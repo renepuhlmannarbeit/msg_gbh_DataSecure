@@ -1,19 +1,17 @@
-# Real/sensitive documents
+# Real/sensitive documents: never commit document payloads to this public repository
 *.doc
+*.docx
 *.docm
 *.xls
+*.xlsx
 *.xlsm
 *.ppt
+*.pptx
 *.pptm
 *.pdf
-# Supported Office fixtures are ignored by default; tracked synthetic fixtures are explicit exceptions below.
-*.docx
-*.xlsx
-*.pptx
-!tests/fixtures/synthetic_profile.docx
-!tests/fixtures/synthetic_customer.xlsx
-!tests/fixtures/synthetic_contract.pptx
-!tests/fixtures/synthetic_customer.pdf
+
+# Generated synthetic fixtures
+/tests/fixtures/
 
 # Local privacy workspaces / outputs
 Input/

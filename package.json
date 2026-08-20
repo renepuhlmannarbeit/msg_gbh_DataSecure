@@ -1,15 +1,13 @@
 {
   "name": "eu-privacy-document-gateway-mcpb",
-  "version": "3.2.0-rc1",
+  "version": "3.2.0-rc2",
   "private": true,
   "description": "Offline-first Claude Desktop MCPB for local document de-identification on Windows",
   "main": "server/index.js",
   "engines": {"node": ">=22"},
   "license": "UNLICENSED",
   "scripts": {
-    "fixtures": "python tests/make-fixtures.py",
-    "assemble": "python scripts/assemble_sources.py",
-    "test": "python scripts/assemble_sources.py && node tests/test-manifest.js && node tests/test-parsers.js && node tests/test-pii-regression.js && node tests/test-image-sanitizer.js && node tests/test-visual.js && node tests/test-gateway-e2e.js && node tests/test-mcp-protocol.js",
-    "build:mcpb": "python scripts/build_mcpb.py"
+    "test": "node tests/make-fixtures.mjs && node tests/test-manifest.js && node tests/test-parsers.js && node tests/test-pii-regression.js && node tests/test-image-sanitizer.js && node tests/test-visual.js && node tests/test-gateway-e2e.js && node tests/test-mcp-protocol.js",
+    "build:mcpb": "node scripts/build-mcpb.mjs"
   }
 }

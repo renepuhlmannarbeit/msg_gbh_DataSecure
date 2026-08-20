@@ -1,4 +1,4 @@
-# Architekturentscheidung v3.2 RC1
+# Architekturentscheidung v3.2 RC2
 
 ## Entscheidung
 
@@ -6,7 +6,7 @@ Für sensible lokale Dateien bleibt **Claude Desktop + lokale MCPB Desktop Exten
 
 ## Warum v3.2 anders ist
 
-v3.1 installierte zur Laufzeit npm-Pakete. Das widerspricht der aktuellen MCPB-Best-Practice, nach der Desktop Extensions Abhängigkeiten bündeln und offline funktionieren sollen. v3.2 enthält deshalb Parser, Privacy Engine und Paketlogik direkt im MCPB und führt beim Anwender kein `npm install` und kein Python-Setup aus.
+Frühere Prototypen installierten teilweise Runtime-Pakete oder nutzten große generierte Quelldateien. RC2 besteht aus normalem modularen Node.js-Quellcode. Parser, Privacy Engine und Paketlogik werden direkt ins MCPB gepackt; beim Anwender laufen weder `npm install` noch Python-Setup oder Modell-Download.
 
 ## Dokumente
 
@@ -28,6 +28,10 @@ v3.1 installierte zur Laufzeit npm-Pakete. Das widerspricht der aktuellen MCPB-B
 ## Claude-Zugriff
 
 Claude hat über diese Extension keine Funktion zum Lesen des Originals oder des Review-Previews. Read-Tools akzeptieren ausschließlich veröffentlichte Output-Pakete. Markdown und Assets sind mit SHA-256 im Manifest gebunden.
+
+## Repository / CI
+
+Das Repository enthält normalen modularen Sourcecode, keine `source-parts`. Synthetische Office/PDF-Fixtures werden bei Tests mit Node.js erzeugt und nicht committed. GitHub Actions führt Tests aus und erzeugt das MCPB-Artefakt.
 
 ## AI Act
 

@@ -1,14 +1,10 @@
 'use strict';
-
 const fs=require('fs');const path=require('path');const os=require('os');const crypto=require('crypto');const {spawn}=require('child_process');
-const {SafeError,dataRoot,runtimeReady,readStatus,convertDocument,rasterizeToPng,ocrPngDetailed}=require('./runtime');
-const pii=require('./pii-engine');
-const {decodePng,encodePng,decodeBmp,encodeBmp,flattenWords,entityRects,redactEditable,normalizeMime}=require('./image-sanitizer');
-
-const VERSION='3.2.0-rc1';
+const {dataRoot}=require('../runtime');
+const VERSION='3.2.0-rc2';
 const SUPPORTED=new Set(['.pdf','.docx','.xlsx','.pptx','.txt','.md','.csv']);
 const PROFILES=new Set(['auto','customer','applicant','personnel_profile','contract','general']);
-const MAX_INPUT_BYTES=100*1024*1024,MAX_TEXT_CHARS=20_000_000,MAX_VISUAL_ASSETS=150,MAX_ASSET_BYTES=30*1024*1024;
+const LIMITS={MAX_INPUT_BYTES:100*1024*1024,MAX_TEXT_CHARS:20_000_000,MAX_VISUAL_ASSETS:150,MAX_ASSET_BYTES:30*1024*1024};
 
 function roots(){let root=String(process.env.EU_PRIVACY_ROOT||'').trim();if(!root)root=path.join(os.homedir(),'Documents','Claude Privacy');const r={root,input:path.join(root,'Input'),output:path.join(root,'Output'),processed:path.join(root,'Processed'),review:path.join(root,'Needs Visual Review'),audit:path.join(dataRoot(),'audit'),jobs:path.join(dataRoot(),'jobs')};for(const p of Object.values(r))fs.mkdirSync(p,{recursive:true});return r;}
 function sha256Buffer(b){return crypto.createHash('sha256').update(b).digest('hex');}function sha256File(p){return sha256Buffer(fs.readFileSync(p));}
@@ -28,9 +24,4 @@ function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();cons
 };
   if(score.personnel_profile>=4)return'personnel_profile';const ranked=Object.entries(score).filter(([k])=>k!=='personnel_profile').sort((a,b)=>b[1]-a[1]);return ranked[0][1]>=2?ranked[0][0]:'general';}
 
-function genericStatus(){return{ok:true,version:VERSION,engine_ready:runtimeReady(),engine_phase:readStatus().phase,input_documents:listInput().length,anonymized_packages:listPackageDirs().filter(p=>fs.existsSync(path.join(p.full,'manifest.json'))).length,visual_review_items:listReviewItems().items.length,folders_ready:true,supported_inputs:['PDF','Word (.docx)','Excel (.xlsx)','PowerPoint (.pptx)','TXT','Markdown','CSV'],runtime_dependency_install:false,workflow:'Input -> bundled local parser -> bundled PII engine -> residual gate -> visual raster/OCR/redaction or local review -> Output package',raw_content_sent_to_claude:false};}
-
-function normalizePng(buf,mime){if(mime==='image/png')return encodePng(decodePng(buf));if(mime==='image/bmp')return encodePng(decodeBmp(buf));return null;}
-function languageTag(){const l=String(process.env.EU_PRIVACY_LANGUAGE||'de').toLowerCase();return l.startsWith('de')?'de-DE':'en-US';}
-async function prepareVisual(att,profile,deps={}){
-  const raster=deps.rasterizeToPng||rasterizeToPng,ocr=deps.ocrPngDetailed||ocrPngDetaile
+module.exports={VERSION,SUPPORTED,PROFILES,LIMITS,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listInput,listPackageDirs,openFolder,detectProfileFromMarkdown};

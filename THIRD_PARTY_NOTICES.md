@@ -1,6 +1,6 @@
 # Third-party / design references
 
-v3.2.0 RC1 hat keine zur Laufzeit nachinstallierten npm-Abhängigkeiten. Die Implementierung ist eigenständig und nutzt Node.js-Core sowie lokale Windows-APIs über gebündelte PowerShell-Bridges.
+v3.2.0 RC2 hat keine zur Laufzeit nachinstallierten npm-Abhängigkeiten. Die Implementierung ist eigenständig und nutzt Node.js-Core sowie lokale Windows-APIs über gebündelte PowerShell-Bridges.
 
 Design- und Testreferenzen, die bei der Architektur berücksichtigt wurden:
 

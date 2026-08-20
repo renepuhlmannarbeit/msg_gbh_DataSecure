@@ -3,50 +3,28 @@
   "manifest_version": "0.4",
   "name": "eu-privacy-document-gateway",
   "display_name": "EU Privacy Document Gateway",
-  "version": "3.2.0-rc1",
+  "version": "3.2.0-rc2",
   "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway: PDF/Word/Excel/PowerPoint rein, verifiziertes Markdown plus datenschutzgeprüfte oder lokal zurückgehaltene Grafiken raus.",
   "long_description": "Windows Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind im MCPB gebündelt; beim Anwender wird kein npm/Python installiert. DOCX/XLSX/PPTX werden lokal als OOXML gelesen; PDF-Textlayer werden fail-closed verarbeitet. Direkte Identifikatoren werden entfernt, Personalprofile behandeln Arbeitgeber/Kunden/Projektbezeichnungen als Quasi-Identifikatoren und behalten fachliche Skills/Rollen möglichst bei. Visuelle Assets werden lokal rasterisiert/OCR-geprüft und redigiert oder in Needs Visual Review zurückgehalten. Claude kann nur freigegebenes Markdown und freigegebene PNGs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {"name": "Internal EU Privacy Document Gateway"},
   "icon": "assets/icon.png",
-  "server": {
-    "type": "node",
-    "entry_point": "server/index.js",
-    "mcp_config": {
-      "command": "node",
-      "args": ["${__dirname}/server/index.js"],
-      "env": {
-        "EU_PRIVACY_ROOT": "${user_config.root_dir}",
-        "EU_PRIVACY_LANGUAGE": "${user_config.language}",
-        "EU_PRIVACY_VISUAL_MODE": "${user_config.visual_mode}"
-      }
-    }
-  },
-  "compatibility": {"claude_desktop": ">=1.0.0", "platforms": ["win32"], "runtimes": {"node": ">=22.0.0"}},
+  "server": {"type":"node","entry_point":"server/index.js","mcp_config":{"command":"node","args":["${__dirname}/server/index.js"],"env":{"EU_PRIVACY_ROOT":"${user_config.root_dir}","EU_PRIVACY_LANGUAGE":"${user_config.language}","EU_PRIVACY_VISUAL_MODE":"${user_config.visual_mode}"}}},
+  "compatibility": {"claude_desktop":">=1.0.0","platforms":["win32"],"runtimes":{"node":">=22.0.0"}},
   "user_config": {
-    "root_dir": {"type": "directory", "title": "Privacy-Ordner (optional)", "description": "Optionaler Stammordner. Leer lassen für Dokumente\\Claude Privacy.", "default": "", "required": false},
-    "language": {"type": "string", "title": "Standardsprache", "description": "Standardsprache für lokale OCR-/Privacy-Verarbeitung. Für deutsche Dokumente: de.", "default": "de", "required": false},
-    "visual_mode": {"type": "string", "title": "Grafik-Datenschutzmodus", "description": "strict (empfohlen) hält OCR-arme oder unsichere Grafiken lokal zur menschlichen Prüfung zurück. balanced ist weniger streng.", "default": "strict", "required": false}
+    "root_dir":{"type":"directory","title":"Privacy-Ordner (optional)","description":"Optionaler Stammordner. Leer lassen für Dokumente\\Claude Privacy.","default":"","required":false},
+    "language":{"type":"string","title":"Standardsprache","description":"Standardsprache für lokale OCR-/Privacy-Verarbeitung. Für deutsche Dokumente: de.","default":"de","required":false},
+    "visual_mode":{"type":"string","title":"Grafik-Datenschutzmodus","description":"strict (empfohlen) hält OCR-arme oder unsichere Grafiken lokal zur menschlichen Prüfung zurück. balanced ist weniger streng.","default":"strict","required":false}
   },
   "tools": [
-    {"name": "privacy_status", "description": "Lokaler Engine-, Queue-, Paket- und Reviewstatus ohne Rohinhalt."},
-    {"name": "open_privacy_folder", "description": "Öffnet den lokalen Privacy-Ordner."},
-    {"name": "anonymize_next_document", "description": "Erzeugt aus der nächsten Input-Datei ein verifiziertes Privacy-Paket; unsichere Grafiken bleiben lokal zur Review."},
-    {"name": "list_anonymized_packages", "description": "Listet freigegebene Privacy-Pakete."},
-    {"name": "read_anonymized_document", "description": "Liest ausschließlich verifiziertes Markdown eines freigegebenen Pakets."},
-    {"name": "list_anonymized_assets", "description": "Listet ausschließlich freigegebene visuelle Assets."},
-    {"name": "read_anonymized_asset", "description": "Liest ein freigegebenes PNG für visuelle Analyse in Claude."},
-    {"name": "list_visual_review_items", "description": "Listet lokal zurückgehaltene visuelle Review-Items ohne Bildinhalt."},
-    {"name": "open_visual_review_folder", "description": "Öffnet den lokalen Review-Ordner."},
-    {"name": "approve_visual_asset", "description": "Gibt einen metadatafreien PNG-Preview erst nach ausdrücklicher menschlicher Datenschutzprüfung frei."},
-    {"name": "open_output_folder", "description": "Öffnet den lokalen Output-Ordner."}
+    {"name":"privacy_status","description":"Lokaler Engine-, Queue-, Paket- und Reviewstatus ohne Rohinhalt."},{"name":"open_privacy_folder","description":"Öffnet den lokalen Privacy-Ordner."},{"name":"anonymize_next_document","description":"Erzeugt aus der nächsten Input-Datei ein verifiziertes Privacy-Paket; unsichere Grafiken bleiben lokal zur Review."},{"name":"list_anonymized_packages","description":"Listet freigegebene Privacy-Pakete."},{"name":"read_anonymized_document","description":"Liest ausschließlich verifiziertes Markdown eines freigegebenen Pakets."},{"name":"list_anonymized_assets","description":"Listet ausschließlich freigegebene visuelle Assets."},{"name":"read_anonymized_asset","description":"Liest ein freigegebenes PNG für visuelle Analyse in Claude."},{"name":"list_visual_review_items","description":"Listet lokal zurückgehaltene visuelle Review-Items ohne Bildinhalt."},{"name":"open_visual_review_folder","description":"Öffnet den lokalen Review-Ordner."},{"name":"approve_visual_asset","description":"Gibt einen metadatafreien PNG-Preview erst nach ausdrücklicher menschlicher Datenschutzprüfung frei."},{"name":"open_output_folder","description":"Öffnet den lokalen Output-Ordner."}
   ],
   "prompts": [
-    {"name": "anonymize_customer", "description": "Nächstes Kundendokument als Privacy-Paket verarbeiten.", "arguments": ["task"], "text": "Verarbeite das nächste lokale Kundendokument datenschutzfreundlich und verwende anschließend nur freigegebene Paketdaten. Aufgabe: ${arguments.task}"},
-    {"name": "anonymize_applicant", "description": "Nächste Bewerbung als Privacy-Paket verarbeiten.", "arguments": ["task"], "text": "Verarbeite die nächste lokale Bewerbung datenschutzfreundlich. Verwende nur freigegebene Paketdaten und führe kein unfreigegebenes Ranking/Scoring durch. Aufgabe: ${arguments.task}"},
-    {"name": "anonymize_personnel_profile", "description": "Nächstes Mitarbeiter-/Beraterprofil datenschutzfreundlich verarbeiten.", "arguments": ["task"], "text": "Verarbeite das nächste lokale Mitarbeiter-/Beraterprofil. Verwende nur freigegebene Paketdaten; Zweck und mögliche Annex-III-Beschäftigungsrelevanz separat klassifizieren. Aufgabe: ${arguments.task}"},
-    {"name": "anonymize_contract", "description": "Nächsten Vertrag als Privacy-Paket verarbeiten.", "arguments": ["task"], "text": "Verarbeite den nächsten lokalen Vertrag datenschutzfreundlich und verwende anschließend nur freigegebene Paketdaten. Aufgabe: ${arguments.task}"}
+    {"name":"anonymize_customer","description":"Nächstes Kundendokument als Privacy-Paket verarbeiten.","arguments":["task"],"text":"Verarbeite das nächste lokale Kundendokument datenschutzfreundlich und verwende anschließend nur freigegebene Paketdaten. Aufgabe: ${arguments.task}"},
+    {"name":"anonymize_applicant","description":"Nächste Bewerbung als Privacy-Paket verarbeiten.","arguments":["task"],"text":"Verarbeite die nächste lokale Bewerbung datenschutzfreundlich. Verwende nur freigegebene Paketdaten und führe kein unfreigegebenes Ranking/Scoring durch. Aufgabe: ${arguments.task}"},
+    {"name":"anonymize_personnel_profile","description":"Nächstes Mitarbeiter-/Beraterprofil datenschutzfreundlich verarbeiten.","arguments":["task"],"text":"Verarbeite das nächste lokale Mitarbeiter-/Beraterprofil. Verwende nur freigegebene Paketdaten; Zweck und mögliche Annex-III-Beschäftigungsrelevanz separat klassifizieren. Aufgabe: ${arguments.task}"},
+    {"name":"anonymize_contract","description":"Nächsten Vertrag als Privacy-Paket verarbeiten.","arguments":["task"],"text":"Verarbeite den nächsten lokalen Vertrag datenschutzfreundlich und verwende anschließend nur freigegebene Paketdaten. Aufgabe: ${arguments.task}"}
   ],
-  "keywords": ["privacy", "DSGVO", "GDPR", "EU AI Act", "PII", "de-identification", "markdown", "images", "personnel profile", "applicant", "contract", "customer", "offline", "Windows"],
-  "tools_generated": false,
-  "prompts_generated": false
+  "keywords":["privacy","DSGVO","GDPR","EU AI Act","PII","de-identification","markdown","images","personnel profile","applicant","contract","customer","offline","Windows"],
+  "tools_generated":false,
+  "prompts_generated":false
 }
