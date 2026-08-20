@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate synthetic fixtures
+        run: python tests/make-fixtures.py
+      - name: Test
+        run: npm test
+      - name: Scan repository for forbidden real-data markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE 'puhlmann|toll collect|aok systems|rene\.puhlmann|gmail\.com' --exclude-dir=.git --exclude='ci.yml' .; then
+            echo 'Potential real-data marker found. Use synthetic test data only.' >&2
+            exit 1
+          fi
+      - name: Build MCPB
+        run: python scripts/build_mcpb.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcpb-${{ github.sha }}
+          path: dist/*.mcpb
