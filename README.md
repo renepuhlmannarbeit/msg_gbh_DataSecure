@@ -1,6 +1,6 @@
 # DataSecure Privacy Preflight v3.2.0 RC2
 
-> **Sicherheits-Hinweis für dieses öffentliche Repository:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Repository-Tests verwenden ausschließlich synthetische Daten.
+> **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
 DataSecure ist jetzt **Plugin-first** aufgebaut: Claude Skills übernehmen Routing, Zweck-/Profilwahl und Governance; ein gebündelter lokaler MCP-Server bildet die technische Privacy-Grenze und verarbeitet Quelldateien, bevor Claude deren Inhalt verwendet.
 
@@ -113,7 +113,9 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 
 ## Repository/Organisation
 
-Für einen organisationsweit über GitHub synchronisierten Claude-Plugin-Marketplace muss das Repository laut aktueller Claude-Dokumentation **private oder internal** sein. Solange dieses Repo öffentlich ist, eignet sich der Plugin-ZIP-Upload für den Pilot; vor einer Organisations-Synchronisierung sollte die Sichtbarkeit geändert und der Marketplace final abgenommen werden.
+Für einen organisationsweit über GitHub synchronisierten Claude-Plugin-Marketplace muss das Repository laut aktueller Claude-Dokumentation **private oder internal** sein. Diese Voraussetzung ist erfüllt: das Repository ist privat.
+
+Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für den Pilot und die GitHub-Synchronisierung für den Organisations-Rollout. Vor dem Rollout fehlt noch die Marketplace-Abnahme und die Windows-Abnahme der OCR-/Rasterisierungs-Bridge; Checkliste in [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Release-Status
 

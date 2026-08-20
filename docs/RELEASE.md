@@ -40,7 +40,8 @@ Do not mark a build production-ready until all of these hold:
 - [ ] the packaged plugin answers `initialize` (CI verifies this)
 - [ ] no Office/PDF file is tracked (CI verifies this)
 - [ ] the golden output diff has been reviewed for this release
-- [ ] repository visibility is private/internal before organisation sync
+- [ ] repository visibility is still private/internal (required for organisation
+      sync; currently satisfied, re-check before each release in case it changed)
 
 ## Windows acceptance run
 

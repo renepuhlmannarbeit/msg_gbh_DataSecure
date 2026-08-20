@@ -1,4 +1,6 @@
-# Real/sensitive documents: never commit document payloads to this public repository
+# Real/sensitive documents: never commit document payloads. The repository is
+# private, but a commit is permanent, replicates to every clone and has no
+# retention control. CI fails on any tracked file of these types. See SECURITY.md.
 *.doc
 *.docx
 *.docm
