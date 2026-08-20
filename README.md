@@ -86,11 +86,30 @@ Erzeugt werden:
 - `DataSecure-Privacy-Preflight-v3.2.0-rc2.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
 - `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc2.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
-Der Plugin-Build kopiert den getesteten kanonischen Runtime-Code aus `/server` in das ZIP. Endanwender führen weder npm noch Python aus.
+`plugins/data-secure` ist der kanonische Produktbaum: Runtime (`server/`), Windows-Helper (`scripts/`) und Skills liegen dort. Der Build ersetzt nichts — was ein Marketplace-Install direkt aus dem Repository auflöst, ist identisch mit dem ZIP-Inhalt. Gepackt wird mit einem ZIP-Writer auf `node:zlib`, dadurch läuft `npm run build` unter Windows und unter Linux-CI ohne externes `zip`-Binary. Endanwender führen weder npm noch Python aus.
 
-## Synthetische Tests
+## Tests
 
-`tests/fixtures/synthetic-personnel-profile.md` und `tests/expected/synthetic-personnel-profile.expected.md` bilden einen vollständig erfundenen Regressionstest ab. `docs/SYNTHETIC_TEST_REPORT.md` ist ausdrücklich als Demo-/Sollreport gekennzeichnet und kein Produktivtestnachweis.
+```bash
+npm test
+```
+
+134 Fälle über Manifest-Konsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Gateway-E2E und MCP-Protokoll — ohne npm-Abhängigkeiten. Die Office-/PDF-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+
+`tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
+
+Details: [docs/TESTING.md](docs/TESTING.md).
+
+## Dokumentation
+
+| Datei | Inhalt |
+|---|---|
+| [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md) | Sicherheitsgrenze, was Claude erreicht, alle Fail-Closed-Punkte |
+| [docs/PLUGIN_TARGET_ARCHITECTURE.md](docs/PLUGIN_TARGET_ARCHITECTURE.md) | Zielarchitektur Plugin + lokaler MCP |
+| [docs/AI_ACT_AND_GDPR.md](docs/AI_ACT_AND_GDPR.md) | DSGVO-/AI-Act-Einordnung und Grenzen |
+| [docs/TESTING.md](docs/TESTING.md) | Testsuite und Regressionsfälle |
+| [docs/RELEASE.md](docs/RELEASE.md) | Build, Distribution, Release-Gate, Windows-Abnahme |
+| [ARCHITECTURE_DECISION.md](ARCHITECTURE_DECISION.md) | Architekturentscheidung v3.2 |
 
 ## Repository/Organisation
 
@@ -98,4 +117,6 @@ Für einen organisationsweit über GitHub synchronisierten Claude-Plugin-Marketp
 
 ## Release-Status
 
-RC2 ist für Pilot/Abnahme vorgesehen. Parser-, PII-, Visual-, MCP-, Hash/Tamper-, Plugin-Struktur- und Packaging-Tests laufen automatisiert bzw. im lokalen Release-Test. Windows OCR/EMF-Rasterisierung muss abschließend auf einem echten Ziel-Windows-PC abgenommen werden.
+RC2 ist für Pilot/Abnahme vorgesehen. Manifest-, Parser-, PII-, Bild-, Visual-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+
+Offen bleibt die Abnahme auf einem echten Ziel-Windows-PC: Windows-OCR gegen ein echtes Scan-Dokument und EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` dort `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

@@ -6,5 +6,6 @@
   "profiles": ["customer", "applicant", "personnel_profile", "contract", "general", "auto"],
   "formats": ["pdf", "docx", "xlsx", "pptx", "txt", "md", "csv"],
   "real_regression_fixture_embedded": false,
+  "synthetic_golden_regression_enforced": true,
   "status": "release-candidate"
 }

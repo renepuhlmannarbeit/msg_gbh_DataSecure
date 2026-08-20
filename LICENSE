@@ -1,0 +1,24 @@
+Proprietary and confidential
+============================
+
+Copyright (c) 2026 msg systems ag. All rights reserved.
+
+This software and its documentation are proprietary and confidential. They are
+provided for internal evaluation and internal use only.
+
+No permission is granted to use, copy, modify, merge, publish, distribute,
+sublicense or sell copies of this software, in whole or in part, without prior
+written permission from the copyright holder.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. THE COPYRIGHT HOLDER SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+This software performs privacy pre-processing. It is not legal advice, not a
+guarantee of anonymity under the GDPR, and not an EU AI Act conformity
+assessment. See SECURITY.md and docs/AI_ACT_AND_GDPR.md.
+
+NOTE: This notice was drafted as a placeholder for a repository that carried no
+license file at all. It has not been reviewed by legal counsel. Confirm the
+wording with msg legal before any external distribution.

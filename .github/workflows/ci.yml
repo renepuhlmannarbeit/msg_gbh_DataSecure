@@ -2,29 +2,84 @@ name: CI
 
 on:
   push:
-    branches: [main, 'feature/**']
+    branches: [main, 'feature/**', 'fix/**']
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  guard:
+    name: Repository guards
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No real documents may be tracked
+        shell: bash
+        run: |
+          tracked="$(git ls-files '*.pdf' '*.doc*' '*.xls*' '*.ppt*' || true)"
+          if [ -n "$tracked" ]; then
+            echo "Office/PDF files must not be committed to this repository:"
+            echo "$tracked"
+            exit 1
+          fi
+
+      - name: No CRLF in tracked sources
+        shell: bash
+        run: |
+          bad="$(git grep -Il $'\r' -- '*.js' '*.mjs' '*.json' '*.md' '*.yml' '*.ps1' || true)"
+          if [ -n "$bad" ]; then
+            echo "These files contain CRLF; .gitattributes enforces LF:"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: No runtime dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ] || [ -d node_modules ]; then
+            echo "The offline promise forbids installed dependencies."
+            exit 1
+          fi
+
+  test:
+    name: Test on ${{ matrix.os }}
+    # Windows is the only supported runtime, so it must be part of CI rather
+    # than a platform the product is merely assumed to work on.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify no real documents are tracked
-        shell: bash
-        run: |
-          tracked="$(git ls-files '*.pdf' '*.docx' '*.xlsx' '*.pptx' || true)"
-          test -z "$tracked" || { echo "Office/PDF files must not be committed to this public repo:"; echo "$tracked"; exit 1; }
-      - name: Run privacy, parser, MCP and plugin tests
+      - name: Run privacy, parser, image, MCP and plugin tests
         run: npm test
+
+  build:
+    name: Build plugin and MCPB
+    needs: [guard, test]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Build Claude plugin ZIP and standalone MCPB
         run: npm run build
+      - name: Verify the packaged plugin actually starts
+        shell: bash
+        run: |
+          set -e
+          mkdir -p .verify
+          unzip -q -o dist/*.zip -d .verify
+          reply="$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node .verify/server/index.js)"
+          echo "$reply"
+          echo "$reply" | grep -q 'eu-privacy-document-gateway'
       - uses: actions/upload-artifact@v4
         with:
           name: data-secure-build-${{ github.sha }}
