@@ -1,0 +1,10 @@
+{
+  "version": "3.2.0-rc1",
+  "build_date": "2026-08-20",
+  "target": "Claude Desktop Windows / MCPB manifest 0.4",
+  "runtime": "bundled Node.js core implementation; no npm/Python runtime install",
+  "profiles": ["customer", "applicant", "personnel_profile", "contract", "general", "auto"],
+  "formats": ["pdf", "docx", "xlsx", "pptx", "txt", "md", "csv"],
+  "real_regression_fixture_embedded": false,
+  "status": "release-candidate"
+}
