@@ -1,0 +1,47 @@
+,m=>{findings.push({type,value_hash:hashShort(m)});return ph;});}
+  // Phone false positives are common, so require separators or phone context.
+  out=out.replace(PHONE_RE,(m,off,whole)=>{const left=whole.slice(Math.max(0,off-30),off).toLowerCase();if(/[./ -]/.test(m)&&(/tel|telefon|phone|mobil|fax|kontakt/.test(left)||/^\+/.test(m))){findings.push({type:'PHONE',value_hash:hashShort(m)});return '[PHONE_REDACTED]';}return m;});
+  out=out.replace(EMAIL_RE,m=>{findings.push({type:'EMAIL',value_hash:hashShort(m)});return '[EMAIL_REDACTED]';});
+  return out;
+}
+
+function anonymize(text, profile='general') {
+  text=String(text||'');const findings=[];const reg=makeRegistry();let out=text;
+  const names=collectNameSeeds(text);
+  if(profile==='contract'||profile==='customer'){let cm;const cr=/(?:vertreten\s+durch|gegenüber|vertragspartei|\bund)\s+([A-ZÄÖÜÀ-Ý][A-Za-zÀ-ÖØ-öø-ÿÄÖÜäöüß'’\-]+[ \t]+[A-ZÄÖÜÀ-Ý][A-Za-zÀ-ÖØ-öø-ÿÄÖÜäöüß'’\-]+)/gi;while((cm=cr.exec(text)))if(looksName(cm[1]))names.push(cm[1]);}
+  if(profile==='applicant'){for(const l of lines(text).slice(0,80)){const v=l.trim();if(!v.includes('|')&&!v.includes(':')&&looksName(v))names.push(v);}}
+  names.push(...collectContextualNameCandidates(text,profile));
+  const orgs=collectOrganizations(text);
+  if(profile==='personnel_profile')out=anonymizePersonnel(out,reg,findings);
+  // Remove direct structured identifiers before organisation alias replacement, so an
+  // organisation alias cannot accidentally rewrite the domain portion of an e-mail address.
+  out=replaceStructured(out,findings);
+  // Assign remaining organizations. In personnel profiles these are quasi-identifiers by default.
+  for(const org of orgs){if(ORG_ALLOW.has(org.toUpperCase()))continue;const existing=reg.map.get(`ORG:${key(org)}`);const ph=existing||reg.assign(profile==='personnel_profile'?'CUSTOMER':'ORG',org);reg.map.set(`ORG:${key(org)}`,ph);findings.push({type:'ORGANIZATION',value_hash:hashShort(org)});}
+  // Replace names and surname variants consistently.
+  for(const name of names){const norm=normalizeSpaces(name);const titleCase=norm.replace(/\b([A-ZÄÖÜÀ-Ý])([A-ZÄÖÜÀ-Ý'’\-]+)/g,(x,a,b)=>a+b.toLowerCase());const ph=reg.assign('PERSON',titleCase);findings.push({type:'PERSON',value_hash:hashShort(norm)});out=replaceAllInsensitive(out,norm,ph);out=replaceAllInsensitive(out,titleCase,ph);const toks=titleCase.split(/\s+/);if(toks.length>=2){const surname=toks[toks.length-1];out=out.replace(new RegExp(`\\b(?:Herr(?:n)?|Frau)\\s+${surname.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`,'giu'),ph);}}
+  // Replace registered organisations, longest values first.
+  const orgPairs=[...reg.map.entries()].filter(([k])=>k.startsWith('ORG:')).map(([k,v])=>[k.slice(4),v]).sort((a,b)=>b[0].length-a[0].length);
+  for(const [lower,ph] of orgPairs){out=replaceAllInsensitive(out,lower,ph);const alias=lower.replace(/[ \t]+(?:gmbh(?:[ \t]*&[ \t]*co\.?[ \t]*kg)?|ag|se|kg|ohg|gbr|e\.?v\.?|b\.?v\.?|ltd\.?|limited|inc\.?|llc|sas|sarl|s\.?a\.?|plc|ug(?:[ \t]*\(haftungsbeschränkt\))?)$/i,'').trim();if(alias.length>=5)out=replaceAllInsensitive(out,alias,ph);}for(const [k,ph] of reg.map){if(k.startsWith('PROJECT:'))out=replaceAllInsensitive(out,k.slice(8),ph);}
+  if(profile==='personnel_profile') for(const loc of [...new Set(reg.locations.filter(Boolean))].sort((a,b)=>b.length-a.length)) out=replaceAllInsensitive(out,loc,'[LOCATION_REDACTED]');
+  // In personnel profile, redact standalone domains (often customer identity), otherwise keep generic URLs unless personal contact.
+  if(profile==='personnel_profile')out=out.replace(URL_RE,m=>{findings.push({type:'URL',value_hash:hashShort(m)});return '[URL_REDACTED]';});
+  return {text:out,findings,counts:reg.counts,reidentification_risk:profile==='personnel_profile'?'high':'context_dependent'};
+}
+
+function scanResidual(text, profile='general') {
+  const clean=String(text||'').replace(/\[[A-Z_]+(?:_\d+)?\]/g,' ');const f=scanStructured(clean);
+  // High-confidence direct names remaining.
+  for(const n of collectNameSeeds(clean))f.push({type:'PERSON_CANDIDATE',text:n});
+  // Company suffixes are residual identifiers for personnel_profile unless allowlisted.
+  if(profile==='personnel_profile')for(const o of collectOrganizations(clean))if(!ORG_ALLOW.has(o.toUpperCase()))f.push({type:'ORGANIZATION_CANDIDATE',text:o});
+  return f;
+}
+
+
+function sensitiveSpans(text, profile='general') {
+  const out=[]; const seen=new Set();
+  function add(type,start,end,value){if(start<0||end<=start)return;const k=`${start}:${end}:${type}`;if(seen.has(k))return;seen.add(k);out.push({type,start,end,text:value});}
+  for(const f of scanStructured(text)) add(f.type,f.start,f.end,f.text);
+  for(const n of collectNameSeeds(text)){let from=0;const low=text.toLocaleLowerCase('de-DE'),needle=n.toLocaleLowerCase('de-DE');while((from=low.indexOf(needle,from))>=0){add('PERSON',from,from+n.length,text.slice(from,from+n.length));from+=n.length;}}
+  if(profile!=='g
