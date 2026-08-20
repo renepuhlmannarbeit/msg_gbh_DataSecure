@@ -34,7 +34,9 @@ for(const skill of requiredSkills){
   const p=path.join(pluginRoot,'skills',skill,'SKILL.md');
   assert.ok(fs.existsSync(p),`missing skill ${skill}`);
   const text=fs.readFileSync(p,'utf8');
-  assert.ok(text.startsWith('---\n'),`${skill} missing frontmatter`);
+  // Tolerant of CRLF: a Windows checkout with core.autocrlf=true would
+  // otherwise fail this assertion on the only supported platform.
+  assert.ok(/^---\r?\n/.test(text),`${skill} missing frontmatter`);
 }
 
 const preflight=fs.readFileSync(path.join(pluginRoot,'skills','data-secure-preflight','SKILL.md'),'utf8');

@@ -1,17 +1,244 @@
 'use strict';
-const assert=require('assert');const fs=require('fs');const os=require('os');const path=require('path');
-const {encodePng}=require('../server/image-sanitizer');
-const root=fs.mkdtempSync(path.join(os.tmpdir(),'eu-privacy-v32-e2e-'));process.env.EU_PRIVACY_ROOT=root;process.env.LOCALAPPDATA=path.join(root,'localapp');
-const gw=require('../server/gateway');const fixtures=path.join(__dirname,'fixtures');const rgba=Buffer.alloc(300*120*4,255),png=encodePng({width:300,height:120,rgba});
-function depsFor(mode){let count=0;return{rasterizeToPng:async()=>png,ocrPngDetailed:async()=>{if(mode==='pii'){count++;return count%2===1?{text:'Max Mustermann max@example.de',words:[{text:'Max',bbox:{x0:10,y0:10,x1:50,y1:30}},{text:'Mustermann',bbox:{x0:55,y0:10,x1:130,y1:30}},{text:'max@example.de',bbox:{x0:10,y0:40,x1:160,y1:60}}]}:{text:'',words:[]};}return{text:'',words:[]};}};}
-function put(src,name){fs.mkdirSync(path.join(root,'Input'),{recursive:true});fs.copyFileSync(src,path.join(root,'Input',name||path.basename(src)));}
-(async()=>{
- put(path.join(fixtures,'synthetic_customer.xlsx'));let r=await gw.anonymizeNext('customer',depsFor('pii'));assert(r.ok);assert.equal(r.visual_assets.included,1);let m=JSON.parse(fs.readFileSync(path.join(root,'Output',r.package_id,'manifest.json'),'utf8'));assert.equal(m.verification.runtime_dependency_install,false);let md=fs.readFileSync(path.join(root,'Output',r.package_id,m.document),'utf8');assert(!md.includes('Max Mustermann'));assert(!md.includes('max@example.de'));assert(gw.readOutput(r.package_id).content_is_verified_anonymized_markdown);let assets=gw.listAssets(r.package_id);assert.equal(assets.assets.length,1);let image=gw.readAsset(r.package_id,assets.assets[0].asset_id);assert(image.__image.data.length>20);
- put(path.join(fixtures,'synthetic_contract.pptx'));r=await gw.anonymizeNext('contract',depsFor('pii'));assert(r.ok);md=fs.readFileSync(path.join(root,'Output',r.package_id,r.document_id),'utf8');assert(!md.includes('Max Mustermann'));assert(!md.includes('Alpha GmbH'));assert(!md.includes('max@example.de'));
- put(path.join(fixtures,'synthetic_customer.pdf'));r=await gw.anonymizeNext('customer',depsFor('none'));assert(r.ok);md=fs.readFileSync(path.join(root,'Output',r.package_id,r.document_id),'utf8');assert(!md.includes('Max Mustermann'));assert(!md.includes('max@example.de'));
- put(path.join(fixtures,'synthetic_profile.docx'));r=await gw.anonymizeNext('auto',depsFor('none'));assert(r.ok);assert.equal(r.profile,'personnel_profile');assert.equal(r.visual_assets.total,1);assert.equal(r.visual_assets.included,0);assert.equal(r.visual_assets.review_required,1);md=fs.readFileSync(path.join(root,'Output',r.package_id,r.document_id),'utf8');for(const x of ['MAX MUSTERMANN','Beispiel Consulting GmbH','Kunde Alpha GmbH','Köln'])assert(!md.toLowerCase().includes(x.toLowerCase()));assert(md.includes('Product Owner'));const reviews=gw.listReviewItems();const mine=reviews.items.filter(x=>x.package_id===r.package_id);assert.equal(mine.length,1);assert.throws(()=>gw.approveReviewAsset(mine[0].review_id,false),/ausdrücklicher/);const approval=gw.approveReviewAsset(mine[0].review_id,true);assert(approval.ok);const released=gw.listAssets(r.package_id);assert.equal(released.assets.length,1);const assetId=released.assets[0].asset_id;const assetPath=path.join(root,'Output',r.package_id,released.assets[0].file);fs.appendFileSync(assetPath,Buffer.from([0]));assert.throws(()=>gw.readAsset(r.package_id,assetId),/verändert/);
- {const before=gw.listOutputs().packages.length;const src=path.join(root,'Input','synthetic-failure.pdf');fs.copyFileSync(path.join(fixtures,'synthetic_customer.pdf'),src);const pii=require('../server/pii-engine');const old=pii.scanResidual;pii.scanResidual=()=>[{type:'TEST_LEAK'}];let err=null;try{await gw.anonymizeNext('customer',depsFor('none'));}catch(e){err=e;}pii.scanResidual=old;assert(err);assert.equal(gw.listOutputs().packages.length,before);assert(fs.existsSync(src));fs.unlinkSync(src);}
- assert.throws(()=>gw.readOutput('../Processed',0,1000),/Ungültige Paket-ID/);
- const pkg=gw.listOutputs().packages[0].package_id;const {document}=JSON.parse(fs.readFileSync(path.join(root,'Output',pkg,'manifest.json'),'utf8'));fs.appendFileSync(path.join(root,'Output',pkg,document),'\nTAMPER');assert.throws(()=>gw.readOutput(pkg),/verändert/);
- console.log('PASS gateway e2e');
-})().catch(e=>{console.error(e);process.exit(1)}).finally(()=>{try{fs.rmSync(root,{recursive:true,force:true})}catch{}});
+
+// End to end tests through the gateway API that the MCP tools call. The OCR
+// bridge is stubbed so the whole pipeline runs on Linux CI as well.
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { createSuite, assertAbsent, assertPresent } = require('./helpers');
+
+const runtimeDir = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-v32-e2e-'));
+process.env.EU_PRIVACY_ROOT = root;
+process.env.LOCALAPPDATA = path.join(root, 'localapp');
+
+const { encodePng } = require(path.join(runtimeDir, 'image-sanitizer.js'));
+const gw = require(path.join(runtimeDir, 'gateway.js'));
+const pii = require(path.join(runtimeDir, 'pii-engine.js'));
+const { splitReviewId } = require(path.join(runtimeDir, 'gateway', 'review.js'));
+
+const { testAsync, test, done, assert } = createSuite('Gateway end to end');
+
+const fixtures = path.join(__dirname, 'fixtures');
+const blankPng = encodePng({ width: 300, height: 120, rgba: Buffer.alloc(300 * 120 * 4, 255) });
+
+// `pii` alternates between a page with PII and a clean page so that the
+// redaction path and its verification pass are both exercised.
+function depsFor(mode) {
+  let count = 0;
+  return {
+    rasterizeToPng: async () => blankPng,
+    ocrPngDetailed: async () => {
+      if (mode !== 'pii') return { text: '', words: [] };
+      count++;
+      if (count % 2 === 0) return { text: '', words: [] };
+      return {
+        text: 'Kunde: Max Mustermann max@example.de',
+        words: [
+          { text: 'Kunde:', bbox: { x0: 10, y0: 10, x1: 50, y1: 30 } },
+          { text: 'Max', bbox: { x0: 55, y0: 10, x1: 90, y1: 30 } },
+          { text: 'Mustermann', bbox: { x0: 95, y0: 10, x1: 170, y1: 30 } },
+          { text: 'max@example.de', bbox: { x0: 10, y0: 40, x1: 160, y1: 60 } }
+        ]
+      };
+    }
+  };
+}
+
+function queue(src, name) {
+  fs.mkdirSync(path.join(root, 'Input'), { recursive: true });
+  const dest = path.join(root, 'Input', name || path.basename(src));
+  fs.copyFileSync(src, dest);
+  return dest;
+}
+
+function readPackage(result) {
+  const dir = path.join(root, 'Output', result.package_id);
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+  return { dir, manifest, markdown: fs.readFileSync(path.join(dir, manifest.document), 'utf8') };
+}
+
+async function main() {
+  await testAsync('an XLSX customer sheet becomes a verified package with a released visual', async () => {
+    queue(path.join(fixtures, 'synthetic_customer.xlsx'));
+    const result = await gw.anonymizeNext('customer', depsFor('pii'));
+    assert.ok(result.ok);
+    assert.strictEqual(result.visual_assets.included, 1);
+
+    const { manifest, markdown } = readPackage(result);
+    assert.strictEqual(manifest.verification.runtime_dependency_install, false);
+    assert.strictEqual(manifest.verification.text_residual_pii, 'passed');
+    assert.strictEqual(manifest.verification.residual_gate_checked_dictionary_literals, true);
+    assertAbsent(markdown, 'Max Mustermann', 'customer name');
+    assertAbsent(markdown, 'max@example.de', 'mail address');
+    assertPresent(markdown, '[PERSON_001]', 'person pseudonym');
+
+    const read = gw.readOutput(result.package_id);
+    assert.strictEqual(read.content_is_verified_anonymized_markdown, true);
+
+    const assets = gw.listAssets(result.package_id);
+    assert.strictEqual(assets.assets.length, 1);
+    const image = gw.readAsset(result.package_id, assets.assets[0].asset_id);
+    assert.ok(image.__image.data.length > 20, 'image payload must be returned');
+    assert.strictEqual(image.mime_type, 'image/png');
+  });
+
+  await testAsync('a PPTX contract is de-identified including its speaker notes', async () => {
+    queue(path.join(fixtures, 'synthetic_contract.pptx'));
+    const result = await gw.anonymizeNext('contract', depsFor('pii'));
+    assert.ok(result.ok);
+    const { markdown } = readPackage(result);
+    assertAbsent(markdown, 'Max Mustermann', 'counterparty');
+    assertAbsent(markdown, 'Alpha GmbH', 'organisation');
+    assertAbsent(markdown, 'max@example.de', 'mail address in notes');
+    assertPresent(markdown, 'Haftung und Kündigung', 'contract content must survive');
+  });
+
+  await testAsync('a PDF customer record is de-identified without OCR', async () => {
+    queue(path.join(fixtures, 'synthetic_customer.pdf'));
+    const result = await gw.anonymizeNext('customer', depsFor('none'));
+    assert.ok(result.ok);
+    const { markdown } = readPackage(result);
+    assertAbsent(markdown, 'Max Mustermann', 'customer name');
+    assertAbsent(markdown, 'max@example.de', 'mail address');
+  });
+
+  await testAsync('a DOCX profile is auto-detected and its visual is withheld', async () => {
+    queue(path.join(fixtures, 'synthetic_profile.docx'));
+    const result = await gw.anonymizeNext('auto', depsFor('none'));
+    assert.ok(result.ok);
+    assert.strictEqual(result.profile, 'personnel_profile');
+    assert.strictEqual(result.profile_detection, 'local-auto');
+    assert.strictEqual(result.visual_assets.total, 1);
+    assert.strictEqual(result.visual_assets.included, 0);
+    assert.strictEqual(result.visual_assets.review_required, 1);
+
+    const { markdown } = readPackage(result);
+    for (const value of ['MAX MUSTERMANN', 'Beispiel Consulting GmbH', 'Kunde Alpha GmbH', 'Köln']) {
+      assertAbsent(markdown, value, 'identifier');
+    }
+    assertPresent(markdown, 'Product Owner', 'role must survive');
+    assertPresent(markdown, 'Business Analyst', 'role must survive');
+
+    globalThis.__profilePackage = result.package_id;
+  });
+
+  await testAsync('a withheld visual is released only after explicit human confirmation', async () => {
+    const packageId = globalThis.__profilePackage;
+    const mine = gw.listReviewItems().items.filter((x) => x.package_id === packageId);
+    assert.strictEqual(mine.length, 1);
+
+    assert.throws(() => gw.approveReviewAsset(mine[0].review_id, false), /ausdrücklicher/);
+    assert.throws(() => gw.approveReviewAsset(mine[0].review_id, 'yes'), /ausdrücklicher/);
+
+    const approval = gw.approveReviewAsset(mine[0].review_id, true);
+    assert.ok(approval.ok);
+
+    const released = gw.listAssets(packageId);
+    assert.strictEqual(released.assets.length, 1);
+    globalThis.__profileAsset = released.assets[0];
+  });
+
+  await testAsync('a released asset that was modified afterwards is refused', async () => {
+    const packageId = globalThis.__profilePackage;
+    const asset = globalThis.__profileAsset;
+    const assetPath = path.join(root, 'Output', packageId, asset.file);
+    fs.appendFileSync(assetPath, Buffer.from([0]));
+    assert.throws(() => gw.readAsset(packageId, asset.asset_id), /verändert/);
+  });
+
+  await testAsync('approval refuses to re-bless a Markdown file that was tampered with', async () => {
+    queue(path.join(fixtures, 'synthetic_profile.docx'), 'tamper-check.docx');
+    const result = await gw.anonymizeNext('personnel_profile', depsFor('none'));
+    const { dir, manifest } = readPackage(result);
+
+    fs.appendFileSync(path.join(dir, manifest.document), '\nEingeschmuggelter Text');
+    const item = gw.listReviewItems().items.find((x) => x.package_id === result.package_id);
+    assert.ok(item, 'the profile visual must be in review');
+    assert.throws(
+      () => gw.approveReviewAsset(item.review_id, true),
+      /Markdown-Datei wurde verändert/,
+      'approval must not launder a tampered document by rewriting its hash'
+    );
+  });
+
+  await testAsync('a failing residual gate releases nothing and keeps the source file', async () => {
+    const before = gw.listOutputs().packages.length;
+    const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'synthetic-failure.pdf');
+
+    const original = pii.scanResidual;
+    pii.scanResidual = () => [{ type: 'TEST_LEAK' }];
+    let error = null;
+    try {
+      await gw.anonymizeNext('customer', depsFor('none'));
+    } catch (e) {
+      error = e;
+    } finally {
+      pii.scanResidual = original;
+    }
+
+    assert.ok(error, 'the gate must throw');
+    assert.strictEqual(gw.listOutputs().packages.length, before, 'no package may be released');
+    assert.ok(fs.existsSync(src), 'the source must stay in Input for a retry');
+    const stray = fs.readdirSync(path.join(root, 'Output')).filter((n) => n.startsWith('.'));
+    assert.deepStrictEqual(stray, [], 'no staging directory may be left behind');
+    fs.unlinkSync(src);
+  });
+
+  await testAsync('an empty Input folder is reported rather than treated as an error', async () => {
+    for (const f of fs.readdirSync(path.join(root, 'Input'))) {
+      fs.unlinkSync(path.join(root, 'Input', f));
+    }
+    const result = await gw.anonymizeNext('customer', depsFor('none'));
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.error, 'input_empty');
+    assert.strictEqual(result.raw_content_sent_to_claude, false);
+  });
+
+  test('a package id may not escape the Output directory', () => {
+    assert.throws(() => gw.readOutput('../Processed', 0, 1000), /Ungültige Paket-ID/);
+    assert.throws(() => gw.readOutput('..', 0, 1000), /Ungültige Paket-ID/);
+    assert.throws(() => gw.readOutput('.hidden', 0, 1000), /Ungültige Paket-ID/);
+    assert.throws(() => gw.readOutput('sub/dir', 0, 1000), /Ungültige Paket-ID/);
+  });
+
+  test('a Markdown file that was modified after release is refused', () => {
+    const packageId = gw.listOutputs().packages[0].package_id;
+    const { document } = JSON.parse(
+      fs.readFileSync(path.join(root, 'Output', packageId, 'manifest.json'), 'utf8')
+    );
+    fs.appendFileSync(path.join(root, 'Output', packageId, document), '\nTAMPER');
+    assert.throws(() => gw.readOutput(packageId), /verändert/);
+  });
+
+  test('review ids are parsed from the end so package names may contain separators', () => {
+    assert.deepStrictEqual(splitReviewId('Paket__mit__trenner__asset-001'), {
+      pkg: 'Paket__mit__trenner',
+      asset: 'asset-001'
+    });
+    assert.throws(() => splitReviewId('kaputt'), /Ungültige Review-ID/);
+    assert.throws(() => splitReviewId('paket__asset-x'), /Ungültige Review-ID/);
+  });
+
+  test('privacy_status reports the visual bridge honestly', () => {
+    const status = gw.genericStatus();
+    assert.strictEqual(status.ok, true);
+    assert.strictEqual(status.raw_content_sent_to_claude, false);
+    assert.strictEqual(status.text_engine, 'ready');
+    assert.ok(['available', 'unavailable'].includes(status.visual_bridge));
+    if (process.platform !== 'win32') {
+      assert.strictEqual(status.visual_bridge, 'unavailable', 'the bridge is Windows only');
+      assert.strictEqual(status.engine_phase, 'ready_text_only');
+    }
+  });
+
+  try {
+    fs.rmSync(root, { recursive: true, force: true });
+  } catch {
+    /* best effort */
+  }
+  done();
+}
+
+main();
