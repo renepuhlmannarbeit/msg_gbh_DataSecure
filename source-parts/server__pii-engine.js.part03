@@ -1,0 +1,7 @@
+eneral'){const nr=/\b[A-ZÄÖÜÀ-Ý][A-Za-zÀ-ÖØ-öø-ÿÄÖÜäöüß'’\-]{2,}(?:[ \t]+[A-ZÄÖÜÀ-Ý][A-Za-zÀ-ÖØ-öø-ÿÄÖÜäöüß'’\-]{2,}){1,2}\b/g;let nm;while((nm=nr.exec(text))){if(looksName(nm[0]))add('PERSON_CANDIDATE',nm.index,nm.index+nm[0].length,nm[0]);}}
+  const orgs=collectOrganizations(text);for(const o of orgs){if(ORG_ALLOW.has(o.toUpperCase()))continue;let from=0;const low=text.toLocaleLowerCase('de-DE'),needle=o.toLocaleLowerCase('de-DE');while((from=low.indexOf(needle,from))>=0){add('ORGANIZATION',from,from+o.length,text.slice(from,from+o.length));from+=o.length;}}
+  if(profile==='personnel_profile'||profile==='applicant'||profile==='customer') { URL_RE.lastIndex=0; let m; while((m=URL_RE.exec(text))) add('URL',m.index,m.index+m[0].length,m[0]); }
+  return out.sort((a,b)=>a.start-b.start||b.end-a.end);
+}
+
+module.exports={anonymize,scanResidual,scanStructured,collectNameSeeds,collectOrganizations,looksName,sensitiveSpans};
