@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "msg-gbh-datasecure",
+  "description": "Internal marketplace for the DataSecure privacy preflight plugin.",
+  "owner": {
+    "name": "DataSecure Internal Prototype"
+  },
+  "plugins": [
+    {
+      "name": "data-secure",
+      "displayName": "DataSecure Privacy Preflight",
+      "description": "Local privacy preflight for PDF, Word, Excel and PowerPoint before Claude uses document content.",
+      "author": {
+        "name": "DataSecure Internal Prototype"
+      },
+      "category": "security",
+      "source": "./plugins/data-secure"
+    }
+  ]
+}
