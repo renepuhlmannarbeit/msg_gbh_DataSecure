@@ -10,7 +10,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "fixtures": "python tests/make-fixtures.py",
-    "test": "node tests/test-manifest.js && node tests/test-parsers.js && node tests/test-pii-regression.js && node tests/test-image-sanitizer.js && node tests/test-visual.js && node tests/test-gateway-e2e.js && node tests/test-gateway-e2e-mocked-runtime.js && node tests/test-mcp-protocol.js",
+    "assemble": "python scripts/assemble_sources.py",
+    "test": "python scripts/assemble_sources.py && node tests/test-manifest.js && node tests/test-parsers.js && node tests/test-pii-regression.js && node tests/test-image-sanitizer.js && node tests/test-visual.js && node tests/test-gateway-e2e.js && node tests/test-gateway-e2e-mocked-runtime.js && node tests/test-mcp-protocol.js",
     "build:mcpb": "python scripts/build_mcpb.py"
   }
 }
