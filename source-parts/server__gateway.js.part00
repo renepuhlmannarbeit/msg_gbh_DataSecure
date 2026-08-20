@@ -1,0 +1,36 @@
+'use strict';
+
+const fs=require('fs');const path=require('path');const os=require('os');const crypto=require('crypto');const {spawn}=require('child_process');
+const {SafeError,dataRoot,runtimeReady,readStatus,convertDocument,rasterizeToPng,ocrPngDetailed}=require('./runtime');
+const pii=require('./pii-engine');
+const {decodePng,encodePng,decodeBmp,encodeBmp,flattenWords,entityRects,redactEditable,normalizeMime}=require('./image-sanitizer');
+
+const VERSION='3.2.0-rc1';
+const SUPPORTED=new Set(['.pdf','.docx','.xlsx','.pptx','.txt','.md','.csv']);
+const PROFILES=new Set(['auto','customer','applicant','personnel_profile','contract','general']);
+const MAX_INPUT_BYTES=100*1024*1024,MAX_TEXT_CHARS=20_000_000,MAX_VISUAL_ASSETS=150,MAX_ASSET_BYTES=30*1024*1024;
+
+function roots(){let root=String(process.env.EU_PRIVACY_ROOT||'').trim();if(!root)root=path.join(os.homedir(),'Documents','Claude Privacy');const r={root,input:path.join(root,'Input'),output:path.join(root,'Output'),processed:path.join(root,'Processed'),review:path.join(root,'Needs Visual Review'),audit:path.join(dataRoot(),'audit'),jobs:path.join(dataRoot(),'jobs')};for(const p of Object.values(r))fs.mkdirSync(p,{recursive:true});return r;}
+function sha256Buffer(b){return crypto.createHash('sha256').update(b).digest('hex');}function sha256File(p){return sha256Buffer(fs.readFileSync(p));}
+function timestamp(){const d=new Date();return d.getFullYear().toString()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0');}
+function safePackageId(profile){const prefix={customer:'Kundendokument',applicant:'Bewerbung',personnel_profile:'Mitarbeiterprofil',contract:'Vertrag',general:'Dokument'}[profile]||'Dokument';return `${prefix}_${timestamp()}_anonymisiert`;}
+function uniqueDir(dir,base){let p=path.join(dir,base),i=2;while(fs.existsSync(p))p=path.join(dir,`${base}_${i++}`);return p;}
+function uniquePath(dir,file){const e=path.extname(file),b=path.basename(file,e);let p=path.join(dir,file),i=2;while(fs.existsSync(p))p=path.join(dir,`${b}_${i++}${e}`);return p;}
+function listInput(){const r=roots();return fs.readdirSync(r.input,{withFileTypes:true}).filter(x=>x.isFile()&&SUPPORTED.has(path.extname(x.name).toLowerCase())).map(x=>({name:x.name,full:path.join(r.input,x.name),stat:fs.statSync(path.join(r.input,x.name))})).sort((a,b)=>a.stat.mtimeMs-b.stat.mtimeMs);}
+function listPackageDirs(){const r=roots();return fs.readdirSync(r.output,{withFileTypes:true}).filter(x=>x.isDirectory()&&!x.name.startsWith('.')).map(x=>({id:x.name,full:path.join(r.output,x.name)}));}
+function openFolder(dir){if(process.platform!=='win32')return{ok:false,message:'Ordneröffnung ist nur unter Windows verfügbar.'};const c=spawn('explorer.exe',[dir],{detached:true,stdio:'ignore',windowsHide:true});c.unref();return{ok:true,opened:true};}
+
+function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();const score={
+  personnel_profile:['projekterfahrung','berufserfahrung','skillset','zertifizierungen','unternehmen:','ausbildung:','rolle im projekt','funktion:'].reduce((n,k)=>n+(t.includes(k)?1:0),0),
+  applicant:['bewerbung','anschreiben','lebenslauf','curriculum vitae','bewerber','motivation','arbeitszeugnis'].reduce((n,k)=>n+(t.includes(k)?1:0),0),
+  contract:['vertrag','vertragspartei','kündigung','haftung','vertragslaufzeit','präambel','zahlungspflicht','vereinbarung','§'].reduce((n,k)=>n+(t.includes(k)?1:0),0),
+  customer:['kundennummer','kunde:','rechnung','bestellung','ticket','support','crm','lieferadresse','auftragsnummer','reklamation'].reduce((n,k)=>n+(t.includes(k)?1:0),0)
+};
+  if(score.personnel_profile>=4)return'personnel_profile';const ranked=Object.entries(score).filter(([k])=>k!=='personnel_profile').sort((a,b)=>b[1]-a[1]);return ranked[0][1]>=2?ranked[0][0]:'general';}
+
+function genericStatus(){return{ok:true,version:VERSION,engine_ready:runtimeReady(),engine_phase:readStatus().phase,input_documents:listInput().length,anonymized_packages:listPackageDirs().filter(p=>fs.existsSync(path.join(p.full,'manifest.json'))).length,visual_review_items:listReviewItems().items.length,folders_ready:true,supported_inputs:['PDF','Word (.docx)','Excel (.xlsx)','PowerPoint (.pptx)','TXT','Markdown','CSV'],runtime_dependency_install:false,workflow:'Input -> bundled local parser -> bundled PII engine -> residual gate -> visual raster/OCR/redaction or local review -> Output package',raw_content_sent_to_claude:false};}
+
+function normalizePng(buf,mime){if(mime==='image/png')return encodePng(decodePng(buf));if(mime==='image/bmp')return encodePng(decodeBmp(buf));return null;}
+function languageTag(){const l=String(process.env.EU_PRIVACY_LANGUAGE||'de').toLowerCase();return l.startsWith('de')?'de-DE':'en-US';}
+async function prepareVisual(att,profile,deps={}){
+  const raster=deps.rasterizeToPng||rasterizeToPng,ocr=deps.ocrPngDetailed||ocrPngDetaile
