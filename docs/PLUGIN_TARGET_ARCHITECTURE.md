@@ -1,0 +1,92 @@
+# Zielarchitektur: Claude Plugin + lokaler Privacy MCP
+
+## Entscheidung
+
+Für den vorgesehenen Einsatz wird das Produkt als **Claude Plugin** gedacht, nicht nur als nackte Desktop Extension.
+
+Das Plugin bündelt:
+
+1. einen kleinen Skill für den anwenderfreundlichen Privacy-Preflight,
+2. einen lokalen MCP-Server als technische Sicherheitsgrenze,
+3. optionale Compliance-/AI-Act-Hinweise für den nachgelagerten Zweck.
+
+## Warum kein Skill allein?
+
+Ein Skill ist eine Verfahrensanweisung für Claude. Er ist nicht die technische Grenze, die garantiert, dass Rohdaten vor der Modellverarbeitung lokal bereinigt werden. Deshalb darf der Skill niemals der einzige Datenschutzmechanismus sein.
+
+## Ziel-UX
+
+Der Anwender installiert genau ein Plugin und verwendet danach z. B.:
+
+`/datasafe`
+
+oder schreibt:
+
+`Prüfe und anonymisiere das nächste Dokument.`
+
+Der Skill orchestriert dann ausschließlich lokale MCP-Tools.
+
+## Sicherheitsfluss
+
+```text
+Originaldatei
+    |
+    v
+lokaler Privacy MCP
+    |
+    +-- Dokumenttyp bestimmen
+    +-- Text / Tabellen / Bilder extrahieren
+    +-- direkte Identifikatoren entfernen
+    +-- Quasi-Identifikatoren pseudonymisieren / generalisieren
+    +-- visuelle Assets lokal prüfen
+    +-- Residual-PII-Gate
+    +-- Audit + Manifest erzeugen
+    |
+    v
+Privacy-Paket
+    |
+    +-- anonymisiert.md
+    +-- assets/ (nur freigegebene Bilder)
+    +-- manifest.json
+    +-- audit.json
+    |
+    v
+Claude darf nur diesen Output lesen
+```
+
+## Skills
+
+Vorgesehen sind kleine, klar getrennte Skills:
+
+- `datasafe-preflight`: Standardvorprüfung und Anonymisierung
+- `datasafe-customer`: Kundendatenprofil
+- `datasafe-personnel`: Mitarbeiter-/Beraterprofile
+- `datasafe-applicant`: Bewerbungsunterlagen
+- `datasafe-contract`: Vertragsunterlagen
+- `datasafe-compliance`: Hinweise zu Zweck, Datenschutz und AI-Act-Governance
+
+Die Skills enthalten keine Rohdatenverarbeitung. Sie wählen Profile, erklären Ergebnisse und rufen lokale Tools auf.
+
+## Lokaler MCP
+
+Der lokale MCP übernimmt ausschließlich deterministische bzw. lokal kontrollierte Verarbeitung. Er darf Rohdaten lesen, aber nur bereinigte Outputs an Claude zurückgeben.
+
+Empfohlene Tool-Oberfläche:
+
+- `privacy_status`
+- `open_privacy_folder`
+- `prepare_next_document`
+- `list_anonymized_packages`
+- `read_anonymized_document`
+- `list_anonymized_assets`
+- `read_anonymized_asset`
+- `list_visual_reviews`
+- `approve_visual_review`
+
+## AI-Act-Grenze
+
+Das Plugin ist eine Privacy-/Preflight-Schicht. Es erklärt ausdrücklich nicht automatisch einen nachgelagerten HR-, Recruiting-, Scoring-, Ranking- oder Beschäftigungsworkflow für zulässig oder compliant. Der konkrete Zweck muss separat bewertet werden.
+
+## Release-Modell
+
+Quellcode bleibt modular und reviewbar im Git-Repository. CI erzeugt synthetische Testdokumente, führt Regressionstests aus und baut anschließend das installierbare Plugin-/MCP-Artefakt. Reale Mitarbeiter-, Kunden- oder Vertragsdokumente gehören nicht ins Repository.

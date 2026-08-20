@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify no real documents are tracked
+        shell: bash
+        run: |
+          tracked="$(git ls-files '*.pdf' '*.docx' '*.xlsx' '*.pptx' || true)"
+          test -z "$tracked" || { echo "Office/PDF files must not be committed to this public repo:"; echo "$tracked"; exit 1; }
+      - name: Run privacy, parser, MCP and plugin tests
+        run: npm test
+      - name: Build Claude plugin ZIP and standalone MCPB
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-secure-build-${{ github.sha }}
+          path: |
+            dist/*.zip
+            dist/*.mcpb

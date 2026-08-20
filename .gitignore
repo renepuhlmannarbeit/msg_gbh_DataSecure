@@ -1,0 +1,39 @@
+# Real/sensitive documents: never commit document payloads to this public repository
+*.doc
+*.docx
+*.docm
+*.xls
+*.xlsx
+*.xlsm
+*.ppt
+*.pptx
+*.pptm
+*.pdf
+
+# Generated synthetic fixtures
+/tests/fixtures/
+
+# Local privacy workspaces / outputs
+Input/
+Output/
+Processed/
+Needs Visual Review/
+Claude Privacy/
+*.pii-session
+
+# Credentials and environment
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.token
+secrets.*
+
+# Build/runtime
+dist/
+node_modules/
+.DS_Store
+Thumbs.db
+__pycache__/
