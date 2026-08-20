@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs');const path=require('path');const os=require('os');const crypto=require('crypto');const {spawn}=require('child_process');
 const {dataRoot}=require('../runtime');
-const VERSION='3.2.0-rc2';
+const {VERSION}=require('../version');
 const SUPPORTED=new Set(['.pdf','.docx','.xlsx','.pptx','.txt','.md','.csv']);
 const PROFILES=new Set(['auto','customer','applicant','personnel_profile','contract','general']);
 const LIMITS={MAX_INPUT_BYTES:100*1024*1024,MAX_TEXT_CHARS:20_000_000,MAX_VISUAL_ASSETS:150,MAX_ASSET_BYTES:30*1024*1024};
