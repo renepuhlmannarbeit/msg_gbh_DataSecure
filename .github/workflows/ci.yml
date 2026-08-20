@@ -21,9 +21,13 @@ jobs:
         run: |
           tracked="$(git ls-files '*.pdf' '*.docx' '*.xlsx' '*.pptx' || true)"
           test -z "$tracked" || { echo "Office/PDF files must not be committed to this public repo:"; echo "$tracked"; exit 1; }
-      - run: npm test
-      - run: npm run build:mcpb
+      - name: Run privacy, parser, MCP and plugin tests
+        run: npm test
+      - name: Build Claude plugin ZIP and standalone MCPB
+        run: npm run build
       - uses: actions/upload-artifact@v4
         with:
-          name: eu-privacy-mcpb
-          path: dist/*.mcpb
+          name: data-secure-build-${{ github.sha }}
+          path: |
+            dist/*.zip
+            dist/*.mcpb
