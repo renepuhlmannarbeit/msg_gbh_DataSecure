@@ -94,7 +94,7 @@ Erzeugt werden:
 npm test
 ```
 
-134 Fälle über Manifest-Konsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Gateway-E2E und MCP-Protokoll — ohne npm-Abhängigkeiten. Die Office-/PDF-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+154 Fälle über Manifest-Konsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Gateway-E2E, MCP-Protokoll sowie eine Adversarial-Suite (feindlicher Dokumentinhalt, Unicode-Tarnung, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -104,6 +104,7 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 
 | Datei | Inhalt |
 |---|---|
+| [docs/ANLEITUNG.md](docs/ANLEITUNG.md) | **Für Anwender:** Installation Schritt für Schritt, täglicher Ablauf, Platzhalter, Grenzen |
 | [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md) | Sicherheitsgrenze, was Claude erreicht, alle Fail-Closed-Punkte |
 | [docs/PLUGIN_TARGET_ARCHITECTURE.md](docs/PLUGIN_TARGET_ARCHITECTURE.md) | Zielarchitektur Plugin + lokaler MCP |
 | [docs/AI_ACT_AND_GDPR.md](docs/AI_ACT_AND_GDPR.md) | DSGVO-/AI-Act-Einordnung und Grenzen |
