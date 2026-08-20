@@ -1,0 +1,41 @@
+# Real/sensitive documents
+*.doc
+*.docm
+*.xls
+*.xlsm
+*.ppt
+*.pptm
+*.pdf
+# Supported Office fixtures are ignored by default; tracked synthetic fixtures are explicit exceptions below.
+*.docx
+*.xlsx
+*.pptx
+!tests/fixtures/synthetic_profile.docx
+!tests/fixtures/synthetic_customer.xlsx
+!tests/fixtures/synthetic_contract.pptx
+!tests/fixtures/synthetic_customer.pdf
+
+# Local privacy workspaces / outputs
+Input/
+Output/
+Processed/
+Needs Visual Review/
+Claude Privacy/
+*.pii-session
+
+# Credentials and environment
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.token
+secrets.*
+
+# Build/runtime
+dist/
+node_modules/
+.DS_Store
+Thumbs.db
+__pycache__/
