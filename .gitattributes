@@ -1,0 +1,14 @@
+# The runtime target is Windows, but sources must stay LF so that tests which
+# assert on file content (frontmatter, golden files) behave identically on
+# Windows checkouts and Linux CI.
+* text=auto eol=lf
+
+# Binary fixtures and assets must never be line-ending normalised.
+*.png binary
+*.ico binary
+*.mcpb binary
+*.zip binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
