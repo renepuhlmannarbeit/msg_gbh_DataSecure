@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import json, zipfile, hashlib
+import json, zipfile, hashlib, subprocess, sys
 
 ROOT=Path(__file__).resolve().parents[1]
+subprocess.run([sys.executable, str(ROOT/'scripts'/'assemble_sources.py')], check=True)
 manifest=json.loads((ROOT/'manifest.json').read_text(encoding='utf-8'))
 version=manifest['version']
 out=ROOT/'dist'/f"EU-Privacy-Document-Gateway-Windows-v{version}.mcpb"
