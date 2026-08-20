@@ -1,130 +1,187 @@
 # DataSecure einrichten
 
-Anleitung für Anwenderinnen und Anwender. Version 3.2.0 RC2, Windows 10/11.
-
-DataSecure entfernt personenbezogene Daten aus Ihren Dokumenten, **bevor** Claude
-sie liest.
+Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
+Version 3.2.0 RC2 · Windows 10/11 · ca. 20 Minuten.
 
 ---
 
-## Worum es geht
+## Wozu das Ganze
 
-Wenn Sie ein Mitarbeiterprofil, einen Lebenslauf, einen Vertrag oder einen
-Kundenvorgang von Claude auswerten lassen, sieht Claude normalerweise das
-Original — mit Namen, Anschriften, Telefonnummern, Kunden- und
-Projektbezeichnungen. Genau das soll bei personenbezogenen Daten nicht passieren.
+Wenn Sie einen Lebenslauf, ein Mitarbeiterprofil, einen Vertrag oder einen
+Kundenvorgang von Claude auswerten lassen, sieht Claude sonst das Original — mit
+Namen, Anschriften, Telefonnummern, Kunden- und Projektbezeichnungen. Bei
+personenbezogenen Daten soll das nicht passieren.
 
 DataSecure schiebt eine Prüfstelle davor. Die Datei bleibt auf Ihrem Rechner. Ein
 kleines Programm liest sie dort, ersetzt die Identifikatoren durch Platzhalter und
-legt eine geprüfte Fassung ab. Claude bekommt **nur** diese geprüfte Fassung zu
-sehen — es gibt für Claude schlicht keine Möglichkeit, an das Original zu kommen.
+legt eine geprüfte Fassung ab. Claude bekommt **nur** diese geprüfte Fassung — es
+gibt für Claude keinen Weg zum Original.
 
-Fachlich Relevantes bleibt erhalten. Aus „Erika Beispiel war Product Ownerin bei
-der HanseCargo AG" wird „[PERSON_001] war Product Ownerin bei [KUNDE_001]" — die
-Rolle bleibt lesbar, die Person nicht mehr erkennbar.
-
-## Die eine Regel, auf die es ankommt
-
-Der Schutz wirkt nur, wenn das Original nie in den Chat gelangt. Alles andere ist
-Komfort.
-
-- **Nicht:** Dokument per Büroklammer an Claude anhängen oder den Text
-  hineinkopieren.
-- **Sondern:** Dokument in den Ordner `Input` legen und Claude bitten, das
-  nächste Dokument zu verarbeiten.
-
-## Voraussetzungen
-
-- Windows 10 oder 11 — DataSecure läuft nur unter Windows.
-- Claude Desktop, installiert und angemeldet.
-- Die Installationsdatei von Ihrer IT — es gibt zwei Varianten, und sie
-  unterscheiden sich in genau einem Punkt:
-
-| Datei | Installation | Zusätzlich nötig |
-|---|---|---|
-| `…​.mcpb` | Doppelklick | nichts |
-| `…​.zip` | Einstellungen → Plugins → hochladen | Node.js ab Version 22 auf dem Rechner |
-
-Der Grund: Die `.mcpb`-Variante bringt ihre Laufzeitumgebung mit. Die
-`.zip`-Variante — und ebenso eine Installation über einen firmeninternen
-Plugin-Marketplace — startet den lokalen Dienst über den Befehl `node` und setzt
-deshalb voraus, dass Node.js auf dem Rechner installiert ist.
-
-Wenn Sie nicht wissen, welche Variante Sie haben: nehmen Sie die `.mcpb`, falls
-beide vorliegen. Administratorrechte brauchen Sie in keinem Fall, und weder
-Python noch npm werden je ausgeführt.
+Fachliches bleibt erhalten. Aus „Erika Beispiel war Product Ownerin bei der
+HanseCargo AG" wird „[PERSON_001] war Product Ownerin bei [KUNDE_001]".
 
 ---
 
-## Teil 1: Installation
+## Die drei Regeln
 
-**1. Datei ablegen.** Speichern Sie die Datei an einem Ort, den Sie wiederfinden,
-zum Beispiel `Dokumente\DataSecure\`. Öffnen Sie sie noch nicht.
+Wenn Sie sich sonst nichts merken — diese drei. Alles andere ist Bedienung.
 
-**2. Installieren.** Bei einer `.mcpb`-Datei genügt ein Doppelklick: Claude
-Desktop öffnet sich und fragt, ob die Erweiterung installiert werden soll —
-bestätigen mit *Installieren*. Bei einer `.zip`-Datei stattdessen Claude Desktop
-öffnen, *Einstellungen → Plugins*, dort die ZIP-Datei hochladen.
+### Regel 1 — Das Original kommt nie in den Chat
 
-**3. Einstellungen bestätigen.** Drei Angaben werden abgefragt; die Vorgaben
-passen für fast alle:
+Der gesamte Schutz hängt daran. Wer die Datei anhängt oder den Text
+hineinkopiert, hat alle Maßnahmen umgangen, auch wenn danach alles normal
+aussieht.
 
-| Angabe | Vorgabe | Bedeutung |
+- **Nicht:** Dokument per Büroklammer anhängen oder Text einfügen.
+- **Sondern:** Dokument in den Ordner `Input` legen und Claude bitten, es zu
+  verarbeiten.
+
+### Regel 2 — Über Bilder entscheiden nur Sie
+
+Grafiken werden zurückgehalten, bis ein Mensch sie freigibt; bei Bewerbungen und
+Mitarbeiterprofilen **immer**. Claude kann das Bild vorher nicht sehen und Ihnen
+deshalb auch nicht sagen, was darauf ist. Schauen Sie selbst hin.
+
+### Regel 3 — Räumen Sie auf
+
+DataSecure löscht **nichts von allein**. Ihre Originale sammeln sich in
+`Processed`, extrahierte Bilder — auch Bewerbungsfotos — in
+`Needs Visual Review`. Beides bleibt unverschlüsselt auf der Festplatte liegen,
+bis Sie es löschen. Machen Sie das zum festen Schritt am Ende jeder Arbeit.
+
+---
+
+## Teil 1: Bevor Sie anfangen
+
+Drei Fragen. Wenn Sie eine nicht sicher beantworten können: IT fragen, nicht
+raten.
+
+1. **Läuft Windows 10 oder 11?** DataSecure gibt es nur für Windows.
+2. **Ist Claude Desktop installiert und sind Sie angemeldet?** Die Anwendung auf
+   dem Rechner, nicht die Webseite im Browser.
+3. **Welche Datei haben Sie von der IT bekommen?** Schauen Sie auf die Endung —
+   davon hängt der ganze Rest ab.
+
+> **Windows blockiert Dateien aus E-Mails.** Rechte Maustaste auf die Datei →
+> *Eigenschaften* → unten das Häkchen bei *Zulassen* setzen → *OK*. Fehlt das
+> Häkchen, ist alles in Ordnung.
+
+## Teil 2: Welcher der drei Wege ist Ihrer?
+
+Sie müssen nur einen davon machen.
+
+| Weg | Sie haben … | Was zu tun ist |
 |---|---|---|
-| Privacy-Ordner | *leer lassen* | Legt die Arbeitsordner unter `Dokumente\Claude Privacy` an |
-| Sprache | `de` | Für deutsche Dokumente so lassen — davon hängt die Texterkennung in Bildern ab |
-| Grafik-Modus | `strict` | Im Zweifel wird eine Grafik zurückgehalten statt freigegeben |
+| **A** (am einfachsten) | eine Datei auf `.mcpb` | Doppelklick, sonst nichts nötig → Teil 3 |
+| **B** (nur mit Vorarbeit) | eine Datei auf `.zip` | Braucht zusätzlich Node.js ≥ 22 auf dem Rechner → Teil 4 |
+| **C** (nichts zu tun) | gar keine Datei | Die IT verteilt zentral; das Plugin erscheint von selbst → Teil 5 |
 
-**4. Claude Desktop neu starten.** Einmal vollständig schließen und wieder
-öffnen. Erst danach ist DataSecure aktiv.
+**Warum der Unterschied:** Die `.mcpb`-Datei bringt alles mit, was sie zum Laufen
+braucht. Die `.zip` und die zentrale Verteilung nicht — die starten ein
+Hilfsprogramm namens `node`, das getrennt installiert sein muss. Wenn Sie die
+Wahl haben: `.mcpb`.
 
-**5. Prüfen, ob es läuft.** Schreiben Sie Claude: *„Prüfe bitte den Status von
-DataSecure."* Claude sollte antworten, dass die Engine bereit ist und wie viele
-Dokumente im Eingang liegen (null).
+## Teil 3: Weg A — über die `.mcpb`-Datei
 
-Steht dort `visual_bridge: unavailable`, funktioniert der Textteil trotzdem —
-Grafiken werden dann grundsätzlich zurückgehalten. Melden Sie das der IT, aber
-Sie können arbeiten.
+1. **Datei an einen festen Platz legen**, z. B. `Dokumente\DataSecure\`. Nicht in
+   den Downloads-Ordner.
+2. **Claude Desktop öffnen.** Erst die Anwendung starten, dann installieren.
+3. **Doppelklick auf die Datei.** Claude fragt, ob die Erweiterung installiert
+   werden soll.
+   > Erscheint stattdessen *„Wie möchten Sie diese Datei öffnen?"*, kennt Windows
+   > die Endung nicht. Abbrechen und die Datei stattdessen mit gedrückter
+   > Maustaste in das offene Claude-Fenster ziehen. Klappt auch das nicht: in den
+   > Claude-Einstellungen nach *Erweiterungen* / *Extensions* suchen. Finden Sie
+   > nichts davon — aufhören und IT rufen.
+4. **Bestätigen und die drei Angaben stehen lassen.** Ändern Sie nichts:
 
-## Teil 2: Die vier Ordner
+   | Angabe | So lassen | Bedeutung |
+   |---|---|---|
+   | Privacy-Ordner | *leer* | Legt die Ordner unter `Dokumente\Claude Privacy` an |
+   | Sprache | `de` | Nötig für deutsche Texterkennung in Bildern |
+   | Grafik-Modus | `strict` | Im Zweifel wird ein Bild zurückgehalten |
 
-DataSecure legt unter `Dokumente\Claude Privacy` vier Ordner an. Ihr Dokument
-wandert hindurch:
+5. **Claude komplett schließen und neu öffnen.** Wirklich beenden: rechte
+   Maustaste auf das Claude-Symbol neben der Uhr → *Beenden*. Ohne diesen Schritt
+   passiert nichts.
+6. **Weiter zu Teil 5.**
+
+## Teil 4: Weg B — über die `.zip`-Datei
+
+> **Zuerst lesen.** Dieser Weg braucht **Node.js ab Version 22**. Das zu
+> installieren erfordert in der Regel Administratorrechte, die Sie vermutlich
+> nicht haben. **Installieren Sie Node nicht selbst** — schicken Sie die Vorlage
+> aus Teil 11 an die IT. Ist Node bereits vorhanden, geht es hier weiter.
+
+1. **Datei an einen festen Platz legen.** **Nicht entpacken** — die ZIP wird als
+   Ganzes gebraucht.
+2. **In Claude Desktop die Plugin-Verwaltung öffnen.** Einstellungen → nach
+   *Plugins* suchen; je nach Version auch *Erweiterungen* oder *Extensions*.
+   Finden Sie nichts Vergleichbares: aufhören und IT rufen.
+3. **ZIP-Datei hochladen** und bestätigen.
+4. **Claude komplett schließen und neu öffnen** (Symbol neben der Uhr →
+   *Beenden*).
+
+## Teil 5: Hat es funktioniert?
+
+Schreiben Sie Claude genau diesen Satz:
+
+> Prüfe bitte den Status von DataSecure.
+
+Drei mögliche Ausgänge:
+
+- **Alles gut.** Claude nennt eine Version, sagt, dass alles bereit ist, und dass
+  **0 Dokumente** im Eingang liegen. → Teil 6.
+- **Teilweise.** Claude antwortet, erwähnt aber, dass die Bildprüfung nicht
+  verfügbar ist (`visual_bridge: unavailable`). **Sie können arbeiten:** Texte
+  laufen normal, Bilder werden alle zurückgehalten. An die IT melden, aber nicht
+  darauf warten.
+- **Nicht gut.** Claude kennt DataSecure nicht oder meldet einen Fehler. Machen
+  Sie **genau einen** Versuch: Claude beenden, neu starten, Satz wiederholen.
+  Dann aufhören und die Vorlage aus Teil 11 an die IT schicken.
+
+## Teil 6: Die vier Ordner
+
+Unter `Dokumente\Claude Privacy`. Wenn Sie sie nicht finden: *„Öffne den
+Privacy-Ordner"*.
 
 | Ordner | Inhalt |
 |---|---|
-| `Input` | Hier legen Sie das Originaldokument hinein |
-| `Output` | Die geprüfte Fassung. Nur das hier sieht Claude |
-| `Needs Visual Review` | Grafiken, die ein Mensch erst freigeben muss |
-| `Processed` | Ihr Original, nach der Verarbeitung hierher verschoben |
+| `Input` | Hier legen Sie das Dokument hinein. Nur diesen brauchen Sie aktiv |
+| `Output` | Die geprüfte Fassung. Nur das sieht Claude |
+| `Needs Visual Review` | Bilder, die auf Ihre Freigabe warten. Enthält echte Fotos |
+| `Processed` | Ihre Originale. Enthält alle Personendaten. **Aufräumen** |
 
-Im Alltag brauchen Sie nur `Input`. Wenn Sie den Ordner nicht finden: fragen Sie
-Claude *„Öffne den Privacy-Ordner"*, dann geht der Explorer auf.
+## Teil 7: So arbeiten Sie damit
 
-## Teil 3: Der tägliche Ablauf
+1. **Dokument in `Input` kopieren.** PDF, Word, Excel, PowerPoint, TXT, Markdown,
+   CSV. Kopieren, nicht verschieben — DataSecure schiebt die Datei später selbst
+   nach `Processed`.
+2. **Claude bitten:** *„Anonymisiere bitte das nächste Dokument und fasse
+   anschließend die Qualifikationen zusammen."* Zur Sicherheit können Sie die Art
+   dazusagen: „… als Bewerbung", „… als Vertrag", „… als Mitarbeiterprofil".
+3. **Normal weiterarbeiten.** Claude sieht nur Platzhalter statt echter Namen.
+4. **Falls Bilder zurückgehalten wurden: selbst ansehen.** Öffnen Sie
+   `Needs Visual Review`. Ist nichts Personenbezogenes darauf — kein Gesicht,
+   keine Unterschrift, kein Name, kein Briefkopf — dann: *„Ich habe die Grafik
+   geprüft, sie enthält keine personenbezogenen Daten. Bitte freigeben."* Im
+   Zweifel nicht freigeben.
+5. **Aufräumen (Regel 3).** Jedes Mal am Ende:
+   - `Processed` leeren — Ihre Originale mit allen Personendaten
+   - `Needs Visual Review` leeren — dort liegen auch Bewerbungsfotos
+   - `Output` leeren, sobald das Ergebnis nicht mehr gebraucht wird
 
-**1. Dokument in den Eingang kopieren.** Unterstützt werden PDF, Word, Excel,
-PowerPoint sowie TXT, Markdown und CSV. Kopieren, nicht verschieben.
+   Mit <kbd>Umschalt</kbd> + <kbd>Entf</kbd> löschen oder danach den Papierkorb
+   leeren.
 
-**2. Claude bitten, es zu verarbeiten.** Zum Beispiel: *„Anonymisiere bitte das
-nächste Dokument und fasse anschließend die Qualifikationen zusammen."* Die Art
-des Dokuments erkennt DataSecure selbst; wenn Sie sichergehen wollen, sagen Sie
-es dazu — „… als Bewerbung", „… als Vertrag", „… als Mitarbeiterprofil".
+**Warum Schritt 5 nicht optional ist:** DataSecure löscht nichts von allein. Ohne
+Aufräumen wächst auf der Festplatte eine vollständige, unverschlüsselte Sammlung
+genau der Dokumente, die geschützt werden sollten.
 
-**3. Mit der geprüften Fassung weiterarbeiten.** Ab hier arbeiten Sie normal
-weiter. Claude sieht dabei nur Platzhalter statt der echten Namen.
+## Teil 8: Was die Platzhalter bedeuten
 
-**4. Zurückgehaltene Grafiken prüfen**, falls welche anfallen. Claude sagt Ihnen
-Bescheid. Schauen Sie sich die Grafik im Ordner `Needs Visual Review` an; ist
-nichts Personenbezogenes darauf zu sehen, geben Sie sie frei: *„Ich habe die
-Grafik geprüft, sie enthält keine personenbezogenen Daten. Bitte freigeben."*
-
-Diese Freigabe ist Ihre Entscheidung und Ihre Verantwortung. Claude kann die
-Grafik vorher nicht sehen und Ihnen deshalb auch nicht sagen, was darauf ist.
-
-## Teil 4: Was die Platzhalter bedeuten
-
-Gleiche Nummer heißt: innerhalb *dieses* Dokuments dieselbe Person oder Firma.
+Gleiche Nummer heißt: innerhalb *dieses einen* Dokuments dieselbe Person oder
+Firma.
 
 | Platzhalter | Stand im Original |
 |---|---|
@@ -133,56 +190,60 @@ Gleiche Nummer heißt: innerhalb *dieses* Dokuments dieselbe Person oder Firma.
 | `[KUNDE_001]` | ein Kunde oder Auftraggeber |
 | `[PROJEKT_001]` | eine Projektbezeichnung |
 | `[ORGANISATION_001]` | eine sonstige Firma |
-| `[LOCATION_REDACTED]` | Ort, Anschrift oder Standort |
+| `[LOCATION_REDACTED]` | Ort, Anschrift, Standort |
 | `[EMAIL_REDACTED]` | eine E-Mail-Adresse |
-| `[PHONE_REDACTED]` | eine Telefon- oder Faxnummer |
+| `[PHONE_REDACTED]` | Telefon- oder Faxnummer |
 | `[ID_REDACTED]` | Mitarbeiter-, Kunden-, Rechnungsnummer, Steuer-ID |
 | `[BANK_DATA_REDACTED]` | IBAN, BIC, Kartennummer |
 | `[URL_REDACTED]` | eine Internetadresse |
 
-Es gibt **keine gespeicherte Rückübersetzungstabelle**. `[PERSON_001]` in
-Dokument A und `[PERSON_001]` in Dokument B sind mit hoher Wahrscheinlichkeit
-verschiedene Menschen. Vergleichen Sie Platzhalter nie über Dokumentgrenzen
-hinweg.
+**Häufiger Irrtum:** `[PERSON_001]` in Dokument A und `[PERSON_001]` in Dokument B
+sind **verschiedene Menschen**. Es gibt keine gespeicherte Zuordnungstabelle, die
+Nummern beginnen bei jedem Dokument neu.
 
-## Teil 5: Wenn etwas nicht klappt
+## Teil 9: Wenn etwas nicht klappt
 
-**„Verarbeitung wurde sicher gestoppt."** DataSecure hat im Ergebnis noch etwas
-gefunden, das nach einem Identifikator aussieht, und deshalb gar nichts
-freigegeben. Ihre Datei liegt unverändert im Eingang. Das ist der gewollte
-Notfallmodus — es ist nie etwas Ungeprüftes durchgerutscht. Melden Sie den Fall
-mit der Dokumentart (nicht mit dem Dokument) an die IT.
-
-**„Grafik wurde nicht freigegeben."** Normalfall, kein Fehler. Bei Bewerbungen
-und Mitarbeiterprofilen werden Bilder *immer* zurückgehalten — ein Foto oder eine
-Unterschrift macht eine Person sofort wieder erkennbar.
-
-| Beobachtung | Das hilft |
+| Was Sie sehen | Was Sie tun |
 |---|---|
-| Claude kennt DataSecure nicht | Claude Desktop nach der Installation vollständig schließen und neu öffnen |
-| „Keine unterstützte Datei im Eingang" | Datei liegt woanders oder hat ein anderes Format. *„Öffne den Privacy-Ordner"* und in `Input` legen |
-| Gescanntes PDF wird abgelehnt | Reine Scans ohne Textebene lehnt DataSecure bewusst ab. Wenn vorhanden, die Originaldatei statt des Scans nutzen |
-| Fachbegriff wurde fälschlich geschwärzt | Kein Datenschutzproblem, aber melden — der Begriff kann in die Ausnahmeliste |
-| Ein Name steht noch in der geprüften Fassung | Das ist ernst. Nicht weiterarbeiten, sofort melden, den Chat nicht weiterverwenden |
+| Claude kennt DataSecure nicht | Claude beenden (Symbol neben der Uhr → *Beenden*), neu starten. Genau ein Versuch, dann IT |
+| „Wie möchten Sie diese Datei öffnen?" | Abbrechen, Datei ins offene Claude-Fenster ziehen |
+| „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
+| „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Datei liegt unverändert im Eingang. An IT melden — mit der Dokumentart, nicht mit dem Dokument |
+| „Grafik wurde nicht freigegeben" | Normalfall. Bild selbst ansehen und bewusst entscheiden (Regel 2) |
+| Gescanntes PDF wird abgelehnt | Reine Scans ohne Textebene werden bewusst abgelehnt. Wenn möglich das Original statt des Scans nehmen |
+| Fachbegriff fälschlich geschwärzt | Kein Datenschutzproblem, aber bitte melden |
+| **Echter Name in der geprüften Fassung** | **Sofort aufhören.** Nicht weiterarbeiten, Chat nicht weiterverwenden, umgehend melden |
 
-## Teil 6: Was DataSecure nicht leistet
+## Teil 10: Was DataSecure nicht leistet
 
-- **Keine garantierte Anonymität im Rechtssinn.** Es ist eine De-Identifizierung.
-  Ob ein Ergebnis im konkreten Fall als anonym gilt, ist eine juristische
-  Bewertung, keine technische.
+- **Keine garantierte Anonymität im Rechtssinn.** Es ist eine De-Identifizierung;
+  ob ein Ergebnis als anonym gilt, ist eine juristische Bewertung.
 - **Keine Freigabe für Personalentscheidungen.** Ein anonymisiertes
-  Bewerberprofil bedeutet nicht, dass Sie damit automatisiert ranken, bewerten,
-  vorsortieren oder absagen dürfen. Das ist ein eigener Zweck und braucht eine
-  eigene Freigabe. Siehe [AI_ACT_AND_GDPR.md](AI_ACT_AND_GDPR.md).
-- **Keine DSGVO- oder EU-AI-Act-Zertifizierung.** DataSecure ist ein technischer
-  Baustein, kein Nachweis.
-- **Kein Ersatz für Ihr Urteil.** Wenn ein Dokument so speziell ist, dass schon
-  die Beschreibung die Person erkennbar macht, hilft kein Platzhalter.
+  Bewerberprofil erlaubt kein automatisiertes Ranken, Bewerten, Vorsortieren oder
+  Absagen. Eigener Zweck, eigene Freigabe. Siehe
+  [AI_ACT_AND_GDPR.md](AI_ACT_AND_GDPR.md).
+- **Keine DSGVO- oder EU-AI-Act-Zertifizierung.** Ein technischer Baustein, kein
+  Nachweis.
+- **Kein Ersatz für Ihr Urteil.** Wenn schon die Beschreibung die Person
+  erkennbar macht, hilft kein Platzhalter.
+
+## Teil 11: Wenn Sie die IT brauchen
+
+```
+Betreff: DataSecure — Installation klappt nicht
+
+Rechner: (Rechnername oder Personalnummer)
+Erhaltene Datei: (.mcpb / .zip / keine)
+Wo es hakt: (was Sie zuletzt gemacht haben und was passiert ist)
+
+Claude-Version und Windows-Version reiche ich bei Bedarf nach.
+```
+
+**Niemals mitschicken:** das betroffene Dokument, Screenshots mit
+Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-Fragen, Fehlermeldungen und falsch geschwärzte Fachbegriffe an die IT des
-Geschäftsbereichs Healthcare. Bitte nie das betroffene Dokument mitschicken — die
-Beschreibung genügt.
-
-Diese Anleitung ist keine Rechtsberatung.
+DataSecure Privacy Preflight 3.2.0 RC2 · Geschäftsbereich Healthcare, msg systems ag.
+Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
+Datenschutzvorgaben Ihres Bereichs.

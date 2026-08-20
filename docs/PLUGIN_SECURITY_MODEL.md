@@ -81,6 +81,26 @@ Document text and OCR output are data, never instructions. The server states
 this in its MCP `instructions`, and no tool interprets document content as a
 command.
 
+## Known gap: nothing is ever deleted
+
+The runtime has no retention logic at all. `moveProcessed()` moves every source
+document into `Processed/` and nothing removes it afterwards; every withheld
+image stays in `Needs Visual Review/` even once `approved` is set; `Output/` and
+the audit directory grow without bound.
+
+The practical consequence is the opposite of the product's purpose: a workstation
+accumulates an unmanaged, unencrypted archive of exactly the documents the gate
+exists to protect — including applicant photos and signatures extracted out of
+CVs. Under Art. 5(1)(e) GDPR that is a storage-limitation problem, and it is not
+something a user can be expected to infer.
+
+Until the runtime handles it, the mitigation is procedural and lives in
+[ANLEITUNG.md](ANLEITUNG.md) as rule 3: the user clears `Processed`,
+`Needs Visual Review` and `Output` at the end of each session. A procedural
+mitigation for a technical control is a weak substitute, so this belongs on the
+roadmap as a feature: a configurable retention window, an explicit purge tool,
+and deletion of a review preview once its asset has been released or rejected.
+
 ## What this model does not claim
 
 No legal anonymity, no GDPR certification, no EU AI Act conformity assessment.
