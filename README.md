@@ -1,6 +1,6 @@
-# EU Privacy Document Gateway v3.2.0 RC1
+# EU Privacy Document Gateway v3.2.0 RC2
 
-> **Sicherheits-Hinweis für dieses öffentliche Repository:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Alle Repository-Testdaten sind synthetisch.
+> **Sicherheits-Hinweis für dieses öffentliche Repository:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Repository-Tests erzeugen ausschließlich synthetische Dokumente zur Laufzeit.
 
 Lokale Claude-Desktop-Erweiterung für Windows. Ziel: sensible Geschäftsdokumente werden **vor der Modellverarbeitung lokal** in ein Privacy-Paket überführt. Claude erhält über diese Extension nur freigegebenes Markdown und freigegebene PNG-Grafiken.
 
@@ -21,7 +21,7 @@ Lokale Claude-Desktop-Erweiterung für Windows. Ziel: sensible Geschäftsdokumen
 - `general`
 - `auto`
 
-`personnel_profile` ist neu in v3.2 und wurde aus dem Realtest eines 14-seitigen Mitarbeiterprofils abgeleitet. Direkte Identifikatoren werden entfernt; Arbeitgeber, Kunden, konkrete Projektbezeichnungen und genaue Standorte werden als Quasi-Identifikatoren pseudonymisiert/generalisiert. Rollen, Skills, Zertifizierungen, Methoden und Technologien sollen erhalten bleiben.
+`personnel_profile` ist ein eigener Modus: Direkte Identifikatoren werden entfernt; Arbeitgeber, Kunden, konkrete Projektbezeichnungen und genaue Standorte werden als Quasi-Identifikatoren pseudonymisiert/generalisiert. Rollen, Skills, Zertifizierungen, Methoden und Technologien sollen erhalten bleiben.
 
 ## Output
 
@@ -59,22 +59,21 @@ Der Privacy-Schritt entscheidet nicht über die Risikoklasse des nachgelagerten 
 
 ## Installation
 
-Claude Desktop → Settings/Einstellungen → Extensions → Advanced settings/Erweiterte Einstellungen → Extension Developer → Install Extension… → `.mcpb` auswählen.
+Claude Desktop → Einstellungen → Extensions → Advanced settings → Extension Developer → Install Extension… → `.mcpb` auswählen.
 
 Danach: `Öffne meinen Privacy-Ordner` → Datei nach `Input` → `Anonymisiere das nächste Dokument`.
 
-## Release-Status
-
-RC1. Parser-, PII-, Visual-, MCP-, Hash/Tamper- und Packaging-Tests sind enthalten. Windows OCR/EMF-Rasterisierung kann in dieser Linux-Buildumgebung nur statisch bzw. über Mock-Gates getestet werden; der finale Abnahmetest muss einmal auf dem Ziel-Windows-PC erfolgen.
-
 ## Entwicklung und Tests
 
-Die Runtime benötigt beim Anwender keine npm- oder Python-Installation. Für Entwicklung/CI wird Python ausschließlich zum Erzeugen synthetischer Testfixtures und zum Packen der `.mcpb` verwendet.
+Der Quellbaum ist normal modularisiert; es gibt keine `source-parts`. Auch der reguläre CI-/Buildpfad benötigt kein Python. Synthetische DOCX/XLSX/PPTX/PDF-Fixtures werden bei `npm test` mit Node.js erzeugt und sind nicht im Repository gespeichert.
 
 ```bash
-python tests/make-fixtures.py
 npm test
-python scripts/build_mcpb.py
+npm run build:mcpb
 ```
 
-Das Buildskript erzeugt `dist/EU-Privacy-Document-Gateway-Windows-v3.2.0-rc1.mcpb`. Echte personenbezogene Dokumente gehören **nicht** in `tests/fixtures/`.
+GitHub Actions führt die Tests aus und stellt die gebaute `.mcpb` als Workflow-Artefakt bereit. Endanwender installieren nur diese Datei.
+
+## Release-Status
+
+RC2 ist für Pilot/Abnahme vorgesehen. Parser-, PII-, Visual-, MCP-, Hash/Tamper- und Packaging-Tests laufen automatisiert. Windows OCR/EMF-Rasterisierung kann in der Linux-CI nur über Fail-Closed-/Mock-Gates geprüft werden; die finale Abnahme erfolgt einmal auf einem Ziel-Windows-PC.
