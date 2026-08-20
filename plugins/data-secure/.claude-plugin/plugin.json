@@ -1,0 +1,21 @@
+{
+  "name": "data-secure",
+  "displayName": "DataSecure Privacy Preflight",
+  "version": "3.2.0-rc2",
+  "description": "Privacy preflight for local business documents before Claude uses their content.",
+  "author": {
+    "name": "DataSecure Internal Prototype"
+  },
+  "repository": "https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure",
+  "license": "UNLICENSED",
+  "keywords": [
+    "privacy",
+    "gdpr",
+    "dsgvo",
+    "eu-ai-act",
+    "pii",
+    "documents",
+    "local-mcp",
+    "preflight"
+  ]
+}
