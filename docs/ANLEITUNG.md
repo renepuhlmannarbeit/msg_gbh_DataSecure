@@ -37,12 +37,22 @@ Komfort.
 
 - Windows 10 oder 11 — DataSecure läuft nur unter Windows.
 - Claude Desktop, installiert und angemeldet.
-- Die Installationsdatei von Ihrer IT: entweder
-  `DataSecure-Privacy-Preflight-v3.2.0-rc2.zip` oder
-  `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc2.mcpb`.
+- Die Installationsdatei von Ihrer IT — es gibt zwei Varianten, und sie
+  unterscheiden sich in genau einem Punkt:
 
-Sie müssen nichts weiter installieren. Kein Python, kein Node, keine
-Administratorrechte.
+| Datei | Installation | Zusätzlich nötig |
+|---|---|---|
+| `…​.mcpb` | Doppelklick | nichts |
+| `…​.zip` | Einstellungen → Plugins → hochladen | Node.js ab Version 22 auf dem Rechner |
+
+Der Grund: Die `.mcpb`-Variante bringt ihre Laufzeitumgebung mit. Die
+`.zip`-Variante — und ebenso eine Installation über einen firmeninternen
+Plugin-Marketplace — startet den lokalen Dienst über den Befehl `node` und setzt
+deshalb voraus, dass Node.js auf dem Rechner installiert ist.
+
+Wenn Sie nicht wissen, welche Variante Sie haben: nehmen Sie die `.mcpb`, falls
+beide vorliegen. Administratorrechte brauchen Sie in keinem Fall, und weder
+Python noch npm werden je ausgeführt.
 
 ---
 
