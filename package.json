@@ -1,13 +1,15 @@
 {
-  "name": "eu-privacy-document-gateway-mcpb",
+  "name": "data-secure-privacy-preflight",
   "version": "3.2.0-rc2",
   "private": true,
-  "description": "Offline-first Claude Desktop MCPB for local document de-identification on Windows",
+  "description": "Claude plugin and standalone MCPB for local document privacy preflight on Windows",
   "main": "server/index.js",
   "engines": {"node": ">=22"},
   "license": "UNLICENSED",
   "scripts": {
-    "test": "node tests/make-fixtures.mjs && node tests/test-manifest.js && node tests/test-parsers.js && node tests/test-pii-regression.js && node tests/test-image-sanitizer.js && node tests/test-visual.js && node tests/test-gateway-e2e.js && node tests/test-mcp-protocol.js",
-    "build:mcpb": "node scripts/build-mcpb.mjs"
+    "test": "node tests/make-fixtures.mjs && node tests/test-plugin-structure.js && node tests/test-manifest.js && node tests/test-parsers.js && node tests/test-pii-regression.js && node tests/test-image-sanitizer.js && node tests/test-visual.js && node tests/test-gateway-e2e.js && node tests/test-mcp-protocol.js",
+    "build:plugin": "node scripts/build-plugin.mjs",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "build": "npm run build:plugin && npm run build:mcpb"
   }
 }
