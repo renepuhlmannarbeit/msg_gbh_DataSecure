@@ -42,11 +42,19 @@ const EMAIL_RE = new RegExp(
   'giu'
 );
 
-// Shape only. Whether a shape is treated as a phone number is decided by
-// phoneHasContext() so that the residual gate and the redactor cannot disagree.
+// Every detector below is deliberately line-local: `\s` also matches a newline,
+// and a pattern that may cross one stops being a detector and becomes a way to
+// swallow the following paragraph. A postal address written with `\s+` matched
+// "20457 Hamburg\n\nAngebot AN" as one address and left "-2026-0815" glued to
+// the placeholder.
+const SEP_CHARS = ' \\t'; // for use inside a character class
+const SEP = `[${SEP_CHARS}]`; // for standalone use
+
+// Shape only. Whether a shape is treated as a phone number is decided in
+// structured.js so that the residual gate and the redactor cannot disagree.
 const PHONE_RE = new RegExp(
-  `${NB}(?:\\+\\d{1,3}[\\s./\\-]?)?(?:\\(?\\d{2,5}\\)?[\\s./\\-]?)` +
-    `\\d{3,5}[\\s./\\-]\\d{2,6}(?:[\\s./\\-]\\d{1,6})?${NA}`,
+  `${NB}(?:\\+\\d{1,3}[${SEP_CHARS}./\\-]?)?(?:\\(?\\d{2,5}\\)?[${SEP_CHARS}./\\-]?)` +
+    `\\d{3,5}[${SEP_CHARS}./\\-]\\d{2,6}(?:[${SEP_CHARS}./\\-]\\d{1,6})?${NA}`,
   'gu'
 );
 const PHONE_LABEL_RE = /(?:tel|telefon|phone|mobil|handy|fax|kontakt|durchwahl)\s*\.?\s*:?\s*$/i;
@@ -67,11 +75,14 @@ const IP_RE = new RegExp(
 );
 
 const POSTAL_ADDRESS_RE = new RegExp(
-  `${NB}\\d{5}\\s+[${UPPER}][${NAME_BODY}]+(?:\\s+[${UPPER}][${NAME_BODY}]+){0,3}${NA}`,
+  `${NB}\\d{5}${SEP}+[${UPPER}][${NAME_BODY}]+(?:${SEP}+[${UPPER}][${NAME_BODY}]+){0,3}${NA}`,
   'gu'
 );
 
-const DE_SV_RE = new RegExp(`${NB}\\d{2}\\s?\\d{6}\\s?[A-Z]\\s?\\d{2}\\s?\\d${NA}`, 'gu');
+const DE_SV_RE = new RegExp(
+  `${NB}\\d{2}${SEP}?\\d{6}${SEP}?[A-Z]${SEP}?\\d{2}${SEP}?\\d${NA}`,
+  'gu'
+);
 
 // A bare 11-digit run is any invoice, order or article number, so the German
 // tax id is label-gated as well. Bare runs are covered by LABELED_ID_RE.
@@ -156,8 +167,25 @@ const ORG_ALLOW = new Set([
   'KUBERNETES', 'LINUX', 'WINDOWS'
 ]);
 
+// Invisible characters that break tokenisation without being visible to a
+// reader. The soft hyphen is the practically relevant one: Word inserts it for
+// justified text, so "Mül<U+00AD>ler" is an ordinary German document, and every
+// name pattern would silently miss it.
+const INVISIBLE_RE = /[­​‌‍⁠﻿]/gu;
+
+// Text entering the engine is normalised once. Without NFC a decomposed umlaut
+// ("Mu" + U+0308) does not match the name character classes at all, which is
+// how documents exported from macOS would have passed a surname through
+// untouched. Normalisation is idempotent, so applying it defensively at several
+// boundaries is free.
+function normalizeText(s) {
+  return String(s || '')
+    .normalize('NFC')
+    .replace(INVISIBLE_RE, '');
+}
+
 function normalizeSpaces(s) {
-  return String(s || '').replace(/\s+/g, ' ').trim();
+  return normalizeText(s).replace(/\s+/g, ' ').trim();
 }
 
 function key(s) {
@@ -295,6 +323,8 @@ module.exports = {
   ROLE_WORDS,
   TECH_TERMS,
   ORG_ALLOW,
+  normalizeText,
+  INVISIBLE_RE,
   normalizeSpaces,
   key,
   hashShort,

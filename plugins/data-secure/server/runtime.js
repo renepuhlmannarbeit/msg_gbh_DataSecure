@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { normalizeText } = require('./privacy/base');
 const { parseOoxml } = require('./ooxml');
 const { parsePdf } = require('./pdf-lite');
 const { rasterizeToPng, ocrPngDetailed } = require('./windows-visual');
@@ -61,18 +62,29 @@ function readStatus() {
   };
 }
 
+// Text is normalised the moment it leaves a parser, so every later stage sees
+// one form. A decomposed umlaut or a Word soft hyphen inside a surname would
+// otherwise walk straight past the name patterns.
+function normalized(result) {
+  return { ...result, markdown: normalizeText(result.markdown) };
+}
+
 async function convertDocument(source) {
   const ext = path.extname(source).toLowerCase();
   const buf = fs.readFileSync(source);
   try {
-    if (['.docx', '.xlsx', '.pptx'].includes(ext)) return parseOoxml(buf, ext);
-    if (ext === '.pdf') return parsePdf(buf);
+    if (['.docx', '.xlsx', '.pptx'].includes(ext)) return normalized(parseOoxml(buf, ext));
+    if (ext === '.pdf') return normalized(parsePdf(buf));
     if (ext === '.md' || ext === '.txt') {
-      return { markdown: buf.toString('utf8'), attachments: [], warnings: [] };
+      return normalized({ markdown: buf.toString('utf8'), attachments: [], warnings: [] });
     }
     if (ext === '.csv') {
       const body = buf.toString('utf8').replace(/```/g, '` ` `');
-      return { markdown: `# Tabelleninhalt\n\n\`\`\`csv\n${body}\n\`\`\``, attachments: [], warnings: [] };
+      return normalized({
+        markdown: `# Tabelleninhalt\n\n\`\`\`csv\n${body}\n\`\`\``,
+        attachments: [],
+        warnings: []
+      });
     }
     throw new SafeError('Nicht unterstütztes Format.');
   } catch (e) {

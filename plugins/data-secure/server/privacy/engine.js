@@ -4,6 +4,7 @@ const {
   URL_RE,
   NB,
   NA,
+  normalizeText,
   normalizeSpaces,
   key,
   hashShort,
@@ -165,7 +166,7 @@ function buildOrgDictionary(text, reg, profile, findings) {
 }
 
 function anonymize(text, profile = 'general') {
-  const src = String(text || '');
+  const src = normalizeText(text);
   const findings = [];
   const reg = makeRegistry();
 
@@ -251,7 +252,7 @@ function anonymize(text, profile = 'general') {
 // things: that no direct identifier pattern is left, and that no literal the
 // redactor claimed to have replaced survives in the output.
 function scanResidual(text, profile = 'general', knownValues = []) {
-  const clean = String(text || '').replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
+  const clean = normalizeText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
   const out = scanStructured(clean).map((f) => ({ type: f.type, text: f.text }));
 
   for (const name of collectNameSeeds(clean)) out.push({ type: 'PERSON_CANDIDATE', text: name });
@@ -278,7 +279,7 @@ function scanResidual(text, profile = 'general', knownValues = []) {
 // name is gone the next capitalised words shift into its position and the
 // heuristic flags them, so a correct redaction could never be confirmed.
 function verifyRedactedText(afterText, redactedValues = []) {
-  const text = String(afterText || '');
+  const text = normalizeText(afterText);
   const findings = findStructuredSpans(text).map((s) => ({ type: s.type, text: s.text }));
   for (const value of redactedValues) {
     const v = normalizeSpaces(value);
@@ -291,7 +292,7 @@ function verifyRedactedText(afterText, redactedValues = []) {
 
 // Character spans used to map OCR text back to pixel rectangles.
 function sensitiveSpans(text, profile = 'general') {
-  const src = String(text || '');
+  const src = normalizeText(text);
   const out = [];
   const seen = new Set();
 

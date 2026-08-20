@@ -20,8 +20,36 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-visual.js` | 19 | every branch of the visual gate with injected OCR and rasteriser bridges |
 | `test-gateway-e2e.js` | 13 | the four document types end to end, human approval, tamper detection, path traversal, fail-closed rollback |
 | `test-mcp-protocol.js` | 21 | the server driven over real stdio: handshake, schemas, annotations, error codes, notification handling, stdout framing |
+| `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 
-Total: 134 assertions-level cases plus the plugin structure check.
+Total: 154 assertion-level cases plus the plugin structure check.
+
+## The adversarial suite
+
+The other files check that documented behaviour holds. This one attacks from
+angles the design did not explicitly plan for, and each angle has found
+something:
+
+| Angle | What it asks |
+|---|---|
+| Hostile content | Does a document that instructs Claude, forges a placeholder or forges a compliance header change any behaviour? |
+| Unicode | Do decomposed umlauts, soft hyphens, zero-width characters or non-Latin scripts get past the name patterns? |
+| Sizes and regexes | Does any pattern backtrack catastrophically? Does a 90 kB document stay in budget? |
+| Malformed containers | Do 40 byte-level mutations of a DOCX ever raise something other than `SafeError`? Can a ZIP entry escape? Can an IHDR claim 3.6 gigapixels? |
+| Determinism | Is the same input byte-identical twice? Do pseudonyms leak between documents? |
+| Concurrency and arguments | Can two parallel runs produce two packages from one source? Can a read argument reach another file, or a negative offset misbehave? |
+
+Findings it produced, all fixed:
+
+- decomposed umlauts (NFC vs NFD) were not matched at all, so a surname in a
+  document exported from macOS passed through untouched
+- a Word soft hyphen (`U+00AD`) inside a surname hid it from every name pattern;
+  Word inserts these for justified text, so this is an ordinary document
+- `POSTAL_ADDRESS_RE` used `\s+`, which matches a newline: "20457 Hamburg" ate
+  the blank line and the first token of the next paragraph and produced
+  `[LOCATION_REDACTED]-2026-0815`. `PHONE_RE` and `DE_SV_RE` had the same
+  latitude. All structured detectors are line-local now, which is asserted
+  generically rather than per pattern.
 
 ## Fixtures
 
