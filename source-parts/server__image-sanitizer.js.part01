@@ -1,0 +1,83 @@
+eight;y++){
+    const sy=topDown?y:(height-1-y), base=pixelOffset+sy*rowSize;
+    if(base+rowSize>buf.length) throw new ImageSafetyError('BMP-Daten unvollständig.');
+    for(let x=0;x<width;x++){
+      const s=base+x*(bpp/8), d=(y*width+x)*4; rgba[d]=buf[s+2];rgba[d+1]=buf[s+1];rgba[d+2]=buf[s];rgba[d+3]=bpp===32?buf[s+3]:255;
+    }
+  }
+  return {width,height,rgba};
+}
+function encodeBmp({width,height,rgba}) {
+  const rowSize=Math.floor((24*width+31)/32)*4, header=54, imageSize=rowSize*height, out=Buffer.alloc(header+imageSize);
+  out.write('BM',0);out.writeUInt32LE(out.length,2);out.writeUInt32LE(header,10);out.writeUInt32LE(40,14);out.writeInt32LE(width,18);out.writeInt32LE(-height,22);out.writeUInt16LE(1,26);out.writeUInt16LE(24,28);out.writeUInt32LE(0,30);out.writeUInt32LE(imageSize,34);out.writeInt32LE(2835,38);out.writeInt32LE(2835,42);
+  for(let y=0;y<height;y++) for(let x=0;x<width;x++){const s=(y*width+x)*4,d=header+y*rowSize+x*3;out[d]=rgba[s+2];out[d+1]=rgba[s+1];out[d+2]=rgba[s];}
+  return out;
+}
+
+function redactRgba(img, rects, padding=4) {
+  const {width,height,rgba}=img;
+  for (const r of rects) {
+    const x0=clamp(Math.floor(r.x0-padding),0,width), y0=clamp(Math.floor(r.y0-padding),0,height), x1=clamp(Math.ceil(r.x1+padding),0,width), y1=clamp(Math.ceil(r.y1+padding),0,height);
+    for(let y=y0;y<y1;y++) for(let x=x0;x<x1;x++){const i=(y*width+x)*4;rgba[i]=0;rgba[i+1]=0;rgba[i+2]=0;rgba[i+3]=255;}
+  }
+  return img;
+}
+
+function stripJpegMetadata(buf) {
+  if (buf.length<4 || buf[0]!==0xff || buf[1]!==0xd8) throw new ImageSafetyError('JPEG-Signatur ungültig.');
+  const parts=[buf.subarray(0,2)]; let p=2;
+  while (p<buf.length) {
+    if (buf[p]!==0xff) { parts.push(buf.subarray(p)); break; }
+    let q=p; while(q<buf.length&&buf[q]===0xff) q++; if(q>=buf.length) break;
+    const marker=buf[q];
+    if(marker===0xda){parts.push(buf.subarray(p));break;} // SOS + compressed payload
+    if(marker===0xd9){parts.push(buf.subarray(p,q+1));break;}
+    if((marker>=0xd0&&marker<=0xd7)||marker===0x01){parts.push(buf.subarray(p,q+1));p=q+1;continue;}
+    if(q+2>=buf.length) throw new ImageSafetyError('JPEG-Segment unvollständig.');
+    const len=buf.readUInt16BE(q+1); const end=q+1+len; if(len<2||end>buf.length) throw new ImageSafetyError('JPEG-Segment ungültig.');
+    const isMeta=(marker>=0xe0&&marker<=0xef)||marker===0xfe;
+    if(!isMeta) parts.push(buf.subarray(p,end));
+    p=end;
+  }
+  return Buffer.concat(parts);
+}
+
+function flattenWords(ocr) {
+  const words=[];
+  const blocks=ocr?.blocks || ocr?.data?.blocks || [];
+  for(const b of blocks||[]) for(const p of b?.paragraphs||[]) for(const l of p?.lines||[]) for(const w of l?.words||[]) {
+    const text=String(w?.text||'').trim(); const box=w?.bbox; if(text&&box&&Number.isFinite(box.x0)) words.push({text,bbox:{x0:box.x0,y0:box.y0,x1:box.x1,y1:box.y1}});
+  }
+  if(!words.length && Array.isArray(ocr?.words)) for(const w of ocr.words){const text=String(w?.text||'').trim(),box=w?.bbox;if(text&&box)words.push({text,bbox:box});}
+  let text='';
+  for(const w of words){if(text)text+=' ';w.start=text.length;text+=w.text;w.end=text.length;}
+  return {text,words};
+}
+function entityRects(entities, words) {
+  const rects=[];
+  for(const e of entities||[]){const s=Number(e.start),t=Number(e.end);if(!Number.isFinite(s)||!Number.isFinite(t))continue;for(const w of words)if(w.end>s&&w.start<t)rects.push(w.bbox);}
+  // Merge only exact duplicates; broad merges can hide too much diagram content.
+  const seen=new Set(); return rects.filter(r=>{const k=`${r.x0},${r.y0},${r.x1},${r.y1}`;if(seen.has(k))return false;seen.add(k);return true;});
+}
+function minOcrCharsFor(profile, mode) {
+  if(mode==='balanced') return 0;
+  if(profile==='contract') return 20;
+  if(profile==='customer') return 12;
+  if(profile==='general') return 12;
+  return Number.POSITIVE_INFINITY; // applicant: no images
+}
+function normalizeMime(att) {
+  let m=String(att?.mimeType||'').toLowerCase();
+  if(m==='image/jpg')m='image/jpeg';
+  if(!m.startsWith('image/')){
+    const e=String(att?.extension||'').toLowerCase();
+    m={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',bmp:'image/bmp',gif:'image/gif',webp:'image/webp',tif:'image/tiff',tiff:'image/tiff'}[e]||m;
+  }
+  return m;
+}
+function extForMime(m){return {'image/png':'png','image/jpeg':'jpg','image/bmp':'bmp','image/gif':'gif','image/webp':'webp','image/tiff':'tiff'}[m]||'bin';}
+function reencodeMetadataFree(buf,mime){if(mime==='image/png')return encodePng(decodePng(buf));if(mime==='image/bmp')return encodeBmp(decodeBmp(buf));if(mime==='image/jpeg')return stripJpegMetadata(buf);throw new ImageSafetyError('Bildformat kann nicht metadata-frei geschrieben werden.');}
+function redactEditable(buf,mime,rects){if(mime==='image/png')return encodePng(redactRgba(decodePng(buf),rects));if(mime==='image/bmp')return encodeBmp(redactRgba(decodeBmp(buf),rects));throw new ImageSafetyError('Bildformat kann nicht lokal geschwärzt werden.');}
+
+/**
+ * Sanitize one Of
