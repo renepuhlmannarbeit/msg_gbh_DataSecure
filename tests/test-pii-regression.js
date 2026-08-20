@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('assert');const fs=require('fs');const path=require('path');
+const {parseOoxml}=require('../server/ooxml');const pii=require('../server/pii-engine');const gw=require('../server/gateway');const fx=path.join(__dirname,'fixtures');
+const md=parseOoxml(fs.readFileSync(path.join(fx,'synthetic_profile.docx')),'.docx').markdown;assert.equal(gw._test.detectProfileFromMarkdown(md),'personnel_profile');let a=pii.anonymize(md,'personnel_profile');for(const x of ['MAX MUSTERMANN','Beispiel Consulting GmbH','Kunde Alpha GmbH','Köln'])assert(!a.text.toLowerCase().includes(x.toLowerCase()));for(const keep of ['Product Owner','Business Analyst','Skillset'])assert(a.text.includes(keep));assert.equal(pii.scanResidual(a.text,'personnel_profile').length,0);assert(a.text.includes('[ARBEITGEBER_001]'));assert(a.text.includes('[KUNDE_001]'));assert(a.text.includes('[PROJEKT_001]'));
+a=pii.anonymize('| Kunde | Max Mustermann |\n| E-Mail | max@example.de |','customer');assert(!a.text.includes('Max Mustermann'));assert(!a.text.includes('max@example.de'));assert.equal(pii.scanResidual(a.text,'customer').length,0);
+a=pii.anonymize('Vertrag zwischen Alpha GmbH und Max Mustermann. E-Mail max@example.de','contract');assert(!a.text.includes('Alpha GmbH'));assert(!a.text.includes('Max Mustermann'));assert(!a.text.includes('max@example.de'));
+// Regression: names in running prose and e-mail domains must not survive or be partially rewritten.
+a=pii.anonymize('Bewerbung von Max Mustermann. E-Mail: max@example.de. Senior Consultant bei Example GmbH.','applicant');assert(!a.text.includes('Max Mustermann'));assert(!a.text.includes('max@example.de'));assert(!a.text.includes('max@[ORGANISATION_'));assert(a.text.includes('[PERSON_001]'));assert(a.text.includes('[EMAIL_REDACTED]'));
+a=pii.anonymize('Vertragspartei Max Mustermann, E-Mail max@example.de. Example GmbH liefert.','contract');assert(!a.text.includes('Max Mustermann'));assert(!a.text.includes('max@example.de'));assert(a.text.includes('Vertragspartei [PERSON_001]'));
+console.log('PASS pii regression');
