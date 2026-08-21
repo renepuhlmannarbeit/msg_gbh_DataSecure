@@ -171,6 +171,30 @@ async function main() {
     assert.strictEqual(result.stdout, value);
   });
 
+  await testAsync('the real Windows review form initializes and returns its selected redaction', async () => {
+    if (process.platform !== 'win32') return;
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const anonymized = 'Kontakt: [PERSON_001]\nInterner Alias: Blauwal\nRolle: Lösungsarchitektin';
+    const alias = 'Blauwal';
+    const aliasStart = anonymized.indexOf(alias);
+    const draft = buildReviewDraft('Kontakt: Erika Musterfrau\nInterner Alias: Blauwal\nRolle: Lösungsarchitektin', anonymized, 'customer');
+    const nonInteractiveScript = powershellReviewScript().replace(
+      '[void]$form.ShowDialog()',
+      `$form.Add_Shown({ $right.Select(${aliasStart}, ${alias.length}); $redact.PerformClick(); $approve.PerformClick() }); [void]$form.ShowDialog()`
+    );
+    const result = childProcess.spawnSync(
+      powershell,
+      ['-NoProfile', '-NonInteractive', '-Sta', '-Command', nonInteractiveScript],
+      { input: JSON.stringify(draft), encoding: 'utf8', windowsHide: true, shell: false }
+    );
+    assert.strictEqual(result.status, 0, String(result.stderr || ''));
+    const answer = JSON.parse(result.stdout);
+    assert.strictEqual(answer.action, 'reviewed');
+    assert.deepStrictEqual(answer.redactions, [{ end: aliasStart + alias.length, start: aliasStart }]);
+    assert.match(applyManualRedactions(anonymized, answer.redactions), /Interner Alias: \[MANUAL_REDACTION\]/);
+    assert.match(applyManualRedactions(anonymized, answer.redactions), /Rolle: Lösungsarchitektin/);
+  });
+
   await testAsync('manual review actions can only remove selected spans', async () => {
     assert.strictEqual(
       applyManualRedactions('Rolle: Architekt; Ort: [LOCATION_REDACTED]', [{ start: 7, end: 16 }]),

@@ -52,6 +52,10 @@ The real OCR/redaction path passed on 2026-08-21 with
 `npm run test:windows-visual` on the target Windows machine. The remaining
 unchecked items still require manual acceptance.
 
+- [x] the real Windows text-review form initializes, marks a manually selected
+      synthetic alias, updates the release preview and returns the exact range
+      while preserving the professional text (automated native-form acceptance,
+      2026-08-21)
 - [ ] the plugin installs and the local MCP starts without any runtime install
 - [ ] `privacy_status` reports `visual_bridge: available`
 - [ ] the privacy folder opens
