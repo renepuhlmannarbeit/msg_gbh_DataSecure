@@ -7,4 +7,5 @@ const {listOutputs,readOutput,listAssets,readAsset}=require('./gateway/package-s
 const {listReviewItems,approveReviewAsset}=require('./gateway/review');
 const {prepareVisual,processVisuals}=require('./gateway/visuals');
 const {anonymizeMarkdown}=require('./gateway/compliance');
-module.exports={SafeError,roots,genericStatus,openFolder,anonymizeNext,listOutputs,readOutput,listAssets,readAsset,listReviewItems,approveReviewAsset,_test:{detectProfileFromMarkdown,safePackageId,prepareVisual,anonymizeMarkdown,processVisuals}};
+const {cleanupLocalData,retentionStatus,purgeLocalData}=require('./gateway/retention');
+module.exports={SafeError,roots,genericStatus,openFolder,anonymizeNext,listOutputs,readOutput,listAssets,readAsset,listReviewItems,approveReviewAsset,cleanupLocalData,retentionStatus,purgeLocalData,_test:{detectProfileFromMarkdown,safePackageId,prepareVisual,anonymizeMarkdown,processVisuals}};

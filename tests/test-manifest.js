@@ -71,10 +71,10 @@ test('MCPB manifest declares the fields the runtime relies on', () => {
   assert.strictEqual(mcpb.server.entry_point, 'server/index.js');
   assert.deepStrictEqual(mcpb.compatibility.platforms, ['win32']);
   assert.match(mcpb.compatibility.runtimes.node, /^>=\s*2[2-9]/);
-  for (const key of ['root_dir', 'language', 'visual_mode']) {
+  for (const key of ['root_dir', 'language', 'visual_mode', 'retention_days']) {
     assert.ok(mcpb.user_config[key], `user_config.${key} missing`);
   }
-  for (const key of ['root_dir', 'language', 'visual_mode']) {
+  for (const key of ['root_dir', 'language', 'visual_mode', 'retention_days']) {
     assert.ok(
       JSON.stringify(mcpb.server.mcp_config.env).includes(`user_config.${key}`),
       `env does not wire user_config.${key}`
@@ -139,6 +139,7 @@ test('the MCP config uses the plugin root placeholder', () => {
   assert.ok(server, 'data-secure-local server missing');
   assert.strictEqual(server.command, 'node');
   assert.deepStrictEqual(server.args, ['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
+  assert.strictEqual(server.env.EU_PRIVACY_RETENTION_DAYS, '7');
 });
 
 test('no npm runtime dependencies are declared', () => {

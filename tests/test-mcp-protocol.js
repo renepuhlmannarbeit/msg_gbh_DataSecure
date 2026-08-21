@@ -26,7 +26,8 @@ function talk(messages, { timeoutMs = 15000 } = {}) {
         EU_PRIVACY_ROOT: root,
         LOCALAPPDATA: path.join(root, 'localapp'),
         EU_PRIVACY_LANGUAGE: 'de',
-        EU_PRIVACY_VISUAL_MODE: 'strict'
+        EU_PRIVACY_VISUAL_MODE: 'strict',
+        EU_PRIVACY_RETENTION_DAYS: '7'
       }
     });
 
@@ -82,7 +83,8 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.ok(tools.length >= 11, `expected at least 11 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 12, `expected exactly 12 tools, got ${tools.length}`);
+    assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     for (const tool of tools) {
       assert.ok(tool.name, 'tool without a name');
       assert.ok(tool.description, `tool ${tool.name} has no description`);
@@ -103,7 +105,7 @@ async function main() {
     for (const name of ['privacy_status', 'read_anonymized_document', 'read_anonymized_asset', 'list_anonymized_packages']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, true, `${name} must be read only`);
     }
-    for (const name of ['anonymize_next_document', 'approve_visual_asset']) {
+    for (const name of ['anonymize_next_document', 'approve_visual_asset', 'purge_local_data']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, false, `${name} must not claim to be read only`);
     }
   });
@@ -113,6 +115,38 @@ async function main() {
     const approve = responses.find((r) => r.id === 2).result.tools.find((t) => t.name === 'approve_visual_asset');
     assert.deepStrictEqual([...approve.inputSchema.required].sort(), ['confirmed', 'review_id']);
     assert.strictEqual(approve.inputSchema.properties.confirmed.const, true, 'confirmed must be pinned to true');
+    const purge = responses.find((r) => r.id === 2).result.tools.find((t) => t.name === 'purge_local_data');
+    assert.deepStrictEqual(purge.inputSchema.required, ['confirmed']);
+    assert.strictEqual(purge.inputSchema.properties.confirmed.const, true);
+    assert.deepStrictEqual(purge.inputSchema.properties.scope.enum, ['processed', 'output', 'review', 'all']);
+  });
+
+  await testAsync('purge_local_data refuses omission and deletes only the confirmed scope', async () => {
+    const processed = path.join(root, 'Processed');
+    const output = path.join(root, 'Output');
+    fs.mkdirSync(processed, { recursive: true });
+    fs.mkdirSync(output, { recursive: true });
+    fs.writeFileSync(path.join(processed, 'purge-me.pdf'), 'local original');
+    fs.mkdirSync(path.join(output, 'keep-package'), { recursive: true });
+    fs.writeFileSync(path.join(output, 'keep-package', 'manifest.json'), '{}');
+
+    const refused = await talk([
+      rpc(1, 'tools/call', { name: 'purge_local_data', arguments: { scope: 'processed' } })
+    ]);
+    assert.strictEqual(refused.responses[0].result.isError, true);
+    assert.ok(fs.existsSync(path.join(processed, 'purge-me.pdf')));
+
+    const accepted = await talk([
+      rpc(1, 'tools/call', {
+        name: 'purge_local_data',
+        arguments: { scope: 'processed', confirmed: true }
+      })
+    ]);
+    const result = accepted.responses[0].result;
+    assert.ok(!result.isError);
+    assert.strictEqual(result.structuredContent.audit_retained, true);
+    assert.ok(!fs.existsSync(path.join(processed, 'purge-me.pdf')));
+    assert.ok(fs.existsSync(path.join(output, 'keep-package', 'manifest.json')));
   });
 
   await testAsync('tools/call privacy_status returns structured content without raw document data', async () => {

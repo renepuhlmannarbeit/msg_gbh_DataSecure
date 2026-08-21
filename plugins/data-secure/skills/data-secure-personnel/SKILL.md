@@ -1,7 +1,7 @@
 ---
 name: data-secure-personnel
 description: Use for employee, consultant, staffing, capability, CV-like internal personnel profiles, project staffing profiles, or competence profiles that should be de-identified before Claude analyzes them.
-version: 3.2.0-rc3
+version: 3.2.0-rc4
 ---
 
 # Personnel Profile Privacy

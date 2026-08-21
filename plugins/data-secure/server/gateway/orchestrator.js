@@ -17,6 +17,7 @@ const {
   detectProfileFromMarkdown
 } = require('./common');
 const { processVisuals, assetsMarkdown } = require('./visuals');
+const { cleanupLocalData, retentionDays } = require('./retention');
 const {
   anonymizeMarkdown,
   complianceHeader,
@@ -33,9 +34,25 @@ function newJobId() {
   return `${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
 }
 
+function bestEffortRetentionCleanup(deps, scope = 'all') {
+  try {
+    const cleanup = deps.cleanupLocalData || cleanupLocalData;
+    return cleanup({
+      scope,
+      now: deps.now,
+      retentionDays: deps.retentionDays,
+      removeEntry: deps.removeRetentionEntry
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function anonymizeNext(profile = 'auto', deps = {}) {
   const requested = String(profile || 'auto').toLowerCase();
   if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
+
+  bestEffortRetentionCleanup(deps);
 
   const queue = listInput();
   if (!queue.length) {
@@ -171,6 +188,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     stagePackage = null;
     processedPath = null;
 
+    // A zero-day policy removes the original and any withheld preview bytes as
+    // soon as the successful package is committed. The new Output package stays
+    // readable until the next cleanup trigger, when its directory is expired.
+    if ((deps.retentionDays ?? retentionDays()) === 0) {
+      bestEffortRetentionCleanup(deps, ['processed', 'review']);
+    }
+
     return {
       ok: true,
       profile: effective,
@@ -246,4 +270,4 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   }
 }
 
-module.exports = { anonymizeNext };
+module.exports = { anonymizeNext, bestEffortRetentionCleanup };

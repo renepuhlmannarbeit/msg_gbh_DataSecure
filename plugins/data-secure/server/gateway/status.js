@@ -5,9 +5,11 @@ const path = require('path');
 const { runtimeReady, readStatus } = require('../runtime');
 const { VERSION, listInput, listPackageDirs } = require('./common');
 const { listReviewItems } = require('./review');
+const { retentionStatus } = require('./retention');
 
-function genericStatus() {
+function genericStatus(options = {}) {
   const engine = readStatus();
+  const retention = retentionStatus(options);
   return {
     ok: true,
     version: VERSION,
@@ -22,6 +24,9 @@ function genericStatus() {
       fs.existsSync(path.join(p.full, 'manifest.json'))
     ).length,
     visual_review_items: listReviewItems().items.length,
+    retention_days: retention.retention_days,
+    retention_due_entries: retention.due_entries,
+    retention_last_cleanup: retention.last_cleanup,
     folders_ready: true,
     supported_inputs: ['PDF', 'Word (.docx)', 'Excel (.xlsx)', 'PowerPoint (.pptx)', 'TXT', 'Markdown', 'CSV'],
     runtime_dependency_install: false,

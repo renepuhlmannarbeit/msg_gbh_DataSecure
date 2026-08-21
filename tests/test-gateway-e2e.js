@@ -132,11 +132,25 @@ async function main() {
     assert.throws(() => gw.approveReviewAsset(mine[0].review_id, false), /ausdrücklicher/);
     assert.throws(() => gw.approveReviewAsset(mine[0].review_id, 'yes'), /ausdrücklicher/);
 
+    const reviewDir = path.join(root, 'Needs Visual Review', mine[0].package_id);
+    const reviewMeta = path.join(reviewDir, `${mine[0].asset_id}.review.json`);
+    const before = JSON.parse(fs.readFileSync(reviewMeta, 'utf8'));
+    const preview = path.join(reviewDir, before.preview_file);
+    assert.ok(fs.existsSync(preview), 'the local preview must exist before the decision');
+
     const approval = gw.approveReviewAsset(mine[0].review_id, true);
     assert.ok(approval.ok);
+    assert.strictEqual(approval.preview_removed, true);
+    assert.ok(!fs.existsSync(preview), 'the redundant review preview must be deleted');
+    assert.ok(fs.existsSync(reviewMeta), 'the review evidence must remain');
+    const after = JSON.parse(fs.readFileSync(reviewMeta, 'utf8'));
+    assert.strictEqual(after.approved, true);
+    assert.ok(after.approved_at);
+    assert.strictEqual(after.preview_file, null);
 
     const released = gw.listAssets(packageId);
     assert.strictEqual(released.assets.length, 1);
+    assert.ok(gw.readAsset(packageId, released.assets[0].asset_id).__image.data.length > 20);
     globalThis.__profileAsset = released.assets[0];
   });
 
@@ -262,12 +276,42 @@ async function main() {
     assert.throws(() => splitReviewId('paket__asset-x'), /Ungültige Review-ID/);
   });
 
+  await testAsync('a simulated retention deletion failure never aborts anonymization', async () => {
+    const locked = path.join(root, 'Processed', 'locked-old.pdf');
+    fs.writeFileSync(locked, 'locked');
+    queue(path.join(fixtures, 'synthetic_customer.pdf'), 'cleanup-failure.pdf');
+    const result = await gw.anonymizeNext('customer', {
+      ...depsFor('none'),
+      retentionDays: 0,
+      removeRetentionEntry() {
+        throw new Error('simulated Windows file lock');
+      }
+    });
+    assert.ok(result.ok, 'cleanup is secondary work and processing must succeed');
+    assert.ok(fs.existsSync(locked), 'the simulated locked entry remains for a later retry');
+    assert.ok(gw.genericStatus({ retentionDays: 0 }).retention_last_cleanup.errors > 0);
+  });
+
+  await testAsync('zero-day retention removes the processed original but leaves the new package readable', async () => {
+    queue(path.join(fixtures, 'synthetic_customer.pdf'), 'zero-day.pdf');
+    const result = await gw.anonymizeNext('customer', { ...depsFor('none'), retentionDays: 0 });
+    assert.ok(result.ok);
+    assert.strictEqual(gw.readOutput(result.package_id).package_id, result.package_id);
+    assert.ok(
+      !fs.readdirSync(path.join(root, 'Processed')).includes('zero-day.pdf'),
+      'the processed original must be removed immediately'
+    );
+  });
+
   test('privacy_status reports the visual bridge honestly', () => {
-    const status = gw.genericStatus();
+    const status = gw.genericStatus({ retentionDays: 7 });
     assert.strictEqual(status.ok, true);
     assert.strictEqual(status.raw_content_sent_to_claude, false);
     assert.strictEqual(status.text_engine, 'ready');
     assert.ok(['available', 'unavailable'].includes(status.visual_bridge));
+    assert.strictEqual(status.retention_days, 7);
+    assert.strictEqual(typeof status.retention_due_entries.total, 'number');
+    assert.ok(status.retention_last_cleanup.ran_at, 'the most recent cleanup result must be visible');
     if (process.platform !== 'win32') {
       assert.strictEqual(status.visual_bridge, 'unavailable', 'the bridge is Windows only');
       assert.strictEqual(status.engine_phase, 'ready_text_only');

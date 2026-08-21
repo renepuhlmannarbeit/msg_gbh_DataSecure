@@ -96,25 +96,34 @@ Document text and OCR output are data, never instructions. The server states
 this in its MCP `instructions`, and no tool interprets document content as a
 command.
 
-## Known gap: nothing is ever deleted
+## Retention and deletion
 
-The runtime has no retention logic at all. `moveProcessed()` moves every source
-document into `Processed/` and nothing removes it afterwards; every withheld
-image stays in `Needs Visual Review/` even once `approved` is set; `Output/` and
-the audit directory grow without bound.
+The runtime applies a configurable retention window to direct entries in
+`Processed/`, `Output/` and `Needs Visual Review/`; the default is seven days.
+Cleanup runs when the MCP server starts and again before every processing run.
+Expiry is based on the entry mtime, and an Output package is treated atomically
+by its directory mtime. Hidden staging directories are excluded. A locked or
+otherwise undeletable entry is recorded in `privacy_status` and does not abort
+document processing.
 
-The practical consequence is the opposite of the product's purpose: a workstation
-accumulates an unmanaged, unencrypted archive of exactly the documents the gate
-exists to protect — including applicant photos and signatures extracted out of
-CVs. Under Art. 5(1)(e) GDPR that is a storage-limitation problem, and it is not
-something a user can be expected to infer.
+For a review entry, expiry removes preview image bytes but keeps its
+`.review.json` evidence. This deliberately includes pending reviews: an
+unreviewed applicant photo must not live forever merely because nobody made a
+decision. Its package manifest continues to say `review_required`, so the
+package remains valid and the unavailable image stays fail-closed. Approval
+likewise deletes the redundant preview after copying the reviewed PNG into the
+released package.
 
-Until the runtime handles it, the mitigation is procedural and lives in
-[ANLEITUNG.md](ANLEITUNG.md) as rule 3: the user clears `Processed`,
-`Needs Visual Review` and `Output` at the end of each session. A procedural
-mitigation for a technical control is a weak substitute, so this belongs on the
-roadmap as a feature: a configurable retention window, an explicit purge tool,
-and deletion of a review preview once its asset has been released or rejected.
+`retention_days=0` removes the processed original and withheld preview bytes as
+soon as a successful run commits. The newly returned Output package remains
+readable for that response and becomes eligible at the next cleanup trigger.
+The confirmed `purge_local_data` tool can immediately clean one selected scope
+or all three.
+
+Audit records are intentionally outside both automatic retention and manual
+purge. They contain hashes and processing facts only (`raw_content_logged:
+false`), no raw values or original filenames, and remain the evidence needed to
+reconstruct what the privacy gate did.
 
 ## What this model does not claim
 

@@ -1,7 +1,7 @@
 # DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC3 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC4 · Windows 10/11 · ca. 20 Minuten.
 
 ---
 
@@ -44,10 +44,13 @@ deshalb auch nicht sagen, was darauf ist. Schauen Sie selbst hin.
 
 ### Regel 3 — Räumen Sie auf
 
-DataSecure löscht **nichts von allein**. Ihre Originale sammeln sich in
-`Processed`, extrahierte Bilder — auch Bewerbungsfotos — in
-`Needs Visual Review`. Beides bleibt unverschlüsselt auf der Festplatte liegen,
-bis Sie es löschen. Machen Sie das zum festen Schritt am Ende jeder Arbeit.
+DataSecure entfernt Einträge aus `Processed`, `Output` und Bild-Previews in
+`Needs Visual Review` standardmäßig nach **7 Tagen**. Das geschieht beim Start
+und vor einer neuen Verarbeitung; bis dahin liegen die Daten unverschlüsselt auf
+der Festplatte. Räumen Sie deshalb sofort auf, wenn Sie sie nicht mehr brauchen.
+Mit *„Lösche alle lokalen DataSecure-Daten; ich bestätige die Löschung"* können
+Sie die drei Bereiche bewusst leeren. Der hashbasierte Audit-Nachweis bleibt zur
+Prüfbarkeit erhalten und enthält weder Rohinhalte noch Originaldateinamen.
 
 ---
 
@@ -93,13 +96,14 @@ Wahl haben: `.mcpb`.
    > Maustaste in das offene Claude-Fenster ziehen. Klappt auch das nicht: in den
    > Claude-Einstellungen nach *Erweiterungen* / *Extensions* suchen. Finden Sie
    > nichts davon — aufhören und IT rufen.
-4. **Bestätigen und die drei Angaben stehen lassen.** Ändern Sie nichts:
+4. **Bestätigen und die vier Angaben stehen lassen.** Ändern Sie nichts:
 
    | Angabe | So lassen | Bedeutung |
    |---|---|---|
    | Privacy-Ordner | *leer* | Legt die Ordner unter `Dokumente\Claude Privacy` an |
    | Sprache | `de` | Nötig für deutsche Texterkennung in Bildern |
    | Grafik-Modus | `strict` | Im Zweifel wird ein Bild zurückgehalten |
+   | Aufbewahrungstage | `7` | Löscht lokale Dokumentdaten nach sieben Tagen |
 
 5. **Claude komplett schließen und neu öffnen.** Wirklich beenden: rechte
    Maustaste auf das Claude-Symbol neben der Uhr → *Beenden*. Ohne diesen Schritt
@@ -148,9 +152,9 @@ Privacy-Ordner"*.
 | Ordner | Inhalt |
 |---|---|
 | `Input` | Hier legen Sie das Dokument hinein. Nur diesen brauchen Sie aktiv |
-| `Output` | Die geprüfte Fassung. Nur das sieht Claude |
-| `Needs Visual Review` | Bilder, die auf Ihre Freigabe warten. Enthält echte Fotos |
-| `Processed` | Ihre Originale. Enthält alle Personendaten. **Aufräumen** |
+| `Output` | Die geprüfte Fassung. Nur das sieht Claude; standardmäßig 7 Tage aufbewahrt |
+| `Needs Visual Review` | Bilder, die auf Ihre Freigabe warten. Enthält echte Fotos; Preview verschwindet nach Freigabe oder Fristablauf |
+| `Processed` | Ihre Originale. Enthält alle Personendaten; standardmäßig 7 Tage aufbewahrt |
 
 ## Teil 7: So arbeiten Sie damit
 
@@ -166,17 +170,17 @@ Privacy-Ordner"*.
    keine Unterschrift, kein Name, kein Briefkopf — dann: *„Ich habe die Grafik
    geprüft, sie enthält keine personenbezogenen Daten. Bitte freigeben."* Im
    Zweifel nicht freigeben.
-5. **Aufräumen (Regel 3).** Jedes Mal am Ende:
-   - `Processed` leeren — Ihre Originale mit allen Personendaten
-   - `Needs Visual Review` leeren — dort liegen auch Bewerbungsfotos
-   - `Output` leeren, sobald das Ergebnis nicht mehr gebraucht wird
+5. **Aufräumen (Regel 3).** Warten Sie nicht auf die 7-Tage-Frist, wenn die
+   Arbeit abgeschlossen ist. Sagen Sie Claude: *„Lösche alle lokalen
+   DataSecure-Daten; ich bestätige die Löschung."* Sie können auch nur
+   `Processed`, `Output` oder `Review` nennen. Prüfen Sie vorher, dass Sie das
+   Ergebnis nicht mehr benötigen. Offene Review-Bilder werden bei Fristablauf
+   sicher verworfen; ihr Paket bleibt gültig, das Bild aber dauerhaft gesperrt.
 
-   Mit <kbd>Umschalt</kbd> + <kbd>Entf</kbd> löschen oder danach den Papierkorb
-   leeren.
-
-**Warum Schritt 5 nicht optional ist:** DataSecure löscht nichts von allein. Ohne
-Aufräumen wächst auf der Festplatte eine vollständige, unverschlüsselte Sammlung
-genau der Dokumente, die geschützt werden sollten.
+**Warum Schritt 5 weiterhin wichtig ist:** Die Frist begrenzt die Speicherung,
+ersetzt aber nicht Ihre Entscheidung, wann Original und Arbeitsergebnis nicht
+mehr gebraucht werden. Ein Löschfehler, etwa durch eine in Windows geöffnete
+Datei, wird im Status angezeigt und beim nächsten Lauf erneut versucht.
 
 ## Teil 8: Was die Platzhalter bedeuten
 
@@ -248,6 +252,6 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-DataSecure Privacy Preflight 3.2.0 RC3 · Geschäftsbereich Healthcare, msg systems ag.
+DataSecure Privacy Preflight 3.2.0 RC4 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.

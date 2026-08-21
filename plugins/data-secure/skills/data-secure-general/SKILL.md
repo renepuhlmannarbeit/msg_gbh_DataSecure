@@ -1,7 +1,7 @@
 ---
 name: data-secure-general
 description: Use for local business documents that need privacy preflight before Claude analysis when no customer, applicant, personnel, or contract profile clearly applies.
-version: 3.2.0-rc3
+version: 3.2.0-rc4
 ---
 
 # General Document Privacy

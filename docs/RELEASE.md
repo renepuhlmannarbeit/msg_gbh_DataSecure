@@ -3,7 +3,7 @@
 ## Artefacts
 
 ```bash
-npm run version:sync -- 3.2.0-rc3   # propagate a new version everywhere
+npm run version:sync -- 3.2.0-rc4   # propagate a new version everywhere
 npm test
 npm run build
 ```
@@ -56,6 +56,13 @@ pilot, verify on a target machine:
 - [ ] an EMF/WMF graphic either rasterises safely or is withheld
 - [ ] applicant and personnel visuals stay local until reviewed
 - [ ] only released Markdown and released assets are readable by Claude
+- [ ] `privacy_status` reports the configured retention window and due counts
+- [ ] an expired synthetic Processed file, Output package and pending review
+      preview are removed, while hidden staging directories and audit hashes remain
+- [ ] `purge_local_data` requires explicit confirmation and cleans only the
+      selected scope
+- [ ] with retention set to `0`, the processed original disappears immediately
+      and the newly created package is still readable
 
 If `privacy_status` reports `visual_bridge: unavailable`, the text path still
 works and every graphic is withheld — that is the intended degraded mode, not a

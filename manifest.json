@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "eu-privacy-document-gateway",
   "display_name": "EU Privacy Document Gateway",
-  "version": "3.2.0-rc3",
+  "version": "3.2.0-rc4",
   "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway: PDF/Word/Excel/PowerPoint rein, verifiziertes Markdown plus datenschutzgeprüfte oder lokal zurückgehaltene Grafiken raus.",
   "long_description": "Windows Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind im MCPB gebündelt; beim Anwender wird kein npm/Python installiert. DOCX/XLSX/PPTX werden lokal als OOXML gelesen; PDF-Textlayer werden fail-closed verarbeitet. Direkte Identifikatoren werden entfernt, Personalprofile behandeln Arbeitgeber/Kunden/Projektbezeichnungen als Quasi-Identifikatoren und behalten fachliche Skills/Rollen möglichst bei. Visuelle Assets werden lokal rasterisiert/OCR-geprüft und redigiert oder in Needs Visual Review zurückgehalten. Claude kann nur freigegebenes Markdown und freigegebene PNGs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {
@@ -21,7 +21,8 @@
       "env": {
         "EU_PRIVACY_ROOT": "${user_config.root_dir}",
         "EU_PRIVACY_LANGUAGE": "${user_config.language}",
-        "EU_PRIVACY_VISUAL_MODE": "${user_config.visual_mode}"
+        "EU_PRIVACY_VISUAL_MODE": "${user_config.visual_mode}",
+        "EU_PRIVACY_RETENTION_DAYS": "${user_config.retention_days}"
       }
     }
   },
@@ -54,6 +55,14 @@
       "title": "Grafik-Datenschutzmodus",
       "description": "strict (empfohlen) hält OCR-arme oder unsichere Grafiken lokal zur menschlichen Prüfung zurück. balanced ist weniger streng.",
       "default": "strict",
+      "required": false
+    },
+    "retention_days": {
+      "type": "number",
+      "title": "Lokale Aufbewahrungstage",
+      "description": "Anzahl Tage bis lokale verarbeitete Dateien, Ausgabepakete und Review-Previews automatisch gelöscht werden. 0 löscht nach erfolgreicher Verarbeitung so früh wie sicher möglich.",
+      "default": 7,
+      "min": 0,
       "required": false
     }
   },
@@ -101,6 +110,10 @@
     {
       "name": "open_output_folder",
       "description": "Öffnet den lokalen Output-Ordner."
+    },
+    {
+      "name": "purge_local_data",
+      "description": "Löscht bestätigte lokale Daten in Processed, Output oder Review; Audit-Nachweise bleiben erhalten."
     }
   ],
   "prompts": [

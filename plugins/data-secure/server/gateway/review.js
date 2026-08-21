@@ -52,6 +52,26 @@ function safeReviewMeta(reviewId) {
   return { dir, meta, j };
 }
 
+function removePreviewAfterDecision(dir, review) {
+  const name = String(review.preview_file || '');
+  if (!name) return true;
+  if (path.basename(name) !== name) return false;
+  const preview = path.join(dir, name);
+  try {
+    if (fs.existsSync(preview)) {
+      const stat = fs.lstatSync(preview);
+      if (stat.isSymbolicLink() || !stat.isFile()) return false;
+      fs.unlinkSync(preview);
+    }
+    review.preview_file = null;
+    review.preview_sha256 = null;
+    review.preview_removed_at = new Date().toISOString();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function approveReviewAsset(reviewId, confirmed) {
   if (confirmed !== true) {
     throw new SafeError(
@@ -118,9 +138,18 @@ function approveReviewAsset(reviewId, confirmed) {
 
   j.approved = true;
   j.approved_at = new Date().toISOString();
+  const previewRemoved = removePreviewAfterDecision(dir, j);
+  if (!previewRemoved) j.preview_cleanup_error = true;
   fs.writeFileSync(meta, JSON.stringify(j, null, 2), 'utf8');
 
-  return { ok: true, review_id: reviewId, package_id: j.package_id, asset_id: j.asset_id, approved: true };
+  return {
+    ok: true,
+    review_id: reviewId,
+    package_id: j.package_id,
+    asset_id: j.asset_id,
+    approved: true,
+    preview_removed: previewRemoved
+  };
 }
 
-module.exports = { listReviewItems, approveReviewAsset, splitReviewId };
+module.exports = { listReviewItems, approveReviewAsset, splitReviewId, removePreviewAfterDecision };
