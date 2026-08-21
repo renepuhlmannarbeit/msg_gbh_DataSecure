@@ -1,4 +1,4 @@
-# DataSecure Privacy Preflight v3.2.0 RC8
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC9
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
@@ -34,13 +34,8 @@ Wenn die Anforderung lautet, dass Rohdaten **vor** Modellverarbeitung bereinigt 
 
 ## Plugin-Komponenten
 
-- `data-secure-preflight`: Hauptworkflow und Sicherheitsgrenze
-- `data-secure-customer`: Kundendokumente
-- `data-secure-personnel`: Mitarbeiter-/Beraterprofile
-- `data-secure-applicant`: Bewerbungen/CVs
-- `data-secure-contract`: Verträge
-- `data-secure-general`: allgemeine Geschäftsdokumente
-- `data-secure-compliance`: DSGVO-/AI-Act-Governance-Hinweise
+- `gbh-datasecure-dokument-anonymisieren`: gemeinsamer Hauptworkflow mit passender Profilwahl für alle unterstützten Dokumentarten
+- `gbh-datasecure-datenschutz-erklaeren`: Schutzgrenzen, Aufbewahrung, Audit sowie DSGVO-/EU-AI-Act-Hinweise
 - lokaler MCP unter `.mcp.json`
 
 ## Unterstützte Inputs
@@ -90,8 +85,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc8.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
-- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc8.mcpb` – Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc9.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
+- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc9.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
@@ -141,6 +136,6 @@ Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für
 
 ## Release-Status
 
-RC8 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen. Weiterhin fehlen die visuelle Human-Presence-Freigabe, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+RC9 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen. Weiterhin fehlen die visuelle Human-Presence-Freigabe, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

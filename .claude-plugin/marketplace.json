@@ -1,17 +1,17 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "msg-gbh-datasecure",
-  "description": "Internal marketplace for the DataSecure privacy preflight plugin.",
+  "description": "Interner Marketplace für das lokale Datenschutz-Plugin GBH DataSecure.",
   "owner": {
-    "name": "DataSecure Internal Prototype"
+    "name": "Geschäftsbereich Healthcare, msg systems ag"
   },
   "plugins": [
     {
       "name": "data-secure",
-      "displayName": "DataSecure Privacy Preflight",
-      "description": "Local privacy preflight for PDF, Word, Excel and PowerPoint before Claude uses document content.",
+      "displayName": "GBH DataSecure – Dokumente anonymisieren",
+      "description": "Lokale Anonymisierung von PDF-, Word-, Excel-, PowerPoint- und Bilddateien, bevor Claude deren Inhalte verarbeitet.",
       "author": {
-        "name": "DataSecure Internal Prototype"
+        "name": "Geschäftsbereich Healthcare, msg systems ag"
       },
       "category": "security",
       "source": "./plugins/data-secure"

@@ -1,9 +1,9 @@
-# DataSecure einrichten
+# GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC8 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC9 · Windows 10/11 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC8 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC9 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -303,7 +303,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-DataSecure Privacy Preflight 3.2.0 RC8 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC9 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

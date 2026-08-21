@@ -1,20 +1,20 @@
 {
   "name": "data-secure",
-  "displayName": "DataSecure Privacy Preflight",
-  "version": "3.2.0-rc8",
-  "description": "Privacy preflight for local business documents and scans before Claude uses their content.",
+  "displayName": "GBH DataSecure – Dokumente anonymisieren",
+  "version": "3.2.0-rc9",
+  "description": "Lokale Anonymisierung und Datenschutzprüfung von Geschäftsdokumenten und Scans, bevor Claude deren Inhalte verarbeitet.",
   "author": {
-    "name": "DataSecure Internal Prototype"
+    "name": "Geschäftsbereich Healthcare, msg systems ag"
   },
   "license": "UNLICENSED",
   "keywords": [
-    "privacy",
+    "datenschutz",
     "gdpr",
     "dsgvo",
     "eu-ai-act",
     "pii",
-    "documents",
+    "dokumente",
     "local-mcp",
-    "preflight"
+    "anonymisierung"
   ]
 }

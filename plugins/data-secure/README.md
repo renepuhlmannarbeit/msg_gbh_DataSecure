@@ -1,29 +1,23 @@
-# DataSecure Privacy Preflight
+# GBH DataSecure – Dokumente anonymisieren
 
-Claude plugin for local privacy preflight of PDF, DOCX, XLSX, PPTX, text and standalone PNG/JPEG/BMP documents.
+Claude-Plugin zur lokalen Anonymisierung und Datenschutzprüfung von PDF-, DOCX-, XLSX-, PPTX-, Text- sowie eigenständigen PNG-, JPEG- und BMP-Dateien.
 
-The plugin combines:
+Das Plugin verbindet:
 
-- Claude Skills for routing, purpose/profile selection and governance guidance.
-- A local MCP server for the actual privacy boundary and file processing.
-- A fail-closed output model: Claude reads only released Markdown and released PNG assets.
+- zwei klar getrennte Claude-Skills für Anonymisierung und Datenschutzerklärung,
+- einen lokalen MCP-Server als technische Datenschutzgrenze und zur Dateiverarbeitung,
+- ein sicher abbrechendes Ausgabemodell: Claude liest nur freigegebenes Markdown und freigegebene PNG-Dateien.
 
-## User workflow
+## Ablauf für Anwender
 
-1. For TXT or DOCX, ask Claude to prepare a local document. DataSecure opens a
-   local file picker; on Windows it then offers a local, redaction-only review.
-2. For PDF, XLSX, PPTX, MD, CSV or images, ask Claude to open the privacy folder
-   and copy the source into `Input`.
-3. Ask Claude to anonymize/de-identify the document.
-4. Claude uses only the released Markdown and released PNG assets.
-5. Visuals that cannot be verified automatically stay local under
-   `Needs Visual Review`. This engineering build has no human visual-release
-   path, so opening the folder does not make those assets readable by Claude.
+1. Bitte Claude bei TXT oder DOCX, ein lokales Dokument vorzubereiten. DataSecure öffnet einen lokalen Dateidialog und unter Windows anschließend eine auf zusätzliche Schwärzungen begrenzte Prüfung.
+2. Bitte Claude bei PDF, XLSX, PPTX, MD, CSV oder Bildern, den Datenschutzordner zu öffnen, und kopiere die Quelldatei nach `Input`.
+3. Bitte Claude, das Dokument zu anonymisieren oder zu de-identifizieren.
+4. Claude verwendet ausschließlich freigegebenes Markdown und freigegebene PNG-Dateien.
+5. Nicht automatisch verifizierbare Grafiken bleiben lokal unter `Needs Visual Review`. Dieser Engineering-Build besitzt keinen menschlichen Freigabeweg für visuelle Inhalte; das Öffnen des Ordners macht sie für Claude nicht lesbar.
 
-The Windows text review may add `[MANUAL_REDACTION]` replacements but cannot
-freely edit professional content. Skipping the optional review does not bypass
-technical coverage, residual-PII or visual gates.
+Die Windows-Textprüfung kann zusätzliche Ersetzungen mit `[MANUAL_REDACTION]` hinzufügen, den fachlichen Inhalt aber nicht frei bearbeiten. Das Überspringen der optionalen Prüfung umgeht weder technische Abdeckungsprüfungen noch Kontrollen auf verbliebene personenbezogene Daten oder visuelle Inhalte.
 
-Do not upload or paste a raw sensitive source document directly into Claude if the goal is to prevent Claude from seeing the original content before privacy processing.
+Lade ein sensibles Original nicht direkt in Claude hoch und füge es nicht in den Chat ein, wenn Claude den Inhalt erst nach der Datenschutzverarbeitung sehen darf.
 
-This plugin does not provide legal advice, a guarantee of legal anonymization, GDPR certification, or EU AI Act certification.
+Dieses Plugin bietet keine Rechtsberatung, keine Garantie rechtlicher Anonymität und keine Zertifizierung nach DSGVO oder EU AI Act.

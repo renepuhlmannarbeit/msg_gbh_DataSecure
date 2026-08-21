@@ -87,8 +87,8 @@ async function main() {
     assert.strictEqual(r.result.serverInfo.name, 'eu-privacy-document-gateway');
     assert.ok(r.result.capabilities.tools, 'tools capability must be advertised');
     assert.ok(r.result.capabilities.prompts, 'prompts capability must be advertised');
-    assert.match(r.result.instructions, /untrusted data/i, 'prompt-injection guidance must be sent');
-    assert.match(r.result.instructions, /Do not claim legal anonymity/i);
+    assert.match(r.result.instructions, /nicht vertrauenswürdige Daten/i, 'prompt-injection guidance must be sent');
+    assert.match(r.result.instructions, /keine rechtssichere Anonymität/i);
   });
 
   await testAsync('an unknown protocol version falls back to a supported one', async () => {
@@ -100,20 +100,20 @@ async function main() {
     const { responses } = await talk([rpc(1, 'initialize', {})]);
     const instructions = responses[0].result.instructions;
     assert.match(instructions, /purge_local_data/);
-    assert.match(instructions, /explicit scope and confirmation/i);
+    assert.match(instructions, /ausdrücklich genannten Umfang und eine ausdrückliche Bestätigung/i);
     assert.match(instructions, /confirmed=true/);
-    assert.match(instructions, /Processed originals/);
+    assert.match(instructions, /Verarbeitete Originale/);
     assert.match(instructions, /retention_days=0/);
-    assert.match(instructions, /exposes no visual approval tool/i);
-    assert.match(instructions, /model-controlled boolean is not human-presence evidence/i);
-    assert.match(instructions, /metadata-only audit receipt is intentionally retained/i);
-    assert.match(instructions, /without document hashes, exact file sizes, paths, filenames or raw values/i);
-    assert.match(instructions, /untrusted data/i);
-    assert.match(instructions, /Do not claim legal anonymity/i);
-    assert.match(instructions, /does not authorize automated ranking/i);
-    assert.match(instructions, /recognised image text may appear/i);
-    assert.match(instructions, /explicit profile/i);
-    assert.match(instructions, /image-only content before local OCR/i);
+    assert.match(instructions, /kein visuelles Freigabewerkzeug/i);
+    assert.match(instructions, /vom Modell gesteuerter Wahrheitswert keine menschliche Handlung belegt/i);
+    assert.match(instructions, /metadatenbasierter Audit-Nachweis bleibt absichtlich/i);
+    assert.match(instructions, /ohne Dokument-Hashes, exakte Dateigrößen, Pfade, Dateinamen oder Rohwerte/i);
+    assert.match(instructions, /nicht vertrauenswürdige Daten/i);
+    assert.match(instructions, /keine rechtssichere Anonymität/i);
+    assert.match(instructions, /erlaubt kein automatisches Ranking/i);
+    assert.match(instructions, /Erkannter Bildtext darf/i);
+    assert.match(instructions, /ausdrücklich gewähltes Profil/i);
+    assert.match(instructions, /reine Bildinhalte vor der lokalen OCR/i);
   });
 
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {

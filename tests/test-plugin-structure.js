@@ -22,14 +22,14 @@ assert.strictEqual(mcp['data-secure-local'].command,'node');
 assert.deepStrictEqual(mcp['data-secure-local'].args,['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
 
 const requiredSkills=[
-  'data-secure-preflight',
-  'data-secure-personnel',
-  'data-secure-applicant',
-  'data-secure-customer',
-  'data-secure-contract',
-  'data-secure-compliance',
-  'data-secure-general'
+  'gbh-datasecure-dokument-anonymisieren',
+  'gbh-datasecure-datenschutz-erklaeren'
 ];
+assert.deepStrictEqual(
+  fs.readdirSync(path.join(pluginRoot,'skills')).sort(),
+  [...requiredSkills].sort(),
+  'plugin must expose exactly the consolidated GBH DataSecure skills'
+);
 const skillTexts=[];
 for(const skill of requiredSkills){
   const p=path.join(pluginRoot,'skills',skill,'SKILL.md');
@@ -41,10 +41,13 @@ for(const skill of requiredSkills){
   assert.ok(/^---\r?\n/.test(text),`${skill} missing frontmatter`);
 }
 
-const preflight=fs.readFileSync(path.join(pluginRoot,'skills','data-secure-preflight','SKILL.md'),'utf8');
-assert.match(preflight,/do \*\*not\*\* ask the user to paste or upload the original document/i);
+const preflight=fs.readFileSync(path.join(pluginRoot,'skills','gbh-datasecure-dokument-anonymisieren','SKILL.md'),'utf8');
+assert.match(preflight,/fordere den Anwender \*\*nicht\*\* auf,[^\n]*(?:einzufügen|hochzuladen)/i);
 assert.match(preflight,/read_anonymized_document/);
 assert.match(preflight,/read_anonymized_asset/);
+for(const profile of ['customer','applicant','personnel_profile','contract','general']){
+  assert.match(preflight,new RegExp(`\\b${profile}\\b`),`missing profile guidance for ${profile}`);
+}
 
 // Agent/runtime coupling: a tool may not ship unless Claude is told how to use
 // it, or this test contains an explicit, reviewed reason why no instruction is
@@ -72,8 +75,8 @@ for(const name of toolNames){
   assert.ok(instructed||toolInstructionExceptions[name],`${name} has no agent-layer instruction or justified exception`);
 }
 
-assert.match(agentGuidance,/purge_local_data[\s\S]{0,300}explicit[^\n]*confirm/i);
-assert.match(agentGuidance,/retention_days=0[\s\S]{0,160}(?:disable|unavailable)/i);
-assert.match(agentGuidance,/metadata-only audit receipt[\s\S]{0,220}(?:outside retention|remains|retained)/i);
+assert.match(agentGuidance,/purge_local_data[\s\S]{0,400}(?:ausdrücklich|explicit)[^\n]*(?:Bestätigung|confirm)/i);
+assert.match(agentGuidance,/retention_days=0[\s\S]{0,240}(?:nicht verfügbar|deaktiviert|disable|unavailable)/i);
+assert.match(agentGuidance,/(?:metadatenbasierter Audit-Nachweis|metadata-only audit receipt)[\s\S]{0,260}(?:außerhalb|bestehen|bleibt|retained)/i);
 
 console.log('PLUGIN STRUCTURE PASS');
