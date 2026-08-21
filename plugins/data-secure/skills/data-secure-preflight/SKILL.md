@@ -1,7 +1,7 @@
 ---
 name: data-secure-preflight
-description: Use this skill when the user wants to anonymize, pseudonymize, de-identify, privacy-check, or safely analyze a local PDF, DOCX, XLSX, PPTX, TXT, MD or CSV before Claude sees the source content.
-version: 3.2.0-rc7
+description: Use this skill when the user wants to anonymize, pseudonymize, de-identify, privacy-check, or safely analyze a local PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, PNG, JPEG or BMP before Claude sees the source content.
+version: 3.2.0-rc8
 ---
 
 # DataSecure Privacy Preflight

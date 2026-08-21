@@ -22,7 +22,7 @@ Rolle: Product Owner
 
 ### [KUNDE_001] – [PROJEKT_001]
 
-Zeitraum: 2024–2026
+Zeitraum: 01/2024 – 08/2026
 Rolle im Projekt: Business Analyst / Product Owner
 Branche: Logistik
 
@@ -48,7 +48,7 @@ Mitarbeiternummer: [ID_REDACTED]
 
 ### [KUNDE_002] – [PROJEKT_002]
 
-Zeitraum: 2022–2023
+Zeitraum: 05/2022 – 12/2023
 Rolle: Product Owner
 Standort des Projekts: [LOCATION_REDACTED]
 

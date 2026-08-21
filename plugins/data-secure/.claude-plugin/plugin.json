@@ -1,8 +1,8 @@
 {
   "name": "data-secure",
   "displayName": "DataSecure Privacy Preflight",
-  "version": "3.2.0-rc7",
-  "description": "Privacy preflight for local business documents before Claude uses their content.",
+  "version": "3.2.0-rc8",
+  "description": "Privacy preflight for local business documents and scans before Claude uses their content.",
   "author": {
     "name": "DataSecure Internal Prototype"
   },

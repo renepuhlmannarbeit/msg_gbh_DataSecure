@@ -86,6 +86,12 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     claimed = true;
 
     const converted = await convertDocument(source);
+    if (requested === 'auto' && converted.requiresExplicitProfile) {
+      throw new SafeError(
+        'Für reine Bild-/Scan-Eingaben muss das Datenschutzprofil ausdrücklich gewählt werden; ' +
+          'die automatische Profilerkennung erhält vor der lokalen OCR keinen Dokumenttext.'
+      );
+    }
     if (converted.markdown.length > MAX_TEXT_CHARS) {
       throw new SafeError('Extrahierter Dokumenttext ist zu groß.');
     }

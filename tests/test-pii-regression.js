@@ -52,9 +52,9 @@ test('personnel profile matches the golden expected output byte for byte', () =>
   const src = fs.readFileSync(goldenSource, 'utf8');
   const actual = anonymize(src, 'personnel_profile').text;
 
-  if (process.env.UPDATE_EXPECTED === '1') {
+  if (process.argv.includes('--update')) {
     fs.writeFileSync(goldenExpected, actual, 'utf8');
-    console.log('       (golden file rewritten because UPDATE_EXPECTED=1)');
+    console.log('       (golden file rewritten because --update was passed)');
   }
 
   const expected = fs.readFileSync(goldenExpected, 'utf8');
@@ -90,6 +90,18 @@ test('golden run removes every synthetic direct identifier', () => {
     assertAbsent(text, value, 'identifier');
   }
   assert.deepStrictEqual(residual, [], 'residual gate must be clean');
+});
+
+test('business project periods stay exact while labelled birth dates are removed', () => {
+  const src = [
+    'ERIKA BEISPIEL',
+    'Zeitraum: 01/2024 – 08/2026',
+    'Geburtsdatum: 14.03.1987'
+  ].join('\n');
+  const { text } = anonymizeVerified(src, 'personnel_profile');
+  assertPresent(text, 'Zeitraum: 01/2024 – 08/2026', 'business period');
+  assertAbsent(text, '14.03.1987', 'birth date');
+  assertPresent(text, '[DATE_REDACTED]', 'birth-date placeholder');
 });
 
 test('golden run preserves the professional content', () => {

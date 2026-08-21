@@ -16,6 +16,7 @@ function blankPng(w = 300, h = 120) {
 }
 
 const img = blankPng();
+fs.writeFileSync(path.join(root, 'synthetic_scan.png'), img);
 
 const docxBody = [
   '<w:p><w:r><w:t>Unternehmen: Beispiel Consulting GmbH</w:t></w:r></w:p>',
@@ -88,5 +89,15 @@ const pdf =
   `4 0 obj << /Length ${pdfContent.length} >> stream\n${pdfContent}\nendstream endobj\n` +
   '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n%%EOF\n';
 fs.writeFileSync(path.join(root, 'synthetic_customer.pdf'), Buffer.from(pdf, 'latin1'));
+
+const jpegMarker = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+const scannedPdf = Buffer.from(
+  '%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n' +
+    `2 0 obj << /Subtype /Image /Filter /DCTDecode /Length ${jpegMarker.length} >> stream\n` +
+    jpegMarker.toString('latin1') +
+    '\nendstream endobj\n%%EOF\n',
+  'latin1'
+);
+fs.writeFileSync(path.join(root, 'synthetic_scan.pdf'), scannedPdf);
 
 console.log('fixtures created', root);

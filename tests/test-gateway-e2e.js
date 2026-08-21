@@ -53,6 +53,13 @@ function queue(src, name) {
   return dest;
 }
 
+function queueBuffer(name, data) {
+  fs.mkdirSync(path.join(root, 'Input'), { recursive: true });
+  const dest = path.join(root, 'Input', name);
+  fs.writeFileSync(dest, data);
+  return dest;
+}
+
 function readPackage(result) {
   const dir = path.join(root, 'Output', result.package_id);
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
@@ -102,6 +109,46 @@ async function main() {
     const { markdown } = readPackage(result);
     assertAbsent(markdown, 'Max Mustermann', 'customer name');
     assertAbsent(markdown, 'max@example.de', 'mail address');
+  });
+
+  await testAsync('a standalone PNG is OCR-redacted and packaged without exposing raw pixels', async () => {
+    queueBuffer('synthetic-scan.png', blankPng);
+    const result = await gw.anonymizeNext('customer', depsFor('pii'));
+    assert.ok(result.ok);
+    assert.strictEqual(result.visual_assets.included, 1);
+    assert.ok(result.visual_assets.redactions > 0);
+    const { markdown } = readPackage(result);
+    assertAbsent(markdown, 'Max Mustermann', 'OCR name');
+    assertAbsent(markdown, 'max@example.de', 'OCR email');
+    assertPresent(markdown, '[PERSON_001]', 'OCR person placeholder');
+  });
+
+  await testAsync('an image-only input requires an explicit profile instead of guessing before OCR', async () => {
+    const src = queueBuffer('auto-profile-scan.png', blankPng);
+    await assert.rejects(
+      () => gw.anonymizeNext('auto', depsFor('pii')),
+      /Datenschutzprofil ausdrücklich gewählt/
+    );
+    assert.ok(fs.existsSync(src), 'the image must be restored to Input after the fail-closed stop');
+    fs.unlinkSync(src);
+  });
+
+  await testAsync('a scanned PDF with an embedded JPEG uses the same OCR privacy gate', async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const scan = Buffer.from(
+      '%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n' +
+        `2 0 obj << /Subtype /Image /Filter /DCTDecode /Length ${jpeg.length} >> stream\n` +
+        jpeg.toString('latin1') +
+        '\nendstream endobj\n%%EOF\n',
+      'latin1'
+    );
+    queueBuffer('synthetic-scan.pdf', scan);
+    const result = await gw.anonymizeNext('customer', depsFor('pii'));
+    assert.ok(result.ok);
+    assert.strictEqual(result.visual_assets.included, 1);
+    const { markdown } = readPackage(result);
+    assertAbsent(markdown, 'Max Mustermann', 'scanned PDF OCR name');
+    assertPresent(markdown, '[PERSON_001]', 'scanned PDF OCR placeholder');
   });
 
   await testAsync('a DOCX profile is auto-detected and its visual is withheld', async () => {

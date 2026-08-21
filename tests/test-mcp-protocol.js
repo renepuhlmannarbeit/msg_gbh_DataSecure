@@ -94,6 +94,8 @@ async function main() {
     assert.match(instructions, /Do not claim legal anonymity/i);
     assert.match(instructions, /does not authorize automated ranking/i);
     assert.match(instructions, /recognised text may appear/i);
+    assert.match(instructions, /explicit profile/i);
+    assert.match(instructions, /image-only content before local OCR/i);
   });
 
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {

@@ -1,6 +1,6 @@
 # DataSecure Privacy Preflight
 
-Claude plugin for local privacy preflight of PDF, DOCX, XLSX and PPTX documents.
+Claude plugin for local privacy preflight of PDF, DOCX, XLSX, PPTX, text and standalone PNG/JPEG/BMP documents.
 
 The plugin combines:
 

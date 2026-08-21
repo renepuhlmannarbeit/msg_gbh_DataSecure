@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc7",
+  "version": "3.2.0-rc8",
   "private": true,
   "description": "Claude plugin and standalone MCPB for local document privacy preflight on Windows",
   "main": "plugins/data-secure/server/index.js",
@@ -11,7 +11,9 @@
   "scripts": {
     "fixtures": "node tests/make-fixtures.js",
     "test": "npm run fixtures && node tests/test-manifest.js && node tests/test-plugin-structure.js && node tests/test-parsers.js && node tests/test-pii-regression.js && node tests/test-image-sanitizer.js && node tests/test-visual.js && node tests/test-retention.js && node tests/test-gateway-e2e.js && node tests/test-mcp-protocol.js && node tests/test-adversarial.js && node tests/exploratory-review-20.js",
-    "test:golden": "node tests/make-fixtures.js && UPDATE_EXPECTED=1 node tests/test-pii-regression.js",
+    "test:golden": "node tests/make-fixtures.js && node tests/test-pii-regression.js --update",
+    "benchmark:pii-shield": "node scripts/benchmark-pii-shield.mjs",
+    "test:windows-visual": "node tests/windows-visual-acceptance.js",
     "version:sync": "node scripts/set-version.mjs",
     "build:plugin": "node scripts/build-plugin.mjs",
     "build:mcpb": "node scripts/build-mcpb.mjs",

@@ -3,7 +3,7 @@
 ## Artefacts
 
 ```bash
-npm run version:sync -- 3.2.0-rc7   # propagate a new version everywhere
+npm run version:sync -- 3.2.0-rc8   # propagate a new version everywhere
 npm test
 npm run build
 ```
@@ -48,11 +48,15 @@ Do not mark a build production-ready until all of these hold:
 The bridges to Windows OCR and rasterisation cannot be exercised in CI. Before a
 pilot, verify on a target machine:
 
+The real OCR/redaction path passed on 2026-08-21 with
+`npm run test:windows-visual` on the target Windows machine. The remaining
+unchecked items still require manual acceptance.
+
 - [ ] the plugin installs and the local MCP starts without any runtime install
 - [ ] `privacy_status` reports `visual_bridge: available`
 - [ ] the privacy folder opens
 - [ ] DOCX, XLSX, PPTX and PDF preflight work on synthetic files
-- [ ] a scanned image is OCR'd, and PII inside it is blacked out
+- [x] a scanned image is OCR'd, and PII inside it is blacked out
 - [ ] an EMF/WMF graphic either rasterises safely or is withheld
 - [ ] applicant and personnel visuals stay local until reviewed
 - [ ] only released Markdown and released assets are readable by Claude

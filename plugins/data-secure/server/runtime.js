@@ -86,6 +86,26 @@ async function convertDocument(source) {
         warnings: []
       });
     }
+    if (['.png', '.jpg', '.jpeg', '.bmp'].includes(ext)) {
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg';
+      return normalized({
+        markdown:
+          '# Bildinhalt\n\n' +
+          '> Der fachliche Bildtext wird lokal per OCR extrahiert und durch dieselbe Datenschutzprüfung verarbeitet.',
+        attachments: [
+          {
+            type: 'image',
+            mimeType,
+            data: buf.toString('base64'),
+            name: path.basename(source),
+            extension: ext.slice(1),
+            source_part: 'standalone-image'
+          }
+        ],
+        warnings: [],
+        requiresExplicitProfile: true
+      });
+    }
     throw new SafeError('Nicht unterstütztes Format.');
   } catch (e) {
     if (e instanceof SafeError) throw e;

@@ -47,7 +47,8 @@ function parsePdf(buffer) {
   }
   if(!textParts.length){const strings=extractStrings(bin);if(strings.length)textParts.push(strings.join(' '));}
   const text=textParts.join('\n\n').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]+/g,' ').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
-  if(!text)throw new Error('PDF hat keinen sicher extrahierbaren Textlayer. Scan-/komplexe PDFs werden fail-closed gestoppt.');
+  if(!text&&attachments.length){return {markdown:'# PDF-Scan\n\n> Der Seiteninhalt wird lokal per OCR extrahiert und durch dieselbe Datenschutzprüfung verarbeitet.',attachments,warnings:['PDF besitzt keinen Textlayer; eingebettete JPEG-Bilder werden ausschließlich über den lokalen Visual-/OCR-Gate verarbeitet.'],unreviewedVisualCount:Math.max(0,imageCount-attachments.length),requiresExplicitProfile:true};}
+  if(!text)throw new Error('PDF hat keinen sicher extrahierbaren Textlayer und keine sicher extrahierbaren JPEG-Bilder. Verarbeitung wurde fail-closed gestoppt.');
   const warnings=[]; if(imageCount>attachments.length)warnings.push(`PDF enthält ${imageCount-attachments.length} visuelle Bildobjekte, die nicht als JPEG sicher extrahiert werden konnten.`);
   return {markdown:`# PDF-Inhalt\n\n${text}`,attachments,warnings,unreviewedVisualCount:Math.max(0,imageCount-attachments.length)};
 }

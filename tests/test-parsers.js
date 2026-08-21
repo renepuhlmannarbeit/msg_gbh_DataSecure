@@ -188,6 +188,22 @@ test('a PDF without an extractable text layer fails closed', () => {
   assert.throws(() => parsePdf(scanned), (e) => e instanceof Error);
 });
 
+test('a scanned PDF with an embedded JPEG is routed to the visual privacy gate', () => {
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const scanned = Buffer.from(
+    '%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n' +
+      `2 0 obj << /Subtype /Image /Filter /DCTDecode /Length ${jpeg.length} >> stream\n` +
+      jpeg.toString('latin1') +
+      '\nendstream endobj\n%%EOF\n',
+    'latin1'
+  );
+  const result = parsePdf(scanned);
+  assertPresent(result.markdown, 'PDF-Scan', 'scan marker');
+  assert.strictEqual(result.attachments.length, 1);
+  assert.strictEqual(result.attachments[0].mimeType, 'image/jpeg');
+  assert.strictEqual(result.requiresExplicitProfile, true);
+});
+
 // ---------------------------------------------------------------------------
 // Plain formats and dispatch
 // ---------------------------------------------------------------------------
@@ -206,7 +222,17 @@ async function main() {
   const result = await convertDocument(file);
   assertPresent(result.markdown, '```csv', 'code fence');
   assertPresent(result.markdown, 'Max;Köln', 'csv row');
-});
+  });
+
+  await testAsync('standalone PNG images are routed to the visual privacy gate', async () => {
+    const png = encodePng({ width: 8, height: 8, rgba: Buffer.alloc(8 * 8 * 4, 255) });
+    const file = write('scan.png', png);
+    const result = await convertDocument(file);
+    assertPresent(result.markdown, 'Bildinhalt', 'image marker');
+    assert.strictEqual(result.attachments.length, 1);
+    assert.strictEqual(result.attachments[0].mimeType, 'image/png');
+    assert.strictEqual(result.requiresExplicitProfile, true);
+  });
 
   await testAsync('a CSV that contains a fence cannot break out of the code block', async () => {
   const file = write('inject.csv', 'a;b\n```\n# Überschrift\n');

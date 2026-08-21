@@ -1,4 +1,4 @@
-# DataSecure Privacy Preflight v3.2.0 RC7
+# DataSecure Privacy Preflight v3.2.0 RC8
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
@@ -9,7 +9,7 @@ Anthropic unterstützt Plugins in Claude Chat (Web und Desktop) sowie Cowork. Sk
 ## Zielworkflow
 
 ```text
-PDF / DOCX / XLSX / PPTX
+PDF / DOCX / XLSX / PPTX / PNG / JPEG / BMP
           ↓
    lokaler Privacy-MCP
           ↓
@@ -39,11 +39,12 @@ Wenn die Anforderung lautet, dass Rohdaten **vor** Modellverarbeitung bereinigt 
 
 ## Unterstützte Inputs
 
-- PDF mit extrahierbarem Textlayer; komplexe/Scan-PDFs fail-closed
+- PDF mit extrahierbarem Textlayer; reine Scans mit extrahierbaren JPEG-Seitenbildern laufen über OCR, andere komplexe Scans fail-closed
 - DOCX
 - XLSX
 - PPTX
 - TXT, MD, CSV
+- PNG, JPEG und BMP als eigenständige Bild-/Scan-Dateien
 
 ## Privacy-Profile
 
@@ -83,8 +84,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc7.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
-- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc7.mcpb` – Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc8.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
+- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc8.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
 `plugins/data-secure` ist der kanonische Produktbaum: Runtime (`server/`), Windows-Helper (`scripts/`) und Skills liegen dort. Der Build ersetzt nichts — was ein Marketplace-Install direkt aus dem Repository auflöst, ist identisch mit dem ZIP-Inhalt. Gepackt wird mit einem ZIP-Writer auf `node:zlib`, dadurch läuft `npm run build` unter Windows und unter Linux-CI ohne externes `zip`-Binary. Endanwender führen weder npm noch Python aus.
 
@@ -94,7 +95,7 @@ Erzeugt werden:
 npm test
 ```
 
-222 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+228 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -116,10 +117,10 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 
 Für einen organisationsweit über GitHub synchronisierten Claude-Plugin-Marketplace muss das Repository laut aktueller Claude-Dokumentation **private oder internal** sein. Diese Voraussetzung ist erfüllt: das Repository ist privat.
 
-Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für den Pilot und die GitHub-Synchronisierung für den Organisations-Rollout. Vor dem Rollout fehlt noch die Marketplace-Abnahme und die Windows-Abnahme der OCR-/Rasterisierungs-Bridge; Checkliste in [docs/RELEASE.md](docs/RELEASE.md).
+Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für den Pilot und die GitHub-Synchronisierung für den Organisations-Rollout. Vor dem Rollout fehlen noch die Marketplace-Abnahme und die Windows-Abnahme der EMF/WMF-Rasterisierung; die reale Windows-OCR-Abnahme ist am 21.08.2026 bestanden. Checkliste in [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Release-Status
 
-RC7 ist für Pilot/Abnahme vorgesehen. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+RC8 ist für Pilot/Abnahme vorgesehen. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
 
-Offen bleibt die Abnahme auf einem echten Ziel-Windows-PC: Windows-OCR gegen ein echtes Scan-Dokument und EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` dort `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).
+Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

@@ -1,7 +1,7 @@
 ---
 name: data-secure-compliance
 description: Use when explaining DataSecure privacy safeguards, GDPR/DSGVO limitations, EU AI Act implications, audit behavior, human review, or whether a processed document is safe to use with Claude.
-version: 3.2.0-rc7
+version: 3.2.0-rc8
 ---
 
 # DataSecure Privacy and AI Governance

@@ -20,8 +20,6 @@ const TABLE_LOCATION_RE = new RegExp(`^(\\|\\s*${LOCATION_LABEL}\\s*:?\\s*\\|\\s
 const LINE_EMPLOYER_RE = new RegExp(`^(\\s*${EMPLOYER_LABEL}\\s*:\\s*)(.+)$`, 'iu');
 const LINE_LOCATION_RE = new RegExp(`^(\\s*${LOCATION_LABEL}\\s*:\\s*)(.+)$`, 'iu');
 const DASH_SPLIT_RE = /^(.{2,120}?)[ \t]+[–—-][ \t]+(.{3,180})$/u;
-const PERIOD_RANGE_RE = /(Zeitraum\s*:\s*)(?:seit\s*)?(\d{1,2})\/(\d{4})\s*[–—-]\s*(\d{1,2})\/(\d{4})/giu;
-const PERIOD_SINCE_RE = /(Zeitraum\s*:\s*)seit\s*(\d{1,2})\/(\d{4})/giu;
 
 const EMPLOYER_PLACEHOLDER = '[ARBEITGEBER_001]';
 const LOCATION_PLACEHOLDER = '[LOCATION_REDACTED]';
@@ -146,12 +144,9 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     out.push(line);
   }
 
-  // Month-level project periods are generalised to years: the exact start and
-  // end month of a named project is a strong quasi-identifier.
-  return out
-    .join('\n')
-    .replace(PERIOD_RANGE_RE, (_m, p, _m1, y1, _m2, y2) => `${p}${y1}–${y2}`)
-    .replace(PERIOD_SINCE_RE, (_m, p, _mo, y) => `${p}seit ${y}`);
+  // Business periods are substantive content. Only dates explicitly labelled
+  // as birth dates are removed by the structured-identifier pass.
+  return out.join('\n');
 }
 
 module.exports = { anonymizePersonnel, looksLikeOrgSide, hasStopToken };

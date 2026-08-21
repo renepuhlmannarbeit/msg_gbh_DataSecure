@@ -40,7 +40,7 @@ Every one of these stops the pipeline or withholds the asset rather than
 guessing:
 
 - unsupported or unparsable container
-- PDF without an extractable text layer
+- PDF without an extractable text layer and without safely extractable JPEG page images
 - PDF with a damaged or oversized Flate-compressed stream; the parser rejects
   the document instead of treating the compressed bytes as readable text
 - extracted text or asset count over the configured limits
