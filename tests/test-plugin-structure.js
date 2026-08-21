@@ -30,10 +30,12 @@ const requiredSkills=[
   'data-secure-compliance',
   'data-secure-general'
 ];
+const skillTexts=[];
 for(const skill of requiredSkills){
   const p=path.join(pluginRoot,'skills',skill,'SKILL.md');
   assert.ok(fs.existsSync(p),`missing skill ${skill}`);
   const text=fs.readFileSync(p,'utf8');
+  skillTexts.push(text);
   // Tolerant of CRLF: a Windows checkout with core.autocrlf=true would
   // otherwise fail this assertion on the only supported platform.
   assert.ok(/^---\r?\n/.test(text),`${skill} missing frontmatter`);
@@ -43,5 +45,34 @@ const preflight=fs.readFileSync(path.join(pluginRoot,'skills','data-secure-prefl
 assert.match(preflight,/do \*\*not\*\* ask the user to paste or upload the original document/i);
 assert.match(preflight,/read_anonymized_document/);
 assert.match(preflight,/read_anonymized_asset/);
+
+// Agent/runtime coupling: a tool may not ship unless Claude is told how to use
+// it, or this test contains an explicit, reviewed reason why no instruction is
+// appropriate. Keep the source slices narrow so names in TOOLS do not satisfy
+// their own coverage check.
+const indexSource=fs.readFileSync(path.join(pluginRoot,'server','index.js'),'utf8');
+const toolsStart=indexSource.indexOf('const TOOLS=[');
+const toolsEnd=indexSource.indexOf('];',toolsStart);
+assert.notStrictEqual(toolsStart,-1,'TOOLS table missing');
+assert.notStrictEqual(toolsEnd,-1,'TOOLS table is unterminated');
+const toolNames=[...indexSource.slice(toolsStart,toolsEnd).matchAll(/\{name:'([a-z_]+)',title:/g)].map(m=>m[1]);
+assert.strictEqual(toolNames.length,12,'unexpected tool count');
+
+const instructionsStart=indexSource.indexOf('const INSTRUCTIONS=');
+assert.notStrictEqual(instructionsStart,-1,'INSTRUCTIONS missing');
+const instructionSource=indexSource.slice(instructionsStart,toolsStart);
+const agentGuidance=[instructionSource,...skillTexts].join('\n');
+const toolInstructionExceptions={};
+for(const [name,reason] of Object.entries(toolInstructionExceptions)){
+  assert.ok(reason.trim().length>=20,`${name} exception needs a concrete reason`);
+}
+for(const name of toolNames){
+  const instructed=new RegExp(`\\b${name}\\b`).test(agentGuidance);
+  assert.ok(instructed||toolInstructionExceptions[name],`${name} has no agent-layer instruction or justified exception`);
+}
+
+assert.match(agentGuidance,/purge_local_data[\s\S]{0,300}explicit[^\n]*confirm/i);
+assert.match(agentGuidance,/retention_days=0[\s\S]{0,160}(?:disable|unavailable)/i);
+assert.match(agentGuidance,/audit evidence[\s\S]{0,160}(?:outside retention|remains|retained)/i);
 
 console.log('PLUGIN STRUCTURE PASS');

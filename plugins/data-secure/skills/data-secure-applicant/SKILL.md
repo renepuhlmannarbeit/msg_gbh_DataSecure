@@ -1,14 +1,14 @@
 ---
 name: data-secure-applicant
 description: Use for job applications, CVs, resumes, candidate profiles, cover letters, or applicant documents that should be privacy-processed locally before Claude analyzes them.
-version: 3.2.0-rc6
+version: 3.2.0-rc7
 ---
 
 # Applicant Privacy
 
 Use `anonymize_next_document` with `profile=applicant`.
 
-Applicant visuals are withheld by default. Keep useful qualifications, experience, skills, certifications and role history while removing direct identifiers and other identifying details according to the local privacy gate.
+Applicant visuals are withheld by default and their review previews expire. Ask for prompt review; with `retention_days=0`, later visual approval is unavailable. Keep useful qualifications, experience, skills, certifications and role history while removing direct identifiers and other identifying details according to the local privacy gate.
 
 After processing, use only released package data. Do not infer or reconstruct the candidate's identity from the remaining career history.
 

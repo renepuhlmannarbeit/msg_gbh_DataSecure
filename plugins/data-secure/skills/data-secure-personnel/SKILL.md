@@ -1,7 +1,7 @@
 ---
 name: data-secure-personnel
 description: Use for employee, consultant, staffing, capability, CV-like internal personnel profiles, project staffing profiles, or competence profiles that should be de-identified before Claude analyzes them.
-version: 3.2.0-rc6
+version: 3.2.0-rc7
 ---
 
 # Personnel Profile Privacy
@@ -12,7 +12,7 @@ Preserve business value such as roles, skills, certifications, methods, technolo
 
 Reduce re-identification risk by removing direct identifiers and pseudonymizing/generalizing quasi-identifiers such as employer, client names, exact project names and precise locations when the local engine classifies them as identifying context.
 
-Personnel photos and other visuals are not automatically released. They remain local until privacy review.
+Personnel photos and other visuals are not automatically released. Their local review previews remain only until privacy review or retention expiry; with `retention_days=0`, later visual approval is unavailable.
 
 After processing, use only the released privacy package. Do not reconstruct real names or infer identities from project history.
 

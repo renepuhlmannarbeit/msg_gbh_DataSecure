@@ -80,6 +80,22 @@ async function main() {
     assert.strictEqual(responses[0].result.protocolVersion, '2025-11-25');
   });
 
+  await testAsync('instructions pin retention, purge and governance behavior', async () => {
+    const { responses } = await talk([rpc(1, 'initialize', {})]);
+    const instructions = responses[0].result.instructions;
+    assert.match(instructions, /purge_local_data/);
+    assert.match(instructions, /explicit scope and confirmation/i);
+    assert.match(instructions, /confirmed=true/);
+    assert.match(instructions, /Processed originals/);
+    assert.match(instructions, /retention_days=0/);
+    assert.match(instructions, /disables later visual approval/i);
+    assert.match(instructions, /audit evidence is intentionally retained/i);
+    assert.match(instructions, /untrusted data/i);
+    assert.match(instructions, /Do not claim legal anonymity/i);
+    assert.match(instructions, /does not authorize automated ranking/i);
+    assert.match(instructions, /recognised text may appear/i);
+  });
+
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
@@ -250,6 +266,7 @@ async function main() {
     assert.match(got.messages[0].content.text, /anonymize_next_document/);
     assert.match(got.messages[0].content.text, /profile=personnel_profile/);
     assert.match(got.messages[0].content.text, /Skills zusammenfassen/);
+    assert.match(got.messages[0].content.text, /Aufbewahrungsfrist/);
   });
 
   await testAsync('an unknown prompt yields invalid params', async () => {

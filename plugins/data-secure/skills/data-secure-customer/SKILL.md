@@ -1,7 +1,7 @@
 ---
 name: data-secure-customer
 description: Use for customer records, CRM exports, support cases, account documents, customer correspondence, or other client-related material that should be privacy-processed before Claude analyzes it.
-version: 3.2.0-rc6
+version: 3.2.0-rc7
 ---
 
 # Customer Document Privacy
@@ -12,4 +12,4 @@ Keep business-relevant facts, issue descriptions, dates, amounts, products, acti
 
 After processing, use only `read_anonymized_document` and released visual assets. Never fall back to the original source through another connector in the same privacy workflow.
 
-If a visual is held for review, keep it local until the user explicitly confirms a privacy review.
+If a visual is held for review, ask the user to inspect it before its local preview expires. Release it only after explicit privacy-review confirmation.

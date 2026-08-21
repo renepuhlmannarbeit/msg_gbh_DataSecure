@@ -1,7 +1,7 @@
 ---
 name: data-secure-compliance
 description: Use when explaining DataSecure privacy safeguards, GDPR/DSGVO limitations, EU AI Act implications, audit behavior, human review, or whether a processed document is safe to use with Claude.
-version: 3.2.0-rc6
+version: 3.2.0-rc7
 ---
 
 # DataSecure Privacy and AI Governance
@@ -12,8 +12,10 @@ Explain the architecture accurately:
 - Skills orchestrate the workflow but are not themselves a privacy boundary.
 - Raw source content should enter through the local `Input` folder, not by direct chat upload, when pre-model privacy processing is required.
 - Claude should receive only released Markdown and released PNG assets from the privacy package.
-- Visuals that cannot be verified automatically remain local until human review.
+- Visuals that cannot be verified automatically remain local until human approval or retention expiry.
 - Audit data must not contain raw source values.
+- `Processed`, `Output` and review-preview data are subject to the configured retention window; `retention_days=0` disables later visual approval.
+- Hash-only audit evidence is intentionally outside retention and `purge_local_data`, so processing remains verifiable without retaining raw content.
 
 Use precise terminology. Pseudonymization/de-identification is not automatically legal anonymization. Residual re-identification risk can remain through context and quasi-identifiers.
 
