@@ -90,9 +90,9 @@ async function main() {
       },
       close() { closed = true; }
     };
-    const result = await prepareLocalDocument('personnel_profile', { platform: 'win32', launchCompanion: () => fake });
+    const result = await prepareLocalDocument('personnel_profile', { platform: 'win32', removeImages: true, launchCompanion: () => fake });
     assert.deepStrictEqual(calls, [
-      { command: 'pick_source', params: { profile: 'personnel_profile' } },
+      { command: 'pick_source', params: { profile: 'personnel_profile', remove_images: true } },
       { command: 'process_source', params: { job_id: 'job-opaque' } }
     ]);
     assert.strictEqual(result.review_decision, 'reviewed');

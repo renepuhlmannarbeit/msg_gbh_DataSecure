@@ -241,6 +241,14 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     if ((converted.attachments || []).length > MAX_VISUAL_ASSETS) {
       throw new SafeError('Zu viele visuelle Assets für den automatischen Workflow.');
     }
+    if (
+      deps.removeImages === true &&
+      ((converted.warnings || []).length > 0 || (converted.unreviewedVisualCount || 0) > 0)
+    ) {
+      throw new SafeError(
+        'Bilder können nicht sicher entfernt werden, weil die Datei unbekannte oder nicht vollständig extrahierbare Inhalte enthält.'
+      );
+    }
 
     const effective = requested === 'auto' ? detectProfileFromMarkdown(converted.markdown) : requested;
     const finalPackage = uniqueDir(r.output, `${safePackageId(effective)}_${crypto.randomBytes(3).toString('hex')}`);
@@ -249,7 +257,16 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     stagePackage = path.join(r.output, `.${packageId}.tmp_${crypto.randomBytes(3).toString('hex')}`);
     fs.mkdirSync(stagePackage, { recursive: true });
 
-    const vis = await processVisuals(converted.attachments, effective, packageId, stagePackage, deps);
+    const removeImages = deps.removeImages === true &&
+      ['.docx', '.xlsx', '.pptx'].includes(ext) &&
+      !converted.requiresExplicitProfile;
+    const vis = await processVisuals(converted.attachments, effective, packageId, stagePackage, {
+      ...deps,
+      removeImages
+    });
+    const included = vis.results.filter((x) => x.status === 'included').length;
+    const review = vis.results.filter((x) => x.status === 'review_required').length;
+    const removed = vis.results.filter((x) => x.status === 'removed').length;
 
     // OCR text of a withheld visual is released only after it has passed the
     // text privacy gate; the image bytes themselves stay local. See
@@ -268,14 +285,11 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         profile: effective,
         detected_identifiers: anon.entityCount,
         technical_review_required:
-          vis.results.some((item) => item.status !== 'included') ||
+          review > 0 ||
           (converted.warnings || []).length > 0 ||
           (converted.unreviewedVisualCount || 0) > 0
       });
     }
-    const included = vis.results.filter((x) => x.status === 'included').length;
-    const review = vis.results.length - included;
-
     let reviewedText = anon.text;
     if (deps.reviewText) {
       const reviewResult = await deps.reviewText({
@@ -306,6 +320,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         entityCount: anon.entityCount,
         included,
         review,
+        removed,
         reidentificationRisk: anon.reidentificationRisk
       }) +
       reviewedText +
@@ -352,6 +367,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       assets: vis.results,
       parser_warnings: converted.warnings || [],
       pdf_unextractable_visual_objects: converted.unreviewedVisualCount || 0,
+      images_removed_by_explicit_request: removed,
       ai_act: aiActMeta(effective)
     };
     if (deps.companionJobId) manifest.companion_job_id = deps.companionJobId;
@@ -429,6 +445,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         total: vis.results.length,
         included,
         review_required: review,
+        removed,
         redactions: vis.results.reduce((n, x) => n + (x.redactions || 0), 0)
       },
       original_moved_to_processed: !copiedClaim,
@@ -500,6 +517,58 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   }
 }
 
+async function anonymizeAll(profile = 'auto', deps = {}) {
+  const requested = String(profile || 'auto').toLowerCase();
+  if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
+  const queue = deps.inputQueue || listInput();
+  if (!queue.length) {
+    return {
+      ok: false,
+      error: 'input_empty',
+      message: 'Keine unterstützte Datei im lokalen Input-Ordner.',
+      raw_content_sent_to_claude: false
+    };
+  }
+
+  const maximum = 25;
+  const selected = queue.slice(0, maximum);
+  const results = [];
+  for (let index = 0; index < selected.length; index++) {
+    try {
+      const result = await anonymizeNext(requested, { ...deps, inputQueue: [selected[index]] });
+      results.push({
+        index: index + 1,
+        status: 'released',
+        package_id: result.package_id,
+        document_id: result.document_id,
+        profile: result.profile,
+        visual_assets: result.visual_assets
+      });
+    } catch (error) {
+      results.push({
+        index: index + 1,
+        status: 'stopped',
+        message: error instanceof SafeError
+          ? error.message
+          : 'Die lokale Verarbeitung wurde sicher abgebrochen.'
+      });
+    }
+  }
+
+  const released = results.filter((item) => item.status === 'released').length;
+  const stopped = results.length - released;
+  return {
+    ok: released > 0,
+    batch_total: queue.length,
+    attempted: selected.length,
+    released,
+    stopped,
+    remaining: Math.max(0, queue.length - selected.length),
+    results,
+    raw_content_sent_to_claude: false
+  };
+}
+
 async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
   const absolute = path.resolve(String(source || ''));
   if (!path.isAbsolute(String(source || '')) || absolute !== String(source)) {
@@ -522,6 +591,7 @@ async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
 
 module.exports = {
   anonymizeNext,
+  anonymizeAll,
   anonymizeSelectedSource,
   bestEffortRetentionCleanup,
   cleanupAbandonedWorkingJobs

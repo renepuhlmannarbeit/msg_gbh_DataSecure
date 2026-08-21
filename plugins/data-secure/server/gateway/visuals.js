@@ -212,6 +212,19 @@ function writeReviewItem(packageId, assetId, res, packageDir) {
 }
 
 async function processVisuals(attachments, profile, packageId, stagePackage, deps = {}) {
+  if (deps.removeImages === true) {
+    return {
+      results: (attachments || []).map((att, index) => ({
+        asset_id: `asset-${String(index + 1).padStart(3, '0')}`,
+        status: 'removed',
+        reason: 'removed_by_explicit_text_only_request',
+        original_mime: normalizeMime(att),
+        redactions: 0
+      })),
+      ocrExtras: ''
+    };
+  }
+
   const assetsDir = path.join(stagePackage, 'assets');
   fs.mkdirSync(assetsDir, { recursive: true });
 
@@ -264,6 +277,8 @@ function assetsMarkdown(results) {
     const n = x.asset_id.replace('asset-', '');
     if (x.status === 'included') {
       out.push(`![Sichere Grafik ${n}](./${x.file})`);
+    } else if (x.status === 'removed') {
+      out.push(`> Grafik ${n} wurde auf ausdrücklichen Wunsch entfernt und nicht in das Markdown übernommen.`);
     } else {
       out.push(
         `> Grafik ${n} wurde nicht an Claude freigegeben. Lokale visuelle Prüfung erforderlich (${x.reason}).`

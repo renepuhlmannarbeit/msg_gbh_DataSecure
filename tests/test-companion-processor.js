@@ -240,6 +240,30 @@ async function main() {
     assert.deepStrictEqual(fs.readdirSync(r.output), []);
   });
 
+  await testAsync('DOCX visuals can be explicitly removed for a text-only Markdown package', async () => {
+    const r = workspace('visual-remove');
+    const fixture = path.join(__dirname, 'fixtures', 'synthetic_profile.docx');
+    const file = path.join(base, 'visual-profile-text-only.docx');
+    fs.copyFileSync(fixture, file);
+    const job = createJob({ profile: 'personnel_profile', source_type: 'docx' });
+    const result = await processCompanionJob(job.job_id, file, job.profile, {
+      removeImages: true,
+      confirmAutomaticRelease: () => true,
+      gatewayDeps: {
+        ocrPngDetailed: async () => { throw new Error('OCR must not run in text-only mode'); },
+        rasterizeToPng: async () => { throw new Error('rasterization must not run in text-only mode'); }
+      }
+    });
+    assert.strictEqual(result.job.state, 'Released');
+    assert.strictEqual(result.visual_assets.removed, 1);
+    assert.strictEqual(result.visual_assets.review_required, 0);
+    assert.strictEqual(fs.existsSync(file), true, 'the selected original must remain untouched');
+    assert.deepStrictEqual(fs.readdirSync(r.review), []);
+    const released = readOutput(result.package_id, 0, 30000);
+    assert.match(released.text, /Grafik 001 wurde auf ausdrücklichen Wunsch entfernt/);
+    assert.match(released.text, /Java|Architekt|Projekt/i, 'professional text must remain usable');
+  });
+
   await testAsync('DOCX with an unsupported content part is blocked before local text review', async () => {
     const r = workspace('unsupported-docx-part');
     const file = path.join(base, 'embedded.docx');

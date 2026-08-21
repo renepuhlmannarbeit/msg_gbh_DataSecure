@@ -100,7 +100,7 @@ function createAuditReceipt(profile, source, meta) {
     reidentification_risk: meta.reidentificationRisk,
     visual_assets_total: meta.results.length,
     visual_assets_included: meta.results.filter((x) => x.status === 'included').length,
-    visual_assets_review_required: meta.results.filter((x) => x.status !== 'included').length,
+    visual_assets_review_required: meta.results.filter((x) => x.status === 'review_required').length,
     visual_redactions: meta.results.reduce((n, x) => n + (x.redactions || 0), 0)
   });
 }

@@ -30,6 +30,7 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
   try {
     const result = await (options.anonymizeSelectedSource || anonymizeSelectedSource)(sourcePath, profile, {
       ...(options.gatewayDeps || {}),
+      removeImages: options.removeImages === true,
       companionJobId: jobId,
       onClaimed: () => transitionJob(jobId, 'Claimed'),
       onExtracted: () => transitionJob(jobId, 'Extracted'),
@@ -70,6 +71,7 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
       ok: true, job: jobStatus(jobId), package_id: result.package_id,
       document_id: result.document_id, verification: result.verification,
       detected_identifiers: result.detected_identifiers, review_decision: reviewDecision,
+      visual_assets: result.visual_assets,
       raw_content_sent_to_claude: false
     };
   } catch (error) {

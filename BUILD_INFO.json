@@ -1,5 +1,5 @@
 {
-  "version": "3.2.0-rc9",
+  "version": "3.2.0-rc10",
   "build_date": "2026-08-21",
   "target": "Claude Desktop Windows / MCPB manifest 0.4",
   "runtime": "bundled Node.js core implementation; no npm/Python runtime install",

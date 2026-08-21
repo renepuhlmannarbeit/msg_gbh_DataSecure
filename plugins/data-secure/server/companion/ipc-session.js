@@ -116,7 +116,11 @@ function createCompanionSession(options = {}) {
       return response(descriptor());
     }
     if (frame.command === 'pick_source') {
-      if (!exactKeys(frame.params, ['profile']) || !PROFILES.has(frame.params.profile)) {
+      const validShape = exactKeys(frame.params, ['profile']) || exactKeys(frame.params, ['profile', 'remove_images']);
+      if (
+        !validShape || !PROFILES.has(frame.params.profile) ||
+        (Object.hasOwn(frame.params, 'remove_images') && frame.params.remove_images !== true)
+      ) {
         throw new SafeError('Ungültiges Profil für die lokale Dateiauswahl.');
       }
       const selectedByAdapter = selectSource({ allowedTypes: ['txt', 'docx'] });
@@ -131,17 +135,22 @@ function createCompanionSession(options = {}) {
         throw new SafeError('Die ausgewählte Datei wurde während der Übergabe verändert.');
       }
       const job = createJob({ profile: frame.params.profile, source_type: selected.sourceType });
-      sources.set(job.job_id, selected.sourcePath);
+      sources.set(job.job_id, {
+        path: selected.sourcePath,
+        removeImages: frame.params.remove_images === true
+      });
       return response({ ok: true, job });
     }
     if (frame.command === 'process_source') {
       if (!exactKeys(frame.params, ['job_id'])) {
         throw new SafeError('Verarbeitung benötigt genau eine Job-ID.');
       }
-      const sourcePath = sources.get(frame.params.job_id);
-      if (!sourcePath) throw new SafeError('Für diesen Job ist keine private Quelle gebunden.');
+      const selected = sources.get(frame.params.job_id);
+      if (!selected) throw new SafeError('Für diesen Job ist keine private Quelle gebunden.');
       const profile = jobStatus(frame.params.job_id).profile;
-      return Promise.resolve(processSource(frame.params.job_id, sourcePath, profile)).then((result) => {
+      return Promise.resolve(processSource(frame.params.job_id, selected.path, profile, {
+        removeImages: selected.removeImages
+      })).then((result) => {
         if (result?.ok) sources.delete(frame.params.job_id);
         return response(result);
       });

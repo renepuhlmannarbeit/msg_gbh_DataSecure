@@ -11,8 +11,8 @@ Das Plugin verbindet:
 ## Ablauf für Anwender
 
 1. Bitte Claude bei TXT oder DOCX, ein lokales Dokument vorzubereiten. DataSecure öffnet einen lokalen Dateidialog und unter Windows anschließend eine auf zusätzliche Schwärzungen begrenzte Prüfung.
-2. Bitte Claude bei PDF, XLSX, PPTX, MD, CSV oder Bildern, den Datenschutzordner zu öffnen, und kopiere die Quelldatei nach `Input`.
-3. Bitte Claude, das Dokument zu anonymisieren oder zu de-identifizieren.
+2. Bitte Claude bei PDF, XLSX, PPTX, MD, CSV, Bildern oder mehreren Dateien, den Datenschutzordner zu öffnen, und kopiere die Quelldateien nach `Input`.
+3. Bitte Claude, das nächste Dokument oder alle Dokumente zu anonymisieren. Der Stapellauf verarbeitet bis zu 25 Dateien nacheinander und erstellt pro Datei ein eigenes Markdown-Paket.
 4. Claude verwendet ausschließlich freigegebenes Markdown und freigegebene PNG-Dateien.
 5. Nicht automatisch verifizierbare Grafiken bleiben lokal unter `Needs Visual Review`. Dieser Engineering-Build besitzt keinen menschlichen Freigabeweg für visuelle Inhalte; das Öffnen des Ordners macht sie für Claude nicht lesbar.
 
@@ -21,3 +21,5 @@ Die Windows-Textprüfung kann zusätzliche Ersetzungen mit `[MANUAL_REDACTION]` 
 Lade ein sensibles Original nicht direkt in Claude hoch und füge es nicht in den Chat ein, wenn Claude den Inhalt erst nach der Datenschutzverarbeitung sehen darf.
 
 Dieses Plugin bietet keine Rechtsberatung, keine Garantie rechtlicher Anonymität und keine Zertifizierung nach DSGVO oder EU AI Act.
+
+Wenn ausschließlich der Text benötigt wird, können bekannte Bildanlagen texttragender Office-Dateien nach ausdrücklicher Zustimmung entfernt werden. Die erzeugte `.md` kennzeichnet jede entfernte Grafik. Reine Bilder, Scans und unbekannte eingebettete Objekte werden dadurch nicht an den Sicherheitsprüfungen vorbeigeschleust.

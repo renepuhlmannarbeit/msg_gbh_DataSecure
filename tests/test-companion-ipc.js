@@ -97,6 +97,29 @@ test('authenticated file selection returns no path and stores it only in memory'
   assert.doesNotMatch(fs.readFileSync(journal, 'utf8'), /employee|sourcePath|original_path/i);
 });
 
+test('image-removal intent is accepted only as a literal true flag', () => {
+  const source = path.join(root, 'text-only.docx');
+  fs.writeFileSync(source, 'synthetic');
+  const sessionId = crypto.randomUUID();
+  let options;
+  const session = createCompanionSession({
+    secret,
+    sessionId,
+    pickSource: () => ({ sourcePath: source, sourceType: 'docx', sourceBytes: 9 }),
+    processCompanionJob: async (_jobId, _sourcePath, _profile, received) => {
+      options = received;
+      return { ok: true };
+    }
+  });
+  assert.throws(
+    () => session.dispatch(frame(sessionId, 1, 'pick_source', { profile: 'customer', remove_images: false })),
+    /Ungültiges Profil/
+  );
+  const picked = session.dispatch(frame(sessionId, 2, 'pick_source', { profile: 'customer', remove_images: true }));
+  session.dispatch(frame(sessionId, 3, 'process_source', { job_id: picked.job.job_id }));
+  assert.deepStrictEqual(options, { removeImages: true });
+});
+
 test('authenticated cancel creates local evidence and drops the private source', () => {
   const source = path.join(root, 'cancel.txt');
   fs.writeFileSync(source, 'synthetic');

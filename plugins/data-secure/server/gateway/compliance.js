@@ -81,6 +81,7 @@ function complianceHeader(profile, meta) {
     `Datenschutz-Pässe: ${meta.passes}\n` +
     `Ersetzte/erfasste Identifikatoren: ${meta.entityCount}\n` +
     `Automatisch freigegebene visuelle Assets: ${meta.included}\n` +
+    `Auf ausdrücklichen Wunsch entfernte visuelle Assets: ${meta.removed || 0}\n` +
     `Lokale visuelle Review-Items: ${meta.review}\n` +
     'Persistente Rückzuordnung: nein\n' +
     `Re-Identifikationsrisiko: ${meta.reidentificationRisk}\n` +

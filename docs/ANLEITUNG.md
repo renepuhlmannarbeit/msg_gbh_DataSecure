@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC9 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC10 · Windows 10/11 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC9 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC10 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -194,7 +194,10 @@ Privacy-Ordner"*.
    gewählte Original bleibt unverändert an seinem bisherigen Ort.
 
 Brechen Sie den zweiten Dialog ab, wird nichts veröffentlicht. Word-Dokumente mit
-Bildern oder nicht vollständig prüfbaren Inhalten bleiben weiterhin gesperrt. Auf
+Bildern bleiben standardmäßig gesperrt. Wenn Sie ausdrücklich nur den Text als
+Markdown benötigen, können Sie Claude sagen: *„Anonymisiere das Dokument und
+entferne alle Bilder.“* Bekannte Bildanlagen werden dann lokal verworfen und in der
+`.md` als entfernt vermerkt. Unbekannte eingebettete Objekte bleiben gesperrt. Auf
 macOS und Linux ist die bearbeitbare Review-Oberfläche in diesem Pilot noch nicht
 verfügbar; der Workflow stoppt dort an dieser Stelle sicher.
 
@@ -207,9 +210,13 @@ verfügbar; der Workflow stoppt dort an dieser Stelle sicher.
    Sie die Dokumentart ausdrücklich dazusagen, zum Beispiel „als Kundendokument“
    oder „als Bewerbung“; vor der lokalen OCR kann sie nicht sicher automatisch
    erkannt werden.
-2. **Claude bitten:** *„Anonymisiere bitte das nächste Dokument und fasse
-   anschließend die Qualifikationen zusammen."* Zur Sicherheit können Sie die Art
-   dazusagen: „… als Bewerbung", „… als Vertrag", „… als Mitarbeiterprofil".
+2. **Claude bitten:** Für eine Datei: *„Anonymisiere bitte das nächste Dokument und
+   fasse anschließend die Qualifikationen zusammen.“* Für mehrere Dateien:
+   *„Anonymisiere alle Dokumente im Input-Ordner.“* Der Stapellauf verarbeitet bis
+   zu 25 Dateien nacheinander, erstellt pro Datei ein eigenes Markdown-Paket und
+   setzt nach einem Einzelfehler mit den übrigen Dateien fort. Zur Sicherheit können
+   Sie die Art dazusagen: „… als Bewerbung“, „… als Vertrag“, „… als
+   Mitarbeiterprofil“.
 3. **Normal weiterarbeiten.** Claude erhält ausschließlich die bereinigte Fassung
    aus dem DataSecure-Weg. Unterstützte erkannte Identifikatoren erscheinen als
    Platzhalter; nicht erkannte Namen oder kontextuelle Hinweise können verbleiben.
@@ -303,7 +310,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC9 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC10 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

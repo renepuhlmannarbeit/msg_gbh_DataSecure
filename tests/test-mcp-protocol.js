@@ -119,7 +119,7 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 12, `expected exactly 12 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 13, `expected exactly 13 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {

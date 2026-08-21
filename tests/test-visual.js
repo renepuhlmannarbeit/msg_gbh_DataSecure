@@ -232,6 +232,27 @@ async function main() {
     assert.ok(fs.existsSync(path.join(stage, 'assets', 'asset-001.png')));
   });
 
+  await testAsync('explicit text-only mode removes visuals without OCR or review bytes', async () => {
+    const stage = fs.mkdtempSync(path.join(root, 'stage-'));
+    let ocrCalled = false;
+    const out = await processVisuals([attachment()], 'personnel_profile', 'Paket_Text_Only', stage, {
+      removeImages: true,
+      ocrPngDetailed: async () => { ocrCalled = true; throw new Error('must not run'); }
+    });
+    assert.strictEqual(ocrCalled, false);
+    assert.strictEqual(out.ocrExtras, '');
+    assert.deepStrictEqual(out.results, [{
+      asset_id: 'asset-001',
+      status: 'removed',
+      reason: 'removed_by_explicit_text_only_request',
+      original_mime: 'image/png',
+      redactions: 0
+    }]);
+    assert.strictEqual(fs.existsSync(path.join(stage, 'assets')), false);
+    assert.strictEqual(fs.existsSync(path.join(root, 'Needs Visual Review', 'Paket_Text_Only')), false);
+    assert.match(assetsMarkdown(out.results), /ausdrücklichen Wunsch entfernt/);
+  });
+
   await testAsync('OCR text of a withheld visual is carried over for the text gate', async () => {
     const stage = fs.mkdtempSync(path.join(root, 'stage-'));
     const out = await processVisuals([attachment()], 'personnel_profile', 'Paket_Test_3', stage, {

@@ -14,7 +14,9 @@ async function prepareLocalDocument(profile = 'auto', options = {}) {
   const companion = (options.launchCompanion || launchCompanion)(options.supervisorOptions);
   try {
     await companion.ready;
-    const picked = await companion.request('pick_source', { profile: selectedProfile });
+    const pickParams = { profile: selectedProfile };
+    if (options.removeImages === true) pickParams.remove_images = true;
+    const picked = await companion.request('pick_source', pickParams);
     if (!picked?.ok || !picked.job?.job_id) throw new SafeError('Lokale Dateiauswahl wurde nicht sicher abgeschlossen.');
     const processed = await companion.request('process_source', { job_id: picked.job.job_id });
     return {
