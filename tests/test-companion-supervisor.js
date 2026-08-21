@@ -75,6 +75,7 @@ async function main() {
   await testAsync('manager runs picker before processing and returns only released metadata', async () => {
     const calls = [];
     let closed = false;
+    let summaryCalls = 0;
     const fake = {
       ready: Promise.resolve({}),
       async request(command, params) {
@@ -91,7 +92,10 @@ async function main() {
       },
       close() { closed = true; }
     };
-    const result = await prepareLocalDocument('personnel_profile', { platform: 'win32', removeImages: true, launchCompanion: () => fake });
+    const result = await prepareLocalDocument('personnel_profile', {
+      platform: 'win32', removeImages: true, launchCompanion: () => fake,
+      showCompletionSummary() { summaryCalls++; return true; }
+    });
     assert.deepStrictEqual(calls, [
       { command: 'pick_sources', params: { profile: 'personnel_profile', remove_images: true } },
       { command: 'process_source', params: { job_id: 'job-opaque' } }
@@ -101,6 +105,8 @@ async function main() {
     assert.strictEqual(result.raw_content_sent_to_claude, false);
     assert.strictEqual(result.selected_count, 1);
     assert.strictEqual(result.released_count, 1);
+    assert.strictEqual(result.completion_summary_shown, false);
+    assert.strictEqual(summaryCalls, 0, 'single-file flow needs no duplicate completion window');
     assert.strictEqual(closed, true);
     assert.doesNotMatch(JSON.stringify(result), /source|filename|original_path/i);
   });
@@ -125,15 +131,35 @@ async function main() {
       close() {}
     };
     const result = await prepareLocalDocument('auto', {
-      platform: 'win32', launchCompanion: () => fake
+      platform: 'win32', launchCompanion: () => fake,
+      showCompletionSummary: () => true
     });
     assert.strictEqual(result.workflow, 'local_companion_txt_docx_batch');
     assert.strictEqual(result.selected_count, 3);
     assert.strictEqual(result.released_count, 2);
     assert.strictEqual(result.failed_count, 1);
+    assert.strictEqual(result.completion_summary_shown, true);
     assert.deepStrictEqual(result.results.map((item) => item.ok), [true, false, true]);
     assert.strictEqual(requests.filter((item) => item.command === 'process_source').length, 3);
     assert.doesNotMatch(JSON.stringify(result), /sourcePath|filename|original_path/i);
+  });
+
+  await testAsync('an unavailable batch completion window never invalidates released packages', async () => {
+    const fake = {
+      ready: Promise.resolve({}),
+      async request(command) {
+        if (command === 'pick_sources') return { ok: true, jobs: [{ job_id: 'one' }, { job_id: 'two' }] };
+        return { ok: true, job: { job_id: command, state: 'Released' }, package_id: 'package-one' };
+      },
+      close() {}
+    };
+    const result = await prepareLocalDocument('general', {
+      platform: 'win32', launchCompanion: () => fake,
+      showCompletionSummary() { throw new Error('desktop unavailable'); }
+    });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.released_count, 2);
+    assert.strictEqual(result.completion_summary_shown, false);
   });
 
   await testAsync('manager always closes the companion when local selection is cancelled', async () => {

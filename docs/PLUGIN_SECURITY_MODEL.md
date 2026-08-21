@@ -63,7 +63,9 @@ guessing:
 - OCR liefert mehr als 100.000 Wörter, mehr als fünf Millionen Textzeichen oder
   ein nicht exakt validierbares Ergebnisobjekt
 - die gesamte visuelle Verarbeitung eines Dokuments überschreitet drei Minuten;
-  der Prozessbaum wird beendet, die Quelle wiederhergestellt und kein Teilpaket publiziert
+  der aktuelle Windows-Adapter versucht den Prozessbaum zu beenden, stellt die Quelle
+  wieder her und publiziert kein Teilpaket. Der harte OS-Nachweis für alle Nachfahren
+  folgt erst mit dem geplanten Job-Object-Launcher
 - recognised text too short to trust the "no PII found" result
 - PII found but its bounding boxes cannot be mapped
 - redaction failed, or a second OCR pass still finds the redacted strings

@@ -2,7 +2,8 @@
 
 // This process receives document bytes through inherited file descriptor 3.
 // It runs under Node's permission model: parser code is readable, while file
-// writes, network, child processes, workers, addons and the inspector stay denied.
+// writes and Node network/child/worker/addon/inspector APIs stay denied. This is a
+// permission-model seat belt, not a complete operating-system sandbox.
 const fs = require('fs');
 const { parseDocumentBuffer } = require('./document-parser');
 

@@ -63,7 +63,7 @@ Der Status enthält nur:
 
 ## Implementierter Review-Vertrag
 
-- Der flüchtige Entwurf verwendet `data-secure-text-review/1`.
+- Der flüchtige Entwurf verwendet `data-secure-text-review/2`.
 - Heuristisch erkannte Spannen erhalten wertfreie `text:v1:*`-Hinweise mit Typ und
   Offset im normalisierten lokal extrahierten Text. Sie sind noch keine stabilen
   Extractor-/OOXML-Source-Locatoren und werden weder persistiert noch an MCP zurückgegeben.

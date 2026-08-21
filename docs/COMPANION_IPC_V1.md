@@ -11,8 +11,9 @@ startet ihn mit geerbten stdin/stdout-Pipes. Ein zufälliger 256-Bit-Session-Key
 nicht über Argumente oder Umgebungsvariablen übergeben, sondern ausschließlich über
 den zusätzlichen geerbten Dateideskriptor 3.
 
-Bei Supervisor-Timeout oder Protokollfehler wird unter Windows der gesamte
-Companion-Prozessbaum beendet. Jeder private Arbeitsordner besitzt eine
+Bei Supervisor-Timeout oder Protokollfehler versucht der aktuelle Windows-Adapter,
+den gesamten Companion-Prozessbaum zu beenden. Eine harte OS-Garantie folgt erst mit
+dem geplanten Job-Object-Launcher. Jeder private Arbeitsordner besitzt eine
 PID-/Nonce-Ownerdatei; ein späterer Start oder Lauf entfernt verwaiste
 Arbeitskopien. Lebende Owner, unbekannte Ordner und Symlinks werden nicht gelöscht,
 und ein Bereinigungsfehler blockiert die nächste Verarbeitung sichtbar.
@@ -60,6 +61,13 @@ Job; die Verarbeitung läuft sequenziell und ein Fehler stoppt nur die betroffen
 Datei. Die datensparsame Zusammenfassung nennt Anzahl ausgewählter, freigegebener
 und gestoppter Dateien sowie die Paket-IDs erfolgreicher Ergebnisse. Für TXT und
 textuell vollständig auswertbare DOCX läuft die Verarbeitung bis `Detected`.
+Nach Abschluss einer Mehrfachauswahl zeigt der MCP-Supervisor lokal genau einmal eine
+rein informative Ansicht mit den drei Zählern „Ausgewählt“, „Erfolgreich vorbereitet“
+und „Sicher gestoppt“. Sie enthält keine Dateinamen, Pfade, Inhalte, Job-/Paket-IDs
+oder technischen Fehler. Ihr einziger Button „Schließen“ beendet nur die Ansicht;
+sie ist weder Teil des authentifizierten Zustandsautomaten noch eine Freigabeinstanz.
+Ein Darstellungsfehler darf bereits gültig veröffentlichte Pakete nicht zurückrollen.
+Bei einer einzelnen Datei entfällt diese zusätzliche Ansicht.
 Unter Windows zeigt der Companion danach
 normalisierten extrahierten Quelltext und bereinigte Fassung ausschließlich lokal
 nebeneinander. Heuristisch erkannte Originalspannen sind als flüchtige

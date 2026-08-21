@@ -311,11 +311,12 @@ Online-Datenbank und keine Freshnesslogik.
 
 ### DS-011 – Ein lokaler Datei- und Mehrdatei-Einstieg (M)
 
-**Stand RC14: erster nutzbarer Slice umgesetzt.** Der private Windows-Dialog erlaubt
+**Stand RC17: nutzbarer TXT-/DOCX-Slice umgesetzt.** Der private Windows-Dialog erlaubt
 bis zu 25 TXT-/DOCX-Dateien; jede erhält einen eigenen Job und ein eigenes Paket.
 Fehler werden pro Datei isoliert, das lokale Prüffenster zeigt „Datei x von y“, und
-die MCP-Zusammenfassung trennt ausgewählt, freigegeben und sicher gestoppt. Offen
-sind eine eigene lokale Abschlussansicht und weitere Formate im selben Picker.
+die MCP-Zusammenfassung trennt ausgewählt, freigegeben und sicher gestoppt. Nach einer
+Mehrfachauswahl erscheint genau einmal eine lokale Abschlussansicht mit denselben drei
+Zählern und ausschließlich „Schließen“. Offen sind weitere Formate im selben Picker.
 
 **Ergebnis:** „Dateien für Claude vorbereiten“ öffnet einen lokalen Dialog für eine
 oder mehrere Dateien. Jede Datei wird unabhängig verarbeitet; offene Entscheidungen
@@ -531,8 +532,9 @@ belegen:
 3. **DS-003 (technisch in RC14, menschliche Abnahme offen):** Pflichtdialog nutzt eine
    Frage, zwei Antworten und Zurück/Ändern. Mit mindestens fünf fachfremden Personen
    synthetisch testen. Visuelle Freigabe bleibt deaktiviert.
-4. **DS-011 (erster Slice in RC14):** Mehrfachauswahl, lokales „Datei x von y“ und
-   Fehlerisolierung sind umgesetzt; eine eigene lokale Abschlussansicht ergänzen.
+4. **DS-011 (TXT-/DOCX-Slice in RC17):** Mehrfachauswahl, lokales „Datei x von y“,
+   Fehlerisolierung und eine rein informative Abschlussansicht sind umgesetzt;
+   weitere Formate folgen anhand der Coverage-Matrix aus DS-203.
 5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus
    laufen ohne neue Nutzeroberfläche, Datumslogik oder Laufzeitnetz.
 6. **DS-009 (Parser-/Budget-Slices in RC16):** Parserprozess, CPU-/Heap-/Antwortgrenzen,

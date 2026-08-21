@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC16 · ausschließlich synthetische Daten
+Version 3.2.0 RC17 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC16 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC17 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -52,6 +52,14 @@ enthalten.
       verständlichem Fortschritt nacheinander verarbeitet.
 - [ ] Abbruch oder Fehler bei einer Datei veröffentlicht dafür nichts, blockiert aber
       die übrigen ausgewählten Dateien nicht.
+- [ ] Nach einer Mehrfachauswahl erscheint die Abschlussansicht genau einmal und zeigt
+      ausschließlich „Ausgewählt“, „Erfolgreich vorbereitet“ und „Sicher gestoppt“.
+- [ ] Die Abschlussansicht formuliert alle erfolgreich, teilweise erfolgreich und
+      vollständig sicher gestoppt korrekt; sie enthält keine Rohdaten, Dateinamen,
+      Pfade, Job-/Paket-IDs oder technischen Fehler.
+- [ ] „Schließen“ und das Fensterschließen schließen nur die Ansicht. Sie starten keine
+      Wiederholung und erteilen keine Freigabe. Bei einer Einzeldatei erscheint keine
+      zusätzliche Abschlussansicht.
 - [ ] Claude zeigt weder gewählten Pfad noch Originaltext.
 - [ ] Links sind Hinweise im normalisierten Quelltext sichtbar; rechts ist die
       automatisch bereinigte Fassung schreibgeschützt.
@@ -93,7 +101,7 @@ BMP-Datei verwenden. Scan-PDF separat prüfen.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC16 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC17 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

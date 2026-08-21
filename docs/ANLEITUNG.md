@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC16 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC17 · Windows 10/11 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC16 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC17 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -205,6 +205,11 @@ Privacy-Ordner"*.
 5. Jede Fassung wird erneut automatisch geprüft. Erst danach kann Claude das
    bereinigte Markdown lesen. Abbruch oder Fensterschließen veröffentlicht für die
    betroffene Datei nichts; die übrigen Dateien laufen weiter.
+6. Nach mehreren ausgewählten TXT-/Word-Dateien erscheint genau einmal die lokale
+   Ansicht **„DataSecure – Verarbeitung abgeschlossen“**. Sie zeigt ausschließlich
+   **Ausgewählt**, **Erfolgreich vorbereitet** und **Sicher gestoppt**. Mit
+   **„Schließen“** schließen Sie nur die Anzeige; es wird nichts erneut verarbeitet
+   oder zusätzlich freigegeben. Bei einer einzelnen Datei entfällt diese Anzeige.
 
 Wenn Sie ausschließlich Markdown ohne Bilder brauchen, sagen Sie einmalig:
 *„Anonymisiere die Dateien und entferne alle Bilder.“* Bekannte Bildanlagen in
@@ -314,7 +319,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC16 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC17 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

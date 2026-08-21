@@ -29,14 +29,15 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-companion-retention.js` | 6 | expiry and zero-day cleanup, strict direct-entry deletion, unsafe-entry preservation, metadata-only status, and local human evidence for immediate purge |
 | `test-companion-ipc.js` | 11 | platform multi-picker commands, strict source validation, local fallback, HMAC/session/replay enforcement, path-free responses and journals, local cancellation, and real fd-3 bootstrap process start |
 | `test-companion-processor.js` | 27 | TXT/DOCX release, terminal local cancellation and skip, mandatory keep/redact decisions for ambiguous credential issuers, locator-scoped manual redactions with exact preview, post-edit residual blocking, value-free and Unicode-stable highlight hints, real UTF-8 Windows pipe plus stdin-only review transport, real Windows-Forms initialization and automated button-path acceptance, visual/unsupported-part DOCX blocking, abandoned private-copy cleanup, rollback, queue isolation, and path-free result/audit evidence |
-| `test-companion-supervisor.js` | 9 | child-environment secret filtering, Windows process-tree termination, real authenticated launch, sequence recovery, multi-picker orchestration, guaranteed close, and pre-launch profile/platform refusal |
+| `test-companion-supervisor.js` | 10 | child-environment secret filtering, Windows process-tree termination, real authenticated launch, sequence recovery, multi-picker orchestration, non-authoritative completion UI failure, guaranteed close, and pre-launch profile/platform refusal |
+| `test-completion-summary.js` | 6 | all-success, partial and all-stopped wording; strict count validation; content-free Windows invocation; fail-closed acknowledgement; and real auto-closing Windows Forms initialization |
 | `test-gateway-e2e.js` | 25 | Office/PDF plus standalone PNG and scanned-PDF routes end to end, mixed-batch continuation after parsing and ambiguity failures, document-wide visual-timeout rollback, explicit-profile enforcement for image-only input, internal visual-release primitive and preview deletion (not exposed through MCP), zero-day retention, audit migration blocking, tamper detection, path traversal, source claiming and failure-injected cleanup/publish/move rollback |
 | `test-mcp-protocol.js` | 25 | the server driven over real stdio: startup orphan cleanup, handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, privacy-safe diagnostic status, error codes, notification handling, stdout framing |
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 | `test-sarif-check.mjs` | 4 | fail-closed local CodeQL report parsing without leaking finding messages into the release-gate output |
 
-Total: 344 assertion-level cases plus the plugin structure check (**345 checks overall**).
+Total: 351 assertion-level cases plus the plugin structure check (**352 checks overall**).
 
 ## The adversarial suite
 

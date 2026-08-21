@@ -2,6 +2,7 @@
 
 const { SafeError } = require('../runtime');
 const { launchCompanion } = require('./supervisor');
+const { showCompletionSummary } = require('./completion-summary');
 
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 
@@ -49,6 +50,19 @@ async function prepareLocalDocument(profile = 'auto', options = {}) {
       failed_count: results.length - released,
       raw_content_sent_to_claude: false
     };
+    let completionSummaryShown = false;
+    if (results.length > 1) {
+      try {
+        completionSummaryShown = (options.showCompletionSummary || showCompletionSummary)(summary, {
+          platform: options.platform,
+          env: options.env
+        }) === true;
+      } catch {
+        // The informational window is not a release authority. Its failure must
+        // not invalidate packages that already passed every privacy gate.
+      }
+    }
+    summary.completion_summary_shown = completionSummaryShown;
     if (results.length === 1) {
       return { ...results[0], ...summary, workflow: 'local_companion_txt_docx' };
     }
