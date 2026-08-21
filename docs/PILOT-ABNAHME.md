@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC21 · ausschließlich synthetische Daten
+Version 3.2.0 RC22 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC21 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC22 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -37,11 +37,20 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
 - [ ] `privacy_status` zeigt auf Windows x64 `parser_boundary: windows_job_object`.
       Fehlender oder manipulierter Launcher meldet `PARSER_ISOLATION_FAILED`, öffnet
       keinen Dateidialog und startet Node nicht direkt.
+- [ ] `privacy_status` zeigt auf Windows x64 `visual_boundary: windows_job_object`.
+      Fehlender oder manipulierter Launcher startet weder OCR noch Rasterisierung
+      direkt; Grafiken bleiben zurückgehalten.
+- [ ] PDF erscheint ausschließlich unter `blocked_inputs` mit
+      `PDF_COVERAGE_UNVERIFIED`, nicht unter den unterstützten Eingaben.
 - [ ] Der Privacy-Ordner öffnet sich und enthält die vier erwarteten Bereiche.
 - [ ] Ein absichtlich beschädigtes oder falsch versioniertes Artefakt wird nicht als
       einsatzbereit gemeldet.
-- [ ] Update auf eine höhere Testversion und Rückkehr zur vorherigen Version sind
-      praktisch bestanden.
+- [ ] Erstinstallation startet aus dem festgelegten Artefakt ohne zusätzliche Runtime.
+- [ ] Update auf eine höhere Testversion erhält Konfiguration und synthetische
+      Aufbewahrungsmetadaten und meldet die neue Version.
+- [ ] Rollback auf die vorherige Version startet und verarbeitet den synthetischen
+      Kernfall ohne widersprüchliche Pakete.
+- [ ] Erneutes Upgrade auf die Zielversion ist praktisch bestanden.
 
 ## 4. TXT-/DOCX-Mehrfachauswahl und lokale Textprüfung
 
@@ -104,7 +113,7 @@ verwenden. Text- und Scan-PDF separat als verpflichtende Stop-Gegenprobe prüfen
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC21 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC22 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

@@ -57,7 +57,17 @@ async function main() {
     assert.ok(!markdown.includes('max@example.de'));
     assert.ok(markdown.includes('[PERSON_001]'));
     assert.ok(markdown.includes('[EMAIL_REDACTED]'));
-    console.log('Windows visual acceptance: PASS (real Windows OCR, redaction, verification)');
+
+    const { rasterizeToPng, visualBridgeStatus, VisualBridgeError } =
+      require('../plugins/data-secure/server/windows-visual');
+    assert.deepStrictEqual(visualBridgeStatus(), {
+      available: true, mode: 'windows_job_object', reason: 'ok'
+    });
+    await assert.rejects(
+      rasterizeToPng(Buffer.from('not-an-emf', 'ascii'), 'emf'),
+      (error) => error instanceof VisualBridgeError
+    );
+    console.log('Windows visual acceptance: PASS (Job Object, real OCR/redaction, malformed EMF refusal)');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

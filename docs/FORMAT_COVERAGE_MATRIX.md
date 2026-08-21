@@ -1,6 +1,6 @@
 # Format-Coverage-Matrix
 
-Stand: 3.2.0 RC21. Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte
+Stand: 3.2.0 RC22. Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte
 Dateiendungen. `Privater Dialog` bedeutet: Der gesamte lokale Review-/Residual-/Release-
 Pfad ist freigegeben. `Input` ist der technische Fallback und kein Beleg vollständiger
 Struktur- oder Formattreue.
@@ -14,7 +14,7 @@ Struktur- oder Formattreue.
 | PPTX | Folientext und Sprechernotizen | bekannte Medien über Visual-Gate | nein | Master/Layout, Charts, SmartArt, eingebettete Objekte und externe Beziehungen systematisch abdecken |
 | MD | gesamter UTF-8-Text innerhalb der Größenlimits | referenzierte externe Inhalte werden nicht geladen | nein | eingebettete Daten/HTML und Zeichencodierung explizit klassifizieren |
 | CSV | Text in abgeschirmtem Markdown-Fence | keine | nein | Dialekt, Encoding und mehrzeilige Felder explizit abnehmen |
-| PNG/BMP/JPEG | OCR-Text nur über lokalen Visual-Gate | Pixelprüfung, Schwärzung und Kontroll-OCR soweit Codec unterstützt | nein | ausdrückliches Profil; JPEG/BMP/PNG-Varianten und OCR/Raster-OS-Grenze weiter härten |
+| PNG/BMP/JPEG | OCR-Text nur über lokalen Visual-Gate | Pixelprüfung, Schwärzung und Kontroll-OCR soweit Codec unterstützt; Windows-Prozess läuft im Job Object | nein | ausdrückliches Profil; Codec-Varianten, AppContainer und Dateisystemgrenze weiter härten |
 
 ## PDF-Freigabekriterien für den privaten Dialog
 

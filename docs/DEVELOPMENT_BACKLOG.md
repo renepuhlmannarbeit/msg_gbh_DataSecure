@@ -216,7 +216,7 @@ Ein unterbrochener Vorgang wird sicher bereinigt oder eindeutig wiederaufgenomme
 
 ### DS-007 – Pilot-Release-Gate und Installationsbeweis (M)
 
-**Stand RC14: teilweise umgesetzt.** CI baut ZIP und MCPB reproduzierbar, erzeugt
+**Stand RC22: teilweise umgesetzt.** CI baut ZIP und MCPB reproduzierbar, erzeugt
 eine SPDX-2.3-SBOM und SHA-256-Prüfsummen, scannt die vollständige Git-Historie mit
 Gitleaks und analysiert JavaScript mit CodeQL; Actions sind auf Commit-SHAs gepinnt.
 Offen bleiben Codesignatur sowie dokumentierte Installation, Upgrade und Rollback
@@ -259,7 +259,7 @@ gespeicherten vollständigen Originaldatei-Hashes und verkürzten ungesalzenen
 **Ergebnis:** Unvertraute Dokumente, Konverter und OCR laufen in kurzlebigen Workern mit
 Zeit-, Speicher-, Größen-, Seiten-, Objekt- und Dekompressionsgrenzen.
 
-**Stand RC18: native Parser-Prozessgrenzen für Windows x64 umgesetzt.** Jede Datei wird
+**Stand RC22: native Parser- und Visual-Prozessgrenzen für Windows x64 umgesetzt.** Jede Datei wird
 in einem kurzlebigen Node-Kindprozess geparst. Auf Windows startet er ausschließlich
 über einen gebündelten C++17-Launcher: Quelle als geerbtes stdin-Handle ohne Pfad,
 `CREATE_SUSPENDED`, Job-Zuweisung vor Resume, `ACTIVE_PROCESS=1`, 768 MiB Prozess-/
@@ -272,10 +272,14 @@ Paketkonsistenzprüfung, reale Grenztests sowie getrenntes C++-CodeQL sind Teil 
 Release-Gates. Der Sidecar ist ausdrücklich kein Herkunfts- oder Signaturnachweis.
 Der Parent begrenzt zusätzlich Wallclock, V8-Heap, Antwortschema, Text, Anlagen und
 Gesamtausgabe und bestätigt das Launcher-Ende vor der Rückgabe eines Timeoutfehlers.
-OCR/Raster besitzen weiterhin Dokument-/Einzelzeit- und Ausgabegrenzen, ihr heutiger
-Windows-Prozessbaum-Abbruch ist aber noch best effort. Offen sind Codesignatur,
-Windows ARM64, der Job-Object-Pfad für OCR/Raster sowie AppContainer als belegte
-OS-Netz-/Dateisystem-/Credential-Grenze. Vor klinischen Echtdaten bleibt dies ein Gate.
+OCR/Raster starten ebenfalls ohne direkten PowerShell-Fallback über den verifizierten
+Launcher. Der Visual-Job erzwingt einen Prozess, 768 MiB Prozess-/Jobspeicher,
+90 Sekunden CPU, 115 Sekunden Wallclock und `KILL_ON_JOB_CLOSE`; der äußere Adapter
+bestätigt das Launcher-Ende. Reale Windows-OCR, Schwärzung, Kontroll-OCR, ein
+PowerShell-Kindprozessversuch und malformed EMF sind synthetisch abgenommen. Offen sind
+Codesignatur, Windows ARM64, AppContainer als belegte OS-Netz-/Dateisystem-/Credential-
+Grenze, restriktive Temp-Ablage und breitere Codec-/Windows-10-/Windows-11-Abnahme.
+Vor klinischen Echtdaten bleibt dies ein Gate.
 
 **Abnahme:**
 
@@ -556,10 +560,11 @@ belegen:
    weitere Formate folgen ausschließlich anhand der Coverage-Matrix aus DS-203.
 5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus
    laufen ohne neue Nutzeroberfläche, Datumslogik oder Laufzeitnetz.
-6. **DS-009 (Parser-Job-Object-Slice in RC18):** Native Windows-x64-Prozess-, CPU-
-   und Speichergrenzen samt fail-closed Packaging sind umgesetzt. Als Nächstes den
-   Launcher für OCR/Raster kalibrieren und AppContainer ohne Netz-Capabilities gegen
-   Internet, DNS, RFC1918 und Loopback nachweisen; ARM64 und Signatur folgen getrennt.
+6. **DS-009 (Parser-/Visual-Job-Object-Slice in RC22):** Native Windows-x64-Prozess-,
+   CPU- und Speichergrenzen samt fail-closed Packaging sind für Parser, OCR und Raster
+   umgesetzt. Als Nächstes AppContainer ohne Netz-Capabilities sowie restriktive Temp-
+   und Dateisystemgrenzen gegen Internet, DNS, RFC1918 und Loopback nachweisen; ARM64,
+   Codec-Matrix und Signatur folgen getrennt.
 7. **DS-203 (RC21-Spike, Produkt weiter fail-closed):** PDF erzeugt weder im Dialog noch
    im Input-Pfad ein Paket. Packaging, Attestation, Lizenzinventar, PE-Härtung,
    Basis-API und Job-Object-Ausführung sind synthetisch belegt. Als Nächstes folgt ein

@@ -35,6 +35,7 @@ function genericStatus(options = {}) {
     parser_boundary_reason: engine.parser_boundary_reason,
     visual_bridge: engine.visual_bridge,
     visual_bridge_reason: engine.visual_bridge_reason,
+    visual_boundary: engine.visual_boundary,
     input_documents: listInput().length,
     anonymized_packages: listPackageDirs().filter((p) =>
       fs.existsSync(path.join(p.full, 'manifest.json'))
@@ -63,7 +64,6 @@ function genericStatus(options = {}) {
     companion_model_can_release: companion.model_can_release,
     folders_ready: true,
     supported_inputs: [
-      'PDF',
       'Word (.docx)',
       'Excel (.xlsx)',
       'PowerPoint (.pptx)',
@@ -73,6 +73,9 @@ function genericStatus(options = {}) {
       'PNG',
       'JPEG',
       'BMP'
+    ],
+    blocked_inputs: [
+      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' }
     ],
     runtime_dependency_install: false,
     workflow:

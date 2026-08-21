@@ -53,6 +53,8 @@ jobs:
           node-version: '22'
       - name: Run privacy, parser, image, MCP and plugin tests
         run: npm test
+      - name: Run real Windows visual Job Object acceptance
+        run: npm run test:windows-visual
 
   build:
     name: Build plugin and MCPB
@@ -81,6 +83,8 @@ jobs:
             echo "$reply" | grep -q 'eu-privacy-document-gateway'
             echo "$reply" | grep -q 'windows_job_object'
             echo "$reply" | grep -q '"text_engine":"ready"'
+            echo "$reply" | grep -q '"visual_boundary":"windows_job_object"'
+            echo "$reply" | grep -q '"blocked_inputs":\[{"format":"PDF","reason":"PDF_COVERAGE_UNVERIFIED"}\]'
           done
           test -f .verify/plugin/bin/windows-x64/datasecure-sandbox.exe
           test -f .verify/mcpb/bin/windows-x64/datasecure-sandbox.exe

@@ -3,7 +3,7 @@
 ## Artefacts
 
 ```bash
-npm run version:sync -- 3.2.0-rc20  # propagate a new version everywhere
+npm run version:sync -- <version>  # propagate a new version everywhere
 npm test
 npm run build
 node scripts/generate-sbom.mjs
@@ -60,7 +60,8 @@ Do not mark a build production-ready until all of these hold:
 - [ ] JavaScript and native C++ CodeQL SARIF gates plus the complete-history Gitleaks
       scan are green
 - [ ] `npm run version:sync` reports "all files already in sync"
-- [ ] packaged ZIP and MCPB answer `initialize` and report `windows_job_object` (CI verifies this)
+- [ ] packaged ZIP and MCPB answer `initialize` and report `windows_job_object` for
+      both parser and visual boundary (CI verifies this)
 - [ ] the packaged plugin contains `bin/windows-x64/datasecure-sandbox.exe` and its
       matching SHA-256 sidecar (CI and the build verify this)
 - [ ] ZIP, MCPB, SPDX SBOM and `SHA256SUMS` are present in the same CI artefact
@@ -72,8 +73,9 @@ Do not mark a build production-ready until all of these hold:
 
 ## Windows acceptance run
 
-The bridges to Windows OCR and rasterisation cannot be exercised in CI. Before a
-pilot, verify on a target machine:
+CI exercises the real Windows OCR/redaction path under the native Job Object and
+refuses a malformed EMF. Before a pilot, repeat the following on the supported target
+Windows versions because the GitHub runner is not a representative end-user install:
 
 The real OCR/redaction path passed on 2026-08-21 with
 `npm run test:windows-visual` on the target Windows machine. The remaining
@@ -85,7 +87,8 @@ alone do not close them.
       while preserving the professional text (automated native-form acceptance,
       2026-08-21)
 - [ ] the plugin installs and the local MCP starts without any runtime install
-- [ ] `privacy_status` reports `visual_bridge: available`
+- [ ] `privacy_status` reports `visual_bridge: available` and
+      `visual_boundary: windows_job_object`
 - [ ] the privacy folder opens
 - [ ] DOCX, XLSX and PPTX preflight work on synthetic files
 - [ ] every PDF stops with `PDF_COVERAGE_UNVERIFIED`, restores its source and publishes no package

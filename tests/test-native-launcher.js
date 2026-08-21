@@ -49,6 +49,24 @@ test('ACTIVE_PROCESS=1 blocks child creation below Node permissions', () => {
   assert.strictEqual(result.stdout, 'CHILD_BLOCKED');
 });
 
+test('ACTIVE_PROCESS=1 also blocks child creation from the PowerShell visual host', () => {
+  if (process.platform !== 'win32') return;
+  const powershell = path.join(process.env.SystemRoot || 'C:\\Windows',
+    'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const command = [
+    "$ErrorActionPreference='Stop'",
+    "try { Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c','exit 0' -WindowStyle Hidden",
+    "  [Console]::Out.Write('CHILD_STARTED'); exit 9",
+    "} catch { [Console]::Out.Write('CHILD_BLOCKED') }"
+  ].join(';');
+  const result = childProcess.spawnSync(launcher, [
+    '--memory-mib', '128', '--cpu-ms', '5000', '--wall-ms', '5000', '--', powershell,
+    '-NoProfile', '-NonInteractive', '-Command', command
+  ], { encoding: 'utf8', windowsHide: true, shell: false, timeout: 10_000, maxBuffer: 64 * 1024 });
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, 'CHILD_BLOCKED');
+});
+
 test('job memory limit terminates an allocating worker', () => {
   if (process.platform !== 'win32') return;
   const result = runNode("const a=[];setInterval(()=>a.push(Buffer.alloc(8*1024*1024,1)),5)", {

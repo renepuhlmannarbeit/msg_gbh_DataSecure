@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC21 · Windows 10/11 x64 · ca. 20 Minuten.
+Version 3.2.0 RC22 · Windows 10/11 x64 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC21 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC22 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -79,7 +79,7 @@ Dateigrößen, Pfade, Dateinamen oder Rohinhalte.
 Drei Fragen. Wenn Sie eine nicht sicher beantworten können: IT fragen, nicht
 raten.
 
-1. **Läuft Windows 10 oder 11?** DataSecure gibt es nur für Windows.
+1. **Läuft Windows 10 oder 11 auf einem x64-PC?** Windows ARM64 wird noch nicht unterstützt.
 2. **Ist Claude Desktop installiert und sind Sie angemeldet?** Die Anwendung auf
    dem Rechner, nicht die Webseite im Browser.
 3. **Welche Datei haben Sie von der IT bekommen?** Schauen Sie auf die Endung —
@@ -95,9 +95,9 @@ Sie müssen nur einen davon machen.
 
 | Weg | Sie haben … | Was zu tun ist |
 |---|---|---|
-| **A** (am einfachsten) | eine Datei auf `.mcpb` | Doppelklick, sonst nichts nötig → Teil 3 |
-| **B** (Engineering-Weg) | eine Datei auf `.zip` | Nur nach IT-Freigabe; Runtime-Auflösung muss für die Zielumgebung belegt sein → Teil 4 |
-| **C** (nichts zu tun) | gar keine Datei | Die IT verteilt zentral; das Plugin erscheint von selbst → Teil 5 |
+| **A** (Engineering-Testweg) | eine Datei auf `.mcpb` | Über Claude-Einstellungen installieren → Teil 3 |
+| **B** (Plugin-Zielweg, noch abzunehmen) | eine Datei auf `.zip` | Nur nach IT-Freigabe; Runtime-Auflösung und Installation müssen für die Zielumgebung belegt sein → Teil 4 |
+| **C** (IT-verwaltet, noch nicht rollout-erprobt) | gar keine Datei | Die IT verteilt zentral; erst nach Marketplace- und Rollout-Abnahme → Teil 5 |
 
 **Warum der Unterschied:** Claude Desktop stellt für `.mcpb`-Desktop-Extensions
 eine eingebaute Node.js-Runtime bereit. Der aktuelle Plugin-ZIP startet ebenfalls
@@ -113,8 +113,7 @@ verbindlich belegt. Wenn Sie die Wahl haben: `.mcpb`.
 3. **Einstellungen → Erweiterungen → Erweiterte Einstellungen** öffnen. Im
    Abschnitt für Extension-Entwickler **„Erweiterung installieren …"** wählen,
    die `.mcpb`-Datei auswählen und den Dialog bestätigen.
-   > Doppelklick oder Ziehen in Claude können je nach Version ebenfalls angeboten
-   > werden. Der Einstellungsweg ist der dokumentierte Standard. Fehlt der Bereich,
+   > Der Einstellungsweg ist der dokumentierte Testweg. Fehlt der Bereich,
    > ist die Desktop-App möglicherweise veraltet oder durch eine IT-Richtlinie
    > eingeschränkt — dann aufhören und IT rufen.
 4. **Bestätigen und die vier Angaben stehen lassen.** Ändern Sie nichts:
@@ -223,7 +222,7 @@ wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
 Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen Sie
 eine gestoppte TXT-/DOCX-Datei anschließend erneut über den lokalen Dateidialog.
 
-RC21 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
+RC22 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
 ARM64 stoppt bereits die lokale Parserbereitschaft sicher; es gibt dort keinen
 direkten Node-Ersatzpfad. Plattformübergreifende Adapter sind ein späterer Backlog-
 Punkt und kein aktueller Produktclaim.
@@ -284,7 +283,7 @@ Nummern beginnen bei jedem Dokument neu.
 | `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
 | Claude meldet mehr Dateien als in `Input` lagen | `input_documents_seen`, `attempted` und `automatic_retries` prüfen. Mehrere Versuche derselben Datei sind keine mehreren Dateien |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
-| `PDF_COVERAGE_UNVERIFIED` | PDF ist in RC21 unabhängig vom Inhalt sicher gesperrt. Verwenden Sie nach Organisationsfreigabe die ursprüngliche DOCX-/XLSX-/PPTX-/TXT-Datei oder lassen Sie einen ausdrücklich freigegebenen PNG-/JPEG-Export erneut durch DataSecure verarbeiten; niemals das Original-PDF oder den Export direkt in Claude hochladen |
+| `PDF_COVERAGE_UNVERIFIED` | PDF ist in RC22 unabhängig vom Inhalt sicher gesperrt. Verwenden Sie nach Organisationsfreigabe die ursprüngliche DOCX-/XLSX-/PPTX-/TXT-Datei oder lassen Sie einen ausdrücklich freigegebenen PNG-/JPEG-Export erneut durch DataSecure verarbeiten; niemals das Original-PDF oder den Export direkt in Claude hochladen |
 | Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | In `Processed` nachsehen und das Original zurück nach `Input` verschieben. Tritt das erneut auf, an IT melden |
 | Fachbegriff fälschlich geschwärzt | Kein Datenschutzproblem, aber bitte melden |
 | **Echter Name in der geprüften Fassung** | **Sofort aufhören.** Nicht weiterarbeiten, Chat nicht weiterverwenden, umgehend melden |
@@ -323,7 +322,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC21 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC22 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

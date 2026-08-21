@@ -1,11 +1,15 @@
 'use strict';
 
 const fs = require('fs');
-const crypto = require('crypto');
 const path = require('path');
 const os = require('os');
 const childProcess = require('child_process');
-const { rasterizeToPng, ocrPngDetailed } = require('./windows-visual');
+const {
+  rasterizeToPng,
+  ocrPngDetailed,
+  visualBridgeStatus
+} = require('./windows-visual');
+const { verifyNativeLauncherArtifact } = require('./native-launcher');
 
 class SafeError extends Error {}
 let nativeHostProbeCache;
@@ -35,71 +39,24 @@ function descriptorStartsAsPdf(fd, io = fs) {
 }
 
 function verifyNativeLauncher(launcher, options = {}) {
-  const exists = options.existsSync || fs.existsSync;
-  if (!exists(launcher)) throw safeError(
-    'Die native Windows-Parserbegrenzung ist nicht verfügbar.', 'PARSER_ISOLATION_FAILED'
-  );
-  const checksumFile = launcher.replace(/\.exe$/i, '.sha256');
-  let expected;
-  let bytes;
   try {
-    if (typeof options.launcherExpectedSha256 === 'string' && Buffer.isBuffer(options.launcherBytes)) {
-      expected = options.launcherExpectedSha256;
-      bytes = options.launcherBytes;
-    } else {
-      if (!exists(checksumFile)) throw new Error('checksum_missing');
-      expected = fs.readFileSync(checksumFile, 'utf8').trim();
-      bytes = fs.readFileSync(launcher);
+    return verifyNativeLauncherArtifact(launcher, options);
+  } catch (error) {
+    if (error.reason === 'missing') {
+      throw safeError('Die native Windows-Parserbegrenzung ist nicht verfügbar.', 'PARSER_ISOLATION_FAILED');
     }
-  } catch {
-    throw safeError('Die native Windows-Parserbegrenzung ist beschädigt oder unvollständig.', 'PARSER_ISOLATION_FAILED');
+    if (error.reason === 'not_pe' || error.reason === 'not_amd64_pe') {
+      throw safeError('Die native Windows-Parserbegrenzung besitzt nicht das erwartete x64-Format.', 'PARSER_ISOLATION_FAILED');
+    }
+    throw safeError(
+      'Die native Windows-Parserbegrenzung ist beschädigt oder unvollständig.', 'PARSER_ISOLATION_FAILED'
+    );
   }
-  const actual = crypto.createHash('sha256').update(bytes).digest('hex');
-  if (!/^[a-f0-9]{64}$/.test(expected) || actual !== expected) {
-    throw safeError('Die native Windows-Parserbegrenzung ist beschädigt oder unvollständig.', 'PARSER_ISOLATION_FAILED');
-  }
-  try {
-    if (bytes.length < 0x40 || bytes.readUInt16LE(0) !== 0x5a4d) throw new Error('not_pe');
-    const peOffset = bytes.readUInt32LE(0x3c);
-    if (peOffset > bytes.length - 24 || bytes.toString('ascii', peOffset, peOffset + 4) !== 'PE\0\0' ||
-      bytes.readUInt16LE(peOffset + 4) !== 0x8664) throw new Error('not_amd64_pe');
-  } catch {
-    throw safeError('Die native Windows-Parserbegrenzung besitzt nicht das erwartete x64-Format.', 'PARSER_ISOLATION_FAILED');
-  }
-  return launcher;
 }
 
 function dataRoot() {
   const base = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
   return path.join(base, 'ClaudeEUPrivacyDocumentGatewayV32');
-}
-
-function helperScript(name) {
-  return path.join(__dirname, '..', 'scripts', name);
-}
-
-function powershellPath() {
-  const root = process.env.SystemRoot || 'C:\\Windows';
-  return path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-}
-
-// The visual pipeline depends on the Windows PowerShell bridge. Reporting it as
-// ready unconditionally - as this function used to - hides the difference
-// between "no graphics in this document" and "graphics could not be checked and
-// were all withheld", which is exactly what an operator needs to know.
-function visualBridgeStatus() {
-  if (process.platform !== 'win32') {
-    return { available: false, reason: 'not_windows' };
-  }
-  for (const name of ['windows-ocr.ps1', 'rasterize-image.ps1']) {
-    if (!fs.existsSync(helperScript(name))) {
-      return { available: false, reason: `helper_missing:${name}` };
-    }
-  }
-  if (!fs.existsSync(powershellPath())) {
-    return { available: false, reason: 'powershell_missing' };
-  }
-  return { available: true, reason: 'ok' };
 }
 
 // Text processing has no end-user-installed dependency. On Windows its bundled
@@ -151,7 +108,8 @@ function readStatus() {
       parser_boundary: parser.mode,
       parser_boundary_reason: parser.reason,
       visual_bridge: visual.available ? 'available' : 'unavailable',
-      visual_bridge_reason: visual.reason
+      visual_bridge_reason: visual.reason,
+      visual_boundary: visual.mode
     };
   }
   return {
@@ -163,7 +121,8 @@ function readStatus() {
     parser_boundary: parser.mode,
     parser_boundary_reason: parser.reason,
     visual_bridge: visual.available ? 'available' : 'unavailable',
-    visual_bridge_reason: visual.reason
+    visual_bridge_reason: visual.reason,
+    visual_boundary: visual.mode
   };
 }
 

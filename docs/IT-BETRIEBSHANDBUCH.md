@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC21 · Stand 21.08.2026
+Version 3.2.0 RC22 · Stand 21.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC21 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC22 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -15,10 +15,10 @@ Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine MCP-Read-Date
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC21 |
+| Artefakt | Ziel | Status RC22 |
 |---|---|---|
-| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc20.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-x64-Engineering-Weg; frische Installation noch abzunehmen |
-| `DataSecure-Privacy-Preflight-v3.2.0-rc20.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Parser-Launcher; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc22.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-x64-Engineering-Weg; frische Installation noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc22.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher für Parser/OCR/Raster; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -40,6 +40,9 @@ Code begrenzt. Web/Cowork dürfen keine Originaldatei für diesen Preflight erha
 - Keine Cloud-OCR-, Remote-MCP- oder Upload-Fallbacks für Originaldaten zulassen.
 - Nur Artefakte aus demselben grünen `main`-Commit verwenden; SHA-256 vor der
   Installation mit der Release-Evidenz vergleichen.
+- `privacy_status` muss für Parser und Bildverarbeitung `windows_job_object` melden.
+  Andernfalls bleibt Textverarbeitung gesperrt beziehungsweise werden Grafiken sicher
+  zurückgehalten; niemals PowerShell oder Node manuell als Ausweichweg starten.
 
 Claude Desktop stellt für MCPB-Desktop-Extensions eine eingebaute Node.js-Runtime
 bereit. Für Endanwender ist keine separate Node-/npm-Installation vorgesehen. Ob
@@ -128,7 +131,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC21 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC22 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.

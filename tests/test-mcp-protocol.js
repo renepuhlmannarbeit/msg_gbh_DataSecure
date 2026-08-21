@@ -218,6 +218,12 @@ async function main() {
     assert.strictEqual(result.structuredContent.companion_model_can_review, false);
     assert.strictEqual(result.structuredContent.companion_model_can_release, false);
     assert.ok(result.structuredContent.supported_inputs.includes('PNG'));
+    assert.ok(!result.structuredContent.supported_inputs.includes('PDF'));
+    assert.deepStrictEqual(result.structuredContent.blocked_inputs, [
+      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' }
+    ]);
+    assert.strictEqual(result.structuredContent.visual_boundary,
+      process.platform === 'win32' ? 'windows_job_object' : 'unavailable');
     assert.ok(result.structuredContent.supported_inputs.includes('JPEG'));
     assert.ok(result.structuredContent.supported_inputs.includes('BMP'));
     assert.ok(!result.isError);

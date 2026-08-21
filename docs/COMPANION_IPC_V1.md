@@ -124,6 +124,7 @@ Dokument-SHA-256 gebunden.
 1. Menschliche Windows-Usability-Abnahme durchführen und lokale Review-UI für
    macOS und Linux produktionsfähig umsetzen.
 2. Den nativen PDFium-Text-only-Vertrag aus `PDF_ENGINE_DECISION.md` umsetzen und erst nach allen Gates PDF in den privaten Vertical-Slice aufnehmen.
-3. Den nativen Job-Object-Launcher getrennt für OCR/Raster kalibrieren und danach
-   AppContainer ohne Netz-Capabilities als OS-Grenze nachweisen.
+3. Der kalibrierte Job-Object-Pfad für OCR/Raster ist in RC22 umgesetzt. Als Nächstes
+   AppContainer ohne Netz-Capabilities sowie restriktive Temp-/Dateisystemgrenzen
+   gegen Internet, DNS, RFC1918 und Loopback nachweisen.
 4. Codesignatur, Upgrade/Rollback und reale Plattformtests nachweisen.

@@ -509,6 +509,12 @@ async function main() {
     assert.strictEqual(status.parser_boundary, process.platform === 'win32' ? 'windows_job_object' : 'not_applicable');
     assert.strictEqual(status.parser_boundary_reason, process.platform === 'win32' ? 'ok' : 'not_windows');
     assert.ok(['available', 'unavailable'].includes(status.visual_bridge));
+    assert.strictEqual(status.visual_boundary,
+      process.platform === 'win32' ? 'windows_job_object' : 'unavailable');
+    assert.ok(!status.supported_inputs.includes('PDF'));
+    assert.deepStrictEqual(status.blocked_inputs, [
+      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' }
+    ]);
     assert.strictEqual(status.retention_days, 7);
     assert.strictEqual(typeof status.retention_due_entries.total, 'number');
     assert.ok(status.retention_last_cleanup.ran_at, 'the most recent cleanup result must be visible');

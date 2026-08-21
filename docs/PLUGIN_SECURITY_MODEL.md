@@ -54,6 +54,15 @@ akzeptiert nur das versionierte Parser-Schema. Node-Permissions sind
 weiterhin Defense-in-depth; erst ein erfolgreich getesteter AppContainer liefert die
 noch offene OS-Netz-/Dateisystem-/Credential-Grenze.
 
+Die PowerShell-Brücken für Windows OCR und Rasterisierung laufen über denselben
+verifizierten Launcher, jedoch mit getrennt kalibrierten Grenzen: ein Prozess,
+768 MiB Prozess-/Jobspeicher, 90 Sekunden CPU und 115 Sekunden Job-Wallclock.
+`ACTIVE_PROCESS=1` wurde sowohl gegen Node als auch gegen einen Kindprozessversuch aus
+PowerShell real geprüft. Fehlt oder scheitert diese Grenze, startet kein direkter
+PowerShell-Fallback; das betreffende Bild bleibt zurückgehalten. Das Job Object ist
+keine No-Network-, Profil-, Registry- oder Dateisystem-Sandbox. AppContainer und
+restriktivere temporäre Ablage bleiben vor klinischen Echtdaten eigene Gates.
+
 Every one of these stops the pipeline or withholds the asset rather than
 guessing:
 
@@ -73,9 +82,8 @@ guessing:
 - OCR liefert mehr als 100.000 Wörter, mehr als fünf Millionen Textzeichen oder
   ein nicht exakt validierbares Ergebnisobjekt
 - die gesamte visuelle Verarbeitung eines Dokuments überschreitet drei Minuten;
-  der aktuelle Windows-Adapter versucht den Prozessbaum zu beenden, stellt die Quelle
-  wieder her und publiziert kein Teilpaket. Der harte OS-Nachweis für alle Nachfahren
-  des OCR-/Rasterpfads folgt in einem getrennt kalibrierten Launcher-Slice
+  der Windows-Adapter beendet den Job einschließlich PowerShell, bestätigt das
+  Launcher-Ende, stellt die Quelle wieder her und publiziert kein Teilpaket
 - recognised text too short to trust the "no PII found" result
 - PII found but its bounding boxes cannot be mapped
 - redaction failed, or a second OCR pass still finds the redacted strings
