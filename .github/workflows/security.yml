@@ -21,7 +21,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Initialize CodeQL
@@ -32,6 +31,19 @@ jobs:
           queries: security-extended
       - name: Analyze
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          upload: never
+          output: codeql-results
+      - name: Enforce clean CodeQL result
+        run: node scripts/check-sarif.mjs codeql-results
+      - name: Archive CodeQL evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d4f1e999027af79c5b89b4b8288aab0ef # v4.6.2
+        with:
+          name: codeql-sarif-${{ github.sha }}
+          path: codeql-results
+          if-no-files-found: error
+          retention-days: 14
 
   secret-history:
     name: Gitleaks (complete history)

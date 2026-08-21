@@ -48,7 +48,7 @@ every rollout because the Claude UI and admin controls can change:
 Do not mark a build production-ready until all of these hold:
 
 - [ ] CI is green on `main`, on both `ubuntu-latest` and `windows-latest`
-- [ ] CodeQL and the complete-history Gitleaks scan are green
+- [ ] local CodeQL SARIF gate and the complete-history Gitleaks scan are green
 - [ ] `npm run version:sync` reports "all files already in sync"
 - [ ] the packaged plugin answers `initialize` (CI verifies this)
 - [ ] ZIP, MCPB, SPDX SBOM and `SHA256SUMS` are present in the same CI artefact

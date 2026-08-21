@@ -41,7 +41,10 @@ third-party runtime package dependencies and cryptographically binds the two
 archives to the release metadata. CodeQL analyzes the JavaScript sources on
 pull requests and pushes to `main`.
 
-GitHub CodeQL supports public repositories and private organisation repositories
-with GitHub Code Security enabled. If repository visibility or licensing makes
-CodeQL unavailable, the workflow failure is a release blocker; do not silently
-disable the job. All workflow Actions are pinned to immutable commit SHAs.
+GitHub CodeQL supports uploading results for public repositories and private
+organisation repositories with GitHub Code Security enabled. This private repo
+does not depend on that paid upload/UI feature: CI runs the analysis locally,
+fails when the generated SARIF contains a finding, and archives the SARIF as a
+14-day workflow artefact. A missing or malformed report also fails closed. If
+GitHub Code Security is enabled later, SARIF upload can be added without changing
+the release gate. All workflow Actions are pinned to immutable commit SHAs.
