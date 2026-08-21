@@ -39,6 +39,7 @@ function bestEffortRetentionCleanup(deps, scope = 'all') {
     const cleanup = deps.cleanupLocalData || cleanupLocalData;
     return cleanup({
       scope,
+      trigger: 'run',
       now: deps.now,
       retentionDays: deps.retentionDays,
       removeEntry: deps.removeRetentionEntry

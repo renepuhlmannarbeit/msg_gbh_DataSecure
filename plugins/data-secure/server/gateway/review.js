@@ -81,6 +81,16 @@ function approveReviewAsset(reviewId, confirmed) {
 
   const { dir, meta, j } = safeReviewMeta(reviewId);
   if (j.approved) return { ok: true, already_approved: true, review_id: reviewId };
+  // An expired preview and a preview that never existed need different answers:
+  // the first is the retention window doing its job, the second means the image
+  // could not be rasterised safely in the first place.
+  if (j.preview_expired) {
+    throw new SafeError(
+      'Die lokale Preview dieses Review-Items ist durch die Aufbewahrungsfrist gelöscht ' +
+        'worden und kann nicht mehr freigegeben werden. Das Dokument bei Bedarf erneut ' +
+        'verarbeiten; die Grafik bleibt bis dahin zurückgehalten.'
+    );
+  }
   if (!j.preview_file) {
     throw new SafeError(
       'Für dieses Review-Item existiert kein sicher rasterisierter Preview-Kandidat. ' +

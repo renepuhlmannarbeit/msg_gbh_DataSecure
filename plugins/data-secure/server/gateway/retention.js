@@ -11,9 +11,12 @@ const SCOPES = new Set(['processed', 'output', 'review']);
 
 let lastCleanup = {
   ran_at: null,
+  trigger: null,
   retention_days: DEFAULT_RETENTION_DAYS,
   removed: { processed: 0, output: 0, review: 0 },
-  errors: 0
+  errors: 0,
+  errors_by_scope: { processed: 0, output: 0, review: 0 },
+  error_codes: {}
 };
 
 function retentionDays(env = process.env) {
@@ -103,28 +106,68 @@ function previewFiles(reviewDir, fsApi = fs) {
   return files;
 }
 
-function markReviewExpired(reviewDir, removedNames, at, fsApi = fs) {
-  let changed = false;
-  for (const entry of fsApi.readdirSync(reviewDir, { withFileTypes: true })) {
+// Maps the preview file name each evidence record claims to that record's path,
+// so a single preview can be marked without rescanning the directory.
+function reviewMetaIndex(reviewDir, fsApi = fs) {
+  const index = new Map();
+  let entries = [];
+  try {
+    entries = fsApi.readdirSync(reviewDir, { withFileTypes: true });
+  } catch {
+    return index;
+  }
+  for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.review.json')) continue;
     const metaPath = path.join(reviewDir, entry.name);
     try {
       const meta = JSON.parse(fsApi.readFileSync(metaPath, 'utf8'));
-      if (meta.preview_file && removedNames.has(meta.preview_file)) {
-        meta.preview_file = null;
-        meta.preview_sha256 = null;
-        meta.preview_expired = true;
-        meta.preview_expired_at = new Date(at).toISOString();
-        fsApi.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
-        changed = true;
-      }
+      if (meta.preview_file) index.set(String(meta.preview_file), metaPath);
     } catch {
-      /* unreadable evidence stays untouched; preview bytes are still removed */
+      /* unreadable evidence is left untouched */
     }
   }
-  return changed;
+  return index;
 }
 
+function markPreviewExpired(metaPath, at, fsApi = fs) {
+  const meta = JSON.parse(fsApi.readFileSync(metaPath, 'utf8'));
+  meta.preview_file = null;
+  meta.preview_sha256 = null;
+  meta.preview_expired = true;
+  meta.preview_expired_at = new Date(at).toISOString();
+  fsApi.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+}
+
+// Heals records whose claimed preview no longer exists on disk. Without this the
+// invariant would depend on a single flawless pass: once the bytes are gone, the
+// preview no longer appears in previewFiles(), so a marking step missed earlier
+// could never run again and the record would claim a preview forever.
+function reconcileMissingPreviews(reviewDir, at, fsApi = fs) {
+  let healed = 0;
+  for (const [name, metaPath] of reviewMetaIndex(reviewDir, fsApi)) {
+    const preview = path.join(reviewDir, name);
+    let exists = true;
+    try {
+      fsApi.lstatSync(preview);
+    } catch {
+      exists = false;
+    }
+    if (exists) continue;
+    try {
+      markPreviewExpired(metaPath, at, fsApi);
+      healed++;
+    } catch {
+      /* an unwritable record is reported by the caller as a failure */
+    }
+  }
+  return healed;
+}
+
+// Each preview is completed on its own: bytes gone, record updated immediately.
+// Marking after the whole loop meant one non-file entry left deleted bytes
+// behind a record that still claimed preview_file and preview_sha256, so
+// listReviewItems() reported preview_available and approval failed with a
+// misleading "Paketdatei fehlt".
 function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
   assertInside(reviewDir, root);
   const stat = fsApi.lstatSync(reviewDir);
@@ -132,18 +175,30 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
     throw new Error('Review-Ziel ist kein freigegebenes Verzeichnis.');
   }
 
-  const removed = new Set();
+  const index = reviewMetaIndex(reviewDir, fsApi);
+  const failures = [];
+  let removed = 0;
+
   for (const file of previewFiles(reviewDir, fsApi)) {
-    assertInside(file, root);
-    const fileStat = fsApi.lstatSync(file);
-    if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
-      throw new Error('Review-Preview ist kein freigegebener Dateipfad.');
+    const name = path.basename(file);
+    try {
+      assertInside(file, root);
+      const fileStat = fsApi.lstatSync(file);
+      if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
+        throw new Error('Review-Preview ist kein freigegebener Dateipfad.');
+      }
+      fsApi.unlinkSync(file);
+      removed++;
+      const metaPath = index.get(name);
+      if (metaPath) markPreviewExpired(metaPath, at, fsApi);
+    } catch (err) {
+      failures.push(err);
     }
-    fsApi.unlinkSync(file);
-    removed.add(path.basename(file));
   }
-  if (removed.size) markReviewExpired(reviewDir, removed, at, fsApi);
-  return removed.size;
+
+  // Also repairs records left inconsistent by an earlier interrupted run.
+  reconcileMissingPreviews(reviewDir, at, fsApi);
+  return { removed, failures };
 }
 
 function selectedScopes(scope) {
@@ -170,10 +225,25 @@ function cleanupLocalData(options = {}) {
   const removeEntry = options.removeEntry || ((target, root) => safeRemoveEntry(target, root, fsApi));
   const result = {
     ran_at: new Date(at).toISOString(),
+    // Which trigger produced this record: a manual purge ignores expiry
+    // entirely, so reporting it as an ordinary retention run would mislead.
+    trigger: options.trigger || (force ? 'purge' : 'retention'),
     retention_days: days,
+    forced: force,
     removed: { processed: 0, output: 0, review: 0 },
-    errors: 0
+    errors: 0,
+    errors_by_scope: { processed: 0, output: 0, review: 0 },
+    // Error codes only. A path or filename here would put document names into
+    // a status response that is explicitly free of raw data.
+    error_codes: {}
   };
+
+  function recordFailure(scope, err) {
+    result.errors++;
+    result.errors_by_scope[scope]++;
+    const code = String(err?.code || err?.message || 'unknown').slice(0, 60);
+    result.error_codes[code] = (result.error_codes[code] || 0) + 1;
+  }
 
   for (const scope of scopes) {
     const root = r[scope];
@@ -181,13 +251,17 @@ function cleanupLocalData(options = {}) {
       if (!force && !entryExpired(entry.full, cutoff, fsApi)) continue;
       try {
         if (scope === 'review') {
-          if (removeReviewPreviews(entry.full, root, at, fsApi) > 0) result.removed.review++;
+          // Counted even when a later preview in the same directory fails:
+          // bytes that are gone must show up as removed.
+          const outcome = removeReviewPreviews(entry.full, root, at, fsApi);
+          if (outcome.removed > 0) result.removed.review += outcome.removed;
+          for (const err of outcome.failures) recordFailure(scope, err);
         } else {
           removeEntry(entry.full, root);
           result.removed[scope]++;
         }
-      } catch {
-        result.errors++;
+      } catch (err) {
+        recordFailure(scope, err);
       }
     }
   }
@@ -228,7 +302,7 @@ function purgeLocalData(scope = 'all', confirmed = false, options = {}) {
     throw new SafeError('Lokale Datenschutzdaten werden nur nach ausdrücklicher Bestätigung gelöscht.');
   }
   const selected = String(scope || 'all').toLowerCase();
-  const result = cleanupLocalData({ ...options, scope: selected, force: true });
+  const result = cleanupLocalData({ ...options, scope: selected, force: true, trigger: 'purge' });
   return {
     ok: true,
     scope: selected,
@@ -243,6 +317,8 @@ module.exports = {
   RETENTION_ENV,
   retentionDays,
   safeRemoveEntry,
+  removeReviewPreviews,
+  reconcileMissingPreviews,
   cleanupLocalData,
   dueCounts,
   retentionStatus,

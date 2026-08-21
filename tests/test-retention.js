@@ -11,7 +11,8 @@ const {
   retentionDays,
   cleanupLocalData,
   dueCounts,
-  purgeLocalData
+  purgeLocalData,
+  retentionStatus
 } = require(path.join(runtime, 'gateway', 'retention.js'));
 
 const { test, done, assert } = createSuite('Retention and local deletion');
@@ -170,6 +171,59 @@ test('a deletion failure is recorded and does not abort other entries', () => {
   assert.strictEqual(result.removed.processed, 1);
   assert.ok(fs.existsSync(first));
   assert.ok(!fs.existsSync(second));
+});
+
+// A single entry that is not a regular file used to abort the whole review loop
+// after some previews were already unlinked, leaving evidence that still claimed
+// preview_file and preview_sha256 for bytes that were gone.
+test('a blocked entry does not leave evidence claiming a deleted preview', () => {
+  const root = sandbox('review-partial');
+  const dir = reviewItem(root, 'Paket_partial', 9);
+  fs.mkdirSync(path.join(dir, 'blocker'));
+  old(dir, 9);
+
+  const result = cleanupLocalData({ roots: root, retentionDays: 7, now: NOW, scope: ['review'] });
+
+  assert.ok(!fs.existsSync(path.join(dir, 'asset-001.png')), 'preview bytes must be gone');
+  assert.strictEqual(result.removed.review, 1, 'a deleted preview must be counted');
+  assert.strictEqual(result.errors, 1, 'the blocked entry must be reported');
+  assert.strictEqual(result.errors_by_scope.review, 1, 'the failure must name its scope');
+  assert.ok(Object.keys(result.error_codes).length > 0, 'a reason must be recorded');
+  assert.ok(
+    !JSON.stringify(result).includes('Paket_partial'),
+    'no path or entry name may reach the status record'
+  );
+
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'asset-001.review.json'), 'utf8'));
+  assert.strictEqual(meta.preview_file, null, 'evidence must not outlive the bytes');
+  assert.strictEqual(meta.preview_sha256, null);
+  assert.strictEqual(meta.preview_expired, true);
+});
+
+// Once the bytes are gone the preview no longer appears in the directory scan,
+// so a marking step missed by an interrupted run could never catch up.
+test('evidence left inconsistent by an earlier run is repaired', () => {
+  const root = sandbox('review-heal');
+  const dir = reviewItem(root, 'Paket_heal', 9);
+  fs.unlinkSync(path.join(dir, 'asset-001.png'));
+  old(dir, 9);
+
+  cleanupLocalData({ roots: root, retentionDays: 7, now: NOW, scope: ['review'] });
+
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'asset-001.review.json'), 'utf8'));
+  assert.strictEqual(meta.preview_file, null, 'a stale claim must be healed');
+  assert.strictEqual(meta.preview_expired, true);
+});
+
+test('a purge is recorded as a purge, not as an ordinary retention run', () => {
+  const root = sandbox('trigger');
+  file(path.join(root.output, 'Paket_fresh', 'x.md'));
+
+  assert.ok(purgeLocalData('output', true, { roots: root, now: NOW }).ok);
+
+  const status = retentionStatus({ roots: root, retentionDays: 7, now: NOW });
+  assert.strictEqual(status.last_cleanup.trigger, 'purge', 'the trigger must be visible');
+  assert.strictEqual(status.last_cleanup.forced, true, 'an ignored expiry window must be visible');
 });
 
 try {

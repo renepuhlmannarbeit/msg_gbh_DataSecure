@@ -114,11 +114,35 @@ package remains valid and the unavailable image stays fail-closed. Approval
 likewise deletes the redundant preview after copying the reviewed PNG into the
 released package.
 
+Deletion and evidence are completed per review entry, not per directory: the
+bytes go and the record is updated in the same step. A record whose claimed
+preview no longer exists is repaired on the next run, so an interrupted pass
+cannot leave a `.review.json` promising a file that is gone. Approval of an
+expired item is refused with a message that names the retention window rather
+than reporting a missing package file.
+
 `retention_days=0` removes the processed original and withheld preview bytes as
 soon as a successful run commits. The newly returned Output package remains
 readable for that response and becomes eligible at the next cleanup trigger.
+
+**`retention_days=0` therefore disables visual approval.** Applicant and
+personnel profiles withhold every image by default, so with a zero window the
+preview is gone before a human can look at it and no graphic from those profiles
+can ever be released. That is a defensible maximum-privacy setting, but it is a
+workflow decision rather than a fine adjustment.
+
 The confirmed `purge_local_data` tool can immediately clean one selected scope
-or all three.
+or all three. It ignores the expiry window, and `privacy_status` records the
+trigger (`startup`, `run` or `purge`) plus a `forced` flag so a purge is not
+mistaken for an ordinary retention run. Failures are counted per scope with an
+error code and no path or document name.
+
+Two deliberate limits. A review directory that holds nothing but evidence is
+kept, so `Needs Visual Review` accumulates one small directory per processed
+package with images; the `.review.json` records are the proof of what was
+withheld and when its bytes expired. And there is no explicit reject tool:
+withholding plus expiry is the rejection path, so the only way to refuse a
+graphic is to leave it alone.
 
 Audit records are intentionally outside both automatic retention and manual
 purge. They contain hashes and processing facts only (`raw_content_logged:

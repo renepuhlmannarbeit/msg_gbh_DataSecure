@@ -1,7 +1,7 @@
 # DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC4 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC5 · Windows 10/11 · ca. 20 Minuten.
 
 ---
 
@@ -41,6 +41,13 @@ aussieht.
 Grafiken werden zurückgehalten, bis ein Mensch sie freigibt; bei Bewerbungen und
 Mitarbeiterprofilen **immer**. Claude kann das Bild vorher nicht sehen und Ihnen
 deshalb auch nicht sagen, was darauf ist. Schauen Sie selbst hin.
+
+Sehen Sie sich Bilder **zeitnah** an. Nach Ablauf der Aufbewahrungsfrist (Regel 3)
+wird die Bilddatei gelöscht und die Grafik bleibt dauerhaft zurückgehalten;
+Claude nennt Ihnen dann ausdrücklich die abgelaufene Frist als Grund. Sie können
+das Dokument bei Bedarf erneut verarbeiten. Hat Ihre IT die Aufbewahrung auf
+`0` Tage gesetzt, ist eine Bildfreigabe grundsätzlich nicht möglich — das ist
+eine bewusste Einstellung, kein Fehler.
 
 ### Regel 3 — Räumen Sie auf
 
@@ -252,6 +259,6 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-DataSecure Privacy Preflight 3.2.0 RC4 · Geschäftsbereich Healthcare, msg systems ag.
+DataSecure Privacy Preflight 3.2.0 RC5 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
