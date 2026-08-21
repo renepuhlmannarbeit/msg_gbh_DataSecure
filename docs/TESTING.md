@@ -15,7 +15,7 @@ file prints one line per case and exits non-zero on the first failure.
 |---|---|---|
 | `test-manifest.js` | 13 | version consistency across package.json, MCPB manifest, plugin.json, VERSION, BUILD_INFO and all skills; tool/prompt parity between manifest and server; marketplace target; that the plugin entry point resolves inside the plugin root; that every test the npm script names exists |
 | `test-plugin-structure.js` | – | plugin directory layout, skill frontmatter, MCP config, and mechanical coverage requiring every runtime tool to appear in agent guidance or a justified exception |
-| `test-parsers.js` | 23 | DOCX/XLSX/PPTX text, entities, embedded and vector media; standalone PNG routing; scan-PDF JPEG routing; ZIP hardening including false sizes, aggregate limits and header consistency; PDF text layer and escapes; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
+| `test-parsers.js` | 25 | DOCX/XLSX/PPTX text, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; standalone PNG routing; scan-PDF JPEG routing; ZIP hardening including false sizes, aggregate limits and header consistency; PDF text layer and escapes; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
 | `test-pii-regression.js` | 55 | golden personnel profile byte for byte, exact preservation of business periods, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
 | `test-image-sanitizer.js` | 20 | PNG/BMP round trips, bounded PNG decompression and chunk lengths, metadata stripping, refusal of unsupported variants, OCR offset mapping, pixel-level redaction with padding and clamping |
 | `test-visual.js` | 19 | every branch of the visual gate with injected OCR and rasteriser bridges |
@@ -24,14 +24,14 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-companion-job-store.js` | 8 | versioned append-only job contract, monotone transitions, local human evidence, limited verification claims, release hash binding, terminal states, strict raw-data-field refusal, tamper and traversal refusal |
 | `test-companion-retention.js` | 6 | expiry and zero-day cleanup, strict direct-entry deletion, unsafe-entry preservation, metadata-only status, and local human evidence for immediate purge |
 | `test-companion-ipc.js` | 8 | platform picker commands, strict source validation, local fallback, HMAC/session/replay enforcement, path-free responses and journals, local cancellation, and real fd-3 bootstrap process start |
-| `test-companion-processor.js` | 9 | confirmed TXT and text-only DOCX release, declined skip, local-dialog evidence, visual DOCX blocking, unsupported-format failure, publish/journal rollback, queue isolation, and path-free result/audit evidence |
-| `test-companion-supervisor.js` | 6 | child-environment secret filtering, real authenticated launch, sequence recovery, picker-before-processing orchestration, guaranteed close, and pre-launch profile refusal |
+| `test-companion-processor.js` | 18 | TXT/DOCX release, terminal local cancellation and skip, locator-scoped manual redactions with exact preview, post-edit residual blocking, value-free and Unicode-stable highlight hints, real UTF-8 Windows pipe plus stdin-only review transport, visual/unsupported-part DOCX blocking, abandoned private-copy cleanup, rollback, queue isolation, and path-free result/audit evidence |
+| `test-companion-supervisor.js` | 8 | child-environment secret filtering, Windows process-tree termination, real authenticated launch, sequence recovery, picker-before-processing orchestration, guaranteed close, and pre-launch profile/platform refusal |
 | `test-gateway-e2e.js` | 22 | Office/PDF plus standalone PNG and scanned-PDF routes end to end, explicit-profile enforcement for image-only input, internal visual-release primitive and preview deletion (not exposed through MCP), zero-day retention, audit migration blocking, tamper detection, path traversal, source claiming and failure-injected cleanup/publish/move rollback |
-| `test-mcp-protocol.js` | 23 | the server driven over real stdio: handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, error codes, notification handling, stdout framing |
+| `test-mcp-protocol.js` | 24 | the server driven over real stdio: startup orphan cleanup, handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, error codes, notification handling, stdout framing |
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 273 assertion-level cases plus the plugin structure check (274 checks overall).
+Total: 287 assertion-level cases plus the plugin structure check (288 checks overall).
 
 ## The adversarial suite
 

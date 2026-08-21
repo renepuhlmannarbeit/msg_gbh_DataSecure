@@ -73,6 +73,51 @@ test('DOCX vector graphics are surfaced rather than dropped silently', () => {
   assert.strictEqual(result.attachments[0].mimeType, 'image/x-emf');
 });
 
+test('DOCX unsupported content-bearing parts are reported instead of silently omitted', () => {
+  const result = parseOoxml(
+    docx(['Sichtbarer Text'], [['word/embeddings/oleObject1.bin', Buffer.from('private embedded content')]]),
+    '.docx'
+  );
+  assert.strictEqual(result.warnings.length, 1);
+  assert.match(result.warnings[0], /nicht unterstützte inhaltsfähige OOXML-Part/);
+  assert.doesNotMatch(result.warnings[0], /oleObject1|private embedded content/);
+  const disguised = parseOoxml(
+    docx(['Sichtbarer Text'], [['word/theme/oleObject1.xml', Buffer.from('<private>disguised content</private>')]]),
+    '.docx'
+  );
+  assert.strictEqual(disguised.warnings.length, 1, 'a known directory must not allow an unknown part type');
+
+  const objectRelationship = parseOoxml(
+    docx(['Sichtbarer Text'], [[
+      'word/_rels/document.xml.rels',
+      Buffer.from('<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="theme/theme1.xml"/></Relationships>')
+    ], ['word/theme/theme1.xml', Buffer.from('<private>object content</private>')]]),
+    '.docx'
+  );
+  assert.strictEqual(objectRelationship.warnings.length, 1, 'unknown relationship types must block coverage');
+
+  const wrongContentType = parseOoxml(
+    docx(['Sichtbarer Text'], [[
+      '[Content_Types].xml',
+      Buffer.from('<Types><Override PartName="/word/document.xml" ContentType="application/x-private-object"/></Types>')
+    ]]),
+    '.docx'
+  );
+  assert.strictEqual(wrongContentType.warnings.length, 1, 'content type overrides must match the parsed part class');
+});
+
+test('DOCX external relationships are technical uncertainty rather than omitted content', () => {
+  const result = parseOoxml(
+    docx(['Externer Link'], [[
+      'word/_rels/document.xml.rels',
+      Buffer.from('<Relationships><Relationship Id="rId1" Target="https://customer.example/private" TargetMode="External"/></Relationships>')
+    ]]),
+    '.docx'
+  );
+  assert.strictEqual(result.warnings.length, 1);
+  assert.doesNotMatch(result.warnings[0], /customer\.example/);
+});
+
 // ---------------------------------------------------------------------------
 // XLSX / PPTX
 // ---------------------------------------------------------------------------

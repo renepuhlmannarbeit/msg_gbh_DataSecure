@@ -53,9 +53,10 @@ redaction and second-OCR verification run via `npm run test:windows-visual`.
   atomic all-or-nothing batch.
 - Identity mappings are persisted for deanonymisation. This conflicts with the
   selected ephemeral mapping lifecycle.
-- PII-Shield provides a strong local text review UI with add/remove overrides;
-  review can be skipped. DataSecure currently offers human review only for
-  visuals, not for text findings.
+- PII-Shield provides a mature local text review UI with add/remove overrides;
+  review can be skipped. DataSecure now has a Windows text-review vertical slice
+  with marked text hints, selection-only additional redactions and post-edit verification,
+  but not yet equivalent cross-platform UX or per-finding controls.
 - `npm ci` for the unmodified upstream lockfile reported 20 dependency
   vulnerabilities: 1 low, 6 moderate, 12 high and 1 critical. Exploitability
   in this local workflow was not assessed by this functional benchmark.
@@ -64,6 +65,7 @@ redaction and second-OCR verification run via `npm run test:windows-visual`.
 
 PII-Shield is not sufficient unchanged for the required workflow. Its GLiNER
 detector and text-review UX remain useful reference implementations. DataSecure
-has the broader and safer file boundary, but still needs an optional local text
-review and a consciously started cross-document batch with an ephemeral shared
-placeholder map before it satisfies every agreed requirement.
+has the broader and safer file boundary plus a first fail-closed local text-review
+path, but still needs cross-platform review parity and a consciously started
+cross-document batch with an ephemeral shared placeholder map before it satisfies
+every agreed requirement.

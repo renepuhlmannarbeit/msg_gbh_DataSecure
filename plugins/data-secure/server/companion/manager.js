@@ -8,6 +8,9 @@ const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 
 async function prepareLocalDocument(profile = 'auto', options = {}) {
   const selectedProfile = String(profile || 'auto').toLowerCase();
   if (!PROFILES.has(selectedProfile)) throw new SafeError('Unbekanntes Datenschutzprofil.');
+  if ((options.platform || process.platform) !== 'win32') {
+    throw new SafeError('Die lokale Textprüfung ist auf diesem Gerät noch nicht verfügbar; es wurde keine Datei ausgewählt.');
+  }
   const companion = (options.launchCompanion || launchCompanion)(options.supervisorOptions);
   try {
     await companion.ready;
@@ -17,7 +20,8 @@ async function prepareLocalDocument(profile = 'auto', options = {}) {
     return {
       ...processed,
       workflow: 'local_companion_txt_docx',
-      human_skip_confirmed_locally: processed?.job?.state === 'Released',
+      review_decision: processed?.review_decision,
+      human_skip_confirmed_locally: processed?.review_decision === 'skipped',
       raw_content_sent_to_claude: false
     };
   } finally {

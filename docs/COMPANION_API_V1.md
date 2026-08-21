@@ -1,8 +1,8 @@
 # DataSecure Companion API v1
 
 Status: Vertrag, Job-Retention, privater IPC sowie TXT-/DOCX-Vertical-Slice mit
-lokalem File Picker und Skip-Klick implementiert; Review-UI und signiertes Packaging
-noch nicht implementiert.
+lokalem File Picker und bearbeitbarer Windows-Review-UI implementiert;
+plattformübergreifende UI und signiertes Packaging noch nicht implementiert.
 
 ## Zweck
 
@@ -61,9 +61,29 @@ Der Status enthält nur:
 - `model_can_review=false`, `model_can_release=false`
 - `raw_content_available=false`
 
+## Implementierter Review-Vertrag
+
+- Der flüchtige Entwurf verwendet `data-secure-text-review/1`.
+- Heuristisch erkannte Spannen erhalten wertfreie `text:v1:*`-Hinweise mit Typ und
+  Offset im normalisierten lokal extrahierten Text. Sie sind noch keine stabilen
+  Extractor-/OOXML-Source-Locatoren und werden weder persistiert noch an MCP zurückgegeben.
+- Die UI akzeptiert nur zusätzliche Offset-Ersetzungen, keine freie Textbearbeitung.
+  Die daraus erzeugte Fassung wird vor `Verified` erneut gegen direkte
+  Identifikatoren und das flüchtige Ersetzungswörterbuch geprüft.
+- `Reviewed`/`Skipped` bindet die lokale Aktion an den SHA-256 des freigegebenen
+  bereinigten Textkörpers; `Released` bindet anschließend das vollständige Paket an
+  seinen Output-SHA-256.
+- Abbruch veröffentlicht nichts; technische/visuelle Unsicherheit bleibt unabhängig
+  von Review oder Skip gesperrt.
+- Nicht unterstützte inhaltsfähige DOCX-Parts werden durch eine Coverage-Prüfung
+  blockiert, statt still aus der Arbeitsfassung zu verschwinden.
+- Verwaiste private Arbeitskopien besitzen eine datensparsame Prozess-Ownerdatei und
+  werden bei einem späteren Start/Lauf sicher bereinigt. Unsichere Einträge oder
+  Bereinigungsfehler werden nicht übergangen.
+
 ## Nächster Implementierungsschritt
 
-1. Extraktionsergebnisse über versionierte Source-Locator-IDs an die lokale Review-UI geben.
-2. Manuelle Korrekturen erneut durch Residual-Gate und Release-Bindung führen.
+1. Review-Oberfläche plattformübergreifend bereitstellen und reale UI-Abnahmen ergänzen.
+2. Replacement-Provenienz und Source-Locatoren aus dem tatsächlichen TXT-/OOXML-Extractor ergänzen.
 3. Text-PDF und isolierte Worker ergänzen.
 4. Companion-Packaging signieren und Installationsherkunft nachweisen.

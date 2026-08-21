@@ -17,7 +17,7 @@ If the original sensitive document has already been pasted or uploaded directly 
 ## Workflow
 
 1. Call `privacy_status`.
-2. For TXT or DOCX, call `prepare_local_document` with `profile=auto` unless a more specific profile is clearly requested. It opens the operating-system file picker and a separate local confirmation; never ask for or infer the source path.
+2. For TXT or DOCX, call `prepare_local_document` with `profile=auto` unless a more specific profile is clearly requested. It opens the operating-system file picker and, on the Windows pilot, a local redaction-only text review where additional selected spans may be anonymized but fachlicher Inhalt cannot be freely rewritten; never ask for or infer the source path. The workflow fails closed where that local review UI is unavailable.
 3. For other formats, if no input document is queued, call `open_privacy_folder`, tell the user to copy the source file into `Input`, and then call `anonymize_next_document`.
 4. If processing succeeds, use `list_anonymized_packages` when package selection is needed, then only `read_anonymized_document` for text. Use `list_anonymized_assets` before `read_anonymized_asset` for released visuals. `open_output_folder` is only for a user who wants to inspect the local released package.
 5. Never try to read the original source file through another connector or tool as part of this privacy workflow.

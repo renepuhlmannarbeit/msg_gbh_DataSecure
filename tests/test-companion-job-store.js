@@ -22,8 +22,12 @@ const {
 const { test, done, assert } = createSuite('Companion job contract');
 const at = (minute) => new Date(`2026-08-21T10:${String(minute).padStart(2, '0')}:00.000Z`);
 
-function localAction() {
-  return { action_id: crypto.randomUUID(), channel: 'local_companion' };
+function localAction(withContent = true) {
+  return {
+    action_id: crypto.randomUUID(),
+    channel: 'local_companion',
+    ...(withContent ? { content_sha256: 'c'.repeat(64) } : {})
+  };
 }
 
 test('capabilities expose no model review or release authority', () => {
@@ -31,7 +35,9 @@ test('capabilities expose no model review or release authority', () => {
   assert.strictEqual(caps.api_version, API_VERSION);
   assert.strictEqual(caps.job_schema, JOB_SCHEMA);
   assert.strictEqual(caps.phase, 'txt_docx_vertical_slice_ready');
-  assert.strictEqual(caps.local_ui, 'native_picker_and_skip_confirmation');
+  assert.strictEqual(caps.local_ui, process.platform === 'win32'
+    ? 'native_picker_and_redaction_review'
+    : 'native_picker_text_review_unavailable');
   assert.deepStrictEqual(caps.supported_vertical_slice_inputs, ['TXT', 'DOCX']);
   assert.strictEqual(caps.private_ipc, 'inherited_stdio_authenticated');
   assert.strictEqual(caps.binary_signing, 'not_implemented');
@@ -87,6 +93,10 @@ test('review and skip require strict local human evidence', () => {
       }),
     /lokale Nutzeraktion/
   );
+  assert.throws(
+    () => transitionJob(job.job_id, 'Reviewed', { human_action: localAction(false) }),
+    /lokale Nutzeraktion/
+  );
 });
 
 test('release is impossible before review or skip and verification', () => {
@@ -111,7 +121,7 @@ test('release is impossible before review or skip and verification', () => {
 
 test('terminal jobs cannot be reopened', () => {
   const job = createJob({ profile: 'general', source_type: 'md' });
-  transitionJob(job.job_id, 'Cancelled', { human_action: localAction() });
+  transitionJob(job.job_id, 'Cancelled', { human_action: localAction(false) });
   assert.throws(() => transitionJob(job.job_id, 'Claimed'), /Unzulässiger Jobwechsel/);
 });
 

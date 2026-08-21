@@ -1,8 +1,8 @@
 # DataSecure Companion IPC v1
 
 Status: privater IPC, MCP-Supervisor und TXT-/DOCX-Vertical-Slice mit nativer
-Dateiauswahl und lokaler Skip-Bestätigung implementiert; Review-UI, Packaging und
-Codesignatur noch nicht implementiert.
+Dateiauswahl sowie lokaler Redaktionsprüfung unter Windows implementiert;
+plattformübergreifende Review-UI, Packaging und Codesignatur noch nicht implementiert.
 
 ## Sicherheitsgrenze
 
@@ -10,6 +10,12 @@ Der Companion öffnet keinen TCP-, HTTP- oder Loopback-Listener. Der Supervisor
 startet ihn mit geerbten stdin/stdout-Pipes. Ein zufälliger 256-Bit-Session-Key wird
 nicht über Argumente oder Umgebungsvariablen übergeben, sondern ausschließlich über
 den zusätzlichen geerbten Dateideskriptor 3.
+
+Bei Supervisor-Timeout oder Protokollfehler wird unter Windows der gesamte
+Companion-Prozessbaum beendet. Jeder private Arbeitsordner besitzt eine
+PID-/Nonce-Ownerdatei; ein späterer Start oder Lauf entfernt verwaiste
+Arbeitskopien. Lebende Owner, unbekannte Ordner und Symlinks werden nicht gelöscht,
+und ein Bereinigungsfehler blockiert die nächste Verarbeitung sichtbar.
 
 Der Server veröffentlicht beim Start nur eine datensparsame Session-Beschreibung.
 Jeder folgende Frame enthält:
@@ -47,29 +53,51 @@ modellseitige Aufruffläche.
 Der MCP-Einstieg `prepare_local_document` darf den privaten Companion starten und
 damit den lokalen Dateidialog öffnen. Er erhält weder den gewählten Pfad noch
 Originalbytes oder Action-Token. Für TXT und textuell vollständig auswertbare DOCX
-läuft die Verarbeitung bis `Detected`. Vor `Skipped -> Verified -> Released` zeigt
-der Companion einen zweiten Betriebssystemdialog mit der Trefferzahl. Nur dessen
-lokale Bestätigung erzeugt die Action-ID. DOCX mit zurückgehaltenen Bildern oder
-technischen Unsicherheiten kann über diesen Dialog nicht freigegeben werden.
+läuft die Verarbeitung bis `Detected`. Unter Windows zeigt der Companion danach
+normalisierten extrahierten Quelltext und bereinigte Fassung ausschließlich lokal
+nebeneinander. Heuristisch erkannte Originalspannen sind als flüchtige
+`text:v1:*`-Hinweise markiert. In der schreibgeschützten bereinigten Fassung können
+zusätzliche sensible Spannen ausschließlich zur Ersetzung durch
+`[MANUAL_REDACTION]` ausgewählt werden; freie fachliche Textänderungen sind nicht
+möglich. Eine zweite schreibgeschützte Ansicht zeigt vor der Freigabe die exakt aus
+diesen Auswahlen entstehende Fassung. „Geprüft freigeben“ erzeugt `Reviewed`, „Prüfung
+überspringen“ erzeugt `Skipped`. Beide Aktionen erhalten erst nach einem erneuten
+Residual-Gate über die exakte Ausgabe den Zustand `Verified`. DOCX mit
+zurückgehaltenen Bildern oder technischen Unsicherheiten kann über diesen Dialog
+nicht freigegeben werden.
+Unbekannte inhaltsfähige DOCX-Parts, beispielsweise Embeddings oder nicht
+unterstützte SmartArt-/Diagramm-Parts, gelten ebenfalls als technische Unsicherheit.
 
-Das Benutzeroriginal wird nicht verschoben. Eine private Arbeitskopie existiert nur
-während der Verarbeitung und wird vor Veröffentlichung entfernt. Companion-Pakete
+Der feste PowerShell-Programmtext enthält keine Dokumentdaten. Der Review-Entwurf
+wird nur über stdin an den lokalen UI-Unterprozess übergeben; stdout enthält nur die
+Aktion und bei `Reviewed` wertfreie Offset-Bereiche für zusätzliche Ersetzungen.
+Weder Entwurf noch Markierungshinweise
+werden über den authentifizierten MCP-/Supervisor-Kanal zurückgegeben oder im
+Jobjournal persistiert.
+
+Das Benutzeroriginal wird nicht verschoben. Im Normalfall existiert eine private
+Arbeitskopie nur während der Verarbeitung und wird vor Veröffentlichung entfernt;
+nach einem harten Prozessabbruch entfernt sie die beschriebene Orphan-Bereinigung.
+Companion-Pakete
 sind zusätzlich zum Paket-Hash an ein terminales `Released`-Journal mit demselben
 Dokument-SHA-256 gebunden.
 
 ## Bewusste Nicht-Claims
 
 - Der Slice ist noch kein signiertes natives Binary.
-- Eine Gegenüberstellung von Original und bereinigter Fassung sowie manuelle
-  Korrekturen sind noch nicht implementiert. Der aktuelle sichere Weg ist ausschließlich
-  die bewusst bestätigte Option „ohne zusätzliche Textprüfung fortfahren“.
+- Die lokale Redaktions-Gegenüberstellung ist im Pilot nur unter Windows implementiert;
+  macOS und Linux stoppen an dieser Stelle fail-closed.
+- Die aktuellen Markierungen sind normalisierte Textoffset-Hinweise aus einem
+  separaten Detektorlauf, kein vollständiger Provenienz-Trace der Transformation.
+  Strukturbezogene OOXML-Locatoren und tatsächliche Replacement-Provenienz sind noch
+  nicht implementiert.
 - PDF und weitere Formate verwenden weiterhin den bestehenden Input-Ordner-Pfad.
 - Ein authentifizierter Prozesskanal allein ersetzt keine Codesignatur,
   Installationsherkunft oder echte UI-Akzeptanztests.
 
 ## Nächste Abnahme
 
-1. Source-Locator-basierte lokale Gegenüberstellung und Korrekturen implementieren.
+1. Lokale Review-UI für macOS und Linux produktionsfähig umsetzen.
 2. Text-PDF in den privaten Vertical-Slice aufnehmen.
 3. Parser/OCR in ressourcenbegrenzte, netzlose Worker auslagern.
 4. Codesignatur, Upgrade/Rollback und reale Plattformtests nachweisen.

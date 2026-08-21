@@ -74,16 +74,22 @@ function safeJobDir(jobId, { mustExist = true } = {}) {
   return dir;
 }
 
-function validateHumanAction(value) {
+function validateHumanAction(value, contentRequired = false) {
+  const keys = contentRequired ? 'action_id,channel,content_sha256' : 'action_id,channel';
   if (
     !value ||
     value.channel !== 'local_companion' ||
     !isUuid(value.action_id) ||
-    Object.keys(value).sort().join(',') !== 'action_id,channel'
+    Object.keys(value).sort().join(',') !== keys ||
+    (contentRequired && !/^[0-9a-f]{64}$/i.test(String(value.content_sha256 || '')))
   ) {
     throw new SafeError('Review, Überspringen oder Abbruch benötigt eine lokale Nutzeraktion.');
   }
-  return { action_id: value.action_id, channel: 'local_companion' };
+  return {
+    action_id: value.action_id,
+    channel: 'local_companion',
+    ...(contentRequired ? { content_sha256: value.content_sha256.toLowerCase() } : {})
+  };
 }
 
 function verification(value) {
@@ -122,7 +128,7 @@ function canonicalEvent(input) {
     event.profile = input.profile;
     event.source_type = input.source_type;
   } else if (['Reviewed', 'Skipped', 'Cancelled'].includes(input.state)) {
-    event.human_action = validateHumanAction(input.human_action);
+    event.human_action = validateHumanAction(input.human_action, input.state !== 'Cancelled');
   } else if (input.state === 'Verified') {
     event.verification = verification(input.verification);
   } else if (input.state === 'Released') {
@@ -282,7 +288,9 @@ function companionCapabilities() {
     job_schema: JOB_SCHEMA,
     phase: 'txt_docx_vertical_slice_ready',
     supported_states: [...STATES],
-    local_ui: 'native_picker_and_skip_confirmation',
+    local_ui: process.platform === 'win32'
+      ? 'native_picker_and_redaction_review'
+      : 'native_picker_text_review_unavailable',
     supported_vertical_slice_inputs: ['TXT', 'DOCX'],
     private_ipc: 'inherited_stdio_authenticated',
     binary_signing: 'not_implemented',

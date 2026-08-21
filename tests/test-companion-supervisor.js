@@ -9,7 +9,11 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-supervisor-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 
-const { companionEnvironment, launchCompanion } = require('../plugins/data-secure/server/companion/supervisor');
+const {
+  companionEnvironment,
+  terminateProcessTree,
+  launchCompanion
+} = require('../plugins/data-secure/server/companion/supervisor');
 const { prepareLocalDocument } = require('../plugins/data-secure/server/companion/manager');
 const { testAsync, done, assert } = createSuite('Companion supervisor and MCP boundary');
 
@@ -23,6 +27,22 @@ async function main() {
       CUSTOM_TOKEN: 'must-not-pass'
     });
     assert.deepStrictEqual(filtered, { SystemRoot: 'C:\\Windows', EU_PRIVACY_RETENTION_DAYS: '7' });
+  });
+
+  await testAsync('Windows timeout termination targets the complete companion process tree', async () => {
+    let invocation;
+    let directKills = 0;
+    terminateProcessTree({ pid: 4321, kill: () => { directKills++; } }, {
+      platform: 'win32', systemRoot: 'C:\\Windows',
+      killTreeRunner: (command, args, options) => {
+        invocation = { command, args, options };
+        return { status: 0 };
+      }
+    });
+    assert.match(invocation.command, /taskkill\.exe$/i);
+    assert.deepStrictEqual(invocation.args, ['/pid', '4321', '/t', '/f']);
+    assert.strictEqual(invocation.options.shell, false);
+    assert.strictEqual(directKills, 0);
   });
 
   await testAsync('supervisor launches the real child with authenticated inherited stdio', async () => {
@@ -62,6 +82,7 @@ async function main() {
         return {
           ok: true,
           job: { job_id: 'job-opaque', state: 'Released' },
+          review_decision: 'reviewed',
           package_id: 'package-opaque',
           document_id: 'document-opaque.md',
           raw_content_sent_to_claude: false
@@ -69,12 +90,13 @@ async function main() {
       },
       close() { closed = true; }
     };
-    const result = await prepareLocalDocument('personnel_profile', { launchCompanion: () => fake });
+    const result = await prepareLocalDocument('personnel_profile', { platform: 'win32', launchCompanion: () => fake });
     assert.deepStrictEqual(calls, [
       { command: 'pick_source', params: { profile: 'personnel_profile' } },
       { command: 'process_source', params: { job_id: 'job-opaque' } }
     ]);
-    assert.strictEqual(result.human_skip_confirmed_locally, true);
+    assert.strictEqual(result.review_decision, 'reviewed');
+    assert.strictEqual(result.human_skip_confirmed_locally, false);
     assert.strictEqual(result.raw_content_sent_to_claude, false);
     assert.strictEqual(closed, true);
     assert.doesNotMatch(JSON.stringify(result), /source|filename|original_path/i);
@@ -87,7 +109,7 @@ async function main() {
       request: async () => { throw new Error('cancelled'); },
       close() { closed = true; }
     };
-    await assert.rejects(prepareLocalDocument('customer', { launchCompanion: () => fake }), /cancelled/);
+    await assert.rejects(prepareLocalDocument('customer', { platform: 'win32', launchCompanion: () => fake }), /cancelled/);
     assert.strictEqual(closed, true);
   });
 
@@ -96,6 +118,15 @@ async function main() {
     await assert.rejects(
       prepareLocalDocument('executive_scoring', { launchCompanion: () => { launched = true; } }),
       /Unbekanntes Datenschutzprofil/
+    );
+    assert.strictEqual(launched, false);
+  });
+
+  await testAsync('manager refuses an unavailable review platform before opening the picker', async () => {
+    let launched = false;
+    await assert.rejects(
+      prepareLocalDocument('customer', { platform: 'linux', launchCompanion: () => { launched = true; } }),
+      /keine Datei ausgewählt/
     );
     assert.strictEqual(launched, false);
   });

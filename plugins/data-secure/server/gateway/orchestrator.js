@@ -36,6 +36,91 @@ function newJobId() {
   return `${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
 }
 
+function processAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function safeWorkingTree(root) {
+  const pending = [root];
+  while (pending.length) {
+    const current = pending.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      const stat = fs.lstatSync(full);
+      if (stat.isSymbolicLink()) return false;
+      if (stat.isDirectory()) pending.push(full);
+      else if (!stat.isFile()) return false;
+    }
+  }
+  return true;
+}
+
+function cleanupAbandonedWorkingJobs(options = {}) {
+  const root = options.root || roots().jobs;
+  const now = options.now instanceof Date ? options.now.valueOf() : Number(options.now || Date.now());
+  const maxUnownedAgeMs = options.maxUnownedAgeMs ?? 24 * 60 * 60 * 1000;
+  const maxOwnedAgeMs = options.maxOwnedAgeMs ?? 12 * 60 * 60 * 1000;
+  if (!Number.isFinite(now) || !Number.isFinite(maxUnownedAgeMs) || maxUnownedAgeMs < 0) {
+    throw new SafeError('Ungültige Zeitgrenze für die Bereinigung privater Arbeitskopien.');
+  }
+  if (!Number.isFinite(maxOwnedAgeMs) || maxOwnedAgeMs < 0) {
+    throw new SafeError('Ungültige Owner-Zeitgrenze für private Arbeitskopien.');
+  }
+  const rootStat = fs.lstatSync(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new SafeError('Der Bereich für private Arbeitskopien ist kein sicherer lokaler Ordner.');
+  }
+  const resolvedRoot = path.resolve(root);
+  const realRoot = fs.realpathSync.native(root);
+  const comparable = (value) => process.platform === 'win32' ? value.toLowerCase() : value;
+  if (comparable(realRoot) !== comparable(resolvedRoot)) {
+    throw new SafeError('Der Bereich für private Arbeitskopien verweist auf einen anderen Speicherort.');
+  }
+  const isProcessAlive = options.isProcessAlive || processAlive;
+  const removeDir = options.removeDir || ((target) => fs.rmSync(target, { recursive: true }));
+  let removed = 0;
+  let active = 0;
+  let ignored = 0;
+  let failures = 0;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!/^[a-z0-9]+_[0-9a-f]{8}$/i.test(entry.name)) { ignored++; continue; }
+    const target = path.resolve(root, entry.name);
+    if (path.dirname(target) !== path.resolve(root)) { failures++; continue; }
+    try {
+      const stat = fs.lstatSync(target);
+      if (!entry.isDirectory() || !stat.isDirectory() || stat.isSymbolicLink() || !safeWorkingTree(target)) {
+        failures++;
+        continue;
+      }
+      if (comparable(path.dirname(fs.realpathSync.native(target))) !== comparable(realRoot)) {
+        failures++;
+        continue;
+      }
+      const ownerPath = path.join(target, '.owner.json');
+      let owner = null;
+      if (fs.existsSync(ownerPath)) {
+        owner = JSON.parse(fs.readFileSync(ownerPath, 'utf8'));
+        if (
+          !owner || !Number.isSafeInteger(owner.pid) ||
+          !/^[0-9a-f]{32}$/i.test(String(owner.nonce || '')) ||
+          Number.isNaN(Date.parse(owner.created_at)) ||
+          Object.keys(owner).sort().join(',') !== 'created_at,nonce,pid'
+        ) throw new Error('invalid owner');
+      }
+      const ownerAgeMs = owner ? now - Date.parse(owner.created_at) : null;
+      if (owner && ownerAgeMs >= 0 && ownerAgeMs <= maxOwnedAgeMs && isProcessAlive(owner.pid)) {
+        active++;
+        continue;
+      }
+      if (!owner && now - stat.mtimeMs < maxUnownedAgeMs) { active++; continue; }
+      removeDir(target);
+      removed++;
+    } catch { failures++; }
+  }
+  return { removed, active, ignored, failures };
+}
+
 function copyRegularFileExclusive(source, destination, expectedStat) {
   const noFollow = fs.constants.O_NOFOLLOW || 0;
   let sourceFd;
@@ -88,6 +173,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
 
   bestEffortRetentionCleanup(deps);
+  const workingCleanup = (deps.cleanupAbandonedWorkingJobs || cleanupAbandonedWorkingJobs)({ now: deps.now });
+  if (workingCleanup.failures) {
+    throw new SafeError('Verwaiste private Arbeitskopien konnten nicht sicher bereinigt werden; Verarbeitung wurde gestoppt.');
+  }
 
   const auditMigration = (deps.migrateLegacyAuditReceipts || migrateLegacyAuditReceipts)();
   if (auditMigration.legacy_pending || auditMigration.migration_errors || auditMigration.write_errors) {
@@ -116,6 +205,11 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   const jobId = newJobId();
   const jobDir = path.join(r.jobs, jobId);
   fs.mkdirSync(jobDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(jobDir, '.owner.json'),
+    JSON.stringify({ pid: process.pid, created_at: new Date().toISOString(), nonce: crypto.randomBytes(16).toString('hex') }),
+    { encoding: 'utf8', mode: 0o600, flag: 'wx' }
+  );
 
   let source = originalSource;
   let claimed = false;
@@ -176,11 +270,35 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       await deps.onDetected({
         profile: effective,
         detected_identifiers: anon.entityCount,
-        technical_review_required: vis.results.some((item) => item.status !== 'included')
+        technical_review_required:
+          vis.results.some((item) => item.status !== 'included') ||
+          (converted.warnings || []).length > 0 ||
+          (converted.unreviewedVisualCount || 0) > 0
       });
     }
     const included = vis.results.filter((x) => x.status === 'included').length;
     const review = vis.results.length - included;
+
+    let reviewedText = anon.text;
+    if (deps.reviewText) {
+      const reviewResult = await deps.reviewText({
+        original_text: rawWithOcr,
+        anonymized_text: anon.text,
+        profile: effective,
+        detected_identifiers: anon.entityCount,
+        technical_review_required:
+          review > 0 ||
+          (converted.warnings || []).length > 0 ||
+          (converted.unreviewedVisualCount || 0) > 0
+      });
+      if (!reviewResult || typeof reviewResult.text !== 'string') {
+        throw new SafeError('Die lokale Textprüfung lieferte keine freigabefähige Fassung.');
+      }
+      if (reviewResult.text.length > MAX_TEXT_CHARS) {
+        throw new SafeError('Die lokal bearbeitete Fassung ist zu groß.');
+      }
+      reviewedText = reviewResult.text;
+    }
 
     const mdName = `${packageId}.md`;
     const mdPath = path.join(stagePackage, mdName);
@@ -193,7 +311,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         review,
         reidentificationRisk: anon.reidentificationRisk
       }) +
-      anon.text +
+      reviewedText +
       assetsMarkdown(vis.results);
     fs.writeFileSync(mdPath, finalText, 'utf8');
 
@@ -248,6 +366,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       await deps.beforePublish({
         package_id: packageId,
         document_sha256: documentSha256,
+        reviewed_content_sha256: crypto.createHash('sha256').update(reviewedText, 'utf8').digest('hex'),
         profile: effective,
         detected_identifiers: anon.entityCount,
         technical_review_required: review > 0
@@ -404,4 +523,9 @@ async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
   });
 }
 
-module.exports = { anonymizeNext, anonymizeSelectedSource, bestEffortRetentionCleanup };
+module.exports = {
+  anonymizeNext,
+  anonymizeSelectedSource,
+  bestEffortRetentionCleanup,
+  cleanupAbandonedWorkingJobs
+};

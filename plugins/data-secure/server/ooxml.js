@@ -59,12 +59,84 @@ function renderWordBody(xml) {
   }
   return blocks.join('\n\n');
 }
+function docxCoverageWarnings(entries) {
+  const supported = [
+    /^\[Content_Types\]\.xml$/i,
+    /^_rels\/\.rels$/i,
+    /^docProps\/(?:core|app)\.xml$/i,
+    /^word\/(?:document|styles|settings|numbering|fontTable|webSettings|comments|footnotes|endnotes|header\d+|footer\d+)\.xml$/i,
+    /^word\/_rels\/(?:document|header\d+|footer\d+|comments|footnotes|endnotes)\.xml\.rels$/i,
+    /^word\/theme\/theme\d+\.xml$/i,
+    /^word\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i
+  ];
+  const relationshipTypes = new Set([
+    'officeDocument', 'core-properties', 'extended-properties',
+    'styles', 'settings', 'numbering', 'fontTable', 'webSettings', 'theme',
+    'header', 'footer', 'image', 'comments', 'footnotes', 'endnotes', 'hyperlink'
+  ]);
+  const overrideTypes = new Map([
+    ['word/document.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml'],
+    ['word/styles.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml'],
+    ['word/settings.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml'],
+    ['word/numbering.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml'],
+    ['word/fontTable.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml'],
+    ['word/webSettings.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml'],
+    ['word/comments.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml'],
+    ['word/footnotes.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml'],
+    ['word/endnotes.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml'],
+    ['docProps/core.xml', 'application/vnd.openxmlformats-package.core-properties+xml'],
+    ['docProps/app.xml', 'application/vnd.openxmlformats-officedocument.extended-properties+xml']
+  ]);
+  function expectedOverrideType(part) {
+    const normalized = String(part || '').replace(/^\//, '');
+    if (/^word\/header\d+\.xml$/i.test(normalized)) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
+    }
+    if (/^word\/footer\d+\.xml$/i.test(normalized)) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml';
+    }
+    if (/^word\/theme\/theme\d+\.xml$/i.test(normalized)) {
+      return 'application/vnd.openxmlformats-officedocument.theme+xml';
+    }
+    return overrideTypes.get(normalized) || null;
+  }
+  let unsupported = 0;
+  for (const [name, data] of entries) {
+    if (!supported.some((pattern) => pattern.test(name))) unsupported++;
+    if (/\.rels$/i.test(name)) {
+      const xml = data.toString('utf8');
+      const relationships = xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi);
+      for (const match of relationships) {
+        const attrs = match[1];
+        const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+        if (!type || !relationshipTypes.has(type)) unsupported++;
+        if (/\bTargetMode\s*=\s*["']External["']/i.test(attrs)) unsupported++;
+      }
+    }
+    if (name === '[Content_Types].xml') {
+      const xml = data.toString('utf8');
+      const overrides = xml.matchAll(/<Override\b([^>]+?)\/?>(?:<\/Override>)?/gi);
+      for (const match of overrides) {
+        const attrs = match[1];
+        const part = /\bPartName=["']([^"']+)["']/i.exec(attrs)?.[1];
+        const contentType = /\bContentType=["']([^"']+)["']/i.exec(attrs)?.[1];
+        const expected = expectedOverrideType(part);
+        if (!expected || contentType !== expected || !entries.has(String(part || '').replace(/^\//, ''))) {
+          unsupported++;
+        }
+      }
+    }
+  }
+  return unsupported
+    ? [`DOCX enthält ${unsupported} nicht unterstützte inhaltsfähige OOXML-Part(s); Companion-Freigabe wird blockiert.`]
+    : [];
+}
 function parseDocx(entries) {
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
   let md=renderWordBody(main.toString('utf8'));
   for(const [name,data] of entries) if(/^word\/(header|footer)\d+\.xml$/i.test(name)) { const t=textTags(data.toString('utf8'),'w:t').join(' ').trim(); if(t) md += `\n\n## ${name.includes('header')?'Kopfzeile':'Fußzeile'}\n\n${t}`; }
   for(const extra of ['word/comments.xml','word/footnotes.xml','word/endnotes.xml']) if(entries.has(extra)) { const t=textTags(entries.get(extra).toString('utf8'),'w:t').join(' ').trim(); if(t) md+=`\n\n## ${extra.includes('comments')?'Kommentare':extra.includes('footnotes')?'Fußnoten':'Endnoten'}\n\n${t}`; }
-  return { markdown:md, attachments:mediaAttachments(entries,'word/media/'), warnings:[] };
+  return { markdown:md, attachments:mediaAttachments(entries,'word/media/'), warnings:docxCoverageWarnings(entries) };
 }
 function sharedStrings(entries) {
   const b=entries.get('xl/sharedStrings.xml'); if(!b)return[]; const xml=b.toString('utf8'), out=[]; let m; const re=/<si\b[\s\S]*?<\/si>/gi; while((m=re.exec(xml)))out.push(textTags(m[0],'t').join('')); return out;
@@ -94,4 +166,4 @@ function parseOoxml(buffer, ext) {
   if(ext==='.docx')return parseDocx(entries); if(ext==='.xlsx')return parseXlsx(entries); if(ext==='.pptx')return parsePptx(entries); throw new Error('OOXML-Format nicht unterstützt.');
 }
 
-module.exports={parseOoxml,parseDocx,parseXlsx,parsePptx,xmlDecode,stripTags,contentType};
+module.exports={parseOoxml,parseDocx,parseXlsx,parsePptx,docxCoverageWarnings,xmlDecode,stripTags,contentType};

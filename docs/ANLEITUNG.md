@@ -180,16 +180,20 @@ Privacy-Ordner"*.
 1. Bitten Sie Claude: *„Bereite eine lokale Datei für Claude vor.“*
 2. DataSecure öffnet einen Dateidialog außerhalb Claude. Wählen Sie eine TXT- oder
    DOCX-Datei. Claude sieht weder den Pfad noch das Original.
-3. DataSecure ersetzt erkannte Stellen lokal. Enthält das Dokument keine
-   zurückgehaltenen Bilder oder technischen Unsicherheiten, erscheint ein zweiter
-   lokaler Dialog mit der Trefferzahl. Nur dort können Sie bewusst „ohne zusätzliche
-   Textprüfung fortfahren“.
-4. Erst nach diesem Klick kann Claude die bereinigte Fassung lesen. Das von Ihnen
+3. DataSecure ersetzt erkannte Stellen lokal. Unter Windows erscheint eine lokale
+   Gegenüberstellung: links der normalisierte Quelltext mit Erkennungshinweisen,
+   rechts die schreibgeschützte bereinigte Fassung. Übersehene sensible Stellen
+   können Sie rechts auswählen und ausschließlich zusätzlich anonymisieren; darunter
+   sehen Sie die exakte daraus entstehende Freigabevorschau. Danach
+   können Sie freigeben oder die zusätzliche Sichtprüfung bewusst überspringen.
+4. Jede bearbeitete Fassung wird erneut automatisch geprüft. Erst nach bestandenem
+   Residual-Gate kann Claude die bereinigte Fassung lesen. Das von Ihnen
    gewählte Original bleibt unverändert an seinem bisherigen Ort.
 
-Wählen Sie im zweiten Dialog „Nein“, wird nichts veröffentlicht. Word-Dokumente mit
-Bildern oder nicht vollständig prüfbaren Inhalten bleiben ebenfalls gesperrt, bis die
-lokale Review-Oberfläche implementiert ist.
+Brechen Sie den zweiten Dialog ab, wird nichts veröffentlicht. Word-Dokumente mit
+Bildern oder nicht vollständig prüfbaren Inhalten bleiben weiterhin gesperrt. Auf
+macOS und Linux ist die bearbeitbare Review-Oberfläche in diesem Pilot noch nicht
+verfügbar; der Workflow stoppt dort an dieser Stelle sicher.
 
 ### Bestehender Ordnerweg für weitere Formate
 

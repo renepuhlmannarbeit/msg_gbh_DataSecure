@@ -107,6 +107,13 @@ Review-Oberfläche, Speicherpfad und Richtlinie einsatzbereit sind.
 
 ### DS-003 – Lokale optionale Textprüfung (L)
 
+**Stand:** Windows-Vertical-Slice umgesetzt: lokale Gegenüberstellung, heuristische
+Markierungshinweise, ausschließlich zusätzliche manuelle Redaktionen,
+exakte Ergebnisvorschau, inhaltshashgebundener Review/Skip-Nachweis, erneuter
+Residual-Gate, DOCX-Part-Coverage und verwaiste-Arbeitskopien-Cleanup. Offen sind
+macOS/Linux, Provenienz aus der tatsächlichen Replacement-Pipeline,
+strukturbezogene OOXML-Locatoren und echte Plattform-/Usability-Abnahmen.
+
 **Ergebnis:** Ein lokales Fenster zeigt Original und bereinigte Fassung mit markierten
 Ersetzungen. Aktionen: „Übersehene Stelle markieren“, „Ersetzung zurücknehmen“,
 „Freigeben“ und „Prüfung überspringen“.

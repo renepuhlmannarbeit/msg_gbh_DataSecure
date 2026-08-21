@@ -23,6 +23,25 @@ function companionEnvironment(source = process.env) {
   return result;
 }
 
+function terminateProcessTree(child, options = {}) {
+  if (!child) return;
+  const platform = options.platform || process.platform;
+  if (platform === 'win32' && Number.isSafeInteger(child.pid) && child.pid > 0) {
+    const runner = options.killTreeRunner || childProcess.spawnSync;
+    const systemRoot = options.systemRoot || process.env.SystemRoot || 'C:\\Windows';
+    try {
+      const result = runner(path.join(systemRoot, 'System32', 'taskkill.exe'), ['/pid', String(child.pid), '/t', '/f'], {
+        windowsHide: true,
+        stdio: 'ignore',
+        shell: false,
+        timeout: 10_000
+      });
+      if (!result?.error && result?.status === 0) return;
+    } catch { /* fall through to the direct child as a last resort */ }
+  }
+  try { child.kill(); } catch { /* process already exited */ }
+}
+
 function launchCompanion(options = {}) {
   const spawn = options.spawn || childProcess.spawn;
   const secret = crypto.randomBytes(32);
@@ -76,7 +95,7 @@ function launchCompanion(options = {}) {
     buffer += chunk;
     if (Buffer.byteLength(buffer, 'utf8') > MAX_RESPONSE_BYTES) {
       rejectAll(new SafeError('Companion-IPC-Antwort ist zu groß.'));
-      child.kill();
+      terminateProcessTree(child, options);
       return;
     }
     let newline;
@@ -84,7 +103,7 @@ function launchCompanion(options = {}) {
       const line = buffer.slice(0, newline).trim();
       buffer = buffer.slice(newline + 1);
       if (!line) continue;
-      try { handleLine(line); } catch (error) { rejectAll(error); child.kill(); return; }
+      try { handleLine(line); } catch (error) { rejectAll(error); terminateProcessTree(child, options); return; }
     }
   });
   child.once('error', () => rejectAll(new SafeError('Companion-Prozess konnte nicht gestartet werden.')));
@@ -103,7 +122,7 @@ function launchCompanion(options = {}) {
       const timer = setTimeout(() => {
         pending.delete(sequence);
         reject(new SafeError('Companion-Anfrage hat das lokale Zeitlimit überschritten.'));
-        child.kill();
+        terminateProcessTree(child, options);
       }, options.timeoutMs || REQUEST_TIMEOUT_MS);
       pending.set(sequence, { resolve, reject, timer });
       child.stdin.write(`${JSON.stringify(frame)}\n`, (error) => {
@@ -126,4 +145,10 @@ function launchCompanion(options = {}) {
   return { ready, request, close };
 }
 
-module.exports = { REQUEST_TIMEOUT_MS, MAX_RESPONSE_BYTES, companionEnvironment, launchCompanion };
+module.exports = {
+  REQUEST_TIMEOUT_MS,
+  MAX_RESPONSE_BYTES,
+  companionEnvironment,
+  terminateProcessTree,
+  launchCompanion
+};

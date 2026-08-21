@@ -61,6 +61,22 @@ function talk(messages, { timeoutMs = 15000 } = {}) {
 const rpc = (id, method, params) => ({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) });
 
 async function main() {
+  await testAsync('server startup removes an abandoned private working copy', async () => {
+    const jobs = path.join(root, 'localapp', 'ClaudeEUPrivacyDocumentGatewayV32', 'jobs');
+    const orphan = path.join(jobs, 'startup_12345678');
+    fs.mkdirSync(orphan, { recursive: true });
+    fs.writeFileSync(path.join(orphan, 'source.txt'), 'private source after crash');
+    fs.writeFileSync(path.join(orphan, '.owner.json'), JSON.stringify({
+      pid: 2147483647,
+      created_at: new Date().toISOString(),
+      nonce: 'd'.repeat(32)
+    }));
+    const { responses, stderr } = await talk([rpc(1, 'ping')]);
+    assert.strictEqual(responses.length, 1);
+    assert.strictEqual(stderr, '');
+    assert.strictEqual(fs.existsSync(orphan), false);
+  });
+
   await testAsync('initialize returns server info, capabilities and instructions', async () => {
     const { responses } = await talk([rpc(1, 'initialize', { protocolVersion: '2025-06-18' })]);
     assert.strictEqual(responses.length, 1);
@@ -187,7 +203,9 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.audit_write_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
     assert.strictEqual(result.structuredContent.companion_phase, 'txt_docx_vertical_slice_ready');
-    assert.strictEqual(result.structuredContent.companion_local_ui, 'native_picker_and_skip_confirmation');
+    assert.strictEqual(result.structuredContent.companion_local_ui, process.platform === 'win32'
+      ? 'native_picker_and_redaction_review'
+      : 'native_picker_text_review_unavailable');
     assert.deepStrictEqual(result.structuredContent.companion_supported_vertical_slice_inputs, ['TXT', 'DOCX']);
     assert.strictEqual(result.structuredContent.companion_private_ipc, 'inherited_stdio_authenticated');
     assert.strictEqual(result.structuredContent.companion_binary_signing, 'not_implemented');
