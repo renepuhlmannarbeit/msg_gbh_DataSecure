@@ -12,6 +12,7 @@ const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/com
 const { luhnValid, isAllowedOrg, looksName } = require('../plugins/data-secure/server/privacy/base');
 const { resolveSpans } = require('../plugins/data-secure/server/privacy/spans');
 const { trimReferenceValue } = require('../plugins/data-secure/server/privacy/structured');
+const { collectHeaderNameCandidates } = require('../plugins/data-secure/server/privacy/entities');
 
 const { test, done, assert } = createSuite('PII regression');
 
@@ -602,6 +603,44 @@ test('idempotence: a second pass over released text changes nothing', () => {
   const once = anonymize(src, 'personnel_profile').text;
   const twice = anonymize(once, 'personnel_profile').text;
   assert.strictEqual(twice, once, 'processing released text again must be a no-op');
+});
+
+// The golden fixture carries no noun-shaped capability line, so the case above
+// never exercises the anchor rule. The anchor that suppresses such a line is
+// destroyed by its own replacement, which is exactly how a later pass could
+// reclassify preserved capability text as a person.
+test('idempotence holds when the anchor is consumed by its own redaction', () => {
+  const src = [
+    'ERIKA BEISPIEL',
+    'Beratung, Umsetzung',
+    '',
+    '## Qualifikationen',
+    '',
+    'Analyse, Konzeption'
+  ].join('\n');
+
+  const once = anonymize(src, 'personnel_profile').text;
+  const twice = anonymize(once, 'personnel_profile').text;
+  const thrice = anonymize(twice, 'personnel_profile').text;
+
+  assertAbsent(once, 'ERIKA BEISPIEL', 'the anchor');
+  assertPresent(once, 'Beratung, Umsetzung', 'capability line in the header');
+  assertPresent(once, 'Analyse, Konzeption', 'capability line in the body');
+  assert.strictEqual(twice, once, 'a second pass must not reclassify preserved text');
+  assert.strictEqual(thrice, twice, 'and neither must a third');
+});
+
+test('the anchor parameter defaults to the safe direction', () => {
+  // A caller that forgets the argument must not let noun morphology suppress
+  // the only name in the document: a missed name is the heavier error.
+  const found = collectHeaderNameCandidates('Jung, Dennis\n', 'personnel_profile');
+  assert.deepStrictEqual(
+    found.map((seed) => seed.value),
+    ['Jung, Dennis'],
+    'omitting the anchor argument must not enable the noun-shape exclusion'
+  );
+  const suppressed = collectHeaderNameCandidates('Jung, Dennis\n', 'personnel_profile', 40, true);
+  assert.deepStrictEqual(suppressed, [], 'an explicit anchor still enables the exclusion');
 });
 
 done();

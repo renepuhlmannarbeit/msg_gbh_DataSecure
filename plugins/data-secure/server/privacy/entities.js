@@ -120,10 +120,13 @@ const CONTACT_CONTEXT_RE =
 // Medium confidence: a bare title-case name in the structural profile header,
 // or in a compact contact/address block. Once a section starts, profile body
 // prose no longer inherits implicit person context merely because it occurs in
-// the first 40 lines. The final parameter defaults to the pre-R3 behaviour for
-// callers of this exported helper; collectPersonSeeds supplies the real anchor
-// state so noun morphology can never suppress the document's only name clue.
-function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPersonAnchor = true) {
+// the first 40 lines.
+//
+// The anchor parameter defaults to false, not to the pre-R3 behaviour: with
+// true, a caller that forgets it lets noun morphology suppress the document's
+// only name clue, and a missed name is the heavier error. collectPersonSeeds
+// always supplies the real state.
+function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPersonAnchor = false) {
   const out = [];
   const bigram = new RegExp(
     `^(?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,3}$`,
@@ -261,6 +264,13 @@ function collectContextualNameCandidates(text, profile) {
   return out;
 }
 
+// A person pseudonym already in the text is itself proof that a person was
+// identified. Reading the anchor off the text keeps anonymize() idempotent:
+// the anchor that suppresses a noun-shaped capability line is destroyed by its
+// own replacement, so without this a second pass over released text would
+// reclassify that line as a person.
+const PERSON_PLACEHOLDER_RE = /\[PERSON_\d{3,}\]/u;
+
 function collectPersonSeeds(
   text,
   profile = 'general',
@@ -268,8 +278,9 @@ function collectPersonSeeds(
   strongPersonAnchorOverride = null
 ) {
   const anchors = precomputedAnchors === null ? collectPersonAnchors(text) : precomputedAnchors;
+  const anchorInText = anchors.length > 0 || PERSON_PLACEHOLDER_RE.test(String(text || ''));
   const hasStrongPersonAnchor =
-    strongPersonAnchorOverride === null ? anchors.length > 0 : Boolean(strongPersonAnchorOverride);
+    strongPersonAnchorOverride === null ? anchorInText : Boolean(strongPersonAnchorOverride);
   const seeds = [
     ...anchors,
     ...collectHeaderNameCandidates(text, profile, 40, hasStrongPersonAnchor),

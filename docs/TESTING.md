@@ -23,7 +23,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 201 assertion-level cases plus the plugin structure check.
+Total: 203 assertion-level cases plus the plugin structure check.
 
 ## The adversarial suite
 
