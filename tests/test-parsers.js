@@ -161,6 +161,16 @@ test('XLSX shared strings are resolved into table cells', () => {
   assertPresent(result.markdown, 'Wert', 'shared string');
 });
 
+test('XLSX table escaping handles backslashes before Markdown separators', () => {
+  const buf = zipStore([
+    ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Blatt" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/sharedStrings.xml', '<sst><si><t>C:\\Temp|Name</t></si></sst>'],
+    ['xl/worksheets/sheet1.xml', '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>']
+  ]);
+  assertPresent(parseOoxml(buf, '.xlsx').markdown, 'C:\\\\Temp\\|Name', 'escaped table cell');
+});
+
 test('XLSX inline numbers are kept', () => {
   const buf = zipStore([
     ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Blatt" r:id="rId1"/></sheets></workbook>'],

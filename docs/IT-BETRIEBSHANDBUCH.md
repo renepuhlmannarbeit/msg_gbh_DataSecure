@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC15 · Stand 21.08.2026
+Version 3.2.0 RC16 · Stand 21.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC15 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC16 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -15,10 +15,10 @@ Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine MCP-Read-Date
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC15 |
+| Artefakt | Ziel | Status RC16 |
 |---|---|---|
-| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc15.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-Engineering-Weg; frische Installation noch abzunehmen |
-| `DataSecure-Privacy-Preflight-v3.2.0-rc15.zip` | Claude-Plugin/Organisations-Marketplace | Skills plus lokaler MCP; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc16.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-Engineering-Weg; frische Installation noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc16.zip` | Claude-Plugin/Organisations-Marketplace | Skills plus lokaler MCP; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -124,7 +124,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC15 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC16 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.

@@ -101,13 +101,27 @@ function diagnosticFile(options = {}) {
 function readEvents(options = {}) {
   const io = options.fs || fs;
   const file = diagnosticFile(options);
-  if (!io.existsSync(file)) return [];
-  const stat = io.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_BYTES) return [];
+  let fd;
+  let contents;
+  try {
+    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0);
+    try { fd = io.openSync(file, flags); }
+    catch (error) {
+      if (error?.code === 'ENOENT') return [];
+      throw error;
+    }
+    const opened = io.fstatSync(fd);
+    const named = io.lstatSync(file);
+    if (!opened.isFile() || opened.size > MAX_FILE_BYTES || named.isSymbolicLink() ||
+        opened.dev !== named.dev || opened.ino !== named.ino) return [];
+    contents = io.readFileSync(fd, 'utf8');
+  } finally {
+    if (fd !== undefined) io.closeSync(fd);
+  }
   const now = options.now instanceof Date ? options.now.valueOf() : Number(options.now ?? Date.now());
   const cutoff = now - RETENTION_DAYS * 24 * 60 * 60 * 1000;
   const events = [];
-  for (const line of io.readFileSync(file, 'utf8').split(/\r?\n/)) {
+  for (const line of contents.split(/\r?\n/)) {
     if (!line.trim()) continue;
     try {
       const raw = JSON.parse(line);

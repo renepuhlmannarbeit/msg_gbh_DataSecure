@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { rasterizeToPng, ocrPngDetailed } = require('../runtime');
+const { VisualBudgetError } = require('../windows-visual');
 const pii = require('../pii-engine');
 const {
   decodePng,
@@ -17,6 +18,32 @@ const { minOcrCharsFor } = require('../images/ocr-map');
 const { LIMITS, roots, sha256Buffer, sha256File } = require('./common');
 
 const { MAX_ASSET_BYTES } = LIMITS;
+const VISUAL_TOTAL_TIMEOUT_MS = 3 * 60 * 1000;
+
+function visualDeadline(deps) {
+  if (Number.isFinite(deps.deadlineAt)) return deps.deadlineAt;
+  const requested = Number(deps.totalTimeoutMs);
+  const budget = Number.isFinite(requested) ? Math.max(1, Math.min(VISUAL_TOTAL_TIMEOUT_MS, requested)) : VISUAL_TOTAL_TIMEOUT_MS;
+  return Date.now() + budget;
+}
+
+async function withinVisualBudget(fn, args, deadlineAt) {
+  const remaining = Math.floor(deadlineAt - Date.now());
+  if (remaining <= 0) throw new VisualBudgetError('Die visuelle Verarbeitung überschritt das Gesamtzeitlimit.');
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => fn(...args, { timeoutMs: remaining })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(
+          new VisualBudgetError('Die visuelle Verarbeitung überschritt das Gesamtzeitlimit.')
+        ), remaining);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function normalizePng(buf, mime) {
   if (mime === 'image/png') return encodePng(decodePng(buf));
@@ -39,6 +66,7 @@ function visualMode() {
 async function prepareVisual(att, profile, deps = {}) {
   const raster = deps.rasterizeToPng || rasterizeToPng;
   const ocr = deps.ocrPngDetailed || ocrPngDetailed;
+  const deadlineAt = visualDeadline(deps);
   const mime = normalizeMime(att);
   const ext = String(att.extension || path.extname(att.name || '').slice(1) || 'bin').toLowerCase();
 
@@ -67,8 +95,10 @@ async function prepareVisual(att, profile, deps = {}) {
   }
   if (!png) {
     try {
-      png = await raster(raw, ext);
-    } catch {
+      const rasterized = await withinVisualBudget(raster, [raw, ext], deadlineAt);
+      png = normalizePng(rasterized, 'image/png');
+    } catch (error) {
+      if (error instanceof VisualBudgetError) throw error;
       png = null;
     }
   }
@@ -80,9 +110,10 @@ async function prepareVisual(att, profile, deps = {}) {
   let ocrText = '';
   if (png) {
     try {
-      ocrData = await ocr(png, languageTag());
+      ocrData = await withinVisualBudget(ocr, [png, languageTag()], deadlineAt);
       ocrText = flattenWords(ocrData).text || String(ocrData?.text || '').trim();
-    } catch {
+    } catch (error) {
+      if (error instanceof VisualBudgetError) throw error;
       ocrData = null;
     }
   }
@@ -146,7 +177,7 @@ async function prepareVisual(att, profile, deps = {}) {
   // those forever.
   const redactedValues = spans.map((s) => s.text);
   try {
-    const after = await ocr(redacted, languageTag());
+    const after = await withinVisualBudget(ocr, [redacted, languageTag()], deadlineAt);
     const afterText = flattenWords(after).text || String(after?.text || '');
     if (pii.verifyRedactedText(afterText, redactedValues).length) {
       return {
@@ -158,7 +189,8 @@ async function prepareVisual(att, profile, deps = {}) {
         redactions: rects.length
       };
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof VisualBudgetError) throw error;
     return {
       status: 'review_required',
       reason: 'post_redaction_ocr_failed',
@@ -231,11 +263,12 @@ async function processVisuals(attachments, profile, packageId, stagePackage, dep
   const results = [];
   const ocrExtras = [];
   let seq = 0;
+  const deadlineAt = visualDeadline(deps);
 
   for (const att of attachments || []) {
     seq++;
     const assetId = `asset-${String(seq).padStart(3, '0')}`;
-    const res = await prepareVisual(att, profile, deps);
+    const res = await prepareVisual(att, profile, { ...deps, deadlineAt });
 
     // The recognised text is released even for a withheld image, but only after
     // it has passed the text privacy gate together with the document body.
@@ -289,4 +322,7 @@ function assetsMarkdown(results) {
   return out.join('\n');
 }
 
-module.exports = { prepareVisual, processVisuals, assetsMarkdown, safeReviewFilename };
+module.exports = {
+  VISUAL_TOTAL_TIMEOUT_MS, visualDeadline, withinVisualBudget,
+  prepareVisual, processVisuals, assetsMarkdown, safeReviewFilename
+};

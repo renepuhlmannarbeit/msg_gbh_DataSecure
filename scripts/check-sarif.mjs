@@ -32,9 +32,17 @@ export function summarizeSarif(target) {
   const rules = new Map();
   let results = 0;
   for (const file of files) {
-    const stat = fs.statSync(file);
-    if (stat.size > MAX_FILE_BYTES) throw new Error('SARIF-Datei ist zu groß.');
-    const sarif = JSON.parse(fs.readFileSync(file, 'utf8'));
+    let fd;
+    let raw;
+    try {
+      fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile() || stat.size > MAX_FILE_BYTES) throw new Error('SARIF-Datei ist zu groß.');
+      raw = fs.readFileSync(fd, 'utf8');
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
+    }
+    const sarif = JSON.parse(raw);
     if (sarif?.version !== '2.1.0' || !Array.isArray(sarif.runs)) {
       throw new Error('Ungültiges SARIF-Format.');
     }

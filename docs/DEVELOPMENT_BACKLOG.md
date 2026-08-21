@@ -259,15 +259,18 @@ gespeicherten vollständigen Originaldatei-Hashes und verkürzten ungesalzenen
 **Ergebnis:** Unvertraute Dokumente, Konverter und OCR laufen in kurzlebigen Workern mit
 Zeit-, Speicher-, Größen-, Seiten-, Objekt- und Dekompressionsgrenzen.
 
-**Stand RC15: Parser-Slice umgesetzt.** Jede Datei wird in einem kurzlebigen
+**Stand RC16: Parser- und Budget-Slices umgesetzt.** Jede Datei wird in einem kurzlebigen
 Node-Kindprozess geparst. Der private Dateideskriptor 3 übergibt die Quelle ohne Pfad
 im Argument, ein 45-Sekunden-Limit, begrenzter V8-Heap, minimale Umgebung,
 Node-Permissions, ein versioniertes Antwortschema sowie Grenzen für Text, Anlagen und
-Gesamtausgabe schützen den MCP-/Companion-Hauptprozess. Parserfehler geben keine
-internen Meldungen oder Rohwerte zurück. Diese Härtung begrenzt weder nativen RSS
-vollständig noch stellt sie eine OS-seitige Netzsperre dar. Offen sind daher ein
-Windows-Job-Object/AppContainer bzw. nativer Launcher, Prozessbaum-/RSS-Nachweis und
-die OCR-/Raster-Gesamtbudgets. Vor klinischen Echtdaten bleibt dies ein hartes Gate.
+Gesamtausgabe schützen den MCP-/Companion-Hauptprozess. OCR/Raster besitzen zusätzlich
+ein gemeinsames Drei-Minuten-Dokumentbudget, 120-Sekunden-Einzelgrenzen, begrenzte
+Konsol-/Dateiausgaben, ein striktes OCR-Antwortschema und Windows-Prozessbaum-Abbruch.
+Budgetfehler veröffentlichen kein Teilpaket und stellen die Quelle wieder her.
+Parser-/Bridgefehler geben keine internen Meldungen oder Rohwerte zurück. Diese Härtung
+begrenzt weder nativen RSS vollständig noch stellt sie eine OS-seitige Netzsperre dar.
+Offen sind daher ein Windows-Job-Object/AppContainer bzw. nativer Launcher sowie der
+Prozessbaum-/RSS-/No-Network-Nachweis. Vor klinischen Echtdaten bleibt dies ein hartes Gate.
 
 **Abnahme:**
 
@@ -532,9 +535,9 @@ belegen:
    Fehlerisolierung sind umgesetzt; eine eigene lokale Abschlussansicht ergänzen.
 5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus
    laufen ohne neue Nutzeroberfläche, Datumslogik oder Laufzeitnetz.
-6. **DS-009 (Parser-Slice in RC15):** CPU-/Heap-/Antwortgrenzen und eigener Prozess
-   sind umgesetzt. Als Nächstes OCR/Raster-Ausgaben und Dokument-Gesamtzeit begrenzen;
-   echte Netz-/RSS-Isolation mit nativem Windows-Launcher nachweisen.
+6. **DS-009 (Parser-/Budget-Slices in RC16):** Parserprozess, CPU-/Heap-/Antwortgrenzen,
+   OCR-/Raster-Ausgaben und Dokument-Gesamtzeit sind umgesetzt. Als Nächstes echte
+   Netz-/RSS-Isolation mit nativem Windows-Launcher nachweisen.
 7. **DS-203 (danach):** zuerst Text-PDF in denselben vollständigen lokalen Pfad
    aufnehmen; weitere Formate nur anhand einer Coverage-Matrix.
 8. **DS-005/DS-205:** Upload-Umgehung, Einzel-/Mehrdateiweg, Mehrdeutigkeit, sicheren

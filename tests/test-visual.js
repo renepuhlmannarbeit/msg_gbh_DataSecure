@@ -21,6 +21,7 @@ const { encodePng, decodePng } = require(path.join(runtime, 'image-sanitizer.js'
 const { prepareVisual, processVisuals, assetsMarkdown, safeReviewFilename } = require(
   path.join(runtime, 'gateway', 'visuals.js')
 );
+const { VisualBudgetError } = require(path.join(runtime, 'windows-visual.js'));
 
 const { testAsync, test, done, assert } = createSuite('Visual gate');
 
@@ -261,6 +262,15 @@ async function main() {
     assert.ok(out.ocrExtras.includes('Extrahierter Bildtext 1'), 'image text section must be added');
     assert.ok(out.ocrExtras.includes('Max Mustermann'), 'raw OCR text enters the text pipeline');
     assert.strictEqual(out.results[0].status, 'review_required', 'the image itself stays local');
+  });
+
+  await testAsync('the document-wide visual deadline aborts instead of releasing a partial package', async () => {
+    const stage = fs.mkdtempSync(path.join(root, 'stage-'));
+    await assert.rejects(processVisuals([attachment()], 'customer', 'Paket_Timeout', stage, {
+      totalTimeoutMs: 5,
+      ocrPngDetailed: async () => new Promise(() => {})
+    }), VisualBudgetError);
+    assert.strictEqual(fs.readdirSync(path.join(stage, 'assets')).length, 0);
   });
 
   test('the assets section marks withheld graphics explicitly', () => {

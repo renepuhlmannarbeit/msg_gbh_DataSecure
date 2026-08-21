@@ -104,6 +104,34 @@ async function main() {
     fs.unlinkSync(blocked);
   });
 
+  await testAsync('a document-wide visual timeout restores the source and publishes no partial package', async () => {
+    const source = queueBuffer('visual-timeout.txt', 'safe professional content');
+    const outputDir = path.join(root, 'Output');
+    const reviewDir = path.join(root, 'Needs Visual Review');
+    const outputsBefore = fs.existsSync(outputDir) ? fs.readdirSync(outputDir).length : 0;
+    const reviewsBefore = fs.existsSync(reviewDir) ? fs.readdirSync(reviewDir).length : 0;
+    let ocrCalls = 0;
+    await assert.rejects(gw.anonymizeNext('customer', {
+      totalTimeoutMs: 10,
+      convertDocument: async () => ({
+        markdown: '# Fachinhalt\n\nRolle: Product Owner', warnings: [],
+        attachments: [1, 2].map((n) => ({
+          type: 'image', mimeType: 'image/png', extension: 'png', name: `image${n}.png`,
+          data: blankPng.toString('base64')
+        }))
+      }),
+      ocrPngDetailed: async () => {
+        ocrCalls++;
+        if (ocrCalls === 1) return depsFor('clean').ocrPngDetailed();
+        return new Promise(() => {});
+      }
+    }), /kein vollständiges Output-Paket/);
+    assert.strictEqual(fs.existsSync(source), true, 'source must be restored to Input');
+    assert.strictEqual(fs.readdirSync(outputDir).length, outputsBefore, 'no partial package may remain');
+    assert.strictEqual(fs.readdirSync(reviewDir).length, reviewsBefore, 'no partial review item may remain');
+    fs.unlinkSync(source);
+  });
+
   await testAsync('an XLSX customer sheet becomes a verified package with a released visual', async () => {
     queue(path.join(fixtures, 'synthetic_customer.xlsx'));
     const result = await gw.anonymizeNext('customer', {

@@ -59,6 +59,11 @@ guessing:
 - PNG with an invalid chunk CRC; the built-in decoder rejects it and the visual
   pipeline must obtain a clean PNG through local rasterisation or withhold it
 - OCR bridge unavailable
+- OCR/Raster-Konsol- oder Dateiausgabe überschreitet das feste Limit
+- OCR liefert mehr als 100.000 Wörter, mehr als fünf Millionen Textzeichen oder
+  ein nicht exakt validierbares Ergebnisobjekt
+- die gesamte visuelle Verarbeitung eines Dokuments überschreitet drei Minuten;
+  der Prozessbaum wird beendet, die Quelle wiederhergestellt und kein Teilpaket publiziert
 - recognised text too short to trust the "no PII found" result
 - PII found but its bounding boxes cannot be mapped
 - redaction failed, or a second OCR pass still finds the redacted strings
