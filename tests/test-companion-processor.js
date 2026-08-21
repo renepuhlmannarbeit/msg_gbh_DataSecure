@@ -418,6 +418,20 @@ async function main() {
     assert.ok(fs.existsSync(file));
   });
 
+  await testAsync('a PDF renamed as TXT cannot bypass the private picker path', async () => {
+    const r = workspace('renamed-pdf');
+    const bytes = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF', 'ascii');
+    const file = source('renamed-pdf.txt', bytes);
+    const job = createJob({ profile: 'customer', source_type: 'txt' });
+    await assert.rejects(
+      processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true }),
+      (error) => error.code === 'PDF_COVERAGE_UNVERIFIED'
+    );
+    assert.strictEqual(jobStatus(job.job_id).state, 'Failed');
+    assert.deepStrictEqual(fs.readFileSync(file), bytes);
+    assert.deepStrictEqual(fs.readdirSync(r.output), []);
+  });
+
   await testAsync('a failed release journal update removes the published package', async () => {
     const r = workspace('release-rollback');
     const file = source('rollback.txt', 'Kontakt: Max Mustermann, max@example.de');

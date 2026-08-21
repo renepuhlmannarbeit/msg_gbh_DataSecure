@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
+const childProcess = require('child_process');
 const { createSuite } = require('./helpers');
 const { SafeError, convertDocument, validateParserResult, nativeParserStatus } = require('../plugins/data-secure/server/runtime');
 
@@ -38,6 +39,59 @@ function fakeChild(action) {
 }
 
 async function main() {
+  await testAsync('renamed PDFs are blocked from text parsers before any worker starts', async () => {
+    let spawned = 0;
+    const pdf = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF', 'ascii');
+    for (const extension of ['txt', 'md', 'csv']) {
+      const file = path.join(root, `renamed.${extension}`);
+      fs.writeFileSync(file, pdf);
+      await assert.rejects(
+        () => convertDocument(file, { ...nativeOptions, spawn() { spawned++; throw new Error('must not run'); } }),
+        (error) => error instanceof SafeError && error.code === 'PDF_COVERAGE_UNVERIFIED'
+      );
+    }
+    for (const offset of [900, 1019, 1020, 1023]) {
+      const leadingJunk = path.join(root, `leading-junk-${offset}.txt`);
+      fs.writeFileSync(leadingJunk, Buffer.concat([Buffer.alloc(offset, 0x20), pdf]));
+      await assert.rejects(
+        () => convertDocument(leadingJunk, { ...nativeOptions, spawn() { spawned++; throw new Error('must not run'); } }),
+        (error) => error instanceof SafeError && error.code === 'PDF_COVERAGE_UNVERIFIED'
+      );
+    }
+    assert.strictEqual(spawned, 0);
+
+    const lateMention = path.join(root, 'late-pdf-mention.txt');
+    // Offset 1024 is outside the PDF header contract and may be ordinary text.
+    fs.writeFileSync(lateMention, `${'A'.repeat(1024)}%PDF- wird hier nur dokumentiert.`);
+    const result = await convertDocument(lateMention, {
+      ...nativeOptions,
+      spawn() {
+        spawned++;
+        return fakeChild((child) => {
+          child.stdout.end(JSON.stringify({
+            schema: 'data-secure-parser-result/1', ok: true,
+            result: { markdown: 'safe', attachments: [], warnings: [] }
+          }));
+          child.emit('close', 0);
+        });
+      }
+    });
+    assert.strictEqual(result.markdown, 'safe');
+    assert.strictEqual(spawned, 1);
+  });
+
+  test('the packaged parser worker has no direct PDF implementation', () => {
+    const worker = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'parser-worker.js');
+    const result = childProcess.spawnSync(process.execPath, [
+      '--permission', `--allow-fs-read=${path.dirname(worker)}`, '--disable-proto=throw', worker, '.pdf', '0'
+    ], {
+      input: Buffer.from('%PDF-1.4\n%%EOF', 'ascii'), encoding: 'utf8', env: {}, windowsHide: true
+    });
+    const response = JSON.parse(result.stdout);
+    assert.strictEqual(result.status, 2);
+    assert.deepStrictEqual(response, { schema: 'data-secure-parser-result/1', ok: false, error: 'parse_failed' });
+  });
+
   await testAsync('Windows worker starts only through the native launcher with inherited stdin', async () => {
     const file = source();
     let invocation;

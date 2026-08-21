@@ -3,7 +3,6 @@
 const path = require('path');
 const { normalizeText } = require('./privacy/base');
 const { parseOoxml } = require('./ooxml');
-const { parsePdf } = require('./pdf-lite');
 
 function normalized(result) {
   return { ...result, markdown: normalizeText(result.markdown) };
@@ -12,7 +11,6 @@ function normalized(result) {
 function parseDocumentBuffer(buffer, ext) {
   if (!Buffer.isBuffer(buffer)) throw new TypeError('parser input must be a buffer');
   if (['.docx', '.xlsx', '.pptx'].includes(ext)) return normalized(parseOoxml(buffer, ext));
-  if (ext === '.pdf') return normalized(parsePdf(buffer));
   if (ext === '.md' || ext === '.txt') {
     return normalized({ markdown: buffer.toString('utf8'), attachments: [], warnings: [] });
   }

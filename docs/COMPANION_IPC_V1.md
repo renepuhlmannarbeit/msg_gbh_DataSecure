@@ -113,7 +113,7 @@ Dokument-SHA-256 gebunden.
   separaten Detektorlauf, kein vollständiger Provenienz-Trace der Transformation.
   Strukturbezogene OOXML-Locatoren und tatsächliche Replacement-Provenienz sind noch
   nicht implementiert.
-- PDF und weitere Formate verwenden weiterhin den bestehenden Input-Ordner-Pfad.
+- Weitere freigegebene Formate verwenden weiterhin den bestehenden Input-Ordner-Pfad. PDF stoppt dort bis zum vollständigen Coverage-Nachweis mit `PDF_COVERAGE_UNVERIFIED` und erzeugt kein Paket.
 - Ein authentifizierter Prozesskanal allein ersetzt keine Codesignatur,
   Installationsherkunft oder menschliche Usability-Abnahme. Der echte Windows-
   Formularpfad wird automatisiert mit einer synthetischen Auswahl, Vorschau und
@@ -123,7 +123,7 @@ Dokument-SHA-256 gebunden.
 
 1. Menschliche Windows-Usability-Abnahme durchführen und lokale Review-UI für
    macOS und Linux produktionsfähig umsetzen.
-2. Text-PDF in den privaten Vertical-Slice aufnehmen.
+2. Den nativen PDFium-Text-only-Vertrag aus `PDF_ENGINE_DECISION.md` umsetzen und erst nach allen Gates PDF in den privaten Vertical-Slice aufnehmen.
 3. Den nativen Job-Object-Launcher getrennt für OCR/Raster kalibrieren und danach
    AppContainer ohne Netz-Capabilities als OS-Grenze nachweisen.
 4. Codesignatur, Upgrade/Rollback und reale Plattformtests nachweisen.

@@ -15,7 +15,7 @@ const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
 const { convertDocument, SafeError } = require(path.join(runtime, 'runtime.js'));
 const { parseOoxml } = require(path.join(runtime, 'ooxml.js'));
 const { readZip, ZipError } = require(path.join(runtime, 'zip-reader.js'));
-const { parsePdf } = require(path.join(runtime, 'pdf-lite.js'));
+const { parsePdf } = require(path.join(__dirname, 'helpers', 'legacy-pdf-lite.js'));
 const { encodePng } = require(path.join(runtime, 'images', 'png.js'));
 
 const { test, testAsync, done, assert } = createSuite('Parsers');
@@ -338,6 +338,14 @@ async function main() {
     assert.strictEqual(result.attachments.length, 1);
     assert.strictEqual(result.attachments[0].mimeType, 'image/png');
     assert.strictEqual(result.requiresExplicitProfile, true);
+  });
+
+  await testAsync('PDF cannot enter the release parser before full coverage is proven', async () => {
+    const file = write('coverage-unverified.pdf', simplePdf(['Kontakt: Max Mustermann']));
+    await assert.rejects(
+      () => convertDocument(file),
+      (error) => error instanceof SafeError && error.code === 'PDF_COVERAGE_UNVERIFIED'
+    );
   });
 
   await testAsync('a CSV that contains a fence cannot break out of the code block', async () => {

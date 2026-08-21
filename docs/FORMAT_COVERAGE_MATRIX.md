@@ -1,6 +1,6 @@
 # Format-Coverage-Matrix
 
-Stand: 3.2.0 RC19. Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte
+Stand: 3.2.0 RC20. Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte
 Dateiendungen. `Privater Dialog` bedeutet: Der gesamte lokale Review-/Residual-/Release-
 Pfad ist freigegeben. `Input` ist der technische Fallback und kein Beleg vollständiger
 Struktur- oder Formattreue.
@@ -9,7 +9,7 @@ Struktur- oder Formattreue.
 |---|---|---|---|---|
 | TXT | gesamter UTF-8-Text innerhalb der Größenlimits | keine | ja | Encoding außerhalb UTF-8 nicht zugesichert |
 | DOCX | Dokumenttext einschließlich Tabellen und verschachtelter DrawingML-Textfelder | bekannte Medien entfernen oder zurückhalten; unbekannte inhaltsfähige Parts blockieren | ja | Kommentare, Kopf-/Fußzeilen und weitere OOXML-Parts erst nach expliziter Coverage freigeben |
-| PDF | einfache Literal-/Hex-Strings aus einigen Content-Streams; kein vollständiger Seitennachweis | direkte JPEG-Objekte; übrige Visuals unvollständig | **nein** | Page-Tree/Contents, Form-XObjects, Inline-Images, Vektoren, Font-Encoding, ToUnicode, indirekte Filter und DecodeParms vollständig auswerten oder blockieren |
+| PDF | `pdf-lite` nur noch als Test-/Gegenprobenparser; kein Release-Pfad | nicht freigegeben | **nein** | jeder PDF-Lauf stoppt mit `PDF_COVERAGE_UNVERIFIED`; Zielarchitektur und Gates siehe `PDF_ENGINE_DECISION.md` |
 | XLSX | Shared-/Inline-Strings und einfache Zellwerte | bekannte Medien über Visual-Gate | nein | Kommentare, Formeln/Anzeigeformat, Charts, Zeichnungen, versteckte Bereiche und externe Beziehungen systematisch abdecken |
 | PPTX | Folientext und Sprechernotizen | bekannte Medien über Visual-Gate | nein | Master/Layout, Charts, SmartArt, eingebettete Objekte und externe Beziehungen systematisch abdecken |
 | MD | gesamter UTF-8-Text innerhalb der Größenlimits | referenzierte externe Inhalte werden nicht geladen | nein | eingebettete Daten/HTML und Zeichencodierung explizit klassifizieren |
@@ -38,6 +38,7 @@ sind:
    Decoy-Stream, Inline-Image, Vektorlogo, Form-XObject, indirekten Filter und beschädigte
    Container.
 
-Bis diese Kriterien erfüllt sind, verwendet das Plugin für PDF ausschließlich den
-lokalen `Input`-Fallback und behauptet weder vollständige Inhaltstreue noch eine
-Freigabe im privaten Dialog.
+Bis diese Kriterien erfüllt sind, stoppt das Plugin PDF auch im lokalen `Input`-Pfad
+vor der Extraktion. Das Original wird wiederhergestellt, es entsteht kein Paket und
+Claude erhält keine Rohbytes. Der alte Lite-Parser bleibt ausschließlich für
+adversariale Tests erhalten und ist kein Produktpfad.

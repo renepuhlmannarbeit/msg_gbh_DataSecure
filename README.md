@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC19
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC20
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
@@ -15,7 +15,7 @@ erhalten.
 ## Zielworkflow
 
 ```text
-PDF / DOCX / XLSX / PPTX / TXT / MD / CSV / PNG / JPEG / BMP
+DOCX / XLSX / PPTX / TXT / MD / CSV / PNG / JPEG / BMP
           ↓
    lokaler Privacy-MCP
           ↓
@@ -32,7 +32,7 @@ PDF / DOCX / XLSX / PPTX / TXT / MD / CSV / PNG / JPEG / BMP
 
 Wenn Rohdaten **vor** der Modellverarbeitung bereinigt werden müssen, wird das Original weder direkt in den Chat hochgeladen noch hineinkopiert. Nach außen gibt es einen Einstieg: „Anonymisiere eine oder mehrere Dateien lokal.“ DataSecure wählt den passenden lokalen Weg und verwendet danach nur die erzeugten Privacy-Pakete.
 
-Bis zu 25 TXT-/DOCX-Dateien können gemeinsam im privaten Dateidialog ausgewählt werden. DataSecure verarbeitet sie nacheinander und öffnet unter Windows je Datei die lokale Textprüfung. PDF und andere Formate oder ein formatgemischter Stapel werden gemeinsam in `Claude Privacy/Input` abgelegt und ebenfalls nacheinander verarbeitet. Jede Datei erhält ein eigenes Markdown-Paket; ein Fehler bei einer Datei blockiert die übrigen nicht. Der Dokumenttyp muss nicht für jede Datei angegeben werden: Gemischte Dokumentarten verwenden intern `profile=auto`. Nur eigenständige Bilder und Scan-PDFs ohne Textschicht brauchen vor der OCR eine Zweckangabe. Gestoppte Läufe werden nicht automatisch wiederholt.
+Bis zu 25 TXT-/DOCX-Dateien können gemeinsam im privaten Dateidialog ausgewählt werden. DataSecure verarbeitet sie nacheinander und öffnet unter Windows je Datei die lokale Textprüfung. Andere freigegebene Formate oder ein formatgemischter Stapel werden gemeinsam in `Claude Privacy/Input` abgelegt und ebenfalls nacheinander verarbeitet. Jede Datei erhält ein eigenes Markdown-Paket; ein Fehler bei einer Datei blockiert die übrigen nicht. Der Dokumenttyp muss nicht für jede Datei angegeben werden: Gemischte Dokumentarten verwenden intern `profile=auto`. Eigenständige Bilder brauchen vor der OCR eine Zweckangabe. PDF ist in RC20 vollständig gesperrt und erzeugt bis zum belegten nativen Coverage-Pfad kein Paket. Gestoppte Läufe werden nicht automatisch wiederholt.
 
 Wenn ausdrücklich reine Markdown-Ausgabe ohne Bilder gewünscht ist, entfernt `remove_images=true` bekannte Bildanlagen in texttragenden Office-Dateien lokal und vermerkt dies in der `.md`. Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans bleiben weiterhin durch die Sicherheitsgrenzen geschützt.
 
@@ -46,7 +46,7 @@ Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begre
 
 ## Unterstützte Inputs
 
-- PDF mit extrahierbarem Textlayer; reine Scans mit extrahierbaren JPEG-Seitenbildern laufen über OCR, andere komplexe Scans fail-closed
+- PDF derzeit fail-closed gesperrt; Ziel ist ein nativer, isolierter PDFium-Worker mit positivem Text-/Objekt-/Unicode-Coverage-Nachweis
 - DOCX
 - XLSX
 - PPTX
@@ -98,8 +98,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc19.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
-- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc19.mcpb` – Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc20.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
+- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc20.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
@@ -117,7 +117,7 @@ plattformspezifischen Companion mit nachgewiesener Installationsherkunft ersetze
 npm test
 ```
 
-365 Assertion-Fälle plus Plugin-Strukturprüfung, insgesamt **366 Prüfungen**, über Manifest-/Agentenkonsistenz, den nativen Windows-Job-Object-Launcher, isolierte Parserprozesse, PII-Regression, Zertifikatskatalog, Bildcodecs, begrenzte Windows-OCR-/Raster-Bridge, Visual-Gate, Retention/Löschung, Audit- und Diagnose-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/Mehrfach-Picker, TXT-/DOCX-Verarbeitung, datensparsame Stapel-Abschlussanzeige, Bildentfernung und gemischte Stapelläufe, Gateway-E2E, MCP-Protokoll, SARIF-Release-Gate sowie Adversarial- und alternative Repräsentations-Suites. Die nativen Tests belegen geerbten pfadlosen Input, `ACTIVE_PROCESS=1`, Prozess-/Jobspeicher-, CPU- und Wallclock-Grenzen, `KILL_ON_JOB_CLOSE`, Paketkonsistenz/PE-x64-Prüfung, native AMD64-Hostprobe und den fehlenden unsandboxed Fallback. Die Regressionen decken außerdem verschachtelte Word-Textfelder, Zertifikate im Abschnitt, Fließtext und OCR-Pfad, denselben Organisationsnamen in Zertifikats- und Kundenrolle, die Abgrenzung zu langen Projektbeschreibungen sowie IT-/Test-/Produkt-/Business-Analysis-/Health-IT-Fachvokabular ab. Die Suite besitzt keine npm-Laufzeitabhängigkeiten. Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+371 Assertion-Fälle plus Plugin-Strukturprüfung, insgesamt **372 Prüfungen**, über Manifest-/Agentenkonsistenz, den nativen Windows-Job-Object-Launcher, isolierte Parserprozesse, PII-Regression, Zertifikatskatalog, Bildcodecs, begrenzte Windows-OCR-/Raster-Bridge, Visual-Gate, Retention/Löschung, Audit- und Diagnose-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/Mehrfach-Picker, TXT-/DOCX-Verarbeitung, datensparsame Stapel-Abschlussanzeige, Bildentfernung und gemischte Stapelläufe, Gateway-E2E, MCP-Protokoll, SARIF-Release-Gate sowie Adversarial- und alternative Repräsentations-Suites. Die nativen Tests belegen geerbten pfadlosen Input, `ACTIVE_PROCESS=1`, Prozess-/Jobspeicher-, CPU- und Wallclock-Grenzen, `KILL_ON_JOB_CLOSE`, Paketkonsistenz/PE-x64-Prüfung, native AMD64-Hostprobe und den fehlenden unsandboxed Fallback. Die Regressionen decken außerdem verschachtelte Word-Textfelder, Zertifikate im Abschnitt, Fließtext und OCR-Pfad, denselben Organisationsnamen in Zertifikats- und Kundenrolle, die Abgrenzung zu langen Projektbeschreibungen sowie IT-/Test-/Produkt-/Business-Analysis-/Health-IT-Fachvokabular ab. Die Suite besitzt keine npm-Laufzeitabhängigkeiten. Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -149,6 +149,6 @@ Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für
 
 ## Release-Status
 
-RC19 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze und eine inhaltsfreie Abschlussanzeige für Mehrfachläufe. PDF bleibt nach adversarialem Security-Review bis zu einem belastbaren Page-/Font-/Visual-Coverage-Nachweis außerhalb des privaten Dialogs. Dokumentparser starten auf Windows x64 ausschließlich über den gebündelten nativen Launcher: suspended, vor Resume einem Job Object zugewiesen, mit genau einem Prozess, 768 MiB Prozess-/Jobspeicher, 40 Sekunden CPU-Zeit, 45 Sekunden Wallclock, `KILL_ON_JOB_CLOSE` und expliziter Handle-Liste. SHA-256 und PE-x64-Prüfung belegen die interne Paketkonsistenz, nicht Herstellerherkunft oder Manipulationsschutz. Fehlt der Launcher, stimmt das Paketpaar nicht oder läuft das Plugin außerhalb Windows x64, gibt es keinen direkten Node-Fallback. Noch offen sind Authenticode/geschützter Installationspfad, Windows ARM64, AppContainer als OS-Netz-/Dateisystemgrenze, dieselbe harte Grenze für OCR/Raster, frische Installation/Upgrade/Rollback und menschliche Usability-Abnahme. Bis dahin bleiben klinische Echtdaten und ein Nutzerpilot gesperrt. JavaScript und der native C++-Launcher werden getrennt mit CodeQL geprüft; CI verifiziert zusätzlich beide Paketformen und ihre Parserstatus-Antwort.
+RC20 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze und eine inhaltsfreie Abschlussanzeige für Mehrfachläufe. PDF bleibt nach adversarialem Security-Review bis zu einem belastbaren Page-/Font-/Visual-Coverage-Nachweis vollständig aus Dialog und Input-Veröffentlichung gesperrt. Dokumentparser starten auf Windows x64 ausschließlich über den gebündelten nativen Launcher: suspended, vor Resume einem Job Object zugewiesen, mit genau einem Prozess, 768 MiB Prozess-/Jobspeicher, 40 Sekunden CPU-Zeit, 45 Sekunden Wallclock, `KILL_ON_JOB_CLOSE` und expliziter Handle-Liste. SHA-256 und PE-x64-Prüfung belegen die interne Paketkonsistenz, nicht Herstellerherkunft oder Manipulationsschutz. Fehlt der Launcher, stimmt das Paketpaar nicht oder läuft das Plugin außerhalb Windows x64, gibt es keinen direkten Node-Fallback. Noch offen sind Authenticode/geschützter Installationspfad, Windows ARM64, AppContainer als OS-Netz-/Dateisystemgrenze, dieselbe harte Grenze für OCR/Raster, frische Installation/Upgrade/Rollback und menschliche Usability-Abnahme. Bis dahin bleiben klinische Echtdaten und ein Nutzerpilot gesperrt. JavaScript und der native C++-Launcher werden getrennt mit CodeQL geprüft; CI verifiziert zusätzlich beide Paketformen und ihre Parserstatus-Antwort.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

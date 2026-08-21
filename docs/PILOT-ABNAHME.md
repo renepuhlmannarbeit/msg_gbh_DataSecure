@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC19 · ausschließlich synthetische Daten
+Version 3.2.0 RC20 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC19 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC20 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -81,15 +81,15 @@ vorstehenden Punkte prüfen zusätzlich Verständlichkeit und den installierten 
 
 ## 5. Andere und formatgemischte Dateien über den Input-Ordner
 
-Jeweils eine synthetische DOCX-, XLSX-, PPTX-, Text-PDF-, CSV-, PNG-, JPEG- und
-BMP-Datei verwenden. Scan-PDF separat prüfen.
+Jeweils eine synthetische DOCX-, XLSX-, PPTX-, CSV-, PNG-, JPEG- und BMP-Datei
+verwenden. Text- und Scan-PDF separat als verpflichtende Stop-Gegenprobe prüfen.
 
 - [ ] Unterstützte Formate erzeugen ein verifiziertes Privacy-Paket oder einen
       verständlichen fail-closed Grund.
 - [ ] PPTX-Sprechernotizen und XLSX-Zelltexte werden berücksichtigt.
 - [ ] CSV-Inhalt kann nicht aus seinem Markdown-Fence ausbrechen.
-- [ ] PDF ohne sicher extrahierbaren Text/Bildpfad wird nicht leer freigegeben.
-- [ ] Ein Bild-/Scan-PDF verlangt vor OCR ein ausdrückliches Profil.
+- [ ] Jedes PDF stoppt mit `PDF_COVERAGE_UNVERIFIED`, stellt das Original wieder her
+      und erzeugt weder Teil- noch Output-Paket.
 - [ ] Synthetische PII im Scan wird geschwärzt und durch zweiten OCR-Lauf verifiziert.
 - [ ] EMF/WMF rasterisiert sicher oder wird vollständig zurückgehalten.
 
@@ -104,7 +104,7 @@ BMP-Datei verwenden. Scan-PDF separat prüfen.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC19 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC20 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

@@ -83,6 +83,15 @@ test('MCPB manifest declares the fields the runtime relies on', () => {
   }
 });
 
+test('PDF is declared blocked until the native coverage contract is released', () => {
+  assert.ok(!buildInfo.formats.includes('pdf'), 'PDF must not appear in released formats');
+  assert.deepStrictEqual(buildInfo.blocked_formats, ['pdf']);
+  assert.match(mcpb.long_description, /PDF.*sicher gesperrt/u);
+  assert.match(readText(path.join(runtime, 'runtime.js')), /PDF_COVERAGE_UNVERIFIED/u);
+  assert.strictEqual(fs.existsSync(path.join(runtime, 'pdf-lite.js')), false, 'legacy PDF parser must not ship');
+  assert.strictEqual(fs.existsSync(path.join(root, 'tests', 'helpers', 'legacy-pdf-lite.js')), true);
+});
+
 // The server declares its tables as `const TOOLS=[...]` / `const PROMPTS=[...]`.
 // Reading the names out of the source keeps this check free of a server import.
 function declaredNames(source, table) {

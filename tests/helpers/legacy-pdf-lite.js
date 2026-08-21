@@ -1,5 +1,9 @@
 'use strict';
 
+// Historical best-effort parser retained only for adversarial regression tests.
+// It is intentionally outside the packaged plugin and must never be imported by
+// production code.
+
 const zlib = require('zlib');
 const MAX_EXPANDED_CONTENT_BYTES = 20 * 1024 * 1024;
 

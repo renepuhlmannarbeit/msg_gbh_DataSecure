@@ -3,7 +3,7 @@
 ## Artefacts
 
 ```bash
-npm run version:sync -- 3.2.0-rc19  # propagate a new version everywhere
+npm run version:sync -- 3.2.0-rc20  # propagate a new version everywhere
 npm test
 npm run build
 node scripts/generate-sbom.mjs
@@ -87,7 +87,8 @@ alone do not close them.
 - [ ] the plugin installs and the local MCP starts without any runtime install
 - [ ] `privacy_status` reports `visual_bridge: available`
 - [ ] the privacy folder opens
-- [ ] DOCX, XLSX, PPTX and PDF preflight work on synthetic files
+- [ ] DOCX, XLSX and PPTX preflight work on synthetic files
+- [ ] every PDF stops with `PDF_COVERAGE_UNVERIFIED`, restores its source and publishes no package
 - [x] a scanned image is OCR'd, and PII inside it is blacked out
 - [ ] an EMF/WMF graphic either rasterises safely or is withheld
 - [ ] applicant and personnel visuals stay local and unavailable to Claude

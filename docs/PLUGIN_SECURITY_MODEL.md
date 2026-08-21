@@ -37,7 +37,8 @@ engine as the rest of the document. The released Markdown marks them under
 
 ## Fail-closed points
 
-Text- und Office-/PDF-Parser laufen pro Datei in einem separaten Node-Prozess. Auf
+Text- und Office-Parser laufen pro Datei in einem separaten Node-Prozess. PDF stoppt
+vor dem Parserstart mit `PDF_COVERAGE_UNVERIFIED`. Auf
 Windows x64 startet ein gebündelter nativer Launcher das Kind suspended, weist es vor
 Resume einem Job Object zu und erzwingt einen Prozess, 768 MiB Prozess-/Jobspeicher,
 40 Sekunden CPU-Zeit, 45 Sekunden Wallclock sowie `KILL_ON_JOB_CLOSE`. Die Quelle wird ausschließlich als
@@ -57,12 +58,10 @@ Every one of these stops the pipeline or withholds the asset rather than
 guessing:
 
 - unsupported or unparsable container
-- PDF without an extractable text layer and without safely extractable JPEG page images
-- PDF with a damaged or oversized Flate-compressed stream; the parser rejects
-  the document instead of treating the compressed bytes as readable text
-- PDF markers for encryption, object streams, forms, annotations, embedded files and
-  unsupported stream filters are surfaced as parser warnings. This is not complete
-  PDF coverage; PDF therefore remains outside the private TXT-/DOCX dialog.
+- every PDF, independent of apparent text or image content; the legacy Lite parser is
+  retained only for adversarial tests and cannot publish a package
+- the future PDFium worker remains blocked until the Page-/Font-/Unicode-/Visual-
+  coverage, licensing, AppContainer and release gates in `PDF_ENGINE_DECISION.md` pass
 - extracted text or asset count over the configured limits
 - residual gate finds a direct identifier or a literal the redactor claimed to
   have replaced

@@ -24,6 +24,7 @@ const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 
 const ERROR_CODES = new Set([
   'NONE', 'INPUT_EMPTY', 'INPUT_TOO_LARGE', 'WORKING_CLEANUP_BLOCKED',
   'AUDIT_MIGRATION_BLOCKED', 'UNSUPPORTED_FORMAT', 'PARSE_FAILED',
+  'PDF_COVERAGE_UNVERIFIED',
   'PARSER_RESOURCE_LIMIT', 'PARSER_ISOLATION_FAILED',
   'PROFILE_REQUIRED', 'TEXT_TOO_LARGE', 'TOO_MANY_VISUALS',
   'IMAGE_REMOVAL_UNSAFE', 'VISUAL_REVIEW_REQUIRED', 'LOCAL_REVIEW_CANCELLED',
@@ -81,6 +82,7 @@ function classifyDiagnosticError(error, stage = 'started') {
   if (/größer als 100 MB/i.test(message)) return 'INPUT_TOO_LARGE';
   if (/Verwaiste private Arbeitskopien/i.test(message)) return 'WORKING_CLEANUP_BLOCKED';
   if (/Audit-Nachweise/i.test(message)) return 'AUDIT_MIGRATION_BLOCKED';
+  if (/PDF-Dateien bleiben sicher gestoppt|PDF-Prüfpfad/i.test(message)) return 'PDF_COVERAGE_UNVERIFIED';
   if (/nicht unterstützt|unsupported/i.test(message)) return 'UNSUPPORTED_FORMAT';
   if (/reine Bild|Scan-Eingaben|Profil ausdrücklich/i.test(message)) return 'PROFILE_REQUIRED';
   if (/Dokumenttext ist zu groß|bearbeitete Fassung ist zu groß/i.test(message)) return 'TEXT_TOO_LARGE';

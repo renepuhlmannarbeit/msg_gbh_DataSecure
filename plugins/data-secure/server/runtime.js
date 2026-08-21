@@ -16,6 +16,24 @@ function safeError(message, code) {
   return error;
 }
 
+function pdfCoverageError() {
+  return safeError(
+    'PDF-Dateien bleiben sicher gestoppt, bis der vollständige lokale PDF-Prüfpfad freigegeben ist. ' +
+      'Verwenden Sie, falls verfügbar, die ursprüngliche DOCX-, XLSX-, PPTX- oder TXT-Datei; ' +
+      'laden Sie das PDF nicht direkt in Claude hoch.',
+    'PDF_COVERAGE_UNVERIFIED'
+  );
+}
+
+function descriptorStartsAsPdf(fd, io = fs) {
+  // The PDF header may start at any position in the first 1024 bytes. Read the
+  // four trailing bytes as well so a marker starting at offset 1023 is complete.
+  const header = Buffer.alloc(1028);
+  const length = io.readSync(fd, header, 0, header.length, 0);
+  const index = header.subarray(0, length).indexOf(Buffer.from('%PDF-', 'ascii'));
+  return index >= 0 && index <= 1023;
+}
+
 function verifyNativeLauncher(launcher, options = {}) {
   const exists = options.existsSync || fs.existsSync;
   if (!exists(launcher)) throw safeError(
@@ -185,6 +203,12 @@ async function convertDocument(source, options = {}) {
   const ext = path.extname(source).toLowerCase();
   const supported = new Set(['.pdf', '.docx', '.xlsx', '.pptx', '.txt', '.md', '.csv', '.png', '.jpg', '.jpeg', '.bmp']);
   if (!supported.has(ext)) throw new SafeError('Nicht unterstütztes Format.');
+  // pdf-lite remains available only for adversarial parser tests. Its extraction
+  // is not a coverage proof: fonts, the page tree and every visual object cannot
+  // yet be accounted for. Never let that best-effort result enter the release
+  // pipeline. RC20 keeps PDF fail-closed until the native PDFium contract in
+  // docs/PDF_ENGINE_DECISION.md has passed all release gates.
+  if (ext === '.pdf') throw pdfCoverageError();
   const worker = path.join(__dirname, 'parser-worker.js');
   const spawn = options.spawn || childProcess.spawn;
   const platform = options.platform || process.platform;
@@ -212,6 +236,16 @@ async function convertDocument(source, options = {}) {
     ...nodeFlags, '0'
   ];
   const fd = fs.openSync(source, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  try {
+    // A renamed PDF must not enter a text/CSV parser. Sniff the same descriptor
+    // that is inherited by the worker, so no path re-open can swap the checked
+    // bytes before parsing. PDF headers may legally follow leading junk within
+    // the first 1024 bytes.
+    if (descriptorStartsAsPdf(fd)) throw pdfCoverageError();
+  } catch (error) {
+    fs.closeSync(fd);
+    throw error;
+  }
   stdio = [fd, 'pipe', 'ignore'];
   let child;
   try {

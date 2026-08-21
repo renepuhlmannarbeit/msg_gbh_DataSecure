@@ -1,6 +1,6 @@
 # GBH DataSecure – Dokumente anonymisieren
 
-Claude-Plugin zur lokalen Anonymisierung und Datenschutzprüfung von PDF-, DOCX-, XLSX-, PPTX-, Text- sowie eigenständigen PNG-, JPEG- und BMP-Dateien.
+Claude-Plugin zur lokalen Anonymisierung und Datenschutzprüfung von DOCX-, XLSX-, PPTX-, Text- sowie eigenständigen PNG-, JPEG- und BMP-Dateien. PDF bleibt in RC20 bis zum vollständigen nativen Coverage-Nachweis sicher gesperrt.
 
 Das Plugin verbindet:
 
@@ -11,8 +11,8 @@ Das Plugin verbindet:
 ## Ablauf für Anwender
 
 1. Bitte Claude bei TXT oder DOCX, ein lokales Dokument vorzubereiten. DataSecure öffnet einen lokalen Dateidialog und unter Windows anschließend eine auf zusätzliche Schwärzungen begrenzte Prüfung.
-2. Bitte Claude bei PDF, XLSX, PPTX, MD, CSV, Bildern oder mehreren Dateien, den Datenschutzordner zu öffnen, und kopiere die Quelldateien nach `Input`.
-3. Bitte Claude, das nächste Dokument oder alle Dokumente zu anonymisieren. Der Stapellauf verarbeitet bis zu 25 Dateien nacheinander und erstellt pro Datei ein eigenes Markdown-Paket. Für gemischte Dokumentarten genügt `auto`; nur reine Bilder und Scan-PDFs ohne Textschicht brauchen ein ausdrückliches Profil.
+2. Bitte Claude bei XLSX, PPTX, MD, CSV, Bildern oder mehreren formatgemischten Dateien, den Datenschutzordner zu öffnen, und kopiere die Quelldateien nach `Input`. PDF erzeugt derzeit bewusst kein Paket.
+3. Bitte Claude, das nächste Dokument oder alle Dokumente zu anonymisieren. Der Stapellauf verarbeitet bis zu 25 Dateien nacheinander und erstellt pro erfolgreich freigegebener Datei ein eigenes Markdown-Paket. Für gemischte Dokumentarten genügt `auto`; nur reine Bilder brauchen ein ausdrückliches Profil.
 4. Claude verwendet ausschließlich freigegebenes Markdown und freigegebene PNG-Dateien.
 5. Nicht automatisch verifizierbare Grafiken bleiben lokal unter `Needs Visual Review`. Dieser Engineering-Build besitzt keinen menschlichen Freigabeweg für visuelle Inhalte; das Öffnen des Ordners macht sie für Claude nicht lesbar.
 

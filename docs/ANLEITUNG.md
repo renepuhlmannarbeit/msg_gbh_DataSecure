@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC19 · Windows 10/11 x64 · ca. 20 Minuten.
+Version 3.2.0 RC20 · Windows 10/11 x64 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC19 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC20 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -185,16 +185,17 @@ Privacy-Ordner"*.
    DataSecure.“* Sie müssen keine internen Profilnamen kennen und einen gemischten
    Stapel nicht Datei für Datei einordnen.
 2. DataSecure zeigt Ihnen den passenden lokalen Weg:
-   - Für bis zu 25 TXT- oder Word-Dokumente öffnet sich ein Dateidialog außerhalb
+   - Für bis zu 25 TXT- oder DOCX-Dateien (Word) öffnet sich ein Dateidialog außerhalb
      Claude. Wählen Sie dort eine oder mehrere Dateien aus.
-   - Für PDF, Excel, PowerPoint, Markdown, CSV, Bilder oder einen formatgemischten
-     Stapel öffnet DataSecure den Privacy-Ordner. Kopieren Sie alle gewünschten
-     Dateien gemeinsam nach `Input`, nicht in den Chat.
+   - Für Excel, PowerPoint, Markdown, CSV, Bilder oder einen formatgemischten Stapel
+     öffnet DataSecure den Privacy-Ordner. Kopieren Sie alle gewünschten Dateien
+     gemeinsam nach `Input`, nicht in den Chat. PDF ist in dieser Version sicher
+     gesperrt und darf auch nicht direkt in den Chat hochgeladen werden.
    Claude erhält weder die Quellpfade noch die Originale.
 3. DataSecure verarbeitet jede Datei nacheinander und erstellt pro Datei ein eigenes
    Markdown-Paket. Ein Fehler bei einer Datei blockiert die übrigen nicht. Den Typ
-   müssen Sie nur dann nennen, wenn eine eigenständige Bilddatei oder ein Scan-PDF
-   ohne Textschicht sonst nicht einzuordnen ist, zum Beispiel „als Bewerbung“ oder
+   müssen Sie nur dann nennen, wenn eine eigenständige Bilddatei sonst nicht
+   einzuordnen ist, zum Beispiel „als Bewerbung“ oder
    „als Kundendokument“.
 4. Bei TXT- und Word-Dokumenten erscheint unter Windows je Datei die lokale
    Textprüfung. Gelb markierte Organisationen sind fachlich mehrdeutig. Entscheiden
@@ -222,7 +223,7 @@ wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
 Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen Sie
 eine gestoppte TXT-/DOCX-Datei anschließend erneut über den lokalen Dateidialog.
 
-RC19 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
+RC20 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
 ARM64 stoppt bereits die lokale Parserbereitschaft sicher; es gibt dort keinen
 direkten Node-Ersatzpfad. Plattformübergreifende Adapter sind ein späterer Backlog-
 Punkt und kein aktueller Produktclaim.
@@ -283,8 +284,7 @@ Nummern beginnen bei jedem Dokument neu.
 | `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
 | Claude meldet mehr Dateien als in `Input` lagen | `input_documents_seen`, `attempted` und `automatic_retries` prüfen. Mehrere Versuche derselben Datei sind keine mehreren Dateien |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
-| Gescanntes PDF wird abgelehnt | Scans mit sicher extrahierbaren JPEG-Seitenbildern laufen über OCR. Andere PDF-Bildcodierungen werden fail-closed abgelehnt; wenn möglich das Original oder einen PNG-/JPEG-Export verwenden |
-| PDF wird abgelehnt, obwohl es sich in einem PDF-Reader öffnen lässt | Das PDF neu exportieren oder die Originaldatei statt einer weitergeleiteten Kopie verwenden |
+| `PDF_COVERAGE_UNVERIFIED` | PDF ist in RC20 unabhängig vom Inhalt sicher gesperrt. Verwenden Sie nach Organisationsfreigabe die ursprüngliche DOCX-/XLSX-/PPTX-/TXT-Datei oder lassen Sie einen ausdrücklich freigegebenen PNG-/JPEG-Export erneut durch DataSecure verarbeiten; niemals das Original-PDF oder den Export direkt in Claude hochladen |
 | Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | In `Processed` nachsehen und das Original zurück nach `Input` verschieben. Tritt das erneut auf, an IT melden |
 | Fachbegriff fälschlich geschwärzt | Kein Datenschutzproblem, aber bitte melden |
 | **Echter Name in der geprüften Fassung** | **Sofort aufhören.** Nicht weiterarbeiten, Chat nicht weiterverwenden, umgehend melden |
@@ -323,7 +323,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC19 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC20 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

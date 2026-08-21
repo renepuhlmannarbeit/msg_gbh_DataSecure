@@ -464,9 +464,13 @@ Unternehmens-, Projekt-, Standort-, Personen- und Personalnummernmuster werden e
 
 ### DS-203 – Formatvollständigkeit und Strukturtreue (L)
 
-**Stand RC19:** Die erste explizite Matrix liegt in
+**Stand RC20:** Die erste explizite Matrix liegt in
 [`FORMAT_COVERAGE_MATRIX.md`](FORMAT_COVERAGE_MATRIX.md). Der geplante Text-PDF-
-Dialogschnitt wurde nach Security-/Architektur-Gegenproben nicht freigeschaltet.
+Dialogschnitt wurde nach Security-/Architektur-Gegenproben nicht freigeschaltet. Der
+unvollständige `pdf-lite`-Pfad ist nun auch für Input-Veröffentlichungen gesperrt;
+`PDF_COVERAGE_UNVERIFIED` stellt Original und Null-Output sicher. PDFium wurde als
+Zielengine für einen strikt isolierten Text-only-Worker festgelegt; Gates und
+Trust-Boundary stehen in [`PDF_ENGINE_DECISION.md`](PDF_ENGINE_DECISION.md).
 
 **Ergebnis:** Kopf-/Fußzeilen, Kommentare, Notizen, Tabellen, Textboxen, Metadaten,
 eingebettete Grafiken und Scan-PDFs werden systematisch erfasst. Optionaler Apache-Tika-
@@ -551,12 +555,12 @@ belegen:
    und Speichergrenzen samt fail-closed Packaging sind umgesetzt. Als Nächstes den
    Launcher für OCR/Raster kalibrieren und AppContainer ohne Netz-Capabilities gegen
    Internet, DNS, RFC1918 und Loopback nachweisen; ARM64 und Signatur folgen getrennt.
-7. **DS-203 (Security-Revalidierung in RC19):** Text-PDF bleibt aus dem privaten
-   Dialog, bis Catalog/Page-Tree/Contents vollständig verfolgt, Font-Encoding und
-   ToUnicode korrekt ausgewertet sowie Images, Inline-Images, Form-XObjects und
-   Vektorinhalt vollständig erfasst oder blockiert werden. Indirekte Filter und
-   DecodeParms gehören ebenfalls ins Gate. Erst danach folgen reale Word-/LibreOffice-/
-   Browser-PDFs und adversariale Gegenproben als Freigabeevidenz.
+7. **DS-203 (RC20-Fail-closed und Zielarchitektur):** PDF erzeugt weder im Dialog noch
+   im Input-Pfad ein Paket. Als Nächstes folgt der gepinnte PDFium-Packaging-/Lizenz-
+   Spike und danach ein nativer Text-only-Worker. Catalog/Page-Tree, Unicode, alle
+   Nichttextobjekte, Annotationen, Attachments, JavaScript, Verschlüsselung und Limits
+   müssen positiv belegt sein. Erst danach folgen reale Word-/LibreOffice-/Browser-PDFs
+   und adversariale Gegenproben als Freigabeevidenz.
 8. **DS-005/DS-205:** Upload-Umgehung, Einzel-/Mehrdateiweg, Mehrdeutigkeit, sicheren
    Abbruch und Verständlichkeit mit synthetischen Dokumenten abnehmen.
 

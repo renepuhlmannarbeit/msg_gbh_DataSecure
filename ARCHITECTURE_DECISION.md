@@ -16,7 +16,7 @@ Frühere Prototypen installierten teilweise Runtime-Pakete oder nutzten große g
 ## Dokumente
 
 - DOCX/XLSX/PPTX: eigenständiger OOXML/ZIP-Parser mit Größen-/Pfadgrenzen.
-- PDF: konservativer Textlayer-Parser; komplexe/Scan-PDFs werden fail-closed gestoppt. DCT/JPEG-Bildobjekte können extrahiert werden; sonstige PDF-Visuals werden nicht still als sicher behandelt.
+- PDF: in RC20 vollständig aus dem Produktparser entfernt und vor jeder Veröffentlichung mit `PDF_COVERAGE_UNVERIFIED` gesperrt. Der historische Lite-Parser liegt ausschließlich im Testbereich; Zielarchitektur ist der native PDFium-Vertrag aus `docs/PDF_ENGINE_DECISION.md`.
 - TXT/MD/CSV: lokal direkt verarbeitet.
 
 ## Datenschutzprofile

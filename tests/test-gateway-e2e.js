@@ -195,13 +195,16 @@ async function main() {
     assertPresent(markdown, 'Haftung und Kündigung', 'contract content must survive');
   });
 
-  await testAsync('a PDF customer record is de-identified without OCR', async () => {
-    queue(path.join(fixtures, 'synthetic_customer.pdf'));
-    const result = await gw.anonymizeNext('customer', depsFor('none'));
-    assert.ok(result.ok);
-    const { markdown } = readPackage(result);
-    assertAbsent(markdown, 'Max Mustermann', 'customer name');
-    assertAbsent(markdown, 'max@example.de', 'mail address');
+  await testAsync('a PDF is stopped before release while coverage remains unverified', async () => {
+    const source = queue(path.join(fixtures, 'synthetic_customer.pdf'));
+    const before = gw.listOutputs().packages.length;
+    await assert.rejects(
+      () => gw.anonymizeNext('customer', depsFor('none')),
+      (error) => error.code === 'PDF_COVERAGE_UNVERIFIED'
+    );
+    assert.strictEqual(gw.listOutputs().packages.length, before, 'PDF must not publish a package');
+    assert.ok(fs.existsSync(source), 'the stopped PDF must be restored to Input');
+    fs.unlinkSync(source);
   });
 
   await testAsync('a standalone PNG is OCR-redacted and packaged without exposing raw pixels', async () => {
@@ -226,7 +229,7 @@ async function main() {
     fs.unlinkSync(src);
   });
 
-  await testAsync('a scanned PDF with an embedded JPEG uses the same OCR privacy gate', async () => {
+  await testAsync('a scanned PDF cannot bypass the PDF coverage gate through an embedded JPEG', async () => {
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
     const scan = Buffer.from(
       '%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n' +
@@ -235,13 +238,34 @@ async function main() {
         '\nendstream endobj\n%%EOF\n',
       'latin1'
     );
-    queueBuffer('synthetic-scan.pdf', scan);
-    const result = await gw.anonymizeNext('customer', depsFor('pii'));
-    assert.ok(result.ok);
-    assert.strictEqual(result.visual_assets.included, 1);
-    const { markdown } = readPackage(result);
-    assertAbsent(markdown, 'Max Mustermann', 'scanned PDF OCR name');
-    assertPresent(markdown, '[PERSON_001]', 'scanned PDF OCR placeholder');
+    const source = queueBuffer('synthetic-scan.pdf', scan);
+    const before = gw.listOutputs().packages.length;
+    await assert.rejects(
+      () => gw.anonymizeNext('customer', depsFor('pii')),
+      (error) => error.code === 'PDF_COVERAGE_UNVERIFIED'
+    );
+    assert.strictEqual(gw.listOutputs().packages.length, before);
+    assert.ok(fs.existsSync(source), 'the scanned PDF must be restored to Input');
+    fs.unlinkSync(source);
+  });
+
+  await testAsync('a PDF renamed as TXT is restored byte-identically and publishes nothing', async () => {
+    const bytes = fs.readFileSync(path.join(fixtures, 'synthetic_customer.pdf'));
+    const source = queueBuffer('renamed-pdf.txt', bytes);
+    const before = {
+      output: fs.readdirSync(path.join(root, 'Output')).length,
+      processed: fs.readdirSync(path.join(root, 'Processed')).length,
+      review: fs.readdirSync(path.join(root, 'Needs Visual Review')).length
+    };
+    await assert.rejects(
+      () => gw.anonymizeNext('customer', depsFor('none')),
+      (error) => error.code === 'PDF_COVERAGE_UNVERIFIED'
+    );
+    assert.deepStrictEqual(fs.readFileSync(source), bytes);
+    assert.strictEqual(fs.readdirSync(path.join(root, 'Output')).length, before.output);
+    assert.strictEqual(fs.readdirSync(path.join(root, 'Processed')).length, before.processed);
+    assert.strictEqual(fs.readdirSync(path.join(root, 'Needs Visual Review')).length, before.review);
+    fs.unlinkSync(source);
   });
 
   await testAsync('a DOCX profile is auto-detected and its visual is withheld', async () => {
@@ -319,7 +343,7 @@ async function main() {
 
   await testAsync('a failing residual gate releases nothing and keeps the source file', async () => {
     const before = gw.listOutputs().packages.length;
-    const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'synthetic-failure.pdf');
+    const src = queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'synthetic-failure.xlsx');
 
     const original = pii.scanResidual;
     pii.scanResidual = () => [{ type: 'TEST_LEAK' }];
@@ -343,7 +367,7 @@ async function main() {
   await testAsync('a failed package publish restores the source and releases nothing', async () => {
     const before = gw.listOutputs().packages.length;
     const auditBefore = retainedAuditCount();
-    const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'publish-failure.pdf');
+    const src = queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'publish-failure.xlsx');
     await assert.rejects(
       () => gw.anonymizeNext('customer', {
         ...depsFor('none'),
@@ -364,7 +388,7 @@ async function main() {
   await testAsync('a failed source move restores the claimed input and releases nothing', async () => {
     const before = gw.listOutputs().packages.length;
     const auditBefore = retainedAuditCount();
-    const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'move-failure.pdf');
+    const src = queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'move-failure.xlsx');
     await assert.rejects(
       () => gw.anonymizeNext('customer', {
         ...depsFor('none'),
@@ -433,7 +457,7 @@ async function main() {
   await testAsync('a simulated retention deletion failure never aborts anonymization', async () => {
     const locked = path.join(root, 'Processed', 'locked-old.pdf');
     fs.writeFileSync(locked, 'locked');
-    queue(path.join(fixtures, 'synthetic_customer.pdf'), 'cleanup-failure.pdf');
+    queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'cleanup-failure.xlsx');
     const result = await gw.anonymizeNext('customer', {
       ...depsFor('none'),
       retentionDays: 0,
@@ -447,12 +471,12 @@ async function main() {
   });
 
   await testAsync('zero-day retention removes the processed original but leaves the new package readable', async () => {
-    queue(path.join(fixtures, 'synthetic_customer.pdf'), 'zero-day.pdf');
+    queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'zero-day.xlsx');
     const result = await gw.anonymizeNext('customer', { ...depsFor('none'), retentionDays: 0 });
     assert.ok(result.ok);
     assert.strictEqual(gw.readOutput(result.package_id).package_id, result.package_id);
     assert.ok(
-      !fs.readdirSync(path.join(root, 'Processed')).includes('zero-day.pdf'),
+      !fs.readdirSync(path.join(root, 'Processed')).includes('zero-day.xlsx'),
       'the processed original must be removed immediately'
     );
   });

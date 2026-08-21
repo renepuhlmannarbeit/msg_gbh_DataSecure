@@ -26,7 +26,11 @@ PII-Shield missed these six required de-identifications even with GLiNER ready:
 Both systems preserved all eight checked business-content literals: roles,
 exact month/year project periods, method, tool, task and qualification.
 
-## Executed format matrix
+## Historische ausgeführte Formatmatrix
+
+Die folgende Tabelle dokumentiert ausschließlich den damaligen Benchmarklauf und ist
+kein aktueller Produktclaim. Seit RC20 ist PDF unabhängig vom damaligen Testergebnis
+im DataSecure-Produktpfad gesperrt und erzeugt kein Paket.
 
 | Input | DataSecure | PII-Shield 2.2.0 |
 |---|---:|---:|
