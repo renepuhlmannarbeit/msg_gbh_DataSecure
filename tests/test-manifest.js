@@ -153,6 +153,7 @@ test('native Windows launcher has a reproducible source and release build contra
   assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');
+  assert.strictEqual(pkg.scripts['native:analyze'], 'node scripts/build-native.mjs --analyze');
   assert.strictEqual(pkg.scripts.posttest, 'node tests/test-native-launcher.js');
   for (const rel of [
     'native/windows/datasecure-sandbox.cpp',

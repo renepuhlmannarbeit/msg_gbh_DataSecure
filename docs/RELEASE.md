@@ -24,6 +24,9 @@ directory with MSVC 19.50.35725 / VC Tools 14.50.35717, Windows SDK 10.0.26100.0
 and `/Brepro` and compares it byte-for-byte with the tracked x64 binary. The build
 fails if this pinned toolchain is unavailable. Both archive builders independently check
 SHA-256 and PE AMD64 before packaging. Archive entries carry a fixed timestamp.
+The native CodeQL job uses `native:analyze` with the same pinned source/toolchain;
+CodeQL instrumentation changes output bytes, so the independent CI build job owns the
+byte-for-byte `native:repro` gate for the same commit SHA.
 
 `plugins/data-secure` is the canonical tree. The build substitutes nothing: what
 a marketplace install resolves from the repository is what the ZIP contains.

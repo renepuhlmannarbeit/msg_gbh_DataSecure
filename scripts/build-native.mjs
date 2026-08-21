@@ -11,8 +11,8 @@ const expectedCompiler = '19.50.35725';
 const expectedWindowsSdk = '10.0.26100.0';
 
 const mode = process.argv[2];
-if (!['--update', '--verify-reproducible'].includes(mode)) {
-  throw new Error('use --update or --verify-reproducible explicitly');
+if (!['--update', '--verify-reproducible', '--analyze'].includes(mode)) {
+  throw new Error('use --update, --verify-reproducible or --analyze explicitly');
 }
 if (process.platform !== 'win32') throw new Error('native Windows launcher builds require Windows x64');
 if (process.arch !== 'x64') {
@@ -66,12 +66,14 @@ try {
     fs.writeFileSync(trackedChecksum, `${hash}\n`, 'utf8');
     verifyNativeArtifact(trackedOutput, trackedChecksum);
     console.log(`Updated ${trackedOutput}\nsha256=${hash}\ntoolchain=MSVC ${expectedCompiler} / Windows SDK ${expectedWindowsSdk}`);
-  } else {
+  } else if (mode === '--verify-reproducible') {
     const tracked = verifyNativeArtifact(trackedOutput, trackedChecksum);
     if (!bytes.equals(tracked.bytes)) {
       throw new Error(`native launcher source/binary drift: built=${hash} tracked=${tracked.sha256}`);
     }
     console.log(`Native source/binary reproducibility verified: sha256=${hash}\ntoolchain=MSVC ${expectedCompiler} / Windows SDK ${expectedWindowsSdk}`);
+  } else {
+    console.log(`Native analysis build completed: sha256=${hash}\ntoolchain=MSVC ${expectedCompiler} / Windows SDK ${expectedWindowsSdk}`);
   }
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });

@@ -12,6 +12,7 @@
     "native:verify": "node scripts/verify-native.mjs",
     "native:update": "node scripts/build-native.mjs --update",
     "native:repro": "node scripts/build-native.mjs --verify-reproducible",
+    "native:analyze": "node scripts/build-native.mjs --analyze",
     "native:build": "npm run native:update",
     "pretest": "npm run native:verify",
     "posttest": "node tests/test-native-launcher.js",
