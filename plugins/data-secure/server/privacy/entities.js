@@ -128,10 +128,16 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40) {
     }
     if (!hasContext) continue;
     if (commaName.test(s)) {
+      if (!looksName(titleCase(s.replace(',', ' ')))) continue;
+      // In "Surname, Given name" the first token would be the useful alias,
+      // but registering an unlabelled leading token is unsafe: comma-shaped
+      // domain lists are common, and a false alias would redact prose globally.
       out.push({ value: s, confidence: 'header_comma', noSurnameAlias: true });
       continue;
     }
     if (particleName.test(s)) {
+      const withoutParticles = s.replace(/\b(?:von|van|de|del|der|den|zu|zur|zum)\b/giu, ' ');
+      if (!looksName(titleCase(withoutParticles))) continue;
       out.push({ value: s, confidence: 'header_particle' });
       continue;
     }

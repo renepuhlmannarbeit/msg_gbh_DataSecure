@@ -164,6 +164,9 @@ const ROLE_WORDS = new Set([
   'STANDORT', 'UNTERNEHMEN', 'KUNDE', 'KUNDEN', 'KONTAKT', 'ANLAGE', 'INHALT',
   'ZUSAMMENFASSUNG', 'BESCHREIBUNG', 'ERGEBNIS', 'ERGEBNISSE', 'ZIELE',
   'SEITE', 'STAND', 'VERSION', 'DATUM', 'TESTFALL', 'VERTRAULICH',
+  // industries and languages frequently appear as comma-separated profile data
+  'LOGISTIK', 'GESUNDHEITSWESEN', 'VERSICHERUNG', 'KRANKENKASSEN',
+  'DEUTSCH', 'ENGLISCH',
   // agile / requirements vocabulary that reads like a name
   'USER', 'STORIES', 'STORY', 'BACKLOG', 'REFINEMENT', 'REVIEW', 'RETRO',
   'SPRINT', 'EPIC', 'EPICS', 'RELEASE', 'ROADMAP', 'WORKSHOP', 'WORKSHOPS',

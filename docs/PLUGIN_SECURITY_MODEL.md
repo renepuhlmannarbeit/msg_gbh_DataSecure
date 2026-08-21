@@ -41,10 +41,14 @@ guessing:
 
 - unsupported or unparsable container
 - PDF without an extractable text layer
+- PDF with a damaged or oversized Flate-compressed stream; the parser rejects
+  the document instead of treating the compressed bytes as readable text
 - extracted text or asset count over the configured limits
 - residual gate finds a direct identifier or a literal the redactor claimed to
   have replaced
 - image cannot be rasterised to PNG locally
+- PNG with an invalid chunk CRC; the built-in decoder rejects it and the visual
+  pipeline must obtain a clean PNG through local rasterisation or withhold it
 - OCR bridge unavailable
 - recognised text too short to trust the "no PII found" result
 - PII found but its bounding boxes cannot be mapped
@@ -59,18 +63,24 @@ Staging directories and review items from the failed run are removed. A failed
 automatic restore is reported explicitly for manual recovery rather than being
 misreported as an ordinary clean rollback.
 
-## Two independent checks, not one
+A hard process or machine crash in the short window after the source move and
+before the Output rename cannot run that rollback. In that case the original can
+already be in `Processed` although no result package is visible in `Output`.
 
-The redactor uses allow lists to avoid destroying useful content. The verifier
-must not share them, or it can only ever confirm the redactor's own blind spots.
-The residual gate therefore checks two things that do not depend on the
-redactor's heuristics:
+## Two complementary checks, with one shared heuristic
+
+The residual gate checks two things:
 
 1. no direct identifier pattern is present, and
 2. none of the literals the redactor recorded in its dictionary survives.
 
-Point 2 is the stronger one: it turns "I replaced Erika Beispiel" into an
-assertion that can actually fail.
+Point 2 is non-circular: it turns "I replaced Erika Beispiel" into an assertion
+that can actually fail independently of how the replacement was performed.
+Direct-person detection is not independent, however. Both redactor and gate use
+`collectPersonSeeds(clean, profile)`. A person missed by that shared collector
+is therefore also missed by the gate unless another detector or an existing
+dictionary literal catches it. The gate verifies removal and direct identifier
+patterns; it does not prove that the person-name heuristic is complete.
 
 ## Integrity
 

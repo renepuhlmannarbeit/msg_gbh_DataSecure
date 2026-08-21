@@ -27,6 +27,11 @@ const {
 } = require('./base');
 const { placeholderSpans, applySpans } = require('./spans');
 
+// Five digits followed by a unit are far more likely to be a quantity than a
+// German postcode and city. Keep this semantic exclusion beside the detector
+// so the postal regex remains line-local and the gate shares the same rule.
+const POSTAL_QUANTITY_RE = /^\d{5}[ \t]+(?:Euro|EUR|Stück|Stueck|Punkte|Stunden|Tage|Monate|Jahre|Prozent|Einwohner|Exemplare|Teile|kg|km|qm|m²|Liter)(?:[ \t]|$)/iu;
+
 // One declarative table drives both the redactor and the residual gate. The
 // previous split between scanStructured() and replaceStructured() meant the
 // gate reported identifier classes the redactor never removed (the bare
@@ -125,7 +130,8 @@ const DETECTORS = [
     type: 'POSTAL_ADDRESS',
     re: POSTAL_ADDRESS_RE,
     placeholder: '[LOCATION_REDACTED]',
-    priority: 76
+    priority: 76,
+    accept: (value) => !POSTAL_QUANTITY_RE.test(value)
   }
 ];
 

@@ -1,7 +1,7 @@
 # DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC2 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC3 · Windows 10/11 · ca. 20 Minuten.
 
 ---
 
@@ -213,6 +213,8 @@ Nummern beginnen bei jedem Dokument neu.
 | „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Datei liegt unverändert im Eingang. An IT melden — mit der Dokumentart, nicht mit dem Dokument |
 | „Grafik wurde nicht freigegeben" | Normalfall. Bild selbst ansehen und bewusst entscheiden (Regel 2) |
 | Gescanntes PDF wird abgelehnt | Reine Scans ohne Textebene werden bewusst abgelehnt. Wenn möglich das Original statt des Scans nehmen |
+| PDF wird abgelehnt, obwohl es sich in einem PDF-Reader öffnen lässt | Das PDF neu exportieren oder die Originaldatei statt einer weitergeleiteten Kopie verwenden |
+| Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | In `Processed` nachsehen und das Original zurück nach `Input` verschieben. Tritt das erneut auf, an IT melden |
 | Fachbegriff fälschlich geschwärzt | Kein Datenschutzproblem, aber bitte melden |
 | **Echter Name in der geprüften Fassung** | **Sofort aufhören.** Nicht weiterarbeiten, Chat nicht weiterverwenden, umgehend melden |
 
@@ -246,6 +248,6 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-DataSecure Privacy Preflight 3.2.0 RC2 · Geschäftsbereich Healthcare, msg systems ag.
+DataSecure Privacy Preflight 3.2.0 RC3 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.

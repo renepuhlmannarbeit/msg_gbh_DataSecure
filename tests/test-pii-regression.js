@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { createSuite, assertAbsent, assertPresent } = require('./helpers');
 const pii = require('../plugins/data-secure/server/pii-engine');
+const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const { luhnValid, isAllowedOrg, looksName } = require('../plugins/data-secure/server/privacy/base');
 const { resolveSpans } = require('../plugins/data-secure/server/privacy/spans');
 const { trimReferenceValue } = require('../plugins/data-secure/server/privacy/structured');
@@ -339,6 +340,31 @@ test('common German street variants are redacted', () => {
   }
 });
 
+test('quantities and units are not mistaken for postal addresses', () => {
+  const cases = [
+    ['Rechnungsbetrag: 50000 Euro netto', '50000 Euro'],
+    ['Menge 10000 Stueck geliefert', '10000 Stueck'],
+    ['Wert 12345 Punkte', '12345 Punkte'],
+    ...[
+      'EUR', 'Stück', 'Stunden', 'Tage', 'Monate', 'Jahre', 'Prozent',
+      'Einwohner', 'Exemplare', 'Teile', 'kg', 'km', 'qm', 'm²', 'Liter'
+    ].map((unit) => [`Wert: 50000 ${unit} netto`, `50000 ${unit}`])
+  ];
+  for (const [src, literal] of cases) {
+    const { text } = anonymizeVerified(`${src}\n`, 'general');
+    assertPresent(text, literal, `quantity in ${src}`);
+    assertAbsent(text, '[LOCATION_REDACTED]', 'location placeholder');
+  }
+});
+
+test('real postal addresses remain detectable including lower-case cities', () => {
+  for (const value of ['20457 Hamburg', '80331 München', '04103 Leipzig Mitte', '20457 hamburg']) {
+    const { text } = anonymizeVerified(`${value}\n`, 'general');
+    assertAbsent(text, value, `postal address ${value}`);
+    assertPresent(text, '[LOCATION_REDACTED]', 'location placeholder');
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Allow lists and over-redaction.
 // ---------------------------------------------------------------------------
@@ -362,6 +388,39 @@ test('technology names are not mistaken for people', () => {
     assertPresent(text, value, 'technology name');
   }
   assert.strictEqual(counts.PERSON, 0, `expected no person, got ${counts.PERSON}`);
+});
+
+test('comma-shaped domain and language lines are not people', () => {
+  for (const [profile, value] of [
+    ['personnel_profile', 'Logistik, Gesundheitswesen'],
+    ['personnel_profile', 'Scrum, SAFe'],
+    ['applicant', 'Versicherung, Krankenkassen'],
+    ['applicant', 'Deutsch, Englisch']
+  ]) {
+    const { text, counts } = anonymizeVerified(`${value}\n`, profile);
+    assertPresent(text, value, 'domain content');
+    assert.strictEqual(counts.PERSON, 0, `expected no person for ${value}`);
+  }
+});
+
+test('a comma-formatted surname and given name remain detectable', () => {
+  const { text, counts } = anonymizeVerified('Mustermann, Max\n', 'personnel_profile');
+  assert.strictEqual(text.trim(), '[PERSON_001]');
+  assert.strictEqual(counts.PERSON, 1);
+});
+
+test('a person name with nobiliary particles remains detectable', () => {
+  const { text, counts } = anonymizeVerified('Anna von der Heide\n', 'personnel_profile');
+  assertAbsent(text, 'Anna von der Heide', 'particle name');
+  assertPresent(text, '[PERSON_001]', 'person pseudonym');
+  assert.strictEqual(counts.PERSON, 1);
+});
+
+test('comma-separated role names remain preserved', () => {
+  const value = 'Product Owner, Scrum Master';
+  const { text, counts } = anonymizeVerified(`${value}\n`, 'personnel_profile');
+  assertPresent(text, value, 'role names');
+  assert.strictEqual(counts.PERSON, 0);
 });
 
 test('looksName rejects roles, technologies and honorifics', () => {
@@ -416,6 +475,19 @@ test('the residual gate detects a literal the redactor claimed to have removed',
 test('the residual gate ignores inserted placeholders', () => {
   const findings = pii.scanResidual('Kontakt: [PERSON_001] / [EMAIL_REDACTED]', 'general', ['Erika Beispiel']);
   assert.deepStrictEqual(findings, []);
+});
+
+test('gateway anonymisation converges in one pass for representative documents', () => {
+  const cases = [
+    [fs.readFileSync(goldenSource, 'utf8'), 'personnel_profile'],
+    ['Max Mustermann\nMusterstraße 12\n10115 Berlin\nTelefon: 030 1234567\n', 'customer'],
+    ['Mustermann, Max\nTelefon: +49 40 555 0101\n', 'customer'],
+    ['Vertrag zwischen Alpha Beispiel GmbH und Anna Beispiel.\n', 'contract']
+  ];
+  for (const [src, profile] of cases) {
+    const result = anonymizeMarkdown(src, profile);
+    assert.strictEqual(result.passes, 1, `expected one pass for ${profile}`);
+  }
 });
 
 test('idempotence: a second pass over released text changes nothing', () => {
