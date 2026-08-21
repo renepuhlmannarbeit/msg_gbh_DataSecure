@@ -56,7 +56,8 @@ const toolsEnd=indexSource.indexOf('];',toolsStart);
 assert.notStrictEqual(toolsStart,-1,'TOOLS table missing');
 assert.notStrictEqual(toolsEnd,-1,'TOOLS table is unterminated');
 const toolNames=[...indexSource.slice(toolsStart,toolsEnd).matchAll(/\{name:'([a-z_]+)',title:/g)].map(m=>m[1]);
-assert.strictEqual(toolNames.length,12,'unexpected tool count');
+assert.strictEqual(toolNames.length,11,'unexpected tool count');
+assert.ok(!toolNames.includes('approve_visual_asset'),'Claude must not receive a model-callable human approval tool');
 
 const instructionsStart=indexSource.indexOf('const INSTRUCTIONS=');
 assert.notStrictEqual(instructionsStart,-1,'INSTRUCTIONS missing');
@@ -73,6 +74,6 @@ for(const name of toolNames){
 
 assert.match(agentGuidance,/purge_local_data[\s\S]{0,300}explicit[^\n]*confirm/i);
 assert.match(agentGuidance,/retention_days=0[\s\S]{0,160}(?:disable|unavailable)/i);
-assert.match(agentGuidance,/audit evidence[\s\S]{0,160}(?:outside retention|remains|retained)/i);
+assert.match(agentGuidance,/metadata-only audit receipt[\s\S]{0,220}(?:outside retention|remains|retained)/i);
 
 console.log('PLUGIN STRUCTURE PASS');

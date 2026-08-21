@@ -88,12 +88,14 @@ async function main() {
     assert.match(instructions, /confirmed=true/);
     assert.match(instructions, /Processed originals/);
     assert.match(instructions, /retention_days=0/);
-    assert.match(instructions, /disables later visual approval/i);
-    assert.match(instructions, /audit evidence is intentionally retained/i);
+    assert.match(instructions, /exposes no visual approval tool/i);
+    assert.match(instructions, /model-controlled boolean is not human-presence evidence/i);
+    assert.match(instructions, /metadata-only audit receipt is intentionally retained/i);
+    assert.match(instructions, /without document hashes, exact file sizes, paths, filenames or raw values/i);
     assert.match(instructions, /untrusted data/i);
     assert.match(instructions, /Do not claim legal anonymity/i);
     assert.match(instructions, /does not authorize automated ranking/i);
-    assert.match(instructions, /recognised text may appear/i);
+    assert.match(instructions, /recognised image text may appear/i);
     assert.match(instructions, /explicit profile/i);
     assert.match(instructions, /image-only content before local OCR/i);
   });
@@ -101,8 +103,9 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 12, `expected exactly 12 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 11, `expected exactly 11 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
+    assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {
       assert.ok(tool.name, 'tool without a name');
       assert.ok(tool.description, `tool ${tool.name} has no description`);
@@ -123,17 +126,16 @@ async function main() {
     for (const name of ['privacy_status', 'read_anonymized_document', 'read_anonymized_asset', 'list_anonymized_packages']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, true, `${name} must be read only`);
     }
-    for (const name of ['anonymize_next_document', 'approve_visual_asset', 'purge_local_data']) {
+    for (const name of ['anonymize_next_document', 'purge_local_data']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, false, `${name} must not claim to be read only`);
     }
   });
 
-  await testAsync('the human approval tool requires an explicit confirmation constant', async () => {
+  await testAsync('model-callable human approval is absent and purge remains explicit', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
-    const approve = responses.find((r) => r.id === 2).result.tools.find((t) => t.name === 'approve_visual_asset');
-    assert.deepStrictEqual([...approve.inputSchema.required].sort(), ['confirmed', 'review_id']);
-    assert.strictEqual(approve.inputSchema.properties.confirmed.const, true, 'confirmed must be pinned to true');
-    const purge = responses.find((r) => r.id === 2).result.tools.find((t) => t.name === 'purge_local_data');
+    const tools = responses.find((r) => r.id === 2).result.tools;
+    assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
+    const purge = tools.find((t) => t.name === 'purge_local_data');
     assert.deepStrictEqual(purge.inputSchema.required, ['confirmed']);
     assert.strictEqual(purge.inputSchema.properties.confirmed.const, true);
     assert.deepStrictEqual(purge.inputSchema.properties.scope.enum, ['processed', 'output', 'review', 'all']);
@@ -178,6 +180,14 @@ async function main() {
     assert.strictEqual(result.structuredContent.ok, true);
     assert.strictEqual(result.structuredContent.raw_content_sent_to_claude, false);
     assert.strictEqual(result.structuredContent.runtime_dependency_install, false);
+    assert.strictEqual(result.structuredContent.audit_schema, 'data-secure-audit-receipt/2');
+    assert.strictEqual(typeof result.structuredContent.audit_receipts_retained, 'number');
+    assert.strictEqual(typeof result.structuredContent.legacy_audit_pending, 'number');
+    assert.strictEqual(typeof result.structuredContent.audit_migration_errors, 'number');
+    assert.strictEqual(typeof result.structuredContent.audit_write_errors, 'number');
+    assert.ok(result.structuredContent.supported_inputs.includes('PNG'));
+    assert.ok(result.structuredContent.supported_inputs.includes('JPEG'));
+    assert.ok(result.structuredContent.supported_inputs.includes('BMP'));
     assert.ok(!result.isError);
   });
 

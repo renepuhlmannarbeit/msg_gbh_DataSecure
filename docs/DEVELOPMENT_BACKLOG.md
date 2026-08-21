@@ -176,7 +176,7 @@ prüft Installation, Start, Upgrade und Rollback auf einem frischen Windows-Syst
 - Warmstart eines üblichen Textdokuments beginnt innerhalb von fünf Sekunden; Zielwert
   für ein Standarddokument ist unter 30 Sekunden ohne OCR.
 
-### DS-008 – Datensparsames Audit und verständliche Aufbewahrung (M)
+### DS-008 – Datensparsames Audit und verständliche Aufbewahrung (M) — umgesetzt
 
 **Ergebnis:** Dauerhaftes Audit speichert nur Kategorien, Zähler, Komponenten-/
 Regelversionen, Ergebnisstatus und eine zufällige Vorgangs-ID. Die derzeit dauerhaft

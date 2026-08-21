@@ -66,6 +66,11 @@ function readPackage(result) {
   return { dir, manifest, markdown: fs.readFileSync(path.join(dir, manifest.document), 'utf8') };
 }
 
+function retainedAuditCount() {
+  const dir = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'audit');
+  return fs.existsSync(dir) ? fs.readdirSync(dir).filter((name) => name.endsWith('.json')).length : 0;
+}
+
 async function main() {
   await testAsync('an XLSX customer sheet becomes a verified package with a released visual', async () => {
     queue(path.join(fixtures, 'synthetic_customer.xlsx'));
@@ -80,6 +85,31 @@ async function main() {
     assertAbsent(markdown, 'Max Mustermann', 'customer name');
     assertAbsent(markdown, 'max@example.de', 'mail address');
     assertPresent(markdown, '[PERSON_001]', 'person pseudonym');
+
+    const packageAudit = JSON.parse(
+      fs.readFileSync(path.join(root, 'Output', result.package_id, 'audit.json'), 'utf8')
+    );
+    assert.match(packageAudit.operation_id, /^[0-9a-f-]{36}$/i, 'audit needs a random receipt id');
+    assert.strictEqual(packageAudit.result, 'released');
+    assert.strictEqual(result.operation_id, packageAudit.operation_id);
+    assert.strictEqual(manifest.operation_id, packageAudit.operation_id);
+    assert.strictEqual(result.audit_receipt_retained, true);
+    assert.match(packageAudit.source_size_class, /^(tiny|small|medium|large)$/);
+    assert.strictEqual(packageAudit.source_bytes, undefined, 'exact input size must not persist');
+    assert.strictEqual(packageAudit.source_sha256, undefined, 'source fingerprint must not persist');
+    assert.strictEqual(packageAudit.output_sha256, undefined, 'output hash belongs only in the package manifest');
+    assert.doesNotMatch(
+      JSON.stringify(packageAudit),
+      /value_hash|source_sha|output_sha/i,
+      'audit receipt must contain no content-derived fingerprints'
+    );
+
+    const auditDir = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'audit');
+    const retainedReceipt = fs
+      .readdirSync(auditDir)
+      .map((name) => JSON.parse(fs.readFileSync(path.join(auditDir, name), 'utf8')))
+      .find((receipt) => receipt.operation_id === packageAudit.operation_id);
+    assert.deepStrictEqual(retainedReceipt, packageAudit, 'retained audit must use the same metadata-only receipt');
 
     const read = gw.readOutput(result.package_id);
     assert.strictEqual(read.content_is_verified_anonymized_markdown, true);
@@ -249,6 +279,7 @@ async function main() {
 
   await testAsync('a failed package publish restores the source and releases nothing', async () => {
     const before = gw.listOutputs().packages.length;
+    const auditBefore = retainedAuditCount();
     const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'publish-failure.pdf');
     await assert.rejects(
       () => gw.anonymizeNext('customer', {
@@ -260,6 +291,7 @@ async function main() {
       /sicher gestoppt|veröffentlicht/
     );
     assert.strictEqual(gw.listOutputs().packages.length, before, 'failed publish must expose no package');
+    assert.strictEqual(retainedAuditCount(), auditBefore, 'failed publish must retain no success receipt');
     assert.ok(fs.existsSync(src), 'the source must be restored to Input');
     const retry = await gw.anonymizeNext('customer', depsFor('none'));
     assert.ok(retry.ok, 'the restored source must be processable exactly once on retry');
@@ -268,6 +300,7 @@ async function main() {
 
   await testAsync('a failed source move restores the claimed input and releases nothing', async () => {
     const before = gw.listOutputs().packages.length;
+    const auditBefore = retainedAuditCount();
     const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'move-failure.pdf');
     await assert.rejects(
       () => gw.anonymizeNext('customer', {
@@ -279,6 +312,7 @@ async function main() {
       /sicher gestoppt/
     );
     assert.strictEqual(gw.listOutputs().packages.length, before, 'failed move must expose no package');
+    assert.strictEqual(retainedAuditCount(), auditBefore, 'failed source move must retain no success receipt');
     assert.ok(fs.existsSync(src), 'the claimed source must be restored to its original Input name');
     assert.deepStrictEqual(
       fs.readdirSync(path.join(root, 'Input')).filter((name) => name.startsWith('.processing_')),
@@ -296,6 +330,16 @@ async function main() {
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.error, 'input_empty');
     assert.strictEqual(result.raw_content_sent_to_claude, false);
+  });
+
+  await testAsync('an unresolved legacy audit blocks new processing', async () => {
+    await assert.rejects(
+      () =>
+        gw.anonymizeNext('customer', {
+          migrateLegacyAuditReceipts: () => ({ legacy_pending: 1, migration_errors: 1 })
+        }),
+      /Alte Audit-Nachweise/
+    );
   });
 
   test('a package id may not escape the Output directory', () => {

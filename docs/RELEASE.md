@@ -62,7 +62,7 @@ unchecked items still require manual acceptance.
 - [ ] only released Markdown and released assets are readable by Claude
 - [ ] `privacy_status` reports the configured retention window and due counts
 - [ ] an expired synthetic Processed file, Output package and pending review
-      preview are removed, while hidden staging directories and audit hashes remain
+      preview are removed, while hidden staging directories and metadata-only audit receipts remain
 - [ ] `purge_local_data` requires explicit confirmation and cleans only the
       selected scope
 - [ ] with retention set to `0`, the processed original disappears immediately

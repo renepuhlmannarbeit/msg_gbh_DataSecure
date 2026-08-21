@@ -2,10 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const pii = require('../pii-engine');
-const { VERSION, roots, sha256File, uniquePath } = require('./common');
+const { VERSION, roots, uniquePath } = require('./common');
+const { createAuditReceipt, writePackageAudit, retainAudit } = require('./audit');
 
 const MAX_PASSES = 3;
 
@@ -77,7 +77,7 @@ function complianceHeader(profile, meta) {
     `EU Privacy Document Gateway ${VERSION}\n` +
     `Profil: ${profile}\n` +
     `Quelle: ${meta.ext.slice(1).toUpperCase()}\n` +
-    'Rest-PII-Prüfung: bestanden\n' +
+    'Unterstützte Restprüfung: keine weiteren Treffer\n' +
     `Datenschutz-Pässe: ${meta.passes}\n` +
     `Ersetzte/erfasste Identifikatoren: ${meta.entityCount}\n` +
     `Automatisch freigegebene visuelle Assets: ${meta.included}\n` +
@@ -107,36 +107,6 @@ function aiActMeta(profile) {
     };
   }
   return { downstream_purpose_classification_required: true };
-}
-
-function auditRecord(profile, source, md, meta) {
-  return {
-    timestamp: new Date().toISOString(),
-    gateway_version: VERSION,
-    profile,
-    source_extension: path.extname(source).toLowerCase(),
-    source_sha256: sha256File(source),
-    source_bytes: fs.statSync(source).size,
-    output_sha256: sha256File(md),
-    text_entity_count: meta.entityCount,
-    privacy_passes: meta.passes,
-    residual_pii_verification: 'passed',
-    reidentification_risk: meta.reidentificationRisk,
-    visual_assets_total: meta.results.length,
-    visual_assets_included: meta.results.filter((x) => x.status === 'included').length,
-    visual_assets_review_required: meta.results.filter((x) => x.status !== 'included').length,
-    visual_redactions: meta.results.reduce((n, x) => n + (x.redactions || 0), 0),
-    raw_content_logged: false,
-    mapping_retained: false,
-    ai_act: aiActMeta(profile)
-  };
-}
-
-function writeAudit(rec, dir) {
-  const r = roots();
-  const name = `audit_${rec.timestamp.replace(/[:.]/g, '-')}_${crypto.randomBytes(3).toString('hex')}.json`;
-  fs.writeFileSync(path.join(r.audit, name), JSON.stringify(rec, null, 2), 'utf8');
-  fs.writeFileSync(path.join(dir, 'audit.json'), JSON.stringify(rec, null, 2), 'utf8');
 }
 
 function moveProcessed(source, originalName = path.basename(source)) {
@@ -176,8 +146,9 @@ module.exports = {
   aiActNote,
   complianceHeader,
   aiActMeta,
-  auditRecord,
-  writeAudit,
+  auditRecord: createAuditReceipt,
+  writePackageAudit,
+  retainAudit,
   moveProcessed,
   restoreProcessed
 };

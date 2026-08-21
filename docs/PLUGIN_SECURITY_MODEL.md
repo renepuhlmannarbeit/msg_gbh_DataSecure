@@ -22,10 +22,10 @@ Claude Desktop extension installation. Both ship the same runtime from
 | Original document | never | there is no tool that reads it |
 | Anonymised Markdown | yes | residual gate passed, SHA-256 matches the manifest |
 | Released PNG asset | yes | OCR found nothing, or a redaction was verified |
-| Withheld image pixels | never | only a human can release them |
+| Withheld image pixels | never | current MCP cannot release them; future local companion requires human presence |
 | OCR text of a withheld image | yes | after it passed the same text gate as the document body |
-| Review preview | never | not readable through any tool |
-| Audit record | metadata only | values are stored as truncated hashes |
+| Review preview | never | not readable through any tool; no model-callable approval tool is exposed |
+| Audit record | metadata only | random operation ID, categories, counters, versions and status only |
 
 The "OCR text of a withheld image" row is deliberate and worth understanding:
 the *image* stays local because a photo, signature or logo re-identifies a person
@@ -86,9 +86,10 @@ patterns; it does not prove that the person-name heuristic is complete.
 
 `document_sha256` and each asset's `sha256` are written into the package
 manifest. The read tools verify them on every call, so a document modified after
-release is refused rather than served. Approving a withheld visual also verifies
-the current Markdown hash first, so an approval cannot silently re-bless a file
-that was tampered with in between.
+release is refused rather than served. The internal visual-release primitive also
+verifies the current Markdown hash, but it is deliberately not exposed through
+MCP. A future companion must additionally bind it to non-model-controlled local
+human-presence evidence.
 
 ## Untrusted content
 
@@ -129,11 +130,10 @@ file.
 soon as a successful run commits. The newly returned Output package remains
 readable for that response and becomes eligible at the next cleanup trigger.
 
-**`retention_days=0` therefore disables visual approval.** Applicant and
-personnel profiles withhold every image by default, so with a zero window the
-preview is gone before a human can look at it and no graphic from those profiles
-can ever be released. That is a defensible maximum-privacy setting, but it is a
-workflow decision rather than a fine adjustment.
+**Visual approval is currently disabled through Claude regardless of retention.**
+`retention_days=0` additionally removes the preview before any future local
+companion review could occur. Applicant and personnel profiles withhold every
+image by default, so no graphic from those profiles is released in this mode.
 
 The confirmed `purge_local_data` tool can immediately clean one selected scope
 or all three. It ignores the expiry window, and `privacy_status` records the
@@ -151,10 +151,20 @@ withheld and when its bytes expired. And there is no explicit reject tool:
 withholding plus expiry is the rejection path, so the only way to refuse a
 graphic is to leave it alone.
 
-Audit records are intentionally outside both automatic retention and manual
-purge. They contain hashes and processing facts only (`raw_content_logged:
-false`), no raw values or original filenames, and remain the evidence needed to
-reconstruct what the privacy gate did.
+Audit receipts are intentionally outside both automatic retention and manual
+purge. They contain a random operation ID, categories, counters, versions and
+status only (`raw_content_logged: false`). They contain no document or value
+hashes, exact file sizes, paths, filenames or raw values. Integrity hashes for
+released output remain in the package manifest and expire with that package.
+At startup, parseable legacy audit records are rewritten through the same strict
+metadata whitelist; unreadable or locked records remain visible as a
+non-sensitive migration error in `privacy_status` and block further document
+processing. Such an unresolved legacy file may still contain an old fingerprint;
+it must be remediated locally by IT before the gateway becomes ready again.
+If retaining a new global receipt fails after package publication, a metadata-only
+persistent block marker stops further processing. On restart the gateway restores
+the receipt from the canonical package-local copy before cleanup; if reconciliation
+is impossible, IT remediation remains mandatory and readiness stays false.
 
 ## What this model does not claim
 

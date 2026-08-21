@@ -60,7 +60,7 @@
     "retention_days": {
       "type": "number",
       "title": "Lokale Aufbewahrungstage",
-      "description": "Anzahl Tage bis lokale verarbeitete Dateien, Ausgabepakete und Review-Previews automatisch gelöscht werden. 0 löscht Original und zurückgehaltene Preview direkt nach erfolgreicher Verarbeitung und deaktiviert damit die visuelle Freigabe: bei Bewerbungen und Mitarbeiterprofilen wird dann nie eine Grafik freigebbar.",
+      "description": "Anzahl Tage bis lokale verarbeitete Dateien, Ausgabepakete und Review-Previews automatisch gelöscht werden. Die visuelle Freigabe über Claude ist in diesem Engineering-Build generell deaktiviert; 0 löscht Original und zurückgehaltene Preview direkt nach erfolgreicher Verarbeitung.",
       "default": 7,
       "min": 0,
       "required": false
@@ -102,10 +102,6 @@
     {
       "name": "open_visual_review_folder",
       "description": "Öffnet den lokalen Review-Ordner."
-    },
-    {
-      "name": "approve_visual_asset",
-      "description": "Gibt einen metadatafreien PNG-Preview erst nach ausdrücklicher menschlicher Datenschutzprüfung frei."
     },
     {
       "name": "open_output_folder",

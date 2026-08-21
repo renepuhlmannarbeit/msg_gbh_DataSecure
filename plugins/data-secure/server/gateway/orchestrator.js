@@ -23,10 +23,12 @@ const {
   complianceHeader,
   aiActMeta,
   auditRecord,
-  writeAudit,
+  writePackageAudit,
+  retainAudit,
   moveProcessed,
   restoreProcessed
 } = require('./compliance');
+const { migrateLegacyAuditReceipts } = require('./audit');
 
 const { MAX_INPUT_BYTES, MAX_TEXT_CHARS, MAX_VISUAL_ASSETS } = LIMITS;
 
@@ -55,6 +57,14 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
   bestEffortRetentionCleanup(deps);
 
+  const auditMigration = (deps.migrateLegacyAuditReceipts || migrateLegacyAuditReceipts)();
+  if (auditMigration.legacy_pending || auditMigration.migration_errors || auditMigration.write_errors) {
+    throw new SafeError(
+      'Verarbeitung wurde gestoppt: Alte Audit-Nachweise konnten nicht datensparsam migriert werden. ' +
+        'Bitte privacy_status prüfen und die lokale IT-Bereinigung durchführen.'
+    );
+  }
+
   const queue = listInput();
   if (!queue.length) {
     return {
@@ -80,6 +90,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   let stagePackage = null;
   let processedPath = null;
   let reviewPackageId = null;
+  let auditReceiptRetained = false;
   try {
     source = path.join(r.input, `.processing_${jobId}_${originalName}`);
     fs.renameSync(originalSource, source);
@@ -148,9 +159,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       throw new SafeError(`Finale Markdown-Datei hat den Residual-Gate nicht bestanden (${classes}).`);
     }
 
+    const auditReceipt = auditRecord(effective, source, {
+      entityCount: anon.entityCount,
+      passes: anon.passes,
+      reidentificationRisk: anon.reidentificationRisk,
+      results: vis.results
+    });
+
     const manifest = {
       schema: 'eu-privacy-package/2',
       gateway_version: VERSION,
+      operation_id: auditReceipt.operation_id,
       package_id: packageId,
       created_at: new Date().toISOString(),
       profile: effective,
@@ -173,15 +192,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     };
     fs.writeFileSync(path.join(stagePackage, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
 
-    writeAudit(
-      auditRecord(effective, source, mdPath, {
-        entityCount: anon.entityCount,
-        passes: anon.passes,
-        reidentificationRisk: anon.reidentificationRisk,
-        results: vis.results
-      }),
-      stagePackage
-    );
+    writePackageAudit(auditReceipt, stagePackage);
 
     const moveSource = deps.moveProcessed || moveProcessed;
     const publishPackage = deps.publishPackage || ((from, to) => fs.renameSync(from, to));
@@ -194,6 +205,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     publishPackage(stagePackage, finalPackage);
     stagePackage = null;
     processedPath = null;
+    auditReceiptRetained = retainAudit(auditReceipt);
 
     // A zero-day policy removes the original and any withheld preview bytes as
     // soon as the successful package is committed. The new Output package stays
@@ -204,6 +216,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     return {
       ok: true,
+      operation_id: auditReceipt.operation_id,
+      audit_receipt_retained: auditReceiptRetained,
       profile: effective,
       profile_detection: requested === 'auto' ? 'local-auto' : 'explicit',
       package_id: packageId,

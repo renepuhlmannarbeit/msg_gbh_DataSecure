@@ -3,6 +3,11 @@
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
 Version 3.2.0 RC8 · Windows 10/11 · ca. 20 Minuten.
 
+> **Nur Engineering-Abnahme:** RC8 darf ausschließlich mit synthetischen
+> Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
+> oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
+> signierten lokalen Companions mit technisch belegter menschlicher Review-Aktion.
+
 ---
 
 ## Wozu das Ganze
@@ -12,12 +17,13 @@ Kundenvorgang von Claude auswerten lassen, sieht Claude sonst das Original — m
 Namen, Anschriften, Telefonnummern, Kunden- und Projektbezeichnungen. Bei
 personenbezogenen Daten soll das nicht passieren.
 
-DataSecure schiebt eine Prüfstelle davor. Die Datei bleibt auf Ihrem Rechner. Ein
-kleines Programm liest sie dort, ersetzt die Identifikatoren durch Platzhalter und
-legt eine geprüfte Fassung ab. Claude bekommt **nur** diese geprüfte Fassung — es
-gibt für Claude keinen Weg zum Original.
+DataSecure schiebt im vorgesehenen lokalen Ablauf eine Prüfstelle davor. Die Datei
+bleibt auf Ihrem Rechner. Ein kleines Programm liest sie dort, ersetzt unterstützte
+erkannte Identifikatoren durch Platzhalter und legt eine bereinigte Fassung ab.
+Über die DataSecure-Tools erhält Claude nur diese Fassung. Ein normaler Upload oder
+Dateizugriff außerhalb dieses Ablaufs umgeht die Grenze.
 
-Fachliches bleibt erhalten. Aus „Erika Beispiel war Product Ownerin bei der
+Fachliches soll so weit wie unterstützt erhalten bleiben. Aus „Erika Beispiel war Product Ownerin bei der
 HanseCargo AG" wird „[PERSON_001] war Product Ownerin bei [KUNDE_001]".
 
 ---
@@ -38,9 +44,11 @@ aussieht.
 
 ### Regel 2 — Über Bilder entscheiden nur Sie
 
-Grafiken werden zurückgehalten, bis ein Mensch sie freigibt; bei Bewerbungen und
-Mitarbeiterprofilen **immer**. Claude kann das Bild vorher nicht sehen und Ihnen
-deshalb auch nicht sagen, was darauf ist. Schauen Sie selbst hin.
+Grafiken werden bei Unsicherheit zurückgehalten; bei Bewerbungen und
+Mitarbeiterprofilen **immer**. Claude kann das Bild nicht sehen und Ihnen deshalb
+auch nicht sagen, was darauf ist. Eine Freigabe über Claude ist in diesem
+Engineering-Build bewusst deaktiviert, bis der lokale Companion einen echten
+menschlichen Klick technisch belegen kann.
 
 Sehen Sie sich Bilder **zeitnah** an. Nach Ablauf der Aufbewahrungsfrist (Regel 3)
 wird die Bilddatei gelöscht und die Grafik bleibt dauerhaft zurückgehalten;
@@ -56,8 +64,10 @@ DataSecure entfernt Einträge aus `Processed`, `Output` und Bild-Previews in
 und vor einer neuen Verarbeitung; bis dahin liegen die Daten unverschlüsselt auf
 der Festplatte. Räumen Sie deshalb sofort auf, wenn Sie sie nicht mehr brauchen.
 Mit *„Lösche alle lokalen DataSecure-Daten; ich bestätige die Löschung"* können
-Sie die drei Bereiche bewusst leeren. Der hashbasierte Audit-Nachweis bleibt zur
-Prüfbarkeit erhalten und enthält weder Rohinhalte noch Originaldateinamen.
+Sie die drei Bereiche bewusst leeren. Ein datensparsamer Audit-Nachweis bleibt
+zur Prüfbarkeit erhalten. Er enthält eine zufällige Vorgangs-ID, Kategorien,
+Zähler, Versionen und Status, aber keine Dokument- oder Wert-Hashes, exakten
+Dateigrößen, Pfade, Dateinamen oder Rohinhalte.
 
 ---
 
@@ -160,7 +170,7 @@ Privacy-Ordner"*.
 |---|---|
 | `Input` | Hier legen Sie das Dokument hinein. Nur diesen brauchen Sie aktiv |
 | `Output` | Die geprüfte Fassung. Nur das sieht Claude; standardmäßig 7 Tage aufbewahrt |
-| `Needs Visual Review` | Bilder, die auf Ihre Freigabe warten. Enthält echte Fotos; Preview verschwindet nach Freigabe oder Fristablauf |
+| `Needs Visual Review` | Lokal zurückgehaltene Bilder. Enthält echte Fotos; in diesem Engineering-Build keine Freigabe über Claude, Preview verschwindet nach Fristablauf |
 | `Processed` | Ihre Originale. Enthält alle Personendaten; standardmäßig 7 Tage aufbewahrt |
 
 ## Teil 7: So arbeiten Sie damit
@@ -175,12 +185,13 @@ Privacy-Ordner"*.
 2. **Claude bitten:** *„Anonymisiere bitte das nächste Dokument und fasse
    anschließend die Qualifikationen zusammen."* Zur Sicherheit können Sie die Art
    dazusagen: „… als Bewerbung", „… als Vertrag", „… als Mitarbeiterprofil".
-3. **Normal weiterarbeiten.** Claude sieht nur Platzhalter statt echter Namen.
-4. **Falls Bilder zurückgehalten wurden: selbst ansehen.** Öffnen Sie
-   `Needs Visual Review`. Ist nichts Personenbezogenes darauf — kein Gesicht,
-   keine Unterschrift, kein Name, kein Briefkopf — dann: *„Ich habe die Grafik
-   geprüft, sie enthält keine personenbezogenen Daten. Bitte freigeben."* Im
-   Zweifel nicht freigeben.
+3. **Normal weiterarbeiten.** Claude erhält ausschließlich die bereinigte Fassung
+   aus dem DataSecure-Weg. Unterstützte erkannte Identifikatoren erscheinen als
+   Platzhalter; nicht erkannte Namen oder kontextuelle Hinweise können verbleiben.
+4. **Falls Bilder zurückgehalten wurden:** Sie können `Needs Visual Review` lokal
+   ansehen, dürfen Claude aber nicht mit ihrer Freigabe beauftragen. Der aktuelle
+   Engineering-Build besitzt noch keinen sicheren menschlichen Freigabekanal; das
+   Bild bleibt daher zurückgehalten.
 5. **Aufräumen (Regel 3).** Warten Sie nicht auf die 7-Tage-Frist, wenn die
    Arbeit abgeschlossen ist. Sagen Sie Claude: *„Lösche alle lokalen
    DataSecure-Daten; ich bestätige die Löschung."* Sie können auch nur
@@ -226,7 +237,7 @@ Nummern beginnen bei jedem Dokument neu.
 | „Wie möchten Sie diese Datei öffnen?" | Abbrechen, Datei ins offene Claude-Fenster ziehen |
 | „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
 | „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Datei liegt unverändert im Eingang. An IT melden — mit der Dokumentart, nicht mit dem Dokument |
-| „Grafik wurde nicht freigegeben" | Normalfall. Bild selbst ansehen und bewusst entscheiden (Regel 2) |
+| „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
 | Gescanntes PDF wird abgelehnt | Scans mit sicher extrahierbaren JPEG-Seitenbildern laufen über OCR. Andere PDF-Bildcodierungen werden fail-closed abgelehnt; wenn möglich das Original oder einen PNG-/JPEG-Export verwenden |
 | PDF wird abgelehnt, obwohl es sich in einem PDF-Reader öffnen lässt | Das PDF neu exportieren oder die Originaldatei statt einer weitergeleiteten Kopie verwenden |
 | Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | In `Processed` nachsehen und das Original zurück nach `Input` verschieben. Tritt das erneut auf, an IT melden |

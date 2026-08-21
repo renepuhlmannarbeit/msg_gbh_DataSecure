@@ -81,7 +81,9 @@ Empfohlene Tool-Oberfläche:
 - `list_anonymized_assets`
 - `read_anonymized_asset`
 - `list_visual_reviews`
-- `approve_visual_review`
+
+Visual release is intentionally not an MCP tool. It belongs to the future signed
+local companion and requires non-model-controlled human-presence evidence.
 
 ## AI-Act-Grenze
 

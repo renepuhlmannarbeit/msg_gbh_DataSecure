@@ -12,10 +12,10 @@ Explain the architecture accurately:
 - Skills orchestrate the workflow but are not themselves a privacy boundary.
 - Raw source content should enter through the local `Input` folder, not by direct chat upload, when pre-model privacy processing is required.
 - Claude should receive only released Markdown and released PNG assets from the privacy package.
-- Visuals that cannot be verified automatically remain local until human approval or retention expiry.
+- Visuals that cannot be verified automatically remain local. This engineering build exposes no approval path through Claude; previews expire under retention.
 - Audit data must not contain raw source values.
-- `Processed`, `Output` and review-preview data are subject to the configured retention window; `retention_days=0` disables later visual approval.
-- Hash-only audit evidence is intentionally outside retention and `purge_local_data`, so processing remains verifiable without retaining raw content.
+- `Processed`, `Output` and review-preview data are subject to the configured retention window; visual release through Claude is disabled for all retention settings.
+- A metadata-only audit receipt is intentionally outside retention and `purge_local_data`. It retains a random operation ID, categories, counters, versions and status, but no document hashes, exact file sizes, paths, filenames or raw values.
 
 Use precise terminology. Pseudonymization/de-identification is not automatically legal anonymization. Residual re-identification risk can remain through context and quasi-identifiers.
 
