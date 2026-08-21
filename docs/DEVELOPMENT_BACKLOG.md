@@ -316,12 +316,13 @@ Online-Datenbank und keine Freshnesslogik.
 
 ### DS-011 – Ein lokaler Datei- und Mehrdatei-Einstieg (M)
 
-**Stand RC18 (seit RC17): nutzbarer TXT-/DOCX-Slice umgesetzt.** Der private Windows-Dialog erlaubt
+**Stand RC19 (seit RC17): nutzbarer TXT-/DOCX-Slice umgesetzt.** Der private Windows-Dialog erlaubt
 bis zu 25 TXT-/DOCX-Dateien; jede erhält einen eigenen Job und ein eigenes Paket.
 Fehler werden pro Datei isoliert, das lokale Prüffenster zeigt „Datei x von y“, und
 die MCP-Zusammenfassung trennt ausgewählt, freigegeben und sicher gestoppt. Nach einer
 Mehrfachauswahl erscheint genau einmal eine lokale Abschlussansicht mit denselben drei
-Zählern und ausschließlich „Schließen“. Offen sind weitere Formate im selben Picker.
+Zählern und ausschließlich „Schließen“. PDF wurde nach adversarialem Security-Review
+nicht freigeschaltet: Der Lite-Parser belegt Page-, Font- und Visual-Coverage noch nicht.
 
 **Ergebnis:** „Dateien für Claude vorbereiten“ öffnet einen lokalen Dialog für eine
 oder mehrere Dateien. Jede Datei wird unabhängig verarbeitet; offene Entscheidungen
@@ -463,6 +464,10 @@ Unternehmens-, Projekt-, Standort-, Personen- und Personalnummernmuster werden e
 
 ### DS-203 – Formatvollständigkeit und Strukturtreue (L)
 
+**Stand RC19:** Die erste explizite Matrix liegt in
+[`FORMAT_COVERAGE_MATRIX.md`](FORMAT_COVERAGE_MATRIX.md). Der geplante Text-PDF-
+Dialogschnitt wurde nach Security-/Architektur-Gegenproben nicht freigeschaltet.
+
 **Ergebnis:** Kopf-/Fußzeilen, Kommentare, Notizen, Tabellen, Textboxen, Metadaten,
 eingebettete Grafiken und Scan-PDFs werden systematisch erfasst. Optionaler Apache-Tika-
 Adapter wird nur übernommen, wenn Nutzen, Paketgröße und Angriffsfläche überzeugen.
@@ -539,15 +544,19 @@ belegen:
    synthetisch testen. Visuelle Freigabe bleibt deaktiviert.
 4. **DS-011 (TXT-/DOCX-Slice seit RC17):** Mehrfachauswahl, lokales „Datei x von y“,
    Fehlerisolierung und eine rein informative Abschlussansicht sind umgesetzt;
-   weitere Formate folgen anhand der Coverage-Matrix aus DS-203.
+   weitere Formate folgen ausschließlich anhand der Coverage-Matrix aus DS-203.
 5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus
    laufen ohne neue Nutzeroberfläche, Datumslogik oder Laufzeitnetz.
 6. **DS-009 (Parser-Job-Object-Slice in RC18):** Native Windows-x64-Prozess-, CPU-
    und Speichergrenzen samt fail-closed Packaging sind umgesetzt. Als Nächstes den
    Launcher für OCR/Raster kalibrieren und AppContainer ohne Netz-Capabilities gegen
    Internet, DNS, RFC1918 und Loopback nachweisen; ARM64 und Signatur folgen getrennt.
-7. **DS-203 (danach):** zuerst Text-PDF in denselben vollständigen lokalen Pfad
-   aufnehmen; weitere Formate nur anhand einer Coverage-Matrix.
+7. **DS-203 (Security-Revalidierung in RC19):** Text-PDF bleibt aus dem privaten
+   Dialog, bis Catalog/Page-Tree/Contents vollständig verfolgt, Font-Encoding und
+   ToUnicode korrekt ausgewertet sowie Images, Inline-Images, Form-XObjects und
+   Vektorinhalt vollständig erfasst oder blockiert werden. Indirekte Filter und
+   DecodeParms gehören ebenfalls ins Gate. Erst danach folgen reale Word-/LibreOffice-/
+   Browser-PDFs und adversariale Gegenproben als Freigabeevidenz.
 8. **DS-005/DS-205:** Upload-Umgehung, Einzel-/Mehrdateiweg, Mehrdeutigkeit, sicheren
    Abbruch und Verständlichkeit mit synthetischen Dokumenten abnehmen.
 

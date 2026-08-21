@@ -60,6 +60,9 @@ guessing:
 - PDF without an extractable text layer and without safely extractable JPEG page images
 - PDF with a damaged or oversized Flate-compressed stream; the parser rejects
   the document instead of treating the compressed bytes as readable text
+- PDF markers for encryption, object streams, forms, annotations, embedded files and
+  unsupported stream filters are surfaced as parser warnings. This is not complete
+  PDF coverage; PDF therefore remains outside the private TXT-/DOCX dialog.
 - extracted text or asset count over the configured limits
 - residual gate finds a direct identifier or a literal the redactor claimed to
   have replaced

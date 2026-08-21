@@ -652,7 +652,7 @@ async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
   }
   const ext = path.extname(absolute).toLowerCase();
   if (!new Set(['.txt', '.docx']).has(ext)) {
-    throw new SafeError('Der erste Companion-Slice unterstützt ausschließlich TXT und DOCX.');
+    throw new SafeError('Der private Dateidialog unterstützt derzeit ausschließlich TXT und DOCX.');
   }
   return anonymizeNext(profile, {
     ...deps,

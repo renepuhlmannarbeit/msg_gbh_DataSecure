@@ -87,5 +87,5 @@ Der Status enthält nur:
    plattformübergreifend bereitstellen. Der native Windows-Formularpfad ist bereits
    automatisiert mit synthetischen Daten abgenommen.
 2. Replacement-Provenienz und Source-Locatoren aus dem tatsächlichen TXT-/OOXML-Extractor ergänzen.
-3. Text-PDF und isolierte Worker ergänzen.
+3. PDF erst nach belegter Page-/Content-/Font-/Visual-Coverage in den privaten Dialog aufnehmen; der Regex-basierte Lite-Parser genügt dafür noch nicht.
 4. Companion-Packaging signieren und Installationsherkunft nachweisen.

@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC18 · Windows 10/11 x64 · ca. 20 Minuten.
+Version 3.2.0 RC19 · Windows 10/11 x64 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC18 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC19 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -222,7 +222,7 @@ wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
 Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen Sie
 eine gestoppte TXT-/DOCX-Datei anschließend erneut über den lokalen Dateidialog.
 
-RC18 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
+RC19 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
 ARM64 stoppt bereits die lokale Parserbereitschaft sicher; es gibt dort keinen
 direkten Node-Ersatzpfad. Plattformübergreifende Adapter sind ein späterer Backlog-
 Punkt und kein aktueller Produktclaim.
@@ -323,7 +323,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC18 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC19 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

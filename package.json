@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc18",
+  "version": "3.2.0-rc19",
   "private": true,
   "description": "Claude-Plugin und eigenständiges MCPB zur lokalen Anonymisierung von Dokumenten unter Windows",
   "main": "plugins/data-secure/server/index.js",

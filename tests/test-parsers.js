@@ -261,6 +261,34 @@ test('PDF escape sequences are decoded', () => {
   assertPresent(result.markdown, 'Klammer ( auf', 'escaped parenthesis');
 });
 
+test('PDF forms and unsupported stream filters are reported as incomplete coverage', () => {
+  const pdf = Buffer.from(
+    '%PDF-1.4\n1 0 obj << /Type /Catalog /AcroForm 8 0 R >> endobj\n' +
+      '2 0 obj << /Filter /ASCII85Decode /Length 5 >> stream\nabcde\nendstream endobj\n' +
+      '3 0 obj << /Length 35 >> stream\nBT (Kontakt Max Mustermann) Tj ET\nendstream endobj\n%%EOF\n',
+    'latin1'
+  );
+  const result = parsePdf(pdf);
+  assert.ok(result.warnings.some((warning) => /Formularfelder/.test(warning)));
+  assert.ok(result.warnings.some((warning) => /nicht unterstütztem Filter/.test(warning)));
+});
+
+test('PDF custom fonts, forms, indirect filters and vector content produce coverage warnings', () => {
+  const pdf = Buffer.from(
+    '%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n' +
+      '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n' +
+      '3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj\n' +
+      '4 0 obj << /Length 53 >> stream\nBT (Sachlicher Text) Tj ET 0 0 100 100 re f\nendstream endobj\n' +
+      '5 0 obj << /Subtype /Type0 /Encoding /Identity-H /ToUnicode 6 0 R >> endobj\n' +
+      '6 0 obj << /Subtype /Form /Filter 9 0 R /Length 5 >> stream\nabcde\nendstream endobj\n%%EOF\n',
+    'latin1'
+  );
+  const result = parsePdf(pdf);
+  assert.ok(result.warnings.some((warning) => /komplexe Fontcodierung|Form-XObjects/.test(warning)));
+  assert.ok(result.warnings.some((warning) => /nicht unterstütztem Filter/.test(warning)));
+  assert.ok(result.warnings.some((warning) => /Grafikoperatoren/.test(warning)));
+});
+
 test('a PDF without an extractable text layer fails closed', () => {
   const scanned = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n', 'latin1');
   assert.throws(() => parsePdf(scanned), (e) => e instanceof Error);

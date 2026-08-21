@@ -15,7 +15,7 @@ file prints one line per case and exits non-zero on the first failure.
 |---|---|---|
 | `test-manifest.js` | 14 | version consistency across package.json, MCPB manifest, plugin.json, VERSION, BUILD_INFO and all skills; tool/prompt parity between manifest and server; marketplace target; plugin entry point and native build/package contracts; and that every test the npm script names exists |
 | `test-plugin-structure.js` | – | plugin directory layout, skill frontmatter, MCP config, and mechanical coverage requiring every runtime tool to appear in agent guidance or a justified exception |
-| `test-parsers.js` | 27 | DOCX/XLSX/PPTX text including nested DrawingML text boxes, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; Markdown table escaping; standalone PNG routing; scan-PDF JPEG routing; ZIP hardening including false sizes, aggregate limits and header consistency; PDF text layer and escapes; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
+| `test-parsers.js` | 29 | DOCX/XLSX/PPTX text including nested DrawingML text boxes, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; Markdown table escaping; standalone PNG routing; scan-PDF JPEG routing; ZIP hardening including false sizes, aggregate limits and header consistency; PDF text layer plus conservative structure/filter/font/graphics warning coverage; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
 | `test-parser-isolation.js` | 7 | mandatory Windows-launcher invocation, inherited stdin transport, missing/corrupt launcher refusal without fallback, fixed resource/setup codes, confirmed deadline termination, response-size/schema enforcement and content-free worker errors |
 | `test-native-launcher.js` | 6 | real Windows Job Object transport, `ACTIVE_PROCESS=1`, process/job memory, CPU and wallclock enforcement, and `KILL_ON_JOB_CLOSE` worker removal |
 | `test-pii-regression.js` | 63 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, explicit-versus-ambiguous credential context, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, project-prose disambiguation, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
@@ -38,7 +38,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 | `test-sarif-check.mjs` | 4 | fail-closed local CodeQL report parsing without leaking finding messages into the release-gate output |
 
-Total: 363 assertion-level cases plus the plugin structure check (**364 checks overall**).
+Total: 365 assertion-level cases plus the plugin structure check (**366 checks overall**).
 
 ## The adversarial suite
 

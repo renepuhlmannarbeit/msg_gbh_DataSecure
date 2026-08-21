@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC18 · ausschließlich synthetische Daten
+Version 3.2.0 RC19 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC18 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC19 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -104,7 +104,7 @@ BMP-Datei verwenden. Scan-PDF separat prüfen.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC18 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC19 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz
