@@ -38,7 +38,7 @@ jobs:
         run: node scripts/check-sarif.mjs codeql-results
       - name: Archive CodeQL evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d4f1e999027af79c5b89b4b8288aab0ef # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeql-sarif-${{ github.sha }}
           path: codeql-results
