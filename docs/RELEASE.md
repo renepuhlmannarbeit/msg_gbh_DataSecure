@@ -3,7 +3,7 @@
 ## Artefacts
 
 ```bash
-npm run version:sync -- 3.2.0-rc14  # propagate a new version everywhere
+npm run version:sync -- 3.2.0-rc15  # propagate a new version everywhere
 npm test
 npm run build
 node scripts/generate-sbom.mjs

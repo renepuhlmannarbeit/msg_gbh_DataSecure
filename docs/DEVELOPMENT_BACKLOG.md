@@ -259,11 +259,15 @@ gespeicherten vollständigen Originaldatei-Hashes und verkürzten ungesalzenen
 **Ergebnis:** Unvertraute Dokumente, Konverter und OCR laufen in kurzlebigen Workern mit
 Zeit-, Speicher-, Größen-, Seiten-, Objekt- und Dekompressionsgrenzen.
 
-**Stand:** Wichtige In-Process-Grenzen für Input, Text, ZIP, PDF, Bilder, Assets und
-Windows-OCR bestehen bereits. Offen sind die Härtung gegen ein realistisches
-Pilotprofil, CPU-/Heap-Abbruch für JavaScript-Parser und die Trennung vom
-MCP-Hauptprozess. Für einen synthetischen Pilot kann die Isolation gestuft erfolgen;
-vor klinischen Echtdaten bleibt sie ein hartes Gate.
+**Stand RC15: Parser-Slice umgesetzt.** Jede Datei wird in einem kurzlebigen
+Node-Kindprozess geparst. Der private Dateideskriptor 3 übergibt die Quelle ohne Pfad
+im Argument, ein 45-Sekunden-Limit, begrenzter V8-Heap, minimale Umgebung,
+Node-Permissions, ein versioniertes Antwortschema sowie Grenzen für Text, Anlagen und
+Gesamtausgabe schützen den MCP-/Companion-Hauptprozess. Parserfehler geben keine
+internen Meldungen oder Rohwerte zurück. Diese Härtung begrenzt weder nativen RSS
+vollständig noch stellt sie eine OS-seitige Netzsperre dar. Offen sind daher ein
+Windows-Job-Object/AppContainer bzw. nativer Launcher, Prozessbaum-/RSS-Nachweis und
+die OCR-/Raster-Gesamtbudgets. Vor klinischen Echtdaten bleibt dies ein hartes Gate.
 
 **Abnahme:**
 
@@ -528,8 +532,9 @@ belegen:
    Fehlerisolierung sind umgesetzt; eine eigene lokale Abschlussansicht ergänzen.
 5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus
    laufen ohne neue Nutzeroberfläche, Datumslogik oder Laufzeitnetz.
-6. **DS-009 (M als erster Slice):** vorhandene Grenzen gegen das Pilotprofil härten,
-   CPU-/Heap-Abbruch ergänzen und einen netzlosen Worker-Isolationsspike durchführen.
+6. **DS-009 (Parser-Slice in RC15):** CPU-/Heap-/Antwortgrenzen und eigener Prozess
+   sind umgesetzt. Als Nächstes OCR/Raster-Ausgaben und Dokument-Gesamtzeit begrenzen;
+   echte Netz-/RSS-Isolation mit nativem Windows-Launcher nachweisen.
 7. **DS-203 (danach):** zuerst Text-PDF in denselben vollständigen lokalen Pfad
    aufnehmen; weitere Formate nur anhand einer Coverage-Matrix.
 8. **DS-005/DS-205:** Upload-Umgehung, Einzel-/Mehrdateiweg, Mehrdeutigkeit, sicheren

@@ -37,6 +37,14 @@ engine as the rest of the document. The released Markdown marks them under
 
 ## Fail-closed points
 
+Text- und Office-/PDF-Parser laufen pro Datei in einem separaten Node-Prozess. Die
+Quelle wird über einen geerbten, nur lesbaren Dateideskriptor übergeben; sensible
+Pfade erscheinen nicht in dessen Argumenten. Der Parent erzwingt ein Zeitlimit,
+begrenzt V8-Heap und Antwortgröße und akzeptiert nur das versionierte Parser-Schema.
+Node-Permissions sperren unbeabsichtigte Datei-Schreib-, Child-/Worker- und weitere
+Prozessfähigkeiten. Sie sind ein zusätzlicher Sicherheitsgurt, keine Sandbox gegen
+bösartigen Code und keine garantierte OS-Netz-/RSS-Isolation.
+
 Every one of these stops the pipeline or withholds the asset rather than
 guessing:
 

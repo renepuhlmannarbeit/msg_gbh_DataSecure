@@ -246,7 +246,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     diagnosticStage = 'claimed';
     if (deps.onClaimed) await deps.onClaimed();
 
-    const converted = await convertDocument(source);
+    const converted = await (deps.convertDocument || convertDocument)(source);
     diagnosticStage = 'converted';
     diagnostic.parser_warning_count = (converted.warnings || []).length;
     diagnostic.visual_assets_total = (converted.attachments || []).length + (converted.unreviewedVisualCount || 0);

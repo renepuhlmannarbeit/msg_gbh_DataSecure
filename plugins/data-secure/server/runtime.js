@@ -3,9 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { normalizeText } = require('./privacy/base');
-const { parseOoxml } = require('./ooxml');
-const { parsePdf } = require('./pdf-lite');
+const childProcess = require('child_process');
 const { rasterizeToPng, ocrPngDetailed } = require('./windows-visual');
 
 class SafeError extends Error {}
@@ -62,58 +60,95 @@ function readStatus() {
   };
 }
 
-// Text is normalised the moment it leaves a parser, so every later stage sees
-// one form. A decomposed umlaut or a Word soft hyphen inside a surname would
-// otherwise walk straight past the name patterns.
-function normalized(result) {
-  return { ...result, markdown: normalizeText(result.markdown) };
+const PARSER_TIMEOUT_MS = 45_000;
+const MAX_PARSER_RESPONSE_BYTES = 160 * 1024 * 1024;
+const MAX_ATTACHMENT_BASE64_CHARS = 42 * 1024 * 1024;
+
+function validateParserResult(value) {
+  if (!value || typeof value !== 'object' || typeof value.markdown !== 'string' ||
+    value.markdown.length > 20_000_000 || !Array.isArray(value.attachments) ||
+    value.attachments.length > 150 || !Array.isArray(value.warnings) || value.warnings.length > 200) {
+    throw new SafeError('Der isolierte Dokumentparser lieferte kein gültiges Ergebnis.');
+  }
+  let decodedAttachmentBytes = 0;
+  for (const attachment of value.attachments) {
+    if (!attachment || typeof attachment !== 'object' || typeof attachment.data !== 'string' ||
+      attachment.data.length > MAX_ATTACHMENT_BASE64_CHARS ||
+      !/^[A-Za-z0-9+/]*={0,2}$/.test(attachment.data) ||
+      Object.keys(attachment).sort().join(',') !== 'data,extension,mimeType,name,source_part,type') {
+      throw new SafeError('Ein isoliert extrahiertes Asset ist ungültig oder zu groß.');
+    }
+    const decodedBytes = Buffer.byteLength(attachment.data, 'base64');
+    if (decodedBytes > 30 * 1024 * 1024) throw new SafeError('Ein isoliert extrahiertes Asset ist zu groß.');
+    decodedAttachmentBytes += decodedBytes;
+  }
+  if (decodedAttachmentBytes > 100 * 1024 * 1024) throw new SafeError('Die isoliert extrahierten Assets sind insgesamt zu groß.');
+  if (!value.warnings.every((item) => typeof item === 'string' && item.length <= 1000)) {
+    throw new SafeError('Der isolierte Dokumentparser lieferte ungültige Warnungen.');
+  }
+  return value;
 }
 
-async function convertDocument(source) {
+async function convertDocument(source, options = {}) {
   const ext = path.extname(source).toLowerCase();
-  const buf = fs.readFileSync(source);
+  const supported = new Set(['.pdf', '.docx', '.xlsx', '.pptx', '.txt', '.md', '.csv', '.png', '.jpg', '.jpeg', '.bmp']);
+  if (!supported.has(ext)) throw new SafeError('Nicht unterstütztes Format.');
+  const worker = path.join(__dirname, 'parser-worker.js');
+  const spawn = options.spawn || childProcess.spawn;
+  const fd = fs.openSync(source, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  let child;
   try {
-    if (['.docx', '.xlsx', '.pptx'].includes(ext)) return normalized(parseOoxml(buf, ext));
-    if (ext === '.pdf') return normalized(parsePdf(buf));
-    if (ext === '.md' || ext === '.txt') {
-      return normalized({ markdown: buf.toString('utf8'), attachments: [], warnings: [] });
-    }
-    if (ext === '.csv') {
-      const body = buf.toString('utf8').replace(/```/g, '` ` `');
-      return normalized({
-        markdown: `# Tabelleninhalt\n\n\`\`\`csv\n${body}\n\`\`\``,
-        attachments: [],
-        warnings: []
-      });
-    }
-    if (['.png', '.jpg', '.jpeg', '.bmp'].includes(ext)) {
-      const mimeType = ext === '.png' ? 'image/png' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg';
-      return normalized({
-        markdown:
-          '# Bildinhalt\n\n' +
-          '> Der fachliche Bildtext wird lokal per OCR extrahiert und durch dieselbe Datenschutzprüfung verarbeitet.',
-        attachments: [
-          {
-            type: 'image',
-            mimeType,
-            data: buf.toString('base64'),
-            name: path.basename(source),
-            extension: ext.slice(1),
-            source_part: 'standalone-image'
-          }
-        ],
-        warnings: [],
-        requiresExplicitProfile: true
-      });
-    }
-    throw new SafeError('Nicht unterstütztes Format.');
-  } catch (e) {
-    if (e instanceof SafeError) throw e;
-    throw new SafeError(
-      `Die ${ext.replace('.', '').toUpperCase()}-Datei konnte nicht sicher lokal gelesen werden: ` +
-        `${String(e.message || e).slice(0, 240)}`
-    );
+    child = spawn(options.execPath || process.execPath, [
+      '--permission', `--allow-fs-read=${__dirname}`, '--disable-proto=throw', '--max-old-space-size=384', worker, ext
+    ], {
+      stdio: ['ignore', 'pipe', 'ignore', fd],
+      windowsHide: true,
+      shell: false,
+      env: {}
+    });
+  } catch {
+    fs.closeSync(fd);
+    throw new SafeError('Der isolierte Dokumentparser konnte nicht gestartet werden.');
   }
+  fs.closeSync(fd);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let size = 0;
+    const chunks = [];
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error); else resolve(value);
+    };
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch { /* already stopped */ }
+      finish(new SafeError('Der isolierte Dokumentparser hat das Zeitlimit überschritten.'));
+    }, options.timeoutMs ?? PARSER_TIMEOUT_MS);
+    child.stdout.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_PARSER_RESPONSE_BYTES) {
+        try { child.kill(); } catch { /* already stopped */ }
+        finish(new SafeError('Der isolierte Dokumentparser lieferte zu viele Daten.'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    child.once('error', () => finish(new SafeError('Der isolierte Dokumentparser konnte nicht gestartet werden.')));
+    child.once('close', (code) => {
+      if (settled) return;
+      let response;
+      try { response = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* handled below */ }
+      const responseKeys = response && typeof response === 'object' ? Object.keys(response).sort().join(',') : '';
+      if (code !== 0 || response?.schema !== 'data-secure-parser-result/1' || !response?.ok ||
+        responseKeys !== 'ok,result,schema') {
+        finish(new SafeError(`Die ${ext.slice(1).toUpperCase()}-Datei konnte nicht sicher lokal gelesen werden.`));
+        return;
+      }
+      try { finish(null, validateParserResult(response.result)); }
+      catch (error) { finish(error); }
+    });
+  });
 }
 
 module.exports = {
@@ -122,6 +157,9 @@ module.exports = {
   runtimeReady,
   readStatus,
   visualBridgeStatus,
+  PARSER_TIMEOUT_MS,
+  MAX_PARSER_RESPONSE_BYTES,
+  validateParserResult,
   convertDocument,
   rasterizeToPng,
   ocrPngDetailed

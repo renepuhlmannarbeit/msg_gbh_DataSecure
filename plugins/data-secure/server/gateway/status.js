@@ -73,7 +73,7 @@ function genericStatus(options = {}) {
     ],
     runtime_dependency_install: false,
     workflow:
-      'Input -> bundled local parser -> bundled PII engine -> residual gate -> ' +
+      'Input -> isolated local parser process -> bundled PII engine -> residual gate -> ' +
       'visual raster/OCR/redaction or local review -> Output package',
     raw_content_sent_to_claude: false
   };
