@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC17 · ausschließlich synthetische Daten
+Version 3.2.0 RC18 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC17 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC18 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -34,6 +34,9 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
 - [ ] Claude-Neustart aktiviert DataSecure.
 - [ ] `privacy_status` zeigt Version, Retention, Companion-/Review-Fähigkeit und
       `visual_bridge` verständlich an.
+- [ ] `privacy_status` zeigt auf Windows x64 `parser_boundary: windows_job_object`.
+      Fehlender oder manipulierter Launcher meldet `PARSER_ISOLATION_FAILED`, öffnet
+      keinen Dateidialog und startet Node nicht direkt.
 - [ ] Der Privacy-Ordner öffnet sich und enthält die vier erwarteten Bereiche.
 - [ ] Ein absichtlich beschädigtes oder falsch versioniertes Artefakt wird nicht als
       einsatzbereit gemeldet.
@@ -101,7 +104,7 @@ BMP-Datei verwenden. Scan-PDF separat prüfen.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC17 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC18 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

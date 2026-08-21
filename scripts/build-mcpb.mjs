@@ -11,6 +11,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
+import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -40,6 +41,13 @@ try {
   }
 
   fs.cpSync(path.join(pluginDir, 'server'), path.join(stage, 'server'), { recursive: true });
+
+  const nativeBin = path.join(pluginDir, 'bin');
+  verifyNativeArtifact(
+    path.join(nativeBin, 'windows-x64', 'datasecure-sandbox.exe'),
+    path.join(nativeBin, 'windows-x64', 'datasecure-sandbox.sha256')
+  );
+  fs.cpSync(nativeBin, path.join(stage, 'bin'), { recursive: true });
 
   fs.mkdirSync(path.join(stage, 'scripts'), { recursive: true });
   for (const helper of ['windows-ocr.ps1', 'rasterize-image.ps1']) {

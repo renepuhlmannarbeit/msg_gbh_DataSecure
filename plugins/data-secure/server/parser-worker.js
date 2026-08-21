@@ -1,6 +1,7 @@
 'use strict';
 
-// This process receives document bytes through inherited file descriptor 3.
+// This process receives document bytes through an inherited descriptor. The native
+// Windows launcher maps the source to stdin; the non-Windows test path uses fd 3.
 // It runs under Node's permission model: parser code is readable, while file
 // writes and Node network/child/worker/addon/inspector APIs stay denied. This is a
 // permission-model seat belt, not a complete operating-system sandbox.
@@ -17,7 +18,9 @@ try {
     throw new Error('permission_boundary_missing');
   }
   const ext = String(process.argv[2] || '').toLowerCase();
-  const input = fs.readFileSync(3);
+  const sourceFd = Number(process.argv[3]);
+  if (sourceFd !== 0 && sourceFd !== 3) throw new Error('source_descriptor_invalid');
+  const input = fs.readFileSync(sourceFd);
   send({ schema: 'data-secure-parser-result/1', ok: true, result: parseDocumentBuffer(input, ext) });
 } catch {
   send({ schema: 'data-secure-parser-result/1', ok: false, error: 'parse_failed' });

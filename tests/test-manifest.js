@@ -5,6 +5,7 @@
 // drift between them used to be invisible until a user installed the plugin.
 
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const { createSuite } = require('./helpers');
 
@@ -145,6 +146,33 @@ test('the MCP config uses the plugin root placeholder', () => {
 test('no npm runtime dependencies are declared', () => {
   assert.ok(!pkg.dependencies, 'the offline promise forbids runtime dependencies');
   assert.strictEqual(buildInfo.runtime.includes('no npm'), true);
+});
+
+test('native Windows launcher has a reproducible source and release build contract', () => {
+  assert.strictEqual(pkg.scripts.pretest, 'npm run native:verify');
+  assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
+  assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
+  assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');
+  assert.strictEqual(pkg.scripts.posttest, 'node tests/test-native-launcher.js');
+  for (const rel of [
+    'native/windows/datasecure-sandbox.cpp',
+    'scripts/build-native.mjs',
+    'scripts/verify-native.mjs',
+    'scripts/lib/native-artifact.mjs',
+    'tests/test-native-launcher.js',
+    'plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe',
+    'plugins/data-secure/bin/windows-x64/datasecure-sandbox.sha256'
+  ]) {
+    assert.ok(fs.existsSync(path.join(root, rel)), `native boundary input missing: ${rel}`);
+  }
+  for (const rel of ['scripts/build-plugin.mjs', 'scripts/build-mcpb.mjs']) {
+    assert.match(readText(path.join(root, rel)), /datasecure-sandbox\.exe/,
+      `${rel} does not enforce native launcher packaging`);
+  }
+  const binary = path.join(root, 'plugins', 'data-secure', 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+  const expected = readText(binary.replace(/\.exe$/u, '.sha256')).trim();
+  const actual = crypto.createHash('sha256').update(fs.readFileSync(binary)).digest('hex');
+  assert.strictEqual(actual, expected, 'tracked native launcher does not match its checksum');
 });
 
 test('every test referenced by the npm test script exists', () => {

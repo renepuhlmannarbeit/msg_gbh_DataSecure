@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC17 · Stand 21.08.2026
+Version 3.2.0 RC18 · Stand 21.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC17 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC18 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -15,10 +15,10 @@ Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine MCP-Read-Date
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC17 |
+| Artefakt | Ziel | Status RC18 |
 |---|---|---|
-| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc17.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-Engineering-Weg; frische Installation noch abzunehmen |
-| `DataSecure-Privacy-Preflight-v3.2.0-rc17.zip` | Claude-Plugin/Organisations-Marketplace | Skills plus lokaler MCP; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc18.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-x64-Engineering-Weg; frische Installation noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc18.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Parser-Launcher; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -30,7 +30,9 @@ Code begrenzt. Web/Cowork dürfen keine Originaldatei für diesen Preflight erha
 
 ## 2. Voraussetzungen
 
-- Unterstützter Pilot: Windows 10/11 mit aktueller Claude-Desktop-Version.
+- Unterstützter Engineering-Test: Windows 10/11 x64 mit aktueller Claude-Desktop-Version.
+- Windows ARM64 bleibt gesperrt, bis ein separat gebauter und getesteter Launcher
+  ausgeliefert wird. Es gibt keinen direkten Node-Fallback.
 - Desktop Extensions und lokale MCP-Server dürfen nicht durch Enterprise-Richtlinien
   deaktiviert sein.
 - Der angemeldete Nutzer benötigt Schreibzugriff auf den konfigurierten lokalen
@@ -89,6 +91,8 @@ Aktuelle offizielle Referenzen:
 Ein grüner Startnachweis umfasst mindestens:
 
 - `privacy_status` antwortet mit Version, Retention und formatbezogenen Fähigkeiten;
+- `privacy_status` meldet `parser_boundary: windows_job_object`; `unavailable` ist ein
+  harter Stopp und darf nicht durch eine manuelle Node-Konfiguration umgangen werden;
 - der lokale Privacy-Ordner lässt sich öffnen;
 - `Input`, `Output`, `Processed` und `Needs Visual Review` existieren;
 - bis zu 25 TXT-/DOCX-Dateien öffnen gemeinsam den privaten Dateidialog und unter
@@ -124,7 +128,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC17 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC18 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.
@@ -154,6 +158,8 @@ Erlaubte Diagnoseangaben:
 - Artefakttyp und nicht sensitiver SHA-256;
 - Fehlercode, Formatklasse, Jobzustand, Zähler und Zeitpunkt;
 - Angabe, ob `visual_bridge` verfügbar ist.
+- Angabe, ob `parser_boundary` als `windows_job_object` einsatzbereit ist. Die Codes
+  `PARSER_ISOLATION_FAILED` und `PARSER_RESOURCE_LIMIT` enthalten keine Quelldetails.
 
 Nie an Tickets, Chats oder Repositories anhängen:
 

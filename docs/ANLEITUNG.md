@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC17 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC18 · Windows 10/11 x64 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC17 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC18 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -222,8 +222,10 @@ wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
 Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen Sie
 eine gestoppte TXT-/DOCX-Datei anschließend erneut über den lokalen Dateidialog.
 
-Auf macOS und Linux ist die bearbeitbare Review-Oberfläche in diesem Pilot noch nicht
-verfügbar; der Workflow stoppt dort an dieser Stelle sicher.
+RC18 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
+ARM64 stoppt bereits die lokale Parserbereitschaft sicher; es gibt dort keinen
+direkten Node-Ersatzpfad. Plattformübergreifende Adapter sind ein späterer Backlog-
+Punkt und kein aktueller Produktclaim.
 
 ### Nach der Verarbeitung
 
@@ -277,6 +279,8 @@ Nummern beginnen bei jedem Dokument neu.
 | „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
 | „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Nicht automatisch erneut starten. `diagnostic_status` aufrufen und nur den festen Fehlercode an IT melden — nicht Datei, Dateiname, Pfad oder Inhalt |
 | `AMBIGUITY_REVIEW_REQUIRED` | Ein Organisationsname könnte Zertifikatsanbieter oder Arbeitgeber/Kunde sein. TXT/DOCX über den lokalen Dateidialog öffnen und die gelbe Stelle entscheiden |
+| `PARSER_ISOLATION_FAILED` | Die lokale Windows-Sicherheitsgrenze fehlt oder ist beschädigt. Nicht erneut versuchen und nichts manuell umgehen; Plugin/Extension durch IT neu installieren lassen |
+| `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
 | Claude meldet mehr Dateien als in `Input` lagen | `input_documents_seen`, `attempted` und `automatic_retries` prüfen. Mehrere Versuche derselben Datei sind keine mehreren Dateien |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
 | Gescanntes PDF wird abgelehnt | Scans mit sicher extrahierbaren JPEG-Seitenbildern laufen über OCR. Andere PDF-Bildcodierungen werden fail-closed abgelehnt; wenn möglich das Original oder einen PNG-/JPEG-Export verwenden |
@@ -319,7 +323,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC17 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC18 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

@@ -103,7 +103,10 @@ Dokument-SHA-256 gebunden.
 
 ## Bewusste Nicht-Claims
 
-- Der Slice ist noch kein signiertes natives Binary.
+- Der Parser-Launcher ist als unsigniertes x64-Binary gebündelt. Laufzeit-SHA-256 und
+  PE-Prüfung belegen nur die Konsistenz des gemeinsam ausgelieferten Paares, nicht
+  Herkunft oder Manipulationsschutz. Codesignatur, geschützter Installationspfad und
+  Windows ARM64 sind noch offen.
 - Die lokale Redaktions-Gegenüberstellung ist im Pilot nur unter Windows implementiert;
   macOS und Linux stoppen an dieser Stelle fail-closed.
 - Die aktuellen Markierungen sind normalisierte Textoffset-Hinweise aus einem
@@ -121,5 +124,6 @@ Dokument-SHA-256 gebunden.
 1. Menschliche Windows-Usability-Abnahme durchführen und lokale Review-UI für
    macOS und Linux produktionsfähig umsetzen.
 2. Text-PDF in den privaten Vertical-Slice aufnehmen.
-3. Parser/OCR in ressourcenbegrenzte, netzlose Worker auslagern.
+3. Den nativen Job-Object-Launcher getrennt für OCR/Raster kalibrieren und danach
+   AppContainer ohne Netz-Capabilities als OS-Grenze nachweisen.
 4. Codesignatur, Upgrade/Rollback und reale Plattformtests nachweisen.

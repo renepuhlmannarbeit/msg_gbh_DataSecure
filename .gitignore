@@ -36,6 +36,7 @@ secrets.*
 # Build/runtime
 dist/
 node_modules/
+*.obj
 .DS_Store
 Thumbs.db
 __pycache__/

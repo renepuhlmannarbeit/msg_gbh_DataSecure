@@ -3,7 +3,7 @@
 ## Artefacts
 
 ```bash
-npm run version:sync -- 3.2.0-rc17  # propagate a new version everywhere
+npm run version:sync -- 3.2.0-rc18  # propagate a new version everywhere
 npm test
 npm run build
 node scripts/generate-sbom.mjs
@@ -16,9 +16,14 @@ node scripts/generate-sbom.mjs
 | `dist/DataSecure-Privacy-Preflight-v<version>.spdx.json` | SPDX 2.3 software bill of materials with archive hashes |
 | `dist/SHA256SUMS` | SHA-256 verification for ZIP, MCPB and SBOM |
 
-Both are built with a `node:zlib` ZIP writer, so `npm run build` works on Windows
-and on Linux CI without an external `zip` binary. Archive entries carry a fixed
-timestamp, so the same source produces the same SHA-256.
+Both archives use a `node:zlib` ZIP writer without an external `zip` binary.
+Normal tests and archive builds use `npm run native:verify` and never overwrite the
+reviewed launcher. A release maintainer updates it explicitly with
+`npm run native:update`; `npm run native:repro` then rebuilds into a temporary
+directory with MSVC 19.50.35725 / VC Tools 14.50.35717, Windows SDK 10.0.26100.0
+and `/Brepro` and compares it byte-for-byte with the tracked x64 binary. The build
+fails if this pinned toolchain is unavailable. Both archive builders independently check
+SHA-256 and PE AMD64 before packaging. Archive entries carry a fixed timestamp.
 
 `plugins/data-secure` is the canonical tree. The build substitutes nothing: what
 a marketplace install resolves from the repository is what the ZIP contains.
@@ -47,10 +52,13 @@ every rollout because the Claude UI and admin controls can change:
 
 Do not mark a build production-ready until all of these hold:
 
-- [ ] CI is green on `main`, on both `ubuntu-latest` and `windows-latest`
-- [ ] local CodeQL SARIF gate and the complete-history Gitleaks scan are green
+- [ ] CI repository guards are green on Linux and the supported runtime suite is green on Windows
+- [ ] JavaScript and native C++ CodeQL SARIF gates plus the complete-history Gitleaks
+      scan are green
 - [ ] `npm run version:sync` reports "all files already in sync"
-- [ ] the packaged plugin answers `initialize` (CI verifies this)
+- [ ] packaged ZIP and MCPB answer `initialize` and report `windows_job_object` (CI verifies this)
+- [ ] the packaged plugin contains `bin/windows-x64/datasecure-sandbox.exe` and its
+      matching SHA-256 sidecar (CI and the build verify this)
 - [ ] ZIP, MCPB, SPDX SBOM and `SHA256SUMS` are present in the same CI artefact
 - [ ] downloaded release files match `SHA256SUMS`
 - [ ] no Office/PDF file is tracked (CI verifies this)

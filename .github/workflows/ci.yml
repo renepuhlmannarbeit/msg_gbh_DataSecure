@@ -28,7 +28,7 @@ jobs:
       - name: No CRLF in tracked sources
         shell: bash
         run: |
-          bad="$(git grep -Il $'\r' -- '*.js' '*.mjs' '*.json' '*.md' '*.yml' '*.ps1' || true)"
+          bad="$(git grep -Il $'\r' -- '*.js' '*.mjs' '*.json' '*.md' '*.yml' '*.ps1' '*.cpp' || true)"
           if [ -n "$bad" ]; then
             echo "These files contain CRLF; .gitattributes enforces LF:"
             echo "$bad"
@@ -44,14 +44,8 @@ jobs:
           fi
 
   test:
-    name: Test on ${{ matrix.os }}
-    # Windows is the only supported runtime, so it must be part of CI rather
-    # than a platform the product is merely assumed to work on.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    name: Test supported Windows runtime
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -70,16 +64,26 @@ jobs:
         with:
           node-version: '22'
       - name: Build Claude plugin ZIP and standalone MCPB
-        run: npm run build
-      - name: Verify the packaged plugin actually starts
+        run: |
+          npm run native:repro
+          npm run build
+      - name: Verify both packaged runtimes and parser boundary
         shell: bash
         run: |
           set -e
-          mkdir -p .verify
-          unzip -q -o dist/*.zip -d .verify
-          reply="$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node .verify/server/index.js)"
-          echo "$reply"
-          echo "$reply" | grep -q 'eu-privacy-document-gateway'
+          mkdir -p .verify/plugin .verify/mcpb
+          unzip -q -o dist/*.zip -d .verify/plugin
+          unzip -q -o dist/*.mcpb -d .verify/mcpb
+          for runtime in .verify/plugin/server/index.js .verify/mcpb/server/index.js; do
+            reply="$(printf '%s\n%s\n' \
+              '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+              '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"privacy_status","arguments":{}}}' | node "$runtime")"
+            echo "$reply" | grep -q 'eu-privacy-document-gateway'
+            echo "$reply" | grep -q 'windows_job_object'
+            echo "$reply" | grep -q '"text_engine":"ready"'
+          done
+          test -f .verify/plugin/bin/windows-x64/datasecure-sandbox.exe
+          test -f .verify/mcpb/bin/windows-x64/datasecure-sandbox.exe
       - name: Generate SPDX SBOM and SHA-256 checksums
         run: node scripts/generate-sbom.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

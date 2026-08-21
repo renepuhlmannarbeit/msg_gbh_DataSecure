@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC17
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC18
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
@@ -98,8 +98,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc17.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
-- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc17.mcpb` – Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc18.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
+- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc18.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
@@ -109,7 +109,7 @@ MCPB stellt Claude Desktop laut aktueller Anthropic-Dokumentation eine eingebaut
 Node.js-Runtime bereit. vNext soll beide Wege durch einen signierten
 plattformspezifischen Companion mit nachgewiesener Installationsherkunft ersetzen.
 
-`plugins/data-secure` ist der kanonische Produktbaum: Runtime (`server/`), Windows-Helper (`scripts/`) und Skills liegen dort. Der Build ersetzt nichts — was ein Marketplace-Install direkt aus dem Repository auflöst, ist identisch mit dem ZIP-Inhalt. Gepackt wird mit einem ZIP-Writer auf `node:zlib`, dadurch läuft `npm run build` unter Windows und unter Linux-CI ohne externes `zip`-Binary. Endanwender führen weder npm noch Python aus.
+`plugins/data-secure` ist der kanonische Produktbaum: Runtime (`server/`), Windows-Helper (`scripts/`) und Skills liegen dort. Der normale Build ersetzt nichts — was ein Marketplace-Install direkt aus dem Repository auflöst, ist identisch mit dem ZIP-Inhalt. Gepackt wird mit einem ZIP-Writer auf `node:zlib`; dabei wird das committed Windows-x64-Binary geprüft, aber nur durch den ausdrücklich getrennten Maintainer-Befehl `native:update` ersetzt. Endanwender führen weder npm noch Python aus.
 
 ## Tests
 
@@ -117,7 +117,7 @@ plattformspezifischen Companion mit nachgewiesener Installationsherkunft ersetze
 npm test
 ```
 
-351 Assertion-Fälle plus Plugin-Strukturprüfung, insgesamt **352 Prüfungen**, über Manifest-/Agentenkonsistenz, isolierte Parserprozesse, PII-Regression, Zertifikatskatalog, Bildcodecs, begrenzte Windows-OCR-/Raster-Bridge, Visual-Gate, Retention/Löschung, Audit- und Diagnose-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/Mehrfach-Picker, TXT-/DOCX-Verarbeitung, datensparsame Stapel-Abschlussanzeige, Bildentfernung und gemischte Stapelläufe, Gateway-E2E, MCP-Protokoll, SARIF-Release-Gate sowie Adversarial- und alternative Repräsentations-Suites. Die Regressionen decken außerdem verschachtelte Word-Textfelder, Zertifikate im Abschnitt, Fließtext und OCR-Pfad, denselben Organisationsnamen in Zertifikats- und Kundenrolle, die Abgrenzung zu langen Projektbeschreibungen sowie IT-/Test-/Produkt-/Business-Analysis-/Health-IT-Fachvokabular ab. Darin enthalten sind echte Windows-Forms-Smoke-Tests für Aufbau, manuelle Zusatzauswahl, Zertifikatsentscheidung, Zurück/Ändern und die Abschlussanzeige. Die Suite besitzt keine npm-Laufzeitabhängigkeiten. Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+363 Assertion-Fälle plus Plugin-Strukturprüfung, insgesamt **364 Prüfungen**, über Manifest-/Agentenkonsistenz, den nativen Windows-Job-Object-Launcher, isolierte Parserprozesse, PII-Regression, Zertifikatskatalog, Bildcodecs, begrenzte Windows-OCR-/Raster-Bridge, Visual-Gate, Retention/Löschung, Audit- und Diagnose-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/Mehrfach-Picker, TXT-/DOCX-Verarbeitung, datensparsame Stapel-Abschlussanzeige, Bildentfernung und gemischte Stapelläufe, Gateway-E2E, MCP-Protokoll, SARIF-Release-Gate sowie Adversarial- und alternative Repräsentations-Suites. Die nativen Tests belegen geerbten pfadlosen Input, `ACTIVE_PROCESS=1`, Prozess-/Jobspeicher-, CPU- und Wallclock-Grenzen, `KILL_ON_JOB_CLOSE`, Paketkonsistenz/PE-x64-Prüfung, native AMD64-Hostprobe und den fehlenden unsandboxed Fallback. Die Regressionen decken außerdem verschachtelte Word-Textfelder, Zertifikate im Abschnitt, Fließtext und OCR-Pfad, denselben Organisationsnamen in Zertifikats- und Kundenrolle, die Abgrenzung zu langen Projektbeschreibungen sowie IT-/Test-/Produkt-/Business-Analysis-/Health-IT-Fachvokabular ab. Die Suite besitzt keine npm-Laufzeitabhängigkeiten. Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -149,6 +149,6 @@ Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für
 
 ## Release-Status
 
-RC17 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Mehrfachläufe enden mit einer rein lokalen, inhaltsfreien Abschlussanzeige mit drei Zählern und ohne Freigabewirkung. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen; Dokumentparser laufen mit Deadline und Ergebnisgrenzen in einem separaten Prozess. OCR und Rasterisierung besitzen begrenzte Konsol-/Dateiausgaben, ein gemeinsames Dokument-Zeitbudget und strikte OCR-Ergebnisvalidierung. Der derzeitige Windows-Prozessbaum-Abbruch ist best effort und noch keine harte OS-Sandbox. Weiterhin fehlen die visuelle Human-Presence-Freigabe, harte OS-Netz-/RSS-Isolation, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+RC18 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze und eine inhaltsfreie Abschlussanzeige für Mehrfachläufe. Dokumentparser starten auf Windows x64 ausschließlich über den gebündelten nativen Launcher: suspended, vor Resume einem Job Object zugewiesen, mit genau einem Prozess, 768 MiB Prozess-/Jobspeicher, 40 Sekunden CPU-Zeit, 45 Sekunden Wallclock, `KILL_ON_JOB_CLOSE` und expliziter Handle-Liste. SHA-256 und PE-x64-Prüfung belegen die interne Paketkonsistenz, nicht Herstellerherkunft oder Manipulationsschutz. Fehlt der Launcher, stimmt das Paketpaar nicht oder läuft das Plugin außerhalb Windows x64, gibt es keinen direkten Node-Fallback. Noch offen sind Authenticode/geschützter Installationspfad, Windows ARM64, AppContainer als OS-Netz-/Dateisystemgrenze, dieselbe harte Grenze für OCR/Raster, frische Installation/Upgrade/Rollback und menschliche Usability-Abnahme. Bis dahin bleiben klinische Echtdaten und ein Nutzerpilot gesperrt. JavaScript und der native C++-Launcher werden getrennt mit CodeQL geprüft; CI verifiziert zusätzlich beide Paketformen und ihre Parserstatus-Antwort.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

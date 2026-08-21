@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { runtimeReady, readStatus } = require('../runtime');
+const { readStatus } = require('../runtime');
 const { VERSION, listInput, listPackageDirs } = require('./common');
 const { listReviewItems } = require('./review');
 const { retentionStatus } = require('./retention');
@@ -19,17 +19,20 @@ function genericStatus(options = {}) {
   const companionRetention = companionRetentionStatus(options);
   const auditBlocked =
     audit.legacy_pending > 0 || audit.migration_errors > 0 || audit.write_errors > 0;
+  const engineReady = engine.text_engine === 'ready' && !auditBlocked;
   return {
-    ok: !auditBlocked,
+    ok: engineReady,
     version: VERSION,
     privacy_ruleset: PRIVACY_RULESET_VERSION,
     credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
-    engine_ready: runtimeReady() && !auditBlocked,
+    engine_ready: engineReady,
     engine_phase: auditBlocked ? 'blocked_audit_migration' : engine.phase,
     engine_message: auditBlocked
       ? 'Alte Audit-Nachweise müssen lokal durch die IT bereinigt oder migriert werden.'
       : engine.message,
     text_engine: engine.text_engine,
+    parser_boundary: engine.parser_boundary,
+    parser_boundary_reason: engine.parser_boundary_reason,
     visual_bridge: engine.visual_bridge,
     visual_bridge_reason: engine.visual_bridge_reason,
     input_documents: listInput().length,

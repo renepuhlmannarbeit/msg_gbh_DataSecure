@@ -35,11 +35,27 @@ const artefacts = expectedNames
     };
   })
   .sort((left, right) => left.name.localeCompare(right.name, 'en'));
+const nativeInputs = [
+  ['plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe', 'native-launcher'],
+  ['native/windows/datasecure-sandbox.cpp', 'native-source']
+].map(([relative, kind]) => {
+  const bytes = fs.readFileSync(path.join(root, relative));
+  return {
+    name: relative,
+    kind,
+    sha1: crypto.createHash('sha1').update(bytes).digest('hex'),
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex')
+  };
+});
 
 const safeId = (name) => `SPDXRef-File-${name.replace(/[^A-Za-z0-9.-]+/gu, '-')}`;
 const packageId = 'SPDXRef-Package-DataSecure';
+const containedFiles = [
+  ...artefacts,
+  nativeInputs.find(({ kind }) => kind === 'native-launcher')
+];
 const packageVerificationCode = crypto.createHash('sha1')
-  .update(artefacts.map(({ sha1 }) => sha1).sort().join(''))
+  .update(containedFiles.map(({ sha1 }) => sha1).sort().join(''))
   .digest('hex');
 const created = `${buildInfo.build_date}T00:00:00Z`;
 if (!/^\d{4}-\d{2}-\d{2}T00:00:00Z$/u.test(created)) {
@@ -64,24 +80,52 @@ const sbom = {
     downloadLocation: 'NOASSERTION',
     filesAnalyzed: true,
     packageVerificationCode: { packageVerificationCodeValue: packageVerificationCode },
-    comment: 'Runtime dependency inventory: none; the shipped implementation uses Node.js core modules only.',
+    comment: `Runtime dependency inventory: none; the shipped implementation uses Node.js core modules plus a Windows launcher with statically linked MSVC CRT. Repository source and reviewed binary are linked below; toolchain: ${buildInfo.native_toolchain}.`,
     licenseConcluded: 'NOASSERTION',
     licenseDeclared: 'NOASSERTION',
     copyrightText: 'NOASSERTION'
   }],
-  files: artefacts.map(({ name, sha256 }) => ({
+  files: [...artefacts, ...nativeInputs].map(({ name, sha1, sha256 }) => ({
     fileName: `./${name}`,
     SPDXID: safeId(name),
-    checksums: [{ algorithm: 'SHA256', checksumValue: sha256 }],
+    checksums: [
+      ...(sha1 ? [{ algorithm: 'SHA1', checksumValue: sha1 }] : []),
+      { algorithm: 'SHA256', checksumValue: sha256 }
+    ],
     licenseConcluded: 'NOASSERTION',
     copyrightText: 'NOASSERTION'
   })),
-  relationships: artefacts.map(({ name }) => ({
-    spdxElementId: packageId,
-    relationshipType: 'CONTAINS',
-    relatedSpdxElement: safeId(name)
-  }))
+  relationships: [
+    ...artefacts.map(({ name }) => ({
+      spdxElementId: packageId,
+      relationshipType: 'CONTAINS',
+      relatedSpdxElement: safeId(name)
+    })),
+    {
+      spdxElementId: packageId,
+      relationshipType: 'CONTAINS',
+      relatedSpdxElement: safeId('plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe')
+    },
+    {
+      spdxElementId: safeId('plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe'),
+      relationshipType: 'GENERATED_FROM',
+      relatedSpdxElement: safeId('native/windows/datasecure-sandbox.cpp')
+    }
+  ]
 };
+
+// Keep SPDX packageVerificationCode aligned with every file declared as
+// package content. This catches accidental provenance drift when files or
+// relationships are added later.
+const filesById = new Map(sbom.files.map((file) => [file.SPDXID, file]));
+const containedSha1 = sbom.relationships
+  .filter((relationship) => relationship.spdxElementId === packageId &&
+    relationship.relationshipType === 'CONTAINS')
+  .map((relationship) => filesById.get(relationship.relatedSpdxElement)
+    ?.checksums.find((checksum) => checksum.algorithm === 'SHA1')?.checksumValue);
+if (containedSha1.some((value) => !value)) throw new Error('SPDX contained file lacks SHA-1');
+const verifiedCode = crypto.createHash('sha1').update(containedSha1.sort().join('')).digest('hex');
+if (verifiedCode !== packageVerificationCode) throw new Error('SPDX package verification code mismatch');
 
 fs.mkdirSync(dist, { recursive: true });
 const sbomName = `DataSecure-Privacy-Preflight-v${pkg.version}.spdx.json`;
@@ -95,4 +139,4 @@ const checksums = [...artefacts, { name: sbomName, sha256: sbomHash }]
   .join('\n');
 fs.writeFileSync(path.join(dist, 'SHA256SUMS'), `${checksums}\n`, 'utf8');
 
-console.log(`${sbomPath}\n  files=${artefacts.length}\n${path.join(dist, 'SHA256SUMS')}`);
+console.log(`${sbomPath}\n  files=${artefacts.length + nativeInputs.length}\n${path.join(dist, 'SHA256SUMS')}`);

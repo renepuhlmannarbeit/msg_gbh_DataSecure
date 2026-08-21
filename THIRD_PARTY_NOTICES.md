@@ -1,6 +1,11 @@
 # Third-party / design references
 
-v3.2.0 RC3 hat keine zur Laufzeit nachinstallierten npm-Abhängigkeiten. Die Implementierung ist eigenständig und nutzt Node.js-Core sowie lokale Windows-APIs über gebündelte PowerShell-Bridges.
+v3.2.0 RC18 hat keine zur Laufzeit nachinstallierten npm-, Python- oder sonstigen
+Paketabhängigkeiten. Die Implementierung nutzt Node.js-Core, gebündelte PowerShell-
+Bridges und einen Windows-x64-Launcher mit statisch gelinkter MSVC-Laufzeit. Der
+zugehörige C++-Quelltext und die Buildanweisung liegen im Git-Repository desselben
+Release-Commits; die Distributionsarchive enthalten das Binary, aber nicht den
+Quelltext. Der Launcher verwendet ausschließlich Windows-SDK-APIs.
 
 Design- und Testreferenzen, die bei der Architektur berücksichtigt wurden:
 

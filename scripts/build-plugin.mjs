@@ -10,6 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
+import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -21,6 +22,9 @@ const out = path.join(dist, `DataSecure-Privacy-Preflight-v${plugin.version}.zip
 // Fail closed on a plugin tree that would not start on the user's machine.
 const entryPoint = path.join(pluginDir, 'server', 'index.js');
 if (!fs.existsSync(entryPoint)) throw new Error('plugin runtime entry point missing');
+const nativeLauncher = path.join(pluginDir, 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+const nativeChecksum = `${nativeLauncher.slice(0, -4)}.sha256`;
+verifyNativeArtifact(nativeLauncher, nativeChecksum);
 
 const entrySource = fs.readFileSync(entryPoint, 'utf8');
 if (/require\((['"])(?:\.\.\/){2,}/.test(entrySource)) {

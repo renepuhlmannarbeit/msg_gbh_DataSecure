@@ -8,6 +8,7 @@
 *.ico binary
 *.mcpb binary
 *.zip binary
+*.exe binary
 *.pdf binary
 *.docx binary
 *.xlsx binary

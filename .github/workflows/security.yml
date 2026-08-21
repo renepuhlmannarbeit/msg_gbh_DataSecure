@@ -46,6 +46,43 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  codeql-native:
+    name: CodeQL (native Windows launcher)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Initialize native CodeQL
+        uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-extended
+      - name: Build native Windows launcher
+        run: npm run native:repro
+      - name: Analyze native launcher
+        uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          upload: never
+          upload-database: false
+          output: codeql-native-results
+      - name: Enforce clean native CodeQL result
+        run: node scripts/check-sarif.mjs codeql-native-results
+      - name: Archive native CodeQL evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-native-sarif-${{ github.sha }}
+          path: codeql-native-results
+          if-no-files-found: error
+          retention-days: 14
+
   secret-history:
     name: Gitleaks (complete history)
     runs-on: ubuntu-latest

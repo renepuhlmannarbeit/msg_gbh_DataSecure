@@ -259,18 +259,23 @@ gespeicherten vollständigen Originaldatei-Hashes und verkürzten ungesalzenen
 **Ergebnis:** Unvertraute Dokumente, Konverter und OCR laufen in kurzlebigen Workern mit
 Zeit-, Speicher-, Größen-, Seiten-, Objekt- und Dekompressionsgrenzen.
 
-**Stand RC16: Parser- und Budget-Slices umgesetzt.** Jede Datei wird in einem kurzlebigen
-Node-Kindprozess geparst. Der private Dateideskriptor 3 übergibt die Quelle ohne Pfad
-im Argument, ein 45-Sekunden-Limit, begrenzter V8-Heap, minimale Umgebung,
-Node-Permissions, ein versioniertes Antwortschema sowie Grenzen für Text, Anlagen und
-Gesamtausgabe schützen den MCP-/Companion-Hauptprozess. OCR/Raster besitzen zusätzlich
-ein gemeinsames Drei-Minuten-Dokumentbudget, 120-Sekunden-Einzelgrenzen, begrenzte
-Konsol-/Dateiausgaben, ein striktes OCR-Antwortschema und Windows-Prozessbaum-Abbruch.
-Budgetfehler veröffentlichen kein Teilpaket und stellen die Quelle wieder her.
-Parser-/Bridgefehler geben keine internen Meldungen oder Rohwerte zurück. Diese Härtung
-begrenzt weder nativen RSS vollständig noch stellt sie eine OS-seitige Netzsperre dar.
-Offen sind daher ein Windows-Job-Object/AppContainer bzw. nativer Launcher sowie der
-Prozessbaum-/RSS-/No-Network-Nachweis. Vor klinischen Echtdaten bleibt dies ein hartes Gate.
+**Stand RC18: native Parser-Prozessgrenzen für Windows x64 umgesetzt.** Jede Datei wird
+in einem kurzlebigen Node-Kindprozess geparst. Auf Windows startet er ausschließlich
+über einen gebündelten C++17-Launcher: Quelle als geerbtes stdin-Handle ohne Pfad,
+`CREATE_SUSPENDED`, Job-Zuweisung vor Resume, `ACTIVE_PROCESS=1`, 768 MiB Prozess-/
+Jobspeicher, 40 Sekunden CPU-Zeit, 45 Sekunden Wallclock und `KILL_ON_JOB_CLOSE`.
+Nur stdin/stdout/stderr
+werden vererbt; das Jobhandle nie. Fehlender, beschädigter oder nicht zur Architektur
+passender Launcher stoppt ohne direkten Node-Fallback. SHA-256, reproduzierbarer
+Quellbuild, bytegleicher `/Brepro`-Vergleich gegen das committed Binary, PE-x64-/
+Paketkonsistenzprüfung, reale Grenztests sowie getrenntes C++-CodeQL sind Teil des
+Release-Gates. Der Sidecar ist ausdrücklich kein Herkunfts- oder Signaturnachweis.
+Der Parent begrenzt zusätzlich Wallclock, V8-Heap, Antwortschema, Text, Anlagen und
+Gesamtausgabe und bestätigt das Launcher-Ende vor der Rückgabe eines Timeoutfehlers.
+OCR/Raster besitzen weiterhin Dokument-/Einzelzeit- und Ausgabegrenzen, ihr heutiger
+Windows-Prozessbaum-Abbruch ist aber noch best effort. Offen sind Codesignatur,
+Windows ARM64, der Job-Object-Pfad für OCR/Raster sowie AppContainer als belegte
+OS-Netz-/Dateisystem-/Credential-Grenze. Vor klinischen Echtdaten bleibt dies ein Gate.
 
 **Abnahme:**
 
@@ -311,7 +316,7 @@ Online-Datenbank und keine Freshnesslogik.
 
 ### DS-011 – Ein lokaler Datei- und Mehrdatei-Einstieg (M)
 
-**Stand RC17: nutzbarer TXT-/DOCX-Slice umgesetzt.** Der private Windows-Dialog erlaubt
+**Stand RC18 (seit RC17): nutzbarer TXT-/DOCX-Slice umgesetzt.** Der private Windows-Dialog erlaubt
 bis zu 25 TXT-/DOCX-Dateien; jede erhält einen eigenen Job und ein eigenes Paket.
 Fehler werden pro Datei isoliert, das lokale Prüffenster zeigt „Datei x von y“, und
 die MCP-Zusammenfassung trennt ausgewählt, freigegeben und sicher gestoppt. Nach einer
@@ -532,14 +537,15 @@ belegen:
 3. **DS-003 (technisch in RC14, menschliche Abnahme offen):** Pflichtdialog nutzt eine
    Frage, zwei Antworten und Zurück/Ändern. Mit mindestens fünf fachfremden Personen
    synthetisch testen. Visuelle Freigabe bleibt deaktiviert.
-4. **DS-011 (TXT-/DOCX-Slice in RC17):** Mehrfachauswahl, lokales „Datei x von y“,
+4. **DS-011 (TXT-/DOCX-Slice seit RC17):** Mehrfachauswahl, lokales „Datei x von y“,
    Fehlerisolierung und eine rein informative Abschlussansicht sind umgesetzt;
    weitere Formate folgen anhand der Coverage-Matrix aus DS-203.
 5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus
    laufen ohne neue Nutzeroberfläche, Datumslogik oder Laufzeitnetz.
-6. **DS-009 (Parser-/Budget-Slices in RC16):** Parserprozess, CPU-/Heap-/Antwortgrenzen,
-   OCR-/Raster-Ausgaben und Dokument-Gesamtzeit sind umgesetzt. Als Nächstes echte
-   Netz-/RSS-Isolation mit nativem Windows-Launcher nachweisen.
+6. **DS-009 (Parser-Job-Object-Slice in RC18):** Native Windows-x64-Prozess-, CPU-
+   und Speichergrenzen samt fail-closed Packaging sind umgesetzt. Als Nächstes den
+   Launcher für OCR/Raster kalibrieren und AppContainer ohne Netz-Capabilities gegen
+   Internet, DNS, RFC1918 und Loopback nachweisen; ARM64 und Signatur folgen getrennt.
 7. **DS-203 (danach):** zuerst Text-PDF in denselben vollständigen lokalen Pfad
    aufnehmen; weitere Formate nur anhand einer Coverage-Matrix.
 8. **DS-005/DS-205:** Upload-Umgehung, Einzel-/Mehrdateiweg, Mehrdeutigkeit, sicheren

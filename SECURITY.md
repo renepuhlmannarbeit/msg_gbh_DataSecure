@@ -36,10 +36,11 @@ boundary sits, what reaches Claude, and every fail-closed point.
 ## Build provenance
 
 Every CI build publishes the plugin ZIP and MCPB together with an SPDX 2.3 SBOM
-and `SHA256SUMS`. The SBOM records that the shipped Node.js implementation has no
-third-party runtime package dependencies and cryptographically binds the two
-archives to the release metadata. CodeQL analyzes the JavaScript sources on
-pull requests and pushes to `main`.
+and `SHA256SUMS`. The SBOM records that the shipped Node.js implementation and
+statically linked native Windows launcher have no third-party runtime package
+dependencies and cryptographically binds the two archives to the release metadata.
+Separate CodeQL jobs analyze JavaScript and the C++ launcher on pull requests and
+pushes to `main`.
 
 GitHub CodeQL supports uploading results for public repositories and private
 organisation repositories with GitHub Code Security enabled. This private repo

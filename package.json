@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc17",
+  "version": "3.2.0-rc18",
   "private": true,
   "description": "Claude-Plugin und eigenständiges MCPB zur lokalen Anonymisierung von Dokumenten unter Windows",
   "main": "plugins/data-secure/server/index.js",
@@ -9,6 +9,13 @@
   },
   "license": "UNLICENSED",
   "scripts": {
+    "native:verify": "node scripts/verify-native.mjs",
+    "native:update": "node scripts/build-native.mjs --update",
+    "native:repro": "node scripts/build-native.mjs --verify-reproducible",
+    "native:build": "npm run native:update",
+    "pretest": "npm run native:verify",
+    "posttest": "node tests/test-native-launcher.js",
+    "prebuild": "npm run native:verify",
     "fixtures": "node tests/make-fixtures.js",
     "test": "npm run fixtures && node tests/test-manifest.js && node tests/test-plugin-structure.js && node tests/test-parsers.js && node tests/test-parser-isolation.js && node tests/test-pii-regression.js && node tests/test-credential-catalog.js && node tests/test-image-sanitizer.js && node tests/test-windows-visual.js && node tests/test-visual.js && node tests/test-retention.js && node tests/test-audit-privacy.js && node tests/test-diagnostics.js && node tests/test-companion-job-store.js && node tests/test-companion-retention.js && node tests/test-companion-ipc.js && node tests/test-companion-processor.js && node tests/test-companion-supervisor.js && node tests/test-completion-summary.js && node tests/test-gateway-e2e.js && node tests/test-mcp-protocol.js && node tests/test-adversarial.js && node tests/exploratory-review-20.js && node tests/test-sarif-check.mjs",
     "test:golden": "node tests/make-fixtures.js && node tests/test-pii-regression.js --update",

@@ -37,13 +37,21 @@ engine as the rest of the document. The released Markdown marks them under
 
 ## Fail-closed points
 
-Text- und Office-/PDF-Parser laufen pro Datei in einem separaten Node-Prozess. Die
-Quelle wird über einen geerbten, nur lesbaren Dateideskriptor übergeben; sensible
-Pfade erscheinen nicht in dessen Argumenten. Der Parent erzwingt ein Zeitlimit,
-begrenzt V8-Heap und Antwortgröße und akzeptiert nur das versionierte Parser-Schema.
-Node-Permissions sperren unbeabsichtigte Datei-Schreib-, Child-/Worker- und weitere
-Prozessfähigkeiten. Sie sind ein zusätzlicher Sicherheitsgurt, keine Sandbox gegen
-bösartigen Code und keine garantierte OS-Netz-/RSS-Isolation.
+Text- und Office-/PDF-Parser laufen pro Datei in einem separaten Node-Prozess. Auf
+Windows x64 startet ein gebündelter nativer Launcher das Kind suspended, weist es vor
+Resume einem Job Object zu und erzwingt einen Prozess, 768 MiB Prozess-/Jobspeicher,
+40 Sekunden CPU-Zeit, 45 Sekunden Wallclock sowie `KILL_ON_JOB_CLOSE`. Die Quelle wird ausschließlich als
+geerbtes stdin-Handle übergeben; Argumente enthalten keinen Quellpfad. Eine explizite
+Handle-Liste vererbt nur stdin/stdout/stderr und nie das Jobhandle. Fehlt der Launcher,
+passt sein PE-x64-Format nicht oder schlägt Paketkonsistenz-/Jobprüfung fehl, existiert
+auch außerhalb Windows x64 kein direkter Node-Fallback. Der SHA-Sidecar ist kein
+Authentizitätsnachweis; Codesignatur und geschützter Installationspfad bleiben Gate.
+Der Launcher prüft mit `IsWow64Process2` zusätzlich die native Hostarchitektur und
+stoppt daher auch ein emuliertes x64-Node auf Windows ARM64 vor der Verarbeitung.
+Der Parent begrenzt zusätzlich Wallclock, V8-Heap und die Parserantwort auf 48 MiB und
+akzeptiert nur das versionierte Parser-Schema. Node-Permissions sind
+weiterhin Defense-in-depth; erst ein erfolgreich getesteter AppContainer liefert die
+noch offene OS-Netz-/Dateisystem-/Credential-Grenze.
 
 Every one of these stops the pipeline or withholds the asset rather than
 guessing:
@@ -65,7 +73,7 @@ guessing:
 - die gesamte visuelle Verarbeitung eines Dokuments überschreitet drei Minuten;
   der aktuelle Windows-Adapter versucht den Prozessbaum zu beenden, stellt die Quelle
   wieder her und publiziert kein Teilpaket. Der harte OS-Nachweis für alle Nachfahren
-  folgt erst mit dem geplanten Job-Object-Launcher
+  des OCR-/Rasterpfads folgt in einem getrennt kalibrierten Launcher-Slice
 - recognised text too short to trust the "no PII found" result
 - PII found but its bounding boxes cannot be mapped
 - redaction failed, or a second OCR pass still finds the redacted strings

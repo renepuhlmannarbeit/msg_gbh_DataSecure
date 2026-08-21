@@ -1,8 +1,10 @@
 {
-  "version": "3.2.0-rc17",
+  "version": "3.2.0-rc18",
   "build_date": "2026-08-21",
-  "target": "Claude Desktop Windows / MCPB manifest 0.4",
-  "runtime": "bundled Node.js core implementation; no npm/Python runtime install",
+  "target": "Claude Desktop Windows x64 / MCPB manifest 0.4",
+  "runtime": "bundled Node.js core plus native Job Object launcher with statically linked MSVC CRT; no npm/Python runtime install",
+  "native_toolchain": "MSVC 19.50.35725 / VC Tools 14.50.35717 / Windows SDK 10.0.26100.0",
+  "native_source": "native/windows/datasecure-sandbox.cpp",
   "profiles": [
     "customer",
     "applicant",
