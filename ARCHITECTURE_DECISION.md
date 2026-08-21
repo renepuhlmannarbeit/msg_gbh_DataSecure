@@ -1,5 +1,10 @@
 # Architekturentscheidung v3.2 RC2
 
+Statushinweis RC8 (21.08.2026): Die Grundentscheidung gilt fort. Der aktuelle
+Umsetzungs- und Release-Stand steht in `README.md`, `docs/RELEASE.md` und
+`docs/COMPANION_IPC_V1.md`; bei abweichenden Detailaussagen sind diese neueren
+Dokumente maßgeblich.
+
 ## Entscheidung
 
 Für sensible lokale Dateien bleibt **Claude Desktop + lokale MCPB Desktop Extension** die Sicherheitsgrenze. Ein Skill allein ist kein geeigneter Pre-Processing-Gate, weil der Skill erst innerhalb von Claude wirkt. Der Gateway verarbeitet deshalb die Quelldatei lokal und gibt über MCP nur freigegebenes Markdown bzw. freigegebene PNG-Assets zurück.
@@ -21,9 +26,14 @@ Frühere Prototypen installierten teilweise Runtime-Pakete oder nutzten große g
 ## Visuelle Assets
 
 - PNG/BMP: lokal normalisiert; bei OCR-PII pixelweise redigiert und erneut geprüft.
-- JPEG/EMF/WMF: unter Windows lokal metadatafrei zu PNG rasterisiert; danach gleiche Pipeline.
+- JPEG: Metadaten werden lokal entfernt; der Inhalt läuft danach durch dieselbe
+  Visual-Pipeline. EMF/WMF wird nur bei verfügbarer und erfolgreich verifizierter
+  Windows-Bridge rasterisiert, andernfalls vollständig zurückgehalten; die reale
+  EMF/WMF-Abnahme ist noch offen.
 - SVG oder nicht rasterisierbare Assets: keine stille Freigabe; lokale Review-Queue.
-- `applicant`/`personnel_profile`: Visuals werden standardmäßig lokal zurückgehalten. Ein Mensch kann einen metadatafreien PNG-Preview ausdrücklich freigeben.
+- `applicant`/`personnel_profile`: Visuals werden lokal zurückgehalten. RC8 besitzt
+  keinen menschlichen visuellen Freigabekanal; Preview-Inspektion oder eine
+  Chatbestätigung macht das Asset nicht für Claude lesbar.
 
 ## Claude-Zugriff
 

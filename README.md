@@ -4,7 +4,13 @@
 
 DataSecure ist jetzt **Plugin-first** aufgebaut: Claude Skills übernehmen Routing, Zweck-/Profilwahl und Governance; ein gebündelter lokaler MCP-Server bildet die technische Privacy-Grenze und verarbeitet Quelldateien, bevor Claude deren Inhalt verwendet.
 
-Anthropic unterstützt Plugins in Claude Chat (Web und Desktop) sowie Cowork. Skills funktionieren in Chat und Cowork; Plugins können lokale MCP-Server bündeln. Der Standalone-MCPB bleibt als Fallback-Artefakt für direkte Claude-Desktop-Extension-Installationen erhalten.
+Anthropic unterstützt Plugin-Skills in Claude Chat (Web und Desktop) sowie Cowork.
+Der lokale MCP-Dateizugriff steht nach aktueller Claude-Dokumentation jedoch nur in
+Claude Desktop beziehungsweise Claude Code zur Verfügung. Web und Cowork dürfen
+daher nur bereits bereinigte Outputs nutzen oder den Ablauf erklären, niemals
+Originaldateien zur angeblich lokalen Vorverarbeitung annehmen. Der Standalone-MCPB
+bleibt als Fallback-Artefakt für direkte Claude-Desktop-Extension-Installationen
+erhalten.
 
 ## Zielworkflow
 
@@ -24,7 +30,7 @@ PDF / DOCX / XLSX / PPTX / PNG / JPEG / BMP
         Claude
 ```
 
-Wenn die Anforderung lautet, dass Rohdaten **vor** Modellverarbeitung bereinigt werden müssen, soll die Originaldatei nicht direkt in den Chat hochgeladen oder hineinkopiert werden. Stattdessen nutzt der Anwender den lokalen `Claude Privacy/Input`-Ordner.
+Wenn die Anforderung lautet, dass Rohdaten **vor** Modellverarbeitung bereinigt werden müssen, soll die Originaldatei nicht direkt in den Chat hochgeladen oder hineinkopiert werden. Für TXT/DOCX startet DataSecure einen lokalen Dateidialog mit optionaler Windows-Textprüfung. Weitere Formate verwenden derzeit den lokalen `Claude Privacy/Input`-Ordner.
 
 ## Plugin-Komponenten
 
@@ -87,12 +93,13 @@ Erzeugt werden:
 - `DataSecure-Privacy-Preflight-v3.2.0-rc8.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
 - `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc8.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
-Der Plugin-ZIP-/Marketplace-Weg startet derzeit `node` und setzt deshalb auf dem
-Zielrechner eine zentral bereitgestellte Node.js-Runtime ab Version 22 voraus. Das ist
-ein dokumentierter Übergangszustand und noch nicht die angestrebte Ein-Klick-
-Auslieferung. Das Windows-MCPB ist der runtimegebündelte Pilot-Fallback; vNext soll
-beide Wege durch einen signierten plattformspezifischen Companion ohne manuelle
-Runtime-Installation ersetzen.
+Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
+in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
+Systempfad auflöst, ist noch durch den frischen Installationstest zu belegen; bis dahin
+darf für diesen Weg keine installationsfreie Zusage gemacht werden. Für das Windows-
+MCPB stellt Claude Desktop laut aktueller Anthropic-Dokumentation eine eingebaute
+Node.js-Runtime bereit. vNext soll beide Wege durch einen signierten
+plattformspezifischen Companion mit nachgewiesener Installationsherkunft ersetzen.
 
 `plugins/data-secure` ist der kanonische Produktbaum: Runtime (`server/`), Windows-Helper (`scripts/`) und Skills liegen dort. Der Build ersetzt nichts — was ein Marketplace-Install direkt aus dem Repository auflöst, ist identisch mit dem ZIP-Inhalt. Gepackt wird mit einem ZIP-Writer auf `node:zlib`, dadurch läuft `npm run build` unter Windows und unter Linux-CI ohne externes `zip`-Binary. Endanwender führen weder npm noch Python aus.
 
@@ -102,7 +109,7 @@ Runtime-Installation ersetzen.
 npm test
 ```
 
-274 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/File-Picker und TXT-/DOCX-Verarbeitung, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+288 Assertion-Fälle plus Plugin-Strukturprüfung, insgesamt **289 Prüfungen**, über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/File-Picker und TXT-/DOCX-Verarbeitung, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites. Darin enthalten ist ein echter Windows-Forms-Smoke-Test für Aufbau, manuelle Zusatzauswahl, Vorschau und Rückgabe des exakten Redaktionsbereichs. Die Suite besitzt keine npm-Laufzeitabhängigkeiten. Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -113,6 +120,8 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 | Datei | Inhalt |
 |---|---|
 | [docs/ANLEITUNG.md](docs/ANLEITUNG.md) | **Für Anwender:** Installation Schritt für Schritt, täglicher Ablauf, Platzhalter, Grenzen |
+| [docs/IT-BETRIEBSHANDBUCH.md](docs/IT-BETRIEBSHANDBUCH.md) | **Für IT/Admins:** Installation, Verteilung, Update, Rollback, Betrieb und Support |
+| [docs/PILOT-ABNAHME.md](docs/PILOT-ABNAHME.md) | **Für Pilotverantwortliche:** synthetische Go/No-Go-Abnahme ohne Echtdaten |
 | [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md) | Sicherheitsgrenze, was Claude erreicht, alle Fail-Closed-Punkte |
 | [docs/PLUGIN_TARGET_ARCHITECTURE.md](docs/PLUGIN_TARGET_ARCHITECTURE.md) | Zielarchitektur Plugin + lokaler MCP |
 | [docs/DEVELOPMENT_BACKLOG.md](docs/DEVELOPMENT_BACKLOG.md) | Priorisiertes Produkt-, Plattform- und Security-Backlog für den einfachen Claude-Rollout |
@@ -132,6 +141,6 @@ Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für
 
 ## Release-Status
 
-RC8 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt jetzt eine lokale Human-Presence-Grenze für bewusstes Überspringen der Zusatzprüfung; die Gegenüberstellung, manuelle Korrektur, visuelle Freigabe sowie signiertes Packaging fehlen weiterhin. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+RC8 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen. Weiterhin fehlen die visuelle Human-Presence-Freigabe, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

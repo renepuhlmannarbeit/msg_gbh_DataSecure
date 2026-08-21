@@ -6,13 +6,18 @@ version: 3.2.0-rc8
 
 # Personnel Profile Privacy
 
-Use `anonymize_next_document` with `profile=personnel_profile`.
+For TXT/DOCX use `prepare_local_document` with `profile=personnel_profile`. For
+other supported formats queued in `Input`, use `anonymize_next_document` with
+`profile=personnel_profile`.
 
 Preserve business value such as roles, skills, certifications, methods, technologies, responsibilities, project periods and industry experience where possible.
 
 Reduce re-identification risk by removing direct identifiers and pseudonymizing/generalizing quasi-identifiers such as employer, client names, exact project names and precise locations when the local engine classifies them as identifying context.
 
-Personnel photos and other visuals are not automatically released. Their local review previews remain only until privacy review or retention expiry; with `retention_days=0`, later visual approval is unavailable.
+Personnel photos and other visuals are not automatically released. They remain
+local and unavailable to Claude; their previews expire with retention. This
+engineering build has no human visual-release path, including when retention is
+greater than zero.
 
 After processing, use only the released privacy package. Do not reconstruct real names or infer identities from project history.
 

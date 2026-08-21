@@ -10,11 +10,19 @@ The plugin combines:
 
 ## User workflow
 
-1. Ask Claude to open the privacy folder.
-2. Copy the source document into `Input`.
-3. Ask Claude to anonymize/de-identify the next document.
-4. Claude uses only the released privacy package.
-5. Visuals that cannot be released automatically stay under `Needs Visual Review` until explicitly reviewed.
+1. For TXT or DOCX, ask Claude to prepare a local document. DataSecure opens a
+   local file picker; on Windows it then offers a local, redaction-only review.
+2. For PDF, XLSX, PPTX, MD, CSV or images, ask Claude to open the privacy folder
+   and copy the source into `Input`.
+3. Ask Claude to anonymize/de-identify the document.
+4. Claude uses only the released Markdown and released PNG assets.
+5. Visuals that cannot be verified automatically stay local under
+   `Needs Visual Review`. This engineering build has no human visual-release
+   path, so opening the folder does not make those assets readable by Claude.
+
+The Windows text review may add `[MANUAL_REDACTION]` replacements but cannot
+freely edit professional content. Skipping the optional review does not bypass
+technical coverage, residual-PII or visual gates.
 
 Do not upload or paste a raw sensitive source document directly into Claude if the goal is to prevent Claude from seeing the original content before privacy processing.
 

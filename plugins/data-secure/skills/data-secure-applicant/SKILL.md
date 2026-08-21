@@ -6,9 +6,15 @@ version: 3.2.0-rc8
 
 # Applicant Privacy
 
-Use `anonymize_next_document` with `profile=applicant`.
+For TXT/DOCX use `prepare_local_document` with `profile=applicant`. For other
+supported formats queued in `Input`, use `anonymize_next_document` with
+`profile=applicant`.
 
-Applicant visuals are withheld by default and their review previews expire. Ask for prompt review; with `retention_days=0`, later visual approval is unavailable. Keep useful qualifications, experience, skills, certifications and role history while removing direct identifiers and other identifying details according to the local privacy gate.
+Applicant visuals are withheld by default and remain unavailable to Claude; their
+local review previews expire. This engineering build has no human visual-release
+path, including when retention is greater than zero. Keep useful qualifications,
+experience, skills, certifications and role history while removing direct
+identifiers and other identifying details according to the local privacy gate.
 
 After processing, use only released package data. Do not infer or reconstruct the candidate's identity from the remaining career history.
 

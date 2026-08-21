@@ -31,6 +31,15 @@ a marketplace install resolves from the repository is what the ZIP contains.
 All three run the same local privacy runtime and the same fail-closed release
 model.
 
+For custom MCPB installation use Claude Desktop **Settings → Extensions →
+Advanced settings → Install Extension…**. Claude Desktop provides the Node.js
+runtime for desktop extensions. Plugin ZIP distribution uses **Customize →
+Plugins** or an organisation marketplace. Re-check both official workflows before
+every rollout because the Claude UI and admin controls can change:
+
+- <https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop>
+- <https://support.claude.com/en/articles/13837433-manage-plugins-for-your-organization>
+
 ## Release gate
 
 Do not mark a build production-ready until all of these hold:
@@ -50,7 +59,8 @@ pilot, verify on a target machine:
 
 The real OCR/redaction path passed on 2026-08-21 with
 `npm run test:windows-visual` on the target Windows machine. The remaining
-unchecked items still require manual acceptance.
+unchecked items still require installed-product or human acceptance; unit tests
+alone do not close them.
 
 - [x] the real Windows text-review form initializes, marks a manually selected
       synthetic alias, updates the release preview and returns the exact range
@@ -62,7 +72,7 @@ unchecked items still require manual acceptance.
 - [ ] DOCX, XLSX, PPTX and PDF preflight work on synthetic files
 - [x] a scanned image is OCR'd, and PII inside it is blacked out
 - [ ] an EMF/WMF graphic either rasterises safely or is withheld
-- [ ] applicant and personnel visuals stay local until reviewed
+- [ ] applicant and personnel visuals stay local and unavailable to Claude
 - [ ] only released Markdown and released assets are readable by Claude
 - [ ] `privacy_status` reports the configured retention window and due counts
 - [ ] an expired synthetic Processed file, Output package and pending review
@@ -75,6 +85,11 @@ unchecked items still require manual acceptance.
 If `privacy_status` reports `visual_bridge: unavailable`, the text path still
 works and every graphic is withheld — that is the intended degraded mode, not a
 silent failure.
+
+The native-form checkbox proves control initialization and the exact automated
+selection/button path with synthetic text. It is not evidence that the interface
+is understandable to employees; that belongs to the pilot acceptance run in
+`PILOT-ABNAHME.md`.
 
 ## What must never ship
 

@@ -93,11 +93,14 @@ Dokument-SHA-256 gebunden.
   nicht implementiert.
 - PDF und weitere Formate verwenden weiterhin den bestehenden Input-Ordner-Pfad.
 - Ein authentifizierter Prozesskanal allein ersetzt keine Codesignatur,
-  Installationsherkunft oder echte UI-Akzeptanztests.
+  Installationsherkunft oder menschliche Usability-Abnahme. Der echte Windows-
+  Formularpfad wird automatisiert mit einer synthetischen Auswahl, Vorschau und
+  Freigabe geprüft; macOS/Linux und die Bedienbarkeit durch Pilotanwender bleiben offen.
 
 ## Nächste Abnahme
 
-1. Lokale Review-UI für macOS und Linux produktionsfähig umsetzen.
+1. Menschliche Windows-Usability-Abnahme durchführen und lokale Review-UI für
+   macOS und Linux produktionsfähig umsetzen.
 2. Text-PDF in den privaten Vertical-Slice aufnehmen.
 3. Parser/OCR in ressourcenbegrenzte, netzlose Worker auslagern.
 4. Codesignatur, Upgrade/Rollback und reale Plattformtests nachweisen.

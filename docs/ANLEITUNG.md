@@ -6,7 +6,9 @@ Version 3.2.0 RC8 · Windows 10/11 · ca. 20 Minuten.
 > **Nur Engineering-Abnahme:** RC8 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
-> signierten lokalen Companions mit technisch belegter menschlicher Review-Aktion.
+> signierten lokalen Companions, bestandenem Installationstest und dokumentierter
+> Pilotfreigabe. Die lokale TXT-/DOCX-Review-Aktion ist technisch umgesetzt; die
+> visuelle Human-Presence-Freigabe und Codesignatur fehlen noch.
 
 ---
 
@@ -93,26 +95,27 @@ Sie müssen nur einen davon machen.
 | Weg | Sie haben … | Was zu tun ist |
 |---|---|---|
 | **A** (am einfachsten) | eine Datei auf `.mcpb` | Doppelklick, sonst nichts nötig → Teil 3 |
-| **B** (nur mit Vorarbeit) | eine Datei auf `.zip` | Braucht zusätzlich Node.js ≥ 22 auf dem Rechner → Teil 4 |
+| **B** (Engineering-Weg) | eine Datei auf `.zip` | Nur nach IT-Freigabe; Runtime-Auflösung muss für die Zielumgebung belegt sein → Teil 4 |
 | **C** (nichts zu tun) | gar keine Datei | Die IT verteilt zentral; das Plugin erscheint von selbst → Teil 5 |
 
-**Warum der Unterschied:** Die `.mcpb`-Datei bringt alles mit, was sie zum Laufen
-braucht. Die `.zip` und die zentrale Verteilung nicht — die starten ein
-Hilfsprogramm namens `node`, das getrennt installiert sein muss. Wenn Sie die
-Wahl haben: `.mcpb`.
+**Warum der Unterschied:** Claude Desktop stellt für `.mcpb`-Desktop-Extensions
+eine eingebaute Node.js-Runtime bereit. Der aktuelle Plugin-ZIP startet ebenfalls
+`node`; ob dieser Befehl in der jeweiligen Plugin-Oberfläche aus Claudes Runtime
+oder aus dem Windows-Systempfad kommt, wird erst im frischen Installationstest
+verbindlich belegt. Wenn Sie die Wahl haben: `.mcpb`.
 
 ## Teil 3: Weg A — über die `.mcpb`-Datei
 
 1. **Datei an einen festen Platz legen**, z. B. `Dokumente\DataSecure\`. Nicht in
    den Downloads-Ordner.
 2. **Claude Desktop öffnen.** Erst die Anwendung starten, dann installieren.
-3. **Doppelklick auf die Datei.** Claude fragt, ob die Erweiterung installiert
-   werden soll.
-   > Erscheint stattdessen *„Wie möchten Sie diese Datei öffnen?"*, kennt Windows
-   > die Endung nicht. Abbrechen und die Datei stattdessen mit gedrückter
-   > Maustaste in das offene Claude-Fenster ziehen. Klappt auch das nicht: in den
-   > Claude-Einstellungen nach *Erweiterungen* / *Extensions* suchen. Finden Sie
-   > nichts davon — aufhören und IT rufen.
+3. **Einstellungen → Erweiterungen → Erweiterte Einstellungen** öffnen. Im
+   Abschnitt für Extension-Entwickler **„Erweiterung installieren …"** wählen,
+   die `.mcpb`-Datei auswählen und den Dialog bestätigen.
+   > Doppelklick oder Ziehen in Claude können je nach Version ebenfalls angeboten
+   > werden. Der Einstellungsweg ist der dokumentierte Standard. Fehlt der Bereich,
+   > ist die Desktop-App möglicherweise veraltet oder durch eine IT-Richtlinie
+   > eingeschränkt — dann aufhören und IT rufen.
 4. **Bestätigen und die vier Angaben stehen lassen.** Ändern Sie nichts:
 
    | Angabe | So lassen | Bedeutung |
@@ -129,17 +132,17 @@ Wahl haben: `.mcpb`.
 
 ## Teil 4: Weg B — über die `.zip`-Datei
 
-> **Zuerst lesen.** Dieser Weg braucht **Node.js ab Version 22**. Das zu
-> installieren erfordert in der Regel Administratorrechte, die Sie vermutlich
-> nicht haben. **Installieren Sie Node nicht selbst** — schicken Sie die Vorlage
-> aus Teil 11 an die IT. Ist Node bereits vorhanden, geht es hier weiter.
+> **Zuerst lesen.** Dieser Weg ist bis zum frischen Installationsbeweis ein
+> Engineering-Weg. **Installieren Sie Node nicht selbst.** Die IT muss vorab
+> bestätigen, dass der lokale MCP aus dem Plugin in Ihrer Claude-Version startet.
 
 1. **Datei an einen festen Platz legen.** **Nicht entpacken** — die ZIP wird als
    Ganzes gebraucht.
-2. **In Claude Desktop die Plugin-Verwaltung öffnen.** Einstellungen → nach
-   *Plugins* suchen; je nach Version auch *Erweiterungen* oder *Extensions*.
-   Finden Sie nichts Vergleichbares: aufhören und IT rufen.
-3. **ZIP-Datei hochladen** und bestätigen.
+2. **In Claude Desktop „Anpassen/Customize" öffnen**, dann **Plugins** auswählen.
+   Benutzerdefinierte Plugins werden dort hochgeladen; eine Organisationsverteilung
+   kann den Eintrag bereits bereitstellen. Finden Sie keine Upload-Möglichkeit,
+   aufhören und IT rufen.
+3. **ZIP-Datei als benutzerdefiniertes Plugin hochladen** und bestätigen.
 4. **Claude komplett schließen und neu öffnen** (Symbol neben der Uhr →
    *Beenden*).
 
@@ -281,6 +284,10 @@ Nummern beginnen bei jedem Dokument neu.
 
 ## Teil 11: Wenn Sie die IT brauchen
 
+Für Installation, Organisationsverteilung, Update, Rollback und datensparsame
+Diagnose gilt das [IT-Betriebshandbuch](IT-BETRIEBSHANDBUCH.md). Die technische
+Freigabe wird mit der [Pilot-Abnahme](PILOT-ABNAHME.md) dokumentiert.
+
 ```
 Betreff: DataSecure — Installation klappt nicht
 
@@ -299,3 +306,8 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 DataSecure Privacy Preflight 3.2.0 RC8 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
+
+Installationsoberflächen abgeglichen am 21.08.2026 mit den offiziellen Claude-
+Anleitungen für Desktop Extensions und Plugins. Vor einem Rollout erneut prüfen:
+<https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop>
+und <https://support.claude.com/en/articles/13837440-use-plugins-in-claude>.

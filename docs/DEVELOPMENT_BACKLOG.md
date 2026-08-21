@@ -48,8 +48,8 @@ nur das freigegebene Privacy-Paket erreicht Claude
 | Oberfläche | Zielmodus | Sicherheitsbedingung |
 |---|---|---|
 | Claude Desktop Chat | Primärer Pilot | lokaler Companion/MCP verfügbar |
-| Claude Cowork | Nach technischer Abnahme | lokale Verarbeitung tatsächlich verfügbar; kein Cloud-Connector für Rohdaten |
-| Claude Web | Skill/Erklärung, ggf. Nutzung bereits bereinigter Outputs | niemals Rohdateien zur Vorverarbeitung hochladen |
+| Claude Cowork | Skill/Erklärung und bereits bereinigte Outputs | lokaler MCP ist dort aktuell nicht verfügbar; niemals Rohdateien zur Vorverarbeitung hochladen |
+| Claude Web | Skill/Erklärung und bereits bereinigte Outputs | lokaler MCP ist dort aktuell nicht verfügbar; niemals Rohdateien zur Vorverarbeitung hochladen |
 | Claude Code | Expertenmodus | Originale außerhalb des Workspace und der erlaubten Dateisystembereiche; MCP allein verhindert keinen direkten Shell-/Dateizugriff |
 
 Fehlt die lokale Fähigkeit, stoppt DataSecure mit einer klaren Anleitung. Es gibt
@@ -110,9 +110,11 @@ Review-Oberfläche, Speicherpfad und Richtlinie einsatzbereit sind.
 **Stand:** Windows-Vertical-Slice umgesetzt: lokale Gegenüberstellung, heuristische
 Markierungshinweise, ausschließlich zusätzliche manuelle Redaktionen,
 exakte Ergebnisvorschau, inhaltshashgebundener Review/Skip-Nachweis, erneuter
-Residual-Gate, DOCX-Part-Coverage und verwaiste-Arbeitskopien-Cleanup. Offen sind
-macOS/Linux, Provenienz aus der tatsächlichen Replacement-Pipeline,
-strukturbezogene OOXML-Locatoren und echte Plattform-/Usability-Abnahmen.
+Residual-Gate, DOCX-Part-Coverage und verwaiste-Arbeitskopien-Cleanup. Der echte
+Windows-Forms-Pfad ist automatisiert mit synthetischer Auswahl und Schaltflächen-
+Auslösung abgenommen. Offen sind die menschliche Windows-Usability-Abnahme,
+macOS/Linux, Provenienz aus der tatsächlichen Replacement-Pipeline sowie
+strukturbezogene OOXML-Locatoren.
 
 **Ergebnis:** Ein lokales Fenster zeigt Original und bereinigte Fassung mit markierten
 Ersetzungen. Aktionen: „Übersehene Stelle markieren“, „Ersetzung zurücknehmen“,
@@ -396,20 +398,28 @@ Jedes Backlog-Item mit Dateizugriff, Freigabe oder Mapping ist erst fertig, wenn
 
 ## Nächste Iteration
 
-Für den nächsten Sprint empfiehlt sich ein dünner, belegbarer Pilot-Slice:
+Der Windows-TXT-/DOCX-Vertical-Slice, das datensparsame Audit und die lokale
+Review-/Skip-Grenze sind inzwischen umgesetzt. Der nächste Sprint soll deshalb
+nicht noch einmal dieselben Spikes planen, sondern den installierten Pilotpfad
+belegen:
 
-- DS-001: vorhandene Skills hinter einem sichtbaren DataSecure-Einstieg routen
-- DS-002: Fähigkeiten und Fehlertexte vereinheitlichen
-- DS-004: nicht sensitiven Abschlussbericht implementieren
-- DS-005: Upload-Umgehungsfälle als Skill-/Prompt-Tests ergänzen
-- DS-007: frische Windows-Installation inklusive Upgrade/Rollback automatisieren
-- DS-008: persistente Original- und Treffer-Fingerprints aus dem Audit entfernen
-- DS-009: Worker-/Isolation-Spike für Parser und OCR durchführen
-- DS-003 als UI-/Human-Presence-Spike spezifizieren, noch nicht improvisiert über
-  modellgesteuerte MCP-Parameter umsetzen
+1. **DS-007:** MCPB und Plugin-ZIP auf einer frischen Windows-Umgebung installieren;
+   Start, Upgrade, Rollback, Prüfsummen, SBOM und Codesignatur nachweisen.
+2. **DS-001/DS-002/DS-004:** den geführten Einstieg, `privacy_status` und den
+   datensparsamen Abschlussbericht innerhalb der installierten Claude-Oberfläche
+   mit dem synthetischen Abnahmekorpus prüfen.
+3. **DS-003:** menschliche Windows-Usability-Abnahme durchführen und einen lokalen
+   Human-Presence-Kanal für visuelle Freigaben entwerfen; visuelle Freigabe bleibt
+   bis dahin deaktiviert.
+4. **DS-009:** Parser und OCR in ressourcenbegrenzte, netzlose Worker auslagern.
+5. **DS-203:** TXT/DOCX-Dateidialog und Reviewpfad zuerst auf Text-PDF, danach auf
+   weitere strukturell belegbare Formate erweitern; XLSX/PPTX/PDF bleiben bis dahin
+   im Input-Ordner-Workflow.
+6. **DS-005/DS-205:** Upload-Umgehung und Verständlichkeit mit fachfremden
+   Pilotanwendern ausschließlich anhand synthetischer Dokumente prüfen.
 
-Erst wenn dieser Slice im Pilot ohne technische Begriffe und ohne Rohdaten-Upload
-funktioniert, sollte die plattformübergreifende Paketierung parallelisiert werden.
+Erst wenn Installation, installierter End-to-End-Pfad und menschliche Bedienbarkeit
+belegt sind, sollte ein Pilot mit ausdrücklich freigegebenen Daten erwogen werden.
 
 ## Validierte Annahmen zur Claude-Verteilung
 
@@ -420,8 +430,9 @@ Die Planung stützt sich auf den am 21.08.2026 dokumentierten Claude-Stand:
   internen GitHub-Repository synchronisieren.
 - Organisations-Skills benötigen aktivierte Skills sowie Codeausführung/Dateierstellung;
   gruppenspezifische Skills sollen als Plugin verteilt werden.
-- Plugin-Skills sind in Claude Chat/Desktop und Cowork nutzbar; nicht jede erweiterte
-  Plugin-Komponente steht in jeder Oberfläche zur Verfügung.
+- Plugin-Skills sind in Claude Chat/Desktop und Cowork nutzbar. Lokale MCP-Server
+  stehen nach aktuellem Claude-Stand nur in Desktop und Claude Code zur Verfügung;
+  Web/Cowork sind deshalb kein Rohdaten-Preflight-Pfad.
 - Cowork-Connectoren erreichen externe Dienste über Anthropic-Infrastruktur und sind
   deshalb kein Ersatz für den lokalen Rohdaten-Gate.
 

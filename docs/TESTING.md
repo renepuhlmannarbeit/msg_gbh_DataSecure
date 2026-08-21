@@ -24,14 +24,14 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-companion-job-store.js` | 8 | versioned append-only job contract, monotone transitions, local human evidence, limited verification claims, release hash binding, terminal states, strict raw-data-field refusal, tamper and traversal refusal |
 | `test-companion-retention.js` | 6 | expiry and zero-day cleanup, strict direct-entry deletion, unsafe-entry preservation, metadata-only status, and local human evidence for immediate purge |
 | `test-companion-ipc.js` | 8 | platform picker commands, strict source validation, local fallback, HMAC/session/replay enforcement, path-free responses and journals, local cancellation, and real fd-3 bootstrap process start |
-| `test-companion-processor.js` | 18 | TXT/DOCX release, terminal local cancellation and skip, locator-scoped manual redactions with exact preview, post-edit residual blocking, value-free and Unicode-stable highlight hints, real UTF-8 Windows pipe plus stdin-only review transport, visual/unsupported-part DOCX blocking, abandoned private-copy cleanup, rollback, queue isolation, and path-free result/audit evidence |
+| `test-companion-processor.js` | 19 | TXT/DOCX release, terminal local cancellation and skip, locator-scoped manual redactions with exact preview, post-edit residual blocking, value-free and Unicode-stable highlight hints, real UTF-8 Windows pipe plus stdin-only review transport, real Windows-Forms initialization and automated button-path acceptance, visual/unsupported-part DOCX blocking, abandoned private-copy cleanup, rollback, queue isolation, and path-free result/audit evidence |
 | `test-companion-supervisor.js` | 8 | child-environment secret filtering, Windows process-tree termination, real authenticated launch, sequence recovery, picker-before-processing orchestration, guaranteed close, and pre-launch profile/platform refusal |
 | `test-gateway-e2e.js` | 22 | Office/PDF plus standalone PNG and scanned-PDF routes end to end, explicit-profile enforcement for image-only input, internal visual-release primitive and preview deletion (not exposed through MCP), zero-day retention, audit migration blocking, tamper detection, path traversal, source claiming and failure-injected cleanup/publish/move rollback |
 | `test-mcp-protocol.js` | 24 | the server driven over real stdio: startup orphan cleanup, handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, error codes, notification handling, stdout framing |
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 287 assertion-level cases plus the plugin structure check (288 checks overall).
+Total: 288 assertion-level cases plus the plugin structure check (**289 checks overall**).
 
 ## The adversarial suite
 
@@ -120,8 +120,14 @@ supported runtime, so a Linux-only pipeline would not prove much; the visual
 bridge itself is stubbed in tests and still needs one manual acceptance run on a
 target machine with Windows OCR available.
 
-## Still requiring manual acceptance
+## Native Windows acceptance status
 
-- Windows OCR against a real scanned document
-- EMF/WMF rasterisation through the PowerShell bridge
-- plugin installation in the Claude engineering environment; no real-data pilot before the signed local companion provides human-presence review
+- Passed: Windows OCR/redaction/verification against a synthetically rendered scan.
+- Passed: the real Windows text-review form initializes, selects a synthetic alias,
+  invokes the redaction and approval buttons, returns the exact range and preserves
+  the professional text. This proves the native control path, not human usability.
+- Still open: EMF/WMF rasterisation through the PowerShell bridge.
+- Still open: installation, upgrade and rollback in a fresh Claude engineering
+  environment.
+- Still open: a small human usability acceptance and the signed local companion;
+  no real-data pilot before both are approved.

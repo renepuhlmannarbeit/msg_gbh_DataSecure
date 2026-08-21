@@ -83,7 +83,9 @@ Der Status enthält nur:
 
 ## Nächster Implementierungsschritt
 
-1. Review-Oberfläche plattformübergreifend bereitstellen und reale UI-Abnahmen ergänzen.
+1. Menschliche Windows-Usability-Abnahme ergänzen und Review-Oberfläche
+   plattformübergreifend bereitstellen. Der native Windows-Formularpfad ist bereits
+   automatisiert mit synthetischen Daten abgenommen.
 2. Replacement-Provenienz und Source-Locatoren aus dem tatsächlichen TXT-/OOXML-Extractor ergänzen.
 3. Text-PDF und isolierte Worker ergänzen.
 4. Companion-Packaging signieren und Installationsherkunft nachweisen.
