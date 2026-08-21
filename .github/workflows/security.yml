@@ -67,8 +67,8 @@ jobs:
       - name: Build native Windows launcher
         # CodeQL compiler instrumentation intentionally changes the produced
         # bytes. CI's separate build job performs the byte-for-byte /Brepro
-        # comparison for the same commit; this job compiles the same pinned
-        # source/toolchain solely for native analysis.
+        # comparison for the same commit; this job compiles the same source and
+        # pinned SDK with the runner MSVC solely for native analysis.
         run: npm run native:analyze
       - name: Analyze native launcher
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4

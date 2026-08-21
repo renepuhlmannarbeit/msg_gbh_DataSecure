@@ -41,9 +41,12 @@ if (!fs.existsSync(vcvars) || !fs.existsSync(source)) throw new Error('native la
 fs.mkdirSync(trackedDir, { recursive: true });
 
 const quote = (value) => `"${String(value).replaceAll('"', '""')}"`;
+const compilerGuard = mode === '--analyze'
+  ? []
+  : ['cl.exe', '/Bv', '2>&1', '|', 'findstr', `/C:${quote(expectedCompiler)}`, '>nul', '&&'];
 const command = [
   'call', quote(vcvars), 'x64', expectedWindowsSdk, '>nul', '&&',
-  'cl.exe', '/Bv', '2>&1', '|', 'findstr', `/C:${quote(expectedCompiler)}`, '>nul', '&&',
+  ...compilerGuard,
   'cl.exe', '/nologo', '/std:c++17', '/O2', '/MT', '/W4', '/WX', '/sdl', '/guard:cf',
   '/DUNICODE', '/D_UNICODE', '/Brepro', `/Fe:${quote(output)}`, `/Fo:${quote(object)}`,
   quote(source), '/link', '/SUBSYSTEM:CONSOLE', '/guard:cf', '/CETCOMPAT',
@@ -73,7 +76,7 @@ try {
     }
     console.log(`Native source/binary reproducibility verified: sha256=${hash}\ntoolchain=MSVC ${expectedCompiler} / Windows SDK ${expectedWindowsSdk}`);
   } else {
-    console.log(`Native analysis build completed: sha256=${hash}\ntoolchain=MSVC ${expectedCompiler} / Windows SDK ${expectedWindowsSdk}`);
+    console.log(`Native analysis build completed: sha256=${hash}\ntoolchain=runner MSVC / Windows SDK ${expectedWindowsSdk}`);
   }
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
