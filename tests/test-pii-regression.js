@@ -403,10 +403,46 @@ test('comma-shaped domain and language lines are not people', () => {
   }
 });
 
+const unlistedCommaPairs = [
+  'Beratung, Umsetzung',
+  'Analyse, Konzeption',
+  'Migration, Schulung',
+  'Verzahnung, Nachlauf'
+];
+
+function assertCommaPairsPreserved(profile, belowSection) {
+  for (const value of unlistedCommaPairs) {
+    const src = belowSection
+      ? `## Qualifikationen\n${value}\n`
+      : `${value}\n\nQualifikationen\nFachliche Inhalte\n`;
+    const { text, counts } = anonymizeVerified(src, profile);
+    assertPresent(text, value, 'unlisted domain content');
+    assert.strictEqual(counts.PERSON, 0, `expected no person for ${profile}: ${value}`);
+  }
+}
+
+test('unlisted comma pairs remain intact in the personnel profile header', () => {
+  assertCommaPairsPreserved('personnel_profile', false);
+});
+
+test('unlisted comma pairs remain intact below personnel profile sections', () => {
+  assertCommaPairsPreserved('personnel_profile', true);
+});
+
+test('unlisted comma pairs remain intact in the applicant header', () => {
+  assertCommaPairsPreserved('applicant', false);
+});
+
+test('unlisted comma pairs remain intact below applicant sections', () => {
+  assertCommaPairsPreserved('applicant', true);
+});
+
 test('a comma-formatted surname and given name remain detectable', () => {
-  const { text, counts } = anonymizeVerified('Mustermann, Max\n', 'personnel_profile');
-  assert.strictEqual(text.trim(), '[PERSON_001]');
-  assert.strictEqual(counts.PERSON, 1);
+  for (const value of ['Mustermann, Max', 'Beispiel, Erika Maria']) {
+    const { text, counts } = anonymizeVerified(`${value}\n`, 'personnel_profile');
+    assert.strictEqual(text.trim(), '[PERSON_001]');
+    assert.strictEqual(counts.PERSON, 1);
+  }
 });
 
 test('a person name with nobiliary particles remains detectable', () => {
@@ -421,6 +457,33 @@ test('comma-separated role names remain preserved', () => {
   const { text, counts } = anonymizeVerified(`${value}\n`, 'personnel_profile');
   assertPresent(text, value, 'role names');
   assert.strictEqual(counts.PERSON, 0);
+});
+
+test('a labelled contact name remains detectable below profile sections', () => {
+  const src = [
+    'Qualifikationen',
+    'Fachliche Inhalte',
+    'Projekterfahrung',
+    'Mehrere Projekte',
+    'Ansprechpartner: Thomas Berger'
+  ].join('\n');
+  const { text, counts } = anonymizeVerified(src, 'personnel_profile');
+  assertAbsent(text, 'Thomas Berger', 'late contact name');
+  assertPresent(text, '[PERSON_001]', 'person pseudonym');
+  assert.strictEqual(counts.PERSON, 1);
+});
+
+test('a bare name with immediate contact evidence remains detectable below profile sections', () => {
+  const src = [
+    'Qualifikationen',
+    'Fachliche Inhalte',
+    'Max Mustermann',
+    'Telefon: +49 40 555 0101'
+  ].join('\n');
+  const { text, counts } = anonymizeVerified(src, 'personnel_profile');
+  assertAbsent(text, 'Max Mustermann', 'late contact-block name');
+  assertPresent(text, '[PERSON_001]', 'person pseudonym');
+  assert.strictEqual(counts.PERSON, 1);
 });
 
 test('looksName rejects roles, technologies and honorifics', () => {

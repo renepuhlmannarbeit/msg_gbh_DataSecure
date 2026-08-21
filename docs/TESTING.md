@@ -15,7 +15,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-manifest.js` | 13 | version consistency across package.json, MCPB manifest, plugin.json, VERSION, BUILD_INFO and all skills; tool/prompt parity between manifest and server; marketplace target; that the plugin entry point resolves inside the plugin root; that every test the npm script names exists |
 | `test-plugin-structure.js` | – | plugin directory layout, skill frontmatter, MCP config |
 | `test-parsers.js` | 21 | DOCX/XLSX/PPTX text, entities, embedded and vector media; ZIP hardening including false sizes, aggregate limits and header consistency; PDF text layer and escapes; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
-| `test-pii-regression.js` | 42 | golden personnel profile byte for byte, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
+| `test-pii-regression.js` | 48 | golden personnel profile byte for byte, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
 | `test-image-sanitizer.js` | 20 | PNG/BMP round trips, bounded PNG decompression and chunk lengths, metadata stripping, refusal of unsupported variants, OCR offset mapping, pixel-level redaction with padding and clamping |
 | `test-visual.js` | 19 | every branch of the visual gate with injected OCR and rasteriser bridges |
 | `test-gateway-e2e.js` | 15 | the four document types end to end, human approval, tamper detection, path traversal, source claiming and failure-injected publish/move rollback |
@@ -23,7 +23,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 191 assertion-level cases plus the plugin structure check.
+Total: 197 assertion-level cases plus the plugin structure check.
 
 ## The adversarial suite
 
@@ -88,6 +88,11 @@ Each of these corresponds to a defect found in 3.2.0-rc2:
   Stories` and `Azure DevOps` were pseudonymised
 - comma-shaped industry, language and role lines bypassed the person-name
   plausibility filter, while real comma and particle names still need detection
+- applicant and personnel profiles treated their first 40 non-empty lines as
+  implicit person context, so unlisted comma-shaped capability pairs in both
+  headers and section bodies were pseudonymised; structural header boundaries,
+  conservative noun morphology and immediate body contact evidence now separate
+  those cases without weakening labelled person anchors
 - five-digit quantities followed by units such as `Euro`, `Stück` or `Punkte`
   were mistaken for postal addresses
 - representative golden, contact, comma-name and contract documents did not

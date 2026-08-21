@@ -41,6 +41,32 @@ function isLabelLine(line) {
   return /^[^:\n]{1,40}:/.test(String(line).trim());
 }
 
+const HEADER_SECTION_RE =
+  /^(?:Qualifikationen|Projekterfahrung|Berufserfahrung|Skillset|Zertifizierungen|Sprachkenntnisse|Branchenkenntnisse|Technologien|Methoden|Kenntnisse|Ausbildung|Werdegang)\s*:?$/iu;
+
+function endsProfileHeader(line) {
+  const s = String(line).trim();
+  return (
+    /^#{1,6}\s+/.test(s) ||
+    /^[-*+]\s/.test(s) ||
+    /^\d+[.)]\s/.test(s) ||
+    HEADER_SECTION_RE.test(s)
+  );
+}
+
+// Abstract German nouns are common in capability lists but extremely unlikely
+// as every component of an unlabelled person line. This shape check scales to
+// unseen vocabulary without turning the role-word set into a noun dictionary.
+const ABSTRACT_NOUN_ENDING_RE =
+  /(?:ung(?:en)?|tion(?:en)?|sion(?:en)?|tät(?:en)?|keit(?:en)?|heit(?:en)?|schaft(?:en)?|nis(?:se)?|ment(?:e)?|lauf|läufe|lyse|wesen)$/iu;
+
+function hasAbstractNounShape(value) {
+  return normalizeSpaces(value.replace(',', ' '))
+    .split(/\s+/)
+    .filter((token) => !/^(?:von|van|de|del|der|den|zu|zur|zum)$/iu.test(token))
+    .every((token) => ABSTRACT_NOUN_ENDING_RE.test(token));
+}
+
 function stripHonorifics(value) {
   const toks = normalizeSpaces(value).split(/\s+/);
   while (toks.length && isStopToken(toks[0])) toks.shift();
@@ -91,9 +117,10 @@ function collectPersonAnchors(text) {
 const CONTACT_CONTEXT_RE =
   /(?:\b\d{5}[ \t]+[A-ZÄÖÜ]|(?:straße|strasse|str\.|weg|allee|gasse|platz|ring|damm|ufer|chaussee|stieg)[ \t]+\d|(?:telefon|tel\.?|mobil|handy|fax|e-?mail)[ \t]*:)/iu;
 
-// Medium confidence: a bare title-case name in a profile header, or in a
-// compact contact/address block for all other profiles. Nearby contact
-// evidence prevents ordinary title-case prose from becoming a person.
+// Medium confidence: a bare title-case name in the structural profile header,
+// or in a compact contact/address block. Once a section starts, profile body
+// prose no longer inherits implicit person context merely because it occurs in
+// the first 40 lines.
 function collectHeaderNameCandidates(text, profile, maxLines = 40) {
   const out = [];
   const bigram = new RegExp(
@@ -111,17 +138,24 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40) {
   );
   const allLines = lines(text);
   let seen = 0;
+  let inHeader = true;
   for (let index = 0; index < allLines.length; index++) {
     const line = allLines[index];
     const s = line.trim();
     if (!s) continue;
     if (++seen > maxLines) break;
+    if (endsProfileHeader(s)) inHeader = false;
     if (isStructuralLine(s) || isLabelLine(s)) continue;
-    let hasContext = true;
-    if (profile !== 'applicant' && profile !== 'personnel_profile') {
-      const from = Math.max(0, index - 3);
+    let hasContext = inHeader;
+    if (!hasContext) {
+      // In profile bodies a wide window can turn a section phrase immediately
+      // before a labelled contact into a second person. Direct neighbours are
+      // enough for an unlabelled address block; other profiles keep the wider
+      // customer/contract window used before rc3.
+      const radius = profile === 'applicant' || profile === 'personnel_profile' ? 1 : 3;
+      const from = Math.max(0, index - radius);
       const nearby = allLines
-        .slice(from, Math.min(allLines.length, index + 4))
+        .slice(from, Math.min(allLines.length, index + radius + 1))
         .filter((_value, relative) => from + relative !== index)
         .join('\n');
       hasContext = CONTACT_CONTEXT_RE.test(nearby);
@@ -129,6 +163,7 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40) {
     if (!hasContext) continue;
     if (commaName.test(s)) {
       if (!looksName(titleCase(s.replace(',', ' ')))) continue;
+      if (hasAbstractNounShape(s)) continue;
       // In "Surname, Given name" the first token would be the useful alias,
       // but registering an unlabelled leading token is unsafe: comma-shaped
       // domain lists are common, and a false alias would redact prose globally.
@@ -138,6 +173,7 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40) {
     if (particleName.test(s)) {
       const withoutParticles = s.replace(/\b(?:von|van|de|del|der|den|zu|zur|zum)\b/giu, ' ');
       if (!looksName(titleCase(withoutParticles))) continue;
+      if (hasAbstractNounShape(s)) continue;
       out.push({ value: s, confidence: 'header_particle' });
       continue;
     }
