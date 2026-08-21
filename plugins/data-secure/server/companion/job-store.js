@@ -280,9 +280,10 @@ function companionCapabilities() {
   return {
     api_version: API_VERSION,
     job_schema: JOB_SCHEMA,
-    phase: 'private_ipc_ready',
+    phase: 'txt_docx_vertical_slice_ready',
     supported_states: [...STATES],
-    local_ui: 'native_file_picker_ready',
+    local_ui: 'native_picker_and_skip_confirmation',
+    supported_vertical_slice_inputs: ['TXT', 'DOCX'],
     private_ipc: 'inherited_stdio_authenticated',
     binary_signing: 'not_implemented',
     job_retention: 'integrated',

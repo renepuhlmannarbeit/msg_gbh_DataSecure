@@ -175,6 +175,24 @@ Privacy-Ordner"*.
 
 ## Teil 7: So arbeiten Sie damit
 
+### Empfohlener Weg für TXT und Word-Dokumente
+
+1. Bitten Sie Claude: *„Bereite eine lokale Datei für Claude vor.“*
+2. DataSecure öffnet einen Dateidialog außerhalb Claude. Wählen Sie eine TXT- oder
+   DOCX-Datei. Claude sieht weder den Pfad noch das Original.
+3. DataSecure ersetzt erkannte Stellen lokal. Enthält das Dokument keine
+   zurückgehaltenen Bilder oder technischen Unsicherheiten, erscheint ein zweiter
+   lokaler Dialog mit der Trefferzahl. Nur dort können Sie bewusst „ohne zusätzliche
+   Textprüfung fortfahren“.
+4. Erst nach diesem Klick kann Claude die bereinigte Fassung lesen. Das von Ihnen
+   gewählte Original bleibt unverändert an seinem bisherigen Ort.
+
+Wählen Sie im zweiten Dialog „Nein“, wird nichts veröffentlicht. Word-Dokumente mit
+Bildern oder nicht vollständig prüfbaren Inhalten bleiben ebenfalls gesperrt, bis die
+lokale Review-Oberfläche implementiert ist.
+
+### Bestehender Ordnerweg für weitere Formate
+
 1. **Dokument in `Input` kopieren.** PDF, Word, Excel, PowerPoint, TXT, Markdown,
    CSV sowie eigenständige PNG-, JPEG- oder BMP-Bilder werden unterstützt.
    Kopieren, nicht verschieben — DataSecure schiebt die Datei später selbst

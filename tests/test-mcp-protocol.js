@@ -103,7 +103,7 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 11, `expected exactly 11 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 12, `expected exactly 12 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {
@@ -186,8 +186,9 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.audit_migration_errors, 'number');
     assert.strictEqual(typeof result.structuredContent.audit_write_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
-    assert.strictEqual(result.structuredContent.companion_phase, 'private_ipc_ready');
-    assert.strictEqual(result.structuredContent.companion_local_ui, 'native_file_picker_ready');
+    assert.strictEqual(result.structuredContent.companion_phase, 'txt_docx_vertical_slice_ready');
+    assert.strictEqual(result.structuredContent.companion_local_ui, 'native_picker_and_skip_confirmation');
+    assert.deepStrictEqual(result.structuredContent.companion_supported_vertical_slice_inputs, ['TXT', 'DOCX']);
     assert.strictEqual(result.structuredContent.companion_private_ipc, 'inherited_stdio_authenticated');
     assert.strictEqual(result.structuredContent.companion_binary_signing, 'not_implemented');
     assert.strictEqual(result.structuredContent.companion_job_retention, 'integrated');

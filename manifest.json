@@ -72,6 +72,10 @@
       "description": "Lokaler Engine-, Queue-, Paket- und Reviewstatus ohne Rohinhalt."
     },
     {
+      "name": "prepare_local_document",
+      "description": "Öffnet für TXT/DOCX einen lokalen Dateidialog und verlangt vor Freigabe eine separate lokale Bestätigung; Claude erhält weder Quellpfad noch Originalbytes."
+    },
+    {
       "name": "open_privacy_folder",
       "description": "Öffnet den lokalen Privacy-Ordner."
     },

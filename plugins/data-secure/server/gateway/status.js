@@ -45,6 +45,7 @@ function genericStatus(options = {}) {
     companion_api_version: companion.api_version,
     companion_phase: companion.phase,
     companion_local_ui: companion.local_ui,
+    companion_supported_vertical_slice_inputs: companion.supported_vertical_slice_inputs,
     companion_private_ipc: companion.private_ipc,
     companion_binary_signing: companion.binary_signing,
     companion_job_retention: companion.job_retention,

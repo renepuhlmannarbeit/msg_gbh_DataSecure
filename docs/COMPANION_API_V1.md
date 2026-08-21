@@ -1,14 +1,15 @@
 # DataSecure Companion API v1
 
-Status: Vertrag, Job-Retention, privater IPC und nativer File Picker implementiert;
-Review-UI und signiertes Packaging noch nicht implementiert.
+Status: Vertrag, Job-Retention, privater IPC sowie TXT-/DOCX-Vertical-Slice mit
+lokalem File Picker und Skip-Klick implementiert; Review-UI und signiertes Packaging
+noch nicht implementiert.
 
 ## Zweck
 
-Der Companion wird die lokale Sicherheitsgrenze zwischen Originaldateien und
-Claude. Die API v1 legt zunächst das unveränderliche Jobmodell fest. Sie ist noch
-nicht als MCP-Tool veröffentlicht: Claude darf Jobs weder reviewen noch überspringen
-noch freigeben.
+Der Companion ist die lokale Sicherheitsgrenze zwischen Originaldateien und Claude.
+Claude darf den geführten lokalen Workflow starten, aber Jobs weder reviewen noch
+überspringen noch freigeben. Diese Übergänge bleiben im privaten Companion und
+benötigen den lokalen Dialogklick.
 
 ## Sicherheitsvertrag
 
@@ -62,7 +63,7 @@ Der Status enthält nur:
 
 ## Nächster Implementierungsschritt
 
-1. Companion-Launcher an die MCP-Fassade anbinden und Packaging signieren.
-2. Extraktionsergebnisse über versionierte Source-Locator-IDs an die lokale UI geben.
-3. Lokale Review-/Skip-Action an einen echten UI-Klick und Output-Hash binden.
-4. TXT-/DOCX-Vertical-Slice gegen diesen Zustandsautomaten integrieren.
+1. Extraktionsergebnisse über versionierte Source-Locator-IDs an die lokale Review-UI geben.
+2. Manuelle Korrekturen erneut durch Residual-Gate und Release-Bindung führen.
+3. Text-PDF und isolierte Worker ergänzen.
+4. Companion-Packaging signieren und Installationsherkunft nachweisen.

@@ -2,10 +2,10 @@
 const {SafeError}=require('./runtime');
 const {roots,openFolder,detectProfileFromMarkdown,safePackageId}=require('./gateway/common');
 const {genericStatus}=require('./gateway/status');
-const {anonymizeNext}=require('./gateway/orchestrator');
+const {anonymizeNext,anonymizeSelectedSource}=require('./gateway/orchestrator');
 const {listOutputs,readOutput,listAssets,readAsset}=require('./gateway/package-store');
 const {listReviewItems,approveReviewAsset}=require('./gateway/review');
 const {prepareVisual,processVisuals}=require('./gateway/visuals');
 const {anonymizeMarkdown}=require('./gateway/compliance');
 const {cleanupLocalData,retentionStatus,purgeLocalData}=require('./gateway/retention');
-module.exports={SafeError,roots,genericStatus,openFolder,anonymizeNext,listOutputs,readOutput,listAssets,readAsset,listReviewItems,approveReviewAsset,cleanupLocalData,retentionStatus,purgeLocalData,_test:{detectProfileFromMarkdown,safePackageId,prepareVisual,anonymizeMarkdown,processVisuals}};
+module.exports={SafeError,roots,genericStatus,openFolder,anonymizeNext,listOutputs,readOutput,listAssets,readAsset,listReviewItems,approveReviewAsset,cleanupLocalData,retentionStatus,purgeLocalData,_internal:{anonymizeSelectedSource},_test:{detectProfileFromMarkdown,safePackageId,prepareVisual,anonymizeMarkdown,processVisuals}};

@@ -17,8 +17,8 @@ If the original sensitive document has already been pasted or uploaded directly 
 ## Workflow
 
 1. Call `privacy_status`.
-2. If no input document is queued, call `open_privacy_folder` and tell the user to copy the source file into the `Input` folder.
-3. Call `anonymize_next_document` with `profile=auto` unless a more specific profile is clearly requested.
+2. For TXT or DOCX, call `prepare_local_document` with `profile=auto` unless a more specific profile is clearly requested. It opens the operating-system file picker and a separate local confirmation; never ask for or infer the source path.
+3. For other formats, if no input document is queued, call `open_privacy_folder`, tell the user to copy the source file into `Input`, and then call `anonymize_next_document`.
 4. If processing succeeds, use `list_anonymized_packages` when package selection is needed, then only `read_anonymized_document` for text. Use `list_anonymized_assets` before `read_anonymized_asset` for released visuals. `open_output_folder` is only for a user who wants to inspect the local released package.
 5. Never try to read the original source file through another connector or tool as part of this privacy workflow.
 6. If visuals are held for review, use `list_visual_review_items` and explain that they remain local and unavailable to Claude. `open_visual_review_folder` may be used for local inspection, but the current MCP interface intentionally has no approval tool: a model-controlled boolean is not evidence of a human action. Visual release remains disabled until the signed local companion provides a human-presence boundary. Preview bytes disappear when the retention window expires.

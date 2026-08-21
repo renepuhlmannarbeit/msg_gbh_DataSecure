@@ -56,7 +56,7 @@ const toolsEnd=indexSource.indexOf('];',toolsStart);
 assert.notStrictEqual(toolsStart,-1,'TOOLS table missing');
 assert.notStrictEqual(toolsEnd,-1,'TOOLS table is unterminated');
 const toolNames=[...indexSource.slice(toolsStart,toolsEnd).matchAll(/\{name:'([a-z_]+)',title:/g)].map(m=>m[1]);
-assert.strictEqual(toolNames.length,11,'unexpected tool count');
+assert.strictEqual(toolNames.length,12,'unexpected tool count');
 assert.ok(!toolNames.includes('approve_visual_asset'),'Claude must not receive a model-callable human approval tool');
 
 const instructionsStart=indexSource.indexOf('const INSTRUCTIONS=');

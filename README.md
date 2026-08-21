@@ -102,7 +102,7 @@ Runtime-Installation ersetzen.
 npm test
 ```
 
-259 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag, -Retention und privaten IPC/File-Picker, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+274 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/File-Picker und TXT-/DOCX-Verarbeitung, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -132,6 +132,6 @@ Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für
 
 ## Release-Status
 
-RC8 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Vor einem Pilot muss insbesondere die lokale Human-Presence-Grenze für Review/Freigabe umgesetzt sein. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+RC8 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt jetzt eine lokale Human-Presence-Grenze für bewusstes Überspringen der Zusatzprüfung; die Gegenüberstellung, manuelle Korrektur, visuelle Freigabe sowie signiertes Packaging fehlen weiterhin. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

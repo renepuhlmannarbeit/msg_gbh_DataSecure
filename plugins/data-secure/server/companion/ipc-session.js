@@ -2,12 +2,13 @@
 
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
-const { createJob, transitionJob } = require('./job-store');
+const { createJob, transitionJob, jobStatus } = require('./job-store');
 const { purgeCompanionJobs } = require('./retention');
 const { pickSource, validateSelectedPath } = require('./file-picker');
+const { processCompanionJob } = require('./processor');
 
 const IPC_VERSION = 'data-secure-companion-ipc/1';
-const COMMANDS = new Set(['capabilities', 'pick_source', 'cancel_job', 'purge_jobs']);
+const COMMANDS = new Set(['capabilities', 'pick_source', 'process_source', 'cancel_job', 'purge_jobs']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 
 function exactKeys(value, expected) {
@@ -73,6 +74,7 @@ function createCompanionSession(options = {}) {
   const secret = validSecret(options.secret || crypto.randomBytes(32));
   const sessionId = options.sessionId || crypto.randomUUID();
   const selectSource = options.pickSource || pickSource;
+  const processSource = options.processCompanionJob || processCompanionJob;
   const sources = new Map();
   let nextSequence = 1;
 
@@ -117,11 +119,11 @@ function createCompanionSession(options = {}) {
       if (!exactKeys(frame.params, ['profile']) || !PROFILES.has(frame.params.profile)) {
         throw new SafeError('Ungültiges Profil für die lokale Dateiauswahl.');
       }
-      const selectedByAdapter = selectSource();
+      const selectedByAdapter = selectSource({ allowedTypes: ['txt', 'docx'] });
       if (!exactKeys(selectedByAdapter, ['sourcePath', 'sourceType', 'sourceBytes'])) {
         throw new SafeError('Der lokale Dateidialog lieferte ein ungültiges Ergebnis.');
       }
-      const selected = validateSelectedPath(selectedByAdapter.sourcePath);
+      const selected = validateSelectedPath(selectedByAdapter.sourcePath, { allowedTypes: ['txt', 'docx'] });
       if (
         selected.sourceType !== selectedByAdapter.sourceType ||
         selected.sourceBytes !== selectedByAdapter.sourceBytes
@@ -131,6 +133,18 @@ function createCompanionSession(options = {}) {
       const job = createJob({ profile: frame.params.profile, source_type: selected.sourceType });
       sources.set(job.job_id, selected.sourcePath);
       return response({ ok: true, job });
+    }
+    if (frame.command === 'process_source') {
+      if (!exactKeys(frame.params, ['job_id'])) {
+        throw new SafeError('Verarbeitung benötigt genau eine Job-ID.');
+      }
+      const sourcePath = sources.get(frame.params.job_id);
+      if (!sourcePath) throw new SafeError('Für diesen Job ist keine private Quelle gebunden.');
+      const profile = jobStatus(frame.params.job_id).profile;
+      return Promise.resolve(processSource(frame.params.job_id, sourcePath, profile)).then((result) => {
+        if (result?.ok) sources.delete(frame.params.job_id);
+        return response(result);
+      });
     }
     if (frame.command === 'cancel_job') {
       if (!exactKeys(frame.params, ['job_id'])) throw new SafeError('Abbruch benötigt genau eine Job-ID.');

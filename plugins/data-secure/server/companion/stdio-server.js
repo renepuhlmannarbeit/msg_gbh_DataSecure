@@ -19,18 +19,22 @@ const session = createCompanionSession({ secret: readBootstrapSecret() });
 write({ type: 'ready', ...session.descriptor() });
 
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+let sequence = Promise.resolve();
 input.on('line', (line) => {
-  try {
-    const frame = JSON.parse(line);
-    write({ type: 'result', sequence: frame?.sequence ?? null, result: session.dispatch(frame) });
-  } catch (error) {
-    write({
-      type: 'error',
-      code: error instanceof SafeError ? 'REQUEST_REJECTED' : 'INTERNAL_ERROR',
-      message:
-        error instanceof SafeError
-          ? error.message
-          : 'Companion-Anfrage wurde sicher abgebrochen.'
-    });
-  }
+  sequence = sequence.then(async () => {
+    let frameSequence = null;
+    try {
+      if (Buffer.byteLength(line, 'utf8') > 16 * 1024) throw new SafeError('Companion-IPC-Frame ist zu groß.');
+      const frame = JSON.parse(line);
+      frameSequence = frame?.sequence ?? null;
+      const result = await session.dispatch(frame);
+      write({ type: 'result', sequence: frame?.sequence ?? null, result });
+    } catch (error) {
+      write({
+        type: 'error', sequence: frameSequence,
+        code: error instanceof SafeError ? 'REQUEST_REJECTED' : 'INTERNAL_ERROR',
+        message: error instanceof SafeError ? error.message : 'Companion-Anfrage wurde sicher abgebrochen.'
+      });
+    }
+  });
 });

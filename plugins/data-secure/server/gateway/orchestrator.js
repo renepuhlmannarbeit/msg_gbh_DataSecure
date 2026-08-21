@@ -36,6 +36,38 @@ function newJobId() {
   return `${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
 }
 
+function copyRegularFileExclusive(source, destination, expectedStat) {
+  const noFollow = fs.constants.O_NOFOLLOW || 0;
+  let sourceFd;
+  let destinationFd;
+  try {
+    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
+    const opened = fs.fstatSync(sourceFd);
+    const current = fs.lstatSync(source);
+    if (
+      !opened.isFile() || !current.isFile() || current.isSymbolicLink() ||
+      opened.dev !== expectedStat.dev || opened.ino !== expectedStat.ino ||
+      current.dev !== expectedStat.dev || current.ino !== expectedStat.ino ||
+      opened.size !== expectedStat.size || current.size !== expectedStat.size
+    ) {
+      throw new SafeError('Die ausgewählte Datei wurde während der Übergabe verändert.');
+    }
+    destinationFd = fs.openSync(destination, 'wx', 0o600);
+    const chunk = Buffer.allocUnsafe(64 * 1024);
+    let position = 0;
+    while (position < opened.size) {
+      const read = fs.readSync(sourceFd, chunk, 0, Math.min(chunk.length, opened.size - position), position);
+      if (read <= 0) throw new SafeError('Die private Arbeitskopie ist unvollständig.');
+      let written = 0;
+      while (written < read) written += fs.writeSync(destinationFd, chunk, written, read - written);
+      position += read;
+    }
+  } finally {
+    if (destinationFd !== undefined) fs.closeSync(destinationFd);
+    if (sourceFd !== undefined) fs.closeSync(sourceFd);
+  }
+}
+
 function bestEffortRetentionCleanup(deps, scope = 'all') {
   try {
     const cleanup = deps.cleanupLocalData || cleanupLocalData;
@@ -65,7 +97,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     );
   }
 
-  const queue = listInput();
+  const queue = deps.inputQueue || listInput();
   if (!queue.length) {
     return {
       ok: false,
@@ -91,12 +123,21 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   let processedPath = null;
   let reviewPackageId = null;
   let auditReceiptRetained = false;
+  const copiedClaim = deps.copyClaim === true;
   try {
-    source = path.join(r.input, `.processing_${jobId}_${originalName}`);
-    fs.renameSync(originalSource, source);
+    source = copiedClaim
+      ? path.join(jobDir, `source${ext}`)
+      : path.join(r.input, `.processing_${jobId}_${originalName}`);
+    if (copiedClaim) {
+      copyRegularFileExclusive(originalSource, source, queue[0].stat);
+    } else {
+      fs.renameSync(originalSource, source);
+    }
     claimed = true;
+    if (deps.onClaimed) await deps.onClaimed();
 
     const converted = await convertDocument(source);
+    if (deps.onExtracted) await deps.onExtracted(converted);
     if (requested === 'auto' && converted.requiresExplicitProfile) {
       throw new SafeError(
         'Für reine Bild-/Scan-Eingaben muss das Datenschutzprofil ausdrücklich gewählt werden; ' +
@@ -131,6 +172,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
 
     const anon = anonymizeMarkdown(rawWithOcr, effective);
+    if (deps.onDetected) {
+      await deps.onDetected({
+        profile: effective,
+        detected_identifiers: anon.entityCount,
+        technical_review_required: vis.results.some((item) => item.status !== 'included')
+      });
+    }
     const included = vis.results.filter((x) => x.status === 'included').length;
     const review = vis.results.length - included;
 
@@ -166,6 +214,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       results: vis.results
     });
 
+    const documentSha256 = sha256File(mdPath);
     const manifest = {
       schema: 'eu-privacy-package/2',
       gateway_version: VERSION,
@@ -175,7 +224,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       profile: effective,
       source_type: ext.slice(1),
       document: mdName,
-      document_sha256: sha256File(mdPath),
+      document_sha256: documentSha256,
       verification: {
         text_residual_pii: 'passed',
         residual_gate_checked_dictionary_literals: true,
@@ -190,9 +239,20 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       pdf_unextractable_visual_objects: converted.unreviewedVisualCount || 0,
       ai_act: aiActMeta(effective)
     };
+    if (deps.companionJobId) manifest.companion_job_id = deps.companionJobId;
     fs.writeFileSync(path.join(stagePackage, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
 
     writePackageAudit(auditReceipt, stagePackage);
+
+    if (deps.beforePublish) {
+      await deps.beforePublish({
+        package_id: packageId,
+        document_sha256: documentSha256,
+        profile: effective,
+        detected_identifiers: anon.entityCount,
+        technical_review_required: review > 0
+      });
+    }
 
     const moveSource = deps.moveProcessed || moveProcessed;
     const publishPackage = deps.publishPackage || ((from, to) => fs.renameSync(from, to));
@@ -200,9 +260,32 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // The source is moved before the package becomes visible. If publishing
     // fails, the catch path restores it to Input. This makes the output rename
     // the single commit point instead of exposing a package from a failed job.
-    processedPath = moveSource(source, originalName);
-    claimed = false;
+    if (copiedClaim) {
+      fs.unlinkSync(source);
+      claimed = false;
+    } else {
+      processedPath = moveSource(source, originalName);
+      claimed = false;
+    }
     publishPackage(stagePackage, finalPackage);
+    try {
+      if (deps.afterPublish) {
+        await deps.afterPublish({
+          package_id: packageId,
+          document_sha256: documentSha256,
+          profile: effective
+        });
+      }
+    } catch (error) {
+      try {
+        fs.rmSync(finalPackage, { recursive: true, force: true });
+      } catch {
+        throw new SafeError(
+          'Companion-Release konnte nicht atomar abgeschlossen werden; manuelle Prüfung erforderlich.'
+        );
+      }
+      throw error;
+    }
     stagePackage = null;
     processedPath = null;
     auditReceiptRetained = retainAudit(auditReceipt);
@@ -232,7 +315,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         review_required: review,
         redactions: vis.results.reduce((n, x) => n + (x.redactions || 0), 0)
       },
-      original_moved_to_processed: true,
+      original_moved_to_processed: !copiedClaim,
       persistent_mapping_retained: false,
       runtime_dependency_install: false,
       raw_content_sent_to_claude: false,
@@ -250,7 +333,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         );
       }
     }
-    if (claimed && fs.existsSync(source) && !fs.existsSync(originalSource)) {
+    if (claimed && copiedClaim && fs.existsSync(source)) {
+      try {
+        fs.unlinkSync(source);
+        claimed = false;
+      } catch {
+        recoveryError = new SafeError(
+          'Verarbeitung wurde gestoppt; die private Arbeitskopie konnte nicht sicher entfernt werden.'
+        );
+      }
+    }
+    if (claimed && !copiedClaim && fs.existsSync(source) && !fs.existsSync(originalSource)) {
       try {
         fs.renameSync(source, originalSource);
         claimed = false;
@@ -291,4 +384,24 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   }
 }
 
-module.exports = { anonymizeNext, bestEffortRetentionCleanup };
+async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
+  const absolute = path.resolve(String(source || ''));
+  if (!path.isAbsolute(String(source || '')) || absolute !== String(source)) {
+    throw new SafeError('Companion-Quelle muss ein absoluter normalisierter Pfad sein.');
+  }
+  const stat = fs.lstatSync(absolute);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new SafeError('Companion-Quelle ist keine reguläre lokale Datei.');
+  }
+  const ext = path.extname(absolute).toLowerCase();
+  if (!new Set(['.txt', '.docx']).has(ext)) {
+    throw new SafeError('Der erste Companion-Slice unterstützt ausschließlich TXT und DOCX.');
+  }
+  return anonymizeNext(profile, {
+    ...deps,
+    inputQueue: [{ name: path.basename(absolute), full: absolute, stat }],
+    copyClaim: true
+  });
+}
+
+module.exports = { anonymizeNext, anonymizeSelectedSource, bestEffortRetentionCleanup };

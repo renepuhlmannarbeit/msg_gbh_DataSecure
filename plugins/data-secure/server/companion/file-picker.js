@@ -30,7 +30,18 @@ function defaultRunner(command, args) {
   });
 }
 
-function pickerCommands(platform = process.platform, env = process.env) {
+function allowedExtensions(allowedTypes) {
+  if (!allowedTypes) return Object.keys(SOURCE_TYPES);
+  const types = new Set(allowedTypes);
+  const extensions = Object.entries(SOURCE_TYPES).filter(([, type]) => types.has(type)).map(([ext]) => ext);
+  if (!extensions.length) throw new SafeError('Der lokale Dateidialog hat keine unterstützten Formate.');
+  return extensions;
+}
+
+function pickerCommands(platform = process.platform, env = process.env, allowedTypes) {
+  const extensions = allowedExtensions(allowedTypes);
+  const windowsFilter = extensions.map((ext) => `*${ext}`).join(';');
+  const unixFilter = extensions.map((ext) => `*${ext}`).join(' ');
   if (platform === 'win32') {
     const systemRoot = env.SystemRoot || 'C:\\Windows';
     const powershell = path.join(
@@ -44,7 +55,7 @@ function pickerCommands(platform = process.platform, env = process.env) {
       'Add-Type -AssemblyName System.Windows.Forms',
       '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
       "$dialog.Title = 'Datei für Claude vorbereiten'",
-      "$dialog.Filter = 'Unterstützte Dateien|*.pdf;*.docx;*.xlsx;*.pptx;*.txt;*.md;*.csv;*.png;*.jpg;*.jpeg;*.bmp'",
+      `$dialog.Filter = 'Unterstützte Dateien|${windowsFilter}'`,
       '$dialog.Multiselect = $false',
       "if ($dialog.ShowDialog() -eq 'OK') { [Console]::Out.Write($dialog.FileName) }"
     ].join('; ');
@@ -61,7 +72,7 @@ function pickerCommands(platform = process.platform, env = process.env) {
   if (platform === 'linux') {
     return [
       { command: 'zenity', args: ['--file-selection', '--title=Datei für Claude vorbereiten'] },
-      { command: 'kdialog', args: ['--getopenfilename', '.', 'Unterstützte Dateien (*.pdf *.docx *.xlsx *.pptx *.txt *.md *.csv *.png *.jpg *.jpeg *.bmp)'] }
+      { command: 'kdialog', args: ['--getopenfilename', '.', `Unterstützte Dateien (${unixFilter})`] }
     ];
   }
   throw new SafeError('Für dieses Betriebssystem ist kein lokaler Dateidialog verfügbar.');
@@ -75,6 +86,9 @@ function validateSelectedPath(selected, options = {}) {
   if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
   const sourceType = SOURCE_TYPES[path.extname(candidate).toLowerCase()];
   if (!sourceType) throw new SafeError('Das ausgewählte Dateiformat wird nicht unterstützt.');
+  if (options.allowedTypes && !new Set(options.allowedTypes).has(sourceType)) {
+    throw new SafeError('Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.');
+  }
   let stat;
   try {
     stat = fsApi.lstatSync(candidate);
@@ -93,7 +107,7 @@ function validateSelectedPath(selected, options = {}) {
 function pickSource(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
-  for (const spec of pickerCommands(options.platform, options.env)) {
+  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes)) {
     const result = runner(spec.command, spec.args);
     if (result?.error?.code === 'ENOENT') {
       unavailable++;

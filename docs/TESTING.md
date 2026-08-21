@@ -24,12 +24,14 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-companion-job-store.js` | 8 | versioned append-only job contract, monotone transitions, local human evidence, limited verification claims, release hash binding, terminal states, strict raw-data-field refusal, tamper and traversal refusal |
 | `test-companion-retention.js` | 6 | expiry and zero-day cleanup, strict direct-entry deletion, unsafe-entry preservation, metadata-only status, and local human evidence for immediate purge |
 | `test-companion-ipc.js` | 8 | platform picker commands, strict source validation, local fallback, HMAC/session/replay enforcement, path-free responses and journals, local cancellation, and real fd-3 bootstrap process start |
+| `test-companion-processor.js` | 9 | confirmed TXT and text-only DOCX release, declined skip, local-dialog evidence, visual DOCX blocking, unsupported-format failure, publish/journal rollback, queue isolation, and path-free result/audit evidence |
+| `test-companion-supervisor.js` | 6 | child-environment secret filtering, real authenticated launch, sequence recovery, picker-before-processing orchestration, guaranteed close, and pre-launch profile refusal |
 | `test-gateway-e2e.js` | 22 | Office/PDF plus standalone PNG and scanned-PDF routes end to end, explicit-profile enforcement for image-only input, internal visual-release primitive and preview deletion (not exposed through MCP), zero-day retention, audit migration blocking, tamper detection, path traversal, source claiming and failure-injected cleanup/publish/move rollback |
 | `test-mcp-protocol.js` | 23 | the server driven over real stdio: handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, error codes, notification handling, stdout framing |
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 258 assertion-level cases plus the plugin structure check (259 checks overall).
+Total: 273 assertion-level cases plus the plugin structure check (274 checks overall).
 
 ## The adversarial suite
 

@@ -98,13 +98,13 @@ test('authenticated file selection returns no path and stores it only in memory'
 });
 
 test('authenticated cancel creates local evidence and drops the private source', () => {
-  const source = path.join(root, 'cancel.pdf');
+  const source = path.join(root, 'cancel.txt');
   fs.writeFileSync(source, 'synthetic');
   const sessionId = crypto.randomUUID();
   const session = createCompanionSession({
     secret,
     sessionId,
-    pickSource: () => ({ sourcePath: source, sourceType: 'pdf', sourceBytes: 9 })
+    pickSource: () => ({ sourcePath: source, sourceType: 'txt', sourceBytes: 9 })
   });
   const picked = session.dispatch(frame(sessionId, 1, 'pick_source', { profile: 'customer' }));
   const cancelled = session.dispatch(frame(sessionId, 2, 'cancel_job', { job_id: picked.job.job_id }));
