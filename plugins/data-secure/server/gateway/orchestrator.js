@@ -74,9 +74,6 @@ function cleanupAbandonedWorkingJobs(options = {}) {
   const resolvedRoot = path.resolve(root);
   const realRoot = fs.realpathSync.native(root);
   const comparable = (value) => process.platform === 'win32' ? value.toLowerCase() : value;
-  if (comparable(realRoot) !== comparable(resolvedRoot)) {
-    throw new SafeError('Der Bereich für private Arbeitskopien verweist auf einen anderen Speicherort.');
-  }
   const isProcessAlive = options.isProcessAlive || processAlive;
   const removeDir = options.removeDir || ((target) => fs.rmSync(target, { recursive: true }));
   let removed = 0;
@@ -86,7 +83,7 @@ function cleanupAbandonedWorkingJobs(options = {}) {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!/^[a-z0-9]+_[0-9a-f]{8}$/i.test(entry.name)) { ignored++; continue; }
     const target = path.resolve(root, entry.name);
-    if (path.dirname(target) !== path.resolve(root)) { failures++; continue; }
+    if (comparable(path.dirname(target)) !== comparable(resolvedRoot)) { failures++; continue; }
     try {
       const stat = fs.lstatSync(target);
       if (!entry.isDirectory() || !stat.isDirectory() || stat.isSymbolicLink() || !safeWorkingTree(target)) {
