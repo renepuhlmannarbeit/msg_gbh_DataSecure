@@ -23,7 +23,8 @@ const {
   aiActMeta,
   auditRecord,
   writeAudit,
-  moveProcessed
+  moveProcessed,
+  restoreProcessed
 } = require('./compliance');
 
 const { MAX_INPUT_BYTES, MAX_TEXT_CHARS, MAX_VISUAL_ASSETS } = LIMITS;
@@ -46,16 +47,26 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     };
   }
 
-  const source = queue[0].full;
-  const ext = path.extname(source).toLowerCase();
+  const originalSource = queue[0].full;
+  const originalName = queue[0].name;
+  const ext = path.extname(originalSource).toLowerCase();
   if (queue[0].stat.size > MAX_INPUT_BYTES) throw new SafeError('Eingabedatei ist größer als 100 MB.');
 
   const r = roots();
-  const jobDir = path.join(r.jobs, newJobId());
+  const jobId = newJobId();
+  const jobDir = path.join(r.jobs, jobId);
   fs.mkdirSync(jobDir, { recursive: true });
 
+  let source = originalSource;
+  let claimed = false;
   let stagePackage = null;
+  let processedPath = null;
+  let reviewPackageId = null;
   try {
+    source = path.join(r.input, `.processing_${jobId}_${originalName}`);
+    fs.renameSync(originalSource, source);
+    claimed = true;
+
     const converted = await convertDocument(source);
     if (converted.markdown.length > MAX_TEXT_CHARS) {
       throw new SafeError('Extrahierter Dokumenttext ist zu groß.');
@@ -65,8 +76,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
 
     const effective = requested === 'auto' ? detectProfileFromMarkdown(converted.markdown) : requested;
-    const finalPackage = uniqueDir(r.output, safePackageId(effective));
+    const finalPackage = uniqueDir(r.output, `${safePackageId(effective)}_${crypto.randomBytes(3).toString('hex')}`);
     const packageId = path.basename(finalPackage);
+    reviewPackageId = packageId;
     stagePackage = path.join(r.output, `.${packageId}.tmp_${crypto.randomBytes(3).toString('hex')}`);
     fs.mkdirSync(stagePackage, { recursive: true });
 
@@ -145,9 +157,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       stagePackage
     );
 
-    fs.renameSync(stagePackage, finalPackage);
+    const moveSource = deps.moveProcessed || moveProcessed;
+    const publishPackage = deps.publishPackage || ((from, to) => fs.renameSync(from, to));
+
+    // The source is moved before the package becomes visible. If publishing
+    // fails, the catch path restores it to Input. This makes the output rename
+    // the single commit point instead of exposing a package from a failed job.
+    processedPath = moveSource(source, originalName);
+    claimed = false;
+    publishPackage(stagePackage, finalPackage);
     stagePackage = null;
-    moveProcessed(source);
+    processedPath = null;
 
     return {
       ok: true,
@@ -172,6 +192,27 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       ai_act: aiActMeta(effective)
     };
   } catch (e) {
+    let recoveryError = null;
+    if (processedPath) {
+      try {
+        (deps.restoreProcessed || restoreProcessed)(processedPath, originalSource);
+        processedPath = null;
+      } catch {
+        recoveryError = new SafeError(
+          'Verarbeitung wurde gestoppt; die Quelldatei konnte nicht automatisch nach Input zurückgelegt werden. Manuelle Prüfung erforderlich.'
+        );
+      }
+    }
+    if (claimed && fs.existsSync(source) && !fs.existsSync(originalSource)) {
+      try {
+        fs.renameSync(source, originalSource);
+        claimed = false;
+      } catch {
+        recoveryError = new SafeError(
+          'Verarbeitung wurde gestoppt; die beanspruchte Quelldatei konnte nicht nach Input zurückgelegt werden. Manuelle Prüfung erforderlich.'
+        );
+      }
+    }
     if (stagePackage && fs.existsSync(stagePackage)) {
       try {
         fs.rmSync(stagePackage, { recursive: true, force: true });
@@ -179,6 +220,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         /* the staging directory is best-effort cleanup only */
       }
     }
+    if (reviewPackageId) {
+      const reviewDir = path.join(r.review, reviewPackageId);
+      if (fs.existsSync(reviewDir)) {
+        try {
+          fs.rmSync(reviewDir, { recursive: true, force: true });
+        } catch {
+          /* review cleanup is best effort; its bytes are never exposed by a read tool */
+        }
+      }
+    }
+    if (recoveryError) throw recoveryError;
     if (e instanceof SafeError) throw e;
     throw new SafeError(
       'Verarbeitung wurde sicher gestoppt. Es wurde kein vollständiges Output-Paket freigegeben.'

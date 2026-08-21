@@ -51,8 +51,13 @@ guessing:
 - redaction failed, or a second OCR pass still finds the redacted strings
 - package, asset or Markdown hash does not match the manifest
 
-A stopped run leaves the source file in `Input` and releases nothing. Staging
-directories are removed on failure so no partial package can be picked up.
+A run first claims its source under a hidden name so concurrent calls cannot
+process the same input. The source is moved to `Processed` before the atomic
+Output rename, which is the single publish/commit point. If publishing fails,
+the source is restored to its original `Input` name and no package is exposed.
+Staging directories and review items from the failed run are removed. A failed
+automatic restore is reported explicitly for manual recovery rather than being
+misreported as an ordinary clean rollback.
 
 ## Two independent checks, not one
 

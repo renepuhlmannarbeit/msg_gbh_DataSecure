@@ -1,6 +1,7 @@
 'use strict';
 
 const zlib = require('zlib');
+const MAX_EXPANDED_CONTENT_BYTES = 20 * 1024 * 1024;
 
 function pdfUnescape(s='') {
   let out='';
@@ -29,17 +30,20 @@ function extractStrings(content) {
   return out;
 }
 function maybeInflate(dict, stream) {
-  if(/\/Filter\s*\/FlateDecode\b/.test(dict)){try{return zlib.inflateSync(stream);}catch{return stream;}}
+  if(/\/Filter\s*\/FlateDecode\b/.test(dict)){
+    try{return zlib.inflateSync(stream,{maxOutputLength:MAX_EXPANDED_CONTENT_BYTES});}
+    catch{throw new Error('PDF-Flate-Stream ist beschädigt oder überschreitet das Dekompressionslimit.');}
+  }
   return stream;
 }
 function parsePdf(buffer) {
   if(!Buffer.isBuffer(buffer))buffer=Buffer.from(buffer);
   if(buffer.length<5||buffer.toString('latin1',0,5)!=='%PDF-')throw new Error('PDF-Signatur ungültig.');
-  const bin=buffer.toString('latin1'); const textParts=[]; const attachments=[]; let imageCount=0;
+  const bin=buffer.toString('latin1'); const textParts=[]; const attachments=[]; let imageCount=0,expandedBytes=0;
   const objRe=/(\d+)\s+(\d+)\s+obj\b([\s\S]*?)endobj/gm; let m;
   while((m=objRe.exec(bin))){const body=m[3];const si=body.indexOf('stream');if(si<0){continue;}let start=si+6;if(body[start]==='\r'&&body[start+1]==='\n')start+=2;else if(body[start]==='\n'||body[start]==='\r')start+=1;const ei=body.lastIndexOf('endstream');if(ei<start)continue;const dict=body.slice(0,si);const streamLatin=body.slice(start,ei);const stream=Buffer.from(streamLatin,'latin1');
     if(/\/Subtype\s*\/Image\b/.test(dict)){imageCount++;if(/\/Filter\s*\/DCTDecode\b/.test(dict)){attachments.push({type:'image',mimeType:'image/jpeg',data:stream.toString('base64'),name:`pdf_image_${imageCount}.jpg`,extension:'jpg',source_part:`pdf-object-${m[1]}`});}continue;}
-    const data=maybeInflate(dict,stream);const content=data.toString('latin1');if(/\bBT\b/.test(content)){const strings=extractStrings(content);if(strings.length)textParts.push(strings.join(' '));}
+    const data=maybeInflate(dict,stream);expandedBytes+=data.length;if(expandedBytes>MAX_EXPANDED_CONTENT_BYTES)throw new Error('PDF-Inhaltsstreams überschreiten das Dekompressionslimit.');const content=data.toString('latin1');if(/\bBT\b/.test(content)){const strings=extractStrings(content);if(strings.length)textParts.push(strings.join(' '));}
   }
   if(!textParts.length){const strings=extractStrings(bin);if(strings.length)textParts.push(strings.join(' '));}
   const text=textParts.join('\n\n').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]+/g,' ').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();

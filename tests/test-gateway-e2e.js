@@ -186,6 +186,47 @@ async function main() {
     fs.unlinkSync(src);
   });
 
+  await testAsync('a failed package publish restores the source and releases nothing', async () => {
+    const before = gw.listOutputs().packages.length;
+    const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'publish-failure.pdf');
+    await assert.rejects(
+      () => gw.anonymizeNext('customer', {
+        ...depsFor('none'),
+        publishPackage: () => {
+          throw new Error('injected publish failure');
+        }
+      }),
+      /sicher gestoppt|veröffentlicht/
+    );
+    assert.strictEqual(gw.listOutputs().packages.length, before, 'failed publish must expose no package');
+    assert.ok(fs.existsSync(src), 'the source must be restored to Input');
+    const retry = await gw.anonymizeNext('customer', depsFor('none'));
+    assert.ok(retry.ok, 'the restored source must be processable exactly once on retry');
+    assert.ok(!fs.existsSync(src), 'successful retry must move the source out of Input');
+  });
+
+  await testAsync('a failed source move restores the claimed input and releases nothing', async () => {
+    const before = gw.listOutputs().packages.length;
+    const src = queue(path.join(fixtures, 'synthetic_customer.pdf'), 'move-failure.pdf');
+    await assert.rejects(
+      () => gw.anonymizeNext('customer', {
+        ...depsFor('none'),
+        moveProcessed: () => {
+          throw new Error('injected move failure');
+        }
+      }),
+      /sicher gestoppt/
+    );
+    assert.strictEqual(gw.listOutputs().packages.length, before, 'failed move must expose no package');
+    assert.ok(fs.existsSync(src), 'the claimed source must be restored to its original Input name');
+    assert.deepStrictEqual(
+      fs.readdirSync(path.join(root, 'Input')).filter((name) => name.startsWith('.processing_')),
+      [],
+      'no hidden claimed input may remain'
+    );
+    fs.unlinkSync(src);
+  });
+
   await testAsync('an empty Input folder is reported rather than treated as an error', async () => {
     for (const f of fs.readdirSync(path.join(root, 'Input'))) {
       fs.unlinkSync(path.join(root, 'Input', f));

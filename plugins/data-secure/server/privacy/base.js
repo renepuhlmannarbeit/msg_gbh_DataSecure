@@ -38,7 +38,8 @@ const URL_RE = new RegExp(
 );
 
 const EMAIL_RE = new RegExp(
-  `${NB}[A-Z0-9._%+\\-]+@[A-Z0-9.\\-]+\\.[A-Z]{2,}${NA}`,
+  `${NB}[\\p{L}\\p{N}._%+\\-]+@(?:[\\p{L}\\p{N}](?:[\\p{L}\\p{N}\\-]{0,61}[\\p{L}\\p{N}])?\\.)+` +
+    `(?:[\\p{L}]{2,63}|xn--[a-z0-9-]{2,59})${NA}`,
   'giu'
 );
 
@@ -53,13 +54,14 @@ const SEP = `[${SEP_CHARS}]`; // for standalone use
 // Shape only. Whether a shape is treated as a phone number is decided in
 // structured.js so that the residual gate and the redactor cannot disagree.
 const PHONE_RE = new RegExp(
-  `${NB}(?:\\+\\d{1,3}[${SEP_CHARS}./\\-]?)?(?:\\(?\\d{2,5}\\)?[${SEP_CHARS}./\\-]?)` +
-    `\\d{3,5}[${SEP_CHARS}./\\-]\\d{2,6}(?:[${SEP_CHARS}./\\-]\\d{1,6})?${NA}`,
+  `${NB}(?:\\+\\d{1,3}[${SEP_CHARS}./\\-]?(?:\\(0\\)[${SEP_CHARS}./\\-]?)?)?` +
+    `(?:\\(?\\d{2,5}\\)?[${SEP_CHARS}./\\-]?)` +
+    `\\d{3,8}(?:[${SEP_CHARS}./\\-]\\d{1,6}){0,2}${NA}`,
   'gu'
 );
 const PHONE_LABEL_RE = /(?:tel|telefon|phone|mobil|handy|fax|kontakt|durchwahl)\s*\.?\s*:?\s*$/i;
 
-const IBAN_RE = new RegExp(`${NB}[A-Z]{2}\\d{2}(?:[ ]?[A-Z0-9]){11,30}${NA}`, 'gu');
+const IBAN_RE = new RegExp(`${NB}[A-Z]{2}\\d{2}(?:[ ]?[A-Z0-9]){11,30}${NA}`, 'giu');
 
 // A bare BIC is indistinguishable from an ordinary German word in upper case:
 // /\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\b/ matches SOFTWARE, PROJEKTE,
@@ -74,10 +76,37 @@ const IP_RE = new RegExp(
   'gu'
 );
 
+const IPV6_PART = '[A-F0-9]{1,4}';
+const IPV6_RE = new RegExp(
+  `${NB}(?:(?:${IPV6_PART}:){7}${IPV6_PART}|(?:${IPV6_PART}:){1,7}:|` +
+    `(?:${IPV6_PART}:){1,6}:${IPV6_PART}|(?:${IPV6_PART}:){1,5}(?::${IPV6_PART}){1,2}|` +
+    `(?:${IPV6_PART}:){1,4}(?::${IPV6_PART}){1,3}|(?:${IPV6_PART}:){1,3}(?::${IPV6_PART}){1,4}|` +
+    `(?:${IPV6_PART}:){1,2}(?::${IPV6_PART}){1,5}|${IPV6_PART}:(?:(?::${IPV6_PART}){1,6})|` +
+    `:(?:(?::${IPV6_PART}){1,7}|:))${NA}`,
+  'giu'
+);
+
 const POSTAL_ADDRESS_RE = new RegExp(
   `${NB}\\d{5}${SEP}+[${UPPER}][${NAME_BODY}]+(?:${SEP}+[${UPPER}][${NAME_BODY}]+){0,3}${NA}`,
-  'gu'
+  'giu'
 );
+
+// Street and house number are a direct address component even when postal
+// code and city are stored on a separate line.
+const STREET_ADDRESS_RE = new RegExp(
+  `${NB}(?:(?:[${UPPER}][${NAME_BODY}.\\-]{1,80}(?:straße|strasse|str\\.|weg|allee|gasse|platz|ring|damm|ufer|chaussee|stieg))` +
+    `|(?:[${UPPER}][${NAME_BODY}.]{0,50}(?:${SEP}+[${UPPER}][${NAME_BODY}.]{0,50}){0,3}` +
+    `${SEP}+(?:straße|strasse|str\\.|weg|allee|gasse|platz|ring|damm|ufer|chaussee|stieg))` +
+    `|(?:(?:Am|An${SEP}+der|Auf${SEP}+der|In${SEP}+der|Zum|Zur|Unter${SEP}+den|Unter${SEP}+der)` +
+    `${SEP}+[${UPPER}][${NAME_BODY}.]+(?:${SEP}+[${UPPER}][${NAME_BODY}.]+){0,2}))${SEP}+\\d{1,5}[a-zA-Z]?` +
+    `(?:${SEP}*[–—-]${SEP}*\\d{1,5}[a-zA-Z]?)?${NA}`,
+  'giu'
+);
+
+const DATE_OF_BIRTH_RE = new RegExp(`${NB}\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}${NA}`, 'gu');
+const DATE_OF_BIRTH_LABEL_RE = /(?:geburtsdatum|geburtstag|date of birth|dob)\s*:?\s*$/i;
+const VEHICLE_PLATE_RE = new RegExp(`${NB}[A-ZÄÖÜ]{1,3}-[A-Z]{1,2}[ ]?\\d{1,4}[EH]?${NA}`, 'giu');
+const VEHICLE_PLATE_LABEL_RE = /(?:kennzeichen|kfz-?kennzeichen|nummernschild)\s*:?\s*$/i;
 
 const DE_SV_RE = new RegExp(
   `${NB}\\d{2}${SEP}?\\d{6}${SEP}?[A-Z]${SEP}?\\d{2}${SEP}?\\d${NA}`,
@@ -313,7 +342,13 @@ module.exports = {
   BIC_RE,
   BIC_LABEL_RE,
   IP_RE,
+  IPV6_RE,
   POSTAL_ADDRESS_RE,
+  STREET_ADDRESS_RE,
+  DATE_OF_BIRTH_RE,
+  DATE_OF_BIRTH_LABEL_RE,
+  VEHICLE_PLATE_RE,
+  VEHICLE_PLATE_LABEL_RE,
   DE_TAX_RE,
   DE_TAX_LABEL_RE,
   DE_SV_RE,

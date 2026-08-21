@@ -306,6 +306,39 @@ test('phone detection uses the same rule for gate and redactor', () => {
   assert.deepStrictEqual(notAPhone.residual, [], 'a norm reference must not block the gate');
 });
 
+test('common German two-group phone numbers are redacted', () => {
+  for (const value of ['030 1234567', '+49 30 1234567', '040/123456', '0176 12345678']) {
+    const { text, residual } = anonymizeVerified(`Telefon: ${value}\n`, 'customer');
+    assertAbsent(text, value, `phone number ${value}`);
+    assert.deepStrictEqual(residual, [], `residual gate must be clean for ${value}`);
+  }
+});
+
+test('customer address blocks lose the person, street, city and phone number', () => {
+  const src = [
+    '# Rechnung',
+    '',
+    'Max Mustermann',
+    'Musterstraße 12a',
+    '10115 Berlin',
+    'Telefon: 030 1234567',
+    'Rechnungsnummer: RE-2026-42'
+  ].join('\n');
+  const { text, residual } = anonymizeVerified(src, 'customer');
+  for (const value of ['Max Mustermann', 'Musterstraße 12a', '10115 Berlin', '030 1234567']) {
+    assertAbsent(text, value, 'address-block identifier');
+  }
+  assert.deepStrictEqual(residual, [], 'the complete released address block must pass verification');
+});
+
+test('common German street variants are redacted', () => {
+  for (const value of ['Musterstr. 12a', 'Am Markt 7', 'An der Allee 4–6', 'Auf der Höhe 3']) {
+    const { text, residual } = anonymizeVerified(value, 'general');
+    assertAbsent(text, value, `street address ${value}`);
+    assert.deepStrictEqual(residual, [], `residual gate must be clean for ${value}`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Allow lists and over-redaction.
 // ---------------------------------------------------------------------------

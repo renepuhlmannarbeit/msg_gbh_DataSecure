@@ -8,7 +8,13 @@ const {
   BIC_RE,
   BIC_LABEL_RE,
   IP_RE,
+  IPV6_RE,
   POSTAL_ADDRESS_RE,
+  STREET_ADDRESS_RE,
+  DATE_OF_BIRTH_RE,
+  DATE_OF_BIRTH_LABEL_RE,
+  VEHICLE_PLATE_RE,
+  VEHICLE_PLATE_LABEL_RE,
   DE_TAX_RE,
   DE_TAX_LABEL_RE,
   DE_SV_RE,
@@ -76,6 +82,20 @@ const DETECTORS = [
     trimValue: true
   },
   {
+    type: 'DATE_OF_BIRTH',
+    re: DATE_OF_BIRTH_RE,
+    placeholder: '[DATE_REDACTED]',
+    priority: 81,
+    accept: (value, text, index) => hasLabelBefore(text, index, DATE_OF_BIRTH_LABEL_RE)
+  },
+  {
+    type: 'VEHICLE_PLATE',
+    re: VEHICLE_PLATE_RE,
+    placeholder: '[ID_REDACTED]',
+    priority: 81,
+    accept: (value, text, index) => hasLabelBefore(text, index, VEHICLE_PLATE_LABEL_RE)
+  },
+  {
     type: 'PHONE',
     re: PHONE_RE,
     placeholder: '[PHONE_REDACTED]',
@@ -88,6 +108,18 @@ const DETECTORS = [
     re: IP_RE,
     placeholder: '[IP_REDACTED]',
     priority: 78
+  },
+  {
+    type: 'IPV6',
+    re: IPV6_RE,
+    placeholder: '[IP_REDACTED]',
+    priority: 78
+  },
+  {
+    type: 'STREET_ADDRESS',
+    re: STREET_ADDRESS_RE,
+    placeholder: '[LOCATION_REDACTED]',
+    priority: 77
   },
   {
     type: 'POSTAL_ADDRESS',

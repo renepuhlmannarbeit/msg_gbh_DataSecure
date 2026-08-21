@@ -94,7 +94,7 @@ Erzeugt werden:
 npm test
 ```
 
-154 Fälle über Manifest-Konsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Gateway-E2E, MCP-Protokoll sowie eine Adversarial-Suite (feindlicher Dokumentinhalt, Unicode-Tarnung, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+184 Fälle über Manifest-Konsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 

@@ -8,6 +8,7 @@
 const path = require('path');
 const zlib = require('zlib');
 const { createSuite } = require('./helpers');
+const { crc32 } = require('./lib/zip');
 
 const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
 const {
@@ -65,12 +66,39 @@ test('PNG encoding drops ancillary chunks', () => {
   chunk.writeUInt32BE(text.length, 0);
   type.copy(chunk, 4);
   text.copy(chunk, 8);
+  chunk.writeUInt32BE(crc32(Buffer.concat([type, text])), 8 + text.length);
   const tampered = Buffer.concat([original.subarray(0, 33), chunk, original.subarray(33)]);
 
   const cleaned = encodePng(decodePng(tampered));
   assert.ok(tampered.includes('Erika Beispiel'), 'precondition: metadata is present before cleaning');
   assert.ok(!cleaned.includes('Erika Beispiel'), 'metadata must not survive re-encoding');
   assert.ok(!cleaned.includes('tEXt'), 'no tEXt chunk may be written');
+});
+
+test('PNG rejects decompressed data beyond the declared scanlines', () => {
+  const original = encodePng(solidRgba(1, 1));
+  const idat = original.indexOf(Buffer.from('IDAT', 'ascii')) - 4;
+  const oldLength = original.readUInt32BE(idat);
+  const raw = Buffer.concat([Buffer.from([0, 255, 255, 255, 255]), Buffer.alloc(4096, 0x41)]);
+  const compressed = zlib.deflateSync(raw);
+  const chunk = Buffer.alloc(12 + compressed.length);
+  chunk.writeUInt32BE(compressed.length, 0);
+  chunk.write('IDAT', 4, 'ascii');
+  compressed.copy(chunk, 8);
+  chunk.writeUInt32BE(crc32(Buffer.concat([Buffer.from('IDAT'), compressed])), 8 + compressed.length);
+  const malformed = Buffer.concat([
+    original.subarray(0, idat),
+    chunk,
+    original.subarray(idat + 12 + oldLength)
+  ]);
+  assert.throws(() => decodePng(malformed), (e) => e instanceof ImageSafetyError);
+});
+
+test('PNG rejects a chunk whose declared length exceeds the file', () => {
+  const bad = Buffer.from(encodePng(solidRgba(1, 1)));
+  const idat = bad.indexOf(Buffer.from('IDAT', 'ascii')) - 4;
+  bad.writeUInt32BE(0x7fffffff, idat);
+  assert.throws(() => decodePng(bad), (e) => e instanceof ImageSafetyError);
 });
 
 test('PNG greyscale and truecolour inputs are normalised to RGBA', () => {
@@ -89,7 +117,7 @@ test('PNG greyscale and truecolour inputs are normalised to RGBA', () => {
     out.writeUInt32BE(data.length, 0);
     t.copy(out, 4);
     data.copy(out, 8);
-    // CRC is recomputed by the decoder path only for structure, not validated.
+    out.writeUInt32BE(crc32(Buffer.concat([t, data])), 8 + data.length);
     return out;
   };
   const png = Buffer.concat([

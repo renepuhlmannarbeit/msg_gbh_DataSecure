@@ -88,22 +88,53 @@ function collectPersonAnchors(text) {
   return out;
 }
 
-// Medium confidence: a bare title-case name, but only in the contact/header
-// block of an applicant or personnel document and never on a structural or
-// label line.
+const CONTACT_CONTEXT_RE =
+  /(?:\b\d{5}[ \t]+[A-ZÄÖÜ]|(?:straße|strasse|str\.|weg|allee|gasse|platz|ring|damm|ufer|chaussee|stieg)[ \t]+\d|(?:telefon|tel\.?|mobil|handy|fax|e-?mail)[ \t]*:)/iu;
+
+// Medium confidence: a bare title-case name in a profile header, or in a
+// compact contact/address block for all other profiles. Nearby contact
+// evidence prevents ordinary title-case prose from becoming a person.
 function collectHeaderNameCandidates(text, profile, maxLines = 40) {
-  if (profile !== 'applicant' && profile !== 'personnel_profile') return [];
   const out = [];
   const bigram = new RegExp(
-    `^(?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,2}$`,
+    `^(?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,3}$`,
     'u'
   );
+  const commaName = new RegExp(
+    `^(?:${NAME_TOKEN}|${CAPS_TOKEN}),\\s*(?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN}))?$`,
+    'u'
+  );
+  const particleName = new RegExp(
+    `^(?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:von|van|de|del|der|den|zu|zur|zum)){1,3}` +
+      `\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})$`,
+    'u'
+  );
+  const allLines = lines(text);
   let seen = 0;
-  for (const line of lines(text)) {
+  for (let index = 0; index < allLines.length; index++) {
+    const line = allLines[index];
     const s = line.trim();
     if (!s) continue;
     if (++seen > maxLines) break;
     if (isStructuralLine(s) || isLabelLine(s)) continue;
+    let hasContext = true;
+    if (profile !== 'applicant' && profile !== 'personnel_profile') {
+      const from = Math.max(0, index - 3);
+      const nearby = allLines
+        .slice(from, Math.min(allLines.length, index + 4))
+        .filter((_value, relative) => from + relative !== index)
+        .join('\n');
+      hasContext = CONTACT_CONTEXT_RE.test(nearby);
+    }
+    if (!hasContext) continue;
+    if (commaName.test(s)) {
+      out.push({ value: s, confidence: 'header_comma', noSurnameAlias: true });
+      continue;
+    }
+    if (particleName.test(s)) {
+      out.push({ value: s, confidence: 'header_particle' });
+      continue;
+    }
     if (!bigram.test(s)) continue;
     if (!looksName(titleCase(s))) continue;
     pushPerson(out, s, 'header_block');

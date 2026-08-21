@@ -88,7 +88,7 @@ function buildPersonDictionary(seeds, reg) {
     }
     const toks = canonical.split(/\s+/);
     const surname = toks[toks.length - 1];
-    if (looksSurname(surname) && surname.length >= 3 && !surnameToPlaceholder.has(key(surname))) {
+    if (!seed.noSurnameAlias && looksSurname(surname) && surname.length >= 3 && !surnameToPlaceholder.has(key(surname))) {
       surnameToPlaceholder.set(key(surname), ph);
     }
   }
@@ -210,7 +210,7 @@ function anonymize(text, profile = 'general') {
       );
     }
   }
-  if (profile === 'personnel_profile') {
+  if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {
     URL_RE.lastIndex = 0;
     let m;
     while ((m = URL_RE.exec(out))) {
@@ -255,7 +255,15 @@ function scanResidual(text, profile = 'general', knownValues = []) {
   const clean = normalizeText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
   const out = scanStructured(clean).map((f) => ({ type: f.type, text: f.text }));
 
-  for (const name of collectNameSeeds(clean)) out.push({ type: 'PERSON_CANDIDATE', text: name });
+  for (const seed of collectPersonSeeds(clean, profile)) {
+    out.push({ type: 'PERSON_CANDIDATE', text: seed.value });
+  }
+
+  if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {
+    URL_RE.lastIndex = 0;
+    let match;
+    while ((match = URL_RE.exec(clean))) out.push({ type: 'URL', text: match[0] });
+  }
 
   if (profile === 'personnel_profile') {
     for (const org of collectOrganizations(clean)) {

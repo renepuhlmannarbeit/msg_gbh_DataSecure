@@ -134,6 +134,29 @@ test('an OOXML container without a main part is rejected instead of returning em
   assert.throws(() => parseOoxml(buf, '.docx'), (e) => e instanceof Error);
 });
 
+test('a ZIP entry with a false zero uncompressed size is rejected', () => {
+  const bad = Buffer.from(docx(['Inhalt']));
+  const central = bad.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  assert.ok(central >= 0, 'fixture must contain a central-directory entry');
+  bad.writeUInt32LE(0, central + 24);
+  assert.throws(() => readZip(bad), (e) => e instanceof ZipError);
+});
+
+test('ZIP limits use the sum of the extracted entry lengths', () => {
+  const archive = zipStore([
+    ['a.txt', '1234'],
+    ['b.txt', '5678']
+  ]);
+  assert.throws(() => readZip(archive, { maxUncompressed: 7 }), (e) => e instanceof ZipError);
+  assert.strictEqual(readZip(archive, { maxUncompressed: 8 }).size, 2);
+});
+
+test('inconsistent local and central ZIP headers are rejected', () => {
+  const bad = Buffer.from(docx(['Inhalt']));
+  bad.writeUInt16LE(8, 8); // local method says deflate, central directory says stored
+  assert.throws(() => readZip(bad), (e) => e instanceof ZipError);
+});
+
 // ---------------------------------------------------------------------------
 // PDF
 // ---------------------------------------------------------------------------

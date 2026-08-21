@@ -136,15 +136,35 @@ function writeAudit(rec, dir) {
   fs.writeFileSync(path.join(dir, 'audit.json'), JSON.stringify(rec, null, 2), 'utf8');
 }
 
-function moveProcessed(source) {
+function moveProcessed(source, originalName = path.basename(source)) {
   const r = roots();
-  const dest = uniquePath(r.processed, path.basename(source));
+  const dest = uniquePath(r.processed, path.basename(originalName));
+  moveExact(source, dest);
+  return dest;
+}
+
+function moveExact(source, dest) {
   try {
     fs.renameSync(source, dest);
-  } catch {
-    fs.copyFileSync(source, dest);
-    fs.unlinkSync(source);
+  } catch (renameError) {
+    fs.copyFileSync(source, dest, fs.constants.COPYFILE_EXCL);
+    try {
+      fs.unlinkSync(source);
+    } catch (unlinkError) {
+      try {
+        fs.unlinkSync(dest);
+      } catch {
+        throw new SafeError('Dateiverschiebung ist inkonsistent fehlgeschlagen; manuelle Prüfung erforderlich.');
+      }
+      throw unlinkError;
+    }
   }
+  return dest;
+}
+
+function restoreProcessed(processed, source) {
+  if (fs.existsSync(source)) throw new SafeError('Quelldatei kann nicht sicher wiederhergestellt werden.');
+  return moveExact(processed, source);
 }
 
 module.exports = {
@@ -155,5 +175,6 @@ module.exports = {
   aiActMeta,
   auditRecord,
   writeAudit,
-  moveProcessed
+  moveProcessed,
+  restoreProcessed
 };

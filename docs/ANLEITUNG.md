@@ -193,6 +193,8 @@ Firma.
 | `[LOCATION_REDACTED]` | Ort, Anschrift, Standort |
 | `[EMAIL_REDACTED]` | eine E-Mail-Adresse |
 | `[PHONE_REDACTED]` | Telefon- oder Faxnummer |
+| `[DATE_REDACTED]` | ein beschriftetes Geburtsdatum |
+| `[IP_REDACTED]` | eine IPv4- oder IPv6-Adresse |
 | `[ID_REDACTED]` | Mitarbeiter-, Kunden-, Rechnungsnummer, Steuer-ID |
 | `[BANK_DATA_REDACTED]` | IBAN, BIC, Kartennummer |
 | `[URL_REDACTED]` | eine Internetadresse |
