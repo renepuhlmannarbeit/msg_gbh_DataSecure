@@ -32,7 +32,7 @@ test('capabilities expose no model review or release authority', () => {
   assert.strictEqual(caps.job_schema, JOB_SCHEMA);
   assert.strictEqual(caps.phase, 'contract_ready');
   assert.strictEqual(caps.local_ui, 'not_implemented');
-  assert.strictEqual(caps.job_retention, 'not_integrated');
+  assert.strictEqual(caps.job_retention, 'integrated');
   assert.strictEqual(caps.model_can_review, false);
   assert.strictEqual(caps.model_can_release, false);
   assert.strictEqual(caps.raw_content_available, false);

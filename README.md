@@ -102,7 +102,7 @@ Runtime-Installation ersetzen.
 npm test
 ```
 
-245 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+251 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag und -Retention, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 

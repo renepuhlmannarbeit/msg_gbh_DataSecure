@@ -74,7 +74,7 @@ function safeJobDir(jobId, { mustExist = true } = {}) {
   return dir;
 }
 
-function humanAction(value) {
+function validateHumanAction(value) {
   if (
     !value ||
     value.channel !== 'local_companion' ||
@@ -122,7 +122,7 @@ function canonicalEvent(input) {
     event.profile = input.profile;
     event.source_type = input.source_type;
   } else if (['Reviewed', 'Skipped', 'Cancelled'].includes(input.state)) {
-    event.human_action = humanAction(input.human_action);
+    event.human_action = validateHumanAction(input.human_action);
   } else if (input.state === 'Verified') {
     event.verification = verification(input.verification);
   } else if (input.state === 'Released') {
@@ -283,7 +283,7 @@ function companionCapabilities() {
     phase: 'contract_ready',
     supported_states: [...STATES],
     local_ui: 'not_implemented',
-    job_retention: 'not_integrated',
+    job_retention: 'integrated',
     review_channel: 'local_companion_only',
     model_can_review: false,
     model_can_release: false,
@@ -296,6 +296,8 @@ module.exports = {
   JOB_SCHEMA,
   STATES,
   companionCapabilities,
+  jobsRoot,
+  validateHumanAction,
   createJob,
   transitionJob,
   jobStatus,

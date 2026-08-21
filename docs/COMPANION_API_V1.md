@@ -1,6 +1,6 @@
 # DataSecure Companion API v1
 
-Status: Vertrag implementiert, lokale UI noch nicht implementiert.
+Status: Vertrag und Job-Retention implementiert, lokale UI noch nicht implementiert.
 
 ## Zweck
 
@@ -26,9 +26,15 @@ noch freigeben.
 - `Released` ist nur nach `Verified` möglich und wird an den SHA-256 des Outputs
   gebunden.
 - Claude erhält später nur den datensparsamen Jobstatus und veröffentlichte Outputs.
-- Das Jobjournal muss vor Aktivierung des Companions an Output-Retention und „Jetzt
-  löschen“ gekoppelt werden. Der aktuelle Capability-Status lautet deshalb bewusst
-  `job_retention=not_integrated`; der Vertrag ist noch kein Pilotpfad.
+- Das Jobjournal nutzt dieselbe Aufbewahrungsfrist wie Outputs. Abgelaufene Jobs
+  werden beim Serverstart entfernt; bei `retention_days=0` sind sie beim nächsten
+  Cleanup-Lauf fällig.
+- „Jetzt löschen“ ist als interne Companion-Funktion implementiert und verlangt eine
+  exakte lokale Action-ID. Sie ist absichtlich kein MCP-Tool und damit nicht durch
+  Claude auslösbar.
+- Gelöscht werden ausschließlich direkte UUID-Jobordner mit regulären, nummerierten
+  Journaldateien. Symlinks, Unterordner und unbekannte Einträge bleiben unangetastet
+  und werden nur als datensparsame Fehlerzähler gemeldet.
 
 ## Zustandsautomat
 
@@ -56,8 +62,7 @@ Der Status enthält nur:
 ## Nächster Implementierungsschritt
 
 1. Signierten Companion-Prozess mit privatem IPC anbinden.
-2. Jobjournal an Retention und bestätigte lokale Löschung koppeln.
-3. File Picker außerhalb Claude bereitstellen.
-4. Extraktionsergebnisse über versionierte Source-Locator-IDs an die lokale UI geben.
-5. Lokale Action-ID erst durch einen echten UI-Klick erzeugen.
-6. TXT-/DOCX-Vertical-Slice gegen diesen Zustandsautomaten integrieren.
+2. File Picker außerhalb Claude bereitstellen.
+3. Extraktionsergebnisse über versionierte Source-Locator-IDs an die lokale UI geben.
+4. Lokale Action-ID erst durch einen echten UI-Klick erzeugen.
+5. TXT-/DOCX-Vertical-Slice gegen diesen Zustandsautomaten integrieren.

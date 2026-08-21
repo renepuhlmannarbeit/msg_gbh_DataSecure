@@ -8,12 +8,14 @@ const { listReviewItems } = require('./review');
 const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
 const { companionCapabilities } = require('../companion/job-store');
+const { companionRetentionStatus } = require('../companion/retention');
 
 function genericStatus(options = {}) {
   const engine = readStatus();
   const retention = retentionStatus(options);
   const audit = auditStatus();
   const companion = companionCapabilities();
+  const companionRetention = companionRetentionStatus(options);
   const auditBlocked =
     audit.legacy_pending > 0 || audit.migration_errors > 0 || audit.write_errors > 0;
   return {
@@ -44,6 +46,10 @@ function genericStatus(options = {}) {
     companion_phase: companion.phase,
     companion_local_ui: companion.local_ui,
     companion_job_retention: companion.job_retention,
+    companion_job_retention_days: companionRetention.retention_days,
+    companion_jobs_due: companionRetention.due_jobs,
+    companion_job_inspection_errors: companionRetention.inspection_errors,
+    companion_job_last_cleanup: companionRetention.last_cleanup,
     companion_model_can_review: companion.model_can_review,
     companion_model_can_release: companion.model_can_release,
     folders_ready: true,

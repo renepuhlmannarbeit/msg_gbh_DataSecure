@@ -188,7 +188,10 @@ async function main() {
     assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
     assert.strictEqual(result.structuredContent.companion_phase, 'contract_ready');
     assert.strictEqual(result.structuredContent.companion_local_ui, 'not_implemented');
-    assert.strictEqual(result.structuredContent.companion_job_retention, 'not_integrated');
+    assert.strictEqual(result.structuredContent.companion_job_retention, 'integrated');
+    assert.strictEqual(typeof result.structuredContent.companion_job_retention_days, 'number');
+    assert.strictEqual(typeof result.structuredContent.companion_jobs_due, 'number');
+    assert.strictEqual(typeof result.structuredContent.companion_job_inspection_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_model_can_review, false);
     assert.strictEqual(result.structuredContent.companion_model_can_release, false);
     assert.ok(result.structuredContent.supported_inputs.includes('PNG'));

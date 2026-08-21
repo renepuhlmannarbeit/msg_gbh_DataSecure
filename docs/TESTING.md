@@ -22,12 +22,13 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-retention.js` | 14 | expiry by injected time/mtime, duplicate and invalid evidence, immediate reconciliation, scope isolation, stable status diagnostics, staging and audit preservation, and non-fatal deletion/inspection failures |
 | `test-audit-privacy.js` | 7 | strict metadata receipts, v1/v2 canonical migration, persistent write blocking, marker and markerless crash-window reconciliation, leakage and readiness blocking |
 | `test-companion-job-store.js` | 8 | versioned append-only job contract, monotone transitions, local human evidence, limited verification claims, release hash binding, terminal states, strict raw-data-field refusal, tamper and traversal refusal |
+| `test-companion-retention.js` | 6 | expiry and zero-day cleanup, strict direct-entry deletion, unsafe-entry preservation, metadata-only status, and local human evidence for immediate purge |
 | `test-gateway-e2e.js` | 22 | Office/PDF plus standalone PNG and scanned-PDF routes end to end, explicit-profile enforcement for image-only input, internal visual-release primitive and preview deletion (not exposed through MCP), zero-day retention, audit migration blocking, tamper detection, path traversal, source claiming and failure-injected cleanup/publish/move rollback |
 | `test-mcp-protocol.js` | 23 | the server driven over real stdio: handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, error codes, notification handling, stdout framing |
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 244 assertion-level cases plus the plugin structure check (245 checks overall).
+Total: 250 assertion-level cases plus the plugin structure check (251 checks overall).
 
 ## The adversarial suite
 
