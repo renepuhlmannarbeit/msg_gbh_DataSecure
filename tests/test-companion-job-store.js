@@ -30,8 +30,10 @@ test('capabilities expose no model review or release authority', () => {
   const caps = companionCapabilities();
   assert.strictEqual(caps.api_version, API_VERSION);
   assert.strictEqual(caps.job_schema, JOB_SCHEMA);
-  assert.strictEqual(caps.phase, 'contract_ready');
-  assert.strictEqual(caps.local_ui, 'not_implemented');
+  assert.strictEqual(caps.phase, 'private_ipc_ready');
+  assert.strictEqual(caps.local_ui, 'native_file_picker_ready');
+  assert.strictEqual(caps.private_ipc, 'inherited_stdio_authenticated');
+  assert.strictEqual(caps.binary_signing, 'not_implemented');
   assert.strictEqual(caps.job_retention, 'integrated');
   assert.strictEqual(caps.model_can_review, false);
   assert.strictEqual(caps.model_can_release, false);

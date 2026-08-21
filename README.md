@@ -102,7 +102,7 @@ Runtime-Installation ersetzen.
 npm test
 ```
 
-251 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag und -Retention, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+259 Fälle über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag, -Retention und privaten IPC/File-Picker, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites (feindlicher Dokumentinhalt, Unicode-Tarnung, alternative Telefon-/Adress-/Namensformen, ReDoS, mutierte Container, Determinismus, Nebenläufigkeit) — ohne npm-Abhängigkeiten. Die Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -118,6 +118,7 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 | [docs/DEVELOPMENT_BACKLOG.md](docs/DEVELOPMENT_BACKLOG.md) | Priorisiertes Produkt-, Plattform- und Security-Backlog für den einfachen Claude-Rollout |
 | [docs/PRODUCT_ARCHITECTURE_DECISION.md](docs/PRODUCT_ARCHITECTURE_DECISION.md) | vNext-Entscheidung: lokale Datenschutzschleuse, Strangler-Modernisierung und Sprachstrategie |
 | [docs/COMPANION_API_V1.md](docs/COMPANION_API_V1.md) | Versionierter Companion-Vertrag und monotones, datensparsames Jobmodell |
+| [docs/COMPANION_IPC_V1.md](docs/COMPANION_IPC_V1.md) | Authentifizierter privater stdio-Kanal und nativer File-Picker-Vertrag |
 | [docs/AI_ACT_AND_GDPR.md](docs/AI_ACT_AND_GDPR.md) | DSGVO-/AI-Act-Einordnung und Grenzen |
 | [docs/TESTING.md](docs/TESTING.md) | Testsuite und Regressionsfälle |
 | [docs/RELEASE.md](docs/RELEASE.md) | Build, Distribution, Release-Gate, Windows-Abnahme |

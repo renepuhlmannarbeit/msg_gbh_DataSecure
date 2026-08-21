@@ -186,8 +186,10 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.audit_migration_errors, 'number');
     assert.strictEqual(typeof result.structuredContent.audit_write_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
-    assert.strictEqual(result.structuredContent.companion_phase, 'contract_ready');
-    assert.strictEqual(result.structuredContent.companion_local_ui, 'not_implemented');
+    assert.strictEqual(result.structuredContent.companion_phase, 'private_ipc_ready');
+    assert.strictEqual(result.structuredContent.companion_local_ui, 'native_file_picker_ready');
+    assert.strictEqual(result.structuredContent.companion_private_ipc, 'inherited_stdio_authenticated');
+    assert.strictEqual(result.structuredContent.companion_binary_signing, 'not_implemented');
     assert.strictEqual(result.structuredContent.companion_job_retention, 'integrated');
     assert.strictEqual(typeof result.structuredContent.companion_job_retention_days, 'number');
     assert.strictEqual(typeof result.structuredContent.companion_jobs_due, 'number');

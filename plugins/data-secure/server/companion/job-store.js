@@ -280,9 +280,11 @@ function companionCapabilities() {
   return {
     api_version: API_VERSION,
     job_schema: JOB_SCHEMA,
-    phase: 'contract_ready',
+    phase: 'private_ipc_ready',
     supported_states: [...STATES],
-    local_ui: 'not_implemented',
+    local_ui: 'native_file_picker_ready',
+    private_ipc: 'inherited_stdio_authenticated',
+    binary_signing: 'not_implemented',
     job_retention: 'integrated',
     review_channel: 'local_companion_only',
     model_can_review: false,

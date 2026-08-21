@@ -1,0 +1,118 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const childProcess = require('child_process');
+const { SafeError } = require('../runtime');
+
+const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
+const SOURCE_TYPES = Object.freeze({
+  '.pdf': 'pdf',
+  '.docx': 'docx',
+  '.xlsx': 'xlsx',
+  '.pptx': 'pptx',
+  '.txt': 'txt',
+  '.md': 'md',
+  '.csv': 'csv',
+  '.png': 'png',
+  '.jpg': 'jpeg',
+  '.jpeg': 'jpeg',
+  '.bmp': 'bmp'
+});
+
+function defaultRunner(command, args) {
+  return childProcess.spawnSync(command, args, {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 10 * 60 * 1000,
+    maxBuffer: 1024 * 1024,
+    shell: false
+  });
+}
+
+function pickerCommands(platform = process.platform, env = process.env) {
+  if (platform === 'win32') {
+    const systemRoot = env.SystemRoot || 'C:\\Windows';
+    const powershell = path.join(
+      systemRoot,
+      'System32',
+      'WindowsPowerShell',
+      'v1.0',
+      'powershell.exe'
+    );
+    const script = [
+      'Add-Type -AssemblyName System.Windows.Forms',
+      '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
+      "$dialog.Title = 'Datei für Claude vorbereiten'",
+      "$dialog.Filter = 'Unterstützte Dateien|*.pdf;*.docx;*.xlsx;*.pptx;*.txt;*.md;*.csv;*.png;*.jpg;*.jpeg;*.bmp'",
+      '$dialog.Multiselect = $false',
+      "if ($dialog.ShowDialog() -eq 'OK') { [Console]::Out.Write($dialog.FileName) }"
+    ].join('; ');
+    return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
+  }
+  if (platform === 'darwin') {
+    return [
+      {
+        command: '/usr/bin/osascript',
+        args: ['-e', 'POSIX path of (choose file with prompt "Datei für Claude vorbereiten")']
+      }
+    ];
+  }
+  if (platform === 'linux') {
+    return [
+      { command: 'zenity', args: ['--file-selection', '--title=Datei für Claude vorbereiten'] },
+      { command: 'kdialog', args: ['--getopenfilename', '.', 'Unterstützte Dateien (*.pdf *.docx *.xlsx *.pptx *.txt *.md *.csv *.png *.jpg *.jpeg *.bmp)'] }
+    ];
+  }
+  throw new SafeError('Für dieses Betriebssystem ist kein lokaler Dateidialog verfügbar.');
+}
+
+function validateSelectedPath(selected, options = {}) {
+  const fsApi = options.fs || fs;
+  const maxBytes = options.maxBytes ?? MAX_SOURCE_BYTES;
+  const candidate = String(selected || '').trim();
+  if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
+  if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
+  const sourceType = SOURCE_TYPES[path.extname(candidate).toLowerCase()];
+  if (!sourceType) throw new SafeError('Das ausgewählte Dateiformat wird nicht unterstützt.');
+  let stat;
+  try {
+    stat = fsApi.lstatSync(candidate);
+  } catch {
+    throw new SafeError('Die ausgewählte Datei ist nicht mehr verfügbar.');
+  }
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new SafeError('Die Auswahl ist keine reguläre lokale Datei.');
+  }
+  if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
+    throw new SafeError('Die ausgewählte Datei liegt außerhalb der zulässigen Größe.');
+  }
+  return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
+}
+
+function pickSource(options = {}) {
+  const runner = options.runner || defaultRunner;
+  let unavailable = 0;
+  for (const spec of pickerCommands(options.platform, options.env)) {
+    const result = runner(spec.command, spec.args);
+    if (result?.error?.code === 'ENOENT') {
+      unavailable++;
+      continue;
+    }
+    if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
+    if (result?.status !== 0 && !String(result?.stdout || '').trim()) {
+      throw new SafeError('Keine Datei ausgewählt.');
+    }
+    return validateSelectedPath(result?.stdout, options);
+  }
+  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
+  throw new SafeError('Keine Datei ausgewählt.');
+}
+
+module.exports = {
+  MAX_SOURCE_BYTES,
+  SOURCE_TYPES,
+  pickerCommands,
+  validateSelectedPath,
+  pickSource
+};

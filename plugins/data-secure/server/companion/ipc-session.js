@@ -1,0 +1,158 @@
+'use strict';
+
+const crypto = require('crypto');
+const { SafeError } = require('../runtime');
+const { createJob, transitionJob } = require('./job-store');
+const { purgeCompanionJobs } = require('./retention');
+const { pickSource, validateSelectedPath } = require('./file-picker');
+
+const IPC_VERSION = 'data-secure-companion-ipc/1';
+const COMMANDS = new Set(['capabilities', 'pick_source', 'cancel_job', 'purge_jobs']);
+const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
+
+function exactKeys(value, expected) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).sort().join(',') === [...expected].sort().join(',')
+  );
+}
+
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function validSecret(secret) {
+  const value = Buffer.isBuffer(secret) ? secret : Buffer.from(secret || '');
+  if (value.length !== 32) throw new SafeError('Companion-Session-Key muss genau 256 Bit haben.');
+  return Buffer.from(value);
+}
+
+function unsignedFrame(frame) {
+  return {
+    session_id: frame.session_id,
+    sequence: frame.sequence,
+    command: frame.command,
+    params: frame.params
+  };
+}
+
+function frameMac(secret, frame) {
+  return crypto.createHmac('sha256', validSecret(secret)).update(canonical(unsignedFrame(frame))).digest('hex');
+}
+
+function signFrame(secret, frame) {
+  const unsigned = unsignedFrame(frame);
+  return { ...unsigned, mac: frameMac(secret, unsigned) };
+}
+
+function safeEqualHex(left, right) {
+  if (!/^[0-9a-f]{64}$/i.test(String(left || '')) || !/^[0-9a-f]{64}$/i.test(String(right || ''))) {
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+}
+
+function response(result) {
+  const encoded = JSON.stringify(result);
+  if (/sourcePath|source_path|filename|original_path/i.test(encoded)) {
+    throw new SafeError('Companion-Antwort verletzt die Rohdatengrenze.');
+  }
+  return result;
+}
+
+function createCompanionSession(options = {}) {
+  const secret = validSecret(options.secret || crypto.randomBytes(32));
+  const sessionId = options.sessionId || crypto.randomUUID();
+  const selectSource = options.pickSource || pickSource;
+  const sources = new Map();
+  let nextSequence = 1;
+
+  function descriptor() {
+    return {
+      ipc_version: IPC_VERSION,
+      session_id: sessionId,
+      transport: 'inherited_stdio',
+      network_listener: false,
+      authenticated_frames: true,
+      model_authority: false
+    };
+  }
+
+  function verify(frame) {
+    if (!exactKeys(frame, ['session_id', 'sequence', 'command', 'params', 'mac'])) {
+      throw new SafeError('Ungültiger Companion-IPC-Frame.');
+    }
+    if (frame.session_id !== sessionId || frame.sequence !== nextSequence || !COMMANDS.has(frame.command)) {
+      throw new SafeError('Companion-IPC-Frame ist nicht für diese Session gültig.');
+    }
+    if (!exactKeys(frame.params, Object.keys(frame.params || {}))) {
+      throw new SafeError('Ungültige Companion-IPC-Parameter.');
+    }
+    if (!safeEqualHex(frame.mac, frameMac(secret, frame))) {
+      throw new SafeError('Companion-IPC-Authentifizierung fehlgeschlagen.');
+    }
+    nextSequence++;
+  }
+
+  function localAction() {
+    return { action_id: crypto.randomUUID(), channel: 'local_companion' };
+  }
+
+  function dispatch(frame) {
+    verify(frame);
+    if (frame.command === 'capabilities') {
+      if (!exactKeys(frame.params, [])) throw new SafeError('Capabilities akzeptiert keine Parameter.');
+      return response(descriptor());
+    }
+    if (frame.command === 'pick_source') {
+      if (!exactKeys(frame.params, ['profile']) || !PROFILES.has(frame.params.profile)) {
+        throw new SafeError('Ungültiges Profil für die lokale Dateiauswahl.');
+      }
+      const selectedByAdapter = selectSource();
+      if (!exactKeys(selectedByAdapter, ['sourcePath', 'sourceType', 'sourceBytes'])) {
+        throw new SafeError('Der lokale Dateidialog lieferte ein ungültiges Ergebnis.');
+      }
+      const selected = validateSelectedPath(selectedByAdapter.sourcePath);
+      if (
+        selected.sourceType !== selectedByAdapter.sourceType ||
+        selected.sourceBytes !== selectedByAdapter.sourceBytes
+      ) {
+        throw new SafeError('Die ausgewählte Datei wurde während der Übergabe verändert.');
+      }
+      const job = createJob({ profile: frame.params.profile, source_type: selected.sourceType });
+      sources.set(job.job_id, selected.sourcePath);
+      return response({ ok: true, job });
+    }
+    if (frame.command === 'cancel_job') {
+      if (!exactKeys(frame.params, ['job_id'])) throw new SafeError('Abbruch benötigt genau eine Job-ID.');
+      const job = transitionJob(frame.params.job_id, 'Cancelled', { human_action: localAction() });
+      sources.delete(frame.params.job_id);
+      return response({ ok: true, job });
+    }
+    if (frame.command === 'purge_jobs') {
+      if (!exactKeys(frame.params, [])) throw new SafeError('Löschen akzeptiert keine Parameter.');
+      sources.clear();
+      return response(purgeCompanionJobs(localAction()));
+    }
+    throw new SafeError('Unbekannter Companion-Befehl.');
+  }
+
+  return { descriptor, dispatch, hasPrivateSource: (jobId) => sources.has(jobId) };
+}
+
+module.exports = {
+  IPC_VERSION,
+  canonical,
+  frameMac,
+  signFrame,
+  createCompanionSession
+};

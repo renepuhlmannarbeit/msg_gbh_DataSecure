@@ -1,6 +1,7 @@
 # DataSecure Companion API v1
 
-Status: Vertrag und Job-Retention implementiert, lokale UI noch nicht implementiert.
+Status: Vertrag, Job-Retention, privater IPC und nativer File Picker implementiert;
+Review-UI und signiertes Packaging noch nicht implementiert.
 
 ## Zweck
 
@@ -61,8 +62,7 @@ Der Status enthält nur:
 
 ## Nächster Implementierungsschritt
 
-1. Signierten Companion-Prozess mit privatem IPC anbinden.
-2. File Picker außerhalb Claude bereitstellen.
-3. Extraktionsergebnisse über versionierte Source-Locator-IDs an die lokale UI geben.
-4. Lokale Action-ID erst durch einen echten UI-Klick erzeugen.
-5. TXT-/DOCX-Vertical-Slice gegen diesen Zustandsautomaten integrieren.
+1. Companion-Launcher an die MCP-Fassade anbinden und Packaging signieren.
+2. Extraktionsergebnisse über versionierte Source-Locator-IDs an die lokale UI geben.
+3. Lokale Review-/Skip-Action an einen echten UI-Klick und Output-Hash binden.
+4. TXT-/DOCX-Vertical-Slice gegen diesen Zustandsautomaten integrieren.
