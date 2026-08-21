@@ -7,11 +7,13 @@ const { VERSION, listInput, listPackageDirs } = require('./common');
 const { listReviewItems } = require('./review');
 const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
+const { companionCapabilities } = require('../companion/job-store');
 
 function genericStatus(options = {}) {
   const engine = readStatus();
   const retention = retentionStatus(options);
   const audit = auditStatus();
+  const companion = companionCapabilities();
   const auditBlocked =
     audit.legacy_pending > 0 || audit.migration_errors > 0 || audit.write_errors > 0;
   return {
@@ -38,6 +40,12 @@ function genericStatus(options = {}) {
     legacy_audit_pending: audit.legacy_pending,
     audit_migration_errors: audit.migration_errors,
     audit_write_errors: audit.write_errors,
+    companion_api_version: companion.api_version,
+    companion_phase: companion.phase,
+    companion_local_ui: companion.local_ui,
+    companion_job_retention: companion.job_retention,
+    companion_model_can_review: companion.model_can_review,
+    companion_model_can_release: companion.model_can_release,
     folders_ready: true,
     supported_inputs: [
       'PDF',

@@ -185,6 +185,12 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.legacy_audit_pending, 'number');
     assert.strictEqual(typeof result.structuredContent.audit_migration_errors, 'number');
     assert.strictEqual(typeof result.structuredContent.audit_write_errors, 'number');
+    assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
+    assert.strictEqual(result.structuredContent.companion_phase, 'contract_ready');
+    assert.strictEqual(result.structuredContent.companion_local_ui, 'not_implemented');
+    assert.strictEqual(result.structuredContent.companion_job_retention, 'not_integrated');
+    assert.strictEqual(result.structuredContent.companion_model_can_review, false);
+    assert.strictEqual(result.structuredContent.companion_model_can_release, false);
     assert.ok(result.structuredContent.supported_inputs.includes('PNG'));
     assert.ok(result.structuredContent.supported_inputs.includes('JPEG'));
     assert.ok(result.structuredContent.supported_inputs.includes('BMP'));
