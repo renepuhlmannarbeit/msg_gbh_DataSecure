@@ -128,6 +128,98 @@ test('golden run preserves the professional content', () => {
   }
 });
 
+test('unknown credentials are preserved by section while the same issuer as employer is anonymized', () => {
+  const src = [
+    'MAX MUSTERMANN',
+    'Zertifizierungen',
+    'Example Learning GmbH Quantum Validation Expert (QVE)',
+    'Qualifikationen',
+    'Arbeitgeber: Example Learning GmbH'
+  ].join('\n');
+  const { text, residual } = anonymizeVerified(src, 'personnel_profile');
+  assertPresent(text, 'Example Learning GmbH Quantum Validation Expert (QVE)', 'unknown credential and issuer');
+  assertPresent(text, 'Arbeitgeber: [ARBEITGEBER_001]', 'employer placeholder');
+  assert.deepStrictEqual(residual, [], 'preserved issuer must not fail the residual gate');
+});
+
+test('credential context works in prose without a certification heading', () => {
+  const src = [
+    'MAX MUSTERMANN',
+    'Certified Tester Foundation Level, ausgestellt durch Example Board e.V.',
+    'Microsoft Azure Administrator Associate',
+    'AWS Certified Developer – Associate',
+    'IIBA Certificate in Product Ownership Analysis (CPOA)',
+    'HL7 FHIR Foundational Implementer',
+    'HIMSS Certified Professional in Healthcare Information and Management Systems (CPHIMS)'
+  ].join('\n');
+  const { text, residual } = anonymizeVerified(src, 'personnel_profile');
+  assertPresent(text, 'Example Board e.V.', 'issuer in credential prose');
+  assertPresent(text, 'Certified Tester Foundation Level', 'credential title');
+  assertPresent(text, 'Microsoft Azure Administrator Associate', 'Microsoft credential');
+  assertPresent(text, 'AWS Certified Developer – Associate', 'AWS credential');
+  assertPresent(text, 'IIBA Certificate in Product Ownership Analysis (CPOA)', 'IIBA credential');
+  assertPresent(text, 'HL7 FHIR Foundational Implementer', 'HL7 credential');
+  assertPresent(text, 'HIMSS Certified Professional', 'HIMSS credential');
+  assert.deepStrictEqual(residual, [], 'credential prose must pass verification');
+});
+
+test('domain-shaped credential issuers stay while verification URLs are redacted', () => {
+  const src = [
+    'MAX MUSTERMANN',
+    'Zertifizierungen',
+    'Scrum.org Professional Scrum Master II (PSM II)',
+    'Verifikation: https://scrum.org/certificates/private-4711'
+  ].join('\n');
+  const { text, residual } = anonymizeVerified(src, 'personnel_profile');
+  assertPresent(text, 'Scrum.org Professional Scrum Master II (PSM II)', 'domain-shaped issuer');
+  assertAbsent(text, 'private-4711', 'verification URL');
+  assertPresent(text, '[URL_REDACTED]', 'URL placeholder');
+  assert.deepStrictEqual(residual, [], 'issuer and redacted verification URL must pass verification');
+});
+
+test('OCR span classification protects issuers but still detects certificate-holder names', () => {
+  const src = 'Zertifikat für Max Mustermann, ausgestellt durch Example Board e.V.';
+  const spans = pii.sensitiveSpans(src, 'personnel_profile');
+  assert.ok(spans.some((s) => s.type === 'PERSON' && /Max Mustermann/i.test(s.text)), 'holder name must remain sensitive');
+  assert.ok(!spans.some((s) => /Example Board|Board e\.V\./i.test(s.text)), 'issuer must remain professional content');
+});
+
+test('known technology brands with a legal form are still anonymized as customers', () => {
+  const src = 'MAX MUSTERMANN\nKunde: SAP SE\nRolle: Business Analyst';
+  const { text, residual } = anonymizeVerified(src, 'personnel_profile');
+  assertAbsent(text, 'SAP SE', 'customer organisation');
+  assert.deepStrictEqual(residual, [], 'customer organisation must be removed');
+});
+
+test('issuer and role words in project prose do not protect a customer', () => {
+  const src = [
+    'MAX MUSTERMANN',
+    'Projektkunde: Example Health GmbH',
+    'Weiterentwicklung des Portals der Example Health GmbH auf Basis von SAP Commerce. ' +
+      'Die Rolle wechselte vom Product Owner zum Scrum Master; weitere technische Aufgaben ' +
+      'umfassten Architektur, Tests und die Abstimmung mit mehreren Entwicklungsteams.'
+  ].join('\n');
+  const { text, residual } = anonymizeVerified(src, 'personnel_profile');
+  assertAbsent(text, 'Example Health GmbH', 'customer in project prose');
+  assert.deepStrictEqual(residual, [], 'project prose must pass verification');
+});
+
+test('IT, testing, product, business-analysis and health-IT vocabulary is professional content', () => {
+  const src = [
+    'MAX MUSTERMANN',
+    'Software Architecture, Requirements Engineering, Test Management, Test Automation',
+    'Product Discovery, Product Vision, Sprint Retrospective, Stakeholder Management',
+    'Business Analysis, Requirements Elicitation, Process Modeling, Data Modeling',
+    'Health Level Seven, HL7 FHIR, IHE Profiles, Electronic Health Record',
+    'Elektronische Patientenakte, Telematik Infrastruktur, Patient Identity Management'
+  ].join('\n');
+  const { text } = anonymizeVerified(src, 'personnel_profile');
+  for (const term of [
+    'Software Architecture', 'Test Management', 'Product Discovery', 'Business Analysis',
+    'HL7 FHIR', 'IHE Profiles', 'Elektronische Patientenakte', 'Telematik Infrastruktur'
+  ]) assertPresent(text, term, 'professional vocabulary');
+});
+
 test('golden run assigns exactly one person pseudonym', () => {
   const src = fs.readFileSync(goldenSource, 'utf8');
   const { counts } = anonymizeVerified(src, 'personnel_profile');

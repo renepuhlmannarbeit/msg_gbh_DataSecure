@@ -15,8 +15,8 @@ file prints one line per case and exits non-zero on the first failure.
 |---|---|---|
 | `test-manifest.js` | 13 | version consistency across package.json, MCPB manifest, plugin.json, VERSION, BUILD_INFO and all skills; tool/prompt parity between manifest and server; marketplace target; that the plugin entry point resolves inside the plugin root; that every test the npm script names exists |
 | `test-plugin-structure.js` | – | plugin directory layout, skill frontmatter, MCP config, and mechanical coverage requiring every runtime tool to appear in agent guidance or a justified exception |
-| `test-parsers.js` | 25 | DOCX/XLSX/PPTX text, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; standalone PNG routing; scan-PDF JPEG routing; ZIP hardening including false sizes, aggregate limits and header consistency; PDF text layer and escapes; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
-| `test-pii-regression.js` | 55 | golden personnel profile byte for byte, exact preservation of business periods, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
+| `test-parsers.js` | 26 | DOCX/XLSX/PPTX text including nested DrawingML text boxes, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; standalone PNG routing; scan-PDF JPEG routing; ZIP hardening including false sizes, aggregate limits and header consistency; PDF text layer and escapes; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
+| `test-pii-regression.js` | 62 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, project-prose disambiguation, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
 | `test-image-sanitizer.js` | 20 | PNG/BMP round trips, bounded PNG decompression and chunk lengths, metadata stripping, refusal of unsupported variants, OCR offset mapping, pixel-level redaction with padding and clamping |
 | `test-visual.js` | 19 | every branch of the visual gate with injected OCR and rasteriser bridges |
 | `test-retention.js` | 14 | expiry by injected time/mtime, duplicate and invalid evidence, immediate reconciliation, scope isolation, stable status diagnostics, staging and audit preservation, and non-fatal deletion/inspection failures |
@@ -32,7 +32,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 298 assertion-level cases plus the plugin structure check (**299 checks overall**).
+Total: 306 assertion-level cases plus the plugin structure check (**307 checks overall**).
 
 ## The adversarial suite
 

@@ -25,6 +25,7 @@ const {
 const { anonymizePersonnel } = require('./personnel');
 const { findStructuredSpans, scanStructured, replaceStructured } = require('./structured');
 const { placeholderSpans, applySpans } = require('./spans');
+const { credentialContextSpans, inCredentialContext, isCredentialIssuerDomain } = require('./credentials');
 
 // Entity priorities. Structured identifiers (80-90) always win over entity
 // names so that a surname alias can never eat part of an e-mail address, and a
@@ -125,7 +126,6 @@ function buildOrgDictionary(text, reg, profile, findings) {
   const orgs = collectOrganizations(text);
 
   for (const org of orgs) {
-    if (isAllowedOrg(org)) continue;
     const existing = reg.lookup('ORG', org);
     const ph = existing || reg.assign(profile === 'personnel_profile' ? 'CUSTOMER' : 'ORG', org);
     reg.map.set(`ORG:${key(org)}`, ph);
@@ -170,9 +170,22 @@ function anonymize(text, profile = 'general') {
   const src = normalizeText(text);
   const findings = [];
   const reg = makeRegistry();
+  const sourceCredentialRanges = profile === 'personnel_profile' || profile === 'applicant'
+    ? credentialContextSpans(src)
+    : [];
+  const sourceOrgSpans = collectOrganizations(src).flatMap((org) =>
+    findLiteralSpans(src,org,'','ORGANIZATION',PRIORITY.ORGANIZATION)
+  );
 
   const strongPersonAnchors = collectPersonAnchors(src);
-  const seeds = collectPersonSeeds(src, profile, strongPersonAnchors);
+  const seeds = collectPersonSeeds(src, profile, strongPersonAnchors).filter((seed) => {
+    const occurrences=findLiteralSpans(src,seed.value,'','PERSON',PRIORITY.PERSON);
+    if(!occurrences.length) return true;
+    return !occurrences.every((span) =>
+      inCredentialContext(src,span.start,span.end,sourceCredentialRanges) &&
+      sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
+    );
+  });
   const personKeys = new Set();
   for (const seed of seeds) {
     personKeys.add(key(seed.value));
@@ -181,6 +194,9 @@ function anonymize(text, profile = 'general') {
 
   let out = src;
   if (profile === 'personnel_profile') out = anonymizePersonnel(out, reg, findings, personKeys);
+  const credentialRanges = profile === 'personnel_profile' || profile === 'applicant'
+    ? credentialContextSpans(out)
+    : [];
 
   const dictionary = [
     ...buildPersonDictionary(seeds, reg),
@@ -203,10 +219,14 @@ function anonymize(text, profile = 'general') {
   // Single resolved pass: structured identifiers and entity literals are
   // collected first and conflicts are settled by priority, so no rule can
   // corrupt the input of another rule.
-  const spans = [...findStructuredSpans(out)];
+  const spans = [...findStructuredSpans(out)].filter((span) =>
+    !(span.type === 'URL' && isCredentialIssuerDomain(out,span.start,span.end,credentialRanges))
+  );
   for (const entry of dictionary) {
     const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority);
     for (const span of found) {
+      if ((entry.type === 'ORGANIZATION' || entry.type === 'PROJECT') &&
+          inCredentialContext(out, span.start, span.end, credentialRanges)) continue;
       spans.push(
         span.type === 'PERSON' || span.type === 'PERSON_ALIAS' ? growOverHonorific(out, span) : span
       );
@@ -216,6 +236,7 @@ function anonymize(text, profile = 'general') {
     URL_RE.lastIndex = 0;
     let m;
     while ((m = URL_RE.exec(out))) {
+      if(isCredentialIssuerDomain(out,m.index,m.index+m[0].length,credentialRanges)) continue;
       spans.push({
         type: 'URL',
         start: m.index,
@@ -256,30 +277,58 @@ function anonymize(text, profile = 'general') {
 // redactor claimed to have replaced survives in the output.
 function scanResidual(text, profile = 'general', knownValues = [], options = {}) {
   const clean = normalizeText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
-  const out = scanStructured(clean).map((f) => ({ type: f.type, text: f.text }));
+  const credentialRanges = profile === 'personnel_profile' || profile === 'applicant'
+    ? credentialContextSpans(clean)
+    : [];
+  const out = scanStructured(clean)
+    .filter((f) => !(f.type === 'URL' && isCredentialIssuerDomain(clean,f.start,f.end,credentialRanges)))
+    .map((f) => ({ type: f.type, text: f.text }));
+  const residualOrgKeys=new Set();
+  const residualOrgSpans=[];
+  for(const org of collectOrganizations(clean)) {
+    residualOrgKeys.add(key(org));
+    residualOrgKeys.add(key(orgAlias(org)));
+    residualOrgSpans.push(...findLiteralSpans(clean,org,'','ORGANIZATION',PRIORITY.ORGANIZATION));
+  }
 
   const strongPersonAnchor = options.strongPersonAnchor === true;
   for (const seed of collectPersonSeeds(clean, profile, null, strongPersonAnchor)) {
+    const occurrences=findLiteralSpans(clean,seed.value,'','PERSON',PRIORITY.PERSON);
+    const issuerOnly=occurrences.length>0 && occurrences.every((span) =>
+      inCredentialContext(clean,span.start,span.end,credentialRanges) &&
+      residualOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
+    );
+    if(issuerOnly) continue;
     out.push({ type: 'PERSON_CANDIDATE', text: seed.value });
   }
 
   if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {
     URL_RE.lastIndex = 0;
     let match;
-    while ((match = URL_RE.exec(clean))) out.push({ type: 'URL', text: match[0] });
+    while ((match = URL_RE.exec(clean))) {
+      if(!isCredentialIssuerDomain(clean,match.index,match.index+match[0].length,credentialRanges)) {
+        out.push({ type: 'URL', text: match[0] });
+      }
+    }
   }
 
   if (profile === 'personnel_profile') {
     for (const org of collectOrganizations(clean)) {
-      if (!isAllowedOrg(org)) out.push({ type: 'ORGANIZATION_CANDIDATE', text: org });
+      const occurrences=findLiteralSpans(clean,org,'','ORGANIZATION',PRIORITY.ORGANIZATION);
+      if (occurrences.some((s)=>!inCredentialContext(clean,s.start,s.end,credentialRanges))) {
+        out.push({ type: 'ORGANIZATION_CANDIDATE', text: org });
+      }
     }
   }
 
   for (const value of knownValues || []) {
     const v = normalizeSpaces(value);
     if (v.length < 3) continue;
-    const re = new RegExp(`${NB}${escapeRegExp(v)}${NA}`, 'iu');
-    if (re.test(clean)) out.push({ type: 'RESIDUAL_ENTITY', text: v });
+    const occurrences=findLiteralSpans(clean,v,'','RESIDUAL_ENTITY',0);
+    const credentialOrg=residualOrgKeys.has(key(v));
+    if (occurrences.some((s)=>!(credentialOrg && inCredentialContext(clean,s.start,s.end,credentialRanges)))) {
+      out.push({ type: 'RESIDUAL_ENTITY', text: v });
+    }
   }
 
   return out;
@@ -305,6 +354,12 @@ function verifyRedactedText(afterText, redactedValues = []) {
 // Character spans used to map OCR text back to pixel rectangles.
 function sensitiveSpans(text, profile = 'general') {
   const src = normalizeText(text);
+  const credentialRanges = profile === 'personnel_profile' || profile === 'applicant'
+    ? credentialContextSpans(src)
+    : [];
+  const sourceOrgSpans = collectOrganizations(src).flatMap((org) =>
+    findLiteralSpans(src,org,'','ORGANIZATION',PRIORITY.ORGANIZATION)
+  );
   const out = [];
   const seen = new Set();
 
@@ -316,17 +371,22 @@ function sensitiveSpans(text, profile = 'general') {
     out.push({ type, start, end, text: value });
   }
 
-  for (const f of findStructuredSpans(src)) add(f.type, f.start, f.end, f.text);
+  for (const f of findStructuredSpans(src)) {
+    if(f.type === 'URL' && isCredentialIssuerDomain(src,f.start,f.end,credentialRanges)) continue;
+    add(f.type, f.start, f.end, f.text);
+  }
 
   for (const seed of collectPersonSeeds(src, profile)) {
     for (const span of findLiteralSpans(src, seed.value, '', 'PERSON', PRIORITY.PERSON)) {
+      if(inCredentialContext(src,span.start,span.end,credentialRanges) &&
+         sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)) continue;
       add('PERSON', span.start, span.end, span.text);
     }
   }
 
   for (const org of collectOrganizations(src)) {
-    if (isAllowedOrg(org)) continue;
     for (const span of findLiteralSpans(src, org, '', 'ORGANIZATION', PRIORITY.ORGANIZATION)) {
+      if (inCredentialContext(src,span.start,span.end,credentialRanges)) continue;
       add('ORGANIZATION', span.start, span.end, span.text);
     }
   }
@@ -334,7 +394,10 @@ function sensitiveSpans(text, profile = 'general') {
   if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {
     URL_RE.lastIndex = 0;
     let m;
-    while ((m = URL_RE.exec(src))) add('URL', m.index, m.index + m[0].length, m[0]);
+    while ((m = URL_RE.exec(src))) {
+      if(isCredentialIssuerDomain(src,m.index,m.index+m[0].length,credentialRanges)) continue;
+      add('URL', m.index, m.index + m[0].length, m[0]);
+    }
   }
 
   return out.sort((a, b) => a.start - b.start || b.end - a.end);

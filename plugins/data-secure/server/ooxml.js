@@ -41,23 +41,52 @@ function paragraphText(xml, textTag='w:t') {
   let m; while((m=tokenRe.exec(xml))) { if(m[1]!==undefined)s+=xmlDecode(m[1]); else if(/^<w:tab/i.test(m[0])) s+='\t'; else s+='\n'; }
   return s.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
 }
-function renderWordBody(xml) {
-  const body=/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/i.exec(xml)?.[1] || xml;
-  const blocks=[]; const re=/<w:(p|tbl)\b[\s\S]*?<\/w:\1>/gi; let m;
-  while((m=re.exec(body))) {
-    if(m[1].toLowerCase()==='p') {
-      const p=m[0], txt=paragraphText(p); if(!txt) continue;
-      const style=/<w:pStyle\b[^>]*w:val="([^"]+)"/i.exec(p)?.[1]||'';
-      const lvl=/heading\s*([1-6])/i.exec(style)?.[1] || /^Heading([1-6])$/i.exec(style)?.[1];
-      const bullet=/<w:numPr\b/i.test(p);
-      if(lvl) blocks.push(`${'#'.repeat(Number(lvl))} ${txt}`); else if(bullet) blocks.push(`- ${txt}`); else blocks.push(txt);
-    } else {
-      const rows=[]; let rm; const rr=/<w:tr\b[\s\S]*?<\/w:tr>/gi;
-      while((rm=rr.exec(m[0]))) { const cells=[]; let cm; const cr=/<w:tc\b[\s\S]*?<\/w:tc>/gi; while((cm=cr.exec(rm[0]))) cells.push(paragraphText(cm[0]).replace(/\n/g,'<br>')); rows.push(cells); }
-      if(rows.length){const cols=Math.max(...rows.map(r=>r.length));const norm=rows.map(r=>Array.from({length:cols},(_,i)=>r[i]||''));blocks.push('| '+norm[0].join(' | ')+' |\n| '+norm[0].map(()=> '---').join(' | ')+' |'+(norm.length>1?'\n'+norm.slice(1).map(r=>'| '+r.join(' | ')+' |').join('\n'):''));}
-    }
+function renderWordParagraph(p) {
+  const txt=paragraphText(p); if(!txt) return '';
+  const style=/<w:pStyle\b[^>]*w:val="([^"]+)"/i.exec(p)?.[1]||'';
+  const lvl=/heading\s*([1-6])/i.exec(style)?.[1] || /^Heading([1-6])$/i.exec(style)?.[1];
+  const bullet=/<w:numPr\b/i.test(p);
+  if(lvl) return `${'#'.repeat(Number(lvl))} ${txt}`;
+  if(bullet) return `- ${txt}`;
+  return txt;
+}
+function renderWordTable(table) {
+  const rows=[]; let rm; const rr=/<w:tr\b[\s\S]*?<\/w:tr>/gi;
+  while((rm=rr.exec(table))) {
+    const cells=[]; let cm; const cr=/<w:tc\b[\s\S]*?<\/w:tc>/gi;
+    while((cm=cr.exec(rm[0]))) cells.push(paragraphText(cm[0]).replace(/\n/g,'<br>'));
+    rows.push(cells);
   }
-  return blocks.join('\n\n');
+  if(!rows.length) return '';
+  const cols=Math.max(...rows.map(r=>r.length));
+  const norm=rows.map(r=>Array.from({length:cols},(_,i)=>r[i]||''));
+  return '| '+norm[0].join(' | ')+' |\n| '+norm[0].map(()=> '---').join(' | ')+' |'+(norm.length>1?'\n'+norm.slice(1).map(r=>'| '+r.join(' | ')+' |').join('\n'):'');
+}
+function renderWordBody(xml) {
+  // Word stores visible text boxes as paragraphs nested inside an outer
+  // drawing paragraph. A flat non-greedy paragraph regex stops at the first
+  // nested closing tag and silently loses the remaining text-box paragraphs.
+  // Prefer the modern AlternateContent choice and walk balanced p/tbl tags so
+  // every visible leaf paragraph is retained in document order.
+  const source=String(xml).replace(/<mc:Fallback\b[^>]*>[\s\S]*?<\/mc:Fallback>/gi,'');
+  const body=/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/i.exec(source)?.[1] || source;
+  const root={type:'root',children:[]}; const stack=[root]; let m;
+  const tags=/<(\/?)w:(p|tbl)\b([^>]*)>/gi;
+  while((m=tags.exec(body))) {
+    const closing=Boolean(m[1]), type=m[2].toLowerCase();
+    const selfClosing=!closing && /\/\s*$/.test(m[3]);
+    if(selfClosing) continue;
+    if(!closing) { stack.push({type,start:m.index,children:[]}); continue; }
+    const node=stack.pop();
+    if(!node || node.type!==type) continue;
+    const raw=body.slice(node.start,tags.lastIndex);
+    let block='';
+    if(type==='tbl') block=renderWordTable(raw);
+    else if(node.children.length) block=node.children.filter(Boolean).join('\n\n');
+    else block=renderWordParagraph(raw);
+    stack[stack.length-1].children.push(block);
+  }
+  return root.children.filter(Boolean).join('\n\n');
 }
 function docxCoverageWarnings(entries) {
   const supported = [

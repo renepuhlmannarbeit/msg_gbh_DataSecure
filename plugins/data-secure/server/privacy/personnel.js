@@ -2,6 +2,7 @@
 
 const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName } = require('./base');
 const { collectOrganizations } = require('./entities');
+const { credentialContextSpans } = require('./credentials');
 
 const EMPLOYER_LABEL = '(?:Unternehmen|Arbeitgeber|Firma|Aktueller\\s+Arbeitgeber|Entsendendes\\s+Unternehmen)';
 const LOCATION_LABEL =
@@ -63,8 +64,13 @@ function looksLikeOrgSide(value, personKeys) {
 
 function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
   const out = [];
+  const ranges = credentialContextSpans(text);
+  let lineOffset = 0;
 
   for (const rawLine of String(text).split('\n')) {
+    const lineEnd = lineOffset + rawLine.length;
+    const credentialLine = ranges.some((r) => lineOffset < r.end && r.start < lineEnd);
+    lineOffset = lineEnd + 1;
     let line = rawLine;
 
     const tableEmployer = line.match(TABLE_EMPLOYER_RE);
@@ -104,7 +110,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     const [, prefix, content] = line.match(PREFIX_RE);
 
     // "<Customer> – <Project>" project headings.
-    const dash = content.match(DASH_SPLIT_RE);
+    const dash = credentialLine ? null : content.match(DASH_SPLIT_RE);
     if (dash) {
       const left = normalizeSpaces(dash[1]);
       const right = normalizeSpaces(dash[2]);
@@ -124,7 +130,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     }
 
     // A bare organisation line inside a project block is the customer.
-    if (!prefix.trim() && content.trim() && content.length <= 100) {
+    if (!credentialLine && !prefix.trim() && content.trim() && content.length <= 100) {
       const s = normalizeSpaces(content);
       if (!s.startsWith('[') && !s.includes('|') && looksLikeOrgSide(s, personKeys)) {
         const isCapsOrLegal =

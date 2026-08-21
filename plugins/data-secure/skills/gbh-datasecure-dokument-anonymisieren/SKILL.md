@@ -1,7 +1,7 @@
 ---
 name: gbh-datasecure-dokument-anonymisieren
 description: Nutze diesen Skill, wenn lokale Dokumente oder Scans vor der Verarbeitung durch Claude anonymisiert, pseudonymisiert, de-identifiziert oder auf personenbezogene Daten geprüft werden sollen.
-version: 3.2.0-rc11
+version: 3.2.0-rc12
 ---
 
 # GBH DataSecure – Dokument anonymisieren

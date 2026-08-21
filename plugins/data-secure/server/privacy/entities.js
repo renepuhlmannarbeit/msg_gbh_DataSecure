@@ -8,7 +8,6 @@ const {
   normalizeSpaces,
   key,
   lines,
-  isAllowedOrg,
   titleCase,
   isStopToken,
   looksName,
@@ -102,6 +101,16 @@ function collectPersonAnchors(text) {
 
   const table = new RegExp(`^\\|\\s*${PERSON_LABEL}\\s*:?\\s*\\|\\s*([^|\\n]+)\\|`, 'gimu');
   while ((m = table.exec(src))) pushPerson(out, m[1], 'label');
+
+  // Credential prose often names the holder on the same line as the issuer.
+  // The issuer remains professional content, but the holder is still PII.
+  const credentialHolder = new RegExp(
+    `(?:Zertifikat|Bescheinigung|certificate|credential)\\s+(?:für|for)\\s+` +
+      `((?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,2})` +
+      `(?=\\s*(?:,|;|\\(|$))`,
+    'giu'
+  );
+  while ((m = credentialHolder.exec(src))) pushPerson(out, m[1], 'credential_holder');
 
   // A standalone all-caps line in a profile header is the person's name.
   const capsLine = new RegExp(`^${CAPS_TOKEN}(?:\\s+${CAPS_TOKEN}){1,3}$`, 'u');
@@ -306,7 +315,7 @@ function collectOrganizations(text) {
   let m;
   while ((m = COMPANY_RE.exec(text))) {
     const v = normalizeSpaces(m[1]);
-    if (v && !isAllowedOrg(v)) out.push(v);
+    if (v) out.push(v);
   }
   return [...new Set(out)];
 }

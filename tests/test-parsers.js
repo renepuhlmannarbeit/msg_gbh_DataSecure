@@ -55,6 +55,29 @@ test('DOCX XML entities are decoded', () => {
   assertPresent(result.markdown, 'Preis < 100', 'less-than entity');
 });
 
+test('DOCX DrawingML text boxes retain all certification text', () => {
+  const drawing = [
+    '<w:p><w:r><mc:AlternateContent>',
+    '<mc:Choice Requires="wps"><w:drawing><wps:wsp><wps:txbx><w:txbxContent>',
+    '<w:p><w:r><w:t>Zertifizierungen</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>Scrum.org Professional Scrum Product Owner I (PSPO I)</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>SAFe Agilist</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>Scrum.org Professional Scrum Master II (PSM II)</w:t></w:r></w:p>',
+    '</w:txbxContent></wps:txbx></wps:wsp></w:drawing></mc:Choice>',
+    '<mc:Fallback><w:pict><w:txbxContent><w:p><w:r><w:t>Zertifizierungen</w:t></w:r></w:p></w:txbxContent></w:pict></mc:Fallback>',
+    '</mc:AlternateContent></w:r></w:p>'
+  ].join('');
+  const result = parseOoxml(zipStore([[
+    'word/document.xml',
+    `<w:document xmlns:w="w" xmlns:mc="mc" xmlns:wps="wps"><w:body>${drawing}<w:p><w:r><w:t>Qualifikationen</w:t></w:r></w:p></w:body></w:document>`
+  ]]), '.docx');
+  assertPresent(result.markdown, 'Scrum.org Professional Scrum Product Owner I (PSPO I)', 'text-box certificate issuer');
+  assertPresent(result.markdown, 'SAFe Agilist', 'text-box certificate');
+  assertPresent(result.markdown, 'Scrum.org Professional Scrum Master II (PSM II)', 'last text-box paragraph');
+  assert.strictEqual((result.markdown.match(/Zertifizierungen/g)||[]).length, 1, 'fallback text must not be duplicated');
+  assert.ok(result.markdown.indexOf('Zertifizierungen') < result.markdown.indexOf('Qualifikationen'));
+});
+
 test('DOCX embedded images become attachments with a mime type', () => {
   const png = encodePng({ width: 8, height: 8, rgba: Buffer.alloc(8 * 8 * 4, 255) });
   const result = parseOoxml(docx(['Mit Bild'], [['word/media/image1.png', png]]), '.docx');
