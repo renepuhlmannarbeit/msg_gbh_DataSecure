@@ -10,11 +10,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const lockPath = path.join(root, 'native', 'pdfium', 'pdfium-spike.lock.json');
 const sourcePath = path.join(root, 'native', 'windows', 'datasecure-pdfium-probe.cpp');
 const maxDownloadBytes = 10 * 1024 * 1024;
-const allowedDownloadHosts = new Set([
-  'github.com',
-  'objects.githubusercontent.com',
-  'release-assets.githubusercontent.com'
-]);
+const pinnedDistribution = Object.freeze({
+  repository: 'bblanchon/pdfium-binaries',
+  tag: 'chromium/8009',
+  asset: 'pdfium-win-x64.tgz',
+  url: 'https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8009/pdfium-win-x64.tgz'
+});
+const pinnedUpstreamRefUrl =
+  'https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/8009?format=JSON';
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -31,6 +34,9 @@ export function readAndValidateLock() {
   invariant(lock.release_enabled === false, 'PDFium must not be release-enabled by the spike lock');
   invariant(lock.distribution?.affiliation === 'unofficial-third-party',
     'unofficial distribution provenance must be explicit');
+  for (const [field, expected] of Object.entries(pinnedDistribution)) {
+    invariant(lock.distribution?.[field] === expected, `unexpected pinned distribution ${field}`);
+  }
   invariant(/^[a-f0-9]{40}$/.test(String(lock.distribution?.commit || '')),
     'invalid distribution commit');
   invariant(/^[a-f0-9]{64}$/.test(String(lock.distribution?.sha256 || '')),
@@ -60,19 +66,15 @@ export function readAndValidateLock() {
   return lock;
 }
 
-async function downloadPinnedAsset(lock, destination) {
-  const response = await fetch(lock.distribution.url, { redirect: 'follow', signal: AbortSignal.timeout(60000) });
-  invariant(response.ok, `PDFium download failed with HTTP ${response.status}`);
-  const finalUrl = new URL(response.url);
-  invariant(finalUrl.protocol === 'https:' && allowedDownloadHosts.has(finalUrl.hostname),
-    'PDFium download redirected to an unexpected host');
-  const declared = Number(response.headers.get('content-length') || 0);
-  invariant(!declared || declared === lock.distribution.bytes, 'PDFium Content-Length differs from lock');
-  invariant(!declared || declared <= maxDownloadBytes, 'PDFium download exceeds size limit');
-  const bytes = Buffer.from(await response.arrayBuffer());
+function downloadPinnedAsset(lock, destination) {
+  invariant(!fs.existsSync(destination), 'PDFium destination already exists');
+  run('gh.exe', ['release', 'download', pinnedDistribution.tag,
+    '--repo', pinnedDistribution.repository, '--pattern', pinnedDistribution.asset,
+    '--dir', path.dirname(destination)]);
+  invariant(fs.existsSync(destination), 'PDFium release download produced no locked asset');
+  const bytes = fs.readFileSync(destination);
   invariant(bytes.length === lock.distribution.bytes, 'PDFium asset size differs from lock');
   invariant(sha256(bytes) === lock.distribution.sha256, 'PDFium asset hash differs from lock');
-  fs.writeFileSync(destination, bytes, { flag: 'wx' });
 }
 
 async function verifyRemoteProvenance(lock, assetPath) {
@@ -101,7 +103,7 @@ async function verifyRemoteProvenance(lock, assetPath) {
     'PDFium attestation does not cover the locked asset digest');
 
   const upstreamResponse = await fetch(
-    `${lock.upstream.repository}/+/refs/heads/${lock.upstream.branch}?format=JSON`,
+    pinnedUpstreamRefUrl,
     { redirect: 'error', signal: AbortSignal.timeout(20000) });
   invariant(upstreamResponse.ok, `official PDFium ref lookup failed with HTTP ${upstreamResponse.status}`);
   const upstreamText = await upstreamResponse.text();
@@ -302,7 +304,7 @@ export async function runSpike() {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-pdfium-spike-'));
   try {
     const assetPath = path.join(temporary, lock.distribution.asset);
-    await downloadPinnedAsset(lock, assetPath);
+    downloadPinnedAsset(lock, assetPath);
     await verifyRemoteProvenance(lock, assetPath);
     const payload = inspectAndExtract(lock, assetPath, path.join(temporary, 'payload'));
     const vcvars = discoverVcvars();
