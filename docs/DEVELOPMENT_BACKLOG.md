@@ -464,13 +464,18 @@ Unternehmens-, Projekt-, Standort-, Personen- und Personalnummernmuster werden e
 
 ### DS-203 – Formatvollständigkeit und Strukturtreue (L)
 
-**Stand RC20:** Die erste explizite Matrix liegt in
+**Stand RC21:** Die erste explizite Matrix liegt in
 [`FORMAT_COVERAGE_MATRIX.md`](FORMAT_COVERAGE_MATRIX.md). Der geplante Text-PDF-
 Dialogschnitt wurde nach Security-/Architektur-Gegenproben nicht freigeschaltet. Der
 unvollständige `pdf-lite`-Pfad ist nun auch für Input-Veröffentlichungen gesperrt;
 `PDF_COVERAGE_UNVERIFIED` stellt Original und Null-Output sicher. PDFium wurde als
 Zielengine für einen strikt isolierten Text-only-Worker festgelegt; Gates und
 Trust-Boundary stehen in [`PDF_ENGINE_DECISION.md`](PDF_ENGINE_DECISION.md).
+Der gepinnte Packaging-/API-Spike läuft ausschließlich synthetisch und bestätigt
+Speicherinput, Job-Object-Kompatibilität, Basis-API sowie eine Paketgröße von rund
+7,6 MiB. Seine Produktentscheidung ist wegen Community-Binary, noch nicht vollständiger
+API-Abdeckung, AppContainer-, Reproduzierbarkeits- und Legal-Gate ausdrücklich No-Go;
+siehe [`PDFIUM_SPIKE_EVIDENCE.md`](PDFIUM_SPIKE_EVIDENCE.md).
 
 **Ergebnis:** Kopf-/Fußzeilen, Kommentare, Notizen, Tabellen, Textboxen, Metadaten,
 eingebettete Grafiken und Scan-PDFs werden systematisch erfasst. Optionaler Apache-Tika-
@@ -555,9 +560,11 @@ belegen:
    und Speichergrenzen samt fail-closed Packaging sind umgesetzt. Als Nächstes den
    Launcher für OCR/Raster kalibrieren und AppContainer ohne Netz-Capabilities gegen
    Internet, DNS, RFC1918 und Loopback nachweisen; ARM64 und Signatur folgen getrennt.
-7. **DS-203 (RC20-Fail-closed und Zielarchitektur):** PDF erzeugt weder im Dialog noch
-   im Input-Pfad ein Paket. Als Nächstes folgt der gepinnte PDFium-Packaging-/Lizenz-
-   Spike und danach ein nativer Text-only-Worker. Catalog/Page-Tree, Unicode, alle
+7. **DS-203 (RC21-Spike, Produkt weiter fail-closed):** PDF erzeugt weder im Dialog noch
+   im Input-Pfad ein Paket. Packaging, Attestation, Lizenzinventar, PE-Härtung,
+   Basis-API und Job-Object-Ausführung sind synthetisch belegt. Als Nächstes folgt ein
+   reproduzierbarer Eigenbau aus offizieller Quelle und danach der native Text-only-
+   Worker. Catalog/Page-Tree, Unicode, alle
    Nichttextobjekte, Annotationen, Attachments, JavaScript, Verschlüsselung und Limits
    müssen positiv belegt sein. Erst danach folgen reale Word-/LibreOffice-/Browser-PDFs
    und adversariale Gegenproben als Freigabeevidenz.

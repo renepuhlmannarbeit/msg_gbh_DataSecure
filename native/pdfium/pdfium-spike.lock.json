@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "purpose": "engineering-spike-only",
+  "release_enabled": false,
+  "distribution": {
+    "repository": "bblanchon/pdfium-binaries",
+    "affiliation": "unofficial-third-party",
+    "tag": "chromium/8009",
+    "commit": "83e48f560bd8088c649a50ee202a0db78fbc98ea",
+    "asset": "pdfium-win-x64.tgz",
+    "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8009/pdfium-win-x64.tgz",
+    "bytes": 3768924,
+    "sha256": "c78a8cd51b48abafcb266d868e401afefda1d189aa01ebbe743dc1d144e06031"
+  },
+  "attestation": {
+    "repository": "bblanchon/pdfium-binaries",
+    "workflow": ".github/workflows/build-all.yml",
+    "workflow_ref": "refs/heads/master",
+    "workflow_commit": "83e48f560bd8088c649a50ee202a0db78fbc98ea",
+    "runner_environment": "github-hosted",
+    "build_trigger": "workflow_dispatch",
+    "invocation": "https://github.com/bblanchon/pdfium-binaries/actions/runs/31995278599/attempts/4"
+  },
+  "upstream": {
+    "repository": "https://pdfium.googlesource.com/pdfium",
+    "branch": "chromium/8009",
+    "commit": "acf52a0b01420c97ed1005ae171edd63bd4701bd",
+    "version": "153.0.8009.0"
+  },
+  "build_contract": {
+    "target_os": "win",
+    "target_cpu": "x64",
+    "is_component_build": false,
+    "is_debug": false,
+    "pdf_enable_v8": false,
+    "pdf_enable_xfa": false,
+    "pdf_use_partition_alloc": false
+  },
+  "payload": {
+    "archive_entry_count": 50,
+    "file_count": 45,
+    "extracted_bytes": 7974710,
+    "listing_sha256": "1ddf656d684d16a50ff6335702f883f3726e20ce3dcf59c8c724f083c8b8c896",
+    "manifest_sha256": "8ca3480ffee6a9b294e3d49fb3f87c2d16e26da99dcb824fd3318f5cf8a50b6b",
+    "version_sha256": "1f792cb96ff39839d055f630231c6f042420d19c48f7d12c0ed28252a9d8acbf",
+    "args_sha256": "161bf08999e403b7da9d924c45b7ee7bc8beb3038b08f9e174ba6761dd06a976",
+    "dll_bytes": 7261184,
+    "dll_sha256": "3aabcd60cec7c2bae8e40d63110b6b53dfe657015f268496fdf9ef9460cbe4d5"
+  },
+  "required_notices": [
+    "LICENSE",
+    "licenses/pdfium.txt",
+    "licenses/zlib.txt",
+    "licenses/lcms.txt",
+    "licenses/simdutf.txt",
+    "licenses/fast_float.txt",
+    "licenses/libpng.txt",
+    "licenses/libjpeg_turbo.ijg",
+    "licenses/libjpeg_turbo.md",
+    "licenses/freetype.txt",
+    "licenses/agg23.txt",
+    "licenses/llvm-libc.txt",
+    "licenses/icu.txt",
+    "licenses/abseil.txt",
+    "licenses/libopenjpeg.txt"
+  ],
+  "pe_contract": {
+    "machine": "8664",
+    "required_hardening": [
+      "High Entropy Virtual Addresses",
+      "Dynamic base",
+      "NX compatible",
+      "Control Flow Guard",
+      "CET compatible"
+    ],
+    "imported_dlls": [
+      "ADVAPI32.dll",
+      "GDI32.dll",
+      "KERNEL32.dll",
+      "USER32.dll"
+    ],
+    "required_exports": [
+      "FPDF_InitLibraryWithConfig",
+      "FPDF_LoadMemDocument64",
+      "FPDF_GetPageCount",
+      "FPDF_LoadPage",
+      "FPDFPage_CountObjects",
+      "FPDFPage_GetObject",
+      "FPDFPageObj_GetType",
+      "FPDFText_LoadPage",
+      "FPDFText_CountChars",
+      "FPDFText_GetUnicode",
+      "FPDFPage_GetAnnotCount",
+      "FPDFDoc_GetAttachmentCount",
+      "FPDFDoc_GetJavaScriptActionCount",
+      "FPDF_GetSecurityHandlerRevision"
+    ]
+  }
+}

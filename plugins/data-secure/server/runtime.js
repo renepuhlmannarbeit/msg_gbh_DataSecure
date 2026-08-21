@@ -206,7 +206,7 @@ async function convertDocument(source, options = {}) {
   // pdf-lite remains available only for adversarial parser tests. Its extraction
   // is not a coverage proof: fonts, the page tree and every visual object cannot
   // yet be accounted for. Never let that best-effort result enter the release
-  // pipeline. RC20 keeps PDF fail-closed until the native PDFium contract in
+  // pipeline. The current release keeps PDF fail-closed until the native PDFium contract in
   // docs/PDF_ENGINE_DECISION.md has passed all release gates.
   if (ext === '.pdf') throw pdfCoverageError();
   const worker = path.join(__dirname, 'parser-worker.js');

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkgPath = path.join(root, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+const previous = pkg.version;
 
 const target = process.argv[2] || pkg.version;
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(target)) {
@@ -66,6 +67,34 @@ const skillsDir = path.join(root, 'plugins', 'data-secure', 'skills');
 for (const name of fs.readdirSync(skillsDir)) {
   const rel = path.posix.join('plugins/data-secure/skills', name, 'SKILL.md');
   patchText(rel, /^version:.*$/m, `version: ${target}`);
+}
+
+// Keep the small set of user-facing, current-release documents in sync as well.
+// Historical backlog evidence deliberately stays on the version in which it happened.
+const releaseLabel = (version) => {
+  const match = /^(\d+\.\d+\.\d+)-rc(\d+)$/i.exec(version);
+  return match ? `${match[1]} RC${match[2]}` : version;
+};
+const rcLabel = (version) => {
+  const match = /-rc(\d+)$/i.exec(version);
+  return match ? `RC${match[1]}` : version;
+};
+for (const rel of [
+  'README.md',
+  'docs/ANLEITUNG.md',
+  'docs/FORMAT_COVERAGE_MATRIX.md',
+  'docs/IT-BETRIEBSHANDBUCH.md',
+  'docs/PILOT-ABNAHME.md',
+  'plugins/data-secure/README.md',
+  'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/unterstuetzte-formate.md'
+]) {
+  const file = path.join(root, rel);
+  if (!fs.existsSync(file)) continue;
+  const current = fs.readFileSync(file, 'utf8');
+  const next = current
+    .replaceAll(releaseLabel(previous), releaseLabel(target))
+    .replaceAll(rcLabel(previous), rcLabel(target));
+  writeIfChanged(rel, next);
 }
 
 console.log(`version ${target}`);

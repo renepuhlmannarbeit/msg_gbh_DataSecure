@@ -1,6 +1,6 @@
 # GBH DataSecure – Dokumente anonymisieren
 
-Claude-Plugin zur lokalen Anonymisierung und Datenschutzprüfung von DOCX-, XLSX-, PPTX-, Text- sowie eigenständigen PNG-, JPEG- und BMP-Dateien. PDF bleibt in RC20 bis zum vollständigen nativen Coverage-Nachweis sicher gesperrt.
+Claude-Plugin zur lokalen Anonymisierung und Datenschutzprüfung von DOCX-, XLSX-, PPTX-, Text- sowie eigenständigen PNG-, JPEG- und BMP-Dateien. PDF bleibt in RC21 bis zum vollständigen nativen Coverage-Nachweis sicher gesperrt.
 
 Das Plugin verbindet:
 

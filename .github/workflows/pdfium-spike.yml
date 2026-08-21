@@ -1,0 +1,73 @@
+name: PDFium engineering spike
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  attestations: read
+  contents: read
+
+concurrency:
+  group: pdfium-spike-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Synthetic Windows x64 probe
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Initialize native CodeQL
+        uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-extended
+      - name: Verify locked supply chain and run synthetic probe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node scripts/pdfium-spike.mjs --run | Tee-Object -FilePath pdfium-spike-evidence.json
+      - name: Analyze native probe
+        uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          upload: never
+          upload-database: false
+          output: codeql-pdfium-probe-results
+      - name: Enforce clean native CodeQL result
+        run: node scripts/check-sarif.mjs codeql-pdfium-probe-results
+      - name: Prove release archives exclude the spike payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run build
+          $archives = @(Get-ChildItem -LiteralPath dist -File | Where-Object {
+            $_.Extension -in @('.zip', '.mcpb')
+          })
+          if ($archives.Count -ne 2) { throw 'Expected exactly two release archives.' }
+          foreach ($archive in $archives) {
+            $entries = @(tar -tf $archive.FullName)
+            $forbidden = @($entries | Where-Object {
+              $_ -match '(?i)(\.dll$|datasecure-pdfium-probe|native/pdfium|fpdf_|licenses/pdfium|pdfium-spike\.lock)'
+            })
+            if ($forbidden.Count -ne 0) {
+              throw "PDFium spike payload entered $($archive.Name)."
+            }
+          }
+      - name: Archive synthetic spike evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pdfium-spike-${{ github.sha }}
+          path: |
+            pdfium-spike-evidence.json
+            codeql-pdfium-probe-results
+          if-no-files-found: error
+          retention-days: 14

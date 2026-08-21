@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "eu-privacy-document-gateway",
   "display_name": "GBH DataSecure – Dokumente anonymisieren",
-  "version": "3.2.0-rc20",
+  "version": "3.2.0-rc21",
   "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway: TXT/DOCX im privaten Dialog, weitere freigegebene Formate über den lokalen Input-Pfad; verifiziertes Markdown und sicher behandelte Grafiken als Ergebnis.",
   "long_description": "Windows Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind im MCPB gebündelt; beim Anwender wird kein npm/Python installiert. TXT und DOCX sind für den privaten Einzel-/Mehrdateidialog freigegeben. Weitere Formatpfade werden ausschließlich gemäß der dokumentierten Coverage-Matrix angeboten. PDF bleibt bis zum vollständigen Page-, Font-, Unicode- und Visual-Coverage-Nachweis sicher gesperrt und erzeugt kein Privacy-Paket. Direkte Identifikatoren werden entfernt, Personalprofile behandeln Arbeitgeber/Kunden/Projektbezeichnungen als Quasi-Identifikatoren und behalten fachliche Skills/Rollen und Geschäftszeiträume bei. Visuelle Assets werden lokal rasterisiert/OCR-geprüft und redigiert oder in Needs Visual Review zurückgehalten. Claude kann nur freigegebenes Markdown und freigegebene PNGs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {

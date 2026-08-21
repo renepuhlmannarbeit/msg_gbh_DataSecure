@@ -1,6 +1,6 @@
 # Architekturentscheidung: lokaler PDF-Pfad
 
-Stand: 21.08.2026 · Entscheidung für RC20
+Stand: 21.08.2026 · Entscheidung für RC21
 
 ## Entscheidung
 
@@ -70,3 +70,18 @@ Node-Parent weist unbekannte Felder, unplausible Zähler und überschrittene Lim
 
 Erst wenn diese Gates in CI und auf einer frischen Windows-VM bestanden sind, dürfen
 Capabilities, privater Dateidialog und Produkttexte PDF als unterstützt ausweisen.
+
+## RC21: Packaging-/API-Spike
+
+Der gepinnte Engineering-Spike ist technisch erfolgreich, seine Produktentscheidung
+bleibt jedoch **No-Go**. Eine dynamische, inoffizielle Community-Distribution dient
+ausschließlich zur synthetischen API- und Größenmessung; sie wird weder gebaut noch
+geladen oder ausgeliefert, wenn das Plugin normal getestet, gestartet oder paketiert
+wird. Lockwerte, positive Evidenz und verbleibende Blocker stehen in
+[`PDFIUM_SPIKE_EVIDENCE.md`](PDFIUM_SPIKE_EVIDENCE.md).
+
+Für die nächste Stufe wird ein eigener reproduzierbarer Build aus dem offiziellen,
+gepinnten PDFium-Commit angestrebt, möglichst als statisch gebundene Einzel-EXE. Die
+Probe muss direkt als einziges Kind des vorhandenen Job-Object-Launchers laufen. Eine
+implizit gelinkte DLL ist kein Produktziel, weil Windows sie bereits vor `main` lädt
+und Härtung im Prozess dann zu spät käme.

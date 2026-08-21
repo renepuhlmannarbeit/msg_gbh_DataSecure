@@ -17,6 +17,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-plugin-structure.js` | – | plugin directory layout, skill frontmatter, MCP config, and mechanical coverage requiring every runtime tool to appear in agent guidance or a justified exception |
 | `test-parsers.js` | 30 | DOCX/XLSX/PPTX text including nested DrawingML text boxes, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; Markdown table escaping; standalone PNG routing; legacy PDF parser adversarial coverage plus the mandatory `PDF_COVERAGE_UNVERIFIED` release gate; ZIP hardening including false sizes, aggregate limits and header consistency; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
 | `test-parser-isolation.js` | 11 | mandatory Windows-launcher invocation, inherited stdin transport, renamed-PDF signature blocking before spawn, absence of a PDF implementation in the packaged worker, missing/corrupt launcher refusal without fallback, native-host architecture probing, fixed resource/setup codes, confirmed deadline termination, response-size/schema enforcement and content-free worker errors |
+| `test-pdfium-spike.mjs` | 6 | offline contract for the non-release PDFium lock: immutable distributor/upstream provenance and hashes, V8/XFA-off build, license inventory, strict separation from the product worker and unchanged `PDF_COVERAGE_UNVERIFIED` runtime gate; the networked/native engineering probe remains an explicit `npm run pdfium:spike` command |
 | `test-native-launcher.js` | 6 | real Windows Job Object transport, `ACTIVE_PROCESS=1`, process/job memory, CPU and wallclock enforcement, and `KILL_ON_JOB_CLOSE` worker removal |
 | `test-pii-regression.js` | 63 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, explicit-versus-ambiguous credential context, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, project-prose disambiguation, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
 | `test-credential-catalog.js` | 9 | deterministic offline catalog schema, aliases, context separation, optional verified references and unknown-certification preservation |
@@ -38,7 +39,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 | `test-sarif-check.mjs` | 4 | fail-closed local CodeQL report parsing without leaking finding messages into the release-gate output |
 
-Total: 371 assertion-level cases plus the plugin structure check (**372 checks overall**).
+Total: 377 assertion-level cases plus the plugin structure check (**378 checks overall**).
 
 ## The adversarial suite
 

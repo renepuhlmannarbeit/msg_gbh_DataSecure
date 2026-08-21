@@ -1,6 +1,6 @@
 # Format-Coverage-Matrix
 
-Stand: 3.2.0 RC20. Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte
+Stand: 3.2.0 RC21. Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte
 Dateiendungen. `Privater Dialog` bedeutet: Der gesamte lokale Review-/Residual-/Release-
 Pfad ist freigegeben. `Input` ist der technische Fallback und kein Beleg vollständiger
 Struktur- oder Formattreue.
