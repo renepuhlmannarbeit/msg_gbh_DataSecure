@@ -13,6 +13,7 @@ const { luhnValid, isAllowedOrg, looksName } = require('../plugins/data-secure/s
 const { resolveSpans } = require('../plugins/data-secure/server/privacy/spans');
 const { trimReferenceValue } = require('../plugins/data-secure/server/privacy/structured');
 const { collectHeaderNameCandidates } = require('../plugins/data-secure/server/privacy/entities');
+const { credentialIssuerAmbiguities } = require('../plugins/data-secure/server/privacy/credentials');
 
 const { test, done, assert } = createSuite('PII regression');
 
@@ -149,8 +150,15 @@ test('credential context works in prose without a certification heading', () => 
     'Microsoft Azure Administrator Associate',
     'AWS Certified Developer – Associate',
     'IIBA Certificate in Product Ownership Analysis (CPOA)',
+    'IREB Certified Professional for Requirements Engineering (CPRE)',
+    'UXQB Certified Professional for Usability and User Experience (CPUX-F)',
+    'PMI Professional in Business Analysis (PMI-PBA)',
+    'Linux Foundation Certified System Administrator (LFCS)',
+    'Cloud Native Computing Foundation Certified Kubernetes Administrator (CKA)',
+    'Red Hat Certified Engineer (RHCE)',
     'HL7 FHIR Foundational Implementer',
-    'HIMSS Certified Professional in Healthcare Information and Management Systems (CPHIMS)'
+    'HIMSS Certified Professional in Healthcare Information and Management Systems (CPHIMS)',
+    'IHE Certified Professional – IHE Foundations (IHE-CPP)'
   ].join('\n');
   const { text, residual } = anonymizeVerified(src, 'personnel_profile');
   assertPresent(text, 'Example Board e.V.', 'issuer in credential prose');
@@ -158,9 +166,50 @@ test('credential context works in prose without a certification heading', () => 
   assertPresent(text, 'Microsoft Azure Administrator Associate', 'Microsoft credential');
   assertPresent(text, 'AWS Certified Developer – Associate', 'AWS credential');
   assertPresent(text, 'IIBA Certificate in Product Ownership Analysis (CPOA)', 'IIBA credential');
+  assertPresent(text, 'IREB Certified Professional for Requirements Engineering (CPRE)', 'IREB credential');
+  assertPresent(text, 'UXQB Certified Professional for Usability', 'UXQB credential');
+  assertPresent(text, 'PMI Professional in Business Analysis (PMI-PBA)', 'PMI credential');
+  assertPresent(text, 'Linux Foundation Certified System Administrator (LFCS)', 'Linux Foundation credential');
+  assertPresent(text, 'Certified Kubernetes Administrator (CKA)', 'CNCF credential');
+  assertPresent(text, 'Red Hat Certified Engineer (RHCE)', 'Red Hat credential');
   assertPresent(text, 'HL7 FHIR Foundational Implementer', 'HL7 credential');
   assertPresent(text, 'HIMSS Certified Professional', 'HIMSS credential');
+  assertPresent(text, 'IHE Certified Professional – IHE Foundations (IHE-CPP)', 'IHE credential');
   assert.deepStrictEqual(residual, [], 'credential prose must pass verification');
+});
+
+test('catalog-only issuer matches require a local decision while explicit certification context does not', () => {
+  const ambiguous = 'Microsoft Azure Administrator Associate';
+  const ambiguousOutput = anonymizeMarkdown(ambiguous, 'personnel_profile').text;
+  assert.strictEqual(credentialIssuerAmbiguities(ambiguous, ambiguousOutput).length, 1);
+  assert.strictEqual(
+    credentialIssuerAmbiguities('Zertifizierungen\nMicrosoft Azure Administrator Associate', 'Zertifizierungen\nMicrosoft Azure Administrator Associate').length,
+    0
+  );
+  assert.strictEqual(
+    credentialIssuerAmbiguities('Microsoft Certified: Azure Administrator Associate', 'Microsoft Certified: Azure Administrator Associate').length,
+    0
+  );
+  assert.strictEqual(
+    credentialIssuerAmbiguities('Arbeitgeber: Microsoft\nRolle: Developer', 'Arbeitgeber: [ARBEITGEBER_001]\nRolle: Developer').length,
+    0
+  );
+  assert.strictEqual(
+    credentialIssuerAmbiguities(
+      'Agile Frameworks: Kanban, Scaled Agile Framework (SAFe), Scrum',
+      'Agile Frameworks: Kanban, Scaled Agile Framework (SAFe), Scrum'
+    ).length,
+    0,
+    'ordinary framework names must not be mistaken for certification codes'
+  );
+  assert.strictEqual(
+    credentialIssuerAmbiguities(
+      'Weiterentwicklung der SAP-Commerce-Plattform',
+      'Weiterentwicklung der SAP-Commerce-Plattform'
+    ).length,
+    0,
+    'PL at the start of Plattform must not be treated as an uppercase certification code'
+  );
 });
 
 test('domain-shaped credential issuers stay while verification URLs are redacted', () => {

@@ -7,3 +7,9 @@
 - `general`: Erhalte nützlichen, nicht identifizierenden Geschäftsinhalt und brich bei unsicheren Quellen oder visuellen Inhalten sicher ab.
 
 Bei Bewerbungen und Personalprofilen bleiben Fotos und andere Grafiken grundsätzlich lokal und für Claude unzugänglich. Aus verbleibenden Berufs- oder Projektdaten dürfen keine Identitäten rekonstruiert oder abgeleitet werden.
+
+Für Zertifizierungen gilt eine Kontextregel: Abschnitte wie „Zertifizierungen“ und
+eindeutige Bezeichnungen werden erhalten. Ein bekannter Anbietername allein ist
+nur ein Hinweis. Wenn er sowohl Zertifikatsanbieter als auch Arbeitgeber/Kunde
+sein könnte, muss der Anwender die konkrete Stelle lokal als „erhalten“ oder
+„anonymisieren“ entscheiden; ohne Entscheidung keine Freigabe.

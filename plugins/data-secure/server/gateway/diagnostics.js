@@ -26,6 +26,7 @@ const ERROR_CODES = new Set([
   'AUDIT_MIGRATION_BLOCKED', 'UNSUPPORTED_FORMAT', 'PARSE_FAILED',
   'PROFILE_REQUIRED', 'TEXT_TOO_LARGE', 'TOO_MANY_VISUALS',
   'IMAGE_REMOVAL_UNSAFE', 'VISUAL_REVIEW_REQUIRED', 'LOCAL_REVIEW_CANCELLED',
+  'AMBIGUITY_REVIEW_REQUIRED',
   'RESIDUAL_PII', 'PUBLISH_FAILED', 'RECOVERY_FAILED', 'INTERNAL_FAILURE'
 ]);
 
@@ -66,6 +67,7 @@ function sanitizeDiagnostic(record = {}, options = {}) {
     visual_assets_review_required: boundedCount(record.visual_assets_review_required),
     visual_assets_removed: boundedCount(record.visual_assets_removed),
     text_entity_count: boundedCount(record.text_entity_count),
+    ambiguous_organization_count: boundedCount(record.ambiguous_organization_count),
     error_code: ERROR_CODES.has(errorCode) ? errorCode : 'INTERNAL_FAILURE'
   };
 }

@@ -62,6 +62,12 @@ Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begre
 
 `personnel_profile` entfernt direkte Identifikatoren und pseudonymisiert/generalisiert Arbeitgeber, Kunden, konkrete Projektbezeichnungen und genaue Standorte als Quasi-Identifikatoren. Rollen, Skills, Zertifizierungen, Methoden, Technologien und Projektzeiträume sollen möglichst erhalten bleiben.
 
+Bei Zertifizierungen entscheidet der Kontext, nicht eine starre Namensliste: Ein
+ausdrücklicher Zertifikatsabschnitt oder eine eindeutige Zertifikatsbezeichnung
+wird automatisch erhalten; ein nur kataloggestützter Organisations-Treffer wird
+im lokalen Review gelb markiert. Der Mitarbeiter muss ihn als Zertifizierung
+erhalten oder anonymisieren. Ohne diese Entscheidung gibt es keine Freigabe.
+
 ## Visuelle Assets
 
 Grafiken werden nicht still verworfen. Automatisch freigegebene Rastergrafiken landen im Privacy-Paket. Unsichere, OCR-arme oder bei Personal-/Bewerberprofilen zurückgehaltene Grafiken bleiben ausschließlich lokal unter `Needs Visual Review`. Die Freigabe ist über Claude bewusst deaktiviert, bis der lokale Companion eine echte menschliche Handlung technisch belegen kann.
@@ -73,6 +79,7 @@ Grafiken werden nicht still verworfen. Automatisch freigegebene Rastergrafiken l
 - Output-Markdown und Assets sind SHA-256-gebunden; Manipulation blockiert die Read-Tools.
 - Kein persistentes Identitäts-Mapping.
 - Neue und erfolgreich migrierte Audit-Receipts enthalten keine Rohwerte, Originaldateinamen, exakten Dateigrößen oder verknüpfbaren Dokument-/Wert-Hashes; ein nicht migrierbarer Altbestand blockiert weitere Verarbeitung.
+- Status, Paketmanifest und Audit-Receipt nennen die eigenständige Regelwerkversion; bekannte Zertifikatsanbieter sind nur lokale Erkennungshinweise und keine Online-Wahrheitsquelle.
 - Dokument-/OCR-Inhalt wird als untrusted data behandelt.
 - Keine Behauptung von rechtlicher Anonymität, DSGVO-Zertifizierung oder EU-AI-Act-Zertifizierung.
 
@@ -89,8 +96,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc12.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
-- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc12.mcpb` – Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc13.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
+- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc13.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem

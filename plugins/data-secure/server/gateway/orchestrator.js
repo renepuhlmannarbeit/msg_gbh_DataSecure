@@ -30,6 +30,8 @@ const {
 } = require('./compliance');
 const { migrateLegacyAuditReceipts } = require('./audit');
 const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
+const { credentialIssuerAmbiguities } = require('../privacy/credentials');
+const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 
 const { MAX_INPUT_BYTES, MAX_TEXT_CHARS, MAX_VISUAL_ASSETS } = LIMITS;
 
@@ -307,11 +309,16 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
 
     const anon = anonymizeMarkdown(rawWithOcr, effective);
+    const ambiguities = ['personnel_profile', 'applicant'].includes(effective)
+      ? credentialIssuerAmbiguities(rawWithOcr, anon.text)
+      : [];
     diagnostic.text_entity_count = anon.entityCount;
+    diagnostic.ambiguous_organization_count = ambiguities.length;
     if (deps.onDetected) {
       await deps.onDetected({
         profile: effective,
         detected_identifiers: anon.entityCount,
+        ambiguous_organization_count: ambiguities.length,
         technical_review_required:
           review > 0 ||
           (converted.warnings || []).length > 0 ||
@@ -319,12 +326,18 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       });
     }
     let reviewedText = anon.text;
+    if (ambiguities.length > 0 && !deps.reviewText) {
+      const error = new SafeError('Mehrdeutige Organisationsnamen benötigen eine lokale Entscheidung vor der Freigabe.');
+      error.code = 'AMBIGUITY_REVIEW_REQUIRED';
+      throw error;
+    }
     if (deps.reviewText) {
       const reviewResult = await deps.reviewText({
         original_text: rawWithOcr,
         anonymized_text: anon.text,
         profile: effective,
         detected_identifiers: anon.entityCount,
+        ambiguities,
         technical_review_required:
           review > 0 ||
           (converted.warnings || []).length > 0 ||
@@ -378,6 +391,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     const manifest = {
       schema: 'eu-privacy-package/2',
       gateway_version: VERSION,
+      privacy_ruleset: PRIVACY_RULESET_VERSION,
+      credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
       operation_id: auditReceipt.operation_id,
       package_id: packageId,
       created_at: new Date().toISOString(),
@@ -393,6 +408,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         persistent_mapping: false,
         runtime_dependency_install: false
       },
+      ambiguity_resolution: ambiguities.length > 0 ? 'local_human_complete' : 'not_required',
+      ambiguous_organization_count: ambiguities.length,
       reidentification_risk: anon.reidentificationRisk,
       assets: vis.results,
       parser_warnings: converted.warnings || [],

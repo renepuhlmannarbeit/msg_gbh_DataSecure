@@ -157,6 +157,12 @@ purge. They contain a random operation ID, categories, counters, versions and
 status only (`raw_content_logged: false`). They contain no document or value
 hashes, exact file sizes, paths, filenames or raw values. Integrity hashes for
 released output remain in the package manifest and expire with that package.
+The receipt, package manifest and status expose a privacy-ruleset identifier
+separately from the gateway version. Credential catalog entries are offline
+detection hints only. Explicit certification context is preserved; a catalog-
+only organisation occurrence requires a local keep/redact decision, and neither
+the occurrence nor that decision is written to the audit receipt or exposed to
+the model.
 At startup, parseable legacy audit records are rewritten through the same strict
 metadata whitelist; unreadable or locked records remain visible as a
 non-sensitive migration error in `privacy_status` and block further document

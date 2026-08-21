@@ -187,8 +187,11 @@ Privacy-Ordner"*.
    Gegenüberstellung: links der normalisierte Quelltext mit Erkennungshinweisen,
    rechts die schreibgeschützte bereinigte Fassung. Übersehene sensible Stellen
    können Sie rechts auswählen und ausschließlich zusätzlich anonymisieren; darunter
-   sehen Sie die exakte daraus entstehende Freigabevorschau. Danach
-   können Sie freigeben oder die zusätzliche Sichtprüfung bewusst überspringen.
+   sehen Sie die exakte daraus entstehende Freigabevorschau. Gelb markierte
+   Organisationen sind fachlich mehrdeutig: Entscheiden Sie für jede Stelle
+   **„Als Zertifizierung erhalten“** oder **„Organisation anonymisieren“**.
+   Danach können Sie freigeben. Nur wenn es keine gelbe Stelle gibt, darf die
+   zusätzliche Sichtprüfung bewusst übersprungen werden.
 4. Jede bearbeitete Fassung wird erneut automatisch geprüft. Erst nach bestandenem
    Residual-Gate kann Claude die bereinigte Fassung lesen. Das von Ihnen
    gewählte Original bleibt unverändert an seinem bisherigen Ort.
@@ -217,6 +220,10 @@ verfügbar; der Workflow stoppt dort an dieser Stelle sicher.
    setzt nach einem Einzelfehler mit den übrigen Dateien fort. Zur Sicherheit können
    Sie die Art dazusagen: „… als Bewerbung“, „… als Vertrag“, „… als
    Mitarbeiterprofil“.
+   Enthält eine Datei im Ordnerweg einen mehrdeutigen Zertifikats-/Organisations-
+   Treffer, wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
+   Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen
+   Sie die gestoppte TXT-/DOCX-Datei anschließend über „Bereite eine lokale Datei vor“.
 3. **Normal weiterarbeiten.** Claude erhält ausschließlich die bereinigte Fassung
    aus dem DataSecure-Weg. Unterstützte erkannte Identifikatoren erscheinen als
    Platzhalter; nicht erkannte Namen oder kontextuelle Hinweise können verbleiben.
@@ -269,6 +276,7 @@ Nummern beginnen bei jedem Dokument neu.
 | „Wie möchten Sie diese Datei öffnen?" | Abbrechen, Datei ins offene Claude-Fenster ziehen |
 | „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
 | „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Nicht automatisch erneut starten. `diagnostic_status` aufrufen und nur den festen Fehlercode an IT melden — nicht Datei, Dateiname, Pfad oder Inhalt |
+| `AMBIGUITY_REVIEW_REQUIRED` | Ein Organisationsname könnte Zertifikatsanbieter oder Arbeitgeber/Kunde sein. TXT/DOCX über den lokalen Dateidialog öffnen und die gelbe Stelle entscheiden |
 | Claude meldet mehr Dateien als in `Input` lagen | `input_documents_seen`, `attempted` und `automatic_retries` prüfen. Mehrere Versuche derselben Datei sind keine mehreren Dateien |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
 | Gescanntes PDF wird abgelehnt | Scans mit sicher extrahierbaren JPEG-Seitenbildern laufen über OCR. Andere PDF-Bildcodierungen werden fail-closed abgelehnt; wenn möglich das Original oder einen PNG-/JPEG-Export verwenden |

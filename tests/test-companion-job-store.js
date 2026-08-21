@@ -36,7 +36,7 @@ test('capabilities expose no model review or release authority', () => {
   assert.strictEqual(caps.job_schema, JOB_SCHEMA);
   assert.strictEqual(caps.phase, 'txt_docx_vertical_slice_ready');
   assert.strictEqual(caps.local_ui, process.platform === 'win32'
-    ? 'native_picker_and_redaction_review'
+    ? 'native_picker_redaction_and_ambiguity_review'
     : 'native_picker_text_review_unavailable');
   assert.deepStrictEqual(caps.supported_vertical_slice_inputs, ['TXT', 'DOCX']);
   assert.strictEqual(caps.private_ipc, 'inherited_stdio_authenticated');

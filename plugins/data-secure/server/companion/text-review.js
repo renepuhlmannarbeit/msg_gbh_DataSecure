@@ -7,11 +7,11 @@ const pii = require('../pii-engine');
 const { LIMITS } = require('../gateway/common');
 const { normalizeText } = require('../privacy/base');
 
-const REVIEW_SCHEMA = 'data-secure-text-review/1';
+const REVIEW_SCHEMA = 'data-secure-text-review/2';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
-function buildReviewDraft(originalText, anonymizedText, profile) {
+function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = []) {
   // sensitiveSpans uses the engine's normalised coordinate space. Displaying
   // that same local-only representation keeps highlights correct for NFC,
   // soft-hyphen and zero-width inputs instead of applying shifted offsets.
@@ -24,7 +24,20 @@ function buildReviewDraft(originalText, anonymizedText, profile) {
     end: span.end,
     type: span.type
   }));
-  return { schema: REVIEW_SCHEMA, original_text: original, anonymized_text: anonymized, locators };
+  const safeAmbiguities = (ambiguities || []).map((item) => {
+    const keys = ['ambiguity_id', 'anonymized_end', 'anonymized_start', 'original_end', 'original_start', 'type'];
+    if (!item || Object.keys(item).sort().join(',') !== keys.sort().join(',') ||
+      !/^credential:v2:[0-9]{6}$/.test(String(item.ambiguity_id || '')) ||
+      item.type !== 'credential_issuer_ambiguous' ||
+      !Number.isSafeInteger(item.original_start) || !Number.isSafeInteger(item.original_end) ||
+      !Number.isSafeInteger(item.anonymized_start) || !Number.isSafeInteger(item.anonymized_end) ||
+      item.original_start < 0 || item.original_end <= item.original_start || item.original_end > original.length ||
+      item.anonymized_start < 0 || item.anonymized_end <= item.anonymized_start || item.anonymized_end > anonymized.length) {
+      throw new SafeError('Ein lokaler Mehrdeutigkeits-Hinweis ist ungültig.');
+    }
+    return { ...item };
+  });
+  return { schema: REVIEW_SCHEMA, original_text: original, anonymized_text: anonymized, locators, ambiguities: safeAmbiguities };
 }
 
 function powershellUtf8Preamble() {
@@ -47,7 +60,7 @@ function powershellReviewScript() {
     '$form.FormBorderStyle = "Sizable"; $form.MinimizeBox = $true',
     '$info = New-Object System.Windows.Forms.Label',
     '$info.Dock = "Top"; $info.Height = 52; $info.Padding = [System.Windows.Forms.Padding]::new(10, 8, 10, 4)',
-    '$info.Text = "Links: normalisierter Quelltext (Hinweise markiert). Rechts oben: anonymisierte Fassung zum Auswählen weiterer sensibler Stellen. Rechts unten: exakte Vorschau der Freigabe."',
+    '$info.Text = "Rot: sensible Stellen. Gelb: Organisation mit unklarem Zertifikatsbezug - bitte unten ausdrücklich entscheiden. Rechts unten: exakte Vorschau der Freigabe."',
     '$split = New-Object System.Windows.Forms.SplitContainer',
     '$split.Dock = "Fill"; $split.Orientation = "Vertical"; $split.SplitterDistance = 570',
     '$left = New-Object System.Windows.Forms.RichTextBox',
@@ -65,29 +78,39 @@ function powershellReviewScript() {
     '[void]$rightLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle("Percent", 50)))',
     '$rightLayout.Controls.Add($right, 0, 0); $rightLayout.Controls.Add($preview, 0, 1)',
     'foreach ($locator in $draft.locators) { $left.Select([int]$locator.start, [int]$locator.end - [int]$locator.start); $left.SelectionBackColor = [System.Drawing.Color]::LightSalmon }',
+    'foreach ($item in $draft.ambiguities) { $left.Select([int]$item.original_start, [int]$item.original_end - [int]$item.original_start); $left.SelectionBackColor = [System.Drawing.Color]::Khaki; $right.Select([int]$item.anonymized_start, [int]$item.anonymized_end - [int]$item.anonymized_start); $right.SelectionBackColor = [System.Drawing.Color]::Khaki }',
     '$left.Select(0, 0)',
     '$split.Panel1.Controls.Add($left); $split.Panel2.Controls.Add($rightLayout)',
     '$buttons = New-Object System.Windows.Forms.FlowLayoutPanel',
-    '$buttons.Dock = "Bottom"; $buttons.Height = 54; $buttons.FlowDirection = "RightToLeft"; $buttons.Padding = [System.Windows.Forms.Padding]::new(8)',
+    '$buttons.Dock = "Bottom"; $buttons.Height = 86; $buttons.FlowDirection = "RightToLeft"; $buttons.Padding = [System.Windows.Forms.Padding]::new(8)',
     '$approve = New-Object System.Windows.Forms.Button; $approve.Text = "Geprüft freigeben"; $approve.Width = 150',
     '$redact = New-Object System.Windows.Forms.Button; $redact.Text = "Auswahl anonymisieren"; $redact.Width = 165',
     '$skip = New-Object System.Windows.Forms.Button; $skip.Text = "Prüfung überspringen"; $skip.Width = 160',
     '$cancel = New-Object System.Windows.Forms.Button; $cancel.Text = "Abbrechen"; $cancel.Width = 110',
-    '$script:answer = $null; $script:redactions = New-Object System.Collections.ArrayList',
-    'function Update-Preview { $value = [string]$draft.anonymized_text; foreach ($item in @($script:redactions | Sort-Object start -Descending)) { $value = $value.Substring(0, [int]$item.start) + "[MANUAL_REDACTION]" + $value.Substring([int]$item.end) }; $preview.Text = $value }',
-    '$redact.Add_Click({ $start = $right.SelectionStart; $length = $right.SelectionLength; if ($length -le 0) { [void][System.Windows.Forms.MessageBox]::Show("Bitte zuerst rechts eine sensible Stelle auswählen.", "DataSecure", "OK", "Information"); return }; $end = $start + $length; foreach ($item in $script:redactions) { if ($start -lt [int]$item.end -and [int]$item.start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Diese Auswahl überschneidet sich mit einer bestehenden manuellen Anonymisierung.", "DataSecure", "OK", "Warning"); return } }; [void]$script:redactions.Add(@{ start = $start; end = $end }); $right.SelectionBackColor = [System.Drawing.Color]::LightSalmon; $right.Select(0, 0); Update-Preview })',
-    '$approve.Add_Click({ $script:answer = @{ action = "reviewed"; redactions = @($script:redactions) }; $form.Close() })',
-    '$skip.Add_Click({ $script:answer = @{ action = "skipped" }; $form.Close() })',
+    '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "Als Zertifizierung erhalten"; $keep.Width = 185',
+    '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "Organisation anonymisieren"; $anonOrg.Width = 185',
+    '$ambiguityInfo = New-Object System.Windows.Forms.Label; $ambiguityInfo.Width = 230; $ambiguityInfo.Height = 28',
+    '$script:answer = $null; $script:redactions = New-Object System.Collections.ArrayList; $script:decisions = @{}; $script:current = 0',
+    'function Ambiguity-Redactions { $items = New-Object System.Collections.ArrayList; foreach ($candidate in $draft.ambiguities) { if ($script:decisions[[string]$candidate.ambiguity_id] -eq "redact") { [void]$items.Add(@{ start = [int]$candidate.anonymized_start; end = [int]$candidate.anonymized_end }) } }; return $items }',
+    'function Update-Preview { $value = [string]$draft.anonymized_text; $all = @($script:redactions) + @(Ambiguity-Redactions); foreach ($item in @($all | Sort-Object start -Descending)) { $value = $value.Substring(0, [int]$item.start) + "[MANUAL_REDACTION]" + $value.Substring([int]$item.end) }; $preview.Text = $value }',
+    'function Show-Ambiguity { if ($draft.ambiguities.Count -eq 0) { $ambiguityInfo.Text = "Keine offene Zuordnung"; $keep.Enabled = $false; $anonOrg.Enabled = $false; return }; while ($script:current -lt $draft.ambiguities.Count -and $script:decisions.ContainsKey([string]$draft.ambiguities[$script:current].ambiguity_id)) { $script:current++ }; if ($script:current -ge $draft.ambiguities.Count) { $ambiguityInfo.Text = "Alle Zuordnungen entschieden"; $keep.Enabled = $false; $anonOrg.Enabled = $false; return }; $candidate = $draft.ambiguities[$script:current]; $ambiguityInfo.Text = "Zuordnung " + ($script:current + 1) + " von " + $draft.ambiguities.Count; $right.Select([int]$candidate.anonymized_start, [int]$candidate.anonymized_end - [int]$candidate.anonymized_start); $right.ScrollToCaret() }',
+    'function Decide-Ambiguity([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $script:decisions[[string]$candidate.ambiguity_id] = $decision; Update-Preview; Show-Ambiguity }',
+    '$redact.Add_Click({ $start = $right.SelectionStart; $length = $right.SelectionLength; if ($length -le 0) { [void][System.Windows.Forms.MessageBox]::Show("Bitte zuerst rechts eine sensible Stelle auswählen.", "DataSecure", "OK", "Information"); return }; $end = $start + $length; foreach ($candidate in $draft.ambiguities) { if ($start -lt [int]$candidate.anonymized_end -and [int]$candidate.anonymized_start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Für gelb markierte Organisationen bitte die Schaltflächen Erhalten oder Anonymisieren verwenden.", "DataSecure", "OK", "Warning"); return } }; foreach ($item in $script:redactions) { if ($start -lt [int]$item.end -and [int]$item.start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Diese Auswahl überschneidet sich mit einer bestehenden manuellen Anonymisierung.", "DataSecure", "OK", "Warning"); return } }; [void]$script:redactions.Add(@{ start = $start; end = $end }); $right.SelectionBackColor = [System.Drawing.Color]::LightSalmon; $right.Select(0, 0); Update-Preview })',
+    '$keep.Add_Click({ Decide-Ambiguity "keep" })',
+    '$anonOrg.Add_Click({ Decide-Ambiguity "redact" })',
+    '$approve.Add_Click({ if ($script:decisions.Count -ne $draft.ambiguities.Count) { [void][System.Windows.Forms.MessageBox]::Show("Bitte jede gelb markierte Organisation als Zertifizierung erhalten oder anonymisieren.", "DataSecure", "OK", "Warning"); return }; $decisionList = @(); foreach ($candidate in $draft.ambiguities) { $decisionList += @{ ambiguity_id = [string]$candidate.ambiguity_id; decision = [string]$script:decisions[[string]$candidate.ambiguity_id] } }; $script:answer = @{ action = "reviewed"; redactions = @($script:redactions); decisions = $decisionList }; $form.Close() })',
+    '$skip.Add_Click({ if ($draft.ambiguities.Count -gt 0) { [void][System.Windows.Forms.MessageBox]::Show("Bei gelb markierten Organisationen darf die Prüfung nicht übersprungen werden.", "DataSecure", "OK", "Warning"); return }; $script:answer = @{ action = "skipped" }; $form.Close() })',
     '$cancel.Add_Click({ $script:answer = @{ action = "cancelled" }; $form.Close() })',
     '$form.Add_FormClosing({ if ($null -eq $script:answer) { $script:answer = @{ action = "cancelled" } } })',
-    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel))',
+    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel, $keep, $anonOrg, $ambiguityInfo))',
     '$form.Controls.Add($split); $form.Controls.Add($buttons); $form.Controls.Add($info)',
+    'Show-Ambiguity; Update-Preview',
     '[void]$form.ShowDialog()',
     '[Console]::Out.Write(($script:answer | ConvertTo-Json -Compress))'
   ].join('; ');
 }
 
-function validateReviewResult(value) {
+function validateReviewResult(value, draft = null) {
   if (!value || !['reviewed', 'skipped', 'cancelled'].includes(value.action)) {
     throw new SafeError('Die lokale Textprüfung lieferte kein gültiges Ergebnis.');
   }
@@ -95,11 +118,30 @@ function validateReviewResult(value) {
     if (!Array.isArray(value.redactions) || value.redactions.length > MAX_MANUAL_REDACTIONS) {
       throw new SafeError('Die lokalen Anonymisierungsaktionen sind ungültig oder zu zahlreich.');
     }
-    if (Object.keys(value).sort().join(',') !== 'action,redactions') {
+    const reviewKeys = Object.keys(value).sort().join(',');
+    const noAmbiguities = !draft || (draft.ambiguities || []).length === 0;
+    if (reviewKeys !== 'action,decisions,redactions' && !(noAmbiguities && reviewKeys === 'action,redactions')) {
       throw new SafeError('Die lokale Textprüfung enthält nicht erlaubte Felder.');
+    }
+    const suppliedDecisions = value.decisions === undefined && noAmbiguities ? [] : value.decisions;
+    if (!Array.isArray(suppliedDecisions)) throw new SafeError('Die lokalen Zuordnungsentscheidungen fehlen.');
+    const decisions = suppliedDecisions.map((item) => {
+      if (!item || Object.keys(item).sort().join(',') !== 'ambiguity_id,decision' ||
+        !['keep', 'redact'].includes(item.decision)) {
+        throw new SafeError('Eine lokale Zuordnungsentscheidung ist ungültig.');
+      }
+      return { ambiguity_id: String(item.ambiguity_id), decision: item.decision };
+    });
+    if (draft) {
+      const expected = (draft.ambiguities || []).map((item) => item.ambiguity_id).sort();
+      const actual = decisions.map((item) => item.ambiguity_id).sort();
+      if (new Set(actual).size !== actual.length || actual.join(',') !== expected.join(',')) {
+        throw new SafeError('Nicht alle mehrdeutigen Organisationen wurden lokal entschieden.');
+      }
     }
     return {
       action: 'reviewed',
+      decisions,
       redactions: value.redactions.map((range) => {
         if (
           !range || !Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) ||
@@ -163,7 +205,7 @@ function reviewTextLocally(draft, options = {}) {
   if (result?.error || result?.status !== 0) throw new SafeError('Die lokale Textprüfung konnte nicht sicher abgeschlossen werden.');
   let parsed;
   try { parsed = JSON.parse(String(result.stdout || '')); } catch { throw new SafeError('Die lokale Textprüfung lieferte kein gültiges Ergebnis.'); }
-  return validateReviewResult(parsed);
+  return validateReviewResult(parsed, draft);
 }
 
 module.exports = {

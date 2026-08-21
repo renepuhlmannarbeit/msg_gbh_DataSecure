@@ -104,6 +104,47 @@ async function main() {
     assert.match(readEvents(job.job_id).find((event) => event.state === 'Reviewed').human_action.content_sha256, /^[a-f0-9]{64}$/);
   });
 
+  await testAsync('an ambiguous issuer is released only after an explicit local keep decision', async () => {
+    workspace('ambiguity-keep');
+    const file = source('ambiguity-keep.txt', 'Microsoft Azure Administrator Associate\nRolle: Cloud Engineer');
+    const job = createJob({ profile: 'personnel_profile', source_type: 'txt' });
+    const result = await processCompanionJob(job.job_id, file, job.profile, {
+      reviewTextLocally: (input) => ({
+        action: 'reviewed', redactions: [],
+        decisions: input.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' }))
+      })
+    });
+    assert.strictEqual(result.job.state, 'Released');
+    assert.match(readOutput(result.package_id, 0, 30000).text, /Microsoft Azure Administrator Associate/);
+  });
+
+  await testAsync('an ambiguous issuer can be anonymized by the local decision', async () => {
+    workspace('ambiguity-redact');
+    const file = source('ambiguity-redact.txt', 'Microsoft Azure Administrator Associate\nRolle: Cloud Engineer');
+    const job = createJob({ profile: 'personnel_profile', source_type: 'txt' });
+    const result = await processCompanionJob(job.job_id, file, job.profile, {
+      reviewTextLocally: (input) => ({
+        action: 'reviewed', redactions: [],
+        decisions: input.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'redact' }))
+      })
+    });
+    const released = readOutput(result.package_id, 0, 30000).text;
+    assert.doesNotMatch(released, /Microsoft/);
+    assert.match(released, /\[MANUAL_REDACTION\] Azure Administrator Associate/);
+  });
+
+  await testAsync('an ambiguous issuer cannot be skipped', async () => {
+    const r = workspace('ambiguity-skip');
+    const file = source('ambiguity-skip.txt', 'Microsoft Azure Administrator Associate');
+    const job = createJob({ profile: 'personnel_profile', source_type: 'txt' });
+    await assert.rejects(
+      processCompanionJob(job.job_id, file, job.profile, { reviewTextLocally: () => ({ action: 'skipped' }) }),
+      /lokal entschieden/
+    );
+    assert.deepStrictEqual(fs.readdirSync(r.output), []);
+    assert.ok(fs.existsSync(file));
+  });
+
   await testAsync('an invalid manual redaction range fails closed and publishes nothing', async () => {
     const r = workspace('reviewed-residual-block');
     const file = source('residual.txt', 'Kontakt: Max Mustermann, max@example.de\nRolle: Architekt');
@@ -137,6 +178,19 @@ async function main() {
     }
     assert.ok(draft.locators.some((locator) => draft.original_text.slice(locator.start, locator.end).includes('Max Müller')));
     assert.ok(draft.locators.some((locator) => draft.original_text.slice(locator.start, locator.end).includes('@')));
+  });
+
+  await testAsync('review validation requires exactly one decision for every ambiguity', async () => {
+    const value = 'Microsoft Azure Administrator Associate';
+    const ambiguity = {
+      ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+      original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+    };
+    const draft = buildReviewDraft(value, value, 'personnel_profile', [ambiguity]);
+    assert.throws(() => reviewTextLocally(draft, {
+      platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+      runner: () => ({ status: 0, stdout: JSON.stringify({ action: 'reviewed', redactions: [], decisions: [] }) })
+    }), /Nicht alle mehrdeutigen/);
   });
 
   await testAsync('the Windows reviewer receives content only on stdin and returns redaction ranges', async () => {
@@ -193,6 +247,29 @@ async function main() {
     assert.deepStrictEqual(answer.redactions, [{ end: aliasStart + alias.length, start: aliasStart }]);
     assert.match(applyManualRedactions(anonymized, answer.redactions), /Interner Alias: \[MANUAL_REDACTION\]/);
     assert.match(applyManualRedactions(anonymized, answer.redactions), /Rolle: Lösungsarchitektin/);
+  });
+
+  await testAsync('the real Windows review form records an explicit ambiguity decision', async () => {
+    if (process.platform !== 'win32') return;
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const value = 'Microsoft Azure Administrator Associate';
+    const draft = buildReviewDraft(value, value, 'personnel_profile', [{
+      ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+      original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+    }]);
+    const nonInteractiveScript = powershellReviewScript().replace(
+      '[void]$form.ShowDialog()',
+      '$form.Add_Shown({ $keep.PerformClick(); $approve.PerformClick() }); [void]$form.ShowDialog()'
+    );
+    const result = childProcess.spawnSync(
+      powershell,
+      ['-NoProfile', '-NonInteractive', '-Sta', '-Command', nonInteractiveScript],
+      { input: JSON.stringify(draft), encoding: 'utf8', windowsHide: true, shell: false }
+    );
+    assert.strictEqual(result.status, 0, String(result.stderr || ''));
+    assert.deepStrictEqual(JSON.parse(result.stdout).decisions, [{
+      ambiguity_id: 'credential:v2:000001', decision: 'keep'
+    }]);
   });
 
   await testAsync('manual review actions can only remove selected spans', async () => {

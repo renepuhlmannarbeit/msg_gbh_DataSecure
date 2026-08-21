@@ -9,6 +9,7 @@ const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
 const { companionCapabilities } = require('../companion/job-store');
 const { companionRetentionStatus } = require('../companion/retention');
+const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 
 function genericStatus(options = {}) {
   const engine = readStatus();
@@ -21,6 +22,8 @@ function genericStatus(options = {}) {
   return {
     ok: !auditBlocked,
     version: VERSION,
+    privacy_ruleset: PRIVACY_RULESET_VERSION,
+    credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
     engine_ready: runtimeReady() && !auditBlocked,
     engine_phase: auditBlocked ? 'blocked_audit_migration' : engine.phase,
     engine_message: auditBlocked

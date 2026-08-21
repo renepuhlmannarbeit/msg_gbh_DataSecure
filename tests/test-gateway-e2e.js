@@ -92,6 +92,18 @@ async function main() {
     fs.unlinkSync(blocked);
   });
 
+  await testAsync('a batch stops an ambiguous personnel file without UI and continues with the next file', async () => {
+    const blocked = queueBuffer('01-ambiguous.txt', 'Microsoft Azure Administrator Associate');
+    queueBuffer('02-safe.txt', 'Rolle: Softwarearchitekt\nSkills: Java, SQL');
+    const result = await gw.anonymizeAll('personnel_profile', depsFor('clean'));
+    assert.strictEqual(result.released, 1);
+    assert.strictEqual(result.stopped, 1);
+    assert.match(result.results.find((item) => item.status === 'stopped').message, /lokale Entscheidung/);
+    assert.doesNotMatch(JSON.stringify(result), /Microsoft|01-ambiguous|02-safe/);
+    assert.ok(fs.existsSync(blocked));
+    fs.unlinkSync(blocked);
+  });
+
   await testAsync('an XLSX customer sheet becomes a verified package with a released visual', async () => {
     queue(path.join(fixtures, 'synthetic_customer.xlsx'));
     const result = await gw.anonymizeNext('customer', {

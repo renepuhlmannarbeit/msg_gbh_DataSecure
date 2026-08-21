@@ -6,11 +6,13 @@ const crypto = require('crypto');
 const { VERSION } = require('../version');
 const { dataRoot } = require('../runtime');
 const { roots } = require('./common');
+const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 
-const AUDIT_SCHEMA = 'data-secure-audit-receipt/2';
+const AUDIT_SCHEMA = 'data-secure-audit-receipt/3';
 const SIZE_CLASSES = new Set(['tiny', 'small', 'medium', 'large']);
 const PROFILES = new Set(['customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 let auditWriteErrors = 0;
+const UNKNOWN_POLICY_VERSION = 'legacy/unknown';
 
 function boundedInteger(value) {
   const n = Number(value);
@@ -35,6 +37,11 @@ function safeTimestamp(value) {
 function safeVersion(value) {
   const text = String(value || VERSION);
   return /^[0-9A-Za-z.+_-]{1,40}$/.test(text) ? text : VERSION;
+}
+
+function safePolicyVersion(value, fallback) {
+  const text = String(value || fallback);
+  return /^[0-9A-Za-z./+_-]{1,64}$/.test(text) ? text : fallback;
 }
 
 function safeExtension(value) {
@@ -63,6 +70,8 @@ function sanitizeReceipt(record = {}) {
     operation_id: safeOperationId(record.operation_id),
     timestamp: safeTimestamp(record.timestamp),
     gateway_version: safeVersion(record.gateway_version),
+    privacy_ruleset: safePolicyVersion(record.privacy_ruleset, UNKNOWN_POLICY_VERSION),
+    credential_context_policy: safePolicyVersion(record.credential_context_policy, UNKNOWN_POLICY_VERSION),
     profile,
     source_extension: safeExtension(record.source_extension),
     source_size_class: sizeClass,
@@ -90,6 +99,8 @@ function createAuditReceipt(profile, source, meta) {
   return sanitizeReceipt({
     timestamp: new Date().toISOString(),
     gateway_version: VERSION,
+    privacy_ruleset: PRIVACY_RULESET_VERSION,
+    credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
     profile,
     source_extension: path.extname(source),
     source_size_class: sourceSizeClass(fs.statSync(source).size),

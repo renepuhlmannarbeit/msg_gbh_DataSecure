@@ -24,12 +24,14 @@ function json(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-test('the v2 receipt is a strict metadata whitelist', () => {
+test('the current receipt is a strict metadata whitelist with ruleset provenance', () => {
   const secret = 'Max Mustermann';
   const receipt = sanitizeReceipt({
     operation_id: crypto.randomUUID(),
     timestamp: '2026-08-21T08:00:00.000Z',
     gateway_version: '3.2.0-rc8',
+    privacy_ruleset: 'de-business/2',
+    credential_context_policy: 'credential-context/2',
     profile: 'personnel_profile',
     source_extension: '.docx',
     source_bytes: 123456,
@@ -49,6 +51,8 @@ test('the v2 receipt is a strict metadata whitelist', () => {
   });
   const encoded = JSON.stringify(receipt);
   assert.strictEqual(receipt.schema, AUDIT_SCHEMA);
+  assert.strictEqual(receipt.privacy_ruleset, 'de-business/2');
+  assert.strictEqual(receipt.credential_context_policy, 'credential-context/2');
   assert.strictEqual(receipt.source_size_class, 'tiny');
   assert.strictEqual(receipt.source_bytes, undefined);
   assert.doesNotMatch(encoded, /Max Mustermann|Lebenslauf|Personal/);
@@ -90,6 +94,8 @@ test('legacy audit migration removes fingerprints atomically and is idempotent',
   const operationId = migrated.operation_id;
   const encoded = JSON.stringify(migrated);
   assert.strictEqual(migrated.schema, AUDIT_SCHEMA);
+  assert.strictEqual(migrated.privacy_ruleset, 'legacy/unknown');
+  assert.strictEqual(migrated.credential_context_policy, 'legacy/unknown');
   assert.strictEqual(
     migrated.result,
     'verification_passed',
@@ -108,7 +114,7 @@ test('legacy audit migration removes fingerprints atomically and is idempotent',
   assert.strictEqual(json(legacy).operation_id, operationId, 'a second pass must not rewrite the receipt identity');
 });
 
-test('a forged v2 receipt is canonicalized instead of trusted by schema name', () => {
+test('a forged current receipt is canonicalized instead of trusted by schema name', () => {
   const dir = roots().audit;
   const forged = path.join(dir, 'forged-v2.json');
   fs.writeFileSync(

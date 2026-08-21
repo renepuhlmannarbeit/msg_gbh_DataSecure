@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { anonymizeSelectedSource } = require('../gateway/orchestrator');
 const { jobStatus, transitionJob } = require('./job-store');
-const { buildReviewDraft, applyManualRedactions, reviewTextLocally } = require('./text-review');
+const { buildReviewDraft, validateReviewResult, applyManualRedactions, reviewTextLocally } = require('./text-review');
 
 function textSha256(text) { return crypto.createHash('sha256').update(String(text), 'utf8').digest('hex'); }
 function localAction(contentSha256) {
@@ -23,7 +23,7 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
     ? ({ anonymized_text, detected_identifiers }) => options.confirmAutomaticRelease(detected_identifiers)
       ? { action: 'skipped' }
       : { action: 'cancelled' }
-    : (input) => reviewTextLocally(buildReviewDraft(input.original_text, input.anonymized_text, input.profile)));
+    : (input) => reviewTextLocally(input.review_draft));
   let detected = false;
   let approvedContentSha256 = null;
   let reviewDecision = null;
@@ -37,18 +37,29 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
       onDetected: () => { detected = true; return transitionJob(jobId, 'Detected'); },
       reviewText: async (input) => {
         if (input.technical_review_required) throw technicalReviewRequired('Die Datei enthält visuelle oder technisch unsichere Inhalte und benötigt lokale Prüfung.');
-        const decision = await review(input);
+        const draft = buildReviewDraft(input.original_text, input.anonymized_text, input.profile, input.ambiguities);
+        const rawDecision = await review({ ...input, review_draft: draft });
+        const decision = rawDecision?.action === 'reviewed' && !Object.hasOwn(rawDecision, 'decisions')
+          ? validateReviewResult({ ...rawDecision, decisions: [] }, draft)
+          : validateReviewResult(rawDecision, draft);
         if (decision?.action === 'reviewed') {
-          if (!Array.isArray(decision.redactions)) {
-            throw new SafeError('Die lokale Textprüfung lieferte keine gültigen Anonymisierungsaktionen.');
-          }
-          const text = applyManualRedactions(input.anonymized_text, decision.redactions);
+          const byId = new Map((input.ambiguities || []).map((item) => [item.ambiguity_id, item]));
+          const ambiguityRedactions = decision.decisions
+            .filter((item) => item.decision === 'redact')
+            .map((item) => {
+              const candidate = byId.get(item.ambiguity_id);
+              return { start: candidate.anonymized_start, end: candidate.anonymized_end };
+            });
+          const text = applyManualRedactions(input.anonymized_text, [...decision.redactions, ...ambiguityRedactions]);
           approvedContentSha256 = textSha256(text);
           reviewDecision = 'reviewed';
           transitionJob(jobId, 'Reviewed', { human_action: localAction(approvedContentSha256) });
           return { text };
         }
         if (decision?.action === 'skipped') {
+          if ((input.ambiguities || []).length > 0) {
+            throw reviewRequired('Mehrdeutige Organisationen müssen vor der Freigabe lokal entschieden werden.');
+          }
           approvedContentSha256 = textSha256(input.anonymized_text);
           reviewDecision = 'skipped';
           transitionJob(jobId, 'Skipped', { human_action: localAction(approvedContentSha256) });

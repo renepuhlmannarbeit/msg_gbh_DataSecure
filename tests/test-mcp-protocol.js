@@ -196,7 +196,9 @@ async function main() {
     assert.strictEqual(result.structuredContent.ok, true);
     assert.strictEqual(result.structuredContent.raw_content_sent_to_claude, false);
     assert.strictEqual(result.structuredContent.runtime_dependency_install, false);
-    assert.strictEqual(result.structuredContent.audit_schema, 'data-secure-audit-receipt/2');
+    assert.strictEqual(result.structuredContent.audit_schema, 'data-secure-audit-receipt/3');
+    assert.strictEqual(result.structuredContent.privacy_ruleset, 'de-business/2');
+    assert.strictEqual(result.structuredContent.credential_context_policy, 'credential-context/2');
     assert.strictEqual(typeof result.structuredContent.audit_receipts_retained, 'number');
     assert.strictEqual(typeof result.structuredContent.legacy_audit_pending, 'number');
     assert.strictEqual(typeof result.structuredContent.audit_migration_errors, 'number');
@@ -204,7 +206,7 @@ async function main() {
     assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
     assert.strictEqual(result.structuredContent.companion_phase, 'txt_docx_vertical_slice_ready');
     assert.strictEqual(result.structuredContent.companion_local_ui, process.platform === 'win32'
-      ? 'native_picker_and_redaction_review'
+      ? 'native_picker_redaction_and_ambiguity_review'
       : 'native_picker_text_review_unavailable');
     assert.deepStrictEqual(result.structuredContent.companion_supported_vertical_slice_inputs, ['TXT', 'DOCX']);
     assert.strictEqual(result.structuredContent.companion_private_ipc, 'inherited_stdio_authenticated');

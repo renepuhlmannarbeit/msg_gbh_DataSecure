@@ -289,7 +289,7 @@ function companionCapabilities() {
     phase: 'txt_docx_vertical_slice_ready',
     supported_states: [...STATES],
     local_ui: process.platform === 'win32'
-      ? 'native_picker_and_redaction_review'
+      ? 'native_picker_redaction_and_ambiguity_review'
       : 'native_picker_text_review_unavailable',
     supported_vertical_slice_inputs: ['TXT', 'DOCX'],
     private_ipc: 'inherited_stdio_authenticated',
