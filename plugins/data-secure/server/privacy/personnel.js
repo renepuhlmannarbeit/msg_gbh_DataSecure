@@ -5,6 +5,7 @@ const { collectOrganizations } = require('./entities');
 const { credentialContextSpans } = require('./credentials');
 
 const EMPLOYER_LABEL = '(?:Unternehmen|Arbeitgeber|Firma|Aktueller\\s+Arbeitgeber|Entsendendes\\s+Unternehmen)';
+const CUSTOMER_LABEL = '(?:Kunde|Kundenunternehmen|Projektkunde|Auftraggeber)';
 const LOCATION_LABEL =
   '(?:Standort(?:\\s+des\\s+Projekts)?|Projektstandort|Einsatzort|Dienstort|Wohnort|Wohnsitz|Adresse|Anschrift|Ort)';
 
@@ -17,8 +18,10 @@ const ORG_SHAPE_RE = /^[A-Z0-9ÄÖÜ][A-Za-z0-9ÄÖÜäöüß .&'’+\-/]{2,50}$
 const DOMAIN_SHAPE_RE = /^[a-z0-9][a-z0-9.\-]+\.(?:de|com|net|org|eu)$/i;
 
 const TABLE_EMPLOYER_RE = new RegExp(`^(\\|\\s*${EMPLOYER_LABEL}\\s*:?\\s*\\|\\s*)([^|\\n]+)(\\|)`, 'iu');
+const TABLE_CUSTOMER_RE = new RegExp(`^(\\|\\s*${CUSTOMER_LABEL}\\s*:?\\s*\\|\\s*)([^|\\n]+)(\\|)`, 'iu');
 const TABLE_LOCATION_RE = new RegExp(`^(\\|\\s*${LOCATION_LABEL}\\s*:?\\s*\\|\\s*)([^|\\n]+)(\\|)`, 'iu');
 const LINE_EMPLOYER_RE = new RegExp(`^(\\s*${EMPLOYER_LABEL}\\s*:\\s*)(.+)$`, 'iu');
+const LINE_CUSTOMER_RE = new RegExp(`^(\\s*${CUSTOMER_LABEL}\\s*:\\s*)(.+)$`, 'iu');
 const LINE_LOCATION_RE = new RegExp(`^(\\s*${LOCATION_LABEL}\\s*:\\s*)(.+)$`, 'iu');
 const DASH_SPLIT_RE = /^(.{2,120}?)[ \t]+[–—-][ \t]+(.{3,180})$/u;
 
@@ -49,6 +52,16 @@ function registerEmployer(reg, findings, value) {
   for (const org of collectOrganizations(clean)) reg.map.set(`ORG:${key(org)}`, EMPLOYER_PLACEHOLDER);
   reg.map.set(`ORG:${key(clean)}`, EMPLOYER_PLACEHOLDER);
   return EMPLOYER_PLACEHOLDER;
+}
+
+function registerCustomer(reg, findings, value) {
+  const clean = normalizeSpaces(value);
+  if (!clean) return null;
+  const placeholder = reg.assign('CUSTOMER', clean);
+  findings.push({ type: 'CUSTOMER', value_hash: hashShort(clean) });
+  for (const org of collectOrganizations(clean)) reg.map.set(`ORG:${key(org)}`, placeholder);
+  reg.map.set(`ORG:${key(clean)}`, placeholder);
+  return placeholder;
 }
 
 function looksLikeOrgSide(value, personKeys) {
@@ -82,6 +95,15 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
       }
     }
 
+    const tableCustomer = line.match(TABLE_CUSTOMER_RE);
+    if (tableCustomer) {
+      const ph = registerCustomer(reg, findings, tableCustomer[2]);
+      if (ph) {
+        out.push(line.replace(TABLE_CUSTOMER_RE, `$1${ph} $3`));
+        continue;
+      }
+    }
+
     const tableLocation = line.match(TABLE_LOCATION_RE);
     if (tableLocation) {
       rememberLocation(reg, tableLocation[2]);
@@ -95,6 +117,15 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
       const ph = registerEmployer(reg, findings, lineEmployer[2]);
       if (ph) {
         out.push(lineEmployer[1] + ph);
+        continue;
+      }
+    }
+
+    const lineCustomer = line.match(LINE_CUSTOMER_RE);
+    if (lineCustomer) {
+      const ph = registerCustomer(reg, findings, lineCustomer[2]);
+      if (ph) {
+        out.push(lineCustomer[1] + ph);
         continue;
       }
     }

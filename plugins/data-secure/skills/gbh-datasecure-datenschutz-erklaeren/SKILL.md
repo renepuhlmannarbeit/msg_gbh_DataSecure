@@ -1,7 +1,7 @@
 ---
 name: gbh-datasecure-datenschutz-erklaeren
 description: Nutze diesen Skill, um Schutzmaßnahmen und Grenzen von GBH DataSecure, DSGVO- und EU-AI-Act-Aspekte, Audit-Daten, Aufbewahrung oder menschliche Prüfungen verständlich zu erklären.
-version: 3.2.0-rc13
+version: 3.2.0-rc14
 ---
 
 # GBH DataSecure – Datenschutz erklären
@@ -10,7 +10,7 @@ Erkläre die Architektur präzise:
 
 - Der lokale MCP-Server bildet die technische Datenschutzgrenze.
 - Skills steuern den Ablauf, sind aber selbst keine Datenschutzgrenze.
-- Wenn eine Vorverarbeitung vor dem Modell erforderlich ist, gelangen Rohdaten über den lokalen `Input`-Ordner hinein und nicht durch einen direkten Chat-Upload.
+- Wenn eine Vorverarbeitung vor dem Modell erforderlich ist, gelangen Rohdaten über den lokalen DataSecure-Dateidialog oder den lokalen `Input`-Ordner hinein und nicht durch einen direkten Chat-Upload. Bis zu 25 TXT-/DOCX-Dateien nutzen gemeinsam den Dialog; andere Formate oder formatgemischte Stapel verwenden derzeit den Ordnerweg.
 - Claude erhält nur freigegebenes Markdown und freigegebene PNG-Dateien aus dem Datenschutzpaket.
 - Nicht automatisch verifizierbare Grafiken bleiben lokal. Dieser Engineering-Build bietet keinen Freigabeweg über Claude; Vorschauen verfallen gemäß Aufbewahrungsfrist.
 - Audit-Daten dürfen keine Rohwerte aus der Quelldatei enthalten.

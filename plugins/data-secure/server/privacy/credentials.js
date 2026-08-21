@@ -1,6 +1,7 @@
 'use strict';
 
 const { normalizeSpaces, normalizeText } = require('./base');
+const { matchers: credentialCatalogMatchers } = require('./credential-catalog');
 
 const CERT_SECTION_RE = /^(?:zertifizierungen?|zertifikate?|bescheinigungen?|credentials?|certifications?|certificates?|licenses?(?:\s+(?:and|&|und)\s+certifications?)?)\s*:?$/iu;
 const SECTION_RE = /^(?:qualifikationen?|skillset|kenntnisse|kompetenzen|technologien|methoden|sprachkenntnisse|branchenkenntnisse|projekterfahrung|berufserfahrung|ausbildung|weiterbildung|werdegang|profil|summary|skills?|experience|employment|education|projects?|arbeitgeber|unternehmen|kunde|projekt|zeitraum|funktion|aufgaben(?:\s*&\s*verantwortlichkeiten)?)\s*:?$/iu;
@@ -8,15 +9,15 @@ const CERT_CUE_RE = /\b(?:zertifiz(?:iert|ierung|ierungen|ierte)|zertifikat(?:e|
 // Acronyms must remain case-sensitive. With an /i suffix, codes such as PL or
 // SC would also match the beginnings of ordinary words like "Plattform" or
 // "Scaled", turning technology lines into false certificate contexts.
-const CERT_CODE_RE = /\b(?:PSM|PSPO|PSD|PSK|PSU|PSF|PSPBM|PPDV|PAL|PAL-EBM|SPS|PMP|CAPM|PgMP|PfMP|PMI-(?:ACP|RMP|PBA|PMOCP|CPMAI|SP)|CSPP|ECBA|CCBA|CBAP|CPOA|AAC|CBDA|CPRE|CPUX|CTFL|CTAL|CTEL|ITIL|CISA|CISM|CGEIT|CRISC|CDPSE|CISSP|CCSP|SSCP|CSSLP|CGRC|CCNA|LFCA|LFCS|LFCE|CKA|CKAD|CKS|KCNA|KCSA|RHCSA|RHCE|RHCA|CAHIMS|CPHIMS|CPDHTS|IHE-CPP|AB|AZ|AI|DP|PL|SC|MS|MD|MB|GH)(?:[- ][A-Z0-9]+)*\b/u;
+const CERT_CODE_RE = credentialCatalogMatchers.code;
 // An issuer alone is not enough: "Arbeitgeber: Microsoft" must still be
 // anonymised.  These names only establish credential context together with a
 // credential-shaped title on the same line.  The list intentionally contains
 // programmes/issuers rather than every current exam title, so newly introduced
 // credentials inherit protection without requiring a release first.
-const CERT_ISSUER_RE = /\b(?:ISTQB|International\s+Software\s+Testing\s+Qualifications\s+Board|IREB|International\s+Requirements\s+Engineering\s+Board|UXQB|International\s+Usability\s+and\s+User\s+Experience\s+Qualification\s+Board|A4Q|iSQI|Scrum\.org|Scrum\s+Alliance|Scaled\s+Agile|SAFe|Kanban\s+University|IIBA|International\s+Institute\s+of\s+Business\s+Analysis|PMI|Project\s+Management\s+Institute|PeopleCert|AXELOS|BCS|Microsoft|GitHub|Amazon\s+Web\s+Services|AWS|Google\s+Cloud|Cisco|CompTIA|ISACA|ISC2|ISC²|Linux\s+Foundation|Cloud\s+Native\s+Computing\s+Foundation|CNCF|Kubernetes|Red\s+Hat|Oracle|SAP|HL7|Health\s+Level\s+Seven|HIMSS|IHE)\b/iu;
+const CERT_ISSUER_RE = credentialCatalogMatchers.issuer;
 const CERT_TITLE_RE = /\b(?:certified|certification|certificate|credential|professional|associate|expert|specialist|foundation|practitioner|agilist|master|product\s+owner|architect|developer|engineer|administrator|analyst|manager|auditor|security|cloud|devops|testing|test\s+automation|requirements\s+engineering|usability|user\s+experience|business\s+analysis|product\s+ownership|system\s+administrator|solutions?\s+architect|kubernetes|FHIR|CDA|healthcare\s+information|digital\s+health)\b/iu;
-const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunde|projektkunde|auftraggeber)\s*:\s*$/iu;
+const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunde|projektkunde|auftraggeber|technologien?|technologies|tools?|skillset|kenntnisse)\s*:\s*$/iu;
 
 function plainLine(line) {
   return normalizeSpaces(String(line || '')
@@ -136,12 +137,23 @@ function isCredentialIssuerDomain(text,start,end,ranges=credentialContextSpans(t
   return hasCredentialCue(after);
 }
 
+function isCatalogTechnologyTerm(text, start, end) {
+  const src = String(text || '');
+  const value = src.slice(start, end);
+  const exactIssuer = new RegExp(`^(?:${CERT_ISSUER_RE.source})$`, CERT_ISSUER_RE.flags);
+  if (!exactIssuer.test(value)) return false;
+  const lineStart = src.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  const prefix = src.slice(lineStart, start);
+  return /^\s*(?:technologien?|technologies|tools?)\s*:\s*$/iu.test(prefix);
+}
+
 module.exports={
   credentialContextSpans,
   credentialContextDetails,
   credentialIssuerAmbiguities,
   inCredentialContext,
   isCredentialIssuerDomain,
+  isCatalogTechnologyTerm,
   CERT_SECTION_RE,
   CERT_CUE_RE,
   CERT_CODE_RE,

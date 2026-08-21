@@ -3,15 +3,18 @@
 ## Artefacts
 
 ```bash
-npm run version:sync -- 3.2.0-rc8   # propagate a new version everywhere
+npm run version:sync -- 3.2.0-rc14  # propagate a new version everywhere
 npm test
 npm run build
+node scripts/generate-sbom.mjs
 ```
 
 | Artefact | Purpose |
 |---|---|
 | `dist/DataSecure-Privacy-Preflight-v<version>.zip` | primary Claude plugin |
 | `dist/EU-Privacy-Document-Gateway-Windows-v<version>.mcpb` | standalone Claude Desktop extension, fallback |
+| `dist/DataSecure-Privacy-Preflight-v<version>.spdx.json` | SPDX 2.3 software bill of materials with archive hashes |
+| `dist/SHA256SUMS` | SHA-256 verification for ZIP, MCPB and SBOM |
 
 Both are built with a `node:zlib` ZIP writer, so `npm run build` works on Windows
 and on Linux CI without an external `zip` binary. Archive entries carry a fixed
@@ -45,8 +48,11 @@ every rollout because the Claude UI and admin controls can change:
 Do not mark a build production-ready until all of these hold:
 
 - [ ] CI is green on `main`, on both `ubuntu-latest` and `windows-latest`
+- [ ] CodeQL and the complete-history Gitleaks scan are green
 - [ ] `npm run version:sync` reports "all files already in sync"
 - [ ] the packaged plugin answers `initialize` (CI verifies this)
+- [ ] ZIP, MCPB, SPDX SBOM and `SHA256SUMS` are present in the same CI artefact
+- [ ] downloaded release files match `SHA256SUMS`
 - [ ] no Office/PDF file is tracked (CI verifies this)
 - [ ] the golden output diff has been reviewed for this release
 - [ ] repository visibility is still private/internal (required for organisation

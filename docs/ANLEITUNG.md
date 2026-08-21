@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC12 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC14 · Windows 10/11 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC12 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC14 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -41,8 +41,9 @@ hineinkopiert, hat alle Maßnahmen umgangen, auch wenn danach alles normal
 aussieht.
 
 - **Nicht:** Dokument per Büroklammer anhängen oder Text einfügen.
-- **Sondern:** Dokument in den Ordner `Input` legen und Claude bitten, es zu
-  verarbeiten.
+- **Sondern:** Claude um die lokale DataSecure-Verarbeitung bitten und die Dateien
+  ausschließlich im danach geöffneten lokalen Dateidialog oder `Input`-Ordner
+  auswählen.
 
 ### Regel 2 — Über Bilder entscheiden nur Sie
 
@@ -171,74 +172,68 @@ Privacy-Ordner"*.
 
 | Ordner | Inhalt |
 |---|---|
-| `Input` | Hier legen Sie das Dokument hinein. Nur diesen brauchen Sie aktiv |
+| `Input` | Hier legen Sie andere Formate oder formatgemischte Stapel hinein, wenn DataSecure den Ordnerweg öffnet |
 | `Output` | Die geprüfte Fassung. Nur das sieht Claude; standardmäßig 7 Tage aufbewahrt |
 | `Needs Visual Review` | Lokal zurückgehaltene Bilder. Enthält echte Fotos; in diesem Engineering-Build keine Freigabe über Claude, Preview verschwindet nach Fristablauf |
 | `Processed` | Ihre Originale. Enthält alle Personendaten; standardmäßig 7 Tage aufbewahrt |
 
 ## Teil 7: So arbeiten Sie damit
 
-### Empfohlener Weg für TXT und Word-Dokumente
+### Ein Einstieg für eine oder mehrere Dateien
 
-1. Bitten Sie Claude: *„Bereite eine lokale Datei für Claude vor.“*
-2. DataSecure öffnet einen Dateidialog außerhalb Claude. Wählen Sie eine TXT- oder
-   DOCX-Datei. Claude sieht weder den Pfad noch das Original.
-3. DataSecure ersetzt erkannte Stellen lokal. Unter Windows erscheint eine lokale
-   Gegenüberstellung: links der normalisierte Quelltext mit Erkennungshinweisen,
-   rechts die schreibgeschützte bereinigte Fassung. Übersehene sensible Stellen
-   können Sie rechts auswählen und ausschließlich zusätzlich anonymisieren; darunter
-   sehen Sie die exakte daraus entstehende Freigabevorschau. Gelb markierte
-   Organisationen sind fachlich mehrdeutig: Entscheiden Sie für jede Stelle
-   **„Als Zertifizierung erhalten“** oder **„Organisation anonymisieren“**.
-   Danach können Sie freigeben. Nur wenn es keine gelbe Stelle gibt, darf die
-   zusätzliche Sichtprüfung bewusst übersprungen werden.
-4. Jede bearbeitete Fassung wird erneut automatisch geprüft. Erst nach bestandenem
-   Residual-Gate kann Claude die bereinigte Fassung lesen. Das von Ihnen
-   gewählte Original bleibt unverändert an seinem bisherigen Ort.
+1. Bitten Sie Claude: *„Anonymisiere eine oder mehrere Dateien lokal mit
+   DataSecure.“* Sie müssen keine internen Profilnamen kennen und einen gemischten
+   Stapel nicht Datei für Datei einordnen.
+2. DataSecure zeigt Ihnen den passenden lokalen Weg:
+   - Für bis zu 25 TXT- oder Word-Dokumente öffnet sich ein Dateidialog außerhalb
+     Claude. Wählen Sie dort eine oder mehrere Dateien aus.
+   - Für PDF, Excel, PowerPoint, Markdown, CSV, Bilder oder einen formatgemischten
+     Stapel öffnet DataSecure den Privacy-Ordner. Kopieren Sie alle gewünschten
+     Dateien gemeinsam nach `Input`, nicht in den Chat.
+   Claude erhält weder die Quellpfade noch die Originale.
+3. DataSecure verarbeitet jede Datei nacheinander und erstellt pro Datei ein eigenes
+   Markdown-Paket. Ein Fehler bei einer Datei blockiert die übrigen nicht. Den Typ
+   müssen Sie nur dann nennen, wenn eine eigenständige Bilddatei oder ein Scan-PDF
+   ohne Textschicht sonst nicht einzuordnen ist, zum Beispiel „als Bewerbung“ oder
+   „als Kundendokument“.
+4. Bei TXT- und Word-Dokumenten erscheint unter Windows je Datei die lokale
+   Textprüfung. Gelb markierte Organisationen sind fachlich mehrdeutig. Entscheiden
+   Sie dort **„Als Zertifizierung erhalten“** oder **„Organisation anonymisieren“**.
+   Übersehene sensible Stellen können Sie zusätzlich schwärzen. Fachlicher Inhalt
+   lässt sich nicht frei umschreiben. Solange eine gelbe Stelle offen ist, kann die
+   Prüfung nicht übersprungen werden.
+5. Jede Fassung wird erneut automatisch geprüft. Erst danach kann Claude das
+   bereinigte Markdown lesen. Abbruch oder Fensterschließen veröffentlicht für die
+   betroffene Datei nichts; die übrigen Dateien laufen weiter.
 
-Brechen Sie den zweiten Dialog ab, wird nichts veröffentlicht. Word-Dokumente mit
-Bildern bleiben standardmäßig gesperrt. Wenn Sie ausdrücklich nur den Text als
-Markdown benötigen, können Sie Claude sagen: *„Anonymisiere das Dokument und
-entferne alle Bilder.“* Bekannte Bildanlagen werden dann lokal verworfen und in der
-`.md` als entfernt vermerkt. Unbekannte eingebettete Objekte bleiben gesperrt. Auf
-macOS und Linux ist die bearbeitbare Review-Oberfläche in diesem Pilot noch nicht
+Wenn Sie ausschließlich Markdown ohne Bilder brauchen, sagen Sie einmalig:
+*„Anonymisiere die Dateien und entferne alle Bilder.“* Bekannte Bildanlagen in
+texttragenden Office-Dateien werden lokal verworfen und in der `.md` als entfernt
+vermerkt. Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans werden
+dadurch nicht an den Sicherheitsprüfungen vorbeigeführt.
+
+Enthält eine Datei im Ordnerweg einen mehrdeutigen Zertifikats-/Organisations-Treffer,
+wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
+Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen Sie
+eine gestoppte TXT-/DOCX-Datei anschließend erneut über den lokalen Dateidialog.
+
+Auf macOS und Linux ist die bearbeitbare Review-Oberfläche in diesem Pilot noch nicht
 verfügbar; der Workflow stoppt dort an dieser Stelle sicher.
 
-### Bestehender Ordnerweg für weitere Formate
+### Nach der Verarbeitung
 
-1. **Dokument in `Input` kopieren.** PDF, Word, Excel, PowerPoint, TXT, Markdown,
-   CSV sowie eigenständige PNG-, JPEG- oder BMP-Bilder werden unterstützt.
-   Kopieren, nicht verschieben — DataSecure schiebt die Datei später selbst
-   nach `Processed`. Bei einem reinen Bild oder Scan-PDF ohne Textlayer müssen
-   Sie die Dokumentart ausdrücklich dazusagen, zum Beispiel „als Kundendokument“
-   oder „als Bewerbung“; vor der lokalen OCR kann sie nicht sicher automatisch
-   erkannt werden.
-2. **Claude bitten:** Für eine Datei: *„Anonymisiere bitte das nächste Dokument und
-   fasse anschließend die Qualifikationen zusammen.“* Für mehrere Dateien:
-   *„Anonymisiere alle Dokumente im Input-Ordner.“* Der Stapellauf verarbeitet bis
-   zu 25 Dateien nacheinander, erstellt pro Datei ein eigenes Markdown-Paket und
-   setzt nach einem Einzelfehler mit den übrigen Dateien fort. Zur Sicherheit können
-   Sie die Art dazusagen: „… als Bewerbung“, „… als Vertrag“, „… als
-   Mitarbeiterprofil“.
-   Enthält eine Datei im Ordnerweg einen mehrdeutigen Zertifikats-/Organisations-
-   Treffer, wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
-   Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen
-   Sie die gestoppte TXT-/DOCX-Datei anschließend über „Bereite eine lokale Datei vor“.
-3. **Normal weiterarbeiten.** Claude erhält ausschließlich die bereinigte Fassung
-   aus dem DataSecure-Weg. Unterstützte erkannte Identifikatoren erscheinen als
-   Platzhalter; nicht erkannte Namen oder kontextuelle Hinweise können verbleiben.
-4. **Falls Bilder zurückgehalten wurden:** Sie können `Needs Visual Review` lokal
-   ansehen, dürfen Claude aber nicht mit ihrer Freigabe beauftragen. Der aktuelle
-   Engineering-Build besitzt noch keinen sicheren menschlichen Freigabekanal; das
-   Bild bleibt daher zurückgehalten.
-5. **Aufräumen (Regel 3).** Warten Sie nicht auf die 7-Tage-Frist, wenn die
-   Arbeit abgeschlossen ist. Sagen Sie Claude: *„Lösche alle lokalen
-   DataSecure-Daten; ich bestätige die Löschung."* Sie können auch nur
-   `Processed`, `Output` oder `Review` nennen. Prüfen Sie vorher, dass Sie das
-   Ergebnis nicht mehr benötigen. Offene Review-Bilder werden bei Fristablauf
-   sicher verworfen; ihr Paket bleibt gültig, das Bild aber dauerhaft gesperrt.
+- **Normal weiterarbeiten:** Claude verwendet ausschließlich die bereinigten
+  Fassungen aus dem DataSecure-Weg. Unterstützte erkannte Identifikatoren erscheinen
+  als Platzhalter; nicht erkannte Namen oder kontextuelle Hinweise können verbleiben.
+- **Zurückgehaltene Bilder:** Sie können `Needs Visual Review` lokal ansehen, dürfen
+  Claude aber nicht mit ihrer Freigabe beauftragen. Der aktuelle Engineering-Build
+  besitzt noch keinen sicheren menschlichen Freigabekanal.
+- **Aufräumen (Regel 3):** Sagen Sie nach Abschluss: *„Lösche alle lokalen
+  DataSecure-Daten; ich bestätige die Löschung."* Sie können auch nur `Processed`,
+  `Output` oder `Review` nennen. Prüfen Sie vorher, dass Sie das Ergebnis nicht mehr
+  benötigen.
 
-**Warum Schritt 5 weiterhin wichtig ist:** Die Frist begrenzt die Speicherung,
+**Warum das Aufräumen weiterhin wichtig ist:** Die Frist begrenzt die Speicherung,
 ersetzt aber nicht Ihre Entscheidung, wann Original und Arbeitsergebnis nicht
 mehr gebraucht werden. Ein Löschfehler, etwa durch eine in Windows geöffnete
 Datei, wird im Status angezeigt und beim nächsten Lauf erneut versucht.
@@ -319,7 +314,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC12 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC14 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

@@ -1,7 +1,8 @@
 # Entwicklungsbacklog: DataSecure als einfaches Claude-Plugin
 
 Stand: 21.08.2026
-Status: Produkt- und Architekturvorschlag nach UX-, Plattform- und Security-Review
+Status: Revalidiert nach UX-, Datenschutz-/Health-IT-, Security- und Architekturreview
+unter Einbezug der übertragbaren Provenienz-/Contract-Test-Ideen aus German-law-mcp
 
 ## Zielbild
 
@@ -21,7 +22,7 @@ DataSecure prüft Fähigkeiten und verarbeitet lokal
         ↓
 automatische Ersetzung + harte Rest-PII-/Visual-Gates
         ↓
-optionale lokale Prüfung: Freigeben | Korrigieren | Überspringen
+lokale Prüfung nur bei Bedarf: Freigeben | Korrigieren | Überspringen
         ↓
 nur das freigegebene Privacy-Paket erreicht Claude
 ```
@@ -62,10 +63,39 @@ keinen stillen Fallback auf Upload, Cloud-OCR oder Remote-Verarbeitung.
 - Erkannte Inhalte werden automatisch ersetzt. Harte Sicherheitsfehler wie OCR-Ausfall,
   nicht auswertbare Bereiche oder unsichere Bilder sind nicht überspringbar.
 - „Prüfung überspringen“ überspringt nur die optionale inhaltliche Sichtkontrolle.
+- Offene fachliche Mehrdeutigkeiten sind Pflichtentscheidungen und niemals
+  überspringbar. Ein Katalogtreffer darf allein keine Freigabe begründen.
 - Keine Deanonymisierung und vorerst kein dauerhaftes Identitäts-Mapping.
 - Kein Nutzer installiert Node.js, Python, Java, OCR-Modelle oder npm-Pakete manuell.
 - Keine Produkttelemetrie mit Dateinamen, Dokumenttext, Originalwerten, Mappings oder
   Dokument-Hashes.
+
+### Einfachheitsbudget
+
+Jede neue Funktion muss entweder einen harten Schutz verbessern oder den normalen
+Nutzerweg messbar vereinfachen. Andernfalls wird sie nicht in den Pilotkern aufgenommen.
+
+- Sichtbar bleibt ein Ablauf: **Dateien auswählen → nur nötige Stellen lokal klären →
+  Ergebnis in Claude verwenden**.
+- Einzel- und Mehrdateien verwenden denselben Einstieg. Profile, Parser, Kataloge,
+  Regelversionen und Pakete bleiben interne Begriffe.
+- Im Normalfall sind höchstens drei bewusste Nutzeraktionen bis zum ersten Ergebnis
+  erlaubt. Zusätzliche Entscheidungen entstehen ausschließlich aus echten
+  Mehrdeutigkeiten oder nicht überspringbaren Sicherheitsgrenzen.
+- Pro Entscheidung zeigt die Oberfläche genau eine Frage, zwei eindeutige Antworten,
+  „Zurück/Ändern“, Fortschritt und Abbruch.
+- Technische Fehlercodes und Diagnosedetails erscheinen nur unter „Details für IT“.
+- Keine Endnutzer-Konfiguration für Zertifikatsanbieter, Profile, URLs, Scanner oder
+  Regelwerke.
+
+### Pilotgrenze Health-IT
+
+Der erste Pilot umfasst synthetische beziehungsweise ausdrücklich freigegebene
+Mitarbeiter-, Bewerber-, Vertrags- und allgemeine Geschäftsdokumente. Patienten-,
+Behandlungs- und klinische Dokumente mit besonderen Kategorien personenbezogener Daten
+werden erst nach eigenem Recall-/Leakage-Nachweis, DSFA/DPIA und organisatorischer
+Claude-Freigabe als unterstützt bezeichnet. Health-IT-Fachvokabular im Testkorpus ist
+noch keine Freigabe dieses Dokumentzwecks.
 
 ## Priorisierung
 
@@ -112,19 +142,28 @@ Markierungshinweise, ausschließlich zusätzliche manuelle Redaktionen,
 exakte Ergebnisvorschau, inhaltshashgebundener Review/Skip-Nachweis, erneuter
 Residual-Gate, DOCX-Part-Coverage und verwaiste-Arbeitskopien-Cleanup. Der echte
 Windows-Forms-Pfad ist automatisiert mit synthetischer Auswahl und Schaltflächen-
-Auslösung abgenommen. Offen sind die menschliche Windows-Usability-Abnahme,
-macOS/Linux, Provenienz aus der tatsächlichen Replacement-Pipeline sowie
-strukturbezogene OOXML-Locatoren.
+Auslösung abgenommen. Kataloggestützte Organisationsmehrdeutigkeiten benötigen bereits
+eine lokale Erhalten-/Anonymisieren-Entscheidung und können nicht übersprungen werden.
+RC14 ergänzt „Zurück/Entscheidung ändern“, die feste Einzelfrage mit zwei Antworten,
+Fortschritt „Stelle x von y“ und blendet Überspringen bei Pflichtentscheidungen aus.
+Offen sind die menschliche Windows-Usability-Abnahme, eine noch kompaktere Ansicht
+ohne dauerhaft sichtbare Gegenüberstellung, macOS/Linux, Provenienz aus der
+tatsächlichen Replacement-Pipeline sowie strukturbezogene OOXML-Locatoren.
 
-**Ergebnis:** Ein lokales Fenster zeigt Original und bereinigte Fassung mit markierten
-Ersetzungen. Aktionen: „Übersehene Stelle markieren“, „Ersetzung zurücknehmen“,
-„Freigeben“ und „Prüfung überspringen“.
+**Ergebnis:** Der Standardpfad zeigt eine kurze Vorschau. Nur bei Mehrdeutigkeit zeigt
+das lokale Fenster nacheinander genau eine markierte Stelle mit ausreichendem Kontext
+und fragt: „Gehört dieser Name zu einer Zertifizierung?“ Aktionen: „Ja, beibehalten“,
+„Nein, Namen ersetzen“, „Zurück/Ändern“ und „Abbrechen“. Die vollständige
+Gegenüberstellung bleibt als erweiterte Prüfung erreichbar.
 
 **Abnahme:**
 
 - Originalwerte und Review-Vorschau sind über kein MCP-Read-Tool erreichbar.
 - Korrekturen lösen den Residual-Gate erneut aus.
 - Überspringen gibt ausschließlich technisch vollständig verarbeitete Textbereiche frei.
+- Bei offenen Mehrdeutigkeiten ist Überspringen ausgeblendet oder deaktiviert.
+- Eine Entscheidung kann vor der Freigabe zurückgenommen und geändert werden.
+- Fortschritt „Stelle x von y“ und eine kurze Abschlussübersicht sind sichtbar.
 - OCR-Ausfälle, nicht auswertbare Bereiche und zurückgehaltene Bilder bleiben auch beim
   Überspringen gesperrt.
 - Eine echte lokale Nutzeraktion erzeugt einen nicht vom Modell fälschbaren Freigabe-
@@ -139,6 +178,10 @@ zurückgehaltene Inhalte, Review-/Skip-Status und lokalen Löschstatus.
 
 - Bericht enthält weder Originalwerte noch sensible Dateinamen.
 - In weniger als zehn Sekunden ist erkennbar, ob das Ergebnis verwendbar ist.
+- Eingangsdokumente, tatsächliche Verarbeitungsversuche und Ergebnisse werden getrennt
+  gezählt; ein Wiederholungsversuch darf nie als zweite Datei erscheinen.
+- Pro Datei gibt es genau einen Status: bereit, Entscheidung erforderlich oder sicher
+  gestoppt. Die Hauptansicht enthält keine technischen Fehlercodes.
 - Der Wortlaut lautet „lokal de-identifiziert/geprüft“, nicht pauschal „vollständig
   anonym“.
 
@@ -173,6 +216,12 @@ Ein unterbrochener Vorgang wird sicher bereinigt oder eindeutig wiederaufgenomme
 
 ### DS-007 – Pilot-Release-Gate und Installationsbeweis (M)
 
+**Stand RC14: teilweise umgesetzt.** CI baut ZIP und MCPB reproduzierbar, erzeugt
+eine SPDX-2.3-SBOM und SHA-256-Prüfsummen, scannt die vollständige Git-Historie mit
+Gitleaks und analysiert JavaScript mit CodeQL; Actions sind auf Commit-SHAs gepinnt.
+Offen bleiben Codesignatur sowie dokumentierte Installation, Upgrade und Rollback
+auf einem frischen, vom Entwicklungsrechner unabhängigen Windows-System.
+
 **Ergebnis:** Ein reproduzierbarer Release-Prozess erzeugt signierte Pilotartefakte und
 prüft Installation, Start, Upgrade und Rollback auf einem frischen Windows-System.
 
@@ -181,6 +230,9 @@ prüft Installation, Start, Upgrade und Rollback auf einem frischen Windows-Syst
 - Plugin-ZIP unter dem Organisationslimit und Standalone-Fallback werden aus demselben
   geprüften Quellstand erzeugt.
 - Signatur, Version, SBOM, Prüfsummen und Herkunft sind nachvollziehbar.
+- CodeQL und Gitleaks einschließlich Historie laufen für Pull Requests und `main`;
+  verwendete GitHub Actions sind auf geprüfte Commit-SHAs gepinnt. Weitere Scanner
+  werden nur bei nachgewiesenem Mehrwert ergänzt.
 - Endanwender führen weder npm noch Runtime-Installer aus.
 - Warmstart eines üblichen Textdokuments beginnt innerhalb von fünf Sekunden; Zielwert
   für ein Standarddokument ist unter 30 Sekunden ohne OCR.
@@ -207,6 +259,12 @@ gespeicherten vollständigen Originaldatei-Hashes und verkürzten ungesalzenen
 **Ergebnis:** Unvertraute Dokumente, Konverter und OCR laufen in kurzlebigen Workern mit
 Zeit-, Speicher-, Größen-, Seiten-, Objekt- und Dekompressionsgrenzen.
 
+**Stand:** Wichtige In-Process-Grenzen für Input, Text, ZIP, PDF, Bilder, Assets und
+Windows-OCR bestehen bereits. Offen sind die Härtung gegen ein realistisches
+Pilotprofil, CPU-/Heap-Abbruch für JavaScript-Parser und die Trennung vom
+MCP-Hauptprozess. Für einen synthetischen Pilot kann die Isolation gestuft erfolgen;
+vor klinischen Echtdaten bleibt sie ein hartes Gate.
+
 **Abnahme:**
 
 - Kein Netzwerkzugriff aus Verarbeitungsworkern.
@@ -216,6 +274,58 @@ Zeit-, Speicher-, Größen-, Seiten-, Objekt- und Dekompressionsgrenzen.
   Original wiederauffindbar.
 - Fuzzing, ZIP-Bombs, PDF-Objektbomben und manipulierte Bildcontainer laufen im
   verpflichtenden Release-Gate.
+
+### DS-010 – Versionierter Offline-Fachkatalog und Contract-Korpus (S–M)
+
+**Stand RC14: umgesetzt.** Der lokale Katalog enthält 29 fachlich relevante Anbieter
+mit Aliasen, Kategorien und Codes. Loader, Literal-Compiler und Contract-Korpus prüfen
+Schema, Normalisierung, Kontexttrennung und optionale verifizierte HTTPS-Referenzen.
+Er besitzt weder Datums-/Ablauflogik noch Laufzeitnetz oder eine Nutzeroberfläche.
+
+**Ergebnis:** Zertifikatsanbieter, Aliase und Codes liegen als kleine, versionierte
+Offline-Datendatei getrennt von der Erkennungslogik vor. Die Idee übernimmt nur die
+strukturierte Provenienz und Contract-Prüfung aus German-law-mcp – keine
+Online-Datenbank und keine Freshnesslogik.
+
+**Abnahme:**
+
+- Schlanke Felder: stabile ID, Anzeigename, Aliase, Kategorie und optional eine
+  Referenz-URL, wenn diese tatsächlich geprüft wurde.
+- Keine Pflicht-URL, kein Prüfdatum, kein Ablaufdatum, kein Laufzeitnetz und kein
+  zusätzliches MCP-Tool.
+- Unbekannte Felder, doppelte IDs sowie Alias-Kollisionen nach Unicode-/Case-
+  Normalisierung werden in CI abgewiesen; Regex-Metazeichen werden nicht als aktive
+  Muster übernommen.
+- Generierte Contract-Tests prüfen denselben Namen im Zertifikats-, Arbeitgeber-,
+  Kunden- und Technologiekontext sowie unbekannte Zertifikate in expliziten
+  Zertifikatsabschnitten und lange Projekttexte.
+- Ein Katalogtreffer bleibt ein Hinweis. Expliziter Kontext entscheidet automatisch;
+  echte Restmehrdeutigkeit bleibt eine lokale Pflichtentscheidung.
+
+### DS-011 – Ein lokaler Datei- und Mehrdatei-Einstieg (M)
+
+**Stand RC14: erster nutzbarer Slice umgesetzt.** Der private Windows-Dialog erlaubt
+bis zu 25 TXT-/DOCX-Dateien; jede erhält einen eigenen Job und ein eigenes Paket.
+Fehler werden pro Datei isoliert, das lokale Prüffenster zeigt „Datei x von y“, und
+die MCP-Zusammenfassung trennt ausgewählt, freigegeben und sicher gestoppt. Offen
+sind eine eigene lokale Abschlussansicht und weitere Formate im selben Picker.
+
+**Ergebnis:** „Dateien für Claude vorbereiten“ öffnet einen lokalen Dialog für eine
+oder mehrere Dateien. Jede Datei wird unabhängig verarbeitet; offene Entscheidungen
+werden nacheinander lokal geklärt. Der Input-Ordner bleibt ein IT-/Fallbackweg, aber
+kein zweiter normaler Nutzerprozess.
+
+**Abnahme:**
+
+- Mehrfachauswahl, automatische Dokumentart und sichtbarer Fortschritt „Datei x von y“.
+- Nur nicht klassifizierbare Scans lösen eine gezielte Profilfrage aus.
+- Ein Fehler stoppt nur die betroffene unabhängige Datei; andere Dateien laufen weiter.
+- Abschluss: Anzahl bereit, Entscheidung erforderlich und sicher gestoppt sowie je
+  Datei genau eine nächste Handlung – ohne Pfade oder sensible Dateinamen an Claude.
+- Bilder folgen einer organisationsseitigen Voreinstellung; der Nutzer wird nicht bei
+  jeder Datei erneut mit technischen Optionen konfrontiert.
+- Zunächst getrennte Pakete und getrennte Platzhalter je Datei. Kein gemeinsames
+  Identitätsmapping und keine Alles-oder-nichts-Sperre im einfachen Modus.
 
 ## P1 – Organisation und Plattformunabhängigkeit
 
@@ -269,10 +379,11 @@ Skip-Erlaubnis, Claude-Oberflächen und Telemetrie zentral.
 - Richtlinien sind signiert oder anderweitig manipulationsgeschützt; Version und aktive
   Quelle erscheinen ohne sensible Werte im Status.
 
-### DS-105 – Bewusster Mehrdatei-Batch (L)
+### DS-105 – Zusammenhängender Fall-Batch mit gemeinsamem Mapping (L)
 
-**Ergebnis:** Ein bewusst gestarteter Batch verwendet konsistente Platzhalter über alle
-Dateien, damit der fachliche Zusammenhang für Claude erhalten bleibt.
+**Ergebnis:** Ein später ausdrücklich gewählter Spezialmodus verwendet konsistente
+Platzhalter über zusammengehörige Dateien. Er ist nicht der einfache Mehrdateiweg aus
+DS-011 und gehört nicht in den ersten Pilot.
 
 **Abnahme:**
 
@@ -388,13 +499,15 @@ Jedes Backlog-Item mit Dateizugriff, Freigabe oder Mapping ist erst fertig, wenn
 
 ## Empfohlene Lieferreihenfolge
 
-1. **Pilotkern:** DS-001, DS-002, DS-004, DS-005, DS-006, DS-007, DS-008, DS-009
-2. **Sichere Prüfung:** DS-003 und zugehörige Human-Presence-Evidenz
-3. **Organisation:** DS-104, DS-106, DS-107
-4. **Plattformbasis:** DS-101; danach DS-102, optional DS-103
-5. **Zusammenhängende Dateien:** DS-105
-6. **Qualität und Reichweite:** DS-201 vor DS-202; danach DS-203 und DS-204
-7. **Rolloutentscheidung:** DS-205 und erneuter unabhängiger Security-/UX-Review
+1. **Installiertes Produkt:** DS-007 sowie installierter DS-001/DS-002/DS-004-Pfad
+2. **Einfacher Nutzerweg:** DS-003 vereinfachen, danach DS-011
+3. **Wartbare Fachregeln:** DS-010 ohne sichtbare Zusatzkonfiguration
+4. **Pilot-Security:** DS-005, DS-006 und gestufte DS-009-Härtung
+5. **Menschliche Abnahme:** DS-205 mit mindestens fünf fachfremden Beschäftigten
+6. **Organisation:** DS-104, DS-106, DS-107
+7. **Plattformbasis:** DS-101; danach DS-102, optional DS-103
+8. **Qualität und Reichweite:** DS-201 vor DS-202; danach DS-203 und DS-204
+9. **Spezialmodus zusammenhängende Dateien:** DS-105 erst nach dem einfachen Pilot
 
 ## Nächste Iteration
 
@@ -403,23 +516,49 @@ Review-/Skip-Grenze sind inzwischen umgesetzt. Der nächste Sprint soll deshalb
 nicht noch einmal dieselben Spikes planen, sondern den installierten Pilotpfad
 belegen:
 
-1. **DS-007:** MCPB und Plugin-ZIP auf einer frischen Windows-Umgebung installieren;
-   Start, Upgrade, Rollback, Prüfsummen, SBOM und Codesignatur nachweisen.
-2. **DS-001/DS-002/DS-004:** den geführten Einstieg, `privacy_status` und den
-   datensparsamen Abschlussbericht innerhalb der installierten Claude-Oberfläche
-   mit dem synthetischen Abnahmekorpus prüfen.
-3. **DS-003:** menschliche Windows-Usability-Abnahme durchführen und einen lokalen
-   Human-Presence-Kanal für visuelle Freigaben entwerfen; visuelle Freigabe bleibt
-   bis dahin deaktiviert.
-4. **DS-009:** Parser und OCR in ressourcenbegrenzte, netzlose Worker auslagern.
-5. **DS-203:** TXT/DOCX-Dateidialog und Reviewpfad zuerst auf Text-PDF, danach auf
-   weitere strukturell belegbare Formate erweitern; XLSX/PPTX/PDF bleiben bis dahin
-   im Input-Ordner-Workflow.
-6. **DS-005/DS-205:** Upload-Umgehung und Verständlichkeit mit fachfremden
-   Pilotanwendern ausschließlich anhand synthetischer Dokumente prüfen.
+1. **Dokumentationshygiene (erledigt in RC14):** sichtbare Versionsangaben,
+   Anwenderanleitung, Skills und technische Handbücher wurden konsistent aktualisiert.
+2. **DS-007 (M):** einen empfohlenen Plugin-ZIP-Installationsweg auf frischem Windows
+   einschließlich Start, Upgrade, Rollback, Prüfsummen, SBOM, Codesignatur sowie
+   minimalem CodeQL-/Secret-Scan nachweisen; MCPB bleibt Fallback.
+3. **DS-003 (technisch in RC14, menschliche Abnahme offen):** Pflichtdialog nutzt eine
+   Frage, zwei Antworten und Zurück/Ändern. Mit mindestens fünf fachfremden Personen
+   synthetisch testen. Visuelle Freigabe bleibt deaktiviert.
+4. **DS-011 (erster Slice in RC14):** Mehrfachauswahl, lokales „Datei x von y“ und
+   Fehlerisolierung sind umgesetzt; eine eigene lokale Abschlussansicht ergänzen.
+5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus
+   laufen ohne neue Nutzeroberfläche, Datumslogik oder Laufzeitnetz.
+6. **DS-009 (M als erster Slice):** vorhandene Grenzen gegen das Pilotprofil härten,
+   CPU-/Heap-Abbruch ergänzen und einen netzlosen Worker-Isolationsspike durchführen.
+7. **DS-203 (danach):** zuerst Text-PDF in denselben vollständigen lokalen Pfad
+   aufnehmen; weitere Formate nur anhand einer Coverage-Matrix.
+8. **DS-005/DS-205:** Upload-Umgehung, Einzel-/Mehrdateiweg, Mehrdeutigkeit, sicheren
+   Abbruch und Verständlichkeit mit synthetischen Dokumenten abnehmen.
 
 Erst wenn Installation, installierter End-to-End-Pfad und menschliche Bedienbarkeit
 belegt sind, sollte ein Pilot mit ausdrücklich freigegebenen Daten erwogen werden.
+
+## Revalidierungsprotokoll
+
+Die Priorisierung wurde aus drei unabhängigen Fachperspektiven gegengeprüft:
+
+- **UX/Produkt:** ein sichtbarer Einzel-/Mehrdateiweg, reduzierte Pflichtentscheidung,
+  verständlicher Abschluss statt Ordner-/Paketverwaltung;
+- **Datenschutz, IT-Security und Health-IT:** Katalog nie als Freigabewahrheit,
+  installierte Release-Herkunft, minimale Supply-Chain-Prüfung, gestufte
+  Parserisolation und klare Grenze für klinische Daten;
+- **Softwarearchitektur/Entwicklung:** bestehende Engine behalten, Katalog und Tests
+  intern strukturieren, einfachen Batch von gemeinsamem Mapping trennen, kein
+  Big-Bang-Port und keine Online-Datenbank.
+
+Gemeinsamer Beschluss: Die aus der
+[Quellenstruktur](https://github.com/nenna-ai-GmbH/German-law-mcp/blob/main/sources.yml)
+und [Security-Automatisierung](https://github.com/nenna-ai-GmbH/German-law-mcp/tree/main/.github/workflows)
+von German-law-mcp übertragbaren Muster sind strukturierte Provenienz, Contract-Tests
+und minimale Release-/Security-Evidenz. Nicht übernommen
+werden tägliche Quellenprüfung, `last_verified`-/Ablaufdaten, Runtime-Downloads,
+Remote-MCP, große Datenbank oder eine Sammlung überlappender Scanner. Diese Entscheidung
+hält die technische Nachvollziehbarkeit hoch und die sichtbare Bedienung klein.
 
 ## Validierte Annahmen zur Claude-Verteilung
 

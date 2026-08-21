@@ -6,6 +6,7 @@ const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
 
 const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
+const MAX_SELECTED_SOURCES = 25;
 const SOURCE_TYPES = Object.freeze({
   '.pdf': 'pdf',
   '.docx': 'docx',
@@ -38,7 +39,7 @@ function allowedExtensions(allowedTypes) {
   return extensions;
 }
 
-function pickerCommands(platform = process.platform, env = process.env, allowedTypes) {
+function pickerCommands(platform = process.platform, env = process.env, allowedTypes, multiple = false) {
   const extensions = allowedExtensions(allowedTypes);
   const windowsFilter = extensions.map((ext) => `*${ext}`).join(';');
   const unixFilter = extensions.map((ext) => `*${ext}`).join(' ');
@@ -56,8 +57,10 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
       '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
       "$dialog.Title = 'Datei für Claude vorbereiten'",
       `$dialog.Filter = 'Unterstützte Dateien|${windowsFilter}'`,
-      '$dialog.Multiselect = $false',
-      "if ($dialog.ShowDialog() -eq 'OK') { [Console]::Out.Write($dialog.FileName) }"
+      `$dialog.Multiselect = $${multiple ? 'true' : 'false'}`,
+      multiple
+        ? "if ($dialog.ShowDialog() -eq 'OK') { [Console]::Out.Write(($dialog.FileNames -join [Environment]::NewLine)) }"
+        : "if ($dialog.ShowDialog() -eq 'OK') { [Console]::Out.Write($dialog.FileName) }"
     ].join('; ');
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
   }
@@ -123,10 +126,38 @@ function pickSource(options = {}) {
   throw new SafeError('Keine Datei ausgewählt.');
 }
 
+function pickSources(options = {}) {
+  const runner = options.runner || defaultRunner;
+  let unavailable = 0;
+  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true)) {
+    const result = runner(spec.command, spec.args);
+    if (result?.error?.code === 'ENOENT') {
+      unavailable++;
+      continue;
+    }
+    if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
+    const output = String(result?.stdout || '').trim();
+    if (result?.status !== 0 && !output) throw new SafeError('Keine Datei ausgewählt.');
+    const selectedPaths = output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    if (!selectedPaths.length) throw new SafeError('Keine Datei ausgewählt.');
+    if (selectedPaths.length > (options.maxSources ?? MAX_SELECTED_SOURCES)) {
+      throw new SafeError(`Bitte höchstens ${options.maxSources ?? MAX_SELECTED_SOURCES} Dateien gleichzeitig auswählen.`);
+    }
+    if (new Set(selectedPaths.map((value) => value.toLowerCase())).size !== selectedPaths.length) {
+      throw new SafeError('Eine Datei wurde mehrfach ausgewählt.');
+    }
+    return selectedPaths.map((selected) => validateSelectedPath(selected, options));
+  }
+  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
+  throw new SafeError('Keine Datei ausgewählt.');
+}
+
 module.exports = {
   MAX_SOURCE_BYTES,
+  MAX_SELECTED_SOURCES,
   SOURCE_TYPES,
   pickerCommands,
   validateSelectedPath,
-  pickSource
+  pickSource,
+  pickSources
 };

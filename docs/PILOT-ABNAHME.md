@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC8 · ausschließlich synthetische Daten
+Version 3.2.0 RC14 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC8 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC14 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -40,13 +40,18 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
 - [ ] Update auf eine höhere Testversion und Rückkehr zur vorherigen Version sind
       praktisch bestanden.
 
-## 4. TXT-/DOCX-Dateidialog und lokale Textprüfung
+## 4. TXT-/DOCX-Mehrfachauswahl und lokale Textprüfung
 
 Synthetischer Inhalt soll einen automatisch erkannten Namen/E-Mailkontakt, den
 zusätzlichen Alias `Blauwal` und fachlichen Text wie `Rolle: Lösungsarchitektin`
 enthalten.
 
-- [ ] „Bereite eine lokale Datei vor“ öffnet einen Dateidialog außerhalb Claude.
+- [ ] „Anonymisiere eine oder mehrere Dateien lokal“ öffnet einen Dateidialog
+      außerhalb Claude.
+- [ ] Eine bis 25 TXT-/DOCX-Dateien lassen sich gemeinsam auswählen und werden mit
+      verständlichem Fortschritt nacheinander verarbeitet.
+- [ ] Abbruch oder Fehler bei einer Datei veröffentlicht dafür nichts, blockiert aber
+      die übrigen ausgewählten Dateien nicht.
 - [ ] Claude zeigt weder gewählten Pfad noch Originaltext.
 - [ ] Links sind Hinweise im normalisierten Quelltext sichtbar; rechts ist die
       automatisch bereinigte Fassung schreibgeschützt.
@@ -63,7 +68,7 @@ Automatisierte Basisevidenz: Der native Windows-Forms-Pfad mit synthetischer Ali
 Auswahl, Redaktions- und Freigabe-Schaltfläche ist im Windows-Test enthalten. Die
 vorstehenden Punkte prüfen zusätzlich Verständlichkeit und den installierten Pfad.
 
-## 5. Weitere Formate über den Input-Ordner
+## 5. Andere und formatgemischte Dateien über den Input-Ordner
 
 Jeweils eine synthetische DOCX-, XLSX-, PPTX-, Text-PDF-, CSV-, PNG-, JPEG- und
 BMP-Datei verwenden. Scan-PDF separat prüfen.
@@ -88,7 +93,7 @@ BMP-Datei verwenden. Scan-PDF separat prüfen.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC8 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC14 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz
@@ -149,4 +154,3 @@ Mit mindestens einer Person testen, die weder MCP noch Node/OCR/JSON kennt:
 
 Jedes `FAIL` bei Rohdatenzugriff, Coverage, Residual-Gate, Visual-Gate, Manipulations-
 oder Löschgrenzen bedeutet **No-Go**. `BLOCKED` ist kein `PASS`.
-

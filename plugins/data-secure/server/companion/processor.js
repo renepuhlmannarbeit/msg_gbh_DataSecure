@@ -37,7 +37,10 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
       onDetected: () => { detected = true; return transitionJob(jobId, 'Detected'); },
       reviewText: async (input) => {
         if (input.technical_review_required) throw technicalReviewRequired('Die Datei enthält visuelle oder technisch unsichere Inhalte und benötigt lokale Prüfung.');
-        const draft = buildReviewDraft(input.original_text, input.anonymized_text, input.profile, input.ambiguities);
+        const draft = buildReviewDraft(input.original_text, input.anonymized_text, input.profile, input.ambiguities, {
+          batchIndex: options.batchIndex,
+          batchTotal: options.batchTotal
+        });
         const rawDecision = await review({ ...input, review_draft: draft });
         const decision = rawDecision?.action === 'reviewed' && !Object.hasOwn(rawDecision, 'decisions')
           ? validateReviewResult({ ...rawDecision, decisions: [] }, draft)

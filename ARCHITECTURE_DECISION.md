@@ -1,6 +1,6 @@
 # Architekturentscheidung v3.2 RC2
 
-Statushinweis RC8 (21.08.2026): Die Grundentscheidung gilt fort. Der aktuelle
+Statushinweis RC14 (21.08.2026): Die Grundentscheidung gilt fort. Der aktuelle
 Umsetzungs- und Release-Stand steht in `README.md`, `docs/RELEASE.md` und
 `docs/COMPANION_IPC_V1.md`; bei abweichenden Detailaussagen sind diese neueren
 Dokumente maßgeblich.
@@ -31,7 +31,7 @@ Frühere Prototypen installierten teilweise Runtime-Pakete oder nutzten große g
   Windows-Bridge rasterisiert, andernfalls vollständig zurückgehalten; die reale
   EMF/WMF-Abnahme ist noch offen.
 - SVG oder nicht rasterisierbare Assets: keine stille Freigabe; lokale Review-Queue.
-- `applicant`/`personnel_profile`: Visuals werden lokal zurückgehalten. RC8 besitzt
+- `applicant`/`personnel_profile`: Visuals werden lokal zurückgehalten. RC14 besitzt
   keinen menschlichen visuellen Freigabekanal; Preview-Inspektion oder eine
   Chatbestätigung macht das Asset nicht für Claude lesbar.
 

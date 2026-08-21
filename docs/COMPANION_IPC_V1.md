@@ -31,17 +31,20 @@ lokalen Prozessverbunds.
 
 ## Lokale Dateiauswahl
 
-`pick_source` öffnet einen nativen Dialog außerhalb Claude:
+`pick_sources` öffnet einen nativen Dialog außerhalb Claude. Unter Windows kann
+der Anwender eine oder bis zu 25 TXT-/DOCX-Dateien gleichzeitig auswählen;
+`pick_source` bleibt als interner Einzeldatei-Befehl kompatibel:
 
 - Windows: `System.Windows.Forms.OpenFileDialog` über das gebündelte Windows
   PowerShell,
 - macOS: `/usr/bin/osascript` mit `choose file`,
 - Linux: `zenity`, mit lokalem `kdialog` als Fallback.
 
-Die Auswahl wird anschließend erneut gegen das Dateisystem geprüft: absoluter Pfad,
-unterstützte Endung, reguläre Datei, kein Symlink und höchstens 100 MiB. Pfad und
-Dateigröße bleiben im flüchtigen Companion-Speicher. Claude-Antworten und das
-append-only Jobjournal enthalten weder Pfad noch Dateinamen oder Rohbytes.
+Jede Auswahl wird anschließend erneut gegen das Dateisystem geprüft: absoluter
+Pfad, unterstützte Endung, reguläre Datei, kein Symlink und höchstens 100 MiB.
+Doppelte Einträge und mehr als 25 Dateien werden abgewiesen. Pfade und Dateigrößen
+bleiben im flüchtigen Companion-Speicher. Claude-Antworten und die append-only
+Jobjournale enthalten weder Pfad noch Dateinamen oder Rohbytes.
 
 ## Lokale Aktionen
 
@@ -51,17 +54,25 @@ Befehle sind nicht als MCP-Tools veröffentlicht und besitzen daher keine
 modellseitige Aufruffläche.
 
 Der MCP-Einstieg `prepare_local_document` darf den privaten Companion starten und
-damit den lokalen Dateidialog öffnen. Er erhält weder den gewählten Pfad noch
-Originalbytes oder Action-Token. Für TXT und textuell vollständig auswertbare DOCX
-läuft die Verarbeitung bis `Detected`. Unter Windows zeigt der Companion danach
+damit den lokalen Mehrfachdialog öffnen. Er erhält weder die gewählten Pfade noch
+Originalbytes oder Action-Token. Aus jeder Auswahl entsteht ein eigener privater
+Job; die Verarbeitung läuft sequenziell und ein Fehler stoppt nur die betroffene
+Datei. Die datensparsame Zusammenfassung nennt Anzahl ausgewählter, freigegebener
+und gestoppter Dateien sowie die Paket-IDs erfolgreicher Ergebnisse. Für TXT und
+textuell vollständig auswertbare DOCX läuft die Verarbeitung bis `Detected`.
+Unter Windows zeigt der Companion danach
 normalisierten extrahierten Quelltext und bereinigte Fassung ausschließlich lokal
 nebeneinander. Heuristisch erkannte Originalspannen sind als flüchtige
 `text:v1:*`-Hinweise markiert. In der schreibgeschützten bereinigten Fassung können
 zusätzliche sensible Spannen ausschließlich zur Ersetzung durch
 `[MANUAL_REDACTION]` ausgewählt werden; freie fachliche Textänderungen sind nicht
 möglich. Eine zweite schreibgeschützte Ansicht zeigt vor der Freigabe die exakt aus
-diesen Auswahlen entstehende Fassung. „Geprüft freigeben“ erzeugt `Reviewed`, „Prüfung
-überspringen“ erzeugt `Skipped`. Beide Aktionen erhalten erst nach einem erneuten
+diesen Auswahlen entstehende Fassung. Fachlich mehrdeutige Zertifikatsanbieter
+werden nacheinander mit genau einer Frage und den Antworten „Ja, beibehalten“ oder
+„Nein, Namen ersetzen“ geklärt; eine vorherige Entscheidung kann lokal geändert
+werden. Solange eine solche Entscheidung offen ist, ist Überspringen nicht sichtbar.
+„Geprüft freigeben“ erzeugt `Reviewed`, „Prüfung überspringen“ erzeugt `Skipped`.
+Beide Aktionen erhalten erst nach einem erneuten
 Residual-Gate über die exakte Ausgabe den Zustand `Verified`. DOCX mit
 zurückgehaltenen Bildern oder technischen Unsicherheiten kann über diesen Dialog
 nicht freigegeben werden.

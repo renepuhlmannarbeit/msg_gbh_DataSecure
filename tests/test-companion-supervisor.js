@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
+const { SafeError } = require('../plugins/data-secure/server/runtime');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-supervisor-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
@@ -78,7 +79,7 @@ async function main() {
       ready: Promise.resolve({}),
       async request(command, params) {
         calls.push({ command, params });
-        if (command === 'pick_source') return { ok: true, job: { job_id: 'job-opaque' } };
+        if (command === 'pick_sources') return { ok: true, jobs: [{ job_id: 'job-opaque' }], selected_count: 1 };
         return {
           ok: true,
           job: { job_id: 'job-opaque', state: 'Released' },
@@ -92,14 +93,47 @@ async function main() {
     };
     const result = await prepareLocalDocument('personnel_profile', { platform: 'win32', removeImages: true, launchCompanion: () => fake });
     assert.deepStrictEqual(calls, [
-      { command: 'pick_source', params: { profile: 'personnel_profile', remove_images: true } },
+      { command: 'pick_sources', params: { profile: 'personnel_profile', remove_images: true } },
       { command: 'process_source', params: { job_id: 'job-opaque' } }
     ]);
     assert.strictEqual(result.review_decision, 'reviewed');
     assert.strictEqual(result.human_skip_confirmed_locally, false);
     assert.strictEqual(result.raw_content_sent_to_claude, false);
+    assert.strictEqual(result.selected_count, 1);
+    assert.strictEqual(result.released_count, 1);
     assert.strictEqual(closed, true);
     assert.doesNotMatch(JSON.stringify(result), /source|filename|original_path/i);
+  });
+
+  await testAsync('manager processes multiple selections independently and keeps successful packages', async () => {
+    const requests = [];
+    const fake = {
+      ready: Promise.resolve({}),
+      async request(command, params) {
+        requests.push({ command, params });
+        if (command === 'pick_sources') return {
+          ok: true, selected_count: 3,
+          jobs: [{ job_id: 'one' }, { job_id: 'two' }, { job_id: 'three' }]
+        };
+        if (params.job_id === 'two') throw new SafeError('Datei 2 wurde sicher gestoppt.');
+        return {
+          ok: true, job: { job_id: params.job_id, state: 'Released' },
+          package_id: `package-${params.job_id}`, review_decision: 'reviewed',
+          raw_content_sent_to_claude: false
+        };
+      },
+      close() {}
+    };
+    const result = await prepareLocalDocument('auto', {
+      platform: 'win32', launchCompanion: () => fake
+    });
+    assert.strictEqual(result.workflow, 'local_companion_txt_docx_batch');
+    assert.strictEqual(result.selected_count, 3);
+    assert.strictEqual(result.released_count, 2);
+    assert.strictEqual(result.failed_count, 1);
+    assert.deepStrictEqual(result.results.map((item) => item.ok), [true, false, true]);
+    assert.strictEqual(requests.filter((item) => item.command === 'process_source').length, 3);
+    assert.doesNotMatch(JSON.stringify(result), /sourcePath|filename|original_path/i);
   });
 
   await testAsync('manager always closes the companion when local selection is cancelled', async () => {

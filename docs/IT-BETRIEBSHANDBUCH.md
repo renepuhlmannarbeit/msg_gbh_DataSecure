@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC8 · Stand 21.08.2026
+Version 3.2.0 RC14 · Stand 21.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC8 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC14 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -15,10 +15,10 @@ Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine MCP-Read-Date
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC8 |
+| Artefakt | Ziel | Status RC14 |
 |---|---|---|
-| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc8.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-Engineering-Weg; frische Installation noch abzunehmen |
-| `DataSecure-Privacy-Preflight-v3.2.0-rc8.zip` | Claude-Plugin/Organisations-Marketplace | Skills plus lokaler MCP; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc14.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-Engineering-Weg; frische Installation noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc14.zip` | Claude-Plugin/Organisations-Marketplace | Skills plus lokaler MCP; Runtime-Auflösung in der Zielumgebung noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -91,7 +91,9 @@ Ein grüner Startnachweis umfasst mindestens:
 - `privacy_status` antwortet mit Version, Retention und formatbezogenen Fähigkeiten;
 - der lokale Privacy-Ordner lässt sich öffnen;
 - `Input`, `Output`, `Processed` und `Needs Visual Review` existieren;
-- TXT/DOCX öffnen den privaten Dateidialog und unter Windows die lokale Textprüfung;
+- bis zu 25 TXT-/DOCX-Dateien öffnen gemeinsam den privaten Dateidialog und unter
+  Windows nacheinander die lokale Textprüfung; ein Einzelfehler blockiert die übrigen
+  Dateien nicht;
 - der ausgewählte Pfad und der Originaltext erscheinen weder im MCP-Ergebnis noch im
   Jobjournal oder Audit;
 - das gepackte MCP beantwortet `initialize`;
@@ -110,10 +112,11 @@ Die vollständige Abnahme steht in [PILOT-ABNAHME.md](PILOT-ABNAHME.md).
 | `Needs Visual Review` | lokal zurückgehaltene Vorschauen | keine Freigabe über Claude; Preview verfällt |
 | Audit | datensparsame Zähler/Status | keine Rohwerte, Namen, Pfade oder Inhalts-Hashes |
 
-Das TXT-/DOCX-Dateidialog-Original bleibt an seinem ursprünglichen Ort; DataSecure
-verarbeitet eine private Arbeitskopie. Löschfehler werden gemeldet und beim nächsten
-Cleanup erneut versucht. Unbekannte Verzeichnisse, Symlinks und Junctions werden nicht
-aggressiv entfernt.
+Die TXT-/DOCX-Dateidialog-Originale bleiben an ihrem ursprünglichen Ort; DataSecure
+verarbeitet private Arbeitskopien. Andere Formate oder formatgemischte Stapel werden
+über `Input` verarbeitet. Löschfehler werden gemeldet und beim nächsten Cleanup erneut
+versucht. Unbekannte Verzeichnisse, Symlinks und Junctions werden nicht aggressiv
+entfernt.
 
 `purge_local_data` löscht nur nach ausdrücklicher Bestätigung und nur den gewählten
 Scope. Vor einem Purge sicherstellen, dass die synthetischen Ergebnisse nicht mehr
@@ -121,7 +124,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC8 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC14 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.

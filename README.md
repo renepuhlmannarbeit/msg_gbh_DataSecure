@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC12
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC14
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
@@ -15,7 +15,7 @@ erhalten.
 ## Zielworkflow
 
 ```text
-PDF / DOCX / XLSX / PPTX / PNG / JPEG / BMP
+PDF / DOCX / XLSX / PPTX / TXT / MD / CSV / PNG / JPEG / BMP
           ↓
    lokaler Privacy-MCP
           ↓
@@ -30,9 +30,11 @@ PDF / DOCX / XLSX / PPTX / PNG / JPEG / BMP
         Claude
 ```
 
-Wenn die Anforderung lautet, dass Rohdaten **vor** Modellverarbeitung bereinigt werden müssen, soll die Originaldatei nicht direkt in den Chat hochgeladen oder hineinkopiert werden. Für TXT/DOCX startet DataSecure einen lokalen Dateidialog mit optionaler Windows-Textprüfung. Weitere Formate verwenden derzeit den lokalen `Claude Privacy/Input`-Ordner.
+Wenn Rohdaten **vor** der Modellverarbeitung bereinigt werden müssen, wird das Original weder direkt in den Chat hochgeladen noch hineinkopiert. Nach außen gibt es einen Einstieg: „Anonymisiere eine oder mehrere Dateien lokal.“ DataSecure wählt den passenden lokalen Weg und verwendet danach nur die erzeugten Privacy-Pakete.
 
-Mehrere Dateien können gemeinsam in `Input` abgelegt und mit `anonymize_all_documents` nacheinander verarbeitet werden. Bis zu 25 Dateien ergeben getrennte Markdown-Pakete; ein Fehler bei einer Datei blockiert die übrigen nicht. Gemischte Dokumentarten verwenden `profile=auto`; nur eigenständige Bilder und Scan-PDFs ohne Textschicht brauchen eine ausdrückliche Profilwahl. Gestoppte Läufe werden nicht automatisch wiederholt, und das Ergebnis trennt gefundene Dateien, Versuche und Wiederholungen. Mit ausdrücklich gewünschtem `remove_images=true` werden bekannte Bildanlagen texttragender Office-Dateien entfernt und in der `.md` transparent vermerkt.
+Bis zu 25 TXT-/DOCX-Dateien können gemeinsam im privaten Dateidialog ausgewählt werden. DataSecure verarbeitet sie nacheinander und öffnet unter Windows je Datei die lokale Textprüfung. Andere Formate oder ein formatgemischter Stapel werden gemeinsam in `Claude Privacy/Input` abgelegt und ebenfalls nacheinander verarbeitet. Jede Datei erhält ein eigenes Markdown-Paket; ein Fehler bei einer Datei blockiert die übrigen nicht. Der Dokumenttyp muss nicht für jede Datei angegeben werden: Gemischte Dokumentarten verwenden intern `profile=auto`. Nur eigenständige Bilder und Scan-PDFs ohne Textschicht brauchen vor der OCR eine Zweckangabe. Gestoppte Läufe werden nicht automatisch wiederholt, und das Ergebnis trennt gefundene Dateien, Versuche und Wiederholungen.
+
+Wenn ausdrücklich reine Markdown-Ausgabe ohne Bilder gewünscht ist, entfernt `remove_images=true` bekannte Bildanlagen in texttragenden Office-Dateien lokal und vermerkt dies in der `.md`. Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans bleiben weiterhin durch die Sicherheitsgrenzen geschützt.
 
 Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begrenztes Diagnosejournal. `diagnostic_status` zeigt ausschließlich Verarbeitungsphase, Formatklasse, Profil, Zähler und feste Fehlercodes; Dateinamen, Pfade, Dokumentinhalt, erkannte Werte und Dokument-Hashes werden weder gespeichert noch ausgegeben.
 
@@ -96,8 +98,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc13.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
-- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc13.mcpb` – Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc14.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
+- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc14.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
@@ -147,6 +149,6 @@ Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für
 
 ## Release-Status
 
-RC12 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen. Weiterhin fehlen die visuelle Human-Presence-Freigabe, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+RC14 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen. Weiterhin fehlen die visuelle Human-Presence-Freigabe, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

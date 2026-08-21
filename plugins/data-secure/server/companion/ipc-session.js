@@ -4,11 +4,11 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { createJob, transitionJob, jobStatus } = require('./job-store');
 const { purgeCompanionJobs } = require('./retention');
-const { pickSource, validateSelectedPath } = require('./file-picker');
+const { pickSource, pickSources, validateSelectedPath } = require('./file-picker');
 const { processCompanionJob } = require('./processor');
 
 const IPC_VERSION = 'data-secure-companion-ipc/1';
-const COMMANDS = new Set(['capabilities', 'pick_source', 'process_source', 'cancel_job', 'purge_jobs']);
+const COMMANDS = new Set(['capabilities', 'pick_source', 'pick_sources', 'process_source', 'cancel_job', 'purge_jobs']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 
 function exactKeys(value, expected) {
@@ -74,6 +74,9 @@ function createCompanionSession(options = {}) {
   const secret = validSecret(options.secret || crypto.randomBytes(32));
   const sessionId = options.sessionId || crypto.randomUUID();
   const selectSource = options.pickSource || pickSource;
+  const selectSources = options.pickSources || (options.pickSource
+    ? (pickerOptions) => [options.pickSource(pickerOptions)]
+    : pickSources);
   const processSource = options.processCompanionJob || processCompanionJob;
   const sources = new Map();
   let nextSequence = 1;
@@ -115,7 +118,7 @@ function createCompanionSession(options = {}) {
       if (!exactKeys(frame.params, [])) throw new SafeError('Capabilities akzeptiert keine Parameter.');
       return response(descriptor());
     }
-    if (frame.command === 'pick_source') {
+    if (frame.command === 'pick_source' || frame.command === 'pick_sources') {
       const validShape = exactKeys(frame.params, ['profile']) || exactKeys(frame.params, ['profile', 'remove_images']);
       if (
         !validShape || !PROFILES.has(frame.params.profile) ||
@@ -123,23 +126,38 @@ function createCompanionSession(options = {}) {
       ) {
         throw new SafeError('Ungültiges Profil für die lokale Dateiauswahl.');
       }
-      const selectedByAdapter = selectSource({ allowedTypes: ['txt', 'docx'] });
-      if (!exactKeys(selectedByAdapter, ['sourcePath', 'sourceType', 'sourceBytes'])) {
-        throw new SafeError('Der lokale Dateidialog lieferte ein ungültiges Ergebnis.');
+      const adapterResult = frame.command === 'pick_sources'
+        ? selectSources({ allowedTypes: ['txt', 'docx'] })
+        : [selectSource({ allowedTypes: ['txt', 'docx'] })];
+      if (!Array.isArray(adapterResult) || !adapterResult.length || adapterResult.length > 25) {
+        throw new SafeError('Der lokale Dateidialog lieferte keine gültige Dateiauswahl.');
       }
-      const selected = validateSelectedPath(selectedByAdapter.sourcePath, { allowedTypes: ['txt', 'docx'] });
-      if (
-        selected.sourceType !== selectedByAdapter.sourceType ||
-        selected.sourceBytes !== selectedByAdapter.sourceBytes
-      ) {
-        throw new SafeError('Die ausgewählte Datei wurde während der Übergabe verändert.');
-      }
-      const job = createJob({ profile: frame.params.profile, source_type: selected.sourceType });
-      sources.set(job.job_id, {
-        path: selected.sourcePath,
-        removeImages: frame.params.remove_images === true
+      const selectedItems = adapterResult.map((selectedByAdapter) => {
+        if (!exactKeys(selectedByAdapter, ['sourcePath', 'sourceType', 'sourceBytes'])) {
+          throw new SafeError('Der lokale Dateidialog lieferte ein ungültiges Ergebnis.');
+        }
+        const selected = validateSelectedPath(selectedByAdapter.sourcePath, { allowedTypes: ['txt', 'docx'] });
+        if (
+          selected.sourceType !== selectedByAdapter.sourceType ||
+          selected.sourceBytes !== selectedByAdapter.sourceBytes
+        ) {
+          throw new SafeError('Eine ausgewählte Datei wurde während der Übergabe verändert.');
+        }
+        return selected;
       });
-      return response({ ok: true, job });
+      const jobs = selectedItems.map((selected, index) => {
+        const job = createJob({ profile: frame.params.profile, source_type: selected.sourceType });
+        sources.set(job.job_id, {
+          path: selected.sourcePath,
+          removeImages: frame.params.remove_images === true,
+          batchIndex: index + 1,
+          batchTotal: selectedItems.length
+        });
+        return job;
+      });
+      return response(frame.command === 'pick_source'
+        ? { ok: true, job: jobs[0] }
+        : { ok: true, jobs, selected_count: jobs.length });
     }
     if (frame.command === 'process_source') {
       if (!exactKeys(frame.params, ['job_id'])) {
@@ -149,7 +167,9 @@ function createCompanionSession(options = {}) {
       if (!selected) throw new SafeError('Für diesen Job ist keine private Quelle gebunden.');
       const profile = jobStatus(frame.params.job_id).profile;
       return Promise.resolve(processSource(frame.params.job_id, selected.path, profile, {
-        removeImages: selected.removeImages
+        removeImages: selected.removeImages,
+        batchIndex: selected.batchIndex,
+        batchTotal: selected.batchTotal
       })).then((result) => {
         if (result?.ok) sources.delete(frame.params.job_id);
         return response(result);

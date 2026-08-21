@@ -13,7 +13,7 @@ jobs:
     name: Repository guards
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: No real documents may be tracked
         shell: bash
@@ -53,8 +53,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
       - name: Run privacy, parser, image, MCP and plugin tests
@@ -65,8 +65,8 @@ jobs:
     needs: [guard, test]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
       - name: Build Claude plugin ZIP and standalone MCPB
@@ -80,9 +80,13 @@ jobs:
           reply="$(echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | node .verify/server/index.js)"
           echo "$reply"
           echo "$reply" | grep -q 'eu-privacy-document-gateway'
-      - uses: actions/upload-artifact@v4
+      - name: Generate SPDX SBOM and SHA-256 checksums
+        run: node scripts/generate-sbom.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: data-secure-build-${{ github.sha }}
           path: |
             dist/*.zip
             dist/*.mcpb
+            dist/*.spdx.json
+            dist/SHA256SUMS

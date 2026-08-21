@@ -10,7 +10,7 @@ const { createSuite } = require('./helpers');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-ipc-'));
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
 
-const { validateSelectedPath, pickerCommands, pickSource } = require('../plugins/data-secure/server/companion/file-picker');
+const { validateSelectedPath, pickerCommands, pickSource, pickSources } = require('../plugins/data-secure/server/companion/file-picker');
 const { IPC_VERSION, signFrame, createCompanionSession } = require('../plugins/data-secure/server/companion/ipc-session');
 
 const { test, done, assert } = createSuite('Companion private IPC and file picker');
@@ -61,6 +61,26 @@ test('linux picker falls back locally and validates the result', () => {
   assert.strictEqual(selected.sourceType, 'pdf');
 });
 
+test('Windows multi-picker validates up to 25 distinct local files', () => {
+  const first = path.join(root, 'first.txt');
+  const second = path.join(root, 'second.docx');
+  fs.writeFileSync(first, 'first');
+  fs.writeFileSync(second, 'second');
+  const selected = pickSources({
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+    allowedTypes: ['txt', 'docx'],
+    runner: (_command, args) => {
+      assert.match(args.join(' '), /Multiselect = \$true/);
+      return { status: 0, stdout: `${first}\r\n${second}` };
+    }
+  });
+  assert.deepStrictEqual(selected.map((item) => item.sourceType), ['txt', 'docx']);
+  assert.throws(() => pickSources({
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, maxSources: 1,
+    runner: () => ({ status: 0, stdout: `${first}\r\n${second}` })
+  }), /höchstens 1/);
+});
+
 test('descriptor promises authenticated inherited stdio without model authority', () => {
   const session = createCompanionSession({ secret, sessionId: crypto.randomUUID() });
   const descriptor = session.descriptor();
@@ -97,6 +117,26 @@ test('authenticated file selection returns no path and stores it only in memory'
   assert.doesNotMatch(fs.readFileSync(journal, 'utf8'), /employee|sourcePath|original_path/i);
 });
 
+test('authenticated multi-selection creates private jobs without returning paths', () => {
+  const first = path.join(root, 'batch-one.txt');
+  const second = path.join(root, 'batch-two.txt');
+  fs.writeFileSync(first, 'one');
+  fs.writeFileSync(second, 'two');
+  const sessionId = crypto.randomUUID();
+  const session = createCompanionSession({
+    secret,
+    sessionId,
+    pickSources: () => [first, second].map((sourcePath) => ({
+      sourcePath, sourceType: 'txt', sourceBytes: 3
+    }))
+  });
+  const result = session.dispatch(frame(sessionId, 1, 'pick_sources', { profile: 'auto' }));
+  assert.strictEqual(result.selected_count, 2);
+  assert.strictEqual(result.jobs.length, 2);
+  assert.ok(result.jobs.every((job) => session.hasPrivateSource(job.job_id)));
+  assert.doesNotMatch(JSON.stringify(result), /batch-one|batch-two|sourcePath|original_path/i);
+});
+
 test('image-removal intent is accepted only as a literal true flag', () => {
   const source = path.join(root, 'text-only.docx');
   fs.writeFileSync(source, 'synthetic');
@@ -117,7 +157,7 @@ test('image-removal intent is accepted only as a literal true flag', () => {
   );
   const picked = session.dispatch(frame(sessionId, 2, 'pick_source', { profile: 'customer', remove_images: true }));
   session.dispatch(frame(sessionId, 3, 'process_source', { job_id: picked.job.job_id }));
-  assert.deepStrictEqual(options, { removeImages: true });
+  assert.deepStrictEqual(options, { removeImages: true, batchIndex: 1, batchTotal: 1 });
 });
 
 test('authenticated cancel creates local evidence and drops the private source', () => {

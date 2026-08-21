@@ -25,7 +25,12 @@ const {
 const { anonymizePersonnel } = require('./personnel');
 const { findStructuredSpans, scanStructured, replaceStructured } = require('./structured');
 const { placeholderSpans, applySpans } = require('./spans');
-const { credentialContextSpans, inCredentialContext, isCredentialIssuerDomain } = require('./credentials');
+const {
+  credentialContextSpans,
+  inCredentialContext,
+  isCredentialIssuerDomain,
+  isCatalogTechnologyTerm
+} = require('./credentials');
 
 // Entity priorities. Structured identifiers (80-90) always win over entity
 // names so that a surname alias can never eat part of an e-mail address, and a
@@ -38,6 +43,11 @@ const PRIORITY = {
   LOCATION: 60,
   URL: 58
 };
+
+function isProtectedProfessionalDomain(text, start, end, credentialRanges) {
+  return isCredentialIssuerDomain(text, start, end, credentialRanges) ||
+    isCatalogTechnologyTerm(text, start, end);
+}
 
 // "Herr Weiß" must collapse into a single pseudonym instead of leaving
 // "Herr [PERSON_001]": the honorific is a gender quasi-identifier and carries
@@ -220,7 +230,7 @@ function anonymize(text, profile = 'general') {
   // collected first and conflicts are settled by priority, so no rule can
   // corrupt the input of another rule.
   const spans = [...findStructuredSpans(out)].filter((span) =>
-    !(span.type === 'URL' && isCredentialIssuerDomain(out,span.start,span.end,credentialRanges))
+    !(span.type === 'URL' && isProtectedProfessionalDomain(out,span.start,span.end,credentialRanges))
   );
   for (const entry of dictionary) {
     const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority);
@@ -236,7 +246,7 @@ function anonymize(text, profile = 'general') {
     URL_RE.lastIndex = 0;
     let m;
     while ((m = URL_RE.exec(out))) {
-      if(isCredentialIssuerDomain(out,m.index,m.index+m[0].length,credentialRanges)) continue;
+      if(isProtectedProfessionalDomain(out,m.index,m.index+m[0].length,credentialRanges)) continue;
       spans.push({
         type: 'URL',
         start: m.index,
@@ -281,7 +291,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     ? credentialContextSpans(clean)
     : [];
   const out = scanStructured(clean)
-    .filter((f) => !(f.type === 'URL' && isCredentialIssuerDomain(clean,f.start,f.end,credentialRanges)))
+    .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .map((f) => ({ type: f.type, text: f.text }));
   const residualOrgKeys=new Set();
   const residualOrgSpans=[];
@@ -306,7 +316,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     URL_RE.lastIndex = 0;
     let match;
     while ((match = URL_RE.exec(clean))) {
-      if(!isCredentialIssuerDomain(clean,match.index,match.index+match[0].length,credentialRanges)) {
+      if(!isProtectedProfessionalDomain(clean,match.index,match.index+match[0].length,credentialRanges)) {
         out.push({ type: 'URL', text: match[0] });
       }
     }
@@ -372,7 +382,7 @@ function sensitiveSpans(text, profile = 'general') {
   }
 
   for (const f of findStructuredSpans(src)) {
-    if(f.type === 'URL' && isCredentialIssuerDomain(src,f.start,f.end,credentialRanges)) continue;
+    if(f.type === 'URL' && isProtectedProfessionalDomain(src,f.start,f.end,credentialRanges)) continue;
     add(f.type, f.start, f.end, f.text);
   }
 
@@ -395,7 +405,7 @@ function sensitiveSpans(text, profile = 'general') {
     URL_RE.lastIndex = 0;
     let m;
     while ((m = URL_RE.exec(src))) {
-      if(isCredentialIssuerDomain(src,m.index,m.index+m[0].length,credentialRanges)) continue;
+      if(isProtectedProfessionalDomain(src,m.index,m.index+m[0].length,credentialRanges)) continue;
       add('URL', m.index, m.index + m[0].length, m[0]);
     }
   }

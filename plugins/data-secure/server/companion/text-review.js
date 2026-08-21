@@ -11,7 +11,7 @@ const REVIEW_SCHEMA = 'data-secure-text-review/2';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
-function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = []) {
+function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [], progress = {}) {
   // sensitiveSpans uses the engine's normalised coordinate space. Displaying
   // that same local-only representation keeps highlights correct for NFC,
   // soft-hyphen and zero-width inputs instead of applying shifted offsets.
@@ -37,7 +37,21 @@ function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [
     }
     return { ...item };
   });
-  return { schema: REVIEW_SCHEMA, original_text: original, anonymized_text: anonymized, locators, ambiguities: safeAmbiguities };
+  const batchIndex = progress.batchIndex ?? 1;
+  const batchTotal = progress.batchTotal ?? 1;
+  if (!Number.isSafeInteger(batchIndex) || !Number.isSafeInteger(batchTotal) ||
+    batchIndex < 1 || batchTotal < 1 || batchTotal > 25 || batchIndex > batchTotal) {
+    throw new SafeError('Der lokale Dateifortschritt ist ungültig.');
+  }
+  return {
+    schema: REVIEW_SCHEMA,
+    original_text: original,
+    anonymized_text: anonymized,
+    locators,
+    ambiguities: safeAmbiguities,
+    batch_index: batchIndex,
+    batch_total: batchTotal
+  };
 }
 
 function powershellUtf8Preamble() {
@@ -56,11 +70,12 @@ function powershellReviewScript() {
     '$draft = [Console]::In.ReadToEnd() | ConvertFrom-Json',
     '$form = New-Object System.Windows.Forms.Form',
     '$form.Text = "DataSecure - lokale Textprüfung"',
+    'if ([int]$draft.batch_total -gt 1) { $form.Text += " - Datei " + [int]$draft.batch_index + " von " + [int]$draft.batch_total }',
     '$form.Width = 1200; $form.Height = 760; $form.StartPosition = "CenterScreen"',
     '$form.FormBorderStyle = "Sizable"; $form.MinimizeBox = $true',
     '$info = New-Object System.Windows.Forms.Label',
     '$info.Dock = "Top"; $info.Height = 52; $info.Padding = [System.Windows.Forms.Padding]::new(10, 8, 10, 4)',
-    '$info.Text = "Rot: sensible Stellen. Gelb: Organisation mit unklarem Zertifikatsbezug - bitte unten ausdrücklich entscheiden. Rechts unten: exakte Vorschau der Freigabe."',
+    '$info.Text = "Prüfe nur die gelben Stellen. Rot wurde bereits anonymisiert. Rechts unten siehst du die fertige Fassung für Claude."',
     '$split = New-Object System.Windows.Forms.SplitContainer',
     '$split.Dock = "Fill"; $split.Orientation = "Vertical"; $split.SplitterDistance = 570',
     '$left = New-Object System.Windows.Forms.RichTextBox',
@@ -87,22 +102,25 @@ function powershellReviewScript() {
     '$redact = New-Object System.Windows.Forms.Button; $redact.Text = "Auswahl anonymisieren"; $redact.Width = 165',
     '$skip = New-Object System.Windows.Forms.Button; $skip.Text = "Prüfung überspringen"; $skip.Width = 160',
     '$cancel = New-Object System.Windows.Forms.Button; $cancel.Text = "Abbrechen"; $cancel.Width = 110',
-    '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "Als Zertifizierung erhalten"; $keep.Width = 185',
-    '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "Organisation anonymisieren"; $anonOrg.Width = 185',
-    '$ambiguityInfo = New-Object System.Windows.Forms.Label; $ambiguityInfo.Width = 230; $ambiguityInfo.Height = 28',
+    '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "Ja, beibehalten"; $keep.Width = 145',
+    '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "Nein, Namen ersetzen"; $anonOrg.Width = 170',
+    '$back = New-Object System.Windows.Forms.Button; $back.Text = "Zurück / ändern"; $back.Width = 140',
+    '$ambiguityInfo = New-Object System.Windows.Forms.Label; $ambiguityInfo.Width = 330; $ambiguityInfo.Height = 38',
     '$script:answer = $null; $script:redactions = New-Object System.Collections.ArrayList; $script:decisions = @{}; $script:current = 0',
     'function Ambiguity-Redactions { $items = New-Object System.Collections.ArrayList; foreach ($candidate in $draft.ambiguities) { if ($script:decisions[[string]$candidate.ambiguity_id] -eq "redact") { [void]$items.Add(@{ start = [int]$candidate.anonymized_start; end = [int]$candidate.anonymized_end }) } }; return $items }',
     'function Update-Preview { $value = [string]$draft.anonymized_text; $all = @($script:redactions) + @(Ambiguity-Redactions); foreach ($item in @($all | Sort-Object start -Descending)) { $value = $value.Substring(0, [int]$item.start) + "[MANUAL_REDACTION]" + $value.Substring([int]$item.end) }; $preview.Text = $value }',
-    'function Show-Ambiguity { if ($draft.ambiguities.Count -eq 0) { $ambiguityInfo.Text = "Keine offene Zuordnung"; $keep.Enabled = $false; $anonOrg.Enabled = $false; return }; while ($script:current -lt $draft.ambiguities.Count -and $script:decisions.ContainsKey([string]$draft.ambiguities[$script:current].ambiguity_id)) { $script:current++ }; if ($script:current -ge $draft.ambiguities.Count) { $ambiguityInfo.Text = "Alle Zuordnungen entschieden"; $keep.Enabled = $false; $anonOrg.Enabled = $false; return }; $candidate = $draft.ambiguities[$script:current]; $ambiguityInfo.Text = "Zuordnung " + ($script:current + 1) + " von " + $draft.ambiguities.Count; $right.Select([int]$candidate.anonymized_start, [int]$candidate.anonymized_end - [int]$candidate.anonymized_start); $right.ScrollToCaret() }',
-    'function Decide-Ambiguity([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $script:decisions[[string]$candidate.ambiguity_id] = $decision; Update-Preview; Show-Ambiguity }',
+    'function Show-Ambiguity { if ($draft.ambiguities.Count -eq 0) { $ambiguityInfo.Text = "Keine offene Zuordnung"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $back.Enabled = $false; $approve.Enabled = $true; return }; if ($script:current -ge $draft.ambiguities.Count) { $ambiguityInfo.Text = "Alle " + $draft.ambiguities.Count + " Stellen entschieden"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $back.Enabled = $true; $approve.Enabled = $true; return }; $candidate = $draft.ambiguities[$script:current]; $ambiguityInfo.Text = "Stelle " + ($script:current + 1) + " von " + $draft.ambiguities.Count + ": Gehört dieser Name zu einer Zertifizierung?"; $keep.Enabled = $true; $anonOrg.Enabled = $true; $back.Enabled = ($script:current -gt 0); $approve.Enabled = $false; $right.Select([int]$candidate.anonymized_start, [int]$candidate.anonymized_end - [int]$candidate.anonymized_start); $right.ScrollToCaret() }',
+    'function Decide-Ambiguity([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $script:decisions[[string]$candidate.ambiguity_id] = $decision; $script:current++; Update-Preview; Show-Ambiguity }',
     '$redact.Add_Click({ $start = $right.SelectionStart; $length = $right.SelectionLength; if ($length -le 0) { [void][System.Windows.Forms.MessageBox]::Show("Bitte zuerst rechts eine sensible Stelle auswählen.", "DataSecure", "OK", "Information"); return }; $end = $start + $length; foreach ($candidate in $draft.ambiguities) { if ($start -lt [int]$candidate.anonymized_end -and [int]$candidate.anonymized_start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Für gelb markierte Organisationen bitte die Schaltflächen Erhalten oder Anonymisieren verwenden.", "DataSecure", "OK", "Warning"); return } }; foreach ($item in $script:redactions) { if ($start -lt [int]$item.end -and [int]$item.start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Diese Auswahl überschneidet sich mit einer bestehenden manuellen Anonymisierung.", "DataSecure", "OK", "Warning"); return } }; [void]$script:redactions.Add(@{ start = $start; end = $end }); $right.SelectionBackColor = [System.Drawing.Color]::LightSalmon; $right.Select(0, 0); Update-Preview })',
     '$keep.Add_Click({ Decide-Ambiguity "keep" })',
     '$anonOrg.Add_Click({ Decide-Ambiguity "redact" })',
+    '$back.Add_Click({ if ($draft.ambiguities.Count -eq 0) { return }; if ($script:current -ge $draft.ambiguities.Count) { $script:current = $draft.ambiguities.Count - 1 } elseif ($script:current -gt 0) { $script:current-- }; $candidate = $draft.ambiguities[$script:current]; [void]$script:decisions.Remove([string]$candidate.ambiguity_id); Update-Preview; Show-Ambiguity })',
     '$approve.Add_Click({ if ($script:decisions.Count -ne $draft.ambiguities.Count) { [void][System.Windows.Forms.MessageBox]::Show("Bitte jede gelb markierte Organisation als Zertifizierung erhalten oder anonymisieren.", "DataSecure", "OK", "Warning"); return }; $decisionList = @(); foreach ($candidate in $draft.ambiguities) { $decisionList += @{ ambiguity_id = [string]$candidate.ambiguity_id; decision = [string]$script:decisions[[string]$candidate.ambiguity_id] } }; $script:answer = @{ action = "reviewed"; redactions = @($script:redactions); decisions = $decisionList }; $form.Close() })',
     '$skip.Add_Click({ if ($draft.ambiguities.Count -gt 0) { [void][System.Windows.Forms.MessageBox]::Show("Bei gelb markierten Organisationen darf die Prüfung nicht übersprungen werden.", "DataSecure", "OK", "Warning"); return }; $script:answer = @{ action = "skipped" }; $form.Close() })',
     '$cancel.Add_Click({ $script:answer = @{ action = "cancelled" }; $form.Close() })',
     '$form.Add_FormClosing({ if ($null -eq $script:answer) { $script:answer = @{ action = "cancelled" } } })',
-    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel, $keep, $anonOrg, $ambiguityInfo))',
+    '$skip.Visible = ($draft.ambiguities.Count -eq 0)',
+    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel, $back, $keep, $anonOrg, $ambiguityInfo))',
     '$form.Controls.Add($split); $form.Controls.Add($buttons); $form.Controls.Add($info)',
     'Show-Ambiguity; Update-Preview',
     '[void]$form.ShowDialog()',

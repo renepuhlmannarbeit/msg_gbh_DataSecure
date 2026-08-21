@@ -170,6 +170,17 @@ async function main() {
     assert.doesNotMatch(powershellReviewScript(), /Mustermann|example\.de/);
   });
 
+  await testAsync('local review progress contains only a bounded item position', async () => {
+    const draft = buildReviewDraft('Kontakt: Max Mustermann', 'Kontakt: [PERSON_001]', 'customer', [], {
+      batchIndex: 2,
+      batchTotal: 4
+    });
+    assert.strictEqual(draft.batch_index, 2);
+    assert.strictEqual(draft.batch_total, 4);
+    assert.match(powershellReviewScript(), /Datei .*batch_index.* von .*batch_total/);
+    assert.throws(() => buildReviewDraft('a', 'a', 'general', [], { batchIndex: 0, batchTotal: 4 }), /Dateifortschritt/);
+  });
+
   await testAsync('review locator offsets use the displayed normalized Unicode text', async () => {
     const draft = buildReviewDraft('Name: Max Mu\u0308l\u00ADler, mu\u200Beller@example.de', 'bereinigt', 'customer');
     assert.strictEqual(draft.original_text, 'Name: Max Müller, mueller@example.de');
@@ -270,6 +281,39 @@ async function main() {
     assert.deepStrictEqual(JSON.parse(result.stdout).decisions, [{
       ambiguity_id: 'credential:v2:000001', decision: 'keep'
     }]);
+  });
+
+  await testAsync('the real Windows review form lets a user go back and change an ambiguity decision', async () => {
+    if (process.platform !== 'win32') return;
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const value = 'Microsoft Azure Administrator Associate\nScrum.org Professional Scrum Master I';
+    const secondStart = value.indexOf('Scrum.org');
+    const draft = buildReviewDraft(value, value, 'personnel_profile', [
+      {
+        ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+        original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+      },
+      {
+        ambiguity_id: 'credential:v2:000002', type: 'credential_issuer_ambiguous',
+        original_start: secondStart, original_end: secondStart + 9,
+        anonymized_start: secondStart, anonymized_end: secondStart + 9
+      }
+    ]);
+    const nonInteractiveScript = powershellReviewScript().replace(
+      '[void]$form.ShowDialog()',
+      '$form.Add_Shown({ $keep.PerformClick(); $anonOrg.PerformClick(); $back.PerformClick(); $keep.PerformClick(); $approve.PerformClick() }); [void]$form.ShowDialog()'
+    );
+    const result = childProcess.spawnSync(
+      powershell,
+      ['-NoProfile', '-NonInteractive', '-Sta', '-Command', nonInteractiveScript],
+      { input: JSON.stringify(draft), encoding: 'utf8', windowsHide: true, shell: false }
+    );
+    assert.strictEqual(result.status, 0, String(result.stderr || ''));
+    assert.deepStrictEqual(JSON.parse(result.stdout).decisions, [
+      { ambiguity_id: 'credential:v2:000001', decision: 'keep' },
+      { ambiguity_id: 'credential:v2:000002', decision: 'keep' }
+    ]);
+    assert.match(nonInteractiveScript, /\$skip\.Visible = \(\$draft\.ambiguities\.Count -eq 0\)/);
   });
 
   await testAsync('manual review actions can only remove selected spans', async () => {

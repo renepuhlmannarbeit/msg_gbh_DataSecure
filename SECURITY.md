@@ -11,6 +11,10 @@ build artefacts. Use synthetic examples only.
 
 CI enforces the mechanical part of this: a tracked `.pdf`, `.doc*`, `.xls*` or
 `.ppt*` file fails the build. The rule itself is broader than what CI can check.
+Gitleaks additionally scans the complete Git history on every pull request and
+push to `main`. Findings are redacted in CI output. A clean scan is evidence
+that the configured detectors found no known secret pattern; it is not evidence
+that the repository contains no personal or confidential information.
 
 If something confidential was committed, treat rewriting the history and
 rotating any exposed secret as the fix. Removing it in a later commit is not
@@ -28,3 +32,16 @@ compliance.
 
 See [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md) for where the
 boundary sits, what reaches Claude, and every fail-closed point.
+
+## Build provenance
+
+Every CI build publishes the plugin ZIP and MCPB together with an SPDX 2.3 SBOM
+and `SHA256SUMS`. The SBOM records that the shipped Node.js implementation has no
+third-party runtime package dependencies and cryptographically binds the two
+archives to the release metadata. CodeQL analyzes the JavaScript sources on
+pull requests and pushes to `main`.
+
+GitHub CodeQL supports public repositories and private organisation repositories
+with GitHub Code Security enabled. If repository visibility or licensing makes
+CodeQL unavailable, the workflow failure is a release blocker; do not silently
+disable the job. All workflow Actions are pinned to immutable commit SHAs.
