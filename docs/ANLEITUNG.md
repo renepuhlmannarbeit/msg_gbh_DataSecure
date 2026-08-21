@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC10 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC11 · Windows 10/11 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC10 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC11 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -268,7 +268,8 @@ Nummern beginnen bei jedem Dokument neu.
 | Claude kennt DataSecure nicht | Claude beenden (Symbol neben der Uhr → *Beenden*), neu starten. Genau ein Versuch, dann IT |
 | „Wie möchten Sie diese Datei öffnen?" | Abbrechen, Datei ins offene Claude-Fenster ziehen |
 | „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
-| „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Datei liegt unverändert im Eingang. An IT melden — mit der Dokumentart, nicht mit dem Dokument |
+| „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Nicht automatisch erneut starten. `diagnostic_status` aufrufen und nur den festen Fehlercode an IT melden — nicht Datei, Dateiname, Pfad oder Inhalt |
+| Claude meldet mehr Dateien als in `Input` lagen | `input_documents_seen`, `attempted` und `automatic_retries` prüfen. Mehrere Versuche derselben Datei sind keine mehreren Dateien |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
 | Gescanntes PDF wird abgelehnt | Scans mit sicher extrahierbaren JPEG-Seitenbildern laufen über OCR. Andere PDF-Bildcodierungen werden fail-closed abgelehnt; wenn möglich das Original oder einen PNG-/JPEG-Export verwenden |
 | PDF wird abgelehnt, obwohl es sich in einem PDF-Reader öffnen lässt | Das PDF neu exportieren oder die Originaldatei statt einer weitergeleiteten Kopie verwenden |
@@ -310,7 +311,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC10 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC11 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

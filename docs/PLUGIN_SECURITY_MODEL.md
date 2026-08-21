@@ -26,6 +26,7 @@ Claude Desktop extension installation. Both ship the same runtime from
 | OCR text of a withheld image | yes | after it passed the same text gate as the document body |
 | Review preview | never | not readable through any tool; no model-callable approval tool is exposed |
 | Audit record | metadata only | random operation ID, categories, counters, versions and status only |
+| Diagnostic event | metadata only | processing stage, format class, profile, counters and allowlisted error code only |
 
 The "OCR text of a withheld image" row is deliberate and worth understanding:
 the *image* stays local because a photo, signature or logo re-identifies a person
@@ -161,6 +162,12 @@ metadata whitelist; unreadable or locked records remain visible as a
 non-sensitive migration error in `privacy_status` and block further document
 processing. Such an unresolved legacy file may still contain an old fingerprint;
 it must be remediated locally by IT before the gateway becomes ready again.
+
+The diagnostic journal is separate from the audit record and is not evidence of
+a release. It is capped at 200 events and 14 days. Its strict canonical schema
+cannot contain filenames, paths, document content, detected values, raw error
+messages or hashes; malformed and forged rows are ignored. A diagnostic write
+failure is best effort and cannot weaken or block the document privacy gates.
 If retaining a new global receipt fails after package publication, a metadata-only
 persistent block marker stops further processing. On restart the gateway restores
 the receipt from the canonical package-local copy before cleanup; if reconciliation

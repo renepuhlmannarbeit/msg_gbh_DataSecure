@@ -29,6 +29,7 @@ const {
   restoreProcessed
 } = require('./compliance');
 const { migrateLegacyAuditReceipts } = require('./audit');
+const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
 
 const { MAX_INPUT_BYTES, MAX_TEXT_CHARS, MAX_VISUAL_ASSETS } = LIMITS;
 
@@ -165,6 +166,14 @@ function bestEffortRetentionCleanup(deps, scope = 'all') {
   }
 }
 
+function bestEffortDiagnostic(deps, event) {
+  try {
+    return (deps.recordDiagnostic || recordDiagnostic)(event);
+  } catch {
+    return false;
+  }
+}
+
 async function anonymizeNext(profile = 'auto', deps = {}) {
   const requested = String(profile || 'auto').toLowerCase();
   if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
@@ -215,6 +224,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   let reviewPackageId = null;
   let auditReceiptRetained = false;
   const copiedClaim = deps.copyClaim === true;
+  let diagnosticStage = 'started';
+  const diagnostic = {
+    route: copiedClaim ? 'companion' : 'input',
+    source_type: ext.slice(1),
+    profile: requested,
+    remove_images: deps.removeImages === true
+  };
   try {
     source = copiedClaim
       ? path.join(jobDir, `source${ext}`)
@@ -225,9 +241,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       fs.renameSync(originalSource, source);
     }
     claimed = true;
+    diagnosticStage = 'claimed';
     if (deps.onClaimed) await deps.onClaimed();
 
     const converted = await convertDocument(source);
+    diagnosticStage = 'converted';
+    diagnostic.parser_warning_count = (converted.warnings || []).length;
+    diagnostic.visual_assets_total = (converted.attachments || []).length + (converted.unreviewedVisualCount || 0);
     if (deps.onExtracted) await deps.onExtracted(converted);
     if (requested === 'auto' && converted.requiresExplicitProfile) {
       throw new SafeError(
@@ -251,6 +271,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
 
     const effective = requested === 'auto' ? detectProfileFromMarkdown(converted.markdown) : requested;
+    diagnostic.profile = effective;
+    diagnosticStage = 'profile_selected';
     const finalPackage = uniqueDir(r.output, `${safePackageId(effective)}_${crypto.randomBytes(3).toString('hex')}`);
     const packageId = path.basename(finalPackage);
     reviewPackageId = packageId;
@@ -267,6 +289,11 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     const included = vis.results.filter((x) => x.status === 'included').length;
     const review = vis.results.filter((x) => x.status === 'review_required').length;
     const removed = vis.results.filter((x) => x.status === 'removed').length;
+    diagnosticStage = 'visuals_processed';
+    diagnostic.visual_assets_total = vis.results.length + (converted.unreviewedVisualCount || 0);
+    diagnostic.visual_assets_included = included;
+    diagnostic.visual_assets_review_required = review + (converted.unreviewedVisualCount || 0);
+    diagnostic.visual_assets_removed = removed;
 
     // OCR text of a withheld visual is released only after it has passed the
     // text privacy gate; the image bytes themselves stay local. See
@@ -280,6 +307,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
 
     const anon = anonymizeMarkdown(rawWithOcr, effective);
+    diagnostic.text_entity_count = anon.entityCount;
     if (deps.onDetected) {
       await deps.onDetected({
         profile: effective,
@@ -310,6 +338,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       }
       reviewedText = reviewResult.text;
     }
+    diagnosticStage = 'text_reviewed';
 
     const mdName = `${packageId}.md`;
     const mdPath = path.join(stagePackage, mdName);
@@ -336,6 +365,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       const classes = [...new Set(finalResidual.map((x) => x.type))].sort().join(', ');
       throw new SafeError(`Finale Markdown-Datei hat den Residual-Gate nicht bestanden (${classes}).`);
     }
+    diagnosticStage = 'verified';
 
     const auditReceipt = auditRecord(effective, source, {
       entityCount: anon.entityCount,
@@ -400,6 +430,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       claimed = false;
     }
     publishPackage(stagePackage, finalPackage);
+    diagnosticStage = 'published';
     try {
       if (deps.afterPublish) {
         await deps.afterPublish({
@@ -428,6 +459,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     if ((deps.retentionDays ?? retentionDays()) === 0) {
       bestEffortRetentionCleanup(deps, ['processed', 'review']);
     }
+
+    bestEffortDiagnostic(deps, {
+      ...diagnostic,
+      stage: 'published',
+      result: 'released',
+      error_code: 'NONE'
+    });
 
     return {
       ok: true,
@@ -503,6 +541,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         }
       }
     }
+    const diagnosticError = recoveryError || e;
+    bestEffortDiagnostic(deps, {
+      ...diagnostic,
+      stage: recoveryError ? 'recovery' : diagnosticStage,
+      result: 'stopped',
+      error_code: classifyDiagnosticError(diagnosticError, recoveryError ? 'recovery' : diagnosticStage)
+    });
     if (recoveryError) throw recoveryError;
     if (e instanceof SafeError) throw e;
     throw new SafeError(
@@ -526,6 +571,14 @@ async function anonymizeAll(profile = 'auto', deps = {}) {
       ok: false,
       error: 'input_empty',
       message: 'Keine unterstützte Datei im lokalen Input-Ordner.',
+      input_documents_seen: 0,
+      batch_total: 0,
+      attempted: 0,
+      automatic_retries: 0,
+      released: 0,
+      stopped: 0,
+      remaining: 0,
+      results: [],
       raw_content_sent_to_claude: false
     };
   }
@@ -559,8 +612,10 @@ async function anonymizeAll(profile = 'auto', deps = {}) {
   const stopped = results.length - released;
   return {
     ok: released > 0,
+    input_documents_seen: queue.length,
     batch_total: queue.length,
     attempted: selected.length,
+    automatic_retries: 0,
     released,
     stopped,
     remaining: Math.max(0, queue.length - selected.length),

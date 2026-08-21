@@ -76,20 +76,28 @@ async function main() {
     const blocked = queueBuffer('01-scan.png', blankPng);
     queueBuffer('02-customer.txt', 'Kunde: Max Mustermann\nE-Mail: max@example.de\nTicket: Zugang gesperrt');
     const result = await gw.anonymizeAll('auto', depsFor('clean'));
+    assert.strictEqual(result.input_documents_seen, 2);
     assert.strictEqual(result.attempted, 2);
+    assert.strictEqual(result.automatic_retries, 0);
     assert.strictEqual(result.released, 1);
     assert.strictEqual(result.stopped, 1);
     assert.strictEqual(result.results.length, 2);
     assert.ok(result.results.some((item) => item.status === 'released'));
     assert.ok(result.results.some((item) => item.status === 'stopped'));
     assert.doesNotMatch(JSON.stringify(result), /01-scan|02-customer|Max Mustermann|max@example/i);
+    const diagnostic = gw.diagnosticStatus();
+    assert.ok(diagnostic.events.some((event) => event.error_code === 'PROFILE_REQUIRED'));
+    assert.doesNotMatch(JSON.stringify(diagnostic), /01-scan|02-customer|Max Mustermann|max@example/i);
     assert.strictEqual(fs.existsSync(blocked), true, 'the failed source must remain in Input');
     fs.unlinkSync(blocked);
   });
 
   await testAsync('an XLSX customer sheet becomes a verified package with a released visual', async () => {
     queue(path.join(fixtures, 'synthetic_customer.xlsx'));
-    const result = await gw.anonymizeNext('customer', depsFor('pii'));
+    const result = await gw.anonymizeNext('customer', {
+      ...depsFor('pii'),
+      recordDiagnostic() { throw new Error('diagnostic storage unavailable'); }
+    });
     assert.ok(result.ok);
     assert.strictEqual(result.visual_assets.included, 1);
 

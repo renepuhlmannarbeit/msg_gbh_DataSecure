@@ -119,7 +119,7 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 13, `expected exactly 13 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 14, `expected exactly 14 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {
@@ -139,7 +139,7 @@ async function main() {
   await testAsync('read tools are annotated read only and write tools are not', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const byName = Object.fromEntries(responses.find((r) => r.id === 2).result.tools.map((t) => [t.name, t]));
-    for (const name of ['privacy_status', 'read_anonymized_document', 'read_anonymized_asset', 'list_anonymized_packages']) {
+    for (const name of ['privacy_status', 'diagnostic_status', 'read_anonymized_document', 'read_anonymized_asset', 'list_anonymized_packages']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, true, `${name} must be read only`);
     }
     for (const name of ['anonymize_next_document', 'purge_local_data']) {
@@ -219,6 +219,21 @@ async function main() {
     assert.ok(result.structuredContent.supported_inputs.includes('JPEG'));
     assert.ok(result.structuredContent.supported_inputs.includes('BMP'));
     assert.ok(!result.isError);
+  });
+
+  await testAsync('tools/call diagnostic_status exposes only bounded metadata', async () => {
+    const { responses } = await talk([
+      rpc(1, 'initialize', {}),
+      rpc(2, 'tools/call', { name: 'diagnostic_status', arguments: { limit: 5 } })
+    ]);
+    const result = responses.find((response) => response.id === 2).result.structuredContent;
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.retention_days, 14);
+    assert.ok(result.events.length <= 5);
+    assert.strictEqual(result.raw_content_logged, false);
+    assert.strictEqual(result.filenames_logged, false);
+    assert.strictEqual(result.paths_logged, false);
+    assert.strictEqual(result.hashes_logged, false);
   });
 
   await testAsync('an empty input folder is reported as a result, not as a transport error', async () => {

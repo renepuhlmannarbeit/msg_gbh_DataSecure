@@ -138,6 +138,13 @@ Prüfsummen, dokumentierte Herkunft und einen praktisch bestandenen Rollback.
 
 ## 8. Support und Diagnose
 
+Das read-only Werkzeug `diagnostic_status` liefert die letzten maximal 50 Einträge
+aus einem lokal auf 14 Tage und 200 Ereignisse begrenzten Journal. Es enthält nur
+Verarbeitungsphase, Formatklasse, Profil, Zähler und feste Fehlercodes. Dateiname,
+Pfad, Inhalt, erkannte Werte, technische Fehlermeldung und Dokument-Hash werden
+nicht geschrieben. Ein Fehler beim Schreiben des Diagnosejournals darf die
+Dokumentenverarbeitung nicht blockieren und bleibt als `write_errors` sichtbar.
+
 Erlaubte Diagnoseangaben:
 
 - DataSecure-, Claude-Desktop- und Windows-Version;
@@ -150,7 +157,7 @@ Nie an Tickets, Chats oder Repositories anhängen:
 - Originaldokumente oder Privacy-Outputs;
 - Screenshots mit Dokumentinhalt;
 - Pfade oder Dateinamen mit Personen-/Kundendaten;
-- Jobjournale oder lokale Arbeitsordner ohne vorherige Datenschutzprüfung;
+- andere Jobjournale oder lokale Arbeitsordner ohne vorherige Datenschutzprüfung;
 - Zugangsdaten, API-Schlüssel oder Identitätsmappings.
 
 Bei einem vermuteten Klartextdurchlass: Verarbeitung stoppen, Ergebnis nicht an Claude

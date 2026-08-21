@@ -21,17 +21,18 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-visual.js` | 19 | every branch of the visual gate with injected OCR and rasteriser bridges |
 | `test-retention.js` | 14 | expiry by injected time/mtime, duplicate and invalid evidence, immediate reconciliation, scope isolation, stable status diagnostics, staging and audit preservation, and non-fatal deletion/inspection failures |
 | `test-audit-privacy.js` | 7 | strict metadata receipts, v1/v2 canonical migration, persistent write blocking, marker and markerless crash-window reconciliation, leakage and readiness blocking |
+| `test-diagnostics.js` | 5 | strict diagnostic metadata whitelist, canonical status output, 14-day/200-event retention, forged-row hardening, non-blocking write failures and coarse error classification |
 | `test-companion-job-store.js` | 8 | versioned append-only job contract, monotone transitions, local human evidence, limited verification claims, release hash binding, terminal states, strict raw-data-field refusal, tamper and traversal refusal |
 | `test-companion-retention.js` | 6 | expiry and zero-day cleanup, strict direct-entry deletion, unsafe-entry preservation, metadata-only status, and local human evidence for immediate purge |
 | `test-companion-ipc.js` | 8 | platform picker commands, strict source validation, local fallback, HMAC/session/replay enforcement, path-free responses and journals, local cancellation, and real fd-3 bootstrap process start |
 | `test-companion-processor.js` | 19 | TXT/DOCX release, terminal local cancellation and skip, locator-scoped manual redactions with exact preview, post-edit residual blocking, value-free and Unicode-stable highlight hints, real UTF-8 Windows pipe plus stdin-only review transport, real Windows-Forms initialization and automated button-path acceptance, visual/unsupported-part DOCX blocking, abandoned private-copy cleanup, rollback, queue isolation, and path-free result/audit evidence |
 | `test-companion-supervisor.js` | 8 | child-environment secret filtering, Windows process-tree termination, real authenticated launch, sequence recovery, picker-before-processing orchestration, guaranteed close, and pre-launch profile/platform refusal |
 | `test-gateway-e2e.js` | 22 | Office/PDF plus standalone PNG and scanned-PDF routes end to end, explicit-profile enforcement for image-only input, internal visual-release primitive and preview deletion (not exposed through MCP), zero-day retention, audit migration blocking, tamper detection, path traversal, source claiming and failure-injected cleanup/publish/move rollback |
-| `test-mcp-protocol.js` | 24 | the server driven over real stdio: startup orphan cleanup, handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, error codes, notification handling, stdout framing |
+| `test-mcp-protocol.js` | 25 | the server driven over real stdio: startup orphan cleanup, handshake, schemas, annotations, retention/purge/governance instructions, confirmed purge, privacy-safe diagnostic status, error codes, notification handling, stdout framing |
 | `test-adversarial.js` | 20 | hostile document content, Unicode that looks like text but is not, pathological sizes and regex behaviour, mutated containers, determinism, concurrency, the MCP argument surface |
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 
-Total: 292 assertion-level cases plus the plugin structure check (**293 checks overall**).
+Total: 298 assertion-level cases plus the plugin structure check (**299 checks overall**).
 
 ## The adversarial suite
 

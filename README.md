@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC10
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC11
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
@@ -32,7 +32,9 @@ PDF / DOCX / XLSX / PPTX / PNG / JPEG / BMP
 
 Wenn die Anforderung lautet, dass Rohdaten **vor** Modellverarbeitung bereinigt werden müssen, soll die Originaldatei nicht direkt in den Chat hochgeladen oder hineinkopiert werden. Für TXT/DOCX startet DataSecure einen lokalen Dateidialog mit optionaler Windows-Textprüfung. Weitere Formate verwenden derzeit den lokalen `Claude Privacy/Input`-Ordner.
 
-Mehrere Dateien können gemeinsam in `Input` abgelegt und mit `anonymize_all_documents` nacheinander verarbeitet werden. Bis zu 25 Dateien ergeben getrennte Markdown-Pakete; ein Fehler bei einer Datei blockiert die übrigen nicht. Mit ausdrücklich gewünschtem `remove_images=true` werden bekannte Bildanlagen texttragender Office-Dateien entfernt und in der `.md` transparent vermerkt.
+Mehrere Dateien können gemeinsam in `Input` abgelegt und mit `anonymize_all_documents` nacheinander verarbeitet werden. Bis zu 25 Dateien ergeben getrennte Markdown-Pakete; ein Fehler bei einer Datei blockiert die übrigen nicht. Gemischte Dokumentarten verwenden `profile=auto`; nur eigenständige Bilder und Scan-PDFs ohne Textschicht brauchen eine ausdrückliche Profilwahl. Gestoppte Läufe werden nicht automatisch wiederholt, und das Ergebnis trennt gefundene Dateien, Versuche und Wiederholungen. Mit ausdrücklich gewünschtem `remove_images=true` werden bekannte Bildanlagen texttragender Office-Dateien entfernt und in der `.md` transparent vermerkt.
+
+Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begrenztes Diagnosejournal. `diagnostic_status` zeigt ausschließlich Verarbeitungsphase, Formatklasse, Profil, Zähler und feste Fehlercodes; Dateinamen, Pfade, Dokumentinhalt, erkannte Werte und Dokument-Hashes werden weder gespeichert noch ausgegeben.
 
 ## Plugin-Komponenten
 
@@ -87,8 +89,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc10.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
-- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc10.mcpb` – Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc11.zip` – primäres Claude-Plugin für manuellen Plugin-Marketplace-Upload/Pilot
+- `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc11.mcpb` – Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
@@ -106,7 +108,7 @@ plattformspezifischen Companion mit nachgewiesener Installationsherkunft ersetze
 npm test
 ```
 
-292 Assertion-Fälle plus Plugin-Strukturprüfung, insgesamt **293 Prüfungen**, über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/File-Picker, TXT-/DOCX-Verarbeitung, Bildentfernung und gemischte Stapelläufe, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites. Darin enthalten ist ein echter Windows-Forms-Smoke-Test für Aufbau, manuelle Zusatzauswahl, Vorschau und Rückgabe des exakten Redaktionsbereichs. Die Suite besitzt keine npm-Laufzeitabhängigkeiten. Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
+298 Assertion-Fälle plus Plugin-Strukturprüfung, insgesamt **299 Prüfungen**, über Manifest-/Agentenkonsistenz, Parser, PII-Regression, Bildcodecs, Visual-Gate, Retention/Löschung, Audit- und Diagnose-Datensparsamkeit, Companion-Jobvertrag, -Retention, privaten IPC/File-Picker, TXT-/DOCX-Verarbeitung, Bildentfernung und gemischte Stapelläufe, Gateway-E2E, MCP-Protokoll sowie Adversarial- und alternative Repräsentations-Suites. Darin enthalten ist ein echter Windows-Forms-Smoke-Test für Aufbau, manuelle Zusatzauswahl, Vorschau und Rückgabe des exakten Redaktionsbereichs. Die Suite besitzt keine npm-Laufzeitabhängigkeiten. Office-/PDF-/Bild-Fixtures werden generiert und nicht committet; CI schlägt fehl, sobald ein echtes Dokument getrackt würde.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -138,6 +140,6 @@ Damit sind beide Distributionswege offen — der manuelle Plugin-ZIP-Upload für
 
 ## Release-Status
 
-RC10 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen. Weiterhin fehlen die visuelle Human-Presence-Freigabe, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
+RC11 ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. Der TXT-/DOCX-Companion besitzt unter Windows eine lokale Human-Presence-Grenze mit Gegenüberstellung, ausschließlich zusätzlichen manuellen Redaktionen, exakter Vorschau sowie bewusstem Review oder Überspringen. Der native Formularpfad ist mit synthetischen Daten automatisiert abgenommen. Weiterhin fehlen die visuelle Human-Presence-Freigabe, Codesignatur, frische Installation/Upgrade/Rollback und eine menschliche Usability-Abnahme. Manifest-, Agenten-, Parser-, PII-, Bild-, Visual-, Retention-, MCP-, Hash/Tamper- und Packaging-Tests laufen in CI auf `ubuntu-latest` und `windows-latest`; CI verifiziert zusätzlich, dass das gepackte Plugin tatsächlich startet.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

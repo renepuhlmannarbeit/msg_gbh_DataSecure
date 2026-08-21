@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('fs');const os=require('os');const path=require('path');
+const {createSuite}=require('./helpers');
+const {DIAGNOSTIC_SCHEMA,RETENTION_DAYS,MAX_EVENTS,sanitizeDiagnostic,classifyDiagnosticError,recordDiagnostic,diagnosticStatus,_test}=require('../plugins/data-secure/server/gateway/diagnostics');
+const {test,done,assert}=createSuite('Privacy-safe diagnostics');
+const base=fs.mkdtempSync(path.join(os.tmpdir(),'data-secure-diagnostics-'));const NOW=Date.UTC(2026,7,21,12,0,0);
+
+test('diagnostic entries use a strict metadata whitelist',()=>{const event=sanitizeDiagnostic({timestamp:new Date(NOW).toISOString(),route:'input',stage:'converted',result:'stopped',source_type:'.docx',profile:'personnel_profile',remove_images:true,error_code:'PARSE_FAILED',filename:'Max Mustermann Lebenslauf.docx',path:'C:\\Personal\\Max.docx',raw_content:'Max Mustermann',message:'ZIP error for Max',document_sha256:'a'.repeat(64)},{now:NOW});const encoded=JSON.stringify(event);assert.strictEqual(event.schema,DIAGNOSTIC_SCHEMA);assert.strictEqual(event.source_type,'docx');assert.doesNotMatch(encoded,/Max|Personal|Lebenslauf|raw_content|sha256|message|filename|path/i);});
+
+test('record and status expose only canonical recent events',()=>{const dataRoot=path.join(base,'canonical');assert.strictEqual(recordDiagnostic({timestamp:new Date(NOW).toISOString(),route:'input',stage:'converted',result:'stopped',source_type:'docx',profile:'auto',error_code:'PARSE_FAILED',raw_value:'Erika Beispiel'},{dataRoot,now:NOW}),true);const status=diagnosticStatus(20,{dataRoot,now:NOW});assert.strictEqual(status.events.length,1);assert.strictEqual(status.events[0].error_code,'PARSE_FAILED');assert.strictEqual(status.raw_content_logged,false);assert.doesNotMatch(JSON.stringify(status),/Erika Beispiel/);});
+
+test('journal retention removes old events and caps the event count',()=>{const dataRoot=path.join(base,'retention');recordDiagnostic({timestamp:new Date(NOW-(RETENTION_DAYS+1)*86400000).toISOString()},{dataRoot,now:NOW});for(let index=0;index<MAX_EVENTS+5;index++)recordDiagnostic({timestamp:new Date(NOW-(MAX_EVENTS+5-index)*1000).toISOString(),route:'batch',stage:'published',result:'released',source_type:'mixed',error_code:'NONE'},{dataRoot,now:NOW});const events=_test.readEvents({dataRoot,now:NOW});assert.strictEqual(events.length,MAX_EVENTS);assert.ok(events.every(event=>Date.parse(event.timestamp)>=NOW-RETENTION_DAYS*86400000));});
+
+test('forged and malformed rows cannot leak through the status tool',()=>{const dataRoot=path.join(base,'forged');const file=_test.diagnosticFile({dataRoot});fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,['{broken',JSON.stringify({schema:DIAGNOSTIC_SCHEMA,timestamp:new Date(NOW).toISOString(),raw_content:'Secret Customer Name'})].join('\n'));const status=diagnosticStatus(20,{dataRoot,now:NOW});assert.strictEqual(status.events.length,1);assert.doesNotMatch(JSON.stringify(status),/Secret Customer Name|"raw_content":/);});
+
+test('diagnostic writes are best effort and error classification stays coarse',()=>{const deniedFs=Object.create(fs);deniedFs.mkdirSync=()=>{throw new Error('C:\\Secret\\Customer.docx');};assert.doesNotThrow(()=>recordDiagnostic({raw_content:'secret'},{dataRoot:path.join(base,'denied'),fs:deniedFs,now:NOW}));assert.strictEqual(recordDiagnostic({},{dataRoot:path.join(base,'denied'),fs:deniedFs,now:NOW}),false);assert.strictEqual(classifyDiagnosticError(new Error('ZIP-Endverzeichnis nicht gefunden'),'converted'),'PARSE_FAILED');assert.strictEqual(classifyDiagnosticError(new Error('Max Mustermann'),'claimed'),'INTERNAL_FAILURE');});
+
+try{fs.rmSync(base,{recursive:true,force:true});}catch{/* best effort */}done();
