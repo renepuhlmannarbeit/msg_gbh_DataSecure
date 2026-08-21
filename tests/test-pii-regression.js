@@ -28,13 +28,17 @@ function anonymize(text, profile) {
 function anonymizeVerified(text, profile) {
   const first = anonymize(text, profile);
   let candidate = first.text;
-  let residual = pii.scanResidual(candidate, profile, first.dictionary);
+  let strongPersonAnchor = first.strongPersonAnchor === true;
+  let residual = pii.scanResidual(candidate, profile, first.dictionary, { strongPersonAnchor });
   let passes = 1;
   if (residual.length) {
     const second = anonymize(candidate, profile);
     candidate = second.text;
     passes = 2;
-    residual = pii.scanResidual(candidate, profile, [...first.dictionary, ...second.dictionary]);
+    strongPersonAnchor ||= second.strongPersonAnchor === true;
+    residual = pii.scanResidual(candidate, profile, [...first.dictionary, ...second.dictionary], {
+      strongPersonAnchor
+    });
   }
   return { text: candidate, residual, passes, counts: first.counts, dictionary: first.dictionary };
 }
@@ -410,27 +414,28 @@ const unlistedCommaPairs = [
   'Verzahnung, Nachlauf'
 ];
 
-function assertCommaPairsPreserved(profile, belowSection) {
+function assertCommaPairsPreserved(profile, belowSection, anchored = false) {
   for (const value of unlistedCommaPairs) {
     const src = belowSection
       ? `## Qualifikationen\n${value}\n`
-      : `${value}\n\nQualifikationen\nFachliche Inhalte\n`;
+      : `${anchored ? 'ERIKA BEISPIEL\n' : ''}${value}\n\nQualifikationen\nFachliche Inhalte\n`;
     const { text, counts } = anonymizeVerified(src, profile);
     assertPresent(text, value, 'unlisted domain content');
-    assert.strictEqual(counts.PERSON, 0, `expected no person for ${profile}: ${value}`);
+    assert.strictEqual(counts.PERSON, anchored ? 1 : 0, `unexpected person count for ${profile}: ${value}`);
+    if (anchored) assertAbsent(text, 'ERIKA BEISPIEL', 'anchored person name');
   }
 }
 
-test('unlisted comma pairs remain intact in the personnel profile header', () => {
-  assertCommaPairsPreserved('personnel_profile', false);
+test('an anchored personnel profile preserves unlisted comma pairs in its header', () => {
+  assertCommaPairsPreserved('personnel_profile', false, true);
 });
 
 test('unlisted comma pairs remain intact below personnel profile sections', () => {
   assertCommaPairsPreserved('personnel_profile', true);
 });
 
-test('unlisted comma pairs remain intact in the applicant header', () => {
-  assertCommaPairsPreserved('applicant', false);
+test('an anchored applicant profile preserves unlisted comma pairs in its header', () => {
+  assertCommaPairsPreserved('applicant', false, true);
 });
 
 test('unlisted comma pairs remain intact below applicant sections', () => {
@@ -443,6 +448,35 @@ test('a comma-formatted surname and given name remain detectable', () => {
     assert.strictEqual(text.trim(), '[PERSON_001]');
     assert.strictEqual(counts.PERSON, 1);
   }
+});
+
+const nounEndingNames = [
+  'Jung, Dennis',
+  'Hartung, Denis',
+  'Jung, Denis',
+  'Hartung, Clement'
+];
+
+function assertCommaNamesRedacted(profile, values) {
+  for (const value of values) {
+    const { text, counts } = anonymizeVerified(`${value}\n`, profile);
+    assert.strictEqual(text.trim(), '[PERSON_001]', `expected person pseudonym for ${profile}: ${value}`);
+    assert.strictEqual(counts.PERSON, 1, `expected one person for ${profile}: ${value}`);
+  }
+}
+
+test('noun-ending names remain detectable in personnel profiles', () => {
+  assertCommaNamesRedacted('personnel_profile', nounEndingNames);
+});
+
+test('noun-ending names remain detectable in applicant profiles', () => {
+  assertCommaNamesRedacted('applicant', nounEndingNames);
+});
+
+test('comma names with one noun-shaped token remain detectable', () => {
+  const values = ['Hartung, Peter', 'Meier, Dennis', 'Bergmann, Denis'];
+  assertCommaNamesRedacted('personnel_profile', values);
+  assertCommaNamesRedacted('applicant', values);
 });
 
 test('a person name with nobiliary particles remains detectable', () => {
@@ -551,6 +585,16 @@ test('gateway anonymisation converges in one pass for representative documents',
     const result = anonymizeMarkdown(src, profile);
     assert.strictEqual(result.passes, 1, `expected one pass for ${profile}`);
   }
+});
+
+test('an anchored noun-shaped profile keeps capability text through gateway verification', () => {
+  const result = anonymizeMarkdown(
+    'ERIKA BEISPIEL\nBeratung, Umsetzung\n\nQualifikationen\nFachliche Inhalte\n',
+    'personnel_profile'
+  );
+  assert.strictEqual(result.passes, 1);
+  assertAbsent(result.text, 'ERIKA BEISPIEL', 'anchored person name');
+  assertPresent(result.text, 'Beratung, Umsetzung', 'capability text');
 });
 
 test('idempotence: a second pass over released text changes nothing', () => {

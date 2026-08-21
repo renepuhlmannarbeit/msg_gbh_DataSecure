@@ -120,8 +120,10 @@ const CONTACT_CONTEXT_RE =
 // Medium confidence: a bare title-case name in the structural profile header,
 // or in a compact contact/address block. Once a section starts, profile body
 // prose no longer inherits implicit person context merely because it occurs in
-// the first 40 lines.
-function collectHeaderNameCandidates(text, profile, maxLines = 40) {
+// the first 40 lines. The final parameter defaults to the pre-R3 behaviour for
+// callers of this exported helper; collectPersonSeeds supplies the real anchor
+// state so noun morphology can never suppress the document's only name clue.
+function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPersonAnchor = true) {
   const out = [];
   const bigram = new RegExp(
     `^(?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,3}$`,
@@ -163,7 +165,7 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40) {
     if (!hasContext) continue;
     if (commaName.test(s)) {
       if (!looksName(titleCase(s.replace(',', ' ')))) continue;
-      if (hasAbstractNounShape(s)) continue;
+      if (hasStrongPersonAnchor && hasAbstractNounShape(s)) continue;
       // In "Surname, Given name" the first token would be the useful alias,
       // but registering an unlabelled leading token is unsafe: comma-shaped
       // domain lists are common, and a false alias would redact prose globally.
@@ -173,7 +175,7 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40) {
     if (particleName.test(s)) {
       const withoutParticles = s.replace(/\b(?:von|van|de|del|der|den|zu|zur|zum)\b/giu, ' ');
       if (!looksName(titleCase(withoutParticles))) continue;
-      if (hasAbstractNounShape(s)) continue;
+      if (hasStrongPersonAnchor && hasAbstractNounShape(s)) continue;
       out.push({ value: s, confidence: 'header_particle' });
       continue;
     }
@@ -259,10 +261,18 @@ function collectContextualNameCandidates(text, profile) {
   return out;
 }
 
-function collectPersonSeeds(text, profile = 'general') {
+function collectPersonSeeds(
+  text,
+  profile = 'general',
+  precomputedAnchors = null,
+  strongPersonAnchorOverride = null
+) {
+  const anchors = precomputedAnchors === null ? collectPersonAnchors(text) : precomputedAnchors;
+  const hasStrongPersonAnchor =
+    strongPersonAnchorOverride === null ? anchors.length > 0 : Boolean(strongPersonAnchorOverride);
   const seeds = [
-    ...collectPersonAnchors(text),
-    ...collectHeaderNameCandidates(text, profile),
+    ...anchors,
+    ...collectHeaderNameCandidates(text, profile, 40, hasStrongPersonAnchor),
     ...collectContextualNameCandidates(text, profile)
   ];
   const byKey = new Map();

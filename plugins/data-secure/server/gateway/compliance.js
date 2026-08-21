@@ -18,14 +18,16 @@ function anonymizeMarkdown(raw, profile) {
   let entityCount = 0;
   let residual = [];
   let passes = 0;
+  let strongPersonAnchor = false;
 
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     const result = pii.anonymize(candidate, profile);
     candidate = result.text;
     entityCount += result.findings.length;
     for (const value of result.dictionary || []) dictionary.push(value);
+    strongPersonAnchor ||= result.strongPersonAnchor === true;
     passes = pass;
-    residual = pii.scanResidual(candidate, profile, dictionary);
+    residual = pii.scanResidual(candidate, profile, dictionary, { strongPersonAnchor });
     if (!residual.length) break;
   }
 
@@ -42,6 +44,7 @@ function anonymizeMarkdown(raw, profile) {
     entityCount,
     passes,
     dictionary,
+    strongPersonAnchor,
     reidentificationRisk: profile === 'personnel_profile' ? 'high' : 'context_dependent'
   };
 }

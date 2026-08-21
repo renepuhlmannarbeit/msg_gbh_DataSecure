@@ -17,11 +17,13 @@ const results = [];
 function released(text, profile = 'general') {
   let candidate = text;
   const dictionary = [];
+  let strongPersonAnchor = false;
   for (let pass = 0; pass < 3; pass++) {
     const result = pii.anonymize(candidate, profile);
     candidate = result.text;
     dictionary.push(...result.dictionary);
-    if (!pii.scanResidual(candidate, profile, dictionary).length) break;
+    strongPersonAnchor ||= result.strongPersonAnchor === true;
+    if (!pii.scanResidual(candidate, profile, dictionary, { strongPersonAnchor }).length) break;
   }
   return candidate;
 }

@@ -116,7 +116,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     // Second, independent gate over the exact bytes that will be released,
     // including the compliance header and the asset section.
-    const finalResidual = pii.scanResidual(finalText, effective, anon.dictionary);
+    const finalResidual = pii.scanResidual(finalText, effective, anon.dictionary, {
+      strongPersonAnchor: anon.strongPersonAnchor
+    });
     if (finalResidual.length) {
       const classes = [...new Set(finalResidual.map((x) => x.type))].sort().join(', ');
       throw new SafeError(`Finale Markdown-Datei hat den Residual-Gate nicht bestanden (${classes}).`);

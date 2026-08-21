@@ -16,6 +16,7 @@ const {
   looksSurname
 } = require('./base');
 const {
+  collectPersonAnchors,
   collectPersonSeeds,
   collectNameSeeds,
   collectOrganizations,
@@ -170,7 +171,8 @@ function anonymize(text, profile = 'general') {
   const findings = [];
   const reg = makeRegistry();
 
-  const seeds = collectPersonSeeds(src, profile);
+  const strongPersonAnchors = collectPersonAnchors(src);
+  const seeds = collectPersonSeeds(src, profile, strongPersonAnchors);
   const personKeys = new Set();
   for (const seed of seeds) {
     personKeys.add(key(seed.value));
@@ -243,6 +245,7 @@ function anonymize(text, profile = 'general') {
     findings,
     counts: reg.counts,
     dictionary: dictionary.map((d) => d.value),
+    strongPersonAnchor: strongPersonAnchors.length > 0,
     reidentification_risk: profile === 'personnel_profile' ? 'high' : 'context_dependent'
   };
 }
@@ -251,11 +254,12 @@ function anonymize(text, profile = 'general') {
 // ever confirm the redactor's own blind spots. It checks two independent
 // things: that no direct identifier pattern is left, and that no literal the
 // redactor claimed to have replaced survives in the output.
-function scanResidual(text, profile = 'general', knownValues = []) {
+function scanResidual(text, profile = 'general', knownValues = [], options = {}) {
   const clean = normalizeText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
   const out = scanStructured(clean).map((f) => ({ type: f.type, text: f.text }));
 
-  for (const seed of collectPersonSeeds(clean, profile)) {
+  const strongPersonAnchor = options.strongPersonAnchor === true;
+  for (const seed of collectPersonSeeds(clean, profile, null, strongPersonAnchor)) {
     out.push({ type: 'PERSON_CANDIDATE', text: seed.value });
   }
 
