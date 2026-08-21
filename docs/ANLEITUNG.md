@@ -1,7 +1,7 @@
 # DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC5 · Windows 10/11 · ca. 20 Minuten.
+Version 3.2.0 RC6 · Windows 10/11 · ca. 20 Minuten.
 
 ---
 
@@ -259,6 +259,6 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-DataSecure Privacy Preflight 3.2.0 RC5 · Geschäftsbereich Healthcare, msg systems ag.
+DataSecure Privacy Preflight 3.2.0 RC6 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.

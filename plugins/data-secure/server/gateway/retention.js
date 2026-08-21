@@ -13,7 +13,9 @@ let lastCleanup = {
   ran_at: null,
   trigger: null,
   retention_days: DEFAULT_RETENTION_DAYS,
+  forced: false,
   removed: { processed: 0, output: 0, review: 0 },
+  removed_review_previews: 0,
   errors: 0,
   errors_by_scope: { processed: 0, output: 0, review: 0 },
   error_codes: {}
@@ -106,27 +108,34 @@ function previewFiles(reviewDir, fsApi = fs) {
   return files;
 }
 
-// Maps the preview file name each evidence record claims to that record's path,
-// so a single preview can be marked without rescanning the directory.
+// Maps each claimed preview name to every evidence record that names it. More
+// than one record may be corruptly or historically associated with the same
+// preview; overwriting one in a Map would leave stale evidence behind.
 function reviewMetaIndex(reviewDir, fsApi = fs) {
   const index = new Map();
+  const failures = [];
   let entries = [];
   try {
     entries = fsApi.readdirSync(reviewDir, { withFileTypes: true });
   } catch {
-    return index;
+    return { index, failures };
   }
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.review.json')) continue;
     const metaPath = path.join(reviewDir, entry.name);
     try {
       const meta = JSON.parse(fsApi.readFileSync(metaPath, 'utf8'));
-      if (meta.preview_file) index.set(String(meta.preview_file), metaPath);
-    } catch {
-      /* unreadable evidence is left untouched */
+      if (meta.preview_file) {
+        const name = String(meta.preview_file);
+        const paths = index.get(name) || [];
+        paths.push(metaPath);
+        index.set(name, paths);
+      }
+    } catch (err) {
+      failures.push(err);
     }
   }
-  return index;
+  return { index, failures };
 }
 
 function markPreviewExpired(metaPath, at, fsApi = fs) {
@@ -142,25 +151,51 @@ function markPreviewExpired(metaPath, at, fsApi = fs) {
 // invariant would depend on a single flawless pass: once the bytes are gone, the
 // preview no longer appears in previewFiles(), so a marking step missed earlier
 // could never run again and the record would claim a preview forever.
-function reconcileMissingPreviews(reviewDir, at, fsApi = fs) {
+function reconcileMissingPreviews(reviewDir, root, at, fsApi = fs) {
+  assertInside(reviewDir, root);
+  const stat = fsApi.lstatSync(reviewDir);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error('Review-Ziel ist kein freigegebenes Verzeichnis.');
+  }
+
   let healed = 0;
-  for (const [name, metaPath] of reviewMetaIndex(reviewDir, fsApi)) {
+  const evidence = reviewMetaIndex(reviewDir, fsApi);
+  const failures = [...evidence.failures];
+  for (const [name, metaPaths] of evidence.index) {
+    // Invalid claims are never resolved or inspected outside the review entry.
+    // They are closed fail-safe while any outside file remains untouched.
+    const validName = path.basename(name) === name;
     const preview = path.join(reviewDir, name);
-    let exists = true;
-    try {
-      fsApi.lstatSync(preview);
-    } catch {
-      exists = false;
+    let exists = false;
+    if (validName) {
+      try {
+        assertInside(preview, reviewDir);
+        const previewStat = fsApi.lstatSync(preview);
+        if (previewStat.isSymbolicLink() || !previewStat.isFile()) {
+          const err = new Error('Review-Preview hat einen nicht unterstützten Typ.');
+          err.code = 'UNSAFE_PREVIEW_TYPE';
+          failures.push(err);
+          continue;
+        }
+        exists = true;
+      } catch (err) {
+        if (err?.code !== 'ENOENT') {
+          failures.push(err);
+          continue;
+        }
+      }
     }
     if (exists) continue;
-    try {
-      markPreviewExpired(metaPath, at, fsApi);
-      healed++;
-    } catch {
-      /* an unwritable record is reported by the caller as a failure */
+    for (const metaPath of metaPaths) {
+      try {
+        markPreviewExpired(metaPath, at, fsApi);
+        healed++;
+      } catch (err) {
+        failures.push(err);
+      }
     }
   }
-  return healed;
+  return { healed, failures };
 }
 
 // Each preview is completed on its own: bytes gone, record updated immediately.
@@ -175,8 +210,8 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
     throw new Error('Review-Ziel ist kein freigegebenes Verzeichnis.');
   }
 
-  const index = reviewMetaIndex(reviewDir, fsApi);
-  const failures = [];
+  const evidence = reviewMetaIndex(reviewDir, fsApi);
+  const failures = [...evidence.failures];
   let removed = 0;
 
   for (const file of previewFiles(reviewDir, fsApi)) {
@@ -189,15 +224,21 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
       }
       fsApi.unlinkSync(file);
       removed++;
-      const metaPath = index.get(name);
-      if (metaPath) markPreviewExpired(metaPath, at, fsApi);
+      for (const metaPath of evidence.index.get(name) || []) {
+        try {
+          markPreviewExpired(metaPath, at, fsApi);
+        } catch (err) {
+          failures.push(err);
+        }
+      }
     } catch (err) {
       failures.push(err);
     }
   }
 
   // Also repairs records left inconsistent by an earlier interrupted run.
-  reconcileMissingPreviews(reviewDir, at, fsApi);
+  const reconciliation = reconcileMissingPreviews(reviewDir, root, at, fsApi);
+  failures.push(...reconciliation.failures);
   return { removed, failures };
 }
 
@@ -231,6 +272,9 @@ function cleanupLocalData(options = {}) {
     retention_days: days,
     forced: force,
     removed: { processed: 0, output: 0, review: 0 },
+    // `removed` remains an entry count across every scope. Preview-file bytes
+    // are reported separately so existing status consumers keep their units.
+    removed_review_previews: 0,
     errors: 0,
     errors_by_scope: { processed: 0, output: 0, review: 0 },
     // Error codes only. A path or filename here would put document names into
@@ -241,20 +285,34 @@ function cleanupLocalData(options = {}) {
   function recordFailure(scope, err) {
     result.errors++;
     result.errors_by_scope[scope]++;
-    const code = String(err?.code || err?.message || 'unknown').slice(0, 60);
+    const candidate = String(err?.code || '').toUpperCase();
+    const code = /^[A-Z][A-Z0-9_]{0,31}$/.test(candidate) ? candidate : 'UNKNOWN';
     result.error_codes[code] = (result.error_codes[code] || 0) + 1;
   }
 
   for (const scope of scopes) {
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
+      if (scope === 'review') {
+        // Reconcile inconsistent evidence on every trigger. Deleting a preview
+        // refreshes the directory mtime, so waiting for expiry again could
+        // otherwise leave a stale claim for a full retention window.
+        try {
+          const reconciliation = reconcileMissingPreviews(entry.full, root, at, fsApi);
+          for (const err of reconciliation.failures) recordFailure(scope, err);
+        } catch (err) {
+          recordFailure(scope, err);
+          continue;
+        }
+      }
       if (!force && !entryExpired(entry.full, cutoff, fsApi)) continue;
       try {
         if (scope === 'review') {
           // Counted even when a later preview in the same directory fails:
           // bytes that are gone must show up as removed.
           const outcome = removeReviewPreviews(entry.full, root, at, fsApi);
-          if (outcome.removed > 0) result.removed.review += outcome.removed;
+          if (outcome.removed > 0) result.removed.review++;
+          result.removed_review_previews += outcome.removed;
           for (const err of outcome.failures) recordFailure(scope, err);
         } else {
           removeEntry(entry.full, root);
@@ -307,6 +365,7 @@ function purgeLocalData(scope = 'all', confirmed = false, options = {}) {
     ok: true,
     scope: selected,
     removed: result.removed,
+    removed_review_previews: result.removed_review_previews,
     errors: result.errors,
     audit_retained: true
   };

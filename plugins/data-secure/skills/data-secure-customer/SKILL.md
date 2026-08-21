@@ -1,7 +1,7 @@
 ---
 name: data-secure-customer
 description: Use for customer records, CRM exports, support cases, account documents, customer correspondence, or other client-related material that should be privacy-processed before Claude analyzes it.
-version: 3.2.0-rc5
+version: 3.2.0-rc6
 ---
 
 # Customer Document Privacy

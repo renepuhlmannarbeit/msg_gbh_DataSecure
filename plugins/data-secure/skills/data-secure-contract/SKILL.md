@@ -1,7 +1,7 @@
 ---
 name: data-secure-contract
 description: Use for contracts, agreements, addenda, statements of work, procurement documents, legal correspondence, or similar business documents that should be de-identified before Claude analyzes them.
-version: 3.2.0-rc5
+version: 3.2.0-rc6
 ---
 
 # Contract Privacy

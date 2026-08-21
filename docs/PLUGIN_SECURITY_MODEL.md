@@ -115,11 +115,15 @@ likewise deletes the redundant preview after copying the reviewed PNG into the
 released package.
 
 Deletion and evidence are completed per review entry, not per directory: the
-bytes go and the record is updated in the same step. A record whose claimed
-preview no longer exists is repaired on the next run, so an interrupted pass
-cannot leave a `.review.json` promising a file that is gone. Approval of an
-expired item is refused with a message that names the retention window rather
-than reporting a missing package file.
+bytes go and every record associated with that preview is updated in the same
+step. Records whose claimed preview no longer exists are reconciled on every
+cleanup trigger, even when the directory mtime is still fresh, so an interrupted
+pass cannot leave a `.review.json` promising a file that is gone for another
+retention window. Invalid non-basename claims fail closed without inspecting or
+deleting outside data. An inspection error is reported and is never mistaken
+for proof that bytes are absent. Approval of an expired item is refused with a
+message that names the retention window rather than reporting a missing package
+file.
 
 `retention_days=0` removes the processed original and withheld preview bytes as
 soon as a successful run commits. The newly returned Output package remains
@@ -134,8 +138,11 @@ workflow decision rather than a fine adjustment.
 The confirmed `purge_local_data` tool can immediately clean one selected scope
 or all three. It ignores the expiry window, and `privacy_status` records the
 trigger (`startup`, `run` or `purge`) plus a `forced` flag so a purge is not
-mistaken for an ordinary retention run. Failures are counted per scope with an
-error code and no path or document name.
+mistaken for an ordinary retention run. Failures are counted per scope using
+only validated error-code tokens; arbitrary exception messages, paths and
+document names never enter status. `removed` remains a count of direct entries
+for all three scopes, while `removed_review_previews` separately reports the
+number of preview files removed.
 
 Two deliberate limits. A review directory that holds nothing but evidence is
 kept, so `Needs Visual Review` accumulates one small directory per processed

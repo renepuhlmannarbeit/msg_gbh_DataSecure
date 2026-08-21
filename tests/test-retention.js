@@ -226,6 +226,129 @@ test('a purge is recorded as a purge, not as an ordinary retention run', () => {
   assert.strictEqual(status.last_cleanup.forced, true, 'an ignored expiry window must be visible');
 });
 
+test('every evidence record is closed when two records name the same preview', () => {
+  const root = sandbox('duplicate-evidence');
+  const dir = reviewItem(root, 'Paket_duplicate', 9);
+  file(
+    path.join(dir, 'asset-002.review.json'),
+    JSON.stringify({
+      review_id: 'Paket_duplicate__asset-002',
+      preview_file: 'asset-001.png',
+      preview_sha256: 'abc'
+    })
+  );
+  old(dir, 9);
+
+  const result = cleanupLocalData({ roots: root, retentionDays: 7, now: NOW, scope: 'review' });
+
+  assert.strictEqual(result.removed.review, 1, 'removed.review counts review entries, not files');
+  assert.strictEqual(result.removed_review_previews, 1, 'the file count is reported separately');
+  for (const asset of ['asset-001', 'asset-002']) {
+    const meta = JSON.parse(fs.readFileSync(path.join(dir, `${asset}.review.json`), 'utf8'));
+    assert.strictEqual(meta.preview_file, null, `${asset} must not retain a stale preview claim`);
+    assert.strictEqual(meta.preview_expired, true);
+  }
+});
+
+test('reconcile rejects a non-basename preview claim without inspecting or deleting outside data', () => {
+  const root = sandbox('invalid-preview-path');
+  const dir = path.join(root.review, 'Paket_invalid');
+  const outside = path.join(root.review, 'outside.png');
+  file(outside, 'must survive');
+  file(
+    path.join(dir, 'asset-001.review.json'),
+    JSON.stringify({
+      review_id: 'Paket_invalid__asset-001',
+      preview_file: '../outside.png',
+      preview_sha256: 'abc'
+    })
+  );
+  old(dir, 9);
+
+  cleanupLocalData({ roots: root, retentionDays: 7, now: NOW, scope: 'review' });
+
+  assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'must survive');
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'asset-001.review.json'), 'utf8'));
+  assert.strictEqual(meta.preview_file, null, 'an invalid claim must fail closed');
+  assert.strictEqual(meta.preview_expired, true);
+});
+
+test('evidence write failures stay visible without leaking a document name and heal next run', () => {
+  const root = sandbox('evidence-write-failure');
+  const dir = reviewItem(root, 'Paket_sensitive-customer', 9);
+  const metaPath = path.join(dir, 'asset-001.review.json');
+  const failingFs = Object.create(fs);
+  failingFs.writeFileSync = (target, ...args) => {
+    if (path.resolve(target) === path.resolve(metaPath)) {
+      throw new Error('cannot update Paket_sensitive-customer');
+    }
+    return fs.writeFileSync(target, ...args);
+  };
+
+  const failed = cleanupLocalData({
+    roots: root,
+    retentionDays: 7,
+    now: NOW,
+    scope: 'review',
+    fs: failingFs
+  });
+  assert.ok(!fs.existsSync(path.join(dir, 'asset-001.png')), 'bytes were already deleted');
+  assert.ok(failed.errors > 0, 'the evidence failure must be reported');
+  assert.deepStrictEqual(Object.keys(failed.error_codes), ['UNKNOWN']);
+  assert.ok(!JSON.stringify(failed).includes('sensitive-customer'), 'status must not leak names');
+
+  // Deleting the preview refreshed the directory mtime, so healing must not
+  // wait another retention window before repairing the stale evidence.
+  const healed = cleanupLocalData({ roots: root, retentionDays: 7, now: NOW, scope: 'review' });
+  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+  assert.strictEqual(meta.preview_file, null);
+  assert.strictEqual(meta.preview_expired, true);
+  assert.strictEqual(healed.errors, 0);
+});
+
+test('initial and ordinary cleanup status keep a stable diagnostic shape', () => {
+  const before = retentionStatus({ roots: sandbox('initial-shape'), retentionDays: 7, now: NOW });
+  for (const field of ['forced', 'errors_by_scope', 'error_codes', 'removed_review_previews']) {
+    assert.ok(Object.hasOwn(before.last_cleanup, field), `initial last_cleanup.${field} missing`);
+  }
+
+  const root = sandbox('ordinary-trigger');
+  cleanupLocalData({ roots: root, retentionDays: 7, now: NOW, trigger: 'run' });
+  const after = retentionStatus({ roots: root, retentionDays: 7, now: NOW }).last_cleanup;
+  assert.strictEqual(after.trigger, 'run');
+  assert.strictEqual(after.forced, false);
+});
+
+test('a preview inspection error is reported and never mistaken for missing bytes', () => {
+  const root = sandbox('preview-inspection-error');
+  const dir = reviewItem(root, 'Paket_inspection', 1);
+  const preview = path.join(dir, 'asset-001.png');
+  const metaPath = path.join(dir, 'asset-001.review.json');
+  const deniedFs = Object.create(fs);
+  deniedFs.lstatSync = (target) => {
+    if (path.resolve(target) === path.resolve(preview)) {
+      const err = new Error('access denied');
+      err.code = 'EACCES';
+      throw err;
+    }
+    return fs.lstatSync(target);
+  };
+
+  const result = cleanupLocalData({
+    roots: root,
+    retentionDays: 7,
+    now: NOW,
+    scope: 'review',
+    fs: deniedFs
+  });
+
+  assert.strictEqual(result.error_codes.EACCES, 1);
+  assert.ok(fs.existsSync(preview), 'unverified bytes must remain untouched');
+  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+  assert.strictEqual(meta.preview_file, 'asset-001.png', 'evidence must not claim deletion');
+  assert.ok(!meta.preview_expired);
+});
+
 try {
   fs.rmSync(base, { recursive: true, force: true });
 } catch {

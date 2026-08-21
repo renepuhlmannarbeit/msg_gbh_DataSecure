@@ -303,6 +303,26 @@ async function main() {
     );
   });
 
+  await testAsync('zero-day retention disables visual approval with an explicit expiry reason', async () => {
+    queue(path.join(fixtures, 'synthetic_profile.docx'), 'zero-day-profile.docx');
+    const result = await gw.anonymizeNext('personnel_profile', {
+      ...depsFor('none'),
+      retentionDays: 0
+    });
+    assert.ok(result.ok);
+    assert.strictEqual(result.visual_assets.review_required, 1);
+    assert.strictEqual(gw.readOutput(result.package_id).package_id, result.package_id);
+
+    const item = gw.listReviewItems().items.find((entry) => entry.package_id === result.package_id);
+    assert.ok(item, 'the retained evidence must remain discoverable');
+    assert.strictEqual(item.preview_available, false);
+    assert.throws(
+      () => gw.approveReviewAsset(item.review_id, true),
+      /Aufbewahrungsfrist/,
+      'an expired preview must not be reported as a missing package file'
+    );
+  });
+
   test('privacy_status reports the visual bridge honestly', () => {
     const status = gw.genericStatus({ retentionDays: 7 });
     assert.strictEqual(status.ok, true);

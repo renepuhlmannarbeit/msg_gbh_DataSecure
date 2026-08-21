@@ -1,7 +1,7 @@
 ---
 name: data-secure-applicant
 description: Use for job applications, CVs, resumes, candidate profiles, cover letters, or applicant documents that should be privacy-processed locally before Claude analyzes them.
-version: 3.2.0-rc5
+version: 3.2.0-rc6
 ---
 
 # Applicant Privacy
