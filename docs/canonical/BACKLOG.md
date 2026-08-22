@@ -6,6 +6,11 @@ Dies ist die einzige priorisierte Arbeitsliste für das beschlossene Zielprodukt
 `P0` blockiert alle nachfolgenden Freigaben. Ein Eintrag gilt erst als erledigt, wenn
 Code, Tests, Dokumentation und Traceability gemeinsam aktualisiert sind.
 
+Pflegeregel: Jeder Entwicklungscommit aktualisiert die betroffene Story oder wird
+unmittelbar von einem Dokumentationscommit begleitet. Das Backlog nennt dabei den
+tatsächlich erreichten Nachweis und die verbleibende Restlücke; Piloten werden nicht
+mit Produktfreigaben gleichgesetzt.
+
 ## Statusübersicht der Epics
 
 | Epic | PO-Status | Wiederverwendbare Basis | Nächster echter Produktfortschritt |
@@ -90,6 +95,22 @@ Status: **in Arbeit** · Epic: BL-023, BL-024
 Vor Produktcode werden bestehende PDF-/OCR-Bausteine gegen einen Eigenbuild sowie
 Engine, Offline-Verhalten, Paketgröße, Lizenzinventar,
 Verschlüsselung, Scanpfad und sichere Prozessgrenze auf Windows/macOS/Linux belegt.
+
+Fortschritt 22.08.2026:
+
+- PDFium-Preflight `32593313169` und PDF.js-/Canvas-Pilot `32594467568` liefen auf
+  Windows x64, macOS x64/ARM64 und Linux x64; alle Ergebnisse bleiben `no_go`.
+- Tesseract.js-/Canvas-Pilot `32594838193` bestand lokale Deutsch-/Englisch-OCR und
+  Netzwerkverbot auf denselben vier Zielen.
+- Lauf `32595199861` ergänzte offizielle CycloneDX-1.5-SBOMs, Paketintegritäten,
+  Lizenzallowlist sowie Commit-/Hashprüfung der Sprachmodelle und ihrer Lizenz.
+- Lauf `32595454727` bestand getrennte OCR-Prozesse, Timeout-/Flood-Gegenproben,
+  Heap-, Laufzeit- und Ausgabegrenzen; Windows zusätzlich mit Job-Object-RAM/CPU.
+
+Restlücke: vollständige PDF-Coverage einschließlich Verschlüsselung und Scanpfad,
+native harte RAM-/CPU-Grenzen auf macOS/Linux, Notices/Schwachstellenrichtlinie,
+Angriffskorpus sowie ein frisches verteilbares Pluginpaket. Keine Pflichtmatrixzelle
+ist allein durch die Piloten als Produktnachweis bestanden.
 
 ### Meilenstein 1 – Nutzbarer fortsetzbarer TXT-/DOCX-Stapelkern
 
@@ -302,16 +323,27 @@ sind abgedeckt.
 
 #### BL-024.1 – Gemeinsamen OCR-Vertrag Deutsch/Englisch definieren
 
-Status: **offen** · Epic: BL-024 · Abhängigkeit: BL-023.1
+Status: **in Arbeit** · Epic: BL-024 · Abhängigkeit: BL-023.1
 
 Wortpositionen, Konfidenz, gemischte Sprache, Ressourcenlimits und Fehlercodes sind
 plattformneutral versioniert.
+
+Fortschritt: Tesseract.js 7.0.0 liefert Deutsch/Englisch lokal auf allen vier
+Zielarchitekturen. Prozess-, Netzwerk-, Heap-, Laufzeit- und Ausgabegrenzen sowie
+feste Pilotfehler sind nachgewiesen. Offen sind der versionierte normalisierte
+Wort-/Positionsvertrag, Konfidenzregeln, vollständige Fehlercode-Matrix und native
+macOS/Linux-Ressourcengrenzen.
 
 #### BL-024.2 – OCR-Backends für Windows, macOS und Linux liefern
 
 Status: **offen** · Epic: BL-024 · Abhängigkeiten: BL-024.1, BL-010.1
 
 Alle Backends laufen gebündelt, offline und mit demselben Vertrag.
+
+Vorarbeit: Der portable Tesseract.js-WASM-Pilot läuft offline auf Windows x64,
+macOS x64/ARM64 und Linux x64. Die Story bleibt offen, bis BL-024.1 abgeschlossen,
+Runtime und Modelle installationsfrei gebündelt und im echten Pluginpfad integriert
+sind.
 
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 
@@ -465,8 +497,8 @@ und keine offene Architekturentscheidung verbirgt.
 
 ## Definition of Done
 
-Eine Story ist erst erledigt, wenn Code, Tests, `CURRENT_STATE.md` und Traceability
-aktualisiert sind; Security-, Privacy- und Recovery-Negativtests bestehen; jeder
+Eine Story ist erst erledigt, wenn Code, Tests, `BACKLOG.md`, `CURRENT_STATE.md` und
+Traceability aktualisiert sind; Security-, Privacy- und Recovery-Negativtests bestehen; jeder
 Defekt einen Regressionstest erhält; keine Rohwerte, Pfade oder Mappingdaten über MCP
 oder Diagnose austreten; Artefaktparität besteht; Ist-Fähigkeiten erst nach positiver
 Abnahme erweitert werden; betroffene Zielplattformen praktisch getestet sind; und

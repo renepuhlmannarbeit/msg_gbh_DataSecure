@@ -84,5 +84,8 @@ if (target.reuse_policy?.open_source_first !== true ||
     target.reuse_policy?.custom_code_requires_documented_gap !== true) {
   throw new Error('target capability contract is missing the open-source-first policy');
 }
+if (!backlogText.includes('Code, Tests, `BACKLOG.md`, `CURRENT_STATE.md` und')) {
+  throw new Error('definition of done does not require backlog progress maintenance');
+}
 
 console.log(`Canonical documentation: PASS (${decisions.length} decisions, ${backlog.length} epics, ${stories.length} stories)`);
