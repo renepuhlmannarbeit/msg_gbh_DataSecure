@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { zipStore } = require('./lib/zip');
 
 if (process.platform !== 'win32') {
   console.log('Windows visual acceptance: skipped (Windows only)');
@@ -42,14 +43,24 @@ async function main() {
 
     const inputDir = path.join(root, 'Input');
     fs.mkdirSync(inputDir, { recursive: true });
-    fs.copyFileSync(imagePath, path.join(inputDir, 'synthetic-ocr.png'));
+    const docx = zipStore([
+      ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Synthetischer OCR-Test</w:t></w:r></w:p></w:body></w:document>'],
+      ['word/media/image1.png', fs.readFileSync(imagePath)]
+    ]);
+    fs.writeFileSync(path.join(inputDir, 'synthetic-ocr.docx'), docx);
+
+    const { ocrPngDetailed, rasterizeToPng, visualBridgeStatus, VisualBridgeError } =
+      require('../plugins/data-secure/server/windows-visual');
+    const rawOcr = await ocrPngDetailed(fs.readFileSync(imagePath), 'de-DE');
+    assert.match(rawOcr.text, /Max Mustermann/);
+    assert.match(rawOcr.text, /max@example\.de/);
 
     const gw = require('../plugins/data-secure/server/gateway');
     const result = await gw.anonymizeNext('customer');
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.visual_assets.included, 0, 'visual assets must never be released automatically');
     assert.strictEqual(result.visual_assets.review_required, 1, 'visual asset must remain local for review');
-    assert.ok(result.visual_assets.redactions > 0, 'at least one pixel redaction is required');
+    assert.strictEqual(result.visual_assets.redactions, 0, 'withheld pixels must not require a release redaction');
 
     const outputDir = path.join(root, 'Output', result.package_id);
     const manifest = JSON.parse(fs.readFileSync(path.join(outputDir, 'manifest.json'), 'utf8'));
@@ -59,8 +70,6 @@ async function main() {
     assert.ok(markdown.includes('[PERSON_001]'));
     assert.ok(markdown.includes('[EMAIL_REDACTED]'));
 
-    const { rasterizeToPng, visualBridgeStatus, VisualBridgeError } =
-      require('../plugins/data-secure/server/windows-visual');
     assert.deepStrictEqual(visualBridgeStatus(), {
       available: true, mode: 'windows_job_object', reason: 'ok'
     });
@@ -68,7 +77,7 @@ async function main() {
       rasterizeToPng(Buffer.from('not-an-emf', 'ascii'), 'emf'),
       (error) => error instanceof VisualBridgeError
     );
-    console.log('Windows visual acceptance: PASS (Job Object, real OCR/redaction, malformed EMF refusal)');
+    console.log('Windows visual acceptance: PASS (Job Object, real OCR, local-only pixels, malformed EMF refusal)');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
