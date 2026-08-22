@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC27 · ausschließlich synthetische Daten
+Version 3.2.0 RC28 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC27 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC28 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -56,41 +56,37 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
       Kernfall ohne widersprüchliche Pakete.
 - [ ] Erneutes Upgrade auf die Zielversion ist praktisch bestanden.
 
-## 4. TXT-/DOCX-Mehrfachauswahl und lokale Textprüfung
+## 4. Fortsetzbarer Ein- und Mehrdateiablauf
 
-Synthetischer Inhalt soll einen automatisch erkannten Namen/E-Mailkontakt, den
-zusätzlichen Alias `Blauwal` und fachlichen Text wie `Rolle: Lösungsarchitektin`
-enthalten.
+Synthetischer Inhalt soll einen automatisch erkannten Namen/E-Mailkontakt und
+fachlichen Text wie `Rolle: Lösungsarchitektin` enthalten. Eine zweite Datei soll
+gezielt mit `AMBIGUITY_REVIEW_REQUIRED` stoppen.
 
-- [ ] „Anonymisiere eine oder mehrere Dateien lokal“ öffnet einen Dateidialog
-      außerhalb Claude.
-- [ ] Eine bis 25 TXT-/DOCX-Dateien lassen sich gemeinsam auswählen und werden mit
-      verständlichem Fortschritt nacheinander verarbeitet.
-- [ ] Abbruch oder Fehler bei einer Datei veröffentlicht dafür nichts, blockiert aber
-      die übrigen ausgewählten Dateien nicht.
-- [ ] Nach einer Mehrfachauswahl erscheint die Abschlussansicht genau einmal und zeigt
-      ausschließlich „Ausgewählt“, „Erfolgreich vorbereitet“ und „Sicher gestoppt“.
-- [ ] Die Abschlussansicht formuliert alle erfolgreich, teilweise erfolgreich und
-      vollständig sicher gestoppt korrekt; sie enthält keine Rohdaten, Dateinamen,
-      Pfade, Job-/Paket-IDs oder technischen Fehler.
-- [ ] „Schließen“ und das Fensterschließen schließen nur die Ansicht. Sie starten keine
-      Wiederholung und erteilen keine Freigabe. Bei einer Einzeldatei erscheint keine
-      zusätzliche Abschlussansicht.
-- [ ] Claude zeigt weder gewählten Pfad noch Originaltext.
-- [ ] Links sind Hinweise im normalisierten Quelltext sichtbar; rechts ist die
-      automatisch bereinigte Fassung schreibgeschützt.
-- [ ] `Blauwal` kann ausgewählt und nur durch `[MANUAL_REDACTION]` ersetzt werden.
-- [ ] Die untere Vorschau entspricht exakt dem später freigegebenen Text.
-- [ ] Rolle und sonstiger fachlicher Inhalt bleiben unverändert.
-- [ ] „Geprüft freigeben“ veröffentlicht erst nach erneut bestandenem Residual-Gate.
-- [ ] „Prüfung überspringen“ überspringt nur die Sichtkontrolle, nicht technische
-      Coverage-, Rest-PII- oder Visual-Gates.
-- [ ] „Abbrechen“ beziehungsweise Fensterschließen veröffentlicht nichts.
-- [ ] DOCX mit Bild oder unbekanntem inhaltsfähigem Part bleibt gesperrt.
-
-Automatisierte Basisevidenz: Der native Windows-Forms-Pfad mit synthetischer Alias-
-Auswahl, Redaktions- und Freigabe-Schaltfläche ist im Windows-Test enthalten. Die
-vorstehenden Punkte prüfen zusätzlich Verständlichkeit und den installierten Pfad.
+- [ ] „Anonymisiere eine oder mehrere Dateien lokal“ nennt nur die vorhandene Anzahl
+      und öffnet den lokalen `Input`-Ordner, keinen lang laufenden Dateidialog.
+- [ ] Liegt bereits eine Datei im Eingang, verlangt Claude die Bestätigung, dass sie
+      zum aktuellen Lauf gehört. Bei einer Abweichung zwischen genannter und erkannter
+      Zahl beginnt keine Verarbeitung.
+- [ ] Ohne ausdrücklichen Wunsch erscheint keine zusätzliche Frage zur Bildentfernung;
+      Bilder in Bewerbungs-/Personalunterlagen bleiben standardmäßig lokal.
+- [ ] Nach Bestätigung wird die Anzahl erneut geprüft. Null oder mehr als 25 Dateien
+      werden verständlich gemeldet und nicht stillschweigend verarbeitet.
+- [ ] Pro MCP-Aufruf wird genau eine Datei verarbeitet; ein Stapel von mehreren
+      Dokumenten läuft nicht als ein einziger langer Aufruf.
+- [ ] Ein Stopp veröffentlicht für die betroffene Datei nichts und wird im selben Lauf
+      nicht wiederholt. Die übrigen bestätigten Dateien werden trotzdem genau einmal
+      versucht.
+- [ ] Claude zeigt weder Pfad, Dateiname, Originaltext noch interne Queue-Position.
+- [ ] Der normale Input-Ablauf öffnet keinen Textreview- oder zweiten Dateidialog.
+- [ ] Mehrdeutige Zertifikats-/Organisationsstellen werden nicht geraten, sondern
+      stoppen nur die betroffene Datei.
+- [ ] Rolle, Zertifizierungen und sonstiger fachlicher Inhalt bleiben im erfolgreichen
+      synthetischen Fall unverändert.
+- [ ] Das Residual-Gate prüft exakt die später freigegebene Markdown-Fassung.
+- [ ] Claude nennt am Ende nur erfolgreiche und sicher gestoppte Dateien und verwendet
+      ausschließlich Paket-IDs aus den Einzelaufrufen dieses Laufs.
+- [ ] Eine erneute Verarbeitung einer gestoppten Datei beginnt erst nach einem neuen,
+      ausdrücklichen Nutzerauftrag.
 
 ## 5. Andere und formatgemischte Dateien über den Input-Ordner
 
@@ -117,7 +113,7 @@ verwenden. Text- und Scan-PDF separat als verpflichtende Stop-Gegenprobe prüfen
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC27 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC28 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

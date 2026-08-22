@@ -12,9 +12,9 @@ const corpus = JSON.parse(fs.readFileSync(
 const validSkills = new Set(['anonymize', 'explain', 'none']);
 const validRoutes = new Set(['dialog', 'folder', 'clarify-purpose', 'clarify-image-removal', 'stop-prior-upload', 'blocked-pdf', 'cleanup', 'explain', 'none']);
 
-test('corpus has the versioned schema and twenty cases', () => {
+test('corpus has the versioned schema and twenty-four cases', () => {
   assert.strictEqual(corpus.schema, 'datasecure-skill-evals/v1');
-  assert.strictEqual(corpus.cases.length, 20);
+  assert.strictEqual(corpus.cases.length, 24);
 });
 
 test('case identifiers are unique and every expectation is structurally complete', () => {
@@ -45,17 +45,19 @@ test('critical privacy and usability scenarios cannot disappear from the corpus'
     'no-image-removal-consent', 'standalone-scan-unknown-purpose', 'pdf-blocked', 'already-uploaded-original',
     'skip-mandatory-review', 'partial-batch-result', 'zero-release-result',
     'all-local-data-delete-confirmed', 'privacy-boundary-explanation',
-    'already-anonymized-markdown'
+    'already-anonymized-markdown', 'existing-input-before-run',
+    'declared-one-status-two', 'resumable-twenty-five-files',
+    'first-file-stops-continue-rest'
   ]) assert.ok(ids.has(required), `missing critical scenario ${required}`);
 });
 
-test('a personnel image decision precedes selection and an uploaded original stops processing', () => {
+test('personnel images default safely without an extra question and an uploaded original stops processing', () => {
   const byId = new Map(corpus.cases.map((item) => [item.id, item]));
   const imageChoice = byId.get('no-image-removal-consent');
-  assert.strictEqual(imageChoice.expected_route, 'clarify-image-removal');
-  assert.strictEqual(imageChoice.remove_images, null);
-  assert.ok(imageChoice.required_outcomes.includes('ask_image_handling_before_picker'));
-  assert.ok(imageChoice.forbidden_outcomes.includes('open_picker_before_image_choice'));
+  assert.strictEqual(imageChoice.expected_route, 'folder');
+  assert.strictEqual(imageChoice.remove_images, false);
+  assert.ok(imageChoice.required_outcomes.includes('default_images_to_local_withhold'));
+  assert.ok(imageChoice.forbidden_outcomes.includes('ask_unnecessary_image_question'));
 
   const uploaded = byId.get('already-uploaded-original');
   assert.strictEqual(uploaded.expected_route, 'stop-prior-upload');
@@ -67,6 +69,14 @@ test('ordinary processing uses the resumable local input route instead of a long
   const ordinary = corpus.cases.filter((item) => ['single-contract-docx', 'multiple-mixed-docx'].includes(item.id));
   assert.ok(ordinary.every((item) => item.expected_route === 'folder'));
   assert.ok(ordinary.every((item) => item.required_outcomes.includes('wait_for_local_input_confirmation')));
+});
+
+test('large and partially failing runs are split into single-file tool calls', () => {
+  const byId = new Map(corpus.cases.map((item) => [item.id, item]));
+  assert.ok(byId.get('resumable-twenty-five-files').required_outcomes.includes('one_tool_call_per_document'));
+  assert.ok(byId.get('resumable-twenty-five-files').forbidden_outcomes.includes('single_long_batch_tool_call'));
+  assert.ok(byId.get('first-file-stops-continue-rest').required_outcomes.includes('increment_skip_stopped'));
+  assert.ok(byId.get('first-file-stops-continue-rest').forbidden_outcomes.includes('retry_stopped_file'));
 });
 
 test('every processing case forbids direct upload and every released-content task continues safely', () => {

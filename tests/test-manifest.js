@@ -55,14 +55,14 @@ test('no runtime module hard-codes a version literal of its own', () => {
   }
 });
 
-test('every skill declares the same version as the plugin', () => {
+test('every skill uses only supported frontmatter and relies on the plugin version', () => {
   const skillsDir = path.join(root, 'plugins', 'data-secure', 'skills');
   for (const name of fs.readdirSync(skillsDir)) {
     const file = path.join(skillsDir, name, 'SKILL.md');
     const text = readText(file);
-    const match = /^version:\s*(.+)$/m.exec(text);
-    assert.ok(match, `${name}/SKILL.md has no version field`);
-    assert.strictEqual(match[1].trim(), plugin.version, `${name}/SKILL.md version drift`);
+    assert.doesNotMatch(text, /^version:/m, `${name}/SKILL.md must not use unsupported version frontmatter`);
+    assert.match(text, /^name:\s*[a-z0-9-]+$/m, `${name}/SKILL.md has no valid name`);
+    assert.match(text, /^description:\s*.+$/m, `${name}/SKILL.md has no description`);
   }
 });
 

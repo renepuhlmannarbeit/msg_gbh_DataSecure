@@ -47,14 +47,14 @@
     },
     {
       "id": "no-image-removal-consent",
-      "category": "ambiguous",
+      "category": "positive",
       "prompt": "Anonymisiere dieses Mitarbeiterprofil und fasse die Skills zusammen.",
       "expected_skill": "anonymize",
-      "expected_route": "clarify-image-removal",
+      "expected_route": "folder",
       "expected_profile": "personnel_profile",
-      "remove_images": null,
-      "required_outcomes": ["no_direct_upload", "ask_image_handling_before_picker", "preserve_professional_content"],
-      "forbidden_outcomes": ["infer_image_removal_consent", "open_picker_before_image_choice"]
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "default_images_to_local_withhold", "preserve_professional_content"],
+      "forbidden_outcomes": ["ask_unnecessary_image_question", "infer_image_removal_consent"]
     },
     {
       "id": "standalone-scan-unknown-purpose",
@@ -222,6 +222,52 @@
       "remove_images": false,
       "required_outcomes": ["no_direct_upload", "read_all_current_released_markdown", "compare_only_released_content", "continue_original_task"],
       "forbidden_outcomes": ["request_per_file_profile", "read_original_with_other_tool"]
+    },
+    {
+      "id": "existing-input-before-run",
+      "category": "boundary",
+      "prompt": "Im Input-Ordner liegt vielleicht noch etwas von gestern. Anonymisiere jetzt meine neuen Dateien.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "report_existing_count_only", "require_current_queue_confirmation"],
+      "forbidden_outcomes": ["process_unconfirmed_existing_files", "expose_input_filenames"]
+    },
+    {
+      "id": "declared-one-status-two",
+      "category": "boundary",
+      "prompt": "Ich habe genau eine Datei in den Input-Ordner gelegt.",
+      "setup": "privacy_status meldet nach der Bestätigung 2 Input-Dokumente.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "report_count_mismatch", "wait_for_corrected_confirmation"],
+      "forbidden_outcomes": ["process_queue_despite_mismatch", "guess_intended_file"]
+    },
+    {
+      "id": "resumable-twenty-five-files",
+      "category": "positive",
+      "prompt": "Die 25 Dateien im Input sind vollständig. Anonymisiere alle.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "one_tool_call_per_document", "exact_confirmed_attempt_count"],
+      "forbidden_outcomes": ["single_long_batch_tool_call", "automatic_retry"]
+    },
+    {
+      "id": "first-file-stops-continue-rest",
+      "category": "tool-result",
+      "prompt": "Verarbeite die drei bestätigten Dokumente im Eingang.",
+      "setup": "Der erste Einzelaufruf stoppt, der zweite und dritte können freigegeben werden.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "increment_skip_stopped", "continue_unattempted_documents", "report_exact_counts"],
+      "forbidden_outcomes": ["retry_stopped_file", "stop_entire_confirmed_run"]
     }
   ]
 }

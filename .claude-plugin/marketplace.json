@@ -9,7 +9,7 @@
     {
       "name": "data-secure",
       "displayName": "GBH DataSecure – Dokumente anonymisieren",
-      "description": "Lokale Anonymisierung von PDF-, Word-, Excel-, PowerPoint- und Bilddateien, bevor Claude deren Inhalte verarbeitet.",
+      "description": "Lokale De-Identifizierung von Word-, Excel-, PowerPoint-, Text- und Bilddateien, bevor Claude deren Inhalte verarbeitet; PDF bleibt derzeit gesperrt.",
       "author": {
         "name": "Geschäftsbereich Healthcare, msg systems ag"
       },

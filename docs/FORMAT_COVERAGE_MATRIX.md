@@ -1,8 +1,10 @@
 # Format-Coverage-Matrix
 
 Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte Dateiendungen.
-Der fortsetzbare `Input`-Ablauf ist der Standard auf allen Plattformen. Windows x64
-besitzt zusätzlich die native Job-Object-Grenze und bearbeitbare lokale Textprüfung.
+Der fortsetzbare `Input`-Ablauf mit einem MCP-Aufruf pro Datei ist der Standard auf
+allen Plattformen. Windows x64 besitzt zusätzlich die native Job-Object-Grenze; die
+bearbeitbare lokale Textprüfung gehört zum getrennten Companion-Engineeringpfad und
+wird im einfachen Standardablauf nicht geöffnet.
 macOS/Linux sind für TXT/DOCX textbasiert freigegeben, halten visuelle Inhalte zurück
 und stoppen bei einer notwendigen Mehrdeutigkeitsentscheidung sicher.
 

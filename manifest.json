@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "eu-privacy-document-gateway",
   "display_name": "GBH DataSecure – Dokumente anonymisieren",
-  "version": "3.2.0-rc27",
+  "version": "3.2.0-rc28",
   "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway für Windows, macOS und Linux: fortsetzbarer Input-Ablauf, verifiziertes Markdown und sicher behandelte Grafiken.",
   "long_description": "Plattformneutrale Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind gebündelt; beim Anwender wird kein npm/Python installiert. Der kurze Input-Ordner-Ablauf trennt Dateibereitstellung und Verarbeitung, damit kein interaktiver MCP-Aufruf am Claude-Zeitlimit hängen bleibt. Windows x64 besitzt die vollständigere Job-Object-, Textreview- und Visual-Grenze. macOS/Linux unterstützen den TXT-/DOCX-Textpfad mit Node Permission Model und stoppen bei visuellen oder manuellen Mehrdeutigkeiten sicher. Weitere Formatpfade werden ausschließlich gemäß der dokumentierten Coverage-Matrix angeboten. PDF bleibt bis zum vollständigen Coverage-Nachweis sicher gesperrt. Direkte Identifikatoren werden entfernt; fachliche Skills, Rollen, Zertifizierungen und Geschäftszeiträume sollen erhalten bleiben. Claude kann nur freigegebenes Markdown und freigegebene PNGs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {
@@ -88,10 +88,6 @@
     {
       "name": "anonymize_next_document",
       "description": "Erzeugt aus der nächsten Input-Datei ein verifiziertes Privacy-Paket; bekannte Bildanlagen texttragender Office-Dokumente können auf ausdrücklichen Wunsch entfernt werden."
-    },
-    {
-      "name": "anonymize_all_documents",
-      "description": "Verarbeitet bis zu 25 unterstützte Input-Dateien nacheinander in getrennte Markdown-Pakete; ein Dateifehler blockiert die übrigen Dateien nicht."
     },
     {
       "name": "list_anonymized_packages",

@@ -119,9 +119,10 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 14, `expected exactly 14 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 13, `expected exactly 13 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'open_input_folder'));
     assert.ok(!tools.some((tool) => tool.name === 'prepare_local_document'));
+    assert.ok(!tools.some((tool) => tool.name === 'anonymize_all_documents'));
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {
@@ -136,6 +137,9 @@ async function main() {
       assert.ok(tool.annotations, `tool ${tool.name} has no annotations`);
       assert.strictEqual(tool.annotations.openWorldHint, false, `tool ${tool.name} must be closed world`);
     }
+    const next = tools.find((tool) => tool.name === 'anonymize_next_document');
+    assert.strictEqual(next.inputSchema.properties.skip_stopped.minimum, 0);
+    assert.strictEqual(next.inputSchema.properties.skip_stopped.maximum, 24);
   });
 
   await testAsync('read tools are annotated read only and write tools are not', async () => {

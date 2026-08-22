@@ -204,10 +204,22 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     };
   }
 
-  const originalSource = queue[0].full;
-  const originalName = queue[0].name;
+  const queueIndex = Number.isInteger(deps.queueIndex) ? deps.queueIndex : 0;
+  if (queueIndex < 0 || queueIndex >= queue.length) {
+    return {
+      ok: false,
+      error: 'input_position_empty',
+      message: 'Die angeforderte Warteschlangenposition ist nicht mehr vorhanden. Bitte Datenschutzstatus erneut prüfen.',
+      input_documents_seen: queue.length,
+      raw_content_sent_to_claude: false
+    };
+  }
+
+  const selectedInput = queue[queueIndex];
+  const originalSource = selectedInput.full;
+  const originalName = selectedInput.name;
   const ext = path.extname(originalSource).toLowerCase();
-  if (queue[0].stat.size > MAX_INPUT_BYTES) throw new SafeError('Eingabedatei ist größer als 100 MB.');
+  if (selectedInput.stat.size > MAX_INPUT_BYTES) throw new SafeError('Eingabedatei ist größer als 100 MB.');
 
   const r = roots();
   const jobId = newJobId();
@@ -238,7 +250,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       ? path.join(jobDir, `source${ext}`)
       : path.join(r.input, `.processing_${jobId}_${originalName}`);
     if (copiedClaim) {
-      copyRegularFileExclusive(originalSource, source, queue[0].stat);
+      copyRegularFileExclusive(originalSource, source, selectedInput.stat);
     } else {
       fs.renameSync(originalSource, source);
     }

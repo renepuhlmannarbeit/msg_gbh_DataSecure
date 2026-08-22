@@ -104,6 +104,28 @@ async function main() {
     fs.unlinkSync(blocked);
   });
 
+  await testAsync('resumable single-file calls skip earlier stops without retrying them', async () => {
+    const blocked = queueBuffer('01-scan.png', blankPng);
+    queueBuffer('02-first.txt', 'Kunde: Max Mustermann\nE-Mail: max@example.de\nTicket: Erster Fall');
+    queueBuffer('03-second.txt', 'Kunde: Erika Musterfrau\nE-Mail: erika@example.de\nTicket: Zweiter Fall');
+
+    await assert.rejects(
+      () => gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 0 }),
+      /Datenschutzprofil ausdrücklich gewählt/
+    );
+    const first = await gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 1 });
+    const second = await gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 1 });
+
+    assert.ok(first.ok && second.ok);
+    assert.strictEqual(fs.existsSync(blocked), true, 'the stopped source remains available for an explicit retry');
+    assert.deepStrictEqual(
+      fs.readdirSync(path.join(root, 'Input')).filter((name) => !name.startsWith('.')),
+      ['01-scan.png'],
+      'each later document must be attempted exactly once'
+    );
+    fs.unlinkSync(blocked);
+  });
+
   await testAsync('a document-wide visual timeout restores the source and publishes no partial package', async () => {
     const source = queueBuffer('visual-timeout.txt', 'safe professional content');
     const outputDir = path.join(root, 'Output');

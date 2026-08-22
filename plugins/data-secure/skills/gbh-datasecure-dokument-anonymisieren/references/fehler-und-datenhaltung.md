@@ -2,10 +2,10 @@
 
 ## Gestoppte Verarbeitung
 
-Wiederhole einen gestoppten Lauf niemals automatisch. Werte bei der privaten Auswahl
-`selected_count`, `released_count` und `failed_count` wörtlich aus. Beim Ordnerweg gelten
-zusätzlich `input_documents_seen`, `attempted` und `automatic_retries`: mehrere Versuche
-derselben Datei sind keine mehreren Dateien.
+Wiederhole einen gestoppten Lauf niemals automatisch. Beim Ordnerweg wird jede bestätigte
+Datei in einem getrennten Aufruf versucht. `skip_stopped` entspricht stets der Zahl der
+im aktuellen Mehrdateilauf zuvor gestoppten Dateien. Dadurch bleiben diese im Eingang,
+werden während desselben Laufs übersprungen und die übrigen Dateien können weiterlaufen.
 
 Rufe `diagnostic_status` auf und erkläre nur dessen feste Fehlercodes:
 
@@ -18,7 +18,7 @@ Rufe `diagnostic_status` auf und erkläre nur dessen feste Fehlercodes:
   werden.
 
 Im Stapel stoppt nur die betroffene Datei. Arbeite ausschließlich mit den Paket-IDs,
-die derselbe Lauf ausdrücklich als freigegeben meldet.
+die die einzelnen Aufrufe dieses bestätigten Laufs ausdrücklich als freigegeben melden.
 
 ## Aufbewahrung und Löschung
 

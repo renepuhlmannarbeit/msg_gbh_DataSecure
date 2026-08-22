@@ -1,6 +1,6 @@
 # GBH DataSecure – Dokumente anonymisieren
 
-Claude-Plugin zur lokalen Anonymisierung und Datenschutzprüfung von DOCX-, XLSX-, PPTX-, Text- sowie eigenständigen PNG-, JPEG- und BMP-Dateien. PDF bleibt in RC27 bis zum vollständigen nativen Coverage-Nachweis sicher gesperrt.
+Claude-Plugin zur lokalen Anonymisierung und Datenschutzprüfung von DOCX-, XLSX-, PPTX-, Text- sowie eigenständigen PNG-, JPEG- und BMP-Dateien. PDF bleibt in RC28 bis zum vollständigen nativen Coverage-Nachweis sicher gesperrt.
 
 Das Plugin verbindet:
 
@@ -11,12 +11,12 @@ Das Plugin verbindet:
 ## Ablauf für Anwender
 
 1. Bitte Claude, den DataSecure-Eingangsordner zu öffnen. Kopiere eine oder mehrere Dateien in `Input` und bestätige anschließend im Chat, dass sie bereitliegen. Lade sensible Originale nicht als Chat-Anhang hoch.
-2. Claude verarbeitet erst danach das nächste Dokument oder alle Dokumente. Der Stapellauf verarbeitet bis zu 25 Dateien nacheinander und erstellt pro erfolgreich freigegebener Datei ein eigenes Markdown-Paket. Für gemischte Dokumentarten genügt `auto`; nur reine Bilder brauchen ein ausdrückliches Profil. PDF erzeugt bewusst kein Paket.
-3. Der getrennte Ablauf hält keinen Dateidialog während eines MCP-Aufrufs offen und vermeidet dadurch das beobachtete Claude-Zeitlimit.
+2. Claude prüft die Anzahl erneut und verarbeitet danach genau diese bestätigte Zahl mit einem kurzen Aufruf pro Datei. Bereits gestoppte Dateien werden im selben Lauf übersprungen statt wiederholt. Für gemischte Dokumentarten genügt `auto`; nur reine Bilder brauchen ein ausdrückliches Profil. PDF erzeugt bewusst kein Paket.
+3. Der getrennte Ablauf hält weder Dateiauswahl noch einen kompletten Stapel in einem einzigen MCP-Aufruf offen und vermeidet dadurch das beobachtete Claude-Zeitlimit.
 4. Claude verwendet ausschließlich freigegebenes Markdown und freigegebene PNG-Dateien.
 5. Nicht automatisch verifizierbare Grafiken bleiben lokal unter `Needs Visual Review`. Dieser Engineering-Build besitzt keinen menschlichen Freigabeweg für visuelle Inhalte; das Öffnen des Ordners macht sie für Claude nicht lesbar.
 
-Unter Windows kann die lokale Textprüfung zusätzliche Ersetzungen mit `[MANUAL_REDACTION]` hinzufügen, den fachlichen Inhalt aber nicht frei bearbeiten. macOS und Linux unterstützen zunächst den portablen TXT-/DOCX-Textpfad; Mehrdeutigkeiten stoppen dort sicher, Bilder werden nicht freigegeben. Das Überspringen einer optionalen Prüfung umgeht weder technische Abdeckungsprüfungen noch Kontrollen auf verbliebene personenbezogene Daten oder visuelle Inhalte.
+Der normale Input-Ablauf öffnet auf keiner Plattform einen zusätzlichen Textprüfdialog. Mehrdeutigkeiten stoppen die betroffene Datei sicher; Bilder werden nach Profil und Sicherheitslage entfernt, automatisch verifiziert oder lokal zurückgehalten. Eine getrennte Windows-Companion-Prüfoberfläche bleibt Engineering-Gegenstand und ist nicht Teil dieses einfachen Standardablaufs.
 
 Lade ein sensibles Original nicht direkt in Claude hoch und füge es nicht in den Chat ein, wenn Claude den Inhalt erst nach der Datenschutzverarbeitung sehen darf.
 

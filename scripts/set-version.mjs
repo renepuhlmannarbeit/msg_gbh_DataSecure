@@ -63,12 +63,6 @@ patchText(
   `VERSION: '${target}'`
 );
 
-const skillsDir = path.join(root, 'plugins', 'data-secure', 'skills');
-for (const name of fs.readdirSync(skillsDir)) {
-  const rel = path.posix.join('plugins/data-secure/skills', name, 'SKILL.md');
-  patchText(rel, /^version:.*$/m, `version: ${target}`);
-}
-
 // Keep the small set of user-facing, current-release documents in sync as well.
 // Historical backlog evidence deliberately stays on the version in which it happened.
 const releaseLabel = (version) => {
