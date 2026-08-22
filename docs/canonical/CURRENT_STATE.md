@@ -198,6 +198,17 @@ diese exakte Version den vollständigen, laut Paketmetadaten geltenden MIT-Text 
 Autor- und Herkunftshinweis; jeder andere fehlende Lizenztext stoppt den Build.
 Produktintegration und frische Pluginpakete bleiben offen.
 
+Der erste Produktadapter `server/portable-ocr.js` ist nun im Pluginpfad vorhanden.
+Er ordnet ausschließlich die vier vereinbarten OS-/Architekturziele zu, lehnt Links,
+Zusatzdateien, fehlende oder hashabweichende Dateien ab, verlangt den OCR-V1-Vertrag
+und `release_enabled: true` und startet den Worker über den gebündelten nativen
+Supervisor mit RAM-, CPU-, Zeit-, Ausgabe- und Netzwerkgrenze. Das aktuelle Plugin
+liefert noch kein freigegebenes Bundle aus; auf Windows bleibt daher der bestehende
+Bridge-Pfad aktiv, auf macOS/Linux bleiben visuelle Inhalte unverändert lokal
+zurückgehalten. Sieben Adaptertests belegen Plattformauswahl, gesperrtes Gate,
+Manipulations-/Zusatzdateistopp, positiven Vertragspfad und inhaltsfreie
+Ressourcenfehler und das feste OCR-V1-Fehlervokabular.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**

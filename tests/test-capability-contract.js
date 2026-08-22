@@ -102,4 +102,13 @@ test('the target contract is documentation, not a shipped plugin runtime input',
   assert.strictEqual(fs.existsSync(path.join(root, 'plugins', 'data-secure', 'TARGET_CAPABILITIES.json')), false);
 });
 
+test('the portable OCR adapter is shipped but cannot self-enable coverage', () => {
+  const adapter = read('plugins/data-secure/server/portable-ocr.js');
+  assert.match(adapter, /manifest\.release_enabled !== true/u);
+  assert.match(adapter, /data-secure-ocr-runtime-bundle\/v1/u);
+  assert.match(adapter, /bundle_integrity_failed/u);
+  assert.strictEqual(fs.existsSync(path.join(root, 'plugins', 'data-secure', 'server', 'ocr-runtime')), false);
+  assert.strictEqual(current.formats.includes('png'), false);
+});
+
 done();

@@ -10,6 +10,10 @@ const {
   visualBridgeStatus
 } = require('./windows-visual');
 const { verifyNativeLauncherArtifact } = require('./native-launcher');
+const {
+  portableOcrStatus,
+  ocrPngDetailedPortable
+} = require('./portable-ocr');
 
 class SafeError extends Error {}
 let nativeHostProbeCache;
@@ -108,6 +112,7 @@ function runtimeReady() {
 
 function readStatus() {
   const visual = visualBridgeStatus();
+  const portableOcr = portableOcrStatus();
   const parser = nativeParserStatus();
   if (!parser.available) {
     return {
@@ -118,7 +123,9 @@ function readStatus() {
       parser_boundary_reason: parser.reason,
       visual_bridge: visual.available ? 'available' : 'unavailable',
       visual_bridge_reason: visual.reason,
-      visual_boundary: visual.mode
+      visual_boundary: visual.mode,
+      portable_ocr: portableOcr.available ? 'available' : 'unavailable',
+      portable_ocr_reason: portableOcr.reason
     };
   }
   return {
@@ -131,8 +138,18 @@ function readStatus() {
     parser_boundary_reason: parser.reason,
     visual_bridge: visual.available ? 'available' : 'unavailable',
     visual_bridge_reason: visual.reason,
-    visual_boundary: visual.mode
+    visual_boundary: visual.mode,
+    portable_ocr: portableOcr.available ? 'available' : 'unavailable',
+    portable_ocr_reason: portableOcr.reason
   };
+}
+
+async function ocrPng(buffer, language, options = {}) {
+  const portable = portableOcrStatus(options.portableOcr || {});
+  if (portable.available) {
+    return ocrPngDetailedPortable(buffer, language, options.portableOcr || {});
+  }
+  return ocrPngDetailed(buffer, language, options);
 }
 
 const PARSER_TIMEOUT_MS = 50_000;
@@ -333,5 +350,6 @@ module.exports = {
   verifyNativeLauncher,
   convertDocument,
   rasterizeToPng,
-  ocrPngDetailed
+  ocrPngDetailed: ocrPng,
+  portableOcrStatus
 };

@@ -141,3 +141,10 @@ x64/ARM64 und Linux x64. Der vollständige MIT-Fallback für exakt `tr46@0.0.3` 
 lokal ergänzt; unbekannte fehlende Lizenztexte brechen den Build ab. Das Manifest
 bleibt `release_enabled: false`; Pluginintegration und frische Installation sind
 offen.
+
+Der gesperrte Produktadapter ist über `plugins/data-secure/server/portable-ocr.js`
+und `tests/test-portable-ocr-adapter.js` nachvollziehbar. Er akzeptiert nur ein
+vollständig inventarisiertes und gehashtes Zielbundle mit expliziter Freigabe,
+verwirft zusätzliche Dateien und Links und bestätigt die Worker-Beendigung vor einer
+Timeout-/Ausgabegrenzen-Antwort. Der aktuelle Pluginbaum enthält kein freigegebenes
+Bundle; die veröffentlichte Capability-Matrix bleibt deshalb unverändert.

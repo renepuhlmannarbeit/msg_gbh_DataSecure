@@ -1,0 +1,128 @@
+'use strict';
+
+const assert = require('assert');
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { EventEmitter } = require('events');
+const { encodePng } = require('../plugins/data-secure/server/images/png');
+const {
+  runtimeTarget, portableOcrStatus, ocrPngDetailedPortable, PortableOcrError
+} = require('../plugins/data-secure/server/portable-ocr');
+
+let passed = 0;
+async function test(name, fn) {
+  try { await fn(); passed++; console.log(`  ok   ${name}`); }
+  catch (error) { console.error(`  fail ${name}`); throw error; }
+}
+function hash(data) { return crypto.createHash('sha256').update(data).digest('hex'); }
+function fixture(released = true) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'portable-ocr-test-'));
+  const files = {
+    'datasecure-ocr-sandbox.exe': Buffer.from('launcher'),
+    'runtime-worker.mjs': Buffer.from('worker'),
+    'network-deny.cjs': Buffer.from('deny'),
+    'models/deu.traineddata': Buffer.from('deu'),
+    'models/eng.traineddata': Buffer.from('eng'),
+    'THIRD_PARTY_NOTICES.md': Buffer.from('notices')
+  };
+  for (const [relative, data] of Object.entries(files)) {
+    const file = path.join(root, ...relative.split('/'));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, data);
+  }
+  const manifest = {
+    schema: 'data-secure-ocr-runtime-bundle/v1', target: 'windows-x64',
+    release_enabled: released, contract: 'data-secure-ocr-result/v1', models: ['deu', 'eng'],
+    components: [], files: Object.entries(files).map(([relative, data]) => ({
+      path: relative, bytes: data.length, sha256: hash(data)
+    }))
+  };
+  fs.writeFileSync(path.join(root, 'bundle-manifest.json'), JSON.stringify(manifest));
+  return root;
+}
+function fakeSpawn(result, exitCode = 0) {
+  return () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stdin = new EventEmitter();
+    child.stdin.end = () => setImmediate(() => {
+      if (result) child.stdout.emit('data', Buffer.from(JSON.stringify(result)));
+      child.emit('close', exitCode);
+    });
+    child.kill = () => true;
+    return child;
+  };
+}
+
+(async () => {
+  console.log('\nPortable OCR adapter');
+  await test('maps only the four supported platform targets', () => {
+    assert.strictEqual(runtimeTarget('win32', 'x64'), 'windows-x64');
+    assert.strictEqual(runtimeTarget('darwin', 'x64'), 'macos-x64');
+    assert.strictEqual(runtimeTarget('darwin', 'arm64'), 'macos-arm64');
+    assert.strictEqual(runtimeTarget('linux', 'x64'), 'linux-x64');
+    assert.strictEqual(runtimeTarget('win32', 'arm64'), null);
+  });
+  await test('keeps a valid but unreleased bundle disabled', () => {
+    const root = fixture(false);
+    try { assert.deepStrictEqual(portableOcrStatus({ runtimeRoot: root, platform: 'win32', arch: 'x64' }), {
+      available: false, mode: 'bundled_disabled', reason: 'coverage_unverified', target: 'windows-x64'
+    }); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('rejects a modified bundle before execution', () => {
+    const root = fixture(true);
+    try {
+      fs.appendFileSync(path.join(root, 'runtime-worker.mjs'), 'tampered');
+      assert.strictEqual(portableOcrStatus({ runtimeRoot: root, platform: 'win32', arch: 'x64' }).reason,
+        'bundle_integrity_failed');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('rejects an unlisted file in the executable bundle tree', () => {
+    const root = fixture(true);
+    try {
+      fs.writeFileSync(path.join(root, 'node-options-injection.cjs'), 'unexpected');
+      assert.strictEqual(portableOcrStatus({ runtimeRoot: root, platform: 'win32', arch: 'x64' }).reason,
+        'bundle_integrity_failed');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('executes a released verified bundle through the bounded adapter', async () => {
+    const root = fixture(true);
+    const result = {
+      schema: 'data-secure-ocr-result/v1', status: 'recognized', languages: ['deu', 'eng'],
+      image: { width: 1, height: 1 }, text: 'Hallo', confidence: 99,
+      words: [{ index: 0, line_index: 0, text: 'Hallo', confidence: 99,
+        bbox: { x0: 0, y0: 0, x1: 1, y1: 1 } }],
+      quality: { requires_visual_review: true, reasons: ['NON_TEXTUAL_MEANING_UNVERIFIED'] }
+    };
+    const png = encodePng({ width: 1, height: 1, rgba: Buffer.from([255, 255, 255, 255]) });
+    try {
+      const actual = await ocrPngDetailedPortable(png, 'de-DE', {
+        runtimeRoot: root, platform: 'win32', arch: 'x64', spawn: fakeSpawn(result)
+      });
+      assert.strictEqual(actual.text, 'Hallo');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('returns only a fixed error when the worker fails', async () => {
+    const root = fixture(true);
+    const png = encodePng({ width: 1, height: 1, rgba: Buffer.from([0, 0, 0, 255]) });
+    try {
+      await assert.rejects(() => ocrPngDetailedPortable(png, 'de-DE', {
+        runtimeRoot: root, platform: 'win32', arch: 'x64', spawn: fakeSpawn(null, 125)
+      }), (error) => error instanceof PortableOcrError && error.code === 'OCR_RESOURCE_LIMIT' &&
+        !error.message.includes(root));
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('uses only errors from the canonical OCR V1 vocabulary', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'plugins', 'data-secure',
+      'server', 'portable-ocr.js'), 'utf8');
+    const actual = [...source.matchAll(/new PortableOcrError\('([A-Z_]+)'\)/gu)].map((match) => match[1]);
+    const allowed = new Set(['OCR_INPUT_INVALID', 'OCR_INPUT_LIMIT', 'OCR_MODEL_UNAVAILABLE',
+      'OCR_MODEL_INTEGRITY_FAILED', 'OCR_BACKEND_UNAVAILABLE', 'OCR_TIMEOUT', 'OCR_RESOURCE_LIMIT',
+      'OCR_OUTPUT_LIMIT', 'OCR_RESULT_INVALID', 'OCR_NETWORK_POLICY_FAILED', 'OCR_CANCELLED']);
+    assert.ok(actual.length > 5);
+    assert.ok(actual.every((code) => allowed.has(code)));
+  });
+  console.log(`Portable OCR adapter: ${passed} passed, 0 failed`);
+})().catch(() => { process.exitCode = 1; });

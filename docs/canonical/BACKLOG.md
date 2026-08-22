@@ -367,12 +367,12 @@ Alle Backends laufen gebündelt, offline und mit demselben Vertrag.
 Vorarbeit: Der portable Tesseract.js-WASM-Pilot läuft offline auf Windows x64,
 macOS x64/ARM64 und Linux x64. BL-024.1 ist abgeschlossen. Runtime, Modelle und
 native Supervisoren sind inzwischen installationsfrei pro Zielarchitektur gebündelt;
-die Story bleibt bis zur Integration in den echten Pluginpfad offen.
+die Story bleibt bis zur vollständigen Integration und Abnahme im echten Pluginpfad
+offen.
 
-Nächster Schnitt: reproduzierbare, hashgeprüfte Runtime-/Modellartefakte für alle
-vier Zielarchitekturen bauen, Lizenz-/NOTICE-Inventar vervollständigen und zunächst
-über einen weiterhin gesperrten Runtime-Adapter integrieren. Erst frische ZIP- und
-Marketplace-Installationen dürfen den Pfad freigeben.
+Nächster Schnitt: die geprüften Zielbundles in eine universelle oder nachweislich
+gleichwertige plattformspezifische Plugin-Auslieferung übernehmen. Erst frische ZIP-
+und Marketplace-Installationen dürfen den Pfad nach den Coverage-Gates freigeben.
 
 Umsetzung in Prüfung: `build-ocr-runtime.mjs` erzeugt pro Zielarchitektur ein
 hashinventarisiertes, weiterhin gesperrtes Bundle aus Tesseract.js, 13 tatsächlichen
@@ -380,12 +380,16 @@ Runtime-Komponenten, `deu`/`eng`, OCR-V1, Netzsperre, Drittanbieterhinweisen und
 nativen Supervisor. Das nur für Testbilder benötigte `@napi-rs/canvas` wird nicht
 ausgeliefert. Das Windows-x64-Bundle umfasst 241 inventarisierte Dateien und rund
 57,5 MB; Hashprüfung, echter Offline-OCR-Lauf und inhaltsfreier Negativfall bestehen
-lokal. Lauf `32597030060` auf `7427b3c` belegt Build, statische Prüfung und echten Offline-OCR-
+lokal. Lauf `32597030060` auf `7427b3c` belegt Build, statische Prüfung und echten
+Offline-OCR-
 Smoke-Test derselben Bündel auf Windows x64, macOS x64/ARM64 und Linux x64. Für das
 einzige Paket ohne mitgelieferte Lizenzdatei (`tr46@0.0.3`) liegt ein exakt
 versionsgebundener, vollständiger MIT-Text mit Herkunftshinweis vor. Offen sind der
-weiterhin gesperrte Runtime-Adapter, frische ZIP-/Marketplace-Installationen und die
-nachfolgenden Coverage-Gates.
+Plugin-Bundle-Builder, frische ZIP-/Marketplace-Installationen und die nachfolgenden
+Coverage-Gates. Der Produktadapter `portable-ocr.js` ist bereits integriert, prüft
+Zielplattform, vollständiges Dateiinventar und SHA-256 jedes Bundle-Bestandteils und
+startet nur bei `release_enabled: true`; der aktuelle Pluginbaum enthält bewusst kein
+freigegebenes OCR-Bundle und behält damit das bisherige Verhalten.
 
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 
