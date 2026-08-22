@@ -380,7 +380,7 @@ Runtime-Komponenten, `deu`/`eng`, OCR-V1, Netzsperre, Drittanbieterhinweisen und
 nativen Supervisor. Das nur für Testbilder benötigte `@napi-rs/canvas` wird nicht
 ausgeliefert. Das Windows-x64-Bundle umfasst 241 inventarisierte Dateien und rund
 57,5 MB; Hashprüfung, echter Offline-OCR-Lauf und inhaltsfreier Negativfall bestehen
-lokal. Lauf `32596789509` belegt Build, statische Prüfung und echten Offline-OCR-
+lokal. Lauf `32597030060` auf `7427b3c` belegt Build, statische Prüfung und echten Offline-OCR-
 Smoke-Test derselben Bündel auf Windows x64, macOS x64/ARM64 und Linux x64. Für das
 einzige Paket ohne mitgelieferte Lizenzdatei (`tr46@0.0.3`) liegt ein exakt
 versionsgebundener, vollständiger MIT-Text mit Herkunftshinweis vor. Offen sind der

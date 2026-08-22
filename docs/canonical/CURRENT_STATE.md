@@ -190,7 +190,7 @@ OCR-V1, Netzsperre und den zielabhängigen nativen Supervisor, erstellt für jed
 Größe und SHA-256 und setzt `release_enabled: false`. Canvas bleibt als reines
 Testwerkzeug außerhalb des Anwenderbundles. Das lokale Windows-x64-Bundle hat rund
 57,5 MB und bestand Inventar-, Lizenzindex-, echten Offline-OCR- und inhaltsfreien
-Fehlerpfadtest. GitHub-Actions-Lauf `32596789509` baut, prüft und testet dieselben
+Fehlerpfadtest. GitHub-Actions-Lauf `32597030060` auf `7427b3c` baut, prüft und testet dieselben
 Bündel auf Windows x64, macOS x64/ARM64 und Linux x64 und sichert sie als
 14-Tage-Artefakte. Nur `tr46@0.0.3` liefert weder im npm-Tarball noch im zugehörigen
 Upstream-Tag eine eigene Lizenzdatei. Der Builder ergänzt deshalb ausschließlich für
