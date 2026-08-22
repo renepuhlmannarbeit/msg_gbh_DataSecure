@@ -628,6 +628,11 @@ belegen:
    und adversariale Gegenproben als Freigabeevidenz.
 8. **DS-005/DS-205:** Upload-Umgehung, Einzel-/Mehrdateiweg, Mehrdeutigkeit, sicheren
    Abbruch und Verständlichkeit mit synthetischen Dokumenten abnehmen.
+9. **Skill-Verhalten (Korpus in RC24 umgesetzt, Modellabnahme offen):** Die 20 Fälle aus
+   `evals/skill-behavior-cases.json` je dreimal in frischen Sitzungen mit allen im Pilot
+   angebotenen Claude-Modellen ausführen. Trigger, Koexistenz, Werkzeugwahl, Bildzustimmung,
+   Paketbindung und automatische Fortsetzung der ursprünglichen Aufgabe müssen die Gates aus
+   [SKILL_EVALUATION.md](SKILL_EVALUATION.md) erfüllen.
 
 Erst wenn Installation, installierter End-to-End-Pfad und menschliche Bedienbarkeit
 belegt sind, sollte ein Pilot mit ausdrücklich freigegebenen Daten erwogen werden.

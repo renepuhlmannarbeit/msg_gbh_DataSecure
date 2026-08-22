@@ -64,6 +64,9 @@ Do not mark a build production-ready until all of these hold:
       both parser and visual boundary (CI verifies this)
 - [ ] the extracted plugin ZIP passes `npm run test:plugin-zip`: German skill
       contracts, the 150-case contract matrix and preservation controls are green
+- [ ] every model offered in the pilot passes all 20 cases from
+      `evals/skill-behavior-cases.json` according to `docs/SKILL_EVALUATION.md`;
+      corpus validation in `npm test` is not a substitute for these model runs
 - [ ] the packaged plugin contains `bin/windows-x64/datasecure-sandbox.exe` and its
       matching SHA-256 sidecar (CI and the build verify this)
 - [ ] ZIP, MCPB, SPDX SBOM and `SHA256SUMS` are present in the same CI artefact

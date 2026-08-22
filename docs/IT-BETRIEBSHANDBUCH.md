@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC23 · Stand 21.08.2026
+Version 3.2.0 RC24 · Stand 21.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC23 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC24 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -15,7 +15,7 @@ Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine MCP-Read-Date
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC23 |
+| Artefakt | Ziel | Status RC24 |
 |---|---|---|
 | `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc23.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-x64-Engineering-Weg; frische Installation noch abzunehmen |
 | `DataSecure-Privacy-Preflight-v3.2.0-rc23.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher für Parser/OCR/Raster; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
@@ -131,7 +131,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC23 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC24 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.

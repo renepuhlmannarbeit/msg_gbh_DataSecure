@@ -31,6 +31,7 @@ assert.deepStrictEqual(
   'plugin must expose exactly the consolidated GBH DataSecure skills'
 );
 const skillTexts=[];
+const referenceTexts=[];
 for(const skill of requiredSkills){
   const p=path.join(pluginRoot,'skills',skill,'SKILL.md');
   assert.ok(fs.existsSync(p),`missing skill ${skill}`);
@@ -39,12 +40,20 @@ for(const skill of requiredSkills){
   // Tolerant of CRLF: a Windows checkout with core.autocrlf=true would
   // otherwise fail this assertion on the only supported platform.
   assert.ok(/^---\r?\n/.test(text),`${skill} missing frontmatter`);
+  const references=path.join(pluginRoot,'skills',skill,'references');
+  if(fs.existsSync(references)){
+    for(const file of fs.readdirSync(references).filter(name=>name.endsWith('.md')).sort()){
+      referenceTexts.push(fs.readFileSync(path.join(references,file),'utf8'));
+    }
+  }
 }
 
 const preflight=fs.readFileSync(path.join(pluginRoot,'skills','gbh-datasecure-dokument-anonymisieren','SKILL.md'),'utf8');
-assert.match(preflight,/fordere den Anwender \*\*nicht\*\* auf,[^\n]*(?:einzufügen|hochzuladen)/i);
+assert.match(preflight,/Fordere sensible Originale \*\*nicht\*\*[^\n]*(?:Chat-Upload|Einfügen)/i);
 assert.match(preflight,/read_anonymized_document/);
 assert.match(preflight,/read_anonymized_asset/);
+assert.match(preflight,/ausschließlich die in diesem Aufruf als freigegeben gemeldeten `package_id`/i);
+assert.match(preflight,/ursprüngliche Nutzeraufgabe automatisch und ausschließlich/i);
 for(const profile of ['customer','applicant','personnel_profile','contract','general']){
   assert.match(preflight,new RegExp(`\\b${profile}\\b`),`missing profile guidance for ${profile}`);
 }
@@ -65,7 +74,7 @@ assert.ok(!toolNames.includes('approve_visual_asset'),'Claude must not receive a
 const instructionsStart=indexSource.indexOf('const INSTRUCTIONS=');
 assert.notStrictEqual(instructionsStart,-1,'INSTRUCTIONS missing');
 const instructionSource=indexSource.slice(instructionsStart,toolsStart);
-const agentGuidance=[instructionSource,...skillTexts].join('\n');
+const agentGuidance=[instructionSource,...skillTexts,...referenceTexts].join('\n');
 const toolInstructionExceptions={};
 for(const [name,reason] of Object.entries(toolInstructionExceptions)){
   assert.ok(reason.trim().length>=20,`${name} exception needs a concrete reason`);

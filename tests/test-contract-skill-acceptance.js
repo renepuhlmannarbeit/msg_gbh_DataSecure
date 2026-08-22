@@ -24,10 +24,11 @@ const { anonymizeMarkdown } = require(path.join(pluginRoot, 'server', 'gateway',
 const { test, done, assert } = createSuite('Local contract skill acceptance');
 
 test('anonymization skill selects the local contract path without uploading the original', () => {
-  assert.match(anonymizeSkill, /`contract` für Verträge/u);
-  assert.match(anonymizeSkill, /nicht[^\n]+Original[^\n]+Chat/iu);
+  assert.match(anonymizeSkill, /`contract`[^\n]+Zweck eindeutig/u);
+  assert.match(anonymizeSkill, /Originale \*\*nicht\*\*[^\n]+Chat-Upload/iu);
   assert.match(anonymizeSkill, /read_anonymized_document/u);
-  assert.match(anonymizeSkill, /mehrere Dateien/u);
+  assert.match(anonymizeSkill, /ursprüngliche Nutzeraufgabe automatisch/iu);
+  assert.match(anonymizeSkill, /diesem Aufruf[^\n]+`package_id`/iu);
 });
 
 test('explanation skill states the privacy boundary and avoids a legal anonymity claim', () => {

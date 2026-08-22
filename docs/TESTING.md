@@ -18,6 +18,7 @@ file prints one line per case and exits non-zero on the first failure.
 |---|---|---|
 | `test-manifest.js` | 15 | version consistency across package.json, MCPB manifest, plugin.json, VERSION, BUILD_INFO and all skills; PDF blocked-format contract; tool/prompt parity between manifest and server; marketplace target; plugin entry point and native build/package contracts; and that every test the npm script names exists |
 | `test-plugin-structure.js` | – | plugin directory layout, skill frontmatter, MCP config, and mechanical coverage requiring every runtime tool to appear in agent guidance or a justified exception |
+| `test-skill-eval-corpus.js` | 5 | versioned set of 20 synthetic model-behavior scenarios covering triggering, non-triggering, coexistence, routing, image consent, PDF refusal, partial results, current-run package binding and cleanup; this validates the evaluation contract, not a simulated Claude run |
 | `test-parsers.js` | 30 | DOCX/XLSX/PPTX text including nested DrawingML text boxes, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; Markdown table escaping; standalone PNG routing; legacy PDF parser adversarial coverage plus the mandatory `PDF_COVERAGE_UNVERIFIED` release gate; ZIP hardening including false sizes, aggregate limits and header consistency; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
 | `test-parser-isolation.js` | 11 | mandatory Windows-launcher invocation, inherited stdin transport, renamed-PDF signature blocking before spawn, absence of a PDF implementation in the packaged worker, missing/corrupt launcher refusal without fallback, native-host architecture probing, fixed resource/setup codes, confirmed deadline termination, response-size/schema enforcement and content-free worker errors |
 | `test-pdfium-spike.mjs` | 6 | offline contract for the non-release PDFium lock: immutable distributor/upstream provenance and hashes, V8/XFA-off build, license inventory, strict separation from the product worker and unchanged `PDF_COVERAGE_UNVERIFIED` runtime gate; the networked/native engineering probe remains an explicit `npm run pdfium:spike` command |
@@ -45,7 +46,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 | `test-sarif-check.mjs` | 4 | fail-closed local CodeQL report parsing without leaking finding messages into the release-gate output |
 
-Total: 556 assertion-level cases plus the plugin structure check (**557 checks overall**).
+Total: 561 assertion-level cases plus the plugin structure check (**562 checks overall**).
 
 The Windows CI additionally runs `test:windows-visual`: a synthetic scan passes through
 the real Job Object, Windows OCR, pixel redaction and verification OCR; malformed EMF

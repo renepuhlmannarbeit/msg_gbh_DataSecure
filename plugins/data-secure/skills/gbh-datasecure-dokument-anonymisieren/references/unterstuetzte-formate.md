@@ -1,6 +1,6 @@
 # Unterstützte Formate
 
-Die lokale Vorverarbeitung unterstützt derzeit DOCX, XLSX, PPTX, TXT, MD, CSV, PNG, JPEG und BMP in den jeweils in der Coverage-Matrix beschriebenen Grenzen. PDF bleibt in RC23 vollständig gesperrt und erzeugt mit `PDF_COVERAGE_UNVERIFIED` kein Paket, bis der native Page-/Font-/Unicode-/Visual-Coverage-Pfad belegt ist. Reine Bilddateien benötigen ein ausdrücklich gewähltes Datenschutzprofil, weil die automatische Erkennung sie vor der lokalen OCR nicht sicher einordnen kann.
+Die lokale Vorverarbeitung unterstützt derzeit DOCX, XLSX, PPTX, TXT, MD, CSV, PNG, JPEG und BMP in den jeweils in der Coverage-Matrix beschriebenen Grenzen. PDF bleibt in RC24 vollständig gesperrt und erzeugt mit `PDF_COVERAGE_UNVERIFIED` kein Paket, bis der native Page-/Font-/Unicode-/Visual-Coverage-Pfad belegt ist. Reine Bilddateien benötigen ein ausdrücklich gewähltes Datenschutzprofil, weil die automatische Erkennung sie vor der lokalen OCR nicht sicher einordnen kann.
 
 Nur automatisch verifizierte Grafiken dürfen freigegeben werden. Alle anderen bleiben lokal unter `Needs Visual Review`; dieser Engineering-Build bietet bewusst keinen menschlichen Freigabeweg über Claude oder MCP.
 

@@ -1,7 +1,7 @@
 {
   "name": "data-secure",
   "displayName": "GBH DataSecure – Dokumente anonymisieren",
-  "version": "3.2.0-rc23",
+  "version": "3.2.0-rc24",
   "description": "Lokale Anonymisierung und Datenschutzprüfung von Geschäftsdokumenten und Scans, bevor Claude deren Inhalte verarbeitet.",
   "author": {
     "name": "Geschäftsbereich Healthcare, msg systems ag"
