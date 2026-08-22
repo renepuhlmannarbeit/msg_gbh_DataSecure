@@ -49,7 +49,7 @@ test('PDF/OCR risk sources and the four required runner targets are pinned', () 
     'windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64'
   ]);
   const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'pdf-ocr-risk.yml'), 'utf8');
-  for (const runner of ['windows-latest', 'macos-13', 'macos-14', 'ubuntu-latest']) {
+  for (const runner of ['windows-latest', 'macos-15-intel', 'macos-14', 'ubuntu-latest']) {
     assert.ok(workflow.includes(runner), `risk workflow missing ${runner}`);
   }
   assert.match(workflow, /Community PDFium spike became releasable/u);
