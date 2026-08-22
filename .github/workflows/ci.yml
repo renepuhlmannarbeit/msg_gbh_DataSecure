@@ -56,9 +56,23 @@ jobs:
       - name: Run real Windows visual Job Object acceptance
         run: npm run test:windows-visual
 
+  portable-test:
+    name: Test portable runtime (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.13.0'
+      - name: Run privacy, portable parser, MCP and plugin tests
+        run: npm test
+
   build:
     name: Build plugin and MCPB
-    needs: [guard, test]
+    needs: [guard, test, portable-test]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -86,8 +100,8 @@ jobs:
             echo "$reply" | grep -q '"visual_boundary":"windows_job_object"'
             echo "$reply" | grep -q '"blocked_inputs":\[{"format":"PDF","reason":"PDF_COVERAGE_UNVERIFIED"}\]'
           done
-          test -f .verify/plugin/bin/windows-x64/datasecure-sandbox.exe
-          test -f .verify/mcpb/bin/windows-x64/datasecure-sandbox.exe
+          test -f .verify/plugin/server/native/windows-x64/datasecure-sandbox.exe
+          test -f .verify/mcpb/server/native/windows-x64/datasecure-sandbox.exe
       - name: Test the packaged German skills with synthetic contracts
         run: npm run test:plugin-zip
       - name: Generate SPDX SBOM and SHA-256 checksums

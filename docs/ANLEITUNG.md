@@ -1,14 +1,20 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC26 · Windows 10/11 x64 · ca. 20 Minuten.
+Windows 10/11 x64 sowie macOS/Linux-Textpfad · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC26 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC27 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
 > Pilotfreigabe. Die lokale TXT-/DOCX-Review-Aktion ist technisch umgesetzt; die
 > visuelle Human-Presence-Freigabe und Codesignatur fehlen noch.
+
+> **Plattformstatus:** Windows x64 besitzt derzeit die vollständigere lokale
+> Prüfoberfläche und Bildverarbeitung. Auf macOS/Linux ist TXT/DOCX textbasiert
+> nutzbar; Bilder bleiben lokal oder werden auf Wunsch entfernt, und Fälle mit
+> notwendiger manueller Mehrdeutigkeitsentscheidung stoppen sicher. Es ist keine
+> zusätzliche Python-, Node- oder npm-Installation nötig.
 
 ---
 
@@ -183,14 +189,11 @@ Privacy-Ordner"*.
 1. Bitten Sie Claude: *„Anonymisiere eine oder mehrere Dateien lokal mit
    DataSecure.“* Sie müssen keine internen Profilnamen kennen und einen gemischten
    Stapel nicht Datei für Datei einordnen.
-2. DataSecure zeigt Ihnen den passenden lokalen Weg:
-   - Für bis zu 25 TXT- oder DOCX-Dateien (Word) öffnet sich ein Dateidialog außerhalb
-     Claude. Wählen Sie dort eine oder mehrere Dateien aus.
-   - Für Excel, PowerPoint, Markdown, CSV, Bilder oder einen formatgemischten Stapel
-     öffnet DataSecure den Privacy-Ordner. Kopieren Sie alle gewünschten Dateien
-     gemeinsam nach `Input`, nicht in den Chat. PDF ist in dieser Version sicher
-     gesperrt und darf auch nicht direkt in den Chat hochgeladen werden.
-   Claude erhält weder die Quellpfade noch die Originale.
+2. DataSecure öffnet auf allen unterstützten Plattformen den lokalen Ordner `Input`.
+   Kopieren Sie dort bis zu 25 gewünschte Dateien hinein, nicht in den Chat. Kehren
+   Sie anschließend zu Claude zurück und bestätigen Sie kurz, dass die Dateien
+   bereitliegen. PDF ist sicher gesperrt und darf auch nicht direkt hochgeladen
+   werden. Claude erhält weder die Quellpfade noch die Originale.
 3. DataSecure verarbeitet jede Datei nacheinander und erstellt pro Datei ein eigenes
    Markdown-Paket. Ein Fehler bei einer Datei blockiert die übrigen nicht. Den Typ
    müssen Sie nur dann nennen, wenn eine eigenständige Bilddatei sonst nicht
@@ -205,11 +208,8 @@ Privacy-Ordner"*.
 5. Jede Fassung wird erneut automatisch geprüft. Erst danach kann Claude das
    bereinigte Markdown lesen. Abbruch oder Fensterschließen veröffentlicht für die
    betroffene Datei nichts; die übrigen Dateien laufen weiter.
-6. Nach mehreren ausgewählten TXT-/Word-Dateien erscheint genau einmal die lokale
-   Ansicht **„DataSecure – Verarbeitung abgeschlossen“**. Sie zeigt ausschließlich
-   **Ausgewählt**, **Erfolgreich vorbereitet** und **Sicher gestoppt**. Mit
-   **„Schließen“** schließen Sie nur die Anzeige; es wird nichts erneut verarbeitet
-   oder zusätzlich freigegeben. Bei einer einzelnen Datei entfällt diese Anzeige.
+6. Claude nennt nach dem Stapellauf ausschließlich die Zahl erfolgreicher und sicher
+   gestoppter Dateien und arbeitet mit den freigegebenen Paketen weiter.
 
 Wenn Sie ausschließlich Markdown ohne Bilder brauchen, sagen Sie einmalig:
 *„Anonymisiere die Dateien und entferne alle Bilder.“* Bekannte Bildanlagen in
@@ -217,15 +217,15 @@ texttragenden Office-Dateien werden lokal verworfen und in der `.md` als entfern
 vermerkt. Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans werden
 dadurch nicht an den Sicherheitsprüfungen vorbeigeführt.
 
-Enthält eine Datei im Ordnerweg einen mehrdeutigen Zertifikats-/Organisations-Treffer,
+Enthält eine Datei einen mehrdeutigen Zertifikats-/Organisations-Treffer,
 wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
-Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen Sie
-eine gestoppte TXT-/DOCX-Datei anschließend erneut über den lokalen Dateidialog.
+Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Unter
+Windows kann die separate lokale Prüfoberfläche später für gezielte Nachbearbeitung
+verwendet werden; macOS/Linux geben einen solchen Fall derzeit nicht frei.
 
-RC26 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
-ARM64 stoppt bereits die lokale Parserbereitschaft sicher; es gibt dort keinen
-direkten Node-Ersatzpfad. Plattformübergreifende Adapter sind ein späterer Backlog-
-Punkt und kein aktueller Produktclaim.
+Windows x64 besitzt die vollständigere Engineering-Grenze. macOS und Linux verwenden
+für TXT/DOCX den gebündelten Node-Textpfad ohne Zusatzinstallation und stoppen bei
+Bildern oder manuellen Mehrdeutigkeiten sicher. Windows ARM64 bleibt noch gesperrt.
 
 ### Nach der Verarbeitung
 
@@ -283,7 +283,7 @@ Nummern beginnen bei jedem Dokument neu.
 | `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
 | Claude meldet mehr Dateien als in `Input` lagen | `input_documents_seen`, `attempted` und `automatic_retries` prüfen. Mehrere Versuche derselben Datei sind keine mehreren Dateien |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
-| `PDF_COVERAGE_UNVERIFIED` | PDF ist in RC26 unabhängig vom Inhalt sicher gesperrt. Verwenden Sie nach Organisationsfreigabe die ursprüngliche DOCX-/XLSX-/PPTX-/TXT-Datei oder lassen Sie einen ausdrücklich freigegebenen PNG-/JPEG-Export erneut durch DataSecure verarbeiten; niemals das Original-PDF oder den Export direkt in Claude hochladen |
+| `PDF_COVERAGE_UNVERIFIED` | PDF ist in RC27 unabhängig vom Inhalt sicher gesperrt. Verwenden Sie nach Organisationsfreigabe die ursprüngliche DOCX-/XLSX-/PPTX-/TXT-Datei oder lassen Sie einen ausdrücklich freigegebenen PNG-/JPEG-Export erneut durch DataSecure verarbeiten; niemals das Original-PDF oder den Export direkt in Claude hochladen |
 | Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | In `Processed` nachsehen und das Original zurück nach `Input` verschieben. Tritt das erneut auf, an IT melden |
 | Fachbegriff fälschlich geschwärzt | Kein Datenschutzproblem, aber bitte melden |
 | **Echter Name in der geprüften Fassung** | **Sofort aufhören.** Nicht weiterarbeiten, Chat nicht weiterverwenden, umgehend melden |
@@ -322,7 +322,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC26 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC27 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

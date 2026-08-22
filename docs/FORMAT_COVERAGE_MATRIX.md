@@ -1,14 +1,15 @@
 # Format-Coverage-Matrix
 
-Stand: 3.2.0 RC26. Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte
-Dateiendungen. `Privater Dialog` bedeutet: Der gesamte lokale Review-/Residual-/Release-
-Pfad ist freigegeben. `Input` ist der technische Fallback und kein Beleg vollständiger
-Struktur- oder Formattreue.
+Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte Dateiendungen.
+Der fortsetzbare `Input`-Ablauf ist der Standard auf allen Plattformen. Windows x64
+besitzt zusätzlich die native Job-Object-Grenze und bearbeitbare lokale Textprüfung.
+macOS/Linux sind für TXT/DOCX textbasiert freigegeben, halten visuelle Inhalte zurück
+und stoppen bei einer notwendigen Mehrdeutigkeitsentscheidung sicher.
 
-| Format | Belegte Textbereiche | Visuelle Behandlung | Privater Dialog | Bekannte Grenzen / nächstes Gate |
+| Format | Belegte Textbereiche | Visuelle Behandlung | Plattformstatus | Bekannte Grenzen / nächstes Gate |
 |---|---|---|---|---|
-| TXT | gesamter UTF-8-Text innerhalb der Größenlimits | keine | ja | Encoding außerhalb UTF-8 nicht zugesichert |
-| DOCX | Dokumenttext einschließlich Tabellen und verschachtelter DrawingML-Textfelder | bekannte Medien entfernen oder zurückhalten; unbekannte inhaltsfähige Parts blockieren | ja | Kommentare, Kopf-/Fußzeilen und weitere OOXML-Parts erst nach expliziter Coverage freigeben |
+| TXT | gesamter UTF-8-Text innerhalb der Größenlimits | keine | Windows/macOS/Linux Textpfad | Encoding außerhalb UTF-8 nicht zugesichert |
+| DOCX | Dokumenttext einschließlich Tabellen und verschachtelter DrawingML-Textfelder | bekannte Medien entfernen oder zurückhalten; unbekannte inhaltsfähige Parts blockieren | Windows vollständigere Prüfung; macOS/Linux Textpfad fail-closed | Kommentare, Kopf-/Fußzeilen und weitere OOXML-Parts erst nach expliziter Coverage freigeben |
 | PDF | `pdf-lite` nur noch als Test-/Gegenprobenparser; kein Release-Pfad | nicht freigegeben | **nein** | jeder PDF-Lauf stoppt mit `PDF_COVERAGE_UNVERIFIED`; Zielarchitektur und Gates siehe `PDF_ENGINE_DECISION.md` |
 | XLSX | Shared-/Inline-Strings und einfache Zellwerte | bekannte Medien über Visual-Gate | nein | Kommentare, Formeln/Anzeigeformat, Charts, Zeichnungen, versteckte Bereiche und externe Beziehungen systematisch abdecken |
 | PPTX | Folientext und Sprechernotizen | bekannte Medien über Visual-Gate | nein | Master/Layout, Charts, SmartArt, eingebettete Objekte und externe Beziehungen systematisch abdecken |

@@ -21,7 +21,7 @@ if (pkg.version !== buildInfo.version) {
 
 const expectedNames = [
   `DataSecure-Privacy-Preflight-v${pkg.version}.zip`,
-  `EU-Privacy-Document-Gateway-Windows-v${pkg.version}.mcpb`
+  `DataSecure-Privacy-Gateway-v${pkg.version}.mcpb`
 ];
 const artefacts = expectedNames
   .map((name) => {

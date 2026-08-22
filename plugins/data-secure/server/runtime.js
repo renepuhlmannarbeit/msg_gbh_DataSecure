@@ -55,7 +55,9 @@ function verifyNativeLauncher(launcher, options = {}) {
 }
 
 function dataRoot() {
-  const base = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+  const base = process.env.LOCALAPPDATA || (process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Library', 'Application Support')
+    : process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'));
   return path.join(base, 'ClaudeEUPrivacyDocumentGatewayV32');
 }
 
@@ -63,6 +65,13 @@ function dataRoot() {
 // native boundary must also be present and match the packaged checksum.
 function nativeParserStatus(options = {}) {
   const platform = options.platform || process.platform;
+  if (platform === 'darwin' || platform === 'linux') {
+    const version = String(options.nodeVersion || process.versions.node || '0.0.0').split('.').map(Number);
+    const permissionStable = version[0] > 22 || (version[0] === 22 && version[1] >= 13);
+    return permissionStable
+      ? { available: true, mode: 'node_permission_process', reason: 'ok' }
+      : { available: false, mode: 'unavailable', reason: 'node_permission_model_too_old' };
+  }
   if (platform !== 'win32') return { available: false, mode: 'unavailable', reason: 'unsupported_platform' };
   const arch = options.arch || process.arch;
   if (arch !== 'x64') return { available: false, mode: 'unavailable', reason: 'unsupported_architecture' };
@@ -103,7 +112,7 @@ function readStatus() {
   if (!parser.available) {
     return {
       phase: 'blocked_parser_isolation',
-      message: 'Die native Windows-Parserbegrenzung ist nicht einsatzbereit; Textverarbeitung bleibt gesperrt.',
+      message: 'Die lokale Parserbegrenzung ist nicht einsatzbereit; Textverarbeitung bleibt gesperrt.',
       text_engine: 'unavailable',
       parser_boundary: parser.mode,
       parser_boundary_reason: parser.reason,
@@ -177,23 +186,29 @@ async function convertDocument(source, options = {}) {
     '--permission', `--allow-fs-read=${__dirname}`, '--disable-proto=throw',
     '--max-old-space-size=384', worker, ext
   ];
-  if (platform !== 'win32') {
-    throw safeError('Die lokale Dokumentverarbeitung ist nur unter Windows x64 freigegeben.', 'PARSER_ISOLATION_FAILED');
-  }
   let command = nodeExecutable;
   let args = [...nodeFlags, '0'];
   let stdio;
-  if (arch !== 'x64') {
-    throw safeError('Die native Windows-Parserbegrenzung ist für diese Prozessorarchitektur nicht verfügbar.', 'PARSER_ISOLATION_FAILED');
+  if (platform === 'win32') {
+    if (arch !== 'x64') {
+      throw safeError('Die native Windows-Parserbegrenzung ist für diese Prozessorarchitektur nicht verfügbar.', 'PARSER_ISOLATION_FAILED');
+    }
+    const launcher = options.launcherPath || path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
+    command = verifyNativeLauncher(launcher, options);
+    args = [
+      '--memory-mib', String(PARSER_JOB_MEMORY_MIB),
+      '--cpu-ms', String(PARSER_JOB_CPU_MS),
+      '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable,
+      ...nodeFlags, '0'
+    ];
+  } else if (platform === 'darwin' || platform === 'linux') {
+    const portable = nativeParserStatus({ platform, nodeVersion: options.nodeVersion });
+    if (!portable.available) {
+      throw safeError('Die portable Node-Parserbegrenzung benötigt Node.js 22.13 oder neuer.', 'PARSER_ISOLATION_FAILED');
+    }
+  } else {
+    throw safeError('Für dieses Betriebssystem ist keine lokale Parserbegrenzung freigegeben.', 'PARSER_ISOLATION_FAILED');
   }
-  const launcher = options.launcherPath || path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
-  command = verifyNativeLauncher(launcher, options);
-  args = [
-    '--memory-mib', String(PARSER_JOB_MEMORY_MIB),
-    '--cpu-ms', String(PARSER_JOB_CPU_MS),
-    '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable,
-    ...nodeFlags, '0'
-  ];
   const fd = fs.openSync(source, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   try {
     // A renamed PDF must not enter a text/CSV parser. Sniff the same descriptor

@@ -8,7 +8,7 @@ the tests cover. Nothing is substituted at build time.
 ```bash
 npm test              # fixtures, manifests, parsers, privacy, images, MCP protocol
 npm run build:plugin  # dist/DataSecure-Privacy-Preflight-v<version>.zip
-npm run build:mcpb    # dist/EU-Privacy-Document-Gateway-Windows-v<version>.mcpb
+npm run build:mcpb    # dist/DataSecure-Privacy-Gateway-v<version>.mcpb
 npm run version:sync  # propagate package.json version to every manifest
 ```
 

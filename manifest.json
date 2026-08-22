@@ -3,9 +3,9 @@
   "manifest_version": "0.4",
   "name": "eu-privacy-document-gateway",
   "display_name": "GBH DataSecure – Dokumente anonymisieren",
-  "version": "3.2.0-rc26",
-  "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway: TXT/DOCX im privaten Dialog, weitere freigegebene Formate über den lokalen Input-Pfad; verifiziertes Markdown und sicher behandelte Grafiken als Ergebnis.",
-  "long_description": "Windows Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind im MCPB gebündelt; beim Anwender wird kein npm/Python installiert. TXT und DOCX sind für den privaten Einzel-/Mehrdateidialog freigegeben. Weitere Formatpfade werden ausschließlich gemäß der dokumentierten Coverage-Matrix angeboten. PDF bleibt bis zum vollständigen Page-, Font-, Unicode- und Visual-Coverage-Nachweis sicher gesperrt und erzeugt kein Privacy-Paket. Direkte Identifikatoren werden entfernt, Personalprofile behandeln Arbeitgeber/Kunden/Projektbezeichnungen als Quasi-Identifikatoren und behalten fachliche Skills/Rollen und Geschäftszeiträume bei. Visuelle Assets werden lokal rasterisiert/OCR-geprüft und redigiert oder in Needs Visual Review zurückgehalten. Claude kann nur freigegebenes Markdown und freigegebene PNGs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
+  "version": "3.2.0-rc27",
+  "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway für Windows, macOS und Linux: fortsetzbarer Input-Ablauf, verifiziertes Markdown und sicher behandelte Grafiken.",
+  "long_description": "Plattformneutrale Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind gebündelt; beim Anwender wird kein npm/Python installiert. Der kurze Input-Ordner-Ablauf trennt Dateibereitstellung und Verarbeitung, damit kein interaktiver MCP-Aufruf am Claude-Zeitlimit hängen bleibt. Windows x64 besitzt die vollständigere Job-Object-, Textreview- und Visual-Grenze. macOS/Linux unterstützen den TXT-/DOCX-Textpfad mit Node Permission Model und stoppen bei visuellen oder manuellen Mehrdeutigkeiten sicher. Weitere Formatpfade werden ausschließlich gemäß der dokumentierten Coverage-Matrix angeboten. PDF bleibt bis zum vollständigen Coverage-Nachweis sicher gesperrt. Direkte Identifikatoren werden entfernt; fachliche Skills, Rollen, Zertifizierungen und Geschäftszeiträume sollen erhalten bleiben. Claude kann nur freigegebenes Markdown und freigegebene PNGs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {
     "name": "Geschäftsbereich Healthcare, msg systems ag"
   },
@@ -29,10 +29,12 @@
   "compatibility": {
     "claude_desktop": ">=1.0.0",
     "platforms": [
-      "win32"
+      "win32",
+      "darwin",
+      "linux"
     ],
     "runtimes": {
-      "node": ">=22.0.0"
+      "node": ">=22.13.0"
     }
   },
   "user_config": {
@@ -76,8 +78,8 @@
       "description": "Datensparsame lokale Diagnose mit Verarbeitungsphasen und festen Fehlercodes ohne Dokumentdaten."
     },
     {
-      "name": "prepare_local_document",
-      "description": "Öffnet für TXT/DOCX einen lokalen Dateidialog und verlangt vor Freigabe eine separate lokale Bestätigung; Claude erhält weder Quellpfad noch Originalbytes."
+      "name": "open_input_folder",
+      "description": "Öffnet den lokalen DataSecure-Eingangsordner plattformneutral, ohne Dateien an Claude zu übertragen."
     },
     {
       "name": "open_privacy_folder",

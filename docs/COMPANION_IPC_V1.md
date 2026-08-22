@@ -54,11 +54,13 @@ Der Companion erzeugt dafür die kurzlebige `local_companion`-Action-ID selbst. 
 Befehle sind nicht als MCP-Tools veröffentlicht und besitzen daher keine
 modellseitige Aufruffläche.
 
-Der MCP-Einstieg `prepare_local_document` darf den privaten Companion starten und
-damit den lokalen Mehrfachdialog öffnen. Er erhält weder die gewählten Pfade noch
-Originalbytes oder Action-Token. Aus jeder Auswahl entsteht ein eigener privater
-Job; die Verarbeitung läuft sequenziell und ein Fehler stoppt nur die betroffene
-Datei. Die datensparsame Zusammenfassung nennt Anzahl ausgewählter, freigegebener
+Der frühere MCP-Einstieg `prepare_local_document` ist seit RC27 nicht mehr öffentlich
+exponiert: Dateidialog, Prüfung und Freigabe in einem einzigen Aufruf kollidierten in
+Claude Desktop mit dem 180-Sekunden-Zeitlimit. Der Code bleibt vorerst als interner
+Engineering-Pfad erhalten. Der Skill öffnet stattdessen kurz `Input`, wartet auf eine
+neue Nutzernachricht und startet erst danach die Verarbeitung. Aus jeder Datei entsteht
+ein eigener privater Job; die Verarbeitung läuft sequenziell und ein Fehler stoppt
+nur die betroffene Datei. Die datensparsame Zusammenfassung nennt Anzahl gefundener, freigegebener
 und gestoppter Dateien sowie die Paket-IDs erfolgreicher Ergebnisse. Für TXT und
 textuell vollständig auswertbare DOCX läuft die Verarbeitung bis `Detected`.
 Nach Abschluss einer Mehrfachauswahl zeigt der MCP-Supervisor lokal genau einmal eine

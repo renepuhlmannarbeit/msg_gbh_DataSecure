@@ -32,6 +32,14 @@ test('platform pickers use argument arrays and no network transport', () => {
   }
 });
 
+test('macOS multi-picker returns newline-delimited POSIX paths without shell interpolation', () => {
+  const [spec] = pickerCommands('darwin', {}, ['txt', 'docx'], true);
+  assert.strictEqual(spec.command, '/usr/bin/osascript');
+  assert.match(spec.args.join(' '), /multiple selections allowed/);
+  assert.match(spec.args.join(' '), /POSIX path/);
+  assert.match(spec.args.join(' '), /linefeed/);
+});
+
 test('selected source must be an absolute regular supported file', () => {
   const source = path.join(root, 'profile.docx');
   fs.writeFileSync(source, 'synthetic');

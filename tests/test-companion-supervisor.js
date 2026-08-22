@@ -185,10 +185,25 @@ async function main() {
   await testAsync('manager refuses an unavailable review platform before opening the picker', async () => {
     let launched = false;
     await assert.rejects(
-      prepareLocalDocument('customer', { platform: 'linux', launchCompanion: () => { launched = true; } }),
+      prepareLocalDocument('customer', { platform: 'freebsd', launchCompanion: () => { launched = true; } }),
       /keine Datei ausgewählt/
     );
     assert.strictEqual(launched, false);
+  });
+
+  await testAsync('manager permits the macOS companion adapter', async () => {
+    let closed = false;
+    const fake = {
+      ready: Promise.resolve({}),
+      async request(command) {
+        if (command === 'pick_sources') return { ok: true, jobs: [{ job_id: 'mac-job' }] };
+        return { ok: true, job: { job_id: 'mac-job', state: 'Released' }, package_id: 'mac-package' };
+      },
+      close() { closed = true; }
+    };
+    const result = await prepareLocalDocument('general', { platform: 'darwin', launchCompanion: () => fake });
+    assert.strictEqual(result.released_count, 1);
+    assert.strictEqual(closed, true);
   });
 
   done();

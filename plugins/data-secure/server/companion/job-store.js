@@ -290,7 +290,9 @@ function companionCapabilities() {
     supported_states: [...STATES],
     local_ui: process.platform === 'win32'
       ? 'native_picker_redaction_and_ambiguity_review'
-      : 'native_picker_text_review_unavailable',
+      : ['darwin', 'linux'].includes(process.platform)
+        ? 'native_picker_confirm_or_fail_closed_on_ambiguity'
+        : 'unavailable',
     supported_vertical_slice_inputs: ['TXT', 'DOCX'],
     private_ipc: 'inherited_stdio_authenticated',
     binary_signing: 'not_implemented',

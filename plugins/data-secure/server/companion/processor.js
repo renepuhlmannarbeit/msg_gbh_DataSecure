@@ -5,6 +5,7 @@ const { SafeError } = require('../runtime');
 const { anonymizeSelectedSource } = require('../gateway/orchestrator');
 const { jobStatus, transitionJob } = require('./job-store');
 const { buildReviewDraft, validateReviewResult, applyManualRedactions, reviewTextLocally } = require('./text-review');
+const { confirmAutomaticRelease } = require('./local-confirmation');
 
 function textSha256(text) { return crypto.createHash('sha256').update(String(text), 'utf8').digest('hex'); }
 function localAction(contentSha256) {
@@ -19,11 +20,21 @@ function technicalReviewRequired(message) { const error = new SafeError(message)
 
 async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
   if (jobStatus(jobId).state !== 'Created') throw new SafeError('Companion-Job kann nicht erneut automatisch verarbeitet werden.');
+  const platform = options.platform || process.platform;
   const review = options.reviewTextLocally || (options.confirmAutomaticRelease
     ? ({ anonymized_text, detected_identifiers }) => options.confirmAutomaticRelease(detected_identifiers)
       ? { action: 'skipped' }
       : { action: 'cancelled' }
-    : (input) => reviewTextLocally(input.review_draft));
+    : platform === 'win32'
+      ? (input) => reviewTextLocally(input.review_draft)
+      : (input) => {
+          if ((input.ambiguities || []).length > 0) {
+            throw reviewRequired('Mehrdeutige Organisationen benötigen auf diesem Gerät eine lokale Entscheidung; es wurde nichts freigegeben.');
+          }
+          return confirmAutomaticRelease(input.detected_identifiers, { platform })
+            ? { action: 'skipped' }
+            : { action: 'cancelled' };
+        });
   let detected = false;
   let approvedContentSha256 = null;
   let reviewDecision = null;

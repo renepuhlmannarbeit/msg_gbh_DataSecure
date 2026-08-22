@@ -18,7 +18,7 @@ const pluginDir = path.join(root, 'plugins', 'data-secure');
 const dist = path.join(root, 'dist');
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-const out = path.join(dist, `EU-Privacy-Document-Gateway-Windows-v${manifest.version}.mcpb`);
+const out = path.join(dist, `DataSecure-Privacy-Gateway-v${manifest.version}.mcpb`);
 const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcpb-'));
 
 // Documents that describe the security boundary travel with the extension.

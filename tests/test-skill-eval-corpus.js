@@ -63,6 +63,12 @@ test('a personnel image decision precedes selection and an uploaded original sto
   assert.ok(uploaded.forbidden_outcomes.includes('open_picker_in_exposed_chat'));
 });
 
+test('ordinary processing uses the resumable local input route instead of a long picker call', () => {
+  const ordinary = corpus.cases.filter((item) => ['single-contract-docx', 'multiple-mixed-docx'].includes(item.id));
+  assert.ok(ordinary.every((item) => item.expected_route === 'folder'));
+  assert.ok(ordinary.every((item) => item.required_outcomes.includes('wait_for_local_input_confirmation')));
+});
+
 test('every processing case forbids direct upload and every released-content task continues safely', () => {
   const processing = corpus.cases.filter((item) => item.expected_skill === 'anonymize' && !['cleanup'].includes(item.expected_route));
   assert.ok(processing.every((item) => item.required_outcomes.includes('no_direct_upload')));

@@ -75,10 +75,21 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
   }
   if (platform === 'darwin') {
+    const script = multiple
+      ? [
+          'set selectedFiles to choose file with prompt "Datei für Claude vorbereiten" with multiple selections allowed',
+          'set selectedPaths to {}',
+          'repeat with selectedFile in selectedFiles',
+          'set end of selectedPaths to POSIX path of selectedFile',
+          'end repeat',
+          "set AppleScript's text item delimiters to linefeed",
+          'return selectedPaths as text'
+        ].join('\n')
+      : 'POSIX path of (choose file with prompt "Datei für Claude vorbereiten")';
     return [
       {
         command: '/usr/bin/osascript',
-        args: ['-e', 'POSIX path of (choose file with prompt "Datei für Claude vorbereiten")']
+        args: ['-e', script]
       }
     ];
   }

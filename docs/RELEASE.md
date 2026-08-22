@@ -12,7 +12,7 @@ node scripts/generate-sbom.mjs
 | Artefact | Purpose |
 |---|---|
 | `dist/DataSecure-Privacy-Preflight-v<version>.zip` | primary Claude plugin |
-| `dist/EU-Privacy-Document-Gateway-Windows-v<version>.mcpb` | standalone Claude Desktop extension, fallback |
+| `dist/DataSecure-Privacy-Gateway-v<version>.mcpb` | standalone Claude Desktop extension, fallback |
 | `dist/DataSecure-Privacy-Preflight-v<version>.spdx.json` | SPDX 2.3 software bill of materials with archive hashes |
 | `dist/SHA256SUMS` | SHA-256 verification for ZIP, MCPB and SBOM |
 

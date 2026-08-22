@@ -9,7 +9,7 @@ const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 
 async function prepareLocalDocument(profile = 'auto', options = {}) {
   const selectedProfile = String(profile || 'auto').toLowerCase();
   if (!PROFILES.has(selectedProfile)) throw new SafeError('Unbekanntes Datenschutzprofil.');
-  if ((options.platform || process.platform) !== 'win32') {
+  if (!new Set(['win32', 'darwin', 'linux']).has(options.platform || process.platform)) {
     throw new SafeError('Die lokale Textprüfung ist auf diesem Gerät noch nicht verfügbar; es wurde keine Datei ausgewählt.');
   }
   const companion = (options.launchCompanion || launchCompanion)(options.supervisorOptions);

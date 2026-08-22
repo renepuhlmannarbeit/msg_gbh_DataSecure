@@ -151,7 +151,7 @@ async function main() {
   await testAsync('unsupported platforms and matching non-PE launchers fail closed before spawn', async () => {
     let spawned = false;
     await assert.rejects(convertDocument(source('unsupported-platform.txt'), {
-      ...nativeOptions, platform: 'linux',
+      ...nativeOptions, platform: 'freebsd',
       spawn() { spawned = true; throw new Error('must not run'); }
     }), (error) => error instanceof SafeError && error.code === 'PARSER_ISOLATION_FAILED');
     const notPe = Buffer.from('matching but not a PE executable');
@@ -163,12 +163,45 @@ async function main() {
     assert.strictEqual(spawned, false);
   });
 
+  await testAsync('macOS and Linux use the stable Node permission process without a native launcher', async () => {
+    for (const platform of ['darwin', 'linux']) {
+      let invocation;
+      const result = await convertDocument(source(`portable-${platform}.txt`), {
+        platform, nodeVersion: '22.13.0',
+        spawn(command, args, options) {
+          invocation = { command, args, options };
+          return fakeChild((child) => {
+            child.stdout.end(JSON.stringify({
+              schema: 'data-secure-parser-result/1', ok: true,
+              result: { markdown: 'portable-safe', attachments: [], warnings: [] }
+            }));
+            child.emit('close', 0);
+          });
+        }
+      });
+      assert.strictEqual(result.markdown, 'portable-safe');
+      assert.strictEqual(invocation.command, process.execPath);
+      assert.ok(invocation.args.includes('--permission'));
+      assert.ok(invocation.args.some((item) => item.startsWith('--allow-fs-read=')));
+      assert.ok(!invocation.args.includes('--allow-net'));
+      assert.ok(!invocation.args.includes('--allow-child-process'));
+      assert.deepStrictEqual(invocation.options.env, {});
+      assert.strictEqual(typeof invocation.options.stdio[0], 'number');
+    }
+  });
+
   test('status probes the native host and blocks x64 emulation on ARM64', () => {
     assert.deepStrictEqual(nativeParserStatus({ ...nativeOptions, hostProbeStatus: 126 }), {
       available: false, mode: 'unavailable', reason: 'unsupported_host_architecture'
     });
     assert.deepStrictEqual(nativeParserStatus({ ...nativeOptions, hostProbeStatus: 0 }), {
       available: true, mode: 'windows_job_object', reason: 'ok'
+    });
+    assert.deepStrictEqual(nativeParserStatus({ platform: 'darwin', nodeVersion: '22.13.0' }), {
+      available: true, mode: 'node_permission_process', reason: 'ok'
+    });
+    assert.deepStrictEqual(nativeParserStatus({ platform: 'linux', nodeVersion: '22.12.0' }), {
+      available: false, mode: 'unavailable', reason: 'node_permission_model_too_old'
     });
   });
 

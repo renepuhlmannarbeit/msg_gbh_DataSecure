@@ -120,6 +120,8 @@ async function main() {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
     assert.strictEqual(tools.length, 14, `expected exactly 14 tools, got ${tools.length}`);
+    assert.ok(tools.some((tool) => tool.name === 'open_input_folder'));
+    assert.ok(!tools.some((tool) => tool.name === 'prepare_local_document'));
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {
@@ -207,7 +209,9 @@ async function main() {
     assert.strictEqual(result.structuredContent.companion_phase, 'txt_docx_vertical_slice_ready');
     assert.strictEqual(result.structuredContent.companion_local_ui, process.platform === 'win32'
       ? 'native_picker_redaction_and_ambiguity_review'
-      : 'native_picker_text_review_unavailable');
+      : ['darwin', 'linux'].includes(process.platform)
+        ? 'native_picker_confirm_or_fail_closed_on_ambiguity'
+        : 'unavailable');
     assert.deepStrictEqual(result.structuredContent.companion_supported_vertical_slice_inputs, ['TXT', 'DOCX']);
     assert.strictEqual(result.structuredContent.companion_private_ipc, 'inherited_stdio_authenticated');
     assert.strictEqual(result.structuredContent.companion_binary_signing, 'not_implemented');

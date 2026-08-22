@@ -9,6 +9,11 @@ npm run benchmark:detectors # aggregate detector quality on the synthetic ground
 npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
 ```
 
+CI führt die portable Suite mit Node 22.13 auf macOS und Linux sowie die vollständige
+Suite einschließlich nativer Job-Object-/OCR-Prüfung auf Windows aus. Ein grüner
+macOS-CI-Lauf belegt Parser- und Vertragsverhalten, ersetzt aber nicht die manuelle
+Finder-/Claude-Desktop-Abnahme auf echter Mac-Hardware.
+
 The suite has no npm dependencies. `tests/helpers.js` is a ~50 line runner; each
 file prints one line per case and exits non-zero on the first failure.
 

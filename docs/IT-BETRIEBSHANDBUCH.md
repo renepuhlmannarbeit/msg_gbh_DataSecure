@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC26 · Stand 21.08.2026
+Version 3.2.0 RC27 · Stand 21.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC26 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC27 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -15,9 +15,9 @@ Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine MCP-Read-Date
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC26 |
+| Artefakt | Ziel | Status RC27 |
 |---|---|---|
-| `EU-Privacy-Document-Gateway-Windows-v3.2.0-rc23.mcpb` | lokale Claude-Desktop-Extension | bevorzugter Windows-x64-Engineering-Weg; frische Installation noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc27.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 | `DataSecure-Privacy-Preflight-v3.2.0-rc23.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher für Parser/OCR/Raster; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
@@ -94,13 +94,14 @@ Aktuelle offizielle Referenzen:
 Ein grüner Startnachweis umfasst mindestens:
 
 - `privacy_status` antwortet mit Version, Retention und formatbezogenen Fähigkeiten;
-- `privacy_status` meldet `parser_boundary: windows_job_object`; `unavailable` ist ein
-  harter Stopp und darf nicht durch eine manuelle Node-Konfiguration umgangen werden;
+- `privacy_status` meldet auf Windows x64 `parser_boundary: windows_job_object` und
+  auf macOS/Linux `parser_boundary: node_permission_process`; `unavailable` ist ein
+  harter Stopp und darf nicht durch eine manuelle Laufzeitkonfiguration umgangen werden;
 - der lokale Privacy-Ordner lässt sich öffnen;
 - `Input`, `Output`, `Processed` und `Needs Visual Review` existieren;
-- bis zu 25 TXT-/DOCX-Dateien öffnen gemeinsam den privaten Dateidialog und unter
-  Windows nacheinander die lokale Textprüfung; ein Einzelfehler blockiert die übrigen
-  Dateien nicht;
+- bis zu 25 Dateien werden über den fortsetzbaren `Input`-Ablauf verarbeitet; ein
+  Einzelfehler blockiert die übrigen Dateien nicht und kein MCP-Aufruf wartet während
+  der lokalen Dateibereitstellung;
 - der ausgewählte Pfad und der Originaltext erscheinen weder im MCP-Ergebnis noch im
   Jobjournal oder Audit;
 - das gepackte MCP beantwortet `initialize`;
@@ -131,7 +132,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC26 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC27 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.

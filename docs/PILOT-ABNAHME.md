@@ -1,14 +1,15 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC26 · ausschließlich synthetische Daten
+Version 3.2.0 RC27 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC26 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC27 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
 
-- **Durchführung:** IT/Testverantwortliche auf einem frischen Windows-Testkonto.
+- **Durchführung:** IT/Testverantwortliche auf einem frischen Windows-Testkonto und
+  für den portablen Textpfad zusätzlich auf einem frischen macOS-Testkonto.
 - **Beobachtung:** mindestens eine fachfremde Pilotperson für die Usability-Fälle.
 - **Freigabe:** Produkt, IT-Security und Datenschutz nach ihren internen Vorgaben.
 - **Korpus:** ausschließlich im Repository erzeugte oder ausdrücklich als vollständig
@@ -20,7 +21,7 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
 
 ## 2. Vorbedingungen
 
-- [ ] CI ist auf `main` für Ubuntu, Windows, Repository-Guards und Paket-Build grün.
+- [ ] CI ist auf `main` für Ubuntu, macOS, Windows, Repository-Guards und Paket-Build grün.
 - [ ] Build-Commit und Artefaktprüfsummen sind protokolliert.
 - [ ] Testsystem enthält keine echten DataSecure-Dokumente oder Altbestände.
 - [ ] Aktuelle Claude-Desktop-Version und erlaubte Desktop Extensions sind bestätigt.
@@ -37,6 +38,9 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
 - [ ] `privacy_status` zeigt auf Windows x64 `parser_boundary: windows_job_object`.
       Fehlender oder manipulierter Launcher meldet `PARSER_ISOLATION_FAILED`, öffnet
       keinen Dateidialog und startet Node nicht direkt.
+- [ ] `privacy_status` zeigt auf macOS `parser_boundary: node_permission_process`;
+      TXT/DOCX funktionieren ohne separat installierte Node-/Python-Laufzeit und
+      visuelle oder mehrdeutige Fälle stoppen sicher.
 - [ ] `privacy_status` zeigt auf Windows x64 `visual_boundary: windows_job_object`.
       Fehlender oder manipulierter Launcher startet weder OCR noch Rasterisierung
       direkt; Grafiken bleiben zurückgehalten.
@@ -113,7 +117,7 @@ verwenden. Text- und Scan-PDF separat als verpflichtende Stop-Gegenprobe prüfen
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC26 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC27 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

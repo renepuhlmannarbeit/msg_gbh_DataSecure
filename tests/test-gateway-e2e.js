@@ -506,8 +506,11 @@ async function main() {
     assert.strictEqual(status.ok, true);
     assert.strictEqual(status.raw_content_sent_to_claude, false);
     assert.strictEqual(status.text_engine, 'ready');
-    assert.strictEqual(status.parser_boundary, process.platform === 'win32' ? 'windows_job_object' : 'not_applicable');
-    assert.strictEqual(status.parser_boundary_reason, process.platform === 'win32' ? 'ok' : 'not_windows');
+    const portable = ['darwin', 'linux'].includes(process.platform);
+    assert.strictEqual(status.parser_boundary, process.platform === 'win32'
+      ? 'windows_job_object'
+      : portable ? 'node_permission_process' : 'unavailable');
+    assert.strictEqual(status.parser_boundary_reason, portable || process.platform === 'win32' ? 'ok' : 'unsupported_platform');
     assert.ok(['available', 'unavailable'].includes(status.visual_bridge));
     assert.strictEqual(status.visual_boundary,
       process.platform === 'win32' ? 'windows_job_object' : 'unavailable');

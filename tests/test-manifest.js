@@ -70,7 +70,8 @@ test('MCPB manifest declares the fields the runtime relies on', () => {
   assert.strictEqual(mcpb.manifest_version, '0.4');
   assert.strictEqual(mcpb.server.type, 'node');
   assert.strictEqual(mcpb.server.entry_point, 'server/index.js');
-  assert.deepStrictEqual(mcpb.compatibility.platforms, ['win32']);
+  assert.deepStrictEqual(mcpb.compatibility.platforms, ['win32', 'darwin', 'linux']);
+  assert.strictEqual(mcpb.compatibility.runtimes.node, '>=22.13.0');
   assert.match(mcpb.compatibility.runtimes.node, /^>=\s*2[2-9]/);
   for (const key of ['root_dir', 'language', 'visual_mode', 'retention_days']) {
     assert.ok(mcpb.user_config[key], `user_config.${key} missing`);
