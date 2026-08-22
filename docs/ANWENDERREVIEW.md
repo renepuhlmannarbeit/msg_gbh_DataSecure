@@ -1,6 +1,10 @@
 # Anwenderreview des DataSecure-Ablaufs
 
-Stand: RC29 · Reviewziel: einfacher, verständlicher und technisch gebundener Ablauf
+> **Ist-Review RC30:** Diese Datei dokumentiert den heute getesteten Ablauf. Das
+> verbindliche Ziel nach dem Produkt-Grill steht unter
+> [canonical/PRODUCT.md](canonical/PRODUCT.md).
+
+Stand: RC30 · Reviewziel: einfacher, verständlicher und technisch gebundener Ablauf
 für eine oder mehrere lokale Dateien auf Windows, macOS und Linux.
 
 ## Zielbild
@@ -53,6 +57,12 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
 7. **Ungültige Skill-Metadaten:** Das nicht unterstützte `version`-Frontmatter wurde
    entfernt. Die Releaseversion stammt eindeutig aus dem Plugin-Manifest; beide Skills
    bestehen den Skill-Validator.
+8. **Automatischer Skill-Aufruf:** Der Hauptskill bleibt absichtlich per natürlicher
+   Sprache aufrufbar und setzt daher nicht `disable-model-invocation: true`. Das ist
+   eine bewusste Bedienentscheidung: Dateiauswahl, Stapelbestätigung, Bildentfernung
+   und Löschung bleiben trotzdem durch lokale beziehungsweise ausdrückliche
+   Bestätigungsschranken geschützt. Fehlt `privacy_status`, stoppt der Ablauf ohne
+   Dateizugriff.
 
 ## Zweites Expertenreview und Hardening
 
@@ -74,7 +84,7 @@ folgenden technischen Änderungen:
 
 ## Bewusst verbleibende Grenzen
 
-- Ein echter Modell-/UI-Abnahmelauf mit installiertem RC29 bleibt erforderlich; die
+- Ein echter Modell-/UI-Abnahmelauf mit installiertem RC30 bleibt erforderlich; die
   automatisierten Tests beweisen nicht, dass jede Claude-Version den Skill identisch
   ausführt.
 - Mehrdeutige Zertifikats-/Organisationsstellen stoppen im Standardablauf. Ein einfacher,

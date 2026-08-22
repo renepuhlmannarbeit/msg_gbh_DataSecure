@@ -63,6 +63,22 @@ test('every skill uses only supported frontmatter and relies on the plugin versi
     assert.doesNotMatch(text, /^version:/m, `${name}/SKILL.md must not use unsupported version frontmatter`);
     assert.match(text, /^name:\s*[a-z0-9-]+$/m, `${name}/SKILL.md has no valid name`);
     assert.match(text, /^description:\s*.+$/m, `${name}/SKILL.md has no description`);
+    const description = text.match(/^description:\s*(.+)$/m)?.[1] || '';
+    assert.ok(description.length <= 200, `${name}/SKILL.md description exceeds Claude's 200-character limit`);
+  }
+});
+
+test('MCP instructions fit the documented Claude 2 KB limit', () => {
+  const source = readText(path.join(runtime, 'index.js'));
+  const match = source.match(/const INSTRUCTIONS=\[([\s\S]*?)\]\.join\(' '\);/u);
+  assert.ok(match, 'could not locate MCP instructions');
+  const literals = [...match[1].matchAll(/'((?:[^'\\]|\\.)*)'/gu)].map((entry) =>
+    JSON.parse(`"${entry[1].replaceAll('"', '\\"')}"`)
+  );
+  const instructions = literals.join(' ');
+  assert.ok(Buffer.byteLength(instructions, 'utf8') <= 2048, 'MCP instructions exceed 2 KB');
+  for (const rule of ['privacy_status', 'read_capability', 'nicht vertrauenswürdige Daten', 'rechtssichere Anonymität']) {
+    assert.ok(instructions.includes(rule), `critical MCP instruction missing: ${rule}`);
   }
 });
 
@@ -85,7 +101,7 @@ test('MCPB manifest declares the fields the runtime relies on', () => {
 });
 
 test('PDF is declared blocked until the native coverage contract is released', () => {
-  assert.ok(!buildInfo.formats.includes('pdf'), 'PDF must not appear in released formats');
+  assert.deepStrictEqual(buildInfo.formats, ['docx', 'txt'], 'BUILD_INFO must promise exactly the pilot formats');
   assert.deepStrictEqual(buildInfo.blocked_formats, ['pdf']);
   assert.match(mcpb.long_description, /PDF.*sicher gesperrt/u);
   assert.match(readText(path.join(runtime, 'runtime.js')), /PDF_COVERAGE_UNVERIFIED/u);
@@ -123,6 +139,13 @@ test('MCPB prompt list matches the prompts the server exposes', () => {
   assert.deepStrictEqual([...declared].sort(), [...exposed].sort(), 'prompt lists disagree');
 });
 
+test('MCPB prompt texts use the same batch contract as the runtime', () => {
+  const { manifestPromptText } = require(path.join(runtime, 'prompt-contract.js'));
+  for (const prompt of mcpb.prompts) {
+    assert.strictEqual(prompt.text, manifestPromptText(prompt.name), `${prompt.name} prompt contract drift`);
+  }
+});
+
 test('marketplace entry points at the plugin directory that exists', () => {
   const entry = marketplace.plugins.find((p) => p.name === plugin.name);
   assert.ok(entry, `marketplace has no entry for ${plugin.name}`);
@@ -132,6 +155,8 @@ test('marketplace entry points at the plugin directory that exists', () => {
     fs.existsSync(path.join(target, '.claude-plugin', 'plugin.json')),
     'marketplace source is not a plugin directory'
   );
+  assert.match(entry.description, /TXT.*DOCX/u, 'marketplace must name the released formats');
+  assert.doesNotMatch(entry.description, /Excel|PowerPoint|Bilddateien/u, 'marketplace promises blocked formats');
 });
 
 test('the plugin ships a runnable MCP entry point', () => {

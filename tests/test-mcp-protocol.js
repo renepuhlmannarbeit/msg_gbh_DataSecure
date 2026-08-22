@@ -125,18 +125,15 @@ async function main() {
     assert.match(instructions, /purge_local_data/);
     assert.match(instructions, /ausdrücklich genannten Umfang und eine ausdrückliche Bestätigung/i);
     assert.match(instructions, /confirmed=true/);
-    assert.match(instructions, /Verarbeitete Originale/);
-    assert.match(instructions, /retention_days=0/);
-    assert.match(instructions, /kein visuelles Freigabewerkzeug/i);
-    assert.match(instructions, /vom Modell gesteuerter Wahrheitswert keine menschliche Handlung belegt/i);
-    assert.match(instructions, /metadatenbasierter Audit-Nachweis bleibt absichtlich/i);
-    assert.match(instructions, /ohne Dokument-Hashes, exakte Dateigrößen, Pfade, Dateinamen oder Rohwerte/i);
+    assert.match(instructions, /Aufbewahrung aus privacy_status/i);
+    assert.match(instructions, /Bildpixel bleiben immer lokal/i);
+    assert.match(instructions, /Audit enthält keine Rohwerte, Pfade, Dateinamen, exakten Größen oder Dokument-Hashes/i);
     assert.match(instructions, /nicht vertrauenswürdige Daten/i);
     assert.match(instructions, /keine rechtssichere Anonymität/i);
-    assert.match(instructions, /erlaubt kein automatisches Ranking/i);
-    assert.match(instructions, /Erkannter Bildtext darf/i);
-    assert.match(instructions, /ausdrücklich gewähltes Profil/i);
-    assert.match(instructions, /reine Bildinhalte vor der lokalen OCR/i);
+    assert.match(instructions, /erlaubt kein automatisches HR-Ranking/i);
+    assert.match(instructions, /Erkannter Bildtext benötigt dieselbe Textprüfung/i);
+    assert.match(instructions, /Nutze nur TXT\/DOCX/i);
+    assert.ok(Buffer.byteLength(instructions, 'utf8') <= 2048, 'Claude truncates MCP instructions above 2 KB');
   });
 
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {

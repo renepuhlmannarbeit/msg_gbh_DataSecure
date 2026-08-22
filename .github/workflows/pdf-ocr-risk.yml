@@ -1,0 +1,64 @@
+name: PDF and OCR three-platform risk preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  attestations: read
+  contents: read
+
+concurrency:
+  group: pdf-ocr-risk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Risk preflight (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-13, macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.13.0'
+      - name: Validate target pins and emit non-release evidence
+        shell: bash
+        run: node scripts/pdf-ocr-risk.mjs --platform-preflight > pdf-ocr-risk-preflight.json
+      - name: Prove current product remains fail-closed
+        run: node tests/test-capability-contract.js
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pdf-ocr-risk-preflight-${{ matrix.os }}-${{ github.sha }}
+          path: pdf-ocr-risk-preflight.json
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-community-spike:
+    name: Existing Windows community-binary negative gate
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.13.0'
+      - name: Run pinned spike; it must remain NO-GO
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node scripts/pdfium-spike.mjs --run | Tee-Object -FilePath pdfium-community-spike.json
+          $evidence = Get-Content -Raw -LiteralPath pdfium-community-spike.json | ConvertFrom-Json
+          if ($evidence.release_decision -ne 'no_go') { throw 'Community PDFium spike became releasable.' }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pdfium-community-spike-${{ github.sha }}
+          path: pdfium-community-spike.json
+          if-no-files-found: error
+          retention-days: 14

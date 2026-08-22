@@ -1,5 +1,9 @@
 # Zielarchitektur: Claude Plugin + lokaler Privacy MCP
 
+> **Historische Zielarchitektur:** Für aktuelle Produktentscheidungen, Grenzen und
+> Prioritäten gelten [canonical/PRODUCT.md](canonical/PRODUCT.md) und
+> [canonical/BACKLOG.md](canonical/BACKLOG.md).
+
 ## Entscheidung
 
 Für den vorgesehenen Einsatz wird das Produkt als **Claude Plugin** gedacht, nicht nur als nackte Desktop Extension.

@@ -86,6 +86,7 @@ for (const rel of [
   if (!fs.existsSync(file)) continue;
   const current = fs.readFileSync(file, 'utf8');
   const next = current
+    .replaceAll(previous, target)
     .replaceAll(releaseLabel(previous), releaseLabel(target))
     .replaceAll(rcLabel(previous), rcLabel(target));
   writeIfChanged(rel, next);

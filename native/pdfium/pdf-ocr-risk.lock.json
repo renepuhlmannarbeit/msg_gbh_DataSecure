@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "purpose": "bl-023.1-risk-proof-only",
+  "release_enabled": false,
+  "pdf": {
+    "engine": "pdfium",
+    "repository": "https://pdfium.googlesource.com/pdfium",
+    "commit": "acf52a0b01420c97ed1005ae171edd63bd4701bd",
+    "build": {
+      "is_debug": false,
+      "is_component_build": false,
+      "pdf_enable_v8": false,
+      "pdf_enable_xfa": false,
+      "use_system_libs": false
+    }
+  },
+  "ocr_candidate": {
+    "engine": "tesseract",
+    "repository": "https://github.com/tesseract-ocr/tesseract",
+    "tag": "5.5.2",
+    "commit": "9c516f4c6dc5b3a962dc7a2a39b5c3e21ce27466",
+    "license": "Apache-2.0",
+    "models": {
+      "repository": "https://github.com/tesseract-ocr/tessdata_fast",
+      "tag": "4.1.0",
+      "commit": "a8ba5063ab8013372a20e300da0c97ee46b92b07",
+      "languages": ["deu", "eng"],
+      "engine_mode": "lstm-only"
+    }
+  },
+  "platforms": [
+    { "id": "windows-x64", "os": "win32", "arch": "x64" },
+    { "id": "macos-x64", "os": "darwin", "arch": "x64" },
+    { "id": "macos-arm64", "os": "darwin", "arch": "arm64" },
+    { "id": "linux-x64", "os": "linux", "arch": "x64" }
+  ],
+  "required_gates": [
+    "official-source-build",
+    "reproducible-package",
+    "no-manual-runtime-install",
+    "network-denial",
+    "text-unicode-object-coverage",
+    "forms-annotations-attachments-actions-encryption",
+    "scan-pdf-ocr-deu-eng-mixed",
+    "resource-limits",
+    "fuzz-sanitizer-adversarial",
+    "license-sbom",
+    "fresh-zip-marketplace"
+  ]
+}

@@ -1,5 +1,9 @@
 # Produkt- und Architekturentscheidung vNext
 
+> **Historische Architekturgrundlage:** Neuere verbindliche Entscheidungen stehen im
+> [kanonischen Entscheidungsregister](canonical/DECISIONS.md). Insbesondere sind eine
+> Signierungspflicht und frühere Mengen-/Formatgrenzen nicht mehr das Ziel.
+
 Stand: 21.08.2026
 Status: angenommen für die schrittweise Modernisierung
 

@@ -62,6 +62,10 @@ Do not mark a build production-ready until all of these hold:
 - [ ] `npm run version:sync` reports "all files already in sync"
 - [ ] packaged ZIP and MCPB answer `initialize` and report `windows_job_object` for
       both parser and visual boundary (CI verifies this)
+- [ ] `claude plugin validate ./plugins/data-secure --strict` and
+      `claude plugin validate . --strict` pass with the Claude CLI version recorded
+      in the release evidence; until an official stable CI validator is pinned, this
+      remains an explicit release-workstation gate
 - [ ] the extracted plugin ZIP passes `npm run test:plugin-zip`: German skill
       contracts, the 150-case contract matrix and preservation controls are green
 - [ ] every model offered in the pilot passes all 20 cases from

@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "eu-privacy-document-gateway",
   "display_name": "GBH DataSecure – Dokumente anonymisieren",
-  "version": "3.2.0-rc29",
+  "version": "3.2.0-rc30",
   "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway für Windows, macOS und Linux: gebundene TXT-/DOCX-Stapel und verifiziertes Markdown.",
   "long_description": "Plattformneutrale Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind gebündelt; beim Anwender wird kein npm/Python installiert. Der Server bindet 1–25 bestätigte TXT-/DOCX-Dateien an einen lokalen Snapshot und verarbeitet jede Position höchstens einmal; PDF bleibt sicher gesperrt und alle weiteren Formate stoppen im Pilot ebenfalls sicher. Windows x64 besitzt die vollständigere Job-Object- und Textreview-Grenze. macOS/Linux unterstützen den TXT-/DOCX-Textpfad mit Node Permission Model und stoppen bei visuellen oder manuellen Mehrdeutigkeiten sicher. Direkte Identifikatoren werden entfernt; fachliche Skills, Rollen, Zertifizierungen und Geschäftszeiträume sollen erhalten bleiben. Alle Bildpixel bleiben lokal. Claude kann freigegebenes Markdown nur mit einer kurzlebigen paketgebundenen Leseberechtigung desselben Laufs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {
@@ -117,35 +117,35 @@
   "prompts": [
     {
       "name": "anonymize_customer",
-      "description": "Nächstes Kundendokument als Privacy-Paket verarbeiten.",
+      "description": "Bestätigte Kundendokumente als Privacy-Pakete verarbeiten.",
       "arguments": [
         "task"
       ],
-      "text": "Verarbeite das nächste lokale Kundendokument datenschutzfreundlich und verwende anschließend nur freigegebene Paketdaten. Aufgabe: ${arguments.task}"
+      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=customer) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     },
     {
       "name": "anonymize_applicant",
-      "description": "Nächste Bewerbung als Privacy-Paket verarbeiten.",
+      "description": "Bestätigte Bewerbungen als Privacy-Pakete verarbeiten.",
       "arguments": [
         "task"
       ],
-      "text": "Verarbeite die nächste lokale Bewerbung datenschutzfreundlich. Verwende nur freigegebene Paketdaten und führe kein unfreigegebenes Ranking/Scoring durch. Aufgabe: ${arguments.task}"
+      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=applicant) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     },
     {
       "name": "anonymize_personnel_profile",
-      "description": "Nächstes Mitarbeiter-/Beraterprofil datenschutzfreundlich verarbeiten.",
+      "description": "Bestätigte Mitarbeiter-/Beraterprofile als Privacy-Pakete verarbeiten.",
       "arguments": [
         "task"
       ],
-      "text": "Verarbeite das nächste lokale Mitarbeiter-/Beraterprofil. Verwende nur freigegebene Paketdaten; Zweck und mögliche Annex-III-Beschäftigungsrelevanz separat klassifizieren. Aufgabe: ${arguments.task}"
+      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=personnel_profile) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     },
     {
       "name": "anonymize_contract",
-      "description": "Nächsten Vertrag als Privacy-Paket verarbeiten.",
+      "description": "Bestätigte Verträge als Privacy-Pakete verarbeiten.",
       "arguments": [
         "task"
       ],
-      "text": "Verarbeite den nächsten lokalen Vertrag datenschutzfreundlich und verwende anschließend nur freigegebene Paketdaten. Aufgabe: ${arguments.task}"
+      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=contract) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     }
   ],
   "keywords": [

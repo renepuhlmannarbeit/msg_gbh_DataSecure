@@ -1,6 +1,6 @@
 {
-  "version": "3.2.0-rc29",
-  "build_date": "2026-08-21",
+  "version": "3.2.0-rc30",
+  "build_date": "2026-08-22",
   "target": "Claude Desktop Windows x64 / MCPB manifest 0.4",
   "runtime": "bundled Node.js core plus native Job Object launcher with statically linked MSVC CRT; no npm/Python runtime install",
   "native_toolchain": "MSVC 19.50.35725 / VC Tools 14.50.35717 / Windows SDK 10.0.26100.0",
@@ -15,14 +15,7 @@
   ],
   "formats": [
     "docx",
-    "xlsx",
-    "pptx",
-    "txt",
-    "md",
-    "csv",
-    "png",
-    "jpeg",
-    "bmp"
+    "txt"
   ],
   "blocked_formats": [
     "pdf"

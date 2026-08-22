@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "contract": "target-only-not-runtime",
+  "product": "GBH DataSecure",
+  "baseline": "3.2.0-rc30",
+  "decision_ids": [
+    "DS-001", "DS-002", "DS-003", "DS-004", "DS-005", "DS-006",
+    "DS-007", "DS-008", "DS-009", "DS-010", "DS-011", "DS-012",
+    "DS-013", "DS-014", "DS-015", "DS-016", "DS-017", "DS-018",
+    "DS-019", "DS-020", "DS-021", "DS-022", "DS-023", "DS-024",
+    "DS-025", "DS-026", "DS-027", "DS-028", "DS-029", "DS-030",
+    "DS-031", "DS-032", "DS-033", "DS-034", "DS-035", "DS-036",
+    "DS-037"
+  ],
+  "primary_product": "claude-plugin",
+  "distribution": {
+    "equivalent_primary_channels": ["zip", "private-marketplace"],
+    "engineering_fallback": "mcpb"
+  },
+  "surfaces": {
+    "local_original_processing": ["claude-desktop", "claude-code"],
+    "clean-results-only": ["web", "mobile"]
+  },
+  "platforms": ["windows", "macos", "linux"],
+  "manual_runtime_installation": [],
+  "visible_skills": [
+    "gbh-datasecure-dokument-anonymisieren",
+    "gbh-datasecure-datenschutz-erklaeren"
+  ],
+  "formats": [
+    { "id": "txt", "extensions": [".txt"] },
+    { "id": "markdown", "extensions": [".md", ".markdown"] },
+    { "id": "docx", "extensions": [".docx"] },
+    { "id": "pdf", "extensions": [".pdf"], "includes": ["scan-pdf"] },
+    { "id": "xlsx", "extensions": [".xlsx"] },
+    { "id": "pptx", "extensions": [".pptx"] },
+    { "id": "csv", "extensions": [".csv"] },
+    { "id": "png", "extensions": [".png"] },
+    { "id": "jpeg", "extensions": [".jpg", ".jpeg"] },
+    { "id": "bmp", "extensions": [".bmp"] }
+  ],
+  "batch": {
+    "maximum_files": 100,
+    "maximum_total_bytes": 524288000,
+    "maximum_pages_slides_or_sheets": null,
+    "maximum_active_batches": 1,
+    "resume_after_restart": true,
+    "mixed_document_types": true,
+    "profile_selection": "automatic-per-file"
+  },
+  "working_copies": {
+    "originals_unchanged": true,
+    "successful_copy_retention_days": 0,
+    "open_copy_maximum_retention_days": 14
+  },
+  "output": {
+    "one_markdown_per_source": true,
+    "neutral_filenames": true,
+    "persistent_mapping_csv": true,
+    "persistent_receipt_json": true,
+    "mapping_visible_to_mcp": false,
+    "image_pixels_visible_to_model": false
+  },
+  "processing": {
+    "network_access": false,
+    "ocr_languages": ["de", "en"],
+    "single_bundled_completion_dialog": true,
+    "password_storage": "memory-only",
+    "pseudonym_scope": "batch"
+  },
+  "quality_gate": {
+    "minimum_synthetic_documents": 1000,
+    "maximum_missed_direct_identifiers": 0,
+    "minimum_professional_content_preservation_ratio": 0.99,
+    "fresh_installation_channels": ["zip", "private-marketplace"],
+    "fresh_installation_platforms": ["windows", "macos", "linux"]
+  }
+}

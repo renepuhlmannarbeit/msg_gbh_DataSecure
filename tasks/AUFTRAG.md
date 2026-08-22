@@ -1,5 +1,9 @@
 # Review-Auftrag für Claude — DataSecure 3.2.0 RC8
 
+> **Nicht aktiv / historisch:** Dieser RC8-Auftrag bleibt nur als alter
+> Übergabestand erhalten. Aktive Arbeit wird ausschließlich aus
+> [`docs/canonical/BACKLOG.md`](../docs/canonical/BACKLOG.md) abgeleitet.
+
 Bitte den aktuellen Stand auf `main` unabhängig prüfen. Keine Produktivdaten
 verwenden; ausschließlich die synthetischen Repository-Fixtures.
 

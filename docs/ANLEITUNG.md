@@ -3,18 +3,20 @@
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
 Windows 10/11 x64 sowie macOS/Linux-Textpfad · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC29 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC30 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
-> signierten lokalen Companions, bestandenem Installationstest und dokumentierter
+> lokalen Companions, bestandenem Installationstest und dokumentierter
 > Pilotfreigabe. Die lokale TXT-/DOCX-Review-Aktion ist technisch umgesetzt; die
-> visuelle Human-Presence-Freigabe und Codesignatur fehlen noch.
+> vollständige visuelle Human-Presence- und Plattformabnahme fehlt noch. Eine
+> Signatur oder Zertifizierung ist keine Voraussetzung.
 
 > **Plattformstatus:** Windows x64 besitzt derzeit die vollständigere lokale
 > Prüfoberfläche und Bildverarbeitung. Auf macOS/Linux ist TXT/DOCX textbasiert
-> nutzbar; Bilder bleiben lokal oder werden auf Wunsch entfernt, und Fälle mit
-> notwendiger manueller Mehrdeutigkeitsentscheidung stoppen sicher. Es ist keine
-> zusätzliche Python-, Node- oder npm-Installation nötig.
+> vorgesehen; Bilder bleiben lokal oder werden auf Wunsch entfernt, und Fälle mit
+> notwendiger manueller Mehrdeutigkeitsentscheidung stoppen sicher. Der Plugin-ZIP
+> benötigt eine nachgewiesene Node-22.13+-Auflösung; nur beim MCPB dokumentiert
+> Anthropic eine eingebaute Node-Runtime. Installieren Sie keine Laufzeit selbst.
 
 ---
 
@@ -230,8 +232,10 @@ Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Ein 
 Versuch der gestoppten Datei erfolgt erst auf Ihren ausdrücklichen Auftrag.
 
 Windows x64 besitzt die vollständigere Engineering-Grenze. macOS und Linux verwenden
-für TXT/DOCX den gebündelten Node-Textpfad ohne Zusatzinstallation und stoppen bei
-Bildern oder manuellen Mehrdeutigkeiten sicher. Windows ARM64 bleibt noch gesperrt.
+für TXT/DOCX den Node-Textpfad und stoppen bei Bildern oder manuellen Mehrdeutigkeiten
+sicher. Ob die benötigte Node-Runtime vom jeweiligen Installationsartefakt und
+Claude-Desktop-Build zuverlässig bereitgestellt wird, muss auf jeder Zielplattform
+noch in einer frischen Installation abgenommen werden. Windows ARM64 bleibt gesperrt.
 
 ### Nach der Verarbeitung
 
@@ -331,7 +335,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC29 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC30 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

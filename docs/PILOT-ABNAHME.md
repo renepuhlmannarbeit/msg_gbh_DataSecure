@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC29 · ausschließlich synthetische Daten
+Version 3.2.0 RC30 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC29 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC30 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -122,7 +122,7 @@ PPTX, MD, CSV, PNG, JPEG, BMP und PDF dienen als verpflichtende Stop-Gegenproben
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC29 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC30 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz
@@ -182,7 +182,7 @@ Mit mindestens einer Person testen, die weder MCP noch Node/OCR/JSON kennt:
 - alle harten Sicherheits-, Installations-, Update-/Rollback- und Löschfälle `PASS`
   sind;
 - keine offene P0-Sicherheitslücke oder unklare Rohdatenübertragung existiert;
-- Artefakte signiert, mit SBOM und freigegebener Herkunft versehen sind;
+- Artefakte versioniert, mit SBOM und dokumentierter Prüfsumme abgelegt sind;
 - menschliche Usability-Abnahme bestanden ist;
 - Datenschutz und IT-Security den konkreten Zweck und Pilotumfang freigegeben haben.
 

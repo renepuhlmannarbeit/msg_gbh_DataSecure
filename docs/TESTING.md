@@ -21,7 +21,7 @@ file prints one line per case and exits non-zero on the first failure.
 
 | File | Cases | Covers |
 |---|---|---|
-| `test-manifest.js` | 16 | version consistency across package.json, MCPB manifest, plugin.json, VERSION, BUILD_INFO and all skills; pilot format contract; tool/prompt parity between manifest and server; marketplace target; plugin entry point and native build/package contracts; and that every test the npm script names exists |
+| `test-manifest.js` | 18 | version consistency across package.json, MCPB manifest, plugin.json, VERSION, BUILD_INFO and all skills; exact pilot format contract; tool/prompt parity between manifest and server; marketplace target; plugin entry point and native build/package contracts; and that every test the npm script names exists |
 | `test-plugin-structure.js` | – | plugin directory layout, skill frontmatter, MCP config, and mechanical coverage requiring every runtime tool to appear in agent guidance or a justified exception |
 | `test-skill-eval-corpus.js` | 8 | versioned set of 24 synthetic model-behavior scenarios covering triggering, non-triggering, queue confirmation, resumable single-file calls, safe image defaults, PDF refusal, partial results, current-run package binding and cleanup; this validates the evaluation contract, not a simulated Claude run |
 | `test-parsers.js` | 30 | DOCX/XLSX/PPTX text including nested DrawingML text boxes, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; Markdown table escaping; standalone PNG routing; legacy PDF parser adversarial coverage plus the mandatory `PDF_COVERAGE_UNVERIFIED` release gate; ZIP hardening including false sizes, aggregate limits and header consistency; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
@@ -144,10 +144,12 @@ Each of these corresponds to a defect found in 3.2.0-rc2:
 
 ## Platform coverage
 
-CI runs the suite on `ubuntu-latest` and `windows-latest`. Windows is the only
-supported runtime, so a Linux-only pipeline would not prove much; the visual
-bridge itself is stubbed in tests and still needs one manual acceptance run on a
-target machine with Windows OCR available.
+CI runs the suite on `windows-latest`, `macos-latest` and `ubuntu-latest`. Windows x64
+has the most complete engineering boundary; the TXT/DOCX text path is also intended
+for macOS and Linux. CI explicitly installs Node and therefore does not prove the
+installation-free Plugin-ZIP runtime. Automated tests also do not replace a fresh
+plugin/MCPB installation. Platform-neutral tests stub the visual bridge, which still
+requires manual acceptance on each target platform.
 
 ## Native Windows acceptance status
 

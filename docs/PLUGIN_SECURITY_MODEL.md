@@ -51,7 +51,9 @@ vertrauenswürdige Parser in einem kurzlebigen Node-Prozess mit dem seit Node 22
 stabilen Permission Model: nur die gebündelten Parserdateien sind lesbar; Netzwerk-,
 Kindprozess- und Worker-Berechtigungen werden nicht erteilt. Dieser Mechanismus ist
 Defense-in-depth und ausdrücklich keine Sandbox gegen bösartigen Code. Der SHA-Sidecar ist kein
-Authentizitätsnachweis; Codesignatur und geschützter Installationspfad bleiben Gate.
+Authentizitätsnachweis. Codesignatur ist keine Produktvoraussetzung; eine
+Herstelleridentität darf daraus nicht behauptet werden. Geschützte Installation und
+nachvollziehbare Artefaktablage bleiben technische Härtungsmaßnahmen.
 Der Launcher prüft mit `IsWow64Process2` zusätzlich die native Hostarchitektur und
 stoppt daher auch ein emuliertes x64-Node auf Windows ARM64 vor der Verarbeitung.
 Der Parent begrenzt zusätzlich Wallclock, V8-Heap und die Parserantwort auf 48 MiB und

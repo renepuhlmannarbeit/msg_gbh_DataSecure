@@ -1,5 +1,10 @@
 # Entwicklungsbacklog: DataSecure als einfaches Claude-Plugin
 
+> **Historischer RC30-Planungsstand:** Diese Datei bleibt als fachlicher
+> Entstehungsnachweis erhalten. Das einzige verbindliche Backlog steht unter
+> [canonical/BACKLOG.md](canonical/BACKLOG.md); bei Widersprüchen gilt das
+> [kanonische Dokumentensystem](canonical/README.md).
+
 Stand: 21.08.2026
 Status: Revalidiert nach UX-, Datenschutz-/Health-IT-, Security- und Architekturreview
 unter Einbezug der übertragbaren Provenienz-/Contract-Test-Ideen aus German-law-mcp
@@ -49,8 +54,9 @@ nur das freigegebene Privacy-Paket erreicht Claude
 | Oberfläche | Zielmodus | Sicherheitsbedingung |
 |---|---|---|
 | Claude Desktop Chat | Primärer Pilot | lokaler Companion/MCP verfügbar |
-| Claude Cowork | Skill/Erklärung und bereits bereinigte Outputs | lokaler MCP ist dort aktuell nicht verfügbar; niemals Rohdateien zur Vorverarbeitung hochladen |
-| Claude Web | Skill/Erklärung und bereits bereinigte Outputs | lokaler MCP ist dort aktuell nicht verfügbar; niemals Rohdateien zur Vorverarbeitung hochladen |
+| Claude Cowork Desktop | Lokaler Preflight nur bei sichtbarem `privacy_status` | im Zielbuild beobachtet; vor jeder Freigabe versionsspezifisch testen, niemals Upload-Fallback |
+| Claude Cowork Web/Mobil | Skill/Erklärung und bereits bereinigte Outputs | kein freigegebener lokaler Preflight; niemals Rohdateien zur Vorverarbeitung hochladen |
+| Claude Chat Web/Mobil | Skill/Erklärung und bereits bereinigte Outputs | kein freigegebener lokaler Preflight; niemals Rohdateien zur Vorverarbeitung hochladen |
 | Claude Code | Expertenmodus | Originale außerhalb des Workspace und der erlaubten Dateisystembereiche; MCP allein verhindert keinen direkten Shell-/Dateizugriff |
 
 Fehlt die lokale Fähigkeit, stoppt DataSecure mit einer klaren Anleitung. Es gibt
@@ -668,9 +674,11 @@ Die Planung stützt sich auf den am 21.08.2026 dokumentierten Claude-Stand:
   internen GitHub-Repository synchronisieren.
 - Organisations-Skills benötigen aktivierte Skills sowie Codeausführung/Dateierstellung;
   gruppenspezifische Skills sollen als Plugin verteilt werden.
-- Plugin-Skills sind in Claude Chat/Desktop und Cowork nutzbar. Lokale MCP-Server
-  stehen nach aktuellem Claude-Stand nur in Desktop und Claude Code zur Verfügung;
-  Web/Cowork sind deshalb kein Rohdaten-Preflight-Pfad.
+- Plugin-Skills sind in Claude Chat und Cowork nutzbar. Lokale MCP-Server benötigen
+  einen Claude-Desktop-Host oder Claude Code. Cowork Desktop funktionierte im
+  geprüften Zielbuild, bleibt aber versionsabhängig; maßgeblich ist stets, ob
+  `privacy_status` in der konkreten Unterhaltung verfügbar ist. Web/Mobil sind kein
+  Rohdaten-Preflight-Pfad.
 - Cowork-Connectoren erreichen externe Dienste über Anthropic-Infrastruktur und sind
   deshalb kein Ersatz für den lokalen Rohdaten-Gate.
 

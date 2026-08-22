@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC29 · Stand 22.08.2026
+Version 3.2.0 RC30 · Stand 22.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC29 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC30 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -17,18 +17,20 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC29 |
+| Artefakt | Ziel | Status RC30 |
 |---|---|---|
-| `DataSecure-Privacy-Gateway-v3.2.0-rc29.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
-| `DataSecure-Privacy-Preflight-v3.2.0-rc29.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc30.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc30.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
 Installationsherkunft.
 
-Plugin-Skills können auch in Web und Cowork erscheinen. Das macht den lokalen MCP
-dort nicht verfügbar: Der lokale Dateipfad ist aktuell auf Claude Desktop und Claude
-Code begrenzt. Web/Cowork dürfen keine Originaldatei für diesen Preflight erhalten.
+Plugin-Skills können in Chat und Cowork erscheinen. Der lokale Dateipfad funktioniert
+nur in einem Claude-Desktop-Host oder in Claude Code und nur, wenn `privacy_status`
+in der konkreten Unterhaltung verfügbar ist. Das wurde im Zielbuild auch in Cowork
+Desktop beobachtet, ist aber vor jeder Freigabe versionsspezifisch zu testen. Web und
+Mobil dürfen keine Originaldatei für diesen Preflight erhalten.
 
 ## 2. Voraussetzungen
 
@@ -152,7 +154,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC29 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC30 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.
@@ -164,8 +166,9 @@ abgeschlossen ist:
    erneut installieren.
 6. Keine Arbeitsdaten zwischen Versionen manuell kopieren oder Jobjournale verändern.
 
-Ein Produktionsrollout benötigt signierte Artefakte, SBOM, nachvollziehbare
-Prüfsummen, dokumentierte Herkunft und einen praktisch bestandenen Rollback.
+Ein Produktionsrollout benötigt versionierte und vollständig getestete Artefakte,
+SBOM, nachvollziehbare Prüfsummen und einen praktisch bestandenen Rollback. Eine
+Codesignatur ist keine Voraussetzung und darf nicht behauptet werden.
 
 ## 8. Support und Diagnose
 
@@ -205,7 +208,7 @@ informieren.
 Ein Pilot ist **No-Go**, solange mindestens einer dieser Punkte offen ist:
 
 - frische Installation, Upgrade und Rollback nicht bestanden;
-- Artefakte nicht signiert oder Herkunft nicht freigegeben;
+- Artefaktversion oder Prüfsumme stimmt nicht mit der freigegebenen Ablage überein;
 - visuelle, Parser- oder OCR-Unsicherheit kann durch Nutzer/Modell umgangen werden;
 - Echtdaten wären für Installation oder Abnahme nötig;
 - nur der normale Claude-Dateiupload statt des lokalen DataSecure-Wegs funktioniert;

@@ -129,4 +129,4 @@ Dokument-SHA-256 gebunden.
 3. Der kalibrierte Job-Object-Pfad für OCR/Raster ist in RC22 umgesetzt. Als Nächstes
    AppContainer ohne Netz-Capabilities sowie restriktive Temp-/Dateisystemgrenzen
    gegen Internet, DNS, RFC1918 und Loopback nachweisen.
-4. Codesignatur, Upgrade/Rollback und reale Plattformtests nachweisen.
+4. Upgrade/Rollback, Artefaktparität und reale Plattformtests nachweisen.
