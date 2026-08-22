@@ -336,8 +336,9 @@ Pixelpositionen, Deutsch/Englisch, Konfidenz- und Fail-closed-Regeln, gemeinsame
 Grenzwerte sowie elf inhaltsfreie Fehlercodes. Der Tesseract.js-Adapter fordert
 `blocks` ausdrücklich an und normalisiert die echte gemischtsprachige Probe; acht
 Positiv-/Negativtests decken leere Ergebnisse, niedrige Konfidenz, fehlende
-Positionen, ungültige Boxen und Pixelgrenzen ab. Offen vor Abschluss sind der
-Vier-Plattform-Nachweis dieses Vertrags und native harte macOS/Linux-RAM-/CPU-Grenzen.
+Positionen, ungültige Boxen und Pixelgrenzen ab. GitHub-Actions-Lauf `32596087930`
+bestätigt Vertrag, echte OCR und Negativtests auf Windows x64, macOS x64/ARM64 und
+Linux x64. Offen vor Abschluss sind native harte macOS/Linux-RAM-/CPU-Grenzen.
 
 #### BL-024.2 – OCR-Backends für Windows, macOS und Linux liefern
 

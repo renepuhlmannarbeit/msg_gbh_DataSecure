@@ -105,6 +105,7 @@ nachvollziehbar. `test-ocr-result-contract.mjs` prüft acht Positiv- und Negativ
 `test-architecture-contracts.js` verhindert das Entfernen von Blockanforderung,
 Schema, Konfidenz-/Reviewregeln und Workflowtest. Der echte lokale Windows-Pilot
 lieferte 14 positionierte Wörter, 95 Prozent mittlere Konfidenz und weiterhin
-`OCR_COVERAGE_UNVERIFIED`/`no_go`. Der Vier-Plattform-Lauf für diesen Commit sowie
-native harte macOS/Linux-RAM-/CPU-Grenzen fehlen noch, deshalb ist BL-024.1 nicht
-erledigt.
+`OCR_COVERAGE_UNVERIFIED`/`no_go`. GitHub-Actions-Lauf `32596087930` auf Commit
+`f53f5df` bestätigt Vertrag, echte OCR und Negativtests auf Windows x64, macOS
+x64/ARM64 und Linux x64. Native harte macOS/Linux-RAM-/CPU-Grenzen fehlen noch,
+deshalb ist BL-024.1 nicht erledigt.

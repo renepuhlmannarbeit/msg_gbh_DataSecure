@@ -166,9 +166,10 @@ Konfidenzen. Niedrige Konfidenz verwirft kein Wort; leere oder selbst perfekte O
 belegt keine Datenschutzfreigabe, und `requires_visual_review` bleibt in V1 immer
 aktiv. Die Grenzen stimmen mit den kleineren bestehenden Runtimegrenzen überein:
 25 MiB Eingabe, 30 Millionen Pixel, 5 Millionen Zeichen und 100.000 Wörter. Acht
-lokale Vertrags- und Negativtests bestehen. Vier-Plattform-CI für diesen neuen Stand
-und native harte macOS/Linux-Ressourcengrenzen stehen noch aus; BL-024.1 bleibt daher
-in Arbeit und der Produktpfad geschlossen.
+lokale Vertrags- und Negativtests bestehen. GitHub-Actions-Lauf `32596087930` auf
+`f53f5df` bestätigt Vertrag, echte gemischtsprachige OCR und Negativtests auf Windows
+x64, macOS x64/ARM64 und Linux x64. Native harte macOS/Linux-Ressourcengrenzen stehen
+noch aus; BL-024.1 bleibt daher in Arbeit und der Produktpfad geschlossen.
 
 ## BL-030 – Stapelweite Entitätsauflösung
 
