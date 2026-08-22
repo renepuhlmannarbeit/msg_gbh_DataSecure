@@ -5,6 +5,7 @@ npm test                # the whole suite
 npm run test:golden     # regenerate the golden expected output after an intended change
 npm run test:windows-visual # real Windows OCR/redaction acceptance (Windows only)
 npm run test:skills     # local German skill/contract acceptance
+npm run benchmark:detectors # aggregate detector quality on the synthetic ground truth
 npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
 ```
 
@@ -24,6 +25,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-pii-regression.js` | 73 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, explicit-versus-ambiguous credential context, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, lower-case legal brands including terminal punctuation, internal connectors, bounded party clauses, ordinal metadata guards and common contractual abbreviations, occurrence-scoped organisation/person overlap and connector false-positive guards, project-prose disambiguation, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
 | `test-contract-skill-acceptance.js` | 12 | both shipped German skill contracts plus ten invented service contracts with twenty public company-name tokens; identifiers must disappear while service, amount, term, termination and certification content survive; `test:plugin-zip` repeats the same acceptance against the extracted release ZIP |
 | `test-contract-skill-matrix.js` | 150 | deterministic combinations of 30 public company-name tokens, 30 invented people, ten invented addresses and six contract layouts; parties, people, contact, bank and reference data must disappear while business and certification content survives; the built-ZIP check repeats the matrix against the shipped runtime |
+| `test-detector-benchmark.js` | 2 | neutral ground-truth evaluation over the same 150 cases: aggregate and per-type precision/recall/F1, severity-weighted misses and explicit content-preservation controls; a negative control proves that extra redaction is penalized |
 | `test-credential-catalog.js` | 9 | deterministic offline catalog schema, aliases, context separation, optional verified references and unknown-certification preservation |
 | `test-image-sanitizer.js` | 20 | PNG/BMP round trips, bounded PNG decompression and chunk lengths, metadata stripping, refusal of unsupported variants, OCR offset mapping, pixel-level redaction with padding and clamping |
 | `test-windows-visual.js` | 10 | mandatory verified Job Object launcher without PowerShell fallback, secret-free environment, native status/resource mapping, console limits, race-safe confirmed process-tree termination, fixed errors and bounded OCR schema |
@@ -43,7 +45,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 | `test-sarif-check.mjs` | 4 | fail-closed local CodeQL report parsing without leaking finding messages into the release-gate output |
 
-Total: 554 assertion-level cases plus the plugin structure check (**555 checks overall**).
+Total: 556 assertion-level cases plus the plugin structure check (**557 checks overall**).
 
 The Windows CI additionally runs `test:windows-visual`: a synthetic scan passes through
 the real Job Object, Windows OCR, pixel redaction and verification OCR; malformed EMF

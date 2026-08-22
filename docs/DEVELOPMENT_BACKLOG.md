@@ -447,11 +447,15 @@ Formatklasse, Review/Skip und Support-ID.
 
 ### DS-201 – Unabhängiger Detektor-Benchmark (M)
 
-**Stand RC23:** Eine deterministische 150-Fall-Matrix variiert Unternehmen,
-erfundene Personen, Anschriften und sechs Vertragslayouts. Das folgt dem sinnvollen
-Prinzip templatebasierter synthetischer Evaluationsdaten aus `presidio-research`,
-ohne dessen Python-/Modellabhängigkeiten in das Produkt zu übernehmen. Die Recherche
-hat außerdem `@doccloak/core` (Apache-2.0, lokale Regex-/optionale ONNX-Pipeline),
+**Stand RC23 – Baseline umgesetzt:** Eine deterministische 150-Fall-Matrix ist nun ein
+versionierter Ground-Truth-Korpus mit 1.950 sensitiven Entitäten und 900 expliziten
+Erhaltungskontrollen. Der neutrale Adaptervertrag und die Auswertung messen Precision,
+Recall, F1, schweregewichtete False Negatives, Inhaltsverlust und Laufzeit. Die aktuelle
+DataSecure-Baseline erreicht auf diesem synthetischen Korpus jeweils 1,0 für Precision,
+Recall, F1 und Erhaltung. Das ist eine Regressionsaussage für den Korpus, keine allgemeine
+Genauigkeitszusage. Details und reproduzierbarer Befehl: [DETECTOR_BENCHMARK.md](DETECTOR_BENCHMARK.md).
+
+Die Recherche hat `@doccloak/core` (Apache-2.0, lokale Regex-/optionale ONNX-Pipeline),
 Presidio sowie den GLiNER-basierten `maskeringsscript` als Benchmark-Kandidaten
 bestätigt. Sie werden zunächst nur als getrennte Test-Orakel bewertet; ihre Treffer
 dürfen weder automatisch veröffentlicht noch die bestehende lokale Prüfung umgehen.
@@ -463,9 +467,10 @@ Quellen für den Spike:
 - <https://github.com/microsoft/presidio>
 - <https://github.com/MinBZK/maskeringsscript>
 
-**Ergebnis:** Bestehende Regeln werden auf demselben versionierten deutschen Testkorpus
-gegen GLiNER-, Presidio- und PII-Shield-Ansätze verglichen. Kein Backend wird allein
-wegen seiner Trefferzahl zum Produktstandard.
+**Nächste Entscheidung:** Zuerst wird der reine Regex-Pfad von DocCloak.Core in einer
+isolierten, fest gepinnten Testumgebung gegen denselben Korpus gemessen. Danach folgen
+Presidio und erst nach Lizenz-, Hash-, Sicherheits- und Größenprüfung optionale
+GLiNER/ONNX-Artefakte. Kein Backend wird allein wegen seiner Trefferzahl zum Produktstandard.
 
 **Abnahme:**
 
@@ -478,6 +483,8 @@ wegen seiner Trefferzahl zum Produktstandard.
   Laufzeitdownloads oder Netzaufrufe während einer Dokumentverarbeitung sind verboten.
 - Eine zusätzliche Engine verändert nicht die Skills: Für Anwender bleibt genau ein
   Einstieg, Auswahl und Kombination der Detektoren liegen vollständig im lokalen Runtime-Pfad.
+- Übernahme nur, wenn schweregewichtete False Negatives sinken, ohne Inhaltsverlust,
+  Paketabhängigkeiten, Netzbedarf oder schwächere Fail-Closed-Gates zu verursachen.
 
 ### DS-201a – Lokale Review-Oberfläche als MCP-App-Spike (M)
 

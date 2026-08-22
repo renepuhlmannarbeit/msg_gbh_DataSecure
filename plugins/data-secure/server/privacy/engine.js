@@ -400,8 +400,11 @@ function sensitiveSpans(text, profile = 'general') {
 
   for (const seed of collectPersonSeeds(src, profile)) {
     for (const span of findLiteralSpans(src, seed.value, '', 'PERSON', PRIORITY.PERSON)) {
-      if(inCredentialContext(src,span.start,span.end,credentialRanges) &&
-         sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)) continue;
+      // Keep OCR/image span classification aligned with the text engine: a
+      // name-shaped substring inside a longer legal-form organisation is not
+      // a second person finding. A separate occurrence outside that company
+      // span remains detectable as a person.
+      if (sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)) continue;
       add('PERSON', span.start, span.end, span.text);
     }
   }
