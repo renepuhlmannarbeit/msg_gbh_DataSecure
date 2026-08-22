@@ -370,9 +370,10 @@ native Supervisoren sind inzwischen installationsfrei pro Zielarchitektur gebün
 die Story bleibt bis zur vollständigen Integration und Abnahme im echten Pluginpfad
 offen.
 
-Nächster Schnitt: die geprüften Zielbundles in eine universelle oder nachweislich
-gleichwertige plattformspezifische Plugin-Auslieferung übernehmen. Erst frische ZIP-
-und Marketplace-Installationen dürfen den Pfad nach den Coverage-Gates freigeben.
+Der geprüfte Universal-V2-Baustein ist nun im kanonischen Pluginbaum eingebettet.
+ZIP und Marketplace verwenden damit dieselben Bytes ohne manuelle Runtime-
+Installation. Erst frische ZIP- und Marketplace-Installationen dürfen den Pfad nach
+den Coverage-Gates freigeben; das eingebettete Manifest bleibt bis dahin gesperrt.
 
 Umsetzung in Prüfung: `build-ocr-runtime.mjs` erzeugt pro Zielarchitektur ein
 hashinventarisiertes, weiterhin gesperrtes Bundle aus Tesseract.js, 13 tatsächlichen
@@ -384,12 +385,12 @@ lokal. Lauf `32597030060` auf `7427b3c` belegt Build, statische Prüfung und ech
 Offline-OCR-
 Smoke-Test derselben Bündel auf Windows x64, macOS x64/ARM64 und Linux x64. Für das
 einzige Paket ohne mitgelieferte Lizenzdatei (`tr46@0.0.3`) liegt ein exakt
-versionsgebundener, vollständiger MIT-Text mit Herkunftshinweis vor. Offen sind der
-Plugin-Bundle-Builder, frische ZIP-/Marketplace-Installationen und die nachfolgenden
-Coverage-Gates. Der Produktadapter `portable-ocr.js` ist bereits integriert, prüft
+versionsgebundener, vollständiger MIT-Text mit Herkunftshinweis vor. Offen sind
+frische ZIP-/Marketplace-Installationen und die nachfolgenden Coverage-Gates. Der
+Produktadapter `portable-ocr.js` ist bereits integriert, prüft
 Zielplattform, vollständiges Dateiinventar und SHA-256 jedes Bundle-Bestandteils und
-startet nur bei `release_enabled: true`; der aktuelle Pluginbaum enthält bewusst kein
-freigegebenes OCR-Bundle und behält damit das bisherige Verhalten.
+startet nur bei `release_enabled: true`; der aktuelle Pluginbaum enthält das Bundle
+bewusst nur mit `release_enabled: false` und behält damit das bisherige Verhalten.
 
 Gefundener Paketierungsdefekt: Der erste Artefaktlauf ließ standardmäßig versteckte
 npm-Dateien aus, obwohl sie im Bundle-Manifest inventarisiert waren. Der Universal-
@@ -405,18 +406,22 @@ gemeinsame Bytes stoppen auch dann, wenn ein einzelnes Quellmanifest passend neu
 gehasht wurde. Lauf `32597783210` lädt die vier Artefakte erneut herunter,
 assembliert, prüft und führt auf Linux echten Offline-OCR aus. Das erneut lokal
 heruntergeladene Universal-Artefakt umfasst 244 inventarisierte Dateien und
-57.592.942 Bytes. Nächster Schnitt ist die Einbettung dieses weiterhin gesperrten
-V2-Bundles in den echten Plugin-ZIP-/Marketplace-Build einschließlich POSIX-
-Ausführungsmodus.
+57.592.942 Bytes. Die Herkunft ist im Pluginbaum mit Workflow-Lauf, Commit und
+Manifest-SHA dauerhaft festgehalten.
 
-Lokaler Paketierungsschnitt: `build-portable-plugin.mjs` kopiert den kanonischen
-Pluginbaum und das vollständig geprüfte V2-Bundle nur in eine flüchtige Staging-
-Struktur. Der erzeugte Engineering-ZIP enthält 319 Einträge, ist rund 22,0 MB groß
-und bleibt mit deaktiviertem OCR-Gate eindeutig nicht freigegeben.
+Lokaler Paketierungsschnitt: `build-portable-plugin.mjs` kopierte den kanonischen
+Pluginbaum und das vollständig geprüfte V2-Bundle zunächst in eine flüchtige
+Staging-Struktur. Der erzeugte Engineering-ZIP enthielt 319 Einträge, war rund
+22,0 MB groß und blieb mit deaktiviertem OCR-Gate eindeutig nicht freigegeben.
 `verify-portable-plugin-zip.mjs` prüft Plugin-Quellparität, jedes Runtime-Byte und die
-POSIX-Ausführungsmodi. Der ZIP-Writer schreibt deterministische Unix-Modi; der
-Cloud-Folgejob baut zweimal bytegleich und prüft nach echter `unzip`-Extraktion alle
-drei POSIX-Launcher. Dieser Plattformnachweis steht noch aus.
+POSIX-Ausführungsmodi. Der normale Plugin-Build validiert nun die eingebetteten 244
+Runtime-Dateien samt Herkunftsnachweis und erzeugt aus derselben Marketplace-Quelle
+320 Einträge, 22.033.607 Bytes und SHA-256
+`6d3883745cfb01f444fecfcfffe77e7515eac0cf84c81e009420a4c07f2b5cf3`.
+Der ZIP-Writer schreibt deterministische Unix-Modi. Der vorgesehene Cloud-Folgejob
+`32598196806` startete wegen eines GitHub-Abrechnungs-/Ausgabenlimits nicht; der
+Cloud-Doppelbuild und die echte `unzip`-Prüfung aller drei POSIX-Launcher bleiben
+daher als externer Abnahmenachweis offen.
 
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 

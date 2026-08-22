@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
+import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -25,6 +26,21 @@ if (!fs.existsSync(entryPoint)) throw new Error('plugin runtime entry point miss
 const nativeLauncher = path.join(pluginDir, 'server', 'native', 'windows-x64', 'datasecure-sandbox.exe');
 const nativeChecksum = `${nativeLauncher.slice(0, -4)}.sha256`;
 verifyNativeArtifact(nativeLauncher, nativeChecksum);
+const portableOcr = path.join(pluginDir, 'server', 'ocr-runtime');
+if (!fs.existsSync(portableOcr)) throw new Error('vendored OCR runtime missing');
+const ocrEvidence = validateUniversalRuntime(portableOcr, { releaseEnabled: false });
+const provenance = JSON.parse(fs.readFileSync(path.join(pluginDir, 'server',
+  'ocr-runtime.provenance.json'), 'utf8'));
+if (provenance.schema !== 'data-secure-vendored-ocr-provenance/v1' ||
+  provenance.bundle_manifest_sha256 !== ocrEvidence.manifestSha256 ||
+  provenance.files !== ocrEvidence.files || provenance.bytes !== ocrEvidence.bytes ||
+  provenance.release_enabled !== false || !Number.isSafeInteger(provenance.source_workflow_run) ||
+  !/^[a-f0-9]{40}$/u.test(String(provenance.source_commit))) {
+  throw new Error('vendored OCR provenance mismatch');
+}
+const executableOcrEntries = new Set(ocrEvidence.manifest.targets
+  .filter((target) => target.target !== 'windows-x64')
+  .map((target) => `server/ocr-runtime/${target.launcher}`));
 
 const entrySource = fs.readFileSync(entryPoint, 'utf8');
 if (/require\((['"])(?:\.\.\/){2,}/.test(entrySource)) {
@@ -52,7 +68,10 @@ for (const skill of fs.readdirSync(path.join(pluginDir, 'skills'))) {
 }
 
 fs.rmSync(out, { force: true });
-const files = collectFiles(pluginDir);
+const files = collectFiles(pluginDir).map((file) => ({
+  ...file,
+  mode: executableOcrEntries.has(file.archivePath) ? 0o100755 : 0o100644
+}));
 const result = writeZip(out, files);
 const hash = crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex');
 

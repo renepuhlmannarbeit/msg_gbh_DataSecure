@@ -33,9 +33,16 @@ try {
   }
   for (const required of [
     'server/native/windows-x64/datasecure-sandbox.exe',
-    'server/native/windows-x64/datasecure-sandbox.sha256'
+    'server/native/windows-x64/datasecure-sandbox.sha256',
+    'server/ocr-runtime/bundle-manifest.json',
+    'server/ocr-runtime.provenance.json'
   ]) {
     if (!entries.has(required)) throw new Error(`Plugin ZIP enthält ${required} nicht.`);
+  }
+  const ocrManifest = JSON.parse(entries.get('server/ocr-runtime/bundle-manifest.json').toString('utf8'));
+  if (ocrManifest.schema !== 'data-secure-ocr-runtime-bundle/v2' ||
+    ocrManifest.release_enabled !== false) {
+    throw new Error('Plugin ZIP darf die portable OCR-Abdeckung noch nicht freigeben.');
   }
   for (const [name, bytes] of entries) {
     const destination = path.resolve(target, ...name.split('/'));

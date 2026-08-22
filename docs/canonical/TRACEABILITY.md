@@ -139,15 +139,15 @@ Fehlerlauf bestehen. GitHub-Actions-Lauf `32597030060` auf `7427b3c` belegt Bund
 Hash-/Lizenzinventarprüfung und echten Offline-OCR-Smoke-Test zusätzlich auf macOS
 x64/ARM64 und Linux x64. Der vollständige MIT-Fallback für exakt `tr46@0.0.3` ist
 lokal ergänzt; unbekannte fehlende Lizenztexte brechen den Build ab. Das Manifest
-bleibt `release_enabled: false`; Pluginintegration und frische Installation sind
-offen.
+bleibt `release_enabled: false`; frische Installationen sind offen.
 
 Der gesperrte Produktadapter ist über `plugins/data-secure/server/portable-ocr.js`
 und `tests/test-portable-ocr-adapter.js` nachvollziehbar. Er akzeptiert nur ein
 vollständig inventarisiertes und gehashtes Zielbundle mit expliziter Freigabe,
 verwirft zusätzliche Dateien und Links und bestätigt die Worker-Beendigung vor einer
-Timeout-/Ausgabegrenzen-Antwort. Der aktuelle Pluginbaum enthält kein freigegebenes
-Bundle; die veröffentlichte Capability-Matrix bleibt deshalb unverändert.
+Timeout-/Ausgabegrenzen-Antwort. Der aktuelle Pluginbaum enthält das Bundle nur mit
+deaktiviertem Freigabegate; die veröffentlichte Capability-Matrix bleibt deshalb
+unverändert.
 
 Der Download von Lauf `32597030060` deckte fehlende versteckte npm-Dateien in den
 hochgeladenen Artefakten auf. `assemble-ocr-runtime.mjs` stoppte beim ersten fehlenden
@@ -167,4 +167,14 @@ Dateien und 57.592.942 Bytes; das Freigabeflag bleibt aus.
 `test-zip-permissions.mjs` bilden die nächste Paketgrenze. Lokal wurden 319 ZIP-
 Einträge und 22.033.239 Bytes vollständig gegen Pluginquelle und V2-Manifest geprüft.
 Die drei POSIX-Launcher tragen `0755`, alle anderen Einträge deterministisch `0644`.
-Der Cloud-Nachweis für Doppelbuild und echte Extraktion ist noch offen.
+Der kanonische Pluginbaum enthält nun dasselbe gesperrte V2-Bundle. Die Datei
+`ocr-runtime.provenance.json` bindet es an Lauf `32597783210`, Commit
+`df1c85fee38ce5f94488ee267c38f410614081a2` und Manifest-SHA
+`4497c0db499493429d12b9af7aaa2bb2b437878c8877eb3cf325947d2d341098`.
+`build-plugin.mjs`, `verify-plugin-zip.mjs`, der Capability-Vertrag und der neue
+obligatorische Universal-Bundle-Test prüfen diese Bindung sowie alle 244 Dateien.
+Der normale lokale Build ergab 320 Einträge, 22.033.607 Bytes und SHA-256
+`6d3883745cfb01f444fecfcfffe77e7515eac0cf84c81e009420a4c07f2b5cf3`.
+Der Cloud-Nachweis für Doppelbuild und echte Extraktion ist noch offen: Lauf
+`32598196806` wurde vor dem ersten Schritt durch das GitHub-Abrechnungs-/Ausgabenlimit
+verhindert und ist daher kein Code- oder Testfehler.

@@ -181,8 +181,9 @@ zusätzlich echte Speicher- und CPU-Überschreitungen. Lauf `32596426359` auf
 `4c9f0ec` bestand diese Grenzen zusammen mit Vertrag, Offline-OCR und übrigen
 Negativproben auf Windows x64, macOS x64/ARM64 und Linux x64. BL-024.1 ist damit
 abgeschlossen. BL-024.2 ist jetzt in Arbeit; Runtime, Modelle und native Launcher
-sind installationsfrei pro Zielarchitektur gebündelt, aber noch nicht in den
-ausgelieferten Pluginpfad integriert, der unverändert geschlossen bleibt.
+sind installationsfrei pro Zielarchitektur gebündelt. Das daraus erzeugte
+Universal-Bundle ist inzwischen im Pluginpfad integriert; sein Freigabegate bleibt
+unverändert geschlossen.
 
 Für BL-024.2 existiert nun ein erster reproduzierbarer Runtime-Bundle-Builder. Er
 kopiert nur die gelockte Tesseract-Laufzeitabhängigkeitsmenge, lokale Modelle,
@@ -196,14 +197,14 @@ Bündel auf Windows x64, macOS x64/ARM64 und Linux x64 und sichert sie als
 Upstream-Tag eine eigene Lizenzdatei. Der Builder ergänzt deshalb ausschließlich für
 diese exakte Version den vollständigen, laut Paketmetadaten geltenden MIT-Text samt
 Autor- und Herkunftshinweis; jeder andere fehlende Lizenztext stoppt den Build.
-Produktintegration und frische Pluginpakete bleiben offen.
+Frische Installationsabnahmen bleiben offen.
 
 Der erste Produktadapter `server/portable-ocr.js` ist nun im Pluginpfad vorhanden.
 Er ordnet ausschließlich die vier vereinbarten OS-/Architekturziele zu, lehnt Links,
 Zusatzdateien, fehlende oder hashabweichende Dateien ab, verlangt den OCR-V1-Vertrag
 und `release_enabled: true` und startet den Worker über den gebündelten nativen
 Supervisor mit RAM-, CPU-, Zeit-, Ausgabe- und Netzwerkgrenze. Das aktuelle Plugin
-liefert noch kein freigegebenes Bundle aus; auf Windows bleibt daher der bestehende
+liefert das universelle Bundle nur gesperrt aus; auf Windows bleibt daher der bestehende
 Bridge-Pfad aktiv, auf macOS/Linux bleiben visuelle Inhalte unverändert lokal
 zurückgehalten. Sieben Adaptertests belegen Plattformauswahl, gesperrtes Gate,
 Manipulations-/Zusatzdateistopp, positiven Vertragspfad und inhaltsfreie
@@ -222,16 +223,20 @@ damit unter 65 MiB statt vier Runtime-Kopien zu tragen. Acht synthetische
 Assemblerchecks und die Adaptertests bestehen. Lauf `32597783210` bestätigt den
 vollständigen Cloud-Download, die Assembly und einen echten Linux-Smoke-Test. Das
 erneut lokal heruntergeladene Ergebnis besitzt 244 inventarisierte Dateien,
-57.592.942 Bytes und bleibt mit `release_enabled: false` gesperrt. Offen ist seine
-Einbettung in die echten ZIP-/Marketplace-Pakete mit erhaltenem POSIX-Ausführungsbit.
+57.592.942 Bytes und bleibt mit `release_enabled: false` gesperrt.
 
-Ein separater Engineering-Builder bettet das gesperrte Universal-Bundle inzwischen
-in einen echten Plugin-ZIP ein, ohne den kanonischen Marketplace-Quellbaum zu
-verändern. Der lokale Build besitzt 319 Einträge, 22.033.239 Bytes und bestand
-Quellparität, vollständige Runtime-Hashprüfung und Modusprüfung. Der deterministische
-ZIP-Writer normalisiert reguläre Dateien auf `0644` und setzt nur die drei POSIX-
-Launcher auf `0755`. Cloud-Reproduzierbarkeit und echte Linux-Extraktion sind im
-nächsten Lauf zu bestätigen; Marketplace-Parität bleibt danach noch offen.
+Das gesperrte Universal-Bundle ist nun Bestandteil des kanonischen Marketplace-
+Quellbaums. Sein Herkunftsnachweis bindet Workflow-Lauf `32597783210`, Commit
+`df1c85f` und Manifest-SHA
+`4497c0db499493429d12b9af7aaa2bb2b437878c8877eb3cf325947d2d341098`.
+Der normale Plugin-ZIP und der Marketplace verwenden damit dieselben Runtime-Bytes;
+der lokale Build besitzt 320 Einträge, 22.033.607 Bytes und bestand Quellparität,
+vollständige Runtime-Hashprüfung und Modusprüfung. Der deterministische ZIP-Writer
+normalisiert reguläre Dateien auf `0644` und setzt nur die drei POSIX-Launcher auf
+`0755`. Der vorgesehene GitHub-Lauf `32598196806` konnte wegen eines externen
+Abrechnungs-/Ausgabenlimits nicht starten. Cloud-Reproduzierbarkeit, echte Linux-
+Extraktion und frische Installationen bleiben deshalb offen; die Fähigkeit bleibt
+gesperrt.
 
 ## BL-030 – Stapelweite Entitätsauflösung
 

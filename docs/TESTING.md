@@ -9,8 +9,10 @@ npm run benchmark:detectors # aggregate detector quality on the synthetic ground
 npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
 ```
 
-Der gesperrte universelle OCR-Engineering-ZIP wird nur mit einem zuvor geprüften
-V2-Runtime-Verzeichnis gebaut:
+`npm test` prüft zusätzlich jedes Byte der im kanonischen Pluginbaum eingebetteten,
+weiterhin gesperrten universellen OCR-V2-Runtime. Damit verwenden normaler ZIP-Build
+und Marketplace dieselbe Quelle. Für die erneute Prüfung eines frisch assemblierten
+externen Runtime-Verzeichnisses bleibt der Engineering-Build verfügbar:
 
 ```bash
 node scripts/build-portable-plugin.mjs --runtime dist/ocr-runtime/universal
@@ -35,8 +37,9 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-parsers.js` | 30 | DOCX/XLSX/PPTX text including nested DrawingML text boxes, entities, embedded/vector media, strict part-path coverage and external-relationship blocking; Markdown table escaping; standalone PNG routing; legacy PDF parser adversarial coverage plus the mandatory `PDF_COVERAGE_UNVERIFIED` release gate; ZIP hardening including false sizes, aggregate limits and header consistency; CSV fence escaping; every failure path raises `SafeError` instead of returning empty text |
 | `test-parser-isolation.js` | 13 | mandatory Windows-launcher invocation, inherited stdin transport, renamed-PDF signature blocking before spawn, absence of a PDF implementation in the packaged worker, missing/corrupt launcher refusal without fallback, native-host architecture probing, fixed resource/setup codes, cooperative cancellation, confirmed deadline termination, response-size/schema enforcement and content-free worker errors |
 | `test-pdfium-spike.mjs` | 6 | offline contract for the non-release PDFium lock: immutable distributor/upstream provenance and hashes, V8/XFA-off build, license inventory, strict separation from the product worker and unchanged `PDF_COVERAGE_UNVERIFIED` runtime gate; the networked/native engineering probe remains an explicit `npm run pdfium:spike` command |
-| `test-portable-ocr-adapter.js` | 7 | exact OS/architecture selection, explicit release gate, complete hash inventory and extra-file rejection, bounded OCR-V1 execution, fixed content-free errors and canonical error vocabulary; the shipped plugin remains closed while no released runtime bundle is present |
+| `test-portable-ocr-adapter.js` | 7 | exact OS/architecture selection, explicit release gate, complete hash inventory and extra-file rejection, bounded OCR-V1 execution, fixed content-free errors and canonical error vocabulary; the shipped runtime remains closed while its release flag is disabled |
 | `test-ocr-universal-assembler.mjs` | 8 | four exact target bundles, byte-identical shared runtime closure, single model/runtime copy, four launcher entries, non-release v2 contract, adapter compatibility and rejection of a validly rehashed but divergent platform core |
+| `test-ocr-universal-bundle.mjs` | 1 | complete byte, size, target, model and component inventory of the vendored universal OCR runtime while its release gate remains disabled |
 | `test-zip-permissions.mjs` | 2 | deterministic ZIP central-directory Unix metadata preserves executable launcher mode while ordinary files remain non-executable |
 | `test-native-launcher.js` | 7 | real Windows Job Object transport, `ACTIVE_PROCESS=1` for Node and the PowerShell visual host, process/job memory, CPU and wallclock enforcement, and `KILL_ON_JOB_CLOSE` worker removal |
 | `test-pii-regression.js` | 76 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, explicit-versus-ambiguous credential context, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, lower-case legal brands including terminal punctuation, internal connectors, bounded party clauses, ordinal metadata guards and common contractual abbreviations, occurrence-scoped organisation/person overlap and connector false-positive guards, project-prose disambiguation, German and Unicode person names, common telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |

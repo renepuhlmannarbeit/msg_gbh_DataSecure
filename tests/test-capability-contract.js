@@ -107,7 +107,13 @@ test('the portable OCR adapter is shipped but cannot self-enable coverage', () =
   assert.match(adapter, /manifest\.release_enabled !== true/u);
   assert.match(adapter, /data-secure-ocr-runtime-bundle\/v1/u);
   assert.match(adapter, /bundle_integrity_failed/u);
-  assert.strictEqual(fs.existsSync(path.join(root, 'plugins', 'data-secure', 'server', 'ocr-runtime')), false);
+  const manifest = json('plugins/data-secure/server/ocr-runtime/bundle-manifest.json');
+  const provenance = json('plugins/data-secure/server/ocr-runtime.provenance.json');
+  assert.strictEqual(manifest.release_enabled, false);
+  assert.strictEqual(manifest.schema, 'data-secure-ocr-runtime-bundle/v2');
+  assert.strictEqual(provenance.release_enabled, false);
+  assert.strictEqual(provenance.bundle_manifest_sha256,
+    '4497c0db499493429d12b9af7aaa2bb2b437878c8877eb3cf325947d2d341098');
   assert.strictEqual(current.formats.includes('png'), false);
 });
 

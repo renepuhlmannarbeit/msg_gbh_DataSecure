@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
+import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtimeIndex = process.argv.indexOf('--runtime');
@@ -11,64 +12,27 @@ if (runtimeIndex < 0 || !process.argv[runtimeIndex + 1]) {
 }
 const runtime = path.resolve(process.argv[runtimeIndex + 1]);
 const outputIndex = process.argv.indexOf('--output');
-const manifestFile = path.join(runtime, 'bundle-manifest.json');
-const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
-const targetOrder = ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64'];
-if (manifest.schema !== 'data-secure-ocr-runtime-bundle/v2' || manifest.target !== 'universal' ||
-  manifest.release_enabled !== false || manifest.contract !== 'data-secure-ocr-result/v1' ||
-  JSON.stringify(manifest.targets?.map((item) => item.target)) !==
-    JSON.stringify(targetOrder) ||
-  !Array.isArray(manifest.files)) {
-  throw new Error('PORTABLE_PLUGIN_RUNTIME_NOT_ENGINEERING_V2');
-}
-for (const item of manifest.targets) {
-  const name = item.target === 'windows-x64' ? 'datasecure-ocr-sandbox.exe' : 'datasecure-ocr-sandbox';
-  if (item.launcher !== `targets/${item.target}/${name}`) {
-    throw new Error('PORTABLE_PLUGIN_RUNTIME_TARGET_INVALID');
-  }
-}
-function runtimeFiles(directory, base = directory) {
-  const result = [];
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const full = path.join(directory, entry.name);
-    if (entry.isSymbolicLink()) throw new Error('PORTABLE_PLUGIN_RUNTIME_SYMLINK_REFUSED');
-    if (entry.isDirectory()) result.push(...runtimeFiles(full, base));
-    else if (entry.isFile()) result.push(path.relative(base, full).split(path.sep).join('/'));
-    else throw new Error('PORTABLE_PLUGIN_RUNTIME_SPECIAL_FILE_REFUSED');
-  }
-  return result.sort();
-}
-const expectedRuntime = new Set();
-for (const item of manifest.files) {
-  if (!item || expectedRuntime.has(item.path) || !Number.isSafeInteger(item.bytes) || item.bytes < 0 ||
-    !/^[a-f0-9]{64}$/u.test(String(item.sha256)) || item.path.includes('\\') ||
-    item.path.split('/').some((part) => !part || part === '.' || part === '..')) {
-    throw new Error('PORTABLE_PLUGIN_RUNTIME_INVENTORY_INVALID');
-  }
-  expectedRuntime.add(item.path);
-  const file = path.join(runtime, ...item.path.split('/'));
-  const stat = fs.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== item.bytes ||
-    crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') !== item.sha256) {
-    throw new Error(`PORTABLE_PLUGIN_RUNTIME_HASH_FAILED_${item.path}`);
-  }
-}
-const actualRuntime = runtimeFiles(runtime).filter((item) => item !== 'bundle-manifest.json');
-if (actualRuntime.length !== expectedRuntime.size || actualRuntime.some((item) => !expectedRuntime.has(item))) {
-  throw new Error('PORTABLE_PLUGIN_RUNTIME_INVENTORY_INVALID');
-}
+const runtimeEvidence = validateUniversalRuntime(runtime, { releaseEnabled: false });
+const executableOcrEntries = new Set(runtimeEvidence.manifest.targets
+  .filter((target) => target.target !== 'windows-x64')
+  .map((target) => `server/ocr-runtime/${target.launcher}`));
 const dist = path.join(root, 'dist');
 const stage = path.join(dist, '.portable-plugin-stage');
 const pluginSource = path.join(root, 'plugins', 'data-secure');
-if (fs.existsSync(path.join(pluginSource, 'server', 'ocr-runtime'))) {
-  throw new Error('PORTABLE_PLUGIN_CANONICAL_RUNTIME_COLLISION');
+const canonicalRuntime = path.join(pluginSource, 'server', 'ocr-runtime');
+const canonicalEvidence = fs.existsSync(canonicalRuntime)
+  ? validateUniversalRuntime(canonicalRuntime, { releaseEnabled: false }) : null;
+if (canonicalEvidence && canonicalEvidence.manifestSha256 !== runtimeEvidence.manifestSha256) {
+  throw new Error('PORTABLE_PLUGIN_CANONICAL_RUNTIME_DIFFERS');
 }
 fs.rmSync(stage, { recursive: true, force: true });
 try {
   fs.cpSync(pluginSource, stage, { recursive: true, errorOnExist: true, force: false });
-  fs.cpSync(runtime, path.join(stage, 'server', 'ocr-runtime'), {
-    recursive: true, errorOnExist: true, force: false
-  });
+  if (!canonicalEvidence) {
+    fs.cpSync(runtime, path.join(stage, 'server', 'ocr-runtime'), {
+      recursive: true, errorOnExist: true, force: false
+    });
+  }
   const plugin = JSON.parse(fs.readFileSync(path.join(stage, '.claude-plugin', 'plugin.json'), 'utf8'));
   const archive = outputIndex >= 0 && process.argv[outputIndex + 1]
     ? path.resolve(process.argv[outputIndex + 1])
@@ -79,8 +43,7 @@ try {
   }
   const files = collectFiles(stage).map((file) => ({
     ...file,
-    mode: /^server\/ocr-runtime\/targets\/(?:macos-x64|macos-arm64|linux-x64)\//u
-      .test(file.archivePath) ? 0o100755 : 0o100644
+    mode: executableOcrEntries.has(file.archivePath) ? 0o100755 : 0o100644
   }));
   fs.rmSync(archive, { force: true });
   const result = writeZip(archive, files);

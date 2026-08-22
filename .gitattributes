@@ -13,3 +13,7 @@
 *.docx binary
 *.xlsx binary
 *.pptx binary
+
+# The vendored OCR runtime is hash-inventoried byte for byte. Some upstream text
+# files intentionally contain CRLF, so Git must not normalize anything in this tree.
+plugins/data-secure/server/ocr-runtime/** -text

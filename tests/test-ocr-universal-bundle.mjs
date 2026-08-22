@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const bundle = path.resolve(process.argv[2] || '');
-if (!process.argv[2]) throw new Error('OCR_UNIVERSAL_BUNDLE_PATH_REQUIRED');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const bundle = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.join(root, 'plugins', 'data-secure', 'server', 'ocr-runtime');
 const manifest = JSON.parse(fs.readFileSync(path.join(bundle, 'bundle-manifest.json'), 'utf8'));
 assert.equal(manifest.schema, 'data-secure-ocr-runtime-bundle/v2');
 assert.equal(manifest.target, 'universal');
