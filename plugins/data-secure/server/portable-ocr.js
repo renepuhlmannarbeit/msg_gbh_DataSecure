@@ -60,7 +60,10 @@ function inspectPortableOcr(options = {}) {
   const arch = options.arch || process.arch;
   const target = runtimeTarget(platform, arch);
   if (!target) return { available: false, mode: 'unavailable', reason: 'unsupported_platform' };
-  const root = options.runtimeRoot || path.join(__dirname, 'ocr-runtime', target);
+  let root = options.runtimeRoot || path.join(__dirname, 'ocr-runtime');
+  if (!options.runtimeRoot && !fs.existsSync(path.join(root, 'bundle-manifest.json'))) {
+    root = path.join(root, target);
+  }
   try {
     const rootInfo = fs.lstatSync(root);
     if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('root');
@@ -70,8 +73,11 @@ function inspectPortableOcr(options = {}) {
       throw new Error('manifest');
     }
     const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
-    if (manifest.schema !== 'data-secure-ocr-runtime-bundle/v1' || manifest.target !== target ||
-      manifest.contract !== 'data-secure-ocr-result/v1' ||
+    const legacy = manifest.schema === 'data-secure-ocr-runtime-bundle/v1' && manifest.target === target;
+    const universal = manifest.schema === 'data-secure-ocr-runtime-bundle/v2' &&
+      manifest.target === 'universal' && Array.isArray(manifest.targets);
+    const targetEntry = universal && manifest.targets.find((item) => item?.target === target);
+    if ((!legacy && !targetEntry) || manifest.contract !== 'data-secure-ocr-result/v1' ||
       JSON.stringify(manifest.models) !== JSON.stringify(['deu', 'eng']) ||
       !Array.isArray(manifest.files) || manifest.files.length < 6) throw new Error('manifest');
     if (manifest.release_enabled !== true) {
@@ -89,13 +95,17 @@ function inspectPortableOcr(options = {}) {
     const actual = inventoryFiles(root).filter((item) => item !== 'bundle-manifest.json').sort();
     if (actual.length !== seen.size || actual.some((item) => !seen.has(item))) throw new Error('inventory');
     const launcherName = target === 'windows-x64' ? 'datasecure-ocr-sandbox.exe' : 'datasecure-ocr-sandbox';
-    for (const required of [launcherName, 'runtime-worker.mjs', 'network-deny.cjs',
+    const launcherRelative = legacy ? launcherName : targetEntry.launcher;
+    if (launcherRelative !== (legacy ? launcherName : `targets/${target}/${launcherName}`)) {
+      throw new Error('launcher');
+    }
+    for (const required of [launcherRelative, 'runtime-worker.mjs', 'network-deny.cjs',
       'models/deu.traineddata', 'models/eng.traineddata', 'THIRD_PARTY_NOTICES.md']) {
       if (!seen.has(required)) throw new Error('incomplete');
     }
     return {
       available: true, mode: 'bundled_portable_ocr', reason: 'ok', target, root,
-      launcher: path.join(root, launcherName), worker: path.join(root, 'runtime-worker.mjs'),
+      launcher: path.join(root, ...launcherRelative.split('/')), worker: path.join(root, 'runtime-worker.mjs'),
       networkDeny: path.join(root, 'network-deny.cjs')
     };
   } catch {

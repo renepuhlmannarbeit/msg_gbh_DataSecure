@@ -209,6 +209,20 @@ zurückgehalten. Sieben Adaptertests belegen Plattformauswahl, gesperrtes Gate,
 Manipulations-/Zusatzdateistopp, positiven Vertragspfad und inhaltsfreie
 Ressourcenfehler und das feste OCR-V1-Fehlervokabular.
 
+Beim ersten Zusammenführen der vier Laufartefakte wurde eine reale Lieferkettenlücke
+sichtbar: `upload-artifact` hatte versteckte npm-Dateien trotz Manifest ausgelassen.
+Der Assembler verweigerte deshalb die Quelle. Der Workflow ist auf vollständigen
+Hidden-File-Upload umgestellt; bis ein neuer Download erneut geprüft wurde, gilt der
+universelle Paketierungsnachweis als offen.
+
+Der Universal-Assembler und sein V2-Vertrag sind implementiert. Er dedupliziert die
+auf allen vier Plattformen nachweislich bytegleichen 239 Runtime-/Modell-/Notice-
+Dateien und ergänzt nur vier zielgebundene Supervisoren; das erwartete Bündel bleibt
+damit unter 65 MiB statt vier Runtime-Kopien zu tragen. Acht synthetische
+Assemblerchecks und die Adaptertests bestehen. Der erweiterte Workflow muss den
+vollständigen Cloud-Download, die Assembly und einen echten Linux-Smoke-Test noch
+bestätigen.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**

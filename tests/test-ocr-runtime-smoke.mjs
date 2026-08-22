@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCanvas } from '../native/ocr/pilot/node_modules/@napi-rs/canvas/index.js';
@@ -7,9 +8,10 @@ import { createCanvas } from '../native/ocr/pilot/node_modules/@napi-rs/canvas/i
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.argv[2];
 if (!target) throw new Error('OCR_BUNDLE_SMOKE_TARGET_REQUIRED');
-const bundle = path.join(root, 'dist', 'ocr-runtime', target);
-const launcher = path.join(bundle, target === 'windows-x64'
-  ? 'datasecure-ocr-sandbox.exe' : 'datasecure-ocr-sandbox');
+const bundle = process.argv[3] ? path.resolve(process.argv[3]) : path.join(root, 'dist', 'ocr-runtime', target);
+const launcherName = target === 'windows-x64' ? 'datasecure-ocr-sandbox.exe' : 'datasecure-ocr-sandbox';
+const universalLauncher = path.join(bundle, 'targets', target, launcherName);
+const launcher = fs.existsSync(universalLauncher) ? universalLauncher : path.join(bundle, launcherName);
 const canvas = createCanvas(1400, 420);
 const context = canvas.getContext('2d');
 context.fillStyle = '#ffffff';

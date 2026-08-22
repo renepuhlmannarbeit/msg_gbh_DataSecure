@@ -391,6 +391,20 @@ Zielplattform, vollständiges Dateiinventar und SHA-256 jedes Bundle-Bestandteil
 startet nur bei `release_enabled: true`; der aktuelle Pluginbaum enthält bewusst kein
 freigegebenes OCR-Bundle und behält damit das bisherige Verhalten.
 
+Gefundener Paketierungsdefekt: Der erste Artefaktlauf ließ standardmäßig versteckte
+npm-Dateien aus, obwohl sie im Bundle-Manifest inventarisiert waren. Der Universal-
+Assembler stoppte deshalb korrekt. Der Workflow lädt Bundle-Verzeichnisse nun mit
+`include-hidden-files: true` hoch; der erneute Download-/Assemblierungsnachweis ist
+noch offen.
+
+Der neue `assemble-ocr-runtime.mjs` akzeptiert genau die vier vollständig
+hashgeprüften V1-Quellbundles und erzeugt den weiterhin gesperrten Universalvertrag
+`data-secure-ocr-runtime-bundle/v2`: 239 byteidentische gemeinsame Dateien werden
+nur einmal übernommen, die vier nativen Launcher liegen zielgetrennt. Abweichende
+gemeinsame Bytes stoppen auch dann, wenn ein einzelnes Quellmanifest passend neu
+gehasht wurde. Der CI-Folgejob lädt die vier Artefakte erneut herunter, assembliert,
+prüft und führt auf Linux echten Offline-OCR aus. Dieser neue Lauf steht noch aus.
+
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 
 Status: **offen** · Epic: BL-024 · Abhängigkeiten: BL-020.1, BL-024.2
