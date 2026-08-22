@@ -173,8 +173,20 @@ Der kanonische Pluginbaum enthält nun dasselbe gesperrte V2-Bundle. Die Datei
 `4497c0db499493429d12b9af7aaa2bb2b437878c8877eb3cf325947d2d341098`.
 `build-plugin.mjs`, `verify-plugin-zip.mjs`, der Capability-Vertrag und der neue
 obligatorische Universal-Bundle-Test prüfen diese Bindung sowie alle 244 Dateien.
-Der normale lokale Build ergab 320 Einträge, 22.033.607 Bytes und SHA-256
+Der lokale Paketierungs-Checkpoint `75da6c5` ergab 320 Einträge, 22.033.607 Bytes und SHA-256
 `6d3883745cfb01f444fecfcfffe77e7515eac0cf84c81e009420a4c07f2b5cf3`.
 Der Cloud-Nachweis für Doppelbuild und echte Extraktion ist noch offen: Lauf
 `32598196806` wurde vor dem ersten Schritt durch das GitHub-Abrechnungs-/Ausgabenlimit
 verhindert und ist daher kein Code- oder Testfehler.
+
+BL-020.1 beginnt mit `docs/canonical/contracts/CONTENT_GRAPH_V1.md`, dem strikten
+JSON-Schema, `server/content-graph.js` und `test-content-graph.js`. Die produktive
+Parsergrenze erzeugt und validiert den Graph zwingend; Legacy-Ergebnisse ohne Graph,
+ungebundene Assets, doppelte IDs, zusätzliche Rohtextfelder, Traversal-Fragmente und
+Positionen außerhalb des normalisierten Markdown werden abgelehnt. Die sechs Tests
+belegen Text-, Tabellen- und Bildknoten sowie die fail-closed Isolationsgrenze. Als
+externe Semantikreferenz dienen ausschließlich die offiziellen W3C-Definitionen für
+halb offene [Text Position Selectors](https://www.w3.org/TR/annotation-model/#text-position-selector)
+und [Fragment Selectors](https://www.w3.org/TR/annotation-model/#fragment-selector);
+es wurde keine zusätzliche Runtime übernommen. Die Formatfreigabe bleibt
+unverändert.

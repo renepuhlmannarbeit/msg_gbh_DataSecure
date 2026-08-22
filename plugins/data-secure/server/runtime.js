@@ -158,6 +158,7 @@ const PARSER_JOB_MEMORY_MIB = 768;
 const PARSER_JOB_CPU_MS = 40_000;
 const MAX_PARSER_RESPONSE_BYTES = 48 * 1024 * 1024;
 const MAX_ATTACHMENT_BASE64_CHARS = 12 * 1024 * 1024;
+const { validateContentGraph } = require('./content-graph');
 
 function validateParserResult(value) {
   if (!value || typeof value !== 'object' || typeof value.markdown !== 'string' ||
@@ -180,6 +181,11 @@ function validateParserResult(value) {
   if (decodedAttachmentBytes > 24 * 1024 * 1024) throw new SafeError('Die isoliert extrahierten Assets sind insgesamt zu groß.');
   if (!value.warnings.every((item) => typeof item === 'string' && item.length <= 1000)) {
     throw new SafeError('Der isolierte Dokumentparser lieferte ungültige Warnungen.');
+  }
+  try {
+    validateContentGraph(value.content_graph, value.markdown, value.attachments);
+  } catch {
+    throw new SafeError('Der isolierte Dokumentparser lieferte keinen gültigen Content-Graph.');
   }
   return value;
 }

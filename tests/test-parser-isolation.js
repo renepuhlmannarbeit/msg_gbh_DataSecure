@@ -9,6 +9,7 @@ const { PassThrough } = require('stream');
 const childProcess = require('child_process');
 const { createSuite } = require('./helpers');
 const { SafeError, convertDocument, validateParserResult, nativeParserStatus } = require('../plugins/data-secure/server/runtime');
+const { createContentGraph } = require('../plugins/data-secure/server/content-graph');
 
 const { testAsync, test, done, assert } = createSuite('Isolated parser process');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-parser-isolation-'));
@@ -36,6 +37,14 @@ function fakeChild(action) {
   child.kill = () => { child.killed = true; queueMicrotask(() => child.emit('close', null)); return true; };
   queueMicrotask(() => action(child));
   return child;
+}
+
+function parserResult(markdown) {
+  const attachments = [];
+  return {
+    markdown, attachments, warnings: [],
+    content_graph: createContentGraph(markdown, attachments, '.txt')
+  };
 }
 
 async function main() {
@@ -78,7 +87,7 @@ async function main() {
         return fakeChild((child) => {
           child.stdout.end(JSON.stringify({
             schema: 'data-secure-parser-result/1', ok: true,
-            result: { markdown: 'safe', attachments: [], warnings: [] }
+            result: parserResult('safe')
           }));
           child.emit('close', 0);
         });
@@ -110,7 +119,7 @@ async function main() {
         return fakeChild((child) => {
           child.stdout.end(JSON.stringify({
             schema: 'data-secure-parser-result/1', ok: true,
-            result: { markdown: 'safe', attachments: [], warnings: [] }
+            result: parserResult('safe')
           }));
           child.emit('close', 0);
         });
@@ -181,7 +190,7 @@ async function main() {
           return fakeChild((child) => {
             child.stdout.end(JSON.stringify({
               schema: 'data-secure-parser-result/1', ok: true,
-              result: { markdown: 'portable-safe', attachments: [], warnings: [] }
+              result: parserResult('portable-safe')
             }));
             child.emit('close', 0);
           });

@@ -69,8 +69,19 @@ Status: **teilweise**
 
 Vorhanden: gehärteter ZIP-Leser, OOXML-Partprüfung, Warnungen für externe oder
 unbekannte inhaltstragende Parts, Attachment-Quellen und fail-closed Parserfehler.
-Rest: ein formatübergreifender versionierter Content-Graph mit stabilen Locators für
-Text, Tabellen, Bilder, Kommentare, Notizen, PDF-Objekte und rekursive Anhänge.
+Die produktive isolierte Parsergrenze verlangt jetzt zusätzlich
+`data-secure-content-graph/v1`. Der Graph beschreibt Text und Tabellen über halb
+offene Positionen im NFC-/LF-normalisierten UTF-16-Markdown und bindet jedes Bild
+über Asset-Index, Medientyp und einen containerinternen strukturellen Part. Er
+dupliziert keinen Rohtext. Doppelte IDs, unbekannte Felder oder Knotentypen,
+Traversal-Parts, ungültige Positionen und unvollständige Asset-Abdeckung stoppen.
+Sechs Vertragstests decken diese erste Scheibe ab.
+
+Der kleine Locator-Kern übernimmt nur die Semantik von W3C
+`TextPositionSelector` und `FragmentSelector`; JSON-LD oder Apache Tika werden nicht
+als Runtime-Abhängigkeit eingeführt. Rest: feingranulare stabile Locators für
+Office-Parts, Zellen, Folien, Kommentare, Notizen, PDF-Objekte, Metadaten und
+rekursive Anhänge. Die aktive Formatliste bleibt TXT/DOCX.
 
 ## BL-021 – TXT, Markdown und CSV
 
@@ -230,8 +241,9 @@ Quellbaums. Sein Herkunftsnachweis bindet Workflow-Lauf `32597783210`, Commit
 `df1c85f` und Manifest-SHA
 `4497c0db499493429d12b9af7aaa2bb2b437878c8877eb3cf325947d2d341098`.
 Der normale Plugin-ZIP und der Marketplace verwenden damit dieselben Runtime-Bytes;
-der lokale Build besitzt 320 Einträge, 22.033.607 Bytes und bestand Quellparität,
-vollständige Runtime-Hashprüfung und Modusprüfung. Der deterministische ZIP-Writer
+der Paketierungs-Checkpoint `75da6c5` besaß 320 Einträge, 22.033.607 Bytes und
+bestand Quellparität, vollständige Runtime-Hashprüfung und Modusprüfung. Der
+deterministische ZIP-Writer
 normalisiert reguläre Dateien auf `0644` und setzt nur die drei POSIX-Launcher auf
 `0755`. Der vorgesehene GitHub-Lauf `32598196806` konnte wegen eines externen
 Abrechnungs-/Ausgabenlimits nicht starten. Cloud-Reproduzierbarkeit, echte Linux-

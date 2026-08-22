@@ -267,10 +267,22 @@ Ein Chat-Anhang erzeugt eine klare Offenlegungswarnung und keinen irreführenden
 
 #### BL-020.1 – Gemeinsamen Content-Graph und Locator-Vertrag implementieren
 
-Status: **offen** · Epic: BL-020 · Abhängigkeit: BL-011.1
+Status: **in Arbeit** · Epic: BL-020 · Abhängigkeit: BL-011.1
 
 Alle Parser liefern dieselbe versionierte Struktur für Text, Tabellen, Bilder,
 Metadaten und Quellenpositionen.
+
+Erster Schnitt: `data-secure-content-graph/v1` ist als striktes Schema und
+Runtime-Validator implementiert. Die produktive Parsergrenze liefert jetzt für TXT,
+DOCX sowie die noch gesperrten Testparser denselben Graph mit Text-, Tabellen- und
+Bildknoten. Halb offene Textpositionen folgen dem W3C-`TextPositionSelector` im
+expliziten NFC-/LF-normalisierten UTF-16-Markdown; Bilder sind vollständig und
+indexstabil über strukturelle `FragmentSelector` an Assets gebunden. Der Graph
+dupliziert keine Rohtexte und akzeptiert weder Pfade noch unbekannte Felder.
+
+Offen: feingranulare Office-Part-, Zell-, Folien-, PDF-Seiten- und
+Metadaten-Locators sowie positive Coverage-Gegenproben pro später freizugebendem
+Format. Dieser Schnitt erweitert die aktuelle Formatfreigabe nicht.
 
 #### BL-020.2 – Rekursive Einbettungen und aktive Inhalte absichern
 
@@ -415,8 +427,8 @@ Staging-Struktur. Der erzeugte Engineering-ZIP enthielt 319 Einträge, war rund
 22,0 MB groß und blieb mit deaktiviertem OCR-Gate eindeutig nicht freigegeben.
 `verify-portable-plugin-zip.mjs` prüft Plugin-Quellparität, jedes Runtime-Byte und die
 POSIX-Ausführungsmodi. Der normale Plugin-Build validiert nun die eingebetteten 244
-Runtime-Dateien samt Herkunftsnachweis und erzeugt aus derselben Marketplace-Quelle
-320 Einträge, 22.033.607 Bytes und SHA-256
+Runtime-Dateien samt Herkunftsnachweis. Der Paketierungs-Checkpoint `75da6c5`
+erzeugte aus derselben Marketplace-Quelle 320 Einträge, 22.033.607 Bytes und SHA-256
 `6d3883745cfb01f444fecfcfffe77e7515eac0cf84c81e009420a4c07f2b5cf3`.
 Der ZIP-Writer schreibt deterministische Unix-Modi. Der vorgesehene Cloud-Folgejob
 `32598196806` startete wegen eines GitHub-Abrechnungs-/Ausgabenlimits nicht; der
