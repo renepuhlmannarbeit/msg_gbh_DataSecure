@@ -5,6 +5,12 @@
   "tag": "4.1.0",
   "tag_object": "a8ba5063ab8013372a20e300da0c97ee46b92b07",
   "commit": "65727574dfcd264acbb0c3e07860e4e9e9b22185",
+  "license": {
+    "file": "LICENSE",
+    "spdx": "Apache-2.0",
+    "bytes": 11358,
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
   "models": {
     "deu": {
       "file": "deu.traineddata",

@@ -95,6 +95,12 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.strictEqual(models.raw_base,
     'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast');
   assert.strictEqual(models.commit, '65727574dfcd264acbb0c3e07860e4e9e9b22185');
+  assert.deepStrictEqual(models.license, {
+    file: 'LICENSE',
+    spdx: 'Apache-2.0',
+    bytes: 11358,
+    sha256: 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30'
+  });
   assert.deepStrictEqual(Object.keys(models.models), ['deu', 'eng']);
   assert.strictEqual(models.models.deu.sha256,
     '19d219bbb6672c869d20a9636c6816a81eb9a71796cb93ebe0cb1530e2cdb22d');
@@ -116,6 +122,12 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
     'network-deny.cjs'), 'utf8');
   for (const token of ['node:http', 'node:https', 'node:net', 'node:tls', 'node:dns',
     'globalThis.fetch']) assert.ok(networkDeny.includes(token), `network deny missing ${token}`);
+  const supplyChain = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
+    'verify-supply-chain.mjs'), 'utf8');
+  for (const token of ["'Apache-2.0', 'MIT', 'BSD-2-Clause'", 'PACKAGE_INTEGRITY_MISSING_',
+    'PACKAGE_LICENSE_NOT_ALLOWED_', "sbom.bomFormat, 'CycloneDX'", 'model_hashes_verified']) {
+    assert.ok(supplyChain.includes(token), `OCR supply-chain check missing ${token}`);
+  }
 
   const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
     'tesseractjs-ocr-pilot.yml'), 'utf8');
@@ -124,6 +136,8 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   }
   assert.match(workflow, /npm ci --prefix native\/ocr\/pilot --ignore-scripts/u);
   assert.match(workflow, /NODE_OPTIONS: --require=/u);
+  assert.match(workflow, /npm sbom --prefix native\/ocr\/pilot --package-lock-only --sbom-format cyclonedx/u);
+  assert.match(workflow, /verify-supply-chain\.mjs/u);
 });
 
 done();

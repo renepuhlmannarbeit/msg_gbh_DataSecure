@@ -27,9 +27,25 @@ for (const [language, model] of Object.entries(lock.models)) {
   fs.writeFileSync(path.join(modelDir, model.file), bytes, { mode: 0o600, flag: 'wx' });
 }
 
+const licenseUrl = `${lock.raw_base}/${lock.commit}/${lock.license.file}`;
+const licenseResponse = await fetch(licenseUrl, {
+  redirect: 'error',
+  signal: AbortSignal.timeout(30000)
+});
+if (!licenseResponse.ok) throw new Error(`MODEL_LICENSE_HTTP_${licenseResponse.status}`);
+const licenseBytes = Buffer.from(await licenseResponse.arrayBuffer());
+if (licenseBytes.length !== lock.license.bytes) throw new Error('MODEL_LICENSE_SIZE_MISMATCH');
+const licenseDigest = crypto.createHash('sha256').update(licenseBytes).digest('hex');
+if (licenseDigest !== lock.license.sha256) throw new Error('MODEL_LICENSE_HASH_MISMATCH');
+fs.writeFileSync(path.join(modelDir, lock.license.file), licenseBytes, {
+  mode: 0o600,
+  flag: 'wx'
+});
+
 process.stdout.write(`${JSON.stringify({
   schema_version: 1,
   model_commit: lock.commit,
   languages: Object.keys(lock.models),
+  model_license: lock.license.spdx,
   verified: true
 })}\n`);
