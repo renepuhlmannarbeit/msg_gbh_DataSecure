@@ -128,6 +128,16 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
     'PACKAGE_LICENSE_NOT_ALLOWED_', "sbom.bomFormat, 'CycloneDX'", 'model_hashes_verified']) {
     assert.ok(supplyChain.includes(token), `OCR supply-chain check missing ${token}`);
   }
+  const isolated = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
+    'isolated-run.mjs'), 'utf8');
+  for (const token of ['windows_job_object', 'node_permission_process', '--permission',
+    '--allow-worker', '--allow-addons', '--max-old-space-size=512',
+    'OCR_ISOLATION_TIMEOUT', 'OCR_ISOLATION_OUTPUT_LIMIT', 'verifyNativeLauncherArtifact',
+    "passed_gates: ["]) {
+    assert.ok(isolated.includes(token), `OCR isolated pilot missing safeguard ${token}`);
+  }
+  assert.doesNotMatch(isolated, /\.\.\.process\.env/u);
+  assert.match(isolated, /stdio: \['ignore', 'pipe', 'ignore'\]/u);
 
   const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
     'tesseractjs-ocr-pilot.yml'), 'utf8');
@@ -138,6 +148,7 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.match(workflow, /NODE_OPTIONS: --require=/u);
   assert.match(workflow, /npm sbom --prefix native\/ocr\/pilot --package-lock-only --sbom-format cyclonedx/u);
   assert.match(workflow, /verify-supply-chain\.mjs/u);
+  assert.match(workflow, /isolated-run\.mjs/u);
 });
 
 done();

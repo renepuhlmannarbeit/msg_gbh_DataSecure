@@ -41,6 +41,9 @@ jobs:
         env:
           NODE_OPTIONS: --require=${{ github.workspace }}/native/ocr/pilot/network-deny.cjs
         run: node native/ocr/pilot/run.mjs > tesseractjs-ocr-pilot.json
+      - name: Run OCR through bounded platform process
+        shell: bash
+        run: node native/ocr/pilot/isolated-run.mjs > tesseractjs-ocr-isolation.json
       - name: Prove pilot remains outside the released plugin
         run: node tests/test-capability-contract.js
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -48,6 +51,7 @@ jobs:
           name: tesseractjs-ocr-pilot-${{ matrix.os }}-${{ github.sha }}
           path: |
             tesseractjs-ocr-pilot.json
+            tesseractjs-ocr-isolation.json
             tesseractjs-ocr-sbom.cdx.json
             tesseractjs-ocr-supply-chain.json
           if-no-files-found: error
