@@ -38,6 +38,14 @@ keine Formatfreigabe.
 
 ### Meilenstein 0 – Wahrheit und riskante Verträge zuerst
 
+#### BL-001.1 – Open-Source-Wiederverwendung verbindlich machen
+
+Status: **erledigt** · Epic: BL-001 · Entscheidung: DS-038
+
+Jedes Epic besitzt im kanonischen Komponentenregister Kandidaten, Prüfgates oder eine
+begründete Restlücke. Eine Story darf Eigenentwicklung erst beginnen, wenn passende
+Bausteine praktisch verglichen wurden; ein Bibliotheksname allein ist keine Abnahme.
+
 #### BL-002.1 – RC30-Ist-Manifest vervollständigen
 
 Status: **erledigt** · Epic: BL-002
@@ -79,7 +87,8 @@ des Sicherheitsvertrags.
 
 Status: **in Arbeit** · Epic: BL-023, BL-024
 
-Vor Produktcode werden Engine, Offline-Verhalten, Paketgröße, Lizenzinventar,
+Vor Produktcode werden bestehende PDF-/OCR-Bausteine gegen einen Eigenbuild sowie
+Engine, Offline-Verhalten, Paketgröße, Lizenzinventar,
 Verschlüsselung, Scanpfad und sichere Prozessgrenze auf Windows/macOS/Linux belegt.
 
 ### Meilenstein 1 – Nutzbarer fortsetzbarer TXT-/DOCX-Stapelkern
@@ -451,7 +460,8 @@ dokumentiert geprüft. Ein Echtdatenpilot bleibt eine getrennte Entscheidung.
 Eine Story ist erst bereit, wenn sie Nutzerergebnis und Plattformumfang nennt,
 DS-/Epic-IDs sowie wiederzuverwendende Module und Tests referenziert, Abhängigkeiten
 und Datenschutzgrenze festhält, positive/negative/Abbruch-Akzeptanzfälle besitzt,
-synthetische Fixtures beschreibt und keine offene Architekturentscheidung verbirgt.
+synthetische Fixtures beschreibt, den Eintrag in `OPEN_SOURCE_COMPONENTS.md` bewertet
+und keine offene Architekturentscheidung verbirgt.
 
 ## Definition of Done
 
@@ -466,7 +476,7 @@ bei UI-Arbeit Barrierefreiheit sowie verständliche Fehler nachgewiesen sind.
 
 ### BL-001 – Kanonisches Dokumentensystem etablieren
 
-Status: **erledigt** · Entscheidungen: DS-001 bis DS-037 · Ist: [BL-001](CURRENT_STATE.md#bl-001--kanonisches-dokumentensystem)
+Status: **erledigt** · Entscheidungen: DS-001 bis DS-038 · Ist: [BL-001](CURRENT_STATE.md#bl-001--kanonisches-dokumentensystem)
 
 Abnahme: Kanonische Quellen, Entscheidungsregister, Backlog und Traceability sind
 vorhanden; ein automatischer Test erkennt fehlende oder verwaiste IDs; alte

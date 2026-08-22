@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = path.join(root, 'docs', 'canonical');
-const required = ['README.md', 'DECISIONS.md', 'PRODUCT.md', 'BACKLOG.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json'];
+const required = ['README.md', 'DECISIONS.md', 'PRODUCT.md', 'BACKLOG.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md'];
 
 for (const file of required) {
   if (!fs.existsSync(path.join(canonical, file))) throw new Error(`missing canonical document: ${file}`);
@@ -17,6 +17,7 @@ const currentText = read('CURRENT_STATE.md');
 const traceText = read('TRACEABILITY.md');
 const indexText = read('README.md');
 const productText = read('PRODUCT.md');
+const openSourceText = read('OPEN_SOURCE_COMPONENTS.md');
 const target = JSON.parse(read('TARGET_CAPABILITIES.json'));
 
 const collect = (text, pattern) => [...text.matchAll(pattern)].map((match) => match[1]);
@@ -67,6 +68,9 @@ for (const id of backlog) {
 for (const id of currentBacklog) {
   if (!backlog.includes(id)) throw new Error(`current-state audit references unknown backlog item: ${id}`);
 }
+for (const id of backlog) {
+  if (!openSourceText.includes(id)) throw new Error(`open-source register missing backlog item: ${id}`);
+}
 for (const id of collect(traceText, /\b(BL-\d{3})\b/g)) {
   if (!backlog.includes(id)) throw new Error(`traceability references unknown backlog item: ${id}`);
 }
@@ -75,6 +79,10 @@ for (const file of required.slice(1)) {
 }
 for (const token of ['Ist-Zustand RC30', '100 Dateien', '500 MB', 'Windows', 'macOS', 'Linux']) {
   if (!productText.includes(token)) throw new Error(`canonical product is missing: ${token}`);
+}
+if (target.reuse_policy?.open_source_first !== true ||
+    target.reuse_policy?.custom_code_requires_documented_gap !== true) {
+  throw new Error('target capability contract is missing the open-source-first policy');
 }
 
 console.log(`Canonical documentation: PASS (${decisions.length} decisions, ${backlog.length} epics, ${stories.length} stories)`);

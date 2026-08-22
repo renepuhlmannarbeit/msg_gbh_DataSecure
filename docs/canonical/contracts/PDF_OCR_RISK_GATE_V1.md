@@ -10,8 +10,10 @@ eigenständige Bilder in Ist-Manifest, Picker, Skills und Marketplace gesperrt.
 
 ## Festgelegte technische Richtung
 
-- PDFium bleibt die bevorzugte PDF-Engine; der Community-Binary-Spike ist nur
-  Engineering-Evidenz und keine Produktabhängigkeit.
+- Unter DS-038 bleibt die endgültige PDF-Engine bis zum praktischen Vergleich offen.
+  Mozilla PDF.js mit lokal gebündeltem Canvas ist der bevorzugte einfache
+  Drei-Plattform-Pilot; PDFium bleibt der native Fallback. Der Community-Binary-Spike
+  ist nur Engineering-Evidenz und keine Produktabhängigkeit.
 - OCR arbeitet vollständig offline und muss Deutsch, Englisch sowie gemischte
   Dokumente unterstützen.
 - Tesseract 5.5.2 mit den offiziellen `tessdata_fast`-Modellen 4.1.0 für `deu`
@@ -29,7 +31,7 @@ eigenständige Bilder in Ist-Manifest, Picker, Skills und Marketplace gesperrt.
 
 | Nachweis | Windows | macOS | Linux |
 |---|---|---|---|
-| eigener gepinnter PDFium-Build | offen | offen | offen |
+| gepinnte gepflegte PDF-Engine und Lieferkette | offen | offen | offen |
 | reproduzierbares Runtime-Paket ohne manuelle Installation | offen | offen | offen |
 | Offline-/DNS-/Loopback-/Privatnetz-Verweigerung | offen | offen | offen |
 | Text, Unicode, Seitenbaum und Objekt-Coverage | offen | offen | offen |

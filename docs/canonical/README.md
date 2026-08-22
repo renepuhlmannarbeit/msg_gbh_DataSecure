@@ -19,7 +19,9 @@ Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
    und Abnahmenachweis.
 6. [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json) – maschinenlesbarer,
    ausdrücklich nicht als Runtime-Freigabe verwendbarer Zielvertrag.
-7. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben RC30 oder
+7. [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – verbindliches
+   Wiederverwendungsregister mit Kandidaten, Ausschlüssen und Prüfgates.
+8. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben RC30 oder
    liefern Detailwissen, sind aber nicht entscheidungsführend.
 
 Bei einem Widerspruch gilt die höher stehende Quelle. Eine neue Entscheidung erhält
@@ -47,9 +49,11 @@ Eine wiederverwendbare technische Basis macht ein Epic deshalb noch nicht erledi
 1. Entscheidung mit ID erfassen oder ausdrücklich ersetzen.
 2. `PRODUCT.md` nur dann anpassen, wenn sich das Zielverhalten ändert.
 3. Backlogposition mit Entscheidungs-IDs und messbarer Abnahme ergänzen.
-4. Ist-Abgleich und Traceability aktualisieren.
-5. `npm run test:docs` sowie die betroffenen Produkt- und Artefakttests ausführen.
-6. Erst danach README, Handbücher, Skills und Marketplace-Texte ableiten.
+4. Open-Source-Kandidaten im Wiederverwendungsregister prüfen und Auswahl oder
+   Restlücke festhalten.
+5. Ist-Abgleich und Traceability aktualisieren.
+6. `npm run test:docs` sowie die betroffenen Produkt- und Artefakttests ausführen.
+7. Erst danach README, Handbücher, Skills und Marketplace-Texte ableiten.
 
 `scripts/verify-canonical-docs.mjs` verhindert fehlende oder verwaiste
 Entscheidungs- und Story-IDs. `tests/test-capability-contract.js` trennt zusätzlich

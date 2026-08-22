@@ -46,6 +46,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | DS-035 | BL-002, BL-020 | migrationsfähige Verträge und grüne Regression |
 | DS-036 | BL-011, BL-012 | Fortschritt, sicherer Abbruch und Fortsetzung |
 | DS-037 | BL-024 | Deutsch-/Englisch-OCR und gemischtsprachige Tests |
+| DS-038 | BL-001, BL-010 bis BL-052 | Komponentenregister, Prüfgate und begründete Restlücke vor Eigenentwicklung |
 
 ## Umsetzungsnachweise erledigter Stories
 
@@ -56,6 +57,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | BL-002.3 | `test-capability-contract.js` vergleicht Ist-/Zielvertrag, Runtime, Skills, Marketplace und aktive Handbücher; Bestandteil von `npm test` |
 | BL-011.1 | `contracts/BATCH_SNAPSHOT_V1.md` und `test-architecture-contracts.js` definieren und prüfen den unveränderlichen privaten Snapshot |
 | BL-030.1 | `contracts/BATCH_PSEUDONYM_V1.md` und `test-architecture-contracts.js` definieren restart-stabile stapelweite Pseudonyme ohne Rohwerttabelle |
+| BL-001.1 | `OPEN_SOURCE_COMPONENTS.md`, DS-038 und `verify-canonical-docs.mjs` erzwingen Open-Source-Prüfung für jedes Epic |
 
 Offener Nachweis: `contracts/PDF_OCR_RISK_GATE_V1.md` ist das Prüfprotokoll für
 BL-023.1. Es ist ausdrücklich kein Erledigungsnachweis, solange Pflichtzellen offen

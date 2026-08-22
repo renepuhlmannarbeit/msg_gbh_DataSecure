@@ -1,0 +1,41 @@
+name: PDF.js local stack three-platform pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdfjs-stack-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pilot:
+    name: PDF.js stack pilot (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15-intel, macos-14, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.13.0'
+          cache: npm
+          cache-dependency-path: native/pdfjs/pilot/package-lock.json
+      - name: Install locked pilot dependencies
+        run: npm ci --prefix native/pdfjs/pilot --ignore-scripts
+      - name: Run content-free local-byte pilot
+        shell: bash
+        run: node native/pdfjs/pilot/run.mjs > pdfjs-stack-pilot.json
+      - name: Prove pilot remains outside the released plugin
+        run: node tests/test-capability-contract.js
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pdfjs-stack-pilot-${{ matrix.os }}-${{ github.sha }}
+          path: pdfjs-stack-pilot.json
+          if-no-files-found: error
+          retention-days: 14

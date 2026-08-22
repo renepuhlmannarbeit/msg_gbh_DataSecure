@@ -12,7 +12,11 @@ sind Evidenz für Codeverhalten, nicht automatisch für installierte Claude-Ober
 Status: **erledigt**
 
 Vorhanden: `docs/canonical/*`, Entscheidungs-/Backlog-/Traceability-IDs und
-`scripts/verify-canonical-docs.mjs`. Rest: nur laufende Pflege bei jeder Änderung.
+`scripts/verify-canonical-docs.mjs`. Das Wiederverwendungsregister
+`OPEN_SOURCE_COMPONENTS.md` ordnet jedem Epic Open-Source-Kandidaten oder eine
+begründete Eigenimplementierungs-Restlücke zu; der Dokumententest blockiert fehlende
+Epic-Zuordnungen. Rest: Kandidaten je Story praktisch evaluieren und das Register bei
+jeder Auswahl oder Ablehnung pflegen.
 
 ## BL-002 – Ist- und Ziel-Fähigkeiten
 
@@ -91,8 +95,12 @@ abdecken.
 Status: **in Arbeit**
 
 Vorhanden: PDF-Signaturerkennung, adversariale Legacy-Tests, gesperrter PDF-Pfad und
-ein reproduzierbar gelockter PDFium-Engineering-Spike. Rest: produktiver isolierter
-PDFium-Worker, vollständige Text-/Font-/Formular-/Annotation-/Anhang-/Visual-Coverage,
+ein reproduzierbar gelockter PDFium-Engineering-Spike. Unter DS-038 wurde zusätzlich
+ein gelockter PDF.js-6.2.108-/Canvas-1.0.7-Pilot begonnen. Der lokale Windows-Lauf
+belegt Byte-Eingabe, Textextraktion, Seitenrendering, JavaScript-Action-Erkennung und
+null beobachtete Netzwerkversuche, bleibt aber ausdrücklich `no_go`. Rest:
+produktiver isolierter PDF-Worker, vollständige
+Text-/Font-/Formular-/Annotation-/Anhang-/Visual-Coverage,
 Verschlüsselung und Scan-OCR; bis dahin bleibt `PDF_COVERAGE_UNVERIFIED` aktiv.
 
 Das neue `contracts/PDF_OCR_RISK_GATE_V1.md` definiert dafür eine einheitliche

@@ -35,7 +35,7 @@ test('PDF and OCR stay blocked until every platform risk cell is proven', () => 
   for (const risk of ['PDFium', 'Offline', 'Unicode', 'Verschlüsselung', 'Fuzzing', 'SBOM']) {
     assert.ok(text.includes(risk), `PDF/OCR gate missing: ${risk}`);
   }
-  assert.match(text, /\| eigener gepinnter PDFium-Build \| offen \| offen \| offen \|/u);
+  assert.match(text, /\| gepinnte gepflegte PDF-Engine und Lieferkette \| offen \| offen \| offen \|/u);
   assert.match(text, /Bis jede Pflichtzelle positiv belegt ist.*gesperrt/su);
 });
 
@@ -53,6 +53,30 @@ test('PDF/OCR risk sources and the four required runner targets are pinned', () 
     assert.ok(workflow.includes(runner), `risk workflow missing ${runner}`);
   }
   assert.match(workflow, /Community PDFium spike became releasable/u);
+});
+
+test('PDF.js pilot is locked, offline, non-release and tested on four runner targets', () => {
+  const pilotPackage = readJson('native/pdfjs/pilot/package.json');
+  assert.deepStrictEqual(pilotPackage.dependencies, {
+    '@napi-rs/canvas': '1.0.7',
+    'pdfjs-dist': '6.2.108'
+  });
+  const pilotLock = readJson('native/pdfjs/pilot/package-lock.json');
+  assert.strictEqual(pilotLock.lockfileVersion, 3);
+  assert.match(pilotLock.packages['node_modules/pdfjs-dist'].integrity, /^sha512-/u);
+  assert.match(pilotLock.packages['node_modules/@napi-rs/canvas'].integrity, /^sha512-/u);
+  const source = fs.readFileSync(path.join(root, 'native', 'pdfjs', 'pilot', 'run.mjs'), 'utf8');
+  for (const token of ['data: bytes', 'isEvalSupported: false', 'disableAutoFetch: true',
+    'useWorkerFetch: false', "release_decision: 'no_go'", 'networkAttempts']) {
+    assert.ok(source.includes(token), `PDF.js pilot missing safeguard ${token}`);
+  }
+  const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
+    'pdfjs-stack-pilot.yml'), 'utf8');
+  for (const runner of ['windows-latest', 'macos-15-intel', 'macos-14', 'ubuntu-latest']) {
+    assert.ok(workflow.includes(runner), `PDF.js pilot workflow missing ${runner}`);
+  }
+  assert.match(workflow, /npm ci --prefix native\/pdfjs\/pilot --ignore-scripts/u);
+  assert.doesNotMatch(workflow, /curl|wget|Invoke-WebRequest/iu);
 });
 
 done();

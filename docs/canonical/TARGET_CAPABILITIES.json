@@ -10,7 +10,7 @@
     "DS-019", "DS-020", "DS-021", "DS-022", "DS-023", "DS-024",
     "DS-025", "DS-026", "DS-027", "DS-028", "DS-029", "DS-030",
     "DS-031", "DS-032", "DS-033", "DS-034", "DS-035", "DS-036",
-    "DS-037"
+    "DS-037", "DS-038"
   ],
   "primary_product": "claude-plugin",
   "distribution": {
@@ -67,6 +67,21 @@
     "single_bundled_completion_dialog": true,
     "password_storage": "memory-only",
     "pseudonym_scope": "batch"
+  },
+  "reuse_policy": {
+    "open_source_first": true,
+    "required_checks": [
+      "maintained-official-source",
+      "pinned-version-and-integrity",
+      "redistributable-license",
+      "offline-no-network",
+      "windows-macos-linux",
+      "no-manual-runtime-installation",
+      "coverage-and-negative-tests",
+      "resource-limits-and-sandbox",
+      "sbom-and-notices"
+    ],
+    "custom_code_requires_documented_gap": true
   },
   "quality_gate": {
     "minimum_synthetic_documents": 1000,

@@ -35,7 +35,7 @@
     { "id": "linux-x64", "os": "linux", "arch": "x64" }
   ],
   "required_gates": [
-    "official-source-build",
+    "pinned-maintained-engine-supply-chain",
     "reproducible-package",
     "no-manual-runtime-install",
     "network-denial",

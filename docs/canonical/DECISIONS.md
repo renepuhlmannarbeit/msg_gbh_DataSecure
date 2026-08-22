@@ -238,3 +238,15 @@ Deutsch und Englisch sind die verbindlichen OCR-Sprachen des ersten vollständig
 Releases, einschließlich gemischtsprachiger Dokumente. Die Entitätserkennung bleibt
 zusätzlich für relevante lateinische, griechische, kyrillische und häufige
 CJK-Namensschreibweisen ausgelegt. Weitere OCR-Sprachpakete können versioniert folgen.
+
+## DS-038 – Open Source vor Eigenentwicklung
+
+Vor eigener technischer Implementierung wird für jede Backlog-Story geprüft, ob ein
+gepflegter Open-Source-Baustein das Nutzerziel einfacher und sicher erfüllt. Eine
+Komponente wird nur übernommen, wenn Herkunft und Version fest pinbar sind, die
+Lizenz zur Verteilung passt, Verarbeitung vollständig lokal und netzwerkfrei möglich
+ist, Windows/macOS/Linux ohne manuelle Installation abgedeckt sind und unsere
+Coverage-, Ressourcen-, Datenschutz- und Negativtests bestehen. Externe Bibliotheken
+ersetzen nicht die DataSecure-Sicherheitsgrenze. Nicht passende Komponenten dürfen
+als Testorakel oder Benchmark dienen; Eigenentwicklung braucht eine dokumentierte
+Restlücke.
