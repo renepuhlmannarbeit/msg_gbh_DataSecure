@@ -1,9 +1,9 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Version 3.2.0 RC22 · Windows 10/11 x64 · ca. 20 Minuten.
+Version 3.2.0 RC23 · Windows 10/11 x64 · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC22 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC23 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > signierten lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -222,7 +222,7 @@ wird nur diese Datei sicher gestoppt, weil der Ordnerlauf keinen lokalen
 Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Öffnen Sie
 eine gestoppte TXT-/DOCX-Datei anschließend erneut über den lokalen Dateidialog.
 
-RC22 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
+RC23 ist ausschließlich für Windows x64 freigegeben. Auf macOS, Linux und Windows
 ARM64 stoppt bereits die lokale Parserbereitschaft sicher; es gibt dort keinen
 direkten Node-Ersatzpfad. Plattformübergreifende Adapter sind ein späterer Backlog-
 Punkt und kein aktueller Produktclaim.
@@ -283,7 +283,7 @@ Nummern beginnen bei jedem Dokument neu.
 | `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
 | Claude meldet mehr Dateien als in `Input` lagen | `input_documents_seen`, `attempted` und `automatic_retries` prüfen. Mehrere Versuche derselben Datei sind keine mehreren Dateien |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
-| `PDF_COVERAGE_UNVERIFIED` | PDF ist in RC22 unabhängig vom Inhalt sicher gesperrt. Verwenden Sie nach Organisationsfreigabe die ursprüngliche DOCX-/XLSX-/PPTX-/TXT-Datei oder lassen Sie einen ausdrücklich freigegebenen PNG-/JPEG-Export erneut durch DataSecure verarbeiten; niemals das Original-PDF oder den Export direkt in Claude hochladen |
+| `PDF_COVERAGE_UNVERIFIED` | PDF ist in RC23 unabhängig vom Inhalt sicher gesperrt. Verwenden Sie nach Organisationsfreigabe die ursprüngliche DOCX-/XLSX-/PPTX-/TXT-Datei oder lassen Sie einen ausdrücklich freigegebenen PNG-/JPEG-Export erneut durch DataSecure verarbeiten; niemals das Original-PDF oder den Export direkt in Claude hochladen |
 | Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | In `Processed` nachsehen und das Original zurück nach `Input` verschieben. Tritt das erneut auf, an IT melden |
 | Fachbegriff fälschlich geschwärzt | Kein Datenschutzproblem, aber bitte melden |
 | **Echter Name in der geprüften Fassung** | **Sofort aufhören.** Nicht weiterarbeiten, Chat nicht weiterverwenden, umgehend melden |
@@ -322,7 +322,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC22 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC23 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

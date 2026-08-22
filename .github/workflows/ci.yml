@@ -88,6 +88,8 @@ jobs:
           done
           test -f .verify/plugin/bin/windows-x64/datasecure-sandbox.exe
           test -f .verify/mcpb/bin/windows-x64/datasecure-sandbox.exe
+      - name: Test the packaged German skills with synthetic contracts
+        run: npm run test:plugin-zip
       - name: Generate SPDX SBOM and SHA-256 checksums
         run: node scripts/generate-sbom.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

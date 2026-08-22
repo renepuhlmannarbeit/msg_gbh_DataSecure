@@ -16,7 +16,7 @@ const NAME_TOKEN = `[${UPPER}][${NAME_BODY}]{1,30}`;
 const CAPS_TOKEN = `[${UPPER}][${UPPER}'’\\-]{1,30}`;
 
 const ORG_SUFFIX =
-  '(?:GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|AG|SE|KG|OHG|GbR|e\\.?V\\.?|B\\.?V\\.?' +
+  '(?:GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|AG|SE(?:\\s*&\\s*Co\\.?\\s*KGaA)?|KGaA|KG|OHG|GbR|e\\.?V\\.?|B\\.?V\\.?' +
   '|Ltd\\.?|Limited|Inc\\.?|LLC|SAS|SARL|S\\.?A\\.?|PLC' +
   '|UG(?:\\s*\\(haftungsbeschränkt\\))?)';
 
@@ -97,7 +97,7 @@ const STREET_ADDRESS_RE = new RegExp(
   `${NB}(?:(?:[${UPPER}][${NAME_BODY}.\\-]{1,80}(?:straße|strasse|str\\.|weg|allee|gasse|platz|ring|damm|ufer|chaussee|stieg))` +
     `|(?:[${UPPER}][${NAME_BODY}.]{0,50}(?:${SEP}+[${UPPER}][${NAME_BODY}.]{0,50}){0,3}` +
     `${SEP}+(?:straße|strasse|str\\.|weg|allee|gasse|platz|ring|damm|ufer|chaussee|stieg))` +
-    `|(?:(?:Am|An${SEP}+der|Auf${SEP}+der|In${SEP}+der|Zum|Zur|Unter${SEP}+den|Unter${SEP}+der)` +
+    `|(?:(?:Am|Im|An${SEP}+der|Auf${SEP}+der|In${SEP}+der|Zum|Zur|Unter${SEP}+den|Unter${SEP}+der)` +
     `${SEP}+[${UPPER}][${NAME_BODY}.]+(?:${SEP}+[${UPPER}][${NAME_BODY}.]+){0,2}))${SEP}+\\d{1,5}[a-zA-Z]?` +
     `(?:${SEP}*[–—-]${SEP}*\\d{1,5}[a-zA-Z]?)?${NA}`,
   'giu'

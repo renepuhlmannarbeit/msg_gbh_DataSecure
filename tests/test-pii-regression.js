@@ -353,6 +353,145 @@ test('organisations starting with an umlaut are detected', () => {
   assertAbsent(text, 'Österreichische', 'organisation');
 });
 
+test('lower-case legal brands and organisation-shaped names are anonymized as contract parties', () => {
+  const src = [
+    'Vertragsparteien sind msg systems ag und Deutsche Telekom AG.',
+    'Leistung: Testmanagement und Qualitätssicherung für Krankenhaussoftware.'
+  ].join('\n');
+  const { text, residual } = anonymizeVerified(src, 'contract');
+  assertAbsent(text, 'msg systems ag', 'lower-case organisation');
+  assertAbsent(text, 'Deutsche Telekom AG', 'capitalised organisation');
+  assert.doesNotMatch(text, /\[PERSON_\d+\][ \\t]+AG/u, 'organisation alias must not win as a person');
+  assertPresent(text, 'Testmanagement und Qualitätssicherung', 'professional contract content');
+  assert.deepStrictEqual(residual, [], 'contract parties must not survive the residual gate');
+});
+
+test('lower-case organisations survive neither terminal punctuation nor labels', () => {
+  const cases = [
+    'Vertragsparteien sind Deutsche Telekom AG und msg systems ag.',
+    'Vertragspartei: msg systems ag.',
+    'msg systems ag.'
+  ];
+  for (const source of cases) {
+    const { text, residual } = anonymizeVerified(source, 'contract');
+    assertAbsent(text, 'msg systems ag', 'lower-case organisation at the segment end');
+    assert.deepStrictEqual(residual, []);
+  }
+});
+
+test('an internal und in a lower-case company name is not treated as a party separator', () => {
+  const source = 'Vertragsparteien sind forschung und entwicklung gmbh und msg systems ag.';
+  const { text, counts, residual } = anonymizeVerified(source, 'contract');
+  assertAbsent(text, 'forschung und entwicklung gmbh', 'first organisation');
+  assertAbsent(text, 'msg systems ag', 'second organisation');
+  assert.strictEqual(counts.ORG, 2);
+  assert.deepStrictEqual(residual, []);
+});
+
+test('a party clause stops before professional prose in the next sentence', () => {
+  const cases = [
+    [
+      'Vertragsparteien sind alpha gmbh. Leistung: Entwicklung und Test der SAP SE.',
+      'Vertragsparteien sind [ORGANISATION_001]. Leistung: Entwicklung und Test der [ORGANISATION_002].',
+      2
+    ],
+    [
+      'Vertrag zwischen alpha gmbh und beta ag. Betrieb und Test der SAP SE.',
+      'Vertrag zwischen [ORGANISATION_001] und [ORGANISATION_002]. Betrieb und Test der [ORGANISATION_003].',
+      3
+    ]
+  ];
+  for (const [source, expected, count] of cases) {
+    const { text, counts, residual } = anonymizeVerified(source, 'contract');
+    assert.strictEqual(text, expected);
+    assert.strictEqual(counts.ORG, count);
+    assert.deepStrictEqual(residual, []);
+  }
+});
+
+test('sowie separates parties without becoming part of either organisation', () => {
+  const source = 'Vertragsparteien sind forschung und entwicklung gmbh sowie msg systems ag.';
+  const { text, counts, residual } = anonymizeVerified(source, 'contract');
+  assert.strictEqual(text, 'Vertragsparteien sind [ORGANISATION_001] sowie [ORGANISATION_002].');
+  assert.strictEqual(counts.ORG, 2);
+  assert.deepStrictEqual(residual, []);
+});
+
+test('contract abbreviations and addresses do not hide a later lower-case party', () => {
+  const cases = [
+    'Vertrag zwischen alpha gmbh, Musterstr. 1, und msg systems ag.',
+    'Vertragsparteien sind alpha gmbh, z. Hd. Anna Muster, und msg systems ag.',
+    'Vertrag zwischen alpha gmbh, vertreten durch Dr. Anna Muster, und msg systems ag.',
+    'Vereinbarung zwischen alpha gmbh, Nr. 7, sowie msg systems ag.'
+  ];
+  for (const source of cases) {
+    const { text, counts, residual } = anonymizeVerified(source, 'contract');
+    assertAbsent(text, 'alpha gmbh', 'first lower-case party');
+    assertAbsent(text, 'msg systems ag', 'later lower-case party');
+    assert.strictEqual(counts.ORG, 2);
+    assert.deepStrictEqual(residual, []);
+  }
+});
+
+test('party metadata never turns following professional prose into an organisation', () => {
+  const cases = [
+    [
+      'Vertragsparteien sind alpha gmbh, Nr. 1. Leistung und Test der SAP SE.',
+      'Vertragsparteien sind [ORGANISATION_001], Nr. 1. Leistung und Test der [ORGANISATION_002].'
+    ],
+    [
+      'Vertrag zwischen alpha gmbh, Sitz Haus 7. Betrieb und Test der SAP SE.',
+      'Vertrag zwischen [ORGANISATION_001], Sitz Haus 7. Betrieb und Test der [ORGANISATION_002].'
+    ],
+    [
+      'Vertragsparteien sind alpha gmbh, Stand 22.08.2026. Leistung und Test der SAP SE.',
+      'Vertragsparteien sind [ORGANISATION_001], Stand 22.08.2026. Leistung und Test der [ORGANISATION_002].'
+    ]
+  ];
+  for (const [source, expected] of cases) {
+    const { text, counts, residual } = anonymizeVerified(source, 'contract');
+    assert.strictEqual(text, expected);
+    assert.strictEqual(counts.ORG, 2);
+    assert.deepStrictEqual(residual, []);
+  }
+});
+
+test('an ordinal metadata point before an explicit connector keeps the next party detectable', () => {
+  const source = 'Vertrag zwischen alpha gmbh, Nr. 7. und msg systems ag.';
+  const { text, counts, residual } = anonymizeVerified(source, 'contract');
+  assertAbsent(text, 'alpha gmbh', 'first party');
+  assertAbsent(text, 'msg systems ag', 'party following an ordinal point');
+  assert.strictEqual(counts.ORG, 2);
+  assert.deepStrictEqual(residual, []);
+});
+
+test('the same words can be an organisation alias and an explicit person without leaving a legal form', () => {
+  const src = [
+    'Deutsche Telekom AG ist Vertragspartei.',
+    'Ansprechpartner: Deutsche Telekom.'
+  ].join('\n');
+  const { text, residual } = anonymizeVerified(src, 'contract');
+  assert.match(text, /^\[ORGANISATION_\d+\] ist Vertragspartei\./u);
+  assert.match(text, /Ansprechpartner: \[PERSON_\d+\]\./u);
+  assert.doesNotMatch(text, /\[PERSON_\d+\][ \\t]+AG/u);
+  assert.deepStrictEqual(residual, []);
+});
+
+test('ordinary prose connectors never pull professional text into an organisation span', () => {
+  const cases = [
+    ['Leistung: Entwicklung und Test der SAP SE Schnittstelle.', 'Leistung: Entwicklung und Test der [ORGANISATION_001] Schnittstelle.'],
+    ['Leistung: Entwicklung und Betrieb durch die SAP SE.', 'Leistung: Entwicklung und Betrieb durch die [ORGANISATION_001].'],
+    ['Wir entwickeln und testen die Anwendung für SAP SE Kunden.', 'Wir entwickeln und testen die Anwendung für [ORGANISATION_001] Kunden.'],
+    ['Der Kunde nutzt SAP SE für die Abrechnung.', 'Der Kunde nutzt [ORGANISATION_001] für die Abrechnung.'],
+    ['Der Unterschied zwischen Altverfahren und SAP SE bleibt dokumentiert.', 'Der Unterschied zwischen Altverfahren und [ORGANISATION_001] bleibt dokumentiert.']
+  ];
+  for (const [source, expected] of cases) {
+    const { text, residual } = anonymizeVerified(source, 'contract');
+    assert.strictEqual(text, expected);
+    assert.deepStrictEqual(residual, []);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Identity consistency: one human, one pseudonym.
 // ---------------------------------------------------------------------------

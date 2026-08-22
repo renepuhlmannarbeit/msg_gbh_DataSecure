@@ -4,6 +4,7 @@ const { lineBoundsAt } = require('./spans');
 const {
   NAME_TOKEN,
   CAPS_TOKEN,
+  ORG_SUFFIX,
   COMPANY_RE,
   normalizeSpaces,
   key,
@@ -13,6 +14,87 @@ const {
   looksName,
   looksSurname
 } = require('./base');
+
+// Some brands and their registered legal forms are intentionally written in
+// lower case (for example "msg systems ag"). The general COMPANY_RE stays
+// capitalization-sensitive to avoid interpreting arbitrary prose as a company.
+// Lower/mixed-case variants are accepted only as a whole labelled value, a
+// party-list segment, or a complete standalone line. In particular, ordinary
+// prose connectors such as "und" never establish company context themselves.
+const COMPANY_WORD = "[A-Za-z0-9ÄÖÜäöüß&.'’+\\-/]+";
+const SEGMENT_COMPANY_RE = new RegExp(
+  `^[ \\t]*(?:die[ \\t]+)?(${COMPANY_WORD}(?:[ \\t]+${COMPANY_WORD}){0,7}[ \\t]+${ORG_SUFFIX})` +
+    `(?=[ \\t]*(?:$|[.,;:]|\\(|[-–—]|vertreten\\b|nachfolgend\\b))`,
+  'iu'
+);
+const PARTY_COMPANY_RE = new RegExp(
+  `(?:^|[,;][ \\t]*(?:und|sowie|als[ \\t]+auch)[ \\t]+|\\b(?:und|sowie|als[ \\t]+auch)[ \\t]+)(?:die[ \\t]+)?` +
+    `(${COMPANY_WORD}(?:[ \\t]+${COMPANY_WORD}){0,7}?[ \\t]+${ORG_SUFFIX})` +
+    `(?=[ \\t]*(?:$|[.,;:]|\\(|[-–—]|\\b(?:und|sowie|als[ \\t]+auch)\\b|vertreten\\b|nachfolgend\\b))`,
+  'giu'
+);
+const COMPANY_LABEL_RE =
+  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma)\s*:\s*(.+)$/iu;
+const COMPANY_TABLE_RE =
+  /^\|\s*(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma)\s*:?\s*\|\s*([^|]+)\|/iu;
+const PARTY_CLAUSE_RE =
+  /\b(?:Vertragsparteien?\s+(?:sind|:)|(?:Vertrag|Vereinbarung)\s+zwischen)\s+(.+)$/iu;
+
+const CLAUSE_ABBREVIATIONS = new Set([
+  'dr', 'prof', 'nr', 'hd', 'str', 'bzw', 'ca', 'ggf', 'inkl', 'zzgl', 'u', 'a'
+]);
+
+// A party clause may contain abbreviations and address components before the
+// next party ("Dr.", "z. Hd.", "Musterstr.", "Nr. 7"). Only a real sentence
+// stop between two company matches ends the proven party context. The scan is
+// line-local and bounded by the already matched clause.
+function hasPartySentenceBoundary(gap, followedByPartyConnector = false) {
+  const value = String(gap || '');
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] !== '.') continue;
+    const before = value.slice(0, index);
+    const word = before.match(/([\p{L}]+)$/u)?.[1]?.toLocaleLowerCase('de-DE') || '';
+    const previous = index > 0 ? value[index - 1] : '';
+    if (/\d/u.test(previous)) {
+      const after = value.slice(index + 1);
+      if (/^\d/u.test(after) || (followedByPartyConnector && /^[ \t]*$/u.test(after))) continue;
+    }
+    if (word.length === 1 || CLAUSE_ABBREVIATIONS.has(word) || word.endsWith('str')) continue;
+    return true;
+  }
+  return false;
+}
+
+function collectContextOrganizations(text) {
+  const out = [];
+  for (const line of lines(text)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const table = trimmed.match(COMPANY_TABLE_RE);
+    const labelText = trimmed.replace(/^[-*+]\s+/u, '');
+    const labelled = labelText.match(COMPANY_LABEL_RE);
+    const clause = trimmed.match(PARTY_CLAUSE_RE);
+    const candidates = [];
+    if (table) candidates.push(table[1]);
+    if (labelled) candidates.push(labelled[1]);
+    if (clause) {
+      PARTY_COMPANY_RE.lastIndex = 0;
+      let party;
+      let previousEnd = 0;
+      while ((party = PARTY_COMPANY_RE.exec(clause[1]))) {
+        if (hasPartySentenceBoundary(clause[1].slice(previousEnd, party.index), party.index > 0)) break;
+        out.push(normalizeSpaces(party[1]));
+        previousEnd = party.index + party[0].length;
+      }
+    }
+    if (!table && !labelled && !clause) candidates.push(trimmed);
+    for (const candidate of candidates) {
+      const match = candidate.match(SEGMENT_COMPANY_RE);
+      if (match) out.push(normalizeSpaces(match[1]));
+    }
+  }
+  return out;
+}
 
 const PERSON_LABEL =
   '(?:Name|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
@@ -310,7 +392,7 @@ function collectNameSeeds(text) {
 }
 
 function collectOrganizations(text) {
-  const out = [];
+  const out = collectContextOrganizations(text);
   COMPANY_RE.lastIndex = 0;
   let m;
   while ((m = COMPANY_RE.exec(text))) {

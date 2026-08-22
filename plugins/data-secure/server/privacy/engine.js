@@ -191,6 +191,13 @@ function anonymize(text, profile = 'general') {
   const seeds = collectPersonSeeds(src, profile, strongPersonAnchors).filter((seed) => {
     const occurrences=findLiteralSpans(src,seed.value,'','PERSON',PRIORITY.PERSON);
     if(!occurrences.length) return true;
+    // A capitalised organisation alias such as "Deutsche Telekom" can look
+    // exactly like a person's full name. If every occurrence is contained in
+    // a longer legal-form organisation, the organisation interpretation is
+    // unambiguous and must win before person priorities are applied.
+    if (occurrences.every((span) =>
+      sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
+    )) return false;
     return !occurrences.every((span) =>
       inCredentialContext(src,span.start,span.end,sourceCredentialRanges) &&
       sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
@@ -232,9 +239,14 @@ function anonymize(text, profile = 'general') {
   const spans = [...findStructuredSpans(out)].filter((span) =>
     !(span.type === 'URL' && isProtectedProfessionalDomain(out,span.start,span.end,credentialRanges))
   );
+  const organizationCoverage = collectOrganizations(out).flatMap((org) =>
+    findLiteralSpans(out, org, '', 'ORGANIZATION', PRIORITY.ORGANIZATION)
+  );
   for (const entry of dictionary) {
     const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority);
     for (const span of found) {
+      if ((entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS') &&
+          organizationCoverage.some((org) => span.start >= org.start && span.end <= org.end)) continue;
       if ((entry.type === 'ORGANIZATION' || entry.type === 'PROJECT') &&
           inCredentialContext(out, span.start, span.end, credentialRanges)) continue;
       spans.push(

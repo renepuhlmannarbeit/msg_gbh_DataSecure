@@ -216,9 +216,14 @@ Ein unterbrochener Vorgang wird sicher bereinigt oder eindeutig wiederaufgenomme
 
 ### DS-007 – Pilot-Release-Gate und Installationsbeweis (M)
 
-**Stand RC22: teilweise umgesetzt.** CI baut ZIP und MCPB reproduzierbar, erzeugt
+**Stand RC23: teilweise umgesetzt.** CI baut ZIP und MCPB reproduzierbar, erzeugt
 eine SPDX-2.3-SBOM und SHA-256-Prüfsummen, scannt die vollständige Git-Historie mit
 Gitleaks und analysiert JavaScript mit CodeQL; Actions sind auf Commit-SHAs gepinnt.
+Das tatsächlich gebaute Plugin-ZIP wird entpackt und mit den ausgelieferten deutschen
+Skills gegen zehn synthetische Verträge sowie eine 150-Fall-Matrix aus verschiedenen
+Unternehmen, erfundenen Personen, Anschriften und Vertragslayouts abgenommen. Diese
+Prüfung simuliert nicht das Claude-Modell, belegt aber Skill-Vertrag, Paketinhalt und
+Anonymisierungswirkung gemeinsam.
 Offen bleiben Codesignatur sowie dokumentierte Installation, Upgrade und Rollback
 auf einem frischen, vom Entwicklungsrechner unabhängigen Windows-System.
 
@@ -442,6 +447,22 @@ Formatklasse, Review/Skip und Support-ID.
 
 ### DS-201 – Unabhängiger Detektor-Benchmark (M)
 
+**Stand RC23:** Eine deterministische 150-Fall-Matrix variiert Unternehmen,
+erfundene Personen, Anschriften und sechs Vertragslayouts. Das folgt dem sinnvollen
+Prinzip templatebasierter synthetischer Evaluationsdaten aus `presidio-research`,
+ohne dessen Python-/Modellabhängigkeiten in das Produkt zu übernehmen. Die Recherche
+hat außerdem `@doccloak/core` (Apache-2.0, lokale Regex-/optionale ONNX-Pipeline),
+Presidio sowie den GLiNER-basierten `maskeringsscript` als Benchmark-Kandidaten
+bestätigt. Sie werden zunächst nur als getrennte Test-Orakel bewertet; ihre Treffer
+dürfen weder automatisch veröffentlicht noch die bestehende lokale Prüfung umgehen.
+
+Quellen für den Spike:
+
+- <https://github.com/microsoft/presidio-research>
+- <https://github.com/WLojek/DocCloak.Core>
+- <https://github.com/microsoft/presidio>
+- <https://github.com/MinBZK/maskeringsscript>
+
 **Ergebnis:** Bestehende Regeln werden auf demselben versionierten deutschen Testkorpus
 gegen GLiNER-, Presidio- und PII-Shield-Ansätze verglichen. Kein Backend wird allein
 wegen seiner Trefferzahl zum Produktstandard.
@@ -453,6 +474,31 @@ wegen seiner Trefferzahl zum Produktstandard.
 - Fachinhalte wie Rollen, Skills, Methoden, Technologien und Projektzeiträume erhalten
   eigene Over-Redaction-Metriken.
 - Kandidaten laufen zunächst hinter Feature Flag und dürfen harte Gates nicht umgehen.
+- Der erste Vergleich nutzt fest gepinnte Offline-Artefakte und dasselbe Ground Truth;
+  Laufzeitdownloads oder Netzaufrufe während einer Dokumentverarbeitung sind verboten.
+- Eine zusätzliche Engine verändert nicht die Skills: Für Anwender bleibt genau ein
+  Einstieg, Auswahl und Kombination der Detektoren liegen vollständig im lokalen Runtime-Pfad.
+
+### DS-201a – Lokale Review-Oberfläche als MCP-App-Spike (M)
+
+**Ergebnis:** Der bestehende lokale Review-Vertrag wird prototypisch mit dem offiziellen
+MCP-Apps-Standard (`ui://`, sandboxed iframe) dargestellt. Bewertet wird ausschließlich,
+ob damit die Windows-Forms-Oberfläche später plattformneutral ersetzt werden kann; die
+App erhält keine Freigabeautorität und der Skill bleibt unverändert einfach.
+
+Referenzen:
+
+- <https://github.com/modelcontextprotocol/ext-apps>
+- <https://github.com/gregmos/PII-Shield#human-in-the-loop-review>
+
+**Abnahme:**
+
+- Rohtext und markierte Fundstellen bleiben nachweislich lokal und erscheinen weder in
+  Modell-Toolresultaten noch Logs, Diagnosen oder externen Requests.
+- Fehlende Host-Unterstützung, UI-Abbruch oder Protokollfehler führen sicher zu keinem
+  Paket; der bestehende lokale Pfad bleibt bis zur vollständigen Abnahme maßgeblich.
+- Keine React-/Vite-/SDK-Laufzeit wird allein für den Spike in das Release-Paket gezogen;
+  Paketgröße, CSP, Barrierefreiheit und Supportmatrix werden vor einer Übernahme gemessen.
 
 ### DS-202 – Erweiterte lokale Erkennung (L)
 

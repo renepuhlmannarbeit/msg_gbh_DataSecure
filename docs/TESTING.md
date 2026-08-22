@@ -4,6 +4,8 @@
 npm test                # the whole suite
 npm run test:golden     # regenerate the golden expected output after an intended change
 npm run test:windows-visual # real Windows OCR/redaction acceptance (Windows only)
+npm run test:skills     # local German skill/contract acceptance
+npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
 ```
 
 The suite has no npm dependencies. `tests/helpers.js` is a ~50 line runner; each
@@ -19,7 +21,9 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-parser-isolation.js` | 11 | mandatory Windows-launcher invocation, inherited stdin transport, renamed-PDF signature blocking before spawn, absence of a PDF implementation in the packaged worker, missing/corrupt launcher refusal without fallback, native-host architecture probing, fixed resource/setup codes, confirmed deadline termination, response-size/schema enforcement and content-free worker errors |
 | `test-pdfium-spike.mjs` | 6 | offline contract for the non-release PDFium lock: immutable distributor/upstream provenance and hashes, V8/XFA-off build, license inventory, strict separation from the product worker and unchanged `PDF_COVERAGE_UNVERIFIED` runtime gate; the networked/native engineering probe remains an explicit `npm run pdfium:spike` command |
 | `test-native-launcher.js` | 7 | real Windows Job Object transport, `ACTIVE_PROCESS=1` for Node and the PowerShell visual host, process/job memory, CPU and wallclock enforcement, and `KILL_ON_JOB_CLOSE` worker removal |
-| `test-pii-regression.js` | 63 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, explicit-versus-ambiguous credential context, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, project-prose disambiguation, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
+| `test-pii-regression.js` | 73 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, explicit-versus-ambiguous credential context, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, lower-case legal brands including terminal punctuation, internal connectors, bounded party clauses, ordinal metadata guards and common contractual abbreviations, occurrence-scoped organisation/person overlap and connector false-positive guards, project-prose disambiguation, common German telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
+| `test-contract-skill-acceptance.js` | 12 | both shipped German skill contracts plus ten invented service contracts with twenty public company-name tokens; identifiers must disappear while service, amount, term, termination and certification content survive; `test:plugin-zip` repeats the same acceptance against the extracted release ZIP |
+| `test-contract-skill-matrix.js` | 150 | deterministic combinations of 30 public company-name tokens, 30 invented people, ten invented addresses and six contract layouts; parties, people, contact, bank and reference data must disappear while business and certification content survives; the built-ZIP check repeats the matrix against the shipped runtime |
 | `test-credential-catalog.js` | 9 | deterministic offline catalog schema, aliases, context separation, optional verified references and unknown-certification preservation |
 | `test-image-sanitizer.js` | 20 | PNG/BMP round trips, bounded PNG decompression and chunk lengths, metadata stripping, refusal of unsupported variants, OCR offset mapping, pixel-level redaction with padding and clamping |
 | `test-windows-visual.js` | 10 | mandatory verified Job Object launcher without PowerShell fallback, secret-free environment, native status/resource mapping, console limits, race-safe confirmed process-tree termination, fixed errors and bounded OCR schema |
@@ -39,7 +43,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `exploratory-review-20.js` | 20 | alternative German phone/address/name forms, Unicode e-mail and IDN, IPv6, lower-case IBAN, labelled birth dates and vehicle plates, customer URLs, duplicate ZIP entries and PNG CRC integrity |
 | `test-sarif-check.mjs` | 4 | fail-closed local CodeQL report parsing without leaking finding messages into the release-gate output |
 
-Total: 382 assertion-level cases plus the plugin structure check (**383 checks overall**).
+Total: 554 assertion-level cases plus the plugin structure check (**555 checks overall**).
 
 The Windows CI additionally runs `test:windows-visual`: a synthetic scan passes through
 the real Job Object, Windows OCR, pixel redaction and verification OCR; malformed EMF
