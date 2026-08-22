@@ -41,7 +41,14 @@ export function collectFiles(dir, base = dir) {
     if (entry.isDirectory()) {
       out.push(...collectFiles(full, base));
     } else if (entry.isFile()) {
-      out.push({ archivePath: path.relative(base, full).split(path.sep).join('/'), fullPath: full });
+      out.push({
+        archivePath: path.relative(base, full).split(path.sep).join('/'),
+        fullPath: full,
+        // Source checkout modes differ between Windows and POSIX. Callers that
+        // package a native POSIX executable must override this deterministic
+        // regular-file default explicitly.
+        mode: 0o100644
+      });
     }
   }
   return out;
@@ -76,7 +83,7 @@ export function writeZip(outFile, files) {
 
     const ch = Buffer.alloc(46);
     ch.writeUInt32LE(0x02014b50, 0);
-    ch.writeUInt16LE(20, 4);
+    ch.writeUInt16LE(0x0314, 4); // ZIP 2.0, created on Unix
     ch.writeUInt16LE(20, 6);
     ch.writeUInt16LE(0x800, 8);
     ch.writeUInt16LE(method, 10);
@@ -86,6 +93,8 @@ export function writeZip(outFile, files) {
     ch.writeUInt32LE(data.length, 20);
     ch.writeUInt32LE(raw.length, 24);
     ch.writeUInt16LE(name.length, 28);
+    const mode = Number.isInteger(file.mode) ? file.mode & 0xffff : 0o100644;
+    ch.writeUInt32LE((mode * 0x10000) >>> 0, 38);
     ch.writeUInt32LE(offset, 42);
     centrals.push(ch, name);
 
@@ -104,4 +113,29 @@ export function writeZip(outFile, files) {
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
   fs.writeFileSync(outFile, Buffer.concat([local, central, end]));
   return { entries: files.length, bytes: fs.statSync(outFile).size };
+}
+
+export function readCentralModes(buffer) {
+  const modes = new Map();
+  const minimum = Math.max(0, buffer.length - 65557);
+  let end = -1;
+  for (let offset = buffer.length - 22; offset >= minimum; offset--) {
+    if (buffer.readUInt32LE(offset) === 0x06054b50) { end = offset; break; }
+  }
+  if (end < 0) throw new Error('ZIP_END_NOT_FOUND');
+  const count = buffer.readUInt16LE(end + 10);
+  let offset = buffer.readUInt32LE(end + 16);
+  for (let index = 0; index < count; index++) {
+    if (offset + 46 > end || buffer.readUInt32LE(offset) !== 0x02014b50) {
+      throw new Error('ZIP_CENTRAL_INVALID');
+    }
+    const nameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const name = buffer.toString('utf8', offset + 46, offset + 46 + nameLength);
+    modes.set(name, buffer.readUInt32LE(offset + 38) >>> 16);
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  if (modes.size !== count) throw new Error('ZIP_CENTRAL_DUPLICATE');
+  return modes;
 }

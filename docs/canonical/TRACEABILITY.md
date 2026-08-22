@@ -162,3 +162,9 @@ Adapterkompatibilität und den Stopp bei plattformspezifisch abweichendem gemein
 Kern. Der nachgelagerte Download-/Assembly-/Offline-OCR-Job in Lauf `32597783210`
 ist grün. Ein erneuter lokaler Artefaktdownload bestand die Hashprüfung mit 244
 Dateien und 57.592.942 Bytes; das Freigabeflag bleibt aus.
+
+`build-portable-plugin.mjs`, `verify-portable-plugin-zip.mjs` und
+`test-zip-permissions.mjs` bilden die nächste Paketgrenze. Lokal wurden 319 ZIP-
+Einträge und 22.033.239 Bytes vollständig gegen Pluginquelle und V2-Manifest geprüft.
+Die drei POSIX-Launcher tragen `0755`, alle anderen Einträge deterministisch `0644`.
+Der Cloud-Nachweis für Doppelbuild und echte Extraktion ist noch offen.

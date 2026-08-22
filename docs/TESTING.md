@@ -9,6 +9,14 @@ npm run benchmark:detectors # aggregate detector quality on the synthetic ground
 npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
 ```
 
+Der gesperrte universelle OCR-Engineering-ZIP wird nur mit einem zuvor geprüften
+V2-Runtime-Verzeichnis gebaut:
+
+```bash
+node scripts/build-portable-plugin.mjs --runtime dist/ocr-runtime/universal
+node scripts/verify-portable-plugin-zip.mjs
+```
+
 CI führt die portable Suite mit Node 22.13 auf macOS und Linux sowie die vollständige
 Suite einschließlich nativer Job-Object-/OCR-Prüfung auf Windows aus. Ein grüner
 macOS-CI-Lauf belegt Parser- und Vertragsverhalten, ersetzt aber nicht die manuelle
@@ -29,6 +37,7 @@ file prints one line per case and exits non-zero on the first failure.
 | `test-pdfium-spike.mjs` | 6 | offline contract for the non-release PDFium lock: immutable distributor/upstream provenance and hashes, V8/XFA-off build, license inventory, strict separation from the product worker and unchanged `PDF_COVERAGE_UNVERIFIED` runtime gate; the networked/native engineering probe remains an explicit `npm run pdfium:spike` command |
 | `test-portable-ocr-adapter.js` | 7 | exact OS/architecture selection, explicit release gate, complete hash inventory and extra-file rejection, bounded OCR-V1 execution, fixed content-free errors and canonical error vocabulary; the shipped plugin remains closed while no released runtime bundle is present |
 | `test-ocr-universal-assembler.mjs` | 8 | four exact target bundles, byte-identical shared runtime closure, single model/runtime copy, four launcher entries, non-release v2 contract, adapter compatibility and rejection of a validly rehashed but divergent platform core |
+| `test-zip-permissions.mjs` | 2 | deterministic ZIP central-directory Unix metadata preserves executable launcher mode while ordinary files remain non-executable |
 | `test-native-launcher.js` | 7 | real Windows Job Object transport, `ACTIVE_PROCESS=1` for Node and the PowerShell visual host, process/job memory, CPU and wallclock enforcement, and `KILL_ON_JOB_CLOSE` worker removal |
 | `test-pii-regression.js` | 76 | golden personnel profile byte for byte, exact preservation of business periods, occurrence-scoped credential issuers in sections, prose and OCR spans, explicit-versus-ambiguous credential context, domain-shaped issuers versus verification URLs, IT/testing/product/business-analysis/health-IT vocabulary, lower-case legal brands including terminal punctuation, internal connectors, bounded party clauses, ordinal metadata guards and common contractual abbreviations, occurrence-scoped organisation/person overlap and connector false-positive guards, project-prose disambiguation, German and Unicode person names, common telephone/address formats, one-pass gateway convergence, plus one case per defect listed below |
 | `test-contract-skill-acceptance.js` | 12 | both shipped German skill contracts plus ten invented service contracts with twenty public company-name tokens; identifiers must disappear while service, amount, term, termination and certification content survive; `test:plugin-zip` repeats the same acceptance against the extracted release ZIP |

@@ -409,6 +409,15 @@ heruntergeladene Universal-Artefakt umfasst 244 inventarisierte Dateien und
 V2-Bundles in den echten Plugin-ZIP-/Marketplace-Build einschließlich POSIX-
 Ausführungsmodus.
 
+Lokaler Paketierungsschnitt: `build-portable-plugin.mjs` kopiert den kanonischen
+Pluginbaum und das vollständig geprüfte V2-Bundle nur in eine flüchtige Staging-
+Struktur. Der erzeugte Engineering-ZIP enthält 319 Einträge, ist rund 22,0 MB groß
+und bleibt mit deaktiviertem OCR-Gate eindeutig nicht freigegeben.
+`verify-portable-plugin-zip.mjs` prüft Plugin-Quellparität, jedes Runtime-Byte und die
+POSIX-Ausführungsmodi. Der ZIP-Writer schreibt deterministische Unix-Modi; der
+Cloud-Folgejob baut zweimal bytegleich und prüft nach echter `unzip`-Extraktion alle
+drei POSIX-Launcher. Dieser Plattformnachweis steht noch aus.
+
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 
 Status: **offen** · Epic: BL-024 · Abhängigkeiten: BL-020.1, BL-024.2

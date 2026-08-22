@@ -161,7 +161,8 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   for (const token of ['build-ocr-runtime.mjs', 'test-ocr-runtime-bundle.mjs',
     'test-ocr-runtime-smoke.mjs', 'dist/ocr-runtime/${{ env.OCR_BUNDLE_TARGET }}/',
     'include-hidden-files: true', 'assemble-ocr-runtime.mjs',
-    'test-ocr-universal-bundle.mjs', 'tesseractjs-ocr-universal-${{ github.sha }}']) {
+    'test-ocr-universal-bundle.mjs', 'tesseractjs-ocr-universal-${{ github.sha }}',
+    'build-portable-plugin.mjs', 'verify-portable-plugin-zip.mjs', 'test -x']) {
     assert.ok(workflow.includes(token), `OCR bundle workflow missing ${token}`);
   }
 

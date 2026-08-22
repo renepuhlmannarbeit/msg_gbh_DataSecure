@@ -225,6 +225,14 @@ erneut lokal heruntergeladene Ergebnis besitzt 244 inventarisierte Dateien,
 57.592.942 Bytes und bleibt mit `release_enabled: false` gesperrt. Offen ist seine
 Einbettung in die echten ZIP-/Marketplace-Pakete mit erhaltenem POSIX-Ausführungsbit.
 
+Ein separater Engineering-Builder bettet das gesperrte Universal-Bundle inzwischen
+in einen echten Plugin-ZIP ein, ohne den kanonischen Marketplace-Quellbaum zu
+verändern. Der lokale Build besitzt 319 Einträge, 22.033.239 Bytes und bestand
+Quellparität, vollständige Runtime-Hashprüfung und Modusprüfung. Der deterministische
+ZIP-Writer normalisiert reguläre Dateien auf `0644` und setzt nur die drei POSIX-
+Launcher auf `0755`. Cloud-Reproduzierbarkeit und echte Linux-Extraktion sind im
+nächsten Lauf zu bestätigen; Marketplace-Parität bleibt danach noch offen.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**

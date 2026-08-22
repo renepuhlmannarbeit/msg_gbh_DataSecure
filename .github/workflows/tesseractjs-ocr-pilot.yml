@@ -107,12 +107,27 @@ jobs:
           node scripts/assemble-ocr-runtime.mjs --input dist/ocr-platform-downloads --output dist/ocr-runtime/universal > tesseractjs-ocr-universal.json
           node tests/test-ocr-universal-bundle.mjs dist/ocr-runtime/universal
           node tests/test-ocr-runtime-smoke.mjs linux-x64 dist/ocr-runtime/universal > tesseractjs-ocr-universal-smoke.json
+          node scripts/build-portable-plugin.mjs --runtime dist/ocr-runtime/universal > tesseractjs-portable-plugin.json
+          node scripts/verify-portable-plugin-zip.mjs
+          archive="dist/DataSecure-Privacy-Preflight-Portable-Engineering-v3.2.0-rc30.zip"
+          first="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          node scripts/build-portable-plugin.mjs --runtime dist/ocr-runtime/universal > tesseractjs-portable-plugin-rebuild.json
+          second="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          test "$first" = "$second"
+          extract="$(mktemp -d)"
+          unzip -q "$archive" -d "$extract"
+          test -x "$extract/server/ocr-runtime/targets/macos-x64/datasecure-ocr-sandbox"
+          test -x "$extract/server/ocr-runtime/targets/macos-arm64/datasecure-ocr-sandbox"
+          test -x "$extract/server/ocr-runtime/targets/linux-x64/datasecure-ocr-sandbox"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tesseractjs-ocr-universal-${{ github.sha }}
           path: |
             tesseractjs-ocr-universal.json
             tesseractjs-ocr-universal-smoke.json
+            tesseractjs-portable-plugin.json
+            tesseractjs-portable-plugin-rebuild.json
+            dist/DataSecure-Privacy-Preflight-Portable-Engineering-v3.2.0-rc30.zip
             dist/ocr-runtime/universal/
           if-no-files-found: error
           include-hidden-files: true
