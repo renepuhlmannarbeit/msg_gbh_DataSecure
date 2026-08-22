@@ -24,13 +24,17 @@ function secureDirectory(directory, label) {
 }
 
 function readOwner(jobDir) {
+  let descriptor;
   try {
     const stat = fs.lstatSync(jobDir);
     if (!stat.isDirectory() || stat.isSymbolicLink()) return { state: 'invalid' };
     const ownerPath = path.join(jobDir, '.owner.json');
-    const ownerStat = fs.lstatSync(ownerPath);
-    if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) return { state: 'invalid' };
-    const owner = JSON.parse(fs.readFileSync(ownerPath, 'utf8'));
+    descriptor = fs.openSync(ownerPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const ownerStat = fs.fstatSync(descriptor);
+    const namedOwner = fs.lstatSync(ownerPath);
+    if (!ownerStat.isFile() || namedOwner.isSymbolicLink() ||
+        namedOwner.dev !== ownerStat.dev || namedOwner.ino !== ownerStat.ino) return { state: 'invalid' };
+    const owner = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
     if (
       !owner || !Number.isSafeInteger(owner.pid) ||
       !/^[0-9a-f]{32}$/i.test(String(owner.nonce || '')) ||
@@ -40,6 +44,8 @@ function readOwner(jobDir) {
     return { state: 'valid', owner };
   } catch (error) {
     return error.code === 'ENOENT' ? { state: 'absent' } : { state: 'invalid' };
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
   }
 }
 

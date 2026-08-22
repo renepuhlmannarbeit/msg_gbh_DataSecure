@@ -32,12 +32,19 @@ function writeState(state) {
 function readState(token) {
   const target = batchPath(token);
   let state;
+  let descriptor;
   try {
-    const stat = fs.lstatSync(target);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('unsafe');
-    state = JSON.parse(fs.readFileSync(target, 'utf8'));
+    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const stat = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(target);
+    if (!stat.isFile() || named.isSymbolicLink() || named.dev !== stat.dev || named.ino !== stat.ino) {
+      throw new Error('unsafe');
+    }
+    state = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
   } catch {
     throw new SafeError('Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte den Eingang erneut bestätigen.');
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
   }
   if (state.token !== token || state.schema !== 'datasecure-batch/1') {
     throw new SafeError('Batch-Sitzung ist ungültig. Bitte den Eingang erneut bestätigen.');
