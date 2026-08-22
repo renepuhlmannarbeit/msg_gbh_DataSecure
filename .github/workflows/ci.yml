@@ -98,7 +98,8 @@ jobs:
             echo "$reply" | grep -q 'windows_job_object'
             echo "$reply" | grep -q '"text_engine":"ready"'
             echo "$reply" | grep -q '"visual_boundary":"windows_job_object"'
-            echo "$reply" | grep -q '"blocked_inputs":\[{"format":"PDF","reason":"PDF_COVERAGE_UNVERIFIED"}\]'
+            echo "$reply" | grep -q '"format":"PDF","reason":"PDF_COVERAGE_UNVERIFIED"'
+            echo "$reply" | grep -q '"reason":"FORMAT_COVERAGE_UNVERIFIED"'
           done
           test -f .verify/plugin/server/native/windows-x64/datasecure-sandbox.exe
           test -f .verify/mcpb/server/native/windows-x64/datasecure-sandbox.exe
