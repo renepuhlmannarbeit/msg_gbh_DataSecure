@@ -22,7 +22,7 @@ const out = path.join(dist, `DataSecure-Privacy-Preflight-v${plugin.version}.zip
 // Fail closed on a plugin tree that would not start on the user's machine.
 const entryPoint = path.join(pluginDir, 'server', 'index.js');
 if (!fs.existsSync(entryPoint)) throw new Error('plugin runtime entry point missing');
-const nativeLauncher = path.join(pluginDir, 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+const nativeLauncher = path.join(pluginDir, 'server', 'native', 'windows-x64', 'datasecure-sandbox.exe');
 const nativeChecksum = `${nativeLauncher.slice(0, -4)}.sha256`;
 verifyNativeArtifact(nativeLauncher, nativeChecksum);
 
@@ -34,6 +34,9 @@ if (/require\((['"])(?:\.\.\/){2,}/.test(entrySource)) {
 const mcp = JSON.parse(fs.readFileSync(path.join(pluginDir, '.mcp.json'), 'utf8'));
 const arg = mcp?.['data-secure-local']?.args?.[0];
 if (arg !== '${CLAUDE_PLUGIN_ROOT}/server/index.js') throw new Error('unexpected MCP entry point');
+if (fs.existsSync(path.join(pluginDir, 'bin'))) {
+  throw new Error('Claude-hosted plugins must not contain a top-level bin directory');
+}
 
 for (const helper of ['windows-ocr.ps1', 'rasterize-image.ps1']) {
   const file = path.join(pluginDir, 'scripts', helper);

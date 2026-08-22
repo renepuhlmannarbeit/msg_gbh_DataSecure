@@ -66,7 +66,7 @@ function nativeParserStatus(options = {}) {
   if (platform !== 'win32') return { available: false, mode: 'unavailable', reason: 'unsupported_platform' };
   const arch = options.arch || process.arch;
   if (arch !== 'x64') return { available: false, mode: 'unavailable', reason: 'unsupported_architecture' };
-  const launcher = options.launcherPath || path.join(__dirname, '..', 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+  const launcher = options.launcherPath || path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
   try {
     verifyNativeLauncher(launcher, options);
     let probeStatus = options.hostProbeStatus;
@@ -186,7 +186,7 @@ async function convertDocument(source, options = {}) {
   if (arch !== 'x64') {
     throw safeError('Die native Windows-Parserbegrenzung ist für diese Prozessorarchitektur nicht verfügbar.', 'PARSER_ISOLATION_FAILED');
   }
-  const launcher = options.launcherPath || path.join(__dirname, '..', 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+  const launcher = options.launcherPath || path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
   command = verifyNativeLauncher(launcher, options);
   args = [
     '--memory-mib', String(PARSER_JOB_MEMORY_MIB),

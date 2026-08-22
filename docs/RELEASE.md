@@ -67,8 +67,9 @@ Do not mark a build production-ready until all of these hold:
 - [ ] every model offered in the pilot passes all 20 cases from
       `evals/skill-behavior-cases.json` according to `docs/SKILL_EVALUATION.md`;
       corpus validation in `npm test` is not a substitute for these model runs
-- [ ] the packaged plugin contains `bin/windows-x64/datasecure-sandbox.exe` and its
-      matching SHA-256 sidecar (CI and the build verify this)
+- [ ] the packaged plugin contains `server/native/windows-x64/datasecure-sandbox.exe`
+      and its matching SHA-256 sidecar, and contains no reserved top-level `bin/`
+      directory (CI and the build verify this)
 - [ ] ZIP, MCPB, SPDX SBOM and `SHA256SUMS` are present in the same CI artefact
 - [ ] downloaded release files match `SHA256SUMS`
 - [ ] no Office/PDF file is tracked (CI verifies this)

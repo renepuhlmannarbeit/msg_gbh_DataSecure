@@ -10,7 +10,7 @@ const { createSuite } = require('./helpers');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-ipc-'));
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
 
-const { validateSelectedPath, pickerCommands, pickSource, pickSources } = require('../plugins/data-secure/server/companion/file-picker');
+const { PICKER_CANCELLED, validateSelectedPath, pickerCommands, pickSource, pickSources } = require('../plugins/data-secure/server/companion/file-picker');
 const { IPC_VERSION, signFrame, createCompanionSession } = require('../plugins/data-secure/server/companion/ipc-session');
 
 const { test, done, assert } = createSuite('Companion private IPC and file picker');
@@ -79,6 +79,25 @@ test('Windows multi-picker validates up to 25 distinct local files', () => {
     platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, maxSources: 1,
     runner: () => ({ status: 0, stdout: `${first}\r\n${second}` })
   }), /höchstens 1/);
+});
+
+test('Windows picker disposes the dialog and reports closing as an explicit cancellation', () => {
+  const [spec] = pickerCommands('win32', { SystemRoot: 'C:\\Windows' }, ['txt', 'docx'], true);
+  const command = spec.args.join(' ');
+  assert.match(command, /DialogResult\]::OK/);
+  assert.match(command, /\.Dispose\(\)/);
+  assert.match(command, new RegExp(PICKER_CANCELLED));
+  assert.throws(() => pickSources({
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+    runner: () => ({ status: 0, stdout: PICKER_CANCELLED })
+  }), /Dateiauswahl wurde abgebrochen/);
+});
+
+test('picker timeout is distinguished from a start failure', () => {
+  assert.throws(() => pickSources({
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+    runner: () => ({ error: { code: 'ETIMEDOUT' } })
+  }), /Zeitüberschreitung/);
 });
 
 test('descriptor promises authenticated inherited stdio without model authority', () => {

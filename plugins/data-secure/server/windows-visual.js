@@ -46,7 +46,7 @@ function bridgeEnvironment(source = process.env) {
 }
 
 function nativeLauncherPath() {
-  return path.join(__dirname, '..', 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+  return path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
 }
 
 function powershellPath(systemRoot) {

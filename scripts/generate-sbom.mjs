@@ -36,7 +36,7 @@ const artefacts = expectedNames
   })
   .sort((left, right) => left.name.localeCompare(right.name, 'en'));
 const nativeInputs = [
-  ['plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe', 'native-launcher'],
+  ['plugins/data-secure/server/native/windows-x64/datasecure-sandbox.exe', 'native-launcher'],
   ['native/windows/datasecure-sandbox.cpp', 'native-source']
 ].map(([relative, kind]) => {
   const bytes = fs.readFileSync(path.join(root, relative));
@@ -104,10 +104,10 @@ const sbom = {
     {
       spdxElementId: packageId,
       relationshipType: 'CONTAINS',
-      relatedSpdxElement: safeId('plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe')
+      relatedSpdxElement: safeId('plugins/data-secure/server/native/windows-x64/datasecure-sandbox.exe')
     },
     {
-      spdxElementId: safeId('plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe'),
+      spdxElementId: safeId('plugins/data-secure/server/native/windows-x64/datasecure-sandbox.exe'),
       relationshipType: 'GENERATED_FROM',
       relatedSpdxElement: safeId('native/windows/datasecure-sandbox.cpp')
     }

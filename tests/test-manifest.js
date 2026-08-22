@@ -170,8 +170,8 @@ test('native Windows launcher has a reproducible source and release build contra
     'scripts/verify-native.mjs',
     'scripts/lib/native-artifact.mjs',
     'tests/test-native-launcher.js',
-    'plugins/data-secure/bin/windows-x64/datasecure-sandbox.exe',
-    'plugins/data-secure/bin/windows-x64/datasecure-sandbox.sha256'
+    'plugins/data-secure/server/native/windows-x64/datasecure-sandbox.exe',
+    'plugins/data-secure/server/native/windows-x64/datasecure-sandbox.sha256'
   ]) {
     assert.ok(fs.existsSync(path.join(root, rel)), `native boundary input missing: ${rel}`);
   }
@@ -179,10 +179,18 @@ test('native Windows launcher has a reproducible source and release build contra
     assert.match(readText(path.join(root, rel)), /datasecure-sandbox\.exe/,
       `${rel} does not enforce native launcher packaging`);
   }
-  const binary = path.join(root, 'plugins', 'data-secure', 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+  const binary = path.join(root, 'plugins', 'data-secure', 'server', 'native', 'windows-x64', 'datasecure-sandbox.exe');
   const expected = readText(binary.replace(/\.exe$/u, '.sha256')).trim();
   const actual = crypto.createHash('sha256').update(fs.readFileSync(binary)).digest('hex');
   assert.strictEqual(actual, expected, 'tracked native launcher does not match its checksum');
+});
+
+test('Claude plugin avoids the reserved top-level bin directory', () => {
+  assert.strictEqual(
+    fs.existsSync(path.join(root, 'plugins', 'data-secure', 'bin')),
+    false,
+    'Claude Desktop rejects uploaded plugins that contain a top-level bin directory'
+  );
 });
 
 test('every test referenced by the npm test script exists', () => {

@@ -16,6 +16,15 @@ if (!fs.existsSync(archive)) throw new Error(`Plugin ZIP fehlt: ${path.basename(
 const target = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-plugin-zip-'));
 try {
   const entries = readZip(fs.readFileSync(archive));
+  if ([...entries.keys()].some((name) => name === 'bin' || name.startsWith('bin/'))) {
+    throw new Error('Claude Desktop lehnt Plugin-ZIPs mit einem obersten bin/-Ordner ab.');
+  }
+  for (const required of [
+    'server/native/windows-x64/datasecure-sandbox.exe',
+    'server/native/windows-x64/datasecure-sandbox.sha256'
+  ]) {
+    if (!entries.has(required)) throw new Error(`Plugin ZIP enthält ${required} nicht.`);
+  }
   for (const [name, bytes] of entries) {
     const destination = path.resolve(target, ...name.split('/'));
     if (!destination.startsWith(`${path.resolve(target)}${path.sep}`)) {

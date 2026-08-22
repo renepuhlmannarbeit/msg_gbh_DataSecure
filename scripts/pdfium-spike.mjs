@@ -312,7 +312,7 @@ export async function runSpike() {
     const executable = path.join(temporary, 'datasecure-pdfium-probe.exe');
     compileProbe(payload, executable, vcvars);
     fs.copyFileSync(payload.dllPath, path.join(temporary, 'pdfium.dll'));
-    const launcher = path.join(root, 'plugins', 'data-secure', 'bin', 'windows-x64',
+    const launcher = path.join(root, 'plugins', 'data-secure', 'server', 'native', 'windows-x64',
       'datasecure-sandbox.exe');
     verifyNativeArtifact(launcher, launcher.slice(0, -4) + '.sha256');
 

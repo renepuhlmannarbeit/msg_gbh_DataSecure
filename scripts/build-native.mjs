@@ -31,7 +31,7 @@ if (found.status !== 0 || !installation) throw new Error('Visual C++ x64 build t
 
 const vcvars = path.join(installation, 'VC', 'Auxiliary', 'Build', 'vcvarsall.bat');
 const source = path.join(root, 'native', 'windows', 'datasecure-sandbox.cpp');
-const trackedDir = path.join(root, 'plugins', 'data-secure', 'bin', 'windows-x64');
+const trackedDir = path.join(root, 'plugins', 'data-secure', 'server', 'native', 'windows-x64');
 const trackedOutput = path.join(trackedDir, 'datasecure-sandbox.exe');
 const trackedChecksum = path.join(trackedDir, 'datasecure-sandbox.sha256');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-native-'));

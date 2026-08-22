@@ -7,6 +7,7 @@ const { SafeError } = require('../runtime');
 
 const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
 const MAX_SELECTED_SOURCES = 25;
+const PICKER_CANCELLED = '__DATASECURE_PICKER_CANCELLED__';
 const SOURCE_TYPES = Object.freeze({
   '.pdf': 'pdf',
   '.docx': 'docx',
@@ -58,9 +59,18 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
       "$dialog.Title = 'Datei für Claude vorbereiten'",
       `$dialog.Filter = 'Unterstützte Dateien|${windowsFilter}'`,
       `$dialog.Multiselect = $${multiple ? 'true' : 'false'}`,
+      'try {',
+      '  $result = $dialog.ShowDialog()',
+      "  if ($result -eq [System.Windows.Forms.DialogResult]::OK) {",
       multiple
-        ? "if ($dialog.ShowDialog() -eq 'OK') { [Console]::Out.Write(($dialog.FileNames -join [Environment]::NewLine)) }"
-        : "if ($dialog.ShowDialog() -eq 'OK') { [Console]::Out.Write($dialog.FileName) }"
+        ? '    [Console]::Out.Write(($dialog.FileNames -join [Environment]::NewLine))'
+        : '    [Console]::Out.Write($dialog.FileName)',
+      '  } else {',
+      `    [Console]::Out.Write('${PICKER_CANCELLED}')`,
+      '  }',
+      '} finally {',
+      '  $dialog.Dispose()',
+      '}'
     ].join('; ');
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
   }
@@ -116,11 +126,14 @@ function pickSource(options = {}) {
       unavailable++;
       continue;
     }
+    if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
     if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
-    if (result?.status !== 0 && !String(result?.stdout || '').trim()) {
+    const output = String(result?.stdout || '').trim();
+    if (output === PICKER_CANCELLED) throw new SafeError('Die lokale Dateiauswahl wurde abgebrochen.');
+    if (result?.status !== 0 && !output) {
       throw new SafeError('Keine Datei ausgewählt.');
     }
-    return validateSelectedPath(result?.stdout, options);
+    return validateSelectedPath(output, options);
   }
   if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
   throw new SafeError('Keine Datei ausgewählt.');
@@ -135,8 +148,10 @@ function pickSources(options = {}) {
       unavailable++;
       continue;
     }
+    if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
     if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
     const output = String(result?.stdout || '').trim();
+    if (output === PICKER_CANCELLED) throw new SafeError('Die lokale Dateiauswahl wurde abgebrochen.');
     if (result?.status !== 0 && !output) throw new SafeError('Keine Datei ausgewählt.');
     const selectedPaths = output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     if (!selectedPaths.length) throw new SafeError('Keine Datei ausgewählt.');
@@ -155,6 +170,7 @@ function pickSources(options = {}) {
 module.exports = {
   MAX_SOURCE_BYTES,
   MAX_SELECTED_SOURCES,
+  PICKER_CANCELLED,
   SOURCE_TYPES,
   pickerCommands,
   validateSelectedPath,

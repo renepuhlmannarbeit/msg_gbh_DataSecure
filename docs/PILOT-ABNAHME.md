@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC24 · ausschließlich synthetische Daten
+Version 3.2.0 RC26 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC24 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC26 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -113,7 +113,7 @@ verwenden. Text- und Scan-PDF separat als verpflichtende Stop-Gegenprobe prüfen
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC24 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC26 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

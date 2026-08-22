@@ -8,7 +8,7 @@ const { createSuite } = require('./helpers');
 const { convertDocument } = require('../plugins/data-secure/server/runtime');
 
 const { test, testAsync, done, assert } = createSuite('Native Windows parser boundary');
-const launcher = path.join(__dirname, '..', 'plugins', 'data-secure', 'bin', 'windows-x64', 'datasecure-sandbox.exe');
+const launcher = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'native', 'windows-x64', 'datasecure-sandbox.exe');
 
 function runNode(script, options = {}) {
   return childProcess.spawnSync(launcher, [
