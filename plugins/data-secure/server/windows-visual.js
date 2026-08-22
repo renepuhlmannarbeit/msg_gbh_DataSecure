@@ -27,7 +27,7 @@ function terminateProcessTree(child, options = {}) {
     const runner = options.killTreeRunner || childProcess.spawnSync;
     const systemRoot = options.systemRoot || process.env.SystemRoot || 'C:\\Windows';
     try {
-      const result = runner(path.join(systemRoot, 'System32', 'taskkill.exe'),
+      const result = runner(path.win32.join(systemRoot, 'System32', 'taskkill.exe'),
         ['/pid', String(child.pid), '/t', '/f'], {
           windowsHide: true, stdio: 'ignore', shell: false, timeout: 10_000
         });
@@ -50,7 +50,7 @@ function nativeLauncherPath() {
 }
 
 function powershellPath(systemRoot) {
-  return path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 }
 
 function visualBridgeStatus(options = {}) {

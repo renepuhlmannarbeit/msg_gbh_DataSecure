@@ -15,7 +15,7 @@ function confirmationCommands(count, platform = process.platform, env = process.
   if (!Number.isSafeInteger(count) || count < 0) throw new SafeError('Ungültige Trefferzahl.');
   const message = `${count} erkannte Stelle(n) wurden automatisch ersetzt. Ohne zusätzliche Textprüfung mit der bereinigten Fassung fortfahren?`;
   if (platform === 'win32') {
-    const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const powershell = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const escaped = message.replace(/'/g, "''");
     const script = [
       'Add-Type -AssemblyName System.Windows.Forms',

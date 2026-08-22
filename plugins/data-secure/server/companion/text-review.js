@@ -214,7 +214,7 @@ function reviewTextLocally(draft, options = {}) {
   }
   if (!draft || draft.schema !== REVIEW_SCHEMA) throw new SafeError('Ungültiger lokaler Review-Entwurf.');
   const env = options.env || process.env;
-  const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const powershell = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const runner = options.runner || defaultRunner;
   const result = runner(
     powershell,

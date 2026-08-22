@@ -84,7 +84,7 @@ function completionSummaryCommand(summary, options = {}) {
   ].join('; ');
   const env = options.env || process.env;
   return {
-    command: path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+    command: path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script]
   };
 }
