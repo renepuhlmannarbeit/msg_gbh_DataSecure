@@ -46,6 +46,20 @@ belegt lediglich Pins, Plattformausführung und den weiterhin geschlossenen
 Produktpfad; er setzt keine Pflichtzelle automatisch auf bestanden. Der bestehende
 Windows-Community-Spike muss ausdrücklich `no_go` melden.
 
+## Ausgeführter Plattform-Preflight
+
+GitHub-Actions-Lauf `32593313169` auf Commit `fdd2a02` wurde am 22.08.2026 auf
+Windows x64 (`windows-latest`), macOS x64 (`macos-15-intel`), macOS ARM64
+(`macos-14`) und Linux x64 (`ubuntu-latest`) erfolgreich ausgeführt. Die vier
+Artefakte bestätigen ausschließlich Plattformausführung, gültige Quell-Pins und den
+fail-closed Produktpfad. Sie melden übereinstimmend `passed_gates: []`, alle elf
+offenen Gates, `PDF_COVERAGE_UNVERIFIED` und `release_decision: no_go`.
+
+Das zusätzliche Windows-Community-Negativ-Gate bestand ebenfalls, weil der gepinnte
+Fremdbinary-Spike erwartungsgemäß `no_go` meldete. Damit ist die CI-Vorprüfung
+funktionsfähig; keine Zelle der Pflichtmatrix ist dadurch bestanden und BL-023.1
+bleibt in Arbeit.
+
 ## Messprotokoll
 
 Jede Zelle benötigt Plattform/Architektur, OS-Version, Compiler/SDK, Engine-Commit,

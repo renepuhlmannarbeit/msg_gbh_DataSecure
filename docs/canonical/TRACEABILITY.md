@@ -61,4 +61,8 @@ Offener Nachweis: `contracts/PDF_OCR_RISK_GATE_V1.md` ist das Prüfprotokoll fü
 BL-023.1. Es ist ausdrücklich kein Erledigungsnachweis, solange Pflichtzellen offen
 sind. `pdf-ocr-risk.lock.json`, `pdf-ocr-risk.mjs` und der manuelle
 `pdf-ocr-risk.yml`-Workflow liefern reproduzierbare Pins und Drei-Plattform-
-Preflights, aber bewusst noch keine Produktfreigabe.
+Preflights, aber bewusst noch keine Produktfreigabe. GitHub-Actions-Lauf
+`32593313169` auf Commit `fdd2a02` belegt die erfolgreiche Ausführung auf Windows
+x64, macOS x64, macOS ARM64 und Linux x64 sowie das erwartete NO-GO der
+Windows-Community-Probe. Die Artefakte weisen ausdrücklich `passed_gates: []`, alle
+elf offenen Gates, `PDF_COVERAGE_UNVERIFIED` und `release_decision: no_go` aus.

@@ -1,6 +1,6 @@
 # RC30-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 22.08.2026 · geprüfter Quellstand: lokaler RC30-Working-Tree
+Stand: 22.08.2026 · geprüfter Quellstand: `fdd2a02` auf `main`
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -101,9 +101,13 @@ deshalb bleibt BL-023.1 in Arbeit und PDF produktseitig gesperrt.
 `pdf-ocr-risk.lock.json` pinnt den offiziellen PDFium-Stand sowie Tesseract 5.5.2
 und die deutschen/englischen `tessdata_fast`-Modelle als Prüfkandidaten. Der manuelle
 Workflow `pdf-ocr-risk.yml` erzeugt getrennte NO-GO-Preflights für Windows x64,
-macOS x64/ARM64 und Linux x64. Die vorhandene Windows-Community-Probe wurde lokal
-erneut erfolgreich ausgeführt und meldet weiterhin ausdrücklich `no_go`; ein
-offizieller Eigenbuild und die übrigen Pflichtzellen bleiben offen.
+macOS x64/ARM64 und Linux x64. GitHub-Actions-Lauf `32593313169` auf `fdd2a02`
+bestand am 22.08.2026 alle vier Preflights (`windows-latest`, `macos-15-intel`,
+`macos-14`, `ubuntu-latest`). Alle meldeten gültige Pins, den geschlossenen
+Produktpfad `PDF_COVERAGE_UNVERIFIED`, keine bestandene Pflichtzelle und
+`release_decision: no_go`. Auch das Windows-Community-Negativ-Gate bestand, weil
+die Probe erwartungsgemäß weiterhin `no_go` meldete. Ein offizieller Eigenbuild und
+die übrigen Pflichtzellen bleiben offen.
 
 ## BL-024 – Offline-OCR und Bilder
 
