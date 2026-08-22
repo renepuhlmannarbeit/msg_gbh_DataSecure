@@ -23,7 +23,8 @@
     "models": {
       "repository": "https://github.com/tesseract-ocr/tessdata_fast",
       "tag": "4.1.0",
-      "commit": "a8ba5063ab8013372a20e300da0c97ee46b92b07",
+      "tag_object": "a8ba5063ab8013372a20e300da0c97ee46b92b07",
+      "commit": "65727574dfcd264acbb0c3e07860e4e9e9b22185",
       "languages": ["deu", "eng"],
       "engine_mode": "lstm-only"
     }

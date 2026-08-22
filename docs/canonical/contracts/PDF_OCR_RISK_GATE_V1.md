@@ -16,10 +16,11 @@ eigenständige Bilder in Ist-Manifest, Picker, Skills und Marketplace gesperrt.
   ist nur Engineering-Evidenz und keine Produktabhängigkeit.
 - OCR arbeitet vollständig offline und muss Deutsch, Englisch sowie gemischte
   Dokumente unterstützen.
-- Tesseract 5.5.2 mit den offiziellen `tessdata_fast`-Modellen 4.1.0 für `deu`
-  und `eng` ist der gepinnte OCR-Kandidat des Risikobeweises, noch keine
-  Produktabhängigkeit. Engine und Modelle werden je Release aus offiziellen Quellen
-  gebaut beziehungsweise unverändert gehasht und gemeinsam lizenziert inventarisiert.
+- Tesseract.js 7.0.0 mit tesseract.js-core 7.0.0, `@napi-rs/canvas` 1.0.7 und den
+  offiziellen `tessdata_fast`-Modellen 4.1.0 für `deu` und `eng` ist der bevorzugte
+  portable OCR-Pilot. Tesseract 5.5.2 bleibt nativer Fallback. Beides sind noch keine
+  Produktabhängigkeiten. Engine und Modelle werden je Release aus offiziellen Quellen
+  bezogen, exakt gelockt, unverändert gehasht und gemeinsam lizenziert inventarisiert.
 - Parser/OCR erhalten ausschließlich begrenzte Bytes aus privaten Arbeitskopien,
   keine Quellpfade, Cloud-Credentials oder Netzwerkfähigkeit.
 - Betriebssystemspezifische Worker sind zulässig; ihre normalisierten Ergebnisse und
@@ -75,6 +76,25 @@ Coverage-Prüfung, besteht aber noch keine Pflichtmatrix-Zelle. Anhänge, Formul
 Annotationen, Verschlüsselung, Ressourcen-/Prozessisolation, Offline-OCR,
 Angriffskorpus, NOTICE/SBOM sowie das echte Pluginpaket bleiben offen. PDF bleibt
 deshalb `PDF_COVERAGE_UNVERIFIED`.
+
+## Tesseract.js-/Canvas-Open-Source-Pilot
+
+Der lokale Windows-x64-Pilot verwendet exakt Tesseract.js 7.0.0,
+tesseract.js-core 7.0.0 und `@napi-rs/canvas` 1.0.7. Die offiziellen Modelle
+`deu.traineddata` und `eng.traineddata` stammen aus dem aufgelösten
+`tessdata_fast`-4.1.0-Commit `65727574dfcd264acbb0c3e07860e4e9e9b22185`;
+Größe und SHA-256 werden vor jeder Verwendung geprüft. Der annotierte Tag-Objektwert
+`a8ba5063ab8013372a20e300da0c97ee46b92b07` wird getrennt dokumentiert und nicht
+fälschlich als Quell-Commit verwendet.
+
+Eine synthetische deutsch-/englischsprachige Bildprobe bestand lokal mit 95 Prozent
+mittlerer OCR-Konfidenz. Während der Erkennung blockierte ein von Haupt- und
+Workerprozess geerbtes Preload-Modul HTTP, HTTPS, TCP, TLS, DNS und `fetch`; die
+Modelle wurden ausschließlich aus dem lokalen, hashgeprüften Verzeichnis geladen.
+Der Vier-Plattform-Workflow ist angelegt, aber noch nicht als Evidenz ausgeführt.
+Auch dieser Pilot meldet `passed_gates: []`, `OCR_COVERAGE_UNVERIFIED` und
+`release_decision: no_go`: Modellbündel/NOTICE, Sandbox und Ressourcenlimits,
+Pixelredaktion, Scan-PDF-Integration, Angriffskorpus und echtes Pluginpaket fehlen.
 
 ## Messprotokoll
 

@@ -36,6 +36,7 @@ secrets.*
 # Build/runtime
 dist/
 node_modules/
+/native/ocr/pilot/models/
 *.obj
 .DS_Store
 Thumbs.db

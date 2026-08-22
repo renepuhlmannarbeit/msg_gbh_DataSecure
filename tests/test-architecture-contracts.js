@@ -79,4 +79,51 @@ test('PDF.js pilot is locked, offline, non-release and tested on four runner tar
   assert.doesNotMatch(workflow, /curl|wget|Invoke-WebRequest/iu);
 });
 
+test('Tesseract.js pilot is locked to verified local models and four runner targets', () => {
+  const pilotPackage = readJson('native/ocr/pilot/package.json');
+  assert.deepStrictEqual(pilotPackage.dependencies, {
+    '@napi-rs/canvas': '1.0.7',
+    'tesseract.js': '7.0.0'
+  });
+  const pilotLock = readJson('native/ocr/pilot/package-lock.json');
+  assert.strictEqual(pilotLock.lockfileVersion, 3);
+  for (const dependency of ['tesseract.js', 'tesseract.js-core', '@napi-rs/canvas']) {
+    assert.match(pilotLock.packages[`node_modules/${dependency}`].integrity, /^sha512-/u);
+  }
+
+  const models = readJson('native/ocr/pilot/models.lock.json');
+  assert.strictEqual(models.raw_base,
+    'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast');
+  assert.strictEqual(models.commit, '65727574dfcd264acbb0c3e07860e4e9e9b22185');
+  assert.deepStrictEqual(Object.keys(models.models), ['deu', 'eng']);
+  assert.strictEqual(models.models.deu.sha256,
+    '19d219bbb6672c869d20a9636c6816a81eb9a71796cb93ebe0cb1530e2cdb22d');
+  assert.strictEqual(models.models.eng.sha256,
+    '7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2');
+
+  const fetchSource = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
+    'fetch-models.mjs'), 'utf8');
+  for (const token of ['raw.githubusercontent.com', 'MODEL_SOURCE_NOT_ALLOWLISTED',
+    'MODEL_HASH_', "flag: 'wx'"]) {
+    assert.ok(fetchSource.includes(token), `OCR model fetch missing safeguard ${token}`);
+  }
+  const source = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot', 'run.mjs'), 'utf8');
+  for (const token of ["langPath: modelDir", "cacheMethod: 'none'", 'gzip: false',
+    "release_decision: 'no_go'", "product_image_gate: 'OCR_COVERAGE_UNVERIFIED'"]) {
+    assert.ok(source.includes(token), `OCR pilot missing safeguard ${token}`);
+  }
+  const networkDeny = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
+    'network-deny.cjs'), 'utf8');
+  for (const token of ['node:http', 'node:https', 'node:net', 'node:tls', 'node:dns',
+    'globalThis.fetch']) assert.ok(networkDeny.includes(token), `network deny missing ${token}`);
+
+  const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
+    'tesseractjs-ocr-pilot.yml'), 'utf8');
+  for (const runner of ['windows-latest', 'macos-15-intel', 'macos-14', 'ubuntu-latest']) {
+    assert.ok(workflow.includes(runner), `OCR pilot workflow missing ${runner}`);
+  }
+  assert.match(workflow, /npm ci --prefix native\/ocr\/pilot --ignore-scripts/u);
+  assert.match(workflow, /NODE_OPTIONS: --require=/u);
+});
+
 done();
