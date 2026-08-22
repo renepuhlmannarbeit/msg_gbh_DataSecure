@@ -75,3 +75,11 @@ Canvas 1.0.7 auf Windows x64, macOS x64, macOS ARM64 und Linux x64. Lokale
 Byte-Eingabe, Text, Rendering und Action-Erkennung bestanden ohne beobachteten
 Netzwerkversuch; alle Artefakte melden weiterhin `passed_gates: []`,
 `PDF_COVERAGE_UNVERIFIED` und `release_decision: no_go`.
+
+Auch der OCR-Pilot ist noch kein Erledigungsnachweis: GitHub-Actions-Lauf
+`32594838193` auf Commit `b6ce3ad` belegt Tesseract.js/tesseract.js-core 7.0.0,
+Canvas 1.0.7 sowie hashgeprüfte lokale Deutsch-/Englischmodelle auf Windows x64,
+macOS x64, macOS ARM64 und Linux x64. Die gemischtsprachige synthetische Probe
+bestand unter Prozess-Netzwerksperre mit 95 Prozent mittlerer Konfidenz; alle
+Artefakte melden weiterhin `passed_gates: []`, `OCR_COVERAGE_UNVERIFIED` und
+`release_decision: no_go`.

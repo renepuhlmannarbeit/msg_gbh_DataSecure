@@ -91,7 +91,9 @@ Eine synthetische deutsch-/englischsprachige Bildprobe bestand lokal mit 95 Proz
 mittlerer OCR-Konfidenz. Während der Erkennung blockierte ein von Haupt- und
 Workerprozess geerbtes Preload-Modul HTTP, HTTPS, TCP, TLS, DNS und `fetch`; die
 Modelle wurden ausschließlich aus dem lokalen, hashgeprüften Verzeichnis geladen.
-Der Vier-Plattform-Workflow ist angelegt, aber noch nicht als Evidenz ausgeführt.
+GitHub-Actions-Lauf `32594838193` auf Commit `b6ce3ad` wiederholte diese Probe
+erfolgreich auf Windows x64, macOS x64, macOS ARM64 und Linux x64. Alle vier
+Artefakte melden 95 Prozent Konfidenz, lokale Modelle und gemischtsprachige OCR.
 Auch dieser Pilot meldet `passed_gates: []`, `OCR_COVERAGE_UNVERIFIED` und
 `release_decision: no_go`: Modellbündel/NOTICE, Sandbox und Ressourcenlimits,
 Pixelredaktion, Scan-PDF-Integration, Angriffskorpus und echtes Pluginpaket fehlen.

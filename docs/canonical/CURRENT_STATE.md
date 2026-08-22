@@ -132,7 +132,10 @@ Tesseract.js 7.0.0, tesseract.js-core 7.0.0 und `@napi-rs/canvas` 1.0.7 verwende
 ausschließlich lokale, hashgeprüfte `deu`-/`eng`-Modelle aus dem tatsächlichen
 `tessdata_fast`-Commit `65727574dfcd264acbb0c3e07860e4e9e9b22185`. Der lokale
 Windows-x64-Lauf bestand eine synthetische gemischtsprachige Probe bei vorgeladener
-Prozess-Netzwerksperre mit 95 Prozent mittlerer OCR-Konfidenz. Das ist nur
+Prozess-Netzwerksperre mit 95 Prozent mittlerer OCR-Konfidenz. GitHub-Actions-Lauf
+`32594838193` auf `b6ce3ad` bestätigte dasselbe Ergebnis auf Windows x64, macOS
+x64/ARM64 und Linux x64. Alle vier Artefakte melden lokale Modelle,
+`mixed_language_ocr: true`, Prozess-Netzwerksperre und 95 Prozent Konfidenz. Das ist nur
 Engineering-Evidenz: Produktintegration, Modell-Lizenzdateien, isolierter Worker,
 Ressourcengrenzen, Scan-PDF, Pixelredaktion, Angriffskorpus und frisches Pluginpaket
 bleiben offen; der Pilot meldet deshalb `OCR_COVERAGE_UNVERIFIED` und `no_go`.
