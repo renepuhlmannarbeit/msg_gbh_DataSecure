@@ -68,3 +68,10 @@ Preflights, aber bewusst noch keine Produktfreigabe. GitHub-Actions-Lauf
 x64, macOS x64, macOS ARM64 und Linux x64 sowie das erwartete NO-GO der
 Windows-Community-Probe. Die Artefakte weisen ausdrücklich `passed_gates: []`, alle
 elf offenen Gates, `PDF_COVERAGE_UNVERIFIED` und `release_decision: no_go` aus.
+
+Der alternative Open-Source-Pilot ist ebenfalls noch kein Erledigungsnachweis:
+GitHub-Actions-Lauf `32594467568` auf Commit `b622278` belegt PDF.js 6.2.108 und
+Canvas 1.0.7 auf Windows x64, macOS x64, macOS ARM64 und Linux x64. Lokale
+Byte-Eingabe, Text, Rendering und Action-Erkennung bestanden ohne beobachteten
+Netzwerkversuch; alle Artefakte melden weiterhin `passed_gates: []`,
+`PDF_COVERAGE_UNVERIFIED` und `release_decision: no_go`.

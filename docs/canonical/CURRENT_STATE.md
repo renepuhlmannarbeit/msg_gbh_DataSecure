@@ -1,6 +1,6 @@
 # RC30-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 22.08.2026 · geprüfter Quellstand: `fdd2a02` auf `main`
+Stand: 22.08.2026 · geprüfter Produktstand: `b622278` auf `main`
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -96,9 +96,10 @@ Status: **in Arbeit**
 
 Vorhanden: PDF-Signaturerkennung, adversariale Legacy-Tests, gesperrter PDF-Pfad und
 ein reproduzierbar gelockter PDFium-Engineering-Spike. Unter DS-038 wurde zusätzlich
-ein gelockter PDF.js-6.2.108-/Canvas-1.0.7-Pilot begonnen. Der lokale Windows-Lauf
-belegt Byte-Eingabe, Textextraktion, Seitenrendering, JavaScript-Action-Erkennung und
-null beobachtete Netzwerkversuche, bleibt aber ausdrücklich `no_go`. Rest:
+ein gelockter PDF.js-6.2.108-/Canvas-1.0.7-Pilot begonnen. GitHub-Actions-Lauf
+`32594467568` belegt auf Windows x64, macOS x64/ARM64 und Linux x64 Byte-Eingabe,
+Textextraktion, Seitenrendering, JavaScript-Action-Erkennung und null beobachtete
+Netzwerkversuche. Alle vier Artefakte bleiben ausdrücklich `no_go`. Rest:
 produktiver isolierter PDF-Worker, vollständige
 Text-/Font-/Formular-/Annotation-/Anhang-/Visual-Coverage,
 Verschlüsselung und Scan-OCR; bis dahin bleibt `PDF_COVERAGE_UNVERIFIED` aktiv.

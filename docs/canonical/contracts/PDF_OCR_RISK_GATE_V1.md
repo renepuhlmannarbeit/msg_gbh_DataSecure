@@ -62,6 +62,20 @@ Fremdbinary-Spike erwartungsgemäß `no_go` meldete. Damit ist die CI-Vorprüfun
 funktionsfähig; keine Zelle der Pflichtmatrix ist dadurch bestanden und BL-023.1
 bleibt in Arbeit.
 
+## PDF.js-/Canvas-Open-Source-Pilot
+
+GitHub-Actions-Lauf `32594467568` auf Commit `b622278` führte den exakt gelockten
+Stack PDF.js 6.2.108 und `@napi-rs/canvas` 1.0.7 auf Windows x64, macOS x64, macOS
+ARM64 und Linux x64 aus. Alle Plattformen bestanden lokale Byte-Eingabe,
+Textextraktion, Seitenrendering, Erkennung einer eingebetteten JavaScript-Action und
+die instrumentierte Prüfung mit null Netzwerkversuchen.
+
+Dieser Nachweis bevorzugt den einfacheren portablen Stack für die nächste
+Coverage-Prüfung, besteht aber noch keine Pflichtmatrix-Zelle. Anhänge, Formulare,
+Annotationen, Verschlüsselung, Ressourcen-/Prozessisolation, Offline-OCR,
+Angriffskorpus, NOTICE/SBOM sowie das echte Pluginpaket bleiben offen. PDF bleibt
+deshalb `PDF_COVERAGE_UNVERIFIED`.
+
 ## Messprotokoll
 
 Jede Zelle benötigt Plattform/Architektur, OS-Version, Compiler/SDK, Engine-Commit,

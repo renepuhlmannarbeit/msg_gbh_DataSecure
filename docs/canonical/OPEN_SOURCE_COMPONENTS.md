@@ -32,7 +32,7 @@ Abnahme auf Windows, macOS und Linux.
 | BL-020 | Benchmark | fflate (MIT) als ZIP-/Dekompressionsorakel | Eigene gehärtete Limits und Content-Graph-Locators bleiben erforderlich. |
 | BL-021 | Pilot | markdown-it (MIT), Papa Parse (MIT) | Gegen vorhandene MD-/CSV-Parser testen; nur bei besserer Coverage übernehmen. |
 | BL-022 | Pilot | Mammoth (BSD-2-Clause) für DOCX-Differentialtests; SheetJS Community Edition (Apache-2.0) für XLSX | DOCX/XLSX ergänzen, aber unbekannte OOXML-Parts und PPTX weiter fail-closed behandeln. |
-| BL-023 | Pilot | Mozilla `pdfjs-dist` 6.2.108 (Apache-2.0) plus `@napi-rs/canvas` 1.0.7 (MIT); PDFium bleibt Fallback | Lockfile vorhanden; lokaler Windows-Pilot für Byte-Input, Text, Rendering, Action-Erkennung und null Netzwerkversuche bestanden. Drei-OS-, Coverage-, Isolations- und Paketgates bleiben offen. |
+| BL-023 | Pilot | Mozilla `pdfjs-dist` 6.2.108 (Apache-2.0) plus `@napi-rs/canvas` 1.0.7 (MIT); PDFium bleibt Fallback | Lockfile und Vier-Plattform-Lauf `32594467568` für Byte-Input, Text, Rendering, Action-Erkennung und null Netzwerkversuche bestanden. Coverage-, Isolations- und Produktpaketgates bleiben offen. |
 | BL-024 | Pilot | Tesseract.js und tesseract.js-core (Apache-2.0) mit gebündelten `deu`/`eng`-Modellen; Canvas/Sharp nur nach Lizenzprüfung | Offline-WASM vermeidet manuelle OCR-Installation; CDN-Defaults müssen technisch blockiert sein. |
 | BL-030 | Benchmark | Microsoft Presidio (MIT) als synthetisches Erkennungsorakel | Python-/Modellruntime und deutsche Fachdomäne sprechen vorerst gegen Produktintegration. |
 | BL-031 | Beibehalten | Offizielle Herstellerkataloge und bestehende Kontextregeln | Externe NER entscheidet nicht allein über Zertifikats-/Organisationskontext. |
