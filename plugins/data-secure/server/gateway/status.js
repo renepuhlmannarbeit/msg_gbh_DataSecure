@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readStatus } = require('../runtime');
-const { VERSION, listInput, listPackageDirs } = require('./common');
+const { VERSION, listInput, listPackageDirs, storageStatus } = require('./common');
 const { listReviewItems } = require('./review');
 const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
@@ -17,18 +17,21 @@ function genericStatus(options = {}) {
   const audit = auditStatus();
   const companion = companionCapabilities();
   const companionRetention = companionRetentionStatus(options);
+  const storage = storageStatus();
   const auditBlocked =
     audit.legacy_pending > 0 || audit.migration_errors > 0 || audit.write_errors > 0;
-  const engineReady = engine.text_engine === 'ready' && !auditBlocked;
+  const engineReady = engine.text_engine === 'ready' && !auditBlocked && storage.safe;
   return {
     ok: engineReady,
     version: VERSION,
     privacy_ruleset: PRIVACY_RULESET_VERSION,
     credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
     engine_ready: engineReady,
-    engine_phase: auditBlocked ? 'blocked_audit_migration' : engine.phase,
+    engine_phase: auditBlocked ? 'blocked_audit_migration' : !storage.safe ? 'blocked_unsafe_storage' : engine.phase,
     engine_message: auditBlocked
       ? 'Alte Audit-Nachweise müssen lokal durch die IT bereinigt oder migriert werden.'
+      : !storage.safe
+        ? 'Der konfigurierte Datenschutzordner liegt in einem bekannten Cloud-Sync- oder Netzwerkpfad. Verarbeitung bleibt gesperrt.'
       : engine.message,
     text_engine: engine.text_engine,
     parser_boundary: engine.parser_boundary,
@@ -63,19 +66,15 @@ function genericStatus(options = {}) {
     companion_model_can_review: companion.model_can_review,
     companion_model_can_release: companion.model_can_release,
     folders_ready: true,
+    storage_safe: storage.safe,
+    storage_mode: storage.mode,
     supported_inputs: [
       'Word (.docx)',
-      'Excel (.xlsx)',
-      'PowerPoint (.pptx)',
-      'TXT',
-      'Markdown',
-      'CSV',
-      'PNG',
-      'JPEG',
-      'BMP'
+      'TXT'
     ],
     blocked_inputs: [
-      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' }
+      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
+      { format: 'XLSX, PPTX, Markdown, CSV und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ],
     runtime_dependency_install: false,
     workflow:

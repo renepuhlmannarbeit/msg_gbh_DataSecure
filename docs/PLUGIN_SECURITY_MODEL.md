@@ -20,9 +20,8 @@ Claude Desktop extension installation. Both ship the same runtime from
 | Artefact | Reaches Claude | Condition |
 |---|---|---|
 | Original document | never | there is no tool that reads it |
-| Anonymised Markdown | yes | residual gate passed, SHA-256 matches the manifest |
-| Released PNG asset | yes | OCR found nothing, or a redaction was verified |
-| Withheld image pixels | never | current MCP cannot release them; future local companion requires human presence |
+| Anonymised Markdown | yes | residual gate passed, SHA-256 matches the manifest, and the caller presents the package-bound read capability from this run |
+| Image pixels | no in the public pilot | every graphic remains local; a future companion may release a separately human-approved asset |
 | OCR text of a withheld image | yes | after it passed the same text gate as the document body |
 | Review preview | never | not readable through any tool; no model-callable approval tool is exposed |
 | Audit record | metadata only | random operation ID, categories, counters, versions and status only |
@@ -37,8 +36,10 @@ engine as the rest of the document. The released Markdown marks them under
 
 ## Fail-closed points
 
-Text- und Office-Parser laufen pro Datei in einem separaten Node-Prozess. PDF stoppt
-vor dem Parserstart mit `PDF_COVERAGE_UNVERIFIED`. Auf
+Text- und Office-Parser laufen pro Datei in einem separaten Node-Prozess. Der
+öffentliche Pilot akzeptiert ausschließlich TXT und DOCX. PDF stoppt vor dem
+Parserstart mit `PDF_COVERAGE_UNVERIFIED`; alle anderen Formate stoppen mit einem
+festen Nicht-Unterstützt-Code. Jede Parserwarnung verhindert eine Freigabe. Auf
 Windows x64 startet ein gebündelter nativer Launcher das Kind suspended, weist es vor
 Resume einem Job Object zu und erzwingt einen Prozess, 768 MiB Prozess-/Jobspeicher,
 40 Sekunden CPU-Zeit, 45 Sekunden Wallclock sowie `KILL_ON_JOB_CLOSE`. Die Quelle wird ausschließlich als
@@ -70,7 +71,8 @@ restriktivere temporäre Ablage bleiben vor klinischen Echtdaten eigene Gates.
 Every one of these stops the pipeline or withholds the asset rather than
 guessing:
 
-- unsupported or unparsable container
+- every input format except TXT and DOCX
+- unsupported or unparsable container, or any parser warning
 - every PDF, independent of apparent text or image content; the legacy Lite parser is
   retained only for adversarial tests and cannot publish a package
 - the future PDFium worker remains blocked until the Page-/Font-/Unicode-/Visual-
@@ -101,9 +103,27 @@ Staging directories and review items from the failed run are removed. A failed
 automatic restore is reported explicitly for manual recovery rather than being
 misreported as an ordinary clean rollback.
 
-A hard process or machine crash in the short window after the source move and
-before the Output rename cannot run that rollback. In that case the original can
-already be in `Processed` although no result package is visible in `Output`.
+A startup recovery pass restores abandoned hidden input claims without overwriting
+an existing file, following symlinks or touching a claim that still has a live
+owner. A hard process or machine crash after the source has already moved to
+`Processed`, but before the Output rename, can still require manual recovery: the
+original may then be present in `Processed` while no package is visible in `Output`.
+
+## Batch and read capabilities
+
+After the user confirms the visible file count, `begin_document_batch` creates a
+server-owned snapshot for exactly 1–25 TXT-/DOCX inputs. Names, sizes, mtimes and
+hashes remain local. Replacing, adding or removing a file invalidates the whole
+batch, even when the count stays unchanged. The server records each position as
+pending, processing, released or stopped; a stopped item is not retried
+automatically. A crash converts an interrupted processing position into a stopped
+position on restart so the model cannot accidentally process it twice.
+
+Successful processing returns a random, package-bound read capability. It lives
+only in server memory, expires after 15 minutes and is required together with the
+package ID for every Markdown or asset read. Package IDs alone are insufficient,
+and the public MCP exposes no historical package-list tool. Restarting the server
+therefore revokes every outstanding read capability.
 
 ## Two complementary checks, with one shared heuristic
 
@@ -123,8 +143,9 @@ patterns; it does not prove that the person-name heuristic is complete.
 ## Integrity
 
 `document_sha256` and each asset's `sha256` are written into the package
-manifest. The read tools verify them on every call, so a document modified after
-release is refused rather than served. The internal visual-release primitive also
+manifest. The read tools verify both integrity and the short-lived package read
+capability on every call, so a document modified after release or a guessed old
+package ID is refused rather than served. The internal visual-release primitive also
 verifies the current Markdown hash, but it is deliberately not exposed through
 MCP. A future companion must additionally bind it to non-model-controlled local
 human-presence evidence.
@@ -136,6 +157,12 @@ this in its MCP `instructions`, and no tool interprets document content as a
 command.
 
 ## Retention and deletion
+
+By default the runtime stores its workspace in the operating system's local app-data
+area, not in Documents. Known OneDrive, iCloud Drive, Dropbox, Google Drive and
+Windows network locations are refused. This is a conservative known-path check,
+not proof that an arbitrary custom folder is never synchronised; administrators
+remain responsible for the chosen override.
 
 The runtime applies a configurable retention window to direct entries in
 `Processed/`, `Output/` and `Needs Visual Review/`; the default is seven days.

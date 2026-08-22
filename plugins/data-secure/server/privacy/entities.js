@@ -99,7 +99,7 @@ function collectContextOrganizations(text) {
 const PERSON_LABEL =
   '(?:Name|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
   '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|Kontakt|Sachbearbeiter(?:in)?' +
-  '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?)';
+  '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Имя|ФИО|Όνομα|姓名|氏名|이름)';
 
 const HONORIFIC = '(?:Herrn?|Frau|Dr\\.?|Prof\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm)\\.?|Mag\\.?)';
 
@@ -257,6 +257,13 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPers
       hasContext = CONTACT_CONTEXT_RE.test(nearby);
     }
     if (!hasContext) continue;
+    if (
+      inHeader && (profile === 'personnel_profile' || profile === 'applicant') &&
+      /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]{2,16}$/u.test(s)
+    ) {
+      pushPerson(out, s, 'cjk_header');
+      continue;
+    }
     if (commaName.test(s)) {
       if (!looksName(titleCase(s.replace(',', ' ')))) continue;
       if (hasStrongPersonAnchor && hasAbstractNounShape(s)) continue;

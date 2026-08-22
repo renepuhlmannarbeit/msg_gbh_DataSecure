@@ -17,6 +17,7 @@ const { encodePng } = require(path.join(runtimeDir, 'image-sanitizer.js'));
 const gw = require(path.join(runtimeDir, 'gateway.js'));
 const pii = require(path.join(runtimeDir, 'pii-engine.js'));
 const { splitReviewId } = require(path.join(runtimeDir, 'gateway', 'review.js'));
+const { recoverAbandonedInputClaims } = require(path.join(runtimeDir, 'gateway', 'recovery.js'));
 
 const { testAsync, test, done, assert } = createSuite('Gateway end to end');
 
@@ -72,6 +73,70 @@ function retainedAuditCount() {
 }
 
 async function main() {
+  test('startup recovery restores an abandoned hidden claim without overwriting a newer file', () => {
+    const input = path.join(root, 'Input');
+    const jobs = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'jobs');
+    fs.mkdirSync(input, { recursive: true });
+    fs.mkdirSync(jobs, { recursive: true });
+    const jobId = 'recover_12345678';
+    const hidden = path.join(input, `.processing_${jobId}_collision.txt`);
+    fs.writeFileSync(hidden, 'abandoned-private-source');
+    fs.writeFileSync(path.join(input, 'collision.txt'), 'newer-user-source');
+    const jobDir = path.join(jobs, jobId);
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, '.owner.json'), JSON.stringify({
+      pid: 2147483647,
+      created_at: new Date().toISOString(),
+      nonce: 'a'.repeat(32)
+    }));
+
+    const result = recoverAbandonedInputClaims({ input, jobs, isProcessAlive: () => false });
+    assert.deepStrictEqual(result, { recovered: 1, active: 0, ignored: 0, failures: 0 });
+    assert.strictEqual(fs.readFileSync(path.join(input, 'collision.txt'), 'utf8'), 'newer-user-source');
+    assert.strictEqual(
+      fs.readFileSync(path.join(input, 'collision_wiederhergestellt_2.txt'), 'utf8'),
+      'abandoned-private-source'
+    );
+    assert.strictEqual(fs.existsSync(hidden), false);
+    fs.unlinkSync(path.join(input, 'collision.txt'));
+    fs.unlinkSync(path.join(input, 'collision_wiederhergestellt_2.txt'));
+    fs.rmSync(jobDir, { recursive: true, force: true });
+  });
+
+  test('startup recovery never follows a hidden symlink or steals an active claim', () => {
+    const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-recovery-'));
+    const input = path.join(isolated, 'Input');
+    const jobs = path.join(isolated, 'jobs');
+    fs.mkdirSync(input);
+    fs.mkdirSync(jobs);
+    const activeId = 'active_12345678';
+    const activeClaim = path.join(input, `.processing_${activeId}_active.txt`);
+    fs.writeFileSync(activeClaim, 'active-private-source');
+    const activeJob = path.join(jobs, activeId);
+    fs.mkdirSync(activeJob);
+    fs.writeFileSync(path.join(activeJob, '.owner.json'), JSON.stringify({
+      pid: process.pid,
+      created_at: new Date().toISOString(),
+      nonce: 'b'.repeat(32)
+    }));
+    const outside = path.join(isolated, 'outside.txt');
+    fs.writeFileSync(outside, 'outside-private-source');
+    const symlink = path.join(input, '.processing_link_12345678_link.txt');
+    let symlinkCreated = false;
+    try { fs.symlinkSync(outside, symlink, 'file'); symlinkCreated = true; } catch { /* restricted host */ }
+
+    const result = recoverAbandonedInputClaims({ input, jobs, isProcessAlive: () => true });
+    assert.strictEqual(result.active, 1);
+    assert.strictEqual(result.recovered, 0);
+    assert.strictEqual(fs.existsSync(activeClaim), true);
+    assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'outside-private-source');
+    if (symlinkCreated) {
+      assert.strictEqual(result.failures, 1);
+      assert.strictEqual(fs.lstatSync(symlink).isSymbolicLink(), true);
+    }
+    fs.rmSync(isolated, { recursive: true, force: true });
+  });
+
   await testAsync('a mixed batch continues after one file fails and returns no filenames', async () => {
     const blocked = queueBuffer('01-scan.png', blankPng);
     queueBuffer('02-customer.txt', 'Kunde: Max Mustermann\nE-Mail: max@example.de\nTicket: Zugang gesperrt');
@@ -86,7 +151,7 @@ async function main() {
     assert.ok(result.results.some((item) => item.status === 'stopped'));
     assert.doesNotMatch(JSON.stringify(result), /01-scan|02-customer|Max Mustermann|max@example/i);
     const diagnostic = gw.diagnosticStatus();
-    assert.ok(diagnostic.events.some((event) => event.error_code === 'PROFILE_REQUIRED'));
+    assert.ok(diagnostic.events.some((event) => event.error_code === 'FORMAT_COVERAGE_UNVERIFIED'));
     assert.doesNotMatch(JSON.stringify(diagnostic), /01-scan|02-customer|Max Mustermann|max@example/i);
     assert.strictEqual(fs.existsSync(blocked), true, 'the failed source must remain in Input');
     fs.unlinkSync(blocked);
@@ -111,7 +176,7 @@ async function main() {
 
     await assert.rejects(
       () => gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 0 }),
-      /Datenschutzprofil ausdrücklich gewählt/
+      (error) => error.code === 'FORMAT_COVERAGE_UNVERIFIED'
     );
     const first = await gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 1 });
     const second = await gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 1 });
@@ -154,16 +219,40 @@ async function main() {
     fs.unlinkSync(source);
   });
 
-  await testAsync('an XLSX customer sheet becomes a verified package with a released visual', async () => {
-    queue(path.join(fixtures, 'synthetic_customer.xlsx'));
+  await testAsync('a cooperative cancellation after claiming restores the source and leaves no hidden claim', async () => {
+    const source = queueBuffer('cancelled.txt', 'Kunde: Max Mustermann\nTicket: Abbruchtest');
+    const selected = { name: path.basename(source), full: source, stat: fs.statSync(source) };
+    const controller = new AbortController();
+    await assert.rejects(
+      () => gw.anonymizeNext('customer', {
+        ...depsFor('none'),
+        inputQueue: [selected],
+        abortSignal: controller.signal,
+        onClaimed: async () => controller.abort()
+      }),
+      (error) => error.code === 'REQUEST_CANCELLED'
+    );
+    assert.strictEqual(fs.existsSync(source), true);
+    assert.deepStrictEqual(
+      fs.readdirSync(path.join(root, 'Input')).filter((name) => name.startsWith('.processing_')),
+      []
+    );
+    fs.unlinkSync(source);
+  });
+
+  await testAsync('a TXT customer record becomes a verified text-only package', async () => {
+    queueBuffer('synthetic-customer.txt', 'Kunde: Max Mustermann\nE-Mail: max@example.de\nTicket: Zugang gesperrt');
     const result = await gw.anonymizeNext('customer', {
       ...depsFor('pii'),
       recordDiagnostic() { throw new Error('diagnostic storage unavailable'); }
     });
     assert.ok(result.ok);
-    assert.strictEqual(result.visual_assets.included, 1);
+    assert.strictEqual(result.visual_assets.included, 0);
 
     const { manifest, markdown } = readPackage(result);
+    assert.match(result.read_capability, /^[A-Za-z0-9_-]{43}$/);
+    assert.ok(Date.parse(result.read_capability_expires_at) > Date.now());
+    assert.doesNotMatch(JSON.stringify(manifest), /read_capability/i, 'read grants must never be persisted');
     assert.strictEqual(manifest.verification.runtime_dependency_install, false);
     assert.strictEqual(manifest.verification.text_residual_pii, 'passed');
     assert.strictEqual(manifest.verification.residual_gate_checked_dictionary_literals, true);
@@ -196,25 +285,37 @@ async function main() {
       .find((receipt) => receipt.operation_id === packageAudit.operation_id);
     assert.deepStrictEqual(retainedReceipt, packageAudit, 'retained audit must use the same metadata-only receipt');
 
-    const read = gw.readOutput(result.package_id);
+    const read = gw.readOutput(result.package_id, result.read_capability);
     assert.strictEqual(read.content_is_verified_anonymized_markdown, true);
 
-    const assets = gw.listAssets(result.package_id);
-    assert.strictEqual(assets.assets.length, 1);
-    const image = gw.readAsset(result.package_id, assets.assets[0].asset_id);
-    assert.ok(image.__image.data.length > 20, 'image payload must be returned');
-    assert.strictEqual(image.mime_type, 'image/png');
+    const assets = gw.listAssets(result.package_id, result.read_capability);
+    assert.strictEqual(assets.assets.length, 0);
   });
 
-  await testAsync('a PPTX contract is de-identified including its speaker notes', async () => {
-    queue(path.join(fixtures, 'synthetic_contract.pptx'));
-    const result = await gw.anonymizeNext('contract', depsFor('pii'));
-    assert.ok(result.ok);
-    const { markdown } = readPackage(result);
-    assertAbsent(markdown, 'Max Mustermann', 'counterparty');
-    assertAbsent(markdown, 'Alpha GmbH', 'organisation');
-    assertAbsent(markdown, 'max@example.de', 'mail address in notes');
-    assertPresent(markdown, 'Haftung und Kündigung', 'contract content must survive');
+  for (const [name, fixture] of [['XLSX', 'synthetic_customer.xlsx'], ['PPTX', 'synthetic_contract.pptx']]) {
+    await testAsync(`${name} remains blocked until format coverage is proven`, async () => {
+      const source = queue(path.join(fixtures, fixture));
+      await assert.rejects(
+        () => gw.anonymizeNext('contract', depsFor('pii')),
+        (error) => error.code === 'FORMAT_COVERAGE_UNVERIFIED'
+      );
+      assert.ok(fs.existsSync(source));
+      fs.unlinkSync(source);
+    });
+  }
+
+  await testAsync('any parser warning stops a DOCX before release', async () => {
+    const source = queue(path.join(fixtures, 'synthetic_profile.docx'), 'warning.docx');
+    const before = gw.listOutputs().packages.length;
+    await assert.rejects(
+      () => gw.anonymizeNext('personnel_profile', {
+        convertDocument: async () => ({ markdown: 'Name: Max Mustermann', attachments: [], warnings: ['unknown OOXML part'] })
+      }),
+      (error) => error.code === 'PARSER_COVERAGE_UNVERIFIED'
+    );
+    assert.strictEqual(gw.listOutputs().packages.length, before);
+    assert.ok(fs.existsSync(source));
+    fs.unlinkSync(source);
   });
 
   await testAsync('a PDF is stopped before release while coverage remains unverified', async () => {
@@ -229,23 +330,11 @@ async function main() {
     fs.unlinkSync(source);
   });
 
-  await testAsync('a standalone PNG is OCR-redacted and packaged without exposing raw pixels', async () => {
-    queueBuffer('synthetic-scan.png', blankPng);
-    const result = await gw.anonymizeNext('customer', depsFor('pii'));
-    assert.ok(result.ok);
-    assert.strictEqual(result.visual_assets.included, 1);
-    assert.ok(result.visual_assets.redactions > 0);
-    const { markdown } = readPackage(result);
-    assertAbsent(markdown, 'Max Mustermann', 'OCR name');
-    assertAbsent(markdown, 'max@example.de', 'OCR email');
-    assertPresent(markdown, '[PERSON_001]', 'OCR person placeholder');
-  });
-
-  await testAsync('an image-only input requires an explicit profile instead of guessing before OCR', async () => {
+  await testAsync('a standalone image remains blocked in the pilot', async () => {
     const src = queueBuffer('auto-profile-scan.png', blankPng);
     await assert.rejects(
       () => gw.anonymizeNext('auto', depsFor('pii')),
-      /Datenschutzprofil ausdrücklich gewählt/
+      (error) => error.code === 'FORMAT_COVERAGE_UNVERIFIED'
     );
     assert.ok(fs.existsSync(src), 'the image must be restored to Input after the fail-closed stop');
     fs.unlinkSync(src);
@@ -308,10 +397,12 @@ async function main() {
     assertPresent(markdown, 'Business Analyst', 'role must survive');
 
     globalThis.__profilePackage = result.package_id;
+    globalThis.__profileCapability = result.read_capability;
   });
 
   await testAsync('a withheld visual is released only after explicit human confirmation', async () => {
     const packageId = globalThis.__profilePackage;
+    const readCapability = globalThis.__profileCapability;
     const mine = gw.listReviewItems().items.filter((x) => x.package_id === packageId);
     assert.strictEqual(mine.length, 1);
 
@@ -334,18 +425,19 @@ async function main() {
     assert.ok(after.approved_at);
     assert.strictEqual(after.preview_file, null);
 
-    const released = gw.listAssets(packageId);
+    const released = gw.listAssets(packageId, readCapability);
     assert.strictEqual(released.assets.length, 1);
-    assert.ok(gw.readAsset(packageId, released.assets[0].asset_id).__image.data.length > 20);
+    assert.ok(gw.readAsset(packageId, readCapability, released.assets[0].asset_id).__image.data.length > 20);
     globalThis.__profileAsset = released.assets[0];
   });
 
   await testAsync('a released asset that was modified afterwards is refused', async () => {
     const packageId = globalThis.__profilePackage;
+    const readCapability = globalThis.__profileCapability;
     const asset = globalThis.__profileAsset;
     const assetPath = path.join(root, 'Output', packageId, asset.file);
     fs.appendFileSync(assetPath, Buffer.from([0]));
-    assert.throws(() => gw.readAsset(packageId, asset.asset_id), /verändert/);
+    assert.throws(() => gw.readAsset(packageId, readCapability, asset.asset_id), /verändert/);
   });
 
   await testAsync('approval refuses to re-bless a Markdown file that was tampered with', async () => {
@@ -365,7 +457,7 @@ async function main() {
 
   await testAsync('a failing residual gate releases nothing and keeps the source file', async () => {
     const before = gw.listOutputs().packages.length;
-    const src = queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'synthetic-failure.xlsx');
+    const src = queueBuffer('synthetic-failure.txt', 'Kunde: Max Mustermann');
 
     const original = pii.scanResidual;
     pii.scanResidual = () => [{ type: 'TEST_LEAK' }];
@@ -389,7 +481,7 @@ async function main() {
   await testAsync('a failed package publish restores the source and releases nothing', async () => {
     const before = gw.listOutputs().packages.length;
     const auditBefore = retainedAuditCount();
-    const src = queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'publish-failure.xlsx');
+    const src = queueBuffer('publish-failure.txt', 'Kunde: Max Mustermann');
     await assert.rejects(
       () => gw.anonymizeNext('customer', {
         ...depsFor('none'),
@@ -410,7 +502,7 @@ async function main() {
   await testAsync('a failed source move restores the claimed input and releases nothing', async () => {
     const before = gw.listOutputs().packages.length;
     const auditBefore = retainedAuditCount();
-    const src = queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'move-failure.xlsx');
+    const src = queueBuffer('move-failure.txt', 'Kunde: Max Mustermann');
     await assert.rejects(
       () => gw.anonymizeNext('customer', {
         ...depsFor('none'),
@@ -452,10 +544,31 @@ async function main() {
   });
 
   test('a package id may not escape the Output directory', () => {
-    assert.throws(() => gw.readOutput('../Processed', 0, 1000), /Ungültige Paket-ID/);
-    assert.throws(() => gw.readOutput('..', 0, 1000), /Ungültige Paket-ID/);
-    assert.throws(() => gw.readOutput('.hidden', 0, 1000), /Ungültige Paket-ID/);
-    assert.throws(() => gw.readOutput('sub/dir', 0, 1000), /Ungültige Paket-ID/);
+    for (const id of ['../Processed', '..', '.hidden', 'sub/dir']) {
+      assert.throws(() => gw.readOutput(id, 'x'.repeat(43), 0, 1000), /Leseberechtigung/);
+      assert.throws(() => gw.issueReadCapability(id), /Paket|Ungültige Paket-ID/);
+    }
+  });
+
+  test('package ids alone and capabilities from another run cannot disclose a package', () => {
+    const packages = gw.listOutputs().packages;
+    assert.ok(packages.length >= 2, 'the suite must have at least two released packages');
+    const first = globalThis.__profilePackage;
+    const second = packages.find((item) => item.package_id !== first).package_id;
+    const grant = gw.issueReadCapability(first);
+    assert.throws(() => gw.readOutput(first), /Leseberechtigung/);
+    assert.throws(() => gw.readOutput(second, grant.read_capability), /Leseberechtigung/);
+    assert.strictEqual(gw.readOutput(first, grant.read_capability).package_id, first);
+  });
+
+  test('an expired read capability is rejected without consulting package contents', () => {
+    const packageId = gw.listOutputs().packages[0].package_id;
+    const grant = gw.issueReadCapability(packageId);
+    const afterExpiry = Date.parse(grant.read_capability_expires_at) + 1;
+    assert.throws(
+      () => gw.requireReadCapability(packageId, grant.read_capability, afterExpiry),
+      /Leseberechtigung/
+    );
   });
 
   test('a Markdown file that was modified after release is refused', () => {
@@ -464,7 +577,8 @@ async function main() {
       fs.readFileSync(path.join(root, 'Output', packageId, 'manifest.json'), 'utf8')
     );
     fs.appendFileSync(path.join(root, 'Output', packageId, document), '\nTAMPER');
-    assert.throws(() => gw.readOutput(packageId), /verändert/);
+    const grant = gw.issueReadCapability(packageId);
+    assert.throws(() => gw.readOutput(packageId, grant.read_capability), /verändert/);
   });
 
   test('review ids are parsed from the end so package names may contain separators', () => {
@@ -479,7 +593,7 @@ async function main() {
   await testAsync('a simulated retention deletion failure never aborts anonymization', async () => {
     const locked = path.join(root, 'Processed', 'locked-old.pdf');
     fs.writeFileSync(locked, 'locked');
-    queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'cleanup-failure.xlsx');
+    queueBuffer('cleanup-failure.txt', 'Kunde: Max Mustermann');
     const result = await gw.anonymizeNext('customer', {
       ...depsFor('none'),
       retentionDays: 0,
@@ -493,12 +607,12 @@ async function main() {
   });
 
   await testAsync('zero-day retention removes the processed original but leaves the new package readable', async () => {
-    queue(path.join(fixtures, 'synthetic_customer.xlsx'), 'zero-day.xlsx');
+    queueBuffer('zero-day.txt', 'Kunde: Max Mustermann');
     const result = await gw.anonymizeNext('customer', { ...depsFor('none'), retentionDays: 0 });
     assert.ok(result.ok);
-    assert.strictEqual(gw.readOutput(result.package_id).package_id, result.package_id);
+    assert.strictEqual(gw.readOutput(result.package_id, result.read_capability).package_id, result.package_id);
     assert.ok(
-      !fs.readdirSync(path.join(root, 'Processed')).includes('zero-day.xlsx'),
+      !fs.readdirSync(path.join(root, 'Processed')).includes('zero-day.txt'),
       'the processed original must be removed immediately'
     );
   });
@@ -511,7 +625,7 @@ async function main() {
     });
     assert.ok(result.ok);
     assert.strictEqual(result.visual_assets.review_required, 1);
-    assert.strictEqual(gw.readOutput(result.package_id).package_id, result.package_id);
+    assert.strictEqual(gw.readOutput(result.package_id, result.read_capability).package_id, result.package_id);
 
     const item = gw.listReviewItems().items.find((entry) => entry.package_id === result.package_id);
     assert.ok(item, 'the retained evidence must remain discoverable');
@@ -538,7 +652,8 @@ async function main() {
       process.platform === 'win32' ? 'windows_job_object' : 'unavailable');
     assert.ok(!status.supported_inputs.includes('PDF'));
     assert.deepStrictEqual(status.blocked_inputs, [
-      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' }
+      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
+      { format: 'XLSX, PPTX, Markdown, CSV und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ]);
     assert.strictEqual(status.retention_days, 7);
     assert.strictEqual(typeof status.retention_due_entries.total, 'number');

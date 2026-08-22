@@ -10,10 +10,11 @@ const NB = '(?<![\\p{L}\\p{N}_])';
 const NA = '(?![\\p{L}\\p{N}_])';
 
 // Character classes shared by the person/organisation patterns.
-const UPPER = 'A-ZÄÖÜÀ-Ý';
-const NAME_BODY = "A-Za-zÀ-ÖØ-öø-ÿÄÖÜäöüß'’\\-";
-const NAME_TOKEN = `[${UPPER}][${NAME_BODY}]{1,30}`;
-const CAPS_TOKEN = `[${UPPER}][${UPPER}'’\\-]{1,30}`;
+const UPPER = '\\p{Lu}\\p{Lt}';
+const NAME_BODY = "\\p{L}\\p{M}'’\\-";
+const CJK_NAME_TOKEN = '[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}]{2,16}';
+const NAME_TOKEN = `(?:[${UPPER}][${NAME_BODY}]{1,30}|${CJK_NAME_TOKEN})`;
+const CAPS_TOKEN = `(?:[${UPPER}][${UPPER}\\p{M}'’\\-]{1,30}|${CJK_NAME_TOKEN})`;
 
 const ORG_SUFFIX =
   '(?:GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|AG|SE(?:\\s*&\\s*Co\\.?\\s*KGaA)?|KGaA|KG|OHG|GbR|e\\.?V\\.?|B\\.?V\\.?' +

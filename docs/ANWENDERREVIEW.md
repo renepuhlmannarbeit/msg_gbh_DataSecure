@@ -1,6 +1,6 @@
 # Anwenderreview des DataSecure-Ablaufs
 
-Stand: RC28 · Reviewziel: einfacher, verständlicher und sicher fortsetzbarer Ablauf
+Stand: RC29 · Reviewziel: einfacher, verständlicher und technisch gebundener Ablauf
 für eine oder mehrere lokale Dateien auf Windows, macOS und Linux.
 
 ## Zielbild
@@ -21,13 +21,13 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
 | Erststart | Status nennt Version, Bereitschaft und Anzahl im Eingang ohne Pfade oder Namen. |
 | Eine Datei | Ordner öffnet sich, Bestätigung wird abgewartet, genau ein Verarbeitungsaufruf folgt. |
 | Mehrere Dateien | Anzahl wird nach Bestätigung erneut geprüft; pro Datei folgt ein eigener kurzer Aufruf. |
-| Gemischte Textformate | `auto` ordnet jede Datei intern ein; keine Klassifizierung pro Datei. |
-| Reines Bild/Scan | Ein eindeutiger Zweck ist nötig; ohne Zweck stoppt nur diese Datei. |
+| Gemischte Dokumentarten | `auto` ordnet TXT/DOCX intern ein; weitere Formate bleiben im Pilot gesperrt. |
+| Reines Bild/Scan | Stoppt im beaufsichtigten Pilot mit `FORMAT_COVERAGE_UNVERIFIED`. |
 | Personalprofil mit Bildern | Keine zusätzliche Standardfrage; Bilder bleiben lokal, Text kann freigegeben werden. |
 | Ausdrückliche Bildentfernung | `remove_images=true`; unsichere Office-Objekte stoppen statt still erhalten zu bleiben. |
 | Altbestand im Eingang | Nur die Anzahl wird gemeldet; vor Verarbeitung muss der aktuelle Bestand bestätigt werden. |
 | Abweichende Anzahl | Keine Verarbeitung, bis der Anwender den Eingang korrigiert oder die erkannte Zahl bestätigt. |
-| Stopp in Datei 1 | Kein automatischer Retry; Datei 2 bis N werden mit `skip_stopped` genau einmal versucht. |
+| Stopp in Datei 1 | Der Server markiert den Stopp; Datei 2 bis N werden genau einmal versucht. |
 | Teilerfolg | Claude nutzt nur Paket-IDs der erfolgreichen Einzelaufrufe und nennt exakte Zähler. |
 | Chat-Anhang | Sicherer Stopp; die frühere Offenlegung wird nicht als rückgängig gemacht dargestellt. |
 | PDF | Sicherer Stopp mit `PDF_COVERAGE_UNVERIFIED`; kein Upload als Umgehung. |
@@ -38,9 +38,9 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
 1. **Stapel-Timeout:** Der öffentliche Komplettstapel belegte einen MCP-Aufruf für bis
    zu 25 Dateien. Er wurde aus der öffentlichen Werkzeugoberfläche entfernt. Der Skill
    nutzt jetzt einen Aufruf pro Datei.
-2. **Wiederholungsschleife:** Eine gestoppte Datei bleibt sicher im Eingang und wäre
-   erneut die nächste gewesen. `skip_stopped` überspringt bereits gestoppte Dateien im
-   aktuellen Lauf, ohne sie zu löschen oder erneut zu versuchen.
+2. **Wiederholungsschleife:** Eine gestoppte Datei bleibt sicher im Eingang. Eine
+   serverseitige Batch-Sitzung verwaltet Fortschritt und Stopps, ohne modellseitige
+   Queue-Position oder automatische Wiederholung.
 3. **Unbemerkte Altbestände:** Status und Anzahl werden vor dem Öffnen und nach der
    Nutzerbestätigung geprüft. Abweichungen stoppen vor der Verarbeitung.
 4. **Unnötige Bildfrage:** Für Personal-/Bewerbungsunterlagen ist lokales Zurückhalten
@@ -54,9 +54,27 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
    entfernt. Die Releaseversion stammt eindeutig aus dem Plugin-Manifest; beide Skills
    bestehen den Skill-Validator.
 
+## Zweites Expertenreview und Hardening
+
+Das anschließende UX-, Datenschutz-, Security-, QA- und Architekturreview führte zu
+folgenden technischen Änderungen:
+
+1. Verwaiste `.processing_*`-Claims werden beim Start ohne Überschreiben, Symlinkfolge
+   oder stille Wiederholung wiederhergestellt. Cancellation und Shutdown sind kooperativ.
+2. Der Standardordner liegt im lokalen App-Datenbereich; bekannte Cloud-Sync- und
+   Netzwerkpfade blockieren die Verarbeitung.
+3. `begin_document_batch` bindet 1 bis 25 bestätigte Dateien lokal an einen Snapshot.
+   Eine Bestandsänderung invalidiert ihn.
+4. Paket-IDs sind keine Leseberechtigung. Jeder Erfolg liefert ein paketgebundenes,
+   15 Minuten gültiges RAM-Token; historische Pakete sind nicht global auflistbar.
+5. Der Pilot ist auf UTF-8-TXT und vollständig abgedeckte DOCX begrenzt. Jede
+   Parserwarnung und jedes andere Format stoppt fail-closed.
+6. Bildpixel bleiben profilunabhängig lokal. Die Namensregeln decken zusätzlich
+   beschriftete griechische, kyrillische und CJK-Namen sowie begrenzte CJK-Profilköpfe ab.
+
 ## Bewusst verbleibende Grenzen
 
-- Ein echter Modell-/UI-Abnahmelauf mit installiertem RC28 bleibt erforderlich; die
+- Ein echter Modell-/UI-Abnahmelauf mit installiertem RC29 bleibt erforderlich; die
   automatisierten Tests beweisen nicht, dass jede Claude-Version den Skill identisch
   ausführt.
 - Mehrdeutige Zertifikats-/Organisationsstellen stoppen im Standardablauf. Ein einfacher,

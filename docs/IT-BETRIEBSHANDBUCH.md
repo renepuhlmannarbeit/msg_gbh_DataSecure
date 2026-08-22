@@ -1,24 +1,26 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC28 · Stand 21.08.2026
+Version 3.2.0 RC29 · Stand 22.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC28 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC29 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
 ## 1. Betriebsmodell und Sicherheitsgrenze
 
 DataSecure verarbeitet Originaldateien lokal und veröffentlicht ausschließlich
-verifiziertes Markdown sowie automatisch freigegebene PNG-Assets. Originalpfade,
-Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine MCP-Read-Daten.
+verifiziertes Markdown. Sämtliche Bildpixel bleiben im öffentlichen Pilot lokal.
+Originalpfade, Originalbytes, Review-Texte und lokale Aktionsnachweise sind keine
+MCP-Read-Daten. Das Markdown ist nur mit der kurzlebigen paketgebundenen
+Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC28 |
+| Artefakt | Ziel | Status RC29 |
 |---|---|---|
-| `DataSecure-Privacy-Gateway-v3.2.0-rc27.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
-| `DataSecure-Privacy-Preflight-v3.2.0-rc23.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher für Parser/OCR/Raster; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc29.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc29.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -57,7 +59,7 @@ Zusage machen.
 3. Im Extension-Developer-Bereich `Install Extension…` wählen.
 4. Das geprüfte `.mcpb` auswählen, Berechtigungen und vier Konfigurationswerte
    kontrollieren:
-   - Privacy-Ordner: leer für den Standard unter `Dokumente\Claude Privacy`;
+   - Privacy-Ordner: leer für den lokalen DataSecure-App-Datenbereich;
    - Sprache: `de`;
    - Grafikmodus: `strict`;
    - Aufbewahrung: `7` Tage für den Engineering-Test.
@@ -98,11 +100,13 @@ Ein grüner Startnachweis umfasst mindestens:
   auf macOS/Linux `parser_boundary: node_permission_process`; `unavailable` ist ein
   harter Stopp und darf nicht durch eine manuelle Laufzeitkonfiguration umgangen werden;
 - der lokale Privacy-Ordner lässt sich öffnen;
+- `privacy_status` meldet `storage_safe: true`; bekannte Cloud-Sync- und
+  Netzwerkpfade führen zu einem sicheren Stopp;
 - `Input`, `Output`, `Processed` und `Needs Visual Review` existieren;
-- bis zu 25 bestätigte Dateien werden über den fortsetzbaren `Input`-Ablauf mit genau
-  einem MCP-Aufruf pro Datei verarbeitet; ein Einzelfehler wird nicht automatisch
-  wiederholt, blockiert die übrigen Dateien nicht und kein Aufruf wartet während der
-  lokalen Dateibereitstellung;
+- 1–25 bestätigte TXT-/DOCX-Dateien werden vor der Verarbeitung an einen
+  serverseitigen Snapshot gebunden; ein Aufruf verarbeitet genau eine noch nicht
+  versuchte Position, ein Stopp wird nicht automatisch wiederholt und Änderungen am
+  Bestand invalidieren den Stapel;
 - der ausgewählte Pfad und der Originaltext erscheinen weder im MCP-Ergebnis noch im
   Jobjournal oder Audit;
 - das gepackte MCP beantwortet `initialize`;
@@ -115,17 +119,32 @@ Die vollständige Abnahme steht in [PILOT-ABNAHME.md](PILOT-ABNAHME.md).
 
 | Bereich | Inhalt | Standardverhalten |
 |---|---|---|
-| `Input` | noch nicht verarbeitete Quellen | wird vom Ordnerworkflow beansprucht |
+| `Input` | noch nicht verarbeitete TXT-/DOCX-Arbeitskopien | wird vom Ordnerworkflow beansprucht |
 | `Processed` | verarbeitete Originale des Ordnerworkflows | nach Retention löschbar |
-| `Output` | freigegebene Privacy-Pakete | nach Retention löschbar |
+| `Output` | freigegebene Markdown-Pakete | nach Retention löschbar; Lesen nur mit 15-Minuten-Berechtigung des aktuellen Laufs |
 | `Needs Visual Review` | lokal zurückgehaltene Vorschauen | keine Freigabe über Claude; Preview verfällt |
 | Audit | datensparsame Zähler/Status | keine Rohwerte, Namen, Pfade oder Inhalts-Hashes |
 
-Im normalen Produktablauf werden alle Formate über `Input` verarbeitet. Der ältere
+Im Pilot werden ausschließlich TXT und DOCX über `Input` verarbeitet. PDF und alle
+weiteren Formate stoppen fail-closed. Der ältere
 TXT-/DOCX-Companion-Dateidialog bleibt ein getrennter Engineeringpfad und ist nicht
 öffentlich als Werkzeug exponiert. Löschfehler werden gemeldet und beim nächsten
 Cleanup erneut versucht. Unbekannte Verzeichnisse, Symlinks und Junctions werden
 nicht aggressiv entfernt.
+
+Der Standardarbeitsbereich liegt nicht unter `Dokumente`, sondern im lokalen
+App-Datenbereich des Betriebssystems. Bekannte OneDrive-, iCloud-Drive-, Dropbox-,
+Google-Drive- und Windows-Netzwerkpfade werden blockiert. Das ersetzt keine
+administrative Prüfung unbekannter Synchronisationssoftware. Ein alter Ordner
+`Dokumente\Claude Privacy` wird beim Upgrade absichtlich weder automatisch kopiert
+noch gelöscht; die IT bereinigt oder migriert ihn kontrolliert, ohne sensible Daten
+in eine Synchronisation zu verschieben.
+
+Nach einem Absturz stellt der Server verwaiste versteckte Input-Claims beim Start
+wieder her, ohne vorhandene Dateien zu überschreiben oder Links zu verfolgen. Eine
+bereits begonnene Batch-Position wird als gestoppt markiert und nicht erneut
+ausgeführt. Ein Absturz nach dem Verschieben nach `Processed`, aber vor Veröffentlichung
+des Outputs, kann weiterhin eine manuelle Wiederherstellung erfordern.
 
 `purge_local_data` löscht nur nach ausdrücklicher Bestätigung und nur den gewählten
 Scope. Vor einem Purge sicherstellen, dass die synthetischen Ergebnisse nicht mehr
@@ -133,7 +152,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC28 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC29 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.
@@ -165,6 +184,8 @@ Erlaubte Diagnoseangaben:
 - Angabe, ob `visual_bridge` verfügbar ist.
 - Angabe, ob `parser_boundary` als `windows_job_object` einsatzbereit ist. Die Codes
   `PARSER_ISOLATION_FAILED` und `PARSER_RESOURCE_LIMIT` enthalten keine Quelldetails.
+- `storage_safe`, `storage_mode`, Batch-Zähler und feste Wiederherstellungscodes;
+  niemals Batch-Token oder Leseberechtigungen in ein Ticket kopieren.
 
 Nie an Tickets, Chats oder Repositories anhängen:
 

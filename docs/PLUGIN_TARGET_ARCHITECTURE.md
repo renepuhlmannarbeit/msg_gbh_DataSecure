@@ -46,7 +46,7 @@ lokaler Privacy MCP
 Privacy-Paket
     |
     +-- anonymisiert.md
-    +-- assets/ (nur freigegebene Bilder)
+    +-- assets/ (im öffentlichen Pilot keine Bildpixel; nur künftige lokal freigegebene Assets)
     +-- manifest.json
     +-- audit.json
     |
@@ -56,14 +56,10 @@ Claude darf nur diesen Output lesen
 
 ## Skills
 
-Vorgesehen sind kleine, klar getrennte Skills:
+Das ausgelieferte Plugin hält die Oberfläche bewusst klein:
 
-- `datasafe-preflight`: Standardvorprüfung und Anonymisierung
-- `datasafe-customer`: Kundendatenprofil
-- `datasafe-personnel`: Mitarbeiter-/Beraterprofile
-- `datasafe-applicant`: Bewerbungsunterlagen
-- `datasafe-contract`: Vertragsunterlagen
-- `datasafe-compliance`: Hinweise zu Zweck, Datenschutz und AI-Act-Governance
+- `gbh-datasecure-dokument-anonymisieren`: ein gemeinsamer, automatisch routender Dokumentablauf
+- `gbh-datasecure-datenschutz-erklaeren`: Grenzen, Datenschutz und AI-Act-Governance
 
 Die Skills enthalten keine Rohdatenverarbeitung. Sie wählen Profile, erklären Ergebnisse und rufen lokale Tools auf.
 
@@ -75,12 +71,16 @@ Empfohlene Tool-Oberfläche:
 
 - `privacy_status`
 - `open_privacy_folder`
-- `prepare_next_document`
-- `list_anonymized_packages`
+- `open_input_folder`
+- `begin_document_batch`
+- `anonymize_next_document`
 - `read_anonymized_document`
-- `list_anonymized_assets`
-- `read_anonymized_asset`
-- `list_visual_reviews`
+- `list_visual_review_items`
+
+Der Server bindet eine bestätigte Menge von 1–25 Dateien an einen unveränderlichen
+lokalen Snapshot. Lesezugriff auf ein Ergebnis erfordert neben der Paket-ID eine
+kurzlebige, nur im Arbeitsspeicher gehaltene Berechtigung desselben Laufs. Eine
+globale Paketliste ist absichtlich nicht Teil der öffentlichen Tool-Oberfläche.
 
 Visual release is intentionally not an MCP tool. It belongs to the future signed
 local companion and requires non-model-controlled human-presence evidence.

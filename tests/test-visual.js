@@ -1,9 +1,8 @@
 'use strict';
 
 // Visual gate tests. This is the part of the product with the strongest promise
-// attached to it: an image reaches Claude only if OCR found nothing, or if a
-// redaction was verified by a second OCR pass. Every other outcome must be
-// review_required. The OCR and rasteriser bridges are injected, so these tests
+// attached to it: no image reaches Claude automatically. OCR text may enter the
+// text privacy gate, while pixels always remain local for review. The OCR and rasteriser bridges are injected, so these tests
 // run on Linux CI as well even though the real bridges are Windows only.
 
 const fs = require('fs');
@@ -17,7 +16,7 @@ process.env.EU_PRIVACY_ROOT = root;
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
 process.env.EU_PRIVACY_VISUAL_MODE = 'strict';
 
-const { encodePng, decodePng } = require(path.join(runtime, 'image-sanitizer.js'));
+const { encodePng } = require(path.join(runtime, 'image-sanitizer.js'));
 const { prepareVisual, processVisuals, assetsMarkdown, safeReviewFilename } = require(
   path.join(runtime, 'gateway', 'visuals.js')
 );
@@ -72,13 +71,12 @@ const rasterFails = async () => {
 };
 
 async function main() {
-  await testAsync('a clean image with enough recognised text is released', async () => {
+  await testAsync('a clean image with enough recognised text is still withheld', async () => {
     const res = await prepareVisual(attachment(), 'customer', {
       ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)])
     });
-    assert.strictEqual(res.status, 'included');
-    assert.strictEqual(res.reason, 'ocr_clean_metadata_free');
-    assert.strictEqual(res.redactions, 0);
+    assert.strictEqual(res.status, 'review_required');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
   });
 
   await testAsync('a clean image with too little recognised text is withheld in strict mode', async () => {
@@ -86,50 +84,43 @@ async function main() {
       ocrPngDetailed: stubOcr([ocrWords(['ok'])])
     });
     assert.strictEqual(res.status, 'review_required');
-    assert.strictEqual(res.reason, 'insufficient_ocr_for_automatic_release');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
   });
 
   await testAsync('contract visuals need more recognised text than customer visuals', async () => {
     const words = ocrWords(['Anlage', 'zwei']); // 11 characters
     const customer = await prepareVisual(attachment(), 'customer', { ocrPngDetailed: stubOcr([words]) });
     const contract = await prepareVisual(attachment(), 'contract', { ocrPngDetailed: stubOcr([words]) });
-    assert.strictEqual(customer.reason, 'insufficient_ocr_for_automatic_release');
-    assert.strictEqual(contract.reason, 'insufficient_ocr_for_automatic_release');
+    assert.strictEqual(customer.reason, 'visual_local_review_required');
+    assert.strictEqual(contract.reason, 'visual_local_review_required');
 
     const longer = ocrWords(['Anlage', 'zwei', 'zur', 'Vereinbarung']);
     const okCustomer = await prepareVisual(attachment(), 'customer', { ocrPngDetailed: stubOcr([longer]) });
-    assert.strictEqual(okCustomer.status, 'included');
+    assert.strictEqual(okCustomer.status, 'review_required');
   });
 
-  await testAsync('balanced mode releases a low text image that strict mode withholds', async () => {
+  await testAsync('balanced mode cannot override local-only visual handling', async () => {
     process.env.EU_PRIVACY_VISUAL_MODE = 'balanced';
     try {
       const res = await prepareVisual(attachment(), 'customer', {
         ocrPngDetailed: stubOcr([ocrWords(['ok'])])
       });
-      assert.strictEqual(res.status, 'included');
+      assert.strictEqual(res.status, 'review_required');
+      assert.strictEqual(res.reason, 'visual_local_review_required');
     } finally {
       process.env.EU_PRIVACY_VISUAL_MODE = 'strict';
     }
   });
 
-  await testAsync('an image with PII is redacted and the redaction is verified', async () => {
+  await testAsync('an image with PII remains local even when OCR detects it', async () => {
     const before = ocrWords(['Kunde:', 'Max', 'Mustermann', 'Quartalsbericht', 'Region', 'Nord']);
     const after = ocrWords(['Kunde:', 'Quartalsbericht', 'Region', 'Nord']);
     const res = await prepareVisual(attachment(), 'customer', {
       ocrPngDetailed: stubOcr([before, after])
     });
-    assert.strictEqual(res.status, 'included');
-    assert.strictEqual(res.reason, 'pii_redacted_and_verified');
-    assert.ok(res.redactions >= 2, `expected at least 2 redactions, got ${res.redactions}`);
-
-    // The released bytes must actually contain black pixels.
-    const img = decodePng(res.data);
-    let black = 0;
-    for (let i = 0; i < img.rgba.length; i += 4) {
-      if (img.rgba[i] === 0 && img.rgba[i + 1] === 0 && img.rgba[i + 2] === 0) black++;
-    }
-    assert.ok(black > 0, 'the released image must contain redacted pixels');
+    assert.strictEqual(res.status, 'review_required');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
+    assert.match(res.ocrText, /Max Mustermann/);
   });
 
   await testAsync('an image whose redaction did not remove the PII is withheld', async () => {
@@ -138,7 +129,7 @@ async function main() {
       ocrPngDetailed: stubOcr([stillLeaking, stillLeaking])
     });
     assert.strictEqual(res.status, 'review_required');
-    assert.strictEqual(res.reason, 'residual_visual_pii');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
   });
 
   await testAsync('a failing verification OCR pass withholds the image', async () => {
@@ -147,7 +138,7 @@ async function main() {
       ocrPngDetailed: stubOcr([before, new Error('ocr crashed')])
     });
     assert.strictEqual(res.status, 'review_required');
-    assert.strictEqual(res.reason, 'post_redaction_ocr_failed');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
   });
 
   await testAsync('an unavailable OCR bridge withholds the image', async () => {
@@ -155,7 +146,7 @@ async function main() {
       ocrPngDetailed: stubOcr([new Error('windows ocr missing')])
     });
     assert.strictEqual(res.status, 'review_required');
-    assert.strictEqual(res.reason, 'ocr_unavailable_fail_closed');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
     assert.strictEqual(res.ocrText, '', 'no OCR text may be reported when OCR failed');
   });
 
@@ -166,16 +157,17 @@ async function main() {
       { rasterizeToPng: rasterFails, ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)]) }
     );
     assert.strictEqual(res.status, 'review_required');
-    assert.strictEqual(res.reason, 'visual_not_rasterized_safely');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
   });
 
-  await testAsync('a rasterisable vector graphic goes through the normal pipeline', async () => {
+  await testAsync('a rasterisable vector graphic remains local', async () => {
     const res = await prepareVisual(
       attachment({ mimeType: 'image/x-emf', extension: 'emf', data: Buffer.from([1, 2, 3]).toString('base64') }),
       'customer',
       { rasterizeToPng: rasterOk, ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)]) }
     );
-    assert.strictEqual(res.status, 'included');
+    assert.strictEqual(res.status, 'review_required');
+    assert.strictEqual(res.reason, 'visual_local_review_required');
   });
 
   await testAsync('an empty attachment is withheld', async () => {
@@ -201,7 +193,7 @@ async function main() {
         ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)])
       });
       assert.strictEqual(res.status, 'review_required');
-      assert.ok(res.reason.endsWith('_visual_human_review'), `unexpected reason ${res.reason}`);
+      assert.strictEqual(res.reason, 'visual_local_review_required');
       assert.ok(res.candidatePng, 'a metadata free preview candidate must exist for human review');
     });
   }
@@ -222,15 +214,14 @@ async function main() {
     assert.ok(files.includes('asset-001.png'), 'a local preview candidate must be written');
   });
 
-  await testAsync('a released visual is staged with a content hash', async () => {
+  await testAsync('a customer visual is never staged as a package asset', async () => {
     const stage = fs.mkdtempSync(path.join(root, 'stage-'));
     const out = await processVisuals([attachment()], 'customer', 'Paket_Test_2', stage, {
       ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)])
     });
-    assert.strictEqual(out.results[0].status, 'included');
-    assert.match(out.results[0].sha256, /^[0-9a-f]{64}$/);
-    assert.strictEqual(out.results[0].file, 'assets/asset-001.png');
-    assert.ok(fs.existsSync(path.join(stage, 'assets', 'asset-001.png')));
+    assert.strictEqual(out.results[0].status, 'review_required');
+    assert.strictEqual(out.results[0].reason, 'visual_local_review_required');
+    assert.strictEqual(fs.readdirSync(path.join(stage, 'assets')).length, 0);
   });
 
   await testAsync('explicit text-only mode removes visuals without OCR or review bytes', async () => {

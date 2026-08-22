@@ -77,6 +77,29 @@ async function main() {
     assert.strictEqual(fs.existsSync(orphan), false);
   });
 
+  await testAsync('server startup restores an abandoned hidden Input claim before accepting requests', async () => {
+    const input = path.join(root, 'Input');
+    const jobs = path.join(root, 'localapp', 'ClaudeEUPrivacyDocumentGatewayV32', 'jobs');
+    const jobId = 'crashed_abcdef12';
+    fs.mkdirSync(input, { recursive: true });
+    const hidden = path.join(input, `.processing_${jobId}_recovered.txt`);
+    fs.writeFileSync(hidden, 'private source after hard termination');
+    const job = path.join(jobs, jobId);
+    fs.mkdirSync(job, { recursive: true });
+    fs.writeFileSync(path.join(job, '.owner.json'), JSON.stringify({
+      pid: 2147483647,
+      created_at: new Date().toISOString(),
+      nonce: 'e'.repeat(32)
+    }));
+
+    const { responses, stderr } = await talk([rpc(1, 'ping')]);
+    assert.strictEqual(responses.length, 1);
+    assert.strictEqual(stderr, '');
+    assert.strictEqual(fs.existsSync(hidden), false);
+    assert.strictEqual(fs.readFileSync(path.join(input, 'recovered.txt'), 'utf8'), 'private source after hard termination');
+    fs.unlinkSync(path.join(input, 'recovered.txt'));
+  });
+
   await testAsync('initialize returns server info, capabilities and instructions', async () => {
     const { responses } = await talk([rpc(1, 'initialize', { protocolVersion: '2025-06-18' })]);
     assert.strictEqual(responses.length, 1);
@@ -119,10 +142,12 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 13, `expected exactly 13 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 11, `expected exactly 11 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'open_input_folder'));
     assert.ok(!tools.some((tool) => tool.name === 'prepare_local_document'));
     assert.ok(!tools.some((tool) => tool.name === 'anonymize_all_documents'));
+    assert.ok(!tools.some((tool) => tool.name === 'list_anonymized_packages'));
+    assert.ok(tools.some((tool) => tool.name === 'begin_document_batch'));
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {
@@ -138,14 +163,23 @@ async function main() {
       assert.strictEqual(tool.annotations.openWorldHint, false, `tool ${tool.name} must be closed world`);
     }
     const next = tools.find((tool) => tool.name === 'anonymize_next_document');
-    assert.strictEqual(next.inputSchema.properties.skip_stopped.minimum, 0);
-    assert.strictEqual(next.inputSchema.properties.skip_stopped.maximum, 24);
+    assert.deepStrictEqual(next.inputSchema.required, ['batch_token']);
+    assert.strictEqual(next.inputSchema.properties.batch_token.minLength, 64);
+    const begin = tools.find((tool) => tool.name === 'begin_document_batch');
+    assert.deepStrictEqual(begin.inputSchema.required, ['expected_count']);
+    assert.strictEqual(begin.inputSchema.properties.expected_count.maximum, 25);
+    for (const name of ['read_anonymized_document']) {
+      const readTool = tools.find((tool) => tool.name === name);
+      assert.ok(readTool.inputSchema.required.includes('read_capability'));
+      assert.strictEqual(readTool.inputSchema.properties.read_capability.minLength, 43);
+      assert.strictEqual(readTool.inputSchema.properties.read_capability.maxLength, 43);
+    }
   });
 
   await testAsync('read tools are annotated read only and write tools are not', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const byName = Object.fromEntries(responses.find((r) => r.id === 2).result.tools.map((t) => [t.name, t]));
-    for (const name of ['privacy_status', 'diagnostic_status', 'read_anonymized_document', 'read_anonymized_asset', 'list_anonymized_packages']) {
+    for (const name of ['privacy_status', 'diagnostic_status', 'read_anonymized_document']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, true, `${name} must be read only`);
     }
     for (const name of ['anonymize_next_document', 'purge_local_data']) {
@@ -157,6 +191,8 @@ async function main() {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
+    assert.ok(!tools.some((tool) => tool.name === 'read_anonymized_asset'));
+    assert.ok(!tools.some((tool) => tool.name === 'list_anonymized_assets'));
     const purge = tools.find((t) => t.name === 'purge_local_data');
     assert.deepStrictEqual(purge.inputSchema.required, ['confirmed']);
     assert.strictEqual(purge.inputSchema.properties.confirmed.const, true);
@@ -225,15 +261,14 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.companion_job_inspection_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_model_can_review, false);
     assert.strictEqual(result.structuredContent.companion_model_can_release, false);
-    assert.ok(result.structuredContent.supported_inputs.includes('PNG'));
+    assert.deepStrictEqual(result.structuredContent.supported_inputs, ['Word (.docx)', 'TXT']);
     assert.ok(!result.structuredContent.supported_inputs.includes('PDF'));
     assert.deepStrictEqual(result.structuredContent.blocked_inputs, [
-      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' }
+      { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
+      { format: 'XLSX, PPTX, Markdown, CSV und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ]);
     assert.strictEqual(result.structuredContent.visual_boundary,
       process.platform === 'win32' ? 'windows_job_object' : 'unavailable');
-    assert.ok(result.structuredContent.supported_inputs.includes('JPEG'));
-    assert.ok(result.structuredContent.supported_inputs.includes('BMP'));
     assert.ok(!result.isError);
   });
 
@@ -255,7 +290,7 @@ async function main() {
   await testAsync('an empty input folder is reported as a result, not as a transport error', async () => {
     const { responses } = await talk([
       rpc(1, 'initialize', {}),
-      rpc(2, 'tools/call', { name: 'anonymize_next_document', arguments: { profile: 'customer' } })
+      rpc(2, 'tools/call', { name: 'begin_document_batch', arguments: { expected_count: 1, profile: 'customer' } })
     ]);
     const r = responses.find((x) => x.id === 2);
     assert.ok(r.result, 'an empty queue must not produce a JSON-RPC error');
@@ -271,17 +306,17 @@ async function main() {
     const result = responses.find((r) => r.id === 2).result;
     assert.strictEqual(result.isError, true);
     assert.strictEqual(result.structuredContent.raw_content_sent_to_claude, false);
-    assert.match(result.structuredContent.message, /Paket/i, 'a safe german message is expected');
+    assert.match(result.structuredContent.message, /Leseberechtigung/i, 'a safe german message is expected');
   });
 
   await testAsync('a path traversal package id is refused', async () => {
     const { responses } = await talk([
       rpc(1, 'initialize', {}),
-      rpc(2, 'tools/call', { name: 'read_anonymized_document', arguments: { package_id: '../Processed' } })
+      rpc(2, 'tools/call', { name: 'read_anonymized_document', arguments: { package_id: '../Processed', read_capability: 'x'.repeat(43) } })
     ]);
     const result = responses.find((r) => r.id === 2).result;
     assert.strictEqual(result.isError, true);
-    assert.match(result.structuredContent.message, /Ungültige Paket-ID/);
+    assert.match(result.structuredContent.message, /Leseberechtigung/);
   });
 
   await testAsync('an unknown tool yields a JSON-RPC invalid params error', async () => {

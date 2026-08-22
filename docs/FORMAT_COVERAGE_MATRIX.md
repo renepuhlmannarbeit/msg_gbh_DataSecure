@@ -1,5 +1,13 @@
 # Format-Coverage-Matrix
 
+## Öffentliche Pilot-Allowlist
+
+Nur TXT und DOCX dürfen ein Privacy-Paket veröffentlichen. Alle anderen sichtbaren
+Dateien stoppen mit einem festen Fehlercode; es gibt keinen Upload- oder
+Parser-Fallback. Jede Parserwarnung stoppt ebenfalls. Bildpixel aus DOCX bleiben
+unabhängig vom erkannten Typ lokal und werden im öffentlichen Pilot nicht an Claude
+freigegeben.
+
 Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte Dateiendungen.
 Der fortsetzbare `Input`-Ablauf mit einem MCP-Aufruf pro Datei ist der Standard auf
 allen Plattformen. Windows x64 besitzt zusätzlich die native Job-Object-Grenze; die

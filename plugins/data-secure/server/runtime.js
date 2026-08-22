@@ -168,15 +168,24 @@ function validateParserResult(value) {
 }
 
 async function convertDocument(source, options = {}) {
+  if (options.signal?.aborted) {
+    throw safeError('Der isolierte Dokumentparser wurde auf Anforderung beendet.', 'REQUEST_CANCELLED');
+  }
   const ext = path.extname(source).toLowerCase();
-  const supported = new Set(['.pdf', '.docx', '.xlsx', '.pptx', '.txt', '.md', '.csv', '.png', '.jpg', '.jpeg', '.bmp']);
-  if (!supported.has(ext)) throw new SafeError('Nicht unterstütztes Format.');
+  // The parser contains additional extraction code for adversarial/unit tests,
+  // but the product release boundary is intentionally narrower until coverage
+  // for further formats has been demonstrated.
+  const supported = new Set(['.docx', '.txt']);
+  if (ext === '.pdf') throw pdfCoverageError();
+  if (!supported.has(ext)) throw safeError(
+    'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben.',
+    'FORMAT_COVERAGE_UNVERIFIED'
+  );
   // pdf-lite remains available only for adversarial parser tests. Its extraction
   // is not a coverage proof: fonts, the page tree and every visual object cannot
   // yet be accounted for. Never let that best-effort result enter the release
   // pipeline. The current release keeps PDF fail-closed until the native PDFium contract in
   // docs/PDF_ENGINE_DECISION.md has passed all release gates.
-  if (ext === '.pdf') throw pdfCoverageError();
   const worker = path.join(__dirname, 'parser-worker.js');
   const spawn = options.spawn || childProcess.spawn;
   const platform = options.platform || process.platform;
@@ -245,6 +254,7 @@ async function convertDocument(source, options = {}) {
       settled = true;
       clearTimeout(timer);
       clearTimeout(terminationTimer);
+      if (options.signal) options.signal.removeEventListener('abort', abortHandler);
       if (error) reject(error); else resolve(value);
     };
     const terminate = (error) => {
@@ -263,6 +273,11 @@ async function convertDocument(source, options = {}) {
     const timer = setTimeout(() => {
       terminate(new SafeError('Der isolierte Dokumentparser hat das Zeitlimit überschritten.'));
     }, options.timeoutMs ?? PARSER_TIMEOUT_MS);
+    const abortHandler = () => terminate(
+      safeError('Der isolierte Dokumentparser wurde auf Anforderung beendet.', 'REQUEST_CANCELLED')
+    );
+    if (options.signal) options.signal.addEventListener('abort', abortHandler, { once: true });
+    if (options.signal?.aborted) abortHandler();
     child.stdout.on('data', (chunk) => {
       size += chunk.length;
       if (size > MAX_PARSER_RESPONSE_BYTES) {

@@ -316,28 +316,22 @@ test('a scanned PDF with an embedded JPEG is routed to the visual privacy gate',
 
 async function main() {
 
-  await testAsync('TXT and MD are passed through unchanged', async () => {
+  await testAsync('TXT is passed through unchanged', async () => {
   const file = write('note.txt', 'Freitext mit Umlauten: Öl, Ärger, Übung.\n');
   const result = await convertDocument(file);
   assertPresent(result.markdown, 'Öl, Ärger, Übung', 'plain text');
   assert.deepStrictEqual(result.attachments, []);
 });
 
-  await testAsync('CSV content is fenced so that separators are not read as markdown', async () => {
+  await testAsync('CSV remains blocked at the release parser boundary', async () => {
   const file = write('liste.csv', 'Name;Ort\nMax;Köln\n');
-  const result = await convertDocument(file);
-  assertPresent(result.markdown, '```csv', 'code fence');
-  assertPresent(result.markdown, 'Max;Köln', 'csv row');
+  await assert.rejects(() => convertDocument(file), (e) => e.code === 'FORMAT_COVERAGE_UNVERIFIED');
   });
 
-  await testAsync('standalone PNG images are routed to the visual privacy gate', async () => {
+  await testAsync('standalone PNG images remain blocked in the pilot', async () => {
     const png = encodePng({ width: 8, height: 8, rgba: Buffer.alloc(8 * 8 * 4, 255) });
     const file = write('scan.png', png);
-    const result = await convertDocument(file);
-    assertPresent(result.markdown, 'Bildinhalt', 'image marker');
-    assert.strictEqual(result.attachments.length, 1);
-    assert.strictEqual(result.attachments[0].mimeType, 'image/png');
-    assert.strictEqual(result.requiresExplicitProfile, true);
+    await assert.rejects(() => convertDocument(file), (e) => e.code === 'FORMAT_COVERAGE_UNVERIFIED');
   });
 
   await testAsync('PDF cannot enter the release parser before full coverage is proven', async () => {
@@ -348,11 +342,9 @@ async function main() {
     );
   });
 
-  await testAsync('a CSV that contains a fence cannot break out of the code block', async () => {
+  await testAsync('a CSV with a fence cannot bypass the pilot allowlist', async () => {
   const file = write('inject.csv', 'a;b\n```\n# Überschrift\n');
-  const result = await convertDocument(file);
-  const fences = result.markdown.match(/```/g) || [];
-  assert.strictEqual(fences.length, 2, 'exactly the opening and closing fence may remain');
+  await assert.rejects(() => convertDocument(file), (e) => e.code === 'FORMAT_COVERAGE_UNVERIFIED');
 });
 
   await testAsync('an unsupported extension is refused', async () => {

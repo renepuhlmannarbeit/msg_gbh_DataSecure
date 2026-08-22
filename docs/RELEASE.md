@@ -96,12 +96,14 @@ alone do not close them.
 - [ ] `privacy_status` reports `visual_bridge: available` and
       `visual_boundary: windows_job_object`
 - [ ] the privacy folder opens
-- [ ] DOCX, XLSX and PPTX preflight work on synthetic files
+- [ ] TXT and DOCX preflight work on synthetic files; XLSX, PPTX and all other
+      non-pilot formats stop without publishing output
 - [ ] every PDF stops with `PDF_COVERAGE_UNVERIFIED`, restores its source and publishes no package
 - [x] a scanned image is OCR'd, and PII inside it is blacked out
 - [ ] an EMF/WMF graphic either rasterises safely or is withheld
 - [ ] applicant and personnel visuals stay local and unavailable to Claude
-- [ ] only released Markdown and released assets are readable by Claude
+- [ ] only released Markdown with the current run's package-bound read capability
+      is readable by Claude; a package ID alone and historical package enumeration fail
 - [ ] `privacy_status` reports the configured retention window and due counts
 - [ ] an expired synthetic Processed file, Output package and pending review
       preview are removed, while hidden staging directories and metadata-only audit receipts remain

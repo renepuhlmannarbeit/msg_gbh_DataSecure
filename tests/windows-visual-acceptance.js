@@ -47,7 +47,8 @@ async function main() {
     const gw = require('../plugins/data-secure/server/gateway');
     const result = await gw.anonymizeNext('customer');
     assert.strictEqual(result.ok, true);
-    assert.strictEqual(result.visual_assets.included, 1, 'redacted image must pass the second OCR check');
+    assert.strictEqual(result.visual_assets.included, 0, 'visual assets must never be released automatically');
+    assert.strictEqual(result.visual_assets.review_required, 1, 'visual asset must remain local for review');
     assert.ok(result.visual_assets.redactions > 0, 'at least one pixel redaction is required');
 
     const outputDir = path.join(root, 'Output', result.package_id);

@@ -94,6 +94,8 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
     });
     return {
       ok: true, job: jobStatus(jobId), package_id: result.package_id,
+      read_capability: result.read_capability,
+      read_capability_expires_at: result.read_capability_expires_at,
       document_id: result.document_id, verification: result.verification,
       detected_identifiers: result.detected_identifiers, review_decision: reviewDecision,
       visual_assets: result.visual_assets,

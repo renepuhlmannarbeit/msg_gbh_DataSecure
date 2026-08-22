@@ -8,8 +8,10 @@ const pii = require('../pii-engine');
 const {
   VERSION,
   PROFILES,
+  PILOT_SUPPORTED,
   LIMITS,
   roots,
+  storageStatus,
   sha256File,
   safePackageId,
   uniqueDir,
@@ -30,10 +32,18 @@ const {
 } = require('./compliance');
 const { migrateLegacyAuditReceipts } = require('./audit');
 const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
+const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 
 const { MAX_INPUT_BYTES, MAX_TEXT_CHARS, MAX_VISUAL_ASSETS } = LIMITS;
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  const error = new SafeError('Die lokale Verarbeitung wurde auf Anforderung sicher abgebrochen.');
+  error.code = 'REQUEST_CANCELLED';
+  throw error;
+}
 
 function newJobId() {
   return `${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
@@ -179,6 +189,13 @@ function bestEffortDiagnostic(deps, event) {
 async function anonymizeNext(profile = 'auto', deps = {}) {
   const requested = String(profile || 'auto').toLowerCase();
   if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
+  if (!storageStatus().safe) {
+    const error = new SafeError('Der konfigurierte Datenschutzordner ist ein bekannter Cloud-Sync- oder Netzwerkpfad. Verarbeitung wurde sicher gestoppt.');
+    error.code = 'UNSAFE_STORAGE_LOCATION';
+    throw error;
+  }
+
+  throwIfAborted(deps.abortSignal);
 
   bestEffortRetentionCleanup(deps);
   const workingCleanup = (deps.cleanupAbandonedWorkingJobs || cleanupAbandonedWorkingJobs)({ now: deps.now });
@@ -219,6 +236,18 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   const originalSource = selectedInput.full;
   const originalName = selectedInput.name;
   const ext = path.extname(originalSource).toLowerCase();
+  if (!PILOT_SUPPORTED.has(ext)) {
+    const error = new SafeError(
+      'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben. ' +
+        'Verwenden Sie ausschließlich TXT oder DOCX; PDF, XLSX, PPTX, Markdown, CSV und Bilddateien bleiben sicher gestoppt.'
+    );
+    error.code = ext === '.pdf' ? 'PDF_COVERAGE_UNVERIFIED' : 'FORMAT_COVERAGE_UNVERIFIED';
+    bestEffortDiagnostic(deps, {
+      route: 'input', source_type: ext.slice(1), profile: requested,
+      stage: 'started', result: 'stopped', error_code: error.code
+    });
+    throw error;
+  }
   if (selectedInput.stat.size > MAX_INPUT_BYTES) throw new SafeError('Eingabedatei ist größer als 100 MB.');
 
   const r = roots();
@@ -246,6 +275,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     remove_images: deps.removeImages === true
   };
   try {
+    throwIfAborted(deps.abortSignal);
     source = copiedClaim
       ? path.join(jobDir, `source${ext}`)
       : path.join(r.input, `.processing_${jobId}_${originalName}`);
@@ -258,11 +288,22 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     diagnosticStage = 'claimed';
     if (deps.onClaimed) await deps.onClaimed();
 
-    const converted = await (deps.convertDocument || convertDocument)(source);
+    throwIfAborted(deps.abortSignal);
+
+    const converted = await (deps.convertDocument || convertDocument)(source, { signal: deps.abortSignal });
+    throwIfAborted(deps.abortSignal);
     diagnosticStage = 'converted';
     diagnostic.parser_warning_count = (converted.warnings || []).length;
     diagnostic.visual_assets_total = (converted.attachments || []).length + (converted.unreviewedVisualCount || 0);
     if (deps.onExtracted) await deps.onExtracted(converted);
+    if ((converted.warnings || []).length > 0) {
+      const error = new SafeError(
+        'Der lokale Parser meldet eine unvollständige Dokumentabdeckung. ' +
+          'Die Datei bleibt sicher gestoppt und es wird kein Paket freigegeben.'
+      );
+      error.code = 'PARSER_COVERAGE_UNVERIFIED';
+      throw error;
+    }
     if (requested === 'auto' && converted.requiresExplicitProfile) {
       throw new SafeError(
         'Für reine Bild-/Scan-Eingaben muss das Datenschutzprofil ausdrücklich gewählt werden; ' +
@@ -300,6 +341,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       ...deps,
       removeImages
     });
+    throwIfAborted(deps.abortSignal);
     const included = vis.results.filter((x) => x.status === 'included').length;
     const review = vis.results.filter((x) => x.status === 'review_required').length;
     const removed = vis.results.filter((x) => x.status === 'removed').length;
@@ -355,6 +397,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
           (converted.warnings || []).length > 0 ||
           (converted.unreviewedVisualCount || 0) > 0
       });
+      throwIfAborted(deps.abortSignal);
       if (!reviewResult || typeof reviewResult.text !== 'string') {
         throw new SafeError('Die lokale Textprüfung lieferte keine freigabefähige Fassung.');
       }
@@ -444,6 +487,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         technical_review_required: review > 0
       });
     }
+    throwIfAborted(deps.abortSignal);
 
     const moveSource = deps.moveProcessed || moveProcessed;
     const publishPackage = deps.publishPackage || ((from, to) => fs.renameSync(from, to));
@@ -496,6 +540,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       error_code: 'NONE'
     });
 
+    const readGrant = issueReadCapability(packageId);
     return {
       ok: true,
       operation_id: auditReceipt.operation_id,
@@ -503,6 +548,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       profile: effective,
       profile_detection: requested === 'auto' ? 'local-auto' : 'explicit',
       package_id: packageId,
+      read_capability: readGrant.read_capability,
+      read_capability_expires_at: readGrant.read_capability_expires_at,
       document_id: mdName,
       verification: 'passed',
       privacy_passes: anon.passes,

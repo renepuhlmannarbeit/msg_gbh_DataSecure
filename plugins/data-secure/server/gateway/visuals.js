@@ -4,17 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const { rasterizeToPng, ocrPngDetailed } = require('../runtime');
 const { VisualBudgetError } = require('../windows-visual');
-const pii = require('../pii-engine');
 const {
   decodePng,
   encodePng,
   decodeBmp,
   flattenWords,
-  entityRects,
-  redactEditable,
   normalizeMime
 } = require('../image-sanitizer');
-const { minOcrCharsFor } = require('../images/ocr-map');
 const { LIMITS, roots, sha256Buffer, sha256File } = require('./common');
 
 const { MAX_ASSET_BYTES } = LIMITS;
@@ -56,13 +52,9 @@ function languageTag() {
   return l.startsWith('de') ? 'de-DE' : 'en-US';
 }
 
-function visualMode() {
-  return String(process.env.EU_PRIVACY_VISUAL_MODE || 'strict').toLowerCase();
-}
-
-// Every early return here is a fail-closed decision: the asset stays local and
-// only a human can release it. `included` is reached exclusively via an OCR pass
-// that found nothing, or via a redaction that a second OCR pass confirmed.
+// Every visual stays local by default. OCR can contribute text to the same PII
+// gate as the document body, but it is not proof that faces, signatures, logos,
+// QR codes or other identifying pixels are absent.
 async function prepareVisual(att, profile, deps = {}) {
   const raster = deps.rasterizeToPng || rasterizeToPng;
   const ocr = deps.ocrPngDetailed || ocrPngDetailed;
@@ -118,96 +110,15 @@ async function prepareVisual(att, profile, deps = {}) {
     }
   }
 
-  // Applicant and personnel visuals are never auto-released: a photo, a
-  // signature or a company logo re-identifies the person directly.
-  if (profile === 'applicant' || profile === 'personnel_profile') {
-    return {
-      status: 'review_required',
-      reason: profile === 'applicant' ? 'applicant_visual_human_review' : 'personnel_visual_human_review',
-      reviewData,
-      reviewExt,
-      ocrText,
-      candidatePng: png
-    };
-  }
-
-  if (!png) {
-    return { status: 'review_required', reason: 'visual_not_rasterized_safely', reviewData, reviewExt, ocrText };
-  }
-  if (!ocrData) {
-    return { status: 'review_required', reason: 'ocr_unavailable_fail_closed', reviewData: png, reviewExt: 'png', ocrText: '' };
-  }
-
-  const flat = flattenWords(ocrData);
-  const spans = pii.sensitiveSpans(ocrText, profile);
-
-  if (!spans.length) {
-    // Too little recognised text means OCR probably failed rather than that the
-    // image is clean, so the profile-specific minimum applies.
-    const minChars = minOcrCharsFor(profile, visualMode());
-    if (ocrText.trim().length < minChars) {
-      return {
-        status: 'review_required',
-        reason: 'insufficient_ocr_for_automatic_release',
-        reviewData: png,
-        reviewExt: 'png',
-        ocrText
-      };
-    }
-    return { status: 'included', reason: 'ocr_clean_metadata_free', data: png, mime: 'image/png', ocrText, redactions: 0 };
-  }
-
-  const rects = entityRects(spans, flat.words);
-  if (!rects.length) {
-    return { status: 'review_required', reason: 'pii_bbox_mapping_failed', reviewData: png, reviewExt: 'png', ocrText };
-  }
-
-  let redacted;
-  try {
-    redacted = redactEditable(png, 'image/png', rects);
-  } catch {
-    return { status: 'review_required', reason: 'visual_redaction_failed', reviewData: png, reviewExt: 'png', ocrText };
-  }
-
-  // Verify the redaction by reading the image back: a black box that failed to
-  // cover the glyphs must not be released. The check asks whether the redacted
-  // strings are gone and no direct identifier remains, not whether new
-  // low-confidence candidates appeared - after a name is blacked out the next
-  // capitalised words move into its position, and a candidate scan would flag
-  // those forever.
-  const redactedValues = spans.map((s) => s.text);
-  try {
-    const after = await withinVisualBudget(ocr, [redacted, languageTag()], deadlineAt);
-    const afterText = flattenWords(after).text || String(after?.text || '');
-    if (pii.verifyRedactedText(afterText, redactedValues).length) {
-      return {
-        status: 'review_required',
-        reason: 'residual_visual_pii',
-        reviewData: redacted,
-        reviewExt: 'png',
-        ocrText,
-        redactions: rects.length
-      };
-    }
-  } catch (error) {
-    if (error instanceof VisualBudgetError) throw error;
-    return {
-      status: 'review_required',
-      reason: 'post_redaction_ocr_failed',
-      reviewData: redacted,
-      reviewExt: 'png',
-      ocrText,
-      redactions: rects.length
-    };
-  }
-
+  // This decision is deliberately profile-independent. OCR only recognises
+  // text; it cannot safely classify all identifying visual content.
   return {
-    status: 'included',
-    reason: 'pii_redacted_and_verified',
-    data: redacted,
-    mime: 'image/png',
+    status: 'review_required',
+    reason: 'visual_local_review_required',
+    reviewData,
+    reviewExt,
     ocrText,
-    redactions: rects.length
+    candidatePng: png
   };
 }
 

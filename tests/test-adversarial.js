@@ -371,14 +371,15 @@ async function main() {
   test('read tool arguments cannot be abused to reach other files', () => {
     const packageId = gw.listOutputs().packages[0]?.package_id;
     if (!packageId) return;
+    const capability = gw.issueReadCapability(packageId).read_capability;
     for (const bad of ['../Processed', '..\\..\\Windows', 'pkg .md', 'pkg/../..', '.', './']) {
-      assert.throws(() => gw.readOutput(bad, 0, 1000), /Ungültige Paket-ID|Paket nicht gefunden/, `accepted ${JSON.stringify(bad)}`);
+      assert.throws(() => gw.readOutput(bad, capability, 0, 1000), /Leseberechtigung|Ungültige Paket-ID|Paket nicht gefunden/, `accepted ${JSON.stringify(bad)}`);
     }
     // Out of range paging must clamp, not throw or leak.
-    const far = gw.readOutput(packageId, 10 ** 9, 1000);
+    const far = gw.readOutput(packageId, capability, 10 ** 9, 1000);
     assert.strictEqual(far.text, '');
     assert.strictEqual(far.has_more, false);
-    const negative = gw.readOutput(packageId, -50, 1000);
+    const negative = gw.readOutput(packageId, capability, -50, 1000);
     assert.strictEqual(negative.offset, 0, 'a negative offset must clamp to zero');
   });
 

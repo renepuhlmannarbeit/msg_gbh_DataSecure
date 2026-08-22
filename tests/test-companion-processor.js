@@ -51,7 +51,7 @@ async function main() {
     const result = await processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true });
     assert.strictEqual(result.job.state, 'Released');
     assert.deepStrictEqual(fs.readFileSync(file), original);
-    const released = readOutput(result.package_id, 0, 30000);
+    const released = readOutput(result.package_id, result.read_capability, 0, 30000);
     assert.doesNotMatch(released.text, /Max Mustermann|max\.mustermann|1234567/i);
     assert.match(released.text, /Softwarearchitekt/);
     assert.strictEqual(readEvents(job.job_id).at(-1).output_sha256.length, 64);
@@ -80,7 +80,7 @@ async function main() {
     const job = createJob({ profile: 'personnel_profile', source_type: 'docx' });
     const result = await processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true });
     assert.strictEqual(result.job.state, 'Released');
-    assert.match(readOutput(result.package_id, 0, 30000).text, /Architekt/);
+    assert.match(readOutput(result.package_id, result.read_capability, 0, 30000).text, /Architekt/);
   });
 
   await testAsync('a locally reviewed additional alias redaction preserves professional content', async () => {
@@ -97,7 +97,7 @@ async function main() {
     assert.deepStrictEqual(readEvents(job.job_id).map((event) => event.state), [
       'Created', 'Claimed', 'Extracted', 'Detected', 'Reviewed', 'Verified', 'Released'
     ]);
-    const released = readOutput(result.package_id, 0, 30000).text;
+    const released = readOutput(result.package_id, result.read_capability, 0, 30000).text;
     assert.match(released, /Kundenalias intern: \[MANUAL_REDACTION\]/);
     assert.match(released, /Rolle: Architekt/);
     assert.strictEqual(result.review_decision, 'reviewed');
@@ -115,7 +115,7 @@ async function main() {
       })
     });
     assert.strictEqual(result.job.state, 'Released');
-    assert.match(readOutput(result.package_id, 0, 30000).text, /Microsoft Azure Administrator Associate/);
+    assert.match(readOutput(result.package_id, result.read_capability, 0, 30000).text, /Microsoft Azure Administrator Associate/);
   });
 
   await testAsync('an ambiguous issuer can be anonymized by the local decision', async () => {
@@ -128,7 +128,7 @@ async function main() {
         decisions: input.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'redact' }))
       })
     });
-    const released = readOutput(result.package_id, 0, 30000).text;
+    const released = readOutput(result.package_id, result.read_capability, 0, 30000).text;
     assert.doesNotMatch(released, /Microsoft/);
     assert.match(released, /\[MANUAL_REDACTION\] Azure Administrator Associate/);
   });
@@ -380,7 +380,7 @@ async function main() {
     assert.strictEqual(result.visual_assets.review_required, 0);
     assert.strictEqual(fs.existsSync(file), true, 'the selected original must remain untouched');
     assert.deepStrictEqual(fs.readdirSync(r.review), []);
-    const released = readOutput(result.package_id, 0, 30000);
+    const released = readOutput(result.package_id, result.read_capability, 0, 30000);
     assert.match(released.text, /Grafik 001 wurde auf ausdrücklichen Wunsch entfernt/);
     assert.match(released.text, /Java|Architekt|Projekt/i, 'professional text must remain usable');
   });
@@ -398,7 +398,7 @@ async function main() {
       processCompanionJob(job.job_id, file, job.profile, {
         reviewTextLocally: () => { reviewCalled = true; return { action: 'skipped' }; }
       }),
-      /technisch unsichere Inhalte/
+      /unvollständige Dokumentabdeckung/
     );
     assert.strictEqual(reviewCalled, false);
     assert.strictEqual(jobStatus(job.job_id).state, 'Failed');

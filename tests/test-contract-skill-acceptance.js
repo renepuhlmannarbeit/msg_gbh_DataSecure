@@ -28,7 +28,7 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /Originale \*\*nicht\*\*[^\n]+Chat-Upload/iu);
   assert.match(anonymizeSkill, /read_anonymized_document/u);
   assert.match(anonymizeSkill, /ursprüngliche Nutzeraufgabe automatisch/iu);
-  assert.match(anonymizeSkill, /diesem Aufruf[^\n]+`package_id`/iu);
+  assert.match(anonymizeSkill, /`package_id` und `read_capability` aus demselben erfolgreichen Einzelergebnis/iu);
 });
 
 test('explanation skill states the privacy boundary and avoids a legal anonymity claim', () => {

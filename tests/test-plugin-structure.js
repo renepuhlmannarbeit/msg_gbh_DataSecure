@@ -51,8 +51,10 @@ for(const skill of requiredSkills){
 const preflight=fs.readFileSync(path.join(pluginRoot,'skills','gbh-datasecure-dokument-anonymisieren','SKILL.md'),'utf8');
 assert.match(preflight,/Fordere sensible Originale \*\*nicht\*\*[^\n]*(?:Chat-Upload|Einfügen)/i);
 assert.match(preflight,/read_anonymized_document/);
-assert.match(preflight,/read_anonymized_asset/);
-assert.match(preflight,/ausschließlich die in diesem Aufruf als freigegeben gemeldeten `package_id`/i);
+assert.match(preflight,/kein Werkzeug, das Bildpixel an Claude überträgt/i);
+assert.match(preflight,/ausschließlich `package_id` und `read_capability` aus demselben erfolgreichen Einzelergebnis/i);
+assert.match(preflight,/begin_document_batch/i);
+assert.match(preflight,/batch_token/i);
 assert.match(preflight,/ursprüngliche Nutzeraufgabe automatisch und ausschließlich/i);
 for(const profile of ['customer','applicant','personnel_profile','contract','general']){
   assert.match(preflight,new RegExp(`\\b${profile}\\b`),`missing profile guidance for ${profile}`);
@@ -68,7 +70,7 @@ const toolsEnd=indexSource.indexOf('];',toolsStart);
 assert.notStrictEqual(toolsStart,-1,'TOOLS table missing');
 assert.notStrictEqual(toolsEnd,-1,'TOOLS table is unterminated');
 const toolNames=[...indexSource.slice(toolsStart,toolsEnd).matchAll(/\{name:'([a-z_]+)',title:/g)].map(m=>m[1]);
-assert.strictEqual(toolNames.length,13,'unexpected tool count');
+assert.strictEqual(toolNames.length,11,'unexpected tool count');
 assert.ok(!toolNames.includes('anonymize_all_documents'),'a complete multi-file run must not occupy one MCP call');
 assert.ok(!toolNames.includes('approve_visual_asset'),'Claude must not receive a model-callable human approval tool');
 

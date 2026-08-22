@@ -93,6 +93,32 @@ test('golden run removes every synthetic direct identifier', () => {
   assert.deepStrictEqual(residual, [], 'residual gate must be clean');
 });
 
+test('labelled Greek, Cyrillic and CJK names are removed and pass the residual gate', () => {
+  for (const [label, name] of [
+    ['Όνομα', 'Νίκος Παπαδόπουλος'],
+    ['Имя', 'Александр Иванов'],
+    ['姓名', '王小明'],
+    ['氏名', '山田太郎'],
+    ['이름', '김민준']
+  ]) {
+    const { text, residual } = anonymizeVerified(`${label}: ${name}\nRolle: Softwareentwickler`, 'personnel_profile');
+    assertAbsent(text, name, `${label} name`);
+    assertPresent(text, '[PERSON_001]', `${label} placeholder`);
+    assert.deepStrictEqual(residual, [], `${label} residual gate`);
+  }
+});
+
+test('a standalone CJK name in a personnel-profile header is removed', () => {
+  const { text, residual } = anonymizeVerified('王小明\nQualifikationen\nJava und SQL', 'personnel_profile');
+  assertAbsent(text, '王小明', 'CJK header name');
+  assert.deepStrictEqual(residual, []);
+});
+
+test('standalone CJK professional content outside a profile header is preserved', () => {
+  const { text } = anonymizeVerified('## Projekterfahrung\n人工知能\nRolle: Developer', 'personnel_profile');
+  assertPresent(text, '人工知能', 'CJK professional content');
+});
+
 test('business project periods stay exact while labelled birth dates are removed', () => {
   const src = [
     'ERIKA BEISPIEL',

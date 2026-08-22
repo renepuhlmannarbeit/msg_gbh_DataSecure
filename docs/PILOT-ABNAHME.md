@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC28 · ausschließlich synthetische Daten
+Version 3.2.0 RC29 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC28 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC29 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 ## 1. Rollen und Nachweise
@@ -47,6 +47,9 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
 - [ ] PDF erscheint ausschließlich unter `blocked_inputs` mit
       `PDF_COVERAGE_UNVERIFIED`, nicht unter den unterstützten Eingaben.
 - [ ] Der Privacy-Ordner öffnet sich und enthält die vier erwarteten Bereiche.
+- [ ] Der Standardordner liegt im lokalen App-Datenbereich. Ein expliziter OneDrive-,
+      iCloud-, Dropbox- oder Netzwerkpfad meldet `blocked_unsafe_storage` und startet
+      keine Verarbeitung.
 - [ ] Ein absichtlich beschädigtes oder falsch versioniertes Artefakt wird nicht als
       einsatzbereit gemeldet.
 - [ ] Erstinstallation startet aus dem festgelegten Artefakt ohne zusätzliche Runtime.
@@ -69,13 +72,15 @@ gezielt mit `AMBIGUITY_REVIEW_REQUIRED` stoppen.
       Zahl beginnt keine Verarbeitung.
 - [ ] Ohne ausdrücklichen Wunsch erscheint keine zusätzliche Frage zur Bildentfernung;
       Bilder in Bewerbungs-/Personalunterlagen bleiben standardmäßig lokal.
-- [ ] Nach Bestätigung wird die Anzahl erneut geprüft. Null oder mehr als 25 Dateien
-      werden verständlich gemeldet und nicht stillschweigend verarbeitet.
+- [ ] Nach Bestätigung erzeugt `begin_document_batch` nur bei exakt 1 bis 25 Dateien
+      ein Batch-Token; Namen und lokale Hashes erscheinen in keiner Toolantwort.
+- [ ] Austausch, Hinzufügen oder Zeitstempeländerung nach der Bestätigung invalidiert
+      den Stapel vollständig, auch wenn die Anzahl gleich bleibt.
 - [ ] Pro MCP-Aufruf wird genau eine Datei verarbeitet; ein Stapel von mehreren
       Dokumenten läuft nicht als ein einziger langer Aufruf.
-- [ ] Ein Stopp veröffentlicht für die betroffene Datei nichts und wird im selben Lauf
-      nicht wiederholt. Die übrigen bestätigten Dateien werden trotzdem genau einmal
-      versucht.
+- [ ] Ein Stopp veröffentlicht für die betroffene Datei nichts und wird serverseitig
+      im Batch markiert. Die übrigen Dateien werden genau einmal versucht, ohne einen
+      vom Modell berechneten Überspringzähler.
 - [ ] Claude zeigt weder Pfad, Dateiname, Originaltext noch interne Queue-Position.
 - [ ] Der normale Input-Ablauf öffnet keinen Textreview- oder zweiten Dateidialog.
 - [ ] Mehrdeutige Zertifikats-/Organisationsstellen werden nicht geraten, sondern
@@ -87,24 +92,28 @@ gezielt mit `AMBIGUITY_REVIEW_REQUIRED` stoppen.
       ausschließlich Paket-IDs aus den Einzelaufrufen dieses Laufs.
 - [ ] Eine erneute Verarbeitung einer gestoppten Datei beginnt erst nach einem neuen,
       ausdrücklichen Nutzerauftrag.
+- [ ] Abbruch, MCP-Neustart oder geschlossenes stdin nach dem Claim stellt die Datei
+      kollisionsfrei sichtbar wieder her; ein unsicher unterbrochener Batch-Eintrag
+      wird nicht automatisch wiederholt.
+- [ ] Der reale 25-Dateien-Test besteht mit Stopps an Position 1, 13 und 25 ohne
+      doppelte Verarbeitung.
 
-## 5. Andere und formatgemischte Dateien über den Input-Ordner
+## 5. Formatgrenze des beaufsichtigten Piloten
 
-Jeweils eine synthetische DOCX-, XLSX-, PPTX-, CSV-, PNG-, JPEG- und BMP-Datei
-verwenden. Text- und Scan-PDF separat als verpflichtende Stop-Gegenprobe prüfen.
+Jeweils eine synthetische TXT- und DOCX-Datei als Positivfall verwenden. XLSX,
+PPTX, MD, CSV, PNG, JPEG, BMP und PDF dienen als verpflichtende Stop-Gegenproben.
 
-- [ ] Unterstützte Formate erzeugen ein verifiziertes Privacy-Paket oder einen
-      verständlichen fail-closed Grund.
-- [ ] PPTX-Sprechernotizen und XLSX-Zelltexte werden berücksichtigt.
-- [ ] CSV-Inhalt kann nicht aus seinem Markdown-Fence ausbrechen.
+- [ ] TXT und vollständig abgedeckte DOCX erzeugen ein verifiziertes Privacy-Paket.
+- [ ] Jede DOCX-Parserwarnung stoppt mit `PARSER_COVERAGE_UNVERIFIED`.
+- [ ] Alle anderen Formate stoppen mit festem Coverage-Fehler und bleiben in `Input`.
 - [ ] Jedes PDF stoppt mit `PDF_COVERAGE_UNVERIFIED`, stellt das Original wieder her
       und erzeugt weder Teil- noch Output-Paket.
-- [ ] Synthetische PII im Scan wird geschwärzt und durch zweiten OCR-Lauf verifiziert.
-- [ ] EMF/WMF rasterisiert sicher oder wird vollständig zurückgehalten.
+- [ ] Eingebettete DOCX-Grafiken bleiben lokal; erkannter Bildtext passiert denselben
+      Text-PII-Gate, aber Pixel werden nicht automatisch freigegeben.
 
 ## 6. Visuelle Sicherheitsgrenze
 
-- [ ] Automatisch verifizierte Rastergrafiken erscheinen als freigegebene PNG-Assets.
+- [ ] Keine Rastergrafik wird im Pilot allein aufgrund eines OCR-Ergebnisses freigegeben.
 - [ ] Unsichere/OCR-arme Grafiken erscheinen nur lokal unter
       `Needs Visual Review`.
 - [ ] Bewerber- und Personalvisuals bleiben unabhängig vom Textreview lokal und für
@@ -113,12 +122,15 @@ verwenden. Text- und Scan-PDF separat als verpflichtende Stop-Gegenprobe prüfen
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC28 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC29 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz
 
 - [ ] Claude kann ausschließlich freigegebenes Markdown und freigegebene Assets lesen.
+- [ ] Paket-ID ohne `read_capability`, Capability eines anderen Pakets, abgelaufene
+      Capability und MCP-Neustart blockieren jeden Leseversuch.
+- [ ] Historische Pakete sind im normalen Toolset nicht global auflistbar.
 - [ ] Originale und lokale Review-Vorschauen sind über kein Read-Tool erreichbar.
 - [ ] Nachträgliche Änderung an Markdown oder Asset blockiert das Lesen.
 - [ ] Ein manipuliertes Manifest, Paketpfad oder eine Review-ID kann den Output-Bereich

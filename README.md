@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC28
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC29
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
@@ -15,15 +15,15 @@ erhalten.
 ## Zielworkflow
 
 ```text
-DOCX / XLSX / PPTX / TXT / MD / CSV / PNG / JPEG / BMP
+DOCX / TXT (beaufsichtigter Pilot)
           ↓
    lokaler Privacy-MCP
           ↓
- Text + Bilder prüfen
+ Text prüfen, Bilder lokal zurückhalten
           ↓
  Privacy-Paket
  ├─ anonymisiertes Markdown
- ├─ freigegebene PNG-Assets
+ ├─ keine automatisch freigegebenen Bildpixel
  ├─ manifest.json
  └─ audit.json
           ↓
@@ -32,7 +32,7 @@ DOCX / XLSX / PPTX / TXT / MD / CSV / PNG / JPEG / BMP
 
 Wenn Rohdaten **vor** der Modellverarbeitung bereinigt werden müssen, wird das Original weder direkt in den Chat hochgeladen noch hineinkopiert. Nach außen gibt es einen Einstieg: „Anonymisiere eine oder mehrere Dateien lokal.“ DataSecure wählt den passenden lokalen Weg und verwendet danach nur die erzeugten Privacy-Pakete.
 
-Bis zu 25 unterstützte Dateien werden gemeinsam in `Claude Privacy/Input` abgelegt. Claude prüft die datensparsame Anzahl vor und nach der Nutzerbestätigung; dadurch laufen Altbestände oder zusätzliche Dateien nicht unbemerkt mit. Danach verarbeitet jeder MCP-Aufruf genau eine Datei. Bereits gestoppte Dateien werden im bestätigten Stapel übersprungen statt wiederholt, die übrigen laufen weiter. Dadurch liegen weder Dateiauswahl noch ein kompletter Stapel in einem einzigen 180-Sekunden-Aufruf. Der Ablauf funktioniert mit Explorer, Finder und unterstützten Linux-Dateimanagern. Jede erfolgreiche Datei erhält ein eigenes Markdown-Paket. Gemischte Textdokumentarten verwenden intern `profile=auto`; eigenständige Bilder brauchen vor der OCR eine Zweckangabe. PDF ist vollständig gesperrt.
+Bis zu 25 TXT-/DOCX-Dateien werden gemeinsam in den über Claude geöffneten lokalen `Input`-Ordner gelegt. Nach der Nutzerbestätigung bindet der Server den unveränderten Bestand an ein kurzlebiges Batch-Token; Anzahl, Identitäten und Hashes bleiben lokal. Jeder MCP-Aufruf verarbeitet genau eine noch nicht versuchte Datei. Ein Stopp wird serverseitig festgehalten, Änderungen am Input invalidieren den Stapel. Jede erfolgreiche Datei erhält ein eigenes Markdown-Paket und eine paketgebundene Leseberechtigung für 15 Minuten. PDF und alle weiteren Formate bleiben im Pilot gesperrt.
 
 Windows x64 besitzt die vollständigere Engineering-Grenze mit nativem Job Object und lokalem Text-Review. macOS und Linux verwenden für TXT/DOCX den stabilen Node-Permission-Prozess ohne separat installierte Laufzeit; er ist Defense-in-depth und keine Sicherheitsgrenze gegen bösartigen Code. Bild/OCR-Freigabe und bearbeitbare Mehrdeutigkeitsprüfung sind dort noch nicht produktionsreif: Bilder bleiben lokal oder werden auf ausdrücklichen Wunsch entfernt, Mehrdeutigkeiten stoppen sicher. Eine echte Mac-Freigabe setzt weiterhin den CI-Lauf und einen manuellen Test auf einem Mac voraus.
 
@@ -46,14 +46,12 @@ Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begre
 - `gbh-datasecure-datenschutz-erklaeren`: Schutzgrenzen, Aufbewahrung, Audit sowie DSGVO-/EU-AI-Act-Hinweise
 - lokaler MCP unter `.mcp.json`
 
-## Unterstützte Inputs
+## Pilot-Inputs
 
 - PDF derzeit fail-closed gesperrt; der bisherige Engineering-Spike belegt Packaging und Basis-API, ist aber ausdrücklich keine Produktfreigabe. Ziel bleibt ein eigener nativer, isolierter PDFium-Worker mit positivem Text-/Objekt-/Unicode-Coverage-Nachweis
-- DOCX
-- XLSX
-- PPTX
-- TXT, MD, CSV
-- PNG, JPEG und BMP als eigenständige Bild-/Scan-Dateien
+- DOCX, sofern der Parser keine Coverage-Warnung meldet
+- UTF-8-TXT
+- XLSX, PPTX, MD, CSV, PNG, JPEG, BMP und PDF derzeit fail-closed gesperrt
 
 ## Privacy-Profile
 
@@ -74,12 +72,13 @@ erhalten oder anonymisieren. Ohne diese Entscheidung gibt es keine Freigabe.
 
 ## Visuelle Assets
 
-Grafiken werden nicht still verworfen. Automatisch freigegebene Rastergrafiken landen im Privacy-Paket. Unsichere, OCR-arme oder bei Personal-/Bewerberprofilen zurückgehaltene Grafiken bleiben ausschließlich lokal unter `Needs Visual Review`. Die Freigabe ist über Claude bewusst deaktiviert, bis der lokale Companion eine echte menschliche Handlung technisch belegen kann.
+Grafiken werden nicht still verworfen und im öffentlichen Pilot grundsätzlich nicht an Claude freigegeben. Sie bleiben lokal unter `Needs Visual Review`; OCR-Text darf erst nach der normalen Textprüfung in das Markdown einfließen. Ein späterer lokaler Companion müsste eine echte menschliche Handlung technisch belegen, bevor dafür überhaupt ein eigener Freigabepfad eingeführt wird.
 
 ## Sicherheit
 
 - Originaldateien sind nicht über ein MCP-Read-Tool erreichbar.
-- Claude kann nur freigegebenes Markdown und freigegebene PNGs lesen.
+- Claude kann freigegebenes Markdown nur mit der kurzlebigen Leseberechtigung desselben Laufs lesen; Paket-IDs und historische Paketlisten reichen nicht.
+- Bildpixel bleiben im Pilot lokal und werden nicht automatisch freigegeben.
 - Output-Markdown und Assets sind SHA-256-gebunden; Manipulation blockiert die Read-Tools.
 - Kein persistentes Identitäts-Mapping.
 - Neue und erfolgreich migrierte Audit-Receipts enthalten keine Rohwerte, Originaldateinamen, exakten Dateigrößen oder verknüpfbaren Dokument-/Wert-Hashes; ein nicht migrierbarer Altbestand blockiert weitere Verarbeitung.
@@ -100,8 +99,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc23.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
-- `DataSecure-Privacy-Gateway-v3.2.0-rc27.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc29.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
+- `DataSecure-Privacy-Gateway-v3.2.0-rc29.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
