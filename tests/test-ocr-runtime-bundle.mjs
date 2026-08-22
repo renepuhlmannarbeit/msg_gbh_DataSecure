@@ -16,6 +16,9 @@ assert.equal(manifest.contract, 'data-secure-ocr-result/v1');
 assert.deepStrictEqual(manifest.models, ['deu', 'eng']);
 assert.equal(manifest.components.length, 13);
 assert.ok(manifest.components.every((item) => item.name !== '@napi-rs/canvas'));
+assert.ok(manifest.components.every((item) => item.license_file));
+assert.equal(manifest.components.find((item) => item.name === 'tr46').license_file,
+  'fallback:tr46-0.0.3-MIT.txt');
 const paths = new Set();
 for (const item of manifest.files) {
   assert.ok(!paths.has(item.path));
@@ -35,4 +38,6 @@ assert.ok(paths.has(target === 'windows-x64' ? 'datasecure-ocr-sandbox.exe' : 'd
 const notices = fs.readFileSync(path.join(bundle, 'THIRD_PARTY_NOTICES.md'), 'utf8');
 for (const component of manifest.components) assert.ok(notices.includes(`## ${component.name} ${component.version}`));
 assert.ok(notices.includes('## tessdata_fast deu/eng — Apache-2.0'));
+assert.ok(notices.includes('Copyright (c) Sebastian Mayr'));
+assert.ok(notices.includes('Permission is hereby granted'));
 process.stdout.write(`OCR runtime bundle ${target}: ${manifest.files.length + 1} files verified.\n`);

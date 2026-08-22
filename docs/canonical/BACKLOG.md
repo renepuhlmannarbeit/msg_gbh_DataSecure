@@ -365,9 +365,9 @@ Status: **in Arbeit** · Epic: BL-024 · Abhängigkeiten: BL-024.1, BL-010.1
 Alle Backends laufen gebündelt, offline und mit demselben Vertrag.
 
 Vorarbeit: Der portable Tesseract.js-WASM-Pilot läuft offline auf Windows x64,
-macOS x64/ARM64 und Linux x64. Die Story bleibt offen, bis BL-024.1 abgeschlossen,
-Runtime und Modelle installationsfrei gebündelt und im echten Pluginpfad integriert
-sind.
+macOS x64/ARM64 und Linux x64. BL-024.1 ist abgeschlossen. Runtime, Modelle und
+native Supervisoren sind inzwischen installationsfrei pro Zielarchitektur gebündelt;
+die Story bleibt bis zur Integration in den echten Pluginpfad offen.
 
 Nächster Schnitt: reproduzierbare, hashgeprüfte Runtime-/Modellartefakte für alle
 vier Zielarchitekturen bauen, Lizenz-/NOTICE-Inventar vervollständigen und zunächst
@@ -380,8 +380,12 @@ Runtime-Komponenten, `deu`/`eng`, OCR-V1, Netzsperre, Drittanbieterhinweisen und
 nativen Supervisor. Das nur für Testbilder benötigte `@napi-rs/canvas` wird nicht
 ausgeliefert. Das Windows-x64-Bundle umfasst 241 inventarisierte Dateien und rund
 57,5 MB; Hashprüfung, echter Offline-OCR-Lauf und inhaltsfreier Negativfall bestehen
-lokal. macOS x64/ARM64 und Linux x64 sowie vollständige Lizenztexte für Pakete ohne
-mitgelieferte Lizenzdatei müssen der neue Vier-Plattform-Lauf noch belegen.
+lokal. Lauf `32596789509` belegt Build, statische Prüfung und echten Offline-OCR-
+Smoke-Test derselben Bündel auf Windows x64, macOS x64/ARM64 und Linux x64. Für das
+einzige Paket ohne mitgelieferte Lizenzdatei (`tr46@0.0.3`) liegt ein exakt
+versionsgebundener, vollständiger MIT-Text mit Herkunftshinweis vor. Offen sind der
+weiterhin gesperrte Runtime-Adapter, frische ZIP-/Marketplace-Installationen und die
+nachfolgenden Coverage-Gates.
 
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 

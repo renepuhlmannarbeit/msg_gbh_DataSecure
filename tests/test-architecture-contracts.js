@@ -162,6 +162,17 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
     'test-ocr-runtime-smoke.mjs', 'dist/ocr-runtime/${{ env.OCR_BUNDLE_TARGET }}/']) {
     assert.ok(workflow.includes(token), `OCR bundle workflow missing ${token}`);
   }
+
+  const bundleBuilder = fs.readFileSync(path.join(root, 'scripts',
+    'build-ocr-runtime.mjs'), 'utf8');
+  for (const token of ['licenseFallbacks', "'tr46@0.0.3'",
+    'OCR_BUNDLE_LICENSE_TEXT_MISSING_', 'OCR_BUNDLE_LICENSE_FALLBACK_INVALID_']) {
+    assert.ok(bundleBuilder.includes(token), `OCR bundle license gate missing ${token}`);
+  }
+  const tr46License = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
+    'license-fallbacks', 'tr46-0.0.3-MIT.txt'), 'utf8');
+  assert.match(tr46License, /Copyright \(c\) Sebastian Mayr/u);
+  assert.match(tr46License, /Permission is hereby granted/u);
 });
 
 test('OCR result v1 fixes positions, confidence, limits and content-free errors', () => {

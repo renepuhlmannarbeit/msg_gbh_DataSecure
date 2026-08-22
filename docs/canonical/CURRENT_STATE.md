@@ -181,8 +181,8 @@ zusätzlich echte Speicher- und CPU-Überschreitungen. Lauf `32596426359` auf
 `4c9f0ec` bestand diese Grenzen zusammen mit Vertrag, Offline-OCR und übrigen
 Negativproben auf Windows x64, macOS x64/ARM64 und Linux x64. BL-024.1 ist damit
 abgeschlossen. BL-024.2 ist jetzt in Arbeit; Runtime, Modelle und native Launcher
-sind noch nicht installationsfrei gebündelt oder in den ausgelieferten Pluginpfad
-integriert, der unverändert geschlossen bleibt.
+sind installationsfrei pro Zielarchitektur gebündelt, aber noch nicht in den
+ausgelieferten Pluginpfad integriert, der unverändert geschlossen bleibt.
 
 Für BL-024.2 existiert nun ein erster reproduzierbarer Runtime-Bundle-Builder. Er
 kopiert nur die gelockte Tesseract-Laufzeitabhängigkeitsmenge, lokale Modelle,
@@ -190,10 +190,13 @@ OCR-V1, Netzsperre und den zielabhängigen nativen Supervisor, erstellt für jed
 Größe und SHA-256 und setzt `release_enabled: false`. Canvas bleibt als reines
 Testwerkzeug außerhalb des Anwenderbundles. Das lokale Windows-x64-Bundle hat rund
 57,5 MB und bestand Inventar-, Lizenzindex-, echten Offline-OCR- und inhaltsfreien
-Fehlerpfadtest. Der Workflow soll dieselben Bundles auf allen vier Zielen bauen und
-als 14-Tage-Artefakte sichern; dieser CI-Nachweis steht noch aus. Zwei alte MIT-
-Pakete liefern im npm-Tarball keinen vollständigen eigenen Lizenztext, weshalb das
-Notice-Gate ebenfalls bewusst offen bleibt.
+Fehlerpfadtest. GitHub-Actions-Lauf `32596789509` baut, prüft und testet dieselben
+Bündel auf Windows x64, macOS x64/ARM64 und Linux x64 und sichert sie als
+14-Tage-Artefakte. Nur `tr46@0.0.3` liefert weder im npm-Tarball noch im zugehörigen
+Upstream-Tag eine eigene Lizenzdatei. Der Builder ergänzt deshalb ausschließlich für
+diese exakte Version den vollständigen, laut Paketmetadaten geltenden MIT-Text samt
+Autor- und Herkunftshinweis; jeder andere fehlende Lizenztext stoppt den Build.
+Produktintegration und frische Pluginpakete bleiben offen.
 
 ## BL-030 – Stapelweite Entitätsauflösung
 

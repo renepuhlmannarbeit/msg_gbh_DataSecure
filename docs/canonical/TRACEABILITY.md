@@ -135,6 +135,9 @@ Die BL-024.2-Vorarbeit ist über `scripts/build-ocr-runtime.mjs`,
 `test-ocr-runtime-smoke.mjs` nachvollziehbar. Das lokale Windows-x64-Artefakt besitzt
 241 inventarisierte Dateien, 13 Runtime-Komponenten, rund 57,5 MB, beide Modelle und
 einen geprüften nativen Launcher; echter Offline-OCR- und leerer inhaltsfreier
-Fehlerlauf bestehen. Das Manifest bleibt `release_enabled: false`. Plattform-CI,
-vollständige fehlende MIT-Lizenztexte, Pluginintegration und frische Installation
-sind offen.
+Fehlerlauf bestehen. GitHub-Actions-Lauf `32596789509` belegt Bundle-Build,
+Hash-/Lizenzinventarprüfung und echten Offline-OCR-Smoke-Test zusätzlich auf macOS
+x64/ARM64 und Linux x64. Der vollständige MIT-Fallback für exakt `tr46@0.0.3` ist
+lokal ergänzt; unbekannte fehlende Lizenztexte brechen den Build ab. Das Manifest
+bleibt `release_enabled: false`; Pluginintegration und frische Installation sind
+offen.

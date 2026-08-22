@@ -15,6 +15,9 @@ const packages = [
   'opencollective-postinstall', 'regenerator-runtime', 'wasm-feature-detect', 'zlibjs',
   'whatwg-url', 'tr46', 'webidl-conversions'
 ];
+const licenseFallbacks = {
+  'tr46@0.0.3': path.join(pilot, 'license-fallbacks', 'tr46-0.0.3-MIT.txt')
+};
 
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -61,11 +64,17 @@ for (const name of packages) {
   const metadata = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
   copyTree(source, path.join(output, 'node_modules', ...name.split('/')));
   const licenseFile = fs.readdirSync(source).find((file) => /^(licen[cs]e|copying)([-.]|$)/iu.test(file));
-  components.push({ name, version: metadata.version, license: metadata.license, license_file: licenseFile || null });
+  const fallback = licenseFallbacks[`${name}@${metadata.version}`];
+  if (!licenseFile && !fallback) throw new Error(`OCR_BUNDLE_LICENSE_TEXT_MISSING_${name}`);
+  if (fallback && (!fs.statSync(fallback).isFile() || !fs.readFileSync(fallback, 'utf8').includes(
+    'Permission is hereby granted'))) throw new Error(`OCR_BUNDLE_LICENSE_FALLBACK_INVALID_${name}`);
+  components.push({
+    name, version: metadata.version, license: metadata.license,
+    license_file: licenseFile || `fallback:${path.basename(fallback)}`
+  });
   notice += `## ${name} ${metadata.version} — ${metadata.license}\n\n`;
   if (licenseFile) notice += `${fs.readFileSync(path.join(source, licenseFile), 'utf8').trim()}\n\n`;
-  else notice += `Paketmetadaten: ${metadata.license}. Autor: ${metadata.author || 'nicht angegeben'}. ` +
-    `Quelle: ${typeof metadata.repository === 'string' ? metadata.repository : metadata.repository?.url || 'nicht angegeben'}.\n\n`;
+  else notice += `${fs.readFileSync(fallback, 'utf8').trim()}\n\n`;
 }
 notice += '## tessdata_fast deu/eng — Apache-2.0\n\n' +
   fs.readFileSync(path.join(pilot, 'models', 'LICENSE'), 'utf8').trim() + '\n';
