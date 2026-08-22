@@ -347,6 +347,11 @@ Zeitüberschreitung und erzeugt keine Inhaltsausgabe. Der Workflow kompiliert ih
 macOS x64/ARM64 und Linux x64 und führt echte RAM-/CPU-Negativproben aus. Dieser
 Nachweis ist bis zum erfolgreichen Vier-Plattform-Lauf noch ausstehend.
 
+Negativnachweis: Lauf `32596337378` bestand Linux und Windows, stoppte aber beide
+macOS-Ziele bereits beim `-Werror`-Build, weil der strikt gesetzte POSIX-Namensraum
+Darwin-Typen aus `libproc.h` ausblendete. Der Quelltext aktiviert deshalb auf macOS
+explizit den Darwin-Namensraum; der erneute Vier-Plattform-Lauf steht aus.
+
 #### BL-024.2 – OCR-Backends für Windows, macOS und Linux liefern
 
 Status: **offen** · Epic: BL-024 · Abhängigkeiten: BL-024.1, BL-010.1

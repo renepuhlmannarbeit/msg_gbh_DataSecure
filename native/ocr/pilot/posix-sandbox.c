@@ -1,4 +1,8 @@
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE 1
+#else
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include <errno.h>
 #include <signal.h>
 #include <stdint.h>

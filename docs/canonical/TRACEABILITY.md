@@ -116,3 +116,8 @@ prüfbar. Der Workflow kompiliert mit `cc -std=c11 -O2 -Wall -Wextra -Werror` un
 fordert auf macOS x64/ARM64 sowie Linux x64 positive OCR-, Speicher-, CPU-, Zeit- und
 Ausgabeproben. Bis ein erfolgreicher Lauf vorliegt, ist das nur Implementierung und
 kein Plattformnachweis.
+
+Der erste Buildlauf `32596337378` ist ein bewahrter Negativnachweis: Windows und
+Linux bestanden, macOS x64/ARM64 scheiterten sicher vor OCR, weil `_POSIX_C_SOURCE`
+die für `libproc.h` erforderlichen Darwin-Typen ausblendete. Die Korrektur verwendet
+auf Apple `_DARWIN_C_SOURCE`; ihr erneuter Plattformnachweis steht aus.
