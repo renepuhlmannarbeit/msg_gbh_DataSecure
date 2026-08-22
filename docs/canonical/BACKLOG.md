@@ -394,16 +394,20 @@ freigegebenes OCR-Bundle und behält damit das bisherige Verhalten.
 Gefundener Paketierungsdefekt: Der erste Artefaktlauf ließ standardmäßig versteckte
 npm-Dateien aus, obwohl sie im Bundle-Manifest inventarisiert waren. Der Universal-
 Assembler stoppte deshalb korrekt. Der Workflow lädt Bundle-Verzeichnisse nun mit
-`include-hidden-files: true` hoch; der erneute Download-/Assemblierungsnachweis ist
-noch offen.
+`include-hidden-files: true` hoch; Lauf `32597783210` auf `df1c85f` erbringt den
+erneuten Download-/Assemblierungsnachweis.
 
 Der neue `assemble-ocr-runtime.mjs` akzeptiert genau die vier vollständig
 hashgeprüften V1-Quellbundles und erzeugt den weiterhin gesperrten Universalvertrag
 `data-secure-ocr-runtime-bundle/v2`: 239 byteidentische gemeinsame Dateien werden
 nur einmal übernommen, die vier nativen Launcher liegen zielgetrennt. Abweichende
 gemeinsame Bytes stoppen auch dann, wenn ein einzelnes Quellmanifest passend neu
-gehasht wurde. Der CI-Folgejob lädt die vier Artefakte erneut herunter, assembliert,
-prüft und führt auf Linux echten Offline-OCR aus. Dieser neue Lauf steht noch aus.
+gehasht wurde. Lauf `32597783210` lädt die vier Artefakte erneut herunter,
+assembliert, prüft und führt auf Linux echten Offline-OCR aus. Das erneut lokal
+heruntergeladene Universal-Artefakt umfasst 244 inventarisierte Dateien und
+57.592.942 Bytes. Nächster Schnitt ist die Einbettung dieses weiterhin gesperrten
+V2-Bundles in den echten Plugin-ZIP-/Marketplace-Build einschließlich POSIX-
+Ausführungsmodus.
 
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 

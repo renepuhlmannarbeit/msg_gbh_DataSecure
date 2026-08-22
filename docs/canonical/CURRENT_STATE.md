@@ -212,16 +212,18 @@ Ressourcenfehler und das feste OCR-V1-Fehlervokabular.
 Beim ersten Zusammenführen der vier Laufartefakte wurde eine reale Lieferkettenlücke
 sichtbar: `upload-artifact` hatte versteckte npm-Dateien trotz Manifest ausgelassen.
 Der Assembler verweigerte deshalb die Quelle. Der Workflow ist auf vollständigen
-Hidden-File-Upload umgestellt; bis ein neuer Download erneut geprüft wurde, gilt der
-universelle Paketierungsnachweis als offen.
+Hidden-File-Upload umgestellt. Lauf `32597783210` auf `df1c85f` bestätigt den
+vollständigen Download und schließt diesen Defekt.
 
 Der Universal-Assembler und sein V2-Vertrag sind implementiert. Er dedupliziert die
 auf allen vier Plattformen nachweislich bytegleichen 239 Runtime-/Modell-/Notice-
 Dateien und ergänzt nur vier zielgebundene Supervisoren; das erwartete Bündel bleibt
 damit unter 65 MiB statt vier Runtime-Kopien zu tragen. Acht synthetische
-Assemblerchecks und die Adaptertests bestehen. Der erweiterte Workflow muss den
-vollständigen Cloud-Download, die Assembly und einen echten Linux-Smoke-Test noch
-bestätigen.
+Assemblerchecks und die Adaptertests bestehen. Lauf `32597783210` bestätigt den
+vollständigen Cloud-Download, die Assembly und einen echten Linux-Smoke-Test. Das
+erneut lokal heruntergeladene Ergebnis besitzt 244 inventarisierte Dateien,
+57.592.942 Bytes und bleibt mit `release_enabled: false` gesperrt. Offen ist seine
+Einbettung in die echten ZIP-/Marketplace-Pakete mit erhaltenem POSIX-Ausführungsbit.
 
 ## BL-030 – Stapelweite Entitätsauflösung
 

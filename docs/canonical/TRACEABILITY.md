@@ -151,13 +151,14 @@ Bundle; die veröffentlichte Capability-Matrix bleibt deshalb unverändert.
 
 Der Download von Lauf `32597030060` deckte fehlende versteckte npm-Dateien in den
 hochgeladenen Artefakten auf. `assemble-ocr-runtime.mjs` stoppte beim ersten fehlenden
-Manifesteintrag. Der Workflow verlangt nun `include-hidden-files: true`; ein neuer
-Vier-Plattform-Lauf muss die heruntergeladenen Artefakte und den Universal-Assembler
-noch belegen.
+Manifesteintrag. Der Workflow verlangt nun `include-hidden-files: true`; Lauf
+`32597783210` auf `df1c85f` belegt die erneut heruntergeladenen Artefakte und den
+Universal-Assembler.
 
 `scripts/assemble-ocr-runtime.mjs`, `test-ocr-universal-assembler.mjs` und
 `test-ocr-universal-bundle.mjs` definieren den universellen V2-Nachweis. Der
 synthetische Test belegt exakte Zielmenge, einfache Modellkopie, vier Launcher,
 Adapterkompatibilität und den Stopp bei plattformspezifisch abweichendem gemeinsamen
-Kern. Der Workflow enthält einen nachgelagerten Download-/Assembly-/Offline-OCR-Job;
-seine Laufnummer ist noch offen.
+Kern. Der nachgelagerte Download-/Assembly-/Offline-OCR-Job in Lauf `32597783210`
+ist grün. Ein erneuter lokaler Artefaktdownload bestand die Hashprüfung mit 244
+Dateien und 57.592.942 Bytes; das Freigabeflag bleibt aus.
