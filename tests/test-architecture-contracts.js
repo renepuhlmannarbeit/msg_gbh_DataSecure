@@ -131,7 +131,7 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   }
   const isolated = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
     'isolated-run.mjs'), 'utf8');
-  for (const token of ['windows_job_object', 'node_permission_process', '--permission',
+  for (const token of ['windows_job_object', 'posix_native_supervisor', '--permission',
     '--allow-worker', '--allow-addons', '--max-old-space-size=512',
     'OCR_ISOLATION_TIMEOUT', 'OCR_ISOLATION_OUTPUT_LIMIT', 'verifyNativeLauncherArtifact',
     "passed_gates: ["]) {
@@ -139,6 +139,12 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   }
   assert.doesNotMatch(isolated, /\.\.\.process\.env/u);
   assert.match(isolated, /stdio: \['ignore', 'pipe', 'ignore'\]/u);
+  const posix = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
+    'posix-sandbox.c'), 'utf8');
+  for (const token of ['setrlimit(RLIMIT_CPU', 'proc_pid_rusage', '/proc/%ld/statm',
+    'kill(-child_group, SIGKILL)', 'RESOURCE_LIMIT']) {
+    assert.ok(posix.includes(token), `POSIX OCR boundary missing ${token}`);
+  }
 
   const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
     'tesseractjs-ocr-pilot.yml'), 'utf8');
@@ -151,6 +157,7 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.match(workflow, /verify-supply-chain\.mjs/u);
   assert.match(workflow, /isolated-run\.mjs/u);
   assert.match(workflow, /test-ocr-result-contract\.mjs/u);
+  assert.match(workflow, /cc -std=c11 -O2 -Wall -Wextra -Werror/u);
 });
 
 test('OCR result v1 fixes positions, confidence, limits and content-free errors', () => {

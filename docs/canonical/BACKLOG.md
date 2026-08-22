@@ -340,6 +340,13 @@ Positionen, ungültige Boxen und Pixelgrenzen ab. GitHub-Actions-Lauf `325960879
 bestätigt Vertrag, echte OCR und Negativtests auf Windows x64, macOS x64/ARM64 und
 Linux x64. Offen vor Abschluss sind native harte macOS/Linux-RAM-/CPU-Grenzen.
 
+Aktuelle Umsetzung: Ein kleiner POSIX-C-Supervisor setzt pro OCR-Prozess die native
+CPU-Grenze, überwacht den physischen Speicher über Linux `/proc` beziehungsweise
+macOS `proc_pid_rusage`, beendet die gesamte Prozessgruppe bei RAM-, CPU- oder
+Zeitüberschreitung und erzeugt keine Inhaltsausgabe. Der Workflow kompiliert ihn auf
+macOS x64/ARM64 und Linux x64 und führt echte RAM-/CPU-Negativproben aus. Dieser
+Nachweis ist bis zum erfolgreichen Vier-Plattform-Lauf noch ausstehend.
+
 #### BL-024.2 – OCR-Backends für Windows, macOS und Linux liefern
 
 Status: **offen** · Epic: BL-024 · Abhängigkeiten: BL-024.1, BL-010.1

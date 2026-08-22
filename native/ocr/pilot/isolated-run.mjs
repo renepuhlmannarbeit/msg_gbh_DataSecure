@@ -17,7 +17,10 @@ const JOB_WALL_MS = 45_000;
 const SUPERVISOR_WALL_MS = 50_000;
 const OUTPUT_BYTES = 64 * 1024;
 
-function commandFor(script, scriptArgs = []) {
+function commandFor(script, scriptArgs = [], options = {}) {
+  const memoryMib = options.memoryMib ?? MEMORY_MIB;
+  const cpuMs = options.cpuMs ?? CPU_MS;
+  const jobWallMs = options.jobWallMs ?? JOB_WALL_MS;
   const nodeArgs = [
     '--permission',
     `--allow-fs-read=${pilotDir}`,
@@ -29,7 +32,20 @@ function commandFor(script, scriptArgs = []) {
     ...scriptArgs
   ];
   if (process.platform !== 'win32') {
-    return { command: process.execPath, args: nodeArgs, mode: 'node_permission_process' };
+    const posixLauncher = process.env.DATASECURE_OCR_POSIX_LAUNCHER;
+    if (!posixLauncher || !path.isAbsolute(posixLauncher)) {
+      throw new Error('OCR_ISOLATION_BOUNDARY_FAILED');
+    }
+    return {
+      command: posixLauncher,
+      args: [
+        '--memory-mib', String(memoryMib),
+        '--cpu-ms', String(cpuMs),
+        '--wall-ms', String(jobWallMs),
+        '--', process.execPath, ...nodeArgs
+      ],
+      mode: 'posix_native_supervisor'
+    };
   }
   const { verifyNativeLauncherArtifact } = require(path.join(repoRoot, 'plugins',
     'data-secure', 'server', 'native-launcher.js'));
@@ -37,9 +53,9 @@ function commandFor(script, scriptArgs = []) {
   return {
     command: launcher,
     args: [
-      '--memory-mib', String(MEMORY_MIB),
-      '--cpu-ms', String(CPU_MS),
-      '--wall-ms', String(JOB_WALL_MS),
+      '--memory-mib', String(memoryMib),
+      '--cpu-ms', String(cpuMs),
+      '--wall-ms', String(jobWallMs),
       '--', process.execPath, ...nodeArgs
     ],
     mode: 'windows_job_object'
@@ -47,7 +63,7 @@ function commandFor(script, scriptArgs = []) {
 }
 
 function runBounded(script, scriptArgs = [], options = {}) {
-  const invocation = commandFor(script, scriptArgs);
+  const invocation = commandFor(script, scriptArgs, options);
   const timeoutMs = options.timeoutMs ?? SUPERVISOR_WALL_MS;
   const outputLimit = options.outputLimit ?? OUTPUT_BYTES;
   return new Promise((resolve, reject) => {
@@ -116,6 +132,18 @@ const timeoutProbe = await expectFailure('OCR_ISOLATION_TIMEOUT', () => runBound
 const outputProbe = await expectFailure('OCR_ISOLATION_OUTPUT_LIMIT', () => runBounded(
   path.join(pilotDir, 'isolation-fixture.mjs'), ['flood'], { outputLimit: 1024 }
 ));
+const memoryProbe = await expectFailure(
+  'OCR_ISOLATION_RESOURCE_LIMIT', () => runBounded(
+    path.join(pilotDir, 'isolation-fixture.mjs'), ['memory'],
+    { timeoutMs: 10_000, memoryMib: 192 }
+  )
+);
+const cpuProbe = await expectFailure(
+  'OCR_ISOLATION_RESOURCE_LIMIT', () => runBounded(
+    path.join(pilotDir, 'isolation-fixture.mjs'), ['cpu'],
+    { timeoutMs: 10_000, cpuMs: 500 }
+  )
+);
 
 process.stdout.write(`${JSON.stringify({
   schema_version: 1,
@@ -124,14 +152,19 @@ process.stdout.write(`${JSON.stringify({
   isolation_mode: positive.mode,
   network_policy: 'child-process-preload-deny',
   limits: {
-    memory_mib: process.platform === 'win32' ? MEMORY_MIB : null,
+    memory_mib: MEMORY_MIB,
     node_heap_mib: 512,
-    cpu_ms: process.platform === 'win32' ? CPU_MS : null,
-    job_wall_ms: process.platform === 'win32' ? JOB_WALL_MS : null,
+    cpu_ms: CPU_MS,
+    job_wall_ms: JOB_WALL_MS,
     supervisor_wall_ms: SUPERVISOR_WALL_MS,
     output_bytes: OUTPUT_BYTES
   },
-  negative_probes: { timeout: timeoutProbe, output_limit: outputProbe },
+  negative_probes: {
+    timeout: timeoutProbe,
+    output_limit: outputProbe,
+    memory_limit: memoryProbe,
+    cpu_limit: cpuProbe
+  },
   mixed_language_ocr: result.mixed_language_ocr,
   release_decision: 'no_go',
   product_image_gate: 'OCR_COVERAGE_UNVERIFIED',
@@ -139,10 +172,11 @@ process.stdout.write(`${JSON.stringify({
     'pilot-process-boundary',
     'pilot-network-deny',
     'pilot-wallclock-limit',
-    'pilot-output-limit'
+    'pilot-output-limit',
+    'pilot-native-memory-limit',
+    'pilot-native-cpu-limit'
   ],
   open_work: [
-    'native-memory-and-cpu-limits-on-macos-linux',
     'runtime-bundle-integration',
     'adversarial-layout-and-resource-corpus',
     'fresh-plugin-package'

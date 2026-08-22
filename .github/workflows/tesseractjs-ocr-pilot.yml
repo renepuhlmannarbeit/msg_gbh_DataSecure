@@ -28,6 +28,12 @@ jobs:
           cache-dependency-path: native/ocr/pilot/package-lock.json
       - name: Install locked pilot dependencies
         run: npm ci --prefix native/ocr/pilot --ignore-scripts
+      - name: Build native POSIX resource supervisor
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror native/ocr/pilot/posix-sandbox.c -o native/ocr/pilot/datasecure-ocr-sandbox
+          echo "DATASECURE_OCR_POSIX_LAUNCHER=$GITHUB_WORKSPACE/native/ocr/pilot/datasecure-ocr-sandbox" >> "$GITHUB_ENV"
       - name: Fetch and verify official build-time language models
         run: node native/ocr/pilot/fetch-models.mjs
       - name: Generate official npm CycloneDX SBOM

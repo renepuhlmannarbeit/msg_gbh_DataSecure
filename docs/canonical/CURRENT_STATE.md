@@ -171,6 +171,15 @@ lokale Vertrags- und Negativtests bestehen. GitHub-Actions-Lauf `32596087930` au
 x64, macOS x64/ARM64 und Linux x64. Native harte macOS/Linux-Ressourcengrenzen stehen
 noch aus; BL-024.1 bleibt daher in Arbeit und der Produktpfad geschlossen.
 
+Als nächster BL-024.1-Schritt ist ein abhängigkeitloser POSIX-C-Supervisor im
+Engineering-Pilot implementiert. Er startet Node ohne Shell in einer eigenen
+Prozessgruppe, setzt `RLIMIT_CPU` und kein Core-Dump, überwacht den physischen
+Speicher nativ über Linux `/proc/<pid>/statm` beziehungsweise Apples
+`proc_pid_rusage` im 10-ms-Takt und beendet die ganze Gruppe bei Grenzverletzung.
+Der Workflow baut den Quelltext auf beiden macOS-Architekturen und Linux und prüft
+zusätzlich echte Speicher- und CPU-Überschreitungen. Dieser neue Stand ist noch
+nicht in CI belegt und bleibt außerhalb des ausgelieferten Plugins.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**

@@ -109,3 +109,10 @@ lieferte 14 positionierte Wörter, 95 Prozent mittlere Konfidenz und weiterhin
 `f53f5df` bestätigt Vertrag, echte OCR und Negativtests auf Windows x64, macOS
 x64/ARM64 und Linux x64. Native harte macOS/Linux-RAM-/CPU-Grenzen fehlen noch,
 deshalb ist BL-024.1 nicht erledigt.
+
+Die noch unbelegte POSIX-Grenze ist als Quelltext
+`native/ocr/pilot/posix-sandbox.c` und als Adapteränderung in `isolated-run.mjs`
+prüfbar. Der Workflow kompiliert mit `cc -std=c11 -O2 -Wall -Wextra -Werror` und
+fordert auf macOS x64/ARM64 sowie Linux x64 positive OCR-, Speicher-, CPU-, Zeit- und
+Ausgabeproben. Bis ein erfolgreicher Lauf vorliegt, ist das nur Implementierung und
+kein Plattformnachweis.

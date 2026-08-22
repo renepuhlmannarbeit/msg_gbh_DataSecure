@@ -72,8 +72,18 @@ Tesseract.js-Performance-Dokumentation warnt vor beliebig vielen parallelen Work
 wegen hohen Speicherverbrauchs:
 https://github.com/naptha/tesseract.js/blob/master/docs/performance.md
 
-Windows besitzt zusätzlich harte Job-Object-Grenzen. Gleichwertige native RAM-/CPU-
-Grenzen für macOS und Linux sind weiterhin ein offenes Freigabegate.
+Windows besitzt zusätzlich harte Job-Object-Grenzen. Der Engineering-Pilot enthält
+einen kleinen POSIX-Supervisor: `RLIMIT_CPU` begrenzt CPU-Zeit; physischer Speicher
+wird über Linux `/proc/<pid>/statm` beziehungsweise Apples `proc_pid_rusage`
+überwacht und die gesamte Prozessgruppe bei Überschreitung beendet. Die Grundlagen
+sind in der Linux-Manpage zu `setrlimit` und Apples XNU-Header/Manpage dokumentiert:
+
+- https://man7.org/linux/man-pages/man2/getrlimit.2.html
+- https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h
+- https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/setrlimit.2.html
+
+Bis positive und negative Läufe auf macOS x64/ARM64 und Linux x64 vorliegen, bleibt
+diese native RAM-/CPU-Grenze ein offenes Freigabegate.
 
 ## Stabile Fehlercodes
 
