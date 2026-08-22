@@ -98,3 +98,13 @@ Timeout-/Flood-Gegenproben; Windows besitzt darüber hinaus Job-Object-RAM-/CPU-
 Grenzen. Native harte macOS/Linux-Ressourcengrenzen, Runtime-Integration,
 Angriffskorpus und frisches Pluginpaket bleiben offen, deshalb ist dies kein
 Erledigungs- oder Freigabenachweis.
+
+Der normalisierte OCR-Vertrag ist in `contracts/OCR_RESULT_V1.md`,
+`contracts/ocr-result-v1.schema.json` und `native/ocr/pilot/ocr-contract.mjs`
+nachvollziehbar. `test-ocr-result-contract.mjs` prüft acht Positiv- und Negativfälle;
+`test-architecture-contracts.js` verhindert das Entfernen von Blockanforderung,
+Schema, Konfidenz-/Reviewregeln und Workflowtest. Der echte lokale Windows-Pilot
+lieferte 14 positionierte Wörter, 95 Prozent mittlere Konfidenz und weiterhin
+`OCR_COVERAGE_UNVERIFIED`/`no_go`. Der Vier-Plattform-Lauf für diesen Commit sowie
+native harte macOS/Linux-RAM-/CPU-Grenzen fehlen noch, deshalb ist BL-024.1 nicht
+erledigt.

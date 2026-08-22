@@ -27,7 +27,7 @@
     "benchmark:detectors": "node scripts/benchmark-detectors.mjs",
     "test:windows-visual": "node tests/windows-visual-acceptance.js",
     "test:skills": "node tests/test-contract-skill-acceptance.js && node tests/test-contract-skill-matrix.js",
-    "test:docs": "node scripts/verify-canonical-docs.mjs",
+    "test:docs": "node scripts/verify-canonical-docs.mjs && node tests/test-ocr-result-contract.mjs",
     "test:plugin-zip": "node scripts/verify-plugin-zip.mjs",
     "test:mcpb": "node scripts/verify-mcpb.mjs",
     "test:artifacts": "npm run test:plugin-zip && npm run test:mcpb",

@@ -115,7 +115,8 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   }
   const source = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot', 'run.mjs'), 'utf8');
   for (const token of ["langPath: modelDir", "cacheMethod: 'none'", 'gzip: false',
-    "release_decision: 'no_go'", "product_image_gate: 'OCR_COVERAGE_UNVERIFIED'"]) {
+    'blocks: true', 'normalizeOcrResult', "release_decision: 'no_go'",
+    "product_image_gate: 'OCR_COVERAGE_UNVERIFIED'"]) {
     assert.ok(source.includes(token), `OCR pilot missing safeguard ${token}`);
   }
   const networkDeny = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
@@ -149,6 +150,19 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.match(workflow, /npm sbom --prefix native\/ocr\/pilot --package-lock-only --sbom-format cyclonedx/u);
   assert.match(workflow, /verify-supply-chain\.mjs/u);
   assert.match(workflow, /isolated-run\.mjs/u);
+  assert.match(workflow, /test-ocr-result-contract\.mjs/u);
+});
+
+test('OCR result v1 fixes positions, confidence, limits and content-free errors', () => {
+  const contract = read('OCR_RESULT_V1.md');
+  for (const required of [
+    'BL-024.1', 'data-secure-ocr-result/v1', 'halb offener Pixelbox',
+    'OCR_LOW_CONFIDENCE_PRESENT', 'OCR_EMPTY', '100 Prozent', '30.000.000',
+    'OCR_RESULT_INVALID', 'OCR_NETWORK_POLICY_FAILED', 'macOS', 'Linux'
+  ]) assert.ok(contract.includes(required), `OCR contract missing: ${required}`);
+  const schema = readJson('docs/canonical/contracts/ocr-result-v1.schema.json');
+  assert.strictEqual(schema.additionalProperties, false);
+  assert.strictEqual(schema.properties.quality.properties.requires_visual_review.const, true);
 });
 
 done();

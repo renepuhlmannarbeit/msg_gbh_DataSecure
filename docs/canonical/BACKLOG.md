@@ -330,9 +330,14 @@ plattformneutral versioniert.
 
 Fortschritt: Tesseract.js 7.0.0 liefert Deutsch/Englisch lokal auf allen vier
 Zielarchitekturen. Prozess-, Netzwerk-, Heap-, Laufzeit- und Ausgabegrenzen sowie
-feste Pilotfehler sind nachgewiesen. Offen sind der versionierte normalisierte
-Wort-/Positionsvertrag, Konfidenzregeln, vollständige Fehlercode-Matrix und native
-macOS/Linux-Ressourcengrenzen.
+feste Pilotfehler sind nachgewiesen. `contracts/OCR_RESULT_V1.md` und das strikte
+`ocr-result-v1.schema.json` versionieren nun Text, Wort-/Zeilenindex, halb offene
+Pixelpositionen, Deutsch/Englisch, Konfidenz- und Fail-closed-Regeln, gemeinsame
+Grenzwerte sowie elf inhaltsfreie Fehlercodes. Der Tesseract.js-Adapter fordert
+`blocks` ausdrücklich an und normalisiert die echte gemischtsprachige Probe; acht
+Positiv-/Negativtests decken leere Ergebnisse, niedrige Konfidenz, fehlende
+Positionen, ungültige Boxen und Pixelgrenzen ab. Offen vor Abschluss sind der
+Vier-Plattform-Nachweis dieses Vertrags und native harte macOS/Linux-RAM-/CPU-Grenzen.
 
 #### BL-024.2 – OCR-Backends für Windows, macOS und Linux liefern
 

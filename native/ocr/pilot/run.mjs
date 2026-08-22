@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCanvas } from '@napi-rs/canvas';
 import { createWorker, OEM } from 'tesseract.js';
+import { normalizeOcrResult } from './ocr-contract.mjs';
 
 const pilotDir = path.dirname(fileURLToPath(import.meta.url));
 const modelDir = path.resolve(process.env.DATASECURE_OCR_MODEL_DIR || path.join(pilotDir, 'models'));
@@ -26,8 +27,13 @@ const worker = await createWorker(['deu', 'eng'], OEM.LSTM_ONLY, {
 });
 
 try {
-  const result = await worker.recognize(png);
-  const normalized = result.data.text.normalize('NFKC');
+  const result = await worker.recognize(png, {}, { blocks: true });
+  const contract = normalizeOcrResult(result.data, {
+    width: canvas.width,
+    height: canvas.height,
+    languages: ['deu', 'eng']
+  });
+  const normalized = contract.text;
   for (const expected of ['Projektmanager', 'Alice Example', 'Software Tester',
     'Berlin', 'Example GmbH', 'Health IT']) {
     assert.ok(normalized.includes(expected), `OCR_EXPECTED_TOKEN_MISSING_${expected.replaceAll(' ', '_')}`);
@@ -42,8 +48,11 @@ try {
     languages: ['deu', 'eng'],
     local_models: true,
     mixed_language_ocr: true,
+    normalized_contract: contract.schema,
+    normalized_word_count: contract.words.length,
+    visual_review_required: contract.quality.requires_visual_review,
     network_policy: 'process-preload-deny',
-    mean_confidence: Math.round(result.data.confidence),
+    mean_confidence: contract.confidence,
     release_decision: 'no_go',
     product_image_gate: 'OCR_COVERAGE_UNVERIFIED',
     passed_gates: [],

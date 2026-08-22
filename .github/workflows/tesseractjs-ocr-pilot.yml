@@ -41,6 +41,8 @@ jobs:
         env:
           NODE_OPTIONS: --require=${{ github.workspace }}/native/ocr/pilot/network-deny.cjs
         run: node native/ocr/pilot/run.mjs > tesseractjs-ocr-pilot.json
+      - name: Verify normalized OCR contract and negative cases
+        run: node tests/test-ocr-result-contract.mjs
       - name: Run OCR through bounded platform process
         shell: bash
         run: node native/ocr/pilot/isolated-run.mjs > tesseractjs-ocr-isolation.json

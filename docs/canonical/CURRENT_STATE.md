@@ -158,6 +158,18 @@ Job-Laufzeit. macOS und Linux verwenden das Node-Permission-Modell; native harte
 RAM-/CPU-Grenzen sind dort noch offen. Die Produkt-Runtime nutzt diesen Pilotpfad
 noch nicht und bleibt unverändert fail-closed.
 
+BL-024.1 besitzt jetzt zusätzlich den plattformneutralen Vertrag
+`contracts/OCR_RESULT_V1.md` mit strengem JSON-Schema. Der Pilot fordert die seit
+Tesseract.js 6 standardmäßig deaktivierte Blockausgabe ausdrücklich an und reduziert
+Backenddaten auf NFKC-Text, Zeilen-/Wortindizes, halb offene Pixelboxen und
+Konfidenzen. Niedrige Konfidenz verwirft kein Wort; leere oder selbst perfekte OCR
+belegt keine Datenschutzfreigabe, und `requires_visual_review` bleibt in V1 immer
+aktiv. Die Grenzen stimmen mit den kleineren bestehenden Runtimegrenzen überein:
+25 MiB Eingabe, 30 Millionen Pixel, 5 Millionen Zeichen und 100.000 Wörter. Acht
+lokale Vertrags- und Negativtests bestehen. Vier-Plattform-CI für diesen neuen Stand
+und native harte macOS/Linux-Ressourcengrenzen stehen noch aus; BL-024.1 bleibt daher
+in Arbeit und der Produktpfad geschlossen.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**

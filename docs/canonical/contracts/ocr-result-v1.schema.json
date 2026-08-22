@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://msg-systems.example/data-secure/contracts/ocr-result-v1.schema.json",
+  "title": "DataSecure OCR result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "status", "languages", "image", "text", "confidence", "words", "quality"],
+  "properties": {
+    "schema": { "const": "data-secure-ocr-result/v1" },
+    "status": { "enum": ["recognized", "empty"] },
+    "languages": {
+      "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true,
+      "items": { "enum": ["deu", "eng"] }
+    },
+    "image": {
+      "type": "object", "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "text": { "type": "string", "maxLength": 5000000 },
+    "confidence": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "words": {
+      "type": "array", "maxItems": 100000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["index", "line_index", "text", "confidence", "bbox"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "line_index": { "type": "integer", "minimum": 0 },
+          "text": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "confidence": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "bbox": {
+            "type": "object", "additionalProperties": false,
+            "required": ["x0", "y0", "x1", "y1"],
+            "properties": {
+              "x0": { "type": "integer", "minimum": 0 },
+              "y0": { "type": "integer", "minimum": 0 },
+              "x1": { "type": "integer", "minimum": 1 },
+              "y1": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "quality": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requires_visual_review", "reasons"],
+      "properties": {
+        "requires_visual_review": { "const": true },
+        "reasons": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "enum": ["NON_TEXTUAL_MEANING_UNVERIFIED", "OCR_EMPTY", "OCR_LOW_CONFIDENCE_PRESENT"] }
+        }
+      }
+    }
+  }
+}
