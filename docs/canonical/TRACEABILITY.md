@@ -83,3 +83,10 @@ macOS x64, macOS ARM64 und Linux x64. Die gemischtsprachige synthetische Probe
 bestand unter Prozess-Netzwerksperre mit 95 Prozent mittlerer Konfidenz; alle
 Artefakte melden weiterhin `passed_gates: []`, `OCR_COVERAGE_UNVERIFIED` und
 `release_decision: no_go`.
+
+GitHub-Actions-Lauf `32595199861` auf Commit `fcb55ed` ergänzt für den OCR-Piloten
+auf allen vier Plattformen offizielle CycloneDX-1.5-SBOMs. Die Evidenz bestätigt je
+Plattform 25 gelockte Paketkomponenten, vollständige Paketintegritäten, ausschließlich
+Apache-2.0/MIT/BSD-2-Clause sowie Commit-/Größen-/Hashprüfung der Modelle und ihrer
+Apache-2.0-Lizenz. Die Lizenz-/SBOM-Pflichtzelle bleibt wegen fehlender vollständiger
+Notices, Schwachstellenrichtlinie und echtem Auslieferungspaket weiterhin offen.

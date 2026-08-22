@@ -98,6 +98,15 @@ Auch dieser Pilot meldet `passed_gates: []`, `OCR_COVERAGE_UNVERIFIED` und
 `release_decision: no_go`: Modellbündel/NOTICE, Sandbox und Ressourcenlimits,
 Pixelredaktion, Scan-PDF-Integration, Angriffskorpus und echtes Pluginpaket fehlen.
 
+GitHub-Actions-Lauf `32595199861` auf Commit `fcb55ed` ergänzte auf allen vier
+Zielplattformen ein offizielles npm-CycloneDX-1.5-SBOM und eine strikte
+Lieferkettenprüfung. Je Artefakt sind 25 gelockte Paketkomponenten, vollständige
+Integritätswerte und nur Apache-2.0, MIT oder BSD-2-Clause belegt. Modellbytes und
+die Apache-2.0-Modelllizenz wurden erneut gegen Commit, Größe und SHA-256 geprüft.
+Die Pflichtzelle „Lizenzinventar und SBOM“ bleibt dennoch offen, bis vollständige
+Notice-Texte, Schwachstellenrichtlinie und das wirklich auszuliefernde Runtime-/
+Pluginpaket denselben Nachweis bestehen.
+
 ## Messprotokoll
 
 Jede Zelle benötigt Plattform/Architektur, OS-Version, Compiler/SDK, Engine-Commit,

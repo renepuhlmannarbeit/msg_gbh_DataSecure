@@ -140,6 +140,15 @@ Engineering-Evidenz: Produktintegration, Modell-Lizenzdateien, isolierter Worker
 Ressourcengrenzen, Scan-PDF, Pixelredaktion, Angriffskorpus und frisches Pluginpaket
 bleiben offen; der Pilot meldet deshalb `OCR_COVERAGE_UNVERIFIED` und `no_go`.
 
+GitHub-Actions-Lauf `32595199861` auf `fcb55ed` ergänzte auf denselben vier
+Plattformzielen ein mit dem offiziellen `npm sbom` erzeugtes CycloneDX-1.5-SBOM.
+Je Plattform wurden 25 gelockte Paketkomponenten mit vollständigen SHA-512-
+Integritätswerten und ausschließlich Apache-2.0, MIT oder BSD-2-Clause nachgewiesen.
+Die Apache-2.0-Lizenzdatei der Sprachmodelle ist zusätzlich an denselben Quell-Commit,
+ihre Größe und SHA-256 gebunden. Das erfüllt noch nicht die Pflichtmatrix: vollständige
+Notice-Texte, Schwachstellenrichtlinie, verteilbares Runtime-Bundle und frische
+Pluginpakete bleiben offen.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**
