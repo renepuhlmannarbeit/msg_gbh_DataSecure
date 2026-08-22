@@ -323,7 +323,7 @@ sind abgedeckt.
 
 #### BL-024.1 – Gemeinsamen OCR-Vertrag Deutsch/Englisch definieren
 
-Status: **in Arbeit** · Epic: BL-024 · Abhängigkeit: BL-023.1
+Status: **erledigt** · Epic: BL-024 · Abhängigkeit: BL-023.1
 
 Wortpositionen, Konfidenz, gemischte Sprache, Ressourcenlimits und Fehlercodes sind
 plattformneutral versioniert.
@@ -350,11 +350,17 @@ Nachweis ist bis zum erfolgreichen Vier-Plattform-Lauf noch ausstehend.
 Negativnachweis: Lauf `32596337378` bestand Linux und Windows, stoppte aber beide
 macOS-Ziele bereits beim `-Werror`-Build, weil der strikt gesetzte POSIX-Namensraum
 Darwin-Typen aus `libproc.h` ausblendete. Der Quelltext aktiviert deshalb auf macOS
-explizit den Darwin-Namensraum; der erneute Vier-Plattform-Lauf steht aus.
+explizit den Darwin-Namensraum; danach wurde vollständig neu geprüft.
+
+Abschlussnachweis: Lauf `32596426359` auf `4c9f0ec` bestand auf Windows x64, macOS
+x64/ARM64 und Linux x64. Alle vier Ziele bestanden den OCR-V1-Vertrag, echte lokale
+Deutsch-/Englisch-OCR, Netzwerkverbot, RAM-, CPU-, Zeit- und Ausgabegrenzen sowie
+die zugehörigen Gegenproben. BL-024.1 ist damit abgeschlossen; dies ist ausdrücklich
+noch keine Produktfreigabe oder gebündelte Auslieferung.
 
 #### BL-024.2 – OCR-Backends für Windows, macOS und Linux liefern
 
-Status: **offen** · Epic: BL-024 · Abhängigkeiten: BL-024.1, BL-010.1
+Status: **in Arbeit** · Epic: BL-024 · Abhängigkeiten: BL-024.1, BL-010.1
 
 Alle Backends laufen gebündelt, offline und mit demselben Vertrag.
 
@@ -362,6 +368,11 @@ Vorarbeit: Der portable Tesseract.js-WASM-Pilot läuft offline auf Windows x64,
 macOS x64/ARM64 und Linux x64. Die Story bleibt offen, bis BL-024.1 abgeschlossen,
 Runtime und Modelle installationsfrei gebündelt und im echten Pluginpfad integriert
 sind.
+
+Nächster Schnitt: reproduzierbare, hashgeprüfte Runtime-/Modellartefakte für alle
+vier Zielarchitekturen bauen, Lizenz-/NOTICE-Inventar vervollständigen und zunächst
+über einen weiterhin gesperrten Runtime-Adapter integrieren. Erst frische ZIP- und
+Marketplace-Installationen dürfen den Pfad freigeben.
 
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 

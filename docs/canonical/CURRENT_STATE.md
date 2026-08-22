@@ -177,8 +177,12 @@ Prozessgruppe, setzt `RLIMIT_CPU` und kein Core-Dump, überwacht den physischen
 Speicher nativ über Linux `/proc/<pid>/statm` beziehungsweise Apples
 `proc_pid_rusage` im 10-ms-Takt und beendet die ganze Gruppe bei Grenzverletzung.
 Der Workflow baut den Quelltext auf beiden macOS-Architekturen und Linux und prüft
-zusätzlich echte Speicher- und CPU-Überschreitungen. Dieser neue Stand ist noch
-nicht in CI belegt und bleibt außerhalb des ausgelieferten Plugins.
+zusätzlich echte Speicher- und CPU-Überschreitungen. Lauf `32596426359` auf
+`4c9f0ec` bestand diese Grenzen zusammen mit Vertrag, Offline-OCR und übrigen
+Negativproben auf Windows x64, macOS x64/ARM64 und Linux x64. BL-024.1 ist damit
+abgeschlossen. BL-024.2 ist jetzt in Arbeit; Runtime, Modelle und native Launcher
+sind noch nicht installationsfrei gebündelt oder in den ausgelieferten Pluginpfad
+integriert, der unverändert geschlossen bleibt.
 
 ## BL-030 – Stapelweite Entitätsauflösung
 

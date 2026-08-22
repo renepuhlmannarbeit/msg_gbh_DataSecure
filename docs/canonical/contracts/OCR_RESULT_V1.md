@@ -82,8 +82,10 @@ sind in der Linux-Manpage zu `setrlimit` und Apples XNU-Header/Manpage dokumenti
 - https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h
 - https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/setrlimit.2.html
 
-Bis positive und negative Läufe auf macOS x64/ARM64 und Linux x64 vorliegen, bleibt
-diese native RAM-/CPU-Grenze ein offenes Freigabegate.
+Lauf `32596426359` belegt die positiven und negativen Grenzen auf macOS x64/ARM64,
+Linux x64 und zusätzlich Windows x64. Damit ist der V1-Ressourcenvertrag erfüllt;
+die installationsfreie Auslieferung und Produktintegration bleiben Aufgabe von
+BL-024.2.
 
 ## Stabile Fehlercodes
 
@@ -107,7 +109,7 @@ der fortsetzbare Stapelzustand richtet sich nach dem kanonischen Batchvertrag.
 
 ## Freigabegrenze
 
-Der Vertrag schließt BL-024.1 erst nach Positiv- und Negativtests auf allen vier
-Zielarchitekturen. Er schaltet weder Bilder noch PDF frei. BL-024.2 muss Adapter,
+Der Vertrag ist durch Positiv- und Negativtests auf allen vier Zielarchitekturen
+belegt. Er schaltet weder Bilder noch PDF frei. BL-024.2 muss Adapter,
 Modelle und Runtime installationsfrei bündeln; BL-024.3 und BL-023.4 müssen danach
 die vollständige visuelle Coverage nachweisen.

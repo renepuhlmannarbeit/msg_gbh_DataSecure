@@ -58,6 +58,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | BL-011.1 | `contracts/BATCH_SNAPSHOT_V1.md` und `test-architecture-contracts.js` definieren und prüfen den unveränderlichen privaten Snapshot |
 | BL-030.1 | `contracts/BATCH_PSEUDONYM_V1.md` und `test-architecture-contracts.js` definieren restart-stabile stapelweite Pseudonyme ohne Rohwerttabelle |
 | BL-001.1 | `OPEN_SOURCE_COMPONENTS.md`, DS-038 und `verify-canonical-docs.mjs` erzwingen Open-Source-Prüfung für jedes Epic |
+| BL-024.1 | `contracts/OCR_RESULT_V1.md`, Schema, Normalisierer und Lauf `32596426359` belegen Wortpositionen, Konfidenz, Sprachen, Fehler und Ressourcengrenzen auf vier Zielarchitekturen |
 
 Offener Nachweis: `contracts/PDF_OCR_RISK_GATE_V1.md` ist das Prüfprotokoll für
 BL-023.1. Es ist ausdrücklich kein Erledigungsnachweis, solange Pflichtzellen offen
@@ -120,4 +121,11 @@ kein Plattformnachweis.
 Der erste Buildlauf `32596337378` ist ein bewahrter Negativnachweis: Windows und
 Linux bestanden, macOS x64/ARM64 scheiterten sicher vor OCR, weil `_POSIX_C_SOURCE`
 die für `libproc.h` erforderlichen Darwin-Typen ausblendete. Die Korrektur verwendet
-auf Apple `_DARWIN_C_SOURCE`; ihr erneuter Plattformnachweis steht aus.
+auf Apple `_DARWIN_C_SOURCE`; danach wurde vollständig neu geprüft.
+
+Die Korrektur ist durch Lauf `32596426359` auf Commit `4c9f0ec` belegt. Windows x64,
+macOS x64/ARM64 und Linux x64 bestanden Build, echten gemischtsprachigen OCR-Lauf,
+V1-Vertrag, Offline-Grenze sowie RAM-, CPU-, Zeit- und Ausgabeflut-Gegenproben.
+Damit ist BL-024.1 erledigt. Die Artefakte melden weiterhin
+`OCR_COVERAGE_UNVERIFIED` und `no_go`, weil Bündelung und Produktintegration zu
+BL-024.2 gehören.
