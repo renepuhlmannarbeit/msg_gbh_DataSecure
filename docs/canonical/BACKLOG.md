@@ -374,6 +374,15 @@ vier Zielarchitekturen bauen, Lizenz-/NOTICE-Inventar vervollständigen und zun�
 über einen weiterhin gesperrten Runtime-Adapter integrieren. Erst frische ZIP- und
 Marketplace-Installationen dürfen den Pfad freigeben.
 
+Umsetzung in Prüfung: `build-ocr-runtime.mjs` erzeugt pro Zielarchitektur ein
+hashinventarisiertes, weiterhin gesperrtes Bundle aus Tesseract.js, 13 tatsächlichen
+Runtime-Komponenten, `deu`/`eng`, OCR-V1, Netzsperre, Drittanbieterhinweisen und dem
+nativen Supervisor. Das nur für Testbilder benötigte `@napi-rs/canvas` wird nicht
+ausgeliefert. Das Windows-x64-Bundle umfasst 241 inventarisierte Dateien und rund
+57,5 MB; Hashprüfung, echter Offline-OCR-Lauf und inhaltsfreier Negativfall bestehen
+lokal. macOS x64/ARM64 und Linux x64 sowie vollständige Lizenztexte für Pakete ohne
+mitgelieferte Lizenzdatei müssen der neue Vier-Plattform-Lauf noch belegen.
+
 #### BL-024.3 – PNG, JPEG und BMP freigeben
 
 Status: **offen** · Epic: BL-024 · Abhängigkeiten: BL-020.1, BL-024.2

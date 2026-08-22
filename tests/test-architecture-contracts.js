@@ -158,6 +158,10 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.match(workflow, /isolated-run\.mjs/u);
   assert.match(workflow, /test-ocr-result-contract\.mjs/u);
   assert.match(workflow, /cc -std=c11 -O2 -Wall -Wextra -Werror/u);
+  for (const token of ['build-ocr-runtime.mjs', 'test-ocr-runtime-bundle.mjs',
+    'test-ocr-runtime-smoke.mjs', 'dist/ocr-runtime/${{ env.OCR_BUNDLE_TARGET }}/']) {
+    assert.ok(workflow.includes(token), `OCR bundle workflow missing ${token}`);
+  }
 });
 
 test('OCR result v1 fixes positions, confidence, limits and content-free errors', () => {

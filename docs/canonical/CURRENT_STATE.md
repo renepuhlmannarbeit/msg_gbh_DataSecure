@@ -184,6 +184,17 @@ abgeschlossen. BL-024.2 ist jetzt in Arbeit; Runtime, Modelle und native Launche
 sind noch nicht installationsfrei gebündelt oder in den ausgelieferten Pluginpfad
 integriert, der unverändert geschlossen bleibt.
 
+Für BL-024.2 existiert nun ein erster reproduzierbarer Runtime-Bundle-Builder. Er
+kopiert nur die gelockte Tesseract-Laufzeitabhängigkeitsmenge, lokale Modelle,
+OCR-V1, Netzsperre und den zielabhängigen nativen Supervisor, erstellt für jede Datei
+Größe und SHA-256 und setzt `release_enabled: false`. Canvas bleibt als reines
+Testwerkzeug außerhalb des Anwenderbundles. Das lokale Windows-x64-Bundle hat rund
+57,5 MB und bestand Inventar-, Lizenzindex-, echten Offline-OCR- und inhaltsfreien
+Fehlerpfadtest. Der Workflow soll dieselben Bundles auf allen vier Zielen bauen und
+als 14-Tage-Artefakte sichern; dieser CI-Nachweis steht noch aus. Zwei alte MIT-
+Pakete liefern im npm-Tarball keinen vollständigen eigenen Lizenztext, weshalb das
+Notice-Gate ebenfalls bewusst offen bleibt.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**

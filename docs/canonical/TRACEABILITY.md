@@ -129,3 +129,12 @@ V1-Vertrag, Offline-Grenze sowie RAM-, CPU-, Zeit- und Ausgabeflut-Gegenproben.
 Damit ist BL-024.1 erledigt. Die Artefakte melden weiterhin
 `OCR_COVERAGE_UNVERIFIED` und `no_go`, weil Bündelung und Produktintegration zu
 BL-024.2 gehören.
+
+Die BL-024.2-Vorarbeit ist über `scripts/build-ocr-runtime.mjs`,
+`native/ocr/pilot/runtime-worker.mjs`, `test-ocr-runtime-bundle.mjs` und
+`test-ocr-runtime-smoke.mjs` nachvollziehbar. Das lokale Windows-x64-Artefakt besitzt
+241 inventarisierte Dateien, 13 Runtime-Komponenten, rund 57,5 MB, beide Modelle und
+einen geprüften nativen Launcher; echter Offline-OCR- und leerer inhaltsfreier
+Fehlerlauf bestehen. Das Manifest bleibt `release_enabled: false`. Plattform-CI,
+vollständige fehlende MIT-Lizenztexte, Pluginintegration und frische Installation
+sind offen.

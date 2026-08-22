@@ -52,6 +52,21 @@ jobs:
       - name: Run OCR through bounded platform process
         shell: bash
         run: node native/ocr/pilot/isolated-run.mjs > tesseractjs-ocr-isolation.json
+      - name: Select runtime bundle target
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then target=windows-x64
+          elif [[ "$RUNNER_OS" == "Linux" ]]; then target=linux-x64
+          elif [[ "$(uname -m)" == "arm64" ]]; then target=macos-arm64
+          else target=macos-x64
+          fi
+          echo "OCR_BUNDLE_TARGET=$target" >> "$GITHUB_ENV"
+      - name: Build and verify installation-free OCR runtime bundle
+        shell: bash
+        run: |
+          node scripts/build-ocr-runtime.mjs "$OCR_BUNDLE_TARGET" > tesseractjs-ocr-bundle.json
+          node tests/test-ocr-runtime-bundle.mjs "$OCR_BUNDLE_TARGET"
+          node tests/test-ocr-runtime-smoke.mjs "$OCR_BUNDLE_TARGET" > tesseractjs-ocr-bundle-smoke.json
       - name: Prove pilot remains outside the released plugin
         run: node tests/test-capability-contract.js
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -62,5 +77,8 @@ jobs:
             tesseractjs-ocr-isolation.json
             tesseractjs-ocr-sbom.cdx.json
             tesseractjs-ocr-supply-chain.json
+            tesseractjs-ocr-bundle.json
+            tesseractjs-ocr-bundle-smoke.json
+            dist/ocr-runtime/${{ env.OCR_BUNDLE_TARGET }}/
           if-no-files-found: error
           retention-days: 14
