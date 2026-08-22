@@ -107,6 +107,16 @@ Die Pflichtzelle „Lizenzinventar und SBOM“ bleibt dennoch offen, bis vollst�
 Notice-Texte, Schwachstellenrichtlinie und das wirklich auszuliefernde Runtime-/
 Pluginpaket denselben Nachweis bestehen.
 
+GitHub-Actions-Lauf `32595454727` auf Commit `fa34c91` belegt außerdem den
+separaten OCR-Prozess auf Windows x64, macOS x64/ARM64 und Linux x64. Alle vier
+Ziele bestanden Netzwerkverbot, 512-MiB-Node-Heap, 50-Sekunden-Wächter,
+64-KiB-Ausgabegrenze sowie echte Timeout- und Ausgabeflut-Gegenproben. Windows
+bestand über das vorhandene verifizierte Job Object zusätzlich 768 MiB RAM,
+40 Sekunden CPU und 45 Sekunden Job-Laufzeit. Auf macOS/Linux fehlen weiterhin
+native harte RAM-/CPU-Limits; außerdem ist der Pfad weder in das Runtime-Bundle noch
+in eine frische Plugininstallation eingebunden. Die Ressourcen-/Prozesszelle bleibt
+daher offen.
+
 ## Messprotokoll
 
 Jede Zelle benötigt Plattform/Architektur, OS-Version, Compiler/SDK, Engine-Commit,

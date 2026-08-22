@@ -149,6 +149,15 @@ ihre Größe und SHA-256 gebunden. Das erfüllt noch nicht die Pflichtmatrix: vo
 Notice-Texte, Schwachstellenrichtlinie, verteilbares Runtime-Bundle und frische
 Pluginpakete bleiben offen.
 
+GitHub-Actions-Lauf `32595454727` auf `fa34c91` führte OCR anschließend auf allen
+vier Plattformzielen in einem separaten Prozess mit vererbtem Netzwerkverbot,
+512-MiB-Node-Heap, 50-Sekunden-Wächter und 64-KiB-Ausgabegrenze aus. Timeout- und
+Ausgabeflut-Gegenproben wurden überall sicher beendet. Windows verwendete zusätzlich
+das verifizierte Job Object mit 768 MiB RAM, 40 Sekunden CPU und 45 Sekunden
+Job-Laufzeit. macOS und Linux verwenden das Node-Permission-Modell; native harte
+RAM-/CPU-Grenzen sind dort noch offen. Die Produkt-Runtime nutzt diesen Pilotpfad
+noch nicht und bleibt unverändert fail-closed.
+
 ## BL-030 – Stapelweite Entitätsauflösung
 
 Status: **teilweise**

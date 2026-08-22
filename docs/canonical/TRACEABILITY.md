@@ -90,3 +90,11 @@ Plattform 25 gelockte Paketkomponenten, vollständige Paketintegritäten, aussch
 Apache-2.0/MIT/BSD-2-Clause sowie Commit-/Größen-/Hashprüfung der Modelle und ihrer
 Apache-2.0-Lizenz. Die Lizenz-/SBOM-Pflichtzelle bleibt wegen fehlender vollständiger
 Notices, Schwachstellenrichtlinie und echtem Auslieferungspaket weiterhin offen.
+
+GitHub-Actions-Lauf `32595454727` auf Commit `fa34c91` belegt die isolierte
+OCR-Technikprobe auf Windows x64, macOS x64/ARM64 und Linux x64. Prozessgrenze,
+Netzwerkverbot, Node-Heap, Wächter und Ausgabegrenze bestanden einschließlich
+Timeout-/Flood-Gegenproben; Windows besitzt darüber hinaus Job-Object-RAM-/CPU-
+Grenzen. Native harte macOS/Linux-Ressourcengrenzen, Runtime-Integration,
+Angriffskorpus und frisches Pluginpaket bleiben offen, deshalb ist dies kein
+Erledigungs- oder Freigabenachweis.
