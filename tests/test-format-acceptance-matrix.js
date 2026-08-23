@@ -152,6 +152,59 @@ const CASES = [
   }
 ];
 
+// Keep the matrix deterministic and fully synthetic.  These variants exercise
+// the real reader → detector → residual gate → released-Markdown path with
+// different direct identifiers, rather than merely changing a source_format
+// field in a benchmark record.  Eight base cases plus seventeen variants make
+// exactly one hundred format/container runs below.
+const VARIANT_PEOPLE = [
+  'Anna Krüger', 'Benedikt Wolf', 'Clara Hansen', 'David Neumann',
+  'Emilia Berger', 'Felix König', 'Greta Schmitt', 'Hannes Vogel',
+  'Ines Richter', 'Jonas Weber', 'Katrin Brandt', 'Lars Hoffmann',
+  'Mara Stein', 'Nico Falk', 'Olivia Kern', 'Paul Winter', 'Rita Sommer'
+];
+
+function replaceEverywhere(value, from, to) {
+  return value.split(from).join(to);
+}
+
+function makeVariant(base, index) {
+  const person = VARIANT_PEOPLE[index];
+  const email = `matrix.${index + 1}@example.invalid`;
+  const phone = `+49 221 55${String(1000 + index).padStart(4, '0')}`;
+  const replacements = new Map();
+
+  // Contract/customer cases put the organisation first; every other fixture
+  // starts with its labelled person.  Keep the legal-form organisation intact
+  // so this remains a test of the person field rather than accidentally
+  // replacing a company with a name-shaped, suffix-less value.
+  const personIndex = ['contract', 'customer'].includes(base.id) ? 1 : 0;
+  if (base.identifiers[personIndex]) replacements.set(base.identifiers[personIndex], person);
+  if (base.identifiers[1] && base.identifiers[1].includes('@')) replacements.set(base.identifiers[1], email);
+  for (const identifier of base.identifiers) {
+    if (identifier.startsWith('+')) replacements.set(identifier, phone);
+  }
+
+  let sourceText = base.sourceText;
+  let csv = base.csv;
+  for (const [from, to] of replacements) {
+    sourceText = replaceEverywhere(sourceText, from, to);
+    csv = replaceEverywhere(csv, from, to);
+  }
+
+  return {
+    ...base,
+    id: `${base.id}-variant-${index + 1}`,
+    sourceText,
+    csv,
+    identifiers: base.identifiers.map((identifier) => replacements.get(identifier) || identifier)
+  };
+}
+
+const PIPELINE_CASES = CASES.concat(
+  Array.from({ length: 17 }, (_, index) => makeVariant(CASES[index % CASES.length], index))
+);
+
 function docx(text) {
   const body = text.split('\n').map((line) =>
     `<w:p><w:r><w:t>${line.replace(/&/g, '&amp;')}</w:t></w:r></w:p>`
@@ -182,7 +235,8 @@ test('two isolated profile labels do not over-classify a general document as a p
 });
 
 async function main() {
-  for (const sample of CASES) for (const extension of ['.txt', '.md', '.csv', '.docx']) {
+  assert.strictEqual(PIPELINE_CASES.length, 25, 'the deterministic matrix has 25 documents');
+  for (const sample of PIPELINE_CASES) for (const extension of ['.txt', '.md', '.csv', '.docx']) {
     await testAsync(`${sample.id} ${extension} reaches released Markdown with the shared privacy contract`, async () => {
       const result = await gateway._internal.anonymizeSelectedSource(writeFormat(extension, sample), 'auto');
       assert.strictEqual(result.ok, true);

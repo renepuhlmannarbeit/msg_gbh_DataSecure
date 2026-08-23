@@ -124,7 +124,17 @@ function preflightOoxmlContainers(queue, readFile = fs.readFileSync) {
   for (const entry of queue) {
     if (!['.docx', '.xlsx', '.pptx'].includes(path.extname(entry.name).toLowerCase())) continue;
     try {
-      inspectZipDirectory(readFile(entry.full), { maxEntries: 20000, maxUncompressed: 300 * 1024 * 1024 });
+      const bytes = readFile(entry.full);
+      // This gate is deliberately a *container* preflight.  A file merely
+      // named .docx/.xlsx/.pptx but without an OPC/CFB signature remains the
+      // responsibility of the regular worker, which records it as a stopped
+      // source and lets the rest of a batch continue.  Treating arbitrary
+      // bytes as a broken ZIP here would turn that per-item recovery contract
+      // into an all-or-nothing intake failure.
+      const startsZip = bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+      const startsCfb = bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+      if (!startsZip && !startsCfb) continue;
+      inspectZipDirectory(bytes, { maxEntries: 20000, maxUncompressed: 300 * 1024 * 1024 });
     } catch (error) {
       // Do not offer a password prompt unless a reviewed local decrypter is
       // actually available. The fixed code allows a clear user explanation
@@ -216,14 +226,27 @@ function safeRemoveWorkDirectory(token) {
     throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.');
   }
   if (!fs.existsSync(target)) return;
-  const inspect = (current) => {
-    const stat = fs.lstatSync(current);
-    if (stat.isSymbolicLink()) throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.');
-    if (stat.isDirectory()) for (const child of fs.readdirSync(current)) inspect(path.join(current, child));
-    else if (!stat.isFile()) throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.');
+  // Do not delegate a previously inspected tree to recursive rm(). Each
+  // object is lstat'ed immediately before removal, and every directory is
+  // bound to its original device/inode again before rmdir. A replacement with
+  // a link, junction, or a different directory therefore stops instead of
+  // traversing outside the private work root.
+  const removeEntry = (current) => {
+    const before = fs.lstatSync(current);
+    if (before.isSymbolicLink()) throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.');
+    if (before.isFile()) {
+      fs.unlinkSync(current);
+      return;
+    }
+    if (!before.isDirectory()) throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.');
+    for (const child of fs.readdirSync(current)) removeEntry(path.join(current, child));
+    const after = fs.lstatSync(current);
+    if (!after.isDirectory() || after.isSymbolicLink() || after.dev !== before.dev || after.ino !== before.ino) {
+      throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.');
+    }
+    fs.rmdirSync(current);
   };
-  inspect(target);
-  fs.rmSync(target, { recursive: true, force: false, maxRetries: 0 });
+  removeEntry(target);
 }
 
 function activeLockPath() { return path.join(batchRoot(), 'active-processing.json'); }

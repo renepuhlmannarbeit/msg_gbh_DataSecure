@@ -192,10 +192,12 @@ aufgerufenen Helfer für literale Kindnamen, Linkfreiheit, kanonische Containmen
 Geräte- und Inode-Prüfung. Ein echter Windows-Junction-Test stoppt vor Listing/Kopie
 und lässt das externe Ziel unberührt. Drei zusätzliche reale lokale Gegenproben
 belegen den Stopp bei Inode-Austausch direkt vor Snapshot, bei ersetzter versiegelter
-Kopie vor Recovery sowie bei einem verschachtelten Junction/Symlink vor rekursivem
-Discard; gerettete und externe Daten bleiben unverändert. Sonstige
-Win32-Reparse-Typen, die echte macOS-/Linux-Matrix und die letzte nur handle-relativ
-schließbare Race-Lücke beim rekursiven OS-Delete bleiben offen. V8-Heap
+Kopie vor Recovery sowie bei einem verschachtelten Junction/Symlink vor Cleanup;
+gerettete und externe Daten bleiben unverändert. Das Cleanup verwendet nun keine
+rekursive OS-Löschung mehr, sondern lstat-/inode-gebundene Einzelobjekt-Entfernung:
+eingefügte Links, Junctions oder ausgetauschte Verzeichnisse stoppen vor dem Entfernen.
+Sonstige Win32-Reparse-Typen, die echte macOS-/Linux-Matrix und die letzte nur
+handle-relativ schließbare Race-Lücke bleiben offen. V8-Heap
 und Parent-Timeout auf macOS/Linux sind außerdem weiterhin keine harten Grenzen für
 native/`Buffer`-Allokationen und Prozessbäume. Der bewährte POSIX-OCR-Supervisor ist
 die vorgesehene Wiederverwendungsbasis für BL-011.9. Sein Quellpilot besitzt jetzt
@@ -824,9 +826,11 @@ zusätzlicher 1.000-Fall-Akzeptanzkorpus mit 500 Verträgen, 167 Mitarbeiterprof
 167 Bewerbungen und 166 Kundenvorgängen. Der Mehrprofilkorpus prüft direkte
 Identifikatoren sowie den Erhalt von Rollen, Fachinhalten und Zertifikaten. Dazu
 kommen 77 PII-Regressionen, 29 Skill-Szenarien, 20 Explorationsfälle und eine
-33-Fall-Formatmatrix. Diese prüft die reale automatische Profilerkennung sowie
+100-Fall-Formatmatrix. Diese prüft die reale automatische Profilerkennung sowie
 Entfernung/Erhalt über TXT, Markdown, CSV und DOCX für deutsche, englische,
-französische, spanische und niederländische Personalprofilbeschriftungen.
+französische, spanische und niederländische Personalprofilbeschriftungen sowie
+17 weitere deterministische Varianten direkter Identifikatoren. Jede Zelle der
+Matrix durchläuft den echten lokalen Gateway-Pfad, nicht bloß eine Metadatenprüfung.
 Parser-/Visual-/Security-Tests und ein messender Detektorbenchmark ergänzen sie. Rest: mindestens
 1.000 dokumentartige Fixtures über alle Zielformate, Layouts, Sprachen und Angriffe
 sowie die verbindliche Null-Miss-/99-%-Erhaltungsmetrik.

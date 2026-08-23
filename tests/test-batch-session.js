@@ -621,6 +621,22 @@ async function main() {
     assert.strictEqual(fs.readFileSync(sentinel, 'utf8'), 'extern und unverändert');
   });
 
+  await testAsync('discard uses inode-bound single-entry removal instead of recursive rm', async () => {
+    resetInput(); add('discard-single-entry.txt', 'Kunde: Max Mustermann');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const nested = path.join(_test.workPath(begun.batch_token), 'nested');
+    fs.mkdirSync(nested);
+    fs.writeFileSync(path.join(nested, 'regular.txt'), 'nur lokal', 'utf8');
+    const originalRm = fs.rmSync;
+    fs.rmSync = () => { throw new Error('recursive rm must not be called'); };
+    try {
+      assert.strictEqual(discardIncompleteBatches().ok, true);
+      assert.strictEqual(fs.existsSync(_test.workPath(begun.batch_token)), false);
+    } finally {
+      fs.rmSync = originalRm;
+    }
+  });
+
   await testAsync('private directory creation accepts only one literal child below its parent', async () => {
     const parent = path.join(base, 'private-directory-parent');
     const created = ensurePrivateDirectory(parent, 'audit');
