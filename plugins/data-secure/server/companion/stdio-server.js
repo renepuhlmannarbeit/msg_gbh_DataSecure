@@ -32,7 +32,7 @@ input.on('line', (line) => {
     } catch (error) {
       write({
         type: 'error', sequence: frameSequence,
-        code: error instanceof SafeError ? 'REQUEST_REJECTED' : 'INTERNAL_ERROR',
+        code: error instanceof SafeError ? (error.code || 'REQUEST_REJECTED') : 'INTERNAL_ERROR',
         message: error instanceof SafeError ? error.message : 'Companion-Anfrage wurde sicher abgebrochen.'
       });
     }

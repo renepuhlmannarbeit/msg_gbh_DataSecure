@@ -21,20 +21,27 @@ function technicalReviewRequired(message) { const error = new SafeError(message)
 async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
   if (jobStatus(jobId).state !== 'Created') throw new SafeError('Companion-Job kann nicht erneut automatisch verarbeitet werden.');
   const platform = options.platform || process.platform;
-  const review = options.reviewTextLocally || (options.confirmAutomaticRelease
-    ? ({ anonymized_text, detected_identifiers }) => options.confirmAutomaticRelease(detected_identifiers)
+  // Choosing files in the native picker is an explicit local action for this
+  // batch. Clear text can therefore follow the automatic path without one
+  // identical confirmation window per file. It never authorises an ambiguous
+  // issuer or a technical/visual review: those remain fail-closed below.
+  const review = options.reviewTextLocally || ((input) => {
+    if ((input.ambiguities || []).length > 0) {
+      if (platform === 'win32' || platform === 'darwin' || platform === 'linux') {
+        return (options.nativeReview || reviewTextLocally)(input.review_draft, { platform });
+      }
+      throw reviewRequired('Mehrdeutige Organisationen benötigen auf diesem Gerät eine lokale Entscheidung; es wurde nichts freigegeben.');
+    }
+    if (options.automaticBatchApproval === true) return { action: 'skipped' };
+    if (options.confirmAutomaticRelease) {
+      return options.confirmAutomaticRelease(input.detected_identifiers)
+        ? { action: 'skipped' }
+        : { action: 'cancelled' };
+    }
+    return confirmAutomaticRelease(input.detected_identifiers, { platform })
       ? { action: 'skipped' }
-      : { action: 'cancelled' }
-    : platform === 'win32'
-      ? (input) => reviewTextLocally(input.review_draft)
-      : (input) => {
-          if ((input.ambiguities || []).length > 0) {
-            throw reviewRequired('Mehrdeutige Organisationen benötigen auf diesem Gerät eine lokale Entscheidung; es wurde nichts freigegeben.');
-          }
-          return confirmAutomaticRelease(input.detected_identifiers, { platform })
-            ? { action: 'skipped' }
-            : { action: 'cancelled' };
-        });
+      : { action: 'cancelled' };
+  });
   let detected = false;
   let approvedContentSha256 = null;
   let reviewDecision = null;

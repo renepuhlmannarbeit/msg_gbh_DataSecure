@@ -15,11 +15,14 @@ Rufe `diagnostic_status` auf und erkläre nur dessen feste Fehlercodes:
   Parser niemals direkt als Umgehung.
 - `PARSER_RESOURCE_LIMIT`: Nichts wurde freigegeben; keine automatische Wiederholung.
 - `PARSER_COVERAGE_UNVERIFIED`: Der extrahierte Inhalt war nicht nachweislich vollständig.
-- `FORMAT_COVERAGE_UNVERIFIED`: Im Pilot sind nur TXT und DOCX freigegeben.
+- `FORMAT_COVERAGE_UNVERIFIED`: Im Pilot sind nur TXT, Markdown, CSV und DOCX freigegeben.
 - `UNSAFE_STORAGE_LOCATION`: Der konfigurierte Ordner liegt in einem bekannten Cloud-Sync-
   oder Netzwerkpfad.
 - `PDF_COVERAGE_UNVERIFIED`: PDF bleibt gesperrt und darf nicht per Chat-Upload umgangen
   werden.
+- `LOCAL_MAPPING_EXPORT_FAILED`: Es wurde kein Ergebnis freigegeben, weil die lokale
+  Zuordnungsübersicht nicht sicher aktualisiert werden konnte. Nicht automatisch
+  wiederholen; die lokale Speicherberechtigung beziehungsweise den Exportordner prüfen.
 
 Im Stapel stoppt nur die betroffene Datei, solange der Snapshot unverändert ist. Arbeite
 ausschließlich mit `package_id` und `read_capability`, die derselbe erfolgreiche Aufruf
@@ -31,6 +34,17 @@ meldet. Die Leseberechtigung ist kurzlebig und kann keine anderen Pakete öffnen
 `Output` und Review-Vorschauen verfallen. Bei `retention_days=0` sind visuelle Freigaben
 nicht verfügbar; Original und Vorschau werden unmittelbar nach erfolgreicher Verarbeitung
 entfernt.
+
+`private_work_copy_cleanup_pending` ist nur ein lokaler Zähler für eine nach einer
+bereits bestätigten Übergabe noch nicht entfernte private Arbeitskopie. Er enthält keine
+Datei- oder Batchkennung. Die nächste sichere Batch-Verarbeitung und der Serverstart
+versuchen die reguläre Bereinigung erneut; der Zähler ist kein Anlass, ein Ergebnis zu
+widerrufen oder dieselbe Quelle erneut zu verarbeiten.
+
+`expired_batch_cleanup_pending` zählt ausschließlich abgelaufene lokale Batch-Snapshots,
+deren sichere Bereinigung noch aussteht. Er enthält weder Batch-ID noch Dokumentanzahl,
+Name, Pfad oder Inhalt. Der Zähler bedeutet nicht, dass Daten an Claude gelangt sind;
+er ist ein Hinweis für IT, die lokale Wartung beziehungsweise Zugriffsrechte zu prüfen.
 
 Das Diagnosejournal ist auf 14 Tage beziehungsweise 200 Ereignisse begrenzt und enthält
 keine Dateinamen, Pfade, Inhalte, erkannten Werte oder Dokument-Hashes. Ein separater,

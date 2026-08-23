@@ -1,22 +1,29 @@
 # GBH DataSecure einrichten
 
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
-Windows 10/11 x64 sowie macOS/Linux-Textpfad · ca. 20 Minuten.
+Windows 10/11 x64 und macOS; Linux nur über einen lokalen Claude-Code-Host · ca. 20 Minuten.
 
 > **Nur Engineering-Abnahme:** RC30 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > lokalen Companions, bestandenem Installationstest und dokumentierter
-> Pilotfreigabe. Die lokale TXT-/DOCX-Review-Aktion ist technisch umgesetzt; die
+> Pilotfreigabe. Die lokale TXT-/Markdown-/CSV-/DOCX-Review-Aktion ist technisch umgesetzt; die
 > vollständige visuelle Human-Presence- und Plattformabnahme fehlt noch. Eine
 > Signatur oder Zertifizierung ist keine Voraussetzung.
 
 > **Plattformstatus:** Windows x64 besitzt derzeit die vollständigere lokale
-> Prüfoberfläche und Bildverarbeitung. Auf macOS/Linux ist TXT/DOCX textbasiert
-> vorgesehen; Bilder bleiben lokal oder werden auf Wunsch entfernt, und Fälle mit
-> notwendiger manueller Mehrdeutigkeitsentscheidung stoppen sicher. Der Plugin-ZIP
+> Prüfoberfläche und Bildverarbeitung. Auf macOS ist für TXT/Markdown/CSV/DOCX zusätzlich eine
+> lokale Beibehalten/Anonymisieren-Entscheidung für Zertifikatsaussteller vorbereitet;
+> Linux besitzt denselben begrenzten Entscheidungsweg über Zenity oder KDialog. Bis
+> zu echter Mac-/Linux-Abnahme bleiben beide Engineering-Status. Bilder bleiben lokal
+> oder werden auf Wunsch entfernt. Der Plugin-ZIP
 > benötigt eine nachgewiesene Node-22.13+-Auflösung; nur beim MCPB dokumentiert
 > Anthropic eine eingebaute Node-Runtime. Installieren Sie keine Laufzeit selbst.
+
+> **Host-Grenze:** Die Claude-Desktop-App wird laut aktueller Anthropic-Dokumentation
+> auf Windows und macOS angeboten, nicht auf Linux. Linux ist deshalb erst nach einer
+> eigenen Claude-Code-CLI-Installationsabnahme nutzbar; eine Linux-Desktop-Installation
+> wird nicht behauptet.
 
 ---
 
@@ -199,17 +206,18 @@ Die ursprüngliche Quelldatei außerhalb des DataSecure-Ordners bleibt unveränd
    Eingang liegen. Prüfen Sie im geöffneten `Input`-Ordner, dass dort **nur** die
    Dateien des jetzigen Laufs liegen. So werden Altbestände nicht versehentlich
    mitverarbeitet.
-3. Kopieren Sie bis zu 25 TXT- oder DOCX-Dateien hinein, nicht in den Chat. Kehren Sie
+3. Kopieren Sie bis zu 100 TXT-, Markdown- (`.md` oder `.markdown`), CSV- oder DOCX-Dateien mit zusammen höchstens 500 MB hinein, nicht in den Chat. Kehren Sie
    zu Claude zurück und bestätigen Sie kurz, dass ausschließlich diese Dateien
-   bereitliegen. DataSecure bindet genau diesen Bestand an eine kurzlebige lokale
-   Batch-Sitzung. Ein Austausch oder Hinzufügen während des Laufs stoppt den gesamten
-   Stapel. PDF und alle anderen Formate sind im Pilot sicher gesperrt.
+   bereitliegen. DataSecure übernimmt sofort private, versiegelte Arbeitskopien in
+   eine lokale Batch-Sitzung. Spätere Änderungen, Umbenennungen oder Ergänzungen im
+   Input-Ordner verändern den gestarteten Stapel nicht. PDF und alle anderen Formate
+   sind im Pilot sicher gesperrt.
 4. DataSecure verarbeitet pro technischem Aufruf genau eine Datei und erstellt pro
    Erfolg ein eigenes Markdown-Paket. Dadurch bleibt auch ein Stapel fortsetzbar und
    läuft nicht als ein einziger langer Aufruf in ein Zeitlimit. Ein Fehler wird nicht
    automatisch wiederholt und blockiert die übrigen bestätigten Dateien nicht. Den
    Fortschritt verwaltet der Server; Claude berechnet keine Warteschlangenposition.
-5. TXT- und DOCX-Dokumentarten werden automatisch eingeordnet. Eigenständige Bilder,
+5. TXT-, Markdown-, CSV- und DOCX-Dokumente werden automatisch eingeordnet. Eigenständige Bilder,
    Scans und andere Formate sind im Pilot noch nicht freigegeben.
 6. Der normale Ordnerablauf öffnet keinen zusätzlichen Prüfdialog. Mehrdeutige
    Organisations-/Zertifikatsstellen stoppen nur die betroffene Datei sicher; sie
@@ -219,6 +227,21 @@ Die ursprüngliche Quelldatei außerhalb des DataSecure-Ordners bleibt unveränd
    lokal im `Input` verbliebenen Dateien sind die gestoppten; ihre Namen wurden Claude
    nicht mitgeteilt. Erfolgreiches Markdown ist nur über die 15 Minuten gültige
    Leseberechtigung desselben Laufs abrufbar.
+
+### Sicher anhalten und später fortsetzen
+
+Wenn Sie während eines laufenden DataSecure-Werkzeugschritts in Claude auf **Stopp**
+klicken, wird der aktuelle Schritt sicher unterbrochen. Es wird kein unvollständiges
+Paket freigegeben, die übrigen Dateien werden nicht automatisch neu ausgewählt und
+die gerade unterbrochene Datei wird nicht still erneut versucht. Der lokale Stapel
+bleibt als Checkpoint erhalten. Bitten Sie Claude später ausdrücklich um
+*„den letzten DataSecure-Stapel fortsetzen“*; erst dann wird ausschließlich eine
+technisch unterbrochene Datei erneut eingeplant. Ein terminaler Sicherheitsstopp
+bleibt dagegen gesperrt.
+
+Schließen Sie einen lokalen Auswahl- oder Prüfdialog, gilt dieser Lauf als beendet.
+DataSecure öffnet keinen zweiten Dialog. Starten Sie nur dann ausdrücklich neu, wenn
+Sie wirklich einen neuen lokalen Auswahlvorgang wünschen.
 
 Wenn Sie ausschließlich Markdown ohne Bilder brauchen, sagen Sie einmalig:
 *„Anonymisiere die Dateien und entferne alle Bilder.“* Bekannte Bildanlagen in
@@ -232,7 +255,7 @@ Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Ein 
 Versuch der gestoppten Datei erfolgt erst auf Ihren ausdrücklichen Auftrag.
 
 Windows x64 besitzt die vollständigere Engineering-Grenze. macOS und Linux verwenden
-für TXT/DOCX den Node-Textpfad und stoppen bei Bildern oder manuellen Mehrdeutigkeiten
+für TXT/Markdown/CSV/DOCX den Node-Textpfad und stoppen bei Bildern oder manuellen Mehrdeutigkeiten
 sicher. Ob die benötigte Node-Runtime vom jeweiligen Installationsartefakt und
 Claude-Desktop-Build zuverlässig bereitgestellt wird, muss auf jeder Zielplattform
 noch in einer frischen Installation abgenommen werden. Windows ARM64 bleibt gesperrt.
@@ -288,13 +311,14 @@ Nummern beginnen bei jedem Dokument neu.
 | „Wie möchten Sie diese Datei öffnen?" | Abbrechen, Datei ins offene Claude-Fenster ziehen |
 | „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
 | „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Nicht automatisch erneut starten. `diagnostic_status` aufrufen und nur den festen Fehlercode an IT melden — nicht Datei, Dateiname, Pfad oder Inhalt |
+| Sie haben in Claude auf **Stopp** geklickt | Der Stapel bleibt lokal fortsetzbar; kein Paket der unterbrochenen Datei wurde freigegeben. Nicht automatisch neu starten. Bitten Sie bei Bedarf ausdrücklich, den letzten DataSecure-Stapel fortzusetzen |
 | `AMBIGUITY_REVIEW_REQUIRED` | Ein Organisationsname könnte Zertifikatsanbieter oder Arbeitgeber/Kunde sein. Die Datei bleibt in `Input`; nicht automatisch erneut starten. Der normale Ordnerablauf rät hier bewusst nicht |
 | `PARSER_ISOLATION_FAILED` | Die lokale Windows-Sicherheitsgrenze fehlt oder ist beschädigt. Nicht erneut versuchen und nichts manuell umgehen; Plugin/Extension durch IT neu installieren lassen |
 | `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
 | Claude meldet vor dem Start eine andere Anzahl | Im geöffneten `Input`-Ordner nur die beabsichtigten Dateien belassen und die korrekte Anzahl erneut bestätigen |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
-| `PDF_COVERAGE_UNVERIFIED` | PDF ist unabhängig vom Inhalt sicher gesperrt. Verwenden Sie eine freigegebene TXT- oder DOCX-Quelle; niemals das PDF direkt in Claude hochladen |
-| `FORMAT_COVERAGE_UNVERIFIED` | Im Pilot sind nur TXT und DOCX zugelassen. Die Datei bleibt in `Input` |
+| `PDF_COVERAGE_UNVERIFIED` | PDF ist unabhängig vom Inhalt sicher gesperrt. Verwenden Sie eine freigegebene TXT-, Markdown-, CSV- oder DOCX-Quelle; niemals das PDF direkt in Claude hochladen |
+| `FORMAT_COVERAGE_UNVERIFIED` | Im Pilot sind nur TXT, Markdown (`.md`), CSV und DOCX zugelassen. Die Datei bleibt in `Input` |
 | `PARSER_COVERAGE_UNVERIFIED` | DOCX enthält nicht vollständig abgedeckte Bestandteile. Es wurde kein Paket veröffentlicht |
 | `UNSAFE_STORAGE_LOCATION` | Der konfigurierte Ordner liegt in einem bekannten Cloud-Sync- oder Netzwerkpfad. IT muss einen lokalen Pfad konfigurieren |
 | Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | DataSecure stellt abgebrochene versteckte Arbeitsdateien beim Neustart kollisionsfrei wieder her. Nicht manuell in versteckten Dateien arbeiten; bei erneutem Auftreten IT informieren |

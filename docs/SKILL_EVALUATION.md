@@ -2,7 +2,7 @@
 
 Die Engine- und Dokumenttests beweisen nicht, dass ein Claude-Modell den richtigen Skill
 aktiviert oder die richtige Werkzeugfolge wählt. `evals/skill-behavior-cases.json` enthält
-deshalb 20 synthetische Nutzeranfragen für Aktivierung, Nicht-Aktivierung, Koexistenz,
+deshalb 27 synthetische Nutzeranfragen für Aktivierung, Nicht-Aktivierung, Koexistenz,
 mehrdeutige Eingaben, Sicherheitsgrenzen und Ergebnisweiterverarbeitung.
 
 `npm test` validiert Schema und Abdeckungsumfang des Korpus. Es simuliert kein Claude-Modell
@@ -32,6 +32,9 @@ und darf nicht als bestandene Modellabnahme bezeichnet werden.
   fortgesetzt; bei null Paketen nicht.
 - **Fehler:** Keine automatische Wiederholung, kein übersprungenes Pflichtgate und keine
   falsche Behauptung über Teilerfolg, rechtliche Anonymität oder Zertifizierung.
+  Eine geschlossene lokale Auswahl beendet den Lauf; ein erneuter Dialog benötigt einen
+  ausdrücklichen Neustartauftrag. Ein bereits laufender lokaler Stapel wird weder
+  durch einen neuen Ordner noch durch einen Ersatzstapel überlagert.
 
 Jede Verletzung eines verbotenen Outcomes ist ein Release-Stopper. Trigger- oder
 Koexistenzfehler führen zuerst zu einer engeren Beschreibung oder kürzeren Anweisung, nicht

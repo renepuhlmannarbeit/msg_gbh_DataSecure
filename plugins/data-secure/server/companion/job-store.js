@@ -293,7 +293,7 @@ function companionCapabilities() {
       : ['darwin', 'linux'].includes(process.platform)
         ? 'native_picker_confirm_or_fail_closed_on_ambiguity'
         : 'unavailable',
-    supported_vertical_slice_inputs: ['TXT', 'DOCX'],
+    supported_vertical_slice_inputs: ['TXT', 'Markdown (.md)', 'CSV', 'DOCX'],
     private_ipc: 'inherited_stdio_authenticated',
     binary_signing: 'not_implemented',
     job_retention: 'integrated',

@@ -22,8 +22,15 @@ const { confirmationCommands, confirmAutomaticRelease } = require('../plugins/da
 const {
   REVIEW_SCHEMA,
   buildReviewDraft,
+  buildBatchReviewDraft,
   powershellUtf8Preamble,
   powershellReviewScript,
+  darwinReviewScript,
+  linuxViewerCommands,
+  linuxChoiceCommand,
+  linuxFinalChoiceCommand,
+  linuxReviewTextLocally,
+  validateReviewResult,
   applyManualRedactions,
   reviewTextLocally
 } = require('../plugins/data-secure/server/companion/text-review');
@@ -57,6 +64,31 @@ async function main() {
     assert.strictEqual(readEvents(job.job_id).at(-1).output_sha256.length, 64);
   });
 
+  await testAsync('Markdown processing uses the same confirmed local path and keeps references inert', async () => {
+    workspace('markdown-release');
+    const file = source('employee.md', '# Notiz\n\nKontakt: Max Mustermann\n\n![extern](https://example.invalid/image.png)');
+    const job = createJob({ profile: 'personnel_profile', source_type: 'md' });
+    const result = await processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true });
+    assert.strictEqual(result.job.state, 'Released');
+    const released = readOutput(result.package_id, result.read_capability, 0, 30000).text;
+    assert.doesNotMatch(released, /Max Mustermann/u);
+    assert.match(released, /\[PERSON_001\]/u);
+    assert.match(released, /\[URL_REDACTED\]/u, 'the URL is treated as text and privacy-redacted, never fetched');
+  });
+
+  await testAsync('CSV processing uses the confirmed local path and renders inert Markdown text', async () => {
+    workspace('csv-release');
+    const file = source('employee.csv', 'Name;Rolle;Projekt\nMax Mustermann;Product Owner;Klinikportal\n');
+    const job = createJob({ profile: 'personnel_profile', source_type: 'csv' });
+    const result = await processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true });
+    assert.strictEqual(result.job.state, 'Released');
+    const released = readOutput(result.package_id, result.read_capability, 0, 30000).text;
+    assert.doesNotMatch(released, /Max Mustermann/u);
+    assert.match(released, /\[PERSON_001\]/u);
+    assert.match(released, /Product Owner/u);
+    assert.match(released, /Klinikportal/u);
+  });
+
   await testAsync('cancelling the local review records a terminal local action and publishes nothing', async () => {
     const r = workspace('decline');
     const file = source('decline.txt', 'Name: Erika Musterfrau\nE-Mail: erika@example.de');
@@ -75,12 +107,28 @@ async function main() {
     workspace('docx-release');
     const file = path.join(base, 'text-only.docx');
     fs.writeFileSync(file, zipStore([
+      ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
       ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Kontakt: Max Mustermann, max@example.de</w:t></w:r></w:p><w:p><w:r><w:t>Rolle: Architekt</w:t></w:r></w:p></w:body></w:document>']
     ]));
     const job = createJob({ profile: 'personnel_profile', source_type: 'docx' });
     const result = await processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true });
     assert.strictEqual(result.job.state, 'Released');
     assert.match(readOutput(result.package_id, result.read_capability, 0, 30000).text, /Architekt/);
+  });
+
+  await testAsync('a clear file selected for a batch needs no duplicate per-file review dialog', async () => {
+    workspace('batch-auto-clear');
+    const file = source('batch-auto-clear.txt', 'Kontakt: Jana Beispiel, jana.beispiel@example.de\nRolle: Testmanagerin');
+    const job = createJob({ profile: 'personnel_profile', source_type: 'txt' });
+    const result = await processCompanionJob(job.job_id, file, job.profile, {
+      automaticBatchApproval: true,
+      confirmAutomaticRelease: () => { throw new Error('Ein klarer Batch-Fall darf keinen Einzel-Dialog öffnen.'); }
+    });
+    assert.strictEqual(result.job.state, 'Released');
+    assert.strictEqual(result.review_decision, 'skipped');
+    assert.deepStrictEqual(readEvents(job.job_id).map((event) => event.state), [
+      'Created', 'Claimed', 'Extracted', 'Detected', 'Skipped', 'Verified', 'Released'
+    ]);
   });
 
   await testAsync('a locally reviewed additional alias redaction preserves professional content', async () => {
@@ -133,6 +181,29 @@ async function main() {
     assert.match(released, /\[MANUAL_REDACTION\] Azure Administrator Associate/);
   });
 
+  await testAsync('the macOS companion invokes its local credential decision path before release', async () => {
+    const r = workspace('macos-credential-decision');
+    const file = source('macos-credential-decision.txt', 'Microsoft Azure Administrator Associate\nRolle: Cloud Engineer');
+    const job = createJob({ profile: 'personnel_profile', source_type: 'txt' });
+    let receivedDraft;
+    const result = await processCompanionJob(job.job_id, file, job.profile, {
+      platform: 'darwin',
+      nativeReview(draft, options) {
+        receivedDraft = { draft, options };
+        return {
+          action: 'reviewed', redactions: [],
+          decisions: draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' }))
+        };
+      }
+    });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(receivedDraft.options.platform, 'darwin');
+    assert.ok(receivedDraft.draft.ambiguities.length > 0);
+    const pkg = readOutput(result.package_id, result.read_capability);
+    assert.match(pkg.text, /Microsoft Azure Administrator Associate/u);
+    assert.ok(fs.existsSync(r.output));
+  });
+
   await testAsync('an ambiguous issuer cannot be skipped', async () => {
     const r = workspace('ambiguity-skip');
     const file = source('ambiguity-skip.txt', 'Microsoft Azure Administrator Associate');
@@ -177,6 +248,9 @@ async function main() {
     });
     assert.strictEqual(draft.batch_index, 2);
     assert.strictEqual(draft.batch_total, 4);
+    assert.strictEqual(buildReviewDraft('Kontakt: Max Mustermann', 'Kontakt: [PERSON_001]', 'customer', [], {
+      batchIndex: 100, batchTotal: 100
+    }).batch_total, 100);
     assert.match(powershellReviewScript(), /Datei .*batch_index.* von .*batch_total/);
     assert.throws(() => buildReviewDraft('a', 'a', 'general', [], { batchIndex: 0, batchTotal: 4 }), /Dateifortschritt/);
   });
@@ -204,6 +278,18 @@ async function main() {
     }), /Nicht alle mehrdeutigen/);
   });
 
+  await testAsync('a local review deferral is a bounded action without draft data', async () => {
+    const draft = buildReviewDraft('Microsoft Azure Administrator Associate', 'Microsoft Azure Administrator Associate', 'personnel_profile', [{
+      ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+      original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+    }]);
+    assert.strictEqual(draft.allow_defer, false);
+    assert.deepStrictEqual(validateReviewResult({ action: 'deferred' }, draft), { action: 'deferred' });
+    assert.throws(() => validateReviewResult({ action: 'deferred', raw_text: 'Microsoft' }, draft), /nicht erlaubte Felder/);
+    assert.doesNotMatch(linuxChoiceCommand('zenity', 0, 1).args.join(' '), /Später entscheiden/u);
+    assert.match(linuxChoiceCommand('zenity', 0, 1, true).args.join(' '), /Später entscheiden/u);
+  });
+
   await testAsync('the Windows reviewer receives content only on stdin and returns redaction ranges', async () => {
     const draft = buildReviewDraft('Kontakt: Max Mustermann', 'Kontakt: [PERSON_001]', 'customer');
     let observed;
@@ -221,6 +307,103 @@ async function main() {
     assert.match(JSON.stringify(observed.args), /OutputEncoding/);
     assert.match(JSON.stringify(observed.args), /Update-Preview/);
     assert.match(JSON.stringify(observed.args), /MANUAL_REDACTION/);
+  });
+
+  await testAsync('the macOS reviewer receives ambiguity text only on stdin and returns bounded decisions', async () => {
+    const value = 'Scrum.org Professional Scrum Master I';
+    const draft = buildReviewDraft(value, value, 'personnel_profile', [{
+      ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+      original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+    }]);
+    let observed;
+    const decision = reviewTextLocally(draft, {
+      platform: 'darwin',
+      runner: (command, args, input) => {
+        observed = { command, args, input };
+        return { status: 0, stdout: JSON.stringify({
+          action: 'reviewed', redactions: [],
+          decisions: [{ ambiguity_id: 'credential:v2:000001', decision: 'keep' }]
+        }) };
+      }
+    });
+    assert.deepStrictEqual(decision.decisions, [{ ambiguity_id: 'credential:v2:000001', decision: 'keep' }]);
+    assert.strictEqual(observed.command, '/usr/bin/osascript');
+    assert.match(JSON.stringify(observed.args), /fileHandleWithStandardInput/u);
+    assert.doesNotMatch(JSON.stringify(observed.args), /Scrum\.org/u);
+    assert.match(observed.input, /Scrum\.org/u);
+    assert.doesNotMatch(darwinReviewScript(), /do shell script|curl|wget|http/iu);
+  });
+
+  await testAsync('the Linux reviewer exposes ambiguity context only through stdin and requires an explicit decision', async () => {
+    const value = 'Scrum.org Professional Scrum Master I';
+    const draft = buildReviewDraft(value, value, 'personnel_profile', [{
+      ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+      original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+    }]);
+    const calls = [];
+    const decision = reviewTextLocally(draft, {
+      platform: 'linux',
+      runner: (command, args, input) => {
+        calls.push({ command, args, input });
+        if (args.includes('--text-info')) return { status: 0, stdout: '' };
+        if (args.some((value) => String(value).includes('Alle Fundstellen sind entschieden'))) return { status: 0, stdout: 'release\n' };
+        return { status: 0, stdout: 'keep\n' };
+      }
+    });
+    assert.deepStrictEqual(decision.decisions, [{ ambiguity_id: 'credential:v2:000001', decision: 'keep' }]);
+    assert.strictEqual(calls.length, 3);
+    assert.match(calls[0].input, /Scrum\.org/u);
+    assert.doesNotMatch(JSON.stringify(calls[0].args), /Scrum\.org/u);
+    assert.strictEqual(calls[1].input, undefined);
+    assert.deepStrictEqual(linuxViewerCommands()[1].args.slice(0, 2), ['--textbox', '/dev/stdin']);
+    assert.match(linuxChoiceCommand('zenity', 0, 1).args.join(' '), /Abbrechen/u);
+    assert.match(linuxFinalChoiceCommand('zenity', false, false).args.join(' '), /Zurück \/ ändern/u);
+  });
+
+  await testAsync('all native reviewers visibly distinguish the shared batch-review mode', async () => {
+    const text = 'Microsoft Zertifikat';
+    const bundle = buildBatchReviewDraft([{
+      original_text: text, anonymized_text: text, profile: 'personnel_profile',
+      ambiguities: [{
+        ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+        original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+      }]
+    }]);
+    assert.match(powershellReviewScript(), /lokale Stapelprüfung/u);
+    assert.match(powershellReviewScript(), /\$redact\.Visible = \(\$null -eq \$draft\.batch_review\)/u);
+    assert.match(darwinReviewScript(), /draft\.batch_review/u);
+    assert.match(darwinReviewScript(), /Weitere Optionen/u);
+    assert.doesNotMatch(darwinReviewScript(), /\["Abbrechen", "Später entscheiden", "Anonymisieren", "Beibehalten"\]/u);
+    assert.match(linuxViewerCommands(true)[0].args.join(' '), /lokale Stapelprüfung/u);
+    assert.match(linuxChoiceCommand('zenity', 0, 1, true, true).args.join(' '), /Stapelentscheidung/u);
+    assert.strictEqual(bundle.draft.batch_review.document_count, 1);
+  });
+
+  await testAsync('the Linux reviewer restarts local decisions when the user chooses change', async () => {
+    const value = 'Microsoft Zertifikat';
+    const draft = buildReviewDraft(value, value, 'personnel_profile', [{
+      ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+      original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9
+    }], { allowDefer: true });
+    let finalCalls = 0;
+    let candidateCalls = 0;
+    const result = linuxReviewTextLocally(draft, {
+      runner: (command, args) => {
+        if (args.includes('--text-info')) return { status: 0, stdout: '' };
+        if (args.some((value) => String(value).includes('Alle Fundstellen sind entschieden'))) {
+          finalCalls++;
+          return { status: 0, stdout: finalCalls === 1 ? 'change\n' : 'release\n' };
+        }
+        candidateCalls++;
+        return { status: 0, stdout: candidateCalls === 1 ? 'keep\n' : 'redact\n' };
+      }
+    });
+    assert.strictEqual(finalCalls, 2);
+    assert.strictEqual(candidateCalls, 2);
+    assert.deepStrictEqual(result, {
+      action: 'reviewed', redactions: [],
+      decisions: [{ ambiguity_id: 'credential:v2:000001', decision: 'redact' }]
+    });
   });
 
   await testAsync('the real Windows PowerShell pipe round-trips Unicode as UTF-8', async () => {
@@ -389,6 +572,7 @@ async function main() {
     const r = workspace('unsupported-docx-part');
     const file = path.join(base, 'embedded.docx');
     fs.writeFileSync(file, zipStore([
+      ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
       ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Kontakt: Max Mustermann</w:t></w:r></w:p></w:body></w:document>'],
       ['word/embeddings/oleObject1.bin', Buffer.from('embedded private content')]
     ]));
@@ -412,7 +596,7 @@ async function main() {
     const job = createJob({ profile: 'customer', source_type: 'pdf' });
     await assert.rejects(
       processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true }),
-      /ausschließlich TXT und DOCX/
+/ausschließlich TXT, Markdown, CSV und DOCX/
     );
     assert.strictEqual(jobStatus(job.job_id).state, 'Failed');
     assert.ok(fs.existsSync(file));

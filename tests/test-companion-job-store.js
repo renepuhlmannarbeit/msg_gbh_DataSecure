@@ -40,7 +40,7 @@ test('capabilities expose no model review or release authority', () => {
     : ['darwin', 'linux'].includes(process.platform)
       ? 'native_picker_confirm_or_fail_closed_on_ambiguity'
       : 'unavailable');
-  assert.deepStrictEqual(caps.supported_vertical_slice_inputs, ['TXT', 'DOCX']);
+  assert.deepStrictEqual(caps.supported_vertical_slice_inputs, ['TXT', 'Markdown (.md)', 'CSV', 'DOCX']);
   assert.strictEqual(caps.private_ipc, 'inherited_stdio_authenticated');
   assert.strictEqual(caps.binary_signing, 'not_implemented');
   assert.strictEqual(caps.job_retention, 'integrated');

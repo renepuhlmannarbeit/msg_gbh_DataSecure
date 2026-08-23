@@ -87,6 +87,38 @@ test('reference URLs are optional and accepted only as explicitly verified HTTPS
   );
 });
 
+test('verified sources are local catalog metadata, never a runtime lookup', () => {
+  const sources = {
+    istqb: 'https://www.istqb.org/certifications/',
+    'scrum-org': 'https://www.scrum.org/professional-scrum-certifications',
+    'scaled-agile': 'https://scaledagile.com/certification/',
+    iiba: 'https://www.iiba.org/business-analysis-certifications/iiba-certifications/',
+    himss: 'https://www.himss.org/certifications/',
+    'open-group': 'https://www.opengroup.org/certifications/accredited-certification-program-home-page',
+    microsoft: 'https://learn.microsoft.com/en-us/credentials/',
+    aws: 'https://docs.aws.amazon.com/aws-certification/latest/examguides/aws-certification-exam-guides.html',
+    'google-cloud': 'https://cloud.google.com/learn/certification?hl=en',
+    cisco: 'https://www.cisco.com/site/us/en/learn/training-certifications/certifications/index.html',
+    isaca: 'https://www.isaca.org/credentialing',
+    isc2: 'https://www.isc2.org/certifications',
+    'linux-foundation': 'https://training.linuxfoundation.org/certification-catalog/',
+    cncf: 'https://training.linuxfoundation.org/certification-catalog/',
+    pmi: 'https://www.pmi.org/certifications',
+    'red-hat': 'https://www.redhat.com/en/services/certifications',
+    sap: 'https://learning.sap.com/get-certified',
+    hl7: 'https://info.hl7.org/hubfs/Education/Path%20to%20HL7%20Certification.pdf'
+  };
+  for (const [id, referenceUrl] of Object.entries(sources)) {
+    const item = catalog.entries.find((entry) => entry.id === id);
+    assert.strictEqual(item.reference_url, referenceUrl);
+    assert.strictEqual(item.reference_verified, true);
+  }
+  const openGroup = catalog.entries.find((item) => item.id === 'open-group');
+  assert.ok(compileCatalogMatchers(catalog).code.test('TOGAF Enterprise Architecture Practitioner'));
+  assert.ok(compileCatalogMatchers(catalog).code.test('SAFe Scrum Master (SSM)'));
+  assert.ok(compileCatalogMatchers(catalog).code.test('SAFe Product Owner/Product Manager (POPM)'));
+});
+
 test('aliases are compiled as literals rather than executable regular expressions', () => {
   const matchers = compileCatalogMatchers(compactCatalog([
     entry({ aliases: ['Example (Board)+'], codes: ['EXB'] })

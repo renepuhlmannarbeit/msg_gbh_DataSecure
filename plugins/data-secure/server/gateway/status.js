@@ -9,6 +9,7 @@ const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
 const { companionCapabilities } = require('../companion/job-store');
 const { companionRetentionStatus } = require('../companion/retention');
+const { recoverableBatchStatus, localCleanupStatus } = require('./batch');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 
 function genericStatus(options = {}) {
@@ -18,6 +19,8 @@ function genericStatus(options = {}) {
   const companion = companionCapabilities();
   const companionRetention = companionRetentionStatus(options);
   const storage = storageStatus();
+  const batches = recoverableBatchStatus();
+  const localCleanup = localCleanupStatus();
   const auditBlocked =
     audit.legacy_pending > 0 || audit.migration_errors > 0 || audit.write_errors > 0;
   const engineReady = engine.text_engine === 'ready' && !auditBlocked && storage.safe;
@@ -40,6 +43,8 @@ function genericStatus(options = {}) {
     visual_bridge_reason: engine.visual_bridge_reason,
     visual_boundary: engine.visual_boundary,
     input_documents: listInput().length,
+    ...batches,
+    ...localCleanup,
     anonymized_packages: listPackageDirs().filter((p) =>
       fs.existsSync(path.join(p.full, 'manifest.json'))
     ).length,
@@ -70,11 +75,13 @@ function genericStatus(options = {}) {
     storage_mode: storage.mode,
     supported_inputs: [
       'Word (.docx)',
+      'Markdown (.md)',
+      'CSV',
       'TXT'
     ],
     blocked_inputs: [
       { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
-      { format: 'XLSX, PPTX, Markdown, CSV und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
+      { format: 'XLSX, PPTX und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ],
     runtime_dependency_install: false,
     workflow:

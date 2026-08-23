@@ -49,7 +49,15 @@ const severity = {
   DATE_OF_BIRTH: 5
 };
 
-function partyLines(kind, a, b, p1, p2) {
+function partyLines(kind, a, b, p1, p2, language) {
+  if (language === 'en') {
+    if (kind === 0) return [`Agreement between ${a}, represented by ${p1}, and ${b}, represented by ${p2}.`];
+    if (kind === 1) return [`Parties are ${a}; and ${b}.`, `Representative: ${p1}`, `Contact person: ${p2}`];
+    if (kind === 2) return [`Client: ${a}`, `Supplier: ${b}`, `Representative: ${p1}`, `Contact person: ${p2}`];
+    if (kind === 3) return [`| Client | ${a} |`, `| Supplier | ${b} |`, `| Representative | ${p1} |`, `| Contact person | ${p2} |`];
+    if (kind === 4) return [`- Company: ${a}`, `- Contract party: ${b}`, `- Representative: ${p1}`, `- Contact person: ${p2}`];
+    return [`Service agreement between ${a}, represented by ${p1}, and ${b}, represented by ${p2}.`];
+  }
   if (kind === 0) return [`Vertrag zwischen ${a}, vertreten durch ${p1}, und ${b}, vertreten durch ${p2}.`];
   if (kind === 1) return [`Vertragsparteien sind ${a}; und ${b}.`, `Vertreter: ${p1}`, `Kontaktperson: ${p2}`];
   if (kind === 2) return [`Auftraggeber: ${a}`, `Auftragnehmer: ${b}`, `Ansprechpartner: ${p1}`, `Vertreter: ${p2}`];
@@ -78,9 +86,13 @@ function locateAll(source, specs) {
   return spans.sort((a, b) => a.start - b.start || a.end - b.end || a.type.localeCompare(b.type));
 }
 
-function createContractCorpus(count = 150) {
+// The generator intentionally remains deterministic. It gives the regression
+// suite a large, reproducible ground-truth corpus without ever storing real
+// business documents in the repository.
+function createContractCorpus(count = 1000) {
   const corpus = [];
   for (let index = 0; index < count; index++) {
+    const language = index % 4 === 3 ? 'en' : 'de';
     const partyA = companies[index % companies.length];
     let partyB = companies[(index * 7 + 11) % companies.length];
     if (partyB === partyA) partyB = companies[(index + 1) % companies.length];
@@ -93,22 +105,27 @@ function createContractCorpus(count = 150) {
     const contractId = `RV-${2026 + (index % 3)}-${String(index + 1).padStart(4, '0')}`;
     const phone = `+49 30 ${String(7000000 + index).padStart(7, '0')}`;
     const birthDate = `${String((index % 27) + 1).padStart(2, '0')}.02.${1970 + (index % 25)}`;
-    const service = `Leistungsbaustein ${index + 1}: Entwicklung, Testmanagement und Qualitätssicherung für Krankenhaussoftware.`;
-    const amount = `Vergütung: ${125000 + index * 100} EUR netto.`;
-    const term = `Laufzeit: 1. Oktober ${2026 + (index % 3)} bis 30. September ${2027 + (index % 3)}.`;
-    const cancellation = `Kündigungsfrist: ${(index % 6) + 1} Monate zum Quartalsende.`;
-    const liability = 'Haftung: begrenzt auf die jährliche Nettovergütung.';
-    const certification = 'Qualifikation: Scrum.org Professional Scrum Master II (PSM II).';
+    const english = language === 'en';
+    const service = english
+      ? `Service component ${index + 1}: software engineering, test management and quality assurance for hospital software.`
+      : `Leistungsbaustein ${index + 1}: Entwicklung, Testmanagement und Qualitätssicherung für Krankenhaussoftware.`;
+    const amount = english ? `Remuneration: ${125000 + index * 100} EUR net.` : `Vergütung: ${125000 + index * 100} EUR netto.`;
+    const term = english
+      ? `Term: 1 October ${2026 + (index % 3)} to 30 September ${2027 + (index % 3)}.`
+      : `Laufzeit: 1. Oktober ${2026 + (index % 3)} bis 30. September ${2027 + (index % 3)}.`;
+    const cancellation = english ? `Notice period: ${(index % 6) + 1} months to quarter end.` : `Kündigungsfrist: ${(index % 6) + 1} Monate zum Quartalsende.`;
+    const liability = english ? 'Liability: limited to the annual net remuneration.' : 'Haftung: begrenzt auf die jährliche Nettovergütung.';
+    const certification = english ? 'Certification: Scrum.org Professional Scrum Master II (PSM II).' : 'Qualifikation: Scrum.org Professional Scrum Master II (PSM II).';
     const source = [
-      `# ${index % 2 ? 'Rahmenvertrag' : 'Dienstleistungsvertrag'} ${index + 1}`,
-      ...partyLines(index % 6, partyA, partyB, personA, personB),
-      `Anschrift: ${street}, ${city}`,
-      `E-Mail: ${emailA}; ${emailB}`,
-      `Telefon: ${phone}`,
-      `Vertragsnummer: ${contractId}`,
+      `# ${english ? (index % 2 ? 'Master service agreement' : 'Service agreement') : (index % 2 ? 'Rahmenvertrag' : 'Dienstleistungsvertrag')} ${index + 1}`,
+      ...partyLines(index % 6, partyA, partyB, personA, personB, language),
+      `${english ? 'Address' : 'Anschrift'}: ${street}, ${city}`,
+      `${english ? 'Email' : 'E-Mail'}: ${emailA}; ${emailB}`,
+      `${english ? 'Phone' : 'Telefon'}: ${phone}`,
+      `${english ? 'Contract number' : 'Vertragsnummer'}: ${contractId}`,
       'IBAN: DE02 1203 0000 0000 2020 51',
       'BIC: BYLADEM1001',
-      `Geburtsdatum: ${birthDate}`,
+      `${english ? 'Date of birth' : 'Geburtsdatum'}: ${birthDate}`,
       service,
       amount,
       term,
@@ -132,8 +149,11 @@ function createContractCorpus(count = 150) {
     ].map(([category, value]) => ({ type: category, category, value }));
 
     corpus.push({
-      id: `contract-${String(index + 1).padStart(3, '0')}`,
+      id: `contract-${String(index + 1).padStart(4, '0')}`,
       profile: 'contract',
+      source_format: 'txt',
+      language,
+      document_type: 'contract',
       layout: index % 6 + 1,
       source,
       entities: locateAll(source, entitySpecs),
@@ -144,4 +164,89 @@ function createContractCorpus(count = 150) {
   return corpus;
 }
 
-module.exports = { createContractCorpus, companies, people, streets, cities };
+function createProfileCorpus(count = 500) {
+  const corpus = [];
+  const roles = ['Product Owner', 'Scrum Master', 'Business Analyst', 'Testmanager', 'Softwareentwickler'];
+  const certificates = [
+    'Scrum.org Professional Scrum Master II (PSM II)',
+    'Scrum.org Professional Scrum Product Owner I (PSPO I)',
+    'Microsoft Azure Administrator Associate',
+    'ISTQB Certified Tester Foundation Level',
+    'HL7 FHIR Proficiency Exam'
+  ];
+  for (let index = 0; index < count; index++) {
+    const profile = ['personnel_profile', 'applicant', 'customer'][index % 3];
+    const person = people[(index * 3 + 5) % people.length];
+    const company = companies[(index * 13 + 2) % companies.length];
+    const role = roles[index % roles.length];
+    const certificate = certificates[index % certificates.length];
+    const email = `${profile.replace(/_/gu, '.')}.${index + 1}@example.de`;
+    const phone = `+49 40 ${String(7100000 + index).padStart(7, '0')}`;
+    const url = 'example.de';
+    let source;
+    let documentType;
+    let preserved;
+    if (profile === 'personnel_profile') {
+      documentType = 'personnel_profile';
+      source = [
+        '# Mitarbeiterprofil', `Name: ${person}`, `E-Mail: ${email}`, `Telefon: ${phone}`,
+        `Kunde: ${company}`, `Rolle: ${role}`, 'Zertifizierungen', certificate,
+        'Technologien: Java, SQL, HL7 FHIR', 'Branche: Gesundheitswesen'
+      ].join('\n');
+      preserved = [
+        ['role', `Rolle: ${role}`], ['certificate', certificate],
+        ['technology', 'Technologien: Java, SQL, HL7 FHIR'], ['industry', 'Branche: Gesundheitswesen']
+      ];
+    } else if (profile === 'applicant') {
+      documentType = 'application';
+      source = [
+        '# Bewerbung', `Name: ${person}`, `E-Mail: ${email}`, `Telefon: ${phone}`,
+        `Arbeitgeber: ${company}`, `Zertifikat: ${certificate}`, `Zielrolle: ${role}`,
+        'Kenntnisse: Java, SQL, Testautomatisierung'
+      ].join('\n');
+      preserved = [
+        ['certificate', certificate], ['role', `Zielrolle: ${role}`],
+        ['technology', 'Kenntnisse: Java, SQL, Testautomatisierung']
+      ];
+    } else {
+      documentType = 'customer_record';
+      source = [
+        '# Kundenvorgang', `Kunde: ${company}`, `Ansprechpartner: ${person}`,
+        `E-Mail: ${email}`, `Telefon: ${phone}`,
+        `Anliegen: Qualitätssicherung für Krankenhaussoftware in der Rolle ${role}.`,
+        'Priorität: Hoch'
+      ].join('\n');
+      preserved = [
+        ['request', `Anliegen: Qualitätssicherung für Krankenhaussoftware in der Rolle ${role}.`],
+        ['priority', 'Priorität: Hoch']
+      ];
+    }
+    const entitySpecs = [
+      ['PERSON', person], ['ORGANIZATION', company], ['EMAIL', email], ['URL', url], ['PHONE', phone]
+    ].map(([type, value]) => ({ type, value, severity: severity[type] || 4 }));
+    corpus.push({
+      id: `profile-${String(index + 1).padStart(4, '0')}`,
+      profile,
+      source_format: 'txt',
+      language: 'de',
+      document_type: documentType,
+      layout: index % 3 + 1,
+      source,
+      entities: locateAll(source, entitySpecs),
+      preserved: locateAll(source, preserved.map(([category, value]) => ({ type: category, category, value }))),
+      values: { person, company, email, phone, certificate }
+    });
+  }
+  return corpus;
+}
+
+function createAcceptanceCorpus(count = 1000) {
+  const requested = Number.isSafeInteger(count) && count > 0 ? count : 1000;
+  const contracts = Math.ceil(requested / 2);
+  return [...createContractCorpus(contracts), ...createProfileCorpus(requested - contracts)];
+}
+
+module.exports = {
+  createContractCorpus, createProfileCorpus, createAcceptanceCorpus,
+  companies, people, streets, cities
+};

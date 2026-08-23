@@ -17,7 +17,24 @@ async function prepareLocalDocument(profile = 'auto', options = {}) {
     await companion.ready;
     const pickParams = { profile: selectedProfile };
     if (options.removeImages === true) pickParams.remove_images = true;
-    const picked = await companion.request('pick_sources', pickParams);
+    let picked;
+    try {
+      picked = await companion.request('pick_sources', pickParams);
+    } catch (error) {
+      if (error?.code === 'LOCAL_SELECTION_CANCELLED') {
+        return {
+          ok: false,
+          error: 'local_selection_cancelled',
+          message: 'Die lokale Dateiauswahl wurde abgebrochen. Es wurde kein Stapel gestartet.',
+          workflow: 'local_companion_txt_docx',
+          selected_count: 0,
+          released_count: 0,
+          failed_count: 0,
+          raw_content_sent_to_claude: false
+        };
+      }
+      throw error;
+    }
     if (!picked?.ok || !Array.isArray(picked.jobs) || !picked.jobs.length ||
       picked.jobs.some((job) => !job?.job_id)) {
       throw new SafeError('Lokale Dateiauswahl wurde nicht sicher abgeschlossen.');

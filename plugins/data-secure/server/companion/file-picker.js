@@ -4,9 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
+const { LIMITS } = require('../gateway/common');
+const { uiProcessEnvironment } = require('./ui-process-policy');
 
-const MAX_SOURCE_BYTES = 100 * 1024 * 1024;
-const MAX_SELECTED_SOURCES = 25;
+const MAX_SOURCE_BYTES = LIMITS.MAX_INPUT_BYTES;
+const MAX_SELECTED_SOURCES = LIMITS.MAX_BATCH_FILES;
 const PICKER_CANCELLED = '__DATASECURE_PICKER_CANCELLED__';
 const SOURCE_TYPES = Object.freeze({
   '.pdf': 'pdf',
@@ -15,6 +17,7 @@ const SOURCE_TYPES = Object.freeze({
   '.pptx': 'pptx',
   '.txt': 'txt',
   '.md': 'md',
+  '.markdown': 'md',
   '.csv': 'csv',
   '.png': 'png',
   '.jpg': 'jpeg',
@@ -22,13 +25,14 @@ const SOURCE_TYPES = Object.freeze({
   '.bmp': 'bmp'
 });
 
-function defaultRunner(command, args) {
+function defaultRunner(command, args, _input, env = process.env) {
   return childProcess.spawnSync(command, args, {
     encoding: 'utf8',
     windowsHide: true,
     timeout: 10 * 60 * 1000,
     maxBuffer: 1024 * 1024,
-    shell: false
+    shell: false,
+    env: uiProcessEnvironment(env)
   });
 }
 
@@ -44,6 +48,9 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
   const extensions = allowedExtensions(allowedTypes);
   const windowsFilter = extensions.map((ext) => `*${ext}`).join(';');
   const unixFilter = extensions.map((ext) => `*${ext}`).join(' ');
+  // AppleScript accepts extension strings in `of type`. They originate only
+  // from SOURCE_TYPES, never from a model or caller-controlled string.
+  const macTypeFilter = `{${extensions.map((ext) => `"${ext.slice(1)}"`).join(', ')}}`;
   if (platform === 'win32') {
     const systemRoot = env.SystemRoot || 'C:\\Windows';
     const powershell = path.join(
@@ -77,7 +84,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
   if (platform === 'darwin') {
     const script = multiple
       ? [
-          'set selectedFiles to choose file with prompt "Datei für Claude vorbereiten" with multiple selections allowed',
+          `set selectedFiles to choose file with prompt "Datei für Claude vorbereiten" of type ${macTypeFilter} with multiple selections allowed`,
           'set selectedPaths to {}',
           'repeat with selectedFile in selectedFiles',
           'set end of selectedPaths to POSIX path of selectedFile',
@@ -85,7 +92,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
           "set AppleScript's text item delimiters to linefeed",
           'return selectedPaths as text'
         ].join('\n')
-      : 'POSIX path of (choose file with prompt "Datei für Claude vorbereiten")';
+      : `POSIX path of (choose file with prompt "Datei für Claude vorbereiten" of type ${macTypeFilter})`;
     return [
       {
         command: '/usr/bin/osascript',
@@ -94,9 +101,18 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
     ];
   }
   if (platform === 'linux') {
+    const zenityArgs = ['--file-selection', '--title=Datei für Claude vorbereiten'];
+    const kdialogArgs = ['--getopenfilename', '.', `Unterstützte Dateien (${unixFilter})`];
+    if (multiple) {
+      // Both helpers return one selected path per line. Do not rely on a
+      // platform default: without these flags a 100-file batch silently turns
+      // into a one-file selection on Linux.
+      zenityArgs.push('--multiple', '--separator=\n');
+      kdialogArgs.push('--multiple', '--separate-output');
+    }
     return [
-      { command: 'zenity', args: ['--file-selection', '--title=Datei für Claude vorbereiten'] },
-      { command: 'kdialog', args: ['--getopenfilename', '.', `Unterstützte Dateien (${unixFilter})`] }
+      { command: 'zenity', args: zenityArgs },
+      { command: 'kdialog', args: kdialogArgs }
     ];
   }
   throw new SafeError('Für dieses Betriebssystem ist kein lokaler Dateidialog verfügbar.');
@@ -128,11 +144,17 @@ function validateSelectedPath(selected, options = {}) {
   return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
 }
 
+function selectionCancelledError() {
+  const error = new SafeError('Die lokale Dateiauswahl wurde abgebrochen.');
+  error.code = 'LOCAL_SELECTION_CANCELLED';
+  return error;
+}
+
 function pickSource(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
   for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes)) {
-    const result = runner(spec.command, spec.args);
+    const result = runner(spec.command, spec.args, undefined, options.env || process.env);
     if (result?.error?.code === 'ENOENT') {
       unavailable++;
       continue;
@@ -140,10 +162,11 @@ function pickSource(options = {}) {
     if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
     if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
     const output = String(result?.stdout || '').trim();
-    if (output === PICKER_CANCELLED) throw new SafeError('Die lokale Dateiauswahl wurde abgebrochen.');
-    if (result?.status !== 0 && !output) {
-      throw new SafeError('Keine Datei ausgewählt.');
-    }
+    // Windows prints a fixed marker. macOS (user-cancelled AppleScript) and
+    // Linux dialog helpers conventionally return a non-zero exit with no
+    // selection. Both are terminal user cancellations, never a reason to
+    // reopen a picker or create a replacement batch.
+    if (output === PICKER_CANCELLED || (result?.status !== 0 && !output)) throw selectionCancelledError();
     return validateSelectedPath(output, options);
   }
   if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
@@ -154,7 +177,7 @@ function pickSources(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
   for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true)) {
-    const result = runner(spec.command, spec.args);
+    const result = runner(spec.command, spec.args, undefined, options.env || process.env);
     if (result?.error?.code === 'ENOENT') {
       unavailable++;
       continue;
@@ -162,8 +185,7 @@ function pickSources(options = {}) {
     if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
     if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
     const output = String(result?.stdout || '').trim();
-    if (output === PICKER_CANCELLED) throw new SafeError('Die lokale Dateiauswahl wurde abgebrochen.');
-    if (result?.status !== 0 && !output) throw new SafeError('Keine Datei ausgewählt.');
+    if (output === PICKER_CANCELLED || (result?.status !== 0 && !output)) throw selectionCancelledError();
     const selectedPaths = output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     if (!selectedPaths.length) throw new SafeError('Keine Datei ausgewählt.');
     if (selectedPaths.length > (options.maxSources ?? MAX_SELECTED_SOURCES)) {
@@ -172,7 +194,12 @@ function pickSources(options = {}) {
     if (new Set(selectedPaths.map((value) => value.toLowerCase())).size !== selectedPaths.length) {
       throw new SafeError('Eine Datei wurde mehrfach ausgewählt.');
     }
-    return selectedPaths.map((selected) => validateSelectedPath(selected, options));
+    const selected = selectedPaths.map((selected) => validateSelectedPath(selected, options));
+    const total = selected.reduce((sum, item) => sum + item.sourceBytes, 0);
+    if (total > (options.maxTotalBytes ?? LIMITS.MAX_BATCH_TOTAL_BYTES)) {
+      throw new SafeError('Die ausgewählten Dateien sind zusammen größer als 500 MB.');
+    }
+    return selected;
   }
   if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
   throw new SafeError('Keine Datei ausgewählt.');
@@ -185,6 +212,7 @@ module.exports = {
   SOURCE_TYPES,
   pickerCommands,
   validateSelectedPath,
+  selectionCancelledError,
   pickSource,
   pickSources
 };

@@ -1,6 +1,6 @@
 # DataSecure Companion API v1
 
-Status: Vertrag, Job-Retention, privater IPC sowie TXT-/DOCX-Vertical-Slice mit
+Status: Vertrag, Job-Retention, privater IPC sowie TXT-/Markdown-/CSV-/DOCX-Vertical-Slice mit
 lokalem File Picker und bearbeitbarer Windows-Review-UI implementiert;
 plattformübergreifende UI und signiertes Packaging noch nicht implementiert.
 

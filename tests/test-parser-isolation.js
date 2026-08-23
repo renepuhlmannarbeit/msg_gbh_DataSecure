@@ -51,20 +51,12 @@ async function main() {
   await testAsync('renamed PDFs are blocked from text parsers before any worker starts', async () => {
     let spawned = 0;
     const pdf = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF', 'ascii');
-    for (const extension of ['txt']) {
+    for (const extension of ['txt', 'md', 'markdown', 'csv']) {
       const file = path.join(root, `renamed.${extension}`);
       fs.writeFileSync(file, pdf);
       await assert.rejects(
         () => convertDocument(file, { ...nativeOptions, spawn() { spawned++; throw new Error('must not run'); } }),
         (error) => error instanceof SafeError && error.code === 'PDF_COVERAGE_UNVERIFIED'
-      );
-    }
-    for (const extension of ['md', 'csv']) {
-      const file = path.join(root, `blocked.${extension}`);
-      fs.writeFileSync(file, pdf);
-      await assert.rejects(
-        () => convertDocument(file, { ...nativeOptions, spawn() { spawned++; throw new Error('must not run'); } }),
-        (error) => error instanceof SafeError && error.code === 'FORMAT_COVERAGE_UNVERIFIED'
       );
     }
     for (const offset of [900, 1019, 1020, 1023]) {

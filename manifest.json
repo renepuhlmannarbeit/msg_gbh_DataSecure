@@ -4,8 +4,8 @@
   "name": "eu-privacy-document-gateway",
   "display_name": "GBH DataSecure – Dokumente anonymisieren",
   "version": "3.2.0-rc30",
-  "description": "Offline-first lokales Claude-Desktop-Privacy-Gateway für Windows, macOS und Linux: gebundene TXT-/DOCX-Stapel und verifiziertes Markdown.",
-  "long_description": "Plattformneutrale Claude Desktop Extension für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind gebündelt; beim Anwender wird kein npm/Python installiert. Der Server bindet 1–25 bestätigte TXT-/DOCX-Dateien an einen lokalen Snapshot und verarbeitet jede Position höchstens einmal; PDF bleibt sicher gesperrt und alle weiteren Formate stoppen im Pilot ebenfalls sicher. Windows x64 besitzt die vollständigere Job-Object- und Textreview-Grenze. macOS/Linux unterstützen den TXT-/DOCX-Textpfad mit Node Permission Model und stoppen bei visuellen oder manuellen Mehrdeutigkeiten sicher. Direkte Identifikatoren werden entfernt; fachliche Skills, Rollen, Zertifizierungen und Geschäftszeiträume sollen erhalten bleiben. Alle Bildpixel bleiben lokal. Claude kann freigegebenes Markdown nur mit einer kurzlebigen paketgebundenen Leseberechtigung desselben Laufs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
+  "description": "Offline-first lokales Privacy-Gateway für Node-fähige Claude-Hosts: gebundene TXT-/Markdown-/CSV-/DOCX-Stapel und verifiziertes Markdown.",
+  "long_description": "Lokale Claude-Integration für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind gebündelt; beim Anwender wird kein npm/Python installiert. Der Server bindet 1–100 bestätigte TXT-, Markdown-, CSV- oder DOCX-Dateien an einen lokalen Snapshot und verarbeitet jede Position höchstens einmal; CSV-Zellen werden nur als Text gelesen und niemals ausgeführt. PDF bleibt sicher gesperrt und alle weiteren Formate stoppen im Pilot ebenfalls sicher. Windows x64 besitzt die vollständigere Job-Object- und Textreview-Grenze. macOS/Linux unterstützen den TXT-/Markdown-/CSV-/DOCX-Textpfad mit Node Permission Model und stoppen bei visuellen oder manuellen Mehrdeutigkeiten sicher. Linux ist ein lokaler Claude-Code-Host-Zielpfad, keine Zusage für eine Claude-Desktop-App. Direkte Identifikatoren werden entfernt; fachliche Skills, Rollen, Zertifizierungen und Geschäftszeiträume sollen erhalten bleiben. Alle Bildpixel bleiben lokal. Claude kann freigegebenes Markdown nur mit einer kurzlebigen paketgebundenen Leseberechtigung desselben Laufs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {
     "name": "Geschäftsbereich Healthcare, msg systems ag"
   },
@@ -78,6 +78,10 @@
       "description": "Datensparsame lokale Diagnose mit Verarbeitungsphasen und festen Fehlercodes ohne Dokumentdaten."
     },
     {
+      "name": "export_diagnostic_package",
+      "description": "Erstellt nach ausdrücklicher Bestätigung einen lokalen inhaltsfreien Diagnoseexport ohne Versand."
+    },
+    {
       "name": "open_input_folder",
       "description": "Öffnet den lokalen DataSecure-Eingangsordner plattformneutral, ohne Dateien an Claude zu übertragen."
     },
@@ -92,6 +96,22 @@
     {
       "name": "anonymize_next_document",
       "description": "Verarbeitet die nächste noch nicht versuchte Datei einer serverseitig gebundenen Batch-Sitzung."
+    },
+    {
+      "name": "review_deferred_document_batch",
+      "description": "Prüft alle vertagten Zertifikatsfundstellen ausschließlich lokal in einem Stapelreview und veröffentlicht erst nach vollständiger Entscheidung atomare Einzelpakete."
+    },
+    {
+      "name": "acknowledge_batch_document",
+      "description": "Bestätigt die erfolgreiche Übergabe eines gelesenen Pakets, bevor der Stapel fortschreitet."
+    },
+    {
+      "name": "resume_document_batch",
+      "description": "Setzt nach ausdrücklicher Bestätigung ausschließlich retryfähige Unterbrechungen desselben Batch fort."
+    },
+    {
+      "name": "continue_most_recent_document_batch",
+      "description": "Setzt nach ausdrücklicher Bestätigung den zuletzt offenen lokalen Stapel fort, ohne einen Dateinamen offenzulegen."
     },
     {
       "name": "read_anonymized_document",
@@ -121,7 +141,7 @@
       "arguments": [
         "task"
       ],
-      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=customer) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
+  "text": "Prüfe privacy_status. Ist batch_processing_active=true, erkläre knapp, dass ein lokaler Stapel läuft, und öffne oder starte nichts erneut. Bei recoverable_batches>0 frage andernfalls zuerst nach einer ausdrücklichen Fortsetzung und rufe dann ausschließlich continue_most_recent_document_batch(confirmed=true) auf; öffne keinen Ersatzbatch. Andernfalls öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=customer) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Lies jedes erfolgreiche Paket ausschließlich mit dessen package_id und read_capability und bestätige es danach mit acknowledge_batch_document, bevor das nächste Dokument angefordert wird. PDF und alle Formate außer TXT, Markdown, CSV und DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     },
     {
       "name": "anonymize_applicant",
@@ -129,7 +149,7 @@
       "arguments": [
         "task"
       ],
-      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=applicant) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
+  "text": "Prüfe privacy_status. Ist batch_processing_active=true, erkläre knapp, dass ein lokaler Stapel läuft, und öffne oder starte nichts erneut. Bei recoverable_batches>0 frage andernfalls zuerst nach einer ausdrücklichen Fortsetzung und rufe dann ausschließlich continue_most_recent_document_batch(confirmed=true) auf; öffne keinen Ersatzbatch. Andernfalls öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=applicant) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Lies jedes erfolgreiche Paket ausschließlich mit dessen package_id und read_capability und bestätige es danach mit acknowledge_batch_document, bevor das nächste Dokument angefordert wird. PDF und alle Formate außer TXT, Markdown, CSV und DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     },
     {
       "name": "anonymize_personnel_profile",
@@ -137,7 +157,7 @@
       "arguments": [
         "task"
       ],
-      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=personnel_profile) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
+  "text": "Prüfe privacy_status. Ist batch_processing_active=true, erkläre knapp, dass ein lokaler Stapel läuft, und öffne oder starte nichts erneut. Bei recoverable_batches>0 frage andernfalls zuerst nach einer ausdrücklichen Fortsetzung und rufe dann ausschließlich continue_most_recent_document_batch(confirmed=true) auf; öffne keinen Ersatzbatch. Andernfalls öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=personnel_profile) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Lies jedes erfolgreiche Paket ausschließlich mit dessen package_id und read_capability und bestätige es danach mit acknowledge_batch_document, bevor das nächste Dokument angefordert wird. PDF und alle Formate außer TXT, Markdown, CSV und DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     },
     {
       "name": "anonymize_contract",
@@ -145,7 +165,7 @@
       "arguments": [
         "task"
       ],
-      "text": "Prüfe privacy_status, öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=contract) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Verwende zum Lesen nur package_id und read_capability aus dem jeweiligen erfolgreichen Aufruf. PDF und alle Formate außer TXT/DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
+  "text": "Prüfe privacy_status. Ist batch_processing_active=true, erkläre knapp, dass ein lokaler Stapel läuft, und öffne oder starte nichts erneut. Bei recoverable_batches>0 frage andernfalls zuerst nach einer ausdrücklichen Fortsetzung und rufe dann ausschließlich continue_most_recent_document_batch(confirmed=true) auf; öffne keinen Ersatzbatch. Andernfalls öffne mit open_input_folder den lokalen Eingang und warte auf die Bestätigung des Anwenders. Binde danach die bestätigte Anzahl mit begin_document_batch (profile=contract) und verarbeite den Stapel mit je einem anonymize_next_document-Aufruf über dasselbe batch_token. Lies jedes erfolgreiche Paket ausschließlich mit dessen package_id und read_capability und bestätige es danach mit acknowledge_batch_document, bevor das nächste Dokument angefordert wird. PDF und alle Formate außer TXT, Markdown, CSV und DOCX bleiben im Pilot gesperrt. Output und lokale Originalkopien unterliegen der gemeldeten Aufbewahrungsfrist. Aufgabe: ${arguments.task}"
     }
   ],
   "keywords": [

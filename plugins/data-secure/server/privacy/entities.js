@@ -28,17 +28,17 @@ const SEGMENT_COMPANY_RE = new RegExp(
   'iu'
 );
 const PARTY_COMPANY_RE = new RegExp(
-  `(?:^|[,;][ \\t]*(?:und|sowie|als[ \\t]+auch)[ \\t]+|\\b(?:und|sowie|als[ \\t]+auch)[ \\t]+)(?:die[ \\t]+)?` +
-    `(${COMPANY_WORD}(?:[ \\t]+${COMPANY_WORD}){0,7}?[ \\t]+${ORG_SUFFIX})` +
-    `(?=[ \\t]*(?:$|[.,;:]|\\(|[-–—]|\\b(?:und|sowie|als[ \\t]+auch)\\b|vertreten\\b|nachfolgend\\b))`,
+  `(?:^|[,;][ \\t]*(?:und|sowie|als[ \\t]+auch|and)[ \\t]+|\\b(?:und|sowie|als[ \\t]+auch|and)[ \\t]+)(?:die[ \\t]+)?` +
+  `(${COMPANY_WORD}(?:[ \\t]+${COMPANY_WORD}){0,7}?[ \\t]+${ORG_SUFFIX})` +
+    `(?=[ \\t]*(?:$|[.,;:]|\\(|[-–—]|\\b(?:und|sowie|als[ \\t]+auch|and)\\b|vertreten\\b|represented\\b|nachfolgend\\b))`,
   'giu'
 );
 const COMPANY_LABEL_RE =
-  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma)\s*:\s*(.+)$/iu;
+  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier)\s*:\s*(.+)$/iu;
 const COMPANY_TABLE_RE =
-  /^\|\s*(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma)\s*:?\s*\|\s*([^|]+)\|/iu;
+  /^\|\s*(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier)\s*:?\s*\|\s*([^|]+)\|/iu;
 const PARTY_CLAUSE_RE =
-  /\b(?:Vertragsparteien?\s+(?:sind|:)|(?:Vertrag|Vereinbarung)\s+zwischen)\s+(.+)$/iu;
+  /\b(?:Vertragsparteien?\s+(?:sind|:)|(?:Vertrag|Vereinbarung)\s+zwischen|Parties\s+(?:are|:)|(?:Service\s+)?Agreement\s+between)\s+(.+)$/iu;
 
 const CLAUSE_ABBREVIATIONS = new Set([
   'dr', 'prof', 'nr', 'hd', 'str', 'bzw', 'ca', 'ggf', 'inkl', 'zzgl', 'u', 'a'
@@ -93,15 +93,71 @@ function collectContextOrganizations(text) {
       if (match) out.push(normalizeSpaces(match[1]));
     }
   }
+  for (const value of markdownTableColumnValues(text, /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier):?$/iu)) {
+    const match = value.match(SEGMENT_COMPANY_RE);
+    if (match) out.push(normalizeSpaces(match[1]));
+  }
   return out;
 }
 
 const PERSON_LABEL =
   '(?:Name|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
-  '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|Kontakt|Sachbearbeiter(?:in)?' +
-  '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Имя|ФИО|Όνομα|姓名|氏名|이름)';
+  '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|(?:(?:Interner|Technischer|Fachlicher)\\s+)?Kontakt|Sachbearbeiter(?:in)?' +
+  '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Autor(?:in)?|Verfasser(?:in)?|Manager(?:in)?' +
+  '|Eigentümer(?:in)?|Bearbeiter(?:in)?|(?:Zuletzt\\s+)?(?:geändert|erstellt)\\s+von' +
+  '|Author|Creator|Manager|Owner|Approver|Representative|Contact\\s+person|Last\\s+modified\\s+by|Modified\\s+by|Имя|ФИО|Όνομα|姓名|氏名|이름)';
 
 const HONORIFIC = '(?:Herrn?|Frau|Dr\\.?|Prof\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm)\\.?|Mag\\.?)';
+
+function markdownTableCells(line) {
+  const source = String(line || '').trim();
+  if (!source.startsWith('|') || !source.endsWith('|')) return null;
+  const cells = [];
+  let value = '';
+  let escaped = false;
+  for (const char of source.slice(1, -1)) {
+    if (escaped) {
+      value += char;
+      escaped = false;
+    } else if (char === '\\') {
+      escaped = true;
+    } else if (char === '|') {
+      cells.push(value.trim());
+      value = '';
+    } else {
+      value += char;
+    }
+  }
+  if (escaped) value += '\\';
+  cells.push(value.trim());
+  return cells;
+}
+
+function markdownTableColumnValues(text, label) {
+  const all = lines(text);
+  const values = [];
+  for (let index = 0; index + 2 < all.length; index++) {
+    const headers = markdownTableCells(all[index]);
+    const separator = markdownTableCells(all[index + 1]);
+    if (!headers || !separator || headers.length !== separator.length ||
+      !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
+    const matchedColumns = headers
+      .map((header, column) => ({ header: header.replace(/\s+\(\d+\)$/u, ''), column }))
+      .filter((item) => label.test(item.header));
+    if (!matchedColumns.length) continue;
+    index += 2;
+    while (index < all.length) {
+      const row = markdownTableCells(all[index]);
+      if (!row || row.length !== headers.length) {
+        index--;
+        break;
+      }
+      for (const { column } of matchedColumns) values.push(row[column]);
+      index++;
+    }
+  }
+  return values;
+}
 
 // Markdown structure and label lines are where the old "every title-case
 // bigram is a person" rule did its damage: it turned "User Stories" into
@@ -161,6 +217,15 @@ function pushPerson(out, value, confidence) {
   out.push({ value: cleaned, confidence });
 }
 
+function pushExplicitPerson(out, value, confidence) {
+  const cleaned = stripHonorifics(value);
+  if (!cleaned || cleaned.length > 80) return;
+  const token = new RegExp(`^(?:${NAME_TOKEN}|${CAPS_TOKEN})$`, 'u');
+  const tokens = cleaned.split(/\s+/u);
+  if (tokens.length < 1 || tokens.length > 4 || !tokens.every((item) => token.test(item))) return;
+  out.push({ value: cleaned, confidence });
+}
+
 // High-confidence anchors: the document itself says "this is a person".
 function collectPersonAnchors(text) {
   const src = String(text || '');
@@ -175,14 +240,17 @@ function collectPersonAnchors(text) {
   while ((m = honor.exec(src))) pushPerson(out, m[1], 'honorific');
 
   // "Name: Erika Beispiel", also inside markdown tables.
-  const label = new RegExp(`^\\s*${PERSON_LABEL}\\s*:\\s*(.+)$`, 'gimu');
-  while ((m = label.exec(src))) pushPerson(out, m[1], 'label');
+  const label = new RegExp(`^\\s*(?:[-*+]\\s+)?${PERSON_LABEL}\\s*:\\s*(.+)$`, 'gimu');
+  while ((m = label.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
   const inline = new RegExp(`${PERSON_LABEL}\\s*:\\s*(${NAME_TOKEN}[ \\t]+${NAME_TOKEN})`, 'giu');
-  while ((m = inline.exec(src))) pushPerson(out, m[1], 'label');
+  while ((m = inline.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
   const table = new RegExp(`^\\|\\s*${PERSON_LABEL}\\s*:?\\s*\\|\\s*([^|\\n]+)\\|`, 'gimu');
-  while ((m = table.exec(src))) pushPerson(out, m[1], 'label');
+  while ((m = table.exec(src))) pushExplicitPerson(out, m[1], 'label');
+
+  const tableLabel = new RegExp(`^${PERSON_LABEL}:?$`, 'iu');
+  for (const value of markdownTableColumnValues(src, tableLabel)) pushExplicitPerson(out, value, 'label');
 
   // Credential prose often names the holder on the same line as the issuer.
   // The issuer remains professional content, but the holder is still PII.
@@ -235,11 +303,20 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPers
   const allLines = lines(text);
   let seen = 0;
   let inHeader = true;
+  let inSecondaryIdentityArea = false;
   for (let index = 0; index < allLines.length; index++) {
     const line = allLines[index];
     const s = line.trim();
     if (!s) continue;
     if (++seen > maxLines) break;
+    // Parser-generated story headings mark text which Word renders outside
+    // the main body. They are not profile sections such as "Skillset" and
+    // must not disable the narrowly scoped tab-field check below.
+    if (/^#{1,6}\s+(?:Kopfzeile|Fußzeile|Kommentare|Fußnoten|Endnoten)$/iu.test(s)) {
+      inSecondaryIdentityArea = true;
+      continue;
+    }
+    if (/^#{1,6}\s+/u.test(s)) inSecondaryIdentityArea = false;
     if (endsProfileHeader(s)) inHeader = false;
     if (isStructuralLine(s) || isLabelLine(s)) continue;
     let hasContext = inHeader;
@@ -280,6 +357,19 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPers
       out.push({ value: s, confidence: 'header_particle' });
       continue;
     }
+    // DOCX headers and footers commonly render a label and the profile holder
+    // in one paragraph separated by a Word tab (for example
+    // "Vertraulich<TAB>Max Mustermann"). The whole line is not a name, but
+    // the final tab field is a bounded, profile-header-only name candidate.
+    // Do not apply this rule to ordinary prose or non-personnel documents.
+    if ((inHeader || inSecondaryIdentityArea) && (profile === 'personnel_profile' || profile === 'applicant')) {
+      const fields = s.split(/\t+/u).map((value) => value.trim()).filter(Boolean);
+      const candidate = fields.length >= 2 ? fields[fields.length - 1] : '';
+      if (candidate && bigram.test(candidate) && looksName(titleCase(candidate))) {
+        pushPerson(out, candidate, 'header_tab');
+        continue;
+      }
+    }
     if (!bigram.test(s)) continue;
     if (!looksName(titleCase(s))) continue;
     pushPerson(out, s, 'header_block');
@@ -317,12 +407,12 @@ function collectContextualNameCandidates(text, profile) {
   const src = String(text || '');
   const out = [];
   const before =
-    /(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|unterzeichnet\s+von|z\.\s?hd\.?)\s*$/i;
+    /(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/i;
   const after = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b/i;
   // Contracts and customer records name the counterparty through connectors
   // rather than honorifics: "Vertrag zwischen Alpha GmbH und Max Mustermann".
   const contractual =
-    /(?:zwischen|und|sowie|auftraggeber(?:in)?|auftragnehmer(?:in)?|lieferant(?:in)?|nachfolgend|handelnd\s+für|im\s+namen\s+von)\s*$/i;
+    /(?:zwischen|und|sowie|auftraggeber(?:in)?|auftragnehmer(?:in)?|lieferant(?:in)?|nachfolgend|handelnd\s+für|im\s+namen\s+von|between|and|client|supplier)\s*$/i;
   const useContractual = profile === 'contract' || profile === 'customer';
 
   for (const run of capitalisedRuns(src)) {
@@ -441,6 +531,8 @@ module.exports = {
   HONORIFIC,
   isStructuralLine,
   isLabelLine,
+  markdownTableCells,
+  markdownTableColumnValues,
   stripHonorifics,
   capitalisedRuns,
   collectPersonAnchors,

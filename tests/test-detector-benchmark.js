@@ -2,23 +2,37 @@
 
 const path = require('path');
 const { createSuite } = require('./helpers');
-const { createContractCorpus } = require('../benchmarks/contract-corpus');
+const { createContractCorpus, createAcceptanceCorpus } = require('../benchmarks/contract-corpus');
 const { evaluateDetector } = require('../benchmarks/evaluate-detector');
 const engine = require(path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'privacy', 'engine.js'));
 
 const { test, done, assert } = createSuite('Detector benchmark contract');
 
 test('DataSecure meets the synthetic contract ground truth without content loss', () => {
-  const result = evaluateDetector(createContractCorpus(150), (sample) => ({
+  const result = evaluateDetector(createContractCorpus(1000), (sample) => ({
     spans: engine.sensitiveSpans(sample.source, sample.profile),
     output: engine.anonymize(sample.source, sample.profile).text
   }));
-  assert.strictEqual(result.samples, 150);
+  assert.strictEqual(result.samples, 1000);
   assert.strictEqual(result.fn, 0, `false negatives: ${result.fn}`);
   assert.strictEqual(result.fp, 0, `false positives: ${result.fp}`);
   assert.strictEqual(result.precision, 1);
   assert.strictEqual(result.recall, 1);
   assert.strictEqual(result.f1, 1);
+  assert.strictEqual(result.preservation.rate, 1);
+  assert.deepStrictEqual(result.preservation.lostByCategory, {});
+});
+
+test('DataSecure preserves certifications while removing direct identifiers across every active profile', () => {
+  const result = evaluateDetector(createAcceptanceCorpus(1000), (sample) => ({
+    spans: engine.sensitiveSpans(sample.source, sample.profile),
+    output: engine.anonymize(sample.source, sample.profile).text
+  }));
+  assert.strictEqual(result.samples, 1000);
+  assert.strictEqual(result.fn, 0, `false negatives: ${result.fn}`);
+  assert.strictEqual(result.fp, 0, `false positives: ${result.fp}`);
+  assert.strictEqual(result.precision, 1);
+  assert.strictEqual(result.recall, 1);
   assert.strictEqual(result.preservation.rate, 1);
   assert.deepStrictEqual(result.preservation.lostByCategory, {});
 });

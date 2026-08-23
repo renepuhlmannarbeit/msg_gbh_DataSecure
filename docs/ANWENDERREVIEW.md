@@ -25,10 +25,11 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
 | Erststart | Status nennt Version, Bereitschaft und Anzahl im Eingang ohne Pfade oder Namen. |
 | Eine Datei | Ordner öffnet sich, Bestätigung wird abgewartet, genau ein Verarbeitungsaufruf folgt. |
 | Mehrere Dateien | Anzahl wird nach Bestätigung erneut geprüft; pro Datei folgt ein eigener kurzer Aufruf. |
-| Gemischte Dokumentarten | `auto` ordnet TXT/DOCX intern ein; weitere Formate bleiben im Pilot gesperrt. |
+| Gemischte Dokumentarten | `auto` ordnet TXT/Markdown/CSV/DOCX intern ein; weitere Formate bleiben im Pilot gesperrt. |
 | Reines Bild/Scan | Stoppt im beaufsichtigten Pilot mit `FORMAT_COVERAGE_UNVERIFIED`. |
 | Personalprofil mit Bildern | Keine zusätzliche Standardfrage; Bilder bleiben lokal, Text kann freigegeben werden. |
-| Ausdrückliche Bildentfernung | `remove_images=true`; unsichere Office-Objekte stoppen statt still erhalten zu bleiben. |
+| Nur Markdown / Bilder nicht im Ergebnis | `remove_images=false`; Bildpixel werden ohnehin nie freigegeben, Grafiken bleiben lokal und sicher erkannter Bildtext kann erhalten bleiben. |
+| Lokale Bildanlagen ausdrücklich verwerfen | `remove_images=true`; Bildtext wird nicht übernommen, unsichere Office-Objekte stoppen statt still erhalten zu bleiben. |
 | Altbestand im Eingang | Nur die Anzahl wird gemeldet; vor Verarbeitung muss der aktuelle Bestand bestätigt werden. |
 | Abweichende Anzahl | Keine Verarbeitung, bis der Anwender den Eingang korrigiert oder die erkannte Zahl bestätigt. |
 | Stopp in Datei 1 | Der Server markiert den Stopp; Datei 2 bis N werden genau einmal versucht. |
@@ -42,7 +43,8 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
 1. **Stapel-Timeout:** Der öffentliche Komplettstapel belegte einen MCP-Aufruf für bis
    zu 25 Dateien. Er wurde aus der öffentlichen Werkzeugoberfläche entfernt. Der Skill
    nutzt jetzt einen Aufruf pro Datei.
-2. **Wiederholungsschleife:** Eine gestoppte Datei bleibt sicher im Eingang. Eine
+2. **Wiederholungsschleife:** Eine gestoppte Datei bleibt als versiegelte private
+   Arbeitskopie fortsetzbar. Die Originaldatei bleibt unverändert im Eingang. Eine
    serverseitige Batch-Sitzung verwaltet Fortschritt und Stopps, ohne modellseitige
    Queue-Position oder automatische Wiederholung.
 3. **Unbemerkte Altbestände:** Status und Anzahl werden vor dem Öffnen und nach der
@@ -73,11 +75,11 @@ folgenden technischen Änderungen:
    oder stille Wiederholung wiederhergestellt. Cancellation und Shutdown sind kooperativ.
 2. Der Standardordner liegt im lokalen App-Datenbereich; bekannte Cloud-Sync- und
    Netzwerkpfade blockieren die Verarbeitung.
-3. `begin_document_batch` bindet 1 bis 25 bestätigte Dateien lokal an einen Snapshot.
+3. `begin_document_batch` bindet 1 bis 100 bestätigte TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB lokal an einen Snapshot.
    Eine Bestandsänderung invalidiert ihn.
 4. Paket-IDs sind keine Leseberechtigung. Jeder Erfolg liefert ein paketgebundenes,
    15 Minuten gültiges RAM-Token; historische Pakete sind nicht global auflistbar.
-5. Der Pilot ist auf UTF-8-TXT und vollständig abgedeckte DOCX begrenzt. Jede
+5. Der Pilot ist auf UTF-8-TXT, Markdown (`.md`), CSV und vollständig abgedeckte DOCX begrenzt. CSV-Zellen bleiben rein textuell und werden nie ausgeführt. Jede
    Parserwarnung und jedes andere Format stoppt fail-closed.
 6. Bildpixel bleiben profilunabhängig lokal. Die Namensregeln decken zusätzlich
    beschriftete griechische, kyrillische und CJK-Namen sowie begrenzte CJK-Profilköpfe ab.

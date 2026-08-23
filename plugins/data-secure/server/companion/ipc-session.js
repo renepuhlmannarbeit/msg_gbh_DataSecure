@@ -6,6 +6,7 @@ const { createJob, transitionJob, jobStatus } = require('./job-store');
 const { purgeCompanionJobs } = require('./retention');
 const { pickSource, pickSources, validateSelectedPath } = require('./file-picker');
 const { processCompanionJob } = require('./processor');
+const { LIMITS } = require('../gateway/common');
 
 const IPC_VERSION = 'data-secure-companion-ipc/1';
 const COMMANDS = new Set(['capabilities', 'pick_source', 'pick_sources', 'process_source', 'cancel_job', 'purge_jobs']);
@@ -127,16 +128,16 @@ function createCompanionSession(options = {}) {
         throw new SafeError('Ungültiges Profil für die lokale Dateiauswahl.');
       }
       const adapterResult = frame.command === 'pick_sources'
-        ? selectSources({ allowedTypes: ['txt', 'docx'] })
-        : [selectSource({ allowedTypes: ['txt', 'docx'] })];
-      if (!Array.isArray(adapterResult) || !adapterResult.length || adapterResult.length > 25) {
+        ? selectSources({ allowedTypes: ['txt', 'md', 'csv', 'docx'] })
+        : [selectSource({ allowedTypes: ['txt', 'md', 'csv', 'docx'] })];
+      if (!Array.isArray(adapterResult) || !adapterResult.length || adapterResult.length > LIMITS.MAX_BATCH_FILES) {
         throw new SafeError('Der lokale Dateidialog lieferte keine gültige Dateiauswahl.');
       }
       const selectedItems = adapterResult.map((selectedByAdapter) => {
         if (!exactKeys(selectedByAdapter, ['sourcePath', 'sourceType', 'sourceBytes'])) {
           throw new SafeError('Der lokale Dateidialog lieferte ein ungültiges Ergebnis.');
         }
-        const selected = validateSelectedPath(selectedByAdapter.sourcePath, { allowedTypes: ['txt', 'docx'] });
+        const selected = validateSelectedPath(selectedByAdapter.sourcePath, { allowedTypes: ['txt', 'md', 'csv', 'docx'] });
         if (
           selected.sourceType !== selectedByAdapter.sourceType ||
           selected.sourceBytes !== selectedByAdapter.sourceBytes
@@ -145,11 +146,15 @@ function createCompanionSession(options = {}) {
         }
         return selected;
       });
+      if (selectedItems.reduce((sum, item) => sum + item.sourceBytes, 0) > LIMITS.MAX_BATCH_TOTAL_BYTES) {
+        throw new SafeError('Die ausgewählten Dateien sind zusammen größer als 500 MB.');
+      }
       const jobs = selectedItems.map((selected, index) => {
         const job = createJob({ profile: frame.params.profile, source_type: selected.sourceType });
         sources.set(job.job_id, {
           path: selected.sourcePath,
           removeImages: frame.params.remove_images === true,
+          automaticBatchApproval: true,
           batchIndex: index + 1,
           batchTotal: selectedItems.length
         });
@@ -168,6 +173,7 @@ function createCompanionSession(options = {}) {
       const profile = jobStatus(frame.params.job_id).profile;
       return Promise.resolve(processSource(frame.params.job_id, selected.path, profile, {
         removeImages: selected.removeImages,
+        automaticBatchApproval: selected.automaticBatchApproval === true,
         batchIndex: selected.batchIndex,
         batchTotal: selected.batchTotal
       })).then((result) => {

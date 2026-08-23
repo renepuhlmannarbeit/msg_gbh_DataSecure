@@ -39,7 +39,7 @@ Begründung. Keine Dokumenttexte, Pfade, Dateinamen oder Screenshots mit Inhalt.
       Fehlender oder manipulierter Launcher meldet `PARSER_ISOLATION_FAILED`, öffnet
       keinen Dateidialog und startet Node nicht direkt.
 - [ ] `privacy_status` zeigt auf macOS `parser_boundary: node_permission_process`;
-      TXT/DOCX funktionieren ohne separat installierte Node-/Python-Laufzeit und
+TXT/Markdown/CSV/DOCX funktionieren ohne separat installierte Node-/Python-Laufzeit und
       visuelle oder mehrdeutige Fälle stoppen sicher.
 - [ ] `privacy_status` zeigt auf Windows x64 `visual_boundary: windows_job_object`.
       Fehlender oder manipulierter Launcher startet weder OCR noch Rasterisierung
@@ -72,7 +72,12 @@ gezielt mit `AMBIGUITY_REVIEW_REQUIRED` stoppen.
       Zahl beginnt keine Verarbeitung.
 - [ ] Ohne ausdrücklichen Wunsch erscheint keine zusätzliche Frage zur Bildentfernung;
       Bilder in Bewerbungs-/Personalunterlagen bleiben standardmäßig lokal.
-- [ ] Nach Bestätigung erzeugt `begin_document_batch` nur bei exakt 1 bis 25 Dateien
+- [ ] „Nur Markdown“ oder „Bilder nicht an Claude geben“ lässt `remove_images=false`:
+      Bildpixel bleiben lokal, sicher erkannter Bildtext durchläuft den normalen
+      Text-Gate und der strenge lokale Verwerfmodus wird nicht unnötig aktiviert.
+- [ ] Der strenge lokale Verwerfmodus wird nur bei dem ausdrücklichen Wunsch genutzt,
+      lokale Bildanlagen selbst zu löschen; unbekannte Office-Objekte stoppen dabei sicher.
+- [ ] Nach Bestätigung erzeugt `begin_document_batch` nur bei exakt 1 bis 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB
       ein Batch-Token; Namen und lokale Hashes erscheinen in keiner Toolantwort.
 - [ ] Austausch, Hinzufügen oder Zeitstempeländerung nach der Bestätigung invalidiert
       den Stapel vollständig, auch wenn die Anzahl gleich bleibt.
@@ -95,15 +100,15 @@ gezielt mit `AMBIGUITY_REVIEW_REQUIRED` stoppen.
 - [ ] Abbruch, MCP-Neustart oder geschlossenes stdin nach dem Claim stellt die Datei
       kollisionsfrei sichtbar wieder her; ein unsicher unterbrochener Batch-Eintrag
       wird nicht automatisch wiederholt.
-- [ ] Der reale 25-Dateien-Test besteht mit Stopps an Position 1, 13 und 25 ohne
+- [ ] Der reale 100-Dateien-Test besteht mit Stopps an Position 1, 50 und 100 ohne
       doppelte Verarbeitung.
 
 ## 5. Formatgrenze des beaufsichtigten Piloten
 
-Jeweils eine synthetische TXT- und DOCX-Datei als Positivfall verwenden. XLSX,
+Jeweils eine synthetische TXT-, CSV- und DOCX-Datei als Positivfall verwenden. XLSX,
 PPTX, MD, CSV, PNG, JPEG, BMP und PDF dienen als verpflichtende Stop-Gegenproben.
 
-- [ ] TXT und vollständig abgedeckte DOCX erzeugen ein verifiziertes Privacy-Paket.
+- [ ] TXT, CSV und vollständig abgedeckte DOCX erzeugen ein verifiziertes Privacy-Paket; CSV-Zellen werden dabei nicht ausgeführt.
 - [ ] Jede DOCX-Parserwarnung stoppt mit `PARSER_COVERAGE_UNVERIFIED`.
 - [ ] Alle anderen Formate stoppen mit festem Coverage-Fehler und bleiben in `Input`.
 - [ ] Jedes PDF stoppt mit `PDF_COVERAGE_UNVERIFIED`, stellt das Original wieder her

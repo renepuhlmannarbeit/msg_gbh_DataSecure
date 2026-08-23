@@ -3,11 +3,12 @@
 const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
+const { uiProcessEnvironment } = require('./ui-process-policy');
 
-function defaultRunner(command, args) {
+function defaultRunner(command, args, _input, env = process.env) {
   return childProcess.spawnSync(command, args, {
     encoding: 'utf8', windowsHide: true, timeout: 10 * 60 * 1000,
-    maxBuffer: 64 * 1024, shell: false
+    maxBuffer: 64 * 1024, shell: false, env: uiProcessEnvironment(env)
   });
 }
 
@@ -41,7 +42,7 @@ function confirmAutomaticRelease(count, options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
   for (const spec of confirmationCommands(count, options.platform, options.env)) {
-    const result = runner(spec.command, spec.args);
+    const result = runner(spec.command, spec.args, undefined, options.env || process.env);
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
     if (result?.error) throw new SafeError('Die lokale Bestätigung konnte nicht geöffnet werden.');
     const platform = options.platform || process.platform;

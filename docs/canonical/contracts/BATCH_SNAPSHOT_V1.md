@@ -31,7 +31,8 @@ werden niemals verschoben, verändert oder als Fortsetzungsbasis verwendet.
 
 `snapshot.json` enthält nur Schema-/Versionsstand, zufällige Batch- und Item-IDs,
 Quellbasename für das spätere lokale Mapping, erkannten Dateityp, Bytezahl,
-Arbeitskopie-Hash, Status und Journalsequenz. Arbeitskopien tragen ausschließlich
+Arbeitskopie-Hash, Status, einen festen inhaltsfreien Checkpoint, einen optionalen
+booleschen `review_resumed`-Marker und Journalsequenz. Arbeitskopien tragen ausschließlich
 zufällige interne Namen. Das gesamte Verzeichnis muss nur für den aktuellen Benutzer
 zugänglich sein und bekannte Sync-/Netzwerkpfade ablehnen.
 
@@ -42,16 +43,31 @@ Diagnose unsichtbar. Hashes der Arbeitskopien verlassen den privaten Job Store n
 ## Zustands- und Fortsetzungsregeln
 
 - Pro Benutzer darf höchstens ein Stapel den Zustand `processing` besitzen.
-- Zulässige Itemzustände sind `copied`, `processing`, `awaiting-decision`, `released`,
-  `failed-retryable`, `failed-terminal` und `cancelled`.
+- Zulässige Itemzustände sind `pending`, `processing`, `delivery_pending`, `released`,
+  `retryable`, `deferred_review` und `stopped`. `deferred_review` enthält nur den
+  festen Checkpoint `awaiting_local_review`, niemals einen Entwurf, Fundstellen,
+  Entscheidungen oder Rohwerte. Der übrige Stapel kann weiterlaufen; erst eine
+  ausdrückliche Fortsetzungsbestätigung setzt ihn wieder auf `pending`. Ein
+  `retryable`-Eintrag wird ebenfalls nur nach ausdrücklicher Bestätigung wieder zu
+  `pending`; `review_resumed` verhindert beim nächsten technischen Verarbeitungsschritt
+  nur die erneute automatische Vertagung und enthält keinerlei fachliche Entscheidung.
+  Ein `stopped`-Eintrag bleibt terminal gesperrt.
+- Der Checkpoint beschreibt ausschließlich eine feste technische Phase (`sealed`,
+  private Kopie, Extraktion, Textprüfung, Paketverifikation, Übergabe oder
+  Terminalzustand). Er enthält weder Fundstellen noch Rohwerte, Namen oder Pfade und
+  wird niemals über MCP, Audit oder Diagnose offengelegt.
 - Jeder Übergang erhält eine monotone Sequenz und wird vor dem nächsten Seiteneffekt
   atomar persistiert. Ein Neustart leitet den nächsten Schritt nur aus Snapshot und
   Journal ab; `released` wird nie erneut verarbeitet.
-- Ein Absturz in `processing` wird zu `failed-retryable`, sofern kein atomar
+- Ein Absturz in `processing` wird zu `retryable`, sofern kein atomar
   verifiziertes Ergebnis existiert. Ein vorhandenes verifiziertes Ergebnis wird
-  übernommen, nicht neu erzeugt.
-- Erfolgreiche Arbeitskopien werden unmittelbar nach atomarer Ergebnis- und Mapping-
-  Fortschreibung gelöscht. Offene Kopien verfallen spätestens nach 14 Tagen.
+  über seine zufällige Item-Paketkennung, sein Manifest und seinen Markdown-Hash
+  übernommen, nicht neu erzeugt. Sein Mapping-Commit ist idempotent.
+- Ein Ergebnis bleibt `delivery_pending`, bis Claude es mit seiner Paketkennung
+  bestätigt hat. Bis dahin wird genau dasselbe verifizierte Paket erneut angeboten;
+  die Quelle wird nicht erneut verarbeitet. Erst nach dieser Bestätigung werden
+  Ergebnisstatus und Arbeitskopie terminal fortgeschrieben. Offene Kopien verfallen
+  spätestens nach 14 Tagen.
 - Lösch- oder Persistenzfehler werden sichtbar und blockieren eine widersprüchliche
   Freigabe; sie führen nicht zu einem stillen Neustart des gesamten Stapels.
 
@@ -61,4 +77,3 @@ Die Implementierung muss Originaländerung nach Commit, Änderung während Kopie
 Symlink/Junction, gleichnamige Quellen, Absturz vor und nach Ergebnis-Commit,
 Stromausfallfenster, vollen Datenträger, konkurrierenden zweiten Stapel sowie
 Fortsetzung nach Prozess- und Rechnerneustart testen.
-

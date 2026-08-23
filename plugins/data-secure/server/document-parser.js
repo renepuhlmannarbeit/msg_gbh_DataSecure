@@ -5,20 +5,157 @@ const { normalizeText } = require('./privacy/base');
 const { parseOoxml } = require('./ooxml');
 const { createContentGraph } = require('./content-graph');
 
+const FORBIDDEN_TEXT_CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u;
+const CSV_DELIMITERS = Object.freeze([',', ';', '\t']);
+
+function decodeUtf8Source(buffer) {
+  if (!Buffer.isBuffer(buffer)) throw new TypeError('parser input must be a buffer');
+  let text;
+  try {
+    // WHATWG decoding removes an optional UTF-8 BOM. fatal prevents replacement
+    // characters from silently changing identifiers or coverage positions.
+    text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(buffer);
+  } catch {
+    throw new Error('TEXT_ENCODING_INVALID');
+  }
+  if (FORBIDDEN_TEXT_CONTROLS.test(text)) throw new Error('TEXT_CONTROL_INVALID');
+  return text;
+}
+
+function parseCsvRows(source, delimiter) {
+  if (!CSV_DELIMITERS.includes(delimiter)) throw new Error('CSV_DELIMITER_INVALID');
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+  let quoteClosed = false;
+  let touched = false;
+  const commitField = () => { row.push(field); field = ''; quoteClosed = false; };
+  const commitRow = () => {
+    commitField();
+    if (touched) rows.push(row);
+    row = [];
+    touched = false;
+  };
+
+  for (let index = 0; index < source.length; index++) {
+    const char = source[index];
+    if (quoted) {
+      if (char === '"') {
+        if (source[index + 1] === '"') {
+          field += '"';
+          index++;
+        } else {
+          quoted = false;
+          quoteClosed = true;
+        }
+      } else {
+        field += char;
+      }
+      continue;
+    }
+    if (quoteClosed) {
+      if (char === delimiter) {
+        commitField();
+        touched = true;
+      } else if (char === '\n') {
+        commitRow();
+      } else {
+        throw new Error('CSV_QUOTE_INVALID');
+      }
+      continue;
+    }
+    if (char === '"') {
+      if (field.length !== 0) throw new Error('CSV_QUOTE_INVALID');
+      quoted = true;
+      touched = true;
+    } else if (char === delimiter) {
+      commitField();
+      touched = true;
+    } else if (char === '\n') {
+      commitRow();
+    } else {
+      field += char;
+      touched = true;
+    }
+  }
+  if (quoted) throw new Error('CSV_QUOTE_INVALID');
+  if (touched || row.length > 0 || field.length > 0 || quoteClosed) commitRow();
+  return rows;
+}
+
+function csvDelimiter(source) {
+  const candidates = [];
+  for (const delimiter of CSV_DELIMITERS) {
+    let rows;
+    try { rows = parseCsvRows(source, delimiter); } catch { continue; }
+    const widths = rows.map((row) => row.length).filter((width) => width > 0);
+    const maxWidth = Math.max(0, ...widths);
+    const consistent = maxWidth > 1 && widths.length > 0 && widths.every((width) => width === maxWidth);
+    candidates.push({ delimiter, maxWidth, consistent });
+  }
+  const viable = candidates.filter((candidate) => candidate.consistent);
+  if (!viable.length) return ','; // RFC-4180-compatible one-column data.
+  viable.sort((left, right) => right.maxWidth - left.maxWidth);
+  if (viable.length > 1 && viable[0].maxWidth === viable[1].maxWidth) {
+    throw new Error('CSV_DELIMITER_AMBIGUOUS');
+  }
+  return viable[0].delimiter;
+}
+
+function csvMarkdownCell(value) {
+  // Markdown, not CSV/XLSX, is the only output. Formula-looking source remains
+  // literal text; this serializer never evaluates it or produces a spreadsheet.
+  return String(value)
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/\\/gu, '\\\\')
+    .replace(/\|/gu, '\\|')
+    .replace(/\n/gu, '<br>');
+}
+
+function csvToMarkdown(source) {
+  const normalizedSource = normalizeText(String(source || '')).replace(/\r\n?/gu, '\n');
+  const delimiter = csvDelimiter(normalizedSource);
+  const rows = parseCsvRows(normalizedSource, delimiter);
+  if (!rows.length) throw new Error('CSV_EMPTY');
+  const width = rows[0].length;
+  if (width < 1 || rows.some((row) => row.length !== width)) throw new Error('CSV_ROW_WIDTH_INVALID');
+  const seen = new Map();
+  const headers = rows[0].map((header, index) => {
+    const base = String(header).trim() || `Spalte ${index + 1}`;
+    const count = (seen.get(base) || 0) + 1;
+    seen.set(base, count);
+    return count === 1 ? base : `${base} (${count})`;
+  });
+  const table = [
+    `| ${headers.map(csvMarkdownCell).join(' | ')} |`,
+    `| ${headers.map(() => '---').join(' | ')} |`,
+    ...rows.slice(1).map((row) => `| ${row.map(csvMarkdownCell).join(' | ')} |`)
+  ];
+  return `# Tabelleninhalt\n\n${table.join('\n')}`;
+}
+
 function normalized(result, ext) {
-  const value = { ...result, markdown: normalizeText(result.markdown).replace(/\r\n?/gu, '\n') };
-  return { ...value, content_graph: createContentGraph(value.markdown, value.attachments, ext) };
+  const { sections = [], ...rest } = result;
+  const clean = (text) => normalizeText(text).replace(/\r\n?/gu, '\n');
+  const value = { ...rest, markdown: clean(rest.markdown) };
+  const normalizedSections = sections.map((section) => ({ ...section, markdown: clean(section.markdown) }));
+  return {
+    ...value,
+    content_graph: createContentGraph(value.markdown, value.attachments, ext, normalizedSections)
+  };
 }
 
 function parseDocumentBuffer(buffer, ext) {
   if (!Buffer.isBuffer(buffer)) throw new TypeError('parser input must be a buffer');
   if (['.docx', '.xlsx', '.pptx'].includes(ext)) return normalized(parseOoxml(buffer, ext), ext);
-  if (ext === '.md' || ext === '.txt') {
-    return normalized({ markdown: buffer.toString('utf8'), attachments: [], warnings: [] }, ext);
+if (ext === '.md' || ext === '.markdown' || ext === '.txt') {
+    return normalized({ markdown: decodeUtf8Source(buffer), attachments: [], warnings: [] }, ext);
   }
   if (ext === '.csv') {
-    const body = buffer.toString('utf8').replace(/```/g, '` ` `');
-    return normalized({ markdown: `# Tabelleninhalt\n\n\`\`\`csv\n${body}\n\`\`\``, attachments: [], warnings: [] }, ext);
+    return normalized({ markdown: csvToMarkdown(decodeUtf8Source(buffer)), attachments: [], warnings: [] }, ext);
   }
   if (['.png', '.jpg', '.jpeg', '.bmp'].includes(ext)) {
     const mimeType = ext === '.png' ? 'image/png' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg';
@@ -35,4 +172,13 @@ function parseDocumentBuffer(buffer, ext) {
   throw new Error('unsupported_format');
 }
 
-module.exports = { parseDocumentBuffer };
+module.exports = {
+  FORBIDDEN_TEXT_CONTROLS,
+  CSV_DELIMITERS,
+  decodeUtf8Source,
+  parseCsvRows,
+  csvDelimiter,
+  csvMarkdownCell,
+  csvToMarkdown,
+  parseDocumentBuffer
+};

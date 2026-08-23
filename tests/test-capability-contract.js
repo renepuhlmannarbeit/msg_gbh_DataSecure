@@ -49,7 +49,7 @@ test('the target contract records the agreed platforms, formats and limits exact
 });
 
 test('the released capability manifest remains the narrow RC30 allowlist', () => {
-  assert.deepStrictEqual(current.formats, ['docx', 'txt']);
+  assert.deepStrictEqual(current.formats, ['csv', 'docx', 'markdown', 'txt']);
   assert.deepStrictEqual(current.blocked_formats, ['pdf']);
   assert.match(current.status, /^release-candidate$/);
   assert.notDeepStrictEqual(current.formats, target.formats.map((format) => format.id));
@@ -63,22 +63,27 @@ test('runtime modules cannot import or expose the target contract as current sta
   const status = read('plugins/data-secure/server/gateway/status.js');
   assert.match(
     status,
-    /supported_inputs:\s*\[\s*'Word \(\.docx\)',\s*'TXT'\s*\]/u,
+    /supported_inputs:\s*\[\s*'Word \(\.docx\)',\s*'Markdown \(\.md\)',\s*'CSV',\s*'TXT'\s*\]/u,
     'privacy_status must expose exactly the released input allowlist'
   );
 });
 
-test('runtime, MCP schema, skills and active handbooks retain the 25-file TXT/DOCX contract', () => {
+test('runtime, MCP schema, skills and active handbooks retain the 100-file/500-MB text-format contract', () => {
   const index = read('plugins/data-secure/server/index.js');
   const common = read('plugins/data-secure/server/gateway/common.js');
   const batch = read('plugins/data-secure/server/gateway/batch.js');
-  assert.match(index, /maximum:25/u);
-  assert.match(common, /PILOT_SUPPORTED=new Set\(\['\.docx','\.txt'\]\)/u);
-  assert.match(batch, /expected > 25/u);
+  assert.match(index, /maximum:100/u);
+  assert.match(common, /PILOT_SUPPORTED=new Set\(\['\.docx','\.txt','\.md','\.markdown','\.csv'\]\)/u);
+  assert.match(common, /MAX_BATCH_FILES:100/u);
+  assert.match(common, /MAX_BATCH_TOTAL_BYTES:500\*1024\*1024/u);
+  assert.match(batch, /expected > LIMITS\.MAX_BATCH_FILES/u);
   for (const rel of currentPublicFiles) {
     const text = read(rel);
-    assert.match(text, /25/u, `${rel} omits the current batch maximum`);
+    assert.match(text, /100/u, `${rel} omits the current batch maximum`);
+    assert.match(text, /500 MB/u, `${rel} omits the current batch-size limit`);
     assert.match(text, /TXT/u, `${rel} omits TXT`);
+    assert.match(text, /Markdown/u, `${rel} omits Markdown`);
+    assert.match(text, /CSV/u, `${rel} omits CSV`);
     assert.match(text, /DOCX/u, `${rel} omits DOCX`);
   }
 });

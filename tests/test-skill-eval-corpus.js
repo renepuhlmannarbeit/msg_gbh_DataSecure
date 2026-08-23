@@ -10,11 +10,11 @@ const corpus = JSON.parse(fs.readFileSync(
   'utf8'
 ));
 const validSkills = new Set(['anonymize', 'explain', 'none']);
-const validRoutes = new Set(['dialog', 'folder', 'clarify-purpose', 'clarify-image-removal', 'stop-prior-upload', 'blocked-pdf', 'cleanup', 'explain', 'none']);
+const validRoutes = new Set(['dialog', 'folder', 'clarify-purpose', 'clarify-image-removal', 'stop-prior-upload', 'blocked-pdf', 'cleanup', 'explain', 'none', 'wait-active-batch']);
 
-test('corpus has the versioned schema and twenty-four cases', () => {
+test('corpus has the versioned schema and twenty-nine cases', () => {
   assert.strictEqual(corpus.schema, 'datasecure-skill-evals/v1');
-  assert.strictEqual(corpus.cases.length, 24);
+  assert.strictEqual(corpus.cases.length, 29);
 });
 
 test('case identifiers are unique and every expectation is structurally complete', () => {
@@ -41,14 +41,47 @@ test('trigger, non-trigger and coexistence decisions all have representative cov
 test('critical privacy and usability scenarios cannot disappear from the corpus', () => {
   const ids = new Set(corpus.cases.map((item) => item.id));
   for (const required of [
-    'multiple-mixed-docx', 'mixed-format-folder', 'explicit-image-removal',
+    'multiple-mixed-docx', 'mixed-format-folder', 'markdown-without-image-pixels',
     'no-image-removal-consent', 'standalone-scan-unknown-purpose', 'pdf-blocked', 'already-uploaded-original',
     'skip-mandatory-review', 'partial-batch-result', 'zero-release-result',
     'all-local-data-delete-confirmed', 'privacy-boundary-explanation',
     'already-anonymized-markdown', 'existing-input-before-run',
     'declared-one-status-two', 'resumable-twenty-five-files',
-    'first-file-stops-continue-rest'
+    'first-file-stops-continue-rest', 'resume-latest-batch-new-chat', 'local-selection-cancelled', 'host-processing-cancelled',
+    'active-local-batch', 'partial-batch-continues-original-analysis'
   ]) assert.ok(ids.has(required), `missing critical scenario ${required}`);
+});
+
+test('a locally cancelled selection never becomes an automatic replacement run', () => {
+  const cancelled = corpus.cases.find((item) => item.id === 'local-selection-cancelled');
+  assert.ok(cancelled.required_outcomes.includes('wait_for_explicit_restart'));
+  assert.ok(cancelled.forbidden_outcomes.includes('reopen_local_picker_automatically'));
+  assert.ok(cancelled.forbidden_outcomes.includes('start_replacement_batch'));
+});
+
+test('an active local batch is never replaced or restarted', () => {
+  const active = corpus.cases.find((item) => item.id === 'active-local-batch');
+  assert.strictEqual(active.expected_route, 'wait-active-batch');
+  assert.ok(active.required_outcomes.includes('wait_without_new_folder_or_dialog'));
+  assert.ok(active.forbidden_outcomes.includes('open_input_folder'));
+  assert.ok(active.forbidden_outcomes.includes('begin_replacement_batch'));
+  assert.ok(active.forbidden_outcomes.includes('reopen_local_picker_automatically'));
+});
+
+test('a host-level cancellation never creates an automatic replacement or a partial release', () => {
+  const cancelled = corpus.cases.find((item) => item.id === 'host-processing-cancelled');
+  assert.ok(cancelled.required_outcomes.includes('report_safe_checkpoint'));
+  assert.ok(cancelled.required_outcomes.includes('wait_for_explicit_resume'));
+  assert.ok(cancelled.forbidden_outcomes.includes('automatic_retry'));
+  assert.ok(cancelled.required_outcomes.includes('do_not_claim_partial_package'));
+  assert.ok(cancelled.forbidden_outcomes.includes('reopen_local_picker_automatically'));
+});
+
+test('a new chat requires confirmation before it resumes the latest local batch', () => {
+  const resumed = corpus.cases.find((item) => item.id === 'resume-latest-batch-new-chat');
+  assert.ok(resumed.required_outcomes.includes('ask_explicit_resume_confirmation'));
+  assert.ok(resumed.required_outcomes.includes('continue_latest_local_batch'));
+  assert.ok(resumed.forbidden_outcomes.includes('automatic_resume_without_confirmation'));
 });
 
 test('personnel images default safely without an extra question and an uploaded original stops processing', () => {
@@ -63,6 +96,14 @@ test('personnel images default safely without an extra question and an uploaded 
   assert.strictEqual(uploaded.expected_route, 'stop-prior-upload');
   assert.ok(uploaded.forbidden_outcomes.includes('process_uploaded_attachment'));
   assert.ok(uploaded.forbidden_outcomes.includes('open_picker_in_exposed_chat'));
+});
+
+test('a Markdown-only request keeps image pixels local without enabling strict local image discard', () => {
+  const markdownOnly = corpus.cases.find((item) => item.id === 'markdown-without-image-pixels');
+  assert.strictEqual(markdownOnly.expected_route, 'folder');
+  assert.strictEqual(markdownOnly.remove_images, false);
+  assert.ok(markdownOnly.required_outcomes.includes('markdown_without_image_pixels'));
+  assert.ok(markdownOnly.forbidden_outcomes.includes('unnecessarily_enable_strict_local_image_discard'));
 });
 
 test('ordinary processing uses the resumable local input route instead of a long picker call', () => {
@@ -83,8 +124,12 @@ test('every processing case forbids direct upload and every released-content tas
   const processing = corpus.cases.filter((item) => item.expected_skill === 'anonymize' && !['cleanup'].includes(item.expected_route));
   assert.ok(processing.every((item) => item.required_outcomes.includes('no_direct_upload')));
   const continuation = corpus.cases.filter((item) => item.required_outcomes.includes('continue_original_task'));
-  assert.ok(continuation.length >= 4);
+  assert.ok(continuation.length >= 5);
   assert.ok(continuation.every((item) => item.expected_skill === 'anonymize'));
+  const partial = corpus.cases.find((item) => item.id === 'partial-batch-continues-original-analysis');
+  assert.ok(partial.required_outcomes.includes('report_exact_counts'));
+  assert.ok(partial.required_outcomes.includes('compare_only_released_content'));
+  assert.ok(partial.forbidden_outcomes.includes('request_original_for_comparison'));
 });
 
 done();

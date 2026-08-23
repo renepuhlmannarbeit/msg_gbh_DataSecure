@@ -100,8 +100,17 @@ test('MCPB manifest declares the fields the runtime relies on', () => {
   }
 });
 
+test('public host wording distinguishes Linux engine support from Claude Desktop availability', () => {
+  const readme = readText(path.join(root, 'README.md'));
+  const guide = readText(path.join(root, 'docs', 'ANLEITUNG.md'));
+  assert.doesNotMatch(mcpb.description, /Claude-Desktop[^\n]{0,80}Linux/iu);
+  assert.match(mcpb.long_description, /Linux ist ein lokaler Claude-Code-Host-Zielpfad/u);
+  assert.match(readme, /Claude-Desktop-App ist kein Linux-Auslieferungsweg/u);
+  assert.match(guide, /nicht auf Linux/u);
+});
+
 test('PDF is declared blocked until the native coverage contract is released', () => {
-  assert.deepStrictEqual(buildInfo.formats, ['docx', 'txt'], 'BUILD_INFO must promise exactly the pilot formats');
+  assert.deepStrictEqual(buildInfo.formats, ['csv', 'docx', 'markdown', 'txt'], 'BUILD_INFO must promise exactly the pilot formats');
   assert.deepStrictEqual(buildInfo.blocked_formats, ['pdf']);
   assert.match(mcpb.long_description, /PDF.*sicher gesperrt/u);
   assert.match(readText(path.join(runtime, 'runtime.js')), /PDF_COVERAGE_UNVERIFIED/u);
@@ -143,6 +152,8 @@ test('MCPB prompt texts use the same batch contract as the runtime', () => {
   const { manifestPromptText } = require(path.join(runtime, 'prompt-contract.js'));
   for (const prompt of mcpb.prompts) {
     assert.strictEqual(prompt.text, manifestPromptText(prompt.name), `${prompt.name} prompt contract drift`);
+    assert.match(prompt.text, /batch_processing_active=true/u, `${prompt.name} must wait for an active local batch`);
+    assert.match(prompt.text, /öffne oder starte nichts erneut/u, `${prompt.name} must not create a replacement run`);
   }
 });
 
@@ -155,7 +166,7 @@ test('marketplace entry points at the plugin directory that exists', () => {
     fs.existsSync(path.join(target, '.claude-plugin', 'plugin.json')),
     'marketplace source is not a plugin directory'
   );
-  assert.match(entry.description, /TXT.*DOCX/u, 'marketplace must name the released formats');
+  assert.match(entry.description, /TXT.*CSV.*DOCX/u, 'marketplace must name the released formats');
   assert.doesNotMatch(entry.description, /Excel|PowerPoint|Bilddateien/u, 'marketplace promises blocked formats');
 });
 

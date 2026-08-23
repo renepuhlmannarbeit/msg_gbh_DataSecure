@@ -6,8 +6,10 @@ const { SafeError } = require('../runtime');
 const pii = require('../pii-engine');
 const { LIMITS } = require('../gateway/common');
 const { normalizeText } = require('../privacy/base');
+const { uiProcessEnvironment } = require('./ui-process-policy');
 
 const REVIEW_SCHEMA = 'data-secure-text-review/2';
+const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/1';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
@@ -39,8 +41,9 @@ function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [
   });
   const batchIndex = progress.batchIndex ?? 1;
   const batchTotal = progress.batchTotal ?? 1;
+  const allowDefer = progress.allowDefer === true;
   if (!Number.isSafeInteger(batchIndex) || !Number.isSafeInteger(batchTotal) ||
-    batchIndex < 1 || batchTotal < 1 || batchTotal > 25 || batchIndex > batchTotal) {
+    batchIndex < 1 || batchTotal < 1 || batchTotal > LIMITS.MAX_BATCH_FILES || batchIndex > batchTotal) {
     throw new SafeError('Der lokale Dateifortschritt ist ungültig.');
   }
   return {
@@ -50,8 +53,128 @@ function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [
     locators,
     ambiguities: safeAmbiguities,
     batch_index: batchIndex,
-    batch_total: batchTotal
+    batch_total: batchTotal,
+    allow_defer: allowDefer
   };
+}
+
+// A batch review is intentionally an in-memory adapter around the established
+// single-text review schema. The journal stores neither this draft nor its
+// `entries` map: callers recreate it from sealed source copies for the one
+// local UI process. Anonymous "Dokument N" separators keep local file names
+// out of the UI payload as well as out of any eventual MCP response.
+function buildBatchReviewDraft(documents, progress = {}) {
+  if (!Array.isArray(documents) || documents.length < 1 || documents.length > LIMITS.MAX_BATCH_FILES) {
+    throw new SafeError('Der lokale Stapelreview enthält keine zulässige Anzahl von Dokumenten.');
+  }
+  const originals = [];
+  const anonymized = [];
+  const ambiguities = [];
+  const entries = [];
+  let originalOffset = 0;
+  let anonymizedOffset = 0;
+  let globalCandidate = 0;
+
+  for (let index = 0; index < documents.length; index++) {
+    const document = documents[index];
+    if (!document || typeof document !== 'object') {
+      throw new SafeError('Ein lokaler Stapelreview enthält einen ungültigen Dokumententwurf.');
+    }
+    const individual = buildReviewDraft(
+      document.original_text,
+      document.anonymized_text,
+      document.profile || 'general',
+      document.ambiguities || [],
+      { batchIndex: index + 1, batchTotal: documents.length }
+    );
+    const label = `\n\n===== Dokument ${index + 1} von ${documents.length} =====\n\n`;
+    originals.push(label, individual.original_text);
+    anonymized.push(label, individual.anonymized_text);
+    originalOffset += label.length;
+    anonymizedOffset += label.length;
+    const candidateIds = new Map();
+    for (const candidate of individual.ambiguities) {
+      const globalId = `credential:v2:${String(++globalCandidate).padStart(6, '0')}`;
+      candidateIds.set(globalId, candidate.ambiguity_id);
+      ambiguities.push({
+        ambiguity_id: globalId,
+        type: candidate.type,
+        original_start: originalOffset + candidate.original_start,
+        original_end: originalOffset + candidate.original_end,
+        anonymized_start: anonymizedOffset + candidate.anonymized_start,
+        anonymized_end: anonymizedOffset + candidate.anonymized_end
+      });
+    }
+    entries.push({ document_index: index + 1, candidate_ids: candidateIds });
+    originalOffset += individual.original_text.length;
+    anonymizedOffset += individual.anonymized_text.length;
+  }
+  if (ambiguities.length === 0) {
+    throw new SafeError('Der lokale Stapelreview enthält keine offenen Zuordnungen.');
+  }
+  const originalText = originals.join('');
+  const anonymizedText = anonymized.join('');
+  if (originalText.length > MAX_REVIEW_CHARS || anonymizedText.length > MAX_REVIEW_CHARS) {
+    throw new SafeError('Der lokale Stapelreview ist zu groß und wurde nicht freigegeben.');
+  }
+  const draft = buildReviewDraft(originalText, anonymizedText, 'general', ambiguities, {
+    batchIndex: 1,
+    batchTotal: 1,
+    allowDefer: progress.allowDefer === true
+  });
+  draft.batch_review = {
+    schema: BATCH_REVIEW_SCHEMA,
+    document_count: documents.length,
+    display: 'anonymous_document_sequence'
+  };
+  return { draft, entries };
+}
+
+// Convert a validated aggregate answer back to per-document decisions without
+// carrying raw text, locators or document names beyond this call boundary.
+// Range redactions deliberately remain unavailable in the first batch UI:
+// ranges crossing a synthetic document separator could otherwise be mapped to
+// the wrong output. Credential decisions remain fully actionable.
+function resolveBatchReviewResult(bundle, value) {
+  if (!bundle || !bundle.draft || !Array.isArray(bundle.entries)) {
+    throw new SafeError('Der lokale Stapelreview-Zustand ist ungültig.');
+  }
+  const decision = validateReviewResult(value, bundle.draft);
+  if (decision.action !== 'reviewed') return { action: decision.action, documents: [] };
+  if (decision.redactions.length !== 0) {
+    throw new SafeError('Freie Bereichsanonymisierungen sind im gemeinsamen Stapelreview noch nicht verfügbar.');
+  }
+  const byGlobalId = new Map();
+  for (const entry of bundle.entries) {
+    if (!entry || !Number.isSafeInteger(entry.document_index) || !(entry.candidate_ids instanceof Map)) {
+      throw new SafeError('Der lokale Stapelreview-Zustand ist ungültig.');
+    }
+    for (const [globalId, localId] of entry.candidate_ids) {
+      if (byGlobalId.has(globalId)) throw new SafeError('Der lokale Stapelreview enthält doppelte Fundstellen.');
+      byGlobalId.set(globalId, { document_index: entry.document_index, ambiguity_id: localId });
+    }
+  }
+  const grouped = new Map(bundle.entries.map((entry) => [entry.document_index, []]));
+  for (const item of decision.decisions) {
+    const target = byGlobalId.get(item.ambiguity_id);
+    if (!target) throw new SafeError('Die lokale Stapelentscheidung enthält eine unbekannte Fundstelle.');
+    grouped.get(target.document_index).push({ ambiguity_id: target.ambiguity_id, decision: item.decision });
+  }
+  return {
+    action: 'reviewed',
+    documents: [...grouped.entries()].map(([document_index, decisions]) => ({ document_index, decisions }))
+  };
+}
+
+// The caller owns the lifetime of this promise. In particular it must not put
+// `bundle`, `draft` or this result into a journal: all three are local review
+// material. Keeping the coordinator here makes the one-UI-call invariant easy
+// to test independently from later batch publication mechanics.
+async function reviewBatchTextLocally(documents, options = {}) {
+  const bundle = buildBatchReviewDraft(documents, { allowDefer: options.allowDefer === true });
+  const reviewer = options.reviewTextLocally || reviewTextLocally;
+  const answer = await reviewer(bundle.draft, options);
+  return resolveBatchReviewResult(bundle, answer);
 }
 
 function powershellUtf8Preamble() {
@@ -70,6 +193,7 @@ function powershellReviewScript() {
     '$draft = [Console]::In.ReadToEnd() | ConvertFrom-Json',
     '$form = New-Object System.Windows.Forms.Form',
     '$form.Text = "DataSecure - lokale Textprüfung"',
+    'if ($null -ne $draft.batch_review) { $form.Text = "DataSecure - lokale Stapelprüfung" }',
     'if ([int]$draft.batch_total -gt 1) { $form.Text += " - Datei " + [int]$draft.batch_index + " von " + [int]$draft.batch_total }',
     '$form.Width = 1200; $form.Height = 760; $form.StartPosition = "CenterScreen"; $form.TopMost = $true; $form.ShowInTaskbar = $true',
     '$form.Add_Shown({ $form.Activate(); $form.BringToFront() })',
@@ -77,6 +201,7 @@ function powershellReviewScript() {
     '$info = New-Object System.Windows.Forms.Label',
     '$info.Dock = "Top"; $info.Height = 52; $info.Padding = [System.Windows.Forms.Padding]::new(10, 8, 10, 4)',
     '$info.Text = "Prüfe nur die gelben Stellen. Rot wurde bereits anonymisiert. Rechts unten siehst du die fertige Fassung für Claude."',
+    'if ($null -ne $draft.batch_review) { $info.Text = "Stapelprüfung: Entscheide die gelb markierten Zertifikatsstellen. Freie Bereichsanonymisierungen sind in diesem Schritt gesperrt." }',
     '$split = New-Object System.Windows.Forms.SplitContainer',
     '$split.Dock = "Fill"; $split.Orientation = "Vertical"; $split.SplitterDistance = 570',
     '$left = New-Object System.Windows.Forms.RichTextBox',
@@ -103,6 +228,7 @@ function powershellReviewScript() {
     '$redact = New-Object System.Windows.Forms.Button; $redact.Text = "Auswahl anonymisieren"; $redact.Width = 165',
     '$skip = New-Object System.Windows.Forms.Button; $skip.Text = "Prüfung überspringen"; $skip.Width = 160',
     '$cancel = New-Object System.Windows.Forms.Button; $cancel.Text = "Abbrechen"; $cancel.Width = 110',
+    '$defer = New-Object System.Windows.Forms.Button; $defer.Text = "Später entscheiden"; $defer.Width = 155',
     '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "Ja, beibehalten"; $keep.Width = 145',
     '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "Nein, Namen ersetzen"; $anonOrg.Width = 170',
     '$back = New-Object System.Windows.Forms.Button; $back.Text = "Zurück / ändern"; $back.Width = 140',
@@ -119,9 +245,12 @@ function powershellReviewScript() {
     '$approve.Add_Click({ if ($script:decisions.Count -ne $draft.ambiguities.Count) { [void][System.Windows.Forms.MessageBox]::Show("Bitte jede gelb markierte Organisation als Zertifizierung erhalten oder anonymisieren.", "DataSecure", "OK", "Warning"); return }; $decisionList = @(); foreach ($candidate in $draft.ambiguities) { $decisionList += @{ ambiguity_id = [string]$candidate.ambiguity_id; decision = [string]$script:decisions[[string]$candidate.ambiguity_id] } }; $script:answer = @{ action = "reviewed"; redactions = @($script:redactions); decisions = $decisionList }; $form.Close() })',
     '$skip.Add_Click({ if ($draft.ambiguities.Count -gt 0) { [void][System.Windows.Forms.MessageBox]::Show("Bei gelb markierten Organisationen darf die Prüfung nicht übersprungen werden.", "DataSecure", "OK", "Warning"); return }; $script:answer = @{ action = "skipped" }; $form.Close() })',
     '$cancel.Add_Click({ $script:answer = @{ action = "cancelled" }; $form.Close() })',
+    '$defer.Add_Click({ $script:answer = @{ action = "deferred" }; $form.Close() })',
     '$form.Add_FormClosing({ if ($null -eq $script:answer) { $script:answer = @{ action = "cancelled" } } })',
     '$skip.Visible = ($draft.ambiguities.Count -eq 0)',
-    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel, $back, $keep, $anonOrg, $ambiguityInfo))',
+    '$defer.Visible = [bool]$draft.allow_defer',
+    '$redact.Visible = ($null -eq $draft.batch_review)',
+    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel, $defer, $back, $keep, $anonOrg, $ambiguityInfo))',
     '$form.Controls.Add($split); $form.Controls.Add($buttons); $form.Controls.Add($info)',
     'Show-Ambiguity; Update-Preview',
     '[void]$form.ShowDialog()',
@@ -129,9 +258,183 @@ function powershellReviewScript() {
   ].join('; ');
 }
 
+// The macOS reviewer deliberately receives the review draft over stdin as
+// UTF-8.  Passing text through an osascript argument would expose it in the
+// process list; a temporary file would add an unnecessary raw-data lifecycle.
+// This focused UI decides only the known credential-issuer ambiguities.  It
+// does not pretend to offer the Windows free-range redaction editor.
+function darwinReviewScript() {
+  return [
+    'ObjC.import("Foundation");',
+    'function run(argv) {',
+    '  var app = Application.currentApplication(); app.includeStandardAdditions = true;',
+    '  var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;',
+    '  var source = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding));',
+    '  var draft = JSON.parse(source);',
+    '  var title = draft.batch_review ? "DataSecure – lokale Stapelprüfung" : "DataSecure – lokale Zertifikatsprüfung";',
+    '  try {',
+    '    while (true) {',
+    '      var decisions = [];',
+    '      for (var index = 0; index < draft.ambiguities.length; index++) {',
+    '      var item = draft.ambiguities[index];',
+    '      var value = draft.original_text.substring(item.original_start, item.original_end);',
+    '      var before = draft.original_text.substring(Math.max(0, item.original_start - 100), item.original_start);',
+    '      var after = draft.original_text.substring(item.original_end, Math.min(draft.original_text.length, item.original_end + 100));',
+    '      var message = "Stelle " + (index + 1) + " von " + draft.ambiguities.length + ":\\n\\n" + before + "[" + value + "]" + after + "\\n\\nIst die markierte Organisation der Aussteller einer Zertifizierung?";',
+    // Standard Additions maps to NSAlert and supports at most three buttons.
+    // Keep defer reachable through a second, content-free option dialog rather
+    // than relying on a fourth button that macOS would reject.
+    '      var buttons = draft.allow_defer ? ["Weitere Optionen", "Anonymisieren", "Beibehalten"] : ["Abbrechen", "Anonymisieren", "Beibehalten"];',
+    '      var answer = app.displayDialog(message, { withTitle: title, buttons: buttons, defaultButton: "Beibehalten", cancelButton: "Abbrechen" });',
+    '      if (answer.buttonReturned === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
+    '      if (answer.buttonReturned === "Weitere Optionen") { var later = app.displayDialog("Diese Fundstelle nicht freigeben?", { withTitle: title, buttons: ["Abbrechen", "Später entscheiden"], defaultButton: "Später entscheiden", cancelButton: "Abbrechen" }); if (later.buttonReturned === "Später entscheiden") return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
+    '      decisions.push({ ambiguity_id: item.ambiguity_id, decision: answer.buttonReturned === "Beibehalten" ? "keep" : "redact" });',
+    '      }',
+    '      var finalButtons = draft.allow_defer ? ["Weitere Optionen", "Zurück / ändern", "Geprüft freigeben"] : ["Abbrechen", "Zurück / ändern", "Geprüft freigeben"];',
+    '      var finalAnswer = app.displayDialog("Alle Fundstellen sind entschieden. Du kannst die Entscheidungen jetzt freigeben oder vollständig neu treffen.", { withTitle: title, buttons: finalButtons, defaultButton: "Geprüft freigeben", cancelButton: "Abbrechen" });',
+    '      if (finalAnswer.buttonReturned === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
+    '      if (finalAnswer.buttonReturned === "Weitere Optionen") { var finalLater = app.displayDialog("Stapelentscheidung nicht freigeben?", { withTitle: title, buttons: ["Abbrechen", "Später entscheiden"], defaultButton: "Später entscheiden", cancelButton: "Abbrechen" }); if (finalLater.buttonReturned === "Später entscheiden") return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
+    '      if (finalAnswer.buttonReturned === "Zurück / ändern") continue;',
+    '      return JSON.stringify({ action: "reviewed", redactions: [], decisions: decisions });',
+    '    }',
+    '  } catch (error) { return JSON.stringify({ action: "cancelled" }); }',
+    '}'
+  ].join('\n');
+}
+
+function linuxReviewContext(draft, item, index) {
+  const before = draft.original_text.slice(Math.max(0, item.original_start - 300), item.original_start);
+  const value = draft.original_text.slice(item.original_start, item.original_end);
+  const after = draft.original_text.slice(item.original_end, Math.min(draft.original_text.length, item.original_end + 300));
+  return [
+    `DataSecure – ${draft.batch_review ? 'lokale Stapelprüfung' : 'lokale Zertifikatsprüfung'} (${index + 1} von ${draft.ambiguities.length})`,
+    '',
+    'Die eckig markierte Stelle wird nur lokal angezeigt.',
+    'Ist sie der Aussteller einer Zertifizierung?',
+    '',
+    `${before}[${value}]${after}`
+  ].join('\n');
+}
+
+function linuxViewerCommands(batchReview = false) {
+  const title = batchReview ? 'DataSecure – lokale Stapelprüfung' : 'DataSecure – lokale Zertifikatsprüfung';
+  return [
+    { id: 'zenity', command: 'zenity', args: ['--text-info', `--title=${title}`, '--width=900', '--height=620'] },
+    // KDialog accepts a local file name for its text box. `/dev/stdin` binds
+    // it to the inherited anonymous input pipe without creating a raw-text
+    // temporary file or placing the text in an argument.
+    { id: 'kdialog', command: 'kdialog', args: ['--textbox', '/dev/stdin', '900', '620', '--title', title] }
+  ];
+}
+
+function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = false) {
+  const prompt = `Fundstelle ${index + 1} von ${total}: Entscheidung lokal treffen.`;
+  const title = batchReview ? 'DataSecure – Stapelentscheidung' : 'DataSecure – Zertifikatsentscheidung';
+  if (id === 'zenity') {
+    return {
+      command: 'zenity',
+      args: [
+        '--list', '--radiolist', `--title=${title}`, `--text=${prompt}`,
+        '--column=Schlüssel', '--column=Entscheidung',
+        'keep', 'Beibehalten', 'FALSE',
+        'redact', 'Anonymisieren', 'FALSE',
+        ...(allowDefer ? ['defer', 'Später entscheiden', 'FALSE'] : []),
+        'cancel', 'Abbrechen', 'TRUE',
+        '--hide-header', '--ok-label=Weiter', '--cancel-label=Abbrechen'
+      ]
+    };
+  }
+  return {
+    command: 'kdialog',
+    args: [
+      '--radiolist', prompt,
+      'keep', 'Beibehalten', 'off',
+      'redact', 'Anonymisieren', 'off',
+      ...(allowDefer ? ['defer', 'Später entscheiden', 'off'] : []),
+      'cancel', 'Abbrechen', 'on',
+      '--title', title
+    ]
+  };
+}
+
+function linuxFinalChoiceCommand(id, allowDefer = false, batchReview = false) {
+  const prompt = 'Alle Fundstellen sind entschieden. Freigeben oder Entscheidungen vollständig neu treffen?';
+  const title = batchReview ? 'DataSecure – Stapelentscheidung' : 'DataSecure – Zertifikatsentscheidung';
+  if (id === 'zenity') {
+    return {
+      command: 'zenity',
+      args: [
+        '--list', '--radiolist', `--title=${title}`, `--text=${prompt}`,
+        '--column=Schlüssel', '--column=Entscheidung',
+        'release', 'Geprüft freigeben', 'TRUE',
+        'change', 'Zurück / ändern', 'FALSE',
+        ...(allowDefer ? ['defer', 'Später entscheiden', 'FALSE'] : []),
+        'cancel', 'Abbrechen', 'FALSE',
+        '--hide-header', '--ok-label=Weiter', '--cancel-label=Abbrechen'
+      ]
+    };
+  }
+  return {
+    command: 'kdialog',
+    args: [
+      '--radiolist', prompt,
+      'release', 'Geprüft freigeben', 'on',
+      'change', 'Zurück / ändern', 'off',
+      ...(allowDefer ? ['defer', 'Später entscheiden', 'off'] : []),
+      'cancel', 'Abbrechen', 'off',
+      '--title', title
+    ]
+  };
+}
+
+function runLinuxReviewDialog(candidates, input, runner, env) {
+  for (const candidate of candidates) {
+    const result = runner(candidate.command, candidate.args, input, env);
+    if (result?.error?.code === 'ENOENT') continue;
+    return { id: candidate.id, result };
+  }
+  throw new SafeError('Auf diesem Gerät ist keine lokale Zertifikatsprüfung verfügbar.');
+}
+
+function linuxReviewTextLocally(draft, options) {
+  const runner = options.runner || defaultRunner;
+  const env = options.env || process.env;
+  while (true) {
+    const decisions = [];
+    let reviewerId;
+    for (let index = 0; index < draft.ambiguities.length; index++) {
+      const displayed = runLinuxReviewDialog(linuxViewerCommands(draft.batch_review !== undefined), linuxReviewContext(draft, draft.ambiguities[index], index), runner, env);
+      if (displayed.result?.error || displayed.result?.status !== 0) return { action: 'cancelled' };
+      reviewerId = displayed.id;
+      const choice = linuxChoiceCommand(displayed.id, index, draft.ambiguities.length, draft.allow_defer === true, draft.batch_review !== undefined);
+      const selected = runner(choice.command, choice.args, undefined, env);
+      if (selected?.error || selected?.status !== 0) return { action: 'cancelled' };
+      const answer = String(selected.stdout || '').trim().toLocaleLowerCase('de-DE');
+      let decision;
+      if (answer === 'keep' || answer === 'beibehalten') decision = 'keep';
+      if (answer === 'redact' || answer === 'anonymisieren') decision = 'redact';
+      if (answer === 'defer' || answer === 'später entscheiden') return { action: 'deferred' };
+      if (!decision) return { action: 'cancelled' };
+      decisions.push({ ambiguity_id: draft.ambiguities[index].ambiguity_id, decision });
+    }
+    const finish = linuxFinalChoiceCommand(reviewerId, draft.allow_defer === true, draft.batch_review !== undefined);
+    const finalResult = runner(finish.command, finish.args, undefined, env);
+    if (finalResult?.error || finalResult?.status !== 0) return { action: 'cancelled' };
+    const finalAnswer = String(finalResult.stdout || '').trim().toLocaleLowerCase('de-DE');
+    if (finalAnswer === 'release' || finalAnswer === 'geprüft freigeben') return { action: 'reviewed', redactions: [], decisions };
+    if (finalAnswer === 'change' || finalAnswer === 'zurück / ändern') continue;
+    if (finalAnswer === 'defer' || finalAnswer === 'später entscheiden') return { action: 'deferred' };
+    return { action: 'cancelled' };
+  }
+}
+
 function validateReviewResult(value, draft = null) {
-  if (!value || !['reviewed', 'skipped', 'cancelled'].includes(value.action)) {
+  if (!value || !['reviewed', 'skipped', 'cancelled', 'deferred'].includes(value.action)) {
     throw new SafeError('Die lokale Textprüfung lieferte kein gültiges Ergebnis.');
+  }
+  if (value.action === 'deferred') {
+    if (Object.keys(value).sort().join(',') !== 'action') throw new SafeError('Die lokale Vertagung enthält nicht erlaubte Felder.');
+    return { action: 'deferred' };
   }
   if (value.action === 'reviewed') {
     if (!Array.isArray(value.redactions) || value.redactions.length > MAX_MANUAL_REDACTIONS) {
@@ -193,7 +496,7 @@ function applyManualRedactions(text, ranges) {
   return result;
 }
 
-function defaultRunner(command, args, input) {
+function defaultRunner(command, args, input, env = process.env) {
   return childProcess.spawnSync(command, args, {
     input,
     encoding: 'utf8',
@@ -203,24 +506,34 @@ function defaultRunner(command, args, input) {
     // terminated by its parent.
     timeout: 5 * 60 * 1000,
     maxBuffer: 64 * 1024 * 1024,
-    shell: false
+    shell: false,
+    env: uiProcessEnvironment(env)
   });
 }
 
 function reviewTextLocally(draft, options = {}) {
   const platform = options.platform || process.platform;
-  if (platform !== 'win32') {
-    throw new SafeError('Die bearbeitbare lokale Textprüfung ist in diesem Pilot derzeit nur unter Windows verfügbar.');
-  }
   if (!draft || draft.schema !== REVIEW_SCHEMA) throw new SafeError('Ungültiger lokaler Review-Entwurf.');
   const env = options.env || process.env;
-  const powershell = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  // Sanitize before invoking the supplied runner as well. This keeps test,
+  // integration and production runners on the same no-proxy/no-cloud-secret
+  // boundary instead of relying on the default runner alone.
+  const reviewEnv = uiProcessEnvironment(env);
   const runner = options.runner || defaultRunner;
-  const result = runner(
-    powershell,
-    ['-NoProfile', '-NonInteractive', '-Sta', '-Command', powershellReviewScript()],
-    JSON.stringify(draft)
-  );
+  let command;
+  let args;
+  if (platform === 'win32') {
+    command = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    args = ['-NoProfile', '-NonInteractive', '-Sta', '-Command', powershellReviewScript()];
+  } else if (platform === 'darwin') {
+    command = '/usr/bin/osascript';
+    args = ['-l', 'JavaScript', '-e', darwinReviewScript()];
+  } else if (platform === 'linux') {
+    return validateReviewResult(linuxReviewTextLocally(draft, { runner, env: reviewEnv }), draft);
+  } else {
+    throw new SafeError('Die bearbeitbare lokale Textprüfung ist auf diesem Gerät noch nicht verfügbar; es wurde nichts freigegeben.');
+  }
+  const result = runner(command, args, JSON.stringify(draft), reviewEnv);
   if (result?.error || result?.status !== 0) throw new SafeError('Die lokale Textprüfung konnte nicht sicher abgeschlossen werden.');
   let parsed;
   try { parsed = JSON.parse(String(result.stdout || '')); } catch { throw new SafeError('Die lokale Textprüfung lieferte kein gültiges Ergebnis.'); }
@@ -229,10 +542,20 @@ function reviewTextLocally(draft, options = {}) {
 
 module.exports = {
   REVIEW_SCHEMA,
+  BATCH_REVIEW_SCHEMA,
   MAX_REVIEW_CHARS,
   buildReviewDraft,
+  buildBatchReviewDraft,
+  resolveBatchReviewResult,
+  reviewBatchTextLocally,
   powershellUtf8Preamble,
   powershellReviewScript,
+  darwinReviewScript,
+  linuxReviewContext,
+  linuxViewerCommands,
+  linuxChoiceCommand,
+  linuxFinalChoiceCommand,
+  linuxReviewTextLocally,
   validateReviewResult,
   applyManualRedactions,
   reviewTextLocally

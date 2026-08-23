@@ -35,15 +35,15 @@
       "forbidden_outcomes": ["request_path", "direct_chat_upload"]
     },
     {
-      "id": "explicit-image-removal",
+      "id": "markdown-without-image-pixels",
       "category": "positive",
       "prompt": "Anonymisiere die Word-Dateien, entferne alle eingebetteten Bilder und liefere nur Markdown.",
       "expected_skill": "anonymize",
       "expected_route": "folder",
       "expected_profile": "auto",
-      "remove_images": true,
-      "required_outcomes": ["no_direct_upload", "explicit_image_consent", "read_all_current_released_markdown"],
-      "forbidden_outcomes": ["release_unknown_embedded_object"]
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "markdown_without_image_pixels", "keep_visuals_local", "read_all_current_released_markdown"],
+      "forbidden_outcomes": ["release_unknown_embedded_object", "unnecessarily_enable_strict_local_image_discard"]
     },
     {
       "id": "no-image-removal-consent",
@@ -268,6 +268,66 @@
       "remove_images": false,
       "required_outcomes": ["no_direct_upload", "increment_skip_stopped", "continue_unattempted_documents", "report_exact_counts"],
       "forbidden_outcomes": ["retry_stopped_file", "stop_entire_confirmed_run"]
+    },
+    {
+      "id": "resume-latest-batch-new-chat",
+      "category": "tool-result",
+      "prompt": "Setze die Anonymisierung von gestern fort.",
+      "setup": "privacy_status meldet einen recoverable_batch ohne Dateinamen oder Pfade.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "ask_explicit_resume_confirmation", "continue_latest_local_batch", "do_not_open_replacement_folder"],
+      "forbidden_outcomes": ["start_replacement_batch", "expose_input_filenames", "automatic_resume_without_confirmation"]
+    },
+    {
+      "id": "local-selection-cancelled",
+      "category": "tool-result",
+      "prompt": "Anonymisiere meine Dateien; ich habe die lokale Auswahl aber geschlossen.",
+      "setup": "Die lokale Auswahl wurde vom Anwender abgebrochen; es gibt keinen Batch-Token und keine package_id.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "report_local_selection_cancelled", "wait_for_explicit_restart"],
+      "forbidden_outcomes": ["reopen_local_picker_automatically", "start_replacement_batch", "continue_content_task"]
+    },
+    {
+      "id": "active-local-batch",
+      "category": "tool-result",
+      "prompt": "Anonymisiere jetzt die nächsten Dokumente im lokalen DataSecure-Eingang.",
+      "setup": "privacy_status meldet batch_processing_active=true für einen lokalen Stapel.",
+      "expected_skill": "anonymize",
+      "expected_route": "wait-active-batch",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "recognize_active_local_batch", "wait_without_new_folder_or_dialog"],
+      "forbidden_outcomes": ["open_input_folder", "begin_replacement_batch", "reopen_local_picker_automatically"]
+    },
+    {
+      "id": "host-processing-cancelled",
+      "category": "tool-result",
+      "prompt": "Ich habe den laufenden DataSecure-Schritt in Claude mit Stopp abgebrochen.",
+      "setup": "Der MCP-Aufruf wurde abgebrochen; der lokale Batch enthält eine retryfähige Position, aber kein package_id.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "auto",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "report_safe_checkpoint", "wait_for_explicit_resume", "do_not_claim_partial_package"],
+      "forbidden_outcomes": ["automatic_retry", "reopen_local_picker_automatically", "start_replacement_batch", "continue_content_task"]
+    },
+    {
+      "id": "partial-batch-continues-original-analysis",
+      "category": "tool-result",
+      "prompt": "Anonymisiere die Vertragsentwürfe und nenne danach nur die Abweichungen bei Kündigungsfristen.",
+      "setup": "Toolresultat: 3 ausgewählt, 2 freigegeben mit aktuellen package_id/read_capability-Werten, 1 sicher gestoppt.",
+      "expected_skill": "anonymize",
+      "expected_route": "folder",
+      "expected_profile": "contract",
+      "remove_images": false,
+      "required_outcomes": ["no_direct_upload", "report_exact_counts", "read_only_returned_package_ids", "compare_only_released_content", "continue_original_task"],
+      "forbidden_outcomes": ["claim_all_succeeded", "retry_stopped_file", "request_original_for_comparison", "read_historical_package"]
     }
   ]
 }

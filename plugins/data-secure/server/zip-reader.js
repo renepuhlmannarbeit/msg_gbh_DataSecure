@@ -28,6 +28,53 @@ function findEocd(buf) {
   throw new ZipError('ZIP-Endverzeichnis nicht gefunden.');
 }
 
+// This is deliberately a directory-only inspection.  Callers that need file
+// bytes must still use readZip(), which validates every local header, inflates
+// with bounded output and checks CRCs.  The preflight is useful before a
+// private batch snapshot: it rejects impossible or oversized OOXML containers
+// without decompressing raw document content or writing a work copy.
+function inspectZipDirectory(buf, limits={}) {
+  if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
+  const maxEntries = limits.maxEntries || 20000;
+  const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
+  const eocd = findEocd(buf);
+  const totalEntries = buf.readUInt16LE(eocd + 10);
+  const cdSize = buf.readUInt32LE(eocd + 12);
+  const cdOffset = buf.readUInt32LE(eocd + 16);
+  if (totalEntries > maxEntries) throw new ZipError('ZIP enthält zu viele Einträge.');
+  if (cdOffset + cdSize > buf.length) throw new ZipError('ZIP-Zentralverzeichnis ungültig.');
+
+  const cdEnd = cdOffset + cdSize;
+  const names = new Set();
+  let p = cdOffset;
+  let total = 0;
+  let files = 0;
+  for (let n=0; n<totalEntries; n++) {
+    if (p + 46 > cdEnd || buf.readUInt32LE(p) !== 0x02014b50) throw new ZipError('ZIP-Zentralverzeichnis beschädigt.');
+    const flags = buf.readUInt16LE(p + 8);
+    const compSize = buf.readUInt32LE(p + 20);
+    const uncompSize = buf.readUInt32LE(p + 24);
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const commentLen = buf.readUInt16LE(p + 32);
+    const localOffset = buf.readUInt32LE(p + 42);
+    if (p + 46 + nameLen + extraLen + commentLen > cdEnd) throw new ZipError('ZIP-Zentralverzeichnis abgeschnitten.');
+    if (flags & 1) throw new ZipError('Verschlüsselte ZIP-Einträge werden nicht unterstützt.');
+    if (compSize === 0xffffffff || uncompSize === 0xffffffff || localOffset === 0xffffffff) throw new ZipError('ZIP64 wird nicht unterstützt.');
+    const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8').replace(/\\/g,'/');
+    p += 46 + nameLen + extraLen + commentLen;
+    if (!name || name.endsWith('/')) continue;
+    if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
+    if (names.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
+    if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.');
+    names.add(name);
+    total += uncompSize;
+    files++;
+  }
+  if (p !== cdEnd) throw new ZipError('ZIP-Zentralverzeichnis hat eine unerwartete Größe.');
+  return { entries: totalEntries, files, uncompressed_bytes: total };
+}
+
 function readZip(buf, limits={}) {
   if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
   const maxEntries = limits.maxEntries || 20000;
@@ -100,4 +147,4 @@ function readZip(buf, limits={}) {
   return out;
 }
 
-module.exports = { ZipError, readZip };
+module.exports = { ZipError, inspectZipDirectory, readZip };

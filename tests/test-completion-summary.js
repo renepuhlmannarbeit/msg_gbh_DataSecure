@@ -5,6 +5,7 @@ const {
   validateSummary,
   completionSummaryText,
   completionSummaryCommand,
+  completionSummaryCommands,
   showCompletionSummary
 } = require('../plugins/data-secure/server/companion/completion-summary');
 
@@ -28,7 +29,7 @@ test('partial and stopped wording distinguish released from withheld results', (
 
 test('invalid or inconsistent counters fail closed', () => {
   assert.throws(() => validateSummary({ selected_count: 2, released_count: 2, failed_count: 1 }), /Ungültige/);
-  assert.throws(() => validateSummary({ selected_count: 26, released_count: 26, failed_count: 0 }), /Ungültige/);
+  assert.throws(() => validateSummary({ selected_count: 101, released_count: 101, failed_count: 0 }), /Ungültige/);
   assert.throws(() => validateSummary({ selected_count: 1, released_count: -1, failed_count: 2 }), /Ungültige/);
 });
 
@@ -40,6 +41,25 @@ test('Windows command contains only fixed wording and bounded counters', () => {
   assert.deepStrictEqual(spec.args.slice(0, 4), ['-NoProfile', '-NonInteractive', '-Sta', '-Command']);
   assert.match(spec.args[4], /Schließen/);
   assert.doesNotMatch(JSON.stringify(spec), /filename|source|path|content/i);
+});
+
+test('macOS and Linux completion commands are local and content-free except fixed counters', () => {
+  const summary = { selected_count: 3, released_count: 2, failed_count: 1 };
+  const mac = completionSummaryCommand(summary, { platform: 'darwin' });
+  assert.strictEqual(mac.command, '/usr/bin/osascript');
+  assert.match(mac.args.join(' '), /SHOWN/);
+  const linux = completionSummaryCommand(summary, { platform: 'linux' });
+  assert.strictEqual(linux.command, 'zenity');
+  assert.ok(linux.args.includes('--info'));
+  const linuxCommands = completionSummaryCommands(summary, { platform: 'linux' });
+  assert.deepStrictEqual(linuxCommands.map((spec) => spec.command), ['zenity', 'kdialog']);
+  assert.match(linuxCommands[1].args.join(' '), /--msgbox/);
+  let calls = 0;
+  assert.strictEqual(showCompletionSummary(summary, {
+    platform: 'linux',
+    runner: () => (++calls === 1 ? { error: { code: 'ENOENT' } } : { status: 0 })
+  }), true);
+  assert.strictEqual(calls, 2);
 });
 
 test('shown evidence requires the exact local process result', () => {

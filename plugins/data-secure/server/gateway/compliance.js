@@ -12,16 +12,20 @@ const MAX_PASSES = 3;
 // The residual gate is handed the literals the redactor claims to have
 // replaced. Without them the gate can only re-run the redactor's own
 // detectors, which by construction cannot find what the redactor missed.
-function anonymizeMarkdown(raw, profile) {
+function anonymizeMarkdown(raw, profile, options = {}) {
   let candidate = String(raw || '');
   const dictionary = [];
   let entityCount = 0;
   let residual = [];
   let passes = 0;
   let strongPersonAnchor = false;
+  // A batch-scoped registry is deliberately an internal dependency. The MCP
+  // schema never accepts one and this function neither persists nor creates a
+  // secret: the later native secret-store gate owns that responsibility.
+  const anonymizeOptions = options.registry ? { registry: options.registry } : undefined;
 
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
-    const result = pii.anonymize(candidate, profile);
+    const result = pii.anonymize(candidate, profile, anonymizeOptions);
     candidate = result.text;
     entityCount += result.findings.length;
     for (const value of result.dictionary || []) dictionary.push(value);

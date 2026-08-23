@@ -105,7 +105,7 @@ Ein grüner Startnachweis umfasst mindestens:
 - `privacy_status` meldet `storage_safe: true`; bekannte Cloud-Sync- und
   Netzwerkpfade führen zu einem sicheren Stopp;
 - `Input`, `Output`, `Processed` und `Needs Visual Review` existieren;
-- 1–25 bestätigte TXT-/DOCX-Dateien werden vor der Verarbeitung an einen
+- 1–100 bestätigte TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB werden vor der Verarbeitung an einen
   serverseitigen Snapshot gebunden; ein Aufruf verarbeitet genau eine noch nicht
   versuchte Position, ein Stopp wird nicht automatisch wiederholt und Änderungen am
   Bestand invalidieren den Stapel;
@@ -121,15 +121,15 @@ Die vollständige Abnahme steht in [PILOT-ABNAHME.md](PILOT-ABNAHME.md).
 
 | Bereich | Inhalt | Standardverhalten |
 |---|---|---|
-| `Input` | noch nicht verarbeitete TXT-/DOCX-Arbeitskopien | wird vom Ordnerworkflow beansprucht |
+| `Input` | noch nicht verarbeitete TXT-/Markdown-/CSV-/DOCX-Arbeitskopien | wird vom Ordnerworkflow beansprucht |
 | `Processed` | verarbeitete Originale des Ordnerworkflows | nach Retention löschbar |
 | `Output` | freigegebene Markdown-Pakete | nach Retention löschbar; Lesen nur mit 15-Minuten-Berechtigung des aktuellen Laufs |
 | `Needs Visual Review` | lokal zurückgehaltene Vorschauen | keine Freigabe über Claude; Preview verfällt |
 | Audit | datensparsame Zähler/Status | keine Rohwerte, Namen, Pfade oder Inhalts-Hashes |
 
-Im Pilot werden ausschließlich TXT und DOCX über `Input` verarbeitet. PDF und alle
+Im Pilot werden ausschließlich TXT, Markdown (`.md`), CSV und DOCX über `Input` verarbeitet. CSV-Zellen werden nur als Text in eine Markdown-Tabelle übertragen und nie ausgeführt. PDF und alle
 weiteren Formate stoppen fail-closed. Der ältere
-TXT-/DOCX-Companion-Dateidialog bleibt ein getrennter Engineeringpfad und ist nicht
+TXT-/Markdown-/CSV-/DOCX-Companion-Dateidialog bleibt ein getrennter Engineeringpfad und ist nicht
 öffentlich als Werkzeug exponiert. Löschfehler werden gemeldet und beim nächsten
 Cleanup erneut versucht. Unbekannte Verzeichnisse, Symlinks und Junctions werden
 nicht aggressiv entfernt.

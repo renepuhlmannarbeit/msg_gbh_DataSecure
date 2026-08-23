@@ -37,7 +37,7 @@ engine as the rest of the document. The released Markdown marks them under
 ## Fail-closed points
 
 Text- und Office-Parser laufen pro Datei in einem separaten Node-Prozess. Der
-öffentliche Pilot akzeptiert ausschließlich TXT und DOCX. PDF stoppt vor dem
+öffentliche Pilot akzeptiert ausschließlich TXT, Markdown (`.md`), CSV und DOCX. CSV-Zellen werden nur als Text in Markdown überführt und nie ausgeführt. PDF stoppt vor dem
 Parserstart mit `PDF_COVERAGE_UNVERIFIED`; alle anderen Formate stoppen mit einem
 festen Nicht-Unterstützt-Code. Jede Parserwarnung verhindert eine Freigabe. Auf
 Windows x64 startet ein gebündelter nativer Launcher das Kind suspended, weist es vor
@@ -73,7 +73,7 @@ restriktivere temporäre Ablage bleiben vor klinischen Echtdaten eigene Gates.
 Every one of these stops the pipeline or withholds the asset rather than
 guessing:
 
-- every input format except TXT and DOCX
+- every input format except TXT, Markdown (`.md`), CSV and DOCX
 - unsupported or unparsable container, or any parser warning
 - every PDF, independent of apparent text or image content; the legacy Lite parser is
   retained only for adversarial tests and cannot publish a package
@@ -114,7 +114,7 @@ original may then be present in `Processed` while no package is visible in `Outp
 ## Batch and read capabilities
 
 After the user confirms the visible file count, `begin_document_batch` creates a
-server-owned snapshot for exactly 1–25 TXT-/DOCX inputs. Names, sizes, mtimes and
+server-owned snapshot for exactly 1–100 TXT-/Markdown-/CSV-/DOCX inputs. Names, sizes, mtimes and
 hashes remain local. Replacing, adding or removing a file invalidates the whole
 batch, even when the count stays unchanged. The server records each position as
 pending, processing, released or stopped; a stopped item is not retried

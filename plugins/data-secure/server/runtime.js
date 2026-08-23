@@ -198,7 +198,7 @@ async function convertDocument(source, options = {}) {
   // The parser contains additional extraction code for adversarial/unit tests,
   // but the product release boundary is intentionally narrower until coverage
   // for further formats has been demonstrated.
-  const supported = new Set(['.docx', '.txt']);
+  const supported = new Set(['.docx', '.txt', '.md', '.markdown', '.csv']);
   if (ext === '.pdf') throw pdfCoverageError();
   if (!supported.has(ext)) throw safeError(
     'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben.',
@@ -210,12 +210,13 @@ async function convertDocument(source, options = {}) {
   // pipeline. The current release keeps PDF fail-closed until the native PDFium contract in
   // docs/PDF_ENGINE_DECISION.md has passed all release gates.
   const worker = path.join(__dirname, 'parser-worker.js');
+  const networkDeny = path.join(__dirname, 'network-deny.cjs');
   const spawn = options.spawn || childProcess.spawn;
   const platform = options.platform || process.platform;
   const arch = options.arch || process.arch;
   const nodeExecutable = options.execPath || process.execPath;
   const nodeFlags = [
-    '--permission', `--allow-fs-read=${__dirname}`, '--disable-proto=throw',
+    '--permission', `--allow-fs-read=${__dirname}`, `--require=${networkDeny}`, '--disable-proto=throw',
     '--max-old-space-size=384', worker, ext
   ];
   let command = nodeExecutable;

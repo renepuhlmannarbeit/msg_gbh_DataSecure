@@ -48,7 +48,7 @@
       "required": ["id", "kind", "locator"],
       "properties": {
         "id": { "type": "string", "pattern": "^node-[0-9]{6}$" },
-        "kind": { "enum": ["text", "table"] },
+        "kind": { "enum": ["text", "table", "metadata"] },
         "locator": {
           "type": "object",
           "additionalProperties": false,

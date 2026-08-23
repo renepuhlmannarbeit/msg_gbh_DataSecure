@@ -16,9 +16,13 @@ Erkläre einen Teilerfolg anhand der Zähler und verwende nur die Paket-IDs dies
 
 ## Reine Textausgabe
 
-Anfrage: „Entferne die Bilder, anonymisiere alle Dateien und fasse danach die Qualifikationen zusammen.“
+Anfrage: „Entferne die Bilder aus dem Ergebnis, anonymisiere alle Dateien und fasse danach die Qualifikationen zusammen.“
 
-Die ausdrückliche Bildentfernung erlaubt `remove_images=true`. Lies danach alle freigegebenen
-Markdown-Dateien und fasse ausschließlich deren fachliche Inhalte zusammen.
+Verwende `remove_images=false`: Das Ergebnis ist ohnehin Markdown ohne Bildpixel. Grafiken
+bleiben lokal zurückgehalten; sicher erkannter Bildtext kann nach derselben Datenschutzprüfung
+im Markdown bleiben. Lies danach alle freigegebenen Markdown-Dateien und fasse ausschließlich
+deren fachliche Inhalte zusammen.
 
-Ohne eine solche Zustimmung bleibt `remove_images=false`.
+`remove_images=true` ist nur für den engeren Wunsch geeignet, die **lokalen** Bildanlagen selbst
+zu verwerfen. Das kann bei unbekannten Office-Objekten sicher stoppen und lässt keinen Bildtext
+in die Markdown-Ausgabe einfließen.

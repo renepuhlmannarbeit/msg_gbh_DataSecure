@@ -26,6 +26,10 @@ Tabelle aus Rohwert und Platzhalter ist verboten.
 - Eine Kollision innerhalb eines Stapels wird mit einer versionierten Domänentrennung
   deterministisch verlängert. Ein stilles Zusammenführen zweier Entitäten ist
   verboten.
+- Die laufzeitinterne Alias-Map ist nicht als Property zugänglich oder mutierbar.
+  Die PII-Engine erhält nur die begrenzten Methoden `remember` und
+  `entriesForKind` für die notwendige Aliasauflösung; die Registry selbst bleibt
+  nicht serialisierbar.
 
 ## Lebenszyklus und Datenschutz
 
@@ -54,4 +58,3 @@ Tests müssen gleiche Entitäten über mehrere Dateien und Neustarts, unterschie
 Stapel, Aliasformen, Unicode-Normalisierung, Typtrennung, künstliche Kollisionen,
 Secret-Verlust, Ablauf nach 14 Tagen, Rollback sowie die Abwesenheit von Rohwerten in
 Snapshot, Journal, Export, Diagnose und MCP-Ausgaben belegen.
-

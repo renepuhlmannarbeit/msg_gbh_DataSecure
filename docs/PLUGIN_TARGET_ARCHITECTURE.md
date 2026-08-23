@@ -78,10 +78,12 @@ Empfohlene Tool-Oberfläche:
 - `open_input_folder`
 - `begin_document_batch`
 - `anonymize_next_document`
+- `acknowledge_batch_document`
+- `continue_most_recent_document_batch`
 - `read_anonymized_document`
 - `list_visual_review_items`
 
-Der Server bindet eine bestätigte Menge von 1–25 Dateien an einen unveränderlichen
+Der Server bindet eine bestätigte Menge von 1–100 Dateien mit zusammen höchstens 500 MB an einen unveränderlichen
 lokalen Snapshot. Lesezugriff auf ein Ergebnis erfordert neben der Paket-ID eine
 kurzlebige, nur im Arbeitsspeicher gehaltene Berechtigung desselben Laufs. Eine
 globale Paketliste ist absichtlich nicht Teil der öffentlichen Tool-Oberfläche.

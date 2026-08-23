@@ -13,10 +13,11 @@ test('batch snapshot contract fixes originals, private copies and crash semantic
   const text = read('BATCH_SNAPSHOT_V1.md');
   for (const required of [
     'BL-011.1', 'Originale', 'Arbeitskopien', 'atomar', 'SHA-256', 'fsync',
-    'Symlink', 'Reparse-Point', '14 Tagen', 'Rechnerneustart', 'höchstens ein Stapel'
+    'Symlink', 'Reparse-Point', '14 Tagen', 'Rechnerneustart', 'höchstens ein Stapel', 'Checkpoint'
   ]) assert.ok(text.includes(required), `snapshot contract missing: ${required}`);
   assert.match(text, /Originalpfad wird nicht erneut geöffnet/u);
   assert.match(text, /Quellpfade werden nicht[\s\S]*Antworten geschrieben/u);
+  assert.match(text, /Checkpoint[\s\S]*niemals über MCP, Audit oder Diagnose/u);
 });
 
 test('pseudonym contract is restart-stable without a raw mapping table', () => {
@@ -27,6 +28,83 @@ test('pseudonym contract is restart-stable without a raw mapping table', () => {
   ]) assert.ok(text.includes(required), `pseudonym contract missing: ${required}`);
   assert.match(text, /Klartext-Fallback ist verboten/u);
   assert.match(text, /Zwischen Stapeln.*keine stabile Verknüpfung/u);
+});
+
+test('batch secret-store contract pins the native candidate and keeps every fallback closed', () => {
+  const text = read('BATCH_SECRET_STORE_V1.md');
+  for (const required of [
+    'BL-030.2', '@napi-rs/keyring', '1.3.0', 'MIT', 'new Entry(service, account)',
+    'setPassword', 'getPassword', 'deletePassword', '256-Bit', 'Base64url',
+    'keyring-win32-x64-msvc', 'keyring-darwin-x64', 'keyring-darwin-arm64',
+    'keyring-linux-x64-gnu', 'keyring-linux-x64-musl', 'BATCH_SECRET_STORE_UNAVAILABLE'
+  ]) assert.ok(text.includes(required), `secret-store contract missing: ${required}`);
+  assert.match(text, /vor\*\* Snapshot-Commit und Pseudonymvergabe/u);
+  assert.match(text, /keinen Klartext-, Datei-, Umgebungsvariablen-, CLI-, Cloud-/u);
+  assert.match(text, /Rechnerneustart zwischen Set und Get/u);
+});
+
+test('batch review contract keeps its aggregate UI anonymous and range-safe', () => {
+  const text = read('BATCH_REVIEW_V1.md');
+  for (const required of [
+    'BL-012.1', 'Dokument 1', 'Dokument N', 'globale Entwurfskennung',
+    'Rückzuordnung', 'nur im Speicher', 'Freie Bereichsredaktionen',
+    'dokumentgrenzenfesten', 'stdin', 'MCP-Antworten'
+  ]) assert.ok(text.includes(required), `batch-review contract missing: ${required}`);
+  assert.match(text, /Originalnamen und Pfade gehören nicht in die UI-Nutzlast/u);
+  assert.match(text, /positionssicheren, dokumentgrenzenfesten Abbildung gesperrt/iu);
+});
+
+test('embedded content contract fixes recursion, resources and active-content refusal', () => {
+  const text = read('EMBEDDED_CONTENT_V1.md');
+  for (const required of [
+    'BL-020.2', 'DS-017', '3 Ebenen', '20 eingebettete Dokumente',
+    '50 MiB', '100 MiB', 'VBA', 'OLE', 'ActiveX', 'externe Beziehungen',
+    'inhaltsfreie Coverage-Warnung', 'source_part', 'interne Paketbeziehung'
+  ]) assert.ok(text.includes(required), `embedded-content contract missing: ${required}`);
+  assert.match(text, /vollständigen Dokumentbaum, nicht pro Kind/u);
+  assert.match(text, /weder gestartet noch[\s\S]*abgedeckter statischer Inhalt/u);
+});
+
+test('raw-content network contract covers every local and remote escape class', () => {
+  const text = read('NETWORK_BOUNDARY_V1.md');
+  for (const required of [
+    'BL-020.3', 'Loopback', 'RFC1918', 'ULA', 'DNS', '--allow-net',
+    'network-deny.cjs', 'HTTP(S)', 'TCP/TLS', 'UDP', 'HTTP/2', 'fetch',
+    'WebSocket', 'DATASECURE_NETWORK_DENIED', 'Windows-x64', 'macOS-ARM64', 'Linux-x64'
+  ]) assert.ok(text.includes(required), `network contract missing: ${required}`);
+  assert.match(text, /kein Versprechen einer[\s\S]*Sandbox/u);
+  assert.match(text, /bleibt deshalb in Arbeit/u);
+});
+
+test('text source contract fixes strict UTF-8, inert Markdown and a closed release gate', () => {
+  const text = read('TEXT_SOURCE_V1.md');
+  for (const required of [
+    'BL-021.1', 'UTF-8', 'BOM', 'CRLF', 'NFC', 'C0-Steuerzeichen',
+    'Raw HTML', 'Frontmatter', 'Codeblöcke', 'Content-Graph V1',
+    'FORMAT_COVERAGE_UNVERIFIED', 'TextDecoder', 'fatal: true', 'markdown-it'
+  ]) assert.ok(text.includes(required), `text-source contract missing: ${required}`);
+  assert.match(text, /rendert[\s\S]*kein HTML/u);
+  assert.match(text, /Release-Gate geschlossen/u);
+});
+
+test('CSV source contract fixes strict dialect parsing and literal formula handling', () => {
+  const text = read('CSV_SOURCE_V1.md');
+  for (const required of [
+    'BL-021.2', 'RFC-4180', 'Semikolon', 'Tab', 'doppelte Anführungszeichen',
+    'ungleiche Zeilenbreiten', 'Formelähnliche', 'Content-Graph-V1',
+    'Papa Parse', 'Release-Gate geschlossen'
+  ]) assert.ok(text.includes(required), `CSV-source contract missing: ${required}`);
+  assert.match(text, /weder CSV noch XLSX als Ergebnis/u);
+});
+
+test('DOCX story contract covers secondary stories while keeping unknown parts closed', () => {
+  const text = read('DOCX_STORY_COVERAGE_V1.md');
+  for (const required of [
+    'BL-022.1', 'word/document.xml', 'w:hdr', 'w:ftr', 'w:comments',
+    'w:footnotes', 'w:endnotes', 'Textfelder', 'source_part', 'Residual-Gate',
+    'externe Beziehung', 'Glossarien', 'Mammoth'
+  ]) assert.ok(text.includes(required), `DOCX-story contract missing: ${required}`);
+  assert.match(text, /nicht stillschweigend ausgelassen/u);
 });
 
 test('PDF and OCR stay blocked until every platform risk cell is proven', () => {

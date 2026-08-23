@@ -46,7 +46,8 @@ function launchCompanion(options = {}) {
   const spawn = options.spawn || childProcess.spawn;
   const secret = crypto.randomBytes(32);
   const server = options.server || path.join(__dirname, 'stdio-server.js');
-  const child = spawn(options.execPath || process.execPath, [server], {
+  const networkDeny = options.networkDeny || path.join(__dirname, '..', 'network-deny.cjs');
+  const child = spawn(options.execPath || process.execPath, [`--require=${networkDeny}`, server], {
     stdio: ['pipe', 'pipe', 'ignore', 'pipe'],
     windowsHide: true,
     env: companionEnvironment(options.env || process.env)
@@ -87,7 +88,11 @@ function launchCompanion(options = {}) {
     pending.delete(message.sequence);
     clearTimeout(item.timer);
     if (message.type === 'result') item.resolve(message.result);
-    else item.reject(new SafeError(String(message.message || 'Companion-Anfrage wurde abgewiesen.')));
+    else {
+      const error = new SafeError(String(message.message || 'Companion-Anfrage wurde abgewiesen.'));
+      error.code = typeof message.code === 'string' ? message.code : 'REQUEST_REJECTED';
+      item.reject(error);
+    }
   }
 
   child.stdout.setEncoding('utf8');

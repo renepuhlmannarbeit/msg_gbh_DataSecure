@@ -162,14 +162,27 @@ async function main() {
     assert.strictEqual(result.completion_summary_shown, false);
   });
 
-  await testAsync('manager always closes the companion when local selection is cancelled', async () => {
+  await testAsync('manager returns an explicit terminal no-selection result and never retries the picker', async () => {
     let closed = false;
+    let calls = 0;
     const fake = {
       ready: Promise.resolve({}),
-      request: async () => { throw new Error('cancelled'); },
+      request: async () => {
+        calls++;
+        const error = new Error('cancelled');
+        error.code = 'LOCAL_SELECTION_CANCELLED';
+        throw error;
+      },
       close() { closed = true; }
     };
-    await assert.rejects(prepareLocalDocument('customer', { platform: 'win32', launchCompanion: () => fake }), /cancelled/);
+    const result = await prepareLocalDocument('customer', { platform: 'win32', launchCompanion: () => fake });
+    assert.deepStrictEqual(result, {
+      ok: false, error: 'local_selection_cancelled',
+      message: 'Die lokale Dateiauswahl wurde abgebrochen. Es wurde kein Stapel gestartet.',
+      workflow: 'local_companion_txt_docx', selected_count: 0, released_count: 0,
+      failed_count: 0, raw_content_sent_to_claude: false
+    });
+    assert.strictEqual(calls, 1);
     assert.strictEqual(closed, true);
   });
 

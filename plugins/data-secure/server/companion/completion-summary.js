@@ -3,13 +3,15 @@
 const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
+const { uiProcessEnvironment } = require('./ui-process-policy');
+const { LIMITS } = require('../gateway/common');
 
 function validateSummary(summary) {
   const selected = Number(summary?.selected_count);
   const released = Number(summary?.released_count);
   const failed = Number(summary?.failed_count);
   if (![selected, released, failed].every(Number.isSafeInteger) ||
-      selected < 1 || selected > 25 || released < 0 || failed < 0 ||
+      selected < 1 || selected > LIMITS.MAX_BATCH_FILES || released < 0 || failed < 0 ||
       released + failed !== selected) {
     throw new SafeError('Ungültige lokale Abschlusszusammenfassung.');
   }
@@ -37,18 +39,37 @@ function completionSummaryText(summary) {
   };
 }
 
-function defaultRunner(command, args) {
+function defaultRunner(command, args, _input, env = process.env) {
   return childProcess.spawnSync(command, args, {
     encoding: 'utf8', windowsHide: true, timeout: 10 * 60 * 1000,
-    maxBuffer: 64 * 1024, shell: false
+    maxBuffer: 64 * 1024, shell: false, env: uiProcessEnvironment(env)
   });
 }
 
 function completionSummaryCommand(summary, options = {}) {
-  if ((options.platform || process.platform) !== 'win32') {
-    throw new SafeError('Die lokale Abschlussansicht ist auf diesem Gerät noch nicht verfügbar.');
-  }
+  return completionSummaryCommands(summary, options)[0];
+}
+
+function completionSummaryCommands(summary, options = {}) {
+  const platform = options.platform || process.platform;
   const { title, message } = completionSummaryText(summary);
+  if (platform === 'darwin') {
+    const escape = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n');
+    return [{
+      command: '/usr/bin/osascript',
+      args: ['-e', `display dialog "${escape(message)}" with title "${escape(title)}" buttons {"Schließen"} default button "Schließen"; return "SHOWN"`]
+    }];
+  }
+  if (platform === 'linux') {
+    // Minimal Linux installations commonly ship either GTK (Zenity) or KDE
+    // (KDialog), not necessarily both. They receive the same fixed, content-
+    // free summary and are tried only when the first executable is absent.
+    return [
+      { command: 'zenity', args: ['--info', `--title=${title}`, `--text=${message}`] },
+      { command: 'kdialog', args: ['--msgbox', message, '--title', title] }
+    ];
+  }
+  if (platform !== 'win32') throw new SafeError('Für dieses Betriebssystem ist keine lokale Abschlussansicht verfügbar.');
   const escape = (value) => value.replace(/'/g, "''");
   const script = [
     'Add-Type -AssemblyName System.Windows.Forms',
@@ -83,24 +104,40 @@ function completionSummaryCommand(summary, options = {}) {
     "[Console]::Out.Write('SHOWN')"
   ].join('; ');
   const env = options.env || process.env;
-  return {
+  return [{
     command: path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script]
-  };
+  }];
 }
 
 function showCompletionSummary(summary, options = {}) {
-  const spec = completionSummaryCommand(summary, options);
-  const result = (options.runner || defaultRunner)(spec.command, spec.args);
-  if (result?.error || result?.status !== 0 || String(result?.stdout || '').trim() !== 'SHOWN') {
-    throw new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.');
+  const platform = options.platform || process.platform;
+  let unavailable = 0;
+  for (const spec of completionSummaryCommands(summary, options)) {
+    const result = (options.runner || defaultRunner)(
+      spec.command,
+      spec.args,
+      undefined,
+      options.env || process.env
+    );
+    if (result?.error?.code === 'ENOENT') {
+      unavailable++;
+      continue;
+    }
+    const shown = platform === 'linux'
+      ? result?.status === 0
+      : result?.status === 0 && String(result?.stdout || '').trim() === 'SHOWN';
+    if (result?.error || !shown) throw new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.');
+    return true;
   }
-  return true;
+  if (unavailable) throw new SafeError('Auf diesem Gerät ist keine lokale Abschlussansicht verfügbar.');
+  throw new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.');
 }
 
 module.exports = {
   validateSummary,
   completionSummaryText,
   completionSummaryCommand,
+  completionSummaryCommands,
   showCompletionSummary
 };

@@ -138,12 +138,14 @@ function buildOrgDictionary(text, reg, profile, findings) {
   for (const org of orgs) {
     const existing = reg.lookup('ORG', org);
     const ph = existing || reg.assign(profile === 'personnel_profile' ? 'CUSTOMER' : 'ORG', org);
-    reg.map.set(`ORG:${key(org)}`, ph);
+    if (typeof reg.remember === 'function') reg.remember('ORG', org, ph);
+    else reg.map.set(`ORG:${key(org)}`, ph);
     findings.push({ type: 'ORGANIZATION', value_hash: hashShort(org) });
   }
 
   // Includes organisations registered by the personnel line rules.
-  for (const [mapKey, ph] of reg.map) {
+  const orgPairs = typeof reg.entriesForKind === 'function' ? reg.entriesForKind('ORG').map(({ value, placeholder }) => [`ORG:${value}`, placeholder]) : reg.map;
+  for (const [mapKey, ph] of orgPairs) {
     if (!mapKey.startsWith('ORG:')) continue;
     const value = mapKey.slice(4);
     entries.push({
@@ -163,7 +165,8 @@ function buildOrgDictionary(text, reg, profile, findings) {
     }
   }
 
-  for (const [mapKey, ph] of reg.map) {
+  const projectPairs = typeof reg.entriesForKind === 'function' ? reg.entriesForKind('PROJECT').map(({ value, placeholder }) => [`PROJECT:${value}`, placeholder]) : reg.map;
+  for (const [mapKey, ph] of projectPairs) {
     if (!mapKey.startsWith('PROJECT:')) continue;
     entries.push({
       value: mapKey.slice(8),
@@ -176,10 +179,10 @@ function buildOrgDictionary(text, reg, profile, findings) {
   return entries;
 }
 
-function anonymize(text, profile = 'general') {
+function anonymize(text, profile = 'general', options = {}) {
   const src = normalizeText(text);
   const findings = [];
-  const reg = makeRegistry();
+  const reg = options.registry || makeRegistry();
   const sourceCredentialRanges = profile === 'personnel_profile' || profile === 'applicant'
     ? credentialContextSpans(src)
     : [];

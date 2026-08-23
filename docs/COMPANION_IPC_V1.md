@@ -1,6 +1,6 @@
 # DataSecure Companion IPC v1
 
-Status: privater IPC, MCP-Supervisor und TXT-/DOCX-Vertical-Slice mit nativer
+Status: privater IPC, MCP-Supervisor und TXT-/Markdown-/CSV-/DOCX-Vertical-Slice mit nativer
 Dateiauswahl sowie lokaler Redaktionsprüfung unter Windows implementiert;
 plattformübergreifende Review-UI, Packaging und Codesignatur noch nicht implementiert.
 
@@ -33,7 +33,7 @@ lokalen Prozessverbunds.
 ## Lokale Dateiauswahl
 
 `pick_sources` öffnet einen nativen Dialog außerhalb Claude. Unter Windows kann
-der Anwender eine oder bis zu 25 TXT-/DOCX-Dateien gleichzeitig auswählen;
+der Anwender eine oder bis zu 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB gleichzeitig auswählen;
 `pick_source` bleibt als interner Einzeldatei-Befehl kompatibel:
 
 - Windows: `System.Windows.Forms.OpenFileDialog` über das gebündelte Windows
@@ -42,8 +42,8 @@ der Anwender eine oder bis zu 25 TXT-/DOCX-Dateien gleichzeitig auswählen;
 - Linux: `zenity`, mit lokalem `kdialog` als Fallback.
 
 Jede Auswahl wird anschließend erneut gegen das Dateisystem geprüft: absoluter
-Pfad, unterstützte Endung, reguläre Datei, kein Symlink und höchstens 100 MiB.
-Doppelte Einträge und mehr als 25 Dateien werden abgewiesen. Pfade und Dateigrößen
+Pfad, unterstützte Endung, reguläre Datei, kein Symlink und höchstens 500 MiB.
+Doppelte Einträge, mehr als 100 Dateien und mehr als 500 MB Gesamtgröße werden abgewiesen. Pfade und Dateigrößen
 bleiben im flüchtigen Companion-Speicher. Claude-Antworten und die append-only
 Jobjournale enthalten weder Pfad noch Dateinamen oder Rohbytes.
 

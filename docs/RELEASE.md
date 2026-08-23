@@ -67,7 +67,7 @@ Do not mark a build production-ready until all of these hold:
       in the release evidence; until an official stable CI validator is pinned, this
       remains an explicit release-workstation gate
 - [ ] the extracted plugin ZIP passes `npm run test:plugin-zip`: German skill
-      contracts, the 150-case contract matrix and preservation controls are green
+      contracts, the 150-case end-to-end matrix, the 1.000-case detector corpus and preservation controls are green
 - [ ] every model offered in the pilot passes all 20 cases from
       `evals/skill-behavior-cases.json` according to `docs/SKILL_EVALUATION.md`;
       corpus validation in `npm test` is not a substitute for these model runs

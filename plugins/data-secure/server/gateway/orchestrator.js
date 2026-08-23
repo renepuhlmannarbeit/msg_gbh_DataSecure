@@ -16,6 +16,7 @@ const {
   safePackageId,
   uniqueDir,
   listInput,
+  validateBatchLimits,
   detectProfileFromMarkdown
 } = require('./common');
 const { processVisuals, assetsMarkdown } = require('./visuals');
@@ -179,6 +180,11 @@ function bestEffortRetentionCleanup(deps, scope = 'all') {
 }
 
 function bestEffortDiagnostic(deps, event) {
+  // A batch-review preparation pass deliberately recreates review material
+  // from a sealed source and then discards it before publication. It is not a
+  // failed user-visible processing attempt, so it must not add a misleading
+  // diagnostic event while the raw-derived draft is still in memory.
+  if (deps.suppressDiagnostic === true) return false;
   try {
     return (deps.recordDiagnostic || recordDiagnostic)(event);
   } catch {
@@ -239,7 +245,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   if (!PILOT_SUPPORTED.has(ext)) {
     const error = new SafeError(
       'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben. ' +
-        'Verwenden Sie ausschließlich TXT oder DOCX; PDF, XLSX, PPTX, Markdown, CSV und Bilddateien bleiben sicher gestoppt.'
+      'Verwenden Sie ausschließlich TXT, Markdown, CSV oder DOCX; PDF, XLSX, PPTX und Bilddateien bleiben sicher gestoppt.'
     );
     error.code = ext === '.pdf' ? 'PDF_COVERAGE_UNVERIFIED' : 'FORMAT_COVERAGE_UNVERIFIED';
     bestEffortDiagnostic(deps, {
@@ -328,7 +334,21 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     const effective = requested === 'auto' ? detectProfileFromMarkdown(converted.markdown) : requested;
     diagnostic.profile = effective;
     diagnosticStage = 'profile_selected';
-    const finalPackage = uniqueDir(r.output, `${safePackageId(effective)}_${crypto.randomBytes(3).toString('hex')}`);
+    // Batch sessions own an opaque random item id before any source bytes are
+    // processed.  They may supply it as a deterministic package id so crash
+    // recovery can recognize an already-published package without inspecting
+    // source names or retrying that source.  Interactive one-off processing
+    // keeps the existing collision-safe random naming.
+    const requestedPackageId = deps.packageId === undefined ? null : String(deps.packageId);
+    if (requestedPackageId !== null && !/^[A-Za-z0-9_-]{16,128}$/.test(requestedPackageId)) {
+      throw new SafeError('Die lokale Paketkennung ist ungültig.');
+    }
+    const finalPackage = requestedPackageId === null
+      ? uniqueDir(r.output, `${safePackageId(effective)}_${crypto.randomBytes(3).toString('hex')}`)
+      : path.join(r.output, requestedPackageId);
+    if (requestedPackageId !== null && fs.existsSync(finalPackage)) {
+      throw new SafeError('Die lokale Paketkennung ist bereits belegt; Verarbeitung wurde sicher gestoppt.');
+    }
     const packageId = path.basename(finalPackage);
     reviewPackageId = packageId;
     stagePackage = path.join(r.output, `.${packageId}.tmp_${crypto.randomBytes(3).toString('hex')}`);
@@ -362,7 +382,12 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         'Processed für manuelle visuelle Prüfung.';
     }
 
-    const anon = anonymizeMarkdown(rawWithOcr, effective);
+    // `pseudonymRegistry` is an internal, short-lived dependency reserved for
+    // the future three-platform native-secret-store release. It cannot come
+    // from an MCP tool argument and is never written to an output package,
+    // journal, diagnostic, or audit receipt.
+    const anon = anonymizeMarkdown(rawWithOcr, effective,
+      deps.pseudonymRegistry ? { registry: deps.pseudonymRegistry } : undefined);
     const ambiguities = ['personnel_profile', 'applicant'].includes(effective)
       ? credentialIssuerAmbiguities(rawWithOcr, anon.text)
       : [];
@@ -659,7 +684,11 @@ async function anonymizeAll(profile = 'auto', deps = {}) {
     };
   }
 
-  const maximum = 25;
+  try { validateBatchLimits(queue); } catch (error) {
+    if (error.message === 'BATCH_TOTAL_LIMIT') throw new SafeError('Der lokale Stapel ist größer als 500 MB.');
+    throw new SafeError('Der lokale Stapel enthält zu viele oder zu große Dateien.');
+  }
+  const maximum = LIMITS.MAX_BATCH_FILES;
   const selected = queue.slice(0, maximum);
   const results = [];
   for (let index = 0; index < selected.length; index++) {
@@ -710,8 +739,8 @@ async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
     throw new SafeError('Companion-Quelle ist keine reguläre lokale Datei.');
   }
   const ext = path.extname(absolute).toLowerCase();
-  if (!new Set(['.txt', '.docx']).has(ext)) {
-    throw new SafeError('Der private Dateidialog unterstützt derzeit ausschließlich TXT und DOCX.');
+  if (!new Set(['.txt', '.md', '.markdown', '.csv', '.docx']).has(ext)) {
+    throw new SafeError('Der private Dateidialog unterstützt derzeit ausschließlich TXT, Markdown, CSV und DOCX.');
   }
   return anonymizeNext(profile, {
     ...deps,

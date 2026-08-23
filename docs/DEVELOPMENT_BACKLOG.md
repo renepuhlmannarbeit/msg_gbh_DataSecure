@@ -331,17 +331,21 @@ Online-Datenbank und keine Freshnesslogik.
 
 ### DS-011 – Ein lokaler Datei- und Mehrdatei-Einstieg (M)
 
-**Stand RC19 (seit RC17): nutzbarer TXT-/DOCX-Slice umgesetzt.** Der private Windows-Dialog erlaubt
-bis zu 25 TXT-/DOCX-Dateien; jede erhält einen eigenen Job und ein eigenes Paket.
-Fehler werden pro Datei isoliert, das lokale Prüffenster zeigt „Datei x von y“, und
-die MCP-Zusammenfassung trennt ausgewählt, freigegeben und sicher gestoppt. Nach einer
+**Stand RC30: nutzbarer TXT-/Markdown-/CSV-/DOCX-Slice umgesetzt.** Der private lokale Dialog erlaubt
+bis zu 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit insgesamt höchstens 500 MB; jede erhält einen eigenen Job und ein eigenes Paket.
+Fehler werden pro Datei isoliert. Eindeutige Textdateien folgen nach der bewussten
+lokalen Auswahl ohne einen zusätzlichen identischen Einzeldialog dem automatischen
+Pfad; nur offene fachliche Entscheidungen können weiter ein lokales Prüffenster mit
+„Datei x von y“ auslösen. Die MCP-Zusammenfassung trennt ausgewählt, freigegeben und
+sicher gestoppt. Nach einer
 Mehrfachauswahl erscheint genau einmal eine lokale Abschlussansicht mit denselben drei
 Zählern und ausschließlich „Schließen“. PDF wurde nach adversarialem Security-Review
 nicht freigeschaltet: Der Lite-Parser belegt Page-, Font- und Visual-Coverage noch nicht.
 
 **Ergebnis:** „Dateien für Claude vorbereiten“ öffnet einen lokalen Dialog für eine
-oder mehrere Dateien. Jede Datei wird unabhängig verarbeitet; offene Entscheidungen
-werden nacheinander lokal geklärt. Der Input-Ordner bleibt ein IT-/Fallbackweg, aber
+oder mehrere Dateien. Jede Datei wird unabhängig verarbeitet; klare Dateien benötigen
+keine weitere Interaktion, offene Entscheidungen werden derzeit noch nacheinander
+lokal geklärt. Der Input-Ordner bleibt ein IT-/Fallbackweg, aber
 kein zweiter normaler Nutzerprozess.
 
 **Abnahme:**
@@ -614,7 +618,7 @@ belegen:
 3. **DS-003 (technisch in RC14, menschliche Abnahme offen):** Pflichtdialog nutzt eine
    Frage, zwei Antworten und Zurück/Ändern. Mit mindestens fünf fachfremden Personen
    synthetisch testen. Visuelle Freigabe bleibt deaktiviert.
-4. **DS-011 (TXT-/DOCX-Slice seit RC17):** Mehrfachauswahl, lokales „Datei x von y“,
+4. **DS-011 (TXT-/Markdown-/CSV-/DOCX-Slice seit RC17):** Mehrfachauswahl, lokales „Datei x von y“,
    Fehlerisolierung und eine rein informative Abschlussansicht sind umgesetzt;
    weitere Formate folgen ausschließlich anhand der Coverage-Matrix aus DS-203.
 5. **DS-010 (erledigt in RC14):** Offline-Fachkatalog, Validator und Contract-Korpus

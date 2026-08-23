@@ -72,8 +72,10 @@ macOS und Linux sowie die in `DS-033` festgelegte 1.000-Dokument-Suite voraus.
 ## Ist-Zustand RC30
 
 RC30 ist ausschließlich die technische Ausgangsbasis. Aktuell öffentlich freigegeben
-sind nur TXT und DOCX im synthetischen Engineering-Betrieb; 25 Dateien bilden die
-heutige Stapelgrenze. PDF und weitere Zielformate, der neue Abschlussdialog,
-dauerhafte Mapping-Exporte, 100-Dateien-Fortsetzung und die plattformübergreifende
-Ein-Klick-Laufzeit sind noch nicht vollständig implementiert. Maßgeblich für den
+sind nur TXT, Markdown, CSV und DOCX im synthetischen Engineering-Betrieb; bis zu 100 Dateien mit
+zusammen höchstens 500 MB bilden die heutige Stapelgrenze. Der serverseitig
+versiegelte Stapel, der dauerhafte lokale Mapping-Export und die ausdrückliche
+Wiederaufnahme nach Unterbrechungen sind als Engineering-Basis umgesetzt; der
+stapelweite Abschlussdialog und die nachweislich installationsfreie Drei-OS-Laufzeit
+fehlen weiterhin. PDF und weitere Zielformate bleiben gesperrt. Maßgeblich für den
 aktuellen Betriebsumfang bleiben README, Betriebshandbuch und Releasecheckliste.

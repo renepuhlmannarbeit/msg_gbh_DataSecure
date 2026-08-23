@@ -1,0 +1,38 @@
+name: Native keyring smoke pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keyring-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pilot:
+    name: OS secret store pilot (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Exactly one runner per supported OS family.  The package lock already
+        # pins both macOS architecture artifacts; a second macOS runner would
+        # duplicate the same behavioural smoke test at a high Actions cost.
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.13.0'
+          cache: npm
+          cache-dependency-path: native/keyring/pilot/package-lock.json
+      - name: Install locked native candidate
+        run: npm ci --prefix native/keyring/pilot --ignore-scripts
+      - name: Prove native store set/get/delete without a fallback
+        shell: bash
+        env:
+          RUN_KEYRING_PILOT: '1'
+        run: node tests/test-keyring-pilot.js

@@ -31,6 +31,12 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /`package_id` und `read_capability` aus demselben erfolgreichen Einzelergebnis/iu);
 });
 
+test('Markdown-only output keeps image pixels local instead of unnecessarily enabling strict discard', () => {
+  assert.match(anonymizeSkill, /Jedes freigegebene Paket ist Markdown ohne Bildpixel/u);
+  assert.match(anonymizeSkill, /Setze `remove_images=true` \*\*nicht\*\* bloß für „nur Markdown“/u);
+  assert.match(anonymizeSkill, /Verwende ohne Rückfrage `remove_images=false` – auch bei „nur Markdown“/u);
+});
+
 test('explanation skill states the privacy boundary and avoids a legal anonymity claim', () => {
   assert.match(explainSkill, /Skills steuern den Ablauf, sind aber selbst keine Datenschutzgrenze/u);
   assert.match(explainSkill, /nicht automatisch eine rechtliche Anonymisierung/u);

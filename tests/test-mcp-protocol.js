@@ -132,20 +132,25 @@ async function main() {
     assert.match(instructions, /keine rechtssichere Anonymität/i);
     assert.match(instructions, /erlaubt kein automatisches HR-Ranking/i);
     assert.match(instructions, /Erkannter Bildtext benötigt dieselbe Textprüfung/i);
-    assert.match(instructions, /Nutze nur TXT\/DOCX/i);
+    assert.match(instructions, /Nutze nur TXT, Markdown, CSV oder DOCX/i);
+    assert.match(instructions, /Host-Stopp: kein Ersatzdialog oder Teilpaket/i);
     assert.ok(Buffer.byteLength(instructions, 'utf8') <= 2048, 'Claude truncates MCP instructions above 2 KB');
   });
 
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 11, `expected exactly 11 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 16, `expected exactly 16 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'open_input_folder'));
     assert.ok(!tools.some((tool) => tool.name === 'prepare_local_document'));
     assert.ok(!tools.some((tool) => tool.name === 'anonymize_all_documents'));
     assert.ok(!tools.some((tool) => tool.name === 'list_anonymized_packages'));
     assert.ok(tools.some((tool) => tool.name === 'begin_document_batch'));
+    assert.ok(tools.some((tool) => tool.name === 'acknowledge_batch_document'));
+    assert.ok(tools.some((tool) => tool.name === 'review_deferred_document_batch'));
+    assert.ok(tools.some((tool) => tool.name === 'continue_most_recent_document_batch'));
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
+    assert.ok(tools.some((tool) => tool.name === 'export_diagnostic_package'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
     for (const tool of tools) {
       assert.ok(tool.name, 'tool without a name');
@@ -162,9 +167,17 @@ async function main() {
     const next = tools.find((tool) => tool.name === 'anonymize_next_document');
     assert.deepStrictEqual(next.inputSchema.required, ['batch_token']);
     assert.strictEqual(next.inputSchema.properties.batch_token.minLength, 64);
+    const acknowledge = tools.find((tool) => tool.name === 'acknowledge_batch_document');
+    assert.deepStrictEqual(acknowledge.inputSchema.required, ['batch_token', 'package_id']);
+    const continueMostRecent = tools.find((tool) => tool.name === 'continue_most_recent_document_batch');
+    assert.deepStrictEqual(continueMostRecent.inputSchema.required, ['confirmed']);
+    assert.strictEqual(continueMostRecent.inputSchema.properties.confirmed.const, true);
+    const resume = tools.find((tool) => tool.name === 'resume_document_batch');
+    assert.deepStrictEqual(resume.inputSchema.required, ['batch_token', 'confirmed']);
+    assert.strictEqual(resume.inputSchema.properties.confirmed.const, true);
     const begin = tools.find((tool) => tool.name === 'begin_document_batch');
     assert.deepStrictEqual(begin.inputSchema.required, ['expected_count']);
-    assert.strictEqual(begin.inputSchema.properties.expected_count.maximum, 25);
+    assert.strictEqual(begin.inputSchema.properties.expected_count.maximum, 100);
     for (const name of ['read_anonymized_document']) {
       const readTool = tools.find((tool) => tool.name === name);
       assert.ok(readTool.inputSchema.required.includes('read_capability'));
@@ -196,6 +209,15 @@ async function main() {
     assert.deepStrictEqual(purge.inputSchema.properties.scope.enum, ['processed', 'output', 'review', 'all']);
   });
 
+  await testAsync('diagnostic export rejects missing confirmation before creating a local support package', async () => {
+    const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/call', {
+      name: 'export_diagnostic_package', arguments: {}
+    })]);
+    const result = responses.find((response) => response.id === 2).result;
+    assert.strictEqual(result.isError, true);
+    assert.match(result.content[0].text, /ausdrückliche Bestätigung/);
+  });
+
   await testAsync('purge_local_data refuses omission and deletes only the confirmed scope', async () => {
     const processed = path.join(root, 'Processed');
     const output = path.join(root, 'Output');
@@ -224,6 +246,27 @@ async function main() {
     assert.ok(fs.existsSync(path.join(output, 'keep-package', 'manifest.json')));
   });
 
+  await testAsync('resume_document_batch rejects a missing or false confirmation before it can resume work', async () => {
+    const token = 'a'.repeat(64);
+    const { responses } = await talk([
+      rpc(1, 'initialize', {}),
+      rpc(2, 'tools/call', { name: 'resume_document_batch', arguments: { batch_token: token, confirmed: false } })
+    ]);
+    const result = responses.find((response) => response.id === 2).result;
+    assert.strictEqual(result.isError, true);
+    assert.strictEqual(result.structuredContent.raw_content_sent_to_claude, false);
+  });
+
+  await testAsync('continue_most_recent_document_batch rejects a missing confirmation before it can select a local batch', async () => {
+    const { responses } = await talk([
+      rpc(1, 'initialize', {}),
+      rpc(2, 'tools/call', { name: 'continue_most_recent_document_batch', arguments: {} })
+    ]);
+    const result = responses.find((response) => response.id === 2).result;
+    assert.strictEqual(result.isError, true);
+    assert.strictEqual(result.structuredContent.raw_content_sent_to_claude, false);
+  });
+
   await testAsync('tools/call privacy_status returns structured content without raw document data', async () => {
     const { responses } = await talk([
       rpc(1, 'initialize', {}),
@@ -241,6 +284,12 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.audit_receipts_retained, 'number');
     assert.strictEqual(typeof result.structuredContent.legacy_audit_pending, 'number');
     assert.strictEqual(typeof result.structuredContent.audit_migration_errors, 'number');
+    assert.strictEqual(typeof result.structuredContent.recoverable_batches, 'number');
+    assert.strictEqual(typeof result.structuredContent.batches_awaiting_resume, 'number');
+    assert.strictEqual(typeof result.structuredContent.batches_awaiting_delivery, 'number');
+    assert.strictEqual(typeof result.structuredContent.batch_processing_active, 'boolean');
+    assert.strictEqual(typeof result.structuredContent.private_work_copy_cleanup_pending, 'number');
+    assert.strictEqual(typeof result.structuredContent.expired_batch_cleanup_pending, 'number');
     assert.strictEqual(typeof result.structuredContent.audit_write_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
     assert.strictEqual(result.structuredContent.companion_phase, 'txt_docx_vertical_slice_ready');
@@ -249,7 +298,7 @@ async function main() {
       : ['darwin', 'linux'].includes(process.platform)
         ? 'native_picker_confirm_or_fail_closed_on_ambiguity'
         : 'unavailable');
-    assert.deepStrictEqual(result.structuredContent.companion_supported_vertical_slice_inputs, ['TXT', 'DOCX']);
+    assert.deepStrictEqual(result.structuredContent.companion_supported_vertical_slice_inputs, ['TXT', 'Markdown (.md)', 'CSV', 'DOCX']);
     assert.strictEqual(result.structuredContent.companion_private_ipc, 'inherited_stdio_authenticated');
     assert.strictEqual(result.structuredContent.companion_binary_signing, 'not_implemented');
     assert.strictEqual(result.structuredContent.companion_job_retention, 'integrated');
@@ -258,11 +307,11 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.companion_job_inspection_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_model_can_review, false);
     assert.strictEqual(result.structuredContent.companion_model_can_release, false);
-    assert.deepStrictEqual(result.structuredContent.supported_inputs, ['Word (.docx)', 'TXT']);
+    assert.deepStrictEqual(result.structuredContent.supported_inputs, ['Word (.docx)', 'Markdown (.md)', 'CSV', 'TXT']);
     assert.ok(!result.structuredContent.supported_inputs.includes('PDF'));
     assert.deepStrictEqual(result.structuredContent.blocked_inputs, [
       { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
-      { format: 'XLSX, PPTX, Markdown, CSV und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
+      { format: 'XLSX, PPTX und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ]);
     assert.strictEqual(result.structuredContent.visual_boundary,
       process.platform === 'win32' ? 'windows_job_object' : 'unavailable');

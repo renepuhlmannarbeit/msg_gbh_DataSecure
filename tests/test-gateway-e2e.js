@@ -340,6 +340,79 @@ async function main() {
     fs.unlinkSync(src);
   });
 
+  await testAsync('a Markdown source takes the same isolated privacy path as TXT without fetching references', async () => {
+    const source = queueBuffer(
+      'released-markdown.md',
+      Buffer.from('# Interne Notiz\n\nKontakt: Max Mustermann\n\n![extern](https://example.invalid/image.png)\n', 'utf8')
+    );
+    const result = await gw.anonymizeNext('auto', depsFor('none'));
+    assert.strictEqual(result.ok, true);
+    const { markdown } = readPackage(result);
+    assertAbsent(markdown, 'Max Mustermann', 'Markdown contact');
+    assertPresent(markdown, '[PERSON_001]', 'Markdown pseudonym');
+    assertPresent(markdown, 'https://example.invalid/image.png', 'inert Markdown reference');
+    assert.strictEqual(fs.existsSync(source), false, 'released Markdown is claimed from Input only after the allowlist gate');
+  });
+
+  await testAsync('the long .markdown extension uses the same isolated privacy path as .md', async () => {
+    const source = queueBuffer(
+      'released-markdown-long.markdown',
+      Buffer.from('# Interne Notiz\n\nKontakt: Erika Beispiel\n\nRolle: Business Analystin\n', 'utf8')
+    );
+    const result = await gw.anonymizeNext('auto', depsFor('none'));
+    assert.strictEqual(result.ok, true);
+    const { markdown } = readPackage(result);
+    assertAbsent(markdown, 'Erika Beispiel', 'long Markdown contact');
+    assertPresent(markdown, '[PERSON_001]', 'long Markdown pseudonym');
+    assertPresent(markdown, 'Business Analystin', 'long Markdown role');
+    assert.strictEqual(fs.existsSync(source), false, 'the long Markdown extension is claimed only after the allowlist gate');
+  });
+
+  await testAsync('a CSV source is converted locally into anonymized Markdown without evaluating cells', async () => {
+    const source = queueBuffer(
+      'released-table.csv',
+      Buffer.from('Name;Rolle;Projekt\nMax Mustermann;Product Owner;Klinikportal\nErika Beispiel;Testmanagerin;Telematik\n', 'utf8')
+    );
+    const result = await gw.anonymizeNext('auto', depsFor('none'));
+    assert.strictEqual(result.ok, true);
+    const { markdown } = readPackage(result);
+    assertAbsent(markdown, 'Max Mustermann', 'CSV contact');
+    assertAbsent(markdown, 'Erika Beispiel', 'CSV contact');
+    assertPresent(markdown, '[PERSON_001]', 'CSV pseudonym');
+    assertPresent(markdown, 'Product Owner', 'CSV professional role');
+    assertPresent(markdown, 'Klinikportal', 'CSV professional content');
+    assert.strictEqual(fs.existsSync(source), false, 'released CSV is claimed from Input only after the allowlist gate');
+  });
+
+  await testAsync('every recognised but unreleased non-PDF format stops before any claim or package', async () => {
+    const outputDir = path.join(root, 'Output');
+    const processedDir = path.join(root, 'Processed');
+    const reviewDir = path.join(root, 'Needs Visual Review');
+    const count = (dir) => fs.existsSync(dir) ? fs.readdirSync(dir).length : 0;
+    const before = {
+      output: count(outputDir), processed: count(processedDir), review: count(reviewDir)
+    };
+    const samples = [
+      ['unreleased-sheet.xlsx', Buffer.from('not-an-ooxml-workbook', 'utf8')],
+      ['unreleased-slides.pptx', Buffer.from('not-an-ooxml-presentation', 'utf8')],
+      ['unreleased-image.jpg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+      ['unreleased-image.jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+      ['unreleased-image.bmp', Buffer.from('BM', 'ascii')]
+    ];
+    for (const [name, bytes] of samples) {
+      const source = queueBuffer(name, bytes);
+      await assert.rejects(
+        () => gw.anonymizeNext('auto', depsFor('none')),
+        (error) => error.code === 'FORMAT_COVERAGE_UNVERIFIED'
+      );
+      assert.strictEqual(fs.existsSync(source), true, `${path.extname(name)} stays untouched in Input`);
+      fs.unlinkSync(source);
+    }
+    assert.strictEqual(count(outputDir), before.output, 'unreleased formats create no output package');
+    assert.strictEqual(count(processedDir), before.processed, 'unreleased formats never move to Processed');
+    assert.strictEqual(count(reviewDir), before.review, 'unreleased formats create no visual review copy');
+  });
+
   await testAsync('a scanned PDF cannot bypass the PDF coverage gate through an embedded JPEG', async () => {
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
     const scan = Buffer.from(
@@ -653,7 +726,7 @@ async function main() {
     assert.ok(!status.supported_inputs.includes('PDF'));
     assert.deepStrictEqual(status.blocked_inputs, [
       { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
-      { format: 'XLSX, PPTX, Markdown, CSV und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
+      { format: 'XLSX, PPTX und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ]);
     assert.strictEqual(status.retention_days, 7);
     assert.strictEqual(typeof status.retention_due_entries.total, 'number');

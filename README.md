@@ -16,7 +16,9 @@ Zielbuild auch in Cowork Desktop beobachtet, bleibt aber versionsabhängig und w
 jeder Freigabe erneut getestet. Web- und Mobiloberflächen dürfen nur bereits
 bereinigte Outputs nutzen oder den Ablauf erklären, niemals Originaldateien zur
 angeblich lokalen Vorverarbeitung annehmen. Der Standalone-MCPB bleibt als
-Fallback-Artefakt für direkte Claude-Desktop-Extension-Installationen erhalten.
+Fallback-Artefakt für direkte Claude-Desktop-Extension-Installationen erhalten. Die
+Claude-Desktop-App ist kein Linux-Auslieferungsweg; Linux bleibt ein Ziel für einen
+lokalen Claude-Code-Host und benötigt dafür eine eigene Installationsabnahme.
 
 ## Zielworkflow
 
@@ -38,13 +40,18 @@ DOCX / TXT (beaufsichtigter Pilot)
 
 Wenn Rohdaten **vor** der Modellverarbeitung bereinigt werden müssen, wird das Original weder direkt in den Chat hochgeladen noch hineinkopiert. Nach außen gibt es einen Einstieg: „Anonymisiere eine oder mehrere Dateien lokal.“ DataSecure wählt den passenden lokalen Weg und verwendet danach nur die erzeugten Privacy-Pakete.
 
-Bis zu 25 TXT-/DOCX-Dateien werden gemeinsam in den über Claude geöffneten lokalen `Input`-Ordner gelegt. Nach der Nutzerbestätigung bindet der Server den unveränderten Bestand an ein kurzlebiges Batch-Token; Anzahl, Identitäten und Hashes bleiben lokal. Jeder MCP-Aufruf verarbeitet genau eine noch nicht versuchte Datei. Ein Stopp wird serverseitig festgehalten, Änderungen am Input invalidieren den Stapel. Jede erfolgreiche Datei erhält ein eigenes Markdown-Paket und eine paketgebundene Leseberechtigung für 15 Minuten. PDF und alle weiteren Formate bleiben im Pilot gesperrt.
+Bis zu 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB werden gemeinsam in den über Claude geöffneten lokalen `Input`-Ordner gelegt. Nach der Nutzerbestätigung übernimmt der Server versiegelte private Arbeitskopien; Anzahl, Identitäten und Hashes bleiben lokal. Jeder MCP-Aufruf verarbeitet genau eine noch nicht versuchte Datei. Ein Stopp wird serverseitig festgehalten, Änderungen am Input verändern den gestarteten Stapel nicht. In einer neuen Unterhaltung zeigt DataSecure nur die Anzahl offener Stapel und fragt vor der Fortsetzung ausdrücklich nach. Nach jedem erfolgreichen Paket liest Claude dieses mit einer paketgebundenen, 15 Minuten gültigen Berechtigung und bestätigt die Übergabe erst danach. Ein Chat- oder Serverabbruch liefert dasselbe verifizierte Paket erneut, statt die Quelle doppelt zu verarbeiten. Jede erfolgreiche Datei erhält einen ausschließlich lokalen Eintrag in `DataSecure-Export/DataSecure-Mapping.csv`. Terminale Stapel ergänzen dort einen inhaltsfreien JSON-Nachweis ohne Namen, Pfade oder Dokumentinhalte. Markdown-Links, HTML und Bildreferenzen werden nicht geladen, sondern nur als Text durch die Datenschutzregeln verarbeitet. CSV-Zellen werden ausschließlich als Text verarbeitet und niemals ausgeführt. PDF und alle weiteren Formate bleiben im Pilot gesperrt.
 
-Windows x64 besitzt die vollständigere Engineering-Grenze mit nativem Job Object und lokalem Text-Review. macOS und Linux verwenden für TXT/DOCX den stabilen Node-Permission-Prozess; er ist Defense-in-depth und keine Sicherheitsgrenze gegen bösartigen Code. Beim Plugin-ZIP ist die dafür nötige Node-22.13+-Auflösung noch nicht installationsfrei belegt; beim MCPB stellt Claude Desktop eine eingebaute Node-Runtime bereit. Bild/OCR-Freigabe und bearbeitbare Mehrdeutigkeitsprüfung sind dort noch nicht produktionsreif: Bilder bleiben lokal oder werden auf ausdrücklichen Wunsch entfernt, Mehrdeutigkeiten stoppen sicher. Eine echte Mac-Freigabe setzt weiterhin den CI-Lauf und einen manuellen Test auf einem Mac voraus.
+Windows x64 besitzt die vollständigere Engineering-Grenze mit nativem Job Object und lokalem Text-Review. macOS und Linux verwenden für TXT/Markdown/CSV/DOCX den stabilen Node-Permission-Prozess; er ist Defense-in-depth und keine Sicherheitsgrenze gegen bösartigen Code. Beim Plugin-ZIP ist die dafür nötige Node-22.13+-Auflösung noch nicht installationsfrei belegt; beim MCPB stellt Claude Desktop eine eingebaute Node-Runtime bereit. macOS besitzt einen lokalen, stdin-gebundenen Keep/Anonymisieren-Weg für mehrdeutige Zertifikatsaussteller; Linux nutzt dafür Zenity oder KDialog ohne Rohtext in Argumenten. Freie Redaktionen und Bild/OCR-Freigabe sind dort noch nicht produktionsreif. Bilder bleiben lokal oder werden auf ausdrücklichen Wunsch entfernt. Echte Mac-/Linux-Freigaben setzen weiterhin CI und manuelle Zielplattformtests voraus.
 
-Wenn ausdrücklich reine Markdown-Ausgabe ohne Bilder gewünscht ist, entfernt `remove_images=true` bekannte Bildanlagen in texttragenden Office-Dateien lokal und vermerkt dies in der `.md`. Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans bleiben weiterhin durch die Sicherheitsgrenzen geschützt.
+Jede freigegebene Ausgabe ist Markdown ohne Bildpixel. Für „nur Markdown“ oder „Bilder nicht an Claude geben“ bleibt daher `remove_images=false`: Grafiken bleiben lokal zurückgehalten, und nur sicher erkannter Bildtext kann nach derselben Datenschutzprüfung in Markdown einfließen. `remove_images=true` ist allein ein strenger lokaler Verwerfmodus für Bildanlagen; er übernimmt keinen Bildtext und stoppt bei unbekannten Office-Objekten sicher.
 
 Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begrenztes Diagnosejournal. `diagnostic_status` zeigt ausschließlich Verarbeitungsphase, Formatklasse, Profil, Zähler und feste Fehlercodes; Dateinamen, Pfade, Dokumentinhalt, erkannte Werte und Dokument-Hashes werden weder gespeichert noch ausgegeben.
+
+Auf ausdrücklichen Support- oder IT-Wunsch kann `export_diagnostic_package` nach
+einer weiteren Bestätigung einen lokalen Diagnose-Schnappschuss erzeugen. Er enthält
+nur diese bereinigten Metadaten und Prüfsummen der Programmkomponenten; er wird
+niemals automatisch versendet.
 
 ## Plugin-Komponenten
 
@@ -57,7 +64,7 @@ Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begre
 - PDF derzeit fail-closed gesperrt; der bisherige Engineering-Spike belegt Packaging und Basis-API, ist aber ausdrücklich keine Produktfreigabe. Ziel bleibt ein eigener nativer, isolierter PDFium-Worker mit positivem Text-/Objekt-/Unicode-Coverage-Nachweis
 - DOCX, sofern der Parser keine Coverage-Warnung meldet
 - UTF-8-TXT
-- XLSX, PPTX, MD, CSV, PNG, JPEG, BMP und PDF derzeit fail-closed gesperrt
+- XLSX, PPTX, PNG, JPEG, BMP und PDF derzeit fail-closed gesperrt; Markdown ist als `.md` und `.markdown` freigegeben
 
 ## Privacy-Profile
 
@@ -124,7 +131,7 @@ plattformspezifische Komponenten mit nachgewiesener Test- und Artefaktparität e
 npm test
 ```
 
-Die automatisierte Suite deckt Manifest-/Agentenkonsistenz, 24 versionierte Skill-Verhaltensfälle, isolierte Parser, PII- und Zertifikatsregressionen, den fortsetzbaren Mehrdateiablauf, Bild- und Visual-Gates, Retention, Audit-/Diagnose-Datensparsamkeit, Gateway-E2E, MCP-Protokoll und Adversarial-Fälle ab. Die Skill-Abnahme verarbeitet zehn vollständig erfundene Verträge mit zwanzig öffentlichen Unternehmensnamen. Eine zusätzliche deterministische Ground-Truth-Matrix prüft 150 Konstellationen; dabei müssen 1.950 sensitive Entitäten verschwinden und 900 fachliche Kontrollen erhalten bleiben. Das ist eine synthetische Regressionsbaseline und keine allgemeine Genauigkeitszusage. `npm run test:plugin-zip` wiederholt die Skill-Prüfungen gegen den tatsächlich gebauten Plugin-ZIP. Endanwender führen weder npm noch Python aus; echte Claude-Modellläufe und die installierte UI bleiben eine getrennte Pilotabnahme.
+Die automatisierte Suite deckt Manifest-/Agentenkonsistenz, 28 versionierte Skill-Verhaltensfälle, isolierte Parser, PII- und Zertifikatsregressionen, den fortsetzbaren Mehrdateiablauf, Bild- und Visual-Gates, Retention, Audit-/Diagnose-Datensparsamkeit, Gateway-E2E, MCP-Protokoll und Adversarial-Fälle ab. Die Skill-Abnahme verarbeitet zehn vollständig erfundene Verträge mit zwanzig öffentlichen Unternehmensnamen. Eine zusätzliche deterministische Ground-Truth-Matrix prüft 150 Konstellationen; dabei müssen 1.950 sensitive Entitäten verschwinden und 900 fachliche Kontrollen erhalten bleiben. Das ist eine synthetische Regressionsbaseline und keine allgemeine Genauigkeitszusage. `npm run test:plugin-zip` wiederholt die Skill-Prüfungen gegen den tatsächlich gebauten Plugin-ZIP. Endanwender führen weder npm noch Python aus; echte Claude-Modellläufe und die installierte UI bleiben eine getrennte Pilotabnahme.
 
 `tests/expected/synthetic-personnel-profile.expected.md` ist ein **generiertes** Golden-File. Nach einer beabsichtigten Verhaltensänderung: `npm run test:golden`, Diff prüfen, dann committen.
 
@@ -160,6 +167,6 @@ Beide Artefakte werden für die technische Abnahme gebaut und geprüft. Weder de
 
 ## Release-Status
 
-Der aktuelle RC ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. PDF bleibt nach adversarialem Security-Review bis zu einem belastbaren Page-/Font-/Visual-Coverage-Nachweis vollständig gesperrt. Auf Windows x64 starten Dokumentparser und PowerShell-Brücken ausschließlich über den gebündelten nativen Job-Object-Launcher. Auf macOS/Linux benötigt der vertrauenswürdige TXT-/DOCX-Parser Node 22.13+; eine installationsfreie Auflösung ist für den Plugin-ZIP noch nicht nachgewiesen. Bild/OCR und bearbeitbare Mehrdeutigkeitsprüfung bleiben dort fail-closed. SHA-256 und PE-x64-Prüfung belegen Paketkonsistenz, nicht Herstellerherkunft oder Manipulationsschutz. Noch offen sind Windows ARM64, eine stärkere OS-Sandbox, frische Installation/Upgrade/Rollback sowie menschliche Windows-, macOS- und Linux-Usability-Abnahmen. Bis dahin bleiben klinische Echtdaten und ein Nutzerpilot gesperrt.
+Der aktuelle RC ist nur für technische Engineering-Abnahme vorgesehen, nicht für einen Nutzerpilot mit echten Daten. PDF bleibt nach adversarialem Security-Review bis zu einem belastbaren Page-/Font-/Visual-Coverage-Nachweis vollständig gesperrt. Auf Windows x64 starten Dokumentparser und PowerShell-Brücken ausschließlich über den gebündelten nativen Job-Object-Launcher. Auf macOS/Linux benötigt der vertrauenswürdige TXT-/Markdown-/CSV-/DOCX-Parser Node 22.13+; eine installationsfreie Auflösung ist für den Plugin-ZIP noch nicht nachgewiesen. Bild/OCR und freie Textredaktionen bleiben dort fail-closed; die begrenzte lokale Zertifikatsentscheidung ist noch nicht auf Zielgeräten abgenommen. SHA-256 und PE-x64-Prüfung belegen Paketkonsistenz, nicht Herstellerherkunft oder Manipulationsschutz. Noch offen sind Windows ARM64, eine stärkere OS-Sandbox, frische Installation/Upgrade/Rollback sowie menschliche Windows-, macOS- und Linux-Usability-Abnahmen. Bis dahin bleiben klinische Echtdaten und ein Nutzerpilot gesperrt.
 
 Die reale Windows-OCR-Abnahme gegen ein synthetisch gerendertes Scan-Bild ist am 21.08.2026 bestanden. Offen bleibt die EMF/WMF-Rasterisierung über die PowerShell-Bridge. Meldet `privacy_status` `visual_bridge: unavailable`, arbeitet der Textpfad weiter und alle Grafiken werden zurückgehalten — das ist der beabsichtigte degradierte Modus. Checkliste: [docs/RELEASE.md](docs/RELEASE.md).

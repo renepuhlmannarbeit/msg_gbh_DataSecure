@@ -34,7 +34,9 @@ const docxBody = [
 fs.writeFileSync(
   path.join(root, 'synthetic_profile.docx'),
   zipStore([
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
     ['word/document.xml', `<w:document xmlns:w="w"><w:body>${docxBody}</w:body></w:document>`],
+    ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>'],
     ['word/media/image1.png', img]
   ])
 );
@@ -42,8 +44,9 @@ fs.writeFileSync(
 fs.writeFileSync(
   path.join(root, 'synthetic_customer.xlsx'),
   zipStore([
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
     ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Kunden" r:id="rId1"/></sheets></workbook>'],
-    ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
     [
       'xl/sharedStrings.xml',
       '<sst><si><t>Kunde</t></si><si><t>Max Mustermann</t></si><si><t>E-Mail</t></si>' +
@@ -57,6 +60,8 @@ fs.writeFileSync(
         '<row r="3"><c r="A3" t="s"><v>4</v></c><c r="B3" t="s"><v>5</v></c></row>' +
         '</sheetData></worksheet>'
     ],
+    ['xl/drawings/drawing1.xml', '<xdr:wsDr xmlns:xdr="xdr"/>'],
+    ['xl/drawings/_rels/drawing1.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>'],
     ['xl/media/image1.png', img]
   ])
 );
@@ -64,6 +69,9 @@ fs.writeFileSync(
 fs.writeFileSync(
   path.join(root, 'synthetic_contract.pptx'),
   zipStore([
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
     [
       'ppt/slides/slide1.xml',
       '<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><p:sp><p:txBody>' +
@@ -75,6 +83,7 @@ fs.writeFileSync(
       'ppt/notesSlides/notesSlide1.xml',
       '<p:notes xmlns:p="p" xmlns:a="a"><a:t>Kontakt max@example.de</a:t></p:notes>'
     ],
+    ['ppt/slides/_rels/slide1.xml.rels', '<Relationships><Relationship Id="rId17" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/><Relationship Id="rId18" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>'],
     ['ppt/media/image1.png', img]
   ])
 );

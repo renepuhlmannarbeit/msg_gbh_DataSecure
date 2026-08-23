@@ -128,7 +128,8 @@ const CREDIT_RE = new RegExp(`${NB}(?:\\d[ \\-]?){12,18}\\d${NA}`, 'gu');
 const ID_LABELS =
   '(?:Mitarbeiter|Personal|Kunden|Auftrags|Vertrags|Rechnungs|Bestell|Versicherungs|Sozialversicherungs|Ausweis|Personalausweis|Reisepass|Führerschein|Matrikel|Patienten|Fall|Akten|Beleg|Lieferanten|Debitoren|Kreditoren)' +
   '(?:nummer|nr\\.?|-nr\\.?|-nummer|zeichen)' +
-  '|Aktenzeichen|Az\\.|Personalnr\\.|SV-?Nr\\.|Steuernummer|Steuer-?ID';
+  '|Aktenzeichen|Az\\.|Personalnr\\.|SV-?Nr\\.|Steuernummer|Steuer-?ID' +
+  '|(?:contract|reference|order|invoice|employee|customer|case|patient)[ \\t]*(?:number|no\\.?|id)';
 const LABELED_ID_RE = new RegExp(
   `(${ID_LABELS})([ \\t]*[:=][ \\t]*|[ \\t]+)((?:[A-Z0-9][A-Z0-9./\\-]*)(?:[ ][A-Z0-9][A-Z0-9./\\-]*){0,3})`,
   'giu'

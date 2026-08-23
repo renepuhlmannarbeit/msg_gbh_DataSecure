@@ -2,7 +2,7 @@
 
 ## Öffentliche Pilot-Allowlist
 
-Nur TXT und DOCX dürfen ein Privacy-Paket veröffentlichen. Alle anderen sichtbaren
+Nur TXT, Markdown (`.md` und `.markdown`), CSV und DOCX dürfen ein Privacy-Paket veröffentlichen. Alle anderen sichtbaren
 Dateien stoppen mit einem festen Fehlercode; es gibt keinen Upload- oder
 Parser-Fallback. Jede Parserwarnung stoppt ebenfalls. Bildpixel aus DOCX bleiben
 unabhängig vom erkannten Typ lokal und werden im öffentlichen Pilot nicht an Claude
@@ -13,7 +13,7 @@ Der fortsetzbare `Input`-Ablauf mit einem MCP-Aufruf pro Datei ist der Standard 
 allen Plattformen. Windows x64 besitzt zusätzlich die native Job-Object-Grenze; die
 bearbeitbare lokale Textprüfung gehört zum getrennten Companion-Engineeringpfad und
 wird im einfachen Standardablauf nicht geöffnet.
-macOS/Linux sind für TXT/DOCX textbasiert freigegeben, halten visuelle Inhalte zurück
+macOS/Linux sind für TXT/Markdown/CSV/DOCX textbasiert freigegeben, halten visuelle Inhalte zurück
 und stoppen bei einer notwendigen Mehrdeutigkeitsentscheidung sicher.
 
 | Format | Belegte Textbereiche | Visuelle Behandlung | Plattformstatus | Bekannte Grenzen / nächstes Gate |
@@ -23,8 +23,8 @@ und stoppen bei einer notwendigen Mehrdeutigkeitsentscheidung sicher.
 | PDF | `pdf-lite` nur noch als Test-/Gegenprobenparser; kein Release-Pfad | nicht freigegeben | **nein** | jeder PDF-Lauf stoppt mit `PDF_COVERAGE_UNVERIFIED`; Zielarchitektur und Gates siehe `PDF_ENGINE_DECISION.md` |
 | XLSX | Shared-/Inline-Strings und einfache Zellwerte | bekannte Medien über Visual-Gate | nein | Kommentare, Formeln/Anzeigeformat, Charts, Zeichnungen, versteckte Bereiche und externe Beziehungen systematisch abdecken |
 | PPTX | Folientext und Sprechernotizen | bekannte Medien über Visual-Gate | nein | Master/Layout, Charts, SmartArt, eingebettete Objekte und externe Beziehungen systematisch abdecken |
-| MD | gesamter UTF-8-Text innerhalb der Größenlimits | referenzierte externe Inhalte werden nicht geladen | nein | eingebettete Daten/HTML und Zeichencodierung explizit klassifizieren |
-| CSV | Text in abgeschirmtem Markdown-Fence | keine | nein | Dialekt, Encoding und mehrzeilige Felder explizit abnehmen |
+| MD | gesamter fatal validierter, NFC-/LF-normalisierter UTF-8-Text innerhalb der Größenlimits | referenzierte externe Inhalte werden nicht geladen | Windows/macOS/Linux Textpfad | Links, HTML und Bildreferenzen bleiben inert; `.md` und `.markdown` nutzen denselben Textpfad, eingebettete Daten bleiben gesperrt |
+| CSV | endlicher, strikt validierter UTF-8-CSV-Parser; Ausgabe ausschließlich als Markdown-Tabelle | keine; Zellen werden nie ausgeführt | Windows/macOS/Linux Textpfad | Quote-Defekte, ungleiche Spaltenbreiten und leere Tabellen stoppen; Formelzeichen bleiben literal; praktische Drei-OS-Abnahme bleibt offen |
 | PNG/BMP/JPEG | OCR-Text nur über lokalen Visual-Gate | Pixelprüfung, Schwärzung und Kontroll-OCR soweit Codec unterstützt; Windows-Prozess läuft im Job Object | nein | ausdrückliches Profil; Codec-Varianten, AppContainer und Dateisystemgrenze weiter härten |
 
 ## PDF-Freigabekriterien für den privaten Dialog

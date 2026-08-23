@@ -32,12 +32,25 @@ test('platform pickers use argument arrays and no network transport', () => {
   }
 });
 
-test('macOS multi-picker returns newline-delimited POSIX paths without shell interpolation', () => {
-  const [spec] = pickerCommands('darwin', {}, ['txt', 'docx'], true);
+test('macOS picker filters the current allowlist and returns newline-delimited POSIX paths without shell interpolation', () => {
+  const [spec] = pickerCommands('darwin', {}, ['txt', 'md', 'csv', 'docx'], true);
   assert.strictEqual(spec.command, '/usr/bin/osascript');
   assert.match(spec.args.join(' '), /multiple selections allowed/);
   assert.match(spec.args.join(' '), /POSIX path/);
   assert.match(spec.args.join(' '), /linefeed/);
+  assert.match(spec.args.join(' '), /of type \{"docx", "txt", "md", "markdown", "csv"\}/);
+  const [single] = pickerCommands('darwin', {}, ['txt']);
+  assert.match(single.args.join(' '), /of type \{"txt"\}/);
+});
+
+test('Linux multi-picker explicitly requests one path per line', () => {
+  const specs = pickerCommands('linux', {}, ['txt', 'md', 'csv', 'docx'], true);
+  const zenity = specs.find((spec) => spec.command === 'zenity');
+  const kdialog = specs.find((spec) => spec.command === 'kdialog');
+  assert.ok(zenity.args.includes('--multiple'));
+  assert.ok(zenity.args.includes('--separator=\n'));
+  assert.ok(kdialog.args.includes('--multiple'));
+  assert.ok(kdialog.args.includes('--separate-output'));
 });
 
 test('selected source must be an absolute regular supported file', () => {
@@ -52,6 +65,9 @@ test('selected source must be an absolute regular supported file', () => {
   const directory = path.join(root, 'folder.pdf');
   fs.mkdirSync(directory);
   assert.throws(() => validateSelectedPath(directory), /keine reguläre/);
+  const longMarkdown = path.join(root, 'profile.markdown');
+  fs.writeFileSync(longMarkdown, 'synthetic');
+  assert.strictEqual(validateSelectedPath(longMarkdown, { allowedTypes: ['md'] }).sourceType, 'md');
 });
 
 test('linux picker falls back locally and validates the result', () => {
@@ -69,20 +85,20 @@ test('linux picker falls back locally and validates the result', () => {
   assert.strictEqual(selected.sourceType, 'pdf');
 });
 
-test('Windows multi-picker validates up to 25 distinct local files', () => {
+test('Windows multi-picker validates up to 100 distinct local files', () => {
   const first = path.join(root, 'first.txt');
-  const second = path.join(root, 'second.docx');
+  const second = path.join(root, 'second.csv');
   fs.writeFileSync(first, 'first');
   fs.writeFileSync(second, 'second');
   const selected = pickSources({
     platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
-    allowedTypes: ['txt', 'docx'],
+    allowedTypes: ['txt', 'md', 'csv', 'docx'],
     runner: (_command, args) => {
       assert.match(args.join(' '), /Multiselect = \$true/);
       return { status: 0, stdout: `${first}\r\n${second}` };
     }
   });
-  assert.deepStrictEqual(selected.map((item) => item.sourceType), ['txt', 'docx']);
+  assert.deepStrictEqual(selected.map((item) => item.sourceType), ['txt', 'csv']);
   assert.throws(() => pickSources({
     platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, maxSources: 1,
     runner: () => ({ status: 0, stdout: `${first}\r\n${second}` })
@@ -98,7 +114,16 @@ test('Windows picker disposes the dialog and reports closing as an explicit canc
   assert.throws(() => pickSources({
     platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
     runner: () => ({ status: 0, stdout: PICKER_CANCELLED })
-  }), /Dateiauswahl wurde abgebrochen/);
+  }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+});
+
+test('macOS and Linux dialog closing is the same explicit terminal cancellation', () => {
+  for (const platform of ['darwin', 'linux']) {
+    assert.throws(() => pickSources({
+      platform,
+      runner: () => ({ status: 1, stdout: '' })
+    }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED', `${platform} closing must not become a retryable picker error`);
+  }
 });
 
 test('picker timeout is distinguished from a start failure', () => {
@@ -184,7 +209,9 @@ test('image-removal intent is accepted only as a literal true flag', () => {
   );
   const picked = session.dispatch(frame(sessionId, 2, 'pick_source', { profile: 'customer', remove_images: true }));
   session.dispatch(frame(sessionId, 3, 'process_source', { job_id: picked.job.job_id }));
-  assert.deepStrictEqual(options, { removeImages: true, batchIndex: 1, batchTotal: 1 });
+  assert.deepStrictEqual(options, {
+    removeImages: true, automaticBatchApproval: true, batchIndex: 1, batchTotal: 1
+  });
 });
 
 test('authenticated cancel creates local evidence and drops the private source', () => {

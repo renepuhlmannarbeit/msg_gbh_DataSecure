@@ -14,7 +14,9 @@
     "auto"
   ],
   "formats": [
+    "csv",
     "docx",
+    "markdown",
     "txt"
   ],
   "blocked_formats": [

@@ -1,6 +1,6 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 22.08.2026 · Status aller folgenden Entscheidungen: **angenommen**
+Stand: 23.08.2026 · Status aller folgenden Entscheidungen: **angenommen**
 
 Diese Entscheidungen stammen aus dem abgeschlossenen Produkt-Grill. Sie beschreiben
 das Zielprodukt, nicht den Funktionsumfang von RC30.
@@ -22,8 +22,11 @@ bleibt technischer Fallback und Engineering-Artefakt.
 
 Lokale Originalverarbeitung ist nur in Claude Desktop oder Claude Code zulässig,
 wenn `privacy_status` in der konkreten Unterhaltung erfolgreich verfügbar ist.
-Cowork Desktop ist damit versionsabhängig möglich. Web und Mobil dürfen nur bereits
-bereinigte Ergebnisse verwenden oder den Schutz erklären.
+Cowork Desktop ist damit versionsabhängig möglich. Die Claude-Desktop-App wird nach
+aktueller Herstellerdokumentation auf Windows und macOS angeboten; Linux ist nur als
+lokaler Claude-Code-Host-Zielpfad vorgesehen und braucht eine eigene Abnahme. Web,
+Mobil und Remote-Sitzungen dürfen nur bereits bereinigte Ergebnisse verwenden oder
+den Schutz erklären.
 
 ## DS-004 – Plattformziel und Installation
 
@@ -145,9 +148,12 @@ Aufträge dürfen gespeichert sein.
 
 ## DS-023 – Exportordner und dauerhafte Ergebnisse
 
-Beim ersten Lauf wird ein lokaler Standard-Exportordner gewählt und später vor dem
-Start angezeigt beziehungsweise änderbar gemacht. Exportierte Markdown-Ergebnisse,
-Mapping und Nachweis bleiben dort dauerhaft, bis der Anwender sie löscht.
+DataSecure verwendet einen festen benutzerlokalen Exportordner
+`DataSecure-Export` innerhalb seines Datenschutzbereichs. Der Normalweg fragt nicht
+nach einem Ordner und zeigt ihn nicht vor jedem Start erneut an; das verhindert
+Fehlablagen und hält Ergebnis, Mapping und Nachweis dauerhaft an derselben Stelle.
+Exportierte Markdown-Ergebnisse, Mapping und Nachweis bleiben dort, bis der Anwender
+sie selbst löscht oder außerhalb von DataSecure kopiert.
 
 ## DS-024 – Neutrale Namen und lokales Mapping
 
@@ -184,7 +190,9 @@ mit Skalierung und Screenreader bedienbar.
 
 Normale Anwender ändern keine Erkennungsgrenzen, Profile oder Fachkataloge. Diese sind
 versioniert und Bestandteil eines geprüften Releases. Einstellbar bleiben
-Exportordner, optionale Vorschau und ausdrücklich gewünschte Bildentfernung.
+Exportordner, optionale Vorschau und der ausdrücklich gewünschte strenge lokale
+Verwerfmodus für Bildanlagen. Jede Markdown-Ausgabe enthält ohnehin keine Bildpixel;
+eine reine Markdown-Anforderung aktiviert diesen Modus nicht.
 
 ## DS-030 – Keine Signierungs- oder Zertifizierungspflicht
 

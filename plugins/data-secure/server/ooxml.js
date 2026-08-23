@@ -3,6 +3,12 @@
 const path = require('path');
 const { readZip, ZipError } = require('./zip-reader');
 
+const MAX_EMBEDDED_DEPTH = 3;
+const MAX_EMBEDDED_DOCUMENTS = 20;
+const MAX_EMBEDDED_BYTES = 50 * 1024 * 1024;
+const MAX_EMBEDDED_EXPANDED_BYTES = 100 * 1024 * 1024;
+const SUPPORTED_EMBEDDED = /^(?:word|xl|ppt)\/embeddings\/[^/]+\.(docx|xlsx|pptx)$/i;
+
 function xmlDecode(s='') {
   return String(s)
     .replace(/&#x([0-9a-f]+);/gi, (_,h)=>String.fromCodePoint(parseInt(h,16)))
@@ -18,12 +24,52 @@ function contentType(name) {
   const e=path.extname(name).toLowerCase();
   return ({'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.bmp':'image/bmp','.gif':'image/gif','.tif':'image/tiff','.tiff':'image/tiff','.webp':'image/webp','.svg':'image/svg+xml','.emf':'image/x-emf','.wmf':'image/x-wmf'})[e] || 'application/octet-stream';
 }
-function mediaAttachments(entries, prefix) {
+function mediaAttachments(entries, prefix, allowedParts = null) {
   const out=[];
   for(const [name,data] of entries) if(name.startsWith(prefix) && /\.(png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(name)) {
+    if (allowedParts && !allowedParts.has(name)) continue;
     out.push({ type:'image', mimeType:contentType(name), data:data.toString('base64'), name:path.basename(name), extension:path.extname(name).slice(1).toLowerCase(), source_part:name });
   }
   return out;
+}
+const CORE_PROPERTIES = [
+  ['dc:title','Titel'],['dc:subject','Betreff'],['dc:creator','Autor'],
+  ['cp:keywords','Schlagwörter'],['dc:description','Beschreibung'],
+  ['cp:lastModifiedBy','Zuletzt geändert von'],['cp:category','Kategorie'],
+  ['cp:contentStatus','Inhaltsstatus'],['dc:identifier','Kennung'],
+  ['dc:language','Sprache'],['cp:lastPrinted','Zuletzt gedruckt'],
+  ['dcterms:created','Erstellt'],['dcterms:modified','Geändert'],
+  ['cp:revision','Revision'],['cp:version','Version']
+];
+const APP_PROPERTIES = [
+  ['Manager','Manager'],['Company','Unternehmen'],['Template','Vorlage'],
+  ['HyperlinkBase','Hyperlink-Basis'],['Application','Anwendung'],['AppVersion','Anwendungsversion']
+];
+function metadataSection(entries, sourcePart, fields) {
+  const data=entries.get(sourcePart); if(!data)return null; const xml=data.toString('utf8'), lines=[];
+  for(const [tag,label] of fields){const value=textTags(xml,tag).map(item=>String(item).replace(/\s+/g,' ').trim()).filter(Boolean).join(' | ');if(value)lines.push(`- ${label}: ${value}`);}
+  return lines.length?{kind:'metadata',source_part:sourcePart,markdown:`## Dokumentmetadaten\n\n${lines.join('\n')}`}:null;
+}
+function customMetadataSection(entries) {
+  const sourcePart='docProps/custom.xml',data=entries.get(sourcePart);if(!data)return null;
+  const xml=data.toString('utf8'),lines=[];let match;const properties=/<property\b([^>]*)>([\s\S]*?)<\/property>/gi;
+  const scalar=/^\s*<vt:(lpwstr|bstr|i1|i2|i4|i8|int|ui1|ui2|ui4|ui8|uint|r4|r8|decimal|bool|filetime|date|cy|error)\b[^>]*>([\s\S]*?)<\/vt:\1>\s*$/i;
+  while((match=properties.exec(xml))){const name=xmlDecode(/\bname=["']([^"']+)["']/i.exec(match[1])?.[1]||'').trim();const valueMatch=scalar.exec(match[2]);const value=valueMatch?stripTags(valueMatch[2]):'';if(name&&value)lines.push(`- ${name}: ${value}`);}
+  return lines.length?{kind:'metadata',source_part:sourcePart,markdown:`## Benutzerdefinierte Dokumentmetadaten\n\n${lines.join('\n')}`}:null;
+}
+function customMetadataWarnings(entries) {
+  const data=entries.get('docProps/custom.xml');if(!data)return[];const xml=data.toString('utf8');let unsupported=0,match;
+  const properties=/<property\b[^>]*>([\s\S]*?)<\/property>/gi;
+  const scalar=/^\s*<vt:(lpwstr|bstr|i1|i2|i4|i8|int|ui1|ui2|ui4|ui8|uint|r4|r8|decimal|bool|filetime|date|cy|error)\b[^>]*>[\s\S]*?<\/vt:\1>\s*$/i;
+  while((match=properties.exec(xml)))if(!scalar.test(match[1]))unsupported++;
+  return unsupported?[`OOXML enthält ${unsupported} nicht unterstützte benutzerdefinierte Metadatenwerte; Freigabe wird blockiert.`]:[];
+}
+function metadataSections(entries) {
+  return [
+    metadataSection(entries,'docProps/core.xml',CORE_PROPERTIES),
+    metadataSection(entries,'docProps/app.xml',APP_PROPERTIES),
+    customMetadataSection(entries)
+  ].filter(Boolean);
 }
 function relMap(entries, relPath, baseDir) {
   const buf=entries.get(relPath); if(!buf) return new Map();
@@ -54,7 +100,7 @@ function renderWordTable(table) {
   const rows=[]; let rm; const rr=/<w:tr\b[\s\S]*?<\/w:tr>/gi;
   while((rm=rr.exec(table))) {
     const cells=[]; let cm; const cr=/<w:tc\b[\s\S]*?<\/w:tc>/gi;
-    while((cm=cr.exec(rm[0]))) cells.push(paragraphText(cm[0]).replace(/\n/g,'<br>'));
+    while((cm=cr.exec(rm[0]))) cells.push(paragraphText(cm[0]).replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\n/g,'<br>'));
     rows.push(cells);
   }
   if(!rows.length) return '';
@@ -62,14 +108,20 @@ function renderWordTable(table) {
   const norm=rows.map(r=>Array.from({length:cols},(_,i)=>r[i]||''));
   return '| '+norm[0].join(' | ')+' |\n| '+norm[0].map(()=> '---').join(' | ')+' |'+(norm.length>1?'\n'+norm.slice(1).map(r=>'| '+r.join(' | ')+' |').join('\n'):'');
 }
-function renderWordBody(xml) {
+function wordPartScope(xml, rootTag) {
+  const escaped = String(rootTag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`<w:${escaped}\\b[^>]*>([\\s\\S]*?)<\\/w:${escaped}>`, 'i').exec(xml)?.[1] || '';
+}
+function renderWordPart(xml, rootTag) {
   // Word stores visible text boxes as paragraphs nested inside an outer
   // drawing paragraph. A flat non-greedy paragraph regex stops at the first
   // nested closing tag and silently loses the remaining text-box paragraphs.
-  // Prefer the modern AlternateContent choice and walk balanced p/tbl tags so
-  // every visible leaf paragraph is retained in document order.
+  // Prefer the modern AlternateContent choice and walk balanced p/tbl tags.
+  // This applies to every WordprocessingML story, not only document.xml:
+  // headers, footers, comments and notes can carry the same structures.
   const source=String(xml).replace(/<mc:Fallback\b[^>]*>[\s\S]*?<\/mc:Fallback>/gi,'');
-  const body=/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/i.exec(source)?.[1] || source;
+  const body=wordPartScope(source, rootTag);
+  if(!body) return '';
   const root={type:'root',children:[]}; const stack=[root]; let m;
   const tags=/<(\/?)w:(p|tbl)\b([^>]*)>/gi;
   while((m=tags.exec(body))) {
@@ -88,20 +140,226 @@ function renderWordBody(xml) {
   }
   return root.children.filter(Boolean).join('\n\n');
 }
+function renderWordBody(xml) { return renderWordPart(xml, 'body'); }
+function docxMainRelationshipIssueCount(entries) {
+  // A .docx is an OPC package, not an arbitrary ZIP containing a plausible
+  // word/document.xml.  The root officeDocument relationship is therefore
+  // the first coverage boundary: accepting an orphan main part would make a
+  // malformed or substituted package appear complete.
+  const rels = entries.get('_rels/.rels');
+  if (!rels) return 1;
+  let valid = 0;
+  let issues = 0;
+  for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+    const attrs = match[1];
+    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    if (type !== 'officeDocument') continue;
+    const target = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
+    const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+    if (external || target !== 'word/document.xml' || !entries.has('word/document.xml')) {
+      issues++;
+      continue;
+    }
+    valid++;
+  }
+  // Exactly one internal canonical root is required.  Duplicate roots are an
+  // ambiguity, even where they happen to name the same part.
+  return issues + (valid === 1 ? 0 : 1);
+}
+function docxMainWordRootIssueCount(entries) {
+  // The renderer deliberately supports the standard WordprocessingML `w:`
+  // vocabulary only. A named main part with another or missing root must not
+  // silently turn into an empty document that later appears safe.
+  const main = entries.get('word/document.xml');
+  if (!main) return 1;
+  const xml = main.toString('utf8');
+  return /<w:document\b/i.test(xml) && /<w:body\b/i.test(xml) ? 0 : 1;
+}
+function packageMainRelationshipIssueCount(entries, expectedMainPart) {
+  // Every OOXML family is an OPC package. A coincidentally named main part
+  // inside a ZIP is not coverage evidence unless the package root points to
+  // it once and only once through an internal officeDocument relationship.
+  const rels = entries.get('_rels/.rels');
+  if (!rels) return 1;
+  let valid = 0;
+  let issues = 0;
+  for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+    const attrs = match[1];
+    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    if (type !== 'officeDocument') continue;
+    const target = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
+    const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+    if (external || target !== expectedMainPart || !entries.has(expectedMainPart)) {
+      issues++;
+      continue;
+    }
+    valid++;
+  }
+  return issues + (valid === 1 ? 0 : 1);
+}
+function docxStoryRelationshipIssueCount(entries) {
+  // Word's secondary stories are distinct package parts. Merely finding a
+  // plausible filename is not a coverage proof: the part must be reachable
+  // from the main document through its declared internal relationship.
+  const relPath = 'word/_rels/document.xml.rels';
+  const rels = entries.get(relPath);
+  const stories = [...entries.keys()].filter((name) =>
+    /^word\/(?:header\d+|footer\d+|comments|footnotes|endnotes)\.xml$/i.test(name)
+  );
+  if (!stories.length) return 0;
+  if (!rels) return stories.length;
+  const expected = new Map([
+    ['header', { part: /^word\/header\d+\.xml$/i, root: 'hdr' }],
+    ['footer', { part: /^word\/footer\d+\.xml$/i, root: 'ftr' }],
+    ['comments', { part: /^word\/comments\.xml$/i, root: 'comments' }],
+    ['footnotes', { part: /^word\/footnotes\.xml$/i, root: 'footnotes' }],
+    ['endnotes', { part: /^word\/endnotes\.xml$/i, root: 'endnotes' }]
+  ]);
+  const reachable = new Set();
+  const relationshipCounts = new Map();
+  let issues = 0;
+  for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+    const attrs = match[1];
+    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    if (!expected.has(type)) continue;
+    const target = /\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '';
+    const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+    // A target is relative to word/document.xml. POSIX normalization is only
+    // accepted after rejecting absolute and parent traversal source text.
+    if (external || !target || /^(?:\/|[A-Za-z]:)/u.test(target) || /(?:^|\/)\.\.(?:\/|$)/u.test(target)) {
+      issues++;
+      continue;
+    }
+    const resolved = path.posix.normalize(path.posix.join('word', target));
+    const expectedStory = expected.get(type);
+    if (!expectedStory.part.test(resolved) || !entries.has(resolved)) {
+      issues++;
+      continue;
+    }
+    // A correctly named part with the wrong WordprocessingML root would be
+    // rendered as empty below. Treat it as a coverage failure instead of
+    // silently losing a story that could contain personal data.
+    const storyXml = entries.get(resolved).toString('utf8');
+    if (!new RegExp(`<w:${expectedStory.root}\\b`, 'i').test(storyXml)) {
+      issues++;
+      continue;
+    }
+    relationshipCounts.set(resolved, (relationshipCounts.get(resolved) || 0) + 1);
+    reachable.add(resolved);
+  }
+  // More than one edge to the same story is an ambiguity. Do not let a
+  // duplicated relationship masquerade as a single fully-covered story.
+  for (const count of relationshipCounts.values()) if (count !== 1) issues++;
+  for (const story of stories) if (!reachable.has(story)) issues++;
+  return issues;
+}
+function docxImageRelationshipCoverage(entries) {
+  // Picture bytes are sensitive content just like text.  A Word media part is
+  // therefore not an attachment merely because its filename looks familiar:
+  // it must be referenced by one internal image relationship from a covered
+  // Word part.  This avoids displaying an orphan or substituted binary in a
+  // local review window.
+  const media = new Set([...entries.keys()].filter((name) =>
+    /^word\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(name)
+  ));
+  const safeTargets = new Set();
+  let issues = 0;
+  for (const [relPath, data] of entries) {
+    if (!/^word\/(?:_rels\/)?[^/]+\.rels$/i.test(relPath)) continue;
+    const base = relationshipBase(relPath);
+    if (base === null) continue;
+    for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+      const attrs = match[1];
+      const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+      const rawTarget = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
+      const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+      if (!rawTarget) continue;
+      const targetLooksLikeMedia = /(?:^|\/)media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(rawTarget);
+      // Normalize before comparing to the fixed media set.  A target that
+      // leaves the `word/media/` set can never become a safe attachment.
+      if (external || /[\\?#\0]/u.test(rawTarget) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(rawTarget)) {
+        if (type === 'image' || targetLooksLikeMedia) issues++;
+        continue;
+      }
+      const target = path.posix.normalize(path.posix.join(base, rawTarget));
+      if (type === 'image') {
+        if (!media.has(target)) issues++;
+        else safeTargets.add(target);
+      } else if (media.has(target)) {
+        issues++;
+      }
+    }
+  }
+  for (const name of media) if (!safeTargets.has(name)) issues++;
+  return {
+    safeTargets,
+    warnings: issues ? [`DOCX enthält ${issues} nicht eindeutig über eine interne Bildbeziehung abgesicherte Grafik(en); Freigabe wird blockiert.`] : []
+  };
+}
+function packageImageRelationshipCoverage(entries, packageRoot, label, allowedSourceParts = null) {
+  // XLSX and PPTX use the same OPC relationship model as DOCX.  Keep their
+  // image boundary equally strict even while their text formats remain
+  // unreleased: media bytes require an internal `image` edge from a part in
+  // the same package, never filename discovery.
+  const prefix = `${packageRoot}/media/`;
+  const media = new Set([...entries.keys()].filter((name) =>
+    name.startsWith(prefix) && /\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(name)
+  ));
+  const safeTargets = new Set();
+  let issues = 0;
+  for (const [relPath, data] of entries) {
+    if (!relPath.startsWith(`${packageRoot}/`) || !/\.rels$/i.test(relPath)) continue;
+    const base = relationshipBase(relPath);
+    if (base === null) continue;
+    // `relationshipBase` is the directory used for target resolution.  The
+    // authorization boundary, however, is the concrete source part (for
+    // example `xl/drawings/drawing1.xml`), not its directory.
+    const sourcePart = relPath.replace('/_rels/', '/').replace(/\.rels$/i, '');
+    const sourceAllowed = !allowedSourceParts || allowedSourceParts.has(sourcePart);
+    for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+      const attrs = match[1];
+      const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+      const rawTarget = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
+      const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+      if (!rawTarget) continue;
+      const looksLikeMedia = /(?:^|\/)media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(rawTarget);
+      // OPC targets from drawing and slide subdirectories legitimately use
+      // `../media/...`. Normalize before comparing to the fixed media set;
+      // any traversal outside that set cannot become a safe attachment.
+      if (external || /[\\?#\0]/u.test(rawTarget) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(rawTarget)) {
+        if (type === 'image' || looksLikeMedia) issues++;
+        continue;
+      }
+      const target = path.posix.normalize(path.posix.join(base, rawTarget));
+      if (type === 'image') {
+        if (!sourceAllowed || !media.has(target)) issues++;
+        else safeTargets.add(target);
+      } else if (media.has(target) && sourceAllowed) {
+        issues++;
+      }
+    }
+  }
+  for (const name of media) if (!safeTargets.has(name)) issues++;
+  return {
+    safeTargets,
+    warnings: issues ? [`${label} enthält ${issues} nicht eindeutig über eine interne Bildbeziehung abgesicherte Grafik(en); Freigabe wird blockiert.`] : []
+  };
+}
 function docxCoverageWarnings(entries) {
   const supported = [
     /^\[Content_Types\]\.xml$/i,
     /^_rels\/\.rels$/i,
-    /^docProps\/(?:core|app)\.xml$/i,
+    /^docProps\/(?:core|app|custom)\.xml$/i,
     /^word\/(?:document|styles|settings|numbering|fontTable|webSettings|comments|footnotes|endnotes|header\d+|footer\d+)\.xml$/i,
     /^word\/_rels\/(?:document|header\d+|footer\d+|comments|footnotes|endnotes)\.xml\.rels$/i,
     /^word\/theme\/theme\d+\.xml$/i,
-    /^word\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i
+    /^word\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i,
+    /^word\/embeddings\/[^/]+\.(?:docx|xlsx|pptx)$/i
   ];
   const relationshipTypes = new Set([
-    'officeDocument', 'core-properties', 'extended-properties',
+    'officeDocument', 'core-properties', 'extended-properties', 'custom-properties',
     'styles', 'settings', 'numbering', 'fontTable', 'webSettings', 'theme',
-    'header', 'footer', 'image', 'comments', 'footnotes', 'endnotes', 'hyperlink'
+    'header', 'footer', 'image', 'comments', 'footnotes', 'endnotes', 'hyperlink', 'package'
   ]);
   const overrideTypes = new Map([
     ['word/document.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml'],
@@ -114,7 +372,8 @@ function docxCoverageWarnings(entries) {
     ['word/footnotes.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml'],
     ['word/endnotes.xml', 'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml'],
     ['docProps/core.xml', 'application/vnd.openxmlformats-package.core-properties+xml'],
-    ['docProps/app.xml', 'application/vnd.openxmlformats-officedocument.extended-properties+xml']
+    ['docProps/app.xml', 'application/vnd.openxmlformats-officedocument.extended-properties+xml'],
+    ['docProps/custom.xml', 'application/vnd.openxmlformats-officedocument.custom-properties+xml']
   ]);
   function expectedOverrideType(part) {
     const normalized = String(part || '').replace(/^\//, '');
@@ -127,6 +386,10 @@ function docxCoverageWarnings(entries) {
     if (/^word\/theme\/theme\d+\.xml$/i.test(normalized)) {
       return 'application/vnd.openxmlformats-officedocument.theme+xml';
     }
+    const embedded = /^word\/embeddings\/[^/]+\.(docx|xlsx|pptx)$/i.exec(normalized)?.[1]?.toLowerCase();
+    if (embedded === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (embedded === 'xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    if (embedded === 'pptx') return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     return overrideTypes.get(normalized) || null;
   }
   let unsupported = 0;
@@ -156,43 +419,301 @@ function docxCoverageWarnings(entries) {
       }
     }
   }
+  unsupported += docxMainRelationshipIssueCount(entries);
+  unsupported += docxMainWordRootIssueCount(entries);
+  unsupported += docxStoryRelationshipIssueCount(entries);
   return unsupported
     ? [`DOCX enthält ${unsupported} nicht unterstützte inhaltsfähige OOXML-Part(s); Companion-Freigabe wird blockiert.`]
     : [];
 }
 function parseDocx(entries) {
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
-  let md=renderWordBody(main.toString('utf8'));
-  for(const [name,data] of entries) if(/^word\/(header|footer)\d+\.xml$/i.test(name)) { const t=textTags(data.toString('utf8'),'w:t').join(' ').trim(); if(t) md += `\n\n## ${name.includes('header')?'Kopfzeile':'Fußzeile'}\n\n${t}`; }
-  for(const extra of ['word/comments.xml','word/footnotes.xml','word/endnotes.xml']) if(entries.has(extra)) { const t=textTags(entries.get(extra).toString('utf8'),'w:t').join(' ').trim(); if(t) md+=`\n\n## ${extra.includes('comments')?'Kommentare':extra.includes('footnotes')?'Fußnoten':'Endnoten'}\n\n${t}`; }
-  return { markdown:md, attachments:mediaAttachments(entries,'word/media/'), warnings:docxCoverageWarnings(entries) };
+  const sections=[]; const body=renderWordBody(main.toString('utf8'));
+  if(body)sections.push({kind:'text',source_part:'word/document.xml',markdown:body});
+  for(const [name,data] of entries) if(/^word\/(header|footer)\d+\.xml$/i.test(name)) {
+    const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root);
+    if(t) sections.push({kind:'text',source_part:name,markdown:`## ${root==='hdr'?'Kopfzeile':'Fußzeile'}\n\n${t}`});
+  }
+  for(const [extra,root,label] of [
+    ['word/comments.xml','comments','Kommentare'],
+    ['word/footnotes.xml','footnotes','Fußnoten'],
+    ['word/endnotes.xml','endnotes','Endnoten']
+  ]) if(entries.has(extra)) {
+    const t=renderWordPart(entries.get(extra).toString('utf8'),root);
+    if(t)sections.push({kind:'text',source_part:extra,markdown:`## ${label}\n\n${t}`});
+  }
+  sections.push(...metadataSections(entries));
+  const imageCoverage = docxImageRelationshipCoverage(entries);
+  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries)] };
 }
 function sharedStrings(entries) {
   const b=entries.get('xl/sharedStrings.xml'); if(!b)return[]; const xml=b.toString('utf8'), out=[]; let m; const re=/<si\b[\s\S]*?<\/si>/gi; while((m=re.exec(xml)))out.push(textTags(m[0],'t').join('')); return out;
 }
 function colNumber(ref) { const m=/^([A-Z]+)/i.exec(ref||''); if(!m)return 0; let n=0; for(const c of m[1].toUpperCase())n=n*26+(c.charCodeAt(0)-64); return n; }
-function parseXlsx(entries) {
-  const shared=sharedStrings(entries); const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const rels=relMap(entries,'xl/_rels/workbook.xml.rels','xl');
-  const sheetMeta=[]; let sm; const sr=/<sheet\b([^>]+?)\/?>(?:<\/sheet>)?/gi; while((sm=sr.exec(workbook))){const a=sm[1],name=xmlDecode(/\bname="([^"]+)"/i.exec(a)?.[1]||'Sheet'),rid=/\br:id="([^"]+)"/i.exec(a)?.[1]; if(rid&&rels.get(rid))sheetMeta.push({name,target:rels.get(rid)});}
-  if(!sheetMeta.length) for(const name of entries.keys()) if(/^xl\/worksheets\/sheet\d+\.xml$/i.test(name))sheetMeta.push({name:path.basename(name,'.xml'),target:name});
-  const parts=[];
-  for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;const xml=buf.toString('utf8');const rows=[];let rm;const rr=/<row\b[\s\S]*?<\/row>/gi;while((rm=rr.exec(xml))){const vals=[];let cm;const cr=/<c\b([^>]*)>([\s\S]*?)<\/c>/gi;while((cm=cr.exec(rm[0]))){const attrs=cm[1],body=cm[2],ref=/\br="([^"]+)"/i.exec(attrs)?.[1]||'',idx=colNumber(ref)-1,t=/\bt="([^"]+)"/i.exec(attrs)?.[1]||'';let v=/<v\b[^>]*>([\s\S]*?)<\/v>/i.exec(body)?.[1]??'';if(t==='s')v=shared[Number(v)]??v;else if(t==='inlineStr')v=textTags(body,'t').join('');else if(t==='str')v=xmlDecode(v);vals[idx<0?vals.length:idx]=String(v); } if(vals.some(v=>String(v||'').trim()))rows.push(vals);}
-    parts.push(`# Arbeitsblatt: ${s.name}`); if(rows.length){const cols=Math.min(100,Math.max(...rows.map(r=>r.length)));const norm=rows.slice(0,10000).map(r=>Array.from({length:cols},(_,i)=>String(r[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>')));parts.push('| '+norm[0].join(' | ')+' |');parts.push('| '+norm[0].map(()=> '---').join(' | ')+' |');for(const r of norm.slice(1))parts.push('| '+r.join(' | ')+' |');if(rows.length>10000)parts.push('> Weitere Zeilen wurden aus Sicherheitsgründen nicht automatisch gerendert.');}
+function xlsxSheetRelationshipMap(entries) {
+  const rels = entries.get('xl/_rels/workbook.xml.rels');
+  if (!rels) return { targets: new Map(), issues: 1 };
+  const targets = new Map(); let issues = 0;
+  for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+    const attrs = match[1];
+    const id = /\bId=["']([^"']+)["']/i.exec(attrs)?.[1];
+    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    const target = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
+    const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+    if (!id) { issues++; continue; }
+    if (type !== 'worksheet' || external || !target || /[\\?#\0]/u.test(target) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(target) || /(?:^|\/)\.\.(?:\/|$)/u.test(target)) { issues++; continue; }
+    const resolved = path.posix.normalize(path.posix.join('xl', target));
+    if (!/^xl\/worksheets\/sheet\d+\.xml$/i.test(resolved) || !entries.has(resolved) || targets.has(id)) { issues++; continue; }
+    targets.set(id, resolved);
   }
-  const chartText=[]; for(const [name,data] of entries) if(/^xl\/charts\/chart\d+\.xml$/i.test(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')); if(vals.length)chartText.push(`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`);}
-  const drawingText=[];for(const [name,data]of entries)if(/^xl\/drawings\/.*\.xml$/i.test(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)drawingText.push(`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`);}
-  return { markdown:[...parts,...chartText,...drawingText].join('\n\n'), attachments:mediaAttachments(entries,'xl/media/'), warnings:[] };
+  return { targets, issues };
+}
+function internalRelationshipTargets(entries, relPath, expectedType, allowedTarget) {
+  const xml = entries.get(relPath)?.toString('utf8');
+  if (!xml) return { targets: new Set(), issues: 0 };
+  const base = relationshipBase(relPath);
+  if (base === null) return { targets: new Set(), issues: 1 };
+  const targets = new Set();
+  let issues = 0;
+  for (const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+    const attrs = match[1];
+    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    if (type !== expectedType) continue;
+    const raw = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
+    const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+    if (external || !raw || /[\\?#\0]/u.test(raw) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(raw)) {
+      issues++;
+      continue;
+    }
+    const target = path.posix.normalize(path.posix.join(base, raw));
+    if (!allowedTarget.test(target) || !entries.has(target)) {
+      issues++;
+      continue;
+    }
+    targets.add(target);
+  }
+  return { targets, issues };
+}
+function xlsxSupplementRelationshipCoverage(entries, sheetMeta) {
+  const drawings = new Set([...entries.keys()].filter((name) => /^xl\/drawings\/[^/]+\.xml$/i.test(name)));
+  const charts = new Set([...entries.keys()].filter((name) => /^xl\/charts\/chart\d+\.xml$/i.test(name)));
+  const safeDrawings = new Set();
+  const safeCharts = new Set();
+  let issues = 0;
+  for (const sheet of sheetMeta) {
+    const relPath = `xl/worksheets/_rels/${path.basename(sheet.target)}.rels`;
+    const linked = internalRelationshipTargets(entries, relPath, 'drawing', /^xl\/drawings\/[^/]+\.xml$/i);
+    issues += linked.issues;
+    for (const target of linked.targets) safeDrawings.add(target);
+  }
+  for (const drawing of safeDrawings) {
+    const relPath = `xl/drawings/_rels/${path.basename(drawing)}.rels`;
+    const linked = internalRelationshipTargets(entries, relPath, 'chart', /^xl\/charts\/chart\d+\.xml$/i);
+    issues += linked.issues;
+    for (const target of linked.targets) safeCharts.add(target);
+  }
+  for (const drawing of drawings) if (!safeDrawings.has(drawing)) issues++;
+  for (const chart of charts) if (!safeCharts.has(chart)) issues++;
+  return {
+    safeDrawings,
+    safeCharts,
+    warnings: issues ? [`XLSX enthält ${issues} nicht eindeutig über interne Arbeitsblatt-/Drawing-Beziehungen abgesicherte Grafikstruktur(en); Freigabe wird blockiert.`] : []
+  };
+}
+function parseXlsx(entries) {
+  const shared=sharedStrings(entries); const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
+  const sheetMeta=[]; let issues=relationState.issues; let sm; const sr=/<sheet\b([^>]+?)\/?>(?:<\/sheet>)?/gi; while((sm=sr.exec(workbook))){const a=sm[1],name=xmlDecode(/\bname="([^"]+)"/i.exec(a)?.[1]||'Sheet'),rid=/\br:id="([^"]+)"/i.exec(a)?.[1]; const target=rid&&relationState.targets.get(rid); if(!rid||!target) { issues++; continue; } sheetMeta.push({name,target});}
+  if(!workbook || !sheetMeta.length) issues++;
+  const sections=[]; let formulaCells=0;
+  for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;const xml=buf.toString('utf8');const rows=[];let rm;const rr=/<row\b[\s\S]*?<\/row>/gi;while((rm=rr.exec(xml))){const vals=[];let cm;const cr=/<c\b([^>]*)>([\s\S]*?)<\/c>/gi;while((cm=cr.exec(rm[0]))){const attrs=cm[1],body=cm[2],ref=/\br="([^"]+)"/i.exec(attrs)?.[1]||'',idx=colNumber(ref)-1,t=/\bt="([^"]+)"/i.exec(attrs)?.[1]||'';if(/<f\b[^>]*>[\s\S]*?<\/f>|<f\b[^>]*\/>/i.test(body))formulaCells++;let v=/<v\b[^>]*>([\s\S]*?)<\/v>/i.exec(body)?.[1]??'';if(t==='s')v=shared[Number(v)]??v;else if(t==='inlineStr')v=textTags(body,'t').join('');else if(t==='str')v=xmlDecode(v);vals[idx<0?vals.length:idx]=String(v); } if(vals.some(v=>String(v||'').trim()))rows.push(vals);}
+    const parts=[`# Arbeitsblatt: ${s.name}`]; if(rows.length){const cols=Math.min(100,Math.max(...rows.map(r=>r.length)));const norm=rows.slice(0,10000).map(r=>Array.from({length:cols},(_,i)=>String(r[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>')));parts.push('| '+norm[0].join(' | ')+' |');parts.push('| '+norm[0].map(()=> '---').join(' | ')+' |');for(const r of norm.slice(1))parts.push('| '+r.join(' | ')+' |');if(rows.length>10000)parts.push('> Weitere Zeilen wurden aus Sicherheitsgründen nicht automatisch gerendert.');} sections.push({kind:'table',source_part:s.target,markdown:parts.join('\n\n')});
+  }
+  const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, sheetMeta);
+  for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
+  for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
+  sections.push(...metadataSections(entries));
+  const imageCoverage = packageImageRelationshipCoverage(entries, 'xl', 'XLSX', supplementCoverage.safeDrawings);
+  const warnings=[...customMetadataWarnings(entries), ...imageCoverage.warnings, ...supplementCoverage.warnings];
+  if(rootIssues)warnings.push(`XLSX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  if(issues)warnings.push(`XLSX enthält ${issues} nicht eindeutig über eine interne Arbeitsblattbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  if(formulaCells)warnings.push(`XLSX enthält ${formulaCells} Formelzelle(n); Freigabe wird bis zur vollständigen Formelcoverage blockiert.`);
+  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'xl/media/', imageCoverage.safeTargets), warnings };
 }
 function slideNumber(name){return Number(/slide(\d+)\.xml$/i.exec(name)?.[1]||0);}
-function parsePptx(entries) {
-  const slides=[...entries.keys()].filter(n=>/^ppt\/slides\/slide\d+\.xml$/i.test(n)).sort((a,b)=>slideNumber(a)-slideNumber(b)); const parts=[];
-  for(const s of slides){const n=slideNumber(s),xml=entries.get(s).toString('utf8'),texts=textTags(xml,'a:t');parts.push(`# Folie ${n}`);if(texts.length)parts.push(texts.join('\n\n'));const notes=`ppt/notesSlides/notesSlide${n}.xml`;if(entries.has(notes)){const nt=textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)parts.push(`## Notizen\n\n${nt.join('\n\n')}`);} }
-  for(const [name,data] of entries) if(/^ppt\/charts\/chart\d+\.xml$/i.test(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t'));if(vals.length)parts.push(`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`);}
-  return { markdown:parts.join('\n\n'), attachments:mediaAttachments(entries,'ppt/media/'), warnings:[] };
+function pptRelationshipTarget(entries, relPath, id, expectedType, base) {
+  const xml=entries.get(relPath)?.toString('utf8'); if(!xml)return null;
+  let resolvedTarget=null;
+  for(const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)){
+    const attrs=match[1],rid=/\bId=["']([^"']+)["']/i.exec(attrs)?.[1],type=/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop(),raw=xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1]||'');
+    if(id ? rid!==id : type!==expectedType)continue;
+    if(type!==expectedType||/\bTargetMode\s*=\s*["']External["']/i.test(attrs)||!raw||/[\\?#\0]/u.test(raw)||/^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(raw))return null;
+    const target=path.posix.normalize(path.posix.join(base,raw)); if(!target.startsWith('ppt/')||!entries.has(target))return null;
+    if(resolvedTarget!==null)return null;
+    resolvedTarget=target;
+  }
+  return resolvedTarget;
 }
-function parseOoxml(buffer, ext) {
-  let entries; try{entries=readZip(buffer);}catch(e){if(e instanceof ZipError)throw e;throw new Error('Office-Datei konnte nicht als OOXML gelesen werden.');}
-  if(ext==='.docx')return parseDocx(entries); if(ext==='.xlsx')return parseXlsx(entries); if(ext==='.pptx')return parsePptx(entries); throw new Error('OOXML-Format nicht unterstützt.');
+function pptChartRelationshipCoverage(entries, slides) {
+  const charts = new Set([...entries.keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/i.test(name)));
+  const safeCharts = new Set();
+  let issues = 0;
+  for (const slide of slides) {
+    const relPath = `ppt/slides/_rels/${path.basename(slide)}.rels`;
+    const linked = internalRelationshipTargets(entries, relPath, 'chart', /^ppt\/charts\/chart\d+\.xml$/i);
+    issues += linked.issues;
+    for (const target of linked.targets) safeCharts.add(target);
+  }
+  for (const chart of charts) if (!safeCharts.has(chart)) issues++;
+  return {
+    safeCharts,
+    warnings: issues ? [`PPTX enthält ${issues} nicht eindeutig über interne Folienbeziehungen abgesicherte Diagrammstruktur(en); Freigabe wird blockiert.`] : []
+  };
+}
+function parsePptx(entries) {
+  const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
+  const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;while((m=sr.exec(presentation))){const id=/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1],target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target);}
+  if(!presentation||!slides.length)issues++;
+  const sections=[];
+  for(const s of slides){const n=slideNumber(s),xml=entries.get(s).toString('utf8'),texts=textTags(xml,'a:t');const slide=[`# Folie ${n}`];if(texts.length)slide.push(texts.join('\n\n'));sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');if(notes){const nt=textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});} }
+  const chartCoverage = pptChartRelationshipCoverage(entries, slides);
+  for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t'));if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
+  sections.push(...metadataSections(entries));
+  const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
+  const warnings=[...customMetadataWarnings(entries), ...imageCoverage.warnings, ...chartCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  if(rootIssues)warnings.push(`PPTX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'ppt/media/', imageCoverage.safeTargets), warnings };
+}
+function genericSecurityWarnings(entries) {
+  let unsupportedEmbedded=0,active=0,external=0;
+  for(const [name,data] of entries){
+    if(/\/(?:embeddings)\//i.test(name)&&!SUPPORTED_EMBEDDED.test(name))unsupportedEmbedded++;
+    if(/(?:^|\/)(?:vbaProject\.bin|vbaData\.xml|activeX\/|ctrlProps\/|customUI\/|externalLinks\/)/i.test(name))active++;
+    if(/\.rels$/i.test(name)){
+      const xml=data.toString('utf8');
+      for(const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)){
+        const attrs=match[1],type=/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+        if(/\bTargetMode\s*=\s*["']External["']/i.test(attrs))external++;
+        if(['vbaProject','oleObject','control','externalLink','attachedTemplate'].includes(type))active++;
+      }
+    }
+  }
+  const warnings=[];
+  if(unsupportedEmbedded)warnings.push(`OOXML enthält ${unsupportedEmbedded} nicht unterstützte eingebettete Datei(en); Freigabe wird blockiert.`);
+  if(active)warnings.push(`OOXML enthält ${active} aktive oder ausführbare Inhaltsbeziehung(en); Freigabe wird blockiert.`);
+  if(external)warnings.push(`OOXML enthält ${external} externe Inhaltsbeziehung(en); Freigabe wird blockiert.`);
+  return warnings;
+}
+function relationshipBase(relPath) {
+  if(relPath==='_rels/.rels')return '';
+  const match=/^(.*\/)?_rels\/([^/]+)\.rels$/i.exec(relPath);
+  if(!match)return null;
+  return path.posix.dirname(`${match[1]||''}${match[2]}`).replace(/^\.$/, '');
+}
+function relationshipOwner(relPath) {
+  if(relPath==='_rels/.rels')return null;
+  const match=/^(.*\/)?_rels\/([^/]+)\.rels$/i.exec(relPath);
+  return match?`${match[1]||''}${match[2]}`:null;
+}
+function embeddedRelationshipCoverage(entries, reachableParts) {
+  const safeTargets=new Set(),unsafeTargets=new Set(),packageTargetCounts=new Map();let invalidPackageRelationships=0;
+  const trustedParts=reachableParts instanceof Set?reachableParts:new Set();
+  for(const [name,data] of entries){
+    if(!/\.rels$/i.test(name))continue;
+    const base=relationshipBase(name),owner=relationshipOwner(name);if(base===null||owner===null)continue;
+    const xml=data.toString('utf8');
+    for(const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)){
+      const attrs=match[1],type=/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+      const rawTarget=xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1]||'');
+      const external=/\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+      if(!rawTarget||external)continue;
+      if(/[\\?#\0]/u.test(rawTarget)||/^[a-z][a-z0-9+.-]*:/iu.test(rawTarget)){
+        if(type==='package')invalidPackageRelationships++;
+        continue;
+      }
+      const target=path.posix.normalize(path.posix.join(base,rawTarget.replace(/^\/+/,'')));
+      if(target==='..'||target.startsWith('../')){
+        if(type==='package')invalidPackageRelationships++;
+        continue;
+      }
+      if(type==='package'){
+        // A relationship from an orphan custom/XML part must not make an
+        // embedding eligible merely because it happens to name a supported
+        // file. The owning part itself has to have been reached by the
+        // format-specific parser before its package edge is trusted.
+        if(!trustedParts.has(owner))invalidPackageRelationships++;
+        else if(SUPPORTED_EMBEDDED.test(target)&&entries.has(target)){
+          packageTargetCounts.set(target,(packageTargetCounts.get(target)||0)+1);
+          safeTargets.add(target);
+        }
+        else invalidPackageRelationships++;
+      } else if(SUPPORTED_EMBEDDED.test(target))unsafeTargets.add(target);
+    }
+  }
+  let missing=0;
+  for(const name of entries.keys())if(SUPPORTED_EMBEDDED.test(name)){
+    if(!safeTargets.has(name)||unsafeTargets.has(name)||packageTargetCounts.get(name)!==1)missing++;
+    if(unsafeTargets.has(name))safeTargets.delete(name);
+    if(packageTargetCounts.get(name)!==1)safeTargets.delete(name);
+  }
+  const warnings=[];
+  if(missing||invalidPackageRelationships)warnings.push(`OOXML enthält ${missing+invalidPackageRelationships} nicht eindeutig über eine interne Paketbeziehung abgesicherte Einbettung(en); Freigabe wird blockiert.`);
+  return {safeTargets,warnings};
+}
+function embeddedState(context) {
+  if(context===undefined)return {depth:0,budget:{documents:0,archiveBytes:0,expandedBytes:0}};
+  const values=[context?.depth,context?.budget?.documents,context?.budget?.archiveBytes,context?.budget?.expandedBytes];
+  if(values.every(value=>Number.isSafeInteger(value)&&value>=0))return context;
+  throw new Error('EMBEDDED_CONTEXT_INVALID');
+}
+function augmentEmbedded(result, entries, context) {
+  const state=embeddedState(context);
+  const reachableParts=new Set(result.sections.map((section)=>section.source_part));
+  const coverage=embeddedRelationshipCoverage(entries,reachableParts),matches=[];
+  result.warnings.push(...coverage.warnings);
+  for(const [name,data]of entries){const match=SUPPORTED_EMBEDDED.exec(name);if(match&&coverage.safeTargets.has(name))matches.push({name,data,ext:`.${match[1].toLowerCase()}`});}
+  let ordinal=0;
+  for(const embedded of matches){
+    ordinal++;
+    if(state.depth>=MAX_EMBEDDED_DEPTH){result.warnings.push('OOXML-Einbettung überschreitet die erlaubte Rekursionstiefe; Freigabe wird blockiert.');continue;}
+    if(state.budget.documents>=MAX_EMBEDDED_DOCUMENTS){result.warnings.push('OOXML enthält zu viele eingebettete Dokumente; Freigabe wird blockiert.');continue;}
+    if(embedded.data.length>MAX_EMBEDDED_BYTES-state.budget.archiveBytes){result.warnings.push('OOXML-Einbettungen überschreiten das erlaubte Archivbytebudget; Freigabe wird blockiert.');continue;}
+    state.budget.documents++;
+    state.budget.archiveBytes+=embedded.data.length;
+    let nested;
+    try{nested=parseOoxml(embedded.data,embedded.ext,{depth:state.depth+1,budget:state.budget});}
+    catch{result.warnings.push('Eingebettetes OOXML-Dokument konnte nicht vollständig geprüft werden; Freigabe wird blockiert.');continue;}
+    result.sections.push({kind:'text',source_part:embedded.name,markdown:`## Eingebettetes Dokument ${ordinal}`});
+    for(const section of nested.sections)result.sections.push({...section,source_part:`${embedded.name}!/${section.source_part}`});
+    for(const attachment of nested.attachments)result.attachments.push({...attachment,source_part:`${embedded.name}!/${attachment.source_part}`});
+    result.warnings.push(...nested.warnings);
+  }
+  result.markdown=result.sections.map(section=>section.markdown).join('\n\n');
+  return result;
+}
+function parseOoxml(buffer, ext, context) {
+  const state=embeddedState(context);
+  let zipLimits={};
+  if(state.depth>0){
+    const remainingExpanded=MAX_EMBEDDED_EXPANDED_BYTES-state.budget.expandedBytes;
+    if(remainingExpanded<=0)throw new Error('EMBEDDED_EXPANDED_BUDGET_EXCEEDED');
+    zipLimits={maxUncompressed:remainingExpanded};
+  }
+  let entries; try{entries=readZip(buffer,zipLimits);}catch(e){if(e instanceof ZipError)throw e;throw new Error('Office-Datei konnte nicht als OOXML gelesen werden.');}
+  if(state.depth>0){
+    let expanded=0;for(const data of entries.values())expanded+=data.length;
+    if(expanded>MAX_EMBEDDED_EXPANDED_BYTES-state.budget.expandedBytes)throw new Error('EMBEDDED_EXPANDED_BUDGET_EXCEEDED');
+    state.budget.expandedBytes+=expanded;
+  }
+  let result;
+  if(ext==='.docx')result=parseDocx(entries);
+  else if(ext==='.xlsx')result=parseXlsx(entries);
+  else if(ext==='.pptx')result=parsePptx(entries);
+  else throw new Error('OOXML-Format nicht unterstützt.');
+  if(ext!=='.docx')result.warnings.push(...genericSecurityWarnings(entries));
+  return augmentEmbedded(result,entries,state);
 }
 
-module.exports={parseOoxml,parseDocx,parseXlsx,parsePptx,docxCoverageWarnings,xmlDecode,stripTags,contentType};
+module.exports={
+  parseOoxml,parseDocx,parseXlsx,parsePptx,docxCoverageWarnings,xmlDecode,stripTags,contentType,
+  MAX_EMBEDDED_DEPTH,MAX_EMBEDDED_DOCUMENTS,MAX_EMBEDDED_BYTES,MAX_EMBEDDED_EXPANDED_BYTES
+};
