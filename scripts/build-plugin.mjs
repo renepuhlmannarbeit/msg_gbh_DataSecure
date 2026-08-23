@@ -50,9 +50,6 @@ if (/require\((['"])(?:\.\.\/){2,}/.test(entrySource)) {
 const mcp = JSON.parse(fs.readFileSync(path.join(pluginDir, '.mcp.json'), 'utf8'));
 const arg = mcp?.['data-secure-local']?.args?.[0];
 if (arg !== '${CLAUDE_PLUGIN_ROOT}/server/index.js') throw new Error('unexpected MCP entry point');
-if (fs.existsSync(path.join(pluginDir, 'bin'))) {
-  throw new Error('Claude-hosted plugins must not contain a top-level bin directory');
-}
 
 for (const helper of ['windows-ocr.ps1', 'rasterize-image.ps1']) {
   const file = path.join(pluginDir, 'scripts', helper);

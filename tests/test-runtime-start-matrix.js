@@ -34,7 +34,10 @@ test('no user install, online bootstrap, silent fallback or three-plugin workaro
 
 test('SEA remains a target-bound spike until one-plugin dispatch and lifecycle are proven', () => {
   assert.strictEqual(matrix.fallback_spike.technology, 'node-sea');
-  assert.strictEqual(matrix.fallback_spike.status, 'architecture-spike-only');
+  assert.strictEqual(matrix.fallback_spike.status, 'unreleased-windows-engineering-proof');
+  assert.strictEqual(matrix.fallback_spike.pilot_evidence.release_enabled, false);
+  assert.strictEqual(matrix.fallback_spike.pilot_evidence.windows_x64.status, 'local-reproducible-mcp-proof');
+  assert.match(matrix.fallback_spike.pilot_evidence.windows_x64.sha256, /^[a-f0-9]{64}$/);
   for (const target of ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64']) {
     assert.ok(matrix.fallback_spike.required_before_adoption.includes(`${target}-binary-and-hash`));
   }

@@ -39,6 +39,16 @@ const UI_PROCESS_POLICIES = Object.freeze({
     os_network_sandbox_required: false,
     os_network_sandbox_verified: false
   }),
+  password_prompt: Object.freeze({
+    // A password is never part of an MCP frame, command line, environment,
+    // journal or diagnostic record.  The native helper receives it from the
+    // user and writes it only to its inherited local stdout pipe.
+    input_class: 'user_entered_secret',
+    output_class: 'ephemeral_secret_buffer',
+    raw_content: false,
+    os_network_sandbox_required: true,
+    os_network_sandbox_verified: false
+  }),
   text_review: Object.freeze({
     input_class: 'raw_and_anonymized_document_text',
     output_class: 'bounded_review_decisions',

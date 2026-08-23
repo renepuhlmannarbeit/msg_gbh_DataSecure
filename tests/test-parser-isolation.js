@@ -219,16 +219,26 @@ async function main() {
 
   test('status probes the native host and blocks x64 emulation on ARM64', () => {
     assert.deepStrictEqual(nativeParserStatus({ ...nativeOptions, hostProbeStatus: 126 }), {
-      available: false, mode: 'unavailable', reason: 'unsupported_host_architecture'
+      available: false,
+      mode: 'unavailable',
+      reason: 'unsupported_host_architecture',
+      resource_boundary: 'unavailable',
+      hard_process_limits: false
     });
     assert.deepStrictEqual(nativeParserStatus({ ...nativeOptions, hostProbeStatus: 0 }), {
-      available: true, mode: 'windows_job_object', reason: 'ok'
+      available: true,
+      mode: 'windows_job_object',
+      reason: 'ok',
+      resource_boundary: 'windows_job_object',
+      hard_process_limits: true
     });
     assert.deepStrictEqual(nativeParserStatus({ platform: 'darwin', nodeVersion: '22.13.0' }), {
-      available: true, mode: 'node_permission_process', reason: 'ok'
+      available: true, mode: 'node_permission_process', reason: 'ok',
+      resource_boundary: 'node_heap_and_parent_timeout', hard_process_limits: false
     });
     assert.deepStrictEqual(nativeParserStatus({ platform: 'linux', nodeVersion: '22.12.0' }), {
-      available: false, mode: 'unavailable', reason: 'node_permission_model_too_old'
+      available: false, mode: 'unavailable', reason: 'node_permission_model_too_old',
+      resource_boundary: 'unavailable', hard_process_limits: false
     });
   });
 
@@ -241,6 +251,11 @@ async function main() {
       error instanceof SafeError && error.code === 'PARSER_RESOURCE_LIMIT' && !/native-125/.test(error.message));
     await assert.rejects(run(123), (error) =>
       error instanceof SafeError && error.code === 'PARSER_ISOLATION_FAILED' && !/native-123/.test(error.message));
+    await assert.rejects(convertDocument(source('posix-setup.txt'), {
+      platform: 'linux', nodeVersion: '22.13.0',
+      spawn: () => fakeChild((child) => child.emit('close', 123))
+    }), (error) => error instanceof SafeError && error.code === 'PARSER_ISOLATION_FAILED' &&
+      !/posix-setup/.test(error.message));
   });
 
   await testAsync('hung parser is terminated at the deadline and returns a fixed SafeError', async () => {

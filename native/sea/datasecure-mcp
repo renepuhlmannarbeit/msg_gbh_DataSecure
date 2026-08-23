@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+SELF_DIR=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
+PLATFORM=$(uname -s 2>/dev/null || true)
+MACHINE=$(uname -m 2>/dev/null || true)
+
+case "${PLATFORM}:${MACHINE}" in
+  Darwin:x86_64) TARGET=macos-x64 ;;
+  Darwin:arm64) TARGET=macos-arm64 ;;
+  Linux:x86_64) TARGET=linux-x64 ;;
+  *)
+    printf '%s\n' 'DATASECURE_RUNTIME_UNSUPPORTED' >&2
+    exit 126
+    ;;
+esac
+
+LAUNCHER="${SELF_DIR}/../server/runtime/${TARGET}/datasecure-mcp"
+if [ ! -f "${LAUNCHER}" ] || [ ! -x "${LAUNCHER}" ] || [ -L "${LAUNCHER}" ]; then
+  printf '%s\n' 'DATASECURE_RUNTIME_MISSING' >&2
+  exit 126
+fi
+exec "${LAUNCHER}" "$@"

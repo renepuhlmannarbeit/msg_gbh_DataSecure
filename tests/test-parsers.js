@@ -871,6 +871,24 @@ test('directory-only ZIP preflight reports bounded aggregate metadata without in
   assert.throws(() => inspectZipDirectory(archive, { maxUncompressed: 7 }), (e) => e instanceof ZipError);
 });
 
+test('encrypted ZIP entries have a fixed local error code', () => {
+  const archive = Buffer.from(zipStore([['a.txt', 'local-only']]));
+  const central = archive.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  assert.ok(central >= 0);
+  archive.writeUInt16LE(1, central + 8);
+  assert.throws(() => inspectZipDirectory(archive), (error) =>
+    error instanceof ZipError && error.code === 'ZIP_ENCRYPTED_ENTRY' && !/a\.txt/i.test(error.message));
+});
+
+test('standard encrypted Office CFB containers have a fixed local error code', () => {
+  const encryptedOffice = Buffer.alloc(512);
+  Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(encryptedOffice);
+  assert.throws(() => inspectZipDirectory(encryptedOffice), (error) =>
+    error instanceof ZipError && error.code === 'OOXML_ENCRYPTED_CONTAINER');
+  assert.throws(() => readZip(encryptedOffice), (error) =>
+    error instanceof ZipError && error.code === 'OOXML_ENCRYPTED_CONTAINER');
+});
+
 test('inconsistent local and central ZIP headers are rejected', () => {
   const bad = Buffer.from(docx(['Inhalt']));
   bad.writeUInt16LE(8, 8); // local method says deflate, central directory says stored

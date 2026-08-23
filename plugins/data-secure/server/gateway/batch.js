@@ -9,7 +9,7 @@ const { anonymizeNext } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, STOPPED: MAPPING_STOPPED } = require('./mapping');
 const { appendBatchEvidence } = require('./batch-evidence');
-const { inspectZipDirectory } = require('../zip-reader');
+const { inspectZipDirectory, ZipError } = require('../zip-reader');
 const {
   buildReviewDraft,
   validateReviewResult,
@@ -116,15 +116,25 @@ function assertStagingCapacity(queue, statfs = fs.statfsSync) {
 }
 
 function preflightOoxmlContainers(queue, readFile = fs.readFileSync) {
-  // DOCX is the only released OOXML format today.  Inspecting its central
-  // directory before the snapshot catches ZIP64, encrypted and expansion-bomb
-  // containers before any private work copy exists.  This does not replace the
-  // later full parser/CRC validation and never returns archive names or bytes.
+  // All OOXML families are ZIP containers, even where the product release gate
+  // still blocks XLSX/PPTX. Inspecting their central directory before the
+  // snapshot catches ZIP64, encrypted and expansion-bomb containers before any
+  // private work copy exists. This does not replace the later full parser/CRC
+  // validation and never returns archive names or bytes.
   for (const entry of queue) {
-    if (path.extname(entry.name).toLowerCase() !== '.docx') continue;
+    if (!['.docx', '.xlsx', '.pptx'].includes(path.extname(entry.name).toLowerCase())) continue;
     try {
       inspectZipDirectory(readFile(entry.full), { maxEntries: 20000, maxUncompressed: 300 * 1024 * 1024 });
-    } catch {
+    } catch (error) {
+      // Do not offer a password prompt unless a reviewed local decrypter is
+      // actually available. The fixed code allows a clear user explanation
+      // without exposing archive names, paths, or container details.
+      if (error instanceof ZipError && ['ZIP_ENCRYPTED_ENTRY', 'OOXML_ENCRYPTED_CONTAINER'].includes(error.code)) {
+        throw localReviewError(
+          'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED',
+          'Die passwortgeschützte Office-Datei wurde lokal nicht übernommen. Ein geprüfter lokaler Entschlüsselungsweg ist noch nicht freigegeben.'
+        );
+      }
       throw new SafeError('Der Office-Container konnte vor der lokalen Stapelübernahme nicht sicher geprüft werden.');
     }
   }
@@ -370,6 +380,16 @@ function batchUserStatus(progress) {
     return {
       user_status: `Lokale Verarbeitung läuft: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`,
       next_action: 'wait_for_current_document'
+    };
+  }
+  if (progress.batch_phase !== 'ready_for_next_document') {
+    // Never reinterpret an unknown or future persisted phase as permission to
+    // process another source. A status reader is deliberately side-effect free;
+    // the only safe recovery is to inspect the local status and let the server
+    // map the actual state again.
+    return {
+      user_status: `Lokaler Stapelstatus ist unklar: ${completed} von ${total} Dateien sind abgeschlossen. Es wurde keine weitere Datei verarbeitet.`,
+      next_action: 'check_privacy_status'
     };
   }
   return {

@@ -11,6 +11,7 @@ const { companionCapabilities } = require('../companion/job-store');
 const { companionRetentionStatus } = require('../companion/retention');
 const { recoverableBatchStatus, localCleanupStatus } = require('./batch');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
+const { runtimeInfo } = require('../runtime-info');
 
 function genericStatus(options = {}) {
   const engine = readStatus();
@@ -39,6 +40,8 @@ function genericStatus(options = {}) {
     text_engine: engine.text_engine,
     parser_boundary: engine.parser_boundary,
     parser_boundary_reason: engine.parser_boundary_reason,
+    parser_resource_boundary: engine.parser_resource_boundary,
+    parser_hard_process_limits: engine.parser_hard_process_limits,
     visual_bridge: engine.visual_bridge,
     visual_bridge_reason: engine.visual_bridge_reason,
     visual_boundary: engine.visual_boundary,
@@ -83,7 +86,7 @@ function genericStatus(options = {}) {
       { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
       { format: 'XLSX, PPTX und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ],
-    runtime_dependency_install: false,
+    ...runtimeInfo(),
     workflow:
       'Input -> isolated local parser process -> bundled PII engine -> residual gate -> ' +
       'visual raster/OCR/redaction or local review -> Output package',

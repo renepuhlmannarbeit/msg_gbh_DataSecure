@@ -2,7 +2,32 @@
 
 const zlib = require('zlib');
 
-class ZipError extends Error {}
+class ZipError extends Error {
+  constructor(message, code) {
+    super(message);
+    this.name = 'ZipError';
+    if (code) this.code = code;
+  }
+}
+
+function encryptedEntryError() {
+  return new ZipError('Verschlüsselte ZIP-Einträge werden nicht unterstützt.', 'ZIP_ENCRYPTED_ENTRY');
+}
+
+const CFB_SIGNATURE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+
+function encryptedOfficeContainerError() {
+  return new ZipError('Verschlüsselte Office-Container werden nicht unterstützt.', 'OOXML_ENCRYPTED_CONTAINER');
+}
+
+function rejectEncryptedOfficeContainer(buf) {
+  // ECMA-376 encrypted Office files are Compound File Binary (CFB/OLE), not
+  // ZIP/OPC packages. Recognize the container signature before looking for a
+  // ZIP end record, so the caller can stop clearly without parsing metadata.
+  if (buf.length >= CFB_SIGNATURE.length && buf.subarray(0, CFB_SIGNATURE.length).equals(CFB_SIGNATURE)) {
+    throw encryptedOfficeContainerError();
+  }
+}
 
 let crcTable;
 function crc32(buf) {
@@ -35,6 +60,7 @@ function findEocd(buf) {
 // without decompressing raw document content or writing a work copy.
 function inspectZipDirectory(buf, limits={}) {
   if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
+  rejectEncryptedOfficeContainer(buf);
   const maxEntries = limits.maxEntries || 20000;
   const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
   const eocd = findEocd(buf);
@@ -59,7 +85,7 @@ function inspectZipDirectory(buf, limits={}) {
     const commentLen = buf.readUInt16LE(p + 32);
     const localOffset = buf.readUInt32LE(p + 42);
     if (p + 46 + nameLen + extraLen + commentLen > cdEnd) throw new ZipError('ZIP-Zentralverzeichnis abgeschnitten.');
-    if (flags & 1) throw new ZipError('Verschlüsselte ZIP-Einträge werden nicht unterstützt.');
+    if (flags & 1) throw encryptedEntryError();
     if (compSize === 0xffffffff || uncompSize === 0xffffffff || localOffset === 0xffffffff) throw new ZipError('ZIP64 wird nicht unterstützt.');
     const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8').replace(/\\/g,'/');
     p += 46 + nameLen + extraLen + commentLen;
@@ -77,6 +103,7 @@ function inspectZipDirectory(buf, limits={}) {
 
 function readZip(buf, limits={}) {
   if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
+  rejectEncryptedOfficeContainer(buf);
   const maxEntries = limits.maxEntries || 20000;
   const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
   const eocd = findEocd(buf);
@@ -102,7 +129,7 @@ function readZip(buf, limits={}) {
     const commentLen = buf.readUInt16LE(p + 32);
     const localOffset = buf.readUInt32LE(p + 42);
     if (p + 46 + nameLen + extraLen + commentLen > cdEnd) throw new ZipError('ZIP-Zentralverzeichnis abgeschnitten.');
-    if (flags & 1) throw new ZipError('Verschlüsselte ZIP-Einträge werden nicht unterstützt.');
+    if (flags & 1) throw encryptedEntryError();
     if (compSize === 0xffffffff || uncompSize === 0xffffffff || localOffset === 0xffffffff) throw new ZipError('ZIP64 wird nicht unterstützt.');
     const nameBuf = buf.subarray(p + 46, p + 46 + nameLen);
     const name = nameBuf.toString((flags & 0x800) ? 'utf8' : 'utf8').replace(/\\/g,'/');

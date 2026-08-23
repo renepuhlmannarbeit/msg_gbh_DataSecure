@@ -239,6 +239,8 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.match(workflow, /test-ocr-result-contract\.mjs/u);
   assert.match(workflow, /cc -std=c11 -O2 -Wall -Wextra -Werror/u);
   assert.match(workflow, /--sandbox-contract/u);
+  assert.match(isolated, /Number\.isInteger\(code\) && code >= 120 && code <= 126/u,
+    'POSIX supervisor setup failures must remain boundary failures');
   for (const token of ['build-ocr-runtime.mjs', 'test-ocr-runtime-bundle.mjs',
     'test-ocr-runtime-smoke.mjs', 'dist/ocr-runtime/${{ env.OCR_BUNDLE_TARGET }}/',
     'include-hidden-files: true', 'assemble-ocr-runtime.mjs',

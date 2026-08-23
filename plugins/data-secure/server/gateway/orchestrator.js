@@ -36,6 +36,7 @@ const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
 const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
+const { runtimeInfo } = require('../runtime-info');
 
 const { MAX_INPUT_BYTES, MAX_TEXT_CHARS, MAX_VISUAL_ASSETS } = LIMITS;
 
@@ -486,7 +487,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         visual_fail_closed: true,
         visual_ocr_text_released: true,
         persistent_mapping: false,
-        runtime_dependency_install: false
+        ...runtimeInfo()
       },
       ambiguity_resolution: ambiguities.length > 0 ? 'local_human_complete' : 'not_required',
       ambiguous_organization_count: ambiguities.length,
@@ -589,7 +590,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       },
       original_moved_to_processed: !copiedClaim,
       persistent_mapping_retained: false,
-      runtime_dependency_install: false,
+      ...runtimeInfo(),
       raw_content_sent_to_claude: false,
       ai_act: aiActMeta(effective)
     };

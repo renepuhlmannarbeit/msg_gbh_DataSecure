@@ -66,12 +66,20 @@ Marketplace bleiben bis zu ihren Fresh-Install-/Negativmatrizen unbelegt.
 `RUNTIME_START_MATRIX_V1.json` macht diese Grenze maschinenlesbar: MCPB nutzt laut
 offizieller Desktop-Extension-Dokumentation die eingebaute Node-Runtime ohne
 Nutzerinstallation; gewöhnliches Plugin-ZIP/Marketplace darf daraus keine Garantie
-ableiten. Der Node-SEA-Fallback ist technisch plausibel, bleibt aber ein
-Architekturspike: Node 22 verlangt zielabhängige Binärinjektion und die aktuelle
-Standard-Plugin-MCP-Konfiguration dokumentiert keinen OS-Selektor für einen einzigen
-universellen Plugin-Befehl. Vier Tests verhindern Nutzerinstallationen,
-Runtime-Downloads, stillen MCPB-Wechsel, drei sichtbare OS-Plugins und vorschnelle
-SEA-Freigaben.
+ableiten. Der Node-SEA-Fallback besitzt jetzt einen unveröffentlichten Windows-x64-
+Engineeringnachweis. Node 22.23.2, `postject` 1.0.0-alpha.6 und vier offizielle
+Zielarchive sind exakt gelockt. Ein fester erweiterungsloser Plugin-Befehl verwendet
+unter Windows die `.exe`-Auflösung und auf POSIX einen geschlossenen Ziel-Dispatcher.
+Zwei Windows-Builds waren byteidentisch; der echte MCP-Server bestand bei leerem
+`PATH` `initialize` und `privacy_status` ohne Host-Node. Die aktuelle öffentliche
+`.mcp.json` bleibt bis zur ausgeführten Vier-Ziel-Matrix und zu Fresh Install,
+Update/Rollback unverändert auf `node`; der Status weist diesen Pfad nun als
+`host_node` und hostabhängig aus. Nutzerinstallationen, Runtime-Downloads, stiller
+MCPB-Wechsel, drei sichtbare OS-Plugins und vorschnelle SEA-Freigaben bleiben
+automatisch gesperrt. Ein separater Engineering-Assembler verlangt alle vier an
+Build- und MCP-Evidenz gebundenen Zielprogramme, verändert nur einen temporären
+Stagingbaum und erzeugt bei unvollständigem Satz kein ZIP; ein erfolgreiches
+universelles Assembly wurde noch nicht behauptet.
 
 Der Hostvertrag ist inzwischen zusätzlich in `HOST_MATRIX_V1.json` und
 `HOST_MATRIX_V1.md` versioniert. Direkte Prompts und der Anonymisierungs-Skill
@@ -120,6 +128,12 @@ Stapelphase, die nächste Positionsnummer und einen terminalen Fortschrittsproze
 Fortsetzbare und noch nicht an Claude bestätigte Pakete zählen dafür bewusst nicht als
 erledigt; Namen und Pfade bleiben weiterhin ausgeschlossen. Eine lokale sichtbare
 Fortschrittsanzeige bleibt offen.
+
+Ein unbekannter oder künftig erweiterter persistierter Phasenwert fällt nicht mehr
+auf „nächste Datei verarbeiten“ zurück. Er liefert ausschließlich die inhaltsfreie
+Aktion `check_privacy_status`; der Skill startet, setzt oder öffnet dann nichts und
+verweist bei fortbestehendem Zustand auf die lokale IT-Prüfung. Das verhindert einen
+logischen Fehlstart nach beschädigtem oder versionsfremdem Journal.
 
 Nach mindestens drei bereits lokal gemessenen Verarbeitungsdauern ergänzt dieselbe
 Antwort eine konservative Restzeit für rein automatisch verbleibende Positionen. Sie
@@ -190,6 +204,14 @@ einen festen maschinenlesbaren Vertragsmarker. Der manuelle OCR-Workflow kompili
 ihn auf macOS/Linux mit `-Werror` und prüft den Marker. Neue Zielbinärhashes, echte
 adversariale OS-Proben und die Einbindung in den allgemeinen Parserpfad fehlen noch;
 deshalb bleibt die produktive POSIX-Aussage unverändert geschlossen.
+`privacy_status` macht die aktuelle Grenze nun explizit sichtbar:
+`parser_resource_boundary=node_heap_and_parent_timeout` und
+`parser_hard_process_limits=false` auf dem produktiven POSIX-Fallback, gegenüber
+`windows_job_object` und `true` beim Windows-Host. Das ist eine ehrliche
+Statusverbesserung, keine vorgezogene Schließung von BL-011.9.
+Reservierte Exitcodes der künftigen POSIX-Sandbox werden im allgemeinen Parser nun
+ebenso wie unter Windows immer als `PARSER_ISOLATION_FAILED` behandelt; sie können
+nicht als gewöhnlicher Parserfehler in einen unsicheren Fortsetzungsweg geraten.
 
 Abgelaufene private Batch-Snapshots werden beim Start und zusätzlich in einer
 lokalen sechs-stündigen Wartung bereinigt. Der periodische Lauf ist auf ein
@@ -393,6 +415,12 @@ erzeugen eine inhaltsfreie Warnung. Formelzellen werden unabhängig von einem
 gecachten Wert ebenso gestoppt. `xl/media/` benötigt ebenfalls eine interne
 `image`-Relationship; ein Drawing-Part darf dabei nur auf ein normalisiertes Ziel
 innerhalb von `xl/media/` verweisen. Das ist keine XLSX-Freigabe.
+
+Seit 23.08.2026 durchläuft zusätzlich jeder DOCX-, XLSX- und PPTX-Container vor
+einer privaten Batch-Arbeitskopie dieselbe begrenzte ZIP-Verzeichnisprüfung.
+ZIP64, verschlüsselte Einträge, falsche Größen und Entpackungsbomben stoppen damit
+auch in den weiterhin gesperrten Office-Formaten, ohne eine Arbeitskopie anzulegen.
+Das erweitert keine Formatfreigabe.
 
 XLSX-Drawing-Text folgt nur einer internen `drawing`-Relationship aus einem
 erreichbaren Arbeitsblatt; Charttext nur einer `chart`-Relationship aus diesem
@@ -648,9 +676,23 @@ Ambiguitätsentscheidungen, Zurück/Ändern und technisch gebundenem Skip. macOS
 für Zertifikatsaussteller eine lokale, `stdin`-gebundene Beibehalten/Anonymisieren-
 Entscheidung ohne freie Textredaktion. Linux verwendet dafür Zenity oder KDialog und
 überträgt Fundstellenkontext nur über `stdin` beziehungsweise `/dev/stdin`.
-Claude kann weder reviewen noch freigeben. Rest: lokaler Passwortdialog,
-RAM-only-Secretvertrag, „Später entscheiden“, freie Redaktionen außerhalb Windows
-und echte Zielplattformabnahmen.
+Claude kann weder reviewen noch freigeben. Der neue plattformneutrale
+`local-password`-Vertrag öffnet einen maskierten nativen Passwortdialog (Windows,
+macOS, Linux), übergibt das Geheimnis ausschließlich in einer lokalen Pipe an einen
+lokalen Verbraucher und nullt danach sowohl Pipe- als auch Verbraucherbuffer. Passwort,
+Pfad und Rohinhalt sind weder MCP-Parameter noch Kommandozeile, Umgebung, Journal oder
+Diagnose; der Vertrag akzeptiert ausschließlich einen begrenzten Binärwert, damit keine
+nicht löschbare JavaScript-Stringkopie entsteht. Das ist bewusst **noch keine Entschlüsselungsfreigabe**: Bis ein separat
+geprüfter lokaler Entschlüsseler integriert und auf den drei Zielplattformen abgenommen
+ist, bleiben passwortgeschützte Dateien fail-closed. Rest: diese Entschlüsselerbindung,
+„Später entscheiden“, freie Redaktionen außerhalb Windows und echte Zielplattformabnahmen.
+
+Passwortgeschützte ZIP-/Office-Container erhalten bereits vor der Batch-Arbeitskopie
+den festen inhaltsfreien Fehlercode `PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED`. Das
+System öffnet hierfür bewusst keinen wirkungslosen Passwortdialog und schlägt keine
+Umgehung per Upload vor. Neben verschlüsselten ZIP-Einträgen erkennt der Preflight
+auch die CFB/OLE-Signatur der normalen Microsoft-Office-Verschlüsselung; beide Wege
+bleiben bis zur geprüften lokalen Entschlüsselerbindung gesperrt.
 
 Korrektur 23.08.2026: Der macOS-Dialog besitzt den unter BL-012 dokumentierten
 P0-Defekt und ist daher kein aktueller Plattformnachweis. Der bestehende Code- und

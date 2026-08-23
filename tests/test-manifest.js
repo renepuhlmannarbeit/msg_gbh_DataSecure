@@ -229,12 +229,11 @@ test('native Windows launcher has a reproducible source and release build contra
   assert.strictEqual(actual, expected, 'tracked native launcher does not match its checksum');
 });
 
-test('Claude plugin avoids the reserved top-level bin directory', () => {
-  assert.strictEqual(
-    fs.existsSync(path.join(root, 'plugins', 'data-secure', 'bin')),
-    false,
-    'Claude Desktop rejects uploaded plugins that contain a top-level bin directory'
-  );
+test('Claude plugin build no longer rejects the officially documented executable directory', () => {
+  const build = fs.readFileSync(path.join(root, 'scripts', 'build-plugin.mjs'), 'utf8');
+  assert.doesNotMatch(build, /must not contain a top-level bin directory/);
+  const sea = JSON.parse(fs.readFileSync(path.join(root, 'native', 'sea', 'launcher-contract.json'), 'utf8'));
+  assert.strictEqual(sea.release_enabled, false, 'unproven launchers must not enter the plugin package');
 });
 
 test('every test referenced by the npm test script exists', () => {

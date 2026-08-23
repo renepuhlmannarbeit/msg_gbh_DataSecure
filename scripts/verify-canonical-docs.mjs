@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = path.join(root, 'docs', 'canonical');
-const required = ['README.md', 'DECISIONS.md', 'PRODUCT.md', 'BACKLOG.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md'];
+const required = ['README.md', 'DECISIONS.md', 'PRODUCT.md', 'BACKLOG.md', 'BACKLOG_ARCHIVE_2026-08.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md'];
 
 for (const file of required) {
   if (!fs.existsSync(path.join(canonical, file))) throw new Error(`missing canonical document: ${file}`);
@@ -13,6 +13,7 @@ for (const file of required) {
 const read = (file) => fs.readFileSync(path.join(canonical, file), 'utf8');
 const decisionsText = read('DECISIONS.md');
 const backlogText = read('BACKLOG.md');
+const archiveText = read('BACKLOG_ARCHIVE_2026-08.md');
 const currentText = read('CURRENT_STATE.md');
 const traceText = read('TRACEABILITY.md');
 const indexText = read('README.md');
@@ -23,7 +24,8 @@ const target = JSON.parse(read('TARGET_CAPABILITIES.json'));
 const collect = (text, pattern) => [...text.matchAll(pattern)].map((match) => match[1]);
 const decisions = collect(decisionsText, /^## (DS-\d{3})\b/gm);
 const backlog = collect(backlogText, /^### (BL-\d{3})\b/gm);
-const stories = collect(backlogText, /^#### (BL-\d{3}\.\d+)\b/gm);
+const stories = collect(backlogText, /^\| (BL-\d{3}\.\d+) \|/gm);
+const archivedStories = collect(archiveText, /^\| (BL-\d{3}\.\d+) \|/gm);
 const traceDecisions = collect(traceText, /^\| (DS-\d{3}) \|/gm);
 const currentBacklog = collect(currentText, /^## (BL-\d{3})\b/gm);
 
@@ -34,7 +36,7 @@ const unique = (values, label) => {
 
 unique(decisions, 'decision ids');
 unique(backlog, 'backlog ids');
-unique(stories, 'backlog story ids');
+unique([...stories, ...archivedStories], 'backlog story ids');
 unique(traceDecisions, 'traceability decision ids');
 unique(currentBacklog, 'current-state backlog ids');
 if (!decisions.length || !backlog.length || !stories.length) {
@@ -45,10 +47,14 @@ for (const id of stories) {
   const parent = id.slice(0, 6);
   if (!backlog.includes(parent)) throw new Error(`story references unknown parent epic: ${id}`);
   const escaped = id.replace('.', '\\.');
-  const section = backlogText.match(new RegExp(`^#### ${escaped}\\b[\\s\\S]*?(?=^#### |^### |(?![\\s\\S]))`, 'm'))?.[0] ?? '';
-  if (!/^Status: \*\*(erledigt|in Arbeit|offen|blockiert)\*\*/m.test(section)) {
+  const row = backlogText.match(new RegExp(`^\\| ${escaped} \\|[^\\n]*\\| \\*\\*(erledigt|in Arbeit|offen|blockiert)\\*\\* \\|`, 'm'))?.[0] ?? '';
+  if (!row) {
     throw new Error(`story has no valid status: ${id}`);
   }
+}
+for (const id of archivedStories) {
+  const parent = id.slice(0, 6);
+  if (!backlog.includes(parent)) throw new Error(`archived story references unknown parent epic: ${id}`);
 }
 
 for (const id of decisions) {

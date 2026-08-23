@@ -2,6 +2,18 @@ name: Tesseract.js offline OCR three-platform pilot
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Evidence target; choose all only for universal runtime evidence.
+        required: true
+        default: linux-x64
+        type: choice
+        options:
+          - linux-x64
+          - windows-x64
+          - macos-x64
+          - macos-arm64
+          - all
 
 permissions:
   contents: read
@@ -11,12 +23,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  select-target:
+    name: Select requested evidence target
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.target }}" in
+            windows-x64) matrix='{"include":[{"os":"windows-latest","target":"windows-x64"}]}' ;;
+            macos-x64) matrix='{"include":[{"os":"macos-15-intel","target":"macos-x64"}]}' ;;
+            macos-arm64) matrix='{"include":[{"os":"macos-14","target":"macos-arm64"}]}' ;;
+            linux-x64) matrix='{"include":[{"os":"ubuntu-latest","target":"linux-x64"}]}' ;;
+            all) matrix='{"include":[{"os":"windows-latest","target":"windows-x64"},{"os":"macos-15-intel","target":"macos-x64"},{"os":"macos-14","target":"macos-arm64"},{"os":"ubuntu-latest","target":"linux-x64"}]}' ;;
+            *) exit 64 ;;
+          esac
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   pilot:
     name: Offline OCR pilot (${{ matrix.os }})
     strategy:
       fail-fast: false
-      matrix:
-        os: [windows-latest, macos-15-intel, macos-14, ubuntu-latest]
+      matrix: ${{ fromJSON(needs.select-target.outputs.matrix) }}
+    needs: select-target
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -89,6 +122,7 @@ jobs:
 
   universal-bundle:
     name: Assemble universal OCR runtime
+    if: ${{ inputs.target == 'all' }}
     needs: pilot
     runs-on: ubuntu-latest
     timeout-minutes: 15

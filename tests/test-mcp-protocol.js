@@ -296,7 +296,13 @@ async function main() {
     assert.strictEqual(result.content[0].type, 'text');
     assert.strictEqual(result.structuredContent.ok, true);
     assert.strictEqual(result.structuredContent.raw_content_sent_to_claude, false);
-    assert.strictEqual(result.structuredContent.runtime_dependency_install, false);
+    assert.strictEqual(result.structuredContent.runtime_mode, 'host_node');
+    assert.strictEqual(result.structuredContent.runtime_target, null);
+    assert.strictEqual(result.structuredContent.runtime_dependency_install, true);
+    assert.strictEqual(result.structuredContent.host_node_required, true);
+    assert.strictEqual(result.structuredContent.parser_resource_boundary,
+      process.platform === 'win32' ? 'windows_job_object' : 'node_heap_and_parent_timeout');
+    assert.strictEqual(result.structuredContent.parser_hard_process_limits, process.platform === 'win32');
     assert.strictEqual(result.structuredContent.audit_schema, 'data-secure-audit-receipt/3');
     assert.strictEqual(result.structuredContent.privacy_ruleset, 'de-business/2');
     assert.strictEqual(result.structuredContent.credential_context_policy, 'credential-context/2');

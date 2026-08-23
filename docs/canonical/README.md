@@ -21,7 +21,9 @@ Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
    ausdrücklich nicht als Runtime-Freigabe verwendbarer Zielvertrag.
 7. [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – verbindliches
    Wiederverwendungsregister mit Kandidaten, Ausschlüssen und Prüfgates.
-8. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben RC30 oder
+8. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) – abgeschlossene
+   Stories mit kompaktem Abschlussnachweis; nicht als aktive Arbeitsliste verwenden.
+9. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben RC30 oder
    liefern Detailwissen, sind aber nicht entscheidungsführend.
 
 Bei einem Widerspruch gilt die höher stehende Quelle. Eine neue Entscheidung erhält

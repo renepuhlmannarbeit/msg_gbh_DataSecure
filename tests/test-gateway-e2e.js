@@ -253,7 +253,10 @@ async function main() {
     assert.match(result.read_capability, /^[A-Za-z0-9_-]{43}$/);
     assert.ok(Date.parse(result.read_capability_expires_at) > Date.now());
     assert.doesNotMatch(JSON.stringify(manifest), /read_capability/i, 'read grants must never be persisted');
-    assert.strictEqual(manifest.verification.runtime_dependency_install, false);
+    assert.strictEqual(manifest.verification.runtime_mode, 'host_node');
+    assert.strictEqual(manifest.verification.runtime_target, null);
+    assert.strictEqual(manifest.verification.runtime_dependency_install, true);
+    assert.strictEqual(manifest.verification.host_node_required, true);
     assert.strictEqual(manifest.verification.text_residual_pii, 'passed');
     assert.strictEqual(manifest.verification.residual_gate_checked_dictionary_literals, true);
     assertAbsent(markdown, 'Max Mustermann', 'customer name');

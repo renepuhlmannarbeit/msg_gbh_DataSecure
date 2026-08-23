@@ -56,6 +56,21 @@ test('native, platform, OCR, packaging and security workflows stay manual', () =
   }
 });
 
+test('costly platform workflows default to one Linux target and assemble only on explicit all', () => {
+  for (const name of ['sea-launcher-pilot.yml', 'tesseractjs-ocr-pilot.yml']) {
+    const source = workflows.get(name);
+    assert.ok(source, `${name} is missing`);
+    assert.match(source, /^        default: linux-x64$/m, `${name} must default to one low-cost target`);
+    assert.match(source, /^          - all$/m, `${name} must retain an explicit full-evidence option`);
+    assert.match(source, /matrix: \$\{\{ fromJSON\(needs\.select-target\.outputs\.matrix\) \}\}/u,
+      `${name} must create runners only for the selected platform target`);
+    assert.match(source, /case "\$\{\{ inputs\.target \}\}" in/u,
+      `${name} must select its matrix from the explicit manual input`);
+    assert.match(source, /if: \$\{\{ inputs\.target == 'all' \}\}/u,
+      `${name} must not assemble a universal artifact from incomplete evidence`);
+  }
+});
+
 test('manual security evidence can be selected instead of always running three jobs', () => {
   const security = workflows.get('security.yml');
   for (const scope of ['javascript', 'native', 'secrets', 'all']) {

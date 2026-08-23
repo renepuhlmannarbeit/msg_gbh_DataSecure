@@ -356,17 +356,46 @@ async function main() {
     }
   });
 
-  await testAsync('unsafe DOCX directory metadata is refused before a private batch copy is created', async () => {
+  await testAsync('unsafe OOXML directory metadata is refused for DOCX, XLSX and PPTX before a private batch copy is created', async () => {
+    for (const extension of ['.docx', '.xlsx', '.pptx']) {
+      resetInput();
+      const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
+      const source = path.join(roots().input, `unsafe-container${extension}`);
+      const archive = Buffer.from(zipStore([['word/document.xml', '<w:document/>']]));
+      const central = archive.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+      assert.ok(central >= 0);
+      archive.writeUInt32LE(301 * 1024 * 1024, central + 24);
+      fs.writeFileSync(source, archive);
+      assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), /Office-Container/i);
+      assert.strictEqual(fs.readFileSync(source).equals(archive), true);
+      assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
+    }
+  });
+
+  await testAsync('a password-protected Office container stops before a snapshot without offering an unimplemented decryption path', async () => {
     resetInput();
     const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
-    const source = path.join(roots().input, 'unsafe-container.docx');
+    const source = path.join(roots().input, 'protected.docx');
     const archive = Buffer.from(zipStore([['word/document.xml', '<w:document/>']]));
     const central = archive.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
     assert.ok(central >= 0);
-    archive.writeUInt32LE(301 * 1024 * 1024, central + 24);
+    archive.writeUInt16LE(1, central + 8);
     fs.writeFileSync(source, archive);
-    assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), /Office-Container/i);
+    assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
+      error.code === 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED' && !/protected|\.docx/i.test(error.message));
     assert.strictEqual(fs.readFileSync(source).equals(archive), true);
+    assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
+  });
+
+  await testAsync('a standard encrypted Office CFB container stops before a snapshot without offering an unimplemented decryption path', async () => {
+    resetInput();
+    const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
+    const source = path.join(roots().input, 'protected-standard.docx');
+    const encryptedOffice = Buffer.alloc(512);
+    Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(encryptedOffice);
+    fs.writeFileSync(source, encryptedOffice);
+    assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
+      error.code === 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED' && !/protected|\.docx/i.test(error.message));
     assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
   });
 
@@ -409,7 +438,9 @@ async function main() {
   await testAsync('a terminally stopped batch receives the same aggregate-only evidence receipt', async () => {
     resetInput();
     try { fs.unlinkSync(evidencePath()); } catch { /* test starts without a receipt */ }
-    add('terminal-stop.xlsx', 'Kunde: Max Mustermann');
+    // The format gate, not the OOXML-container preflight, is the behavior
+    // under test. Keep the extension/content combination structurally honest.
+    fs.writeFileSync(path.join(roots().input, 'terminal-stop.xlsx'), zipStore([['xl/workbook.xml', '<workbook/>']]));
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processBatchNext(begun.batch_token, deps);
     assert.strictEqual(result.ok, false);

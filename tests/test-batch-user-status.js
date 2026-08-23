@@ -51,6 +51,13 @@ test('public progress exposes only the bounded user status and no item name', ()
   assert.doesNotMatch(JSON.stringify(result), /Erika|Musterfrau|Kundenakte|\.docx/i);
 });
 
+test('an unknown persisted phase never falls through to processing another document', () => {
+  const result = _test.batchUserStatus(progress({ batch_phase: 'unexpected_future_phase' }));
+  assert.strictEqual(result.next_action, 'check_privacy_status');
+  assert.match(result.user_status, /Status ist unklar.*keine weitere Datei verarbeitet/i);
+  assert.doesNotMatch(result.user_status, /Musterfrau|C:\\|\.docx/i);
+});
+
 test('rest time is a bounded median from at least three local processing samples', () => {
   const result = _test.publicProgress({
     token: 'b'.repeat(64),

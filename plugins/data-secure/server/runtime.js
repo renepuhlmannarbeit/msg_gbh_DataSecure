@@ -73,12 +73,30 @@ function nativeParserStatus(options = {}) {
     const version = String(options.nodeVersion || process.versions.node || '0.0.0').split('.').map(Number);
     const permissionStable = version[0] > 22 || (version[0] === 22 && version[1] >= 13);
     return permissionStable
-      ? { available: true, mode: 'node_permission_process', reason: 'ok' }
-      : { available: false, mode: 'unavailable', reason: 'node_permission_model_too_old' };
+      ? {
+        available: true,
+        mode: 'node_permission_process',
+        reason: 'ok',
+        resource_boundary: 'node_heap_and_parent_timeout',
+        hard_process_limits: false
+      }
+      : {
+        available: false,
+        mode: 'unavailable',
+        reason: 'node_permission_model_too_old',
+        resource_boundary: 'unavailable',
+        hard_process_limits: false
+      };
   }
-  if (platform !== 'win32') return { available: false, mode: 'unavailable', reason: 'unsupported_platform' };
+  if (platform !== 'win32') return {
+    available: false, mode: 'unavailable', reason: 'unsupported_platform',
+    resource_boundary: 'unavailable', hard_process_limits: false
+  };
   const arch = options.arch || process.arch;
-  if (arch !== 'x64') return { available: false, mode: 'unavailable', reason: 'unsupported_architecture' };
+  if (arch !== 'x64') return {
+    available: false, mode: 'unavailable', reason: 'unsupported_architecture',
+    resource_boundary: 'unavailable', hard_process_limits: false
+  };
   const launcher = options.launcherPath || path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
   try {
     verifyNativeLauncher(launcher, options);
@@ -95,14 +113,14 @@ function nativeParserStatus(options = {}) {
       }
     }
     if (probeStatus === 126) {
-      return { available: false, mode: 'unavailable', reason: 'unsupported_host_architecture' };
+      return { available: false, mode: 'unavailable', reason: 'unsupported_host_architecture', resource_boundary: 'unavailable', hard_process_limits: false };
     }
     if (probeStatus !== 0) {
-      return { available: false, mode: 'unavailable', reason: 'host_probe_failed' };
+      return { available: false, mode: 'unavailable', reason: 'host_probe_failed', resource_boundary: 'unavailable', hard_process_limits: false };
     }
-    return { available: true, mode: 'windows_job_object', reason: 'ok' };
+    return { available: true, mode: 'windows_job_object', reason: 'ok', resource_boundary: 'windows_job_object', hard_process_limits: true };
   } catch (error) {
-    return { available: false, mode: 'unavailable', reason: error.code || 'integrity_failed' };
+    return { available: false, mode: 'unavailable', reason: error.code || 'integrity_failed', resource_boundary: 'unavailable', hard_process_limits: false };
   }
 }
 
@@ -121,6 +139,8 @@ function readStatus() {
       text_engine: 'unavailable',
       parser_boundary: parser.mode,
       parser_boundary_reason: parser.reason,
+      parser_resource_boundary: parser.resource_boundary,
+      parser_hard_process_limits: parser.hard_process_limits,
       visual_bridge: visual.available ? 'available' : 'unavailable',
       visual_bridge_reason: visual.reason,
       visual_boundary: visual.mode,
@@ -136,6 +156,8 @@ function readStatus() {
     text_engine: 'ready',
     parser_boundary: parser.mode,
     parser_boundary_reason: parser.reason,
+    parser_resource_boundary: parser.resource_boundary,
+    parser_hard_process_limits: parser.hard_process_limits,
     visual_bridge: visual.available ? 'available' : 'unavailable',
     visual_bridge_reason: visual.reason,
     visual_boundary: visual.mode,
@@ -323,8 +345,10 @@ async function convertDocument(source, options = {}) {
         finish(safeError('Der isolierte Dokumentparser hat eine Ressourcenbegrenzung erreicht.', 'PARSER_RESOURCE_LIMIT'));
         return;
       }
-      if (platform === 'win32' && Number.isInteger(code) && code >= 120 && code <= 126) {
-        finish(safeError('Die native Windows-Parserbegrenzung konnte nicht sicher angewendet werden.', 'PARSER_ISOLATION_FAILED'));
+      // Windows and the future POSIX supervisor reserve 120..126 for boundary
+      // failures. Do not reinterpret a POSIX sandbox failure as a parser error.
+      if (Number.isInteger(code) && code >= 120 && code <= 126) {
+        finish(safeError('Die lokale Parserbegrenzung konnte nicht sicher angewendet werden.', 'PARSER_ISOLATION_FAILED'));
         return;
       }
       let response;

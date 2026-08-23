@@ -101,7 +101,10 @@ function runBounded(script, scriptArgs = [], options = {}) {
       clearTimeout(timer);
       if (stopReason) return reject(new Error(stopReason));
       if (code === 125) return reject(new Error('OCR_ISOLATION_RESOURCE_LIMIT'));
-      if (process.platform === 'win32' && Number.isInteger(code) && code >= 120 && code <= 126) {
+      // Both the Windows Job Object launcher and the POSIX supervisor reserve
+      // 120..126 for boundary failures.  Never reinterpret such a failure as
+      // an OCR/worker error merely because the host is not Windows.
+      if (Number.isInteger(code) && code >= 120 && code <= 126) {
         return reject(new Error('OCR_ISOLATION_BOUNDARY_FAILED'));
       }
       if (code !== 0) return reject(new Error('OCR_ISOLATION_WORKER_FAILED'));
