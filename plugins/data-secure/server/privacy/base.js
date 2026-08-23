@@ -60,7 +60,14 @@ const PHONE_RE = new RegExp(
     `\\d{3,8}(?:[${SEP_CHARS}./\\-]\\d{1,6}){0,2}${NA}`,
   'gu'
 );
-const PHONE_LABEL_RE = /(?:tel|telefon|phone|mobil|handy|fax|kontakt|durchwahl)\s*\.?\s*:?\s*$/i;
+const PHONE_LABEL_RE = /(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|handy|fax|kontakt|durchwahl)\s*\.?\s*:?\s*$/iu;
+// France commonly groups local subscriber numbers into four two-digit pairs
+// after a one-digit area code. Keep that shape separate from PHONE_RE so a
+// broadened generic matcher cannot mistake short technical number runs for PII.
+const FRENCH_PHONE_RE = new RegExp(
+  `${NB}(?:(?:\\+33|0)[${SEP_CHARS}./\\-]?[1-9](?:[${SEP_CHARS}./\\-]?\\d{2}){4})${NA}`,
+  'gu'
+);
 
 const IBAN_RE = new RegExp(`${NB}[A-Z]{2}\\d{2}(?:[ ]?[A-Z0-9]){11,30}${NA}`, 'giu');
 
@@ -359,6 +366,7 @@ module.exports = {
   EMAIL_RE,
   PHONE_RE,
   PHONE_LABEL_RE,
+  FRENCH_PHONE_RE,
   IBAN_RE,
   BIC_RE,
   BIC_LABEL_RE,

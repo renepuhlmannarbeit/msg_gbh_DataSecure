@@ -35,7 +35,8 @@ unverändert.
 V1 bildet die bestehende Parsergrenze verlustfrei als Text-, Tabellen- und
 Bildknoten ab. OOXML-Abschnitte besitzen bereits containerinterne Part-Locators für
 DOCX-Hauptteil, Kopf-/Fußzeilen, Kommentare, Fuß-/Endnoten, XLSX-Arbeitsblätter,
-Diagramme und Zeichnungstext sowie PPTX-Folien, Notizen und Diagramme. Kern-,
+Diagramme und Zeichnungstext sowie PPTX-Folien, Notizen, Diagramme, eindeutig
+erreichbare Layouts und Master. Kern-,
 Anwendungs- und benutzerdefinierte OOXML-Eigenschaften besitzen eigene
 Metadatenknoten. Benutzerdefinierte Werte werden nur für unterstützte skalare
 OOXML-Typen ausgegeben; komplexe Typen stoppen die Coverage-Prüfung. Feinere

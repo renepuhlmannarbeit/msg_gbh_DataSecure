@@ -6,6 +6,7 @@ const { createJob, transitionJob, jobStatus } = require('./job-store');
 const { purgeCompanionJobs } = require('./retention');
 const { pickSource, pickSources, validateSelectedPath } = require('./file-picker');
 const { processCompanionJob } = require('./processor');
+const { confirmBatchStart } = require('./batch-start-confirmation');
 const { LIMITS } = require('../gateway/common');
 
 const IPC_VERSION = 'data-secure-companion-ipc/1';
@@ -79,6 +80,11 @@ function createCompanionSession(options = {}) {
     ? (pickerOptions) => [options.pickSource(pickerOptions)]
     : pickSources);
   const processSource = options.processCompanionJob || processCompanionJob;
+  // Test-only injected pickers already represent a deliberate synthetic test
+  // choice. Production sessions use the native count/size confirmation.
+  const confirmStart = options.confirmBatchStart || (options.pickSource || options.pickSources
+    ? () => true
+    : confirmBatchStart);
   const sources = new Map();
   let nextSequence = 1;
 
@@ -148,6 +154,12 @@ function createCompanionSession(options = {}) {
       });
       if (selectedItems.reduce((sum, item) => sum + item.sourceBytes, 0) > LIMITS.MAX_BATCH_TOTAL_BYTES) {
         throw new SafeError('Die ausgewählten Dateien sind zusammen größer als 500 MB.');
+      }
+      const totalBytes = selectedItems.reduce((sum, item) => sum + item.sourceBytes, 0);
+      if (confirmStart({ selected_count: selectedItems.length, total_bytes: totalBytes }) !== true) {
+        const error = new SafeError('Der lokale Stapelstart wurde abgebrochen. Es wurde kein Stapel gestartet.');
+        error.code = 'LOCAL_SELECTION_CANCELLED';
+        throw error;
       }
       const jobs = selectedItems.map((selected, index) => {
         const job = createJob({ profile: frame.params.profile, source_type: selected.sourceType });

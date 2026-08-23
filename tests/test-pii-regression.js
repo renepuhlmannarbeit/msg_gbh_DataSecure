@@ -638,6 +638,32 @@ test('common German two-group phone numbers are redacted', () => {
   }
 });
 
+test('explicit French, Spanish and Dutch profile labels remove identifiers and preserve qualifications', () => {
+  const cases = [
+    ['Nom', 'Élodie Martin', 'Téléphone', '+33 1 42 68 53 00', 'Entreprise', 'Exemple Santé Numérique SAS', 'Product Owner', 'ITIL 4 Foundation'],
+    ['Nombre', 'Lucía García', 'Teléfono', '+34 91 123 45 67', 'Empresa', 'Ejemplo Salud Digital S.L.', 'Scrum Master', 'PSM I'],
+    ['Naam', 'Noor van Dijk', 'Telefoon', '+31 20 123 4567', 'Bedrijf', 'Voorbeeld Zorg IT B.V.', 'Business Analyst', 'ISTQB Foundation']
+  ];
+  for (const [personLabel, person, phoneLabel, phone, companyLabel, company, role, credential] of cases) {
+    const email = `${person.toLocaleLowerCase('en-US').replace(/ /gu, '.')}@example.invalid`;
+    const source = [
+      `${personLabel}: ${person}`,
+      `E-mail: ${email}`,
+      `${phoneLabel}: ${phone}`,
+      `${companyLabel}: ${company}`,
+      `Role: ${role}`,
+      `Certification: ${credential}`
+    ].join('\n');
+    const result = anonymizeMarkdown(source, 'personnel_profile');
+    assertAbsent(result.text, person, `${personLabel} person`);
+    assertAbsent(result.text, email, `${personLabel} email`);
+    assertAbsent(result.text, phone, `${phoneLabel} phone`);
+    assertAbsent(result.text, company, `${companyLabel} company`);
+    assertPresent(result.text, role, `${personLabel} role`);
+    assertPresent(result.text, credential, `${personLabel} credential`);
+  }
+});
+
 test('customer address blocks lose the person, street, city and phone number', () => {
   const src = [
     '# Rechnung',

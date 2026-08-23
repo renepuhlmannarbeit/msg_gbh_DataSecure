@@ -144,19 +144,25 @@ test('XLSX locators distinguish worksheet, chart and drawing text', () => {
   ]);
 });
 
-test('PPTX locators distinguish slide, notes and chart data', () => {
+test('PPTX locators distinguish slide, notes, chart, layout and master data', () => {
   const result = parseDocumentBuffer(zipStore([
     ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
-    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
-    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Folientext</a:t></p:sld>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/><Relationship Id="rIdMaster" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>'],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Folientext</a:t><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Tabellenwert</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></p:sld>'],
     ['ppt/notesSlides/notesSlide1.xml', '<p:notes xmlns:p="p" xmlns:a="a"><a:t>Notiztext</a:t></p:notes>'],
-    ['ppt/slides/_rels/slide1.xml.rels', '<Relationships><Relationship Id="rId17" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/><Relationship Id="rId18" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>'],
-    ['ppt/charts/chart1.xml', '<c:chart xmlns:c="c"><c:v>Diagrammwert</c:v></c:chart>']
+    ['ppt/slides/_rels/slide1.xml.rels', '<Relationships><Relationship Id="rId17" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/><Relationship Id="rId18" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/><Relationship Id="rIdLayout" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>'],
+    ['ppt/charts/chart1.xml', '<c:chart xmlns:c="c"><c:v>Diagrammwert</c:v></c:chart>'],
+    ['ppt/slideLayouts/slideLayout1.xml', '<p:sldLayout xmlns:p="p" xmlns:a="a"><a:t>Layouttext</a:t></p:sldLayout>'],
+    ['ppt/slideLayouts/_rels/slideLayout1.xml.rels', '<Relationships><Relationship Id="rIdMaster" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>'],
+    ['ppt/slideMasters/slideMaster1.xml', '<p:sldMaster xmlns:p="p" xmlns:a="a"><a:t>Mastertext</a:t></p:sldMaster>']
   ]), '.pptx');
   assert.deepStrictEqual(result.content_graph.nodes.map((node) => [node.kind, node.locator.source_part]), [
     ['text', 'ppt/slides/slide1.xml'],
+    ['table', 'ppt/slides/slide1.xml'],
     ['text', 'ppt/notesSlides/notesSlide1.xml'],
-    ['table', 'ppt/charts/chart1.xml']
+    ['table', 'ppt/charts/chart1.xml'],
+    ['text', 'ppt/slideLayouts/slideLayout1.xml'],
+    ['text', 'ppt/slideMasters/slideMaster1.xml']
   ]);
 });
 

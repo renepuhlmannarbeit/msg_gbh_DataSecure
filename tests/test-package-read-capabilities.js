@@ -47,6 +47,7 @@ function makePackage(id, body) {
 
 makePackage('run-one', '# Freigegeben eins');
 makePackage('run-two', '# Freigegeben zwei');
+makePackage('run-long', Array.from({ length: 2500 }, (_, index) => `Zeile ${String(index).padStart(4, '0')}: freigegebene synthetische Fachinformation.`).join('\n'));
 
 test('a package id alone is never sufficient', () => {
   assert.throws(() => readOutput('run-one'), /Leseberechtigung/);
@@ -77,6 +78,33 @@ test('expired and fabricated capabilities fail closed', () => {
 test('capabilities cannot be minted for absent or unsafe package ids', () => {
   assert.throws(() => issueReadCapability('missing'), /Paket nicht gefunden/);
   assert.throws(() => issueReadCapability('../Processed'), /Ungültige Paket-ID/);
+});
+
+test('bounded character pages cover a long document completely without overlap or omission', () => {
+  const grant = issueReadCapability('run-long');
+  const pages = [];
+  let offset = 0;
+  let total;
+  do {
+    const page = readOutput('run-long', grant.read_capability, offset, 7000);
+    pages.push(page.text);
+    total = page.total_chars;
+    assert.strictEqual(page.offset, offset);
+    assert.strictEqual(page.next_offset, offset + page.text.length);
+    assert.ok(page.text.length <= 7000);
+    offset = page.next_offset;
+    if (!page.has_more) break;
+  } while (pages.length < 100);
+  const combined = pages.join('');
+  assert.strictEqual(combined.length, total);
+  assert.strictEqual(offset, total);
+  assert.match(combined, /^Zeile 0000:/u);
+  assert.match(combined, /Zeile 2499:/u);
+
+  const minimum = readOutput('run-long', grant.read_capability, 0, 1);
+  const maximum = readOutput('run-long', grant.read_capability, 0, 1000000);
+  assert.strictEqual(minimum.text.length, 1000);
+  assert.strictEqual(maximum.text.length, 30000);
 });
 
 done();

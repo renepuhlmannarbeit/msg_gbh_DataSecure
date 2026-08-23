@@ -18,6 +18,13 @@ const UI_PROCESS_POLICIES = Object.freeze({
     os_network_sandbox_required: false,
     os_network_sandbox_verified: false
   }),
+  batch_start_confirmation: Object.freeze({
+    input_class: 'bounded_counters',
+    output_class: 'boolean_decision',
+    raw_content: false,
+    os_network_sandbox_required: false,
+    os_network_sandbox_verified: false
+  }),
   completion_summary: Object.freeze({
     input_class: 'bounded_counters',
     output_class: 'shown_evidence',

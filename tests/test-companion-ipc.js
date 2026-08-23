@@ -10,7 +10,8 @@ const { createSuite } = require('./helpers');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-ipc-'));
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
 
-const { PICKER_CANCELLED, validateSelectedPath, pickerCommands, pickSource, pickSources } = require('../plugins/data-secure/server/companion/file-picker');
+const { PICKER_CANCELLED, PICKER_TITLE, validateSelectedPath, pickerCommands, pickSource, pickSources } = require('../plugins/data-secure/server/companion/file-picker');
+const { startConfirmationText, startConfirmationCommands, confirmBatchStart } = require('../plugins/data-secure/server/companion/batch-start-confirmation');
 const { IPC_VERSION, signFrame, createCompanionSession } = require('../plugins/data-secure/server/companion/ipc-session');
 
 const { test, done, assert } = createSuite('Companion private IPC and file picker');
@@ -28,7 +29,24 @@ test('platform pickers use argument arrays and no network transport', () => {
       assert.strictEqual(typeof spec.command, 'string');
       assert.ok(Array.isArray(spec.args));
       assert.doesNotMatch(`${spec.command} ${spec.args.join(' ')}`, /https?:|localhost|127\.0\.0\.1/i);
+      assert.match(spec.args.join(' '), new RegExp(PICKER_TITLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
+  }
+});
+
+test('batch start confirmation contains only bounded selection facts and a clear privacy explanation', () => {
+  const summary = { selected_count: 3, total_bytes: 2 * 1024 * 1024 };
+  const text = startConfirmationText(summary);
+  assert.match(text.title, /lokalen Stapel starten/i);
+  assert.match(text.message, /3 Datei/);
+  assert.match(text.message, /2 MB/);
+  assert.match(text.message, /TXT, Markdown, CSV und DOCX/);
+  assert.match(text.message, /Bilder bleiben standardmäßig lokal/);
+  assert.doesNotMatch(JSON.stringify(text), /C:\\|\.docx|Musterfrau/i);
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const specs = startConfirmationCommands(summary, { platform, env: { SystemRoot: 'C:\\Windows' } });
+    assert.ok(specs.length >= 1);
+    assert.strictEqual(confirmBatchStart(summary, { platform, runner: () => platform === 'win32' ? { status: 0, stdout: 'START_CONFIRMED' } : (platform === 'darwin' ? { status: 0, stdout: 'Starten' } : { status: 0 }) }), true);
   }
 });
 
@@ -187,6 +205,21 @@ test('authenticated multi-selection creates private jobs without returning paths
   assert.strictEqual(result.jobs.length, 2);
   assert.ok(result.jobs.every((job) => session.hasPrivateSource(job.job_id)));
   assert.doesNotMatch(JSON.stringify(result), /batch-one|batch-two|sourcePath|original_path/i);
+});
+
+test('cancelling the batch start confirmation creates no private job', () => {
+  const source = path.join(root, 'cancel-before-start.txt');
+  fs.writeFileSync(source, 'one');
+  const sessionId = crypto.randomUUID();
+  const session = createCompanionSession({
+    secret, sessionId,
+    pickSources: () => [{ sourcePath: source, sourceType: 'txt', sourceBytes: 3 }],
+    confirmBatchStart: () => false
+  });
+  assert.throws(
+    () => session.dispatch(frame(sessionId, 1, 'pick_sources', { profile: 'auto' })),
+    (error) => error.code === 'LOCAL_SELECTION_CANCELLED'
+  );
 });
 
 test('image-removal intent is accepted only as a literal true flag', () => {

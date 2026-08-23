@@ -4,6 +4,8 @@ const { createSuite } = require('./helpers');
 const {
   BATCH_REVIEW_SCHEMA,
   buildBatchReviewDraft,
+  groupForCandidate,
+  linuxReviewTextLocally,
   resolveBatchReviewResult,
   reviewBatchTextLocally
 } = require('../plugins/data-secure/server/companion/text-review');
@@ -65,6 +67,46 @@ test('never accepts free ranges or missing decisions for the shared batch review
   assert.throws(() => resolveBatchReviewResult(bundle, {
     action: 'reviewed', redactions: [], decisions: []
   }), /Nicht alle mehrdeutigen Organisationen/);
+});
+
+test('offers a conscious group only for identical normalized local context lines', () => {
+  const repeated = 'Scrum.org Professional Scrum Master I (PSM I)';
+  const distinct = 'Scrum.org Professional Scrum Product Owner I (PSPO I)';
+  const bundle = buildBatchReviewDraft([
+    { original_text: repeated, anonymized_text: repeated, profile: 'personnel_profile', ambiguities: [ambiguity('credential:v2:000001', repeated, repeated, 'Scrum.org')] },
+    { original_text: `  ${repeated}  `, anonymized_text: `  ${repeated}  `, profile: 'personnel_profile', ambiguities: [ambiguity('credential:v2:000001', `  ${repeated}  `, `  ${repeated}  `, 'Scrum.org')] },
+    { original_text: distinct, anonymized_text: distinct, profile: 'personnel_profile', ambiguities: [ambiguity('credential:v2:000001', distinct, distinct, 'Scrum.org')] }
+  ]);
+  const first = bundle.draft.ambiguities[0].ambiguity_id;
+  const second = bundle.draft.ambiguities[1].ambiguity_id;
+  const third = bundle.draft.ambiguities[2].ambiguity_id;
+  const group = groupForCandidate(bundle.draft, first);
+  assert.ok(group);
+  assert.deepStrictEqual(group.candidate_ids, [first, second]);
+  assert.strictEqual(groupForCandidate(bundle.draft, third), null);
+  const publicMetadata = JSON.stringify(bundle.draft.batch_review);
+  assert.doesNotMatch(publicMetadata, /Professional Scrum|PSM I|PSPO I|Scrum\.org/u);
+});
+
+test('the local Linux reviewer expands only an explicitly chosen same-context group', () => {
+  const repeated = 'Scrum.org Professional Scrum Master I (PSM I)';
+  const bundle = buildBatchReviewDraft([
+    { original_text: repeated, anonymized_text: repeated, profile: 'personnel_profile', ambiguities: [ambiguity('credential:v2:000001', repeated, repeated, 'Scrum.org')] },
+    { original_text: repeated, anonymized_text: repeated, profile: 'personnel_profile', ambiguities: [ambiguity('credential:v2:000001', repeated, repeated, 'Scrum.org')] }
+  ]);
+  let choiceCalls = 0;
+  const result = linuxReviewTextLocally(bundle.draft, {
+    runner: (_command, args) => {
+      const text = args.join(' ');
+      if (text.includes('--text-info')) return { status: 0, stdout: '' };
+      if (text.includes('keep_group')) { choiceCalls++; return { status: 0, stdout: 'keep_group' }; }
+      if (text.includes('Geprüft freigeben')) return { status: 0, stdout: 'release' };
+      throw new Error(`unexpected local review command: ${text}`);
+    },
+    env: {}
+  });
+  assert.strictEqual(choiceCalls, 1);
+  assert.deepStrictEqual(result.decisions, bundle.draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' })));
 });
 
 test('keeps names and paths out of its local-to-local metadata map', () => {

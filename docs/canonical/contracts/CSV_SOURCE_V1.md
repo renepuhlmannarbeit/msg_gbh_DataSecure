@@ -25,12 +25,14 @@ führt keine Formeln aus.
 
 ## Wiederverwendung und Gate
 
-Papa Parse ist ein gepflegter, abhängigkeitsfreier MIT-Kandidat und dient als
-Differentialreferenz für Dialekte, Quote- und Formeltests. Es wird zunächst nicht
-eingebettet: Die Paketfreigabe verlangt eine minimierte, überprüfbare lokale
-Angriffsfläche ohne generische Download-/Worker-/Stream-Optionen. Erst wenn der
-Differentialtest gegen eine gepinnte Papa-Parse-Version, End-to-End-Stapel-, Paket-,
-Skill- und Drei-OS-Abnahme grün sind, darf `.csv` in die Ist-Allowlist.
+Papa Parse 5.5.3 (MIT, feste Lockfile-Integrität) dient ausschließlich als
+Test-Differentialreferenz für Dialekte, Quote- und Formeltests. Es wird nicht in
+das Plugin eingebettet: Die Paketfreigabe verlangt eine minimierte, überprüfbare
+lokale Angriffsfläche ohne generische Download-/Worker-/Stream-Optionen. Der
+180-Fall-Vergleich ist grün; er umfasst nur eindeutig markierte Dialekte, weil
+unquotierte konkurrierende Trennzeichen fachlich mehrdeutig bleiben und im
+Produktparser fail-closed stoppen. Die aktive CSV-Allowlist bleibt auf den lokalen
+Textpfad begrenzt; die praktische Drei-OS-Abnahme ist weiterhin offen.
 
 ## Primärquellen
 

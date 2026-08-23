@@ -1,117 +1,75 @@
-name: CI
+name: Cost-capped CI
 
+# Cost policy: ordinary changes start exactly one short Linux job. Native,
+# three-platform, OCR, packaging and security evidence is intentionally kept in
+# the manual workflows and is run only for an explicit release/acceptance need.
 on:
   push:
-    branches: [main, 'feature/**', 'fix/**']
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'benchmarks/**'
+      - 'docs/canonical/**'
+      - 'native/**'
+      - 'plugins/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manifest.json'
+      - 'package.json'
+      - 'package-lock.json'
   pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'benchmarks/**'
+      - 'docs/canonical/**'
+      - 'native/**'
+      - 'plugins/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manifest.json'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: cost-capped-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  guard:
-    name: Repository guards
+  core:
+    name: Fast privacy and repository gates
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: No real documents may be tracked
+      - name: Repository privacy guards
         shell: bash
         run: |
+          set -euo pipefail
           tracked="$(git ls-files '*.pdf' '*.doc*' '*.xls*' '*.ppt*' || true)"
           if [ -n "$tracked" ]; then
-            echo "Office/PDF files must not be committed to this repository:"
-            echo "$tracked"
+            echo "Office/PDF files must not be committed to this repository."
             exit 1
           fi
-
-      - name: No CRLF in tracked sources
-        shell: bash
-        run: |
-          bad="$(git grep -Il $'\r' -- '*.js' '*.mjs' '*.json' '*.md' '*.yml' '*.ps1' '*.cpp' || true)"
+          bad="$(git grep -Il $'\r' -- '*.js' '*.mjs' '*.json' '*.md' '*.yml' '*.ps1' '*.cpp' '*.c' || true)"
           if [ -n "$bad" ]; then
-            echo "These files contain CRLF; .gitattributes enforces LF:"
-            echo "$bad"
+            echo "Tracked source files must use LF."
             exit 1
           fi
+          node -e "const p=require('./package.json'); if (p.dependencies && Object.keys(p.dependencies).length) process.exit(1)"
 
-      - name: No runtime dependencies
-        shell: bash
-        run: |
-          if [ -f package-lock.json ] || [ -d node_modules ]; then
-            echo "The offline promise forbids installed dependencies."
-            exit 1
-          fi
-
-  test:
-    name: Test supported Windows runtime
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22'
-      - name: Run privacy, parser, image, MCP and plugin tests
-        run: npm test
-      - name: Run real Windows visual Job Object acceptance
-        run: npm run test:windows-visual
-
-  portable-test:
-    name: Test portable runtime (${{ matrix.os }})
-    strategy:
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22.13.0'
-      - name: Run privacy, portable parser, MCP and plugin tests
-        run: npm test
+          cache: npm
 
-  build:
-    name: Build plugin and MCPB
-    needs: [guard, test, portable-test]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22'
-      - name: Build Claude plugin ZIP and standalone MCPB
-        run: |
-          npm run native:repro
-          npm run build
-      - name: Verify both packaged runtimes and parser boundary
-        shell: bash
-        run: |
-          set -e
-          mkdir -p .verify/plugin .verify/mcpb
-          unzip -q -o dist/*.zip -d .verify/plugin
-          unzip -q -o dist/*.mcpb -d .verify/mcpb
-          for runtime in .verify/plugin/server/index.js .verify/mcpb/server/index.js; do
-            reply="$(printf '%s\n%s\n' \
-              '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-              '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"privacy_status","arguments":{}}}' | node "$runtime")"
-            echo "$reply" | grep -q 'eu-privacy-document-gateway'
-            echo "$reply" | grep -q 'windows_job_object'
-            echo "$reply" | grep -q '"text_engine":"ready"'
-            echo "$reply" | grep -q '"visual_boundary":"windows_job_object"'
-            echo "$reply" | grep -q '"format":"PDF","reason":"PDF_COVERAGE_UNVERIFIED"'
-            echo "$reply" | grep -q '"reason":"FORMAT_COVERAGE_UNVERIFIED"'
-          done
-          test -f .verify/plugin/server/native/windows-x64/datasecure-sandbox.exe
-          test -f .verify/mcpb/server/native/windows-x64/datasecure-sandbox.exe
-      - name: Test the packaged German skills with synthetic contracts
-        run: npm run test:plugin-zip
-      - name: Generate SPDX SBOM and SHA-256 checksums
-        run: node scripts/generate-sbom.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: data-secure-build-${{ github.sha }}
-          path: |
-            dist/*.zip
-            dist/*.mcpb
-            dist/*.spdx.json
-            dist/SHA256SUMS
+      - name: Install locked development-only test oracles
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run the cost-capped security regression set
+        run: npm run test:ci

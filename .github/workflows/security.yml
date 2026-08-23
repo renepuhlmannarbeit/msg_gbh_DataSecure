@@ -1,10 +1,18 @@
 name: Security
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Run only the evidence currently needed
+        required: true
+        default: javascript
+        type: choice
+        options:
+          - javascript
+          - native
+          - secrets
+          - all
 
 permissions:
   contents: read
@@ -15,6 +23,7 @@ concurrency:
 
 jobs:
   codeql:
+    if: ${{ inputs.scope == 'javascript' || inputs.scope == 'all' }}
     name: CodeQL (JavaScript)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -47,6 +56,7 @@ jobs:
           retention-days: 14
 
   codeql-native:
+    if: ${{ inputs.scope == 'native' || inputs.scope == 'all' }}
     name: CodeQL (native Windows launcher)
     runs-on: windows-latest
     timeout-minutes: 20
@@ -88,6 +98,7 @@ jobs:
           retention-days: 14
 
   secret-history:
+    if: ${{ inputs.scope == 'secrets' || inputs.scope == 'all' }}
     name: Gitleaks (complete history)
     runs-on: ubuntu-latest
     timeout-minutes: 10

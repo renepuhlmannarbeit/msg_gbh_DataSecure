@@ -6,7 +6,8 @@ const {
   completionSummaryText,
   completionSummaryCommand,
   completionSummaryCommands,
-  showCompletionSummary
+  showCompletionSummary,
+  showTerminalBatchSummary
 } = require('../plugins/data-secure/server/companion/completion-summary');
 
 const { test, done, assert } = createSuite('Local completion summary');
@@ -71,6 +72,25 @@ test('shown evidence requires the exact local process result', () => {
   assert.throws(() => showCompletionSummary(summary, {
     platform: 'win32', runner: () => ({ status: 0, stdout: '' })
   }), /konnte nicht geöffnet/);
+});
+
+test('terminal batch summaries accept only completed bounded public progress', () => {
+  let shown = 0;
+  const options = {
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+    runner: () => { shown++; return { status: 0, stdout: 'SHOWN' }; }
+  };
+  assert.strictEqual(showTerminalBatchSummary({
+    complete: false, batch_total: 2, released: 2, stopped: 0
+  }, options), false);
+  assert.strictEqual(shown, 0);
+  assert.strictEqual(showTerminalBatchSummary({
+    complete: true, batch_total: 2, released: 1, stopped: 1
+  }, options), true);
+  assert.strictEqual(shown, 1);
+  assert.throws(() => showTerminalBatchSummary({
+    complete: true, batch_total: 2, released: 2, stopped: 1
+  }, options), /Ungültige/);
 });
 
 test('the real Windows completion form initializes and closes through the test-only path', () => {

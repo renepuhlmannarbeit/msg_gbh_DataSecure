@@ -20,6 +20,7 @@ const {
   completionSummaryCommand,
   showCompletionSummary
 } = require('../plugins/data-secure/server/companion/completion-summary');
+const { startConfirmationCommands } = require('../plugins/data-secure/server/companion/batch-start-confirmation');
 const {
   REVIEW_SCHEMA,
   powershellReviewScript,
@@ -49,10 +50,11 @@ const HOSTILE_ENV = Object.freeze({
 
 test('all native UI helpers have an explicit immutable data classification', () => {
   assert.deepStrictEqual(Object.keys(UI_PROCESS_POLICIES).sort(), [
-    'completion_summary', 'count_confirmation', 'folder_opener', 'path_picker', 'text_review'
+    'batch_start_confirmation', 'completion_summary', 'count_confirmation', 'folder_opener', 'path_picker', 'text_review'
   ]);
   assert.strictEqual(uiProcessPolicy('path_picker').raw_content, false);
   assert.strictEqual(uiProcessPolicy('count_confirmation').raw_content, false);
+  assert.strictEqual(uiProcessPolicy('batch_start_confirmation').raw_content, false);
   assert.strictEqual(uiProcessPolicy('completion_summary').raw_content, false);
   assert.strictEqual(uiProcessPolicy('folder_opener').raw_content, false);
   const review = uiProcessPolicy('text_review');
@@ -81,6 +83,24 @@ test('folder opening is cross-platform, shell-free and receives the sanitized en
   assert.deepStrictEqual(openFolder('C:\\DataSecure\\Input', { platform: 'freebsd', spawn: runner }), {
     ok: false, message: 'Für dieses Betriebssystem ist keine lokale Ordneröffnung verfügbar.'
   });
+});
+
+test('native start, picker and completion paths use keyboard-accessible OS dialogs on every target platform', () => {
+  const summary = { selected_count: 2, total_bytes: 2048 };
+  const result = { selected_count: 2, released_count: 1, failed_count: 1 };
+  const windowsStart = startConfirmationCommands(summary, { platform: 'win32', env: HOSTILE_ENV })[0].args.at(-1);
+  const windowsPicker = pickerCommands('win32', HOSTILE_ENV, ['txt'], true)[0].args.at(-1);
+  const windowsFinish = completionSummaryCommand(result, { platform: 'win32', env: HOSTILE_ENV }).args.at(-1);
+  assert.match(windowsStart, /MessageBox[\s\S]*YesNo/);
+  assert.match(windowsPicker, /OpenFileDialog/);
+  assert.match(windowsFinish, /AcceptButton.*CancelButton/);
+  for (const platform of ['darwin', 'linux']) {
+    const start = startConfirmationCommands(summary, { platform });
+    const picker = pickerCommands(platform, HOSTILE_ENV, ['txt'], true);
+    const finish = completionSummaryCommand(result, { platform });
+    assert.ok(start.length >= 1 && picker.length >= 1 && finish.command);
+    assert.doesNotMatch(JSON.stringify({ start, picker, finish }), /cmd\.exe|\/bin\/sh|powershell.*-EncodedCommand/i);
+  }
 });
 
 test('UI environment is allowlisted and strips proxy, cloud, Node and Electron controls', () => {

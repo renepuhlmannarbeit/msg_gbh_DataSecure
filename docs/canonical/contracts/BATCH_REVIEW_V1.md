@@ -43,9 +43,11 @@ unberührt.
    nach nachweislich gleichem Fundstellentyp und identischem Kontext ausdrücklich
    gewählt werden; sie ist nie Voreinstellung.
 4. Nach bestätigter lokaler Entscheidung werden nur die geprüften Positionen in
-   demselben Vorgang veröffentlicht. Eine Unterbrechung vor dem atomaren
-   Paket-Commit lässt die Position vertagt; ein verifiziertes Paket wird nach
-   Neustart wie jeder andere `delivery_pending`-Eintrag erneut zugestellt.
+   demselben Vorgang veröffentlicht und lokal abgeschlossen. Eine Unterbrechung vor
+   dem atomaren Paket-Commit lässt die Position vertagt; ein bereits verifiziertes
+   Paket wird nach Neustart deterministisch übernommen. Claude erhält es erst später
+   über den paginierten namenfreien Ergebnisplan; seine Auswertung ist keine
+   Voraussetzung für den lokalen Stapelfortschritt.
 5. „Später entscheiden“ ist jederzeit möglich und bleibt ein inhaltsfreier
    `deferred_review`-Zustand. Der normale Fortsetzungsweg darf keine vertagte
    Datei ohne lokale Reviewentscheidung automatisch freigeben.

@@ -77,7 +77,9 @@ Empfohlene Tool-Oberfläche:
 - `open_privacy_folder`
 - `open_input_folder`
 - `begin_document_batch`
-- `anonymize_next_document`
+- `start_document_batch_processing`
+- `document_batch_status`
+- `list_document_batch_results`
 - `acknowledge_batch_document`
 - `continue_most_recent_document_batch`
 - `read_anonymized_document`

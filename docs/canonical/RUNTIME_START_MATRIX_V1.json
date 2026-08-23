@@ -1,0 +1,56 @@
+{
+  "schema": "datasecure-runtime-start-matrix/v1",
+  "decision": "conditional-no-release-claim",
+  "user_runtime_install_required": false,
+  "paths": [
+    {
+      "id": "desktop-extension-mcpb",
+      "package": "mcpb",
+      "host": "claude-desktop",
+      "command": "node",
+      "runtime_evidence": "official-built-in-node",
+      "status": "documented-fallback",
+      "source": "https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop"
+    },
+    {
+      "id": "plugin-zip-marketplace-desktop-cowork",
+      "package": "plugin",
+      "host": "claude-desktop-cowork",
+      "command": "node",
+      "runtime_evidence": "fresh-install-observation-required",
+      "status": "no-go-until-observed",
+      "source": "https://support.claude.com/en/articles/13837440-use-plugins-in-claude"
+    },
+    {
+      "id": "plugin-zip-claude-code",
+      "package": "plugin",
+      "host": "claude-code",
+      "command": "node",
+      "runtime_evidence": "host-or-path-resolution-required",
+      "status": "conditional",
+      "source": "https://code.claude.com/docs/en/plugins-reference"
+    }
+  ],
+  "fallback_spike": {
+    "technology": "node-sea",
+    "status": "architecture-spike-only",
+    "reason": "Node 22 SEA requires one bundled CommonJS entry and target-specific PE, Mach-O or ELF injection; the documented standard plugin MCP configuration has one command and no OS selector.",
+    "source": "https://nodejs.org/download/release/latest-jod/docs/api/single-executable-applications.html",
+    "required_before_adoption": [
+      "single-bundle-runtime-proof",
+      "windows-x64-binary-and-hash",
+      "macos-x64-binary-and-hash",
+      "macos-arm64-binary-and-hash",
+      "linux-x64-binary-and-hash",
+      "one-plugin-platform-dispatch-proof",
+      "fresh-install-update-rollback"
+    ]
+  },
+  "forbidden_workarounds": [
+    "ask-user-to-install-node",
+    "runtime-npm-or-npx-download",
+    "silent-switch-to-mcpb",
+    "three-user-visible-os-plugins",
+    "claim-plugin-runtime-from-mcpb-documentation"
+  ]
+}

@@ -25,6 +25,7 @@ const {
   buildBatchReviewDraft,
   powershellUtf8Preamble,
   powershellReviewScript,
+  darwinDialogContract,
   darwinReviewScript,
   linuxViewerCommands,
   linuxChoiceCommand,
@@ -290,6 +291,21 @@ async function main() {
     assert.match(linuxChoiceCommand('zenity', 0, 1, true).args.join(' '), /Später entscheiden/u);
   });
 
+  await testAsync('every macOS dialog contract offers its default and cancel action', async () => {
+    for (const phase of ['decision', 'group', 'final']) {
+      for (const allowDefer of [false, true]) {
+        const contract = darwinDialogContract(phase, allowDefer);
+        assert.ok(contract.buttons.length <= 3, `${phase} exceeds the Standard Additions button limit`);
+        assert.ok(contract.buttons.includes(contract.defaultButton), `${phase} default button is not offered`);
+        assert.ok(contract.buttons.includes(contract.cancelButton), `${phase} cancel button is not offered`);
+        assert.strictEqual(contract.cancelAction, allowDefer ? 'deferred' : 'cancelled');
+      }
+    }
+    assert.throws(() => darwinDialogContract('unknown', true), /macOS-Dialogvertrag/u);
+    assert.doesNotMatch(darwinReviewScript(), /Weitere Optionen/u);
+    assert.match(darwinReviewScript(), /number === -128 && draft\.allow_defer/u);
+  });
+
   await testAsync('the Windows reviewer receives content only on stdin and returns redaction ranges', async () => {
     const draft = buildReviewDraft('Kontakt: Max Mustermann', 'Kontakt: [PERSON_001]', 'customer');
     let observed;
@@ -371,11 +387,17 @@ async function main() {
     }]);
     assert.match(powershellReviewScript(), /lokale Stapelprüfung/u);
     assert.match(powershellReviewScript(), /\$redact\.Visible = \(\$null -eq \$draft\.batch_review\)/u);
+    assert.match(powershellReviewScript(), /Gleiche behalten/u);
+    assert.match(powershellReviewScript(), /Decide-Group/u);
     assert.match(darwinReviewScript(), /draft\.batch_review/u);
-    assert.match(darwinReviewScript(), /Weitere Optionen/u);
-    assert.doesNotMatch(darwinReviewScript(), /\["Abbrechen", "Später entscheiden", "Anonymisieren", "Beibehalten"\]/u);
+    assert.match(darwinReviewScript(), /Später entscheiden/u);
+    assert.match(darwinReviewScript(), /Nur diese Stelle/u);
+    assert.match(darwinReviewScript(), /Gleiche Stellen/u);
+    assert.match(darwinReviewScript(), /decideGroup/u);
+    assert.doesNotMatch(darwinReviewScript(), /cancelButton: "Abbrechen"[^\n]+Später entscheiden/u);
     assert.match(linuxViewerCommands(true)[0].args.join(' '), /lokale Stapelprüfung/u);
     assert.match(linuxChoiceCommand('zenity', 0, 1, true, true).args.join(' '), /Stapelentscheidung/u);
+    assert.match(linuxChoiceCommand('zenity', 0, 1, true, true, true).args.join(' '), /gleiche Stellen/u);
     assert.strictEqual(bundle.draft.batch_review.document_count, 1);
   });
 

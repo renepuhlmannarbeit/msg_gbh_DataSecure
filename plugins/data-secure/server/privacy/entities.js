@@ -34,11 +34,16 @@ const PARTY_COMPANY_RE = new RegExp(
   'giu'
 );
 const COMPANY_LABEL_RE =
-  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier)\s*:\s*(.+)$/iu;
+  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)\s*:\s*(.+)$/iu;
 const COMPANY_TABLE_RE =
-  /^\|\s*(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier)\s*:?\s*\|\s*([^|]+)\|/iu;
+  /^\|\s*(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)\s*:?\s*\|\s*([^|]+)\|/iu;
 const PARTY_CLAUSE_RE =
   /\b(?:Vertragsparteien?\s+(?:sind|:)|(?:Vertrag|Vereinbarung)\s+zwischen|Parties\s+(?:are|:)|(?:Service\s+)?Agreement\s+between)\s+(.+)$/iu;
+// A role before "für/bei" is professional content, not the first words of a
+// legal-form organisation. Without this boundary a complete standalone line
+// such as "Testmanager für Fiktive Gesundheit GmbH" could be consumed as one
+// organisation by the deliberately broad standalone-line matcher.
+const PROFESSIONAL_ORG_PREFIX_RE = /^(?:(?:Senior\s+|Lead\s+)?(?:Product\s+Owner|Scrum\s+Master|Softwareentwickler(?:in)?|Entwickler(?:in)?|Testmanager(?:in)?|Tester(?:in)?|Business\s+Analyst(?:in)?|QA\s+Engineer|IT-?Projektleiter(?:in)?|FHIR-Entwickler(?:in)?))\s+(?:für|bei|at)\s+/iu;
 
 const CLAUSE_ABBREVIATIONS = new Set([
   'dr', 'prof', 'nr', 'hd', 'str', 'bzw', 'ca', 'ggf', 'inkl', 'zzgl', 'u', 'a'
@@ -89,11 +94,14 @@ function collectContextOrganizations(text) {
     }
     if (!table && !labelled && !clause) candidates.push(trimmed);
     for (const candidate of candidates) {
-      const match = candidate.match(SEGMENT_COMPANY_RE);
+      const organizationCandidate = (!table && !labelled && !clause)
+        ? candidate.replace(PROFESSIONAL_ORG_PREFIX_RE, '')
+        : candidate;
+      const match = organizationCandidate.match(SEGMENT_COMPANY_RE);
       if (match) out.push(normalizeSpaces(match[1]));
     }
   }
-  for (const value of markdownTableColumnValues(text, /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier):?$/iu)) {
+  for (const value of markdownTableColumnValues(text, /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever):?$/iu)) {
     const match = value.match(SEGMENT_COMPANY_RE);
     if (match) out.push(normalizeSpaces(match[1]));
   }
@@ -105,7 +113,7 @@ const PERSON_LABEL =
   '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|(?:(?:Interner|Technischer|Fachlicher)\\s+)?Kontakt|Sachbearbeiter(?:in)?' +
   '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Autor(?:in)?|Verfasser(?:in)?|Manager(?:in)?' +
   '|Eigentümer(?:in)?|Bearbeiter(?:in)?|(?:Zuletzt\\s+)?(?:geändert|erstellt)\\s+von' +
-  '|Author|Creator|Manager|Owner|Approver|Representative|Contact\\s+person|Last\\s+modified\\s+by|Modified\\s+by|Имя|ФИО|Όνομα|姓名|氏名|이름)';
+  '|Author|Creator|Manager|Owner|Approver|Representative|Contact\\s+person|Last\\s+modified\\s+by|Modified\\s+by|Nom|Nombre|Naam|Имя|ФИО|Όνομα|姓名|氏名|이름)';
 
 const HONORIFIC = '(?:Herrn?|Frau|Dr\\.?|Prof\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm)\\.?|Mag\\.?)';
 
@@ -221,8 +229,10 @@ function pushExplicitPerson(out, value, confidence) {
   const cleaned = stripHonorifics(value);
   if (!cleaned || cleaned.length > 80) return;
   const token = new RegExp(`^(?:${NAME_TOKEN}|${CAPS_TOKEN})$`, 'u');
+  const particle = /^(?:von|van|de|del|der|den|zu|zur|zum)$/iu;
   const tokens = cleaned.split(/\s+/u);
-  if (tokens.length < 1 || tokens.length > 4 || !tokens.every((item) => token.test(item))) return;
+  if (tokens.length < 1 || tokens.length > 4 || !tokens.every((item) => token.test(item) || particle.test(item))) return;
+  if (!tokens.some((item) => token.test(item))) return;
   out.push({ value: cleaned, confidence });
 }
 
@@ -240,14 +250,24 @@ function collectPersonAnchors(text) {
   while ((m = honor.exec(src))) pushPerson(out, m[1], 'honorific');
 
   // "Name: Erika Beispiel", also inside markdown tables.
-  const label = new RegExp(`^\\s*(?:[-*+]\\s+)?${PERSON_LABEL}\\s*:\\s*(.+)$`, 'gimu');
+  const label = new RegExp(`^\\s*(?:>\\s*)?(?:[-*+]\\s+)?${PERSON_LABEL}\\s*:\\s*(.+)$`, 'gimu');
   while ((m = label.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
   const inline = new RegExp(`${PERSON_LABEL}\\s*:\\s*(${NAME_TOKEN}[ \\t]+${NAME_TOKEN})`, 'giu');
   while ((m = inline.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
   const table = new RegExp(`^\\|\\s*${PERSON_LABEL}\\s*:?\\s*\\|\\s*([^|\\n]+)\\|`, 'gimu');
-  while ((m = table.exec(src))) pushExplicitPerson(out, m[1], 'label');
+  while ((m = table.exec(src))) {
+    // A parser-generated CSV header starts exactly like a two-column
+    // key/value table ("| Name | E-Mail |"), but its next line is the
+    // Markdown separator.  Never treat a column title as a person's name.
+    const lineEnd = src.indexOf('\n', m.index);
+    const nextStart = lineEnd < 0 ? src.length : lineEnd + 1;
+    const nextEnd = src.indexOf('\n', nextStart);
+    const nextLine = src.slice(nextStart, nextEnd < 0 ? src.length : nextEnd);
+    if (/^\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|\s*$/u.test(nextLine)) continue;
+    pushExplicitPerson(out, m[1], 'label');
+  }
 
   const tableLabel = new RegExp(`^${PERSON_LABEL}:?$`, 'iu');
   for (const value of markdownTableColumnValues(src, tableLabel)) pushExplicitPerson(out, value, 'label');

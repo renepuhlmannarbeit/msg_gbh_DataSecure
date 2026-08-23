@@ -134,10 +134,23 @@ function showCompletionSummary(summary, options = {}) {
   throw new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.');
 }
 
+// The MCP batch path publishes only this bounded progress object.  Keeping the
+// adapter here prevents the native UI from ever receiving a source identifier,
+// package id, path, filename or document content.
+function showTerminalBatchSummary(progress, options = {}) {
+  if (!progress || progress.complete !== true) return false;
+  return showCompletionSummary({
+    selected_count: progress.batch_total,
+    released_count: progress.released,
+    failed_count: progress.stopped
+  }, options);
+}
+
 module.exports = {
   validateSummary,
   completionSummaryText,
   completionSummaryCommand,
   completionSummaryCommands,
-  showCompletionSummary
+  showCompletionSummary,
+  showTerminalBatchSummary
 };

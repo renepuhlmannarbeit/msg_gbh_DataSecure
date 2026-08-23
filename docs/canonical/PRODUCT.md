@@ -19,14 +19,23 @@ offline extrahieren, OCR, erkennen und ersetzen
                  ↓
 ein gebündelter lokaler Dialog nur bei offenen Stellen
                  ↓
-Markdown + lokale Mapping-CSV + JSON-Nachweis exportieren
+gesamten lokalen Stapel abschließen und
+Markdown + Mapping-CSV + JSON-Nachweis exportieren
                  ↓
-Claude arbeitet automatisch nur mit freigegebenem Markdown weiter
+Claude arbeitet nur mit freigegebenem Markdown weiter;
+große Ergebnismengen werden aufgabenbezogen gestuft gelesen
 ```
 
 Der Anwender wählt keine Dokumentprofile. Gemischte Stapel sind normal. Nach einem
 Abbruch wird an der letzten sicheren Position fortgesetzt. Eindeutige Ergebnisse
 benötigen keine Pflichtvorschau.
+
+Die 100-Dateien-/500-MB-Grenze beschreibt die lokale Aufbereitung, nicht die Größe
+eines Modellkontexts. Der lokale Stapel wird vollständig verarbeitet und exportiert,
+auch wenn Claude für die anschließende Aufgabe nur ausgewählte Ergebnisse benötigt.
+Bei einem ausdrücklichen Gesamtauftrag liest Claude freigegebene Ergebnisse in
+begrenzten, fortsetzbaren Schritten und nennt verwendete sowie noch offene Ergebnisse;
+es wird nichts stillschweigend ausgelassen.
 
 ## Zielformate und Ausgabe
 
@@ -59,6 +68,9 @@ Kopie der Quelle.
 Sichtbar sind genau zwei Skills. Der normale Dialog verwendet Alltagssprache und
 höchstens einen gebündelten Abschlussdialog. Technische Details sind einklappbar.
 Direkter ZIP-Import und privater Marketplace führen zum gleichen Produktverhalten.
+Lokale Originalverarbeitung startet ausschließlich, wenn `privacy_status` in der
+aktuellen Sitzung erfolgreich ist. Eine sichtbare Plugin-Kachel oder ein sichtbarer
+Skill allein gilt nicht als verbundener lokaler Datenschutzpfad.
 
 ## Aussage- und Freigabegrenzen
 

@@ -10,11 +10,11 @@ const corpus = JSON.parse(fs.readFileSync(
   'utf8'
 ));
 const validSkills = new Set(['anonymize', 'explain', 'none']);
-const validRoutes = new Set(['dialog', 'folder', 'clarify-purpose', 'clarify-image-removal', 'stop-prior-upload', 'blocked-pdf', 'cleanup', 'explain', 'none', 'wait-active-batch']);
+const validRoutes = new Set(['dialog', 'folder', 'clarify-purpose', 'clarify-image-removal', 'stop-prior-upload', 'blocked-pdf', 'blocked-host', 'cleanup', 'explain', 'none', 'wait-active-batch']);
 
-test('corpus has the versioned schema and twenty-nine cases', () => {
+test('corpus has the versioned schema and thirty-three cases', () => {
   assert.strictEqual(corpus.schema, 'datasecure-skill-evals/v1');
-  assert.strictEqual(corpus.cases.length, 29);
+  assert.strictEqual(corpus.cases.length, 33);
 });
 
 test('case identifiers are unique and every expectation is structurally complete', () => {
@@ -48,8 +48,28 @@ test('critical privacy and usability scenarios cannot disappear from the corpus'
     'already-anonymized-markdown', 'existing-input-before-run',
     'declared-one-status-two', 'resumable-twenty-five-files',
     'first-file-stops-continue-rest', 'resume-latest-batch-new-chat', 'local-selection-cancelled', 'host-processing-cancelled',
-    'active-local-batch', 'partial-batch-continues-original-analysis'
+    'active-local-batch', 'partial-batch-continues-original-analysis',
+    'web-visible-skill-without-local-mcp', 'mobile-visible-plugin-without-local-mcp',
+    'scheduled-cloud-original-processing', 'desktop-skill-present-connector-disconnected'
   ]) assert.ok(ids.has(required), `missing critical scenario ${required}`);
+});
+
+test('negative host classes require the live local gate and forbid every workaround', () => {
+  const ids = [
+    'web-visible-skill-without-local-mcp',
+    'mobile-visible-plugin-without-local-mcp',
+    'scheduled-cloud-original-processing',
+    'desktop-skill-present-connector-disconnected'
+  ];
+  const cases = ids.map((id) => corpus.cases.find((item) => item.id === id));
+  assert.ok(cases.every(Boolean));
+  assert.ok(cases.every((item) => item.expected_route === 'blocked-host'));
+  assert.ok(cases.every((item) => item.required_outcomes.includes('no_direct_upload')));
+  assert.ok(cases.every((item) => item.required_outcomes.includes('require_successful_privacy_status')));
+  assert.ok(cases.every((item) => item.required_outcomes.includes('stop_without_file_access')));
+  assert.ok(cases.every((item) => item.forbidden_outcomes.some((outcome) => [
+    'infer_local_mcp_from_ui', 'schedule_original_processing'
+  ].includes(outcome))));
 });
 
 test('a locally cancelled selection never becomes an automatic replacement run', () => {
@@ -112,9 +132,11 @@ test('ordinary processing uses the resumable local input route instead of a long
   assert.ok(ordinary.every((item) => item.required_outcomes.includes('wait_for_local_input_confirmation')));
 });
 
-test('large and partially failing runs are split into single-file tool calls', () => {
+test('large and partially failing runs use local execution with separate model reading', () => {
   const byId = new Map(corpus.cases.map((item) => [item.id, item]));
-  assert.ok(byId.get('resumable-twenty-five-files').required_outcomes.includes('one_tool_call_per_document'));
+  assert.ok(byId.get('resumable-twenty-five-files').required_outcomes.includes('one_persistent_local_executor'));
+  assert.ok(byId.get('resumable-twenty-five-files').required_outcomes.includes('model_read_progress_separate'));
+  assert.ok(byId.get('resumable-twenty-five-files').forbidden_outcomes.includes('model_call_per_document'));
   assert.ok(byId.get('resumable-twenty-five-files').forbidden_outcomes.includes('single_long_batch_tool_call'));
   assert.ok(byId.get('first-file-stops-continue-rest').required_outcomes.includes('increment_skip_stopped'));
   assert.ok(byId.get('first-file-stops-continue-rest').forbidden_outcomes.includes('retry_stopped_file'));

@@ -52,7 +52,9 @@ const preflight=fs.readFileSync(path.join(pluginRoot,'skills','gbh-datasecure-do
 assert.match(preflight,/Fordere sensible Originale \*\*nicht\*\*[^\n]*(?:Chat-Upload|Einfügen)/i);
 assert.match(preflight,/read_anonymized_document/);
 assert.match(preflight,/kein Werkzeug, das Bildpixel an Claude überträgt/i);
-assert.match(preflight,/ausschließlich `package_id` und `read_capability` aus demselben erfolgreichen Einzelergebnis/i);
+assert.match(preflight,/ausschließlich `package_id` und `read_capability` aus dieser aktuellen Seite/i);
+assert.match(preflight,/list_document_batch_results` mit höchstens zehn Ergebnissen pro Seite/i);
+assert.match(preflight,/start_document_batch_processing` mit demselben `batch_token`/i);
 assert.match(preflight,/begin_document_batch/i);
 assert.match(preflight,/batch_token/i);
 assert.match(preflight,/ursprüngliche Nutzeraufgabe automatisch und ausschließlich/i);
@@ -70,8 +72,9 @@ const toolsEnd=indexSource.indexOf('];',toolsStart);
 assert.notStrictEqual(toolsStart,-1,'TOOLS table missing');
 assert.notStrictEqual(toolsEnd,-1,'TOOLS table is unterminated');
 const toolNames=[...indexSource.slice(toolsStart,toolsEnd).matchAll(/\{name:'([a-z_]+)',title:/g)].map(m=>m[1]);
-assert.strictEqual(toolNames.length,16,'unexpected tool count');
+assert.strictEqual(toolNames.length,20,'unexpected tool count');
 assert.ok(!toolNames.includes('anonymize_all_documents'),'a complete multi-file run must not occupy one MCP call');
+assert.ok(!toolNames.includes('anonymize_next_document'),'Claude must not drive the local queue one document at a time');
 assert.ok(!toolNames.includes('approve_visual_asset'),'Claude must not receive a model-callable human approval tool');
 
 const instructionsStart=indexSource.indexOf('const INSTRUCTIONS=');

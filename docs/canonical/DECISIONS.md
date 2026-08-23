@@ -258,3 +258,18 @@ Coverage-, Ressourcen-, Datenschutz- und Negativtests bestehen. Externe Biblioth
 ersetzen nicht die DataSecure-Sicherheitsgrenze. Nicht passende Komponenten dürfen
 als Testorakel oder Benchmark dienen; Eigenentwicklung braucht eine dokumentierte
 Restlücke.
+
+## DS-039 – Lokale Stapelaufbereitung und Claude-Weiterverarbeitung trennen
+
+Die Grenze von 100 Dateien und 500 MB gilt für die vollständige lokale, fortsetzbare
+Aufbereitung, Prüfung und den Export. Sie ist keine Zusage, dass dieselbe Datenmenge
+in einen einzelnen Modellkontext passt oder vollständig in einer Unterhaltung gelesen
+wird. DataSecure beendet den lokalen Stapel unabhängig von der nachfolgenden
+Claude-Aufgabe und hält alle freigegebenen Markdown-Ergebnisse lokal bereit.
+
+Claude verwendet anschließend nur freigegebene Ergebnisse und liest sie
+aufgabenbezogen in begrenzten, fortsetzbaren Schritten. Soll ausdrücklich der gesamte
+Stapel ausgewertet werden, zeigt der Ablauf die Anzahl bereits verwendeter und noch
+offener Ergebnisse und setzt die Auswertung gestuft fort. Ergebnisse dürfen weder
+stillschweigend ausgelassen noch wegen eines Modell-, Kontext- oder Hostlimits als
+lokal unverarbeitet dargestellt werden.

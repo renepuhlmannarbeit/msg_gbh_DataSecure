@@ -3,13 +3,15 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { fork, spawn } = require('child_process');
 const { createSuite } = require('./helpers');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
-const { roots, privacyRoot, storageStatus } = require('../plugins/data-secure/server/gateway/common');
-const { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { roots, privacyRoot, storageStatus, ensurePrivateDirectory } = require('../plugins/data-secure/server/gateway/common');
+const { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { startLocalBatchExecutor } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { csvField } = require('../plugins/data-secure/server/gateway/mapping');
 const { evidencePath, SCHEMA, validateEvidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
 const { zipStore } = require('./lib/zip');
@@ -49,13 +51,266 @@ async function processAndAcknowledge(token, options = deps) {
   return { ...result, ...acknowledgement, package_id: result.package_id, read_capability: result.read_capability };
 }
 
+async function crashDetachedExecutor(token, crashAt) {
+  const child = fork(path.join(__dirname, 'fixtures', 'crash-batch-worker.js'), [], {
+    windowsHide: true,
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    env: { ...process.env, DATASECURE_TEST_CRASH_AT: String(crashAt) }
+  });
+  const exited = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+  });
+  child.send({ type: 'run-crash-test', batch_token: token });
+  return exited;
+}
+
+async function mcpBatchCalls(calls) {
+  const child = spawn(process.execPath, [
+    path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'index.js')
+  ], {
+    windowsHide: true,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env }
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk; });
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const closed = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code !== 0) reject(new Error(`MCP restart probe failed (${code}): ${stderr}`));
+      else resolve();
+    });
+  });
+  for (const [index, call] of calls.entries()) {
+    child.stdin.write(`${JSON.stringify({
+      jsonrpc: '2.0', id: index + 1, method: 'tools/call',
+      params: { name: call.name, arguments: call.arguments }
+    })}\n`);
+  }
+  child.stdin.end();
+  await closed;
+  return stdout.split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line));
+}
+
 async function main() {
+  await testAsync('background executor receives its token only over private IPC and exposes content-free progress', async () => {
+    resetInput(); add('worker.txt', 'Kunde: Max Mustermann');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    let workerFile;
+    let workerArgs;
+    let workerOptions;
+    let message;
+    const child = {
+      pid: process.pid,
+      send(value, callback) { message = value; setImmediate(() => callback()); },
+      disconnect() {},
+      unref() {},
+      kill() {}
+    };
+    const started = startLocalBatchExecutor(begun.batch_token, {
+      forkProcess(file, args, options) {
+        workerFile = file;
+        workerArgs = args;
+        workerOptions = options;
+        return child;
+      }
+    });
+    assert.strictEqual(started.local_processing_started, true);
+    assert.strictEqual(started.local_processing_active, true);
+    assert.deepStrictEqual(workerArgs, []);
+    assert.match(workerFile, /batch-worker\.js$/);
+    assert.deepStrictEqual(workerOptions.stdio, ['ignore', 'ignore', 'ignore', 'ipc']);
+    assert.deepStrictEqual(workerOptions.execArgv, [`--require=${path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'network-deny.cjs')}`]);
+    assert.strictEqual(workerOptions.serialization, 'json');
+    assert.strictEqual(workerOptions.env.NODE_OPTIONS, undefined);
+    assert.strictEqual(workerOptions.env.HTTPS_PROXY, undefined);
+    assert.deepStrictEqual(message, { type: 'start-local-batch', batch_token: begun.batch_token });
+    assert.doesNotMatch(JSON.stringify(started), /worker|Mustermann|\.txt/u);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(releaseLocalBatchExecutor(begun.batch_token, process.pid), true);
+    assert.strictEqual(_test.publicProgress(_test.readState(begun.batch_token)).local_processing_active, false);
+    discardIncompleteBatches();
+  });
+
+  await testAsync('local executor completes clear files before Claude reads a paginated nameless result list', async () => {
+    resetInput();
+    ordered('Alpha Vertrag.txt', 'Kontakt: Alice Beispiel, alice@example.test', 1);
+    ordered('Beta Profil.txt', 'Kontakt: Bob Beispiel, +49 30 123456', 2);
+    ordered('Gamma Vorgang.txt', 'IBAN: DE89370400440532013000', 3);
+    const begun = beginBatch({ expectedCount: 3, profile: 'auto' });
+    const claimed = claimLocalBatchExecutor(begun.batch_token, process.pid);
+    assert.strictEqual(claimed.local_processing_active, true);
+    const completed = await runLocalBatchExecutor(begun.batch_token, deps);
+    assert.strictEqual(completed.complete, true);
+    assert.strictEqual(completed.released, 3);
+    assert.strictEqual(completed.local_processing_active, false);
+
+    const first = listBatchResults(begun.batch_token, { limit: 2 });
+    assert.strictEqual(first.results.length, 2);
+    assert.strictEqual(first.available, 3);
+    assert.match(first.next_cursor, /^[A-Za-z0-9_-]+$/);
+    assert.doesNotMatch(JSON.stringify(first), /Alpha|Beta|Gamma|Alice|Bob|IBAN|\.txt/u);
+    for (const result of first.results) {
+      assert.match(result.package_id, /^ds_[a-f0-9]{32}$/);
+      assert.match(result.read_capability, /^[A-Za-z0-9_-]{43}$/);
+      acknowledgeDeliveredPackage(begun.batch_token, result.package_id);
+    }
+
+    const rest = listBatchResults(begun.batch_token, { cursor: first.next_cursor, limit: 2 });
+    assert.strictEqual(rest.results.length, 1);
+    assert.strictEqual(rest.used, 2);
+    acknowledgeDeliveredPackage(begun.batch_token, rest.results[0].package_id);
+    const empty = listBatchResults(begun.batch_token, { limit: 20 });
+    assert.strictEqual(empty.results.length, 0);
+    assert.strictEqual(empty.used, 3);
+    assert.strictEqual(empty.available, 0);
+  });
+
+  await testAsync('one mixed auto batch selects the profile independently for every document', async () => {
+    resetInput();
+    ordered('A.txt', [
+      'Vertrag', 'Vertragspartei: Nordstern Beratung GmbH', 'Haftung und Kündigung',
+      'Vertragslaufzeit: 24 Monate', 'Kontakt: Erika Beispiel'
+    ].join('\n'), 1);
+    ordered('B.md', [
+      '# Mitarbeiterprofil', 'Berufserfahrung', 'Skillset: Java, Testing',
+      'Projekterfahrung', 'Name: Max Mustermann'
+    ].join('\n'), 2);
+    ordered('C.txt', [
+      'Bewerbung', 'Lebenslauf', 'Motivation für die ausgeschriebene Stelle',
+      'Bewerber: Lea Musterfrau', 'E-Mail: lea@example.test'
+    ].join('\n'), 3);
+    ordered('D.md', [
+      '# Kundenvorgang', 'Kundennummer: 4711', 'Kunde: Beispiel Klinik GmbH',
+      'Rechnung und Bestellung', 'Kontakt: Samira Muster'
+    ].join('\n'), 4);
+
+    const begun = beginBatch({ expectedCount: 4, profile: 'auto' });
+    claimLocalBatchExecutor(begun.batch_token, process.pid);
+    const completed = await runLocalBatchExecutor(begun.batch_token, deps);
+    assert.strictEqual(completed.complete, true);
+    assert.strictEqual(completed.released, 4);
+
+    const state = _test.readState(begun.batch_token);
+    const profiles = [];
+    let releasedText = '';
+    for (const item of state.items) {
+      const packageFolder = path.join(roots().output, item.package_id);
+      const manifest = JSON.parse(fs.readFileSync(path.join(packageFolder, 'manifest.json'), 'utf8'));
+      profiles.push(manifest.profile);
+      releasedText += fs.readFileSync(path.join(packageFolder, manifest.document), 'utf8');
+    }
+    assert.deepStrictEqual(profiles, ['contract', 'personnel_profile', 'applicant', 'customer']);
+    assert.doesNotMatch(releasedText, /Erika Beispiel|Max Mustermann|Lea Musterfrau|Samira Muster|lea@example\.test/u);
+    assert.match(releasedText, /Haftung|Skillset|Motivation|Kundennummer/u);
+  });
+
+  await testAsync('detached local worker finishes a real text batch after the starting call returns', async () => {
+    resetInput(); add('detached.txt', 'Kontakt: Max Mustermann, max.mustermann@example.test');
+    const begun = beginBatch({ expectedCount: 1, profile: 'general' });
+    const started = startLocalBatchExecutor(begun.batch_token);
+    assert.strictEqual(started.local_processing_started, true);
+    let progress = started;
+    // The product worker is detached and intentionally independent of this
+    // MCP call. Give slower Windows/CI filesystem scanners enough time before
+    // declaring the integration test failed; this is not a product timeout.
+    const deadline = Date.now() + 60_000;
+    while (progress.local_processing_active && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      progress = readBatchProgress(begun.batch_token);
+    }
+    assert.strictEqual(progress.local_processing_active, false);
+    assert.strictEqual(progress.complete, true);
+    assert.strictEqual(progress.released, 1);
+    const listed = listBatchResults(begun.batch_token, { limit: 1 });
+    assert.strictEqual(listed.results.length, 1);
+    assert.doesNotMatch(JSON.stringify(listed), /detached|Mustermann|example\.test/u);
+    acknowledgeDeliveredPackage(begun.batch_token, listed.results[0].package_id);
+  });
+
+  await testAsync('result cursors are batch-bound and tampering fails closed', async () => {
+    resetInput(); add('one.txt', 'Kunde: Max Mustermann');
+    const firstBatch = beginBatch({ expectedCount: 1, profile: 'customer' });
+    claimLocalBatchExecutor(firstBatch.batch_token, process.pid);
+    await runLocalBatchExecutor(firstBatch.batch_token, deps);
+    const page = listBatchResults(firstBatch.batch_token, { limit: 1 });
+    const cursor = _test.resultCursor(firstBatch.batch_token, 0);
+    const replacement = cursor.endsWith('A') ? 'B' : 'A';
+    assert.throws(() => listBatchResults(firstBatch.batch_token, { cursor: `${cursor.slice(0, -1)}${replacement}` }), /Cursor ist ungültig/i);
+
+    resetInput(); add('two.txt', 'Kunde: Erika Musterfrau');
+    const secondBatch = beginBatch({ expectedCount: 1, profile: 'customer' });
+    assert.throws(() => listBatchResults(secondBatch.batch_token, { cursor }), /Cursor ist ungültig/i);
+    assert.strictEqual(page.results.length, 1);
+  });
+
+  await testAsync('a real MCP process restart revokes old grants but resumes the durable result cursor', async () => {
+    resetInput();
+    ordered('restart-alpha.txt', 'Kunde: Alice Beispiel', 1);
+    ordered('restart-beta.txt', 'Kunde: Bob Beispiel', 2);
+    ordered('restart-gamma.txt', 'Kunde: Carol Beispiel', 3);
+    const begun = beginBatch({ expectedCount: 3, profile: 'customer' });
+    claimLocalBatchExecutor(begun.batch_token, process.pid);
+    const completed = await runLocalBatchExecutor(begun.batch_token, deps);
+    assert.strictEqual(completed.released, 3);
+
+    const firstProcess = await mcpBatchCalls([{
+      name: 'list_document_batch_results',
+      arguments: { batch_token: begun.batch_token, limit: 2 }
+    }]);
+    const first = firstProcess[0].result.structuredContent;
+    assert.strictEqual(first.results.length, 2);
+    assert.match(first.next_cursor, /^[A-Za-z0-9_-]+$/u);
+    const expiredByRestart = first.results[0];
+
+    const secondProcess = await mcpBatchCalls([
+      {
+        name: 'read_anonymized_document',
+        arguments: {
+          package_id: expiredByRestart.package_id,
+          read_capability: expiredByRestart.read_capability
+        }
+      },
+      {
+        name: 'list_document_batch_results',
+        arguments: { batch_token: begun.batch_token, cursor: first.next_cursor, limit: 2 }
+      }
+    ]);
+    assert.strictEqual(secondProcess[0].result.isError, true);
+    assert.match(secondProcess[0].result.structuredContent.message, /Leseberechtigung/u);
+    const continued = secondProcess[1].result.structuredContent;
+    assert.strictEqual(continued.results.length, 1);
+    assert.strictEqual(continued.next_cursor, null);
+    assert.strictEqual(continued.batch_complete, true);
+    assert.doesNotMatch(JSON.stringify([...firstProcess, ...secondProcess]), /restart-(?:alpha|beta|gamma)|Alice|Bob|Carol|\.txt/u);
+  });
+
   await testAsync('count mismatch cannot create a batch token', async () => {
     resetInput(); add('one.txt', 'Kunde: Max Mustermann');
     const result = beginBatch({ expectedCount: 2, profile: 'customer' });
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.error, 'input_count_changed');
     assert.ok(!result.batch_token);
+  });
+
+  await testAsync('server-side local start cancellation creates no sealed batch copy', async () => {
+    resetInput(); add('only-local.txt', 'Kunde: Max Mustermann');
+    const batchesBefore = fs.readdirSync(_test.batchRoot()).sort();
+    let summary;
+    const result = beginBatch({
+      expectedCount: 1,
+      profile: 'customer',
+      confirmStart: (candidate) => { summary = candidate; return false; }
+    });
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.error, 'local_batch_start_cancelled');
+    assert.match(result.user_status, /kein Stapel begonnen/);
+    assert.strictEqual(result.next_action, 'restart_only_on_request');
+    assert.deepStrictEqual(summary, { selected_count: 1, total_bytes: Buffer.byteLength('Kunde: Max Mustermann') });
+    assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).sort(), batchesBefore);
   });
 
   await testAsync('batch boundaries accept 100 files but reject 101 files and more than 500 MB before hashing', async () => {
@@ -261,6 +516,100 @@ async function main() {
     process.env.EU_PRIVACY_ROOT = configured;
   });
 
+  await testAsync('a configured privacy root behind a local link is refused before a batch starts', async () => {
+    const configured = process.env.EU_PRIVACY_ROOT;
+    const target = path.join(base, 'OneDrive - Example', 'actual');
+    const link = path.join(base, 'apparently-local');
+    fs.mkdirSync(target, { recursive: true });
+    try { fs.rmSync(link, { recursive: true, force: true }); } catch { /* absent */ }
+    fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+    process.env.EU_PRIVACY_ROOT = path.join(link, 'Privacy');
+    assert.strictEqual(storageStatus().safe, false);
+    assert.throws(() => beginBatch({ expectedCount: 1 }), /nicht freigegeben/i);
+    process.env.EU_PRIVACY_ROOT = configured;
+  });
+
+  await testAsync('the private batch root refuses a junction or symlink before listing or copying', async () => {
+    const configuredLocalAppData = process.env.LOCALAPPDATA;
+    const isolatedLocalAppData = path.join(base, 'isolated-localapp');
+    const gatewayRoot = path.join(isolatedLocalAppData, 'ClaudeEUPrivacyDocumentGatewayV32');
+    const outside = path.join(base, 'outside-batch-target');
+    fs.mkdirSync(gatewayRoot, { recursive: true });
+    fs.mkdirSync(outside, { recursive: true });
+    const linkedBatches = path.join(gatewayRoot, 'batches');
+    fs.symlinkSync(outside, linkedBatches, process.platform === 'win32' ? 'junction' : 'dir');
+    process.env.LOCALAPPDATA = isolatedLocalAppData;
+    try {
+      assert.throws(() => _test.batchRoot(), /PRIVACY_STORAGE_UNSAFE/);
+      assert.deepStrictEqual(fs.readdirSync(outside), []);
+    } finally {
+      process.env.LOCALAPPDATA = configuredLocalAppData;
+    }
+  });
+
+  await testAsync('an input inode swap immediately before snapshot copy fails closed', async () => {
+    resetInput();
+    const original = add('swap-before-copy.txt', 'Kunde: Max Mustermann');
+    const saved = path.join(base, 'swap-before-copy.saved');
+    let swapped = false;
+    try {
+      assert.throws(() => beginBatch({
+        expectedCount: 1,
+        profile: 'customer',
+        statfs(target) {
+          if (!swapped) {
+            fs.renameSync(original, saved);
+            fs.writeFileSync(original, 'ausgetauschtes Objekt', 'utf8');
+            swapped = true;
+          }
+          return fs.statfsSync(target);
+        }
+      }), /während der lokalen Übernahme verändert/i);
+      assert.strictEqual(fs.readFileSync(saved, 'utf8'), 'Kunde: Max Mustermann');
+      assert.strictEqual(fs.readFileSync(original, 'utf8'), 'ausgetauschtes Objekt');
+    } finally {
+      if (fs.existsSync(original)) fs.unlinkSync(original);
+      if (fs.existsSync(saved)) fs.renameSync(saved, original);
+    }
+  });
+
+  await testAsync('discard refuses a nested junction or symlink and leaves its external target untouched', async () => {
+    resetInput(); add('discard-link.txt', 'Kunde: Max Mustermann');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const outside = path.join(base, 'discard-external-target');
+    const sentinel = path.join(outside, 'do-not-touch.txt');
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(sentinel, 'extern und unverändert', 'utf8');
+    const link = path.join(_test.workPath(begun.batch_token), 'unexpected-link');
+    fs.symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => discardIncompleteBatches(), /Arbeitsbereich konnte nicht sicher bereinigt/i);
+    assert.strictEqual(fs.readFileSync(sentinel, 'utf8'), 'extern und unverändert');
+    assert.strictEqual(fs.existsSync(path.join(_test.batchRoot(), `${begun.batch_token}.json`)), true);
+    fs.unlinkSync(link);
+    assert.strictEqual(discardIncompleteBatches().ok, true);
+    assert.strictEqual(fs.readFileSync(sentinel, 'utf8'), 'extern und unverändert');
+  });
+
+  await testAsync('private directory creation accepts only one literal child below its parent', async () => {
+    const parent = path.join(base, 'private-directory-parent');
+    const created = ensurePrivateDirectory(parent, 'audit');
+    assert.strictEqual(created, path.join(parent, 'audit'));
+    assert.throws(() => ensurePrivateDirectory(parent, '../outside'), /PRIVACY_STORAGE_UNSAFE/);
+    assert.throws(() => ensurePrivateDirectory(parent, 'nested/child'), /PRIVACY_STORAGE_UNSAFE/);
+  });
+
+  await testAsync('explicit discard removes incomplete snapshots but preserves already published output', async () => {
+    resetInput(); add('discard-me.txt', 'Kunde: Max Mustermann');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    assert.ok(fs.existsSync(_test.workPath(begun.batch_token)));
+    const result = discardIncompleteBatches();
+    assert.strictEqual(result.ok, true);
+    assert.ok(result.discarded_batches >= 1);
+    assert.strictEqual(result.raw_content_sent_to_claude, false);
+    assert.strictEqual(fs.existsSync(_test.workPath(begun.batch_token)), false);
+    assert.strictEqual(fs.existsSync(path.join(_test.batchRoot(), `${begun.batch_token}.json`)), false);
+  });
+
   await testAsync('only one local batch can process at a time and a dead owner lock is recoverable', async () => {
     resetInput(); add('confirmed.txt', 'Kunde: Max Mustermann');
     const first = beginBatch({ expectedCount: 1, profile: 'customer' });
@@ -449,6 +798,33 @@ async function main() {
     assert.strictEqual(complete.complete, true);
   });
 
+  await testAsync('MCP batch review finalizes locally and exposes results only through the bounded result plan', async () => {
+    resetInput();
+    ordered('review-first.txt', 'Microsoft Azure Administrator Associate\nRolle: Cloud Engineer', 1);
+    ordered('review-second.txt', 'Microsoft Azure Administrator Associate\nRolle: Testmanager', 2);
+    const begun = beginBatch({ expectedCount: 2, profile: 'personnel_profile' });
+    await processBatchNext(begun.batch_token, deps);
+    await processBatchNext(begun.batch_token, deps);
+    const reviewed = await reviewDeferredBatch(begun.batch_token, {
+      ...deps,
+      localFinalize: true,
+      platform: 'linux',
+      reviewTextLocally: (draft) => ({
+        action: 'reviewed',
+        redactions: [],
+        decisions: draft.ambiguities.map((candidate) => ({ ambiguity_id: candidate.ambiguity_id, decision: 'keep' }))
+      })
+    });
+    assert.strictEqual(reviewed.ok, true);
+    assert.strictEqual(reviewed.locally_released, 2);
+    assert.strictEqual(reviewed.complete, true);
+    assert.strictEqual(reviewed.packages, undefined);
+    assert.doesNotMatch(JSON.stringify(reviewed), /package_id|read_capability|review-first|review-second/u);
+    const listed = listBatchResults(begun.batch_token, { limit: 1 });
+    assert.strictEqual(listed.results.length, 1);
+    assert.strictEqual(listed.available, 2);
+  });
+
   await testAsync('a shared local review explains why it cannot start before analysis completes', async () => {
     resetInput();
     ordered('not-ready-first.txt', 'Microsoft Azure Administrator Associate\nRolle: Cloud Engineer', 1);
@@ -569,7 +945,14 @@ async function main() {
     assert.strictEqual(stopped.completion_percent, 33);
     assert.strictEqual(stopped.local_mapping_exported, true);
     assert.strictEqual(stopped.remaining, 2);
+    const stoppedItem = _test.readState(begun.batch_token).items.find((item) => item.status === 'stopped');
+    assert.ok(Number.isSafeInteger(stoppedItem.processing_duration_ms));
+    assert.ok(stoppedItem.processing_duration_ms >= 0);
+    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), stoppedItem.work_name)), false);
     const first = await processAndAcknowledge(begun.batch_token, deps);
+    const releasedItem = _test.readState(begun.batch_token).items.find((item) => item.status === 'released');
+    assert.ok(Number.isSafeInteger(releasedItem.processing_duration_ms));
+    assert.ok(releasedItem.processing_duration_ms >= 0);
     const second = await processAndAcknowledge(begun.batch_token, deps);
     assert.ok(first.ok && second.ok);
     assert.strictEqual(second.complete, true);
@@ -612,6 +995,47 @@ async function main() {
     assert.doesNotMatch(JSON.stringify(result), /unreadable\.xlsx/);
   });
 
+  await testAsync('a stopped source is deleted immediately and a failed deletion is retried locally', async () => {
+    resetInput();
+    const cleanupBefore = localCleanupStatus().private_work_copy_cleanup_pending;
+    add('locked-stop.xlsx', 'Name,Mail\nMax Mustermann,max@example.de');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const stopped = await processBatchNext(begun.batch_token, {
+      ...deps,
+      unlinkWorkCopy: () => { throw new Error('synthetic locked stopped copy'); }
+    });
+    assert.strictEqual(stopped.ok, false);
+    const pending = _test.readState(begun.batch_token).items[0];
+    assert.strictEqual(pending.status, 'stopped');
+    assert.strictEqual(pending.work_copy_cleanup_pending, true);
+    assert.strictEqual(localCleanupStatus().private_work_copy_cleanup_pending, cleanupBefore + 1);
+    const retried = await processBatchNext(begun.batch_token, deps);
+    assert.strictEqual(retried.complete, true);
+    const cleaned = _test.readState(begun.batch_token).items[0];
+    assert.strictEqual(cleaned.work_copy_cleanup_pending, undefined);
+    assert.strictEqual(localCleanupStatus().private_work_copy_cleanup_pending, cleanupBefore);
+    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), cleaned.work_name)), false);
+  });
+
+  await testAsync('startup recovery retries a pending cleanup for a safely stopped source', async () => {
+    resetInput();
+    add('restart-cleanup.xlsx', 'Name,Mail\nMax Mustermann,max@example.de');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    await processBatchNext(begun.batch_token, {
+      ...deps,
+      unlinkWorkCopy: () => { throw new Error('synthetic cleanup interruption'); }
+    });
+    const pending = _test.readState(begun.batch_token).items[0];
+    assert.strictEqual(pending.status, 'stopped');
+    assert.strictEqual(pending.work_copy_cleanup_pending, true);
+    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), pending.work_name)), true);
+    const recovered = recoverBatches();
+    assert.strictEqual(recovered.failures, 0);
+    const cleaned = _test.readState(begun.batch_token).items[0];
+    assert.strictEqual(cleaned.work_copy_cleanup_pending, undefined);
+    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), cleaned.work_name)), false);
+  });
+
   await testAsync('changes to originals after snapshot do not alter the sealed batch', async () => {
     resetInput();
     const original = add('confirmed.txt', 'Kunde: Max Mustermann');
@@ -623,6 +1047,40 @@ async function main() {
     assert.strictEqual(result.released, 1);
     assert.strictEqual((await processAndAcknowledge(begun.batch_token, deps)).complete, true);
     assert.strictEqual(fs.readFileSync(original, 'utf8'), 'ausgetauschter Inhalt');
+  });
+
+  await testAsync('a changed sealed source stops its pending batch and removes every remaining private copy', async () => {
+    resetInput();
+    add('first.txt', 'Kunde: Max Mustermann');
+    add('second.txt', 'Kunde: Erika Musterfrau');
+    const begun = beginBatch({ expectedCount: 2, profile: 'customer' });
+    const before = _test.readState(begun.batch_token);
+    fs.writeFileSync(path.join(_test.workPath(begun.batch_token), before.items[0].work_name), 'tampered sealed source', 'utf8');
+    const stopped = await processBatchNext(begun.batch_token, deps);
+    assert.strictEqual(stopped.ok, false);
+    assert.strictEqual(stopped.error, 'batch_snapshot_changed');
+    const after = _test.readState(begun.batch_token);
+    assert.strictEqual(after.invalidated, true);
+    for (const item of after.items) {
+      assert.strictEqual(item.status, 'stopped');
+      assert.strictEqual(item.error_code, 'BATCH_SNAPSHOT_CHANGED');
+      assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), item.work_name)), false);
+    }
+  });
+
+  await testAsync('a sealed-copy inode substitution before recovery is rejected without touching the saved object', async () => {
+    resetInput(); add('sealed-swap.txt', 'Kunde: Max Mustermann');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const before = _test.readState(begun.batch_token);
+    const sealed = path.join(_test.workPath(begun.batch_token), before.items[0].work_name);
+    const saved = path.join(base, 'sealed-swap.saved');
+    fs.renameSync(sealed, saved);
+    fs.writeFileSync(sealed, 'substituted private object', 'utf8');
+    const stopped = await processBatchNext(begun.batch_token, deps);
+    assert.strictEqual(stopped.error, 'batch_snapshot_changed');
+    assert.strictEqual(fs.readFileSync(saved, 'utf8'), 'Kunde: Max Mustermann');
+    assert.strictEqual(fs.existsSync(sealed), false);
+    fs.unlinkSync(saved);
   });
 
   await testAsync('added originals after snapshot do not alter the sealed batch', async () => {
@@ -770,7 +1228,7 @@ async function main() {
     assert.strictEqual(localCleanupStatus().expired_batch_cleanup_pending, cleanupBefore.expired_batch_cleanup_pending);
   });
 
-  await testAsync('a real 100-file session handles stops at positions 1, 50 and 100 exactly once', async () => {
+  await testAsync('a real 100-file local executor handles stops at positions 1, 50 and 100 with bounded result pages', async () => {
     resetInput();
     for (let index = 1; index <= 100; index++) {
       const blocked = [1, 50, 100].includes(index);
@@ -781,15 +1239,90 @@ async function main() {
       );
     }
     const begun = beginBatch({ expectedCount: 100, profile: 'customer' });
-    const results = [];
-    for (let index = 0; index < 100; index++) results.push(await processAndAcknowledge(begun.batch_token, deps));
-    assert.strictEqual(results.filter((result) => result.ok).length, 97);
-    assert.strictEqual(results.filter((result) => !result.ok).length, 3);
-    const final = results.at(-1);
+    claimLocalBatchExecutor(begun.batch_token, process.pid);
+    const final = await runLocalBatchExecutor(begun.batch_token, deps);
     assert.strictEqual(final.complete, true);
     assert.strictEqual(final.released, 97);
     assert.strictEqual(final.stopped, 3);
+    let cursor;
+    let listed = 0;
+    let pages = 0;
+    do {
+      const page = listBatchResults(begun.batch_token, { cursor, limit: 10 });
+      assert.ok(page.results.length <= 10);
+      for (const result of page.results) acknowledgeDeliveredPackage(begun.batch_token, result.package_id);
+      listed += page.results.length;
+      pages++;
+      cursor = page.next_cursor;
+    } while (cursor);
+    assert.strictEqual(listed, 97);
+    assert.strictEqual(pages, 10);
+    const exhausted = listBatchResults(begun.batch_token, { limit: 10 });
+    assert.strictEqual(exhausted.used, 97);
+    assert.strictEqual(exhausted.available, 0);
+    assert.strictEqual(exhausted.safely_stopped, 3);
     assert.strictEqual(fs.readdirSync(roots().input).length, 100);
+  });
+
+  await testAsync('real worker crashes at positions 1, 50 and 100 recover without duplicate release', async () => {
+    resetInput();
+    for (let index = 1; index <= 100; index++) {
+      const crashPosition = [1, 50, 100].includes(index);
+      ordered(
+        `crash-${String(index).padStart(3, '0')}.${crashPosition ? 'txt' : 'xlsx'}`,
+        `Kunde: Testperson ${index}\nVorgang: synthetisch`,
+        index
+      );
+    }
+    const begun = beginBatch({ expectedCount: 100, profile: 'customer' });
+    const crashes = [
+      { absolutePosition: 1, localAttempt: 1, releasedBefore: 0, stoppedBefore: 0 },
+      { absolutePosition: 50, localAttempt: 2, releasedBefore: 1, stoppedBefore: 48 },
+      { absolutePosition: 100, localAttempt: 2, releasedBefore: 2, stoppedBefore: 97 }
+    ];
+    for (const crash of crashes) {
+      const exit = await crashDetachedExecutor(begun.batch_token, crash.localAttempt);
+      assert.strictEqual(exit.code, 17, `worker must crash at global item ${crash.absolutePosition}`);
+
+      const interrupted = readBatchProgress(begun.batch_token);
+      assert.strictEqual(interrupted.local_processing_active, false);
+      assert.strictEqual(interrupted.processing, 1);
+      assert.strictEqual(interrupted.released, crash.releasedBefore);
+      assert.strictEqual(interrupted.stopped, crash.stoppedBefore);
+
+      const recovered = recoverBatches();
+      assert.ok(recovered.recovered >= 1);
+      const awaitingResume = readBatchProgress(begun.batch_token);
+      assert.strictEqual(awaitingResume.processing, 0);
+      assert.strictEqual(awaitingResume.retryable, 1);
+      assert.strictEqual(awaitingResume.released, crash.releasedBefore);
+      assert.strictEqual(awaitingResume.stopped, crash.stoppedBefore);
+
+      const resumed = resumeBatch(begun.batch_token);
+      assert.strictEqual(resumed.ok, true);
+      assert.strictEqual(resumed.resumed, 1);
+    }
+
+    claimLocalBatchExecutor(begun.batch_token, process.pid);
+    const completed = await runLocalBatchExecutor(begun.batch_token, deps);
+    assert.strictEqual(completed.complete, true);
+    assert.strictEqual(completed.released, 3);
+    assert.strictEqual(completed.stopped, 97);
+    assert.strictEqual(completed.retryable, 0);
+
+    const state = _test.readState(begun.batch_token);
+    const packageIds = state.items.filter((item) => item.status === 'released').map((item) => item.package_id);
+    assert.strictEqual(new Set(packageIds).size, 3);
+    assert.ok(state.items.every((item) => ['released', 'stopped'].includes(item.status)));
+
+    let cursor;
+    let listed = 0;
+    do {
+      const page = listBatchResults(begun.batch_token, { cursor, limit: 20 });
+      listed += page.results.length;
+      cursor = page.next_cursor;
+    } while (cursor);
+    assert.strictEqual(listed, 3);
   });
 
   done();

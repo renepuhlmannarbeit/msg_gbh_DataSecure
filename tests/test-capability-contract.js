@@ -24,6 +24,7 @@ const currentPublicFiles = [
   'README.md',
   'docs/ANLEITUNG.md',
   'docs/IT-BETRIEBSHANDBUCH.md',
+  'docs/PILOT-ABNAHME.md',
   'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md',
   'plugins/data-secure/skills/gbh-datasecure-datenschutz-erklaeren/SKILL.md'
 ];
@@ -98,6 +99,16 @@ test('marketplace and plugin manifests promise only the released formats', () =>
     assert.match(description, /DOCX/u);
     assert.doesNotMatch(description, /PDF|XLSX|PPTX|PNG|JPEG|BMP/u);
   }
+});
+
+test('the pilot acceptance guide distinguishes active and blocked RC30 formats', () => {
+  const pilot = read('docs/PILOT-ABNAHME.md');
+  assert.match(pilot, /TXT, Markdown, CSV und vollständig abgedeckte DOCX/u);
+  assert.match(pilot, /XLSX, PPTX, eigenständige PNG\/JPEG\/BMP und PDF/u);
+  assert.doesNotMatch(pilot, /XLSX,\s*PPTX,\s*MD,\s*CSV/u,
+    'the acceptance guide must not list active Markdown/CSV as stop cases');
+  assert.match(pilot, /fünf erwarteten Bereiche[\s\S]*DataSecure-Export/u,
+    'the acceptance guide must expose the permanent mapping-export area');
 });
 
 test('the target contract is documentation, not a shipped plugin runtime input', () => {

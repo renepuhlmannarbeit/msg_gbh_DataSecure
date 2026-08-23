@@ -2,10 +2,15 @@
 
 const { normalizeSpaces, normalizeText } = require('./base');
 const { matchers: credentialCatalogMatchers } = require('./credential-catalog');
+const { markdownTableCells } = require('./entities');
 
-const CERT_SECTION_RE = /^(?:zertifizierungen?|zertifikate?|bescheinigungen?|credentials?|certifications?|certificates?|licenses?(?:\s+(?:and|&|und)\s+certifications?)?)\s*:?$/iu;
+// The table path must recognise the same narrowly tested certification
+// headings as profile detection. Otherwise a CSV row containing a credential
+// is treated as one long credential context and can accidentally protect the
+// separate employer cell in that row.
+const CERT_SECTION_RE = /^(?:zertifizierungen?|zertifikate?|bescheinigungen?|credentials?|certifications?|certificates?|certificering|certificación(?:es)?|licenses?(?:\s+(?:and|&|und)\s+certifications?)?)\s*:?$/iu;
 const SECTION_RE = /^(?:qualifikationen?|skillset|kenntnisse|kompetenzen|technologien|methoden|sprachkenntnisse|branchenkenntnisse|projekterfahrung|berufserfahrung|ausbildung|weiterbildung|werdegang|profil|summary|skills?|experience|employment|education|projects?|arbeitgeber|unternehmen|kunde|projekt|zeitraum|funktion|aufgaben(?:\s*&\s*verantwortlichkeiten)?)\s*:?$/iu;
-const CERT_CUE_RE = /\b(?:zertifiz(?:iert|ierung|ierungen|ierte)|zertifikat(?:e|en)?|certificate|certification|certified|credential|issued\s+by|ausgestellt\s+(?:von|durch)|professional\s+scrum|safe\s+agilist|foundation|practitioner)\b/iu;
+const CERT_CUE_RE = /\b(?:zertifiz(?:iert|ierung|ierungen|ierte)|zertifikat(?:e|en)?|certificate|certification|certificering|certificación(?:es)?|certified|credential|issued\s+by|ausgestellt\s+(?:von|durch)|professional\s+scrum|safe\s+agilist|foundation|practitioner)\b/iu;
 // Acronyms must remain case-sensitive. With an /i suffix, codes such as PL or
 // SC would also match the beginnings of ordinary words like "Plattform" or
 // "Scaled", turning technology lines into false certificate contexts.
@@ -28,6 +33,28 @@ function plainLine(line) {
     .replace(/[*_`]/g, ''));
 }
 
+function markdownTableCellRanges(line, offset) {
+  const ranges = [];
+  const source = String(line || '');
+  if (!source.trimStart().startsWith('|')) return ranges;
+  let start = source.indexOf('|') + 1;
+  let escaped = false;
+  for (let index = start; index <= source.length; index++) {
+    const atEnd = index === source.length;
+    const char = source[index];
+    if (!atEnd && escaped) { escaped = false; continue; }
+    if (!atEnd && char === '\\') { escaped = true; continue; }
+    if (atEnd || char === '|') {
+      const raw = source.slice(start, index);
+      const leading = raw.match(/^\s*/u)[0].length;
+      const trailing = raw.match(/\s*$/u)[0].length;
+      ranges.push({ start: offset + start + leading, end: offset + index - trailing });
+      start = index + 1;
+    }
+  }
+  return ranges;
+}
+
 function hasCredentialCue(text) {
   return CERT_CUE_RE.test(text) || CERT_CODE_RE.test(text);
 }
@@ -38,7 +65,31 @@ function hasCredentialTitle(text) {
 
 function credentialContextDetails(text) {
   const src=String(text || ''); const spans=[]; let offset=0; let section=false;
-  for(const line of src.split('\n')) {
+  let credentialColumns = null;
+  const allLines = src.split('\n');
+  for(let lineIndex=0; lineIndex<allLines.length; lineIndex++) {
+    const line = allLines[lineIndex];
+    const cells = markdownTableCells(line);
+    const nextCells = markdownTableCells(allLines[lineIndex + 1] || '');
+    if (cells && nextCells && cells.length === nextCells.length &&
+        nextCells.every((cell) => /^:?-{3,}:?$/u.test(cell))) {
+      credentialColumns = new Set(cells
+        .map((cell, column) => ({ cell: cell.replace(/\s+\(\d+\)$/u, ''), column }))
+        .filter(({ cell }) => CERT_SECTION_RE.test(cell) || hasCredentialCue(cell))
+        .map(({ column }) => column));
+      offset+=line.length+1;
+      continue;
+    }
+    if (cells && credentialColumns?.size) {
+      const ranges = markdownTableCellRanges(line, offset);
+      for (const column of credentialColumns) {
+        const range = ranges[column];
+        if (range && range.end > range.start) spans.push({ start: range.start, end: range.end, reason: 'table_column' });
+      }
+      offset+=line.length+1;
+      continue;
+    }
+    if (!cells) credentialColumns = null;
     const clean=plainLine(line);
     const certHeading=CERT_SECTION_RE.test(clean);
     const markdownHeading=/^\s*#{1,6}\s+/.test(line);

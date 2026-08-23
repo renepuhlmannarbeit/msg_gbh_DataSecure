@@ -46,7 +46,8 @@ TXT/Markdown/CSV/DOCX funktionieren ohne separat installierte Node-/Python-Laufz
       direkt; Grafiken bleiben zurückgehalten.
 - [ ] PDF erscheint ausschließlich unter `blocked_inputs` mit
       `PDF_COVERAGE_UNVERIFIED`, nicht unter den unterstützten Eingaben.
-- [ ] Der Privacy-Ordner öffnet sich und enthält die vier erwarteten Bereiche.
+- [ ] Der Privacy-Ordner öffnet sich und enthält die fünf erwarteten Bereiche
+      `Input`, `Output`, `Needs Visual Review`, `Processed` und `DataSecure-Export`.
 - [ ] Der Standardordner liegt im lokalen App-Datenbereich. Ein expliziter OneDrive-,
       iCloud-, Dropbox- oder Netzwerkpfad meldet `blocked_unsafe_storage` und startet
       keine Verarbeitung.
@@ -58,6 +59,29 @@ TXT/Markdown/CSV/DOCX funktionieren ohne separat installierte Node-/Python-Laufz
 - [ ] Rollback auf die vorherige Version startet und verarbeitet den synthetischen
       Kernfall ohne widersprüchliche Pakete.
 - [ ] Erneutes Upgrade auf die Zielversion ist praktisch bestanden.
+
+## 3a. Host-Gate und negative Oberflächen
+
+Jeden Fall in einer neuen Unterhaltung mit einem ausschließlich synthetischen
+Original prüfen. Ein sichtbarer Skill oder Plugin-Eintrag zählt nicht als
+Verbindungsnachweis.
+
+- [ ] Cowork Desktop mit aktivem Local MCP darf den Originalpfad erst nach einem in
+      derselben Sitzung erfolgreichen `privacy_status` öffnen.
+- [ ] Cowork Desktop mit getrenntem oder nicht erlaubtem Local MCP stoppt einmalig
+      vor Datei-/Ordnerzugriff und empfiehlt nur neue lokale Sitzung oder IT-Prüfung.
+- [ ] Claude Web stoppt trotz sichtbarem Skill, Originalanhang, Pfadangabe und Wunsch
+      nach anderem Connector; weder Upload noch Originalinhalt werden verarbeitet.
+- [ ] Claude Mobile versucht weder rechnerübergreifenden Ordnerzugriff noch
+      Computer-Use und behauptet keine lokale Verbindung.
+- [ ] Eine Cloud-/Scheduled-Sitzung plant oder startet keine Verarbeitung lokaler
+      Originale und verwendet keinen allgemeinen Filesystem- oder anderen Connector.
+- [ ] Bereits **vorher lokal bereinigtes** synthetisches Markdown lässt sich in allen
+      Negativklassen normal weiterverarbeiten, ohne einen neuen DataSecure-Lauf zu
+      behaupten.
+- [ ] Nach fehlgeschlagenem Host-Gate entsteht keine Wiederholschleife und kein
+      Ersatzdialog. Die Nachweise enthalten nur Hostklasse, Claude-Version,
+      `PASS/FAIL/BLOCKED` und nicht sensitiven Fehlercode.
 
 ## 4. Fortsetzbarer Ein- und Mehrdateiablauf
 
@@ -79,36 +103,48 @@ gezielt mit `AMBIGUITY_REVIEW_REQUIRED` stoppen.
       lokale Bildanlagen selbst zu löschen; unbekannte Office-Objekte stoppen dabei sicher.
 - [ ] Nach Bestätigung erzeugt `begin_document_batch` nur bei exakt 1 bis 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB
       ein Batch-Token; Namen und lokale Hashes erscheinen in keiner Toolantwort.
-- [ ] Austausch, Hinzufügen oder Zeitstempeländerung nach der Bestätigung invalidiert
-      den Stapel vollständig, auch wenn die Anzahl gleich bleibt.
-- [ ] Pro MCP-Aufruf wird genau eine Datei verarbeitet; ein Stapel von mehreren
-      Dokumenten läuft nicht als ein einziger langer Aufruf.
+- [ ] Austausch, Hinzufügen oder Zeitstempeländerung im `Input`-Ordner nach der
+      versiegelten Übernahme verändert den gestarteten Stapel nicht. Eine absichtlich
+      veränderte **private Arbeitskopie** wird dagegen fail-closed gestoppt; sie darf
+      niemals ein Ergebnis für die ursprüngliche Quelle erzeugen.
+- [ ] `start_document_batch_processing` kehrt kurz zurück; der getrennte lokale
+      Worker verarbeitet intern sequenziell und läuft weder als langer MCP-Aufruf
+      noch als modellseitiger Aufruf pro Datei.
+- [ ] `document_batch_status` enthält nur Zähler. `list_document_batch_results`
+      liefert höchstens zehn namenfreie Ergebnisse pro Skillseite; Abbruch der
+      Claude-Auswertung verändert den lokal abgeschlossenen Stapel nicht.
 - [ ] Ein Stopp veröffentlicht für die betroffene Datei nichts und wird serverseitig
       im Batch markiert. Die übrigen Dateien werden genau einmal versucht, ohne einen
       vom Modell berechneten Überspringzähler.
 - [ ] Claude zeigt weder Pfad, Dateiname, Originaltext noch interne Queue-Position.
-- [ ] Der normale Input-Ablauf öffnet keinen Textreview- oder zweiten Dateidialog.
+- [ ] Der normale Input-Ablauf öffnet keinen Textreview pro Datei und keinen zweiten
+      Dateidialog. Mehrdeutigkeiten werden erst nach der restlichen Analyse in genau
+      einem ausdrücklich gestarteten lokalen Sammelreview behandelt.
 - [ ] Mehrdeutige Zertifikats-/Organisationsstellen werden nicht geraten, sondern
-      stoppen nur die betroffene Datei.
+      bleiben bis zu diesem lokalen Review gesperrt; technische Fortsetzung darf sie
+      nicht freigeben.
 - [ ] Rolle, Zertifizierungen und sonstiger fachlicher Inhalt bleiben im erfolgreichen
       synthetischen Fall unverändert.
 - [ ] Das Residual-Gate prüft exakt die später freigegebene Markdown-Fassung.
 - [ ] Claude nennt am Ende nur erfolgreiche und sicher gestoppte Dateien und verwendet
-      ausschließlich Paket-IDs aus den Einzelaufrufen dieses Laufs.
+      ausschließlich Paket-IDs aus dem Batch-gebundenen paginierten Ergebnisplan.
 - [ ] Eine erneute Verarbeitung einer gestoppten Datei beginnt erst nach einem neuen,
       ausdrücklichen Nutzerauftrag.
 - [ ] Abbruch, MCP-Neustart oder geschlossenes stdin nach dem Claim stellt die Datei
       kollisionsfrei sichtbar wieder her; ein unsicher unterbrochener Batch-Eintrag
       wird nicht automatisch wiederholt.
 - [ ] Der reale 100-Dateien-Test besteht mit Stopps an Position 1, 50 und 100 ohne
-      doppelte Verarbeitung.
+      doppelte Verarbeitung; 97 Freigaben erscheinen lückenlos in zehn Seiten.
 
 ## 5. Formatgrenze des beaufsichtigten Piloten
 
-Jeweils eine synthetische TXT-, CSV- und DOCX-Datei als Positivfall verwenden. XLSX,
-PPTX, MD, CSV, PNG, JPEG, BMP und PDF dienen als verpflichtende Stop-Gegenproben.
+Jeweils eine synthetische TXT-, Markdown-, CSV- und DOCX-Datei als Positivfall
+verwenden. XLSX, PPTX, eigenständige PNG/JPEG/BMP und PDF dienen als verpflichtende
+Stop-Gegenproben.
 
-- [ ] TXT, CSV und vollständig abgedeckte DOCX erzeugen ein verifiziertes Privacy-Paket; CSV-Zellen werden dabei nicht ausgeführt.
+- [ ] TXT, Markdown, CSV und vollständig abgedeckte DOCX erzeugen ein verifiziertes
+      Privacy-Paket; Markdown-Referenzen bleiben inert und CSV-Zellen werden nicht
+      ausgeführt.
 - [ ] Jede DOCX-Parserwarnung stoppt mit `PARSER_COVERAGE_UNVERIFIED`.
 - [ ] Alle anderen Formate stoppen mit festem Coverage-Fehler und bleiben in `Input`.
 - [ ] Jedes PDF stoppt mit `PDF_COVERAGE_UNVERIFIED`, stellt das Original wieder her

@@ -4,6 +4,7 @@ const {
   EMAIL_RE,
   PHONE_RE,
   PHONE_LABEL_RE,
+  FRENCH_PHONE_RE,
   IBAN_RE,
   BIC_RE,
   BIC_LABEL_RE,
@@ -103,6 +104,14 @@ const DETECTORS = [
   {
     type: 'PHONE',
     re: PHONE_RE,
+    placeholder: '[PHONE_REDACTED]',
+    priority: 80,
+    accept: (value, text, index) =>
+      value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE)
+  },
+  {
+    type: 'PHONE',
+    re: FRENCH_PHONE_RE,
     placeholder: '[PHONE_REDACTED]',
     priority: 80,
     accept: (value, text, index) =>

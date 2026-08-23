@@ -149,11 +149,18 @@ test('MCPB prompt list matches the prompts the server exposes', () => {
 });
 
 test('MCPB prompt texts use the same batch contract as the runtime', () => {
-  const { manifestPromptText } = require(path.join(runtime, 'prompt-contract.js'));
+  const { manifestPromptText, HOST_GATE_TEXT, OPEN_BATCH_DECISION_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
   for (const prompt of mcpb.prompts) {
     assert.strictEqual(prompt.text, manifestPromptText(prompt.name), `${prompt.name} prompt contract drift`);
+    assert.ok(prompt.text.includes(HOST_GATE_TEXT), `${prompt.name} must use the canonical live host gate`);
+    assert.match(prompt.text, /weder Upload, Computer-Use noch ein allgemeines Dateisystem/u, `${prompt.name} must forbid host workarounds`);
     assert.match(prompt.text, /batch_processing_active=true/u, `${prompt.name} must wait for an active local batch`);
     assert.match(prompt.text, /öffne oder starte nichts erneut/u, `${prompt.name} must not create a replacement run`);
+    assert.ok(prompt.text.includes(OPEN_BATCH_DECISION_TEXT), `${prompt.name} must use the canonical open-batch decision`);
+    assert.match(prompt.text, /zweite ausdrückliche Bestätigung/u, `${prompt.name} must double-confirm discard`);
+    assert.match(prompt.text, /jetzt nichts tun; rufe dann kein Stapelwerkzeug auf/u, `${prompt.name} must allow a safe no-op`);
+    assert.match(prompt.text, /awaiting_local_review.*review_deferred_document_batch/u, `${prompt.name} must route local review without resume`);
+    assert.match(prompt.text, /Nur wenn recoverable_batches=0/u, `${prompt.name} must not open a replacement input folder`);
   }
 });
 
@@ -200,7 +207,7 @@ test('native Windows launcher has a reproducible source and release build contra
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');
   assert.strictEqual(pkg.scripts['native:analyze'], 'node scripts/build-native.mjs --analyze');
-  assert.strictEqual(pkg.scripts.posttest, 'node tests/test-native-launcher.js');
+  assert.strictEqual(pkg.scripts.posttest, 'node tests/test-docx-differential.js && node tests/test-native-launcher.js');
   for (const rel of [
     'native/windows/datasecure-sandbox.cpp',
     'scripts/build-native.mjs',

@@ -1,0 +1,54 @@
+{
+  "schema": "datasecure-corpus-contract/v1",
+  "sample_schema": {
+    "required": [
+      "id",
+      "profile",
+      "source_format",
+      "language",
+      "document_type",
+      "layout",
+      "source",
+      "entities",
+      "preserved"
+    ],
+    "profiles": ["contract", "personnel_profile", "applicant", "customer", "general"],
+    "active_source_formats": ["txt", "md", "markdown", "csv", "docx"],
+    "entity_required": ["type", "value", "start", "end", "severity"],
+    "preserved_required": ["category", "value", "start", "end"],
+    "position_space": "utf16-code-units",
+    "synthetic_only": true
+  },
+  "quality_gates": {
+    "direct_identifier_false_negatives_max": 0,
+    "unexpected_redactions_max": 0,
+    "marked_content_preservation_rate_min": 0.99
+  },
+  "corpora": {
+    "contract_1000": {
+      "samples": 1000,
+      "formats": { "txt": 1000 },
+      "languages": { "de": 750, "en": 250 },
+      "document_types": { "contract": 1000 },
+      "profiles": { "contract": 1000 }
+    },
+    "acceptance_1000": {
+      "samples": 1000,
+      "formats": { "txt": 1000 },
+      "languages": { "de": 875, "en": 125 },
+      "document_types": {
+        "contract": 500,
+        "personnel_profile": 167,
+        "application": 167,
+        "customer_record": 166
+      },
+      "profiles": {
+        "contract": 500,
+        "personnel_profile": 167,
+        "applicant": 167,
+        "customer": 166
+      }
+    }
+  },
+  "scope_note": "Container- und weitere Sprachverteilungen werden erst nach ihrem jeweiligen Coverage-Gate ergänzt; fehlende Einträge sind keine Freigabe."
+}

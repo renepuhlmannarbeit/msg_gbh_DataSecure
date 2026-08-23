@@ -23,7 +23,13 @@ Windows 10/11 x64 und macOS; Linux nur über einen lokalen Claude-Code-Host · c
 > **Host-Grenze:** Die Claude-Desktop-App wird laut aktueller Anthropic-Dokumentation
 > auf Windows und macOS angeboten, nicht auf Linux. Linux ist deshalb erst nach einer
 > eigenen Claude-Code-CLI-Installationsabnahme nutzbar; eine Linux-Desktop-Installation
-> wird nicht behauptet.
+> wird nicht behauptet. Für Originale reicht ein sichtbarer Skill, Plugin-Eintrag
+> oder Connector niemals aus: `privacy_status` muss in genau der aktuellen Sitzung
+> erfolgreich sein. Ohne diesen Nachweis stoppt DataSecure vor jedem Datei- oder
+> Ordnerzugriff. Verwenden Sie dann weder Upload noch Computer-Use, allgemeinen
+> Dateizugriff oder einen anderen Connector als Ersatz. Web, Mobil, Cloud-/Scheduled
+> und Desktop mit getrenntem Local MCP sind im Pilot NO-GO für Originale. Bereits
+> vorher lokal bereinigtes Markdown dürfen Sie dort normal weiterverwenden.
 
 ---
 
@@ -94,7 +100,7 @@ Dateigrößen, Pfade, Dateinamen oder Rohinhalte.
 Drei Fragen. Wenn Sie eine nicht sicher beantworten können: IT fragen, nicht
 raten.
 
-1. **Läuft Windows 10 oder 11 auf einem x64-PC?** Windows ARM64 wird noch nicht unterstützt.
+1. **Läuft Windows 10 oder 11 auf einem x64-PC?** Dann gilt dieser Installationsleitfaden. Windows ARM64 bleibt gesperrt. Auf macOS oder Linux ist DataSecure derzeit ausschließlich ein von der IT abzunehmender Engineering-Testweg; bitte nicht nach den Windows-Schritten installieren.
 2. **Ist Claude Desktop installiert und sind Sie angemeldet?** Die Anwendung auf
    dem Rechner, nicht die Webseite im Browser.
 3. **Welche Datei haben Sie von der IT bekommen?** Schauen Sie auf die Endung —
@@ -179,7 +185,7 @@ Drei mögliche Ausgänge:
   Sie **genau einen** Versuch: Claude beenden, neu starten, Satz wiederholen.
   Dann aufhören und die Vorlage aus Teil 11 an die IT schicken.
 
-## Teil 6: Die vier Ordner
+## Teil 6: Die fünf Ordner
 
 Der Standard liegt im lokalen DataSecure-App-Datenbereich und nicht unter
 `Dokumente`. Sie müssen den technischen Pfad nicht kennen: *„Öffne den
@@ -191,6 +197,7 @@ Privacy-Ordner"* öffnet ihn im Explorer oder Finder.
 | `Output` | Die geprüfte Fassung. Nur das sieht Claude; standardmäßig 7 Tage aufbewahrt |
 | `Needs Visual Review` | Lokal zurückgehaltene Bilder. Enthält echte Fotos; in diesem Engineering-Build keine Freigabe über Claude, Preview verschwindet nach Fristablauf |
 | `Processed` | Die von Ihnen in `Input` abgelegte Arbeitskopie; standardmäßig 7 Tage aufbewahrt |
+| `DataSecure-Export` | Dauerhafte lokale Übersicht: `DataSecure-Mapping.csv` ordnet jede Originaldatei ihrem anonymisierten Ergebnis zu; der zugehörige Batch-Nachweis enthält nur Zähler und Status |
 
 Die ursprüngliche Quelldatei außerhalb des DataSecure-Ordners bleibt unverändert.
 `purge_local_data` löscht sie niemals.
@@ -208,25 +215,36 @@ Die ursprüngliche Quelldatei außerhalb des DataSecure-Ordners bleibt unveränd
    mitverarbeitet.
 3. Kopieren Sie bis zu 100 TXT-, Markdown- (`.md` oder `.markdown`), CSV- oder DOCX-Dateien mit zusammen höchstens 500 MB hinein, nicht in den Chat. Kehren Sie
    zu Claude zurück und bestätigen Sie kurz, dass ausschließlich diese Dateien
-   bereitliegen. DataSecure übernimmt sofort private, versiegelte Arbeitskopien in
-   eine lokale Batch-Sitzung. Spätere Änderungen, Umbenennungen oder Ergänzungen im
+   bereitliegen. Vor der Übernahme sehen Sie noch eine lokale Startbestätigung mit
+   Anzahl, Gesamtgröße, Formaten und Bildstandard. Erst **Starten** erstellt private,
+   versiegelte Arbeitskopien; **Abbrechen** erstellt keinen Batch. Spätere Änderungen,
+   Umbenennungen oder Ergänzungen im
    Input-Ordner verändern den gestarteten Stapel nicht. PDF und alle anderen Formate
    sind im Pilot sicher gesperrt.
-4. DataSecure verarbeitet pro technischem Aufruf genau eine Datei und erstellt pro
-   Erfolg ein eigenes Markdown-Paket. Dadurch bleibt auch ein Stapel fortsetzbar und
-   läuft nicht als ein einziger langer Aufruf in ein Zeitlimit. Ein Fehler wird nicht
-   automatisch wiederholt und blockiert die übrigen bestätigten Dateien nicht. Den
-   Fortschritt verwaltet der Server; Claude berechnet keine Warteschlangenposition.
+4. Ein kurzer Startaufruf übergibt den versiegelten Stapel an einen getrennten lokalen
+   Hintergrundprozessor. Er verarbeitet intern Datei für Datei und erstellt pro Erfolg
+   ein eigenes Markdown-Paket, ohne dass Claude für jede Datei einen Werkzeugaufruf
+   ausführen oder Inhalt lesen muss. Ein Fehler wird nicht automatisch wiederholt und
+   blockiert die übrigen bestätigten Dateien nicht. Den Fortschritt verwaltet der
+   Server; Claude sieht nur Zähler und berechnet keine Warteschlangenposition.
 5. TXT-, Markdown-, CSV- und DOCX-Dokumente werden automatisch eingeordnet. Eigenständige Bilder,
    Scans und andere Formate sind im Pilot noch nicht freigegeben.
-6. Der normale Ordnerablauf öffnet keinen zusätzlichen Prüfdialog. Mehrdeutige
-   Organisations-/Zertifikatsstellen stoppen nur die betroffene Datei sicher; sie
-   werden nicht geraten. Jede freigegebene Fassung besteht danach nochmals das
-   automatische Residual-Gate.
-7. Claude nennt am Ende die Zahl erfolgreicher und sicher gestoppter Dateien. Die
+6. Der normale Ordnerablauf öffnet keinen Prüfdialog pro Datei. Mehrdeutige
+   Organisations-/Zertifikatsstellen werden gesammelt, während klare Dateien
+   weiterlaufen. Erst ein ausdrücklich gestarteter lokaler Sammelreview entscheidet
+   diese Stellen; bis dahin bleiben die betroffenen Dateien gesperrt. Jede danach
+   freigegebene Fassung besteht nochmals das automatische Residual-Gate.
+7. Bei mehr als einer Datei zeigt DataSecure zusätzlich eine lokale Abschlussübersicht
+   mit den Zählern ausgewählt, erfolgreich vorbereitet und sicher gestoppt. Claude
+   nennt am Ende dieselben Zähler. Die
    lokal im `Input` verbliebenen Dateien sind die gestoppten; ihre Namen wurden Claude
-   nicht mitgeteilt. Erfolgreiches Markdown ist nur über die 15 Minuten gültige
-   Leseberechtigung desselben Laufs abrufbar.
+   nicht mitgeteilt. Claude erhält Ergebnisse nur namenfrei in Seiten von höchstens
+   zehn und liest je nach Aufgabe nur benötigte Pakete. Erfolgreiches Markdown ist
+   nur über die 15 Minuten gültige Leseberechtigung desselben Laufs abrufbar; ein
+   Chatabbruch ändert den bereits lokal abgeschlossenen Stapel nicht. Die dauerhafte Zuordnung zwischen
+   Original und Ergebnis finden Sie lokal in `DataSecure-Export/DataSecure-Mapping.csv`.
+   Bitten Sie Claude bei Bedarf ausdrücklich, die lokale Ergebnisübersicht zu öffnen;
+   deren Inhalt wird nicht an Claude übertragen.
 
 ### Sicher anhalten und später fortsetzen
 
@@ -308,7 +326,7 @@ Nummern beginnen bei jedem Dokument neu.
 | Was Sie sehen | Was Sie tun |
 |---|---|
 | Claude kennt DataSecure nicht | Claude beenden (Symbol neben der Uhr → *Beenden*), neu starten. Genau ein Versuch, dann IT |
-| „Wie möchten Sie diese Datei öffnen?" | Abbrechen, Datei ins offene Claude-Fenster ziehen |
+| „Wie möchten Sie diese Datei öffnen?" | Abbrechen. Das Original nicht in Claude ziehen; zurück zum DataSecure-Input-Ordner und den lokalen Ablauf neu starten. |
 | „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
 | „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Nicht automatisch erneut starten. `diagnostic_status` aufrufen und nur den festen Fehlercode an IT melden — nicht Datei, Dateiname, Pfad oder Inhalt |
 | Sie haben in Claude auf **Stopp** geklickt | Der Stapel bleibt lokal fortsetzbar; kein Paket der unterbrochenen Datei wurde freigegeben. Nicht automatisch neu starten. Bitten Sie bei Bedarf ausdrücklich, den letzten DataSecure-Stapel fortzusetzen |

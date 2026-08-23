@@ -50,6 +50,7 @@ function launchCompanion(options = {}) {
   const child = spawn(options.execPath || process.execPath, [`--require=${networkDeny}`, server], {
     stdio: ['pipe', 'pipe', 'ignore', 'pipe'],
     windowsHide: true,
+    shell: false,
     env: companionEnvironment(options.env || process.env)
   });
   child.stdio[3].end(secret);

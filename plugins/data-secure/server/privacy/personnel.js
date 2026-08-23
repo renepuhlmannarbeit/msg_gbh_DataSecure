@@ -1,11 +1,11 @@
 'use strict';
 
-const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName } = require('./base');
-const { collectOrganizations } = require('./entities');
+const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName, IBAN_RE } = require('./base');
+const { collectOrganizations, markdownTableColumnValues } = require('./entities');
 const { credentialContextSpans } = require('./credentials');
 
-const EMPLOYER_LABEL = '(?:Unternehmen|Arbeitgeber|Firma|Aktueller\\s+Arbeitgeber|Entsendendes\\s+Unternehmen)';
-const CUSTOMER_LABEL = '(?:Kunde|Kundenunternehmen|Projektkunde|Auftraggeber)';
+const EMPLOYER_LABEL = '(?:Unternehmen|Arbeitgeber|Firma|Aktueller\\s+Arbeitgeber|Entsendendes\\s+Unternehmen|Company|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)';
+const CUSTOMER_LABEL = '(?:Kunde|Kundenunternehmen|Projektkunde|Auftraggeber|Client|Cliente|Klant)';
 const LOCATION_LABEL =
   '(?:Standort(?:\\s+des\\s+Projekts)?|Projektstandort|Einsatzort|Dienstort|Wohnort|Wohnsitz|Adresse|Anschrift|Ort)';
 
@@ -16,6 +16,7 @@ const LOCATION_LABEL =
 const PREFIX_RE = /^(\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)?)([\s\S]*)$/u;
 const ORG_SHAPE_RE = /^[A-Z0-9ÄÖÜ][A-Za-z0-9ÄÖÜäöüß .&'’+\-/]{2,50}$/u;
 const DOMAIN_SHAPE_RE = /^[a-z0-9][a-z0-9.\-]+\.(?:de|com|net|org|eu)$/i;
+const PROFESSIONAL_ROLE_RE = /^(?:(?:Senior\s+|Lead\s+)?(?:Product\s+Owner|Scrum\s+Master|Softwareentwickler(?:in)?|Entwickler(?:in)?|Testmanager(?:in)?|Tester(?:in)?|Business\s+Analyst(?:in)?|QA\s+Engineer|IT-?Projektleiter(?:in)?|IT-?Projektleitung|FHIR-Entwickler(?:in)?))$/iu;
 
 const TABLE_EMPLOYER_RE = new RegExp(`^(\\|\\s*${EMPLOYER_LABEL}\\s*:?\\s*\\|\\s*)([^|\\n]+)(\\|)`, 'iu');
 const TABLE_CUSTOMER_RE = new RegExp(`^(\\|\\s*${CUSTOMER_LABEL}\\s*:?\\s*\\|\\s*)([^|\\n]+)(\\|)`, 'iu');
@@ -30,6 +31,11 @@ const LOCATION_PLACEHOLDER = '[LOCATION_REDACTED]';
 
 function hasStopToken(value) {
   return normalizeSpaces(value).split(/\s+/).some(isStopToken);
+}
+
+function containsIban(value) {
+  IBAN_RE.lastIndex = 0;
+  return IBAN_RE.test(String(value || ''));
 }
 
 function rememberLocation(reg, value) {
@@ -67,6 +73,7 @@ function registerCustomer(reg, findings, value) {
 function looksLikeOrgSide(value, personKeys) {
   const clean = normalizeSpaces(value);
   if (!clean) return false;
+  if (PROFESSIONAL_ROLE_RE.test(clean)) return false;
   if (clean.includes(':')) return false;
   if (personKeys.has(key(clean))) return false;
   if (collectOrganizations(clean).length > 0) return true;
@@ -78,6 +85,19 @@ function looksLikeOrgSide(value, personKeys) {
 function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
   const out = [];
   const ranges = credentialContextSpans(text);
+  // CSV sources are rendered as multi-column Markdown tables. Register the
+  // labelled values up front so the normal literal pass can redact the cells
+  // without mistaking adjacent certificate cells for the same context.
+  for (const value of markdownTableColumnValues(text, new RegExp(`^${EMPLOYER_LABEL}:?$`, 'iu'))) {
+    registerEmployer(reg, findings, value);
+  }
+  for (const value of markdownTableColumnValues(text, new RegExp(`^${CUSTOMER_LABEL}:?$`, 'iu'))) {
+    registerCustomer(reg, findings, value);
+  }
+  for (const value of markdownTableColumnValues(text, new RegExp(`^${LOCATION_LABEL}:?$`, 'iu'))) {
+    rememberLocation(reg, value);
+    findings.push({ type: 'LOCATION', value_hash: hashShort(value) });
+  }
   let lineOffset = 0;
 
   for (const rawLine of String(text).split('\n')) {
@@ -163,9 +183,13 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     // A bare organisation line inside a project block is the customer.
     if (!credentialLine && !prefix.trim() && content.trim() && content.length <= 100) {
       const s = normalizeSpaces(content);
-      if (!s.startsWith('[') && !s.includes('|') && looksLikeOrgSide(s, personKeys)) {
+      if (!s.startsWith('[') && !s.includes('|') && !containsIban(s) && looksLikeOrgSide(s, personKeys)) {
+        const legalOrganizations = collectOrganizations(s);
         const isCapsOrLegal =
-          collectOrganizations(s).length > 0 ||
+          // A role sentence can contain a legal-form company ("Testmanager
+          // für Beispiel GmbH") but must not itself become the customer.
+          // Only an exact standalone organisation is eligible for this rule.
+          legalOrganizations.some((organization) => key(organization) === key(s)) ||
           DOMAIN_SHAPE_RE.test(s) ||
           /^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9 .&+\-]{2,40}$/u.test(s);
         if (isCapsOrLegal) {

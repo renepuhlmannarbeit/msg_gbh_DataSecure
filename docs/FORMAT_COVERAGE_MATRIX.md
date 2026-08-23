@@ -9,8 +9,8 @@ unabhängig vom erkannten Typ lokal und werden im öffentlichen Pilot nicht an C
 freigegeben.
 
 Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte Dateiendungen.
-Der fortsetzbare `Input`-Ablauf mit einem MCP-Aufruf pro Datei ist der Standard auf
-allen Plattformen. Windows x64 besitzt zusätzlich die native Job-Object-Grenze; die
+Der fortsetzbare `Input`-Ablauf mit einem getrennten sequenziellen lokalen Executor
+ist der Standard auf allen Plattformen; Claude-Lesen ist davon getrennt. Windows x64 besitzt zusätzlich die native Job-Object-Grenze; die
 bearbeitbare lokale Textprüfung gehört zum getrennten Companion-Engineeringpfad und
 wird im einfachen Standardablauf nicht geöffnet.
 macOS/Linux sind für TXT/Markdown/CSV/DOCX textbasiert freigegeben, halten visuelle Inhalte zurück

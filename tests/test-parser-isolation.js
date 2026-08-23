@@ -8,7 +8,16 @@ const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
 const childProcess = require('child_process');
 const { createSuite } = require('./helpers');
-const { SafeError, convertDocument, validateParserResult, nativeParserStatus } = require('../plugins/data-secure/server/runtime');
+const {
+  SafeError,
+  convertDocument,
+  validateParserResult,
+  nativeParserStatus,
+  PARSER_TIMEOUT_MS,
+  PARSER_JOB_WALL_MS,
+  PARSER_JOB_MEMORY_MIB,
+  PARSER_JOB_CPU_MS
+} = require('../plugins/data-secure/server/runtime');
 const { createContentGraph } = require('../plugins/data-secure/server/content-graph');
 
 const { testAsync, test, done, assert } = createSuite('Isolated parser process');
@@ -191,12 +200,21 @@ async function main() {
       assert.strictEqual(result.markdown, 'portable-safe');
       assert.strictEqual(invocation.command, process.execPath);
       assert.ok(invocation.args.includes('--permission'));
+      assert.ok(invocation.args.includes('--max-old-space-size=384'));
       assert.ok(invocation.args.some((item) => item.startsWith('--allow-fs-read=')));
       assert.ok(!invocation.args.includes('--allow-net'));
       assert.ok(!invocation.args.includes('--allow-child-process'));
       assert.deepStrictEqual(invocation.options.env, {});
       assert.strictEqual(typeof invocation.options.stdio[0], 'number');
     }
+  });
+
+  test('the parser budgets are explicit and internally consistent on every active platform', () => {
+    assert.strictEqual(PARSER_TIMEOUT_MS, 50_000);
+    assert.strictEqual(PARSER_JOB_WALL_MS, 45_000);
+    assert.strictEqual(PARSER_JOB_MEMORY_MIB, 768);
+    assert.strictEqual(PARSER_JOB_CPU_MS, 40_000);
+    assert.ok(PARSER_JOB_WALL_MS < PARSER_TIMEOUT_MS);
   });
 
   test('status probes the native host and blocks x64 emulation on ARM64', () => {

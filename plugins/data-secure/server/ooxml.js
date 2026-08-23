@@ -108,6 +108,48 @@ function renderWordTable(table) {
   const norm=rows.map(r=>Array.from({length:cols},(_,i)=>r[i]||''));
   return '| '+norm[0].join(' | ')+' |\n| '+norm[0].map(()=> '---').join(' | ')+' |'+(norm.length>1?'\n'+norm.slice(1).map(r=>'| '+r.join(' | ')+' |').join('\n'):'');
 }
+function escapeMarkdownTableCell(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+}
+function renderPptTable(table) {
+  // DrawingML tables have their visible cells in a:tc/a:txBody/a:t. Render
+  // them structurally instead of flattening them into slide prose.  The
+  // caller has already established that the containing slide is reachable.
+  const rows = []; let row;
+  const rowRe = /<a:tr\b[\s\S]*?<\/a:tr>/gi;
+  while ((row = rowRe.exec(table))) {
+    const cells = []; let cell;
+    const cellRe = /<a:tc\b[\s\S]*?<\/a:tc>/gi;
+    while ((cell = cellRe.exec(row[0]))) cells.push(escapeMarkdownTableCell(textTags(cell[0], 'a:t').join('\n')));
+    if (cells.length) rows.push(cells);
+  }
+  if (!rows.length) return '';
+  const cols = Math.max(...rows.map((cells) => cells.length));
+  const normalized = rows.map((cells) => Array.from({ length: cols }, (_, index) => cells[index] || ''));
+  return '| ' + normalized[0].join(' | ') + ' |\n| ' + normalized[0].map(() => '---').join(' | ') + ' |' +
+    (normalized.length > 1 ? '\n' + normalized.slice(1).map((cells) => '| ' + cells.join(' | ') + ' |').join('\n') : '');
+}
+function pptSlideTableSections(xml, sourcePart) {
+  const source = String(xml);
+  const opened = (source.match(/<a:tbl\b/gi) || []).length;
+  const closed = (source.match(/<\/a:tbl\s*>/gi) || []).length;
+  const tables = []; let match;
+  const tableRe = /<a:tbl\b[\s\S]*?<\/a:tbl>/gi;
+  while ((match = tableRe.exec(source))) {
+    const markdown = renderPptTable(match[0]);
+    // An empty but structurally valid table has no text to emit. It is not a
+    // coverage failure; a non-empty/unbalanced table is handled by the caller.
+    if (markdown) tables.push({ kind: 'table', source_part: sourcePart, markdown: `## Tabelle\n\n${markdown}` });
+  }
+  const balanced = opened === closed;
+  return {
+    tables,
+    // If a table is truncated, do not let its cells fall back into plain
+    // slide text. The whole tail is withheld until a complete parser exists.
+    prose: balanced ? source.replace(tableRe, '') : source.replace(/<a:tbl\b[\s\S]*$/i, ''),
+    issues: balanced && tables.length <= opened ? 0 : 1
+  };
+}
 function wordPartScope(xml, rootTag) {
   const escaped = String(rootTag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`<w:${escaped}\\b[^>]*>([\\s\\S]*?)<\\/w:${escaped}>`, 'i').exec(xml)?.[1] || '';
@@ -173,7 +215,26 @@ function docxMainWordRootIssueCount(entries) {
   const main = entries.get('word/document.xml');
   if (!main) return 1;
   const xml = main.toString('utf8');
-  return /<w:document\b/i.test(xml) && /<w:body\b/i.test(xml) ? 0 : 1;
+  return hasCompleteWordRoot(xml, 'document') && hasCompleteWordRoot(xml, 'body') ? 0 : 1;
+}
+function hasCompleteWordRoot(xml, rootTag) {
+  // The renderer needs a complete XML scope.  Merely finding an opening Word
+  // tag is not coverage evidence: a truncated part would otherwise render as
+  // empty and could appear safe to the downstream gate.  Empty self-closing
+  // secondary stories are valid and contain no text, so keep that case.
+  const opening = new RegExp(`<w:${rootTag}\\b[^>]*>`, 'i').exec(xml);
+  if (!opening) return false;
+  if (/\/\s*>$/u.test(opening[0])) return true;
+  return new RegExp(`</w:${rootTag}\\s*>`, 'i').test(xml.slice(opening.index + opening[0].length));
+}
+function hasCompleteXmlRoot(xml, rootTag) {
+  // XLSX has no single mandatory namespace prefix. A truncated part must not
+  // look like an empty, harmless worksheet or shared-string table.
+  const escaped = String(rootTag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const opening = new RegExp(`<(?:(?:[A-Za-z_][\\w.-]*):)?${escaped}\\b[^>]*>`, 'i').exec(xml);
+  if (!opening) return false;
+  if (/\/\s*>$/u.test(opening[0])) return true;
+  return new RegExp(`</(?:(?:[A-Za-z_][\\w.-]*):)?${escaped}\\s*>`, 'i').test(xml.slice(opening.index + opening[0].length));
 }
 function packageMainRelationshipIssueCount(entries, expectedMainPart) {
   // Every OOXML family is an OPC package. A coincidentally named main part
@@ -240,7 +301,7 @@ function docxStoryRelationshipIssueCount(entries) {
     // rendered as empty below. Treat it as a coverage failure instead of
     // silently losing a story that could contain personal data.
     const storyXml = entries.get(resolved).toString('utf8');
-    if (!new RegExp(`<w:${expectedStory.root}\\b`, 'i').test(storyXml)) {
+    if (!hasCompleteWordRoot(storyXml, expectedStory.root)) {
       issues++;
       continue;
     }
@@ -470,10 +531,11 @@ function xlsxSheetRelationshipMap(entries) {
 }
 function internalRelationshipTargets(entries, relPath, expectedType, allowedTarget) {
   const xml = entries.get(relPath)?.toString('utf8');
-  if (!xml) return { targets: new Set(), issues: 0 };
+  if (!xml) return { targets: new Set(), targetCounts: new Map(), issues: 0 };
   const base = relationshipBase(relPath);
-  if (base === null) return { targets: new Set(), issues: 1 };
+  if (base === null) return { targets: new Set(), targetCounts: new Map(), issues: 1 };
   const targets = new Set();
+  const targetCounts = new Map();
   let issues = 0;
   for (const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
     const attrs = match[1];
@@ -491,8 +553,9 @@ function internalRelationshipTargets(entries, relPath, expectedType, allowedTarg
       continue;
     }
     targets.add(target);
+    targetCounts.set(target, (targetCounts.get(target) || 0) + 1);
   }
-  return { targets, issues };
+  return { targets, targetCounts, issues };
 }
 function xlsxSupplementRelationshipCoverage(entries, sheetMeta) {
   const drawings = new Set([...entries.keys()].filter((name) => /^xl\/drawings\/[^/]+\.xml$/i.test(name)));
@@ -520,6 +583,72 @@ function xlsxSupplementRelationshipCoverage(entries, sheetMeta) {
     warnings: issues ? [`XLSX enthält ${issues} nicht eindeutig über interne Arbeitsblatt-/Drawing-Beziehungen abgesicherte Grafikstruktur(en); Freigabe wird blockiert.`] : []
   };
 }
+function xlsxCommentRelationshipCoverage(entries, sheetMeta) {
+  const comments = new Set([...entries.keys()].filter((name) => /^xl\/comments\d+\.xml$/i.test(name)));
+  const safeComments = new Set();
+  const relationshipCounts = new Map();
+  let issues = 0;
+  for (const sheet of sheetMeta) {
+    const relPath = `xl/worksheets/_rels/${path.basename(sheet.target)}.rels`;
+    const linked = internalRelationshipTargets(entries, relPath, 'comments', /^xl\/comments\d+\.xml$/i);
+    issues += linked.issues;
+    for (const target of linked.targets) {
+      relationshipCounts.set(target, (relationshipCounts.get(target) || 0) + (linked.targetCounts.get(target) || 0));
+      if (hasCompleteXmlRoot(entries.get(target)?.toString('utf8') || '', 'comments')) safeComments.add(target);
+      else issues++;
+    }
+  }
+  for (const comment of comments) {
+    if (!safeComments.has(comment) || relationshipCounts.get(comment) !== 1) issues++;
+  }
+  for (const [comment, count] of relationshipCounts) {
+    if (count !== 1) safeComments.delete(comment);
+  }
+  return {
+    safeComments,
+    warnings: issues ? [`XLSX enthält ${issues} nicht eindeutig über interne Arbeitsblattbeziehungen abgesicherte Kommentarstruktur(en); Freigabe wird blockiert.`] : []
+  };
+}
+function xlsxCoverageWarnings(entries, sheetMeta) {
+  // XLSX is intentionally not a released input format yet. Parsing it during
+  // development must still make every unrendered content-bearing part visible
+  // as a content-free warning; otherwise it could appear complete.
+  const supportedParts = [
+    /^\[Content_Types\]\.xml$/i, /^_rels\/\.rels$/i,
+    /^docProps\/(?:core|app|custom)\.xml$/i,
+    /^xl\/workbook\.xml$/i, /^xl\/_rels\/workbook\.xml\.rels$/i,
+    /^xl\/worksheets\/sheet\d+\.xml$/i, /^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/i,
+    /^xl\/sharedStrings\.xml$/i, /^xl\/comments\d+\.xml$/i,
+    /^xl\/drawings\/[^/]+\.xml$/i, /^xl\/drawings\/_rels\/[^/]+\.xml\.rels$/i,
+    /^xl\/charts\/chart\d+\.xml$/i, /^xl\/charts\/_rels\/chart\d+\.xml\.rels$/i,
+    /^xl\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i,
+    /^xl\/embeddings\/[^/]+\.(?:docx|xlsx|pptx)$/i
+  ];
+  const knownRelationshipTypes = new Set([
+    'officeDocument', 'core-properties', 'extended-properties', 'custom-properties',
+    'worksheet', 'sharedStrings', 'drawing', 'chart', 'image', 'comments', 'hyperlink', 'package'
+  ]);
+  let issues = 0;
+  for (const [name, data] of entries) {
+    if (!supportedParts.some((pattern) => pattern.test(name))) issues++;
+    if (/\.rels$/i.test(name)) {
+      for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+        const type = /\bType=["']([^"']+)["']/i.exec(match[1])?.[1]?.split('/').pop();
+        if (!type || !knownRelationshipTypes.has(type)) issues++;
+      }
+    }
+  }
+  const workbook = entries.get('xl/workbook.xml')?.toString('utf8') || '';
+  if (!hasCompleteXmlRoot(workbook, 'workbook')) issues++;
+  const shared = entries.get('xl/sharedStrings.xml')?.toString('utf8');
+  if (shared !== undefined && !hasCompleteXmlRoot(shared, 'sst')) issues++;
+  for (const sheet of sheetMeta) {
+    if (!hasCompleteXmlRoot(entries.get(sheet.target)?.toString('utf8') || '', 'worksheet')) issues++;
+  }
+  return issues
+    ? [`XLSX enthält ${issues} noch nicht vollständig abgedeckte Inhaltsstruktur(en); Freigabe wird blockiert.`]
+    : [];
+}
 function parseXlsx(entries) {
   const shared=sharedStrings(entries); const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
   const sheetMeta=[]; let issues=relationState.issues; let sm; const sr=/<sheet\b([^>]+?)\/?>(?:<\/sheet>)?/gi; while((sm=sr.exec(workbook))){const a=sm[1],name=xmlDecode(/\bname="([^"]+)"/i.exec(a)?.[1]||'Sheet'),rid=/\br:id="([^"]+)"/i.exec(a)?.[1]; const target=rid&&relationState.targets.get(rid); if(!rid||!target) { issues++; continue; } sheetMeta.push({name,target});}
@@ -529,11 +658,13 @@ function parseXlsx(entries) {
     const parts=[`# Arbeitsblatt: ${s.name}`]; if(rows.length){const cols=Math.min(100,Math.max(...rows.map(r=>r.length)));const norm=rows.slice(0,10000).map(r=>Array.from({length:cols},(_,i)=>String(r[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>')));parts.push('| '+norm[0].join(' | ')+' |');parts.push('| '+norm[0].map(()=> '---').join(' | ')+' |');for(const r of norm.slice(1))parts.push('| '+r.join(' | ')+' |');if(rows.length>10000)parts.push('> Weitere Zeilen wurden aus Sicherheitsgründen nicht automatisch gerendert.');} sections.push({kind:'table',source_part:s.target,markdown:parts.join('\n\n')});
   }
   const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, sheetMeta);
+  const commentCoverage = xlsxCommentRelationshipCoverage(entries, sheetMeta);
   for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
   for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
+  for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
   sections.push(...metadataSections(entries));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'xl', 'XLSX', supplementCoverage.safeDrawings);
-  const warnings=[...customMetadataWarnings(entries), ...imageCoverage.warnings, ...supplementCoverage.warnings];
+  const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings];
   if(rootIssues)warnings.push(`XLSX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(issues)warnings.push(`XLSX enthält ${issues} nicht eindeutig über eine interne Arbeitsblattbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(formulaCells)warnings.push(`XLSX enthält ${formulaCells} Formelzelle(n); Freigabe wird bis zur vollständigen Formelcoverage blockiert.`);
@@ -569,18 +700,146 @@ function pptChartRelationshipCoverage(entries, slides) {
     warnings: issues ? [`PPTX enthält ${issues} nicht eindeutig über interne Folienbeziehungen abgesicherte Diagrammstruktur(en); Freigabe wird blockiert.`] : []
   };
 }
+function pptNotesRelationshipCoverage(entries, slides) {
+  const notes = new Set([...entries.keys()].filter((name) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/i.test(name)));
+  const safeNotes = new Set();
+  const relationshipCounts = new Map();
+  let issues = 0;
+  for (const slide of slides) {
+    const relPath = `ppt/slides/_rels/${path.basename(slide)}.rels`;
+    const linked = internalRelationshipTargets(entries, relPath, 'notesSlide', /^ppt\/notesSlides\/notesSlide\d+\.xml$/i);
+    issues += linked.issues;
+    for (const target of linked.targets) {
+      relationshipCounts.set(target, (relationshipCounts.get(target) || 0) + (linked.targetCounts.get(target) || 0));
+      if (hasCompleteXmlRoot(entries.get(target)?.toString('utf8') || '', 'notes')) safeNotes.add(target);
+      else issues++;
+    }
+  }
+  for (const note of notes) {
+    if (!safeNotes.has(note) || relationshipCounts.get(note) !== 1) issues++;
+  }
+  for (const [note, count] of relationshipCounts) {
+    if (count !== 1) safeNotes.delete(note);
+  }
+  return {
+    safeNotes,
+    warnings: issues ? [`PPTX enthält ${issues} nicht eindeutig über interne Folienbeziehungen abgesicherte Notizstruktur(en); Freigabe wird blockiert.`] : []
+  };
+}
+function pptMasterLayoutCoverage(entries, slides) {
+  const layouts = new Set([...entries.keys()].filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i.test(name)));
+  const masters = new Set([...entries.keys()].filter((name) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/i.test(name)));
+  const candidateLayouts = new Set(), safeLayouts = new Set(), safeMasters = new Set(), layoutMasters = new Map();
+  let issues = 0;
+  for (const slide of slides) {
+    const linked = internalRelationshipTargets(entries, `ppt/slides/_rels/${path.basename(slide)}.rels`, 'slideLayout', /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i);
+    issues += linked.issues;
+    // A layout may be shared by many slides, but each individual slide has one
+    // unambiguous layout edge. Do not mistake normal sharing for ambiguity.
+    if (!linked.targets.size) {
+      if (layouts.size) issues++;
+      continue;
+    }
+    if (linked.targets.size !== 1 || [...linked.targetCounts.values()].some((count) => count !== 1)) { issues++; continue; }
+    const [target] = linked.targets;
+    if (hasCompleteXmlRoot(entries.get(target)?.toString('utf8') || '', 'sldLayout')) candidateLayouts.add(target); else issues++;
+  }
+  for (const layout of candidateLayouts) {
+    const linked = internalRelationshipTargets(entries, `ppt/slideLayouts/_rels/${path.basename(layout)}.rels`, 'slideMaster', /^ppt\/slideMasters\/slideMaster\d+\.xml$/i);
+    issues += linked.issues;
+    // A master is normally shared by several layouts; uniqueness is required
+    // on this layout's outgoing relationship, not across the whole package.
+    if (linked.targets.size !== 1 || [...linked.targetCounts.values()].some((count) => count !== 1)) { issues++; continue; }
+    const [target] = linked.targets;
+    if (hasCompleteXmlRoot(entries.get(target)?.toString('utf8') || '', 'sldMaster')) {
+      layoutMasters.set(layout, target);
+    } else issues++;
+  }
+  const presentation = internalRelationshipTargets(entries, 'ppt/_rels/presentation.xml.rels', 'slideMaster', /^ppt\/slideMasters\/slideMaster\d+\.xml$/i);
+  issues += presentation.issues;
+  for (const [layout, master] of layoutMasters) {
+    if (presentation.targetCounts.get(master) === 1) {
+      safeLayouts.add(layout);
+      safeMasters.add(master);
+    }
+  }
+  for (const layout of layouts) if (!safeLayouts.has(layout)) issues++;
+  for (const master of masters) {
+    if (!safeMasters.has(master) || presentation.targetCounts.get(master) !== 1) issues++;
+  }
+  for (const master of [...safeMasters]) if (presentation.targetCounts.get(master) !== 1) safeMasters.delete(master);
+  return { safeLayouts, safeMasters, warnings: issues ? [`PPTX enthält ${issues} nicht eindeutig über interne Folien-/Layout-/Master-Beziehungen abgesicherte Vorlagenstruktur(en); Freigabe wird blockiert.`] : [] };
+}
+function pptxCoverageWarnings(entries, slides, safeNotes, masterCoverage) {
+  // Like XLSX, PPTX remains a non-release format. This guard makes omitted
+  // masters, layouts, comments, embedded objects and unknown relationships
+  // visible to the local gate instead of letting rendered slide text imply
+  // complete coverage.
+  const supportedParts = [
+    /^\[Content_Types\]\.xml$/i, /^_rels\/\.rels$/i,
+    /^docProps\/(?:core|app|custom)\.xml$/i,
+    /^ppt\/presentation\.xml$/i, /^ppt\/_rels\/presentation\.xml\.rels$/i,
+    /^ppt\/slides\/slide\d+\.xml$/i, /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/i,
+    /^ppt\/notesSlides\/notesSlide\d+\.xml$/i,
+    /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i, /^ppt\/slideLayouts\/_rels\/slideLayout\d+\.xml\.rels$/i,
+    /^ppt\/slideMasters\/slideMaster\d+\.xml$/i, /^ppt\/slideMasters\/_rels\/slideMaster\d+\.xml\.rels$/i,
+    /^ppt\/charts\/chart\d+\.xml$/i, /^ppt\/charts\/_rels\/chart\d+\.xml\.rels$/i,
+    /^ppt\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i,
+    /^ppt\/embeddings\/[^/]+\.(?:docx|xlsx|pptx)$/i
+  ];
+  const knownRelationshipTypes = new Set([
+    'officeDocument', 'core-properties', 'extended-properties', 'custom-properties',
+    'slide', 'notesSlide', 'slideLayout', 'slideMaster', 'chart', 'image', 'hyperlink', 'package'
+  ]);
+  let issues = 0;
+  for (const [name, data] of entries) {
+    if (!supportedParts.some((pattern) => pattern.test(name))) issues++;
+    if (/\.rels$/i.test(name)) {
+      for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
+        const type = /\bType=["']([^"']+)["']/i.exec(match[1])?.[1]?.split('/').pop();
+        if (!type || !knownRelationshipTypes.has(type)) issues++;
+      }
+    }
+  }
+  const presentation = entries.get('ppt/presentation.xml')?.toString('utf8') || '';
+  if (!hasCompleteXmlRoot(presentation, 'presentation')) issues++;
+  for (const slide of slides) {
+    if (!hasCompleteXmlRoot(entries.get(slide)?.toString('utf8') || '', 'sld')) issues++;
+  }
+  for (const note of safeNotes) {
+    if (!hasCompleteXmlRoot(entries.get(note)?.toString('utf8') || '', 'notes')) issues++;
+  }
+  for (const layout of masterCoverage.safeLayouts) if (!hasCompleteXmlRoot(entries.get(layout)?.toString('utf8') || '', 'sldLayout')) issues++;
+  for (const master of masterCoverage.safeMasters) if (!hasCompleteXmlRoot(entries.get(master)?.toString('utf8') || '', 'sldMaster')) issues++;
+  return issues
+    ? [`PPTX enthält ${issues} noch nicht vollständig abgedeckte Inhaltsstruktur(en); Freigabe wird blockiert.`]
+    : [];
+}
 function parsePptx(entries) {
-  const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
+  const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,tableIssues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
   const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;while((m=sr.exec(presentation))){const id=/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1],target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target);}
   if(!presentation||!slides.length)issues++;
+  const notesCoverage = pptNotesRelationshipCoverage(entries, slides);
+  const masterCoverage = pptMasterLayoutCoverage(entries, slides);
   const sections=[];
-  for(const s of slides){const n=slideNumber(s),xml=entries.get(s).toString('utf8'),texts=textTags(xml,'a:t');const slide=[`# Folie ${n}`];if(texts.length)slide.push(texts.join('\n\n'));sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');if(notes){const nt=textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});} }
+  for(const s of slides){
+    const n=slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s),texts=textTags(tableCoverage.prose,'a:t'),slide=[`# Folie ${n}`];
+    tableIssues+=tableCoverage.issues;
+    if(texts.length)slide.push(texts.join('\n\n'));
+    sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
+    sections.push(...tableCoverage.tables);
+    const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');
+    if(notes&&notesCoverage.safeNotes.has(notes)){const nt=textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
+  }
   const chartCoverage = pptChartRelationshipCoverage(entries, slides);
   for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t'));if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
   sections.push(...metadataSections(entries));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
-  const warnings=[...customMetadataWarnings(entries), ...imageCoverage.warnings, ...chartCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, slides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(rootIssues)warnings.push(`PPTX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  if(tableIssues)warnings.push(`PPTX enthält ${tableIssues} nicht vollständig strukturierte DrawingML-Tabelle(n); Freigabe wird blockiert.`);
   return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'ppt/media/', imageCoverage.safeTargets), warnings };
 }
 function genericSecurityWarnings(entries) {

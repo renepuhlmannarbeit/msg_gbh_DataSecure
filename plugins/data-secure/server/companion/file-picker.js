@@ -10,6 +10,7 @@ const { uiProcessEnvironment } = require('./ui-process-policy');
 const MAX_SOURCE_BYTES = LIMITS.MAX_INPUT_BYTES;
 const MAX_SELECTED_SOURCES = LIMITS.MAX_BATCH_FILES;
 const PICKER_CANCELLED = '__DATASECURE_PICKER_CANCELLED__';
+const PICKER_TITLE = 'Dateien lokal für Claude vorbereiten – max. 100 Dateien / 500 MB';
 const SOURCE_TYPES = Object.freeze({
   '.pdf': 'pdf',
   '.docx': 'docx',
@@ -63,7 +64,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
     const script = [
       'Add-Type -AssemblyName System.Windows.Forms',
       '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
-      "$dialog.Title = 'Datei für Claude vorbereiten'",
+      `$dialog.Title = '${PICKER_TITLE}'`,
       `$dialog.Filter = 'Unterstützte Dateien|${windowsFilter}'`,
       `$dialog.Multiselect = $${multiple ? 'true' : 'false'}`,
       'try {',
@@ -84,7 +85,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
   if (platform === 'darwin') {
     const script = multiple
       ? [
-          `set selectedFiles to choose file with prompt "Datei für Claude vorbereiten" of type ${macTypeFilter} with multiple selections allowed`,
+          `set selectedFiles to choose file with prompt "${PICKER_TITLE}" of type ${macTypeFilter} with multiple selections allowed`,
           'set selectedPaths to {}',
           'repeat with selectedFile in selectedFiles',
           'set end of selectedPaths to POSIX path of selectedFile',
@@ -92,7 +93,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
           "set AppleScript's text item delimiters to linefeed",
           'return selectedPaths as text'
         ].join('\n')
-      : `POSIX path of (choose file with prompt "Datei für Claude vorbereiten" of type ${macTypeFilter})`;
+      : `POSIX path of (choose file with prompt "${PICKER_TITLE}" of type ${macTypeFilter})`;
     return [
       {
         command: '/usr/bin/osascript',
@@ -101,8 +102,8 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
     ];
   }
   if (platform === 'linux') {
-    const zenityArgs = ['--file-selection', '--title=Datei für Claude vorbereiten'];
-    const kdialogArgs = ['--getopenfilename', '.', `Unterstützte Dateien (${unixFilter})`];
+    const zenityArgs = ['--file-selection', `--title=${PICKER_TITLE}`];
+    const kdialogArgs = ['--getopenfilename', '.', `Unterstützte Dateien (${unixFilter})`, PICKER_TITLE];
     if (multiple) {
       // Both helpers return one selected path per line. Do not rely on a
       // platform default: without these flags a 100-file batch silently turns
@@ -209,6 +210,7 @@ module.exports = {
   MAX_SOURCE_BYTES,
   MAX_SELECTED_SOURCES,
   PICKER_CANCELLED,
+  PICKER_TITLE,
   SOURCE_TYPES,
   pickerCommands,
   validateSelectedPath,

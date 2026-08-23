@@ -47,11 +47,20 @@ async function main() {
   });
 
   await testAsync('supervisor launches the real child with authenticated inherited stdio', async () => {
-    const companion = launchCompanion();
+    let invocation;
+    const companion = launchCompanion({
+      spawn(command, args, options) {
+        invocation = { command, args, options };
+        return require('child_process').spawn(command, args, options);
+      }
+    });
     try {
       const ready = await companion.ready;
       assert.strictEqual(ready.transport, 'inherited_stdio');
       assert.strictEqual(ready.network_listener, false);
+      assert.strictEqual(invocation.options.shell, false);
+      assert.strictEqual(invocation.options.windowsHide, true);
+      assert.deepStrictEqual(invocation.options.stdio, ['pipe', 'pipe', 'ignore', 'pipe']);
       const capabilities = await companion.request('capabilities', {});
       assert.strictEqual(capabilities.session_id, ready.session_id);
       assert.strictEqual(capabilities.model_authority, false);

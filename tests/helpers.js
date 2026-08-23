@@ -1,7 +1,8 @@
 'use strict';
 
-// Minimal test harness. The project deliberately ships without npm
-// dependencies, so the tests cannot use a runner from the registry either.
+// Minimal test harness. The product runtime deliberately ships without npm
+// dependencies. Tests may use explicitly pinned, dev-only differential oracles,
+// but never a registry-provided test runner.
 // Every test file collects cases, prints one line per case and exits non-zero
 // on the first failure so CI stops at the offending assertion.
 

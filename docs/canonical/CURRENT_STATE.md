@@ -54,6 +54,34 @@ Claude-Code-Host-Zielpfad geführt; ein Linux-Desktop-Plugin wird weder beworben
 als abgenommen ausgegeben. Rest bleibt der konkrete frische Installationsspike samt
 installationsfreier Node-Auflösung.
 
+Review 23.08.2026: Die Plugin-`.mcp.json` startet derzeit `node`. Dass dies auf dem
+Entwicklerrechner funktioniert, belegt keinen ZIP-/Marketplace-Start auf einem
+frischen Konto ohne System-Node; die ausdrücklich dokumentierte eingebaute
+Node-Runtime des MCPB darf nicht auf den Plugin-ZIP übertragen werden. Zusätzlich
+sind die Herstellerangaben zu lokalem MCP in Cowork-Web-/Mobil-/Cloud-Sitzungen
+widersprüchlich. Deshalb ist nur ein erfolgreicher `privacy_status` in der aktuellen
+Sitzung ein positives Hostgate. BL-010.7 und BL-010.8 sind P0; Cowork, ZIP und
+Marketplace bleiben bis zu ihren Fresh-Install-/Negativmatrizen unbelegt.
+
+`RUNTIME_START_MATRIX_V1.json` macht diese Grenze maschinenlesbar: MCPB nutzt laut
+offizieller Desktop-Extension-Dokumentation die eingebaute Node-Runtime ohne
+Nutzerinstallation; gewöhnliches Plugin-ZIP/Marketplace darf daraus keine Garantie
+ableiten. Der Node-SEA-Fallback ist technisch plausibel, bleibt aber ein
+Architekturspike: Node 22 verlangt zielabhängige Binärinjektion und die aktuelle
+Standard-Plugin-MCP-Konfiguration dokumentiert keinen OS-Selektor für einen einzigen
+universellen Plugin-Befehl. Vier Tests verhindern Nutzerinstallationen,
+Runtime-Downloads, stillen MCPB-Wechsel, drei sichtbare OS-Plugins und vorschnelle
+SEA-Freigaben.
+
+Der Hostvertrag ist inzwischen zusätzlich in `HOST_MATRIX_V1.json` und
+`HOST_MATRIX_V1.md` versioniert. Direkte Prompts und der Anonymisierungs-Skill
+stoppen vor Datei-/Ordnerzugriff, wenn `privacy_status` in genau der aktuellen
+Sitzung nicht erfolgreich ist; Skill-/Plugin-Sichtbarkeit, Desktop-App, Upload,
+Computer-Use, allgemeines Dateisystem und andere Connectoren gelten nicht als
+Nachweis oder Ersatz. Vier Evalfälle prüfen Web, Mobil, Cloud-/Scheduled und einen
+getrennten Desktop-Connector. Damit ist die Policy automatisiert belegt, nicht aber
+der echte Hostlebenszyklus; die beobachtete Negativmatrix bleibt offen.
+
 ## BL-011 – Fortsetzbarer Job Store
 
 Status: **teilweise**
@@ -66,22 +94,38 @@ bis zu 100 Dateien mit zusammen höchstens 500 MB. Eine atomare benutzerlokale
 Prozesssperre erzwingt jetzt genau einen verarbeitenden Stapel, auch über getrennte
 Serverprozesse. Unterbrechungen während einer Datei werden als retryfähig gespeichert
 und nur nach ausdrücklicher Fortsetzung erneut geplant; erfolgreiche Dateien werden
-nicht wiederholt. Ein nachgelagerter Fehler beim Löschen einer bereits veröffentlichten
-privaten Arbeitskopie kann diese Freigabe nicht rückwirkend in einen Stopp verwandeln;
+nicht wiederholt. Freigegebene und sicher gestoppte Positionen benötigen ihre
+versiegelte Quelle nach lokalem Mapping-Commit nicht mehr: Die private Arbeitskopie
+wird sofort nur als reguläre, erwartete Datei entfernt. Ein nachgelagerter Löschfehler
+kann weder eine Freigabe rückwirkend in einen Stopp verwandeln noch Originale berühren;
 die Kopie bleibt ausschließlich lokal zur späteren Bereinigung markiert und wird bei
-jedem weiteren sicheren Batch-Aufruf sowie beim Start erneut nur als reguläre Datei
-bereinigt. Der Batch verarbeitet versiegelte private Arbeitskopien und lässt Originale
+jedem weiteren sicheren Batch-Aufruf sowie beim Start erneut geprüft. Der Batch
+verarbeitet bis dahin versiegelte private Arbeitskopien und lässt Originale
 unverändert. Ein atomar veröffentlichtes Paket wird über die vorab zufällige
 Batch-Item-ID, Manifest und Markdown-Hash wiedererkannt; bis zur ausdrücklichen
 MCP-Übergabebestätigung wird genau dieses Paket erneut angeboten statt die Quelle
-erneut zu verarbeiten. Rest: weitere phasenfeine Checkpoints; terminale
-Sicherheitsstopps bleiben bewusst terminal.
+erneut zu verarbeiten. Für jeden irreversiblen Verarbeitungsschritt wird zusätzlich
+ein fester inhaltsfreier Checkpoint (`sealed`, private Kopie, Extraktion,
+Textprüfung, Paketverifikation, Übergabe oder terminaler Zustand) atomar
+persistiert und nicht über MCP ausgegeben. Terminale Sicherheitsstopps bleiben
+bewusst terminal.
+
+Manipulation oder Verlust einer versiegelten Arbeitskopie invalidiert den offenen
+Snapshot fail-closed: Alle noch offenen Positionen werden lokal als derselbe
+technische Stopp dokumentiert und ihre privaten Kopien bereinigt. Die unveränderten
+Originale bleiben dabei außerhalb dieses Fehlerpfads.
 
 Die MCP-seitige Fortschrittsantwort enthält außer Zählern jetzt auch eine neutrale
 Stapelphase, die nächste Positionsnummer und einen terminalen Fortschrittsprozentsatz.
 Fortsetzbare und noch nicht an Claude bestätigte Pakete zählen dafür bewusst nicht als
 erledigt; Namen und Pfade bleiben weiterhin ausgeschlossen. Eine lokale sichtbare
 Fortschrittsanzeige bleibt offen.
+
+Nach mindestens drei bereits lokal gemessenen Verarbeitungsdauern ergänzt dieselbe
+Antwort eine konservative Restzeit für rein automatisch verbleibende Positionen. Sie
+verwendet den Median der lokalen Dauern, enthält keine Quellidentität und wird bei
+offener manueller Prüfung oder einer erforderlichen ausdrücklichen Fortsetzung nicht
+ausgegeben. Eine native Live-Anzeige dieser inhaltsfreien Information bleibt offen.
 
 Ein zusätzlicher `privacy_status`-Zähler zeigt ausschließlich die Anzahl noch
 bereinigungsbedürftiger privater Arbeitskopien. Er enthält keine Batch- oder
@@ -92,6 +136,11 @@ aktiviert: Sie benötigt einen gleichwertig getesteten OS-Benutzerschutz für DP
 Keychain und Secret Service. Es gibt keinen Klartext- oder Eigenverschlüsselungs-
 Fallback; bis zur Drei-OS-Evidenz bleibt die bestehende Pseudonymisierung pro
 Dokument begrenzt.
+
+Ein unabhängiges Review am 23.08.2026 hat diesen Punkt als Release-Sperre
+bestätigt: Der vorhandene Keyring-/Registry-Pilot ist absichtlich noch nicht in
+den aktiven Batchpfad verdrahtet. Eine Aktivierung ist erst zulässig, wenn der
+vollständige, offline geprüfte Drei-OS-Runtime-Bundle-Nachweis vorliegt.
 
 Für freigegebene und terminal gestoppte Batch-Dateien entsteht zusätzlich eine
 ausschließlich lokale, dauerhafte UTF-8-Mapping-CSV unter `DataSecure-Export`; ein
@@ -116,8 +165,37 @@ Verschlüsselte, ZIP64-, beschädigte und übergroße Container werden ohne Entp
 und ohne neue Arbeitskopie abgewiesen; die vollständige Parser-, Header- und
 CRC-Prüfung bleibt der nachgelagerte, maßgebliche Freigabeschritt.
 
+Der aktive Parserpfad hat feste und getestete Ressourcenbudgets. Jede Plattform
+startet Node mit höchstens 384 MiB V8-Heap und der aufrufende Prozess beendet einen
+Parser nach 50 Sekunden. Der verifizierte Windows-Launcher erzwingt zusätzlich
+768 MiB Prozessspeicher, 40 Sekunden CPU und 45 Sekunden Wallclock; das äußere
+Zeitlimit liegt absichtlich danach, um die native Ressourcenmeldung zu erhalten.
+Die praktische Ressourcenabnahme auf allen Zielplattformen bleibt offen.
+
+Review-Fortschritt 23.08.2026: Die private `batches`-Wurzel sowie `audit`, `jobs` und
+die Datenschutzunterordner verwenden jetzt einen zentralen, bei jedem Zugriff erneut
+aufgerufenen Helfer für literale Kindnamen, Linkfreiheit, kanonische Containment-,
+Geräte- und Inode-Prüfung. Ein echter Windows-Junction-Test stoppt vor Listing/Kopie
+und lässt das externe Ziel unberührt. Drei zusätzliche reale lokale Gegenproben
+belegen den Stopp bei Inode-Austausch direkt vor Snapshot, bei ersetzter versiegelter
+Kopie vor Recovery sowie bei einem verschachtelten Junction/Symlink vor rekursivem
+Discard; gerettete und externe Daten bleiben unverändert. Sonstige
+Win32-Reparse-Typen, die echte macOS-/Linux-Matrix und die letzte nur handle-relativ
+schließbare Race-Lücke beim rekursiven OS-Delete bleiben offen. V8-Heap
+und Parent-Timeout auf macOS/Linux sind außerdem weiterhin keine harten Grenzen für
+native/`Buffer`-Allokationen und Prozessbäume. Der bewährte POSIX-OCR-Supervisor ist
+die vorgesehene Wiederverwendungsbasis für BL-011.9. Sein Quellpilot besitzt jetzt
+zusätzlich harte Adressraum-, Daten-, Dateigrößen- und Dateideskriptorlimits sowie
+einen festen maschinenlesbaren Vertragsmarker. Der manuelle OCR-Workflow kompiliert
+ihn auf macOS/Linux mit `-Werror` und prüft den Marker. Neue Zielbinärhashes, echte
+adversariale OS-Proben und die Einbindung in den allgemeinen Parserpfad fehlen noch;
+deshalb bleibt die produktive POSIX-Aussage unverändert geschlossen.
+
 Abgelaufene private Batch-Snapshots werden beim Start und zusätzlich in einer
-lokalen sechs-stündigen Wartung bereinigt. Beide Wege achten auf die globale
+lokalen sechs-stündigen Wartung bereinigt. Der periodische Lauf ist auf ein
+sicher begrenztes Intervall festgelegt, hält den Server nicht künstlich offen,
+isoliert lokale Wartungsfehler und wird beim geregelten Shutdown genau einmal
+gestoppt. Beide Wege achten auf die globale
 Verarbeitungssperre: Existiert ein lebender Owner, wird nichts am Batchzustand oder
 an Arbeitskopien verändert. Das verhindert insbesondere, dass eine parallele zweite
 Serverinstanz einen aktiven `processing`-Schritt als Absturz klassifiziert.
@@ -152,6 +230,14 @@ stoppen sicher. Es gibt zudem lokale Abschlusszähler; Abbruch und Timeout stopp
 sicher. Der servergebundene Input-Ordner-Batch nutzt bei Zertifikats-/Organisations-
 Mehrdeutigkeiten nun ebenfalls diese lokale Entscheidung; er persistiert nur den
 terminalen Status und festen Fehlercode, niemals Entwurf, Fundstelle oder Entscheidung.
+
+Review-Korrektur 23.08.2026: Der gefundene macOS-Fehler – ein nicht angebotener
+Cancel-Button in vertagbaren Review-/Finaldialogen – ist im Quelltext behoben.
+BL-012.8 erzeugt Fundstellen-, Gruppen- und Finaldialog aus einem validierten
+Darwin-Aktionsvertrag mit höchstens drei Buttons; Escape/Schließen wird sicher als
+Vertagung oder Abbruch behandelt. Unit-, Batchreview- und UI-Policy-Tests sind grün.
+Bis zum echten `osascript`- und Fresh-Install-Nachweis bleibt dies Implementierung,
+keine macOS-Review- oder Pilotfreigabe.
 Mehrdatei-Stapel analysieren zunächst alle Positionen. Nach Abschluss des
 Reststapels rekonstruiert `review_deferred_document_batch` die offenen
 Fundstellen ausschließlich aus den versiegelten Arbeitskopien, ruft den lokalen
@@ -178,6 +264,12 @@ Windows Forms, AppleScript sowie Zenity mit KDialog-Fallback zeigen nur
 Batch-Zähler. Das ist noch nicht der fachliche Abschlussdialog und erteilt keine
 Freigabe.
 
+Der serverseitige Batchfortschritt besitzt zusätzlich kurze, inhaltsfreie
+Anwendertexte und eine feste nächste Aktion: Verarbeitung, sichere Bereitstellung,
+Fortsetzung, lokale Prüfung oder lokale Übersicht. Der Skill verwendet diese statt
+interner Phasencodes. Eine sichtbare native Fortschrittsansicht und die vereinfachte
+Start-/Ergebnisoberfläche bleiben offen.
+
 Die native macOS-Auswahl filtert wie Windows und Linux auf die aktuelle
 RC30-Allowlist TXT/Markdown/CSV/DOCX. Unabhängig davon prüft der Companion jede Auswahl weiterhin
 auf Erweiterung, reguläre Datei, Symlink und Größenvertrag; der sichtbare Filter
@@ -196,7 +288,8 @@ offene Positionen im NFC-/LF-normalisierten UTF-16-Markdown und bindet jedes Bil
 dupliziert keinen Rohtext. Doppelte IDs, unbekannte Felder oder Knotentypen,
 Traversal-Parts, ungültige Positionen und unvollständige Asset-Abdeckung stoppen.
 Für OOXML zeigen Abschnittsknoten jetzt auf Hauptteil, Kopf-/Fußzeilen, Kommentare,
-Fuß-/Endnoten, Arbeitsblätter, Diagramme, Zeichnungstext, Folien und Notizen.
+Fuß-/Endnoten, Arbeitsblätter, Diagramme, Zeichnungstext, Folien, Notizen,
+eindeutig erreichte Layouts und Master sowie PPTX-DrawingML-Tabellen.
 `docProps/core.xml`, `docProps/app.xml` und `docProps/custom.xml` werden als
 eigene Metadatenknoten in das zu prüfende Markdown aufgenommen; persönliche
 Office-Eigenschaften werden dadurch nicht mehr still ausgelassen. Die
@@ -229,7 +322,7 @@ Companion laden vor privatem Code dieselbe packaged `network-deny.cjs`; sie sper
 HTTP(S), TCP/TLS, DNS, UDP, HTTP/2, Fetch, WebSocket und Listener mit einem festen
 inhaltsfreien Fehler. Der Parser behält zusätzlich sein Node-Berechtigungsmodell.
 Drei reale Negativtests sind lokal auf Windows x64 grün und laufen über `npm test`
-auch in der vorhandenen macOS-/Linux-CI-Matrix. Ein weiterer Fünfer-Testvertrag
+auch in der manuell gestarteten macOS-/Linux-Abnahmematrix. Ein weiterer Fünfer-Testvertrag
 klassifiziert alle nativen UI-Prozesse, entfernt Proxy-/Cloud-/Node-Steuerung aus
 ihrem Environment, erzwingt `shell: false`, belegt Rohtexttransport ausschließlich
 per `stdin` zur Windows-Textprüfung und verbietet Netzwerkprimitive in den festen
@@ -256,8 +349,9 @@ literal Markdown, PII in horizontalen Tabellen, UTF-8/Graph und große Tabellen 
 Der lokale Parser erzeugt nur Markdown, niemals ein Spreadsheet. Gateway- und Companion-End-to-End-
 Tests belegen für `.md` und `.csv` denselben isolierten Privacy-Paketpfad wie für TXT; externe Markdown-
 Referenzen werden nicht geladen, CSV-Zellen nie ausgeführt, sondern jeweils als Text geprüft. Alle weiteren
-nicht freigegebenen Formate stoppen vor Claim, Output und Reviewkopie. Rest:
-praktische MD-/CSV-Drei-OS-Abnahme sowie der gepinnte Papa-Parse-Differentialvergleich.
+nicht freigegebenen Formate stoppen vor Claim, Output und Reviewkopie. Papa Parse
+5.5.3 ist als exakt gelocktes reines Testorakel eingebunden und vergleicht 180
+eindeutige CSV-Dialekt-/Quote-Fälle. Rest: praktische MD-/CSV-Drei-OS-Abnahme.
 
 ## BL-022 – DOCX, XLSX und PPTX
 
@@ -270,14 +364,25 @@ Endnoten inzwischen strukturerhaltend, einschließlich Tabs und Umbrüchen; auch
 Personendaten erreichen nachweislich den Privacy-Gate. Die Paketwurzel muss genau eine
 interne `officeDocument`-Beziehung auf `word/document.xml` enthalten; sekundäre
 DOCX-Stories müssen zusätzlich über passende interne Beziehungen von
-`word/document.xml` erreichbar sein. Verwaiste, fehlende, externe, falsche oder
-mehrdeutige Ziele blockieren. Rest: vollständige Relationship-Matrix für
-DOCX sowie XLSX/PPTX produktiv freigeben und Formeln, Charts, alle relevanten
-Beziehungen und eingebettete Dokumente positiv abdecken.
+`word/document.xml` erreichbar sein. Verwaiste, fehlende, abgeschnittene, externe,
+falsche oder mehrdeutige Ziele blockieren. Die Negativmatrix prüft den passenden
+Wurzelvertrag für jede zulässige Neben-Story (`header`, `footer`, `comments`,
+`footnotes`, `endnotes`) inhaltsfrei. Rest: praktische Interoperabilitätsabnahme
+mit realen Word-Generatoren, die bewusst gesperrten Story-Typen sowie XLSX/PPTX
+produktiv freigeben und Formeln, Kommentare, Charts, Master-/Layout-Inhalte, alle relevanten Beziehungen und eingebettete
+Dokumente positiv abdecken.
 
-Für PPTX ist die Folien- und Notiz-Reachability als Vorarbeit gehärtet: Nur intern
-von `presentation.xml` referenzierte Folien und intern von diesen Folien referenzierte
-Notizen werden gerendert. `ppt/media/` benötigt zusätzlich eine interne
+Zusätzlich vergleicht eine reine, exakt gelockte Entwicklungsabhängigkeit Mammoth
+1.12.1 24 reguläre Hauptteil-/Tabellen-DOCX gegen die lokale Extraktion. Das ist
+kein Freigabebeweis für weitere Word-Stories oder reale Word-Generatoren und wird
+nicht in Plugin oder MCPB ausgeliefert.
+
+Für PPTX ist die Folien-, Notiz- und Vorlagen-Reachability als Vorarbeit gehärtet: Nur intern
+von `presentation.xml` referenzierte Folien, intern von diesen Folien referenzierte
+Notizen sowie über `slide` → `slideLayout` → `slideMaster` eindeutig erreichte
+Layout-/Mastertexte werden gerendert. Ein Master muss zusätzlich genau einmal aus
+`presentation.xml` referenziert sein; normale Mehrfachnutzung eines Layouts oder Masters
+bleibt zulässig. `ppt/media/` benötigt zusätzlich eine interne
 `image`-Relationship; verwaiste oder externe Grafikbytes werden nicht einmal in den
 lokalen Assetpfad gegeben. Das ist keine PPTX-Freigabe.
 
@@ -306,9 +411,10 @@ exakt eine interne `officeDocument`-Relationship auf `xl/workbook.xml` beziehung
 bleiben inhaltsfrei gesperrt; dies erweitert keine Formatfreigabe.
 
 Die DOCX-Negativmatrix umfasst zusätzlich fehlende, externe, falsche und doppelte
-Root-`officeDocument`-Beziehungen sowie Parent-Traversal, externe Ziele und
-Typ-Ziel-Mismatches für sekundäre Stories. Alle Fälle bleiben fail-closed und ihre
-Warnungen enthalten weder Story-Text noch Partnamen oder Zielpfade.
+Root-`officeDocument`-Beziehungen sowie Parent-Traversal, externe Ziele,
+Typ-Ziel-Mismatches und abgeschnittene Wurzelbereiche für sekundäre Stories. Alle
+Fälle bleiben fail-closed und ihre Warnungen enthalten weder Story-Text noch
+Partnamen oder Zielpfade.
 
 `word/media/` ist keine implizite Bild-Quelle mehr: Nur eine passende interne
 `image`-Relationship führt ein Bild in den lokalen Sichtprüfpfad. Orphan-Medien,
@@ -469,9 +575,11 @@ gesperrt.
 Status: **teilweise**
 
 Vorhanden: Profil `auto`, mehrere Fachprofile, kontextbezogene PII-Engine und
-deterministische Pseudonyme innerhalb eines einzelnen Dokuments. Rest: automatische
-Profilentscheidung pro Datei im gemischten Stapel und ein flüchtiger gemeinsamer
-Pseudonymkontext über alle Stapeldokumente.
+deterministische Pseudonyme innerhalb eines einzelnen Dokuments. Ein realer
+Vier-Datei-Batch belegt jetzt zusätzlich die unabhängige automatische Wahl von
+`contract`, `personnel_profile`, `applicant` und `customer` innerhalb desselben
+Stapels samt Identifikatorentfernung und Fachinhaltserhalt. Rest: ein produktiv
+aktivierter flüchtiger gemeinsamer Pseudonymkontext über alle Stapeldokumente.
 
 Zielvertrag ergänzt: `contracts/BATCH_PSEUDONYM_V1.md` definiert eine über den
 OS-Benutzerschutz gesicherte HMAC-Ableitung ohne persistente Rohwert-Mappingtabelle,
@@ -497,6 +605,16 @@ Diagnose erhalten ihn nicht. Der Batchpfad erzeugt oder persistiert ihn wegen de
 fehlenden Drei-OS-Evidenz weiterhin nicht. `test-batch-pseudonym-registry.js` prüft
 diese Grenze.
 
+`server/batch-pseudonym-context.js` implementiert nun zusätzlich den noch
+deaktivierten Lebenszyklus zwischen Store und Registry: atomare Provisionierung mit
+Rollbackversuch, Laden pro Verarbeitungsschritt, sichere `finally`-Bereinigung,
+fester Verlustfehler und terminales Löschen. Persistierbar ist nur die
+Vertragsversion mit dem opaken Batchkonto, nie Secret oder Rohwert-Mapping.
+`test-batch-pseudonym-context.js` prüft sieben Lifecycle-Fälle und simuliert dabei
+einen Prozesswechsel über zwei vollständig neue Registry-Instanzen. Das ist kein
+Release-Nachweis: Begin/Resume/TTL/Discard rufen die Naht erst nach einer positiven
+nativen Drei-OS-Matrix auf.
+
 Für den nativen Store gibt es zusätzlich `native/keyring/pilot` mit gelocktem
 `@napi-rs/keyring` 1.3.0, allen geforderten Zielartefakten, einem inhaltsfreien
 Set/Get/Delete-Runner sowie einer ungestarteten Vier-Ziel-GitHub-Actions-Matrix. Der
@@ -515,8 +633,11 @@ HTTPS-Quellen liegen für ISTQB, Scrum.org, Scaled Agile, IIBA, HIMSS, The Open 
 Microsoft, AWS, Google Cloud, Cisco, ISACA, ISC2, Linux Foundation, CNCF, PMI, Red
 Hat, SAP und HL7 vor. Sie werden ausschließlich lokal als Erkennungshinweise
 verwendet, nicht zur Laufzeit abgefragt und enthalten weder Prüfdaten noch eine
-Aussage über die individuelle Gültigkeit eines Zertifikats. Rest: Abschlussdialog über
-den gesamten Stapel, Gruppenentscheidungen und Ausbau anhand des 1.000-Dokument-Korpus.
+Aussage über die individuelle Gültigkeit eines Zertifikats. Der gemeinsame lokale
+Abschlussdialog kann jetzt eine bewusst gewählte Entscheidung ausschließlich für
+Fundstellen mit identischer normalisierter vollständiger Kontextzeile übernehmen;
+die opake Gruppierung und die Rohwerte bleiben flüchtig lokal. Rest: praktische
+Zielplattformabnahme und Ausbau anhand des 1.000-Dokument-Korpus.
 
 ## BL-032 – Passwörter und lokale Entscheidungen
 
@@ -530,6 +651,10 @@ Entscheidung ohne freie Textredaktion. Linux verwendet dafür Zenity oder KDialo
 Claude kann weder reviewen noch freigeben. Rest: lokaler Passwortdialog,
 RAM-only-Secretvertrag, „Später entscheiden“, freie Redaktionen außerhalb Windows
 und echte Zielplattformabnahmen.
+
+Korrektur 23.08.2026: Der macOS-Dialog besitzt den unter BL-012 dokumentierten
+P0-Defekt und ist daher kein aktueller Plattformnachweis. Der bestehende Code- und
+Stdin-Vertrag bleibt wiederverwendbare Basis, aber nicht Freigabeevidenz.
 
 ## BL-040 – Dauerhafter Export
 
@@ -549,14 +674,20 @@ Status: **teilweise**
 
 Vorhanden: zwei validierte Skills, natürliche Aktivierung, Capability-Stopp,
 Upload-Stopp, fortsetzbare Einzelschritte und capability-gebundenes Markdown-Lesen.
-Die vier direkten MCP-Prompts und die natürliche Skillaktivierung verwenden denselben
-bestätigten Input-/Fortsetzungsvertrag: Ein neuer Chat erhält nur offene Batchzähler,
-fragt nach Fortsetzung und kann erst danach den zuletzt offenen Batch übernehmen.
+Die vier direkten MCP-Prompts und die natürliche Skillaktivierung erreichen denselben
+serverseitigen Input-/Fortsetzungspfad und verwenden im Quellstand denselben
+kanonischen Entscheidungsvertrag. Bei offenen Stapeln stehen Fortsetzen nach
+Zustimmung, Verwerfen nach quantifizierter Doppelbestätigung oder folgenloses
+Nichtstun zur Wahl. `awaiting_local_review` führt ausschließlich in die lokale
+Review-Fortsetzung; ein neuer Input darf nur ohne wiederherstellbaren Stapel geöffnet
+werden. Manifest-, MCP-, Capability- und Skillkorpus-Tests sichern diesen Vertrag.
+BL-041.4 bleibt bis zur beobachteten Modell-/Fresh-Install-Abnahme P0.
 Meldet der lokale Status einen laufenden Stapel, warten beide Startwege ohne
 Ordneröffnung, Ersatzbatch oder weiteren lokalen Dialog.
 Ein sichtbares Original stoppt vor jedem DataSecure-Aufruf; eine geschlossene lokale
 Auswahl beendet den Lauf statt einen neuen Dialog oder Ersatzbatch auszulösen. Der
-versionierte Skillkorpus enthält dafür 28 Szenarien. Ein neuer Chat sieht ausschließlich
+versionierte Skillkorpus enthält dafür 33 Szenarien, darunter vier negative
+Hostklassen. Ein neuer Chat sieht ausschließlich
 inhaltsfreie Zähler offener Stapel und kann nach ausdrücklicher Zustimmung den zuletzt
 offenen Stapel fortsetzen; er öffnet dafür keinen Ersatzordner und erhält keine Namen
 oder Pfade. Eine Anforderung „nur Markdown“ behält alle Bildpixel lokal zurück und
@@ -566,6 +697,50 @@ inhaltsfreie lokale Checkpointphase persistiert; sie unterstützt die Recovery, 
 aber nicht an Claude ausgegeben. Rest: neuer lokale-Auswahl-/
 Jobweg, Ziel-Formatumfang und installierte Modell-/UI-Abnahme für natürliche Sprache
 sowie direkte Skillauswahl auf allen Zieloberflächen.
+
+Fortschritt 23.08.2026: Der frühere Datei-für-Datei-Vertrag ist im Quellstand durch
+einen abgekoppelten lokalen Executor ergänzt. Ein kurzer MCP-Start übergibt das Token
+nur per privater IPC; der Worker arbeitet mit Netzwerk-Deny, Umgebungs-Allowlist und
+PID-Lease bis Abschluss, Review oder Recovery. Lokale Freigabe, Mapping und
+Bereinigung sind nicht mehr vom Claude-Lesen abhängig. Claude erhält anschließend
+nur inhaltsfreien Status und eine Batch-gebundene namenfreie Ergebnisliste in
+begrenzten Seiten; sein bestätigter Lesefortschritt wird separat persistiert. Ein
+echter Worker-TXT-Test, ein lokaler Reviewtest und ein 100-Dateien-Lauf mit Stopps an
+1/50/100 und 97 Ergebnissen in zehn Seiten sind grün. Ein zweiter
+100-Positionen-Mischstapel erzwingt echte Worker-Prozessabbrüche an den
+globalen Positionen 1, 50 und 100, übernimmt jede Position erst nach Recovery und
+ausdrücklichem Resume und erzeugt kein Doppelpaket.
+
+Ein zusätzlicher realer MCP-Prozesswechsel widerruft erwartungsgemäß die alte
+prozesslokale Leseberechtigung, setzt den manipulationsgeschützten Ergebnis-Cursor im
+neuen Prozess fort und gibt keine Quellidentität aus. Ein 137.499-Zeichen-Test setzt
+freigegebenes Markdown in begrenzten Seiten vollständig und ohne Überlappung wieder
+zusammen und erzwingt die 1.000-/30.000-Zeichen-Grenzen. Damit sind MCP-Neustart und
+Zeichenbudget lokal belegt. BL-041.5 bleibt bis zu 500-MB-Realdaten,
+Host-/Rechnerneustart, Drei-OS-Fresh-Install und beobachteter Cowork-Auswertung in
+Arbeit.
+
+Die lokale manuelle Grenzabnahme bindet außerdem 100 reale synthetische
+TXT-/Markdown-/CSV-Dateien mit exakt 500 MiB an einen privaten Snapshot, prüft alle
+100 Hashes/Kopien, entfernt nur den Checkpoint und erhält alle Originale. Der Lauf
+bestand in 1.732 ms bei 3.403.776 Bytes RSS-Zuwachs. Datei-SHA-256 arbeitet dafür
+jetzt descriptorbasiert in 1-MiB-Blöcken; ein Maximalinput wird nicht mehr komplett
+in den Node-Heap geladen. Die vollständige fachliche Verarbeitung von 500 MiB Text
+bleibt eine getrennte manuelle End-to-End-Abnahme und wird nicht in die kostenkritische
+Standard-CI aufgenommen.
+
+Bei mehrteiligen regulären MCP-Stapeln erscheint nach der letzten bestätigten
+Freigabe zusätzlich eine lokale Abschlussübersicht mit ausschließlich den Zählern
+ausgewählt, freigegeben und sicher gestoppt. Kann dieser freiwillige Hinweis nicht
+geöffnet werden, bleibt das Ergebnis dennoch freigegeben und nutzbar.
+
+Der `Input`-Ordnerweg zeigt unmittelbar vor dem Snapshot dieselbe lokale
+Startbestätigung wie die direkte Mehrfachauswahl. Ein lokales Abbrechen hinterlässt
+keinen Batch und keine versiegelte Arbeitskopie.
+
+Die freiwillige Gesamtübersicht ist der lokale Exportordner mit dem dauerhaft
+geführten `DataSecure-Mapping.csv`. Er wird nur auf ausdrücklichen Wunsch geöffnet;
+der Server liefert dafür weder Namen noch den Mappinginhalt an Claude.
 
 Ein lokaler Abbruch der Dateiauswahl ist nun ein expliziter, inhaltsfreier terminaler
 Zustand statt eines allgemeinen Toolfehlers. Die authentisierte IPC transportiert
@@ -583,27 +758,89 @@ Ein ausdrücklich bestätigter lokaler Diagnoseexport enthält zusätzlich aussc
 bereinigte Diagnosemetadaten und Programmprüfsummen; er wird nie automatisch
 übertragen. Rest: abschließende Alltagssprach-/Barrierefreiheitsprüfung.
 
+Alle 18 MCP-Tools besitzen jetzt zusätzlich vollständige boolesche
+`readOnlyHint`-, `destructiveHint`-, `idempotentHint`- und `openWorldHint`-
+Annotationen sowie einen Titel. Eine zentrale Policy klassifiziert Lesen,
+Ordneröffnung, Verarbeitung, Review, Bestätigung, Verwerfen und Purge getrennt; der
+MCP-Vertragstest blockiert fehlende beziehungsweise widersprüchliche Klassen. Offen
+bleibt die beobachtete Manual-/Auto-/Skip-Abnahme in Cowork.
+
 ## BL-050 – 1.000-Dokument-Korpus
 
 Status: **teilweise**
+
+Der Schema- und Metrikteil BL-050.1 ist abgeschlossen:
+`benchmarks/CORPUS_CONTRACT_V1.json` definiert die Ground-Truth-Felder, den
+UTF-16-Positionsraum, die exakten Verteilungen der zwei 1.000er-Korpora sowie die
+Release-Gates null direkte Misses, null Zusatzredaktionen und mindestens 99 Prozent
+markierten Inhaltserhalt. Vier Vertragstests prüfen Form, Verteilung und das reale
+Detektorergebnis. Der verbleibende Teil von BL-050 betrifft neue dokumentartige
+Fixtures für noch gesperrte Container, Sprachen, Layouts und Angriffe.
 
 Vorhanden: 1.000-Fall-Vertragskorpus mit positionsgenauer Ground Truth und ein
 zusätzlicher 1.000-Fall-Akzeptanzkorpus mit 500 Verträgen, 167 Mitarbeiterprofilen,
 167 Bewerbungen und 166 Kundenvorgängen. Der Mehrprofilkorpus prüft direkte
 Identifikatoren sowie den Erhalt von Rollen, Fachinhalten und Zertifikaten. Dazu
-kommen 76 PII-Regressionen, 28 Skill-Szenarien, 20 Explorationsfälle,
-Parser-/Visual-/Security-Tests und ein messender Detektorbenchmark. Rest: mindestens
+kommen 77 PII-Regressionen, 29 Skill-Szenarien, 20 Explorationsfälle und eine
+33-Fall-Formatmatrix. Diese prüft die reale automatische Profilerkennung sowie
+Entfernung/Erhalt über TXT, Markdown, CSV und DOCX für deutsche, englische,
+französische, spanische und niederländische Personalprofilbeschriftungen.
+Parser-/Visual-/Security-Tests und ein messender Detektorbenchmark ergänzen sie. Rest: mindestens
 1.000 dokumentartige Fixtures über alle Zielformate, Layouts, Sprachen und Angriffe
 sowie die verbindliche Null-Miss-/99-%-Erhaltungsmetrik.
+
+Ergänzend deckt ein permanenter 2.000-Fall-Sweep acht Markdown-Strukturen und
+variierte synthetische Namen, Unternehmen, Zertifikate, deutsche IBANs und
+Telefonnummern über alle fünf Profile ab. Er fordert zugleich die idempotente
+Verarbeitung bereits freigegebener Texte.
+
+Eine zusätzliche feldbezeichnungsgebundene Regression umfasst französische,
+spanische und niederländische Personalprofile: Name, E-Mail, Telefon und
+Arbeitgeber werden entfernt, während Rolle und Zertifikat erhalten bleiben. Der
+französische Einziffern-Ortscode wird dafür mit einer separaten engen
+Telefonform erfasst. Über diese getesteten Labelformen hinaus wird keine allgemeine
+Sprachabdeckung behauptet.
+
+Zusätzlich verifiziert eine reale Gateway-Matrix die vier aktiven Formate TXT,
+Markdown, CSV und DOCX mit denselben direkten Identifikatoren, Zertifizierungen und
+IT-Rollen. CSV-Zertifikatskontext ist dabei zellengenau und schützt keinen
+Arbeitgeber in derselben Datenzeile. Die automatische Profilwahl erkennt den Fall
+in allen vier Formaten als Personalprofil – jeweils mit deutschem und englischem
+Profil. Einzelne Company-/Role-Labels bleiben ohne weitere Profilsignale allgemein.
+
+Die Matrix umfasst darüber hinaus Vertrag, Bewerbung und Kundenvorgang in allen
+vier aktiven Formaten und prüft die automatische Profilwahl. Beschriftete
+Bewerber-Wohnorte und Arbeitgeber werden auch in CSV-Spalten de-identifiziert.
 
 ## BL-051 – Plattform- und Distributionsmatrix
 
 Status: **teilweise**
 
-Vorhanden: Windows-, macOS- und Linux-CI, Windows-Native-Tests, ZIP-/MCPB-Build,
-SBOM, Prüfsummen und Quellparität. Rest: echte frische ZIP- und Marketplace-
+Vorhanden: eine kostenbegrenzte automatische Ubuntu-Kernprüfung sowie eine nur
+manuell gestartete Windows-/macOS-/Linux-Vollmatrix, Windows-Native-Tests,
+ZIP-/MCPB-Build, SBOM, Prüfsummen und Quellparität. Der automatische Pfad besitzt
+genau einen Job, zehn Minuten Timeout, Änderungsfilter und Abbruch doppelter Läufe;
+Plattform-, Release-, OCR-/PDF- und Security-Evidenz wird gezielt manuell gewählt.
+Rest: echte frische ZIP- und Marketplace-
 Installationen, kompletter End-to-End-Weg und Rückrolle auf Windows/macOS/Linux;
 CI nutzt derzeit auf macOS/Linux noch eine ausdrücklich eingerichtete Node-Runtime.
+Offen sind zusätzlich der echte Cowork-Lebenszyklus (Fresh Install, neue Sitzung,
+Upgrade, Rollback) und die Web-/Mobil-/Cloud-Negativmatrix. Sichtbare Skills oder ein
+grüner Pakettest ersetzen weder Connector- noch `privacy_status`-Nachweis.
+
+Für diese Negativmatrix liegen jetzt ein maschinenlesbarer Hostvertrag,
+`test-host-matrix` und vier Skill-Evalfälle vor. Web, Mobil, Cloud/Scheduled und
+Desktop ohne erfolgreichen Local-MCP-Probe sind darin NO-GO für Originale; bereits
+lokal bereinigtes Markdown bleibt erlaubt. Die Tests belegen das Sollverhalten des
+Plugins, nicht die tatsächliche Reaktion der jeweiligen Claude-Oberfläche. Deshalb
+bleibt BL-051.6 bis zur beobachteten Hostabnahme **in Arbeit**.
+
+BL-051.7 ist umgesetzt: `test-workflow-budget.js` verhindert unbemerkte neue
+Push-/PR-Workflows, Matrizen, Artefaktuploads oder unbeschränkte Laufzeiten im
+automatischen Pfad. `release-evidence.yml` erhält die vollständige Plattform- und
+Build-Evidenz als bewusste Auswahl; `security.yml` lässt JavaScript-, Native- und
+Secret-Prüfung getrennt starten. Dadurch bedeutet ein normaler Push höchstens einen
+kurzen Linux-Lauf statt der früheren sieben Jobs.
 
 ## BL-052 – Menschliche Abnahme
 
@@ -612,4 +849,7 @@ Status: **offen**
 Vorhanden: dokumentierte UX-, Datenschutz-, Security-, Architektur- und
 Claude-Dokumentationsreviews sowie automatisierte native Windows-Formtests. Rest:
 beobachtete Abnahme mit normalen Anwendern und Fach-/Datenschutzvertretung auf allen
-drei Plattformen. Echtdaten bleiben bis zu einer separaten Pilotentscheidung NO-GO.
+drei Plattformen. Die Abnahme muss insbesondere Cowork-Fresh-Install, beide
+Skillstarts, Connectorfehler, quantifiziertes Verwerfen, lokale Fachprüfung und
+gestufte Claude-Weiterverarbeitung beobachten. Echtdaten bleiben bis zu einer
+separaten Pilotentscheidung NO-GO.

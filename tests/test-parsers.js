@@ -189,6 +189,42 @@ test('DOCX secondary stories reject duplicate relationships and mismatched Word 
   }
 });
 
+test('DOCX rejects truncated main and secondary story roots instead of silently rendering them empty', () => {
+  const truncatedMain = parseOoxml(zipStore([
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
+    ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Vertraulicher Inhalt</w:t></w:r></w:p>']
+  ]), '.docx');
+  assert.strictEqual(truncatedMain.warnings.length, 1, 'a truncated main body must block coverage');
+  assert.strictEqual(truncatedMain.markdown, '', 'a truncated main body must not yield partial text');
+  assert.doesNotMatch(truncatedMain.warnings[0], /Vertraulicher/u, 'the warning stays content-free');
+
+  const truncatedStory = parseOoxml(docx(['Sichtbarer Text'], [
+    ['word/comments.xml', '<w:comments xmlns:w="w"><w:comment><w:p><w:r><w:t>Vertraulicher Kommentar</w:t></w:r></w:p></w:comment>'],
+    ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/></Relationships>']
+  ]), '.docx');
+  assert.strictEqual(truncatedStory.warnings.length, 1, 'a truncated secondary story must block coverage');
+  assert.doesNotMatch(truncatedStory.warnings[0], /Vertraulicher|Sichtbarer/u, 'the warning stays content-free');
+});
+
+test('DOCX enforces the relationship and root contract for every supported secondary story type', () => {
+  const storyTypes = [
+    ['header', 'header1.xml', 'hdr'],
+    ['footer', 'footer1.xml', 'ftr'],
+    ['comments', 'comments.xml', 'comments'],
+    ['footnotes', 'footnotes.xml', 'footnotes'],
+    ['endnotes', 'endnotes.xml', 'endnotes']
+  ];
+  for (const [relationshipType, part, root] of storyTypes) {
+    const wrongRoot = root === 'hdr' ? 'ftr' : 'hdr';
+    const result = parseOoxml(docx(['Sichtbarer Text'], [
+      [`word/${part}`, `<w:${wrongRoot} xmlns:w="w"><w:p><w:r><w:t>Vertraulicher ${relationshipType}</w:t></w:r></w:p></w:${wrongRoot}>`],
+      ['word/_rels/document.xml.rels', `<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${relationshipType}" Target="${part}"/></Relationships>`]
+    ]), '.docx');
+    assert.strictEqual(result.warnings.length, 1, `${relationshipType} must require its matching Word root`);
+    assert.doesNotMatch(result.warnings[0], /Vertraulicher|Sichtbarer/u, `${relationshipType} warning stays content-free`);
+  }
+});
+
 test('DOCX embedded images become attachments with a mime type', () => {
   const png = encodePng({ width: 8, height: 8, rgba: Buffer.alloc(8 * 8 * 4, 255) });
   const result = parseOoxml(docx(['Mit Bild'], [
@@ -488,6 +524,25 @@ test('XLSX inline numbers are kept', () => {
   assertPresent(parseOoxml(buf, '.xlsx').markdown, '42', 'numeric cell');
 });
 
+test('self-closing empty XLSX and PPTX parts are structurally valid rather than treated as truncation', () => {
+  const xlsx = parseOoxml(zipStore([
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Leer" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/sharedStrings.xml', '<sst/>'],
+    ['xl/worksheets/sheet1.xml', '<worksheet/>']
+  ]), '.xlsx');
+  assert.ok(!xlsx.warnings.some((warning) => /nicht vollständig abgedeckte Inhaltsstruktur/u.test(warning)));
+
+  const pptx = parseOoxml(zipStore([
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
+    ['ppt/slides/slide1.xml', '<p:sld/>']
+  ]), '.pptx');
+  assert.ok(!pptx.warnings.some((warning) => /nicht vollständig abgedeckte Inhaltsstruktur/u.test(warning)));
+});
+
 test('XLSX formula cells stop coverage even when a cached value exists', () => {
   const buf = zipStore([
     ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Blatt" r:id="rId1"/></sheets></workbook>'],
@@ -497,6 +552,52 @@ test('XLSX formula cells stop coverage even when a cached value exists', () => {
   const result = parseOoxml(buf, '.xlsx');
   assert.ok(result.warnings.some((warning) => /Formelzelle/u.test(warning)));
   assert.doesNotMatch(JSON.stringify(result.warnings), /Max Mustermann|CONCAT/u, 'formula warning stays content-free');
+});
+
+test('XLSX comment text requires one reachable worksheet comment relationship', () => {
+  const common = [
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Blatt" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1"><v>1</v></c></row></sheetData></worksheet>'],
+    ['xl/comments1.xml', '<comments><commentList><comment ref="A1"><text><r><t>Kommentar von Max Mustermann</t></r></text></comment></commentList></comments>']
+  ];
+  const linked = parseOoxml(zipStore([...common,
+    ['xl/worksheets/_rels/sheet1.xml.rels', '<Relationships><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/></Relationships>']
+  ]), '.xlsx');
+  assertPresent(linked.markdown, 'Kommentar von Max Mustermann', 'reachable comment');
+  assert.ok(!linked.warnings.some((warning) => /Kommentarstruktur/u.test(warning)));
+
+  const orphan = parseOoxml(zipStore(common), '.xlsx');
+  assert.doesNotMatch(orphan.markdown, /Kommentar von Max Mustermann/u);
+  assert.ok(orphan.warnings.some((warning) => /Kommentarstruktur/u.test(warning)));
+  assert.doesNotMatch(JSON.stringify(orphan.warnings), /Max Mustermann|comments1/u);
+
+  const duplicate = parseOoxml(zipStore([...common,
+    ['xl/worksheets/_rels/sheet1.xml.rels', '<Relationships><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/></Relationships>']
+  ]), '.xlsx');
+  assert.doesNotMatch(duplicate.markdown, /Kommentar von Max Mustermann/u);
+  assert.ok(duplicate.warnings.some((warning) => /Kommentarstruktur/u.test(warning)));
+});
+
+test('XLSX blocks unrendered comments and truncated worksheet parts with content-free coverage warnings', () => {
+  const common = [
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Blatt" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>']
+  ];
+  const comment = parseOoxml(zipStore([...common,
+    ['xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1"><v>1</v></c></row></sheetData></worksheet>'],
+    ['xl/comments1.xml', '<comments><commentList><comment ref="A1"><text><t>Privater Kommentar</t></text></comment></commentList></comments>']
+  ]), '.xlsx');
+  assert.ok(comment.warnings.some((warning) => /Kommentarstruktur/u.test(warning)));
+  assert.doesNotMatch(JSON.stringify(comment.warnings), /Privater Kommentar|comments1/u);
+
+  const truncated = parseOoxml(zipStore([...common.filter(([name]) => name !== 'ppt/notesSlides/notesSlide1.xml'),
+    ['xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>Vertraulicher Wert</t></is></c></row></sheetData>']
+  ]), '.xlsx');
+  assert.ok(truncated.warnings.some((warning) => /nicht vollständig abgedeckte Inhaltsstruktur/u.test(warning)));
+  assert.doesNotMatch(JSON.stringify(truncated.warnings), /Vertraulicher Wert/u);
 });
 
 test('XLSX never renders an orphan, external or non-worksheet relationship target', () => {
@@ -573,6 +674,52 @@ test('PPTX slide text and speaker notes are both extracted', () => {
   const result = parseOoxml(buf, '.pptx');
   assertPresent(result.markdown, 'Folientitel', 'slide text');
   assertPresent(result.markdown, 'Notiztext', 'speaker note');
+  assert.ok(!result.warnings.some((warning) => /Notizstruktur/u.test(warning)));
+});
+
+test('PPTX DrawingML tables preserve cells as an escaped Markdown table', () => {
+  const result = parseOoxml(zipStore([
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Rolle</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Product|Owner</a:t></a:r></a:p></a:txBody></a:tc></a:tr><a:tr><a:tc><a:txBody><a:p><a:r><a:t>Firma</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>Beispiel GmbH</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>']
+  ]), '.pptx');
+  assert.match(result.markdown, /## Tabelle\n\n\| Rolle \| Product\\\|Owner \|/u);
+  assert.match(result.markdown, /\| Firma \| Beispiel GmbH \|/u);
+  assert.strictEqual((result.markdown.match(/Beispiel GmbH/gu) || []).length, 1, 'table text must not be duplicated as slide prose');
+  assert.ok(result.sections.some((section) => section.kind === 'table' && section.source_part === 'ppt/slides/slide1.xml'));
+});
+
+test('PPTX truncated DrawingML tables trigger an inhaltsfreie slide coverage stop', () => {
+  const result = parseOoxml(zipStore([
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><a:tbl><a:tr><a:tc><a:t>Vertrauliche Tabelle</a:t></a:tc></a:tr></p:spTree></p:cSld></p:sld>']
+  ]), '.pptx');
+  assert.ok(result.warnings.some((warning) => /DrawingML-Tabelle/u.test(warning)));
+  assert.doesNotMatch(result.markdown, /Vertrauliche Tabelle/u);
+  assert.doesNotMatch(JSON.stringify(result.warnings), /Vertrauliche Tabelle/u);
+});
+
+test('PPTX notes require one reachable notesSlide relationship and complete notes root', () => {
+  const common = [
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Sichtbare Folie</a:t></p:sld>'],
+    ['ppt/notesSlides/notesSlide1.xml', '<p:notes xmlns:p="p" xmlns:a="a"><a:t>Private Notiz</a:t></p:notes>']
+  ];
+  const orphan = parseOoxml(zipStore(common), '.pptx');
+  assert.doesNotMatch(orphan.markdown, /Private Notiz/u);
+  assert.ok(orphan.warnings.some((warning) => /Notizstruktur/u.test(warning)));
+  assert.doesNotMatch(JSON.stringify(orphan.warnings), /Private Notiz|notesSlide1/u);
+
+  const truncated = parseOoxml(zipStore([...common.filter(([name]) => name !== 'ppt/notesSlides/notesSlide1.xml'),
+    ['ppt/slides/_rels/slide1.xml.rels', '<Relationships><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/></Relationships>'],
+    ['ppt/notesSlides/notesSlide1.xml', '<p:notes xmlns:p="p" xmlns:a="a"><a:t>Private Notiz</a:t>']
+  ]), '.pptx');
+  assert.doesNotMatch(truncated.markdown, /Private Notiz/u);
+  assert.ok(truncated.warnings.some((warning) => /Notizstruktur/u.test(warning)));
 });
 
 test('PPTX does not render orphan or external slide targets', () => {
@@ -605,6 +752,30 @@ test('PPTX does not choose between multiple notesSlide relationships', () => {
   assert.doesNotMatch(result.markdown, /Private Notiz Eins|Private Notiz Zwei/u, 'ambiguous notes stay out of output');
 });
 
+test('PPTX layout and master text require the reachable slide-to-layout-to-master chain', () => {
+  const common = [
+    ['_rels/.rels', '<Relationships><Relationship Id="rIdRoot" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/><p:sldId r:id="rId2"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/><Relationship Id="rIdMaster" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>'],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Folie Eins</a:t></p:sld>'],
+    ['ppt/slides/slide2.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Folie Zwei</a:t></p:sld>'],
+    ['ppt/slides/_rels/slide1.xml.rels', '<Relationships><Relationship Id="rIdLayout" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>'],
+    ['ppt/slides/_rels/slide2.xml.rels', '<Relationships><Relationship Id="rIdLayout" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>'],
+    ['ppt/slideLayouts/slideLayout1.xml', '<p:sldLayout xmlns:p="p" xmlns:a="a"><a:t>Vertraulicher Layouttext</a:t></p:sldLayout>'],
+    ['ppt/slideLayouts/_rels/slideLayout1.xml.rels', '<Relationships><Relationship Id="rIdMaster" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>'],
+    ['ppt/slideMasters/slideMaster1.xml', '<p:sldMaster xmlns:p="p" xmlns:a="a"><a:t>Vertraulicher Mastertext</a:t></p:sldMaster>']
+  ];
+  const linked = parseOoxml(zipStore(common), '.pptx');
+  assertPresent(linked.markdown, 'Vertraulicher Layouttext', 'reachable layout');
+  assertPresent(linked.markdown, 'Vertraulicher Mastertext', 'reachable master');
+  assert.ok(!linked.warnings.some((warning) => /Vorlagenstruktur/u.test(warning)), 'shared layout/master stay unambiguous');
+
+  const orphan = parseOoxml(zipStore(common.filter(([name]) => !/slideLayouts|slideMasters|slide2\.xml|slide2\.xml\.rels|rId2/.test(name))), '.pptx');
+  assert.doesNotMatch(orphan.markdown, /Vertraulicher Layouttext|Vertraulicher Mastertext/u, 'orphan template text stays out of output');
+  assert.ok(orphan.warnings.some((warning) => /Vorlagenstruktur/u.test(warning)));
+  assert.doesNotMatch(JSON.stringify(orphan.warnings), /Vertraulicher|slideLayout|slideMaster/u);
+});
+
 test('PPTX media needs an internal image relationship before entering the visual path', () => {
   const base = [
     ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
@@ -635,6 +806,26 @@ test('PPTX chart text requires an internal relationship from a reachable slide',
   assert.ok(result.warnings.some((warning) => /Diagrammstruktur/u.test(warning)));
   assert.doesNotMatch(result.markdown, /Geheimer Diagrammwert/u);
   assert.doesNotMatch(JSON.stringify(result.warnings), /Geheimer|chart1/u);
+});
+
+test('PPTX blocks unrendered master content and truncated slides with content-free coverage warnings', () => {
+  const common = [
+    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>']
+  ];
+  const master = parseOoxml(zipStore([...common,
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Sichtbare Folie</a:t></p:sld>'],
+    ['ppt/slideMasters/slideMaster1.xml', '<p:sldMaster xmlns:p="p" xmlns:a="a"><a:t>Vertraulicher Mastertext</a:t></p:sldMaster>']
+  ]), '.pptx');
+  assert.ok(master.warnings.some((warning) => /Vorlagenstruktur/u.test(warning)));
+  assert.doesNotMatch(JSON.stringify(master.warnings), /Vertraulicher Mastertext|slideMaster1/u);
+
+  const truncated = parseOoxml(zipStore([...common,
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Vertraulicher Folientext</a:t>']
+  ]), '.pptx');
+  assert.ok(truncated.warnings.some((warning) => /nicht vollständig abgedeckte Inhaltsstruktur/u.test(warning)));
+  assert.doesNotMatch(JSON.stringify(truncated.warnings), /Vertraulicher Folientext/u);
 });
 
 // ---------------------------------------------------------------------------

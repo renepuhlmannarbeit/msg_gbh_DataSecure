@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError, dataRoot } = require('../runtime');
-const { PROFILES, LIMITS, roots, listInput, validateBatchLimits, sha256File, storageStatus } = require('./common');
+const { PROFILES, LIMITS, roots, listInput, validateBatchLimits, sha256File, storageStatus, ensurePrivateDirectory } = require('./common');
 const { anonymizeNext } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, STOPPED: MAPPING_STOPPED } = require('./mapping');
@@ -77,9 +77,8 @@ async function reviewSingleBatchTextLocally(input, state, item, deps = {}) {
 }
 
 function batchRoot() {
-  const root = path.join(dataRoot(), 'batches');
-  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-  return root;
+  const gatewayRoot = ensurePrivateDirectory(path.dirname(dataRoot()), path.basename(dataRoot()));
+  return ensurePrivateDirectory(gatewayRoot, 'batches');
 }
 
 function batchTtlMs() {
@@ -224,6 +223,25 @@ function processAlive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
+function liveLocalExecutor(state) {
+  return Number.isSafeInteger(state?.local_executor_pid) && state.local_executor_pid > 0 &&
+    processAlive(state.local_executor_pid);
+}
+
+function assertLocalExecutorAccess(state, executorPid) {
+  if (!liveLocalExecutor(state)) {
+    if (state.local_executor_pid !== undefined) {
+      delete state.local_executor_pid;
+      delete state.local_executor_started_at;
+      writeState(state);
+    }
+    return;
+  }
+  if (state.local_executor_pid !== executorPid) {
+    throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
+  }
+}
+
 function validActiveLock(value) {
   return Boolean(value && value.schema === 'datasecure-active-batch/1' &&
     TOKEN_RE.test(value.token) && Number.isSafeInteger(value.pid) && value.pid > 0 &&
@@ -308,6 +326,77 @@ function readState(token) {
   return state;
 }
 
+function batchUserStatus(progress) {
+  const completed = progress.completed;
+  const total = progress.batch_total;
+  // An estimate is shown only after a small local sample exists.  It is based
+  // on processing time only (not on a user's reading or review time) and is
+  // deliberately omitted as soon as an explicit recovery/review decision is
+  // needed.  That avoids presenting an invented completion promise.
+  const eta = Number.isSafeInteger(progress.estimated_remaining_seconds) && progress.estimated_remaining_seconds >= 0
+    ? ` Gemessene Restzeit für die verbleibende automatische Verarbeitung: ca. ${formatRemainingTime(progress.estimated_remaining_seconds)}.`
+    : '';
+  if (progress.complete) {
+    return {
+      user_status: `Stapel abgeschlossen: ${progress.released} erfolgreich vorbereitet, ${progress.stopped} sicher gestoppt.`,
+      next_action: 'open_local_overview'
+    };
+  }
+  if (progress.batch_phase === 'awaiting_local_review') {
+    return {
+      user_status: `Lokale Prüfung erforderlich: ${completed} von ${total} Dateien sind abgeschlossen.`,
+      next_action: 'review_local_decisions'
+    };
+  }
+  if (progress.batch_phase === 'awaiting_explicit_resume') {
+    return {
+      user_status: `Stapel angehalten: ${completed} von ${total} Dateien sind abgeschlossen.`,
+      next_action: 'resume_batch'
+    };
+  }
+  if (progress.batch_phase === 'awaiting_delivery_acknowledgement') {
+    return {
+      user_status: `Ergebnis wird sicher bereitgestellt: ${completed} von ${total} Dateien sind abgeschlossen.`,
+      next_action: 'read_and_confirm_result'
+    };
+  }
+  if (progress.batch_phase === 'processing_local_batch') {
+    return {
+      user_status: `Lokale Stapelverarbeitung läuft: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`,
+      next_action: 'wait_for_local_batch'
+    };
+  }
+  if (progress.batch_phase === 'processing_local_document') {
+    return {
+      user_status: `Lokale Verarbeitung läuft: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`,
+      next_action: 'wait_for_current_document'
+    };
+  }
+  return {
+    user_status: `Stapel bereit: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`,
+    next_action: 'process_next_document'
+  };
+}
+
+function formatRemainingTime(seconds) {
+  if (seconds < 60) return 'unter 1 Minute';
+  return `${Math.max(1, Math.round(seconds / 60))} Minuten`;
+}
+
+function measuredRemainingSeconds(state, remaining) {
+  // The journal holds only monotonic durations, never source-derived data.
+  // Three samples make a median resilient to one slow document/container.
+  if (!Number.isSafeInteger(remaining) || remaining <= 0) return null;
+  const samples = (state.items || [])
+    .map((item) => Number(item.processing_duration_ms))
+    .filter((duration) => Number.isSafeInteger(duration) && duration >= 0 && duration <= 60 * 60 * 1000)
+    .sort((left, right) => left - right);
+  if (samples.length < 3) return null;
+  const median = samples[Math.floor(samples.length / 2)];
+  const seconds = Math.ceil((median * remaining) / 1000);
+  return Number.isSafeInteger(seconds) ? seconds : null;
+}
+
 function publicProgress(state) {
   const released = state.items.filter((item) => item.status === 'released').length;
   const deliveryPending = state.items.filter((item) => item.status === DELIVERY_PENDING).length;
@@ -320,7 +409,8 @@ function publicProgress(state) {
   const complete = remaining === 0 && retryable === 0 && deferredReview === 0 && deliveryPending === 0 && processing === 0;
   const processingIndex = state.items.findIndex((item) => item.status === 'processing');
   const pendingIndex = state.items.findIndex((item) => item.status === 'pending');
-  return {
+  const localProcessing = liveLocalExecutor(state);
+  const progress = {
     batch_token: state.token,
     batch_total: state.items.length,
     attempted: released + stopped + retryable + deferredReview + deliveryPending + processing,
@@ -336,13 +426,21 @@ function publicProgress(state) {
     retryable,
     deferred_review: deferredReview,
     remaining,
+    local_processing_active: localProcessing,
+    // A rest-time estimate is meaningful only for the automatic queue. A
+    // deferred human decision or an explicit recovery is intentionally not
+    // assigned a duration.
+    estimated_remaining_seconds: retryable === 0 && deferredReview === 0
+      ? measuredRemainingSeconds(state, remaining)
+      : null,
     awaiting_resume: (retryable > 0 || deferredReview > 0) && remaining === 0 && deliveryPending === 0 && processing === 0,
     complete,
     // These fields deliberately communicate only queue state. In particular,
     // no source name, path or document-derived phase crosses the MCP boundary.
-    batch_phase: complete ? 'complete' : (processing > 0 ? 'processing_local_document' : (deliveryPending > 0 ? 'awaiting_delivery_acknowledgement' : (deferredReview > 0 && remaining === 0 ? 'awaiting_local_review' : (retryable > 0 && remaining === 0 ? 'awaiting_explicit_resume' : 'ready_for_next_document')))),
+    batch_phase: complete ? 'complete' : (localProcessing ? 'processing_local_batch' : (processing > 0 ? 'processing_local_document' : (deliveryPending > 0 ? 'awaiting_delivery_acknowledgement' : (deferredReview > 0 && remaining === 0 ? 'awaiting_local_review' : (retryable > 0 && remaining === 0 ? 'awaiting_explicit_resume' : 'ready_for_next_document'))))),
     next_position: processingIndex >= 0 ? processingIndex + 1 : (pendingIndex >= 0 ? pendingIndex + 1 : null)
   };
+  return { ...progress, ...batchUserStatus(progress) };
 }
 
 function writeTerminalEvidence(state) {
@@ -369,6 +467,7 @@ function resumeBatch(token) {
   active.add(token);
   try {
   const state = readState(token);
+  assertLocalExecutorAccess(state);
   if (state.invalidated === true) throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
   // The caller owns the live global lock at this point.  A leftover
   // `processing` state can therefore only be from a previous interrupted
@@ -408,13 +507,13 @@ function incompleteBatchState(state) {
   );
 }
 
-function recoverableBatchStates() {
+function recoverableBatchStates(options = {}) {
   const states = [];
   // Status enumeration must not call readState() while another process owns a
   // live batch: readState() performs expiry cleanup for an unowned session.
   // A read-only MCP status call must never mutate a live owner's snapshot.
   const owner = readActiveLock();
-  if (owner && processAlive(owner.pid)) return states;
+  if (!options.ignoreActiveLock && owner && processAlive(owner.pid)) return states;
   let entries = [];
   try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); } catch { return states; }
   for (const entry of entries) {
@@ -423,7 +522,8 @@ function recoverableBatchStates() {
     if (!TOKEN_RE.test(token)) continue;
     try {
       const state = readStateForMaintenance(token);
-      if (Date.now() <= Date.parse(state.expires_at) && incompleteBatchState(state)) states.push(state);
+      if (Date.now() <= Date.parse(state.expires_at) && incompleteBatchState(state) &&
+          (options.includeActiveExecutors === true || !liveLocalExecutor(state))) states.push(state);
     } catch { /* malformed and expired snapshots remain unavailable */ }
   }
   return states;
@@ -431,8 +531,10 @@ function recoverableBatchStates() {
 
 function recoverableBatchStatus() {
   const owner = readActiveLock();
-  const processingActive = Boolean(owner && processAlive(owner.pid));
-  const states = processingActive ? [] : recoverableBatchStates();
+  let processingActive = Boolean(owner && processAlive(owner.pid));
+  const allStates = processingActive ? [] : recoverableBatchStates({ includeActiveExecutors: true });
+  if (allStates.some((state) => liveLocalExecutor(state))) processingActive = true;
+  const states = allStates.filter((state) => !liveLocalExecutor(state));
   return {
     recoverable_batches: states.length,
     batches_awaiting_resume: states.filter((state) => publicProgress(state).awaiting_resume).length,
@@ -491,6 +593,30 @@ function continueMostRecentBatch() {
   return { ok: true, batch_token: selected.token, ...publicProgress(readState(selected.token)), raw_content_sent_to_claude: false };
 }
 
+function discardIncompleteBatches() {
+  const maintenanceToken = crypto.randomBytes(32).toString('hex');
+  acquireActiveLock(maintenanceToken);
+  try {
+    const allStates = recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true });
+    if (allStates.some((state) => liveLocalExecutor(state))) {
+      throw new SafeError('Ein lokaler Dokumentstapel wird noch verarbeitet und kann nicht verworfen werden.');
+    }
+    const states = allStates;
+    let discarded = 0;
+    for (const state of states) {
+      // A discard is a local, user-confirmed abandonment of the sealed source
+      // snapshot. It never touches already published output packages or the
+      // durable local mapping ledger.
+      safeRemoveWorkDirectory(state.token);
+      fs.unlinkSync(batchPath(state.token));
+      discarded += 1;
+    }
+    return { ok: true, discarded_batches: discarded, raw_content_sent_to_claude: false };
+  } finally {
+    releaseActiveLock(maintenanceToken);
+  }
+}
+
 function beginBatch(options = {}) {
   if (!storageStatus().safe) throw new SafeError('Der konfigurierte Datenschutzordner ist für die lokale Verarbeitung nicht freigegeben.');
   const expected = Number(options.expectedCount);
@@ -513,6 +639,26 @@ function beginBatch(options = {}) {
   try { validateBatchLimits(queue); } catch (error) {
     if (error.message === 'BATCH_TOTAL_LIMIT') throw new SafeError('Der bestätigte Stapel ist größer als 500 MB.');
     throw new SafeError('Eine ausgewählte Datei liegt außerhalb der zulässigen Größe.');
+  }
+  // The server-bound Input folder has no native picker.  Give it the same
+  // local, counter-only final confirmation before any private copy is made.
+  // Tests and non-UI callers omit the optional dependency deliberately.
+  if (typeof options.confirmStart === 'function') {
+    const confirmed = options.confirmStart({
+      selected_count: queue.length,
+      total_bytes: queue.reduce((total, entry) => total + entry.stat.size, 0)
+    });
+    if (confirmed !== true) {
+      return {
+        ok: false,
+        error: 'local_batch_start_cancelled',
+        message: 'Die lokale Startbestätigung wurde abgebrochen. Es wurde kein Stapel begonnen.',
+        user_status: 'Lokaler Start abgebrochen: Es wurde kein Stapel begonnen.',
+        next_action: 'restart_only_on_request',
+        input_documents_seen: queue.length,
+        raw_content_sent_to_claude: false
+      };
+    }
   }
   preflightOoxmlContainers(queue, options.readFile || fs.readFileSync);
   assertStagingCapacity(queue, options.statfs || fs.statfsSync);
@@ -645,25 +791,69 @@ function deliveryResult(state, item) {
   };
 }
 
+function cleanupTerminalWorkCopy(state, item, deps = {}) {
+  // A terminally released or stopped position has no legitimate reason to
+  // retain its sealed source bytes.  Keep this single-file operation as strict
+  // as release cleanup: no recursion, no symlink traversal and no derived
+  // filename.  A failed deletion is recorded only as a local cleanup duty.
+  if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item?.work_name || ''))) {
+    throw new SafeError('Private Arbeitskopie ist nicht sicher bereinigbar.');
+  }
+  const full = path.join(workPath(state.token), item.work_name);
+  if (fs.existsSync(full)) {
+    const stat = fs.lstatSync(full);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Private Arbeitskopie ist nicht sicher bereinigbar.');
+    (deps.unlinkWorkCopy || fs.unlinkSync)(full);
+  }
+  delete item.work_copy_cleanup_pending;
+}
+
 function acknowledgeDeliveredPackage(token, packageId, deps = {}) {
   if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
   acquireActiveLock(token);
   active.add(token);
   try {
     const state = readState(token);
-    const item = state.items.find((candidate) => candidate.status === DELIVERY_PENDING && candidate.package_id === packageId);
+    assertLocalExecutorAccess(state, deps.executorPid);
+    const item = state.items.find((candidate) =>
+      [DELIVERY_PENDING, 'released'].includes(candidate.status) && candidate.package_id === packageId
+    );
     if (!item) throw new SafeError('Für dieses Paket liegt keine bestätigbare Batch-Übergabe vor.');
     if (!regularPublishedPackage(packageId)) throw new SafeError('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
-    item.status = 'released';
-    item.checkpoint = 'released';
-    try {
-      const full = path.join(workPath(state.token), item.work_name);
-      if (fs.existsSync(full)) {
-        const stat = fs.lstatSync(full);
-        if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Private Arbeitskopie ist nicht sicher bereinigbar.');
-        (deps.unlinkWorkCopy || fs.unlinkSync)(full);
+    if (item.status === DELIVERY_PENDING) {
+      item.status = 'released';
+      item.checkpoint = 'released';
+      try {
+        cleanupTerminalWorkCopy(state, item, deps);
+      } catch {
+        item.work_copy_cleanup_pending = true;
       }
-      delete item.work_copy_cleanup_pending;
+    }
+    item.analysis_acknowledged = true;
+    writeState(state);
+    return { ok: true, ...publicProgress(state), local_evidence_exported: writeTerminalEvidence(state), raw_content_sent_to_claude: false };
+  } finally {
+    active.delete(token);
+    releaseActiveLock(token);
+  }
+}
+
+function finalizePublishedPackageLocally(token, packageId, deps = {}) {
+  if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
+  acquireActiveLock(token);
+  active.add(token);
+  try {
+    const state = readState(token);
+    assertLocalExecutorAccess(state, deps.executorPid);
+    const item = state.items.find((candidate) => candidate.status === DELIVERY_PENDING && candidate.package_id === packageId);
+    if (!item || !regularPublishedPackage(packageId)) {
+      throw new SafeError('Das lokal veröffentlichte Paket konnte nicht sicher abgeschlossen werden.');
+    }
+    item.status = 'released';
+    item.checkpoint = 'released_locally';
+    item.analysis_acknowledged = false;
+    try {
+      cleanupTerminalWorkCopy(state, item, deps);
     } catch {
       item.work_copy_cleanup_pending = true;
     }
@@ -675,25 +865,78 @@ function acknowledgeDeliveredPackage(token, packageId, deps = {}) {
   }
 }
 
+function resultCursor(token, index) {
+  const position = String(index);
+  const signature = crypto.createHmac('sha256', token).update(position).digest('base64url').slice(0, 16);
+  return Buffer.from(`${position}.${signature}`, 'utf8').toString('base64url');
+}
+
+function parseResultCursor(token, cursor) {
+  if (cursor === undefined || cursor === null || cursor === '') return 0;
+  if (typeof cursor !== 'string' || cursor.length > 96 || !/^[A-Za-z0-9_-]+$/.test(cursor)) {
+    throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
+  }
+  let decoded;
+  try { decoded = Buffer.from(cursor, 'base64url').toString('utf8'); } catch { throw new SafeError('Der Ergebnis-Cursor ist ungültig.'); }
+  const match = /^(0|[1-9][0-9]{0,2})\.([A-Za-z0-9_-]{16})$/.exec(decoded);
+  if (!match) throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
+  const index = Number(match[1]);
+  const expected = resultCursor(token, index);
+  const left = Buffer.from(expected);
+  const right = Buffer.from(cursor);
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
+  return index;
+}
+
+function listBatchResults(token, options = {}) {
+  const limit = Number(options.limit ?? 10);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new SafeError('Ergebnislimit muss zwischen 1 und 20 liegen.');
+  const state = readState(token);
+  const start = parseResultCursor(token, options.cursor);
+  if (start > state.items.length) throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
+  const results = [];
+  let nextIndex = start;
+  for (; nextIndex < state.items.length && results.length < limit; nextIndex++) {
+    const item = state.items[nextIndex];
+    if (item.status !== 'released' || item.analysis_acknowledged === true) continue;
+    if (!regularPublishedPackage(item.package_id)) throw new SafeError('Ein freigegebenes Ergebnis konnte nicht sicher verifiziert werden.');
+    const { issueReadCapability } = require('./package-store');
+    const grant = issueReadCapability(item.package_id);
+    results.push({
+      package_id: item.package_id,
+      read_capability: grant.read_capability,
+      read_capability_expires_at: grant.read_capability_expires_at
+    });
+  }
+  const available = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true).length;
+  const used = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged === true).length;
+  const progress = publicProgress(state);
+  return {
+    ok: true,
+    results,
+    next_cursor: nextIndex < state.items.length ? resultCursor(token, nextIndex) : null,
+    used,
+    available,
+    still_open: progress.remaining + progress.processing + progress.retryable + progress.deferred_review + progress.delivery_pending,
+    safely_stopped: progress.stopped,
+    batch_complete: progress.complete,
+    raw_content_sent_to_claude: false
+  };
+}
+
 function retryReleasedWorkCopyCleanup(state, deps = {}) {
   let changed = false;
   let pending = 0;
   for (const item of state.items || []) {
-    if (item.status !== 'released' || item.work_copy_cleanup_pending !== true) continue;
+    if (!['released', 'stopped'].includes(item.status) || item.work_copy_cleanup_pending !== true) continue;
     if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item.work_name || ''))) {
       pending++;
       continue;
     }
-    const full = path.join(workPath(state.token), item.work_name);
     try {
-      // Never follow or recursively remove an unexpected entry while cleaning
-      // a successful private copy. A vanished regular copy is already clean.
-      if (fs.existsSync(full)) {
-        const stat = fs.lstatSync(full);
-        if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Private Arbeitskopie ist nicht sicher bereinigbar.');
-        (deps.unlinkWorkCopy || fs.unlinkSync)(full);
-      }
-      delete item.work_copy_cleanup_pending;
+      // Never follow or recursively remove an unexpected terminal copy. A
+      // vanished regular copy is already clean.
+      cleanupTerminalWorkCopy(state, item, deps);
       changed = true;
     } catch {
       pending++;
@@ -767,6 +1010,7 @@ async function reviewDeferredBatch(token, deps = {}) {
   active.add(token);
   try {
     const state = readState(token);
+    assertLocalExecutorAccess(state, deps.executorPid);
     if (state.invalidated === true) throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
     if (reconcilePublishedItems(state)) writeState(state);
     if (markInterruptedItemsRetryable(state) > 0) writeState(state);
@@ -816,6 +1060,7 @@ async function reviewDeferredBatch(token, deps = {}) {
 
     const decisionsByIndex = new Map(outcome.documents.map((document) => [document.document_index, document.decisions]));
     const packages = [];
+    let locallyReleased = 0;
     let failed = 0;
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
@@ -849,12 +1094,21 @@ async function reviewDeferredBatch(token, deps = {}) {
           const mappingError = localReviewError('LOCAL_MAPPING_EXPORT_FAILED', 'Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
           throw mappingError;
         }
-        item.status = DELIVERY_PENDING;
-        item.checkpoint = 'delivery_pending';
         item.package_id = result.package_id;
-        item.work_copy_cleanup_pending = true;
+        if (deps.localFinalize === true) {
+          item.status = 'released';
+          item.checkpoint = 'released_locally';
+          item.analysis_acknowledged = false;
+          try { cleanupTerminalWorkCopy(state, item, deps); }
+          catch { item.work_copy_cleanup_pending = true; }
+          locallyReleased++;
+        } else {
+          item.status = DELIVERY_PENDING;
+          item.checkpoint = 'delivery_pending';
+          item.work_copy_cleanup_pending = true;
+        }
         writeState(state);
-        packages.push(deliveryResult(state, item));
+        if (deps.localFinalize !== true) packages.push(deliveryResult(state, item));
       } catch (error) {
         const code = error?.code || 'PROCESSING_INTERRUPTED';
         item.status = RETRYABLE_CODES.has(code) ? 'retryable' : 'stopped';
@@ -863,6 +1117,8 @@ async function reviewDeferredBatch(token, deps = {}) {
         if (item.status === 'stopped') {
           try { appendMapping(item.name, '', MAPPING_STOPPED); item.local_mapping_exported = true; }
           catch { item.local_mapping_exported = false; }
+          try { cleanupTerminalWorkCopy(state, item, deps); }
+          catch { item.work_copy_cleanup_pending = true; }
         }
         failed++;
         writeState(state);
@@ -873,11 +1129,12 @@ async function reviewDeferredBatch(token, deps = {}) {
       // already verified packages remain usable and must be handed to Claude
       // with their live capabilities rather than being hidden behind an MCP
       // error response. The counters still make the partial failure explicit.
-      ok: packages.length > 0,
-      packages,
+      ok: packages.length > 0 || locallyReleased > 0,
+      ...(deps.localFinalize === true ? { locally_released: locallyReleased } : { packages }),
       reviewed_documents: items.length,
       failed_documents: failed,
       ...publicProgress(state),
+      ...(deps.localFinalize === true ? { local_evidence_exported: writeTerminalEvidence(state) } : {}),
       raw_content_sent_to_claude: false
     };
   } finally {
@@ -892,6 +1149,7 @@ async function processBatchNext(token, deps = {}) {
   active.add(token);
   try {
     const state = readState(token);
+    assertLocalExecutorAccess(state, deps.executorPid);
     if (state.invalidated === true) throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
     // A crash may happen after the atomic output rename but before the MCP
     // response. Reconcile only a fully verified deterministic package; this
@@ -913,7 +1171,19 @@ async function processBatchNext(token, deps = {}) {
       entry = exactPendingEntry(state, item);
     } catch (error) {
       state.invalidated = true;
-      for (const pending of state.items) if (pending.status === 'pending') pending.status = 'stopped';
+      for (const pending of state.items) {
+        if (pending.status !== 'pending') continue;
+        pending.status = 'stopped';
+        pending.checkpoint = 'stopped';
+        pending.error_code = 'BATCH_SNAPSHOT_CHANGED';
+        // Once the sealed source itself no longer verifies, no later workflow
+        // may consume it. Record the terminal local outcome and remove only
+        // this exact private copy; originals remain untouched.
+        try { appendMapping(pending.name, '', MAPPING_STOPPED); pending.local_mapping_exported = true; }
+        catch { pending.local_mapping_exported = false; }
+        try { cleanupTerminalWorkCopy(state, pending, deps); }
+        catch { pending.work_copy_cleanup_pending = true; }
+      }
       writeState(state);
       return {
         ok: false,
@@ -927,6 +1197,7 @@ async function processBatchNext(token, deps = {}) {
     // recovery converts this state to stopped rather than silently retrying it.
     item.status = 'processing';
     item.checkpoint = 'processing_started';
+    item.processing_started_at_ms = Date.now();
     writeState(state);
     try {
       // Persist only a fixed, content-free phase before every irreversible
@@ -988,6 +1259,8 @@ async function processBatchNext(token, deps = {}) {
       // document or silently moving on.
       item.status = DELIVERY_PENDING;
       item.checkpoint = 'delivery_pending';
+      item.processing_duration_ms = Math.max(0, Date.now() - Number(item.processing_started_at_ms || Date.now()));
+      delete item.processing_started_at_ms;
       item.package_id = result.package_id;
       item.work_copy_cleanup_pending = true;
       writeState(state);
@@ -996,6 +1269,8 @@ async function processBatchNext(token, deps = {}) {
       const code = error && error.code ? error.code : 'PROCESSING_INTERRUPTED';
       item.status = code === 'LOCAL_REVIEW_DEFERRED' ? DEFERRED_REVIEW : (RETRYABLE_CODES.has(code) ? 'retryable' : 'stopped');
       item.checkpoint = item.status === 'retryable' ? 'retryable' : (item.status === DEFERRED_REVIEW ? 'awaiting_local_review' : 'stopped');
+      if (item.status === 'stopped') item.processing_duration_ms = Math.max(0, Date.now() - Number(item.processing_started_at_ms || Date.now()));
+      delete item.processing_started_at_ms;
       item.error_code = code;
       // The permanent, local-only mapping is also the user's overview of a
       // partial batch. A terminal stop has no result package, but must not look
@@ -1006,6 +1281,8 @@ async function processBatchNext(token, deps = {}) {
           appendMapping(item.name, '', MAPPING_STOPPED);
           item.local_mapping_exported = true;
         } catch { item.local_mapping_exported = false; }
+        try { cleanupTerminalWorkCopy(state, item, deps); }
+        catch { item.work_copy_cleanup_pending = true; }
       }
       writeState(state);
       const localEvidenceExported = writeTerminalEvidence(state);
@@ -1027,6 +1304,83 @@ async function processBatchNext(token, deps = {}) {
     active.delete(token);
     releaseActiveLock(token);
   }
+}
+
+function claimLocalBatchExecutor(token, pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0 || !processAlive(pid)) {
+    throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
+  }
+  acquireActiveLock(token);
+  try {
+    const state = readState(token);
+    if (liveLocalExecutor(state)) throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
+    delete state.local_executor_pid;
+    delete state.local_executor_started_at;
+    const progress = publicProgress(state);
+    if (progress.complete || (progress.remaining === 0 && progress.delivery_pending === 0)) {
+      return { ok: false, error: 'batch_not_runnable', ...progress, raw_content_sent_to_claude: false };
+    }
+    state.local_executor_pid = pid;
+    state.local_executor_started_at = new Date().toISOString();
+    writeState(state);
+    return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
+  } finally {
+    releaseActiveLock(token);
+  }
+}
+
+function releaseLocalBatchExecutor(token, pid) {
+  try { acquireActiveLock(token); } catch { return false; }
+  try {
+    const state = readState(token);
+    if (state.local_executor_pid !== pid) return false;
+    delete state.local_executor_pid;
+    delete state.local_executor_started_at;
+    writeState(state);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    releaseActiveLock(token);
+  }
+}
+
+function readBatchProgress(token) {
+  return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
+}
+
+async function runLocalBatchExecutor(token, deps = {}) {
+  const executorPid = Number(deps.executorPid ?? process.pid);
+  const claimed = readState(token);
+  if (!liveLocalExecutor(claimed) || claimed.local_executor_pid !== executorPid) {
+    throw new SafeError('Der lokale Stapelprozessor besitzt keine gültige Ausführungsberechtigung.');
+  }
+  let lastProgress = publicProgress(claimed);
+  try {
+    const maximumSteps = claimed.items.length * 3 + 3;
+    for (let step = 0; step < maximumSteps; step++) {
+      if (lastProgress.delivery_pending > 0) {
+        const state = readState(token);
+        const pending = state.items.find((item) => item.status === DELIVERY_PENDING);
+        if (!pending) break;
+        lastProgress = finalizePublishedPackageLocally(token, pending.package_id, { ...deps, executorPid });
+        continue;
+      }
+      if (lastProgress.remaining === 0) break;
+      const before = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
+      const result = await processBatchNext(token, { ...deps, executorPid });
+      lastProgress = result;
+      if (typeof result.package_id === 'string') {
+        lastProgress = finalizePublishedPackageLocally(token, result.package_id, { ...deps, executorPid });
+        continue;
+      }
+      const after = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
+      if (before === after) break;
+    }
+  } finally {
+    releaseLocalBatchExecutor(token, executorPid);
+  }
+  return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
 }
 
 function recoverBatches(options = {}) {
@@ -1057,6 +1411,7 @@ function recoverBatches(options = {}) {
         // A malformed or substituted journal must remain local and counted as
         // a failure; it must never select another batch's private work copy.
         const state = readStateForMaintenance(token);
+        if (liveLocalExecutor(state)) continue;
         if (now > Date.parse(state.expires_at)) {
           safeRemoveWorkDirectory(state.token);
           fs.unlinkSync(batchPath(state.token));
@@ -1110,6 +1465,7 @@ function cleanupExpiredBatchSnapshots(options = {}) {
       if (!TOKEN_RE.test(tokenFromName)) continue;
       try {
         const state = readStateForMaintenance(tokenFromName);
+        if (liveLocalExecutor(state)) continue;
         if (now <= Date.parse(state.expires_at)) continue;
         safeRemoveWorkDirectory(state.token);
         fs.unlinkSync(batchPath(state.token));
@@ -1141,4 +1497,4 @@ function readStateForMaintenance(token) {
   }
 }
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, recoverBatches, cleanupExpiredBatchSnapshots, _test: { batchRoot, workPath, activeLockPath, readState, readStateForMaintenance, publicProgress, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, regularPublishedPackage, reconcilePublishedItems, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, finalizePublishedPackageLocally, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test: { batchRoot, workPath, activeLockPath, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, regularPublishedPackage, reconcilePublishedItems, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor } };

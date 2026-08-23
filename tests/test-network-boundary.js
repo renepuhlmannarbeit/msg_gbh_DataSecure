@@ -29,10 +29,29 @@ test('parser permission process keeps the network deny preload active', () => {
 test('parser and companion launch the packaged preload before private code', () => {
   const runtime = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'runtime.js'), 'utf8');
   const supervisor = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'companion', 'supervisor.js'), 'utf8');
-  for (const source of [runtime, supervisor]) {
+  const batchExecutor = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'batch-executor.js'), 'utf8');
+  for (const source of [runtime, supervisor, batchExecutor]) {
     assert.match(source, /network-deny\.cjs/u);
     assert.match(source, /--require=/u);
   }
+});
+
+test('the persistent batch worker strips proxy, Node and cloud credential controls', () => {
+  const { batchWorkerEnvironment } = require('../plugins/data-secure/server/gateway/batch-executor');
+  const clean = batchWorkerEnvironment({
+    SystemRoot: 'C:\\Windows',
+    LOCALAPPDATA: 'C:\\Local',
+    EU_PRIVACY_ROOT: 'C:\\Privacy',
+    HTTPS_PROXY: 'https://proxy.invalid',
+    NODE_OPTIONS: '--inspect=0.0.0.0:9229',
+    AWS_SECRET_ACCESS_KEY: 'secret',
+    OPENAI_API_KEY: 'secret'
+  });
+  assert.deepStrictEqual({ ...clean }, {
+    SystemRoot: 'C:\\Windows',
+    LOCALAPPDATA: 'C:\\Local',
+    EU_PRIVACY_ROOT: 'C:\\Privacy'
+  });
 });
 
 done();

@@ -28,7 +28,9 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /Originale \*\*nicht\*\*[^\n]+Chat-Upload/iu);
   assert.match(anonymizeSkill, /read_anonymized_document/u);
   assert.match(anonymizeSkill, /ursprüngliche Nutzeraufgabe automatisch/iu);
-  assert.match(anonymizeSkill, /`package_id` und `read_capability` aus demselben erfolgreichen Einzelergebnis/iu);
+  assert.match(anonymizeSkill, /`list_document_batch_results` mit höchstens zehn Ergebnissen pro Seite/iu);
+  assert.match(anonymizeSkill, /`package_id` und `read_capability` aus dieser aktuellen Seite/iu);
+  assert.match(anonymizeSkill, /Ein Chatabbruch verändert den bereits lokal abgeschlossenen Stapel nicht/iu);
 });
 
 test('Markdown-only output keeps image pixels local instead of unnecessarily enabling strict discard', () => {

@@ -23,8 +23,8 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
 | Reise | Erwartetes Verhalten |
 |---|---|
 | Erststart | Status nennt Version, Bereitschaft und Anzahl im Eingang ohne Pfade oder Namen. |
-| Eine Datei | Ordner öffnet sich, Bestätigung wird abgewartet, genau ein Verarbeitungsaufruf folgt. |
-| Mehrere Dateien | Anzahl wird nach Bestätigung erneut geprüft; pro Datei folgt ein eigener kurzer Aufruf. |
+| Eine Datei | Ordner öffnet sich, Bestätigung wird abgewartet, danach läuft die lokale Verarbeitung unabhängig vom Chat. |
+| Mehrere Dateien | Anzahl wird nach Bestätigung erneut geprüft; ein lokaler Hintergrundprozessor arbeitet den versiegelten Stapel sequenziell ab. |
 | Gemischte Dokumentarten | `auto` ordnet TXT/Markdown/CSV/DOCX intern ein; weitere Formate bleiben im Pilot gesperrt. |
 | Reines Bild/Scan | Stoppt im beaufsichtigten Pilot mit `FORMAT_COVERAGE_UNVERIFIED`. |
 | Personalprofil mit Bildern | Keine zusätzliche Standardfrage; Bilder bleiben lokal, Text kann freigegeben werden. |
@@ -33,16 +33,17 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
 | Altbestand im Eingang | Nur die Anzahl wird gemeldet; vor Verarbeitung muss der aktuelle Bestand bestätigt werden. |
 | Abweichende Anzahl | Keine Verarbeitung, bis der Anwender den Eingang korrigiert oder die erkannte Zahl bestätigt. |
 | Stopp in Datei 1 | Der Server markiert den Stopp; Datei 2 bis N werden genau einmal versucht. |
-| Teilerfolg | Claude nutzt nur Paket-IDs der erfolgreichen Einzelaufrufe und nennt exakte Zähler. |
+| Teilerfolg | Claude erhält nur eine namenfreie, begrenzte Ergebnisliste und nennt exakte Zähler. |
 | Chat-Anhang | Sicherer Stopp; die frühere Offenlegung wird nicht als rückgängig gemacht dargestellt. |
 | PDF | Sicherer Stopp mit `PDF_COVERAGE_UNVERIFIED`; kein Upload als Umgehung. |
 | Löschen | Umfang und Bestätigung bleiben ausdrücklich; Audit-Metadaten werden nicht mitgelöscht. |
 
 ## Im Review beseitigte Ablaufprobleme
 
-1. **Stapel-Timeout:** Der öffentliche Komplettstapel belegte einen MCP-Aufruf für bis
-   zu 25 Dateien. Er wurde aus der öffentlichen Werkzeugoberfläche entfernt. Der Skill
-   nutzt jetzt einen Aufruf pro Datei.
+1. **Stapel-Timeout und Modellaufruf-Flut:** Der Startaufruf kehrt sofort zurück; ein
+   getrennter lokaler Prozessor arbeitet bis zum nächsten sicheren End-/Reviewzustand.
+   Claude liest anschließend höchstens zehn namenfreie Ergebnisse pro Seite und nur
+   den für die Aufgabe benötigten Inhalt.
 2. **Wiederholungsschleife:** Eine gestoppte Datei bleibt als versiegelte private
    Arbeitskopie fortsetzbar. Die Originaldatei bleibt unverändert im Eingang. Eine
    serverseitige Batch-Sitzung verwaltet Fortschritt und Stopps, ohne modellseitige

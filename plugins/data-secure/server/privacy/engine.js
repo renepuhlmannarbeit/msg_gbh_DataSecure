@@ -183,9 +183,7 @@ function anonymize(text, profile = 'general', options = {}) {
   const src = normalizeText(text);
   const findings = [];
   const reg = options.registry || makeRegistry();
-  const sourceCredentialRanges = profile === 'personnel_profile' || profile === 'applicant'
-    ? credentialContextSpans(src)
-    : [];
+  const sourceCredentialRanges = credentialContextSpans(src);
   const sourceOrgSpans = collectOrganizations(src).flatMap((org) =>
     findLiteralSpans(src,org,'','ORGANIZATION',PRIORITY.ORGANIZATION)
   );
@@ -201,6 +199,11 @@ function anonymize(text, profile = 'general', options = {}) {
     if (occurrences.every((span) =>
       sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
     )) return false;
+    // A certification section is professional content in every document type.
+    // Keep explicit holders ("Certificate for Anna Beispiel") detectable, but
+    // never reinterpret a title such as "Azure Fundamentals" as a person.
+    if (occurrences.every((span) => inCredentialContext(src, span.start, span.end, sourceCredentialRanges)) &&
+        !['label', 'honorific', 'credential_holder'].includes(seed.confidence)) return false;
     return !occurrences.every((span) =>
       inCredentialContext(src,span.start,span.end,sourceCredentialRanges) &&
       sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
@@ -213,10 +216,11 @@ function anonymize(text, profile = 'general', options = {}) {
   }
 
   let out = src;
-  if (profile === 'personnel_profile') out = anonymizePersonnel(out, reg, findings, personKeys);
-  const credentialRanges = profile === 'personnel_profile' || profile === 'applicant'
-    ? credentialContextSpans(out)
-    : [];
+  // Applicant profiles contain the same direct employment and residence
+  // fields as personnel profiles.  Applying the bounded label/table path to
+  // both prevents a labelled applicant location from surviving the release.
+  if (profile === 'personnel_profile' || profile === 'applicant') out = anonymizePersonnel(out, reg, findings, personKeys);
+  const credentialRanges = credentialContextSpans(out);
 
   const dictionary = [
     ...buildPersonDictionary(seeds, reg),
@@ -225,7 +229,7 @@ function anonymize(text, profile = 'general', options = {}) {
 
   for (const seed of seeds) findings.push({ type: 'PERSON', value_hash: hashShort(seed.value) });
 
-  if (profile === 'personnel_profile') {
+  if (profile === 'personnel_profile' || profile === 'applicant') {
     for (const loc of [...new Set(reg.locations.filter(Boolean))]) {
       dictionary.push({
         value: loc,
@@ -302,9 +306,7 @@ function anonymize(text, profile = 'general', options = {}) {
 // redactor claimed to have replaced survives in the output.
 function scanResidual(text, profile = 'general', knownValues = [], options = {}) {
   const clean = normalizeText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
-  const credentialRanges = profile === 'personnel_profile' || profile === 'applicant'
-    ? credentialContextSpans(clean)
-    : [];
+  const credentialRanges = credentialContextSpans(clean);
   const out = scanStructured(clean)
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .map((f) => ({ type: f.type, text: f.text }));
@@ -323,7 +325,10 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
       inCredentialContext(clean,span.start,span.end,credentialRanges) &&
       residualOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
     );
-    if(issuerOnly) continue;
+    const certificationOnly = occurrences.length > 0 && occurrences.every((span) =>
+      inCredentialContext(clean, span.start, span.end, credentialRanges)
+    ) && !['label', 'honorific', 'credential_holder'].includes(seed.confidence);
+    if(issuerOnly || certificationOnly) continue;
     out.push({ type: 'PERSON_CANDIDATE', text: seed.value });
   }
 

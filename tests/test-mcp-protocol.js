@@ -140,15 +140,21 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 16, `expected exactly 16 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 20, `expected exactly 20 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'open_input_folder'));
+    assert.ok(tools.some((tool) => tool.name === 'open_export_folder'));
     assert.ok(!tools.some((tool) => tool.name === 'prepare_local_document'));
     assert.ok(!tools.some((tool) => tool.name === 'anonymize_all_documents'));
+    assert.ok(!tools.some((tool) => tool.name === 'anonymize_next_document'));
     assert.ok(!tools.some((tool) => tool.name === 'list_anonymized_packages'));
     assert.ok(tools.some((tool) => tool.name === 'begin_document_batch'));
+    assert.ok(tools.some((tool) => tool.name === 'start_document_batch_processing'));
+    assert.ok(tools.some((tool) => tool.name === 'document_batch_status'));
+    assert.ok(tools.some((tool) => tool.name === 'list_document_batch_results'));
     assert.ok(tools.some((tool) => tool.name === 'acknowledge_batch_document'));
     assert.ok(tools.some((tool) => tool.name === 'review_deferred_document_batch'));
     assert.ok(tools.some((tool) => tool.name === 'continue_most_recent_document_batch'));
+    assert.ok(tools.some((tool) => tool.name === 'discard_incomplete_document_batches'));
     assert.ok(tools.some((tool) => tool.name === 'purge_local_data'));
     assert.ok(tools.some((tool) => tool.name === 'export_diagnostic_package'));
     assert.ok(!tools.some((tool) => tool.name === 'approve_visual_asset'));
@@ -162,11 +168,13 @@ async function main() {
         `tool ${tool.name} accepts unknown arguments`
       );
       assert.ok(tool.annotations, `tool ${tool.name} has no annotations`);
+      assert.strictEqual(typeof tool.title, 'string', `tool ${tool.name} has no title`);
+      assert.ok(tool.title.length > 0, `tool ${tool.name} has an empty title`);
+      for (const field of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint']) {
+        assert.strictEqual(typeof tool.annotations[field], 'boolean', `tool ${tool.name} has no boolean ${field}`);
+      }
       assert.strictEqual(tool.annotations.openWorldHint, false, `tool ${tool.name} must be closed world`);
     }
-    const next = tools.find((tool) => tool.name === 'anonymize_next_document');
-    assert.deepStrictEqual(next.inputSchema.required, ['batch_token']);
-    assert.strictEqual(next.inputSchema.properties.batch_token.minLength, 64);
     const acknowledge = tools.find((tool) => tool.name === 'acknowledge_batch_document');
     assert.deepStrictEqual(acknowledge.inputSchema.required, ['batch_token', 'package_id']);
     const continueMostRecent = tools.find((tool) => tool.name === 'continue_most_recent_document_batch');
@@ -189,11 +197,22 @@ async function main() {
   await testAsync('read tools are annotated read only and write tools are not', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const byName = Object.fromEntries(responses.find((r) => r.id === 2).result.tools.map((t) => [t.name, t]));
-    for (const name of ['privacy_status', 'diagnostic_status', 'read_anonymized_document']) {
+    for (const name of ['privacy_status', 'diagnostic_status', 'document_batch_status', 'read_anonymized_document']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, true, `${name} must be read only`);
     }
-    for (const name of ['anonymize_next_document', 'purge_local_data']) {
+    for (const name of ['start_document_batch_processing', 'list_document_batch_results', 'purge_local_data']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, false, `${name} must not claim to be read only`);
+    }
+    for (const name of ['start_document_batch_processing', 'review_deferred_document_batch', 'acknowledge_batch_document', 'discard_incomplete_document_batches', 'purge_local_data']) {
+      assert.strictEqual(byName[name].annotations.destructiveHint, true, `${name} must disclose destructive local state changes`);
+    }
+    for (const name of ['privacy_status', 'diagnostic_status', 'document_batch_status', 'read_anonymized_document', 'list_visual_review_items']) {
+      assert.strictEqual(byName[name].annotations.idempotentHint, true, `${name} must disclose idempotent reads`);
+      assert.strictEqual(byName[name].annotations.destructiveHint, false, `${name} must be non-destructive`);
+    }
+    for (const name of ['open_input_folder', 'open_privacy_folder', 'open_output_folder', 'open_export_folder', 'open_visual_review_folder']) {
+      assert.strictEqual(byName[name].annotations.idempotentHint, false, `${name} opens a new local UI instance`);
+      assert.strictEqual(byName[name].annotations.destructiveHint, false, `${name} only opens a local folder`);
     }
   });
 
@@ -417,7 +436,8 @@ async function main() {
     assert.strictEqual(prompts.length, 4);
     const got = responses.find((r) => r.id === 3).result;
     assert.strictEqual(got.messages[0].role, 'user');
-    assert.match(got.messages[0].content.text, /anonymize_next_document/);
+    assert.match(got.messages[0].content.text, /start_document_batch_processing/);
+    assert.match(got.messages[0].content.text, /list_document_batch_results/);
     assert.match(got.messages[0].content.text, /profile=personnel_profile/);
     assert.match(got.messages[0].content.text, /Skills zusammenfassen/);
     assert.match(got.messages[0].content.text, /Aufbewahrungsfrist/);

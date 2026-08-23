@@ -1,0 +1,79 @@
+{
+  "schema": "datasecure-host-matrix/v1",
+  "checked_at": "2026-08-23",
+  "original_processing_gate": "successful_privacy_status_in_current_session",
+  "fallbacks_forbidden": [
+    "chat_upload",
+    "computer_use",
+    "general_filesystem",
+    "other_connector"
+  ],
+  "hosts": [
+    {
+      "id": "cowork_desktop_local_mcp",
+      "surface": "Claude Cowork Desktop",
+      "pilot_status": "conditional",
+      "skill_available": "not_sufficient",
+      "local_mcp_available": "runtime_probe_required",
+      "desktop_bridge_required": true,
+      "originals_allowed_after_gate": true,
+      "clean_markdown_allowed": true
+    },
+    {
+      "id": "claude_code_local_mcp",
+      "surface": "Claude Code local",
+      "pilot_status": "conditional",
+      "skill_available": "not_sufficient",
+      "local_mcp_available": "runtime_probe_required",
+      "desktop_bridge_required": false,
+      "originals_allowed_after_gate": true,
+      "clean_markdown_allowed": true
+    },
+    {
+      "id": "desktop_missing_or_disconnected_mcp",
+      "surface": "Desktop host without a successful local MCP probe",
+      "pilot_status": "no_go_for_originals",
+      "skill_available": "irrelevant",
+      "local_mcp_available": false,
+      "desktop_bridge_required": true,
+      "originals_allowed_after_gate": false,
+      "clean_markdown_allowed": true
+    },
+    {
+      "id": "claude_web",
+      "surface": "Claude Web",
+      "pilot_status": "no_go_for_originals",
+      "skill_available": "irrelevant",
+      "local_mcp_available": "not_approved",
+      "desktop_bridge_required": true,
+      "originals_allowed_after_gate": false,
+      "clean_markdown_allowed": true
+    },
+    {
+      "id": "claude_mobile",
+      "surface": "Claude Mobile",
+      "pilot_status": "no_go_for_originals",
+      "skill_available": "irrelevant",
+      "local_mcp_available": "not_approved",
+      "desktop_bridge_required": true,
+      "originals_allowed_after_gate": false,
+      "clean_markdown_allowed": true
+    },
+    {
+      "id": "cloud_or_scheduled_session",
+      "surface": "Cloud or scheduled Claude session",
+      "pilot_status": "no_go_for_originals",
+      "skill_available": "irrelevant",
+      "local_mcp_available": "not_approved",
+      "desktop_bridge_required": true,
+      "originals_allowed_after_gate": false,
+      "clean_markdown_allowed": true
+    }
+  ],
+  "sources": [
+    "https://support.claude.com/en/articles/13837440-use-plugins-in-claude",
+    "https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview",
+    "https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile",
+    "https://support.claude.com/en/articles/11725091-when-to-use-desktop-and-web-connectors"
+  ]
+}

@@ -31,8 +31,9 @@ werden niemals verschoben, verändert oder als Fortsetzungsbasis verwendet.
 
 `snapshot.json` enthält nur Schema-/Versionsstand, zufällige Batch- und Item-IDs,
 Quellbasename für das spätere lokale Mapping, erkannten Dateityp, Bytezahl,
-Arbeitskopie-Hash, Status, einen festen inhaltsfreien Checkpoint, einen optionalen
-booleschen `review_resumed`-Marker und Journalsequenz. Arbeitskopien tragen ausschließlich
+Arbeitskopie-Hash, Status, einen festen inhaltsfreien Checkpoint, optionale boolesche
+`review_resumed`-/`analysis_acknowledged`-Marker sowie die lokale Executor-PID mit
+Startzeit und Journalsequenz. Arbeitskopien tragen ausschließlich
 zufällige interne Namen. Das gesamte Verzeichnis muss nur für den aktuellen Benutzer
 zugänglich sein und bekannte Sync-/Netzwerkpfade ablehnen.
 
@@ -42,7 +43,9 @@ Diagnose unsichtbar. Hashes der Arbeitskopien verlassen den privaten Job Store n
 
 ## Zustands- und Fortsetzungsregeln
 
-- Pro Benutzer darf höchstens ein Stapel den Zustand `processing` besitzen.
+- Pro Benutzer darf höchstens ein Stapel lokal ausgeführt werden. Seine PID-basierte
+  Executor-Lease ist ausschließlich lokaler technischer Zustand; ein lebender Owner
+  blockiert zweiten Start, Resume, Review, Verwerfen und Ablaufbereinigung.
 - Zulässige Itemzustände sind `pending`, `processing`, `delivery_pending`, `released`,
   `retryable`, `deferred_review` und `stopped`. `deferred_review` enthält nur den
   festen Checkpoint `awaiting_local_review`, niemals einen Entwurf, Fundstellen,
@@ -63,11 +66,17 @@ Diagnose unsichtbar. Hashes der Arbeitskopien verlassen den privaten Job Store n
   verifiziertes Ergebnis existiert. Ein vorhandenes verifiziertes Ergebnis wird
   über seine zufällige Item-Paketkennung, sein Manifest und seinen Markdown-Hash
   übernommen, nicht neu erzeugt. Sein Mapping-Commit ist idempotent.
-- Ein Ergebnis bleibt `delivery_pending`, bis Claude es mit seiner Paketkennung
-  bestätigt hat. Bis dahin wird genau dasselbe verifizierte Paket erneut angeboten;
-  die Quelle wird nicht erneut verarbeitet. Erst nach dieser Bestätigung werden
-  Ergebnisstatus und Arbeitskopie terminal fortgeschrieben. Offene Kopien verfallen
-  spätestens nach 14 Tagen.
+- Der normale lokale Executor übernimmt ein verifiziertes `delivery_pending`-Paket
+  unmittelbar in `released`, bereinigt seine private Arbeitskopie und verarbeitet die
+  nächste Position, ohne auf Claude zu warten. `delivery_pending` bleibt als enger
+  Crash-/Legacy-Übergang zulässig und wird deterministisch übernommen, nie neu erzeugt.
+  `analysis_acknowledged` dokumentiert davon getrennt nur, ob Claude das freigegebene
+  Paket für die aktuelle Aufgabe bereits ausgewertet hat. Ein KI-Abbruch ändert weder
+  `released` noch Mapping, Evidenz oder lokalen Batchabschluss.
+- Freigegebene Ergebnisse werden ausschließlich über einen Batch-gebundenen,
+  authentisierten Cursor in Seiten bis 20 Einträgen angeboten. Die Liste enthält
+  keine Quellnamen oder Pfade; jede Leseberechtigung bleibt kurzlebig und paketgebunden.
+  Offene private Kopien verfallen spätestens nach 14 Tagen.
 - Lösch- oder Persistenzfehler werden sichtbar und blockieren eine widersprüchliche
   Freigabe; sie führen nicht zu einem stillen Neustart des gesamten Stapels.
 

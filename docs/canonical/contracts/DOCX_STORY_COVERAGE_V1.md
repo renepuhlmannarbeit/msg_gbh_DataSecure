@@ -25,7 +25,7 @@ stabilen, paketinternen `source_part` im Content-Graph und muss über genau eine
 interne Beziehung von `word/document.xml` erreichbar sein. Der Wurzeltyp des Zielparts
 muss zum Relationship-Typ passen (`w:hdr`, `w:ftr`, `w:comments`, `w:footnotes` oder
 `w:endnotes`). Verwaiste Parts, externe Ziele, Parent-Traversal, fehlende Ziele,
-doppelte Story-Beziehungen, falsch deklarierte Story-Wurzeln und mehrdeutige Root-Beziehungen sind keine
+doppelte Story-Beziehungen, falsch deklarierte oder abgeschnittene Story-Wurzeln und mehrdeutige Root-Beziehungen sind keine
 zulässige Alternative. Die Inhalte
 werden genau einmal in der Markdown-Repräsentation
 geführt und anschließend durch denselben Pseudonymisierungs- und Residual-Gate
@@ -54,7 +54,7 @@ Anonymisierung. Ein separater Negativtest belegt verwaiste und fehlende
 Story-Beziehungen ohne Preisgabe von Partnamen oder Text; die Matrix umfasst zusätzlich
 fehlende, externe, falsche und doppelte Root-`officeDocument`-Beziehungen sowie
 Parent-Traversal, externe Ziele, Typ-Ziel-Mismatches, doppelte Story-Beziehungen und
-falsch deklarierte Story-Wurzeln sekundärer Stories. Die bestehenden adversarialen Tests belegen die sperrende
+falsch deklarierte oder abgeschnittene Story-Wurzeln sekundärer Stories. Die bestehenden adversarialen Tests belegen die sperrende
 Behandlung unbekannter Parts, externer Beziehungen, aktiver Inhalte und
 Einbettungen. Vollcoverage erfordert zusätzlich einen
 beziehungsbasierten Reachability-Nachweis und positive/negative Tests für alle
@@ -63,6 +63,10 @@ zulässigen Story- und Relationship-Varianten.
 ## Wiederverwendung
 
 Die Part-/Relationship-Struktur folgt Open Packaging Conventions und
-WordprocessingML. Mammoth wird nur als künftiger Differential-Kandidat
-betrachtet: es ist ein HTML-Konverter und kann eine fehlende
-fail-closed-Coverage-Prüfung nicht ersetzen.
+WordprocessingML. Mammoth 1.12.1 ist als exakt gelocktes Entwicklungsorakel
+eingebunden: `test-docx-differential.js` vergleicht den Token-Erhalt des
+Hauptteils und gewöhnlicher Tabellen in 24 synthetisch erzeugten gültigen DOCX
+mit der unabhängigen HTML-Konvertierung. Mammoth ist weder Runtime- noch
+Pluginabhängigkeit und kann keine fehlende fail-closed-Coverage-Prüfung oder
+Interoperabilitätsabnahme mit realen Word-Generatoren ersetzen. Rest: praktische
+Drei-OS- und Word-Generator-Abnahme.

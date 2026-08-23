@@ -219,8 +219,10 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.match(isolated, /stdio: \['ignore', 'pipe', 'ignore'\]/u);
   const posix = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
     'posix-sandbox.c'), 'utf8');
-  for (const token of ['setrlimit(RLIMIT_CPU', 'proc_pid_rusage', '/proc/%ld/statm',
-    'kill(-child_group, SIGKILL)', 'RESOURCE_LIMIT']) {
+  for (const token of ['setrlimit(RLIMIT_CPU', 'setrlimit(RLIMIT_AS',
+    'setrlimit(RLIMIT_DATA', 'setrlimit(RLIMIT_FSIZE', 'setrlimit(RLIMIT_NOFILE',
+    'proc_pid_rusage', '/proc/%ld/statm', 'kill(-child_group, SIGKILL)',
+    'datasecure-posix-sandbox/v1', 'process_group_reap', 'RESOURCE_LIMIT']) {
     assert.ok(posix.includes(token), `POSIX OCR boundary missing ${token}`);
   }
 
@@ -236,6 +238,7 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   assert.match(workflow, /isolated-run\.mjs/u);
   assert.match(workflow, /test-ocr-result-contract\.mjs/u);
   assert.match(workflow, /cc -std=c11 -O2 -Wall -Wextra -Werror/u);
+  assert.match(workflow, /--sandbox-contract/u);
   for (const token of ['build-ocr-runtime.mjs', 'test-ocr-runtime-bundle.mjs',
     'test-ocr-runtime-smoke.mjs', 'dist/ocr-runtime/${{ env.OCR_BUNDLE_TARGET }}/',
     'include-hidden-files: true', 'assemble-ocr-runtime.mjs',

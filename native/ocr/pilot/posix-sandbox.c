@@ -25,6 +25,8 @@
 enum { USAGE_ERROR = 120, SETUP_ERROR = 121, START_ERROR = 122,
        WAIT_ERROR = 124, RESOURCE_LIMIT = 125 };
 
+#define CONTRACT_JSON "{\"schema\":\"datasecure-posix-sandbox/v1\",\"limits\":[\"cpu\",\"address_space\",\"data\",\"file_size\",\"open_files\",\"rss\",\"wallclock\"],\"process_group_reap\":true}\n"
+
 static volatile sig_atomic_t child_group = -1;
 
 static void terminate_group(int signal_number) {
@@ -88,9 +90,13 @@ static void kill_and_reap(pid_t pid) {
 
 int main(int argc, char **argv) {
   uint64_t memory_mib = 0, cpu_ms = 0, wall_ms = 0;
-  uint64_t memory_bytes, started;
+  uint64_t memory_bytes, address_bytes, started;
   pid_t pid;
   struct sigaction action;
+  if (argc == 2 && strcmp(argv[1], "--sandbox-contract") == 0) {
+    if (fputs(CONTRACT_JSON, stdout) == EOF || fflush(stdout) != 0) return WAIT_ERROR;
+    return 0;
+  }
   if (argc < 10 || strcmp(argv[1], "--memory-mib") != 0 ||
       strcmp(argv[3], "--cpu-ms") != 0 || strcmp(argv[5], "--wall-ms") != 0 ||
       strcmp(argv[7], "--") != 0 ||
@@ -98,6 +104,14 @@ int main(int argc, char **argv) {
       !parse_unsigned(argv[4], 100, 600000, &cpu_ms) ||
       !parse_unsigned(argv[6], 100, 600000, &wall_ms)) return USAGE_ERROR;
   memory_bytes = memory_mib * 1024ULL * 1024ULL;
+  /* V8 reserves substantially more virtual address space than resident RAM.
+     Keep that reservation possible while still placing a finite hard ceiling
+     on native mmap/Buffer pressure. RSS remains independently monitored at the
+     user-selected memory limit. */
+  address_bytes = memory_bytes * 8ULL;
+  if (address_bytes < 4096ULL * 1024ULL * 1024ULL) {
+    address_bytes = 4096ULL * 1024ULL * 1024ULL;
+  }
   memset(&action, 0, sizeof(action));
   action.sa_handler = terminate_group;
   sigemptyset(&action.sa_mask);
@@ -109,6 +123,10 @@ int main(int argc, char **argv) {
   if (pid == 0) {
     struct rlimit cpu_limit;
     struct rlimit core_limit;
+    struct rlimit address_limit;
+    struct rlimit data_limit;
+    struct rlimit file_limit;
+    struct rlimit open_file_limit;
     uint64_t seconds = (cpu_ms + 999ULL) / 1000ULL;
     if (setpgid(0, 0) != 0) _exit(SETUP_ERROR);
 #ifdef __linux__
@@ -118,7 +136,20 @@ int main(int argc, char **argv) {
     cpu_limit.rlim_max = (rlim_t)seconds;
     core_limit.rlim_cur = 0;
     core_limit.rlim_max = 0;
-    if (setrlimit(RLIMIT_CPU, &cpu_limit) != 0 || setrlimit(RLIMIT_CORE, &core_limit) != 0) {
+    address_limit.rlim_cur = (rlim_t)address_bytes;
+    address_limit.rlim_max = (rlim_t)address_bytes;
+    data_limit.rlim_cur = (rlim_t)memory_bytes;
+    data_limit.rlim_max = (rlim_t)memory_bytes;
+    file_limit.rlim_cur = (rlim_t)(64ULL * 1024ULL * 1024ULL);
+    file_limit.rlim_max = (rlim_t)(64ULL * 1024ULL * 1024ULL);
+    open_file_limit.rlim_cur = (rlim_t)64;
+    open_file_limit.rlim_max = (rlim_t)64;
+    if (setrlimit(RLIMIT_CPU, &cpu_limit) != 0 ||
+        setrlimit(RLIMIT_CORE, &core_limit) != 0 ||
+        setrlimit(RLIMIT_AS, &address_limit) != 0 ||
+        setrlimit(RLIMIT_DATA, &data_limit) != 0 ||
+        setrlimit(RLIMIT_FSIZE, &file_limit) != 0 ||
+        setrlimit(RLIMIT_NOFILE, &open_file_limit) != 0) {
       _exit(SETUP_ERROR);
     }
     execvp(argv[8], &argv[8]);

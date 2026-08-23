@@ -13,6 +13,47 @@ const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/1';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
+function exactContextLine(text, start, end) {
+  const source = String(text || '');
+  const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  const lineEndAt = source.indexOf('\n', end);
+  const lineEnd = lineEndAt < 0 ? source.length : lineEndAt;
+  // This is a deliberately narrow equivalence proof: grouping is permitted
+  // only when the complete local source line is identical after the same
+  // Unicode/whitespace normalization. It is never a fuzzy issuer match.
+  return normalizeText(source.slice(lineStart, lineEnd)).replace(/\s+/gu, ' ').trim().toLocaleLowerCase('de-DE');
+}
+
+function decisionGroups(ambiguities, originalText) {
+  const candidatesByContext = new Map();
+  for (const candidate of ambiguities) {
+    const context = exactContextLine(originalText, candidate.original_start, candidate.original_end);
+    if (!context) continue;
+    const key = `${candidate.type}\u0000${context}`;
+    const ids = candidatesByContext.get(key) || [];
+    ids.push(candidate.ambiguity_id);
+    candidatesByContext.set(key, ids);
+  }
+  let group = 0;
+  return [...candidatesByContext.values()]
+    .filter((ids) => ids.length > 1)
+    .map((ids) => ({
+      group_id: `same_context:v1:${String(++group).padStart(6, '0')}`,
+      candidate_ids: ids
+    }));
+}
+
+function groupForCandidate(draft, ambiguityId) {
+  const groups = draft?.batch_review?.decision_groups;
+  if (!Array.isArray(groups)) return null;
+  const matches = groups.filter((group) => group && Array.isArray(group.candidate_ids) && group.candidate_ids.includes(ambiguityId));
+  if (matches.length !== 1) return null;
+  const group = matches[0];
+  if (!/^same_context:v1:[0-9]{6}$/u.test(String(group.group_id || '')) ||
+    group.candidate_ids.length < 2 || new Set(group.candidate_ids).size !== group.candidate_ids.length) return null;
+  return group;
+}
+
 function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [], progress = {}) {
   // sensitiveSpans uses the engine's normalised coordinate space. Displaying
   // that same local-only representation keeps highlights correct for NFC,
@@ -125,7 +166,11 @@ function buildBatchReviewDraft(documents, progress = {}) {
   draft.batch_review = {
     schema: BATCH_REVIEW_SCHEMA,
     document_count: documents.length,
-    display: 'anonymous_document_sequence'
+    display: 'anonymous_document_sequence',
+    // Candidate IDs are opaque local handles. The raw context used to prove
+    // equality remains only in the already displayed local draft and is never
+    // copied into this metadata, a journal, MCP response or diagnostic.
+    decision_groups: decisionGroups(draft.ambiguities, draft.original_text)
   };
   return { draft, entries };
 }
@@ -231,17 +276,24 @@ function powershellReviewScript() {
     '$defer = New-Object System.Windows.Forms.Button; $defer.Text = "Später entscheiden"; $defer.Width = 155',
     '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "Ja, beibehalten"; $keep.Width = 145',
     '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "Nein, Namen ersetzen"; $anonOrg.Width = 170',
+    '$keepGroup = New-Object System.Windows.Forms.Button; $keepGroup.Text = "Gleiche behalten"; $keepGroup.Width = 155',
+    '$redactGroup = New-Object System.Windows.Forms.Button; $redactGroup.Text = "Gleiche anonymisieren"; $redactGroup.Width = 175',
     '$back = New-Object System.Windows.Forms.Button; $back.Text = "Zurück / ändern"; $back.Width = 140',
     '$ambiguityInfo = New-Object System.Windows.Forms.Label; $ambiguityInfo.Width = 330; $ambiguityInfo.Height = 38',
     '$script:answer = $null; $script:redactions = New-Object System.Collections.ArrayList; $script:decisions = @{}; $script:current = 0',
     'function Ambiguity-Redactions { $items = New-Object System.Collections.ArrayList; foreach ($candidate in $draft.ambiguities) { if ($script:decisions[[string]$candidate.ambiguity_id] -eq "redact") { [void]$items.Add(@{ start = [int]$candidate.anonymized_start; end = [int]$candidate.anonymized_end }) } }; return $items }',
     'function Update-Preview { $value = [string]$draft.anonymized_text; $all = @($script:redactions) + @(Ambiguity-Redactions); foreach ($item in @($all | Sort-Object start -Descending)) { $value = $value.Substring(0, [int]$item.start) + "[MANUAL_REDACTION]" + $value.Substring([int]$item.end) }; $preview.Text = $value }',
-    'function Show-Ambiguity { if ($draft.ambiguities.Count -eq 0) { $ambiguityInfo.Text = "Keine offene Zuordnung"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $back.Enabled = $false; $approve.Enabled = $true; return }; if ($script:current -ge $draft.ambiguities.Count) { $ambiguityInfo.Text = "Alle " + $draft.ambiguities.Count + " Stellen entschieden"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $back.Enabled = $true; $approve.Enabled = $true; return }; $candidate = $draft.ambiguities[$script:current]; $ambiguityInfo.Text = "Stelle " + ($script:current + 1) + " von " + $draft.ambiguities.Count + ": Gehört dieser Name zu einer Zertifizierung?"; $keep.Enabled = $true; $anonOrg.Enabled = $true; $back.Enabled = ($script:current -gt 0); $approve.Enabled = $false; $right.Select([int]$candidate.anonymized_start, [int]$candidate.anonymized_end - [int]$candidate.anonymized_start); $right.ScrollToCaret() }',
+    'function Group-Candidates($candidate) { if ($null -eq $draft.batch_review -or $null -eq $draft.batch_review.decision_groups) { return @() }; foreach ($group in $draft.batch_review.decision_groups) { if ($null -ne $group.candidate_ids -and @($group.candidate_ids).Count -gt 1 -and @($group.candidate_ids) -contains [string]$candidate.ambiguity_id) { return @($group.candidate_ids) } }; return @() }',
+    'function Advance-ToOpen { while ($script:current -lt $draft.ambiguities.Count -and $null -ne $script:decisions[[string]$draft.ambiguities[$script:current].ambiguity_id]) { $script:current++ } }',
+    'function Show-Ambiguity { Advance-ToOpen; if ($draft.ambiguities.Count -eq 0) { $ambiguityInfo.Text = "Keine offene Zuordnung"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $keepGroup.Visible = $false; $redactGroup.Visible = $false; $back.Enabled = $false; $approve.Enabled = $true; return }; if ($script:current -ge $draft.ambiguities.Count) { $ambiguityInfo.Text = "Alle " + $draft.ambiguities.Count + " Stellen entschieden"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $keepGroup.Visible = $false; $redactGroup.Visible = $false; $back.Enabled = $true; $approve.Enabled = $true; return }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; $groupAvailable = @($group).Count -gt 1; $ambiguityInfo.Text = "Stelle " + ($script:current + 1) + " von " + $draft.ambiguities.Count + ": Gehört dieser Name zu einer Zertifizierung?"; if ($groupAvailable) { $ambiguityInfo.Text += " Für " + @($group).Count + " nachweislich gleiche lokale Stellen kannst du bewusst dieselbe Entscheidung übernehmen." }; $keep.Enabled = $true; $anonOrg.Enabled = $true; $keepGroup.Visible = $groupAvailable; $redactGroup.Visible = $groupAvailable; $back.Enabled = ($script:current -gt 0); $approve.Enabled = $false; $right.Select([int]$candidate.anonymized_start, [int]$candidate.anonymized_end - [int]$candidate.anonymized_start); $right.ScrollToCaret() }',
     'function Decide-Ambiguity([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $script:decisions[[string]$candidate.ambiguity_id] = $decision; $script:current++; Update-Preview; Show-Ambiguity }',
+    'function Decide-Group([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; if (@($group).Count -lt 2) { return }; foreach ($id in @($group)) { $script:decisions[[string]$id] = $decision }; $script:current++; Update-Preview; Show-Ambiguity }',
     '$redact.Add_Click({ $start = $right.SelectionStart; $length = $right.SelectionLength; if ($length -le 0) { [void][System.Windows.Forms.MessageBox]::Show("Bitte zuerst rechts eine sensible Stelle auswählen.", "DataSecure", "OK", "Information"); return }; $end = $start + $length; foreach ($candidate in $draft.ambiguities) { if ($start -lt [int]$candidate.anonymized_end -and [int]$candidate.anonymized_start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Für gelb markierte Organisationen bitte die Schaltflächen Erhalten oder Anonymisieren verwenden.", "DataSecure", "OK", "Warning"); return } }; foreach ($item in $script:redactions) { if ($start -lt [int]$item.end -and [int]$item.start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Diese Auswahl überschneidet sich mit einer bestehenden manuellen Anonymisierung.", "DataSecure", "OK", "Warning"); return } }; [void]$script:redactions.Add(@{ start = $start; end = $end }); $right.SelectionBackColor = [System.Drawing.Color]::LightSalmon; $right.Select(0, 0); Update-Preview })',
     '$keep.Add_Click({ Decide-Ambiguity "keep" })',
     '$anonOrg.Add_Click({ Decide-Ambiguity "redact" })',
-    '$back.Add_Click({ if ($draft.ambiguities.Count -eq 0) { return }; if ($script:current -ge $draft.ambiguities.Count) { $script:current = $draft.ambiguities.Count - 1 } elseif ($script:current -gt 0) { $script:current-- }; $candidate = $draft.ambiguities[$script:current]; [void]$script:decisions.Remove([string]$candidate.ambiguity_id); Update-Preview; Show-Ambiguity })',
+    '$keepGroup.Add_Click({ Decide-Group "keep" })',
+    '$redactGroup.Add_Click({ Decide-Group "redact" })',
+    '$back.Add_Click({ if ($draft.ambiguities.Count -eq 0) { return }; if ($script:current -ge $draft.ambiguities.Count) { $script:current = $draft.ambiguities.Count - 1 } elseif ($script:current -gt 0) { $script:current-- }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; if (@($group).Count -gt 1) { foreach ($id in @($group)) { [void]$script:decisions.Remove([string]$id) } } else { [void]$script:decisions.Remove([string]$candidate.ambiguity_id) }; Update-Preview; Show-Ambiguity })',
     '$approve.Add_Click({ if ($script:decisions.Count -ne $draft.ambiguities.Count) { [void][System.Windows.Forms.MessageBox]::Show("Bitte jede gelb markierte Organisation als Zertifizierung erhalten oder anonymisieren.", "DataSecure", "OK", "Warning"); return }; $decisionList = @(); foreach ($candidate in $draft.ambiguities) { $decisionList += @{ ambiguity_id = [string]$candidate.ambiguity_id; decision = [string]$script:decisions[[string]$candidate.ambiguity_id] } }; $script:answer = @{ action = "reviewed"; redactions = @($script:redactions); decisions = $decisionList }; $form.Close() })',
     '$skip.Add_Click({ if ($draft.ambiguities.Count -gt 0) { [void][System.Windows.Forms.MessageBox]::Show("Bei gelb markierten Organisationen darf die Prüfung nicht übersprungen werden.", "DataSecure", "OK", "Warning"); return }; $script:answer = @{ action = "skipped" }; $form.Close() })',
     '$cancel.Add_Click({ $script:answer = @{ action = "cancelled" }; $form.Close() })',
@@ -250,12 +302,40 @@ function powershellReviewScript() {
     '$skip.Visible = ($draft.ambiguities.Count -eq 0)',
     '$defer.Visible = [bool]$draft.allow_defer',
     '$redact.Visible = ($null -eq $draft.batch_review)',
-    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel, $defer, $back, $keep, $anonOrg, $ambiguityInfo))',
+    '$buttons.Controls.AddRange(@($approve, $redact, $skip, $cancel, $defer, $back, $keep, $anonOrg, $keepGroup, $redactGroup, $ambiguityInfo))',
     '$form.Controls.Add($split); $form.Controls.Add($buttons); $form.Controls.Add($info)',
     'Show-Ambiguity; Update-Preview',
     '[void]$form.ShowDialog()',
     '[Console]::Out.Write(($script:answer | ConvertTo-Json -Compress))'
   ].join('; ');
+}
+
+const DARWIN_DIALOG_CONTRACTS = Object.freeze({
+  decision: Object.freeze({
+    defer: Object.freeze({ buttons: Object.freeze(['Später entscheiden', 'Anonymisieren', 'Beibehalten']), defaultButton: 'Beibehalten', cancelButton: 'Später entscheiden', cancelAction: 'deferred' }),
+    cancel: Object.freeze({ buttons: Object.freeze(['Abbrechen', 'Anonymisieren', 'Beibehalten']), defaultButton: 'Beibehalten', cancelButton: 'Abbrechen', cancelAction: 'cancelled' })
+  }),
+  group: Object.freeze({
+    defer: Object.freeze({ buttons: Object.freeze(['Später entscheiden', 'Nur diese Stelle', 'Gleiche Stellen']), defaultButton: 'Nur diese Stelle', cancelButton: 'Später entscheiden', cancelAction: 'deferred' }),
+    cancel: Object.freeze({ buttons: Object.freeze(['Abbrechen', 'Nur diese Stelle', 'Gleiche Stellen']), defaultButton: 'Nur diese Stelle', cancelButton: 'Abbrechen', cancelAction: 'cancelled' })
+  }),
+  final: Object.freeze({
+    defer: Object.freeze({ buttons: Object.freeze(['Später entscheiden', 'Zurück / ändern', 'Geprüft freigeben']), defaultButton: 'Geprüft freigeben', cancelButton: 'Später entscheiden', cancelAction: 'deferred' }),
+    cancel: Object.freeze({ buttons: Object.freeze(['Abbrechen', 'Zurück / ändern', 'Geprüft freigeben']), defaultButton: 'Geprüft freigeben', cancelButton: 'Abbrechen', cancelAction: 'cancelled' })
+  })
+});
+
+function darwinDialogContract(phase, allowDefer = false) {
+  const contract = DARWIN_DIALOG_CONTRACTS[phase]?.[allowDefer ? 'defer' : 'cancel'];
+  if (!contract || !contract.buttons.includes(contract.defaultButton) || !contract.buttons.includes(contract.cancelButton)) {
+    throw new SafeError('Der lokale macOS-Dialogvertrag ist ungültig.');
+  }
+  return {
+    buttons: [...contract.buttons],
+    defaultButton: contract.defaultButton,
+    cancelButton: contract.cancelButton,
+    cancelAction: contract.cancelAction
+  };
 }
 
 // The macOS reviewer deliberately receives the review draft over stdin as
@@ -264,6 +344,7 @@ function powershellReviewScript() {
 // This focused UI decides only the known credential-issuer ambiguities.  It
 // does not pretend to offer the Windows free-range redaction editor.
 function darwinReviewScript() {
+  const contracts = JSON.stringify(DARWIN_DIALOG_CONTRACTS);
   return [
     'ObjC.import("Foundation");',
     'function run(argv) {',
@@ -271,33 +352,40 @@ function darwinReviewScript() {
     '  var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;',
     '  var source = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding));',
     '  var draft = JSON.parse(source);',
+    `  var contracts = ${contracts};`,
     '  var title = draft.batch_review ? "DataSecure – lokale Stapelprüfung" : "DataSecure – lokale Zertifikatsprüfung";',
     '  try {',
+    '    function dialogContract(phase) { var contract = contracts[phase][draft.allow_defer ? "defer" : "cancel"]; if (contract.buttons.indexOf(contract.defaultButton) < 0 || contract.buttons.indexOf(contract.cancelButton) < 0) throw new Error("invalid dialog contract"); return contract; }',
+    '    function showDialog(message, phase) { var contract = dialogContract(phase); var answer = app.displayDialog(message, { withTitle: title, buttons: contract.buttons, defaultButton: contract.defaultButton, cancelButton: contract.cancelButton }); return { button: answer.buttonReturned, cancelAction: contract.cancelAction }; }',
+    '    function groupFor(item) { var groups = draft.batch_review && draft.batch_review.decision_groups; if (!Array.isArray(groups)) return null; var matches = groups.filter(function(group) { return group && Array.isArray(group.candidate_ids) && group.candidate_ids.length > 1 && group.candidate_ids.indexOf(item.ambiguity_id) >= 0; }); return matches.length === 1 ? matches[0] : null; }',
+    '    function decided(decisions, id) { return decisions.some(function(entry) { return entry.ambiguity_id === id; }); }',
+    '    function decideGroup(decisions, group, decision) { group.candidate_ids.forEach(function(id) { if (!decided(decisions, id)) decisions.push({ ambiguity_id: id, decision: decision }); }); }',
     '    while (true) {',
     '      var decisions = [];',
     '      for (var index = 0; index < draft.ambiguities.length; index++) {',
     '      var item = draft.ambiguities[index];',
+    '      if (decided(decisions, item.ambiguity_id)) continue;',
+    '      var group = groupFor(item);',
     '      var value = draft.original_text.substring(item.original_start, item.original_end);',
     '      var before = draft.original_text.substring(Math.max(0, item.original_start - 100), item.original_start);',
     '      var after = draft.original_text.substring(item.original_end, Math.min(draft.original_text.length, item.original_end + 100));',
     '      var message = "Stelle " + (index + 1) + " von " + draft.ambiguities.length + ":\\n\\n" + before + "[" + value + "]" + after + "\\n\\nIst die markierte Organisation der Aussteller einer Zertifizierung?";',
     // Standard Additions maps to NSAlert and supports at most three buttons.
-    // Keep defer reachable through a second, content-free option dialog rather
-    // than relying on a fourth button that macOS would reject.
-    '      var buttons = draft.allow_defer ? ["Weitere Optionen", "Anonymisieren", "Beibehalten"] : ["Abbrechen", "Anonymisieren", "Beibehalten"];',
-    '      var answer = app.displayDialog(message, { withTitle: title, buttons: buttons, defaultButton: "Beibehalten", cancelButton: "Abbrechen" });',
-    '      if (answer.buttonReturned === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
-    '      if (answer.buttonReturned === "Weitere Optionen") { var later = app.displayDialog("Diese Fundstelle nicht freigeben?", { withTitle: title, buttons: ["Abbrechen", "Später entscheiden"], defaultButton: "Später entscheiden", cancelButton: "Abbrechen" }); if (later.buttonReturned === "Später entscheiden") return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
-    '      decisions.push({ ambiguity_id: item.ambiguity_id, decision: answer.buttonReturned === "Beibehalten" ? "keep" : "redact" });',
+    // Defer/cancel is therefore the first real button and also the Esc action.
+    '      var answer = showDialog(message, "decision");',
+    '      if (answer.button === "Später entscheiden") return JSON.stringify({ action: "deferred" });',
+    '      if (answer.button === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
+    '      var choice = answer.button === "Beibehalten" ? "keep" : "redact";',
+    '      if (group) { var groupAnswer = showDialog("Die markierte Stelle gehört zu mehreren nachweislich gleichen lokalen Kontextzeilen. Soll die Entscheidung nur für diese Stelle oder für alle gleichen Stellen gelten?", "group"); if (groupAnswer.button === "Später entscheiden") return JSON.stringify({ action: "deferred" }); if (groupAnswer.button === "Abbrechen") return JSON.stringify({ action: "cancelled" }); if (groupAnswer.button === "Gleiche Stellen") { decideGroup(decisions, group, choice); continue; } }',
+    '      decisions.push({ ambiguity_id: item.ambiguity_id, decision: choice });',
     '      }',
-    '      var finalButtons = draft.allow_defer ? ["Weitere Optionen", "Zurück / ändern", "Geprüft freigeben"] : ["Abbrechen", "Zurück / ändern", "Geprüft freigeben"];',
-    '      var finalAnswer = app.displayDialog("Alle Fundstellen sind entschieden. Du kannst die Entscheidungen jetzt freigeben oder vollständig neu treffen.", { withTitle: title, buttons: finalButtons, defaultButton: "Geprüft freigeben", cancelButton: "Abbrechen" });',
-    '      if (finalAnswer.buttonReturned === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
-    '      if (finalAnswer.buttonReturned === "Weitere Optionen") { var finalLater = app.displayDialog("Stapelentscheidung nicht freigeben?", { withTitle: title, buttons: ["Abbrechen", "Später entscheiden"], defaultButton: "Später entscheiden", cancelButton: "Abbrechen" }); if (finalLater.buttonReturned === "Später entscheiden") return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
-    '      if (finalAnswer.buttonReturned === "Zurück / ändern") continue;',
+    '      var finalAnswer = showDialog("Alle Fundstellen sind entschieden. Du kannst die Entscheidungen jetzt freigeben oder vollständig neu treffen.", "final");',
+    '      if (finalAnswer.button === "Später entscheiden") return JSON.stringify({ action: "deferred" });',
+    '      if (finalAnswer.button === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
+    '      if (finalAnswer.button === "Zurück / ändern") continue;',
     '      return JSON.stringify({ action: "reviewed", redactions: [], decisions: decisions });',
     '    }',
-    '  } catch (error) { return JSON.stringify({ action: "cancelled" }); }',
+    '  } catch (error) { var number = Number(error && (error.errorNumber !== undefined ? error.errorNumber : error.number)); if (number === -128 && draft.allow_defer) return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
     '}'
   ].join('\n');
 }
@@ -327,8 +415,8 @@ function linuxViewerCommands(batchReview = false) {
   ];
 }
 
-function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = false) {
-  const prompt = `Fundstelle ${index + 1} von ${total}: Entscheidung lokal treffen.`;
+function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = false, sameContextGroup = false) {
+  const prompt = `Fundstelle ${index + 1} von ${total}: Entscheidung lokal treffen.${sameContextGroup ? ' Bewusste Gruppenaktion nur für nachweislich gleiche lokale Stellen verfügbar.' : ''}`;
   const title = batchReview ? 'DataSecure – Stapelentscheidung' : 'DataSecure – Zertifikatsentscheidung';
   if (id === 'zenity') {
     return {
@@ -338,6 +426,7 @@ function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = 
         '--column=Schlüssel', '--column=Entscheidung',
         'keep', 'Beibehalten', 'FALSE',
         'redact', 'Anonymisieren', 'FALSE',
+        ...(sameContextGroup ? ['keep_group', 'Für gleiche Stellen beibehalten', 'FALSE', 'redact_group', 'Für gleiche Stellen anonymisieren', 'FALSE'] : []),
         ...(allowDefer ? ['defer', 'Später entscheiden', 'FALSE'] : []),
         'cancel', 'Abbrechen', 'TRUE',
         '--hide-header', '--ok-label=Weiter', '--cancel-label=Abbrechen'
@@ -350,6 +439,7 @@ function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = 
       '--radiolist', prompt,
       'keep', 'Beibehalten', 'off',
       'redact', 'Anonymisieren', 'off',
+      ...(sameContextGroup ? ['keep_group', 'Für gleiche Stellen beibehalten', 'off', 'redact_group', 'Für gleiche Stellen anonymisieren', 'off'] : []),
       ...(allowDefer ? ['defer', 'Später entscheiden', 'off'] : []),
       'cancel', 'Abbrechen', 'on',
       '--title', title
@@ -403,10 +493,13 @@ function linuxReviewTextLocally(draft, options) {
     const decisions = [];
     let reviewerId;
     for (let index = 0; index < draft.ambiguities.length; index++) {
+      const item = draft.ambiguities[index];
+      if (decisions.some((entry) => entry.ambiguity_id === item.ambiguity_id)) continue;
+      const group = groupForCandidate(draft, item.ambiguity_id);
       const displayed = runLinuxReviewDialog(linuxViewerCommands(draft.batch_review !== undefined), linuxReviewContext(draft, draft.ambiguities[index], index), runner, env);
       if (displayed.result?.error || displayed.result?.status !== 0) return { action: 'cancelled' };
       reviewerId = displayed.id;
-      const choice = linuxChoiceCommand(displayed.id, index, draft.ambiguities.length, draft.allow_defer === true, draft.batch_review !== undefined);
+      const choice = linuxChoiceCommand(displayed.id, index, draft.ambiguities.length, draft.allow_defer === true, draft.batch_review !== undefined, !!group);
       const selected = runner(choice.command, choice.args, undefined, env);
       if (selected?.error || selected?.status !== 0) return { action: 'cancelled' };
       const answer = String(selected.stdout || '').trim().toLocaleLowerCase('de-DE');
@@ -414,8 +507,13 @@ function linuxReviewTextLocally(draft, options) {
       if (answer === 'keep' || answer === 'beibehalten') decision = 'keep';
       if (answer === 'redact' || answer === 'anonymisieren') decision = 'redact';
       if (answer === 'defer' || answer === 'später entscheiden') return { action: 'deferred' };
+      if (!decision && answer === 'keep_group') decision = 'keep';
+      if (!decision && answer === 'redact_group') decision = 'redact';
       if (!decision) return { action: 'cancelled' };
-      decisions.push({ ambiguity_id: draft.ambiguities[index].ambiguity_id, decision });
+      const targets = /_group$/u.test(answer) && group ? group.candidate_ids : [item.ambiguity_id];
+      for (const ambiguityId of targets) {
+        if (!decisions.some((entry) => entry.ambiguity_id === ambiguityId)) decisions.push({ ambiguity_id: ambiguityId, decision });
+      }
     }
     const finish = linuxFinalChoiceCommand(reviewerId, draft.allow_defer === true, draft.batch_review !== undefined);
     const finalResult = runner(finish.command, finish.args, undefined, env);
@@ -546,10 +644,12 @@ module.exports = {
   MAX_REVIEW_CHARS,
   buildReviewDraft,
   buildBatchReviewDraft,
+  groupForCandidate,
   resolveBatchReviewResult,
   reviewBatchTextLocally,
   powershellUtf8Preamble,
   powershellReviewScript,
+  darwinDialogContract,
   darwinReviewScript,
   linuxReviewContext,
   linuxViewerCommands,
