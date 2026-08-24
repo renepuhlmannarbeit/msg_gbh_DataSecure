@@ -205,6 +205,17 @@ function copyRegularFileExclusive(source, destination, expectedStat, expectedSha
   }
 }
 
+function openBatchPackageIdsForRetention() {
+  // Lazily required: batch.js requires this module at load time, so a
+  // top-level require here would deadlock on the circular dependency. By call
+  // time the module graph is fully loaded and this resolves normally.
+  try {
+    return require('./batch').openBatchPackageIds();
+  } catch {
+    return new Set();
+  }
+}
+
 function bestEffortRetentionCleanup(deps, scope = 'all') {
   try {
     const cleanup = deps.cleanupLocalData || cleanupLocalData;
@@ -213,7 +224,10 @@ function bestEffortRetentionCleanup(deps, scope = 'all') {
       trigger: 'run',
       now: deps.now,
       retentionDays: deps.retentionDays,
-      removeEntry: deps.removeRetentionEntry
+      removeEntry: deps.removeRetentionEntry,
+      protectedIds: deps.retentionProtectedIds instanceof Set
+        ? deps.retentionProtectedIds
+        : openBatchPackageIdsForRetention()
     });
   } catch {
     return null;

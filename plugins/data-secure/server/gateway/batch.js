@@ -316,7 +316,17 @@ function releaseActiveLock(token) {
 function writeState(state) {
   const target = batchPath(state.token);
   const temporary = `${target}.tmp_${crypto.randomBytes(6).toString('hex')}`;
-  fs.writeFileSync(temporary, `${JSON.stringify(state)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  const payload = `${JSON.stringify(state)}\n`;
+  // The batch journal is the single source of truth for in-flight items; an
+  // unsynced write can survive a process crash but not a power loss between
+  // the write and the rename, letting the rename land the old journal back.
+  const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+  try {
+    fs.writeSync(fd, payload, 0, 'utf8');
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
   fs.renameSync(temporary, target);
 }
 
@@ -348,6 +358,42 @@ function readState(token) {
     throw new SafeError('Batch-Sitzung ist abgelaufen. Bitte den Eingang erneut bestätigen.');
   }
   return state;
+}
+
+// Cross-references every still-open batch item with the Output scope so
+// retention never deletes a package a batch still needs to reach delivery or
+// mapping. Deliberately read-only (unlike readState) and tolerant of anything
+// malformed: this only ever widens a protection set consulted by name against
+// the real Output directory, so a bad or stale journal can at most delay a
+// cleanup, never touch data. Bounded by the batch's own TTL: cleanupExpired-
+// BatchSnapshots reaps the journal itself on the normal schedule, and its
+// packages fall back under ordinary time-based retention from that point on.
+function openBatchPackageIds(fsApi = fs) {
+  const ids = new Set();
+  const dir = batchRoot();
+  let entries;
+  try {
+    entries = fsApi.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return ids;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile || !entry.isFile() || !entry.name.endsWith('.json')) continue;
+    let state;
+    try {
+      state = JSON.parse(fsApi.readFileSync(path.join(dir, entry.name), 'utf8'));
+    } catch {
+      continue;
+    }
+    if (state?.schema !== 'datasecure-batch/1' || !Array.isArray(state.items)) continue;
+    for (const item of state.items) {
+      if ((item?.status === DELIVERY_PENDING || item?.status === MAPPING_PENDING) &&
+        /^ds_[a-f0-9]{32}$/i.test(String(item?.package_id || ''))) {
+        ids.add(item.package_id);
+      }
+    }
+  }
+  return ids;
 }
 
 function batchUserStatus(progress) {
@@ -1848,4 +1894,4 @@ function readStateForMaintenance(token) {
   }
 }
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, _test: { batchRoot, workPath, activeLockPath, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageIds, _test: { batchRoot, workPath, activeLockPath, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates } };

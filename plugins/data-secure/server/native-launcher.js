@@ -20,18 +20,39 @@ function verifyNativeLauncherArtifact(launcher, options = {}) {
   const checksumFile = launcher.replace(/\.exe$/i, '.sha256');
   let expected;
   let bytes;
-  try {
-    if (typeof options.launcherExpectedSha256 === 'string' && Buffer.isBuffer(options.launcherBytes)) {
-      expected = options.launcherExpectedSha256;
-      bytes = options.launcherBytes;
-    } else {
-      if (!exists(checksumFile)) fail('checksum_missing');
-      expected = fs.readFileSync(checksumFile, 'utf8').trim();
-      bytes = fs.readFileSync(launcher);
+  if (typeof options.launcherExpectedSha256 === 'string' && Buffer.isBuffer(options.launcherBytes)) {
+    expected = options.launcherExpectedSha256;
+    bytes = options.launcherBytes;
+  } else {
+    if (!exists(checksumFile)) fail('checksum_missing');
+    // Opens once and stats the held descriptors rather than the paths, so a
+    // symlink or content swap between the existence check above and the read
+    // below cannot slip through the gap a plain readFileSync(path) would leave.
+    const noFollow = fs.constants.O_NOFOLLOW || 0;
+    let launcherFd;
+    let checksumFd;
+    try {
+      launcherFd = fs.openSync(launcher, fs.constants.O_RDONLY | noFollow);
+      checksumFd = fs.openSync(checksumFile, fs.constants.O_RDONLY | noFollow);
+      const openedLauncher = fs.fstatSync(launcherFd);
+      const namedLauncher = fs.lstatSync(launcher);
+      const openedChecksum = fs.fstatSync(checksumFd);
+      const namedChecksum = fs.lstatSync(checksumFile);
+      if (!openedLauncher.isFile() || !namedLauncher.isFile() || namedLauncher.isSymbolicLink() ||
+        openedLauncher.dev !== namedLauncher.dev || openedLauncher.ino !== namedLauncher.ino ||
+        !openedChecksum.isFile() || !namedChecksum.isFile() || namedChecksum.isSymbolicLink() ||
+        openedChecksum.dev !== namedChecksum.dev || openedChecksum.ino !== namedChecksum.ino) {
+        fail('unreadable');
+      }
+      expected = fs.readFileSync(checksumFd, 'utf8').trim();
+      bytes = fs.readFileSync(launcherFd);
+    } catch (error) {
+      if (error instanceof NativeLauncherVerificationError) throw error;
+      fail('unreadable');
+    } finally {
+      if (launcherFd !== undefined) fs.closeSync(launcherFd);
+      if (checksumFd !== undefined) fs.closeSync(checksumFd);
     }
-  } catch (error) {
-    if (error instanceof NativeLauncherVerificationError) throw error;
-    fail('unreadable');
   }
   const actual = crypto.createHash('sha256').update(bytes).digest('hex');
   if (!/^[a-f0-9]{64}$/.test(expected) || actual !== expected) fail('integrity_failed');

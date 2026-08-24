@@ -132,8 +132,8 @@
     },
     {
       "path": "network-deny.cjs",
-      "bytes": 523,
-      "sha256": "7969674ba4e1948c9c84d5e9bd145caff2695c8633af53f5ead3f5bd391d5997"
+      "bytes": 2425,
+      "sha256": "332cceed8fe48468e1f5f44f0dfce783df685ce937714c197be379c536b6b713"
     },
     {
       "path": "node_modules/bmp-js/.npmignore",

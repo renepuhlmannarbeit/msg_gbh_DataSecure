@@ -3,6 +3,15 @@
 // UI helpers are intentionally classified by the most sensitive data they may
 // receive. This contract prevents a convenience dialog from silently becoming
 // another raw-content processing boundary.
+//
+// os_network_sandbox_required/_verified are a forward-looking target, not an
+// active gate: nothing in this module or its callers reads _verified to allow
+// or block anything today. _verified is pinned to false everywhere on purpose
+// (see test-ui-process-policy.js) because no OS-level network sandbox for
+// these helper processes exists yet; the real, currently-enforced isolation
+// for raw_content:true purposes is the fixed script content (no HTTP/socket
+// primitive, checked by tests) plus the stripped UI_ENV_ALLOWLIST environment
+// below. Flip _verified only once an actual OS-level boundary backs it.
 const UI_PROCESS_POLICIES = Object.freeze({
   path_picker: Object.freeze({
     input_class: 'none',

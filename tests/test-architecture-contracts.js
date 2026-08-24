@@ -257,7 +257,9 @@ test('Tesseract.js pilot is locked to verified local models and four runner targ
   const networkDeny = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
     'network-deny.cjs'), 'utf8');
   for (const token of ['node:http', 'node:https', 'node:net', 'node:tls', 'node:dns',
-    'globalThis.fetch']) assert.ok(networkDeny.includes(token), `network deny missing ${token}`);
+    'node:dgram', 'node:http2', "'fetch', 'WebSocket', 'EventSource'",
+    'DATASECURE_NETWORK_DENIED', 'writable: false', 'configurable: false'])
+    assert.ok(networkDeny.includes(token), `network deny missing ${token}`);
   const supplyChain = fs.readFileSync(path.join(root, 'native', 'ocr', 'pilot',
     'verify-supply-chain.mjs'), 'utf8');
   for (const token of ["'Apache-2.0', 'MIT', 'BSD-2-Clause'", 'PACKAGE_INTEGRITY_MISSING_',

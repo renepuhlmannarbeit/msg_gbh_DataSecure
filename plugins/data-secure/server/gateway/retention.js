@@ -264,6 +264,11 @@ function cleanupLocalData(options = {}) {
   const force = options.force === true;
   const fsApi = options.fs || fs;
   const removeEntry = options.removeEntry || ((target, root) => safeRemoveEntry(target, root, fsApi));
+  // A package still needed by an open (delivery/mapping pending) batch item
+  // must survive an automatic sweep even past its own mtime cutoff, or the
+  // batch is left permanently referencing a package that no longer exists.
+  // An explicit, confirmed purge (force) still removes it unconditionally.
+  const protectedIds = !force && options.protectedIds instanceof Set ? options.protectedIds : new Set();
   const result = {
     ran_at: new Date(at).toISOString(),
     // Which trigger produced this record: a manual purge ignores expiry
@@ -305,6 +310,7 @@ function cleanupLocalData(options = {}) {
           continue;
         }
       }
+      if (scope === 'output' && protectedIds.has(entry.name)) continue;
       if (!force && !entryExpired(entry.full, cutoff, fsApi)) continue;
       try {
         if (scope === 'review') {
@@ -334,11 +340,13 @@ function dueCounts(options = {}) {
   const days = options.retentionDays ?? retentionDays();
   const cutoff = at - days * 24 * 60 * 60 * 1000;
   const fsApi = options.fs || fs;
+  const protectedIds = options.protectedIds instanceof Set ? options.protectedIds : new Set();
   const due = { processed: 0, output: 0, review: 0 };
 
   for (const scope of SCOPES) {
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
+      if (scope === 'output' && protectedIds.has(entry.name)) continue;
       if (!entryExpired(entry.full, cutoff, fsApi)) continue;
       if (scope !== 'review' || previewFiles(entry.full, fsApi).length > 0) due[scope]++;
     }

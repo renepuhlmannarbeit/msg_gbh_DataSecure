@@ -574,6 +574,13 @@ test('a labelled German tax id is redacted', () => {
   assert.deepStrictEqual(residual, [], 'residual gate must be clean');
 });
 
+test('a labelled German tax id grouped with spaces is redacted', () => {
+  const src = 'Steuerliche Identifikationsnummer: 26 954 371 827\n';
+  const { text, residual } = anonymizeVerified(src, 'customer');
+  assertAbsent(text, '26 954 371 827', 'grouped tax id');
+  assert.deepStrictEqual(residual, [], 'residual gate must be clean');
+});
+
 test('a German formatted amount does not block the residual gate', () => {
   const src = 'Gesamtsumme: 1.234.567 EUR netto.\n';
   const { text, residual } = anonymizeVerified(src, 'contract');
@@ -631,11 +638,18 @@ test('phone detection uses the same rule for gate and redactor', () => {
 });
 
 test('common German two-group phone numbers are redacted', () => {
-  for (const value of ['030 1234567', '+49 30 1234567', '040/123456', '0176 12345678']) {
+  for (const value of ['030 1234567', '+49 30 1234567', '040/123456', '0176 12345678', '030 12 34 56 78']) {
     const { text, residual } = anonymizeVerified(`Telefon: ${value}\n`, 'customer');
     assertAbsent(text, value, `phone number ${value}`);
     assert.deepStrictEqual(residual, [], `residual gate must be clean for ${value}`);
   }
+});
+
+test('an unlabelled phone number introduced by "erreichbar unter" is redacted', () => {
+  const src = 'Bei Rückfragen erreichbar unter 0151 2345678 während der Geschäftszeiten.\n';
+  const { text, residual } = anonymizeVerified(src, 'customer');
+  assertAbsent(text, '0151 2345678', 'unlabelled phone number');
+  assert.deepStrictEqual(residual, [], 'residual gate must be clean');
 });
 
 test('explicit French, Spanish and Dutch profile labels remove identifiers and preserve qualifications', () => {

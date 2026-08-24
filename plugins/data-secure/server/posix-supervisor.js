@@ -30,7 +30,29 @@ function inspectBinary(bytes, platform, arch) {
   }
   throw new Error('format');
 }
-function identity(file) { const stat = fs.statSync(file); return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`; }
+// Opens once and stats the held descriptor rather than the path, so a symlink
+// or content swap between the safety check and the read cannot slip through
+// the gap a separate lstat()-then-readFileSync() pair would leave open.
+function verifiedRead(target) {
+  const noFollow = fs.constants.O_NOFOLLOW || 0;
+  let fd;
+  try {
+    fd = fs.openSync(target, fs.constants.O_RDONLY | noFollow);
+  } catch {
+    return null;
+  }
+  try {
+    const opened = fs.fstatSync(fd);
+    const named = fs.lstatSync(target);
+    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
+      opened.dev !== named.dev || opened.ino !== named.ino) {
+      return null;
+    }
+    return { bytes: fs.readFileSync(fd), stat: opened };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
 function verifyPosixSupervisor(options = {}) {
   const platform = options.platform || process.platform;
   const arch = options.arch || process.arch;
@@ -38,16 +60,35 @@ function verifyPosixSupervisor(options = {}) {
   if (!executable) return { available: false, reason: 'unsupported_target' };
   const checksum = `${executable}.sha256`;
   try {
-    const named = fs.lstatSync(executable);
-    if (!named.isFile() || named.isSymbolicLink() || !fs.existsSync(checksum)) return { available: false, reason: 'missing_or_unsafe' };
-    const key = `${executable}:${identity(executable)}:${fs.statSync(checksum).mtimeMs}`;
+    // A cheap path-based identity probe decides the cache key first, so a
+    // cache hit costs two lstats rather than re-reading and re-hashing the
+    // whole binary on every call (verifyPosixSupervisor runs per document in
+    // a batch). The fd-based re-read below still runs in full on any miss.
+    const probedExecutable = fs.lstatSync(executable);
+    const probedChecksum = fs.lstatSync(checksum);
+    if (!probedExecutable.isFile() || probedExecutable.isSymbolicLink() ||
+      !probedChecksum.isFile() || probedChecksum.isSymbolicLink()) {
+      return { available: false, reason: 'missing_or_unsafe' };
+    }
+    const key = `${executable}:${probedExecutable.dev}:${probedExecutable.ino}:${probedExecutable.size}:${probedExecutable.mtimeMs}:${probedChecksum.mtimeMs}`;
     const cached = cache.get(key);
     if (cached) return cached;
-    const bytes = fs.readFileSync(executable);
-    inspectBinary(bytes, platform, arch);
-    const expected = fs.readFileSync(checksum, 'utf8').trim();
-    const actual = crypto.createHash('sha256').update(bytes).digest('hex');
+    const execFile = verifiedRead(executable);
+    const checksumFile = execFile && verifiedRead(checksum);
+    if (!execFile || !checksumFile) return { available: false, reason: 'missing_or_unsafe' };
+    inspectBinary(execFile.bytes, platform, arch);
+    const expected = checksumFile.bytes.toString('utf8').trim();
+    const actual = crypto.createHash('sha256').update(execFile.bytes).digest('hex');
     if (!/^[a-f0-9]{64}$/.test(expected) || expected !== actual) return { available: false, reason: 'integrity_failed' };
+    // Node has no portable dirfd/openat-by-fd exec, so the verified bytes
+    // cannot be run directly; this re-check right before the path-based spawn
+    // narrows (but, like elsewhere in this codebase, cannot fully close) the
+    // remaining swap window between verification and execution.
+    const recheck = fs.lstatSync(executable);
+    if (recheck.isSymbolicLink() || recheck.dev !== execFile.stat.dev || recheck.ino !== execFile.stat.ino ||
+      recheck.size !== execFile.stat.size || recheck.mtimeMs !== execFile.stat.mtimeMs) {
+      return { available: false, reason: 'verification_failed' };
+    }
     const probe = (options.spawnSync || childProcess.spawnSync)(executable, ['--sandbox-contract'], { encoding: 'utf8', windowsHide: true, shell: false, env: {}, timeout: 5000, maxBuffer: 4096, stdio: ['ignore', 'pipe', 'ignore'] });
     if (probe.status !== 0 || String(probe.stdout || '').trim() !== CONTRACT) return { available: false, reason: 'contract_failed' };
     const result = { available: true, reason: 'ok', executable };

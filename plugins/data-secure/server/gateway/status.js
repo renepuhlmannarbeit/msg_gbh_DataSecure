@@ -9,14 +9,14 @@ const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
 const { companionCapabilities } = require('../companion/job-store');
 const { companionRetentionStatus } = require('../companion/retention');
-const { recoverableBatchStatus, localCleanupStatus } = require('./batch');
+const { recoverableBatchStatus, localCleanupStatus, openBatchPackageIds } = require('./batch');
 const { localIntakeActive } = require('./batch-executor');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { runtimeInfo } = require('../runtime-info');
 
 function genericStatus(options = {}) {
   const engine = readStatus();
-  const retention = retentionStatus(options);
+  const retention = retentionStatus({ ...options, protectedIds: openBatchPackageIds() });
   const audit = auditStatus();
   const companion = companionCapabilities();
   const companionRetention = companionRetentionStatus(options);

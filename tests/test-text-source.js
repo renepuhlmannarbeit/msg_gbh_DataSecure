@@ -61,8 +61,13 @@ test('PII inside Markdown text and destinations remains subject to de-identifica
   const anonymized = pii.anonymize(parsed.markdown, 'personnel_profile').text;
   assertAbsent(anonymized, 'Max Mustermann', 'Markdown person');
   assertAbsent(anonymized, 'max.mustermann@example.de', 'Markdown e-mail');
+  // CONTACT_URI_RE closes a percent-encoding bypass by treating the whole
+  // "scheme:payload" as one direct identifier (base.js), so the mailto:
+  // scheme itself is consumed by the placeholder along with the address.
+  // Only the surrounding link brackets are expected to survive literally.
+  assertAbsent(anonymized, 'mailto:max.mustermann', 'Markdown mailto payload');
   assertPresent(anonymized, '## Profil', 'heading');
-  assertPresent(anonymized, '[Kontakt](mailto:', 'link structure');
+  assertPresent(anonymized, '[Kontakt](', 'link structure');
 });
 
 test('the complete normalized Markdown is covered by one validated graph', () => {

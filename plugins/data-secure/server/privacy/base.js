@@ -65,11 +65,19 @@ const SEP = `[${SEP_CHARS}]`; // for standalone use
 // structured.js so that the residual gate and the redactor cannot disagree.
 const PHONE_RE = new RegExp(
   `${NB}(?:\\+\\d{1,3}[${SEP_CHARS}./\\-]?(?:\\(0\\)[${SEP_CHARS}./\\-]?)?)?` +
-    `(?:\\(?\\d{2,5}\\)?[${SEP_CHARS}./\\-]?)` +
-    `\\d{3,8}(?:[${SEP_CHARS}./\\-]\\d{1,6}){0,2}${NA}`,
+    `(?:\\(?\\d{2,5}\\)?)` +
+    `(?:[${SEP_CHARS}./\\-]?\\d{3,8}(?:[${SEP_CHARS}./\\-]\\d{1,6}){0,2}` +
+    // The subscriber block is also commonly grouped into short 2-digit pairs
+    // (e.g. "030 12 34 56 78"). That shape needs its own branch requiring a
+    // real separator before the first group: making the plain 3-8 digit
+    // block's minimum 2 instead let it match any bare digit run (an area code
+    // plus a short unseparated remainder, e.g. "1000" in "kontakt.1000@..."),
+    // turning every 4+ digit number after a "kontakt"-labelled line into a
+    // false-positive phone match.
+    `|[${SEP_CHARS}./\\-]\\d{2,4}(?:[${SEP_CHARS}./\\-]\\d{2,4}){2,4})${NA}`,
   'gu'
 );
-const PHONE_LABEL_RE = /(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|handy|fax|kontakt|durchwahl)\s*\.?\s*:?\s*$/iu;
+const PHONE_LABEL_RE = /(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|handy|fax|kontakt|durchwahl|rufnummer|erreichbar(?:\s+unter)?|zu\s+erreichen(?:\s+unter)?|unter\s+der\s+(?:ruf)?nummer|anzurufen\s+unter)\s*\.?\s*:?\s*$/iu;
 // France commonly groups local subscriber numbers into four two-digit pairs
 // after a one-digit area code. Keep that shape separate from PHONE_RE so a
 // broadened generic matcher cannot mistake short technical number runs for PII.
@@ -132,7 +140,9 @@ const DE_SV_RE = new RegExp(
 
 // A bare 11-digit run is any invoice, order or article number, so the German
 // tax id is label-gated as well. Bare runs are covered by LABELED_ID_RE.
-const DE_TAX_SHAPE = '\\d{11}';
+// Official letters commonly print the id grouped as "26 954 371 827"
+// (2-3-3-3); an unseparated \d{11} alone missed that grouped shape.
+const DE_TAX_SHAPE = `\\d{2}${SEP}?\\d{3}${SEP}?\\d{3}${SEP}?\\d{3}`;
 const DE_TAX_RE = new RegExp(`${NB}${DE_TAX_SHAPE}${NA}`, 'gu');
 const DE_TAX_LABEL_RE =
   /(?:steuer(?:-?\s?id|nummer|liche\s+identifikationsnummer)|id-?nr|idnr|ust-?id(?:nr)?)\s*\.?\s*:?\s*$/i;

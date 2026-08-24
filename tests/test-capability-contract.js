@@ -149,7 +149,7 @@ test('the portable OCR adapter is shipped but cannot self-enable coverage', () =
   assert.strictEqual(manifest.schema, 'data-secure-ocr-runtime-bundle/v2');
   assert.strictEqual(provenance.release_enabled, false);
   assert.strictEqual(provenance.bundle_manifest_sha256,
-    '4497c0db499493429d12b9af7aaa2bb2b437878c8877eb3cf325947d2d341098');
+    '1625551004fd0cf663246a2d30f4a4fc8b985ec9fcc733ccf66cd7f03ad443a1');
   assert.strictEqual(current.formats.includes('png'), false);
 });
 

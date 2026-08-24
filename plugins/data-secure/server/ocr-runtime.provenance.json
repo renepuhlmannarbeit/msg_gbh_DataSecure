@@ -2,7 +2,7 @@
   "schema": "data-secure-vendored-ocr-provenance/v1",
   "source_workflow_run": 32597783210,
   "source_commit": "df1c85fee38ce5f94488ee267c38f410614081a2",
-  "bundle_manifest_sha256": "4497c0db499493429d12b9af7aaa2bb2b437878c8877eb3cf325947d2d341098",
+  "bundle_manifest_sha256": "1625551004fd0cf663246a2d30f4a4fc8b985ec9fcc733ccf66cd7f03ad443a1",
   "files": 244,
   "bytes": 57592942,
   "release_enabled": false
