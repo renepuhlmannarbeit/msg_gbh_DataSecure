@@ -29,7 +29,7 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /Originale nie per Chat-Upload/iu);
   assert.match(anonymizeSkill, /continue_anonymized_batch_in_chat/u);
   assert.match(anonymizeSkill, /höchstens fünf freigegebene Markdown-Ergebnisse/iu);
-  assert.match(anonymizeSkill, /document_continuations/u);
+  assert.match(anonymizeSkill, /continue_local_results_handoff/u);
   assert.match(anonymizeSkill, /Bei `local_selection_cancelled` nichts erneut öffnen/iu);
 });
 
