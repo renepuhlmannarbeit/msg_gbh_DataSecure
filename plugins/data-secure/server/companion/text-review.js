@@ -594,15 +594,19 @@ function applyManualRedactions(text, ranges) {
   return result;
 }
 
-function defaultRunner(command, args, input, env = process.env) {
+// The synchronous review_deferred_document_batch MCP tool call must keep this
+// well inside the supervisor's ten-minute request deadline so spawnSync tears
+// down PowerShell before the Node child can be terminated by its parent. The
+// detached, non-blocking review worker (gateway/review-worker.js) is not bound
+// by that per-request deadline and passes a much longer options.timeoutMs.
+const DEFAULT_REVIEW_TIMEOUT_MS = 5 * 60 * 1000;
+
+function defaultRunner(command, args, input, env = process.env, timeoutMs = DEFAULT_REVIEW_TIMEOUT_MS) {
   return childProcess.spawnSync(command, args, {
     input,
     encoding: 'utf8',
     windowsHide: true,
-    // Keep the UI deadline well inside the supervisor's ten-minute request
-    // deadline so spawnSync tears down PowerShell before the Node child can be
-    // terminated by its parent.
-    timeout: 5 * 60 * 1000,
+    timeout: timeoutMs,
     maxBuffer: 64 * 1024 * 1024,
     shell: false,
     env: uiProcessEnvironment(env)
@@ -617,7 +621,9 @@ function reviewTextLocally(draft, options = {}) {
   // integration and production runners on the same no-proxy/no-cloud-secret
   // boundary instead of relying on the default runner alone.
   const reviewEnv = uiProcessEnvironment(env);
-  const runner = options.runner || defaultRunner;
+  const timeoutMs = Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
+    ? options.timeoutMs : DEFAULT_REVIEW_TIMEOUT_MS;
+  const runner = options.runner || ((cmd, cmdArgs, cmdInput, cmdEnv) => defaultRunner(cmd, cmdArgs, cmdInput, cmdEnv, timeoutMs));
   let command;
   let args;
   if (platform === 'win32') {

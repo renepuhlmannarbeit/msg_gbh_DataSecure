@@ -14,6 +14,11 @@ const { recordWorkflowEvent } = require('./workflow-diagnostics');
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
+// The whole point of running detached is that a human decision can outlive a
+// Cowork tool call. companion/text-review.js still defaults its native-dialog
+// spawnSync to 5 minutes for the synchronous MCP path; this worker is not
+// bound by that per-request deadline, so it passes a much longer window.
+const REVIEW_UI_TIMEOUT_MS = 30 * 60 * 1000;
 
 function lifecycle(event) {
   try { recordWorkflowEvent(event); } catch { /* diagnostics never changes review state */ }
@@ -33,7 +38,8 @@ process.once('message', async (message) => {
     const result = await reviewDeferredBatch(token, {
       executorPid: process.pid,
       localFinalize: true,
-      onReviewLifecycle: lifecycle
+      onReviewLifecycle: lifecycle,
+      reviewOptions: { timeoutMs: REVIEW_UI_TIMEOUT_MS }
     });
     lifecycle({
       event: 'review_terminal_state',
