@@ -386,6 +386,21 @@ test('embedded OOXML count and byte budgets are fixed and fail closed', () => {
   } }), /EMBEDDED_EXPANDED_BUDGET_EXCEEDED/, 'the aggregate budget must stop processing before decompression');
 });
 
+test('the twenty-first reachable embedded OOXML package is not rendered', () => {
+  const embedded = [];
+  const relationships = [];
+  for (let index = 1; index <= MAX_EMBEDDED_DOCUMENTS + 1; index++) {
+    embedded.push([`word/embeddings/inner-${index}.docx`, docx([`Eingebettetes Budgetwort ${index}`])]);
+    relationships.push(`<Relationship Id="rId${index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="embeddings/inner-${index}.docx"/>`);
+  }
+  embedded.push(['word/_rels/document.xml.rels', `<Relationships>${relationships.join('')}</Relationships>`]);
+  const result = parseOoxml(docx(['Äußerer Inhalt'], embedded), '.docx');
+  assert.ok(result.warnings.some((warning) => /zu viele eingebettete Dokumente/u.test(warning)));
+  assertPresent(result.markdown, `Eingebettetes Budgetwort ${MAX_EMBEDDED_DOCUMENTS}`, 'last permitted embedded package');
+  assert.doesNotMatch(result.markdown, /Eingebettetes Budgetwort 21/u, 'the over-budget package must not be rendered');
+  assert.doesNotMatch(JSON.stringify(result.warnings), /Eingebettetes Budgetwort|inner-21/u, 'warnings must not disclose embedded content or paths');
+});
+
 test('corrupt supported embeddings and active XLSX content remain blocked', () => {
   const corrupt = parseOoxml(embeddedDocx(['Außen'], Buffer.from('not a zip')), '.docx');
   assert.strictEqual(corrupt.warnings.length, 1);

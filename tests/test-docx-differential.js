@@ -56,13 +56,22 @@ async function verifyBodyAndTables() {
     'Zertifizierung', 'Testautomatisierung', 'Product Owner', 'Datenmodell',
     'Klinische Schnittstelle', 'Kanban', 'ISO 27001', 'Anforderungsanalyse'
   ];
-  for (let index = 0; index < 24; index++) {
+  // 96 deterministic documents exercise multiple ordinary body paragraphs and
+  // two table rows.  This remains deliberately below Word-story/formatting
+  // claims: Mammoth is only an independent parser oracle for plain text.
+  for (let index = 0; index < 96; index++) {
     const expected = [
       `${vocabulary[index % vocabulary.length]} ${index + 1}`,
+      `Projekt ${index + 1}: ${vocabulary[(index + 5) % vocabulary.length]}`,
       `${vocabulary[(index + 3) % vocabulary.length]} Tabelle ${index + 1}`,
-      `${vocabulary[(index + 7) % vocabulary.length]} Wert ${index + 1}`
+      `${vocabulary[(index + 7) % vocabulary.length]} Wert ${index + 1}`,
+      `Prüfung ${index + 1}: ${vocabulary[(index + 9) % vocabulary.length]}`,
+      `Status ${index + 1}: freigegeben`
     ];
-    const buffer = docx([expected[0]], [[expected[1], expected[2]]]);
+    const buffer = docx([expected[0], expected[1]], [
+      [expected[2], expected[3]],
+      [expected[4], expected[5]]
+    ]);
     const local = parseOoxml(buffer, '.docx');
     assert.deepStrictEqual(local.warnings, [], `local parser warning in case ${index}`);
     const converted = await mammoth.convertToHtml({ buffer });
@@ -76,6 +85,6 @@ async function verifyBodyAndTables() {
 
 (async () => {
   await testAsync('Mammoth is exactly pinned as a BSD-2-Clause dev-only oracle', verifyPinnedOracle);
-  await testAsync('our DOCX main-body and table tokens agree with Mammoth for 24 documents', verifyBodyAndTables);
+  await testAsync('our DOCX main-body and table tokens agree with Mammoth for 96 documents', verifyBodyAndTables);
   done();
 })();

@@ -7,11 +7,15 @@ const attempts = [
   ['tls', () => require('node:tls').connect(9, '127.0.0.1')],
   ['dns', () => require('node:dns').lookup('localhost', () => {})],
   ['dns-promises', () => require('node:dns').promises.lookup('localhost')],
+  ['dns-resolve', () => require('node:dns').resolveTxt('localhost', () => {})],
+  ['dns-resolver', () => new (require('node:dns').Resolver)().resolveTxt('localhost', () => {})],
   ['udp', () => require('node:dgram').createSocket('udp4')],
   ['http2', () => require('node:http2').connect('http://127.0.0.1:9')],
   ['fetch', () => globalThis.fetch('http://127.0.0.1:9/')],
   ['websocket', () => new globalThis.WebSocket('ws://127.0.0.1:9/')],
-  ['listener', () => require('node:net').createServer()]
+  ['listener', () => require('node:net').createServer()],
+  ['http-listener', () => require('node:http').createServer()],
+  ['https-listener', () => require('node:https').createServer()]
 ];
 
 const failures = [];

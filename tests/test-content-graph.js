@@ -62,6 +62,14 @@ test('validation rejects duplicate ids, uncovered assets and forged locator boun
 test('validation rejects traversal-shaped structural parts and extra fields', () => {
   assert.throws(() => createContentGraph('safe', [{ mimeType: 'image/png', source_part: '../x' }], '.docx'),
     /SOURCE_PART_INVALID/);
+  assert.throws(() => createContentGraph('safe', [{ mimeType: 'image/png', source_part: 'C:\\private\\image.png' }], '.docx'),
+    /SOURCE_PART_INVALID/);
+  assert.throws(() => createContentGraph('safe', [{ mimeType: 'image/png', source_part: 'https://private.example/image.png' }], '.docx'),
+    /SOURCE_PART_INVALID/);
+  assert.throws(() => createContentGraph('safe', [{ mimeType: 'image/png' }], '.docx'),
+    /SOURCE_PART_INVALID/);
+  assert.throws(() => createContentGraph('safe', [], '.docx', [{ kind: 'text', markdown: 'safe' }]),
+    /SOURCE_PART_INVALID/);
   const graph = createContentGraph('safe', [], '.txt');
   graph.nodes[0].raw_text = 'must never be duplicated';
   assert.throws(() => validateContentGraph(graph, 'safe', []), /TEXT_LOCATOR_INVALID/);

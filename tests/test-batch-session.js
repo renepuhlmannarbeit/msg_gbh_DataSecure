@@ -715,6 +715,10 @@ async function main() {
     assert.strictEqual(resumed.ok, true);
     assert.strictEqual(resumed.resumed, 1);
     assert.strictEqual(_test.readState(begun.batch_token).items[0].checkpoint, 'resumed');
+    const repeatedResume = resumeBatch(begun.batch_token);
+    assert.strictEqual(repeatedResume.ok, false, 'a repeated confirmation must not queue the same item twice');
+    assert.strictEqual(repeatedResume.error, 'no_retryable_documents');
+    assert.strictEqual(_test.readState(begun.batch_token).items[0].status, 'pending');
     const completed = await processAndAcknowledge(begun.batch_token, deps);
     assert.strictEqual(completed.released, 2);
     assert.strictEqual(completed.complete, true);

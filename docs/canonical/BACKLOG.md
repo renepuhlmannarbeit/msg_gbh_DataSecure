@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 23.08.2026 · Product-Owner-bereinigt · Ausgangsbasis RC30
+Stand: 24.08.2026 · Product-Owner-bereinigt · Ausgangsbasis RC30
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und

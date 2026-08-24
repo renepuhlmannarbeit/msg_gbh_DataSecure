@@ -20,6 +20,7 @@ function progress(overrides = {}) {
 test('each server phase has a short German next-step message without source data', () => {
   const cases = [
     ['ready_for_next_document', 'process_next_document', /Stapel bereit/],
+    ['processing_local_batch', 'wait_for_local_batch', /Lokale Stapelverarbeitung läuft/],
     ['processing_local_document', 'wait_for_current_document', /Lokale Verarbeitung läuft/],
     ['awaiting_delivery_acknowledgement', 'read_and_confirm_result', /Ergebnis wird sicher bereitgestellt/],
     ['awaiting_explicit_resume', 'resume_batch', /Stapel angehalten/],
@@ -35,6 +36,19 @@ test('each server phase has a short German next-step message without source data
     assert.match(result.user_status, text);
     assert.match(result.user_status, /47 von 100|45 erfolgreich vorbereitet/);
     assert.doesNotMatch(result.user_status, /Musterfrau|C:\\|\.docx/i);
+  }
+});
+
+test('every supported status message keeps an estimated time bounded and content-free', () => {
+  for (const phase of [
+    'ready_for_next_document', 'processing_local_batch', 'processing_local_document'
+  ]) {
+    const result = _test.batchUserStatus(progress({
+      batch_phase: phase,
+      estimated_remaining_seconds: 119
+    }));
+    assert.match(result.user_status, /Gemessene Restzeit.*2 Minuten/);
+    assert.doesNotMatch(result.user_status, /Musterfrau|C:\\|\.docx|[A-Fa-f0-9]{64}/i);
   }
 });
 

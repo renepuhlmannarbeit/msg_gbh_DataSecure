@@ -18,7 +18,7 @@ function run(extra = []) {
   assert.deepStrictEqual(JSON.parse(result.stdout), { active: true, failures: [] });
 }
 
-test('preload denies DNS, HTTP(S), TCP/TLS, UDP, HTTP/2, fetch, WebSocket and listeners', () => {
+test('preload denies DNS resolvers, HTTP(S), TCP/TLS, UDP, HTTP/2, fetch, WebSocket and listeners', () => {
   run();
 });
 

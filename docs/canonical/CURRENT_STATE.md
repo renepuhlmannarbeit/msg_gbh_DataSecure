@@ -1,6 +1,6 @@
 # RC30-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 23.08.2026 · geprüfter Produktstand: `b622278` auf `main` plus lokaler Arbeitsstand
+Stand: 24.08.2026 · geprüfter Produktstand: `e3af027` auf `main`
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -289,10 +289,12 @@ Batch-Zähler. Das ist noch nicht der fachliche Abschlussdialog und erteilt kein
 Freigabe.
 
 Der serverseitige Batchfortschritt besitzt zusätzlich kurze, inhaltsfreie
-Anwendertexte und eine feste nächste Aktion: Verarbeitung, sichere Bereitstellung,
-Fortsetzung, lokale Prüfung oder lokale Übersicht. Der Skill verwendet diese statt
-interner Phasencodes. Eine sichtbare native Fortschrittsansicht und die vereinfachte
-Start-/Ergebnisoberfläche bleiben offen.
+Anwendertexte und eine feste nächste Aktion: Verarbeitung eines Dokuments oder des
+lokalen Stapels, sichere Bereitstellung, Fortsetzung, lokale Prüfung oder lokale
+Übersicht. Der Skill verwendet diese statt interner Phasencodes. Der Test deckt jede
+unterstützte Phase einschließlich unbekannter persistierter Phasen ab; letztere
+dürfen niemals eine weitere Verarbeitung auslösen. Eine sichtbare native
+Fortschrittsansicht und die vereinfachte Start-/Ergebnisoberfläche bleiben offen.
 
 Die native macOS-Auswahl filtert wie Windows und Linux auf die aktuelle
 RC30-Allowlist TXT/Markdown/CSV/DOCX. Unabhängig davon prüft der Companion jede Auswahl weiterhin
@@ -332,7 +334,9 @@ als Runtime-Abhängigkeit eingeführt. Rest: feinere stabile Locators für Absä
 Zellen und Seitenelemente, noch nicht extrahierte Office-Parts, PDF-Objekte,
 formatabhängige Spezialmetadaten und weitere Anhänge. Eingebettete OOXML-Pakete
 werden in einer ersten BL-020.2-Scheibe bis 3 Ebenen, 20 Dokumente, 50 MiB
-Archivbytes und 100 MiB entpackte Bytes rekursiv geprüft. Containerketten bleiben
+Archivbytes und 100 MiB entpackte Bytes rekursiv geprüft. Ein realer Gegenlauf mit
+21 erreichbaren Paketen belegt, dass das 21. Paket nicht gerendert wird.
+Containerketten bleiben
 im Locator erhalten; das Entpackbudget greift vor der Dekompression. Nur über eine
 eindeutige interne Paketbeziehung erreichbare Einbettungen werden geöffnet;
 verwaiste, fehlende oder zusätzlich aktiv referenzierte Parts bleiben geschlossen.
@@ -397,7 +401,8 @@ produktiv freigeben und Formeln, Kommentare, Charts, Master-/Layout-Inhalte, all
 Dokumente positiv abdecken.
 
 Zusätzlich vergleicht eine reine, exakt gelockte Entwicklungsabhängigkeit Mammoth
-1.12.1 24 reguläre Hauptteil-/Tabellen-DOCX gegen die lokale Extraktion. Das ist
+1.12.1 96 reguläre Hauptteil-/Tabellen-DOCX mit mehreren Hauptteilabsätzen und
+Tabellenzeilen gegen die lokale Extraktion. Das ist
 kein Freigabebeweis für weitere Word-Stories oder reale Word-Generatoren und wird
 nicht in Plugin oder MCPB ausgeliefert.
 
@@ -664,6 +669,9 @@ Microsoft, AWS, Google Cloud, Cisco, ISACA, ISC2, Linux Foundation, CNCF, PMI, R
 Hat, SAP und HL7 vor. Sie werden ausschließlich lokal als Erkennungshinweise
 verwendet, nicht zur Laufzeit abgefragt und enthalten weder Prüfdaten noch eine
 Aussage über die individuelle Gültigkeit eines Zertifikats. Der gemeinsame lokale
+Katalogtest prüft Aussteller-Aliase und gepflegte Codes separat: Sie bleiben nur im
+expliziten Zertifikatskontext erhalten und schützen keinen Arbeitgeber oder Kunden.
+Der gemeinsame lokale
 Abschlussdialog kann jetzt eine bewusst gewählte Entscheidung ausschließlich für
 Fundstellen mit identischer normalisierter vollständiger Kontextzeile übernehmen;
 die opake Gruppierung und die Rohwerte bleiben flüchtig lokal. Rest: praktische

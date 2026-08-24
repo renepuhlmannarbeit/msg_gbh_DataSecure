@@ -142,6 +142,18 @@ test('every issuer alias stays in a certification section but is anonymized as e
   }
 });
 
+test('every catalogued credential code stays in a certification section without protecting an employer', () => {
+  for (const item of catalog.entries) {
+    for (const code of item.codes) {
+      const certification = pii.anonymize(`Zertifizierungen\n${code} Certified Professional`, 'personnel_profile').text;
+      assertPresent(certification, code, `${item.id} credential code`);
+
+      const employer = pii.anonymize(`Arbeitgeber: ${code} Consulting GmbH`, 'personnel_profile').text;
+      assertAbsent(employer, `${code} Consulting GmbH`, `${item.id} employer-shaped credential code`);
+    }
+  }
+});
+
 test('the same alias is not protected merely because it occurs in a technology field', () => {
   for (const item of catalog.entries) {
     for (const alias of item.aliases) {

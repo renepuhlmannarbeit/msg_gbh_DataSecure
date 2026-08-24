@@ -13,8 +13,8 @@ function exactKeys(value, expected) {
 }
 
 function cleanPart(value) {
-  const part = String(value || 'normalized-markdown').replace(/\\/gu, '/');
-  if (!part || part.length > 500 || part.startsWith('/') ||
+  const part = typeof value === 'string' ? value.replace(/\\/gu, '/') : '';
+  if (!part || part.length > 500 || part.startsWith('/') || part.includes(':') ||
     part.split('/').some((item) => !item || item === '.' || item === '..')) {
     throw new Error('CONTENT_GRAPH_SOURCE_PART_INVALID');
   }
