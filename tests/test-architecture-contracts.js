@@ -20,6 +20,63 @@ test('batch snapshot contract fixes originals, private copies and crash semantic
   assert.match(text, /Checkpoint[\s\S]*niemals über MCP, Audit oder Diagnose/u);
 });
 
+test('batch parallelism remains opt-in, centrally committed and privacy bounded', () => {
+  const text = read('BATCH_PARALLELISM_V1.md');
+  for (const required of [
+    'BL-011.12', 'höchstens **zwei**', 'zentrale Committer', 'private IPC',
+    '0600-geschützten Zwei-Slot', '2 × Batchgröße + Headroom', 'Feature-Flag',
+    'Windows, macOS und Linux'
+  ]) assert.ok(text.includes(required), `parallelism contract missing: ${required}`);
+  assert.match(text, /`processBatchNext` wird nicht parallel aufgerufen/u);
+  assert.match(text, /keine Thread-, Worker-, CPU- oder Speicheroption/u);
+  assert.match(text, /keine Texte, Pfade, Namen, Hashes, Tokens oder Fehlerdetails zurück/u);
+  assert.match(text, /Mapping.*exklusiven Commit-Lock|Append-only-Ledger/u);
+  const harness = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'parallel-preparation-harness.js'), 'utf8');
+  assert.match(harness, /Engineering-only proof harness/u);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'batch.js'), 'utf8'), /parallel-preparation-harness/u);
+});
+
+test('POSIX supervisor packaging is conditional but incomplete target artifacts fail closed', () => {
+  const text = read('POSIX_SUPERVISOR_PACKAGING_V1.md');
+  for (const required of ['BL-011.9', 'macos-x64', 'macos-arm64', 'linux-x64', 'SHA-256', '0755', 'Fresh-Install']) {
+    assert.ok(text.includes(required), `POSIX packaging contract missing: ${required}`);
+  }
+  const helper = fs.readFileSync(path.join(root, 'scripts', 'lib', 'posix-supervisor-artifacts.mjs'), 'utf8');
+  for (const code of ['POSIX_SUPERVISOR_TARGET_INCOMPLETE', 'POSIX_SUPERVISOR_TARGET_MISMATCH', 'POSIX_SUPERVISOR_INTEGRITY_FAILED']) {
+    assert.ok(helper.includes(code), `POSIX packaging gate missing: ${code}`);
+  }
+  const pluginBuilder = fs.readFileSync(path.join(root, 'scripts', 'build-plugin.mjs'), 'utf8');
+  const mcpbBuilder = fs.readFileSync(path.join(root, 'scripts', 'build-mcpb.mjs'), 'utf8');
+  assert.match(pluginBuilder, /verifyPosixSupervisorArtifacts/u);
+  assert.match(mcpbBuilder, /verifyPosixSupervisorArtifacts/u);
+});
+
+test('OCR batch reuse stays disabled until a native per-frame session boundary is proven', () => {
+  const text = read('OCR_BATCH_SESSION_V1.md');
+  for (const required of [
+    'BL-024.4', 'kein** aktiver Produktpfad', 'globaler OCR-\nDaemon ist verboten',
+    'single-flight', 'length-prefixed', 'pro Anfrage', 'Windows, macOS', 'Linux x64',
+    'Prozessbaum', 'release_enabled'
+  ]) assert.ok(text.includes(required), `OCR batch-session contract missing: ${required}`);
+  assert.match(text, /keine zusätzliche[\s\S]*Berechtigung, keine Auswahl, kein Polling/u);
+  assert.match(text, /JavaScript-Timer allein genügt nicht/u);
+  const harness = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'ocr-session-harness.js'), 'utf8');
+  assert.match(harness, /Engineering-only preparatory harness/u);
+  assert.match(harness, /OCR_SESSION_SINGLE_FLIGHT/u);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'runtime.js'), 'utf8'), /ocr-session-harness/u);
+});
+
+test('output capacity never invents a global output cap and keeps volume checks local', () => {
+  const text = read('OUTPUT_CAPACITY_V1.md');
+  for (const required of [
+    'BL-011.6', 'Output', 'Needs Visual Review', '2 × Eingabegröße + 64 MiB',
+    'keine erfundene globale Output-Grenze', 'Bytezahl', 'Node-Dateisystemwerte',
+    'Windows', 'macOS', 'Linux'
+  ]) assert.ok(text.includes(required), `output-capacity contract missing: ${required}`);
+  assert.match(text, /vor jedem tatsächlichen Schreiben/iu);
+  assert.match(text, /vor Publish und Mapping/u);
+});
+
 test('pseudonym contract is restart-stable without a raw mapping table', () => {
   const text = read('BATCH_PSEUDONYM_V1.md');
   for (const required of [

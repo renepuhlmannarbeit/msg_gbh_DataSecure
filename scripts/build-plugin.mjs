@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
+import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -26,6 +27,7 @@ if (!fs.existsSync(entryPoint)) throw new Error('plugin runtime entry point miss
 const nativeLauncher = path.join(pluginDir, 'server', 'native', 'windows-x64', 'datasecure-sandbox.exe');
 const nativeChecksum = `${nativeLauncher.slice(0, -4)}.sha256`;
 verifyNativeArtifact(nativeLauncher, nativeChecksum);
+const posixSupervisors = verifyPosixSupervisorArtifacts(path.join(pluginDir, 'server', 'native'));
 const portableOcr = path.join(pluginDir, 'server', 'ocr-runtime');
 if (!fs.existsSync(portableOcr)) throw new Error('vendored OCR runtime missing');
 const ocrEvidence = validateUniversalRuntime(portableOcr, { releaseEnabled: false });
@@ -41,6 +43,7 @@ if (provenance.schema !== 'data-secure-vendored-ocr-provenance/v1' ||
 const executableOcrEntries = new Set(ocrEvidence.manifest.targets
   .filter((target) => target.target !== 'windows-x64')
   .map((target) => `server/ocr-runtime/${target.launcher}`));
+for (const target of posixSupervisors) executableOcrEntries.add(`server/native/${target}/datasecure-sandbox`);
 
 const entrySource = fs.readFileSync(entryPoint, 'utf8');
 if (/require\((['"])(?:\.\.\/){2,}/.test(entrySource)) {

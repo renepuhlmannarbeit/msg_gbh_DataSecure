@@ -16,6 +16,8 @@ const {
   safeResolvePackage,
   listOutputs,
   readOutput,
+  readOutputs,
+  openVerifiedMarkdownSnapshot,
   listAssets,
   readAsset
 } = require('../plugins/data-secure/server/gateway/package-store');
@@ -52,6 +54,8 @@ function makePackage(id, body) {
 makePackage('run-one', '# Freigegeben eins');
 makePackage('run-two', '# Freigegeben zwei');
 makePackage('run-long', Array.from({ length: 2500 }, (_, index) => `Zeile ${String(index).padStart(4, '0')}: freigegebene synthetische Fachinformation.`).join('\n'));
+makePackage('run-unicode', `${'a'.repeat(4799)}🚀Ä Ende`);
+makePackage('run-unicode-many', 'A🚀Ä漢e\u0301|'.repeat(3000));
 
 test('a package id alone is never sufficient', () => {
   assert.throws(() => readOutput('run-one'), /Leseberechtigung/);
@@ -67,6 +71,23 @@ test('one run capability reads only its own verified document and asset', () => 
   assert.strictEqual(listAssets('run-one', grant.read_capability).assets.length, 1);
   assert.ok(readAsset('run-one', grant.read_capability, 'asset-001').__image.data.length > 0);
   assert.throws(() => readOutput('run-two', grant.read_capability), /Leseberechtigung/);
+});
+
+test('a bounded document page reads several independently authorized outputs together', () => {
+  const first = issueReadCapability('run-one');
+  const second = issueReadCapability('run-two');
+  const page = readOutputs([
+    { package_id: 'run-one', read_capability: first.read_capability },
+    { package_id: 'run-two', read_capability: second.read_capability }
+  ]);
+  assert.strictEqual(page.documents.length, 2);
+  assert.match(page.documents[0].text, /eins/);
+  assert.match(page.documents[1].text, /zwei/);
+  assert.throws(() => readOutputs([
+    { package_id: 'run-one', read_capability: first.read_capability },
+    { package_id: 'run-one', read_capability: first.read_capability }
+  ]), /nur einmal/);
+  assert.throws(() => readOutputs([{ package_id: 'run-two', read_capability: first.read_capability }]), /Leseberechtigung/);
 });
 
 test('expired and fabricated capabilities fail closed', () => {
@@ -184,6 +205,78 @@ test('bounded character pages cover a long document completely without overlap o
   const maximum = readOutput('run-long', grant.read_capability, 0, 1000000);
   assert.strictEqual(minimum.text.length, 1000);
   assert.strictEqual(maximum.text.length, 30000);
+});
+
+test('a small verified handoff snapshot pages from RAM and is wiped on disposal', () => {
+  const grant = issueReadCapability('run-long');
+  const snapshot = openVerifiedMarkdownSnapshot('run-long', grant.read_capability);
+  assert.ok(snapshot);
+  const pages = [];
+  let offset = 0;
+  do {
+    const page = snapshot.read(offset, 4800);
+    pages.push(page.text);
+    offset = page.next_offset;
+    if (!page.has_more) break;
+  } while (pages.length < 100);
+  assert.match(pages.join(''), /^Zeile 0000:/u);
+  snapshot.dispose();
+  assert.throws(() => snapshot.read(0, 4800), /nicht mehr gültig/);
+  assert.strictEqual(openVerifiedMarkdownSnapshot('run-long', grant.read_capability, 1024), null);
+});
+
+test('verified snapshot paging decodes bounded UTF-8 windows instead of the complete buffer per page', () => {
+  const grant = issueReadCapability('run-long');
+  const snapshot = openVerifiedMarkdownSnapshot('run-long', grant.read_capability);
+  const originalToString = Buffer.prototype.toString;
+  let unboundedLargeDecodes = 0;
+  let boundedDecodes = 0;
+  Buffer.prototype.toString = function observedToString(encoding, start, end) {
+    if (this.length > 10000 && encoding === 'utf8') {
+      if (start === undefined && end === undefined) unboundedLargeDecodes++;
+      else boundedDecodes++;
+    }
+    return originalToString.call(this, encoding, start, end);
+  };
+  try {
+    let offset = 0;
+    for (let pageNumber = 0; pageNumber < 4; pageNumber++) {
+      const page = snapshot.read(offset, 4800);
+      offset = page.next_offset;
+    }
+  } finally {
+    Buffer.prototype.toString = originalToString;
+    snapshot.dispose();
+  }
+  assert.strictEqual(unboundedLargeDecodes, 0);
+  assert.strictEqual(boundedDecodes, 4);
+});
+
+test('verified handoff snapshot preserves Unicode at a page boundary', () => {
+  const grant = issueReadCapability('run-unicode');
+  const snapshot = openVerifiedMarkdownSnapshot('run-unicode', grant.read_capability);
+  const first = snapshot.read(0, 4800);
+  const second = snapshot.read(first.next_offset, 4800);
+  assert.strictEqual(`${first.text}${second.text}`, `${'a'.repeat(4799)}🚀Ä Ende`);
+  assert.doesNotMatch(`${first.text}${second.text}`, /\uFFFD/u);
+  snapshot.dispose();
+});
+
+test('indexed snapshot reassembles many multibyte pages without replacement or omission', () => {
+  const expected = 'A🚀Ä漢e\u0301|'.repeat(3000);
+  const grant = issueReadCapability('run-unicode-many');
+  const snapshot = openVerifiedMarkdownSnapshot('run-unicode-many', grant.read_capability);
+  const pages = [];
+  let offset = 0;
+  do {
+    const page = snapshot.read(offset, 1000);
+    pages.push(page.text);
+    offset = page.next_offset;
+    if (!page.has_more) break;
+  } while (pages.length < 100);
+  assert.strictEqual(pages.join(''), expected);
+  assert.doesNotMatch(pages.join(''), /\uFFFD/u);
+  snapshot.dispose();
 });
 
 done();

@@ -66,7 +66,7 @@ Grafiken werden im gebündelten lokalen Abschlussdialog kenntlich gemacht.
 
 ## DS-010 – Stapelgrenzen
 
-Ein Stapel umfasst höchstens 100 Dateien und 500 MB Gesamtdaten. Es gibt keine feste
+Ein Stapel umfasst höchstens 100 Dateien und 500 MiB Gesamtdaten. Es gibt keine feste
 Grenze für Seiten, Folien oder Tabellenblätter. Interne Ressourcen-, Entpack-,
 Verschachtelungs- und Laufzeitschranken bleiben erforderlich.
 
@@ -261,7 +261,7 @@ Restlücke.
 
 ## DS-039 – Lokale Stapelaufbereitung und Claude-Weiterverarbeitung trennen
 
-Die Grenze von 100 Dateien und 500 MB gilt für die vollständige lokale, fortsetzbare
+Die Grenze von 100 Dateien und 500 MiB gilt für die vollständige lokale, fortsetzbare
 Aufbereitung, Prüfung und den Export. Sie ist keine Zusage, dass dieselbe Datenmenge
 in einen einzelnen Modellkontext passt oder vollständig in einer Unterhaltung gelesen
 wird. DataSecure beendet den lokalen Stapel unabhängig von der nachfolgenden
@@ -273,3 +273,17 @@ Stapel ausgewertet werden, zeigt der Ablauf die Anzahl bereits verwendeter und n
 offener Ergebnisse und setzt die Auswertung gestuft fort. Ergebnisse dürfen weder
 stillschweigend ausgelassen noch wegen eines Modell-, Kontext- oder Hostlimits als
 lokal unverarbeitet dargestellt werden.
+
+## DS-040 – Cowork-Fast-Path ist lokal zuerst
+
+Die Standardabsicht „Dateien anonymisieren“ ist ein `local_only`-Auftrag: Nach der
+einzigen lokalen Mehrfachauswahl verarbeitet und exportiert DataSecure den Stapel
+ohne Markdown-Lese-, Bestätigungs- oder Polling-Aufruf durch Claude. Ein lokaler,
+inhaltsfreier Abschluss meldet nur Zähler und den Speicherort der lokalen Ergebnisse.
+
+Nur eine ausdrücklich verlangte Folgeaufgabe verwendet `continue_in_chat`; erst dann
+darf Cowork freigegebenes Markdown in begrenzten Seiten lesen. Der Plugin-Server kann
+Host-Berechtigungsdialoge nicht abschalten, minimiert aber die Anzahl und Vielfalt
+der Werkzeuge im Normalpfad. Lokale Verarbeitung bleibt der Produktkern; MCP-Tasks
+oder Benachrichtigungen sind nur ein versionsgebundener Host-Spike und keine
+Voraussetzung für Offline-Verarbeitung oder Abschluss.

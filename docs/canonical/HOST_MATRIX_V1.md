@@ -6,8 +6,8 @@ nur, ob DataSecure in diesem Pilot lokale **Originale** verarbeiten darf.
 
 | Hostklasse | Originale | Bereits bereinigtes Markdown | Bedingung |
 |---|---:|---:|---|
-| Cowork Desktop mit Local MCP | konditional | ja | `privacy_status` muss in derselben Sitzung erfolgreich sein |
-| Claude Code lokal mit Local MCP | konditional | ja | `privacy_status` muss in derselben Sitzung erfolgreich sein |
+| Cowork Desktop mit Local MCP | konditional | ja | lokaler Start prüft Engine und Hostbindung implizit |
+| Claude Code lokal mit Local MCP | konditional | ja | lokaler Start prüft Engine und Hostbindung implizit |
 | Desktop ohne erreichbaren Local MCP | nein | ja | sichtbarer Skill/Plugin-Eintrag genügt nicht |
 | Claude Web | nein | ja | im Pilot nicht als Originalpfad freigegeben |
 | Claude Mobile | nein | ja | im Pilot nicht als Originalpfad freigegeben |
@@ -15,11 +15,13 @@ nur, ob DataSecure in diesem Pilot lokale **Originale** verarbeiten darf.
 
 ## Verbindlicher Laufzeitnachweis
 
-Nur ein erfolgreicher `privacy_status`-Aufruf in genau der aktuellen Sitzung öffnet
-den lokalen Originalpfad. Bei fehlendem oder fehlerhaftem Aufruf stoppt DataSecure
-vor Datei- und Ordnerzugriff. Chat-Upload, Computer-Use, allgemeiner Dateizugriff und
-andere Connectoren sind keine Ersatzwege. Die Nutzerempfehlung beschränkt sich auf
-eine neue unterstützte lokale Desktop-/Claude-Code-Sitzung oder eine IT-Prüfung.
+Der einzige Normalstart prüft Engine und lokale Hostbindung implizit vor dem
+Dateidialog. Bei fehlender oder fehlerhafter Bindung stoppt DataSecure vor Datei-
+und Ordnerzugriff. Ein zusätzlicher modellseitiger `privacy_status`-Aufruf ist kein
+Voraussetzungsschritt und erzeugt keinen weiteren Bestätigungsdialog. Chat-Upload,
+Computer-Use, allgemeiner Dateizugriff und andere Connectoren sind keine Ersatzwege.
+Die Nutzerempfehlung beschränkt sich auf eine neue unterstützte lokale Desktop-/
+Claude-Code-Sitzung oder eine IT-Prüfung.
 
 Die Quellen und ihr Prüfdatum stehen in der JSON-Fassung. Widersprüchliche oder neue
 Herstellerangaben ändern diese konservative Pilotfreigabe erst nach einer separaten,

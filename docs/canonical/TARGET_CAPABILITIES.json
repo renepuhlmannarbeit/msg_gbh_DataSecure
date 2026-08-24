@@ -10,7 +10,7 @@
     "DS-019", "DS-020", "DS-021", "DS-022", "DS-023", "DS-024",
     "DS-025", "DS-026", "DS-027", "DS-028", "DS-029", "DS-030",
     "DS-031", "DS-032", "DS-033", "DS-034", "DS-035", "DS-036",
-    "DS-037", "DS-038", "DS-039"
+    "DS-037", "DS-038", "DS-039", "DS-040"
   ],
   "primary_product": "claude-plugin",
   "distribution": {

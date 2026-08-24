@@ -24,19 +24,19 @@ const { anonymizeMarkdown } = require(path.join(pluginRoot, 'server', 'gateway',
 const { test, done, assert } = createSuite('Local contract skill acceptance');
 
 test('anonymization skill selects the local contract path without uploading the original', () => {
-  assert.match(anonymizeSkill, /`contract`[^\n]+Zweck eindeutig/u);
-  assert.match(anonymizeSkill, /Originale \*\*nicht\*\*[^\n]+Chat-Upload/iu);
-  assert.match(anonymizeSkill, /read_anonymized_document/u);
-  assert.match(anonymizeSkill, /ursprüngliche Nutzeraufgabe automatisch/iu);
-  assert.match(anonymizeSkill, /`list_document_batch_results` mit höchstens zehn Ergebnissen pro Seite/iu);
-  assert.match(anonymizeSkill, /`package_id` und `read_capability` aus dieser aktuellen Seite/iu);
-  assert.match(anonymizeSkill, /Ein Chatabbruch verändert den bereits lokal abgeschlossenen Stapel nicht/iu);
+  assert.match(anonymizeSkill, /`start_document_batch_from_picker`/u);
+  assert.match(anonymizeSkill, /passendes Profil nur bei eindeutigem Zweck/u);
+  assert.match(anonymizeSkill, /Originale nie per Chat-Upload/iu);
+  assert.match(anonymizeSkill, /continue_anonymized_batch_in_chat/u);
+  assert.match(anonymizeSkill, /höchstens fünf freigegebene Markdown-Ergebnisse/iu);
+  assert.match(anonymizeSkill, /document_continuations/u);
+  assert.match(anonymizeSkill, /Bei `local_selection_cancelled` nichts erneut öffnen/iu);
 });
 
 test('Markdown-only output keeps image pixels local instead of unnecessarily enabling strict discard', () => {
-  assert.match(anonymizeSkill, /Jedes freigegebene Paket ist Markdown ohne Bildpixel/u);
-  assert.match(anonymizeSkill, /Setze `remove_images=true` \*\*nicht\*\* bloß für „nur Markdown“/u);
-  assert.match(anonymizeSkill, /Verwende ohne Rückfrage `remove_images=false` – auch bei „nur Markdown“/u);
+  assert.match(anonymizeSkill, /ausschließlich freigegebenes Markdown, niemals .* Bildpixel/u);
+  assert.match(anonymizeSkill, /Bilder bleiben standardmäßig lokal/u);
+  assert.match(anonymizeSkill, /keine zusätzliche Start- oder Bildfrage/u);
 });
 
 test('explanation skill states the privacy boundary and avoids a legal anonymity claim', () => {

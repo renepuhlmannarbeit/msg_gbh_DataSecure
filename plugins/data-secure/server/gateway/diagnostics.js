@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
 const { VERSION } = require('../version');
 const { roots } = require('./common');
+const { assertWritableCapacity } = require('./storage-capacity');
 
 const DIAGNOSTIC_SCHEMA = 'data-secure-diagnostic/1';
 const RETENTION_DAYS = 14;
@@ -32,7 +33,8 @@ const ERROR_CODES = new Set([
   'PROFILE_REQUIRED', 'TEXT_TOO_LARGE', 'TOO_MANY_VISUALS',
   'IMAGE_REMOVAL_UNSAFE', 'VISUAL_REVIEW_REQUIRED', 'LOCAL_REVIEW_CANCELLED',
   'LOCAL_REVIEW_DEFERRED', 'AMBIGUITY_REVIEW_REQUIRED',
-  'RESIDUAL_PII', 'PUBLISH_FAILED', 'RECOVERY_FAILED', 'LOCAL_MAPPING_EXPORT_FAILED', 'INTERNAL_FAILURE'
+  'RESIDUAL_PII', 'PUBLISH_FAILED', 'RECOVERY_FAILED', 'LOCAL_MAPPING_EXPORT_FAILED', 'INTERNAL_FAILURE',
+  'LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE'
 ]);
 
 let writeErrors = 0;
@@ -82,7 +84,7 @@ function classifyDiagnosticError(error, stage = 'started') {
   if (ERROR_CODES.has(code)) return code;
   const message = String(error?.message || '');
   if (/Keine unterstützte Datei|input_empty/i.test(message)) return 'INPUT_EMPTY';
-  if (/größer als 100 MB/i.test(message)) return 'INPUT_TOO_LARGE';
+  if (/größer als 100 MB|Einzeldateigrenze|Größenbegrenzung/i.test(message)) return 'INPUT_TOO_LARGE';
   if (/Verwaiste private Arbeitskopien/i.test(message)) return 'WORKING_CLEANUP_BLOCKED';
   if (/Audit-Nachweise/i.test(message)) return 'AUDIT_MIGRATION_BLOCKED';
   if (/Zuordnungsexport|Mapping/i.test(message)) return 'LOCAL_MAPPING_EXPORT_FAILED';
@@ -156,8 +158,13 @@ function recordDiagnostic(record, options = {}) {
       if (!fileStat.isFile() || fileStat.isSymbolicLink()) throw new Error('unsafe diagnostics file');
     }
     const events = [...readEvents(options), sanitizeDiagnostic(record, options)].slice(-MAX_EVENTS);
+    const serialized = `${events.map((event) => JSON.stringify(event)).join('\n')}\n`;
     temp = path.join(dir, `.events_${crypto.randomBytes(6).toString('hex')}.tmp`);
-    io.writeFileSync(temp, `${events.map((event) => JSON.stringify(event)).join('\n')}\n`, {
+    (options.assertWritableCapacity || assertWritableCapacity)({
+      directory: dir,
+      bytes: Buffer.byteLength(serialized, 'utf8')
+    });
+    io.writeFileSync(temp, serialized, {
       encoding: 'utf8', mode: 0o600, flag: 'wx'
     });
     io.renameSync(temp, file);
@@ -245,12 +252,17 @@ function exportDiagnosticPackage(options = {}) {
   };
   // The export is a local, replaceable support snapshot. Keep the same strict
   // no-follow/atomic write properties as the journals and never return its path.
+  const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
   const temporary = `${target}.tmp_${crypto.randomBytes(6).toString('hex')}`;
   try {
     io.mkdirSync(root, { recursive: true, mode: 0o700 });
     const rootStat = io.lstatSync(root);
     if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('unsafe export directory');
-    io.writeFileSync(temporary, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    (options.assertWritableCapacity || assertWritableCapacity)({
+      directory: root,
+      bytes: Buffer.byteLength(serialized, 'utf8')
+    });
+    io.writeFileSync(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     io.renameSync(temporary, target);
   } catch {
     try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch { /* preserve the prior export */ }

@@ -5,7 +5,7 @@ Stand: 22.08.2026 · Zielstand nach RC30
 ## Ziel in einem Satz
 
 GBH DataSecure ist ein einfach installierbares Claude-Plugin, das bis zu 100 lokale
-Dateien mit zusammen höchstens 500 MB auf Windows, macOS und Linux offline
+Dateien mit zusammen höchstens 500 MiB auf Windows, macOS und Linux offline
 de-identifiziert und Claude ausschließlich geprüfte Markdown-Ergebnisse bereitstellt.
 
 ## Verbindlicher Benutzerweg
@@ -68,9 +68,9 @@ Kopie der Quelle.
 Sichtbar sind genau zwei Skills. Der normale Dialog verwendet Alltagssprache und
 höchstens einen gebündelten Abschlussdialog. Technische Details sind einklappbar.
 Direkter ZIP-Import und privater Marketplace führen zum gleichen Produktverhalten.
-Lokale Originalverarbeitung startet ausschließlich, wenn `privacy_status` in der
-aktuellen Sitzung erfolgreich ist. Eine sichtbare Plugin-Kachel oder ein sichtbarer
-Skill allein gilt nicht als verbundener lokaler Datenschutzpfad.
+Lokale Originalverarbeitung startet ausschließlich, wenn der lokale Start selbst
+Engine und Hostbindung erfolgreich prüft. Eine sichtbare Plugin-Kachel oder ein
+sichtbarer Skill allein gilt nicht als verbundener lokaler Datenschutzpfad.
 
 ## Aussage- und Freigabegrenzen
 
@@ -85,7 +85,10 @@ macOS und Linux sowie die in `DS-033` festgelegte 1.000-Dokument-Suite voraus.
 
 RC30 ist ausschließlich die technische Ausgangsbasis. Aktuell öffentlich freigegeben
 sind nur TXT, Markdown, CSV und DOCX im synthetischen Engineering-Betrieb; bis zu 100 Dateien mit
-zusammen höchstens 500 MB bilden die heutige Stapelgrenze. Der serverseitig
+zusammen höchstens 500 MiB bilden die heutige Stapelgrenze. Zusätzlich gelten
+formatspezifische Einzelgrenzen: TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes
+und DOCX 64 MiB komprimiert/128 MiB entpackt. Eine feste Seitenbegrenzung gibt es
+nicht; die Ressourcenlimits bleiben maßgeblich. Der serverseitig
 versiegelte Stapel, der dauerhafte lokale Mapping-Export und die ausdrückliche
 Wiederaufnahme nach Unterbrechungen sind als Engineering-Basis umgesetzt; der
 stapelweite Abschlussdialog und die nachweislich installationsfreie Drei-OS-Laufzeit

@@ -73,7 +73,12 @@ async function main() {
     const companion = launchCompanion();
     try {
       await companion.ready;
-      await assert.rejects(companion.request('cancel_job', { job_id: '../outside' }), /Ungültige Job-ID/);
+      await assert.rejects(companion.request('cancel_job', { job_id: '../outside' }), (error) => {
+        assert.strictEqual(error.code, 'REQUEST_REJECTED');
+        assert.match(error.message, /lokale Companion-Anfrage wurde sicher abgewiesen/u);
+        assert.doesNotMatch(error.message, /Job-ID|outside/u);
+        return true;
+      });
       const capabilities = await companion.request('capabilities', {});
       assert.strictEqual(capabilities.authenticated_frames, true);
     } finally {

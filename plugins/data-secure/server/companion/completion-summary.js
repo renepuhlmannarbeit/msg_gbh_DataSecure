@@ -24,18 +24,81 @@ function completionSummaryText(summary) {
   if (released === selected) {
     return {
       title: 'DataSecure – Verarbeitung abgeschlossen',
-      message: `${counters}\r\n\r\nAlle ausgewählten Dateien wurden erfolgreich vorbereitet. Die Ergebnisse können jetzt in Claude verwendet werden.`
+      message: `${counters}\r\n\r\nAlle ausgewählten Dateien wurden lokal anonymisiert. Ergebnisse und Zuordnung wurden lokal gespeichert.\r\n\r\nNächster Schritt: Schließe diese Meldung.`
     };
   }
   if (released === 0) {
     return {
       title: 'DataSecure – Verarbeitung abgeschlossen',
-      message: `${counters}\r\n\r\nEs wurde nichts für Claude freigegeben. Claude zeigt anschließend den nächsten sicheren Schritt.`
+      message: `${counters}\r\n\r\nEs wurde nichts für Claude freigegeben. Der lokale Lauf ist abgeschlossen.\r\n\r\nNächster Schritt: Schließe diese Meldung.`
     };
   }
   return {
     title: 'DataSecure – Verarbeitung abgeschlossen',
-    message: `${counters}\r\n\r\nDie erfolgreichen Ergebnisse können jetzt in Claude verwendet werden. Für sicher gestoppte Dateien wurde nichts freigegeben.`
+    message: `${counters}\r\n\r\nDie erfolgreichen Ergebnisse und die Zuordnung wurden lokal gespeichert. Für sicher gestoppte Dateien wurde nichts freigegeben.\r\n\r\nNächster Schritt: Schließe diese Meldung.`
+  };
+}
+
+const RESTING_BATCH_PHASES = new Set([
+  'awaiting_local_review',
+  'awaiting_explicit_resume',
+  'awaiting_local_mapping_repair',
+  'awaiting_delivery_acknowledgement',
+  'ready_for_next_document',
+  'invalid_local_state'
+]);
+
+function batchStateNoticeText(progress) {
+  if (!progress || typeof progress !== 'object') throw new SafeError('Ungültiger lokaler Stapelstatus.');
+  if (progress.complete === true || progress.batch_phase === 'complete') {
+    return completionSummaryText({
+      selected_count: progress.batch_total,
+      released_count: progress.released,
+      failed_count: progress.stopped
+    });
+  }
+  const phase = String(progress.batch_phase || '');
+  if (!RESTING_BATCH_PHASES.has(phase)) throw new SafeError('Ungültiger lokaler Stapelstatus.');
+  const messages = {
+    awaiting_local_review: {
+      title: 'DataSecure – Lokale Prüfung erforderlich',
+      message: 'Der Stapel ist sicher angehalten. Offene Inhalte bleiben ausschließlich lokal.\r\n\r\nNächster Schritt: Wähle in Cowork „Lokale Prüfung fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+    },
+    awaiting_explicit_resume: {
+      title: 'DataSecure – Fortsetzung erforderlich',
+      message: 'Der Stapel wurde nach einer technischen Unterbrechung sicher gespeichert.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+    },
+    awaiting_local_mapping_repair: {
+      title: 'DataSecure – Zuordnung vervollständigen',
+      message: 'Die anonymisierten Ergebnisse sind lokal gesichert; ihre lokale Zuordnung ist noch nicht vollständig.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+    },
+    awaiting_delivery_acknowledgement: {
+      title: 'DataSecure – Lokaler Abschluss ausstehend',
+      message: 'Ein lokal anonymisiertes Ergebnis wartet noch auf den sicheren Abschluss.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+    },
+    ready_for_next_document: {
+      title: 'DataSecure – Verarbeitung sicher angehalten',
+      message: 'Der vorhandene Stapel wurde gespeichert, aber noch nicht vollständig verarbeitet.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+    },
+    invalid_local_state: {
+      title: 'DataSecure – Lokaler Zustand nicht verwendbar',
+      message: 'Der Stapel wurde sicher gestoppt und es wird nichts weiter freigegeben.\r\n\r\nNächster Schritt: Öffne in Cowork den DataSecure-Diagnosestatus.'
+    }
+  };
+  return messages[phase];
+}
+
+function intakeNoticeText(stage) {
+  if (stage === 'after_checkpoint') {
+    return {
+      title: 'DataSecure – Lokale Verarbeitung angehalten',
+      message: 'Die lokale Verarbeitung wurde sicher angehalten. Es wurde kein weiteres Paket freigegeben.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+    };
+  }
+  if (stage !== 'before_checkpoint') throw new SafeError('Ungültiger lokaler Intake-Hinweis.');
+  return {
+    title: 'DataSecure – Lokale Verarbeitung nicht gestartet',
+    message: 'Die lokale Verarbeitung konnte nicht gestartet werden. Es wurde kein Paket freigegeben und keine Datei an Claude übertragen.\r\n\r\nNächster Schritt: Starte den lokalen DataSecure-Dienst neu.'
   };
 }
 
@@ -53,6 +116,11 @@ function completionSummaryCommand(summary, options = {}) {
 function completionSummaryCommands(summary, options = {}) {
   const platform = options.platform || process.platform;
   const { title, message } = completionSummaryText(summary);
+  return localMessageCommands(title, message, options);
+}
+
+function localMessageCommands(title, message, options = {}) {
+  const platform = options.platform || process.platform;
   if (platform === 'darwin') {
     const escape = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n');
     return [{
@@ -111,9 +179,13 @@ function completionSummaryCommands(summary, options = {}) {
 }
 
 function showCompletionSummary(summary, options = {}) {
+  return showLocalMessage(completionSummaryText(summary), options);
+}
+
+function showLocalMessage(notice, options = {}) {
   const platform = options.platform || process.platform;
   let unavailable = 0;
-  for (const spec of completionSummaryCommands(summary, options)) {
+  for (const spec of localMessageCommands(notice.title, notice.message, options)) {
     const result = (options.runner || defaultRunner)(
       spec.command,
       spec.args,
@@ -134,6 +206,14 @@ function showCompletionSummary(summary, options = {}) {
   throw new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.');
 }
 
+function showLocalIntakeNotice(stage, options = {}) {
+  return showLocalMessage(intakeNoticeText(stage), options);
+}
+
+function showBatchStateNotice(progress, options = {}) {
+  return showLocalMessage(batchStateNoticeText(progress), options);
+}
+
 // The MCP batch path publishes only this bounded progress object.  Keeping the
 // adapter here prevents the native UI from ever receiving a source identifier,
 // package id, path, filename or document content.
@@ -149,8 +229,12 @@ function showTerminalBatchSummary(progress, options = {}) {
 module.exports = {
   validateSummary,
   completionSummaryText,
+  intakeNoticeText,
+  batchStateNoticeText,
   completionSummaryCommand,
   completionSummaryCommands,
   showCompletionSummary,
+  showLocalIntakeNotice,
+  showBatchStateNotice,
   showTerminalBatchSummary
 };

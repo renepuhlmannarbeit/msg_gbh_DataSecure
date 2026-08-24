@@ -3,7 +3,7 @@
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
 Windows 10/11 x64 und macOS; Linux nur über einen lokalen Claude-Code-Host · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC30 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC34 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -24,9 +24,9 @@ Windows 10/11 x64 und macOS; Linux nur über einen lokalen Claude-Code-Host · c
 > auf Windows und macOS angeboten, nicht auf Linux. Linux ist deshalb erst nach einer
 > eigenen Claude-Code-CLI-Installationsabnahme nutzbar; eine Linux-Desktop-Installation
 > wird nicht behauptet. Für Originale reicht ein sichtbarer Skill, Plugin-Eintrag
-> oder Connector niemals aus: `privacy_status` muss in genau der aktuellen Sitzung
-> erfolgreich sein. Ohne diesen Nachweis stoppt DataSecure vor jedem Datei- oder
-> Ordnerzugriff. Verwenden Sie dann weder Upload noch Computer-Use, allgemeinen
+> oder Connector niemals aus: Der lokale Betriebssystem-Mehrfachpicker muss in genau
+> der aktuellen Sitzung erscheinen. Ohne diesen Nachweis stoppt DataSecure vor jedem
+> Datei- oder Ordnerzugriff. Verwenden Sie dann weder Upload noch Computer-Use, allgemeinen
 > Dateizugriff oder einen anderen Connector als Ersatz. Web, Mobil, Cloud-/Scheduled
 > und Desktop mit getrenntem Local MCP sind im Pilot NO-GO für Originale. Bereits
 > vorher lokal bereinigtes Markdown dürfen Sie dort normal weiterverwenden.
@@ -62,8 +62,9 @@ hineinkopiert, hat alle Maßnahmen umgangen, auch wenn danach alles normal
 aussieht.
 
 - **Nicht:** Dokument per Büroklammer anhängen oder Text einfügen.
-- **Sondern:** Claude um die lokale DataSecure-Verarbeitung bitten und die Dateien
-  ausschließlich in den danach geöffneten `Input`-Ordner kopieren.
+- **Sondern:** In einer lokalen Cowork-Desktop-Sitzung *„Dateien anonymisieren“*
+  schreiben und die Originale ausschließlich im danach geöffneten
+  Betriebssystem-Mehrfachpicker auswählen.
 
 ### Regel 2 — Bilder bleiben standardmäßig lokal
 
@@ -116,17 +117,18 @@ Sie müssen nur einen davon machen.
 
 | Weg | Sie haben … | Was zu tun ist |
 |---|---|---|
-| **A** (Engineering-Testweg) | eine Datei auf `.mcpb` | Über Claude-Einstellungen installieren → Teil 3 |
-| **B** (Plugin-Zielweg, noch abzunehmen) | eine Datei auf `.zip` | Nur nach IT-Freigabe; Runtime-Auflösung und Installation müssen für die Zielumgebung belegt sein → Teil 4 |
+| **A** (empfohlener Cowork-Weg) | eine Datei auf `.zip` | Als benutzerdefiniertes Plugin hochladen → Teil 4 |
+| **B** (Engineering-Fallback) | eine Datei auf `.mcpb` | Über Claude-Einstellungen installieren → Teil 3 |
 | **C** (IT-verwaltet, noch nicht rollout-erprobt) | gar keine Datei | Die IT verteilt zentral; erst nach Marketplace- und Rollout-Abnahme → Teil 5 |
 
 **Warum der Unterschied:** Claude Desktop stellt für `.mcpb`-Desktop-Extensions
 eine eingebaute Node.js-Runtime bereit. Der aktuelle Plugin-ZIP startet ebenfalls
 `node`; ob dieser Befehl in der jeweiligen Plugin-Oberfläche aus Claudes Runtime
 oder aus dem Windows-Systempfad kommt, wird erst im frischen Installationstest
-verbindlich belegt. Wenn Sie die Wahl haben: `.mcpb`.
+verbindlich belegt. Für Claude Cowork ist dennoch der Plugin-ZIP der führende Weg;
+bei einem fehlenden lokalen Tool nicht auf Upload ausweichen, sondern den Host prüfen.
 
-## Teil 3: Weg A — über die `.mcpb`-Datei
+## Teil 3: Weg B — über die `.mcpb`-Datei
 
 1. **Datei an einen festen Platz legen**, z. B. `Dokumente\DataSecure\`. Nicht in
    den Downloads-Ordner.
@@ -151,9 +153,9 @@ verbindlich belegt. Wenn Sie die Wahl haben: `.mcpb`.
    passiert nichts.
 6. **Weiter zu Teil 5.**
 
-## Teil 4: Weg B — über die `.zip`-Datei
+## Teil 4: Weg A — über die `.zip`-Datei
 
-> **Zuerst lesen.** Dieser Weg ist bis zum frischen Installationsbeweis ein
+> **Zuerst lesen.** Dieser bevorzugte Cowork-Weg ist bis zum frischen Installationsbeweis ein
 > Engineering-Weg. **Installieren Sie Node nicht selbst.** Die IT muss vorab
 > bestätigen, dass der lokale MCP aus dem Plugin in Ihrer Claude-Version startet.
 
@@ -169,23 +171,64 @@ verbindlich belegt. Wenn Sie die Wahl haben: `.mcpb`.
 
 ## Teil 5: Hat es funktioniert?
 
-Schreiben Sie Claude genau diesen Satz:
+Öffnen Sie eine **neue lokale Cowork-Unterhaltung** und schreiben Sie:
 
-> Prüfe bitte den Status von DataSecure.
+> Dateien anonymisieren.
 
-Drei mögliche Ausgänge:
+- **Alles gut:** Sofort erscheint der lokale Betriebssystem-Mehrfachpicker. Wählen
+  Sie für diesen Installationstest noch keine Datei, sondern klicken Sie
+  **Abbrechen**. Damit sind Skill, lokaler MCP und Picker gemeinsam nachgewiesen.
+- **Nicht gut:** Es erscheint kein lokaler Picker, Claude bietet einen Upload an
+  oder meldet einen Fehler. Laden Sie nichts hoch. Beenden Sie Claude vollständig,
+  starten Sie es einmal neu und wiederholen Sie den Satz genau einmal. Danach
+  aufhören und die Vorlage aus Teil 11 an die IT schicken.
 
-- **Alles gut.** Claude nennt eine Version, sagt, dass alles bereit ist, und dass
-  **0 Dokumente** im Eingang liegen. → Teil 6.
-- **Teilweise.** Claude antwortet, erwähnt aber, dass die Bildprüfung nicht
-  verfügbar ist (`visual_bridge: unavailable`). **Sie können arbeiten:** Texte
-  laufen normal, Bilder werden alle zurückgehalten. An die IT melden, aber nicht
-  darauf warten.
-- **Nicht gut.** Claude kennt DataSecure nicht oder meldet einen Fehler. Machen
-  Sie **genau einen** Versuch: Claude beenden, neu starten, Satz wiederholen.
-  Dann aufhören und die Vorlage aus Teil 11 an die IT schicken.
+`privacy_status` und Diagnosewerkzeuge gehören ausschließlich zum aktivierten
+IT-Supportmodus und sind weder Installations- noch Vorbereitungsschritt des normalen
+Cowork-Ablaufs.
 
 ## Teil 6: Die fünf Ordner
+
+### Dateien anonymisieren – der Normalweg
+
+Schreiben Sie in einer neuen Cowork-Unterhaltung einfach: **„Dateien anonymisieren“**.
+DataSecure öffnet sofort die lokale Mehrfach-Dateiauswahl. Wählen Sie bis zu 100
+TXT-, Markdown-, CSV- oder DOCX-Dateien mit zusammen höchstens 500 MiB und klicken
+Sie **„Öffnen“**. Das ist die einzige Startbestätigung; der Stapel startet danach
+lokal automatisch. Sie müssen keine Dateien vorher in `Input` kopieren und keinen
+Diagnosestatus abfragen. Bilder bleiben standardmäßig lokal und werden nicht an
+Claude übertragen.
+
+Zusätzlich zur Stapelgrenze gelten sichere Einzeldateigrenzen: TXT/Markdown
+8.000.000 Bytes, CSV 1.500.000 Bytes und DOCX 64 MiB komprimiert sowie 128 MiB
+entpackt. Es gibt keine feste Seitenbegrenzung. Eine zu große Datei wird bereits
+lokal vor dem Hintergrundlauf abgewiesen.
+
+Der `Input`-Ordner bleibt ausschließlich für einen von IT oder erfahrenen
+Anwendern bewusst gewünschten manuellen/fallspezifischen Ablauf bestehen.
+
+### Optional: einen anderen lokalen Privacy-Ordner wählen
+
+Standardmäßig legt DataSecure seine fünf Ordner unter `SecureDataMsg\workspace` im
+lokalen App-Datenbereich an. Wenn Sie einen festen lokalen Arbeitsort möchten,
+schreiben Sie in einer **neuen Cowork-Unterhaltung**: *„Privacy-Ordner ändern“*.
+DataSecure öffnet dann einen lokalen Betriebssystemdialog. Nach der Auswahl Claude
+vollständig neu starten. Der gewählte Pfad wird nur lokal gespeichert und nicht an
+Claude ausgegeben. Für den Standard genügt: *„Privacy-Ordner auf Standard zurücksetzen“*.
+
+Die MCPB-Variante bietet zusätzlich bei der Installation das optionale Feld
+**Privacy-Ordner**. Die frühere Anleitung über einen unsichtbaren ZIP-Connectorwert
+gilt nicht mehr.
+
+Der Eintrag ist kein Freifahrtschein: Vor der ersten Verarbeitung prüft DataSecure
+den Pfad. OneDrive, iCloud Drive, Dropbox, Google Drive, Netzlaufwerke und
+Symlinks/Junctions werden blockiert; es wird weder eine Datei verarbeitet noch ein
+Pfad an Claude übertragen. Dann einen anderen lokalen Ordner wählen oder IT fragen.
+Den Speicherort nie während eines laufenden Stapels ändern.
+
+Ein älterer Ordner `ClaudeEUPrivacyDocumentGatewayV32` wird beim Update nicht
+automatisch verschoben oder gelöscht. Er kann lokale Originale enthalten und wird
+deshalb ausschließlich nach einer bewussten lokalen IT-Prüfung bereinigt.
 
 Der Standard liegt im lokalen DataSecure-App-Datenbereich und nicht unter
 `Dokumente`. Sie müssen den technischen Pfad nicht kennen: *„Öffne den
@@ -193,14 +236,17 @@ Privacy-Ordner"* öffnet ihn im Explorer oder Finder.
 
 | Ordner | Inhalt |
 |---|---|
-| `Input` | Hier legen Sie ausschließlich die Dateien des jetzt beabsichtigten Laufs hinein |
+| `Input` | DataSecure-eigene Inbox für den technischen Alt-/Fallbackweg; niemals einen SharePoint-, Netz- oder Quellordner hierher verbinden |
 | `Output` | Die geprüfte Fassung. Nur das sieht Claude; standardmäßig 7 Tage aufbewahrt |
 | `Needs Visual Review` | Lokal zurückgehaltene Bilder. Enthält echte Fotos; in diesem Engineering-Build keine Freigabe über Claude, Preview verschwindet nach Fristablauf |
-| `Processed` | Die von Ihnen in `Input` abgelegte Arbeitskopie; standardmäßig 7 Tage aufbewahrt |
+| `Processed` | Ausschließlich DataSecure-eigene Arbeitskopien des technischen Inbox-Fallbacks; standardmäßig 7 Tage aufbewahrt |
 | `DataSecure-Export` | Dauerhafte lokale Übersicht: `DataSecure-Mapping.csv` ordnet jede Originaldatei ihrem anonymisierten Ergebnis zu; der zugehörige Batch-Nachweis enthält nur Zähler und Status |
 
-Die ursprüngliche Quelldatei außerhalb des DataSecure-Ordners bleibt unverändert.
-`purge_local_data` löscht sie niemals.
+Ihre Quelle bleibt unverändert. Der normale Cowork-Mehrfachpicker liest Dateien nur
+lesend und erstellt eine private lokale Arbeitskopie. Das gilt ebenso für eine
+spätere SharePoint-Quelle: DataSecure benötigt dort ausschließlich Leserechte und
+darf nie löschen, verschieben oder überschreiben. `purge_local_data` löscht nur
+DataSecure-eigene Arbeitskopien, Ergebnisse und Vorschauen – niemals Ihre Quelle.
 
 ## Teil 7: So arbeiten Sie damit
 
@@ -209,18 +255,15 @@ Die ursprüngliche Quelldatei außerhalb des DataSecure-Ordners bleibt unveränd
 1. Bitten Sie Claude: *„Anonymisiere eine oder mehrere Dateien lokal mit
    DataSecure.“* Sie müssen keine internen Profilnamen kennen und einen gemischten
    Stapel nicht Datei für Datei einordnen.
-2. DataSecure nennt vor dem Öffnen nur, wie viele sichtbare Dateien bereits im
-   Eingang liegen. Prüfen Sie im geöffneten `Input`-Ordner, dass dort **nur** die
-   Dateien des jetzigen Laufs liegen. So werden Altbestände nicht versehentlich
-   mitverarbeitet.
-3. Kopieren Sie bis zu 100 TXT-, Markdown- (`.md` oder `.markdown`), CSV- oder DOCX-Dateien mit zusammen höchstens 500 MB hinein, nicht in den Chat. Kehren Sie
-   zu Claude zurück und bestätigen Sie kurz, dass ausschließlich diese Dateien
-   bereitliegen. Vor der Übernahme sehen Sie noch eine lokale Startbestätigung mit
-   Anzahl, Gesamtgröße, Formaten und Bildstandard. Erst **Starten** erstellt private,
-   versiegelte Arbeitskopien; **Abbrechen** erstellt keinen Batch. Spätere Änderungen,
-   Umbenennungen oder Ergänzungen im
-   Input-Ordner verändern den gestarteten Stapel nicht. PDF und alle anderen Formate
-   sind im Pilot sicher gesperrt.
+2. Der lokale Mehrfach-Dateidialog öffnet sich direkt. Wählen Sie bis zu 100 TXT-,
+   Markdown- (`.md` oder `.markdown`), CSV- oder DOCX-Dateien mit zusammen höchstens
+   500 MiB aus – nicht in den Chat. Beachten Sie zusätzlich die oben genannten
+   Einzeldateigrenzen.
+3. Klicken Sie **„Öffnen“**. Dies ist die einzige Bestätigung: DataSecure prüft Anzahl,
+   Gesamtgröße, Formate und Bildstandard lokal und erstellt dann private, versiegelte
+   Arbeitskopien. **Abbrechen** erstellt keinen Batch. Spätere Änderungen an den
+   ausgewählten Originalen verändern den gestarteten Snapshot nicht. PDF und alle
+   anderen Formate sind im Pilot sicher gesperrt.
 4. Ein kurzer Startaufruf übergibt den versiegelten Stapel an einen getrennten lokalen
    Hintergrundprozessor. Er verarbeitet intern Datei für Datei und erstellt pro Erfolg
    ein eigenes Markdown-Paket, ohne dass Claude für jede Datei einen Werkzeugaufruf
@@ -237,9 +280,9 @@ Die ursprüngliche Quelldatei außerhalb des DataSecure-Ordners bleibt unveränd
 7. Bei mehr als einer Datei zeigt DataSecure zusätzlich eine lokale Abschlussübersicht
    mit den Zählern ausgewählt, erfolgreich vorbereitet und sicher gestoppt. Claude
    nennt am Ende dieselben Zähler. Die
-   lokal im `Input` verbliebenen Dateien sind die gestoppten; ihre Namen wurden Claude
-   nicht mitgeteilt. Claude erhält Ergebnisse nur namenfrei in Seiten von höchstens
-   zehn und liest je nach Aufgabe nur benötigte Pakete. Erfolgreiches Markdown ist
+   lokal gesperrten Arbeitskopien gehören zu den gestoppten Dateien; ihre Namen wurden
+   Claude nicht mitgeteilt. Claude erhält Ergebnisse nur namenfrei in Seiten von höchstens
+   fünf und liest je nach Aufgabe nur benötigte Pakete. Erfolgreiches Markdown ist
    nur über die 15 Minuten gültige Leseberechtigung desselben Laufs abrufbar; ein
    Chatabbruch ändert den bereits lokal abgeschlossenen Stapel nicht. Die dauerhafte Zuordnung zwischen
    Original und Ergebnis finden Sie lokal in `DataSecure-Export/DataSecure-Mapping.csv`.
@@ -326,20 +369,20 @@ Nummern beginnen bei jedem Dokument neu.
 | Was Sie sehen | Was Sie tun |
 |---|---|
 | Claude kennt DataSecure nicht | Claude beenden (Symbol neben der Uhr → *Beenden*), neu starten. Genau ein Versuch, dann IT |
-| „Wie möchten Sie diese Datei öffnen?" | Abbrechen. Das Original nicht in Claude ziehen; zurück zum DataSecure-Input-Ordner und den lokalen Ablauf neu starten. |
-| „Keine unterstützte Datei im Eingang" | Datei liegt nicht in `Input` oder hat ein anderes Format |
+| „Wie möchten Sie diese Datei öffnen?" | Abbrechen. Das Original nicht in Claude ziehen; eine neue Cowork-Unterhaltung öffnen und den lokalen DataSecure-Ablauf erneut starten. |
+| „Keine unterstützte Datei ausgewählt" | Eine unterstützte TXT-, Markdown-, CSV- oder DOCX-Datei im lokalen Dialog auswählen |
 | „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Nicht automatisch erneut starten. `diagnostic_status` aufrufen und nur den festen Fehlercode an IT melden — nicht Datei, Dateiname, Pfad oder Inhalt |
 | Sie haben in Claude auf **Stopp** geklickt | Der Stapel bleibt lokal fortsetzbar; kein Paket der unterbrochenen Datei wurde freigegeben. Nicht automatisch neu starten. Bitten Sie bei Bedarf ausdrücklich, den letzten DataSecure-Stapel fortzusetzen |
-| `AMBIGUITY_REVIEW_REQUIRED` | Ein Organisationsname könnte Zertifikatsanbieter oder Arbeitgeber/Kunde sein. Die Datei bleibt in `Input`; nicht automatisch erneut starten. Der normale Ordnerablauf rät hier bewusst nicht |
+| `AMBIGUITY_REVIEW_REQUIRED` | Ein Organisationsname könnte Zertifikatsanbieter oder Arbeitgeber/Kunde sein. Die lokale Arbeitskopie bleibt gesperrt; nicht automatisch erneut starten. Der Normalablauf rät hier bewusst nicht |
 | `PARSER_ISOLATION_FAILED` | Die lokale Windows-Sicherheitsgrenze fehlt oder ist beschädigt. Nicht erneut versuchen und nichts manuell umgehen; Plugin/Extension durch IT neu installieren lassen |
 | `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
-| Claude meldet vor dem Start eine andere Anzahl | Im geöffneten `Input`-Ordner nur die beabsichtigten Dateien belassen und die korrekte Anzahl erneut bestätigen |
+| Claude meldet vor dem Start eine andere Anzahl | Abbrechen und die beabsichtigten Dateien im lokalen Mehrfachpicker erneut auswählen; nicht auf `Input` ausweichen |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
 | `PDF_COVERAGE_UNVERIFIED` | PDF ist unabhängig vom Inhalt sicher gesperrt. Verwenden Sie eine freigegebene TXT-, Markdown-, CSV- oder DOCX-Quelle; niemals das PDF direkt in Claude hochladen |
-| `FORMAT_COVERAGE_UNVERIFIED` | Im Pilot sind nur TXT, Markdown (`.md`), CSV und DOCX zugelassen. Die Datei bleibt in `Input` |
+| `FORMAT_COVERAGE_UNVERIFIED` | Im Pilot sind nur TXT, Markdown (`.md`), CSV und DOCX zugelassen. Es wird kein Paket für die Datei freigegeben |
 | `PARSER_COVERAGE_UNVERIFIED` | DOCX enthält nicht vollständig abgedeckte Bestandteile. Es wurde kein Paket veröffentlicht |
 | `UNSAFE_STORAGE_LOCATION` | Der konfigurierte Ordner liegt in einem bekannten Cloud-Sync- oder Netzwerkpfad. IT muss einen lokalen Pfad konfigurieren |
-| Dokument ist aus `Input` verschwunden, aber es gibt kein Ergebnis | DataSecure stellt abgebrochene versteckte Arbeitsdateien beim Neustart kollisionsfrei wieder her. Nicht manuell in versteckten Dateien arbeiten; bei erneutem Auftreten IT informieren |
+| Ausgewählte Datei hat kein Ergebnis | Das Original bleibt unverändert. DataSecure stellt nur seine private Arbeitskopie beim Neustart kollisionsfrei wieder her; nicht erneut auswählen, sondern ausdrücklich fortsetzen oder IT informieren |
 | Fachbegriff fälschlich geschwärzt | Kein Datenschutzproblem, aber bitte melden |
 | **Echter Name in der geprüften Fassung** | **Sofort aufhören.** Nicht weiterarbeiten, Chat nicht weiterverwenden, umgehend melden |
 
@@ -377,7 +420,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC30 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC34 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

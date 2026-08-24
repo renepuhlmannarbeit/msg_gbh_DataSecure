@@ -84,7 +84,7 @@ function parseCsvRows(source, delimiter) {
   return rows;
 }
 
-function csvDelimiter(source) {
+function parseCsvDialect(source) {
   const candidates = [];
   for (const delimiter of CSV_DELIMITERS) {
     let rows;
@@ -95,12 +95,16 @@ function csvDelimiter(source) {
     candidates.push({ delimiter, maxWidth, consistent });
   }
   const viable = candidates.filter((candidate) => candidate.consistent);
-  if (!viable.length) return ','; // RFC-4180-compatible one-column data.
+  if (!viable.length) return { delimiter: ',', rows: parseCsvRows(source, ',') }; // RFC-4180-compatible one-column data.
   viable.sort((left, right) => right.maxWidth - left.maxWidth);
   if (viable.length > 1 && viable[0].maxWidth === viable[1].maxWidth) {
     throw new Error('CSV_DELIMITER_AMBIGUOUS');
   }
-  return viable[0].delimiter;
+  return { delimiter: viable[0].delimiter, rows: parseCsvRows(source, viable[0].delimiter) };
+}
+
+function csvDelimiter(source) {
+  return parseCsvDialect(source).delimiter;
 }
 
 function csvMarkdownCell(value) {
@@ -117,8 +121,7 @@ function csvMarkdownCell(value) {
 
 function csvToMarkdown(source) {
   const normalizedSource = normalizeText(String(source || '')).replace(/\r\n?/gu, '\n');
-  const delimiter = csvDelimiter(normalizedSource);
-  const rows = parseCsvRows(normalizedSource, delimiter);
+  const { rows } = parseCsvDialect(normalizedSource);
   if (!rows.length) throw new Error('CSV_EMPTY');
   const width = rows[0].length;
   if (width < 1 || rows.some((row) => row.length !== width)) throw new Error('CSV_ROW_WIDTH_INVALID');
@@ -177,6 +180,7 @@ module.exports = {
   CSV_DELIMITERS,
   decodeUtf8Source,
   parseCsvRows,
+  parseCsvDialect,
   csvDelimiter,
   csvMarkdownCell,
   csvToMarkdown,

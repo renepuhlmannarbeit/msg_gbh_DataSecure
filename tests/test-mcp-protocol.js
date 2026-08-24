@@ -17,7 +17,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000 } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [serverEntry], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -27,7 +27,8 @@ function talk(messages, { timeoutMs = 15000 } = {}) {
         LOCALAPPDATA: path.join(root, 'localapp'),
         EU_PRIVACY_LANGUAGE: 'de',
         EU_PRIVACY_VISUAL_MODE: 'strict',
-        EU_PRIVACY_RETENTION_DAYS: '7'
+        EU_PRIVACY_RETENTION_DAYS: '7',
+        EU_PRIVACY_SUPPORT_MODE: supportMode ? '1' : '0'
       }
     });
 
@@ -62,7 +63,7 @@ const rpc = (id, method, params) => ({ jsonrpc: '2.0', id, method, ...(params ? 
 
 async function main() {
   await testAsync('server startup removes an abandoned private working copy', async () => {
-    const jobs = path.join(root, 'localapp', 'ClaudeEUPrivacyDocumentGatewayV32', 'jobs');
+    const jobs = path.join(root, 'localapp', 'SecureDataMsg', 'jobs');
     const orphan = path.join(jobs, 'startup_12345678');
     fs.mkdirSync(orphan, { recursive: true });
     fs.writeFileSync(path.join(orphan, 'source.txt'), 'private source after crash');
@@ -79,7 +80,7 @@ async function main() {
 
   await testAsync('server startup restores an abandoned hidden Input claim before accepting requests', async () => {
     const input = path.join(root, 'Input');
-    const jobs = path.join(root, 'localapp', 'ClaudeEUPrivacyDocumentGatewayV32', 'jobs');
+    const jobs = path.join(root, 'localapp', 'SecureDataMsg', 'jobs');
     const jobId = 'crashed_abcdef12';
     fs.mkdirSync(input, { recursive: true });
     const hidden = path.join(input, `.processing_${jobId}_recovered.txt`);
@@ -140,9 +141,14 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 20, `expected exactly 20 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 28, `expected exactly 28 tools, got ${tools.length}`);
     assert.ok(tools.some((tool) => tool.name === 'open_input_folder'));
     assert.ok(tools.some((tool) => tool.name === 'open_export_folder'));
+    assert.ok(tools.some((tool) => tool.name === 'configure_privacy_folder'));
+    assert.ok(tools.some((tool) => tool.name === 'start_document_batch_from_picker'));
+    assert.ok(tools.some((tool) => tool.name === 'continue_anonymized_batch_in_chat'));
+    assert.ok(tools.some((tool) => tool.name === 'start_completed_local_results_handoff'));
+    assert.ok(tools.some((tool) => tool.name === 'continue_local_results_handoff'));
     assert.ok(!tools.some((tool) => tool.name === 'prepare_local_document'));
     assert.ok(!tools.some((tool) => tool.name === 'anonymize_all_documents'));
     assert.ok(!tools.some((tool) => tool.name === 'anonymize_next_document'));
@@ -152,6 +158,8 @@ async function main() {
     assert.ok(tools.some((tool) => tool.name === 'document_batch_status'));
     assert.ok(tools.some((tool) => tool.name === 'list_document_batch_results'));
     assert.ok(tools.some((tool) => tool.name === 'acknowledge_batch_document'));
+    assert.ok(tools.some((tool) => tool.name === 'acknowledge_batch_documents'));
+    assert.ok(tools.some((tool) => tool.name === 'read_anonymized_documents'));
     assert.ok(tools.some((tool) => tool.name === 'review_deferred_document_batch'));
     assert.ok(tools.some((tool) => tool.name === 'continue_most_recent_document_batch'));
     assert.ok(tools.some((tool) => tool.name === 'discard_incomplete_document_batches'));
@@ -186,31 +194,86 @@ async function main() {
     const begin = tools.find((tool) => tool.name === 'begin_document_batch');
     assert.deepStrictEqual(begin.inputSchema.required, ['expected_count']);
     assert.strictEqual(begin.inputSchema.properties.expected_count.maximum, 100);
-    for (const name of ['read_anonymized_document']) {
+    const configure = tools.find((tool) => tool.name === 'configure_privacy_folder');
+    assert.deepStrictEqual(configure.inputSchema.required, ['confirmed']);
+    assert.strictEqual(configure.inputSchema.properties.confirmed.const, true);
+    const picker = tools.find((tool) => tool.name === 'start_document_batch_from_picker');
+    assert.strictEqual(picker.inputSchema.properties.profile.default, 'auto');
+    assert.strictEqual(picker.inputSchema.properties.mode.default, 'local_only');
+    assert.deepStrictEqual(picker.inputSchema.properties.mode.enum, ['local_only', 'continue_in_chat']);
+    const combined = tools.find((tool) => tool.name === 'continue_anonymized_batch_in_chat');
+    assert.deepStrictEqual(combined.inputSchema.required, ['batch_token']);
+    assert.strictEqual(combined.inputSchema.properties.continuations.maxItems, 5);
+    for (const name of ['read_anonymized_document', 'read_anonymized_documents']) {
       const readTool = tools.find((tool) => tool.name === name);
-      assert.ok(readTool.inputSchema.required.includes('read_capability'));
-      assert.strictEqual(readTool.inputSchema.properties.read_capability.minLength, 43);
-      assert.strictEqual(readTool.inputSchema.properties.read_capability.maxLength, 43);
+      if (name === 'read_anonymized_document') {
+        assert.ok(readTool.inputSchema.required.includes('read_capability'));
+        assert.strictEqual(readTool.inputSchema.properties.read_capability.minLength, 43);
+        assert.strictEqual(readTool.inputSchema.properties.read_capability.maxLength, 43);
+      } else {
+        assert.deepStrictEqual(readTool.inputSchema.required, ['documents']);
+        assert.strictEqual(readTool.inputSchema.properties.documents.maxItems, 10);
+      }
     }
+  });
+
+  await testAsync('normal Cowork facade exposes only the token-free routine tools', async () => {
+    const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')], { supportMode: false });
+    const names = responses.find((r) => r.id === 2).result.tools.map((tool) => tool.name).sort();
+    assert.deepStrictEqual(names, [
+      'cancel_local_results_handoff',
+      'configure_privacy_folder',
+      'continue_local_results_handoff',
+      'continue_most_recent_document_batch',
+      'discard_incomplete_document_batches',
+      'open_export_folder',
+      'review_deferred_document_batch',
+      'start_completed_local_results_handoff',
+      'start_document_batch_from_picker'
+    ]);
+    assert.ok(!names.includes('open_input_folder'));
+    assert.ok(!names.includes('begin_document_batch'));
+    assert.ok(!names.includes('read_anonymized_document'));
+    assert.ok(!names.includes('privacy_status'));
+    assert.ok(!names.includes('purge_local_data'));
+  });
+
+  await testAsync('normal Cowork rejects manually invoked technical Input and root paths', async () => {
+    const { responses } = await talk([
+      rpc(1, 'tools/call', { name: 'begin_document_batch', arguments: { expected_count: 1 } }),
+      rpc(2, 'tools/call', { name: 'open_privacy_folder', arguments: {} }),
+      rpc(3, 'tools/call', { name: 'privacy_status', arguments: {} })
+    ], { supportMode: false });
+    assert.strictEqual(responses.length, 3);
+    for (const response of responses.slice(0, 2)) {
+      assert.strictEqual(response.result.isError, true);
+      assert.match(response.result.structuredContent.message, /DataSecure-Eingang.*Supportmodus/u);
+    }
+    assert.strictEqual(responses[2].result.isError, true);
+    assert.match(responses[2].result.structuredContent.message, /lokalen Supportmodus/u);
   });
 
   await testAsync('read tools are annotated read only and write tools are not', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const byName = Object.fromEntries(responses.find((r) => r.id === 2).result.tools.map((t) => [t.name, t]));
-    for (const name of ['privacy_status', 'diagnostic_status', 'document_batch_status', 'read_anonymized_document']) {
+    for (const name of ['privacy_status', 'diagnostic_status', 'document_batch_status', 'read_anonymized_document', 'read_anonymized_documents']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, true, `${name} must be read only`);
+    }
+    for (const name of ['start_completed_local_results_handoff', 'continue_local_results_handoff']) {
+      assert.strictEqual(byName[name].annotations.readOnlyHint, false, `${name} starts or advances an intentional handoff`);
+      assert.strictEqual(byName[name].annotations.idempotentHint, false, `${name} advances local handoff state`);
     }
     for (const name of ['start_document_batch_processing', 'list_document_batch_results', 'purge_local_data']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, false, `${name} must not claim to be read only`);
     }
-    for (const name of ['start_document_batch_processing', 'review_deferred_document_batch', 'acknowledge_batch_document', 'discard_incomplete_document_batches', 'purge_local_data']) {
+    for (const name of ['start_document_batch_processing', 'review_deferred_document_batch', 'acknowledge_batch_document', 'acknowledge_batch_documents', 'discard_incomplete_document_batches', 'purge_local_data']) {
       assert.strictEqual(byName[name].annotations.destructiveHint, true, `${name} must disclose destructive local state changes`);
     }
-    for (const name of ['privacy_status', 'diagnostic_status', 'document_batch_status', 'read_anonymized_document', 'list_visual_review_items']) {
+    for (const name of ['privacy_status', 'diagnostic_status', 'document_batch_status', 'read_anonymized_document', 'read_anonymized_documents', 'list_visual_review_items']) {
       assert.strictEqual(byName[name].annotations.idempotentHint, true, `${name} must disclose idempotent reads`);
       assert.strictEqual(byName[name].annotations.destructiveHint, false, `${name} must be non-destructive`);
     }
-    for (const name of ['open_input_folder', 'open_privacy_folder', 'open_output_folder', 'open_export_folder', 'open_visual_review_folder']) {
+    for (const name of ['open_input_folder', 'open_privacy_folder', 'open_output_folder', 'open_export_folder', 'open_visual_review_folder', 'configure_privacy_folder']) {
       assert.strictEqual(byName[name].annotations.idempotentHint, false, `${name} opens a new local UI instance`);
       assert.strictEqual(byName[name].annotations.destructiveHint, false, `${name} only opens a local folder`);
     }
@@ -442,11 +505,12 @@ async function main() {
     assert.strictEqual(prompts.length, 4);
     const got = responses.find((r) => r.id === 3).result;
     assert.strictEqual(got.messages[0].role, 'user');
-    assert.match(got.messages[0].content.text, /start_document_batch_processing/);
-    assert.match(got.messages[0].content.text, /list_document_batch_results/);
+    assert.match(got.messages[0].content.text, /start_document_batch_from_picker/);
+    assert.match(got.messages[0].content.text, /start_completed_local_results_handoff/);
+    assert.match(got.messages[0].content.text, /continue_local_results_handoff/);
     assert.match(got.messages[0].content.text, /profile=personnel_profile/);
     assert.match(got.messages[0].content.text, /Skills zusammenfassen/);
-    assert.match(got.messages[0].content.text, /Aufbewahrungsfrist/);
+    assert.match(got.messages[0].content.text, /lokale Mehrfach-Dateidialog/);
   });
 
   await testAsync('an unknown prompt yields invalid params', async () => {

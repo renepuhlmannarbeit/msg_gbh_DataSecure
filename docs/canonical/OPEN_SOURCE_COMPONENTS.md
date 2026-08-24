@@ -39,6 +39,7 @@ Abnahme auf Windows, macOS und Linux.
 | BL-032 | Beibehalten | Betriebssystemeigene Secret-/Dialogfunktionen, keine Cloud-Komponente | Passwort und Entscheidungen müssen lokal, RAM-only und UI-gebunden bleiben. |
 | BL-040 | Pilot | Ajv (MIT) für Nachweisschema; csv-stringify (MIT) für robustes CSV | Mapping bleibt technisch außerhalb aller MCP-Lesewerkzeuge. |
 | BL-041 | Beibehalten | Claude-Plugin-/Skill-Verträge und MCP-SDK nur aus dem geprüften Release | Ablauf und Datenschutzgrenze sind produktspezifisch; zusätzliche Agent-Frameworks erhöhen Komplexität. |
+| BL-043 | Beibehalten + Spike | Offizielles MCP-Task-/Notification-Protokoll und Claude-/Cowork-Hostvertrag; keine zusätzliche Runtime | Ein lokaler Worker bleibt der sichere Fallback. Eine Hostfunktion wird erst nach versionsgebundenem Nachweis genutzt; Agent-Frameworks oder Remote-Queue-Dienste würden die lokale Grenze und den Ein-Aufruf-Ablauf verschlechtern. |
 | BL-042 | Pilot | Ajv (MIT) für Diagnoseformat; pino (MIT) höchstens für strukturierte interne Events | Whitelist und Inhaltsfreiheit bleiben eigene Sicherheitslogik. |
 | BL-050 | Pilot | fast-check (MIT) für Property-/Fuzz-Generierung; bestehende Corpus-Runner bleiben | Erweitert synthetische Variation, ersetzt keine markierten 1.000 Dokumente. |
 | BL-051 | Pilot | esbuild (MIT), CycloneDX-Generatoren und GitHub Actions | Supply-Chain-Pins, Paketparität, frische Installation und Rückrolle bleiben eigene Gates. |

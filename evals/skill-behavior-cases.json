@@ -6,10 +6,10 @@
       "category": "positive",
       "prompt": "Anonymisiere meinen DOCX-Vertrag und prüfe danach die Kündigungsfrist.",
       "expected_skill": "anonymize",
-      "expected_route": "folder",
+      "expected_route": "dialog",
       "expected_profile": "contract",
       "remove_images": false,
-      "required_outcomes": ["no_direct_upload", "wait_for_local_input_confirmation", "read_current_released_markdown", "continue_original_task"],
+      "required_outcomes": ["no_direct_upload", "single_local_picker_confirmation", "read_current_released_markdown", "continue_original_task"],
       "forbidden_outcomes": ["request_path", "read_original_with_other_tool"]
     },
     {
@@ -17,10 +17,10 @@
       "category": "positive",
       "prompt": "Wähle mehrere Word-Dateien aus. Einige sind Verträge, andere Mitarbeiterprofile. Fasse sie danach getrennt zusammen.",
       "expected_skill": "anonymize",
-      "expected_route": "folder",
+      "expected_route": "dialog",
       "expected_profile": "auto",
       "remove_images": false,
-      "required_outcomes": ["no_direct_upload", "wait_for_local_input_confirmation", "no_per_file_classification", "read_all_current_released_markdown", "continue_original_task"],
+      "required_outcomes": ["no_direct_upload", "single_local_picker_confirmation", "no_per_file_classification", "read_all_current_released_markdown", "continue_original_task"],
       "forbidden_outcomes": ["request_path", "claim_all_succeeded_without_counts"]
     },
     {

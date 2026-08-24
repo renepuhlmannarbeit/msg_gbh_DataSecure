@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
+import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -47,6 +48,7 @@ try {
     path.join(nativeBin, 'windows-x64', 'datasecure-sandbox.exe'),
     path.join(nativeBin, 'windows-x64', 'datasecure-sandbox.sha256')
   );
+  const posixSupervisors = verifyPosixSupervisorArtifacts(nativeBin);
 
   fs.mkdirSync(path.join(stage, 'scripts'), { recursive: true });
   for (const helper of ['windows-ocr.ps1', 'rasterize-image.ps1']) {
@@ -59,7 +61,15 @@ try {
   if (!fs.existsSync(entry)) throw new Error(`manifest entry_point not staged: ${manifest.server.entry_point}`);
 
   fs.rmSync(out, { force: true });
-  const result = writeZip(out, collectFiles(stage));
+  const posixExecutableEntries = new Set(posixSupervisors.map((target) => `server/native/${target}/datasecure-sandbox`));
+  for (const file of collectFiles(path.join(stage, 'server', 'ocr-runtime'))) {
+    if (/^targets\/(?:macos-x64|macos-arm64|linux-x64)\/datasecure-ocr-sandbox$/u.test(file.archivePath)) {
+      posixExecutableEntries.add(`server/ocr-runtime/${file.archivePath}`);
+    }
+  }
+  const result = writeZip(out, collectFiles(stage).map((file) => ({
+    ...file, mode: posixExecutableEntries.has(file.archivePath) ? 0o100755 : 0o100644
+  })));
   const hash = crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex');
   console.log(`${out}\n  entries=${result.entries} bytes=${result.bytes}\n  sha256=${hash}`);
 } finally {

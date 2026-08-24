@@ -1,8 +1,10 @@
 'use strict';
 const fs=require('fs');const path=require('path');const crypto=require('crypto');const {spawn}=require('child_process');
 const {dataRoot}=require('../runtime');
+const {readConfiguredPrivacyRoot}=require('./privacy-config');
 const {VERSION}=require('../version');
 const {uiProcessEnvironment}=require('../companion/ui-process-policy');
+const {RESOURCE_LIMITS,assertSourceSize}=require('../resource-limits');
 const SUPPORTED=new Set(['.pdf','.docx','.xlsx','.pptx','.txt','.md','.markdown','.csv','.png','.jpg','.jpeg','.bmp']);
 // Release allowlist for the supervised pilot. Other formats remain visible to
 // the queue so the user receives an explicit fail-closed result instead of the
@@ -12,9 +14,10 @@ const SUPPORTED=new Set(['.pdf','.docx','.xlsx','.pptx','.txt','.md','.markdown'
 // links, HTML and image references remain inert source text and are never fetched.
 const PILOT_SUPPORTED=new Set(['.docx','.txt','.md','.markdown','.csv']);
 const PROFILES=new Set(['auto','customer','applicant','personnel_profile','contract','general']);
-const LIMITS={MAX_INPUT_BYTES:500*1024*1024,MAX_BATCH_FILES:100,MAX_BATCH_TOTAL_BYTES:500*1024*1024,MAX_TEXT_CHARS:20_000_000,MAX_VISUAL_ASSETS:150,MAX_ASSET_BYTES:30*1024*1024};
+const LIMITS=RESOURCE_LIMITS;
 
-function privacyRoot(){const configured=String(process.env.EU_PRIVACY_ROOT||'').trim();return path.resolve(configured||path.join(dataRoot(),'workspace'));}
+function configuredPrivacyRoot(){return String(process.env.EU_PRIVACY_ROOT||'').trim()||readConfiguredPrivacyRoot();}
+function privacyRoot(){return path.resolve(configuredPrivacyRoot()||path.join(dataRoot(),'workspace'));}
 function resolvedSafetyPath(target){
   const requested=path.resolve(String(target)); let probe=requested; const suffix=[];
   while(!fs.existsSync(probe)){const parent=path.dirname(probe);if(parent===probe)return null;suffix.unshift(path.basename(probe));probe=parent;}
@@ -32,7 +35,7 @@ function storageStatus(root=privacyRoot()){
   const cloud=/(?:^|\/)(?:OneDrive(?:\s*-\s*[^/]*)?|Dropbox|Google Drive|iCloud Drive)(?:\/|$)/iu.test(normalized);
   const network=(process.platform==='win32'&&(/^\/\//.test(normalized)||/^\\\\/.test(requested)))||/^\/\/[^/]/.test(normalized);
   const reparse=hasReparseComponent(requested);
-  const configured=Boolean(String(process.env.EU_PRIVACY_ROOT||'').trim());
+  const configured=Boolean(configuredPrivacyRoot());
   const safe=Boolean(resolved)&&!cloud&&!network&&!reparse;
   return{safe,mode:cloud?'cloud_synced_path':network?'network_path':reparse?'reparse_path':!resolved?'unverifiable_path':configured?'configured_local_path':'local_app_data',configured};
 }
@@ -66,6 +69,58 @@ function ensurePrivateDirectory(parent,literalChild){
   else fs.mkdirSync(target,{recursive:false,mode:0o700});
   return assertPrivateDirectory(target,parentPath);
 }
+// Removes only one previously known, literal child of a verified private
+// directory.  It deliberately does not call recursive rm(): every entry is
+// checked with lstat immediately before unlink/rmdir, and a directory identity
+// is checked again before its entries are acted on.  Node has no portable
+// dirfd/openat equivalent, so this narrows (but does not claim to eliminate)
+// pathname races; any doubt leaves the tree untouched.
+function safeRemovePrivateTree(parent,literalChild){
+  const child=String(literalChild||'');
+  if(!child||child==='.'||child==='..'||child.includes('/')||child.includes('\\')||child.includes('\0'))throw new Error('PRIVACY_STORAGE_UNSAFE');
+  const parentPath=path.resolve(String(parent));
+  assertPrivateDirectory(parentPath,path.dirname(parentPath));
+  const parentReal=fs.realpathSync.native(parentPath);
+  const parentStat=fs.statSync(parentPath);
+  const target=path.join(parentPath,child);
+  if(path.relative(parentPath,target)!==child||path.dirname(target)!==parentPath)throw new Error('PRIVACY_STORAGE_UNSAFE');
+  if(!fs.existsSync(target))return false;
+  const comparable=(value)=>process.platform==='win32'?value.toLowerCase():value;
+  const verifyParent=()=>{
+    const named=fs.lstatSync(parentPath),opened=fs.statSync(parentPath),real=fs.realpathSync.native(parentPath);
+    if(!named.isDirectory()||named.isSymbolicLink()||!opened.isDirectory()||named.dev!==opened.dev||named.ino!==opened.ino||
+      opened.dev!==parentStat.dev||opened.ino!==parentStat.ino||comparable(real)!==comparable(parentReal))throw new Error('PRIVACY_STORAGE_UNSAFE');
+  };
+  const removeEntry=(current)=>{
+    verifyParent();
+    const relative=path.relative(parentPath,current);
+    if(!relative||relative==='..'||relative.startsWith(`..${path.sep}`)||path.isAbsolute(relative))throw new Error('PRIVACY_STORAGE_UNSAFE');
+    const before=fs.lstatSync(current);
+    if(before.isSymbolicLink())throw new Error('PRIVACY_STORAGE_UNSAFE');
+    if(before.isFile()){
+      const again=fs.lstatSync(current);
+      if(!again.isFile()||again.isSymbolicLink()||again.dev!==before.dev||again.ino!==before.ino)throw new Error('PRIVACY_STORAGE_UNSAFE');
+      fs.unlinkSync(current);
+      return;
+    }
+    if(!before.isDirectory())throw new Error('PRIVACY_STORAGE_UNSAFE');
+    // Recheck the named object before and immediately after listing.  A
+    // replacement can at worst make the operation stop; no listed child is
+    // touched until the original directory identity is seen again.
+    const listed=fs.readdirSync(current);
+    const listedIdentity=fs.lstatSync(current);
+    if(!listedIdentity.isDirectory()||listedIdentity.isSymbolicLink()||listedIdentity.dev!==before.dev||listedIdentity.ino!==before.ino)throw new Error('PRIVACY_STORAGE_UNSAFE');
+    for(const name of listed){
+      if(!name||name==='.'||name==='..'||name.includes('/')||name.includes('\\')||name.includes('\0'))throw new Error('PRIVACY_STORAGE_UNSAFE');
+      removeEntry(path.join(current,name));
+    }
+    const after=fs.lstatSync(current);
+    if(!after.isDirectory()||after.isSymbolicLink()||after.dev!==before.dev||after.ino!==before.ino)throw new Error('PRIVACY_STORAGE_UNSAFE');
+    fs.rmdirSync(current);
+  };
+  removeEntry(target);
+  return true;
+}
 function roots(){const root=privacyRoot();const before=storageStatus(root);if(!before.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');fs.mkdirSync(root,{recursive:true,mode:0o700});const after=storageStatus(root);if(!after.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');const gatewayRoot=ensurePrivateDirectory(path.dirname(dataRoot()),path.basename(dataRoot()));const r={root,input:ensurePrivateDirectory(root,'Input'),output:ensurePrivateDirectory(root,'Output'),processed:ensurePrivateDirectory(root,'Processed'),review:ensurePrivateDirectory(root,'Needs Visual Review'),exports:ensurePrivateDirectory(root,'DataSecure-Export'),audit:ensurePrivateDirectory(gatewayRoot,'audit'),jobs:ensurePrivateDirectory(gatewayRoot,'jobs')};return r;}
 function sha256Buffer(b){return crypto.createHash('sha256').update(b).digest('hex');}
 function sha256File(p){
@@ -88,7 +143,7 @@ function uniquePath(dir,file){const e=path.extname(file),b=path.basename(file,e)
 function listInput(){const r=roots();return fs.readdirSync(r.input,{withFileTypes:true}).filter(x=>x.isFile()&&!x.name.startsWith('.')).map(x=>({name:x.name,full:path.join(r.input,x.name),stat:fs.statSync(path.join(r.input,x.name))})).sort((a,b)=>a.stat.mtimeMs-b.stat.mtimeMs);}
 function validateBatchLimits(queue){
   if(!Array.isArray(queue)||queue.length>LIMITS.MAX_BATCH_FILES)throw new Error('BATCH_FILE_LIMIT');
-  let total=0;for(const entry of queue){const size=Number(entry?.stat?.size);if(!Number.isSafeInteger(size)||size<1||size>LIMITS.MAX_INPUT_BYTES)throw new Error('INPUT_FILE_LIMIT');total+=size;if(total>LIMITS.MAX_BATCH_TOTAL_BYTES)throw new Error('BATCH_TOTAL_LIMIT');}
+  let total=0;for(const entry of queue){const size=Number(entry?.stat?.size);assertSourceSize(path.extname(String(entry?.name||entry?.full||'')),size);total+=size;if(total>LIMITS.MAX_BATCH_TOTAL_BYTES)throw new Error('BATCH_TOTAL_LIMIT');}
   return total;
 }
 function listPackageDirs(){const r=roots();return fs.readdirSync(r.output,{withFileTypes:true}).filter(x=>x.isDirectory()&&!x.name.startsWith('.')).map(x=>({id:x.name,full:path.join(r.output,x.name)}));}
@@ -107,4 +162,4 @@ function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();cons
 };
   if(score.personnel_profile>=3)return'personnel_profile';const ranked=Object.entries(score).filter(([k])=>k!=='personnel_profile').sort((a,b)=>b[1]-a[1]);return ranked[0][1]>=2?ranked[0][0]:'general';}
 
-module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,privacyRoot,resolvedSafetyPath,hasReparseComponent,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listInput,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};
+module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listInput,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};

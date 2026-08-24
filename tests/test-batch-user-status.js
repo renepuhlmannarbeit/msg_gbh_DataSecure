@@ -25,6 +25,7 @@ test('each server phase has a short German next-step message without source data
     ['awaiting_delivery_acknowledgement', 'read_and_confirm_result', /Ergebnis wird sicher bereitgestellt/],
     ['awaiting_explicit_resume', 'resume_batch', /Stapel angehalten/],
     ['awaiting_local_review', 'review_local_decisions', /Lokale Prüfung erforderlich/],
+    ['awaiting_local_mapping_repair', 'local_mapping_repair', /Ergebnis lokal sicher erstellt/],
     ['complete', 'open_local_overview', /Stapel abgeschlossen/]
   ];
   for (const [phase, nextAction, text] of cases) {
@@ -70,6 +71,16 @@ test('an unknown persisted phase never falls through to processing another docum
   assert.strictEqual(result.next_action, 'check_privacy_status');
   assert.match(result.user_status, /Status ist unklar.*keine weitere Datei verarbeitet/i);
   assert.doesNotMatch(result.user_status, /Musterfrau|C:\\|\.docx/i);
+});
+
+test('an empty or malformed checkpoint is never reported as complete', () => {
+  const result = _test.publicProgress({ token: 'e'.repeat(64), items: [] });
+  assert.strictEqual(result.batch_total, 0);
+  assert.strictEqual(result.completion_percent, 0);
+  assert.strictEqual(result.complete, false);
+  assert.strictEqual(result.awaiting_resume, false);
+  assert.strictEqual(result.batch_phase, 'invalid_local_state');
+  assert.strictEqual(result.next_action, 'check_privacy_status');
 });
 
 test('rest time is a bounded median from at least three local processing samples', () => {

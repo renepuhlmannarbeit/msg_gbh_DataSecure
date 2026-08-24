@@ -226,3 +226,28 @@ requires manual acceptance on each target platform.
   environment.
 - Still open: a small human usability acceptance and the signed local companion;
   no real-data pilot before both are approved.
+
+## Lokaler CI-Nachweis 24.08.2026 (RC34-Arbeitsstand)
+
+`npm run test:ci` wurde nach dem Claude-Cowork-/UX-/Performance-Review vollständig
+mit Exit-Code 0 ausgeführt. Der Lauf umfasste unter anderem kanonische Dokumente,
+Kostenbudget, Manifest/Capabilities, 9 normale und 28 Supporttools, alle vier MCP-
+Risikohinweise, zentrale Ressourcenlimits, den inaktiven Zwei-Worker-Harness, 70
+Parsertests, Netzwerk- und UI-Prozessgrenzen, 77 PII-Regressionen, 101 freigegebene
+Formatkombinationen, Mapping/Outbox, direkten Picker/Intake, lokalen Handoff,
+TXT-/CSV-/DOCX-Unterbrechung und Fortsetzung, den inaktiven OCR-Harness, echte
+synthetische Performancepfade, 38 Gateway-, 31 MCP- und 20 Angriffstests.
+
+Der erste Lauf fand dabei einen nicht normalisierten `ZipError` für ein mutiertes
+OOXML-Zentralverzeichnis. Die Runtime wandelt diesen Fall jetzt vor dem Worker in
+einen inhaltsfreien `SafeError` um; Parser- und Angriffssuite sowie der anschließend
+vollständig wiederholte `test:ci`-Lauf bestanden. Dieser lokale Nachweis ersetzt
+keine Fresh-Install-, Cowork-UI-, Accessibility- oder Drei-OS-Evidenz.
+
+Die bewusst nicht im kostenoptimierten Cloud-Gate enthaltene monolithische
+`test-batch-session.js`-Suite wurde anschließend ebenfalls vollständig ausgeführt:
+66 Tests bestanden, einschließlich zweier echter 100-Dateien-Serienläufe sowie
+Crash/Resume an den Positionen 1, 50 und 100. Dabei wurden alte Erwartungen an die
+Review-Phase korrigiert und zwei reale Restfehler behoben: erfolgreicher früher
+Work-Copy-Cleanup meldet nicht länger fälschlich einen offenen Cleanup, und eine
+Crash-Recovery kann dieselbe Paket-ID nicht erneut in die Mapping-CSV schreiben.

@@ -3,6 +3,7 @@
 const { createSuite, assertAbsent, assertPresent } = require('./helpers');
 const {
   parseCsvRows,
+  parseCsvDialect,
   csvDelimiter,
   csvToMarkdown,
   parseDocumentBuffer
@@ -26,6 +27,12 @@ test('German semicolon and tab dialects are detected from consistent records', (
   assert.strictEqual(csvDelimiter('Name;Rolle\nErika Beispiel;Tester'), ';');
   assert.strictEqual(csvDelimiter('Name\tRolle\nErika Beispiel\tTester'), '\t');
   assert.match(csvToMarkdown('Name;Rolle\nErika Beispiel;Tester'), /\| Name \| Rolle \|/);
+});
+
+test('dialect selection parses the selected CSV only once', () => {
+  const dialect = parseCsvDialect('Name;Rolle\nErika Beispiel;Tester');
+  assert.strictEqual(dialect.delimiter, ';');
+  assert.deepStrictEqual(dialect.rows, [['Name', 'Rolle'], ['Erika Beispiel', 'Tester']]);
 });
 
 test('ambiguous multi-column dialects and inconsistent widths fail closed', () => {

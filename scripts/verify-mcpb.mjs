@@ -5,7 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { collectFiles } from './lib/zip.mjs';
+import { collectFiles, readCentralModes } from './lib/zip.mjs';
+import { verifyDataSecureArchiveModes } from './lib/archive-modes.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -44,6 +45,7 @@ const actualNames = [...actual.keys()].sort();
 if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
   throw new Error('MCPB stimmt in seiner Dateiliste nicht mit dem aktuellen Quellstand überein. Neu bauen.');
 }
+verifyDataSecureArchiveModes(readCentralModes(fs.readFileSync(archive)), new Set(actualNames));
 for (const [name, bytes] of expected) {
   if (!actual.get(name)?.equals(bytes)) throw new Error(`MCPB ist gegenüber dem aktuellen Quellstand veraltet: ${name}`);
 }

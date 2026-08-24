@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { collectFiles } from './lib/zip.mjs';
+import { collectFiles, readCentralModes } from './lib/zip.mjs';
+import { verifyDataSecureArchiveModes } from './lib/archive-modes.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -23,6 +24,7 @@ try {
   if (JSON.stringify(archiveNames) !== JSON.stringify(sourceNames)) {
     throw new Error('Plugin ZIP stimmt in seiner Dateiliste nicht mit dem aktuellen Plugin-Quellbaum überein. Neu bauen.');
   }
+  verifyDataSecureArchiveModes(readCentralModes(fs.readFileSync(archive)), new Set(archiveNames));
   for (const file of sourceFiles) {
     if (!entries.get(file.archivePath)?.equals(fs.readFileSync(file.fullPath))) {
       throw new Error(`Plugin ZIP ist gegenüber dem aktuellen Quellstand veraltet: ${file.archivePath}`);

@@ -2,10 +2,10 @@
 
 ## Gestoppte Verarbeitung
 
-Wiederhole einen gestoppten Lauf niemals automatisch. Beim Ordnerweg wird jede bestätigte
+Wiederhole einen gestoppten Lauf niemals automatisch. Im lokalen Stapel wird jede bestätigte
 Datei in einem getrennten Aufruf mit demselben `batch_token` versucht. Der Server markiert
 Stopps dauerhaft in dieser Sitzung und setzt mit der nächsten Datei fort. Eine Änderung am
-bestätigten Input invalidiert den gesamten Stapel.
+bestätigten Picker-Snapshot invalidiert den gesamten Stapel.
 
 Rufe `diagnostic_status` auf und erkläre nur dessen feste Fehlercodes:
 
@@ -25,15 +25,20 @@ Rufe `diagnostic_status` auf und erkläre nur dessen feste Fehlercodes:
   wiederholen; die lokale Speicherberechtigung beziehungsweise den Exportordner prüfen.
 
 Im Stapel stoppt nur die betroffene Datei, solange der Snapshot unverändert ist. Arbeite
-ausschließlich mit `package_id` und `read_capability`, die derselbe erfolgreiche Aufruf
-meldet. Die Leseberechtigung ist kurzlebig und kann keine anderen Pakete öffnen.
+Im Normalweg verwaltet der lokale Ergebnis-Handoff Paketkennungen und Leseberechtigungen
+vollständig serverseitig. Nur im IT-Supportmodus darf mit `package_id` und
+`read_capability` gearbeitet werden, die derselbe erfolgreiche Aufruf meldet. Die
+Leseberechtigung ist kurzlebig und kann keine anderen Pakete öffnen.
 
 ## Aufbewahrung und Löschung
 
-`privacy_status` zeigt die Aufbewahrungsfrist. Originale in `Processed`, Pakete in
-`Output` und Review-Vorschauen verfallen. Bei `retention_days=0` sind visuelle Freigaben
-nicht verfügbar; Original und Vorschau werden unmittelbar nach erfolgreicher Verarbeitung
-entfernt.
+Im IT-Supportmodus zeigt `privacy_status` die Aufbewahrungsfrist. Ausschließlich DataSecure-eigene
+Arbeitskopien in `Processed`, Pakete in `Output` und Review-Vorschauen verfallen.
+Ihre Quelle – lokal, auf einem Netzlaufwerk oder künftig in SharePoint – bleibt
+unverändert und wird niemals von DataSecure gelöscht, verschoben oder überschrieben.
+Bei `retention_days=0` werden nur Arbeitskopie und Vorschau unmittelbar nach
+erfolgreicher Verarbeitung entfernt; eine visuelle Freigabe ist dann nicht verfügbar
+und bleibt im öffentlichen Pilot unabhängig davon deaktiviert.
 
 `private_work_copy_cleanup_pending` ist nur ein lokaler Zähler für eine nach einer
 bereits bestätigten Übergabe noch nicht entfernte private Arbeitskopie. Er enthält keine

@@ -10,6 +10,7 @@ const { auditStatus } = require('./audit');
 const { companionCapabilities } = require('../companion/job-store');
 const { companionRetentionStatus } = require('../companion/retention');
 const { recoverableBatchStatus, localCleanupStatus } = require('./batch');
+const { localIntakeActive } = require('./batch-executor');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { runtimeInfo } = require('../runtime-info');
 
@@ -46,6 +47,7 @@ function genericStatus(options = {}) {
     visual_bridge_reason: engine.visual_bridge_reason,
     visual_boundary: engine.visual_boundary,
     input_documents: listInput().length,
+    local_intake_pending: localIntakeActive(),
     ...batches,
     ...localCleanup,
     anonymized_packages: listPackageDirs().filter((p) =>

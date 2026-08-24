@@ -69,19 +69,24 @@ test('runtime modules cannot import or expose the target contract as current sta
   );
 });
 
-test('runtime, MCP schema, skills and active handbooks retain the 100-file/500-MB text-format contract', () => {
+test('runtime, MCP schema, skills and active handbooks retain the 100-file/500-MiB text-format contract', () => {
   const index = read('plugins/data-secure/server/index.js');
   const common = read('plugins/data-secure/server/gateway/common.js');
   const batch = read('plugins/data-secure/server/gateway/batch.js');
   assert.match(index, /maximum:100/u);
   assert.match(common, /PILOT_SUPPORTED=new Set\(\['\.docx','\.txt','\.md','\.markdown','\.csv'\]\)/u);
-  assert.match(common, /MAX_BATCH_FILES:100/u);
-  assert.match(common, /MAX_BATCH_TOTAL_BYTES:500\*1024\*1024/u);
+  const resourceLimits = read('plugins/data-secure/server/resource-limits.js');
+  assert.match(resourceLimits, /MAX_BATCH_FILES:\s*100/u);
+  assert.match(resourceLimits, /MAX_BATCH_TOTAL_BYTES:\s*500\s*\*\s*MIB/u);
+  assert.match(resourceLimits, /MAX_TEXT_CHARS:\s*8_000_000/u);
   assert.match(batch, /expected > LIMITS\.MAX_BATCH_FILES/u);
   for (const rel of currentPublicFiles) {
     const text = read(rel);
     assert.match(text, /100/u, `${rel} omits the current batch maximum`);
-    assert.match(text, /500 MB/u, `${rel} omits the current batch-size limit`);
+    assert.match(text, /500 MiB/u, `${rel} omits the current batch-size limit`);
+    assert.match(text, /8\.000\.000/u, `${rel} omits the TXT/Markdown source limit`);
+    assert.match(text, /1\.500\.000/u, `${rel} omits the CSV source limit`);
+    assert.match(text, /64 MiB/u, `${rel} omits the DOCX source limit`);
     assert.match(text, /TXT/u, `${rel} omits TXT`);
     assert.match(text, /Markdown/u, `${rel} omits Markdown`);
     assert.match(text, /CSV/u, `${rel} omits CSV`);
@@ -109,6 +114,21 @@ test('the pilot acceptance guide distinguishes active and blocked RC30 formats',
     'the acceptance guide must not list active Markdown/CSV as stop cases');
   assert.match(pilot, /fünf erwarteten Bereiche[\s\S]*DataSecure-Export/u,
     'the acceptance guide must expose the permanent mapping-export area');
+});
+
+test('the Cowork human test kit preserves the one-picker local-only normal path', () => {
+  const readme = read('docs/acceptance/RC30_HUMAN_TEST_KIT/README.md');
+  const cases = read('docs/acceptance/RC30_HUMAN_TEST_KIT/TEST_CASES.md');
+  assert.match(readme, /eine DataSecure-Entscheidung/u);
+  assert.match(readme, /nativen lokalen Mehrfachdialog/u);
+  assert.match(readme, /DataSecure-Mapping\.csv/u);
+  assert.match(cases, /direkten\s+lokalen Mehrfachdialog/u);
+  assert.match(cases, /`local_only`/u);
+  assert.match(readme, /macOS Cowork Desktop[\s\S]*BLOCKED/u);
+  for (const source of [readme, cases]) {
+    assert.doesNotMatch(source, /begin_document_batch|start_document_batch_processing|document_batch_status|list_document_batch_results/u);
+    assert.doesNotMatch(source, /in\s+`Input`\s+kopieren/u);
+  }
 });
 
 test('the target contract is documentation, not a shipped plugin runtime input', () => {

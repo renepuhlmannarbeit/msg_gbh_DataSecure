@@ -4,6 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const childProcess = require('child_process');
+const { verifyPosixSupervisor } = require('./posix-supervisor');
+const { RESOURCE_LIMITS, assertSourceSize } = require('./resource-limits');
+const { inspectZipDirectoryFromFd, ZipError } = require('./zip-reader');
 const {
   rasterizeToPng,
   ocrPngDetailed,
@@ -62,7 +65,9 @@ function dataRoot() {
   const base = process.env.LOCALAPPDATA || (process.platform === 'darwin'
     ? path.join(os.homedir(), 'Library', 'Application Support')
     : process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'));
-  return path.join(base, 'ClaudeEUPrivacyDocumentGatewayV32');
+  // Keep the user-visible local root short and recognisable. The old RC30 root
+  // is deliberately not migrated automatically: it may contain originals.
+  return path.join(base, 'SecureDataMsg');
 }
 
 // Text processing has no end-user-installed dependency. On Windows its bundled
@@ -70,6 +75,22 @@ function dataRoot() {
 function nativeParserStatus(options = {}) {
   const platform = options.platform || process.platform;
   if (platform === 'darwin' || platform === 'linux') {
+    const supervisor = verifyPosixSupervisor({
+      platform, arch: options.arch || process.arch, executable: options.posixSupervisorPath,
+      base: options.posixSupervisorBase, spawnSync: options.spawnSync
+    });
+    if (supervisor.available) {
+      return { available: true, mode: 'posix_native_supervisor', reason: 'ok',
+        resource_boundary: 'posix_native_supervisor', hard_process_limits: true,
+        executable: supervisor.executable };
+    }
+    // A packaged-but-invalid supervisor is never permitted to fall back to the
+    // weaker Node-only boundary. During the transition, absence still retains
+    // the existing non-release portable path until target packages exist.
+    if (options.posixSupervisorPath || options.posixSupervisorBase) {
+      return { available: false, mode: 'unavailable', reason: supervisor.reason,
+        resource_boundary: 'unavailable', hard_process_limits: false };
+    }
     const version = String(options.nodeVersion || process.versions.node || '0.0.0').split('.').map(Number);
     const permissionStable = version[0] > 22 || (version[0] === 22 && version[1] >= 13);
     return permissionStable
@@ -257,20 +278,57 @@ async function convertDocument(source, options = {}) {
       ...nodeFlags, '0'
     ];
   } else if (platform === 'darwin' || platform === 'linux') {
-    const portable = nativeParserStatus({ platform, nodeVersion: options.nodeVersion });
+    const portable = nativeParserStatus({ platform, arch, nodeVersion: options.nodeVersion,
+      posixSupervisorPath: options.posixSupervisorPath, posixSupervisorBase: options.posixSupervisorBase,
+      spawnSync: options.spawnSync });
     if (!portable.available) {
       throw safeError('Die portable Node-Parserbegrenzung benötigt Node.js 22.13 oder neuer.', 'PARSER_ISOLATION_FAILED');
+    }
+    if (portable.mode === 'posix_native_supervisor') {
+      command = portable.executable;
+      args = ['--memory-mib', String(PARSER_JOB_MEMORY_MIB), '--cpu-ms', String(PARSER_JOB_CPU_MS),
+        '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable, ...nodeFlags, '0'];
     }
   } else {
     throw safeError('Für dieses Betriebssystem ist keine lokale Parserbegrenzung freigegeben.', 'PARSER_ISOLATION_FAILED');
   }
   const fd = fs.openSync(source, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   try {
+    const opened = fs.fstatSync(fd);
+    try {
+      assertSourceSize(ext, opened.size);
+    } catch (error) {
+      if (error.code === 'INPUT_FORMAT_LIMIT' || error.code === 'INPUT_FILE_LIMIT') {
+        throw safeError(
+          'Die Datei überschreitet die sichere Einzeldateigrenze für ihr Format.',
+          'INPUT_TOO_LARGE'
+        );
+      }
+      throw error;
+    }
     // A renamed PDF must not enter a text/CSV parser. Sniff the same descriptor
     // that is inherited by the worker, so no path re-open can swap the checked
     // bytes before parsing. PDF headers may legally follow leading junk within
     // the first 1024 bytes.
     if (descriptorStartsAsPdf(fd)) throw pdfCoverageError();
+    if (ext === '.docx') {
+      try {
+        inspectZipDirectoryFromFd(fd, opened.size, {
+          maxEntries: 20000,
+          maxUncompressed: RESOURCE_LIMITS.MAX_OOXML_EXPANDED_BYTES
+        });
+      } catch (error) {
+        if (error instanceof ZipError) {
+          throw safeError(
+            'Die DOCX-Datei konnte nicht als sicherer lokaler Office-Container geprüft werden.',
+            error.code === 'OOXML_ENCRYPTED_CONTAINER' || error.code === 'ZIP_ENCRYPTED_ENTRY'
+              ? error.code
+              : 'DOCX_CONTAINER_INVALID'
+          );
+        }
+        throw error;
+      }
+    }
   } catch (error) {
     fs.closeSync(fd);
     throw error;

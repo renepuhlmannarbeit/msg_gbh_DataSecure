@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC30 · Stand 22.08.2026
+Version 3.2.0 RC34 · Stand 22.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC30 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC34 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -17,10 +17,10 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC30 |
+| Artefakt | Ziel | Status RC34 |
 |---|---|---|
-| `DataSecure-Privacy-Gateway-v3.2.0-rc30.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
-| `DataSecure-Privacy-Preflight-v3.2.0-rc30.zip` | Claude-Plugin/Organisations-Marketplace | Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc34.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc34.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -105,10 +105,13 @@ Ein grüner Startnachweis umfasst mindestens:
 - `privacy_status` meldet `storage_safe: true`; bekannte Cloud-Sync- und
   Netzwerkpfade führen zu einem sicheren Stopp;
 - `Input`, `Output`, `Processed` und `Needs Visual Review` existieren;
-- 1–100 bestätigte TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB werden vor der Verarbeitung an einen
+- 1–100 bestätigte TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MiB werden vor der Verarbeitung an einen
   serverseitigen Snapshot gebunden; ein Aufruf verarbeitet genau eine noch nicht
   versuchte Position, ein Stopp wird nicht automatisch wiederholt und Änderungen am
   Bestand invalidieren den Stapel;
+- Einzeldateien werden vor dem Snapshot formatspezifisch begrenzt: TXT/Markdown
+  8.000.000 Bytes, CSV 1.500.000 Bytes, DOCX 64 MiB komprimiert und 128 MiB
+  entpackt. Es gibt keine feste Seitenbegrenzung; die Ressourcenlimits sind das Gate;
 - der ausgewählte Pfad und der Originaltext erscheinen weder im MCP-Ergebnis noch im
   Jobjournal oder Audit;
 - das gepackte MCP beantwortet `initialize`;
@@ -142,6 +145,26 @@ administrative Prüfung unbekannter Synchronisationssoftware. Ein alter Ordner
 noch gelöscht; die IT bereinigt oder migriert ihn kontrolliert, ohne sensible Daten
 in eine Synchronisation zu verschieben.
 
+### Optionaler IT-verwalteter Stammordner
+
+Im MCPB ist der optionale Konfigurationswert **„Privacy-Ordner (optional)“** bereits
+an `EU_PRIVACY_ROOT` gebunden. In der Plugin-ZIP wird derselbe Wert ausschließlich
+über `configure_privacy_folder` gesetzt: Der lokale Ordnerdialog speichert den
+Stamm ohne Pfadrückgabe an Claude. Der Wert ist ein lokaler Stammordner, etwa
+`D:\DataSecure`; ein leerer Wert verwendet den per-Benutzer-App-Datenbereich
+`SecureDataMsg\workspace`. Nach jeder Änderung Claude
+vollständig neu starten. Der frühere Stamm `ClaudeEUPrivacyDocumentGatewayV32` wird
+nicht automatisch migriert oder gelöscht; vor einer kontrollierten Bereinigung sind
+lokale Originale und offene Stapel auszuschließen.
+
+Der konfigurierte Pfad wird nie in Toolantworten, Audit oder Diagnose übernommen.
+Vor dem Anlegen von `Input`, `Output`, `Processed`, `Needs Visual Review` und
+`DataSecure-Export` validiert der Server den Pfad sowie vorhandene Komponenten. Bei
+Cloud-Sync, Netzpfad, Symlink/Junction oder nicht verifizierbarem Stamm ist
+`storage_safe: false` beziehungsweise `UNSAFE_STORAGE_LOCATION` der erwartete
+Stopp. Einen aktiven oder wiederaufnehmbaren Stapel vorher abschließen oder bewusst
+verwerfen; das Umstellen migriert keine Daten.
+
 Nach einem Absturz stellt der Server verwaiste versteckte Input-Claims beim Start
 wieder her, ohne vorhandene Dateien zu überschreiben oder Links zu verfolgen. Eine
 bereits begonnene Batch-Position wird als gestoppt markiert und nicht erneut
@@ -154,7 +177,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC30 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC34 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.

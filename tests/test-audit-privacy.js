@@ -14,7 +14,10 @@ const {
   AUDIT_SCHEMA,
   sanitizeReceipt,
   migrateLegacyAuditReceipts,
-  auditStatus
+  auditStatus,
+  retainAudit,
+  createPreparedAuditRun,
+  writePackageAudit
 } = require('../plugins/data-secure/server/gateway/audit');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 
@@ -58,6 +61,66 @@ test('the current receipt is a strict metadata whitelist with ruleset provenance
   assert.doesNotMatch(encoded, /Max Mustermann|Lebenslauf|Personal/);
   assert.doesNotMatch(encoded, /(?:source|output|value)_(?:sha|hash)/i);
   assert.doesNotMatch(encoded, /123456/);
+});
+
+test('a prepared in-process capability skips only the duplicate audit migration scan', () => {
+  const receipt = {
+    operation_id: crypto.randomUUID(), timestamp: '2026-08-21T09:00:00.000Z',
+    gateway_version: '3.2.0-rc34', profile: 'general', source_extension: '.txt',
+    text_entity_count: 0, privacy_passes: 1, residual_pii_verification: 'passed',
+    visual_assets_total: 0, visual_assets_included: 0, visual_assets_review_required: 0, visual_redactions: 0
+  };
+  let migrations = 0;
+  const migration = () => { migrations += 1; return { legacy_pending: 0, migration_errors: 0 }; };
+  const capability = createPreparedAuditRun();
+  assert.strictEqual(retainAudit(receipt, { preparedAuditRun: capability, migrateLegacyAuditReceipts: migration }), true);
+  assert.strictEqual(migrations, 0);
+  assert.strictEqual(retainAudit({ ...receipt, operation_id: crypto.randomUUID() }, { migrateLegacyAuditReceipts: migration }), true);
+  assert.strictEqual(migrations, 1);
+});
+
+test('package audit stops before creating a file when the local capacity gate rejects it', () => {
+  const packageDir = path.join(root, 'package-audit-capacity');
+  fs.mkdirSync(packageDir, { recursive: true });
+  const error = new Error('LOCAL_CAPACITY_INSUFFICIENT');
+  error.code = 'LOCAL_CAPACITY_INSUFFICIENT';
+  assert.throws(
+    () => writePackageAudit({
+      operation_id: crypto.randomUUID(),
+      timestamp: '2026-08-21T09:00:00.000Z',
+      profile: 'general',
+      source_extension: '.txt',
+      result: 'released',
+      residual_pii_verification: 'passed'
+    }, packageDir, { assertWritableCapacity: () => { throw error; } }),
+    (received) => received?.code === 'LOCAL_CAPACITY_INSUFFICIENT'
+  );
+  assert.strictEqual(fs.existsSync(path.join(packageDir, 'audit.json')), false);
+  assert.deepStrictEqual(fs.readdirSync(packageDir), []);
+});
+
+test('package audit normalizes a real ENOSPC after a positive capacity check', () => {
+  const packageDir = path.join(root, 'package-audit-enospc');
+  fs.mkdirSync(packageDir, { recursive: true });
+  const io = Object.create(fs);
+  io.writeFileSync = (candidate, ...args) => {
+    if (String(candidate).includes('.audit_')) {
+      const error = new Error('disk full');
+      error.code = 'ENOSPC';
+      throw error;
+    }
+    return fs.writeFileSync(candidate, ...args);
+  };
+  assert.throws(
+    () => writePackageAudit({
+      operation_id: crypto.randomUUID(),
+      timestamp: '2026-08-21T09:00:00.000Z',
+      profile: 'general', source_extension: '.txt', result: 'released', residual_pii_verification: 'passed'
+    }, packageDir, { fs: io, assertWritableCapacity: () => {} }),
+    (received) => received?.code === 'LOCAL_CAPACITY_RACE'
+  );
+  assert.strictEqual(fs.existsSync(path.join(packageDir, 'audit.json')), false);
+  assert.deepStrictEqual(fs.readdirSync(packageDir), []);
 });
 
 test('legacy audit migration removes fingerprints atomically and is idempotent', () => {
@@ -147,7 +210,7 @@ test('a persistent write marker is recovered from the released package receipt',
   fs.mkdirSync(packageDir, { recursive: true });
   fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify({ operation_id: operationId }));
   fs.writeFileSync(path.join(packageDir, 'audit.json'), JSON.stringify(receipt, null, 2));
-  const marker = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'audit-write-blocked.json');
+  const marker = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit-write-blocked.json');
   fs.writeFileSync(
     marker,
     JSON.stringify({
@@ -197,7 +260,7 @@ test('a crash-window package without a marker is reconciled on restart', () => {
 });
 
 test('an unrecoverable persistent write marker blocks readiness', () => {
-  const marker = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'audit-write-blocked.json');
+  const marker = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit-write-blocked.json');
   fs.writeFileSync(
     marker,
     JSON.stringify({
@@ -236,6 +299,31 @@ test('unreadable-shaped legacy entries remain visible without exposing names or 
   assert.strictEqual(gatewayStatus.ok, false);
   assert.strictEqual(gatewayStatus.engine_ready, false);
   assert.strictEqual(gatewayStatus.engine_phase, 'blocked_audit_migration');
+});
+
+test('a retained-audit ENOSPC leaves a local marker without retracting a package', () => {
+  const receipt = {
+    operation_id: crypto.randomUUID(), timestamp: '2026-08-21T09:00:00.000Z',
+    gateway_version: '3.2.0-rc34', profile: 'general', source_extension: '.txt', result: 'released',
+    text_entity_count: 0, privacy_passes: 1, residual_pii_verification: 'passed',
+    visual_assets_total: 0, visual_assets_included: 0, visual_assets_review_required: 0, visual_redactions: 0
+  };
+  const io = Object.create(fs);
+  io.writeFileSync = (candidate, ...args) => {
+    if (String(candidate).includes('.audit_')) {
+      const error = new Error('disk full');
+      error.code = 'ENOSPC';
+      throw error;
+    }
+    return fs.writeFileSync(candidate, ...args);
+  };
+  assert.strictEqual(retainAudit(receipt, { preparedAuditRun: createPreparedAuditRun(), fs: io, assertWritableCapacity: () => {} }), false);
+  const marker = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit-write-blocked.json');
+  const markerValue = json(marker);
+  assert.strictEqual(markerValue.schema, 'data-secure-audit-write-block/1');
+  assert.strictEqual(markerValue.operation_id, receipt.operation_id);
+  assert.doesNotMatch(JSON.stringify(markerValue), /Mustermann|\.txt|[A-Fa-f0-9]{64}/i);
+  fs.unlinkSync(marker);
 });
 
 try {

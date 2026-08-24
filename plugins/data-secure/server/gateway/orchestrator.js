@@ -12,13 +12,14 @@ const {
   LIMITS,
   roots,
   storageStatus,
-  sha256File,
   safePackageId,
   uniqueDir,
+  safeRemovePrivateTree,
   listInput,
   validateBatchLimits,
   detectProfileFromMarkdown
 } = require('./common');
+const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
 const { processVisuals, assetsMarkdown } = require('./visuals');
 const { cleanupLocalData, retentionDays } = require('./retention');
 const {
@@ -31,11 +32,17 @@ const {
   moveProcessed,
   restoreProcessed
 } = require('./compliance');
-const { migrateLegacyAuditReceipts } = require('./audit');
+const { migrateLegacyAuditReceipts, createPreparedAuditRun } = require('./audit');
 const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
 const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
+
+// A batch worker gets one unforgeable in-process preparation capability after
+// its maintenance and audit checks succeeded.  Individual document calls keep
+// their existing fail-closed checks; only the expensive, batch-wide scans are
+// not repeated for every item.
+const preparedRuns = new WeakSet();
 const { runtimeInfo } = require('../runtime-info');
 
 const { MAX_INPUT_BYTES, MAX_TEXT_CHARS, MAX_VISUAL_ASSETS } = LIMITS;
@@ -60,7 +67,12 @@ function safeWorkingTree(root) {
   const pending = [root];
   while (pending.length) {
     const current = pending.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+    const before = fs.lstatSync(current);
+    if (!before.isDirectory() || before.isSymbolicLink()) return false;
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    const after = fs.lstatSync(current);
+    if (!after.isDirectory() || after.isSymbolicLink() || after.dev !== before.dev || after.ino !== before.ino) return false;
+    for (const entry of entries) {
       const full = path.join(current, entry.name);
       const stat = fs.lstatSync(full);
       if (stat.isSymbolicLink()) return false;
@@ -90,7 +102,7 @@ function cleanupAbandonedWorkingJobs(options = {}) {
   const realRoot = fs.realpathSync.native(root);
   const comparable = (value) => process.platform === 'win32' ? value.toLowerCase() : value;
   const isProcessAlive = options.isProcessAlive || processAlive;
-  const removeDir = options.removeDir || ((target) => fs.rmSync(target, { recursive: true }));
+  const removeDir = options.removeDir || ((target) => safeRemovePrivateTree(root, path.basename(target)));
   let removed = 0;
   let active = 0;
   let ignored = 0;
@@ -133,8 +145,16 @@ function cleanupAbandonedWorkingJobs(options = {}) {
   return { removed, active, ignored, failures };
 }
 
-function copyRegularFileExclusive(source, destination, expectedStat) {
+function copyRegularFileExclusive(source, destination, expectedStat, expectedSha256) {
+  if (expectedSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(String(expectedSha256))) {
+    throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
+  }
   const noFollow = fs.constants.O_NOFOLLOW || 0;
+  const sourceChanged = () => {
+    const error = new SafeError('Die ausgewählte Datei wurde während der Übergabe verändert.');
+    if (expectedSha256 !== undefined) error.code = 'BATCH_SNAPSHOT_CHANGED';
+    return error;
+  };
   let sourceFd;
   let destinationFd;
   try {
@@ -145,19 +165,39 @@ function copyRegularFileExclusive(source, destination, expectedStat) {
       !opened.isFile() || !current.isFile() || current.isSymbolicLink() ||
       opened.dev !== expectedStat.dev || opened.ino !== expectedStat.ino ||
       current.dev !== expectedStat.dev || current.ino !== expectedStat.ino ||
-      opened.size !== expectedStat.size || current.size !== expectedStat.size
+      opened.size !== expectedStat.size || current.size !== expectedStat.size ||
+      opened.mtimeMs !== expectedStat.mtimeMs || current.mtimeMs !== expectedStat.mtimeMs
     ) {
-      throw new SafeError('Die ausgewählte Datei wurde während der Übergabe verändert.');
+      throw sourceChanged();
     }
     destinationFd = fs.openSync(destination, 'wx', 0o600);
     const chunk = Buffer.allocUnsafe(64 * 1024);
+    const hash = expectedSha256 === undefined ? null : crypto.createHash('sha256');
     let position = 0;
     while (position < opened.size) {
       const read = fs.readSync(sourceFd, chunk, 0, Math.min(chunk.length, opened.size - position), position);
       if (read <= 0) throw new SafeError('Die private Arbeitskopie ist unvollständig.');
+      hash?.update(chunk.subarray(0, read));
       let written = 0;
       while (written < read) written += fs.writeSync(destinationFd, chunk, written, read - written);
       position += read;
+    }
+    fs.fsyncSync(destinationFd);
+    const after = fs.lstatSync(source);
+    const rechecked = fs.fstatSync(sourceFd);
+    if (!after.isFile() || after.isSymbolicLink() || after.dev !== expectedStat.dev || after.ino !== expectedStat.ino ||
+      after.size !== expectedStat.size || after.mtimeMs !== expectedStat.mtimeMs ||
+      rechecked.size !== expectedStat.size || rechecked.mtimeMs !== expectedStat.mtimeMs) {
+      throw sourceChanged();
+    }
+    if (hash) {
+      const actual = hash.digest();
+      const expected = Buffer.from(String(expectedSha256), 'hex');
+      if (expected.length !== actual.length || !crypto.timingSafeEqual(actual, expected)) {
+        const error = new SafeError('Die versiegelte Arbeitskopie wurde verändert. Der Lauf wurde sicher gestoppt.');
+        error.code = 'BATCH_SNAPSHOT_CHANGED';
+        throw error;
+      }
     }
   } finally {
     if (destinationFd !== undefined) fs.closeSync(destinationFd);
@@ -193,6 +233,29 @@ function bestEffortDiagnostic(deps, event) {
   }
 }
 
+function prepareProcessingRun(deps = {}) {
+  bestEffortRetentionCleanup(deps);
+  const workingCleanup = (deps.cleanupAbandonedWorkingJobs || cleanupAbandonedWorkingJobs)({ now: deps.now });
+  if (workingCleanup.failures) {
+    throw new SafeError('Verwaiste private Arbeitskopien konnten nicht sicher bereinigt werden; Verarbeitung wurde gestoppt.');
+  }
+  const auditMigration = (deps.migrateLegacyAuditReceipts || migrateLegacyAuditReceipts)();
+  if (auditMigration.legacy_pending || auditMigration.migration_errors || auditMigration.write_errors) {
+    throw new SafeError(
+      'Verarbeitung wurde gestoppt: Alte Audit-Nachweise konnten nicht datensparsam migriert werden. ' +
+        'Bitte privacy_status prüfen und die lokale IT-Bereinigung durchführen.'
+    );
+  }
+  const capability = Object.freeze({ preparedAuditRun: createPreparedAuditRun() });
+  preparedRuns.add(capability);
+  return capability;
+}
+
+function ensureProcessingRun(deps = {}) {
+  if (deps.preparedRun && preparedRuns.has(deps.preparedRun)) return;
+  prepareProcessingRun(deps);
+}
+
 async function anonymizeNext(profile = 'auto', deps = {}) {
   const requested = String(profile || 'auto').toLowerCase();
   if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
@@ -204,19 +267,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
   throwIfAborted(deps.abortSignal);
 
-  bestEffortRetentionCleanup(deps);
-  const workingCleanup = (deps.cleanupAbandonedWorkingJobs || cleanupAbandonedWorkingJobs)({ now: deps.now });
-  if (workingCleanup.failures) {
-    throw new SafeError('Verwaiste private Arbeitskopien konnten nicht sicher bereinigt werden; Verarbeitung wurde gestoppt.');
-  }
-
-  const auditMigration = (deps.migrateLegacyAuditReceipts || migrateLegacyAuditReceipts)();
-  if (auditMigration.legacy_pending || auditMigration.migration_errors || auditMigration.write_errors) {
-    throw new SafeError(
-      'Verarbeitung wurde gestoppt: Alte Audit-Nachweise konnten nicht datensparsam migriert werden. ' +
-        'Bitte privacy_status prüfen und die lokale IT-Bereinigung durchführen.'
-    );
-  }
+  ensureProcessingRun(deps);
 
   const queue = deps.inputQueue || listInput();
   if (!queue.length) {
@@ -255,7 +306,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     });
     throw error;
   }
-  if (selectedInput.stat.size > MAX_INPUT_BYTES) throw new SafeError('Eingabedatei ist größer als 100 MB.');
+  if (selectedInput.stat.size > MAX_INPUT_BYTES) throw new SafeError('Eingabedatei überschreitet die absolute lokale Größenbegrenzung.');
 
   const r = roots();
   const jobId = newJobId();
@@ -287,7 +338,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       ? path.join(jobDir, `source${ext}`)
       : path.join(r.input, `.processing_${jobId}_${originalName}`);
     if (copiedClaim) {
-      copyRegularFileExclusive(originalSource, source, selectedInput.stat);
+      copyRegularFileExclusive(originalSource, source, selectedInput.stat, selectedInput.expected_sha256);
     } else {
       fs.renameSync(originalSource, source);
     }
@@ -448,7 +499,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       }) +
       reviewedText +
       assetsMarkdown(vis.results);
-    fs.writeFileSync(mdPath, finalText, 'utf8');
+    const capacity = deps.assertWritableCapacity || assertWritableCapacity;
+    capacity({ directory: stagePackage, bytes: Buffer.byteLength(finalText, 'utf8') });
+    try { fs.writeFileSync(mdPath, finalText, 'utf8'); }
+    catch (error) { throw normalizePostPreflightWriteError(error); }
 
     // Second, independent gate over the exact bytes that will be released,
     // including the compliance header and the asset section.
@@ -468,7 +522,12 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       results: vis.results
     });
 
-    const documentSha256 = sha256File(mdPath);
+    // The exact UTF-8 text has just passed the residual gate and is written
+    // unchanged above. Derive the manifest digest from those same bytes rather
+    // than immediately reading the staged file again. Publication still has
+    // its independent on-disk manifest/hash verification below the package
+    // boundary, so this removes only a redundant local I/O pass.
+    const documentSha256 = crypto.createHash('sha256').update(finalText, 'utf8').digest('hex');
     const manifest = {
       schema: 'eu-privacy-package/2',
       gateway_version: VERSION,
@@ -499,9 +558,19 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       ai_act: aiActMeta(effective)
     };
     if (deps.companionJobId) manifest.companion_job_id = deps.companionJobId;
-    fs.writeFileSync(path.join(stagePackage, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+    const manifestJson = JSON.stringify(manifest, null, 2);
+    capacity({ directory: stagePackage, bytes: Buffer.byteLength(manifestJson, 'utf8') });
+    try { fs.writeFileSync(path.join(stagePackage, 'manifest.json'), manifestJson, 'utf8'); }
+    catch (error) { throw normalizePostPreflightWriteError(error); }
 
-    writePackageAudit(auditReceipt, stagePackage);
+    writePackageAudit(auditReceipt, stagePackage, { assertWritableCapacity: capacity });
+
+    // The durable audit mirror is a different local destination from Output
+    // on configurable installations.  Check its exact, already-sanitised
+    // receipt before the source move and package publish.  A later physical
+    // allocation race is handled by retainAudit's existing local marker and
+    // reconciliation path; it must not retract an already published package.
+    capacity({ directory: r.audit, bytes: Buffer.byteLength(JSON.stringify(auditReceipt, null, 2), 'utf8') });
 
     if (deps.beforePublish) {
       await deps.beforePublish({
@@ -540,7 +609,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       }
     } catch (error) {
       try {
-        fs.rmSync(finalPackage, { recursive: true, force: true });
+        safeRemovePrivateTree(r.output, path.basename(finalPackage));
       } catch {
         throw new SafeError(
           'Companion-Release konnte nicht atomar abgeschlossen werden; manuelle Prüfung erforderlich.'
@@ -550,7 +619,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     stagePackage = null;
     processedPath = null;
-    auditReceiptRetained = retainAudit(auditReceipt);
+    auditReceiptRetained = retainAudit(auditReceipt, {
+      preparedAuditRun: deps.preparedRun?.preparedAuditRun,
+      assertWritableCapacity: capacity
+    });
 
     // A zero-day policy removes the original and any withheld preview bytes as
     // soon as the successful package is committed. The new Output package stays
@@ -628,7 +700,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     if (stagePackage && fs.existsSync(stagePackage)) {
       try {
-        fs.rmSync(stagePackage, { recursive: true, force: true });
+        safeRemovePrivateTree(r.output, path.basename(stagePackage));
       } catch {
         /* the staging directory is best-effort cleanup only */
       }
@@ -637,7 +709,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       const reviewDir = path.join(r.review, reviewPackageId);
       if (fs.existsSync(reviewDir)) {
         try {
-          fs.rmSync(reviewDir, { recursive: true, force: true });
+          safeRemovePrivateTree(r.review, path.basename(reviewDir));
         } catch {
           /* review cleanup is best effort; its bytes are never exposed by a read tool */
         }
@@ -652,12 +724,16 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     });
     if (recoveryError) throw recoveryError;
     if (e instanceof SafeError) throw e;
-    throw new SafeError(
+    const failure = new SafeError(
       'Verarbeitung wurde sicher gestoppt. Es wurde kein vollständiges Output-Paket freigegeben.'
     );
+    if (['LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE'].includes(e?.code)) {
+      failure.code = e.code;
+    }
+    throw failure;
   } finally {
     try {
-      fs.rmSync(jobDir, { recursive: true, force: true });
+      safeRemovePrivateTree(r.jobs, path.basename(jobDir));
     } catch {
       /* the job directory is best-effort cleanup only */
     }
@@ -687,6 +763,9 @@ async function anonymizeAll(profile = 'auto', deps = {}) {
 
   try { validateBatchLimits(queue); } catch (error) {
     if (error.message === 'BATCH_TOTAL_LIMIT') throw new SafeError('Der lokale Stapel ist größer als 500 MB.');
+    if (error.message === 'INPUT_FORMAT_LIMIT') {
+      throw new SafeError('Eine Datei überschreitet die sichere Einzeldateigrenze für ihr Format. Bitte teilen Sie diese Datei auf.');
+    }
     throw new SafeError('Der lokale Stapel enthält zu viele oder zu große Dateien.');
   }
   const maximum = LIMITS.MAX_BATCH_FILES;
@@ -755,5 +834,7 @@ module.exports = {
   anonymizeAll,
   anonymizeSelectedSource,
   bestEffortRetentionCleanup,
-  cleanupAbandonedWorkingJobs
+  cleanupAbandonedWorkingJobs,
+  prepareProcessingRun,
+  _test: { ensureProcessingRun }
 };

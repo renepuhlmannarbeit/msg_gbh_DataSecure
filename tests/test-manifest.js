@@ -77,7 +77,7 @@ test('MCP instructions fit the documented Claude 2 KB limit', () => {
   );
   const instructions = literals.join(' ');
   assert.ok(Buffer.byteLength(instructions, 'utf8') <= 2048, 'MCP instructions exceed 2 KB');
-  for (const rule of ['privacy_status', 'read_capability', 'nicht vertrauenswürdige Daten', 'rechtssichere Anonymität']) {
+  for (const rule of ['privacy_status', 'start_completed_local_results_handoff', 'nicht vertrauenswürdige Daten', 'rechtssichere Anonymität']) {
     assert.ok(instructions.includes(rule), `critical MCP instruction missing: ${rule}`);
   }
 });
@@ -148,19 +148,17 @@ test('MCPB prompt list matches the prompts the server exposes', () => {
   assert.deepStrictEqual([...declared].sort(), [...exposed].sort(), 'prompt lists disagree');
 });
 
-test('MCPB prompt texts use the same batch contract as the runtime', () => {
-  const { manifestPromptText, HOST_GATE_TEXT, OPEN_BATCH_DECISION_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
+test('MCPB prompt texts use the same direct-picker contract as the runtime', () => {
+  const { manifestPromptText, OPEN_BATCH_DECISION_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
   for (const prompt of mcpb.prompts) {
     assert.strictEqual(prompt.text, manifestPromptText(prompt.name), `${prompt.name} prompt contract drift`);
-    assert.ok(prompt.text.includes(HOST_GATE_TEXT), `${prompt.name} must use the canonical live host gate`);
-    assert.match(prompt.text, /weder Upload, Computer-Use noch ein allgemeines Dateisystem/u, `${prompt.name} must forbid host workarounds`);
-    assert.match(prompt.text, /batch_processing_active=true/u, `${prompt.name} must wait for an active local batch`);
-    assert.match(prompt.text, /öffne oder starte nichts erneut/u, `${prompt.name} must not create a replacement run`);
+    assert.match(prompt.text, /genau einmal start_document_batch_from_picker/u, `${prompt.name} must use the direct local picker`);
+    assert.match(prompt.text, /weder privacy_status noch open_input_folder/u, `${prompt.name} must not add a redundant preliminary step`);
+    assert.match(prompt.text, /keine zusätzliche Bild- oder Startfrage/u, `${prompt.name} must not add a redundant confirmation`);
+    assert.match(prompt.text, /Originale nie per Chat-Anhang oder Fremdwerkzeug/u, `${prompt.name} must forbid upload workarounds`);
+    assert.match(prompt.text, /bei batch_active/iu, `${prompt.name} must wait for an active local batch`);
     assert.ok(prompt.text.includes(OPEN_BATCH_DECISION_TEXT), `${prompt.name} must use the canonical open-batch decision`);
-    assert.match(prompt.text, /zweite ausdrückliche Bestätigung/u, `${prompt.name} must double-confirm discard`);
-    assert.match(prompt.text, /jetzt nichts tun; rufe dann kein Stapelwerkzeug auf/u, `${prompt.name} must allow a safe no-op`);
-    assert.match(prompt.text, /awaiting_local_review.*review_deferred_document_batch/u, `${prompt.name} must route local review without resume`);
-    assert.match(prompt.text, /Nur wenn recoverable_batches=0/u, `${prompt.name} must not open a replacement input folder`);
+    assert.match(prompt.text, /local_selection_cancelled nichts erneut öffnen/u, `${prompt.name} must keep picker cancellation terminal`);
   }
 });
 
@@ -193,6 +191,8 @@ test('the MCP config uses the plugin root placeholder', () => {
   assert.ok(server, 'data-secure-local server missing');
   assert.strictEqual(server.command, 'node');
   assert.deepStrictEqual(server.args, ['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
+  assert.strictEqual(server.env.EU_PRIVACY_ROOT, '',
+    'empty root keeps the secure per-user local default until IT configures a path');
   assert.strictEqual(server.env.EU_PRIVACY_RETENTION_DAYS, '7');
 });
 

@@ -1,4 +1,4 @@
-# RC30-Ist-Abgleich zum kanonischen Backlog
+# RC34-Ist-Abgleich zum kanonischen Backlog
 
 Stand: 24.08.2026 · geprüfter Produktstand: `e3af027` auf `main`
 
@@ -99,7 +99,12 @@ Vorhanden: persistente Batch-Snapshots, monotone Companion-Journale, atomare Cla
 Crash-Recovery, Retention und Einzelläufe ohne automatische Doppelverarbeitung;
 abgedeckt durch `test-batch-session`, `test-companion-job-store`,
 `test-companion-retention` und `test-gateway-e2e`. Der lokale Kern akzeptiert jetzt
-bis zu 100 Dateien mit zusammen höchstens 500 MB. Eine atomare benutzerlokale
+bis zu 100 Dateien mit zusammen höchstens 500 MiB. `resource-limits.js` trennt diese
+Stapelgrenze ausdrücklich von parserseitigen Einzelgrenzen: TXT/Markdown 8.000.000
+Bytes, CSV 1.500.000 Bytes, DOCX 64 MiB sowie entpacktes OOXML 128 MiB. Picker,
+Snapshot und Runtime prüfen sie vor einer teuren Materialisierung; eine feste
+Seitenbegrenzung existiert nicht. `test-resource-limits.js`, Picker- und
+Capability-Verträge blockieren abweichende Versprechen. Eine atomare benutzerlokale
 Prozesssperre erzwingt jetzt genau einen verarbeitenden Stapel, auch über getrennte
 Serverprozesse. Unterbrechungen während einer Datei werden als retryfähig gespeichert
 und nur nach ausdrücklicher Fortsetzung erneut geplant; erfolgreiche Dateien werden
@@ -118,6 +123,64 @@ ein fester inhaltsfreier Checkpoint (`sealed`, private Kopie, Extraktion,
 Textprüfung, Paketverifikation, Übergabe oder terminaler Zustand) atomar
 persistiert und nicht über MCP ausgegeben. Terminale Sicherheitsstopps bleiben
 bewusst terminal.
+
+Nach einem erfolgreichen lokalen Snapshot führt der private Batchzustand zusätzlich
+eine feste I/O-Zusammenfassung: Vorprüfung, Arbeitskopien (Dateien und auf höchstens
+500 MiB gerundete Gesamtmenge), finale Freigabe-Gates, Paket-/Audit-Commits und
+einmalige Stapelwartung. Diese Zähler haben keine Dokumentbeziehung und werden
+weder über MCP noch in Audit, Mapping, Manifest oder Export ausgegeben. Sie dienen
+nur der lokalen Regressionsprüfung; ein fehlender Zähler eines älteren Snapshots
+wird nicht nachträglich ergänzt.
+
+Das Cowork-/UX-/Performance-Review vom 24.08.2026 ist technisch konsolidiert:
+Der lokale Mehrfachpicker bleibt einziger Normal-Eingang; `Input` ist Support-only.
+Die sichtbare Routineoberfläche umfasst 9 Werkzeuge, die vollständige IT-
+Supportoberfläche 28. Jeder Toolvertrag besitzt vier explizite MCP-Risikohinweise.
+Jeder ruhende oder terminale Stapelzustand erzeugt genau eine inhaltsfreie lokale
+Meldung mit genau einer nächsten Aktion; Fortsetzung und Review öffnen keine neue
+Dateiauswahl. Gleichnamige Quellen erhalten unabhängige opake IDs.
+
+Der reale synthetische Benchmark nutzt TXT, CSV und DOCX kalt/warm für 1/10/100
+Dateien und erfasst p50/p95, Gesamtzeit, CPU, Peak-RAM sowie nicht zugeordnete
+Laufzeit mit monotoner Zeitbehandlung und relativen Regressionstoren. Der Handoff
+dekodiert kleine verifizierte Ergebnisse einmalig und nutzt für große Seiten ein
+begrenztes Indexfenster; Buffer und Index werden am Ende best-effort überschrieben.
+Eine nicht importierte Zwei-Worker-Vorbereitung und ein nicht importierter OCR-
+Session-Harness decken geschlossene Nachrichten, Reihenfolge, Crash, Replay,
+Single-Flight sowie Ressourcen-/Zeitstopps ab. Beide bleiben absichtlich außerhalb
+des Produktpfads, bis reale Drei-OS-Ressourcenevidenz vorliegt.
+
+Als noch nicht aktivierte Vorbedingung für eine spätere interne Zwei-Worker-Strecke
+existiert ein eigener lokaler Zwei-Slot-Lease-Store. Seine strikt geschlossenen
+`0600`-Records enthalten nur Schema, opake Batch-/Item-/Lease-Kennungen und PID;
+Namen, Pfade, Inhalte, Hashes, Profil, Größen, Zeitstempel und Fehlerdetails sind
+ausgeschlossen. Defekte, zusätzliche oder unlesbare Records blockieren den
+Parallelmodus fail-closed. Der derzeitige Worker verwendet diesen Store bewusst noch
+nicht: bis Slot-Recovery, atomare Speicherreservierung und OCR-Gesamtbudget belegt
+sind, bleibt der Produktpfad seriell.
+
+Die Slot-Recovery selbst ist nun als private Koordinatoroperation vorhanden: Sie
+löscht nur Leases eines nachweislich toten Prozesses, deren Batch- und Itembindung
+vorher explizit freigegeben wurde. Lebende, unbekannte, fremde oder manipulierte
+Leases werden weder übernommen noch gelöscht. Ihre Einbindung in den Worker bleibt
+bis zur Speicherreservierung und der anschließenden Drei-OS-Abnahme deaktiviert.
+
+Ein isolierter Reservierungs-Store schreibt feste lokale Bytes in eine reguläre
+`0600`-Datei und veröffentlicht erst danach einen geschlossenen Record mit opaker
+Batch-/Reservierungskennung und Bytezahl. Er verwendet ausdrücklich keine
+Sparse-Datei und keinen `ftruncate`-Ersatz, ist aber noch kein
+plattformübergreifender Nachweis physisch belegter Blöcke. Der Store ist nicht an den
+Serienpfad angebunden: Vor Aktivierung sind ein lokaler Plattformadapter für die
+Allokationsprüfung, getrennte Workspace-/Output-Volume-Gates, Crash-Recovery und
+reale Windows-/macOS-/Linux-Evidenz erforderlich.
+
+Der Privacy-Stammordner ist im MCPB als optionaler Verzeichniswert und im
+Plugin-Connector als `EU_PRIVACY_ROOT` konfigurierbar. Ein leerer Wert bleibt beim
+sicheren benutzerlokalen App-Datenstandard `SecureDataMsg/workspace`. Vor der Erstellung der Unterordner wird
+der konfigurierte Stamm ohne Pfadprotokoll gegen Cloud-Sync, Netzpfad und
+Symlink/Junction geprüft; ein unsicherer oder nicht prüfbarer Wert stoppt mit
+`UNSAFE_STORAGE_LOCATION`. Eine Umstellung migriert oder verändert keinen aktiven
+oder wiederaufnehmbaren Stapel.
 
 Manipulation oder Verlust einer versiegelten Arbeitskopie invalidiert den offenen
 Snapshot fail-closed: Alle noch offenen Positionen werden lokal als derselbe
@@ -162,10 +225,18 @@ ausschließlich lokale, dauerhafte UTF-8-Mapping-CSV unter `DataSecure-Export`; 
 Stopp erhält bewusst kein erfundenes Ergebnis. Der Skill sieht dabei höchstens den
 inhaltsfreien Erfolg des lokalen Ledger-Schreibens, nie Namen oder Pfade. Die CSV ist
 nicht über MCP lesbar und enthält keine Inhalte oder Rohwerte aus dem Dokumenttext.
-Ein fehlschlagender Mapping-Commit wird als `LOCAL_MAPPING_EXPORT_FAILED` sicher
-gestoppt; ein gerade veröffentlichtes Paket wird zurückgenommen. Der CSV-Commit ist
-bei Recovery idempotent, sodass eine Unterbrechung nach atomarem Schreiben keine
-doppelte Zuordnungszeile erzeugt.
+Ein fehlender CSV-Commit lässt ein bereits manifest-verifiziertes Paket unverändert
+im privaten Zustand `mapping_pending`. Vor der CSV-Ersetzung wird im lokalen,
+nicht per MCP lesbaren `.mapping-outbox`-Ordner ein enger Recovery-Intent mit nur
+Dateibasename, opaker Paket-ID und Zufallskennung gesichert. Die Outbox wird beim
+Neustart nur für weiterhin verifizierte Pakete idempotent abgearbeitet und nach
+erfolgreichem CSV-Commit entfernt. Eine unvollständige atomare Temp-Datei wird nur
+nach vollständiger Schema-Prüfung zur Outbox promoviert; sonst stoppt der lokale
+Recovery-Pfad geschlossen. Vor jedem CSV-Lesen und -Ersetzen schützt zusätzlich
+eine lokale `0600`-Sperre den Read-Modify-Write-Abschnitt. Eine vorhandene,
+unlesbare oder verwaiste Sperre wird im Normalpfad nicht gelöscht, sondern
+fail-closed gemeldet; kontrollierte Lease-Recovery bleibt eine Voraussetzung der
+späteren Zwei-Worker-Optimierung.
 Terminale Stapel ergänzen dort einen atomaren JSON-Nachweis mit nur aggregierten
 Zählern, Versionen, Regelständen und validierten festen Fehlercodes. Auch dieser
 Nachweis enthält keine Namen, Pfade, Inhalte, Hashes, Pseudonyme oder Batch-IDs.
@@ -497,6 +568,22 @@ Pixelredaktion, Visual-Gates und ein real getesteter Windows-OCR-Pfad. Rest:
 gebündelte Deutsch-/Englisch-OCR auf macOS/Linux, gemischtsprachige Abnahme,
 eigenständige Bildfreigabe als Markdown sowie sichere fachliche Grafikprüfung.
 
+Für BL-024.4 liegt mit `contracts/OCR_BATCH_SESSION_V1.md` ein expliziter
+Fail-closed-Vertrag vor: Der heutige Einbild-Sandboxprozess bleibt aktiv, bis ein
+nativer Per-Frame-Supervisor auf Windows, macOS und Linux eine stapelgebundene,
+serielle OCR-Session gleichwertig begrenzt. Ein JavaScript-Pool, globaler Daemon
+oder eine erhöhte Gesamtprozessgrenze ist ausdrücklich kein zulässiger Ersatz.
+
+Für BL-011.8 nutzt die Batch- und Orchestrator-Bereinigung jetzt zusätzlich
+`safeRemovePrivateTree`: Sie akzeptiert nur einen literal benannten direkten Kind-
+Eintrag eines erneut identitätsgebundenen privaten Ordners, prüft jeden Baumknoten
+vor dem Entfernen per `lstat` und stoppt bei Link-, Junction- oder Inode-Austausch.
+Die Adversarial-Tests decken direkten und verschachtelten Link sowie einen Austausch
+unmittelbar während der Verzeichnisauflistung ab; externe Sentinel-Dateien bleiben
+unverändert. Node kann damit keinen vollständig rennfreien Reparse-Schutz beweisen;
+native Directory-Handle-Adapter und reale Gegenproben auf drei Zielsystemen bleiben
+P0-offen.
+
 Unter DS-038 ist zusätzlich ein exakt gelockter portabler Pilot vorhanden:
 Tesseract.js 7.0.0, tesseract.js-core 7.0.0 und `@napi-rs/canvas` 1.0.7 verwenden
 ausschließlich lokale, hashgeprüfte `deu`-/`eng`-Modelle aus dem tatsächlichen
@@ -811,6 +898,21 @@ Freigabe zusätzlich eine lokale Abschlussübersicht mit ausschließlich den Zä
 ausgewählt, freigegeben und sicher gestoppt. Kann dieser freiwillige Hinweis nicht
 geöffnet werden, bleibt das Ergebnis dennoch freigegeben und nutzbar.
 
+Fortschritt 24.08.2026: Der direkte Picker akzeptiert zwei explizite Absichten.
+`local_only` ist der Standard und endet nach dem lokalen Start ohne Claude-Polling,
+Ergebnisliste, Markdown-Lesen oder Bestätigung. Nach einem terminalen Lauf zeigt die
+lokale Elternseite einmalig eine inhaltsfreie Abschlussübersicht mit ausschließlich
+den Zählern ausgewählt, freigegeben und sicher gestoppt; ein Fehler beim Anzeigen
+ändert weder Paket noch Mapping. Der Worker selbst wartet nicht auf diese Anzeige.
+`continue_in_chat` bleibt ausschließlich für ausdrücklich gewünschte Folgeauswertungen
+und liest weiterhin nur freigegebenes Markdown. Die normale Folgeauswertung bündelt
+Status, namenfreie Ergebniswahl und bis zu fünf begrenzte Markdown-Lesevorgänge in
+`continue_anonymized_batch_in_chat`; seitenweise Dokumentfortsetzungen bleiben an
+dieselbe kurzlebige Leseberechtigung gebunden. Die öffentliche Toolmenge ist
+supportgetrennt reduziert. Eine zu frühe Folgeauswertung während lokaler Verarbeitung
+stoppt vor Ergebnisliste und Markdown-Lesen mit einem festen Wartestatus; sie gibt
+weder Paket- noch Leseberechtigungen aus.
+
 Der `Input`-Ordnerweg zeigt unmittelbar vor dem Snapshot dieselbe lokale
 Startbestätigung wie die direkte Mehrfachauswahl. Ein lokales Abbrechen hinterlässt
 keinen Batch und keine versiegelte Arbeitskopie.
@@ -822,8 +924,24 @@ der Server liefert dafür weder Namen noch den Mappinginhalt an Claude.
 Ein lokaler Abbruch der Dateiauswahl ist nun ein expliziter, inhaltsfreier terminaler
 Zustand statt eines allgemeinen Toolfehlers. Die authentisierte IPC transportiert
 `LOCAL_SELECTION_CANCELLED`; der Manager liefert `local_selection_cancelled`, schließt
-den lokalen Companion und startet keinen weiteren Dialog. Dies schützt insbesondere
-vor einem ungewollten wiederholten Auswahlfenster nach einem manuellen Schließen.
+den lokalen Companion und startet keinen weiteren Dialog. Der Direct-Picker übergibt
+denselben inhaltsfreien Zustand unmittelbar an Cowork. Nicht verfügbare Engine,
+Auswahlfehler oder fehlgeschlagener lokaler Start werden getrennt gemeldet; sie
+behaupten nie eine laufende Verarbeitung. Während einer noch laufenden Übernahme
+wird keine zweite Dateiauswahl geöffnet. Dies schützt insbesondere vor einem
+ungewollten wiederholten Auswahlfenster nach einem manuellen Schließen.
+
+Der direkte Picker und die Batch-Übernahme prüfen außerdem den vollständigen
+Quellenpfad vor jedem Lesen und unmittelbar vor der Snapshot-Kopie auf Links und
+Reparse-Punkte. Solche Quellen werden sicher gestoppt; die Originaldatei bleibt
+unverändert. Die gebundene Datei-Descriptor-/Inode-Prüfung der Kopie bleibt danach
+weiterhin bestehen.
+
+Die Office-Container-Vorprüfung liest bei DOCX, XLSX und PPTX nur noch Header,
+Endverzeichnis und Zentralverzeichnis über einen bereits identitätsgeprüften lokalen
+Dateideskriptor. Sie hält damit keine vollständige Quelldatei mehr zusätzlich im
+Heap. Die vollständige ZIP-/CRC-/Parserprüfung läuft unverändert erst auf der
+versiegelten lokalen Arbeitskopie.
 
 ## BL-042 – Kommunikation und Diagnose
 
@@ -835,12 +953,88 @@ Ein ausdrücklich bestätigter lokaler Diagnoseexport enthält zusätzlich aussc
 bereinigte Diagnosemetadaten und Programmprüfsummen; er wird nie automatisch
 übertragen. Rest: abschließende Alltagssprach-/Barrierefreiheitsprüfung.
 
-Alle 18 MCP-Tools besitzen jetzt zusätzlich vollständige boolesche
+Alle 25 MCP-Tools besitzen jetzt zusätzlich vollständige boolesche
 `readOnlyHint`-, `destructiveHint`-, `idempotentHint`- und `openWorldHint`-
 Annotationen sowie einen Titel. Eine zentrale Policy klassifiziert Lesen,
 Ordneröffnung, Verarbeitung, Review, Bestätigung, Verwerfen und Purge getrennt; der
 MCP-Vertragstest blockiert fehlende beziehungsweise widersprüchliche Klassen. Offen
 bleibt die beobachtete Manual-/Auto-/Skip-Abnahme in Cowork.
+
+## BL-043 – Cowork-Fast-Path
+
+Status: **teilweise**
+
+Der direkte Picker unterstützt `local_only` als datensparsamen Standard und einen
+tokenfreien Handoff nur für ausdrücklich gewünschte Folgeauswertung. Der Skill- und
+MCP-Vertrag untersagt im lokalen Standardweg Polling, Ergebnisliste, Markdown-Lesen
+und Bestätigen. Seine Startantwort enthält nur feste, inhaltsfreie Zustandsfelder;
+insbesondere kein Batch-Token und keine Recovery- oder Leseberechtigung. Der lokale
+Abschlussindikator wird ausschließlich aus festen Zählern erzeugt. Noch offen ist
+der versionsgebundene MCP-Task-/Benachrichtigungsnachweis.
+
+Die öffentliche Routineoberfläche ist jetzt supportgetrennt: Im Normalbetrieb
+liefert `tools/list` nur neun sichere Cowork-Aktionen (lokaler Start, tokenfreier
+Handoff, Fortsetzen, ausdrücklich bestätigtes Verwerfen, lokale Entscheidung,
+Privacy-Konfiguration und Ergebnisübersicht). Der technische Input- und Privacy-Stamm sind dort auch bei
+manuell konstruierten Aufrufen gesperrt. Die vollständige 25-Werkzeug-Kompatibilitätsoberfläche bleibt
+lokal nur mit `EU_PRIVACY_SUPPORT_MODE=1` für IT-Support und vorhandene
+Recoveryfälle verfügbar. `start_completed_local_results_handoff` und
+`continue_local_results_handoff` liefern höchstens fünf verifizierte
+Markdown-Ergebnisse pro Aufruf. Auswahl, Paketkennungen, Cursor und
+Leseberechtigungen bleiben im lokalen Serverprozess. Bei genau einem passenden
+fertigen Stapel wird lokal direkt fortgesetzt; bei mehreren Kandidaten erfolgt die
+Wahl ausschließlich in einer lokalen, namenfreien Ansicht. Eine Wiederaufnahme
+eines unvollständigen Stapels bleibt davon getrennt. Nie gelangen Paket-ID,
+Capability, Quellname, Pfad, Token oder Cursor an Cowork.
+
+Für die folgende Optimierung liegt außerdem eine inhaltsfreie Phasenmessung vor:
+Der lokale Batchzustand speichert ausschließlich begrenzte Dauerwerte für Aufnahme,
+Konvertierung/Visuelles, Textprüfung, Verifikation und Veröffentlichung. Weder
+Dokumenttext noch Namen, Pfade, Dateinamen, Hashes oder absolute Zeitstempel werden
+dabei in den Messwert geschrieben oder über MCP ausgegeben. Der Vertragstest prüft
+die vollständige feste Phasenmenge und unempfindliches Verhalten bei fehlerhaften
+Uhren. Referenzwerte auf Windows, macOS und Linux sind weiterhin manuelle Evidenz.
+`npm run benchmark:batch-phases` misst dafür lokal die Szenarien 1, 10 und 100
+synthetische Dateien; es schreibt temporäre Quellen nur in einen eigens erzeugten
+Ordner und gibt ausschließlich aggregierte Millisekundenwerte aus. Der
+Vertragstest startet zusätzlich die kleinen Szenarien 1 und 10 und erzwingt das
+feste JSON-Schema, die fünf Phasen und die Abwesenheit von Quellnamen, Pfaden,
+Hashes und synthetischem Text; er enthält bewusst keine instabile Leistungsschwelle.
+
+Der Direkt-Picker startet nun außerdem die lokale Übernahme in einem isolierten,
+netzgesperrten Hilfsprozess. Der Cowork-Aufruf endet daher nach Auswahl mit sechs
+festen, inhaltsfreien Zustandsfeldern; der opake Batch-Token bleibt ausschließlich
+im lokalen Worker. Erst danach prüfen und versiegeln lokale Funktionen die Quellen
+und verarbeiten sie weiter. Die privaten Pfade werden ausschließlich über lokale
+Prozess-IPC übergeben und weder im Rückgabewert noch in MCP-Antworten gespeichert.
+Ein paralleler zweiter Intake bleibt gesperrt. Der Worker beansprucht vor der
+Verarbeitung selbst seine lokale Ausführungsberechtigung; die Elternseite trennt IPC
+nicht vor seinem eigenen Abschluss. Ein echter Child-Process-Test belegt damit einen
+vollständigen Ein-Datei-Intake ohne Quellmetadaten in der Antwort. Die echte
+Antwortzeit, frühe Intake-Crash-Recovery und die Drei-OS-Abnahme sind weiterhin
+offene Evidenz.
+
+Ein Fehler während der asynchronen lokalen Übernahme erhält keine Dokumentdiagnose
+und keine Chat-Rückfrage: Der Worker meldet der lokalen Elternseite ausschließlich
+`before_checkpoint` oder `after_checkpoint`. Daraus entsteht eine lokale feste
+Hinweisansicht ohne Namen, Pfade, Tokens, Fehlertexte oder Zähler. Vor dem Checkpoint
+existiert kein wiederherstellbarer Stapel; danach bleibt ausschließlich der bereits
+versiegelte lokale Stapel für die bestehende explizite Fortsetzung oder das Verwerfen
+erhalten. Fehler beim Anzeigen des Hinweises verändern diesen Zustand nicht.
+
+Die batchweite Wartung wurde aus dem Dokument-Loop gezogen: Retention-Bereinigung,
+Prüfung verwaister privater Jobs und Audit-Migration laufen genau einmal nach dem
+Claim des lokalen Workers. Ein nur in diesem Prozess erzeugtes, nicht nachbildbares
+Objekt belegt die erfolgreiche Vorbereitung für die folgenden Dokumente; ein
+beliebig gesetztes Flag kann sie nicht überspringen. Speicher-, Abbruch-, Snapshot-,
+Container- und Rest-PII-Gates werden weiterhin pro Dokument ausgeführt. Der
+Batchvertrag prüft die einmalige Ausführung über zwei reale lokale Quellen.
+
+Auch die Auditmigration wird nach dieser Vorbereitung nicht erneut pro Ergebnis
+gescannt. Der pro-Datei-Auditbeleg bleibt dagegen atomar und unverändert erhalten.
+Ein lokaler synthetischer 1/10-Lauf zeigte damit eine Halbierung der gemessenen
+Veröffentlichungsphase gegenüber dem vorherigen Referenzlauf; das ist ein
+Entwicklungsindikator, keine plattformübergreifende Leistungszusage.
 
 ## BL-050 – 1.000-Dokument-Korpus
 

@@ -126,10 +126,10 @@ test('a Markdown-only request keeps image pixels local without enabling strict l
   assert.ok(markdownOnly.forbidden_outcomes.includes('unnecessarily_enable_strict_local_image_discard'));
 });
 
-test('ordinary processing uses the resumable local input route instead of a long picker call', () => {
+test('ordinary processing uses the direct local picker with one user confirmation', () => {
   const ordinary = corpus.cases.filter((item) => ['single-contract-docx', 'multiple-mixed-docx'].includes(item.id));
-  assert.ok(ordinary.every((item) => item.expected_route === 'folder'));
-  assert.ok(ordinary.every((item) => item.required_outcomes.includes('wait_for_local_input_confirmation')));
+  assert.ok(ordinary.every((item) => item.expected_route === 'dialog'));
+  assert.ok(ordinary.every((item) => item.required_outcomes.includes('single_local_picker_confirmation')));
 });
 
 test('large and partially failing runs use local execution with separate model reading', () => {

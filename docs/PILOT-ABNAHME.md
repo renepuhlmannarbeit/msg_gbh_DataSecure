@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC30 · ausschließlich synthetische Daten
+Version 3.2.0 RC34 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC30 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC34 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 Die wiederverwendbaren, vollständig synthetischen Testdokumente, der gruppierte
@@ -91,56 +91,35 @@ Verbindungsnachweis.
 
 ## 4. Fortsetzbarer Ein- und Mehrdateiablauf
 
-Synthetischer Inhalt soll einen automatisch erkannten Namen/E-Mailkontakt und
-fachlichen Text wie `Rolle: Lösungsarchitektin` enthalten. Eine zweite Datei soll
-gezielt mit `AMBIGUITY_REVIEW_REQUIRED` stoppen.
+Der **Normalweg** hat nur drei bewusste Handlungen: neue Cowork-Unterhaltung öffnen,
+„Dateien anonymisieren“ schreiben und im nativen Mehrfachdialog einmal **Öffnen**
+wählen. Quellen werden nie per Büroklammer in den Chat hochgeladen.
 
-- [ ] „Anonymisiere eine oder mehrere Dateien lokal“ nennt nur die vorhandene Anzahl
-      und öffnet den lokalen `Input`-Ordner, keinen lang laufenden Dateidialog.
-- [ ] Liegt bereits eine Datei im Eingang, verlangt Claude die Bestätigung, dass sie
-      zum aktuellen Lauf gehört. Bei einer Abweichung zwischen genannter und erkannter
-      Zahl beginnt keine Verarbeitung.
-- [ ] Ohne ausdrücklichen Wunsch erscheint keine zusätzliche Frage zur Bildentfernung;
-      Bilder in Bewerbungs-/Personalunterlagen bleiben standardmäßig lokal.
-- [ ] „Nur Markdown“ oder „Bilder nicht an Claude geben“ lässt `remove_images=false`:
-      Bildpixel bleiben lokal, sicher erkannter Bildtext durchläuft den normalen
-      Text-Gate und der strenge lokale Verwerfmodus wird nicht unnötig aktiviert.
-- [ ] Der strenge lokale Verwerfmodus wird nur bei dem ausdrücklichen Wunsch genutzt,
-      lokale Bildanlagen selbst zu löschen; unbekannte Office-Objekte stoppen dabei sicher.
-- [ ] Nach Bestätigung erzeugt `begin_document_batch` nur bei exakt 1 bis 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MB
-      ein Batch-Token; Namen und lokale Hashes erscheinen in keiner Toolantwort.
-- [ ] Austausch, Hinzufügen oder Zeitstempeländerung im `Input`-Ordner nach der
-      versiegelten Übernahme verändert den gestarteten Stapel nicht. Eine absichtlich
-      veränderte **private Arbeitskopie** wird dagegen fail-closed gestoppt; sie darf
-      niemals ein Ergebnis für die ursprüngliche Quelle erzeugen.
-- [ ] `start_document_batch_processing` kehrt kurz zurück; der getrennte lokale
-      Worker verarbeitet intern sequenziell und läuft weder als langer MCP-Aufruf
-      noch als modellseitiger Aufruf pro Datei.
-- [ ] `document_batch_status` enthält nur Zähler. `list_document_batch_results`
-      liefert höchstens zehn namenfreie Ergebnisse pro Skillseite; Abbruch der
-      Claude-Auswertung verändert den lokal abgeschlossenen Stapel nicht.
-- [ ] Ein Stopp veröffentlicht für die betroffene Datei nichts und wird serverseitig
-      im Batch markiert. Die übrigen Dateien werden genau einmal versucht, ohne einen
-      vom Modell berechneten Überspringzähler.
-- [ ] Claude zeigt weder Pfad, Dateiname, Originaltext noch interne Queue-Position.
-- [ ] Der normale Input-Ablauf öffnet keinen Textreview pro Datei und keinen zweiten
-      Dateidialog. Mehrdeutigkeiten werden erst nach der restlichen Analyse in genau
-      einem ausdrücklich gestarteten lokalen Sammelreview behandelt.
-- [ ] Mehrdeutige Zertifikats-/Organisationsstellen werden nicht geraten, sondern
-      bleiben bis zu diesem lokalen Review gesperrt; technische Fortsetzung darf sie
-      nicht freigeben.
-- [ ] Rolle, Zertifizierungen und sonstiger fachlicher Inhalt bleiben im erfolgreichen
-      synthetischen Fall unverändert.
-- [ ] Das Residual-Gate prüft exakt die später freigegebene Markdown-Fassung.
-- [ ] Claude nennt am Ende nur erfolgreiche und sicher gestoppte Dateien und verwendet
-      ausschließlich Paket-IDs aus dem Batch-gebundenen paginierten Ergebnisplan.
-- [ ] Eine erneute Verarbeitung einer gestoppten Datei beginnt erst nach einem neuen,
-      ausdrücklichen Nutzerauftrag.
-- [ ] Abbruch, MCP-Neustart oder geschlossenes stdin nach dem Claim stellt die Datei
-      kollisionsfrei sichtbar wieder her; ein unsicher unterbrochener Batch-Eintrag
-      wird nicht automatisch wiederholt.
-- [ ] Der reale 100-Dateien-Test besteht mit Stopps an Position 1, 50 und 100 ohne
-      doppelte Verarbeitung; 97 Freigaben erscheinen lückenlos in zehn Seiten.
+- [ ] Der direkte Mehrfach-Dateidialog akzeptiert 1 bis 100 TXT-, Markdown-, CSV-
+      oder DOCX-Dateien mit zusammen höchstens 500 MiB und weist Überschreitungen
+      der Einzelgrenzen (TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes, DOCX
+      64 MiB komprimiert/128 MiB entpackt) vor dem Hintergrundlauf ab. Es gibt keine
+      feste Seitenbegrenzung und keine vorgelagerte Profil-, Bild-, Start- oder
+      Einzeldatei-Abfrage.
+- [ ] Nach der Auswahl startet genau ein lokaler, fortsetzbarer Batch. Der Normalweg
+      zeigt keinen zweiten Dateidialog, keinen Textreview und keine Ergebnislese-
+      Bestätigung. Hostseitige Cowork-Toolberechtigungen werden als Host-Evidenz
+      gezählt, nicht als DataSecure-Dialog bewertet.
+- [ ] Bilder bleiben standardmäßig lokal. Der Wunsch „Bilder entfernen“ aktiviert
+      ausschließlich den strengen lokalen Löschpfad; unsichere Office-Objekte stoppen
+      sicher. Bildpixel werden nie über Claude freigegeben.
+- [ ] Claude zeigt niemals Pfad, Dateiname, Originaltext, Hash, Token oder interne
+      Queue-Position. Die dauerhafte lokale Zuordnung liegt nur in
+      `DataSecure-Mapping.csv` im Exportbereich.
+- [ ] Rolle, Zertifizierungen und fachlicher Inhalt bleiben im erfolgreichen
+      synthetischen Fall erhalten. Mehrdeutige Zertifikats-/Organisationsstellen
+      werden nicht geraten, sondern sicher gestoppt oder lokal geprüft.
+- [ ] Ein sicherer Stopp veröffentlicht kein Teilpaket. Abbruch oder Cowork-Neustart
+      erzeugen weder Ersatzpicker noch Doppelverarbeitung; eine Fortsetzung ist
+      ausschließlich nach ausdrücklichem Auftrag zulässig.
+- [ ] Der reale 100-Dateien-Test prüft Start, Abbruch und Wiederaufnahme bei
+      ungefähr Position 1, 50 und 100. Bereits terminale Positionen erscheinen
+      weder doppelt noch erneut im Mapping.
 
 ## 5. Formatgrenze des beaufsichtigten Piloten
 
@@ -169,7 +148,7 @@ Stop-Gegenproben.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC30 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC34 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

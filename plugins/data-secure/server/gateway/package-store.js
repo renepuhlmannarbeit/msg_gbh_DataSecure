@@ -1,5 +1,6 @@
 'use strict';
 const fs=require('fs');const path=require('path');const crypto=require('crypto');
+const {isUtf8}=require('buffer');
 const {SafeError}=require('../runtime');
 const {roots,sha256Buffer,sha256File,listPackageDirs,PROFILES}=require('./common');
 const {readEvents}=require('../companion/job-store');
@@ -8,6 +9,9 @@ const {readEvents}=require('../companion/job-store');
 // package id identifies data on disk; it is not authorization to disclose that
 // data to the model. Restarting the MCP server revokes every outstanding grant.
 const DEFAULT_CAPABILITY_TTL_MS=15*60*1000;
+// This cache is deliberately an in-process optimisation for already released
+// Markdown only. It is never persisted, exported, diagnosed or made public.
+const MAX_HANDOFF_SNAPSHOT_BYTES=4*1024*1024;
 const readCapabilities=new Map();
 function capabilityDigest(value){return crypto.createHash('sha256').update(String(value||''),'utf8').digest('hex');}
 function pruneCapabilities(now=Date.now()){for(const[d,g]of readCapabilities){if(g.expiresAt<=now)readCapabilities.delete(d);}}
@@ -68,7 +72,96 @@ function readVerifiedFile(base,rel){
 }
 function listOutputs(){const items=[];for(const x of listPackageDirs()){try{const{m}=safeResolvePackage(x.id);items.push({package_id:x.id,profile:m.profile,created_at:m.created_at,reidentification_risk:m.reidentification_risk==='high'?'high':'context_dependent',assets_included:m.assets.filter(a=>a.status==='included').length,assets_review_required:m.assets.filter(a=>a.status!=='included').length});}catch{}}return{ok:true,packages:items.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,50)};}
 function readOutput(packageId,readCapability,offset=0,maxChars=16000){requireReadCapability(packageId,readCapability);const{p,m}=safeResolvePackage(packageId),rel=m.document;const data=readVerifiedFile(p,rel);if(sha256Buffer(data)!==m.document_sha256)throw new SafeError('Anonymisierte Markdown-Datei wurde verändert.');const text=data.toString('utf8');offset=Math.max(0,Number(offset)||0);maxChars=Math.min(30000,Math.max(1000,Number(maxChars)||16000));return{ok:true,package_id:packageId,document_id:rel,offset,text:text.slice(offset,offset+maxChars),next_offset:Math.min(text.length,offset+maxChars),has_more:offset+maxChars<text.length,total_chars:text.length,content_is_verified_anonymized_markdown:true};}
+function unicodeSliceEnd(text,start,maxChars){
+  let end=Math.min(text.length,start+maxChars);
+  // Offsets in the public read contract are JavaScript character offsets.
+  // Keep surrogate pairs together so a page never contains an unpaired half.
+  if(end>start&&end<text.length){
+    const previous=text.charCodeAt(end-1), next=text.charCodeAt(end);
+    if(previous>=0xd800&&previous<=0xdbff&&next>=0xdc00&&next<=0xdfff)end--;
+  }
+  return end===start?Math.min(text.length,start+2):end;
+}
+const UTF8_INDEX_INTERVAL=4096;
+function utf8SequenceBytes(byte){
+  if(byte<0x80)return 1;
+  if(byte<0xe0)return 2;
+  if(byte<0xf0)return 3;
+  return 4;
+}
+function createUtf8CharacterIndex(data){
+  if(!isUtf8(data))throw new SafeError('Anonymisierte Markdown-Datei ist nicht gültig UTF-8-kodiert.');
+  const characterOffsets=[0],byteOffsets=[0];
+  let byteOffset=0,characterOffset=0,lastIndexed=0;
+  while(byteOffset<data.length){
+    const width=utf8SequenceBytes(data[byteOffset]);
+    byteOffset+=width;
+    characterOffset+=width===4?2:1;
+    if(characterOffset-lastIndexed>=UTF8_INDEX_INTERVAL&&byteOffset<data.length){
+      characterOffsets.push(characterOffset);
+      byteOffsets.push(byteOffset);
+      lastIndexed=characterOffset;
+    }
+  }
+  return{characterOffsets,byteOffsets,totalCharacters:characterOffset};
+}
+function locateUtf8Character(data,index,target){
+  let low=0,high=index.characterOffsets.length-1;
+  while(low<high){const middle=Math.ceil((low+high)/2);if(index.characterOffsets[middle]<=target)low=middle;else high=middle-1;}
+  let characterOffset=index.characterOffsets[low],byteOffset=index.byteOffsets[low];
+  while(byteOffset<data.length&&characterOffset<target){
+    const width=utf8SequenceBytes(data[byteOffset]),units=width===4?2:1;
+    if(characterOffset+units>target)return{byteOffset,trimStartUnits:target-characterOffset,insideSurrogate:true};
+    byteOffset+=width;characterOffset+=units;
+  }
+  return{byteOffset,trimStartUnits:0,insideSurrogate:false};
+}
+function openVerifiedMarkdownSnapshot(packageId,readCapability,maxBytes=MAX_HANDOFF_SNAPSHOT_BYTES){
+  requireReadCapability(packageId,readCapability);
+  const {p,m}=safeResolvePackage(packageId),rel=m.document;
+  const file=safeFile(p,rel);
+  const size=fs.statSync(file).size;
+  const limit=Math.min(MAX_HANDOFF_SNAPSHOT_BYTES,Math.max(1024,Number(maxBytes)||MAX_HANDOFF_SNAPSHOT_BYTES));
+  // A too-large output stays on the existing per-page verified read path.
+  if(size>limit)return null;
+  const data=readVerifiedFile(p,rel);
+  if(sha256Buffer(data)!==m.document_sha256)throw new SafeError('Anonymisierte Markdown-Datei wurde verändert.');
+  const index=createUtf8CharacterIndex(data);
+  let disposed=false;
+  return Object.freeze({
+    bytes:data.length,
+    read(offset=0,maxChars=4800){
+      if(disposed)throw new SafeError('Die lokale Ergebnisübergabe ist nicht mehr gültig.');
+      const start=Math.max(0,Math.min(index.totalCharacters,Math.trunc(Number(offset)||0)));
+      const boundedChars=Math.max(1000,Math.min(30000,Math.trunc(Number(maxChars)||4800)));
+      let end=Math.min(index.totalCharacters,start+boundedChars);
+      let endLocation=locateUtf8Character(data,index,end);
+      // Match String#slice semantics used by the public paging contract while
+      // never returning half of a surrogate pair at a generated page boundary.
+      if(endLocation.insideSurrogate&&end>start){end--;endLocation=locateUtf8Character(data,index,end);}
+      if(end===start&&end<index.totalCharacters){end=Math.min(index.totalCharacters,start+2);endLocation=locateUtf8Character(data,index,end);}
+      const startLocation=locateUtf8Character(data,index,start);
+      const decoded=data.toString('utf8',startLocation.byteOffset,endLocation.byteOffset);
+      const text=startLocation.trimStartUnits?decoded.slice(startLocation.trimStartUnits):decoded;
+      return {text,next_offset:end,has_more:end<index.totalCharacters};
+    },
+    dispose(){if(!disposed){data.fill(0);index.characterOffsets.fill(0);index.byteOffsets.fill(0);index.totalCharacters=0;disposed=true;}}
+  });
+}
+function readOutputs(entries){
+  if(!Array.isArray(entries)||entries.length<1||entries.length>10)throw new SafeError('Bitte zwischen 1 und 10 freigegebene Dokumente lesen.');
+  const seen=new Set();
+  const documents=entries.map((entry)=>{
+    const packageId=String(entry?.package_id||'');
+    if(!packageId||seen.has(packageId))throw new SafeError('Jedes freigegebene Dokument darf pro Leseaufruf nur einmal enthalten sein.');
+    seen.add(packageId);
+    // Six thousand characters per document keep a ten-document Cowork page
+    // bounded while retaining the per-package capability boundary.
+    return readOutput(packageId,entry?.read_capability,entry?.offset??0,Math.min(6000,Number(entry?.max_chars)||6000));
+  });
+  return{ok:true,documents,content_is_verified_anonymized_markdown:true};
+}
 function listAssets(packageId,readCapability){requireReadCapability(packageId,readCapability);const{m}=safeResolvePackage(packageId);return{ok:true,package_id:packageId,assets:(m.assets||[]).filter(a=>a.status==='included').map(a=>({asset_id:a.asset_id,file:a.file,mime_type:a.output_mime,bytes:a.bytes,redactions:a.redactions||0}))};}
 function readAsset(packageId,readCapability,assetId){requireReadCapability(packageId,readCapability);const{p,m}=safeResolvePackage(packageId),a=(m.assets||[]).find(x=>x.status==='included'&&x.asset_id===assetId);if(!a)throw new SafeError('Sicheres Asset nicht gefunden.');validateIncludedAsset(a);const data=readVerifiedFile(p,a.file.split('/').join(path.sep));if(sha256Buffer(data)!==a.sha256)throw new SafeError('Asset wurde nach Freigabe verändert.');return{ok:true,package_id:packageId,asset_id:assetId,mime_type:a.output_mime,bytes:data.length,__image:{data:data.toString('base64'),mimeType:a.output_mime}};}
 
-module.exports={readManifest,safeResolvePackage,safeFile,readVerifiedFile,listOutputs,issueReadCapability,requireReadCapability,readOutput,listAssets,readAsset};
+module.exports={readManifest,safeResolvePackage,safeFile,readVerifiedFile,listOutputs,issueReadCapability,requireReadCapability,readOutput,readOutputs,openVerifiedMarkdownSnapshot,listAssets,readAsset,MAX_HANDOFF_SNAPSHOT_BYTES};

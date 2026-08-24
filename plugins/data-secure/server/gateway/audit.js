@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { VERSION } = require('../version');
 const { dataRoot } = require('../runtime');
 const { roots } = require('./common');
+const { assertWritableCapacity } = require('./storage-capacity');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 
 const AUDIT_SCHEMA = 'data-secure-audit-receipt/3';
@@ -13,6 +14,7 @@ const SIZE_CLASSES = new Set(['tiny', 'small', 'medium', 'large']);
 const PROFILES = new Set(['customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 let auditWriteErrors = 0;
 const UNKNOWN_POLICY_VERSION = 'legacy/unknown';
+const preparedAuditRuns = new WeakSet();
 
 function boundedInteger(value) {
   const n = Number(value);
@@ -116,17 +118,26 @@ function createAuditReceipt(profile, source, meta) {
   });
 }
 
-function atomicWriteJson(file, value) {
+function atomicWriteJson(file, value, options = {}) {
+  const io = options.fs || fs;
   const dir = path.dirname(file);
   const temp = path.join(dir, `.audit_${crypto.randomUUID()}.tmp`);
+  const serialized = JSON.stringify(value, null, 2);
+  const capacity = options.assertWritableCapacity || assertWritableCapacity;
   try {
-    fs.writeFileSync(temp, JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    fs.renameSync(temp, file);
+    capacity({ directory: dir, bytes: Buffer.byteLength(serialized, 'utf8') });
+    io.writeFileSync(temp, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    io.renameSync(temp, file);
   } catch (error) {
     try {
-      fs.unlinkSync(temp);
+      io.unlinkSync(temp);
     } catch {
       /* the original file remains authoritative */
+    }
+    if (error?.code === 'ENOSPC') {
+      const capacityError = new Error('LOCAL_CAPACITY_RACE');
+      capacityError.code = 'LOCAL_CAPACITY_RACE';
+      throw capacityError;
     }
     throw error;
   }
@@ -283,20 +294,31 @@ function auditStatus() {
   return inspectAuditDirectory({ migrate: false });
 }
 
-function writePackageAudit(receipt, packageDir) {
+function writePackageAudit(receipt, packageDir, options = {}) {
   const clean = sanitizeReceipt(receipt);
-  atomicWriteJson(path.join(packageDir, 'audit.json'), clean);
+  atomicWriteJson(path.join(packageDir, 'audit.json'), clean, options);
   return clean;
 }
 
-function retainAudit(receipt) {
-  const migration = migrateLegacyAuditReceipts();
-  if (migration.legacy_pending || migration.migration_errors) return false;
+function createPreparedAuditRun() {
+  const capability = Object.freeze({});
+  preparedAuditRuns.add(capability);
+  return capability;
+}
+
+function retainAudit(receipt, options = {}) {
+  // A batch may skip only the duplicate migration scan after the same process
+  // has already completed it before claiming its first document.  The opaque
+  // capability is not serializable and no MCP argument can manufacture it.
+  if (!preparedAuditRuns.has(options.preparedAuditRun)) {
+    const migration = (options.migrateLegacyAuditReceipts || migrateLegacyAuditReceipts)();
+    if (migration.legacy_pending || migration.migration_errors) return false;
+  }
   const clean = sanitizeReceipt(receipt);
   try {
     const auditDir = roots().audit;
     const name = `audit_${clean.timestamp.replace(/[:.]/g, '-')}_${clean.operation_id}.json`;
-    atomicWriteJson(path.join(auditDir, name), clean);
+    atomicWriteJson(path.join(auditDir, name), clean, options);
     return true;
   } catch {
     auditWriteErrors++;
@@ -315,5 +337,6 @@ module.exports = {
   recoverAuditWriteFailure,
   reconcileReleasedPackageReceipts,
   writePackageAudit,
-  retainAudit
+  retainAudit,
+  createPreparedAuditRun
 };

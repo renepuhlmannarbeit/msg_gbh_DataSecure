@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const zlib = require('zlib');
 
 class ZipError extends Error {
@@ -101,6 +102,83 @@ function inspectZipDirectory(buf, limits={}) {
   return { entries: totalEntries, files, uncompressed_bytes: total };
 }
 
+// The batch intake needs only the archive directory, not every compressed
+// payload. Read it through an already identity-checked descriptor so a large
+// OOXML source is never copied into the parent heap merely for preflight.
+// Full local-header, inflate and CRC validation still happens after the sealed
+// snapshot in readZip().
+function readRangeFromFd(fd, length, position, readSync = fs.readSync) {
+  if (!Number.isSafeInteger(length) || length < 0 || !Number.isSafeInteger(position) || position < 0) {
+    throw new ZipError('ZIP-Bereich ist ungültig.');
+  }
+  const buffer = Buffer.alloc(length);
+  let offset = 0;
+  while (offset < length) {
+    const read = readSync(fd, buffer, offset, length - offset, position + offset);
+    if (!Number.isSafeInteger(read) || read <= 0) throw new ZipError('ZIP-Daten sind abgeschnitten.');
+    offset += read;
+  }
+  return buffer;
+}
+
+function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.readSync) {
+  if (!Number.isSafeInteger(archiveSize) || archiveSize < 1) {
+    throw new ZipError('ZIP-Dateigröße ist ungültig.');
+  }
+  const header = readRangeFromFd(fd, Math.min(8, archiveSize), 0, readSync);
+  rejectEncryptedOfficeContainer(header);
+  if (header.length < 2 || header[0] !== 0x50 || header[1] !== 0x4b) return null;
+
+  const tailLength = Math.min(archiveSize, 22 + 0xffff);
+  const tailStart = archiveSize - tailLength;
+  const tail = readRangeFromFd(fd, tailLength, tailStart, readSync);
+  const eocd = findEocd(tail);
+  const totalEntries = tail.readUInt16LE(eocd + 10);
+  const cdSize = tail.readUInt32LE(eocd + 12);
+  const cdOffset = tail.readUInt32LE(eocd + 16);
+  const cdEnd = cdOffset + cdSize;
+  const maxEntries = limits.maxEntries || 20000;
+  const maxDirectoryBytes = limits.maxDirectoryBytes || 64 * 1024 * 1024;
+  if (!Number.isSafeInteger(cdEnd) || cdOffset < 0 || cdEnd > archiveSize || cdSize > maxDirectoryBytes) {
+    throw new ZipError('ZIP-Zentralverzeichnis ungültig.');
+  }
+  if (totalEntries > maxEntries) throw new ZipError('ZIP enthält zu viele Einträge.');
+  const centralDirectory = readRangeFromFd(fd, cdSize, cdOffset, readSync);
+  // Rebase the directory to zero while retaining the original archive limits.
+  // inspectZipDirectory's local-header checks are intentionally not part of
+  // this preflight; they remain the responsibility of the full post-snapshot
+  // readZip() verification.
+  const names = new Set();
+  let p = 0;
+  let total = 0;
+  let files = 0;
+  const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
+  for (let n = 0; n < totalEntries; n++) {
+    if (p + 46 > centralDirectory.length || centralDirectory.readUInt32LE(p) !== 0x02014b50) throw new ZipError('ZIP-Zentralverzeichnis beschädigt.');
+    const flags = centralDirectory.readUInt16LE(p + 8);
+    const compSize = centralDirectory.readUInt32LE(p + 20);
+    const uncompSize = centralDirectory.readUInt32LE(p + 24);
+    const nameLen = centralDirectory.readUInt16LE(p + 28);
+    const extraLen = centralDirectory.readUInt16LE(p + 30);
+    const commentLen = centralDirectory.readUInt16LE(p + 32);
+    const localOffset = centralDirectory.readUInt32LE(p + 42);
+    if (p + 46 + nameLen + extraLen + commentLen > centralDirectory.length) throw new ZipError('ZIP-Zentralverzeichnis abgeschnitten.');
+    if (flags & 1) throw encryptedEntryError();
+    if (compSize === 0xffffffff || uncompSize === 0xffffffff || localOffset === 0xffffffff) throw new ZipError('ZIP64 wird nicht unterstützt.');
+    const name = centralDirectory.subarray(p + 46, p + 46 + nameLen).toString('utf8').replace(/\\/g, '/');
+    p += 46 + nameLen + extraLen + commentLen;
+    if (!name || name.endsWith('/')) continue;
+    if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
+    if (names.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
+    if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.');
+    names.add(name);
+    total += uncompSize;
+    files++;
+  }
+  if (p !== centralDirectory.length) throw new ZipError('ZIP-Zentralverzeichnis hat eine unerwartete Größe.');
+  return { entries: totalEntries, files, uncompressed_bytes: total };
+}
+
 function readZip(buf, limits={}) {
   if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
   rejectEncryptedOfficeContainer(buf);
@@ -174,4 +252,4 @@ function readZip(buf, limits={}) {
   return out;
 }
 
-module.exports = { ZipError, inspectZipDirectory, readZip };
+module.exports = { ZipError, inspectZipDirectory, inspectZipDirectoryFromFd, readZip };

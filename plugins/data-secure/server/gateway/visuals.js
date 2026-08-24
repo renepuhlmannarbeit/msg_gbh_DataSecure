@@ -12,6 +12,7 @@ const {
   normalizeMime
 } = require('../image-sanitizer');
 const { LIMITS, roots, sha256Buffer, sha256File } = require('./common');
+const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
 
 const { MAX_ASSET_BYTES } = LIMITS;
 const VISUAL_TOTAL_TIMEOUT_MS = 3 * 60 * 1000;
@@ -127,16 +128,19 @@ function safeReviewFilename(id, ext) {
   return `${id}.${clean}`;
 }
 
-function writeReviewItem(packageId, assetId, res, packageDir) {
+function writeReviewItem(packageId, assetId, res, packageDir, deps = {}) {
   const r = roots();
   const dir = path.join(r.review, packageId);
   fs.mkdirSync(dir, { recursive: true });
+  const capacity = deps.assertWritableCapacity || assertWritableCapacity;
 
   const reviewId = `${packageId}__${assetId}`;
   let file = null;
   if (res.reviewData) {
     file = safeReviewFilename(assetId, res.reviewExt);
-    fs.writeFileSync(path.join(dir, file), res.reviewData);
+    capacity({ directory: dir, bytes: res.reviewData.length });
+    try { fs.writeFileSync(path.join(dir, file), res.reviewData); }
+    catch (error) { throw normalizePostPreflightWriteError(error); }
   }
 
   const meta = {
@@ -150,7 +154,10 @@ function writeReviewItem(packageId, assetId, res, packageDir) {
     approved: false,
     package_dir: path.basename(packageDir)
   };
-  fs.writeFileSync(path.join(dir, `${assetId}.review.json`), JSON.stringify(meta, null, 2), 'utf8');
+  const serialized = JSON.stringify(meta, null, 2);
+  capacity({ directory: dir, bytes: Buffer.byteLength(serialized, 'utf8') });
+  try { fs.writeFileSync(path.join(dir, `${assetId}.review.json`), serialized, 'utf8'); }
+  catch (error) { throw normalizePostPreflightWriteError(error); }
   return meta;
 }
 
@@ -176,6 +183,7 @@ async function processVisuals(attachments, profile, packageId, stagePackage, dep
   let seq = 0;
   const deadlineAt = visualDeadline(deps);
 
+  const capacity = deps.assertWritableCapacity || assertWritableCapacity;
   for (const att of attachments || []) {
     seq++;
     const assetId = `asset-${String(seq).padStart(3, '0')}`;
@@ -195,7 +203,9 @@ async function processVisuals(attachments, profile, packageId, stagePackage, dep
 
     if (res.status === 'included' && res.data) {
       const file = `${assetId}.png`;
-      fs.writeFileSync(path.join(assetsDir, file), res.data);
+      capacity({ directory: assetsDir, bytes: res.data.length });
+      try { fs.writeFileSync(path.join(assetsDir, file), res.data); }
+      catch (error) { throw normalizePostPreflightWriteError(error); }
       Object.assign(item, {
         file: `assets/${file}`,
         output_mime: 'image/png',
@@ -203,7 +213,7 @@ async function processVisuals(attachments, profile, packageId, stagePackage, dep
         sha256: sha256Buffer(res.data)
       });
     } else {
-      const meta = writeReviewItem(packageId, assetId, res, stagePackage);
+      const meta = writeReviewItem(packageId, assetId, res, stagePackage, deps);
       item.review_id = meta.review_id;
       item.preview_available = !!meta.preview_file;
     }

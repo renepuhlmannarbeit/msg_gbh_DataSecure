@@ -5,6 +5,7 @@
       "${CLAUDE_PLUGIN_ROOT}/server/index.js"
     ],
     "env": {
+      "EU_PRIVACY_ROOT": "",
       "EU_PRIVACY_LANGUAGE": "de",
       "EU_PRIVACY_VISUAL_MODE": "strict",
       "EU_PRIVACY_RETENTION_DAYS": "7"

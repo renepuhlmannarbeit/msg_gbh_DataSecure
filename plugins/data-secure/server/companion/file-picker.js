@@ -4,13 +4,14 @@ const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
-const { LIMITS } = require('../gateway/common');
+const { LIMITS, hasReparseComponent } = require('../gateway/common');
+const { sourceLimitForExtension } = require('../resource-limits');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 
 const MAX_SOURCE_BYTES = LIMITS.MAX_INPUT_BYTES;
 const MAX_SELECTED_SOURCES = LIMITS.MAX_BATCH_FILES;
 const PICKER_CANCELLED = '__DATASECURE_PICKER_CANCELLED__';
-const PICKER_TITLE = 'Dateien lokal für Claude vorbereiten – max. 100 Dateien / 500 MB';
+const PICKER_TITLE = 'Dateien mit DataSecure lokal anonymisieren';
 const SOURCE_TYPES = Object.freeze({
   '.pdf': 'pdf',
   '.docx': 'docx',
@@ -121,11 +122,15 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
 
 function validateSelectedPath(selected, options = {}) {
   const fsApi = options.fs || fs;
-  const maxBytes = options.maxBytes ?? MAX_SOURCE_BYTES;
+  const pathHasReparseComponent = options.hasReparseComponent || hasReparseComponent;
   const candidate = String(selected || '').trim();
   if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
   if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
-  const sourceType = SOURCE_TYPES[path.extname(candidate).toLowerCase()];
+  if (pathHasReparseComponent(candidate)) {
+    throw new SafeError('Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.');
+  }
+  const extension = path.extname(candidate).toLowerCase();
+  const sourceType = SOURCE_TYPES[extension];
   if (!sourceType) throw new SafeError('Das ausgewählte Dateiformat wird nicht unterstützt.');
   if (options.allowedTypes && !new Set(options.allowedTypes).has(sourceType)) {
     throw new SafeError('Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.');
@@ -139,8 +144,9 @@ function validateSelectedPath(selected, options = {}) {
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new SafeError('Die Auswahl ist keine reguläre lokale Datei.');
   }
+  const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
-    throw new SafeError('Die ausgewählte Datei liegt außerhalb der zulässigen Größe.');
+    throw new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.');
   }
   return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
 }
@@ -206,6 +212,30 @@ function pickSources(options = {}) {
   throw new SafeError('Keine Datei ausgewählt.');
 }
 
+// The native picker deliberately returns only private source descriptors.  The
+// batch gateway uses a differently named internal queue shape; keep this
+// conversion local and testable so a picker result can never be mistaken for
+// an Input-folder entry.
+function batchQueueFromSelection(selected) {
+  if (!Array.isArray(selected) || selected.length < 1) {
+    throw new SafeError('Keine Datei für den lokalen Stapel ausgewählt.');
+  }
+  return selected.map((item) => {
+    const full = String(item?.sourcePath || '');
+    const sourceBytes = item?.sourceBytes;
+    if (!path.isAbsolute(full) || !Number.isSafeInteger(sourceBytes) || sourceBytes < 1) {
+      throw new SafeError('Die lokale Dateiauswahl ist ungültig.');
+    }
+    const name = path.basename(full);
+    // Equal basenames from different local folders are valid. The sealed batch
+    // assigns every copied source an independent random item id and work name;
+    // neither the source path nor a path-derived hash has to be persisted or
+    // shown to Claude. The picker already rejects selecting the exact same
+    // absolute path twice.
+    return { name, full, sourceBytes };
+  });
+}
+
 module.exports = {
   MAX_SOURCE_BYTES,
   MAX_SELECTED_SOURCES,
@@ -216,5 +246,6 @@ module.exports = {
   validateSelectedPath,
   selectionCancelledError,
   pickSource,
-  pickSources
+  pickSources,
+  batchQueueFromSelection
 };

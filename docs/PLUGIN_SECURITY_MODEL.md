@@ -160,8 +160,8 @@ command.
 
 ## Retention and deletion
 
-By default the runtime stores its workspace in the operating system's local app-data
-area, not in Documents. Known OneDrive, iCloud Drive, Dropbox, Google Drive and
+By default the runtime stores its workspace under `SecureDataMsg/workspace` in the
+operating system's local app-data area, not in Documents. Known OneDrive, iCloud Drive, Dropbox, Google Drive and
 Windows network locations are refused. This is a conservative known-path check,
 not proof that an arbitrary custom folder is never synchronised; administrators
 remain responsible for the chosen override.

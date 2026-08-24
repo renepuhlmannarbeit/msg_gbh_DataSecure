@@ -10,14 +10,14 @@ Das Plugin verbindet:
 
 ## Ablauf für Anwender
 
-1. Bitte Claude, den DataSecure-Eingangsordner zu öffnen. Kopiere eine oder mehrere Dateien in `Input` und bestätige anschließend im Chat, dass sie bereitliegen. Lade sensible Originale nicht als Chat-Anhang hoch.
-2. Vor dem lokalen Snapshot bestätigt der Anwender Anzahl, Gesamtgröße, Formate und Bildstandard in einem nativen **Starten**/**Abbrechen**-Dialog. Danach bindet Claude die bestätigte Anzahl mit `begin_document_batch` an einen lokalen Snapshot. Fortschritt und Stopps verwaltet der Server. Änderungen am Input invalidieren den gestarteten Stapel nicht.
-3. Der getrennte Ablauf hält weder Dateiauswahl noch einen kompletten Stapel in einem einzigen MCP-Aufruf offen und vermeidet dadurch das beobachtete Claude-Zeitlimit.
-4. Claude verwendet ausschließlich Markdown, für das derselbe Lauf `package_id` und eine noch gültige `read_capability` zurückgegeben hat.
+1. Schreibe in einer neuen Claude-Cowork-Unterhaltung: **„Dateien anonymisieren“**. Lade sensible Originale nicht als Chat-Anhang hoch.
+2. Der lokale Mehrfach-Dateidialog öffnet sich. Wähle eine oder mehrere Dateien und klicke **„Öffnen“**. Das ist die einzige Normalbestätigung; Anzahl, Größe, Formate und Bildstandard werden lokal geprüft.
+3. Der getrennte lokale Ablauf liest die Auswahl nur lesend, erstellt eine private Arbeitskopie und verarbeitet den Stapel automatisch. Die Quelle bleibt unverändert; nur die von DataSecure selbst erzeugte Arbeitskopie wird nach Abschluss oder Ablauf der Frist bereinigt.
+4. Bei der Standardanfrage endet Claude danach: Markdown, Mapping und Nachweis bleiben lokal. Nur wenn du zusätzlich eine Zusammenfassung oder Weiterverarbeitung verlangst, liest Claude in einem gebündelten Aufruf höchstens fünf verifizierte, anonymisierte Markdown-Ergebnisse.
 5. Alle Grafiken bleiben lokal unter `Needs Visual Review`. Dieser Engineering-Build besitzt keinen Freigabeweg für visuelle Inhalte; das Öffnen des Ordners macht sie für Claude nicht lesbar.
-6. Ein Mehrdatei-Stapel zeigt nach der letzten Bestätigung lokal nur die drei Abschlusszähler. Die dauerhafte lokale Zuordnung liegt in `DataSecure-Export/DataSecure-Mapping.csv` und wird ausschließlich auf Wunsch geöffnet.
+6. Ein Mehrdatei-Stapel zeigt nach dem lokalen Abschluss nur die drei Abschlusszähler. Die dauerhafte lokale Zuordnung liegt in `DataSecure-Export/DataSecure-Mapping.csv` und wird ausschließlich auf Wunsch geöffnet.
 
-Der normale Input-Ablauf unterbricht die Analyse nicht mit einem Prüfdialog pro Datei.
+Der normale Direktauswahl-Ablauf unterbricht die Analyse nicht mit einem Prüfdialog pro Datei.
 Mehrdeutige Zertifikats-/Organisationsstellen werden gesammelt und erst auf
 ausdrücklichen Auftrag in einem einzigen lokalen Sammelreview entschieden; bis dahin
 bleiben die betroffenen Dateien gesperrt. Bildpixel bleiben immer lokal
@@ -28,6 +28,22 @@ wegen eines bekannten AppleScript-Aktionsfehlers nicht freigegeben.
 Lade ein sensibles Original nicht direkt in Claude hoch und füge es nicht in den Chat ein, wenn Claude den Inhalt erst nach der Datenschutzverarbeitung sehen darf.
 
 Dieses Plugin bietet keine Rechtsberatung, keine Garantie rechtlicher Anonymität und keine Zertifizierung nach DSGVO oder EU AI Act.
+
+## Lokalen Privacy-Ordner konfigurieren
+
+Der Standard ist der nicht synchronisierte lokale DataSecure-App-Datenbereich.
+In der Plugin-ZIP kann der Anwender im Chat ausdrücklich „Privacy-Ordner ändern“
+anfordern; DataSecure zeigt dann einen lokalen Ordnerdialog und speichert die Wahl
+ohne den Pfad an Claude zurückzugeben. Die MCPB-Variante bietet das gleiche als
+Installationsfeld. `EU_PRIVACY_ROOT` bleibt für IT-verwaltete Verteilungen möglich.
+Leer lassen bedeutet: sicherer Standardordner. Die Änderung gilt erst nach einem Claude-Neustart und nie für einen
+bereits gestarteten Stapel.
+
+Vor der ersten Verarbeitung prüft DataSecure den gewählten Ordner ohne den Pfad an
+Claude zu übermitteln. OneDrive, iCloud Drive, Dropbox, Google Drive, Netzwerkpfade
+und Symlinks/Junctions werden mit `UNSAFE_STORAGE_LOCATION` gesperrt. Dann einen
+anderen **lokalen** Ordner wählen; nicht durch einen allgemeinen Datei-Connector,
+Cloud-Synchronisation oder Chat-Upload umgehen.
 
 Die normale `.md` enthält nie Bildpixel. Deshalb bleibt bei „nur Markdown“ oder „Bilder nicht an Claude geben“ der Standard aktiv: Grafiken bleiben lokal und sicher erkannter Bildtext kann nach derselben Prüfung erhalten bleiben. Nur wenn lokale Bildanlagen selbst verworfen werden sollen, ist der strenge Modus vorgesehen; er übernimmt keinen Bildtext und stoppt bei unbekannten eingebetteten Objekten sicher.
 

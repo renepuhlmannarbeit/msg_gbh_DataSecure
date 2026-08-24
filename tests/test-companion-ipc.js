@@ -10,7 +10,9 @@ const { createSuite } = require('./helpers');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-ipc-'));
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
 
-const { PICKER_CANCELLED, PICKER_TITLE, validateSelectedPath, pickerCommands, pickSource, pickSources } = require('../plugins/data-secure/server/companion/file-picker');
+const { PICKER_CANCELLED, PICKER_TITLE, validateSelectedPath, pickerCommands, pickSource, pickSources, batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
+const { FOLDER_PICKER_CANCELLED, FOLDER_PICKER_TITLE, pickerCommands: folderPickerCommands, pickFolder } = require('../plugins/data-secure/server/companion/folder-picker');
+const { readConfiguredPrivacyRoot, saveConfiguredPrivacyRoot, clearConfiguredPrivacyRoot } = require('../plugins/data-secure/server/gateway/privacy-config');
 const { startConfirmationText, startConfirmationCommands, confirmBatchStart } = require('../plugins/data-secure/server/companion/batch-start-confirmation');
 const { IPC_VERSION, signFrame, createCompanionSession } = require('../plugins/data-secure/server/companion/ipc-session');
 
@@ -32,6 +34,31 @@ test('platform pickers use argument arrays and no network transport', () => {
       assert.match(spec.args.join(' '), new RegExp(PICKER_TITLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
   }
+});
+
+test('privacy-folder picker is local on all supported platforms and never returns a folder through MCP', () => {
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const specs = folderPickerCommands(platform, { SystemRoot: 'C:\\Windows' });
+    assert.ok(specs.length >= 1);
+    for (const spec of specs) {
+      assert.doesNotMatch(`${spec.command} ${spec.args.join(' ')}`, /https?:|localhost|127\.0\.0\.1/i);
+      assert.match(spec.args.join(' '), new RegExp(FOLDER_PICKER_TITLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
+  }
+  const folder = path.join(root, 'local-privacy');
+  fs.mkdirSync(folder);
+  assert.strictEqual(pickFolder({ platform: 'linux', runner: () => ({ status: 0, stdout: `${folder}\n` }) }), folder);
+  assert.throws(() => pickFolder({ platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, runner: () => ({ status: 0, stdout: FOLDER_PICKER_CANCELLED }) }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+});
+
+test('chosen privacy root is stored locally and can be reset without exposing its value', () => {
+  const folder = path.join(root, 'persisted-local-privacy');
+  fs.mkdirSync(folder);
+  clearConfiguredPrivacyRoot();
+  saveConfiguredPrivacyRoot(folder);
+  assert.strictEqual(readConfiguredPrivacyRoot(), folder);
+  clearConfiguredPrivacyRoot();
+  assert.strictEqual(readConfiguredPrivacyRoot(), '');
 });
 
 test('batch start confirmation contains only bounded selection facts and a clear privacy explanation', () => {
@@ -123,6 +150,28 @@ test('Windows multi-picker validates up to 100 distinct local files', () => {
   }), /höchstens 1/);
 });
 
+test('picker selections keep equal basenames as independently sealed local sources', () => {
+  const first = path.join(root, 'first.txt');
+  const second = path.join(root, 'second.csv');
+  fs.writeFileSync(first, 'first');
+  fs.writeFileSync(second, 'second');
+  assert.deepStrictEqual(batchQueueFromSelection([
+    { sourcePath: first, sourceType: 'txt', sourceBytes: 5 },
+    { sourcePath: second, sourceType: 'csv', sourceBytes: 6 }
+  ]), [
+    { name: 'first.txt', full: first, sourceBytes: 5 },
+    { name: 'second.csv', full: second, sourceBytes: 6 }
+  ]);
+  assert.throws(() => batchQueueFromSelection([{ sourcePath: 'relative.txt', sourceBytes: 1 }]), /ungültig/);
+  const equalBasenames = batchQueueFromSelection([
+    { sourcePath: first, sourceBytes: 5 },
+    { sourcePath: path.join(root, 'nested', 'FIRST.TXT'), sourceBytes: 1 }
+  ]);
+  assert.deepStrictEqual(equalBasenames.map((entry) => entry.name), ['first.txt', 'FIRST.TXT']);
+  assert.notStrictEqual(equalBasenames[0].full, equalBasenames[1].full);
+  assert.doesNotMatch(JSON.stringify(equalBasenames.map((entry) => entry.name)), /nested|\\|\//u);
+});
+
 test('Windows picker disposes the dialog and reports closing as an explicit cancellation', () => {
   const [spec] = pickerCommands('win32', { SystemRoot: 'C:\\Windows' }, ['txt', 'docx'], true);
   const command = spec.args.join(' ');
@@ -183,7 +232,7 @@ test('authenticated file selection returns no path and stores it only in memory'
   assert.ok(result.ok);
   assert.strictEqual(session.hasPrivateSource(result.job.job_id), true);
   assert.doesNotMatch(JSON.stringify(result), /employee|sourcePath|original_path/i);
-  const journal = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'companion-jobs', result.job.job_id, '000001.json');
+  const journal = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'companion-jobs', result.job.job_id, '000001.json');
   assert.doesNotMatch(fs.readFileSync(journal, 'utf8'), /employee|sourcePath|original_path/i);
 });
 

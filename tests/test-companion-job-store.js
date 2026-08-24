@@ -132,7 +132,7 @@ test('journal tampering and path traversal fail closed', () => {
   assert.throws(() => jobStatus('../outside'), /Ungültige Job-ID/);
   const journal = path.join(
     process.env.LOCALAPPDATA,
-    'ClaudeEUPrivacyDocumentGatewayV32',
+    'SecureDataMsg',
     'companion-jobs',
     job.job_id,
     '000001.json'
@@ -164,7 +164,7 @@ test('the persisted journal contains no raw-data affordances', () => {
   transitionJob(job.job_id, 'Claimed');
   const dir = path.join(
     process.env.LOCALAPPDATA,
-    'ClaudeEUPrivacyDocumentGatewayV32',
+    'SecureDataMsg',
     'companion-jobs',
     job.job_id
   );

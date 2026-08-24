@@ -68,14 +68,14 @@ function readPackage(result) {
 }
 
 function retainedAuditCount() {
-  const dir = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'audit');
+  const dir = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit');
   return fs.existsSync(dir) ? fs.readdirSync(dir).filter((name) => name.endsWith('.json')).length : 0;
 }
 
 async function main() {
   test('startup recovery restores an abandoned hidden claim without overwriting a newer file', () => {
     const input = path.join(root, 'Input');
-    const jobs = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'jobs');
+    const jobs = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'jobs');
     fs.mkdirSync(input, { recursive: true });
     fs.mkdirSync(jobs, { recursive: true });
     const jobId = 'recover_12345678';
@@ -281,7 +281,7 @@ async function main() {
       'audit receipt must contain no content-derived fingerprints'
     );
 
-    const auditDir = path.join(process.env.LOCALAPPDATA, 'ClaudeEUPrivacyDocumentGatewayV32', 'audit');
+    const auditDir = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit');
     const retainedReceipt = fs
       .readdirSync(auditDir)
       .map((name) => JSON.parse(fs.readFileSync(path.join(auditDir, name), 'utf8')))

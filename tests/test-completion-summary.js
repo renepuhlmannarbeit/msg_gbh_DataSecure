@@ -4,9 +4,13 @@ const { createSuite } = require('./helpers');
 const {
   validateSummary,
   completionSummaryText,
+  intakeNoticeText,
+  batchStateNoticeText,
   completionSummaryCommand,
   completionSummaryCommands,
   showCompletionSummary,
+  showLocalIntakeNotice,
+  showBatchStateNotice,
   showTerminalBatchSummary
 } = require('../plugins/data-secure/server/companion/completion-summary');
 
@@ -16,7 +20,8 @@ test('all-success wording contains exactly the three counters and next step', ()
   const result = completionSummaryText({ selected_count: 3, released_count: 3, failed_count: 0 });
   assert.strictEqual(result.title, 'DataSecure – Verarbeitung abgeschlossen');
   assert.match(result.message, /Ausgewählt: 3\r\nErfolgreich vorbereitet: 3\r\nSicher gestoppt: 0/);
-  assert.match(result.message, /Ergebnisse können jetzt in Claude verwendet werden/);
+  assert.match(result.message, /Ergebnisse und Zuordnung wurden lokal gespeichert/);
+  assert.match(result.message, /Nächster Schritt: Schließe diese Meldung/);
 });
 
 test('partial and stopped wording distinguish released from withheld results', () => {
@@ -32,6 +37,46 @@ test('invalid or inconsistent counters fail closed', () => {
   assert.throws(() => validateSummary({ selected_count: 2, released_count: 2, failed_count: 1 }), /Ungültige/);
   assert.throws(() => validateSummary({ selected_count: 101, released_count: 101, failed_count: 0 }), /Ungültige/);
   assert.throws(() => validateSummary({ selected_count: 1, released_count: -1, failed_count: 2 }), /Ungültige/);
+});
+
+test('intake failure notices contain only fixed local wording', () => {
+  const before = intakeNoticeText('before_checkpoint');
+  const after = intakeNoticeText('after_checkpoint');
+  assert.match(before.message, /keine Datei an Claude übertragen/i);
+  assert.match(after.message, /Stapel fortsetzen/i);
+  assert.match(after.message, /Dateiauswahl öffnet sich nicht erneut/i);
+  assert.match(before.message, /DataSecure-Dienst neu/i);
+  assert.doesNotMatch(JSON.stringify({ before, after }), /filename|source|path|hash|token|error/i);
+  assert.throws(() => intakeNoticeText('unexpected'), /Ungültiger/);
+  assert.strictEqual(showLocalIntakeNotice('before_checkpoint', {
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, runner: () => ({ status: 0, stdout: 'SHOWN' })
+  }), true);
+});
+
+test('every resting batch phase has one content-free notice and one next action', () => {
+  const phases = [
+    'awaiting_local_review',
+    'awaiting_explicit_resume',
+    'awaiting_local_mapping_repair',
+    'awaiting_delivery_acknowledgement',
+    'ready_for_next_document',
+    'invalid_local_state'
+  ];
+  for (const batch_phase of phases) {
+    const notice = batchStateNoticeText({ batch_phase, complete: false });
+    assert.strictEqual((notice.message.match(/Nächster Schritt:/gu) || []).length, 1, batch_phase);
+    assert.doesNotMatch(JSON.stringify(notice), /filename|source|path|hash|token|package|content/i);
+    if (batch_phase !== 'invalid_local_state') {
+      assert.match(notice.message, /Dateiauswahl öffnet sich nicht erneut|DataSecure-Dienst/u);
+    }
+  }
+  assert.throws(() => batchStateNoticeText({ batch_phase: 'processing_local_document' }), /Ungültiger/);
+  let shown = 0;
+  assert.strictEqual(showBatchStateNotice({ batch_phase: 'awaiting_explicit_resume', complete: false }, {
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+    runner: () => { shown++; return { status: 0, stdout: 'SHOWN' }; }
+  }), true);
+  assert.strictEqual(shown, 1);
 });
 
 test('Windows command contains only fixed wording and bounded counters', () => {

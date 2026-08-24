@@ -17,7 +17,7 @@ const {
   parseOoxml, MAX_EMBEDDED_DEPTH, MAX_EMBEDDED_DOCUMENTS, MAX_EMBEDDED_BYTES,
   MAX_EMBEDDED_EXPANDED_BYTES
 } = require(path.join(runtime, 'ooxml.js'));
-const { readZip, inspectZipDirectory, ZipError } = require(path.join(runtime, 'zip-reader.js'));
+const { readZip, inspectZipDirectory, inspectZipDirectoryFromFd, ZipError } = require(path.join(runtime, 'zip-reader.js'));
 const { parsePdf } = require(path.join(__dirname, 'helpers', 'legacy-pdf-lite.js'));
 const { encodePng } = require(path.join(runtime, 'images', 'png.js'));
 const pii = require(path.join(runtime, 'pii-engine.js'));
@@ -886,6 +886,25 @@ test('directory-only ZIP preflight reports bounded aggregate metadata without in
   assert.throws(() => inspectZipDirectory(archive, { maxUncompressed: 7 }), (e) => e instanceof ZipError);
 });
 
+test('descriptor-bound ZIP preflight reads only header, tail and central directory', () => {
+  const archive = Buffer.from(zipStore([['a.txt', 'x'.repeat(70 * 1024)], ['folder/b.txt', '5678']]));
+  const file = write('directory-preflight.docx', archive);
+  const descriptor = fs.openSync(file, 'r');
+  const reads = [];
+  try {
+    const result = inspectZipDirectoryFromFd(descriptor, archive.length, { maxUncompressed: 100 * 1024 }, (fd, buffer, offset, length, position) => {
+      reads.push({ fd, length, position });
+      return fs.readSync(fd, buffer, offset, length, position);
+    });
+    assert.deepStrictEqual(result, { entries: 2, files: 2, uncompressed_bytes: 70 * 1024 + 4 });
+    assert.ok(reads.length >= 2);
+    assert.ok(reads.every((read) => read.fd === descriptor));
+    assert.ok(reads.every((read) => read.length < archive.length), 'preflight must not read the entire archive as one buffer');
+  } finally {
+    fs.closeSync(descriptor);
+  }
+});
+
 test('encrypted ZIP entries have a fixed local error code', () => {
   const archive = Buffer.from(zipStore([['a.txt', 'local-only']]));
   const central = archive.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
@@ -1033,7 +1052,10 @@ async function main() {
 
   await testAsync('a corrupt DOCX is reported as a SafeError, not as empty content', async () => {
   const file = write('kaputt.docx', Buffer.from('nicht wirklich ein docx'));
-  await assert.rejects(() => convertDocument(file), (e) => e instanceof SafeError);
+  await assert.rejects(
+    () => convertDocument(file),
+    (e) => e instanceof SafeError && !/nicht wirklich/u.test(e.message)
+  );
 });
 
   try {

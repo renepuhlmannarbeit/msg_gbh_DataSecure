@@ -20,6 +20,8 @@ const mcp=readJson(path.join(pluginRoot,'.mcp.json'));
 assert.ok(mcp['data-secure-local'],'local MCP config missing');
 assert.strictEqual(mcp['data-secure-local'].command,'node');
 assert.deepStrictEqual(mcp['data-secure-local'].args,['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
+assert.strictEqual(mcp['data-secure-local'].env.EU_PRIVACY_ROOT,'',
+  'plugin customization must expose an optional privacy-root field');
 
 const requiredSkills=[
   'gbh-datasecure-dokument-anonymisieren',
@@ -49,15 +51,15 @@ for(const skill of requiredSkills){
 }
 
 const preflight=fs.readFileSync(path.join(pluginRoot,'skills','gbh-datasecure-dokument-anonymisieren','SKILL.md'),'utf8');
-assert.match(preflight,/Fordere sensible Originale \*\*nicht\*\*[^\n]*(?:Chat-Upload|Einfügen)/i);
-assert.match(preflight,/read_anonymized_document/);
-assert.match(preflight,/kein Werkzeug, das Bildpixel an Claude überträgt/i);
-assert.match(preflight,/ausschließlich `package_id` und `read_capability` aus dieser aktuellen Seite/i);
-assert.match(preflight,/list_document_batch_results` mit höchstens zehn Ergebnissen pro Seite/i);
-assert.match(preflight,/start_document_batch_processing` mit demselben `batch_token`/i);
-assert.match(preflight,/begin_document_batch/i);
-assert.match(preflight,/batch_token/i);
-assert.match(preflight,/ursprüngliche Nutzeraufgabe automatisch und ausschließlich/i);
+assert.match(preflight,/Originale nie per Chat-Upload, Einfügen/i);
+assert.match(preflight,/start_completed_local_results_handoff/);
+assert.match(preflight,/continue_local_results_handoff/);
+assert.match(preflight,/cancel_local_results_handoff/);
+assert.match(preflight,/niemals Originalbytes, Dateinamen, Pfade, Bildpixel/i);
+assert.match(preflight,/höchstens fünf verifizierte Markdown-Ergebnisse/i);
+assert.match(preflight,/start_document_batch_from_picker/i);
+assert.match(preflight,/Mit \*\*„Öffnen“\*\* bestätigt/i);
+assert.match(preflight,/Token, Paket-\/Dateikennungen, Cursor und Leseberechtigungen bleiben vollständig im lokalen Server/i);
 for(const profile of ['customer','applicant','personnel_profile','contract','general']){
   assert.match(preflight,new RegExp(`\\b${profile}\\b`),`missing profile guidance for ${profile}`);
 }
@@ -72,7 +74,9 @@ const toolsEnd=indexSource.indexOf('];',toolsStart);
 assert.notStrictEqual(toolsStart,-1,'TOOLS table missing');
 assert.notStrictEqual(toolsEnd,-1,'TOOLS table is unterminated');
 const toolNames=[...indexSource.slice(toolsStart,toolsEnd).matchAll(/\{name:'([a-z_]+)',title:/g)].map(m=>m[1]);
-assert.strictEqual(toolNames.length,20,'unexpected tool count');
+assert.strictEqual(toolNames.length,28,'unexpected tool count');
+assert.ok(toolNames.includes('start_document_batch_from_picker'),'direct picker tool missing');
+assert.ok(toolNames.includes('configure_privacy_folder'),'local privacy-root tool missing');
 assert.ok(!toolNames.includes('anonymize_all_documents'),'a complete multi-file run must not occupy one MCP call');
 assert.ok(!toolNames.includes('anonymize_next_document'),'Claude must not drive the local queue one document at a time');
 assert.ok(!toolNames.includes('approve_visual_asset'),'Claude must not receive a model-callable human approval tool');
@@ -81,7 +85,14 @@ const instructionsStart=indexSource.indexOf('const INSTRUCTIONS=');
 assert.notStrictEqual(instructionsStart,-1,'INSTRUCTIONS missing');
 const instructionSource=indexSource.slice(instructionsStart,toolsStart);
 const agentGuidance=[instructionSource,...skillTexts,...referenceTexts].join('\n');
-const toolInstructionExceptions={};
+const toolInstructionExceptions={
+  continue_anonymized_batch_in_chat:'Support- und Kompatibilitätswerkzeug; der normale Cowork-Folgeweg nutzt die tokenfreie lokale Ergebnisübergabe.',
+  document_batch_status:'Support- und Kompatibilitätswerkzeug; der normale Cowork-Folgeweg bündelt Status und Lesen.',
+  list_document_batch_results:'Support- und Kompatibilitätswerkzeug; der normale Cowork-Folgeweg wählt Ergebnisse intern begrenzt aus.',
+  read_anonymized_documents:'Support- und Kompatibilitätswerkzeug; der normale Cowork-Folgeweg liest höchstens fünf Ergebnisse gebündelt.',
+  acknowledge_batch_documents:'Support- und Kompatibilitätswerkzeug; lokale Verarbeitung und der normale Folgeweg benötigen keine Bestätigung.',
+  resume_document_batch:'Support- und Kompatibilitätswerkzeug; der normale Fortsetzen-Aufruf übernimmt die technische Wiederaufnahme selbst.'
+};
 for(const [name,reason] of Object.entries(toolInstructionExceptions)){
   assert.ok(reason.trim().length>=20,`${name} exception needs a concrete reason`);
 }

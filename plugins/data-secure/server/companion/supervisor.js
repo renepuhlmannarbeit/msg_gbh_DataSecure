@@ -90,8 +90,11 @@ function launchCompanion(options = {}) {
     clearTimeout(item.timer);
     if (message.type === 'result') item.resolve(message.result);
     else {
-      const error = new SafeError(String(message.message || 'Companion-Anfrage wurde abgewiesen.'));
-      error.code = typeof message.code === 'string' ? message.code : 'REQUEST_REJECTED';
+      const selectionCancelled = message.code === 'LOCAL_SELECTION_CANCELLED';
+      const error = new SafeError(selectionCancelled
+        ? 'Die lokale Dateiauswahl wurde abgebrochen.'
+        : 'Die lokale Companion-Anfrage wurde sicher abgewiesen.');
+      error.code = selectionCancelled ? 'LOCAL_SELECTION_CANCELLED' : 'REQUEST_REJECTED';
       item.reject(error);
     }
   }

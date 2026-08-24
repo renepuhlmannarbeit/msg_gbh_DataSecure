@@ -83,7 +83,7 @@ for (const id of collect(traceText, /\b(BL-\d{3})\b/g)) {
 for (const file of required.slice(1)) {
   if (!indexText.includes(`(${file})`)) throw new Error(`canonical index does not link ${file}`);
 }
-for (const token of ['Ist-Zustand RC30', '100 Dateien', '500 MB', 'Windows', 'macOS', 'Linux']) {
+for (const token of ['Ist-Zustand RC30', '100 Dateien', '500 MiB', 'Windows', 'macOS', 'Linux']) {
   if (!productText.includes(token)) throw new Error(`canonical product is missing: ${token}`);
 }
 if (target.reuse_policy?.open_source_first !== true ||
