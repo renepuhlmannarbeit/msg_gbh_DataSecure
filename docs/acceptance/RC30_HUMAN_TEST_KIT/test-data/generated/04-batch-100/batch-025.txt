@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 25
+Name: Testperson 25
+E-Mail: batch-025@privacy-example.test
+Telefon: +49 30 70000025
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 25 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

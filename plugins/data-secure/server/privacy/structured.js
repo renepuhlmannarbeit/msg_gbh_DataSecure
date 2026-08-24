@@ -2,6 +2,7 @@
 
 const {
   EMAIL_RE,
+  CONTACT_URI_RE,
   PHONE_RE,
   PHONE_LABEL_RE,
   FRENCH_PHONE_RE,
@@ -39,6 +40,12 @@ const POSTAL_QUANTITY_RE = /^\d{5}[ \t]+(?:Euro|EUR|Stück|Stueck|Punkte|Stunden
 // 11-digit tax id, and every phone shape without a label), so those documents
 // could never pass the gate no matter how often they were processed.
 const DETECTORS = [
+  {
+    type: 'CONTACT_URI',
+    re: CONTACT_URI_RE,
+    placeholder: '[CONTACT_REDACTED]',
+    priority: 91
+  },
   {
     type: 'EMAIL',
     re: EMAIL_RE,

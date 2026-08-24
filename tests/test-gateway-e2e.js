@@ -387,6 +387,27 @@ async function main() {
     assert.strictEqual(fs.existsSync(source), false, 'released CSV is claimed from Input only after the allowlist gate');
   });
 
+  await testAsync('contact URI formulas in a CSV remain inert while their visible PII is anonymized end to end', async () => {
+    const source = queueBuffer(
+      'released-contact-formulas.csv',
+      Buffer.from([
+        'Kontakt',
+        '"=HYPERLINK(""mailto:max.mustermann@example.de"",""Max Mustermann"")"',
+        '"=HYPERLINK(""mailto:erika%2Ebeispiel%40example%2Ede"",""Erika Beispiel"")"',
+        '"=HYPERLINK(""tel:+49 170 1234567"",""Erika Beispiel"")"',
+        '"=HYPERLINK(""sip:jana.beispiel%40example%2Ede"",""Jana Beispiel"")"'
+      ].join('\n'), 'utf8')
+    );
+    const result = await gw.anonymizeNext('personnel_profile', depsFor('none'));
+    assert.strictEqual(result.ok, true);
+    const { markdown } = readPackage(result);
+    for (const value of ['Max Mustermann', 'max.mustermann@example.de', 'erika%2Ebeispiel%40example%2Ede', 'Erika Beispiel', '+49 170 1234567', 'Jana Beispiel', 'jana.beispiel%40example%2Ede']) {
+      assertAbsent(markdown, value, 'CSV formula contact PII');
+    }
+    assertPresent(markdown, '=HYPERLINK(', 'inert CSV formula source');
+    assert.strictEqual(fs.existsSync(source), false, 'released formula CSV is claimed only after privacy verification');
+  });
+
   await testAsync('every recognised but unreleased non-PDF format stops before any claim or package', async () => {
     const outputDir = path.join(root, 'Output');
     const processedDir = path.join(root, 'Processed');

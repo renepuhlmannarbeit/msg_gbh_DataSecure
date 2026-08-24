@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 67
+Name: Testperson 67
+E-Mail: batch-067@privacy-example.test
+Telefon: +49 30 70000067
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 67 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

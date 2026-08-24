@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 84
+Name: Testperson 84
+E-Mail: batch-084@privacy-example.test
+Telefon: +49 30 70000084
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 84 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

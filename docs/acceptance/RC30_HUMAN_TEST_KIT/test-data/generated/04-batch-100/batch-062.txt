@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 62
+Name: Testperson 62
+E-Mail: batch-062@privacy-example.test
+Telefon: +49 30 70000062
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 62 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

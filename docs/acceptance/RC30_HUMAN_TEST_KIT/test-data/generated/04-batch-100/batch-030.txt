@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 30
+Name: Testperson 30
+E-Mail: batch-030@privacy-example.test
+Telefon: +49 30 70000030
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 30 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

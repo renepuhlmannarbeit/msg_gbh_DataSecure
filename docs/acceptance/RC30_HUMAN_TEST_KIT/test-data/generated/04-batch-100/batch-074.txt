@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 74
+Name: Testperson 74
+E-Mail: batch-074@privacy-example.test
+Telefon: +49 30 70000074
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 74 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

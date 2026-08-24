@@ -15,13 +15,15 @@ function csvField(value) {
   let text = String(value ?? '');
   // Spreadsheet programs must not interpret a filename or a package id as a
   // formula when the user opens the local mapping.
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  // Excel and similar tools may ignore leading whitespace (including a BOM)
+  // before evaluating a formula. Treat those prefixes as formula-significant too.
+  if (/^[\s\uFEFF]*[=+\-@]/u.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function mappingPath() { return path.join(roots().exports, 'DataSecure-Mapping.csv'); }
+function mappingPath(options = {}) { return path.join((options.roots || roots)().exports, 'DataSecure-Mapping.csv'); }
 
-function appendMapping(originalName, packageId, status = RELEASED) {
+function appendMapping(originalName, packageId, status = RELEASED, options = {}) {
   const name = String(originalName);
   const result = String(packageId ?? '');
   const state = String(status);
@@ -33,9 +35,18 @@ function appendMapping(originalName, packageId, status = RELEASED) {
   if (path.basename(name) !== name || !(validReleased || validStopped)) {
     throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
   }
-  const target = mappingPath();
+  const io = options.fs || fs;
+  const target = mappingPath(options);
   let previous = '';
-  try { previous = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : ''; }
+  try {
+    const parent = io.lstatSync(path.dirname(target));
+    if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('unsafe mapping directory');
+    if (io.existsSync(target)) {
+      const existing = io.lstatSync(target);
+      if (!existing.isFile() || existing.isSymbolicLink()) throw new Error('unsafe mapping file');
+      previous = io.readFileSync(target, 'utf8');
+    }
+  }
   catch { throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher gelesen werden.'); }
   if (previous && !previous.startsWith(HEADER)) {
     throw new SafeError('Der lokale Zuordnungsexport hat ein ungültiges Format.');
@@ -49,11 +60,11 @@ function appendMapping(originalName, packageId, status = RELEASED) {
   const next = (previous || HEADER) + row;
   const temporary = `${target}.tmp_${crypto.randomBytes(6).toString('hex')}`;
   try {
-    fs.writeFileSync(temporary, next, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    fs.renameSync(temporary, target);
+    io.writeFileSync(temporary, next, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    io.renameSync(temporary, target);
     return true;
   } catch {
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch { /* no broader cleanup */ }
+    try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch { /* no broader cleanup */ }
     throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
   }
 }

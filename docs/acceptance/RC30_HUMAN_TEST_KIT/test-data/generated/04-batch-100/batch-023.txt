@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 23
+Name: Testperson 23
+E-Mail: batch-023@privacy-example.test
+Telefon: +49 30 70000023
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 23 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

@@ -282,6 +282,16 @@ function collectPersonAnchors(text) {
   );
   while ((m = credentialHolder.exec(src))) pushPerson(out, m[1], 'credential_holder');
 
+  // CSV is deliberately rendered as inert Markdown. A spreadsheet-style
+  // Contact-URI formulas can nevertheless carry a separately visible contact name;
+  // the address and display name must both remain eligible for redaction.
+  const contactFormulaHolder = new RegExp(
+    `(?:mailto|tel|sms|callto|sip|xmpp):[^"')\\s]+[^\\n]{0,200}?["']` +
+      `((?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,2})["']`,
+    'giu'
+  );
+  while ((m = contactFormulaHolder.exec(src))) pushPerson(out, m[1], 'label');
+
   // A standalone all-caps line in a profile header is the person's name.
   const capsLine = new RegExp(`^${CAPS_TOKEN}(?:\\s+${CAPS_TOKEN}){1,3}$`, 'u');
   for (const line of lines(src)) {

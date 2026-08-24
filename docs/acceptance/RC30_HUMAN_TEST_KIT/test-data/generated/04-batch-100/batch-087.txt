@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 87
+Name: Testperson 87
+E-Mail: batch-087@privacy-example.test
+Telefon: +49 30 70000087
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 87 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

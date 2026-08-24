@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 49
+Name: Testperson 49
+E-Mail: batch-049@privacy-example.test
+Telefon: +49 30 70000049
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 49 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

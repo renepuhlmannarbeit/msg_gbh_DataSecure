@@ -21,10 +21,18 @@ Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
    ausdrücklich nicht als Runtime-Freigabe verwendbarer Zielvertrag.
 7. [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – verbindliches
    Wiederverwendungsregister mit Kandidaten, Ausschlüssen und Prüfgates.
-8. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) – abgeschlossene
+8. [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) – pro aktiver Story
+   klare Trennung zwischen lokaler Entwicklung und erforderlicher Zielsystem-, Nutzungs-
+   oder Fachevidenz.
+9. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) – abgeschlossene
    Stories mit kompaktem Abschlussnachweis; nicht als aktive Arbeitsliste verwenden.
-9. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben RC30 oder
+10. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben RC30 oder
    liefern Detailwissen, sind aber nicht entscheidungsführend.
+
+Für die tatsächlich erforderlichen menschlichen Nachweise gibt es zusätzlich den
+vollständig synthetischen, nicht kanonischen
+[`RC30_HUMAN_TEST_KIT`](../acceptance/RC30_HUMAN_TEST_KIT/README.md). Seine Ergebnisse
+werden erst durch die Evidence-Matrix und die dort benannten Rollen entscheidungsfähig.
 
 Bei einem Widerspruch gilt die höher stehende Quelle. Eine neue Entscheidung erhält
 eine neue `DS-nnn`-ID. Bestehende Entscheidungen werden nicht still editiert:

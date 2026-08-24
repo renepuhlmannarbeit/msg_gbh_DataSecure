@@ -8,6 +8,9 @@ Teilnachweise stehen im [Ist-Abgleich](CURRENT_STATE.md) und in der
 [Traceability](TRACEABILITY.md). Ein Pilot, lokaler Test oder einzelnes OS ist keine
 Produktfreigabe. **P0** blockiert einen universellen Release.
 
+Die [Evidence-Matrix](BACKLOG_EVIDENCE_MATRIX.md) markiert für jede aktive Story,
+ob und welche reale Zielsystem-, Nutzungs- oder Fachevidenz erforderlich ist.
+
 Definition of Done: Code, Tests, `BACKLOG.md`, `CURRENT_STATE.md` und
 `TRACEABILITY.md` werden gemeinsam aktualisiert. Erst danach kann eine Story in das
 Archiv verschoben werden.
@@ -80,9 +83,7 @@ DS-038, DS-039.
 | BL-010.2 | Windows-Paket liefern. | **offen** |
 | BL-010.3 | macOS-Paket liefern. | **offen** |
 | BL-010.4 | Linux-Paket liefern. | **offen** |
-| BL-010.5 | ZIP-/Marketplace-Gleichheit belegen. | **offen** |
 | BL-010.6 | Versionsarchiv und Rückrolle testen. | **offen** |
-| BL-050.2 | Mindestens 1.000 dokumentartige Fixtures mit den Qualitätsgates liefern. | **in Arbeit** |
 | BL-051.1 | Frische ZIP-Installation auf drei OS abnehmen. | **offen** |
 | BL-051.2 | Marketplace-Installation auf drei OS abnehmen. | **offen** |
 | BL-051.3 | 100-Dateien-/500-MB-End-to-End-Abnahme durchführen. | **offen** |

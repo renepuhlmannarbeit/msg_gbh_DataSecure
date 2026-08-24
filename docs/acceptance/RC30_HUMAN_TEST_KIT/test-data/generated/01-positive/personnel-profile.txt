@@ -1,0 +1,14 @@
+# Mitarbeiterprofil – vollständig synthetisch
+
+Name: Lina Testfeld
+E-Mail: lina.testfeld@privacy-example.test
+Telefon: +49 221 555 0182
+IBAN: DE89 3704 0044 0532 0130 00
+Arbeitgeber: Nordstern Medizin IT GmbH
+Kunde: Falken Klinikverbund AG
+Rolle: Product Owner
+Technologien: Java, SQL, HL7 FHIR, Testautomatisierung
+Zertifizierungen:
+- ISTQB Certified Tester Foundation Level
+- Scrum.org Professional Scrum Master II (PSM II)
+Leistungsinhalt: Qualitätsgesicherte Weiterentwicklung eines klinischen Terminservices.

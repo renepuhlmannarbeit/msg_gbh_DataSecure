@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 43
+Name: Testperson 43
+E-Mail: batch-043@privacy-example.test
+Telefon: +49 30 70000043
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 43 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

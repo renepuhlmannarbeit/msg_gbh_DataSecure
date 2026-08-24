@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 1
+Name: Testperson 1
+E-Mail: batch-001@privacy-example.test
+Telefon: +49 30 70000001
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 1 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

@@ -58,6 +58,34 @@ test('PII in headers and cells remains visible to the normal de-identification p
   assertPresent(anonymized, '# Tabelleninhalt', 'table heading');
 });
 
+test('formula-looking CSV text is inert but still passes through de-identification', () => {
+  const parsed = parseDocumentBuffer(Buffer.from([
+    'Wert',
+    '"=HYPERLINK(\"\"mailto:max.mustermann@example.de\"\",\"\"Max Mustermann\"\")"',
+    '"=HYPERLINK(\"\"mailto:erika%2Ebeispiel%40example%2Ede\"\",\"\"Erika Beispiel\"\")"',
+    '"=HYPERLINK(\"\"tel:+49 170 1234567\"\",\"\"Erika Beispiel\"\")"',
+    '"=HYPERLINK(\"\"sms:+49 160 7654321\"\",\"\"Maria Muster\"\")"',
+    '"=HYPERLINK(\"\"callto:+49 30 123456\"\",\"\"Klaus Beispiel\"\")"',
+    '"=HYPERLINK(\"\"sip:jana.beispiel%40example%2Ede\"\",\"\"Jana Beispiel\"\")"',
+    '"=HYPERLINK(\"\"xmpp:leon.muster%40example%2Ede\"\",\"\"Leon Muster\"\")"'
+  ].join('\n')), '.csv');
+  const anonymized = pii.anonymize(parsed.markdown, 'personnel_profile').text;
+  assertAbsent(anonymized, 'Max Mustermann', 'formula-looking CSV person');
+  assertAbsent(anonymized, 'max.mustermann@example.de', 'formula-looking CSV email');
+  assertAbsent(anonymized, 'erika%2Ebeispiel%40example%2Ede', 'percent-encoded CSV email');
+  assertAbsent(anonymized, 'Erika Beispiel', 'formula-looking CSV phone-contact person');
+  assertAbsent(anonymized, '+49 170 1234567', 'formula-looking CSV phone');
+  assertAbsent(anonymized, 'Maria Muster', 'formula-looking CSV SMS-contact person');
+  assertAbsent(anonymized, '+49 160 7654321', 'formula-looking CSV SMS phone');
+  assertAbsent(anonymized, 'Klaus Beispiel', 'formula-looking CSV callto-contact person');
+  assertAbsent(anonymized, '+49 30 123456', 'formula-looking CSV callto phone');
+  assertAbsent(anonymized, 'Jana Beispiel', 'formula-looking CSV SIP-contact person');
+  assertAbsent(anonymized, 'jana.beispiel%40example%2Ede', 'formula-looking CSV SIP address');
+  assertAbsent(anonymized, 'Leon Muster', 'formula-looking CSV XMPP-contact person');
+  assertAbsent(anonymized, 'leon.muster%40example%2Ede', 'formula-looking CSV XMPP address');
+  assertPresent(anonymized, '=HYPERLINK(', 'formula-looking CSV stays literal source');
+});
+
 test('UTF-8 decoding and graph coverage are shared with text sources', () => {
   assert.throws(() => parseDocumentBuffer(Buffer.from([0xC3, 0x28]), '.csv'), /TEXT_ENCODING_INVALID/);
   const parsed = parseDocumentBuffer(Buffer.from('A,B\r\nÄrger,Übung'), '.csv');

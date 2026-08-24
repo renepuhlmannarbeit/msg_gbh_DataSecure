@@ -40,7 +40,8 @@ Rest: nur laufende Vertragspflege bei jeder Capability-Änderung.
 
 ## BL-010 – Plattformpakete
 
-Status: **teilweise**
+Status: **BL-050.1 und BL-050.2 abgeschlossen; weitere Format- und
+Angriffsausweitung bleibt in ihren jeweiligen Freigabe-Stories offen**
 
 Vorhanden: Plugin-ZIP und MCPB, bytegenaue Paketparität, Windows-x64-Launcher sowie
 Dateiauswahladapter für Windows, macOS und Linux. Rest: automatische OS-Paketwahl,
@@ -377,6 +378,9 @@ literal Markdown, PII in horizontalen Tabellen, UTF-8/Graph und große Tabellen 
 Der lokale Parser erzeugt nur Markdown, niemals ein Spreadsheet. Gateway- und Companion-End-to-End-
 Tests belegen für `.md` und `.csv` denselben isolierten Privacy-Paketpfad wie für TXT; externe Markdown-
 Referenzen werden nicht geladen, CSV-Zellen nie ausgeführt, sondern jeweils als Text geprüft. Alle weiteren
+Ein formelähnliches `mailto:`, `tel:`, `sms:`- oder `callto:`-Feld bleibt ebenfalls inert,
+enthält aber weiterhin erkennbare Kontaktwerte: Adresse oder Nummer und sichtbarer Personenname werden
+gemeinsam de-identifiziert.
 nicht freigegebenen Formate stoppen vor Claim, Output und Reviewkopie. Papa Parse
 5.5.3 ist als exakt gelocktes reines Testorakel eingebunden und vergleicht 180
 eindeutige CSV-Dialekt-/Quote-Fälle. Rest: praktische MD-/CSV-Drei-OS-Abnahme.
@@ -598,6 +602,9 @@ Quellbaums. Sein Herkunftsnachweis bindet Workflow-Lauf `32597783210`, Commit
 Der normale Plugin-ZIP und der Marketplace verwenden damit dieselben Runtime-Bytes;
 der Paketierungs-Checkpoint `75da6c5` besaß 320 Einträge, 22.033.607 Bytes und
 bestand Quellparität, vollständige Runtime-Hashprüfung und Modusprüfung. Der
+reproduzierte RC30-Build bestätigt diese Gleichheit erneut mit 334 ZIP-Einträgen;
+damit ist BL-010.5 abgeschlossen. Eine frische Marketplace-Installation ist davon
+getrennt und bleibt in BL-051.2 offen.
 deterministische ZIP-Writer
 normalisiert reguläre Dateien auf `0644` und setzt nur die drei POSIX-Launcher auf
 `0755`. Der vorgesehene GitHub-Lauf `32598196806` konnte wegen eines externen
@@ -664,7 +671,7 @@ Status: **teilweise**
 Vorhanden: versionierter lokaler Zertifikatskatalog, fundstellenbezogene
 Kontextregeln, Ambiguitäten und umfangreiche Regressionen für IT-/Health-IT-Begriffe,
 Aussteller, Arbeitgeber, Kunden und Vertragsparteien. Verifizierte lokale
-HTTPS-Quellen liegen für ISTQB, Scrum.org, Scaled Agile, IIBA, HIMSS, The Open Group,
+HTTPS-Quellen liegen für ISTQB, IREB, UXQB, Scrum.org, Scrum Alliance, Scaled Agile, Kanban University, IIBA, PeopleCert, HIMSS, The Open Group,
 Microsoft, AWS, Google Cloud, Cisco, ISACA, ISC2, Linux Foundation, CNCF, PMI, Red
 Hat, SAP und HL7 vor. Sie werden ausschließlich lokal als Erkennungshinweise
 verwendet, nicht zur Laufzeit abgefragt und enthalten weder Prüfdaten noch eine
@@ -719,6 +726,24 @@ atomare UTF-8-Mapping-CSV sowie einen geschlossenen, inhaltsfreien JSON-
 Batch-Nachweis. Ergebnis-Pakete erhalten neutrale kollisionssichere Namen;
 Mapping und Nachweis sind technisch außerhalb aller MCP-Lesetools. Die Entscheidung
 für einen festen Ort statt einer wechselnden Ordnerwahl reduziert Fehlablagen.
+Der MCP-Lesepfad akzeptiert außerdem nur ein Version-2-Manifest mit exakt der
+paketgebundenen neutralen Markdown-Datei und einer vollständigen SHA-256-Bindung.
+Freigegebene Bildanlagen benötigen ebenso eine neutrale `asset-NNN`-ID, den
+kanonischen PNG-Namen und eine vollständige Prüfsumme. Ein lokal manipuliertes
+Manifest kann damit keinen Originalnamen oder eine ungeprüfte Datei als
+`document_id` oder Bildanlage an Claude binden. Auch die lokale Paketauflistung
+verwirft Manifeste ohne kanonisches Profil und Zeitformat statt unkontrollierte
+Metadaten auszugeben.
+
+CSV-Formeln bleiben als Text inert. Kontakt-URIs darin werden dennoch als direkte
+Identifikatoren entfernt, auch wenn Mail-, SIP- oder XMPP-Adressen URL-kodiert
+vorliegen; sichtbare Kontaktpersonen durchlaufen denselben Personen- und
+Residual-Gate wie Klartext.
+
+Vor der Claude-Lektüre werden veröffentlichte Markdown-Dateien und Bildanlagen über
+einen einzigen, nicht umleitbaren Dateideskriptor gelesen und gegen dieselbe
+Prüfsumme verifiziert. Ein Austausch zwischen Prüfung und Inhaltslesen wird damit
+sicher gestoppt statt einen anderen Pfad erneut aufzulösen.
 
 ## BL-041 – Claude-Aufgabe fortsetzen
 
@@ -839,9 +864,13 @@ Entfernung/Erhalt über TXT, Markdown, CSV und DOCX für deutsche, englische,
 französische, spanische und niederländische Personalprofilbeschriftungen sowie
 17 weitere deterministische Varianten direkter Identifikatoren. Jede Zelle der
 Matrix durchläuft den echten lokalen Gateway-Pfad, nicht bloß eine Metadatenprüfung.
-Parser-/Visual-/Security-Tests und ein messender Detektorbenchmark ergänzen sie. Rest: mindestens
-1.000 dokumentartige Fixtures über alle Zielformate, Layouts, Sprachen und Angriffe
-sowie die verbindliche Null-Miss-/99-%-Erhaltungsmetrik.
+Parser-/Visual-/Security-Tests und ein messender Detektorbenchmark ergänzen sie.
+Damit ist BL-050.2 erfüllt: die zwei eigenständigen 1.000er-Korpora übertreffen
+die verlangte Mindestmenge, haben versionierte Ground Truth und werden direkt
+gegen Null-Miss-, Null-Zusatzredaktions- und 99-%-Erhaltungsgates ausgeführt.
+Eine spätere Erweiterung um noch gesperrte Container, weitere Sprachen, Layouts
+oder Angriffsklassen ist keine stillschweigende Formatfreigabe; sie bleibt an
+den jeweiligen Format- und Sicherheitsstories gebunden.
 
 Ergänzend deckt ein permanenter 2.000-Fall-Sweep acht Markdown-Strukturen und
 variierte synthetische Namen, Unternehmen, Zertifikate, deutsche IBANs und

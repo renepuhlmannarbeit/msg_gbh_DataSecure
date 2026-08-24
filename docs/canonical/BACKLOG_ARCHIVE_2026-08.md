@@ -1,6 +1,6 @@
 # Backlog-Archiv – August 2026
 
-Stand: 23.08.2026 · archiviert nach Product-Owner-Abgleich mit
+Stand: 24.08.2026 · archiviert nach Product-Owner-Abgleich mit
 `CURRENT_STATE.md`, `TRACEABILITY.md` und der lokalen Testsuite.
 
 Dieses Archiv enthält ausschließlich Stories, deren Definition of Done im
@@ -15,6 +15,7 @@ Formate, Plattformen oder Cowork-Oberflächen. Laufende Teilnachweise bleiben im
 | BL-002.1 | RC30-Istmanifest vollständig und gegen Runtime geprüft | `BUILD_INFO.json`, Manifest- und Runtime-Tests |
 | BL-002.2 | Maschinenlesbarer, strikt vom Ist getrennter Zielvertrag | `TARGET_CAPABILITIES.json`, Contract-Test |
 | BL-002.3 | Fähigkeitsdrift zwischen Runtime, Skills, Marketplace und Handbüchern blockiert | `test-capability-contract.js` |
+| BL-010.5 | ZIP-/Marketplace-Quellgleichheit belegt | `build-plugin.mjs`, `verify-plugin-zip.mjs`, `test-plugin-structure.js`; frische Marketplace-Installation bleibt separat BL-051.2 |
 | BL-011.1 | Unveränderlicher privater Stapel-Snapshot spezifiziert | `contracts/BATCH_SNAPSHOT_V1.md` |
 | BL-011.2 | 100-Dateien-/500-MB-Grenze vor privater Kopie durchgesetzt | `test-batch-session.js` |
 | BL-011.4 | Checkpoints und explizite Wiederaufnahme ohne Quellwiederholung | `gateway/batch.js`, Batch-Tests |
@@ -26,8 +27,10 @@ Formate, Plattformen oder Cowork-Oberflächen. Laufende Teilnachweise bleiben im
 | BL-040.1 | Lokaler Exportort, neutrale Namen und Kollisionsschutz | Mapping-/Batch-Tests |
 | BL-040.2 | MCP-unsichtbare, formelsichere UTF-8-Mapping-CSV | Mapping-/Batch-Tests |
 | BL-040.3 | Stapelweiter, inhaltsfreier JSON-Nachweis | `contracts/BATCH_EVIDENCE_V1.md` |
+| BL-040.4 | Manipulationsfeste, neutrale Paket- und Assetbindung im MCP-Lesepfad | `package-store.js`, `test-package-read-capabilities.js` |
 | BL-042.1 | Bestätigungspflichtiger lokaler Diagnoseexport | `test-diagnostics.js` |
 | BL-050.1 | Korpus-Schema und Qualitätsmetriken festgeschrieben | `benchmarks/CORPUS_CONTRACT_V1.json` |
+| BL-050.2 | Mindestens 1.000 dokumentartige synthetische Fixtures mit Qualitätsgates geliefert | Zwei deterministische 1.000er-Korpora, `test-corpus-contract.js`, `test-detector-benchmark.js`, `test-format-acceptance-matrix.js`, `exploratory-anonymization-2000.js`; gesperrte Formate bleiben ausdrücklich eigene Stories |
 | BL-051.7 | Kostenbegrenzte GitHub-Actions-Policy implementiert | `test-workflow-budget.js` |
 
 Geschlossene Epics: **BL-001**, **BL-002** und **BL-040**. Ihre laufende

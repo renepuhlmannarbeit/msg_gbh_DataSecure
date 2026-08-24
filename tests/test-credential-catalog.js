@@ -90,8 +90,12 @@ test('reference URLs are optional and accepted only as explicitly verified HTTPS
 test('verified sources are local catalog metadata, never a runtime lookup', () => {
   const sources = {
     istqb: 'https://www.istqb.org/certifications/',
+    ireb: 'https://cpre.ireb.org/en',
+    uxqb: 'https://www.uxqb.org/',
+    'scrum-alliance': 'https://www.scrumalliance.org/get-certified',
     'scrum-org': 'https://www.scrum.org/professional-scrum-certifications',
     'scaled-agile': 'https://scaledagile.com/certification/',
+    'kanban-university': 'https://kanban.university/about-kanban-university/',
     iiba: 'https://www.iiba.org/business-analysis-certifications/iiba-certifications/',
     himss: 'https://www.himss.org/certifications/',
     'open-group': 'https://www.opengroup.org/certifications/accredited-certification-program-home-page',
@@ -104,6 +108,7 @@ test('verified sources are local catalog metadata, never a runtime lookup', () =
     'linux-foundation': 'https://training.linuxfoundation.org/certification-catalog/',
     cncf: 'https://training.linuxfoundation.org/certification-catalog/',
     pmi: 'https://www.pmi.org/certifications',
+    peoplecert: 'https://www.peoplecert.org/Organizations/Certifications',
     'red-hat': 'https://www.redhat.com/en/services/certifications',
     sap: 'https://learning.sap.com/get-certified',
     hl7: 'https://info.hl7.org/hubfs/Education/Path%20to%20HL7%20Certification.pdf'
@@ -117,6 +122,8 @@ test('verified sources are local catalog metadata, never a runtime lookup', () =
   assert.ok(compileCatalogMatchers(catalog).code.test('TOGAF Enterprise Architecture Practitioner'));
   assert.ok(compileCatalogMatchers(catalog).code.test('SAFe Scrum Master (SSM)'));
   assert.ok(compileCatalogMatchers(catalog).code.test('SAFe Product Owner/Product Manager (POPM)'));
+  assert.ok(compileCatalogMatchers(catalog).code.test('Certified ScrumMaster (CSM)'));
+  assert.ok(compileCatalogMatchers(catalog).code.test('PRINCE2 Foundation'));
 });
 
 test('aliases are compiled as literals rather than executable regular expressions', () => {

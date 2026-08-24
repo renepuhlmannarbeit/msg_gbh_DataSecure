@@ -44,6 +44,15 @@ const EMAIL_RE = new RegExp(
   'giu'
 );
 
+// Contact URIs are direct identifiers even when their payload is percent-
+// encoded (for example mailto:max%2Emuster%40example%2Ede). The ordinary
+// mail and telephone matchers operate on human-readable text; this bounded
+// URI shape closes that encoding bypass without decoding or evaluating input.
+const CONTACT_URI_RE = new RegExp(
+  `${NB}(?:mailto|tel|sms|callto|sip|xmpp):[A-Za-z0-9%+._~:/?&=\\-]+`,
+  'giu'
+);
+
 // Every detector below is deliberately line-local: `\s` also matches a newline,
 // and a pattern that may cross one stops being a detector and becomes a way to
 // swallow the following paragraph. A postal address written with `\s+` matched
@@ -364,6 +373,7 @@ module.exports = {
   COMPANY_RE,
   URL_RE,
   EMAIL_RE,
+  CONTACT_URI_RE,
   PHONE_RE,
   PHONE_LABEL_RE,
   FRENCH_PHONE_RE,

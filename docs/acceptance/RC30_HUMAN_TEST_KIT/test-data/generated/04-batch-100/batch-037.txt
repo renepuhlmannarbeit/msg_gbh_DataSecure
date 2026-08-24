@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 37
+Name: Testperson 37
+E-Mail: batch-037@privacy-example.test
+Telefon: +49 30 70000037
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 37 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

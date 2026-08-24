@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 46
+Name: Testperson 46
+E-Mail: batch-046@privacy-example.test
+Telefon: +49 30 70000046
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 46 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

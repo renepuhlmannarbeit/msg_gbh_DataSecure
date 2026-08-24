@@ -6,6 +6,12 @@ Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichk
 Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC30 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
+Die wiederverwendbaren, vollständig synthetischen Testdokumente, der gruppierte
+Schritt-für-Schritt-Ablauf und die inhaltsfreie Evidence-Vorlage stehen im
+[`acceptance/RC30_HUMAN_TEST_KIT`](acceptance/RC30_HUMAN_TEST_KIT/README.md).
+Die dortigen Test-IDs sind diesem Handbuch zugeordnet; der Testkit ersetzt keine
+hier verlangte Rolle oder Freigabe.
+
 ## 1. Rollen und Nachweise
 
 - **Durchführung:** IT/Testverantwortliche auf einem frischen Windows-Testkonto und

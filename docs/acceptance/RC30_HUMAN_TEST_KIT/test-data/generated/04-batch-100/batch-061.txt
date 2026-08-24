@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 61
+Name: Testperson 61
+E-Mail: batch-061@privacy-example.test
+Telefon: +49 30 70000061
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 61 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

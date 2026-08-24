@@ -1,0 +1,10 @@
+# Zertifikatsnachweis – vollständig synthetisch
+
+Name: Mara Beispiel
+E-Mail: mara.beispiel@privacy-example.test
+Organisation: Nordstern Akademie GmbH
+Zertifizierung: Nordstern Akademie GmbH Certified Healthcare Product Owner
+Rolle: Product Owner
+
+Die Organisation kann im Kontext Zertifikatsanbieter oder Arbeitgeber sein. Der Test
+erwartet eine sichere lokale Entscheidung oder einen dokumentierten sicheren Stopp.

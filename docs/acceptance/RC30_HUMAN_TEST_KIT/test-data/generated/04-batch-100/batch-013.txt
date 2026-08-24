@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 13
+Name: Testperson 13
+E-Mail: batch-013@privacy-example.test
+Telefon: +49 30 70000013
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 13 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.

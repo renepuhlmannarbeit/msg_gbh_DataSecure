@@ -1,0 +1,9 @@
+# Synthetischer Batchfall 14
+Name: Testperson 14
+E-Mail: batch-014@privacy-example.test
+Telefon: +49 30 70000014
+IBAN: DE89 3704 0044 0532 0130 00
+Kunde: Testfirma 14 GmbH
+Rolle: Testmanager
+Zertifizierung: ISTQB Certified Tester Foundation Level
+Fachlicher Kontext: Testautomatisierung und HL7 FHIR bleiben erhalten.
