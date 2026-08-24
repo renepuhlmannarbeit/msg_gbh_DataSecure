@@ -325,6 +325,21 @@ async function main() {
     assert.match(JSON.stringify(observed.args), /MANUAL_REDACTION/);
   });
 
+  await testAsync('a native review timeout is reported with a fixed content-free code', async () => {
+    const draft = buildReviewDraft('Kontakt: Max Mustermann', 'Kontakt: [PERSON_001]', 'customer');
+    let caught;
+    try {
+      reviewTextLocally(draft, {
+        platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+        runner: () => ({ error: { code: 'ETIMEDOUT', message: 'Max Mustermann timed out' }, status: null })
+      });
+    } catch (error) {
+      caught = error;
+    }
+    assert.strictEqual(caught?.code, 'LOCAL_REVIEW_TIMEOUT');
+    assert.doesNotMatch(String(caught?.message || ''), /Mustermann/u);
+  });
+
   await testAsync('the macOS reviewer receives ambiguity text only on stdin and returns bounded decisions', async () => {
     const value = 'Scrum.org Professional Scrum Master I';
     const draft = buildReviewDraft(value, value, 'personnel_profile', [{

@@ -75,10 +75,11 @@ lokal, sofern der Anwender ihre Entfernung oder Verwendung nicht ausdrücklich v
    Web, Mobil und geplante Cloud-Aufgaben dürfen nur bereits lokal freigegebene
    Ergebnisse erhalten.
 
-10. **Kleine Normaloberfläche:** Standardmäßig sind genau neun Werkzeuge sichtbar:
+10. **Kleine Normaloberfläche:** Standardmäßig sind genau acht Werkzeuge sichtbar:
     Picker, lokale Ergebnisübergabe und deren Abbruch/Fortsetzung, offene Stapel
-    fortsetzen/verwerfen/reviewen, Privacy-Ordner konfigurieren und Exportordner
-    öffnen. Die vollständigen 28 Werkzeuge sind nur im bewusst aktivierten
+    fortsetzen/verwerfen, Privacy-Ordner konfigurieren und Exportordner öffnen.
+    Die Fortsetzung startet bei Bedarf selbst eine getrennte lokale Fachprüfung;
+    ein tokenbasierter Review-Aufruf bleibt Support. Die vollständigen 28 Werkzeuge sind nur im bewusst aktivierten
     IT-Supportmodus sichtbar.
 
 ## Zweites Expertenreview und Hardening

@@ -47,6 +47,25 @@ test('recorded lifecycle identifies a notice boundary without document data', ()
   assert.strictEqual(status.tokens_logged, false);
 });
 
+test('review diagnostics identify reconstruction, local UI and terminal boundaries without private data', () => {
+  const dataRoot = path.join(base, 'review-lifecycle');
+  for (const event of [
+    { event: 'review_worker_spawned', outcome: 'ok' },
+    { event: 'review_reconstruction_started', outcome: 'progress', item_count: 2 },
+    { event: 'review_ui_started', outcome: 'progress', item_count: 2 },
+    { event: 'review_ui_failed', outcome: 'stopped', item_count: 2, error_code: 'LOCAL_REVIEW_TIMEOUT' },
+    { event: 'review_terminal_state', outcome: 'stopped', error_code: 'LOCAL_REVIEW_CANCELLED' }
+  ]) assert.strictEqual(recordWorkflowEvent({ ...event, timestamp: new Date(NOW).toISOString(),
+    token: 'private', filename: 'Mitarbeiterprofil.docx', raw_content: 'Max Mustermann' }, { dataRoot, now: NOW }), true);
+  const status = workflowDiagnosticStatus(20, { dataRoot, now: NOW });
+  assert.deepStrictEqual(status.events.map((event) => event.event), [
+    'review_terminal_state', 'review_ui_failed', 'review_ui_started',
+    'review_reconstruction_started', 'review_worker_spawned'
+  ]);
+  assert.strictEqual(status.events[1].error_code, 'LOCAL_REVIEW_TIMEOUT');
+  assert.doesNotMatch(JSON.stringify(status), /"private"|Mitarbeiterprofil|Mustermann|"filename":|"raw_content":|"token":/i);
+});
+
 test('workflow journal applies retention and a hard event cap', () => {
   const dataRoot = path.join(base, 'retention');
   recordWorkflowEvent({ timestamp: new Date(NOW - (WORKFLOW_RETENTION_DAYS + 1) * 86400000).toISOString(),

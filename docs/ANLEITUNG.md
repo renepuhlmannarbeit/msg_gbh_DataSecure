@@ -3,7 +3,7 @@
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
 Windows 10/11 x64 und macOS; Linux nur über einen lokalen Claude-Code-Host · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC35 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC36 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -296,9 +296,12 @@ klicken, wird der aktuelle Schritt sicher unterbrochen. Es wird kein unvollstän
 Paket freigegeben, die übrigen Dateien werden nicht automatisch neu ausgewählt und
 die gerade unterbrochene Datei wird nicht still erneut versucht. Der lokale Stapel
 bleibt als Checkpoint erhalten. Bitten Sie Claude später ausdrücklich um
-*„den letzten DataSecure-Stapel fortsetzen“*; erst dann wird ausschließlich eine
-technisch unterbrochene Datei erneut eingeplant. Ein terminaler Sicherheitsstopp
-bleibt dagegen gesperrt.
+*„den letzten DataSecure-Stapel fortsetzen“*. Dieser eine bestätigte Schritt startet
+entweder die technische Wiederaufnahme oder – bei zurückgestellten
+Zertifikats-/Organisationsstellen – genau eine lokale Stapelprüfung in einem
+getrennten Prozess. Cowork wartet nicht auf den Prüfdialog, verlangt keine zweite
+Bestätigung und erhält keinen Stapel-Token. Ein terminaler Sicherheitsstopp bleibt
+dagegen gesperrt.
 
 Schließen Sie einen lokalen Auswahl- oder Prüfdialog, gilt dieser Lauf als beendet.
 DataSecure öffnet keinen zweiten Dialog. Starten Sie nur dann ausdrücklich neu, wenn
@@ -311,9 +314,10 @@ vermerkt. Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans 
 dadurch nicht an den Sicherheitsprüfungen vorbeigeführt.
 
 Enthält eine Datei einen mehrdeutigen Zertifikats-/Organisations-Treffer, wird nur
-diese Datei sicher gestoppt, weil der normale Ordnerlauf keinen lokalen
-Entscheidungsdialog besitzt. Die übrigen Dateien werden weiterverarbeitet. Ein neuer
-Versuch der gestoppten Datei erfolgt erst auf Ihren ausdrücklichen Auftrag.
+diese Datei sicher zurückgestellt; die übrigen Dateien werden weiterverarbeitet.
+Nach Ihrem ausdrücklichen Auftrag zum Fortsetzen öffnet DataSecure einmalig die
+lokale Stapelprüfung. Sie entscheidet lokal, ob die gelb markierten Namen zu einer
+Zertifizierung gehören. Währenddessen ist die Cowork-Aufgabe bereits beendet.
 
 Windows x64 besitzt die vollständigere Engineering-Grenze. macOS und Linux verwenden
 für TXT/Markdown/CSV/DOCX den Node-Textpfad und stoppen bei Bildern oder manuellen Mehrdeutigkeiten
@@ -420,7 +424,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC35 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC36 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

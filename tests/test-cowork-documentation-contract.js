@@ -21,7 +21,8 @@ assert.match(anonymize, /genau einmal[^\n]*start_document_batch_from_picker/iu);
 assert.match(anonymize, /weder `privacy_status`[^\n]*`open_input_folder`/iu);
 assert.doesNotMatch(all, /ausschließlich[^\n]{0,100}`Input`-Ordner (?:kopieren|eingehen)/iu, 'old Input normal path returned');
 assert.match(explain, /`Input` ist nur eine gesperrte technische Support-Inbox/iu);
-assert.match(review, /genau neun Werkzeuge/iu);
+assert.match(review, /genau acht Werkzeuge/iu);
+assert.match(review, /Fortsetzung startet[^\n]{0,180}getrennte lokale Fachprüfung/iu);
 assert.match(review, /vollständigen 28 Werkzeuge/iu);
 assert.doesNotMatch(all, /höchstens zehn namenfreie Ergebnisse|Seiten von höchstens zehn/iu);
 

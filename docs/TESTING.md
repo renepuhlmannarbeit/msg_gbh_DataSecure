@@ -231,7 +231,7 @@ requires manual acceptance on each target platform.
 
 `npm run test:ci` wurde nach dem Claude-Cowork-/UX-/Performance-Review vollständig
 mit Exit-Code 0 ausgeführt. Der Lauf umfasste unter anderem kanonische Dokumente,
-Kostenbudget, Manifest/Capabilities, 9 normale und 28 Supporttools, alle vier MCP-
+Kostenbudget, Manifest/Capabilities, damals 9 normale und 28 Supporttools, alle vier MCP-
 Risikohinweise, zentrale Ressourcenlimits, den inaktiven Zwei-Worker-Harness, 70
 Parsertests, Netzwerk- und UI-Prozessgrenzen, 77 PII-Regressionen, 101 freigegebene
 Formatkombinationen, Mapping/Outbox, direkten Picker/Intake, lokalen Handoff,
@@ -251,3 +251,16 @@ Crash/Resume an den Positionen 1, 50 und 100. Dabei wurden alte Erwartungen an d
 Review-Phase korrigiert und zwei reale Restfehler behoben: erfolgreicher früher
 Work-Copy-Cleanup meldet nicht länger fälschlich einen offenen Cleanup, und eine
 Crash-Recovery kann dieselbe Paket-ID nicht erneut in die Mapping-CSV schreiben.
+
+## Lokaler RC36-Nachweis 24.08.2026
+
+Nach der Entkopplung der lokalen Stapelprüfung bestand `npm run test:ci` vollständig
+mit Exit-Code 0. Der vorgeschaltete RC36-Vertragstest bestätigt den sofortigen,
+tokenfreien Cowork-Rückgabewert und die nur über privates IPC gestartete lokale
+Prüfung. Zusätzlich bestanden die 66 servergebundenen Stapeltests, einschließlich
+Review-Rekonstruktion, Abbruch, Vertagung, Wiederaufnahme und zweier echter
+100-Dateien-Läufe. Der gebaute ZIP enthielt 349 Einträge, bestand die Paketparität,
+13 Skill-Vertragstests sowie die synthetische 150-Fälle-Vertragsmatrix. Sowohl der
+Quellplugin-Ordner als auch der entpackte ZIP bestanden `claude plugin validate`.
+Diese Evidenz ersetzt nicht den erneuten Cowork-UI-Test mit installiertem RC36 und
+nicht die noch offenen Zielplattformabnahmen.

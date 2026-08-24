@@ -960,10 +960,12 @@ async function main() {
     const begun = beginBatch({ expectedCount: 2, profile: 'personnel_profile' });
     await processBatchNext(begun.batch_token, deps);
     await processBatchNext(begun.batch_token, deps);
+    const lifecycle = [];
     const reviewed = await reviewDeferredBatch(begun.batch_token, {
       ...deps,
       localFinalize: true,
       platform: 'linux',
+      onReviewLifecycle: (event) => lifecycle.push(event),
       reviewTextLocally: (draft) => ({
         action: 'reviewed',
         redactions: [],
@@ -975,6 +977,11 @@ async function main() {
     assert.strictEqual(reviewed.complete, true);
     assert.strictEqual(reviewed.packages, undefined);
     assert.doesNotMatch(JSON.stringify(reviewed), /package_id|read_capability|review-first|review-second/u);
+    assert.deepStrictEqual(lifecycle.map((event) => event.event), [
+      'review_reconstruction_started', 'review_reconstruction_finished',
+      'review_ui_started', 'review_ui_finished'
+    ]);
+    assert.doesNotMatch(JSON.stringify(lifecycle), /Microsoft|Azure|review-first|review-second|batch_token/u);
     const listed = listBatchResults(begun.batch_token, { limit: 1 });
     assert.strictEqual(listed.results.length, 1);
     assert.strictEqual(listed.available, 2);

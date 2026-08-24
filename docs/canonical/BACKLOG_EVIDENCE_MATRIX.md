@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 24.08.2026 · gilt für RC35 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 24.08.2026 · gilt für RC36 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -57,7 +57,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | BL-041.2 | Ursprüngliche Aufgabe nur begrenzt und fortsetzbar weiterführen. | **E1 + E2, ja:** Chat abbrechen/neustarten und prüfen, dass keine Ersatzverarbeitung entsteht und der Anwender die Fortsetzung versteht. |
 | BL-041.3 | Sichtbare bzw. hochgeladene Originale sicher ablehnen. | **E1, ja:** In Claude einen synthetischen Anhang hochladen und bestätigen, dass kein lokaler Originalpfad und keine Inhaltsverarbeitung erfolgt. |
 | BL-041.6 | **E0 abgeschlossen:** `local_only` endet im Vertrags-/Transcript-Test mit einem Startaufruf, lokalem Abschluss und ohne Claude-Lese-/Bestätigungs-/Pollingaufruf. | **E1, ja:** In Cowork mit synthetischem Stapel beobachten. |
-| BL-041.7 | **E0 abgeschlossen:** 9 normale/28 Supporttools, Skill-/Handbuch-/Manifestdrift, einmalige begrenzte UTF-8-Dekodierung und kontextgebundenes Seitenbudget sind getestet. | **E1, ja:** Frische Cowork-Installation und reale Freigabezahl; Supportmodus und Recovery bleiben erreichbar. |
+| BL-041.7 | **E0 abgeschlossen:** 8 normale/28 Supporttools, tokenfreier asynchroner Reviewstart, Skill-/Handbuch-/Manifestdrift, einmalige begrenzte UTF-8-Dekodierung und kontextgebundenes Seitenbudget sind getestet. | **E1, ja:** Frische Cowork-Installation und reale Freigabezahl; Supportmodus und Recovery bleiben erreichbar. |
 | BL-041.8 | Hostunterstützung für MCP-Tasks/Benachrichtigungen sicher feststellen. | **E0 + E1, ja:** versionsgebundener Cowork-Test; ohne positiven Nachweis bleibt der lokale Worker ohne Polling maßgeblich. |
 | BL-050.3 | **E0 abgeschlossen:** Echter TXT-/CSV-/DOCX-Parser, Kalt/Warm, 1/10/100, p50/p95, Gesamtzeit, CPU, Peak-RAM, monotone Uhr, nicht zugeordnete Laufzeit und relative Regressionstore sind implementiert. | **E1, ja:** Referenzwerte im installierten Produkt auf Windows/macOS/Linux festhalten. |
 | BL-011.10 | Sofortige Hintergrundaufnahme und Recovery während des Intakes sichern. | **E0 + E1, ja:** Crash-/Swap-Test plus echte Mehrfachauswahl auf drei OS. |

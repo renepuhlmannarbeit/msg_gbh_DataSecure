@@ -227,13 +227,13 @@ async function main() {
       'continue_most_recent_document_batch',
       'discard_incomplete_document_batches',
       'open_export_folder',
-      'review_deferred_document_batch',
       'start_completed_local_results_handoff',
       'start_document_batch_from_picker'
     ]);
     assert.ok(!names.includes('open_input_folder'));
     assert.ok(!names.includes('begin_document_batch'));
     assert.ok(!names.includes('read_anonymized_document'));
+    assert.ok(!names.includes('review_deferred_document_batch'));
     assert.ok(!names.includes('privacy_status'));
     assert.ok(!names.includes('purge_local_data'));
   });

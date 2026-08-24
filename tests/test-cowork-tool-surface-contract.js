@@ -36,7 +36,6 @@ const expectedNormal = [
   'cancel_local_results_handoff',
   'continue_most_recent_document_batch',
   'discard_incomplete_document_batches',
-  'review_deferred_document_batch',
   'configure_privacy_folder',
   'open_export_folder'
 ];
@@ -45,7 +44,7 @@ assert.strictEqual(declaredTools.length, 28, 'support surface must contain exact
 assert.deepStrictEqual(normalTools, expectedNormal, 'normal Cowork tool surface drifted');
 assert.strictEqual(new Set(declaredTools).size, declaredTools.length, 'duplicate MCP tool name');
 assert.ok(index.includes('const SUPPORT_TOOL_NAMES'), 'support-tool complement must be explicit');
-assert.strictEqual(declaredTools.filter((name) => !normalTools.includes(name)).length, 19);
+assert.strictEqual(declaredTools.filter((name) => !normalTools.includes(name)).length, 20);
 assert.deepStrictEqual(
   [...manifest.tools.map((tool) => tool.name)].sort(),
   [...declaredTools].sort(),
@@ -59,4 +58,6 @@ for (const forbidden of ['open_input_folder', 'open_privacy_folder', 'begin_docu
   assert.ok(!normalTools.includes(forbidden), `${forbidden} must remain support-only`);
 }
 
-console.log('COWORK TOOL SURFACE CONTRACT PASS (9 normal, 19 support)');
+assert.match(index, /delete safe\.batch_token/u, 'normal continuation must remove the private batch token');
+assert.match(index, /startLocalReviewExecutor\(token\)/u, 'normal continuation must launch review asynchronously');
+console.log('COWORK TOOL SURFACE CONTRACT PASS (8 normal, 20 support)');

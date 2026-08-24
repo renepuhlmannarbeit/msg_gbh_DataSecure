@@ -1,6 +1,6 @@
-# RC35-Ist-Abgleich zum kanonischen Backlog
+# RC36-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 24.08.2026 · geprüfter Produktstand: RC35
+Stand: 24.08.2026 · geprüfter Produktstand: RC36
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -11,6 +11,9 @@ Historischer lokaler Regressionsnachweis 23.08.2026: Ein früherer vollständige
 `npm test`-Lauf wurde mit Exit-Code 0 festgehalten. Er ist keine aktuelle
 Release-Abnahme und darf nicht aus einzelnen späteren Teiltests abgeleitet werden.
 Die jeweils tatsächlich vollständig beendeten Testläufe gehören in `docs/TESTING.md`.
+Der aktuelle RC36-Arbeitsstand bestand am 24.08.2026 die vollständige lokale
+`test:ci`-Suite, 66 servergebundene Batchtests, ZIP-Parität und beide Claude-Plugin-
+Validierungen; Details und Aussagegrenzen stehen dort.
 Weder dieser Nachweis noch ein einzelner lokaler Lauf erweitert die
 TXT/Markdown/CSV/DOCX-Freigabe oder ersetzt frische ZIP-/Marketplace-Installationen
 und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-Host.
@@ -335,25 +338,27 @@ Vertagung oder Abbruch behandelt. Unit-, Batchreview- und UI-Policy-Tests sind g
 Bis zum echten `osascript`- und Fresh-Install-Nachweis bleibt dies Implementierung,
 keine macOS-Review- oder Pilotfreigabe.
 Mehrdatei-Stapel analysieren zunächst alle Positionen. Nach Abschluss des
-Reststapels rekonstruiert `review_deferred_document_batch` die offenen
-Fundstellen ausschließlich aus den versiegelten Arbeitskopien, ruft den lokalen
-Batch-Reviewer einmal auf und veröffentlicht danach nur die vollständig
-entschiedenen Positionen als atomare Einzelpakete. Der Journalzustand enthält
-dabei weder Entwürfe noch Entscheidungen; ein Abbruch oder „Später entscheiden“
-lässt alle offenen Positionen `deferred_review`. Rest: echte native Ein-Fenster-
-Parität auf macOS/Linux, Fortschrittsanzeige, Barrierefreiheit und praktische
-Zielplattformabnahmen.
+Reststapels rekonstruiert der lokale Reviewpfad die offenen Fundstellen
+ausschließlich aus den versiegelten Arbeitskopien, ruft den lokalen Batch-Reviewer
+einmal auf und veröffentlicht danach nur die vollständig entschiedenen Positionen
+als atomare Einzelpakete. Der Journalzustand enthält dabei weder Entwürfe noch
+Entscheidungen; ein Abbruch oder „Später entscheiden“ lässt alle offenen Positionen
+`deferred_review`. Im normalen Cowork-Weg startet die bestätigte Fortsetzung diesen
+Review seit RC36 tokenfrei in einem abgekoppelten lokalen Worker;
+`review_deferred_document_batch` bleibt der synchrone Supportweg. Rest: echte
+native Ein-Fenster-Parität auf macOS/Linux, Fortschrittsanzeige, Barrierefreiheit
+und praktische Zielplattformabnahmen.
 
 Eine lokale Zertifikatsentscheidung kann nun vertagt werden. Die betroffene Datei
 bleibt als privater `deferred_review`-Eintrag ohne Markdown-Paket und ohne
 Entwurfsdaten im Journal zurück; klare Dateien desselben Stapels können weiterlaufen.
 Nach Abschluss des Reststapels zeigt MCP nur Zähler sowie `awaiting_local_review`.
-Erst ein ausdrücklich bestätigter Auftrag für `review_deferred_document_batch`
-rekonstruiert und öffnet die gemeinsame lokale Entscheidung. Der technische
-Fortsetzungsbefehl bleibt ausschließlich retryfähigen Unterbrechungen vorbehalten.
-Die Option erscheint ausschließlich im fortsetzbaren servergebundenen Batch; der
-direkte Einzelfile-Pfad zeigt sie nicht, weil er keinen wiederaufnehmbaren Snapshot
-besitzt.
+Eine einzige ausdrücklich bestätigte Fortsetzung rekonstruiert und öffnet die
+gemeinsame lokale Entscheidung in einem getrennten Prozess und kehrt sofort zu
+Cowork zurück. Derselbe Befehl übernimmt auch retryfähige technische
+Unterbrechungen; eine zweite Review-Bestätigung ist nicht erforderlich. Die Option
+erscheint ausschließlich im fortsetzbaren servergebundenen Batch; der direkte
+Einzelfile-Pfad zeigt sie nicht, weil er keinen wiederaufnehmbaren Snapshot besitzt.
 
 Die informative Abschlussansicht ist bereits plattformübergreifend vorbereitet:
 Windows Forms, AppleScript sowie Zenity mit KDialog-Fallback zeigen nur
@@ -977,10 +982,12 @@ Abschlussindikator wird ausschließlich aus festen Zählern erzeugt. Noch offen 
 der versionsgebundene MCP-Task-/Benachrichtigungsnachweis.
 
 Die öffentliche Routineoberfläche ist jetzt supportgetrennt: Im Normalbetrieb
-liefert `tools/list` nur neun sichere Cowork-Aktionen (lokaler Start, tokenfreier
-Handoff, Fortsetzen, ausdrücklich bestätigtes Verwerfen, lokale Entscheidung,
-Privacy-Konfiguration und Ergebnisübersicht). Der technische Input- und Privacy-Stamm sind dort auch bei
-manuell konstruierten Aufrufen gesperrt. Die vollständige 25-Werkzeug-Kompatibilitätsoberfläche bleibt
+liefert `tools/list` nur acht sichere Cowork-Aktionen (lokaler Start, tokenfreier
+Handoff, Fortsetzen, ausdrücklich bestätigtes Verwerfen, Privacy-Konfiguration und
+Ergebnisübersicht). Die Fortsetzung startet eine erforderliche lokale Fachprüfung
+selbst in einem getrennten Worker; der tokenbasierte synchrone Review ist Support.
+Der technische Input- und Privacy-Stamm sind dort auch bei
+manuell konstruierten Aufrufen gesperrt. Die vollständige 28-Werkzeug-Kompatibilitätsoberfläche bleibt
 lokal nur mit `EU_PRIVACY_SUPPORT_MODE=1` für IT-Support und vorhandene
 Recoveryfälle verfügbar. `start_completed_local_results_handoff` und
 `continue_local_results_handoff` liefern höchstens fünf verifizierte
@@ -990,6 +997,15 @@ fertigen Stapel wird lokal direkt fortgesetzt; bei mehreren Kandidaten erfolgt d
 Wahl ausschließlich in einer lokalen, namenfreien Ansicht. Eine Wiederaufnahme
 eines unvollständigen Stapels bleibt davon getrennt. Nie gelangen Paket-ID,
 Capability, Quellname, Pfad, Token oder Cursor an Cowork.
+
+RC36 ergänzt den nicht blockierenden Reviewvertrag: `continue_most_recent_document_batch`
+entfernt den intern ausgewählten Batch-Token vor der MCP-Antwort und startet bei
+`awaiting_local_review` einen abgekoppelten, netzgesperrten lokalen Review-Worker.
+Rekonstruktion, native Fachentscheidung, Veröffentlichung und Abschlussanzeige
+laufen dort weiter, ohne das Cowork-Zeitfenster zu belegen. Feste Workflow-Ereignisse
+trennen Workerstart, IPC, Rekonstruktion, UI, Terminalzustand und Workerende; sie
+enthalten weder freie Texte noch Dokumentidentifikatoren. Der frühere direkte
+`review_deferred_document_batch` bleibt ausschließlich im Supportmodus.
 
 Für die folgende Optimierung liegt außerdem eine inhaltsfreie Phasenmessung vor:
 Der lokale Batchzustand speichert ausschließlich begrenzte Dauerwerte für Aufnahme,

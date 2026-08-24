@@ -14,6 +14,7 @@ const { recordWorkflowEvent } = require('./workflow-diagnostics');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const pendingIntakes = new Map();
+const pendingReviews = new Map();
 const WORKER_ENV_KEYS = Object.freeze([
   'SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP', 'LOCALAPPDATA', 'APPDATA',
   'HOME', 'XDG_DATA_HOME', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_LANGUAGE',
@@ -245,6 +246,85 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   }
 }
 
-function localIntakeActive() { return pendingIntakes.size > 0; }
+function contentFreeReviewStart(progress, started) {
+  return {
+    ok: progress?.ok !== false,
+    local_review_started: started === true,
+    batch_total: Number(progress?.batch_total || 0),
+    released: Number(progress?.released || 0),
+    stopped: Number(progress?.stopped || 0),
+    deferred_review: Number(progress?.deferred_review || 0),
+    batch_phase: started === true ? 'processing_local_review' : String(progress?.batch_phase || 'invalid_local_state'),
+    next_action: started === true ? 'complete_review_in_local_window' : 'check_local_status',
+    raw_content_sent_to_claude: false
+  };
+}
 
-module.exports = { WORKER_ENV_KEYS, batchWorkerEnvironment, localBatchStateProgress, terminalIntakeProgress, startLocalBatchExecutor, startLocalIntakeExecutor, localIntakeActive };
+// Human review can legitimately take longer than a Cowork tool deadline.  The
+// token is sent only over inherited private IPC to a detached local worker;
+// Cowork receives a bounded start acknowledgement immediately and never sees
+// the token or waits for the review window to close.
+function startLocalReviewExecutor(token, options = {}) {
+  if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
+  if (pendingReviews.size > 0) throw new SafeError('Eine lokale DataSecure-Prüfung läuft bereits.');
+  const forkProcess = options.forkProcess || fork;
+  const record = options.recordWorkflowEvent || recordWorkflowEvent;
+  const claimExecutor = options.claimLocalBatchExecutor || claimLocalBatchExecutor;
+  const releaseExecutor = options.releaseLocalBatchExecutor || releaseLocalBatchExecutor;
+  const lifecycle = (event) => { try { record(event); } catch { /* diagnostics never changes review state */ } };
+  let child;
+  try {
+    child = forkProcess(path.join(__dirname, 'review-worker.js'), [], {
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      execArgv: [`--require=${path.join(__dirname, '..', 'network-deny.cjs')}`],
+      env: batchWorkerEnvironment(options.env || process.env),
+      serialization: 'json'
+    });
+    if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
+      throw new Error('invalid child');
+    }
+    lifecycle({ event: 'review_worker_spawned', outcome: 'ok' });
+    const claimed = claimExecutor(token, child.pid);
+    if (claimed.ok === false) {
+      try { child.kill(); } catch { /* only the just-created helper is targeted */ }
+      return contentFreeReviewStart(claimed, false);
+    }
+    pendingReviews.set(token, child.pid);
+    child.once?.('exit', (code) => {
+      lifecycle({ event: 'review_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', exit_code: code,
+        error_code: code === 0 ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
+      releaseExecutor(token, child.pid);
+      pendingReviews.delete(token);
+    });
+    child.send({ type: 'start-local-review', batch_token: token }, (error) => {
+      lifecycle({ event: error ? 'review_ipc_failed' : 'review_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
+        error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
+      if (error) {
+        releaseExecutor(token, child.pid);
+        pendingReviews.delete(token);
+        try { child.kill?.(); } catch { /* only the just-created helper is targeted */ }
+      }
+      child.unref?.();
+    });
+    return contentFreeReviewStart(claimed, true);
+  } catch {
+    lifecycle({ event: 'review_worker_exited', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
+    pendingReviews.delete(token);
+    if (child && Number.isSafeInteger(child.pid)) {
+      releaseExecutor(token, child.pid);
+      try { child.kill?.(); } catch { /* only the just-created helper is targeted */ }
+    }
+    throw new SafeError('Die lokale Stapelprüfung konnte nicht sicher gestartet werden.');
+  }
+}
+
+function localIntakeActive() { return pendingIntakes.size > 0; }
+function localReviewActive() { return pendingReviews.size > 0; }
+
+module.exports = {
+  WORKER_ENV_KEYS, batchWorkerEnvironment, localBatchStateProgress, terminalIntakeProgress,
+  startLocalBatchExecutor, startLocalIntakeExecutor, startLocalReviewExecutor,
+  localIntakeActive, localReviewActive, _test: { contentFreeReviewStart }
+};

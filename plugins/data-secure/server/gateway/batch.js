@@ -1254,10 +1254,17 @@ async function reviewDeferredBatch(token, deps = {}) {
       return { ok: false, error: 'batch_review_not_ready', message, ...progress, raw_content_sent_to_claude: false };
     }
 
+    const lifecycle = (event) => {
+      try { deps.onReviewLifecycle?.(event); } catch { /* diagnostics cannot change a privacy decision */ }
+    };
     const drafts = [];
     try {
+      lifecycle({ event: 'review_reconstruction_started', outcome: 'progress', item_count: items.length });
       for (const item of items) drafts.push(await captureDeferredReviewInput(state, item, deps));
+      lifecycle({ event: 'review_reconstruction_finished', outcome: 'ok', item_count: items.length });
     } catch (error) {
+      lifecycle({ event: 'review_reconstruction_failed', outcome: 'stopped', item_count: items.length,
+        error_code: 'LOCAL_REVIEW_FAILED' });
       markDeferredReview(state, items, error?.code || 'BATCH_REVIEW_RECONSTRUCTION_FAILED');
       writeState(state);
       return {
@@ -1270,13 +1277,18 @@ async function reviewDeferredBatch(token, deps = {}) {
 
     let outcome;
     try {
+      lifecycle({ event: 'review_ui_started', outcome: 'progress', item_count: items.length });
       outcome = await runBatchReviewLocally(drafts, {
         platform: deps.platform || process.platform,
         allowDefer: true,
         reviewTextLocally: deps.reviewTextLocally || reviewTextLocally,
         ...(deps.reviewOptions || {})
       });
+      lifecycle({ event: 'review_ui_finished', outcome: outcome.action === 'reviewed' ? 'ok' : 'stopped',
+        item_count: items.length, error_code: outcome.action === 'reviewed' ? 'NONE' : 'LOCAL_REVIEW_CANCELLED' });
     } catch (error) {
+      lifecycle({ event: 'review_ui_failed', outcome: 'stopped', item_count: items.length,
+        error_code: error?.code === 'LOCAL_REVIEW_TIMEOUT' ? 'LOCAL_REVIEW_TIMEOUT' : 'LOCAL_REVIEW_FAILED' });
       markDeferredReview(state, items, 'LOCAL_REVIEW_CANCELLED');
       writeState(state);
       return { ok: false, error: 'LOCAL_REVIEW_CANCELLED', message: 'Die lokale Stapelentscheidung wurde abgebrochen. Es wurde nichts freigegeben.', ...publicProgress(state), raw_content_sent_to_claude: false };
@@ -1595,7 +1607,10 @@ function claimLocalBatchExecutor(token, pid) {
     delete state.local_executor_pid;
     delete state.local_executor_started_at;
     const progress = publicProgress(state);
-    if (progress.complete || (progress.remaining === 0 && progress.delivery_pending === 0 && progress.mapping_pending === 0)) {
+    if (progress.complete || (
+      progress.remaining === 0 && progress.delivery_pending === 0 && progress.mapping_pending === 0 &&
+      progress.deferred_review === 0 && progress.retryable === 0
+    )) {
       return { ok: false, error: 'batch_not_runnable', ...progress, raw_content_sent_to_claude: false };
     }
     state.local_executor_pid = pid;

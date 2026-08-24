@@ -632,7 +632,16 @@ function reviewTextLocally(draft, options = {}) {
     throw new SafeError('Die bearbeitbare lokale Textprüfung ist auf diesem Gerät noch nicht verfügbar; es wurde nichts freigegeben.');
   }
   const result = runner(command, args, JSON.stringify(draft), reviewEnv);
-  if (result?.error || result?.status !== 0) throw new SafeError('Die lokale Textprüfung konnte nicht sicher abgeschlossen werden.');
+  if (result?.error?.code === 'ETIMEDOUT') {
+    const error = new SafeError('Die lokale Textprüfung wurde wegen Zeitüberschreitung beendet.');
+    error.code = 'LOCAL_REVIEW_TIMEOUT';
+    throw error;
+  }
+  if (result?.error || result?.status !== 0) {
+    const error = new SafeError('Die lokale Textprüfung konnte nicht sicher abgeschlossen werden.');
+    error.code = 'LOCAL_REVIEW_FAILED';
+    throw error;
+  }
   let parsed;
   try { parsed = JSON.parse(String(result.stdout || '')); } catch { throw new SafeError('Die lokale Textprüfung lieferte kein gültiges Ergebnis.'); }
   return validateReviewResult(parsed, draft);
