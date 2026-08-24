@@ -173,6 +173,10 @@ Rohwerte, Inhalte oder Pseudonymzuordnungen.
 Ein Diagnosepaket wird nur auf Wunsch lokal erzeugt und nie automatisch versandt. Es
 enthält technische Versionen, Plattform, Phasen, Zähler, Laufzeiten, feste Fehlercodes
 und Prüfsummen von Programmdateien, aber keine Dokumentkennzeichen oder Inhalte.
+Eine getrennte Ablaufspur darf ausschließlich fest definierte Übergänge von Picker,
+Worker, privatem IPC, Checkpoint, Verarbeitung und lokaler Abschlussanzeige sowie
+begrenzte Zähler und feste Codes speichern. Freitext, Pfade, Namen, Inhalte, Tokens,
+PIDs und Dokument-Hashes sind im Schema nicht darstellbar.
 
 ## DS-027 – Freiwillige Vorschau und automatische Freigabe
 

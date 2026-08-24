@@ -78,11 +78,13 @@ async function main() {
     fs.writeFileSync(source, 'Kunde: Beispielperson\nE-Mail: beispiel@example.test\nVertragliche Leistung', 'utf8');
     let localNotice = null;
     let completionSummary = null;
+    const workflowEvents = [];
     const started = startLocalIntakeExecutor([{
       name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
     }], 'customer', {
       showLocalIntakeNotice: (stage) => { localNotice = stage; },
-      showTerminalBatchSummary: (summary) => { completionSummary = summary; return true; }
+      showTerminalBatchSummary: (summary) => { completionSummary = summary; return true; },
+      recordWorkflowEvent: (event) => { workflowEvents.push(event); return true; }
     });
     assert.strictEqual(started.ok, true);
     assert.strictEqual(started.local_intake_pending, true);
@@ -96,6 +98,15 @@ async function main() {
     assert.deepStrictEqual(completionSummary, {
       complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0
     });
+    const lifecycleDeadline = Date.now() + 1_000;
+    while (!workflowEvents.some((event) => event.event === 'intake_worker_exited') && Date.now() < lifecycleDeadline) await pause(10);
+    const eventNames = workflowEvents.map((event) => event.event);
+    for (const expected of [
+      'intake_worker_spawned', 'intake_ipc_dispatched', 'intake_checkpoint_created',
+      'intake_processing_started', 'intake_terminal_state', 'completion_notice_started',
+      'completion_notice_finished', 'intake_worker_exited'
+    ]) assert.ok(eventNames.includes(expected), `missing lifecycle event ${expected}`);
+    assert.doesNotMatch(JSON.stringify(workflowEvents), /source\.txt|beispiel@example\.test|Beispielperson/u);
     const state = _test.readState(started.batch_token);
     assert.strictEqual(validatePrivateIoSummary(state.io_summary), true);
     assert.deepStrictEqual(state.io_summary, {

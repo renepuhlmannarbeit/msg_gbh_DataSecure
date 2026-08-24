@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC34 · ausschließlich synthetische Daten
+Version 3.2.0 RC35 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC34 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC35 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 Die wiederverwendbaren, vollständig synthetischen Testdokumente, der gruppierte
@@ -148,7 +148,7 @@ Stop-Gegenproben.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC34 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC35 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

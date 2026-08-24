@@ -31,6 +31,8 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /höchstens fünf freigegebene Markdown-Ergebnisse/iu);
   assert.match(anonymizeSkill, /continue_local_results_handoff/u);
   assert.match(anonymizeSkill, /Bei `local_selection_cancelled` nichts erneut öffnen/iu);
+  assert.match(anonymizeSkill, /Die lokale Verarbeitung wurde gestartet/iu);
+  assert.match(anonymizeSkill, /beende die Cowork-Aufgabe sofort/iu);
 });
 
 test('Markdown-only output keeps image pixels local instead of unnecessarily enabling strict discard', () => {

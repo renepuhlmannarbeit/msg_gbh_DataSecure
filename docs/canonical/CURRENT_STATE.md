@@ -1,6 +1,6 @@
-# RC34-Ist-Abgleich zum kanonischen Backlog
+# RC35-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 24.08.2026 · geprüfter Produktstand: `e3af027` auf `main`
+Stand: 24.08.2026 · geprüfter Produktstand: RC35
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -949,6 +949,10 @@ Status: **teilweise**
 
 Vorhanden: datensparsames Diagnosejournal mit fester Whitelist, Statuswerkzeug,
 Retention, Rechts-/Zertifizierungsgrenzen und technische Fehlercodes hinter Details.
+Eine getrennte inhaltsfreie Ablaufspur lokalisiert Picker-, Worker-, IPC-,
+Checkpoint-, Terminal- und Abschlussanzeigenfehler, ohne freie Texte oder
+Dokumentidentifikatoren aufnehmen zu können. Der local-only-Vertrag verlangt nach
+dem Start genau einen terminalen Satz und verbietet offene Warteaufforderungen.
 Ein ausdrücklich bestätigter lokaler Diagnoseexport enthält zusätzlich ausschließlich
 bereinigte Diagnosemetadaten und Programmprüfsummen; er wird nie automatisch
 übertragen. Rest: abschließende Alltagssprach-/Barrierefreiheitsprüfung.

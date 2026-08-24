@@ -47,8 +47,9 @@ Cloud-Synchronisation oder Chat-Upload umgehen.
 
 Die normale `.md` enthält nie Bildpixel. Deshalb bleibt bei „nur Markdown“ oder „Bilder nicht an Claude geben“ der Standard aktiv: Grafiken bleiben lokal und sicher erkannter Bildtext kann nach derselben Prüfung erhalten bleiben. Nur wenn lokale Bildanlagen selbst verworfen werden sollen, ist der strenge Modus vorgesehen; er übernimmt keinen Bildtext und stoppt bei unbekannten eingebetteten Objekten sicher.
 
-Bei einem lokalen Abbruch zeigt `diagnostic_status` die letzte Verarbeitungsphase
-und einen festen Fehlercode. Das Journal ist auf 14 Tage und 200 Ereignisse
+Bei einem lokalen Abbruch zeigt `diagnostic_status` die letzte Verarbeitungsphase,
+eine getrennte inhaltsfreie Ablaufspur von Picker bis Abschlussanzeige und einen
+festen Fehlercode. Das Verarbeitungsjournal ist auf 14 Tage und 200 Ereignisse
 begrenzt und enthält keine Dateinamen, Pfade, Inhalte, erkannten Werte,
 Rohfehlermeldungen oder Dokument-Hashes. Fehlgeschlagene Dateien werden nicht
 automatisch wiederholt; mehrere Versuche derselben Datei dürfen nicht als mehrere

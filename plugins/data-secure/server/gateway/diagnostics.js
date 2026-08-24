@@ -7,6 +7,7 @@ const { dataRoot } = require('../runtime');
 const { VERSION } = require('../version');
 const { roots } = require('./common');
 const { assertWritableCapacity } = require('./storage-capacity');
+const { workflowDiagnosticStatus } = require('./workflow-diagnostics');
 
 const DIAGNOSTIC_SCHEMA = 'data-secure-diagnostic/1';
 const RETENTION_DAYS = 14;
@@ -190,6 +191,7 @@ function diagnosticStatus(limit = 20, options = {}) {
     retained_events: retained.length,
     returned_events: events.length,
     events,
+    workflow: workflowDiagnosticStatus(boundedLimit, options),
     write_errors: writeErrors,
     inspection_errors: inspectionErrors,
     raw_content_logged: false,

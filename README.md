@@ -1,11 +1,11 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC34
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC35
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
 DataSecure ist jetzt **Plugin-first** aufgebaut: Claude Skills übernehmen Routing, Zweck-/Profilwahl und Governance; ein gebündelter lokaler MCP-Server bildet die technische Privacy-Grenze und verarbeitet Quelldateien, bevor Claude deren Inhalt verwendet.
 
-> **Ist und Ziel nicht verwechseln:** Der ausführbare RC34-Umfang wird in dieser
-> README und im Betriebshandbuch beschrieben. Alle nach RC34 verbindlich getroffenen
+> **Ist und Ziel nicht verwechseln:** Der ausführbare RC35-Umfang wird in dieser
+> README und im Betriebshandbuch beschrieben. Alle nach RC35 verbindlich getroffenen
 > Produktentscheidungen und das einzige gültige Entwicklungsbacklog stehen im
 > [kanonischen Dokumentensystem](docs/canonical/README.md).
 
@@ -46,7 +46,7 @@ Windows x64 besitzt die vollständigere Engineering-Grenze mit nativem Job Objec
 
 Jede freigegebene Ausgabe ist Markdown ohne Bildpixel. Für „nur Markdown“ oder „Bilder nicht an Claude geben“ bleibt daher `remove_images=false`: Grafiken bleiben lokal zurückgehalten, und nur sicher erkannter Bildtext kann nach derselben Datenschutzprüfung in Markdown einfließen. `remove_images=true` ist allein ein strenger lokaler Verwerfmodus für Bildanlagen; er übernimmt keinen Bildtext und stoppt bei unbekannten Office-Objekten sicher.
 
-Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begrenztes Diagnosejournal. `diagnostic_status` zeigt ausschließlich Verarbeitungsphase, Formatklasse, Profil, Zähler und feste Fehlercodes; Dateinamen, Pfade, Dokumentinhalt, erkannte Werte und Dokument-Hashes werden weder gespeichert noch ausgegeben.
+Für lokale Abbrüche führt DataSecure ein auf 14 Tage und 200 Ereignisse begrenztes Diagnosejournal. Eine getrennte, ebenfalls 14 Tage aufbewahrte Ablaufspur protokolliert ausschließlich feste Übergänge wie Picker, Workerstart, privates IPC, Checkpoint, Verarbeitung, Terminalzustand und lokale Abschlussanzeige. `diagnostic_status` zeigt ausschließlich diese festen Ereignisse, Verarbeitungsphase, Formatklasse, Profil, begrenzte Zähler und Fehlercodes; Dateinamen, Pfade, Dokumentinhalt, erkannte Werte, Tokens und Dokument-Hashes werden weder gespeichert noch ausgegeben.
 
 Auf ausdrücklichen Support- oder IT-Wunsch kann `export_diagnostic_package` nach
 einer weiteren Bestätigung einen lokalen Diagnose-Schnappschuss erzeugen. Er enthält
@@ -112,8 +112,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc34.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
-- `DataSecure-Privacy-Gateway-v3.2.0-rc34.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc35.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
+- `DataSecure-Privacy-Gateway-v3.2.0-rc35.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem
@@ -145,8 +145,8 @@ Details: [docs/TESTING.md](docs/TESTING.md).
 | [docs/IT-BETRIEBSHANDBUCH.md](docs/IT-BETRIEBSHANDBUCH.md) | **Für IT/Admins:** Installation, Verteilung, Update, Rollback, Betrieb und Support |
 | [docs/PILOT-ABNAHME.md](docs/PILOT-ABNAHME.md) | **Für Pilotverantwortliche:** synthetische Go/No-Go-Abnahme ohne Echtdaten |
 | [docs/ANWENDERREVIEW.md](docs/ANWENDERREVIEW.md) | Vollständige Anwenderreisen, beseitigte Ablaufprobleme und verbleibende Grenzen |
-| [docs/canonical/README.md](docs/canonical/README.md) | Verbindliche Entscheidungen, Zielprodukt, Backlog und Traceability nach RC34 |
-| [docs/canonical/CURRENT_STATE.md](docs/canonical/CURRENT_STATE.md) | Belegter Ist-/Soll-Abgleich jeder Backlogposition gegen RC34-Code und Tests |
+| [docs/canonical/README.md](docs/canonical/README.md) | Verbindliche Entscheidungen, Zielprodukt, Backlog und Traceability nach RC35 |
+| [docs/canonical/CURRENT_STATE.md](docs/canonical/CURRENT_STATE.md) | Belegter Ist-/Soll-Abgleich jeder Backlogposition gegen RC35-Code und Tests |
 | [docs/SKILL_EVALUATION.md](docs/SKILL_EVALUATION.md) | **Für Pilotverantwortliche:** Modellabnahme für Skill-Aktivierung, Werkzeugwahl und sichere Weiterverarbeitung |
 | [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md) | Sicherheitsgrenze, was Claude erreicht, alle Fail-Closed-Punkte |
 | [docs/PLUGIN_TARGET_ARCHITECTURE.md](docs/PLUGIN_TARGET_ARCHITECTURE.md) | Historische Architekturgrundlage; kanonische Entscheidungen haben Vorrang |

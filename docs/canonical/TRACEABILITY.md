@@ -3,7 +3,7 @@
 Stand: 24.08.2026
 
 Jede angenommene Entscheidung muss mindestens einer Backlogposition zugeordnet sein.
-„Zielnachweis“ beschreibt die verlangte Evidenz, nicht den heutigen RC34-Status.
+„Zielnachweis“ beschreibt die verlangte Evidenz, nicht den heutigen RC35-Status.
 Konkrete Stories `BL-nnn.x` erben die Entscheidungszuordnung ihres Epics; erledigte
 Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 
@@ -94,6 +94,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | BL-040.4 | `gateway/package-store.js` und `test-package-read-capabilities.js` binden jede MCP-lesbare Markdown-Datei und Bildanlage an neutrale Paket-/Asset-Schemata sowie vollständige SHA-256-Prüfsummen, lesen sie über einen inode-gebundenen Dateideskriptor und verwerfen unkanonische öffentliche Paketmetadaten; manipulierte Manifeste können weder Originalnamen noch ungeprüfte Dokumente oder Anlagen freigeben |
 | BL-040.3 | `contracts/BATCH_EVIDENCE_V1.md`, `gateway/batch-evidence.js`, `gateway/batch.js` und `test-batch-session.js` belegen den atomaren JSON-Nachweis mit geschlossenem Feldsatz, aggregierten Zählern sowie eine explizite Leckageprobe gegen Namen, Pfade, Inhalte, Hashes und Batch-/Paket-IDs |
 | BL-042.1 | `gateway/diagnostics.js`, `index.js` und `test-diagnostics.js` belegen den bestätigungspflichtigen lokalen Diagnoseexport, Programmprüfsummen, die Abwesenheit von Namen, Pfaden, Rohinhalten und Dokumentidentifikatoren sowie den Stopp vor einem umgeleiteten Exportordner |
+| BL-042.3 | `gateway/workflow-diagnostics.js`, `gateway/batch-executor.js`, `index.js`, `test-workflow-diagnostics.js` und `test-direct-picker-intake-worker.js` belegen eine getrennte 14-Tage-Ablaufspur mit ausschließlich festen Picker-/Worker-/IPC-/Checkpoint-/Terminal-/Abschlussereignissen, begrenzten Zählern und festen Codes; Freitext, Pfade, Namen, Inhalte, Tokens, PIDs und Dokument-Hashes sind ausgeschlossen |
 | BL-042.2 (E0-Nachweis) | `server/index.js`, `test-mcp-tool-annotations.js` und `test-mcp-protocol.js` belegen für alle 28 Tools Titel und vollständige boolesche read-only/destruktiv/idempotent/open-world Annotationen einschließlich eigener Klassen für Verarbeitung, Review, Bestätigung, Verwerfen und Purge. Echte Cowork-Manual-/Auto-/Skip-Abnahme bleibt offen. |
 | BL-041.6 (Teilnachweis) | `server/index.js`, `normal-path-response.js`, `test-normal-path-response.js`, der Dokument-Skill und `prompt-contract.js` trennen `local_only` von `continue_in_chat`: reine lokale Aufträge enden nach genau einem Startaufruf ohne Polling, Lesen oder Bestätigung. Erfolg, Auswahlabbruch und lokaler Startfehler verwenden jeweils feste inhaltsfreie Zustände und niemals Batch-Token, Pfad, Name oder Quelle; nur ausdrücklich gewünschte Folgeauswertung kann freigegebenes Markdown lesen. Echte Cowork-Toolfolge bleibt E1. |
 | BL-030.1 | `contracts/BATCH_PSEUDONYM_V1.md` und `test-architecture-contracts.js` definieren restart-stabile stapelweite Pseudonyme ohne Rohwerttabelle |

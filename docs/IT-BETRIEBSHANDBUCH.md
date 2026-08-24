@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC34 · Stand 22.08.2026
+Version 3.2.0 RC35 · Stand 22.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC34 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC35 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -17,10 +17,10 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC34 |
+| Artefakt | Ziel | Status RC35 |
 |---|---|---|
-| `DataSecure-Privacy-Preflight-v3.2.0-rc34.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
-| `DataSecure-Privacy-Gateway-v3.2.0-rc34.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc35.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc35.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -177,7 +177,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC34 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC35 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.
@@ -201,6 +201,16 @@ Verarbeitungsphase, Formatklasse, Profil, Zähler und feste Fehlercodes. Dateina
 Pfad, Inhalt, erkannte Werte, technische Fehlermeldung und Dokument-Hash werden
 nicht geschrieben. Ein Fehler beim Schreiben des Diagnosejournals darf die
 Dokumentenverarbeitung nicht blockieren und bleibt als `write_errors` sichtbar.
+
+Zusätzlich enthält `diagnostic_status.workflow` höchstens 50 zurückgegebene feste
+Ablaufereignisse aus einer getrennten, auf 14 Tage und 300 Einträge begrenzten
+lokalen Spur. Sie unterscheidet Picker-Anforderung und -Bestätigung, Workerstart,
+privates IPC, Checkpoint, Verarbeitungsstart, Terminalzustand, Workerende und lokale
+Abschlussanzeige. Zulässig sind nur begrenzte Zähler, Dauer, Exit-/Fehlercode und
+der feste Ereignisname; Batch-Token, PID, Pfad, Dateiname, Inhalt und Hash fehlen.
+Liegt zuletzt `completion_notice_started`, aber kein `completion_notice_finished`
+vor, blockiert die lokale Abschlussanzeige. Fehlt bereits `intake_worker_spawned`,
+liegt der Fehler vor dem Workerstart.
 
 Erlaubte Diagnoseangaben:
 

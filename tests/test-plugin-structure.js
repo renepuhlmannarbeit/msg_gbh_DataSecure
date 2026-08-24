@@ -56,7 +56,7 @@ assert.match(preflight,/start_completed_local_results_handoff/);
 assert.match(preflight,/continue_local_results_handoff/);
 assert.match(preflight,/cancel_local_results_handoff/);
 assert.match(preflight,/niemals Originalbytes, Dateinamen, Pfade, Bildpixel/i);
-assert.match(preflight,/höchstens fünf verifizierte Markdown-Ergebnisse/i);
+assert.match(preflight,/höchstens fünf freigegebene Markdown-Ergebnisse/i);
 assert.match(preflight,/start_document_batch_from_picker/i);
 assert.match(preflight,/Mit \*\*„Öffnen“\*\* bestätigt/i);
 assert.match(preflight,/Token, Paket-\/Dateikennungen, Cursor und Leseberechtigungen bleiben vollständig im lokalen Server/i);

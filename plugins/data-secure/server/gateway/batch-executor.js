@@ -10,6 +10,7 @@ const {
   readBatchProgress
 } = require('./batch');
 const { showLocalIntakeNotice, showBatchStateNotice } = require('../companion/completion-summary');
+const { recordWorkflowEvent } = require('./workflow-diagnostics');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const pendingIntakes = new Map();
@@ -71,6 +72,8 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
 function startLocalBatchExecutor(token, options = {}) {
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
   const forkProcess = options.forkProcess || fork;
+  const record = options.recordWorkflowEvent || recordWorkflowEvent;
+  const lifecycle = (event) => { try { record(event); } catch { /* diagnostics never changes processing */ } };
   let child;
   try {
     child = forkProcess(path.join(__dirname, 'batch-worker.js'), [], {
@@ -84,6 +87,7 @@ function startLocalBatchExecutor(token, options = {}) {
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
     }
+    lifecycle({ event: 'intake_worker_spawned', outcome: 'ok' });
     const claimed = claimLocalBatchExecutor(token, child.pid);
     if (claimed.ok === false) {
       try { child.kill(); } catch { /* only the just-created helper is targeted */ }
@@ -96,14 +100,26 @@ function startLocalBatchExecutor(token, options = {}) {
       try { (options.showBatchStateNotice || showBatchStateNotice)(progress); }
       catch { /* presentation never changes the privacy state */ }
     };
-    child.on?.('message', (message) => showNoticeOnce(localBatchStateProgress(message)));
-    child.once?.('exit', () => {
+    child.on?.('message', (message) => {
+      const progress = localBatchStateProgress(message);
+      if (progress) lifecycle({
+        event: 'intake_terminal_state', outcome: progress.complete ? 'ok' : 'progress',
+        phase: progress.batch_phase, item_count: progress.batch_total,
+        released_count: progress.released, stopped_count: progress.stopped
+      });
+      showNoticeOnce(progress);
+    });
+    child.once?.('exit', (code) => {
+      lifecycle({ event: 'intake_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', exit_code: code,
+        error_code: code === 0 ? 'NONE' : 'LOCAL_WORKER_EXITED' });
       if (noticeShown) return;
       noticeShown = true;
       try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
       catch { /* presentation never changes the privacy state */ }
     });
     child.send({ type: 'start-local-batch', batch_token: token }, (error) => {
+      lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
+        error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
       if (error) releaseLocalBatchExecutor(token, child.pid);
       child.unref?.();
     });
@@ -114,6 +130,7 @@ function startLocalBatchExecutor(token, options = {}) {
       raw_content_sent_to_claude: false
     };
   } catch {
+    lifecycle({ event: 'intake_worker_exited', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
     if (child && Number.isSafeInteger(child.pid)) {
       releaseLocalBatchExecutor(token, child.pid);
       try { child.kill(); } catch { /* only the just-created helper is targeted */ }
@@ -133,6 +150,9 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   const forkProcess = options.forkProcess || fork;
   const showIntakeNotice = options.showLocalIntakeNotice || showLocalIntakeNotice;
   const showState = options.showBatchStateNotice || options.showTerminalBatchSummary || showBatchStateNotice;
+  const workflowRecorder = options.recordWorkflowEvent || recordWorkflowEvent;
+  const lifecycle = (event) => { try { workflowRecorder(event); } catch { /* diagnostics never changes processing */ } };
+  const itemCount = queue.length;
   let child;
   try {
     child = forkProcess(path.join(__dirname, 'batch-worker.js'), [], {
@@ -146,25 +166,57 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
     }
+    lifecycle({ event: 'intake_worker_spawned', outcome: 'ok', item_count: itemCount });
     const intake = { checkpointCreated: false, processingStarted: false, noticeShown: false };
     const showFailureNotice = (stage) => {
       if (intake.noticeShown) return;
       intake.noticeShown = true;
-      try { showIntakeNotice(stage); } catch { /* local notice never changes the privacy state */ }
+      lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
+      try {
+        showIntakeNotice(stage);
+        lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: itemCount });
+      } catch {
+        lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
+          error_code: 'LOCAL_NOTICE_FAILED' });
+      }
     };
     pendingIntakes.set(token, intake);
     child.on?.('message', (message) => {
       if (!message || typeof message !== 'object') return;
-      if (message.type === 'local-intake-checkpoint-created') intake.checkpointCreated = true;
-      if (message.type === 'local-intake-processing-started') intake.processingStarted = true;
+      if (message.type === 'local-intake-checkpoint-created') {
+        intake.checkpointCreated = true;
+        lifecycle({ event: 'intake_checkpoint_created', outcome: 'ok', item_count: itemCount });
+      }
+      if (message.type === 'local-intake-processing-started') {
+        intake.processingStarted = true;
+        lifecycle({ event: 'intake_processing_started', outcome: 'ok', item_count: itemCount });
+      }
       const progress = localBatchStateProgress(message);
       if (progress && !intake.noticeShown) {
         intake.noticeShown = true;
-        try { showState(progress); } catch { /* presentation never changes published local results */ }
+        lifecycle({
+          event: 'intake_terminal_state', outcome: progress.complete ? 'ok' : 'progress',
+          phase: progress.batch_phase, item_count: progress.batch_total,
+          released_count: progress.released, stopped_count: progress.stopped
+        });
+        lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
+        try {
+          showState(progress);
+          lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: itemCount });
+        } catch {
+          lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
+            error_code: 'LOCAL_NOTICE_FAILED' });
+        }
       }
-      if (message.type === 'local-intake-stopped') showFailureNotice(message.stage === 'after_checkpoint' ? 'after_checkpoint' : 'before_checkpoint');
+      if (message.type === 'local-intake-stopped') {
+        lifecycle({ event: 'intake_terminal_state', outcome: 'stopped', item_count: itemCount,
+          error_code: 'LOCAL_WORKER_EXITED' });
+        showFailureNotice(message.stage === 'after_checkpoint' ? 'after_checkpoint' : 'before_checkpoint');
+      }
     });
     child.once?.('exit', (code) => {
+      lifecycle({ event: 'intake_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', item_count: itemCount,
+        exit_code: code, error_code: code === 0 ? 'NONE' : 'LOCAL_WORKER_EXITED' });
       if (!intake.noticeShown) showFailureNotice(intake.checkpointCreated ? 'after_checkpoint' : 'before_checkpoint');
       pendingIntakes.delete(token);
     });
@@ -174,6 +226,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       profile,
       queue: queue.map((entry) => ({ name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes }))
     }, (error) => {
+      lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
+        item_count: itemCount, error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
       if (error) {
         showFailureNotice('before_checkpoint');
         pendingIntakes.delete(token);
@@ -183,6 +237,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     });
     return { ok: true, batch_token: token, local_intake_pending: true, raw_content_sent_to_claude: false };
   } catch {
+    lifecycle({ event: 'intake_worker_exited', outcome: 'stopped', item_count: itemCount,
+      error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
     pendingIntakes.delete(token);
     try { child?.kill?.(); } catch { /* only the just-created helper is targeted */ }
     throw new SafeError('Die lokale Stapelübernahme konnte nicht sicher gestartet werden.');
