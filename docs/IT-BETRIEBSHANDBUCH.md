@@ -104,7 +104,8 @@ Ein grüner Startnachweis umfasst mindestens:
 - der lokale Privacy-Ordner lässt sich öffnen;
 - `privacy_status` meldet `storage_safe: true`; bekannte Cloud-Sync- und
   Netzwerkpfade führen zu einem sicheren Stopp;
-- `Input`, `Output`, `Processed` und `Needs Visual Review` existieren;
+- `Output`, `Needs Visual Review` und `DataSecure-Export` existieren; ein alter
+  `Input`-/`Processed`-Bestand ist nur Migrationsevidenz und kein Eingang;
 - 1–100 bestätigte TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MiB werden vor der Verarbeitung an einen
   serverseitigen Snapshot gebunden; ein Aufruf verarbeitet genau eine noch nicht
   versuchte Position, ein Stopp wird nicht automatisch wiederholt und Änderungen am
@@ -124,16 +125,16 @@ Die vollständige Abnahme steht in [PILOT-ABNAHME.md](PILOT-ABNAHME.md).
 
 | Bereich | Inhalt | Standardverhalten |
 |---|---|---|
-| `Input` | noch nicht verarbeitete TXT-/Markdown-/CSV-/DOCX-Arbeitskopien | wird vom Ordnerworkflow beansprucht |
-| `Processed` | verarbeitete Originale des Ordnerworkflows | nach Retention löschbar |
-| `Output` | freigegebene Markdown-Pakete | nach Retention löschbar; Lesen nur mit 15-Minuten-Berechtigung des aktuellen Laufs |
+| Private Batchdaten | versiegelte Arbeitskopien und Checkpoints | nach Erfolg sofort, sonst spätestens nach 14 Tagen; künftig OS-benutzergebunden verschlüsselt |
+| `Output` | freigegebene Markdown-Pakete | dauerhaft; nur ausdrücklich bestätigt löschbar; Lesen nur mit kurzlebiger Berechtigung |
 | `Needs Visual Review` | lokal zurückgehaltene Vorschauen | keine Freigabe über Claude; Preview verfällt |
+| `DataSecure-Export` | dauerhaftes Mapping und inhaltsfreier Batchnachweis | keine automatische Löschung |
 | Audit | datensparsame Zähler/Status | keine Rohwerte, Namen, Pfade oder Inhalts-Hashes |
 
-Im Pilot werden ausschließlich TXT, Markdown (`.md`), CSV und DOCX über `Input` verarbeitet. CSV-Zellen werden nur als Text in eine Markdown-Tabelle übertragen und nie ausgeführt. PDF und alle
-weiteren Formate stoppen fail-closed. Der ältere
-TXT-/Markdown-/CSV-/DOCX-Companion-Dateidialog bleibt ein getrennter Engineeringpfad und ist nicht
-öffentlich als Werkzeug exponiert. Löschfehler werden gemeldet und beim nächsten
+Im Pilot werden ausschließlich TXT, Markdown (`.md`), CSV und DOCX über den lokalen
+Mehrfachpicker verarbeitet. CSV-Zellen werden nur als Text in eine Markdown-Tabelle
+übertragen und nie ausgeführt. PDF und alle weiteren Formate stoppen fail-closed.
+Einen ausführbaren Input-Ordner- oder Inbox-Fallback gibt es nicht. Löschfehler werden gemeldet und beim nächsten
 Cleanup erneut versucht. Unbekannte Verzeichnisse, Symlinks und Junctions werden
 nicht aggressiv entfernt.
 
@@ -158,18 +159,18 @@ nicht automatisch migriert oder gelöscht; vor einer kontrollierten Bereinigung 
 lokale Originale und offene Stapel auszuschließen.
 
 Der konfigurierte Pfad wird nie in Toolantworten, Audit oder Diagnose übernommen.
-Vor dem Anlegen von `Input`, `Output`, `Processed`, `Needs Visual Review` und
+Vor dem Anlegen verwalteter Arbeitsbereiche, `Output`, `Needs Visual Review` und
 `DataSecure-Export` validiert der Server den Pfad sowie vorhandene Komponenten. Bei
 Cloud-Sync, Netzpfad, Symlink/Junction oder nicht verifizierbarem Stamm ist
 `storage_safe: false` beziehungsweise `UNSAFE_STORAGE_LOCATION` der erwartete
 Stopp. Einen aktiven oder wiederaufnehmbaren Stapel vorher abschließen oder bewusst
 verwerfen; das Umstellen migriert keine Daten.
 
-Nach einem Absturz stellt der Server verwaiste versteckte Input-Claims beim Start
-wieder her, ohne vorhandene Dateien zu überschreiben oder Links zu verfolgen. Eine
-bereits begonnene Batch-Position wird als gestoppt markiert und nicht erneut
-ausgeführt. Ein Absturz nach dem Verschieben nach `Processed`, aber vor Veröffentlichung
-des Outputs, kann weiterhin eine manuelle Wiederherstellung erfordern.
+Nach einem Update stellt eine Übergangsmigration gegebenenfalls verwaiste versteckte
+Claims aus dem früheren Input-Fallback wieder her, ohne Dateien zu überschreiben oder
+Links zu verfolgen. Sie nimmt keine neue Arbeit aus diesen Ordnern an. Eine bereits
+begonnene Picker-Batch-Position wird als gestoppt markiert und nicht automatisch
+erneut ausgeführt.
 
 `purge_local_data` löscht nur nach ausdrücklicher Bestätigung und nur den gewählten
 Scope. Vor einem Purge sicherstellen, dass die synthetischen Ergebnisse nicht mehr

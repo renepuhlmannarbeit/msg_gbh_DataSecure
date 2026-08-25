@@ -52,8 +52,9 @@ TXT/Markdown/CSV/DOCX funktionieren ohne separat installierte Node-/Python-Laufz
       direkt; Grafiken bleiben zurückgehalten.
 - [ ] PDF erscheint ausschließlich unter `blocked_inputs` mit
       `PDF_COVERAGE_UNVERIFIED`, nicht unter den unterstützten Eingaben.
-- [ ] Der Privacy-Ordner öffnet sich und enthält die fünf erwarteten Bereiche
-      `Input`, `Output`, `Needs Visual Review`, `Processed` und `DataSecure-Export`.
+- [ ] Der Privacy-Ordner öffnet sich und enthält `Output`, `Needs Visual Review`
+      und `DataSecure-Export`; ein vorhandener alter `Input`-/`Processed`-Bestand
+      wird nicht als Eingang angeboten.
 - [ ] Der Standardordner liegt im lokalen App-Datenbereich. Ein expliziter OneDrive-,
       iCloud-, Dropbox- oder Netzwerkpfad meldet `blocked_unsafe_storage` und startet
       keine Verarbeitung.
@@ -131,7 +132,8 @@ Stop-Gegenproben.
       Privacy-Paket; Markdown-Referenzen bleiben inert und CSV-Zellen werden nicht
       ausgeführt.
 - [ ] Jede DOCX-Parserwarnung stoppt mit `PARSER_COVERAGE_UNVERIFIED`.
-- [ ] Alle anderen Formate stoppen mit festem Coverage-Fehler und bleiben in `Input`.
+- [ ] Alle anderen Formate stoppen mit festem Coverage-Fehler; ihre Quelle bleibt
+      am ursprünglichen Ort unverändert.
 - [ ] Jedes PDF stoppt mit `PDF_COVERAGE_UNVERIFIED`, stellt das Original wieder her
       und erzeugt weder Teil- noch Output-Paket.
 - [ ] Eingebettete DOCX-Grafiken bleiben lokal; erkannter Bildtext passiert denselben

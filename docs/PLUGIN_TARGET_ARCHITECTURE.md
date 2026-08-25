@@ -71,19 +71,20 @@ Die Skills enthalten keine Rohdatenverarbeitung. Sie wählen Profile, erklären 
 
 Der lokale MCP übernimmt ausschließlich deterministische bzw. lokal kontrollierte Verarbeitung. Er darf Rohdaten lesen, aber nur bereinigte Outputs an Claude zurückgeben.
 
-Empfohlene Tool-Oberfläche:
+Die normale Cowork-Oberfläche bleibt auf acht Aufgabenwerkzeuge begrenzt:
 
-- `privacy_status`
-- `open_privacy_folder`
-- `open_input_folder`
-- `begin_document_batch`
-- `start_document_batch_processing`
-- `document_batch_status`
-- `list_document_batch_results`
-- `acknowledge_batch_document`
+- `start_document_batch_from_picker`
+- `start_completed_local_results_handoff`
+- `continue_local_results_handoff`
+- `cancel_local_results_handoff`
 - `continue_most_recent_document_batch`
-- `read_anonymized_document`
-- `list_visual_review_items`
+- `discard_incomplete_document_batches`
+- `configure_privacy_folder`
+- `open_export_folder`
+
+Diagnose, Detailstatus, technische Lesewerkzeuge und lokale Ordneraktionen bleiben
+im ausdrücklich aktivierten IT-Supportmodus. Einen technischen Input-Ordner oder
+einen zweiten Intake-Vertrag gibt es nicht.
 
 Der Server bindet eine bestätigte Menge von 1–100 Dateien mit zusammen höchstens 500 MB an einen unveränderlichen
 lokalen Snapshot. Lesezugriff auf ein Ergebnis erfordert neben der Paket-ID eine

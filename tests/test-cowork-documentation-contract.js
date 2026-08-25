@@ -19,12 +19,12 @@ for (const text of [guide, review, anonymize, explain, boundary]) {
 }
 assert.match(guide, /„Öffnen“[^\n]{0,160}(?:einzige|genau einmal)/iu, 'single confirmation is unclear');
 assert.match(anonymize, /genau einmal[^\n]*start_document_batch_from_picker/iu);
-assert.match(anonymize, /weder `privacy_status`[^\n]*`open_input_folder`/iu);
+assert.match(anonymize, /weder `privacy_status`[^\n]*(?:Ordner|Supportwerkzeug)/iu);
 assert.doesNotMatch(all, /ausschließlich[^\n]{0,100}`Input`-Ordner (?:kopieren|eingehen)/iu, 'old Input normal path returned');
-assert.match(explain, /`Input` ist nur eine gesperrte technische Support-Inbox/iu);
+assert.match(explain, /(?:keinen technischen (?:Input-|Eingangs)ordner|nie durch einen[^\n]{0,80}technischen Eingangsordner)/iu);
 assert.match(review, /genau acht Werkzeuge/iu);
 assert.match(review, /Fortsetzung startet[^\n]{0,180}getrennte lokale Fachprüfung/iu);
-assert.match(review, /vollständigen 28 Werkzeuge/iu);
+assert.match(review, /vollständigen 25 Werkzeuge/iu);
 assert.doesNotMatch(all, /höchstens zehn namenfreie Ergebnisse|Seiten von höchstens zehn/iu);
 assert.match(anonymize, /pausierter oder fortsetzbarer Stapel blockiert[^\n]{0,100}neue Auswahl nicht/iu);
 assert.doesNotMatch(server, /if\(status\.recoverable_batches>0\)return\{ok:false,error:'recoverable_batch_exists'/u,

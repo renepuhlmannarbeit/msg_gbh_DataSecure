@@ -156,7 +156,7 @@ test('MCPB prompt texts use the same direct-picker contract as the runtime', () 
   for (const prompt of mcpb.prompts) {
     assert.strictEqual(prompt.text, manifestPromptText(prompt.name), `${prompt.name} prompt contract drift`);
     assert.match(prompt.text, /genau einmal start_document_batch_from_picker/u, `${prompt.name} must use the direct local picker`);
-    assert.match(prompt.text, /weder privacy_status noch open_input_folder/u, `${prompt.name} must not add a redundant preliminary step`);
+    assert.match(prompt.text, /weder privacy_status noch ein Ordner-, Status- oder Supportwerkzeug/u, `${prompt.name} must not add a redundant preliminary step`);
     assert.match(prompt.text, /keine zusätzliche Bild- oder Startfrage/u, `${prompt.name} must not add a redundant confirmation`);
     assert.match(prompt.text, /Originale nie per Chat-Anhang oder Fremdwerkzeug/u, `${prompt.name} must forbid upload workarounds`);
     assert.match(prompt.text, /bei batch_active/iu, `${prompt.name} must wait for an active local batch`);

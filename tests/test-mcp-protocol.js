@@ -141,8 +141,8 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 28, `expected exactly 28 tools, got ${tools.length}`);
-    assert.ok(tools.some((tool) => tool.name === 'open_input_folder'));
+    assert.strictEqual(tools.length, 25, `expected exactly 25 tools, got ${tools.length}`);
+    assert.ok(!tools.some((tool) => tool.name === 'open_input_folder'));
     assert.ok(tools.some((tool) => tool.name === 'open_export_folder'));
     assert.ok(tools.some((tool) => tool.name === 'configure_privacy_folder'));
     assert.ok(tools.some((tool) => tool.name === 'start_document_batch_from_picker'));
@@ -153,8 +153,8 @@ async function main() {
     assert.ok(!tools.some((tool) => tool.name === 'anonymize_all_documents'));
     assert.ok(!tools.some((tool) => tool.name === 'anonymize_next_document'));
     assert.ok(!tools.some((tool) => tool.name === 'list_anonymized_packages'));
-    assert.ok(tools.some((tool) => tool.name === 'begin_document_batch'));
-    assert.ok(tools.some((tool) => tool.name === 'start_document_batch_processing'));
+    assert.ok(!tools.some((tool) => tool.name === 'begin_document_batch'));
+    assert.ok(!tools.some((tool) => tool.name === 'start_document_batch_processing'));
     assert.ok(tools.some((tool) => tool.name === 'document_batch_status'));
     assert.ok(tools.some((tool) => tool.name === 'list_document_batch_results'));
     assert.ok(tools.some((tool) => tool.name === 'acknowledge_batch_document'));
@@ -191,9 +191,6 @@ async function main() {
     const resume = tools.find((tool) => tool.name === 'resume_document_batch');
     assert.deepStrictEqual(resume.inputSchema.required, ['batch_token', 'confirmed']);
     assert.strictEqual(resume.inputSchema.properties.confirmed.const, true);
-    const begin = tools.find((tool) => tool.name === 'begin_document_batch');
-    assert.deepStrictEqual(begin.inputSchema.required, ['expected_count']);
-    assert.strictEqual(begin.inputSchema.properties.expected_count.maximum, 100);
     const configure = tools.find((tool) => tool.name === 'configure_privacy_folder');
     assert.deepStrictEqual(configure.inputSchema.required, ['confirmed']);
     assert.strictEqual(configure.inputSchema.properties.confirmed.const, true);
@@ -238,19 +235,17 @@ async function main() {
     assert.ok(!names.includes('purge_local_data'));
   });
 
-  await testAsync('normal Cowork rejects manually invoked technical Input and root paths', async () => {
+  await testAsync('normal Cowork rejects removed legacy and support-only tools', async () => {
     const { responses } = await talk([
       rpc(1, 'tools/call', { name: 'begin_document_batch', arguments: { expected_count: 1 } }),
       rpc(2, 'tools/call', { name: 'open_privacy_folder', arguments: {} }),
       rpc(3, 'tools/call', { name: 'privacy_status', arguments: {} })
     ], { supportMode: false });
     assert.strictEqual(responses.length, 3);
-    for (const response of responses.slice(0, 2)) {
+    for (const response of responses) {
       assert.strictEqual(response.result.isError, true);
-      assert.match(response.result.structuredContent.message, /DataSecure-Eingang.*Supportmodus/u);
+      assert.match(response.result.structuredContent.message, /lokalen Supportmodus/u);
     }
-    assert.strictEqual(responses[2].result.isError, true);
-    assert.match(responses[2].result.structuredContent.message, /lokalen Supportmodus/u);
   });
 
   await testAsync('read tools are annotated read only and write tools are not', async () => {
@@ -263,17 +258,17 @@ async function main() {
       assert.strictEqual(byName[name].annotations.readOnlyHint, false, `${name} starts or advances an intentional handoff`);
       assert.strictEqual(byName[name].annotations.idempotentHint, false, `${name} advances local handoff state`);
     }
-    for (const name of ['start_document_batch_processing', 'list_document_batch_results', 'purge_local_data']) {
+    for (const name of ['list_document_batch_results', 'purge_local_data']) {
       assert.strictEqual(byName[name].annotations.readOnlyHint, false, `${name} must not claim to be read only`);
     }
-    for (const name of ['start_document_batch_processing', 'review_deferred_document_batch', 'acknowledge_batch_document', 'acknowledge_batch_documents', 'discard_incomplete_document_batches', 'purge_local_data']) {
+    for (const name of ['review_deferred_document_batch', 'acknowledge_batch_document', 'acknowledge_batch_documents', 'discard_incomplete_document_batches', 'purge_local_data']) {
       assert.strictEqual(byName[name].annotations.destructiveHint, true, `${name} must disclose destructive local state changes`);
     }
     for (const name of ['privacy_status', 'diagnostic_status', 'document_batch_status', 'read_anonymized_document', 'read_anonymized_documents', 'list_visual_review_items']) {
       assert.strictEqual(byName[name].annotations.idempotentHint, true, `${name} must disclose idempotent reads`);
       assert.strictEqual(byName[name].annotations.destructiveHint, false, `${name} must be non-destructive`);
     }
-    for (const name of ['open_input_folder', 'open_privacy_folder', 'open_output_folder', 'open_export_folder', 'open_visual_review_folder', 'configure_privacy_folder']) {
+    for (const name of ['open_privacy_folder', 'open_output_folder', 'open_export_folder', 'open_visual_review_folder', 'configure_privacy_folder']) {
       assert.strictEqual(byName[name].annotations.idempotentHint, false, `${name} opens a new local UI instance`);
       assert.strictEqual(byName[name].annotations.destructiveHint, false, `${name} only opens a local folder`);
     }
@@ -421,15 +416,15 @@ async function main() {
     assert.strictEqual(result.hashes_logged, false);
   });
 
-  await testAsync('an empty input folder is reported as a result, not as a transport error', async () => {
+  await testAsync('removed Input intake tools stay unavailable in support mode', async () => {
     const { responses } = await talk([
       rpc(1, 'initialize', {}),
       rpc(2, 'tools/call', { name: 'begin_document_batch', arguments: { expected_count: 1, profile: 'customer' } })
     ]);
     const r = responses.find((x) => x.id === 2);
-    assert.ok(r.result, 'an empty queue must not produce a JSON-RPC error');
-    assert.strictEqual(r.result.structuredContent.error, 'input_empty');
-    assert.ok(!r.result.isError, 'an empty queue is not a tool error');
+    assert.ok(r.error, 'unknown tool must produce a JSON-RPC error');
+    assert.strictEqual(r.error.code, -32602);
+    assert.match(r.error.message, /Unbekanntes Werkzeug/u);
   });
 
   await testAsync('a failing tool reports isError and never leaks raw content', async () => {

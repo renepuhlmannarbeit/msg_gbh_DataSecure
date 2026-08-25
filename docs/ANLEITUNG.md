@@ -187,7 +187,7 @@ bei einem fehlenden lokalen Tool nicht auf Upload ausweichen, sondern den Host p
 IT-Supportmodus und sind weder Installations- noch Vorbereitungsschritt des normalen
 Cowork-Ablaufs.
 
-## Teil 6: Die fünf Ordner
+## Teil 6: Lokale Ablage
 
 ### Dateien anonymisieren – der Normalweg
 
@@ -195,7 +195,7 @@ Schreiben Sie in einer neuen Cowork-Unterhaltung einfach: **„Dateien anonymisi
 DataSecure öffnet sofort die lokale Mehrfach-Dateiauswahl. Wählen Sie bis zu 100
 TXT-, Markdown-, CSV- oder DOCX-Dateien mit zusammen höchstens 500 MiB und klicken
 Sie **„Öffnen“**. Das ist die einzige Startbestätigung; der Stapel startet danach
-lokal automatisch. Sie müssen keine Dateien vorher in `Input` kopieren und keinen
+lokal automatisch. Einen technischen Eingangsordner gibt es nicht und Sie müssen keinen
 Diagnosestatus abfragen. Bilder bleiben standardmäßig lokal und werden nicht an
 Claude übertragen.
 
@@ -204,8 +204,9 @@ Zusätzlich zur Stapelgrenze gelten sichere Einzeldateigrenzen: TXT/Markdown
 entpackt. Es gibt keine feste Seitenbegrenzung. Eine zu große Datei wird bereits
 lokal vor dem Hintergrundlauf abgewiesen.
 
-Der `Input`-Ordner bleibt ausschließlich für einen von IT oder erfahrenen
-Anwendern bewusst gewünschten manuellen/fallspezifischen Ablauf bestehen.
+Auch der IT-Support verwendet für neue Stapel ausschließlich den lokalen Picker.
+Ältere `Input`-/`Processed`-Ordner können nach einem Update noch als zu prüfender
+Migrationsbestand vorhanden sein, sind aber kein ausführbarer Eingang mehr.
 
 ### Optional: einen anderen lokalen Privacy-Ordner wählen
 
@@ -236,10 +237,8 @@ Privacy-Ordner"* öffnet ihn im Explorer oder Finder.
 
 | Ordner | Inhalt |
 |---|---|
-| `Input` | DataSecure-eigene Inbox für den technischen Alt-/Fallbackweg; niemals einen SharePoint-, Netz- oder Quellordner hierher verbinden |
-| `Output` | Die geprüfte Fassung. Nur das sieht Claude; standardmäßig 7 Tage aufbewahrt |
+| `Output` | Freigegebene lokale Ergebnispakete; keine automatische Löschung, nur ausdrücklich bestätigt |
 | `Needs Visual Review` | Lokal zurückgehaltene Bilder. Enthält echte Fotos; in diesem Engineering-Build keine Freigabe über Claude, Preview verschwindet nach Fristablauf |
-| `Processed` | Ausschließlich DataSecure-eigene Arbeitskopien des technischen Inbox-Fallbacks; standardmäßig 7 Tage aufbewahrt |
 | `DataSecure-Export` | Dauerhafte lokale Übersicht: `DataSecure-Mapping.csv` ordnet jede Originaldatei ihrem anonymisierten Ergebnis zu; der zugehörige Batch-Nachweis enthält nur Zähler und Status |
 
 Ihre Quelle bleibt unverändert. Der normale Cowork-Mehrfachpicker liest Dateien nur
@@ -380,7 +379,7 @@ Nummern beginnen bei jedem Dokument neu.
 | `AMBIGUITY_REVIEW_REQUIRED` | Ein Organisationsname könnte Zertifikatsanbieter oder Arbeitgeber/Kunde sein. Die lokale Arbeitskopie bleibt gesperrt; nicht automatisch erneut starten. Der Normalablauf rät hier bewusst nicht |
 | `PARSER_ISOLATION_FAILED` | Die lokale Windows-Sicherheitsgrenze fehlt oder ist beschädigt. Nicht erneut versuchen und nichts manuell umgehen; Plugin/Extension durch IT neu installieren lassen |
 | `PARSER_RESOURCE_LIMIT` | Die Datei hat die feste lokale CPU- oder Speichergrenze erreicht. Es wurde nichts freigegeben. Nicht automatisch wiederholen; IT kann die synthetische Reproduktion prüfen |
-| Claude meldet vor dem Start eine andere Anzahl | Abbrechen und die beabsichtigten Dateien im lokalen Mehrfachpicker erneut auswählen; nicht auf `Input` ausweichen |
+| Claude meldet vor dem Start eine andere Anzahl | Abbrechen und die beabsichtigten Dateien im lokalen Mehrfachpicker erneut auswählen; keinen Ersatzordner oder Upload verwenden |
 | „Grafik wurde nicht freigegeben" | Normalfall. Das Bild bleibt im aktuellen Engineering-Build lokal zurückgehalten (Regel 2) |
 | `PDF_COVERAGE_UNVERIFIED` | PDF ist unabhängig vom Inhalt sicher gesperrt. Verwenden Sie eine freigegebene TXT-, Markdown-, CSV- oder DOCX-Quelle; niemals das PDF direkt in Claude hochladen |
 | `FORMAT_COVERAGE_UNVERIFIED` | Im Pilot sind nur TXT, Markdown (`.md`), CSV und DOCX zugelassen. Es wird kein Paket für die Datei freigegeben |

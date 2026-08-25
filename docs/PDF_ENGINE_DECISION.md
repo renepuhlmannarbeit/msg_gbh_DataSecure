@@ -5,7 +5,7 @@ Stand: 21.08.2026 · Entscheidung für RC21
 ## Entscheidung
 
 DataSecure verwendet den bisherigen `pdf-lite`-Parser nicht mehr im Release-Pfad.
-PDF bleibt im privaten Dialog und im Input-Pfad gesperrt, bis ein eigener, gebündelter
+PDF bleibt im privaten Picker gesperrt, bis ein eigener, gebündelter
 PDFium-Worker den unten definierten Coverage-Vertrag erfüllt. Ein PDF darf vorher kein
 Privacy-Paket erzeugen. Der feste Diagnosecode lautet `PDF_COVERAGE_UNVERIFIED`.
 

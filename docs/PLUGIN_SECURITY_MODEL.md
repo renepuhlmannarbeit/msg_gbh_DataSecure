@@ -8,8 +8,8 @@ them. The local MCP server owns file access, de-identification, visual gating,
 integrity checks and release. Claude reads only released privacy-package output.
 
 Uploading a raw sensitive document directly into the chat bypasses the whole
-guarantee. That is why the server instructions tell Claude to route the user to
-the local `Input` folder instead of asking for an upload.
+guarantee. The server therefore accepts new sources only through its local OS
+picker. There is no executable Input-folder fallback.
 
 The plugin is the primary artefact; the standalone MCPB is a fallback for direct
 Claude Desktop extension installation. Both ship the same runtime from
@@ -97,13 +97,11 @@ guessing:
 - redaction failed, or a second OCR pass still finds the redacted strings
 - package, asset or Markdown hash does not match the manifest
 
-A run first claims its source under a hidden name so concurrent calls cannot
-process the same input. The source is moved to `Processed` before the atomic
-Output rename, which is the single publish/commit point. If publishing fails,
-the source is restored to its original `Input` name and no package is exposed.
-Staging directories and review items from the failed run are removed. A failed
-automatic restore is reported explicitly for manual recovery rather than being
-misreported as an ordinary clean rollback.
+A picker run first binds a read-only source to a private sealed snapshot. The
+original is never renamed, moved or deleted. Package publication is atomic; if it
+fails, no package is exposed and the private job remains safely recoverable or is
+cleaned according to its lifecycle. A one-release migration restores abandoned
+hidden claims from the removed Input fallback but never accepts new work there.
 
 A startup recovery pass restores abandoned hidden input claims without overwriting
 an existing file, following symlinks or touching a claim that still has a live
@@ -113,8 +111,9 @@ original may then be present in `Processed` while no package is visible in `Outp
 
 ## Batch and read capabilities
 
-After the user confirms the visible file count, `begin_document_batch` creates a
-server-owned snapshot for exactly 1–100 TXT-/Markdown-/CSV-/DOCX inputs. Names, sizes, mtimes and
+After the user confirms the operating-system picker with “Open”,
+`start_document_batch_from_picker` creates a server-owned snapshot for exactly
+1–100 TXT-/Markdown-/CSV-/DOCX inputs. Names, sizes, mtimes and
 hashes remain local. Replacing, adding or removing a file invalidates the whole
 batch, even when the count stays unchanged. The server records each position as
 pending, processing, released or stopped; a stopped item is not retried

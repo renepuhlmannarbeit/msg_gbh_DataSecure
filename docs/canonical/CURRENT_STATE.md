@@ -23,7 +23,7 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 | Bereich | RC44-IST | beschlossenes SOLL | Lücke / Priorität |
 |---|---|---|---|
 | Cowork-Start | kurzer Picker-/Workerpfad teilweise vorhanden; Host-Node und reale Cowork-Evidenz offen | selbsttragender Windows-/macOS-Start, Readiness und genau ein Self-Heal | P0 Distribution/Evidenz |
-| Quellen | Mehrfach-Dateipicker; Legacy-Input kann Quellen beanspruchen | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | P0 Originalschutz, P1 Ordner |
+| Quellen | Mehrfach-Dateipicker als einziger ausführbarer Eingang; einmalige Startmigration kann nur verwaiste Alt-Claims wiederherstellen | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 Input-Oberfläche entfernt; P0 internen Altcode abbauen, P1 Ordner |
 | Stapel | durable Checkpoints und Background-Intake; neue Auswahl trotz pausierter Stapel im Arbeitsstand umgesetzt | ein aktiver, mehrere pausierte; Pause blockiert nicht | E0 umgesetzt, E1/E2 offen |
 | Review/Abschluss | abgekoppelter Review ohne menschlichen Timeout und detachierte Abschlussmeldung im Arbeitsstand | persistente Queue ohne Entscheidungs-Timeout, nicht blockierender Abschluss | E0 umgesetzt, E1/E2 offen |
 | private Daten | Rohsnapshots und Reviewdaten nicht durchgehend OS-benutzergebunden verschlüsselt | DPAPI/Keychain, kein Klartextfallback | P0 Security |
@@ -835,23 +835,20 @@ Ambiguitätsentscheidungen, Zurück/Ändern und technisch gebundenem Skip. macOS
 für Zertifikatsaussteller eine lokale, `stdin`-gebundene Beibehalten/Anonymisieren-
 Entscheidung ohne freie Textredaktion. Linux verwendet dafür Zenity oder KDialog und
 überträgt Fundstellenkontext nur über `stdin` beziehungsweise `/dev/stdin`.
-Claude kann weder reviewen noch freigeben. Der neue plattformneutrale
-`local-password`-Vertrag öffnet einen maskierten nativen Passwortdialog (Windows,
-macOS, Linux), übergibt das Geheimnis ausschließlich in einer lokalen Pipe an einen
-lokalen Verbraucher und nullt danach sowohl Pipe- als auch Verbraucherbuffer. Passwort,
-Pfad und Rohinhalt sind weder MCP-Parameter noch Kommandozeile, Umgebung, Journal oder
-Diagnose; der Vertrag akzeptiert ausschließlich einen begrenzten Binärwert, damit keine
-nicht löschbare JavaScript-Stringkopie entsteht. Das ist bewusst **noch keine Entschlüsselungsfreigabe**: Bis ein separat
-geprüfter lokaler Entschlüsseler integriert und auf den drei Zielplattformen abgenommen
-ist, bleiben passwortgeschützte Dateien fail-closed. Rest: diese Entschlüsselerbindung,
-„Später entscheiden“, freie Redaktionen außerhalb Windows und echte Zielplattformabnahmen.
+Claude kann weder reviewen noch freigeben. Der vorhandene experimentelle
+`local-password`-Transportvertrag ist durch DS-046 fachlich überholt und wird nicht
+an einen Entschlüsseler angebunden. Er gehört beim Refactoring aus dem Produktpfad
+entfernt. Passwort, Pfad und Rohinhalt bleiben weder MCP-Parameter noch Kommandozeile,
+Umgebung, Journal oder Diagnose. Passwortgeschützte beziehungsweise verschlüsselte
+Quellen werden bereits vor jeder privaten Kopie als nicht verarbeitet ausgewiesen;
+der übrige Stapel läuft weiter.
 
 Passwortgeschützte ZIP-/Office-Container erhalten bereits vor der Batch-Arbeitskopie
 den festen inhaltsfreien Fehlercode `PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED`. Das
 System öffnet hierfür bewusst keinen wirkungslosen Passwortdialog und schlägt keine
 Umgehung per Upload vor. Neben verschlüsselten ZIP-Einträgen erkennt der Preflight
 auch die CFB/OLE-Signatur der normalen Microsoft-Office-Verschlüsselung; beide Wege
-bleiben bis zur geprüften lokalen Entschlüsselerbindung gesperrt.
+bleiben gemäß DS-046 dauerhaft gesperrt und bieten keine Passwortabfrage an.
 
 Korrektur 23.08.2026: Der macOS-Dialog besitzt den unter BL-012 dokumentierten
 P0-Defekt und ist daher kein aktueller Plattformnachweis. Der bestehende Code- und
@@ -936,7 +933,7 @@ neuen Prozess fort und gibt keine Quellidentität aus. Ein 137.499-Zeichen-Test 
 freigegebenes Markdown in begrenzten Seiten vollständig und ohne Überlappung wieder
 zusammen und erzwingt die 1.000-/30.000-Zeichen-Grenzen. Damit sind MCP-Neustart und
 Zeichenbudget lokal belegt. BL-041.5 bleibt bis zu 500-MB-Realdaten,
-Host-/Rechnerneustart, Drei-OS-Fresh-Install und beobachteter Cowork-Auswertung in
+Host-/Rechnerneustart, Windows-/macOS-Fresh-Install und beobachteter Cowork-Auswertung in
 Arbeit.
 
 Die lokale manuelle Grenzabnahme bindet außerdem 100 reale synthetische
@@ -1251,10 +1248,12 @@ separaten Pilotentscheidung NO-GO.
 
 Status: **teilweise**
 
-Vorhanden ist ein lokaler Mehrfach-Dateipicker mit Snapshot- und Mengenlimits.
-Rekursive Ordnerwahl, vollständige Vorabvalidierung der Hierarchie und stabile
-relative Mappingzuordnung fehlen. Der Legacy-Inputpfad widerspricht bis zu seiner
-Korrektur dem strikten Nur-Lesen-Ziel.
+Vorhanden ist ein lokaler Mehrfach-Dateipicker mit Snapshot- und Mengenlimits. Die
+frühere Input-Oberfläche und ihre drei aufrufbaren Werkzeuge sind entfernt; nur eine
+datenbewahrende Startmigration für bereits verwaiste Claims bleibt während des
+Übergangs erhalten. Rekursive Ordnerwahl, vollständige Vorabvalidierung der
+Hierarchie, stabile relative Mappingzuordnung und der Abbau des internen Altpfads
+fehlen noch.
 
 ## BL-047 – Performance und Ressourcensteuerung
 

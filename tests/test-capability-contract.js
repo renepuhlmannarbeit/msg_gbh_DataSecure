@@ -70,10 +70,11 @@ test('runtime modules cannot import or expose the target contract as current sta
 });
 
 test('runtime, MCP schema, skills and active handbooks retain the 100-file/500-MiB text-format contract', () => {
-  const index = read('plugins/data-secure/server/index.js');
   const common = read('plugins/data-secure/server/gateway/common.js');
   const batch = read('plugins/data-secure/server/gateway/batch.js');
-  assert.match(index, /maximum:100/u);
+  const picker = read('plugins/data-secure/server/companion/file-picker.js');
+  assert.match(picker, /MAX_SELECTED_SOURCES = LIMITS\.MAX_BATCH_FILES/u);
+  assert.match(picker, /LIMITS\.MAX_BATCH_TOTAL_BYTES/u);
   assert.match(common, /PILOT_SUPPORTED=new Set\(\['\.docx','\.txt','\.md','\.markdown','\.csv'\]\)/u);
   const resourceLimits = read('plugins/data-secure/server/resource-limits.js');
   assert.match(resourceLimits, /MAX_BATCH_FILES:\s*100/u);
@@ -112,7 +113,7 @@ test('the pilot acceptance guide distinguishes active and blocked RC30 formats',
   assert.match(pilot, /XLSX, PPTX, eigenständige PNG\/JPEG\/BMP und PDF/u);
   assert.doesNotMatch(pilot, /XLSX,\s*PPTX,\s*MD,\s*CSV/u,
     'the acceptance guide must not list active Markdown/CSV as stop cases');
-  assert.match(pilot, /fünf erwarteten Bereiche[\s\S]*DataSecure-Export/u,
+  assert.match(pilot, /Privacy-Ordner[\s\S]*Output[\s\S]*DataSecure-Export/u,
     'the acceptance guide must expose the permanent mapping-export area');
 });
 

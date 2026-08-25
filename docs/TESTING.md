@@ -287,3 +287,19 @@ enthält 350 Einträge und bestand Quellparität, 13 Skill-Vertragstests sowie d
 synthetische 150-Fälle-Vertragsmatrix; sein SHA-256 lautet
 `93a13f5a6bc2a2d86d995cb7206a3a6532dff1da402538fb9220502d0bb529b1`.
 Diese lokale E0-Evidenz ersetzt weiterhin keine Cowork-UI- oder Zielplattformabnahme.
+
+## Lokaler RC44-Refactoring-Nachweis 25.08.2026
+
+Nach der Entfernung der drei alten Input-Werkzeuge aus sämtlichen aufrufbaren MCP-
+Oberflächen bestand `npm run test:ci` vollständig mit Exit-Code 0. Der Supportmodus
+umfasst jetzt 25 Werkzeuge, davon sind acht im normalen Cowork-Ablauf sichtbar;
+`open_input_folder`, `begin_document_batch` und
+`start_document_batch_processing` sind auch im Supportmodus nicht mehr aufrufbar.
+Die datenbewahrende Startmigration für bereits verwaiste Alt-Claims bleibt während
+des Übergangs bestehen und nimmt keine neuen Quellen an.
+
+Der Lauf enthielt unter anderem 70 Parser-, 79 PII-Regressions-, 101 freigegebene
+Formatkombinations-, 38 Gateway-End-to-End-, 31 MCP-Protokoll- und 20 adversariale
+Tests sowie Mapping/Outbox, direkten Picker/Intake, lokalen Handoff, gemischte
+TXT-/CSV-/DOCX-Wiederaufnahme und die inaktiven Performance-/OCR-Harnesses. Dies ist
+lokale E0-Evidenz und ersetzt keine Fresh-Install-, Cowork-UI- oder macOS-Abnahme.

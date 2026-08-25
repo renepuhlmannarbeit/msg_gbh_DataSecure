@@ -628,8 +628,8 @@ belegen:
    umgesetzt. Als Nächstes AppContainer ohne Netz-Capabilities sowie restriktive Temp-
    und Dateisystemgrenzen gegen Internet, DNS, RFC1918 und Loopback nachweisen; ARM64,
    Codec-Matrix und Signatur folgen getrennt.
-7. **DS-203 (RC21-Spike, Produkt weiter fail-closed):** PDF erzeugt weder im Dialog noch
-   im Input-Pfad ein Paket. Packaging, Attestation, Lizenzinventar, PE-Härtung,
+7. **DS-203 (RC21-Spike, Produkt weiter fail-closed):** PDF erzeugt über den lokalen
+   Picker kein Paket. Packaging, Attestation, Lizenzinventar, PE-Härtung,
    Basis-API und Job-Object-Ausführung sind synthetisch belegt. Als Nächstes folgt ein
    reproduzierbarer Eigenbau aus offizieller Quelle und danach der native Text-only-
    Worker. Catalog/Page-Tree, Unicode, alle
