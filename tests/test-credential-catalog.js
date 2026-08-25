@@ -233,4 +233,24 @@ test('the genuine issuer on the same line survives the prose-customer fix', () =
   assertPresent(output, 'Professional Scrum Master', 'certification title');
 });
 
+// isCredentialIssuerDomain() only checked the credential title *after* the
+// domain ("Scrum.org Professional Scrum Master I"), so an equally common
+// shape naming the credential *before* the domain ("Zertifikat ausgestellt
+// von Scrum.org") fell through to URL_RE and was over-redacted to
+// [URL_REDACTED] even though inCredentialContext already knew the line was
+// protected. Over-redaction rather than a leak, but still turns a genuine,
+// professionally relevant issuer name into a placeholder.
+test('a domain-shaped issuer named before the credential title is preserved, not treated as a URL', () => {
+  const output = pii.anonymize('Zertifizierungen\nZertifikat ausgestellt von Scrum.org.', 'personnel_profile').text;
+  assertPresent(output, 'Scrum.org', 'issuer named before the credential title');
+});
+
+test('an unrelated domain outside credential context is still redacted as a URL', () => {
+  const output = pii.anonymize(
+    'Kontakt: max.mustermann@example-synthetic.test, siehe auch example-portfolio.com für Details.',
+    'personnel_profile'
+  ).text;
+  assertAbsent(output, 'example-portfolio.com', 'unrelated domain');
+});
+
 done();

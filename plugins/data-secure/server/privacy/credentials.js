@@ -207,9 +207,16 @@ function isCredentialIssuerDomain(text,start,end,ranges=credentialContextSpans(t
   if(!inCredentialContext(text,start,end,ranges)) return false;
   const value=String(text).slice(start,end);
   if(/(?:https?:\/\/|www\.|[/?#])/iu.test(value)) return false;
+  // "Scrum.org Professional Scrum Master I" names the credential after the
+  // issuer; "Zertifikat ausgestellt von Scrum.org" names it before. Only
+  // checking the trailing text over-redacted the second, equally common
+  // shape into [URL_REDACTED] even though it is already known-protected
+  // (inCredentialContext above), turning a genuine issuer into a URL.
   const lineEnd=String(text).indexOf('\n',end);
   const after=String(text).slice(end,lineEnd<0?undefined:lineEnd);
-  return hasCredentialCue(after);
+  const lineStart=String(text).lastIndexOf('\n',Math.max(0,start-1))+1;
+  const before=String(text).slice(lineStart,start);
+  return hasCredentialCue(after) || hasCredentialCue(before);
 }
 
 function isCatalogTechnologyTerm(text, start, end) {
