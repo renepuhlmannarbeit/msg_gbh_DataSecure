@@ -80,7 +80,9 @@ Handoff-Kandidaten. `gateway/batch-progress.js` kapselt das inhaltsfreie
 Statusmodell, gemessene Restzeit und die deutschen nächsten Schritte. Die rein
 speicherinterne Review-Policy für Keep/Redact/Deferral liegt in
 `gateway/batch-review-policy.js` und ist durch einen eigenen Negativtest
-abgesichert. Die
+abgesichert. `gateway/batch-journal-io.js` kapselt die bereits bewiesenen
+Short-Write- und POSIX-Directory-Fsync-Primitiven; die atomare Journal-
+Orchestrierung bleibt bis zum nächsten sicheren Schnitt in der Fassade. Die
 öffentlichen Exporte bleiben weiterhin in `gateway/batch.js`; die vorhandenen
 Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen.
 

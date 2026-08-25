@@ -12,6 +12,7 @@ const { appendBatchEvidence } = require('./batch-evidence');
 const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
+const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
   createPhaseRecorder,
   createPrivateIoSummary,
@@ -296,34 +297,6 @@ function writeState(state, options = {}) {
     // source of truth; cleanup is bounded to the exact random temporary path.
     try { fs.unlinkSync(temporary); } catch { /* absent or already renamed */ }
     throw err;
-  }
-}
-
-function writeFully(fd, payload, io = fs) {
-  const bytes = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload), 'utf8');
-  let offset = 0;
-  while (offset < bytes.length) {
-    const written = io.writeSync(fd, bytes, offset, bytes.length - offset, null);
-    if (!Number.isSafeInteger(written) || written <= 0 || written > bytes.length - offset) {
-      throw new Error('BATCH_JOURNAL_PARTIAL_WRITE');
-    }
-    offset += written;
-  }
-  return offset;
-}
-
-function syncParentDirectory(target, io = fs, platform = process.platform) {
-  // Windows does not provide the same portable directory-fsync contract.
-  // The journal file itself is flushed above; POSIX additionally persists the
-  // rename metadata before the state transition is reported as durable.
-  if (platform === 'win32') return false;
-  let descriptor;
-  try {
-    descriptor = io.openSync(path.dirname(target), io.constants.O_RDONLY);
-    io.fsyncSync(descriptor);
-    return true;
-  } finally {
-    if (descriptor !== undefined) io.closeSync(descriptor);
   }
 }
 

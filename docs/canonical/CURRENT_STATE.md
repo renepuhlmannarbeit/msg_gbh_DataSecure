@@ -189,7 +189,9 @@ Kandidaten sind bereits in `gateway/batch-results.js`, Statusmodell,
 Fortschrittsberechnung und inhaltsfreie Nutzertexte in `gateway/batch-progress.js`
 gekapselt. Die Keep/Redact-/Deferral-Policy für lokale Zertifikatsentscheidungen
 liegt in `gateway/batch-review-policy.js` und hält Rohtext weiter ausschließlich
-im Speicher. Die weiteren Schnitte trennen Intake/Snapshot, Journal/Recovery,
+im Speicher. Die Short-Write- und POSIX-Directory-Fsync-Primitiven liegen in
+`gateway/batch-journal-io.js`; atomare Zustandsübergänge bleiben weiterhin in
+der bestehenden Fassade. Die weiteren Schnitte trennen Intake/Snapshot, Journal/Recovery,
 Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
 bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
 benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann
