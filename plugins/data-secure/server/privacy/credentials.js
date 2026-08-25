@@ -22,7 +22,16 @@ const CERT_CODE_RE = credentialCatalogMatchers.code;
 // credentials inherit protection without requiring a release first.
 const CERT_ISSUER_RE = credentialCatalogMatchers.issuer;
 const CERT_TITLE_RE = /\b(?:certified|certification|certificate|credential|professional|associate|expert|specialist|foundation|practitioner|agilist|master|product\s+owner|architect|developer|engineer|administrator|analyst|manager|auditor|security|cloud|devops|testing|test\s+automation|requirements\s+engineering|usability|user\s+experience|business\s+analysis|product\s+ownership|system\s+administrator|solutions?\s+architect|kubernetes|FHIR|CDA|healthcare\s+information|digital\s+health)\b/iu;
-const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunde|projektkunde|auftraggeber|technologien?|technologies|tools?|skillset|kenntnisse)\s*:\s*$/iu;
+// Originally label-only ("Kunde: ABC GmbH"). Real CVs also name a customer or
+// employer in prose inside a certification section ("Zertifikat ausgestellt
+// für Kunde ABC GmbH"), where the colon never appears. Without the inline
+// form, credentialContextSpans() protects the whole section paragraph and
+// this exact organisation survives unredacted — an under-redaction, the
+// direction this product treats as the more severe failure. Making the
+// trailing colon optional keeps the label form working and additionally
+// un-protects the prose form; a false match here only widens redaction
+// (over-redaction of skill/technology words), never narrows it.
+const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|projektkunden?|auftraggeber|client|customer|technologien?|technologies|tools?|skillset|kenntnisse)\b(?:\s*:)?\s*$/iu;
 
 function plainLine(line) {
   return normalizeSpaces(String(line || '')
@@ -173,9 +182,19 @@ function credentialIssuerAmbiguities(originalText, anonymizedText) {
   return candidates;
 }
 
+// "Kunde"/"Arbeitgeber"/etc. are ordinary German nouns and always
+// capitalised, so the organisation regex greedily folds them into the
+// match itself ("Kunde ABC GmbH" as one entity) instead of leaving them
+// as a preceding label. In that case the text before the span ("...für ")
+// no longer carries the cue word, so it alone cannot tell prose customer
+// mentions apart from a real issuer. Also checking the span's own leading
+// word closes that gap without touching the shared organisation regex.
+const NON_ISSUER_PREFIX_RE = /^(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|projektkunden?|auftraggeber|client|customer)\b\s*:?\s*/iu;
+
 function inCredentialContext(text,start,end,ranges=credentialContextSpans(text)) {
   const range=ranges.find((r)=>start < r.end && r.start < end);
   if(!range) return false;
+  if(NON_ISSUER_PREFIX_RE.test(String(text).slice(start,end))) return false;
   return !NON_ISSUER_LABEL_RE.test(String(text).slice(range.start,start));
 }
 

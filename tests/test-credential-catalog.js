@@ -190,4 +190,33 @@ test('long project prose is never classified from an issuer and role word alone'
   assert.deepStrictEqual(credentialContextDetails(prose), []);
 });
 
+// A customer or employer named in prose inside a certification section never
+// carries the "Label:" shape the section-wide protection was built around
+// ("Zertifikat ausgestellt für Kunde ABC GmbH"). The organisation regex also
+// folds the role noun into the match itself ("Kunde ABC GmbH"), so the cue
+// word is no longer text preceding the span either. Both gaps together used
+// to leave the customer fully unredacted while still protecting the genuine
+// issuer on the same line - an under-redaction, the more severe failure
+// direction for this product.
+test('a customer or employer named in prose inside a certification section is still anonymized', () => {
+  const cases = [
+    ['Zertifizierungen\nZertifikat ausgestellt für Kunde ABC Beispiel GmbH im Projekt XY, Scrum.org Professional Scrum Master I.', 'ABC Beispiel GmbH'],
+    ['Zertifizierungen\nPMI-ACP erworben während der Anstellung beim Arbeitgeber Contoso Beispiel AG.', 'Contoso Beispiel AG'],
+    ['Certifications\nAWS Certified Cloud Practitioner, delivered for customer Example Nordics Ltd.', 'Example Nordics Ltd']
+  ];
+  for (const [text, customer] of cases) {
+    const output = pii.anonymize(text, 'personnel_profile').text;
+    assertAbsent(output, customer, `customer named in prose (${customer})`);
+  }
+});
+
+test('the genuine issuer on the same line survives the prose-customer fix', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nZertifikat ausgestellt für Kunde ABC Beispiel GmbH im Projekt XY, Scrum.org Professional Scrum Master I.',
+    'personnel_profile'
+  ).text;
+  assertPresent(output, 'Scrum.org', 'certification issuer');
+  assertPresent(output, 'Professional Scrum Master', 'certification title');
+});
+
 done();
