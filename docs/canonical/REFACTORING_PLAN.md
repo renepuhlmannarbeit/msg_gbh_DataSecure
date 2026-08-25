@@ -81,8 +81,14 @@ Statusmodell, gemessene Restzeit und die deutschen nächsten Schritte. Die rein
 speicherinterne Review-Policy für Keep/Redact/Deferral liegt in
 `gateway/batch-review-policy.js` und ist durch einen eigenen Negativtest
 abgesichert. `gateway/batch-journal-io.js` kapselt die bereits bewiesenen
-Short-Write- und POSIX-Directory-Fsync-Primitiven; die atomare Journal-
-Orchestrierung bleibt bis zum nächsten sicheren Schnitt in der Fassade.
+Short-Write- und POSIX-Directory-Fsync-Primitiven. Darauf kapselt
+`gateway/batch-journal-store.js` die atomare Temp-/Rename-Veröffentlichung und
+zwei bewusst getrennte sichere Lesepfade: der normale Pfad darf nur den eigenen
+abgelaufenen Snapshot bereinigen, der Maintenance-Pfad bleibt vollständig
+read-only. Zehn direkte Tests injizieren Short-/Zero-Write, Fehler in jeder
+Publikationsphase, Symlink-/Dateityp-/Inode-Austausch, ungültige Zustände und
+Expiry-Cleanup. Nicht parsebare Ablaufdaten werden jetzt in beiden Pfaden
+fail-closed abgelehnt.
 `gateway/batch-private-store.js` trennt die dynamischen privaten Pfade und das
 tokengebundene Cleanup als Leaf-Modul; `gateway/batch-snapshot.js` kapselt
 Kapazität, OOXML-Preflight und TOCTOU-gebundene Kopie. Der direkte Modultest
@@ -98,7 +104,9 @@ erhält Lock, Journal, Liveness und Progress ausschließlich per Injection. Acht
 fokussierte Tests belegen ungültige, tote, doppelte und fremde PIDs sowie
 Lock-/Journalfehler und die unveränderte öffentliche Batch-Fassade. Die
 öffentlichen Exporte bleiben weiterhin in `gateway/batch.js`; die vorhandenen
-Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen.
+Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen. Als
+nächster R2-Schnitt verbleibt innerhalb dieses Bereichs der Zustandsautomat mit
+Recovery und Reconciliation; er wird nicht in den Journal-Store gezogen.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 

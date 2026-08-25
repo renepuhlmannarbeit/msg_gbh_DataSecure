@@ -190,8 +190,15 @@ Fortschrittsberechnung und inhaltsfreie Nutzertexte in `gateway/batch-progress.j
 gekapselt. Die Keep/Redact-/Deferral-Policy für lokale Zertifikatsentscheidungen
 liegt in `gateway/batch-review-policy.js` und hält Rohtext weiter ausschließlich
 im Speicher. Die Short-Write- und POSIX-Directory-Fsync-Primitiven liegen in
-`gateway/batch-journal-io.js`; atomare Zustandsübergänge bleiben weiterhin in
-der bestehenden Fassade. `gateway/batch-private-store.js` hält dynamisch
+`gateway/batch-journal-io.js`. `gateway/batch-journal-store.js` kapselt darauf
+die atomare Veröffentlichung sowie sichere, getrennte Lesepfade: der normale
+Pfad validiert Schema, Token, nichtleere Positionen und eine parsebare Ablaufzeit
+und bereinigt abgelaufene eigene Snapshots; der Maintenance-Pfad bleibt
+mutationsfrei und liefert Fehler an den zählenden Aufrufer. Direkte Tests
+injizieren Partial-/Zero-Write, Datei-/Verzeichnis-Fsync-, Close- und
+Rename-Fehler sowie Symlink-, Dateityp- und Inode-Austausch. Dadurch ist auch
+die zuvor mögliche Annahme eines nicht parsebaren `expires_at` geschlossen.
+`gateway/batch-private-store.js` hält dynamisch
 aufgelöste private Pfade und tokengebundenes Cleanup; `gateway/batch-snapshot.js`
 kapselt Kapazität, OOXML-Preflight sowie TOCTOU-gebundene Kopie. Positive
 Partial-Writes werden vollständig geschrieben; Zero-Write, Short-Read und eine
@@ -205,7 +212,7 @@ Prozess, während `EPERM` und unbekannte Fehler blockierend bleiben.
 des lokalen Executors als injizierte Factory. Falsche oder konkurrierende PIDs,
 Lockfehler sowie Journalfehler können dadurch fokussiert geprüft werden und
 lassen einen bestehenden Marker unverändert. Die weiteren Schnitte trennen
-vollständiges Journal/Recovery,
+Zustandsautomat/Recovery,
 Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
 bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
 benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann

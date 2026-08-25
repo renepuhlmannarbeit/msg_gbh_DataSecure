@@ -12,6 +12,7 @@ const { appendBatchEvidence } = require('./batch-evidence');
 const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
 const { createBatchExecutorLease } = require('./batch-executor-lease');
+const { createBatchJournalStore } = require('./batch-journal-store');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -50,75 +51,7 @@ function batchTtlMs() {
   return retentionDays() * 24 * 60 * 60 * 1000;
 }
 
-// `durable: false` (only ever passed for the same-status diagnostic phase
-// markers written while an item stays 'processing' - private_copy_claimed,
-// extracted, text_privacy_checked, package_verified, package_published)
-// skips both fsyncs. markInterruptedItemsRetryable() below keys only on
-// item.status, never on item.checkpoint: whichever of these markers last
-// made it to disk before a crash, the item is still read back as
-// 'processing' and is still correctly recovered as retryable, exactly as
-// if this call had never run. The temp-file-then-rename write stays
-// unconditional even when non-durable, so a crash mid-write still can
-// never leave a torn or half-written journal behind - only the flush
-// timing relative to a *power loss* (not a process crash) is relaxed, and
-// only where nothing observable depends on that timing. Every write that
-// actually changes item.status keeps the full durable path.
-function writeState(state, options = {}) {
-  const durable = options.durable !== false;
-  const target = batchPath(state.token);
-  const temporary = `${target}.tmp_${crypto.randomBytes(6).toString('hex')}`;
-  const payload = Buffer.from(`${JSON.stringify(state)}\n`, 'utf8');
-  // The batch journal is the single source of truth for in-flight items; an
-  // unsynced write can survive a process crash but not a power loss between
-  // the write and the rename, letting the rename land the old journal back.
-  try {
-    const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
-    try {
-      writeFully(fd, payload);
-      if (durable) fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    fs.renameSync(temporary, target);
-    if (durable) syncParentDirectory(target);
-  } catch (err) {
-    // A failed short write or flush must never leave a journal-looking
-    // temporary file behind. The old atomically published state remains the
-    // source of truth; cleanup is bounded to the exact random temporary path.
-    try { fs.unlinkSync(temporary); } catch { /* absent or already renamed */ }
-    throw err;
-  }
-}
-
-function readState(token) {
-  const target = batchPath(token);
-  let state;
-  let descriptor;
-  try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    const stat = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(target);
-    if (!stat.isFile() || named.isSymbolicLink() || named.dev !== stat.dev || named.ino !== stat.ino) {
-      throw new Error('unsafe');
-    }
-    state = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
-  } catch {
-    throw new SafeError('Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte den Eingang erneut bestätigen.');
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
-  if (state.token !== token || state.schema !== 'datasecure-batch/1' || !Array.isArray(state.items) || state.items.length === 0) {
-    throw new SafeError('Batch-Sitzung ist ungültig. Bitte den Eingang erneut bestätigen.');
-  }
-  if (Date.now() > Date.parse(state.expires_at)) {
-    try {
-      safeRemoveWorkDirectory(token);
-      fs.unlinkSync(target);
-    } catch { /* fail closed below */ }
-    throw new SafeError('Batch-Sitzung ist abgelaufen. Bitte den Eingang erneut bestätigen.');
-  }
-  return state;
-}
+const { writeState, readState, readStateForMaintenance } = createBatchJournalStore();
 
 // Cross-references every still-open batch item with the Output scope so
 // retention never deletes a package a batch still needs to reach delivery or
@@ -1378,25 +1311,6 @@ function cleanupExpiredBatchSnapshots(options = {}) {
     return { removed, failures, skipped_active: false };
   } finally {
     releaseActiveLock(token);
-  }
-}
-
-function readStateForMaintenance(token) {
-  // Unlike readState(), this does not perform cleanup itself.  The caller owns
-  // the global maintenance lock and needs a parse failure to remain a counted,
-  // fail-closed local condition rather than deleting an unknown entry.
-  const target = batchPath(token);
-  let descriptor;
-  try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    const stat = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(target);
-    if (!stat.isFile() || named.isSymbolicLink() || named.dev !== stat.dev || named.ino !== stat.ino) throw new Error('unsafe');
-    const state = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
-    if (state?.schema !== 'datasecure-batch/1' || state.token !== token || !Number.isFinite(Date.parse(state.expires_at))) throw new Error('invalid');
-    return state;
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
   }
 }
 
