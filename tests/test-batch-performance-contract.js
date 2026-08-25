@@ -105,4 +105,50 @@ test('manual benchmark covers real TXT, CSV and DOCX parsing with bounded cold/w
   assert.doesNotMatch(result.stdout, /datasecure-phase-benchmark-|Synthetischer Fachabschnitt|source|path|hash|filename/i);
 });
 
+test('a non-durable state write still lands correctly on disk but skips fsync, and a status change stays durable', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path2 = require('path');
+  const base = fs.mkdtempSync(path2.join(os.tmpdir(), 'datasecure-perf-durability-'));
+  process.env.EU_PRIVACY_ROOT = path2.join(base, 'privacy');
+  process.env.LOCALAPPDATA = path2.join(base, 'localapp');
+  // Fresh require after setting the env: gateway/common resolves the
+  // private root from EU_PRIVACY_ROOT at call time, but batchRoot() below
+  // must see this test's own isolated root, not one a prior test file left
+  // configured in this process.
+  delete require.cache[require.resolve('../plugins/data-secure/server/gateway/batch')];
+  delete require.cache[require.resolve('../plugins/data-secure/server/gateway/common')];
+  const { _test } = require('../plugins/data-secure/server/gateway/batch');
+  const token = 'a'.repeat(64);
+  const state = {
+    schema: 'datasecure-batch/1',
+    token,
+    profile: 'general',
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    items: [{ name: 'x', status: 'processing', checkpoint: 'processing_started' }]
+  };
+
+  const originalFsync = fs.fsyncSync;
+  let fsyncCalls = 0;
+  fs.fsyncSync = (...args) => { fsyncCalls++; return originalFsync(...args); };
+  try {
+    _test.writeState(state);
+    assert.strictEqual(fsyncCalls, 1, 'a default (durable) write must fsync exactly once');
+
+    state.items[0].checkpoint = 'extracted';
+    _test.writeState(state, { durable: false });
+    assert.strictEqual(fsyncCalls, 1, 'a non-durable checkpoint-only write must not fsync');
+    assert.deepStrictEqual(_test.readState(token).items[0], { name: 'x', status: 'processing', checkpoint: 'extracted' },
+      'the non-durable write must still land correctly and be readable back');
+
+    state.items[0].status = 'retryable';
+    state.items[0].checkpoint = 'retryable';
+    _test.writeState(state);
+    assert.strictEqual(fsyncCalls, 2, 'a write that changes item.status must stay durable');
+  } finally {
+    fs.fsyncSync = originalFsync;
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 done();

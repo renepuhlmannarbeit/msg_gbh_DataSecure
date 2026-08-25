@@ -313,7 +313,21 @@ function releaseActiveLock(token) {
   try { fs.unlinkSync(activeLockPath()); } catch { /* stale lock remains fail-closed */ }
 }
 
-function writeState(state) {
+// `durable: false` (only ever passed for the same-status diagnostic phase
+// markers written while an item stays 'processing' - private_copy_claimed,
+// extracted, text_privacy_checked, package_verified, package_published)
+// skips both fsyncs. markInterruptedItemsRetryable() below keys only on
+// item.status, never on item.checkpoint: whichever of these markers last
+// made it to disk before a crash, the item is still read back as
+// 'processing' and is still correctly recovered as retryable, exactly as
+// if this call had never run. The temp-file-then-rename write stays
+// unconditional even when non-durable, so a crash mid-write still can
+// never leave a torn or half-written journal behind - only the flush
+// timing relative to a *power loss* (not a process crash) is relaxed, and
+// only where nothing observable depends on that timing. Every write that
+// actually changes item.status keeps the full durable path.
+function writeState(state, options = {}) {
+  const durable = options.durable !== false;
   const target = batchPath(state.token);
   const temporary = `${target}.tmp_${crypto.randomBytes(6).toString('hex')}`;
   const payload = Buffer.from(`${JSON.stringify(state)}\n`, 'utf8');
@@ -324,12 +338,12 @@ function writeState(state) {
     const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
     try {
       writeFully(fd, payload);
-      fs.fsyncSync(fd);
+      if (durable) fs.fsyncSync(fd);
     } finally {
       fs.closeSync(fd);
     }
     fs.renameSync(temporary, target);
-    syncParentDirectory(target);
+    if (durable) syncParentDirectory(target);
   } catch (err) {
     // A failed short write or flush must never leave a journal-looking
     // temporary file behind. The old atomically published state remains the
@@ -1407,7 +1421,7 @@ async function reviewDeferredBatch(token, deps = {}) {
           reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1)),
           beforePublish: async (details) => {
             item.checkpoint = 'package_verified';
-            writeState(state);
+            writeState(state, { durable: false });
             if (deps.beforePublish) await deps.beforePublish(details);
           },
           afterPublish: async () => {
@@ -1422,7 +1436,7 @@ async function reviewDeferredBatch(token, deps = {}) {
               item.mapping_outbox_persisted = false;
             }
             item.checkpoint = 'package_published';
-            writeState(state);
+            writeState(state, { durable: false });
           }
         });
         markMappingPending(item, result.package_id);
@@ -1545,10 +1559,14 @@ async function processBatchNext(token, deps = {}) {
       // processing boundary. It is intentionally not returned through MCP:
       // queue counters are enough for Claude, while local recovery retains a
       // useful trace without names, paths or document-derived state.
+      // Non-durable: item.status stays 'processing' across every one of
+      // these markers, and markInterruptedItemsRetryable() below recovers on
+      // status alone, so losing the very latest marker to a crash still
+      // yields the same safe outcome as if it were the durable one.
       const checkpoint = (phase, performancePhase) => {
         if (performancePhase) phaseRecorder.mark(performancePhase);
         item.checkpoint = phase;
-        writeState(state);
+        writeState(state, { durable: false });
       };
       const result = await anonymizeNext(state.profile, {
         ...deps,
@@ -1934,4 +1952,4 @@ function readStateForMaintenance(token) {
   }
 }
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection } };
