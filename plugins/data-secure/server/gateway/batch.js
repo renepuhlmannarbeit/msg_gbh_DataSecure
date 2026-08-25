@@ -9,6 +9,8 @@ const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
 const { appendBatchEvidence } = require('./batch-evidence');
+const { createBatchResultAccess } = require('./batch-results');
+const { createBatchProgress } = require('./batch-progress');
 const {
   createPhaseRecorder,
   createPrivateIoSummary,
@@ -450,145 +452,12 @@ function openBatchPackageProtection(fsApi = fs) {
   return { ids, complete: true };
 }
 
-function batchUserStatus(progress) {
-  const completed = progress.completed;
-  const total = progress.batch_total;
-  // An estimate is shown only after a small local sample exists.  It is based
-  // on processing time only (not on a user's reading or review time) and is
-  // deliberately omitted as soon as an explicit recovery/review decision is
-  // needed.  That avoids presenting an invented completion promise.
-  const eta = Number.isSafeInteger(progress.estimated_remaining_seconds) && progress.estimated_remaining_seconds >= 0
-    ? ` Gemessene Restzeit für die verbleibende automatische Verarbeitung: ca. ${formatRemainingTime(progress.estimated_remaining_seconds)}.`
-    : '';
-  if (progress.complete) {
-    return {
-      user_status: `Stapel abgeschlossen: ${progress.released} erfolgreich vorbereitet, ${progress.stopped} sicher gestoppt.`,
-      next_action: 'open_local_overview'
-    };
-  }
-  if (progress.batch_phase === 'awaiting_local_review') {
-    return {
-      user_status: `Lokale Prüfung erforderlich: ${completed} von ${total} Dateien sind abgeschlossen.`,
-      next_action: 'review_local_decisions'
-    };
-  }
-  if (progress.batch_phase === 'awaiting_local_mapping_repair') {
-    return {
-      user_status: `Ergebnis lokal sicher erstellt: ${completed} von ${total} Dateien sind abgeschlossen. Die Zuordnungsübersicht wird lokal nachgetragen.`,
-      next_action: 'local_mapping_repair'
-    };
-  }
-  if (progress.batch_phase === 'awaiting_explicit_resume') {
-    return {
-      user_status: `Stapel angehalten: ${completed} von ${total} Dateien sind abgeschlossen.`,
-      next_action: 'resume_batch'
-    };
-  }
-  if (progress.batch_phase === 'awaiting_delivery_acknowledgement') {
-    return {
-      user_status: `Ergebnis wird sicher bereitgestellt: ${completed} von ${total} Dateien sind abgeschlossen.`,
-      next_action: 'read_and_confirm_result'
-    };
-  }
-  if (progress.batch_phase === 'processing_local_batch') {
-    return {
-      user_status: `Lokale Stapelverarbeitung läuft: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`,
-      next_action: 'wait_for_local_batch'
-    };
-  }
-  if (progress.batch_phase === 'processing_local_document') {
-    return {
-      user_status: `Lokale Verarbeitung läuft: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`,
-      next_action: 'wait_for_current_document'
-    };
-  }
-  if (progress.batch_phase !== 'ready_for_next_document') {
-    // Never reinterpret an unknown or future persisted phase as permission to
-    // process another source. A status reader is deliberately side-effect free;
-    // the only safe recovery is to inspect the local status and let the server
-    // map the actual state again.
-    return {
-      user_status: `Lokaler Stapelstatus ist unklar: ${completed} von ${total} Dateien sind abgeschlossen. Es wurde keine weitere Datei verarbeitet.`,
-      next_action: 'check_privacy_status'
-    };
-  }
-  return {
-    user_status: `Stapel bereit: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`,
-    next_action: 'process_next_document'
-  };
-}
-
-function formatRemainingTime(seconds) {
-  if (seconds < 60) return 'unter 1 Minute';
-  return `${Math.max(1, Math.round(seconds / 60))} Minuten`;
-}
-
-function measuredRemainingSeconds(state, remaining) {
-  // The journal holds only monotonic durations, never source-derived data.
-  // Three samples make a median resilient to one slow document/container.
-  if (!Number.isSafeInteger(remaining) || remaining <= 0) return null;
-  const samples = (state.items || [])
-    .map((item) => Number(item.processing_duration_ms))
-    .filter((duration) => Number.isSafeInteger(duration) && duration >= 0 && duration <= 60 * 60 * 1000)
-    .sort((left, right) => left - right);
-  if (samples.length < 3) return null;
-  const median = samples[Math.floor(samples.length / 2)];
-  const seconds = Math.ceil((median * remaining) / 1000);
-  return Number.isSafeInteger(seconds) ? seconds : null;
-}
-
-function publicProgress(state) {
-  // A partially written or manually damaged checkpoint must never look like a
-  // successfully completed zero-document batch. readState rejects it in the
-  // normal path; this guard keeps direct/internal status consumers fail-closed.
-  const items = Array.isArray(state.items) ? state.items : [];
-  const invalidState = items.length === 0;
-  const released = items.filter((item) => item.status === 'released').length;
-  const deliveryPending = items.filter((item) => item.status === DELIVERY_PENDING).length;
-  const processing = items.filter((item) => item.status === 'processing').length;
-  const stopped = items.filter((item) => item.status === 'stopped').length;
-  const retryable = items.filter((item) => item.status === 'retryable').length;
-  const deferredReview = items.filter((item) => item.status === DEFERRED_REVIEW).length;
-  const mappingPending = items.filter((item) => item.status === MAPPING_PENDING).length;
-  const remaining = items.filter((item) => item.status === 'pending').length;
-  const completed = released + stopped;
-  const complete = !invalidState && remaining === 0 && retryable === 0 && deferredReview === 0 && mappingPending === 0 && deliveryPending === 0 && processing === 0;
-  const processingIndex = items.findIndex((item) => item.status === 'processing');
-  const pendingIndex = items.findIndex((item) => item.status === 'pending');
-  const localProcessing = liveLocalExecutor(state);
-  const progress = {
-    batch_token: state.token,
-    batch_total: items.length,
-    attempted: released + stopped + retryable + deferredReview + deliveryPending + processing,
-    completed,
-    // This deliberately excludes retryable items: a user-facing 100 percent
-    // must mean that no document is still awaiting an explicit decision to
-    // resume. It is queue metadata only, never a content-derived estimate.
-    completion_percent: invalidState ? 0 : Math.floor((completed * 100) / items.length),
-    released,
-    delivery_pending: deliveryPending,
-    processing,
-    stopped,
-    retryable,
-    deferred_review: deferredReview,
-    mapping_pending: mappingPending,
-    remaining,
-    local_processing_active: localProcessing,
-    // A rest-time estimate is meaningful only for the automatic queue. A
-    // deferred human decision or an explicit recovery is intentionally not
-    // assigned a duration.
-    estimated_remaining_seconds: retryable === 0 && deferredReview === 0
-      ? measuredRemainingSeconds(state, remaining)
-      : null,
-    awaiting_resume: retryable > 0 && remaining === 0 && deliveryPending === 0 && processing === 0,
-    complete,
-    // These fields deliberately communicate only queue state. In particular,
-    // no source name, path or document-derived phase crosses the MCP boundary.
-    batch_phase: invalidState ? 'invalid_local_state' : (complete ? 'complete' : (localProcessing ? 'processing_local_batch' : (processing > 0 ? 'processing_local_document' : (deliveryPending > 0 ? 'awaiting_delivery_acknowledgement' : (deferredReview > 0 && remaining === 0 ? 'awaiting_local_review' : (mappingPending > 0 && remaining === 0 ? 'awaiting_local_mapping_repair' : (retryable > 0 && remaining === 0 ? 'awaiting_explicit_resume' : 'ready_for_next_document'))))))),
-    next_position: processingIndex >= 0 ? processingIndex + 1 : (pendingIndex >= 0 ? pendingIndex + 1 : null)
-  };
-  return { ...progress, ...batchUserStatus(progress) };
-}
+const { batchUserStatus, publicProgress } = createBatchProgress({
+  deliveryPendingStatus: DELIVERY_PENDING,
+  deferredReviewStatus: DEFERRED_REVIEW,
+  mappingPendingStatus: MAPPING_PENDING,
+  liveLocalExecutor
+});
 
 function writeTerminalEvidence(state) {
   const progress = publicProgress(state);
@@ -1159,98 +1028,18 @@ function finalizePublishedPackageLocally(token, packageId, deps = {}) {
   }
 }
 
-function resultCursor(token, index) {
-  const position = String(index);
-  const signature = crypto.createHmac('sha256', token).update(position).digest('base64url').slice(0, 16);
-  return Buffer.from(`${position}.${signature}`, 'utf8').toString('base64url');
-}
-
-function parseResultCursor(token, cursor) {
-  if (cursor === undefined || cursor === null || cursor === '') return 0;
-  if (typeof cursor !== 'string' || cursor.length > 96 || !/^[A-Za-z0-9_-]+$/.test(cursor)) {
-    throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
-  }
-  let decoded;
-  try { decoded = Buffer.from(cursor, 'base64url').toString('utf8'); } catch { throw new SafeError('Der Ergebnis-Cursor ist ungültig.'); }
-  const match = /^(0|[1-9][0-9]{0,2})\.([A-Za-z0-9_-]{16})$/.exec(decoded);
-  if (!match) throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
-  const index = Number(match[1]);
-  const expected = resultCursor(token, index);
-  const left = Buffer.from(expected);
-  const right = Buffer.from(cursor);
-  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
-  return index;
-}
-
-function listBatchResults(token, options = {}) {
-  const limit = Number(options.limit ?? 10);
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new SafeError('Ergebnislimit muss zwischen 1 und 20 liegen.');
-  const state = readState(token);
-  const start = parseResultCursor(token, options.cursor);
-  if (start > state.items.length) throw new SafeError('Der Ergebnis-Cursor ist ungültig.');
-  const results = [];
-  let nextIndex = start;
-  for (; nextIndex < state.items.length && results.length < limit; nextIndex++) {
-    const item = state.items[nextIndex];
-    if (item.status !== 'released' || item.analysis_acknowledged === true) continue;
-    if (!regularPublishedPackage(item.package_id)) throw new SafeError('Ein freigegebenes Ergebnis konnte nicht sicher verifiziert werden.');
-    const { issueReadCapability } = require('./package-store');
-    const grant = issueReadCapability(item.package_id);
-    results.push({
-      package_id: item.package_id,
-      read_capability: grant.read_capability,
-      read_capability_expires_at: grant.read_capability_expires_at
-    });
-  }
-  const available = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true).length;
-  const used = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged === true).length;
-  const progress = publicProgress(state);
-  return {
-    ok: true,
-    results,
-    next_cursor: nextIndex < state.items.length ? resultCursor(token, nextIndex) : null,
-    used,
-    available,
-    still_open: progress.remaining + progress.processing + progress.retryable + progress.deferred_review + progress.mapping_pending + progress.delivery_pending,
-    safely_stopped: progress.stopped,
-    batch_complete: progress.complete,
-    raw_content_sent_to_claude: false
-  };
-}
-
-// This is deliberately an internal discovery primitive.  It returns the
-// opaque checkpoint token only to the local gateway process; callers must
-// never expose it through MCP.  A candidate is eligible only after the whole
-// batch is terminal and at least one verified Markdown package remains
-// unacknowledged for an explicitly requested Claude follow-up.
-function completedLocalOnlyCandidates() {
-  let entries;
-  try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); }
-  catch { return []; }
-  const candidates = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-    const token = entry.name.slice(0, -'.json'.length);
-    if (!TOKEN_RE.test(token)) continue;
-    try {
-      const state = readStateForMaintenance(token);
-      if (Date.now() > Date.parse(state.expires_at)) continue;
-      const progress = publicProgress(state);
-      if (liveLocalExecutor(state) || !progress.complete) continue;
-      const releasedItems = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true);
-      if (releasedItems.length === 0 || !releasedItems.every((item) => regularPublishedPackage(item.package_id))) continue;
-      candidates.push({ token, released: releasedItems.length, stopped: progress.stopped, completedAt: String(state.completed_at || state.updated_at || state.created_at || '') });
-    } catch { /* malformed or expired local state is not a candidate */ }
-  }
-  // The local native picker has a deliberately bounded, readable contract.
-  // More historical candidates are not silently truncated: an operator can
-  // keep their local export and use a fresh batch for a new Claude handoff.
-  const ordered = candidates.sort((left, right) => String(right.completedAt).localeCompare(String(left.completedAt)) || left.token.localeCompare(right.token));
-  if (ordered.length > 50) {
-    throw new SafeError('Es liegen zu viele abgeschlossene lokale Stapel für eine sichere Auswahl vor. Bitte nicht benötigte lokale Ergebnisse nach Ihrer Aufbewahrungsregel bereinigen.');
-  }
-  return ordered;
-}
+const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCandidates } = createBatchResultAccess({
+  SafeError,
+  fs,
+  tokenPattern: TOKEN_RE,
+  batchRoot,
+  readState,
+  readStateForMaintenance,
+  publicProgress,
+  liveLocalExecutor,
+  regularPublishedPackage,
+  issueReadCapability: (packageId) => require('./package-store').issueReadCapability(packageId)
+});
 
 function retryReleasedWorkCopyCleanup(state, deps = {}) {
   let changed = false;

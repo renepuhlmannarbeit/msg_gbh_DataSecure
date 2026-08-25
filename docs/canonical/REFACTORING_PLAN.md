@@ -57,7 +57,7 @@ Status: **abgeschlossen**
 
 ### R2 – Stapelkern verhaltensneutral zerlegen
 
-Status: **als Nächstes** · Story: BL-011.15
+Status: **in Arbeit** · Story: BL-011.15
 
 Der große Stapelkern wird hinter seiner bestehenden Exportoberfläche schrittweise
 in klar verantwortete Module getrennt:
@@ -73,6 +73,13 @@ In R2 ändern sich weder Benutzerablauf noch Fehlerschema, Dateiformate,
 Parallelität, Speicherorte oder Löschregeln. Bestehende Exporte bleiben zunächst
 als Kompatibilitätsfassade erhalten. Jeder Extraktionsschritt muss die gezielten
 Batchtests und die vollständige lokale CI bestehen.
+
+Erster Teilstand: `gateway/batch-results.js` kapselt signierte Ergebnis-Cursor,
+begrenztes Paging und die interne Auswahl vollständig abgeschlossener lokaler
+Handoff-Kandidaten. `gateway/batch-progress.js` kapselt das inhaltsfreie
+Statusmodell, gemessene Restzeit und die deutschen nächsten Schritte. Die
+öffentlichen Exporte bleiben weiterhin in `gateway/batch.js`; die vorhandenen
+Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
