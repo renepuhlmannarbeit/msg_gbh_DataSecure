@@ -109,9 +109,17 @@ nächster Leaf-Schnitt kapselt `gateway/batch-reconciliation.js` die
 deterministische Paketverifikation, Mapping-Zustände und die reine
 `processing`-zu-`retryable`-Transition. Acht fokussierte Tests belegen die
 Adoption ausschließlich verifizierter Pakete, die Reihenfolge Adoption vor
-Retry, alle Mapping-Crashgrenzen und Idempotenz. Journal-Commit, Sperren,
-Byte-Cleanup und Recovery-Orchestrierung bleiben absichtlich in `batch.js`;
-letztere ist der nächste R2-Schnitt.
+Retry, alle Mapping-Crashgrenzen und Idempotenz. Darauf kapselt
+`gateway/batch-recovery.js` nun die rein lesende Wiederaufnahme-/Cleanup-
+Statusermittlung sowie die gesperrte Startup-Recovery und periodische
+Ablaufbereinigung. Neun direkte Tests belegen Live-Owner- und Live-Executor-
+Yield, gemischte defekte und gültige Journale, die feste Reihenfolge Adoption,
+Mapping, Retry und Cleanup, genau einen finalen Journal-Commit, idempotente
+Wiederholung, Workdir-vor-Journal-Löschung, Teilfehler und sichtbare
+Lock-Release-Fehler. Journal-Commit, Byte-Cleanup, explizites Resume/Discard,
+Mapping-Outbox-Replay, Verarbeitung/Commit, Review-Orchestrierung sowie
+Veröffentlichung/Mapping bleiben absichtlich in `batch.js`; der nächste
+R2-Schnitt wird erneut als kleinster verhaltensneutraler Leaf gewählt.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 

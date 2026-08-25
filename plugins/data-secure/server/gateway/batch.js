@@ -14,6 +14,7 @@ const { createBatchProgress } = require('./batch-progress');
 const { createBatchExecutorLease } = require('./batch-executor-lease');
 const { createBatchJournalStore } = require('./batch-journal-store');
 const { createBatchReconciliation } = require('./batch-reconciliation');
+const { createBatchRecovery } = require('./batch-recovery');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -121,6 +122,36 @@ const { batchUserStatus, publicProgress } = createBatchProgress({
 });
 
 const {
+  recoverableBatchStates,
+  recoverableBatchStatus,
+  localCleanupStatus,
+  recoverBatches,
+  cleanupExpiredBatchSnapshots
+} = createBatchRecovery({
+  io: fs,
+  randomBytes: crypto.randomBytes,
+  tokenPattern: TOKEN_RE,
+  batchRoot,
+  batchPath,
+  safeRemoveWorkDirectory,
+  readStateForMaintenance,
+  writeState,
+  readActiveLock,
+  processAlive,
+  acquireActiveLock,
+  releaseActiveLock,
+  liveLocalExecutor,
+  publicProgress,
+  reconcilePublishedItems,
+  reconcilePendingMappings,
+  markInterruptedItemsRetryable,
+  retryReleasedWorkCopyCleanup,
+  deliveryPendingStatus: DELIVERY_PENDING,
+  deferredReviewStatus: DEFERRED_REVIEW,
+  mappingPendingStatus: MAPPING_PENDING
+});
+
+const {
   assertLocalExecutorAccess,
   claimLocalBatchExecutor,
   releaseLocalBatchExecutor
@@ -194,79 +225,6 @@ function resumeBatch(token) {
     active.delete(token);
     releaseActiveLock(token);
   }
-}
-
-function incompleteBatchState(state) {
-  return !state.invalidated && (state.items || []).some((item) =>
-    ['pending', 'processing', 'retryable', DEFERRED_REVIEW, MAPPING_PENDING, DELIVERY_PENDING].includes(item.status)
-  );
-}
-
-function recoverableBatchStates(options = {}) {
-  const states = [];
-  // Status enumeration must not call readState() while another process owns a
-  // live batch: readState() performs expiry cleanup for an unowned session.
-  // A read-only MCP status call must never mutate a live owner's snapshot.
-  const owner = readActiveLock();
-  if (!options.ignoreActiveLock && owner && processAlive(owner.pid)) return states;
-  let entries = [];
-  try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); } catch { return states; }
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-    const token = entry.name.slice(0, -'.json'.length);
-    if (!TOKEN_RE.test(token)) continue;
-    try {
-      const state = readStateForMaintenance(token);
-      if (Date.now() <= Date.parse(state.expires_at) && incompleteBatchState(state) &&
-          (options.includeActiveExecutors === true || !liveLocalExecutor(state))) states.push(state);
-    } catch { /* malformed and expired snapshots remain unavailable */ }
-  }
-  return states;
-}
-
-function recoverableBatchStatus() {
-  const owner = readActiveLock();
-  let processingActive = Boolean(owner && processAlive(owner.pid));
-  const allStates = processingActive ? [] : recoverableBatchStates({ includeActiveExecutors: true });
-  if (allStates.some((state) => liveLocalExecutor(state))) processingActive = true;
-  const states = allStates.filter((state) => !liveLocalExecutor(state));
-  return {
-    recoverable_batches: states.length,
-    batches_awaiting_resume: states.filter((state) => publicProgress(state).awaiting_resume).length,
-    batches_awaiting_delivery: states.filter((state) => state.items.some((item) => item.status === DELIVERY_PENDING)).length,
-    batch_processing_active: processingActive
-  };
-}
-
-function localCleanupStatus() {
-  // The count is deliberately a support signal only. It is built from the
-  // private snapshots locally and never exposes a batch token, item position,
-  // name, path, hash or any document-derived state to MCP.
-  let pending = 0;
-  let expiredPending = 0;
-  const owner = readActiveLock();
-  if (owner && processAlive(owner.pid)) {
-    return { private_work_copy_cleanup_pending: pending, expired_batch_cleanup_pending: expiredPending };
-  }
-  let entries = [];
-  try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); } catch {
-    return { private_work_copy_cleanup_pending: 0, expired_batch_cleanup_pending: 0 };
-  }
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-    const token = entry.name.slice(0, -'.json'.length);
-    if (!TOKEN_RE.test(token)) continue;
-    try {
-      const state = readStateForMaintenance(token);
-      if (Date.now() > Date.parse(state.expires_at)) {
-        // The journal itself still proves that private state awaits the next
-        // safe maintenance pass. Expose only an aggregate, never its token or
-        // document count, so a failed expiry cleanup is operationally visible.
-        expiredPending++;
-      } else pending += (state.items || []).filter((item) => item.work_copy_cleanup_pending === true).length;
-    } catch { /* malformed or expired private state stays unavailable */ }
-  }
-  return { private_work_copy_cleanup_pending: pending, expired_batch_cleanup_pending: expiredPending };
 }
 
 function continueMostRecentBatch() {
@@ -1088,67 +1046,6 @@ async function runLocalBatchExecutor(token, deps = {}) {
   return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
 }
 
-function recoverBatches(options = {}) {
-  const now = Number(options.now || Date.now());
-  let recovered = 0;
-  let removed = 0;
-  let failures = 0;
-  // Startup recovery and a normal worker can otherwise race between a
-  // liveness probe and the first state read.  Take the same lock as every
-  // processing and expiry-maintenance path; recovery is never important
-  // enough to reinterpret a newly active privacy operation as a crash.
-  const maintenanceToken = crypto.randomBytes(32).toString('hex');
-  try {
-    acquireActiveLock(maintenanceToken);
-  } catch {
-    return { recovered, removed, failures, skipped_active: true };
-  }
-  try {
-    let entries = [];
-    try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); }
-    catch { return { recovered, removed, failures: 1, skipped_active: false }; }
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-      const token = entry.name.slice(0, -'.json'.length);
-      if (!TOKEN_RE.test(token)) continue;
-      try {
-        // Bind the state to its own token before using any state-derived path.
-        // A malformed or substituted journal must remain local and counted as
-        // a failure; it must never select another batch's private work copy.
-        const state = readStateForMaintenance(token);
-        if (liveLocalExecutor(state)) continue;
-        if (now > Date.parse(state.expires_at)) {
-          safeRemoveWorkDirectory(state.token);
-          fs.unlinkSync(batchPath(state.token));
-          removed++;
-          continue;
-        }
-        let changed = false;
-        // Prefer a verified deterministic output package over retrying a source
-        // after a process crash. Its local mapping write is idempotent.
-        if (reconcilePublishedItems(state)) {
-          changed = true;
-          recovered++;
-        }
-        if (reconcilePendingMappings(state)) {
-          changed = true;
-          recovered++;
-        }
-        const interrupted = markInterruptedItemsRetryable(state);
-        if (interrupted > 0) {
-          changed = true;
-          recovered += interrupted;
-        }
-        if (retryReleasedWorkCopyCleanup(state).changed) changed = true;
-        if (changed) writeState(state);
-      } catch { failures++; }
-    }
-    return { recovered, removed, failures, skipped_active: false };
-  } finally {
-    releaseActiveLock(maintenanceToken);
-  }
-}
-
 function replayMappingOutbox() {
   let repaired = 0;
   let pending = 0;
@@ -1186,44 +1083,6 @@ function replayMappingOutbox() {
     }
   }
   return { repaired, pending, orphaned_removed: orphanedRemoved, failures };
-}
-
-function cleanupExpiredBatchSnapshots(options = {}) {
-  // Periodic maintenance takes the very same global lock as processing.  It
-  // therefore cannot delete an expired snapshot in the small interval between
-  // a worker reading its state and claiming its private source copy.  If a
-  // user batch is active, maintenance simply yields; no cleanup is important
-  // enough to delay or reinterpret an in-progress privacy decision.
-  const token = crypto.randomBytes(32).toString('hex');
-  try {
-    acquireActiveLock(token);
-  } catch {
-    return { removed: 0, failures: 0, skipped_active: true };
-  }
-  let removed = 0;
-  let failures = 0;
-  const now = Number(options.now || Date.now());
-  try {
-    let entries = [];
-    try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); }
-    catch { return { removed, failures: 1, skipped_active: false }; }
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-      const tokenFromName = entry.name.slice(0, -'.json'.length);
-      if (!TOKEN_RE.test(tokenFromName)) continue;
-      try {
-        const state = readStateForMaintenance(tokenFromName);
-        if (liveLocalExecutor(state)) continue;
-        if (now <= Date.parse(state.expires_at)) continue;
-        safeRemoveWorkDirectory(state.token);
-        fs.unlinkSync(batchPath(state.token));
-        removed++;
-      } catch { failures++; }
-    }
-    return { removed, failures, skipped_active: false };
-  } finally {
-    releaseActiveLock(token);
-  }
 }
 
 module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection } };

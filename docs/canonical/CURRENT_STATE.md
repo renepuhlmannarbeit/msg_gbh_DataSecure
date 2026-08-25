@@ -216,11 +216,20 @@ verifiziert deterministische Output-Pakete ohne Cache, adoptiert sie vor jeder
 Retry-Klassifikation und hält die Recovery-Reihenfolge Outbox, idempotente CSV
 und Intent-Bereinigung fest. Direkte Tests belegen fehlende, manipulierte und
 verlinkte Pakete, alle drei Mapping-Fehlergrenzen sowie idempotente Zustände ohne
-Doppelveröffentlichung. Die weiteren Schnitte trennen Recovery-Orchestrierung,
-Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
-bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
-benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann
-Performanceaktivierung sowie Formaterweiterung.
+Doppelveröffentlichung. `gateway/batch-recovery.js` orchestriert darauf die
+read-only Statusabfrage, Startup-Recovery und periodische Ablaufbereinigung
+hinter derselben globalen Sperre wie die Verarbeitung. Aktive Owner und lokale
+Executoren werden nicht umgedeutet; bei Recovery gilt unverändert Adoption vor
+Mapping vor Retry vor Cleanup und höchstens ein abschließender Journal-Commit.
+Abgelaufene private Arbeitskopien werden vor ihrem Journal entfernt, Fehler
+bleiben pro Snapshot isoliert und gezählt. Neun direkte Negativtests decken
+gemischte defekte Journale, Lock- und Freigabefehler, Teilbereinigung,
+Idempotenz und die unveränderte öffentliche Fassade ab. Die weiteren Schnitte
+trennen Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping
+und verbleibende Wartung hinter der bestehenden Exportfassade. Danach folgen
+Originalschutz, internes Legacy-Intake, benutzergebundene Verschlüsselung,
+Distribution, Inhaltsgrenze und erst dann Performanceaktivierung sowie
+Formaterweiterung.
 
 Als noch nicht aktivierte Vorbedingung für eine spätere interne Zwei-Worker-Strecke
 existiert ein eigener lokaler Zwei-Slot-Lease-Store. Seine strikt geschlossenen
