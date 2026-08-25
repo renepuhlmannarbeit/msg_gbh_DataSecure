@@ -72,6 +72,7 @@ test('runtime modules cannot import or expose the target contract as current sta
 test('runtime, MCP schema, skills and active handbooks retain the 100-file/500-MiB text-format contract', () => {
   const common = read('plugins/data-secure/server/gateway/common.js');
   const batch = read('plugins/data-secure/server/gateway/batch.js');
+  const intake = read('plugins/data-secure/server/gateway/batch-intake.js');
   const picker = read('plugins/data-secure/server/companion/file-picker.js');
   assert.match(picker, /MAX_SELECTED_SOURCES = LIMITS\.MAX_BATCH_FILES/u);
   assert.match(picker, /LIMITS\.MAX_BATCH_TOTAL_BYTES/u);
@@ -80,7 +81,8 @@ test('runtime, MCP schema, skills and active handbooks retain the 100-file/500-M
   assert.match(resourceLimits, /MAX_BATCH_FILES:\s*100/u);
   assert.match(resourceLimits, /MAX_BATCH_TOTAL_BYTES:\s*500\s*\*\s*MIB/u);
   assert.match(resourceLimits, /MAX_TEXT_CHARS:\s*8_000_000/u);
-  assert.match(batch, /expected > LIMITS\.MAX_BATCH_FILES/u);
+  assert.match(batch, /limits:\s*LIMITS/u);
+  assert.match(intake, /expected > limits\.MAX_BATCH_FILES/u);
   for (const rel of currentPublicFiles) {
     const text = read(rel);
     assert.match(text, /100/u, `${rel} omits the current batch maximum`);

@@ -125,11 +125,20 @@ Einzel-/Seitenbestätigung, lokalen Abschluss und terminales Byte-Cleanup. Acht
 direkte Tests belegen vollständige Vorvalidierung vor einer Mehrfachmutation,
 Paketverifikation am Übergabepunkt, Lock-Freigabe an Fehlergrenzen,
 symlink-sicheres Cleanup, Wiederholung nach Journalfehler und idempotente
-Bestätigungen ohne weiteren Journal- oder Evidenzschreibvorgang. Journal-Commit,
-explizites Resume/Discard, Mapping-Outbox-Replay, Verarbeitung/Commit,
-Review-Orchestrierung sowie verbleibende Veröffentlichung/Mapping-Wartung
-bleiben absichtlich in `batch.js`; der nächste R2-Schnitt wird erneut als
-kleinster verhaltensneutraler Leaf gewählt.
+Bestätigungen ohne weiteren Journal- oder Evidenzschreibvorgang.
+`gateway/batch-mapping-maintenance.js` kapselt den verifizierten
+Mapping-Outbox-Replay und bewahrt die Reihenfolge Mapping vor Intent-Löschung.
+Sieben direkte Tests belegen Lese-, Schreib- und Cleanup-Fehler, fehlende,
+unsichere und gemischte Paketzustände sowie inhaltsfreie Ergebniszähler.
+`gateway/batch-intake.js` kapselt Picker-Quellbindung, Vorabprüfung,
+Snapshot-Aufbau und den ersten Journal-Commit. Seine direkten Tests lehnen
+Dateinamen-/Pfadabweichungen und doppelte Quellen vor jedem Metadatenzugriff ab.
+Sie belegen außerdem, dass ein Fehler vor Journalveröffentlichung nur den neuen
+Work-Baum entfernt, während ein Fehler nach Rename beziehungsweise eine
+unsichere Journalnachprüfung Journal und versiegelte Arbeitskopien gemeinsam
+für die Recovery erhält. Explizites Resume/Discard, Verarbeitung/Commit,
+Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
+`batch.js`; der nächste R2-Schnitt wird erneut als kleinster Leaf gewählt.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 

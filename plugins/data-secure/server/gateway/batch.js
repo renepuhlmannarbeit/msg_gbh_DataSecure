@@ -17,6 +17,8 @@ const { createBatchReconciliation } = require('./batch-reconciliation');
 const { createBatchRecovery } = require('./batch-recovery');
 const { createBatchRetentionProtection } = require('./batch-retention-protection');
 const { createBatchDelivery } = require('./batch-delivery');
+const { createBatchMappingMaintenance } = require('./batch-mapping-maintenance');
+const { createBatchIntake } = require('./batch-intake');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -92,6 +94,31 @@ const { batchUserStatus, publicProgress } = createBatchProgress({
   liveLocalExecutor
 });
 
+const { beginBatch } = createBatchIntake({
+  SafeError,
+  io: fs,
+  path,
+  crypto,
+  profiles: PROFILES,
+  limits: LIMITS,
+  listInput,
+  validateBatchLimits,
+  storageStatus,
+  hasReparseComponent,
+  preflightOoxmlContainers,
+  assertStagingCapacity,
+  tokenPattern: TOKEN_RE,
+  batchPath,
+  workPath,
+  copySnapshotFile,
+  batchTtlMs,
+  createPrivateIoSummary,
+  writeState,
+  readStateForMaintenance,
+  safeRemoveWorkDirectory,
+  publicProgress
+});
+
 const {
   assertLocalExecutorAccess,
   claimLocalBatchExecutor,
@@ -149,6 +176,13 @@ const {
   writeTerminalEvidence,
   deliveryPendingStatus: DELIVERY_PENDING,
   mappingPendingStatus: MAPPING_PENDING
+});
+
+const { replayMappingOutbox } = createBatchMappingMaintenance({
+  readOutboxEntries,
+  publishedPackageState,
+  appendMapping,
+  removeMappingOutbox
 });
 
 const {
@@ -264,122 +298,6 @@ function discardIncompleteBatches() {
     return { ok: true, discarded_batches: discarded, raw_content_sent_to_claude: false };
   } finally {
     releaseActiveLock(maintenanceToken);
-  }
-}
-
-function beginBatch(options = {}) {
-  if (!storageStatus().safe) throw new SafeError('Der konfigurierte Datenschutzordner ist für die lokale Verarbeitung nicht freigegeben.');
-  const expected = Number(options.expectedCount);
-  if (!Number.isInteger(expected) || expected < 1 || expected > LIMITS.MAX_BATCH_FILES) {
-    throw new SafeError(`Bestätigte Dateianzahl muss zwischen 1 und ${LIMITS.MAX_BATCH_FILES} liegen.`);
-  }
-  // The normal UX supplies an in-memory, locally selected queue. Its paths
-  // never leave this process; the Input directory remains an advanced/manual
-  // intake route for recovery and managed workflows.
-  const queue = Array.isArray(options.queue) ? options.queue.map((entry) => {
-    const full = path.resolve(String(entry?.full || ''));
-    const name = String(entry?.name || '');
-    if (!path.isAbsolute(full) || !name || path.basename(name) !== name) {
-      throw new SafeError('Die lokale Dateiauswahl ist ungültig.');
-    }
-    if ((options.hasReparseComponent || hasReparseComponent)(full)) {
-      throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
-    }
-    let stat;
-    try { stat = fs.lstatSync(full); } catch { throw new SafeError('Eine ausgewählte Datei ist nicht mehr verfügbar.'); }
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Eine ausgewählte Datei ist nicht regulär lokal verfügbar.');
-    if (Number(entry?.sourceBytes) !== stat.size) throw new SafeError('Eine ausgewählte Datei wurde vor der Übernahme verändert.');
-    return { name, full, stat };
-  }) : listInput();
-  if (queue.length === 0) {
-    return { ok: false, error: 'input_empty', input_documents_seen: 0, raw_content_sent_to_claude: false };
-  }
-  if (queue.length !== expected) {
-    return {
-      ok: false,
-      error: 'input_count_changed',
-      expected_documents: expected,
-      input_documents_seen: queue.length,
-      raw_content_sent_to_claude: false
-    };
-  }
-  try { validateBatchLimits(queue); } catch (error) {
-    if (error.message === 'BATCH_TOTAL_LIMIT') throw new SafeError('Der bestätigte Stapel ist größer als 500 MB.');
-    if (error.message === 'INPUT_FORMAT_LIMIT') {
-      throw new SafeError('Eine ausgewählte Datei überschreitet die sichere Einzeldateigrenze für ihr Format. Bitte teilen Sie diese Datei auf.');
-    }
-    throw new SafeError('Eine ausgewählte Datei liegt außerhalb der zulässigen Größe.');
-  }
-  // The server-bound Input folder has no native picker.  Give it the same
-  // local, counter-only final confirmation before any private copy is made.
-  // Tests and non-UI callers omit the optional dependency deliberately.
-  if (typeof options.confirmStart === 'function') {
-    const confirmed = options.confirmStart({
-      selected_count: queue.length,
-      total_bytes: queue.reduce((total, entry) => total + entry.stat.size, 0)
-    });
-    if (confirmed !== true) {
-      return {
-        ok: false,
-        error: 'local_batch_start_cancelled',
-        message: 'Die lokale Startbestätigung wurde abgebrochen. Es wurde kein Stapel begonnen.',
-        user_status: 'Lokaler Start abgebrochen: Es wurde kein Stapel begonnen.',
-        next_action: 'restart_only_on_request',
-        input_documents_seen: queue.length,
-        raw_content_sent_to_claude: false
-      };
-    }
-  }
-  preflightOoxmlContainers(queue);
-  assertStagingCapacity(queue, options.statfs || fs.statfsSync);
-  const profile = String(options.profile || 'auto').toLowerCase();
-  if (!PROFILES.has(profile)) throw new SafeError('Unbekanntes Profil.');
-  const requestedToken = options.token;
-  if (requestedToken !== undefined && !TOKEN_RE.test(String(requestedToken))) {
-    throw new SafeError('Die lokale Batch-Sitzung ist ungültig.');
-  }
-  const token = requestedToken || crypto.randomBytes(32).toString('hex');
-  if (fs.existsSync(batchPath(token)) || fs.existsSync(workPath(token))) {
-    throw new SafeError('Die lokale Batch-Sitzung ist bereits belegt.');
-  }
-  const now = Date.now();
-  const work = workPath(token);
-  try {
-    fs.mkdirSync(work, { recursive: false, mode: 0o700 });
-    const items = queue.map((entry, index) => {
-      const extension = path.extname(entry.name).toLowerCase();
-      const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}${extension}`;
-      const copied = copySnapshotFile(entry.full, path.join(work, workName), entry.stat);
-      return {
-        id: crypto.randomBytes(16).toString('hex'),
-        name: entry.name,
-        size: copied.size,
-        sha256: copied.sha256,
-        work_name: workName,
-        status: 'pending',
-        checkpoint: 'sealed'
-      };
-    });
-    const state = {
-      schema: 'datasecure-batch/1',
-      token,
-      created_at: new Date(now).toISOString(),
-      expires_at: new Date(now + batchTtlMs()).toISOString(),
-      profile,
-      remove_images: options.removeImages === true,
-      io_summary: createPrivateIoSummary({
-        snapshot_preflight_runs: 1,
-        snapshot_copy_files: items.length,
-        snapshot_copy_mib: Math.ceil(items.reduce((total, item) => total + item.size, 0) / (1024 * 1024))
-      }),
-      items
-    };
-    writeState(state);
-    return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
-  } catch (error) {
-    try { safeRemoveWorkDirectory(token); } catch { /* the original error remains private and fail-closed */ }
-    if (error instanceof SafeError) throw error;
-    throw new SafeError('Der bestätigte Stapel konnte nicht sicher lokal übernommen werden.');
   }
 }
 
@@ -886,45 +804,6 @@ async function runLocalBatchExecutor(token, deps = {}) {
     releaseLocalBatchExecutor(token, executorPid);
   }
   return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
-}
-
-function replayMappingOutbox() {
-  let repaired = 0;
-  let pending = 0;
-  let orphanedRemoved = 0;
-  let failures = 0;
-  let entries;
-  try { entries = readOutboxEntries(); }
-  catch { return { repaired, pending, orphaned_removed: orphanedRemoved, failures: 1 }; }
-  for (const entry of entries) {
-    // A package can only be repaired once its independently verified output
-    // still exists. Never manufacture a CSV association from an orphaned
-    // intent record.
-    const state = publishedPackageState(entry.package_id);
-    if (state === 'missing') {
-      // The output no longer exists (for example after its configured
-      // retention or an explicit Output purge). An intent without a verified
-      // result can never become a mapping row, so remove precisely this
-      // local-only basename-bearing record rather than retaining PII forever.
-      try {
-        removeMappingOutbox(entry);
-        orphanedRemoved++;
-      } catch { failures++; }
-      continue;
-    }
-    if (state !== 'verified') {
-      pending++;
-      continue;
-    }
-    try {
-      appendMapping(entry.original_basename, entry.package_id);
-      removeMappingOutbox(entry);
-      repaired++;
-    } catch {
-      pending++;
-    }
-  }
-  return { repaired, pending, orphaned_removed: orphanedRemoved, failures };
 }
 
 module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection } };

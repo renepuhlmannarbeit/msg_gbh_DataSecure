@@ -237,8 +237,15 @@ zweiten Journal-Commit noch einen doppelten terminalen Evidenznachweis. Acht
 direkte Negativtests belegen Gesamtseitenvalidierung vor Mutation,
 Paketmanipulation, Journal- und Lockfehler, sichere Wiederholung nach bereits
 gelöschter Arbeitskopie sowie Link-/Pfadschutz. Die weiteren Schnitte
-trennen Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping
-und verbleibende Wartung hinter der bestehenden Exportfassade. Danach folgen
+trennen Verarbeitung/Commit, Review-Orchestrierung und verbleibende Wartung
+hinter der bestehenden Exportfassade. Der verifizierte Outbox-Replay liegt nun
+in `gateway/batch-mapping-maintenance.js`; nur `verified` wird nach der festen
+Reihenfolge Mapping vor Intent-Löschung repariert, `missing` entfernt nur den
+exakten verwaisten Intent und jeder unsichere Zustand bleibt pending.
+`gateway/batch-intake.js` bindet den deklarierten Dateinamen vor jedem
+Metadatenzugriff an den tatsächlichen absoluten Basename, lehnt doppelte Quellen
+ab und hält Journal und versiegelten Work-Baum auch dann gemeinsam recoverable,
+wenn der Parent-Fsync erst nach dem atomaren Journal-Rename fehlschlägt. Danach folgen
 Originalschutz, internes Legacy-Intake, benutzergebundene Verschlüsselung,
 Distribution, Inhaltsgrenze und erst dann Performanceaktivierung sowie
 Formaterweiterung.
