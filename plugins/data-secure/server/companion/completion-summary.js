@@ -219,11 +219,26 @@ function showBatchStateNotice(progress, options = {}) {
 // package id, path, filename or document content.
 function showTerminalBatchSummary(progress, options = {}) {
   if (!progress || progress.complete !== true) return false;
-  return showCompletionSummary({
+  const summary = {
     selected_count: progress.batch_total,
     released_count: progress.released,
     failed_count: progress.stopped
-  }, options);
+  };
+  // Injected runners remain synchronous so tests and explicit support tooling
+  // can verify exact UI results. The product completion path detaches the fixed,
+  // content-free notice so closing it can never hold a worker or Cowork call.
+  if (options.runner) return showCompletionSummary(summary, options);
+  const spec = completionSummaryCommand(summary, options);
+  const child = childProcess.spawn(spec.command, spec.args, {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    shell: false,
+    env: uiProcessEnvironment(options.env || process.env)
+  });
+  child.once?.('error', () => {});
+  child.unref();
+  return true;
 }
 
 module.exports = {

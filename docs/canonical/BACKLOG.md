@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 25.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC43
+Stand: 25.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC44
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und
@@ -26,6 +26,39 @@ DS-008, DS-009, DS-010, DS-011, DS-012, DS-013, DS-014, DS-015, DS-016, DS-017,
 DS-018, DS-019, DS-020, DS-021, DS-022, DS-023, DS-024, DS-025, DS-026, DS-027,
 DS-028, DS-029, DS-030, DS-031, DS-032, DS-033, DS-034, DS-035, DS-036, DS-037,
 DS-038, DS-039, DS-040.
+DS-041, DS-042, DS-043, DS-044, DS-045, DS-046, DS-047, DS-048, DS-049,
+DS-050, DS-051, DS-052, DS-053, DS-054, DS-055, DS-056, DS-057, DS-058,
+DS-059, DS-060.
+
+## Product Vision und Dokumentenkanon
+
+Dieses Arbeitspaket übersetzt den bestätigten Cowork-/UX-/Privacy-Grill in einen
+prüfbaren Produktvertrag. Es hat Vorrang vor neuen Formataktivierungen, weil erst
+ein eindeutiges Sollbild verhindert, dass vorhandene Teilwege weiter auseinander
+laufen.
+
+| Story | Ziel / Abnahme | Status |
+|---|---|---|
+| BL-003.1 | Product Vision mit Problem, Zielgruppen, Nutzen, Experience, Sicherheit, Erfolg und Nicht-Zielen kanonisch führen. | **in Arbeit** |
+| BL-003.2 | Dokumentenregister und eindeutige Rangfolge einschließlich abgeleiteter und historischer Dokumente festlegen. | **in Arbeit** |
+| BL-003.3 | Alle bestätigten Entscheidungen als DS-041 bis DS-060 erfassen und ersetzte Regeln ausdrücklich markieren. | **in Arbeit** |
+| BL-003.4 | Zielarchitektur für Cowork, lokale Sicherheitsgrenze, Worker, Review, Distribution und Lifecycle ableiten. | **in Arbeit** |
+| BL-003.5 | RC44 gegen das Soll sowie aktive Dokumentation gegen den Kanon vergleichen; jede Lücke besitzt Priorität und Story. | **in Arbeit** |
+| BL-003.6 | Maschinenvertrag, Traceability, Evidence-Matrix, OSS-Register und Dokumentgates synchronisieren. | **in Arbeit** |
+| BL-003.7 | Nach Codekorrekturen README, Handbücher, Skills und Pakettexte ausschließlich aus dem belegten Iststand aktualisieren. | **offen** |
+
+## Priorisierter IST/SOLL-Schnitt
+
+| Priorität | Arbeitspaket | Begründung / Reihenfolge |
+|---|---|---|
+| **P0.1** | BL-011.14: Originale nie verändern und dauerhafte Exporte von automatischer Retention ausschließen | verhindert irreversiblen Datenverlust |
+| **P0.2** | BL-011.13: private Snapshots, Review und Pseudonymkontext OS-benutzergebunden verschlüsseln | schließt die lokale Rohdatenschutzlücke |
+| **P0.3** | BL-010.8/BL-051.1: selbsttragende Windows-/macOS-Pakete und reale Cowork-Evidenz | ohne Laufzeit kein installierbares Produkt |
+| **P1.1** | BL-011.3/BL-041.9: pausierte Stapel entkoppeln, Review ohne Timeout und nicht blockierender Abschluss | behebt den beobachteten Hänger |
+| **P1.2** | BL-044.1: rekursive Ordnerquelle mit vollständigem Link-/Umfangsgate | gewünschter einfacher Stapelstart |
+| **P1.3** | BL-049.1: Signatur-/Struktur-Sniffing und drei Ergebnisgrade | verhindert falsche Format- und Vollständigkeitsaussagen |
+| **P1.4** | BL-047.1: adaptive Parallelität und messbare Cowork-Latenzbudgets | Performance erst nach Sicherheits- und Durability-Gates aktivieren |
+| **P2** | BL-042.3: progressive inhaltsfreie MCP-App, Sprach-/A11y- und Adminvertrag | Komfortverbesserung mit vollständigem Fallback |
 
 ## Das kann ich noch eigenständig erledigen
 
@@ -107,7 +140,19 @@ genannte E1-/E2-/E3-Evidenz.
 | BL-011.10 | **E0 abgeschlossen; E1 offen:** Intake nach Auswahl in den lokalen Hintergrund verlagern; Cowork antwortet innerhalb weniger Sekunden ohne Quellmetadaten. | **in Arbeit** |
 | BL-011.11 | **E0 abgeschlossen; E1 offen:** Gemischtes Resume, feste I/O-Phasen, einmalige begrenzte Handoff-Dekodierung, Indexfenster und Buffer-Wipe sind regressionsgetestet, ohne Snapshot-/Swap-/Container-Gates zu lockern. Weitere I/O-Optimierung wartet auf reale Dateisystemmessung. | **in Arbeit** |
 | BL-011.12 | **E0 abgeschlossen; E1 offen:** Ein nicht importierter Zwei-Worker-Harness prüft zentrale Reihenfolge/Commit, Slots, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produktstandard bleibt seriell bis zur Drei-OS-Abnahme. | **in Arbeit** |
+| BL-011.13 | Private Snapshots, Reviewdaten und neustartfesten Pseudonymkontext pro OS-Benutzer verschlüsseln; ohne DPAPI/Keychain vor Rohschreiben stoppen. | **offen** |
+| BL-011.14 | Alle Eingangswege strikt schreibgeschützt behandeln und freigegebene Exporte/Mapping aus automatischer Retention ausschließen; explizites Löschen bleibt bestätigt möglich. | **in Arbeit** |
 | BL-024.4 | **E0 abgeschlossen; E1/E3 offen:** Der nicht importierte OCR-Session-Harness prüft geschlossenes Framing, Requestbindung, Replay, Single-Flight, Pixel-/Byte-/Zeitbudgets und Abbruch. Der sichere Einbild-Worker bleibt aktiv, bis native Per-Frame-Grenzen und Drei-OS-Evidenz vorliegen. | **in Arbeit** |
+| BL-041.9 | Review ohne menschlichen Timeout und Abschluss ohne blockierenden Cowork-Aufruf liefern; pausierte Stapel bleiben getrennt startbar. | **in Arbeit** |
+
+## Neue Zielpakete aus dem Produktreview
+
+| Story | Ziel / nächster prüfbarer Abschluss | Status |
+|---|---|---|
+| BL-044.1 | Rekursive lokale Ordnerauswahl mit vollständiger Vorabvalidierung, stabiler relativer Zuordnung und ohne Linkverfolgung liefern. | **offen** |
+| BL-047.1 | Adaptive kleine Parallelität, 25%-/2-GiB-Speicherbudget und 2-s-/10-s-/10%-Performancegates implementieren und synthetisch messen. | **offen** |
+| BL-049.1 | Endung, Signatur und Containerstruktur gemeinsam prüfen; beschädigte, polyglotte und verschlüsselte Quellen einzeln fail-closed behandeln. | **offen** |
+| BL-042.3 | Inhaltsfreie MCP-App als progressive Verbesserung sowie vollständigen Text-/OS-Fallback, Deutsch/Englisch und A11y-Gates liefern. | **offen** |
 
 ## Danach: Content-Gates und gesperrte Formate
 
@@ -152,6 +197,7 @@ Die folgenden stabilen Epics binden Entscheidungen, Ist-Abgleich und Open-Source
 Register. Geschlossene Epics BL-001, BL-002 und BL-040 stehen nur noch im Archiv.
 
 ### BL-010 – Plattform und Distribution
+### BL-003 – Product Vision und Dokumentenkanon
 ### BL-001 – Dokumentensystem und Wiederverwendung (archiviert)
 ### BL-002 – Ist-/Zielvertrag und Drift (archiviert)
 ### BL-011 – Sicherer fortsetzbarer Stapelkern
@@ -167,6 +213,9 @@ Register. Geschlossene Epics BL-001, BL-002 und BL-040 stehen nur noch im Archiv
 ### BL-040 – Lokaler Export und Nachweis (archiviert)
 ### BL-041 – Claude-Übergabe
 ### BL-043 – Cowork-Fast-Path
+### BL-044 – Sichere Datei- und Ordnerquellen
+### BL-047 – Performance und Ressourcensteuerung
+### BL-049 – Inhalts- und Formatgrenze
 ### BL-042 – Diagnose und Berechtigungen
 ### BL-050 – Korpus und Qualitätsmetriken
 ### BL-051 – Installations- und Hostabnahme

@@ -289,7 +289,10 @@ function cleanupLocalData(options = {}) {
     // a status response that is explicitly free of raw data.
     error_codes: {},
     output_protection_complete: outputProtectionComplete,
-    output_cleanup_skipped: !force && !outputProtectionComplete && scopes.includes('output')
+    // Released exports are user results, not temporary privacy data. Automatic
+    // retention therefore never deletes Output; only an explicit confirmed
+    // purge may do so.
+    output_cleanup_skipped: !force && scopes.includes('output')
   };
 
   function recordFailure(scope, err) {
@@ -305,7 +308,7 @@ function cleanupLocalData(options = {}) {
     // Output deletion is safe. Processed sources and review previews can still
     // follow their independent retention rules. An explicit confirmed purge
     // remains authoritative and intentionally ignores this protection.
-    if (scope === 'output' && !force && !outputProtectionComplete) continue;
+    if (scope === 'output' && !force) continue;
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
       if (scope === 'review') {
@@ -355,7 +358,7 @@ function dueCounts(options = {}) {
   const due = { processed: 0, output: 0, review: 0 };
 
   for (const scope of SCOPES) {
-    if (scope === 'output' && !outputProtectionComplete) continue;
+    if (scope === 'output') continue;
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
       if (scope === 'output' && protectedIds.has(entry.name)) continue;

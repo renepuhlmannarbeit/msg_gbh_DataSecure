@@ -83,8 +83,7 @@ test('content-free start envelopes never echo private executor fields', () => {
 
 test('the detached local UI contract outlives a synchronous Cowork tool request', () => {
   assert.strictEqual(DEFAULT_REVIEW_TIMEOUT_MS, 5 * 60 * 1000);
-  assert.strictEqual(DETACHED_REVIEW_TIMEOUT_MS, 30 * 60 * 1000);
-  assert.ok(DETACHED_REVIEW_TIMEOUT_MS > DEFAULT_REVIEW_TIMEOUT_MS);
+  assert.strictEqual(DETACHED_REVIEW_TIMEOUT_MS, null);
   const worker = fs.readFileSync(
     path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'gateway', 'review-worker.js'),
     'utf8'

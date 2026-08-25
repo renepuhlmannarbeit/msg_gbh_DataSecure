@@ -11,6 +11,7 @@ const review = read('docs/ANWENDERREVIEW.md');
 const anonymize = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md');
 const explain = read('plugins/data-secure/skills/gbh-datasecure-datenschutz-erklaeren/SKILL.md');
 const boundary = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/sicherheitsgrenze.md');
+const server = read('plugins/data-secure/server/index.js');
 const all = [guide, review, anonymize, explain, boundary].join('\n');
 
 for (const text of [guide, review, anonymize, explain, boundary]) {
@@ -25,6 +26,9 @@ assert.match(review, /genau acht Werkzeuge/iu);
 assert.match(review, /Fortsetzung startet[^\n]{0,180}getrennte lokale Fachprüfung/iu);
 assert.match(review, /vollständigen 28 Werkzeuge/iu);
 assert.doesNotMatch(all, /höchstens zehn namenfreie Ergebnisse|Seiten von höchstens zehn/iu);
+assert.match(anonymize, /pausierter oder fortsetzbarer Stapel blockiert[^\n]{0,100}neue Auswahl nicht/iu);
+assert.doesNotMatch(server, /if\(status\.recoverable_batches>0\)return\{ok:false,error:'recoverable_batch_exists'/u,
+  'paused batches must not block a new picker batch');
 
 for (const text of [guide, review, anonymize, explain, boundary]) {
   assert.match(text, /lokal/iu, 'local host boundary missing');

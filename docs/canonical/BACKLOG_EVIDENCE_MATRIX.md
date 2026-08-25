@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 25.08.2026 · gilt für RC43 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 25.08.2026 · gilt für RC44 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -21,6 +21,25 @@ einem anderen Host ist kein Ersatz für eine hier verlangte reale Evidenz.
 
 "Mensch erforderlich" umfasst E1 bis E3. E1 kann ein:e IT-Tester:in sein und
 muss keine Endanwenderin bzw. kein Endanwender sein.
+
+## Product Vision und neue priorisierte Pakete
+
+| Story | Was noch zu liefern bzw. zu prüfen ist | Evidenz und konkrete menschliche Aufgabe |
+|---|---|---|
+| BL-003.1 | Product Vision gegen bestätigte Entscheidungen und Nutzerziel führen. | **E0:** Dokumentgates und fachliches Gegenreview; keine reale Rohdatenevidenz. |
+| BL-003.2 | Dokumentenregister und Rangfolge erzwingen. | **E0:** Link-, ID- und Driftprüfung. |
+| BL-003.3 | DS-041 bis DS-060 einschließlich Ersetzungen lückenlos binden. | **E0:** Maschinenvertrag und Traceability. |
+| BL-003.4 | Zielarchitektur aus Produktentscheidungen ableiten. | **E0 + E3:** technische Konsistenz lokal; Security-Freigabe vor Rollout. |
+| BL-003.5 | RC44-IST/SOLL und Dokumentationsdrift vollständig erfassen. | **E0:** Code-/Dokumentreview; E1 bleibt bei ausdrücklich markierten Hostlücken. |
+| BL-003.6 | Kanonische Maschinen- und Nachweisverträge synchronisieren. | **E0:** `npm run test:docs` und `npm run test:ci`. |
+| BL-003.7 | Abgeleitete Handbücher und Skills erst nach Implementierung aktualisieren. | **E0 + E1:** lokale Driftgates; reale Cowork-Texte bei Fresh Install beobachten. |
+| BL-011.13 | Private Daten OS-benutzergebunden verschlüsseln. | **E0 + E1 + E3:** Unit-/Negativtests; DPAPI/Keychain real; Security-Review. |
+| BL-011.14 | Originale unverändert und Exporte dauerhaft halten. | **E0:** synthetische Mutation-/Retentiontests; E1 nur für Cloud-Sync-Interoperabilität. |
+| BL-041.9 | Review/Abschluss nicht blockierend und pausierte Stapel startbar machen. | **E0 + E1 + E2:** Zustands-/Timeouttests; echte Cowork-Laufzeit; beobachtete UX. |
+| BL-044.1 | Rekursive Ordnerquelle ohne Linkverfolgung liefern. | **E0 + E1:** synthetische Hierarchie-/Race-Tests; reale Reparse-/Symlink-Gegenprobe. |
+| BL-047.1 | Adaptive Parallelität und Performancebudgets aktivieren. | **E0 + E1:** deterministische Scheduler-/Speichertests; Referenzhardwaremessung. |
+| BL-049.1 | Signatur/Struktur/Endung und drei Ergebnisgrade umsetzen. | **E0 + E3:** Polyglot-/Korruptionssuite; Security-Review vor Formatfreigabe. |
+| BL-042.3 | Inhaltsfreie MCP-App und vollständigen Fallback liefern. | **E0 + E1 + E2:** Schema-/Leckagetests; echte Cowork-Version; A11y-/UX-Abnahme. |
 
 ## P0-Release- und Sicherheitsblocker
 

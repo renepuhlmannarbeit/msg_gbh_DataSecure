@@ -1,32 +1,35 @@
 # Kanonisches Dokumentensystem
 
-Stand: 22.08.2026
+Stand: 25.08.2026
 
 Dieser Ordner ist die verbindliche Quelle für die Weiterentwicklung von GBH
-DataSecure. Er trennt das heute ausführbare RC30-System vom beschlossenen
+DataSecure. Er trennt das heute ausführbare RC44-System vom beschlossenen
 Produktziel. Ältere Architektur-, Review- und Backlogdateien bleiben als
 Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
 überschreiben.
 
 ## Rangfolge
 
-1. [DECISIONS.md](DECISIONS.md) – angenommene Produktentscheidungen und ihre Gründe.
-2. [PRODUCT.md](PRODUCT.md) – daraus abgeleitetes Zielprodukt und Benutzerablauf.
-3. [BACKLOG.md](BACKLOG.md) – einzige priorisierte Arbeitsliste für das Zielprodukt.
-4. [CURRENT_STATE.md](CURRENT_STATE.md) – belegter RC30-Ist-Abgleich, damit vorhandene
+1. [DECISIONS.md](DECISIONS.md) – angenommene und ausdrücklich ersetzte Entscheidungen.
+2. [PRODUCT_VISION.md](PRODUCT_VISION.md) – Problem, Nutzen, Experience-Prinzipien und Erfolg.
+3. [PRODUCT.md](PRODUCT.md) – daraus abgeleitete Fähigkeiten und Benutzerreisen.
+4. [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) – technische Zielgrenzen.
+5. [BACKLOG.md](BACKLOG.md) – einzige priorisierte Arbeitsliste für das Zielprodukt.
+6. [CURRENT_STATE.md](CURRENT_STATE.md) – belegter RC44-Ist-Abgleich, damit vorhandene
    Funktionen nicht erneut geplant werden.
-5. [TRACEABILITY.md](TRACEABILITY.md) – Zuordnung jeder Entscheidung zu Umsetzung
+7. [TRACEABILITY.md](TRACEABILITY.md) – Zuordnung jeder Entscheidung zu Umsetzung
    und Abnahmenachweis.
-6. [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json) – maschinenlesbarer,
+8. [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json) – maschinenlesbarer,
    ausdrücklich nicht als Runtime-Freigabe verwendbarer Zielvertrag.
-7. [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – verbindliches
+9. [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – verbindliches
    Wiederverwendungsregister mit Kandidaten, Ausschlüssen und Prüfgates.
-8. [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) – pro aktiver Story
+10. [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) – pro aktiver Story
    klare Trennung zwischen lokaler Entwicklung und erforderlicher Zielsystem-, Nutzungs-
    oder Fachevidenz.
-9. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) – abgeschlossene
+11. [DOCUMENT_REGISTER.md](DOCUMENT_REGISTER.md) – Rang, Rolle und Änderungsweg aller Dokumente.
+12. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) – abgeschlossene
    Stories mit kompaktem Abschlussnachweis; nicht als aktive Arbeitsliste verwenden.
-10. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben RC30 oder
+13. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben den freigegebenen Iststand oder
    liefern Detailwissen, sind aber nicht entscheidungsführend.
 
 Für die tatsächlich erforderlichen menschlichen Nachweise gibt es zusätzlich den

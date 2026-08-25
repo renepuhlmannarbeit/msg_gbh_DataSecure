@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc30",
+  "baseline": "3.2.0-rc44",
   "decision_ids": [
     "DS-001", "DS-002", "DS-003", "DS-004", "DS-005", "DS-006",
     "DS-007", "DS-008", "DS-009", "DS-010", "DS-011", "DS-012",
@@ -10,18 +10,24 @@
     "DS-019", "DS-020", "DS-021", "DS-022", "DS-023", "DS-024",
     "DS-025", "DS-026", "DS-027", "DS-028", "DS-029", "DS-030",
     "DS-031", "DS-032", "DS-033", "DS-034", "DS-035", "DS-036",
-    "DS-037", "DS-038", "DS-039", "DS-040"
+    "DS-037", "DS-038", "DS-039", "DS-040", "DS-041", "DS-042",
+    "DS-043", "DS-044", "DS-045", "DS-046", "DS-047", "DS-048",
+    "DS-049", "DS-050", "DS-051", "DS-052", "DS-053", "DS-054",
+    "DS-055", "DS-056", "DS-057", "DS-058", "DS-059", "DS-060"
   ],
   "primary_product": "claude-plugin",
   "distribution": {
     "equivalent_primary_channels": ["zip", "private-marketplace"],
-    "engineering_fallback": "mcpb"
+    "engineering_fallback": "mcpb",
+    "bundled_runtime": true,
+    "manual_packages": ["windows-x64", "macos-universal"]
   },
   "surfaces": {
     "local_original_processing": ["claude-desktop", "claude-code"],
     "clean-results-only": ["web", "mobile"]
   },
   "platforms": ["windows", "macos", "linux"],
+  "initial_cowork_release_platforms": ["windows-x64", "macos-x64", "macos-arm64"],
   "manual_runtime_installation": [],
   "visible_skills": [
     "gbh-datasecure-dokument-anonymisieren",
@@ -46,10 +52,14 @@
     "maximum_active_batches": 1,
     "resume_after_restart": true,
     "mixed_document_types": true,
-    "profile_selection": "automatic-per-file"
+    "profile_selection": "automatic-per-file",
+    "source_selection": ["files", "recursive-folder"],
+    "paused_batches_block_new": false
   },
   "working_copies": {
     "originals_unchanged": true,
+    "originals_never_moved_or_deleted": true,
+    "private_storage_encryption": "os-user-bound",
     "successful_copy_retention_days": 0,
     "open_copy_maximum_retention_days": 14
   },
@@ -59,14 +69,19 @@
     "persistent_mapping_csv": true,
     "persistent_receipt_json": true,
     "mapping_visible_to_mcp": false,
-    "image_pixels_visible_to_model": false
+    "image_pixels_visible_to_model": false,
+    "result_grades": ["complete", "usable-with-omissions", "not-processed"],
+    "automatic_retention": "exports-and-mapping-excluded"
   },
   "processing": {
     "network_access": false,
     "ocr_languages": ["de", "en"],
-    "single_bundled_completion_dialog": true,
-    "password_storage": "memory-only",
-    "pseudonym_scope": "batch"
+    "completion": "nonblocking-content-free-actions",
+    "encrypted_inputs": "do-not-copy-or-decrypt",
+    "pseudonym_scope": "batch-encrypted-resumable",
+    "maximum_cowork_call_seconds": 10,
+    "memory_budget": "min(25%-ram,2-gib)",
+    "adaptive_parallelism": true
   },
   "claude_delivery": {
     "local_batch_completion_independent_of_model_reading": true,
@@ -94,6 +109,8 @@
     "maximum_missed_direct_identifiers": 0,
     "minimum_professional_content_preservation_ratio": 0.99,
     "fresh_installation_channels": ["zip", "private-marketplace"],
-    "fresh_installation_platforms": ["windows", "macos", "linux"]
+    "fresh_installation_platforms": ["windows-x64", "macos-x64", "macos-arm64"],
+    "maximum_unjustified_performance_regression_ratio": 0.1,
+    "maximum_open_p0_or_p1_findings": 0
   }
 }

@@ -601,15 +601,16 @@ function applyManualRedactions(text, ranges) {
 // detached, non-blocking review worker (gateway/review-worker.js) is not bound
 // by that per-request deadline and passes a much longer options.timeoutMs.
 function defaultRunner(command, args, input, env = process.env, timeoutMs = DEFAULT_REVIEW_TIMEOUT_MS) {
-  return childProcess.spawnSync(command, args, {
+  const options = {
     input,
     encoding: 'utf8',
     windowsHide: true,
-    timeout: timeoutMs,
     maxBuffer: 64 * 1024 * 1024,
     shell: false,
     env: uiProcessEnvironment(env)
-  });
+  };
+  if (Number.isSafeInteger(timeoutMs) && timeoutMs > 0) options.timeout = timeoutMs;
+  return childProcess.spawnSync(command, args, options);
 }
 
 function reviewTextLocally(draft, options = {}) {
@@ -620,8 +621,10 @@ function reviewTextLocally(draft, options = {}) {
   // integration and production runners on the same no-proxy/no-cloud-secret
   // boundary instead of relying on the default runner alone.
   const reviewEnv = uiProcessEnvironment(env);
-  const timeoutMs = Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
-    ? options.timeoutMs : DEFAULT_REVIEW_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs === null
+    ? null
+    : (Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
+      ? options.timeoutMs : DEFAULT_REVIEW_TIMEOUT_MS);
   const runner = options.runner || ((cmd, cmdArgs, cmdInput, cmdEnv) => defaultRunner(cmd, cmdArgs, cmdInput, cmdEnv, timeoutMs));
   let command;
   let args;

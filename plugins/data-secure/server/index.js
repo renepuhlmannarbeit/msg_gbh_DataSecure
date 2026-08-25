@@ -116,7 +116,9 @@ function startPickerBatch(args){
   if(!status.engine_ready)return{ok:false,error:'local_engine_unavailable',message:'Die lokale DataSecure-Verarbeitung ist nicht bereit. Es wurde keine Dateiauswahl geöffnet.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false};
   if(status.local_intake_pending)return{ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits vorbereitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false};
   if(status.batch_processing_active)return{ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false};
-  if(status.recoverable_batches>0)return{ok:false,error:'recoverable_batch_exists',message:'Ein unvollständiger lokaler Stapel wartet auf eine ausdrückliche Fortsetzungs- oder Verwerfentscheidung. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:false,next_action:'resolve_recoverable_batch',raw_content_sent_to_claude:false};
+  // Paused/recoverable work is durable and independent. It must not force the
+  // user to resolve old work before starting a new batch; only an actually
+  // active intake or processor owns the single active slot.
   let selected;
   recordWorkflowEvent({event:'picker_requested',outcome:'progress'});
   try{

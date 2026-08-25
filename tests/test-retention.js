@@ -65,7 +65,7 @@ test('retention configuration defaults safely and accepts zero', () => {
   assert.strictEqual(retentionDays({ EU_PRIVACY_RETENTION_DAYS: 'n/a' }), DEFAULT_RETENTION_DAYS);
 });
 
-test('expired processed files, output packages and review previews are cleaned', () => {
+test('automatic retention cleans temporary data but preserves released output', () => {
   const r = sandbox('expired');
   const oldProcessed = path.join(r.processed, 'old.pdf');
   const freshProcessed = path.join(r.processed, 'fresh.pdf');
@@ -88,10 +88,10 @@ test('expired processed files, output packages and review previews are cleaned',
   old(audit);
 
   const result = cleanupLocalData({ roots: r, now: NOW, retentionDays: 7 });
-  assert.deepStrictEqual(result.removed, { processed: 1, output: 1, review: 1 });
+  assert.deepStrictEqual(result.removed, { processed: 1, output: 0, review: 1 });
   assert.ok(!fs.existsSync(oldProcessed));
   assert.ok(fs.existsSync(freshProcessed));
-  assert.ok(!fs.existsSync(oldOutput));
+  assert.ok(fs.existsSync(oldOutput), 'released output is permanent until explicit purge');
   assert.ok(fs.existsSync(freshOutput));
   assert.ok(!fs.existsSync(path.join(expiredReview, 'asset-001.png')));
   assert.ok(fs.existsSync(path.join(expiredReview, 'asset-001.review.json')), 'review evidence remains');
@@ -350,7 +350,7 @@ test('an incomplete batch-journal inspection fails closed for automatic output c
   }), { processed: 0, output: 0, review: 0, total: 0 });
 });
 
-test('a complete inspection protects only referenced packages while confirmed purge remains authoritative', () => {
+test('automatic retention preserves every output while confirmed purge remains authoritative', () => {
   const root = sandbox('complete-output-protection');
   const protectedId = 'ds_' + 'b'.repeat(32);
   const expiredId = 'ds_' + 'c'.repeat(32);
@@ -368,8 +368,8 @@ test('a complete inspection protects only referenced packages while confirmed pu
     scope: 'output'
   });
   assert.ok(fs.existsSync(path.join(root.output, protectedId)));
-  assert.ok(!fs.existsSync(path.join(root.output, expiredId)));
-  assert.strictEqual(automatic.removed.output, 1);
+  assert.ok(fs.existsSync(path.join(root.output, expiredId)));
+  assert.strictEqual(automatic.removed.output, 0);
 
   const purged = purgeLocalData('output', true, {
     roots: root,
@@ -377,8 +377,9 @@ test('a complete inspection protects only referenced packages while confirmed pu
     protectedIds: new Set([protectedId]),
     outputProtectionComplete: false
   });
-  assert.strictEqual(purged.removed.output, 1);
+  assert.strictEqual(purged.removed.output, 2);
   assert.ok(!fs.existsSync(path.join(root.output, protectedId)));
+  assert.ok(!fs.existsSync(path.join(root.output, expiredId)));
 });
 
 test('a preview inspection error is reported and never mistaken for missing bytes', () => {

@@ -1,5 +1,7 @@
 'use strict';
 
+const childProcess = require('child_process');
+const { EventEmitter } = require('events');
 const { createSuite } = require('./helpers');
 const {
   validateSummary,
@@ -136,6 +138,29 @@ test('terminal batch summaries accept only completed bounded public progress', (
   assert.throws(() => showTerminalBatchSummary({
     complete: true, batch_total: 2, released: 2, stopped: 1
   }, options), /Ungültige/);
+});
+
+test('the product terminal notice is detached and cannot block batch completion', () => {
+  const original = childProcess.spawn;
+  const child = new EventEmitter();
+  child.unrefCalled = false;
+  child.unref = () => { child.unrefCalled = true; };
+  let call;
+  childProcess.spawn = (command, args, options) => {
+    call = { command, args, options };
+    return child;
+  };
+  try {
+    assert.strictEqual(showTerminalBatchSummary({
+      complete: true, batch_total: 2, released: 2, stopped: 0
+    }, { platform: 'win32', env: { SystemRoot: 'C:\\Windows' } }), true);
+  } finally {
+    childProcess.spawn = original;
+  }
+  assert.strictEqual(call.options.detached, true);
+  assert.strictEqual(call.options.shell, false);
+  assert.strictEqual(call.options.stdio, 'ignore');
+  assert.strictEqual(child.unrefCalled, true);
 });
 
 test('the real Windows completion form initializes and closes through the test-only path', () => {

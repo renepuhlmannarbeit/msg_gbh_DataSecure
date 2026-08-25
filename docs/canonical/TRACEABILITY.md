@@ -49,6 +49,26 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | DS-038 | BL-001, BL-010 bis BL-052 | Komponentenregister, Prüfgate und begründete Restlücke vor Eigenentwicklung |
 | DS-039 | BL-011, BL-041, BL-051 | vollständiger lokaler Batchabschluss getrennt von begrenzter, fortsetzbarer Claude-Inhaltsübergabe |
 | DS-040 | BL-041, BL-043, BL-050 | lokaler Ein-Aufruf-Standard, explizite Claude-Folgeauswertung und kein Host-Polling als Produktvoraussetzung |
+| DS-041 | BL-003, BL-041, BL-043 | Cowork-first-Ablauf mit lokaler Ausführung und ohne separate Normalweg-App |
+| DS-042 | BL-042 | inhaltsfreie progressive MCP-App und vollständiger OS-/Textfallback |
+| DS-043 | BL-011, BL-012, BL-041 | kurzer Start, durable Worker, Review ohne Entscheidungs-Timeout und pausierte Stapel ohne Startsperre |
+| DS-044 | BL-044, BL-011 | Datei-/Ordnerumfang vollständig prüfen, keine Linkverfolgung und Quellen nur lesen |
+| DS-045 | BL-049, BL-012 | drei eindeutige Ergebnisgrade ohne stille Teilfreigabe |
+| DS-046 | BL-032, BL-049 | verschlüsselte Quellen weder kopieren noch entschlüsseln; Reststapel fortsetzen |
+| DS-047 | BL-047, BL-050 | adaptive Ressourcensteuerung und 2-s-/10-s-/10%-Performancegates |
+| DS-048 | BL-042, BL-043 | Readiness, genau ein Self-Heal und inhaltsfreie 14-Tage-Diagnose ohne Telemetrie |
+| DS-049 | BL-020, BL-022, BL-023, BL-024, BL-049 | Signatur-/Strukturgate, vollständige Office-Coverage, lokale OCR und Residual-Gate |
+| DS-050 | BL-011, BL-030, BL-040 | OS-benutzergebundene Verschlüsselung, sichere Eigenartefaktlöschung und dauerhafte Exporte |
+| DS-051 | BL-041, BL-043 | local-only oder einmalige Batchübergabe und höchstens drei Abschlussaktionen |
+| DS-052 | BL-010, BL-051 | erste Cowork-Freigabe Windows x64 und macOS x64/ARM64; weitere Plattformen gestuft |
+| DS-053 | BL-010, BL-051 | selbsttragende ZIP-/Marketplace-Pakete und signierte native Sicherheitskomponenten vor Rollout |
+| DS-054 | BL-010, BL-011, BL-051 | reversible Migration, Update und Rollback ohne Nutzerdatenverlust |
+| DS-055 | BL-012, BL-042, BL-052 | Deutsch/Englisch, A11y und nicht abschwächbare Adminpolicy |
+| DS-056 | BL-050, BL-051, BL-052 | gestufte Technik-, Cowork-, Fach-, Security- und Rollout-Evidenz ohne offene P0/P1 |
+| DS-057 | BL-003 | Dokumentenrang, unveränderliche IDs und automatisches Driftgate |
+| DS-058 | BL-040, BL-044 | neutrale Ergebnisse und minimales lokales Mapping mit bedingtem relativen Pfad |
+| DS-059 | BL-011, BL-030 | verschlüsselter neustartfester Pseudonymkontext und terminale Löschung |
+| DS-060 | BL-001, BL-010, BL-020, BL-024, BL-051 | gepinnte Offline-Lieferkette, Integrität, Lizenz, SBOM und keine Runtime-Downloads |
 
 ## Offene Review-Nachweise vom 23.08.2026
 
@@ -67,10 +87,17 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 
 ## Umsetzungsnachweise erledigter Stories
 
+### RC44-Arbeitsnachweise aus Product-Vision-Review
+
+| Story | Nachweis |
+|---|---|
+| BL-011.14 (Teilnachweis) | `gateway/retention.js` und `test-retention.js` schließen freigegebene Output-Pakete aus jeder automatischen Retention aus; nur `purge_local_data` mit ausdrücklicher Bestätigung darf sie löschen. Der normale Picker-/Batchpfad verarbeitet externe Quellen bereits über private Kopien; die technische Support-Inbox bleibt bis zu ihrer Ablösung ein verwalteter Importbereich. |
+| BL-041.9 (E0-Teilnachweis) | `server/index.js`, Skill/Promptvertrag und Cowork-Dokumententest belegen, dass pausierte Stapel keine neue Auswahl blockieren. `review-timeouts.js`, `text-review.js` und `test-local-review-executor.js` entfernen im abgekoppelten Worker den menschlichen Entscheidungs-Timeout; der synchrone Supportpfad bleibt begrenzt. `completion-summary.js` und sein Test starten die rein inhaltsfreie terminale Meldung detachiert, sodass ihr Schließen keinen Worker- oder Cowork-Aufruf blockiert. Echte Cowork-/Windows-/macOS-UX-Evidenz bleibt E1/E2. |
+
 | Story | Nachweis |
 |---|---|
 | BL-002.1 | `BUILD_INFO.json`, `manifest.json`, `gateway/status.js`, `test-manifest.js` |
-| BL-002.2 | `TARGET_CAPABILITIES.json` deckt DS-001 bis DS-040 sowie Formate, Plattformen, Grenzwerte und die getrennte Claude-Übergabe maschinenlesbar ab |
+| BL-002.2 | `TARGET_CAPABILITIES.json` deckt DS-001 bis DS-060 sowie Formate, Plattformen, Grenzwerte und die getrennte Claude-Übergabe maschinenlesbar ab |
 | BL-002.3 | `test-capability-contract.js` vergleicht Ist-/Zielvertrag, Runtime, Skills, Marketplace und aktive Handbücher; Bestandteil von `npm test` |
 | BL-010.5 | `build-plugin.mjs`, `verify-plugin-zip.mjs`, `test-plugin-structure.js` und der reproduzierte RC30-Build binden ZIP und Marketplace an denselben kanonischen Pluginbaum; das ersetzt keine frische Marketplace-Installation (BL-051.2) |
 | BL-051.7 | `ci.yml`, `release-evidence.yml`, `security.yml`, `test:ci` und `test-workflow-budget.js` belegen den kostenbegrenzten automatischen Pfad und erhalten schwere Evidenz als bewusste manuelle Auswahl |
@@ -123,6 +150,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | BL-011.10 (Teilnachweis) | `gateway/batch-executor.js`, `gateway/batch-worker.js`, `gateway/status.js`, `companion/completion-summary.js`, der Direct-Picker in `server/index.js`, `test-direct-picker-batch.js` und `test-direct-picker-intake-worker.js` belegen, dass die ausgewählte Queue ausschließlich per privater IPC an einen isolierten Worker geht, dieser vor Verarbeitung seine Ausführungsberechtigung beansprucht und die Elternseite IPC nicht vor seinem Abschluss trennt. Ein öffentlicher, inhaltsfreier Intake-Marker verhindert währenddessen eine zweite Dateiauswahl. Vor/nach Checkpoint sind nur zwei feste lokale Fehlerhinweise möglich; sie enthalten keine Quellmetadaten und verändern keinen Batchzustand. Der MCP-Aufruf gibt im `local_only`-Weg keinen Batch-Token zurück; ein echter Child-Process-Test endet mit einem freigegebenen, inhaltsfreien Status. Reale Antwortzeit-, Crash- und Drei-OS-Evidenz bleiben offen. |
 | BL-041.7 (E0-Nachweis) | `server/index.js`, `gateway/local-only-handoff.js`, `gateway/package-store.js` und `companion/completed-batch-picker.js` trennen 8 normale Cowork-Werkzeuge von 28 Supportwerkzeugen über `EU_PRIVACY_SUPPORT_MODE=1`. Der tokenbasierte synchrone Review ist jetzt Support; die normale Fortsetzung startet eine erforderliche Fachprüfung tokenfrei im lokalen Worker. `test-cowork-tool-surface-contract.js`, `test-cowork-documentation-contract.js` und der Manifesttest blockieren Drift. Der Handoff hält Auswahl, Kennungen, Cursor und kurzlebige Leseberechtigungen nur lokal, gibt höchstens fünf Ergebnisse je Schritt aus und dekodiert kleine verifizierte Dokumente einmalig; größere Ergebnisse nutzen ein begrenztes Indexfenster. Buffer/Index werden bei Bestätigung, Abbruch, Ablauf und Fehler best-effort überschrieben. Unicode-/Surrogatpaare bleiben vollständig; Seiten- und Bestätigungsfehler verwerfen fail-closed. Beobachtete Cowork-UI-Abnahme bleibt offen. |
 | BL-012.2/BL-041.6 (RC37-E0) | `gateway/review-worker.js`, `companion/review-timeouts.js`, `gateway/batch-executor.js`, `gateway/batch.js`, `server/index.js`, `test-local-review-executor.js` und die Cowork-Vertragstests belegen, dass eine einmal bestätigte Fortsetzung die lokale Fachprüfung in einem abgekoppelten, netzgesperrten Worker startet, sofort eine inhaltsfreie MCP-Antwort ohne Batch-Token liefert und Rekonstruktion, UI, Veröffentlichung sowie Abschlussstatus getrennt protokolliert. Der synchrone Supportpfad bleibt auf fünf Minuten begrenzt, während der abgekoppelte UI-Worker 30 Minuten erhält. Ein echter Cowork-/Windows-UI-Lauf bleibt E1. |
+| BL-012.2/BL-041.9 (RC44-E0-Nachtrag) | `companion/review-timeouts.js`, `companion/text-review.js`, `gateway/review-worker.js` und `test-local-review-executor.js` ersetzen den historischen 30-Minuten-Ablauf ausschließlich im abgekoppelten Review-Worker durch eine ausdrückliche menschliche Entscheidung ohne Prozesszeitlimit; der synchrone Supportpfad bleibt auf fünf Minuten begrenzt. `companion/completion-summary.js` und `test-completion-summary.js` belegen zusätzlich, dass die inhaltsfreie Terminalanzeige abgekoppelt startet und den Worker nicht auf ein geschlossenes Dialogfenster warten lässt. `server/index.js`, Prompt-/Skillvertrag und Cowork-Vertragstests erlauben neue Stapel trotz pausierter Altstapel, solange kein Stapel aktiv verarbeitet wird. Echte Cowork-/Drei-OS-UI-Evidenz bleibt E1. |
 | BL-011.1/BL-011.8 (RC37-E0-Nachtrag) | `gateway/batch.js`, `gateway/retention.js`, `gateway/orchestrator.js`, `gateway/status.js`, `test-batch-retention-protection.js` und `test-retention.js` belegen vollständige Short-Write-Behandlung, Datei-fsync vor atomarem Rename, POSIX-Verzeichnis-fsync und fail-closed Output-Retention: offene `delivery_pending`-/`mapping_pending`-Pakete bleiben geschützt; ein einziges unlesbares oder ungültiges Journal setzt die gesamte automatische Output-Löschung aus und meldet nur einen festen Statusindikator. Bestätigte manuelle Löschung bleibt getrennt. Reale Crash-/Dateisystem-Gegenproben auf drei OS bleiben E1. |
 | BL-011.11 (E0-Nachweis) | `gateway/orchestrator.js` erzeugt vor einem lokalen Batch einen prozesslokalen, nicht fälschbaren Vorbereitungskontext; `gateway/batch.js` reicht ihn erst nach erfolgreichem Claim weiter. Manifestdigest und Workerstream vermeiden zusätzliche Vollreads, während unabhängige Paketprüfung und Snapshot-/Swap-Gates erhalten bleiben. `gateway/performance.js` hält feste, gedeckelte, ausschließlich private I/O-/Phasenwerte. `gateway/package-store.js` dekodiert verifizierte kleine Ergebnisse einmalig, nutzt für größere Seiten einen begrenzten Index/Bytefenster-Pfad und überschreibt Buffer/Index beim Ende. `test-mixed-batch-recovery.js`, `test-batch-performance-contract.js`, `test-direct-picker-intake-worker.js`, `test-local-only-handoff.js` und `test-gateway-e2e.js` prüfen Exactly-once, Grenzen und reale Einzelworker-/Paketläufe. Weitere Optimierung wartet auf reale Dateisystemmessungen. |
 | BL-011.6 (E0-Nachweis) | `resource-limits.js`, Picker, Runtime und Batchvorprüfung erzwingen zentral 100 Dateien/500 MiB sowie sichere Einzelgrenzen für TXT/Markdown (8.000.000 Bytes), CSV (1.500.000 Bytes), DOCX (64 MiB) und entpacktes OOXML (128 MiB), bevor der Hintergrundlauf materialisiert. `test-resource-limits.js`, Picker- und Capability-Tests blockieren Drift. `contracts/OUTPUT_CAPACITY_V1.md` und die Storage-/Audit-/Mappingtests legen zusätzlich volumenbezogene Vor-dem-Schreiben-Gates fest. Eine feste Seitenbegrenzung gibt es nicht; Drei-OS-Grenzevidenz bleibt offen. |

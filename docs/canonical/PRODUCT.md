@@ -1,96 +1,112 @@
 # Kanonisches Produktziel
 
-Stand: 22.08.2026 · Zielstand nach RC30
+Stand: 25.08.2026 · Zielbild aus `PRODUCT_VISION.md` · Ist-Zustand RC44
 
 ## Ziel in einem Satz
 
-GBH DataSecure ist ein einfach installierbares Claude-Plugin, das bis zu 100 lokale
-Dateien mit zusammen höchstens 500 MiB auf Windows, macOS und Linux offline
-de-identifiziert und Claude ausschließlich geprüfte Markdown-Ergebnisse bereitstellt.
+GBH DataSecure ist ein selbsttragendes Claude-Cowork-Plugin, das lokale Dateien
+und Ordner offline de-identifiziert und Claude ausschließlich ausdrücklich
+freigegebene Markdown-Arbeitsfassungen bereitstellt.
 
-## Verbindlicher Benutzerweg
+## Verbindlicher Normalweg
 
 ```text
-Natürliche Sprache oder Skill auswählen
+„Diese Dateien anonymisieren“ oder Skill auswählen
                  ↓
-lokal bis zu 100 Dateien auswählen
+lokale Datei- oder Ordnerauswahl
                  ↓
-offline extrahieren, OCR, erkennen und ersetzen
+vollständige Umfangs-, Speicher- und Bereitschaftsprüfung
                  ↓
-ein gebündelter lokaler Dialog nur bei offenen Stellen
+kurze Startbestätigung; lokaler Hintergrundauftrag
                  ↓
-gesamten lokalen Stapel abschließen und
-Markdown + Mapping-CSV + JSON-Nachweis exportieren
+klare Dateien veröffentlichen, Unsicherheiten lokal pausieren
                  ↓
-Claude arbeitet nur mit freigegebenem Markdown weiter;
-große Ergebnismengen werden aufgabenbezogen gestuft gelesen
+höchstens: Ergebnisse verwenden · lokal prüfen · Ausgabe öffnen
 ```
 
-Der Anwender wählt keine Dokumentprofile. Gemischte Stapel sind normal. Nach einem
-Abbruch wird an der letzten sicheren Position fortgesetzt. Eindeutige Ergebnisse
+Gemischte Stapel sind normal; ein Dokumentprofil wird automatisch pro Datei
+bestimmt. Ein aktiver und mehrere pausierte Stapel sind erlaubt. Fehler, Neustart
+oder vertagte Fachentscheidungen führen an der letzten sicheren Position weiter,
+ohne bereits erledigte Dateien erneut zu verarbeiten. Eindeutige Ergebnisse
 benötigen keine Pflichtvorschau.
 
-Die 100-Dateien-/500-MB-Grenze beschreibt die lokale Aufbereitung, nicht die Größe
-eines Modellkontexts. Der lokale Stapel wird vollständig verarbeitet und exportiert,
-auch wenn Claude für die anschließende Aufgabe nur ausgewählte Ergebnisse benötigt.
-Bei einem ausdrücklichen Gesamtauftrag liest Claude freigegebene Ergebnisse in
-begrenzten, fortsetzbaren Schritten und nennt verwendete sowie noch offene Ergebnisse;
-es wird nichts stillschweigend ausgelassen.
+`nur anonymisieren` endet lokal. Nur `anonymisieren und auswerten` übergibt
+freigegebenes Markdown an Claude. Die Grenze von 100 Dateien und 500 MiB beschreibt
+die lokale Aufbereitung, nicht einen Modellkontext; eine Seitenbegrenzung gibt es
+nicht.
 
-## Zielformate und Ausgabe
+## Zielformate und Ergebnisgrade
 
 | Eingang | Zielbehandlung |
 |---|---|
-| TXT, Markdown, CSV | Text und Tabellenstruktur prüfen und als Markdown ausgeben |
-| DOCX | Fließtext, Tabellen, Kopf-/Fußbereiche, Textfelder und eingebettete Inhalte prüfen |
-| XLSX | Blätter, Zellen, Kommentare und eingebettete Inhalte nachvollziehbar abbilden |
-| PPTX | Folientext, Notizen, Tabellen, Textfelder und eingebettete Inhalte abbilden |
-| PDF | Textschicht, Objekte und visuelle Seiten vollständig prüfen; Scan-PDF lokal OCR-verarbeiten |
-| PNG, JPEG, BMP | lokalen OCR-Text prüfen; nicht textuelle Bedeutung als offene Stelle kennzeichnen |
+| TXT, Markdown, CSV | Text und Tabellenstruktur vollständig prüfen |
+| DOCX | Text, Tabellen, Kopf-/Fußbereiche, Textfelder und relevante eingebettete Bereiche prüfen |
+| XLSX | Blätter, Zellen, Kommentare, relevante versteckte Bereiche und Einbettungen prüfen |
+| PPTX | Folien, Notizen, Tabellen, Textfelder und Einbettungen prüfen |
+| PDF und Scan-PDF | Textschicht, Objekte und visuelle Seiten lokal prüfen beziehungsweise OCR-verarbeiten |
+| PNG, JPEG, BMP | lokalen OCR-Text prüfen; unsichere visuelle Bedeutung lokal zurückhalten |
 
-Für jede Quelle entsteht genau ein neutrales Markdown-Ergebnis. Bildpixel werden nicht
-an Claude übertragen. Die Ausgabe ist eine KI-Arbeitsfassung, keine layoutidentische
-Kopie der Quelle.
+Ein Format wird erst nach vollständigen Sicherheits-, Coverage- und
+Zielplattformgates aktiviert. Jede Quelle endet als **vollständig verarbeitet**,
+**verwendbar mit benannten Auslassungen** oder **sicher nicht verarbeitet**.
+Passwortgeschützte beziehungsweise verschlüsselte Quellen werden nicht
+entschlüsselt oder kopiert; der restliche Stapel läuft weiter.
 
-## Lokale Dateien und Datenhaltung
+Für jede Quelle entsteht genau ein neutral benanntes Markdown-Ergebnis. Bildpixel
+gehen nicht an Claude. Der Export ist eine de-identifizierte beziehungsweise
+datenschutzreduzierte KI-Arbeitsfassung, keine Rechtsgarantie und keine
+layoutidentische Kopie.
 
-- Originale bleiben unverändert.
-- Ein aktiver Stapel, mehrere pausierte Stapel.
-- Private Arbeitskopien offener Aufträge verfallen nach 14 Tagen.
-- Freigegebene Exporte bleiben im gewählten Exportordner dauerhaft bestehen.
-- Die Mapping-CSV enthält Originaldateinamen, aber keine Pfade, und bleibt außerhalb
-  der Claude-/MCP-Lesegrenze.
-- Passwörter und stapelweite Pseudonymzuordnungen existieren nur im Arbeitsspeicher.
-- Der Verarbeitungskern verwendet kein Netzwerk.
+## Lokale Daten- und Sicherheitsgrenze
 
-## Produktoberfläche
+- Originale werden niemals verändert, verschoben oder gelöscht.
+- Chat-Anhänge sind kein sicherer Originaleingang; lokal synchronisierte Cloud-
+  Ordner werden ausschließlich lesend verwendet.
+- Symlinks, Junctions, Reparse Points und externe Nachladebeziehungen werden nicht
+  verfolgt; Makros, Skripte und aktive Inhalte werden nie ausgeführt.
+- Private Snapshots und Reviewdaten sind pro Benutzer OS-gebunden verschlüsselt.
+  Erfolgreiche Rohkopien werden sofort, offene spätestens nach 14 Tagen gelöscht.
+- Freigegebene Exporte und das ausschließlich lokale Mapping bleiben dauerhaft.
+  Relative Quellpfade erscheinen nur, wenn eine Ordnerhierarchie sonst mehrdeutig
+  wäre; eine Rohentitätstabelle wird nicht geführt.
+- Verarbeitung, Diagnose und UI besitzen keine eigene Netzwerkkommunikation und
+  keine Telemetrie.
 
-Sichtbar sind genau zwei Skills. Der normale Dialog verwendet Alltagssprache und
-höchstens einen gebündelten Abschlussdialog. Technische Details sind einklappbar.
-Direkter ZIP-Import und privater Marketplace führen zum gleichen Produktverhalten.
-Lokale Originalverarbeitung startet ausschließlich, wenn der lokale Start selbst
-Engine und Hostbindung erfolgreich prüft. Eine sichtbare Plugin-Kachel oder ein
-sichtbarer Skill allein gilt nicht als verbundener lokaler Datenschutzpfad.
+## Cowork-, UX- und Performancevertrag
 
-## Aussage- und Freigabegrenzen
+Cowork ist Einstieg, inhaltsfreier Status und Ergebnisort. Datei-/Ordnerwahl und
+rohdatenhaltige Prüfung erfolgen lokal. Eine optionale inhaltsfreie MCP-App ist nur
+progressive Verbesserung; OS- und Textfallback bleiben vollständig.
 
-„Anonymisieren“ ist der Aktionsname, keine Rechtsgarantie. Das Ergebnis bleibt als
-datenschutzreduziert beziehungsweise pseudonymisiert beschrieben. Eine Signatur oder
-Zertifizierung ist nicht erforderlich und wird nicht behauptet.
+Picker und Startannahme sollen je innerhalb von zwei Sekunden reagieren; kein
+Verarbeitungs-MCP-Aufruf darf Cowork länger als zehn Sekunden blockieren. Adaptive
+Parallelität bleibt unter dem kleineren Wert aus 25 Prozent RAM und zwei GiB.
+Performance-Regressionen über zehn Prozent blockieren ohne begründete
+Qualitätsverbesserung die Freigabe.
 
-Eine allgemeine Plattformfreigabe setzt frische End-to-End-Abnahmen auf Windows,
-macOS und Linux sowie die in `DS-033` festgelegte 1.000-Dokument-Suite voraus.
+## Plattform, Distribution und Lifecycle
 
-## Ist-Zustand RC30
+Der erste produktive Cowork-Release umfasst Windows x64 und macOS Intel/Apple
+Silicon. Linux und Windows ARM64 folgen nach eigener Hostevidenz. Marketplace sowie
+`GBH-DataSecure-Windows-x64.zip` und `GBH-DataSecure-macOS-universal.zip` enthalten
+alle nötigen Laufzeiten; Anwender installieren weder Node.js noch Python. MCPB ist
+nur Fallback.
 
-RC30 ist ausschließlich die technische Ausgangsbasis. Aktuell öffentlich freigegeben
-sind nur TXT, Markdown, CSV und DOCX im synthetischen Engineering-Betrieb; bis zu 100 Dateien mit
-zusammen höchstens 500 MiB bilden die heutige Stapelgrenze. Zusätzlich gelten
-formatspezifische Einzelgrenzen: TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes
-und DOCX 64 MiB komprimiert/128 MiB entpackt. Eine feste Seitenbegrenzung gibt es
-nicht; die Ressourcenlimits bleiben maßgeblich. Der serverseitig
-versiegelte Stapel, der dauerhafte lokale Mapping-Export und die ausdrückliche
-Wiederaufnahme nach Unterbrechungen sind als Engineering-Basis umgesetzt; der
-stapelweite Abschlussdialog und die nachweislich installationsfreie Drei-OS-Laufzeit
-fehlen weiterhin. PDF und weitere Zielformate bleiben gesperrt. Maßgeblich für den
-aktuellen Betriebsumfang bleiben README, Betriebshandbuch und Releasecheckliste.
+Update, Rückrolle und Deinstallation erhalten Originale, Exporte, Mappings und
+offene Stapel. Piloten dürfen unsigniert sein; eigene native Sicherheitskomponenten
+werden vor breitem Unternehmenseinsatz signiert. Deutsch, Englisch und
+WCAG-orientierte Abnahmen gehören zum Releasevertrag.
+
+## Ist-Zustand RC44
+
+Aktuell freigegeben sind TXT, Markdown, CSV und DOCX im synthetisch belegten
+Engineering-Pfad. Die Stapelgrenze beträgt 100 Dateien und 500 MiB; zusätzlich
+gelten TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes und DOCX 64 MiB
+komprimiert/128 MiB entpackt. Fortsetzbare Checkpoints, lokales Mapping,
+Hintergrund-Intake und Sicherheitsgates bestehen teilweise.
+
+Noch nicht erfüllt sind insbesondere selbsttragende Windows-/macOS-Pakete, echte
+Cowork-Abnahmen, Ordnerauswahl, OS-gebundene Verschlüsselung aller privaten
+Arbeitsdaten, nicht blockierender Reviewabschluss, adaptive Produktparallelität und
+die Freigabe von XLSX, PPTX, PDF/Scan-PDF sowie Rasterbildern. Der genaue IST/SOLL-
+Abgleich steht in `CURRENT_STATE.md`; nur `BACKLOG.md` priorisiert die Restarbeit.

@@ -1,6 +1,6 @@
-# RC43-Ist-Abgleich zum kanonischen Backlog
+# RC44-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 25.08.2026 · geprüfter Produktstand: RC43
+Stand: 25.08.2026 · geprüfter Produktstand: RC44
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -17,6 +17,33 @@ Validierungen; Details und Aussagegrenzen stehen dort.
 Weder dieser Nachweis noch ein einzelner lokaler Lauf erweitert die
 TXT/Markdown/CSV/DOCX-Freigabe oder ersetzt frische ZIP-/Marketplace-Installationen
 und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-Host.
+
+## Verdichteter IST/SOLL-Abgleich nach Product-Vision-Review
+
+| Bereich | RC44-IST | beschlossenes SOLL | Lücke / Priorität |
+|---|---|---|---|
+| Cowork-Start | kurzer Picker-/Workerpfad teilweise vorhanden; Host-Node und reale Cowork-Evidenz offen | selbsttragender Windows-/macOS-Start, Readiness und genau ein Self-Heal | P0 Distribution/Evidenz |
+| Quellen | Mehrfach-Dateipicker; Legacy-Input kann Quellen beanspruchen | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | P0 Originalschutz, P1 Ordner |
+| Stapel | durable Checkpoints und Background-Intake; neue Auswahl trotz pausierter Stapel im Arbeitsstand umgesetzt | ein aktiver, mehrere pausierte; Pause blockiert nicht | E0 umgesetzt, E1/E2 offen |
+| Review/Abschluss | abgekoppelter Review ohne menschlichen Timeout und detachierte Abschlussmeldung im Arbeitsstand | persistente Queue ohne Entscheidungs-Timeout, nicht blockierender Abschluss | E0 umgesetzt, E1/E2 offen |
+| private Daten | Rohsnapshots und Reviewdaten nicht durchgehend OS-benutzergebunden verschlüsselt | DPAPI/Keychain, kein Klartextfallback | P0 Security |
+| Ergebnisse | Mapping vorhanden; automatische Output-Löschung im Arbeitsstand deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 umgesetzt, Ableitung offen |
+| Formate | TXT/Markdown/CSV/DOCX; Auswahl überwiegend endungsgeführt | Signatur+Struktur; drei Ergebnisgrade; alle Zielformate gestuft | P1 Content, danach Formate |
+| Performance | serieller Produktpfad, inaktive Harnesses und lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | P1 nach Sicherheitsgates |
+| Cowork-UI | Text/OS-Dialoge, keine MCP-App | inhaltsfreie progressive MCP-App mit vollem Fallback | P2 Komfort |
+
+Die vollständige Sollableitung steht in `PRODUCT_VISION.md` und
+`TARGET_ARCHITECTURE.md`. Diese Matrix ist keine Freigabe; sie priorisiert die
+lieferbaren Differenzen im Backlog.
+
+## BL-003 – Product Vision und Dokumentenkanon
+
+Status: **in Arbeit**
+
+Vorhanden: Product Vision, Zielarchitektur, Dokumentenregister, DS-041 bis DS-060,
+RC44-IST/SOLL-Matrix und priorisiertes Arbeitspaket. Rest: Maschinenvertrag,
+Traceability, Evidence-Matrix und alle abgeleiteten aktuellen Dokumente gegen den
+neuen Kanon validieren; danach BL-003.1 bis BL-003.6 mit Testnachweis archivieren.
 
 ## BL-001 – Kanonisches Dokumentensystem
 
@@ -1044,6 +1071,15 @@ Bestätigte manuelle Löschung bleibt ausdrücklich möglich. Direkte Tests deck
 Short Writes, fehlenden Schreibfortschritt, POSIX-Verzeichnissync, ungültige Journale,
 Schutzmengen, Löschumfang und Timeoutkonstanten ab.
 
+RC44 ersetzt ausschließlich für den abgekoppelten lokalen Review-Worker das
+30-Minuten-Limit: eine menschliche Entscheidung läuft dort nicht mehr automatisch
+ab. Abbrechen und Zurückstellen bleiben ausdrückliche lokale Handlungen. Der
+synchrone Supportpfad behält sein Fünf-Minuten-Limit. Die Abschlussanzeige wird
+außerdem als inhaltsfreier, abgekoppelter Prozess gestartet und kann deshalb weder
+Worker noch Cowork-Aufruf blockieren. Automatische Retention löscht freigegebene
+Ergebnisse nicht mehr; nur eine ausdrücklich bestätigte manuelle Löschung darf den
+Output-Bereich entfernen.
+
 RC38 bis RC41 ergänzten drei Kontextkorrekturen und eine I/O-Optimierung. Die
 ursprünglich regressionsgetesteten Fälle sind wirksam: Kunde/Arbeitgeber in
 Zertifizierungs-Fließtext wird in den getesteten Nomen-, femininen und Verbformen
@@ -1211,3 +1247,43 @@ drei Plattformen. Die Abnahme muss insbesondere Cowork-Fresh-Install, beide
 Skillstarts, Connectorfehler, quantifiziertes Verwerfen, lokale Fachprüfung und
 gestufte Claude-Weiterverarbeitung beobachten. Echtdaten bleiben bis zu einer
 separaten Pilotentscheidung NO-GO.
+## BL-044 – Sichere Datei- und Ordnerquellen
+
+Status: **teilweise**
+
+Vorhanden ist ein lokaler Mehrfach-Dateipicker mit Snapshot- und Mengenlimits.
+Rekursive Ordnerwahl, vollständige Vorabvalidierung der Hierarchie und stabile
+relative Mappingzuordnung fehlen. Der Legacy-Inputpfad widerspricht bis zu seiner
+Korrektur dem strikten Nur-Lesen-Ziel.
+
+## BL-047 – Performance und Ressourcensteuerung
+
+Status: **teilweise**
+
+Benchmarks und getrennte Zwei-Worker-/OCR-Harnesses existieren, sind aber bewusst
+nicht Produktpfad. Adaptive Parallelität, das 25%-/2-GiB-Budget sowie automatische
+2-s-/10-s-/10%-Gates fehlen.
+
+## BL-049 – Inhalts- und Formatgrenze
+
+Status: **teilweise**
+
+Container-, Parser-, Active-Content- und Residualgates sind für freigegebene Formate
+umfangreich vorhanden. Ein einheitliches Vorab-Sniffing aus Endung, Signatur und
+Containerstruktur sowie die drei kanonischen Ergebnisgrade fehlen noch.
+## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
+
+- Automatische Retention überspringt `Output` unabhängig vom Alter; nur ein
+  ausdrücklich bestätigter Purge darf freigegebene Ergebnisse löschen.
+- `start_document_batch_from_picker` blockiert nur aktiven Intake beziehungsweise
+  aktive Verarbeitung, nicht pausierte oder fortsetzbare Stapel.
+- Skill und MCPB-Prompts behandeln die Altstapelverwaltung nur auf ausdrücklichen
+  Wunsch; ein neuer Auftrag öffnet direkt die neue Auswahl.
+- Der abgekoppelte lokale Review besitzt keinen menschlichen Entscheidungs-Timeout.
+  Der synchrone Supportaufruf bleibt auf fünf Minuten begrenzt.
+- Die feste, inhaltsfreie terminale Abschlussmeldung wird detachiert gestartet und
+  hält Batchworker oder Cowork-Aufruf nicht bis zum Schließen offen.
+
+Targettests sind E0; Fresh-Install-, reale Cowork-, Accessibility- und native
+macOS-Evidenz bleiben bei BL-041.9 E1/E2 offen. OS-gebundene Verschlüsselung,
+Ordnerauswahl und selbsttragende Pakete bleiben höher priorisierte Restarbeit.

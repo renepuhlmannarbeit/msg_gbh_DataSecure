@@ -276,8 +276,9 @@ bleibt der gesamte Output-Bereich unangetastet, während unabhängige Processed-
 Review-Retention weiterlaufen. Bestätigte manuelle Löschung bleibt davon bewusst
 unberührt. Batch-Journale behandeln partielle Writes vollständig, flushen die Datei
 vor dem atomaren Rename und synchronisieren auf POSIX zusätzlich das Elternverzeichnis.
-Der abgekoppelte lokale Review-Worker verwendet einen zentral getesteten Zeitraum von
-30 Minuten; der synchrone Supportpfad bleibt auf fünf Minuten begrenzt.
+Der damalige RC37-Nachweis verwendete für den abgekoppelten Review-Worker 30 Minuten;
+der aktuelle Zielvertrag entfernt diesen menschlichen Entscheidungs-Timeout. Der
+synchrone Supportpfad bleibt auf fünf Minuten begrenzt.
 
 Direkte Regressionsevidenz liefern 6 Journal-/Schutztests, 16 Retentiontests, 3
 Review-Executor-Vertragstests und 39 Companion-Verarbeitungstests. `test:ci` und die

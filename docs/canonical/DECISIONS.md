@@ -291,3 +291,144 @@ Host-Berechtigungsdialoge nicht abschalten, minimiert aber die Anzahl und Vielfa
 der Werkzeuge im Normalpfad. Lokale Verarbeitung bleibt der Produktkern; MCP-Tasks
 oder Benachrichtigungen sind nur ein versionsgebundener Host-Spike und keine
 Voraussetzung für Offline-Verarbeitung oder Abschluss.
+
+## DS-041 – Cowork-first mit lokaler Ausführung
+
+Cowork ist der normale Einstieg sowie der Ort für inhaltsfreien Status und
+freigegebene Ergebnisse. Originalzugriff, Verarbeitung und rohdatenhaltige Prüfung
+bleiben lokal. Eine separate Companion-Anwendung gehört nicht zum Normalweg.
+
+## DS-042 – Progressive, inhaltsfreie MCP-App
+
+Eine eingebettete MCP-App darf den Ablauf komfortabler machen, aber nur opake
+Vorgangskennungen, feste Statuswerte, Zähler und inhaltsfreie Aktionen erhalten.
+OS-Picker und Textfallback bleiben vollständig funktionsfähig; ein App-iframe ist
+kein belegbar lokaler Rohdatenkanal.
+
+## DS-043 – Nicht blockierender, dauerhafter Auftrag
+
+Nach durablem Checkpoint kehrt der Startaufruf kurzfristig zurück. Ein unabhängiger
+lokaler Worker verarbeitet weiter. Reviewentscheidungen besitzen keinen
+menschlichen Timeout; pausierte Stapel blockieren keinen neuen Stapel. Diese
+Entscheidung ersetzt DS-013 und präzisiert DS-021, DS-022, DS-036 und DS-040.
+
+## DS-044 – Sichere Datei- und Ordnerquellen
+
+Datei- und rekursive Ordnerwahl sind gleichwertige lokale Starts. Der gesamte
+Umfang wird vorab validiert; Symlinks, Junctions, Reparse Points und externe
+Beziehungen werden nicht verfolgt. Lokal synchronisierte SharePoint-/OneDrive-
+Quellen sind schreibgeschützt zulässig. Chat-Anhänge sind kein Originaleingang.
+
+## DS-045 – Drei ehrliche Ergebnisgrade
+
+Jede Quelle endet als vollständig verarbeitet, verwendbar mit ausdrücklich
+benannten Auslassungen oder sicher nicht verarbeitet. Eine stille Teilfreigabe ist
+unzulässig. Diese Entscheidung ersetzt DS-015.
+
+## DS-046 – Verschlüsselte Quellen nicht entschlüsseln
+
+Passwortgeschützte oder verschlüsselte Quellen werden weder kopiert noch
+entschlüsselt. Sie werden im Stapel getrennt als nicht verarbeitet ausgewiesen;
+andere Quellen laufen weiter. Diese Entscheidung ersetzt DS-016.
+
+## DS-047 – Adaptive lokale Ressourcensteuerung
+
+Parallelität richtet sich automatisch nach CPU, freiem Speicher, Format und OCR.
+Der normale Speicheretat beträgt höchstens das Minimum aus 25 Prozent RAM und zwei
+GiB. Picker und Startannahme sollen je höchstens zwei Sekunden benötigen, kein
+Verarbeitungsaufruf Cowork länger als zehn Sekunden blockieren; ein unbegründeter
+Regressionseffekt über zehn Prozent blockiert die Freigabe.
+
+## DS-048 – Readiness, Selbstheilung und inhaltsfreie Diagnose
+
+Vor dem Start werden lokale Bereitschaft, Benutzerbindung, Schreibrechte und
+Speicher geprüft. DataSecure darf einen eigenen Prozess genau einmal neu starten,
+nicht aber einen ausgefallenen Claude-Host kaschieren. Ereignisse bleiben 14 Tage,
+enthalten keine Inhalte, Namen, Pfade, Hashes oder Tokens und werden nie automatisch
+übertragen.
+
+## DS-049 – Vollständige Inhaltsgrenze
+
+Signatur, Containerstruktur und Endung müssen zusammenpassen. Aktive Inhalte werden
+nie ausgeführt und externe Inhalte nie geladen. Native Textschichten haben Vorrang;
+lokale deutsch-/englische OCR ergänzt nur fehlende Bereiche. Header, Footer,
+Notizen, Kommentare und relevante versteckte Office-Bereiche gehören zur Coverage.
+Ein Nulltreffer wird nur nach vollständigem Parse und unabhängigem Residual-Gate
+freigegeben.
+
+## DS-050 – Benutzergebundene Verschlüsselung und sichere Löschung
+
+Private Snapshots und Reviewdaten werden pro OS-Benutzer mit einem über DPAPI oder
+Keychain geschützten Schlüssel verschlüsselt; ohne sicheren Store wird vor jedem
+Rohschreibzugriff gestoppt. DataSecure löscht nur eigene verwaltete Artefakte,
+niemals Quellen oder Links. Temporäre Rohdaten verschwinden nach Erfolg sofort und
+sonst spätestens nach 14 Tagen; Exporte und Mapping bleiben dauerhaft.
+
+## DS-051 – Einmalige Ergebnisübergabe
+
+`nur anonymisieren` übergibt keine Dokumentinhalte. `anonymisieren und auswerten`
+übergibt freigegebene Markdown-Ergebnisse stapelweise mit höchstens einer
+nutzungsseitigen Freigabe, soweit der Host dies ermöglicht. Hostberechtigungen
+werden nicht umgangen. Der Abschluss zeigt höchstens die drei anwendbaren Aktionen
+„Ergebnisse verwenden“, „lokal prüfen“ und „Ausgabe öffnen“.
+
+## DS-052 – Gestufte Plattformfreigabe
+
+Der erste produktive Cowork-Release umfasst Windows x64 und macOS Intel/Apple
+Silicon. Die Engine bleibt portabel; Linux und Windows ARM64 folgen erst mit eigener
+Hostevidenz. Diese Entscheidung ersetzt DS-004 und DS-034, soweit diese eine
+gleichzeitige Drei-Plattform-Freigabe verlangen.
+
+## DS-053 – Selbsttragende Distribution und Signierung
+
+Anwender installieren weder Node.js noch Python. Marketplace und manuelle
+Windows-x64-/macOS-universal-ZIPs enthalten alle Laufzeiten; MCPB ist nur Fallback.
+Piloten dürfen unsigniert sein, eigene native Sicherheitskomponenten müssen vor
+breitem Unternehmenseinsatz signiert sein. Diese Entscheidung ersetzt DS-030.
+
+## DS-054 – Datenwahrender Lifecycle
+
+Update, Rückrolle und Deinstallation dürfen Originale, Exporte, Mappings und offene
+Aufträge nicht verlieren. Datenmigrationen sind versioniert, vorab gesichert und
+reversibel; bei Fehler bleibt der letzte durable Stand nutzbar.
+
+## DS-055 – Sprache, Barrierefreiheit und Administration
+
+Deutsch und Englisch sowie WCAG-orientierte Tastatur-, Fokus-, Kontrast-, Skalierungs-
+und Screenreader-Gates sind Releasebestandteil. Administration darf Formate,
+Quellgrenzen, Sprache, Ausgabe, Auswertungsmodus und Retention bis höchstens 14 Tage
+verschärfen, aber keine Sicherheitsgrenze abschwächen.
+
+## DS-056 – Stufenweise Freigabe mit menschlicher Evidenz
+
+Auf synthetische Techniktests folgen interne Cowork-Abnahme, kontrollierter
+Echtdatenpilot nach Datenschutz-/Security-Freigabe, Unternehmensrollout und erst
+danach öffentlicher Marketplace. Vor Rollout bleiben P0 und P1 geschlossen und
+Windows-/macOS-Cowork-Nachweise verpflichtend.
+
+## DS-057 – Kanonische Produktführung
+
+`DECISIONS.md`, `PRODUCT_VISION.md`, `PRODUCT.md`, `TARGET_ARCHITECTURE.md`,
+`BACKLOG.md`, `CURRENT_STATE.md`, `TRACEABILITY.md` und Maschinenverträge bilden in
+dieser Rangfolge den Kanon. Entscheidungen besitzen unveränderliche DS-IDs und
+werden ausschließlich durch neue, explizit ersetzende IDs geändert.
+
+## DS-058 – Neutrales Ergebnis und lokales Mapping
+
+Ergebnisse erhalten neutrale Namen. Das dauerhafte lokale Mapping enthält keine
+Rohentitätstabelle und nur dann einen relativen Quellpfad, wenn eine gewählte
+Ordnerhierarchie sonst nicht eindeutig abbildbar wäre. Diese Entscheidung
+präzisiert DS-024.
+
+## DS-059 – Neustartfester Pseudonymkontext
+
+Stapelweite Pseudonyme bleiben über Pause und Neustart konsistent. Dafür wird nur
+der minimal nötige Kontext benutzergebunden verschlüsselt gespeichert und nach
+Abschluss gelöscht. Diese Entscheidung ersetzt die reine RAM-Vorgabe aus DS-019.
+
+## DS-060 – Offline-Lieferkette
+
+Open Source bleibt bevorzugt, wird aber nur gepinnt, integritätsgeprüft,
+lizenzkompatibel, SBOM-erfasst und ohne Runtime-Downloads ausgeliefert. Jede
+Komponente muss die Offline-, Format-, Ressourcen- und Negativgates bestehen. Diese
+Entscheidung präzisiert DS-038.
