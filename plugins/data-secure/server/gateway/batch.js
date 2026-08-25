@@ -11,19 +11,14 @@ const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntri
 const { appendBatchEvidence } = require('./batch-evidence');
 const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
+const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const {
   createPhaseRecorder,
   createPrivateIoSummary,
   incrementPrivateIoSummary
 } = require('./performance');
 const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
-const {
-  buildReviewDraft,
-  validateReviewResult,
-  applyManualRedactions,
-  reviewTextLocally,
-  reviewBatchTextLocally: runBatchReviewLocally
-} = require('../companion/text-review');
+const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('../companion/text-review');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const active = new Set();
@@ -32,57 +27,6 @@ const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
 const DELIVERY_PENDING = 'delivery_pending';
 const DEFERRED_REVIEW = 'deferred_review';
 const MAPPING_PENDING = 'mapping_pending';
-
-function localReviewError(code, message) {
-  const error = new SafeError(message);
-  error.code = code;
-  return error;
-}
-
-async function reviewSingleBatchTextLocally(input, state, item, deps = {}) {
-  // A confirmed Input-folder batch authorizes automatic release of clear
-  // text. Only credential-issuer ambiguity requires an extra local decision.
-  // The review draft stays in memory and reaches the native UI only over
-  // stdin; it is never added to the batch journal or returned through MCP.
-  if ((input.ambiguities || []).length === 0) return { text: input.anonymized_text };
-  // The first pass of a real multi-file batch must finish its analysis before
-  // asking a human a document-specific question. Keep only the fixed deferred
-  // state; the private snapshot is sufficient to reconstruct this review
-  // locally after an explicit continuation. A resumed deferred item is the
-  // exception: it is now intentionally being decided.
-  if (state.items.length > 1 && item.review_resumed !== true && deps.deferAmbiguousReview !== false) {
-    throw localReviewError('LOCAL_REVIEW_DEFERRED', 'Die lokale Zertifikatsentscheidung wird nach der Stapelanalyse gemeinsam vorgelegt. Die Datei bleibt bis dahin lokal gesperrt.');
-  }
-  const platform = deps.platform || process.platform;
-  if (!['win32', 'darwin', 'linux'].includes(platform)) {
-    throw localReviewError('LOCAL_REVIEW_REQUIRED', 'Mehrdeutige Organisationen benötigen auf diesem Gerät eine lokale Entscheidung; es wurde nichts freigegeben.');
-  }
-  const draft = buildReviewDraft(input.original_text, input.anonymized_text, input.profile, input.ambiguities, {
-    batchIndex: state.items.indexOf(item) + 1,
-    batchTotal: state.items.length,
-    allowDefer: true
-  });
-  const reviewer = deps.reviewTextLocally || reviewTextLocally;
-  const rawDecision = await reviewer(draft, {
-    platform,
-    ...(deps.reviewOptions || {})
-  });
-  const decision = validateReviewResult(rawDecision, draft);
-  if (decision.action === 'deferred') {
-    throw localReviewError('LOCAL_REVIEW_DEFERRED', 'Die lokale Zertifikatsentscheidung wurde vertagt. Die Datei bleibt lokal gesperrt und kann später ausdrücklich fortgesetzt werden.');
-  }
-  if (decision.action !== 'reviewed') {
-    throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Entscheidung zu einer Zertifizierungsorganisation wurde abgebrochen. Es wurde nichts freigegeben.');
-  }
-  const ambiguityById = new Map(input.ambiguities.map((candidate) => [candidate.ambiguity_id, candidate]));
-  const ambiguityRedactions = decision.decisions
-    .filter((candidate) => candidate.decision === 'redact')
-    .map((candidate) => {
-      const ambiguity = ambiguityById.get(candidate.ambiguity_id);
-      return { start: ambiguity.anonymized_start, end: ambiguity.anonymized_end };
-    });
-  return { text: applyManualRedactions(input.anonymized_text, [...decision.redactions, ...ambiguityRedactions]) };
-}
 
 function batchRoot() {
   const gatewayRoot = ensurePrivateDirectory(path.dirname(dataRoot()), path.basename(dataRoot()));
@@ -1060,27 +1004,6 @@ function retryReleasedWorkCopyCleanup(state, deps = {}) {
     }
   }
   return { changed, pending };
-}
-
-function reviewedBatchText(input, decisions) {
-  if (!Array.isArray(decisions)) {
-    throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung ist für diese Datei nicht vollständig. Es wurde nichts freigegeben.');
-  }
-  const ambiguityById = new Map((input.ambiguities || []).map((candidate) => [candidate.ambiguity_id, candidate]));
-  if (decisions.length !== ambiguityById.size) {
-    throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung ist für diese Datei nicht vollständig. Es wurde nichts freigegeben.');
-  }
-  const redactions = decisions.map((candidate) => {
-    const ambiguity = ambiguityById.get(candidate.ambiguity_id);
-    if (!ambiguity || candidate.decision !== 'redact') {
-      if (!ambiguity || candidate.decision !== 'keep') {
-        throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung ist ungültig. Es wurde nichts freigegeben.');
-      }
-      return null;
-    }
-    return { start: ambiguity.anonymized_start, end: ambiguity.anonymized_end };
-  }).filter(Boolean);
-  return { text: applyManualRedactions(input.anonymized_text, redactions) };
 }
 
 async function captureDeferredReviewInput(state, item, deps = {}) {

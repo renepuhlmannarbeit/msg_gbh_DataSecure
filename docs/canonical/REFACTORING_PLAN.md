@@ -77,7 +77,10 @@ Batchtests und die vollständige lokale CI bestehen.
 Erster Teilstand: `gateway/batch-results.js` kapselt signierte Ergebnis-Cursor,
 begrenztes Paging und die interne Auswahl vollständig abgeschlossener lokaler
 Handoff-Kandidaten. `gateway/batch-progress.js` kapselt das inhaltsfreie
-Statusmodell, gemessene Restzeit und die deutschen nächsten Schritte. Die
+Statusmodell, gemessene Restzeit und die deutschen nächsten Schritte. Die rein
+speicherinterne Review-Policy für Keep/Redact/Deferral liegt in
+`gateway/batch-review-policy.js` und ist durch einen eigenen Negativtest
+abgesichert. Die
 öffentlichen Exporte bleiben weiterhin in `gateway/batch.js`; die vorhandenen
 Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen.
 

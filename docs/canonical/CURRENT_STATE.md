@@ -187,8 +187,10 @@ verhaltensneutrale Zerlegung des Stapelkerns fest. Diese Strukturarbeit ist als
 BL-011.15 in Arbeit. Ergebnis-Cursor/-Paging und die Auswahl lokaler Handoff-
 Kandidaten sind bereits in `gateway/batch-results.js`, Statusmodell,
 Fortschrittsberechnung und inhaltsfreie Nutzertexte in `gateway/batch-progress.js`
-gekapselt. Die weiteren Schnitte trennen Intake/Snapshot, Journal/Recovery,
-Verarbeitung/Commit, Review, Veröffentlichung/Mapping und Wartung hinter der
+gekapselt. Die Keep/Redact-/Deferral-Policy für lokale Zertifikatsentscheidungen
+liegt in `gateway/batch-review-policy.js` und hält Rohtext weiter ausschließlich
+im Speicher. Die weiteren Schnitte trennen Intake/Snapshot, Journal/Recovery,
+Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
 bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
 benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann
 Performanceaktivierung sowie Formaterweiterung.
