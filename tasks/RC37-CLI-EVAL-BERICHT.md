@@ -52,11 +52,23 @@ Eine Anpassung von Build/ZIP-Prüfung war daher nicht nötig.
 
 ## 3. Gefundene Fehler und Ursachenbehebungen
 
-**Keine reproduzierbaren Produktfehler gefunden.** Alle drei ausgeführten Smoke-Tests
-bestanden korrekt (siehe Abschnitt 5). Es gab daher nichts zu beheben und keinen Grund,
-die Version auf `3.2.0-rc38` zu erhöhen (Auftrag Abschnitt 9, zweiter Fall: „Wenn
-ausschließlich Entwicklungs-Evals oder Dokumentation … ergänzt werden, bleibt RC37
-bestehen“ — siehe Hash-Nachweis in Abschnitt 6).
+**Nachtrag (Commit `068c0cc`, nach diesem Bericht):** Bei der Nacharbeit zu Punkt 6.B.3/
+6.B.4 des Auftrags (Zertifikatsaussteller- vs. Arbeitgeber-/Kundenkontext, DS-012) wurde
+ein reproduzierbarer Fehler in `plugins/data-secure/server/privacy/credentials.js`
+gefunden und behoben: Ein Kunden- oder Arbeitgebername in Fließtext innerhalb eines
+Zertifizierungsabschnitts blieb vollständig unredigiert, z. B. „Zertifikat ausgestellt
+für Kunde ABC GmbH“ — „ABC GmbH“ wurde nie anonymisiert, während der echte Aussteller
+(z. B. Scrum.org) in derselben Zeile korrekt als Fachinhalt erhalten blieb. Das ist eine
+Unter-Redaktion, die laut Auftrag Abschnitt 3.8 schwerere Fehlerrichtung. Ursache waren
+zwei sich verstärkende Lücken: `NON_ISSUER_LABEL_RE` erkannte nur die Form „Label: Wert“,
+nicht die Fließtext-Form; zusätzlich fasst die Organisations-Erkennung das Rollensubstantiv
+(„Kunde“) in den Treffer selbst, sodass das Signalwort nicht mehr vor der Fundstelle
+steht. Fix, Regressionstests (`tests/test-credential-catalog.js`, 2 neue Fälle) und
+Versionserhöhung auf `3.2.0-rc38` sind in Commit `068c0cc` dokumentiert; die volle
+`npm run test:ci`-Kette lief danach erneut vollständig grün.
+
+Aus den drei in diesem Bericht (Abschnitt 5) ausgeführten Smoke-Tests selbst ergab sich
+kein reproduzierbarer Fehler — sie deckten diesen Fall nicht ab.
 
 Eine Nebenbeobachtung ohne Produktbezug: `claude plugin validate <pfad-zur-zip>`
 akzeptiert keine `.zip`-Pfade direkt (versucht die Rohbytes als JSON zu lesen, Fehler
@@ -107,11 +119,21 @@ möglich — siehe Risiken unten).
 
 ## 6. Plugin-/ZIP-Version, Pfad und SHA-256
 
+**Zum Ausführungszeitpunkt dieses Berichts** (vor dem Nachtrag in Abschnitt 3):
+
 - Version: `3.2.0-rc37` (unverändert)
-- ZIP-Pfad: `C:\Users\arkud\Documents\ChatGPT\Datenschutz\repo-review\dist\DataSecure-Privacy-Preflight-v3.2.0-rc37.zip`
+- ZIP-Pfad: `dist/DataSecure-Privacy-Preflight-v3.2.0-rc37.zip`
 - SHA-256: `93a13f5a6bc2a2d86d995cb7206a3a6532dff1da402538fb9220502d0bb529b1`
 - Bestätigt **identisch** vor und nach einem vollständigen Rebuild (`npm run build:plugin`)
   sowie identisch mit dem im Auftrag Abschnitt 2 genannten Erwartungswert.
+
+**Nach dem Nachtrags-Fix (Commit `068c0cc`)**, da eine Server-Quelldatei geändert wurde:
+
+- Version: `3.2.0-rc38` (per `scripts/set-version.mjs` synchronisiert)
+- ZIP-Pfad: `dist/DataSecure-Privacy-Preflight-v3.2.0-rc38.zip`
+- SHA-256: `b8b723a363db3849c5a045d127da3fef62cba7d5e05ddc2dae27494bc2e311ff`
+- Nach dem Fix neu gebaut und erneut mit `npm run test:plugin-zip` sowie
+  `claude plugin validate plugins/data-secure` erfolgreich geprüft.
 
 ## 7. Performance-Ergebnisse
 
