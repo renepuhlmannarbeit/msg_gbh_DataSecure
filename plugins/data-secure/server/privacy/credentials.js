@@ -1,6 +1,6 @@
 'use strict';
 
-const { normalizeSpaces, normalizeText } = require('./base');
+const { normalizeSpaces, normalizeText, ORG_SUFFIX } = require('./base');
 const { matchers: credentialCatalogMatchers } = require('./credential-catalog');
 const { markdownTableCells } = require('./entities');
 
@@ -36,7 +36,12 @@ const CERT_TITLE_RE = /\b(?:certified|certification|certificate|credential|profe
 // same "-e(n)"/"-in(nen)" endings here); "Anstellung bei"/"beschäftigt bei"
 // name an employer through a verb phrase instead of a role noun, so they are
 // listed separately from the noun alternatives rather than folded into \b.
-const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|kundin(?:nen)?|projektkunden?|projektkundin(?:nen)?|auftraggeber|client|customer|technologien?|technologies|tools?|skillset|kenntnisse|(?:anstellung|angestellt|beschäftigt|tätig)\s+(?:bei|für)|employed\s+(?:at|by)|working\s+for)\b(?:\s*:)?\s*$/iu;
+// "tätig(?:keit)?" covers both the adjective ("tätig für") and the nominal
+// form ("Tätigkeit für") in one branch. "im Auftrag von"/"on behalf of"/
+// "commissioned by" name the same customer/commissioning relationship as
+// "Kunde"/"Auftraggeber" through a prepositional phrase instead of a role
+// noun (RC41 counter-review: a customer named this way survived unredacted).
+const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|kundin(?:nen)?|projektkunden?|projektkundin(?:nen)?|auftraggeber|client|customer|technologien?|technologies|tools?|skillset|kenntnisse|(?:anstellung|angestellt|beschäftigt|tätig(?:keit)?)\s+(?:bei|für)|im\s+auftrag\s+von|employed\s+(?:at|by)|working\s+for|on\s+behalf\s+of|commissioned\s+by)\b(?:\s*:)?\s*$/iu;
 
 function plainLine(line) {
   return normalizeSpaces(String(line || '')
@@ -196,27 +201,79 @@ function credentialIssuerAmbiguities(originalText, anonymizedText) {
 // word closes that gap without touching the shared organisation regex.
 const NON_ISSUER_PREFIX_RE = /^(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|kundin(?:nen)?|projektkunden?|projektkundin(?:nen)?|auftraggeber|client|customer)\b\s*:?\s*/iu;
 
+// A domain or organisation counts as "IssuerName Title" - the shape used
+// throughout this file for every catalogued issuer alias ("Scrum.org
+// Professional Scrum Master I", "${code} Certified Professional") - only
+// when the title starts right after a single run of whitespace. A comma or
+// other clause break means the following text describes something else
+// (RC41 counter-review: "Kunde TechCorp GmbH, Certified Scrum Master
+// Schulung durchgeführt" must still redact the customer), so the trim
+// deliberately does not swallow punctuation.
+const CERT_TITLE_LEADING_RE = new RegExp(`^${CERT_TITLE_RE.source}`, CERT_TITLE_RE.flags);
+const CERT_CODE_LEADING_RE = new RegExp(`^(?:${CERT_CODE_RE.source})`, CERT_CODE_RE.flags);
+
+function hasLeadingCredentialTitle(text) {
+  const trimmed = String(text || '').replace(/^[ \t]+/u, '');
+  if (!trimmed) return false;
+  return CERT_TITLE_LEADING_RE.test(trimmed) || CERT_CODE_LEADING_RE.test(trimmed);
+}
+
+// buildOrgDictionary() also redacts a legal-form-stripped alias ("Customer
+// Institute" without "GmbH") so a later bare mention is still caught. That
+// alias span ends before the legal form, so the immediately-following text
+// is the stripped-off suffix ("GmbH"), not yet the credential title. Only
+// the gap left by an actual organisation-suffix word is skipped here - this
+// stays a narrow adjacency fix, not a general "skip anything" allowance.
+const ORG_SUFFIX_GAP_RE = new RegExp(`^[ \\t]+${ORG_SUFFIX}\\b`, 'iu');
+
 function inCredentialContext(text,start,end,ranges=credentialContextSpans(text)) {
   const range=ranges.find((r)=>start < r.end && r.start < end);
   if(!range) return false;
-  if(NON_ISSUER_PREFIX_RE.test(String(text).slice(start,end))) return false;
-  return !NON_ISSUER_LABEL_RE.test(String(text).slice(range.start,start));
+  const src=String(text);
+  if(NON_ISSUER_LABEL_RE.test(src.slice(range.start,start))) return false;
+  if(NON_ISSUER_PREFIX_RE.test(src.slice(start,end))) {
+    // The role word is fused into the organisation's own match ("Kunde ABC
+    // GmbH"), but the same word can start a genuine issuer's proper name
+    // ("Customer Institute GmbH"). Only an immediately following credential
+    // title resolves the ambiguity in the issuer's favour; otherwise the
+    // prefix keeps meaning what it always meant (RC41 counter-review).
+    const lineEnd=src.indexOf('\n',end);
+    const after=src.slice(end,lineEnd<0?undefined:lineEnd).replace(ORG_SUFFIX_GAP_RE,'');
+    if(!hasLeadingCredentialTitle(after)) return false;
+  }
+  return true;
 }
+
+// Attribution must bind tightly to this exact domain, not merely share a
+// certification-section line with an unrelated credential cue. "Zertifikat:
+// AWS Certified Cloud Practitioner - weitere Informationen bei
+// alpha-health.de" is not the same as "Zertifikat ausgestellt von
+// alpha-health.de": the cue word "Zertifikat" sits far earlier in the line
+// and never actually attributes the domain as issuer (RC41 counter-review,
+// an under-redaction of the referenced domain). Only two shapes count as
+// binding: a credential title starts immediately after the domain, or an
+// explicit issuer-attribution phrase ends immediately before it - including
+// on the immediately preceding line, so a short two-line block ("Zertifikat
+// ausgestellt von\nScrum.org") still protects its issuer without treating
+// the whole certification section as a domain allowlist.
+const ISSUER_ATTRIBUTION_BEFORE_RE = /(?:ausgestellt\s+(?:von|durch)|zertifiziert\s+(?:von|durch)|akkreditiert\s+(?:von|durch)|issued\s+by|certified\s+by|accredited\s+by)\s*:?\s*$/iu;
 
 function isCredentialIssuerDomain(text,start,end,ranges=credentialContextSpans(text)) {
   if(!inCredentialContext(text,start,end,ranges)) return false;
   const value=String(text).slice(start,end);
   if(/(?:https?:\/\/|www\.|[/?#])/iu.test(value)) return false;
-  // "Scrum.org Professional Scrum Master I" names the credential after the
-  // issuer; "Zertifikat ausgestellt von Scrum.org" names it before. Only
-  // checking the trailing text over-redacted the second, equally common
-  // shape into [URL_REDACTED] even though it is already known-protected
-  // (inCredentialContext above), turning a genuine issuer into a URL.
-  const lineEnd=String(text).indexOf('\n',end);
-  const after=String(text).slice(end,lineEnd<0?undefined:lineEnd);
-  const lineStart=String(text).lastIndexOf('\n',Math.max(0,start-1))+1;
-  const before=String(text).slice(lineStart,start);
-  return hasCredentialCue(after) || hasCredentialCue(before);
+  const src=String(text);
+  const lineEnd=src.indexOf('\n',end);
+  const after=src.slice(end,lineEnd<0?undefined:lineEnd);
+  if(hasLeadingCredentialTitle(after)) return true;
+  const lineStart=src.lastIndexOf('\n',Math.max(0,start-1))+1;
+  const before=src.slice(lineStart,start);
+  if(ISSUER_ATTRIBUTION_BEFORE_RE.test(before)) return true;
+  if(before.trim() || lineStart<=0) return false;
+  const prevLineEnd=lineStart-1;
+  const prevLineStart=src.lastIndexOf('\n',Math.max(0,prevLineEnd-1))+1;
+  const prevLine=src.slice(prevLineStart,prevLineEnd);
+  return ISSUER_ATTRIBUTION_BEFORE_RE.test(prevLine);
 }
 
 function isCatalogTechnologyTerm(text, start, end) {

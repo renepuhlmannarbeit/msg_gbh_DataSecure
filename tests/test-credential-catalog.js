@@ -253,4 +253,87 @@ test('an unrelated domain outside credential context is still redacted as a URL'
   assertAbsent(output, 'example-portfolio.com', 'unrelated domain');
 });
 
+// RC41 counter-review (tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md): the
+// previous fix protected a domain whenever *any* credential cue shared its
+// line, regardless of whether the cue actually named that domain as issuer.
+// A domain merely referenced for "further information" inside a certificate
+// line is not the issuer and must still be redacted - an under-redaction,
+// the more severe failure direction.
+test('a domain merely referenced inside a certificate line is not treated as its issuer', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nZertifikat: AWS Certified Cloud Practitioner – weitere Informationen bei alpha-health.de',
+    'personnel_profile'
+  ).text;
+  assertAbsent(output, 'alpha-health.de', 'unrelated reference domain in a certificate line');
+});
+
+test('the same unrelated-reference-domain gap reproduces inside a CSV cell', () => {
+  const csv = 'Kategorie,Eintrag\n' +
+    'Zertifizierungen,"Zertifikat: AWS Certified Cloud Practitioner, weitere Informationen bei alpha-health.de"\n';
+  const output = pii.anonymize(csv, 'personnel_profile').text;
+  assertAbsent(output, 'alpha-health.de', 'unrelated reference domain in a CSV cell');
+});
+
+test('a genuine issuer named via "ausgestellt von" directly before the domain still survives', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nZertifikat ausgestellt von alpha-health.de.',
+    'personnel_profile'
+  ).text;
+  assertPresent(output, 'alpha-health.de', 'issuer bound by an explicit attribution phrase');
+});
+
+// The attribution phrase and the domain can land on adjacent lines once text
+// is extracted from a DOCX paragraph break or a short two-line CV block. The
+// binding stays local to this one line pair, not a whole-section allowlist.
+test('a genuine issuer split across two lines by "ausgestellt von" still survives', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nZertifikat ausgestellt von\nScrum.org.',
+    'personnel_profile'
+  ).text;
+  assertPresent(output, 'Scrum.org', 'issuer named on the line after the attribution phrase');
+});
+
+test('a customer named via the nominal "Tätigkeit für" form in a certification section is still anonymized', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nWährend meiner Tätigkeit für Nordlicht Beispiel AG erwarb ich ISTQB Certified Tester.',
+    'personnel_profile'
+  ).text;
+  assertAbsent(output, 'Nordlicht Beispiel AG', 'customer named via Tätigkeit für');
+  assertPresent(output, 'ISTQB', 'certification title');
+});
+
+test('a customer named via "im Auftrag von" in a certification section is still anonymized', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nZertifikat erworben im Auftrag von Alpha Beispiel GmbH, ausgestellt durch Scrum.org.',
+    'personnel_profile'
+  ).text;
+  assertAbsent(output, 'Alpha Beispiel GmbH', 'customer named via im Auftrag von');
+  assertPresent(output, 'Scrum.org', 'genuine issuer on the same line');
+});
+
+// The organisation-name-fused-with-a-role-word gap ("Kunde ABC GmbH") cuts
+// both ways: a real certification body whose own name happens to start with
+// a signal word ("Customer Institute GmbH") must not be treated as a
+// customer merely because of that leading word. It is only safe to trust the
+// name over the signal word when a credential title immediately follows on
+// the same line, mirroring the "IssuerName Title" shape already used for
+// every catalogued issuer alias in this file - a comma or clause break still
+// suppresses the override, so an actual customer followed by unrelated
+// certificate prose is not accidentally protected.
+test('a real issuer name starting with a customer/employer signal word is not over-redacted', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nCustomer Institute GmbH Certified Testing Professional.',
+    'personnel_profile'
+  ).text;
+  assertPresent(output, 'Customer Institute GmbH', 'issuer name starting with a signal word');
+});
+
+test('a real customer immediately followed by unrelated certificate prose is still anonymized', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nKunde TechCorp Beispiel GmbH, Certified Scrum Master Schulung durchgeführt.',
+    'personnel_profile'
+  ).text;
+  assertAbsent(output, 'TechCorp Beispiel GmbH', 'customer separated from following prose by a comma');
+});
+
 done();
