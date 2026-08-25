@@ -67,6 +67,65 @@ steht. Fix, Regressionstests (`tests/test-credential-catalog.js`, 2 neue Fälle)
 Versionserhöhung auf `3.2.0-rc38` sind in Commit `068c0cc` dokumentiert; die volle
 `npm run test:ci`-Kette lief danach erneut vollständig grün.
 
+**Nachtrag (Commit `0ccf994`, RC39):** `gateway/batch.js::writeState` erhielt die
+Option `{ durable: false }` für feste Zwischenmarker, solange `item.status`
+unverändert `processing` bleibt. Datei- und POSIX-Verzeichnis-Fsync werden dort
+übersprungen; jede Statusänderung bleibt durable. Das Gegenreview bestätigte per
+vollständiger Suche, dass `markInterruptedItemsRetryable` ausschließlich den Status
+auswertet und kein Produktpfad `item.checkpoint` für Freigabe oder Recovery liest.
+`tests/test-batch-session.js` bestand mit 66 Fällen einschließlich echter Worker-
+Abbrüche an Position 1, 50 und 100 ohne doppelte Freigabe. Die neue direkte Prüfung
+in `tests/test-batch-performance-contract.js` beweist hingegen nur Schreibbarkeit und
+Fsync-Aufrufzahl, keinen Stromverlust. Außerdem erwartet sie genau einen Fsync und ist
+damit Windows-spezifisch: auf POSIX führt der unverändert notwendige Verzeichnis-Fsync
+zu einem zweiten Aufruf. Das ist ein P2-Nachweisdefizit, keine nachgewiesene
+Status-/Publikationslücke. Die BL-050.3-Evidenzstufe bleibt unverändert.
+
+**Nachtrag (Commit `b7b7e02`, RC40):** `NON_ISSUER_LABEL_RE` und
+`NON_ISSUER_PREFIX_RE` erfassen nun die konkret getesteten femininen Formen
+`Kundin/Kundinnen`, `Projektkundin/Projektkundinnen` sowie Verbphrasen wie
+`Anstellung bei`, `angestellt bei`, `beschäftigt bei`, `tätig für`, `employed at`
+und `working for`. Eine Debug-Ausgabe der tatsächlichen Organisationsfundstellen
+bestätigte die Annahme des Fixes: `COMPANY_RE` schließt das Rollensubstantiv bei
+`Kunde ABC Beispiel GmbH`, `Kundin Nordlicht Beispiel AG`, `Arbeitgeber Contoso
+Beispiel GmbH`, `Customer Example Nordics Ltd` und auch bei `Firma Alpha Beta GmbH
+& Co. KG` jeweils in die Match-Grenzen ein. Die Prefix-Prüfung ist dafür notwendig.
+
+Das adversariale Gegenreview fand zugleich weitere Lücken derselben Klasse:
+
+- `Zertifizierungen\nWährend meiner Tätigkeit für Nordlicht Beispiel AG erwarb ich
+  ISTQB Certified Tester.` lässt `Nordlicht Beispiel AG` unverändert.
+- `Zertifizierungen\nZertifikat erworben im Auftrag von Alpha Beispiel GmbH,
+  ausgestellt durch Scrum.org.` lässt `Alpha Beispiel GmbH` unverändert.
+
+Beide Werte sind Kunden-/Arbeitgeberbezug, nicht Aussteller. Das ist reproduzierbare
+Unter-Redaktion und damit P0. Umgekehrt wird ein echter synthetischer Aussteller wie
+`Customer Institute GmbH Certified Testing Professional` wegen des führenden
+Signalworts als `[KUNDE_001]` über-redigiert. Der Fix ist für seine getesteten Fälle
+korrekt, aber die Kontextgrammatik ist nicht vollständig geschlossen.
+
+**Nachtrag (Commit `4e9caf9`, RC41):** `isCredentialIssuerDomain` prüft nun
+Credential-Cues vor oder nach einer domänenförmigen Fundstelle auf derselben Zeile.
+Der konkrete neue Positivfall `Zertifikat ausgestellt von Scrum.org` bleibt damit
+erhalten. Das unabhängige Gegenreview fand jedoch eine durch diese Erweiterung neu
+geöffnete P0-Unter-Redaktion:
+
+```text
+Zertifizierungen
+Zertifikat: AWS Certified Cloud Practitioner – weitere Informationen bei alpha-health.de
+```
+
+RC41 lässt `alpha-health.de` unverändert, weil irgendein Credential-Cue vor der Domain
+als Ausstellerbeleg genügt. Vor `4e9caf9` fehlte der `before`-Zweig und dieselbe Domain
+wurde als URL redigiert. Der Cue ist nicht an eine Ausstellerbeziehung zur konkreten
+Domain gebunden. Zusätzlich bleibt der mehrzeilige echte Aussteller
+`Zertifikat ausgestellt von\nScrum.org` über-redigiert (`[URL_REDACTED]`).
+
+Wegen der beiden P0-Befundklassen ist RC41 in diesem Kontext nicht releasefähig. Der
+enge Folgeauftrag `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` dokumentiert
+Reproduktionen, Grenzen und Abnahmekriterien; gemäß Gegenreview-Auftrag wurde die
+Produktivlogik nicht verändert.
+
 Aus den drei in diesem Bericht (Abschnitt 5) ausgeführten Smoke-Tests selbst ergab sich
 kein reproduzierbarer Fehler — sie deckten diesen Fall nicht ab.
 
@@ -95,6 +154,21 @@ wurde in dieser Sitzung nicht erneut ausgeführt, da `npm run test:ci` (das im A
 Abschnitt 10 verbindlich verlangte Kommando) bereits vollständig grün war und keine
 Batch-/Recovery-/Review- oder Parser-/Erkennungsänderung vorliegt, die zusätzliche
 gezielte Tests verlangen würde (Auftrag Abschnitt 10, zweiter Absatz).
+
+**Unabhängiges RC41-Gegenreview am 25.08.2026:**
+
+| Befehl | Exitcode | Ergebnis |
+|---|---:|---|
+| `npm run test:ci` | 0 | vollständig grün; die neu reproduzierten P0-Fälle fehlen im Korpus |
+| `node tests/test-credential-catalog.js` | 0 | 16/16 grün |
+| `node tests/test-batch-performance-contract.js` | 0 | 6/6 grün auf Windows |
+| `node tests/test-pii-regression.js` | 0 | 79/79 grün |
+| `node tests/test-detector-benchmark.js` | 0 | 3/3 grün |
+| `node tests/test-batch-session.js` | 0 | 66/66 grün einschließlich echter Worker-Abbrüche |
+| `npm run build:plugin` | 0 | RC41 reproduzierbar gebaut |
+| `npm run test:plugin-zip` | 0 | 150/150 Kontraktfälle, 350 ZIP-Einträge, PASS |
+| `claude plugin validate plugins/data-secure` | 0 | „Validation passed“ |
+| `git diff --check` | 0 | vor Dokumentationsänderung sauber |
 
 ## 5. Claude-CLI-Eval-Ergebnis, With/Without-Vergleich und Gesamtkosten
 
@@ -135,14 +209,42 @@ möglich — siehe Risiken unten).
 - Nach dem Fix neu gebaut und erneut mit `npm run test:plugin-zip` sowie
   `claude plugin validate plugins/data-secure` erfolgreich geprüft.
 
+**Aktueller Gegenreview-Stand nach allen vier Fix-Commits:**
+
+- Version: `3.2.0-rc41`
+- ZIP-Pfad: `dist/DataSecure-Privacy-Preflight-v3.2.0-rc41.zip`
+- SHA-256: `1c6c2438b0431c1bd8f5220177e8bb890c805c5c341008b8bb2ad808a3c76bd3`
+- Eigener Rebuild und anschließende ZIP-Paritätsprüfung: erfolgreich, 350 Einträge.
+- Aussagegrenze: reproduzierbares Artefakt und grüne vorhandene Suite; die in
+  Abschnitt 3 dokumentierten P0-Kontextfälle blockieren dennoch eine
+  Releasebewertung von RC41.
+
 ## 7. Performance-Ergebnisse
 
-Keine neuen Performance-Messungen in dieser Sitzung durchgeführt. Es wurde keine
-Batch-, Parser- oder Erkennungslogik verändert, die eine Neumessung erfordern würde
-(Auftrag Abschnitt 10, zweiter Absatz). Die bestehenden BL-050.3-E0-Messwerte aus dem
-Ausgangsstand `9f375b7` bleiben unverändert gültig.
+RC39 reduzierte die Fsyncs für reine diagnostische `processing`-Zwischenmarker. Die
+Commit-Messung meldete ungefähr 3–5 Prozent Verbesserung im 100-Dokument-Benchmark;
+das Gegenreview führte keinen neuen vergleichbaren Hardwarebenchmark aus und erhebt
+daher keinen zusätzlichen Leistungsanspruch. Statusänderungen bleiben durable, und
+der 66-Fall-Batchtest bestätigte Prozessabbruch/Resume ohne Doppelveröffentlichung.
+
+Die E0-Evidenz ist für diese konkrete Optimierung noch nachzubessern: Der direkte
+Fsync-Zähltest ist auf Windows grün, würde auf POSIX wegen des zusätzlichen
+Verzeichnis-Fsync eine andere Anzahl beobachten, und simuliert keinen Stromverlust
+zwischen non-durable Rename und folgendem durable Statuscommit. Die allgemeine
+BL-050.3-Metrikgrundlage bleibt gültig; reale Windows-/macOS-/Linux-Referenzwerte und
+Dateisystem-Gegenproben bleiben E1.
 
 ## 8. Verbleibende Risiken und ausschließlich menschlich ausführbare Prüfungen
+
+**Neu releaseblockierend aus dem RC41-Gegenreview:**
+- **P0 Zertifikats-/Kundenkontext:** beliebige Kunden-Domain hinter einem vorherigen
+  Credential-Cue sowie verbreitete Kunden-/Arbeitgeberformulierungen können
+  unredigiert bleiben. Das ist ein eigenständig behebbarer E0-Codebefund, keine
+  menschliche Abnahme. Folgeauftrag:
+  `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md`.
+- **P2 Durability-Evidenz:** Fsync-Zähltest plattformneutral machen und gezielte
+  Persistenz-/Crash-Injection ergänzen. Statusbasierte Prozess-Recovery ist bereits
+  grün; E1-Dateisystemnachweise bleiben getrennt.
 
 **Blockierend für den eigentlichen Auftragskern:**
 - **`claude plugin eval`-Freischaltung** — kleinste nötige menschliche Handlung: über
