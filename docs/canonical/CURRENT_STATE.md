@@ -1,6 +1,6 @@
-# RC42-Ist-Abgleich zum kanonischen Backlog
+# RC43-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 25.08.2026 · geprüfter Produktstand: RC42
+Stand: 25.08.2026 · geprüfter Produktstand: RC43
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -786,6 +786,13 @@ RC41-Lücken gegen den Vor-Fix-Stand und bestehen danach; die volle `npm run tes
 Kette blieb grün. Der P0-Rest aus dem RC41-Gegenreview gilt damit als E0
 geschlossen; `tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md` dokumentiert
 Reproduktionen und Abnahme.
+Das anschließende RC42-Gegenreview reproduzierte noch eine angrenzende Lücke ohne
+Satzzeichen: `Kunde TechCorp GmbH Certified ...` wurde durch die unmittelbar
+folgende Titelphrase als Aussteller geschützt. RC43 priorisiert das explizite
+Rollenpräfix nun fail-closed; dasselbe gilt für gewöhnliche englische `Customer`-
+und `Client`-Namen. Nur eng institutionell geformte englische Eigennamen wie
+`Customer Institute GmbH` behalten den Ausstellerpfad. Deutsche, englische,
+Komma- und Doppelpunktvarianten sind im Katalogvertrag regressionsgetestet.
 Der gemeinsame lokale
 Abschlussdialog kann jetzt eine bewusst gewählte Entscheidung ausschließlich für
 Fundstellen mit identischer normalisierter vollständiger Kontextzeile übernehmen;
@@ -1055,10 +1062,11 @@ unredigiert. Beides ist Unter-Redaktion und daher P0. Mehrzeilige domänenförmi
 Aussteller sowie Ausstellernamen, die selbst mit `Customer`, `Firma` oder `Kunden`
 beginnen, zeigen zusätzliche Über-Redaktion. Der enge Folgeauftrag
 `tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md` ist deshalb vor einer
-Releasebewertung abzuarbeiten. Der RC39-Fsync-Test belegt den Mechanismus auf Windows,
-zählt auf POSIX aber wegen des zusätzlichen Verzeichnis-Fsync anders; eine echte
-Persistenz-/Power-Loss-Injection fehlt weiterhin. Die E1-Plattformnachweise bleiben
-unverändert offen.
+Releasebewertung abzuarbeiten. RC42 schloss die dort gebundenen Fälle; RC43 ergänzt
+die unmittelbar anschließende Rollenpräfix-Lücke. Der RC39-Fsync-Test ist mit RC43
+plattformneutral und enthält eine gezielte Rename-Fehlerinjektion: Das vorherige
+durable Journal bleibt erhalten und die statusbasierte Recovery greift. Reale
+Power-Loss- und Drei-OS-Dateisystemnachweise bleiben E1 offen.
 
 Für die folgende Optimierung liegt außerdem eine inhaltsfreie Phasenmessung vor:
 Der lokale Batchzustand speichert ausschließlich begrenzte Dauerwerte für Aufnahme,

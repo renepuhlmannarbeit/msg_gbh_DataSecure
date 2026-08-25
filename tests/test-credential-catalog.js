@@ -329,11 +329,17 @@ test('a real issuer name starting with a customer/employer signal word is not ov
 });
 
 test('a real customer immediately followed by unrelated certificate prose is still anonymized', () => {
-  const output = pii.anonymize(
-    'Zertifizierungen\nKunde TechCorp Beispiel GmbH, Certified Scrum Master Schulung durchgeführt.',
-    'personnel_profile'
-  ).text;
-  assertAbsent(output, 'TechCorp Beispiel GmbH', 'customer separated from following prose by a comma');
+  const cases = [
+    ['Zertifizierungen\nKunde TechCorp Beispiel GmbH, Certified Scrum Master Schulung durchgeführt.', 'TechCorp Beispiel GmbH'],
+    ['Zertifizierungen\nKunde TechCorp Beispiel GmbH Certified Scrum Master Schulung durchgeführt.', 'TechCorp Beispiel GmbH'],
+    ['Zertifizierungen\nKunde: TechCorp Beispiel GmbH Certified Scrum Master Schulung durchgeführt.', 'TechCorp Beispiel GmbH'],
+    ['Certifications\nCustomer Example Nordics Ltd Certified Scrum Master training delivered.', 'Example Nordics Ltd'],
+    ['Certifications\nClient Example Health Ltd Certified Testing Professional training delivered.', 'Example Health Ltd']
+  ];
+  for (const [text, customer] of cases) {
+    const output = pii.anonymize(text, 'personnel_profile').text;
+    assertAbsent(output, customer, `customer followed by certificate prose (${customer})`);
+  }
 });
 
 done();

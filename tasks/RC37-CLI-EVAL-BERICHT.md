@@ -286,28 +286,34 @@ das Gegenreview führte keinen neuen vergleichbaren Hardwarebenchmark aus und er
 daher keinen zusätzlichen Leistungsanspruch. Statusänderungen bleiben durable, und
 der 66-Fall-Batchtest bestätigte Prozessabbruch/Resume ohne Doppelveröffentlichung.
 
-Die E0-Evidenz ist für diese konkrete Optimierung noch nachzubessern: Der direkte
-Fsync-Zähltest ist auf Windows grün, würde auf POSIX wegen des zusätzlichen
-Verzeichnis-Fsync eine andere Anzahl beobachten, und simuliert keinen Stromverlust
-zwischen non-durable Rename und folgendem durable Statuscommit. Die allgemeine
-BL-050.3-Metrikgrundlage bleibt gültig; reale Windows-/macOS-/Linux-Referenzwerte und
+RC43 schließt die E0-Evidenzlücke dieser konkreten Optimierung: Der direkte
+Fsync-Zähltest berücksichtigt Datei-fsync und auf POSIX zusätzlich Verzeichnis-fsync.
+Eine gezielte Rename-Fehlerinjektion bei einem non-durable Zwischenmarker bestätigt,
+dass das letzte durable Journal erhalten bleibt und die statusbasierte Recovery auf
+`PROCESSING_INTERRUPTED` führt. Die allgemeine BL-050.3-Metrikgrundlage bleibt
+gültig; reale Power-Loss-, Windows-/macOS-/Linux-Referenzwerte und
 Dateisystem-Gegenproben bleiben E1.
 
 ## 8. Verbleibende Risiken und ausschließlich menschlich ausführbare Prüfungen
 
-**Aus dem RC41-Gegenreview, Stand nach dem RC42-Nachtrag:**
-- **P0 Zertifikats-/Kundenkontext — geschlossen (Commit `32914da`, RC42):** Die drei
+**Aus dem RC41-Gegenreview, Stand nach dem RC43-Nachtrag:**
+- **P0 Zertifikats-/Kundenkontext — mit RC43 nachgeschärft:** Die drei
   reproduzierten Unter-Redaktionsfälle (beliebige Kunden-Domain hinter einem
   vorherigen Credential-Cue, „Tätigkeit für“, „im Auftrag von“) sowie die zwei
   begleitenden Über-Redaktionsfälle (mehrzeiliger Aussteller, signalworthaltiger
   Ausstellername) sind regressionsgetestet behoben; `tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md`
-  ist damit fachlich abgearbeitet. Verbleibend: keine eigenständige E0-Restarbeit;
+  ist damit fachlich abgearbeitet. Das nachfolgende Gegenreview fand zusätzlich
+  „Kunde TechCorp GmbH Certified ...“ ohne Komma; RC43 priorisiert das Rollenpräfix
+  nun auch in deutschen/englischen Direktvarianten vor der Titeladjazenz und erhält
+  nur den eng institutionellen englischen Ausstellernamen. Verbleibend: keine
+  eigenständige E0-Restarbeit;
   die grundsätzliche Kontextgrammatik bleibt naturgemäß nicht beweisbar vollständig
   und sollte bei künftigen Funden weiter geschlossen werden.
-- **P2 Durability-Evidenz — weiterhin offen, nicht Teil dieses Nachtrags:** Fsync-
-  Zähltest plattformneutral machen und gezielte Persistenz-/Crash-Injection
-  ergänzen. Statusbasierte Prozess-Recovery ist bereits grün; E1-Dateisystemnachweise
-  bleiben getrennt.
+- **P2 Durability-Evidenz — E0 mit RC43 geschlossen:** Der Fsync-Zähltest zählt
+  Datei- und POSIX-Verzeichnis-Fsync plattformneutral. Eine injizierte fehlgeschlagene
+  non-durable Rename-Veröffentlichung lässt das vorherige durable Journal bestehen
+  und führt über die statusbasierte Recovery zu `PROCESSING_INTERRUPTED`.
+  E1-Power-Loss-/Drei-OS-Dateisystemnachweise bleiben getrennt offen.
 
 **Blockierend für den eigentlichen Auftragskern:**
 - **`claude plugin eval`-Freischaltung** — kleinste nötige menschliche Handlung: über

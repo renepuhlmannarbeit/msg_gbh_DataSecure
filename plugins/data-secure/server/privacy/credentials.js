@@ -201,6 +201,17 @@ function credentialIssuerAmbiguities(originalText, anonymizedText) {
 // word closes that gap without touching the shared organisation regex.
 const NON_ISSUER_PREFIX_RE = /^(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|kundin(?:nen)?|projektkunden?|projektkundin(?:nen)?|auftraggeber|client|customer)\b\s*:?\s*/iu;
 
+// English proper names can genuinely start with "Customer"/"Client"
+// (for example "Customer Institute GmbH").  That is the only prefix class
+// for which the role word may be part of an issuer name, and only when the
+// following name starts with an institution noun.  German role prefixes and
+// ordinary English customer names remain explicit privacy signals even when
+// a credential-shaped phrase follows immediately.  This keeps
+// "Customer Institute GmbH Certified ..." while redacting both
+// "Kunde TechCorp GmbH Certified ..." and
+// "Customer TechCorp Ltd Certified ...".
+const POSSIBLE_ENGLISH_ISSUER_NAME_RE = /^(?:client|customer)\s+(?:academy|association|board|council|foundation|institute|institution|organization|university)\b/iu;
+
 // A domain or organisation counts as "IssuerName Title" - the shape used
 // throughout this file for every catalogued issuer alias ("Scrum.org
 // Professional Scrum Master I", "${code} Certified Professional") - only
@@ -239,7 +250,8 @@ function inCredentialContext(text,start,end,ranges=credentialContextSpans(text))
     // prefix keeps meaning what it always meant (RC41 counter-review).
     const lineEnd=src.indexOf('\n',end);
     const after=src.slice(end,lineEnd<0?undefined:lineEnd).replace(ORG_SUFFIX_GAP_RE,'');
-    if(!hasLeadingCredentialTitle(after)) return false;
+    const matchedOrganization=src.slice(start,end);
+    if(!POSSIBLE_ENGLISH_ISSUER_NAME_RE.test(matchedOrganization) || !hasLeadingCredentialTitle(after)) return false;
   }
   return true;
 }

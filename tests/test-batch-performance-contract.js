@@ -129,23 +129,55 @@ test('a non-durable state write still lands correctly on disk but skips fsync, a
   };
 
   const originalFsync = fs.fsyncSync;
+  const originalRename = fs.renameSync;
+  const durableFsyncsPerWrite = process.platform === 'win32' ? 1 : 2;
   let fsyncCalls = 0;
   fs.fsyncSync = (...args) => { fsyncCalls++; return originalFsync(...args); };
   try {
     _test.writeState(state);
-    assert.strictEqual(fsyncCalls, 1, 'a default (durable) write must fsync exactly once');
+    assert.strictEqual(
+      fsyncCalls,
+      durableFsyncsPerWrite,
+      'a durable write must fsync the file and, where portable, its parent directory'
+    );
 
     state.items[0].checkpoint = 'extracted';
     _test.writeState(state, { durable: false });
-    assert.strictEqual(fsyncCalls, 1, 'a non-durable checkpoint-only write must not fsync');
+    assert.strictEqual(fsyncCalls, durableFsyncsPerWrite, 'a non-durable checkpoint-only write must not fsync');
     assert.deepStrictEqual(_test.readState(token).items[0], { name: 'x', status: 'processing', checkpoint: 'extracted' },
       'the non-durable write must still land correctly and be readable back');
 
     state.items[0].status = 'retryable';
     state.items[0].checkpoint = 'retryable';
     _test.writeState(state);
-    assert.strictEqual(fsyncCalls, 2, 'a write that changes item.status must stay durable');
+    assert.strictEqual(fsyncCalls, durableFsyncsPerWrite * 2, 'a write that changes item.status must stay durable');
+
+    // Inject a failure at the atomic publication boundary of a non-durable
+    // checkpoint.  The previous durable state must remain authoritative and
+    // status-based recovery must not depend on the lost diagnostic marker.
+    state.items[0].status = 'processing';
+    state.items[0].checkpoint = 'processing_started';
+    _test.writeState(state);
+    const beforeInjectedFailure = _test.readState(token);
+    state.items[0].checkpoint = 'package_verified';
+    fs.renameSync = (source, destination) => {
+      if (String(source).includes('.tmp_') && String(destination).endsWith(`${token}.json`)) {
+        throw new Error('INJECTED_NON_DURABLE_RENAME_FAILURE');
+      }
+      return originalRename(source, destination);
+    };
+    assert.throws(
+      () => _test.writeState(state, { durable: false }),
+      /INJECTED_NON_DURABLE_RENAME_FAILURE/
+    );
+    fs.renameSync = originalRename;
+    const recovered = _test.readState(token);
+    assert.deepStrictEqual(recovered, beforeInjectedFailure, 'failed checkpoint publication must retain the prior durable journal');
+    assert.strictEqual(_test.markInterruptedItemsRetryable(recovered), 1);
+    assert.strictEqual(recovered.items[0].status, 'retryable');
+    assert.strictEqual(recovered.items[0].error_code, 'PROCESSING_INTERRUPTED');
   } finally {
+    fs.renameSync = originalRename;
     fs.fsyncSync = originalFsync;
     fs.rmSync(base, { recursive: true, force: true });
   }

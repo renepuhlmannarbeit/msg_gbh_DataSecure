@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 25.08.2026 · gilt für RC42 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 25.08.2026 · gilt für RC43 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -50,7 +50,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | BL-012.5 | Tastatur, Skalierung und Screenreader der lokalen Dialoge abnehmen. | **E2, ja:** Accessibility-Tester:in prüft Fokusreihenfolge, Escape, Skalierung und Screenreader auf Windows/macOS/Linux. |
 | BL-012.6 | **E0 abgeschlossen:** Status und genau eine nächste sichere Aktion sind alltagssprachlich vereinheitlicht; unbekannte/defekte Zustände stoppen. | **E2, ja:** Fachfremde Pilotperson erklärt nach jedem synthetischen Stop, was passiert ist und was sie als Nächstes tun würde. |
 | BL-012.7 | **E0 abgeschlossen:** Pickertext, doppelte lokale Quelldateinamen, Fortsetzung ohne Neuauswahl und Dokumentationsdrift sind regressionsgetestet. | **E2, ja:** Pilotperson startet ohne Anleitung und erreicht ein verwendbares Markdown-Ergebnis mit höchstens drei bewussten Aktionen. |
-| BL-031.1 | **E0 P0-Kontextfehler (RC41) mit Commit `32914da`/RC42 geschlossen:** Gruppierte mehrdeutige Fundstellen lokal im Stapel entscheiden. | **Evidenzstufe unverändert E1 + E3, ja:** IT prüft Gruppierung/Resume; Fachvertretung bestätigt, dass nur identische Kontextstellen gemeinsam entschieden werden dürfen. |
+| BL-031.1 | **E0 P0-Kontextfehler einschließlich der angrenzenden Rollenpräfix-Lücke mit RC43 geschlossen:** Gruppierte mehrdeutige Fundstellen lokal im Stapel entscheiden. | **Evidenzstufe unverändert E1 + E3, ja:** IT prüft Gruppierung/Resume; Fachvertretung bestätigt, dass nur identische Kontextstellen gemeinsam entschieden werden dürfen. |
 | BL-032.1 | Mehrdeutigkeitsdialog auf allen Ziel-OS gleich sicher liefern. | **E1 + E2, ja:** Jede Plattform testet Beibehalten/Anonymisieren/Vertagen/Abbruch; beobachtete Person prüft Verständlichkeit. |
 | BL-032.2 | RAM-only-Passwortweg an einen geprüften lokalen Entschlüsseler binden. | **E1 + E3, ja:** Security prüft Speicher-/Log-/CLI-Grenzen und IT testet verschlüsselte synthetische Office-Dateien auf drei OS. |
 | BL-041.1 | Beide Skills auf exakt denselben Jobvertrag führen. | **E1, ja:** In echter Claude-UI beide Skills starten und Toolfolge sowie Hostgate vergleichen. |
@@ -59,7 +59,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | BL-041.6 | **E0 abgeschlossen:** `local_only` endet im Vertrags-/Transcript-Test mit einem Startaufruf, lokalem Abschluss und ohne Claude-Lese-/Bestätigungs-/Pollingaufruf. | **E1, ja:** In Cowork mit synthetischem Stapel beobachten. |
 | BL-041.7 | **E0 abgeschlossen:** 8 normale/28 Supporttools, tokenfreier asynchroner Reviewstart, Skill-/Handbuch-/Manifestdrift, einmalige begrenzte UTF-8-Dekodierung und kontextgebundenes Seitenbudget sind getestet. | **E1, ja:** Frische Cowork-Installation und reale Freigabezahl; Supportmodus und Recovery bleiben erreichbar. |
 | BL-041.8 | Hostunterstützung für MCP-Tasks/Benachrichtigungen sicher feststellen. | **E0 + E1, ja:** versionsgebundener Cowork-Test; ohne positiven Nachweis bleibt der lokale Worker ohne Polling maßgeblich. |
-| BL-050.3 | **E0-Metrikgrundlage abgeschlossen; RC39-Nachweis nachzubessern:** Echter TXT-/CSV-/DOCX-Parser, Kalt/Warm, 1/10/100, p50/p95, Gesamtzeit, CPU, Peak-RAM, monotone Uhr, nicht zugeordnete Laufzeit und relative Regressionstore sind implementiert. Der Fsync-Zähltest muss plattformneutral werden; Persistenz-/Crash-Injection für non-durable Zwischenmarker bleibt E0-offen. | **Evidenzstufe unverändert E1, ja:** Referenzwerte und Dateisystemverhalten im installierten Produkt auf Windows/macOS/Linux festhalten. |
+| BL-050.3 | **E0-Metrik- und Durability-Grundlage abgeschlossen:** Echter TXT-/CSV-/DOCX-Parser, Kalt/Warm, 1/10/100, p50/p95, Gesamtzeit, CPU, Peak-RAM, monotone Uhr, nicht zugeordnete Laufzeit und relative Regressionstore sind implementiert. Der Fsync-Zähltest ist plattformneutral; eine gezielte Rename-Fehlerinjektion belegt die sichere Recovery bei verlorenem non-durable Zwischenmarker. | **Evidenzstufe unverändert E1, ja:** Referenzwerte, reales Power-Loss- und Dateisystemverhalten im installierten Produkt auf Windows/macOS/Linux festhalten. |
 | BL-011.10 | Sofortige Hintergrundaufnahme und Recovery während des Intakes sichern. | **E0 + E1, ja:** Crash-/Swap-Test plus echte Mehrfachauswahl auf drei OS. |
 | BL-011.11 | **E0 abgeschlossen:** Feste I/O-Phasen, gemischtes Exactly-once-Resume sowie einmalige begrenzte Handoff-Dekodierung mit Indexfenster und Buffer-Wipe sind getestet. | **E1, ja:** Byte-/Gate-Regression und Messung auf realen Dateisystemen vor weiterer Optimierung. |
 | BL-011.12 | **E0 abgeschlossen:** Ein nicht importierter Zwei-Worker-Harness prüft Reihenfolge, zentralen Commit, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produkt bleibt seriell. | **E1, ja:** Ressourcen-/Crashabnahme auf drei OS vor Aktivierung. |
