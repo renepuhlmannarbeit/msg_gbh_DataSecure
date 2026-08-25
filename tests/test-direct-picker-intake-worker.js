@@ -20,7 +20,10 @@ function pause(milliseconds) {
 }
 
 async function waitForTerminalProgress(token, noticeStage) {
-  const deadline = Date.now() + 10_000;
+  // Match the worker's own bounded startup allowance. On Windows, process
+  // creation can briefly exceed ten seconds under a busy full-suite run even
+  // though the isolated worker normally completes in well under two seconds.
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (noticeStage()) throw new Error(`local intake stopped at ${noticeStage()}`);
     try {

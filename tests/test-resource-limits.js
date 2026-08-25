@@ -42,8 +42,8 @@ test('the total envelope is independent from the per-file text limit', () => {
 
 test('runtime and batch preflight share the central expanded-container limit', () => {
   const runtime = fs.readFileSync(path.join(root, 'plugins/data-secure/server/runtime.js'), 'utf8');
-  const batch = fs.readFileSync(path.join(root, 'plugins/data-secure/server/gateway/batch.js'), 'utf8');
-  for (const source of [runtime, batch]) {
+  const snapshot = fs.readFileSync(path.join(root, 'plugins/data-secure/server/gateway/batch-snapshot.js'), 'utf8');
+  for (const source of [runtime, snapshot]) {
     assert.match(source, /MAX_OOXML_EXPANDED_BYTES/u);
     assert.doesNotMatch(source, /maxUncompressed:\s*300\s*\*\s*1024\s*\*\s*1024/u);
   }

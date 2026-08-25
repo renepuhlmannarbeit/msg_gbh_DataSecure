@@ -191,7 +191,12 @@ gekapselt. Die Keep/Redact-/Deferral-Policy für lokale Zertifikatsentscheidunge
 liegt in `gateway/batch-review-policy.js` und hält Rohtext weiter ausschließlich
 im Speicher. Die Short-Write- und POSIX-Directory-Fsync-Primitiven liegen in
 `gateway/batch-journal-io.js`; atomare Zustandsübergänge bleiben weiterhin in
-der bestehenden Fassade. Die weiteren Schnitte trennen Intake/Snapshot, Journal/Recovery,
+der bestehenden Fassade. `gateway/batch-private-store.js` hält dynamisch
+aufgelöste private Pfade und tokengebundenes Cleanup; `gateway/batch-snapshot.js`
+kapselt Kapazität, OOXML-Preflight sowie TOCTOU-gebundene Kopie. Positive
+Partial-Writes werden vollständig geschrieben; Zero-Write, Short-Read und eine
+nachträgliche `ctime`-Änderung stoppen fail-closed und entfernen die exakte
+Teilkopie. Die weiteren Schnitte trennen vollständiges Journal/Recovery,
 Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
 bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
 benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann

@@ -3,8 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { SafeError, dataRoot } = require('../runtime');
-const { PROFILES, LIMITS, roots, listInput, validateBatchLimits, sha256File, storageStatus, ensurePrivateDirectory, safeRemovePrivateTree, hasReparseComponent } = require('./common');
+const { SafeError } = require('../runtime');
+const { PROFILES, LIMITS, roots, listInput, validateBatchLimits, sha256File, storageStatus, hasReparseComponent } = require('./common');
 const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
@@ -14,177 +14,31 @@ const { createBatchProgress } = require('./batch-progress');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
+  assertStagingCapacity,
+  preflightOoxmlContainers,
+  regularFileStat,
+  copySnapshotFile
+} = require('./batch-snapshot');
+const { batchRoot, batchPath, workPath, safeRemoveWorkDirectory } = require('./batch-private-store');
+const {
   createPhaseRecorder,
   createPrivateIoSummary,
   incrementPrivateIoSummary
 } = require('./performance');
-const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
 const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('../companion/text-review');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const active = new Set();
 const RETRYABLE_CODES = new Set(['REQUEST_CANCELLED', 'PARSER_TIMEOUT', 'PARSER_START_FAILED', 'PROCESSING_INTERRUPTED', 'LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE']);
-const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
 const DELIVERY_PENDING = 'delivery_pending';
 const DEFERRED_REVIEW = 'deferred_review';
 const MAPPING_PENDING = 'mapping_pending';
-
-function batchRoot() {
-  const gatewayRoot = ensurePrivateDirectory(path.dirname(dataRoot()), path.basename(dataRoot()));
-  return ensurePrivateDirectory(gatewayRoot, 'batches');
-}
 
 function batchTtlMs() {
   // A stopped batch is useful only while its private snapshot is retained.
   // A zero-day retention deliberately expires paused batches at the end of the
   // current operation rather than retaining their source bytes.
   return retentionDays() * 24 * 60 * 60 * 1000;
-}
-
-function assertStagingCapacity(queue, statfs = fs.statfsSync) {
-  const inputBytes = queue.reduce((total, entry) => total + entry.stat.size, 0);
-  // The snapshot is copied once, then the single active parser receives a
-  // separate private job copy. Reserve both plus a fixed metadata/output margin
-  // before touching the first source, rather than filling the disk halfway.
-  const required = inputBytes * 2 + STAGING_HEADROOM_BYTES;
-  let stats;
-  try { stats = statfs(batchRoot()); } catch { throw new SafeError('Der freie lokale Speicher konnte vor der Stapelübernahme nicht sicher geprüft werden.'); }
-  const availableBlocks = Number(stats?.bavail);
-  const blockSize = Number(stats?.bsize);
-  // Validate operands independently. Otherwise two corrupt negative values
-  // could multiply to a plausible positive capacity and permit a snapshot
-  // although the platform did not provide trustworthy filesystem metadata.
-  if (!Number.isSafeInteger(availableBlocks) || availableBlocks < 0 ||
-      !Number.isSafeInteger(blockSize) || blockSize <= 0) {
-    throw new SafeError('Der freie lokale Speicher konnte vor der Stapelübernahme nicht sicher geprüft werden.');
-  }
-  const available = availableBlocks * blockSize;
-  if (!Number.isSafeInteger(available) || available < 0) {
-    throw new SafeError('Der freie lokale Speicher konnte vor der Stapelübernahme nicht sicher geprüft werden.');
-  }
-  if (available < required) {
-    throw new SafeError('Für die private Arbeitskopie dieses Stapels ist nicht genug lokaler Speicher frei. Bitte Speicher freigeben oder den Stapel aufteilen.');
-  }
-  return { inputBytes, required, available };
-}
-
-function preflightOoxmlContainers(queue) {
-  // All OOXML families are ZIP containers, even where the product release gate
-  // still blocks XLSX/PPTX. Inspecting their central directory before the
-  // snapshot catches ZIP64, encrypted and expansion-bomb containers before any
-  // private work copy exists. This does not replace the later full parser/CRC
-  // validation and never returns archive names or bytes.
-  for (const entry of queue) {
-    if (!['.docx', '.xlsx', '.pptx'].includes(path.extname(entry.name).toLowerCase())) continue;
-    let descriptor;
-    try {
-      if (hasReparseComponent(entry.full)) throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
-      descriptor = fs.openSync(entry.full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-      const opened = fs.fstatSync(descriptor);
-      const named = fs.lstatSync(entry.full);
-      if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
-        opened.dev !== entry.stat.dev || opened.ino !== entry.stat.ino ||
-        named.dev !== entry.stat.dev || named.ino !== entry.stat.ino ||
-        opened.size !== entry.stat.size || named.size !== entry.stat.size ||
-        opened.mtimeMs !== entry.stat.mtimeMs || named.mtimeMs !== entry.stat.mtimeMs) {
-        throw new SafeError('Eine ausgewählte Datei wurde vor der lokalen Übernahme verändert.');
-      }
-      // This gate is deliberately directory-only. A file merely named .docx,
-      // .xlsx or .pptx but without an OPC/CFB signature remains a per-item
-      // worker result; it must not turn intake into an all-or-nothing failure.
-      inspectZipDirectoryFromFd(descriptor, opened.size, {
-        maxEntries: 20000,
-        maxUncompressed: LIMITS.MAX_OOXML_EXPANDED_BYTES
-      });
-    } catch (error) {
-      // Do not offer a password prompt unless a reviewed local decrypter is
-      // actually available. The fixed code allows a clear user explanation
-      // without exposing archive names, paths, or container details.
-      if (error instanceof ZipError && ['ZIP_ENCRYPTED_ENTRY', 'OOXML_ENCRYPTED_CONTAINER'].includes(error.code)) {
-        throw localReviewError(
-          'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED',
-          'Die passwortgeschützte Office-Datei wurde lokal nicht übernommen. Ein geprüfter lokaler Entschlüsselungsweg ist noch nicht freigegeben.'
-        );
-      }
-      throw new SafeError('Der Office-Container konnte vor der lokalen Stapelübernahme nicht sicher geprüft werden.');
-    } finally {
-      if (descriptor !== undefined) fs.closeSync(descriptor);
-    }
-  }
-}
-
-function batchPath(token) {
-  if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Ungültige oder abgelaufene Batch-Sitzung.');
-  return path.join(batchRoot(), `${token}.json`);
-}
-
-function workPath(token) {
-  if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Ungültige oder abgelaufene Batch-Sitzung.');
-  return path.join(batchRoot(), `${token}.work`);
-}
-
-function regularFileStat(target) {
-  const noFollow = fs.constants.O_NOFOLLOW || 0;
-  let descriptor;
-  try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | noFollow);
-    const opened = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(target);
-    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() || opened.dev !== named.dev || opened.ino !== named.ino) {
-      throw new SafeError('Die lokale Arbeitskopie ist nicht sicher verwendbar.');
-    }
-    return opened;
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
-}
-
-function copySnapshotFile(source, destination, expected) {
-  const noFollow = fs.constants.O_NOFOLLOW || 0;
-  let input;
-  let output;
-  try {
-    if (hasReparseComponent(source)) throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
-    input = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
-    const opened = fs.fstatSync(input);
-    const named = fs.lstatSync(source);
-    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
-      opened.dev !== expected.dev || opened.ino !== expected.ino ||
-      named.dev !== expected.dev || named.ino !== expected.ino ||
-      opened.size !== expected.size || named.size !== expected.size ||
-      opened.mtimeMs !== expected.mtimeMs || named.mtimeMs !== expected.mtimeMs) {
-      throw new SafeError('Eine ausgewählte Datei wurde während der lokalen Übernahme verändert.');
-    }
-    output = fs.openSync(destination, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
-    const hash = crypto.createHash('sha256');
-    const buffer = Buffer.allocUnsafe(64 * 1024);
-    let position = 0;
-    while (position < opened.size) {
-      const read = fs.readSync(input, buffer, 0, Math.min(buffer.length, opened.size - position), position);
-      if (read <= 0) throw new SafeError('Die private Arbeitskopie ist unvollständig.');
-      hash.update(buffer.subarray(0, read));
-      let written = 0;
-      while (written < read) written += fs.writeSync(output, buffer, written, read - written);
-      position += read;
-    }
-    fs.fsyncSync(output);
-    const after = fs.lstatSync(source);
-    const rechecked = fs.fstatSync(input);
-    if (!after.isFile() || after.isSymbolicLink() || after.dev !== expected.dev || after.ino !== expected.ino ||
-      after.size !== expected.size || after.mtimeMs !== expected.mtimeMs ||
-      rechecked.size !== expected.size || rechecked.mtimeMs !== expected.mtimeMs) {
-      throw new SafeError('Eine ausgewählte Datei wurde während der lokalen Übernahme verändert.');
-    }
-    return { size: position, sha256: hash.digest('hex') };
-  } finally {
-    if (output !== undefined) fs.closeSync(output);
-    if (input !== undefined) fs.closeSync(input);
-  }
-}
-
-function safeRemoveWorkDirectory(token) {
-  try { safeRemovePrivateTree(batchRoot(), `${token}.work`); }
-  catch { throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.'); }
 }
 
 function activeLockPath() { return path.join(batchRoot(), 'active-processing.json'); }
