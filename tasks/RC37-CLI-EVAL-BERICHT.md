@@ -122,12 +122,12 @@ Domain gebunden. Zusätzlich bleibt der mehrzeilige echte Aussteller
 `Zertifikat ausgestellt von\nScrum.org` über-redigiert (`[URL_REDACTED]`).
 
 Wegen der beiden P0-Befundklassen ist RC41 in diesem Kontext nicht releasefähig. Der
-enge Folgeauftrag `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` dokumentiert
+enge Folgeauftrag `tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md` dokumentiert
 Reproduktionen, Grenzen und Abnahmekriterien; gemäß Gegenreview-Auftrag wurde die
 Produktivlogik nicht verändert.
 
 **Nachtrag (Commit `32914da`, RC42):** Der Folgeauftrag
-`tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` wurde vollständig abgearbeitet.
+`tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md` wurde vollständig abgearbeitet.
 `isCredentialIssuerDomain()` in `plugins/data-secure/server/privacy/credentials.js`
 band die Ausstellerzuordnung neu eng an die konkrete Fundstelle: Ein Credential-Cue
 schützt eine Domain nur noch, wenn eine explizite Ausstelleranzeige
@@ -300,7 +300,7 @@ Dateisystem-Gegenproben bleiben E1.
   reproduzierten Unter-Redaktionsfälle (beliebige Kunden-Domain hinter einem
   vorherigen Credential-Cue, „Tätigkeit für“, „im Auftrag von“) sowie die zwei
   begleitenden Über-Redaktionsfälle (mehrzeiliger Aussteller, signalworthaltiger
-  Ausstellername) sind regressionsgetestet behoben; `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md`
+  Ausstellername) sind regressionsgetestet behoben; `tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md`
   ist damit fachlich abgearbeitet. Verbleibend: keine eigenständige E0-Restarbeit;
   die grundsätzliche Kontextgrammatik bleibt naturgemäß nicht beweisbar vollständig
   und sollte bei künftigen Funden weiter geschlossen werden.

@@ -784,7 +784,7 @@ Ausstellerorganisation nur bei unmittelbar folgendem Zertifikatstitel gelten. Ze
 neue Fälle in `tests/test-credential-catalog.js` reproduzieren jede der fünf
 RC41-Lücken gegen den Vor-Fix-Stand und bestehen danach; die volle `npm run test:ci`-
 Kette blieb grün. Der P0-Rest aus dem RC41-Gegenreview gilt damit als E0
-geschlossen; `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` dokumentiert
+geschlossen; `tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md` dokumentiert
 Reproduktionen und Abnahme.
 Der gemeinsame lokale
 Abschlussdialog kann jetzt eine bewusst gewählte Entscheidung ausschließlich für
@@ -1054,7 +1054,7 @@ auf derselben Zeile steht. Außerdem bleiben verbreitete Formulierungen wie
 unredigiert. Beides ist Unter-Redaktion und daher P0. Mehrzeilige domänenförmige
 Aussteller sowie Ausstellernamen, die selbst mit `Customer`, `Firma` oder `Kunden`
 beginnen, zeigen zusätzliche Über-Redaktion. Der enge Folgeauftrag
-`tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` ist deshalb vor einer
+`tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md` ist deshalb vor einer
 Releasebewertung abzuarbeiten. Der RC39-Fsync-Test belegt den Mechanismus auf Windows,
 zählt auf POSIX aber wegen des zusätzlichen Verzeichnis-Fsync anders; eine echte
 Persistenz-/Power-Loss-Injection fehlt weiterhin. Die E1-Plattformnachweise bleiben

@@ -29,7 +29,7 @@ DS-038, DS-039, DS-040.
 
 ## Das kann ich noch eigenständig erledigen
 
-Der RC41-P0-Fund (BL-031.1 / DS-012, `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md`)
+Der RC41-P0-Fund (BL-031.1 / DS-012, `tasks/archiv/2026-08-25-folgeauftrag-p0-credential-context-rc41.md`)
 ist mit Commit `32914da` (RC42) regressionsgetestet geschlossen: Beliebige
 Kunden-Domains hinter einem Credential-Cue werden wieder redigiert, „Tätigkeit für“
 und „im Auftrag von“ werden erfasst, und echte mehrzeilige beziehungsweise
