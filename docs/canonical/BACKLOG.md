@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 25.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC37
+Stand: 25.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC41
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und
@@ -29,14 +29,15 @@ DS-038, DS-039, DS-040.
 
 ## Das kann ich noch eigenständig erledigen
 
-**Kein weiterer klar abgegrenzter E0-Arbeitspunkt ist nach diesem Stand offen.**
-Die Review-Arbeit an lokalen Meldungen, Picker/Support-Trennung, 9-/28-Toolvertrag,
-Toolannotations, Hostgrenze, Handoff-Budget, formatspezifischen Ressourcenlimits,
-TXT-/CSV-/DOCX-Benchmarks, inaktiver Zwei-Worker-Strecke, inaktivem OCR-Harness
-sowie SEA-/Paketgates ist implementiert und regressionsgetestet. Weitere Aktivierung
-oder Optimierung benötigt zuerst die unten genannte E1-/E2-/E3-Evidenz. Neue
-Befunde dürfen wieder als eigener E0-Punkt aufgenommen werden; dieses Feld ist
-keine Behauptung einer Produktfreigabe.
+| Priorität | Story | Nächster E0-Abschluss |
+|---|---|---|
+| **P0** | BL-031.1 / DS-012 | Den engen Folgeauftrag `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` abarbeiten: beliebige Kunden-Domains trotz Credential-Cue redigieren, verbreitete Kunden-/Arbeitgeberformulierungen erfassen und echte mehrzeilige beziehungsweise signalworthaltige Aussteller erhalten. |
+| **P2** | BL-050.3 | Den RC39-Fsync-Vertragstest plattformneutral formulieren und eine gezielte Persistenz-/Crash-Injection für non-durable Zwischenmarker ergänzen; die bestehende Status-Recovery bleibt unverändert. |
+
+Die übrige Review-Arbeit an lokalen Meldungen, Picker/Support-Trennung, Toolvertrag,
+Hostgrenze, Handoff-Budget, Ressourcenlimits, Benchmarks, inaktiver Parallel-/OCR-
+Strecke und Paketgates bleibt implementiert. Weitere Aktivierung benötigt die unten
+genannte E1-/E2-/E3-Evidenz.
 
 ## Das musst du als Mensch machen
 
@@ -82,7 +83,7 @@ keine Behauptung einer Produktfreigabe.
 | BL-012.5 | Tastatur, Skalierung und Screenreader auf drei OS abnehmen. | **in Arbeit** |
 | BL-012.6 | **E0 abgeschlossen; E2 offen:** Anwenderstatus und genau eine nächste sichere Aktion sind vereinheitlicht; beschädigte Checkpoints bleiben fail-closed. | **in Arbeit** |
 | BL-012.7 | **E0 abgeschlossen; E2 offen:** Kurzer Picker-/Ergebnisweg, gleichnamige Quellen über opake IDs und Fortsetzung ohne Neuauswahl sind technisch regressionsgetestet; verständlich abnehmen. | **in Arbeit** |
-| BL-031.1 | Fundstellen gruppiert und lokal im Stapel entscheiden. | **in Arbeit** |
+| BL-031.1 | Fundstellen gruppiert und lokal im Stapel entscheiden; zuvor den reproduzierten P0-Zertifikatskontext-Befund aus RC41 schließen. | **in Arbeit** |
 | BL-032.1 | Mehrdeutigkeitsdialog plattformgleich liefern. | **in Arbeit** |
 | BL-032.2 | Passwortweg ausschließlich lokal und nur im RAM implementieren; geprüften Entschlüsseler erst danach anbinden. | **in Arbeit** |
 | BL-041.1 | **E0 abgeschlossen; E1 offen:** Beide Skillstarts verwenden denselben Picker-/Jobvertrag; in echter Claude-UI beobachten. | **in Arbeit** |
@@ -96,7 +97,7 @@ keine Behauptung einer Produktfreigabe.
 | BL-041.6 | **E0 abgeschlossen; E1 offen:** Reine Anonymisierung endet als `local_only` ohne Ergebnislesen, Bestätigen oder Polling durch Claude und zeigt lokal genau eine terminale Zählerübersicht ohne Dokumentdaten. | **in Arbeit** |
 | BL-041.7 | **E0 abgeschlossen; E1 offen:** Normale Cowork-Fassade umfasst 9 statt 28 Supporttools; Skill/Handbuch/Manifest werden gegen Drift geprüft. Handoff dekodiert einmalig und begrenzt, hält Kennungen lokal und verwirft Fehler fail-closed. Reale Berechtigungszahl und Fresh-Install-Sichtbarkeit bleiben offen. | **in Arbeit** |
 | BL-041.8 | **E0 abgeschlossen; E1 offen:** MCP-Tasks/-Benachrichtigungen versionsgebunden prüfen; ohne Hostnachweis kein Produktpfad und kein Polling. | **in Arbeit** |
-| BL-050.3 | **E0 abgeschlossen; E1 offen:** Inhaltsfreie Messung nutzt echte TXT-/CSV-/DOCX-Pfade, monotone Uhr, Kalt/Warm, 1/10/100, p50/p95, Gesamtzeit, CPU, Peak-RAM, nicht zugeordnete Laufzeit und relative Regressionstore; Zielhardware bleibt E1. | **in Arbeit** |
+| BL-050.3 | **E0-Metrikgrundlage abgeschlossen; RC39-Nachweis nachzubessern; E1 offen:** Inhaltsfreie Messung nutzt echte TXT-/CSV-/DOCX-Pfade, monotone Uhr, Kalt/Warm, 1/10/100, p50/p95, Gesamtzeit, CPU, Peak-RAM, nicht zugeordnete Laufzeit und relative Regressionstore. Die selektive Fsync-Reduktion ist statusseitig plausibel und unter Prozessabbruch getestet; ihr neuer Zähltest ist noch plattformneutral zu formulieren und um Persistenz-/Crash-Injection zu ergänzen. Zielhardware bleibt E1. | **in Arbeit** |
 | BL-011.10 | **E0 abgeschlossen; E1 offen:** Intake nach Auswahl in den lokalen Hintergrund verlagern; Cowork antwortet innerhalb weniger Sekunden ohne Quellmetadaten. | **in Arbeit** |
 | BL-011.11 | **E0 abgeschlossen; E1 offen:** Gemischtes Resume, feste I/O-Phasen, einmalige begrenzte Handoff-Dekodierung, Indexfenster und Buffer-Wipe sind regressionsgetestet, ohne Snapshot-/Swap-/Container-Gates zu lockern. Weitere I/O-Optimierung wartet auf reale Dateisystemmessung. | **in Arbeit** |
 | BL-011.12 | **E0 abgeschlossen; E1 offen:** Ein nicht importierter Zwei-Worker-Harness prüft zentrale Reihenfolge/Commit, Slots, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produktstandard bleibt seriell bis zur Drei-OS-Abnahme. | **in Arbeit** |

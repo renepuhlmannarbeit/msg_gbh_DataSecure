@@ -1,6 +1,6 @@
-# RC37-Ist-Abgleich zum kanonischen Backlog
+# RC41-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 25.08.2026 · geprüfter Produktstand: RC37
+Stand: 25.08.2026 · geprüfter Produktstand: RC41
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -770,6 +770,11 @@ verwendet, nicht zur Laufzeit abgefragt und enthalten weder Prüfdaten noch eine
 Aussage über die individuelle Gültigkeit eines Zertifikats. Der gemeinsame lokale
 Katalogtest prüft Aussteller-Aliase und gepflegte Codes separat: Sie bleiben nur im
 expliziten Zertifikatskontext erhalten und schützen keinen Arbeitgeber oder Kunden.
+Die RC38-/RC40-Regressionen schließen mehrere konkrete Fließtextlücken, sind aber
+nach dem RC41-Gegenreview noch keine vollständige Kontextabdeckung: beliebige Domains
+hinter einem vorherigen Credential-Cue sowie die Formulierungen `Tätigkeit für` und
+`im Auftrag von` können weiterhin einen Kunden-/Arbeitgeberbezug schützen. Dieser
+P0-Rest ist im aktiven Backlog und einem engen Folgeauftrag festgehalten.
 Der gemeinsame lokale
 Abschlussdialog kann jetzt eine bewusst gewählte Entscheidung ausschließlich für
 Fundstellen mit identischer normalisierter vollständiger Kontextzeile übernehmen;
@@ -1020,6 +1025,29 @@ gesamte Output-Bereich nicht automatisch gelöscht. Der feste Statusindikator
 Bestätigte manuelle Löschung bleibt ausdrücklich möglich. Direkte Tests decken
 Short Writes, fehlenden Schreibfortschritt, POSIX-Verzeichnissync, ungültige Journale,
 Schutzmengen, Löschumfang und Timeoutkonstanten ab.
+
+RC38 bis RC41 ergänzten drei Kontextkorrekturen und eine I/O-Optimierung. Die
+ursprünglich regressionsgetesteten Fälle sind wirksam: Kunde/Arbeitgeber in
+Zertifizierungs-Fließtext wird in den getesteten Nomen-, femininen und Verbformen
+redigiert; ein domänenförmiger Aussteller nach einem Cue auf derselben Zeile bleibt
+erhalten. RC39 schreibt reine `processing`-Zwischenmarker ohne Datei-/POSIX-
+Verzeichnis-Fsync, während jede Statusänderung weiterhin den vollständigen
+Durability-Pfad verwendet. `markInterruptedItemsRetryable` entscheidet ausschließlich
+über `item.status`; die vollständigen 66 Batchtests belegen Prozessabbruch und
+Exactly-once-Recovery.
+
+Das unabhängige Gegenreview vom 25.08.2026 begrenzt diese E0-Aussage jedoch: RC41
+schützt auch eine beliebige Kunden-Domain, wenn nur irgendein Credential-Cue vor ihr
+auf derselben Zeile steht. Außerdem bleiben verbreitete Formulierungen wie
+`Tätigkeit für` und `im Auftrag von` innerhalb eines Zertifizierungsabschnitts
+unredigiert. Beides ist Unter-Redaktion und daher P0. Mehrzeilige domänenförmige
+Aussteller sowie Ausstellernamen, die selbst mit `Customer`, `Firma` oder `Kunden`
+beginnen, zeigen zusätzliche Über-Redaktion. Der enge Folgeauftrag
+`tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` ist deshalb vor einer
+Releasebewertung abzuarbeiten. Der RC39-Fsync-Test belegt den Mechanismus auf Windows,
+zählt auf POSIX aber wegen des zusätzlichen Verzeichnis-Fsync anders; eine echte
+Persistenz-/Power-Loss-Injection fehlt weiterhin. Die E1-Plattformnachweise bleiben
+unverändert offen.
 
 Für die folgende Optimierung liegt außerdem eine inhaltsfreie Phasenmessung vor:
 Der lokale Batchzustand speichert ausschließlich begrenzte Dauerwerte für Aufnahme,
