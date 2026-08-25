@@ -81,11 +81,9 @@ function createBatchDelivery(options = {}) {
         throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
       }
       let changed = false;
-      let transitioned = false;
       if (item.status === deliveryPendingStatus) {
         item.status = 'released';
         item.checkpoint = 'released';
-        transitioned = true;
         changed = true;
         try {
           cleanupTerminalWorkCopy(state, item, deps);
@@ -101,7 +99,7 @@ function createBatchDelivery(options = {}) {
       return {
         ok: true,
         ...publicProgress(state),
-        local_evidence_exported: transitioned ? writeTerminalEvidence(state) : undefined,
+        local_evidence_exported: writeTerminalEvidence(state),
         raw_content_sent_to_claude: false
       };
     });
@@ -126,12 +124,10 @@ function createBatchDelivery(options = {}) {
         return item;
       });
       let changed = false;
-      let transitioned = false;
       for (const item of items) {
         if (item.status === deliveryPendingStatus) {
           item.status = 'released';
           item.checkpoint = 'released';
-          transitioned = true;
           changed = true;
           try {
             cleanupTerminalWorkCopy(state, item, deps);
@@ -149,7 +145,7 @@ function createBatchDelivery(options = {}) {
         ok: true,
         acknowledged_count: items.length,
         ...publicProgress(state),
-        local_evidence_exported: transitioned ? writeTerminalEvidence(state) : undefined,
+        local_evidence_exported: writeTerminalEvidence(state),
         raw_content_sent_to_claude: false
       };
     });

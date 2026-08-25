@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC44 · ausschließlich synthetische Daten
+Version 3.2.0 RC45 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC44 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC45 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 Die wiederverwendbaren, vollständig synthetischen Testdokumente, der gruppierte
@@ -150,7 +150,7 @@ Stop-Gegenproben.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC44 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC45 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz

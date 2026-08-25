@@ -102,6 +102,16 @@ function fixture(options = {}) {
       value.cleanupChanged = false;
       return { changed, pending: 0 };
     },
+    ...(options.enableEvidence ? {
+      repairPendingEvidenceOutbox() {
+        events.push('evidence-outbox');
+        return { repaired: Number(options.outboxRepaired || 0), failures: Number(options.outboxFailures || 0) };
+      },
+      reconcileTerminalEvidence(value) {
+        events.push(`evidence:${value.token}`);
+        return options.evidenceFailure === value.token ? false : true;
+      }
+    } : {}),
     deliveryPendingStatus: 'delivery_pending',
     deferredReviewStatus: 'deferred_review',
     mappingPendingStatus: 'mapping_pending'
@@ -236,6 +246,21 @@ test('cleanup-only recovery writes once without inflating the recovered counter'
     recovered: 0, removed: 0, failures: 0, skipped_active: false
   });
   assert.strictEqual(item.events.filter((event) => event === `write:${tokens[0]}`).length, 1);
+});
+
+test('evidence outbox and terminal repair run under the same lock without changing batch recovery counters', () => {
+  const complete = state(tokens[0], { items: [{ status: 'released' }] });
+  const pending = state(tokens[1], { items: [{ status: 'pending' }] });
+  const expired = state(tokens[2], { expires_at: past, items: [{ status: 'stopped' }] });
+  const item = fixture({ states: [complete, pending, expired], enableEvidence: true, outboxRepaired: 1 });
+  assert.deepStrictEqual(item.recovery.recoverBatches(), {
+    recovered: 0, removed: 1, failures: 0, skipped_active: false
+  });
+  assert.strictEqual(item.events.indexOf('evidence-outbox') < item.events.indexOf('readdir'), true);
+  assert.ok(item.events.includes(`evidence:${tokens[0]}`));
+  assert.ok(item.events.includes(`evidence:${tokens[1]}`));
+  assert.ok(item.events.indexOf(`evidence:${tokens[2]}`) < item.events.indexOf(`remove-work:${tokens[2]}`));
+  assert.strictEqual(item.events.filter((event) => event.startsWith('release:')).length, 1);
 });
 
 test('lock release errors remain visible instead of reporting a false successful maintenance result', () => {

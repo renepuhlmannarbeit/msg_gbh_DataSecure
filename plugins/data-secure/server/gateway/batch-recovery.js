@@ -24,6 +24,8 @@ function createBatchRecovery(options = {}) {
   const reconcilePendingMappings = options.reconcilePendingMappings;
   const markInterruptedItemsRetryable = options.markInterruptedItemsRetryable;
   const retryReleasedWorkCopyCleanup = options.retryReleasedWorkCopyCleanup;
+  const reconcileTerminalEvidence = options.reconcileTerminalEvidence;
+  const repairPendingEvidenceOutbox = options.repairPendingEvidenceOutbox;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const deferredReviewStatus = options.deferredReviewStatus || 'deferred_review';
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
@@ -114,6 +116,9 @@ function createBatchRecovery(options = {}) {
       return { recovered, removed, failures, skipped_active: true };
     }
     try {
+      if (repairPendingEvidenceOutbox) {
+        try { repairPendingEvidenceOutbox(); } catch { /* evidence repair never blocks batch recovery */ }
+      }
       let entries = [];
       try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
       catch { return { recovered, removed, failures: 1, skipped_active: false }; }
@@ -125,6 +130,7 @@ function createBatchRecovery(options = {}) {
           const state = readMaintenanceState(tokenFromName);
           if (liveLocalExecutor(state)) continue;
           if (now > Date.parse(state.expires_at)) {
+            if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
             removeWorkDirectory(state.token);
             io.unlinkSync(journalPath(state.token));
             removed++;
@@ -148,6 +154,7 @@ function createBatchRecovery(options = {}) {
           }
           if (retryReleasedWorkCopyCleanup(state).changed) changed = true;
           if (changed) writeState(state);
+          if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
         } catch { failures++; }
       }
       return { recovered, removed, failures, skipped_active: false };
@@ -167,6 +174,9 @@ function createBatchRecovery(options = {}) {
     let failures = 0;
     const now = Number(callOptions.now || nowMs());
     try {
+      if (repairPendingEvidenceOutbox) {
+        try { repairPendingEvidenceOutbox(); } catch { /* retention remains authoritative */ }
+      }
       let entries = [];
       try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
       catch { return { removed, failures: 1, skipped_active: false }; }
@@ -178,6 +188,7 @@ function createBatchRecovery(options = {}) {
           const state = readMaintenanceState(tokenFromName);
           if (liveLocalExecutor(state)) continue;
           if (now <= Date.parse(state.expires_at)) continue;
+          if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
           removeWorkDirectory(state.token);
           io.unlinkSync(journalPath(state.token));
           removed++;

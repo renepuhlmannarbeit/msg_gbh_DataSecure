@@ -305,7 +305,11 @@ async function main() {
     // MCP call. Give slower Windows/CI filesystem scanners enough time before
     // declaring the integration test failed; this is not a product timeout.
     const deadline = Date.now() + 60_000;
-    while (progress.local_processing_active && Date.now() < deadline) {
+    // `process.kill(pid, 0)` can briefly report a just-spawned detached worker
+    // as unavailable on Windows even though its durable terminal commit follows
+    // immediately. The journal's complete state, not one transient PID probe,
+    // is the integration boundary under test.
+    while ((!progress.complete || progress.local_processing_active) && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
       progress = readBatchProgress(begun.batch_token);
     }

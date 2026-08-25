@@ -344,12 +344,14 @@ späteren Zwei-Worker-Optimierung.
 Terminale Stapel ergänzen dort einen atomaren JSON-Nachweis mit nur aggregierten
 Zählern, Versionen, Regelständen und validierten festen Fehlercodes. Auch dieser
 Nachweis enthält keine Namen, Pfade, Inhalte, Hashes, Pseudonyme oder Batch-IDs.
-Ein aktuelles P1-Durability-Review hat jedoch eine Crashlücke zwischen terminalem
-Journal-Commit und diesem best-effort Append bestätigt: Ein fehlgeschlagener
-Append ist noch nicht durable als reparaturpflichtig markiert; ein naiver Retry
-könnte umgekehrt einen doppelten Record erzeugen. Bis ein opaker idempotenter
-Receipt-/Pending-Vertrag implementiert ist, ist der Nachweis daher nicht als
-exakt-einmal crashfest belegt; freigegebene Pakete werden davon nicht zurückgenommen.
+Der P1-Durability-Schnitt ist umgesetzt: `gateway/batch-terminal-evidence.js`
+schreibt vor dem Export einen opaken, inhaltsfreien Pending-Vertrag durable ins
+Journal und in eine retention-unabhängige lokale Outbox. `gateway/batch-evidence.js`
+publiziert den v2-Record atomar und idempotent über dessen zufällige Receipt-ID,
+erhält v1-Records unverändert und bestätigt erst danach `exported`. Crashs vor
+Append, nach Append oder beim Marker-Commit werden ohne erneute Anonymisierung
+repariert; eine widersprüchlich wiederverwendete ID stoppt fail-closed. Paket-
+und Dokumentstatus bleiben bei jedem Evidenzfehler unverändert.
 
 Zielvertrag ergänzt: `contracts/BATCH_SNAPSHOT_V1.md` legt private atomare Kopien,
 Originalunabhängigkeit, Journalzustände, Crashfenster und Löschregeln für BL-011.1

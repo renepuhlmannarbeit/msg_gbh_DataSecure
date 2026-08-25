@@ -77,7 +77,11 @@ function fixture(options = {}) {
       return { read_capability: 'c'.repeat(43), read_capability_expires_at: '2026-08-26T12:00:00.000Z' };
     },
     publicProgress: (state) => ({ complete: state.items.every((entry) => entry.status === 'released') }),
-    writeTerminalEvidence() { events.push('evidence'); return true; },
+    writeTerminalEvidence(state) {
+      if (state.terminal_evidence?.status === 'exported') return true;
+      events.push('evidence');
+      return true;
+    },
     deliveryPendingStatus: 'delivery_pending',
     mappingPendingStatus: 'mapping_pending'
   });
@@ -137,13 +141,24 @@ test('multi-ack validates the complete page before any state or byte mutation', 
 
 test('repeated single and page acknowledgements are durable no-ops', () => {
   const released = item(0, 'released', { acknowledged: true });
-  const value = fixture({ state: { token, items: [released] } });
+  const value = fixture({ state: { token, items: [released], terminal_evidence: { status: 'exported' } } });
   value.delivery.acknowledgeDeliveredPackage(token, ids[0]);
   value.delivery.acknowledgeDeliveredPackages(token, [ids[0]]);
   assert.strictEqual(value.events.filter((event) => event === 'write').length, 0);
   assert.strictEqual(value.events.filter((event) => event === 'evidence').length, 0);
   assert.strictEqual(value.events.filter((event) => event.startsWith('unlink:')).length, 0);
   assert.strictEqual(value.events.filter((event) => event.startsWith('release:')).length, 2);
+});
+
+test('a repeated acknowledgement repairs missing terminal evidence without touching package state or bytes', () => {
+  const released = item(0, 'released', { acknowledged: true });
+  const value = fixture({ state: { token, items: [released] } });
+  const result = value.delivery.acknowledgeDeliveredPackage(token, ids[0]);
+  assert.strictEqual(result.local_evidence_exported, true);
+  assert.strictEqual(value.events.filter((event) => event === 'evidence').length, 1);
+  assert.strictEqual(value.events.filter((event) => event === 'write').length, 0);
+  assert.strictEqual(value.events.filter((event) => event.startsWith('unlink:')).length, 0);
+  assert.strictEqual(value.durable().items[0].status, 'released');
 });
 
 test('a journal failure after byte cleanup remains retryable and releases the lock', () => {

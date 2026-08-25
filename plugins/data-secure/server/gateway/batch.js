@@ -8,7 +8,7 @@ const { PROFILES, LIMITS, listInput, validateBatchLimits, storageStatus, hasRepa
 const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
-const { appendBatchEvidence } = require('./batch-evidence');
+const { createBatchTerminalEvidence } = require('./batch-terminal-evidence');
 const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
 const { createBatchExecutorLease } = require('./batch-executor-lease');
@@ -134,19 +134,21 @@ const {
   publicProgress
 });
 
+const {
+  reconcileTerminalEvidence,
+  repairPendingEvidenceOutbox
+} = createBatchTerminalEvidence({
+  randomBytes: crypto.randomBytes,
+  publicProgress,
+  writeState
+});
+
 function writeTerminalEvidence(state) {
-  const progress = publicProgress(state);
-  // A batch with retryable work is deliberately not final: a later explicit
-  // resume must produce the only terminal receipt. A stopped document is final
-  // only once the remaining queue is exhausted.
-  if (progress.remaining !== 0 || progress.processing !== 0 || progress.retryable !== 0 || progress.deferred_review !== 0 || progress.mapping_pending !== 0) return undefined;
-  // The receipt is a local transparency artifact, not an authorization gate.
-  // A damaged old receipt must never cause a newly valid package to be marked
-  // stopped after it has been safely released and mapped. The caller receives a
-  // bounded status and can have the local export repaired without retrying data.
+  // The receipt is a local transparency artifact, never an authorization
+  // gate. Its coordinator persists an opaque pending intent before export and
+  // deduplicates recovery without changing any released or stopped item.
   try {
-    appendBatchEvidence(state);
-    return true;
+    return reconcileTerminalEvidence(state);
   } catch {
     return false;
   }
@@ -210,6 +212,8 @@ const {
   reconcilePendingMappings,
   markInterruptedItemsRetryable,
   retryReleasedWorkCopyCleanup,
+  reconcileTerminalEvidence: writeTerminalEvidence,
+  repairPendingEvidenceOutbox,
   deliveryPendingStatus: DELIVERY_PENDING,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING
@@ -791,4 +795,4 @@ async function runLocalBatchExecutor(token, deps = {}) {
   return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
 }
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

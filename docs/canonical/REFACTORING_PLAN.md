@@ -141,10 +141,12 @@ unsichere Journalnachprüfung Journal und versiegelte Arbeitskopien gemeinsam
 für die Recovery erhält. Explizites Resume/Discard, Verarbeitung/Commit,
 Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
 `batch.js`; der nächste R2-Schnitt wird erneut als kleinster Leaf gewählt.
-Als nächster P1-Schnitt wird der terminale Nachweis separat transaktional
-geschlossen: durable Pending-/Exported-Markierung, opake idempotente Receipt-ID
-und Recovery für Append- sowie Marker-Commit-Crashfenster. Der Nachweis bleibt
-rein lokal und darf ein bereits verifiziertes Paket niemals zurücknehmen.
+Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
+`batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,
+`batch-evidence.js` den atomaren idempotenten v2-Store und eine inhaltsfreie
+Outbox über die Journal-Retention hinaus. Append-, Marker-Commit- und
+Outbox-Cleanup-Crashfenster sind direkt getestet; der lokale Nachweis nimmt ein
+bereits verifiziertes Paket niemals zurück.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
