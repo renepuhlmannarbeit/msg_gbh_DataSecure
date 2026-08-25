@@ -202,12 +202,26 @@ test('a customer or employer named in prose inside a certification section is st
   const cases = [
     ['Zertifizierungen\nZertifikat ausgestellt für Kunde ABC Beispiel GmbH im Projekt XY, Scrum.org Professional Scrum Master I.', 'ABC Beispiel GmbH'],
     ['Zertifizierungen\nPMI-ACP erworben während der Anstellung beim Arbeitgeber Contoso Beispiel AG.', 'Contoso Beispiel AG'],
-    ['Certifications\nAWS Certified Cloud Practitioner, delivered for customer Example Nordics Ltd.', 'Example Nordics Ltd']
+    ['Certifications\nAWS Certified Cloud Practitioner, delivered for customer Example Nordics Ltd.', 'Example Nordics Ltd'],
+    // The feminine German noun form ("Kundin"/"Kunde" only differ by
+    // grammatical gender, not by role) and a verb-phrased employer mention
+    // without any role noun at all ("Anstellung bei"/"employed at") are
+    // separate gaps in the same cue-recognition mechanism.
+    ['Zertifizierungen\nAnstellung bei Nordpol Beispiel AG, während der Zeit ISTQB Certified Tester erworben.', 'Nordpol Beispiel AG'],
+    ['Certifications\nEmployed at Baltic Beispiel Ltd, obtained AWS Certified Cloud Practitioner.', 'Baltic Beispiel Ltd']
   ];
   for (const [text, customer] of cases) {
     const output = pii.anonymize(text, 'personnel_profile').text;
     assertAbsent(output, customer, `customer named in prose (${customer})`);
   }
+});
+
+test('a customer named via the feminine "Kundin" form in a certification section is still anonymized', () => {
+  const output = pii.anonymize(
+    'Zertifizierungen\nZertifikat ausgestellt für Kundin Erika Beispielfrau im Projekt XY, PMI-ACP erworben.',
+    'personnel_profile'
+  ).text;
+  assertAbsent(output, 'Erika Beispielfrau', 'customer named via Kundin');
 });
 
 test('the genuine issuer on the same line survives the prose-customer fix', () => {

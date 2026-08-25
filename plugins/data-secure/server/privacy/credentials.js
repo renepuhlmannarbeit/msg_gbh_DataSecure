@@ -31,7 +31,12 @@ const CERT_TITLE_RE = /\b(?:certified|certification|certificate|credential|profe
 // trailing colon optional keeps the label form working and additionally
 // un-protects the prose form; a false match here only widens redaction
 // (over-redaction of skill/technology words), never narrows it.
-const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|projektkunden?|auftraggeber|client|customer|technologien?|technologies|tools?|skillset|kenntnisse)\b(?:\s*:)?\s*$/iu;
+// Role nouns need every grammatical German form that can precede a company
+// name directly (masculine/feminine, singular/plural all collapse to the
+// same "-e(n)"/"-in(nen)" endings here); "Anstellung bei"/"beschäftigt bei"
+// name an employer through a verb phrase instead of a role noun, so they are
+// listed separately from the noun alternatives rather than folded into \b.
+const NON_ISSUER_LABEL_RE = /(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|kundin(?:nen)?|projektkunden?|projektkundin(?:nen)?|auftraggeber|client|customer|technologien?|technologies|tools?|skillset|kenntnisse|(?:anstellung|angestellt|beschäftigt|tätig)\s+(?:bei|für)|employed\s+(?:at|by)|working\s+for)\b(?:\s*:)?\s*$/iu;
 
 function plainLine(line) {
   return normalizeSpaces(String(line || '')
@@ -189,7 +194,7 @@ function credentialIssuerAmbiguities(originalText, anonymizedText) {
 // no longer carries the cue word, so it alone cannot tell prose customer
 // mentions apart from a real issuer. Also checking the span's own leading
 // word closes that gap without touching the shared organisation regex.
-const NON_ISSUER_PREFIX_RE = /^(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|projektkunden?|auftraggeber|client|customer)\b\s*:?\s*/iu;
+const NON_ISSUER_PREFIX_RE = /^(?:arbeitgeber|aktueller\s+arbeitgeber|unternehmen|firma|kunden?|kundin(?:nen)?|projektkunden?|projektkundin(?:nen)?|auftraggeber|client|customer)\b\s*:?\s*/iu;
 
 function inCredentialContext(text,start,end,ranges=credentialContextSpans(text)) {
   const range=ranges.find((r)=>start < r.end && r.start < end);
