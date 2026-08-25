@@ -15,6 +15,8 @@ const { createBatchExecutorLease } = require('./batch-executor-lease');
 const { createBatchJournalStore } = require('./batch-journal-store');
 const { createBatchReconciliation } = require('./batch-reconciliation');
 const { createBatchRecovery } = require('./batch-recovery');
+const { createBatchRetentionProtection } = require('./batch-retention-protection');
+const { createBatchDelivery } = require('./batch-delivery');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -46,6 +48,14 @@ const DELIVERY_PENDING = 'delivery_pending';
 const DEFERRED_REVIEW = 'deferred_review';
 const MAPPING_PENDING = 'mapping_pending';
 
+const { openBatchPackageProtection } = createBatchRetentionProtection({
+  io: fs,
+  path,
+  batchRoot,
+  deliveryPendingStatus: DELIVERY_PENDING,
+  mappingPendingStatus: MAPPING_PENDING
+});
+
 function batchTtlMs() {
   // A stopped batch is useful only while its private snapshot is retained.
   // A zero-day retention deliberately expires paused batches at the end of the
@@ -75,80 +85,11 @@ const {
   deliveryPendingStatus: DELIVERY_PENDING
 });
 
-// Cross-references every still-open batch item with the Output scope so
-// retention never deletes a package a batch still needs to reach delivery or
-// mapping. Deliberately read-only (unlike readState) and tolerant of anything
-// malformed. Instead it marks the inspection incomplete so automatic Output
-// retention skips the entire scope. A bad journal can therefore only delay a
-// cleanup, never narrow the protection set and delete referenced packages.
-// Bounded by the batch's own TTL: cleanupExpiredBatchSnapshots reaps valid
-// expired journals on the normal schedule, after which their packages fall
-// back under ordinary time-based retention.
-function openBatchPackageProtection(fsApi = fs) {
-  const ids = new Set();
-  const dir = batchRoot();
-  let entries;
-  try {
-    entries = fsApi.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return { ids, complete: false };
-  }
-  for (const entry of entries) {
-    if (!entry.isFile || !entry.isFile() || !entry.name.endsWith('.json')) continue;
-    let state;
-    try {
-      state = JSON.parse(fsApi.readFileSync(path.join(dir, entry.name), 'utf8'));
-    } catch {
-      return { ids, complete: false };
-    }
-    if (state?.schema !== 'datasecure-batch/1' || !Array.isArray(state.items)) {
-      return { ids, complete: false };
-    }
-    for (const item of state.items) {
-      if ((item?.status === DELIVERY_PENDING || item?.status === MAPPING_PENDING) &&
-        /^ds_[a-f0-9]{32}$/i.test(String(item?.package_id || ''))) {
-        ids.add(item.package_id);
-      }
-    }
-  }
-  return { ids, complete: true };
-}
-
 const { batchUserStatus, publicProgress } = createBatchProgress({
   deliveryPendingStatus: DELIVERY_PENDING,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
   liveLocalExecutor
-});
-
-const {
-  recoverableBatchStates,
-  recoverableBatchStatus,
-  localCleanupStatus,
-  recoverBatches,
-  cleanupExpiredBatchSnapshots
-} = createBatchRecovery({
-  io: fs,
-  randomBytes: crypto.randomBytes,
-  tokenPattern: TOKEN_RE,
-  batchRoot,
-  batchPath,
-  safeRemoveWorkDirectory,
-  readStateForMaintenance,
-  writeState,
-  readActiveLock,
-  processAlive,
-  acquireActiveLock,
-  releaseActiveLock,
-  liveLocalExecutor,
-  publicProgress,
-  reconcilePublishedItems,
-  reconcilePendingMappings,
-  markInterruptedItemsRetryable,
-  retryReleasedWorkCopyCleanup,
-  deliveryPendingStatus: DELIVERY_PENDING,
-  deferredReviewStatus: DEFERRED_REVIEW,
-  mappingPendingStatus: MAPPING_PENDING
 });
 
 const {
@@ -183,6 +124,62 @@ function writeTerminalEvidence(state) {
     return false;
   }
 }
+
+const {
+  deliveryResult,
+  cleanupTerminalWorkCopy,
+  acknowledgeDeliveredPackage,
+  acknowledgeDeliveredPackages,
+  finalizePublishedPackageLocally,
+  retryReleasedWorkCopyCleanup
+} = createBatchDelivery({
+  SafeError,
+  io: fs,
+  path,
+  workPath,
+  active,
+  acquireActiveLock,
+  releaseActiveLock,
+  readState,
+  writeState,
+  assertLocalExecutorAccess,
+  regularPublishedPackage,
+  issueReadCapability: (packageId) => require('./package-store').issueReadCapability(packageId),
+  publicProgress,
+  writeTerminalEvidence,
+  deliveryPendingStatus: DELIVERY_PENDING,
+  mappingPendingStatus: MAPPING_PENDING
+});
+
+const {
+  recoverableBatchStates,
+  recoverableBatchStatus,
+  localCleanupStatus,
+  recoverBatches,
+  cleanupExpiredBatchSnapshots
+} = createBatchRecovery({
+  io: fs,
+  randomBytes: crypto.randomBytes,
+  tokenPattern: TOKEN_RE,
+  batchRoot,
+  batchPath,
+  safeRemoveWorkDirectory,
+  readStateForMaintenance,
+  writeState,
+  readActiveLock,
+  processAlive,
+  acquireActiveLock,
+  releaseActiveLock,
+  liveLocalExecutor,
+  publicProgress,
+  reconcilePublishedItems,
+  reconcilePendingMappings,
+  markInterruptedItemsRetryable,
+  retryReleasedWorkCopyCleanup,
+  deliveryPendingStatus: DELIVERY_PENDING,
+  deferredReviewStatus: DEFERRED_REVIEW,
+  mappingPendingStatus: MAPPING_PENDING
+});
 
 function resumeBatch(token) {
   if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
@@ -419,140 +416,6 @@ function invalidateUnpublishedBatchCopies(state, deps = {}, exceptItem = null) {
   }
 }
 
-function deliveryResult(state, item) {
-  const packageId = String(item?.package_id || '');
-  if (!regularPublishedPackage(packageId)) {
-    throw new SafeError('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
-  }
-  // A capability is intentionally issued only when the package is handed to
-  // this live MCP turn. It is never persisted in the batch snapshot.
-  const { issueReadCapability } = require('./package-store');
-  const readGrant = issueReadCapability(packageId);
-  return {
-    ok: true,
-    package_id: packageId,
-    read_capability: readGrant.read_capability,
-    read_capability_expires_at: readGrant.read_capability_expires_at,
-    verification: 'passed',
-    raw_content_sent_to_claude: false,
-    ...publicProgress(state)
-  };
-}
-
-function cleanupTerminalWorkCopy(state, item, deps = {}) {
-  // A terminally released or stopped position has no legitimate reason to
-  // retain its sealed source bytes.  Keep this single-file operation as strict
-  // as release cleanup: no recursion, no symlink traversal and no derived
-  // filename.  A failed deletion is recorded only as a local cleanup duty.
-  if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item?.work_name || ''))) {
-    throw new SafeError('Private Arbeitskopie ist nicht sicher bereinigbar.');
-  }
-  const full = path.join(workPath(state.token), item.work_name);
-  if (fs.existsSync(full)) {
-    const stat = fs.lstatSync(full);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Private Arbeitskopie ist nicht sicher bereinigbar.');
-    (deps.unlinkWorkCopy || fs.unlinkSync)(full);
-  }
-  delete item.work_copy_cleanup_pending;
-}
-
-function acknowledgeDeliveredPackage(token, packageId, deps = {}) {
-  if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
-  acquireActiveLock(token);
-  active.add(token);
-  try {
-    const state = readState(token);
-    assertLocalExecutorAccess(state, deps.executorPid);
-    const item = state.items.find((candidate) =>
-      [DELIVERY_PENDING, 'released'].includes(candidate.status) && candidate.package_id === packageId
-    );
-    if (!item) throw new SafeError('Für dieses Paket liegt keine bestätigbare Batch-Übergabe vor.');
-    if (!regularPublishedPackage(packageId)) throw new SafeError('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
-    if (item.status === DELIVERY_PENDING) {
-      item.status = 'released';
-      item.checkpoint = 'released';
-      try {
-        cleanupTerminalWorkCopy(state, item, deps);
-      } catch {
-        item.work_copy_cleanup_pending = true;
-      }
-    }
-    item.analysis_acknowledged = true;
-    writeState(state);
-    return { ok: true, ...publicProgress(state), local_evidence_exported: writeTerminalEvidence(state), raw_content_sent_to_claude: false };
-  } finally {
-    active.delete(token);
-    releaseActiveLock(token);
-  }
-}
-
-function acknowledgeDeliveredPackages(token, packageIds, deps = {}) {
-  if (!Array.isArray(packageIds) || packageIds.length < 1 || packageIds.length > 10 || new Set(packageIds).size !== packageIds.length) {
-    throw new SafeError('Bitte zwischen 1 und 10 unterschiedliche Pakete bestätigen.');
-  }
-  if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
-  acquireActiveLock(token);
-  active.add(token);
-  try {
-    const state = readState(token);
-    assertLocalExecutorAccess(state, deps.executorPid);
-    // Validate the whole requested page before changing any acknowledgement.
-    const items = packageIds.map((packageId) => {
-      const item = state.items.find((candidate) =>
-        [DELIVERY_PENDING, 'released'].includes(candidate.status) && candidate.package_id === packageId
-      );
-      if (!item || !regularPublishedPackage(packageId)) {
-        throw new SafeError('Für mindestens ein Paket liegt keine bestätigbare Batch-Übergabe vor.');
-      }
-      return item;
-    });
-    for (const item of items) {
-      if (item.status === DELIVERY_PENDING) {
-        item.status = 'released';
-        item.checkpoint = 'released';
-        try {
-          cleanupTerminalWorkCopy(state, item, deps);
-        } catch {
-          item.work_copy_cleanup_pending = true;
-        }
-      }
-      item.analysis_acknowledged = true;
-    }
-    writeState(state);
-    return { ok: true, acknowledged_count: items.length, ...publicProgress(state), local_evidence_exported: writeTerminalEvidence(state), raw_content_sent_to_claude: false };
-  } finally {
-    active.delete(token);
-    releaseActiveLock(token);
-  }
-}
-
-function finalizePublishedPackageLocally(token, packageId, deps = {}) {
-  if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
-  acquireActiveLock(token);
-  active.add(token);
-  try {
-    const state = readState(token);
-    assertLocalExecutorAccess(state, deps.executorPid);
-    const item = state.items.find((candidate) => candidate.status === DELIVERY_PENDING && candidate.package_id === packageId);
-    if (!item || !regularPublishedPackage(packageId)) {
-      throw new SafeError('Das lokal veröffentlichte Paket konnte nicht sicher abgeschlossen werden.');
-    }
-    item.status = 'released';
-    item.checkpoint = 'released_locally';
-    item.analysis_acknowledged = false;
-    try {
-      cleanupTerminalWorkCopy(state, item, deps);
-    } catch {
-      item.work_copy_cleanup_pending = true;
-    }
-    writeState(state);
-    return { ok: true, ...publicProgress(state), local_evidence_exported: writeTerminalEvidence(state), raw_content_sent_to_claude: false };
-  } finally {
-    active.delete(token);
-    releaseActiveLock(token);
-  }
-}
-
 const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCandidates } = createBatchResultAccess({
   SafeError,
   fs,
@@ -565,27 +428,6 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
   regularPublishedPackage,
   issueReadCapability: (packageId) => require('./package-store').issueReadCapability(packageId)
 });
-
-function retryReleasedWorkCopyCleanup(state, deps = {}) {
-  let changed = false;
-  let pending = 0;
-  for (const item of state.items || []) {
-    if (!['released', 'stopped', MAPPING_PENDING].includes(item.status) || item.work_copy_cleanup_pending !== true) continue;
-    if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item.work_name || ''))) {
-      pending++;
-      continue;
-    }
-    try {
-      // Never follow or recursively remove an unexpected terminal copy. A
-      // vanished regular copy is already clean.
-      cleanupTerminalWorkCopy(state, item, deps);
-      changed = true;
-    } catch {
-      pending++;
-    }
-  }
-  return { changed, pending };
-}
 
 async function captureDeferredReviewInput(state, item, deps = {}) {
   const entry = exactPendingEntry(state, item);

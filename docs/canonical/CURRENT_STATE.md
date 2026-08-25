@@ -224,7 +224,19 @@ Mapping vor Retry vor Cleanup und höchstens ein abschließender Journal-Commit.
 Abgelaufene private Arbeitskopien werden vor ihrem Journal entfernt, Fehler
 bleiben pro Snapshot isoliert und gezählt. Neun direkte Negativtests decken
 gemischte defekte Journale, Lock- und Freigabefehler, Teilbereinigung,
-Idempotenz und die unveränderte öffentliche Fassade ab. Die weiteren Schnitte
+Idempotenz und die unveränderte öffentliche Fassade ab.
+`gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
+Referenzen ohne Journalmutation und blockiert automatische Output-Retention
+bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die
+dynamische Root-Auflösung, den Erhalt vorher gefundener Schutz-IDs und die
+unveränderte Fail-closed-Fassade. `gateway/batch-delivery.js` bündelt die
+verifizierte Capability-Ausgabe, atomare Einzel-/Mehrfachbestätigung, lokalen
+Abschluss und das terminale Einzeldatei-Cleanup. Eine vollständig bereits
+bestätigte Übergabe ist jetzt ein dauerhafter No-op und erzeugt weder einen
+zweiten Journal-Commit noch einen doppelten terminalen Evidenznachweis. Acht
+direkte Negativtests belegen Gesamtseitenvalidierung vor Mutation,
+Paketmanipulation, Journal- und Lockfehler, sichere Wiederholung nach bereits
+gelöschter Arbeitskopie sowie Link-/Pfadschutz. Die weiteren Schnitte
 trennen Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping
 und verbleibende Wartung hinter der bestehenden Exportfassade. Danach folgen
 Originalschutz, internes Legacy-Intake, benutzergebundene Verschlüsselung,

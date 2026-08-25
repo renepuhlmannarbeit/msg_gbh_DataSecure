@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
+const { createBatchRetentionProtection } = require('../plugins/data-secure/server/gateway/batch-retention-protection');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-batch-retention-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
@@ -99,6 +100,52 @@ test('an unreadable journal directory also blocks automatic output deletion', ()
   const result = _test.openBatchPackageProtection({ readdirSync: () => { throw new Error('denied'); } });
   assert.strictEqual(result.complete, false);
   assert.strictEqual(result.ids.size, 0);
+});
+
+test('the extracted reader resolves its root per scan and preserves already collected ids on a later failure', () => {
+  let rootCalls = 0;
+  const protectedId = 'ds_' + 'a'.repeat(32);
+  const { openBatchPackageProtection } = createBatchRetentionProtection({
+    batchRoot() { rootCalls++; return `root-${rootCalls}`; },
+    path: { join: (dir, name) => `${dir}/${name}` }
+  });
+  const io = {
+    readdirSync: () => [fileEntry('valid.json'), fileEntry('broken.json')],
+    readFileSync(target) {
+      if (String(target).endsWith('valid.json')) {
+        return JSON.stringify({
+          schema: 'datasecure-batch/1',
+          items: [{ status: 'delivery_pending', package_id: protectedId }]
+        });
+      }
+      throw new Error('denied');
+    }
+  };
+  const first = openBatchPackageProtection(io);
+  const second = openBatchPackageProtection(io);
+  assert.strictEqual(rootCalls, 2);
+  assert.strictEqual(first.complete, false);
+  assert.deepStrictEqual([...first.ids], [protectedId]);
+  assert.strictEqual(second.complete, false);
+  assert.deepStrictEqual([...second.ids], [protectedId]);
+});
+
+test('the extracted reader propagates root configuration errors and ignores non-file entries', () => {
+  const broken = createBatchRetentionProtection({ batchRoot: () => { throw new Error('ROOT_UNSAFE'); } });
+  assert.throws(() => broken.openBatchPackageProtection(), /ROOT_UNSAFE/);
+
+  const reader = createBatchRetentionProtection({ batchRoot: () => 'root' });
+  let reads = 0;
+  const result = reader.openBatchPackageProtection({
+    readdirSync: () => [
+      { name: 'directory.json' },
+      { name: 'directory-2.json', isFile: () => false },
+      fileEntry('note.txt')
+    ],
+    readFileSync: () => { reads++; return '{}'; }
+  });
+  assert.deepStrictEqual(result, { ids: new Set(), complete: true });
+  assert.strictEqual(reads, 0);
 });
 
 try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* best effort */ }

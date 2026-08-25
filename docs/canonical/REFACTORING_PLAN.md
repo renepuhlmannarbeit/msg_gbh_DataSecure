@@ -116,10 +116,20 @@ Ablaufbereinigung. Neun direkte Tests belegen Live-Owner- und Live-Executor-
 Yield, gemischte defekte und gültige Journale, die feste Reihenfolge Adoption,
 Mapping, Retry und Cleanup, genau einen finalen Journal-Commit, idempotente
 Wiederholung, Workdir-vor-Journal-Löschung, Teilfehler und sichtbare
-Lock-Release-Fehler. Journal-Commit, Byte-Cleanup, explizites Resume/Discard,
-Mapping-Outbox-Replay, Verarbeitung/Commit, Review-Orchestrierung sowie
-Veröffentlichung/Mapping bleiben absichtlich in `batch.js`; der nächste
-R2-Schnitt wird erneut als kleinster verhaltensneutraler Leaf gewählt.
+Lock-Release-Fehler. Der read-only Retention-Schutzscan liegt zusätzlich in
+`gateway/batch-retention-protection.js`. Seine direkten Tests belegen dynamische
+Root-Auflösung, konservativen Gesamtabbruch bei einem defekten Journal, den
+Erhalt bereits gefundener Schutz-IDs und unveränderte Root-Fehlersemantik.
+`gateway/batch-delivery.js` kapselt anschließend Capability-Ausgabe,
+Einzel-/Seitenbestätigung, lokalen Abschluss und terminales Byte-Cleanup. Acht
+direkte Tests belegen vollständige Vorvalidierung vor einer Mehrfachmutation,
+Paketverifikation am Übergabepunkt, Lock-Freigabe an Fehlergrenzen,
+symlink-sicheres Cleanup, Wiederholung nach Journalfehler und idempotente
+Bestätigungen ohne weiteren Journal- oder Evidenzschreibvorgang. Journal-Commit,
+explizites Resume/Discard, Mapping-Outbox-Replay, Verarbeitung/Commit,
+Review-Orchestrierung sowie verbleibende Veröffentlichung/Mapping-Wartung
+bleiben absichtlich in `batch.js`; der nächste R2-Schnitt wird erneut als
+kleinster verhaltensneutraler Leaf gewählt.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
