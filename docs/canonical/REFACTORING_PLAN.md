@@ -93,6 +93,10 @@ fail-closed PID-Liveness in `gateway/process-liveness.js`.
 Der fokussierte Negativtest belegt fail-closed `EPERM` sowie, dass ein zwischen
 Prüfung und Löschung ausgetauschter Lock weder beim Release noch beim
 Dead-Owner-Reclaim entfernt wird. Die
+Executor-Berechtigung liegt separat in `gateway/batch-executor-lease.js` und
+erhält Lock, Journal, Liveness und Progress ausschließlich per Injection. Acht
+fokussierte Tests belegen ungültige, tote, doppelte und fremde PIDs sowie
+Lock-/Journalfehler und die unveränderte öffentliche Batch-Fassade. Die
 öffentlichen Exporte bleiben weiterhin in `gateway/batch.js`; die vorhandenen
 Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen.
 

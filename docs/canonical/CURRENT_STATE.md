@@ -200,8 +200,12 @@ Teilkopie. `gateway/batch-active-lock.js` kapselt die globale Prozesssperre;
 `gateway/process-liveness.js` vereinheitlicht die fail-closed PID-Liveness für
 Lock, Job-Recovery und Vorbereitungsslots. Ein Lock-Austausch zwischen Eigentumsprüfung und Löschung wird
 erkannt; ein neuer Owner bleibt erhalten. Nur `ESRCH` beweist einen toten
-Prozess, während `EPERM` und unbekannte Fehler blockierend bleiben. Die weiteren
-Schnitte trennen vollständiges Journal/Recovery,
+Prozess, während `EPERM` und unbekannte Fehler blockierend bleiben.
+`gateway/batch-executor-lease.js` kapselt Claim, Zugriffskontrolle und Release
+des lokalen Executors als injizierte Factory. Falsche oder konkurrierende PIDs,
+Lockfehler sowie Journalfehler können dadurch fokussiert geprüft werden und
+lassen einen bestehenden Marker unverändert. Die weiteren Schnitte trennen
+vollständiges Journal/Recovery,
 Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
 bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
 benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann

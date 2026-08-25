@@ -11,6 +11,7 @@ const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntri
 const { appendBatchEvidence } = require('./batch-evidence');
 const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
+const { createBatchExecutorLease } = require('./batch-executor-lease');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -47,20 +48,6 @@ function batchTtlMs() {
   // A zero-day retention deliberately expires paused batches at the end of the
   // current operation rather than retaining their source bytes.
   return retentionDays() * 24 * 60 * 60 * 1000;
-}
-
-function assertLocalExecutorAccess(state, executorPid) {
-  if (!liveLocalExecutor(state)) {
-    if (state.local_executor_pid !== undefined) {
-      delete state.local_executor_pid;
-      delete state.local_executor_started_at;
-      writeState(state);
-    }
-    return;
-  }
-  if (state.local_executor_pid !== executorPid) {
-    throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
-  }
 }
 
 // `durable: false` (only ever passed for the same-status diagnostic phase
@@ -177,6 +164,21 @@ const { batchUserStatus, publicProgress } = createBatchProgress({
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
   liveLocalExecutor
+});
+
+const {
+  assertLocalExecutorAccess,
+  claimLocalBatchExecutor,
+  releaseLocalBatchExecutor
+} = createBatchExecutorLease({
+  SafeError,
+  processAlive,
+  liveLocalExecutor,
+  acquireActiveLock,
+  releaseActiveLock,
+  readState,
+  writeState,
+  publicProgress
 });
 
 function writeTerminalEvidence(state) {
@@ -1184,48 +1186,6 @@ async function processBatchNext(token, deps = {}) {
     }
   } finally {
     active.delete(token);
-    releaseActiveLock(token);
-  }
-}
-
-function claimLocalBatchExecutor(token, pid) {
-  if (!Number.isSafeInteger(pid) || pid <= 0 || !processAlive(pid)) {
-    throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
-  }
-  acquireActiveLock(token);
-  try {
-    const state = readState(token);
-    if (liveLocalExecutor(state)) throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
-    delete state.local_executor_pid;
-    delete state.local_executor_started_at;
-    const progress = publicProgress(state);
-    if (progress.complete || (
-      progress.remaining === 0 && progress.delivery_pending === 0 && progress.mapping_pending === 0 &&
-      progress.deferred_review === 0 && progress.retryable === 0
-    )) {
-      return { ok: false, error: 'batch_not_runnable', ...progress, raw_content_sent_to_claude: false };
-    }
-    state.local_executor_pid = pid;
-    state.local_executor_started_at = new Date().toISOString();
-    writeState(state);
-    return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
-  } finally {
-    releaseActiveLock(token);
-  }
-}
-
-function releaseLocalBatchExecutor(token, pid) {
-  try { acquireActiveLock(token); } catch { return false; }
-  try {
-    const state = readState(token);
-    if (state.local_executor_pid !== pid) return false;
-    delete state.local_executor_pid;
-    delete state.local_executor_started_at;
-    writeState(state);
-    return true;
-  } catch {
-    return false;
-  } finally {
     releaseActiveLock(token);
   }
 }
