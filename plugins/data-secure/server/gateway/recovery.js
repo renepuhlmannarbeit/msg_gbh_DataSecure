@@ -4,13 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const { SafeError } = require('../runtime');
 const { SUPPORTED, roots } = require('./common');
+const { processAlive } = require('./process-liveness');
 
 const CLAIM_PATTERN = /^\.processing_([a-z0-9]+_[0-9a-f]{8})_(.+)$/i;
-
-function processAlive(pid) {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try { process.kill(pid, 0); return true; } catch { return false; }
-}
 
 function secureDirectory(directory, label) {
   const stat = fs.lstatSync(directory);

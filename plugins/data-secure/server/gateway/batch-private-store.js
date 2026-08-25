@@ -36,4 +36,4 @@ function safeRemoveWorkDirectory(token) {
   }
 }
 
-module.exports = { batchRoot, batchPath, workPath, safeRemoveWorkDirectory };
+module.exports = { TOKEN_RE, batchRoot, batchPath, workPath, safeRemoveWorkDirectory };

@@ -196,7 +196,12 @@ aufgelöste private Pfade und tokengebundenes Cleanup; `gateway/batch-snapshot.j
 kapselt Kapazität, OOXML-Preflight sowie TOCTOU-gebundene Kopie. Positive
 Partial-Writes werden vollständig geschrieben; Zero-Write, Short-Read und eine
 nachträgliche `ctime`-Änderung stoppen fail-closed und entfernen die exakte
-Teilkopie. Die weiteren Schnitte trennen vollständiges Journal/Recovery,
+Teilkopie. `gateway/batch-active-lock.js` kapselt die globale Prozesssperre;
+`gateway/process-liveness.js` vereinheitlicht die fail-closed PID-Liveness für
+Lock, Job-Recovery und Vorbereitungsslots. Ein Lock-Austausch zwischen Eigentumsprüfung und Löschung wird
+erkannt; ein neuer Owner bleibt erhalten. Nur `ESRCH` beweist einen toten
+Prozess, während `EPERM` und unbekannte Fehler blockierend bleiben. Die weiteren
+Schnitte trennen vollständiges Journal/Recovery,
 Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
 bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
 benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann
@@ -1145,7 +1150,11 @@ und verarbeiten sie weiter. Die privaten Pfade werden ausschließlich über loka
 Prozess-IPC übergeben und weder im Rückgabewert noch in MCP-Antworten gespeichert.
 Ein paralleler zweiter Intake bleibt gesperrt. Der Worker beansprucht vor der
 Verarbeitung selbst seine lokale Ausführungsberechtigung; die Elternseite trennt IPC
-nicht vor seinem eigenen Abschluss. Ein echter Child-Process-Test belegt damit einen
+nicht vor seinem eigenen Abschluss. Da unter Windows das Exit-Ereignis die bereits
+gesendete terminale IPC-Nachricht überholen kann, wartet die reine Präsentationsseite
+vor einem Fehlerhinweis ein kurzes lokales Drain-Fenster. Der Regressionstest
+erzwingt diese Reihenfolge und verhindert den früheren falschen `after_checkpoint`-
+Stopp. Ein echter Child-Process-Test belegt damit einen
 vollständigen Ein-Datei-Intake ohne Quellmetadaten in der Antwort. Die echte
 Antwortzeit, frühe Intake-Crash-Recovery und die Drei-OS-Abnahme sind weiterhin
 offene Evidenz.

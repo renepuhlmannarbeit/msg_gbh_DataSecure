@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
+const { processDefinitelyDead } = require('./process-liveness');
 
 const LEASE_SCHEMA = 'datasecure-worker-lease/1';
 const SLOT_COUNT = 2;
@@ -167,19 +168,6 @@ function releasePreparationLease(directory, lease, value = {}, options = {}) {
   } catch (error) {
     if (error instanceof SafeError) throw error;
     throw privateLeaseError();
-  }
-}
-
-function processDefinitelyDead(pid, kill = process.kill) {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try {
-    kill(pid, 0);
-    return false;
-  } catch (error) {
-    // EPERM and platform-specific failures are deliberately not interpreted as
-    // death. Availability may suffer, but an unknown owner must never be
-    // replaced by a second local worker.
-    return error?.code === 'ESRCH';
   }
 }
 

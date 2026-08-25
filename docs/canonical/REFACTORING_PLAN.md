@@ -88,6 +88,11 @@ tokengebundene Cleanup als Leaf-Modul; `gateway/batch-snapshot.js` kapselt
 Kapazität, OOXML-Preflight und TOCTOU-gebundene Kopie. Der direkte Modultest
 belegt Partial-/Zero-Write, Short-Read, `ctime`-Mutation und den unveränderten
 `batch._test`-Vertrag. Die
+globale Prozesssperre liegt in `gateway/batch-active-lock.js`; die gemeinsame
+fail-closed PID-Liveness in `gateway/process-liveness.js`.
+Der fokussierte Negativtest belegt fail-closed `EPERM` sowie, dass ein zwischen
+Prüfung und Löschung ausgetauschter Lock weder beim Release noch beim
+Dead-Owner-Reclaim entfernt wird. Die
 öffentlichen Exporte bleiben weiterhin in `gateway/batch.js`; die vorhandenen
 Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen.
 

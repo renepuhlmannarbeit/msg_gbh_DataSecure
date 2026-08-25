@@ -37,6 +37,7 @@ const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
 const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
+const { processAlive } = require('./process-liveness');
 
 // A batch worker gets one unforgeable in-process preparation capability after
 // its maintenance and audit checks succeeded.  Individual document calls keep
@@ -56,11 +57,6 @@ function throwIfAborted(signal) {
 
 function newJobId() {
   return `${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
-}
-
-function processAlive(pid) {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
 function safeWorkingTree(root) {

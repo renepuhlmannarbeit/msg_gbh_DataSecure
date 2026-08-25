@@ -19,7 +19,16 @@ const {
   regularFileStat,
   copySnapshotFile
 } = require('./batch-snapshot');
-const { batchRoot, batchPath, workPath, safeRemoveWorkDirectory } = require('./batch-private-store');
+const { TOKEN_RE, batchRoot, batchPath, workPath, safeRemoveWorkDirectory } = require('./batch-private-store');
+const {
+  activeLockPath,
+  processAlive,
+  liveLocalExecutor,
+  validActiveLock,
+  readActiveLock,
+  acquireActiveLock,
+  releaseActiveLock
+} = require('./batch-active-lock');
 const {
   createPhaseRecorder,
   createPrivateIoSummary,
@@ -27,7 +36,6 @@ const {
 } = require('./performance');
 const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('../companion/text-review');
 
-const TOKEN_RE = /^[a-f0-9]{64}$/;
 const active = new Set();
 const RETRYABLE_CODES = new Set(['REQUEST_CANCELLED', 'PARSER_TIMEOUT', 'PARSER_START_FAILED', 'PROCESSING_INTERRUPTED', 'LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE']);
 const DELIVERY_PENDING = 'delivery_pending';
@@ -39,18 +47,6 @@ function batchTtlMs() {
   // A zero-day retention deliberately expires paused batches at the end of the
   // current operation rather than retaining their source bytes.
   return retentionDays() * 24 * 60 * 60 * 1000;
-}
-
-function activeLockPath() { return path.join(batchRoot(), 'active-processing.json'); }
-
-function processAlive(pid) {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try { process.kill(pid, 0); return true; } catch { return false; }
-}
-
-function liveLocalExecutor(state) {
-  return Number.isSafeInteger(state?.local_executor_pid) && state.local_executor_pid > 0 &&
-    processAlive(state.local_executor_pid);
 }
 
 function assertLocalExecutorAccess(state, executorPid) {
@@ -65,53 +61,6 @@ function assertLocalExecutorAccess(state, executorPid) {
   if (state.local_executor_pid !== executorPid) {
     throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
   }
-}
-
-function validActiveLock(value) {
-  return Boolean(value && value.schema === 'datasecure-active-batch/1' &&
-    TOKEN_RE.test(value.token) && Number.isSafeInteger(value.pid) && value.pid > 0 &&
-    typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)));
-}
-
-function readActiveLock() {
-  const target = activeLockPath();
-  let descriptor;
-  try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    const stat = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(target);
-    if (!stat.isFile() || named.isSymbolicLink() || named.dev !== stat.dev || named.ino !== stat.ino) return null;
-    const value = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
-    return validActiveLock(value) ? value : null;
-  } catch { return null; } finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
-}
-
-function acquireActiveLock(token) {
-  const target = activeLockPath();
-  const value = { schema: 'datasecure-active-batch/1', token, pid: process.pid, created_at: new Date().toISOString() };
-  try {
-    fs.writeFileSync(target, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    return true;
-  } catch (error) {
-    if (error?.code !== 'EEXIST') throw new SafeError('Die lokale Stapelsperre konnte nicht sicher angelegt werden.');
-  }
-  const existing = readActiveLock();
-  // Only a conclusively dead, well-formed owner may be recovered. An unknown,
-  // malformed or live lock remains blocking; guessing would permit two writers.
-  if (!existing || processAlive(existing.pid)) {
-    throw new SafeError('Ein anderer lokaler DataSecure-Stapel wird bereits verarbeitet.');
-  }
-  try { fs.unlinkSync(target); } catch { throw new SafeError('Die verwaiste lokale Stapelsperre konnte nicht sicher bereinigt werden.'); }
-  try {
-    fs.writeFileSync(target, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    return true;
-  } catch { throw new SafeError('Ein anderer lokaler DataSecure-Stapel wird bereits verarbeitet.'); }
-}
-
-function releaseActiveLock(token) {
-  const existing = readActiveLock();
-  if (!existing || existing.token !== token || existing.pid !== process.pid) return;
-  try { fs.unlinkSync(activeLockPath()); } catch { /* stale lock remains fail-closed */ }
 }
 
 // `durable: false` (only ever passed for the same-status diagnostic phase

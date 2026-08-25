@@ -42,6 +42,12 @@ function terminalIntakeProgress(message) {
   } : null;
 }
 
+function afterIpcDrain(options, callback) {
+  const schedule = options.scheduleExitFinalization || ((next) => setTimeout(next, 100));
+  try { schedule(callback); }
+  catch { callback(); }
+}
+
 const PRESENTABLE_BATCH_PHASES = new Set([
   'complete',
   'awaiting_local_review',
@@ -113,10 +119,15 @@ function startLocalBatchExecutor(token, options = {}) {
     child.once?.('exit', (code) => {
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', exit_code: code,
         error_code: code === 0 ? 'NONE' : 'LOCAL_WORKER_EXITED' });
-      if (noticeShown) return;
-      noticeShown = true;
-      try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
-      catch { /* presentation never changes the privacy state */ }
+      // On Windows the child exit event can overtake the final IPC message.
+      // Give that already-sent bounded state envelope one event-loop grace
+      // window before presenting a false failure notice.
+      afterIpcDrain(options, () => {
+        if (noticeShown) return;
+        noticeShown = true;
+        try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
+        catch { /* presentation never changes the privacy state */ }
+      });
     });
     child.send({ type: 'start-local-batch', batch_token: token }, (error) => {
       lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
@@ -218,8 +229,10 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     child.once?.('exit', (code) => {
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', item_count: itemCount,
         exit_code: code, error_code: code === 0 ? 'NONE' : 'LOCAL_WORKER_EXITED' });
-      if (!intake.noticeShown) showFailureNotice(intake.checkpointCreated ? 'after_checkpoint' : 'before_checkpoint');
       pendingIntakes.delete(token);
+      afterIpcDrain(options, () => {
+        if (!intake.noticeShown) showFailureNotice(intake.checkpointCreated ? 'after_checkpoint' : 'before_checkpoint');
+      });
     });
     child.send({
       type: 'start-local-intake',
