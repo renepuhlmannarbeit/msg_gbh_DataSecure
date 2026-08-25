@@ -10,7 +10,7 @@ const {
 } = require('./common');
 const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
 const { localReviewError } = require('./batch-review-policy');
-const { batchRoot } = require('./batch-private-store');
+const { batchRoot, workPath } = require('./batch-private-store');
 
 const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
 
@@ -156,9 +156,27 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
   }
 }
 
+function exactPendingEntry(state, item, deps = {}) {
+  const pathApi = deps.path || path;
+  const pathForWork = deps.workPath || workPath;
+  const statRegularFile = deps.regularFileStat || regularFileStat;
+  if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item?.work_name || ''))) {
+    throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
+  }
+  const full = pathApi.join(pathForWork(state.token), item.work_name);
+  const stat = statRegularFile(full);
+  if (stat.size !== item.size) {
+    throw new SafeError('Die versiegelte Arbeitskopie wurde verändert. Der Lauf wurde sicher gestoppt.');
+  }
+  // Hash verification remains fused with the next mandatory streaming copy;
+  // this read-side binding performs no duplicate content read.
+  return { name: item.name, full, stat, expected_sha256: item.sha256 };
+}
+
 module.exports = {
   assertStagingCapacity,
   preflightOoxmlContainers,
   regularFileStat,
-  copySnapshotFile
+  copySnapshotFile,
+  exactPendingEntry
 };

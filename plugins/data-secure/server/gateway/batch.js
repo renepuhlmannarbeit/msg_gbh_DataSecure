@@ -24,8 +24,8 @@ const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
   assertStagingCapacity,
   preflightOoxmlContainers,
-  regularFileStat,
-  copySnapshotFile
+  copySnapshotFile,
+  exactPendingEntry
 } = require('./batch-snapshot');
 const { TOKEN_RE, batchRoot, batchPath, workPath, safeRemoveWorkDirectory } = require('./batch-private-store');
 const {
@@ -299,21 +299,6 @@ function discardIncompleteBatches() {
   } finally {
     releaseActiveLock(maintenanceToken);
   }
-}
-
-function exactPendingEntry(state, item) {
-  if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item.work_name || ''))) {
-    throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
-  }
-  const full = path.join(workPath(state.token), item.work_name);
-  const stat = regularFileStat(full);
-  if (stat.size !== item.size) {
-    throw new SafeError('Die versiegelte Arbeitskopie wurde verändert. Der Lauf wurde sicher gestoppt.');
-  }
-  // The next mandatory local copy verifies this digest while streaming the
-  // exact sealed bytes into its isolated job. That preserves the tamper gate
-  // without reading the work copy once just for hashing and again for copying.
-  return { name: item.name, full, stat, expected_sha256: item.sha256 };
 }
 
 function invalidateUnpublishedBatchCopies(state, deps = {}, exceptItem = null) {

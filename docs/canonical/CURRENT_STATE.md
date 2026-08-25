@@ -245,7 +245,11 @@ exakten verwaisten Intent und jeder unsichere Zustand bleibt pending.
 `gateway/batch-intake.js` bindet den deklarierten Dateinamen vor jedem
 Metadatenzugriff an den tatsächlichen absoluten Basename, lehnt doppelte Quellen
 ab und hält Journal und versiegelten Work-Baum auch dann gemeinsam recoverable,
-wenn der Parent-Fsync erst nach dem atomaren Journal-Rename fehlschlägt. Danach folgen
+wenn der Parent-Fsync erst nach dem atomaren Journal-Rename fehlschlägt.
+`gateway/batch-snapshot.js` bindet beim späteren Review und Processing den
+gesicherten Work-Namen, regulären Dateityp, die exakte Größe und den gespeicherten
+Streaming-Hash-Vertrag wieder an dieselbe Arbeitskopie, ohne sie vor der ohnehin
+nötigen isolierten Kopie ein zweites Mal zu lesen. Danach folgen
 Originalschutz, internes Legacy-Intake, benutzergebundene Verschlüsselung,
 Distribution, Inhaltsgrenze und erst dann Performanceaktivierung sowie
 Formaterweiterung.
@@ -340,6 +344,12 @@ späteren Zwei-Worker-Optimierung.
 Terminale Stapel ergänzen dort einen atomaren JSON-Nachweis mit nur aggregierten
 Zählern, Versionen, Regelständen und validierten festen Fehlercodes. Auch dieser
 Nachweis enthält keine Namen, Pfade, Inhalte, Hashes, Pseudonyme oder Batch-IDs.
+Ein aktuelles P1-Durability-Review hat jedoch eine Crashlücke zwischen terminalem
+Journal-Commit und diesem best-effort Append bestätigt: Ein fehlgeschlagener
+Append ist noch nicht durable als reparaturpflichtig markiert; ein naiver Retry
+könnte umgekehrt einen doppelten Record erzeugen. Bis ein opaker idempotenter
+Receipt-/Pending-Vertrag implementiert ist, ist der Nachweis daher nicht als
+exakt-einmal crashfest belegt; freigegebene Pakete werden davon nicht zurückgenommen.
 
 Zielvertrag ergänzt: `contracts/BATCH_SNAPSHOT_V1.md` legt private atomare Kopien,
 Originalunabhängigkeit, Journalzustände, Crashfenster und Löschregeln für BL-011.1

@@ -91,8 +91,10 @@ Expiry-Cleanup. Nicht parsebare Ablaufdaten werden jetzt in beiden Pfaden
 fail-closed abgelehnt.
 `gateway/batch-private-store.js` trennt die dynamischen privaten Pfade und das
 tokengebundene Cleanup als Leaf-Modul; `gateway/batch-snapshot.js` kapselt
-Kapazität, OOXML-Preflight und TOCTOU-gebundene Kopie. Der direkte Modultest
-belegt Partial-/Zero-Write, Short-Read, `ctime`-Mutation und den unveränderten
+Kapazität, OOXML-Preflight, TOCTOU-gebundene Kopie und nun auch die spätere
+Read-side-Bindung der versiegelten Arbeitskopie. Der direkte Modultest belegt
+Partial-/Zero-Write, Short-Read, `ctime`-Mutation, sichere Work-Namen,
+Größenbindung ohne zweiten Inhaltsleselauf und den unveränderten
 `batch._test`-Vertrag. Die
 globale Prozesssperre liegt in `gateway/batch-active-lock.js`; die gemeinsame
 fail-closed PID-Liveness in `gateway/process-liveness.js`.
@@ -139,6 +141,10 @@ unsichere Journalnachprüfung Journal und versiegelte Arbeitskopien gemeinsam
 für die Recovery erhält. Explizites Resume/Discard, Verarbeitung/Commit,
 Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
 `batch.js`; der nächste R2-Schnitt wird erneut als kleinster Leaf gewählt.
+Als nächster P1-Schnitt wird der terminale Nachweis separat transaktional
+geschlossen: durable Pending-/Exported-Markierung, opake idempotente Receipt-ID
+und Recovery für Append- sowie Marker-Commit-Crashfenster. Der Nachweis bleibt
+rein lokal und darf ein bereits verifiziertes Paket niemals zurücknehmen.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
