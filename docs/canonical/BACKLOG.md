@@ -17,6 +17,12 @@ trennen den noch eigenständig lieferbaren Entwicklungsanteil von echter
 menschlicher Evidenz. Die thematischen Tabellen darunter bleiben das stabile
 Storyregister.
 
+Die Implementierungs- und Migrationsreihenfolge ist zusätzlich im
+[verbindlichen Refactoring-Plan](REFACTORING_PLAN.md) festgelegt. Das Backlog
+bestimmt **was** geliefert wird; der Refactoring-Plan bestimmt die sichere
+Reihenfolge und die Gates. Abweichungen benötigen eine neue oder ersetzende
+Entscheidung.
+
 Definition of Done: Code, Tests, `BACKLOG.md`, `CURRENT_STATE.md` und
 `TRACEABILITY.md` werden gemeinsam aktualisiert. Erst danach kann eine Story in das
 Archiv verschoben werden.
@@ -28,7 +34,7 @@ DS-028, DS-029, DS-030, DS-031, DS-032, DS-033, DS-034, DS-035, DS-036, DS-037,
 DS-038, DS-039, DS-040.
 DS-041, DS-042, DS-043, DS-044, DS-045, DS-046, DS-047, DS-048, DS-049,
 DS-050, DS-051, DS-052, DS-053, DS-054, DS-055, DS-056, DS-057, DS-058,
-DS-059, DS-060.
+DS-059, DS-060, DS-061.
 
 ## Product Vision und Dokumentenkanon
 
@@ -41,6 +47,7 @@ Fresh-Install- und Cowork-Textabnahmen bleiben in BL-041 und BL-051.
 
 | Priorität | Arbeitspaket | Begründung / Reihenfolge |
 |---|---|---|
+| **P0.0** | BL-011.15: Stapelkern verhaltensneutral hinter bestehenden Verträgen zerlegen | senkt das Änderungsrisiko der folgenden Sicherheitsmigrationen |
 | **P0.1** | BL-011.14: Originale nie verändern und dauerhafte Exporte von automatischer Retention ausschließen | verhindert irreversiblen Datenverlust |
 | **P0.2** | BL-011.13: private Snapshots, Review und Pseudonymkontext OS-benutzergebunden verschlüsseln | schließt die lokale Rohdatenschutzlücke |
 | **P0.3** | BL-010.8/BL-051.1: selbsttragende Windows-/macOS-Pakete und reale Cowork-Evidenz | ohne Laufzeit kein installierbares Produkt |
@@ -120,6 +127,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | BL-011.10 | **E0 abgeschlossen; E1 offen:** Intake nach Auswahl in den lokalen Hintergrund verlagern; Cowork antwortet innerhalb weniger Sekunden ohne Quellmetadaten. | **in Arbeit** |
 | BL-011.11 | **E0 abgeschlossen; E1 offen:** Gemischtes Resume, feste I/O-Phasen, einmalige begrenzte Handoff-Dekodierung, Indexfenster und Buffer-Wipe sind regressionsgetestet, ohne Snapshot-/Swap-/Container-Gates zu lockern. Weitere I/O-Optimierung wartet auf reale Dateisystemmessung. | **in Arbeit** |
 | BL-011.12 | **E0 abgeschlossen; E1 offen:** Ein nicht importierter Zwei-Worker-Harness prüft zentrale Reihenfolge/Commit, Slots, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produktstandard bleibt seriell bis zur Windows-/macOS-Abnahme. Linux folgt später. | **in Arbeit** |
+| BL-011.15 | Stapelkern gemäß `REFACTORING_PLAN.md` verhaltensneutral in Intake/Snapshot, Journal/Recovery, Verarbeitung/Commit, Review, Veröffentlichung/Mapping und Wartung zerlegen; öffentliche Exporte und Verhalten bleiben bis zum Abschluss unverändert. | **offen** |
 | BL-011.13 | Private Snapshots, Reviewdaten und neustartfesten Pseudonymkontext pro OS-Benutzer verschlüsseln; ohne DPAPI/Keychain vor Rohschreiben stoppen. | **offen** |
 | BL-011.14 | Alle Eingangswege strikt schreibgeschützt behandeln und freigegebene Exporte/Mapping aus automatischer Retention ausschließen; explizites Löschen bleibt bestätigt möglich. | **in Arbeit** |
 | BL-024.4 | **E0 abgeschlossen; E1/E3 offen:** Der nicht importierte OCR-Session-Harness prüft geschlossenes Framing, Requestbindung, Replay, Single-Flight, Pixel-/Byte-/Zeitbudgets und Abbruch. Der sichere Einbild-Worker bleibt aktiv, bis native Per-Frame-Grenzen und Windows-/macOS-Evidenz vorliegen. Linux folgt später. | **in Arbeit** |

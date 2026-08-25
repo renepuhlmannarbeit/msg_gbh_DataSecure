@@ -163,9 +163,11 @@ nur der lokalen Regressionsprüfung; ein fehlender Zähler eines älteren Snapsh
 wird nicht nachträglich ergänzt.
 
 Das Cowork-/UX-/Performance-Review vom 24.08.2026 ist technisch konsolidiert:
-Der lokale Mehrfachpicker bleibt einziger Normal-Eingang; `Input` ist Support-only.
-Die sichtbare Routineoberfläche umfasst 9 Werkzeuge, die vollständige IT-
-Supportoberfläche 28. Jeder Toolvertrag besitzt vier explizite MCP-Risikohinweise.
+Der lokale Mehrfachpicker ist der einzige ausführbare Eingang. Die frühere
+Input-Oberfläche und ihre drei Werkzeuge sind entfernt; nur die datenbewahrende
+Upgrade-Recovery für bereits verwaiste Alt-Claims bleibt vorübergehend intern.
+Die sichtbare Routineoberfläche umfasst 8 Werkzeuge, die gesamte Oberfläche im
+IT-Supportmodus 25. Jeder Toolvertrag besitzt vier explizite MCP-Risikohinweise.
 Jeder ruhende oder terminale Stapelzustand erzeugt genau eine inhaltsfreie lokale
 Meldung mit genau einer nächsten Aktion; Fortsetzung und Review öffnen keine neue
 Dateiauswahl. Gleichnamige Quellen erhalten unabhängige opake IDs.
@@ -179,6 +181,14 @@ Eine nicht importierte Zwei-Worker-Vorbereitung und ein nicht importierter OCR-
 Session-Harness decken geschlossene Nachrichten, Reihenfolge, Crash, Replay,
 Single-Flight sowie Ressourcen-/Zeitstopps ab. Beide bleiben absichtlich außerhalb
 des Produktpfads, bis reale Drei-OS-Ressourcenevidenz vorliegt.
+
+DS-061 und `REFACTORING_PLAN.md` legen vor den folgenden Verhaltensänderungen eine
+verhaltensneutrale Zerlegung des Stapelkerns fest. Diese Strukturarbeit ist als
+BL-011.15 offen; sie trennt Intake/Snapshot, Journal/Recovery,
+Verarbeitung/Commit, Review, Veröffentlichung/Mapping und Wartung hinter der
+bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
+benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann
+Performanceaktivierung sowie Formaterweiterung.
 
 Als noch nicht aktivierte Vorbedingung für eine spätere interne Zwei-Worker-Strecke
 existiert ein eigener lokaler Zwei-Slot-Lease-Store. Seine strikt geschlossenen
@@ -1033,10 +1043,10 @@ liefert `tools/list` nur acht sichere Cowork-Aktionen (lokaler Start, tokenfreie
 Handoff, Fortsetzen, ausdrücklich bestätigtes Verwerfen, Privacy-Konfiguration und
 Ergebnisübersicht). Die Fortsetzung startet eine erforderliche lokale Fachprüfung
 selbst in einem getrennten Worker; der tokenbasierte synchrone Review ist Support.
-Der technische Input- und Privacy-Stamm sind dort auch bei
-manuell konstruierten Aufrufen gesperrt. Die vollständige 28-Werkzeug-Kompatibilitätsoberfläche bleibt
-lokal nur mit `EU_PRIVACY_SUPPORT_MODE=1` für IT-Support und vorhandene
-Recoveryfälle verfügbar. `start_completed_local_results_handoff` und
+Der Privacy-Stamm ist dort auch bei manuell konstruierten Aufrufen gesperrt; die
+drei früheren Input-Werkzeuge sind vollständig entfernt. Die gesamte
+25-Werkzeug-Oberfläche bleibt lokal nur mit `EU_PRIVACY_SUPPORT_MODE=1` für
+IT-Support und vorhandene Recoveryfälle verfügbar. `start_completed_local_results_handoff` und
 `continue_local_results_handoff` liefern höchstens fünf verifizierte
 Markdown-Ergebnisse pro Aufruf. Auswahl, Paketkennungen, Cursor und
 Leseberechtigungen bleiben im lokalen Serverprozess. Bei genau einem passenden

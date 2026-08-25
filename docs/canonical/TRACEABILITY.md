@@ -69,6 +69,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | DS-058 | BL-040, BL-044 | neutrale Ergebnisse und minimales lokales Mapping mit bedingtem relativen Pfad |
 | DS-059 | BL-011, BL-030 | verschlüsselter neustartfester Pseudonymkontext und terminale Löschung |
 | DS-060 | BL-001, BL-010, BL-020, BL-024, BL-051 | gepinnte Offline-Lieferkette, Integrität, Lizenz, SBOM und keine Runtime-Downloads |
+| DS-061 | BL-003, BL-011 | verbindliche Refactoring-/Migrationsreihenfolge, getrennte Struktur-/Verhaltensänderungen, Pflichtgates und Rollback |
 
 ## Offene Review-Nachweise vom 23.08.2026
 
@@ -91,13 +92,15 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 
 | Story | Nachweis |
 |---|---|
-| BL-011.14 (Teilnachweis) | `gateway/retention.js` und `test-retention.js` schließen freigegebene Output-Pakete aus jeder automatischen Retention aus; nur `purge_local_data` mit ausdrücklicher Bestätigung darf sie löschen. Der normale Picker-/Batchpfad verarbeitet externe Quellen bereits über private Kopien; die technische Support-Inbox bleibt bis zu ihrer Ablösung ein verwalteter Importbereich. |
+| BL-011.14 (Teilnachweis) | `gateway/retention.js` und `test-retention.js` schließen freigegebene Output-Pakete aus jeder automatischen Retention aus; nur `purge_local_data` mit ausdrücklicher Bestätigung darf sie löschen. Der normale Picker-/Batchpfad verarbeitet externe Quellen bereits über private Kopien. Die technische Input-Oberfläche ist entfernt; eine interne datenbewahrende Upgrade-Recovery bleibt bis zur verhaltensneutralen Ablösung nach R3 bestehen. |
+| BL-011.15 (Planvertrag) | DS-061 und `REFACTORING_PLAN.md` verlangen die verhaltensneutrale Zerlegung des Stapelkerns hinter der bestehenden Exportfassade. Intake/Snapshot, Journal/Recovery, Verarbeitung/Commit, Review, Veröffentlichung/Mapping und Wartung werden einzeln charakterisiert, extrahiert, regressionsgeprüft und rückrollbar committed. |
 | BL-041.9 (E0-Teilnachweis) | `server/index.js`, Skill/Promptvertrag und Cowork-Dokumententest belegen, dass pausierte Stapel keine neue Auswahl blockieren. `review-timeouts.js`, `text-review.js` und `test-local-review-executor.js` entfernen im abgekoppelten Worker den menschlichen Entscheidungs-Timeout; der synchrone Supportpfad bleibt begrenzt. `completion-summary.js` und sein Test starten die rein inhaltsfreie terminale Meldung detachiert, sodass ihr Schließen keinen Worker- oder Cowork-Aufruf blockiert. Echte Cowork-/Windows-/macOS-UX-Evidenz bleibt E1/E2. |
 
 | Story | Nachweis |
 |---|---|
 | BL-002.1 | `BUILD_INFO.json`, `manifest.json`, `gateway/status.js`, `test-manifest.js` |
-| BL-002.2 | `TARGET_CAPABILITIES.json` deckt DS-001 bis DS-060 sowie Formate, Plattformen, Grenzwerte und die getrennte Claude-Übergabe maschinenlesbar ab |
+| BL-002.2 | `TARGET_CAPABILITIES.json` deckt DS-001 bis DS-061 sowie Formate, Plattformen, Grenzwerte und die getrennte Claude-Übergabe maschinenlesbar ab |
+| BL-003.8 | `REFACTORING_PLAN.md`, `DOCUMENT_REGISTER.md`, `BACKLOG.md` und das kanonische Driftgate verankern DS-061 als verbindliche Phasen-, Migrations-, Gate- und Rollback-Reihenfolge. |
 | BL-002.3 | `test-capability-contract.js` vergleicht Ist-/Zielvertrag, Runtime, Skills, Marketplace und aktive Handbücher; Bestandteil von `npm test` |
 | BL-010.5 | `build-plugin.mjs`, `verify-plugin-zip.mjs`, `test-plugin-structure.js` und der reproduzierte RC30-Build binden ZIP und Marketplace an denselben kanonischen Pluginbaum; das ersetzt keine frische Marketplace-Installation (BL-051.2) |
 | BL-051.7 | `ci.yml`, `release-evidence.yml`, `security.yml`, `test:ci` und `test-workflow-budget.js` belegen den kostenbegrenzten automatischen Pfad und erhalten schwere Evidenz als bewusste manuelle Auswahl |
@@ -122,7 +125,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | BL-040.3 | `contracts/BATCH_EVIDENCE_V1.md`, `gateway/batch-evidence.js`, `gateway/batch.js` und `test-batch-session.js` belegen den atomaren JSON-Nachweis mit geschlossenem Feldsatz, aggregierten Zählern sowie eine explizite Leckageprobe gegen Namen, Pfade, Inhalte, Hashes und Batch-/Paket-IDs |
 | BL-042.1 | `gateway/diagnostics.js`, `index.js` und `test-diagnostics.js` belegen den bestätigungspflichtigen lokalen Diagnoseexport, Programmprüfsummen, die Abwesenheit von Namen, Pfaden, Rohinhalten und Dokumentidentifikatoren sowie den Stopp vor einem umgeleiteten Exportordner |
 | BL-042.3 | `gateway/workflow-diagnostics.js`, `gateway/batch-executor.js`, `index.js`, `test-workflow-diagnostics.js` und `test-direct-picker-intake-worker.js` belegen eine getrennte 14-Tage-Ablaufspur mit ausschließlich festen Picker-/Worker-/IPC-/Checkpoint-/Terminal-/Abschlussereignissen, begrenzten Zählern und festen Codes; Freitext, Pfade, Namen, Inhalte, Tokens, PIDs und Dokument-Hashes sind ausgeschlossen |
-| BL-042.2 (E0-Nachweis) | `server/index.js`, `test-mcp-tool-annotations.js` und `test-mcp-protocol.js` belegen für alle 28 Tools Titel und vollständige boolesche read-only/destruktiv/idempotent/open-world Annotationen einschließlich eigener Klassen für Verarbeitung, Review, Bestätigung, Verwerfen und Purge. Echte Cowork-Manual-/Auto-/Skip-Abnahme bleibt offen. |
+| BL-042.2 (E0-Nachweis) | `server/index.js`, `test-mcp-tool-annotations.js` und `test-mcp-protocol.js` belegen für alle 25 Tools Titel und vollständige boolesche read-only/destruktiv/idempotent/open-world Annotationen einschließlich eigener Klassen für Verarbeitung, Review, Bestätigung, Verwerfen und Purge. Echte Cowork-Manual-/Auto-/Skip-Abnahme bleibt offen. |
 | BL-041.6 (Teilnachweis) | `server/index.js`, `normal-path-response.js`, `test-normal-path-response.js`, der Dokument-Skill und `prompt-contract.js` trennen `local_only` von `continue_in_chat`: reine lokale Aufträge enden nach genau einem Startaufruf ohne Polling, Lesen oder Bestätigung. Erfolg, Auswahlabbruch und lokaler Startfehler verwenden jeweils feste inhaltsfreie Zustände und niemals Batch-Token, Pfad, Name oder Quelle; nur ausdrücklich gewünschte Folgeauswertung kann freigegebenes Markdown lesen. Echte Cowork-Toolfolge bleibt E1. |
 | BL-030.1 | `contracts/BATCH_PSEUDONYM_V1.md` und `test-architecture-contracts.js` definieren restart-stabile stapelweite Pseudonyme ohne Rohwerttabelle |
 | BL-030.2 (Pilot, kein Release) | `server/batch-secret-store.js` und `test-batch-secret-store.js` belegen einen dynamischen nativen Keyring-Adapter mit festem Servicenamen, opakem Batch-Account, 256-Bit-Secret und fail-closed Unverfügbarkeit ohne Datei-/Umgebungsvariablen-Fallback; Drei-OS-Bundle-Evidenz bleibt offen |

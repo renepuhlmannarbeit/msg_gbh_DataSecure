@@ -14,22 +14,23 @@ Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
 2. [PRODUCT_VISION.md](PRODUCT_VISION.md) – Problem, Nutzen, Experience-Prinzipien und Erfolg.
 3. [PRODUCT.md](PRODUCT.md) – daraus abgeleitete Fähigkeiten und Benutzerreisen.
 4. [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) – technische Zielgrenzen.
-5. [BACKLOG.md](BACKLOG.md) – einzige priorisierte Arbeitsliste für das Zielprodukt.
-6. [CURRENT_STATE.md](CURRENT_STATE.md) – belegter RC44-Ist-Abgleich, damit vorhandene
+5. [REFACTORING_PLAN.md](REFACTORING_PLAN.md) – verbindliche Phasen-, Migrations-, Gate- und Rollback-Reihenfolge.
+6. [BACKLOG.md](BACKLOG.md) – einzige priorisierte Arbeitsliste für das Zielprodukt.
+7. [CURRENT_STATE.md](CURRENT_STATE.md) – belegter RC44-Ist-Abgleich, damit vorhandene
    Funktionen nicht erneut geplant werden.
-7. [TRACEABILITY.md](TRACEABILITY.md) – Zuordnung jeder Entscheidung zu Umsetzung
+8. [TRACEABILITY.md](TRACEABILITY.md) – Zuordnung jeder Entscheidung zu Umsetzung
    und Abnahmenachweis.
-8. [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json) – maschinenlesbarer,
+9. [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json) – maschinenlesbarer,
    ausdrücklich nicht als Runtime-Freigabe verwendbarer Zielvertrag.
-9. [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – verbindliches
+10. [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – verbindliches
    Wiederverwendungsregister mit Kandidaten, Ausschlüssen und Prüfgates.
-10. [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) – pro aktiver Story
+11. [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) – pro aktiver Story
    klare Trennung zwischen lokaler Entwicklung und erforderlicher Zielsystem-, Nutzungs-
    oder Fachevidenz.
-11. [DOCUMENT_REGISTER.md](DOCUMENT_REGISTER.md) – Rang, Rolle und Änderungsweg aller Dokumente.
-12. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) – abgeschlossene
+12. [DOCUMENT_REGISTER.md](DOCUMENT_REGISTER.md) – Rang, Rolle und Änderungsweg aller Dokumente.
+13. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) – abgeschlossene
    Stories mit kompaktem Abschlussnachweis; nicht als aktive Arbeitsliste verwenden.
-13. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben den freigegebenen Iststand oder
+14. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben den freigegebenen Iststand oder
    liefern Detailwissen, sind aber nicht entscheidungsführend.
 
 Für die tatsächlich erforderlichen menschlichen Nachweise gibt es zusätzlich den

@@ -432,3 +432,13 @@ Open Source bleibt bevorzugt, wird aber nur gepinnt, integritätsgeprüft,
 lizenzkompatibel, SBOM-erfasst und ohne Runtime-Downloads ausgeliefert. Jede
 Komponente muss die Offline-, Format-, Ressourcen- und Negativgates bestehen. Diese
 Entscheidung präzisiert DS-038.
+
+## DS-061 – Verbindlicher Refactoring- und Migrationsplan
+
+`REFACTORING_PLAN.md` übersetzt die beschlossenen Produkt- und Architekturgrenzen
+in eine verbindliche, rückrollbare Implementierungsreihenfolge. Strukturänderung
+und Verhaltensänderung werden getrennt; Originalschutz und benutzergebundene
+Verschlüsselung gehen Distribution, Performance und Formaterweiterung voraus.
+Charakterisierungs-, Negativ-, Recovery-, Dokumentations- und lokale CI-Gates sind
+für jeden Teilschnitt Pflicht. Diese Entscheidung ergänzt DS-057 um den
+Implementierungs- und Migrationsrang, ohne frühere Produktentscheidungen zu ändern.

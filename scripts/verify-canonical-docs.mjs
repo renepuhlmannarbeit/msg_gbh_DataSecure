@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = path.join(root, 'docs', 'canonical');
-const required = ['README.md', 'DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md', 'DOCUMENT_REGISTER.md', 'BACKLOG.md', 'BACKLOG_ARCHIVE_2026-08.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md', 'BACKLOG_EVIDENCE_MATRIX.md'];
+const required = ['README.md', 'DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md', 'REFACTORING_PLAN.md', 'DOCUMENT_REGISTER.md', 'BACKLOG.md', 'BACKLOG_ARCHIVE_2026-08.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md', 'BACKLOG_EVIDENCE_MATRIX.md'];
 
 for (const file of required) {
   if (!fs.existsSync(path.join(canonical, file))) throw new Error(`missing canonical document: ${file}`);

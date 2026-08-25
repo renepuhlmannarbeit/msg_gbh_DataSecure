@@ -22,6 +22,7 @@ Formate, Plattformen oder Cowork-Oberflächen. Laufende Teilnachweise bleiben im
 | BL-003.5 | RC44-IST/SOLL und Dokumentationsdrift erfasst | `CURRENT_STATE.md`, priorisierter IST/SOLL-Schnitt |
 | BL-003.6 | Maschinenvertrag, Traceability, Evidenz- und OSS-Register synchronisiert | `TARGET_CAPABILITIES.json`, Dokumententest |
 | BL-003.7 | README, Handbücher, Skills und Pakettexte auf belegten RC44-Iststand synchronisiert | RC44-Baseline `0098ae0`, vollständiger CI-Nachweis |
+| BL-003.8 | Verbindlichen Refactoring- und Migrationsplan mit Phasen, Gates, Rollback und Schlüsselverlust-Checkpoint kanonisiert | DS-061, `REFACTORING_PLAN.md`, Dokumentenregister und Driftgate |
 | BL-010.5 | ZIP-/Marketplace-Quellgleichheit belegt | `build-plugin.mjs`, `verify-plugin-zip.mjs`, `test-plugin-structure.js`; frische Marketplace-Installation bleibt separat BL-051.2 |
 | BL-011.1 | Unveränderlicher privater Stapel-Snapshot spezifiziert | `contracts/BATCH_SNAPSHOT_V1.md` |
 | BL-011.2 | 100-Dateien-/500-MB-Grenze vor privater Kopie durchgesetzt | `test-batch-session.js` |
