@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 25.08.2026 · gilt für RC41 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 25.08.2026 · gilt für RC42 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -50,7 +50,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | BL-012.5 | Tastatur, Skalierung und Screenreader der lokalen Dialoge abnehmen. | **E2, ja:** Accessibility-Tester:in prüft Fokusreihenfolge, Escape, Skalierung und Screenreader auf Windows/macOS/Linux. |
 | BL-012.6 | **E0 abgeschlossen:** Status und genau eine nächste sichere Aktion sind alltagssprachlich vereinheitlicht; unbekannte/defekte Zustände stoppen. | **E2, ja:** Fachfremde Pilotperson erklärt nach jedem synthetischen Stop, was passiert ist und was sie als Nächstes tun würde. |
 | BL-012.7 | **E0 abgeschlossen:** Pickertext, doppelte lokale Quelldateinamen, Fortsetzung ohne Neuauswahl und Dokumentationsdrift sind regressionsgetestet. | **E2, ja:** Pilotperson startet ohne Anleitung und erreicht ein verwendbares Markdown-Ergebnis mit höchstens drei bewussten Aktionen. |
-| BL-031.1 | Vor der gruppierten lokalen Entscheidung den reproduzierten RC41-P0-Kontextfehler E0 schließen: beliebige Kundendomain und verbreitete Kunden-/Arbeitgeberformulierungen dürfen nicht durch Zertifikats-Cues geschützt werden; echte Aussteller müssen erhalten bleiben. | **Evidenzstufe unverändert E1 + E3, ja:** Nach grünem E0-Fix prüft IT Gruppierung/Resume; Fachvertretung bestätigt Kontexttrennung und dass nur identische Kontextstellen gemeinsam entschieden werden dürfen. |
+| BL-031.1 | **E0 P0-Kontextfehler (RC41) mit Commit `32914da`/RC42 geschlossen:** Gruppierte mehrdeutige Fundstellen lokal im Stapel entscheiden. | **Evidenzstufe unverändert E1 + E3, ja:** IT prüft Gruppierung/Resume; Fachvertretung bestätigt, dass nur identische Kontextstellen gemeinsam entschieden werden dürfen. |
 | BL-032.1 | Mehrdeutigkeitsdialog auf allen Ziel-OS gleich sicher liefern. | **E1 + E2, ja:** Jede Plattform testet Beibehalten/Anonymisieren/Vertagen/Abbruch; beobachtete Person prüft Verständlichkeit. |
 | BL-032.2 | RAM-only-Passwortweg an einen geprüften lokalen Entschlüsseler binden. | **E1 + E3, ja:** Security prüft Speicher-/Log-/CLI-Grenzen und IT testet verschlüsselte synthetische Office-Dateien auf drei OS. |
 | BL-041.1 | Beide Skills auf exakt denselben Jobvertrag führen. | **E1, ja:** In echter Claude-UI beide Skills starten und Toolfolge sowie Hostgate vergleichen. |

@@ -1,6 +1,6 @@
-# RC41-Ist-Abgleich zum kanonischen Backlog
+# RC42-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 25.08.2026 · geprüfter Produktstand: RC41
+Stand: 25.08.2026 · geprüfter Produktstand: RC42
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -770,11 +770,22 @@ verwendet, nicht zur Laufzeit abgefragt und enthalten weder Prüfdaten noch eine
 Aussage über die individuelle Gültigkeit eines Zertifikats. Der gemeinsame lokale
 Katalogtest prüft Aussteller-Aliase und gepflegte Codes separat: Sie bleiben nur im
 expliziten Zertifikatskontext erhalten und schützen keinen Arbeitgeber oder Kunden.
-Die RC38-/RC40-Regressionen schließen mehrere konkrete Fließtextlücken, sind aber
-nach dem RC41-Gegenreview noch keine vollständige Kontextabdeckung: beliebige Domains
-hinter einem vorherigen Credential-Cue sowie die Formulierungen `Tätigkeit für` und
-`im Auftrag von` können weiterhin einen Kunden-/Arbeitgeberbezug schützen. Dieser
-P0-Rest ist im aktiven Backlog und einem engen Folgeauftrag festgehalten.
+Die RC38-/RC40-Regressionen schließen mehrere konkrete Fließtextlücken; das
+RC41-Gegenreview fand darüber hinaus, dass beliebige Domains hinter einem
+vorherigen Credential-Cue sowie die Formulierungen `Tätigkeit für` und
+`im Auftrag von` weiterhin einen Kunden-/Arbeitgeberbezug schützen konnten, und dass
+ein mehrzeilig genannter beziehungsweise signalworthaltiger echter Aussteller
+umgekehrt über-redigiert wurde. Commit `32914da` (RC42) bindet die Ausstellerzuordnung
+seither eng an die konkrete Fundstelle (explizite Ausstellerphrase unmittelbar davor,
+auch über einen Zeilenumbruch hinweg, oder ein Zertifikatstitel unmittelbar danach)
+statt an einen beliebig weit entfernten Credential-Cue auf derselben Zeile, ergänzt
+die genannten Kunden-/Arbeitgeberformulierungen und lässt eine signalworthaltige
+Ausstellerorganisation nur bei unmittelbar folgendem Zertifikatstitel gelten. Zehn
+neue Fälle in `tests/test-credential-catalog.js` reproduzieren jede der fünf
+RC41-Lücken gegen den Vor-Fix-Stand und bestehen danach; die volle `npm run test:ci`-
+Kette blieb grün. Der P0-Rest aus dem RC41-Gegenreview gilt damit als E0
+geschlossen; `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` dokumentiert
+Reproduktionen und Abnahme.
 Der gemeinsame lokale
 Abschlussdialog kann jetzt eine bewusst gewählte Entscheidung ausschließlich für
 Fundstellen mit identischer normalisierter vollständiger Kontextzeile übernehmen;

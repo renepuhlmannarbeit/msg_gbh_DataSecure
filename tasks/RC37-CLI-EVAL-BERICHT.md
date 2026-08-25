@@ -126,6 +126,39 @@ enge Folgeauftrag `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` dokumentier
 Reproduktionen, Grenzen und Abnahmekriterien; gemäß Gegenreview-Auftrag wurde die
 Produktivlogik nicht verändert.
 
+**Nachtrag (Commit `32914da`, RC42):** Der Folgeauftrag
+`tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` wurde vollständig abgearbeitet.
+`isCredentialIssuerDomain()` in `plugins/data-secure/server/privacy/credentials.js`
+band die Ausstellerzuordnung neu eng an die konkrete Fundstelle: Ein Credential-Cue
+schützt eine Domain nur noch, wenn eine explizite Ausstelleranzeige
+(„ausgestellt von/durch“, „issued by“, „certified by“, „accredited by“) unmittelbar
+davor steht — auch auf der unmittelbar vorangehenden Zeile für kurze
+Zweizeilenblöcke — oder wenn ein Zertifikatstitel unmittelbar danach beginnt. Damit
+lässt RC42 `alpha-health.de` in „Zertifikat: AWS Certified Cloud Practitioner –
+weitere Informationen bei alpha-health.de“ wieder als Unter-Redaktion zu, schützt
+aber weiterhin einen mehrzeiligen echten Aussteller wie „Zertifikat ausgestellt
+von\nScrum.org“ vor der zuvor bestehenden Über-Redaktion. `NON_ISSUER_LABEL_RE`
+erhielt zusätzlich die nominale Form „Tätigkeit für“ und die Kundenbeziehung
+„im Auftrag von“ (samt „on behalf of“/„commissioned by“ für die bereits
+dokumentierte englische Sprachabdeckung). `inCredentialContext()` erlaubt einer
+Organisation, deren rollenwort-Präfix in ihren eigenen Namen eingeflossen ist
+(„Customer Institute GmbH“), nur dann den Ausstellerstatus, wenn unmittelbar im
+Anschluss auf derselben Zeile ein Zertifikatstitel folgt — ein Komma oder
+Satzabbruch erzwingt weiterhin die normale Kundenredaktion, sodass ein echter
+Kunde mit anschließendem, nicht direkt anschließendem Zertifikatstext („Kunde
+TechCorp Beispiel GmbH, Certified Scrum Master Schulung durchgeführt.“) redigiert
+bleibt. Die Prüfung entfernt außerdem die vom Wörterbucheintrag „Alias ohne
+Rechtsform“ hinterlassene Rechtsformlücke, bevor sie auf einen folgenden Titel
+testet, weil dieser kürzere Alias-Fundort vor der Rechtsform statt vor dem Titel
+endet. Zehn neue Regressionstests in `tests/test-credential-catalog.js` reproduzieren
+jeden der drei P0-Unter-Redaktions- und zwei Über-Redaktionsfälle gegen den
+Vor-Fix-Stand und bestehen danach, einschließlich einer CSV-Zellen-Variante und
+eines Schutztests für den Komma-getrennten Kundenfall. Version auf `3.2.0-rc42`
+erhöht; `npm run test:ci`, `node tests/test-credential-catalog.js` (24/24),
+`node tests/test-pii-regression.js` (79/79), `node tests/test-detector-benchmark.js`
+(3/3), `npm run build:plugin`, `npm run test:plugin-zip` und
+`claude plugin validate plugins/data-secure` liefen danach erneut vollständig grün.
+
 Aus den drei in diesem Bericht (Abschnitt 5) ausgeführten Smoke-Tests selbst ergab sich
 kein reproduzierbarer Fehler — sie deckten diesen Fall nicht ab.
 
@@ -170,6 +203,19 @@ gezielte Tests verlangen würde (Auftrag Abschnitt 10, zweiter Absatz).
 | `claude plugin validate plugins/data-secure` | 0 | „Validation passed“ |
 | `git diff --check` | 0 | vor Dokumentationsänderung sauber |
 
+**P0-Folgeauftrag-Abarbeitung am 25.08.2026 (Commit `32914da`):**
+
+| Befehl | Exitcode | Ergebnis |
+|---|---:|---|
+| `node tests/test-credential-catalog.js` | 0 | 24/24 grün, davon 10 neu |
+| `node tests/test-pii-regression.js` | 0 | 79/79 grün |
+| `node tests/test-detector-benchmark.js` | 0 | 3/3 grün |
+| `npm run test:ci` | 0 | vollständig grün |
+| `npm run build:plugin` | 0 | RC42 gebaut, 350 Einträge |
+| `npm run test:plugin-zip` | 0 | 150/150 Kontraktfälle, 350 ZIP-Einträge, PASS |
+| `claude plugin validate plugins/data-secure` | 0 | „Validation passed“ |
+| `git diff --check` | 0 | keine Whitespace-/Konflikt-Reste |
+
 ## 5. Claude-CLI-Eval-Ergebnis, With/Without-Vergleich und Gesamtkosten
 
 **Formale Ablation nicht möglich** (Blocker, siehe oben). Ersatzweise wurden drei reale,
@@ -209,7 +255,7 @@ möglich — siehe Risiken unten).
 - Nach dem Fix neu gebaut und erneut mit `npm run test:plugin-zip` sowie
   `claude plugin validate plugins/data-secure` erfolgreich geprüft.
 
-**Aktueller Gegenreview-Stand nach allen vier Fix-Commits:**
+**Gegenreview-Stand nach allen vier Fix-Commits (vor dem RC42-Nachtrag):**
 
 - Version: `3.2.0-rc41`
 - ZIP-Pfad: `dist/DataSecure-Privacy-Preflight-v3.2.0-rc41.zip`
@@ -218,6 +264,19 @@ möglich — siehe Risiken unten).
 - Aussagegrenze: reproduzierbares Artefakt und grüne vorhandene Suite; die in
   Abschnitt 3 dokumentierten P0-Kontextfälle blockieren dennoch eine
   Releasebewertung von RC41.
+
+**Nach dem P0-Fix (Commit `32914da`), da der Folgeauftrag Produktivlogik ändert:**
+
+- Version: `3.2.0-rc42`
+- ZIP-Pfad: `dist/DataSecure-Privacy-Preflight-v3.2.0-rc42.zip`
+- SHA-256: `1e09b8688cc6958c67958990910aba276e2bf4a2322983ca35aa996ef96d43cf`
+- Eigener Rebuild und `npm run test:plugin-zip`: erfolgreich, 350 Einträge; SHA-256
+  unabhängig mit `sha256sum` gegengeprüft.
+- Aussagegrenze: Alle drei reproduzierten P0-Unter-Redaktionsfälle und beide
+  begleitenden Über-Redaktionsfälle aus Abschnitt 3 sind regressionsgetestet
+  geschlossen. Das Residual-Gate und die bestehenden Unter-Redaktionsgates wurden
+  nicht gelockert (`npm run test:ci` vollständig grün). Menschliche E1-/E2-/E3-
+  Nachweise aus Abschnitt 8 bleiben unverändert offen.
 
 ## 7. Performance-Ergebnisse
 
@@ -236,15 +295,19 @@ Dateisystem-Gegenproben bleiben E1.
 
 ## 8. Verbleibende Risiken und ausschließlich menschlich ausführbare Prüfungen
 
-**Neu releaseblockierend aus dem RC41-Gegenreview:**
-- **P0 Zertifikats-/Kundenkontext:** beliebige Kunden-Domain hinter einem vorherigen
-  Credential-Cue sowie verbreitete Kunden-/Arbeitgeberformulierungen können
-  unredigiert bleiben. Das ist ein eigenständig behebbarer E0-Codebefund, keine
-  menschliche Abnahme. Folgeauftrag:
-  `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md`.
-- **P2 Durability-Evidenz:** Fsync-Zähltest plattformneutral machen und gezielte
-  Persistenz-/Crash-Injection ergänzen. Statusbasierte Prozess-Recovery ist bereits
-  grün; E1-Dateisystemnachweise bleiben getrennt.
+**Aus dem RC41-Gegenreview, Stand nach dem RC42-Nachtrag:**
+- **P0 Zertifikats-/Kundenkontext — geschlossen (Commit `32914da`, RC42):** Die drei
+  reproduzierten Unter-Redaktionsfälle (beliebige Kunden-Domain hinter einem
+  vorherigen Credential-Cue, „Tätigkeit für“, „im Auftrag von“) sowie die zwei
+  begleitenden Über-Redaktionsfälle (mehrzeiliger Aussteller, signalworthaltiger
+  Ausstellername) sind regressionsgetestet behoben; `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md`
+  ist damit fachlich abgearbeitet. Verbleibend: keine eigenständige E0-Restarbeit;
+  die grundsätzliche Kontextgrammatik bleibt naturgemäß nicht beweisbar vollständig
+  und sollte bei künftigen Funden weiter geschlossen werden.
+- **P2 Durability-Evidenz — weiterhin offen, nicht Teil dieses Nachtrags:** Fsync-
+  Zähltest plattformneutral machen und gezielte Persistenz-/Crash-Injection
+  ergänzen. Statusbasierte Prozess-Recovery ist bereits grün; E1-Dateisystemnachweise
+  bleiben getrennt.
 
 **Blockierend für den eigentlichen Auftragskern:**
 - **`claude plugin eval`-Freischaltung** — kleinste nötige menschliche Handlung: über

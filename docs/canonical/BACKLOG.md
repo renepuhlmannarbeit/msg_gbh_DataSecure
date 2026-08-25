@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 25.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC41
+Stand: 25.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC42
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und
@@ -29,9 +29,15 @@ DS-038, DS-039, DS-040.
 
 ## Das kann ich noch eigenständig erledigen
 
+Der RC41-P0-Fund (BL-031.1 / DS-012, `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md`)
+ist mit Commit `32914da` (RC42) regressionsgetestet geschlossen: Beliebige
+Kunden-Domains hinter einem Credential-Cue werden wieder redigiert, „Tätigkeit für“
+und „im Auftrag von“ werden erfasst, und echte mehrzeilige beziehungsweise
+signalworthaltige Aussteller bleiben erhalten. Der bisherige P0-E0-Arbeitspunkt
+entfällt damit.
+
 | Priorität | Story | Nächster E0-Abschluss |
 |---|---|---|
-| **P0** | BL-031.1 / DS-012 | Den engen Folgeauftrag `tasks/FOLGEAUFTRAG-P0-CREDENTIAL-CONTEXT-RC41.md` abarbeiten: beliebige Kunden-Domains trotz Credential-Cue redigieren, verbreitete Kunden-/Arbeitgeberformulierungen erfassen und echte mehrzeilige beziehungsweise signalworthaltige Aussteller erhalten. |
 | **P2** | BL-050.3 | Den RC39-Fsync-Vertragstest plattformneutral formulieren und eine gezielte Persistenz-/Crash-Injection für non-durable Zwischenmarker ergänzen; die bestehende Status-Recovery bleibt unverändert. |
 
 Die übrige Review-Arbeit an lokalen Meldungen, Picker/Support-Trennung, Toolvertrag,
@@ -83,7 +89,7 @@ genannte E1-/E2-/E3-Evidenz.
 | BL-012.5 | Tastatur, Skalierung und Screenreader auf drei OS abnehmen. | **in Arbeit** |
 | BL-012.6 | **E0 abgeschlossen; E2 offen:** Anwenderstatus und genau eine nächste sichere Aktion sind vereinheitlicht; beschädigte Checkpoints bleiben fail-closed. | **in Arbeit** |
 | BL-012.7 | **E0 abgeschlossen; E2 offen:** Kurzer Picker-/Ergebnisweg, gleichnamige Quellen über opake IDs und Fortsetzung ohne Neuauswahl sind technisch regressionsgetestet; verständlich abnehmen. | **in Arbeit** |
-| BL-031.1 | Fundstellen gruppiert und lokal im Stapel entscheiden; zuvor den reproduzierten P0-Zertifikatskontext-Befund aus RC41 schließen. | **in Arbeit** |
+| BL-031.1 | **E0 P0-Kontextbefund (RC41) abgeschlossen:** Fundstellen gruppiert und lokal im Stapel entscheiden. | **in Arbeit** |
 | BL-032.1 | Mehrdeutigkeitsdialog plattformgleich liefern. | **in Arbeit** |
 | BL-032.2 | Passwortweg ausschließlich lokal und nur im RAM implementieren; geprüften Entschlüsseler erst danach anbinden. | **in Arbeit** |
 | BL-041.1 | **E0 abgeschlossen; E1 offen:** Beide Skillstarts verwenden denselben Picker-/Jobvertrag; in echter Claude-UI beobachten. | **in Arbeit** |
