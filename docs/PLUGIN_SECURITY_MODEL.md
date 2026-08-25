@@ -174,6 +174,16 @@ by its directory mtime. Hidden staging directories are excluded. A locked or
 otherwise undeletable entry is recorded in `privacy_status` and does not abort
 document processing.
 
+Before automatic Output cleanup, every open batch journal is inspected for
+`delivery_pending` and `mapping_pending` package references. Those packages are
+protected even after their ordinary expiry. If the journal directory or any
+journal cannot be read and validated completely, automatic cleanup skips the
+entire Output scope; `privacy_status` reports
+`retention_output_protection_complete=false`. This is deliberately fail-closed:
+an inspection fault may delay deletion but can never narrow protection and delete
+a package still needed for delivery or mapping. A separately confirmed manual
+purge remains authoritative.
+
 For a review entry, expiry removes preview image bytes but keeps its
 `.review.json` evidence. This deliberately includes pending reviews: an
 unreviewed applicant photo must not live forever merely because nobody made a

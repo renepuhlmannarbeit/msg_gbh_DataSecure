@@ -46,6 +46,10 @@ function patchText(rel, pattern, replacement) {
 patchJson('package.json', (d) => {
   d.version = target;
 });
+patchJson('package-lock.json', (d) => {
+  d.version = target;
+  if (d.packages?.['']) d.packages[''].version = target;
+});
 patchJson('manifest.json', (d) => {
   d.version = target;
 });

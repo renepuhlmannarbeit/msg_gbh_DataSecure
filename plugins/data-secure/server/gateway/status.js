@@ -9,14 +9,19 @@ const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
 const { companionCapabilities } = require('../companion/job-store');
 const { companionRetentionStatus } = require('../companion/retention');
-const { recoverableBatchStatus, localCleanupStatus, openBatchPackageIds } = require('./batch');
+const { recoverableBatchStatus, localCleanupStatus, openBatchPackageProtection } = require('./batch');
 const { localIntakeActive } = require('./batch-executor');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { runtimeInfo } = require('../runtime-info');
 
 function genericStatus(options = {}) {
   const engine = readStatus();
-  const retention = retentionStatus({ ...options, protectedIds: openBatchPackageIds() });
+  const outputProtection = openBatchPackageProtection();
+  const retention = retentionStatus({
+    ...options,
+    protectedIds: outputProtection.ids,
+    outputProtectionComplete: outputProtection.complete
+  });
   const audit = auditStatus();
   const companion = companionCapabilities();
   const companionRetention = companionRetentionStatus(options);
@@ -56,6 +61,7 @@ function genericStatus(options = {}) {
     visual_review_items: listReviewItems().items.length,
     retention_days: retention.retention_days,
     retention_due_entries: retention.due_entries,
+    retention_output_protection_complete: retention.output_protection_complete,
     retention_last_cleanup: retention.last_cleanup,
     audit_schema: audit.schema,
     audit_receipts_retained: audit.receipts_retained,

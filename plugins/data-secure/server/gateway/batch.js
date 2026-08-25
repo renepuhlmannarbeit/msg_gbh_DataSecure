@@ -316,18 +316,55 @@ function releaseActiveLock(token) {
 function writeState(state) {
   const target = batchPath(state.token);
   const temporary = `${target}.tmp_${crypto.randomBytes(6).toString('hex')}`;
-  const payload = `${JSON.stringify(state)}\n`;
+  const payload = Buffer.from(`${JSON.stringify(state)}\n`, 'utf8');
   // The batch journal is the single source of truth for in-flight items; an
   // unsynced write can survive a process crash but not a power loss between
   // the write and the rename, letting the rename land the old journal back.
-  const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
   try {
-    fs.writeSync(fd, payload, 0, 'utf8');
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
+    const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+    try {
+      writeFully(fd, payload);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(temporary, target);
+    syncParentDirectory(target);
+  } catch (err) {
+    // A failed short write or flush must never leave a journal-looking
+    // temporary file behind. The old atomically published state remains the
+    // source of truth; cleanup is bounded to the exact random temporary path.
+    try { fs.unlinkSync(temporary); } catch { /* absent or already renamed */ }
+    throw err;
   }
-  fs.renameSync(temporary, target);
+}
+
+function writeFully(fd, payload, io = fs) {
+  const bytes = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload), 'utf8');
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = io.writeSync(fd, bytes, offset, bytes.length - offset, null);
+    if (!Number.isSafeInteger(written) || written <= 0 || written > bytes.length - offset) {
+      throw new Error('BATCH_JOURNAL_PARTIAL_WRITE');
+    }
+    offset += written;
+  }
+  return offset;
+}
+
+function syncParentDirectory(target, io = fs, platform = process.platform) {
+  // Windows does not provide the same portable directory-fsync contract.
+  // The journal file itself is flushed above; POSIX additionally persists the
+  // rename metadata before the state transition is reported as durable.
+  if (platform === 'win32') return false;
+  let descriptor;
+  try {
+    descriptor = io.openSync(path.dirname(target), io.constants.O_RDONLY);
+    io.fsyncSync(descriptor);
+    return true;
+  } finally {
+    if (descriptor !== undefined) io.closeSync(descriptor);
+  }
 }
 
 function readState(token) {
@@ -363,19 +400,20 @@ function readState(token) {
 // Cross-references every still-open batch item with the Output scope so
 // retention never deletes a package a batch still needs to reach delivery or
 // mapping. Deliberately read-only (unlike readState) and tolerant of anything
-// malformed: this only ever widens a protection set consulted by name against
-// the real Output directory, so a bad or stale journal can at most delay a
-// cleanup, never touch data. Bounded by the batch's own TTL: cleanupExpired-
-// BatchSnapshots reaps the journal itself on the normal schedule, and its
-// packages fall back under ordinary time-based retention from that point on.
-function openBatchPackageIds(fsApi = fs) {
+// malformed. Instead it marks the inspection incomplete so automatic Output
+// retention skips the entire scope. A bad journal can therefore only delay a
+// cleanup, never narrow the protection set and delete referenced packages.
+// Bounded by the batch's own TTL: cleanupExpiredBatchSnapshots reaps valid
+// expired journals on the normal schedule, after which their packages fall
+// back under ordinary time-based retention.
+function openBatchPackageProtection(fsApi = fs) {
   const ids = new Set();
   const dir = batchRoot();
   let entries;
   try {
     entries = fsApi.readdirSync(dir, { withFileTypes: true });
   } catch {
-    return ids;
+    return { ids, complete: false };
   }
   for (const entry of entries) {
     if (!entry.isFile || !entry.isFile() || !entry.name.endsWith('.json')) continue;
@@ -383,9 +421,11 @@ function openBatchPackageIds(fsApi = fs) {
     try {
       state = JSON.parse(fsApi.readFileSync(path.join(dir, entry.name), 'utf8'));
     } catch {
-      continue;
+      return { ids, complete: false };
     }
-    if (state?.schema !== 'datasecure-batch/1' || !Array.isArray(state.items)) continue;
+    if (state?.schema !== 'datasecure-batch/1' || !Array.isArray(state.items)) {
+      return { ids, complete: false };
+    }
     for (const item of state.items) {
       if ((item?.status === DELIVERY_PENDING || item?.status === MAPPING_PENDING) &&
         /^ds_[a-f0-9]{32}$/i.test(String(item?.package_id || ''))) {
@@ -393,7 +433,7 @@ function openBatchPackageIds(fsApi = fs) {
       }
     }
   }
-  return ids;
+  return { ids, complete: true };
 }
 
 function batchUserStatus(progress) {
@@ -1894,4 +1934,4 @@ function readStateForMaintenance(token) {
   }
 }
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageIds, _test: { batchRoot, workPath, activeLockPath, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection } };

@@ -11,6 +11,7 @@ const {
 } = require('./batch');
 const { showBatchStateNotice } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
+const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
@@ -18,7 +19,6 @@ const startDeadline = setTimeout(() => process.exit(2), 30_000);
 // Cowork tool call. companion/text-review.js still defaults its native-dialog
 // spawnSync to 5 minutes for the synchronous MCP path; this worker is not
 // bound by that per-request deadline, so it passes a much longer window.
-const REVIEW_UI_TIMEOUT_MS = 30 * 60 * 1000;
 
 function lifecycle(event) {
   try { recordWorkflowEvent(event); } catch { /* diagnostics never changes review state */ }
@@ -39,7 +39,7 @@ process.once('message', async (message) => {
       executorPid: process.pid,
       localFinalize: true,
       onReviewLifecycle: lifecycle,
-      reviewOptions: { timeoutMs: REVIEW_UI_TIMEOUT_MS }
+      reviewOptions: { timeoutMs: DETACHED_REVIEW_TIMEOUT_MS }
     });
     lifecycle({
       event: 'review_terminal_state',
@@ -74,4 +74,3 @@ process.once('message', async (message) => {
 process.once('disconnect', () => {
   if (!started) process.exit(2);
 });
-

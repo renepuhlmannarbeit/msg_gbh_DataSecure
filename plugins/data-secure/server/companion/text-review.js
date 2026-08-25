@@ -7,6 +7,7 @@ const pii = require('../pii-engine');
 const { LIMITS } = require('../gateway/common');
 const { normalizeText } = require('../privacy/base');
 const { uiProcessEnvironment } = require('./ui-process-policy');
+const { DEFAULT_REVIEW_TIMEOUT_MS } = require('./review-timeouts');
 
 const REVIEW_SCHEMA = 'data-secure-text-review/2';
 const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/1';
@@ -599,8 +600,6 @@ function applyManualRedactions(text, ranges) {
 // down PowerShell before the Node child can be terminated by its parent. The
 // detached, non-blocking review worker (gateway/review-worker.js) is not bound
 // by that per-request deadline and passes a much longer options.timeoutMs.
-const DEFAULT_REVIEW_TIMEOUT_MS = 5 * 60 * 1000;
-
 function defaultRunner(command, args, input, env = process.env, timeoutMs = DEFAULT_REVIEW_TIMEOUT_MS) {
   return childProcess.spawnSync(command, args, {
     input,

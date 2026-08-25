@@ -308,7 +308,8 @@ test('evidence write failures stay visible without leaking a document name and h
 
 test('initial and ordinary cleanup status keep a stable diagnostic shape', () => {
   const before = retentionStatus({ roots: sandbox('initial-shape'), retentionDays: 7, now: NOW });
-  for (const field of ['forced', 'errors_by_scope', 'error_codes', 'removed_review_previews']) {
+  assert.strictEqual(before.output_protection_complete, true);
+  for (const field of ['forced', 'errors_by_scope', 'error_codes', 'removed_review_previews', 'output_protection_complete', 'output_cleanup_skipped']) {
     assert.ok(Object.hasOwn(before.last_cleanup, field), `initial last_cleanup.${field} missing`);
   }
 
@@ -317,6 +318,67 @@ test('initial and ordinary cleanup status keep a stable diagnostic shape', () =>
   const after = retentionStatus({ roots: root, retentionDays: 7, now: NOW }).last_cleanup;
   assert.strictEqual(after.trigger, 'run');
   assert.strictEqual(after.forced, false);
+});
+
+test('an incomplete batch-journal inspection fails closed for automatic output cleanup only', () => {
+  const root = sandbox('incomplete-output-protection');
+  const processed = path.join(root.processed, 'old-source.txt');
+  const output = path.join(root.output, 'ds_' + 'a'.repeat(32));
+  file(processed);
+  file(path.join(output, 'manifest.json'), '{}');
+  old(processed);
+  old(output);
+
+  const result = cleanupLocalData({
+    roots: root,
+    retentionDays: 7,
+    now: NOW,
+    outputProtectionComplete: false
+  });
+
+  assert.ok(!fs.existsSync(processed), 'independent processed retention must continue');
+  assert.ok(fs.existsSync(output), 'all output must survive an incomplete journal inspection');
+  assert.strictEqual(result.removed.processed, 1);
+  assert.strictEqual(result.removed.output, 0);
+  assert.strictEqual(result.output_protection_complete, false);
+  assert.strictEqual(result.output_cleanup_skipped, true);
+  assert.deepStrictEqual(dueCounts({
+    roots: root,
+    retentionDays: 7,
+    now: NOW,
+    outputProtectionComplete: false
+  }), { processed: 0, output: 0, review: 0, total: 0 });
+});
+
+test('a complete inspection protects only referenced packages while confirmed purge remains authoritative', () => {
+  const root = sandbox('complete-output-protection');
+  const protectedId = 'ds_' + 'b'.repeat(32);
+  const expiredId = 'ds_' + 'c'.repeat(32);
+  for (const id of [protectedId, expiredId]) {
+    file(path.join(root.output, id, 'manifest.json'), '{}');
+    old(path.join(root.output, id));
+  }
+
+  const automatic = cleanupLocalData({
+    roots: root,
+    retentionDays: 7,
+    now: NOW,
+    protectedIds: new Set([protectedId]),
+    outputProtectionComplete: true,
+    scope: 'output'
+  });
+  assert.ok(fs.existsSync(path.join(root.output, protectedId)));
+  assert.ok(!fs.existsSync(path.join(root.output, expiredId)));
+  assert.strictEqual(automatic.removed.output, 1);
+
+  const purged = purgeLocalData('output', true, {
+    roots: root,
+    now: NOW,
+    protectedIds: new Set([protectedId]),
+    outputProtectionComplete: false
+  });
+  assert.strictEqual(purged.removed.output, 1);
+  assert.ok(!fs.existsSync(path.join(root.output, protectedId)));
 });
 
 test('a preview inspection error is reported and never mistaken for missing bytes', () => {

@@ -18,7 +18,9 @@ let lastCleanup = {
   removed_review_previews: 0,
   errors: 0,
   errors_by_scope: { processed: 0, output: 0, review: 0 },
-  error_codes: {}
+  error_codes: {},
+  output_protection_complete: true,
+  output_cleanup_skipped: false
 };
 
 function retentionDays(env = process.env) {
@@ -269,6 +271,7 @@ function cleanupLocalData(options = {}) {
   // batch is left permanently referencing a package that no longer exists.
   // An explicit, confirmed purge (force) still removes it unconditionally.
   const protectedIds = !force && options.protectedIds instanceof Set ? options.protectedIds : new Set();
+  const outputProtectionComplete = force || options.outputProtectionComplete !== false;
   const result = {
     ran_at: new Date(at).toISOString(),
     // Which trigger produced this record: a manual purge ignores expiry
@@ -284,7 +287,9 @@ function cleanupLocalData(options = {}) {
     errors_by_scope: { processed: 0, output: 0, review: 0 },
     // Error codes only. A path or filename here would put document names into
     // a status response that is explicitly free of raw data.
-    error_codes: {}
+    error_codes: {},
+    output_protection_complete: outputProtectionComplete,
+    output_cleanup_skipped: !force && !outputProtectionComplete && scopes.includes('output')
   };
 
   function recordFailure(scope, err) {
@@ -296,6 +301,11 @@ function cleanupLocalData(options = {}) {
   }
 
   for (const scope of scopes) {
+    // If even one open batch journal could not be inspected, no automatic
+    // Output deletion is safe. Processed sources and review previews can still
+    // follow their independent retention rules. An explicit confirmed purge
+    // remains authoritative and intentionally ignores this protection.
+    if (scope === 'output' && !force && !outputProtectionComplete) continue;
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
       if (scope === 'review') {
@@ -341,9 +351,11 @@ function dueCounts(options = {}) {
   const cutoff = at - days * 24 * 60 * 60 * 1000;
   const fsApi = options.fs || fs;
   const protectedIds = options.protectedIds instanceof Set ? options.protectedIds : new Set();
+  const outputProtectionComplete = options.outputProtectionComplete !== false;
   const due = { processed: 0, output: 0, review: 0 };
 
   for (const scope of SCOPES) {
+    if (scope === 'output' && !outputProtectionComplete) continue;
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
       if (scope === 'output' && protectedIds.has(entry.name)) continue;
@@ -359,6 +371,7 @@ function retentionStatus(options = {}) {
   return {
     retention_days: days,
     due_entries: dueCounts({ ...options, retentionDays: days }),
+    output_protection_complete: options.outputProtectionComplete !== false,
     last_cleanup: lastCleanup
   };
 }

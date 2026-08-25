@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC36 · Stand 22.08.2026
+Version 3.2.0 RC37 · Stand 22.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC36 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC37 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -17,10 +17,10 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC36 |
+| Artefakt | Ziel | Status RC37 |
 |---|---|---|
-| `DataSecure-Privacy-Preflight-v3.2.0-rc36.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
-| `DataSecure-Privacy-Gateway-v3.2.0-rc36.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc37.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc37.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -177,7 +177,7 @@ für die Abnahme benötigt werden.
 
 ## 7. Update und Rollback
 
-RC36 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
+RC37 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.
@@ -221,6 +221,13 @@ belegen den Start; `review_reconstruction_*` grenzt die lokale Rekonstruktion ei
 UI-Zeitablauf, nicht den Verlust bereits fertiggestellter Dateien. Der synchrone
 tokenbasierte Reviewaufruf ist ausschließlich ein Supportweg und darf im normalen
 Cowork-Ablauf nicht verwendet werden.
+
+Der normale abgekoppelte Review-Worker wartet höchstens 30 Minuten auf die lokale
+Prüfoberfläche; der synchrone Supportweg höchstens fünf Minuten. Bei Zeitablauf bleibt
+der Stapel fortsetzbar. Die automatische Output-Retention setzt vollständig aus,
+wenn auch nur ein offenes Batch-Journal nicht sicher gelesen werden kann; sichtbar ist
+dies als `retention_output_protection_complete=false`. Eine solche Meldung ist ein
+Schutzstopp und keine Aufforderung, Output-Dateien manuell zu löschen.
 
 Erlaubte Diagnoseangaben:
 

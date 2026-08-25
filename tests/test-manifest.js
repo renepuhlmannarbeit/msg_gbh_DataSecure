@@ -17,6 +17,7 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 const readText = (p) => fs.readFileSync(p, 'utf8');
 
 const pkg = readJson(path.join(root, 'package.json'));
+const packageLock = readJson(path.join(root, 'package-lock.json'));
 const mcpb = readJson(path.join(root, 'manifest.json'));
 const plugin = readJson(path.join(root, 'plugins', 'data-secure', '.claude-plugin', 'plugin.json'));
 const marketplace = readJson(path.join(root, '.claude-plugin', 'marketplace.json'));
@@ -26,6 +27,8 @@ const versionFile = readText(path.join(root, 'plugins', 'data-secure', 'VERSION'
 test('every manifest declares the same version', () => {
   const sources = {
     'package.json': pkg.version,
+    'package-lock.json': packageLock.version,
+    'package-lock.json#packages': packageLock.packages?.['']?.version,
     'manifest.json': mcpb.version,
     'plugin.json': plugin.version,
     'BUILD_INFO.json': buildInfo.version,

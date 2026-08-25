@@ -1,6 +1,6 @@
-# RC36-Ist-Abgleich zum kanonischen Backlog
+# RC37-Ist-Abgleich zum kanonischen Backlog
 
-Stand: 24.08.2026 · geprüfter Produktstand: RC36
+Stand: 25.08.2026 · geprüfter Produktstand: RC37
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -11,7 +11,7 @@ Historischer lokaler Regressionsnachweis 23.08.2026: Ein früherer vollständige
 `npm test`-Lauf wurde mit Exit-Code 0 festgehalten. Er ist keine aktuelle
 Release-Abnahme und darf nicht aus einzelnen späteren Teiltests abgeleitet werden.
 Die jeweils tatsächlich vollständig beendeten Testläufe gehören in `docs/TESTING.md`.
-Der aktuelle RC36-Arbeitsstand bestand am 24.08.2026 die vollständige lokale
+Der RC36-Arbeitsstand bestand am 24.08.2026 die vollständige lokale
 `test:ci`-Suite, 66 servergebundene Batchtests, ZIP-Parität und beide Claude-Plugin-
 Validierungen; Details und Aussagegrenzen stehen dort.
 Weder dieser Nachweis noch ein einzelner lokaler Lauf erweitert die
@@ -1006,6 +1006,20 @@ laufen dort weiter, ohne das Cowork-Zeitfenster zu belegen. Feste Workflow-Ereig
 trennen Workerstart, IPC, Rekonstruktion, UI, Terminalzustand und Workerende; sie
 enthalten weder freie Texte noch Dokumentidentifikatoren. Der frühere direkte
 `review_deferred_document_batch` bleibt ausschließlich im Supportmodus.
+
+RC37 härtet diesen Vertrag nach dem erneuten Code-Review. Der synchrone lokale
+Supportpfad besitzt weiterhin ein Fünf-Minuten-Limit; der abgekoppelte Worker erhält
+einen zentral definierten und getesteten 30-Minuten-Zeitraum für die native
+Prüfoberfläche. Ein UI-Zeitablauf verändert keine bereits freigegebenen Dateien und
+erlaubt eine ausdrückliche Fortsetzung. Batch-Journale behandeln partielle Writes
+vollständig, flushen die Journaldatei vor dem atomaren Rename und synchronisieren auf
+POSIX zusätzlich den Verzeichniseintrag. Vor automatischer Output-Retention werden
+alle offenen Journale geprüft: ist auch nur eines unlesbar oder ungültig, wird der
+gesamte Output-Bereich nicht automatisch gelöscht. Der feste Statusindikator
+`retention_output_protection_complete` macht diesen Schutzstopp inhaltsfrei sichtbar.
+Bestätigte manuelle Löschung bleibt ausdrücklich möglich. Direkte Tests decken
+Short Writes, fehlenden Schreibfortschritt, POSIX-Verzeichnissync, ungültige Journale,
+Schutzmengen, Löschumfang und Timeoutkonstanten ab.
 
 Für die folgende Optimierung liegt außerdem eine inhaltsfreie Phasenmessung vor:
 Der lokale Batchzustand speichert ausschließlich begrenzte Dauerwerte für Aufnahme,

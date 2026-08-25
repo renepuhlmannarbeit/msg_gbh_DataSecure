@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { createSuite } = require('./helpers');
@@ -8,6 +9,10 @@ const {
   localReviewActive,
   _test
 } = require('../plugins/data-secure/server/gateway/batch-executor');
+const {
+  DEFAULT_REVIEW_TIMEOUT_MS,
+  DETACHED_REVIEW_TIMEOUT_MS
+} = require('../plugins/data-secure/server/companion/review-timeouts');
 
 const { test, done, assert } = createSuite('Non-blocking local review executor');
 const token = 'a'.repeat(64);
@@ -76,5 +81,15 @@ test('content-free start envelopes never echo private executor fields', () => {
   assert.doesNotMatch(JSON.stringify(result), /batch_token|executor|4242|aaaaaaaa/u);
 });
 
-done();
+test('the detached local UI contract outlives a synchronous Cowork tool request', () => {
+  assert.strictEqual(DEFAULT_REVIEW_TIMEOUT_MS, 5 * 60 * 1000);
+  assert.strictEqual(DETACHED_REVIEW_TIMEOUT_MS, 30 * 60 * 1000);
+  assert.ok(DETACHED_REVIEW_TIMEOUT_MS > DEFAULT_REVIEW_TIMEOUT_MS);
+  const worker = fs.readFileSync(
+    path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'gateway', 'review-worker.js'),
+    'utf8'
+  );
+  assert.match(worker, /reviewOptions:\s*\{\s*timeoutMs:\s*DETACHED_REVIEW_TIMEOUT_MS\s*\}/u);
+});
 
+done();
