@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
-const { PROFILES, LIMITS, roots, listInput, validateBatchLimits, sha256File, storageStatus, hasReparseComponent } = require('./common');
+const { PROFILES, LIMITS, listInput, validateBatchLimits, storageStatus, hasReparseComponent } = require('./common');
 const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
@@ -13,6 +13,7 @@ const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
 const { createBatchExecutorLease } = require('./batch-executor-lease');
 const { createBatchJournalStore } = require('./batch-journal-store');
+const { createBatchReconciliation } = require('./batch-reconciliation');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -52,6 +53,26 @@ function batchTtlMs() {
 }
 
 const { writeState, readState, readStateForMaintenance } = createBatchJournalStore();
+
+const {
+  packageIdForItem,
+  publishedPackageState,
+  regularPublishedPackage,
+  markMappingPending,
+  commitPendingMapping,
+  reconcilePendingMappings,
+  reconcilePublishedItems,
+  markInterruptedItemsRetryable
+} = createBatchReconciliation({
+  SafeError,
+  fs,
+  path,
+  ensureMappingOutbox,
+  appendMapping,
+  removeMappingOutbox,
+  mappingPendingStatus: MAPPING_PENDING,
+  deliveryPendingStatus: DELIVERY_PENDING
+});
 
 // Cross-references every still-open batch item with the Output scope so
 // retention never deletes a package a batch still needs to reach delivery or
@@ -438,115 +459,6 @@ function invalidateUnpublishedBatchCopies(state, deps = {}, exceptItem = null) {
     try { cleanupTerminalWorkCopy(state, item, deps); }
     catch { item.work_copy_cleanup_pending = true; }
   }
-}
-
-function packageIdForItem(item) {
-  if (!/^[a-f0-9]{32}$/i.test(String(item?.id || ''))) {
-    throw new SafeError('Die lokale Batch-Identität ist ungültig.');
-  }
-  return `ds_${item.id}`;
-}
-
-function publishedPackageState(packageId) {
-  if (!/^ds_[a-f0-9]{32}$/i.test(String(packageId || ''))) return 'unsafe';
-  let output;
-  try { output = roots().output; } catch { return 'unsafe'; }
-  const target = path.join(output, packageId);
-  if (path.dirname(target) !== output) return 'unsafe';
-  if (!fs.existsSync(target)) return 'missing';
-  try {
-    const folder = fs.lstatSync(target);
-    if (!folder.isDirectory() || folder.isSymbolicLink()) return false;
-    const manifestPath = path.join(target, 'manifest.json');
-    const documentPath = path.join(target, `${packageId}.md`);
-    const manifestStat = fs.lstatSync(manifestPath);
-    const documentStat = fs.lstatSync(documentPath);
-    if (!manifestStat.isFile() || manifestStat.isSymbolicLink() || !documentStat.isFile() || documentStat.isSymbolicLink()) return false;
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    return manifest?.schema === 'eu-privacy-package/2' && manifest.package_id === packageId &&
-      manifest.document === `${packageId}.md` && /^[a-f0-9]{64}$/i.test(String(manifest.document_sha256 || '')) &&
-      sha256File(documentPath) === manifest.document_sha256 ? 'verified' : 'unsafe';
-  } catch { return 'unsafe'; }
-}
-
-function regularPublishedPackage(packageId) {
-  return publishedPackageState(packageId) === 'verified';
-}
-
-function markMappingPending(item, packageId) {
-  if (!regularPublishedPackage(packageId)) {
-    throw new SafeError('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
-  }
-  // Mapping is a durable local convenience ledger, not the publication commit
-  // point. Persist this state before trying the atomic CSV replacement so a
-  // full output package is never deleted solely because its local overview is
-  // temporarily unavailable.
-  item.status = MAPPING_PENDING;
-  item.checkpoint = 'mapping_pending';
-  item.package_id = packageId;
-  item.error_code = 'LOCAL_MAPPING_EXPORT_PENDING';
-  if (item.mapping_outbox_persisted !== true) item.mapping_outbox_persisted = false;
-  item.work_copy_cleanup_pending = true;
-}
-
-function commitPendingMapping(item, packageId) {
-  // Persist the tiny local-only recovery intent before replacing the human
-  // mapping CSV. It holds only the source basename and opaque package id; no
-  // source copy, path, hash, document text, or capability is retained.
-  const outbox = ensureMappingOutbox(item.name, packageId);
-  item.mapping_outbox_persisted = true;
-  appendMapping(item.name, packageId);
-  removeMappingOutbox(outbox);
-  delete item.mapping_outbox_persisted;
-}
-
-function reconcilePendingMappings(state) {
-  let changed = false;
-  for (const item of state.items || []) {
-    if (item.status !== MAPPING_PENDING) continue;
-    const packageId = String(item.package_id || '');
-    if (!regularPublishedPackage(packageId)) continue;
-    try {
-      commitPendingMapping(item, packageId);
-      item.status = DELIVERY_PENDING;
-      item.checkpoint = 'delivery_pending';
-      delete item.error_code;
-      changed = true;
-    } catch {
-      // The pending state stays durable and local.  Do not downgrade the
-      // already verified package, generate a stopped row, or expose any
-      // mapping identity through MCP.
-    }
-  }
-  return changed;
-}
-
-function reconcilePublishedItems(state) {
-  let changed = false;
-  for (const item of state.items || []) {
-    if (item.status !== 'processing') continue;
-    let packageId;
-    try { packageId = packageIdForItem(item); } catch { continue; }
-    // The output package is verified by its own manifest and exact Markdown
-    // hash before it is adopted.  A similarly named directory is never enough
-    // to turn an interrupted source into a release.
-    if (!regularPublishedPackage(packageId)) continue;
-    markMappingPending(item, packageId);
-    changed = true;
-  }
-  return changed;
-}
-
-function markInterruptedItemsRetryable(state) {
-  let recovered = 0;
-  for (const item of state.items || []) {
-    if (item.status !== 'processing') continue;
-    item.status = 'retryable';
-    item.error_code = 'PROCESSING_INTERRUPTED';
-    item.checkpoint = 'retryable';
-    recovered++;
-  }
-  return recovered;
 }
 
 function deliveryResult(state, item) {

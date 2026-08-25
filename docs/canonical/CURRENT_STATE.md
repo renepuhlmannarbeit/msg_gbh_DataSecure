@@ -211,8 +211,12 @@ Prozess, während `EPERM` und unbekannte Fehler blockierend bleiben.
 `gateway/batch-executor-lease.js` kapselt Claim, Zugriffskontrolle und Release
 des lokalen Executors als injizierte Factory. Falsche oder konkurrierende PIDs,
 Lockfehler sowie Journalfehler können dadurch fokussiert geprüft werden und
-lassen einen bestehenden Marker unverändert. Die weiteren Schnitte trennen
-Zustandsautomat/Recovery,
+lassen einen bestehenden Marker unverändert. `gateway/batch-reconciliation.js`
+verifiziert deterministische Output-Pakete ohne Cache, adoptiert sie vor jeder
+Retry-Klassifikation und hält die Recovery-Reihenfolge Outbox, idempotente CSV
+und Intent-Bereinigung fest. Direkte Tests belegen fehlende, manipulierte und
+verlinkte Pakete, alle drei Mapping-Fehlergrenzen sowie idempotente Zustände ohne
+Doppelveröffentlichung. Die weiteren Schnitte trennen Recovery-Orchestrierung,
 Verarbeitung/Commit, Review-Orchestrierung, Veröffentlichung/Mapping und Wartung hinter der
 bestehenden Exportfassade. Danach folgen Originalschutz, internes Legacy-Intake,
 benutzergebundene Verschlüsselung, Distribution, Inhaltsgrenze und erst dann

@@ -105,8 +105,13 @@ fokussierte Tests belegen ungültige, tote, doppelte und fremde PIDs sowie
 Lock-/Journalfehler und die unveränderte öffentliche Batch-Fassade. Die
 öffentlichen Exporte bleiben weiterhin in `gateway/batch.js`; die vorhandenen
 Batch-, Handoff-, Gateway- und MCP-Verträge laufen unverändert dagegen. Als
-nächster R2-Schnitt verbleibt innerhalb dieses Bereichs der Zustandsautomat mit
-Recovery und Reconciliation; er wird nicht in den Journal-Store gezogen.
+nächster Leaf-Schnitt kapselt `gateway/batch-reconciliation.js` die
+deterministische Paketverifikation, Mapping-Zustände und die reine
+`processing`-zu-`retryable`-Transition. Acht fokussierte Tests belegen die
+Adoption ausschließlich verifizierter Pakete, die Reihenfolge Adoption vor
+Retry, alle Mapping-Crashgrenzen und Idempotenz. Journal-Commit, Sperren,
+Byte-Cleanup und Recovery-Orchestrierung bleiben absichtlich in `batch.js`;
+letztere ist der nächste R2-Schnitt.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
