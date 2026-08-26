@@ -77,6 +77,49 @@ test('non-terminal batches create no marker, outbox or receipt', () => {
   }
 });
 
+test('best-effort writer preserves undefined for a non-terminal batch', () => {
+  const value = fixture({ state: state('pending') });
+  assert.strictEqual(typeof value.coordinator.writeTerminalEvidence, 'function');
+  assert.strictEqual(value.coordinator.writeTerminalEvidence(value.reload()), undefined);
+  assert.deepStrictEqual(value.events, []);
+});
+
+test('best-effort writer preserves successful and failed export results', () => {
+  const successful = fixture();
+  assert.strictEqual(successful.coordinator.writeTerminalEvidence(successful.reload()), true);
+
+  const failed = fixture({ failAppend: true });
+  assert.strictEqual(failed.coordinator.writeTerminalEvidence(failed.reload()), false);
+  assert.strictEqual(failed.durable().items[0].status, 'released');
+});
+
+test('best-effort writer contains invalid markers and unexpected coordinator errors', () => {
+  const invalid = state();
+  invalid.terminal_evidence = { schema: 'bad', status: 'pending', receipt_id: 'f'.repeat(32), record: {} };
+  const invalidValue = fixture({ state: invalid });
+  const working = invalidValue.reload();
+  assert.throws(() => invalidValue.coordinator.reconcileTerminalEvidence(structuredClone(working)), /Status des Batch-Nachweises/);
+  assert.strictEqual(invalidValue.coordinator.writeTerminalEvidence(working), false);
+  assert.deepStrictEqual(working, invalid);
+  assert.deepStrictEqual(invalidValue.durable(), invalid);
+
+  const unexpected = createBatchTerminalEvidence({
+    publicProgress() { throw new Error('UNEXPECTED'); }
+  });
+  assert.strictEqual(unexpected.writeTerminalEvidence(state()), false);
+});
+
+test('best-effort writer treats exported evidence as authoritative despite cleanup failure', () => {
+  const first = fixture();
+  assert.strictEqual(first.coordinator.writeTerminalEvidence(first.reload()), true);
+  const restarted = fixture({ state: first.durable(), failRemove: true });
+  const eventOffset = restarted.events.length;
+  assert.strictEqual(restarted.coordinator.writeTerminalEvidence(restarted.reload()), true);
+  assert.ok(restarted.events.slice(eventOffset).every((event) => event.startsWith('remove:')));
+  assert.strictEqual(restarted.events.some((event) => event.startsWith('append:')), false);
+  assert.strictEqual(restarted.events.some((event) => event.startsWith('write:')), false);
+});
+
 test('append failure leaves one durable pending intent and retry reuses its opaque id', () => {
   const first = fixture({ failAppend: true });
   const working = first.reload();

@@ -123,7 +123,7 @@ Lock-Release-Fehler. Der read-only Retention-Schutzscan liegt zusätzlich in
 Root-Auflösung, konservativen Gesamtabbruch bei einem defekten Journal, den
 Erhalt bereits gefundener Schutz-IDs und unveränderte Root-Fehlersemantik.
 `gateway/batch-delivery.js` kapselt anschließend Capability-Ausgabe,
-Einzel-/Seitenbestätigung, lokalen Abschluss und terminales Byte-Cleanup. Acht
+Einzel-/Seitenbestätigung, lokalen Abschluss und terminales Byte-Cleanup. Neun
 direkte Tests belegen vollständige Vorvalidierung vor einer Mehrfachmutation,
 Paketverifikation am Übergabepunkt, Lock-Freigabe an Fehlergrenzen,
 symlink-sicheres Cleanup, Wiederholung nach Journalfehler und idempotente
@@ -138,14 +138,22 @@ Dateinamen-/Pfadabweichungen und doppelte Quellen vor jedem Metadatenzugriff ab.
 Sie belegen außerdem, dass ein Fehler vor Journalveröffentlichung nur den neuen
 Work-Baum entfernt, während ein Fehler nach Rename beziehungsweise eine
 unsichere Journalnachprüfung Journal und versiegelte Arbeitskopien gemeinsam
-für die Recovery erhält. Explizites Resume/Discard, Verarbeitung/Commit,
+für die Recovery erhält. `gateway/batch-discard.js` kapselt das ausdrücklich
+bestätigte Verwerfen unvollständiger Stapel hinter derselben globalen Sperre.
+Acht direkte Tests belegen den vollständigen Stopp bei einem aktiven lokalen
+Executor, die feste Reihenfolge versiegelte Arbeitskopie vor exaktem Journal,
+sichtbare Lock-, Scan-, Cleanup- und Unlink-Fehler, sicheren Retry sowie den
+Erhalt des bestehenden partiellen Mehrstapelvertrags. Originale,
+veröffentlichte Outputs, Mapping und terminale Nachweise liegen außerhalb
+dieser Löschgrenze. Explizites Resume/Continue, Verarbeitung/Commit,
 Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
 `batch.js`; der nächste R2-Schnitt wird erneut als kleinster Leaf gewählt.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,
 `batch-evidence.js` den atomaren idempotenten v2-Store und eine inhaltsfreie
 Outbox über die Journal-Retention hinaus. Append-, Marker-Commit- und
-Outbox-Cleanup-Crashfenster sind direkt getestet; der lokale Nachweis nimmt ein
+Outbox-Cleanup-Crashfenster sowie die ausnahmslos fehlerabschirmende Best-Effort-
+Fassade sind direkt getestet; der lokale Nachweis nimmt ein
 bereits verifiziertes Paket niemals zurück.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen

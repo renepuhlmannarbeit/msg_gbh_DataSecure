@@ -19,6 +19,7 @@ const { createBatchRetentionProtection } = require('./batch-retention-protection
 const { createBatchDelivery } = require('./batch-delivery');
 const { createBatchMappingMaintenance } = require('./batch-mapping-maintenance');
 const { createBatchIntake } = require('./batch-intake');
+const { createBatchDiscard } = require('./batch-discard');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -135,24 +136,13 @@ const {
 });
 
 const {
-  reconcileTerminalEvidence,
+  writeTerminalEvidence,
   repairPendingEvidenceOutbox
 } = createBatchTerminalEvidence({
   randomBytes: crypto.randomBytes,
   publicProgress,
   writeState
 });
-
-function writeTerminalEvidence(state) {
-  // The receipt is a local transparency artifact, never an authorization
-  // gate. Its coordinator persists an opaque pending intent before export and
-  // deduplicates recovery without changing any released or stopped item.
-  try {
-    return reconcileTerminalEvidence(state);
-  } catch {
-    return false;
-  }
-}
 
 const {
   deliveryResult,
@@ -219,6 +209,18 @@ const {
   mappingPendingStatus: MAPPING_PENDING
 });
 
+const { discardIncompleteBatches } = createBatchDiscard({
+  SafeError,
+  io: fs,
+  randomBytes: crypto.randomBytes,
+  batchPath,
+  safeRemoveWorkDirectory,
+  acquireActiveLock,
+  releaseActiveLock,
+  recoverableBatchStates,
+  liveLocalExecutor
+});
+
 function resumeBatch(token) {
   if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
   acquireActiveLock(token);
@@ -279,30 +281,6 @@ function continueMostRecentBatch() {
     if (resumed.ok === false) return resumed;
   }
   return { ok: true, batch_token: selected.token, ...publicProgress(readState(selected.token)), raw_content_sent_to_claude: false };
-}
-
-function discardIncompleteBatches() {
-  const maintenanceToken = crypto.randomBytes(32).toString('hex');
-  acquireActiveLock(maintenanceToken);
-  try {
-    const allStates = recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true });
-    if (allStates.some((state) => liveLocalExecutor(state))) {
-      throw new SafeError('Ein lokaler Dokumentstapel wird noch verarbeitet und kann nicht verworfen werden.');
-    }
-    const states = allStates;
-    let discarded = 0;
-    for (const state of states) {
-      // A discard is a local, user-confirmed abandonment of the sealed source
-      // snapshot. It never touches already published output packages or the
-      // durable local mapping ledger.
-      safeRemoveWorkDirectory(state.token);
-      fs.unlinkSync(batchPath(state.token));
-      discarded += 1;
-    }
-    return { ok: true, discarded_batches: discarded, raw_content_sent_to_claude: false };
-  } finally {
-    releaseActiveLock(maintenanceToken);
-  }
 }
 
 function invalidateUnpublishedBatchCopies(state, deps = {}, exceptItem = null) {

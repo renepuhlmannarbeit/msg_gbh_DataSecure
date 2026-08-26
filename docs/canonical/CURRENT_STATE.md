@@ -222,9 +222,17 @@ hinter derselben globalen Sperre wie die Verarbeitung. Aktive Owner und lokale
 Executoren werden nicht umgedeutet; bei Recovery gilt unverändert Adoption vor
 Mapping vor Retry vor Cleanup und höchstens ein abschließender Journal-Commit.
 Abgelaufene private Arbeitskopien werden vor ihrem Journal entfernt, Fehler
-bleiben pro Snapshot isoliert und gezählt. Neun direkte Negativtests decken
+bleiben pro Snapshot isoliert und gezählt. Zehn direkte Negativtests decken
 gemischte defekte Journale, Lock- und Freigabefehler, Teilbereinigung,
 Idempotenz und die unveränderte öffentliche Fassade ab.
+`gateway/batch-discard.js` kapselt getrennt das ausdrücklich bestätigte
+Verwerfen unvollständiger Stapel. Es prüft unter derselben globalen Sperre alle
+lokalen Executor-Zustände, stoppt bei einem aktiven Worker vollständig und
+entfernt ausschließlich die tokengebundene versiegelte Arbeitskopie vor dem
+exakten Journal. Originale, veröffentlichte Outputs, Mapping und terminale
+Nachweise werden nicht berührt. Acht direkte Grenztests belegen außerdem
+Lock-, Scan-, Cleanup-, Unlink- und Retryverhalten sowie den unveränderten
+partiellen Mehrstapelvertrag.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die

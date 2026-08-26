@@ -85,6 +85,17 @@ function createBatchTerminalEvidence(options = {}) {
     return true;
   }
 
+  function writeTerminalEvidence(state) {
+    // The receipt is a local transparency artifact, never an authorization
+    // gate. Its coordinator persists an opaque pending intent before export and
+    // deduplicates recovery without changing any released or stopped item.
+    try {
+      return reconcileTerminalEvidence(state);
+    } catch {
+      return false;
+    }
+  }
+
   function repairPendingEvidenceOutbox() {
     let repaired = 0;
     let failures = 0;
@@ -103,7 +114,7 @@ function createBatchTerminalEvidence(options = {}) {
     return { repaired, failures };
   }
 
-  return { terminal, reconcileTerminalEvidence, repairPendingEvidenceOutbox };
+  return { terminal, reconcileTerminalEvidence, writeTerminalEvidence, repairPendingEvidenceOutbox };
 }
 
 module.exports = { createBatchTerminalEvidence, validateMarker, MARKER_SCHEMA };
