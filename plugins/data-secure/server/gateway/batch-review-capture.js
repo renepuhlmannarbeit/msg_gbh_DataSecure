@@ -9,6 +9,7 @@ function createBatchReviewCapture(options = {}) {
   async function captureDeferredReviewInput(state, item, deps = {}) {
     const entry = exactPendingEntry(state, item);
     let captured;
+    let captureStoppedPipeline = false;
     try {
       await anonymizeNext(state.profile, {
         ...deps,
@@ -24,8 +25,10 @@ function createBatchReviewCapture(options = {}) {
       });
     } catch (error) {
       if (error?.code !== 'BATCH_REVIEW_CAPTURED') throw error;
+      captureStoppedPipeline = true;
     }
-    if (!captured || !Array.isArray(captured.ambiguities) || captured.ambiguities.length === 0) {
+    if (!captureStoppedPipeline || !captured ||
+        !Array.isArray(captured.ambiguities) || captured.ambiguities.length === 0) {
       throw localReviewError(
         'BATCH_REVIEW_RECONSTRUCTION_FAILED',
         'Die lokale Stapelprüfung konnte die offene Fundstelle nicht unverändert rekonstruieren. Es wurde nichts freigegeben.'

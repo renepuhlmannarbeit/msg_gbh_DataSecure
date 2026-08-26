@@ -45,7 +45,11 @@ function fixture(options = {}) {
         if (options.spoofSentinel) throw reviewError('BATCH_REVIEW_CAPTURED', 'spoof');
         return { should_not_publish: true };
       }
-      callOptions.reviewText(options.draft);
+      if (options.swallowSentinel) {
+        try { callOptions.reviewText(options.draft); } catch { return { unsafe_normal_return: true }; }
+      } else {
+        callOptions.reviewText(options.draft);
+      }
       throw new Error('UNREACHABLE_AFTER_SENTINEL');
     }
   });
@@ -120,7 +124,8 @@ async function main() {
       { draft: undefined },
       { draft: {} },
       { draft: { ambiguities: null } },
-      { draft: { ambiguities: [] } }
+      { draft: { ambiguities: [] } },
+      { draft: { ambiguities: [{}] }, swallowSentinel: true }
     ];
     for (const options of cases) {
       const value = fixture(options);

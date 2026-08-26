@@ -270,8 +270,9 @@ aus der versiegelten Arbeitskopie. Der Rohentwurf bleibt nur als Objekt im
 lokalen Speicher; ein interner Sentinel beendet die normale Pipeline vor einer
 Veröffentlichung. Aufrufer können Entry, Copy-Claim, Bildbehandlung, Paket-ID,
 Diagnosesperre oder Capture-Callback nicht überschreiben. Nur der exakte
-Sentinel wird abgefangen; Snapshot-/Parserfehler und unvollständige Entwürfe
-stoppen fail-closed. Sechs direkte Tests sowie die gemeinsamen Review-Fälle im
+Sentinel wird abgefangen und muss den Pipelineabbruch nachweislich erreicht
+haben; ein intern verschluckter Sentinel, Snapshot-/Parserfehler und
+unvollständige Entwürfe stoppen fail-closed. Sechs direkte Tests sowie die gemeinsamen Review-Fälle im
 66-Szenarien-Batchtest belegen die unveränderte Fassade.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
