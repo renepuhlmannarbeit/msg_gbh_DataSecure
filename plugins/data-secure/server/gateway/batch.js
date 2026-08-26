@@ -8,6 +8,7 @@ const { PROFILES, LIMITS, validateBatchLimits, storageStatus, hasReparseComponen
 const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
+const { sameDocumentResult } = require('./document-result-grade');
 const { createBatchTerminalEvidence } = require('./batch-terminal-evidence');
 const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
@@ -82,6 +83,7 @@ const { writeState, readState, readStateForMaintenance } = createBatchJournalSto
 
 const {
   packageIdForItem,
+  publishedPackageRecord,
   publishedPackageState,
   regularPublishedPackage,
   markMappingPending,
@@ -187,6 +189,7 @@ const {
 
 const { replayMappingOutbox } = createBatchMappingMaintenance({
   readOutboxEntries,
+  publishedPackageRecord,
   publishedPackageState,
   appendMapping,
   removeMappingOutbox
@@ -260,6 +263,7 @@ const { resumeBatch, continueMostRecentBatch } = createBatchContinuation({
 const { invalidateUnpublishedBatchCopies } = createBatchSnapshotInvalidation({
   appendMapping,
   cleanupTerminalWorkCopy,
+  writeState,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingStoppedStatus: MAPPING_STOPPED
 });
@@ -273,7 +277,8 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
   readStateForMaintenance,
   publicProgress,
   liveLocalExecutor,
-  regularPublishedPackage,
+  publishedPackageRecord,
+  sameDocumentResult,
   issueReadCapability: (packageId) => require('./package-store').issueReadCapability(packageId)
 });
 
@@ -395,4 +400,4 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

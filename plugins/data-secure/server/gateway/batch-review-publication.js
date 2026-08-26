@@ -1,5 +1,11 @@
 'use strict';
 
+const {
+  notProcessedDocumentResult,
+  positiveDocumentResult,
+  sameDocumentResult
+} = require('./document-result-grade');
+
 function createBatchReviewPublication(options = {}) {
   const anonymizeNext = options.anonymizeNext;
   const exactPendingEntry = options.exactPendingEntry;
@@ -103,6 +109,8 @@ function createBatchReviewPublication(options = {}) {
       let packagePublished = false;
       let publishedPackageId;
       let publicationContractFailed = false;
+      let verifiedDocumentResult;
+      let publishedDocumentResult;
       try {
         const entry = exactPendingEntry(state, item);
         const result = await anonymizeNext(state.profile, {
@@ -113,27 +121,28 @@ function createBatchReviewPublication(options = {}) {
           packageId: packageIdForItem(item),
           reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1)),
           beforePublish: async (details) => {
+            positiveDocumentResult(details?.document_result);
+            verifiedDocumentResult = details.document_result;
             item.checkpoint = 'package_verified';
             writeState(state, { durable: false });
             if (deps.beforePublish) await deps.beforePublish(details);
           },
-          afterPublish: async () => {
+          afterPublish: async (details) => {
             // The output rename is the publication commit point. Every later
             // failure must remain recoverable through package reconciliation;
             // it must never be downgraded to a parser stop or trigger cleanup.
             packagePublished = true;
             publishedPackageId = packageIdForItem(item);
-            try {
-              ensureMappingOutbox(item.name, publishedPackageId);
-              item.mapping_outbox_persisted = true;
-            } catch {
-              item.mapping_outbox_persisted = false;
-            }
+            positiveDocumentResult(details?.document_result);
+            if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw unconfirmedPublication();
+            publishedDocumentResult = details.document_result;
             item.checkpoint = 'package_published';
             writeState(state, { durable: false });
           }
         });
-        if (!packagePublished || typeof result?.package_id !== 'string' || result.package_id !== publishedPackageId) {
+        if (!packagePublished || typeof result?.package_id !== 'string' || result.package_id !== publishedPackageId ||
+          !sameDocumentResult(result?.document_result, verifiedDocumentResult) ||
+          !sameDocumentResult(result?.document_result, publishedDocumentResult)) {
           publicationContractFailed = true;
           item.status = 'processing';
           item.checkpoint = packagePublished ? 'package_published' : 'publication_unconfirmed';
@@ -142,10 +151,10 @@ function createBatchReviewPublication(options = {}) {
           item.work_copy_cleanup_pending = true;
           throw unconfirmedPublication();
         }
-        markMappingPending(item, result.package_id);
+        markMappingPending(item, result.package_id, result.document_result);
         writeState(state);
         try {
-          ensureMappingOutbox(item.name, result.package_id);
+          ensureMappingOutbox(item.name, result.package_id, item.document_result);
           item.mapping_outbox_persisted = true;
         } catch {
           continue;
@@ -187,9 +196,23 @@ function createBatchReviewPublication(options = {}) {
         item.checkpoint = item.status === 'retryable' ? 'retryable' : 'stopped';
         item.error_code = code;
         if (item.status === 'stopped') {
-          try { appendMapping(item.name, '', mappingStoppedStatus); item.local_mapping_exported = true; }
-          catch { item.local_mapping_exported = false; }
-          try { cleanupTerminalWorkCopy(state, item, deps); }
+          item.document_result = notProcessedDocumentResult(code);
+          item.local_mapping_exported = false;
+          item.work_copy_cleanup_pending = true;
+          writeState(state);
+          try {
+            appendMapping(item.name, '', mappingStoppedStatus, {
+              mappingReference: item.id,
+              documentResult: item.document_result
+            });
+            item.local_mapping_exported = true;
+            writeState(state);
+          }
+          catch { failed++; continue; }
+          try {
+            cleanupTerminalWorkCopy(state, item, deps);
+            item.work_copy_cleanup_pending = false;
+          }
           catch { item.work_copy_cleanup_pending = true; }
         }
         failed++;

@@ -26,6 +26,12 @@ function fixture(options = {}) {
   const invalidation = createBatchSnapshotInvalidation({
     deferredReviewStatus: 'deferred_review',
     mappingStoppedStatus: 'mapping-stopped',
+    writeState(state) {
+      events.push(`write:${state.items.filter((candidate) => candidate.status === 'stopped').length}`);
+      if (options.writeFailureCall && events.filter((event) => event.startsWith('write:')).length === options.writeFailureCall) {
+        throw new Error('journal failed');
+      }
+    },
     appendMapping(name, packageId, status) {
       events.push(`mapping:${name}:${packageId}:${status}`);
       if (options.mappingFailures?.has(name)) throw new Error(`MAPPING:${name}`);
@@ -67,7 +73,7 @@ test('exceptItem uses strict object identity and leaves only that instance uncha
   value.invalidation(state, {}, except);
   assert.deepStrictEqual(except, before);
   assert.strictEqual(equalLooking.status, 'stopped');
-  assert.strictEqual(value.events.length, 2);
+  assert.strictEqual(value.events.filter((event) => !event.startsWith('write:')).length, 2);
 });
 
 test('mapping and cleanup failures are isolated per item and preserve event order', () => {
@@ -79,10 +85,14 @@ test('mapping and cleanup failures are isolated per item and preserve event orde
   value.invalidation(state, { marker: 'x' });
   assert.ok(state.items.every((candidate) => candidate.status === 'stopped'));
   assert.deepStrictEqual(state.items.map((candidate) => candidate.local_mapping_exported), [false, true, false, true]);
-  assert.deepStrictEqual(state.items.map((candidate) => candidate.work_copy_cleanup_pending === true), [false, true, true, false]);
+  assert.deepStrictEqual(state.items.map((candidate) => candidate.work_copy_cleanup_pending === true), [true, true, true, false]);
   for (const candidate of state.items) {
-    assert.ok(value.events.indexOf(`mapping:${candidate.name}::mapping-stopped`) <
-      value.events.indexOf(`cleanup:${candidate.name}:x`));
+    const cleanupEvent = value.events.indexOf(`cleanup:${candidate.name}:x`);
+    if (candidate.local_mapping_exported) {
+      assert.ok(value.events.indexOf(`mapping:${candidate.name}::mapping-stopped`) < cleanupEvent);
+    } else {
+      assert.strictEqual(cleanupEvent, -1);
+    }
   }
 });
 
@@ -118,6 +128,28 @@ test('dependency failures never escape with document-bearing details', () => {
   assert.doesNotThrow(() => value.invalidation(state));
   assert.strictEqual(state.items[0].local_mapping_exported, false);
   assert.strictEqual(state.items[0].work_copy_cleanup_pending, true);
+});
+
+test('all stop decisions are durable before the first mapping and each mapping marker precedes cleanup', () => {
+  const state = { items: [item('pending', 'a'), item('pending', 'b')] };
+  const value = fixture();
+  value.invalidation(state, { marker: 'ordered' });
+  assert.strictEqual(value.events[0], 'write:2');
+  for (const candidate of state.items) {
+    const mapping = value.events.indexOf(`mapping:${candidate.name}::mapping-stopped`);
+    const cleanup = value.events.indexOf(`cleanup:${candidate.name}:ordered`);
+    assert.ok(mapping > 0);
+    assert.ok(value.events.slice(mapping + 1, cleanup).some((event) => event.startsWith('write:')));
+  }
+});
+
+test('crash while persisting invalidation decisions performs no mapping or cleanup', () => {
+  const state = { items: [item('pending', 'a'), item('pending', 'b')] };
+  const value = fixture({ writeFailureCall: 1 });
+  assert.throws(() => value.invalidation(state), /journal failed/u);
+  assert.ok(state.items.every((candidate) => candidate.document_result?.grade === 'not-processed'));
+  assert.ok(!value.events.some((event) => event.startsWith('mapping:')));
+  assert.ok(!value.events.some((event) => event.startsWith('cleanup:')));
 });
 
 test('the public processing facade remains unchanged', () => {

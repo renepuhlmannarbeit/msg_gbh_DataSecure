@@ -6,6 +6,19 @@ const { createSuite } = require('./helpers');
 
 const { test, testAsync, done, assert } = createSuite('Batch review publication boundary');
 
+const COMPLETE_DOCUMENT_RESULT = Object.freeze({
+  schema: 'datasecure-document-result/1',
+  grade: 'complete',
+  omissions: Object.freeze([]),
+  reason_code: null
+});
+const OMITTED_DOCUMENT_RESULT = Object.freeze({
+  schema: 'datasecure-document-result/1',
+  grade: 'usable-with-omissions',
+  omissions: Object.freeze([{ code: 'VISUAL_ASSETS_WITHHELD_LOCALLY', count: 1 }]),
+  reason_code: null
+});
+
 function reviewError(code, message) {
   const error = new SafeError(message);
   error.code = code;
@@ -44,6 +57,7 @@ function fixture(options = {}) {
     packageIdForItem(item) { return `ds_${item.id}`; },
     writeState(value, writeOptions) {
       writes.push({ snapshot: structuredClone(value), writeOptions });
+      events.push(`write:${writes.length}`);
       if (options.writeFailureCall === writes.length) throw new Error('journal failed');
     },
     ensureMappingOutbox(name) {
@@ -55,7 +69,9 @@ function fixture(options = {}) {
       events.push(`mapping-pending:${item.name}`);
       item.status = 'mapping_pending';
       item.package_id = packageId;
+      item.document_result = COMPLETE_DOCUMENT_RESULT;
       item.error_code = 'LOCAL_MAPPING_EXPORT_PENDING';
+      item.mapping_outbox_persisted = false;
     },
     cleanupTerminalWorkCopy(_state, item) {
       events.push(`cleanup:${item.name}`);
@@ -81,9 +97,19 @@ function fixture(options = {}) {
       }
       const reviewed = callOptions.reviewText(drafts[items.indexOf(item)]);
       events.push(`reviewed:${reviewed.text}`);
-      await callOptions.beforePublish?.({});
-      if (options.skipAfterPublish !== true) await callOptions.afterPublish?.();
-      return { package_id: options.wrongPackageId === item.name ? 'ds_' + 'f'.repeat(32) : `ds_${item.id}` };
+      const verifiedResult = options.missingBeforePublishResult === item.name ? undefined : COMPLETE_DOCUMENT_RESULT;
+      const publishedResult = options.missingAfterPublishResult === item.name
+        ? undefined
+        : (options.mismatchedAfterPublishResult === item.name ? OMITTED_DOCUMENT_RESULT : COMPLETE_DOCUMENT_RESULT);
+      const returnedResult = options.missingReturnResult === item.name
+        ? undefined
+        : (options.mismatchedReturnResult === item.name ? OMITTED_DOCUMENT_RESULT : COMPLETE_DOCUMENT_RESULT);
+      await callOptions.beforePublish?.({ document_result: verifiedResult });
+      if (options.skipAfterPublish !== true) await callOptions.afterPublish?.({ document_result: publishedResult });
+      return {
+        package_id: options.wrongPackageId === item.name ? 'ds_' + 'f'.repeat(32) : `ds_${item.id}`,
+        document_result: returnedResult
+      };
     }
   });
   return { publication, state, items, drafts, events, writes };
@@ -220,7 +246,12 @@ async function main() {
   });
 
   await testAsync('missing publish callback or mismatched package id stops the whole boundary before mapping', async () => {
-    for (const options of [{ skipAfterPublish: true }, { wrongPackageId: 'first' }]) {
+    for (const options of [
+      { skipAfterPublish: true },
+      { wrongPackageId: 'first' },
+      { missingReturnResult: 'first' },
+      { mismatchedReturnResult: 'first' }
+    ]) {
       const value = fixture(options);
       await assert.rejects(value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
         { document_index: 1, decisions: [decision('a-1')] },
@@ -233,6 +264,56 @@ async function main() {
       assert.ok(!value.events.some((event) => event.startsWith('mapping-commit:')));
       assert.ok(!value.events.some((event) => event.startsWith('mapping-stopped:')));
     }
+  });
+
+  await testAsync('missing or mismatched post-publish grade remains recoverable without mapping or downgrade', async () => {
+    for (const options of [
+      { missingAfterPublishResult: 'first' },
+      { mismatchedAfterPublishResult: 'first' }
+    ]) {
+      const value = fixture(options);
+      const result = await value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+        { document_index: 1, decisions: [decision('a-1')] },
+        { document_index: 2, decisions: [decision('a-2')] }
+      ]);
+      assert.strictEqual(value.items[0].status, 'processing');
+      assert.strictEqual(value.items[0].checkpoint, 'package_published');
+      assert.strictEqual(value.items[0].error_code, 'PROCESSING_INTERRUPTED');
+      assert.ok(!value.events.includes('mapping-pending:first'));
+      assert.ok(!value.events.includes('mapping-stopped:first'));
+      assert.deepStrictEqual(result.packages.map((entry) => entry.item), ['second']);
+    }
+  });
+
+  await testAsync('missing pre-publication result grade stops safely before any package is committed', async () => {
+    const value = fixture({ missingBeforePublishResult: 'first' });
+    const result = await value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+      { document_index: 1, decisions: [decision('a-1')] },
+      { document_index: 2, decisions: [decision('a-2')] }
+    ]);
+    assert.strictEqual(result.failed, 1);
+    assert.strictEqual(value.items[0].status, 'stopped');
+    assert.strictEqual(value.items[0].document_result.grade, 'not-processed');
+    assert.ok(!value.events.includes('mapping-pending:first'));
+    assert.strictEqual(value.items[1].status, 'delivery_pending');
+  });
+
+  await testAsync('review stop commits decision before mapping and mapping marker before cleanup', async () => {
+    const value = fixture({ pipelineFailure: 'first', pipelineFailureCode: 'PARSER_INVALID' });
+    await value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+      { document_index: 1, decisions: [decision('a-1')] },
+      { document_index: 2, decisions: [decision('a-2')] }
+    ]);
+    const decisionWrite = value.writes.findIndex((write) =>
+      write.snapshot.items[0].document_result?.grade === 'not-processed' &&
+      write.snapshot.items[0].local_mapping_exported === false);
+    const mappingEvent = value.events.indexOf('mapping-stopped:first');
+    const mappingWrite = value.writes.findIndex((write) => write.snapshot.items[0].local_mapping_exported === true);
+    const cleanupEvent = value.events.indexOf('cleanup:first');
+    assert.ok(decisionWrite >= 0);
+    assert.ok(value.events.indexOf(`write:${decisionWrite + 1}`) < mappingEvent);
+    assert.ok(mappingWrite > decisionWrite);
+    assert.ok(value.events.indexOf(`write:${mappingWrite + 1}`) < cleanupEvent);
   });
 
   done();

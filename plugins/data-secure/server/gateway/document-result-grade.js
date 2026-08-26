@@ -107,6 +107,24 @@ function notProcessedDocumentResult(reasonCode) {
   return immutableResult(GRADES.NOT_PROCESSED, [], String(reasonCode || ''));
 }
 
+function sameDocumentResult(left, right) {
+  try {
+    validateDocumentResult(left);
+    validateDocumentResult(right);
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
+function positiveDocumentResult(value) {
+  validateDocumentResult(value);
+  if (![GRADES.COMPLETE, GRADES.USABLE_WITH_OMISSIONS].includes(value.grade)) {
+    throw new DocumentResultError();
+  }
+  return value;
+}
+
 function validateManifestDocumentResult(manifest) {
   if (!manifest || manifest.schema !== 'eu-privacy-package/3') throw new DocumentResultError();
   const expected = releasedDocumentResult({
@@ -129,5 +147,7 @@ module.exports = Object.freeze({
   validateDocumentResult,
   releasedDocumentResult,
   notProcessedDocumentResult,
+  sameDocumentResult,
+  positiveDocumentResult,
   validateManifestDocumentResult
 });

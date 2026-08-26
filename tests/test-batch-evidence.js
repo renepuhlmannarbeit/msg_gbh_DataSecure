@@ -17,8 +17,9 @@ const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch evidence durable store');
 
-function batchState(status = 'released') {
+function batchState(status = 'released', schema = 'datasecure-batch/2') {
   return {
+    schema,
     created_at: '2026-08-26T10:00:00.000Z',
     profile: 'general',
     remove_images: false,
@@ -39,6 +40,7 @@ test('receipt ids make append idempotent and conflicting reuse fails closed', ()
   try {
     const target = path.join(dir, 'evidence.json');
     const record = evidenceRecord(batchState(), '2026-08-26T11:00:00.000Z', '1'.repeat(32));
+    assert.strictEqual(record.batch_snapshot_schema, 'datasecure-batch/2');
     assert.strictEqual(appendEvidenceRecord(record, { target, platform: 'win32' }), true);
     const first = fs.readFileSync(target, 'utf8');
     assert.strictEqual(appendEvidenceRecord(record, { target, platform: 'win32' }), false);
@@ -53,7 +55,7 @@ test('v1 migration preserves every legacy record unchanged beside new v2 receipt
   const dir = sandbox('evidence-legacy');
   try {
     const target = path.join(dir, 'evidence.json');
-    const legacy = evidenceRecord(batchState(), '2026-08-26T10:30:00.000Z', '2'.repeat(32));
+    const legacy = evidenceRecord(batchState('released', 'datasecure-batch/1'), '2026-08-26T10:30:00.000Z', '2'.repeat(32));
     delete legacy.receipt_id;
     legacy.schema = LEGACY_SCHEMA;
     fs.writeFileSync(target, `${JSON.stringify({ schema: LEGACY_SCHEMA, records: [legacy] })}\n`, 'utf8');

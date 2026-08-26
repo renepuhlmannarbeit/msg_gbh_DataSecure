@@ -99,6 +99,19 @@ test('a preflight mapping checkpoint is visible only as aggregate local repair w
   assert.doesNotMatch(JSON.stringify(result), /Private|Defekt|Weiter|\.docx|\.txt/u);
 });
 
+test('a durable stop is non-terminal until its permanent local mapping exists', () => {
+  const result = _test.publicProgress({
+    token: '1'.repeat(64),
+    items: [{ name: 'Private-Defekt.docx', status: 'stopped', local_mapping_exported: false }]
+  });
+  assert.strictEqual(result.mapping_pending, 1);
+  assert.strictEqual(result.stopped, 0);
+  assert.strictEqual(result.completed, 0);
+  assert.strictEqual(result.complete, false);
+  assert.strictEqual(result.batch_phase, 'awaiting_local_mapping_repair');
+  assert.doesNotMatch(JSON.stringify(result), /Private|Defekt|\.docx/u);
+});
+
 test('rest time is a bounded median from at least three local processing samples', () => {
   const result = _test.publicProgress({
     token: 'b'.repeat(64),

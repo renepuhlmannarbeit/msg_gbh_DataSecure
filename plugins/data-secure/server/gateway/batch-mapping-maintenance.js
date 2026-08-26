@@ -1,8 +1,11 @@
 'use strict';
 
+const { sameDocumentResult } = require('./document-result-grade');
+
 function createBatchMappingMaintenance(options = {}) {
   const readOutboxEntries = options.readOutboxEntries;
   const publishedPackageState = options.publishedPackageState;
+  const publishedPackageRecord = options.publishedPackageRecord;
   const appendMapping = options.appendMapping;
   const removeMappingOutbox = options.removeMappingOutbox;
 
@@ -17,7 +20,10 @@ function createBatchMappingMaintenance(options = {}) {
     for (const entry of entries) {
       // Only a conclusively missing package makes its exact intent obsolete.
       // Unsafe or otherwise unverifiable output must remain pending.
-      const state = publishedPackageState(entry.package_id);
+      const published = publishedPackageRecord
+        ? publishedPackageRecord(entry.package_id)
+        : { state: publishedPackageState(entry.package_id), document_result: null };
+      const state = published.state;
       if (state === 'missing') {
         try {
           removeMappingOutbox(entry);
@@ -29,10 +35,20 @@ function createBatchMappingMaintenance(options = {}) {
         pending++;
         continue;
       }
+      if (published.document_result && !sameDocumentResult(entry.document_result, published.document_result)) {
+        pending++;
+        continue;
+      }
+      if (!published.document_result && Object.hasOwn(entry, 'document_result')) {
+        pending++;
+        continue;
+      }
       try {
         // The durable user mapping must exist before its repair intent is
         // removed. A failure in either operation keeps the replay retryable.
-        appendMapping(entry.original_basename, entry.package_id);
+        appendMapping(entry.original_basename, entry.package_id, undefined, {
+          documentResult: entry.document_result
+        });
         removeMappingOutbox(entry);
         repaired++;
       } catch {

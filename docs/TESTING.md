@@ -13,6 +13,21 @@ npm run build:plugin && npm run test:plugin-zip # same acceptance against the bu
 node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # engineering-only MCP proof
 ```
 
+## Lokaler RC61-Nachweis 26.08.2026
+
+Nach der crashsicheren Bindung der DS-045-Ergebnisgrade an Paketmanifest,
+`datasecure-batch/2` und Mapping CSV/Outbox V2 endete `npm test` vollständig mit
+Exit-Code 0. Der Lauf umfasste insbesondere 14 Journal-, elf Mapping-, acht
+Outbox-, sechs Result-Bindungs-, 67 servergebundene Batch-/Crash-/Resume-, 40
+Gateway-End-to-End-, 31 MCP-Protokoll- und 20 adversariale Fälle sowie die
+2.000-Fälle-Exploration, 96 DOCX-Differentialdokumente und sieben native
+Windows-Job-Object-Prüfungen. Ein dabei gefundener Post-Publish-Crashrest wurde
+geschlossen: Ein nur im Speicher gesetzter Grad wird bei fehlgeschlagenem
+Journalwechsel verworfen und beim Wiederanlauf ausschließlich aus dem erneut
+verifizierten V3-Paketmanifest gebunden. Dieser E0-Nachweis erweitert keine
+Formatfreigabe und ersetzt keine frische ZIP-/MCPB-/Cowork-Abnahme auf den
+Zielplattformen.
+
 Lokaler RC55-Schlusslauf 26.08.2026: `npm test` endete nach dem atomaren R3b-Schnitt
 mit Exit-Code 0. Der Lauf bestand 15 direkte Legacy-Migrationsfälle,
 20 Architekturverträge, 40 Gateway-End-to-End-, 66 Batch-/Crash-/Resume- und

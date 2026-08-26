@@ -7,6 +7,19 @@ const { createSuite } = require('./helpers');
 
 const { testAsync, done, assert } = createSuite('Batch single-item processing boundary');
 
+const COMPLETE_DOCUMENT_RESULT = Object.freeze({
+  schema: 'datasecure-document-result/1',
+  grade: 'complete',
+  omissions: Object.freeze([]),
+  reason_code: null
+});
+const OMITTED_DOCUMENT_RESULT = Object.freeze({
+  schema: 'datasecure-document-result/1',
+  grade: 'usable-with-omissions',
+  omissions: Object.freeze([{ code: 'IMAGES_REMOVED_BY_REQUEST', count: 1 }]),
+  reason_code: null
+});
+
 function codedError(code, message = code) {
   const error = new SafeError(message);
   error.code = code;
@@ -67,6 +80,7 @@ function fixture(options = {}) {
       value.status = 'mapping_pending';
       value.checkpoint = 'mapping_pending';
       value.package_id = packageId;
+      value.document_result = COMPLETE_DOCUMENT_RESULT;
       value.error_code = 'LOCAL_MAPPING_EXPORT_PENDING';
     },
     cleanupTerminalWorkCopy(_state, value) {
@@ -112,11 +126,19 @@ function fixture(options = {}) {
       await callOptions.onExtracted({ private: true });
       await callOptions.onDetected({ private: true });
       callOptions.reviewText(options.reviewInput);
-      await callOptions.beforePublish({ private: true });
-      if (!options.skipAfterPublish) await callOptions.afterPublish();
-      if (options.doubleAfterPublish) await callOptions.afterPublish();
+      const verifiedResult = options.missingBeforePublishResult ? undefined : COMPLETE_DOCUMENT_RESULT;
+      const publishedResult = options.missingAfterPublishResult
+        ? undefined
+        : (options.mismatchedAfterPublishResult ? OMITTED_DOCUMENT_RESULT : COMPLETE_DOCUMENT_RESULT);
+      const returnedResult = options.missingReturnResult
+        ? undefined
+        : (options.mismatchedReturnResult ? OMITTED_DOCUMENT_RESULT : COMPLETE_DOCUMENT_RESULT);
+      await callOptions.beforePublish({ private: true, document_result: verifiedResult });
+      if (!options.skipAfterPublish) await callOptions.afterPublish({ document_result: publishedResult });
+      if (options.doubleAfterPublish) await callOptions.afterPublish({ document_result: publishedResult });
       return {
         package_id: options.wrongPackageId ? `ds_${'f'.repeat(32)}` : expectedPackageId,
+        document_result: returnedResult,
         audit_receipt_retained: options.auditReceipt === true
       };
     }
@@ -155,7 +177,6 @@ async function main() {
       'review',
       'io:final_gate_runs',
       'phase:verification',
-      'outbox',
       'phase:publication',
       'phase:publication',
       'mapping-pending',
@@ -216,13 +237,23 @@ async function main() {
     for (const [options, expectedCheckpoint] of [
       [{ skipAfterPublish: true }, 'publication_unconfirmed'],
       [{ doubleAfterPublish: true }, 'package_published'],
-      [{ wrongPackageId: true }, 'package_published']
+      [{ wrongPackageId: true }, 'package_published'],
+      [{ missingBeforePublishResult: true }, 'retryable'],
+      [{ missingAfterPublishResult: true }, 'package_published'],
+      [{ mismatchedAfterPublishResult: true }, 'package_published'],
+      [{ missingReturnResult: true }, 'package_published'],
+      [{ mismatchedReturnResult: true }, 'package_published']
     ]) {
       const value = fixture(options);
       const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
-      assert.strictEqual(result.error, 'BATCH_PUBLICATION_UNCONFIRMED');
-      assert.strictEqual(value.item.status, 'processing');
+      assert.strictEqual(result.error,
+        options.missingBeforePublishResult || options.missingAfterPublishResult
+          ? 'PROCESSING_INTERRUPTED'
+          : 'BATCH_PUBLICATION_UNCONFIRMED');
+      assert.strictEqual(value.item.status,
+        options.missingBeforePublishResult ? 'retryable' : 'processing');
       assert.strictEqual(value.item.checkpoint, expectedCheckpoint);
+      if (options.missingBeforePublishResult) assert.ok(!Object.hasOwn(value.item, 'document_result'));
       assert.ok(!value.events.includes('mapping-pending'));
       assert.ok(!value.events.includes('mapping-stopped'));
       assert.ok(!value.events.includes('cleanup'));
@@ -238,6 +269,7 @@ async function main() {
       assert.strictEqual(value.item.checkpoint, 'package_published', `write ${writeFailureCall}`);
       assert.strictEqual(value.item.error_code, 'PROCESSING_INTERRUPTED', `write ${writeFailureCall}`);
       assert.strictEqual(value.item.package_id, value.expectedPackageId, `write ${writeFailureCall}`);
+      assert.ok(value.writes.some((write) => write.snapshot.items[0].checkpoint === 'package_published'), `write ${writeFailureCall}`);
       assert.ok(!value.events.includes('mapping-stopped'), `write ${writeFailureCall}`);
       assert.strictEqual(value.events.filter((event) => event === 'anonymize').length, 1, `write ${writeFailureCall}`);
     }
@@ -311,6 +343,37 @@ async function main() {
     assert.ok(!JSON.stringify(result).includes('PII-SENTINEL'));
     assert.ok(!JSON.stringify(value.writes).includes('PII-SENTINEL'));
     assert.ok(!JSON.stringify(value.state).includes('PII-SENTINEL'));
+  });
+
+  await testAsync('safe stop is journaled before mapping, mapping before cleanup, and evidence follows mapping', async () => {
+    const value = fixture({ pipelineError: codedError('PARSER_INVALID') });
+    const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+    const decisionWrite = value.writes.findIndex((write) =>
+      write.snapshot.items[0].document_result?.grade === 'not-processed' &&
+      write.snapshot.items[0].local_mapping_exported === false &&
+      write.snapshot.items[0].work_copy_cleanup_pending === true);
+    const mappingEvent = value.events.indexOf('mapping-stopped');
+    const mappingWrite = value.writes.findIndex((write) => write.snapshot.items[0].local_mapping_exported === true);
+    const cleanupEvent = value.events.indexOf('cleanup');
+    assert.ok(decisionWrite >= 0);
+    assert.ok(value.events.indexOf(`write:${decisionWrite + 1}:durable`) < mappingEvent);
+    assert.ok(mappingWrite > decisionWrite);
+    assert.ok(value.events.indexOf(`write:${mappingWrite + 1}:durable`) < cleanupEvent);
+    assert.ok(value.events.indexOf('evidence') > cleanupEvent);
+    assert.strictEqual(result.local_mapping_exported, true);
+  });
+
+  await testAsync('mapping failure preserves the durable stop decision, work copy and suppresses evidence', async () => {
+    const value = fixture({ pipelineError: codedError('PARSER_INVALID'), stopMappingFailure: true });
+    const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+    const durable = value.writes.at(-1).snapshot.items[0];
+    assert.strictEqual(durable.status, 'stopped');
+    assert.strictEqual(durable.document_result.grade, 'not-processed');
+    assert.strictEqual(durable.local_mapping_exported, false);
+    assert.strictEqual(durable.work_copy_cleanup_pending, true);
+    assert.ok(!value.events.includes('cleanup'));
+    assert.ok(!value.events.includes('evidence'));
+    assert.strictEqual(result.local_evidence_exported, false);
   });
 
   done();

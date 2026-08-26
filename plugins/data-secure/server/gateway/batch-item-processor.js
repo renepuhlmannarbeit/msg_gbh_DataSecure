@@ -1,5 +1,11 @@
 'use strict';
 
+const {
+  notProcessedDocumentResult,
+  positiveDocumentResult,
+  sameDocumentResult
+} = require('./document-result-grade');
+
 function createBatchItemProcessor(options = {}) {
   const SafeError = options.SafeError;
   const writeState = options.writeState;
@@ -43,6 +49,11 @@ function createBatchItemProcessor(options = {}) {
     item.package_id = expectedPackageId;
     item.error_code = 'PROCESSING_INTERRUPTED';
     item.work_copy_cleanup_pending = true;
+    // A failed write may have happened after markMappingPending mutated the
+    // in-memory item. The recoverable package-published checkpoint deliberately
+    // carries no terminal grade; recovery rebinds it from the verified manifest.
+    delete item.document_result;
+    delete item.mapping_outbox_persisted;
     delete item.processing_started_at_ms;
     writeState(state);
     return {
@@ -66,6 +77,8 @@ function createBatchItemProcessor(options = {}) {
     const expectedPackageId = packageIdForItem(item);
     let packagePublished = false;
     let publishCallbackCount = 0;
+    let verifiedDocumentResult;
+    let publishedDocumentResult;
     writeState(state);
     try {
       const checkpoint = (phase, performancePhase) => {
@@ -93,33 +106,34 @@ function createBatchItemProcessor(options = {}) {
         },
         reviewText: (input) => reviewSingleBatchTextLocally(input, state, item, deps),
         beforePublish: async (details) => {
+          positiveDocumentResult(details?.document_result);
+          verifiedDocumentResult = details.document_result;
           incrementPrivateIoSummary(state.io_summary, 'final_gate_runs');
           checkpoint('package_verified', 'verification');
           if (deps.beforePublish) await deps.beforePublish(details);
         },
-        afterPublish: async () => {
+        afterPublish: async (details) => {
           publishCallbackCount++;
-          if (publishCallbackCount !== 1) throw publicationUnconfirmed();
-          // The atomic output rename is the commit point. From this line on,
-          // no later error may become a parser stop or delete the work copy.
+          // The atomic output rename has already committed before this callback.
+          // Bind every subsequent validation failure to published recovery.
           packagePublished = true;
-          try {
-            ensureMappingOutbox(item.name, expectedPackageId);
-            item.mapping_outbox_persisted = true;
-          } catch {
-            item.mapping_outbox_persisted = false;
-          }
+          if (publishCallbackCount !== 1) throw publicationUnconfirmed();
+          positiveDocumentResult(details?.document_result);
+          if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw publicationUnconfirmed();
+          publishedDocumentResult = details.document_result;
           checkpoint('package_published', 'publication');
         }
       });
       phaseRecorder.mark('publication');
-      if (!packagePublished || publishCallbackCount !== 1 || result?.package_id !== expectedPackageId) {
+      if (!packagePublished || publishCallbackCount !== 1 || result?.package_id !== expectedPackageId ||
+        !sameDocumentResult(result?.document_result, verifiedDocumentResult) ||
+        !sameDocumentResult(result?.document_result, publishedDocumentResult)) {
         throw publicationUnconfirmed();
       }
-      markMappingPending(item, expectedPackageId);
+      markMappingPending(item, expectedPackageId, result.document_result);
       writeState(state);
       try {
-        ensureMappingOutbox(item.name, expectedPackageId);
+        ensureMappingOutbox(item.name, expectedPackageId, item.document_result);
         item.mapping_outbox_persisted = true;
       } catch {
         return {
@@ -182,7 +196,7 @@ function createBatchItemProcessor(options = {}) {
       }
       const code = error?.code || 'PROCESSING_INTERRUPTED';
       if (code === 'BATCH_SNAPSHOT_CHANGED') {
-        invalidateUnpublishedBatchCopies(state, deps, item);
+        invalidateUnpublishedBatchCopies(state, { ...deps, writeState }, item);
       }
       item.status = code === 'LOCAL_REVIEW_DEFERRED'
         ? deferredReviewStatus
@@ -197,15 +211,41 @@ function createBatchItemProcessor(options = {}) {
       delete item.processing_started_at_ms;
       item.error_code = code;
       if (item.status === 'stopped') {
+        item.document_result = notProcessedDocumentResult(code);
+        item.local_mapping_exported = false;
+        item.work_copy_cleanup_pending = true;
+        // The stop decision is the authoritative commit point. Mapping and
+        // cleanup are separately recoverable projections of that decision.
+        writeState(state);
         try {
-          appendMapping(item.name, '', mappingStoppedStatus);
+          appendMapping(item.name, '', mappingStoppedStatus, {
+            mappingReference: item.id,
+            documentResult: item.document_result
+          });
           item.local_mapping_exported = true;
-        } catch { item.local_mapping_exported = false; }
-        try { cleanupTerminalWorkCopy(state, item, deps); }
-        catch { item.work_copy_cleanup_pending = true; }
+          writeState(state);
+        } catch {
+          return {
+            ok: false,
+            error: code,
+            message: publicFailureMessage(code),
+            ...publicProgress(state),
+            local_mapping_exported: false,
+            local_evidence_exported: false,
+            raw_content_sent_to_claude: false
+          };
+        }
+        try {
+          cleanupTerminalWorkCopy(state, item, deps);
+          item.work_copy_cleanup_pending = false;
+        } catch { item.work_copy_cleanup_pending = true; }
+        writeState(state);
+      } else {
+        writeState(state);
       }
-      writeState(state);
-      const localEvidenceExported = writeTerminalEvidence(state);
+      const localEvidenceExported = item.status === 'stopped' && item.local_mapping_exported !== true
+        ? false
+        : writeTerminalEvidence(state);
       return {
         ok: false,
         error: code,

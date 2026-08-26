@@ -92,11 +92,12 @@ function createBatchProgress(deps) {
     const released = items.filter((item) => item.status === 'released').length;
     const deliveryPending = items.filter((item) => item.status === deliveryPendingStatus).length;
     const processing = items.filter((item) => item.status === 'processing').length;
-    const stopped = items.filter((item) => item.status === 'stopped').length;
+    const stopped = items.filter((item) => item.status === 'stopped' && item.local_mapping_exported !== false).length;
     const retryable = items.filter((item) => item.status === 'retryable').length;
     const deferredReview = items.filter((item) => item.status === deferredReviewStatus).length;
     const mappingPending = items.filter((item) =>
-      item.status === mappingPendingStatus || item.status === preflightMappingPendingStatus
+      item.status === mappingPendingStatus || item.status === preflightMappingPendingStatus ||
+      (item.status === 'stopped' && item.local_mapping_exported === false)
     ).length;
     const remaining = items.filter((item) => item.status === 'pending').length;
     const completed = released + stopped;

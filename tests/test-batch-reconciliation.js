@@ -3,16 +3,20 @@
 const path = require('path');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchReconciliation } = require('../plugins/data-secure/server/gateway/batch-reconciliation');
+const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch reconciliation');
 const packageId = `ds_${'a'.repeat(32)}`;
 const output = path.join('private-root', 'Output');
+const completeResult = Object.freeze({
+  schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null
+});
 
 function fixture(options = {}) {
   const events = [];
   const mappingCalls = [];
-  const mode = options.mode || 'verified';
+  const mode = options.mode || 'v3';
   const packageFolder = path.join(output, packageId);
   const manifestPath = path.join(packageFolder, 'manifest.json');
   const documentPath = path.join(packageFolder, `${packageId}.md`);
@@ -47,7 +51,7 @@ function fixture(options = {}) {
         parser_warnings: [], assets: [], pdf_unextractable_visual_objects: 0,
         images_removed_by_explicit_request: 0,
         visual_assets_withheld_at_release: 0,
-        document_result: { schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null }
+        document_result: completeResult
       });
       return JSON.stringify(value);
     }
@@ -59,14 +63,15 @@ function fixture(options = {}) {
     path,
     roots: options.roots || (() => ({ output })),
     sha256File: () => mode === 'hash-mismatch' ? 'd'.repeat(64) : digest,
-    ensureMappingOutbox(name, id) {
+    ensureMappingOutbox(name, id, documentResult) {
       events.push(`ensure:${name}:${id}`);
+      mappingCalls.push({ phase: 'intent', name, id, documentResult });
       if (failure === 'ensure') throw new Error('ENSURE_FAILED');
       return { name: 'intent' };
     },
     appendMapping(name, id, status, settings) {
       events.push(`append:${name}:${id}`);
-      mappingCalls.push({ name, id, status, settings });
+      mappingCalls.push({ phase: 'append', name, id, status, settings });
       if (failure === 'append') throw new Error('APPEND_FAILED');
     },
     removeMappingOutbox() {
@@ -80,7 +85,7 @@ function fixture(options = {}) {
 }
 
 test('package verification keeps the exact verified, missing, unsafe and structural-false contract', () => {
-  assert.strictEqual(fixture().reconciliation.publishedPackageState(packageId), 'verified');
+  assert.strictEqual(fixture({ mode: 'verified' }).reconciliation.publishedPackageState(packageId), 'verified');
   assert.strictEqual(fixture({ mode: 'v3' }).reconciliation.publishedPackageState(packageId), 'verified');
   assert.strictEqual(fixture({ mode: 'missing' }).reconciliation.publishedPackageState(packageId), 'missing');
   assert.strictEqual(fixture({ mode: 'not-directory' }).reconciliation.publishedPackageState(packageId), false);
@@ -117,6 +122,7 @@ test('verified processing items are adopted before interrupted work becomes retr
     status: 'mapping_pending',
     checkpoint: 'mapping_pending',
     package_id: packageId,
+    document_result: completeResult,
     error_code: 'LOCAL_MAPPING_EXPORT_PENDING',
     mapping_outbox_persisted: false,
     work_copy_cleanup_pending: true
@@ -134,6 +140,24 @@ test('verified processing items are adopted before interrupted work becomes retr
   assert.strictEqual(reconciliation.markInterruptedItemsRetryable(state), 0);
   assert.strictEqual(pending.status, 'pending');
   assert.strictEqual(released.status, 'released');
+});
+
+test('a v1 journal adopts an already published v2 package without inventing a grade', () => {
+  const { reconciliation, mappingCalls } = fixture({ mode: 'v2' });
+  const item = { id: 'a'.repeat(32), name: 'legacy.docx', status: 'processing', checkpoint: 'package_published' };
+  const state = { schema: 'datasecure-batch/1', items: [item] };
+  assert.strictEqual(reconciliation.reconcilePublishedItems(state), true);
+  assert.strictEqual(Object.hasOwn(item, 'document_result'), false);
+  assert.strictEqual(item.status, 'mapping_pending');
+  assert.strictEqual(reconciliation.reconcilePendingMappings(state), true);
+  assert.strictEqual(item.status, 'delivery_pending');
+  assert.strictEqual(mappingCalls[0].documentResult, undefined);
+  assert.strictEqual(mappingCalls[1].settings.documentResult, undefined);
+
+  const v2State = { schema: 'datasecure-batch/2', items: [
+    { id: 'a'.repeat(32), name: 'forged.docx', status: 'processing', checkpoint: 'package_published' }
+  ] };
+  assert.strictEqual(reconciliation.reconcilePublishedItems(v2State), false);
 });
 
 test('missing or unsafe output is never adopted or mapped', () => {
@@ -157,7 +181,8 @@ test('mapping commit preserves the durable intent to CSV to intent-removal order
     status: 'mapping_pending',
     package_id: packageId,
     error_code: 'LOCAL_MAPPING_EXPORT_PENDING',
-    mapping_outbox_persisted: false
+    mapping_outbox_persisted: false,
+    document_result: completeResult
   };
   assert.strictEqual(reconciliation.reconcilePendingMappings({ items: [item] }), true);
   assert.deepStrictEqual(events, [`ensure:one.txt:${packageId}`, `append:one.txt:${packageId}`, 'remove']);
@@ -175,7 +200,8 @@ test('every mapping crash boundary remains pending and can be retried without pu
       status: 'mapping_pending',
       package_id: packageId,
       error_code: 'LOCAL_MAPPING_EXPORT_PENDING',
-      mapping_outbox_persisted: false
+      mapping_outbox_persisted: false,
+      document_result: completeResult
     };
     const { reconciliation, events, clearFailure } = fixture({ mappingFailure: phase });
     assert.strictEqual(reconciliation.reconcilePendingMappings({ items: [item] }), false, phase);
@@ -213,6 +239,7 @@ test('preflight stops become terminal only after an idempotent local stopped map
     status: 'preflight_mapping_pending',
     checkpoint: 'source_preflight_rejected',
     error_code: 'SOURCE_TYPE_MISMATCH',
+    document_result: notProcessedDocumentResult('SOURCE_TYPE_MISMATCH'),
     local_mapping_exported: false
   };
   const state = { items: [item] };
@@ -221,8 +248,12 @@ test('preflight stops become terminal only after an idempotent local stopped map
   assert.strictEqual(item.checkpoint, 'source_preflight_stopped');
   assert.strictEqual(item.local_mapping_exported, true);
   assert.deepStrictEqual(mappingCalls[0], {
+    phase: 'append',
     name: '=duplicate.docx', id: '', status: 'sicher gestoppt',
-    settings: { mappingReference: 'e'.repeat(32) }
+    settings: {
+      mappingReference: 'e'.repeat(32),
+      documentResult: notProcessedDocumentResult('SOURCE_TYPE_MISMATCH')
+    }
   });
   assert.strictEqual(reconciliation.reconcilePreflightStoppedMappings(state), false);
   assert.strictEqual(mappingCalls.length, 1);
@@ -232,6 +263,7 @@ test('failed stopped mapping remains recoverable and snapshot-bearing impostors 
   const pending = {
     id: 'f'.repeat(32), name: 'blocked.pdf', status: 'preflight_mapping_pending',
     checkpoint: 'source_preflight_rejected', error_code: 'SOURCE_FORMAT_NOT_RELEASED',
+    document_result: notProcessedDocumentResult('SOURCE_FORMAT_NOT_RELEASED'),
     local_mapping_exported: false
   };
   const failed = fixture({ mappingFailure: 'append' });

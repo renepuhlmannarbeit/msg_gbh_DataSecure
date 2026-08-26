@@ -739,7 +739,9 @@ async function main() {
     // Simulate termination just after the output rename: the output exists,
     // but the batch journal still says processing and has no package id.
     state.items[0].status = 'processing';
+    state.items[0].checkpoint = 'package_published';
     delete state.items[0].package_id;
+    delete state.items[0].document_result;
     fs.writeFileSync(stateFile, JSON.stringify(state));
     const recovered = recoverBatches();
     assert.ok(recovered.recovered >= 1, 'global recovery may also repair an earlier interrupted test batch');
@@ -1236,10 +1238,10 @@ async function main() {
     assert.match(first.read_capability, /^[A-Za-z0-9_-]{43}$/);
     assert.deepStrictEqual(fs.readdirSync(resetInputDirectory()).sort(), ['blocked.xlsx', 'first.txt', 'second.txt']);
     const mapping = fs.readFileSync(path.join(roots().exports, 'DataSecure-Mapping.csv'), 'utf8');
-    assert.match(mapping, /Originaldatei;Anonymisiertes Ergebnis;Status;Hinweis/);
+    assert.match(mapping, /Originaldatei;Anonymisiertes Ergebnis;Ergebnisgrad;Auslassungen;Grundcode;Hinweis/);
     assert.match(mapping, /"first\.txt"/);
     assert.match(mapping, /"second\.txt"/);
-    assert.match(mapping, /"blocked\.xlsx";"";"sicher gestoppt"/);
+    assert.match(mapping, /"blocked\.xlsx";"";"Sicher nicht verarbeitet";"";"SOURCE_FORMAT_NOT_RELEASED"/);
     assert.doesNotMatch(JSON.stringify(first), /first\.txt/);
     const state = _test.readState(begun.batch_token);
     assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), state.items.find((item) => item.name === 'first.txt').work_name)), false);
@@ -1268,7 +1270,7 @@ async function main() {
     assert.strictEqual(result.stopped, 1);
     assert.strictEqual(result.package_id, undefined);
     const mapping = fs.readFileSync(path.join(roots().exports, 'DataSecure-Mapping.csv'), 'utf8');
-    assert.match(mapping, /"unreadable\.xlsx";"";"sicher gestoppt"/);
+    assert.match(mapping, /"unreadable\.xlsx";"";"Sicher nicht verarbeitet";"";"SOURCE_FORMAT_NOT_RELEASED"/);
     assert.doesNotMatch(JSON.stringify(result), /unreadable\.xlsx/);
   });
 

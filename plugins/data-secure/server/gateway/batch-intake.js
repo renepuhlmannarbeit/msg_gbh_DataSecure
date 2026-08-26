@@ -1,5 +1,7 @@
 'use strict';
 
+const { notProcessedDocumentResult } = require('./document-result-grade');
+
 function createBatchIntake(options = {}) {
   const SafeError = options.SafeError;
   const io = options.io;
@@ -161,6 +163,7 @@ function createBatchIntake(options = {}) {
             status: preflightMappingPendingStatus,
             checkpoint: 'source_preflight_rejected',
             error_code: planned.error_code,
+            document_result: notProcessedDocumentResult(planned.error_code),
             local_mapping_exported: false,
             processing_duration_ms: 0
           };
@@ -181,7 +184,7 @@ function createBatchIntake(options = {}) {
         };
       });
       state = {
-        schema: 'datasecure-batch/1',
+        schema: 'datasecure-batch/2',
         token,
         created_at: new Date(now).toISOString(),
         expires_at: new Date(now + batchTtlMs()).toISOString(),

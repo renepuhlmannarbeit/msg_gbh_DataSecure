@@ -5,6 +5,12 @@ const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch mapping maintenance');
 const ids = ['1', '2', '3', '4'].map((digit) => `ds_${digit.repeat(32)}`);
+const COMPLETE_RESULT = Object.freeze({
+  schema: 'datasecure-document-result/1',
+  grade: 'complete',
+  omissions: Object.freeze([]),
+  reason_code: null
+});
 
 function entry(index) {
   return { package_id: ids[index], original_basename: `Dokument-${index + 1}.docx`, file: `intent-${index + 1}` };
@@ -104,6 +110,35 @@ test('mixed entries are isolated while package-state errors stay fail closed', (
   const stateFailed = fixture({ stateError: ids[0] });
   assert.throws(() => stateFailed.maintenance.replayMappingOutbox(), /STATE_FAILED/);
   assert.ok(!stateFailed.events.some((value) => value.startsWith('append:') || value.startsWith('remove:')));
+});
+
+test('v2 replay binds the outbox result exactly to the verified v3 manifest result', () => {
+  const mismatched = { ...COMPLETE_RESULT, grade: 'usable-with-omissions',
+    omissions: [{ code: 'VISUAL_ASSETS_WITHHELD_LOCALLY', count: 1 }] };
+  const entries = [
+    { ...entry(0), schema: 'datasecure-mapping-outbox/2', document_result: COMPLETE_RESULT },
+    { ...entry(1), schema: 'datasecure-mapping-outbox/2', document_result: COMPLETE_RESULT }
+  ];
+  const appended = [];
+  const removed = [];
+  const maintenance = createBatchMappingMaintenance({
+    readOutboxEntries: () => entries,
+    publishedPackageState: () => 'verified',
+    publishedPackageRecord(packageId) {
+      return { state: 'verified', document_result: packageId === ids[0] ? COMPLETE_RESULT : mismatched };
+    },
+    appendMapping(name, packageId, status, options) {
+      appended.push({ name, packageId, status, documentResult: options.documentResult });
+    },
+    removeMappingOutbox(value) { removed.push(value.package_id); }
+  });
+  assert.deepStrictEqual(maintenance.replayMappingOutbox(), {
+    repaired: 1, pending: 1, orphaned_removed: 0, failures: 0
+  });
+  assert.deepStrictEqual(appended, [{
+    name: 'Dokument-1.docx', packageId: ids[0], status: undefined, documentResult: COMPLETE_RESULT
+  }]);
+  assert.deepStrictEqual(removed, [ids[0]]);
 });
 
 test('the batch composition root preserves both replay facades', () => {

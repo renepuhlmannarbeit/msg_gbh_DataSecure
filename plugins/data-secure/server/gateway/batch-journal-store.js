@@ -6,8 +6,14 @@ const { SafeError } = require('../runtime');
 const { batchPath, safeRemoveWorkDirectory } = require('./batch-private-store');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const {
+  GRADES,
+  validateDocumentResult,
+  positiveDocumentResult
+} = require('./document-result-grade');
 
-const SCHEMA = 'datasecure-batch/1';
+const SCHEMA = 'datasecure-batch/2';
+const LEGACY_SCHEMA = 'datasecure-batch/1';
 const NOT_FOUND = 'Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte den Eingang erneut bestätigen.';
 const INVALID = 'Batch-Sitzung ist ungültig. Bitte den Eingang erneut bestätigen.';
 const EXPIRED = 'Batch-Sitzung ist abgelaufen. Bitte den Eingang erneut bestätigen.';
@@ -117,24 +123,56 @@ function createBatchJournalStore(options = {}) {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
 
-  function validPreflightItem(item) {
+  function validPreflightItem(item, schema) {
     const isPending = item?.status === 'preflight_mapping_pending';
     const isStopped = item?.checkpoint === 'source_preflight_stopped';
     const isPreflight = isPending || isStopped || item?.checkpoint === 'source_preflight_rejected';
     if (!isPreflight) return true;
     const validPair = (isPending && item.checkpoint === 'source_preflight_rejected' && item.local_mapping_exported === false) ||
       (item.status === 'stopped' && isStopped && item.local_mapping_exported === true);
-    return validPair && /^[a-f0-9]{32}$/iu.test(String(item.id || '')) &&
+    const common = validPair && /^[a-f0-9]{32}$/iu.test(String(item.id || '')) &&
       typeof item.name === 'string' && item.name.length > 0 && item.name.length <= 255 &&
       /^[A-Z][A-Z0-9_]{0,95}$/u.test(String(item.error_code || '')) &&
       !Object.hasOwn(item, 'work_name') && !Object.hasOwn(item, 'sha256') &&
       !Object.hasOwn(item, 'package_id');
+    if (!common || schema === LEGACY_SCHEMA) return common;
+    try {
+      validateDocumentResult(item.document_result);
+      return item.document_result.grade === GRADES.NOT_PROCESSED &&
+        item.document_result.reason_code === item.error_code;
+    } catch { return false; }
+  }
+
+  function validV2ItemResult(item) {
+    if (Object.hasOwn(item, 'read_capability')) return false;
+    if (['preflight_mapping_pending', 'stopped'].includes(item.status)) {
+      if (Object.hasOwn(item, 'package_id')) return false;
+      try {
+        validateDocumentResult(item.document_result);
+        return item.document_result.grade === GRADES.NOT_PROCESSED &&
+          item.document_result.reason_code === item.error_code;
+      } catch { return false; }
+    }
+    if (['mapping_pending', 'delivery_pending', 'released'].includes(item.status)) {
+      if (!/^ds_[a-f0-9]{32}$/iu.test(String(item.package_id || ''))) return false;
+      try { positiveDocumentResult(item.document_result); return true; }
+      catch { return false; }
+    }
+    if (Object.hasOwn(item, 'document_result')) return false;
+    if (Object.hasOwn(item, 'package_id')) {
+      return item.status === 'processing' &&
+        ['package_published', 'publication_unconfirmed'].includes(item.checkpoint);
+    }
+    return true;
   }
 
   function validStateShape(state, token) {
-    return state?.token === token && state?.schema === SCHEMA &&
+    const supportedSchema = [SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
+    return state?.token === token && supportedSchema &&
       Array.isArray(state?.items) && state.items.length > 0 &&
-      state.items.length <= maxBatchFiles && state.items.every(validPreflightItem) &&
+      state.items.length <= maxBatchFiles &&
+      state.items.every((item) => validPreflightItem(item, state.schema)) &&
+      (state.schema === LEGACY_SCHEMA || state.items.every(validV2ItemResult)) &&
       validExpiry(state.expires_at) !== undefined;
   }
 

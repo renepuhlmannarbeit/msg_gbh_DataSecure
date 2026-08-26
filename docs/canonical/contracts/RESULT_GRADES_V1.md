@@ -1,6 +1,6 @@
 # Vertrag: Dokumentergebnisgrade V1
 
-Stand: 26.08.2026 · eingeführt mit RC60 · Entscheidung DS-045
+Stand: 26.08.2026 · Paketbindung RC60 · Journal-/Mappingbindung RC61 · Entscheidung DS-045
 
 ## Zweck
 
@@ -42,9 +42,24 @@ von `usable-with-omissions` auf `complete` ändern.
 Historische `eu-privacy-package/2`-Pakete bleiben ausschließlich lesekompatibel.
 Ihnen wird kein Ergebnisgrad nachträglich unterstellt.
 
+## Dauerhafte Journal- und Mappingbindung
+
+Neue Stapel verwenden `datasecure-batch/2`. Ein positiver Grad ist ausschließlich
+für `mapping_pending`, `delivery_pending` oder `released` zusammen mit einer
+verifizierten Paket-ID zulässig. `not-processed` ist ausschließlich an einen
+terminalen Stopp und denselben festen Grundcode gebunden. Offene, vertagte und
+wiederholbare Zustände besitzen keinen Ergebnisgrad. Historische V1-Journale
+bleiben lesbar; ihnen wird kein Grad hinzugefügt.
+
+Die lokale Zuordnung verwendet sechs Spalten: Originaldatei, anonymisiertes
+Ergebnis, deutsche Ergebnisgradanzeige, gezählte Auslassungen, Grundcode und
+Hinweis. Der Mapping-Outbox-Eintrag bindet einen positiven Grad unveränderlich an
+das verifizierte V3-Paket. Wiederanlauf vergleicht Paket, Journal und Outbox erneut;
+Widersprüche bleiben lokal ausstehend. Historische CSV-/Outbox-V1-Einträge werden
+lesbar migriert und ausdrücklich als ohne verfügbaren Ergebnisgrad bezeichnet.
+
 ## Noch nicht Teil dieses E0-Schnitts
 
-Die dauerhafte Projektion von `not-processed` in Journal, Mapping, Evidenz,
-Stapelabschluss und Cowork-Anzeige folgt in einem getrennten crashsicheren Schnitt.
-Bis dahin ist nur der Grad freigegebener V3-Pakete produktiv gebunden. Echte
-Zielsystem- und Security-Abnahmen (E1/E3) bleiben ebenfalls erforderlich.
+Die Projektion der Grade in Evidence/Receipt, Stapelabschluss, Results-/Progress-
+Fassaden und Cowork-Anzeige folgt in getrennten Schnitten. Echte Zielsystem- und
+Security-Abnahmen (E1/E3) bleiben ebenfalls erforderlich.

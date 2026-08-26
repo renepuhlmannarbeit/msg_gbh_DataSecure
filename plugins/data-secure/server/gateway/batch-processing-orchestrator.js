@@ -54,8 +54,7 @@ function createBatchProcessingOrchestrator(options = {}) {
       try {
         entry = exactPendingEntry(state, item);
       } catch (error) {
-        invalidateUnpublishedBatchCopies(state, deps);
-        writeState(state);
+        invalidateUnpublishedBatchCopies(state, { ...deps, writeState });
         return {
           ok: false,
           error: 'batch_snapshot_changed',

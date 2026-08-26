@@ -5,7 +5,13 @@ const path = require('path');
 const { SafeError } = require('../runtime');
 const { roots, sha256File } = require('./common');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, STOPPED } = require('./mapping');
-const { validateManifestDocumentResult } = require('./document-result-grade');
+const {
+  GRADES,
+  validateDocumentResult,
+  positiveDocumentResult,
+  sameDocumentResult,
+  validateManifestDocumentResult
+} = require('./document-result-grade');
 
 function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
@@ -27,38 +33,57 @@ function createBatchReconciliation(options = {}) {
     return `ds_${item.id}`;
   }
 
-  function publishedPackageState(packageId) {
-    if (!/^ds_[a-f0-9]{32}$/i.test(String(packageId || ''))) return 'unsafe';
+  function publishedPackageRecord(packageId) {
+    const record = (state, documentResult = null) => ({ state, document_result: documentResult });
+    if (!/^ds_[a-f0-9]{32}$/i.test(String(packageId || ''))) return record('unsafe');
     let output;
-    try { output = storageRoots().output; } catch { return 'unsafe'; }
+    try { output = storageRoots().output; } catch { return record('unsafe'); }
     const target = pathApi.join(output, packageId);
-    if (pathApi.dirname(target) !== output) return 'unsafe';
-    if (!io.existsSync(target)) return 'missing';
+    if (pathApi.dirname(target) !== output) return record('unsafe');
+    if (!io.existsSync(target)) return record('missing');
     try {
       const folder = io.lstatSync(target);
-      if (!folder.isDirectory() || folder.isSymbolicLink()) return false;
+      if (!folder.isDirectory() || folder.isSymbolicLink()) return record('structurally_unsafe');
       const manifestPath = pathApi.join(target, 'manifest.json');
       const documentPath = pathApi.join(target, `${packageId}.md`);
       const manifestStat = io.lstatSync(manifestPath);
       const documentStat = io.lstatSync(documentPath);
       if (!manifestStat.isFile() || manifestStat.isSymbolicLink() ||
-          !documentStat.isFile() || documentStat.isSymbolicLink()) return false;
+          !documentStat.isFile() || documentStat.isSymbolicLink()) return record('structurally_unsafe');
       const manifest = JSON.parse(io.readFileSync(manifestPath, 'utf8'));
       const supportedSchema = ['eu-privacy-package/2', 'eu-privacy-package/3'].includes(manifest?.schema);
-      if (manifest?.schema === 'eu-privacy-package/3') validateManifestDocumentResult(manifest);
-      return supportedSchema && manifest.package_id === packageId && manifest.document === `${packageId}.md` &&
+      const documentResult = manifest?.schema === 'eu-privacy-package/3'
+        ? validateManifestDocumentResult(manifest)
+        : null;
+      const verified = supportedSchema && manifest.package_id === packageId && manifest.document === `${packageId}.md` &&
         /^[a-f0-9]{64}$/i.test(String(manifest.document_sha256 || '')) &&
-        hashFile(documentPath) === manifest.document_sha256 ? 'verified' : 'unsafe';
-    } catch { return 'unsafe'; }
+        hashFile(documentPath) === manifest.document_sha256;
+      return verified ? record('verified', documentResult) : record('unsafe');
+    } catch { return record('unsafe'); }
+  }
+
+  function publishedPackageState(packageId) {
+    const value = publishedPackageRecord(packageId).state;
+    return value === 'structurally_unsafe' ? false : value;
   }
 
   function regularPublishedPackage(packageId) {
     return publishedPackageState(packageId) === 'verified';
   }
 
-  function markMappingPending(item, packageId) {
-    if (!regularPublishedPackage(packageId)) {
+  function markMappingPending(item, packageId, documentResult) {
+    const published = publishedPackageRecord(packageId);
+    if (published.state !== 'verified') {
       throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
+    }
+    if (published.document_result) {
+      positiveDocumentResult(documentResult);
+      if (!sameDocumentResult(documentResult, published.document_result)) {
+        throw new ErrorType('Der Ergebnisgrad stimmt nicht mit dem veröffentlichten Paket überein.');
+      }
+      item.document_result = documentResult;
+    } else if (documentResult !== undefined && documentResult !== null) {
+      throw new ErrorType('Ein historisches Paket darf keinen nachträglich erfundenen Ergebnisgrad erhalten.');
     }
     // Mapping is a durable local convenience ledger, not the publication
     // commit point. The caller persists this state before the CSV replacement.
@@ -73,9 +98,9 @@ function createBatchReconciliation(options = {}) {
   function commitPendingMapping(item, packageId) {
     // Recovery order is contractual: durable intent, idempotent CSV, then
     // removal of the intent. Journal publication remains the caller's duty.
-    const outbox = persistMappingIntent(item.name, packageId);
+    const outbox = persistMappingIntent(item.name, packageId, item.document_result);
     item.mapping_outbox_persisted = true;
-    writeMapping(item.name, packageId);
+    writeMapping(item.name, packageId, undefined, { documentResult: item.document_result });
     clearMappingIntent(outbox);
     delete item.mapping_outbox_persisted;
   }
@@ -85,7 +110,10 @@ function createBatchReconciliation(options = {}) {
     for (const item of state.items || []) {
       if (item.status !== mappingPendingStatus) continue;
       const packageId = String(item.package_id || '');
-      if (!regularPublishedPackage(packageId)) continue;
+      const published = publishedPackageRecord(packageId);
+      if (published.state !== 'verified') continue;
+      if (published.document_result && !sameDocumentResult(item.document_result, published.document_result)) continue;
+      if (!published.document_result && Object.hasOwn(item, 'document_result')) continue;
       try {
         commitPendingMapping(item, packageId);
         item.status = deliveryPendingStatus;
@@ -103,24 +131,32 @@ function createBatchReconciliation(options = {}) {
   function reconcilePreflightStoppedMappings(state) {
     let changed = false;
     for (const item of state.items || []) {
-      if (item.status !== preflightMappingPendingStatus) continue;
+      const preflightPending = item.status === preflightMappingPendingStatus &&
+        item.checkpoint === 'source_preflight_rejected';
+      const stoppedPending = item.status === 'stopped' && item.local_mapping_exported === false;
+      if (!preflightPending && !stoppedPending) continue;
       if (!/^[a-f0-9]{32}$/i.test(String(item.id || '')) ||
-        item.checkpoint !== 'source_preflight_rejected' ||
         !/^[A-Z][A-Z0-9_]{0,95}$/u.test(String(item.error_code || '')) ||
-        Object.hasOwn(item, 'work_name') || Object.hasOwn(item, 'sha256') ||
         Object.hasOwn(item, 'package_id')) {
         continue;
       }
+      if (preflightPending && (Object.hasOwn(item, 'work_name') || Object.hasOwn(item, 'sha256'))) continue;
       try {
-        writeMapping(item.name, '', STOPPED, { mappingReference: item.id });
+        validateDocumentResult(item.document_result);
+        if (item.document_result.grade !== GRADES.NOT_PROCESSED ||
+          item.document_result.reason_code !== item.error_code) continue;
+        writeMapping(item.name, '', STOPPED, {
+          mappingReference: item.id,
+          documentResult: item.document_result
+        });
         item.status = 'stopped';
-        item.checkpoint = 'source_preflight_stopped';
+        if (preflightPending) item.checkpoint = 'source_preflight_stopped';
         item.local_mapping_exported = true;
         changed = true;
       } catch {
-        // The terminal admission decision is durable already. Keep its local
-        // mapping checkpoint pending; a later maintenance pass retries the
-        // same idempotent row without ever snapshotting or parsing the source.
+        // The terminal decision is durable already. Keep its local mapping
+        // checkpoint pending; a later maintenance pass retries the same
+        // idempotent row without reopening or reparsing the source.
       }
     }
     return changed;
@@ -134,8 +170,14 @@ function createBatchReconciliation(options = {}) {
       try { packageId = packageIdForItem(item); } catch { continue; }
       // Verify again inside markMappingPending. Output may change between the
       // two reads; there is intentionally no cache in this trust boundary.
-      if (!regularPublishedPackage(packageId)) continue;
-      markMappingPending(item, packageId);
+      const published = publishedPackageRecord(packageId);
+      if (published.state !== 'verified') continue;
+      if (!published.document_result && state.schema !== 'datasecure-batch/1') continue;
+      // A V1 journal can have crashed after publishing a V2 package but before
+      // its legacy mapping commit. Finish that exact historical commit without
+      // manufacturing a DS-045 result; never process the deterministic package
+      // path a second time.
+      markMappingPending(item, packageId, published.document_result);
       changed = true;
     }
     return changed;
@@ -155,6 +197,7 @@ function createBatchReconciliation(options = {}) {
 
   return {
     packageIdForItem,
+    publishedPackageRecord,
     publishedPackageState,
     regularPublishedPackage,
     markMappingPending,

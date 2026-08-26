@@ -192,12 +192,17 @@ test('mixed admission journals every position but snapshots only candidates', ()
     assert.ok(item.events.includes('capacity:2'));
     assert.strictEqual(fs.readdirSync(item.work).length, 2);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
+    assert.strictEqual(state.schema, 'datasecure-batch/2');
     assert.deepStrictEqual(state.items.map((entry) => entry.status), [
       'pending', 'preflight_mapping_pending', 'pending', 'preflight_mapping_pending'
     ]);
     for (const stopped of state.items.filter((entry) => entry.status === 'preflight_mapping_pending')) {
       assert.strictEqual(stopped.checkpoint, 'source_preflight_rejected');
       assert.strictEqual(stopped.local_mapping_exported, false);
+      assert.deepStrictEqual(stopped.document_result, {
+        schema: 'datasecure-document-result/1', grade: 'not-processed', omissions: [],
+        reason_code: stopped.error_code
+      });
       assert.strictEqual(Object.hasOwn(stopped, 'work_name'), false);
       assert.strictEqual(Object.hasOwn(stopped, 'sha256'), false);
       assert.strictEqual(Object.hasOwn(stopped, 'package_id'), false);
@@ -219,7 +224,10 @@ test('an all-stopped admission creates a durable repair checkpoint without sourc
     assert.strictEqual(item.events.some((event) => event.startsWith('copy:')), false);
     assert.deepStrictEqual(fs.readdirSync(item.work), []);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
+    assert.strictEqual(state.schema, 'datasecure-batch/2');
     assert.strictEqual(state.items[0].status, 'preflight_mapping_pending');
+    assert.strictEqual(state.items[0].document_result.grade, 'not-processed');
+    assert.strictEqual(state.items[0].document_result.reason_code, 'SOURCE_TEXT_INVALID');
     assert.strictEqual(state.io_summary.snapshot_copy_files, 0);
     assert.strictEqual(state.io_summary.snapshot_copy_mib, 0);
   } finally { item.cleanup(); }

@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchJournalStore } = require('../plugins/data-secure/server/gateway/batch-journal-store');
+const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch journal state store');
@@ -12,7 +13,7 @@ const token = 'a'.repeat(64);
 
 function state(overrides = {}) {
   return {
-    schema: 'datasecure-batch/1',
+    schema: 'datasecure-batch/2',
     token,
     expires_at: '2026-08-26T00:00:00.000Z',
     items: [{ status: 'pending' }],
@@ -348,6 +349,7 @@ test('preflight mapping checkpoints are structurally bound and carry no private 
     status: 'preflight_mapping_pending',
     checkpoint: 'source_preflight_rejected',
     error_code: 'SOURCE_ENCRYPTED_UNSUPPORTED',
+    document_result: notProcessedDocumentResult('SOURCE_ENCRYPTED_UNSUPPORTED'),
     local_mapping_exported: false
   };
   const validStopped = {
@@ -372,6 +374,7 @@ test('preflight mapping checkpoints are structurally bound and carry no private 
     { ...validPending, id: 'not-an-id' },
     { ...validPending, checkpoint: 'source_preflight_stopped' },
     { ...validPending, error_code: 'private value' },
+    { ...validPending, document_result: notProcessedDocumentResult('SOURCE_TEXT_INVALID') },
     { ...validPending, work_name: '001_private.docx' },
     { ...validStopped, local_mapping_exported: false }
   ]) {
@@ -385,6 +388,41 @@ test('preflight mapping checkpoints are structurally bound and carry no private 
       item.cleanup();
     }
   }
+});
+
+test('journal v2 binds terminal result cross-products while v1 remains readable', () => {
+  const item = fixture();
+  const complete = { schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null };
+  const stopped = notProcessedDocumentResult('SOURCE_TEXT_INVALID');
+  const valid = [
+    { status: 'pending', checkpoint: 'sealed' },
+    { status: 'retryable', checkpoint: 'retryable', error_code: 'PROCESSING_INTERRUPTED' },
+    { status: 'mapping_pending', checkpoint: 'mapping_pending', package_id: `ds_${'b'.repeat(32)}`, document_result: complete },
+    { status: 'delivery_pending', checkpoint: 'delivery_pending', package_id: `ds_${'b'.repeat(32)}`, document_result: complete },
+    { status: 'released', checkpoint: 'released', package_id: `ds_${'b'.repeat(32)}`, document_result: complete },
+    { id: 'c'.repeat(32), name: 'blocked.txt', status: 'stopped', checkpoint: 'source_preflight_stopped',
+      error_code: 'SOURCE_TEXT_INVALID', document_result: stopped, local_mapping_exported: true }
+  ];
+  try {
+    for (const entry of valid) {
+      fs.writeFileSync(item.target, `${JSON.stringify(state({ items: [entry] }))}\n`, { mode: 0o600 });
+      assert.deepStrictEqual(item.store.readState(token).items[0], entry);
+    }
+    const invalid = [
+      { status: 'pending', checkpoint: 'sealed', document_result: complete },
+      { status: 'released', checkpoint: 'released', package_id: `ds_${'b'.repeat(32)}` },
+      { status: 'released', checkpoint: 'released', package_id: `ds_${'b'.repeat(32)}`, document_result: stopped },
+      { status: 'stopped', checkpoint: 'stopped', error_code: 'SOURCE_TEXT_INVALID', document_result: complete },
+      { status: 'retryable', checkpoint: 'retryable', package_id: `ds_${'b'.repeat(32)}`, document_result: complete }
+    ];
+    for (const entry of invalid) {
+      fs.writeFileSync(item.target, `${JSON.stringify(state({ items: [entry] }))}\n`, { mode: 0o600 });
+      assert.throws(() => item.store.readState(token), /Sitzung ist ungültig/i);
+    }
+    const legacy = state({ schema: 'datasecure-batch/1', items: [{ status: 'released', package_id: `ds_${'b'.repeat(32)}` }] });
+    fs.writeFileSync(item.target, `${JSON.stringify(legacy)}\n`, { mode: 0o600 });
+    assert.deepStrictEqual(item.store.readState(token), legacy);
+  } finally { item.cleanup(); }
 });
 
 test('maintenance reads are mutation-free and validate their binding and expiry', () => {

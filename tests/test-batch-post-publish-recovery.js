@@ -57,6 +57,10 @@ async function main() {
       const interrupted = await processBatchNext(begun.batch_token, deps);
       assert.strictEqual(injected, true);
       assert.strictEqual(interrupted.error, 'PROCESSING_INTERRUPTED');
+      const checkpoint = _test.readState(begun.batch_token).items[0];
+      assert.strictEqual(checkpoint.status, 'processing');
+      assert.strictEqual(checkpoint.checkpoint, 'package_published');
+      assert.strictEqual(Object.hasOwn(checkpoint, 'document_result'), false);
     } finally {
       fs.renameSync = originalRenameSync;
     }

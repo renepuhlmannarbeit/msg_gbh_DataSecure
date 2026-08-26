@@ -14,6 +14,7 @@ const FILE_NAME = 'DataSecure-Batch-Nachweis.json';
 const OUTBOX_PREFIX = 'batch_evidence_pending_';
 const SAFE_CODE = /^[A-Z][A-Z0-9_]{0,95}$/;
 const RECEIPT_ID_RE = /^[a-f0-9]{32}$/;
+const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const RECORD_KEYS = [
   'schema', 'receipt_id', 'recorded_at', 'batch_started_at', 'batch_finished_at', 'profile', 'image_handling',
@@ -50,7 +51,7 @@ function evidenceRecord(state, recordedAt = new Date().toISOString(), receiptId 
     gateway_version: VERSION,
     privacy_ruleset: PRIVACY_RULESET_VERSION,
     credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
-    batch_snapshot_schema: 'datasecure-batch/1',
+    batch_snapshot_schema: state.schema,
     raw_content_sent_to_claude: false,
     mapping_is_local_only: true,
     error_codes: codes
@@ -83,7 +84,7 @@ function validateEvidenceRecord(record) {
     record.counts.released + record.counts.stopped + record.counts.retryable + record.counts.pending !== record.counts.total ||
     !['complete', 'complete_with_stopped_documents', 'incomplete'].includes(record.outcome) ||
     !safeVersion(record.gateway_version) || !safeVersion(record.privacy_ruleset) ||
-    !safeVersion(record.credential_context_policy) || record.batch_snapshot_schema !== 'datasecure-batch/1' ||
+    !safeVersion(record.credential_context_policy) || !BATCH_SNAPSHOT_SCHEMAS.has(record.batch_snapshot_schema) ||
     record.raw_content_sent_to_claude !== false || record.mapping_is_local_only !== true ||
     !Array.isArray(record.error_codes) || record.error_codes.length > 100 ||
     !record.error_codes.every((code) => SAFE_CODE.test(code))) {

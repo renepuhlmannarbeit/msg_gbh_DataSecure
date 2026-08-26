@@ -27,7 +27,10 @@ function harness(overrides = {}) {
     deliveryResult(value, item) { calls.push(['delivery', value, item]); return response; },
     publicProgress(value) { calls.push(['progress', value]); return { remaining: 0 }; },
     exactPendingEntry(value, item) { calls.push(['entry', value, item]); return entry; },
-    invalidateUnpublishedBatchCopies(value, passedDeps) { calls.push(['invalidate', value, passedDeps]); },
+    invalidateUnpublishedBatchCopies(value, passedDeps) {
+      calls.push(['invalidate', value, passedDeps]);
+      passedDeps.writeState(value);
+    },
     writeState(value) { calls.push(['write', value]); },
     async processSingleBatchItem(value, item, selectedEntry, passedDeps) {
       calls.push(['process', value, item, selectedEntry, passedDeps]);
