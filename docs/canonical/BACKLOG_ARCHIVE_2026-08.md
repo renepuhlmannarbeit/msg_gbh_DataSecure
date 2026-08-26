@@ -28,6 +28,21 @@ Formate, Plattformen oder Cowork-Oberflächen. Laufende Teilnachweise bleiben im
 | BL-011.2 | 100-Dateien-/500-MB-Grenze vor privater Kopie durchgesetzt | `test-batch-session.js` |
 | BL-011.4 | Checkpoints und explizite Wiederaufnahme ohne Quellwiederholung | `gateway/batch.js`, Batch-Tests |
 | BL-011.5 | Cleanup-Lebenszyklus offener Arbeitskopien umgesetzt | `batch-maintenance.js`, Wartungstests |
+| BL-011.15 | R2-Stapelkern hinter unveränderter Exportfassade vollständig in klar verantwortete Module zerlegt | RC45–RC52; `gateway/batch-processing-orchestrator.js`, 66 reale Batch-Szenarien, Fast Path und vollständige lokale Testsuite; Detailnachweise in `TRACEABILITY.md` |
+| BL-011.15/R2-Discard | Gesperrtes tokengebundenes Verwerfen mit enger Löschgrenze isoliert | `gateway/batch-discard.js`, 8 Grenztests |
+| BL-011.15/R2-Continuation | Resume und tokenlose Auswahl des jüngsten offenen Stapels isoliert | `gateway/batch-continuation.js`, 10 Grenztests |
+| BL-011.15/R2-Snapshot-Invalidation | Fail-closed-Invalidierung ausschließlich unveröffentlichter Kopien isoliert | `gateway/batch-snapshot-invalidation.js`, 7 Grenztests |
+| BL-011.15/R2-Executor-Runner | Seriellen lokalen Executor mit festen Prioritäts- und Schrittgrenzen isoliert | `gateway/batch-executor-runner.js`, 7 Grenztests |
+| BL-011.15/R2-Executor-Hardening | Journal-/Runner-Obergrenze und fail-closed Lease-Freigabe gehärtet | Journal-, Runner- und Batch-Session-Tests |
+| BL-011.15/R2-Review-Capture | Flüchtige Rekonstruktion vertagter Review-Fundstellen isoliert | `gateway/batch-review-capture.js`, 6 Grenztests |
+| BL-011.15/R2-Review-State | Deferred-Zustand, Auswahl und Readiness rein isoliert | `gateway/batch-review-state.js`, 5 Grenztests |
+| BL-011.15/R2-Active-Lock-Hardening | Active-Lock an unveränderliche zufällige Identität gebunden | `gateway/batch-active-lock.js`, Lock- und Worker-Serientests |
+| BL-011.15/R2-Review-Publication | Bijektive Review-Bindung und recoverbare Post-Commit-Publikation isoliert | `gateway/batch-review-publication.js`, 8 Grenztests |
+| BL-011.15/R2-Review-Orchestrator | Gemeinsame Review-Folge mit geteilter Single-Flight-Sperre isoliert | `gateway/batch-review-orchestrator.js`, 8 Grenztests |
+| BL-011.15/R2-Single-Item | Single-Item-Processing-/Commit-Automat mit positivem Publish-Nachweis isoliert | `gateway/batch-item-processor.js`, 11 Grenztests |
+| BL-011.15/R2-Processing-Lock | Prozess- und Dateisystem-Sperren bis zum Promise-Settlement gehalten | `test-batch-processing-lock.js`, 2 reale verzögerte Pipeline-Tests |
+| BL-011.15/R2-Next-Maintenance | Vorlaufwartung in bestehender Durability-Reihenfolge isoliert | `gateway/batch-next-maintenance.js`, 8 Grenztests |
+| BL-011.15/R2-Processing-Orchestrator | Äußere Lock-/Lease-/Read-/Maintenance-/Delivery-/Snapshot-/Delegationsfolge isoliert; `batch.js` reine Composition Root | `gateway/batch-processing-orchestrator.js`, 11 Async-Grenztests plus Integrationsgates |
 | BL-012.1 | Klare Mehrdatei-Stapel ohne Einzeldialog analysiert | `test-batch-session.js` |
 | BL-012.4 | Freiwillige Gesamtvorschau bereitgestellt | Batch-Review-Vertrag und Tests |
 | BL-024.1 | OCR-Ergebnisvertrag Deutsch/Englisch als Nicht-Release-Vorarbeit abgeschlossen | `contracts/OCR_RESULT_V1.md`, Contract-Test |

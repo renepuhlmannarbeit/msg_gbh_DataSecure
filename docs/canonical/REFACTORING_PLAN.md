@@ -57,7 +57,7 @@ Status: **abgeschlossen**
 
 ### R2 – Stapelkern verhaltensneutral zerlegen
 
-Status: **in Arbeit** · Story: BL-011.15
+Status: **abgeschlossen** · Story: BL-011.15
 
 Der große Stapelkern wird hinter seiner bestehenden Exportoberfläche schrittweise
 in klar verantwortete Module getrennt:
@@ -206,13 +206,14 @@ Output-Commit bleibt jeder Folgefehler reconcilebar und darf weder
 STOPPED-Mapping noch Catch-bedingtes Quellcleanup auslösen. Die Vorlaufwartung
 liegt nun in `gateway/batch-next-maintenance.js`; sie erhält die bewusst
 mehraufrufrige Adoption-zu-Mapping-Semantik und die getrennten durable Writes
-für Reconciliation, Interrupted-Recovery und Cleanup. Als R2-Rest bleibt nur
-die Composition-Root-/Routing-Bereinigung.
-Vor diesem nächsten Schnitt schließt RC50 die asynchrone Lock-Grenze des
-Coordinators: `return await` hält In-Process- und Dateisystem-Single-Flight bis
-zum Settlement der delegierten Item-Pipeline; verzögerte Resolve-/Reject-
-Integrationstests weisen konkurrierende Verarbeitung währenddessen
-reproduzierbar ab und prüfen die sichere Fehlerfassade.
+für Reconciliation, Interrupted-Recovery und Cleanup. Abschließend kapselt
+`gateway/batch-processing-orchestrator.js` die vollständige äußere Lock-/Lease-/
+Read-/Maintenance-/Delivery-/Pending-/Snapshot-/Delegationsfolge; `batch.js`
+ist reine Composition Root. `return await` hält In-Process- und Dateisystem-
+Single-Flight bis zum Settlement der delegierten Delivery- oder Item-Pipeline.
+Elf direkte Orchestrator- sowie verzögerte Resolve-/Reject-Integrationstests
+belegen Reihenfolge, Fail-closed-Verhalten und sichere Fehlerfassade. R2 ist
+damit abgeschlossen; die nächste Strukturphase ist R3.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,
 `batch-evidence.js` den atomaren idempotenten v2-Store und eine inhaltsfreie

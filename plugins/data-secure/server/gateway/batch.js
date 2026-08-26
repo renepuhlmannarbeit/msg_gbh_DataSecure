@@ -29,6 +29,7 @@ const { createBatchReviewPublication } = require('./batch-review-publication');
 const { createBatchReviewOrchestrator } = require('./batch-review-orchestrator');
 const { createBatchItemProcessor } = require('./batch-item-processor');
 const { createBatchNextMaintenance } = require('./batch-next-maintenance');
+const { createBatchProcessingOrchestrator } = require('./batch-processing-orchestrator');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -347,42 +348,22 @@ const { maintainBeforeNext } = createBatchNextMaintenance({
   writeState
 });
 
-async function processBatchNext(token, deps = {}) {
-  if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
-  acquireActiveLock(token);
-  active.add(token);
-  try {
-    const state = readState(token);
-    assertLocalExecutorAccess(state, deps.executorPid);
-    if (state.invalidated === true) throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
-    maintainBeforeNext(state, deps);
-    const pendingDelivery = state.items.find((candidate) => candidate.status === DELIVERY_PENDING);
-    if (pendingDelivery) return deliveryResult(state, pendingDelivery);
-    const item = state.items.find((candidate) => candidate.status === 'pending');
-    if (!item) return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
-    let entry;
-    try {
-      entry = exactPendingEntry(state, item);
-    } catch (error) {
-      invalidateUnpublishedBatchCopies(state, deps);
-      writeState(state);
-      return {
-        ok: false,
-        error: 'batch_snapshot_changed',
-        message: error instanceof SafeError ? error.message : 'Der bestätigte Dateistapel wurde verändert.',
-        ...publicProgress(state),
-        raw_content_sent_to_claude: false
-      };
-    }
-    // Keep both the in-process guard and the cross-process filesystem lock
-    // until the asynchronous item pipeline has fully settled. Returning the
-    // bare promise would run this function's finally block immediately.
-    return await processSingleBatchItem(state, item, entry, deps);
-  } finally {
-    active.delete(token);
-    releaseActiveLock(token);
-  }
-}
+const { processBatchNext } = createBatchProcessingOrchestrator({
+  SafeError,
+  active,
+  acquireActiveLock,
+  releaseActiveLock,
+  readState,
+  assertLocalExecutorAccess,
+  maintainBeforeNext,
+  deliveryResult,
+  publicProgress,
+  exactPendingEntry,
+  invalidateUnpublishedBatchCopies,
+  writeState,
+  processSingleBatchItem,
+  deliveryPendingStatus: DELIVERY_PENDING
+});
 
 function readBatchProgress(token) {
   return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };

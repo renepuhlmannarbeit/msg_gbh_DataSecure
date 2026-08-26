@@ -184,7 +184,7 @@ des Produktpfads, bis reale Drei-OS-Ressourcenevidenz vorliegt.
 
 DS-061 und `REFACTORING_PLAN.md` legen vor den folgenden Verhaltensänderungen eine
 verhaltensneutrale Zerlegung des Stapelkerns fest. Diese Strukturarbeit ist als
-BL-011.15 in Arbeit. Ergebnis-Cursor/-Paging und die Auswahl lokaler Handoff-
+BL-011.15 abgeschlossen. Ergebnis-Cursor/-Paging und die Auswahl lokaler Handoff-
 Kandidaten sind bereits in `gateway/batch-results.js`, Statusmodell,
 Fortschrittsberechnung und inhaltsfreie Nutzertexte in `gateway/batch-progress.js`
 gekapselt. Die Keep/Redact-/Deferral-Policy für lokale Zertifikatsentscheidungen
@@ -317,7 +317,7 @@ Commit: genau ein Publish-Callback und die exakte deterministische Paket-ID
 sind vor Mapping und Delivery Pflicht. Jeder spätere Journal-, Mapping- oder
 Deliveryfehler bleibt über `processing/package_published` reconcilebar und kann
 weder STOPPED-Mapping noch Catch-bedingte Quellbereinigung auslösen. Elf
-direkte Grenztests und alle 67 realen Batch-Sitzungsszenarien einschließlich
+direkte Grenztests und alle 66 realen Batch-Sitzungsszenarien einschließlich
 echter Post-Publish-Adoption ohne zweite Konvertierung sind grün.
 RC50 schließt zusätzlich eine P1-Single-Flight-Lücke an der Delegationsgrenze:
 `processBatchNext` wartet nun ausdrücklich auf das vollständige Settlement des
@@ -329,8 +329,9 @@ RC51 isoliert außerdem ausschließlich den Wartungsvorlauf in
 `gateway/batch-next-maintenance.js`: Paketadoption und ihr eigener durabler
 Commit, die bewusst erst im Folgeaufruf ausgeführte Mapping-Reparatur,
 Interrupted-Recovery und zuletzt privates Cleanup mit getrennten Writes.
-`batch.js` bleibt Composition Root für Lock, Lease, State-Read,
-Delivery-Priorität, Itemwahl, Snapshotprüfung und delegierte Verarbeitung. Der
+`gateway/batch-processing-orchestrator.js` kapselt die äußere Folge aus Lock,
+Lease, State-Read, Maintenance, Delivery-Priorität, Itemwahl, Snapshotprüfung
+und delegierter Verarbeitung. `batch.js` bleibt reine Composition Root. Der
 Cowork-Workflow, Fehlerschemata und die serielle Ausführung ändern sich nicht.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
@@ -343,9 +344,10 @@ bestätigte Übergabe ist jetzt ein dauerhafter No-op und erzeugt weder einen
 zweiten Journal-Commit noch einen doppelten terminalen Evidenznachweis. Acht
 direkte Negativtests belegen Gesamtseitenvalidierung vor Mutation,
 Paketmanipulation, Journal- und Lockfehler, sichere Wiederholung nach bereits
-gelöschter Arbeitskopie sowie Link-/Pfadschutz. Als R2-Rest verbleibt die
-Composition-Root-/Routing-Bereinigung hinter der bestehenden Exportfassade. Der verifizierte
-Outbox-Replay liegt nun
+gelöschter Arbeitskopie sowie Link-/Pfadschutz. Elf direkte Orchestrator-Tests
+belegen Guard, Cleanup, Fehlerpriorität, Fail-closed-Snapshotinvalidierung und
+bis zum Promise-Settlement gehaltene Sperren. Damit ist R2 abgeschlossen; als
+nächste Strukturphase folgt R3. Der verifizierte Outbox-Replay liegt nun
 in `gateway/batch-mapping-maintenance.js`; nur `verified` wird nach der festen
 Reihenfolge Mapping vor Intent-Löschung repariert, `missing` entfernt nur den
 exakten verwaisten Intent und jeder unsichere Zustand bleibt pending.
