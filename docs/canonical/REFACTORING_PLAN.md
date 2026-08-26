@@ -194,9 +194,13 @@ deterministische Paket-ID. Ab dem bestätigten Output-Commit
 führen spätere Journal-, Mapping- oder Deliveryfehler ausschließlich in den
 reconcilebaren `processing/package_published`-Zustand; STOPPED-Mapping und
 Quellbereinigung sind an dieser Grenze ausgeschlossen.
-Verarbeitung/Commit und die äußere Review-UI-/Lock-Orchestrierung
-sowie verbleibende Wartung bleiben absichtlich in `batch.js`; der nächste
-R2-Schnitt wird erneut als kleinster Leaf gewählt.
+Die äußere Review-UI-/Lock-Orchestrierung liegt anschließend in
+`gateway/batch-review-orchestrator.js`; sie nutzt ausdrücklich dasselbe
+`active`-Set wie der Normalpfad, reconciliiert vor Readiness, rekonstruiert alle
+Drafts vor einem einzigen UI-Aufruf und schreibt terminale Evidenz erst nach
+erfolgreicher lokaler Publication. Verarbeitung/Commit sowie verbleibende
+Wartung bleiben absichtlich in `batch.js`; als nächster R2-Schnitt folgt der
+direkt charakterisierte Single-Item-Zustandsautomat.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,
 `batch-evidence.js` den atomaren idempotenten v2-Store und eine inhaltsfreie

@@ -300,6 +300,15 @@ bleiben selbst Journal-, Mapping- oder Deliveryfehler als
 noch Quellbereinigung. Acht direkte Grenztests sowie die 66 Batch-
 Sitzungsszenarien belegen Mutationsfreiheit vor dem Preflight, gültige
 Umsortierung, Partial Publish und recoverable Crash-/Mapping-/Cleanup-Fehler.
+`gateway/batch-review-orchestrator.js` hält nun die gesamte äußere Reviewfolge
+hinter injizierten Grenzen zusammen: dasselbe `active`-Set und derselbe globale
+Lock wie der Normalpfad, Reconciliation vor Readiness, vollständiger
+speicherinterner Capture vor genau einem lokalen UI-Aufruf, anschließend die
+isolierte Publication und erst bei lokalem Abschluss der terminale Nachweis.
+Sieben direkte Tests belegen Not-ready, Capturefehler, Cancel/Defer/Timeout,
+Remote- und Local-Finalize-Erfolg, selektive Bindingfehlerübersetzung sowie
+Reentrancy-, Acquire- und Release-Verträge. `batch.js` bleibt nur Composition
+Root und die öffentliche Fassade unverändert.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die
