@@ -1,6 +1,6 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 26.08.2026 · geprüfter Produktstand: RC55
+Stand: 26.08.2026 · geprüfter Produktstand: RC60
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -1541,9 +1541,16 @@ verschlüsselte ZIP-Einträge, CFB/OLE und noch gesperrte Formate erhalten pro D
 einen kopierfreien Stopp. Die übrigen Kandidaten laufen weiter. Ein fester
 `preflight_mapping_pending`-Checkpoint hält den Stopp nicht-terminal, bis die
 dauerhafte lokale Zuordnung idempotent geschrieben ist; Recovery liest die Quelle
-dabei nicht erneut. Der positive Grad heißt bewusst nur `candidate`; vollständige
-Parser- und Residualgates folgen. Die drei kanonischen DS-045-Ergebnisgrade fehlen
-noch; die Strukturprüfung schaltet insbesondere XLSX und PPTX nicht frei.
+dabei nicht erneut. Der positive Preflight-Grad heißt bewusst nur `candidate` und
+ist kein Ergebnis. RC60 bindet freigegebene V3-Pakete vor der Veröffentlichung an
+`complete` oder `usable-with-omissions`. Nur ausdrücklich entfernte oder zu diesem
+Zeitpunkt lokal zurückgehaltene Bilder sind erlaubte, gezählte Auslassungen;
+Parserwarnungen und unbekannte Coverage stoppen. Eine spätere lokale Bildfreigabe
+ändert den ursprünglichen Grad nicht. Historische V2-Pakete bleiben ohne erfundenen
+Grad lesbar. Die dauerhafte Projektion aller drei Grade einschließlich
+`not-processed` in Journal, Mapping, Evidenz, Stapelabschluss und Cowork-Anzeige
+sowie E1/E3 fehlen noch. Die Strukturprüfung schaltet insbesondere XLSX und PPTX
+nicht frei.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
 
 - Automatische Retention überspringt `Output` unabhängig vom Alter; nur ein

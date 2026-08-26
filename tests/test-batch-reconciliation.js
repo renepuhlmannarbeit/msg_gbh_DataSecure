@@ -37,12 +37,19 @@ function fixture(options = {}) {
     readFileSync(target) {
       if (target !== manifestPath) throw new Error('unexpected read');
       if (mode === 'malformed-manifest') return '{';
-      return JSON.stringify({
-        schema: mode === 'wrong-schema' ? 'other' : 'eu-privacy-package/2',
+      const value = {
+        schema: mode === 'wrong-schema' ? 'other' : (mode === 'v3' ? 'eu-privacy-package/3' : 'eu-privacy-package/2'),
         package_id: mode === 'wrong-package' ? `ds_${'c'.repeat(32)}` : packageId,
         document: `${packageId}.md`,
         document_sha256: digest
+      };
+      if (mode === 'v3') Object.assign(value, {
+        parser_warnings: [], assets: [], pdf_unextractable_visual_objects: 0,
+        images_removed_by_explicit_request: 0,
+        visual_assets_withheld_at_release: 0,
+        document_result: { schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null }
       });
+      return JSON.stringify(value);
     }
   };
   let failure = options.mappingFailure;
@@ -74,6 +81,7 @@ function fixture(options = {}) {
 
 test('package verification keeps the exact verified, missing, unsafe and structural-false contract', () => {
   assert.strictEqual(fixture().reconciliation.publishedPackageState(packageId), 'verified');
+  assert.strictEqual(fixture({ mode: 'v3' }).reconciliation.publishedPackageState(packageId), 'verified');
   assert.strictEqual(fixture({ mode: 'missing' }).reconciliation.publishedPackageState(packageId), 'missing');
   assert.strictEqual(fixture({ mode: 'not-directory' }).reconciliation.publishedPackageState(packageId), false);
   assert.strictEqual(fixture({ mode: 'folder-symlink' }).reconciliation.publishedPackageState(packageId), false);

@@ -4,6 +4,7 @@ const {isUtf8}=require('buffer');
 const {SafeError}=require('../runtime');
 const {roots,sha256Buffer,sha256File,listPackageDirs,PROFILES}=require('./common');
 const {readEvents}=require('../companion/job-store');
+const {validateManifestDocumentResult,DocumentResultError}=require('./document-result-grade');
 
 // Read capabilities are deliberately process-local and never persisted. A
 // package id identifies data on disk; it is not authorization to disclose that
@@ -47,11 +48,14 @@ function validateIncludedAsset(asset){
   return asset;
 }
 function validatePublicManifest(manifest,id){
-  if(!manifest||manifest.schema!=='eu-privacy-package/2'||manifest.package_id!==id||!PROFILES.has(manifest.profile)||!Number.isFinite(Date.parse(manifest.created_at))||manifest.document!==`${id}.md`||!/^[a-f0-9]{64}$/iu.test(String(manifest.document_sha256||''))){
+  if(!manifest||!['eu-privacy-package/2','eu-privacy-package/3'].includes(manifest.schema)||manifest.package_id!==id||!PROFILES.has(manifest.profile)||!Number.isFinite(Date.parse(manifest.created_at))||manifest.document!==`${id}.md`||!/^[a-f0-9]{64}$/iu.test(String(manifest.document_sha256||''))){
     throw new SafeError('Paketmanifest fehlt oder ist ungültig.');
   }
   if(!Array.isArray(manifest.assets))throw new SafeError('Paketmanifest fehlt oder ist ungültig.');
   for(const asset of manifest.assets){if(asset&&asset.status==='included')validateIncludedAsset(asset);}
+  if(manifest.schema==='eu-privacy-package/3'){
+    try{validateManifestDocumentResult(manifest);}catch(error){if(error instanceof DocumentResultError)throw new SafeError('Paketmanifest fehlt oder ist ungültig.');throw error;}
+  }
   return manifest;
 }
 function safeResolvePackage(id){const r=roots(),name=path.basename(String(id||''));if(!name||name!==String(id||'')||name.startsWith('.'))throw new SafeError('Ungültige Paket-ID.');const p=path.join(r.output,name);if(!fs.existsSync(p))throw new SafeError('Paket nicht gefunden.');const st=fs.lstatSync(p);if(st.isSymbolicLink()||!st.isDirectory())throw new SafeError('Paketpfad ist nicht freigegeben.');const real=fs.realpathSync(p),base=fs.realpathSync(r.output)+path.sep;if(!real.startsWith(base))throw new SafeError('Paket außerhalb des Output-Bereichs.');const m=validatePublicManifest(readManifest(p),name);return{p,m};}

@@ -333,6 +333,11 @@ async function main() {
     assert.strictEqual(result.visual_assets.included, 0);
 
     const { manifest, markdown } = readPackage(result);
+    assert.strictEqual(manifest.schema, 'eu-privacy-package/3');
+    assert.deepStrictEqual(manifest.document_result, {
+      schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null
+    });
+    assert.deepStrictEqual(result.document_result, manifest.document_result);
     assert.match(result.read_capability, /^[A-Za-z0-9_-]{43}$/);
     assert.ok(Date.parse(result.read_capability_expires_at) > Date.now());
     assert.doesNotMatch(JSON.stringify(manifest), /read_capability/i, 'read grants must never be persisted');
@@ -624,6 +629,13 @@ async function main() {
     assert.strictEqual(result.visual_assets.total, 1);
     assert.strictEqual(result.visual_assets.included, 0);
     assert.strictEqual(result.visual_assets.review_required, 1);
+
+    const { manifest } = readPackage(result);
+    assert.strictEqual(manifest.document_result.grade, 'usable-with-omissions');
+    assert.deepStrictEqual(manifest.document_result.omissions, [{
+      code: 'VISUAL_ASSETS_WITHHELD_LOCALLY', count: 1
+    }]);
+    assert.deepStrictEqual(result.document_result, manifest.document_result);
 
     const { markdown } = readPackage(result);
     for (const value of ['MAX MUSTERMANN', 'Beispiel Consulting GmbH', 'Kunde Alpha GmbH', 'Köln']) {

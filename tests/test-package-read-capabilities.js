@@ -24,6 +24,7 @@ const {
 
 const { test, done, assert } = createSuite('Package read capabilities');
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+const { releasedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 
 function makePackage(id, body) {
   const dir = path.join(root, 'Output', id);
@@ -51,6 +52,25 @@ function makePackage(id, body) {
   }));
 }
 
+function promotePackageToV3(id, assets = []) {
+  const manifestPath = path.join(root, 'Output', id, 'manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.schema = 'eu-privacy-package/3';
+  manifest.assets = assets;
+  manifest.parser_warnings = [];
+  manifest.pdf_unextractable_visual_objects = 0;
+  manifest.images_removed_by_explicit_request = assets.filter((asset) => asset.status === 'removed').length;
+  manifest.visual_assets_withheld_at_release = assets.filter((asset) => asset.status === 'review_required').length;
+  manifest.document_result = releasedDocumentResult({
+    parserWarnings: manifest.parser_warnings,
+    visualResults: manifest.assets,
+    unreviewedVisualCount: manifest.pdf_unextractable_visual_objects,
+    imagesRemovedByExplicitRequest: manifest.images_removed_by_explicit_request
+  });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+  return manifestPath;
+}
+
 makePackage('run-one', '# Freigegeben eins');
 makePackage('run-two', '# Freigegeben zwei');
 makePackage('run-long', Array.from({ length: 2500 }, (_, index) => `Zeile ${String(index).padStart(4, '0')}: freigegebene synthetische Fachinformation.`).join('\n'));
@@ -71,6 +91,18 @@ test('one run capability reads only its own verified document and asset', () => 
   assert.strictEqual(listAssets('run-one', grant.read_capability).assets.length, 1);
   assert.ok(readAsset('run-one', grant.read_capability, 'asset-001').__image.data.length > 0);
   assert.throws(() => readOutput('run-two', grant.read_capability), /Leseberechtigung/);
+});
+
+test('v3 packages require a grade consistent with their exact omission signals', () => {
+  const id = 'run-v3-grade';
+  makePackage(id, '# Verifiziertes Ergebnis');
+  const manifestPath = promotePackageToV3(id);
+  const grant = issueReadCapability(id);
+  assert.match(readOutput(id, grant.read_capability).text, /Verifiziertes/);
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.document_result.grade = 'usable-with-omissions';
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+  assert.throws(() => issueReadCapability(id), /Paketmanifest/);
 });
 
 test('a bounded document page reads several independently authorized outputs together', () => {

@@ -35,6 +35,7 @@ const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { processAlive } = require('./process-liveness');
 const { copySourceToPrivateWork } = require('./read-only-source-snapshot');
+const { releasedDocumentResult } = require('./document-result-grade');
 
 // A batch worker gets one unforgeable in-process preparation capability after
 // its maintenance and audit checks succeeded.  Individual document calls keep
@@ -464,6 +465,16 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     diagnosticStage = 'verified';
 
+    // DS-045 is derived from the exact, already verified release signals.
+    // Free-form warnings and unknown visual coverage can never be downgraded
+    // into a harmless omission by a model or a caller.
+    const documentResult = releasedDocumentResult({
+      parserWarnings: converted.warnings || [],
+      visualResults: vis.results,
+      unreviewedVisualCount: converted.unreviewedVisualCount || 0,
+      imagesRemovedByExplicitRequest: removed
+    });
+
     const auditReceipt = auditRecord(effective, source, {
       entityCount: anon.entityCount,
       passes: anon.passes,
@@ -478,7 +489,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // boundary, so this removes only a redundant local I/O pass.
     const documentSha256 = crypto.createHash('sha256').update(finalText, 'utf8').digest('hex');
     const manifest = {
-      schema: 'eu-privacy-package/2',
+      schema: 'eu-privacy-package/3',
       gateway_version: VERSION,
       privacy_ruleset: PRIVACY_RULESET_VERSION,
       credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
@@ -504,6 +515,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       parser_warnings: converted.warnings || [],
       pdf_unextractable_visual_objects: converted.unreviewedVisualCount || 0,
       images_removed_by_explicit_request: removed,
+      visual_assets_withheld_at_release: review,
+      document_result: documentResult,
       ai_act: aiActMeta(effective)
     };
     if (deps.companionJobId) manifest.companion_job_id = deps.companionJobId;
@@ -528,7 +541,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         reviewed_content_sha256: crypto.createHash('sha256').update(reviewedText, 'utf8').digest('hex'),
         profile: effective,
         detected_identifiers: anon.entityCount,
-        technical_review_required: review > 0
+        technical_review_required: review > 0,
+        document_result: documentResult
       });
     }
     throwIfAborted(deps.abortSignal);
@@ -546,7 +560,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         await deps.afterPublish({
           package_id: packageId,
           document_sha256: documentSha256,
-          profile: effective
+          profile: effective,
+          document_result: documentResult
         });
       }
     } catch (error) {
@@ -600,6 +615,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         removed,
         redactions: vis.results.reduce((n, x) => n + (x.redactions || 0), 0)
       },
+      document_result: documentResult,
       original_moved_to_processed: false,
       persistent_mapping_retained: false,
       ...runtimeInfo(),

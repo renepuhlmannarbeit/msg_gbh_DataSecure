@@ -300,7 +300,7 @@ BL-041.9
 
 ### R6 – Quellen- und Inhaltsgrenze vereinheitlichen
 
-Status: **R6a, R6b1 und R6b2-Integrität E0 abgeschlossen; Ergebnisgrade/E1/E3 offen** · Stories: BL-044.1, BL-049.1
+Status: **R6a, R6b1, R6b2-Integrität und Grade-Policy/Manifest E0 abgeschlossen; dauerhafte Projektion/E1/E3 offen** · Stories: BL-044.1, BL-049.1
 
 - R6a liefert den descriptor-gebundenen Classifier aus BL-049.1a.
 - R6b1 plant den vollständigen Stapel vor Mutation, journalisiert Formatstopps
@@ -308,8 +308,11 @@ Status: **R6a, R6b1 und R6b2-Integrität E0 abgeschlossen; Ergebnisgrade/E1/E3 o
   Reststapel fort. Der positive Grad `candidate` aktiviert kein Format und ist
   kein DS-045-Ergebnis.
 - R6b2-Integrität ergänzt echte OPC-Steuerteil-/Relationship-/CRC-Prüfung aller
-  Einträge sowie die SHA-256-Bindung zwischen Preflight und Snapshot. Die genau
-  drei finalen Ergebnisgrade sind der verbleibende R6b2-Teil.
+  Einträge sowie die SHA-256-Bindung zwischen Preflight und Snapshot.
+- R6b2-Grade bindet freigegebene V3-Pakete deterministisch an den Vertrag
+  `contracts/RESULT_GRADES_V1.md`. Verbleibend ist die crashsichere Projektion aller
+  drei Grade einschließlich `not-processed` in Journal, Mapping, Evidenz,
+  Stapelabschluss und Cowork-Anzeige.
 
 - Datei- und rekursive Ordnerauswahl nutzen denselben Snapshotvertrag.
 - Der gesamte Umfang wird vor Start gegen 100 Dateien, 500 MiB, Links,

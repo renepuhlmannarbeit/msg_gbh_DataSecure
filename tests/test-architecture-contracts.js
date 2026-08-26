@@ -406,4 +406,17 @@ test('source preflight v1 remains a candidate-only rejection gate', () => {
   assert.match(contract, /aktiviert kein neues Format|keine neue Formatfreigabe/iu);
 });
 
+test('result grades v1 fixes exactly three honest terminal outcomes', () => {
+  const contract = read('RESULT_GRADES_V1.md');
+  for (const required of [
+    'DS-045', '`complete`', '`usable-with-omissions`', '`not-processed`',
+    '`IMAGES_REMOVED_BY_REQUEST`', '`VISUAL_ASSETS_WITHHELD_LOCALLY`',
+    '`eu-privacy-package/3`', '`visual_assets_withheld_at_release`',
+    'kein Ergebnisgrad nachträglich unterstellt'
+  ]) {
+    assert.ok(contract.includes(required), `result grade contract missing ${required}`);
+  }
+  assert.match(contract, /Parserwarnungen[\s\S]*niemals erlaubte Auslassungen/iu);
+});
+
 done();

@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 26.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC57
+Stand: 26.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC60
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und
@@ -134,7 +134,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 |---|---|---|
 | BL-044.1 | Rekursive lokale Ordnerauswahl mit vollständiger Vorabvalidierung, stabiler relativer Zuordnung und ohne Linkverfolgung liefern. | **offen** |
 | BL-047.1 | Adaptive kleine Parallelität, 25%-/2-GiB-Speicherbudget und 2-s-/10-s-/10%-Performancegates implementieren und synthetisch messen. | **offen** |
-| BL-049.1 | **Teil a, b1 und b2-Integrität E0 abgeschlossen; Ergebnisgrade/E1/E3 offen:** Der descriptor- und identitätsgebundene Source-Preflight plant den vollständigen Mehrfachstapel mutationsfrei. TXT/Markdown/CSV/DOCX-Kandidaten werden erst danach kopiert; Mismatches, ungültiger Text, gesperrte Formate, beschädigte/polyglotte Container, aktive Inhalte, verschlüsselte ZIP-Einträge und CFB/OLE werden pro Datei vor jeder privaten Kopie journalisiert. Der Reststapel läuft weiter. OOXML durchläuft vorher eine begrenzte CRC-Prüfung aller Einträge sowie echte OPC-Steuerteil- und Relationship-Prüfung; ein SHA-256-Vergleich bindet die positive Prüfung an exakt die Snapshot-Bytes. Der lokale Mapping-Zwischenzustand ist strukturell validiert, idempotent reparierbar und erst danach terminal. `candidate` aktiviert kein neues Format. Genau drei DS-045-Ergebnisgrade sowie E1 und E3 bleiben offen. | **in Arbeit** |
+| BL-049.1 | **Teil a, b1, b2-Integrität und Grade-Policy/Manifest E0 abgeschlossen; dauerhafte Ergebnisprojektion/E1/E3 offen:** Der descriptor- und identitätsgebundene Source-Preflight plant den vollständigen Mehrfachstapel mutationsfrei. TXT/Markdown/CSV/DOCX-Kandidaten werden erst danach kopiert; Mismatches, ungültiger Text, gesperrte Formate, beschädigte/polyglotte Container, aktive Inhalte, verschlüsselte ZIP-Einträge und CFB/OLE werden pro Datei vor jeder privaten Kopie journalisiert. Der Reststapel läuft weiter. OOXML durchläuft vorher eine begrenzte CRC-Prüfung aller Einträge sowie echte OPC-Steuerteil- und Relationship-Prüfung; ein SHA-256-Vergleich bindet die positive Prüfung an exakt die Snapshot-Bytes. Der lokale Mapping-Zwischenzustand ist strukturell validiert, idempotent reparierbar und erst danach terminal. Neue V3-Pakete binden `complete` oder `usable-with-omissions` deterministisch an exakt zwei erlaubte Auslassungscodes; Warnungen und unbekannte Coverage stoppen. Historische V2-Pakete bleiben ohne unterstellten Grad lesbar. Die crashsichere Projektion von `not-processed` und aller drei Grade in Journal, Mapping, Evidenz, Stapelabschluss und Cowork-Anzeige sowie E1/E3 bleiben offen. | **in Arbeit** |
 | BL-042.3 | Inhaltsfreie MCP-App als progressive Verbesserung sowie vollständigen Text-/OS-Fallback, Deutsch/Englisch und A11y-Gates liefern. | **offen** |
 
 ## Danach: Content-Gates und gesperrte Formate

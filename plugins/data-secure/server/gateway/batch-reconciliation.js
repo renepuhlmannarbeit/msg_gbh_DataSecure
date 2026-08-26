@@ -5,6 +5,7 @@ const path = require('path');
 const { SafeError } = require('../runtime');
 const { roots, sha256File } = require('./common');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, STOPPED } = require('./mapping');
+const { validateManifestDocumentResult } = require('./document-result-grade');
 
 function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
@@ -43,8 +44,10 @@ function createBatchReconciliation(options = {}) {
       if (!manifestStat.isFile() || manifestStat.isSymbolicLink() ||
           !documentStat.isFile() || documentStat.isSymbolicLink()) return false;
       const manifest = JSON.parse(io.readFileSync(manifestPath, 'utf8'));
-      return manifest?.schema === 'eu-privacy-package/2' && manifest.package_id === packageId &&
-        manifest.document === `${packageId}.md` && /^[a-f0-9]{64}$/i.test(String(manifest.document_sha256 || '')) &&
+      const supportedSchema = ['eu-privacy-package/2', 'eu-privacy-package/3'].includes(manifest?.schema);
+      if (manifest?.schema === 'eu-privacy-package/3') validateManifestDocumentResult(manifest);
+      return supportedSchema && manifest.package_id === packageId && manifest.document === `${packageId}.md` &&
+        /^[a-f0-9]{64}$/i.test(String(manifest.document_sha256 || '')) &&
         hashFile(documentPath) === manifest.document_sha256 ? 'verified' : 'unsafe';
     } catch { return 'unsafe'; }
   }
