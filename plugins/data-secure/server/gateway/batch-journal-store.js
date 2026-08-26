@@ -117,6 +117,27 @@ function createBatchJournalStore(options = {}) {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
 
+  function validPreflightItem(item) {
+    const isPending = item?.status === 'preflight_mapping_pending';
+    const isStopped = item?.checkpoint === 'source_preflight_stopped';
+    const isPreflight = isPending || isStopped || item?.checkpoint === 'source_preflight_rejected';
+    if (!isPreflight) return true;
+    const validPair = (isPending && item.checkpoint === 'source_preflight_rejected' && item.local_mapping_exported === false) ||
+      (item.status === 'stopped' && isStopped && item.local_mapping_exported === true);
+    return validPair && /^[a-f0-9]{32}$/iu.test(String(item.id || '')) &&
+      typeof item.name === 'string' && item.name.length > 0 && item.name.length <= 255 &&
+      /^[A-Z][A-Z0-9_]{0,95}$/u.test(String(item.error_code || '')) &&
+      !Object.hasOwn(item, 'work_name') && !Object.hasOwn(item, 'sha256') &&
+      !Object.hasOwn(item, 'package_id');
+  }
+
+  function validStateShape(state, token) {
+    return state?.token === token && state?.schema === SCHEMA &&
+      Array.isArray(state?.items) && state.items.length > 0 &&
+      state.items.length <= maxBatchFiles && state.items.every(validPreflightItem) &&
+      validExpiry(state.expires_at) !== undefined;
+  }
+
   function readState(token) {
     let state;
     try {
@@ -125,9 +146,7 @@ function createBatchJournalStore(options = {}) {
       throw new ErrorType(NOT_FOUND);
     }
     const expiry = validExpiry(state?.expires_at);
-    if (state?.token !== token || state?.schema !== SCHEMA ||
-        !Array.isArray(state?.items) || state.items.length === 0 ||
-        state.items.length > maxBatchFiles || expiry === undefined) {
+    if (!validStateShape(state, token)) {
       throw new ErrorType(INVALID);
     }
     if (nowMs() > expiry) {
@@ -145,9 +164,7 @@ function createBatchJournalStore(options = {}) {
     // intentionally read-only and preserves raw parse/validation errors so
     // callers can count them without deleting an unknown local record.
     const state = readJournalRecord(token);
-    if (state?.schema !== SCHEMA || state.token !== token ||
-        !Array.isArray(state.items) || state.items.length === 0 ||
-        state.items.length > maxBatchFiles || validExpiry(state.expires_at) === undefined) {
+    if (!validStateShape(state, token)) {
       throw new Error('invalid');
     }
     return state;

@@ -22,6 +22,7 @@ function createBatchRecovery(options = {}) {
   const publicProgress = options.publicProgress;
   const reconcilePublishedItems = options.reconcilePublishedItems;
   const reconcilePendingMappings = options.reconcilePendingMappings;
+  const reconcilePreflightStoppedMappings = options.reconcilePreflightStoppedMappings || (() => false);
   const markInterruptedItemsRetryable = options.markInterruptedItemsRetryable;
   const retryReleasedWorkCopyCleanup = options.retryReleasedWorkCopyCleanup;
   const reconcileTerminalEvidence = options.reconcileTerminalEvidence;
@@ -29,10 +30,12 @@ function createBatchRecovery(options = {}) {
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const deferredReviewStatus = options.deferredReviewStatus || 'deferred_review';
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
+  const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
 
   function incompleteBatchState(state) {
     return !state.invalidated && (state.items || []).some((item) =>
-      ['pending', 'processing', 'retryable', deferredReviewStatus, mappingPendingStatus, deliveryPendingStatus]
+      ['pending', 'processing', 'retryable', deferredReviewStatus, mappingPendingStatus,
+        preflightMappingPendingStatus, deliveryPendingStatus]
         .includes(item.status)
     );
   }
@@ -144,6 +147,10 @@ function createBatchRecovery(options = {}) {
             recovered++;
           }
           if (reconcilePendingMappings(state)) {
+            changed = true;
+            recovered++;
+          }
+          if (reconcilePreflightStoppedMappings(state)) {
             changed = true;
             recovered++;
           }

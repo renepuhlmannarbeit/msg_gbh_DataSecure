@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { SafeError } = require('../runtime');
 const { roots, sha256File } = require('./common');
-const { appendMapping, ensureMappingOutbox, removeMappingOutbox } = require('./mapping');
+const { appendMapping, ensureMappingOutbox, removeMappingOutbox, STOPPED } = require('./mapping');
 
 function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
@@ -17,6 +17,7 @@ function createBatchReconciliation(options = {}) {
   const ErrorType = options.SafeError || SafeError;
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
+  const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
 
   function packageIdForItem(item) {
     if (!/^[a-f0-9]{32}$/i.test(String(item?.id || ''))) {
@@ -96,6 +97,32 @@ function createBatchReconciliation(options = {}) {
     return changed;
   }
 
+  function reconcilePreflightStoppedMappings(state) {
+    let changed = false;
+    for (const item of state.items || []) {
+      if (item.status !== preflightMappingPendingStatus) continue;
+      if (!/^[a-f0-9]{32}$/i.test(String(item.id || '')) ||
+        item.checkpoint !== 'source_preflight_rejected' ||
+        !/^[A-Z][A-Z0-9_]{0,95}$/u.test(String(item.error_code || '')) ||
+        Object.hasOwn(item, 'work_name') || Object.hasOwn(item, 'sha256') ||
+        Object.hasOwn(item, 'package_id')) {
+        continue;
+      }
+      try {
+        writeMapping(item.name, '', STOPPED, { mappingReference: item.id });
+        item.status = 'stopped';
+        item.checkpoint = 'source_preflight_stopped';
+        item.local_mapping_exported = true;
+        changed = true;
+      } catch {
+        // The terminal admission decision is durable already. Keep its local
+        // mapping checkpoint pending; a later maintenance pass retries the
+        // same idempotent row without ever snapshotting or parsing the source.
+      }
+    }
+    return changed;
+  }
+
   function reconcilePublishedItems(state) {
     let changed = false;
     for (const item of state.items || []) {
@@ -130,6 +157,7 @@ function createBatchReconciliation(options = {}) {
     markMappingPending,
     commitPendingMapping,
     reconcilePendingMappings,
+    reconcilePreflightStoppedMappings,
     reconcilePublishedItems,
     markInterruptedItemsRetryable
   };

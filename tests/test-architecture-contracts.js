@@ -398,8 +398,8 @@ test('OCR result v1 fixes positions, confidence, limits and content-free errors'
 test('source preflight v1 remains a candidate-only rejection gate', () => {
   const contract = read('SOURCE_PREFLIGHT_V1.md');
   for (const required of [
-    'BL-049.1a', 'Descriptor', '`candidate`', '`not_released`', '`rejected`',
-    'keine Dateinamen, Pfade, Rohbytes', 'drei finalen Ergebnisgrade'
+    'BL-049.1a', 'BL-049.1b1', 'Descriptor', '`candidate`', '`not_released`', '`rejected`',
+    '`preflight_mapping_pending`', 'keine Dateinamen, Pfade, Rohbytes', 'drei finalen Ergebnisgrade'
   ]) {
     assert.ok(contract.includes(required), `source preflight contract missing ${required}`);
   }

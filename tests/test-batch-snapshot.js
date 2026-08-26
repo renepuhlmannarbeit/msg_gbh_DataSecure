@@ -40,6 +40,14 @@ test('private path helpers stay token-bound and the batch facade keeps its test 
   assert.strictEqual(_test.preflightOoxmlContainers, preflightOoxmlContainers);
 });
 
+test('an all-stopped admission needs no source staging capacity probe', () => {
+  let calls = 0;
+  assert.deepStrictEqual(assertStagingCapacity([], () => { calls++; throw new Error('must not run'); }), {
+    inputBytes: 0, required: 0, available: null
+  });
+  assert.strictEqual(calls, 0);
+});
+
 test('snapshot copy completes correctly across positive partial writes', () => {
   const { source, expected } = sourceFixture('partial.txt');
   const destination = path.join(base, 'partial.copy');

@@ -3,6 +3,7 @@
 function createBatchNextMaintenance(options = {}) {
   const reconcilePublishedItems = options.reconcilePublishedItems;
   const reconcilePendingMappings = options.reconcilePendingMappings;
+  const reconcilePreflightStoppedMappings = options.reconcilePreflightStoppedMappings || (() => false);
   const markInterruptedItemsRetryable = options.markInterruptedItemsRetryable;
   const retryReleasedWorkCopyCleanup = options.retryReleasedWorkCopyCleanup;
   const writeState = options.writeState;
@@ -12,6 +13,11 @@ function createBatchNextMaintenance(options = {}) {
     // short-circuit: a newly adopted package is durably journalled before its
     // mapping can be reconciled by a later invocation.
     if (reconcilePublishedItems(state) || reconcilePendingMappings(state)) {
+      writeState(state);
+    }
+    // A preflight rejection has no package or work copy. Its only remaining
+    // local side effect is the permanent, idempotent stopped mapping row.
+    if (reconcilePreflightStoppedMappings(state)) {
       writeState(state);
     }
     // Interrupted processing may become explicitly resumable only after all

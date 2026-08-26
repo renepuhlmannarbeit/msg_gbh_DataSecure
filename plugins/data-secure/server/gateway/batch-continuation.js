@@ -12,11 +12,13 @@ function createBatchContinuation(options = {}) {
   const assertLocalExecutorAccess = options.assertLocalExecutorAccess;
   const reconcilePublishedItems = options.reconcilePublishedItems;
   const reconcilePendingMappings = options.reconcilePendingMappings;
+  const reconcilePreflightStoppedMappings = options.reconcilePreflightStoppedMappings || (() => false);
   const markInterruptedItemsRetryable = options.markInterruptedItemsRetryable;
   const recoverableBatchStates = options.recoverableBatchStates;
   const publicProgress = options.publicProgress;
   const deferredReviewStatus = options.deferredReviewStatus || 'deferred_review';
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
+  const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
 
   function resumeBatch(token) {
     if (active.has(token)) throw new ErrorType('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
@@ -35,6 +37,7 @@ function createBatchContinuation(options = {}) {
       // resume request.
       let changed = reconcilePublishedItems(state);
       if (reconcilePendingMappings(state)) changed = true;
+      if (reconcilePreflightStoppedMappings(state)) changed = true;
       if (markInterruptedItemsRetryable(state) > 0) changed = true;
       let resumed = 0;
       for (const item of state.items) {
@@ -50,7 +53,8 @@ function createBatchContinuation(options = {}) {
           ok: false,
           error: state.items.some((item) => item.status === deferredReviewStatus)
             ? 'batch_review_required'
-            : (state.items.some((item) => item.status === mappingPendingStatus)
+            : (state.items.some((item) =>
+              item.status === mappingPendingStatus || item.status === preflightMappingPendingStatus)
               ? 'local_mapping_repair_pending'
               : 'no_retryable_documents'),
           ...publicProgress(state),

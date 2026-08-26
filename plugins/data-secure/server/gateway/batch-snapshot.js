@@ -20,6 +20,10 @@ const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
 
 function assertStagingCapacity(queue, statfs = fs.statfsSync) {
   const inputBytes = queue.reduce((total, entry) => total + entry.stat.size, 0);
+  // A batch consisting only of preflight stops creates no private source
+  // snapshot. The tiny atomic journal is guarded by its own write operation;
+  // do not manufacture a 64-MiB staging requirement for zero copied bytes.
+  if (inputBytes === 0) return { inputBytes: 0, required: 0, available: null };
   const required = inputBytes * 2 + STAGING_HEADROOM_BYTES;
   let stats;
   try {
@@ -46,9 +50,8 @@ function assertStagingCapacity(queue, statfs = fs.statfsSync) {
 function preflightSourceEnvelopes(queue, deps = {}) {
   const inspect = deps.inspectSourceFormatFromFd || inspectSourceFormatFromFd;
   for (const entry of queue) {
-    // Keep product wiring inside the pre-existing Office security boundary
-    // until BL-049.1b can journal rejected text/items individually without
-    // aborting otherwise valid positions in a mixed batch.
+    // Compatibility path for isolated callers. Product intake now plans every
+    // source before mutation and journals rejected items individually.
     if (!['.docx', '.xlsx', '.pptx'].includes(extensionForName(entry.name))) continue;
     let descriptor;
     try {
@@ -87,9 +90,8 @@ function preflightSourceEnvelopes(queue, deps = {}) {
           'Dateiendung, Signatur oder minimale Containerstruktur passen nicht sicher zusammen. Die Datei wurde lokal nicht übernommen.'
         );
       }
-      // Formally recognised but locked formats keep the existing per-item
-      // terminal-stop path. BL-049.1b will journal that outcome before copying
-      // while allowing the remaining batch positions to continue.
+      // Formally recognised but locked formats stay outside this compatibility
+      // boundary and are handled by the admission planner in product intake.
     } catch (error) {
       if (error instanceof SafeError) throw error;
       if (error instanceof SourceFormatError) {
@@ -102,8 +104,8 @@ function preflightSourceEnvelopes(queue, deps = {}) {
   }
 }
 
-// Compatibility alias for callers and tests while BL-049.1b replaces the
-// all-or-nothing intake with per-item journaling and continuation.
+// Compatibility alias for isolated callers and tests. Production intake uses
+// the per-item admission planner instead of this all-or-nothing boundary.
 const preflightOoxmlContainers = preflightSourceEnvelopes;
 
 function regularFileStat(target) {

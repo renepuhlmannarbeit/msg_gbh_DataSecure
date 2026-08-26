@@ -1527,20 +1527,18 @@ nicht Produktpfad. Adaptive Parallelität, das 25%-/2-GiB-Budget sowie automatis
 Status: **teilweise**
 
 Container-, Parser-, Active-Content- und Residualgates sind für freigegebene Formate
-umfangreich vorhanden. BL-049.1a ergänzt einen schreibfreien, descriptor-gebundenen
-Classifier. Produktiv ist nur seine bestehende OOXML-Sicherheitsgrenze vor dem
-Snapshot verdrahtet: Sie bindet Dateidentität sowie lokale ZIP-Header, Namen, Flags,
-Methode und Datenbereiche und stoppt bekannte Endungs-/Signatur-/Minimalstruktur-
-Mismatches, beschädigte oder polyglotte ZIPs, offensichtliche aktive Inhalte,
-verschlüsselte ZIP-Einträge und CFB/OLE vor der privaten Kopie. Die vollständige
-UTF-8-/Control-Prüfung ist direkt getestet, bleibt aber bis zur per-Datei-
-Journalisierung bewusst außerhalb des stapelweiten Produktimports. Formal erkannte,
-aber noch nicht freigegebene Formate behalten ihren vorhandenen terminalen
-Einzelstopp nach dem Snapshot. Der positive
-Grad heißt bewusst nur `candidate`; vollständige Parser- und Residualgates folgen.
-Echte OPC-Steuerteil-/Relationship-/CRC-Prüfung, kopierfreie per-Datei-
-Journalisierung mit Fortsetzung des Reststapels sowie die drei kanonischen
-DS-045-Ergebnisgrade fehlen noch.
+umfangreich vorhanden. BL-049.1a/b1 ergänzt einen schreibfreien, descriptor-
+gebundenen Classifier und plant den vollständigen Mehrfachstapel vor der ersten
+Mutation. Er bindet Dateidentität sowie bei OOXML lokale ZIP-Header, Namen, Flags,
+Methode und Datenbereiche. Endungs-/Signatur-/Minimalstruktur-Mismatches, ungültiger
+UTF-8-/Control-Text, beschädigte oder polyglotte ZIPs, aktive Inhalte,
+verschlüsselte ZIP-Einträge, CFB/OLE und noch gesperrte Formate erhalten pro Datei
+einen kopierfreien Stopp. Die übrigen Kandidaten laufen weiter. Ein fester
+`preflight_mapping_pending`-Checkpoint hält den Stopp nicht-terminal, bis die
+dauerhafte lokale Zuordnung idempotent geschrieben ist; Recovery liest die Quelle
+dabei nicht erneut. Der positive Grad heißt bewusst nur `candidate`; vollständige
+Parser- und Residualgates folgen. Echte OPC-Steuerteil-/Relationship-/CRC-Prüfung
+und die drei kanonischen DS-045-Ergebnisgrade fehlen noch.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
 
 - Automatische Retention überspringt `Output` unabhängig vom Alter; nur ein

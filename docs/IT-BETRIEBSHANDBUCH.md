@@ -19,8 +19,8 @@ Es existieren zwei Auslieferungswege:
 
 | Artefakt | Ziel | Status RC57 |
 |---|---|---|
-| `DataSecure-Privacy-Preflight-v3.2.0-rc57.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
-| `DataSecure-Privacy-Gateway-v3.2.0-rc57.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc58.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc58.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -110,6 +110,9 @@ Ein grüner Startnachweis umfasst mindestens:
   serverseitigen Snapshot gebunden; ein Aufruf verarbeitet genau eine noch nicht
   versuchte Position, ein Stopp wird nicht automatisch wiederholt und Änderungen am
   Bestand invalidieren den Stapel;
+- der vollständige Stapel wird vor der ersten Mutation descriptor-gebunden geplant;
+  Formatstopps erzeugen weder Quellkopie noch Paket, erhalten aber einen dauerhaften
+  lokalen Mapping-Status und blockieren andere Kandidaten nicht;
 - Einzeldateien werden vor dem Snapshot formatspezifisch begrenzt: TXT/Markdown
   8.000.000 Bytes, CSV 1.500.000 Bytes, DOCX 64 MiB komprimiert und 128 MiB
   entpackt. Es gibt keine feste Seitenbegrenzung; die Ressourcenlimits sind das Gate;

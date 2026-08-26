@@ -118,6 +118,28 @@ await testAsync('no routable item returns only fresh content-free progress', asy
   assert.doesNotMatch(JSON.stringify(result), /Max Mustermann|private/u);
 });
 
+await testAsync('an all-stopped batch exports terminal evidence after mapping maintenance', async () => {
+  const h = harness({
+    publicProgress(value) {
+      h.calls.push(['progress', value]);
+      return { remaining: 0, stopped: 2, complete: true };
+    },
+    writeTerminalEvidence(value) {
+      h.calls.push(['evidence', value]);
+      return true;
+    }
+  });
+  h.state.items = [{ status: 'stopped' }, { status: 'stopped' }];
+  const result = await h.processBatchNext(h.token, h.deps);
+  assert.deepStrictEqual(result, {
+    ok: true, remaining: 0, stopped: 2, complete: true,
+    local_evidence_exported: true, raw_content_sent_to_claude: false
+  });
+  assert.deepStrictEqual(h.calls.map(([name]) => name), [
+    'acquire', 'read', 'lease', 'maintain', 'progress', 'evidence', 'release'
+  ]);
+});
+
 await testAsync('pending routing preserves state, item, entry, deps and response identity', async () => {
   const h = harness();
   const result = await h.processBatchNext(h.token, h.deps);

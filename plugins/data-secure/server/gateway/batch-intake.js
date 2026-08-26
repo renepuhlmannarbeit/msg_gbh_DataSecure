@@ -10,7 +10,11 @@ function createBatchIntake(options = {}) {
   const validateBatchLimits = options.validateBatchLimits;
   const storageStatus = options.storageStatus;
   const defaultHasReparseComponent = options.hasReparseComponent;
-  const preflightOoxmlContainers = options.preflightOoxmlContainers;
+  const planBatchAdmission = options.planBatchAdmission || ((queue) => {
+    if (typeof options.preflightOoxmlContainers !== 'function') throw new Error('SOURCE_ADMISSION_UNAVAILABLE');
+    options.preflightOoxmlContainers(queue);
+    return queue.map((entry) => ({ entry, admission: 'candidate', error_code: null }));
+  });
   const assertStagingCapacity = options.assertStagingCapacity;
   const tokenPattern = options.tokenPattern;
   const batchPath = options.batchPath;
@@ -23,6 +27,7 @@ function createBatchIntake(options = {}) {
   const safeRemoveWorkDirectory = options.safeRemoveWorkDirectory;
   const publicProgress = options.publicProgress;
   const platform = options.platform || process.platform;
+  const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
 
   function journalPublicationState(expected) {
     try {
@@ -116,14 +121,27 @@ function createBatchIntake(options = {}) {
         };
       }
     }
-    preflightOoxmlContainers(queue);
-    assertStagingCapacity(queue, beginOptions.statfs || io.statfsSync);
     const profile = String(beginOptions.profile || 'auto').toLowerCase();
     if (!profiles.has(profile)) throw new SafeError('Unbekanntes Profil.');
     const requestedToken = beginOptions.token;
     if (requestedToken !== undefined && !tokenPattern.test(String(requestedToken))) {
       throw new SafeError('Die lokale Batch-Sitzung ist ungültig.');
     }
+    let admissionPlan;
+    try {
+      admissionPlan = planBatchAdmission(queue, {
+        fs: io,
+        hasReparseComponent: beginOptions.hasReparseComponent || defaultHasReparseComponent
+      });
+    } catch (error) {
+      const stopped = new SafeError('Die ausgewählten Dateien konnten vor der lokalen Übernahme nicht sicher geprüft werden.');
+      stopped.code = /^[A-Z][A-Z0-9_]{0,95}$/u.test(String(error?.code || ''))
+        ? error.code
+        : 'SOURCE_READ_FAILED';
+      throw stopped;
+    }
+    const candidates = admissionPlan.filter((planned) => planned.admission === 'candidate');
+    assertStagingCapacity(candidates.map((planned) => planned.entry), beginOptions.statfs || io.statfsSync);
     const token = requestedToken || crypto.randomBytes(32).toString('hex');
     if (io.existsSync(batchPath(token)) || io.existsSync(workPath(token))) {
       throw new SafeError('Die lokale Batch-Sitzung ist bereits belegt.');
@@ -133,12 +151,25 @@ function createBatchIntake(options = {}) {
     let state;
     try {
       io.mkdirSync(work, { recursive: false, mode: 0o700 });
-      const items = queue.map((entry, index) => {
+      const items = admissionPlan.map((planned, index) => {
+        const entry = planned.entry;
+        const id = crypto.randomBytes(16).toString('hex');
+        if (planned.admission === 'stopped') {
+          return {
+            id,
+            name: entry.name,
+            status: preflightMappingPendingStatus,
+            checkpoint: 'source_preflight_rejected',
+            error_code: planned.error_code,
+            local_mapping_exported: false,
+            processing_duration_ms: 0
+          };
+        }
         const extension = path.extname(entry.name).toLowerCase();
         const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}${extension}`;
         const copied = copySnapshotFile(entry.full, path.join(work, workName), entry.stat);
         return {
-          id: crypto.randomBytes(16).toString('hex'),
+          id,
           name: entry.name,
           size: copied.size,
           sha256: copied.sha256,
@@ -156,8 +187,8 @@ function createBatchIntake(options = {}) {
         remove_images: beginOptions.removeImages === true,
         io_summary: createPrivateIoSummary({
           snapshot_preflight_runs: 1,
-          snapshot_copy_files: items.length,
-          snapshot_copy_mib: Math.ceil(items.reduce((total, item) => total + item.size, 0) / (1024 * 1024))
+          snapshot_copy_files: candidates.length,
+          snapshot_copy_mib: Math.ceil(items.reduce((total, item) => total + Number(item.size || 0), 0) / (1024 * 1024))
         }),
         items
       };

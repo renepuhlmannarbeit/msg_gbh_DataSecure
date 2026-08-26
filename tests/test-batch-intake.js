@@ -39,8 +39,13 @@ function fixture(options = {}) {
     validateBatchLimits: () => {},
     storageStatus: () => ({ safe: true }),
     hasReparseComponent: () => false,
-    preflightOoxmlContainers: () => { events.push('preflight'); },
-    assertStagingCapacity: () => { events.push('capacity'); },
+    planBatchAdmission(queue) {
+      events.push('plan');
+      return typeof options.planBatchAdmission === 'function'
+        ? options.planBatchAdmission(queue)
+        : queue.map((entry) => ({ entry, admission: 'candidate', error_code: null }));
+    },
+    assertStagingCapacity(queue) { events.push(`capacity:${queue.length}`); },
     tokenPattern: /^[a-f0-9]{64}$/,
     batchPath: () => journal,
     workPath: () => work,
@@ -162,6 +167,75 @@ test('the extracted intake creates the same sealed public response and batch fac
     assert.strictEqual(fs.readdirSync(item.work).length, 1);
     const batch = require('../plugins/data-secure/server/gateway/batch');
     assert.strictEqual(typeof batch.beginBatch, 'function');
+  } finally { item.cleanup(); }
+});
+
+test('mixed admission journals every position but snapshots only candidates', () => {
+  const item = fixture({
+    planBatchAdmission(queue) {
+      return queue.map((entry, index) => index % 2 === 0
+        ? { entry, admission: 'candidate', error_code: null }
+        : { entry, admission: 'stopped', error_code: index === 1
+          ? 'SOURCE_TYPE_MISMATCH'
+          : 'SOURCE_FORMAT_NOT_RELEASED' });
+    }
+  });
+  try {
+    const queue = ['one.txt', 'broken.docx', 'three.csv', 'locked.pdf'].map((name, index) => {
+      const full = path.join(item.root, name);
+      fs.writeFileSync(full, `source ${index}`, { mode: 0o600 });
+      return { name, full, sourceBytes: fs.statSync(full).size };
+    });
+    const result = item.begin(queue);
+    assert.deepStrictEqual(result, { ok: true, total: 4, raw_content_sent_to_claude: false });
+    assert.strictEqual(item.events.filter((event) => event.startsWith('copy:')).length, 2);
+    assert.ok(item.events.includes('capacity:2'));
+    assert.strictEqual(fs.readdirSync(item.work).length, 2);
+    const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
+    assert.deepStrictEqual(state.items.map((entry) => entry.status), [
+      'pending', 'preflight_mapping_pending', 'pending', 'preflight_mapping_pending'
+    ]);
+    for (const stopped of state.items.filter((entry) => entry.status === 'preflight_mapping_pending')) {
+      assert.strictEqual(stopped.checkpoint, 'source_preflight_rejected');
+      assert.strictEqual(stopped.local_mapping_exported, false);
+      assert.strictEqual(Object.hasOwn(stopped, 'work_name'), false);
+      assert.strictEqual(Object.hasOwn(stopped, 'sha256'), false);
+      assert.strictEqual(Object.hasOwn(stopped, 'package_id'), false);
+    }
+    assert.strictEqual(state.io_summary.snapshot_copy_files, 2);
+  } finally { item.cleanup(); }
+});
+
+test('an all-stopped admission creates a durable repair checkpoint without source copies', () => {
+  const item = fixture({
+    planBatchAdmission(queue) {
+      return queue.map((entry) => ({ entry, admission: 'stopped', error_code: 'SOURCE_TEXT_INVALID' }));
+    }
+  });
+  try {
+    const result = item.begin([item.queueEntry()]);
+    assert.deepStrictEqual(result, { ok: true, total: 1, raw_content_sent_to_claude: false });
+    assert.ok(item.events.includes('capacity:0'));
+    assert.strictEqual(item.events.some((event) => event.startsWith('copy:')), false);
+    assert.deepStrictEqual(fs.readdirSync(item.work), []);
+    const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
+    assert.strictEqual(state.items[0].status, 'preflight_mapping_pending');
+    assert.strictEqual(state.io_summary.snapshot_copy_files, 0);
+    assert.strictEqual(state.io_summary.snapshot_copy_mib, 0);
+  } finally { item.cleanup(); }
+});
+
+test('a planning trust failure occurs before work, capacity and journal mutations', () => {
+  const privateFailure = new Error('private source details');
+  privateFailure.code = 'SOURCE_IDENTITY_CHANGED';
+  const item = fixture({ planBatchAdmission() { throw privateFailure; } });
+  try {
+    assert.throws(() => item.begin([item.queueEntry()]), (error) =>
+      error.code === 'SOURCE_IDENTITY_CHANGED' && !/private source details/u.test(error.message));
+    assert.strictEqual(item.events.some((event) => event.startsWith('capacity:') ||
+      event.startsWith('mkdir:') || event.startsWith('copy:') || event === 'write'), false);
+    assert.strictEqual(fs.existsSync(item.work), false);
+    assert.strictEqual(fs.existsSync(item.journal), false);
   } finally { item.cleanup(); }
 });
 

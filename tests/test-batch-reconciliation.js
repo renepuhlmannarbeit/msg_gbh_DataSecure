@@ -11,6 +11,7 @@ const output = path.join('private-root', 'Output');
 
 function fixture(options = {}) {
   const events = [];
+  const mappingCalls = [];
   const mode = options.mode || 'verified';
   const packageFolder = path.join(output, packageId);
   const manifestPath = path.join(packageFolder, 'manifest.json');
@@ -56,8 +57,9 @@ function fixture(options = {}) {
       if (failure === 'ensure') throw new Error('ENSURE_FAILED');
       return { name: 'intent' };
     },
-    appendMapping(name, id) {
+    appendMapping(name, id, status, settings) {
       events.push(`append:${name}:${id}`);
+      mappingCalls.push({ name, id, status, settings });
       if (failure === 'append') throw new Error('APPEND_FAILED');
     },
     removeMappingOutbox() {
@@ -67,7 +69,7 @@ function fixture(options = {}) {
     mappingPendingStatus: 'mapping_pending',
     deliveryPendingStatus: 'delivery_pending'
   });
-  return { reconciliation, events, clearFailure() { failure = undefined; } };
+  return { reconciliation, events, mappingCalls, clearFailure() { failure = undefined; } };
 }
 
 test('package verification keeps the exact verified, missing, unsafe and structural-false contract', () => {
@@ -195,6 +197,45 @@ test('interruption recovery mutates only processing items and is idempotent', ()
   assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items }), 0);
 });
 
+test('preflight stops become terminal only after an idempotent local stopped mapping', () => {
+  const { reconciliation, mappingCalls } = fixture();
+  const item = {
+    id: 'e'.repeat(32),
+    name: '=duplicate.docx',
+    status: 'preflight_mapping_pending',
+    checkpoint: 'source_preflight_rejected',
+    error_code: 'SOURCE_TYPE_MISMATCH',
+    local_mapping_exported: false
+  };
+  const state = { items: [item] };
+  assert.strictEqual(reconciliation.reconcilePreflightStoppedMappings(state), true);
+  assert.strictEqual(item.status, 'stopped');
+  assert.strictEqual(item.checkpoint, 'source_preflight_stopped');
+  assert.strictEqual(item.local_mapping_exported, true);
+  assert.deepStrictEqual(mappingCalls[0], {
+    name: '=duplicate.docx', id: '', status: 'sicher gestoppt',
+    settings: { mappingReference: 'e'.repeat(32) }
+  });
+  assert.strictEqual(reconciliation.reconcilePreflightStoppedMappings(state), false);
+  assert.strictEqual(mappingCalls.length, 1);
+});
+
+test('failed stopped mapping remains recoverable and snapshot-bearing impostors are ignored', () => {
+  const pending = {
+    id: 'f'.repeat(32), name: 'blocked.pdf', status: 'preflight_mapping_pending',
+    checkpoint: 'source_preflight_rejected', error_code: 'SOURCE_FORMAT_NOT_RELEASED',
+    local_mapping_exported: false
+  };
+  const failed = fixture({ mappingFailure: 'append' });
+  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ items: [pending] }), false);
+  assert.strictEqual(pending.status, 'preflight_mapping_pending');
+  failed.clearFailure();
+  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ items: [pending] }), true);
+  const forged = { ...pending, status: 'preflight_mapping_pending', checkpoint: 'source_preflight_rejected', work_name: '001_fake.txt' };
+  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ items: [forged] }), false);
+  assert.strictEqual(forged.status, 'preflight_mapping_pending');
+});
+
 test('the batch composition root preserves every reconciliation test facade', () => {
   const { _test } = require('../plugins/data-secure/server/gateway/batch');
   for (const name of [
@@ -203,6 +244,7 @@ test('the batch composition root preserves every reconciliation test facade', ()
     'regularPublishedPackage',
     'commitPendingMapping',
     'reconcilePendingMappings',
+    'reconcilePreflightStoppedMappings',
     'reconcilePublishedItems',
     'markInterruptedItemsRetryable'
   ]) assert.strictEqual(typeof _test[name], 'function', name);

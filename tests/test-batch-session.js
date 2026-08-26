@@ -516,7 +516,7 @@ async function main() {
     }
   });
 
-  await testAsync('unsafe OOXML directory metadata is refused for DOCX, XLSX and PPTX before a private batch copy is created', async () => {
+  await testAsync('unsafe OOXML metadata is journalled per file without a private source copy', async () => {
     for (const extension of ['.docx', '.xlsx', '.pptx']) {
       resetInput();
       const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
@@ -526,10 +526,15 @@ async function main() {
       assert.ok(central >= 0);
       archive.writeUInt32LE(301 * 1024 * 1024, central + 24);
       fs.writeFileSync(source, archive);
-      assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
-        error.code === 'SOURCE_CONTAINER_CORRUPT');
+      const begun = beginBatch({ expectedCount: 1, profile: 'general' });
+      const stopped = _test.readState(begun.batch_token).items[0];
+      assert.strictEqual(stopped.status, 'preflight_mapping_pending');
+      assert.strictEqual(stopped.error_code, 'SOURCE_CONTAINER_CORRUPT');
+      assert.strictEqual(Object.hasOwn(stopped, 'work_name'), false);
+      assert.deepStrictEqual(fs.readdirSync(_test.workPath(begun.batch_token)), []);
       assert.strictEqual(fs.readFileSync(source).equals(archive), true);
-      assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
+      assert.strictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).length,
+        existingWorkDirectories.length + 1);
     }
   });
 
@@ -542,10 +547,15 @@ async function main() {
     assert.ok(central >= 0);
     archive.writeUInt16LE(1, central + 8);
     fs.writeFileSync(source, archive);
-    assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
-      error.code === 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED' && !/protected|\.docx/i.test(error.message));
+    const begun = beginBatch({ expectedCount: 1, profile: 'general' });
+    const stopped = _test.readState(begun.batch_token).items[0];
+    assert.strictEqual(stopped.status, 'preflight_mapping_pending');
+    assert.strictEqual(stopped.error_code, 'SOURCE_ENCRYPTED_UNSUPPORTED');
+    assert.strictEqual(Object.hasOwn(stopped, 'work_name'), false);
     assert.strictEqual(fs.readFileSync(source).equals(archive), true);
-    assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
+    assert.deepStrictEqual(fs.readdirSync(_test.workPath(begun.batch_token)), []);
+    assert.strictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).length,
+      existingWorkDirectories.length + 1);
   });
 
   await testAsync('a local-header-only encryption flag stops before a snapshot', async () => {
@@ -559,10 +569,15 @@ async function main() {
     ]));
     archive.writeUInt16LE(archive.readUInt16LE(6) | 1, 6);
     fs.writeFileSync(source, archive);
-    assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
-      error.code === 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED');
+    const begun = beginBatch({ expectedCount: 1, profile: 'general' });
+    const stopped = _test.readState(begun.batch_token).items[0];
+    assert.strictEqual(stopped.status, 'preflight_mapping_pending');
+    assert.strictEqual(stopped.error_code, 'SOURCE_ENCRYPTED_UNSUPPORTED');
+    assert.strictEqual(Object.hasOwn(stopped, 'work_name'), false);
     assert.strictEqual(fs.readFileSync(source).equals(archive), true);
-    assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
+    assert.deepStrictEqual(fs.readdirSync(_test.workPath(begun.batch_token)), []);
+    assert.strictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).length,
+      existingWorkDirectories.length + 1);
   });
 
   await testAsync('a legacy-or-encrypted Office CFB container stops honestly before a snapshot', async () => {
@@ -572,9 +587,14 @@ async function main() {
     const encryptedOffice = Buffer.alloc(512);
     Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(encryptedOffice);
     fs.writeFileSync(source, encryptedOffice);
-    assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
-      error.code === 'SOURCE_COMPOUND_BINARY_UNSUPPORTED' && !/protected|\.docx/i.test(error.message));
-    assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
+    const begun = beginBatch({ expectedCount: 1, profile: 'general' });
+    const stopped = _test.readState(begun.batch_token).items[0];
+    assert.strictEqual(stopped.status, 'preflight_mapping_pending');
+    assert.strictEqual(stopped.error_code, 'SOURCE_COMPOUND_BINARY_UNSUPPORTED');
+    assert.strictEqual(Object.hasOwn(stopped, 'work_name'), false);
+    assert.deepStrictEqual(fs.readdirSync(_test.workPath(begun.batch_token)), []);
+    assert.strictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).length,
+      existingWorkDirectories.length + 1);
   });
 
   await testAsync('local mapping CSV neutralizes spreadsheet formulas', async () => {
@@ -621,14 +641,20 @@ async function main() {
     fs.writeFileSync(path.join(resetInputDirectory(), 'terminal-stop.xlsx'), unsupportedXlsx());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processBatchNext(begun.batch_token, deps);
-    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.ok, true);
     assert.strictEqual(result.complete, true);
     assert.strictEqual(result.local_evidence_exported, true);
     const record = JSON.parse(fs.readFileSync(evidencePath(), 'utf8')).records[0];
     assert.strictEqual(record.outcome, 'complete_with_stopped_documents');
     assert.deepStrictEqual(record.counts, { total: 1, released: 0, stopped: 1, retryable: 0, pending: 0 });
-    assert.deepStrictEqual(record.error_codes, ['FORMAT_COVERAGE_UNVERIFIED']);
+    assert.deepStrictEqual(record.error_codes, ['SOURCE_FORMAT_NOT_RELEASED']);
     assert.doesNotMatch(JSON.stringify(record), /terminal-stop|Mustermann|\.xlsx/i);
+    const listed = listBatchResults(begun.batch_token, { limit: 20 });
+    assert.deepStrictEqual(listed.results, []);
+    assert.strictEqual(listed.next_cursor, null);
+    assert.strictEqual(listed.available, 0);
+    assert.strictEqual(listed.safely_stopped, 1);
+    assert.strictEqual(listed.batch_complete, true);
   });
 
   await testAsync('a failed mapping write retains the published package for local repair without delivery', async () => {
@@ -1190,17 +1216,16 @@ async function main() {
     add('first.txt', 'Kunde: Max Mustermann\nE-Mail: max@example.de\nTicket: Eins');
     add('second.txt', 'Kunde: Erika Musterfrau\nE-Mail: erika@example.de\nTicket: Zwei');
     const begun = beginBatch({ expectedCount: 3, profile: 'customer' });
-    const stopped = await processBatchNext(begun.batch_token, deps);
-    assert.strictEqual(stopped.ok, false);
-    assert.strictEqual(stopped.stopped, 1);
-    assert.strictEqual(stopped.completion_percent, 33);
-    assert.strictEqual(stopped.local_mapping_exported, true);
-    assert.strictEqual(stopped.remaining, 2);
-    const stoppedItem = _test.readState(begun.batch_token).items.find((item) => item.status === 'stopped');
+    const planned = _test.readState(begun.batch_token);
+    const stoppedItem = planned.items.find((item) => item.status === 'preflight_mapping_pending');
+    assert.strictEqual(_test.publicProgress(planned).mapping_pending, 1);
+    assert.strictEqual(_test.publicProgress(planned).remaining, 2);
     assert.ok(Number.isSafeInteger(stoppedItem.processing_duration_ms));
     assert.ok(stoppedItem.processing_duration_ms >= 0);
-    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), stoppedItem.work_name)), false);
     const first = await processAndAcknowledge(begun.batch_token, deps);
+    assert.strictEqual(first.stopped, 1);
+    assert.strictEqual(first.released, 1);
+    assert.strictEqual(Object.hasOwn(stoppedItem, 'work_name'), false);
     const releasedItem = _test.readState(begun.batch_token).items.find((item) => item.status === 'released');
     assert.ok(Number.isSafeInteger(releasedItem.processing_duration_ms));
     assert.ok(releasedItem.processing_duration_ms >= 0);
@@ -1239,52 +1264,54 @@ async function main() {
     add('unreadable.xlsx', unsupportedXlsx());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processAndAcknowledge(begun.batch_token, deps);
-    assert.strictEqual(result.ok, false);
-    assert.strictEqual(result.local_mapping_exported, true);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.complete, true);
+    assert.strictEqual(result.stopped, 1);
+    assert.strictEqual(result.package_id, undefined);
     const mapping = fs.readFileSync(path.join(roots().exports, 'DataSecure-Mapping.csv'), 'utf8');
     assert.match(mapping, /"unreadable\.xlsx";"";"sicher gestoppt"/);
     assert.doesNotMatch(JSON.stringify(result), /unreadable\.xlsx/);
   });
 
-  await testAsync('a stopped source is deleted immediately and a failed deletion is retried locally', async () => {
+  await testAsync('a preflight-stopped source never creates a cleanup obligation or invokes source deletion', async () => {
     resetInput();
     const cleanupBefore = localCleanupStatus().private_work_copy_cleanup_pending;
     add('locked-stop.xlsx', unsupportedXlsx());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    let deletionCalls = 0;
     const stopped = await processBatchNext(begun.batch_token, {
       ...deps,
-      unlinkWorkCopy: () => { throw new Error('synthetic locked stopped copy'); }
+      unlinkWorkCopy: () => { deletionCalls++; throw new Error('must not be called'); }
     });
-    assert.strictEqual(stopped.ok, false);
+    assert.strictEqual(stopped.ok, true);
+    assert.strictEqual(stopped.complete, true);
     const pending = _test.readState(begun.batch_token).items[0];
     assert.strictEqual(pending.status, 'stopped');
-    assert.strictEqual(pending.work_copy_cleanup_pending, true);
-    assert.strictEqual(localCleanupStatus().private_work_copy_cleanup_pending, cleanupBefore + 1);
-    const retried = await processBatchNext(begun.batch_token, deps);
-    assert.strictEqual(retried.complete, true);
-    const cleaned = _test.readState(begun.batch_token).items[0];
-    assert.strictEqual(cleaned.work_copy_cleanup_pending, undefined);
+    assert.strictEqual(Object.hasOwn(pending, 'work_name'), false);
+    assert.strictEqual(Object.hasOwn(pending, 'work_copy_cleanup_pending'), false);
+    assert.strictEqual(deletionCalls, 0);
     assert.strictEqual(localCleanupStatus().private_work_copy_cleanup_pending, cleanupBefore);
-    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), cleaned.work_name)), false);
+    assert.deepStrictEqual(fs.readdirSync(_test.workPath(begun.batch_token)), []);
   });
 
-  await testAsync('startup recovery retries a pending cleanup for a safely stopped source', async () => {
+  await testAsync('startup recovery retries a pending stopped mapping without creating a source copy', async () => {
     resetInput();
     add('restart-cleanup.xlsx', unsupportedXlsx());
+    const mappingFile = path.join(roots().exports, 'DataSecure-Mapping.csv');
+    fs.writeFileSync(mappingFile, 'corrupt local mapping', 'utf8');
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
-    await processBatchNext(begun.batch_token, {
-      ...deps,
-      unlinkWorkCopy: () => { throw new Error('synthetic cleanup interruption'); }
-    });
+    await processBatchNext(begun.batch_token, deps);
     const pending = _test.readState(begun.batch_token).items[0];
-    assert.strictEqual(pending.status, 'stopped');
-    assert.strictEqual(pending.work_copy_cleanup_pending, true);
-    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), pending.work_name)), true);
+    assert.strictEqual(pending.status, 'preflight_mapping_pending');
+    assert.strictEqual(Object.hasOwn(pending, 'work_name'), false);
+    assert.deepStrictEqual(fs.readdirSync(_test.workPath(begun.batch_token)), []);
+    fs.unlinkSync(mappingFile);
     const recovered = recoverBatches();
     assert.strictEqual(recovered.failures, 0);
     const cleaned = _test.readState(begun.batch_token).items[0];
-    assert.strictEqual(cleaned.work_copy_cleanup_pending, undefined);
-    assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), cleaned.work_name)), false);
+    assert.strictEqual(cleaned.status, 'stopped');
+    assert.strictEqual(cleaned.local_mapping_exported, true);
+    assert.deepStrictEqual(fs.readdirSync(_test.workPath(begun.batch_token)), []);
   });
 
   await testAsync('changes to originals after snapshot do not alter the sealed batch', async () => {
@@ -1574,8 +1601,8 @@ async function main() {
     }
     const begun = beginBatch({ expectedCount: 100, profile: 'customer' });
     const crashes = [
-      { absolutePosition: 1, localAttempt: 1, releasedBefore: 0, stoppedBefore: 0 },
-      { absolutePosition: 50, localAttempt: 2, releasedBefore: 1, stoppedBefore: 48 },
+      { absolutePosition: 1, localAttempt: 1, releasedBefore: 0, stoppedBefore: 97 },
+      { absolutePosition: 50, localAttempt: 2, releasedBefore: 1, stoppedBefore: 97 },
       { absolutePosition: 100, localAttempt: 2, releasedBefore: 2, stoppedBefore: 97 }
     ];
     for (const crash of crashes) {

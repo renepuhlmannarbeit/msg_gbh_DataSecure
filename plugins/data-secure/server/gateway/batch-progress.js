@@ -5,6 +5,7 @@ function createBatchProgress(deps) {
     deliveryPendingStatus,
     deferredReviewStatus,
     mappingPendingStatus,
+    preflightMappingPendingStatus = 'preflight_mapping_pending',
     liveLocalExecutor
   } = deps;
 
@@ -94,7 +95,9 @@ function createBatchProgress(deps) {
     const stopped = items.filter((item) => item.status === 'stopped').length;
     const retryable = items.filter((item) => item.status === 'retryable').length;
     const deferredReview = items.filter((item) => item.status === deferredReviewStatus).length;
-    const mappingPending = items.filter((item) => item.status === mappingPendingStatus).length;
+    const mappingPending = items.filter((item) =>
+      item.status === mappingPendingStatus || item.status === preflightMappingPendingStatus
+    ).length;
     const remaining = items.filter((item) => item.status === 'pending').length;
     const completed = released + stopped;
     const complete = !invalidState && remaining === 0 && retryable === 0 && deferredReview === 0 && mappingPending === 0 && deliveryPending === 0 && processing === 0;

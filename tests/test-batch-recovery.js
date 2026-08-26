@@ -90,6 +90,15 @@ function fixture(options = {}) {
       value.doMapping = false;
       return changed;
     },
+    ...(options.enablePreflight ? {
+      reconcilePreflightStoppedMappings(value) {
+        events.push(`preflight-mapping:${value.token}`);
+        const item = value.items.find((entry) => entry.status === 'preflight_mapping_pending');
+        if (!item || options.preflightFailure === value.token) return false;
+        item.status = 'stopped';
+        return true;
+      }
+    } : {}),
     markInterruptedItemsRetryable(value) {
       events.push(`retry:${value.token}`);
       const count = value.interrupted;
@@ -114,7 +123,8 @@ function fixture(options = {}) {
     } : {}),
     deliveryPendingStatus: 'delivery_pending',
     deferredReviewStatus: 'deferred_review',
-    mappingPendingStatus: 'mapping_pending'
+    mappingPendingStatus: 'mapping_pending',
+    preflightMappingPendingStatus: 'preflight_mapping_pending'
   });
   return { recovery, events, states };
 }
@@ -242,6 +252,22 @@ test('periodic expiry cleanup uses the same lock, liveness and work-before-journ
 test('cleanup-only recovery writes once without inflating the recovered counter', () => {
   const value = state(tokens[0], { cleanupChanged: true, items: [{ status: 'released' }] });
   const item = fixture({ states: [value] });
+  assert.deepStrictEqual(item.recovery.recoverBatches(), {
+    recovered: 0, removed: 0, failures: 0, skipped_active: false
+  });
+  assert.strictEqual(item.events.filter((event) => event === `write:${tokens[0]}`).length, 1);
+});
+
+test('recovery makes a durable preflight stopped mapping terminal exactly once', () => {
+  const value = state(tokens[0], { items: [{ status: 'preflight_mapping_pending' }] });
+  const item = fixture({ states: [value], enablePreflight: true });
+  assert.deepStrictEqual(item.recovery.recoverableBatchStates().map((entry) => entry.token), [tokens[0]]);
+  assert.deepStrictEqual(item.recovery.recoverBatches(), {
+    recovered: 1, removed: 0, failures: 0, skipped_active: false
+  });
+  assert.strictEqual(value.items[0].status, 'stopped');
+  assert.strictEqual(item.events.filter((event) => event === `preflight-mapping:${tokens[0]}`).length, 1);
+  assert.strictEqual(item.events.filter((event) => event === `write:${tokens[0]}`).length, 1);
   assert.deepStrictEqual(item.recovery.recoverBatches(), {
     recovered: 0, removed: 0, failures: 0, skipped_active: false
   });

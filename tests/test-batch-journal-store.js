@@ -341,6 +341,52 @@ test('normal reads consistently reject invalid schema, token, items and expiry w
   }
 });
 
+test('preflight mapping checkpoints are structurally bound and carry no private snapshot fields', () => {
+  const validPending = {
+    id: 'b'.repeat(32),
+    name: 'locked.docx',
+    status: 'preflight_mapping_pending',
+    checkpoint: 'source_preflight_rejected',
+    error_code: 'SOURCE_ENCRYPTED_UNSUPPORTED',
+    local_mapping_exported: false
+  };
+  const validStopped = {
+    ...validPending,
+    status: 'stopped',
+    checkpoint: 'source_preflight_stopped',
+    local_mapping_exported: true
+  };
+  for (const valid of [validPending, validStopped]) {
+    const item = fixture();
+    try {
+      const value = state({ items: [valid] });
+      fs.writeFileSync(item.target, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+      assert.deepStrictEqual(item.store.readState(token), value);
+      assert.deepStrictEqual(item.store.readStateForMaintenance(token), value);
+    } finally {
+      item.cleanup();
+    }
+  }
+
+  for (const invalid of [
+    { ...validPending, id: 'not-an-id' },
+    { ...validPending, checkpoint: 'source_preflight_stopped' },
+    { ...validPending, error_code: 'private value' },
+    { ...validPending, work_name: '001_private.docx' },
+    { ...validStopped, local_mapping_exported: false }
+  ]) {
+    const item = fixture();
+    try {
+      fs.writeFileSync(item.target, `${JSON.stringify(state({ items: [invalid] }))}\n`, { mode: 0o600 });
+      assert.throws(() => item.store.readState(token), /Sitzung ist ungültig/i);
+      assert.throws(() => item.store.readStateForMaintenance(token), /invalid/);
+      assert.deepStrictEqual(item.events, []);
+    } finally {
+      item.cleanup();
+    }
+  }
+});
+
 test('maintenance reads are mutation-free and validate their binding and expiry', () => {
   const item = fixture({ nowMs: () => Date.parse('2026-08-27T00:00:00.000Z') });
   try {

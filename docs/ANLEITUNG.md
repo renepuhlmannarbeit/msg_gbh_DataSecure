@@ -263,10 +263,12 @@ DataSecure-eigene Arbeitskopien, Ergebnisse und Vorschauen – niemals Ihre Quel
    500 MiB aus – nicht in den Chat. Beachten Sie zusätzlich die oben genannten
    Einzeldateigrenzen.
 3. Klicken Sie **„Öffnen“**. Dies ist die einzige Bestätigung: DataSecure prüft Anzahl,
-   Gesamtgröße, Formate und Bildstandard lokal und erstellt dann private, versiegelte
-   Arbeitskopien. **Abbrechen** erstellt keinen Batch. Spätere Änderungen an den
-   ausgewählten Originalen verändern den gestarteten Snapshot nicht. PDF und alle
-   anderen Formate sind im Pilot sicher gesperrt.
+   Gesamtgröße, Endung, Signatur und Minimalstruktur des vollständigen Stapels lokal.
+   Nur zulässige Kandidaten erhalten danach eine private, versiegelte Arbeitskopie.
+   Ungültige, verschlüsselte oder noch nicht freigegebene Dateien werden ohne Kopie
+   lokal als gestoppt erfasst; die übrigen Dateien laufen weiter. **Abbrechen** erstellt
+   keinen Batch. Spätere Änderungen an den ausgewählten Originalen verändern den
+   gestarteten Snapshot nicht. PDF und alle anderen Formate sind im Pilot sicher gesperrt.
 4. Ein kurzer Startaufruf übergibt den versiegelten Stapel an einen getrennten lokalen
    Hintergrundprozessor. Er verarbeitet intern Datei für Datei und erstellt pro Erfolg
    ein eigenes Markdown-Paket, ohne dass Claude für jede Datei einen Werkzeugaufruf
@@ -283,7 +285,7 @@ DataSecure-eigene Arbeitskopien, Ergebnisse und Vorschauen – niemals Ihre Quel
 7. Bei mehr als einer Datei zeigt DataSecure zusätzlich eine lokale Abschlussübersicht
    mit den Zählern ausgewählt, erfolgreich vorbereitet und sicher gestoppt. Claude
    nennt am Ende dieselben Zähler. Die
-   lokal gesperrten Arbeitskopien gehören zu den gestoppten Dateien; ihre Namen wurden
+   lokal gestoppten Dateien besitzen keine freigegebene Arbeitskopie; ihre Namen wurden
    Claude nicht mitgeteilt. Claude erhält Ergebnisse nur namenfrei in Seiten von höchstens
    fünf und liest je nach Aufgabe nur benötigte Pakete. Erfolgreiches Markdown ist
    nur über die 15 Minuten gültige Leseberechtigung desselben Laufs abrufbar; ein

@@ -83,6 +83,22 @@ test('an empty or malformed checkpoint is never reported as complete', () => {
   assert.strictEqual(result.next_action, 'check_privacy_status');
 });
 
+test('a preflight mapping checkpoint is visible only as aggregate local repair work', () => {
+  const result = _test.publicProgress({
+    token: 'f'.repeat(64),
+    items: [
+      { name: 'Private-Defekt.docx', status: 'preflight_mapping_pending' },
+      { name: 'Weiter.txt', status: 'pending' }
+    ]
+  });
+  assert.strictEqual(result.mapping_pending, 1);
+  assert.strictEqual(result.stopped, 0);
+  assert.strictEqual(result.remaining, 1);
+  assert.strictEqual(result.complete, false);
+  assert.strictEqual(result.next_position, 2);
+  assert.doesNotMatch(JSON.stringify(result), /Private|Defekt|Weiter|\.docx|\.txt/u);
+});
+
 test('rest time is a bounded median from at least three local processing samples', () => {
   const result = _test.publicProgress({
     token: 'b'.repeat(64),

@@ -96,6 +96,22 @@ test('mapping repair commits before interrupted recovery and cleanup', () => {
   ]);
 });
 
+test('preflight stopped mapping receives its own durable boundary before retry and cleanup', () => {
+  const calls = [];
+  const h = harness({
+    reconcilePublishedItems() { calls.push('published'); return false; },
+    reconcilePendingMappings() { calls.push('package-mapping'); return false; },
+    reconcilePreflightStoppedMappings() { calls.push('preflight-mapping'); return true; },
+    writeState() { calls.push('write'); },
+    markInterruptedItemsRetryable() { calls.push('interrupted'); return 0; },
+    retryReleasedWorkCopyCleanup() { calls.push('cleanup'); return { changed: false }; }
+  });
+  h.maintainBeforeNext(h.state, h.deps);
+  assert.deepStrictEqual(calls, [
+    'published', 'package-mapping', 'preflight-mapping', 'write', 'interrupted', 'cleanup'
+  ]);
+});
+
 test('interrupted and cleanup mutations each receive their own durable boundary', () => {
   const calls = [];
   const h = harness({

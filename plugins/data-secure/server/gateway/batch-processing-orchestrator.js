@@ -14,6 +14,7 @@ function createBatchProcessingOrchestrator(options = {}) {
   const invalidateUnpublishedBatchCopies = options.invalidateUnpublishedBatchCopies;
   const writeState = options.writeState;
   const processSingleBatchItem = options.processSingleBatchItem;
+  const writeTerminalEvidence = options.writeTerminalEvidence || (() => undefined);
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
 
   async function processBatchNext(token, deps = {}) {
@@ -38,9 +39,13 @@ function createBatchProcessingOrchestrator(options = {}) {
 
       const item = state.items.find((candidate) => candidate.status === 'pending');
       if (!item) {
+        const progress = publicProgress(state);
         return {
           ok: true,
-          ...publicProgress(state),
+          ...progress,
+          ...(progress.complete === true
+            ? { local_evidence_exported: writeTerminalEvidence(state) }
+            : {}),
           raw_content_sent_to_claude: false
         };
       }

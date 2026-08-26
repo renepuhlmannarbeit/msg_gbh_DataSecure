@@ -1,7 +1,7 @@
 # Vertrag: descriptor-gebundener Quellen-Preflight v1
 
-Status: BL-049.1a E0; produktiv nur für die bereits vorhandene OOXML-
-Sicherheitsgrenze als Ablehnungsgate vor dem privaten Snapshot verdrahtet.
+Status: BL-049.1a und BL-049.1b1 E0; produktiv für den gesamten lokalen
+Mehrfachpicker vor jeder privaten Quellkopie verdrahtet.
 
 ## Zweck und Grenze
 
@@ -18,14 +18,15 @@ Residual-Gates; bei DOCX folgen vollständige lokale Header-, CRC-, OPC-, Parser
 und Residual-Gates. `candidate` ist weder „vollständig verarbeitet“ noch eine
 Freigabe nach DS-045 und aktiviert kein neues Format.
 
-Die vollständige Textklassifikation ist in diesem Leaf direkt getestet, aber noch
-nicht in den stapelweiten Produktpfad importiert: Ohne per-Datei-Journalisierung
-würde ein Text-Reject sonst den ganzen gemischten Stapel vorzeitig abbrechen.
+Die vollständige Textklassifikation ist in den stapelweiten Produktpfad importiert.
+Der gesamte Stapel wird vor der ersten Mutation geplant. Ein Descriptor-, Lese- oder
+Identitätsfehler verwirft die Aufnahme vollständig; ein inhaltlicher Formatstopp wird
+dagegen pro Datei kopierfrei journalisiert und hält andere Kandidaten nicht an.
 
 `not_released` bedeutet: Signatur und Endung eines im Zielbild vorgesehenen, aber
-in diesem Build noch gesperrten Formats passen. Es behält vorerst den vorhandenen
-einzelnen terminalen Formatstopp nach dem Snapshot und wird dadurch nicht aktiviert.
-BL-049.1b muss diesen Stopp kopierfrei journalisieren, ohne den Reststapel anzuhalten.
+in diesem Build noch gesperrten Formats passen. Die Datei erhält vor dem Snapshot
+einen kopierfreien terminalen Einzelstopp; der Reststapel läuft weiter. Dadurch wird
+kein neues Format aktiviert.
 
 `rejected` besitzt ausschließlich feste inhaltsfreie Codes für nicht unterstützte
 Endungen, Endungs-/Signatur-/Minimalstruktur-Mismatch, ungültigen Text, beschädigte
@@ -37,6 +38,13 @@ allein wird nicht als Beweis für Passwortschutz bezeichnet.
 
 - echte OPC-Steuerteil-, Relationship- und CRC-Prüfung vor Snapshot; feste lokale
   ZIP-Header, Name, Flags, Methode und Datenbereich sind bereits gebunden,
-- per-Datei-Journalisierung und Fortsetzung des Reststapels,
 - ausschließlich die drei finalen Ergebnisgrade aus DS-045,
 - neue Formatfreigaben sowie E1/E3 auf realen Zielplattformen.
+
+## Journal- und Mappinggrenze
+
+Ein abgewiesener Eintrag wird zunächst als `preflight_mapping_pending` mit festem,
+inhaltsfreiem Fehlercode persistiert. Er enthält weder `work_name`, Quellhash noch
+Paketkennung. Erst nachdem der dauerhafte lokale Mapping-Eintrag idempotent geschrieben
+wurde, wechselt er auf `stopped`. Wiederanlauf und periodische Wartung reparieren den
+Zwischenzustand, ohne die Quelle erneut zu lesen oder eine Arbeitskopie anzulegen.

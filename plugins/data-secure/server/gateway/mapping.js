@@ -191,6 +191,10 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
   // that fact in the private user-facing ledger prevents an ambiguous missing
   // row without inventing a result identifier.
   const validStopped = state === STOPPED && result === '';
+  const mappingReference = String(options.mappingReference || '');
+  if (mappingReference && !/^[a-f0-9]{32}$/i.test(mappingReference)) {
+    throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
+  }
   if (path.basename(name) !== name || !(validReleased || validStopped)) {
     throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
   }
@@ -216,7 +220,10 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
     if (previous && !previous.startsWith(HEADER)) {
       throw new SafeError('Der lokale Zuordnungsexport hat ein ungültiges Format.');
     }
-    const row = [name, result, state, FIXED_NOTE].map(csvField).join(';') + '\r\n';
+    const note = validStopped && mappingReference
+      ? `Lokale Zuordnung ${mappingReference}; nicht an Claude übertragen.`
+      : FIXED_NOTE;
+    const row = [name, result, state, note].map(csvField).join(';') + '\r\n';
     // A process can disappear after atomically replacing the CSV but before it
     // records that fact in its private batch snapshot. Retrying that exact local
     // commit must be safe: duplicate rows would make the user-facing mapping

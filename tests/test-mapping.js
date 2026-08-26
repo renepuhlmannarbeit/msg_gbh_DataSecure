@@ -103,4 +103,22 @@ test('a real ENOSPC after a positive capacity check preserves the mapping and re
   } finally { fs.rmSync(exportsRoot, { recursive: true, force: true }); }
 });
 
+test('stable local references keep duplicate stopped basenames distinct and retries idempotent', () => {
+  const exportsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-mapping-stopped-'));
+  const roots = () => ({ exports: exportsRoot });
+  const first = 'a'.repeat(32);
+  const second = 'b'.repeat(32);
+  try {
+    assert.strictEqual(appendMapping('same.docx', '', 'sicher gestoppt', { roots, mappingReference: first }), true);
+    assert.strictEqual(appendMapping('same.docx', '', 'sicher gestoppt', { roots, mappingReference: first }), false);
+    assert.strictEqual(appendMapping('same.docx', '', 'sicher gestoppt', { roots, mappingReference: second }), true);
+    const csv = fs.readFileSync(mappingPath({ roots }), 'utf8');
+    assert.strictEqual(csv.split('"same.docx"').length - 1, 2);
+    assert.match(csv, new RegExp(first));
+    assert.match(csv, new RegExp(second));
+    assert.throws(() => appendMapping('same.docx', '', 'sicher gestoppt', { roots, mappingReference: '../unsafe' }),
+      /nicht sicher aktualisiert/u);
+  } finally { fs.rmSync(exportsRoot, { recursive: true, force: true }); }
+});
+
 done();

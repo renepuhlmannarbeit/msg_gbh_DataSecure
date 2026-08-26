@@ -68,7 +68,8 @@ function fixture(options = {}) {
 }
 
 test('non-terminal batches create no marker, outbox or receipt', () => {
-  for (const status of ['pending', 'processing', 'retryable', 'deferred_review', 'mapping_pending', 'delivery_pending']) {
+  for (const status of ['pending', 'processing', 'retryable', 'deferred_review', 'mapping_pending',
+    'preflight_mapping_pending', 'delivery_pending']) {
     const value = fixture({ state: state(status) });
     const working = value.reload();
     assert.strictEqual(value.coordinator.reconcileTerminalEvidence(working), undefined);
