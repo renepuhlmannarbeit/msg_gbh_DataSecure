@@ -156,8 +156,15 @@ Processing-Fehlerleaf ohne eigene Journalmutation. Sieben direkte Tests belegen,
 dass nur unveröffentlichte Positionen gestoppt werden, ein per Objektidentität
 ausgenommenes aktuelles Item unverändert bleibt, Mapping- und Cleanup-Fehler
 je Position unabhängig bleiben und eine Wiederholung keine Doppeloperation
-auslöst. Verarbeitung/Commit, Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
-`batch.js`; der nächste R2-Schnitt wird erneut als kleinster Leaf gewählt.
+auslöst. `gateway/batch-executor-runner.js` kapselt den seriellen lokalen
+Executor-Lauf. Sieben direkte Tests binden Claim-Prüfung vor Release,
+einmalige Vorbereitung, Delivery-vor-Mapping-vor-Processing, beide
+No-progress-Abbrüche, unmittelbare lokale Finalisierung, das feste
+Item-Schrittbudget und den frischen Endstatus nach genau einem Releaseversuch.
+Der Runner beansprucht selbst keinen Lease und gibt einen fremden oder nicht
+mehr lebenden Marker niemals frei. Verarbeitung/Commit, Review-Orchestrierung
+sowie verbleibende Wartung bleiben absichtlich in `batch.js`; der nächste
+R2-Schnitt wird erneut als kleinster Leaf gewählt.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,
 `batch-evidence.js` den atomaren idempotenten v2-Store und eine inhaltsfreie

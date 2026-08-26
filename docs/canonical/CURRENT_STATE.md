@@ -250,6 +250,16 @@ per Objektidentität ausgenommen werden; Mapping- und private Cleanup-Fehler
 werden je Position unabhängig best-effort behandelt. Der Leaf schreibt selbst
 kein Journal und ist bei Wiederholung idempotent. Sieben direkte Tests sichern
 Statusmatrix, Ausnahmeidentität, Teilfehler und unveränderte Processing-Fassade.
+`gateway/batch-executor-runner.js` hält den lokalen Executor weiterhin strikt
+seriell. Die exakte Live-PID-Bindung wird vor dem `try/finally` bewiesen, damit
+ein ungültiger Aufrufer keinen fremden Lease freigibt. Erst danach laufen
+Vorbereitung und Maintenance genau einmal; anschließend gilt unverändert
+Delivery vor Mapping vor normalem Processing. No-progress-Vergleiche und das
+Budget `items.length * 3 + 3` verhindern Busy-Loops. Jeder Fehler nach gültigem
+Claim versucht genau eine Freigabe, und nur ein frisch nach der Freigabe
+gelesener Journalstatus bildet die inhaltsfreie Endantwort. Sieben direkte
+Grenztests sowie die unveränderten 66 Batch-Session-Fälle belegen die Fassade,
+100-Dateien-Grenzen und Crash-Recovery an Position 1, 50 und 100.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die

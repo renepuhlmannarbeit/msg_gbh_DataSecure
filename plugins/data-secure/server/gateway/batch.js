@@ -22,6 +22,7 @@ const { createBatchIntake } = require('./batch-intake');
 const { createBatchDiscard } = require('./batch-discard');
 const { createBatchContinuation } = require('./batch-continuation');
 const { createBatchSnapshotInvalidation } = require('./batch-snapshot-invalidation');
+const { createBatchExecutorRunner } = require('./batch-executor-runner');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -670,53 +671,18 @@ function readBatchProgress(token) {
   return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
 }
 
-async function runLocalBatchExecutor(token, deps = {}) {
-  const executorPid = Number(deps.executorPid ?? process.pid);
-  const claimed = readState(token);
-  if (!liveLocalExecutor(claimed) || claimed.local_executor_pid !== executorPid) {
-    throw new SafeError('Der lokale Stapelprozessor besitzt keine gültige Ausführungsberechtigung.');
-  }
-  let lastProgress = publicProgress(claimed);
-  try {
-    // Expensive but mandatory housekeeping is established exactly once for a
-    // claimed local batch.  The opaque capability is process-local; passing a
-    // plain object from any external caller cannot skip the checks.
-    const preparedRun = prepareProcessingRun(deps);
-    if (incrementPrivateIoSummary(claimed.io_summary, 'batch_maintenance_runs')) {
-      writeState(claimed);
-    }
-    const batchDeps = { ...deps, preparedRun };
-    const maximumSteps = claimed.items.length * 3 + 3;
-    for (let step = 0; step < maximumSteps; step++) {
-      if (lastProgress.delivery_pending > 0) {
-        const state = readState(token);
-        const pending = state.items.find((item) => item.status === DELIVERY_PENDING);
-        if (!pending) break;
-        lastProgress = finalizePublishedPackageLocally(token, pending.package_id, { ...batchDeps, executorPid });
-        continue;
-      }
-      if (lastProgress.mapping_pending > 0) {
-        const before = `${lastProgress.mapping_pending}:${lastProgress.delivery_pending}`;
-        lastProgress = await processBatchNext(token, { ...batchDeps, executorPid });
-        const after = `${lastProgress.mapping_pending}:${lastProgress.delivery_pending}`;
-        if (before === after) break;
-        continue;
-      }
-      if (lastProgress.remaining === 0) break;
-      const before = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
-      const result = await processBatchNext(token, { ...batchDeps, executorPid });
-      lastProgress = result;
-      if (typeof result.package_id === 'string') {
-        lastProgress = finalizePublishedPackageLocally(token, result.package_id, { ...batchDeps, executorPid });
-        continue;
-      }
-      const after = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
-      if (before === after) break;
-    }
-  } finally {
-    releaseLocalBatchExecutor(token, executorPid);
-  }
-  return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
-}
+const { runLocalBatchExecutor } = createBatchExecutorRunner({
+  SafeError,
+  readState,
+  writeState,
+  liveLocalExecutor,
+  publicProgress,
+  prepareProcessingRun,
+  incrementPrivateIoSummary,
+  processBatchNext,
+  finalizePublishedPackageLocally,
+  releaseLocalBatchExecutor,
+  deliveryPendingStatus: DELIVERY_PENDING
+});
 
 module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
