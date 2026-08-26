@@ -395,4 +395,15 @@ test('OCR result v1 fixes positions, confidence, limits and content-free errors'
   assert.strictEqual(schema.properties.quality.properties.requires_visual_review.const, true);
 });
 
+test('source preflight v1 remains a candidate-only rejection gate', () => {
+  const contract = read('SOURCE_PREFLIGHT_V1.md');
+  for (const required of [
+    'BL-049.1a', 'Descriptor', '`candidate`', '`not_released`', '`rejected`',
+    'keine Dateinamen, Pfade, Rohbytes', 'drei finalen Ergebnisgrade'
+  ]) {
+    assert.ok(contract.includes(required), `source preflight contract missing ${required}`);
+  }
+  assert.match(contract, /aktiviert kein neues Format|keine neue Formatfreigabe/iu);
+});
+
 done();

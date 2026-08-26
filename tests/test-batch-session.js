@@ -59,6 +59,14 @@ function ordered(name, text, index) {
   return target;
 }
 
+function unsupportedXlsx() {
+  return zipStore([
+    ['[Content_Types].xml', '<Types/>'],
+    ['_rels/.rels', '<Relationships/>'],
+    ['xl/workbook.xml', '<workbook/>']
+  ]);
+}
+
 const deps = {
   convertDocument: async (source) => ({
     markdown: fs.readFileSync(source, 'utf8'),
@@ -518,7 +526,8 @@ async function main() {
       assert.ok(central >= 0);
       archive.writeUInt32LE(301 * 1024 * 1024, central + 24);
       fs.writeFileSync(source, archive);
-      assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), /Office-Container/i);
+      assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
+        error.code === 'SOURCE_CONTAINER_CORRUPT');
       assert.strictEqual(fs.readFileSync(source).equals(archive), true);
       assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
     }
@@ -539,7 +548,24 @@ async function main() {
     assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
   });
 
-  await testAsync('a standard encrypted Office CFB container stops before a snapshot without offering an unimplemented decryption path', async () => {
+  await testAsync('a local-header-only encryption flag stops before a snapshot', async () => {
+    resetInput();
+    const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
+    const source = path.join(resetInputDirectory(), 'local-header-encrypted.docx');
+    const archive = Buffer.from(zipStore([
+      ['[Content_Types].xml', '<Types/>'],
+      ['_rels/.rels', '<Relationships/>'],
+      ['word/document.xml', '<w:document/>']
+    ]));
+    archive.writeUInt16LE(archive.readUInt16LE(6) | 1, 6);
+    fs.writeFileSync(source, archive);
+    assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
+      error.code === 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED');
+    assert.strictEqual(fs.readFileSync(source).equals(archive), true);
+    assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
+  });
+
+  await testAsync('a legacy-or-encrypted Office CFB container stops honestly before a snapshot', async () => {
     resetInput();
     const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
     const source = path.join(resetInputDirectory(), 'protected-standard.docx');
@@ -547,7 +573,7 @@ async function main() {
     Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(encryptedOffice);
     fs.writeFileSync(source, encryptedOffice);
     assert.throws(() => beginBatch({ expectedCount: 1, profile: 'general' }), (error) =>
-      error.code === 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED' && !/protected|\.docx/i.test(error.message));
+      error.code === 'SOURCE_COMPOUND_BINARY_UNSUPPORTED' && !/protected|\.docx/i.test(error.message));
     assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort(), existingWorkDirectories);
   });
 
@@ -592,7 +618,7 @@ async function main() {
     try { fs.unlinkSync(evidencePath()); } catch { /* test starts without a receipt */ }
     // The format gate, not the OOXML-container preflight, is the behavior
     // under test. Keep the extension/content combination structurally honest.
-    fs.writeFileSync(path.join(resetInputDirectory(), 'terminal-stop.xlsx'), zipStore([['xl/workbook.xml', '<workbook/>']]));
+    fs.writeFileSync(path.join(resetInputDirectory(), 'terminal-stop.xlsx'), unsupportedXlsx());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processBatchNext(begun.batch_token, deps);
     assert.strictEqual(result.ok, false);
@@ -1160,7 +1186,7 @@ async function main() {
 
   await testAsync('the server owns progress and never retries a stopped item', async () => {
     resetInput();
-    add('blocked.xlsx', 'Name,Mail\nMax Mustermann,max@example.de');
+    add('blocked.xlsx', unsupportedXlsx());
     add('first.txt', 'Kunde: Max Mustermann\nE-Mail: max@example.de\nTicket: Eins');
     add('second.txt', 'Kunde: Erika Musterfrau\nE-Mail: erika@example.de\nTicket: Zwei');
     const begun = beginBatch({ expectedCount: 3, profile: 'customer' });
@@ -1210,7 +1236,7 @@ async function main() {
 
   await testAsync('a terminal stop remains recorded locally when no result package exists', async () => {
     resetInput();
-    add('unreadable.xlsx', 'Name,Mail\nMax Mustermann,max@example.de');
+    add('unreadable.xlsx', unsupportedXlsx());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processAndAcknowledge(begun.batch_token, deps);
     assert.strictEqual(result.ok, false);
@@ -1223,7 +1249,7 @@ async function main() {
   await testAsync('a stopped source is deleted immediately and a failed deletion is retried locally', async () => {
     resetInput();
     const cleanupBefore = localCleanupStatus().private_work_copy_cleanup_pending;
-    add('locked-stop.xlsx', 'Name,Mail\nMax Mustermann,max@example.de');
+    add('locked-stop.xlsx', unsupportedXlsx());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const stopped = await processBatchNext(begun.batch_token, {
       ...deps,
@@ -1244,7 +1270,7 @@ async function main() {
 
   await testAsync('startup recovery retries a pending cleanup for a safely stopped source', async () => {
     resetInput();
-    add('restart-cleanup.xlsx', 'Name,Mail\nMax Mustermann,max@example.de');
+    add('restart-cleanup.xlsx', unsupportedXlsx());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     await processBatchNext(begun.batch_token, {
       ...deps,
@@ -1506,7 +1532,7 @@ async function main() {
       const blocked = [1, 50, 100].includes(index);
       ordered(
         `${String(index).padStart(2, '0')}-${blocked ? 'blocked.xlsx' : 'safe.txt'}`,
-        blocked ? 'Name,Mail\nMax Mustermann,max@example.de' : `Kunde: Person ${index}\nTicket: Test ${index}`,
+        blocked ? unsupportedXlsx() : `Kunde: Person ${index}\nTicket: Test ${index}`,
         index
       );
     }
@@ -1542,7 +1568,7 @@ async function main() {
       const crashPosition = [1, 50, 100].includes(index);
       ordered(
         `crash-${String(index).padStart(3, '0')}.${crashPosition ? 'txt' : 'xlsx'}`,
-        `Kunde: Testperson ${index}\nVorgang: synthetisch`,
+        crashPosition ? `Kunde: Testperson ${index}\nVorgang: synthetisch` : unsupportedXlsx(),
         index
       );
     }

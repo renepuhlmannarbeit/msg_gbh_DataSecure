@@ -1069,15 +1069,17 @@ Claude kann weder reviewen noch freigeben. Der vorhandene experimentelle
 an einen Entschlüsseler angebunden. Er gehört beim Refactoring aus dem Produktpfad
 entfernt. Passwort, Pfad und Rohinhalt bleiben weder MCP-Parameter noch Kommandozeile,
 Umgebung, Journal oder Diagnose. Passwortgeschützte beziehungsweise verschlüsselte
-Quellen werden bereits vor jeder privaten Kopie als nicht verarbeitet ausgewiesen;
-der übrige Stapel läuft weiter.
+Quellen werden bereits vor jeder privaten Kopie gestoppt. Die per-Datei-
+Journalisierung, durch die der übrige Stapel weiterlaufen kann, ist noch offen.
 
 Passwortgeschützte ZIP-/Office-Container erhalten bereits vor der Batch-Arbeitskopie
 den festen inhaltsfreien Fehlercode `PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED`. Das
 System öffnet hierfür bewusst keinen wirkungslosen Passwortdialog und schlägt keine
 Umgehung per Upload vor. Neben verschlüsselten ZIP-Einträgen erkennt der Preflight
-auch die CFB/OLE-Signatur der normalen Microsoft-Office-Verschlüsselung; beide Wege
-bleiben gemäß DS-046 dauerhaft gesperrt und bieten keine Passwortabfrage an.
+auch die CFB/OLE-Signatur. Da diese sowohl alte Office-Binärdateien als auch
+verschlüsselte OOXML-Hüllen kennzeichnet, lautet der Stopp hierfür ehrlich
+`SOURCE_COMPOUND_BINARY_UNSUPPORTED`; CFB allein wird nicht als Passwortbeweis
+bezeichnet. Beide Wege bleiben gesperrt und bieten keine Passwortabfrage an.
 
 Korrektur 23.08.2026: Der macOS-Dialog besitzt den unter BL-012 dokumentierten
 P0-Defekt und ist daher kein aktueller Plattformnachweis. Der bestehende Code- und
@@ -1525,8 +1527,20 @@ nicht Produktpfad. Adaptive Parallelität, das 25%-/2-GiB-Budget sowie automatis
 Status: **teilweise**
 
 Container-, Parser-, Active-Content- und Residualgates sind für freigegebene Formate
-umfangreich vorhanden. Ein einheitliches Vorab-Sniffing aus Endung, Signatur und
-Containerstruktur sowie die drei kanonischen Ergebnisgrade fehlen noch.
+umfangreich vorhanden. BL-049.1a ergänzt einen schreibfreien, descriptor-gebundenen
+Classifier. Produktiv ist nur seine bestehende OOXML-Sicherheitsgrenze vor dem
+Snapshot verdrahtet: Sie bindet Dateidentität sowie lokale ZIP-Header, Namen, Flags,
+Methode und Datenbereiche und stoppt bekannte Endungs-/Signatur-/Minimalstruktur-
+Mismatches, beschädigte oder polyglotte ZIPs, offensichtliche aktive Inhalte,
+verschlüsselte ZIP-Einträge und CFB/OLE vor der privaten Kopie. Die vollständige
+UTF-8-/Control-Prüfung ist direkt getestet, bleibt aber bis zur per-Datei-
+Journalisierung bewusst außerhalb des stapelweiten Produktimports. Formal erkannte,
+aber noch nicht freigegebene Formate behalten ihren vorhandenen terminalen
+Einzelstopp nach dem Snapshot. Der positive
+Grad heißt bewusst nur `candidate`; vollständige Parser- und Residualgates folgen.
+Echte OPC-Steuerteil-/Relationship-/CRC-Prüfung, kopierfreie per-Datei-
+Journalisierung mit Fortsetzung des Reststapels sowie die drei kanonischen
+DS-045-Ergebnisgrade fehlen noch.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
 
 - Automatische Retention überspringt `Output` unabhängig vom Alter; nur ein

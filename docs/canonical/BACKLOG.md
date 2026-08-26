@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 26.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC53
+Stand: 26.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC57
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und
@@ -134,7 +134,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 |---|---|---|
 | BL-044.1 | Rekursive lokale Ordnerauswahl mit vollständiger Vorabvalidierung, stabiler relativer Zuordnung und ohne Linkverfolgung liefern. | **offen** |
 | BL-047.1 | Adaptive kleine Parallelität, 25%-/2-GiB-Speicherbudget und 2-s-/10-s-/10%-Performancegates implementieren und synthetisch messen. | **offen** |
-| BL-049.1 | Endung, Signatur und Containerstruktur gemeinsam prüfen; beschädigte, polyglotte und verschlüsselte Quellen einzeln fail-closed behandeln. | **offen** |
+| BL-049.1 | **Teil a E0 abgeschlossen; Teil b/E1/E3 offen:** Der descriptor- und identitätsgebundene Source-Preflight klassifiziert Endung, Signatur und Minimalstruktur. Produktiv stoppt er innerhalb der bestehenden OOXML-Grenze vor jeder privaten Kopie Mismatches, beschädigte/polyglotte Container, inkonsistente lokale ZIP-Header, offensichtliche aktive Inhalte, verschlüsselte ZIP-Einträge und CFB/OLE. Die vollständige UTF-8-/Control-Prüfung ist direkt getestet, bleibt bis zur per-Datei-Journalisierung aber bewusst noch nicht stapelweit verdrahtet. `candidate` ist keine DS-045-Freigabe; formal erkannte, aber gesperrte Formate behalten bis Teil b ihren bestehenden terminalen Einzelstopp nach dem Snapshot. Echte OPC-Steuerteil-/Relationship-/CRC-Prüfung, kopierfreie per-Datei-Journalisierung mit Reststapel-Fortsetzung, genau drei DS-045-Ergebnisgrade sowie E1 und E3 bleiben offen. | **in Arbeit** |
 | BL-042.3 | Inhaltsfreie MCP-App als progressive Verbesserung sowie vollständigen Text-/OS-Fallback, Deutsch/Englisch und A11y-Gates liefern. | **offen** |
 
 ## Danach: Content-Gates und gesperrte Formate

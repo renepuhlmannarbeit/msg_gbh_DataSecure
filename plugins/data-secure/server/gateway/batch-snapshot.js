@@ -8,8 +8,12 @@ const {
   LIMITS,
   hasReparseComponent
 } = require('./common');
-const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
 const { localReviewError } = require('./batch-review-policy');
+const {
+  SourceFormatError,
+  inspectSourceFormatFromFd,
+  extensionForName
+} = require('./source-format-inspector');
 const { batchRoot, workPath } = require('./batch-private-store');
 
 const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
@@ -39,9 +43,13 @@ function assertStagingCapacity(queue, statfs = fs.statfsSync) {
   return { inputBytes, required, available };
 }
 
-function preflightOoxmlContainers(queue) {
+function preflightSourceEnvelopes(queue, deps = {}) {
+  const inspect = deps.inspectSourceFormatFromFd || inspectSourceFormatFromFd;
   for (const entry of queue) {
-    if (!['.docx', '.xlsx', '.pptx'].includes(path.extname(entry.name).toLowerCase())) continue;
+    // Keep product wiring inside the pre-existing Office security boundary
+    // until BL-049.1b can journal rejected text/items individually without
+    // aborting otherwise valid positions in a mixed batch.
+    if (!['.docx', '.xlsx', '.pptx'].includes(extensionForName(entry.name))) continue;
     let descriptor;
     try {
       if (hasReparseComponent(entry.full)) throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
@@ -55,23 +63,48 @@ function preflightOoxmlContainers(queue) {
         opened.mtimeMs !== entry.stat.mtimeMs || named.mtimeMs !== entry.stat.mtimeMs) {
         throw new SafeError('Eine ausgewählte Datei wurde vor der lokalen Übernahme verändert.');
       }
-      inspectZipDirectoryFromFd(descriptor, opened.size, {
+      const result = inspect(descriptor, opened, extensionForName(entry.name), {
         maxEntries: 20000,
-        maxUncompressed: LIMITS.MAX_OOXML_EXPANDED_BYTES
+        maxUncompressed: LIMITS.MAX_OOXML_EXPANDED_BYTES,
+        fstatSync: fs.fstatSync.bind(fs),
+        readSync: fs.readSync.bind(fs)
       });
-    } catch (error) {
-      if (error instanceof ZipError && ['ZIP_ENCRYPTED_ENTRY', 'OOXML_ENCRYPTED_CONTAINER'].includes(error.code)) {
+      if (result.verdict === 'rejected') {
+        if (result.code === 'SOURCE_ENCRYPTED_UNSUPPORTED') {
+          throw localReviewError(
+            'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED',
+            'Die verschlüsselte Datei wurde lokal nicht übernommen. Ein lokaler Entschlüsselungsweg ist nicht freigegeben.'
+          );
+        }
+        if (result.code === 'SOURCE_COMPOUND_BINARY_UNSUPPORTED') {
+          throw localReviewError(
+            result.code,
+            'Die Office-Datei im alten oder verschlüsselten Compound-Format wurde lokal nicht übernommen.'
+          );
+        }
         throw localReviewError(
-          'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED',
-          'Die passwortgeschützte Office-Datei wurde lokal nicht übernommen. Ein geprüfter lokaler Entschlüsselungsweg ist noch nicht freigegeben.'
+          result.code,
+          'Dateiendung, Signatur oder minimale Containerstruktur passen nicht sicher zusammen. Die Datei wurde lokal nicht übernommen.'
         );
       }
-      throw new SafeError('Der Office-Container konnte vor der lokalen Stapelübernahme nicht sicher geprüft werden.');
+      // Formally recognised but locked formats keep the existing per-item
+      // terminal-stop path. BL-049.1b will journal that outcome before copying
+      // while allowing the remaining batch positions to continue.
+    } catch (error) {
+      if (error instanceof SafeError) throw error;
+      if (error instanceof SourceFormatError) {
+        throw localReviewError(error.code, 'Die ausgewählte Datei konnte vor der lokalen Übernahme nicht sicher geprüft werden.');
+      }
+      throw new SafeError('Die ausgewählte Datei konnte vor der lokalen Stapelübernahme nicht sicher geprüft werden.');
     } finally {
       if (descriptor !== undefined) fs.closeSync(descriptor);
     }
   }
 }
+
+// Compatibility alias for callers and tests while BL-049.1b replaces the
+// all-or-nothing intake with per-item journaling and continuation.
+const preflightOoxmlContainers = preflightSourceEnvelopes;
 
 function regularFileStat(target) {
   const noFollow = fs.constants.O_NOFOLLOW || 0;
@@ -175,6 +208,7 @@ function exactPendingEntry(state, item, deps = {}) {
 
 module.exports = {
   assertStagingCapacity,
+  preflightSourceEnvelopes,
   preflightOoxmlContainers,
   regularFileStat,
   copySnapshotFile,

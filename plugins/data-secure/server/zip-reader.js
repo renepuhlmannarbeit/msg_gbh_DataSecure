@@ -133,6 +133,10 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
   const tailStart = archiveSize - tailLength;
   const tail = readRangeFromFd(fd, tailLength, tailStart, readSync);
   const eocd = findEocd(tail);
+  const commentLength = tail.readUInt16LE(eocd + 20);
+  if (limits.requireExactEnd === true && eocd + 22 + commentLength !== tail.length) {
+    throw new ZipError('ZIP besitzt Daten außerhalb seines Endverzeichnisses.', 'ZIP_POLYGLOT');
+  }
   const totalEntries = tail.readUInt16LE(eocd + 10);
   const cdSize = tail.readUInt32LE(eocd + 12);
   const cdOffset = tail.readUInt32LE(eocd + 16);
@@ -141,6 +145,9 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
   const maxDirectoryBytes = limits.maxDirectoryBytes || 64 * 1024 * 1024;
   if (!Number.isSafeInteger(cdEnd) || cdOffset < 0 || cdEnd > archiveSize || cdSize > maxDirectoryBytes) {
     throw new ZipError('ZIP-Zentralverzeichnis ungültig.');
+  }
+  if (limits.requireExactEnd === true && cdEnd !== tailStart + eocd) {
+    throw new ZipError('ZIP besitzt Daten zwischen Zentralverzeichnis und Endmarke.', 'ZIP_POLYGLOT');
   }
   if (totalEntries > maxEntries) throw new ZipError('ZIP enthält zu viele Einträge.');
   const centralDirectory = readRangeFromFd(fd, cdSize, cdOffset, readSync);
@@ -152,10 +159,15 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
   let p = 0;
   let total = 0;
   let files = 0;
+  let hasContentTypes = false;
+  let hasRootRelationships = false;
+  const officeKinds = new Set();
+  let activeContent = false;
   const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
   for (let n = 0; n < totalEntries; n++) {
     if (p + 46 > centralDirectory.length || centralDirectory.readUInt32LE(p) !== 0x02014b50) throw new ZipError('ZIP-Zentralverzeichnis beschädigt.');
     const flags = centralDirectory.readUInt16LE(p + 8);
+    const method = centralDirectory.readUInt16LE(p + 10);
     const compSize = centralDirectory.readUInt32LE(p + 20);
     const uncompSize = centralDirectory.readUInt32LE(p + 24);
     const nameLen = centralDirectory.readUInt16LE(p + 28);
@@ -167,16 +179,53 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     if (compSize === 0xffffffff || uncompSize === 0xffffffff || localOffset === 0xffffffff) throw new ZipError('ZIP64 wird nicht unterstützt.');
     const name = centralDirectory.subarray(p + 46, p + 46 + nameLen).toString('utf8').replace(/\\/g, '/');
     p += 46 + nameLen + extraLen + commentLen;
+    if (localOffset + 30 > cdOffset) throw new ZipError('ZIP-Lokaleintrag beschädigt.');
+    const localHeader = readRangeFromFd(fd, 30, localOffset, readSync);
+    if (localHeader.readUInt32LE(0) !== 0x04034b50) throw new ZipError('ZIP-Lokaleintrag beschädigt.');
+    const localFlags = localHeader.readUInt16LE(6);
+    const localMethod = localHeader.readUInt16LE(8);
+    const localNameLen = localHeader.readUInt16LE(26);
+    const localExtraLen = localHeader.readUInt16LE(28);
+    if (localFlags & 1) throw encryptedEntryError();
+    const localNameStart = localOffset + 30;
+    const dataStart = localNameStart + localNameLen + localExtraLen;
+    const dataEnd = dataStart + compSize;
+    if (!Number.isSafeInteger(dataEnd) || dataStart < localNameStart || dataEnd > cdOffset) {
+      throw new ZipError('ZIP-Lokaleintrag liegt außerhalb des Datenbereichs.');
+    }
+    const localName = readRangeFromFd(fd, localNameLen, localNameStart, readSync)
+      .toString('utf8').replace(/\\/g, '/');
+    if (localFlags !== flags || localMethod !== method || localName !== name) {
+      throw new ZipError('ZIP-Header sind inkonsistent.');
+    }
     if (!name || name.endsWith('/')) continue;
     if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
     if (names.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
     if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.');
     names.add(name);
+    if (name === '[Content_Types].xml') hasContentTypes = true;
+    if (name === '_rels/.rels') hasRootRelationships = true;
+    if (name === 'word/document.xml') officeKinds.add('docx');
+    if (name === 'xl/workbook.xml') officeKinds.add('xlsx');
+    if (name === 'ppt/presentation.xml') officeKinds.add('pptx');
+    if (/(?:^|\/)(?:vbaProject|oleObject)[^/]*\.bin$/iu.test(name) ||
+        /^(?:activeX|customUI|word\/embeddings|xl\/embeddings|ppt\/embeddings)\//iu.test(name)) {
+      activeContent = true;
+    }
     total += uncompSize;
     files++;
   }
   if (p !== centralDirectory.length) throw new ZipError('ZIP-Zentralverzeichnis hat eine unerwartete Größe.');
-  return { entries: totalEntries, files, uncompressed_bytes: total };
+  const result = { entries: totalEntries, files, uncompressed_bytes: total };
+  if (limits.includeStructure === true) {
+    result.structure = Object.freeze({
+      content_types: hasContentTypes,
+      root_relationships: hasRootRelationships,
+      ooxml_type: officeKinds.size === 1 ? [...officeKinds][0] : null,
+      active_content: activeContent
+    });
+  }
+  return result;
 }
 
 function readZip(buf, limits={}) {

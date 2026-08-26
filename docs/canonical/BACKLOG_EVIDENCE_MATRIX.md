@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 26.08.2026 · gilt für RC53 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 26.08.2026 · gilt für RC57 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -31,7 +31,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | BL-041.9 | Review/Abschluss nicht blockierend und pausierte Stapel startbar machen. | **E0 + E1 + E2:** Zustands-/Timeouttests; echte Cowork-Laufzeit; beobachtete UX. |
 | BL-044.1 | Rekursive Ordnerquelle ohne Linkverfolgung liefern. | **E0 + E1:** synthetische Hierarchie-/Race-Tests; reale Reparse-/Symlink-Gegenprobe. |
 | BL-047.1 | Adaptive Parallelität und Performancebudgets aktivieren. | **E0 + E1:** deterministische Scheduler-/Speichertests; Referenzhardwaremessung. |
-| BL-049.1 | Signatur/Struktur/Endung und drei Ergebnisgrade umsetzen. | **E0 + E3:** Polyglot-/Korruptionssuite; Security-Review vor Formatfreigabe. |
+| BL-049.1 | **Teil a E0 abgeschlossen:** Ein descriptor-gebundener Classifier verbindet Endung, bekannte Signatur, vollständige UTF-8-/Control-Prüfung und minimale OOXML-Partnamen. Produktiv ist nur die bestehende OOXML-Sicherheitsgrenze vor dem Snapshot verdrahtet; sie bindet zusätzlich lokale Header, Namen, Flags, Methode und Datenbereiche. `candidate` bleibt unterhalb einer DS-045-Freigabe und aktiviert kein neues Format. Formal passende gesperrte Formate behalten vorerst den vorhandenen terminalen Einzelstopp nach dem Snapshot. | **16 direkte Unit-/Negativtests plus bestehende Batch-Integrationen. Verbleiben:** echte OPC-Steuerteile/Relationships/CRC, stapelweite Textverdrahtung erst mit kopierfreier per-Datei-Journalisierung und Reststapel-Fortsetzung, genau drei DS-045-Grade, E1 und Security-E3 vor jeder Formatfreigabe. |
 | BL-042.3 | Inhaltsfreie MCP-App und vollständigen Fallback liefern. | **E0 + E1 + E2:** Schema-/Leckagetests; echte Cowork-Version; A11y-/UX-Abnahme. |
 
 ## P0-Release- und Sicherheitsblocker
