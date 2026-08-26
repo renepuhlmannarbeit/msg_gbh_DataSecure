@@ -258,7 +258,7 @@ entfernt und die Upgrade-Migration ist als `legacy-input-migration.js` isoliert.
 
 ### R4 – Benutzergebundene Verschlüsselung
 
-Status: **offen** · Stories: BL-011.13, BL-030.2
+Status: **R4a-E0 abgeschlossen; R4b/Produktaktivierung offen** · Stories: BL-011.13, BL-030.2
 
 - Ein zufälliger Installationsschlüssel wird pro OS-Benutzer durch Windows DPAPI
   beziehungsweise macOS Keychain geschützt.
@@ -269,10 +269,22 @@ Status: **offen** · Stories: BL-011.13, BL-030.2
 - Schlüsselrotation und Migration werden atomar, versioniert und rückrollbar
   getestet. Rohwerte erscheinen nie in Recovery- oder Diagnosemeldungen.
 
-Noch vor Aktivierung von R4 ist genau eine Product-Owner-Regel festzuhalten:
-Verlust beziehungsweise Widerruf des OS-Schlüssels. Empfehlung: keine
-Wiederherstellungs-Hintertür; unlesbare private Arbeitskopien werden nach
-ausdrücklicher Bestätigung verworfen und aus unveränderten Originalen neu erzeugt.
+R4a liefert die noch nicht produktiv verdrahtete create-once-Fassade: ein
+versioniertes AES-256-GCM-Envelope, zwingend injizierten transaktionalen
+Secret-Store, Zweck-/Objekt-/Generationsbindung, Replay-Sperre, private Root-/
+Root-Ahnen-/Parent-/Inode-Bindung, exklusive Tempdatei und atomare
+Create-if-absent-Hardlink-
+Publikation mit festen Fehlercodes und Negativtests. Ein vorhandenes Artefakt wird
+in diesem Teilschnitt auch bei einem Publikationsrennen nie ersetzt; eine zweite
+Generation ist gesperrt. R4b muss den transaktionalen Rotations-/Migrations- und
+Recoveryvertrag, die direkte
+Descriptor-/Stream-Übergabe an den Parser und die native Produktverdrahtung liefern.
+
+Die Product-Owner-Regel für Verlust beziehungsweise Widerruf des OS-Schlüssels ist
+mit DS-050 festgelegt: keine Wiederherstellungs-Hintertür; unlesbare private
+Arbeitskopien bleiben gesperrt und werden ausschließlich nach ausdrücklicher lokaler
+Bestätigung verworfen. Ein neuer Auftrag darf nur aus einer weiterhin unveränderten
+Originalquelle entstehen.
 
 ### R5 – Dauerhafter nicht blockierender Cowork-Auftrag
 
@@ -363,7 +375,7 @@ Status: **offen** · Stories: BL-042.3, BL-052.1 bis BL-052.5
 
 ## Noch notwendige menschliche Entscheidungen und Evidenz
 
-Vor R2 und R3 ist keine weitere Product-Owner-Entscheidung nötig. Vor Aktivierung
-von R4 ist nur der oben genannte Schlüsselverlustvertrag zu bestätigen. Alle
+Vor R2, R3 und der E0-Implementierung von R4 ist keine weitere Product-Owner-
+Entscheidung nötig; der Schlüsselverlustvertrag ist in DS-050 entschieden. Alle
 weiteren menschlichen Punkte sind keine Entwicklungsblocker, sondern Release- oder
 Pilotgates gemäß `BACKLOG_EVIDENCE_MATRIX.md`.

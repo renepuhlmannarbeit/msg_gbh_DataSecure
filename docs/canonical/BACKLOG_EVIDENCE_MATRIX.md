@@ -26,7 +26,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 
 | Story | Was noch zu liefern bzw. zu prüfen ist | Evidenz und konkrete menschliche Aufgabe |
 |---|---|---|
-| BL-011.13 | Private Daten OS-benutzergebunden verschlüsseln. | **E0 + E1 + E3:** Unit-/Negativtests; DPAPI/Keychain real; Security-Review. |
+| BL-011.13 | **R4a-E0 abgeschlossen:** create-once AEAD-Fassade mit gebundenem Envelope, transaktionalem synchronem Pflicht-Secret-Store, linkfreier privater Root-/Parent-/Inode-Bindung, atomarer Create-if-absent-Publikation und 19 direkten Unit-/Negativtests; noch nicht im Produktpfad. R4b muss Rotation/Migration, Recovery ungewisser Publikationen und die verschlüsselte Snapshot-/Review-/Parserintegration ergänzen. | **R4b-E0 + E1 + E3 verbleiben:** R4b-Tests; DPAPI/Keychain real; Hardlink-/Crash-Evidenz je freigegebenem Dateisystem; Security-Review des aktiv verdrahteten Pfads. |
 | BL-011.14 | **E0 abgeschlossen und archiviert (RC53–RC55):** Neuquellen sind copy-only, historische `Processed`-Bestände geschützt, `listInput` und technische Intake-Fallbacks entfernt; eine versionierte Migration bewahrt vorhandene sichtbare Dateien und sichert gültige historische Claims kollisionsfrei. | **E0:** Snapshot-, Orchestrator-, Retention-/Purge-, 15 Migrations- und 20 Architekturtests. Reale Update-/Rollback-Evidenz bleibt BL-051.x; Cloud-/Ordnerquellen bleiben BL-044.1. |
 | BL-041.9 | Review/Abschluss nicht blockierend und pausierte Stapel startbar machen. | **E0 + E1 + E2:** Zustands-/Timeouttests; echte Cowork-Laufzeit; beobachtete UX. |
 | BL-044.1 | Rekursive Ordnerquelle ohne Linkverfolgung liefern. | **E0 + E1:** synthetische Hierarchie-/Race-Tests; reale Reparse-/Symlink-Gegenprobe. |

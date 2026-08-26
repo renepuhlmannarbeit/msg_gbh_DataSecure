@@ -1,10 +1,10 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC55
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC56
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
 DataSecure ist jetzt **Plugin-first** aufgebaut: Claude Skills übernehmen Routing, Zweck-/Profilwahl und Governance; ein gebündelter lokaler MCP-Server bildet die technische Privacy-Grenze und verarbeitet Quelldateien, bevor Claude deren Inhalt verwendet.
 
-> **Ist und Ziel nicht verwechseln:** Der ausführbare RC55-Umfang wird in dieser
+> **Ist und Ziel nicht verwechseln:** Der ausführbare RC56-Umfang wird in dieser
 > README und im Betriebshandbuch beschrieben. Alle verbindlich getroffenen
 > Produktentscheidungen und das einzige gültige Entwicklungsbacklog stehen im
 > [kanonischen Dokumentensystem](docs/canonical/README.md).
@@ -112,8 +112,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc55.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
-- `DataSecure-Privacy-Gateway-v3.2.0-rc55.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc56.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
+- `DataSecure-Privacy-Gateway-v3.2.0-rc56.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem

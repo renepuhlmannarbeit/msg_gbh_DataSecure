@@ -26,7 +26,7 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 | Quellen | Mehrfach-Dateipicker als einziger ausführbarer Eingang; kein erzeugter technischer `Input`, keine Queue-Fallbacks; vorhandene Altbestände werden nur versioniert und datenbewahrend migriert | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 BL-011.14 abgeschlossen; P1 Ordnerquelle BL-044.1 |
 | Stapel | durable Checkpoints und Background-Intake; neue Auswahl trotz pausierter Stapel im Arbeitsstand umgesetzt | ein aktiver, mehrere pausierte; Pause blockiert nicht | E0 umgesetzt, E1/E2 offen |
 | Review/Abschluss | abgekoppelter Review ohne menschlichen Timeout und detachierte Abschlussmeldung im Arbeitsstand | persistente Queue ohne Entscheidungs-Timeout, nicht blockierender Abschluss | E0 umgesetzt, E1/E2 offen |
-| private Daten | Rohsnapshots und Reviewdaten nicht durchgehend OS-benutzergebunden verschlüsselt | DPAPI/Keychain, kein Klartextfallback | P0 Security |
+| private Daten | R4a-create-only-AEAD-Fassade synthetisch belegt, aber Rohsnapshots und Reviewdaten noch nicht produktiv darüber geführt | DPAPI/Keychain, kein Klartextfallback | P0 Security: R4b/E1/E3 offen |
 | Ergebnisse | Mapping vorhanden; automatische Output-Löschung im Arbeitsstand deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 umgesetzt, Ableitung offen |
 | Formate | TXT/Markdown/CSV/DOCX; Auswahl überwiegend endungsgeführt | Signatur+Struktur; drei Ergebnisgrade; alle Zielformate gestuft | P1 Content, danach Formate |
 | Performance | serieller Produktpfad, inaktive Harnesses und lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | P1 nach Sicherheitsgates |
@@ -450,6 +450,21 @@ aktiviert: Sie benötigt einen gleichwertig getesteten OS-Benutzerschutz für DP
 Keychain und Secret Service. Es gibt keinen Klartext- oder Eigenverschlüsselungs-
 Fallback; bis zur Drei-OS-Evidenz bleibt die bestehende Pseudonymisierung pro
 Dokument begrenzt.
+
+R4a ergänzt dafür eine isolierte, noch nicht produktiv importierte
+Verschlüsselungsfassade. Sie schreibt private Byteinhalte create-only als
+versioniertes AES-256-GCM-Envelope, bindet Zweck, opake Objektkennung,
+Schlüsselgeneration und Schlüsselkennung als AAD, verlangt einen injizierten
+transaktionalen Secret-Store und normalisiert Manipulation, Replay, Truncation,
+Teilwrites sowie unsichere Commitfenster auf feste Codes. Die private Root- und
+Inode-Bindung einschließlich Root-Ahnen stoppt Pfad-, Junction- oder
+Dateiaustausch; die Create-if-absent-Hardlink-
+Promotion ersetzt auch bei einem Publikationsrennen kein fremdes Ziel. Neunzehn
+direkte Tests belegen, dass kein Klartext persistiert wird, fehlgeschlagene
+Generationen keinen älteren Ciphertext entwerten und ein vorhandenes Artefakt
+nicht ersetzt wird. Die
+aktive Snapshot-/Review-/Parserverdrahtung, transaktionale Rotation und echte
+DPAPI-/Keychain-Evidenz bleiben R4b beziehungsweise E1/E3.
 
 Ein unabhängiges Review am 23.08.2026 hat diesen Punkt als Release-Sperre
 bestätigt: Der vorhandene Keyring-/Registry-Pilot ist absichtlich noch nicht in

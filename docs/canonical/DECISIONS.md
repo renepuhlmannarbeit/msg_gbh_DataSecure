@@ -364,6 +364,13 @@ Rohschreibzugriff gestoppt. DataSecure löscht nur eigene verwaltete Artefakte,
 niemals Quellen oder Links. Temporäre Rohdaten verschwinden nach Erfolg sofort und
 sonst spätestens nach 14 Tagen; Exporte und Mapping bleiben dauerhaft.
 
+Für Verlust oder Widerruf des OS-gebundenen Schlüssels gibt es keine
+Wiederherstellungs-Hintertür und keinen Ersatzschlüssel. Unlesbare private
+Arbeitskopien bleiben gesperrt und dürfen erst nach ausdrücklicher lokaler
+Bestätigung verworfen werden. Falls die unveränderte Originalquelle weiterhin
+verfügbar ist, wird anschließend ein neuer Auftrag aus dieser Quelle begonnen;
+DataSecure verändert oder löscht die Originalquelle dabei niemals.
+
 ## DS-051 – Einmalige Ergebnisübergabe
 
 `nur anonymisieren` übergibt keine Dokumentinhalte. `anonymisieren und auswerten`
