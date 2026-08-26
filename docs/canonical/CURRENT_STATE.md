@@ -285,6 +285,21 @@ Item und ohne Remaining-, Retryable- oder Delivery-Pending-Position. Die feste
 Meldungspriorität bleibt Analyse vor Delivery vor technischer Fortsetzung vor
 „keine Entscheidung“. Fünf Direktprüfungen belegen Idempotenz, Referenztreue,
 Wahrheitstabelle, inhaltsfreie Hinweise und die unveränderte öffentliche Fassade.
+`gateway/batch-review-publication.js` übernimmt danach ausschließlich die
+Publikationsgrenze des gemeinsamen Reviews. Vor der ersten Journalmutation
+müssen Dokumentzahl, eindeutige Indizes und die Ambiguitäts-IDs jeder Position
+eine vollständige Bijektion bilden; fehlende, zusätzliche, doppelte oder
+außerhalb liegende Entscheidungen stoppen mit einem festen inhaltsfreien Code.
+Die Reihenfolge der lokalen Antwort ist unerheblich. Nach erfolgreichem
+Gesamt-Preflight bleibt die vorhandene serielle, je Dokument atomare Paket-,
+Mapping-, Delivery- und Retry-Semantik erhalten. Publish-Callback und exakte
+deterministische Paket-ID müssen vor Mapping und Delivery positiv belegt sein.
+Nach bestätigtem Output-Commit
+bleiben selbst Journal-, Mapping- oder Deliveryfehler als
+`processing/package_published` recoverbar; sie erzeugen weder STOPPED-Mapping
+noch Quellbereinigung. Acht direkte Grenztests sowie die 66 Batch-
+Sitzungsszenarien belegen Mutationsfreiheit vor dem Preflight, gültige
+Umsortierung, Partial Publish und recoverable Crash-/Mapping-/Cleanup-Fehler.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die

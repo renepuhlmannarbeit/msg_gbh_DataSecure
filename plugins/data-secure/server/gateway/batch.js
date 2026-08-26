@@ -25,6 +25,7 @@ const { createBatchSnapshotInvalidation } = require('./batch-snapshot-invalidati
 const { createBatchExecutorRunner } = require('./batch-executor-runner');
 const { createBatchReviewCapture } = require('./batch-review-capture');
 const { createBatchReviewState } = require('./batch-review-state');
+const { createBatchReviewPublication } = require('./batch-review-publication');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -274,6 +275,24 @@ const { markDeferredReview, deferredReviewPlan } = createBatchReviewState({
   deferredReviewStatus: DEFERRED_REVIEW
 });
 
+const { publishReviewedBatch } = createBatchReviewPublication({
+  anonymizeNext,
+  exactPendingEntry,
+  packageIdForItem,
+  reviewedBatchText,
+  writeState,
+  ensureMappingOutbox,
+  markMappingPending,
+  cleanupTerminalWorkCopy,
+  commitPendingMapping,
+  deliveryResult,
+  appendMapping,
+  invalidDecisionError: localReviewError,
+  deliveryPendingStatus: DELIVERY_PENDING,
+  retryableCodes: RETRYABLE_CODES,
+  mappingStoppedStatus: MAPPING_STOPPED
+});
+
 // This is the only path which joins multiple raw-derived review drafts. It
 // recreates all of them from sealed local copies, holds them only for the life
 // of this request, invokes one local reviewer, and then re-runs the normal
@@ -344,97 +363,20 @@ async function reviewDeferredBatch(token, deps = {}) {
       return { ok: false, error: code, message: 'Die lokale Stapelentscheidung wurde nicht abgeschlossen. Alle offenen Dateien bleiben lokal gesperrt.', ...publicProgress(state), raw_content_sent_to_claude: false };
     }
 
-    const decisionsByIndex = new Map(outcome.documents.map((document) => [document.document_index, document.decisions]));
-    const packages = [];
-    let locallyReleased = 0;
-    let failed = 0;
-    for (let index = 0; index < items.length; index++) {
-      const item = items[index];
-      item.status = 'processing';
-      item.checkpoint = 'batch_review_publish_started';
-      delete item.error_code;
-      writeState(state);
-      try {
-        const entry = exactPendingEntry(state, item);
-        const result = await anonymizeNext(state.profile, {
-          ...deps,
-          inputQueue: [entry],
-          copyClaim: true,
-          removeImages: state.remove_images,
-          packageId: packageIdForItem(item),
-          reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1)),
-          beforePublish: async (details) => {
-            item.checkpoint = 'package_verified';
-            writeState(state, { durable: false });
-            if (deps.beforePublish) await deps.beforePublish(details);
-          },
-          afterPublish: async () => {
-            // The output rename already succeeded. Persist a content-free
-            // mapping intent at the first possible post-publish point, but
-            // never retract the verified package if local metadata storage is
-            // temporarily unavailable.
-            try {
-              ensureMappingOutbox(item.name, packageIdForItem(item));
-              item.mapping_outbox_persisted = true;
-            } catch {
-              item.mapping_outbox_persisted = false;
-            }
-            item.checkpoint = 'package_published';
-            writeState(state, { durable: false });
-          }
-        });
-        markMappingPending(item, result.package_id);
-        writeState(state);
-        try {
-          ensureMappingOutbox(item.name, result.package_id);
-          item.mapping_outbox_persisted = true;
-        } catch {
-          // Continue with independent reviewed documents, but retain this raw
-          // private work copy until a durable mapping-repair intent exists.
-          continue;
-        }
-        writeState(state);
-        try { cleanupTerminalWorkCopy(state, item, deps); }
-        catch { item.work_copy_cleanup_pending = true; }
-        writeState(state);
-        try {
-          commitPendingMapping(item, result.package_id);
-        } catch {
-          // The batch can continue with later independent documents. This
-          // package stays locally verified and is handed to Claude only after
-          // the durable mapping row has been written on a later local pass.
-          continue;
-        }
-        if (deps.localFinalize === true) {
-          item.status = 'released';
-          item.checkpoint = 'released_locally';
-          item.analysis_acknowledged = false;
-          try { cleanupTerminalWorkCopy(state, item, deps); }
-          catch { item.work_copy_cleanup_pending = true; }
-          locallyReleased++;
-        } else {
-          item.status = DELIVERY_PENDING;
-          item.checkpoint = 'delivery_pending';
-          delete item.error_code;
-          item.work_copy_cleanup_pending = true;
-        }
-        writeState(state);
-        if (deps.localFinalize !== true) packages.push(deliveryResult(state, item));
-      } catch (error) {
-        const code = error?.code || 'PROCESSING_INTERRUPTED';
-        item.status = RETRYABLE_CODES.has(code) ? 'retryable' : 'stopped';
-        item.checkpoint = item.status === 'retryable' ? 'retryable' : 'stopped';
-        item.error_code = code;
-        if (item.status === 'stopped') {
-          try { appendMapping(item.name, '', MAPPING_STOPPED); item.local_mapping_exported = true; }
-          catch { item.local_mapping_exported = false; }
-          try { cleanupTerminalWorkCopy(state, item, deps); }
-          catch { item.work_copy_cleanup_pending = true; }
-        }
-        failed++;
-        writeState(state);
-      }
+    let publication;
+    try {
+      publication = await publishReviewedBatch(state, items, drafts, outcome.documents, deps);
+    } catch (error) {
+      if (error?.code !== 'BATCH_REVIEW_DECISION_BINDING_INVALID') throw error;
+      return {
+        ok: false,
+        error: error.code,
+        message: error.message,
+        ...publicProgress(state),
+        raw_content_sent_to_claude: false
+      };
     }
+    const { packages, locallyReleased, failed } = publication;
     return {
       // A per-document publication is atomic. If a later document fails, the
       // already verified packages remain usable and must be handed to Claude

@@ -181,7 +181,20 @@ erneute Opens hinweg, während volatile Datei-Zeitstempel nicht mehr zu einem
 falschen Own-Lock-Release-Fehler führen. Der Child-Worker-Vertrag unterscheidet
 jetzt ausdrücklich vollständige und sicher pausierte Zustände; er verwendet
 niemals `remaining === 0` als Terminalprädikat.
-Verarbeitung/Commit, Review-Orchestrierung
+Die Review-Publikationsschleife liegt nun in
+`gateway/batch-review-publication.js`. Sie validiert die vollständige lokale
+Antwort bijektiv über Dokumentindizes und Ambiguitäts-IDs, bevor irgendein
+Itemstatus oder Paket verändert wird. Erst anschließend übernimmt sie die
+bestehende je Dokument atomare Veröffentlichung samt Mapping-, Cleanup-,
+Delivery- und Retry-Grenzen. Direkte Negativtests schließen unvollständige,
+doppelte, außerhalb liegende und fachlich ungültige Bindungen aus und erlauben
+bewusst eine gültige umsortierte Antwort. Mapping und Delivery verlangen
+zusätzlich den positiv aufgerufenen Publish-Callback und die exakte
+deterministische Paket-ID. Ab dem bestätigten Output-Commit
+führen spätere Journal-, Mapping- oder Deliveryfehler ausschließlich in den
+reconcilebaren `processing/package_published`-Zustand; STOPPED-Mapping und
+Quellbereinigung sind an dieser Grenze ausgeschlossen.
+Verarbeitung/Commit und die äußere Review-UI-/Lock-Orchestrierung
 sowie verbleibende Wartung bleiben absichtlich in `batch.js`; der nächste
 R2-Schnitt wird erneut als kleinster Leaf gewählt.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
