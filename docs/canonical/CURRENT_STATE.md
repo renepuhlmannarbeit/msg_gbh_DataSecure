@@ -1,6 +1,6 @@
-# RC44-Ist-Abgleich zum kanonischen Backlog
+# Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 25.08.2026 · geprüfter Produktstand: RC44
+Stand: 26.08.2026 · geprüfter Produktstand: RC53
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -20,7 +20,7 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 
 ## Verdichteter IST/SOLL-Abgleich nach Product-Vision-Review
 
-| Bereich | RC44-IST | beschlossenes SOLL | Lücke / Priorität |
+| Bereich | RC53-IST | beschlossenes SOLL | Lücke / Priorität |
 |---|---|---|---|
 | Cowork-Start | kurzer Picker-/Workerpfad teilweise vorhanden; Host-Node und reale Cowork-Evidenz offen | selbsttragender Windows-/macOS-Start, Readiness und genau ein Self-Heal | P0 Distribution/Evidenz |
 | Quellen | Mehrfach-Dateipicker als einziger ausführbarer Eingang; einmalige Startmigration kann nur verwaiste Alt-Claims wiederherstellen | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 Input-Oberfläche entfernt; P0 internen Altcode abbauen, P1 Ordner |
@@ -31,6 +31,20 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 | Formate | TXT/Markdown/CSV/DOCX; Auswahl überwiegend endungsgeführt | Signatur+Struktur; drei Ergebnisgrade; alle Zielformate gestuft | P1 Content, danach Formate |
 | Performance | serieller Produktpfad, inaktive Harnesses und lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | P1 nach Sicherheitsgates |
 | Cowork-UI | Text/OS-Dialoge, keine MCP-App | inhaltsfreie progressive MCP-App mit vollem Fallback | P2 Komfort |
+
+RC53 schließt den ersten R3-Originalschutzschnitt: Auch die verbliebene direkte
+Orchestratorgrenze verarbeitet Neuquellen ausschließlich über eine identitäts- und
+optional hashgebundene private Arbeitskopie. Der normale Orchestrator importiert
+weder Move/Restore-Helfer noch schreibt, benennt oder löscht er einen Quellpfad.
+Zwölf direkte Boundary-Tests und 40 Gateway-End-to-End-Szenarien belegen den
+byte-, pfad-, identitäts-, größen- und mtime-stabilen Erhalt auf Erfolg, Abbruch
+und mehreren Pipelinefehlern. Gleich große Änderungen zwischen lokaler
+Vorversiegelung und Kopie, Zero-/Partial-Writes, Descriptor-Close und nicht
+bereinigbare private Fehlerartefakte stoppen mit festen Fehlergrenzen. BL-011.14
+bleibt dennoch in Arbeit: historische
+`Processed`-Bestände müssen vor Retention/Purge fail-closed geschützt und der
+technische `Input`-Altweg in eine isolierte versionierte Einmalmigration überführt
+werden.
 
 Die vollständige Sollableitung steht in `PRODUCT_VISION.md` und
 `TARGET_ARCHITECTURE.md`. Diese Matrix ist keine Freigabe; sie priorisiert die
@@ -1135,6 +1149,14 @@ jetzt descriptorbasiert in 1-MiB-Blöcken; ein Maximalinput wird nicht mehr komp
 in den Node-Heap geladen. Die vollständige fachliche Verarbeitung von 500 MiB Text
 bleibt eine getrennte manuelle End-to-End-Abnahme und wird nicht in die kostenkritische
 Standard-CI aufgenommen.
+
+R3a bindet noch nicht extern versiegelte Direktquellen vor der Privatkopie durch einen
+zusätzlichen lokalen Vollhash. Das verhindert auch gleich lange, zeitstempelkonservierende
+Quellwechsel zwischen Bindung und Kopie, kostet für diesen Kompatibilitätspfad jedoch einen
+zweiten vollständigen Lesevorgang. Bereits SHA-256-versiegelte Stapelquellen haben diese
+Zusatzkosten nicht. BL-041.5 misst diese bewusste Sicherheitskostenstelle deshalb getrennt
+auf realer Windows- und macOS-Zielhardware; die Inhaltsbindung wird nicht zugunsten einer
+unbelegten Beschleunigung entfernt.
 
 Bei mehrteiligen regulären MCP-Stapeln erscheint nach der letzten bestätigten
 Freigabe zusätzlich eine lokale Abschlussübersicht mit ausschließlich den Zählern

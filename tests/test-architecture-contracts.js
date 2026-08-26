@@ -20,6 +20,25 @@ test('batch snapshot contract fixes originals, private copies and crash semantic
   assert.match(text, /Checkpoint[\s\S]*niemals über MCP, Audit oder Diagnose/u);
 });
 
+test('every current processing route is copy-only at the source boundary', () => {
+  const orchestrator = fs.readFileSync(
+    path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'orchestrator.js'),
+    'utf8'
+  );
+  const snapshot = fs.readFileSync(
+    path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'read-only-source-snapshot.js'),
+    'utf8'
+  );
+  assert.match(orchestrator, /copySourceToPrivateWork/u);
+  assert.match(orchestrator, /original_moved_to_processed: false/u);
+  assert.doesNotMatch(orchestrator, /moveProcessed|restoreProcessed|\.processing_/u);
+  assert.doesNotMatch(orchestrator, /renameSync\(originalSource|unlinkSync\(originalSource/u);
+  assert.match(snapshot, /O_RDONLY/u);
+  assert.match(snapshot, /O_NOFOLLOW/u);
+  assert.match(snapshot, /fs\.openSync\(destination, 'wx', 0o600\)/u);
+  assert.match(snapshot, /fs\.fsyncSync\(destinationFd\)/u);
+});
+
 test('batch parallelism remains opt-in, centrally committed and privacy bounded', () => {
   const text = read('BATCH_PARALLELISM_V1.md');
   for (const required of [

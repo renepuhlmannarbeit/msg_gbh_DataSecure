@@ -224,7 +224,19 @@ bereits verifiziertes Paket niemals zurück.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
-Status: **offen** · Stories: BL-011.14, BL-044.1
+Status: **in Arbeit** · Stories: BL-011.14, BL-044.1
+
+R3a ist mit RC53 abgeschlossen: `read-only-source-snapshot.js` bindet jede
+Neuquelle über `O_RDONLY`, Link-/Identitäts-/Größen-/mtime-Prüfung und optionalen
+SHA-256 an eine exklusive `0600`-Arbeitskopie. Der Orchestrator besitzt keinen
+Move-/Restore-/Unlink-Pfad für Quellen mehr; alle Veröffentlichungs- und
+Fehlerphasen dürfen ausschließlich die private Kopie bereinigen. Direkte und
+End-to-End-Tests belegen TXT, Markdown, CSV und DOCX sowie Abbruch, Parser- und
+Publishfehler. Unversiegelte Alt-/Direktquellen erhalten vor dem Kopieren eine
+lokale SHA-256-Bindung; Zero-/Partial-Writes und Close-/Cleanupfehler sind
+begrenzt und fail-closed. R3b entfernt als getrennten nächsten Schnitt den technischen
+`Input`-Normalweg und schützt beziehungsweise migriert historische
+`Processed`-Altbestände fail-closed.
 
 - Neue Installationen erzeugen keinen technischen `Input`-Eingang.
 - `listInput` und jede queuebasierte Quelle ohne Picker-/Ordner-Snapshot werden

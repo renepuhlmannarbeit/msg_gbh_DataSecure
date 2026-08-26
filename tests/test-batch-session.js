@@ -295,26 +295,62 @@ async function main() {
     // The product shows one native terminal notice. This integration test
     // observes the durable state directly and must not wait for a human GUI
     // action in CI.
+    const lifecycleEvents = [];
+    let workerChild;
+    let workerExit;
+    const forkObservedWorker = (...args) => {
+      const child = fork(...args);
+      workerChild = child;
+      workerExit = new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('exit', (code, signal) => resolve({ code, signal }));
+      });
+      return child;
+    };
+    const cleanFailedWorker = async () => {
+      try { workerChild?.kill(); } catch { /* only the observed test worker is targeted */ }
+      await Promise.race([
+        Promise.resolve(workerExit).catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, 5_000))
+      ]);
+      try { discardIncompleteBatches(); } catch { /* preserve the primary assertion */ }
+    };
     const started = startLocalBatchExecutor(begun.batch_token, {
       showBatchStateNotice: () => true,
-      showLocalIntakeNotice: () => true
+      showLocalIntakeNotice: () => true,
+      recordWorkflowEvent: (event) => lifecycleEvents.push(event),
+      forkProcess: forkObservedWorker
     });
     assert.strictEqual(started.local_processing_started, true);
+    assert.ok(workerExit, 'detached worker exit observation was not installed');
+    let watchdog;
+    let exited;
+    try {
+      exited = await Promise.race([
+        workerExit,
+        new Promise((_, reject) => {
+          watchdog = setTimeout(() => reject(new Error(`detached worker exceeded test watchdog: ${JSON.stringify(lifecycleEvents)}`)), 180_000);
+        })
+      ]);
+    } catch (error) {
+      await cleanFailedWorker();
+      throw error;
+    } finally {
+      clearTimeout(watchdog);
+    }
+    if (exited.code !== 0) await cleanFailedWorker();
+    assert.strictEqual(exited.code, 0, JSON.stringify({ exited, lifecycleEvents }));
     let progress = started;
-    // The product worker is detached and intentionally independent of this
-    // MCP call. Give slower Windows/CI filesystem scanners enough time before
-    // declaring the integration test failed; this is not a product timeout.
-    const deadline = Date.now() + 60_000;
-    // `process.kill(pid, 0)` can briefly report a just-spawned detached worker
-    // as unavailable on Windows even though its durable terminal commit follows
-    // immediately. The journal's complete state, not one transient PID probe,
-    // is the integration boundary under test.
+    // The worker commits its durable state before exit. Keep a short grace
+    // window for Windows filesystem visibility rather than guessing at total
+    // worker duration while the child is still legitimately running.
+    const deadline = Date.now() + 5_000;
     while ((!progress.complete || progress.local_processing_active) && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
       progress = readBatchProgress(begun.batch_token);
     }
-    assert.strictEqual(progress.local_processing_active, false);
-    assert.strictEqual(progress.complete, true);
+    assert.strictEqual(progress.local_processing_active, false, JSON.stringify(lifecycleEvents));
+    assert.strictEqual(progress.complete, true, JSON.stringify(lifecycleEvents));
     assert.strictEqual(progress.released, 1);
     const listed = listBatchResults(begun.batch_token, { limit: 1 });
     assert.strictEqual(listed.results.length, 1);
@@ -572,6 +608,7 @@ async function main() {
 
   await testAsync('a private-copy cleanup failure never retracts an already published result', async () => {
     resetInput();
+    const cleanupBefore = localCleanupStatus().private_work_copy_cleanup_pending;
     add('cleanup-pending.txt', 'Kunde: Max Mustermann');
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processBatchNext(begun.batch_token, {
@@ -588,13 +625,13 @@ async function main() {
     assert.strictEqual(state.items[0].work_copy_cleanup_pending, true);
     assert.ok(fs.existsSync(path.join(_test.workPath(begun.batch_token), state.items[0].work_name)));
     const cleanup = localCleanupStatus();
-    assert.strictEqual(cleanup.private_work_copy_cleanup_pending, 1);
+    assert.strictEqual(cleanup.private_work_copy_cleanup_pending, cleanupBefore + 1);
     assert.doesNotMatch(JSON.stringify(cleanup), /cleanup-pending|Mustermann|\.txt|batch_token/i);
     const retried = await processBatchNext(begun.batch_token, deps);
     assert.strictEqual(retried.complete, true);
     const cleaned = _test.readState(begun.batch_token);
     assert.strictEqual(cleaned.items[0].work_copy_cleanup_pending, undefined);
-    assert.strictEqual(localCleanupStatus().private_work_copy_cleanup_pending, 0);
+    assert.strictEqual(localCleanupStatus().private_work_copy_cleanup_pending, cleanupBefore);
     assert.ok(!fs.existsSync(path.join(_test.workPath(begun.batch_token), cleaned.items[0].work_name)));
   });
 

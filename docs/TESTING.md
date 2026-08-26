@@ -11,6 +11,17 @@ npm run build:plugin && npm run test:plugin-zip # same acceptance against the bu
 node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # engineering-only MCP proof
 ```
 
+Lokaler RC53-Schlusslauf 26.08.2026: `npm test` endete nach der
+Copy-only-Umstellung aller aktuellen Neuverarbeitungsrouten mit Exit-Code 0.
+Zusätzlich zu den bestehenden Korpora bestanden zwölf direkte
+Read-only-Snapshot-Grenztests, 19 Architekturverträge, 40 Gateway-End-to-End-
+Szenarien, 66 reale Batch-/Crash-/Resume-Szenarien, 31 MCP-Protokollfälle,
+20 adversariale Fälle, der 2.000-Fälle-Sweep, 96 DOCX-Differentialfälle und
+sieben native Windows-Job-Object-Prüfungen. Der vorher separat ausgeführte
+Fast Path und das kanonische Dokumentationsgate endeten ebenfalls mit Exit-Code
+0. Dies ist ein lokaler E0-Nachweis und keine installierte Windows-/macOS-/Claude-
+Abnahme.
+
 Lokaler Schlusslauf 23.08.2026: `npm run test:ci` endete nach den SEA-Launcher-,
 Dispatcher-, Runtime-Status- und Assemblyänderungen mit Exit-Code 0. Darin enthalten
 waren unter anderem 58 Batch-/Crash-Recovery-, 37 Gateway-, 29 MCP-Protokoll- und

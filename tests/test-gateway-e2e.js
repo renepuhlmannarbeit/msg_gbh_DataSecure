@@ -6,6 +6,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { createSuite, assertAbsent, assertPresent } = require('./helpers');
 
 const runtimeDir = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
@@ -19,7 +20,28 @@ const pii = require(path.join(runtimeDir, 'pii-engine.js'));
 const { splitReviewId } = require(path.join(runtimeDir, 'gateway', 'review.js'));
 const { recoverAbandonedInputClaims } = require(path.join(runtimeDir, 'gateway', 'recovery.js'));
 
-const { testAsync, test, done, assert } = createSuite('Gateway end to end');
+const suite = createSuite('Gateway end to end');
+const { done, assert } = suite;
+
+function clearInput() {
+  const input = path.join(root, 'Input');
+  if (!fs.existsSync(input)) return;
+  for (const name of fs.readdirSync(input)) {
+    fs.rmSync(path.join(input, name), { recursive: true, force: true });
+  }
+}
+
+function test(name, fn) {
+  suite.test(name, () => {
+    try { return fn(); } finally { clearInput(); }
+  });
+}
+
+function testAsync(name, fn) {
+  return suite.testAsync(name, async () => {
+    try { return await fn(); } finally { clearInput(); }
+  });
+}
 
 const fixtures = path.join(__dirname, 'fixtures');
 const blankPng = encodePng({ width: 300, height: 120, rgba: Buffer.alloc(300 * 120 * 4, 255) });
@@ -59,6 +81,21 @@ function queueBuffer(name, data) {
   const dest = path.join(root, 'Input', name);
   fs.writeFileSync(dest, data);
   return dest;
+}
+
+function sourceIdentity(file) {
+  const stat = fs.lstatSync(file);
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+  };
+}
+
+function assertSourceUnchanged(file, before, message) {
+  assert.deepStrictEqual(sourceIdentity(file), before, message);
 }
 
 function readPackage(result) {
@@ -179,14 +216,14 @@ async function main() {
       (error) => error.code === 'FORMAT_COVERAGE_UNVERIFIED'
     );
     const first = await gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 1 });
-    const second = await gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 1 });
+    const second = await gw.anonymizeNext('auto', { ...depsFor('clean'), queueIndex: 2 });
 
     assert.ok(first.ok && second.ok);
     assert.strictEqual(fs.existsSync(blocked), true, 'the stopped source remains available for an explicit retry');
     assert.deepStrictEqual(
       fs.readdirSync(path.join(root, 'Input')).filter((name) => !name.startsWith('.')),
-      ['01-scan.png'],
-      'each later document must be attempted exactly once'
+      ['01-scan.png', '02-first.txt', '03-second.txt'],
+      'every source remains available while explicit queue positions prevent retries'
     );
     fs.unlinkSync(blocked);
   });
@@ -295,6 +332,62 @@ async function main() {
     assert.strictEqual(assets.assets.length, 0);
   });
 
+  await testAsync('TXT, Markdown, CSV and DOCX sources remain byte- and identity-stable after release', async () => {
+    const cases = [
+      ['readonly-success.txt', Buffer.from('Kunde: Max Mustermann\nRolle: Product Owner', 'utf8'), 'customer'],
+      ['readonly-success.md', Buffer.from('# Profil\n\nName: Erika Beispiel\n\nRolle: Scrum Master', 'utf8'), 'personnel_profile'],
+      ['readonly-success.csv', Buffer.from('Name;Rolle\nJana Beispiel;Testmanagerin', 'utf8'), 'personnel_profile'],
+      ['readonly-success.docx', fs.readFileSync(path.join(fixtures, 'synthetic_profile.docx')), 'personnel_profile']
+    ];
+    for (const [name, bytes, profile] of cases) {
+      const source = queueBuffer(name, bytes);
+      const before = sourceIdentity(source);
+      const selected = { name, full: source, stat: fs.lstatSync(source) };
+      const result = await gw.anonymizeNext(profile, {
+        ...depsFor('none'),
+        inputQueue: [selected]
+      });
+      assert.strictEqual(result.ok, true, name);
+      assert.strictEqual(result.original_moved_to_processed, false, name);
+      assertSourceUnchanged(source, before, `${name} source mutation`);
+    }
+  });
+
+  await testAsync('abort and pipeline failures remove only private copies and never mutate the source', async () => {
+    const phases = [
+      ['abort', (source, selected) => {
+        const controller = new AbortController();
+        return gw.anonymizeNext('customer', {
+          ...depsFor('none'), inputQueue: [selected], abortSignal: controller.signal,
+          onClaimed: async () => controller.abort()
+        });
+      }],
+      ['convert', (_source, selected) => gw.anonymizeNext('customer', {
+        ...depsFor('none'), inputQueue: [selected],
+        convertDocument: async () => { throw new Error('injected convert failure'); }
+      })],
+      ['before-publish', (_source, selected) => gw.anonymizeNext('customer', {
+        ...depsFor('none'), inputQueue: [selected],
+        beforePublish: async () => { throw new Error('injected pre-publish failure'); }
+      })],
+      ['publish', (_source, selected) => gw.anonymizeNext('customer', {
+        ...depsFor('none'), inputQueue: [selected],
+        publishPackage: () => { throw new Error('injected publish failure'); }
+      })],
+      ['after-publish', (_source, selected) => gw.anonymizeNext('customer', {
+        ...depsFor('none'), inputQueue: [selected],
+        afterPublish: async () => { throw new Error('injected post-publish failure'); }
+      })]
+    ];
+    for (const [phase, run] of phases) {
+      const source = queueBuffer(`readonly-${phase}.txt`, `Kunde: Max Mustermann\nPhase: ${phase}`);
+      const before = sourceIdentity(source);
+      const selected = { name: path.basename(source), full: source, stat: fs.lstatSync(source) };
+      await assert.rejects(() => run(source, selected), /sicher|abgebrochen|veröffentlicht/u, phase);
+      assertSourceUnchanged(source, before, `${phase} source mutation`);
+    }
+  });
+
   for (const [name, fixture] of [['XLSX', 'synthetic_customer.xlsx'], ['PPTX', 'synthetic_contract.pptx']]) {
     await testAsync(`${name} remains blocked until format coverage is proven`, async () => {
       const source = queue(path.join(fixtures, fixture));
@@ -354,7 +447,7 @@ async function main() {
     assertAbsent(markdown, 'Max Mustermann', 'Markdown contact');
     assertPresent(markdown, '[PERSON_001]', 'Markdown pseudonym');
     assertPresent(markdown, 'https://example.invalid/image.png', 'inert Markdown reference');
-    assert.strictEqual(fs.existsSync(source), false, 'released Markdown is claimed from Input only after the allowlist gate');
+    assert.strictEqual(fs.existsSync(source), true, 'released Markdown must remain unchanged at its source path');
   });
 
   await testAsync('the long .markdown extension uses the same isolated privacy path as .md', async () => {
@@ -368,7 +461,7 @@ async function main() {
     assertAbsent(markdown, 'Erika Beispiel', 'long Markdown contact');
     assertPresent(markdown, '[PERSON_001]', 'long Markdown pseudonym');
     assertPresent(markdown, 'Business Analystin', 'long Markdown role');
-    assert.strictEqual(fs.existsSync(source), false, 'the long Markdown extension is claimed only after the allowlist gate');
+    assert.strictEqual(fs.existsSync(source), true, 'the long Markdown source must remain available after release');
   });
 
   await testAsync('a CSV source is converted locally into anonymized Markdown without evaluating cells', async () => {
@@ -384,7 +477,7 @@ async function main() {
     assertPresent(markdown, '[PERSON_001]', 'CSV pseudonym');
     assertPresent(markdown, 'Product Owner', 'CSV professional role');
     assertPresent(markdown, 'Klinikportal', 'CSV professional content');
-    assert.strictEqual(fs.existsSync(source), false, 'released CSV is claimed from Input only after the allowlist gate');
+    assert.strictEqual(fs.existsSync(source), true, 'the released CSV source must never be moved or deleted');
   });
 
   await testAsync('contact URI formulas in a CSV remain inert while their visible PII is anonymized end to end', async () => {
@@ -405,7 +498,7 @@ async function main() {
       assertAbsent(markdown, value, 'CSV formula contact PII');
     }
     assertPresent(markdown, '=HYPERLINK(', 'inert CSV formula source');
-    assert.strictEqual(fs.existsSync(source), false, 'released formula CSV is claimed only after privacy verification');
+    assert.strictEqual(fs.existsSync(source), true, 'privacy verification must not mutate the CSV source');
   });
 
   await testAsync('every recognised but unreleased non-PDF format stops before any claim or package', async () => {
@@ -592,26 +685,27 @@ async function main() {
     assert.strictEqual(retainedAuditCount(), auditBefore, 'failed publish must retain no success receipt');
     assert.ok(fs.existsSync(src), 'the source must be restored to Input');
     const retry = await gw.anonymizeNext('customer', depsFor('none'));
-    assert.ok(retry.ok, 'the restored source must be processable exactly once on retry');
-    assert.ok(!fs.existsSync(src), 'successful retry must move the source out of Input');
+    assert.ok(retry.ok, 'the unchanged source must remain processable on an explicit retry');
+    assert.ok(fs.existsSync(src), 'successful retry must leave the source at its original path');
   });
 
-  await testAsync('a failed source move restores the claimed input and releases nothing', async () => {
+  await testAsync('source-move hooks are unreachable because only private copies are processed', async () => {
     const before = gw.listOutputs().packages.length;
     const auditBefore = retainedAuditCount();
     const src = queueBuffer('move-failure.txt', 'Kunde: Max Mustermann');
-    await assert.rejects(
-      () => gw.anonymizeNext('customer', {
-        ...depsFor('none'),
-        moveProcessed: () => {
-          throw new Error('injected move failure');
-        }
-      }),
-      /sicher gestoppt/
-    );
-    assert.strictEqual(gw.listOutputs().packages.length, before, 'failed move must expose no package');
-    assert.strictEqual(retainedAuditCount(), auditBefore, 'failed source move must retain no success receipt');
-    assert.ok(fs.existsSync(src), 'the claimed source must be restored to its original Input name');
+    let moveCalls = 0;
+    const result = await gw.anonymizeNext('customer', {
+      ...depsFor('none'),
+      moveProcessed: () => {
+        moveCalls++;
+        throw new Error('unreachable move hook');
+      }
+    });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(moveCalls, 0, 'the normal orchestrator must never call a source-move hook');
+    assert.strictEqual(gw.listOutputs().packages.length, before + 1);
+    assert.strictEqual(retainedAuditCount(), auditBefore + 1);
+    assert.ok(fs.existsSync(src), 'the source must remain at its original Input name');
     assert.deepStrictEqual(
       fs.readdirSync(path.join(root, 'Input')).filter((name) => name.startsWith('.processing_')),
       [],
@@ -703,15 +797,12 @@ async function main() {
     assert.ok(gw.genericStatus({ retentionDays: 0 }).retention_last_cleanup.errors > 0);
   });
 
-  await testAsync('zero-day retention removes the processed original but leaves the new package readable', async () => {
-    queueBuffer('zero-day.txt', 'Kunde: Max Mustermann');
+  await testAsync('zero-day retention preserves the original and leaves the new package readable', async () => {
+    const source = queueBuffer('zero-day.txt', 'Kunde: Max Mustermann');
     const result = await gw.anonymizeNext('customer', { ...depsFor('none'), retentionDays: 0 });
     assert.ok(result.ok);
     assert.strictEqual(gw.readOutput(result.package_id, result.read_capability).package_id, result.package_id);
-    assert.ok(
-      !fs.readdirSync(path.join(root, 'Processed')).includes('zero-day.txt'),
-      'the processed original must be removed immediately'
-    );
+    assert.ok(fs.existsSync(source), 'zero-day retention must never remove the selected source');
   });
 
   await testAsync('zero-day retention disables visual approval with an explicit expiry reason', async () => {

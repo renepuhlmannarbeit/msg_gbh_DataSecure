@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 25.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC44
+Stand: 26.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC53
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und
@@ -73,7 +73,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | **P0** | BL-010.8, BL-051.1, BL-051.2, BL-051.4, BL-051.5 | ZIP-/Marketplace-Fresh-Install, Update, Rückrolle und Entfernung ohne System-Node auf Windows x64 und macOS x64/ARM64. Linux ist eine spätere, getrennte Portabilitätsstufe in BL-010.4. |
 | **P0** | BL-011.8, BL-011.9, BL-012.8 | Reparse-/Swap-/Cleanup-Gegenproben und native Supervisor-/Dialog-Evidenz auf Windows und macOS; Linux folgt mit BL-010.4. |
 | **P1** | BL-042.2, BL-041.7 | Reale Anzahl der Cowork-Berechtigungsdialoge in Manual/Auto/Skip bei Start sowie 1/5/20 Handoff-Seiten beobachten; Organisationsrichtlinien getrennt dokumentieren. |
-| **P1** | BL-041.5, BL-050.3, BL-051.3 | Installierte Realmessung für 1/10/100 Dateien und 500 MiB auf Windows-/macOS-Zielhardware: Zeit, CPU, Peak-RAM, Fortschritt, Stopp und Resume. Wahrgenommene Wartezeit separat bewerten. |
+| **P1** | BL-041.5, BL-050.3, BL-051.3 | Installierte Realmessung für 1/10/100 Dateien und 500 MiB auf Windows-/macOS-Zielhardware: Zeit, CPU, Peak-RAM, Fortschritt, Stopp und Resume. Dabei die bewusste R3a-Sicherheitskostenstelle getrennt messen: noch nicht extern SHA-256-versiegelte Direktquellen werden vor der Privatkopie einmal vollständig lokal vorgehasht; versiegelte Stapelquellen nicht. Wahrgenommene Wartezeit separat bewerten. |
 | **P1** | BL-011.7, BL-012.2, BL-012.3, BL-012.5, BL-012.6, BL-012.7, BL-052.1, BL-052.4 | Beobachtete Gebrauchstauglichkeit: Fortschritt, alle Endzustände, Fortsetzung, Tastatur, Fokus, Skalierung, Kontrast und Screenreader ohne technische Hilfestellung. |
 | **P1** | BL-020.3, BL-021.1, BL-021.2, BL-022.1 | Installierte Windows-/macOS-Hosttests für Netzwerkfreiheit sowie reale TXT/Markdown/CSV/DOCX-Interoperabilität. Linux folgt als eigene Portabilitätsevidenz. |
 | **P1** | BL-011.3, BL-030.2, BL-031.1, BL-032.1 | Keyring-/Pseudonym-, Mehrdeutigkeits- und Zertifikatskontextwege auf echten Zielsystemen fachlich und technisch abnehmen. Verschlüsselte Quellen werden gemäß DS-046 nicht entschlüsselt. |
@@ -127,7 +127,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | BL-011.11 | **E0 abgeschlossen; E1 offen:** Gemischtes Resume, feste I/O-Phasen, einmalige begrenzte Handoff-Dekodierung, Indexfenster und Buffer-Wipe sind regressionsgetestet, ohne Snapshot-/Swap-/Container-Gates zu lockern. Weitere I/O-Optimierung wartet auf reale Dateisystemmessung. | **in Arbeit** |
 | BL-011.12 | **E0 abgeschlossen; E1 offen:** Ein nicht importierter Zwei-Worker-Harness prüft zentrale Reihenfolge/Commit, Slots, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produktstandard bleibt seriell bis zur Windows-/macOS-Abnahme. Linux folgt später. | **in Arbeit** |
 | BL-011.13 | Private Snapshots, Reviewdaten und neustartfesten Pseudonymkontext pro OS-Benutzer verschlüsseln; ohne DPAPI/Keychain vor Rohschreiben stoppen. | **offen** |
-| BL-011.14 | Alle Eingangswege strikt schreibgeschützt behandeln und freigegebene Exporte/Mapping aus automatischer Retention ausschließen; explizites Löschen bleibt bestätigt möglich. | **in Arbeit** |
+| BL-011.14 | **R3a/E0 abgeschlossen:** Jede aktuelle Neuverarbeitung öffnet die Quelle ausschließlich lesend und verarbeitet nur eine exklusive private Arbeitskopie; Erfolg, Abbruch und Pipelinefehler lassen TXT/Markdown/CSV/DOCX nach Hash, Größe, Identität und mtime unverändert. Output und Mapping bleiben außerhalb automatischer Retention. **Rest:** historische `Processed`-Bestände fail-closed schützen/migrieren, technischen `Input`-Normalweg entfernen und die Upgrade-Recovery als versionierte Einmalmigration isolieren. | **in Arbeit** |
 | BL-024.4 | **E0 abgeschlossen; E1/E3 offen:** Der nicht importierte OCR-Session-Harness prüft geschlossenes Framing, Requestbindung, Replay, Single-Flight, Pixel-/Byte-/Zeitbudgets und Abbruch. Der sichere Einbild-Worker bleibt aktiv, bis native Per-Frame-Grenzen und Windows-/macOS-Evidenz vorliegen. Linux folgt später. | **in Arbeit** |
 | BL-041.9 | Review ohne menschlichen Timeout und Abschluss ohne blockierenden Cowork-Aufruf liefern; pausierte Stapel bleiben getrennt startbar. | **in Arbeit** |
 

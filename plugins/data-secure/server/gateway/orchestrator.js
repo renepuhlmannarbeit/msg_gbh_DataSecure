@@ -28,9 +28,7 @@ const {
   aiActMeta,
   auditRecord,
   writePackageAudit,
-  retainAudit,
-  moveProcessed,
-  restoreProcessed
+  retainAudit
 } = require('./compliance');
 const { migrateLegacyAuditReceipts, createPreparedAuditRun } = require('./audit');
 const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
@@ -38,6 +36,7 @@ const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { processAlive } = require('./process-liveness');
+const { copySourceToPrivateWork } = require('./read-only-source-snapshot');
 
 // A batch worker gets one unforgeable in-process preparation capability after
 // its maintenance and audit checks succeeded.  Individual document calls keep
@@ -139,66 +138,6 @@ function cleanupAbandonedWorkingJobs(options = {}) {
     } catch { failures++; }
   }
   return { removed, active, ignored, failures };
-}
-
-function copyRegularFileExclusive(source, destination, expectedStat, expectedSha256) {
-  if (expectedSha256 !== undefined && !/^[a-f0-9]{64}$/i.test(String(expectedSha256))) {
-    throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
-  }
-  const noFollow = fs.constants.O_NOFOLLOW || 0;
-  const sourceChanged = () => {
-    const error = new SafeError('Die ausgewählte Datei wurde während der Übergabe verändert.');
-    if (expectedSha256 !== undefined) error.code = 'BATCH_SNAPSHOT_CHANGED';
-    return error;
-  };
-  let sourceFd;
-  let destinationFd;
-  try {
-    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
-    const opened = fs.fstatSync(sourceFd);
-    const current = fs.lstatSync(source);
-    if (
-      !opened.isFile() || !current.isFile() || current.isSymbolicLink() ||
-      opened.dev !== expectedStat.dev || opened.ino !== expectedStat.ino ||
-      current.dev !== expectedStat.dev || current.ino !== expectedStat.ino ||
-      opened.size !== expectedStat.size || current.size !== expectedStat.size ||
-      opened.mtimeMs !== expectedStat.mtimeMs || current.mtimeMs !== expectedStat.mtimeMs
-    ) {
-      throw sourceChanged();
-    }
-    destinationFd = fs.openSync(destination, 'wx', 0o600);
-    const chunk = Buffer.allocUnsafe(64 * 1024);
-    const hash = expectedSha256 === undefined ? null : crypto.createHash('sha256');
-    let position = 0;
-    while (position < opened.size) {
-      const read = fs.readSync(sourceFd, chunk, 0, Math.min(chunk.length, opened.size - position), position);
-      if (read <= 0) throw new SafeError('Die private Arbeitskopie ist unvollständig.');
-      hash?.update(chunk.subarray(0, read));
-      let written = 0;
-      while (written < read) written += fs.writeSync(destinationFd, chunk, written, read - written);
-      position += read;
-    }
-    fs.fsyncSync(destinationFd);
-    const after = fs.lstatSync(source);
-    const rechecked = fs.fstatSync(sourceFd);
-    if (!after.isFile() || after.isSymbolicLink() || after.dev !== expectedStat.dev || after.ino !== expectedStat.ino ||
-      after.size !== expectedStat.size || after.mtimeMs !== expectedStat.mtimeMs ||
-      rechecked.size !== expectedStat.size || rechecked.mtimeMs !== expectedStat.mtimeMs) {
-      throw sourceChanged();
-    }
-    if (hash) {
-      const actual = hash.digest();
-      const expected = Buffer.from(String(expectedSha256), 'hex');
-      if (expected.length !== actual.length || !crypto.timingSafeEqual(actual, expected)) {
-        const error = new SafeError('Die versiegelte Arbeitskopie wurde verändert. Der Lauf wurde sicher gestoppt.');
-        error.code = 'BATCH_SNAPSHOT_CHANGED';
-        throw error;
-      }
-    }
-  } finally {
-    if (destinationFd !== undefined) fs.closeSync(destinationFd);
-    if (sourceFd !== undefined) fs.closeSync(sourceFd);
-  }
 }
 
 function openBatchPackageProtectionForRetention() {
@@ -333,27 +272,24 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   let source = originalSource;
   let claimed = false;
   let stagePackage = null;
-  let processedPath = null;
   let reviewPackageId = null;
   let auditReceiptRetained = false;
-  const copiedClaim = deps.copyClaim === true;
   let diagnosticStage = 'started';
   const diagnostic = {
-    route: copiedClaim ? 'companion' : 'input',
+    route: Array.isArray(deps.inputQueue) ? 'companion' : 'input',
     source_type: ext.slice(1),
     profile: requested,
     remove_images: deps.removeImages === true
   };
   try {
     throwIfAborted(deps.abortSignal);
-    source = copiedClaim
-      ? path.join(jobDir, `source${ext}`)
-      : path.join(r.input, `.processing_${jobId}_${originalName}`);
-    if (copiedClaim) {
-      copyRegularFileExclusive(originalSource, source, selectedInput.stat, selectedInput.expected_sha256);
-    } else {
-      fs.renameSync(originalSource, source);
-    }
+    source = path.join(jobDir, `source${ext}`);
+    copySourceToPrivateWork({
+      source: originalSource,
+      destination: source,
+      expectedStat: selectedInput.stat,
+      expectedSha256: selectedInput.expected_sha256
+    });
     claimed = true;
     diagnosticStage = 'claimed';
     if (deps.onClaimed) await deps.onClaimed();
@@ -596,19 +532,12 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     throwIfAborted(deps.abortSignal);
 
-    const moveSource = deps.moveProcessed || moveProcessed;
     const publishPackage = deps.publishPackage || ((from, to) => fs.renameSync(from, to));
 
-    // The source is moved before the package becomes visible. If publishing
-    // fails, the catch path restores it to Input. This makes the output rename
-    // the single commit point instead of exposing a package from a failed job.
-    if (copiedClaim) {
-      fs.unlinkSync(source);
-      claimed = false;
-    } else {
-      processedPath = moveSource(source, originalName);
-      claimed = false;
-    }
+    // Only the private working copy is disposable. The selected source remains
+    // byte-identical at its original path on every success and failure path.
+    fs.unlinkSync(source);
+    claimed = false;
     publishPackage(stagePackage, finalPackage);
     diagnosticStage = 'published';
     try {
@@ -630,15 +559,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       throw error;
     }
     stagePackage = null;
-    processedPath = null;
     auditReceiptRetained = retainAudit(auditReceipt, {
       preparedAuditRun: deps.preparedRun?.preparedAuditRun,
       assertWritableCapacity: capacity
     });
 
-    // A zero-day policy removes the original and any withheld preview bytes as
-    // soon as the successful package is committed. The new Output package stays
-    // readable until the next cleanup trigger, when its directory is expired.
+    // A zero-day policy removes only managed private/review artifacts. User
+    // sources and durable Output packages remain outside automatic deletion.
     if ((deps.retentionDays ?? retentionDays()) === 0) {
       bestEffortRetentionCleanup(deps, ['processed', 'review']);
     }
@@ -672,7 +599,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         removed,
         redactions: vis.results.reduce((n, x) => n + (x.redactions || 0), 0)
       },
-      original_moved_to_processed: !copiedClaim,
+      original_moved_to_processed: false,
       persistent_mapping_retained: false,
       ...runtimeInfo(),
       raw_content_sent_to_claude: false,
@@ -680,33 +607,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     };
   } catch (e) {
     let recoveryError = null;
-    if (processedPath) {
-      try {
-        (deps.restoreProcessed || restoreProcessed)(processedPath, originalSource);
-        processedPath = null;
-      } catch {
-        recoveryError = new SafeError(
-          'Verarbeitung wurde gestoppt; die Quelldatei konnte nicht automatisch nach Input zurückgelegt werden. Manuelle Prüfung erforderlich.'
-        );
-      }
-    }
-    if (claimed && copiedClaim && fs.existsSync(source)) {
+    if (claimed && fs.existsSync(source)) {
       try {
         fs.unlinkSync(source);
         claimed = false;
       } catch {
         recoveryError = new SafeError(
           'Verarbeitung wurde gestoppt; die private Arbeitskopie konnte nicht sicher entfernt werden.'
-        );
-      }
-    }
-    if (claimed && !copiedClaim && fs.existsSync(source) && !fs.existsSync(originalSource)) {
-      try {
-        fs.renameSync(source, originalSource);
-        claimed = false;
-      } catch {
-        recoveryError = new SafeError(
-          'Verarbeitung wurde gestoppt; die beanspruchte Quelldatei konnte nicht nach Input zurückgelegt werden. Manuelle Prüfung erforderlich.'
         );
       }
     }

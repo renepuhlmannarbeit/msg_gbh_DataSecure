@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 25.08.2026 · gilt für RC44 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 26.08.2026 · gilt für RC53 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -27,7 +27,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | Story | Was noch zu liefern bzw. zu prüfen ist | Evidenz und konkrete menschliche Aufgabe |
 |---|---|---|
 | BL-011.13 | Private Daten OS-benutzergebunden verschlüsseln. | **E0 + E1 + E3:** Unit-/Negativtests; DPAPI/Keychain real; Security-Review. |
-| BL-011.14 | Originale unverändert und Exporte dauerhaft halten. | **E0:** synthetische Mutation-/Retentiontests; E1 nur für Cloud-Sync-Interoperabilität. |
+| BL-011.14 | **E0-Teilnachweis RC53:** alle aktuellen Neuverarbeitungsrouten sind copy-only; offen sind Legacy-`Processed`-Provenienz, technischer `Input` und isolierte Einmalmigration. | **E0:** direkte Snapshot-, Orchestrator-, Fehlerphasen-, Retention- und Migrationstests; E1 nur für Cloud-Sync-Interoperabilität und damit quellspezifisch in BL-044.1. |
 | BL-041.9 | Review/Abschluss nicht blockierend und pausierte Stapel startbar machen. | **E0 + E1 + E2:** Zustands-/Timeouttests; echte Cowork-Laufzeit; beobachtete UX. |
 | BL-044.1 | Rekursive Ordnerquelle ohne Linkverfolgung liefern. | **E0 + E1:** synthetische Hierarchie-/Race-Tests; reale Reparse-/Symlink-Gegenprobe. |
 | BL-047.1 | Adaptive Parallelität und Performancebudgets aktivieren. | **E0 + E1:** deterministische Scheduler-/Speichertests; Referenzhardwaremessung. |
