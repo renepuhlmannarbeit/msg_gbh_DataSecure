@@ -2,6 +2,7 @@
 
 const { createBatchTerminalEvidence, validateMarker } = require('../plugins/data-secure/server/gateway/batch-terminal-evidence');
 const { evidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
+const { releasedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch terminal evidence coordinator');
@@ -18,6 +19,17 @@ function state(status = 'released') {
   };
 }
 
+function stateV2() {
+  const documentResult = releasedDocumentResult({
+    parserWarnings: [], visualResults: [], unreviewedVisualCount: 0, imagesRemovedByExplicitRequest: 0
+  });
+  return {
+    ...state(),
+    schema: 'datasecure-batch/2',
+    items: [{ status: 'released', package_id: `ds_${'b'.repeat(32)}`, document_result: documentResult }]
+  };
+}
+
 function fixture(options = {}) {
   const events = [];
   const records = new Map();
@@ -28,6 +40,11 @@ function fixture(options = {}) {
     randomBytes: () => Buffer.from('00112233445566778899aabbccddeeff', 'hex'),
     nowIso: () => '2026-08-26T11:00:00.000Z',
     publicProgress(value) { return { complete: value.items.every((item) => ['released', 'stopped'].includes(item.status)) }; },
+    publishedPackageRecord(packageId) {
+      if (options.publishedPackageRecord) return options.publishedPackageRecord(packageId);
+      const item = durable.items.find((candidate) => candidate.package_id === packageId);
+      return item ? { state: 'verified', document_result: item.document_result } : { state: 'missing', document_result: null };
+    },
     writeState(value) {
       writeNumber++;
       events.push(`write:${value.terminal_evidence?.status || 'none'}`);
@@ -197,6 +214,23 @@ test('marker and receipt expose no document, package, token, path or hash identi
   assert.strictEqual(value.coordinator.reconcileTerminalEvidence(value.reload()), true);
   const encoded = JSON.stringify(value.durable().terminal_evidence);
   assert.doesNotMatch(encoded, /Alice|Example|package_id|batch_token|sha256|path|a{64}/iu);
+});
+
+test('a v2 retry re-derives the sealed record and refuses a stale package grade', () => {
+  const first = fixture({ state: stateV2(), failAppend: true });
+  assert.strictEqual(first.coordinator.reconcileTerminalEvidence(first.reload()), false);
+  const pending = first.durable();
+  const mismatched = releasedDocumentResult({
+    parserWarnings: [], visualResults: [{ status: 'review_required' }], unreviewedVisualCount: 0,
+    imagesRemovedByExplicitRequest: 0
+  });
+  const restarted = fixture({
+    state: pending,
+    publishedPackageRecord: () => ({ state: 'verified', document_result: mismatched })
+  });
+  assert.strictEqual(restarted.coordinator.reconcileTerminalEvidence(restarted.reload()), false);
+  assert.strictEqual(restarted.records.size, 0);
+  assert.strictEqual(restarted.durable().terminal_evidence.status, 'pending');
 });
 
 done();

@@ -1,6 +1,6 @@
 # Vertrag: Dokumentergebnisgrade V1
 
-Stand: 26.08.2026 · Paketbindung RC60 · Journal-/Mappingbindung RC61 · Entscheidung DS-045
+Stand: 26.08.2026 · Paketbindung RC60 · Journal-/Mappingbindung RC61 · Evidence-/Receipt-Bindung RC62 · Entscheidung DS-045
 
 ## Zweck
 
@@ -58,8 +58,27 @@ das verifizierte V3-Paket. Wiederanlauf vergleicht Paket, Journal und Outbox ern
 Widersprüche bleiben lokal ausstehend. Historische CSV-/Outbox-V1-Einträge werden
 lesbar migriert und ausdrücklich als ohne verfügbaren Ergebnisgrad bezeichnet.
 
+## Dauerhafte Evidence- und Receipt-Bindung
+
+Neue lokale Batch-Nachweise verwenden `datasecure-batch-evidence/3`. Sie enthalten
+ausschließlich aggregierte Zähler für `complete`, `usable-with-omissions`,
+`not-processed` und – nur für historische oder noch nicht terminale Zustände –
+`unavailable`. Zwei weitere Zähler erfassen ausschließlich die erlaubten
+Auslassungscodes. Vor dem Export wird jeder positive Grad erneut gegen das
+verifizierte V3-Paket geprüft. Der Nachweis enthält weiterhin keine Namen, Pfade,
+Paket-/Batch-IDs, Hashes, Fähigkeiten oder Rohwerte.
+
+Freigegebene Pakete verwenden `data-secure-audit-receipt/4`. Das Receipt trägt
+exakt denselben positiven `document_result` wie das verifizierte V3-Manifest.
+`not-processed` erzeugt ohne Paket kein Audit-Receipt. Historische Audit- und
+Evidence-Stände bleiben ohne nachträglich unterstellten Grad lesbar.
+
+Reason-Codes stammen aus einem endlichen, inhaltsfreien Katalog. Unbekannte
+interne Codes werden vor einer terminalen Persistierung zu `INTERNAL_FAILURE`
+vergröbert; dokumentabgeleitete oder frei formulierte Werte sind unzulässig.
+
 ## Noch nicht Teil dieses E0-Schnitts
 
-Die Projektion der Grade in Evidence/Receipt, Stapelabschluss, Results-/Progress-
-Fassaden und Cowork-Anzeige folgt in getrennten Schnitten. Echte Zielsystem- und
+Die Projektion der Grade in Stapelabschluss, Results-/Progress-Fassaden und
+Cowork-Anzeige folgt in getrennten Schnitten. Echte Zielsystem- und
 Security-Abnahmen (E1/E3) bleiben ebenfalls erforderlich.

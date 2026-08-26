@@ -73,7 +73,7 @@ test('not-processed requires one fixed reason and never carries omissions', () =
     schema: 'datasecure-document-result/1', grade: GRADES.NOT_PROCESSED,
     omissions: [], reason_code: 'SOURCE_ENCRYPTED_UNSUPPORTED'
   });
-  for (const reason of ['', '../secret', 'freie Ursache']) {
+  for (const reason of ['', '../secret', 'freie Ursache', 'ALICE_MUSTERMANN']) {
     assert.throws(() => notProcessedDocumentResult(reason), /Ungültiger/);
   }
 });

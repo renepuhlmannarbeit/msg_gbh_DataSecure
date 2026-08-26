@@ -20,6 +20,7 @@ const {
   writePackageAudit
 } = require('../plugins/data-secure/server/gateway/audit');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
+const { releasedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 
 const { test, done, assert } = createSuite('Audit privacy');
 
@@ -193,6 +194,71 @@ test('a forged current receipt is canonicalized instead of trusted by schema nam
   assert.strictEqual(migrated.migration_errors, 0);
   const encoded = JSON.stringify(json(forged));
   assert.doesNotMatch(encoded, /source_sha256|Erika|Personal/);
+});
+
+test('current package and retained audit bind the exact positive manifest result', () => {
+  const r = roots();
+  const operationId = crypto.randomUUID();
+  const documentResult = releasedDocumentResult({
+    parserWarnings: [], visualResults: [], unreviewedVisualCount: 0, imagesRemovedByExplicitRequest: 0
+  });
+  const receipt = sanitizeReceipt({
+    operation_id: operationId,
+    timestamp: '2026-08-21T09:02:00.000Z',
+    profile: 'customer',
+    source_extension: '.docx',
+    result: 'released',
+    residual_pii_verification: 'passed',
+    document_result: documentResult
+  });
+  assert.deepStrictEqual(receipt.document_result, documentResult);
+  const packageDir = path.join(r.output, 'grade-bound-package');
+  fs.mkdirSync(packageDir, { recursive: true });
+  fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify({
+    schema: 'eu-privacy-package/3',
+    operation_id: operationId,
+    parser_warnings: [],
+    assets: [],
+    pdf_unextractable_visual_objects: 0,
+    images_removed_by_explicit_request: 0,
+    visual_assets_withheld_at_release: 0,
+    document_result: documentResult
+  }));
+  fs.writeFileSync(path.join(packageDir, 'audit.json'), JSON.stringify(receipt));
+  assert.strictEqual(migrateLegacyAuditReceipts().write_errors, 0);
+  const retained = fs.readdirSync(r.audit)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => json(path.join(r.audit, name)))
+    .find((entry) => entry.operation_id === operationId);
+  assert.deepStrictEqual(retained.document_result, documentResult);
+});
+
+test('audit recovery refuses a formally valid grade that differs from the v3 manifest', () => {
+  const r = roots();
+  const operationId = crypto.randomUUID();
+  const complete = releasedDocumentResult({
+    parserWarnings: [], visualResults: [], unreviewedVisualCount: 0, imagesRemovedByExplicitRequest: 0
+  });
+  const omitted = releasedDocumentResult({
+    parserWarnings: [], visualResults: [{ status: 'review_required' }], unreviewedVisualCount: 0,
+    imagesRemovedByExplicitRequest: 0
+  });
+  const packageDir = path.join(r.output, 'grade-mismatch-package');
+  fs.mkdirSync(packageDir, { recursive: true });
+  fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify({
+    schema: 'eu-privacy-package/3', operation_id: operationId, parser_warnings: [], assets: [],
+    pdf_unextractable_visual_objects: 0, images_removed_by_explicit_request: 0,
+    visual_assets_withheld_at_release: 0, document_result: complete
+  }));
+  fs.writeFileSync(path.join(packageDir, 'audit.json'), JSON.stringify(sanitizeReceipt({
+    operation_id: operationId, timestamp: '2026-08-21T09:03:00.000Z', profile: 'customer',
+    source_extension: '.docx', result: 'released', residual_pii_verification: 'passed', document_result: omitted
+  })));
+  assert.strictEqual(migrateLegacyAuditReceipts().write_errors, 0);
+  assert.strictEqual(fs.readdirSync(r.audit)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => json(path.join(r.audit, name)))
+    .some((entry) => entry.operation_id === operationId), false);
 });
 
 test('a persistent write marker is recovered from the released package receipt', () => {

@@ -2,6 +2,7 @@
 
 const {
   notProcessedDocumentResult,
+  normalizeDocumentResultReasonCode,
   positiveDocumentResult,
   sameDocumentResult
 } = require('./document-result-grade');
@@ -191,7 +192,10 @@ function createBatchReviewPublication(options = {}) {
           failed++;
           continue;
         }
-        const code = error?.code || 'PROCESSING_INTERRUPTED';
+        const reportedCode = String(error?.code || 'PROCESSING_INTERRUPTED');
+        const code = retryableCodes.has(reportedCode)
+          ? reportedCode
+          : normalizeDocumentResultReasonCode(reportedCode);
         item.status = retryableCodes.has(code) ? 'retryable' : 'stopped';
         item.checkpoint = item.status === 'retryable' ? 'retryable' : 'stopped';
         item.error_code = code;

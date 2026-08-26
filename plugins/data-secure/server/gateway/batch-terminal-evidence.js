@@ -8,11 +8,14 @@ const {
   listPendingEvidence,
   removePendingEvidence,
   evidenceRecord,
-  validateEvidenceRecord,
+  validateAnyEvidenceRecord,
+  SCHEMA: EVIDENCE_SCHEMA,
+  LEGACY_SCHEMA: LEGACY_EVIDENCE_SCHEMA,
   RECEIPT_ID_RE
 } = require('./batch-evidence');
 
-const MARKER_SCHEMA = 'datasecure-batch-terminal-evidence/1';
+const MARKER_SCHEMA = 'datasecure-batch-terminal-evidence/2';
+const LEGACY_MARKER_SCHEMA = 'datasecure-batch-terminal-evidence/1';
 const MARKER_KEYS = ['record', 'receipt_id', 'schema', 'status'].sort();
 
 function exactKeys(value, keys) {
@@ -21,13 +24,15 @@ function exactKeys(value, keys) {
 }
 
 function validateMarker(marker) {
-  if (!exactKeys(marker, MARKER_KEYS) || marker.schema !== MARKER_SCHEMA ||
+  if (!exactKeys(marker, MARKER_KEYS) || ![MARKER_SCHEMA, LEGACY_MARKER_SCHEMA].includes(marker.schema) ||
     !['pending', 'exported'].includes(marker.status) ||
     !RECEIPT_ID_RE.test(String(marker.receipt_id || '')) ||
-    marker.record?.receipt_id !== marker.receipt_id) {
+    marker.record?.receipt_id !== marker.receipt_id ||
+    (marker.schema === MARKER_SCHEMA && marker.record?.schema !== EVIDENCE_SCHEMA) ||
+    (marker.schema === LEGACY_MARKER_SCHEMA && marker.record?.schema !== LEGACY_EVIDENCE_SCHEMA)) {
     throw new SafeError('Der lokale Status des Batch-Nachweises ist ungültig.');
   }
-  validateEvidenceRecord(marker.record);
+  validateAnyEvidenceRecord(marker.record);
   return marker;
 }
 
@@ -41,6 +46,7 @@ function createBatchTerminalEvidence(options = {}) {
   const createPending = options.createPendingEvidence || createPendingEvidence;
   const listPending = options.listPendingEvidence || listPendingEvidence;
   const removePending = options.removePendingEvidence || removePendingEvidence;
+  const publishedPackageRecord = options.publishedPackageRecord;
 
   function terminal(state) {
     return publicProgress(state).complete === true;
@@ -56,7 +62,7 @@ function createBatchTerminalEvidence(options = {}) {
         schema: MARKER_SCHEMA,
         status: 'pending',
         receipt_id: receiptId,
-        record: makeRecord(state, nowIso(), receiptId)
+        record: makeRecord(state, nowIso(), receiptId, { publishedPackageRecord })
       };
       state.terminal_evidence = marker;
       try {
@@ -64,6 +70,15 @@ function createBatchTerminalEvidence(options = {}) {
       } catch {
         return false;
       }
+    }
+    if (marker.schema === MARKER_SCHEMA) {
+      let expected;
+      try {
+        expected = makeRecord(state, marker.record.recorded_at, marker.receipt_id, { publishedPackageRecord });
+      } catch {
+        return false;
+      }
+      if (JSON.stringify(expected) !== JSON.stringify(marker.record)) return false;
     }
     if (marker.status === 'exported') {
       try { removePending(marker.record); } catch { /* exported remains authoritative */ }
@@ -117,4 +132,4 @@ function createBatchTerminalEvidence(options = {}) {
   return { terminal, reconcileTerminalEvidence, writeTerminalEvidence, repairPendingEvidenceOutbox };
 }
 
-module.exports = { createBatchTerminalEvidence, validateMarker, MARKER_SCHEMA };
+module.exports = { createBatchTerminalEvidence, validateMarker, MARKER_SCHEMA, LEGACY_MARKER_SCHEMA };

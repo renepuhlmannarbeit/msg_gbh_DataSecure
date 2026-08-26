@@ -1,16 +1,17 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 26.08.2026 · geprüfter Produktstand: RC61
+Stand: 26.08.2026 · geprüfter Produktstand: RC62
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
 Restdifferenz, `offen` bedeutet ohne belastbare Produktimplementierung. Testdateien
 sind Evidenz für Codeverhalten, nicht automatisch für installierte Claude-Oberflächen.
 
-Aktueller lokaler RC61-Regressionsnachweis 26.08.2026: `npm test` endete nach der
-Paket-, Journal- und Mappingbindung der DS-045-Ergebnisgrade vollständig mit
-Exit-Code 0. Der Lauf ist E0-Codeevidenz, keine installierte Release-Abnahme; die
-Details und Aussagegrenzen stehen in `docs/TESTING.md`.
+Der aktuelle RC62-Arbeitsstand bindet DS-045 zusätzlich an Batch-Evidence v3 und
+Audit-Receipt v4. Die direkten Evidence-, Audit-, Recovery-, Gateway-, Batch- und
+MCP-Tests sind grün; der vollständige lokale Regressionslauf wird in
+`docs/TESTING.md` als E0-Codeevidenz dokumentiert. Er ist keine installierte
+Release-Abnahme.
 Der RC36-Arbeitsstand bestand am 24.08.2026 die vollständige lokale
 `test:ci`-Suite, 66 servergebundene Batchtests, ZIP-Parität und beide Claude-Plugin-
 Validierungen; Details und Aussagegrenzen stehen dort.
@@ -27,7 +28,7 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 | Stapel | durable Checkpoints und Background-Intake; neue Auswahl trotz pausierter Stapel im Arbeitsstand umgesetzt | ein aktiver, mehrere pausierte; Pause blockiert nicht | E0 umgesetzt, E1/E2 offen |
 | Review/Abschluss | abgekoppelter Review ohne menschlichen Timeout und detachierte Abschlussmeldung im Arbeitsstand | persistente Queue ohne Entscheidungs-Timeout, nicht blockierender Abschluss | E0 umgesetzt, E1/E2 offen |
 | private Daten | R4a-create-only-AEAD-Fassade synthetisch belegt, aber Rohsnapshots und Reviewdaten noch nicht produktiv darüber geführt | DPAPI/Keychain, kein Klartextfallback | P0 Security: R4b/E1/E3 offen |
-| Ergebnisse | V3-Pakete sowie Journal/Mapping V2 binden die DS-045-Grade crashsicher; automatische Output-Löschung deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 Paket/Journal/Mapping; Evidence/Cowork offen |
+| Ergebnisse | V3-Pakete, Journal/Mapping V2, Batch-Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher; automatische Output-Löschung deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 dauerhafte Bindung; Abschluss/Results/Progress/Cowork offen |
 | Formate | TXT/Markdown/CSV/DOCX; Auswahl überwiegend endungsgeführt | Signatur+Struktur; drei Ergebnisgrade; alle Zielformate gestuft | P1 Content, danach Formate |
 | Performance | serieller Produktpfad, inaktive Harnesses und lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | P1 nach Sicherheitsgates |
 | Cowork-UI | Text/OS-Dialoge, keine MCP-App | inhaltsfreie progressive MCP-App mit vollem Fallback | P2 Komfort |
@@ -1552,7 +1553,11 @@ nur zusammen mit einem verifizierten Paket in veröffentlichten Zuständen zulä
 `not-processed` ist ausschließlich an einen terminalen Stopp und denselben
 Grundcode gebunden. Mapping CSV/Outbox V2 transportiert diese Bindung crashsicher,
 idempotent und mit erneuter Manifestprüfung; alte CSV-/Outbox-/Journalstände werden
-ohne erfundenen Grad migriert oder gelesen. Die Projektion in Evidence/Receipt,
+ohne erfundenen Grad migriert oder gelesen. RC62 ergänzt ausschließlich aggregierte
+Grade und erlaubte Auslassungen in `datasecure-batch-evidence/3`, prüft positive
+Grade vor Export erneut gegen das V3-Paket und bindet `data-secure-audit-receipt/4`
+exakt an dessen positiven Manifestgrad. Ein endlicher Reason-Code-Katalog verhindert
+inhaltsförmige Fehlerwerte; Unbekanntes wird zu `INTERNAL_FAILURE` vergröbert.
 Stapelabschluss, Results/Progress und Cowork sowie E1/E3 fehlen noch. Die
 Strukturprüfung schaltet insbesondere XLSX und PPTX nicht frei.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde

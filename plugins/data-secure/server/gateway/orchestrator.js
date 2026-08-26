@@ -479,7 +479,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       entityCount: anon.entityCount,
       passes: anon.passes,
       reidentificationRisk: anon.reidentificationRisk,
-      results: vis.results
+      results: vis.results,
+      documentResult
     });
 
     // The exact UTF-8 text has just passed the residual gate and is written

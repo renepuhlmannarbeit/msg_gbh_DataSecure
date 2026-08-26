@@ -158,7 +158,8 @@ const {
 } = createBatchTerminalEvidence({
   randomBytes: crypto.randomBytes,
   publicProgress,
-  writeState
+  writeState,
+  publishedPackageRecord
 });
 
 const {

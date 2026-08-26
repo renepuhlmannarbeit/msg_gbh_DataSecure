@@ -299,7 +299,7 @@ async function main() {
   });
 
   await testAsync('review stop commits decision before mapping and mapping marker before cleanup', async () => {
-    const value = fixture({ pipelineFailure: 'first', pipelineFailureCode: 'PARSER_INVALID' });
+    const value = fixture({ pipelineFailure: 'first', pipelineFailureCode: 'ALICE_MUSTERMANN' });
     await value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
       { document_index: 1, decisions: [decision('a-1')] },
       { document_index: 2, decisions: [decision('a-2')] }
@@ -311,6 +311,8 @@ async function main() {
     const mappingWrite = value.writes.findIndex((write) => write.snapshot.items[0].local_mapping_exported === true);
     const cleanupEvent = value.events.indexOf('cleanup:first');
     assert.ok(decisionWrite >= 0);
+    assert.strictEqual(value.items[0].error_code, 'INTERNAL_FAILURE');
+    assert.strictEqual(value.items[0].document_result.reason_code, 'INTERNAL_FAILURE');
     assert.ok(value.events.indexOf(`write:${decisionWrite + 1}`) < mappingEvent);
     assert.ok(mappingWrite > decisionWrite);
     assert.ok(value.events.indexOf(`write:${mappingWrite + 1}`) < cleanupEvent);

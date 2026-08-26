@@ -209,14 +209,15 @@ async function main() {
   });
 
   await testAsync('deferred, retryable and stopped failures retain exact pre-publication semantics', async () => {
-    for (const [error, status, checkpoint] of [
-      [codedError('LOCAL_REVIEW_DEFERRED'), 'deferred_review', 'awaiting_local_review'],
-      [codedError('PARSER_TIMEOUT'), 'retryable', 'retryable'],
-      [codedError('PARSER_INVALID'), 'stopped', 'stopped']
+    for (const [error, status, checkpoint, expectedCode] of [
+      [codedError('LOCAL_REVIEW_DEFERRED'), 'deferred_review', 'awaiting_local_review', 'LOCAL_REVIEW_DEFERRED'],
+      [codedError('PARSER_TIMEOUT'), 'retryable', 'retryable', 'PARSER_TIMEOUT'],
+      [codedError('ALICE_MUSTERMANN'), 'stopped', 'stopped', 'INTERNAL_FAILURE']
     ]) {
       const value = fixture({ pipelineError: error });
       const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
-      assert.strictEqual(result.error, error.code);
+      assert.strictEqual(result.error, expectedCode);
+      assert.strictEqual(value.item.error_code, expectedCode);
       assert.strictEqual(value.item.status, status);
       assert.strictEqual(value.item.checkpoint, checkpoint);
       assert.strictEqual(value.events.includes('mapping-stopped'), status === 'stopped');
@@ -329,13 +330,13 @@ async function main() {
 
   await testAsync('stop-side mapping and cleanup failures cannot mask the primary safe stop', async () => {
     const value = fixture({
-      pipelineError: codedError('PARSER_INVALID', 'PII-SENTINEL'),
+      pipelineError: codedError('ALICE_MUSTERMANN', 'PII-SENTINEL'),
       stopMappingFailure: true,
       cleanupFailure: true,
       evidence: false
     });
     const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
-    assert.strictEqual(result.error, 'PARSER_INVALID');
+    assert.strictEqual(result.error, 'INTERNAL_FAILURE');
     assert.strictEqual(result.local_mapping_exported, false);
     assert.strictEqual(result.local_evidence_exported, false);
     assert.strictEqual(value.item.work_copy_cleanup_pending, true);
@@ -346,7 +347,7 @@ async function main() {
   });
 
   await testAsync('safe stop is journaled before mapping, mapping before cleanup, and evidence follows mapping', async () => {
-    const value = fixture({ pipelineError: codedError('PARSER_INVALID') });
+    const value = fixture({ pipelineError: codedError('ALICE_MUSTERMANN') });
     const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
     const decisionWrite = value.writes.findIndex((write) =>
       write.snapshot.items[0].document_result?.grade === 'not-processed' &&
@@ -364,7 +365,7 @@ async function main() {
   });
 
   await testAsync('mapping failure preserves the durable stop decision, work copy and suppresses evidence', async () => {
-    const value = fixture({ pipelineError: codedError('PARSER_INVALID'), stopMappingFailure: true });
+    const value = fixture({ pipelineError: codedError('ALICE_MUSTERMANN'), stopMappingFailure: true });
     const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
     const durable = value.writes.at(-1).snapshot.items[0];
     assert.strictEqual(durable.status, 'stopped');

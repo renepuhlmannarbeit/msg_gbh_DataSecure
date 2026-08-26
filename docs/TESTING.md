@@ -13,6 +13,23 @@ npm run build:plugin && npm run test:plugin-zip # same acceptance against the bu
 node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # engineering-only MCP proof
 ```
 
+## Lokaler RC62-Nachweis 26.08.2026
+
+RC62 erweitert die dauerhafte DS-045-Bindung um `datasecure-batch-evidence/3`
+und `data-secure-audit-receipt/4`. Direkte Tests prüfen alle drei Grade, beide
+erlaubten Auslassungsarten, Paket-/Journal-/Receipt-Parität, unveränderte
+Pending-Marker bei Crash/Retry, Legacy ohne Nachklassifizierung und den
+inhaltsfreien endlichen Reason-Code-Katalog. `npm test` endete vollständig mit
+Exit-Code 0. Der Lauf bestand unter anderem 67 Batch-/Crash-/Resume-, 40
+Gateway-End-to-End-, 31 MCP-Protokoll-, 20 adversariale und 2.000 explorative
+Fälle sowie 96 DOCX-Differentialdokumente und sieben native Windows-Grenztests.
+Der echte 100-Dateien-Lauf und Crash-Recovery an Position 1, 50 und 100 waren
+ebenfalls grün. Ein Security-Gegenreview wies nach, dass zuvor ein formal
+gültiger frei erfundener Code wie `ALICE_MUSTERMANN` persistierbar war; RC62
+verwirft solche Werte und persistiert stattdessen ausschließlich den festen Code
+`INTERNAL_FAILURE`. Dieser E0-Nachweis erweitert keine Formatfreigabe und ändert
+den Cowork-Werkzeug- oder Bestätigungsablauf nicht.
+
 ## Lokaler RC61-Nachweis 26.08.2026
 
 Nach der crashsicheren Bindung der DS-045-Ergebnisgrade an Paketmanifest,

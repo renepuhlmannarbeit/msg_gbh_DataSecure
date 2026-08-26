@@ -355,7 +355,9 @@ async function main() {
       fs.readFileSync(path.join(root, 'Output', result.package_id, 'audit.json'), 'utf8')
     );
     assert.match(packageAudit.operation_id, /^[0-9a-f-]{36}$/i, 'audit needs a random receipt id');
+    assert.strictEqual(packageAudit.schema, 'data-secure-audit-receipt/4');
     assert.strictEqual(packageAudit.result, 'released');
+    assert.deepStrictEqual(packageAudit.document_result, manifest.document_result);
     assert.strictEqual(result.operation_id, packageAudit.operation_id);
     assert.strictEqual(manifest.operation_id, packageAudit.operation_id);
     assert.strictEqual(result.audit_receipt_retained, true);

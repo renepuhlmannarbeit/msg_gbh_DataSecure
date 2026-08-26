@@ -300,7 +300,7 @@ BL-041.9
 
 ### R6 – Quellen- und Inhaltsgrenze vereinheitlichen
 
-Status: **R6a, R6b1, R6b2-Integrität, Grade-Policy/Manifest und RC61a-Journal/Mapping E0 abgeschlossen; weitere Projektion/E1/E3 offen** · Stories: BL-044.1, BL-049.1
+Status: **R6a, R6b1, R6b2-Integrität, Grade-Policy/Manifest, RC61a-Journal/Mapping und RC62-Evidence/Receipt E0 abgeschlossen; weitere Projektion/E1/E3 offen** · Stories: BL-044.1, BL-049.1
 
 - R6a liefert den descriptor-gebundenen Classifier aus BL-049.1a.
 - R6b1 plant den vollständigen Stapel vor Mutation, journalisiert Formatstopps
@@ -311,9 +311,11 @@ Status: **R6a, R6b1, R6b2-Integrität, Grade-Policy/Manifest und RC61a-Journal/M
   Einträge sowie die SHA-256-Bindung zwischen Preflight und Snapshot.
 - R6b2-Grade bindet freigegebene V3-Pakete deterministisch an den Vertrag
   `contracts/RESULT_GRADES_V1.md`. RC61a bindet alle drei Grade crashsicher in
-  Journal V2 und lokalem Mapping CSV/Outbox V2; historische V1-/V2-Stände erhalten
-  keinen nachträglich erfundenen Grad. Verbleibend ist die Projektion in
-  Evidence/Receipt, Stapelabschluss, Results/Progress und Cowork-Anzeige.
+  Journal V2 und lokalem Mapping CSV/Outbox V2. RC62 ergänzt Batch-Evidence v3,
+  Audit-Receipt v4 und einen endlichen inhaltsfreien Reason-Code-Katalog;
+  historische V1-/V2-Stände erhalten keinen nachträglich erfundenen Grad.
+  Verbleibend ist die Projektion in Stapelabschluss, Results/Progress und
+  Cowork-Anzeige.
 
 - Datei- und rekursive Ordnerauswahl nutzen denselben Snapshotvertrag.
 - Der gesamte Umfang wird vor Start gegen 100 Dateien, 500 MiB, Links,

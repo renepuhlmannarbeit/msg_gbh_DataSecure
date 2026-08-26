@@ -613,6 +613,12 @@ async function main() {
     assert.strictEqual(receipt.schema, SCHEMA);
     assert.strictEqual(receipt.records.length, 1);
     assert.deepStrictEqual(receipt.records[0].counts, { total: 1, released: 1, stopped: 0, retryable: 0, pending: 0 });
+    assert.deepStrictEqual(receipt.records[0].grade_counts, {
+      complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0
+    });
+    assert.deepStrictEqual(receipt.records[0].omission_counts, {
+      images_removed_by_request: 0, visual_assets_withheld_locally: 0
+    });
     assert.strictEqual(receipt.records[0].raw_content_sent_to_claude, false);
     assert.doesNotMatch(encoded, /Alice|Example|Document|\.txt|package_id|batch_token|sha256|path/i);
     assert.throws(() => validateEvidenceRecord({ ...receipt.records[0], original_name: 'Alice Example' }), /ungültiges Format/);
@@ -646,6 +652,9 @@ async function main() {
     const record = JSON.parse(fs.readFileSync(evidencePath(), 'utf8')).records[0];
     assert.strictEqual(record.outcome, 'complete_with_stopped_documents');
     assert.deepStrictEqual(record.counts, { total: 1, released: 0, stopped: 1, retryable: 0, pending: 0 });
+    assert.deepStrictEqual(record.grade_counts, {
+      complete: 0, usable_with_omissions: 0, not_processed: 1, unavailable: 0
+    });
     assert.deepStrictEqual(record.error_codes, ['SOURCE_FORMAT_NOT_RELEASED']);
     assert.doesNotMatch(JSON.stringify(record), /terminal-stop|Mustermann|\.xlsx/i);
     const listed = listBatchResults(begun.batch_token, { limit: 20 });

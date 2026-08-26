@@ -1,6 +1,6 @@
 'use strict';
 
-const { notProcessedDocumentResult } = require('./document-result-grade');
+const { notProcessedDocumentResult, normalizeDocumentResultReasonCode } = require('./document-result-grade');
 
 function createBatchIntake(options = {}) {
   const SafeError = options.SafeError;
@@ -137,9 +137,7 @@ function createBatchIntake(options = {}) {
       });
     } catch (error) {
       const stopped = new SafeError('Die ausgewählten Dateien konnten vor der lokalen Übernahme nicht sicher geprüft werden.');
-      stopped.code = /^[A-Z][A-Z0-9_]{0,95}$/u.test(String(error?.code || ''))
-        ? error.code
-        : 'SOURCE_READ_FAILED';
+      stopped.code = normalizeDocumentResultReasonCode(error?.code, 'SOURCE_READ_FAILED');
       throw stopped;
     }
     const candidates = admissionPlan.filter((planned) => planned.admission === 'candidate');
@@ -162,8 +160,10 @@ function createBatchIntake(options = {}) {
             name: entry.name,
             status: preflightMappingPendingStatus,
             checkpoint: 'source_preflight_rejected',
-            error_code: planned.error_code,
-            document_result: notProcessedDocumentResult(planned.error_code),
+            error_code: normalizeDocumentResultReasonCode(planned.error_code, 'SOURCE_READ_FAILED'),
+            document_result: notProcessedDocumentResult(
+              normalizeDocumentResultReasonCode(planned.error_code, 'SOURCE_READ_FAILED')
+            ),
             local_mapping_exported: false,
             processing_duration_ms: 0
           };

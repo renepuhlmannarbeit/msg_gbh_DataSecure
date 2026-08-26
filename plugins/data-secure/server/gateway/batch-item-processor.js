@@ -2,6 +2,7 @@
 
 const {
   notProcessedDocumentResult,
+  normalizeDocumentResultReasonCode,
   positiveDocumentResult,
   sameDocumentResult
 } = require('./document-result-grade');
@@ -194,7 +195,10 @@ function createBatchItemProcessor(options = {}) {
           raw_content_sent_to_claude: false
         };
       }
-      const code = error?.code || 'PROCESSING_INTERRUPTED';
+      const reportedCode = String(error?.code || 'PROCESSING_INTERRUPTED');
+      const code = reportedCode === 'LOCAL_REVIEW_DEFERRED' || retryableCodes.has(reportedCode)
+        ? reportedCode
+        : normalizeDocumentResultReasonCode(reportedCode);
       if (code === 'BATCH_SNAPSHOT_CHANGED') {
         invalidateUnpublishedBatchCopies(state, { ...deps, writeState }, item);
       }

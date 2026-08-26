@@ -16,9 +16,52 @@ const OMISSION_CODES = Object.freeze({
 });
 const GRADE_VALUES = new Set(Object.values(GRADES));
 const OMISSION_VALUES = new Set(Object.values(OMISSION_CODES));
+const REASON_CODES = new Set([
+  'AMBIGUITY_REVIEW_REQUIRED',
+  'BATCH_SNAPSHOT_CHANGED',
+  'FORMAT_COVERAGE_UNVERIFIED',
+  'IMAGE_REMOVAL_UNSAFE',
+  'INTERNAL_FAILURE',
+  'LOCAL_MAPPING_EXPORT_FAILED',
+  'LOCAL_REVIEW_CANCELLED',
+  'LOCAL_REVIEW_FAILED',
+  'PARSER_COVERAGE_UNVERIFIED',
+  'PARSER_ISOLATION_FAILED',
+  'PARSER_RESOURCE_LIMIT',
+  'PARSE_FAILED',
+  'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED',
+  'PDF_COVERAGE_UNVERIFIED',
+  'PRIVATE_COPY_CLEANUP_FAILED',
+  'PRIVATE_COPY_CLOSE_FAILED',
+  'PRIVACY_CONFIG_UNSAFE',
+  'PRIVACY_STORAGE_UNSAFE',
+  'PROFILE_REQUIRED',
+  'PUBLISH_FAILED',
+  'RECOVERY_FAILED',
+  'RESIDUAL_PII',
+  'SOURCE_ACTIVE_CONTENT_UNSUPPORTED',
+  'SOURCE_COMPOUND_BINARY_UNSUPPORTED',
+  'SOURCE_CONTAINER_CORRUPT',
+  'SOURCE_CONTAINER_LIMIT',
+  'SOURCE_DESCRIPTOR_INVALID',
+  'SOURCE_ENCRYPTED_UNSUPPORTED',
+  'SOURCE_FORMAT_NOT_RELEASED',
+  'SOURCE_FORMAT_UNSUPPORTED',
+  'SOURCE_IDENTITY_CHANGED',
+  'SOURCE_POLYGLOT_UNSUPPORTED',
+  'SOURCE_READ_FAILED',
+  'SOURCE_SNAPSHOT_CHANGED',
+  'SOURCE_TEXT_INVALID',
+  'SOURCE_TYPE_MISMATCH',
+  'TECHNICAL_REVIEW_REQUIRED',
+  'TEXT_TOO_LARGE',
+  'TOO_MANY_VISUALS',
+  'UNSAFE_STORAGE_LOCATION',
+  'UNSUPPORTED_FORMAT',
+  'VISUAL_REVIEW_REQUIRED'
+]);
 const RESULT_KEYS = ['grade', 'omissions', 'reason_code', 'schema'].sort();
 const OMISSION_KEYS = ['code', 'count'].sort();
-const SAFE_REASON = /^[A-Z][A-Z0-9_]{0,95}$/u;
 
 class DocumentResultError extends Error {
   constructor(message = 'Ungültiger Dokumentergebnisgrad.') {
@@ -56,7 +99,7 @@ function validateDocumentResult(value) {
     throw new DocumentResultError();
   }
   if (value.grade === GRADES.NOT_PROCESSED &&
-      (value.omissions.length !== 0 || !SAFE_REASON.test(String(value.reason_code || '')))) {
+      (value.omissions.length !== 0 || !REASON_CODES.has(String(value.reason_code || '')))) {
     throw new DocumentResultError();
   }
   return value;
@@ -107,6 +150,16 @@ function notProcessedDocumentResult(reasonCode) {
   return immutableResult(GRADES.NOT_PROCESSED, [], String(reasonCode || ''));
 }
 
+function normalizeDocumentResultReasonCode(reasonCode, fallback = 'INTERNAL_FAILURE') {
+  const normalized = String(reasonCode || '');
+  const safeFallback = REASON_CODES.has(fallback) ? fallback : 'INTERNAL_FAILURE';
+  return REASON_CODES.has(normalized) ? normalized : safeFallback;
+}
+
+function isDocumentResultReasonCode(reasonCode) {
+  return REASON_CODES.has(String(reasonCode || ''));
+}
+
 function sameDocumentResult(left, right) {
   try {
     validateDocumentResult(left);
@@ -143,10 +196,13 @@ module.exports = Object.freeze({
   SCHEMA,
   GRADES,
   OMISSION_CODES,
+  REASON_CODES,
   DocumentResultError,
   validateDocumentResult,
   releasedDocumentResult,
   notProcessedDocumentResult,
+  normalizeDocumentResultReasonCode,
+  isDocumentResultReasonCode,
   sameDocumentResult,
   positiveDocumentResult,
   validateManifestDocumentResult

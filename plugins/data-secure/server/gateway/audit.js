@@ -8,8 +8,13 @@ const { dataRoot } = require('../runtime');
 const { roots } = require('./common');
 const { assertWritableCapacity } = require('./storage-capacity');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
+const {
+  positiveDocumentResult,
+  sameDocumentResult,
+  validateManifestDocumentResult
+} = require('./document-result-grade');
 
-const AUDIT_SCHEMA = 'data-secure-audit-receipt/3';
+const AUDIT_SCHEMA = 'data-secure-audit-receipt/4';
 const SIZE_CLASSES = new Set(['tiny', 'small', 'medium', 'large']);
 const PROFILES = new Set(['customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 let auditWriteErrors = 0;
@@ -62,6 +67,17 @@ function isOperationId(value) {
   );
 }
 
+function safePositiveDocumentResult(value) {
+  if (value === undefined || value === null) return null;
+  positiveDocumentResult(value);
+  return {
+    schema: value.schema,
+    grade: value.grade,
+    omissions: value.omissions.map((entry) => ({ code: entry.code, count: entry.count })),
+    reason_code: null
+  };
+}
+
 function sanitizeReceipt(record = {}) {
   const sizeClass = SIZE_CLASSES.has(record.source_size_class)
     ? record.source_size_class
@@ -83,6 +99,7 @@ function sanitizeReceipt(record = {}) {
         : record.result === 'stopped'
           ? 'stopped'
           : 'verification_passed',
+    document_result: safePositiveDocumentResult(record.document_result),
     text_entity_count: boundedInteger(record.text_entity_count),
     privacy_passes: boundedInteger(record.privacy_passes),
     residual_pii_verification: record.residual_pii_verification === 'passed' ? 'passed' : 'not_released',
@@ -114,7 +131,8 @@ function createAuditReceipt(profile, source, meta) {
     visual_assets_total: meta.results.length,
     visual_assets_included: meta.results.filter((x) => x.status === 'included').length,
     visual_assets_review_required: meta.results.filter((x) => x.status === 'review_required').length,
-    visual_redactions: meta.results.reduce((n, x) => n + (x.redactions || 0), 0)
+    visual_redactions: meta.results.reduce((n, x) => n + (x.redactions || 0), 0),
+    document_result: meta.documentResult
   });
 }
 
@@ -194,10 +212,20 @@ function reconcileReleasedPackageReceipts() {
       const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
       const raw = JSON.parse(fs.readFileSync(receiptFile, 'utf8'));
       const clean = sanitizeReceipt(raw);
+      let resultBound = clean.document_result === null;
+      if (manifest?.schema === 'eu-privacy-package/3') {
+        try {
+          const manifestResult = validateManifestDocumentResult(manifest);
+          resultBound = clean.document_result !== null && sameDocumentResult(clean.document_result, manifestResult);
+        } catch {
+          resultBound = false;
+        }
+      }
       const isCanonicalReleased =
         isOperationId(manifest.operation_id) &&
         clean.operation_id === manifest.operation_id &&
         clean.result === 'released' &&
+        resultBound &&
         JSON.stringify(raw) === JSON.stringify(clean);
       if (!isCanonicalReleased) continue;
       if (!retained.has(clean.operation_id)) {
