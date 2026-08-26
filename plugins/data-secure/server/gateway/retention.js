@@ -20,7 +20,10 @@ let lastCleanup = {
   errors_by_scope: { processed: 0, output: 0, review: 0 },
   error_codes: {},
   output_protection_complete: true,
-  output_cleanup_skipped: false
+  output_cleanup_skipped: false,
+  processed_cleanup_skipped: true,
+  processed_protection_complete: false,
+  protected_processed_entries: null
 };
 
 function retentionDays(env = process.env) {
@@ -45,6 +48,37 @@ function directEntries(root, fsApi = fs) {
   } catch {
     return [];
   }
+}
+
+// Historical builds moved user sources into Processed. There is no durable
+// provenance marker that can distinguish such originals from disposable
+// artifacts, so every entry is protected. Inspection is intentionally strict:
+// an unreadable, replaced or linked root is unknown rather than empty.
+function inspectProcessedProtection(processedRoot, fsApi = fs) {
+  try {
+    const before = fsApi.lstatSync(processedRoot);
+    if (!before.isDirectory() || before.isSymbolicLink()) throw new Error('unsafe processed root');
+    const entries = fsApi.readdirSync(processedRoot, { withFileTypes: true });
+    for (const entry of entries) fsApi.lstatSync(path.join(processedRoot, entry.name));
+    const after = fsApi.lstatSync(processedRoot);
+    if (!after.isDirectory() || after.isSymbolicLink() ||
+        before.dev !== after.dev || before.ino !== after.ino ||
+        before.size !== after.size || before.mtimeMs !== after.mtimeMs ||
+        before.ctimeMs !== after.ctimeMs) {
+      throw new Error('processed root changed');
+    }
+    return { complete: true, entries: entries.length };
+  } catch {
+    return { complete: false, entries: null };
+  }
+}
+
+function protectedProcessedError() {
+  const error = new SafeError(
+    'Historische Quelldateien im geschützten Processed-Bereich müssen manuell geprüft werden.'
+  );
+  error.code = 'LEGACY_PROCESSED_SOURCE_PROTECTED';
+  return error;
 }
 
 function assertInside(target, root) {
@@ -266,6 +300,7 @@ function cleanupLocalData(options = {}) {
   const force = options.force === true;
   const fsApi = options.fs || fs;
   const removeEntry = options.removeEntry || ((target, root) => safeRemoveEntry(target, root, fsApi));
+  const processedProtection = options.processedProtection || inspectProcessedProtection(r.processed, fsApi);
   // A package still needed by an open (delivery/mapping pending) batch item
   // must survive an automatic sweep even past its own mtime cutoff, or the
   // batch is left permanently referencing a package that no longer exists.
@@ -292,7 +327,10 @@ function cleanupLocalData(options = {}) {
     // Released exports are user results, not temporary privacy data. Automatic
     // retention therefore never deletes Output; only an explicit confirmed
     // purge may do so.
-    output_cleanup_skipped: !force && scopes.includes('output')
+    output_cleanup_skipped: !force && scopes.includes('output'),
+    processed_cleanup_skipped: true,
+    processed_protection_complete: processedProtection.complete,
+    protected_processed_entries: processedProtection.entries
   };
 
   function recordFailure(scope, err) {
@@ -303,11 +341,17 @@ function cleanupLocalData(options = {}) {
     result.error_codes[code] = (result.error_codes[code] || 0) + 1;
   }
 
+  if (!processedProtection.complete) {
+    const error = new Error('Processed protection inspection failed.');
+    error.code = 'PROCESSED_INSPECTION_FAILED';
+    recordFailure('processed', error);
+  }
+
   for (const scope of scopes) {
-    // If even one open batch journal could not be inspected, no automatic
-    // Output deletion is safe. Processed sources and review previews can still
-    // follow their independent retention rules. An explicit confirmed purge
-    // remains authoritative and intentionally ignores this protection.
+    // Processed may contain originals moved by historical builds and is never
+    // an automatic or explicit deletion target. Output deletion is explicit;
+    // review previews follow their independent retention rules.
+    if (scope === 'processed') continue;
     if (scope === 'output' && !force) continue;
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
@@ -358,7 +402,7 @@ function dueCounts(options = {}) {
   const due = { processed: 0, output: 0, review: 0 };
 
   for (const scope of SCOPES) {
-    if (scope === 'output') continue;
+    if (scope === 'output' || scope === 'processed') continue;
     const root = r[scope];
     for (const entry of directEntries(root, fsApi)) {
       if (scope === 'output' && protectedIds.has(entry.name)) continue;
@@ -371,10 +415,15 @@ function dueCounts(options = {}) {
 
 function retentionStatus(options = {}) {
   const days = options.retentionDays ?? retentionDays();
+  const r = options.roots || roots();
+  const protection = inspectProcessedProtection(r.processed, options.fs || fs);
   return {
     retention_days: days,
     due_entries: dueCounts({ ...options, retentionDays: days }),
     output_protection_complete: options.outputProtectionComplete !== false,
+    processed_cleanup_skipped: true,
+    processed_protection_complete: protection.complete,
+    protected_processed_entries: protection.entries,
     last_cleanup: lastCleanup
   };
 }
@@ -384,7 +433,20 @@ function purgeLocalData(scope = 'all', confirmed = false, options = {}) {
     throw new SafeError('Lokale Datenschutzdaten werden nur nach ausdrücklicher Bestätigung gelöscht.');
   }
   const selected = String(scope || 'all').toLowerCase();
-  const result = cleanupLocalData({ ...options, scope: selected, force: true, trigger: 'purge' });
+  const scopes = selectedScopes(selected);
+  const r = options.roots || roots();
+  const protection = inspectProcessedProtection(r.processed, options.fs || fs);
+  if (scopes.includes('processed') && (!protection.complete || protection.entries > 0)) {
+    throw protectedProcessedError();
+  }
+  const result = cleanupLocalData({
+    ...options,
+    roots: r,
+    scope: selected,
+    force: true,
+    trigger: 'purge',
+    processedProtection: protection
+  });
   return {
     ok: true,
     scope: selected,
@@ -399,6 +461,7 @@ module.exports = {
   DEFAULT_RETENTION_DAYS,
   RETENTION_ENV,
   retentionDays,
+  inspectProcessedProtection,
   safeRemoveEntry,
   removeReviewPreviews,
   reconcileMissingPreviews,

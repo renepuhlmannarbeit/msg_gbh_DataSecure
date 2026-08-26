@@ -36,7 +36,8 @@ function fixture(options = {}) {
     safeRemoveWorkDirectory: options.safeRemoveWorkDirectory || (() => { events.push('remove-work'); }),
     randomBytes: options.randomBytes || (() => Buffer.from('abcdef', 'utf8')),
     nowMs: options.nowMs || (() => Date.parse('2026-08-25T00:00:00.000Z')),
-    syncParentDirectory: options.syncParentDirectory || (() => { events.push('sync-parent'); return true; })
+    syncParentDirectory: options.syncParentDirectory || (() => { events.push('sync-parent'); return true; }),
+    retryDelay: options.retryDelay || (() => {})
   });
   return {
     root,
@@ -118,6 +119,106 @@ test('failures before rename preserve the old journal and clean only the exact t
     } finally {
       item.cleanup();
     }
+  }
+});
+
+test('transient Windows rename failures retry bounded without weakening atomic publication', () => {
+  const item = fixture();
+  try {
+    item.store.writeState(state(), { durable: false });
+    let attempts = 0;
+    const delays = [];
+    const io = {
+      ...fs,
+      constants: fs.constants,
+      renameSync(source, target) {
+        if (attempts++ < 2) {
+          const error = new Error('transient rename');
+          error.code = 'EPERM';
+          throw error;
+        }
+        return fs.renameSync(source, target);
+      }
+    };
+    const retrying = createBatchJournalStore({
+      io,
+      SafeError,
+      batchPath: () => item.target,
+      randomBytes: () => Buffer.from('retry1'),
+      safeRemoveWorkDirectory: () => {},
+      syncParentDirectory: () => true,
+      retryDelay: (milliseconds) => delays.push(milliseconds)
+    });
+    retrying.writeState(state({ revision: 2 }), { durable: false });
+    assert.strictEqual(JSON.parse(raw(item.target)).revision, 2);
+    assert.strictEqual(attempts, 3);
+    assert.deepStrictEqual(delays, [10, 20]);
+
+    attempts = 0;
+    const bounded = createBatchJournalStore({
+      io: {
+        ...fs,
+        constants: fs.constants,
+        renameSync() {
+          attempts++;
+          const error = new Error('still busy');
+          error.code = 'EBUSY';
+          throw error;
+        }
+      },
+      SafeError,
+      batchPath: () => item.target,
+      randomBytes: () => Buffer.from('retry2'),
+      safeRemoveWorkDirectory: () => {},
+      syncParentDirectory: () => true,
+      retryDelay: () => {}
+    });
+    assert.throws(() => bounded.writeState(state({ revision: 3 }), { durable: false }), /still busy/);
+    assert.strictEqual(attempts, 4);
+    assert.strictEqual(JSON.parse(raw(item.target)).revision, 2);
+  } finally {
+    item.cleanup();
+  }
+});
+
+test('a replaced journal target is never overwritten by a transient rename retry', () => {
+  const item = fixture();
+  const displaced = `${item.target}.displaced`;
+  try {
+    item.store.writeState(state(), { durable: false });
+    let attempts = 0;
+    const replacement = state({ revision: 99 });
+    const guarded = createBatchJournalStore({
+      io: {
+        ...fs,
+        constants: fs.constants,
+        renameSync(source, target) {
+          attempts++;
+          if (attempts === 1) {
+            fs.renameSync(target, displaced);
+            fs.writeFileSync(target, `${JSON.stringify(replacement)}\n`, { mode: 0o600 });
+            const error = new Error('transient rename with replacement');
+            error.code = 'EPERM';
+            throw error;
+          }
+          return fs.renameSync(source, target);
+        }
+      },
+      SafeError,
+      batchPath: () => item.target,
+      randomBytes: () => Buffer.from('swap01'),
+      safeRemoveWorkDirectory: () => {},
+      syncParentDirectory: () => true,
+      retryDelay: () => {}
+    });
+    assert.throws(
+      () => guarded.writeState(state({ revision: 2 }), { durable: false }),
+      /BATCH_JOURNAL_TARGET_CHANGED/
+    );
+    assert.strictEqual(attempts, 1, 'replacement is detected before another rename');
+    assert.strictEqual(JSON.parse(raw(item.target)).revision, 99);
+  } finally {
+    item.cleanup();
   }
 });
 

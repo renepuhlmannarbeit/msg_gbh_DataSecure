@@ -10,12 +10,16 @@ const { processAlive: probeProcessAlive } = require('./process-liveness');
 const LOCK_SCHEMA = 'datasecure-active-batch/1';
 const MAX_LOCK_BYTES = 4096;
 const LOCK_ID_RE = /^[a-f0-9]{32}$/;
+const TRANSIENT_UNLINK_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
 function createBatchActiveLock(deps = {}) {
   const io = deps.fs || fs;
   const processApi = deps.process || process;
   const now = deps.now || (() => new Date());
   const randomLockId = deps.randomLockId || (() => crypto.randomBytes(16).toString('hex'));
+  const retryDelay = deps.retryDelay || ((milliseconds) => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  });
 
   function activeLockPath() {
     return path.join(batchRoot(), 'active-processing.json');
@@ -88,14 +92,18 @@ function createBatchActiveLock(deps = {}) {
     // Re-open immediately before deletion. This closes the exploitable window
     // between the caller's ownership/dead-owner decision and unlinking a path
     // that may since have been replaced by a new owner.
-    const current = readActiveLockRecord();
-    if (!sameRecord(current, expected)) return false;
-    try {
-      io.unlinkSync(activeLockPath());
-      return true;
-    } catch {
-      return false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const current = readActiveLockRecord();
+      if (!sameRecord(current, expected)) return false;
+      try {
+        io.unlinkSync(activeLockPath());
+        return true;
+      } catch (error) {
+        if (!TRANSIENT_UNLINK_CODES.has(error?.code) || attempt === 3) return false;
+        retryDelay(10 * (attempt + 1));
+      }
     }
+    return false;
   }
 
   function writeOwnLock(target, token) {

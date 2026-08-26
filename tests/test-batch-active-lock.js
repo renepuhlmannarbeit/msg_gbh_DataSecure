@@ -57,6 +57,23 @@ function ioWithTimestampDrift(target) {
   };
 }
 
+function ioWithTransientUnlink(target, code, failures = 1, beforeRetry) {
+  let attempts = 0;
+  return {
+    ...fs,
+    constants: fs.constants,
+    unlinkSync(name) {
+      if (name === target && attempts++ < failures) {
+        beforeRetry?.(attempts);
+        const error = new Error(code);
+        error.code = code;
+        throw error;
+      }
+      return fs.unlinkSync(name);
+    }
+  };
+}
+
 test('module extraction preserves the batch test facade', () => {
   const direct = createBatchActiveLock();
   assert.strictEqual(_test.activeLockPath(), direct.activeLockPath());
@@ -87,6 +104,52 @@ test('release accepts timestamp drift for the same immutable lock identity', () 
   });
   assert.strictEqual(lock.releaseActiveLock(tokenA), true);
   assert.strictEqual(fs.existsSync(target), false);
+});
+
+test('release retries bounded transient Windows unlink failures for the same lock only', () => {
+  const target = path.join(batchRoot(), 'active-processing.json');
+  writeLock(target, tokenA, 111);
+  const delays = [];
+  const lock = createBatchActiveLock({
+    fs: ioWithTransientUnlink(target, 'EPERM', 2),
+    process: { pid: 111, kill() {} },
+    retryDelay: (milliseconds) => delays.push(milliseconds)
+  });
+  assert.strictEqual(lock.releaseActiveLock(tokenA), true);
+  assert.deepStrictEqual(delays, [10, 20]);
+  assert.strictEqual(fs.existsSync(target), false);
+});
+
+test('release remains bounded and never removes a replacement during a transient retry', () => {
+  const target = path.join(batchRoot(), 'active-processing.json');
+  writeLock(target, tokenA, 111);
+  const replacementId = 'e'.repeat(32);
+  const lock = createBatchActiveLock({
+    fs: ioWithTransientUnlink(target, 'EBUSY', 1, () => {
+      fs.unlinkSync(target);
+      writeLock(target, tokenB, 222, replacementId);
+    }),
+    process: { pid: 111, kill() {} },
+    retryDelay: () => {}
+  });
+  assert.strictEqual(lock.releaseActiveLock(tokenA), false);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(target, 'utf8')), lockValue(tokenB, 222, replacementId));
+  fs.unlinkSync(target);
+});
+
+test('release gives up after four transient failures without hanging', () => {
+  const target = path.join(batchRoot(), 'active-processing.json');
+  writeLock(target, tokenA, 111);
+  let delays = 0;
+  const lock = createBatchActiveLock({
+    fs: ioWithTransientUnlink(target, 'EACCES', 10),
+    process: { pid: 111, kill() {} },
+    retryDelay: () => { delays += 1; }
+  });
+  assert.strictEqual(lock.releaseActiveLock(tokenA), false);
+  assert.strictEqual(delays, 3);
+  assert.strictEqual(fs.existsSync(target), true);
+  fs.unlinkSync(target);
 });
 
 test('release rejects a replacement with identical owner fields but another lock id', () => {

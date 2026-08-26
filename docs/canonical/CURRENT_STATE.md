@@ -1,6 +1,6 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 26.08.2026 · geprüfter Produktstand: RC53
+Stand: 26.08.2026 · geprüfter Produktstand: RC54
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -20,7 +20,7 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 
 ## Verdichteter IST/SOLL-Abgleich nach Product-Vision-Review
 
-| Bereich | RC53-IST | beschlossenes SOLL | Lücke / Priorität |
+| Bereich | RC54-IST | beschlossenes SOLL | Lücke / Priorität |
 |---|---|---|---|
 | Cowork-Start | kurzer Picker-/Workerpfad teilweise vorhanden; Host-Node und reale Cowork-Evidenz offen | selbsttragender Windows-/macOS-Start, Readiness und genau ein Self-Heal | P0 Distribution/Evidenz |
 | Quellen | Mehrfach-Dateipicker als einziger ausführbarer Eingang; einmalige Startmigration kann nur verwaiste Alt-Claims wiederherstellen | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 Input-Oberfläche entfernt; P0 internen Altcode abbauen, P1 Ordner |
@@ -41,10 +41,16 @@ byte-, pfad-, identitäts-, größen- und mtime-stabilen Erhalt auf Erfolg, Abbr
 und mehreren Pipelinefehlern. Gleich große Änderungen zwischen lokaler
 Vorversiegelung und Kopie, Zero-/Partial-Writes, Descriptor-Close und nicht
 bereinigbare private Fehlerartefakte stoppen mit festen Fehlergrenzen. BL-011.14
-bleibt dennoch in Arbeit: historische
-`Processed`-Bestände müssen vor Retention/Purge fail-closed geschützt und der
-technische `Input`-Altweg in eine isolierte versionierte Einmalmigration überführt
-werden.
+RC54 schließt zusätzlich den R3b-Schutzschnitt für historische `Processed`-Bestände.
+Mangels belastbarer Provenienz gilt jeder dortige Eintrag als mögliches Original.
+Automatische Retention, Null-Tage-Regel und bestätigte Purges überspringen den
+Bereich immer. Ein bestätigter Gesamt-Purge prüft ihn vor jeder anderen Mutation
+und stoppt mit einem festen inhaltsfreien Code, sobald ein Eintrag vorhanden oder
+die Inspektion unvollständig ist. Status nennt nur Vollständigkeit und Anzahl;
+Namen, Pfade, Hashes und Inhalte bleiben lokal. Tote Move-/Restore-Helfer sind
+entfernt. BL-011.14 bleibt dennoch in Arbeit, bis der technische `Input`-Altweg in
+eine isolierte versionierte Einmalmigration überführt und aus dem Normalpfad entfernt
+ist.
 
 Die vollständige Sollableitung steht in `PRODUCT_VISION.md` und
 `TARGET_ARCHITECTURE.md`. Diese Matrix ist keine Freigabe; sie priorisiert die
@@ -558,8 +564,8 @@ begrenzte fundstellenbezogene Beibehalten/Anonymisieren-Entscheidung. Windows un
 macOS erhalten Rohtext nur über `stdin`; Linux nutzt Zenity-`stdin` oder KDialogs
 `/dev/stdin`, jeweils ohne Rohtext in Argumenten. Visuelle/technische Unsicherheiten
 stoppen sicher. Es gibt zudem lokale Abschlusszähler; Abbruch und Timeout stoppen
-sicher. Der servergebundene Input-Ordner-Batch nutzt bei Zertifikats-/Organisations-
-Mehrdeutigkeiten nun ebenfalls diese lokale Entscheidung; er persistiert nur den
+sicher. Der servergebundene Picker-Batch nutzt bei Zertifikats-/Organisations-
+Mehrdeutigkeiten dieselbe lokale Entscheidung; er persistiert nur den
 terminalen Status und festen Fehlercode, niemals Entwurf, Fundstelle oder Entscheidung.
 
 Review-Korrektur 23.08.2026: Der gefundene macOS-Fehler – ein nicht angebotener
@@ -1096,12 +1102,13 @@ Status: **teilweise**
 Vorhanden: zwei validierte Skills, natürliche Aktivierung, Capability-Stopp,
 Upload-Stopp, fortsetzbare Einzelschritte und capability-gebundenes Markdown-Lesen.
 Die vier direkten MCP-Prompts und die natürliche Skillaktivierung erreichen denselben
-serverseitigen Input-/Fortsetzungspfad und verwenden im Quellstand denselben
+serverseitigen Picker-/Fortsetzungspfad und verwenden im Quellstand denselben
 kanonischen Entscheidungsvertrag. Bei offenen Stapeln stehen Fortsetzen nach
 Zustimmung, Verwerfen nach quantifizierter Doppelbestätigung oder folgenloses
 Nichtstun zur Wahl. `awaiting_local_review` führt ausschließlich in die lokale
-Review-Fortsetzung; ein neuer Input darf nur ohne wiederherstellbaren Stapel geöffnet
-werden. Manifest-, MCP-, Capability- und Skillkorpus-Tests sichern diesen Vertrag.
+Review-Fortsetzung. Ein neuer Stapel startet nur ohne aktiven Worker; pausierte
+Stapel bleiben getrennt fortsetzbar. Manifest-, MCP-, Capability- und
+Skillkorpus-Tests sichern diesen Vertrag.
 BL-041.4 bleibt bis zur beobachteten Modell-/Fresh-Install-Abnahme P0.
 Meldet der lokale Status einen laufenden Stapel, warten beide Startwege ohne
 Ordneröffnung, Ersatzbatch oder weiteren lokalen Dialog.
@@ -1178,9 +1185,11 @@ supportgetrennt reduziert. Eine zu frühe Folgeauswertung während lokaler Verar
 stoppt vor Ergebnisliste und Markdown-Lesen mit einem festen Wartestatus; sie gibt
 weder Paket- noch Leseberechtigungen aus.
 
-Der `Input`-Ordnerweg zeigt unmittelbar vor dem Snapshot dieselbe lokale
-Startbestätigung wie die direkte Mehrfachauswahl. Ein lokales Abbrechen hinterlässt
-keinen Batch und keine versiegelte Arbeitskopie.
+Der ausführbare Produktweg ist die direkte Mehrfachauswahl. Sie bindet die bestätigte
+Auswahl unmittelbar an den privaten Snapshot; ein lokales Abbrechen hinterlässt
+keinen Batch und keine versiegelte Arbeitskopie. Der noch vorhandene technische
+`Input`-Altcode ist ausschließlich Gegenstand der offenen versionierten Migration
+und kein Anwenderweg.
 
 Die freiwillige Gesamtübersicht ist der lokale Exportordner mit dem dauerhaft
 geführten `DataSecure-Mapping.csv`. Er wird nur auf ausdrücklichen Wunsch geöffnet;
@@ -1344,6 +1353,18 @@ Stopp. Ein echter Child-Process-Test belegt damit einen
 vollständigen Ein-Datei-Intake ohne Quellmetadaten in der Antwort. Die echte
 Antwortzeit, frühe Intake-Crash-Recovery und die Drei-OS-Abnahme sind weiterhin
 offene Evidenz.
+
+RC54 entfernt zwei Windows-Racequellen an dieser Grenze. Vor einem festen
+`after_checkpoint`-Hinweis rekonstruiert die Elternseite einmal den bereits durable
+gespeicherten, inhaltsfreien Terminal- oder Ruhezustand, falls die letzte IPC-
+Nachricht trotz erfolgreichem Workerende nicht ankam. Der atomare Journal-Rename
+und das identitätsgebundene Active-Lock-Unlink wiederholen ausschließlich `EPERM`,
+`EACCES` und `EBUSY` höchstens viermal mit insgesamt 60 Millisekunden Wartezeit.
+Vor jedem Retry wird dieselbe Zielidentität erneut gebunden; Replacement,
+unbekannte Fehler oder dauerhafte Blockade bleiben fail-closed. Ein Lease-
+Übergang meldet nur Erfolg, wenn auch sein eigener globaler Lock sicher freigegeben
+wurde. 50 serielle echte Windows-Workerläufe sowie direkte Journal-, Lock-, Lease-
+und verlorene-IPC-Negativtests bestanden ohne falschen Stopp.
 
 Ein Fehler während der asynchronen lokalen Übernahme erhält keine Dokumentdiagnose
 und keine Chat-Rückfrage: Der Worker meldet der lokalen Elternseite ausschließlich

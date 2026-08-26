@@ -781,19 +781,20 @@ async function main() {
     assert.throws(() => splitReviewId('paket__asset-x'), /Ungültige Review-ID/);
   });
 
-  await testAsync('a simulated retention deletion failure never aborts anonymization', async () => {
+  await testAsync('a simulated review-retention failure never aborts anonymization', async () => {
     const locked = path.join(root, 'Processed', 'locked-old.pdf');
     fs.writeFileSync(locked, 'locked');
+    const blockedReview = path.join(root, 'Needs Visual Review', 'blocked-review');
+    fs.mkdirSync(path.join(blockedReview, 'locked-entry'), { recursive: true });
+    fs.utimesSync(blockedReview, new Date(0), new Date(0));
     queueBuffer('cleanup-failure.txt', 'Kunde: Max Mustermann');
     const result = await gw.anonymizeNext('customer', {
       ...depsFor('none'),
-      retentionDays: 0,
-      removeRetentionEntry() {
-        throw new Error('simulated Windows file lock');
-      }
+      retentionDays: 0
     });
     assert.ok(result.ok, 'cleanup is secondary work and processing must succeed');
-    assert.ok(fs.existsSync(locked), 'the simulated locked entry remains for a later retry');
+    assert.ok(fs.existsSync(locked), 'historical Processed entries are protected permanently');
+    assert.ok(fs.existsSync(path.join(blockedReview, 'locked-entry')));
     assert.ok(gw.genericStatus({ retentionDays: 0 }).retention_last_cleanup.errors > 0);
   });
 
@@ -845,6 +846,10 @@ async function main() {
     ]);
     assert.strictEqual(status.retention_days, 7);
     assert.strictEqual(typeof status.retention_due_entries.total, 'number');
+    assert.strictEqual(status.retention_due_entries.processed, 0);
+    assert.strictEqual(status.retention_processed_cleanup_skipped, true);
+    assert.strictEqual(status.retention_processed_protection_complete, true);
+    assert.strictEqual(typeof status.retention_protected_processed_entries, 'number');
     assert.ok(status.retention_last_cleanup.ran_at, 'the most recent cleanup result must be visible');
     if (process.platform !== 'win32') {
       assert.strictEqual(status.visual_bridge, 'unavailable', 'the bridge is Windows only');

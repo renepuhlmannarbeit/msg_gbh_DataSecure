@@ -26,7 +26,6 @@ async function waitForSettledProgress(token, noticeStage) {
   const deadline = Date.now() + 30_000;
   let lastProgress = null;
   while (Date.now() < deadline) {
-    if (noticeStage()) throw new Error(`local intake stopped at ${noticeStage()}`);
     try {
       const progress = readBatchProgress(token);
       lastProgress = progress;
@@ -37,6 +36,26 @@ async function waitForSettledProgress(token, noticeStage) {
       )) return progress;
     } catch {
       // The child may not yet have written its private batch checkpoint.
+    }
+    if (noticeStage()) {
+      let itemState = null;
+      try {
+        const state = _test.readState(token);
+        const item = state.items?.[0];
+        itemState = item && { status: item.status, checkpoint: item.checkpoint, error_code: item.error_code };
+      } catch {}
+      throw new Error(`local intake stopped at ${noticeStage()}: ${JSON.stringify(lastProgress && {
+        released: lastProgress.released,
+        stopped: lastProgress.stopped,
+        remaining: lastProgress.remaining,
+        retryable: lastProgress.retryable,
+        processing: lastProgress.processing,
+        delivery_pending: lastProgress.delivery_pending,
+        mapping_pending: lastProgress.mapping_pending,
+        deferred_review: lastProgress.deferred_review,
+        local_processing_active: lastProgress.local_processing_active,
+        batch_phase: lastProgress.batch_phase
+      })}; item=${JSON.stringify(itemState)}`);
     }
     await pause(25);
   }

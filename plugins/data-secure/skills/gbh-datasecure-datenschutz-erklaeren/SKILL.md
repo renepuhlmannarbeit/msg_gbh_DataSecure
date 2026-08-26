@@ -15,7 +15,7 @@ Erkläre die Architektur präzise:
 - Alle Grafiken und sonstigen Bildpixel bleiben im öffentlichen Pilot lokal. Dieser Engineering-Build bietet keinen Freigabeweg über Claude; Vorschauen verfallen gemäß Aufbewahrungsfrist.
 - Der Arbeitsbereich liegt standardmäßig im lokalen App-Datenbereich. Bekannte Cloud-Sync- und Netzwerkpfade werden blockiert; eine benutzerdefinierte Ablage muss die IT zusätzlich prüfen.
 - Audit-Daten dürfen keine Rohwerte aus der Quelldatei enthalten.
-- Daten in `Processed`, `Output` und Review-Vorschauen unterliegen der konfigurierten Aufbewahrungsfrist. Eine visuelle Freigabe über Claude ist bei jeder Einstellung deaktiviert.
+- Review-Vorschauen unterliegen der konfigurierten Aufbewahrungsfrist. `Output` bleibt dauerhaft und ist nur ausdrücklich bestätigt löschbar. Historische Einträge in `Processed` können Originale sein und werden weder durch Aufbewahrung noch `purge_local_data` gelöscht; ein Gesamt-Purge stoppt dort bei Bestand oder unvollständiger Inspektion vor jeder Teilmutation. Eine visuelle Freigabe über Claude ist bei jeder Einstellung deaktiviert.
 - Ein rein metadatenbasierter Audit-Nachweis bleibt absichtlich außerhalb der Aufbewahrungsfrist und von `purge_local_data` bestehen. Er enthält eine zufällige Vorgangs-ID, Kategorien, Zähler, Versionen und Status, aber keine Dokument-Hashes, exakten Dateigrößen, Pfade, Dateinamen oder Rohwerte.
 
 Verwende genaue Begriffe. Pseudonymisierung oder De-Identifizierung ist nicht automatisch eine rechtliche Anonymisierung. Durch Kontext und Quasi-Identifikatoren kann ein Restrisiko der Re-Identifizierung bleiben.

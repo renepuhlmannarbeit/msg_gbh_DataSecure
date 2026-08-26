@@ -295,7 +295,7 @@ async function main() {
     assert.match(result.content[0].text, /ausdrückliche Bestätigung/);
   });
 
-  await testAsync('purge_local_data refuses omission and deletes only the confirmed scope', async () => {
+  await testAsync('purge_local_data protects historical sources and deletes only disposable scopes', async () => {
     const processed = path.join(root, 'Processed');
     const output = path.join(root, 'Output');
     fs.mkdirSync(processed, { recursive: true });
@@ -316,11 +316,20 @@ async function main() {
         arguments: { scope: 'processed', confirmed: true }
       })
     ]);
-    const result = accepted.responses[0].result;
+    const protectedResult = accepted.responses[0].result;
+    assert.strictEqual(protectedResult.isError, true);
+    assert.match(protectedResult.content[0].text, /Historische Quelldateien/);
+    assert.ok(fs.existsSync(path.join(processed, 'purge-me.pdf')));
+    assert.ok(fs.existsSync(path.join(output, 'keep-package', 'manifest.json')));
+
+    const outputPurge = await talk([rpc(1, 'tools/call', {
+      name: 'purge_local_data', arguments: { scope: 'output', confirmed: true }
+    })]);
+    const result = outputPurge.responses[0].result;
     assert.ok(!result.isError);
     assert.strictEqual(result.structuredContent.audit_retained, true);
-    assert.ok(!fs.existsSync(path.join(processed, 'purge-me.pdf')));
-    assert.ok(fs.existsSync(path.join(output, 'keep-package', 'manifest.json')));
+    assert.ok(!fs.existsSync(path.join(output, 'keep-package')));
+    assert.ok(fs.existsSync(path.join(processed, 'purge-me.pdf')));
   });
 
   await testAsync('resume_document_batch rejects a missing or false confirmation before it can resume work', async () => {

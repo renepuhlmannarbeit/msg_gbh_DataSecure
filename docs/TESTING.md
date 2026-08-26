@@ -6,21 +6,26 @@ npm run test:ci         # short, security-relevant set used by the one automatic
 npm run test:golden     # regenerate the golden expected output after an intended change
 npm run test:windows-visual # real Windows OCR/redaction acceptance (Windows only)
 npm run test:skills     # local German skill/contract acceptance
+npm run test:intake-worker-stress # 50 real detached intake-worker starts
 npm run benchmark:detectors # aggregate detector quality on the synthetic ground truth
 npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
 node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # engineering-only MCP proof
 ```
 
-Lokaler RC53-Schlusslauf 26.08.2026: `npm test` endete nach der
-Copy-only-Umstellung aller aktuellen Neuverarbeitungsrouten mit Exit-Code 0.
-Zusätzlich zu den bestehenden Korpora bestanden zwölf direkte
+Lokaler RC54-Schlusslauf 26.08.2026: `npm test` endete nach dem fail-closed
+Schutz historischer Originale in `Processed` mit Exit-Code 0. Zusätzlich zu den
+bestehenden Korpora bestanden 21 Retention-/Purge-Grenzfälle, zwölf direkte
 Read-only-Snapshot-Grenztests, 19 Architekturverträge, 40 Gateway-End-to-End-
 Szenarien, 66 reale Batch-/Crash-/Resume-Szenarien, 31 MCP-Protokollfälle,
 20 adversariale Fälle, der 2.000-Fälle-Sweep, 96 DOCX-Differentialfälle und
-sieben native Windows-Job-Object-Prüfungen. Der vorher separat ausgeführte
-Fast Path und das kanonische Dokumentationsgate endeten ebenfalls mit Exit-Code
-0. Dies ist ein lokaler E0-Nachweis und keine installierte Windows-/macOS-/Claude-
-Abnahme.
+sieben native Windows-Job-Object-Prüfungen. Die zuvor für RC53 ausgeführten
+Copy-only-Snapshot-Prüfungen bleiben Teil der grünen Gesamtsuite. Der Fast Path
+endete ebenfalls mit Exit-Code 0. Ein zuvor reproduzierbarer transienter Windows-
+`EPERM` beim atomaren Batch-Journal-Rename blieb nach identitätsgebundenem,
+begrenztem Retry in 50 aufeinanderfolgenden echten Intake-Worker-Läufen aus;
+Journal-, Active-Lock-, Lease- und Picker-Grenztests belegen zusätzlich dauerhafte
+Fehler, Replacement-Rennen und verlorenes Abschluss-IPC fail-closed. Dies ist ein
+lokaler E0-Nachweis und keine installierte Windows-/macOS-/Claude-Abnahme.
 
 Lokaler Schlusslauf 23.08.2026: `npm run test:ci` endete nach den SEA-Launcher-,
 Dispatcher-, Runtime-Status- und Assemblyänderungen mit Exit-Code 0. Darin enthalten
@@ -97,7 +102,7 @@ parsers but are never included in the plugin or MCPB runtime.
 | `test-image-sanitizer.js` | 20 | PNG/BMP round trips, bounded PNG decompression and chunk lengths, metadata stripping, refusal of unsupported variants, OCR offset mapping, pixel-level redaction with padding and clamping |
 | `test-windows-visual.js` | 10 | mandatory verified Job Object launcher without PowerShell fallback, secret-free environment, native status/resource mapping, console limits, race-safe confirmed process-tree termination, fixed errors and bounded OCR schema |
 | `test-visual.js` | 21 | every branch of the visual gate with injected OCR and rasteriser bridges, including the document-wide deadline |
-| `test-retention.js` | 16 | expiry by injected time/mtime, duplicate and invalid evidence, immediate reconciliation, scope isolation, stable status diagnostics, staging and audit preservation, non-fatal deletion/inspection failures, fail-closed Output cleanup after incomplete batch-journal inspection, package protection and explicit-purge precedence |
+| `test-retention.js` | 21 | expiry by injected time/mtime, duplicate and invalid evidence, immediate reconciliation, scope isolation, stable status diagnostics, staging and audit preservation, non-fatal deletion/inspection failures, fail-closed Output cleanup after incomplete batch-journal inspection, permanent protection of historical `Processed` sources, hidden/directory/link entries and outside targets, unreadable protection state, total-purge preflight and explicit disposable-scope precedence |
 | `test-batch-retention-protection.js` | 6 | short-write retry and zero-progress refusal, POSIX parent-directory fsync, complete delivery/mapping package protection, malformed/unreadable journal fail-closed behavior and unreadable journal-root handling |
 | `test-audit-privacy.js` | 7 | strict metadata receipts, legacy-to-v3 canonical migration, separate privacy-ruleset provenance, persistent write blocking, marker and markerless crash-window reconciliation, leakage and readiness blocking |
 | `test-diagnostics.js` | 8 | strict diagnostic metadata whitelist, canonical status output, 14-day/200-event retention, forged-row hardening, non-blocking write failures, coarse error classification and explicit content-free local diagnostic export, including refusal of a redirected export directory before writing and capacity-safe replacement |
@@ -109,7 +114,7 @@ parsers but are never included in the plugin or MCPB runtime.
 | `test-companion-supervisor.js` | 11 | child-environment secret filtering, Windows process-tree termination, real authenticated launch, sequence recovery, multi-picker orchestration, one terminal no-selection result without a retry dialog, non-authoritative completion UI failure, guaranteed close, and pre-launch profile/platform refusal |
 | `test-completion-summary.js` | 8 | all-success, partial and all-stopped wording; strict count validation; content-free Windows invocation; fail-closed acknowledgement; real auto-closing Windows Forms initialization; and macOS/Linux notification fallbacks |
 | `test-local-review-executor.js` | 3 | detached token-free worker start, content-free public response fields and the explicit five-minute synchronous versus thirty-minute detached local-UI timeout contract |
-| `test-gateway-e2e.js` | 38 | TXT/Markdown (`.md`/`.markdown`)/CSV/DOCX routes end to end, including inert CSV contact-URI formulas with verified PII removal, refusal jedes erkannten, aber noch nicht freigegebenen Formats vor Claim/Output/Reviewkopie, parser-warning fail-closed behavior, all-pixels-local policy, mandatory PDF and renamed-PDF null-output/byte-identical restoration, cooperative cancellation, startup claim recovery, zero-day retention, audit migration blocking, tamper detection, path traversal, source claiming and failure-injected cleanup/publish/move rollback |
+| `test-gateway-e2e.js` | 40 | TXT/Markdown (`.md`/`.markdown`)/CSV/DOCX routes end to end, including inert CSV contact-URI formulas with verified PII removal, refusal jedes erkannten, aber noch nicht freigegebenen Formats vor Claim/Output/Reviewkopie, parser-warning fail-closed behavior, all-pixels-local policy, mandatory PDF and renamed-PDF null-output/byte-identical restoration, cooperative cancellation, startup claim recovery, zero-day retention, audit migration blocking, tamper detection, path traversal, copy-only source preservation and failure-injected cleanup/publication rollback |
 | `test-package-read-capabilities.js` | 9 | random in-memory package-bound capabilities, expiry/restart revocation, package-ID-only refusal, strict canonical document-/asset-name, checksum and public-metadata binding against manipulated manifests, descriptor-bound content reads without a second pathname lookup, absence of historical enumeration and lückenlose 7.000-Zeichen-Seiten mit fester 1.000-/30.000-Zeichen-Grenze |
 | `test-corpus-contract.js` | 4 | versioniertes Ground-Truth-Schema, 2.000-Sample-Validierung, exakte Format-/Sprach-/Dokumenttyp-/Profilverteilung und direkte Prüfung der Null-Miss-/Null-Zusatzredaktions-/99-%-Erhaltungsgates |
 | `test-batch-secret-store.js` | 6 | isolated OS-secret-store pilot: opaque batch accounts, fixed service namespace, 256-bit Set/Get/Delete round trip, unavailable/malformed/native-error refusal, and no filesystem, environment, CLI or self-encryption fallback path; no productive pseudonym release claim |
@@ -283,9 +288,10 @@ nicht die noch offenen Zielplattformabnahmen.
 RC37 schließt die beim Review des RC36-Nachtrags gefundenen Restlücken. Automatische
 Output-Retention läuft nur noch, wenn jedes offene Batch-Journal vollständig gelesen
 und validiert werden konnte; bei einem einzigen unlesbaren oder ungültigen Journal
-bleibt der gesamte Output-Bereich unangetastet, während unabhängige Processed- und
-Review-Retention weiterlaufen. Bestätigte manuelle Löschung bleibt davon bewusst
-unberührt. Batch-Journale behandeln partielle Writes vollständig, flushen die Datei
+blieb der gesamte Output-Bereich unangetastet, während nach dem damaligen RC37-Vertrag
+Processed- und Review-Retention weiterliefen. RC54 ersetzt diesen historischen
+Processed-Vertrag: mögliche Alt-Originale werden weder automatisch noch durch Purge
+gelöscht. Batch-Journale behandeln partielle Writes vollständig, flushen die Datei
 vor dem atomaren Rename und synchronisieren auf POSIX zusätzlich das Elternverzeichnis.
 Der damalige RC37-Nachweis verwendete für den abgekoppelten Review-Worker 30 Minuten;
 der aktuelle Zielvertrag entfernt diesen menschlichen Entscheidungs-Timeout. Der

@@ -11,6 +11,7 @@ const SCHEMA = 'datasecure-batch/1';
 const NOT_FOUND = 'Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte den Eingang erneut bestätigen.';
 const INVALID = 'Batch-Sitzung ist ungültig. Bitte den Eingang erneut bestätigen.';
 const EXPIRED = 'Batch-Sitzung ist abgelaufen. Bitte den Eingang erneut bestätigen.';
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
 function createBatchJournalStore(options = {}) {
   const io = options.io || fs;
@@ -21,11 +22,47 @@ function createBatchJournalStore(options = {}) {
   const writeAll = options.writeFully || writeFully;
   const syncParent = options.syncParentDirectory || syncParentDirectory;
   const platform = options.platform || process.platform;
+  const retryDelay = options.retryDelay || ((milliseconds) => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  });
   const ErrorType = options.SafeError || SafeError;
   const maxBatchFiles = options.maxBatchFiles || RESOURCE_LIMITS.MAX_BATCH_FILES;
 
   function temporaryJournalPath(target) {
     return `${target}.tmp_${randomBytes(6).toString('hex')}`;
+  }
+
+  function targetBinding(target) {
+    try {
+      const stat = io.lstatSync(target);
+      if (!stat.isFile() || stat.isSymbolicLink()) return null;
+      return { exists: true, dev: stat.dev, ino: stat.ino, size: stat.size };
+    } catch (error) {
+      return error?.code === 'ENOENT' ? { exists: false } : null;
+    }
+  }
+
+  function sameTargetBinding(left, right) {
+    return Boolean(left && right && left.exists === right.exists && (
+      left.exists === false || (left.dev === right.dev && left.ino === right.ino && left.size === right.size)
+    ));
+  }
+
+  function publishJournal(temporary, target) {
+    const expected = targetBinding(target);
+    if (!expected) throw new Error('BATCH_JOURNAL_TARGET_UNSAFE');
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0 && !sameTargetBinding(targetBinding(target), expected)) {
+        throw new Error('BATCH_JOURNAL_TARGET_CHANGED');
+      }
+      try {
+        io.renameSync(temporary, target);
+        return;
+      } catch (error) {
+        if (!TRANSIENT_RENAME_CODES.has(error?.code) || attempt === 3) throw error;
+        retryDelay(10 * (attempt + 1));
+      }
+    }
   }
 
   // `durable: false` is selected only by the batch state machine for
@@ -48,7 +85,7 @@ function createBatchJournalStore(options = {}) {
       } finally {
         io.closeSync(fd);
       }
-      io.renameSync(temporary, target);
+      publishJournal(temporary, target);
       if (durable) syncParent(target, io, platform);
     } catch (error) {
       // Cleanup is deliberately bounded to the exact random temp path. After

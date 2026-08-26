@@ -32,6 +32,7 @@ function createBatchExecutorLease(deps) {
       throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
     }
     acquireActiveLock(token);
+    let primaryError = null;
     try {
       const state = readState(token);
       if (liveLocalExecutor(state)) {
@@ -50,25 +51,34 @@ function createBatchExecutorLease(deps) {
       state.local_executor_started_at = nowIso();
       writeState(state);
       return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
+    } catch (error) {
+      primaryError = error;
+      throw error;
     } finally {
-      releaseActiveLock(token);
+      const released = releaseActiveLock(token);
+      if (!released && !primaryError) {
+        throw new SafeError('Die lokale Stapelsperre konnte nicht sicher freigegeben werden.');
+      }
     }
   }
 
   function releaseLocalBatchExecutor(token, pid) {
     try { acquireActiveLock(token); } catch { return false; }
+    let releasedLease = false;
     try {
       const state = readState(token);
       if (state.local_executor_pid !== pid) return false;
       delete state.local_executor_pid;
       delete state.local_executor_started_at;
       writeState(state);
-      return true;
+      releasedLease = true;
     } catch {
-      return false;
+      releasedLease = false;
     } finally {
-      releaseActiveLock(token);
+      const releasedLock = releaseActiveLock(token);
+      if (!releasedLock) releasedLease = false;
     }
+    return releasedLease;
   }
 
   return { assertLocalExecutorAccess, claimLocalBatchExecutor, releaseLocalBatchExecutor };

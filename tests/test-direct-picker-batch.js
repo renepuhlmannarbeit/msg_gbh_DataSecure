@@ -295,4 +295,37 @@ test('a final IPC state that arrives just after worker exit suppresses a false f
   assert.deepStrictEqual(failures, []);
 });
 
+test('a durable terminal checkpoint suppresses a false failure when final IPC is lost', () => {
+  const source = path.join(base, 'durable-exit-state.txt');
+  fs.writeFileSync(source, 'Kontakt: Hidden Example', 'utf8');
+  const listeners = {};
+  const states = [];
+  const failures = [];
+  let finalizeExit;
+  const child = {
+    pid: process.pid,
+    once(event, handler) { listeners[`once:${event}`] = handler; },
+    on(event, handler) { listeners[`on:${event}`] = handler; },
+    send(_value, callback) { callback(); },
+    unref() {}, kill() {}
+  };
+  startLocalIntakeExecutor([
+    { name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size }
+  ], 'general', {
+    forkProcess: () => child,
+    readBatchProgress: () => ({
+      complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0
+    }),
+    showBatchStateNotice: (state) => states.push(state),
+    showLocalIntakeNotice: (stage) => failures.push(stage),
+    scheduleExitFinalization: (callback) => { finalizeExit = callback; }
+  });
+  listeners['on:message']?.({ type: 'local-intake-checkpoint-created' });
+  listeners['once:exit']?.(0);
+  finalizeExit();
+  assert.deepStrictEqual(states.map((state) => state.batch_phase), ['complete']);
+  assert.deepStrictEqual(failures, []);
+  assert.doesNotMatch(JSON.stringify(states), /durable-exit-state|Hidden Example|token|path/u);
+});
+
 done();

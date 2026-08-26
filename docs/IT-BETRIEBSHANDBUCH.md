@@ -17,10 +17,10 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC53 |
+| Artefakt | Ziel | Status RC54 |
 |---|---|---|
-| `DataSecure-Privacy-Preflight-v3.2.0-rc53.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
-| `DataSecure-Privacy-Gateway-v3.2.0-rc53.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc54.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc54.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -126,6 +126,7 @@ Die vollständige Abnahme steht in [PILOT-ABNAHME.md](PILOT-ABNAHME.md).
 | Bereich | Inhalt | Standardverhalten |
 |---|---|---|
 | Private Batchdaten | versiegelte Arbeitskopien und Checkpoints | nach Erfolg sofort, sonst spätestens nach 14 Tagen; künftig OS-benutzergebunden verschlüsselt |
+| `Processed` (Altbestand) | mögliche Originale aus historischen Builds | dauerhaft geschützt; niemals durch Retention, Null-Tage-Regel, Purge, Update oder Deinstallation automatisch löschen |
 | `Output` | freigegebene Markdown-Pakete | dauerhaft; nur ausdrücklich bestätigt löschbar; Lesen nur mit kurzlebiger Berechtigung |
 | `Needs Visual Review` | lokal zurückgehaltene Vorschauen | keine Freigabe über Claude; Preview verfällt |
 | `DataSecure-Export` | dauerhaftes Mapping und inhaltsfreier Batchnachweis | keine automatische Löschung |
@@ -172,9 +173,13 @@ Links zu verfolgen. Sie nimmt keine neue Arbeit aus diesen Ordnern an. Eine bere
 begonnene Picker-Batch-Position wird als gestoppt markiert und nicht automatisch
 erneut ausgeführt.
 
-`purge_local_data` löscht nur nach ausdrücklicher Bestätigung und nur den gewählten
-Scope. Vor einem Purge sicherstellen, dass die synthetischen Ergebnisse nicht mehr
-für die Abnahme benötigt werden.
+`purge_local_data` löscht nur nach ausdrücklicher Bestätigung und nur disposable
+`Output`- oder Review-Artefakte. Historische Dateien in `Processed` gelten als
+mögliche Originale und werden nie automatisch gelöscht. Ein `all`-Purge stoppt vor
+jeder anderen Löschung, wenn dort Altbestände vorhanden oder nicht sicher
+inspizierbar sind. Die IT prüft solche Bestände bewusst lokal. Vor einem Purge
+sicherstellen, dass die synthetischen Ergebnisse nicht mehr für die Abnahme benötigt
+werden.
 
 ## 7. Update und Rollback
 

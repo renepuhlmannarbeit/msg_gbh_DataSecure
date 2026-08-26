@@ -16,6 +16,7 @@ function clone(value) {
 function fixture(options = {}) {
   let persisted = clone(options.state || { token, remaining: 1 });
   const events = [];
+  const releaseResults = [...(options.releaseResults || [true])];
   const alive = new Set(options.alive || []);
   const liveLocalExecutor = (state) => Number.isSafeInteger(state?.local_executor_pid) &&
     alive.has(state.local_executor_pid);
@@ -27,7 +28,7 @@ function fixture(options = {}) {
       events.push(`acquire:${value}`);
       if (options.acquireError) throw options.acquireError;
     },
-    releaseActiveLock(value) { events.push(`release:${value}`); },
+    releaseActiveLock(value) { events.push(`release:${value}`); return releaseResults.shift() ?? true; },
     readState(value) {
       events.push(`read:${value}`);
       if (options.readError) throw options.readError;
@@ -127,6 +128,22 @@ test('journal failures never report a claim, release or stale cleanup as success
   });
   assert.throws(() => cleanup.lease.assertLocalExecutorAccess(cleanup.state(), 222), /journal unavailable/);
   assert.strictEqual(cleanup.state().local_executor_pid, 111);
+});
+
+test('a failed global-lock release never reports a successful lease transition', () => {
+  const claiming = fixture({ alive: [222], releaseResults: [false] });
+  assert.throws(
+    () => claiming.lease.claimLocalBatchExecutor(token, 222),
+    /Stapelsperre konnte nicht sicher freigegeben/u
+  );
+  assert.strictEqual(claiming.state().local_executor_pid, 222, 'the durable lease remains recoverable');
+
+  const releasing = fixture({
+    state: { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime },
+    alive: [222], releaseResults: [false]
+  });
+  assert.strictEqual(releasing.lease.releaseLocalBatchExecutor(token, 222), false);
+  assert.strictEqual(releasing.state().local_executor_pid, undefined, 'the durable release is retained');
 });
 
 test('release requires the exact PID and lock failures leave the journal untouched', () => {

@@ -567,7 +567,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // A zero-day policy removes only managed private/review artifacts. User
     // sources and durable Output packages remain outside automatic deletion.
     if ((deps.retentionDays ?? retentionDays()) === 0) {
-      bestEffortRetentionCleanup(deps, ['processed', 'review']);
+      bestEffortRetentionCleanup(deps, ['review']);
     }
 
     bestEffortDiagnostic(deps, {

@@ -29,10 +29,21 @@ test('every current processing route is copy-only at the source boundary', () =>
     path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'read-only-source-snapshot.js'),
     'utf8'
   );
+  const compliance = fs.readFileSync(
+    path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'compliance.js'),
+    'utf8'
+  );
+  const retention = fs.readFileSync(
+    path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'retention.js'),
+    'utf8'
+  );
   assert.match(orchestrator, /copySourceToPrivateWork/u);
   assert.match(orchestrator, /original_moved_to_processed: false/u);
   assert.doesNotMatch(orchestrator, /moveProcessed|restoreProcessed|\.processing_/u);
   assert.doesNotMatch(orchestrator, /renameSync\(originalSource|unlinkSync\(originalSource/u);
+  assert.doesNotMatch(compliance, /moveProcessed|restoreProcessed|moveExact/u);
+  assert.match(retention, /if \(scope === 'processed'\) continue/u);
+  assert.match(retention, /LEGACY_PROCESSED_SOURCE_PROTECTED/u);
   assert.match(snapshot, /O_RDONLY/u);
   assert.match(snapshot, /O_NOFOLLOW/u);
   assert.match(snapshot, /fs\.openSync\(destination, 'wx', 0o600\)/u);

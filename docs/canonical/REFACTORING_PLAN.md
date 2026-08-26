@@ -181,6 +181,11 @@ erneute Opens hinweg, während volatile Datei-Zeitstempel nicht mehr zu einem
 falschen Own-Lock-Release-Fehler führen. Der Child-Worker-Vertrag unterscheidet
 jetzt ausdrücklich vollständige und sicher pausierte Zustände; er verwendet
 niemals `remaining === 0` als Terminalprädikat.
+RC54 ergänzt an derselben Grenze identitätsgebundene, auf vier Versuche begrenzte
+Retries für transiente Windows-Rename-/Unlink-Fehler, verpflichtend erfolgreiche
+Lock-Freigabe vor Lease-Erfolg und eine durable inhaltsfreie Statusrekonstruktion
+bei verlorener terminaler Worker-IPC. Dauerhafte Fehler und Replacement bleiben
+fail-closed; 50 echte serielle Windows-Workerläufe sichern den Race-Fix.
 Die Review-Publikationsschleife liegt nun in
 `gateway/batch-review-publication.js`. Sie validiert die vollständige lokale
 Antwort bijektiv über Dokumentindizes und Ambiguitäts-IDs, bevor irgendein
@@ -234,9 +239,11 @@ Fehlerphasen dürfen ausschließlich die private Kopie bereinigen. Direkte und
 End-to-End-Tests belegen TXT, Markdown, CSV und DOCX sowie Abbruch, Parser- und
 Publishfehler. Unversiegelte Alt-/Direktquellen erhalten vor dem Kopieren eine
 lokale SHA-256-Bindung; Zero-/Partial-Writes und Close-/Cleanupfehler sind
-begrenzt und fail-closed. R3b entfernt als getrennten nächsten Schnitt den technischen
-`Input`-Normalweg und schützt beziehungsweise migriert historische
-`Processed`-Altbestände fail-closed.
+begrenzt und fail-closed. Der erste R3b-Schnitt ist mit RC54 abgeschlossen:
+Historische `Processed`-Altbestände werden unabhängig von Alter und Typ weder durch
+Retention noch Purge verändert; unvollständige Inspektion stoppt fail-closed vor
+einer Gesamtbereinigung. Der verbleibende R3b-Schnitt entfernt den technischen
+`Input`-Normalweg und isoliert die Upgrade-Migration.
 
 - Neue Installationen erzeugen keinen technischen `Input`-Eingang.
 - `listInput` und jede queuebasierte Quelle ohne Picker-/Ordner-Snapshot werden

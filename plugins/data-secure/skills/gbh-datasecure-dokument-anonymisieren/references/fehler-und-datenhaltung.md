@@ -32,13 +32,17 @@ Leseberechtigung ist kurzlebig und kann keine anderen Pakete öffnen.
 
 ## Aufbewahrung und Löschung
 
-Im IT-Supportmodus zeigt `privacy_status` die Aufbewahrungsfrist. Ausschließlich DataSecure-eigene
-Arbeitskopien in `Processed`, Pakete in `Output` und Review-Vorschauen verfallen.
-Ihre Quelle – lokal, auf einem Netzlaufwerk oder künftig in SharePoint – bleibt
-unverändert und wird niemals von DataSecure gelöscht, verschoben oder überschrieben.
-Bei `retention_days=0` werden nur Arbeitskopie und Vorschau unmittelbar nach
-erfolgreicher Verarbeitung entfernt; eine visuelle Freigabe ist dann nicht verfügbar
-und bleibt im öffentlichen Pilot unabhängig davon deaktiviert.
+Im IT-Supportmodus zeigt `privacy_status` die Aufbewahrungsfrist. Private
+Batch-Arbeitskopien werden nach ihrem sicheren Lebenszyklus bereinigt;
+Review-Vorschauen verfallen. Pakete in `Output` bleiben dauerhaft und sind nur
+ausdrücklich bestätigt löschbar. Historische Einträge in `Processed` können
+Originale aus älteren Builds sein und werden weder automatisch noch durch
+`purge_local_data` gelöscht. Ihre Quelle – lokal, auf einem Netzlaufwerk oder künftig
+in SharePoint – bleibt unverändert und wird niemals von DataSecure gelöscht,
+verschoben oder überschrieben. Bei `retention_days=0` werden nur verwaltete private
+Kopien und Vorschauen unmittelbar nach erfolgreicher Verarbeitung entfernt; eine
+visuelle Freigabe ist dann nicht verfügbar und bleibt im öffentlichen Pilot
+unabhängig davon deaktiviert.
 
 `private_work_copy_cleanup_pending` ist nur ein lokaler Zähler für eine nach einer
 bereits bestätigten Übergabe noch nicht entfernte private Arbeitskopie. Er enthält keine
@@ -55,6 +59,9 @@ Das Diagnosejournal ist auf 14 Tage beziehungsweise 200 Ereignisse begrenzt und 
 keine Dateinamen, Pfade, Inhalte, erkannten Werte oder Dokument-Hashes. Ein separater,
 metadatenbasierter Audit-Nachweis bleibt ohne diese Rohdaten außerhalb der Frist bestehen.
 
-Für `purge_local_data` muss der Anwender Umfang und Bestätigung ausdrücklich nennen; beides
-darf nicht hergeleitet oder erweitert werden. Der genaue Satz „Lösche alle lokalen
-DataSecure-Daten; ich bestätige die Löschung“ erlaubt `scope=all, confirmed=true`.
+Für `purge_local_data` muss der Anwender Umfang und Bestätigung ausdrücklich nennen;
+beides darf nicht hergeleitet oder erweitert werden. `Output` und `Review` sind die
+löschbaren Bereiche. `scope=processed` stoppt bei geschützten Altquellen; `scope=all`
+prüft `Processed` zuerst und stoppt bei Bestand oder unvollständiger Inspektion ohne
+Teilmutation. Weise dann auf die bewusste lokale IT-Prüfung hin, statt eine Löschung
+zu behaupten.

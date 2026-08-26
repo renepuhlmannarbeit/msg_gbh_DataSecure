@@ -1,10 +1,8 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const { SafeError } = require('../runtime');
 const pii = require('../pii-engine');
-const { VERSION, roots, uniquePath } = require('./common');
+const { VERSION } = require('./common');
 const { createAuditReceipt, writePackageAudit, retainAudit } = require('./audit');
 
 const MAX_PASSES = 3;
@@ -114,37 +112,6 @@ function aiActMeta(profile) {
   return { downstream_purpose_classification_required: true };
 }
 
-function moveProcessed(source, originalName = path.basename(source)) {
-  const r = roots();
-  const dest = uniquePath(r.processed, path.basename(originalName));
-  moveExact(source, dest);
-  return dest;
-}
-
-function moveExact(source, dest) {
-  try {
-    fs.renameSync(source, dest);
-  } catch (renameError) {
-    fs.copyFileSync(source, dest, fs.constants.COPYFILE_EXCL);
-    try {
-      fs.unlinkSync(source);
-    } catch (unlinkError) {
-      try {
-        fs.unlinkSync(dest);
-      } catch {
-        throw new SafeError('Dateiverschiebung ist inkonsistent fehlgeschlagen; manuelle Prüfung erforderlich.');
-      }
-      throw unlinkError;
-    }
-  }
-  return dest;
-}
-
-function restoreProcessed(processed, source) {
-  if (fs.existsSync(source)) throw new SafeError('Quelldatei kann nicht sicher wiederhergestellt werden.');
-  return moveExact(processed, source);
-}
-
 module.exports = {
   MAX_PASSES,
   anonymizeMarkdown,
@@ -153,7 +120,5 @@ module.exports = {
   aiActMeta,
   auditRecord: createAuditReceipt,
   writePackageAudit,
-  retainAudit,
-  moveProcessed,
-  restoreProcessed
+  retainAudit
 };

@@ -9,6 +9,7 @@ const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
 const {
   DEFAULT_RETENTION_DAYS,
   retentionDays,
+  inspectProcessedProtection,
   cleanupLocalData,
   dueCounts,
   purgeLocalData,
@@ -65,7 +66,7 @@ test('retention configuration defaults safely and accepts zero', () => {
   assert.strictEqual(retentionDays({ EU_PRIVACY_RETENTION_DAYS: 'n/a' }), DEFAULT_RETENTION_DAYS);
 });
 
-test('automatic retention cleans temporary data but preserves released output', () => {
+test('automatic retention cleans review previews but preserves output and historical sources', () => {
   const r = sandbox('expired');
   const oldProcessed = path.join(r.processed, 'old.pdf');
   const freshProcessed = path.join(r.processed, 'fresh.pdf');
@@ -88,9 +89,12 @@ test('automatic retention cleans temporary data but preserves released output', 
   old(audit);
 
   const result = cleanupLocalData({ roots: r, now: NOW, retentionDays: 7 });
-  assert.deepStrictEqual(result.removed, { processed: 1, output: 0, review: 1 });
-  assert.ok(!fs.existsSync(oldProcessed));
+  assert.deepStrictEqual(result.removed, { processed: 0, output: 0, review: 1 });
+  assert.ok(fs.existsSync(oldProcessed), 'historical sources are never retention targets');
   assert.ok(fs.existsSync(freshProcessed));
+  assert.strictEqual(result.processed_cleanup_skipped, true);
+  assert.strictEqual(result.processed_protection_complete, true);
+  assert.strictEqual(result.protected_processed_entries, 2);
   assert.ok(fs.existsSync(oldOutput), 'released output is permanent until explicit purge');
   assert.ok(fs.existsSync(freshOutput));
   assert.ok(!fs.existsSync(path.join(expiredReview, 'asset-001.png')));
@@ -115,18 +119,107 @@ test('hidden staging and current-job directories are never touched', () => {
   }
 });
 
-test('purge requires literal confirmation and obeys its selected scope', () => {
+test('purge requires literal confirmation and refuses protected historical sources', () => {
   const r = sandbox('purge');
   file(path.join(r.processed, 'source.pdf'));
   file(path.join(r.output, 'package', 'manifest.json'), '{}');
   file(path.join(r.audit, 'receipt.json'), '{}');
   assert.throws(() => purgeLocalData('processed', false, { roots: r }), /Bestätigung/);
   assert.throws(() => purgeLocalData('processed', 'true', { roots: r }), /Bestätigung/);
-  const result = purgeLocalData('processed', true, { roots: r, now: NOW });
-  assert.strictEqual(result.removed.processed, 1);
+  assert.throws(
+    () => purgeLocalData('processed', true, { roots: r, now: NOW }),
+    (error) => error.code === 'LEGACY_PROCESSED_SOURCE_PROTECTED'
+  );
+  assert.ok(fs.existsSync(path.join(r.processed, 'source.pdf')));
   assert.ok(fs.existsSync(path.join(r.output, 'package', 'manifest.json')));
   assert.ok(fs.existsSync(path.join(r.audit, 'receipt.json')));
-  assert.strictEqual(result.audit_retained, true);
+});
+
+test('a total purge preflights Processed before mutating output or review', () => {
+  const r = sandbox('purge-all-protected');
+  const source = path.join(r.processed, '.historical-source.docx');
+  const output = path.join(r.output, 'package', 'manifest.json');
+  const review = reviewItem(r, 'review', 8);
+  file(source, 'historical source bytes');
+  file(output, '{}');
+
+  assert.throws(
+    () => purgeLocalData('all', true, { roots: r, now: NOW }),
+    (error) => error.code === 'LEGACY_PROCESSED_SOURCE_PROTECTED' &&
+      !JSON.stringify(error).includes('historical-source')
+  );
+  assert.strictEqual(fs.readFileSync(source, 'utf8'), 'historical source bytes');
+  assert.ok(fs.existsSync(output));
+  assert.ok(fs.existsSync(path.join(review, 'asset-001.png')));
+});
+
+test('an empty protected area permits confirmed purge of explicit disposable scopes', () => {
+  const r = sandbox('purge-empty-processed');
+  file(path.join(r.output, 'package', 'manifest.json'), '{}');
+  reviewItem(r, 'review', 1);
+
+  const processedOnly = purgeLocalData('processed', true, { roots: r, now: NOW });
+  assert.deepStrictEqual(processedOnly.removed, { processed: 0, output: 0, review: 0 });
+  const all = purgeLocalData('all', true, { roots: r, now: NOW });
+  assert.strictEqual(all.removed.processed, 0);
+  assert.strictEqual(all.removed.output, 1);
+  assert.strictEqual(all.removed.review, 1);
+});
+
+test('Processed protection counts every direct entry without following it', () => {
+  const r = sandbox('processed-entry-types');
+  file(path.join(r.processed, '.hidden-source'), 'hidden');
+  fs.mkdirSync(path.join(r.processed, 'historical-directory'));
+  const protection = inspectProcessedProtection(r.processed);
+  assert.deepStrictEqual(protection, { complete: true, entries: 2 });
+  const result = cleanupLocalData({ roots: r, now: NOW, retentionDays: 0 });
+  assert.strictEqual(result.protected_processed_entries, 2);
+  assert.ok(fs.existsSync(path.join(r.processed, '.hidden-source')));
+  assert.ok(fs.existsSync(path.join(r.processed, 'historical-directory')));
+});
+
+test('a linked Processed entry and its outside target are preserved', () => {
+  const r = sandbox('processed-linked-entry');
+  const outside = path.join(base, 'processed-linked-outside');
+  const link = path.join(r.processed, 'linked-history');
+  file(path.join(outside, 'original.txt'), 'outside source');
+  fs.symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+
+  assert.deepStrictEqual(inspectProcessedProtection(r.processed), { complete: true, entries: 1 });
+  assert.throws(
+    () => purgeLocalData('processed', true, { roots: r, now: NOW }),
+    (error) => error.code === 'LEGACY_PROCESSED_SOURCE_PROTECTED'
+  );
+  assert.strictEqual(fs.readFileSync(path.join(outside, 'original.txt'), 'utf8'), 'outside source');
+  assert.ok(fs.lstatSync(link).isSymbolicLink());
+});
+
+test('an unreadable Processed inspection is unknown and blocks a total purge', () => {
+  const r = sandbox('processed-inspection-failure');
+  const output = path.join(r.output, 'package', 'manifest.json');
+  file(output, '{}');
+  const deniedFs = Object.create(fs);
+  deniedFs.readdirSync = (target, options) => {
+    if (path.resolve(target) === path.resolve(r.processed)) {
+      const error = new Error('denied');
+      error.code = 'EACCES';
+      throw error;
+    }
+    return fs.readdirSync(target, options);
+  };
+
+  const automatic = cleanupLocalData({ roots: r, now: NOW, retentionDays: 0, fs: deniedFs });
+  assert.strictEqual(automatic.processed_protection_complete, false);
+  assert.strictEqual(automatic.protected_processed_entries, null);
+  assert.strictEqual(automatic.error_codes.PROCESSED_INSPECTION_FAILED, 1);
+  assert.throws(
+    () => purgeLocalData('all', true, { roots: r, now: NOW, fs: deniedFs }),
+    (error) => error.code === 'LEGACY_PROCESSED_SOURCE_PROTECTED'
+  );
+  assert.ok(fs.existsSync(output));
+  const status = retentionStatus({ roots: r, now: NOW, fs: deniedFs });
+  assert.strictEqual(status.processed_protection_complete, false);
+  assert.strictEqual(status.protected_processed_entries, null);
 });
 
 test('status due counts use entry mtimes without waiting in real time', () => {
@@ -139,14 +232,14 @@ test('status due counts use entry mtimes without waiting in real time', () => {
   old(output, 1);
   reviewItem(r, 'old-review', 8);
   assert.deepStrictEqual(dueCounts({ roots: r, now: NOW, retentionDays: 7 }), {
-    processed: 1,
+    processed: 0,
     output: 0,
     review: 1,
-    total: 2
+    total: 1
   });
 });
 
-test('a deletion failure is recorded and does not abort other entries', () => {
+test('processed entries never reach a deletion callback', () => {
   const r = sandbox('failure');
   const first = path.join(r.processed, 'first.pdf');
   const second = path.join(r.processed, 'second.pdf');
@@ -166,11 +259,12 @@ test('a deletion failure is recorded and does not abort other entries', () => {
       fs.unlinkSync(target);
     }
   });
-  assert.strictEqual(calls, 2);
-  assert.strictEqual(result.errors, 1);
-  assert.strictEqual(result.removed.processed, 1);
+  assert.strictEqual(calls, 0);
+  assert.strictEqual(result.errors, 0);
+  assert.strictEqual(result.removed.processed, 0);
   assert.ok(fs.existsSync(first));
-  assert.ok(!fs.existsSync(second));
+  assert.ok(fs.existsSync(second));
+  assert.strictEqual(result.protected_processed_entries, 2);
 });
 
 // A single entry that is not a regular file used to abort the whole review loop
@@ -309,7 +403,7 @@ test('evidence write failures stay visible without leaking a document name and h
 test('initial and ordinary cleanup status keep a stable diagnostic shape', () => {
   const before = retentionStatus({ roots: sandbox('initial-shape'), retentionDays: 7, now: NOW });
   assert.strictEqual(before.output_protection_complete, true);
-  for (const field of ['forced', 'errors_by_scope', 'error_codes', 'removed_review_previews', 'output_protection_complete', 'output_cleanup_skipped']) {
+  for (const field of ['forced', 'errors_by_scope', 'error_codes', 'removed_review_previews', 'output_protection_complete', 'output_cleanup_skipped', 'processed_cleanup_skipped', 'processed_protection_complete', 'protected_processed_entries']) {
     assert.ok(Object.hasOwn(before.last_cleanup, field), `initial last_cleanup.${field} missing`);
   }
 
@@ -320,7 +414,7 @@ test('initial and ordinary cleanup status keep a stable diagnostic shape', () =>
   assert.strictEqual(after.forced, false);
 });
 
-test('an incomplete batch-journal inspection fails closed for automatic output cleanup only', () => {
+test('an incomplete batch-journal inspection preserves output and historical sources', () => {
   const root = sandbox('incomplete-output-protection');
   const processed = path.join(root.processed, 'old-source.txt');
   const output = path.join(root.output, 'ds_' + 'a'.repeat(32));
@@ -336,9 +430,9 @@ test('an incomplete batch-journal inspection fails closed for automatic output c
     outputProtectionComplete: false
   });
 
-  assert.ok(!fs.existsSync(processed), 'independent processed retention must continue');
+  assert.ok(fs.existsSync(processed), 'historical sources must remain protected');
   assert.ok(fs.existsSync(output), 'all output must survive an incomplete journal inspection');
-  assert.strictEqual(result.removed.processed, 1);
+  assert.strictEqual(result.removed.processed, 0);
   assert.strictEqual(result.removed.output, 0);
   assert.strictEqual(result.output_protection_complete, false);
   assert.strictEqual(result.output_cleanup_skipped, true);

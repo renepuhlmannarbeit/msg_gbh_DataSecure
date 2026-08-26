@@ -84,12 +84,14 @@ eine bewusste Einstellung, kein Fehler.
 
 ### Regel 3 — Räumen Sie auf
 
-DataSecure entfernt Einträge aus `Processed`, `Output` und Bild-Previews in
-`Needs Visual Review` standardmäßig nach **7 Tagen**. Das geschieht beim Start
-und vor einer neuen Verarbeitung; bis dahin liegen die Daten unverschlüsselt auf
-der Festplatte. Räumen Sie deshalb sofort auf, wenn Sie sie nicht mehr brauchen.
-Mit *„Lösche alle lokalen DataSecure-Daten; ich bestätige die Löschung"* können
-Sie die drei Bereiche bewusst leeren. Ein datensparsamer Audit-Nachweis bleibt
+DataSecure entfernt Bild-Previews in `Needs Visual Review` standardmäßig nach
+**7 Tagen**. Freigegebene Pakete in `Output` bleiben dauerhaft und können nur
+ausdrücklich bestätigt gelöscht werden. Historische Dateien in `Processed`
+können Originale aus älteren Versionen sein und werden deshalb weder automatisch
+noch durch einen Purge gelöscht. Ein Gesamt-Purge stoppt ohne Teilbereinigung,
+wenn dort Altbestände vorhanden oder nicht sicher prüfbar sind. Bis zur jeweiligen
+Bereinigung liegen verwaltete Arbeitsdaten unverschlüsselt auf der Festplatte.
+Ein datensparsamer Audit-Nachweis bleibt
 zur Prüfbarkeit erhalten. Er enthält eine zufällige Vorgangs-ID, Kategorien,
 Zähler, Versionen und Status, aber keine Dokument- oder Wert-Hashes, exakten
 Dateigrößen, Pfade, Dateinamen oder Rohinhalte.
@@ -332,14 +334,15 @@ noch in einer frischen Installation abgenommen werden. Windows ARM64 bleibt gesp
 - **Zurückgehaltene Bilder:** Sie können `Needs Visual Review` lokal ansehen, dürfen
   Claude aber nicht mit ihrer Freigabe beauftragen. Der aktuelle Engineering-Build
   besitzt noch keinen sicheren menschlichen Freigabekanal.
-- **Aufräumen (Regel 3):** Sagen Sie nach Abschluss: *„Lösche alle lokalen
-  DataSecure-Daten; ich bestätige die Löschung."* Sie können auch nur `Processed`,
-  `Output` oder `Review` nennen. Prüfen Sie vorher, dass Sie das Ergebnis nicht mehr
-  benötigen.
+- **Aufräumen (Regel 3):** Löschen Sie bei Bedarf `Output` oder `Review` jeweils
+  ausdrücklich bestätigt. `Processed` wird nie automatisch gelöscht; dortige
+  Altbestände prüft die IT bewusst lokal. Prüfen Sie vorher, dass Sie das Ergebnis
+  nicht mehr benötigen.
 
 **Warum das Aufräumen weiterhin wichtig ist:** Die Frist begrenzt die Speicherung,
-ersetzt aber nicht Ihre Entscheidung, wann Original und Arbeitsergebnis nicht
-mehr gebraucht werden. Ein Löschfehler, etwa durch eine in Windows geöffnete
+ersetzt aber nicht Ihre Entscheidung, wann ein Arbeitsergebnis nicht mehr gebraucht
+wird. Originale und mögliche Alt-Originale sind kein DataSecure-Löschziel. Ein
+Löschfehler, etwa durch eine in Windows geöffnete
 Datei, wird im Status angezeigt und beim nächsten Lauf erneut versucht.
 
 ## Teil 8: Was die Platzhalter bedeuten

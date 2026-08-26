@@ -76,6 +76,19 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
   return { complete, batch_phase: batchPhase, batch_total: batchTotal, released, stopped };
 }
 
+// A detached worker can exit before its final bounded IPC envelope is observed
+// by the parent (seen intermittently on Windows). The durable journal is the
+// authority in that case. Reconstruct only the same content-free counters that
+// the worker was allowed to send; never surface the token or journal details.
+function durableBatchStateProgress(token, type, options = {}) {
+  try {
+    const progress = (options.readBatchProgress || readBatchProgress)(token);
+    return localBatchStateProgress({ type, ...progress });
+  } catch {
+    return null;
+  }
+}
+
 function startLocalBatchExecutor(token, options = {}) {
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
   const forkProcess = options.forkProcess || fork;
@@ -123,6 +136,8 @@ function startLocalBatchExecutor(token, options = {}) {
       // Give that already-sent bounded state envelope one event-loop grace
       // window before presenting a false failure notice.
       afterIpcDrain(options, () => {
+        if (noticeShown) return;
+        showNoticeOnce(durableBatchStateProgress(token, 'local-batch-state', options));
         if (noticeShown) return;
         noticeShown = true;
         try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
@@ -193,6 +208,24 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       }
     };
     pendingIntakes.set(token, intake);
+    const showStateOnce = (progress) => {
+      if (!progress || intake.noticeShown) return false;
+      intake.noticeShown = true;
+      lifecycle({
+        event: 'intake_terminal_state', outcome: progress.complete ? 'ok' : 'progress',
+        phase: progress.batch_phase, item_count: progress.batch_total,
+        released_count: progress.released, stopped_count: progress.stopped
+      });
+      lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
+      try {
+        showState(progress);
+        lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: itemCount });
+      } catch {
+        lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
+          error_code: 'LOCAL_NOTICE_FAILED' });
+      }
+      return true;
+    };
     child.on?.('message', (message) => {
       if (!message || typeof message !== 'object') return;
       if (message.type === 'local-intake-checkpoint-created') {
@@ -203,23 +236,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         intake.processingStarted = true;
         lifecycle({ event: 'intake_processing_started', outcome: 'ok', item_count: itemCount });
       }
-      const progress = localBatchStateProgress(message);
-      if (progress && !intake.noticeShown) {
-        intake.noticeShown = true;
-        lifecycle({
-          event: 'intake_terminal_state', outcome: progress.complete ? 'ok' : 'progress',
-          phase: progress.batch_phase, item_count: progress.batch_total,
-          released_count: progress.released, stopped_count: progress.stopped
-        });
-        lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
-        try {
-          showState(progress);
-          lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: itemCount });
-        } catch {
-          lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
-            error_code: 'LOCAL_NOTICE_FAILED' });
-        }
-      }
+      showStateOnce(localBatchStateProgress(message));
       if (message.type === 'local-intake-stopped') {
         lifecycle({ event: 'intake_terminal_state', outcome: 'stopped', item_count: itemCount,
           error_code: 'LOCAL_WORKER_EXITED' });
@@ -231,6 +248,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         exit_code: code, error_code: code === 0 ? 'NONE' : 'LOCAL_WORKER_EXITED' });
       pendingIntakes.delete(token);
       afterIpcDrain(options, () => {
+        if (intake.noticeShown) return;
+        showStateOnce(durableBatchStateProgress(token, 'local-intake-state', options));
         if (!intake.noticeShown) showFailureNotice(intake.checkpointCreated ? 'after_checkpoint' : 'before_checkpoint');
       });
     });
