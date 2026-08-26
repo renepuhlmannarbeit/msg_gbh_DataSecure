@@ -21,6 +21,7 @@ const { createBatchMappingMaintenance } = require('./batch-mapping-maintenance')
 const { createBatchIntake } = require('./batch-intake');
 const { createBatchDiscard } = require('./batch-discard');
 const { createBatchContinuation } = require('./batch-continuation');
+const { createBatchSnapshotInvalidation } = require('./batch-snapshot-invalidation');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -239,23 +240,12 @@ const { resumeBatch, continueMostRecentBatch } = createBatchContinuation({
   mappingPendingStatus: MAPPING_PENDING
 });
 
-function invalidateUnpublishedBatchCopies(state, deps = {}, exceptItem = null) {
-  state.invalidated = true;
-  for (const item of state.items) {
-    if (item === exceptItem) continue;
-    if (!['pending', 'processing', 'retryable', DEFERRED_REVIEW].includes(item.status)) continue;
-    item.status = 'stopped';
-    item.checkpoint = 'stopped';
-    item.error_code = 'BATCH_SNAPSHOT_CHANGED';
-    // Published results retain their own lifecycle. Every not-yet-published
-    // sealed copy is no longer trustworthy once one batch source fails its
-    // immutable-snapshot boundary.
-    try { appendMapping(item.name, '', MAPPING_STOPPED); item.local_mapping_exported = true; }
-    catch { item.local_mapping_exported = false; }
-    try { cleanupTerminalWorkCopy(state, item, deps); }
-    catch { item.work_copy_cleanup_pending = true; }
-  }
-}
+const { invalidateUnpublishedBatchCopies } = createBatchSnapshotInvalidation({
+  appendMapping,
+  cleanupTerminalWorkCopy,
+  deferredReviewStatus: DEFERRED_REVIEW,
+  mappingStoppedStatus: MAPPING_STOPPED
+});
 
 const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCandidates } = createBatchResultAccess({
   SafeError,

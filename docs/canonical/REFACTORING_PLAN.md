@@ -151,7 +151,12 @@ Stapels. Zehn direkte Tests belegen Single-Flight, Lock-/Release-Cleanup,
 Invalidierung vor Reconciliation, die feste Reihenfolge Paketadoption vor
 Mapping vor Interrupted-Recovery vor Resume, idempotente Wiederholung,
 Fehlerpriorität und die namenfreie Auswahl nach `created_at`.
-Verarbeitung/Commit, Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
+`gateway/batch-snapshot-invalidation.js` kapselt zusätzlich den kleinsten
+Processing-Fehlerleaf ohne eigene Journalmutation. Sieben direkte Tests belegen,
+dass nur unveröffentlichte Positionen gestoppt werden, ein per Objektidentität
+ausgenommenes aktuelles Item unverändert bleibt, Mapping- und Cleanup-Fehler
+je Position unabhängig bleiben und eine Wiederholung keine Doppeloperation
+auslöst. Verarbeitung/Commit, Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
 `batch.js`; der nächste R2-Schnitt wird erneut als kleinster Leaf gewählt.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,

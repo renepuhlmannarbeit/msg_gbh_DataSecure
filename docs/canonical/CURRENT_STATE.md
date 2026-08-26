@@ -242,6 +242,14 @@ Fachprüfung und Mapping-Pending werden nicht als normale Verarbeitung
 umgedeutet, und die Auswahlantwort bleibt frei von Namen, Pfaden, Inhalten und
 Hashes. Zehn direkte Tests decken Active-/Lock-/Reader-/Executor-/Reconcile-/
 Write-/Release-Fehler, Invalidierung, Fehlerpriorität und jüngste Auswahl ab.
+`gateway/batch-snapshot-invalidation.js` setzt bei einer manipulierten
+versiegelten Arbeitskopie ausschließlich noch unveröffentlichte Positionen auf
+den festen Sicherheitsstopp. Bereits veröffentlichte, Mapping-/Delivery-pending
+und terminale Positionen bleiben unverändert. Das aktuelle Pipeline-Item kann
+per Objektidentität ausgenommen werden; Mapping- und private Cleanup-Fehler
+werden je Position unabhängig best-effort behandelt. Der Leaf schreibt selbst
+kein Journal und ist bei Wiederholung idempotent. Sieben direkte Tests sichern
+Statusmatrix, Ausnahmeidentität, Teilfehler und unveränderte Processing-Fassade.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die
