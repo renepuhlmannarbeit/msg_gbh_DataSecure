@@ -28,6 +28,7 @@ const { createBatchReviewState } = require('./batch-review-state');
 const { createBatchReviewPublication } = require('./batch-review-publication');
 const { createBatchReviewOrchestrator } = require('./batch-review-orchestrator');
 const { createBatchItemProcessor } = require('./batch-item-processor');
+const { createBatchNextMaintenance } = require('./batch-next-maintenance');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -338,6 +339,14 @@ const { processSingleBatchItem } = createBatchItemProcessor({
   mappingStoppedStatus: MAPPING_STOPPED
 });
 
+const { maintainBeforeNext } = createBatchNextMaintenance({
+  reconcilePublishedItems,
+  reconcilePendingMappings,
+  markInterruptedItemsRetryable,
+  retryReleasedWorkCopyCleanup,
+  writeState
+});
+
 async function processBatchNext(token, deps = {}) {
   if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
   acquireActiveLock(token);
@@ -346,17 +355,7 @@ async function processBatchNext(token, deps = {}) {
     const state = readState(token);
     assertLocalExecutorAccess(state, deps.executorPid);
     if (state.invalidated === true) throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
-    // A crash may happen after the atomic output rename but before the MCP
-    // response. Reconcile only a fully verified deterministic package; this
-    // produces one pending delivery rather than processing the source again.
-    if (reconcilePublishedItems(state) || reconcilePendingMappings(state)) writeState(state);
-    // A stale processing marker is never automatically re-run.  Once this
-    // caller owns the global lock it may safely become retryable, but the
-    // subsequent attempt still requires resume_document_batch confirmation.
-    if (markInterruptedItemsRetryable(state) > 0) writeState(state);
-    // A previous publication is never revoked by a later cleanup problem, but
-    // every safe subsequent batch operation retries its private byte cleanup.
-    if (retryReleasedWorkCopyCleanup(state, deps).changed) writeState(state);
+    maintainBeforeNext(state, deps);
     const pendingDelivery = state.items.find((candidate) => candidate.status === DELIVERY_PENDING);
     if (pendingDelivery) return deliveryResult(state, pendingDelivery);
     const item = state.items.find((candidate) => candidate.status === 'pending');
@@ -404,4 +403,4 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

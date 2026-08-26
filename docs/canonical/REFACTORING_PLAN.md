@@ -203,8 +203,11 @@ Single-Item-Zustandsautomat liegt nun in `gateway/batch-item-processor.js`.
 Dabei sind zwei P1-Grenzen geschlossen: Mapping und Delivery verlangen genau
 einen Publish-Callback und die exakte deterministische Paket-ID; nach dem
 Output-Commit bleibt jeder Folgefehler reconcilebar und darf weder
-STOPPED-Mapping noch Catch-bedingtes Quellcleanup auslösen. Als nächster
-R2-Schnitt folgt nur noch verbleibende Wartungs-/Composition-Root-Bereinigung.
+STOPPED-Mapping noch Catch-bedingtes Quellcleanup auslösen. Die Vorlaufwartung
+liegt nun in `gateway/batch-next-maintenance.js`; sie erhält die bewusst
+mehraufrufrige Adoption-zu-Mapping-Semantik und die getrennten durable Writes
+für Reconciliation, Interrupted-Recovery und Cleanup. Als R2-Rest bleibt nur
+die Composition-Root-/Routing-Bereinigung.
 Vor diesem nächsten Schnitt schließt RC50 die asynchrone Lock-Grenze des
 Coordinators: `return await` hält In-Process- und Dateisystem-Single-Flight bis
 zum Settlement der delegierten Item-Pipeline; verzögerte Resolve-/Reject-

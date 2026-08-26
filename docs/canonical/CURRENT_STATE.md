@@ -325,6 +325,13 @@ asynchronen Item-Prozessors, bevor `finally` das gemeinsame `active`-Gate und
 den globalen Dateisystem-Lock freigibt. Zwei echte verzögerte Pipeline-Tests
 belegen für Resolve und Reject gehaltene Sperren, abgewiesene
 Parallelverarbeitung, genau einen Lauf und keine private Fehlerpreisgabe.
+RC51 isoliert außerdem ausschließlich den Wartungsvorlauf in
+`gateway/batch-next-maintenance.js`: Paketadoption und ihr eigener durabler
+Commit, die bewusst erst im Folgeaufruf ausgeführte Mapping-Reparatur,
+Interrupted-Recovery und zuletzt privates Cleanup mit getrennten Writes.
+`batch.js` bleibt Composition Root für Lock, Lease, State-Read,
+Delivery-Priorität, Itemwahl, Snapshotprüfung und delegierte Verarbeitung. Der
+Cowork-Workflow, Fehlerschemata und die serielle Ausführung ändern sich nicht.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die
@@ -336,8 +343,8 @@ bestätigte Übergabe ist jetzt ein dauerhafter No-op und erzeugt weder einen
 zweiten Journal-Commit noch einen doppelten terminalen Evidenznachweis. Acht
 direkte Negativtests belegen Gesamtseitenvalidierung vor Mutation,
 Paketmanipulation, Journal- und Lockfehler, sichere Wiederholung nach bereits
-gelöschter Arbeitskopie sowie Link-/Pfadschutz. Die weiteren Schnitte trennen
-verbleibende Wartung hinter der bestehenden Exportfassade. Der verifizierte
+gelöschter Arbeitskopie sowie Link-/Pfadschutz. Als R2-Rest verbleibt die
+Composition-Root-/Routing-Bereinigung hinter der bestehenden Exportfassade. Der verifizierte
 Outbox-Replay liegt nun
 in `gateway/batch-mapping-maintenance.js`; nur `verified` wird nach der festen
 Reihenfolge Mapping vor Intent-Löschung repariert, `missing` entfernt nur den
