@@ -165,6 +165,11 @@ Der Runner beansprucht selbst keinen Lease und gibt einen fremden oder nicht
 mehr lebenden Marker niemals frei. Ein anschließendes Security-Gegenreview hat
 die Journal- und Runnergrenze zusätzlich auf höchstens 100 Positionen gebunden;
 ein fehlgeschlagener Lease-Release stoppt nun fest statt Erfolg zu melden.
+`gateway/batch-review-capture.js` isoliert anschließend die kleinste verbleibende
+Rohentwurfsgrenze: versiegelte Entry-Bindung, exakt eine lokale Rekonstruktion
+und ausschließlich speicherinterner Capture über den festen Sentinel. Sechs
+direkte Tests verhindern überschreibbare Pipelineoptionen, Sentinel-Spoofing,
+Fehlerverschlucken, unvollständige Ambiguitäten und jede Inputmutation.
 Verarbeitung/Commit, Review-Orchestrierung
 sowie verbleibende Wartung bleiben absichtlich in `batch.js`; der nächste
 R2-Schnitt wird erneut als kleinster Leaf gewählt.

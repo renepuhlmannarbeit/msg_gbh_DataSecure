@@ -23,6 +23,7 @@ const { createBatchDiscard } = require('./batch-discard');
 const { createBatchContinuation } = require('./batch-continuation');
 const { createBatchSnapshotInvalidation } = require('./batch-snapshot-invalidation');
 const { createBatchExecutorRunner } = require('./batch-executor-runner');
+const { createBatchReviewCapture } = require('./batch-review-capture');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -261,30 +262,12 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
   issueReadCapability: (packageId) => require('./package-store').issueReadCapability(packageId)
 });
 
-async function captureDeferredReviewInput(state, item, deps = {}) {
-  const entry = exactPendingEntry(state, item);
-  let captured;
-  try {
-    await anonymizeNext(state.profile, {
-      ...deps,
-      inputQueue: [entry],
-      copyClaim: true,
-      removeImages: state.remove_images,
-      packageId: packageIdForItem(item),
-      suppressDiagnostic: true,
-      reviewText: (input) => {
-        captured = input;
-        throw localReviewError('BATCH_REVIEW_CAPTURED', 'Lokaler Stapelreview-Entwurf erfasst.');
-      }
-    });
-  } catch (error) {
-    if (error?.code !== 'BATCH_REVIEW_CAPTURED') throw error;
-  }
-  if (!captured || !Array.isArray(captured.ambiguities) || captured.ambiguities.length === 0) {
-    throw localReviewError('BATCH_REVIEW_RECONSTRUCTION_FAILED', 'Die lokale Stapelprüfung konnte die offene Fundstelle nicht unverändert rekonstruieren. Es wurde nichts freigegeben.');
-  }
-  return captured;
-}
+const { captureDeferredReviewInput } = createBatchReviewCapture({
+  anonymizeNext,
+  exactPendingEntry,
+  packageIdForItem,
+  localReviewError
+});
 
 function markDeferredReview(state, items, code) {
   for (const item of items) {

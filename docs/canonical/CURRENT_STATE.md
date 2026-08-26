@@ -265,6 +265,14 @@ Maintenance-Journalzugriff nur noch 1 bis 100 Positionen. Der Runner prüft
 dieselbe feste Obergrenze nochmals vor seinem Item-abgeleiteten Schrittbudget.
 Liefert die Lease-Freigabe nicht ausdrücklich `true`, entsteht kein falscher
 Erfolgsstatus; der Lauf stoppt mit einer festen inhaltsfreien Fehlermeldung.
+`gateway/batch-review-capture.js` rekonstruiert genau eine vertagte Fundstelle
+aus der versiegelten Arbeitskopie. Der Rohentwurf bleibt nur als Objekt im
+lokalen Speicher; ein interner Sentinel beendet die normale Pipeline vor einer
+Veröffentlichung. Aufrufer können Entry, Copy-Claim, Bildbehandlung, Paket-ID,
+Diagnosesperre oder Capture-Callback nicht überschreiben. Nur der exakte
+Sentinel wird abgefangen; Snapshot-/Parserfehler und unvollständige Entwürfe
+stoppen fail-closed. Sechs direkte Tests sowie die gemeinsamen Review-Fälle im
+66-Szenarien-Batchtest belegen die unveränderte Fassade.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die
