@@ -203,7 +203,11 @@ aufgelöste private Pfade und tokengebundenes Cleanup; `gateway/batch-snapshot.j
 kapselt Kapazität, OOXML-Preflight sowie TOCTOU-gebundene Kopie. Positive
 Partial-Writes werden vollständig geschrieben; Zero-Write, Short-Read und eine
 nachträgliche `ctime`-Änderung stoppen fail-closed und entfernen die exakte
-Teilkopie. `gateway/batch-active-lock.js` kapselt die globale Prozesssperre;
+Teilkopie. `gateway/batch-active-lock.js` kapselt die globale Prozesssperre. Neue
+Locks tragen eine zufällige unveränderliche `lock_id`; Release und Dead-Owner-
+Reclaim prüfen Payload, Dateiidentität und ID, ohne volatile Windows-`mtime`-/
+`ctime`-Werte als Eigentumsbeweis zu missbrauchen. Legacy-Locks bleiben lesbar.
+Sechs Direktprüfungen belegen Metadaten-Drift, Replacement, Reclaim und Liveness.
 `gateway/process-liveness.js` vereinheitlicht die fail-closed PID-Liveness für
 Lock, Job-Recovery und Vorbereitungsslots. Ein Lock-Austausch zwischen Eigentumsprüfung und Löschung wird
 erkannt; ein neuer Owner bleibt erhalten. Nur `ESRCH` beweist einen toten
@@ -274,6 +278,13 @@ Sentinel wird abgefangen und muss den Pipelineabbruch nachweislich erreicht
 haben; ein intern verschluckter Sentinel, Snapshot-/Parserfehler und
 unvollständige Entwürfe stoppen fail-closed. Sechs direkte Tests sowie die gemeinsamen Review-Fälle im
 66-Szenarien-Batchtest belegen die unveränderte Fassade.
+`gateway/batch-review-state.js` setzt ausschließlich explizit übergebene Items
+auf den kanonischen Deferred-Zustand und plant rein lesend, ob der gemeinsame
+Review starten darf. Startbereit ist er genau bei mindestens einem Deferred-
+Item und ohne Remaining-, Retryable- oder Delivery-Pending-Position. Die feste
+Meldungspriorität bleibt Analyse vor Delivery vor technischer Fortsetzung vor
+„keine Entscheidung“. Fünf Direktprüfungen belegen Idempotenz, Referenztreue,
+Wahrheitstabelle, inhaltsfreie Hinweise und die unveränderte öffentliche Fassade.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die

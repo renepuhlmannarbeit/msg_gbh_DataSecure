@@ -24,6 +24,7 @@ const { createBatchContinuation } = require('./batch-continuation');
 const { createBatchSnapshotInvalidation } = require('./batch-snapshot-invalidation');
 const { createBatchExecutorRunner } = require('./batch-executor-runner');
 const { createBatchReviewCapture } = require('./batch-review-capture');
+const { createBatchReviewState } = require('./batch-review-state');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -269,13 +270,9 @@ const { captureDeferredReviewInput } = createBatchReviewCapture({
   localReviewError
 });
 
-function markDeferredReview(state, items, code) {
-  for (const item of items) {
-    item.status = DEFERRED_REVIEW;
-    item.checkpoint = 'awaiting_local_review';
-    item.error_code = code;
-  }
-}
+const { markDeferredReview, deferredReviewPlan } = createBatchReviewState({
+  deferredReviewStatus: DEFERRED_REVIEW
+});
 
 // This is the only path which joins multiple raw-derived review drafts. It
 // recreates all of them from sealed local copies, holds them only for the life
@@ -295,13 +292,10 @@ async function reviewDeferredBatch(token, deps = {}) {
     if (publishedReconciled || mappingReconciled) writeState(state);
     if (markInterruptedItemsRetryable(state) > 0) writeState(state);
     const progress = publicProgress(state);
-    const items = state.items.filter((item) => item.status === DEFERRED_REVIEW);
-    if (!items.length || progress.remaining !== 0 || progress.retryable !== 0 || progress.delivery_pending !== 0) {
-      let message = 'Für diesen Stapel gibt es keine vertagten lokalen Entscheidungen.';
-      if (progress.remaining !== 0) message = 'Der Stapel analysiert noch weitere Dateien. Die gemeinsame lokale Prüfung startet erst danach.';
-      else if (progress.delivery_pending !== 0) message = 'Ein bereits freigegebenes Paket muss zuerst gelesen und bestätigt werden.';
-      else if (progress.retryable !== 0) message = 'Eine technische Unterbrechung muss zuerst ausdrücklich fortgesetzt werden.';
-      return { ok: false, error: 'batch_review_not_ready', message, ...progress, raw_content_sent_to_claude: false };
+    const reviewPlan = deferredReviewPlan(state, progress);
+    const items = reviewPlan.items;
+    if (!reviewPlan.ready) {
+      return { ok: false, error: 'batch_review_not_ready', message: reviewPlan.message, ...progress, raw_content_sent_to_claude: false };
     }
 
     const lifecycle = (event) => {

@@ -18,12 +18,12 @@ const tokenA = 'a'.repeat(64);
 const tokenB = 'b'.repeat(64);
 const tokenC = 'c'.repeat(64);
 
-function lockValue(token, pid) {
-  return { schema: 'datasecure-active-batch/1', token, pid, created_at: '2026-08-25T10:00:00.000Z' };
+function lockValue(token, pid, lockId = token.slice(0, 32)) {
+  return { schema: 'datasecure-active-batch/1', token, pid, created_at: '2026-08-25T10:00:00.000Z', lock_id: lockId };
 }
 
-function writeLock(target, token, pid) {
-  fs.writeFileSync(target, `${JSON.stringify(lockValue(token, pid))}\n`, 'utf8');
+function writeLock(target, token, pid, lockId) {
+  fs.writeFileSync(target, `${JSON.stringify(lockValue(token, pid, lockId))}\n`, 'utf8');
 }
 
 function ioWithSwap(target, replacement, swapOnOpen) {
@@ -34,9 +34,25 @@ function ioWithSwap(target, replacement, swapOnOpen) {
     openSync(name, flags, mode) {
       if (name === target && ++opens === swapOnOpen) {
         fs.unlinkSync(target);
-        writeLock(target, replacement.token, replacement.pid);
+        writeLock(target, replacement.token, replacement.pid, replacement.lockId);
       }
       return fs.openSync(name, flags, mode);
+    }
+  };
+}
+
+function ioWithTimestampDrift(target) {
+  let targetStats = 0;
+  return {
+    ...fs,
+    constants: fs.constants,
+    fstatSync(descriptor) {
+      const stat = fs.fstatSync(descriptor);
+      if (++targetStats < 2) return stat;
+      return Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, {
+        mtimeMs: stat.mtimeMs + 10_000,
+        ctimeMs: stat.ctimeMs + 20_000
+      });
     }
   };
 }
@@ -58,6 +74,31 @@ test('release never deletes a replacement lock from a newer owner', () => {
   });
   assert.strictEqual(lock.releaseActiveLock(tokenA), false);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(target, 'utf8')), lockValue(tokenB, 222));
+  fs.unlinkSync(target);
+});
+
+test('release accepts timestamp drift for the same immutable lock identity', () => {
+  fs.mkdirSync(batchRoot(), { recursive: true });
+  const target = path.join(batchRoot(), 'active-processing.json');
+  writeLock(target, tokenA, 111);
+  const lock = createBatchActiveLock({
+    fs: ioWithTimestampDrift(target),
+    process: { pid: 111, kill() {} }
+  });
+  assert.strictEqual(lock.releaseActiveLock(tokenA), true);
+  assert.strictEqual(fs.existsSync(target), false);
+});
+
+test('release rejects a replacement with identical owner fields but another lock id', () => {
+  const target = path.join(batchRoot(), 'active-processing.json');
+  const replacementId = 'f'.repeat(32);
+  writeLock(target, tokenA, 111);
+  const lock = createBatchActiveLock({
+    fs: ioWithSwap(target, { token: tokenA, pid: 111, lockId: replacementId }, 2),
+    process: { pid: 111, kill() {} }
+  });
+  assert.strictEqual(lock.releaseActiveLock(tokenA), false);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(target, 'utf8')), lockValue(tokenA, 111, replacementId));
   fs.unlinkSync(target);
 });
 

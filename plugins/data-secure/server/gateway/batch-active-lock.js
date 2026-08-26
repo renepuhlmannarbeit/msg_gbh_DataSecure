@@ -2,17 +2,20 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { batchRoot, TOKEN_RE } = require('./batch-private-store');
 const { processAlive: probeProcessAlive } = require('./process-liveness');
 
 const LOCK_SCHEMA = 'datasecure-active-batch/1';
 const MAX_LOCK_BYTES = 4096;
+const LOCK_ID_RE = /^[a-f0-9]{32}$/;
 
 function createBatchActiveLock(deps = {}) {
   const io = deps.fs || fs;
   const processApi = deps.process || process;
   const now = deps.now || (() => new Date());
+  const randomLockId = deps.randomLockId || (() => crypto.randomBytes(16).toString('hex'));
 
   function activeLockPath() {
     return path.join(batchRoot(), 'active-processing.json');
@@ -30,7 +33,8 @@ function createBatchActiveLock(deps = {}) {
   function validActiveLock(value) {
     return Boolean(value && value.schema === LOCK_SCHEMA &&
       TOKEN_RE.test(value.token) && Number.isSafeInteger(value.pid) && value.pid > 0 &&
-      typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)));
+      typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)) &&
+      (value.lock_id === undefined || LOCK_ID_RE.test(value.lock_id)));
   }
 
   function readActiveLockRecord() {
@@ -50,9 +54,7 @@ function createBatchActiveLock(deps = {}) {
         identity: {
           dev: opened.dev,
           ino: opened.ino,
-          size: opened.size,
-          mtimeMs: opened.mtimeMs,
-          ctimeMs: opened.ctimeMs
+          size: opened.size
         }
       };
     } catch {
@@ -72,9 +74,14 @@ function createBatchActiveLock(deps = {}) {
     if (!left || !right) return false;
     const a = left.identity;
     const b = right.identity;
+    const leftLockId = left.value.lock_id;
+    const rightLockId = right.value.lock_id;
+    const sameLockId = leftLockId === undefined && rightLockId === undefined
+      ? true
+      : leftLockId === rightLockId && LOCK_ID_RE.test(String(leftLockId || ''));
     return left.value.token === right.value.token && left.value.pid === right.value.pid &&
-      left.value.created_at === right.value.created_at && a.dev === b.dev && a.ino === b.ino &&
-      a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
+      left.value.created_at === right.value.created_at && sameLockId &&
+      a.dev === b.dev && a.ino === b.ino && a.size === b.size;
   }
 
   function unlinkIfUnchanged(expected) {
@@ -97,8 +104,12 @@ function createBatchActiveLock(deps = {}) {
       schema: LOCK_SCHEMA,
       token,
       pid: processApi.pid,
-      created_at: now().toISOString()
+      created_at: now().toISOString(),
+      lock_id: randomLockId()
     };
+    if (!LOCK_ID_RE.test(value.lock_id)) {
+      throw new SafeError('Die lokale Stapelsperre konnte nicht sicher erzeugt werden.');
+    }
     io.writeFileSync(target, `${JSON.stringify(value)}\n`, {
       encoding: 'utf8', mode: 0o600, flag: 'wx'
     });

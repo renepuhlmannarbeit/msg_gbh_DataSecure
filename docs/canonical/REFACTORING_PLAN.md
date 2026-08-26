@@ -170,6 +170,17 @@ Rohentwurfsgrenze: versiegelte Entry-Bindung, exakt eine lokale Rekonstruktion
 und ausschließlich speicherinterner Capture über den festen Sentinel. Sechs
 direkte Tests verhindern überschreibbare Pipelineoptionen, Sentinel-Spoofing,
 Fehlerverschlucken, unvollständige Ambiguitäten und jede Inputmutation.
+`gateway/batch-review-state.js` kapselt zusätzlich die reine Zustandsmarkierung,
+Review-Item-Auswahl und bestehende Bereitschafts-/Hinweispriorität. Fünf direkte
+Tests binden Referenzbegrenzung, Idempotenz, die vollständige Wahrheitstabelle,
+inhaltsfreie feste Meldungen und Mutationsfreiheit, ohne Lock-, UI-, Draft- oder
+Publikationslogik in diese Grenze zu ziehen.
+Ein reproduzierbarer Windows-Serienfund hat außerdem die bestehende Active-Lock-
+Grenze gehärtet: eine zufällige unveränderliche `lock_id` bindet den Owner über
+erneute Opens hinweg, während volatile Datei-Zeitstempel nicht mehr zu einem
+falschen Own-Lock-Release-Fehler führen. Der Child-Worker-Vertrag unterscheidet
+jetzt ausdrücklich vollständige und sicher pausierte Zustände; er verwendet
+niemals `remaining === 0` als Terminalprädikat.
 Verarbeitung/Commit, Review-Orchestrierung
 sowie verbleibende Wartung bleiben absichtlich in `batch.js`; der nächste
 R2-Schnitt wird erneut als kleinster Leaf gewählt.
