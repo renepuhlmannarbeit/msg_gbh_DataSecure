@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { batchPath, safeRemoveWorkDirectory } = require('./batch-private-store');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const SCHEMA = 'datasecure-batch/1';
 const NOT_FOUND = 'Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte den Eingang erneut bestätigen.';
@@ -21,6 +22,7 @@ function createBatchJournalStore(options = {}) {
   const syncParent = options.syncParentDirectory || syncParentDirectory;
   const platform = options.platform || process.platform;
   const ErrorType = options.SafeError || SafeError;
+  const maxBatchFiles = options.maxBatchFiles || RESOURCE_LIMITS.MAX_BATCH_FILES;
 
   function temporaryJournalPath(target) {
     return `${target}.tmp_${randomBytes(6).toString('hex')}`;
@@ -87,7 +89,8 @@ function createBatchJournalStore(options = {}) {
     }
     const expiry = validExpiry(state?.expires_at);
     if (state?.token !== token || state?.schema !== SCHEMA ||
-        !Array.isArray(state?.items) || state.items.length === 0 || expiry === undefined) {
+        !Array.isArray(state?.items) || state.items.length === 0 ||
+        state.items.length > maxBatchFiles || expiry === undefined) {
       throw new ErrorType(INVALID);
     }
     if (nowMs() > expiry) {
@@ -105,7 +108,9 @@ function createBatchJournalStore(options = {}) {
     // intentionally read-only and preserves raw parse/validation errors so
     // callers can count them without deleting an unknown local record.
     const state = readJournalRecord(token);
-    if (state?.schema !== SCHEMA || state.token !== token || validExpiry(state.expires_at) === undefined) {
+    if (state?.schema !== SCHEMA || state.token !== token ||
+        !Array.isArray(state.items) || state.items.length === 0 ||
+        state.items.length > maxBatchFiles || validExpiry(state.expires_at) === undefined) {
       throw new Error('invalid');
     }
     return state;

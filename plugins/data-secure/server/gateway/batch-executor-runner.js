@@ -15,6 +15,7 @@ function createBatchExecutorRunner(options = {}) {
   const finalizePublishedPackageLocally = options.finalizePublishedPackageLocally;
   const releaseLocalBatchExecutor = options.releaseLocalBatchExecutor;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
+  const maxBatchFiles = options.maxBatchFiles || 100;
 
   async function runLocalBatchExecutor(token, deps = {}) {
     const executorPid = Number(deps.executorPid ?? currentPid());
@@ -26,6 +27,9 @@ function createBatchExecutorRunner(options = {}) {
     }
     let lastProgress = publicProgress(claimed);
     try {
+      if (!Array.isArray(claimed.items) || claimed.items.length < 1 || claimed.items.length > maxBatchFiles) {
+        throw new ErrorType('Der lokale Stapelzustand ist ungültig.');
+      }
       // Expensive but mandatory housekeeping is established exactly once for a
       // claimed local batch. The opaque capability remains process-local.
       const preparedRun = prepareProcessingRun(deps);
@@ -61,7 +65,9 @@ function createBatchExecutorRunner(options = {}) {
         if (before === after) break;
       }
     } finally {
-      releaseLocalBatchExecutor(token, executorPid);
+      if (releaseLocalBatchExecutor(token, executorPid) !== true) {
+        throw new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.');
+      }
     }
     return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
   }

@@ -260,6 +260,11 @@ Claim versucht genau eine Freigabe, und nur ein frisch nach der Freigabe
 gelesener Journalstatus bildet die inhaltsfreie Endantwort. Sieben direkte
 Grenztests sowie die unveränderten 66 Batch-Session-Fälle belegen die Fassade,
 100-Dateien-Grenzen und Crash-Recovery an Position 1, 50 und 100.
+Als Security-Nachhärtung akzeptieren sowohl normaler als auch rein lesender
+Maintenance-Journalzugriff nur noch 1 bis 100 Positionen. Der Runner prüft
+dieselbe feste Obergrenze nochmals vor seinem Item-abgeleiteten Schrittbudget.
+Liefert die Lease-Freigabe nicht ausdrücklich `true`, entsteht kein falscher
+Erfolgsstatus; der Lauf stoppt mit einer festen inhaltsfreien Fehlermeldung.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die

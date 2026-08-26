@@ -28,7 +28,7 @@ function fixture(options = {}) {
   let current = options.state || {
     token,
     local_executor_pid: pid,
-    items: [],
+    items: [{}],
     io_summary: {},
     progress: progress()
   };
@@ -101,7 +101,8 @@ function fixture(options = {}) {
       if (options.onRelease) options.onRelease(current);
       return options.releaseResult !== false;
     },
-    deliveryPendingStatus: 'delivery_pending'
+    deliveryPendingStatus: 'delivery_pending',
+    maxBatchFiles: options.maxBatchFiles || 100
   });
 
   return {
@@ -127,7 +128,10 @@ testAsync('lease ownership is proven before progress, preparation or release', a
     assert.deepStrictEqual(value.events, [`read:1:${token}`, 'live']);
   }
 
-  const normalized = fixture({ executorPid: String(pid) });
+  const normalized = fixture({
+    executorPid: String(pid),
+    state: { token, local_executor_pid: pid, items: [{}], io_summary: {}, progress: progress() }
+  });
   await normalized.run();
   assert.ok(normalized.events.includes(`release:${token}:${pid}`));
 });
@@ -156,7 +160,10 @@ testAsync('preparation and maintenance run once before all batch work', async ()
   assert.strictEqual(value.events.filter((event) => event === 'prepare').length, 1);
   assert.strictEqual(value.events.filter((event) => event.startsWith('increment:')).length, 1);
 
-  const unchanged = fixture({ incrementChanged: false });
+  const unchanged = fixture({
+    incrementChanged: false,
+    state: { token, local_executor_pid: pid, items: [{}], io_summary: {}, progress: progress() }
+  });
   await unchanged.run();
   assert.strictEqual(unchanged.events.includes('write'), false);
 });
@@ -224,9 +231,11 @@ testAsync('a new package is finalized immediately while zero remaining does no w
     ['process:1', 'finalize:published-package:1']
   );
 
-  const empty = fixture();
-  await empty.run();
-  assert.deepStrictEqual(empty.counts(), { reads: 2, processCalls: 0, finalizeCalls: 0 });
+  const finished = fixture({
+    state: { token, local_executor_pid: pid, items: [{}], io_summary: {}, progress: progress() }
+  });
+  await finished.run();
+  assert.deepStrictEqual(finished.counts(), { reads: 2, processCalls: 0, finalizeCalls: 0 });
 });
 
 testAsync('the hard item-derived step budget bounds apparent progress', async () => {
@@ -238,12 +247,13 @@ testAsync('the hard item-derived step budget bounds apparent progress', async ()
   assert.strictEqual(value.counts().processCalls, 6);
   assert.strictEqual(value.events.filter((event) => event.startsWith('release:')).length, 1);
 
-  const zero = fixture({
-    state: { token, local_executor_pid: pid, items: [], io_summary: {}, progress: progress({ mapping_pending: 1 }) },
-    process: (call) => progress({ mapping_pending: call + 1 })
+  const oversized = fixture({
+    maxBatchFiles: 1,
+    state: { token, local_executor_pid: pid, items: [{}, {}], io_summary: {}, progress: progress({ mapping_pending: 1 }) }
   });
-  await zero.run();
-  assert.strictEqual(zero.counts().processCalls, 3);
+  await assert.rejects(oversized.run(), /Stapelzustand ist ungültig/);
+  assert.strictEqual(oversized.counts().processCalls, 0);
+  assert.strictEqual(oversized.events.filter((event) => event.startsWith('release:')).length, 1);
 });
 
 testAsync('every post-claim failure releases once and success uses fresh final progress', async () => {
@@ -271,6 +281,13 @@ testAsync('every post-claim failure releases once and success uses fresh final p
     await assert.rejects(value.run(), new RegExp(options.expected));
     assert.strictEqual(value.events.filter((event) => event.startsWith('release:')).length, 1);
   }
+
+  const unreleased = fixture({
+    releaseResult: false,
+    state: { token, local_executor_pid: pid, items: [{}], io_summary: {}, progress: progress() }
+  });
+  await assert.rejects(unreleased.run(), /nicht sicher freigeben/);
+  assert.strictEqual(unreleased.events.filter((event) => event.startsWith('release:')).length, 1);
 
   const completed = fixture({
     state: { token, local_executor_pid: pid, items: [{}], io_summary: {}, progress: progress({ remaining: 1 }) },

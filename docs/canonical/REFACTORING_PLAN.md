@@ -162,7 +162,10 @@ einmalige Vorbereitung, Delivery-vor-Mapping-vor-Processing, beide
 No-progress-Abbrüche, unmittelbare lokale Finalisierung, das feste
 Item-Schrittbudget und den frischen Endstatus nach genau einem Releaseversuch.
 Der Runner beansprucht selbst keinen Lease und gibt einen fremden oder nicht
-mehr lebenden Marker niemals frei. Verarbeitung/Commit, Review-Orchestrierung
+mehr lebenden Marker niemals frei. Ein anschließendes Security-Gegenreview hat
+die Journal- und Runnergrenze zusätzlich auf höchstens 100 Positionen gebunden;
+ein fehlgeschlagener Lease-Release stoppt nun fest statt Erfolg zu melden.
+Verarbeitung/Commit, Review-Orchestrierung
 sowie verbleibende Wartung bleiben absichtlich in `batch.js`; der nächste
 R2-Schnitt wird erneut als kleinster Leaf gewählt.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:

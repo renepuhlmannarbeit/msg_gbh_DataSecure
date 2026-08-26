@@ -222,6 +222,7 @@ test('normal reads consistently reject invalid schema, token, items and expiry w
     state({ schema: 'other' }),
     state({ token: 'b'.repeat(64) }),
     state({ items: [] }),
+    state({ items: Array.from({ length: 101 }, () => ({ status: 'pending' })) }),
     state({ items: 'not-an-array' }),
     state({ expires_at: undefined }),
     state({ expires_at: 'not-a-date' })
@@ -249,7 +250,13 @@ test('maintenance reads are mutation-free and validate their binding and expiry'
     assert.strictEqual(raw(item.target), before);
     assert.deepStrictEqual(item.events, []);
 
-    for (const invalid of [state({ schema: 'other' }), state({ token: 'b'.repeat(64) }), state({ expires_at: 'invalid' })]) {
+    for (const invalid of [
+      state({ schema: 'other' }),
+      state({ token: 'b'.repeat(64) }),
+      state({ items: [] }),
+      state({ items: Array.from({ length: 101 }, () => ({ status: 'pending' })) }),
+      state({ expires_at: 'invalid' })
+    ]) {
       fs.writeFileSync(item.target, `${JSON.stringify(invalid)}\n`, { mode: 0o600 });
       assert.throws(() => item.store.readStateForMaintenance(token), /invalid/);
       assert.deepStrictEqual(item.events, []);
