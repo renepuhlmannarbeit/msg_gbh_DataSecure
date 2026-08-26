@@ -319,6 +319,12 @@ Deliveryfehler bleibt über `processing/package_published` reconcilebar und kann
 weder STOPPED-Mapping noch Catch-bedingte Quellbereinigung auslösen. Elf
 direkte Grenztests und alle 67 realen Batch-Sitzungsszenarien einschließlich
 echter Post-Publish-Adoption ohne zweite Konvertierung sind grün.
+RC50 schließt zusätzlich eine P1-Single-Flight-Lücke an der Delegationsgrenze:
+`processBatchNext` wartet nun ausdrücklich auf das vollständige Settlement des
+asynchronen Item-Prozessors, bevor `finally` das gemeinsame `active`-Gate und
+den globalen Dateisystem-Lock freigibt. Zwei echte verzögerte Pipeline-Tests
+belegen für Resolve und Reject gehaltene Sperren, abgewiesene
+Parallelverarbeitung, genau einen Lauf und keine private Fehlerpreisgabe.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die

@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "eu-privacy-document-gateway",
   "display_name": "GBH DataSecure – Dokumente anonymisieren",
-  "version": "3.2.0-rc49",
+  "version": "3.2.0-rc50",
   "description": "Offline-first lokales Privacy-Gateway für Node-fähige Claude-Hosts: gebundene TXT-/Markdown-/CSV-/DOCX-Stapel und verifiziertes Markdown.",
   "long_description": "Lokale Claude-Integration für Kunden-, Bewerber-, Mitarbeiter-/Beraterprofile, Verträge und allgemeine Geschäftsdokumente. Parser, PII-Engine und Paketlogik sind gebündelt; beim Anwender wird kein npm/Python installiert. Der Server bindet 1–100 bestätigte TXT-, Markdown-, CSV- oder DOCX-Dateien an einen lokalen Snapshot und verarbeitet jede Position höchstens einmal; CSV-Zellen werden nur als Text gelesen und niemals ausgeführt. PDF bleibt sicher gesperrt und alle weiteren Formate stoppen im Pilot ebenfalls sicher. Windows x64 besitzt die vollständigere Job-Object- und Textreview-Grenze. macOS/Linux unterstützen den TXT-/Markdown-/CSV-/DOCX-Textpfad mit Node Permission Model und stoppen bei visuellen oder manuellen Mehrdeutigkeiten sicher. Linux ist ein lokaler Claude-Code-Host-Zielpfad, keine Zusage für eine Claude-Desktop-App. Direkte Identifikatoren werden entfernt; fachliche Skills, Rollen, Zertifizierungen und Geschäftszeiträume sollen erhalten bleiben. Alle Bildpixel bleiben lokal. Claude kann freigegebenes Markdown nur mit einer kurzlebigen paketgebundenen Leseberechtigung desselben Laufs lesen. Dies ist keine Rechtsberatung, Anonymitätsgarantie oder EU-AI-Act-Zertifizierung.",
   "author": {

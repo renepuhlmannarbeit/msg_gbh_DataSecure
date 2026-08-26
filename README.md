@@ -112,8 +112,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc49.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
-- `DataSecure-Privacy-Gateway-v3.2.0-rc49.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc50.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
+- `DataSecure-Privacy-Gateway-v3.2.0-rc50.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem

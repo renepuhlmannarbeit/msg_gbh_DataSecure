@@ -1,5 +1,5 @@
 {
-  "version": "3.2.0-rc49",
+  "version": "3.2.0-rc50",
   "build_date": "2026-08-22",
   "target": "Claude Desktop Windows x64 / MCPB manifest 0.4",
   "runtime": "bundled Node.js core plus native Job Object launcher with statically linked MSVC CRT; no npm/Python runtime install",

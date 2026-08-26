@@ -205,6 +205,11 @@ einen Publish-Callback und die exakte deterministische Paket-ID; nach dem
 Output-Commit bleibt jeder Folgefehler reconcilebar und darf weder
 STOPPED-Mapping noch Catch-bedingtes Quellcleanup auslösen. Als nächster
 R2-Schnitt folgt nur noch verbleibende Wartungs-/Composition-Root-Bereinigung.
+Vor diesem nächsten Schnitt schließt RC50 die asynchrone Lock-Grenze des
+Coordinators: `return await` hält In-Process- und Dateisystem-Single-Flight bis
+zum Settlement der delegierten Item-Pipeline; verzögerte Resolve-/Reject-
+Integrationstests weisen konkurrierende Verarbeitung währenddessen
+reproduzierbar ab und prüfen die sichere Fehlerfassade.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,
 `batch-evidence.js` den atomaren idempotenten v2-Store und eine inhaltsfreie

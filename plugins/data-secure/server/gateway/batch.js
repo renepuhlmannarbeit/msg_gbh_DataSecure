@@ -375,7 +375,10 @@ async function processBatchNext(token, deps = {}) {
         raw_content_sent_to_claude: false
       };
     }
-    return processSingleBatchItem(state, item, entry, deps);
+    // Keep both the in-process guard and the cross-process filesystem lock
+    // until the asynchronous item pipeline has fully settled. Returning the
+    // bare promise would run this function's finally block immediately.
+    return await processSingleBatchItem(state, item, entry, deps);
   } finally {
     active.delete(token);
     releaseActiveLock(token);
