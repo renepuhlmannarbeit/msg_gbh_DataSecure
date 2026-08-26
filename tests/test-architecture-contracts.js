@@ -50,6 +50,22 @@ test('every current processing route is copy-only at the source boundary', () =>
   assert.match(snapshot, /fs\.fsyncSync\(destinationFd\)/u);
 });
 
+test('legacy Input is migration-only and cannot return as a normal intake route', () => {
+  const common = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'common.js'), 'utf8');
+  const intake = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'batch-intake.js'), 'utf8');
+  const gateway = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway.js'), 'utf8');
+  const migration = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'legacy-input-migration.js'), 'utf8');
+  assert.doesNotMatch(common, /function listInput|listInput[,}]/u);
+  assert.doesNotMatch(common, /ensurePrivateDirectory\(root,'Input'\)/u);
+  assert.doesNotMatch(intake, /listInput/u);
+  assert.match(intake, /Array\.isArray\(beginOptions\.queue\)/u);
+  assert.doesNotMatch(gateway, /anonymizeNext,anonymizeAll/u);
+  assert.match(migration, /datasecure-legacy-input-migration\/1/u);
+  assert.match(migration, /path\.join\(privacyRoot\(\), 'Input'\)/u);
+  assert.match(migration, /fs\.linkSync/u);
+  assert.doesNotMatch(migration, /fs\.unlinkSync\(plan\.claim\)/u);
+});
+
 test('batch parallelism remains opt-in, centrally committed and privacy bounded', () => {
   const text = read('BATCH_PARALLELISM_V1.md');
   for (const required of [

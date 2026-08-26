@@ -25,7 +25,7 @@ const started = Date.now();
 const rssBefore = process.memoryUsage().rss;
 
 try {
-  const input = roots().input;
+  const input = fs.mkdtempSync(path.join(base, 'picker-'));
   const fileBytes = 5 * 1024 * 1024;
   const extensions = ['txt', 'md', 'csv'];
   const sources = [];
@@ -40,7 +40,8 @@ try {
   }
   assert.strictEqual(sources.reduce((total, source) => total + fs.statSync(source).size, 0), 500 * 1024 * 1024);
 
-  const result = beginBatch({ expectedCount: 100, profile: 'auto' });
+  const queue = sources.map((full) => { const stat = fs.lstatSync(full); return { name: path.basename(full), full, stat, sourceBytes: stat.size }; });
+  const result = beginBatch({ expectedCount: 100, profile: 'auto', queue });
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.batch_total, 100);
   const state = _test.readState(result.batch_token);

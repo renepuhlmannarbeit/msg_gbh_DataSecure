@@ -15,10 +15,11 @@ process.env.EU_PRIVACY_ROOT = root;
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
 
 const { encodePng } = require(path.join(runtimeDir, 'image-sanitizer.js'));
-const gw = require(path.join(runtimeDir, 'gateway.js'));
+const gateway = require(path.join(runtimeDir, 'gateway.js'));
+const orchestrator = require(path.join(runtimeDir, 'gateway', 'orchestrator.js'));
 const pii = require(path.join(runtimeDir, 'pii-engine.js'));
 const { splitReviewId } = require(path.join(runtimeDir, 'gateway', 'review.js'));
-const { recoverAbandonedInputClaims } = require(path.join(runtimeDir, 'gateway', 'recovery.js'));
+const { migrateLegacyInputV1 } = require(path.join(runtimeDir, 'gateway', 'legacy-input-migration.js'));
 
 const suite = createSuite('Gateway end to end');
 const { done, assert } = suite;
@@ -45,6 +46,10 @@ function testAsync(name, fn) {
 
 const fixtures = path.join(__dirname, 'fixtures');
 const blankPng = encodePng({ width: 300, height: 120, rgba: Buffer.alloc(300 * 120 * 4, 255) });
+
+function isolatedMarkerDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-migration-marker-'));
+}
 
 // `pii` alternates between a page with PII and a clean page so that the
 // redaction path and its verification pass are both exercised.
@@ -83,6 +88,41 @@ function queueBuffer(name, data) {
   return dest;
 }
 
+function currentQueue() {
+  const input = path.join(root, 'Input');
+  if (!fs.existsSync(input)) return [];
+  return fs.readdirSync(input, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+    .map((entry) => {
+      const full = path.join(input, entry.name);
+      return { name: entry.name, full, stat: fs.lstatSync(full) };
+    })
+    .sort((left, right) => left.stat.mtimeMs - right.stat.mtimeMs);
+}
+
+const gw = {
+  ...gateway,
+  anonymizeNext(profile, deps = {}) {
+    return orchestrator.anonymizeNext(profile, { inputQueue: currentQueue(), ...deps });
+  },
+  async anonymizeAll(profile, deps = {}) {
+    const queue = currentQueue();
+    const results = [];
+    for (let index = 0; index < queue.length; index++) {
+      try {
+        const result = await orchestrator.anonymizeNext(profile, { ...deps, inputQueue: [queue[index]] });
+        results.push({ index: index + 1, status: 'released', package_id: result.package_id });
+      } catch (error) {
+        results.push({ index: index + 1, status: 'stopped', message: error.message });
+      }
+    }
+    const released = results.filter((result) => result.status === 'released').length;
+    return { ok: released > 0, input_documents_seen: queue.length, batch_total: queue.length,
+      attempted: queue.length, automatic_retries: 0, released, stopped: queue.length - released,
+      remaining: 0, results, raw_content_sent_to_claude: false };
+  }
+};
+
 function sourceIdentity(file) {
   const stat = fs.lstatSync(file);
   return {
@@ -110,7 +150,7 @@ function retainedAuditCount() {
 }
 
 async function main() {
-  test('startup recovery restores an abandoned hidden claim without overwriting a newer file', () => {
+  test('versioned migration preserves an abandoned hidden claim without overwriting a newer file', () => {
     const input = path.join(root, 'Input');
     const jobs = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'jobs');
     fs.mkdirSync(input, { recursive: true });
@@ -127,20 +167,24 @@ async function main() {
       nonce: 'a'.repeat(32)
     }));
 
-    const result = recoverAbandonedInputClaims({ input, jobs, isProcessAlive: () => false });
-    assert.deepStrictEqual(result, { recovered: 1, active: 0, ignored: 0, failures: 0 });
+    const marker = path.join(isolatedMarkerDir(), 'legacy-input-v1.json');
+    const result = migrateLegacyInputV1({ input, jobs, marker, isProcessAlive: () => false });
+    assert.strictEqual(result.state, 'complete');
+    assert.strictEqual(result.claims_preserved, 1);
+    assert.strictEqual(result.active, 0);
+    assert.strictEqual(result.failures, 0);
     assert.strictEqual(fs.readFileSync(path.join(input, 'collision.txt'), 'utf8'), 'newer-user-source');
     assert.strictEqual(
       fs.readFileSync(path.join(input, 'collision_wiederhergestellt_2.txt'), 'utf8'),
       'abandoned-private-source'
     );
-    assert.strictEqual(fs.existsSync(hidden), false);
+    assert.strictEqual(fs.existsSync(hidden), true, 'the historical source object remains preserved');
     fs.unlinkSync(path.join(input, 'collision.txt'));
     fs.unlinkSync(path.join(input, 'collision_wiederhergestellt_2.txt'));
     fs.rmSync(jobDir, { recursive: true, force: true });
   });
 
-  test('startup recovery never follows a hidden symlink or steals an active claim', () => {
+  test('versioned migration never follows a hidden symlink or steals an active claim', () => {
     const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-recovery-'));
     const input = path.join(isolated, 'Input');
     const jobs = path.join(isolated, 'jobs');
@@ -162,9 +206,11 @@ async function main() {
     let symlinkCreated = false;
     try { fs.symlinkSync(outside, symlink, 'file'); symlinkCreated = true; } catch { /* restricted host */ }
 
-    const result = recoverAbandonedInputClaims({ input, jobs, isProcessAlive: () => true });
+    const markerDir = path.join(isolated, 'migrations');
+    fs.mkdirSync(markerDir);
+    const result = migrateLegacyInputV1({ input, jobs, marker: path.join(markerDir, 'legacy-input-v1.json'), isProcessAlive: () => true });
     assert.strictEqual(result.active, 1);
-    assert.strictEqual(result.recovered, 0);
+    assert.strictEqual(result.claims_preserved, 0);
     assert.strictEqual(fs.existsSync(activeClaim), true);
     assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'outside-private-source');
     if (symlinkCreated) {

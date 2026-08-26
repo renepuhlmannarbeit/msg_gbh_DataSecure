@@ -47,7 +47,8 @@ async function main() {
       ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Synthetischer OCR-Test</w:t></w:r></w:p></w:body></w:document>'],
       ['word/media/image1.png', fs.readFileSync(imagePath)]
     ]);
-    fs.writeFileSync(path.join(inputDir, 'synthetic-ocr.docx'), docx);
+    const source = path.join(inputDir, 'synthetic-ocr.docx');
+    fs.writeFileSync(source, docx);
 
     const { ocrPngDetailed, rasterizeToPng, visualBridgeStatus, VisualBridgeError } =
       require('../plugins/data-secure/server/windows-visual');
@@ -55,8 +56,8 @@ async function main() {
     assert.match(rawOcr.text, /Max Mustermann/);
     assert.match(rawOcr.text, /max@example\.de/);
 
-    const gw = require('../plugins/data-secure/server/gateway');
-    const result = await gw.anonymizeNext('customer');
+    const { anonymizeSelectedSource } = require('../plugins/data-secure/server/gateway/orchestrator');
+    const result = await anonymizeSelectedSource(source, 'customer');
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.visual_assets.included, 0, 'visual assets must never be released automatically');
     assert.strictEqual(result.visual_assets.review_required, 1, 'visual asset must remain local for review');

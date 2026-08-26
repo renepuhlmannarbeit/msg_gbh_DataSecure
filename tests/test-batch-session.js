@@ -10,7 +10,7 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 const { roots, privacyRoot, storageStatus, ensurePrivateDirectory } = require('../plugins/data-secure/server/gateway/common');
-const { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { beginBatch: beginBatchFromQueue, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
 const { startLocalBatchExecutor } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { csvField } = require('../plugins/data-secure/server/gateway/mapping');
 const { evidencePath, SCHEMA, validateEvidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
@@ -19,15 +19,37 @@ const { zipStore } = require('./lib/zip');
 const { testAsync, done, assert } = createSuite('Server-bound batch session');
 
 function resetInput() {
-  const input = roots().input;
+  const input = path.join(privacyRoot(), 'test-picker-sources');
+  fs.mkdirSync(input, { recursive: true });
   for (const entry of fs.readdirSync(input)) fs.rmSync(path.join(input, entry), { recursive: true, force: true });
   return input;
 }
 
 function add(name, text) {
-  const target = path.join(roots().input, name);
+  const target = path.join(resetInputDirectory(), name);
   fs.writeFileSync(target, text, 'utf8');
   return target;
+}
+
+function resetInputDirectory() {
+  const input = path.join(privacyRoot(), 'test-picker-sources');
+  fs.mkdirSync(input, { recursive: true });
+  return input;
+}
+
+function pickerQueue() {
+  return fs.readdirSync(resetInputDirectory(), { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+    .map((entry) => {
+      const full = path.join(resetInputDirectory(), entry.name);
+      const stat = fs.lstatSync(full);
+      return { name: entry.name, full, stat, sourceBytes: stat.size };
+    })
+    .sort((left, right) => left.stat.mtimeMs - right.stat.mtimeMs);
+}
+
+function beginBatch(options = {}) {
+  return beginBatchFromQueue({ ...options, queue: options.queue || pickerQueue() });
 }
 
 function ordered(name, text, index) {
@@ -490,7 +512,7 @@ async function main() {
     for (const extension of ['.docx', '.xlsx', '.pptx']) {
       resetInput();
       const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
-      const source = path.join(roots().input, `unsafe-container${extension}`);
+      const source = path.join(resetInputDirectory(), `unsafe-container${extension}`);
       const archive = Buffer.from(zipStore([['word/document.xml', '<w:document/>']]));
       const central = archive.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
       assert.ok(central >= 0);
@@ -505,7 +527,7 @@ async function main() {
   await testAsync('a password-protected Office container stops before a snapshot without offering an unimplemented decryption path', async () => {
     resetInput();
     const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
-    const source = path.join(roots().input, 'protected.docx');
+    const source = path.join(resetInputDirectory(), 'protected.docx');
     const archive = Buffer.from(zipStore([['word/document.xml', '<w:document/>']]));
     const central = archive.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
     assert.ok(central >= 0);
@@ -520,7 +542,7 @@ async function main() {
   await testAsync('a standard encrypted Office CFB container stops before a snapshot without offering an unimplemented decryption path', async () => {
     resetInput();
     const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
-    const source = path.join(roots().input, 'protected-standard.docx');
+    const source = path.join(resetInputDirectory(), 'protected-standard.docx');
     const encryptedOffice = Buffer.alloc(512);
     Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(encryptedOffice);
     fs.writeFileSync(source, encryptedOffice);
@@ -570,7 +592,7 @@ async function main() {
     try { fs.unlinkSync(evidencePath()); } catch { /* test starts without a receipt */ }
     // The format gate, not the OOXML-container preflight, is the behavior
     // under test. Keep the extension/content combination structurally honest.
-    fs.writeFileSync(path.join(roots().input, 'terminal-stop.xlsx'), zipStore([['xl/workbook.xml', '<workbook/>']]));
+    fs.writeFileSync(path.join(resetInputDirectory(), 'terminal-stop.xlsx'), zipStore([['xl/workbook.xml', '<workbook/>']]));
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processBatchNext(begun.batch_token, deps);
     assert.strictEqual(result.ok, false);
@@ -1162,7 +1184,7 @@ async function main() {
     assert.strictEqual(second.released, 2);
     assert.strictEqual(second.stopped, 1);
     assert.match(first.read_capability, /^[A-Za-z0-9_-]{43}$/);
-    assert.deepStrictEqual(fs.readdirSync(roots().input).sort(), ['blocked.xlsx', 'first.txt', 'second.txt']);
+    assert.deepStrictEqual(fs.readdirSync(resetInputDirectory()).sort(), ['blocked.xlsx', 'first.txt', 'second.txt']);
     const mapping = fs.readFileSync(path.join(roots().exports, 'DataSecure-Mapping.csv'), 'utf8');
     assert.match(mapping, /Originaldatei;Anonymisiertes Ergebnis;Status;Hinweis/);
     assert.match(mapping, /"first\.txt"/);
@@ -1358,7 +1380,7 @@ async function main() {
     const result = await processAndAcknowledge(begun.batch_token, deps);
     assert.strictEqual(result.awaiting_resume, true);
     assert.strictEqual(result.retryable, 1);
-    assert.strictEqual(fs.existsSync(path.join(roots().input, 'resume.txt')), true);
+    assert.strictEqual(fs.existsSync(path.join(resetInputDirectory(), 'resume.txt')), true);
     assert.strictEqual(resumeBatch(begun.batch_token).resumed, 1);
     assert.strictEqual((await processAndAcknowledge(begun.batch_token, deps)).complete, true);
   });
@@ -1511,7 +1533,7 @@ async function main() {
     assert.strictEqual(exhausted.used, 97);
     assert.strictEqual(exhausted.available, 0);
     assert.strictEqual(exhausted.safely_stopped, 3);
-    assert.strictEqual(fs.readdirSync(roots().input).length, 100);
+    assert.strictEqual(fs.readdirSync(resetInputDirectory()).length, 100);
   });
 
   await testAsync('real worker crashes at positions 1, 50 and 100 recover without duplicate release', async () => {

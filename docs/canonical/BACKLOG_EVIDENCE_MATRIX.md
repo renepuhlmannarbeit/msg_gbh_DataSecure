@@ -27,7 +27,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | Story | Was noch zu liefern bzw. zu prüfen ist | Evidenz und konkrete menschliche Aufgabe |
 |---|---|---|
 | BL-011.13 | Private Daten OS-benutzergebunden verschlüsseln. | **E0 + E1 + E3:** Unit-/Negativtests; DPAPI/Keychain real; Security-Review. |
-| BL-011.14 | **E0-Teilnachweis RC54:** alle aktuellen Neuverarbeitungsrouten sind copy-only; historische `Processed`-Bestände sind als mögliche Originale vor Retention, Null-Tage-Regel und Purge geschützt. Offen sind technischer `Input` und die isolierte versionierte Einmalmigration. | **E0:** direkte Snapshot-, Orchestrator-, Fehlerphasen-, Retention-, Purge- und Migrationstests; E1 nur für Cloud-Sync-Interoperabilität und damit quellspezifisch in BL-044.1. |
+| BL-011.14 | **E0 abgeschlossen und archiviert (RC53–RC55):** Neuquellen sind copy-only, historische `Processed`-Bestände geschützt, `listInput` und technische Intake-Fallbacks entfernt; eine versionierte Migration bewahrt vorhandene sichtbare Dateien und sichert gültige historische Claims kollisionsfrei. | **E0:** Snapshot-, Orchestrator-, Retention-/Purge-, 15 Migrations- und 20 Architekturtests. Reale Update-/Rollback-Evidenz bleibt BL-051.x; Cloud-/Ordnerquellen bleiben BL-044.1. |
 | BL-041.9 | Review/Abschluss nicht blockierend und pausierte Stapel startbar machen. | **E0 + E1 + E2:** Zustands-/Timeouttests; echte Cowork-Laufzeit; beobachtete UX. |
 | BL-044.1 | Rekursive Ordnerquelle ohne Linkverfolgung liefern. | **E0 + E1:** synthetische Hierarchie-/Race-Tests; reale Reparse-/Symlink-Gegenprobe. |
 | BL-047.1 | Adaptive Parallelität und Performancebudgets aktivieren. | **E0 + E1:** deterministische Scheduler-/Speichertests; Referenzhardwaremessung. |

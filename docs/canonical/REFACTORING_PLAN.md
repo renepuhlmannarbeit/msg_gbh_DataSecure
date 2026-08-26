@@ -229,7 +229,7 @@ bereits verifiziertes Paket niemals zurück.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
-Status: **in Arbeit** · Stories: BL-011.14, BL-044.1
+Status: **R3b abgeschlossen; Ordnerquelle offen** · Story: BL-044.1
 
 R3a ist mit RC53 abgeschlossen: `read-only-source-snapshot.js` bindet jede
 Neuquelle über `O_RDONLY`, Link-/Identitäts-/Größen-/mtime-Prüfung und optionalen
@@ -242,18 +242,17 @@ lokale SHA-256-Bindung; Zero-/Partial-Writes und Close-/Cleanupfehler sind
 begrenzt und fail-closed. Der erste R3b-Schnitt ist mit RC54 abgeschlossen:
 Historische `Processed`-Altbestände werden unabhängig von Alter und Typ weder durch
 Retention noch Purge verändert; unvollständige Inspektion stoppt fail-closed vor
-einer Gesamtbereinigung. Der verbleibende R3b-Schnitt entfernt den technischen
-`Input`-Normalweg und isoliert die Upgrade-Migration.
+einer Gesamtbereinigung. RC55 schließt R3b: Der technische `Input`-Normalweg ist
+entfernt und die Upgrade-Migration ist als `legacy-input-migration.js` isoliert.
 
-- Neue Installationen erzeugen keinen technischen `Input`-Eingang.
-- `listInput` und jede queuebasierte Quelle ohne Picker-/Ordner-Snapshot werden
-  aus dem Produktpfad entfernt.
+- Neue Installationen erzeugen keinen technischen `Input`-Eingang; `listInput` und
+  jede queuebasierte Quelle ohne Picker-Snapshot sind aus dem Produktpfad entfernt.
 - Picker- und spätere Ordnerquellen werden nur gelesen und in eine private
   Arbeitskopie übernommen. Alle Fehlerpfade lassen die Quelle byteidentisch an
   ihrem Ort.
-- Die Upgrade-Migration wird in ein isoliertes, versioniertes Einmalmodul
-  verschoben. Sie erhält alte Daten, nimmt keine neuen an und kann nach Ablauf der
-  dokumentierten Übergangsversion vollständig entfallen.
+- Die Upgrade-Migration ist ein isoliertes, versioniertes, gesperrtes Einmalmodul.
+  Sie erhält sichtbare Altdateien und historische Claims, nimmt keine neuen an und
+  kann nach Ablauf der dokumentierten Übergangsversion vollständig entfallen.
 - Dauerhafte Markdown-Exporte und Mapping werden nie automatisch durch Retention,
   Update, Rollback oder Deinstallation gelöscht.
 

@@ -121,7 +121,7 @@ function safeRemovePrivateTree(parent,literalChild){
   removeEntry(target);
   return true;
 }
-function roots(){const root=privacyRoot();const before=storageStatus(root);if(!before.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');fs.mkdirSync(root,{recursive:true,mode:0o700});const after=storageStatus(root);if(!after.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');const gatewayRoot=ensurePrivateDirectory(path.dirname(dataRoot()),path.basename(dataRoot()));const r={root,input:ensurePrivateDirectory(root,'Input'),output:ensurePrivateDirectory(root,'Output'),processed:ensurePrivateDirectory(root,'Processed'),review:ensurePrivateDirectory(root,'Needs Visual Review'),exports:ensurePrivateDirectory(root,'DataSecure-Export'),audit:ensurePrivateDirectory(gatewayRoot,'audit'),jobs:ensurePrivateDirectory(gatewayRoot,'jobs')};return r;}
+function roots(){const root=privacyRoot();const before=storageStatus(root);if(!before.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');fs.mkdirSync(root,{recursive:true,mode:0o700});const after=storageStatus(root);if(!after.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');const gatewayRoot=ensurePrivateDirectory(path.dirname(dataRoot()),path.basename(dataRoot()));const r={root,output:ensurePrivateDirectory(root,'Output'),processed:ensurePrivateDirectory(root,'Processed'),review:ensurePrivateDirectory(root,'Needs Visual Review'),exports:ensurePrivateDirectory(root,'DataSecure-Export'),audit:ensurePrivateDirectory(gatewayRoot,'audit'),jobs:ensurePrivateDirectory(gatewayRoot,'jobs'),migrations:ensurePrivateDirectory(gatewayRoot,'migrations')};return r;}
 function sha256Buffer(b){return crypto.createHash('sha256').update(b).digest('hex');}
 function sha256File(p){
   const descriptor=fs.openSync(p,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
@@ -140,7 +140,6 @@ function timestamp(){const d=new Date();return d.getFullYear().toString()+String
 function safePackageId(profile){const prefix={customer:'Kundendokument',applicant:'Bewerbung',personnel_profile:'Mitarbeiterprofil',contract:'Vertrag',general:'Dokument'}[profile]||'Dokument';return `${prefix}_${timestamp()}_anonymisiert`;}
 function uniqueDir(dir,base){let p=path.join(dir,base),i=2;while(fs.existsSync(p))p=path.join(dir,`${base}_${i++}`);return p;}
 function uniquePath(dir,file){const e=path.extname(file),b=path.basename(file,e);let p=path.join(dir,file),i=2;while(fs.existsSync(p))p=path.join(dir,`${b}_${i++}${e}`);return p;}
-function listInput(){const r=roots();return fs.readdirSync(r.input,{withFileTypes:true}).filter(x=>x.isFile()&&!x.name.startsWith('.')).map(x=>({name:x.name,full:path.join(r.input,x.name),stat:fs.statSync(path.join(r.input,x.name))})).sort((a,b)=>a.stat.mtimeMs-b.stat.mtimeMs);}
 function validateBatchLimits(queue){
   if(!Array.isArray(queue)||queue.length>LIMITS.MAX_BATCH_FILES)throw new Error('BATCH_FILE_LIMIT');
   let total=0;for(const entry of queue){const size=Number(entry?.stat?.size);assertSourceSize(path.extname(String(entry?.name||entry?.full||'')),size);total+=size;if(total>LIMITS.MAX_BATCH_TOTAL_BYTES)throw new Error('BATCH_TOTAL_LIMIT');}
@@ -162,4 +161,4 @@ function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();cons
 };
   if(score.personnel_profile>=3)return'personnel_profile';const ranked=Object.entries(score).filter(([k])=>k!=='personnel_profile').sort((a,b)=>b[1]-a[1]);return ranked[0][1]>=2?ranked[0][0]:'general';}
 
-module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listInput,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};
+module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};

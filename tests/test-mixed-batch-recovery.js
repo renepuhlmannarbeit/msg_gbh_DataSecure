@@ -23,7 +23,7 @@ async function processAndAcknowledge(token, convertDocument) {
 
 async function main() {
   await testAsync('TXT, CSV and DOCX release exactly once across an explicit interruption and resume', async () => {
-    const input = roots().input;
+    const input = fs.mkdtempSync(path.join(base, 'picker-'));
     fs.writeFileSync(path.join(input, 'one.txt'), 'Kontakt: Alice Beispiel, alice@example.test\nFachtext bleibt.', 'utf8');
     fs.writeFileSync(path.join(input, 'two.csv'), 'Wert\n"=HYPERLINK(""mailto:bob@example.test"",""Bob Beispiel"")"', 'utf8');
     fs.writeFileSync(path.join(input, 'three.docx'), zipStore([
@@ -33,7 +33,8 @@ async function main() {
     const sources = ['one.txt', 'two.csv', 'three.docx'].map((name) => path.join(input, name));
     const before = sources.map(hash);
     const convertDocument = async (source) => parseDocumentBuffer(fs.readFileSync(source), path.extname(source).toLowerCase());
-    const batch = beginBatch({ expectedCount: 3, profile: 'auto' });
+    const queue = sources.map((full) => { const stat = fs.lstatSync(full); return { name: path.basename(full), full, stat, sourceBytes: stat.size }; });
+    const batch = beginBatch({ expectedCount: 3, profile: 'auto', queue });
     const first = await processAndAcknowledge(batch.batch_token, convertDocument);
     assert.strictEqual(first.released, 1);
     const interrupted = await processBatchNext(batch.batch_token, { convertDocument: async () => {

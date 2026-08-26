@@ -15,8 +15,6 @@ const {
   safePackageId,
   uniqueDir,
   safeRemovePrivateTree,
-  listInput,
-  validateBatchLimits,
   detectProfileFromMarkdown
 } = require('./common');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
@@ -220,12 +218,15 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
   ensureProcessingRun(deps);
 
-  const queue = deps.inputQueue || listInput();
+  if (!Array.isArray(deps.inputQueue)) {
+    throw new SafeError('Die Verarbeitung erfordert eine ausdrücklich ausgewählte lokale Quelle.');
+  }
+  const queue = deps.inputQueue;
   if (!queue.length) {
     return {
       ok: false,
       error: 'input_empty',
-      message: 'Keine unterstützte Datei im lokalen Input-Ordner.',
+      message: 'Die lokale Dateiauswahl enthält keine unterstützte Datei.',
       raw_content_sent_to_claude: false
     };
   }
@@ -659,75 +660,6 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   }
 }
 
-async function anonymizeAll(profile = 'auto', deps = {}) {
-  const requested = String(profile || 'auto').toLowerCase();
-  if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
-  const queue = deps.inputQueue || listInput();
-  if (!queue.length) {
-    return {
-      ok: false,
-      error: 'input_empty',
-      message: 'Keine unterstützte Datei im lokalen Input-Ordner.',
-      input_documents_seen: 0,
-      batch_total: 0,
-      attempted: 0,
-      automatic_retries: 0,
-      released: 0,
-      stopped: 0,
-      remaining: 0,
-      results: [],
-      raw_content_sent_to_claude: false
-    };
-  }
-
-  try { validateBatchLimits(queue); } catch (error) {
-    if (error.message === 'BATCH_TOTAL_LIMIT') throw new SafeError('Der lokale Stapel ist größer als 500 MB.');
-    if (error.message === 'INPUT_FORMAT_LIMIT') {
-      throw new SafeError('Eine Datei überschreitet die sichere Einzeldateigrenze für ihr Format. Bitte teilen Sie diese Datei auf.');
-    }
-    throw new SafeError('Der lokale Stapel enthält zu viele oder zu große Dateien.');
-  }
-  const maximum = LIMITS.MAX_BATCH_FILES;
-  const selected = queue.slice(0, maximum);
-  const results = [];
-  for (let index = 0; index < selected.length; index++) {
-    try {
-      const result = await anonymizeNext(requested, { ...deps, inputQueue: [selected[index]] });
-      results.push({
-        index: index + 1,
-        status: 'released',
-        package_id: result.package_id,
-        document_id: result.document_id,
-        profile: result.profile,
-        visual_assets: result.visual_assets
-      });
-    } catch (error) {
-      results.push({
-        index: index + 1,
-        status: 'stopped',
-        message: error instanceof SafeError
-          ? error.message
-          : 'Die lokale Verarbeitung wurde sicher abgebrochen.'
-      });
-    }
-  }
-
-  const released = results.filter((item) => item.status === 'released').length;
-  const stopped = results.length - released;
-  return {
-    ok: released > 0,
-    input_documents_seen: queue.length,
-    batch_total: queue.length,
-    attempted: selected.length,
-    automatic_retries: 0,
-    released,
-    stopped,
-    remaining: Math.max(0, queue.length - selected.length),
-    results,
-    raw_content_sent_to_claude: false
-  };
-}
-
 async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
   const absolute = path.resolve(String(source || ''));
   if (!path.isAbsolute(String(source || '')) || absolute !== String(source)) {
@@ -750,7 +682,6 @@ async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
 
 module.exports = {
   anonymizeNext,
-  anonymizeAll,
   anonymizeSelectedSource,
   bestEffortRetentionCleanup,
   cleanupAbandonedWorkingJobs,

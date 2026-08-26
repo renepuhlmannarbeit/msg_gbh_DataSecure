@@ -103,11 +103,12 @@ fails, no package is exposed and the private job remains safely recoverable or i
 cleaned according to its lifecycle. A one-release migration restores abandoned
 hidden claims from the removed Input fallback but never accepts new work there.
 
-A startup recovery pass restores abandoned hidden input claims without overwriting
-an existing file, following symlinks or touching a claim that still has a live
-owner. A hard process or machine crash after the source has already moved to
-`Processed`, but before the Output rename, can still require manual recovery: the
-original may then be present in `Processed` while no package is visible in `Output`.
+A versioned one-time migration preserves abandoned hidden Input claims without
+overwriting an existing file, following symlinks or touching a claim that still has
+a live owner. A hard process or machine crash after the private snapshot was
+created, but before the Output rename, is recovered through the checkpoint. The
+selected source itself is never moved or deleted. Historical files already present
+in `Processed` are treated as possible originals and remain protected.
 
 ## Batch and read capabilities
 
@@ -165,8 +166,9 @@ Windows network locations are refused. This is a conservative known-path check,
 not proof that an arbitrary custom folder is never synchronised; administrators
 remain responsible for the chosen override.
 
-The runtime applies a configurable retention window to direct entries in
-`Processed/`, `Output/` and `Needs Visual Review/`; the default is seven days.
+The runtime applies a configurable retention window to direct entries in `Output/`
+and `Needs Visual Review/`; the default is seven days. `Processed/` is excluded
+because historical entries can be original source material.
 Cleanup runs when the MCP server starts and again before every processing run.
 Expiry is based on the entry mtime, and an Output package is treated atomically
 by its directory mtime. Hidden staging directories are excluded. A locked or
@@ -202,8 +204,8 @@ for proof that bytes are absent. Approval of an expired item is refused with a
 message that names the retention window rather than reporting a missing package
 file.
 
-`retention_days=0` removes the processed original and withheld preview bytes as
-soon as a successful run commits. The newly returned Output package remains
+`retention_days=0` removes withheld preview bytes as soon as a successful run
+commits, but never removes possible originals from `Processed`. The newly returned Output package remains
 readable for that response and becomes eligible at the next cleanup trigger.
 
 **Visual approval is currently disabled through Claude regardless of retention.**

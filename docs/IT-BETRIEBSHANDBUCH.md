@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC45 · Stand 22.08.2026
+Version 3.2.0 RC55 · Stand 26.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC45 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC55 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -17,10 +17,10 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC54 |
+| Artefakt | Ziel | Status RC55 |
 |---|---|---|
-| `DataSecure-Privacy-Preflight-v3.2.0-rc54.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
-| `DataSecure-Privacy-Gateway-v3.2.0-rc54.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc55.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc55.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
@@ -167,9 +167,12 @@ Cloud-Sync, Netzpfad, Symlink/Junction oder nicht verifizierbarem Stamm ist
 Stopp. Einen aktiven oder wiederaufnehmbaren Stapel vorher abschließen oder bewusst
 verwerfen; das Umstellen migriert keine Daten.
 
-Nach einem Update stellt eine Übergangsmigration gegebenenfalls verwaiste versteckte
-Claims aus dem früheren Input-Fallback wieder her, ohne Dateien zu überschreiben oder
-Links zu verfolgen. Sie nimmt keine neue Arbeit aus diesen Ordnern an. Eine bereits
+Nach einem Update prüft die schema-versionierte Übergangsmigration ausschließlich
+einen bereits vorhandenen früheren `Input`-Ordner; sie legt ihn nie an. Sichtbare
+Dateien bleiben unverändert. Gültige verwaiste Claims werden kollisionsfrei als
+zusätzlicher Hardlink sichtbar gesichert, wobei auch das historische Quellobjekt
+erhalten bleibt. Links, aktive oder unklare Owner und defekte Marker stoppen vor
+neuer Mutation. Die Migration nimmt keine neue Arbeit aus diesem Ordner an. Eine bereits
 begonnene Picker-Batch-Position wird als gestoppt markiert und nicht automatisch
 erneut ausgeführt.
 
@@ -183,8 +186,9 @@ werden.
 
 ## 7. Update und Rollback
 
-RC45 besitzt noch keinen vollständig belegten Upgrade-/Rollback-Prozess. Bis DS-007
-abgeschlossen ist:
+RC55 besitzt eine versionierte, datenbewahrende Einmalmigration für frühere
+`Input`-Bestände. Die vollständige Installation-/Rollback-Abnahme des ausgelieferten
+Artefakts ist jedoch noch nicht belegt. Bis DS-007 abgeschlossen ist:
 
 1. Konfiguration und Artefaktversion protokollieren, niemals Dokumentinhalte.
 2. Alle synthetischen Jobs abschließen oder bewusst abbrechen.

@@ -46,16 +46,22 @@ async function runWorker(count) {
     // A fresh root for each pass preserves the source-retention contract and
     // guarantees the next pass sees exactly the requested synthetic files.
     process.env.EU_PRIVACY_ROOT = path.join(tempRoot, `run-${ordinal}`);
-    const input = roots().input;
+    roots();
+    const sources = path.join(tempRoot, `sources-${ordinal}`);
+    fs.mkdirSync(sources, { recursive: false, mode: 0o700 });
     const formats = new Set();
+    const queue = [];
     for (let index = 0; index < count; index++) {
       const fixture = syntheticDocument(index);
       formats.add(fixture.extension.slice(1));
-      fs.writeFileSync(path.join(input, `${String(index + 1).padStart(3, '0')}${fixture.extension}`), fixture.data);
+      const name = `${String(index + 1).padStart(3, '0')}${fixture.extension}`;
+      const full = path.join(sources, name);
+      fs.writeFileSync(full, fixture.data);
+      queue.push({ name, full, sourceBytes: fixture.data.length });
     }
     const cpuStart = process.cpuUsage();
     const startedAt = performance.now();
-    const batch = beginBatch({ expectedCount: count, profile: 'general' });
+    const batch = beginBatch({ expectedCount: count, profile: 'general', queue });
     claimLocalBatchExecutor(batch.batch_token, process.pid);
     const result = await runLocalBatchExecutor(batch.batch_token, {
       convertDocument: async (source) => parseDocumentBuffer(fs.readFileSync(source), path.extname(source).toLowerCase())

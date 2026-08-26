@@ -20,10 +20,12 @@ const { testAsync, done, assert } = createSuite('Post-publication batch recovery
 
 async function main() {
   await testAsync('journal failure after output commit adopts once without stopped mapping or reprocessing', async () => {
-    const source = path.join(roots().input, 'post-publish-recovery.txt');
+    const sourceDir = fs.mkdtempSync(path.join(base, 'picker-'));
+    const source = path.join(sourceDir, 'post-publish-recovery.txt');
     fs.writeFileSync(source, 'Kunde: Max Mustermann', 'utf8');
     const mapping = path.join(roots().exports, 'DataSecure-Mapping.csv');
-    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const stat = fs.lstatSync(source);
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer', queue: [{ name: path.basename(source), full: source, stat, sourceBytes: stat.size }] });
     const stateFile = path.join(_test.batchRoot(), `${begun.batch_token}.json`);
     const originalRenameSync = fs.renameSync;
     let injected = false;

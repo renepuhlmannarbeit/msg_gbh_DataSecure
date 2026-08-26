@@ -109,12 +109,14 @@ alone do not close them.
 - [ ] only released Markdown with the current run's package-bound read capability
       is readable by Claude; a package ID alone and historical package enumeration fail
 - [ ] `privacy_status` reports the configured retention window and due counts
-- [ ] an expired synthetic Processed file, Output package and pending review
-      preview are removed, while hidden staging directories and metadata-only audit receipts remain
+- [ ] an expired synthetic Output package and pending review preview are removed,
+      while possible originals in `Processed`, hidden staging directories and
+      metadata-only audit receipts remain
 - [ ] `purge_local_data` requires explicit confirmation and cleans only the
       selected scope
-- [ ] with retention set to `0`, the processed original disappears immediately
-      and the newly created package is still readable
+- [ ] with retention set to `0`, the pending review bytes disappear immediately,
+      possible originals in `Processed` remain protected and the newly created
+      package is still readable
 
 If `privacy_status` reports `visual_bridge: unavailable`, the text path still
 works and every graphic is withheld — that is the intended degraded mode, not a

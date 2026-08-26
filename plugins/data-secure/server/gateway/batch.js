@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
-const { PROFILES, LIMITS, listInput, validateBatchLimits, storageStatus, hasReparseComponent } = require('./common');
+const { PROFILES, LIMITS, validateBatchLimits, storageStatus, hasReparseComponent } = require('./common');
 const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
@@ -112,7 +112,6 @@ const { beginBatch } = createBatchIntake({
   crypto,
   profiles: PROFILES,
   limits: LIMITS,
-  listInput,
   validateBatchLimits,
   storageStatus,
   hasReparseComponent,

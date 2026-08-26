@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readStatus } = require('../runtime');
-const { VERSION, listInput, listPackageDirs, storageStatus } = require('./common');
+const { VERSION, listPackageDirs, storageStatus } = require('./common');
 const { listReviewItems } = require('./review');
 const { retentionStatus } = require('./retention');
 const { auditStatus } = require('./audit');
@@ -51,7 +51,6 @@ function genericStatus(options = {}) {
     visual_bridge: engine.visual_bridge,
     visual_bridge_reason: engine.visual_bridge_reason,
     visual_boundary: engine.visual_boundary,
-    input_documents: listInput().length,
     local_intake_pending: localIntakeActive(),
     ...batches,
     ...localCleanup,
@@ -99,7 +98,7 @@ function genericStatus(options = {}) {
     ],
     ...runtimeInfo(),
     workflow:
-      'Input -> isolated local parser process -> bundled PII engine -> residual gate -> ' +
+      'explicit local picker -> read-only snapshot -> isolated local parser process -> bundled PII engine -> residual gate -> ' +
       'visual raster/OCR/redaction or local review -> Output package',
     raw_content_sent_to_claude: false
   };

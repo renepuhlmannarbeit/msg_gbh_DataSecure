@@ -28,6 +28,7 @@ Formate, Plattformen oder Cowork-Oberflächen. Laufende Teilnachweise bleiben im
 | BL-011.2 | 100-Dateien-/500-MB-Grenze vor privater Kopie durchgesetzt | `test-batch-session.js` |
 | BL-011.4 | Checkpoints und explizite Wiederaufnahme ohne Quellwiederholung | `gateway/batch.js`, Batch-Tests |
 | BL-011.5 | Cleanup-Lebenszyklus offener Arbeitskopien umgesetzt | `batch-maintenance.js`, Wartungstests |
+| BL-011.14 | Originale und dauerhafte Exporte vollständig geschützt; technischer `Input` aus dem Normalweg entfernt | RC53–RC55; read-only Quellsnapshot, geschützter `Processed`-Altbestand, versionierte fail-closed Legacy-Migration, 15 direkte Migrations- und 20 Architekturverträge |
 | BL-011.15 | R2-Stapelkern hinter unveränderter Exportfassade vollständig in klar verantwortete Module zerlegt | RC45–RC52; `gateway/batch-processing-orchestrator.js`, 66 reale Batch-Szenarien, Fast Path und vollständige lokale Testsuite; Detailnachweise in `TRACEABILITY.md` |
 | BL-011.15/R2-Discard | Gesperrtes tokengebundenes Verwerfen mit enger Löschgrenze isoliert | `gateway/batch-discard.js`, 8 Grenztests |
 | BL-011.15/R2-Continuation | Resume und tokenlose Auswahl des jüngsten offenen Stapels isoliert | `gateway/batch-continuation.js`, 10 Grenztests |

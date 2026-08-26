@@ -21,9 +21,11 @@ const { testAsync, done, assert } = createSuite('Batch processing lock integrati
 
 async function main() {
   await testAsync('active and filesystem locks remain held until the item promise settles', async () => {
-    const source = path.join(roots().input, 'processing-lock.txt');
+    const sourceDir = fs.mkdtempSync(path.join(base, 'picker-'));
+    const source = path.join(sourceDir, 'processing-lock.txt');
     fs.writeFileSync(source, 'Kunde: Max Mustermann', 'utf8');
-    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const stat = fs.lstatSync(source);
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer', queue: [{ name: path.basename(source), full: source, stat, sourceBytes: stat.size }] });
 
     let releasePublish;
     let signalPublishEntered;
@@ -61,9 +63,11 @@ async function main() {
   });
 
   await testAsync('locks remain held through rejection and are released without leaking the pipeline error', async () => {
-    const source = path.join(roots().input, 'processing-lock-reject.txt');
+    const sourceDir = fs.mkdtempSync(path.join(base, 'picker-'));
+    const source = path.join(sourceDir, 'processing-lock-reject.txt');
     fs.writeFileSync(source, 'Kunde: Erika Musterfrau', 'utf8');
-    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const stat = fs.lstatSync(source);
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer', queue: [{ name: path.basename(source), full: source, stat, sourceBytes: stat.size }] });
     const stateFile = path.join(_test.batchRoot(), `${begun.batch_token}.json`);
 
     let releasePublish;

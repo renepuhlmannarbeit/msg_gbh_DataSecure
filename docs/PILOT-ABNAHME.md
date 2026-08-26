@@ -1,9 +1,9 @@
 # DataSecure Pilot-Abnahme
 
-Version 3.2.0 RC45 · ausschließlich synthetische Daten
+Version 3.2.0 RC55 · ausschließlich synthetische Daten
 
 Diese Checkliste prüft den installierten End-to-End-Pfad und die Verständlichkeit.
-Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC45 bleibt bis zum
+Sie ersetzt weder Security Review noch Datenschutzfreigabe. RC55 bleibt bis zum
 vollständigen Go/No-Go ein Engineering-Build.
 
 Die wiederverwendbaren, vollständig synthetischen Testdokumente, der gruppierte
@@ -150,7 +150,7 @@ Stop-Gegenproben.
       zurückgehaltenes Bild nicht freigeben.
 - [ ] Abgelaufene Preview bleibt gesperrt; erneute Verarbeitung ist erforderlich.
 
-RC45 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
+RC55 besitzt bewusst keinen visuellen Human-Presence-Freigabekanal. Ein Pilot darf
 diese Einschränkung nicht als Fehler umgehen.
 
 ## 7. Ausgabe- und Manipulationsschutz
@@ -169,8 +169,9 @@ diese Einschränkung nicht als Fehler umgehen.
 ## 8. Aufbewahrung und Löschung
 
 - [ ] `privacy_status` zeigt aktive Frist, fällige Einträge und Löschfehler ohne Pfade.
-- [ ] Abgelaufene synthetische Processed-, Output- und Preview-Einträge verschwinden;
-      Audit-Metadaten und aktive versteckte Staging-Bereiche bleiben korrekt erhalten.
+- [ ] Abgelaufene synthetische Output- und Preview-Einträge verschwinden;
+      mögliche Originale in `Processed`, Audit-Metadaten und aktive versteckte
+      Staging-Bereiche bleiben korrekt erhalten.
 - [ ] `purge_local_data` verlangt die dokumentierte ausdrückliche Bestätigung und
       löscht nur den gewählten Scope.
 - [ ] Bei Retention `0` verschwindet das verarbeitete Ordner-Original am nächsten

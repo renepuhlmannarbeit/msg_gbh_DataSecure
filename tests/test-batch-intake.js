@@ -36,7 +36,6 @@ function fixture(options = {}) {
     crypto: { randomBytes: (size) => Buffer.alloc(size, 0xaa) },
     profiles: new Set(['auto', 'general']),
     limits: { MAX_BATCH_FILES: 100 },
-    listInput: () => [],
     validateBatchLimits: () => {},
     storageStatus: () => ({ safe: true }),
     hasReparseComponent: () => false,

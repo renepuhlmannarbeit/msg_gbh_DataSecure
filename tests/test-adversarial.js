@@ -17,6 +17,7 @@ process.env.LOCALAPPDATA = path.join(root, 'localapp');
 
 const pii = require(path.join(runtimeDir, 'pii-engine.js'));
 const gw = require(path.join(runtimeDir, 'gateway.js'));
+const { anonymizeNext } = require(path.join(runtimeDir, 'gateway', 'orchestrator.js'));
 const { convertDocument, SafeError } = require(path.join(runtimeDir, 'runtime.js'));
 const { encodePng, decodePng } = require(path.join(runtimeDir, 'image-sanitizer.js'));
 const { zipStore } = require('./lib/zip');
@@ -55,8 +56,9 @@ function docxBuffer(paragraphs, extra = []) {
 }
 
 function queue(name, buf) {
-  fs.mkdirSync(path.join(root, 'Input'), { recursive: true });
-  const dest = path.join(root, 'Input', name);
+  const fixtureRoot = path.join(root, 'test-sources');
+  fs.mkdirSync(fixtureRoot, { recursive: true });
+  const dest = path.join(fixtureRoot, name);
   fs.writeFileSync(dest, buf);
   return dest;
 }
@@ -351,14 +353,14 @@ async function main() {
   // -------------------------------------------------------------------------
 
   await testAsync('two concurrent runs never produce two packages from one source', async () => {
-    for (const f of fs.readdirSync(path.join(root, 'Input'))) fs.unlinkSync(path.join(root, 'Input', f));
-    queue('concurrent.docx', docxBuffer(['Kunde: Max Mustermann', 'E-Mail: max@example.invalid'], [['word/media/i.png', blankPng]]));
+    const file = queue('concurrent.docx', docxBuffer(['Kunde: Max Mustermann', 'E-Mail: max@example.invalid'], [['word/media/i.png', blankPng]]));
 
     const deps = { rasterizeToPng: async () => blankPng, ocrPngDetailed: async () => ({ text: '', words: [] }) };
+    const inputQueue = [{ name: path.basename(file), full: file, sourceBytes: fs.statSync(file).size }];
     const before = gw.listOutputs().packages.length;
     const results = await Promise.allSettled([
-      gw.anonymizeNext('customer', deps),
-      gw.anonymizeNext('customer', deps)
+      anonymizeNext('customer', { ...deps, inputQueue }),
+      anonymizeNext('customer', { ...deps, inputQueue })
     ]);
     const created = gw.listOutputs().packages.length - before;
     const ok = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;

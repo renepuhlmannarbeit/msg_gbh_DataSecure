@@ -1,6 +1,6 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 26.08.2026 · geprüfter Produktstand: RC54
+Stand: 26.08.2026 · geprüfter Produktstand: RC55
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -20,10 +20,10 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 
 ## Verdichteter IST/SOLL-Abgleich nach Product-Vision-Review
 
-| Bereich | RC54-IST | beschlossenes SOLL | Lücke / Priorität |
+| Bereich | RC55-IST | beschlossenes SOLL | Lücke / Priorität |
 |---|---|---|---|
 | Cowork-Start | kurzer Picker-/Workerpfad teilweise vorhanden; Host-Node und reale Cowork-Evidenz offen | selbsttragender Windows-/macOS-Start, Readiness und genau ein Self-Heal | P0 Distribution/Evidenz |
-| Quellen | Mehrfach-Dateipicker als einziger ausführbarer Eingang; einmalige Startmigration kann nur verwaiste Alt-Claims wiederherstellen | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 Input-Oberfläche entfernt; P0 internen Altcode abbauen, P1 Ordner |
+| Quellen | Mehrfach-Dateipicker als einziger ausführbarer Eingang; kein erzeugter technischer `Input`, keine Queue-Fallbacks; vorhandene Altbestände werden nur versioniert und datenbewahrend migriert | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 BL-011.14 abgeschlossen; P1 Ordnerquelle BL-044.1 |
 | Stapel | durable Checkpoints und Background-Intake; neue Auswahl trotz pausierter Stapel im Arbeitsstand umgesetzt | ein aktiver, mehrere pausierte; Pause blockiert nicht | E0 umgesetzt, E1/E2 offen |
 | Review/Abschluss | abgekoppelter Review ohne menschlichen Timeout und detachierte Abschlussmeldung im Arbeitsstand | persistente Queue ohne Entscheidungs-Timeout, nicht blockierender Abschluss | E0 umgesetzt, E1/E2 offen |
 | private Daten | Rohsnapshots und Reviewdaten nicht durchgehend OS-benutzergebunden verschlüsselt | DPAPI/Keychain, kein Klartextfallback | P0 Security |
@@ -48,9 +48,12 @@ Bereich immer. Ein bestätigter Gesamt-Purge prüft ihn vor jeder anderen Mutati
 und stoppt mit einem festen inhaltsfreien Code, sobald ein Eintrag vorhanden oder
 die Inspektion unvollständig ist. Status nennt nur Vollständigkeit und Anzahl;
 Namen, Pfade, Hashes und Inhalte bleiben lokal. Tote Move-/Restore-Helfer sind
-entfernt. BL-011.14 bleibt dennoch in Arbeit, bis der technische `Input`-Altweg in
-eine isolierte versionierte Einmalmigration überführt und aus dem Normalpfad entfernt
-ist.
+entfernt. RC55 schließt BL-011.14 ab: `roots()` erzeugt keinen technischen `Input`
+mehr; `listInput`, Intake-Fallbacks und öffentliche Direkt-/Sammelverarbeitung sind
+entfernt. Das isolierte V1-Migrationsmodul prüft einen bereits vorhandenen Altordner
+vollständig, folgt keinen Links, überschreibt nichts und bewahrt sichtbare Dateien
+sowie den historischen Claim. Marker und Sperre sind privat, versioniert und
+inhaltsfrei; Fehler oder aktive Alt-Owner stoppen vor einer neuen Verknüpfung.
 
 Die vollständige Sollableitung steht in `PRODUCT_VISION.md` und
 `TARGET_ARCHITECTURE.md`. Diese Matrix ist keine Freigabe; sie priorisiert die
@@ -1187,9 +1190,10 @@ weder Paket- noch Leseberechtigungen aus.
 
 Der ausführbare Produktweg ist die direkte Mehrfachauswahl. Sie bindet die bestätigte
 Auswahl unmittelbar an den privaten Snapshot; ein lokales Abbrechen hinterlässt
-keinen Batch und keine versiegelte Arbeitskopie. Der noch vorhandene technische
-`Input`-Altcode ist ausschließlich Gegenstand der offenen versionierten Migration
-und kein Anwenderweg.
+keinen Batch und keine versiegelte Arbeitskopie. Der frühere technische
+`Input`-Intake ist entfernt. Das ausgelieferte, versionierte Einmalmodul prüft nur
+noch bereits vorhandene Altbestände datenbewahrend und fail-closed; es ist kein
+Anwenderweg und erzeugt keinen neuen `Input`-Ordner.
 
 Die freiwillige Gesamtübersicht ist der lokale Exportordner mit dem dauerhaft
 geführten `DataSecure-Mapping.csv`. Er wird nur auf ausdrücklichen Wunsch geöffnet;

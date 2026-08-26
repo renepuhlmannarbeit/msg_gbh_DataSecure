@@ -17,14 +17,14 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000, supportMode = true } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [serverEntry], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        EU_PRIVACY_ROOT: root,
-        LOCALAPPDATA: path.join(root, 'localapp'),
+        EU_PRIVACY_ROOT: privacyRoot,
+        LOCALAPPDATA: path.join(privacyRoot, 'localapp'),
         EU_PRIVACY_LANGUAGE: 'de',
         EU_PRIVACY_VISUAL_MODE: 'strict',
         EU_PRIVACY_RETENTION_DAYS: '7',
@@ -78,9 +78,12 @@ async function main() {
     assert.strictEqual(fs.existsSync(orphan), false);
   });
 
-  await testAsync('server startup restores an abandoned hidden Input claim before accepting requests', async () => {
-    const input = path.join(root, 'Input');
-    const jobs = path.join(root, 'localapp', 'SecureDataMsg', 'jobs');
+  await testAsync('server startup preserves and exposes an abandoned historical claim before accepting requests', async () => {
+    // A real upgrade starts without the RC55 completion marker. Keep this
+    // fixture isolated from the preceding fresh-install startup.
+    const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-legacy-'));
+    const input = path.join(legacyRoot, 'Input');
+    const jobs = path.join(legacyRoot, 'localapp', 'SecureDataMsg', 'jobs');
     const jobId = 'crashed_abcdef12';
     fs.mkdirSync(input, { recursive: true });
     const hidden = path.join(input, `.processing_${jobId}_recovered.txt`);
@@ -93,10 +96,10 @@ async function main() {
       nonce: 'e'.repeat(32)
     }));
 
-    const { responses, stderr } = await talk([rpc(1, 'ping')]);
+    const { responses, stderr } = await talk([rpc(1, 'ping')], { privacyRoot: legacyRoot });
     assert.strictEqual(responses.length, 1);
     assert.strictEqual(stderr, '');
-    assert.strictEqual(fs.existsSync(hidden), false);
+    assert.strictEqual(fs.existsSync(hidden), true);
     assert.strictEqual(fs.readFileSync(path.join(input, 'recovered.txt'), 'utf8'), 'private source after hard termination');
     fs.unlinkSync(path.join(input, 'recovered.txt'));
   });

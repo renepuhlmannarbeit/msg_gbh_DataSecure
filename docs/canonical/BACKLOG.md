@@ -47,9 +47,8 @@ Fresh-Install- und Cowork-Textabnahmen bleiben in BL-041 und BL-051.
 
 | Priorität | Arbeitspaket | Begründung / Reihenfolge |
 |---|---|---|
-| **P0.0** | BL-011.14: Originale nie verändern und dauerhafte Exporte von automatischer Retention ausschließen | verhindert irreversiblen Datenverlust |
-| **P0.1** | BL-011.13: private Snapshots, Review und Pseudonymkontext OS-benutzergebunden verschlüsseln | schließt die lokale Rohdatenschutzlücke |
-| **P0.2** | BL-010.8/BL-051.1: selbsttragende Windows-/macOS-Pakete und reale Cowork-Evidenz | ohne Laufzeit kein installierbares Produkt |
+| **P0.0** | BL-011.13: private Snapshots, Review und Pseudonymkontext OS-benutzergebunden verschlüsseln | schließt die lokale Rohdatenschutzlücke |
+| **P0.1** | BL-010.8/BL-051.1: selbsttragende Windows-/macOS-Pakete und reale Cowork-Evidenz | ohne Laufzeit kein installierbares Produkt |
 | **P1.1** | BL-011.3/BL-041.9: pausierte Stapel entkoppeln, Review ohne Timeout und nicht blockierender Abschluss | behebt den beobachteten Hänger |
 | **P1.2** | BL-044.1: rekursive Ordnerquelle mit vollständigem Link-/Umfangsgate | gewünschter einfacher Stapelstart |
 | **P1.3** | BL-049.1: Signatur-/Struktur-Sniffing und drei Ergebnisgrade | verhindert falsche Format- und Vollständigkeitsaussagen |
@@ -58,8 +57,7 @@ Fresh-Install- und Cowork-Textabnahmen bleiben in BL-041 und BL-051.
 
 ## Das kann ich noch eigenständig erledigen
 
-Eigenständig lieferbar sind BL-011.13/BL-011.14 (Verschlüsselung und ausschließlich
-lesende Quellen), BL-044.1
+Eigenständig lieferbar sind BL-011.13 (Verschlüsselung), BL-044.1
 (Ordnerquelle), BL-049.1 (Formatgrenze und Ergebnisgrade), die synthetische Seite von
 BL-047.1 (adaptive Ressourcensteuerung) sowie Build-, Vertrags- und Negativtests.
 Aktivierung und Release bleiben jeweils an die in der Evidence-Matrix genannten
@@ -127,7 +125,6 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | BL-011.11 | **E0 abgeschlossen; E1 offen:** Gemischtes Resume, feste I/O-Phasen, einmalige begrenzte Handoff-Dekodierung, Indexfenster und Buffer-Wipe sind regressionsgetestet, ohne Snapshot-/Swap-/Container-Gates zu lockern. Weitere I/O-Optimierung wartet auf reale Dateisystemmessung. | **in Arbeit** |
 | BL-011.12 | **E0 abgeschlossen; E1 offen:** Ein nicht importierter Zwei-Worker-Harness prüft zentrale Reihenfolge/Commit, Slots, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produktstandard bleibt seriell bis zur Windows-/macOS-Abnahme. Linux folgt später. | **in Arbeit** |
 | BL-011.13 | Private Snapshots, Reviewdaten und neustartfesten Pseudonymkontext pro OS-Benutzer verschlüsseln; ohne DPAPI/Keychain vor Rohschreiben stoppen. | **offen** |
-| BL-011.14 | **R3a und R3b-Schutzschnitt/E0 abgeschlossen:** Jede aktuelle Neuverarbeitung öffnet die Quelle ausschließlich lesend und verarbeitet nur eine exklusive private Arbeitskopie; Erfolg, Abbruch und Pipelinefehler lassen TXT/Markdown/CSV/DOCX nach Hash, Größe, Identität und mtime unverändert. Output und Mapping bleiben außerhalb automatischer Retention. Historische `Processed`-Bestände gelten unabhängig von Alter und Typ als mögliche Originale: Retention, Null-Tage-Regel und bestätigter Purge löschen sie nie; ein Gesamt-Purge stoppt vor jeder anderen Mutation, wenn Altbestände vorhanden oder nicht sicher inspizierbar sind. **Rest:** technischen `Input`-Normalweg entfernen und die Upgrade-Recovery als versionierte, idempotente Einmalmigration isolieren. | **in Arbeit** |
 | BL-024.4 | **E0 abgeschlossen; E1/E3 offen:** Der nicht importierte OCR-Session-Harness prüft geschlossenes Framing, Requestbindung, Replay, Single-Flight, Pixel-/Byte-/Zeitbudgets und Abbruch. Der sichere Einbild-Worker bleibt aktiv, bis native Per-Frame-Grenzen und Windows-/macOS-Evidenz vorliegen. Linux folgt später. | **in Arbeit** |
 | BL-041.9 | Review ohne menschlichen Timeout und Abschluss ohne blockierenden Cowork-Aufruf liefern; pausierte Stapel bleiben getrennt startbar. | **in Arbeit** |
 

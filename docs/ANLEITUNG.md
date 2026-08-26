@@ -3,7 +3,7 @@
 Anleitung für Anwenderinnen und Anwender ohne Vorkenntnisse.
 Windows 10/11 x64 und macOS; Linux nur über einen lokalen Claude-Code-Host · ca. 20 Minuten.
 
-> **Nur Engineering-Abnahme:** RC45 darf ausschließlich mit synthetischen
+> **Nur Engineering-Abnahme:** RC55 darf ausschließlich mit synthetischen
 > Testdokumenten verwendet werden. Keine echten Mitarbeiter-, Bewerber-, Kunden-
 > oder Vertragsdaten verarbeiten. Ein Nutzerpilot beginnt erst nach Freigabe des
 > lokalen Companions, bestandenem Installationstest und dokumentierter
@@ -207,8 +207,10 @@ entpackt. Es gibt keine feste Seitenbegrenzung. Eine zu große Datei wird bereit
 lokal vor dem Hintergrundlauf abgewiesen.
 
 Auch der IT-Support verwendet für neue Stapel ausschließlich den lokalen Picker.
-Ältere `Input`-/`Processed`-Ordner können nach einem Update noch als zu prüfender
-Migrationsbestand vorhanden sein, sind aber kein ausführbarer Eingang mehr.
+Ältere `Input`-/`Processed`-Ordner können nach einem Update noch als geschützter
+Migrationsbestand vorhanden sein, sind aber kein ausführbarer Eingang mehr. Die
+versionierte Startmigration legt keinen neuen `Input`-Ordner an, verarbeitet keine
+sichtbare Altdatei und überschreibt oder löscht keine Basisdatei.
 
 ### Optional: einen anderen lokalen Privacy-Ordner wählen
 
@@ -426,7 +428,7 @@ Dokumentinhalt, oder Dateien aus `Processed`. Die Beschreibung genügt immer.
 
 ---
 
-GBH DataSecure – Dokumente anonymisieren 3.2.0 RC45 · Geschäftsbereich Healthcare, msg systems ag.
+GBH DataSecure – Dokumente anonymisieren 3.2.0 RC55 · Geschäftsbereich Healthcare, msg systems ag.
 Diese Anleitung ist keine Rechtsberatung und ersetzt nicht die
 Datenschutzvorgaben Ihres Bereichs.
 

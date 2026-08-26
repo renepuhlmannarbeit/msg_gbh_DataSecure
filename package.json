@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc54",
+  "version": "3.2.0-rc55",
   "private": true,
   "description": "Plattformneutrales Claude-Plugin und MCPB zur lokalen De-Identifizierung von Dokumenten",
   "main": "plugins/data-secure/server/index.js",
@@ -10,6 +10,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "native:verify": "node scripts/verify-native.mjs",
+    "test:legacy-input": "node tests/test-legacy-input-migration.js",
     "sea:build": "node scripts/build-sea-launcher.mjs",
     "sea:assemble": "node scripts/build-sea-plugin.mjs",
     "native:update": "node scripts/build-native.mjs --update",
@@ -19,9 +20,9 @@
     "pdfium:verify-lock": "node scripts/pdfium-spike.mjs --verify-lock",
     "pdfium:spike": "node scripts/pdfium-spike.mjs --run",
     "risk:pdf-ocr": "node scripts/pdf-ocr-risk.mjs --verify-lock",
-    "pretest": "npm run native:verify",
-    "pretest:ci": "node tests/test-local-review-executor.js && node tests/test-batch-intake.js && node tests/test-batch-discard.js && node tests/test-batch-continuation.js && node tests/test-batch-snapshot-invalidation.js && node tests/test-batch-executor-runner.js && node tests/test-batch-item-processor.js && node tests/test-batch-next-maintenance.js && node tests/test-batch-processing-orchestrator.js && node tests/test-batch-review-capture.js && node tests/test-batch-review-state.js && node tests/test-batch-review-publication.js && node tests/test-batch-review-orchestrator.js && node tests/test-batch-retention-protection.js && node tests/test-batch-journal-store.js && node tests/test-batch-reconciliation.js && node tests/test-batch-recovery.js && node tests/test-batch-evidence.js && node tests/test-batch-terminal-evidence.js && node tests/test-batch-delivery.js && node tests/test-batch-mapping-maintenance.js && node tests/test-batch-active-lock.js && node tests/test-batch-executor-lease.js",
-    "pretest:fast-path": "node tests/test-read-only-source-snapshot.js && node tests/test-local-review-executor.js && node tests/test-batch-intake.js && node tests/test-batch-discard.js && node tests/test-batch-continuation.js && node tests/test-batch-snapshot-invalidation.js && node tests/test-batch-executor-runner.js && node tests/test-batch-item-processor.js && node tests/test-batch-next-maintenance.js && node tests/test-batch-processing-orchestrator.js && node tests/test-batch-review-capture.js && node tests/test-batch-review-state.js && node tests/test-batch-review-publication.js && node tests/test-batch-review-orchestrator.js && node tests/test-batch-retention-protection.js && node tests/test-batch-journal-store.js && node tests/test-batch-reconciliation.js && node tests/test-batch-recovery.js && node tests/test-batch-evidence.js && node tests/test-batch-terminal-evidence.js && node tests/test-batch-delivery.js && node tests/test-batch-mapping-maintenance.js && node tests/test-batch-active-lock.js && node tests/test-batch-executor-lease.js",
+    "pretest": "npm run native:verify && npm run test:legacy-input",
+    "pretest:ci": "npm run test:legacy-input && node tests/test-local-review-executor.js && node tests/test-batch-intake.js && node tests/test-batch-discard.js && node tests/test-batch-continuation.js && node tests/test-batch-snapshot-invalidation.js && node tests/test-batch-executor-runner.js && node tests/test-batch-item-processor.js && node tests/test-batch-next-maintenance.js && node tests/test-batch-processing-orchestrator.js && node tests/test-batch-review-capture.js && node tests/test-batch-review-state.js && node tests/test-batch-review-publication.js && node tests/test-batch-review-orchestrator.js && node tests/test-batch-retention-protection.js && node tests/test-batch-journal-store.js && node tests/test-batch-reconciliation.js && node tests/test-batch-recovery.js && node tests/test-batch-evidence.js && node tests/test-batch-terminal-evidence.js && node tests/test-batch-delivery.js && node tests/test-batch-mapping-maintenance.js && node tests/test-batch-active-lock.js && node tests/test-batch-executor-lease.js",
+    "pretest:fast-path": "npm run test:legacy-input && node tests/test-read-only-source-snapshot.js && node tests/test-local-review-executor.js && node tests/test-batch-intake.js && node tests/test-batch-discard.js && node tests/test-batch-continuation.js && node tests/test-batch-snapshot-invalidation.js && node tests/test-batch-executor-runner.js && node tests/test-batch-item-processor.js && node tests/test-batch-next-maintenance.js && node tests/test-batch-processing-orchestrator.js && node tests/test-batch-review-capture.js && node tests/test-batch-review-state.js && node tests/test-batch-review-publication.js && node tests/test-batch-review-orchestrator.js && node tests/test-batch-retention-protection.js && node tests/test-batch-journal-store.js && node tests/test-batch-reconciliation.js && node tests/test-batch-recovery.js && node tests/test-batch-evidence.js && node tests/test-batch-terminal-evidence.js && node tests/test-batch-delivery.js && node tests/test-batch-mapping-maintenance.js && node tests/test-batch-active-lock.js && node tests/test-batch-executor-lease.js",
     "posttest": "node tests/test-docx-differential.js && node tests/test-native-launcher.js",
     "prebuild": "npm run native:verify",
     "fixtures": "node tests/make-fixtures.js",

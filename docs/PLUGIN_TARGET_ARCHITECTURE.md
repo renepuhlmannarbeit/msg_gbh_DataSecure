@@ -83,8 +83,10 @@ Die normale Cowork-Oberfläche bleibt auf acht Aufgabenwerkzeuge begrenzt:
 - `open_export_folder`
 
 Diagnose, Detailstatus, technische Lesewerkzeuge und lokale Ordneraktionen bleiben
-im ausdrücklich aktivierten IT-Supportmodus. Einen technischen Input-Ordner oder
-einen zweiten Intake-Vertrag gibt es nicht.
+im ausdrücklich aktivierten IT-Supportmodus. Seit RC55 erzeugt auch die Runtime
+keinen technischen Input-Ordner; vorhandene Altbestände werden ausschließlich durch
+eine versionierte, datenbewahrende und fail-closed Startmigration geprüft. Einen
+technischen Input-Ordner oder einen zweiten Intake-Vertrag gibt es nicht.
 
 Der Server bindet eine bestätigte Menge von 1–100 Dateien mit zusammen höchstens 500 MB an einen unveränderlichen
 lokalen Snapshot. Lesezugriff auf ein Ergebnis erfordert neben der Paket-ID eine

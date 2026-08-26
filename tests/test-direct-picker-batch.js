@@ -28,7 +28,7 @@ test('a locally picked queue creates a sealed batch without manual Input staging
   });
   assert.strictEqual(batch.ok, true);
   assert.strictEqual(fs.readFileSync(source, 'utf8'), original, 'the picker source is read-only and remains byte-identical');
-  assert.deepStrictEqual(fs.readdirSync(roots().input), []);
+  assert.strictEqual(fs.existsSync(path.join(roots().root, 'Input')), false);
   assert.strictEqual(discardIncompleteBatches({ confirmed: true }).ok, true);
   assert.strictEqual(fs.readFileSync(source, 'utf8'), original, 'discarding DataSecure work never deletes or changes the source');
 });

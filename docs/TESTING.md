@@ -7,12 +7,19 @@ npm run test:golden     # regenerate the golden expected output after an intende
 npm run test:windows-visual # real Windows OCR/redaction acceptance (Windows only)
 npm run test:skills     # local German skill/contract acceptance
 npm run test:intake-worker-stress # 50 real detached intake-worker starts
+npm run test:legacy-input # versionierte, datenbewahrende Upgrade-Migration
 npm run benchmark:detectors # aggregate detector quality on the synthetic ground truth
 npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
 node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # engineering-only MCP proof
 ```
 
-Lokaler RC54-Schlusslauf 26.08.2026: `npm test` endete nach dem fail-closed
+Lokaler RC55-Schlusslauf 26.08.2026: `npm test` endete nach dem atomaren R3b-Schnitt
+mit Exit-Code 0. Der Lauf bestand 15 direkte Legacy-Migrationsfälle,
+20 Architekturverträge, 40 Gateway-End-to-End-, 66 Batch-/Crash-/Resume- und
+31 MCP-Protokollfälle sowie 20 adversariale Fälle und den 2.000-Fälle-Sweep. Fresh
+Install erzeugt keinen technischen `Input`; sichtbare Altdateien und historische
+Claims bleiben erhalten. Der Fast Path und der reale TXT-/CSV-/DOCX-Benchmark sind
+ebenfalls grün. Der vorherige RC54-Schlusslauf: `npm test` endete nach dem fail-closed
 Schutz historischer Originale in `Processed` mit Exit-Code 0. Zusätzlich zu den
 bestehenden Korpora bestanden 21 Retention-/Purge-Grenzfälle, zwölf direkte
 Read-only-Snapshot-Grenztests, 19 Architekturverträge, 40 Gateway-End-to-End-
@@ -312,8 +319,9 @@ Oberflächen bestand `npm run test:ci` vollständig mit Exit-Code 0. Der Support
 umfasst jetzt 25 Werkzeuge, davon sind acht im normalen Cowork-Ablauf sichtbar;
 `open_input_folder`, `begin_document_batch` und
 `start_document_batch_processing` sind auch im Supportmodus nicht mehr aufrufbar.
-Die datenbewahrende Startmigration für bereits verwaiste Alt-Claims bleibt während
-des Übergangs bestehen und nimmt keine neuen Quellen an.
+Die datenbewahrende Startmigration für bereits verwaiste Alt-Claims ist seit RC55
+als versioniertes, gesperrtes Modul isoliert. Sie nimmt keine neuen Quellen an;
+der Normalpfad besitzt weder `listInput` noch einen technischen Ordnerfallback.
 
 Der Lauf enthielt unter anderem 70 Parser-, 79 PII-Regressions-, 101 freigegebene
 Formatkombinations-, 38 Gateway-End-to-End-, 31 MCP-Protokoll- und 20 adversariale

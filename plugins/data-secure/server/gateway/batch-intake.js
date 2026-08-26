@@ -7,7 +7,6 @@ function createBatchIntake(options = {}) {
   const crypto = options.crypto;
   const profiles = options.profiles;
   const limits = options.limits;
-  const listInput = options.listInput;
   const validateBatchLimits = options.validateBatchLimits;
   const storageStatus = options.storageStatus;
   const defaultHasReparseComponent = options.hasReparseComponent;
@@ -74,9 +73,13 @@ function createBatchIntake(options = {}) {
     if (!Number.isInteger(expected) || expected < 1 || expected > limits.MAX_BATCH_FILES) {
       throw new SafeError(`Bestätigte Dateianzahl muss zwischen 1 und ${limits.MAX_BATCH_FILES} liegen.`);
     }
-    const queue = Array.isArray(beginOptions.queue)
-      ? validatedPickerQueue(beginOptions.queue, beginOptions.hasReparseComponent || defaultHasReparseComponent)
-      : listInput();
+    if (!Array.isArray(beginOptions.queue)) {
+      throw new SafeError('Der Stapel muss aus einer ausdrücklichen lokalen Dateiauswahl stammen.');
+    }
+    const queue = validatedPickerQueue(
+      beginOptions.queue,
+      beginOptions.hasReparseComponent || defaultHasReparseComponent
+    );
     if (queue.length === 0) {
       return { ok: false, error: 'input_empty', input_documents_seen: 0, raw_content_sent_to_claude: false };
     }

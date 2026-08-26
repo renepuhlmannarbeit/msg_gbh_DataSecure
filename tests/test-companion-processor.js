@@ -668,14 +668,14 @@ async function main() {
     assert.ok(fs.existsSync(file));
   });
 
-  await testAsync('selected-source processing never consumes an existing Input queue item', async () => {
+  await testAsync('selected-source processing never creates or consumes a legacy Input queue', async () => {
     const r = workspace('queue-isolation');
-    const queued = path.join(r.input, 'queued.txt');
-    fs.writeFileSync(queued, 'do not consume');
+    const legacyInput = path.join(r.root, 'Input');
+    assert.strictEqual(fs.existsSync(legacyInput), false);
     const file = source('selected.txt', 'Kontakt: Max Mustermann, max@example.de');
     const job = createJob({ profile: 'customer', source_type: 'txt' });
     await processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true });
-    assert.strictEqual(fs.readFileSync(queued, 'utf8'), 'do not consume');
+    assert.strictEqual(fs.existsSync(legacyInput), false);
   });
 
   await testAsync('abandoned private working copies are removed while live and unknown entries stay untouched', async () => {
