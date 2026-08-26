@@ -198,9 +198,13 @@ Die äußere Review-UI-/Lock-Orchestrierung liegt anschließend in
 `gateway/batch-review-orchestrator.js`; sie nutzt ausdrücklich dasselbe
 `active`-Set wie der Normalpfad, reconciliiert vor Readiness, rekonstruiert alle
 Drafts vor einem einzigen UI-Aufruf und schreibt terminale Evidenz erst nach
-erfolgreicher lokaler Publication. Verarbeitung/Commit sowie verbleibende
-Wartung bleiben absichtlich in `batch.js`; als nächster R2-Schnitt folgt der
-direkt charakterisierte Single-Item-Zustandsautomat.
+erfolgreicher lokaler Publication. Der direkt charakterisierte
+Single-Item-Zustandsautomat liegt nun in `gateway/batch-item-processor.js`.
+Dabei sind zwei P1-Grenzen geschlossen: Mapping und Delivery verlangen genau
+einen Publish-Callback und die exakte deterministische Paket-ID; nach dem
+Output-Commit bleibt jeder Folgefehler reconcilebar und darf weder
+STOPPED-Mapping noch Catch-bedingtes Quellcleanup auslösen. Als nächster
+R2-Schnitt folgt nur noch verbleibende Wartungs-/Composition-Root-Bereinigung.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,
 `batch-evidence.js` den atomaren idempotenten v2-Store und eine inhaltsfreie

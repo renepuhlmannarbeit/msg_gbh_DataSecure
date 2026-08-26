@@ -27,6 +27,7 @@ const { createBatchReviewCapture } = require('./batch-review-capture');
 const { createBatchReviewState } = require('./batch-review-state');
 const { createBatchReviewPublication } = require('./batch-review-publication');
 const { createBatchReviewOrchestrator } = require('./batch-review-orchestrator');
+const { createBatchItemProcessor } = require('./batch-item-processor');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -315,6 +316,28 @@ const { reviewDeferredBatch } = createBatchReviewOrchestrator({
   writeTerminalEvidence
 });
 
+const { processSingleBatchItem } = createBatchItemProcessor({
+  SafeError,
+  writeState,
+  anonymizeNext,
+  packageIdForItem,
+  createPhaseRecorder,
+  reviewSingleBatchTextLocally,
+  incrementPrivateIoSummary,
+  ensureMappingOutbox,
+  markMappingPending,
+  cleanupTerminalWorkCopy,
+  commitPendingMapping,
+  appendMapping,
+  invalidateUnpublishedBatchCopies,
+  publicProgress,
+  writeTerminalEvidence,
+  deliveryPendingStatus: DELIVERY_PENDING,
+  deferredReviewStatus: DEFERRED_REVIEW,
+  retryableCodes: RETRYABLE_CODES,
+  mappingStoppedStatus: MAPPING_STOPPED
+});
+
 async function processBatchNext(token, deps = {}) {
   if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
   acquireActiveLock(token);
@@ -352,153 +375,7 @@ async function processBatchNext(token, deps = {}) {
         raw_content_sent_to_claude: false
       };
     }
-    // Persist the attempt before touching the source. After a crash, startup
-    // recovery converts this state to stopped rather than silently retrying it.
-    item.status = 'processing';
-    item.checkpoint = 'processing_started';
-    item.processing_started_at_ms = Date.now();
-    const phaseRecorder = createPhaseRecorder({ now: deps.performanceNow });
-    writeState(state);
-    try {
-      // Persist only a fixed, content-free phase before every irreversible
-      // processing boundary. It is intentionally not returned through MCP:
-      // queue counters are enough for Claude, while local recovery retains a
-      // useful trace without names, paths or document-derived state.
-      // Non-durable: item.status stays 'processing' across every one of
-      // these markers, and markInterruptedItemsRetryable() below recovers on
-      // status alone, so losing the very latest marker to a crash still
-      // yields the same safe outcome as if it were the durable one.
-      const checkpoint = (phase, performancePhase) => {
-        if (performancePhase) phaseRecorder.mark(performancePhase);
-        item.checkpoint = phase;
-        writeState(state, { durable: false });
-      };
-      const result = await anonymizeNext(state.profile, {
-        ...deps,
-        inputQueue: [entry],
-        copyClaim: true,
-        removeImages: state.remove_images,
-        packageId: packageIdForItem(item),
-        onClaimed: async () => {
-          checkpoint('private_copy_claimed', 'intake_and_preparation');
-          if (deps.onClaimed) await deps.onClaimed();
-        },
-        onExtracted: async (converted) => {
-          checkpoint('extracted', 'conversion_and_visual_scan');
-          if (deps.onExtracted) await deps.onExtracted(converted);
-        },
-        onDetected: async (details) => {
-          checkpoint('text_privacy_checked', 'text_privacy_check');
-          if (deps.onDetected) await deps.onDetected(details);
-        },
-        reviewText: (input) => reviewSingleBatchTextLocally(input, state, item, deps),
-        beforePublish: async (details) => {
-          incrementPrivateIoSummary(state.io_summary, 'final_gate_runs');
-          checkpoint('package_verified', 'verification');
-          if (deps.beforePublish) await deps.beforePublish(details);
-        },
-        afterPublish: async () => {
-          try {
-            ensureMappingOutbox(item.name, packageIdForItem(item));
-            item.mapping_outbox_persisted = true;
-          } catch {
-            item.mapping_outbox_persisted = false;
-          }
-          checkpoint('package_published', 'publication');
-        }
-      });
-      phaseRecorder.mark('publication');
-      markMappingPending(item, result.package_id);
-      writeState(state);
-      try {
-        // Persist the recovery intent before dropping the only raw private
-        // work copy. If local storage is unavailable the verified package is
-        // kept, but cleanup is deferred until a durable repair path exists.
-        ensureMappingOutbox(item.name, result.package_id);
-        item.mapping_outbox_persisted = true;
-      } catch {
-        return {
-          ok: false,
-          error: 'LOCAL_MAPPING_EXPORT_PENDING',
-          message: 'Das Ergebnis wurde lokal sicher erstellt. Die lokale Zuordnungsübersicht wird automatisch nachgetragen, sobald der Export wieder verfügbar ist.',
-          ...publicProgress(state),
-          raw_content_sent_to_claude: false
-        };
-      }
-      writeState(state);
-      try { cleanupTerminalWorkCopy(state, item, deps); }
-      catch { item.work_copy_cleanup_pending = true; }
-      writeState(state);
-      try {
-        commitPendingMapping(item, result.package_id);
-      } catch {
-        return {
-          ok: false,
-          error: 'LOCAL_MAPPING_EXPORT_PENDING',
-          message: 'Das Ergebnis wurde lokal sicher erstellt. Die lokale Zuordnungsübersicht wird automatisch nachgetragen, sobald der Export wieder verfügbar ist.',
-          ...publicProgress(state),
-          raw_content_sent_to_claude: false
-        };
-      }
-      // The durable pending state is written before the raw private work copy
-      // is removed. From here on, recovery only needs the local basename and
-      // the verified package id; the source is never processed a second time.
-      item.status = DELIVERY_PENDING;
-      item.checkpoint = 'delivery_pending';
-      delete item.error_code;
-      item.processing_duration_ms = Math.max(0, Date.now() - Number(item.processing_started_at_ms || Date.now()));
-      item.performance_phases_ms = phaseRecorder.snapshot();
-      delete item.processing_started_at_ms;
-      item.package_id = result.package_id;
-      incrementPrivateIoSummary(state.io_summary, 'output_packages_committed');
-      // `retainAudit` is deliberately best-effort after publication. Count an
-      // audit receipt only when the orchestrator confirms the durable local
-      // retention; a failed best-effort write must not turn into a false
-      // performance fact.
-      if (result.audit_receipt_retained === true) {
-        incrementPrivateIoSummary(state.io_summary, 'audit_receipt_writes');
-      }
-      writeState(state);
-      return { ...result, ...publicProgress(state), raw_content_sent_to_claude: false };
-    } catch (error) {
-      const code = error && error.code ? error.code : 'PROCESSING_INTERRUPTED';
-      if (code === 'BATCH_SNAPSHOT_CHANGED') {
-        invalidateUnpublishedBatchCopies(state, deps, item);
-      }
-      item.status = code === 'LOCAL_REVIEW_DEFERRED' ? DEFERRED_REVIEW : (RETRYABLE_CODES.has(code) ? 'retryable' : 'stopped');
-      item.checkpoint = item.status === 'retryable' ? 'retryable' : (item.status === DEFERRED_REVIEW ? 'awaiting_local_review' : 'stopped');
-      if (item.status === 'stopped') item.processing_duration_ms = Math.max(0, Date.now() - Number(item.processing_started_at_ms || Date.now()));
-      item.performance_phases_ms = phaseRecorder.snapshot();
-      delete item.processing_started_at_ms;
-      item.error_code = code;
-      // The permanent, local-only mapping is also the user's overview of a
-      // partial batch. A terminal stop has no result package, but must not look
-      // as if the original source simply disappeared. Mapping failure here is
-      // diagnostic only: the stop itself remains durable and fail-closed.
-      if (item.status === 'stopped') {
-        try {
-          appendMapping(item.name, '', MAPPING_STOPPED);
-          item.local_mapping_exported = true;
-        } catch { item.local_mapping_exported = false; }
-        try { cleanupTerminalWorkCopy(state, item, deps); }
-        catch { item.work_copy_cleanup_pending = true; }
-      }
-      writeState(state);
-      const localEvidenceExported = writeTerminalEvidence(state);
-      return {
-        ok: false,
-        error: code,
-        message: error instanceof SafeError
-          ? error.message
-          : 'Die lokale Verarbeitung wurde sicher unterbrochen. Es wurde kein Paket freigegeben.',
-        ...publicProgress(state),
-        // This is only an operational truth value. It lets the skill point to
-        // a local export problem without receiving a filename or mapping path.
-        local_mapping_exported: item.status === 'stopped' ? item.local_mapping_exported : null,
-        local_evidence_exported: localEvidenceExported,
-        raw_content_sent_to_claude: false
-      };
-    }
+    return processSingleBatchItem(state, item, entry, deps);
   } finally {
     active.delete(token);
     releaseActiveLock(token);

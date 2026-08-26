@@ -305,10 +305,20 @@ hinter injizierten Grenzen zusammen: dasselbe `active`-Set und derselbe globale
 Lock wie der Normalpfad, Reconciliation vor Readiness, vollständiger
 speicherinterner Capture vor genau einem lokalen UI-Aufruf, anschließend die
 isolierte Publication und erst bei lokalem Abschluss der terminale Nachweis.
-Sieben direkte Tests belegen Not-ready, Capturefehler, Cancel/Defer/Timeout,
+Acht direkte Tests belegen Not-ready, Capturefehler, Cancel/Defer/Timeout,
 Remote- und Local-Finalize-Erfolg, selektive Bindingfehlerübersetzung sowie
-Reentrancy-, Acquire- und Release-Verträge. `batch.js` bleibt nur Composition
-Root und die öffentliche Fassade unverändert.
+Reentrancy-, Acquire- und Release-Verträge. `batch.js` bleibt Composition Root
+und dünne öffentliche Orchestrierungsfassade.
+`gateway/batch-item-processor.js` übernimmt außerdem den normalen
+Einzeldokument-Zustandsautomaten ab durablem `processing_started` bis Delivery
+oder sicherem Stopp. Die Fassade behält Lock, Lease, Reconciliation,
+Delivery-Priorität, Itemwahl und Snapshotprüfung. Der Output-Rename gilt als
+Commit: genau ein Publish-Callback und die exakte deterministische Paket-ID
+sind vor Mapping und Delivery Pflicht. Jeder spätere Journal-, Mapping- oder
+Deliveryfehler bleibt über `processing/package_published` reconcilebar und kann
+weder STOPPED-Mapping noch Catch-bedingte Quellbereinigung auslösen. Elf
+direkte Grenztests und alle 67 realen Batch-Sitzungsszenarien einschließlich
+echter Post-Publish-Adoption ohne zweite Konvertierung sind grün.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die
@@ -320,9 +330,9 @@ bestätigte Übergabe ist jetzt ein dauerhafter No-op und erzeugt weder einen
 zweiten Journal-Commit noch einen doppelten terminalen Evidenznachweis. Acht
 direkte Negativtests belegen Gesamtseitenvalidierung vor Mutation,
 Paketmanipulation, Journal- und Lockfehler, sichere Wiederholung nach bereits
-gelöschter Arbeitskopie sowie Link-/Pfadschutz. Die weiteren Schnitte
-trennen Verarbeitung/Commit, Review-Orchestrierung und verbleibende Wartung
-hinter der bestehenden Exportfassade. Der verifizierte Outbox-Replay liegt nun
+gelöschter Arbeitskopie sowie Link-/Pfadschutz. Die weiteren Schnitte trennen
+verbleibende Wartung hinter der bestehenden Exportfassade. Der verifizierte
+Outbox-Replay liegt nun
 in `gateway/batch-mapping-maintenance.js`; nur `verified` wird nach der festen
 Reihenfolge Mapping vor Intent-Löschung repariert, `missing` entfernt nur den
 exakten verwaisten Intent und jeder unsichere Zustand bleibt pending.
