@@ -233,6 +233,15 @@ exakten Journal. Originale, veröffentlichte Outputs, Mapping und terminale
 Nachweise werden nicht berührt. Acht direkte Grenztests belegen außerdem
 Lock-, Scan-, Cleanup-, Unlink- und Retryverhalten sowie den unveränderten
 partiellen Mehrstapelvertrag.
+`gateway/batch-continuation.js` hält die explizite Wiederaufnahme und die
+tokenlose Auswahl des jüngsten offenen Stapels in einer gemeinsamen Grenze.
+Nur `resumeBatch` erwirbt die globale Sperre; Paketadoption, Mapping-Reparatur,
+Interrupted-Recovery und die bestätigte Umstellung ausschließlich retryfähiger
+Positionen bleiben fest geordnet. Wiederholungen sind idempotent, vertagte
+Fachprüfung und Mapping-Pending werden nicht als normale Verarbeitung
+umgedeutet, und die Auswahlantwort bleibt frei von Namen, Pfaden, Inhalten und
+Hashes. Zehn direkte Tests decken Active-/Lock-/Reader-/Executor-/Reconcile-/
+Write-/Release-Fehler, Invalidierung, Fehlerpriorität und jüngste Auswahl ab.
 `gateway/batch-retention-protection.js` liest offene Delivery-/Mapping-
 Referenzen ohne Journalmutation und blockiert automatische Output-Retention
 bereits bei einem einzigen unvollständigen Scan. Direkte Tests belegen die

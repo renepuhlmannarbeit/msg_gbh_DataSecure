@@ -145,8 +145,13 @@ Executor, die feste Reihenfolge versiegelte Arbeitskopie vor exaktem Journal,
 sichtbare Lock-, Scan-, Cleanup- und Unlink-Fehler, sicheren Retry sowie den
 Erhalt des bestehenden partiellen Mehrstapelvertrags. Originale,
 veröffentlichte Outputs, Mapping und terminale Nachweise liegen außerhalb
-dieser Löschgrenze. Explizites Resume/Continue, Verarbeitung/Commit,
-Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
+dieser Löschgrenze. `gateway/batch-continuation.js` kapselt die ausdrücklich
+bestätigte Fortsetzung eines bekannten beziehungsweise des jüngsten offenen
+Stapels. Zehn direkte Tests belegen Single-Flight, Lock-/Release-Cleanup,
+Invalidierung vor Reconciliation, die feste Reihenfolge Paketadoption vor
+Mapping vor Interrupted-Recovery vor Resume, idempotente Wiederholung,
+Fehlerpriorität und die namenfreie Auswahl nach `created_at`.
+Verarbeitung/Commit, Review-Orchestrierung sowie verbleibende Wartung bleiben absichtlich in
 `batch.js`; der nächste R2-Schnitt wird erneut als kleinster Leaf gewählt.
 Der priorisierte P1-Schnitt für terminale Nachweise ist abgeschlossen:
 `batch-terminal-evidence.js` koordiniert durable Pending-/Exported-Marker,

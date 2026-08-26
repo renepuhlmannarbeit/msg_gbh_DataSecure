@@ -20,6 +20,7 @@ const { createBatchDelivery } = require('./batch-delivery');
 const { createBatchMappingMaintenance } = require('./batch-mapping-maintenance');
 const { createBatchIntake } = require('./batch-intake');
 const { createBatchDiscard } = require('./batch-discard');
+const { createBatchContinuation } = require('./batch-continuation');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const {
@@ -221,67 +222,22 @@ const { discardIncompleteBatches } = createBatchDiscard({
   liveLocalExecutor
 });
 
-function resumeBatch(token) {
-  if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
-  acquireActiveLock(token);
-  active.add(token);
-  try {
-  const state = readState(token);
-  assertLocalExecutorAccess(state);
-  if (state.invalidated === true) throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
-  // The caller owns the live global lock at this point.  A leftover
-  // `processing` state can therefore only be from a previous interrupted
-  // owner, never from a concurrent worker.  First adopt a verified package,
-  // then make any remaining interrupted item eligible for this *explicit*
-  // resume request.
-  let changed = reconcilePublishedItems(state);
-  if (reconcilePendingMappings(state)) changed = true;
-  if (markInterruptedItemsRetryable(state) > 0) changed = true;
-  let resumed = 0;
-  for (const item of state.items) {
-    if (item.status === 'retryable') {
-      item.status = 'pending';
-      item.checkpoint = 'resumed';
-      delete item.error_code;
-      resumed++;
-    }
-  }
-  if (!resumed) {
-    if (changed) writeState(state);
-    return {
-      ok: false,
-      error: state.items.some((item) => item.status === DEFERRED_REVIEW)
-        ? 'batch_review_required'
-        : (state.items.some((item) => item.status === MAPPING_PENDING) ? 'local_mapping_repair_pending' : 'no_retryable_documents'),
-      ...publicProgress(state), raw_content_sent_to_claude: false
-    };
-  }
-  writeState(state);
-  return { ok: true, resumed, ...publicProgress(state), raw_content_sent_to_claude: false };
-  } finally {
-    active.delete(token);
-    releaseActiveLock(token);
-  }
-}
-
-function continueMostRecentBatch() {
-  const states = recoverableBatchStates().sort((left, right) =>
-    Date.parse(right.created_at) - Date.parse(left.created_at)
-  );
-  if (!states.length) return { ok: false, error: 'no_incomplete_batch', raw_content_sent_to_claude: false };
-  const selected = states[0];
-  // resumeBatch acquires the global owner lock before inspecting a lingering
-  // `processing` marker. A live worker remains protected by that lock; a dead
-  // one becomes retryable only because the user explicitly continued it. A
-  // deferred human review is intentionally not resumed here: it must enter
-  // the aggregate local-review path rather than falling back to one-file UI.
-  const before = readState(selected.token);
-  if (before.items.some((item) => item.status === 'retryable' || item.status === 'processing')) {
-    const resumed = resumeBatch(selected.token);
-    if (resumed.ok === false) return resumed;
-  }
-  return { ok: true, batch_token: selected.token, ...publicProgress(readState(selected.token)), raw_content_sent_to_claude: false };
-}
+const { resumeBatch, continueMostRecentBatch } = createBatchContinuation({
+  SafeError,
+  active,
+  acquireActiveLock,
+  releaseActiveLock,
+  readState,
+  writeState,
+  assertLocalExecutorAccess,
+  reconcilePublishedItems,
+  reconcilePendingMappings,
+  markInterruptedItemsRetryable,
+  recoverableBatchStates,
+  publicProgress,
+  deferredReviewStatus: DEFERRED_REVIEW,
+  mappingPendingStatus: MAPPING_PENDING
+});
 
 function invalidateUnpublishedBatchCopies(state, deps = {}, exceptItem = null) {
   state.invalidated = true;
