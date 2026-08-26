@@ -167,7 +167,9 @@ function createBatchIntake(options = {}) {
         }
         const extension = path.extname(entry.name).toLowerCase();
         const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}${extension}`;
-        const copied = copySnapshotFile(entry.full, path.join(work, workName), entry.stat);
+        const copied = copySnapshotFile(entry.full, path.join(work, workName), entry.stat, {
+          expectedSha256: planned.source_sha256
+        });
         return {
           id,
           name: entry.name,

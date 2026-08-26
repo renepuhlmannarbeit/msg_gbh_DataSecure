@@ -68,7 +68,7 @@ function inspectZipDirectory(buf, limits={}) {
   const totalEntries = buf.readUInt16LE(eocd + 10);
   const cdSize = buf.readUInt32LE(eocd + 12);
   const cdOffset = buf.readUInt32LE(eocd + 16);
-  if (totalEntries > maxEntries) throw new ZipError('ZIP enthält zu viele Einträge.');
+  if (totalEntries > maxEntries) throw new ZipError('ZIP enthält zu viele Einträge.', 'ZIP_LIMIT');
   if (cdOffset + cdSize > buf.length) throw new ZipError('ZIP-Zentralverzeichnis ungültig.');
 
   const cdEnd = cdOffset + cdSize;
@@ -86,14 +86,14 @@ function inspectZipDirectory(buf, limits={}) {
     const commentLen = buf.readUInt16LE(p + 32);
     const localOffset = buf.readUInt32LE(p + 42);
     if (p + 46 + nameLen + extraLen + commentLen > cdEnd) throw new ZipError('ZIP-Zentralverzeichnis abgeschnitten.');
-    if (flags & 1) throw encryptedEntryError();
+    if (flags & (1 | 0x40 | 0x2000)) throw encryptedEntryError();
     if (compSize === 0xffffffff || uncompSize === 0xffffffff || localOffset === 0xffffffff) throw new ZipError('ZIP64 wird nicht unterstützt.');
     const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8').replace(/\\/g,'/');
     p += 46 + nameLen + extraLen + commentLen;
     if (!name || name.endsWith('/')) continue;
     if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
     if (names.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
-    if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.');
+    if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.', 'ZIP_LIMIT');
     names.add(name);
     total += uncompSize;
     files++;
@@ -102,11 +102,9 @@ function inspectZipDirectory(buf, limits={}) {
   return { entries: totalEntries, files, uncompressed_bytes: total };
 }
 
-// The batch intake needs only the archive directory, not every compressed
-// payload. Read it through an already identity-checked descriptor so a large
-// OOXML source is never copied into the parent heap merely for preflight.
-// Full local-header, inflate and CRC validation still happens after the sealed
-// snapshot in readZip().
+// The batch intake reads directory metadata through an already identity-bound
+// descriptor. Callers may additionally request entry-by-entry inflate/CRC and
+// bounded OPC control extraction before any private snapshot is written.
 function readRangeFromFd(fd, length, position, readSync = fs.readSync) {
   if (!Number.isSafeInteger(length) || length < 0 || !Number.isSafeInteger(position) || position < 0) {
     throw new ZipError('ZIP-Bereich ist ungültig.');
@@ -119,6 +117,33 @@ function readRangeFromFd(fd, length, position, readSync = fs.readSync) {
     offset += read;
   }
   return buffer;
+}
+
+function verifiedEntryDataFromFd(fd, entry, limits, readSync) {
+  const maxEntry = limits.maxEntryUncompressed || limits.maxUncompressed || 300 * 1024 * 1024;
+  const maxRatio = limits.maxCompressionRatio || 1000;
+  if (![0, 8].includes(entry.method)) {
+    throw new ZipError('ZIP-Kompressionsmethode wird nicht unterstützt.', 'ZIP_UNSUPPORTED_METHOD');
+  }
+  if (entry.uncompSize > maxEntry ||
+      (entry.compSize > 0 && entry.uncompSize / entry.compSize > maxRatio)) {
+    throw new ZipError('ZIP-Eintrag überschreitet das sichere Prüfbudget.', 'ZIP_LIMIT');
+  }
+  const compressed = readRangeFromFd(fd, entry.compSize, entry.dataStart, readSync);
+  let data;
+  try {
+    if (entry.method === 0) data = Buffer.from(compressed);
+    else data = zlib.inflateRawSync(compressed, { maxOutputLength: Math.max(1, entry.uncompSize + 1) });
+  } catch {
+    throw new ZipError('ZIP-Dekompression ist beschädigt oder überschreitet das Limit.', 'ZIP_CORRUPT');
+  } finally {
+    compressed.fill(0);
+  }
+  if (data.length !== entry.uncompSize || crc32(data) !== entry.expectedCrc) {
+    data.fill(0);
+    throw new ZipError('ZIP-Prüfsumme oder Größe stimmt nicht.', 'ZIP_CRC_MISMATCH');
+  }
+  return data;
 }
 
 function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.readSync) {
@@ -149,12 +174,9 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
   if (limits.requireExactEnd === true && cdEnd !== tailStart + eocd) {
     throw new ZipError('ZIP besitzt Daten zwischen Zentralverzeichnis und Endmarke.', 'ZIP_POLYGLOT');
   }
-  if (totalEntries > maxEntries) throw new ZipError('ZIP enthält zu viele Einträge.');
+  if (totalEntries > maxEntries) throw new ZipError('ZIP enthält zu viele Einträge.', 'ZIP_LIMIT');
   const centralDirectory = readRangeFromFd(fd, cdSize, cdOffset, readSync);
   // Rebase the directory to zero while retaining the original archive limits.
-  // inspectZipDirectory's local-header checks are intentionally not part of
-  // this preflight; they remain the responsibility of the full post-snapshot
-  // readZip() verification.
   const names = new Set();
   let p = 0;
   let total = 0;
@@ -163,11 +185,16 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
   let hasRootRelationships = false;
   const officeKinds = new Set();
   let activeContent = false;
+  const descriptors = [];
+  const occupiedRanges = [];
+  const controlParts = Object.create(null);
+  let controlBytes = 0;
   const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
   for (let n = 0; n < totalEntries; n++) {
     if (p + 46 > centralDirectory.length || centralDirectory.readUInt32LE(p) !== 0x02014b50) throw new ZipError('ZIP-Zentralverzeichnis beschädigt.');
     const flags = centralDirectory.readUInt16LE(p + 8);
     const method = centralDirectory.readUInt16LE(p + 10);
+    const expectedCrc = centralDirectory.readUInt32LE(p + 16);
     const compSize = centralDirectory.readUInt32LE(p + 20);
     const uncompSize = centralDirectory.readUInt32LE(p + 24);
     const nameLen = centralDirectory.readUInt16LE(p + 28);
@@ -175,7 +202,7 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     const commentLen = centralDirectory.readUInt16LE(p + 32);
     const localOffset = centralDirectory.readUInt32LE(p + 42);
     if (p + 46 + nameLen + extraLen + commentLen > centralDirectory.length) throw new ZipError('ZIP-Zentralverzeichnis abgeschnitten.');
-    if (flags & 1) throw encryptedEntryError();
+    if (flags & (1 | 0x40 | 0x2000)) throw encryptedEntryError();
     if (compSize === 0xffffffff || uncompSize === 0xffffffff || localOffset === 0xffffffff) throw new ZipError('ZIP64 wird nicht unterstützt.');
     const name = centralDirectory.subarray(p + 46, p + 46 + nameLen).toString('utf8').replace(/\\/g, '/');
     p += 46 + nameLen + extraLen + commentLen;
@@ -184,9 +211,12 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     if (localHeader.readUInt32LE(0) !== 0x04034b50) throw new ZipError('ZIP-Lokaleintrag beschädigt.');
     const localFlags = localHeader.readUInt16LE(6);
     const localMethod = localHeader.readUInt16LE(8);
+    const localCrc = localHeader.readUInt32LE(14);
+    const localCompSize = localHeader.readUInt32LE(18);
+    const localUncompSize = localHeader.readUInt32LE(22);
     const localNameLen = localHeader.readUInt16LE(26);
     const localExtraLen = localHeader.readUInt16LE(28);
-    if (localFlags & 1) throw encryptedEntryError();
+    if (localFlags & (1 | 0x40 | 0x2000)) throw encryptedEntryError();
     const localNameStart = localOffset + 30;
     const dataStart = localNameStart + localNameLen + localExtraLen;
     const dataEnd = dataStart + compSize;
@@ -198,10 +228,38 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     if (localFlags !== flags || localMethod !== method || localName !== name) {
       throw new ZipError('ZIP-Header sind inkonsistent.');
     }
+    if (!(flags & 8) && (localCrc !== expectedCrc || localCompSize !== compSize || localUncompSize !== uncompSize)) {
+      throw new ZipError('ZIP-Größenangaben sind inkonsistent.', 'ZIP_CORRUPT');
+    }
+    let entryEnd = dataEnd;
+    if (flags & 8) {
+      if ((localCrc !== 0 && localCrc !== expectedCrc) ||
+        (localCompSize !== 0 && localCompSize !== compSize) ||
+        (localUncompSize !== 0 && localUncompSize !== uncompSize)) {
+        throw new ZipError('ZIP-Datenbeschreibung ist inkonsistent.', 'ZIP_CORRUPT');
+      }
+      const available = cdOffset - dataEnd;
+      if (available < 12) throw new ZipError('ZIP-Datenbeschreibung fehlt.', 'ZIP_CORRUPT');
+      const descriptor = readRangeFromFd(fd, Math.min(16, available), dataEnd, readSync);
+      const signed = descriptor.readUInt32LE(0) === 0x08074b50;
+      const valueOffset = signed ? 4 : 0;
+      if (descriptor.length < valueOffset + 12 || descriptor.readUInt32LE(valueOffset) !== expectedCrc ||
+        descriptor.readUInt32LE(valueOffset + 4) !== compSize ||
+        descriptor.readUInt32LE(valueOffset + 8) !== uncompSize) {
+        throw new ZipError('ZIP-Datenbeschreibung ist inkonsistent.', 'ZIP_CORRUPT');
+      }
+      entryEnd += valueOffset + 12;
+    }
+    for (const range of occupiedRanges) {
+      if (localOffset < range.end && entryEnd > range.start) {
+        throw new ZipError('ZIP-Einträge überlappen sich.', 'ZIP_CORRUPT');
+      }
+    }
+    occupiedRanges.push({ start: localOffset, end: entryEnd });
     if (!name || name.endsWith('/')) continue;
     if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
     if (names.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
-    if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.');
+    if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.', 'ZIP_LIMIT');
     names.add(name);
     if (name === '[Content_Types].xml') hasContentTypes = true;
     if (name === '_rels/.rels') hasRootRelationships = true;
@@ -214,8 +272,32 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     }
     total += uncompSize;
     files++;
+    descriptors.push({ name, method, expectedCrc, compSize, uncompSize, dataStart });
   }
   if (p !== centralDirectory.length) throw new ZipError('ZIP-Zentralverzeichnis hat eine unerwartete Größe.');
+  occupiedRanges.sort((left, right) => left.start - right.start);
+  if (limits.requireExactEnd === true && (occupiedRanges[0]?.start !== 0 ||
+    occupiedRanges.some((range, index) => index > 0 && occupiedRanges[index - 1].end !== range.start) ||
+    occupiedRanges.at(-1)?.end !== cdOffset)) {
+    throw new ZipError('ZIP besitzt ungebundene Datenbereiche.', 'ZIP_POLYGLOT');
+  }
+  if (limits.verifyPayloads === true) {
+    const maxControlPartBytes = limits.maxControlPartBytes || 2 * 1024 * 1024;
+    const maxControlBytes = limits.maxControlBytes || 8 * 1024 * 1024;
+    for (const entry of descriptors) {
+      const data = verifiedEntryDataFromFd(fd, entry, limits, readSync);
+      const isControl = entry.name === '[Content_Types].xml' || entry.name.endsWith('.rels');
+      if (isControl) {
+        if (data.length > maxControlPartBytes || data.length > maxControlBytes - controlBytes) {
+          data.fill(0);
+          throw new ZipError('OPC-Steuerteile überschreiten das sichere Prüfbudget.', 'ZIP_LIMIT');
+        }
+        controlBytes += data.length;
+        controlParts[entry.name] = data.toString('utf8');
+      }
+      data.fill(0);
+    }
+  }
   const result = { entries: totalEntries, files, uncompressed_bytes: total };
   if (limits.includeStructure === true) {
     result.structure = Object.freeze({
@@ -224,6 +306,10 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
       ooxml_type: officeKinds.size === 1 ? [...officeKinds][0] : null,
       active_content: activeContent
     });
+  }
+  if (limits.includeControls === true) {
+    result.control_parts = Object.freeze(controlParts);
+    result.entry_names = Object.freeze([...names]);
   }
   return result;
 }

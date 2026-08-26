@@ -3,6 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { createSuite } = require('./helpers');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-snapshot-'));
@@ -59,6 +60,23 @@ test('snapshot copy completes correctly across positive partial writes', () => {
   const copied = copySnapshotFile(source, destination, expected, { fs: io, hasReparseComponent: () => false });
   assert.strictEqual(copied.size, expected.size);
   assert.strictEqual(fs.readFileSync(destination, 'utf8'), fs.readFileSync(source, 'utf8'));
+});
+
+test('snapshot copy is cryptographically bound to the preflight bytes', () => {
+  const { source, expected } = sourceFixture('bound-digest.txt');
+  const destination = path.join(base, 'bound-digest.copy');
+  const digest = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
+  const copied = copySnapshotFile(source, destination, expected, {
+    fs, hasReparseComponent: () => false, expectedSha256: digest
+  });
+  assert.strictEqual(copied.sha256, digest);
+
+  const rejected = path.join(base, 'bound-digest-rejected.copy');
+  assert.throws(() => copySnapshotFile(source, rejected, expected, {
+    fs, hasReparseComponent: () => false, expectedSha256: '0'.repeat(64)
+  }), /zwischen Prüfung und lokaler Übernahme verändert/i);
+  assert.strictEqual(fs.existsSync(rejected), false);
+  assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
 });
 
 test('write, read and fsync failures remove the exact partial copy', () => {

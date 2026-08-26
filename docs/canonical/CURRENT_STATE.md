@@ -504,11 +504,14 @@ Zielvertrag ergänzt: `contracts/BATCH_SNAPSHOT_V1.md` legt private atomare Kopi
 Originalunabhängigkeit, Journalzustände, Crashfenster und Löschregeln für BL-011.1
 fest; `test-architecture-contracts.js` schützt die Mindestanforderungen.
 
-Vor dem DOCX-Snapshot prüft der lokale Batch zudem ausschließlich das
-ZIP-Zentralverzeichnis gegen den bestehenden 20.000-Einträge-/300-MiB-Vertrag.
-Verschlüsselte, ZIP64-, beschädigte und übergroße Container werden ohne Entpacken
-und ohne neue Arbeitskopie abgewiesen; die vollständige Parser-, Header- und
-CRC-Prüfung bleibt der nachgelagerte, maßgebliche Freigabeschritt.
+Vor dem DOCX-Snapshot prüft der lokale Batch den vollständigen ZIP-/OPC-Umschlag
+gegen feste Eintrags-, Expansions-, Kompressions- und Steuerteilbudgets. Sämtliche
+Einträge werden größen- und CRC-geprüft; Content Types, Root-Relationship, Main-Part
+und alle Relationship-Steuerteile werden lokal fail-closed validiert. Externe oder
+aktive Beziehungen werden nicht verfolgt. Danach bindet ein SHA-256 über den
+geprüften Descriptor die Entscheidung an exakt den Digest der Snapshot-Kopie.
+Verschlüsselte, ZIP64-, beschädigte, aktive und übergroße Container werden ohne
+Arbeitskopie abgewiesen. Parser- und Residualprüfung bleiben nachgelagerte Gates.
 
 Der aktive Parserpfad hat feste und getestete Ressourcenbudgets. Jede Plattform
 startet Node mit höchstens 384 MiB V8-Heap und der aufrufende Prozess beendet einen
@@ -1530,15 +1533,17 @@ Container-, Parser-, Active-Content- und Residualgates sind für freigegebene Fo
 umfangreich vorhanden. BL-049.1a/b1 ergänzt einen schreibfreien, descriptor-
 gebundenen Classifier und plant den vollständigen Mehrfachstapel vor der ersten
 Mutation. Er bindet Dateidentität sowie bei OOXML lokale ZIP-Header, Namen, Flags,
-Methode und Datenbereiche. Endungs-/Signatur-/Minimalstruktur-Mismatches, ungültiger
+Methode und Datenbereiche. Der b2-Integritätsschnitt prüft außerdem alle ZIP-Einträge
+gegen Größe und CRC, validiert begrenzte OPC-Steuerteile und Relationships und
+bindet die anschließende Kopie per SHA-256 an dieselben geprüften Bytes. Endungs-/Signatur-/OPC-Mismatches, ungültiger
 UTF-8-/Control-Text, beschädigte oder polyglotte ZIPs, aktive Inhalte,
 verschlüsselte ZIP-Einträge, CFB/OLE und noch gesperrte Formate erhalten pro Datei
 einen kopierfreien Stopp. Die übrigen Kandidaten laufen weiter. Ein fester
 `preflight_mapping_pending`-Checkpoint hält den Stopp nicht-terminal, bis die
 dauerhafte lokale Zuordnung idempotent geschrieben ist; Recovery liest die Quelle
 dabei nicht erneut. Der positive Grad heißt bewusst nur `candidate`; vollständige
-Parser- und Residualgates folgen. Echte OPC-Steuerteil-/Relationship-/CRC-Prüfung
-und die drei kanonischen DS-045-Ergebnisgrade fehlen noch.
+Parser- und Residualgates folgen. Die drei kanonischen DS-045-Ergebnisgrade fehlen
+noch; die Strukturprüfung schaltet insbesondere XLSX und PPTX nicht frei.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
 
 - Automatische Retention überspringt `Output` unabhängig vom Alter; nur ein

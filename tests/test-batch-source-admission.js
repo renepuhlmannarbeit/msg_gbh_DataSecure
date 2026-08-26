@@ -3,9 +3,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { planBatchAdmission } = require('../plugins/data-secure/server/gateway/batch-source-admission');
 const { SourceFormatError } = require('../plugins/data-secure/server/gateway/source-format-inspector');
 const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch source admission plan');
@@ -21,8 +23,7 @@ function office(kind) {
   const main = kind === 'docx' ? 'word/document.xml' :
     (kind === 'xlsx' ? 'xl/workbook.xml' : 'ppt/presentation.xml');
   return zipStore([
-    ['[Content_Types].xml', '<Types/>'],
-    ['_rels/.rels', '<Relationships/>'],
+    ...opcControlEntries(kind),
     [main, '<root/>']
   ]);
 }
@@ -44,6 +45,10 @@ test('a mixed plan preserves positions and marks only released pilot formats as 
       ['stopped', 'SOURCE_FORMAT_NOT_RELEASED']
     ]);
     assert.deepStrictEqual(plan.map((item) => item.entry), queue);
+    assert.strictEqual(plan[0].source_sha256, crypto.createHash('sha256').update(fs.readFileSync(queue[0].full)).digest('hex'));
+    assert.strictEqual(plan[1].source_sha256, null);
+    assert.strictEqual(plan[2].source_sha256, crypto.createHash('sha256').update(fs.readFileSync(queue[2].full)).digest('hex'));
+    assert.strictEqual(plan[3].source_sha256, null);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

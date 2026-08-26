@@ -15,6 +15,7 @@ const { startLocalBatchExecutor } = require('../plugins/data-secure/server/gatew
 const { csvField } = require('../plugins/data-secure/server/gateway/mapping');
 const { evidencePath, SCHEMA, validateEvidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
 const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 
 const { testAsync, done, assert } = createSuite('Server-bound batch session');
 
@@ -61,8 +62,7 @@ function ordered(name, text, index) {
 
 function unsupportedXlsx() {
   return zipStore([
-    ['[Content_Types].xml', '<Types/>'],
-    ['_rels/.rels', '<Relationships/>'],
+    ...opcControlEntries('xlsx'),
     ['xl/workbook.xml', '<workbook/>']
   ]);
 }
@@ -563,8 +563,7 @@ async function main() {
     const existingWorkDirectories = fs.readdirSync(_test.batchRoot()).filter((name) => name.endsWith('.work')).sort();
     const source = path.join(resetInputDirectory(), 'local-header-encrypted.docx');
     const archive = Buffer.from(zipStore([
-      ['[Content_Types].xml', '<Types/>'],
-      ['_rels/.rels', '<Relationships/>'],
+      ...opcControlEntries('docx'),
       ['word/document.xml', '<w:document/>']
     ]));
     archive.writeUInt16LE(archive.readUInt16LE(6) | 1, 6);

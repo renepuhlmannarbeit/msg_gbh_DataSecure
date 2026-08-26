@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const crypto = require('crypto');
 const {
   LIMITS,
   hasReparseComponent
@@ -14,6 +15,7 @@ const {
 const STOP_CODES = new Set([
   'SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_TYPE_MISMATCH', 'SOURCE_ENCRYPTED_UNSUPPORTED',
   'SOURCE_POLYGLOT_UNSUPPORTED', 'SOURCE_CONTAINER_CORRUPT',
+  'SOURCE_CONTAINER_LIMIT',
   'SOURCE_ACTIVE_CONTENT_UNSUPPORTED', 'SOURCE_TEXT_INVALID',
   'SOURCE_COMPOUND_BINARY_UNSUPPORTED', 'SOURCE_FORMAT_NOT_RELEASED'
 ]);
@@ -65,19 +67,43 @@ function planBatchAdmission(queue, deps = {}) {
         fstatSync: io.fstatSync.bind(io),
         readSync: io.readSync.bind(io)
       });
+      const candidate = result?.verdict === 'candidate';
+      if ((candidate && result?.code !== 'SOURCE_FORMAT_CANDIDATE') ||
+        (!candidate && !STOP_CODES.has(result?.code))) {
+        throw new SourceFormatError('SOURCE_READ_FAILED');
+      }
+      if (candidate) {
+        const hash = crypto.createHash('sha256');
+        const buffer = Buffer.allocUnsafe(64 * 1024);
+        try {
+          let position = 0;
+          while (position < opened.stat.size) {
+            const length = Math.min(buffer.length, opened.stat.size - position);
+            const read = io.readSync(opened.descriptor, buffer, 0, length, position);
+            if (!Number.isSafeInteger(read) || read <= 0 || read > length) throw new SourceFormatError('SOURCE_READ_FAILED');
+            hash.update(buffer.subarray(0, read));
+            position += read;
+          }
+          const after = io.fstatSync(opened.descriptor);
+          if (after.dev !== opened.stat.dev || after.ino !== opened.stat.ino || after.size !== opened.stat.size ||
+            after.mtimeMs !== opened.stat.mtimeMs || after.ctimeMs !== opened.stat.ctimeMs) {
+            throw new SourceFormatError('SOURCE_IDENTITY_CHANGED');
+          }
+          result = { ...result, source_sha256: hash.digest('hex') };
+        } finally {
+          buffer.fill(0);
+        }
+      }
     } finally {
       try { io.closeSync(opened.descriptor); } catch (error) { closeFailure = error; }
     }
     if (closeFailure) throw new SourceFormatError('SOURCE_READ_FAILED');
     const candidate = result?.verdict === 'candidate';
-    if ((candidate && result?.code !== 'SOURCE_FORMAT_CANDIDATE') ||
-      (!candidate && !STOP_CODES.has(result?.code))) {
-      throw new SourceFormatError('SOURCE_READ_FAILED');
-    }
     plan.push(Object.freeze({
       entry,
       admission: candidate ? 'candidate' : 'stopped',
-      error_code: candidate ? null : result.code
+      error_code: candidate ? null : result.code,
+      source_sha256: candidate ? result.source_sha256 : null
     }));
   }
   return Object.freeze(plan);

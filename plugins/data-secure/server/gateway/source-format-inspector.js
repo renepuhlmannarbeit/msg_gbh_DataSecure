@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
+const { validateOpcControls, OpcValidationError } = require('./opc-source-validator');
 
 const PILOT_TYPES = new Set(['txt', 'md', 'csv', 'docx']);
 const EXTENSION_TYPES = Object.freeze({
@@ -135,7 +136,13 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
         maxEntries: options.maxEntries || 20000,
         maxUncompressed: options.maxUncompressed || 128 * 1024 * 1024,
         requireExactEnd: true,
-        includeStructure: true
+        includeStructure: true,
+        verifyPayloads: true,
+        includeControls: true,
+        maxEntryUncompressed: options.maxEntryUncompressed || 64 * 1024 * 1024,
+        maxCompressionRatio: options.maxCompressionRatio || 1000,
+        maxControlPartBytes: options.maxControlPartBytes || 2 * 1024 * 1024,
+        maxControlBytes: options.maxControlBytes || 8 * 1024 * 1024
       }, safeRead);
     } catch (error) {
       if (error instanceof SourceFormatError) throw error;
@@ -144,6 +151,9 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
       }
       if (error instanceof ZipError && error.code === 'ZIP_POLYGLOT') {
         return finish(verdict(declaredType, 'zip', 'rejected', 'SOURCE_POLYGLOT_UNSUPPORTED'));
+      }
+      if (error instanceof ZipError && error.code === 'ZIP_LIMIT') {
+        return finish(verdict(declaredType, 'zip', 'rejected', 'SOURCE_CONTAINER_LIMIT'));
       }
       return finish(verdict(declaredType, 'zip', 'rejected', 'SOURCE_CONTAINER_CORRUPT'));
     }
@@ -154,8 +164,19 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
     if (structure.active_content) {
       return finish(verdict(declaredType, declaredType, 'rejected', 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED', structure));
     }
+    let verifiedStructure;
+    try {
+      verifiedStructure = validateOpcControls({
+        declaredType,
+        entries: new Set(inspected.entry_names || []),
+        controlParts: inspected.control_parts
+      });
+    } catch (error) {
+      if (!(error instanceof OpcValidationError)) throw error;
+      return finish(verdict(declaredType, declaredType, 'rejected', error.code));
+    }
     const result = verdict(declaredType, declaredType, PILOT_TYPES.has(declaredType) ? 'candidate' : 'not_released',
-      PILOT_TYPES.has(declaredType) ? 'SOURCE_FORMAT_CANDIDATE' : 'SOURCE_FORMAT_NOT_RELEASED', structure);
+      PILOT_TYPES.has(declaredType) ? 'SOURCE_FORMAT_CANDIDATE' : 'SOURCE_FORMAT_NOT_RELEASED', verifiedStructure);
     return finish(result);
   }
 

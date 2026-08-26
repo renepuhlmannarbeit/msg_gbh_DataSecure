@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
 const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 const {
   SourceFormatError,
   inspectSourceFormatFromFd
@@ -23,8 +24,7 @@ function officeZip(kind = 'docx', extras = []) {
     pptx: ['ppt/presentation.xml', '<p:presentation/>']
   }[kind];
   return zipStore([
-    ['[Content_Types].xml', '<Types/>'],
-    ['_rels/.rels', '<Relationships/>'],
+    ...opcControlEntries(kind),
     main,
     ...extras
   ]);
@@ -93,10 +93,7 @@ test('DOCX is only a container candidate after signature and minimal part-name c
   assert.strictEqual(result.code, 'SOURCE_FORMAT_CANDIDATE');
   assert.strictEqual(result.detected_type, 'docx');
   assert.deepStrictEqual(result.structure, {
-    content_types: true,
-    root_relationships: true,
-    ooxml_type: 'docx',
-    active_content: false
+    ooxml_type: 'docx', controls_verified: true, relationships_verified: true, crc_verified: true
   });
 });
 

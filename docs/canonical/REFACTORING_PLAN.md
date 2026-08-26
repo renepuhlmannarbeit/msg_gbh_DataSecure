@@ -300,15 +300,16 @@ BL-041.9
 
 ### R6 – Quellen- und Inhaltsgrenze vereinheitlichen
 
-Status: **R6a und R6b1-E0 abgeschlossen; R6b2/E1/E3 offen** · Stories: BL-044.1, BL-049.1
+Status: **R6a, R6b1 und R6b2-Integrität E0 abgeschlossen; Ergebnisgrade/E1/E3 offen** · Stories: BL-044.1, BL-049.1
 
 - R6a liefert den descriptor-gebundenen Classifier aus BL-049.1a.
 - R6b1 plant den vollständigen Stapel vor Mutation, journalisiert Formatstopps
   kopierfrei pro Datei, repariert ihr lokales Mapping idempotent und setzt den
   Reststapel fort. Der positive Grad `candidate` aktiviert kein Format und ist
   kein DS-045-Ergebnis.
-- R6b2 ergänzt echte OPC-Steuerteil-/Relationship-/CRC-Prüfung und genau drei
-  finale Ergebnisgrade.
+- R6b2-Integrität ergänzt echte OPC-Steuerteil-/Relationship-/CRC-Prüfung aller
+  Einträge sowie die SHA-256-Bindung zwischen Preflight und Snapshot. Die genau
+  drei finalen Ergebnisgrade sind der verbleibende R6b2-Teil.
 
 - Datei- und rekursive Ordnerauswahl nutzen denselben Snapshotvertrag.
 - Der gesamte Umfang wird vor Start gegen 100 Dateien, 500 MiB, Links,

@@ -132,6 +132,10 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
   let output;
   let outputCreated = false;
   let succeeded = false;
+  const expectedSha256 = String(deps.expectedSha256 || '').toLowerCase();
+  if (expectedSha256 && !/^[a-f0-9]{64}$/u.test(expectedSha256)) {
+    throw new SafeError('Die geprüfte Quelldatei besitzt keine gültige Integritätsbindung.');
+  }
   try {
     if (reparseCheck(source)) throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
     input = io.openSync(source, io.constants.O_RDONLY | noFollow);
@@ -174,8 +178,16 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
       (Number.isFinite(expectedCtime) && (after.ctimeMs !== expectedCtime || rechecked.ctimeMs !== expectedCtime))) {
       throw new SafeError('Eine ausgewählte Datei wurde während der lokalen Übernahme verändert.');
     }
+    const copiedSha256 = hash.digest('hex');
+    if (expectedSha256) {
+      const actual = Buffer.from(copiedSha256, 'hex');
+      const wanted = Buffer.from(expectedSha256, 'hex');
+      if (!crypto.timingSafeEqual(actual, wanted)) {
+        throw new SafeError('Eine ausgewählte Datei wurde zwischen Prüfung und lokaler Übernahme verändert.');
+      }
+    }
     succeeded = true;
-    return { size: position, sha256: hash.digest('hex') };
+    return { size: position, sha256: copiedSha256 };
   } finally {
     let closeError;
     if (output !== undefined) {
