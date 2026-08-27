@@ -10,7 +10,9 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 const { roots, privacyRoot, storageStatus, ensurePrivateDirectory } = require('../plugins/data-secure/server/gateway/common');
-const { beginBatch: beginBatchFromQueue, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { beginBatch: beginBatchFromQueue, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
+installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 const { startLocalBatchExecutor } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { csvField } = require('../plugins/data-secure/server/gateway/mapping');
 const { evidencePath, SCHEMA, validateEvidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
@@ -68,8 +70,8 @@ function unsupportedXlsx() {
 }
 
 const deps = {
-  convertDocument: async (source) => ({
-    markdown: fs.readFileSync(source, 'utf8'),
+  convertDocument: async (source, options = {}) => ({
+    markdown: (options.inputBuffer || fs.readFileSync(source)).toString('utf8'),
     attachments: [], warnings: [], unreviewedVisualCount: 0, requiresExplicitProfile: false
   })
 };
@@ -328,8 +330,8 @@ async function main() {
     const lifecycleEvents = [];
     let workerChild;
     let workerExit;
-    const forkObservedWorker = (...args) => {
-      const child = fork(...args);
+    const forkObservedWorker = (_productWorker, args, options) => {
+      const child = fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options);
       workerChild = child;
       workerExit = new Promise((resolve, reject) => {
         child.once('error', reject);
@@ -1178,14 +1180,14 @@ async function main() {
     let calls = 0;
     const partial = await reviewDeferredBatch(begun.batch_token, {
       ...deps,
-      convertDocument: async (source) => {
+      convertDocument: async (source, options = {}) => {
         calls++;
         if (calls === 4) {
           const error = new Error('parser unavailable');
           error.code = 'PARSER_START_FAILED';
           throw error;
         }
-        return { markdown: fs.readFileSync(source, 'utf8'), attachments: [], warnings: [], unreviewedVisualCount: 0, requiresExplicitProfile: false };
+        return { markdown: (options.inputBuffer || fs.readFileSync(source)).toString('utf8'), attachments: [], warnings: [], unreviewedVisualCount: 0, requiresExplicitProfile: false };
       },
       platform: 'linux',
       reviewTextLocally: (draft) => ({ action: 'reviewed', redactions: [], decisions: draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' })) })
@@ -1363,11 +1365,11 @@ async function main() {
     const begun = beginBatch({ expectedCount: 2, profile: 'customer' });
     const before = _test.readState(begun.batch_token);
     const sealed = path.join(_test.workPath(begun.batch_token), before.items[0].work_name);
-    const original = fs.readFileSync(sealed, 'utf8');
-    fs.writeFileSync(sealed, 'X'.repeat(Buffer.byteLength(original, 'utf8')), 'utf8');
+    const original = fs.readFileSync(sealed);
+    fs.writeFileSync(sealed, Buffer.alloc(original.length, 0x58));
     const stopped = await processBatchNext(begun.batch_token, deps);
     assert.strictEqual(stopped.ok, false);
-    assert.strictEqual(stopped.error, 'BATCH_SNAPSHOT_CHANGED');
+    assert.strictEqual(stopped.error, 'batch_snapshot_changed');
     assert.strictEqual(stopped.batch_token, begun.batch_token, 'the private gateway may retain its opaque checkpoint token');
     assert.doesNotMatch(JSON.stringify(stopped), /first\.txt|second\.txt|Mustermann|Musterfrau/iu);
     const after = _test.readState(begun.batch_token);
@@ -1390,10 +1392,10 @@ async function main() {
     prepared.items[0].checkpoint = 'retryable';
     fs.writeFileSync(stateFile, JSON.stringify(prepared), 'utf8');
     const sealed = path.join(_test.workPath(begun.batch_token), prepared.items[1].work_name);
-    const original = fs.readFileSync(sealed, 'utf8');
-    fs.writeFileSync(sealed, 'Y'.repeat(Buffer.byteLength(original, 'utf8')), 'utf8');
+    const original = fs.readFileSync(sealed);
+    fs.writeFileSync(sealed, Buffer.alloc(original.length, 0x59));
     const stopped = await processBatchNext(begun.batch_token, deps);
-    assert.strictEqual(stopped.error, 'BATCH_SNAPSHOT_CHANGED');
+    assert.strictEqual(stopped.error, 'batch_snapshot_changed');
     const after = _test.readState(begun.batch_token);
     assert.strictEqual(after.invalidated, true);
     for (const item of after.items) {
@@ -1409,11 +1411,12 @@ async function main() {
     const before = _test.readState(begun.batch_token);
     const sealed = path.join(_test.workPath(begun.batch_token), before.items[0].work_name);
     const saved = path.join(base, 'sealed-swap.saved');
+    const savedBytes = fs.readFileSync(sealed);
     fs.renameSync(sealed, saved);
     fs.writeFileSync(sealed, 'substituted private object', 'utf8');
     const stopped = await processBatchNext(begun.batch_token, deps);
     assert.strictEqual(stopped.error, 'batch_snapshot_changed');
-    assert.strictEqual(fs.readFileSync(saved, 'utf8'), 'Kunde: Max Mustermann');
+    assert.deepStrictEqual(fs.readFileSync(saved), savedBytes);
     assert.strictEqual(fs.existsSync(sealed), false);
     fs.unlinkSync(saved);
   });
@@ -1585,7 +1588,7 @@ async function main() {
     do {
       const page = listBatchResults(begun.batch_token, { cursor, limit: 10 });
       assert.ok(page.results.length <= 10);
-      for (const result of page.results) acknowledgeDeliveredPackage(begun.batch_token, result.package_id);
+      acknowledgeDeliveredPackages(begun.batch_token, page.results.map((result) => result.package_id));
       listed += page.results.length;
       pages++;
       cursor = page.next_cursor;

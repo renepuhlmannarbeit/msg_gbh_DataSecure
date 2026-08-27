@@ -38,7 +38,8 @@ test('every current processing route is copy-only at the source boundary', () =>
     path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'retention.js'),
     'utf8'
   );
-  assert.match(orchestrator, /copySourceToPrivateWork/u);
+  assert.match(orchestrator, /readSourceToPrivateMemory/u);
+  assert.doesNotMatch(orchestrator, /copySourceToPrivateWork/u);
   assert.match(orchestrator, /original_moved_to_processed: false/u);
   assert.doesNotMatch(orchestrator, /moveProcessed|restoreProcessed|\.processing_/u);
   assert.doesNotMatch(orchestrator, /renameSync\(originalSource|unlinkSync\(originalSource/u);

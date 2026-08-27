@@ -229,7 +229,7 @@ bereits verifiziertes Paket niemals zurück.
 
 ### R3 – Originalschutz und internes Legacy-Intake entfernen
 
-Status: **R3b abgeschlossen; Ordnerquelle offen** · Story: BL-044.1
+Status: **R3b und Ordnerquelle E0 abgeschlossen; E1 offen** · Story: BL-044.1
 
 R3a ist mit RC53 abgeschlossen: `read-only-source-snapshot.js` bindet jede
 Neuquelle über `O_RDONLY`, Link-/Identitäts-/Größen-/mtime-Prüfung und optionalen
@@ -255,10 +255,13 @@ entfernt und die Upgrade-Migration ist als `legacy-input-migration.js` isoliert.
   kann nach Ablauf der dokumentierten Übergangsversion vollständig entfallen.
 - Dauerhafte Markdown-Exporte und Mapping werden nie automatisch durch Retention,
   Update, Rollback oder Deinstallation gelöscht.
+- RC66 ergänzt den nativen rekursiven Ordnerpicker mit vollständiger
+  Link-/Junction-/Reparse-, Tiefen-, Eintrags-, Dateizahl- und Größenprüfung vor
+  jeder Aufnahme. Relative Unterordner bleiben ausschließlich im lokalen Mapping.
 
 ### R4 – Benutzergebundene Verschlüsselung
 
-Status: **R4a-E0 abgeschlossen; R4b/Produktaktivierung offen** · Stories: BL-011.13, BL-030.2
+Status: **R4b-E0 produktiv integriert; E1/E3 offen** · Stories: BL-011.13, BL-030.2
 
 - Ein zufälliger Installationsschlüssel wird pro OS-Benutzer durch Windows DPAPI
   beziehungsweise macOS Keychain geschützt.
@@ -269,16 +272,17 @@ Status: **R4a-E0 abgeschlossen; R4b/Produktaktivierung offen** · Stories: BL-01
 - Schlüsselrotation und Migration werden atomar, versioniert und rückrollbar
   getestet. Rohwerte erscheinen nie in Recovery- oder Diagnosemeldungen.
 
-R4a liefert die noch nicht produktiv verdrahtete create-once-Fassade: ein
+RC66 verdrahtet die create-once-Fassade produktiv: ein
 versioniertes AES-256-GCM-Envelope, zwingend injizierten transaktionalen
 Secret-Store, Zweck-/Objekt-/Generationsbindung, Replay-Sperre, private Root-/
 Root-Ahnen-/Parent-/Inode-Bindung, exklusive Tempdatei und atomare
 Create-if-absent-Hardlink-
 Publikation mit festen Fehlercodes und Negativtests. Ein vorhandenes Artefakt wird
 in diesem Teilschnitt auch bei einem Publikationsrennen nie ersetzt; eine zweite
-Generation ist gesperrt. R4b muss den transaktionalen Rotations-/Migrations- und
-Recoveryvertrag, die direkte
-Descriptor-/Stream-Übergabe an den Parser und die native Produktverdrahtung liefern.
+Generation ist gesperrt. Persistente Commitmarker, V2-/Reviewmigration, RAM-only
+Parserübergabe und der exakt gelockte native OS-Keyring schließen R4b-E0.
+Schlüsselrotation bleibt einer späteren Vertragsversion vorbehalten; reale
+Zielsystem- und Security-Evidenz bleiben E1/E3.
 
 Die Product-Owner-Regel für Verlust beziehungsweise Widerruf des OS-Schlüssels ist
 mit DS-050 festgelegt: keine Wiederherstellungs-Hintertür; unlesbare private
@@ -338,7 +342,7 @@ Status: **E0 vorbereitet** · Stories: BL-010.8, BL-051.1 bis BL-051.5
 
 ### R8 – Performance erst nach Sicherheitsgates aktivieren
 
-Status: **Harness vorhanden, Produkt seriell** · Stories: BL-047.1, BL-050.3
+Status: **adaptiver E0-Gleitfenster-Harness abgeschlossen, Produkt seriell bis E1** · Stories: BL-047.1, BL-050.3
 
 - Zuerst reale Referenzwerte für 1/10/100 Dateien und die 500-MiB-Grenze erfassen.
 - Kleine adaptive Parallelität bleibt hinter Lease-, Speicher-, Reihenfolge-,

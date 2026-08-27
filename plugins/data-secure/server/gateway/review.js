@@ -5,8 +5,111 @@ const path = require('path');
 const { SafeError } = require('../runtime');
 const { roots, sha256Buffer, sha256File } = require('./common');
 const { safeResolvePackage, safeFile } = require('./package-store');
+const { productPrivateArtifactCrypto } = require('./private-artifact-runtime');
+const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+
+function writeReviewMetaAtomically(target, value, io = fs, platform = process.platform) {
+  const temporary = `${target}.tmp_${require('crypto').randomBytes(8).toString('hex')}`;
+  const payload = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  let fd;
+  try {
+    fd = io.openSync(temporary, io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL, 0o600);
+    writeFully(fd, payload, io);
+    io.fsyncSync(fd);
+    io.closeSync(fd); fd = undefined;
+    io.renameSync(temporary, target);
+    syncParentDirectory(target, io, platform);
+  } finally {
+    payload.fill(0);
+    if (fd !== undefined) try { io.closeSync(fd); } catch { /* preserve caller failure */ }
+    try { io.unlinkSync(temporary); } catch { /* absent after rename */ }
+  }
+}
+
+function migrateLegacyReviewPreviews(options = {}) {
+  const io = options.fs || fs;
+  const r = roots();
+  const artifactCrypto = options.privateArtifactCrypto || productPrivateArtifactCrypto(r.review);
+  const onlyPackage = options.packageId ? path.basename(String(options.packageId)) : null;
+  let migrated = 0;
+  const packages = io.readdirSync(r.review, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && (!onlyPackage || entry.name === onlyPackage));
+  for (const pkg of packages) {
+    const dir = path.join(r.review, pkg.name);
+    for (const name of io.readdirSync(dir).filter((entry) => entry.endsWith('.review.json'))) {
+      const metaPath = path.join(dir, name);
+      const review = JSON.parse(io.readFileSync(metaPath, 'utf8'));
+      if (review.preview_encrypted === true) {
+        if (review.legacy_preview_file) {
+          const legacy = path.join(dir, path.basename(review.legacy_preview_file));
+          if (path.basename(review.legacy_preview_file) !== review.legacy_preview_file) {
+            throw new SafeError('Alte Review-Metadaten besitzen einen unsicheren Preview-Namen.');
+          }
+          try {
+            const stat = io.lstatSync(legacy);
+            if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('unsafe');
+            io.unlinkSync(legacy);
+          } catch (error) {
+            if (error?.code !== 'ENOENT') throw new SafeError('Eine alte Review-Klartextkopie konnte nicht sicher entfernt werden.');
+          }
+          delete review.legacy_preview_file;
+          writeReviewMetaAtomically(metaPath, review, io, options.platform);
+        }
+        continue;
+      }
+      const legacyName = String(review.preview_file || '');
+      if (!legacyName) continue;
+      if (path.basename(legacyName) !== legacyName || legacyName.endsWith('.dsart')) {
+        throw new SafeError('Alte Review-Metadaten besitzen einen unsicheren Preview-Namen.');
+      }
+      const legacy = path.join(dir, legacyName);
+      const stat = io.lstatSync(legacy);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Eine alte Review-Klartextkopie ist nicht sicher verwendbar.');
+      const plain = io.readFileSync(legacy);
+      try {
+        const plainSha = sha256Buffer(plain);
+        if (review.preview_sha256 && review.preview_sha256 !== plainSha) {
+          throw new SafeError('Eine alte Review-Klartextkopie wurde verändert.');
+        }
+        artifactCrypto.ensureReady?.();
+        const encryptedName = `${review.asset_id}.dsart`;
+        const encrypted = path.join(dir, encryptedName);
+        if (!io.existsSync(encrypted)) {
+          artifactCrypto.writeEncrypted(encrypted, plain, {
+            purpose: 'review-preview', objectId: review.review_id
+          });
+        } else {
+          const verified = artifactCrypto.readEncrypted(encrypted, {
+            purpose: 'review-preview', objectId: review.review_id
+          });
+          try {
+            if (sha256Buffer(verified) !== plainSha) throw new SafeError('Die verschlüsselte Review-Migration stimmt nicht überein.');
+          } finally { verified.fill(0); }
+        }
+        Object.assign(review, {
+          preview_file: encryptedName,
+          preview_sha256: sha256File(encrypted),
+          preview_plain_sha256: plainSha,
+          preview_encrypted: true,
+          legacy_preview_file: legacyName
+        });
+        writeReviewMetaAtomically(metaPath, review, io, options.platform);
+        const current = io.lstatSync(legacy);
+        if (!current.isFile() || current.isSymbolicLink() || current.dev !== stat.dev || current.ino !== stat.ino || current.size !== stat.size) {
+          throw new SafeError('Eine alte Review-Klartextkopie wurde während der Migration verändert.');
+        }
+        io.unlinkSync(legacy);
+        delete review.legacy_preview_file;
+        writeReviewMetaAtomically(metaPath, review, io, options.platform);
+        migrated++;
+      } finally { plain.fill(0); }
+    }
+  }
+  return Object.freeze({ ok: true, migrated });
+}
 
 function listReviewItems() {
+  migrateLegacyReviewPreviews();
   const r = roots();
   const items = [];
   for (const pkg of fs.readdirSync(r.review, { withFileTypes: true }).filter((x) => x.isDirectory())) {
@@ -72,13 +175,15 @@ function removePreviewAfterDecision(dir, review) {
   }
 }
 
-function approveReviewAsset(reviewId, confirmed) {
+function approveReviewAsset(reviewId, confirmed, deps = {}) {
   if (confirmed !== true) {
     throw new SafeError(
       'Visuelles Asset wird nur nach ausdrücklicher menschlicher Datenschutzprüfung freigegeben.'
     );
   }
 
+  const parsedReviewId = splitReviewId(reviewId);
+  migrateLegacyReviewPreviews({ ...deps, packageId: parsedReviewId.pkg });
   const { dir, meta, j } = safeReviewMeta(reviewId);
   if (j.approved) return { ok: true, already_approved: true, review_id: reviewId };
   // An expired preview and a preview that never existed need different answers:
@@ -102,8 +207,8 @@ function approveReviewAsset(reviewId, confirmed) {
   if (j.preview_sha256 && sha256File(preview) !== j.preview_sha256) {
     throw new SafeError('Review-Preview wurde verändert; bitte Dokument neu verarbeiten.');
   }
-  if (path.extname(preview).toLowerCase() !== '.png') {
-    throw new SafeError('Nur metadatafreie PNG-Previews können direkt freigegeben werden.');
+  if (path.extname(preview).toLowerCase() !== '.dsart' || j.preview_encrypted !== true) {
+    throw new SafeError('Nur verschlüsselte metadatafreie PNG-Previews können direkt freigegeben werden.');
   }
 
   const { p, m } = safeResolvePackage(j.package_id);
@@ -119,47 +224,63 @@ function approveReviewAsset(reviewId, confirmed) {
   const asset = (m.assets || []).find((x) => x.asset_id === j.asset_id);
   if (!asset) throw new SafeError('Asset fehlt im Paketmanifest.');
 
-  const data = fs.readFileSync(preview);
-  const assetsDir = path.join(p, 'assets');
-  fs.mkdirSync(assetsDir, { recursive: true });
-  const target = `${j.asset_id}_reviewed.png`;
-  fs.copyFileSync(preview, path.join(assetsDir, target));
+  const artifactCrypto = deps.privateArtifactCrypto || productPrivateArtifactCrypto(roots().review);
+  const data = artifactCrypto.readEncrypted(preview, { purpose: 'review-preview', objectId: reviewId });
+  try {
+    if (!/^[a-f0-9]{64}$/u.test(String(j.preview_plain_sha256 || '')) ||
+        sha256Buffer(data) !== j.preview_plain_sha256) {
+      throw new SafeError('Die entschlüsselte Review-Preview wurde verändert; bitte Dokument neu verarbeiten.');
+    }
+    const assetsDir = path.join(p, 'assets');
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const target = `${j.asset_id}_reviewed.png`;
+    fs.writeFileSync(path.join(assetsDir, target), data, { mode: 0o600, flag: 'wx' });
 
-  Object.assign(asset, {
-    status: 'included',
-    reason: 'human_privacy_review_approved',
-    file: `assets/${target}`,
-    output_mime: 'image/png',
-    bytes: data.length,
-    sha256: sha256Buffer(data),
-    human_reviewed: true
-  });
+    Object.assign(asset, {
+      status: 'included',
+      reason: 'human_privacy_review_approved',
+      file: `assets/${target}`,
+      output_mime: 'image/png',
+      bytes: data.length,
+      sha256: sha256Buffer(data),
+      human_reviewed: true
+    });
 
-  fs.writeFileSync(
-    md,
-    `${fs.readFileSync(md, 'utf8')}\n\n### Menschlich freigegebene Grafik ${j.asset_id}\n\n` +
-      `![Geprüfte Grafik](./assets/${target})\n`,
-    'utf8'
-  );
+    fs.writeFileSync(
+      md,
+      `${fs.readFileSync(md, 'utf8')}\n\n### Menschlich freigegebene Grafik ${j.asset_id}\n\n` +
+        `![Geprüfte Grafik](./assets/${target})\n`,
+      'utf8'
+    );
 
-  m.document_sha256 = sha256File(md);
-  m.human_visual_reviews = (m.human_visual_reviews || 0) + 1;
-  fs.writeFileSync(path.join(p, 'manifest.json'), JSON.stringify(m, null, 2), 'utf8');
+    m.document_sha256 = sha256File(md);
+    m.human_visual_reviews = (m.human_visual_reviews || 0) + 1;
+    fs.writeFileSync(path.join(p, 'manifest.json'), JSON.stringify(m, null, 2), 'utf8');
 
-  j.approved = true;
-  j.approved_at = new Date().toISOString();
-  const previewRemoved = removePreviewAfterDecision(dir, j);
-  if (!previewRemoved) j.preview_cleanup_error = true;
-  fs.writeFileSync(meta, JSON.stringify(j, null, 2), 'utf8');
+    j.approved = true;
+    j.approved_at = new Date().toISOString();
+    const previewRemoved = removePreviewAfterDecision(dir, j);
+    if (!previewRemoved) j.preview_cleanup_error = true;
+    fs.writeFileSync(meta, JSON.stringify(j, null, 2), 'utf8');
 
-  return {
-    ok: true,
-    review_id: reviewId,
-    package_id: j.package_id,
-    asset_id: j.asset_id,
-    approved: true,
-    preview_removed: previewRemoved
-  };
+    return {
+      ok: true,
+      review_id: reviewId,
+      package_id: j.package_id,
+      asset_id: j.asset_id,
+      approved: true,
+      preview_removed: previewRemoved
+    };
+  } finally {
+    data.fill(0);
+  }
 }
 
-module.exports = { listReviewItems, approveReviewAsset, splitReviewId, removePreviewAfterDecision };
+module.exports = {
+  listReviewItems,
+  approveReviewAsset,
+  splitReviewId,
+  removePreviewAfterDecision,
+  migrateLegacyReviewPreviews,
+  writeReviewMetaAtomically
+};

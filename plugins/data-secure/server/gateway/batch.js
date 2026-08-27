@@ -57,6 +57,8 @@ const {
   incrementPrivateIoSummary
 } = require('./performance');
 const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('../companion/text-review');
+const { productPrivateArtifactCrypto } = require('./private-artifact-runtime');
+const { migrateLegacyBatchState } = require('./batch-private-artifact-migration');
 
 const active = new Set();
 const RETRYABLE_CODES = new Set(['REQUEST_CANCELLED', 'PARSER_TIMEOUT', 'PARSER_START_FAILED', 'PROCESSING_INTERRUPTED', 'LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE']);
@@ -64,6 +66,25 @@ const DELIVERY_PENDING = 'delivery_pending';
 const DEFERRED_REVIEW = 'deferred_review';
 const MAPPING_PENDING = 'mapping_pending';
 const PREFLIGHT_MAPPING_PENDING = 'preflight_mapping_pending';
+
+let privateArtifactCryptoProvider = productPrivateArtifactCrypto;
+const privateArtifactCrypto = Object.freeze({
+  ensureReady: () => privateArtifactCryptoProvider(batchRoot()).ensureReady(),
+  writeEncrypted: (...args) => privateArtifactCryptoProvider(batchRoot()).writeEncrypted(...args),
+  readEncrypted: (...args) => privateArtifactCryptoProvider(batchRoot()).readEncrypted(...args)
+});
+
+function setPrivateArtifactCryptoProviderForTests(provider) {
+  if (typeof provider !== 'function') throw new TypeError('private artifact provider required');
+  privateArtifactCryptoProvider = provider;
+}
+
+function encryptedExactPendingEntry(state, item) {
+  migrateLegacyBatchState(state, { artifactCrypto: privateArtifactCrypto, writeState });
+  const current = state.items.find((candidate) => candidate.id === item.id);
+  if (!current) throw new SafeError('Die migrierte private Arbeitskopie wurde nicht gefunden.');
+  return exactPendingEntry(state, current, { artifactCrypto: privateArtifactCrypto });
+}
 
 const { openBatchPackageProtection } = createBatchRetentionProtection({
   io: fs,
@@ -131,6 +152,7 @@ const { beginBatch } = createBatchIntake({
   batchPath,
   workPath,
   copySnapshotFile,
+  privateArtifactCrypto,
   batchTtlMs,
   createPrivateIoSummary,
   writeState,
@@ -291,7 +313,7 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
 
 const { captureDeferredReviewInput } = createBatchReviewCapture({
   anonymizeNext,
-  exactPendingEntry,
+  exactPendingEntry: encryptedExactPendingEntry,
   packageIdForItem,
   localReviewError
 });
@@ -302,7 +324,7 @@ const { markDeferredReview, deferredReviewPlan } = createBatchReviewState({
 
 const { publishReviewedBatch } = createBatchReviewPublication({
   anonymizeNext,
-  exactPendingEntry,
+  exactPendingEntry: encryptedExactPendingEntry,
   packageIdForItem,
   reviewedBatchText,
   writeState,
@@ -380,7 +402,7 @@ const { processBatchNext } = createBatchProcessingOrchestrator({
   maintainBeforeNext,
   deliveryResult,
   publicProgress,
-  exactPendingEntry,
+  exactPendingEntry: encryptedExactPendingEntry,
   invalidateUnpublishedBatchCopies,
   writeState,
   processSingleBatchItem,
@@ -402,9 +424,10 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   incrementPrivateIoSummary,
   processBatchNext,
   finalizePublishedPackageLocally,
+  writeTerminalEvidence,
   releaseLocalBatchExecutor,
   deliveryPendingStatus: DELIVERY_PENDING,
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox, setPrivateArtifactCryptoProviderForTests } };

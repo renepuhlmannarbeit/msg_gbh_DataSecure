@@ -41,6 +41,7 @@ function source(name = 'private-customer-name.txt') {
 
 function fakeChild(action) {
   const child = new EventEmitter();
+  child.stdin = new PassThrough();
   child.stdout = new PassThrough();
   child.killed = false;
   child.kill = () => { child.killed = true; queueMicrotask(() => child.emit('close', null)); return true; };
@@ -57,6 +58,56 @@ function parserResult(markdown) {
 }
 
 async function main() {
+  await testAsync('authenticated in-memory input reaches the isolated parser through stdin without a plaintext path', async () => {
+    const secret = Buffer.from('sensitive marker', 'utf8');
+    let invocation;
+    let received = Buffer.alloc(0);
+    const result = await convertDocument('opaque-private-artifact', {
+      ...nativeOptions,
+      inputBuffer: secret,
+      sourceName: 'source.txt',
+      spawn(command, args, options) {
+        const child = fakeChild((fake) => {
+          fake.stdout.end(JSON.stringify({
+            schema: 'data-secure-parser-result/1', ok: true,
+            result: parserResult('safe-buffer')
+          }));
+          fake.emit('close', 0);
+        });
+        child.stdin.on('data', (chunk) => { received = Buffer.concat([received, chunk]); });
+        invocation = { command, args, options };
+        return child;
+      }
+    });
+    assert.strictEqual(result.markdown, 'safe-buffer');
+    assert.deepStrictEqual(received, secret);
+    assert.deepStrictEqual(invocation.options.stdio, ['pipe', 'pipe', 'ignore']);
+    assert.doesNotMatch(JSON.stringify(invocation), /opaque-private-artifact|sensitive marker|source\.txt/u);
+  });
+
+  await testAsync('a partial or failed authenticated stdin transfer can never release parser output', async () => {
+    const secret = Buffer.from('sensitive marker that must arrive completely', 'utf8');
+    await assert.rejects(
+      () => convertDocument('opaque-private-artifact', {
+        ...nativeOptions,
+        inputBuffer: secret,
+        sourceName: 'source.txt',
+        spawn() {
+          const child = fakeChild((fake) => {
+            fake.stdout.end(JSON.stringify({
+              schema: 'data-secure-parser-result/1', ok: true,
+              result: parserResult('must-not-release')
+            }));
+            fake.emit('close', 0);
+          });
+          child.stdin.end = () => { queueMicrotask(() => child.stdin.emit('error', new Error('EPIPE'))); };
+          return child;
+        }
+      }),
+      (error) => error instanceof SafeError && error.code === 'PARSER_INPUT_INCOMPLETE'
+    );
+  });
+
   await testAsync('renamed PDFs are blocked from text parsers before any worker starts', async () => {
     let spawned = 0;
     const pdf = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF', 'ascii');

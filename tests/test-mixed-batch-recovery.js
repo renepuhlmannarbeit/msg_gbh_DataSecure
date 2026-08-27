@@ -11,6 +11,8 @@ process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch, processBatchNext, resumeBatch, acknowledgeDeliveredPackage, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
+installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
 const { testAsync, done, assert } = createSuite('Mixed-format batch recovery');
 const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -33,11 +35,14 @@ async function main() {
     ]));
     const sources = ['one.txt', 'two.csv', 'three.docx'].map((name) => path.join(input, name));
     const before = sources.map(hash);
-    const convertDocument = async (source) => parseDocumentBuffer(fs.readFileSync(source), path.extname(source).toLowerCase());
+    const convertDocument = async (source, options = {}) => parseDocumentBuffer(
+      options.inputBuffer || fs.readFileSync(source),
+      path.extname(options.sourceName || source).toLowerCase()
+    );
     const queue = sources.map((full) => { const stat = fs.lstatSync(full); return { name: path.basename(full), full, stat, sourceBytes: stat.size }; });
     const batch = beginBatch({ expectedCount: 3, profile: 'auto', queue });
     const first = await processAndAcknowledge(batch.batch_token, convertDocument);
-    assert.strictEqual(first.released, 1);
+    assert.strictEqual(first.released, 1, JSON.stringify(first));
     const interrupted = await processBatchNext(batch.batch_token, { convertDocument: async () => {
       const error = new Error('interrupted'); error.code = 'REQUEST_CANCELLED'; throw error;
     } });

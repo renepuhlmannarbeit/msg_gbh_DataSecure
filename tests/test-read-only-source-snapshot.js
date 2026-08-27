@@ -6,7 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { createSuite } = require('./helpers');
 const {
-  copySourceToPrivateWork
+  copySourceToPrivateWork,
+  readSourceToPrivateMemory
 } = require('../plugins/data-secure/server/gateway/read-only-source-snapshot');
 
 const { test, done, assert } = createSuite('Read-only source snapshot boundary');
@@ -55,6 +56,18 @@ test('binds a sealed source to its expected SHA-256', () => {
   });
   assertSameSource(source, before);
   assert.strictEqual(identity(destination).sha256, before.sha256);
+});
+
+test('direct picker reads an identity-bound in-memory snapshot without a plaintext work file', () => {
+  const source = fixture('memory.txt', 'Kontakt: Synthetische Person 815');
+  const before = identity(source);
+  const result = readSourceToPrivateMemory({ source, expectedStat: fs.lstatSync(source) });
+  try {
+    assert.strictEqual(result.privateBytes.toString('utf8'), fs.readFileSync(source, 'utf8'));
+    assert.strictEqual(result.sourceMutated, false);
+    assert.deepStrictEqual(fs.readdirSync(root).filter((name) => name.includes('memory')), ['memory.txt']);
+    assertSameSource(source, before);
+  } finally { result.privateBytes.fill(0); }
 });
 
 test('a stale identity stops before creating a private copy', () => {

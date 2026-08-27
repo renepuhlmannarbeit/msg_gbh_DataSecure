@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { collectFiles, readCentralModes } from './lib/zip.mjs';
 import { verifyDataSecureArchiveModes } from './lib/archive-modes.mjs';
+import { verifyKeyringArtifacts } from './lib/keyring-artifacts.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -54,6 +55,7 @@ try {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, bytes, { flag: 'wx' });
   }
+  verifyKeyringArtifacts(path.join(target, 'server', 'vendor', 'keyring'));
   for (const test of ['test-contract-skill-acceptance.js', 'test-contract-skill-matrix.js']) {
     const acceptance = spawnSync(
       process.execPath,

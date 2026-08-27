@@ -134,7 +134,7 @@ function createBatchItemProcessor(options = {}) {
       markMappingPending(item, expectedPackageId, result.document_result);
       writeState(state);
       try {
-        ensureMappingOutbox(item.name, expectedPackageId, item.document_result);
+        ensureMappingOutbox(item.source_label || item.name, expectedPackageId, item.document_result);
         item.mapping_outbox_persisted = true;
       } catch {
         return {
@@ -222,7 +222,7 @@ function createBatchItemProcessor(options = {}) {
         // cleanup are separately recoverable projections of that decision.
         writeState(state);
         try {
-          appendMapping(item.name, '', mappingStoppedStatus, {
+          appendMapping(item.source_label || item.name, '', mappingStoppedStatus, {
             mappingReference: item.id,
             documentResult: item.document_result
           });

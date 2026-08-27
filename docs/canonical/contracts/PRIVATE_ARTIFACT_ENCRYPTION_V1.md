@@ -1,6 +1,6 @@
 # Vertrag: verschlüsselte private Artefakte v1
 
-Status: E0-Integrationsvertrag, noch kein Produkt-Release · Story: BL-011.13 ·
+Status: R4b-E0 produktiv integriert, noch kein Produkt-Release · Story: BL-011.13 ·
 Abhängigkeiten: DS-050, `BATCH_SECRET_STORE_V1.md`, `BATCH_SNAPSHOT_V1.md`
 
 ## Zweck und Geltungsbereich
@@ -12,8 +12,8 @@ dauerhafte anonymisierte Exporte und das lokale Mapping liegen ausdrücklich
 außerhalb dieser Verschlüsselungsfassade und werden durch sie weder verändert noch
 gelöscht.
 
-Die E0-Fassade ist kein Release-Nachweis. Der Produktpfad darf erst umgeschaltet
-werden, wenn die gelockten nativen Secret-Store-Artefakte auf allen Releasezielen
+Die E0-Produktintegration ist kein Release-Nachweis. Ein Release darf erst erfolgen,
+wenn die gelockten nativen Secret-Store-Artefakte auf allen Releasezielen
 offline sowie mit Prozesswechsel, Sperre, Neustart und Löschung belegt wurden.
 
 ## Schlüsselgrenze
@@ -51,11 +51,12 @@ offline sowie mit Prozesswechsel, Sperre, Neustart und Löschung belegt wurden.
 
 - Persistenz schreibt ausschließlich verschlüsselte Bytes in eine exklusiv
   erzeugte private `0600`-Tempdatei.
-- R4a ist absichtlich **create-only**. Ein bestehendes Artefakt wird niemals
+- Die V1-Fassade ist absichtlich **create-only**. Ein bestehendes Artefakt wird niemals
   ersetzt; pro Zweck-/Objektbindung ist ausschließlich Generation 1 zulässig.
   Ein zweiter Zielpfad darf keine verdeckte Rotation erzeugen. Rotation und
-  Migration benötigen zusätzlich einen dauerhaften Pointer-/Recovery-Vertrag und
-  bleiben R4b.
+  Schlüsselrotation benötigt zusätzlich einen dauerhaften Pointer-/Recovery-Vertrag
+  und bleibt einer späteren Vertragsversion vorbehalten. Die RC66-Migration betrifft
+  ausschließlich gebundene Legacy-Klartextartefakte derselben Installation.
 - Die Veröffentlichung verwendet eine atomare Create-if-absent-Hardlink-Promotion.
   Sie ersetzt auch dann kein Ziel, wenn ein anderer Prozess es genau zwischen
   Vorprüfung und Veröffentlichung erzeugt. Ein Commit ist erst nach vollständigem
@@ -70,9 +71,8 @@ offline sowie mit Prozesswechsel, Sperre, Neustart und Löschung belegt wurden.
   Temp-Unlink, Parent-`fsync` oder Secret-Commit – wird als
   `PRIVATE_ARTIFACT_DURABILITY_UNCERTAIN` gemeldet. Der veröffentlichte Ciphertext
   bleibt erhalten, die Schlüsselgeneration bleibt jedoch uncommitted/pending.
-  Erst R4b darf diesen Zustand anhand der erwarteten Zielidentität und
-  Envelope-Metadaten recovern. Das System darf in diesem Zustand weder erneut
-  überschreiben noch einen erfolgreichen Commit behaupten.
+  Der persistente Commitmarker sperrt diesen Zustand. Das System darf ihn weder
+  lesen noch erneut überschreiben oder als erfolgreichen Commit behaupten.
 - Die komplette private Root einschließlich aller existierenden Ahnen muss lokal,
   link-/junction-/reparsefrei und ausschließlich für den OS-Benutzer beschreibbar
   sein. Root- und Parent-Inodes werden vor und nach der Operation gebunden.
@@ -91,9 +91,10 @@ offline sowie mit Prozesswechsel, Sperre, Neustart und Löschung belegt wurden.
 
 ## Rotation, Migration und Schlüsselverlust
 
-- R4b muss Rotation und Migration versioniert und rückrollbar liefern. Zu jedem Zeitpunkt ist
-  entweder das letzte durable alte oder das vollständig durable neue Envelope
-  lesbar; Klartext wird nie als Zwischenzustand persistiert.
+- Die RC66-Migration von V2-Snapshots und Legacy-Reviewpreviews ist versioniert und
+  rückrollbar. Zu jedem Zeitpunkt ist entweder der gebundene alte Klartext oder das
+  vollständig durable neue Envelope autoritativ; neuer Klartext wird nie als
+  Zwischenzustand persistiert. Schlüsselrotation ist nicht Bestandteil von V1.
 - Ein fehlgeschlagener Migrationslauf darf weder alten Ciphertext noch Originale,
   Exporte oder Mapping entfernen.
 - Bei Verlust oder Widerruf des OS-Schlüssels gibt es gemäß DS-050 keine
@@ -104,12 +105,11 @@ offline sowie mit Prozesswechsel, Sperre, Neustart und Löschung belegt wurden.
 
 ## Verbindliche Evidenz vor Produktaktivierung
 
-R4a-E0 verlangt Unit-/Negativtests für Ciphertext-at-rest, Nonce-/Tag-/Versionsvertrag,
+R4b-E0 umfasst Unit-/Negativtests für Ciphertext-at-rest, Nonce-/Tag-/Versionsvertrag,
 Objektbindung, Manipulation, falschen Schlüssel, Truncation, Short-/Zero-Write,
 Create-once-/Create-only-Rennen, transaktionale Generationen, Root-Ahnen- und
 Pfad-/Inode-Bindung, synchrone Storegrenze, alle
-Commitfehler und Cleanup. R4b ergänzt Rotation, Migration und
-Crashrollback. E1 verlangt echte
+Commitfehler, Migration und Crashrollback. E1 verlangt echte
 Windows-DPAPI-/Credential-Manager- und macOS-Keychain-Läufe aus den finalen Offline-
 Paketen sowie Hardlink-/Crash-Durability-Evidenz auf jedem freigegebenen
 Dateisystem. E3 verlangt ein Security-Review des Formats, der nativen Lieferkette und

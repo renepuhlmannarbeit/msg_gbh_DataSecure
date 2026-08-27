@@ -30,7 +30,7 @@ function createBatchSnapshotInvalidation(options = {}) {
     if (affected.length > 0) (deps.writeState || options.writeState)(state);
     for (const item of affected) {
       try {
-        appendMapping(item.name, '', mappingStoppedStatus, {
+        appendMapping(item.source_label || item.name, '', mappingStoppedStatus, {
           mappingReference: item.id,
           documentResult: item.document_result
         });

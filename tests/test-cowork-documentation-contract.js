@@ -15,7 +15,7 @@ const server = read('plugins/data-secure/server/index.js');
 const all = [guide, review, anonymize, explain, boundary].join('\n');
 
 for (const text of [guide, review, anonymize, explain, boundary]) {
-  assert.match(text, /(?:Mehrfachpicker|Mehrfach-Datei(?:auswahl|dialog))/iu, 'picker normal path missing');
+  assert.match(text, /(?:Mehrfachpicker|Mehrfach-Datei(?:auswahl|dialog)|Datei- beziehungsweise Ordnerauswahl)/iu, 'picker normal path missing');
 }
 assert.match(guide, /„Öffnen“[^\n]{0,160}(?:einzige|genau einmal)/iu, 'single confirmation is unclear');
 assert.match(anonymize, /genau einmal[^\n]*start_document_batch_from_picker/iu);

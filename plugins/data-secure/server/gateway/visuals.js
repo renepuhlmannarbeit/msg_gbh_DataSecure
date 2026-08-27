@@ -13,6 +13,7 @@ const {
 } = require('../image-sanitizer');
 const { LIMITS, roots, sha256Buffer, sha256File } = require('./common');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
+const { productPrivateArtifactCrypto } = require('./private-artifact-runtime');
 
 const { MAX_ASSET_BYTES } = LIMITS;
 const VISUAL_TOTAL_TIMEOUT_MS = 3 * 60 * 1000;
@@ -137,9 +138,15 @@ function writeReviewItem(packageId, assetId, res, packageDir, deps = {}) {
   const reviewId = `${packageId}__${assetId}`;
   let file = null;
   if (res.reviewData) {
-    file = safeReviewFilename(assetId, res.reviewExt);
-    capacity({ directory: dir, bytes: res.reviewData.length });
-    try { fs.writeFileSync(path.join(dir, file), res.reviewData); }
+    const artifactCrypto = deps.privateArtifactCrypto || productPrivateArtifactCrypto(r.review);
+    artifactCrypto.ensureReady();
+    file = `${assetId}.dsart`;
+    capacity({ directory: dir, bytes: res.reviewData.length + 128 });
+    try {
+      artifactCrypto.writeEncrypted(path.join(dir, file), res.reviewData, {
+        purpose: 'review-preview', objectId: reviewId
+      });
+    }
     catch (error) { throw normalizePostPreflightWriteError(error); }
   }
 
@@ -150,6 +157,8 @@ function writeReviewItem(packageId, assetId, res, packageDir, deps = {}) {
     reason: res.reason,
     preview_file: file,
     preview_sha256: file ? sha256File(path.join(dir, file)) : null,
+    preview_plain_sha256: file ? sha256Buffer(res.reviewData) : null,
+    preview_encrypted: !!file,
     created_at: new Date().toISOString(),
     approved: false,
     package_dir: path.basename(packageDir)

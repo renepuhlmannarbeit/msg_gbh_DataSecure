@@ -127,11 +127,15 @@ function regularFileStat(target) {
 function copySnapshotFile(source, destination, expected, deps = {}) {
   const io = deps.fs || fs;
   const reparseCheck = deps.hasReparseComponent || hasReparseComponent;
+  const artifactCrypto = deps.artifactCrypto;
+  const binding = deps.binding;
+  if (!artifactCrypto || typeof artifactCrypto.writeEncrypted !== 'function' ||
+      !binding || binding.purpose !== 'batch-snapshot') {
+    throw new SafeError('Die Verschlüsselung privater Stapelkopien ist nicht verfügbar. Es wurden keine Quelldaten übernommen.');
+  }
   const noFollow = io.constants.O_NOFOLLOW || 0;
   let input;
-  let output;
-  let outputCreated = false;
-  let succeeded = false;
+  let plaintext;
   const expectedSha256 = String(deps.expectedSha256 || '').toLowerCase();
   if (expectedSha256 && !/^[a-f0-9]{64}$/u.test(expectedSha256)) {
     throw new SafeError('Die geprüfte Quelldatei besitzt keine gültige Integritätsbindung.');
@@ -150,26 +154,15 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
       (Number.isFinite(expectedCtime) && (opened.ctimeMs !== expectedCtime || named.ctimeMs !== expectedCtime))) {
       throw new SafeError('Eine ausgewählte Datei wurde während der lokalen Übernahme verändert.');
     }
-    output = io.openSync(destination, io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL, 0o600);
-    outputCreated = true;
     const hash = crypto.createHash('sha256');
-    const buffer = Buffer.allocUnsafe(64 * 1024);
+    plaintext = Buffer.allocUnsafe(opened.size);
     let position = 0;
     while (position < opened.size) {
-      const read = io.readSync(input, buffer, 0, Math.min(buffer.length, opened.size - position), position);
+      const read = io.readSync(input, plaintext, position, opened.size - position, position);
       if (read <= 0) throw new SafeError('Die private Arbeitskopie ist unvollständig.');
-      hash.update(buffer.subarray(0, read));
-      let written = 0;
-      while (written < read) {
-        const count = io.writeSync(output, buffer, written, read - written);
-        if (!Number.isSafeInteger(count) || count <= 0 || count > read - written) {
-          throw new SafeError('Die private Arbeitskopie ist unvollständig.');
-        }
-        written += count;
-      }
+      hash.update(plaintext.subarray(position, position + read));
       position += read;
     }
-    io.fsyncSync(output);
     const after = io.lstatSync(source);
     const rechecked = io.fstatSync(input);
     if (!after.isFile() || after.isSymbolicLink() || after.dev !== expected.dev || after.ino !== expected.ino ||
@@ -186,20 +179,18 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
         throw new SafeError('Eine ausgewählte Datei wurde zwischen Prüfung und lokaler Übernahme verändert.');
       }
     }
-    succeeded = true;
+    artifactCrypto.writeEncrypted(destination, plaintext, binding);
     return { size: position, sha256: copiedSha256 };
   } finally {
     let closeError;
-    if (output !== undefined) {
-      try { io.closeSync(output); } catch (error) { closeError = error; }
-    }
     if (input !== undefined) {
       try { io.closeSync(input); } catch (error) { closeError ||= error; }
     }
-    if ((!succeeded || closeError) && outputCreated) {
-      try { io.unlinkSync(destination); } catch { /* outer work-tree cleanup remains the final fail-closed guard */ }
+    if (plaintext) plaintext.fill(0);
+    if (closeError) {
+      try { if (io.existsSync(destination)) io.unlinkSync(destination); } catch { /* outer cleanup remains the guard */ }
+      throw closeError;
     }
-    if (succeeded && closeError) throw closeError;
   }
 }
 
@@ -210,14 +201,28 @@ function exactPendingEntry(state, item, deps = {}) {
   if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item?.work_name || ''))) {
     throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
   }
+  const artifactCrypto = deps.artifactCrypto;
+  if (!artifactCrypto || typeof artifactCrypto.readEncrypted !== 'function') {
+    throw new SafeError('Die Verschlüsselung privater Stapelkopien ist nicht verfügbar.');
+  }
   const full = pathApi.join(pathForWork(state.token), item.work_name);
-  const stat = statRegularFile(full);
-  if (stat.size !== item.size) {
+  statRegularFile(full);
+  const privateBytes = artifactCrypto.readEncrypted(full, {
+    purpose: 'batch-snapshot',
+    objectId: `${state.token}:${item.id}`
+  });
+  const actualSha256 = crypto.createHash('sha256').update(privateBytes).digest('hex');
+  if (privateBytes.length !== item.size || !/^[a-f0-9]{64}$/u.test(String(item.sha256 || '')) ||
+      !crypto.timingSafeEqual(Buffer.from(actualSha256, 'hex'), Buffer.from(item.sha256, 'hex'))) {
+    privateBytes.fill(0);
     throw new SafeError('Die versiegelte Arbeitskopie wurde verändert. Der Lauf wurde sicher gestoppt.');
   }
-  // Hash verification remains fused with the next mandatory streaming copy;
-  // this read-side binding performs no duplicate content read.
-  return { name: item.name, full, stat, expected_sha256: item.sha256 };
+  return {
+    name: item.name,
+    private_bytes: privateBytes,
+    expected_sha256: item.sha256,
+    private_artifact_encrypted: true
+  };
 }
 
 module.exports = {

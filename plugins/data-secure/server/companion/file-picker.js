@@ -232,7 +232,8 @@ function batchQueueFromSelection(selected) {
     // neither the source path nor a path-derived hash has to be persisted or
     // shown to Claude. The picker already rejects selecting the exact same
     // absolute path twice.
-    return { name, full, sourceBytes };
+    const sourceLabel = typeof item?.sourceLabel === 'string' ? item.sourceLabel : name;
+    return { name, full, sourceBytes, sourceLabel };
   });
 }
 

@@ -52,7 +52,9 @@ function projectBatchResults(state, options = {}) {
   const items = Array.isArray(state?.items) ? state.items : [];
   if (items.length === 0) return unavailableProjection(0, false);
   if (state.schema === 'datasecure-batch/1') return unavailableProjection(items.length, false);
-  if (state.schema !== 'datasecure-batch/2') return unavailableProjection(items.length, false);
+  if (!['datasecure-batch/2', 'datasecure-batch/3'].includes(state.schema)) {
+    return unavailableProjection(items.length, false);
+  }
 
   const gradeCounts = emptyGradeCounts(0);
   const omissionCounts = emptyOmissionCounts();

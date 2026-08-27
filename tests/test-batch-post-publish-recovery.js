@@ -15,6 +15,8 @@ const {
   acknowledgeDeliveredPackage,
   _test
 } = require('../plugins/data-secure/server/gateway/batch');
+const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
+installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 const { testAsync, done, assert } = createSuite('Post-publication batch recovery integration');
 
@@ -31,8 +33,8 @@ async function main() {
     let injected = false;
     let pipelineRuns = 0;
     const deps = {
-      convertDocument: async (source) => ({
-        markdown: fs.readFileSync(source, 'utf8'),
+      convertDocument: async (source, options = {}) => ({
+        markdown: (options.inputBuffer || fs.readFileSync(source)).toString('utf8'),
         attachments: [], warnings: [], unreviewedVisualCount: 0, requiresExplicitProfile: false
       }),
       // Every processBatchNext call receives this same proof hook. A hidden

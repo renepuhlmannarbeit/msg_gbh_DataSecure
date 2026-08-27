@@ -41,6 +41,8 @@ secrets.*
 # Build/runtime
 dist/
 node_modules/
+!/plugins/data-secure/server/vendor/keyring/node_modules/
+!/plugins/data-secure/server/vendor/keyring/node_modules/**
 !/plugins/data-secure/server/ocr-runtime/
 !/plugins/data-secure/server/ocr-runtime/node_modules/
 !/plugins/data-secure/server/ocr-runtime/node_modules/**

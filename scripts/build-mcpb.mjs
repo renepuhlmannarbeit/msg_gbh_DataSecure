@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
+import { verifyKeyringArtifacts } from './lib/keyring-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -49,6 +50,7 @@ try {
     path.join(nativeBin, 'windows-x64', 'datasecure-sandbox.sha256')
   );
   const posixSupervisors = verifyPosixSupervisorArtifacts(nativeBin);
+  verifyKeyringArtifacts(path.join(pluginDir, 'server', 'vendor', 'keyring'));
 
   fs.mkdirSync(path.join(stage, 'scripts'), { recursive: true });
   for (const helper of ['windows-ocr.ps1', 'rasterize-image.ps1']) {

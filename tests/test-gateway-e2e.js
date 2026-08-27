@@ -18,8 +18,10 @@ const { encodePng } = require(path.join(runtimeDir, 'image-sanitizer.js'));
 const gateway = require(path.join(runtimeDir, 'gateway.js'));
 const orchestrator = require(path.join(runtimeDir, 'gateway', 'orchestrator.js'));
 const pii = require(path.join(runtimeDir, 'pii-engine.js'));
-const { splitReviewId } = require(path.join(runtimeDir, 'gateway', 'review.js'));
+const { splitReviewId, approveReviewAsset } = require(path.join(runtimeDir, 'gateway', 'review.js'));
 const { migrateLegacyInputV1 } = require(path.join(runtimeDir, 'gateway', 'legacy-input-migration.js'));
+const { createTestPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
+const reviewCrypto = createTestPrivateArtifactCrypto(path.join(root, 'Needs Visual Review'));
 
 const suite = createSuite('Gateway end to end');
 const { done, assert } = suite;
@@ -56,6 +58,7 @@ function isolatedMarkerDir() {
 function depsFor(mode) {
   let count = 0;
   return {
+    privateArtifactCrypto: reviewCrypto,
     rasterizeToPng: async () => blankPng,
     ocrPngDetailed: async () => {
       if (mode !== 'pii') return { text: '', words: [] };
@@ -102,6 +105,9 @@ function currentQueue() {
 
 const gw = {
   ...gateway,
+  approveReviewAsset(reviewId, confirmed) {
+    return approveReviewAsset(reviewId, confirmed, { privateArtifactCrypto: reviewCrypto });
+  },
   anonymizeNext(profile, deps = {}) {
     return orchestrator.anonymizeNext(profile, { inputQueue: currentQueue(), ...deps });
   },

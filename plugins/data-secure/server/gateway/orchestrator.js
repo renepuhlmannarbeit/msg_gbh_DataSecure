@@ -34,7 +34,7 @@ const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { processAlive } = require('./process-liveness');
-const { copySourceToPrivateWork } = require('./read-only-source-snapshot');
+const { readSourceToPrivateMemory } = require('./read-only-source-snapshot');
 const { releasedDocumentResult } = require('./document-result-grade');
 
 // A batch worker gets one unforgeable in-process preparation capability after
@@ -246,7 +246,11 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   const selectedInput = queue[queueIndex];
   const originalSource = selectedInput.full;
   const originalName = selectedInput.name;
-  const ext = path.extname(originalSource).toLowerCase();
+  const encryptedInput = selectedInput.private_artifact_encrypted === true && Buffer.isBuffer(selectedInput.private_bytes);
+  if (encryptedInput && (typeof originalName !== 'string' || originalName.length === 0)) {
+    throw new SafeError('Die verschlüsselte private Arbeitskopie besitzt keine gültige Formatbindung.');
+  }
+  const ext = path.extname(originalName || originalSource).toLowerCase();
   if (!PILOT_SUPPORTED.has(ext)) {
     const error = new SafeError(
       'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben. ' +
@@ -259,7 +263,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     });
     throw error;
   }
-  if (selectedInput.stat.size > MAX_INPUT_BYTES) throw new SafeError('Eingabedatei überschreitet die absolute lokale Größenbegrenzung.');
+  const selectedBytes = encryptedInput ? selectedInput.private_bytes.length : selectedInput.stat?.size;
+  if (!Number.isSafeInteger(selectedBytes) || selectedBytes < 0 || selectedBytes > MAX_INPUT_BYTES) {
+    throw new SafeError('Eingabedatei überschreitet die absolute lokale Größenbegrenzung.');
+  }
 
   const r = roots();
   const jobId = newJobId();
@@ -271,7 +278,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     { encoding: 'utf8', mode: 0o600, flag: 'wx' }
   );
 
-  let source = originalSource;
+  let source = originalSource || originalName;
+  let sourceBuffer = encryptedInput ? selectedInput.private_bytes : null;
   let claimed = false;
   let stagePackage = null;
   let reviewPackageId = null;
@@ -285,20 +293,26 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   };
   try {
     throwIfAborted(deps.abortSignal);
-    source = path.join(jobDir, `source${ext}`);
-    copySourceToPrivateWork({
-      source: originalSource,
-      destination: source,
-      expectedStat: selectedInput.stat,
-      expectedSha256: selectedInput.expected_sha256
-    });
+    if (!encryptedInput) {
+      const memorySnapshot = readSourceToPrivateMemory({
+        source: originalSource,
+        expectedStat: selectedInput.stat,
+        expectedSha256: selectedInput.expected_sha256
+      });
+      sourceBuffer = memorySnapshot.privateBytes;
+      source = originalName;
+    }
     claimed = true;
     diagnosticStage = 'claimed';
     if (deps.onClaimed) await deps.onClaimed();
 
     throwIfAborted(deps.abortSignal);
 
-    const converted = await (deps.convertDocument || convertDocument)(source, { signal: deps.abortSignal });
+    const converted = await (deps.convertDocument || convertDocument)(source, {
+      signal: deps.abortSignal,
+      inputBuffer: sourceBuffer,
+      sourceName: originalName
+    });
     throwIfAborted(deps.abortSignal);
     diagnosticStage = 'converted';
     diagnostic.parser_warning_count = (converted.warnings || []).length;
@@ -475,7 +489,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       imagesRemovedByExplicitRequest: removed
     });
 
-    const auditReceipt = auditRecord(effective, source, {
+    const auditReceipt = auditRecord(effective, sourceBuffer
+      ? { name: originalName, size: selectedBytes }
+      : source, {
       entityCount: anon.entityCount,
       passes: anon.passes,
       reidentificationRisk: anon.reidentificationRisk,
@@ -552,7 +568,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     // Only the private working copy is disposable. The selected source remains
     // byte-identical at its original path on every success and failure path.
-    fs.unlinkSync(source);
+    if (!sourceBuffer) fs.unlinkSync(source);
     claimed = false;
     publishPackage(stagePackage, finalPackage);
     diagnosticStage = 'published';
@@ -625,7 +641,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     };
   } catch (e) {
     let recoveryError = null;
-    if (claimed && fs.existsSync(source)) {
+    if (claimed && !sourceBuffer && fs.existsSync(source)) {
       try {
         fs.unlinkSync(source);
         claimed = false;
@@ -669,6 +685,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     throw failure;
   } finally {
+    if (sourceBuffer) {
+      sourceBuffer.fill(0);
+      sourceBuffer = null;
+    }
     try {
       safeRemovePrivateTree(r.jobs, path.basename(jobDir));
     } catch {

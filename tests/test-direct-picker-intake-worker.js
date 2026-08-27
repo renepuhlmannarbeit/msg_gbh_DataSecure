@@ -3,6 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { fork } = require('child_process');
 const { createSuite } = require('./helpers');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intake-worker-'));
@@ -11,9 +12,12 @@ process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { readBatchProgress, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
 const { startLocalIntakeExecutor, localBatchStateProgress, terminalIntakeProgress } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { IO_SUMMARY_SCHEMA, validatePrivateIoSummary } = require('../plugins/data-secure/server/gateway/performance');
 const { testAsync, done, assert } = createSuite('Direct picker intake worker');
+
+installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 function pause(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -142,6 +146,7 @@ async function main() {
     const started = startLocalIntakeExecutor([{
       name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
     }], 'customer', {
+      forkProcess: (_modulePath, args, options) => fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options),
       showLocalIntakeNotice: (stage) => { localNotice = stage; },
       showTerminalBatchSummary: (summary) => { completionSummary = summary; return true; },
       recordWorkflowEvent: (event) => { workflowEvents.push(event); return true; }

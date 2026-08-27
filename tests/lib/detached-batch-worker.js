@@ -1,0 +1,61 @@
+'use strict';
+
+// Test-only equivalent of the detached product worker.  The real child uses
+// the operating-system keyring; this fixture installs the deterministic test
+// key shared by the parent process so the process-boundary contract can be
+// exercised without writing test secrets to the user's credential store.
+
+const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, _test } = require('../../plugins/data-secure/server/gateway/batch');
+const { installBatchPrivateArtifactCrypto } = require('./private-artifact-test-runtime');
+
+installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
+
+let started = false;
+const startDeadline = setTimeout(() => process.exit(2), 30_000);
+
+process.once('message', async (message) => {
+  const validToken = /^[a-f0-9]{64}$/u.test(String(message?.batch_token || ''));
+  const existing = message?.type === 'start-local-batch';
+  const intake = message?.type === 'start-local-intake' && Array.isArray(message?.queue) && message.queue.length > 0;
+  if (started || !validToken || (!existing && !intake)) return process.exit(2);
+  started = true;
+  clearTimeout(startDeadline);
+  const notify = (payload) => new Promise((resolve) => {
+    try {
+      if (typeof process.send !== 'function') return resolve(false);
+      process.send(payload, () => resolve(true));
+    } catch { resolve(false); }
+  });
+  try {
+    if (intake) {
+      const begun = beginBatch({
+        token: message.batch_token,
+        expectedCount: message.queue.length,
+        profile: message.profile || 'auto',
+        queue: message.queue,
+        confirmStart: () => true
+      });
+      if (begun.ok !== true) return process.exit(1);
+      await notify({ type: 'local-intake-checkpoint-created' });
+      if (claimLocalBatchExecutor(message.batch_token, process.pid).ok !== true) return process.exit(1);
+      await notify({ type: 'local-intake-processing-started' });
+    }
+    const completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
+    await notify({
+      type: intake ? 'local-intake-state' : 'local-batch-state',
+      complete: completed.complete === true,
+      batch_phase: completed.batch_phase,
+      batch_total: completed.batch_total,
+      released: completed.released,
+      stopped: completed.stopped,
+      result_grade_counts: completed.result_grade_counts,
+      result_omission_counts: completed.result_omission_counts,
+      result_grades_verified: completed.result_grades_verified
+    });
+    process.exit(0);
+  } catch {
+    process.exit(1);
+  }
+});
+
+process.once('disconnect', () => { if (!started) process.exit(2); });

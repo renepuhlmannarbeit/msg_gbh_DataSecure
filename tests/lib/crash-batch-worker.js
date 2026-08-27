@@ -21,7 +21,10 @@
 //     pointing at a dead pid.
 
 const fs = require('fs');
-const { claimLocalBatchExecutor, runLocalBatchExecutor } = require('../../plugins/data-secure/server/gateway/batch');
+const { claimLocalBatchExecutor, runLocalBatchExecutor, _test } = require('../../plugins/data-secure/server/gateway/batch');
+const { installBatchPrivateArtifactCrypto } = require('./private-artifact-test-runtime');
+
+installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 const TOKEN_RE = /^[a-f0-9]{64}$/u;
 
@@ -33,9 +36,9 @@ const startDeadline = setTimeout(() => process.exit(2), 30_000);
 // Deliberately the same conversion stub the suite passes to its in-process
 // runs. A crash run and a normal run must differ only in the crash, never in
 // the parser.
-function convertDocumentStub(source) {
+function convertDocumentStub(source, options = {}) {
   return Promise.resolve({
-    markdown: fs.readFileSync(source, 'utf8'),
+    markdown: (options.inputBuffer || fs.readFileSync(source)).toString('utf8'),
     attachments: [],
     warnings: [],
     unreviewedVisualCount: 0,
@@ -62,13 +65,13 @@ process.once('message', async (message) => {
     let document = 0;
     await runLocalBatchExecutor(message.batch_token, {
       executorPid: process.pid,
-      convertDocument: (source) => {
+      convertDocument: (source, options) => {
         document++;
         // The item is already durably marked 'processing' before conversion
         // starts, so dying here publishes nothing and leaves precisely one
         // interrupted item behind.
         if (document === crashAt) process.exit(17);
-        return convertDocumentStub(source);
+        return convertDocumentStub(source, options);
       }
     });
     // Reaching this point means the requested crash never happened; the caller

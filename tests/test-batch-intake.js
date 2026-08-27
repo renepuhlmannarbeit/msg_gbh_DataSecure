@@ -54,6 +54,7 @@ function fixture(options = {}) {
       fs.copyFileSync(from, to);
       return { size: stat.size, sha256: 'b'.repeat(64) };
     },
+    privateArtifactCrypto: { ensureReady() { events.push('crypto-ready'); } },
     batchTtlMs: () => 60_000,
     createPrivateIoSummary: (value) => value,
     writeState(state) {
@@ -192,7 +193,7 @@ test('mixed admission journals every position but snapshots only candidates', ()
     assert.ok(item.events.includes('capacity:2'));
     assert.strictEqual(fs.readdirSync(item.work).length, 2);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
-    assert.strictEqual(state.schema, 'datasecure-batch/2');
+    assert.strictEqual(state.schema, 'datasecure-batch/3');
     assert.deepStrictEqual(state.items.map((entry) => entry.status), [
       'pending', 'preflight_mapping_pending', 'pending', 'preflight_mapping_pending'
     ]);
@@ -224,7 +225,7 @@ test('an all-stopped admission creates a durable repair checkpoint without sourc
     assert.strictEqual(item.events.some((event) => event.startsWith('copy:')), false);
     assert.deepStrictEqual(fs.readdirSync(item.work), []);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
-    assert.strictEqual(state.schema, 'datasecure-batch/2');
+    assert.strictEqual(state.schema, 'datasecure-batch/3');
     assert.strictEqual(state.items[0].status, 'preflight_mapping_pending');
     assert.strictEqual(state.items[0].document_result.grade, 'not-processed');
     assert.strictEqual(state.items[0].document_result.reason_code, 'SOURCE_TEXT_INVALID');

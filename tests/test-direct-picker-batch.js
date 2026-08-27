@@ -10,6 +10,8 @@ process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch, discardIncompleteBatches, releaseLocalBatchExecutor, _test } = require('../plugins/data-secure/server/gateway/batch');
+const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
+installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 const { startLocalBatchExecutor, startLocalIntakeExecutor, localIntakeActive } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { batchQueueFromSelection, validateSelectedPath } = require('../plugins/data-secure/server/companion/file-picker');
 const { sourceLimitForExtension } = require('../plugins/data-secure/server/resource-limits');

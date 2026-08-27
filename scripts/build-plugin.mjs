@@ -13,6 +13,7 @@ import { collectFiles, writeZip } from './lib/zip.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
 import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
+import { verifyKeyringArtifacts } from './lib/keyring-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -28,6 +29,7 @@ const nativeLauncher = path.join(pluginDir, 'server', 'native', 'windows-x64', '
 const nativeChecksum = `${nativeLauncher.slice(0, -4)}.sha256`;
 verifyNativeArtifact(nativeLauncher, nativeChecksum);
 const posixSupervisors = verifyPosixSupervisorArtifacts(path.join(pluginDir, 'server', 'native'));
+verifyKeyringArtifacts(path.join(pluginDir, 'server', 'vendor', 'keyring'));
 const portableOcr = path.join(pluginDir, 'server', 'ocr-runtime');
 if (!fs.existsSync(portableOcr)) throw new Error('vendored OCR runtime missing');
 const ocrEvidence = validateUniversalRuntime(portableOcr, { releaseEnabled: false });

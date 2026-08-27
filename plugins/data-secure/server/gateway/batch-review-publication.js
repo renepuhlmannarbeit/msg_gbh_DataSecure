@@ -155,7 +155,7 @@ function createBatchReviewPublication(options = {}) {
         markMappingPending(item, result.package_id, result.document_result);
         writeState(state);
         try {
-          ensureMappingOutbox(item.name, result.package_id, item.document_result);
+          ensureMappingOutbox(item.source_label || item.name, result.package_id, item.document_result);
           item.mapping_outbox_persisted = true;
         } catch {
           continue;
@@ -205,7 +205,7 @@ function createBatchReviewPublication(options = {}) {
           item.work_copy_cleanup_pending = true;
           writeState(state);
           try {
-            appendMapping(item.name, '', mappingStoppedStatus, {
+            appendMapping(item.source_label || item.name, '', mappingStoppedStatus, {
               mappingReference: item.id,
               documentResult: item.document_result
             });

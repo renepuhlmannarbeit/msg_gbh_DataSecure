@@ -111,9 +111,9 @@ function createBatchReconciliation(options = {}) {
   function commitPendingMapping(item, packageId) {
     // Recovery order is contractual: durable intent, idempotent CSV, then
     // removal of the intent. Journal publication remains the caller's duty.
-    const outbox = persistMappingIntent(item.name, packageId, item.document_result);
+    const outbox = persistMappingIntent(item.source_label || item.name, packageId, item.document_result);
     item.mapping_outbox_persisted = true;
-    writeMapping(item.name, packageId, undefined, { documentResult: item.document_result });
+    writeMapping(item.source_label || item.name, packageId, undefined, { documentResult: item.document_result });
     clearMappingIntent(outbox);
     delete item.mapping_outbox_persisted;
   }
@@ -158,7 +158,7 @@ function createBatchReconciliation(options = {}) {
         validateDocumentResult(item.document_result);
         if (item.document_result.grade !== GRADES.NOT_PROCESSED ||
           item.document_result.reason_code !== item.error_code) continue;
-        writeMapping(item.name, '', STOPPED, {
+        writeMapping(item.source_label || item.name, '', STOPPED, {
           mappingReference: item.id,
           documentResult: item.document_result
         });

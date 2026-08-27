@@ -13,6 +13,11 @@ const {
   pickSource
 } = require('../plugins/data-secure/server/companion/file-picker');
 const {
+  SOURCE_FOLDER_CANCELLED,
+  sourceFolderPickerCommands,
+  pickSourceFolder
+} = require('../plugins/data-secure/server/companion/source-folder');
+const {
   confirmationCommands,
   confirmAutomaticRelease
 } = require('../plugins/data-secure/server/companion/local-confirmation');
@@ -95,16 +100,19 @@ test('native start, picker and completion paths use keyboard-accessible OS dialo
   const result = { selected_count: 2, released_count: 1, failed_count: 1 };
   const windowsStart = startConfirmationCommands(summary, { platform: 'win32', env: HOSTILE_ENV })[0].args.at(-1);
   const windowsPicker = pickerCommands('win32', HOSTILE_ENV, ['txt'], true)[0].args.at(-1);
+  const windowsFolderPicker = sourceFolderPickerCommands('win32', HOSTILE_ENV)[0].args.at(-1);
   const windowsFinish = completionSummaryCommand(result, { platform: 'win32', env: HOSTILE_ENV }).args.at(-1);
   assert.match(windowsStart, /MessageBox[\s\S]*YesNo/);
   assert.match(windowsPicker, /OpenFileDialog/);
+  assert.match(windowsFolderPicker, /FolderBrowserDialog/);
   assert.match(windowsFinish, /AcceptButton.*CancelButton/);
   for (const platform of ['darwin', 'linux']) {
     const start = startConfirmationCommands(summary, { platform });
     const picker = pickerCommands(platform, HOSTILE_ENV, ['txt'], true);
+    const folderPicker = sourceFolderPickerCommands(platform, HOSTILE_ENV);
     const finish = completionSummaryCommand(result, { platform });
-    assert.ok(start.length >= 1 && picker.length >= 1 && finish.command);
-    assert.doesNotMatch(JSON.stringify({ start, picker, finish }), /cmd\.exe|\/bin\/sh|powershell.*-EncodedCommand/i);
+    assert.ok(start.length >= 1 && picker.length >= 1 && folderPicker.length >= 1 && finish.command);
+    assert.doesNotMatch(JSON.stringify({ start, picker, folderPicker, finish }), /cmd\.exe|\/bin\/sh|powershell.*-EncodedCommand/i);
   }
 });
 
@@ -125,6 +133,7 @@ test('every default UI runner uses shell false and the sanitized environment', (
     calls.push({ command, args, options });
     const script = String(args.at(-1) || '');
     if (script.includes('OpenFileDialog')) return { status: 0, stdout: PICKER_CANCELLED };
+    if (script.includes('FolderBrowserDialog')) return { status: 0, stdout: SOURCE_FOLDER_CANCELLED };
     if (script.includes('ConvertFrom-Json')) return { status: 0, stdout: '{"action":"cancelled"}' };
     if (script.includes('MessageBox')) return { status: 0, stdout: 'CONFIRMED' };
     if (script.includes('Verarbeitung abgeschlossen')) return { status: 0, stdout: 'SHOWN' };
@@ -132,6 +141,7 @@ test('every default UI runner uses shell false and the sanitized environment', (
   };
   try {
     assert.throws(() => pickSource({ platform: 'win32', env: HOSTILE_ENV }), /abgebrochen/);
+    assert.throws(() => pickSourceFolder({ platform: 'win32', env: HOSTILE_ENV }), /abgebrochen/);
     assert.strictEqual(confirmAutomaticRelease(2, { platform: 'win32', env: HOSTILE_ENV }), true);
     assert.strictEqual(showCompletionSummary({ selected_count: 1, released_count: 1, failed_count: 0 }, {
       platform: 'win32', env: HOSTILE_ENV
@@ -148,7 +158,7 @@ test('every default UI runner uses shell false and the sanitized environment', (
   } finally {
     childProcess.spawnSync = original;
   }
-  assert.strictEqual(calls.length, 4);
+  assert.strictEqual(calls.length, 5);
   for (const call of calls) {
     assert.strictEqual(call.options.shell, false);
     assert.strictEqual(call.options.env.HTTP_PROXY, undefined);
@@ -163,12 +173,17 @@ test('raw document text is stdin-only and reaches only the classified review hel
   const runner = (command, args, input, env) => {
     calls.push({ command, args, input, env });
     if (String(args.at(-1)).includes('OpenFileDialog')) return { status: 0, stdout: PICKER_CANCELLED };
+    if (String(args.at(-1)).includes('FolderBrowserDialog')) return { status: 0, stdout: SOURCE_FOLDER_CANCELLED };
     if (String(args.at(-1)).includes('ConvertFrom-Json')) return { status: 0, stdout: '{"action":"cancelled"}' };
     if (String(args.at(-1)).includes('MessageBox')) return { status: 0, stdout: 'CONFIRMED' };
     if (String(args.at(-1)).includes('Verarbeitung abgeschlossen')) return { status: 0, stdout: 'SHOWN' };
     return { status: 1, stdout: '' };
   };
   assert.throws(() => pickSource({ platform: 'win32', env: HOSTILE_ENV, runner }), /abgebrochen/);
+  assert.throws(() => pickSourceFolder({
+    platform: 'win32', env: HOSTILE_ENV,
+    runner: (command, args, env) => runner(command, args, undefined, env)
+  }), /abgebrochen/);
   confirmAutomaticRelease(1, { platform: 'win32', env: HOSTILE_ENV, runner });
   showCompletionSummary({ selected_count: 1, released_count: 1, failed_count: 0 }, {
     platform: 'win32', env: HOSTILE_ENV, runner
@@ -181,7 +196,7 @@ test('raw document text is stdin-only and reaches only the classified review hel
   }, { platform: 'win32', env: HOSTILE_ENV, runner });
 
   assert.strictEqual(calls.filter((call) => String(call.input || '').includes('PERSON RAW SENTINEL')).length, 1);
-  assert.ok(String(calls[3].input).includes('PERSON RAW SENTINEL'));
+  assert.ok(String(calls[4].input).includes('PERSON RAW SENTINEL'));
   for (const call of calls) assert.doesNotMatch(JSON.stringify(call.args), /PERSON RAW SENTINEL/);
 });
 
@@ -237,6 +252,7 @@ test('Linux credential review keeps raw text off every argument vector', () => {
 test('fixed UI scripts contain no network-capable shell primitive', () => {
   const scripts = [
     ...pickerCommands('win32', HOSTILE_ENV, undefined, true).map((item) => item.args.join(' ')),
+    ...sourceFolderPickerCommands('win32', HOSTILE_ENV).map((item) => item.args.join(' ')),
     ...confirmationCommands(3, 'win32', HOSTILE_ENV).map((item) => item.args.join(' ')),
     completionSummaryCommand({ selected_count: 1, released_count: 1, failed_count: 0 }, {
       platform: 'win32', env: HOSTILE_ENV

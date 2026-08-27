@@ -1,9 +1,10 @@
 'use strict';
 const { createSuite } = require('./helpers');
 const { runParallelPreparationHarness } = require('../plugins/data-secure/server/parallel-preparation-harness');
+const { adaptivePreparationPolicy, GIB, MIB } = require('../plugins/data-secure/server/gateway/adaptive-resource-policy');
 const { testAsync, done, assert } = createSuite('Inactive two-worker preparation harness');
 const ids = ['a', 'b', 'c'].map((value) => value.repeat(32));
-const capability = (position) => String(position).repeat(64);
+const capability = (position) => Number(position).toString(16).padStart(64, '0');
 
 async function main() {
   await testAsync('out-of-order preparation stays bounded and commits centrally in source order', async () => {
@@ -48,6 +49,57 @@ async function main() {
       prepare: async ({ itemId, position }) => ({ status: 'prepared', item_id: itemId, stage_capability: capability(position), staged_bytes: 6 }),
       commit: async () => { throw new Error('must not commit'); }, maximumStagedBytes: 10 });
     assert.deepStrictEqual(limited.states.map((entry) => entry.status), ['retryable', 'retryable']);
+  });
+  await testAsync('adaptive policy is serial by default, permits two workers only with evidence and keeps OCR single-flight', async () => {
+    const host = { totalmem: () => 16 * GIB, freemem: () => 8 * GIB, cpus: () => [{}, {}, {}, {}, {}, {}, {}, {}] };
+    const closed = adaptivePreparationPolicy({ os: host });
+    assert.strictEqual(closed.maximum_workers, 1);
+    assert.strictEqual(closed.maximum_staged_bytes, 2 * GIB);
+    const enabled = adaptivePreparationPolicy({ os: host, productActivationProven: true });
+    assert.strictEqual(enabled.maximum_workers, 2);
+    assert.strictEqual(enabled.product_parallelism_enabled, true);
+    const ocr = adaptivePreparationPolicy({ os: host, productActivationProven: true, ocrActive: true });
+    assert.strictEqual(ocr.maximum_workers, 1);
+    assert.strictEqual(ocr.ocr_single_flight, true);
+    const constrained = adaptivePreparationPolicy({
+      os: { totalmem: () => 2 * GIB, freemem: () => 200 * MIB, cpus: () => [{}, {}, {}, {}] },
+      productActivationProven: true
+    });
+    assert.strictEqual(constrained.maximum_workers, 1);
+    assert.ok(constrained.maximum_staged_bytes >= 64 * MIB);
+  });
+  await testAsync('sliding window never prepares the whole series and cancellation cleans prepared stages', async () => {
+    const manyIds = Array.from({ length: 20 }, (_, index) => (index + 10).toString(16).padStart(32, '0'));
+    let prepares = 0;
+    let commits = 0;
+    const result = await runParallelPreparationHarness({
+      itemIds: manyIds,
+      maximumWorkers: 2,
+      maximumStagedBytes: 2,
+      prepare: async ({ itemId, position }) => {
+        prepares++;
+        return { status: 'prepared', item_id: itemId, stage_capability: capability(position), staged_bytes: 1 };
+      },
+      commit: async () => { commits++; }
+    });
+    assert.strictEqual(prepares, 20);
+    assert.strictEqual(commits, 20);
+    assert.strictEqual(result.peakWorkers, 2);
+    assert.ok(result.peakStagedBytes <= 2);
+
+    const controller = new AbortController();
+    let discarded = 0;
+    const cancelled = await runParallelPreparationHarness({
+      itemIds: manyIds.slice(0, 4), signal: controller.signal,
+      prepare: async ({ itemId, position }) => {
+        if (position === 1) controller.abort();
+        return { status: 'prepared', item_id: itemId, stage_capability: capability(position), staged_bytes: 1 };
+      },
+      commit: async () => { throw new Error('cancelled preparation must not commit'); },
+      discard: async () => { discarded++; }
+    });
+    assert.ok(cancelled.states.every((entry) => entry.status === 'retryable'));
+    assert.ok(discarded >= 1);
   });
   done();
 }

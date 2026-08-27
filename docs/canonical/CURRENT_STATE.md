@@ -1,13 +1,16 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 27.08.2026 · geprüfter Produktstand: RC65
+Stand: 28.08.2026 · geprüfter Produktstand: RC66
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
 Restdifferenz, `offen` bedeutet ohne belastbare Produktimplementierung. Testdateien
 sind Evidenz für Codeverhalten, nicht automatisch für installierte Claude-Oberflächen.
 
-Der aktuelle RC65-Arbeitsstand erhält die RC64-OPC-Prüfung und bindet die
+Der aktuelle RC66-Arbeitsstand erhält die RC65-Paketidentitätsprüfung und ergänzt
+produktive OS-benutzergebundene Verschlüsselung privater Batch-/Reviewartefakte,
+eine sichere rekursive Ordnerquelle sowie die geschlossene adaptive
+Ressourcensteuerung. Der RC65-Arbeitsstand erhält die RC64-OPC-Prüfung und bindet die
 RC63-Projektion der DS-045-Grade in Progress, Abschluss und Cowork-Handoff erneut
 an die exakte Identität der veröffentlichten Pakete. Die Results-Fassade und der
 Lesepfad behalten ihre strengere vollständige Paketprüfung.
@@ -27,13 +30,13 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 | Bereich | RC55-IST | beschlossenes SOLL | Lücke / Priorität |
 |---|---|---|---|
 | Cowork-Start | kurzer Picker-/Workerpfad teilweise vorhanden; Host-Node und reale Cowork-Evidenz offen | selbsttragender Windows-/macOS-Start, Readiness und genau ein Self-Heal | P0 Distribution/Evidenz |
-| Quellen | Mehrfach-Dateipicker als einziger ausführbarer Eingang; kein erzeugter technischer `Input`, keine Queue-Fallbacks; vorhandene Altbestände werden nur versioniert und datenbewahrend migriert | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 BL-011.14 abgeschlossen; P1 Ordnerquelle BL-044.1 |
+| Quellen | Mehrfach-Datei- oder ausdrücklicher rekursiver Ordnerpicker; vollständige Vorabprüfung, kein erzeugter technischer `Input`, keine Linkverfolgung | Datei oder rekursiver Ordner, ausschließlich lesend, keine Linkverfolgung | E0 BL-011.14/BL-044.1 abgeschlossen; E1 Zielsystemtest offen |
 | Stapel | durable Checkpoints und Background-Intake; neue Auswahl trotz pausierter Stapel im Arbeitsstand umgesetzt | ein aktiver, mehrere pausierte; Pause blockiert nicht | E0 umgesetzt, E1/E2 offen |
 | Review/Abschluss | abgekoppelter Review ohne menschlichen Timeout und detachierte Abschlussmeldung im Arbeitsstand | persistente Queue ohne Entscheidungs-Timeout, nicht blockierender Abschluss | E0 umgesetzt, E1/E2 offen |
-| private Daten | R4a-create-only-AEAD-Fassade synthetisch belegt, aber Rohsnapshots und Reviewdaten noch nicht produktiv darüber geführt | DPAPI/Keychain, kein Klartextfallback | P0 Security: R4b/E1/E3 offen |
+| private Daten | R4b-E0 produktiv: AES-256-GCM für Snapshot/Review, OS-Keyring ohne Fallback, Commitbindung und Legacy-Migration; Direktpicker/Parser RAM-only | Credential Manager/Keychain, kein Klartextfallback | E0 abgeschlossen; E1/E3 Releaseblocker |
 | Ergebnisse | V3-Pakete, Journal/Mapping V2, Batch-Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher; RC63 projiziert terminale Grade in Abschluss/Results/Progress/Cowork; automatische Output-Löschung deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 abgeschlossen; E1/E3 offen |
 | Formate | TXT/Markdown/CSV/DOCX; Auswahl überwiegend endungsgeführt | Signatur+Struktur; drei Ergebnisgrade; alle Zielformate gestuft | P1 Content, danach Formate |
-| Performance | serieller Produktpfad, inaktive Harnesses und lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | P1 nach Sicherheitsgates |
+| Performance | serieller Produktpfad, adaptiver geschlossener Zwei-Slot-Gleitfenster-Harness und reale lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | E0 Policy/Scheduler abgeschlossen; Aktivierung nach E1 |
 | Cowork-UI | Text/OS-Dialoge, keine MCP-App | inhaltsfreie progressive MCP-App mit vollem Fallback | P2 Komfort |
 
 RC53 schließt den ersten R3-Originalschutzschnitt: Auch die verbliebene direkte
@@ -150,7 +153,7 @@ der echte Hostlebenszyklus; die beobachtete Negativmatrix bleibt offen.
 
 ## BL-011 – Fortsetzbarer Job Store
 
-Status: **teilweise**
+Status: **E0 abgeschlossen; Produktaktivierung E1-offen**
 
 Vorhanden: persistente Batch-Snapshots, monotone Companion-Journale, atomare Claims,
 Crash-Recovery, Retention und Einzelläufe ohne automatische Doppelverarbeitung;
@@ -1548,9 +1551,13 @@ fehlen noch.
 
 Status: **teilweise**
 
-Benchmarks und getrennte Zwei-Worker-/OCR-Harnesses existieren, sind aber bewusst
-nicht Produktpfad. Adaptive Parallelität, das 25%-/2-GiB-Budget sowie automatische
-2-s-/10-s-/10%-Gates fehlen.
+RC66 ersetzt den kumulativen Harness durch ein begrenztes Zwei-Slot-Gleitfenster.
+Die adaptive Policy verwendet höchstens 25 Prozent RAM, maximal 2 GiB und schaltet
+bei Speicherdruck oder OCR auf einen Slot zurück. Vorbereitung darf parallel sein;
+Verifikation, Publication, Mapping und Audit bleiben seriell in Quellreihenfolge.
+Abbruch, Ressourcenstopp und ungewisser Commit bereinigen vorbereitete Stages und
+geben keine späteren Ergebnisse frei. Der Produktpfad bleibt bis zur realen
+Windows-/macOS-Referenzmessung bewusst seriell.
 
 ## BL-049 – Inhalts- und Formatgrenze
 

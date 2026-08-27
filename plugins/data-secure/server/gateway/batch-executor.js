@@ -173,14 +173,17 @@ function startLocalBatchExecutor(token, options = {}) {
       try { (options.showBatchStateNotice || showBatchStateNotice)(progress); }
       catch { /* presentation never changes the privacy state */ }
     };
-    child.on?.('message', (message) => {
-      const progress = localBatchStateProgress(message);
+    const presentProgress = (progress) => {
       if (progress) lifecycle({
         event: 'intake_terminal_state', outcome: progress.complete ? 'ok' : 'progress',
         phase: progress.batch_phase, item_count: progress.batch_total,
         released_count: progress.released, stopped_count: progress.stopped
       });
       showNoticeOnce(progress);
+    };
+    child.on?.('message', (message) => {
+      const progress = localBatchStateProgress(message);
+      presentProgress(progress);
     });
     child.once?.('exit', (code) => {
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', exit_code: code,
@@ -289,7 +292,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         intake.processingStarted = true;
         lifecycle({ event: 'intake_processing_started', outcome: 'ok', item_count: itemCount });
       }
-      showStateOnce(localBatchStateProgress(message));
+      const progress = localBatchStateProgress(message);
+      showStateOnce(progress);
       if (message.type === 'local-intake-stopped') {
         lifecycle({ event: 'intake_terminal_state', outcome: 'stopped', item_count: itemCount,
           error_code: 'LOCAL_WORKER_EXITED' });
@@ -310,7 +314,10 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       type: 'start-local-intake',
       batch_token: token,
       profile,
-      queue: queue.map((entry) => ({ name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes }))
+      queue: queue.map((entry) => ({
+        name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
+        sourceLabel: entry.sourceLabel || entry.name
+      }))
     }, (error) => {
       lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
         item_count: itemCount, error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });

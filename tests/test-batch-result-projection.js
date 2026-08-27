@@ -25,20 +25,22 @@ function verified(item) {
   return { state: 'verified', document_result: item.document_result };
 }
 
-test('a mixed terminal V2 batch projects the three exact grades and two allowed omissions', () => {
-  const projected = projectBatchResults({
-    schema: 'datasecure-batch/2',
-    items: [
-      { status: 'released', package_id: `ds_${'a'.repeat(32)}`, document_result: complete },
-      { status: 'released', package_id: `ds_${'b'.repeat(32)}`, document_result: omitted },
-      { status: 'stopped', local_mapping_exported: true, error_code: 'RESIDUAL_PII', document_result: stopped }
-    ]
-  }, { verifyPositive: verified });
-  assert.deepStrictEqual(projected, {
-    grade_counts: { complete: 1, usable_with_omissions: 1, not_processed: 1, unavailable: 0 },
-    omission_counts: { images_removed_by_request: 1, visual_assets_withheld_locally: 1 },
-    grades_verified: true
-  });
+test('mixed terminal V2 and encrypted V3 batches project the exact grades and allowed omissions', () => {
+  for (const schema of ['datasecure-batch/2', 'datasecure-batch/3']) {
+    const projected = projectBatchResults({
+      schema,
+      items: [
+        { status: 'released', package_id: `ds_${'a'.repeat(32)}`, document_result: complete },
+        { status: 'released', package_id: `ds_${'b'.repeat(32)}`, document_result: omitted },
+        { status: 'stopped', local_mapping_exported: true, error_code: 'RESIDUAL_PII', document_result: stopped }
+      ]
+    }, { verifyPositive: verified });
+    assert.deepStrictEqual(projected, {
+      grade_counts: { complete: 1, usable_with_omissions: 1, not_processed: 1, unavailable: 0 },
+      omission_counts: { images_removed_by_request: 1, visual_assets_withheld_locally: 1 },
+      grades_verified: true
+    });
+  }
 });
 
 test('open checkpoints and legacy batches never receive an invented grade', () => {

@@ -469,3 +469,29 @@ genau eines. Eine visuelle LibreOffice-Renderprüfung war in dieser lokalen
 Umgebung mangels ausführbarer LibreOffice-Installation nicht möglich. Diese
 E0-Vorbereitung ersetzt weder den installierten 100-Dateien-/500-MiB-Lauf noch
 die beobachteten menschlichen E1/E2/E3-Abnahmen.
+
+## Lokaler RC66-Nachweis für private Artefakte, Ordnerquelle und adaptive Policy 28.08.2026
+
+RC66 verdrahtet die OS-benutzergebundene AES-256-GCM-Fassade in Batch-Snapshot,
+Review und Parserübergabe. Acht Secret-Store-, 19 Crypto-, vier Batchmigrations-,
+drei Reviewmigrations-, neun Snapshot-, 16 Parser-, 21 Visual- und 40 Gateway-
+Fälle bestanden. Der Build prüft fünf native `@napi-rs/keyring`-Zielartefakte der
+Version 1.3.0 gegen Lockfile, Lizenz, Größe, SHA-256 und Binärformat. Direkte
+Pickerverarbeitung erzeugt keine Klartext-Jobdatei; unbestätigte Commitmarker und
+Schlüsselverlust stoppen geschlossen.
+
+Die rekursive Ordnerquelle bestand sieben direkte Drei-OS-, Hierarchie-, Link-,
+Grenz- und Mappingtests sowie die bestehenden Intake-, Journal- und MCP-Verträge.
+Der adaptive Performance-Harness bestand sechs Reihenfolge-, Zwei-Slot-, Speicher-,
+Abbruch-, Commit- und OCR-Single-Flight-Fälle; der reale synthetische
+TXT-/CSV-/DOCX-Benchmark bestand weiterhin. Produktparallelität bleibt bis zur
+realen Windows-/macOS-Referenzmessung geschlossen.
+
+`npm run build` erzeugte und verifizierte
+`DataSecure-Privacy-Preflight-v3.2.0-rc66.zip` mit 417 Einträgen und 26.157.792
+Bytes (`d668a529269af7c3440c0ddf4665e89a6eb0cdfc863e7348f40b044e0aa850fa`)
+sowie `DataSecure-Privacy-Gateway-v3.2.0-rc66.mcpb` mit 588 Einträgen und
+26.588.482 Bytes (`6334587e19959bfdf85f96195222178094d67e8b3838fc360a8da6c164ca9c59`).
+Paketparität, 13 Skill-Vertragstests und die 150-Fälle-Vertragsmatrix bestanden.
+Diese E0-Evidenz ersetzt keine Fresh-Install-, Keyring-/Dateisystem-, Cowork-UI-,
+Accessibility- oder Security-E3-Abnahme.

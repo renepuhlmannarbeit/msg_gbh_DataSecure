@@ -47,7 +47,7 @@ Fresh-Install- und Cowork-Textabnahmen bleiben in BL-041 und BL-051.
 
 | Priorität | Arbeitspaket | Begründung / Reihenfolge |
 |---|---|---|
-| **P0.0** | BL-011.13: private Snapshots, Review und Pseudonymkontext OS-benutzergebunden verschlüsseln | schließt die lokale Rohdatenschutzlücke |
+| **P0.0** | BL-011.13: private Snapshots und Review OS-benutzergebunden verschlüsseln; reale Zielsysteme abnehmen | E0-Produktintegration abgeschlossen, E1/E3 bleiben Releaseblocker |
 | **P0.1** | BL-010.8/BL-051.1: selbsttragende Windows-/macOS-Pakete und reale Cowork-Evidenz | ohne Laufzeit kein installierbares Produkt |
 | **P1.1** | BL-011.3/BL-041.9: pausierte Stapel entkoppeln, Review ohne Timeout und nicht blockierender Abschluss | behebt den beobachteten Hänger |
 | **P1.2** | BL-044.1: rekursive Ordnerquelle mit vollständigem Link-/Umfangsgate | gewünschter einfacher Stapelstart |
@@ -57,9 +57,9 @@ Fresh-Install- und Cowork-Textabnahmen bleiben in BL-041 und BL-051.
 
 ## Das kann ich noch eigenständig erledigen
 
-Eigenständig lieferbar sind BL-011.13 (Verschlüsselung), BL-044.1
-(Ordnerquelle), BL-049.1 (Formatgrenze und Ergebnisgrade), die synthetische Seite von
-BL-047.1 (adaptive Ressourcensteuerung) sowie Build-, Vertrags- und Negativtests.
+Die eigenständig lieferbaren E0-Anteile von BL-011.13 (Verschlüsselung), BL-044.1
+(Ordnerquelle) und BL-047.1 (adaptive Ressourcensteuerung) sind mit RC66 umgesetzt.
+Eigenständig verbleiben weitere Build-, Vertrags- und Negativtests sowie BL-049.1;
 Aktivierung und Release bleiben jeweils an die in der Evidence-Matrix genannten
 Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 
@@ -124,7 +124,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | BL-011.10 | **E0 abgeschlossen; E1 offen:** Intake läuft nach Auswahl lokal im Hintergrund; Cowork antwortet ohne Quellmetadaten. Ein belegter Exit-vor-IPC-Race wird durch ein kurzes lokales Drain-Fenster abgefangen, damit ein bereits erfolgreicher Stapel nicht fälschlich als gestoppt erscheint. Reale Antwortzeit und Drei-OS-Abnahme bleiben offen. | **in Arbeit** |
 | BL-011.11 | **E0 abgeschlossen; E1 offen:** Gemischtes Resume, feste I/O-Phasen, einmalige begrenzte Handoff-Dekodierung, Indexfenster und Buffer-Wipe sind regressionsgetestet, ohne Snapshot-/Swap-/Container-Gates zu lockern. Weitere I/O-Optimierung wartet auf reale Dateisystemmessung. | **in Arbeit** |
 | BL-011.12 | **E0 abgeschlossen; E1 offen:** Ein nicht importierter Zwei-Worker-Harness prüft zentrale Reihenfolge/Commit, Slots, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produktstandard bleibt seriell bis zur Windows-/macOS-Abnahme. Linux folgt später. | **in Arbeit** |
-| BL-011.13 | **R4a-E0 abgeschlossen; R4b/E1/E3 offen:** Eine noch nicht produktiv verdrahtete create-once-Fassade liefert AES-256-GCM, versioniertes Envelope, zwingenden transaktionalen synchronen Secret-Store, Zweck-/Objekt-/Generationsbindung, Replay-Sperre, linkfreie private Root-Ahnen-/Parent-/Inode-Bindung, atomare Create-if-absent-Hardlink-Publikation und feste Negativpfade. Rotation/Migration/Recovery, verschlüsselte Snapshot-/Review-/Parserintegration, reale DPAPI/Keychain- und Dateisystemevidenz sowie Security-Abnahme bleiben offen. | **in Arbeit** |
+| BL-011.13 | **R4b-E0 mit RC66 abgeschlossen; E1/E3 offen:** Batch-Snapshots und Review-Previews werden create-once mit AES-256-GCM und Zweck-/Objektbindung verschlüsselt; Parser erhalten Klartext nur als begrenzten RAM-Buffer. Der exakt gelockte native Keyring nutzt ausschließlich den OS-Secret-Store, besitzt keinen Dateifallback und wird einschließlich Plattformbinaries vor Build und Paketprüfung gehasht. Commitmarker sperren unbestätigten Ciphertext; Schlüsselverlust erzeugt keinen Ersatzschlüssel. V2-Snapshot- und alte Review-Klartexte migrieren journalgebunden und absturzsicher zu V3/`.dsart`; V1 bleibt unverändert gesperrt. Direkte Pickerpfade erzeugen keine Klartext-Jobdatei. Reale Windows-/macOS-Keyring-, Hardlink-/Crash-Evidenz und unabhängige Security-Abnahme bleiben offen. | **in Arbeit** |
 | BL-024.4 | **E0 abgeschlossen; E1/E3 offen:** Der nicht importierte OCR-Session-Harness prüft geschlossenes Framing, Requestbindung, Replay, Single-Flight, Pixel-/Byte-/Zeitbudgets und Abbruch. Der sichere Einbild-Worker bleibt aktiv, bis native Per-Frame-Grenzen und Windows-/macOS-Evidenz vorliegen. Linux folgt später. | **in Arbeit** |
 | BL-041.9 | Review ohne menschlichen Timeout und Abschluss ohne blockierenden Cowork-Aufruf liefern; pausierte Stapel bleiben getrennt startbar. | **in Arbeit** |
 
@@ -132,8 +132,8 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 
 | Story | Ziel / nächster prüfbarer Abschluss | Status |
 |---|---|---|
-| BL-044.1 | Rekursive lokale Ordnerauswahl mit vollständiger Vorabvalidierung, stabiler relativer Zuordnung und ohne Linkverfolgung liefern. | **offen** |
-| BL-047.1 | Adaptive kleine Parallelität, 25%-/2-GiB-Speicherbudget und 2-s-/10-s-/10%-Performancegates implementieren und synthetisch messen. | **offen** |
+| BL-044.1 | **E0 mit RC66 abgeschlossen; E1 offen:** Native Ordnerpicker für Windows/macOS/Linux, deterministische rekursive Vollprüfung vor Aufnahme, keine Link-/Junction-/Reparse-Verfolgung, feste Tiefen-/Eintrags-/100-Dateien-/500-MiB-Grenzen und stabile relative lokale Mappingbezeichner. Reale Link-/Race-Gegenprobe auf Releaseplattformen bleibt offen. | **in Arbeit** |
+| BL-047.1 | **E0 mit RC66 abgeschlossen; E1 offen:** Adaptive Policy begrenzt Vorbereitung auf 25 Prozent RAM, höchstens 2 GiB und maximal zwei Slots; OCR bleibt single-flight. Ein echtes Gleitfenster begrenzt vorbereitete Bytes, veröffentlicht weiterhin strikt seriell in Quellreihenfolge und bereinigt bei Abbruch/Commitfehler. Der 100-Dateien-Test verwendet wie der Cowork-Handoff atomare Zehnerseiten statt 97 redundanter Einzelbestätigungen. Produktstandard bleibt bis zur Windows-/macOS-Referenzmessung seriell. | **in Arbeit** |
 | BL-049.1 | **E0 einschließlich RC65-identitätsgebundener Ergebnisprojektion und RC64-OPC-Interoperabilität abgeschlossen; E1/E3 offen:** Der descriptor- und identitätsgebundene Source-Preflight plant den vollständigen Mehrfachstapel mutationsfrei. TXT/Markdown/CSV/DOCX-Kandidaten werden erst danach kopiert; Mismatches, ungültiger Text, gesperrte Formate, beschädigte/polyglotte Container, aktive Inhalte, verschlüsselte ZIP-Einträge und CFB/OLE werden pro Datei vor jeder privaten Kopie journalisiert. Der Reststapel läuft weiter. OOXML durchläuft vorher eine begrenzte CRC-Prüfung aller Einträge sowie echte OPC-Steuerteil- und Relationship-Prüfung; ein SHA-256-Vergleich bindet die positive Prüfung an exakt die Snapshot-Bytes. RC64 erlaubt Standard-Paketmetadaten und sichere, im Paket verbleibende relative Ziele, während externe und aktive Beziehungen unverändert stoppen; XLSX/PPTX bleiben gesperrt. V3-Pakete, V2-Journal/Mapping, Evidence v3 und Audit-Receipt v4 binden die drei DS-045-Grade crashsicher. RC65 bindet terminalen Progress, Abschluss und Cowork-Handoff über exakte private BigInt-Dateisystemidentitäten erneut an die veröffentlichten Pakete, ohne deren Inhalt erneut zu hashen; Results und Lesepfad behalten ihre vollständige Verifikation. Fehlende oder geänderte Pakete bleiben `unavailable`, private Identitäten verlassen den Checkpoint nicht. Laufende Zustände und Altbestände bleiben ausdrücklich `unavailable`; Acknowledgements erzeugen keinen zweiten Dialog. Verbleiben: reale Windows-/macOS-Cowork-, Accessibility- und Security-Abnahme E1/E3. | **in Arbeit** |
 | BL-042.3 | Inhaltsfreie MCP-App als progressive Verbesserung sowie vollständigen Text-/OS-Fallback, Deutsch/Englisch und A11y-Gates liefern. | **offen** |
 

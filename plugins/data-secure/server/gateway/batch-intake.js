@@ -22,6 +22,7 @@ function createBatchIntake(options = {}) {
   const batchPath = options.batchPath;
   const workPath = options.workPath;
   const copySnapshotFile = options.copySnapshotFile;
+  const privateArtifactCrypto = options.privateArtifactCrypto;
   const batchTtlMs = options.batchTtlMs;
   const createPrivateIoSummary = options.createPrivateIoSummary;
   const writeState = options.writeState;
@@ -60,9 +61,13 @@ function createBatchIntake(options = {}) {
       const identity = platform === 'win32' ? full.toLowerCase() : full;
       if (seen.has(identity)) throw new SafeError('Eine Datei wurde in der lokalen Auswahl mehrfach angegeben.');
       seen.add(identity);
-      return { entry, full, name };
+      const sourceLabel = String(entry?.sourceLabel || name).split('\\').join('/');
+      if (!sourceLabel || sourceLabel.startsWith('/') || sourceLabel.split('/').some((part) => !part || part === '.' || part === '..') || sourceLabel.length > 1024) {
+        throw new SafeError('Die lokale Dateiauswahl enthält einen ungültigen relativen Pfad.');
+      }
+      return { entry, full, name, sourceLabel };
     });
-    return candidates.map(({ entry, full, name }) => {
+    return candidates.map(({ entry, full, name, sourceLabel }) => {
       if (hasReparseComponent(full)) {
         throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
       }
@@ -70,7 +75,7 @@ function createBatchIntake(options = {}) {
       try { stat = io.lstatSync(full); } catch { throw new SafeError('Eine ausgewählte Datei ist nicht mehr verfügbar.'); }
       if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Eine ausgewählte Datei ist nicht regulär lokal verfügbar.');
       if (Number(entry?.sourceBytes) !== stat.size) throw new SafeError('Eine ausgewählte Datei wurde vor der Übernahme verändert.');
-      return { name, full, stat };
+      return { name, sourceLabel, full, stat };
     });
   }
 
@@ -150,6 +155,10 @@ function createBatchIntake(options = {}) {
     const work = workPath(token);
     let state;
     try {
+      if (!privateArtifactCrypto || typeof privateArtifactCrypto.ensureReady !== 'function') {
+        throw new SafeError('Die Verschlüsselung privater Stapelkopien ist nicht verfügbar. Es wurden keine Quelldaten übernommen.');
+      }
+      privateArtifactCrypto.ensureReady();
       io.mkdirSync(work, { recursive: false, mode: 0o700 });
       const items = admissionPlan.map((planned, index) => {
         const entry = planned.entry;
@@ -158,6 +167,7 @@ function createBatchIntake(options = {}) {
           return {
             id,
             name: entry.name,
+            source_label: entry.sourceLabel || entry.name,
             status: preflightMappingPendingStatus,
             checkpoint: 'source_preflight_rejected',
             error_code: normalizeDocumentResultReasonCode(planned.error_code, 'SOURCE_READ_FAILED'),
@@ -168,23 +178,26 @@ function createBatchIntake(options = {}) {
             processing_duration_ms: 0
           };
         }
-        const extension = path.extname(entry.name).toLowerCase();
-        const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}${extension}`;
+        const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}.dsart`;
         const copied = copySnapshotFile(entry.full, path.join(work, workName), entry.stat, {
-          expectedSha256: planned.source_sha256
+          expectedSha256: planned.source_sha256,
+          artifactCrypto: privateArtifactCrypto,
+          binding: { purpose: 'batch-snapshot', objectId: `${token}:${id}` }
         });
         return {
           id,
           name: entry.name,
+          source_label: entry.sourceLabel || entry.name,
           size: copied.size,
           sha256: copied.sha256,
           work_name: workName,
+          private_artifact_encrypted: true,
           status: 'pending',
           checkpoint: 'sealed'
         };
       });
       state = {
-        schema: 'datasecure-batch/2',
+        schema: 'datasecure-batch/3',
         token,
         created_at: new Date(now).toISOString(),
         expires_at: new Date(now + batchTtlMs()).toISOString(),
@@ -208,6 +221,11 @@ function createBatchIntake(options = {}) {
         try { safeRemoveWorkDirectory(token); } catch { /* preserve primary error */ }
       }
       if (error instanceof SafeError) throw error;
+      if (typeof error?.code === 'string' && error.code.startsWith('PRIVATE_ARTIFACT_')) {
+        const stopped = new SafeError(error.message);
+        stopped.code = error.code;
+        throw stopped;
+      }
       throw new SafeError('Der bestätigte Stapel konnte nicht sicher lokal übernommen werden.');
     }
   }

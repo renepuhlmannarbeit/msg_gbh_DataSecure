@@ -115,14 +115,18 @@ function sanitizeReceipt(record = {}) {
 }
 
 function createAuditReceipt(profile, source, meta) {
+  const sourceName = typeof source === 'object' && source !== null ? String(source.name || '') : String(source || '');
+  const sourceBytes = typeof source === 'object' && source !== null
+    ? Number(source.size)
+    : fs.statSync(source).size;
   return sanitizeReceipt({
     timestamp: new Date().toISOString(),
     gateway_version: VERSION,
     privacy_ruleset: PRIVACY_RULESET_VERSION,
     credential_context_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
     profile,
-    source_extension: path.extname(source),
-    source_size_class: sourceSizeClass(fs.statSync(source).size),
+    source_extension: path.extname(sourceName),
+    source_size_class: sourceSizeClass(sourceBytes),
     result: 'released',
     text_entity_count: meta.entityCount,
     privacy_passes: meta.passes,

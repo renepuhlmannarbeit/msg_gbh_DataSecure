@@ -1,6 +1,6 @@
 # Kanonisches Produktziel
 
-Stand: 25.08.2026 · Zielbild aus `PRODUCT_VISION.md` · Ist-Zustand RC44
+Stand: 28.08.2026 · Zielbild aus `PRODUCT_VISION.md` · Ist-Zustand RC66
 
 ## Ziel in einem Satz
 
@@ -97,16 +97,19 @@ offene Stapel. Piloten dürfen unsigniert sein; eigene native Sicherheitskompone
 werden vor breitem Unternehmenseinsatz signiert. Deutsch, Englisch und
 WCAG-orientierte Abnahmen gehören zum Releasevertrag.
 
-## Ist-Zustand RC44
+## Ist-Zustand RC66
 
 Aktuell freigegeben sind TXT, Markdown, CSV und DOCX im synthetisch belegten
 Engineering-Pfad. Die Stapelgrenze beträgt 100 Dateien und 500 MiB; zusätzlich
 gelten TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes und DOCX 64 MiB
 komprimiert/128 MiB entpackt. Fortsetzbare Checkpoints, lokales Mapping,
-Hintergrund-Intake und Sicherheitsgates bestehen teilweise.
+Hintergrund-Intake und Sicherheitsgates bestehen. Rekursive Ordnerauswahl und
+OS-benutzergebundene Verschlüsselung der privaten Batch-/Reviewartefakte sind E0
+integriert; die adaptive Zwei-Slot-Policy ist synthetisch belegt, bleibt im
+Produktpfad aber bis zur realen Zielhardware-Evidenz seriell geschlossen.
 
 Noch nicht erfüllt sind insbesondere selbsttragende Windows-/macOS-Pakete, echte
-Cowork-Abnahmen, Ordnerauswahl, OS-gebundene Verschlüsselung aller privaten
-Arbeitsdaten, nicht blockierender Reviewabschluss, adaptive Produktparallelität und
+Cowork-Abnahmen, reale Keyring-/Dateisystemevidenz, selbsttragende Zielpakete,
+adaptive Produktparallelität und
 die Freigabe von XLSX, PPTX, PDF/Scan-PDF sowie Rasterbildern. Der genaue IST/SOLL-
 Abgleich steht in `CURRENT_STATE.md`; nur `BACKLOG.md` priorisiert die Restarbeit.

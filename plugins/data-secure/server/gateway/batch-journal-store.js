@@ -13,7 +13,8 @@ const {
 } = require('./document-result-grade');
 const { validatePackageIdentity } = require('./package-identity');
 
-const SCHEMA = 'datasecure-batch/2';
+const SCHEMA = 'datasecure-batch/3';
+const V2_SCHEMA = 'datasecure-batch/2';
 const LEGACY_SCHEMA = 'datasecure-batch/1';
 const NOT_FOUND = 'Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte den Eingang erneut bestätigen.';
 const INVALID = 'Batch-Sitzung ist ungültig. Bitte den Eingang erneut bestätigen.';
@@ -144,8 +145,16 @@ function createBatchJournalStore(options = {}) {
     } catch { return false; }
   }
 
-  function validV2ItemResult(item) {
-    if (Object.hasOwn(item, 'read_capability')) return false;
+  function validSourceLabel(item) {
+    if (!Object.hasOwn(item, 'source_label')) return true;
+    const value = item.source_label;
+    return typeof value === 'string' && value.length > 0 && value.length <= 1024 &&
+      !value.startsWith('/') && !value.includes('\\') &&
+      value.split('/').every((part) => part && part !== '.' && part !== '..');
+  }
+
+  function validV2ItemResult(item, schema) {
+    if (!validSourceLabel(item) || Object.hasOwn(item, 'read_capability')) return false;
     if (Object.hasOwn(item, 'package_identity')) {
       if (item.status !== 'released') return false;
       try { validatePackageIdentity(item.package_identity); }
@@ -169,16 +178,22 @@ function createBatchJournalStore(options = {}) {
       return item.status === 'processing' &&
         ['package_published', 'publication_unconfirmed'].includes(item.checkpoint);
     }
+    if (Object.hasOwn(item, 'work_name')) {
+      if (schema === SCHEMA && item.private_artifact_encrypted !== true) return false;
+      if (schema !== SCHEMA && Object.hasOwn(item, 'private_artifact_encrypted')) return false;
+      if (Object.hasOwn(item, 'legacy_work_name') &&
+          !/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/iu.test(String(item.legacy_work_name))) return false;
+    }
     return true;
   }
 
   function validStateShape(state, token) {
-    const supportedSchema = [SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
+    const supportedSchema = [SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
     return state?.token === token && supportedSchema &&
       Array.isArray(state?.items) && state.items.length > 0 &&
       state.items.length <= maxBatchFiles &&
       state.items.every((item) => validPreflightItem(item, state.schema)) &&
-      (state.schema === LEGACY_SCHEMA || state.items.every(validV2ItemResult)) &&
+      (state.schema === LEGACY_SCHEMA || state.items.every((item) => validV2ItemResult(item, state.schema))) &&
       validExpiry(state.expires_at) !== undefined;
   }
 
@@ -217,4 +232,4 @@ function createBatchJournalStore(options = {}) {
   return { writeState, readState, readStateForMaintenance };
 }
 
-module.exports = { createBatchJournalStore };
+module.exports = { SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, createBatchJournalStore };

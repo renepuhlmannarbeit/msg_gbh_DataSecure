@@ -159,8 +159,8 @@ test('picker selections keep equal basenames as independently sealed local sourc
     { sourcePath: first, sourceType: 'txt', sourceBytes: 5 },
     { sourcePath: second, sourceType: 'csv', sourceBytes: 6 }
   ]), [
-    { name: 'first.txt', full: first, sourceBytes: 5 },
-    { name: 'second.csv', full: second, sourceBytes: 6 }
+    { name: 'first.txt', full: first, sourceBytes: 5, sourceLabel: 'first.txt' },
+    { name: 'second.csv', full: second, sourceBytes: 6, sourceLabel: 'second.csv' }
   ]);
   assert.throws(() => batchQueueFromSelection([{ sourcePath: 'relative.txt', sourceBytes: 1 }]), /ungültig/);
   const equalBasenames = batchQueueFromSelection([

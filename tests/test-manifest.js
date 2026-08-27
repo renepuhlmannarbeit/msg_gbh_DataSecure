@@ -207,7 +207,7 @@ test('no npm runtime dependencies are declared', () => {
 test('native Windows launcher has a reproducible source and release build contract', () => {
   assert.strictEqual(
     pkg.scripts.pretest,
-    'npm run native:verify && npm run test:legacy-input && npm run test:result-grades'
+    'npm run test:p0-private && npm run native:verify && npm run test:legacy-input && npm run test:result-grades'
   );
   assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');

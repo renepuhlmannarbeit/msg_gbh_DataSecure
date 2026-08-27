@@ -13,6 +13,7 @@ function createBatchExecutorRunner(options = {}) {
   const incrementPrivateIoSummary = options.incrementPrivateIoSummary;
   const processBatchNext = options.processBatchNext;
   const finalizePublishedPackageLocally = options.finalizePublishedPackageLocally;
+  const writeTerminalEvidence = options.writeTerminalEvidence;
   const releaseLocalBatchExecutor = options.releaseLocalBatchExecutor;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const maxBatchFiles = options.maxBatchFiles || 100;
@@ -69,7 +70,17 @@ function createBatchExecutorRunner(options = {}) {
         throw new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.');
       }
     }
-    return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
+    // Publication and stopped-item paths already attempt this commit. Reconcile
+    // once more at the worker boundary so an independently recoverable evidence
+    // write cannot race the bounded terminal IPC summary. The operation is
+    // idempotent and never changes a released/stopped document decision.
+    let finalState = readState(token);
+    let finalProgress = publicProgress(finalState);
+    if (finalProgress.complete === true && typeof writeTerminalEvidence === 'function') {
+      writeTerminalEvidence(finalState);
+      finalProgress = publicProgress(readState(token));
+    }
+    return { ok: true, ...finalProgress, raw_content_sent_to_claude: false };
   }
 
   return { runLocalBatchExecutor };

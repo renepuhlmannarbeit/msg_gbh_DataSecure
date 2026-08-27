@@ -37,6 +37,8 @@ async function runWorker(count) {
   process.env.EU_PRIVACY_RETENTION_DAYS = '7';
   const { roots } = require('../plugins/data-secure/server/gateway/common');
   const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, _test } = require('../plugins/data-secure/server/gateway/batch');
+  const { installBatchPrivateArtifactCrypto } = require('../tests/lib/private-artifact-test-runtime');
+  installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
   const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
   const { PHASES } = require('../plugins/data-secure/server/gateway/performance');
 

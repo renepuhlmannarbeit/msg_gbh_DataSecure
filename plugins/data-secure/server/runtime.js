@@ -6,7 +6,7 @@ const os = require('os');
 const childProcess = require('child_process');
 const { verifyPosixSupervisor } = require('./posix-supervisor');
 const { RESOURCE_LIMITS, assertSourceSize } = require('./resource-limits');
-const { inspectZipDirectoryFromFd, ZipError } = require('./zip-reader');
+const { inspectZipDirectory, inspectZipDirectoryFromFd, ZipError } = require('./zip-reader');
 const {
   rasterizeToPng,
   ocrPngDetailed,
@@ -42,6 +42,11 @@ function descriptorStartsAsPdf(fd, io = fs) {
   const header = Buffer.alloc(1028);
   const length = io.readSync(fd, header, 0, header.length, 0);
   const index = header.subarray(0, length).indexOf(Buffer.from('%PDF-', 'ascii'));
+  return index >= 0 && index <= 1023;
+}
+
+function bufferStartsAsPdf(buffer) {
+  const index = buffer.subarray(0, Math.min(buffer.length, 1028)).indexOf(Buffer.from('%PDF-', 'ascii'));
   return index >= 0 && index <= 1023;
 }
 
@@ -237,7 +242,9 @@ async function convertDocument(source, options = {}) {
   if (options.signal?.aborted) {
     throw safeError('Der isolierte Dokumentparser wurde auf Anforderung beendet.', 'REQUEST_CANCELLED');
   }
-  const ext = path.extname(source).toLowerCase();
+  const inputBuffer = Buffer.isBuffer(options.inputBuffer) ? options.inputBuffer : null;
+  const sourceName = inputBuffer ? String(options.sourceName || '') : String(source || '');
+  const ext = path.extname(sourceName).toLowerCase();
   // The parser contains additional extraction code for adversarial/unit tests,
   // but the product release boundary is intentionally narrower until coverage
   // for further formats has been demonstrated.
@@ -292,11 +299,10 @@ async function convertDocument(source, options = {}) {
   } else {
     throw safeError('Für dieses Betriebssystem ist keine lokale Parserbegrenzung freigegeben.', 'PARSER_ISOLATION_FAILED');
   }
-  const fd = fs.openSync(source, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-  try {
-    const opened = fs.fstatSync(fd);
+  let fd;
+  if (inputBuffer) {
     try {
-      assertSourceSize(ext, opened.size);
+      assertSourceSize(ext, inputBuffer.length);
     } catch (error) {
       if (error.code === 'INPUT_FORMAT_LIMIT' || error.code === 'INPUT_FILE_LIMIT') {
         throw safeError(
@@ -306,14 +312,10 @@ async function convertDocument(source, options = {}) {
       }
       throw error;
     }
-    // A renamed PDF must not enter a text/CSV parser. Sniff the same descriptor
-    // that is inherited by the worker, so no path re-open can swap the checked
-    // bytes before parsing. PDF headers may legally follow leading junk within
-    // the first 1024 bytes.
-    if (descriptorStartsAsPdf(fd)) throw pdfCoverageError();
+    if (bufferStartsAsPdf(inputBuffer)) throw pdfCoverageError();
     if (ext === '.docx') {
       try {
-        inspectZipDirectoryFromFd(fd, opened.size, {
+        inspectZipDirectory(inputBuffer, {
           maxEntries: 20000,
           maxUncompressed: RESOURCE_LIMITS.MAX_OOXML_EXPANDED_BYTES
         });
@@ -329,11 +331,51 @@ async function convertDocument(source, options = {}) {
         throw error;
       }
     }
-  } catch (error) {
-    fs.closeSync(fd);
-    throw error;
+    stdio = ['pipe', 'pipe', 'ignore'];
+  } else {
+    fd = fs.openSync(source, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    try {
+      const opened = fs.fstatSync(fd);
+      try {
+        assertSourceSize(ext, opened.size);
+      } catch (error) {
+        if (error.code === 'INPUT_FORMAT_LIMIT' || error.code === 'INPUT_FILE_LIMIT') {
+          throw safeError(
+            'Die Datei überschreitet die sichere Einzeldateigrenze für ihr Format.',
+            'INPUT_TOO_LARGE'
+          );
+        }
+        throw error;
+      }
+      // A renamed PDF must not enter a text/CSV parser. Sniff the same descriptor
+      // that is inherited by the worker, so no path re-open can swap the checked
+      // bytes before parsing. PDF headers may legally follow leading junk within
+      // the first 1024 bytes.
+      if (descriptorStartsAsPdf(fd)) throw pdfCoverageError();
+      if (ext === '.docx') {
+        try {
+          inspectZipDirectoryFromFd(fd, opened.size, {
+            maxEntries: 20000,
+            maxUncompressed: RESOURCE_LIMITS.MAX_OOXML_EXPANDED_BYTES
+          });
+        } catch (error) {
+          if (error instanceof ZipError) {
+            throw safeError(
+              'Die DOCX-Datei konnte nicht als sicherer lokaler Office-Container geprüft werden.',
+              error.code === 'OOXML_ENCRYPTED_CONTAINER' || error.code === 'ZIP_ENCRYPTED_ENTRY'
+                ? error.code
+                : 'DOCX_CONTAINER_INVALID'
+            );
+          }
+          throw error;
+        }
+      }
+    } catch (error) {
+      fs.closeSync(fd);
+      throw error;
+    }
+    stdio = [fd, 'pipe', 'ignore'];
   }
-  stdio = [fd, 'pipe', 'ignore'];
   let child;
   try {
     child = spawn(command, args, {
@@ -343,14 +385,22 @@ async function convertDocument(source, options = {}) {
       env: {}
     });
   } catch {
-    fs.closeSync(fd);
+    if (fd !== undefined) fs.closeSync(fd);
     throw safeError('Der isolierte Dokumentparser konnte nicht gestartet werden.', 'PARSER_ISOLATION_FAILED');
   }
-  fs.closeSync(fd);
+  if (fd !== undefined) fs.closeSync(fd);
+  if (inputBuffer) {
+    if (!child.stdin || typeof child.stdin.end !== 'function') {
+      try { child.kill(); } catch { /* startup will fail closed */ }
+      throw safeError('Der isolierte Dokumentparser konnte keine authentifizierten Eingabebytes übernehmen.', 'PARSER_ISOLATION_FAILED');
+    }
+  }
   return new Promise((resolve, reject) => {
     let settled = false;
     let terminationError = null;
     let terminationTimer = null;
+    let inputFlushed = !inputBuffer;
+    let inputFailed = false;
     let size = 0;
     const chunks = [];
     const finish = (error, value) => {
@@ -382,6 +432,16 @@ async function convertDocument(source, options = {}) {
     );
     if (options.signal) options.signal.addEventListener('abort', abortHandler, { once: true });
     if (options.signal?.aborted) abortHandler();
+    if (inputBuffer) {
+      child.stdin.once('error', () => {
+        inputFailed = true;
+        terminate(safeError(
+          'Der isolierte Dokumentparser hat die authentifizierten Eingabebytes nicht vollständig übernommen.',
+          'PARSER_INPUT_INCOMPLETE'
+        ));
+      });
+      child.stdin.end(inputBuffer, () => { inputFlushed = true; });
+    }
     child.stdout.on('data', (chunk) => {
       size += chunk.length;
       if (size > MAX_PARSER_RESPONSE_BYTES) {
@@ -397,6 +457,13 @@ async function convertDocument(source, options = {}) {
       if (settled) return;
       if (terminationError) {
         finish(terminationError);
+        return;
+      }
+      if (inputFailed || !inputFlushed) {
+        finish(safeError(
+          'Der isolierte Dokumentparser hat die authentifizierten Eingabebytes nicht vollständig übernommen.',
+          'PARSER_INPUT_INCOMPLETE'
+        ));
         return;
       }
       if (code === 125) {

@@ -517,7 +517,8 @@ async function main() {
     assert.match(got.messages[0].content.text, /continue_local_results_handoff/);
     assert.match(got.messages[0].content.text, /profile=personnel_profile/);
     assert.match(got.messages[0].content.text, /Skills zusammenfassen/);
-    assert.match(got.messages[0].content.text, /lokale Mehrfach-Dateidialog/);
+    assert.match(got.messages[0].content.text, /lokale Datei- beziehungsweise Ordnerauswahl/);
+    assert.match(got.messages[0].content.text, /source_kind=folder/);
   });
 
   await testAsync('an unknown prompt yields invalid params', async () => {
