@@ -9,6 +9,7 @@ const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
 const { sameDocumentResult } = require('./document-result-grade');
+const { capturePackageIdentity, samePackageIdentity } = require('./package-identity');
 const { createBatchTerminalEvidence } = require('./batch-terminal-evidence');
 const { createBatchResultAccess } = require('./batch-results');
 const { createBatchProgress } = require('./batch-progress');
@@ -84,6 +85,7 @@ const { writeState, readState, readStateForMaintenance } = createBatchJournalSto
 const {
   packageIdForItem,
   publishedPackageRecord,
+  publishedPackageIdentityRecord,
   publishedPackageState,
   regularPublishedPackage,
   markMappingPending,
@@ -110,7 +112,7 @@ const { batchUserStatus, publicProgress } = createBatchProgress({
   mappingPendingStatus: MAPPING_PENDING,
   preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING,
   liveLocalExecutor,
-  publishedPackageRecord
+  publishedPackageRecord: publishedPackageIdentityRecord
 });
 
 const { beginBatch } = createBatchIntake({
@@ -160,7 +162,10 @@ const {
   randomBytes: crypto.randomBytes,
   publicProgress,
   writeState,
-  publishedPackageRecord
+  publishedPackageRecord,
+  publishedPackageIdentityRecord,
+  capturePackageIdentity,
+  samePackageIdentity
 });
 
 const {

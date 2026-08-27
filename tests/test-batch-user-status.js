@@ -71,7 +71,7 @@ test('public progress exposes only the bounded user status and no item name', ()
   assert.doesNotMatch(JSON.stringify(result), /Erika|Musterfrau|Kundenakte|\.docx/i);
 });
 
-test('durable terminal grades avoid package reopens but a changed state fails closed', () => {
+test('durable terminal grades require one current identity record per released package', () => {
   const documentResult = releasedDocumentResult({
     parserWarnings: [], visualResults: [], unreviewedVisualCount: 0, imagesRemovedByExplicitRequest: 0
   });
@@ -90,21 +90,63 @@ test('durable terminal grades avoid package reopens but a changed state fails cl
   state.terminal_evidence = {
     schema: 'datasecure-batch-terminal-evidence/2', status: 'exported', receipt_id: receiptId, record
   };
-  let packageReads = 0;
-  const progressFacade = createBatchProgress({
+  for (const [label, published, verified] of [
+    ['verified', { state: 'verified', document_result: documentResult }, true],
+    ['missing', { state: 'missing', document_result: null }, false],
+    ['unsafe', { state: 'unsafe', document_result: null }, false],
+    ['mismatched', {
+      state: 'verified',
+      document_result: releasedDocumentResult({
+        parserWarnings: [], visualResults: [{ status: 'review_required' }],
+        unreviewedVisualCount: 0, imagesRemovedByExplicitRequest: 0
+      })
+    }, false]
+  ]) {
+    let identityReads = 0;
+    const progressFacade = createBatchProgress({
+      deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+      mappingPendingStatus: 'mapping_pending', liveLocalExecutor: () => false,
+      publishedPackageRecord: () => { identityReads++; return published; }
+    });
+    const result = progressFacade.publicProgress(structuredClone(state));
+    assert.strictEqual(result.result_grades_verified, verified, label);
+    assert.strictEqual(result.result_grade_counts.unavailable, verified ? 0 : 1, label);
+    assert.strictEqual(identityReads, 1, label);
+  }
+});
+
+test('terminal progress binds 100 packages in O(n) without a full-hash callback', () => {
+  const documentResult = releasedDocumentResult({ parserWarnings: [], visualResults: [] });
+  const state = {
+    schema: 'datasecure-batch/2', token: '6'.repeat(64), created_at: '2026-08-27T08:00:00.000Z',
+    profile: 'general', remove_images: false,
+    items: Array.from({ length: 100 }, (_, index) => ({
+      status: 'released', package_id: `ds_${index.toString(16).padStart(32, '0')}`, document_result: documentResult
+    }))
+  };
+  const receiptId = '5'.repeat(32);
+  state.terminal_evidence = {
+    schema: 'datasecure-batch-terminal-evidence/2', status: 'exported', receipt_id: receiptId,
+    record: evidenceRecord(state, '2026-08-27T08:01:00.000Z', receiptId, {
+      publishedPackageRecord: () => ({ state: 'verified', document_result: documentResult })
+    })
+  };
+  let identityReads = 0;
+  let fullHashes = 0;
+  const facade = createBatchProgress({
     deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
     mappingPendingStatus: 'mapping_pending', liveLocalExecutor: () => false,
-    publishedPackageRecord: () => { packageReads++; throw new Error('PACKAGE_REOPENED'); }
+    publishedPackageRecord(item) {
+      identityReads++;
+      return { state: 'verified', document_result: item.document_result };
+    },
+    hashDocument: () => { fullHashes++; }
   });
-  const stable = progressFacade.publicProgress(state);
-  assert.strictEqual(stable.result_grades_verified, true);
-  assert.strictEqual(packageReads, 0);
-
-  state.items[0].document_result = { ...documentResult, grade: 'usable-with-omissions' };
-  const changed = progressFacade.publicProgress(state);
-  assert.strictEqual(changed.result_grades_verified, false);
-  assert.strictEqual(changed.result_grade_counts.unavailable, 1);
-  assert.strictEqual(packageReads, 0);
+  const result = facade.publicProgress(state);
+  assert.strictEqual(result.result_grades_verified, true);
+  assert.strictEqual(result.result_grade_counts.complete, 100);
+  assert.strictEqual(identityReads, 100);
+  assert.strictEqual(fullHashes, 0);
 });
 
 test('an unknown persisted phase never falls through to processing another document', () => {

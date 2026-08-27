@@ -1,6 +1,6 @@
 # Vertrag: Dokumentergebnisgrade V1
 
-Stand: 27.08.2026 · Paketbindung RC60 · Journal-/Mappingbindung RC61 · Evidence-/Receipt-Bindung RC62 · Projektion RC63 · Entscheidung DS-045
+Stand: 27.08.2026 · Paketbindung RC60 · Journal-/Mappingbindung RC61 · Evidence-/Receipt-Bindung RC62 · Projektion RC63/RC65 · Entscheidung DS-045
 
 ## Zweck
 
@@ -79,9 +79,21 @@ vergröbert; dokumentabgeleitete oder frei formulierte Werte sind unzulässig.
 
 ## Progress-, Results-, Abschluss- und Cowork-Projektion
 
-RC63 verwendet eine einzige, fail-closed Projektionsschicht. Terminale V2-Stapel
-werden vor der öffentlichen Zählung erneut gegen jedes veröffentlichte V3-Paket
-gebunden. Progress und der vorhandene lokale Abschlussdialog zeigen ausschließlich
+RC63 verwendet eine einzige, fail-closed Projektionsschicht. RC65 konkretisiert
+die erneute Paketbindung ohne wiederholtes Voll-Hashing: Bei der terminalen
+Evidence-Erzeugung wird jedes freigegebene V3-Paket einmal vollständig geprüft.
+Unmittelbar davor und danach werden die exakten Dateisystemidentitäten von
+`manifest.json` und `<package_id>.md` mit BigInt-`dev`, -`ino`, -`size` und
+-`mtimeMs` erfasst. Nur stabile Identitäten werden im privaten Checkpoint
+gespeichert. Vor jeder späteren öffentlichen Zählung werden dieselben beiden
+Dateien mit genau zwei Metadatenzugriffen je Paket erneut gebunden. Fehlen,
+Linkstatus, ungültige oder geänderte Identität ergeben `unavailable` und
+`grades_verified: false`; der Fortschritt liest oder hasht den Dokumentinhalt
+nicht erneut.
+
+Die privaten Identitätswerte gelangen weder in Batch-Nachweis oder Audit-Receipt
+noch in Diagnose, Mapping, MCP-Antwort oder Handoff. Progress und der vorhandene
+lokale Abschlussdialog zeigen ausschließlich
 Zähler für `complete`, `usable-with-omissions`, `not-processed` und `unavailable`
 sowie die zwei erlaubten visuellen Auslassungsarten. Laufende Zustände und
 Altbestände bleiben `unavailable`; aus `released` oder `stopped` wird kein Grad

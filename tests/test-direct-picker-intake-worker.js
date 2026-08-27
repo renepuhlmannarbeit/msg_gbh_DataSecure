@@ -156,15 +156,18 @@ async function main() {
     assert.strictEqual(completed.processing, 0);
     const completionDeadline = Date.now() + 1_000;
     while (!completionSummary && Date.now() < completionDeadline) await pause(10);
+    // The read-side poll may observe the terminal item immediately before the
+    // worker durably binds terminal evidence. The completion notice is emitted
+    // only after that binding and must therefore carry the verified RC65 grade.
     assert.deepStrictEqual(completionSummary, {
-      complete: completed.complete,
-      batch_phase: completed.batch_phase,
+      complete: true,
+      batch_phase: 'complete',
       batch_total: 1,
-      released: completed.released,
-      stopped: completed.stopped,
-      result_grade_counts: completed.result_grade_counts,
-      result_omission_counts: completed.result_omission_counts,
-      result_grades_verified: completed.result_grades_verified
+      released: 1,
+      stopped: 0,
+      result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+      result_grades_verified: true
     });
     const lifecycleDeadline = Date.now() + 1_000;
     while (!workflowEvents.some((event) => event.event === 'intake_worker_exited') && Date.now() < lifecycleDeadline) await pause(10);

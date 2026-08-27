@@ -3,6 +3,10 @@
 const { createBatchTerminalEvidence, validateMarker } = require('../plugins/data-secure/server/gateway/batch-terminal-evidence');
 const { evidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
 const { releasedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
+const {
+  capturePackageIdentity,
+  samePackageIdentity
+} = require('../plugins/data-secure/server/gateway/package-identity');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch terminal evidence coordinator');
@@ -30,12 +34,19 @@ function stateV2() {
   };
 }
 
+function identity(seed = '1') {
+  const value = String(BigInt(Number.MAX_SAFE_INTEGER) + BigInt(seed));
+  const file = { dev: value, ino: value, mtime_ms: value, size: value };
+  return { schema: 'datasecure-package-identity/1', manifest: { ...file }, document: { ...file } };
+}
+
 function fixture(options = {}) {
   const events = [];
   const records = new Map();
   const outbox = new Map();
   let durable = structuredClone(options.state || state());
   let writeNumber = 0;
+  const currentIdentity = options.currentIdentity || identity('2');
   const coordinator = createBatchTerminalEvidence({
     randomBytes: () => Buffer.from('00112233445566778899aabbccddeeff', 'hex'),
     nowIso: () => '2026-08-26T11:00:00.000Z',
@@ -45,6 +56,17 @@ function fixture(options = {}) {
       const item = durable.items.find((candidate) => candidate.package_id === packageId);
       return item ? { state: 'verified', document_result: item.document_result } : { state: 'missing', document_result: null };
     },
+    publishedPackageIdentityRecord(item) {
+      if (options.publishedPackageIdentityRecord) return options.publishedPackageIdentityRecord(item);
+      return samePackageIdentity(item?.package_identity, currentIdentity)
+        ? { state: 'verified', document_result: item.document_result }
+        : { state: 'unsafe', document_result: null };
+    },
+    capturePackageIdentity() {
+      if (options.capturePackageIdentity) return options.capturePackageIdentity();
+      return structuredClone(currentIdentity);
+    },
+    samePackageIdentity,
     writeState(value) {
       writeNumber++;
       events.push(`write:${value.terminal_evidence?.status || 'none'}`);
@@ -153,6 +175,48 @@ test('an exported v2 receipt reuses its verified aggregate without reopening eve
   assert.strictEqual(packageReads, 1);
   assert.strictEqual(value.coordinator.writeTerminalEvidence(value.reload()), true);
   assert.strictEqual(packageReads, 1);
+});
+
+test('an exported v2 receipt fails closed when its current package identity is missing', () => {
+  const first = fixture({ state: stateV2() });
+  assert.strictEqual(first.coordinator.writeTerminalEvidence(first.reload()), true);
+  const restarted = fixture({
+    state: first.durable(),
+    publishedPackageIdentityRecord: () => ({ state: 'missing', document_result: null })
+  });
+  assert.strictEqual(restarted.coordinator.writeTerminalEvidence(restarted.reload()), false);
+});
+
+test('exact bigint package identities need only bounded metadata reads', () => {
+  const packageId = `ds_${'9'.repeat(32)}`;
+  const calls = [];
+  const stat = (kind) => ({
+    dev: 9007199254740993n,
+    ino: kind === 'manifest' ? 9007199254740995n : 9007199254740997n,
+    size: 42n,
+    mtimeMs: 9007199254740999n,
+    isFile: () => kind !== 'package',
+    isDirectory: () => kind === 'package',
+    isSymbolicLink: () => false
+  });
+  const captured = capturePackageIdentity(packageId, {
+    roots: () => ({ output: 'output' }),
+    path: require('path'),
+    io: {
+      lstatSync(target, options) {
+        calls.push({ target, options });
+        if (String(target).endsWith('manifest.json')) return stat('manifest');
+        if (String(target).endsWith('.md')) return stat('document');
+        return stat('package');
+      },
+      readFileSync() { throw new Error('FULL_CONTENT_READ_FORBIDDEN'); }
+    }
+  });
+  assert.strictEqual(captured.manifest.dev, '9007199254740993');
+  assert.strictEqual(captured.manifest.ino, '9007199254740995');
+  assert.strictEqual(captured.document.ino, '9007199254740997');
+  assert.strictEqual(calls.length, 3);
+  assert.ok(calls.every((call) => call.options?.bigint === true));
 });
 
 test('append failure leaves one durable pending intent and retry reuses its opaque id', () => {

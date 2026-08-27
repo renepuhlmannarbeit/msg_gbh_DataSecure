@@ -11,6 +11,7 @@ const {
   validateDocumentResult,
   positiveDocumentResult
 } = require('./document-result-grade');
+const { validatePackageIdentity } = require('./package-identity');
 
 const SCHEMA = 'datasecure-batch/2';
 const LEGACY_SCHEMA = 'datasecure-batch/1';
@@ -145,6 +146,11 @@ function createBatchJournalStore(options = {}) {
 
   function validV2ItemResult(item) {
     if (Object.hasOwn(item, 'read_capability')) return false;
+    if (Object.hasOwn(item, 'package_identity')) {
+      if (item.status !== 'released') return false;
+      try { validatePackageIdentity(item.package_identity); }
+      catch { return false; }
+    }
     if (['preflight_mapping_pending', 'stopped'].includes(item.status)) {
       if (Object.hasOwn(item, 'package_id')) return false;
       try {

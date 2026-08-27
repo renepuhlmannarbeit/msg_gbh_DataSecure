@@ -36,7 +36,7 @@ function unavailableProjection(total, verified = false) {
 }
 
 function positivePackageMatches(item, verifyPositive) {
-  if (typeof verifyPositive !== 'function') return true;
+  if (typeof verifyPositive !== 'function') return false;
   try {
     const record = verifyPositive(item);
     return record?.state === 'verified' && record.document_result &&

@@ -48,6 +48,54 @@ function createBatchTerminalEvidence(options = {}) {
   const listPending = options.listPendingEvidence || listPendingEvidence;
   const removePending = options.removePendingEvidence || removePendingEvidence;
   const publishedPackageRecord = options.publishedPackageRecord;
+  const publishedPackageIdentityRecord = options.publishedPackageIdentityRecord;
+  const capturePackageIdentity = options.capturePackageIdentity;
+  const samePackageIdentity = options.samePackageIdentity;
+
+  function releasedItems(state) {
+    return (state.items || []).filter((item) => item.status === 'released');
+  }
+
+  function identityProjection(state) {
+    return projectBatchResults(state, {
+      verifyPositive: (item) => publishedPackageIdentityRecord(item)
+    });
+  }
+
+  function captureIdentities(state) {
+    const captured = new Map();
+    for (const item of releasedItems(state)) {
+      captured.set(item.package_id, capturePackageIdentity(item.package_id));
+    }
+    return captured;
+  }
+
+  function identitiesMatch(left, right) {
+    if (left.size !== right.size) return false;
+    for (const [packageId, identity] of left) {
+      if (!samePackageIdentity(identity, right.get(packageId))) return false;
+    }
+    return true;
+  }
+
+  function createBoundRecord(state, recordedAt, receiptId) {
+    const before = captureIdentities(state);
+    const record = makeRecord(state, recordedAt, receiptId, { publishedPackageRecord });
+    const after = captureIdentities(state);
+    if (!identitiesMatch(before, after)) throw new Error('PACKAGE_IDENTITY_CHANGED');
+    for (const item of releasedItems(state)) item.package_identity = after.get(item.package_id);
+    return record;
+  }
+
+  function existingIdentitiesRemainStable(state, operation) {
+    const before = captureIdentities(state);
+    for (const item of releasedItems(state)) {
+      if (!samePackageIdentity(before.get(item.package_id), item.package_identity)) return null;
+    }
+    const result = operation();
+    const after = captureIdentities(state);
+    return identitiesMatch(before, after) ? result : null;
+  }
 
   function terminal(state) {
     // Terminal detection must remain O(n). Package-bound result verification
@@ -60,7 +108,7 @@ function createBatchTerminalEvidence(options = {}) {
     // Historical receipts never exposed document grades and remain
     // authoritative under their original append-only contract.
     if (record.schema !== EVIDENCE_SCHEMA || state.schema === 'datasecure-batch/1') return true;
-    const projection = projectBatchResults(state);
+    const projection = identityProjection(state);
     const released = state.items.filter((item) => item.status === 'released').length;
     const stopped = state.items.filter((item) => item.status === 'stopped').length;
     return projection.grades_verified === true &&
@@ -91,7 +139,7 @@ function createBatchTerminalEvidence(options = {}) {
         schema: MARKER_SCHEMA,
         status: 'pending',
         receipt_id: receiptId,
-        record: makeRecord(state, nowIso(), receiptId, { publishedPackageRecord })
+        record: createBoundRecord(state, nowIso(), receiptId)
       };
       state.terminal_evidence = marker;
       try {
@@ -103,11 +151,12 @@ function createBatchTerminalEvidence(options = {}) {
     if (markerWasPresent && marker.schema === MARKER_SCHEMA) {
       let expected;
       try {
-        expected = makeRecord(state, marker.record.recorded_at, marker.receipt_id, { publishedPackageRecord });
+        expected = existingIdentitiesRemainStable(state, () =>
+          makeRecord(state, marker.record.recorded_at, marker.receipt_id, { publishedPackageRecord }));
       } catch {
         return false;
       }
-      if (JSON.stringify(expected) !== JSON.stringify(marker.record)) return false;
+      if (!expected || JSON.stringify(expected) !== JSON.stringify(marker.record)) return false;
     }
     try {
       createPending(marker.record);

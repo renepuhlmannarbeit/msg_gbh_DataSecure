@@ -417,3 +417,28 @@ Identitätsänderungen (`noThrow: 0`); `test-source-format-inspector.js` bestand
 aufeinanderfolgende Läufe. `npm run test:source-preflight` und `npm run test:ci`
 endeten jeweils mit Exit-Code 0. Menschliche E1/E2/E3-Nachweise werden dadurch
 nicht ersetzt.
+
+## Lokaler RC65-Nachweis zur Paketidentitätsbindung 27.08.2026
+
+RC65 setzt das gewählte Zielbild A aus BL-049.1 um. Bei der terminalen
+Evidence-Erzeugung wird jedes freigegebene Paket einmal vollständig verifiziert;
+Manifest und Markdown werden davor und danach über exakte BigInt-Werte für
+`dev`, `ino`, `size` und `mtimeMs` stabil gebunden. Spätere öffentliche
+Zählungen führen ausschließlich zwei Metadatenzugriffe je Paket aus und hashen
+keinen Dokumentinhalt erneut. Fehlen, Linkstatus oder Identitätsabweichung ergeben
+fail-closed `unavailable`. Die Identitäten verbleiben im privaten Checkpoint.
+
+Die direkten Tests bestanden mit 5 Projektions-, 11 Status-, 15
+Terminal-Evidence-, 12 Abschluss-, 8 Handoff- und 7 Results-Fällen. Die
+100-Pakete-Gegenprobe belegte exakt 100 Identitätsprüfungen und keinen
+Voll-Hash-Aufruf. `npm run test:result-grades`, `test-audit-privacy.js`,
+`test-diagnostics.js` und `npm run test:ci` endeten mit Exit-Code 0. Der echte
+Intake-Worker bestätigt den identitätsgebundenen Grad erst nach dem terminalen
+Evidence-Commit; ein früher read-only Poll darf davor noch `unavailable` sehen.
+
+`DataSecure-Privacy-Preflight-v3.2.0-rc65.zip` enthält 386 Einträge und
+22.218.988 Bytes; Paketparität, 13 Skill-Vertragstests und die synthetische
+150-Fälle-Vertragsmatrix bestanden. Sein SHA-256 lautet
+`b5360c2da4ba937b924b2bd4ef0b8dd4fda7aa11c48fa2688b4bef02393382a7`.
+Diese lokale E0-Evidenz ersetzt keine Fresh-Install-, Cowork-UI-, Accessibility-
+oder Security-E3-Abnahme.

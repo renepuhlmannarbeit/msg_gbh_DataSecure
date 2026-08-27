@@ -72,6 +72,17 @@ test('a package mismatch or invalid stopped reason fails closed for the entire p
   assert.deepStrictEqual(reasonMismatch.grade_counts, { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 1 });
 });
 
+test('a positive result without an explicit package verifier is unavailable', () => {
+  const projected = projectBatchResults({
+    schema: 'datasecure-batch/2',
+    items: [{ status: 'released', package_id: `ds_${'a'.repeat(32)}`, document_result: complete }]
+  });
+  assert.deepStrictEqual(projected.grade_counts, {
+    complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 1
+  });
+  assert.strictEqual(projected.grades_verified, false);
+});
+
 test('the Cowork document projection is positive, localized and contains no reason or identifier', () => {
   const value = publicPositiveDocumentResult(omitted);
   assert.deepStrictEqual(value, {

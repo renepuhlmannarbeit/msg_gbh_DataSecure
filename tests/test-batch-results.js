@@ -77,4 +77,33 @@ test('legacy V1 journal may read only a verified grade-free V2 package', () => {
   assert.strictEqual(invented.issued(), 0);
 });
 
+test('Cowork handoff candidates require the identity-bound terminal projection', () => {
+  const journal = state('datasecure-batch/2', complete);
+  const progress = (verified) => ({
+    remaining: 0, processing: 0, retryable: 0, deferred_review: 0,
+    mapping_pending: 0, delivery_pending: 0, stopped: 0, complete: true,
+    result_grade_counts: verified
+      ? { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 }
+      : { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 1 },
+    result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+    result_grades_verified: verified
+  });
+  const candidates = (verified) => createBatchResultAccess({
+    SafeError: Error,
+    fs: { readdirSync: () => [{ isFile: () => true, name: `${token}.json` }] },
+    tokenPattern: /^[a-f0-9]{64}$/u,
+    batchRoot: () => '.',
+    readState: () => journal,
+    readStateForMaintenance: () => journal,
+    publicProgress: () => progress(verified),
+    liveLocalExecutor: () => false,
+    publishedPackageRecord: () => ({ state: 'verified', document_result: complete }),
+    sameDocumentResult: (left, right) => JSON.stringify(left) === JSON.stringify(right),
+    issueReadCapability: () => ({ read_capability: 'c'.repeat(43), read_capability_expires_at: 'later' })
+  }).completedLocalOnlyCandidates();
+  assert.deepStrictEqual(candidates(false), []);
+  assert.strictEqual(candidates(true).length, 1);
+  assert.strictEqual(candidates(true)[0].grades_verified, true);
+});
+
 done();

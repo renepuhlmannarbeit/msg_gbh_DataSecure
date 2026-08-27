@@ -1,9 +1,9 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC64 · Stand 27.08.2026
+Version 3.2.0 RC65 · Stand 27.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC64 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC65 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
@@ -17,10 +17,10 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC64 |
+| Artefakt | Ziel | Status RC65 |
 |---|---|---|
-| `DataSecure-Privacy-Preflight-v3.2.0-rc64.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
-| `DataSecure-Privacy-Gateway-v3.2.0-rc64.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc65.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc65.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder

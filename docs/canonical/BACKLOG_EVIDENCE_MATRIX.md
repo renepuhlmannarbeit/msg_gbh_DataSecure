@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 27.08.2026 · gilt für RC64 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 27.08.2026 · gilt für RC65 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -31,7 +31,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | BL-041.9 | Review/Abschluss nicht blockierend und pausierte Stapel startbar machen. | **E0 + E1 + E2:** Zustands-/Timeouttests; echte Cowork-Laufzeit; beobachtete UX. |
 | BL-044.1 | Rekursive Ordnerquelle ohne Linkverfolgung liefern. | **E0 + E1:** synthetische Hierarchie-/Race-Tests; reale Reparse-/Symlink-Gegenprobe. |
 | BL-047.1 | Adaptive Parallelität und Performancebudgets aktivieren. | **E0 + E1:** deterministische Scheduler-/Speichertests; Referenzhardwaremessung. |
-| BL-049.1 | **E0 einschließlich RC64-OPC-Interoperabilität und RC63-Projektion abgeschlossen:** Der descriptor-gebundene Classifier lässt Standard-Paketmetadaten sowie sichere interne relative OPC-Ziele zu und sperrt externe beziehungsweise aktive Beziehungen weiterhin vor der Kopie. V3-Paket, Journal/Mapping V2, Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher. Eine gemeinsame Projektion liefert die drei Grade, `unavailable` und zwei erlaubte Auslassungszähler an terminalen Progress, vorhandenen Abschlussdialog, Results und Cowork-Handoff; positive Ergebnisse werden an der Ausgabegrenze erneut paketverifiziert, Legacy wird nie hochgestuft. | **Direkte Classifier-, OPC-/CRC-/Relationship-, 111-Dateien-Admission-, Digest-, Journal-, Mapping-, Evidence-, Audit-, Recovery-, Manipulations-, Projektions-, IPC-, Abschluss-, Results- und Cowork-Pagingtests. Verbleiben:** frische Windows-/macOS-Cowork-, Accessibility- und Security-E3-Abnahme vor Release/Formatfreigabe. |
+| BL-049.1 | **E0 einschließlich RC65-identitätsgebundener Projektion und RC64-OPC-Interoperabilität abgeschlossen:** Der descriptor-gebundene Classifier lässt Standard-Paketmetadaten sowie sichere interne relative OPC-Ziele zu und sperrt externe beziehungsweise aktive Beziehungen weiterhin vor der Kopie. V3-Paket, Journal/Mapping V2, Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher. Progress, Abschluss und Cowork-Handoff prüfen vor der öffentlichen Zählung die privaten exakten BigInt-Identitäten von Manifest und Markdown mit zwei Metadatenzugriffen je Paket; eine Abweichung ergibt `unavailable`, ohne Inhalts-Hashing oder Metadatenoffenlegung. Results und Lesepfad verifizieren weiterhin vollständig. Legacy wird nie hochgestuft. | **Direkte Classifier-, OPC-/CRC-/Relationship-, 111-Dateien-Admission-, Digest-, Journal-, Mapping-, Evidence-, Audit-, Recovery-, Manipulations-, Identitäts-, Projektions-, IPC-, Abschluss-, Results- und Cowork-Pagingtests einschließlich 100-Pakete-O(n)-Gegenprobe ohne Voll-Hashing. Verbleiben:** frische Windows-/macOS-Cowork-, Accessibility- und Security-E3-Abnahme vor Release/Formatfreigabe. |
 | BL-042.3 | Inhaltsfreie MCP-App und vollständigen Fallback liefern. | **E0 + E1 + E2:** Schema-/Leckagetests; echte Cowork-Version; A11y-/UX-Abnahme. |
 
 ## P0-Release- und Sicherheitsblocker

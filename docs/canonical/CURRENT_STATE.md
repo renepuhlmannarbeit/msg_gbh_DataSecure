@@ -1,15 +1,16 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 27.08.2026 · geprüfter Produktstand: RC64
+Stand: 27.08.2026 · geprüfter Produktstand: RC65
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
 Restdifferenz, `offen` bedeutet ohne belastbare Produktimplementierung. Testdateien
 sind Evidenz für Codeverhalten, nicht automatisch für installierte Claude-Oberflächen.
 
-Der aktuelle RC64-Arbeitsstand erhält die RC63-Projektion der dauerhaft gebundenen
-DS-045-Grade in Progress, Abschluss, Results und Cowork und präzisiert zusätzlich
-die OPC-Beziehungsprüfung für reale Office-Dokumente.
+Der aktuelle RC65-Arbeitsstand erhält die RC64-OPC-Prüfung und bindet die
+RC63-Projektion der DS-045-Grade in Progress, Abschluss und Cowork-Handoff erneut
+an die exakte Identität der veröffentlichten Pakete. Die Results-Fassade und der
+Lesepfad behalten ihre strengere vollständige Paketprüfung.
 Die direkten Projektions-, IPC-, Abschluss-, Results-, Paging-, Recovery-, Gateway-, Batch- und
 MCP-Tests sind grün; der vollständige lokale Regressionslauf wird in
 `docs/TESTING.md` als E0-Codeevidenz dokumentiert. Er ist keine installierte
@@ -1582,7 +1583,14 @@ RC63 ergänzt eine gemeinsame fail-closed Projektion in terminalem Progress,
 bestehendem Abschlussdialog, Results und tokenfreiem Cowork-Handoff. Positive
 Grade werden an der Ausgabegrenze erneut gegen das Paket geprüft; laufende und
 historische Zustände bleiben `unavailable`, und Acknowledgements erzeugen keinen
-zweiten Abschlussdialog. Die RC64-Gegenprobe ergänzt reale Standard-Paketmetadaten und sichere relative
+zweiten Abschlussdialog. RC65 verankert diese Gegenprüfung performant im privaten
+Checkpoint: Bei der terminalen Evidence wird jedes Paket einmal vollständig
+verifiziert und die BigInt-Dateisystemidentität von Manifest und Markdown davor
+und danach stabil gebunden. Terminaler Progress, Abschluss und Handoff prüfen
+anschließend nur diese beiden Metadatensätze je Paket statt den Inhalt erneut zu
+hashen. Fehlende, verlinkte oder geänderte Pakete werden fail-closed als
+`unavailable` gezählt; private Identitätswerte erscheinen weder in Evidence,
+Receipt, Diagnose, Mapping noch MCP-Antworten. Die RC64-Gegenprobe ergänzt reale Standard-Paketmetadaten und sichere relative
 OPC-Zielauflösung: 4 positive UAT-Formate und beide Revieweingänge werden als
 Kandidaten erkannt, alle 5 Negativformate stoppen und die 100 Textdateien bleiben
 Kandidaten. Die Formatfreigabe wird dadurch nicht erweitert. E1/E3 fehlen weiter.

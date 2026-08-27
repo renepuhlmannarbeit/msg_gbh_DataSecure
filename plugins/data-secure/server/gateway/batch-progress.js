@@ -110,16 +110,19 @@ function createBatchProgress(deps) {
     const remaining = items.filter((item) => item.status === 'pending').length;
     const completed = released + stopped;
     const complete = !invalidState && remaining === 0 && retryable === 0 && deferredReview === 0 && mappingPending === 0 && deliveryPending === 0 && processing === 0;
-    // Package hashing is deliberately restricted to the terminal boundary.
-    // Running progress stays O(n) and reports every grade as unavailable.
+    // Full package hashing is restricted to terminal-evidence creation. Public
+    // terminal progress performs only the durable O(n) file-identity binding.
     let durableProjection = null;
-    if (complete && state.terminal_evidence?.status === 'exported') {
+    const hasExportedMarker = complete && state.terminal_evidence?.status === 'exported';
+    if (hasExportedMarker) {
       try {
         const marker = validateMarker(state.terminal_evidence);
         const record = marker.record;
         const gradeCounts = record.schema === 'datasecure-batch-evidence/3' ? record.grade_counts : null;
         const omissionCounts = record.schema === 'datasecure-batch-evidence/3' ? record.omission_counts : null;
-        const stateProjection = gradeCounts ? projectBatchResults(state) : null;
+        const stateProjection = gradeCounts
+          ? projectBatchResults(state, { verifyPositive: (item) => publishedPackageRecord(item) })
+          : null;
         if (record.counts.total === items.length && record.counts.released === released && record.counts.stopped === stopped &&
             gradeCounts && gradeCounts.complete + gradeCounts.usable_with_omissions === released &&
             gradeCounts.not_processed === stopped && gradeCounts.unavailable === 0 &&
@@ -131,7 +134,9 @@ function createBatchProgress(deps) {
       } catch { /* a malformed durable marker is never projected */ }
     }
     const projected = complete && options.skipResultProjection !== true
-      ? (durableProjection || projectBatchResults(state, { verifyPositive: (item) => publishedPackageRecord(item.package_id) }))
+      ? (hasExportedMarker
+          ? (durableProjection || { grade_counts: emptyGradeCounts(items.length), omission_counts: emptyOmissionCounts(), grades_verified: false })
+          : projectBatchResults(state, { verifyPositive: (item) => publishedPackageRecord(item) }))
       : { grade_counts: emptyGradeCounts(items.length), omission_counts: emptyOmissionCounts(), grades_verified: false };
     const processingIndex = items.findIndex((item) => item.status === 'processing');
     const pendingIndex = items.findIndex((item) => item.status === 'pending');

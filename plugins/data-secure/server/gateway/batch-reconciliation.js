@@ -12,6 +12,7 @@ const {
   sameDocumentResult,
   validateManifestDocumentResult
 } = require('./document-result-grade');
+const { packageIdentityMatches } = require('./package-identity');
 
 function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
@@ -65,6 +66,18 @@ function createBatchReconciliation(options = {}) {
   function publishedPackageState(packageId) {
     const value = publishedPackageRecord(packageId).state;
     return value === 'structurally_unsafe' ? false : value;
+  }
+
+  function publishedPackageIdentityRecord(item) {
+    const documentResult = item?.document_result || null;
+    try {
+      positiveDocumentResult(documentResult);
+      return packageIdentityMatches(item?.package_id, item?.package_identity)
+        ? { state: 'verified', document_result: documentResult }
+        : { state: 'unsafe', document_result: null };
+    } catch {
+      return { state: 'unsafe', document_result: null };
+    }
   }
 
   function regularPublishedPackage(packageId) {
@@ -198,6 +211,7 @@ function createBatchReconciliation(options = {}) {
   return {
     packageIdForItem,
     publishedPackageRecord,
+    publishedPackageIdentityRecord,
     publishedPackageState,
     regularPublishedPackage,
     markMappingPending,
