@@ -5,14 +5,22 @@ const { test, done, assert } = createSuite('Local-only handoff');
 
 test('token-free handoff reads a verified page without exposing local identifiers', () => {
   const acknowledgements = [];
+  const result = { grade: 'complete', label: 'Vollständig verarbeitet', omissions: [] };
   const handoff = createLocalOnlyHandoff({
-    completedLocalOnlyCandidates: () => [{ token: 'a'.repeat(64), released: 1, stopped: 0 }],
-    listBatchResults: () => ({ results: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43) }], next_cursor: null }),
+    completedLocalOnlyCandidates: () => [{
+      token: 'a'.repeat(64), released: 1, stopped: 0,
+      grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+      grades_verified: true
+    }],
+    listBatchResults: () => ({ results: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43), document_result: result }], next_cursor: null }),
     readOutputs: () => ({ documents: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', text: '# Bereinigt', has_more: false, next_offset: 12 }] }),
     acknowledgeDeliveredPackages: (token, packageIds) => acknowledgements.push({ token, packageIds })
   });
   const first = handoff.start();
-  assert.deepStrictEqual(first.documents, [{ text: '# Bereinigt', has_more: false, content_is_verified_anonymized_markdown: true }]);
+  assert.deepStrictEqual(first.documents, [{ text: '# Bereinigt', has_more: false, content_is_verified_anonymized_markdown: true, document_result: result }]);
+  assert.deepStrictEqual(first.batch_result_summary.grade_counts, { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 });
+  assert.strictEqual(first.batch_result_summary.grades_verified, true);
   assert.strictEqual(JSON.stringify(first).includes('package_id'), false);
   assert.strictEqual(JSON.stringify(first).includes('read_capability'), false);
   assert.strictEqual(JSON.stringify(first).includes('a'.repeat(64)), false);

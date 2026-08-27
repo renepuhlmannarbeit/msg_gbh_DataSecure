@@ -47,7 +47,9 @@ function access(journal, published) {
 
 test('matching V2 journal and verified V3 package issue exactly one capability', () => {
   const fixture = access(state('datasecure-batch/2', complete), { state: 'verified', document_result: complete });
-  assert.strictEqual(fixture.api.listBatchResults(token).results.length, 1);
+  const results = fixture.api.listBatchResults(token).results;
+  assert.strictEqual(results.length, 1);
+  assert.deepStrictEqual(results[0].document_result, { grade: 'complete', label: 'Vollständig verarbeitet', omissions: [] });
   assert.strictEqual(fixture.issued(), 1);
 });
 
@@ -66,7 +68,9 @@ for (const [name, journal, published] of [
 
 test('legacy V1 journal may read only a verified grade-free V2 package', () => {
   const allowed = access(state('datasecure-batch/1', null, false), { state: 'verified', document_result: null });
-  assert.strictEqual(allowed.api.listBatchResults(token).results.length, 1);
+  const results = allowed.api.listBatchResults(token).results;
+  assert.strictEqual(results.length, 1);
+  assert.strictEqual(results[0].document_result, null);
   assert.strictEqual(allowed.issued(), 1);
   const invented = access(state('datasecure-batch/1', null, false), { state: 'verified', document_result: complete });
   assert.throws(() => invented.api.listBatchResults(token), /nicht sicher verifiziert/u);

@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc62",
+  "version": "3.2.0-rc63",
   "private": true,
   "description": "Plattformneutrales Claude-Plugin und MCPB zur lokalen De-Identifizierung von Dokumenten",
   "main": "plugins/data-secure/server/index.js",
@@ -11,7 +11,7 @@
   "scripts": {
     "native:verify": "node scripts/verify-native.mjs",
     "test:source-preflight": "node tests/test-source-format-inspector.js && node tests/test-source-opc-preflight.js && node tests/test-batch-source-admission.js",
-    "test:result-grades": "node tests/test-document-result-grade.js",
+    "test:result-grades": "node tests/test-document-result-grade.js && node tests/test-batch-result-projection.js",
     "test:legacy-input": "node tests/test-legacy-input-migration.js && npm run test:source-preflight",
     "sea:build": "node scripts/build-sea-launcher.mjs",
     "sea:assemble": "node scripts/build-sea-plugin.mjs",

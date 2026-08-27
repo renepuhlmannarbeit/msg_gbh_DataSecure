@@ -18,27 +18,52 @@ const {
 
 const { test, done, assert } = createSuite('Local completion summary');
 
-test('all-success wording contains exactly the three counters and next step', () => {
-  const result = completionSummaryText({ selected_count: 3, released_count: 3, failed_count: 0 });
+function graded(selected, complete, omissions, stopped, omissionCounts = {}) {
+  return {
+    selected_count: selected,
+    released_count: complete + omissions,
+    failed_count: stopped,
+    result_grade_counts: { complete, usable_with_omissions: omissions, not_processed: stopped, unavailable: 0 },
+    result_omission_counts: {
+      images_removed_by_request: omissionCounts.removed || 0,
+      visual_assets_withheld_locally: omissionCounts.withheld || 0
+    },
+    result_grades_verified: true
+  };
+}
+
+test('all-success wording contains the three result grades and next step', () => {
+  const result = completionSummaryText(graded(3, 3, 0, 0));
   assert.strictEqual(result.title, 'DataSecure – Verarbeitung abgeschlossen');
-  assert.match(result.message, /Ausgewählt: 3\r\nErfolgreich vorbereitet: 3\r\nSicher gestoppt: 0/);
-  assert.match(result.message, /Ergebnisse und Zuordnung wurden lokal gespeichert/);
-  assert.match(result.message, /Nächster Schritt: Schließe diese Meldung/);
+  assert.match(result.message, /Ausgewählt: 3\r\nVollständig verarbeitet: 3\r\nVerwendbar mit Auslassungen: 0\r\nSicher nicht verarbeitet: 0/);
+  assert.match(result.message, /Ergebnis.*Zuordnung wurden lokal gespeichert/);
+  assert.match(result.message, /Nächster Schritt: Schließen/);
 });
 
 test('partial and stopped wording distinguish released from withheld results', () => {
-  const partial = completionSummaryText({ selected_count: 3, released_count: 2, failed_count: 1 });
-  assert.match(partial.message, /Erfolgreich vorbereitet: 2/);
-  assert.match(partial.message, /sicher gestoppte Dateien wurde nichts freigegeben/i);
-  const stopped = completionSummaryText({ selected_count: 2, released_count: 0, failed_count: 2 });
-  assert.match(stopped.message, /Erfolgreich vorbereitet: 0/);
-  assert.match(stopped.message, /nichts für Claude freigegeben/);
+  const partial = completionSummaryText(graded(3, 1, 1, 1, { removed: 2, withheld: 1 }));
+  assert.match(partial.message, /Verwendbar mit Auslassungen: 1/);
+  assert.match(partial.message, /Bilder auf Wunsch entfernt: 2/);
+  assert.match(partial.message, /Grafiken ausschließlich lokal zurückgehalten: 1/);
+  assert.match(partial.message, /Für 1 Datei wurde kein Ergebnis freigegeben/i);
+  const stopped = completionSummaryText(graded(2, 0, 0, 2));
+  assert.match(stopped.message, /Sicher nicht verarbeitet: 2/);
+  assert.match(stopped.message, /0 anonymisierte Ergebnisse/);
+});
+
+test('legacy summaries never invent a result grade', () => {
+  const legacy = completionSummaryText({ selected_count: 2, released_count: 1, failed_count: 1 });
+  assert.match(legacy.message, /Ergebnisgrade für diesen älteren Stapel nicht verfügbar: 2/);
+  assert.doesNotMatch(legacy.message, /Vollständig verarbeitet: 1/);
 });
 
 test('invalid or inconsistent counters fail closed', () => {
   assert.throws(() => validateSummary({ selected_count: 2, released_count: 2, failed_count: 1 }), /Ungültige/);
   assert.throws(() => validateSummary({ selected_count: 101, released_count: 101, failed_count: 0 }), /Ungültige/);
   assert.throws(() => validateSummary({ selected_count: 1, released_count: -1, failed_count: 2 }), /Ungültige/);
+  const invalid = graded(2, 1, 0, 1);
+  invalid.result_grade_counts.complete = 2;
+  assert.throws(() => validateSummary(invalid), /Ungültige/);
 });
 
 test('intake failure notices contain only fixed local wording', () => {

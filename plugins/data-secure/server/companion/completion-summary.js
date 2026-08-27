@@ -5,37 +5,67 @@ const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 const { LIMITS } = require('../gateway/common');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 function validateSummary(summary) {
-  const selected = Number(summary?.selected_count);
-  const released = Number(summary?.released_count);
-  const failed = Number(summary?.failed_count);
+  const selected = summary?.selected_count;
+  const released = summary?.released_count;
+  const failed = summary?.failed_count;
   if (![selected, released, failed].every(Number.isSafeInteger) ||
       selected < 1 || selected > LIMITS.MAX_BATCH_FILES || released < 0 || failed < 0 ||
       released + failed !== selected) {
     throw new SafeError('Ungültige lokale Abschlusszusammenfassung.');
   }
-  return { selected, released, failed };
+  const gradeInput = summary?.result_grade_counts;
+  const omissionInput = summary?.result_omission_counts;
+  if (gradeInput === undefined && omissionInput === undefined) {
+    return {
+      selected, released, failed,
+      gradeCounts: { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: selected },
+      omissionCounts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+      gradesVerified: false
+    };
+  }
+  const gradeKeys = gradeInput && typeof gradeInput === 'object' && !Array.isArray(gradeInput)
+    ? Object.keys(gradeInput).sort().join(',') : '';
+  const omissionKeys = omissionInput && typeof omissionInput === 'object' && !Array.isArray(omissionInput)
+    ? Object.keys(omissionInput).sort().join(',') : '';
+  const gradeCounts = gradeKeys === 'complete,not_processed,unavailable,usable_with_omissions' ? gradeInput : null;
+  const omissionCounts = omissionKeys === 'images_removed_by_request,visual_assets_withheld_locally' ? omissionInput : null;
+  const maximumOmissions = selected * RESOURCE_LIMITS.MAX_VISUAL_ASSETS;
+  if (!gradeCounts || !omissionCounts || !Object.values(gradeCounts).every((value) => Number.isSafeInteger(value) && value >= 0) ||
+      !Object.values(omissionCounts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= maximumOmissions) ||
+      gradeCounts.complete + gradeCounts.usable_with_omissions + gradeCounts.not_processed + gradeCounts.unavailable !== selected) {
+    throw new SafeError('Ungültige lokale Abschlusszusammenfassung.');
+  }
+  const gradesVerified = summary.result_grades_verified === true;
+  const validCrossProduct = gradesVerified
+    ? gradeCounts.unavailable === 0 && gradeCounts.complete + gradeCounts.usable_with_omissions === released && gradeCounts.not_processed === failed
+    : gradeCounts.unavailable === selected && gradeCounts.complete === 0 && gradeCounts.usable_with_omissions === 0 && gradeCounts.not_processed === 0 &&
+      omissionCounts.images_removed_by_request === 0 && omissionCounts.visual_assets_withheld_locally === 0;
+  if (!validCrossProduct) throw new SafeError('Ungültige lokale Abschlusszusammenfassung.');
+  return { selected, released, failed, gradeCounts: { ...gradeCounts }, omissionCounts: { ...omissionCounts }, gradesVerified };
 }
 
 function completionSummaryText(summary) {
-  const { selected, released, failed } = validateSummary(summary);
-  const counters = `Ausgewählt: ${selected}\r\nErfolgreich vorbereitet: ${released}\r\nSicher gestoppt: ${failed}`;
-  if (released === selected) {
-    return {
-      title: 'DataSecure – Verarbeitung abgeschlossen',
-      message: `${counters}\r\n\r\nAlle ausgewählten Dateien wurden lokal anonymisiert. Ergebnisse und Zuordnung wurden lokal gespeichert.\r\n\r\nNächster Schritt: Schließe diese Meldung.`
-    };
-  }
-  if (released === 0) {
-    return {
-      title: 'DataSecure – Verarbeitung abgeschlossen',
-      message: `${counters}\r\n\r\nEs wurde nichts für Claude freigegeben. Der lokale Lauf ist abgeschlossen.\r\n\r\nNächster Schritt: Schließe diese Meldung.`
-    };
-  }
+  const { selected, released, failed, gradeCounts, omissionCounts, gradesVerified } = validateSummary(summary);
+  const counters = [
+    `Ausgewählt: ${selected}`,
+    `Vollständig verarbeitet: ${gradeCounts.complete}`,
+    `Verwendbar mit Auslassungen: ${gradeCounts.usable_with_omissions}`,
+    `Sicher nicht verarbeitet: ${gradeCounts.not_processed}`
+  ];
+  if (!gradesVerified) counters.push(`Ergebnisgrade für diesen älteren Stapel nicht verfügbar: ${gradeCounts.unavailable}`);
+  const omissions = [];
+  if (omissionCounts.images_removed_by_request > 0) omissions.push(`Bilder auf Wunsch entfernt: ${omissionCounts.images_removed_by_request}`);
+  if (omissionCounts.visual_assets_withheld_locally > 0) omissions.push(`Grafiken ausschließlich lokal zurückgehalten: ${omissionCounts.visual_assets_withheld_locally}`);
+  const omissionBlock = omissions.length ? `\r\n\r\nAuslassungen (visuelle Bestandteile):\r\n${omissions.join('\r\n')}` : '';
+  const resultWord = released === 1 ? 'anonymisiertes Ergebnis' : 'anonymisierte Ergebnisse';
+  const fileWord = failed === 1 ? 'Datei' : 'Dateien';
+  const outcome = `${released} ${resultWord} und die Zuordnung wurden lokal gespeichert. Für ${failed} ${fileWord} wurde kein Ergebnis freigegeben.`;
   return {
     title: 'DataSecure – Verarbeitung abgeschlossen',
-    message: `${counters}\r\n\r\nDie erfolgreichen Ergebnisse und die Zuordnung wurden lokal gespeichert. Für sicher gestoppte Dateien wurde nichts freigegeben.\r\n\r\nNächster Schritt: Schließe diese Meldung.`
+    message: `${counters.join('\r\n')}${omissionBlock}\r\n\r\n${outcome}\r\n\r\nNächster Schritt: Schließen.`
   };
 }
 
@@ -54,7 +84,10 @@ function batchStateNoticeText(progress) {
     return completionSummaryText({
       selected_count: progress.batch_total,
       released_count: progress.released,
-      failed_count: progress.stopped
+      failed_count: progress.stopped,
+      result_grade_counts: progress.result_grade_counts,
+      result_omission_counts: progress.result_omission_counts,
+      result_grades_verified: progress.result_grades_verified
     });
   }
   const phase = String(progress.batch_phase || '');
@@ -145,17 +178,17 @@ function localMessageCommands(title, message, options = {}) {
     `$form.Text = '${escape(title)}'`,
     "$form.StartPosition = 'CenterScreen'",
     "$form.FormBorderStyle = 'FixedDialog'",
-    '$form.ClientSize = New-Object System.Drawing.Size(560,250)',
+    '$form.ClientSize = New-Object System.Drawing.Size(620,360)',
     '$form.MaximizeBox = $false',
     '$form.MinimizeBox = $false',
     '$form.TopMost = $true',
     '$label = New-Object System.Windows.Forms.Label',
     '$label.Location = New-Object System.Drawing.Point(24,22)',
-    '$label.Size = New-Object System.Drawing.Size(512,160)',
+    '$label.Size = New-Object System.Drawing.Size(572,265)',
     `$label.Text = '${escape(message)}'`,
     '$button = New-Object System.Windows.Forms.Button',
     "$button.Text = 'Schließen'",
-    '$button.Location = New-Object System.Drawing.Point(416,198)',
+    '$button.Location = New-Object System.Drawing.Point(476,304)',
     '$button.Size = New-Object System.Drawing.Size(120,32)',
     "$button.DialogResult = 'OK'",
     '$form.AcceptButton = $button',
@@ -222,7 +255,10 @@ function showTerminalBatchSummary(progress, options = {}) {
   const summary = {
     selected_count: progress.batch_total,
     released_count: progress.released,
-    failed_count: progress.stopped
+    failed_count: progress.stopped,
+    result_grade_counts: progress.result_grade_counts,
+    result_omission_counts: progress.result_omission_counts,
+    result_grades_verified: progress.result_grades_verified
   };
   // Injected runners remain synchronous so tests and explicit support tooling
   // can verify exact UI results. The product completion path detaches the fixed,

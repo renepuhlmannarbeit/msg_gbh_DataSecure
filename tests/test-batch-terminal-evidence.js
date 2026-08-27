@@ -138,6 +138,23 @@ test('best-effort writer treats exported evidence as authoritative despite clean
   assert.strictEqual(restarted.events.some((event) => event.startsWith('write:')), false);
 });
 
+test('an exported v2 receipt reuses its verified aggregate without reopening every package', () => {
+  let packageReads = 0;
+  const initial = stateV2();
+  const value = fixture({
+    state: initial,
+    publishedPackageRecord(packageId) {
+      packageReads++;
+      const item = initial.items.find((candidate) => candidate.package_id === packageId);
+      return item ? { state: 'verified', document_result: item.document_result } : { state: 'missing', document_result: null };
+    }
+  });
+  assert.strictEqual(value.coordinator.writeTerminalEvidence(value.reload()), true);
+  assert.strictEqual(packageReads, 1);
+  assert.strictEqual(value.coordinator.writeTerminalEvidence(value.reload()), true);
+  assert.strictEqual(packageReads, 1);
+});
+
 test('append failure leaves one durable pending intent and retry reuses its opaque id', () => {
   const first = fixture({ failAppend: true });
   const working = first.reload();

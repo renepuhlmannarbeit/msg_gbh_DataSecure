@@ -4,6 +4,7 @@
 // in this process.  This module intentionally stores no document text.
 const { SafeError } = require('../runtime');
 const { pickCompletedBatch } = require('../companion/completed-batch-picker');
+const { GRADES, OMISSION_CODES } = require('./document-result-grade');
 
 // Cap the handoff strictly below the package-store capability lifetime. This
 // prevents a half-open RAM session from retaining a stale read capability.
@@ -14,8 +15,61 @@ const CHUNK_SIZE = 4800;
 const MAX_SNAPSHOT_SESSION_BYTES = 16 * 1024 * 1024;
 
 function safeError(code, message) { const error = new SafeError(message); error.code = code; return error; }
-function publicDocument(document) {
-  return { text: document.text, has_more: document.has_more === true, content_is_verified_anonymized_markdown: true };
+function validatedPublicResult(value) {
+  if (value === null || value === undefined) return null;
+  const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort() : [];
+  if (keys.join(',') !== 'grade,label,omissions' ||
+      ![GRADES.COMPLETE, GRADES.USABLE_WITH_OMISSIONS].includes(value.grade) ||
+      typeof value.label !== 'string' || !Array.isArray(value.omissions) || value.omissions.length > 2) {
+    throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+  }
+  const allowed = new Set(Object.values(OMISSION_CODES));
+  const seen = new Set();
+  for (const omission of value.omissions) {
+    if (!omission || Object.keys(omission).sort().join(',') !== 'code,count,label' ||
+        !allowed.has(omission.code) || seen.has(omission.code) || typeof omission.label !== 'string' ||
+        !Number.isSafeInteger(omission.count) || omission.count < 1) {
+      throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+    }
+    seen.add(omission.code);
+  }
+  if ((value.grade === GRADES.COMPLETE) !== (value.omissions.length === 0)) {
+    throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+  }
+  return value;
+}
+function publicDocument(document, entry) {
+  return {
+    text: document.text,
+    has_more: document.has_more === true,
+    content_is_verified_anonymized_markdown: true,
+    document_result: validatedPublicResult(entry.documentResult)
+  };
+}
+
+function publicBatchSummary(candidate) {
+  const total = candidate.released + candidate.stopped;
+  const hasProjection = candidate.grade_counts !== undefined || candidate.omission_counts !== undefined || candidate.grades_verified !== undefined;
+  const counts = hasProjection ? candidate.grade_counts : { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: total };
+  const omissions = hasProjection ? candidate.omission_counts : { images_removed_by_request: 0, visual_assets_withheld_locally: 0 };
+  const validCounts = counts && Object.keys(counts).sort().join(',') === 'complete,not_processed,unavailable,usable_with_omissions' &&
+    Object.values(counts).every((value) => Number.isSafeInteger(value) && value >= 0);
+  const validOmissions = omissions && Object.keys(omissions).sort().join(',') === 'images_removed_by_request,visual_assets_withheld_locally' &&
+    Object.values(omissions).every((value) => Number.isSafeInteger(value) && value >= 0);
+  const verified = hasProjection && candidate.grades_verified === true;
+  const validCrossProduct = verified
+    ? counts.unavailable === 0 && counts.complete + counts.usable_with_omissions === candidate.released && counts.not_processed === candidate.stopped
+    : counts.unavailable === total && counts.complete === 0 && counts.usable_with_omissions === 0 && counts.not_processed === 0;
+  if (!Number.isSafeInteger(total) || total < 1 || !validCounts || !validOmissions ||
+      counts.complete + counts.usable_with_omissions + counts.not_processed + counts.unavailable !== total || !validCrossProduct) {
+    throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+  }
+  return {
+    grade_counts: { ...counts },
+    omission_counts: { ...omissions },
+    grades_verified: verified,
+    message: `An Claude übergeben: ${candidate.released} anonymisierte Ergebnisse. Nicht übergeben: ${candidate.stopped} sicher nicht verarbeitete ${candidate.stopped === 1 ? 'Datei' : 'Dateien'}.`
+  };
 }
 
 function createLocalOnlyHandoff(deps) {
@@ -49,13 +103,20 @@ function createLocalOnlyHandoff(deps) {
       selected = candidates[ordinal - 1];
       if (!selected) throw safeError('LOCAL_SELECTION_CANCELLED', 'Die lokale Auswahl anonymisierter Ergebnisse wurde abgebrochen.');
     }
-    session = { token: selected.token, entries: [], nextCursor: null, loaded: false, acknowledged: [], snapshotBytes: 0, createdAt: now(), lastUsedAt: now(), expiresAt: now() + MAX_TTL_MS, initial: true };
+    const batchSummary = publicBatchSummary(selected);
+    session = { token: selected.token, entries: [], nextCursor: null, loaded: false, acknowledged: [], snapshotBytes: 0, createdAt: now(), lastUsedAt: now(), expiresAt: now() + MAX_TTL_MS, initial: true, batchSummary };
     return next();
   }
   function loadEntries() {
     if (session.entries.length || (session.loaded && session.nextCursor === null)) return;
     const listed = listBatchResults(session.token, { cursor: session.nextCursor, limit: PAGE_SIZE });
-    session.entries = listed.results.map((entry) => ({ packageId: entry.package_id, capability: entry.read_capability, offset: 0, snapshot: null }));
+    session.entries = listed.results.map((entry) => ({
+      packageId: entry.package_id,
+      capability: entry.read_capability,
+      offset: 0,
+      snapshot: null,
+      documentResult: entry.document_result
+    }));
     session.nextCursor = listed.next_cursor;
     session.loaded = true;
   }
@@ -118,7 +179,16 @@ function createLocalOnlyHandoff(deps) {
       }
       session.entries = nextEntries;
       session.lastUsedAt = now();
-      return { ok: true, documents: read.documents.map(publicDocument), more: session.entries.length > 0 || session.nextCursor !== null, raw_content_sent_to_claude: false, content_is_verified_anonymized_markdown: true };
+      const batchResultSummary = session.initial ? session.batchSummary : undefined;
+      session.initial = false;
+      return {
+        ok: true,
+        documents: read.documents.map((document, index) => publicDocument(document, entries[index])),
+        more: session.entries.length > 0 || session.nextCursor !== null,
+        ...(batchResultSummary ? { batch_result_summary: batchResultSummary } : {}),
+        raw_content_sent_to_claude: false,
+        content_is_verified_anonymized_markdown: true
+      };
     } catch (error) {
       clear();
       throw error;

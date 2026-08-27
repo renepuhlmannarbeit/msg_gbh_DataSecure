@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Backlog-Stories
 
-Stand: 26.08.2026 · gilt für RC62 und ergänzt das [aktive Backlog](BACKLOG.md).
+Stand: 27.08.2026 · gilt für RC63 und ergänzt das [aktive Backlog](BACKLOG.md).
 
 Diese Matrix trennt strikt zwischen lokaler Entwicklungsarbeit und einem echten
 Abschlussnachweis. Ein lokaler Test, eine Code-Review oder eine CI-Ausführung auf
@@ -31,7 +31,7 @@ muss keine Endanwenderin bzw. kein Endanwender sein.
 | BL-041.9 | Review/Abschluss nicht blockierend und pausierte Stapel startbar machen. | **E0 + E1 + E2:** Zustands-/Timeouttests; echte Cowork-Laufzeit; beobachtete UX. |
 | BL-044.1 | Rekursive Ordnerquelle ohne Linkverfolgung liefern. | **E0 + E1:** synthetische Hierarchie-/Race-Tests; reale Reparse-/Symlink-Gegenprobe. |
 | BL-047.1 | Adaptive Parallelität und Performancebudgets aktivieren. | **E0 + E1:** deterministische Scheduler-/Speichertests; Referenzhardwaremessung. |
-| BL-049.1 | **Teil a, b1, b2-Integrität, Grade-Policy/Manifest, RC61a-Journal/Mapping und RC62-Evidence/Receipt E0 abgeschlossen:** Der descriptor-gebundene Classifier ist vor jeder Mutation für den gesamten Mehrfachstapel verdrahtet. Inhaltsbedingte Rejects und noch gesperrte Formate werden einzeln ohne Quellkopie journalisiert und dauerhaft lokal zugeordnet; übrige Kandidaten laufen weiter. OOXML erhält vor Snapshot vollständige Entry-CRC-, OPC-Steuerteil-/Relationship-Prüfung und eine SHA-256-Bindung an die später kopierten Bytes. Neue V3-Pakete enthalten einen aus exakten Release-Signalen abgeleiteten DS-045-Grad. Journal V2 und Mapping CSV/Outbox V2 binden ihn crashsicher an Paket oder terminalen Grundcode. Batch-Evidence v3 aggregiert ausschließlich verifizierte Grade und erlaubte Auslassungen; Audit-Receipt v4 bindet exakt denselben positiven Grad wie das V3-Manifest. Ein endlicher Reason-Code-Katalog grobklassifiziert unbekannte interne Fehler zu `INTERNAL_FAILURE`. Legacy bleibt ohne erfundenen Grad lesbar. | **Direkte Classifier-, OPC-/CRC-, Digest-, Admission-, Journal-, Mapping-, Evidence-, Audit-, Recovery-, Manipulations- und Ergebnisgradtests sowie Gateway- und gemischte TXT/CSV/DOCX-Wiederanlaufläufe. Verbleiben:** Stapelabschluss-, Results/Progress- und Cowork-Projektion, E1 und Security-E3 vor jeder Formatfreigabe. |
+| BL-049.1 | **E0 einschließlich RC63-Projektion abgeschlossen:** Der descriptor-gebundene Classifier, V3-Paket, Journal/Mapping V2, Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher. Eine gemeinsame Projektion liefert die drei Grade, `unavailable` und zwei erlaubte Auslassungszähler an terminalen Progress, vorhandenen Abschlussdialog, Results und Cowork-Handoff; positive Ergebnisse werden an der Ausgabegrenze erneut paketverifiziert, Legacy wird nie hochgestuft. | **Direkte Classifier-, OPC-/CRC-, Digest-, Admission-, Journal-, Mapping-, Evidence-, Audit-, Recovery-, Manipulations-, Projektions-, IPC-, Abschluss-, Results- und Cowork-Pagingtests. Verbleiben:** frische Windows-/macOS-Cowork-, Accessibility- und Security-E3-Abnahme vor Release/Formatfreigabe. |
 | BL-042.3 | Inhaltsfreie MCP-App und vollständigen Fallback liefern. | **E0 + E1 + E2:** Schema-/Leckagetests; echte Cowork-Version; A11y-/UX-Abnahme. |
 
 ## P0-Release- und Sicherheitsblocker

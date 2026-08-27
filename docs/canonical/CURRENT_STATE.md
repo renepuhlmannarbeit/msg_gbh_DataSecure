@@ -1,14 +1,15 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 26.08.2026 · geprüfter Produktstand: RC62
+Stand: 27.08.2026 · geprüfter Produktstand: RC63
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
 Restdifferenz, `offen` bedeutet ohne belastbare Produktimplementierung. Testdateien
 sind Evidenz für Codeverhalten, nicht automatisch für installierte Claude-Oberflächen.
 
-Der aktuelle RC62-Arbeitsstand bindet DS-045 zusätzlich an Batch-Evidence v3 und
-Audit-Receipt v4. Die direkten Evidence-, Audit-, Recovery-, Gateway-, Batch- und
+Der aktuelle RC63-Arbeitsstand projiziert die bereits dauerhaft gebundenen DS-045-
+Grade zusätzlich paketverifiziert in Progress, Abschluss, Results und Cowork.
+Die direkten Projektions-, IPC-, Abschluss-, Results-, Paging-, Recovery-, Gateway-, Batch- und
 MCP-Tests sind grün; der vollständige lokale Regressionslauf wird in
 `docs/TESTING.md` als E0-Codeevidenz dokumentiert. Er ist keine installierte
 Release-Abnahme.
@@ -28,7 +29,7 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 | Stapel | durable Checkpoints und Background-Intake; neue Auswahl trotz pausierter Stapel im Arbeitsstand umgesetzt | ein aktiver, mehrere pausierte; Pause blockiert nicht | E0 umgesetzt, E1/E2 offen |
 | Review/Abschluss | abgekoppelter Review ohne menschlichen Timeout und detachierte Abschlussmeldung im Arbeitsstand | persistente Queue ohne Entscheidungs-Timeout, nicht blockierender Abschluss | E0 umgesetzt, E1/E2 offen |
 | private Daten | R4a-create-only-AEAD-Fassade synthetisch belegt, aber Rohsnapshots und Reviewdaten noch nicht produktiv darüber geführt | DPAPI/Keychain, kein Klartextfallback | P0 Security: R4b/E1/E3 offen |
-| Ergebnisse | V3-Pakete, Journal/Mapping V2, Batch-Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher; automatische Output-Löschung deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 dauerhafte Bindung; Abschluss/Results/Progress/Cowork offen |
+| Ergebnisse | V3-Pakete, Journal/Mapping V2, Batch-Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher; RC63 projiziert terminale Grade in Abschluss/Results/Progress/Cowork; automatische Output-Löschung deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 abgeschlossen; E1/E3 offen |
 | Formate | TXT/Markdown/CSV/DOCX; Auswahl überwiegend endungsgeführt | Signatur+Struktur; drei Ergebnisgrade; alle Zielformate gestuft | P1 Content, danach Formate |
 | Performance | serieller Produktpfad, inaktive Harnesses und lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | P1 nach Sicherheitsgates |
 | Cowork-UI | Text/OS-Dialoge, keine MCP-App | inhaltsfreie progressive MCP-App mit vollem Fallback | P2 Komfort |
@@ -1558,7 +1559,11 @@ Grade und erlaubte Auslassungen in `datasecure-batch-evidence/3`, prüft positiv
 Grade vor Export erneut gegen das V3-Paket und bindet `data-secure-audit-receipt/4`
 exakt an dessen positiven Manifestgrad. Ein endlicher Reason-Code-Katalog verhindert
 inhaltsförmige Fehlerwerte; Unbekanntes wird zu `INTERNAL_FAILURE` vergröbert.
-Stapelabschluss, Results/Progress und Cowork sowie E1/E3 fehlen noch. Die
+RC63 ergänzt eine gemeinsame fail-closed Projektion in terminalem Progress,
+bestehendem Abschlussdialog, Results und tokenfreiem Cowork-Handoff. Positive
+Grade werden an der Ausgabegrenze erneut gegen das Paket geprüft; laufende und
+historische Zustände bleiben `unavailable`, und Acknowledgements erzeugen keinen
+zweiten Abschlussdialog. E1/E3 fehlen noch. Die
 Strukturprüfung schaltet insbesondere XLSX und PPTX nicht frei.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
 

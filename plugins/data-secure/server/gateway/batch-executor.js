@@ -9,7 +9,7 @@ const {
   releaseLocalBatchExecutor,
   readBatchProgress
 } = require('./batch');
-const { showLocalIntakeNotice, showBatchStateNotice } = require('../companion/completion-summary');
+const { validateSummary, showLocalIntakeNotice, showBatchStateNotice } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -38,7 +38,10 @@ function terminalIntakeProgress(message) {
     complete: true,
     batch_total: progress.batch_total,
     released: progress.released,
-    stopped: progress.stopped
+    stopped: progress.stopped,
+    result_grade_counts: progress.result_grade_counts,
+    result_omission_counts: progress.result_omission_counts,
+    result_grades_verified: progress.result_grades_verified
   } : null;
 }
 
@@ -60,9 +63,13 @@ const PRESENTABLE_BATCH_PHASES = new Set([
 
 function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake-state', 'local-batch-state'])) {
   if (!message || !acceptedTypes.has(message.type)) return null;
-  const batchTotal = Number(message.batch_total);
-  const released = Number(message.released);
-  const stopped = Number(message.stopped);
+  const resultKeys = ['result_grade_counts', 'result_omission_counts', 'result_grades_verified'];
+  const presentResultKeys = resultKeys.filter((key) => Object.hasOwn(message, key));
+  const allowedKeys = new Set(['type', 'complete', 'batch_phase', 'batch_total', 'released', 'stopped', ...resultKeys]);
+  if (Object.keys(message).some((key) => !allowedKeys.has(key)) || (presentResultKeys.length !== 0 && presentResultKeys.length !== resultKeys.length)) return null;
+  const batchTotal = message.batch_total;
+  const released = message.released;
+  const stopped = message.stopped;
   if (![batchTotal, released, stopped].every(Number.isSafeInteger) ||
       batchTotal < 1 || batchTotal > 100 || released < 0 || stopped < 0 ||
       released + stopped > batchTotal) return null;
@@ -73,7 +80,43 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
   if ((complete || batchPhase === 'complete') && (batchPhase !== 'complete' || released + stopped !== batchTotal)) return null;
   if (!complete && batchPhase === 'complete') return null;
   if (!complete && released + stopped >= batchTotal) return null;
-  return { complete, batch_phase: batchPhase, batch_total: batchTotal, released, stopped };
+  let validated;
+  if (!complete) {
+    const gradeCounts = presentResultKeys.length ? message.result_grade_counts :
+      { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: batchTotal };
+    const omissionCounts = presentResultKeys.length ? message.result_omission_counts :
+      { images_removed_by_request: 0, visual_assets_withheld_locally: 0 };
+    const validRestingProjection = gradeCounts && Object.keys(gradeCounts).sort().join(',') === 'complete,not_processed,unavailable,usable_with_omissions' &&
+      omissionCounts && Object.keys(omissionCounts).sort().join(',') === 'images_removed_by_request,visual_assets_withheld_locally' &&
+      gradeCounts.complete === 0 && gradeCounts.usable_with_omissions === 0 && gradeCounts.not_processed === 0 && gradeCounts.unavailable === batchTotal &&
+      omissionCounts.images_removed_by_request === 0 && omissionCounts.visual_assets_withheld_locally === 0 &&
+      (!presentResultKeys.length || message.result_grades_verified === false);
+    if (!validRestingProjection) return null;
+    validated = { gradeCounts: { ...gradeCounts }, omissionCounts: { ...omissionCounts }, gradesVerified: false };
+  } else {
+    try {
+      validated = validateSummary({
+        selected_count: batchTotal,
+        released_count: released,
+        failed_count: stopped,
+        ...(presentResultKeys.length ? {
+          result_grade_counts: message.result_grade_counts,
+          result_omission_counts: message.result_omission_counts,
+          result_grades_verified: message.result_grades_verified
+        } : {})
+      });
+    } catch { return null; }
+  }
+  return {
+    complete,
+    batch_phase: batchPhase,
+    batch_total: batchTotal,
+    released,
+    stopped,
+    result_grade_counts: validated.gradeCounts,
+    result_omission_counts: validated.omissionCounts,
+    result_grades_verified: validated.gradesVerified
+  };
 }
 
 // A detached worker can exit before its final bounded IPC envelope is observed
@@ -83,7 +126,17 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
 function durableBatchStateProgress(token, type, options = {}) {
   try {
     const progress = (options.readBatchProgress || readBatchProgress)(token);
-    return localBatchStateProgress({ type, ...progress });
+    return localBatchStateProgress({
+      type,
+      complete: progress.complete,
+      batch_phase: progress.batch_phase,
+      batch_total: progress.batch_total,
+      released: progress.released,
+      stopped: progress.stopped,
+      result_grade_counts: progress.result_grade_counts,
+      result_omission_counts: progress.result_omission_counts,
+      result_grades_verified: progress.result_grades_verified
+    });
   } catch {
     return null;
   }

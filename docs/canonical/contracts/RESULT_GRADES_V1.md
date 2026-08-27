@@ -1,6 +1,6 @@
 # Vertrag: Dokumentergebnisgrade V1
 
-Stand: 26.08.2026 · Paketbindung RC60 · Journal-/Mappingbindung RC61 · Evidence-/Receipt-Bindung RC62 · Entscheidung DS-045
+Stand: 27.08.2026 · Paketbindung RC60 · Journal-/Mappingbindung RC61 · Evidence-/Receipt-Bindung RC62 · Projektion RC63 · Entscheidung DS-045
 
 ## Zweck
 
@@ -77,8 +77,23 @@ Reason-Codes stammen aus einem endlichen, inhaltsfreien Katalog. Unbekannte
 interne Codes werden vor einer terminalen Persistierung zu `INTERNAL_FAILURE`
 vergröbert; dokumentabgeleitete oder frei formulierte Werte sind unzulässig.
 
-## Noch nicht Teil dieses E0-Schnitts
+## Progress-, Results-, Abschluss- und Cowork-Projektion
 
-Die Projektion der Grade in Stapelabschluss, Results-/Progress-Fassaden und
-Cowork-Anzeige folgt in getrennten Schnitten. Echte Zielsystem- und
-Security-Abnahmen (E1/E3) bleiben ebenfalls erforderlich.
+RC63 verwendet eine einzige, fail-closed Projektionsschicht. Terminale V2-Stapel
+werden vor der öffentlichen Zählung erneut gegen jedes veröffentlichte V3-Paket
+gebunden. Progress und der vorhandene lokale Abschlussdialog zeigen ausschließlich
+Zähler für `complete`, `usable-with-omissions`, `not-processed` und `unavailable`
+sowie die zwei erlaubten visuellen Auslassungsarten. Laufende Zustände und
+Altbestände bleiben `unavailable`; aus `released` oder `stopped` wird kein Grad
+erfunden.
+
+Die Results-Fassade gibt einen positiven Grad erst nach exakter Journal-/Paket-
+Übereinstimmung zusammen mit der kurzlebigen Leseberechtigung frei. Der normale
+Cowork-Handoff hält Paket-IDs, Fähigkeiten, Cursor, Namen und Pfade im lokalen
+Server. Er liefert die anonymisierten Markdown-Fragmente mit dem verifizierten
+positiven Grad und zeigt die aggregierte Stapelübersicht genau auf der ersten
+Seite. `not-processed` erzeugt kein Dokument. Acknowledgements öffnen keinen
+zweiten Abschlussdialog; dessen einziger Owner ist der lokale Worker.
+
+Echte Zielsystem-, Accessibility- und Security-Abnahmen (E1/E3) bleiben weiterhin
+erforderlich.

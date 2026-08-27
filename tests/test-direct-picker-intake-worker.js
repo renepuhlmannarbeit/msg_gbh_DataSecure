@@ -88,7 +88,12 @@ async function removeTestRoot() {
 async function main() {
   await testAsync('the direct picker completion envelope contains only bounded terminal counters', async () => {
     const completion = terminalIntakeProgress({ type: 'local-intake-complete', batch_total: 3, released: 2, stopped: 1 });
-    assert.deepStrictEqual(completion, { complete: true, batch_total: 3, released: 2, stopped: 1 });
+    assert.deepStrictEqual(completion, {
+      complete: true, batch_total: 3, released: 2, stopped: 1,
+      result_grade_counts: { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 3 },
+      result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+      result_grades_verified: false
+    });
     assert.strictEqual(terminalIntakeProgress({ type: 'local-intake-complete', batch_total: 1, released: 1, stopped: 1 }), null);
     assert.strictEqual(terminalIntakeProgress({ type: 'local-intake-complete', batch_total: 0, released: 0, stopped: 0 }), null);
     assert.doesNotMatch(JSON.stringify(completion), /token|path|source|package/i);
@@ -96,7 +101,12 @@ async function main() {
       assert.deepStrictEqual(localBatchStateProgress({
         type: 'local-intake-state', complete: false, batch_phase,
         batch_total: 3, released: 1, stopped: 0
-      }), { complete: false, batch_phase, batch_total: 3, released: 1, stopped: 0 });
+      }), {
+        complete: false, batch_phase, batch_total: 3, released: 1, stopped: 0,
+        result_grade_counts: { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 3 },
+        result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+        result_grades_verified: false
+      });
     }
     assert.strictEqual(localBatchStateProgress({
       type: 'local-intake-state', complete: false, batch_phase: 'processing_local_document',
@@ -151,7 +161,10 @@ async function main() {
       batch_phase: completed.batch_phase,
       batch_total: 1,
       released: completed.released,
-      stopped: completed.stopped
+      stopped: completed.stopped,
+      result_grade_counts: completed.result_grade_counts,
+      result_omission_counts: completed.result_omission_counts,
+      result_grades_verified: completed.result_grades_verified
     });
     const lifecycleDeadline = Date.now() + 1_000;
     while (!workflowEvents.some((event) => event.event === 'intake_worker_exited') && Date.now() < lifecycleDeadline) await pause(10);

@@ -2,6 +2,9 @@
 
 const { createSuite } = require('./helpers');
 const { _test } = require('../plugins/data-secure/server/gateway/batch');
+const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
+const { evidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
+const { releasedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 
 const { test, done, assert } = createSuite('Batch user status');
 
@@ -35,7 +38,7 @@ test('each server phase has a short German next-step message without source data
     }));
     assert.strictEqual(result.next_action, nextAction);
     assert.match(result.user_status, text);
-    assert.match(result.user_status, /47 von 100|45 erfolgreich vorbereitet/);
+    assert.match(result.user_status, /47 von 100|45 Ergebnisse bereitgestellt/);
     assert.doesNotMatch(result.user_status, /Musterfrau|C:\\|\.docx/i);
   }
 });
@@ -62,8 +65,46 @@ test('public progress exposes only the bounded user status and no item name', ()
     ]
   });
   assert.strictEqual(result.next_action, 'open_local_overview');
-  assert.match(result.user_status, /1 erfolgreich vorbereitet, 1 sicher gestoppt/);
+  assert.match(result.user_status, /1 Ergebnisse bereitgestellt, 1 sicher gestoppt/);
+  assert.deepStrictEqual(result.result_grade_counts, { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 2 });
+  assert.strictEqual(result.result_grades_verified, false);
   assert.doesNotMatch(JSON.stringify(result), /Erika|Musterfrau|Kundenakte|\.docx/i);
+});
+
+test('durable terminal grades avoid package reopens but a changed state fails closed', () => {
+  const documentResult = releasedDocumentResult({
+    parserWarnings: [], visualResults: [], unreviewedVisualCount: 0, imagesRemovedByExplicitRequest: 0
+  });
+  const state = {
+    schema: 'datasecure-batch/2',
+    token: '9'.repeat(64),
+    created_at: '2026-08-27T08:00:00.000Z',
+    profile: 'general',
+    remove_images: false,
+    items: [{ status: 'released', package_id: `ds_${'8'.repeat(32)}`, document_result: documentResult }]
+  };
+  const receiptId = '7'.repeat(32);
+  const record = evidenceRecord(state, '2026-08-27T08:01:00.000Z', receiptId, {
+    publishedPackageRecord: () => ({ state: 'verified', document_result: documentResult })
+  });
+  state.terminal_evidence = {
+    schema: 'datasecure-batch-terminal-evidence/2', status: 'exported', receipt_id: receiptId, record
+  };
+  let packageReads = 0;
+  const progressFacade = createBatchProgress({
+    deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+    mappingPendingStatus: 'mapping_pending', liveLocalExecutor: () => false,
+    publishedPackageRecord: () => { packageReads++; throw new Error('PACKAGE_REOPENED'); }
+  });
+  const stable = progressFacade.publicProgress(state);
+  assert.strictEqual(stable.result_grades_verified, true);
+  assert.strictEqual(packageReads, 0);
+
+  state.items[0].document_result = { ...documentResult, grade: 'usable-with-omissions' };
+  const changed = progressFacade.publicProgress(state);
+  assert.strictEqual(changed.result_grades_verified, false);
+  assert.strictEqual(changed.result_grade_counts.unavailable, 1);
+  assert.strictEqual(packageReads, 0);
 });
 
 test('an unknown persisted phase never falls through to processing another document', () => {

@@ -13,6 +13,29 @@ npm run build:plugin && npm run test:plugin-zip # same acceptance against the bu
 node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # engineering-only MCP proof
 ```
 
+## Lokaler RC63-Nachweis 27.08.2026
+
+RC63 ergänzt eine gemeinsame fail-closed Projektion für terminalen Progress,
+Results, den bestehenden lokalen Abschlussdialog und den normalen tokenfreien
+Cowork-Handoff. Direkte Positiv- und Negativtests prüfen gemischte Grade, beide
+erlaubten visuellen Auslassungen, Paket-/Journal-Widerspruch, Legacy ohne
+Nachklassifizierung, strikt begrenztes Worker-IPC, genau einen Abschlussdialog,
+Results vor Capability-Ausgabe sowie Paging ohne Paket-ID, Token, Cursor,
+Dateinamen oder Pfade. Die Toolzahl, der Picker und der Bestätigungsablauf bleiben
+unverändert. `npm test` bestand vollständig einschließlich 67 servergebundener
+Batchtests, 100 Dateien, zehn Ergebnisseiten, Crash/Resume an den Positionen 1,
+50 und 100 sowie 2.000 explorativen Anonymisierungsfällen. Ein dabei sichtbar
+gewordener quadratischer Abschluss-Pfad wurde entfernt: Ein paketgebundener
+Nachweis verifiziert die Pakete genau einmal und bereits exportierte Aggregate
+öffnen sie bei jeder Ergebnisbestätigung nicht erneut; ein Zähltest fixiert den
+Vertrag. Der frisch gebaute ZIP enthält 385 Einträge und hat SHA-256
+`4aca812afa50ffc2421c668eb8248bc17ab3a40c67a77df3dfbeb6950debf886`, das MCPB
+enthält 550 Einträge und hat SHA-256
+`840c987e49859e9ffa89c279d42a73bc86a0f5bbb1d101e8bb8f25ea6d8c5e8f`.
+Paketparität, Skill-Abnahme, 150-Fälle-Vertragsmatrix und MCPB-Prüfung bestanden.
+Dieser E0-Nachweis ersetzt weiterhin keine frische installierte Windows-/macOS-
+Cowork-, Accessibility- oder Security-Abnahme.
+
 ## Lokaler RC62-Nachweis 26.08.2026
 
 RC62 erweitert die dauerhafte DS-045-Bindung um `datasecure-batch-evidence/3`

@@ -58,7 +58,10 @@ process.once('message', async (message) => {
       batch_phase: completed.batch_phase,
       batch_total: completed.batch_total,
       released: completed.released,
-      stopped: completed.stopped
+      stopped: completed.stopped,
+      result_grade_counts: completed.result_grade_counts,
+      result_omission_counts: completed.result_omission_counts,
+      result_grades_verified: completed.result_grades_verified
     });
     process.exit(0);
   } catch {

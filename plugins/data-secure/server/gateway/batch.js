@@ -109,7 +109,8 @@ const { batchUserStatus, publicProgress } = createBatchProgress({
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
   preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING,
-  liveLocalExecutor
+  liveLocalExecutor,
+  publishedPackageRecord
 });
 
 const { beginBatch } = createBatchIntake({

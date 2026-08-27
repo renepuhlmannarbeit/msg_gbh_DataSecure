@@ -5,6 +5,7 @@ const {SafeError}=require('../runtime');
 const {roots,sha256Buffer,sha256File,listPackageDirs,PROFILES}=require('./common');
 const {readEvents}=require('../companion/job-store');
 const {validateManifestDocumentResult,DocumentResultError}=require('./document-result-grade');
+const {publicPositiveDocumentResult}=require('./batch-result-projection');
 
 // Read capabilities are deliberately process-local and never persisted. A
 // package id identifies data on disk; it is not authorization to disclose that
@@ -75,7 +76,7 @@ function readVerifiedFile(base,rel){
   }catch(error){if(error instanceof SafeError)throw error;throw new SafeError('Paketdatei ist nicht freigegeben.');}finally{if(descriptor!==undefined)fs.closeSync(descriptor);}
 }
 function listOutputs(){const items=[];for(const x of listPackageDirs()){try{const{m}=safeResolvePackage(x.id);items.push({package_id:x.id,profile:m.profile,created_at:m.created_at,reidentification_risk:m.reidentification_risk==='high'?'high':'context_dependent',assets_included:m.assets.filter(a=>a.status==='included').length,assets_review_required:m.assets.filter(a=>a.status!=='included').length});}catch{}}return{ok:true,packages:items.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,50)};}
-function readOutput(packageId,readCapability,offset=0,maxChars=16000){requireReadCapability(packageId,readCapability);const{p,m}=safeResolvePackage(packageId),rel=m.document;const data=readVerifiedFile(p,rel);if(sha256Buffer(data)!==m.document_sha256)throw new SafeError('Anonymisierte Markdown-Datei wurde verändert.');const text=data.toString('utf8');offset=Math.max(0,Number(offset)||0);maxChars=Math.min(30000,Math.max(1000,Number(maxChars)||16000));return{ok:true,package_id:packageId,document_id:rel,offset,text:text.slice(offset,offset+maxChars),next_offset:Math.min(text.length,offset+maxChars),has_more:offset+maxChars<text.length,total_chars:text.length,content_is_verified_anonymized_markdown:true};}
+function readOutput(packageId,readCapability,offset=0,maxChars=16000){requireReadCapability(packageId,readCapability);const{p,m}=safeResolvePackage(packageId),rel=m.document;const data=readVerifiedFile(p,rel);if(sha256Buffer(data)!==m.document_sha256)throw new SafeError('Anonymisierte Markdown-Datei wurde verändert.');const text=data.toString('utf8');offset=Math.max(0,Number(offset)||0);maxChars=Math.min(30000,Math.max(1000,Number(maxChars)||16000));return{ok:true,package_id:packageId,document_id:rel,offset,text:text.slice(offset,offset+maxChars),next_offset:Math.min(text.length,offset+maxChars),has_more:offset+maxChars<text.length,total_chars:text.length,document_result:m.schema==='eu-privacy-package/3'?publicPositiveDocumentResult(m.document_result):null,content_is_verified_anonymized_markdown:true};}
 function unicodeSliceEnd(text,start,maxChars){
   let end=Math.min(text.length,start+maxChars);
   // Offsets in the public read contract are JavaScript character offsets.

@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { publicPositiveDocumentResult } = require('./batch-result-projection');
 
 function createBatchResultAccess(deps) {
   const {
@@ -19,13 +20,15 @@ function createBatchResultAccess(deps) {
 
   function verifiedResultPackage(state, item) {
     const published = publishedPackageRecord(item.package_id);
-    if (published?.state !== 'verified') return false;
+    if (published?.state !== 'verified') return null;
     const hasJournalResult = Object.hasOwn(item, 'document_result');
     const hasPackageResult = published.document_result !== null && published.document_result !== undefined;
     if (state.schema === 'datasecure-batch/1') {
-      return !hasJournalResult && !hasPackageResult;
+      return !hasJournalResult && !hasPackageResult ? published : null;
     }
-    return hasJournalResult && hasPackageResult && sameDocumentResult(item.document_result, published.document_result);
+    return hasJournalResult && hasPackageResult && sameDocumentResult(item.document_result, published.document_result)
+      ? published
+      : null;
   }
 
   function invalidCursor() {
@@ -70,12 +73,14 @@ function createBatchResultAccess(deps) {
     for (; nextIndex < state.items.length && results.length < limit; nextIndex++) {
       const item = state.items[nextIndex];
       if (item.status !== 'released' || item.analysis_acknowledged === true) continue;
-      if (!verifiedResultPackage(state, item)) throw new SafeError('Ein freigegebenes Ergebnis konnte nicht sicher verifiziert werden.');
+      const verified = verifiedResultPackage(state, item);
+      if (!verified) throw new SafeError('Ein freigegebenes Ergebnis konnte nicht sicher verifiziert werden.');
       const grant = issueReadCapability(item.package_id);
       results.push({
         package_id: item.package_id,
         read_capability: grant.read_capability,
-        read_capability_expires_at: grant.read_capability_expires_at
+        read_capability_expires_at: grant.read_capability_expires_at,
+        document_result: verified.document_result ? publicPositiveDocumentResult(verified.document_result) : null
       });
     }
     const available = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true).length;
@@ -113,8 +118,19 @@ function createBatchResultAccess(deps) {
         const progress = publicProgress(state);
         if (liveLocalExecutor(state) || !progress.complete) continue;
         const releasedItems = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true);
-        if (releasedItems.length === 0 || !releasedItems.every((item) => verifiedResultPackage(state, item))) continue;
-        candidates.push({ token, released: releasedItems.length, stopped: progress.stopped, completedAt: String(state.completed_at || state.updated_at || state.created_at || '') });
+        const verified = state.schema === 'datasecure-batch/2'
+          ? progress.result_grades_verified === true
+          : releasedItems.every((item) => verifiedResultPackage(state, item));
+        if (releasedItems.length === 0 || !verified) continue;
+        candidates.push({
+          token,
+          released: releasedItems.length,
+          stopped: progress.stopped,
+          grade_counts: progress.result_grade_counts,
+          omission_counts: progress.result_omission_counts,
+          grades_verified: progress.result_grades_verified,
+          completedAt: String(state.completed_at || state.updated_at || state.created_at || '')
+        });
       } catch {
         // Malformed or expired local state is not a handoff candidate.
       }

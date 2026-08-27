@@ -13,6 +13,7 @@ const {
   LEGACY_SCHEMA: LEGACY_EVIDENCE_SCHEMA,
   RECEIPT_ID_RE
 } = require('./batch-evidence');
+const { projectBatchResults } = require('./batch-result-projection');
 
 const MARKER_SCHEMA = 'datasecure-batch-terminal-evidence/2';
 const LEGACY_MARKER_SCHEMA = 'datasecure-batch-terminal-evidence/1';
@@ -49,13 +50,41 @@ function createBatchTerminalEvidence(options = {}) {
   const publishedPackageRecord = options.publishedPackageRecord;
 
   function terminal(state) {
-    return publicProgress(state).complete === true;
+    // Terminal detection must remain O(n). Package-bound result verification
+    // happens exactly once while the durable evidence record is created.
+    return publicProgress(state, { skipResultProjection: true }).complete === true;
+  }
+
+  function exportedMarkerMatchesState(marker, state) {
+    const record = marker.record;
+    // Historical receipts never exposed document grades and remain
+    // authoritative under their original append-only contract.
+    if (record.schema !== EVIDENCE_SCHEMA || state.schema === 'datasecure-batch/1') return true;
+    const projection = projectBatchResults(state);
+    const released = state.items.filter((item) => item.status === 'released').length;
+    const stopped = state.items.filter((item) => item.status === 'stopped').length;
+    return projection.grades_verified === true &&
+      record.batch_snapshot_schema === state.schema &&
+      record.profile === state.profile &&
+      record.image_handling === (state.remove_images === true ? 'remove_requested' : 'local_visual_review') &&
+      record.counts.total === state.items.length &&
+      record.counts.released === released &&
+      record.counts.stopped === stopped &&
+      record.counts.retryable === 0 && record.counts.pending === 0 &&
+      JSON.stringify(record.grade_counts) === JSON.stringify(projection.grade_counts) &&
+      JSON.stringify(record.omission_counts) === JSON.stringify(projection.omission_counts);
   }
 
   function reconcileTerminalEvidence(state) {
     if (!terminal(state)) return undefined;
     let marker = state.terminal_evidence;
+    const markerWasPresent = marker !== undefined;
     if (marker !== undefined) validateMarker(marker);
+    if (marker?.status === 'exported') {
+      if (!exportedMarkerMatchesState(marker, state)) return false;
+      try { removePending(marker.record); } catch { /* exported remains authoritative */ }
+      return true;
+    }
     if (!marker) {
       const receiptId = randomBytes(16).toString('hex');
       marker = {
@@ -71,7 +100,7 @@ function createBatchTerminalEvidence(options = {}) {
         return false;
       }
     }
-    if (marker.schema === MARKER_SCHEMA) {
+    if (markerWasPresent && marker.schema === MARKER_SCHEMA) {
       let expected;
       try {
         expected = makeRecord(state, marker.record.recorded_at, marker.receipt_id, { publishedPackageRecord });
@@ -79,10 +108,6 @@ function createBatchTerminalEvidence(options = {}) {
         return false;
       }
       if (JSON.stringify(expected) !== JSON.stringify(marker.record)) return false;
-    }
-    if (marker.status === 'exported') {
-      try { removePending(marker.record); } catch { /* exported remains authoritative */ }
-      return true;
     }
     try {
       createPending(marker.record);
