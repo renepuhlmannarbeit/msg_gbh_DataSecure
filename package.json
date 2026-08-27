@@ -45,7 +45,7 @@
     "benchmark:batch-phases": "node scripts/benchmark-batch-phases.mjs",
     "test:windows-visual": "node tests/windows-visual-acceptance.js",
     "test:skills": "node tests/test-contract-skill-acceptance.js && node tests/test-contract-skill-matrix.js",
-    "test:docs": "node scripts/verify-canonical-docs.mjs && node tests/test-ocr-result-contract.mjs && node tests/test-sea-plugin-assembly.js",
+    "test:docs": "node scripts/verify-canonical-docs.mjs && node tests/test-ocr-result-contract.mjs && node tests/test-sea-plugin-assembly.js && node tests/test-rc63-uat-kit-contract.js",
     "test:plugin-zip": "node scripts/verify-plugin-zip.mjs",
     "test:mcpb": "node scripts/verify-mcpb.mjs",
     "sync:mcpb-manifest": "node scripts/sync-mcpb-manifest.mjs",

@@ -1522,7 +1522,12 @@ kurzen Linux-Lauf statt der früheren sieben Jobs.
 Status: **offen**
 
 Vorhanden: dokumentierte UX-, Datenschutz-, Security-, Architektur- und
-Claude-Dokumentationsreviews sowie automatisierte native Windows-Formtests. Rest:
+Claude-Dokumentationsreviews sowie automatisierte native Windows-Formtests. Das
+RC63-UAT-Kit ist als lokale E0-Vorbereitung reproduzierbar: Ein dokumentierter
+Ablauf erzeugt nach dem Fixture-Build mit gepinntem `python-docx` exakt 111
+synthetische Eingänge in den von Anleitung und Sollmatrix genannten vier Gruppen.
+Ein maschinenlesbares Layout und ein Dokumentvertragstest halten Generator,
+Pfade, Zähler, Fehlercodes und die leeren Prüferfelder synchron. Rest:
 beobachtete Abnahme mit normalen Anwendern und Fach-/Datenschutzvertretung auf allen
 drei Plattformen. Die Abnahme muss insbesondere Cowork-Fresh-Install, beide
 Skillstarts, Connectorfehler, quantifiziertes Verwerfen, lokale Fachprüfung und

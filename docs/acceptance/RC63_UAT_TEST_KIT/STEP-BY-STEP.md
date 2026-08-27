@@ -1,14 +1,17 @@
-# Schritt-für-Schritt-UAT für DataSecure RC63
+# Schritt-für-Schritt-UAT für den DataSecure-RC63-Vertrag
 
 ## 1. Vorbereitung
 
 1. Verwende ein Testkonto und ausschließlich dieses synthetische Paket.
-2. Installiere `DataSecure-Privacy-Preflight-v3.2.0-rc63.zip` in Claude Desktop
-   und aktiviere das Plugin sowie den lokalen Connector.
-3. Starte Claude Desktop vollständig neu.
-4. Öffne eine neue Cowork-Aufgabe. Hänge noch keine Datei an den Chat.
-5. Schreibe: `Zeige mir den DataSecure-Diagnosestatus.`
-6. Prüfe, dass Version `3.2.0-rc63`, der lokale Connector und ein lokaler
+2. Erzeuge die 111 Eingänge mit den drei Befehlen aus `README.md`. Prüfe, dass
+   `docs/acceptance/RC63_UAT_TEST_KIT/inputs` genau 111 Dateien enthält.
+3. Baue das aktuelle Plugin mit `npm run build:plugin` und installiere den dabei
+   gemeldeten ZIP aus `dist` in Claude Desktop. Aktiviere Plugin und Connector.
+4. Starte Claude Desktop vollständig neu.
+5. Öffne eine neue Cowork-Aufgabe. Hänge noch keine Datei an den Chat.
+6. Schreibe: `Zeige mir den DataSecure-Diagnosestatus.`
+7. Prüfe, dass die Version mit `package.json`, dem installierten ZIP und dem
+   lokalen Connector übereinstimmt und ein lokaler
    Privacy-Ordner angezeigt werden. Erfasse keine Pfade im Evidence-Log.
 
 Erwartung: Der Status enthält nur technische Metadaten. Ein fehlender Connector
@@ -85,6 +88,8 @@ PASS:
 - XLSX, PPTX, PDF und eigenständiges PNG stoppen als noch nicht freigegebene
   Formate;
 - das absichtlich beschädigte DOCX stoppt als ungültiger/unsicherer Container;
+- erwartete inhaltsfreie Codes: `SOURCE_FORMAT_NOT_RELEASED` für PDF/PNG und
+  `SOURCE_TYPE_MISMATCH` für die minimalistischen XLSX-/PPTX-/DOCX-Fixtures;
 - Ergebnisgrad je Position: `Sicher nicht verarbeitet`;
 - die fünf Originale bleiben unverändert und Claude erhält keinen Inhalt.
 
@@ -138,4 +143,3 @@ Go für RC63-UAT nur, wenn UAT-01 und UAT-02 `PASS` sind und kein harter
 Datenschutzfehler auftritt. UAT-03 darf nur mit dem beschriebenen lokalen
 Review-/Auslassungsverhalten bestehen. UAT-04 muss sicher stoppen. Ein `BLOCKED`
 ersetzt keinen erforderlichen positiven Zielhostnachweis.
-

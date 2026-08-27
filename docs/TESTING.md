@@ -442,3 +442,30 @@ Evidence-Commit; ein früher read-only Poll darf davor noch `unavailable` sehen.
 `b5360c2da4ba937b924b2bd4ef0b8dd4fda7aa11c48fa2688b4bef02393382a7`.
 Diese lokale E0-Evidenz ersetzt keine Fresh-Install-, Cowork-UI-, Accessibility-
 oder Security-E3-Abnahme.
+
+## Ausführbares RC63-UAT-Kit 27.08.2026
+
+Das UAT-Kit besitzt nun einen einzigen dokumentierten Aufbauweg: zuerst
+`npm run fixtures`, danach die gepinnte Python-Abhängigkeit installieren und den
+Generator mit `--out docs/acceptance/RC63_UAT_TEST_KIT/inputs` ausführen. Das
+maschinenlesbare Fixture-Layout und der Dokumentvertragstest belegen exakt 111
+synthetische Eingänge in vier Gruppen: 4 positive, 2 Review-, 5 gesperrte und 100
+Batchdateien. Der Generator behält seinen bisherigen Standardpfad, akzeptiert aber
+ein explizites, sicher begrenztes Zielverzeichnis und prüft sein Ergebnis gegen das
+Layout.
+
+Die fünf gesperrten Eingänge wurden gegen den tatsächlichen Preflight geprüft:
+PDF und PNG enden mit `SOURCE_FORMAT_NOT_RELEASED`; die minimalistischen XLSX-,
+PPTX- und beschädigten DOCX-Fixtures mit `SOURCE_TYPE_MISMATCH`. Die Sollmatrix
+bildet diese Codes ab. Produktversion und Build-Commit sind in der Evidenzvorlage
+absichtlich leer, damit ausschließlich der wirklich getestete Stand eingetragen
+wird.
+
+`test-rc63-uat-kit-contract.js` bestand mit 5 von 5 Fällen; `npm run test:docs`
+und die vollständige Regression `npm run test:ci` endeten jeweils mit Exit-Code
+0. Beide erzeugten DOCX-Dateien wurden strukturell mit
+`python-docx` geprüft; das positive Profil enthält kein Bild, das Reviewprofil
+genau eines. Eine visuelle LibreOffice-Renderprüfung war in dieser lokalen
+Umgebung mangels ausführbarer LibreOffice-Installation nicht möglich. Diese
+E0-Vorbereitung ersetzt weder den installierten 100-Dateien-/500-MiB-Lauf noch
+die beobachteten menschlichen E1/E2/E3-Abnahmen.

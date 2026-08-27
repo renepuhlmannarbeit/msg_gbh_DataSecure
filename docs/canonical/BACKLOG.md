@@ -167,11 +167,11 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | BL-010.6 | Versionsarchiv und Rückrolle testen. | **offen** |
 | BL-051.1 | Frische ZIP-Installation auf Windows x64 und macOS Intel/ARM abnehmen. | **offen** |
 | BL-051.2 | Marketplace-Installation auf Windows x64 und macOS Intel/ARM abnehmen. | **offen** |
-| BL-051.3 | 100-Dateien-/500-MB-End-to-End-Abnahme durchführen. | **offen** |
+| BL-051.3 | 100-Dateien-/500-MB-End-to-End-Abnahme durchführen; das RC63-UAT-Kit erzeugt die 100 synthetischen Eingänge reproduzierbar, die installierte E1-Messung bleibt offen. | **offen** |
 | BL-051.4 | Rückrolle auf Windows x64 und macOS Intel/ARM abnehmen. | **offen** |
-| BL-052.1 | Beobachtete Anwenderabnahme durchführen. | **offen** |
+| BL-052.1 | Beobachtete Anwenderabnahme durchführen; ausführbares RC63-Kit mit 111 synthetischen Eingängen und leerer Evidenzvorlage ist als E0-Vorbereitung vorhanden. | **offen** |
 | BL-052.2 | IT-/Health-IT-Fachabnahme durchführen. | **offen** |
-| BL-052.3 | Datenschutzabnahme mit synthetischen Daten durchführen. | **offen** |
+| BL-052.3 | Datenschutzabnahme mit synthetischen Daten durchführen; reproduzierbare Eingänge, inhaltsfreie Sollmatrix und unverfälschte leere Evidenzfelder sind vorbereitet. | **offen** |
 | BL-052.4 | Gebrauchstauglichkeit mit beobachteten Nutzenden abnehmen. | **offen** |
 | BL-052.5 | Zielarchitektur und lokale Sicherheitsgrenze vor dem breiten Rollout durch Architektur und Security freigeben. | **offen** |
 

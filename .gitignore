@@ -18,6 +18,7 @@
 # which stay tracked. A helper placed here would silently never reach a clone;
 # tests/test-architecture-contracts.js fails if that happens again.
 /tests/fixtures/
+/docs/acceptance/RC63_UAT_TEST_KIT/inputs/
 
 # Local privacy workspaces / outputs
 Input/

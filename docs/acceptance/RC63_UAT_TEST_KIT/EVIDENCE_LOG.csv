@@ -1,7 +1,7 @@
 test_id,platform,os_version,claude_version,plugin_version,build_commit,artifact_sha256,cold_or_warm,file_count,duration_seconds,grade_complete,grade_usable_with_omissions,grade_not_processed,grade_unavailable,images_removed,visuals_withheld,host_permission_prompts,data_secure_dialogs,one_picker,no_raw_data_in_chat,originals_unchanged,no_duplicate_output,result,error_code,short_content_free_observation,reviewer,date_utc
-UAT-01,,,,3.2.0-rc63,d66aae5,,cold,1,,,,,,,,,,,,,,,,,,
-UAT-02,,,,3.2.0-rc63,d66aae5,,warm,4,,,,,,,,,,,,,,,,,,
-UAT-03,,,,3.2.0-rc63,d66aae5,,warm,2,,,,,,,,,,,,,,,,,,
-UAT-04,,,,3.2.0-rc63,d66aae5,,warm,5,,,,,,,,,,,,,,,,,,
-UAT-05,,,,3.2.0-rc63,d66aae5,,cold,10,,,,,,,,,,,,,,,,,,
-UAT-06,,,,3.2.0-rc63,d66aae5,,warm,100,,,,,,,,,,,,,,,,,,
+UAT-01,,,,,,,cold,1,,,,,,,,,,,,,,,,,,
+UAT-02,,,,,,,warm,4,,,,,,,,,,,,,,,,,,
+UAT-03,,,,,,,warm,2,,,,,,,,,,,,,,,,,,
+UAT-04,,,,,,,warm,5,,,,,,,,,,,,,,,,,,
+UAT-05,,,,,,,cold,10,,,,,,,,,,,,,,,,,,
+UAT-06,,,,,,,warm,100,,,,,,,,,,,,,,,,,,

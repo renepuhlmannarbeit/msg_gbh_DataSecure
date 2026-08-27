@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import shutil
 import struct
 import zipfile
@@ -13,9 +14,12 @@ from docx import Document
 from docx.shared import Inches, Pt
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "test-data" / "generated"
+DEFAULT_OUT = ROOT / "test-data" / "generated"
+OUT = DEFAULT_OUT
 REPOSITORY = Path(__file__).resolve().parents[4]
 SYNTHETIC_IMAGE = REPOSITORY / "tests" / "fixtures" / "synthetic_scan.png"
+LAYOUT_FILE = Path(__file__).with_name("fixture-layout.json")
+RC63_OUT = REPOSITORY / "docs" / "acceptance" / "RC63_UAT_TEST_KIT" / "inputs"
 
 PROFILE = """# Mitarbeiterprofil – vollständig synthetisch
 
@@ -46,6 +50,8 @@ erwartet eine sichere lokale Entscheidung oder einen dokumentierten sicheren Sto
 """
 
 def clean_output() -> None:
+    if OUT.is_symlink():
+        raise RuntimeError("Refusing a linked output directory")
     if OUT.exists():
         shutil.rmtree(OUT)
     for folder in ("01-positive", "02-review", "03-blocked", "04-batch-100"):
@@ -131,10 +137,61 @@ Zertifizierung: ISTQB Certified Tester Foundation Level
 """
         (folder / name).write_text(text, encoding="utf-8")
 
+def expanded_layout() -> set[str]:
+    layout = json.loads(LAYOUT_FILE.read_text(encoding="utf-8"))
+    if layout.get("schema") != "datasecure-synthetic-acceptance-layout/1":
+        raise RuntimeError("Unsupported fixture layout")
+    expected: set[str] = set()
+    for group, definition in layout["groups"].items():
+        for name in definition.get("files", []):
+            expected.add(f"{group}/{name}")
+        sequence = definition.get("sequence")
+        if sequence:
+            for index in range(1, int(sequence["count"]) + 1):
+                expected.add(f"{group}/{sequence['pattern'].format(index=index)}")
+    return expected
+
+def verify_output_layout() -> None:
+    actual = {
+        path.relative_to(OUT).as_posix()
+        for path in OUT.rglob("*")
+        if path.is_file()
+    }
+    expected = expanded_layout()
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise RuntimeError(f"Fixture layout mismatch: missing={missing}, extra={extra}")
+
+def safe_output(raw: Path) -> Path:
+    candidate = raw.expanduser().resolve()
+    allowed_fixed = {DEFAULT_OUT.resolve(), RC63_OUT.resolve()}
+    allowed_test_target = (
+        candidate.parent == REPOSITORY.resolve()
+        and candidate.name.startswith(".tmp-rc63-uat-")
+    )
+    if candidate not in allowed_fixed and not allowed_test_target:
+        raise ValueError(
+            "Output must be the documented RC30/RC63 target or a repository-local "
+            ".tmp-rc63-uat-* test directory"
+        )
+    return candidate
+
 def main() -> None:
+    global OUT
     parser = argparse.ArgumentParser()
     parser.add_argument("--with-500mb-batch", action="store_true")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=DEFAULT_OUT,
+        help="Dedicated output directory (default: RC30 test-data/generated)",
+    )
     args = parser.parse_args()
+    try:
+        OUT = safe_output(args.out)
+    except ValueError as error:
+        parser.error(str(error))
     clean_output()
     write_text_files()
     make_docx(OUT / "01-positive" / "personnel-profile.docx")
@@ -143,6 +200,8 @@ def main() -> None:
     make_batch()
     if args.with_500mb_batch:
         make_batch(large=True)
+    if not args.with_500mb_batch:
+        verify_output_layout()
     print(f"Synthetic acceptance data created: {OUT}")
 
 if __name__ == "__main__":
