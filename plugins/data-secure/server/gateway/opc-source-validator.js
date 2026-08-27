@@ -6,6 +6,26 @@ const OFFICE_REL_TYPES = new Set([
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
   'http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument'
 ]);
+const OFFICE_REL_NAMESPACES = Object.freeze([
+  'http://schemas.openxmlformats.org/officedocument/2006/relationships/',
+  'http://purl.oclc.org/ooxml/officedocument/relationships/'
+]);
+const BLOCKED_OFFICE_RELATIONSHIP_NAMES = new Set([
+  'oleobject',
+  'package',
+  'attachedtemplate',
+  'externallink',
+  'vbaproject',
+  'customui',
+  'activex'
+]);
+const BLOCKED_MICROSOFT_REL_TYPES = new Set([
+  'http://schemas.microsoft.com/office/2006/relationships/vbaproject',
+  'http://schemas.microsoft.com/office/2006/relationships/activexcontrol',
+  'http://schemas.microsoft.com/office/2006/relationships/activexcontrolbinary',
+  'http://schemas.microsoft.com/office/2006/relationships/ui/extensibility',
+  'http://schemas.microsoft.com/office/2007/relationships/ui/extensibility'
+]);
 const MAIN = Object.freeze({
   docx: Object.freeze({
     part: 'word/document.xml',
@@ -157,26 +177,55 @@ function attribute(node, name) {
   return node.attributes.get(name) || '';
 }
 
-function canonicalTarget(value) {
+function canonicalTargetSegments(value) {
   const target = String(value || '');
   if (!target || target.includes('\\') || target.includes('?') || target.includes('#') ||
       target.startsWith('/') || /^[a-z][a-z0-9+.-]*:/iu.test(target)) return null;
-  let decoded;
-  try { decoded = decodeURIComponent(target); } catch { return null; }
-  if (decoded.includes('\\') || decoded.includes('?') || decoded.includes('#') ||
-      decoded.startsWith('/') || /^[a-z][a-z0-9+.-]*:/iu.test(decoded)) return null;
-  const parts = decoded.split('/');
-  if (parts.some((part) => !part || part === '.' || part === '..')) return null;
-  return parts.join('/');
+  const parts = [];
+  for (const rawPart of target.split('/')) {
+    if (!rawPart) return null;
+    let decoded;
+    try { decoded = decodeURIComponent(rawPart); } catch { return null; }
+    if (!decoded || decoded === '.' || decoded.includes('/') || decoded.includes('\\') ||
+      decoded.includes('?') || decoded.includes('#') ||
+      (decoded === '..' && rawPart !== '..')) return null;
+    parts.push(decoded);
+  }
+  return parts;
 }
 
 function resolveRelationshipTarget(relationshipPart, target) {
-  const canonical = canonicalTarget(target);
-  if (!canonical) return null;
-  if (relationshipPart === '_rels/.rels') return canonical;
-  const match = /^(.*\/)?_rels\/([^/]+)\.rels$/u.exec(relationshipPart);
-  if (!match) return null;
-  return `${match[1] || ''}${canonical}`;
+  const targetParts = canonicalTargetSegments(target);
+  if (!targetParts) return null;
+  let resolved = [];
+  if (relationshipPart === '_rels/.rels') {
+    resolved = [];
+  } else {
+    const match = /^(.*\/)?_rels\/([^/]+)\.rels$/u.exec(relationshipPart);
+    if (!match) return null;
+    const sourcePart = `${match[1] || ''}${match[2]}`;
+    resolved = sourcePart.split('/').slice(0, -1);
+  }
+  for (const part of targetParts) {
+    if (part === '..') {
+      if (resolved.length === 0) return null;
+      resolved.pop();
+    } else {
+      resolved.push(part);
+    }
+  }
+  if (resolved.length === 0) return null;
+  return resolved.join('/');
+}
+
+function isBlockedRelationshipType(value) {
+  const type = String(value || '').toLowerCase();
+  if (BLOCKED_MICROSOFT_REL_TYPES.has(type)) return true;
+  for (const namespace of OFFICE_REL_NAMESPACES) {
+    if (!type.startsWith(namespace)) continue;
+    return BLOCKED_OFFICE_RELATIONSHIP_NAMES.has(type.slice(namespace.length));
+  }
+  return false;
 }
 
 function validateOpcControls({ declaredType, entries, controlParts }) {
@@ -210,7 +259,7 @@ function validateOpcControls({ declaredType, entries, controlParts }) {
       if (String(attribute(node, 'TargetMode')).toLowerCase() === 'external') {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
-      if (/(?:oleobject|package|attachedtemplate|externalLink|hyperlink|vbaProject|customUI|activeX)/iu.test(type)) {
+      if (isBlockedRelationshipType(type)) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       const resolvedTarget = resolveRelationshipTarget(name, target);

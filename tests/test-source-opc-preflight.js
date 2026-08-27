@@ -5,18 +5,21 @@ const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
 const { zipStore } = require('./lib/zip');
-const { opcControlEntries } = require('./lib/opc');
+const { opcControlEntries, TYPES } = require('./lib/opc');
 const { inspectSourceFormatFromFd } = require('../plugins/data-secure/server/gateway/source-format-inspector');
 
 const { test, done, assert } = createSuite('OPC source integrity preflight');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-opc-preflight-'));
 
-function docx(controlOverrides = {}, extras = []) {
-  const controls = Object.fromEntries(opcControlEntries('docx'));
+function docx(controlOverrides = {}, extras = [], fixtureOptions = {}) {
+  const generatedControls = opcControlEntries('docx', fixtureOptions);
+  const controls = Object.fromEntries(generatedControls);
+  const generatedParts = generatedControls.filter(([name]) => !['[Content_Types].xml', '_rels/.rels'].includes(name));
   return zipStore([
     ['[Content_Types].xml', controlOverrides.contentTypes ?? controls['[Content_Types].xml']],
     ['_rels/.rels', controlOverrides.relationships ?? controls['_rels/.rels']],
     ['word/document.xml', '<w:document xmlns:w="urn:test"><w:body/></w:document>'],
+    ...generatedParts,
     ...extras
   ]);
 }
@@ -52,6 +55,26 @@ test('a real minimal DOCX OPC package passes every control and CRC gate', () => 
   });
 });
 
+test('standard package metadata relationships remain valid DOCX candidates', () => {
+  const result = inspect('standard-package-metadata.docx', docx({}, [], { standardPackageMetadata: true }));
+  assert.strictEqual(result.verdict, 'candidate');
+  assert.strictEqual(result.code, 'SOURCE_FORMAT_CANDIDATE');
+});
+
+test('a package digital-signature origin relationship remains a valid DOCX candidate', () => {
+  const controls = Object.fromEntries(opcControlEntries('docx'));
+  const relationships = controls['_rels/.rels'].replace(
+    '</Relationships>',
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/origin" Target="_xmlsignatures/origin.sigs"/></Relationships>'
+  );
+  const result = inspect('digital-signature-origin.docx', docx(
+    { relationships },
+    [['_xmlsignatures/origin.sigs', '<SignatureOrigin/>']]
+  ));
+  assert.strictEqual(result.verdict, 'candidate');
+  assert.strictEqual(result.code, 'SOURCE_FORMAT_CANDIDATE');
+});
+
 test('CRC damage in a non-control payload is rejected before snapshot', () => {
   const archive = Buffer.from(docx());
   archive[payloadOffset(archive, 'word/document.xml')] ^= 0x01;
@@ -85,6 +108,50 @@ test('external or active relationships anywhere in the package are rejected', ()
   assert.strictEqual(result.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
 });
 
+test('each blocked internal relationship type remains fail-closed', () => {
+  const blockedTypes = [
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/package',
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject',
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/vbaProject',
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate',
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customUI',
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/activeX',
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink',
+    'http://purl.oclc.org/ooxml/officeDocument/relationships/package',
+    'http://schemas.microsoft.com/office/2006/relationships/vbaProject',
+    'http://schemas.microsoft.com/office/2006/relationships/activeXControl',
+    'http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary',
+    'http://schemas.microsoft.com/office/2006/relationships/ui/extensibility',
+    'http://schemas.microsoft.com/office/2007/relationships/ui/extensibility'
+  ];
+  for (const [index, type] of blockedTypes.entries()) {
+    const relationships = `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="${type}" Target="parts/blocked-${index}.xml"/></Relationships>`;
+    const result = inspect(`blocked-relationship-${index}.docx`, docx({}, [
+      ['word/_rels/document.xml.rels', relationships],
+      [`word/parts/blocked-${index}.xml`, '<blocked/>']
+    ]));
+    assert.strictEqual(result.verdict, 'rejected', type);
+    assert.strictEqual(result.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED', type);
+  }
+});
+
+test('internal hyperlinks resolve locally while external hyperlinks remain blocked', () => {
+  const internal = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="links/reference.xml"/></Relationships>';
+  const internalResult = inspect('internal-hyperlink.docx', docx({}, [
+    ['word/_rels/document.xml.rels', internal],
+    ['word/links/reference.xml', '<reference/>']
+  ]));
+  assert.strictEqual(internalResult.verdict, 'candidate');
+  assert.strictEqual(internalResult.code, 'SOURCE_FORMAT_CANDIDATE');
+
+  const external = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.test" TargetMode="External"/></Relationships>';
+  const externalResult = inspect('external-hyperlink.docx', docx({}, [
+    ['word/_rels/document.xml.rels', external]
+  ]));
+  assert.strictEqual(externalResult.verdict, 'rejected');
+  assert.strictEqual(externalResult.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+});
+
 test('internal relationships must resolve to a contained package part without encoded traversal', () => {
   const rel = (target) => `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="${target}"/></Relationships>`;
   const valid = inspect('internal-valid.docx', docx({}, [
@@ -92,6 +159,12 @@ test('internal relationships must resolve to a contained package part without en
     ['word/styles.xml', '<w:styles xmlns:w="urn:test"/>']
   ]));
   assert.strictEqual(valid.verdict, 'candidate');
+  const validParent = inspect('internal-parent-valid.docx', docx({}, [
+    ['word/_rels/document.xml.rels', rel('../customXml/item1.xml')],
+    ['customXml/item1.xml', '<customXml/>']
+  ]));
+  assert.strictEqual(validParent.verdict, 'candidate');
+  assert.strictEqual(validParent.code, 'SOURCE_FORMAT_CANDIDATE');
   for (const target of ['../custom.xml', '%2e%2e/custom.xml', 'missing.xml']) {
     const result = inspect(`internal-${encodeURIComponent(target)}.docx`, docx({}, [
       ['word/_rels/document.xml.rels', rel(target)]
@@ -99,6 +172,12 @@ test('internal relationships must resolve to a contained package part without en
     assert.strictEqual(result.verdict, 'rejected');
     assert.strictEqual(result.code, 'SOURCE_CONTAINER_CORRUPT');
   }
+  const escapedRoot = inspect('internal-root-escape.docx', docx({}, [
+    ['word/_rels/document.xml.rels', rel('../../outside.xml')],
+    ['outside.xml', '<outside/>']
+  ]));
+  assert.strictEqual(escapedRoot.verdict, 'rejected');
+  assert.strictEqual(escapedRoot.code, 'SOURCE_CONTAINER_CORRUPT');
   const duplicateIds = `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme.xml"/></Relationships>`;
   const duplicateResult = inspect('internal-duplicate-id.docx', docx({}, [
     ['word/_rels/document.xml.rels', duplicateIds],
@@ -115,6 +194,20 @@ test('valid XLSX structure remains structurally checked but product-locked', () 
   assert.strictEqual(result.verdict, 'not_released');
   assert.strictEqual(result.code, 'SOURCE_FORMAT_NOT_RELEASED');
   assert.strictEqual(result.structure.crc_verified, true);
+});
+
+test('standard package metadata cannot unlock XLSX or PPTX', () => {
+  for (const kind of ['xlsx', 'pptx']) {
+    const type = TYPES[kind];
+    const bytes = zipStore([
+      ...opcControlEntries(kind, { standardPackageMetadata: true }),
+      [type.part, '<root/>']
+    ]);
+    const result = inspect(`locked-with-metadata.${kind}`, bytes);
+    assert.strictEqual(result.verdict, 'not_released');
+    assert.strictEqual(result.code, 'SOURCE_FORMAT_NOT_RELEASED');
+    assert.strictEqual(result.structure.crc_verified, true);
+  }
 });
 
 done(() => fs.rmSync(root, { recursive: true, force: true }));

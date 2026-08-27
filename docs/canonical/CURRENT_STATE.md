@@ -1,14 +1,15 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 27.08.2026 · geprüfter Produktstand: RC63
+Stand: 27.08.2026 · geprüfter Produktstand: RC64
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
 Restdifferenz, `offen` bedeutet ohne belastbare Produktimplementierung. Testdateien
 sind Evidenz für Codeverhalten, nicht automatisch für installierte Claude-Oberflächen.
 
-Der aktuelle RC63-Arbeitsstand projiziert die bereits dauerhaft gebundenen DS-045-
-Grade zusätzlich paketverifiziert in Progress, Abschluss, Results und Cowork.
+Der aktuelle RC64-Arbeitsstand erhält die RC63-Projektion der dauerhaft gebundenen
+DS-045-Grade in Progress, Abschluss, Results und Cowork und präzisiert zusätzlich
+die OPC-Beziehungsprüfung für reale Office-Dokumente.
 Die direkten Projektions-, IPC-, Abschluss-, Results-, Paging-, Recovery-, Gateway-, Batch- und
 MCP-Tests sind grün; der vollständige lokale Regressionslauf wird in
 `docs/TESTING.md` als E0-Codeevidenz dokumentiert. Er ist keine installierte
@@ -514,6 +515,14 @@ aktive Beziehungen werden nicht verfolgt. Danach bindet ein SHA-256 über den
 geprüften Descriptor die Entscheidung an exakt den Digest der Snapshot-Kopie.
 Verschlüsselte, ZIP64-, beschädigte, aktive und übergroße Container werden ohne
 Arbeitskopie abgewiesen. Parser- und Residualprüfung bleiben nachgelagerte Gates.
+RC64 klassifiziert aktive Beziehungstypen als vollständige URI statt über ein
+Teilstringmuster. Standard-Paketmetadaten (`core-properties`,
+`extended-properties`, `thumbnail`, Signaturursprung) bleiben dadurch zulässiger
+statischer OPC-Inhalt. Interne Hyperlinks und normale relative Ziele dürfen nur
+auf einen tatsächlich vorhandenen Part innerhalb der Paketwurzel zeigen;
+externe Ziele, Root-Escapes, OLE/Package, VBA, Attached Templates, External Links,
+Custom UI und ActiveX stoppen weiterhin vor jeder Arbeitskopie. XLSX und PPTX
+bleiben unabhängig davon nicht freigegeben.
 
 Der aktive Parserpfad hat feste und getestete Ressourcenbudgets. Jede Plattform
 startet Node mit höchstens 384 MiB V8-Heap und der aufrufende Prozess beendet einen
@@ -1563,8 +1572,11 @@ RC63 ergänzt eine gemeinsame fail-closed Projektion in terminalem Progress,
 bestehendem Abschlussdialog, Results und tokenfreiem Cowork-Handoff. Positive
 Grade werden an der Ausgabegrenze erneut gegen das Paket geprüft; laufende und
 historische Zustände bleiben `unavailable`, und Acknowledgements erzeugen keinen
-zweiten Abschlussdialog. E1/E3 fehlen noch. Die
-Strukturprüfung schaltet insbesondere XLSX und PPTX nicht frei.
+zweiten Abschlussdialog. Die RC64-Gegenprobe ergänzt reale Standard-Paketmetadaten und sichere relative
+OPC-Zielauflösung: 4 positive UAT-Formate und beide Revieweingänge werden als
+Kandidaten erkannt, alle 5 Negativformate stoppen und die 100 Textdateien bleiben
+Kandidaten. Die Formatfreigabe wird dadurch nicht erweitert. E1/E3 fehlen weiter.
+Die Strukturprüfung schaltet insbesondere XLSX und PPTX nicht frei.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
 
 - Automatische Retention überspringt `Output` unabhängig vom Alter; nur ein

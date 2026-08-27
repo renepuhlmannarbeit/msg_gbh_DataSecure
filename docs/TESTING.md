@@ -383,3 +383,28 @@ Formatkombinations-, 38 Gateway-End-to-End-, 31 MCP-Protokoll- und 20 adversaria
 Tests sowie Mapping/Outbox, direkten Picker/Intake, lokalen Handoff, gemischte
 TXT-/CSV-/DOCX-Wiederaufnahme und die inaktiven Performance-/OCR-Harnesses. Dies ist
 lokale E0-Evidenz und ersetzt keine Fresh-Install-, Cowork-UI- oder macOS-Abnahme.
+
+## Lokaler RC64-OPC-Interoperabilitätsnachweis 27.08.2026
+
+RC64 klassifiziert OPC-Beziehungstypen vollständig statt über ungebundene
+Teilstrings. Dadurch bleiben Standard-Paketmetadaten (`core-properties`,
+`extended-properties`, `thumbnail`) und der Signaturursprung zulässige statische
+DOCX-Inhalte. Die Product-Owner-Entscheidung folgt DS-017 und DS-049: enthaltene
+interne Hyperlinks und normale relative Ziele dürfen ausschließlich auf vorhandene
+Parts innerhalb der Paketwurzel zeigen; externe Ziele, Root-Escapes sowie OLE,
+Package, VBA, Attached Templates, External Links, Custom UI und ActiveX stoppen
+weiterhin vor jeder privaten Arbeitskopie. XLSX und PPTX bleiben gesperrt.
+
+Die verlangte synthetische UAT-Admission-Gegenprobe ergab exakt 111 Eingänge:
+`01-positive` 4 Kandidaten, `02-review` 2 Kandidaten, `03-blocked` 5 gestoppte
+Dateien und `04-batch-100` 100 Kandidaten. `npm run test:source-preflight`
+bestand mit 16 Source-, 12 OPC- und 5 Admission-Tests; `npm run
+test:result-grades` bestand mit 6 Grad- und 4 Projektionstests. `npm run test:ci`
+lief vollständig mit Exit-Code 0. Der gebaute Plugin-ZIP bestand Quellparität,
+13 Skill-Vertragstests und die 150-Fälle-Vertragsmatrix.
+
+`DataSecure-Privacy-Preflight-v3.2.0-rc64.zip` enthält 385 Einträge und 22.217.142
+Bytes; sein SHA-256 lautet
+`755f8d7bbc6b787e735c629a116b742a069b83e8931ed466dfc034c467432b9d`.
+Alle genannten Eingänge waren synthetisch. Diese lokale E0-Evidenz ersetzt keine
+Fresh-Install-, Cowork-UI-, Accessibility-, Security-E3- oder Drei-OS-Abnahme.
