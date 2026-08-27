@@ -1587,6 +1587,12 @@ OPC-Zielauflösung: 4 positive UAT-Formate und beide Revieweingänge werden als
 Kandidaten erkannt, alle 5 Negativformate stoppen und die 100 Textdateien bleiben
 Kandidaten. Die Formatfreigabe wird dadurch nicht erweitert. E1/E3 fehlen weiter.
 Die Strukturprüfung schaltet insbesondere XLSX und PPTX nicht frei.
+
+Der RC64-Testnachtrag für BL-049.1a verändert keinen Produktcode: Die synthetische
+Identitätsmutation verwendet für `ino` und `mtimeMs` garantiert verschiedene,
+exakt darstellbare Werte statt eines auf großen NTFS-Dateiindizes wirkungslosen
+`+1`. Die Gegenprobe erkannte 400 von 400 Mutationen; der direkte Inspector-Test
+bestand 20 aufeinanderfolgende Läufe sowie Source-Preflight und lokales CI.
 ## RC44-Nachtrag – zuerst umgesetzte Reviewbefunde
 
 - Automatische Retention überspringt `Output` unabhängig vom Alter; nur ein

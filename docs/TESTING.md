@@ -408,3 +408,12 @@ Bytes; sein SHA-256 lautet
 `755f8d7bbc6b787e735c629a116b742a069b83e8931ed466dfc034c467432b9d`.
 Alle genannten Eingänge waren synthetisch. Diese lokale E0-Evidenz ersetzt keine
 Fresh-Install-, Cowork-UI-, Accessibility-, Security-E3- oder Drei-OS-Abnahme.
+
+## Lokaler RC64-Nachtrag zur Inode-Testpräzision 27.08.2026
+
+Der ausschließlich synthetische BL-049.1a-Testfix verändert keinen Produktcode und
+keine ausgelieferten Artefakte. Eine Gegenprobe mit 400 Dateien erkannte 400
+Identitätsänderungen (`noThrow: 0`); `test-source-format-inspector.js` bestand 20
+aufeinanderfolgende Läufe. `npm run test:source-preflight` und `npm run test:ci`
+endeten jeweils mit Exit-Code 0. Menschliche E1/E2/E3-Nachweise werden dadurch
+nicht ersetzt.

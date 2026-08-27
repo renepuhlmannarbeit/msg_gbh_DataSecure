@@ -203,13 +203,19 @@ test('descriptor identity is checked before and after reads', () => {
   const stat = fs.lstatSync(full);
   const fd = fs.openSync(full, fs.constants.O_RDONLY);
   try {
-    assert.throws(() => inspectSourceFormatFromFd(fd, { ...stat, ino: Number(stat.ino) + 1 }, '.txt'),
+    const changedIno = Number(stat.ino) === 0 ? 1 : 0;
+    assert.notStrictEqual(changedIno, Number(stat.ino));
+    assert.throws(() => inspectSourceFormatFromFd(fd, { ...stat, ino: changedIno }, '.txt'),
       (error) => error instanceof SourceFormatError && error.code === 'SOURCE_IDENTITY_CHANGED');
     let calls = 0;
     assert.throws(() => inspectSourceFormatFromFd(fd, stat, '.txt', {
       fstatSync(value) {
         const current = fs.fstatSync(value);
-        if (++calls > 1) return { ...current, mtimeMs: current.mtimeMs + 1, isFile: () => true };
+        if (++calls > 1) {
+          const changedMtimeMs = Number(current.mtimeMs) === 0 ? 1 : 0;
+          assert.notStrictEqual(changedMtimeMs, Number(current.mtimeMs));
+          return { ...current, mtimeMs: changedMtimeMs, isFile: () => true };
+        }
         return current;
       }
     }), (error) => error.code === 'SOURCE_IDENTITY_CHANGED');
