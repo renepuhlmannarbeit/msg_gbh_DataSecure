@@ -7,10 +7,55 @@
 Abschluss- und Cowork-Projektion"; DS-057 (Rang der Maschinenverträge)
 **Ausgangsstand:** `main` auf `6e95d81`, Produktversion `3.2.0-rc63`
 
-## 0. Vorbedingung: Product-Owner-Entscheidung
+## 0. Entscheidung: **Zielbild (A) ist gewählt**
 
-Dieser Vorgang beginnt mit einer Entscheidung, nicht mit Code. Es liegt ein echter
-Zielkonflikt vor:
+**Getroffen am 27.08.2026, delegiert vom Product Owner. Umzusetzen ist
+ausschließlich Zielbild (A). Zielbild (B) ist verworfen.**
+
+Begründung, in der Reihenfolge ihres Gewichts:
+
+1. **(A) ist keine neue Entscheidung, (B) wäre eine.** `RESULT_GRADES_V1.md`
+   verlangt die erneute Bindung bereits; (A) stellt nur den vertragsgemäßen
+   Zustand her. (B) verlangt eine neue, ausdrücklich ersetzende DS-ID in
+   `DECISIONS.md`, also einen Eingriff in das Entscheidungsregister nach DS-057.
+   Ein solcher Eingriff ist die teuerste verfügbare Option für den geringsten
+   Gewinn.
+2. **Der Cowork-Handoff verhält sich unter (A) messbar besser.**
+   `batch-results.js:121-124` filtert einen Stapel mit `grades_verified !== true`
+   aus der Kandidatenliste. Unter (A) wird ein Stapel mit verlorenem Export gar
+   nicht zur Auswertung angeboten. Unter (B) wird er angeboten und scheitert erst
+   danach hart in `listBatchResults` mit „Ein freigegebenes Ergebnis konnte nicht
+   sicher verifiziert werden." (A) ersetzt einen Fehlschlag durch eine
+   Nichtauswahl.
+3. **Die Aussage lädt zu einer Handlung ein und muss deshalb aktuell sein.**
+   Der Abschluss meldet „Stapel abgeschlossen: N vollständig verarbeitet" und
+   setzt `next_action: 'open_local_overview'`. Wer auf eine nicht mehr vorhandene
+   Übersicht geschickt wird, erhält eine falsche Zusage. Der Fallbacktext bei
+   `grades_verified: false` („Ergebnisse bereitgestellt … Ergebnisgrade sind
+   nicht verfügbar.") ist zudem selbst nützlich: er zeigt an, dass sich am
+   lokalen Export etwas geändert hat.
+4. **Verteidigung in der Tiefe.** Ein manipulierter Checkpoint kann heute über
+   den Marker positive Gradzähler erzeugen. Die eigentliche Absicherung ist
+   BL-011.13, aber (A) verengt den Weg schon vorher.
+5. **Der Performanceeinwand entfällt.** Die Identitätsbindung kostet zwei
+   `lstat` je freigegebenem Paket, ausschließlich auf dem terminalen Pfad. Bei
+   100 Paketen sind das 200 `lstat` gegenüber den 2-s-/10-s-Budgets aus DS-047 —
+   und ausdrücklich **kein** erneutes Voll-Hashing. Damit ist auch der
+   Performance-Geruch „wiederholte Paketprüfung" aus dem Reviewauftrag §6
+   gewahrt.
+
+Der ursprüngliche Zielkonflikt, der zu dieser Entscheidung geführt hat:
+
+- `RESULT_GRADES_V1.md` verlangt: „Terminale V2-Stapel werden **vor der
+  öffentlichen Zählung** erneut gegen jedes veröffentlichte V3-Paket gebunden."
+- Der Reviewauftrag §5 verlangt dasselbe für Progress, Abschluss, Results und
+  Cowork-Handoff.
+- Der Reviewauftrag §6 zählt „wiederholte Paketprüfung" gleichzeitig als
+  Performance-Geruch auf, und die Implementierung begründet den heutigen Zustand
+  ausdrücklich damit
+  (`batch-progress.js:113`, `batch-terminal-evidence.js:53`).
+
+Die beiden Zielbilder im Wortlaut, wie sie zur Entscheidung standen:
 
 - `RESULT_GRADES_V1.md` verlangt: „Terminale V2-Stapel werden **vor der
   öffentlichen Zählung** erneut gegen jedes veröffentlichte V3-Paket gebunden."
@@ -37,10 +82,8 @@ Zählung autoritativ trägt, und die Anwendermeldung wird ehrlich gemacht (sie s
 dann, dass sich die Aussage auf den Abschlusszeitpunkt bezieht, nicht auf den
 heutigen Bestand der Exporte).
 
-**Zielbild (A) ist die Empfehlung dieses Reviews**, weil DS-057 Maschinenverträge
-über eine Implementierungsoptimierung stellt und die Identitätsbindung den
-Performanceeinwand entkräftet. Ohne dokumentierte Entscheidung wird dieser
-Vorgang nicht umgesetzt.
+Zielbild (B) bleibt hier nur als verworfene Alternative dokumentiert. Der
+Abschnitt 3 „bei Zielbild (B)" ist damit **nicht** auszuführen.
 
 ## 1. Befund
 
@@ -127,6 +170,19 @@ user_status           : Stapel abgeschlossen: 1 vollständig verarbeitet, 0 mit 
 1. `batch-result-projection.js:39` fail-closed machen: ein fehlender oder kein
    Funktionswert für `verifyPositive` darf **nicht** `true` bedeuten. Ein
    Aufrufer ohne Verifizierer muss `unavailable` erhalten.
+1a. **Zwingend: die Identitätsbindung darf nicht auf einem Number-Vergleich von
+   `ino` beruhen.** Node liefert den 64-Bit-Dateiindex als JS-Number; oberhalb
+   von 2^53 beträgt der Double-Abstand 2, sodass zwei verschiedene Dateien gleich
+   vergleichen. Auf der Prüfmaschine lagen 30 von 400 frisch erzeugten Dateien
+   darüber (`Number.MAX_SAFE_INTEGER` = 9007199254740991, beobachtete NTFS-`ino`
+   = 9007199256521856, `ino + 1 === ino`). Verwende exakte Werte über
+   `lstat`/`fstat` mit `{ bigint: true }` oder trage die Bindung nicht auf `ino`
+   allein. Andernfalls entsteht eine neue Sicherheitsprüfung, die genau dort
+   fail-open ist, wo sie greifen soll. Dieser Punkt ist unabhängig vom
+   bestehenden, getrennt zu behandelnden Befund in
+   `tests/test-source-format-inspector.js:206`; die 48 vorhandenen
+   Number-Vergleiche von `ino` im Produktcode werden hier **nicht** mit
+   umgestellt.
 2. `batch-progress.js` so umbauen, dass auch der Weg über den durablen Marker
    jedes veröffentlichte Paket erneut bindet. Die Identitätswerte
    (`dev`, `ino`, `size`, `mtimeMs` von `manifest.json` und `<package_id>.md`)
