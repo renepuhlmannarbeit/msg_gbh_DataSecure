@@ -1,5 +1,6 @@
 'use strict';
 
+const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { createSuite } = require('./helpers');
@@ -417,6 +418,67 @@ test('result grades v1 fixes exactly three honest terminal outcomes', () => {
     assert.ok(contract.includes(required), `result grade contract missing ${required}`);
   }
   assert.match(contract, /Parserwarnungen[\s\S]*niemals erlaubte Auslassungen/iu);
+});
+
+test('every project script a test addresses by path exists and is tracked by Git', () => {
+  // Regression guard for the detached crash worker: tests/fixtures/ is ignored
+  // wholesale, so a helper forked from there silently never reaches a clone and
+  // its test dies with a generic exit code instead of proving anything. Test
+  // sources belong in tests/lib/ or tests/helpers/, and every project script a
+  // test addresses by literal path must be present and tracked.
+  const joinPattern = /path\.join\(\s*(__dirname|root)\s*((?:,\s*'[^'\n]+'\s*)+)\)/gu;
+  const repoRootDeclaration = /^const root = path\.resolve\(__dirname, '\.\.'\);$/mu;
+  const scripts = new Map();
+  const collect = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      // tests/fixtures/ carries generated artefacts only and stays unscanned.
+      if (entry.isDirectory()) {
+        if (entry.name !== 'fixtures') collect(full);
+        continue;
+      }
+      if (!/\.(?:js|mjs|cjs)$/u.test(entry.name)) continue;
+      const source = fs.readFileSync(full, 'utf8');
+      // `root` names a throwaway temporary directory in most suites; only trust
+      // it where the file declares it as the repository root.
+      const rootIsRepository = repoRootDeclaration.test(source);
+      joinPattern.lastIndex = 0;
+      let match;
+      while ((match = joinPattern.exec(source)) !== null) {
+        if (match[1] === 'root' && !rootIsRepository) continue;
+        const segments = [...match[2].matchAll(/'([^'\n]+)'/gu)].map((part) => part[1]);
+        if (!/\.(?:js|mjs|cjs)$/u.test(segments.at(-1))) continue;
+        const target = path.resolve(match[1] === 'root' ? root : path.dirname(full), ...segments);
+        const relative = path.relative(root, target).split(path.sep).join('/');
+        if (relative.startsWith('..')) continue;
+        if (!scripts.has(relative)) scripts.set(relative, new Set());
+        scripts.get(relative).add(path.relative(root, full).split(path.sep).join('/'));
+      }
+    }
+  };
+  collect(path.join(root, 'tests'));
+
+  // Guards against a silently broken scan reporting success on an empty set.
+  assert.ok(scripts.size >= 20, `path-referenced script scan collected only ${scripts.size} entries`);
+  assert.ok(
+    scripts.has('tests/lib/crash-batch-worker.js'),
+    'the detached crash worker must stay a path-referenced, tracked test helper'
+  );
+
+  let gitAvailable = true;
+  try { childProcess.execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' }); }
+  catch { gitAvailable = false; }
+
+  for (const [relative, referees] of scripts) {
+    const by = [...referees].sort().join(', ');
+    assert.ok(fs.existsSync(path.join(root, relative)), `${relative} is addressed by ${by} but missing`);
+    if (!gitAvailable) continue;
+    let tracked = true;
+    try {
+      childProcess.execFileSync('git', ['ls-files', '--error-unmatch', '--', relative], { cwd: root, stdio: 'ignore' });
+    } catch { tracked = false; }
+    assert.ok(tracked, `${relative} is addressed by ${by} but not tracked by Git`);
+  }
 });
 
 done();

@@ -82,7 +82,7 @@ async function processAndAcknowledge(token, options = deps) {
 }
 
 async function crashDetachedExecutor(token, crashAt) {
-  const child = fork(path.join(__dirname, 'fixtures', 'crash-batch-worker.js'), [], {
+  const child = fork(path.join(__dirname, 'lib', 'crash-batch-worker.js'), [], {
     windowsHide: true,
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     env: { ...process.env, DATASECURE_TEST_CRASH_AT: String(crashAt) }

@@ -288,8 +288,18 @@ Delivery vor Mapping vor normalem Processing. No-progress-Vergleiche und das
 Budget `items.length * 3 + 3` verhindern Busy-Loops. Jeder Fehler nach gültigem
 Claim versucht genau eine Freigabe, und nur ein frisch nach der Freigabe
 gelesener Journalstatus bildet die inhaltsfreie Endantwort. Sieben direkte
-Grenztests sowie die unveränderten 66 Batch-Session-Fälle belegen die Fassade,
-100-Dateien-Grenzen und Crash-Recovery an Position 1, 50 und 100.
+Grenztests sowie die 67 Batch-Session-Fälle belegen die Fassade,
+100-Dateien-Grenzen und Crash-Recovery an Position 1, 50 und 100. Der dafür
+nötige detachierte Crash-Worker liegt seit RC64 als getrackte Testquelle unter
+`tests/lib/crash-batch-worker.js`; zuvor lag er ausschließlich unversioniert
+unter dem pauschal ignorierten `tests/fixtures/`, sodass der Crashfall auf jedem
+frischen Clone mit einem generischen Exitcode starb und die Recovery-Evidenz
+nicht reproduzierbar war. Der Worker nimmt seinen Token ausschließlich über
+privates IPC, übernimmt den Lease selbst und stirbt mitten in der Konvertierung,
+nachdem der Zustand `processing` bereits durabel geschrieben wurde; er
+veröffentlicht nichts und räumt nichts auf. `test-architecture-contracts.js`
+prüft jetzt zusätzlich, dass jedes von einem Test über einen literalen Pfad
+adressierte Projektskript existiert und von Git getrackt ist.
 Als Security-Nachhärtung akzeptieren sowohl normaler als auch rein lesender
 Maintenance-Journalzugriff nur noch 1 bis 100 Positionen. Der Runner prüft
 dieselbe feste Obergrenze nochmals vor seinem Item-abgeleiteten Schrittbudget.

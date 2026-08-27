@@ -12,7 +12,11 @@
 *.pptm
 *.pdf
 
-# Generated synthetic fixtures
+# Generated synthetic fixtures. This directory holds build products of
+# tests/make-fixtures.js only. Test *source* — shared builders and helper
+# processes a test starts by path — belongs in tests/lib/ or tests/helpers/,
+# which stay tracked. A helper placed here would silently never reach a clone;
+# tests/test-architecture-contracts.js fails if that happens again.
 /tests/fixtures/
 
 # Local privacy workspaces / outputs
