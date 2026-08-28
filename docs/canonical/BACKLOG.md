@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 27.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC65
+Stand: 28.08.2026 · Product-Owner-bereinigt · Arbeitsstand RC66
 
 Dies ist ausschließlich die priorisierte Liste noch offener Arbeit. Erledigte
 Stories stehen im [Archiv](BACKLOG_ARCHIVE_2026-08.md); Implementierungsdetails und
@@ -49,19 +49,33 @@ Fresh-Install- und Cowork-Textabnahmen bleiben in BL-041 und BL-051.
 |---|---|---|
 | **P0.0** | BL-011.13: private Snapshots und Review OS-benutzergebunden verschlüsseln; reale Zielsysteme abnehmen | E0-Produktintegration abgeschlossen, E1/E3 bleiben Releaseblocker |
 | **P0.1** | BL-010.8/BL-051.1: selbsttragende Windows-/macOS-Pakete und reale Cowork-Evidenz | ohne Laufzeit kein installierbares Produkt |
-| **P1.1** | BL-011.3/BL-041.9: pausierte Stapel entkoppeln, Review ohne Timeout und nicht blockierender Abschluss | behebt den beobachteten Hänger |
+| **P1.1** | BL-011.3/BL-041.9: pausierte Stapel, Review ohne menschlichen Timeout und nicht blockierender Abschluss real abnehmen | E0 abgeschlossen; echte Cowork-/UX-Evidenz fehlt |
 | **P1.2** | BL-044.1: rekursive Ordnerquelle mit vollständigem Link-/Umfangsgate | gewünschter einfacher Stapelstart |
-| **P1.3** | BL-049.1: Signatur-/Struktur-Sniffing und drei Ergebnisgrade | verhindert falsche Format- und Vollständigkeitsaussagen |
+| **P1.3** | BL-049.1: Signatur-/Struktur-Sniffing und drei Ergebnisgrade real abnehmen | E0 abgeschlossen; Zielsystem-/Security-Evidenz fehlt |
 | **P1.4** | BL-047.1: adaptive Parallelität und messbare Cowork-Latenzbudgets | Performance erst nach Sicherheits- und Durability-Gates aktivieren |
 | **P2** | BL-042.3: progressive inhaltsfreie MCP-App, Sprach-/A11y- und Adminvertrag | Komfortverbesserung mit vollständigem Fallback |
 
 ## Das kann ich noch eigenständig erledigen
 
-Die eigenständig lieferbaren E0-Anteile von BL-011.13 (Verschlüsselung), BL-044.1
-(Ordnerquelle) und BL-047.1 (adaptive Ressourcensteuerung) sind mit RC66 umgesetzt.
-Eigenständig verbleiben weitere Build-, Vertrags- und Negativtests sowie BL-049.1;
-Aktivierung und Release bleiben jeweils an die in der Evidence-Matrix genannten
-Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
+Die eigenständig lieferbaren E0-Anteile von BL-011.13 (Verschlüsselung), BL-041.9
+(nicht blockierender Review-/Abschlussweg), BL-044.1 (Ordnerquelle), BL-047.1
+(adaptive Ressourcensteuerung) und BL-049.1 (Format-/Ergebnisgrenze) sind
+abgeschlossen. Im RC66-Umfang ist kein bekannter offener E0-Defekt dokumentiert.
+Das ist keine Behauptung, dass unbekannte Fehler ausgeschlossen sind.
+
+Die nächsten eigenständig lieferbaren Pakete sind klar von ihrer späteren
+Produktfreigabe getrennt:
+
+| Reihenfolge | Stories | Eigenständig lieferbarer nächster E0-Anteil |
+|---|---|---|
+| **E0-1** | BL-042.3 | Progressive inhaltsfreie MCP-App, vollständigen Text-/OS-Fallback sowie Deutsch-/Englisch-, Schema-, Leckage- und automatisierbare A11y-Verträge schließen. |
+| **E0-2** | BL-020.1, BL-020.2, BL-022.1 | Gemeinsamen Content-Graph, rekursive Einbettungsgrenzen und verbleibende DOCX-Story-/Negativabdeckung vervollständigen, ohne weitere Formate freizugeben. |
+| **E0-3** | BL-010.1, BL-010.2, BL-010.3, BL-010.6 | Reproduzierbare selbsttragende Windows-/macOS-Artefakte, Versionsarchiv und automatisierte Rollback-Verträge weiter schließen; reale Installation bleibt E1. |
+| **E0-4** | BL-022.2, BL-022.3 | XLSX/PPTX nur hinter vollständigen Parser-, Coverage-, Sicherheits- und Negativgates implementieren; Freigabe bleibt E1/E3. |
+| **E0-5** | BL-023.2 bis BL-023.4, BL-024.2, BL-024.3 | PDF-, Scan-PDF-, OCR- und Bildpfade hinter dem bestehenden NO-GO-Gate weiterentwickeln; Produktaktivierung erst nach vollständiger Drei-OS-/Security-Evidenz. |
+
+Zusätzliche Tests werden nicht als unbegrenzte Sammelaufgabe geführt, sondern
+nur einem konkreten Storybefund und dessen Definition of Done zugeordnet.
 
 ## Das musst du als Mensch machen
 
@@ -72,7 +86,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | **P0** | BL-011.8, BL-011.9, BL-012.8 | Reparse-/Swap-/Cleanup-Gegenproben und native Supervisor-/Dialog-Evidenz auf Windows und macOS; Linux folgt mit BL-010.4. |
 | **P1** | BL-042.2, BL-041.7 | Reale Anzahl der Cowork-Berechtigungsdialoge in Manual/Auto/Skip bei Start sowie 1/5/20 Handoff-Seiten beobachten; Organisationsrichtlinien getrennt dokumentieren. |
 | **P1** | BL-041.5, BL-050.3, BL-051.3 | Installierte Realmessung für 1/10/100 Dateien und 500 MiB auf Windows-/macOS-Zielhardware: Zeit, CPU, Peak-RAM, Fortschritt, Stopp und Resume. Dabei die bewusste R3a-Sicherheitskostenstelle getrennt messen: noch nicht extern SHA-256-versiegelte Direktquellen werden vor der Privatkopie einmal vollständig lokal vorgehasht; versiegelte Stapelquellen nicht. Wahrgenommene Wartezeit separat bewerten. |
-| **P1** | BL-011.7, BL-012.2, BL-012.3, BL-012.5, BL-012.6, BL-012.7, BL-052.1, BL-052.4 | Beobachtete Gebrauchstauglichkeit: Fortschritt, alle Endzustände, Fortsetzung, Tastatur, Fokus, Skalierung, Kontrast und Screenreader ohne technische Hilfestellung. |
+| **P1** | BL-011.7, BL-012.2, BL-012.3, BL-012.5, BL-012.6, BL-012.7, BL-041.9, BL-052.1, BL-052.4 | Beobachtete Gebrauchstauglichkeit: Fortschritt, alle Endzustände, Fortsetzung, nicht blockierender Review/Abschluss, Tastatur, Fokus, Skalierung, Kontrast und Screenreader ohne technische Hilfestellung. |
 | **P1** | BL-020.3, BL-021.1, BL-021.2, BL-022.1 | Installierte Windows-/macOS-Hosttests für Netzwerkfreiheit sowie reale TXT/Markdown/CSV/DOCX-Interoperabilität. Linux folgt als eigene Portabilitätsevidenz. |
 | **P1** | BL-011.3, BL-030.2, BL-031.1, BL-032.1 | Keyring-/Pseudonym-, Mehrdeutigkeits- und Zertifikatskontextwege auf echten Zielsystemen fachlich und technisch abnehmen. Verschlüsselte Quellen werden gemäß DS-046 nicht entschlüsselt. |
 | **P1** | BL-052.2, BL-052.3 | IT-/Health-IT- und Datenschutzfreigabe mit ausschließlich synthetischen Daten, einschließlich Inhaltserhalt, Restrisiko, Retention und zulässigem Verwendungszweck. |
@@ -126,7 +140,7 @@ Zielsystem- beziehungsweise menschlichen Nachweise gebunden.
 | BL-011.12 | **E0 abgeschlossen; E1 offen:** Ein nicht importierter Zwei-Worker-Harness prüft zentrale Reihenfolge/Commit, Slots, geschlossene Nachrichten, Crash, ungewissen Commit und Ressourcenstopps; Produktstandard bleibt seriell bis zur Windows-/macOS-Abnahme. Linux folgt später. | **in Arbeit** |
 | BL-011.13 | **R4b-E0 mit RC66 abgeschlossen; E1/E3 offen:** Batch-Snapshots und Review-Previews werden create-once mit AES-256-GCM und Zweck-/Objektbindung verschlüsselt; Parser erhalten Klartext nur als begrenzten RAM-Buffer. Der exakt gelockte native Keyring nutzt ausschließlich den OS-Secret-Store, besitzt keinen Dateifallback und wird einschließlich Plattformbinaries vor Build und Paketprüfung gehasht. Commitmarker sperren unbestätigten Ciphertext; Schlüsselverlust erzeugt keinen Ersatzschlüssel. V2-Snapshot- und alte Review-Klartexte migrieren journalgebunden und absturzsicher zu V3/`.dsart`; V1 bleibt unverändert gesperrt. Direkte Pickerpfade erzeugen keine Klartext-Jobdatei. Reale Windows-/macOS-Keyring-, Hardlink-/Crash-Evidenz und unabhängige Security-Abnahme bleiben offen. | **in Arbeit** |
 | BL-024.4 | **E0 abgeschlossen; E1/E3 offen:** Der nicht importierte OCR-Session-Harness prüft geschlossenes Framing, Requestbindung, Replay, Single-Flight, Pixel-/Byte-/Zeitbudgets und Abbruch. Der sichere Einbild-Worker bleibt aktiv, bis native Per-Frame-Grenzen und Windows-/macOS-Evidenz vorliegen. Linux folgt später. | **in Arbeit** |
-| BL-041.9 | Review ohne menschlichen Timeout und Abschluss ohne blockierenden Cowork-Aufruf liefern; pausierte Stapel bleiben getrennt startbar. | **in Arbeit** |
+| BL-041.9 | **E0 abgeschlossen; E1/E2 offen:** Der abgekoppelte Review-Worker wartet ohne menschlichen Entscheidungs-Timeout, der synchrone Supportpfad bleibt begrenzt, der Abschlussdialog blockiert weder Worker noch Cowork und pausierte Stapel verhindern keine neue Auswahl. Echte Cowork-/Windows-/macOS-UX-Evidenz bleibt offen. | **in Arbeit** |
 
 ## Neue Zielpakete aus dem Produktreview
 
