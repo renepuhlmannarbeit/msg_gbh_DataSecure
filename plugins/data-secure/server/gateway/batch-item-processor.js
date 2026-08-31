@@ -85,7 +85,10 @@ function createBatchItemProcessor(options = {}) {
       const checkpoint = (phase, performancePhase) => {
         if (performancePhase) phaseRecorder.mark(performancePhase);
         item.checkpoint = phase;
-        writeState(state, { durable: false });
+        // Diagnostic phases stay in memory. Recovery uses the durable
+        // processing marker and the deterministic published package, not
+        // intermediate parser progress. Avoid rewriting the whole batch
+        // five times per document just to record transient phase changes.
       };
       const result = await anonymizeNext(state.profile, {
         ...deps,
@@ -148,10 +151,12 @@ function createBatchItemProcessor(options = {}) {
       writeState(state);
       try { cleanupTerminalWorkCopy(state, item, deps); }
       catch { item.work_copy_cleanup_pending = true; }
-      writeState(state);
       try {
         commitPendingMapping(item, expectedPackageId);
       } catch {
+        // Preserve cleanup debt on this early return; the ordinary path
+        // includes it in the final durable delivery checkpoint below.
+        writeState(state);
         return {
           ok: false,
           error: 'LOCAL_MAPPING_EXPORT_PENDING',

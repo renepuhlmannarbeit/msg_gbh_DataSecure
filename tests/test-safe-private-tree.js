@@ -88,4 +88,37 @@ test('stops if a directory is replaced during listing before any external child 
   assert.strictEqual(fs.readFileSync(path.join(target, 'local.txt'), 'utf8'), 'local');
 });
 
+function boundOptions(base, target) {
+  const identity = (target) => {
+    const stat = fs.lstatSync(target, { bigint: true });
+    return { dev: String(stat.dev), ino: String(stat.ino), birthtimeNs: String(stat.birthtimeNs) };
+  };
+  return { expectedParentIdentity: identity(base), expectedIdentity: identity(target) };
+}
+
+test('bound cleanup validates the whole tree before removing any ordinary sibling of an unsafe entry', () => {
+  const base = parent('bound-preflight');
+  const target = path.join(base, 'job');
+  const outside = parent('bound-outside');
+  fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, 'a-keep.txt'), 'preserved');
+  fs.symlinkSync(outside, path.join(target, 'z-link'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => safeRemovePrivateTree(base, 'job', boundOptions(base, target)), /PRIVACY_STORAGE_UNSAFE/u);
+  assert.strictEqual(fs.readFileSync(path.join(target, 'a-keep.txt'), 'utf8'), 'preserved');
+});
+
+test('bound cleanup rejects wrong parent and target identities and accepts the exact regular tree', () => {
+  const base = parent('bound-identities');
+  const target = path.join(base, 'job');
+  fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, 'data.txt'), 'synthetic');
+  const options = boundOptions(base, target);
+  for (const field of ['expectedIdentity', 'expectedParentIdentity']) {
+    assert.throws(() => safeRemovePrivateTree(base, 'job', { ...options,
+      [field]: { ...options[field], ino: '0' } }), /PRIVACY_STORAGE_UNSAFE/u);
+    assert.strictEqual(fs.existsSync(path.join(target, 'data.txt')), true);
+  }
+  assert.strictEqual(safeRemovePrivateTree(base, 'job', options), true);
+});
+
 done();

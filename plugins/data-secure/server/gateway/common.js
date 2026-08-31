@@ -29,6 +29,10 @@ function hasReparseComponent(target){
   while(true){if(fs.existsSync(probe)){try{if(fs.lstatSync(probe).isSymbolicLink())return true;}catch{return true;}}
     const parent=path.dirname(probe);if(parent===probe)return false;probe=parent;}
 }
+function isManagedStagingPath(target){
+  const relative=path.relative(path.join(privacyRoot(),'.datasecure-staging'),path.resolve(String(target)));
+  return relative===''||(!path.isAbsolute(relative)&&relative!=='..'&&!relative.startsWith(`..${path.sep}`));
+}
 function storageStatus(root=privacyRoot()){
   const requested=path.resolve(String(root)); const resolved=resolvedSafetyPath(requested);
   const normalized=String(resolved||requested).replace(/\\/g,'/');
@@ -75,7 +79,7 @@ function ensurePrivateDirectory(parent,literalChild){
 // is checked again before its entries are acted on.  Node has no portable
 // dirfd/openat equivalent, so this narrows (but does not claim to eliminate)
 // pathname races; any doubt leaves the tree untouched.
-function safeRemovePrivateTree(parent,literalChild){
+function safeRemovePrivateTree(parent,literalChild,options={}){
   const child=String(literalChild||'');
   if(!child||child==='.'||child==='..'||child.includes('/')||child.includes('\\')||child.includes('\0'))throw new Error('PRIVACY_STORAGE_UNSAFE');
   const parentPath=path.resolve(String(parent));
@@ -84,7 +88,42 @@ function safeRemovePrivateTree(parent,literalChild){
   const parentStat=fs.statSync(parentPath);
   const target=path.join(parentPath,child);
   if(path.relative(parentPath,target)!==child||path.dirname(target)!==parentPath)throw new Error('PRIVACY_STORAGE_UNSAFE');
+  const bound=options.expectedIdentity!==undefined;
+  const identityOf=(stat)=>({dev:String(stat.dev),ino:String(stat.ino),birthtimeNs:String(stat.birthtimeNs)});
+  const matches=(stat,expected)=>expected&&Object.keys(expected).sort().join(',')==='birthtimeNs,dev,ino'&&
+    Object.values(expected).every(value=>typeof value==='string'&&/^(?:0|[1-9][0-9]*)$/.test(value))&&
+    Object.keys(expected).every(key=>identityOf(stat)[key]===expected[key]);
+  if(bound&&(!matches(fs.lstatSync(parentPath,{bigint:true}),options.expectedParentIdentity)))throw new Error('PRIVACY_STORAGE_UNSAFE');
   if(!fs.existsSync(target))return false;
+  // Ownership-sensitive staging cleanup: preflight the ENTIRE bounded tree
+  // before deleting its first byte. Remember every ancestor and file identity,
+  // not just whatever happens to occupy the pathname when deletion begins.
+  const plan=new Map();
+  if(bound){
+    const pending=[{full:target,depth:0}];
+    while(pending.length){
+      const {full,depth}=pending.pop();
+      if(plan.size>=10000||depth>32)throw new Error('PRIVACY_STORAGE_UNSAFE');
+      const stat=fs.lstatSync(full,{bigint:true});
+      if(stat.isSymbolicLink()||(!stat.isDirectory()&&!stat.isFile())||
+        (stat.isFile()&&stat.nlink!==1n)||
+        (full===target&&!matches(stat,options.expectedIdentity)))throw new Error('PRIVACY_STORAGE_UNSAFE');
+      plan.set(full,{identity:identityOf(stat),directory:stat.isDirectory(),size:stat.size,mtimeNs:stat.mtimeNs});
+      if(stat.isDirectory())for(const name of fs.readdirSync(full)){
+        if(!name||name==='.'||name==='..'||/[\\/\0]/.test(name))throw new Error('PRIVACY_STORAGE_UNSAFE');
+        pending.push({full:path.join(full,name),depth:depth+1});
+      }
+    }
+  }
+  const verifyBound=(current)=>{
+    if(!bound)return;
+    if(!matches(fs.lstatSync(parentPath,{bigint:true}),options.expectedParentIdentity))throw new Error('PRIVACY_STORAGE_UNSAFE');
+    for(let probe=current;probe!==parentPath;probe=path.dirname(probe)){
+      const saved=plan.get(probe),stat=fs.lstatSync(probe,{bigint:true});
+      if(!saved||stat.isSymbolicLink()||!matches(stat,saved.identity)||stat.isDirectory()!==saved.directory||
+        (!saved.directory&&(!stat.isFile()||stat.nlink!==1n||stat.size!==saved.size||stat.mtimeNs!==saved.mtimeNs)))throw new Error('PRIVACY_STORAGE_UNSAFE');
+    }
+  };
   const comparable=(value)=>process.platform==='win32'?value.toLowerCase():value;
   const verifyParent=()=>{
     const named=fs.lstatSync(parentPath),opened=fs.statSync(parentPath),real=fs.realpathSync.native(parentPath);
@@ -93,6 +132,7 @@ function safeRemovePrivateTree(parent,literalChild){
   };
   const removeEntry=(current)=>{
     verifyParent();
+    verifyBound(current);
     const relative=path.relative(parentPath,current);
     if(!relative||relative==='..'||relative.startsWith(`..${path.sep}`)||path.isAbsolute(relative))throw new Error('PRIVACY_STORAGE_UNSAFE');
     const before=fs.lstatSync(current);
@@ -100,6 +140,7 @@ function safeRemovePrivateTree(parent,literalChild){
     if(before.isFile()){
       const again=fs.lstatSync(current);
       if(!again.isFile()||again.isSymbolicLink()||again.dev!==before.dev||again.ino!==before.ino)throw new Error('PRIVACY_STORAGE_UNSAFE');
+      verifyBound(current);
       fs.unlinkSync(current);
       return;
     }
@@ -116,6 +157,7 @@ function safeRemovePrivateTree(parent,literalChild){
     }
     const after=fs.lstatSync(current);
     if(!after.isDirectory()||after.isSymbolicLink()||after.dev!==before.dev||after.ino!==before.ino)throw new Error('PRIVACY_STORAGE_UNSAFE');
+    verifyBound(current);
     fs.rmdirSync(current);
   };
   removeEntry(target);
@@ -161,4 +203,4 @@ function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();cons
 };
   if(score.personnel_profile>=3)return'personnel_profile';const ranked=Object.entries(score).filter(([k])=>k!=='personnel_profile').sort((a,b)=>b[1]-a[1]);return ranked[0][1]>=2?ranked[0][0]:'general';}
 
-module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};
+module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,isManagedStagingPath,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};

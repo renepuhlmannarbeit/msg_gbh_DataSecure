@@ -9,6 +9,7 @@ const root = path.join(__dirname, '..');
 const contract = JSON.parse(fs.readFileSync(path.join(root, 'native', 'sea', 'launcher-contract.json'), 'utf8'));
 const bootstrap = fs.readFileSync(path.join(root, 'native', 'sea', 'bootstrap.cjs'), 'utf8');
 const builder = fs.readFileSync(path.join(root, 'scripts', 'build-sea-launcher.mjs'), 'utf8');
+const provenance = fs.readFileSync(path.join(root, 'scripts/lib/sea-launcher-provenance.mjs'), 'utf8');
 const verifier = fs.readFileSync(path.join(root, 'scripts', 'verify-sea-launcher.mjs'), 'utf8');
 const dispatcher = fs.readFileSync(path.join(root, 'native', 'sea', 'datasecure-mcp'), 'utf8');
 const pluginMcp = JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'data-secure', '.mcp.json'), 'utf8'));
@@ -29,6 +30,12 @@ test('contract pins one official Node LTS and four target archives by SHA-256', 
 test('bootstrap exposes only a fixed probe and loads the adjacent inspected server tree', () => {
   assert.strictEqual((bootstrap.match(/__DATASECURE_TARGET__/g) || []).length, 1);
   assert.strictEqual((bootstrap.match(/__DATASECURE_NODE_VERSION__/g) || []).length, 1);
+  assert.strictEqual((bootstrap.match(/__DATASECURE_PARSER_ROLE_JSON__/g) || []).length, 1);
+  assert.match(bootstrap, /Object\.defineProperty\(globalThis, '__DATASECURE_PARSER_ROLE__'/);
+  assert.match(bootstrap, /Object\.freeze\(PARSER_ROLE\.server_files\)/);
+  assert.match(builder, /await loadParserRole\(/);
+  assert.match(builder, /SEA_PARENT_ARCHIVE_HASH_MISMATCH/);
+  assert.match(builder, /COPYFILE_EXCL/);
   assert.match(bootstrap, /createRequire\(entry\)\(entry\)/);
   assert.match(bootstrap, /fs\.lstatSync\(entry\)/);
   assert.match(bootstrap, /stat\.isSymbolicLink\(\)/);
@@ -48,24 +55,34 @@ test('one extensionless plugin command has a closed Windows and POSIX dispatch l
 
 test('builder refuses cross-target execution and disables snapshots, code cache and NODE_OPTIONS', () => {
   assert.match(builder, /target\.os !== process\.platform \|\| target\.arch !== process\.arch/);
-  assert.match(builder, /useSnapshot: false/);
-  assert.match(builder, /useCodeCache: false/);
-  assert.match(builder, /execArgvExtension: 'none'/);
-  assert.match(builder, /main: path\.basename\(main\)/);
-  assert.match(builder, /output: path\.basename\(blob\)/);
+  assert.match(provenance, /useSnapshot: false/);
+  assert.match(provenance, /useCodeCache: false/);
+  assert.match(provenance, /execArgvExtension: 'none'/);
+  assert.match(provenance, /main: 'bootstrap.cjs'/);
+  assert.match(provenance, /output: 'sea-prep.blob'/);
+  assert.match(builder, /prepareLauncherProvenance\(root, target.id, parserRole\)/);
+  assert.match(builder, /fs.writeFileSync\(main, prepared.bootstrap/);
+  assert.match(builder, /JSON.stringify\(prepared.config\)/);
+  assert.match(builder, /assertLauncherProvenance\(prepared.provenance, prepareLauncherProvenance/);
+  assert.match(builder, /assertLauncherBuildEvidence\(evidence, bytes, prepared\)/);
   assert.match(builder, /cwd: temporary/);
   assert.match(builder, /SEA runtime probe mismatch/);
 });
 
-test('pilot verifier exercises initialize and privacy_status without a host Node path', () => {
+test('pilot verifier distinguishes normal/support startup and refuses unproved worker evidence', () => {
   assert.match(verifier, /PATH: ''/);
   assert.match(verifier, /NODE_OPTIONS: '--require=datasecure-must-not-be-loaded'/);
   assert.match(verifier, /method: 'initialize'/);
   assert.match(verifier, /name: 'privacy_status'/);
   assert.match(verifier, /runtime_mode !== 'self_contained_node'/);
   assert.match(verifier, /host_node_required !== false/);
-  assert.match(verifier, /launcher_sha256: launcherSha256/);
-  assert.match(verifier, /\.mcp-evidence\.json/);
+  assert.match(verifier, /method: 'tools\/list'/);
+  assert.match(verifier, /EU_PRIVACY_SUPPORT_MODE: '1'/);
+  assert.match(verifier, /createSeaSourceEvidence/);
+  assert.match(verifier, /execPath: launcher/);
+  assert.match(verifier, /SEA_PARSER_CORE_FAILED/);
+  assert.match(verifier, /throw new Error\('SEA_PARSER_NEGATIVE_EVIDENCE_REQUIRED'\)/);
+  assert.doesNotMatch(verifier, /fs\.writeFileSync\([^\n]*\.mcp-evidence/);
 });
 
 test('postject is development-only and the released product command remains unchanged', () => {

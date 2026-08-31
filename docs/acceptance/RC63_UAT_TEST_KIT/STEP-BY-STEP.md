@@ -9,13 +9,19 @@
    gemeldeten ZIP aus `dist` in Claude Desktop. Aktiviere Plugin und Connector.
 4. Starte Claude Desktop vollständig neu.
 5. Öffne eine neue Cowork-Aufgabe. Hänge noch keine Datei an den Chat.
-6. Schreibe: `Zeige mir den DataSecure-Diagnosestatus.`
-7. Prüfe, dass die Version mit `package.json`, dem installierten ZIP und dem
-   lokalen Connector übereinstimmt und ein lokaler
-   Privacy-Ordner angezeigt werden. Erfasse keine Pfade im Evidence-Log.
+6. Schreibe: `Dateien anonymisieren.` Warte auf den lokalen Dateidialog und klicke
+   **Abbrechen**, ohne eine Datei auszuwählen. Kein Upload und keine Diagnoseanfrage.
+7. Prüfe die installierte Pluginversion lokal in der Pluginanzeige gegen
+   `package.json` und den verwendeten ZIP. Erfasse Version und Paket-Build,
+   keine Pfade oder internen Kennungen, im Evidence-Log.
 
-Erwartung: Der Status enthält nur technische Metadaten. Ein fehlender Connector
-ist `BLOCKED`; fahre dann nicht mit Originaldateien fort.
+Erwartung: Genau ein Picker öffnet sich; der Abbruch startet keinen Stapel und
+keinen automatischen Wiederholungsversuch. Fehlt der Picker oder der Connector,
+ist der Einstieg `BLOCKED`; nicht durch Upload umgehen. `privacy_status` und
+`diagnostic_status` sind im Normalmodus absichtlich nicht verfügbar. Ihr Fehlen
+beweist keinen Verbindungsfehler. Der Picker-Test belegt nur Erreichbarkeit,
+nicht die Ausführungsart oder Produktfreigabe: Verwende die für diesen synthetischen
+Test freigegebene Hostkonfiguration aus der [Hostmatrix](../../canonical/HOST_MATRIX_V1.json).
 
 ## 2. UAT-01 - einzelner Kernfall
 

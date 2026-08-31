@@ -26,14 +26,23 @@ test('parser permission process keeps the network deny preload active', () => {
   run(['--permission', `--allow-fs-read=${root}`]);
 });
 
-test('parser and companion launch the packaged preload before private code', () => {
+test('parser and fixed background roles launch the packaged guard before private code', () => {
   const runtime = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'runtime.js'), 'utf8');
   const supervisor = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'companion', 'supervisor.js'), 'utf8');
   const batchExecutor = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'batch-executor.js'), 'utf8');
-  for (const source of [runtime, supervisor, batchExecutor]) {
+  const launcher = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'background-role-launcher.js'), 'utf8');
+  for (const source of [runtime, launcher]) {
     assert.match(source, /network-deny\.cjs/u);
     assert.match(source, /--require=/u);
   }
+  assert.match(supervisor, /launchBackgroundRole\('companion'/u);
+  assert.equal((batchExecutor.match(/launchBackgroundRole\('batch'/gu) || []).length, 2);
+  assert.equal((batchExecutor.match(/launchBackgroundRole\('review'/gu) || []).length, 1);
+  // A new direct spawn/fork here would bypass the single guarded role starter.
+  assert.doesNotMatch(batchExecutor, /\bforkProcess\s*\(|\bfork\s*\(|\bspawn\s*\(/u);
+  const bootstrap = fs.readFileSync(path.join(root, 'native', 'sea', 'bootstrap.cjs'), 'utf8');
+  assert.ok(bootstrap.indexOf("localRequire('./network-deny.cjs')") < bootstrap.indexOf('localRequire(selected)'));
+  assert.match(bootstrap, /__DATASECURE_NETWORK_DENY_ACTIVE__/u);
 });
 
 test('the persistent batch worker strips proxy, Node and cloud credential controls', () => {

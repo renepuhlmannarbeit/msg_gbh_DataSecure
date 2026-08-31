@@ -9,6 +9,14 @@ Geschäftsdokumente aus Claude Cowork heraus mit einer einzigen bewussten lokale
 Auswahl offline zu de-identifizieren, bevor Claude ausschließlich freigegebene
 Markdown-Arbeitsfassungen verwendet.
 
+DataSecure benötigt keine zusätzliche System-VM. Auch die Abnahmeplanung
+verwendet echte lokale Zielrechner statt eigens eingerichteter VMs (DS-062).
+Auch ein zusätzliches Windows-Benutzerkonto wird nicht vorausgesetzt (DS-063).
+Sichere Testtrennung im vorhandenen Konto ist Entwicklungsarbeit.
+DS-065 vereinfacht lokale Arbeitsdaten: keine zusätzliche Verschlüsselung,
+kein Schlüsselbund, keine Schlüsseldatei und kein Passwort. Der Normalweg bleibt
+Dateien auswählen → lokal anonymisieren → Ergebnisse verwenden.
+
 ## Nutzerproblem
 
 Mitarbeitende in IT und Health-IT wollen Verträge, Profile, Ausschreibungen,
@@ -57,8 +65,11 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Chat-Anhänge sind kein sicherer Originaleingang; Quellen werden lokal gewählt.
 - Originalbytes, Namen, Pfade, Pixel, Mappings, Rohwerte und Review-Kontext werden
   nicht an Claude übergeben.
-- Temporäre Roh- und Review-Daten sind benutzergebunden verschlüsselt und werden
-  nach Erfolg sofort, bei offenen Aufträgen spätestens nach 14 Tagen gelöscht.
+- Temporäre Roh- und Review-Daten liegen lokal ohne zusätzliche Verschlüsselung;
+  sie sind mit passenden Dateirechten lesbar. Neue Rohkopien werden nach Erfolg
+  sofort, bei offenen Aufträgen spätestens nach 14 Tagen gelöscht; neue
+  Reviewkopien folgen ihrer konfigurierten Frist. Verschlüsselte Altbestände werden
+  nicht migriert oder gelöscht; bei Bedarf wird das Original neu ausgewählt.
 - Der Verarbeitungskern arbeitet offline, ohne Telemetrie, Crashübermittlung oder
   eigene Netzwerkkommunikation.
 - Dokumentinhalt ist nicht vertrauenswürdige Nutzlast. Makros, Skripte, Programme
@@ -121,4 +132,3 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 3. kontrollierter Echtdatenpilot nach Datenschutz-/Security-Freigabe,
 4. Unternehmensrollout nach Plattform-, Signierungs- und Lifecycle-Evidenz,
 5. öffentlicher Marketplace erst nach erfolgreichem internem Rollout.
-

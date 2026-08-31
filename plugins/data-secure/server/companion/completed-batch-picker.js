@@ -36,7 +36,7 @@ function pickerCommands(candidates, options = {}) {
   const platform = options.platform || process.platform;
   if (platform === 'win32') {
     const quote = (value) => value.replace(/'/g, "''");
-    const items = labels.map((label) => `$list.Items.Add('${quote(label)}')`).join('; ');
+    const items = labels.map((label) => `[void]$list.Items.Add('${quote(label)}')`).join('; ');
     const script = [
       'Add-Type -AssemblyName System.Windows.Forms',
       '$form = New-Object System.Windows.Forms.Form',
@@ -46,8 +46,8 @@ function pickerCommands(candidates, options = {}) {
       '$info = New-Object System.Windows.Forms.Label',
       "$info.Text = 'Wähle einen lokal abgeschlossenen Stapel. Dateinamen und Inhalte werden nicht angezeigt.'",
       '$info.Location = New-Object System.Drawing.Point(20,18)', '$info.Size = New-Object System.Drawing.Size(520,42)',
-      '$list = New-Object System.Windows.Forms.ListBox', '$list.Location = New-Object System.Drawing.Point(20,68)', '$list.Size = New-Object System.Drawing.Size(520,165)', '$list.SelectedIndex = 0',
-      items,
+      '$list = New-Object System.Windows.Forms.ListBox', '$list.Location = New-Object System.Drawing.Point(20,68)', '$list.Size = New-Object System.Drawing.Size(520,165)',
+      items, '$list.SelectedIndex = 0',
       '$start = New-Object System.Windows.Forms.Button', "$start.Text = 'Auswertung starten'", '$start.Location = New-Object System.Drawing.Point(300,252)', '$start.Size = New-Object System.Drawing.Size(150,32)', '$start.DialogResult = [System.Windows.Forms.DialogResult]::OK',
       '$cancel = New-Object System.Windows.Forms.Button', "$cancel.Text = 'Abbrechen'", '$cancel.Location = New-Object System.Drawing.Point(460,252)', '$cancel.Size = New-Object System.Drawing.Size(80,32)', '$cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel',
       '$form.AcceptButton = $start', '$form.CancelButton = $cancel', '$form.Controls.AddRange(@($info,$list,$start,$cancel))',

@@ -5,6 +5,7 @@ const { createContentGraph, validateContentGraph } = require('../plugins/data-se
 const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
 const { validateParserResult } = require('../plugins/data-secure/server/runtime');
 const { zipStore } = require('./lib/zip');
+const graphSchema = require('../docs/canonical/contracts/content-graph-v1.schema.json');
 
 const { test, done, assert } = createSuite('Content graph v1');
 
@@ -103,6 +104,91 @@ test('validation rejects hidden text gaps, overlapping nodes, reordered ids and 
   });
   assert.throws(() => validateContentGraph(withImage, 'Alpha', [{ mimeType: 'image/png', source_part: 'word/media/image1.png' }]),
     /TEXT_ORDER_INVALID/);
+});
+
+test('image locators cannot be relabelled, swapped or paired with an unsafe attachment source', () => {
+  const attachments = [1, 2].map((index) => ({ mimeType: 'image/png', source_part: `word/media/image${index}.png` }));
+  const graph = createContentGraph('safe', attachments, '.docx');
+  const swapped = structuredClone(graph);
+  swapped.nodes[1].locator = structuredClone(graph.nodes[2].locator);
+  swapped.nodes[2].locator = structuredClone(graph.nodes[1].locator);
+  assert.throws(() => validateContentGraph(swapped, 'safe', attachments), /IMAGE_LOCATOR_INVALID/);
+  for (const source_part of ['word/media/other.png', '../private', 'word/\u0000image.png']) {
+    const forged = structuredClone(attachments);
+    forged[0].source_part = source_part;
+    assert.throws(() => validateContentGraph(graph, 'safe', forged), /IMAGE_LOCATOR_INVALID/);
+  }
+});
+
+test('image media types are validated independently even when graph and attachment agree', () => {
+  const attachments = [{ mimeType: 'image/png', source_part: 'word/media/image.png' }];
+  for (const mimeType of [null, 123, '', 'text/html', 'image/png\n', 'image/PNG']) {
+    const graph = createContentGraph('safe', attachments, '.docx');
+    graph.nodes[1].media_type = mimeType;
+    assert.throws(() => validateContentGraph(graph, 'safe', [{ ...attachments[0], mimeType }]), /IMAGE_LOCATOR_INVALID/);
+  }
+});
+
+test('source format has an explicit type and must match the trusted parser invocation', () => {
+  const result = parseDocumentBuffer(Buffer.from('safe'), '.txt');
+  assert.strictEqual(validateParserResult(result, '.txt'), result);
+  for (const source_format of [123, null, ['txt'], 'txt\n', 'docx']) {
+    const forged = structuredClone(result);
+    forged.content_graph.source_format = source_format;
+    assert.throws(() => validateParserResult(forged, '.txt'), /Content-Graph/);
+  }
+});
+
+test('schema and runtime share canonical structural source-part grammar including container chains', () => {
+  const pattern = new RegExp(graphSchema.$defs.part.pattern, 'u');
+  const positive = ['normalized-markdown', 'word/media/ä.png',
+    'word/embeddings/inner.docx!/word/media/image1.png',
+    'word/embeddings/inner.docx!/xl/embeddings/deep.xlsx!/xl/worksheets/sheet1.xml'];
+  const negative = ['', '/', '/word/a', 'word//a', '.', '..', 'word/../a', 'word/./a',
+    'word\\media\\a.png', 'C:/private', 'https://example.invalid/a', 'word/name\u0000.xml',
+    'word/name\n.xml', 'word/name\r.xml', 'word/name\u0085.xml', 'word/a!',
+    'word/a!/../x', 'word/a!//x', 'word/a!/x/..', 'word/a!x', '.!/word/a', '..!/word/a',
+    'word/a\u2028/../private', 'word/a\u2029\u0000.xml', 'word/a\u2028:private', 'word/a\u2029\\private',
+    'word/a.docx!/word/a\u2028/../private', 'word/a.docx!/word/a\u2029\u0000.xml',
+    'word/a.docx!/word/a\u2028:private', 'word/a.docx!/word/a\u2029\\private'];
+  for (const source_part of positive) {
+    assert.ok(pattern.test(source_part), source_part);
+    const attachments = [{ mimeType: 'image/png', source_part }];
+    const graph = createContentGraph('safe', attachments, '.docx');
+    assert.strictEqual(validateContentGraph(graph, 'safe', attachments), graph);
+  }
+  for (const source_part of negative) {
+    assert.strictEqual(pattern.test(source_part), false, JSON.stringify(source_part));
+    assert.throws(() => createContentGraph('safe', [{ mimeType: 'image/png', source_part }], '.docx'), /SOURCE_PART_INVALID/);
+  }
+});
+
+test('constructor refuses an oversized graph before materializing nodes', () => {
+  const section = { kind: 'text', source_part: 'word/document.xml', markdown: '' };
+  const attachments = [{ mimeType: 'image/png', source_part: 'word/media/image.png' }];
+  assert.doesNotThrow(() => createContentGraph('', attachments, '.docx', Array(999).fill(section)));
+  assert.throws(() => createContentGraph('', attachments, '.docx', Array(1000).fill(section)), /NODE_LIMIT/);
+  assert.throws(() => createContentGraph('', Array(1000).fill(attachments[0]), '.docx'), /NODE_LIMIT/);
+});
+
+test('1200 deterministic Unicode/container combinations agree with an independent segment oracle', () => {
+  const schemaPart = graphSchema.$defs.part;
+  const pattern = new RegExp(schemaPart.pattern, 'u');
+  const pieces = ['word', '.', '..', '', 'media', 'a.docx!', 'a\u2028', 'a\u2029',
+    'a\u0000', 'a\n', 'C:', 'a\\b', 'ä', 'a!b', '🙂'];
+  let seed = 69;
+  const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
+  for (let index = 0; index < 1200; index++) {
+    const part = Array.from({ length: 1 + next() % 8 }, () => pieces[next() % pieces.length]).join('/');
+    const expected = part.length > 0 && part.length <= 500 &&
+      !/[\u0000-\u001f\u007f-\u009f\u2028\u2029:\\]/u.test(part) &&
+      part.split('!/').every((container) => !container.includes('!') &&
+        container.split('/').every((segment) => segment && segment !== '.' && segment !== '..'));
+    assert.strictEqual(pattern.test(part), expected, `schema case ${index}`);
+    const build = () => createContentGraph('safe', [{ mimeType: 'image/png', source_part: part }], '.docx');
+    if (expected) assert.doesNotThrow(build, `runtime case ${index}`);
+    else assert.throws(build, /SOURCE_PART_INVALID/, `runtime case ${index}`);
+  }
 });
 
 test('the isolated parser boundary requires the graph instead of accepting legacy output', () => {

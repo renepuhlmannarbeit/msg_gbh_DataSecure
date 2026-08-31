@@ -90,7 +90,13 @@ ausdrücklich bestätigt gelöscht werden. Historische Dateien in `Processed`
 können Originale aus älteren Versionen sein und werden deshalb weder automatisch
 noch durch einen Purge gelöscht. Ein Gesamt-Purge stoppt ohne Teilbereinigung,
 wenn dort Altbestände vorhanden oder nicht sicher prüfbar sind. Bis zur jeweiligen
-Bereinigung liegen verwaltete Arbeitsdaten unverschlüsselt auf der Festplatte.
+Bereinigung liegen neue verwaltete Arbeitsdaten unverschlüsselt auf der Festplatte.
+Sie sind für Ihr Benutzerkonto und andere Prozesse mit passenden Dateirechten
+lesbar. Seit RC80 gibt es dafür keinen Schlüsselbund, keine Schlüsseldatei und
+kein Passwort. Verschlüsselte Arbeitskopien älterer Versionen bleiben samt
+Metadaten unangetastet, auch bei automatischer Bereinigung; wählen Sie das
+unveränderte Original bei Bedarf erneut aus. Dies ist keine Entschlüsselung
+passwortgeschützter Eingangsdateien; diese bleiben nicht unterstützt.
 Ein datensparsamer Audit-Nachweis bleibt
 zur Prüfbarkeit erhalten. Er enthält eine zufällige Vorgangs-ID, Kategorien,
 Zähler, Versionen und Status, aber keine Dokument- oder Wert-Hashes, exakten
@@ -236,8 +242,9 @@ automatisch verschoben oder gelöscht. Er kann lokale Originale enthalten und wi
 deshalb ausschließlich nach einer bewussten lokalen IT-Prüfung bereinigt.
 
 Der Standard liegt im lokalen DataSecure-App-Datenbereich und nicht unter
-`Dokumente`. Sie müssen den technischen Pfad nicht kennen: *„Öffne den
-Privacy-Ordner"* öffnet ihn im Explorer oder Finder.
+`Dokumente`. Sie müssen den technischen Pfad nicht kennen: *„Öffne die lokale
+Ergebnisübersicht“* öffnet den Exportordner im Explorer oder Finder. Die technische
+Öffnung des gesamten Privacy-Ordners ist nur im ausdrücklich aktivierten IT-Supportmodus verfügbar.
 
 | Ordner | Inhalt |
 |---|---|
@@ -283,8 +290,11 @@ DataSecure-eigene Arbeitskopien, Ergebnisse und Vorschauen – niemals Ihre Quel
    diese Stellen; bis dahin bleiben die betroffenen Dateien gesperrt. Jede danach
    freigegebene Fassung besteht nochmals das automatische Residual-Gate.
 7. Bei mehr als einer Datei zeigt DataSecure zusätzlich eine lokale Abschlussübersicht
-   mit den Zählern ausgewählt, erfolgreich vorbereitet und sicher gestoppt. Claude
-   nennt am Ende dieselben Zähler. Die
+   mit den Zählern ausgewählt, erfolgreich vorbereitet und sicher gestoppt. Die
+   Cowork-Aufgabe endet dagegen bereits nach dem lokalen Start, ohne Polling oder
+   automatisches Ergebnislesen. Warten Sie auf die lokale Abschlussübersicht, nicht
+   auf eine weitere Chatmeldung. Mit einem späteren Auftrag wie *„Werte die fertigen
+   DataSecure-Ergebnisse aus“* starten Sie bewusst die Übergabe an Claude. Die
    lokal gestoppten Dateien besitzen keine freigegebene Arbeitskopie; ihre Namen wurden
    Claude nicht mitgeteilt. Claude erhält Ergebnisse nur namenfrei in Seiten von höchstens
    fünf und liest je nach Aufgabe nur benötigte Pakete. Erfolgreiches Markdown ist
@@ -296,14 +306,16 @@ DataSecure-eigene Arbeitskopien, Ergebnisse und Vorschauen – niemals Ihre Quel
 
 ### Sicher anhalten und später fortsetzen
 
-Wenn Sie während eines laufenden DataSecure-Werkzeugschritts in Claude auf **Stopp**
-klicken, wird der aktuelle Schritt sicher unterbrochen. Es wird kein unvollständiges
-Paket freigegeben, die übrigen Dateien werden nicht automatisch neu ausgewählt und
-die gerade unterbrochene Datei wird nicht still erneut versucht. Der lokale Stapel
+Wenn der Claude-Host während der offenen Dateiauswahl ein Abbruchsignal sendet,
+beendet DataSecure seinen Auswahlprozess und startet keinen neuen Intake. **Stopp**
+oder das Ende einer Cowork-Aufgabe beendet jedoch keinen bereits erfolgreich
+gestarteten, unabhängigen lokalen Hintergrundlauf. Das genaue Hostverhalten wird
+im Zielsystemtest geprüft. Bei einer tatsächlichen Unterbrechung der Verarbeitung
+wird kein unvollständiges Paket freigegeben und keine neue Dateiauswahl gestartet. Der lokale Stapel
 bleibt als Checkpoint erhalten. Bitten Sie Claude später ausdrücklich um
 *„den letzten DataSecure-Stapel fortsetzen“*. Dieser eine bestätigte Schritt startet
 entweder die technische Wiederaufnahme oder – bei zurückgestellten
-Zertifikats-/Organisationsstellen – genau eine lokale Stapelprüfung in einem
+Zertifikats-/Organisationsstellen – eine lokale Stapelprüfung in einem
 getrennten Prozess. Cowork wartet nicht auf den Prüfdialog, verlangt keine zweite
 Bestätigung und erhält keinen Stapel-Token. Ein terminaler Sicherheitsstopp bleibt
 dagegen gesperrt.
@@ -312,17 +324,22 @@ Schließen Sie einen lokalen Auswahl- oder Prüfdialog, gilt dieser Lauf als bee
 DataSecure öffnet keinen zweiten Dialog. Starten Sie nur dann ausdrücklich neu, wenn
 Sie wirklich einen neuen lokalen Auswahlvorgang wünschen.
 
-Wenn Sie ausschließlich Markdown ohne Bilder brauchen, sagen Sie einmalig:
-*„Anonymisiere die Dateien und entferne alle Bilder.“* Bekannte Bildanlagen in
-texttragenden Office-Dateien werden lokal verworfen und in der `.md` als entfernt
-vermerkt. Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans werden
-dadurch nicht an den Sicherheitsprüfungen vorbeigeführt.
+Das normale Ergebnis enthält keine Bildpixel. Bilder bleiben lokal zurückgehalten;
+dies bedeutet nicht, dass sie lokal gelöscht wurden. *„Entferne alle Bilder“*
+ändert diesen Normalstandard nicht. Ein ausdrücklich gewünschtes lokales Verwerfen
+gehört zum getrennten Supportweg, niemals zur Löschung aus der Originaldatei.
+Unbekannte eingebettete Objekte sowie eigenständige Bilder und Scans werden dadurch
+nicht an den Format- und Freigabeprüfungen vorbeigeführt.
 
 Enthält eine Datei einen mehrdeutigen Zertifikats-/Organisations-Treffer, wird nur
 diese Datei sicher zurückgestellt; die übrigen Dateien werden weiterverarbeitet.
-Nach Ihrem ausdrücklichen Auftrag zum Fortsetzen öffnet DataSecure einmalig die
-lokale Stapelprüfung. Sie entscheidet lokal, ob die gelb markierten Namen zu einer
-Zertifizierung gehören. Währenddessen ist die Cowork-Aufgabe bereits beendet.
+Nach Ihrem ausdrücklichen Auftrag zum Fortsetzen öffnet DataSecure die lokale
+Stapelprüfung. Sie entscheidet lokal, ob gelb markierte Namen zu einer Zertifizierung
+gehören. Kleine Stapel bleiben eine Prüfgruppe; große Textmengen werden automatisch
+in begrenzten Gruppen nacheinander vorgelegt, ohne erneute Dateiauswahl oder
+Startbestätigung. Bei Abbrechen folgen keine weiteren Gruppen. Bereits freigegebene
+Gruppen bleiben erhalten; offene Dokumente können später fortgesetzt werden.
+Währenddessen ist die Cowork-Aufgabe bereits beendet.
 
 Windows x64 besitzt die vollständigere Engineering-Grenze. macOS und Linux verwenden
 für TXT/Markdown/CSV/DOCX den Node-Textpfad und stoppen bei Bildern oder manuellen Mehrdeutigkeiten
@@ -381,7 +398,7 @@ Nummern beginnen bei jedem Dokument neu.
 | Claude kennt DataSecure nicht | Claude beenden (Symbol neben der Uhr → *Beenden*), neu starten. Genau ein Versuch, dann IT |
 | „Wie möchten Sie diese Datei öffnen?" | Abbrechen. Das Original nicht in Claude ziehen; eine neue Cowork-Unterhaltung öffnen und den lokalen DataSecure-Ablauf erneut starten. |
 | „Keine unterstützte Datei ausgewählt" | Eine unterstützte TXT-, Markdown-, CSV- oder DOCX-Datei im lokalen Dialog auswählen |
-| „Verarbeitung wurde sicher gestoppt" | **Kein Fehler von Ihnen.** Es wurde nichts freigegeben, nichts ist durchgerutscht. Nicht automatisch erneut starten. `diagnostic_status` aufrufen und nur den festen Fehlercode an IT melden — nicht Datei, Dateiname, Pfad oder Inhalt |
+| „Verarbeitung wurde sicher gestoppt" | Nicht automatisch erneut starten. Melden Sie nur den angezeigten festen Fehlercode an die IT — nicht Datei, Dateiname, Pfad oder Inhalt. Diagnosewerkzeuge sind im Normalmodus absichtlich nicht verfügbar; den getrennten Supportweg beschreibt das IT-Betriebshandbuch. Ein Stopp beweist keine vollständige Erkennung in früheren Läufen. |
 | Sie haben in Claude auf **Stopp** geklickt | Der Stapel bleibt lokal fortsetzbar; kein Paket der unterbrochenen Datei wurde freigegeben. Nicht automatisch neu starten. Bitten Sie bei Bedarf ausdrücklich, den letzten DataSecure-Stapel fortzusetzen |
 | `AMBIGUITY_REVIEW_REQUIRED` | Ein Organisationsname könnte Zertifikatsanbieter oder Arbeitgeber/Kunde sein. Die lokale Arbeitskopie bleibt gesperrt; nicht automatisch erneut starten. Der Normalablauf rät hier bewusst nicht |
 | `PARSER_ISOLATION_FAILED` | Die lokale Windows-Sicherheitsgrenze fehlt oder ist beschädigt. Nicht erneut versuchen und nichts manuell umgehen; Plugin/Extension durch IT neu installieren lassen |

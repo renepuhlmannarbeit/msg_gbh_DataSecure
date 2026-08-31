@@ -85,4 +85,28 @@ test('empty and relative roots never resolve implicitly to the process working d
   assert.throws(() => enumerateSourceFolder('relative-folder', { hasReparseComponent: () => false }), /nicht absolut/iu);
 });
 
+test('managed staging is excluded from both direct and recursive source intake without silent skipping', () => {
+  const privacy = path.join(base, 'private-root');
+  const stage = path.join(privacy, '.datasecure-staging', 'payloads', 'synthetic');
+  fs.mkdirSync(stage, { recursive: true });
+  const draft = path.join(stage, 'draft.md');
+  fs.writeFileSync(draft, 'synthetic private draft');
+  const originalEnv = process.env.EU_PRIVACY_ROOT;
+  process.env.EU_PRIVACY_ROOT = privacy;
+  try {
+    const { validateSelectedPath } = require('../plugins/data-secure/server/companion/file-picker');
+    assert.throws(() => validateSelectedPath(draft), /temporäre Ausgaben/u);
+    assert.throws(() => enumerateSourceFolder(stage), /temporäre Ausgaben/u);
+    assert.throws(() => enumerateSourceFolder(privacy), /temporäre Ausgaben/u);
+    const sibling = path.join(privacy, '.datasecure-staging-originals');
+    fs.mkdirSync(sibling);
+    fs.writeFileSync(path.join(sibling, 'original.txt'), 'synthetic original');
+    assert.strictEqual(enumerateSourceFolder(sibling).length, 1);
+    assert.strictEqual(fs.readFileSync(draft, 'utf8'), 'synthetic private draft');
+  } finally {
+    if (originalEnv === undefined) delete process.env.EU_PRIVACY_ROOT;
+    else process.env.EU_PRIVACY_ROOT = originalEnv;
+  }
+});
+
 done();

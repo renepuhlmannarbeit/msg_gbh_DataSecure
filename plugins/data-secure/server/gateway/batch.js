@@ -8,7 +8,7 @@ const { PROFILES, LIMITS, validateBatchLimits, storageStatus, hasReparseComponen
 const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, readOutboxEntries, STOPPED: MAPPING_STOPPED } = require('./mapping');
-const { sameDocumentResult } = require('./document-result-grade');
+const { sameDocumentResult, notProcessedDocumentResult } = require('./document-result-grade');
 const { capturePackageIdentity, samePackageIdentity } = require('./package-identity');
 const { createBatchTerminalEvidence } = require('./batch-terminal-evidence');
 const { createBatchResultAccess } = require('./batch-results');
@@ -57,7 +57,7 @@ const {
   incrementPrivateIoSummary
 } = require('./performance');
 const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('../companion/text-review');
-const { productPrivateArtifactCrypto } = require('./private-artifact-runtime');
+const { createPrivateWorkStore } = require('./private-work-store');
 const { migrateLegacyBatchState } = require('./batch-private-artifact-migration');
 
 const active = new Set();
@@ -67,23 +67,23 @@ const DEFERRED_REVIEW = 'deferred_review';
 const MAPPING_PENDING = 'mapping_pending';
 const PREFLIGHT_MAPPING_PENDING = 'preflight_mapping_pending';
 
-let privateArtifactCryptoProvider = productPrivateArtifactCrypto;
-const privateArtifactCrypto = Object.freeze({
-  ensureReady: () => privateArtifactCryptoProvider(batchRoot()).ensureReady(),
-  writeEncrypted: (...args) => privateArtifactCryptoProvider(batchRoot()).writeEncrypted(...args),
-  readEncrypted: (...args) => privateArtifactCryptoProvider(batchRoot()).readEncrypted(...args)
+const privateWorkStore = Object.freeze({
+  ensureReady: () => createPrivateWorkStore({ privateRoot: batchRoot() }).ensureReady(),
+  writeFile: (...args) => createPrivateWorkStore({ privateRoot: batchRoot() }).writeFile(...args),
+  readFile: (...args) => createPrivateWorkStore({ privateRoot: batchRoot() }).readFile(...args)
 });
 
 function setPrivateArtifactCryptoProviderForTests(provider) {
   if (typeof provider !== 'function') throw new TypeError('private artifact provider required');
-  privateArtifactCryptoProvider = provider;
+  // Compatibility for older test harnesses only. Product snapshots no longer
+  // use any crypto provider; deliberately never invoke the supplied function.
 }
 
-function encryptedExactPendingEntry(state, item) {
-  migrateLegacyBatchState(state, { artifactCrypto: privateArtifactCrypto, writeState });
+function plainExactPendingEntry(state, item) {
+  migrateLegacyBatchState(state, { privateWorkStore, writeState });
   const current = state.items.find((candidate) => candidate.id === item.id);
   if (!current) throw new SafeError('Die migrierte private Arbeitskopie wurde nicht gefunden.');
-  return exactPendingEntry(state, current, { artifactCrypto: privateArtifactCrypto });
+  return exactPendingEntry(state, current, { privateWorkStore });
 }
 
 const { openBatchPackageProtection } = createBatchRetentionProtection({
@@ -101,7 +101,46 @@ function batchTtlMs() {
   return retentionDays() * 24 * 60 * 60 * 1000;
 }
 
-const { writeState, readState, readStateForMaintenance } = createBatchJournalStore();
+const { writeState, readState, readStateForMaintenance } = createBatchJournalStore({
+  assertZeroDayWorkAvailable(state) {
+    if (state.zero_day_work_ended !== true && !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid)) {
+      throw new SafeError('Die Aufbewahrung der privaten Arbeitskopien ist nach dem Laufende abgelaufen. Bitte die Originaldateien neu auswählen.');
+    }
+  }
+});
+
+// Zero days controls SOURCE COPIES, not the time allowed to run a batch or
+// discover its completed exports. Journals keep the normal seven-day result
+// discovery window. A paused zero-day run cannot resume without new originals.
+function finishZeroDayWork(state) {
+  if (state.zero_day_work !== true || state.zero_day_work_cleaned === true || liveLocalExecutor(state)) return false;
+  reconcilePublishedItems(state);
+  reconcilePendingMappings(state);
+  for (const item of state.items) {
+    if (!['pending', 'processing', 'retryable', DEFERRED_REVIEW].includes(item.status)) continue;
+    item.status = 'stopped';
+    item.checkpoint = 'work_retention_expired';
+    item.error_code = 'RECOVERY_FAILED';
+    item.document_result = notProcessedDocumentResult(item.error_code);
+    item.local_mapping_exported = false;
+    delete item.package_id;
+  }
+  delete state.intake_owner_pid;
+  state.zero_day_work_ended = true;
+  // The stop decisions are durable before removing the source copies. Mapping
+  // and cleanup debts use the existing recovery paths, not another scheduler.
+  for (const item of state.items) if (item.work_name) item.work_copy_cleanup_pending = true;
+  writeState(state);
+  reconcilePreflightStoppedMappings(state);
+  try {
+    safeRemoveWorkDirectory(state.token);
+    state.zero_day_work_cleaned = true;
+    for (const item of state.items) delete item.work_copy_cleanup_pending;
+  } catch { /* retain the cleanup debt and every legacy envelope */ }
+  writeState(state);
+  writeTerminalEvidence(state);
+  return true;
+}
 
 const {
   packageIdForItem,
@@ -152,7 +191,7 @@ const { beginBatch } = createBatchIntake({
   batchPath,
   workPath,
   copySnapshotFile,
-  privateArtifactCrypto,
+  privateWorkStore,
   batchTtlMs,
   createPrivateIoSummary,
   writeState,
@@ -252,6 +291,7 @@ const {
   retryReleasedWorkCopyCleanup,
   reconcileTerminalEvidence: writeTerminalEvidence,
   repairPendingEvidenceOutbox,
+  finishZeroDayWork,
   deliveryPendingStatus: DELIVERY_PENDING,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
@@ -313,7 +353,7 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
 
 const { captureDeferredReviewInput } = createBatchReviewCapture({
   anonymizeNext,
-  exactPendingEntry: encryptedExactPendingEntry,
+  exactPendingEntry: plainExactPendingEntry,
   packageIdForItem,
   localReviewError
 });
@@ -324,7 +364,7 @@ const { markDeferredReview, deferredReviewPlan } = createBatchReviewState({
 
 const { publishReviewedBatch } = createBatchReviewPublication({
   anonymizeNext,
-  exactPendingEntry: encryptedExactPendingEntry,
+  exactPendingEntry: plainExactPendingEntry,
   packageIdForItem,
   reviewedBatchText,
   writeState,
@@ -392,7 +432,7 @@ const { maintainBeforeNext } = createBatchNextMaintenance({
   writeState
 });
 
-const { processBatchNext } = createBatchProcessingOrchestrator({
+const { processBatchNext: processBatchNextInternal } = createBatchProcessingOrchestrator({
   SafeError,
   active,
   acquireActiveLock,
@@ -402,13 +442,34 @@ const { processBatchNext } = createBatchProcessingOrchestrator({
   maintainBeforeNext,
   deliveryResult,
   publicProgress,
-  exactPendingEntry: encryptedExactPendingEntry,
+  exactPendingEntry: plainExactPendingEntry,
   invalidateUnpublishedBatchCopies,
   writeState,
   processSingleBatchItem,
   writeTerminalEvidence,
   deliveryPendingStatus: DELIVERY_PENDING
 });
+
+async function processBatchNext(token, deps = {}) {
+  const result = await processBatchNextInternal(token, deps);
+  // A claimed worker owns the whole multi-item operation. Direct/support
+  // callers reach a lifecycle boundary only after the last pending item.
+  if (!deps.executorPid && result?.remaining === 0) {
+    const finished = finishZeroDayOperation(token);
+    if (finished) return { ...result, ...publicProgress(finished) };
+  }
+  return result;
+}
+
+function finishZeroDayOperation(token) {
+  // Lifecycle finalization is another state mutation and therefore uses the
+  // same cross-process ownership lock as processing, delivery and maintenance.
+  acquireActiveLock(token);
+  try {
+    const state = readStateForMaintenance(token);
+    return finishZeroDayWork(state) ? state : null;
+  } finally { releaseActiveLock(token); }
+}
 
 function readBatchProgress(token) {
   return { ok: true, ...publicProgress(readState(token)), raw_content_sent_to_claude: false };
@@ -425,7 +486,11 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   processBatchNext,
   finalizePublishedPackageLocally,
   writeTerminalEvidence,
-  releaseLocalBatchExecutor,
+  releaseLocalBatchExecutor(token, pid) {
+    const released = releaseLocalBatchExecutor(token, pid);
+    if (released) finishZeroDayOperation(token);
+    return released;
+  },
   deliveryPendingStatus: DELIVERY_PENDING,
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });

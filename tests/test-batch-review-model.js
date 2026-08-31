@@ -12,6 +12,19 @@ const {
 
 const { test, testAsync, done, assert } = createSuite('Local batch review model');
 
+test('aggregate budget rejects before span detection and reports a size error, not cancellation', () => {
+  const pii = require('../plugins/data-secure/server/pii-engine');
+  const original = pii.sensitiveSpans;
+  let scans = 0;
+  pii.sensitiveSpans = () => { scans++; return []; };
+  try {
+    const text = 'x'.repeat(4_000_000);
+    assert.throws(() => buildBatchReviewDraft([1, 2].map(() => ({ original_text: text, anonymized_text: text }))),
+      (error) => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+    assert.strictEqual(scans, 0);
+  } finally { pii.sensitiveSpans = original; }
+});
+
 function ambiguity(id, originalText, anonymizedText, value) {
   return {
     ambiguity_id: id,

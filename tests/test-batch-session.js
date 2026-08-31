@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { fork, spawn } = require('child_process');
+const { EventEmitter } = require('events');
 const { createSuite } = require('./helpers');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));
@@ -135,13 +136,13 @@ async function main() {
     let workerArgs;
     let workerOptions;
     let message;
-    const child = {
+    const child = Object.assign(new EventEmitter(), {
       pid: process.pid,
       send(value, callback) { message = value; setImmediate(() => callback()); },
       disconnect() {},
       unref() {},
       kill() {}
-    };
+    });
     const started = startLocalBatchExecutor(begun.batch_token, {
       forkProcess(file, args, options) {
         workerFile = file;
@@ -1531,14 +1532,16 @@ async function main() {
     assert.strictEqual(released.released, 1);
   });
 
-  await testAsync('private processing checkpoints remain local and contain no source identifiers', async () => {
+  await testAsync('intermediate processing phases do not rewrite the durable journal or expose source identifiers', async () => {
     resetInput(); add('checkpoint-name.txt', 'Kunde: Max Mustermann');
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processBatchNext(begun.batch_token, {
       ...deps,
       beforePublish: async () => {
         const state = _test.readState(begun.batch_token);
-        assert.strictEqual(state.items[0].checkpoint, 'package_verified');
+        // Phase-only checkpoints now stay in memory; recovery restarts safely
+        // from the last durable processing boundary if publication has not happened.
+        assert.strictEqual(state.items[0].checkpoint, 'processing_started');
       }
     });
     const state = _test.readState(begun.batch_token);

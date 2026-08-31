@@ -85,7 +85,7 @@ function complianceHeader(profile, meta) {
     `Automatisch freigegebene visuelle Assets: ${meta.included}\n` +
     `Auf ausdrücklichen Wunsch entfernte visuelle Assets: ${meta.removed || 0}\n` +
     `Lokale visuelle Review-Items: ${meta.review}\n` +
-    'Persistente Rückzuordnung: nein\n' +
+    'Keine persistente Personen-Pseudonymtabelle; lokale Zuordnung von Originaldatei und Ergebnis vorhanden.\n' +
     `Re-Identifikationsrisiko: ${meta.reidentificationRisk}\n` +
     'Hinweis: De-Identifizierung garantiert keine rechtliche Anonymität.\n' +
     `Bildtext: OCR-Text zurückgehaltener Grafiken ist nach Textprüfung enthalten (${meta.review} Item(s)).\n` +

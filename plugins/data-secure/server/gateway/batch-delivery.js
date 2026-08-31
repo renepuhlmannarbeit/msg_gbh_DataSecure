@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { SafeError } = require('../runtime');
-const { workPath } = require('./batch-private-store');
+const { workPath, assertPlainWorkFile } = require('./batch-private-store');
 
 const WORK_NAME_RE = /^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i;
 
@@ -43,6 +43,12 @@ function createBatchDelivery(options = {}) {
   }
 
   function cleanupTerminalWorkCopy(state, item, deps = {}) {
+    if (state?.schema === 'datasecure-batch/3' || Object.hasOwn(item || {}, 'private_artifact_encrypted') ||
+        Object.hasOwn(item || {}, 'legacy_work_name')) {
+      const error = new ErrorType('Eine alte verschlüsselte Arbeitskopie bleibt unverändert erhalten.');
+      error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';
+      throw error;
+    }
     if (!WORK_NAME_RE.test(String(item?.work_name || ''))) {
       throw new ErrorType('Private Arbeitskopie ist nicht sicher bereinigbar.');
     }
@@ -52,6 +58,7 @@ function createBatchDelivery(options = {}) {
       if (!stat.isFile() || stat.isSymbolicLink()) {
         throw new ErrorType('Private Arbeitskopie ist nicht sicher bereinigbar.');
       }
+      assertPlainWorkFile(full, io);
       (deps.unlinkWorkCopy || io.unlinkSync)(full);
     }
     delete item.work_copy_cleanup_pending;

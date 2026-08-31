@@ -1,8 +1,8 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 23.08.2026 · Status aller folgenden Entscheidungen: **angenommen**
+Stand: 31.08.2026 · Status aller folgenden Entscheidungen: **angenommen**
 
-Diese Entscheidungen stammen aus dem abgeschlossenen Produkt-Grill. Sie beschreiben
+Diese Entscheidungen stammen aus dem Produkt-Grill und bestätigten Ergänzungen. Sie beschreiben
 das Zielprodukt, nicht den Funktionsumfang von RC30.
 
 ## DS-001 – Produktzweck und Aussagegrenze
@@ -449,3 +449,96 @@ Verschlüsselung gehen Distribution, Performance und Formaterweiterung voraus.
 Charakterisierungs-, Negativ-, Recovery-, Dokumentations- und lokale CI-Gates sind
 für jeden Teilschnitt Pflicht. Diese Entscheidung ergänzt DS-057 um den
 Implementierungs- und Migrationsrang, ohne frühere Produktentscheidungen zu ändern.
+
+## DS-062 – Keine zusätzliche System-VM
+
+Bestätigt am 31.08.2026: DataSecure wird nicht als VM-Lösung gebaut; auch die
+Testplanung darf keine zusätzliche System-VM vorsehen oder voraussetzen.
+Entwicklung und Abnahme erfolgen auf echten lokalen Zielsystemen. Diese
+Entscheidung präzisiert DS-052/DS-056 und verwirft die frühere VM-Testoption.
+Ein separates lokales OS-Testkonto ist ein möglicher, aber gesondert mit dem
+Anwender abzustimmender Weg für Tests mit echtem Credential Store. Ohne sichere
+Trennung bleiben solche Tests offen; produktive Schlüssel und Originale werden
+nicht umbenannt, ausgelesen, überschrieben oder gelöscht, um Tests zu ermöglichen.
+Produktfreie synthetische Tests dürfen weiter lokal laufen. JavaScript-
+Testkontexte (`node:vm`) sind keine zusätzlichen Betriebssystem-VMs. Die Zusage
+betrifft DataSecure und unsere Testinfrastruktur, nicht interne Sandboxtechnik
+des externen Claude-Hosts.
+
+## DS-063 – Kein zusätzliches Windows-Benutzerkonto
+
+Bestätigt am 31.08.2026: Auch ein separates Windows-Benutzerkonto wird weder für
+DataSecure noch für seine Tests bereitgestellt. Diese Entscheidung ersetzt den
+in DS-062 noch zur Abstimmung gestellten OS-Testkonto-Weg. Keine erneute
+Kontoanforderung als Nutzeraufgabe. Der VM-Ausschluss bleibt bestehen.
+
+Die sichere Trennung von Testdaten und Testschlüsseln im vorhandenen Konto ist
+Entwicklungsarbeit. Zunächst sind ausschließlich produktfreie synthetische Tests
+zulässig. Ein möglicher Engineering-eigener Credential-Namensraum benötigt ein
+separates Design, Negativtests und Nachweis, dass kein Produktcredential gelesen,
+verändert oder gelöscht werden kann. Eine frei wählbare Produktvariable zur
+Schlüsselumleitung oder ein anderes Datenverzeichnis alleine genügen nicht.
+Bis dahin bleiben die bisherigen echten SEA-Keyring-Abnahmeläufe unzulässig.
+Synthetische oder abweichend konfigurierte Nachweise dürfen nicht als unveränderte
+Produkt-/OS-Abnahme ausgegeben werden. Diese Grenze ist keine weitere vom Nutzer
+zu beschaffende Infrastruktur, sondern offene E0-Testarchitekturarbeit.
+
+## DS-064 – Einfacher Produktablauf statt wachsender Testinfrastruktur
+
+Bestätigt am 31.08.2026: Einfachheit und Funktionsfähigkeit haben Vorrang vor
+weiterem Ausbau einer umfassenden Schlüsselbund-/SEA-Testinfrastruktur. Diese
+Entscheidung begrenzt den aus DS-063 abgeleiteten Implementierungsumfang; keine
+VM, kein Zusatzkonto und keine weiteren Anwenderdialoge.
+
+Produktive lokale Verschlüsselung, Originalschutz, inhaltsfreie Diagnostik und
+sicheres Stoppen bei Schlüssel-/Parserfehlern bleiben erhalten. Automatisierte
+Verschlüsselungs-, Fehler-, Abbruch- und Fortsetzungstests verwenden die vorhandenen
+Testadapter. Für den echten Windows-Schlüsselbund genügt zunächst ein gezielter
+Smoke-Test: synthetischen Schlüssel in einem eindeutig eigenen temporären
+Testeintrag schreiben, lesen/vergleichen, ausschließlich diesen Eintrag entfernen.
+Keine Produktionscredentials lesen, ersetzen oder löschen. Ein kleiner, expliziter
+lokaler Test genügt; kein allgemeiner Namespace-Manager oder zusätzlicher Dienst.
+
+Die zusätzliche prozessübergreifende Engineering-Session-/Buildbindung und eine
+vollständige native Keyring×SEA×Crash×Recovery-Matrix sind zurückgestellt, nicht
+erledigt und keine vorgeschaltete Pflicht für weitere Produktarbeit. Die
+Kombination ist damit nicht umfassend geprüft; daraus keine pauschale Risiko-
+oder Produktfreigabe ableiten. Normale echte Installation, Dokumentverarbeitung
+und relevante Abbruch-/Fortsetzungsabläufe bleiben praktisch abzunehmen.
+Bekannte reproduzierbare Fehler werden weiterhin behoben.
+
+Nächste Priorität: kleiner Schlüsselbund-Smoke-Test, dann den normalen lokalen
+Cowork-Ablauf mit synthetischen Dokumenten zuverlässig zum Abschluss bringen.
+
+## DS-065 – Lokale Arbeitskopien ohne zusätzliche Verschlüsselung
+
+Bestätigt am 31.08.2026: DataSecure verwendet für neue private lokale Snapshots,
+Reviewkopien und einen künftig neustartfesten Pseudonymkontext keine zusätzliche
+Verschlüsselung. Kein Windows-Schlüsselbund oder anderer OS-Secret-Store, keine
+Ersatzschlüsseldatei und keine Passwortabfrage. Keine zusätzliche VM, kein
+zusätzliches Windows-Konto und kein zusätzlicher Anwenderdialog.
+
+Die verwalteten lokalen Dateien sind für das Benutzerkonto und bei entsprechenden
+Dateirechten auch für andere Prozesse lesbar. Diese Einschränkung ist bewusst
+akzeptiert; „privat“ bedeutet lokal und nicht an Claude freigegeben, nicht
+verschlüsselt. Originalschutz, lokale Anonymisierung, Inhalts-/Release-Gates,
+inhaltsfreie Diagnostik und die Aufbewahrungsregeln neuer Plainkopien bleiben
+unverändert. Erfolgreiche Rohkopien werden entfernt, offene Rohkopien spätestens
+nach 14 Tagen; Reviewkopien folgen ihrer konfigurierten Frist. Originale, Exporte
+und Mappings bleiben geschützt.
+
+Verschlüsselte Altbestände (`datasecure-batch/3`, `.dsart` und zugehörige
+Metadaten) bleiben unangetastet. Keine automatische Entschlüsselung, Migration,
+Schlüsselbundabfrage oder Löschung zur Umstellung. Für eine erneute Verarbeitung
+wird die unveränderte Originaldatei neu ausgewählt. Neue Plain-Stapel erhalten
+einen eindeutigen Speichervertrag und bleiben fortsetzbar; Ciphertext darf niemals
+als Plain umgedeutet werden. Passwortgeschützte Eingangsdateien bleiben gemäß
+DS-046 nicht unterstützt.
+
+Diese Entscheidung ersetzt die Verschlüsselungsanteile von DS-050/DS-059, die
+Verschlüsselung als vorgeschaltetes Arbeitspaket aus DS-061 sowie die
+Schlüsselbund-Testpriorität aus DS-063/DS-064. Native Keyring-Smoke-Tests,
+Engineering-Keyring-Session-Infrastruktur und deren Kombinationsmatrix sind
+wegen Scopewechsel obsolet, nicht bestanden. Vorhandene historische Nachweise
+bleiben dokumentiert; normale lokale Stapel-, Abbruch-/Fortsetzungs-, Paket- und
+Cowork-Tests haben Vorrang.

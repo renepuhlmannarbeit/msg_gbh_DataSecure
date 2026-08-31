@@ -1,9 +1,10 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
-const { batchPath, safeRemoveWorkDirectory } = require('./batch-private-store');
+const { batchPath, safeRemoveWorkDirectory, assertPlainWorkFile } = require('./batch-private-store');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const {
@@ -13,7 +14,8 @@ const {
 } = require('./document-result-grade');
 const { validatePackageIdentity } = require('./package-identity');
 
-const SCHEMA = 'datasecure-batch/3';
+const SCHEMA = 'datasecure-batch/4';
+const ENCRYPTED_SCHEMA = 'datasecure-batch/3';
 const V2_SCHEMA = 'datasecure-batch/2';
 const LEGACY_SCHEMA = 'datasecure-batch/1';
 const NOT_FOUND = 'Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte den Eingang erneut bestätigen.';
@@ -24,6 +26,7 @@ const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 function createBatchJournalStore(options = {}) {
   const io = options.io || fs;
   const pathForToken = options.batchPath || batchPath;
+  const workDirectoryForToken = options.workPath || ((token) => path.join(path.dirname(pathForToken(token)), `${token}.work`));
   const removeWorkDirectory = options.safeRemoveWorkDirectory || safeRemoveWorkDirectory;
   const randomBytes = options.randomBytes || crypto.randomBytes;
   const nowMs = options.nowMs || (() => Date.now());
@@ -35,6 +38,7 @@ function createBatchJournalStore(options = {}) {
   });
   const ErrorType = options.SafeError || SafeError;
   const maxBatchFiles = options.maxBatchFiles || RESOURCE_LIMITS.MAX_BATCH_FILES;
+  const assertZeroDayWorkAvailable = options.assertZeroDayWorkAvailable;
 
   function temporaryJournalPath(target) {
     return `${target}.tmp_${randomBytes(6).toString('hex')}`;
@@ -77,6 +81,7 @@ function createBatchJournalStore(options = {}) {
   // same-status diagnostic checkpoints. Atomic temp-file publication remains
   // unconditional; only the two power-loss flushes are skipped.
   function writeState(state, writeOptions = {}) {
+    rejectEncryptedState(state);
     const durable = writeOptions.durable !== false;
     const target = pathForToken(state.token);
     const temporary = temporaryJournalPath(target);
@@ -155,6 +160,11 @@ function createBatchJournalStore(options = {}) {
 
   function validV2ItemResult(item, schema) {
     if (!validSourceLabel(item) || Object.hasOwn(item, 'read_capability')) return false;
+    // Storage validation must precede all status-specific early returns.
+    if (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
+        /\.dsart$/iu.test(String(item.work_name || ''))) return false;
+    if (Object.hasOwn(item, 'work_name') && schema === SCHEMA && item.private_artifact_plain !== true) return false;
+    if (schema !== SCHEMA && Object.hasOwn(item, 'private_artifact_plain')) return false;
     if (Object.hasOwn(item, 'package_identity')) {
       if (item.status !== 'released') return false;
       try { validatePackageIdentity(item.package_identity); }
@@ -178,13 +188,42 @@ function createBatchJournalStore(options = {}) {
       return item.status === 'processing' &&
         ['package_published', 'publication_unconfirmed'].includes(item.checkpoint);
     }
-    if (Object.hasOwn(item, 'work_name')) {
-      if (schema === SCHEMA && item.private_artifact_encrypted !== true) return false;
-      if (schema !== SCHEMA && Object.hasOwn(item, 'private_artifact_encrypted')) return false;
-      if (Object.hasOwn(item, 'legacy_work_name') &&
-          !/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/iu.test(String(item.legacy_work_name))) return false;
-    }
     return true;
+  }
+
+  function rejectEncryptedState(state) {
+    if (state?.schema === ENCRYPTED_SCHEMA || (Array.isArray(state?.items) && state.items.some((item) =>
+      item && (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
+      /\.dsart$/iu.test(String(item.work_name || '')))))) {
+      const error = new ErrorType('Ein alter verschlüsselter Stapel bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.');
+      error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';
+      throw error;
+    }
+  }
+
+  function rejectRenamedEncryptedCopies(state) {
+    // Retirement/maintenance must not destroy an old envelope just because its
+    // filename and journal marker were changed. Read at most eight bytes per
+    // existing snapshot, never the document body or any credential. Ordinary
+    // active readState/process checkpoints do not pay for this sweep.
+    const items = state.items.filter((item) => item?.work_name);
+    if (!items.length) return;
+    const work = workDirectoryForToken(state.token);
+    let root;
+    try { root = io.lstatSync(work); }
+    catch (error) { if (error?.code === 'ENOENT') return; throw error; }
+    if (!root.isDirectory() || root.isSymbolicLink()) throw new ErrorType(INVALID);
+    for (const item of items) {
+      if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/iu.test(item.work_name)) throw new ErrorType(INVALID);
+      const target = path.join(work, item.work_name);
+      try {
+        assertPlainWorkFile(target, io);
+      } catch (error) {
+        // Already-cleaned terminal snapshots are normal. Any uncertain read
+        // must block maintenance instead of authorising recursive removal.
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
   }
 
   function validStateShape(state, token) {
@@ -204,11 +243,16 @@ function createBatchJournalStore(options = {}) {
     } catch {
       throw new ErrorType(NOT_FOUND);
     }
+    rejectEncryptedState(state);
     const expiry = validExpiry(state?.expires_at);
     if (!validStateShape(state, token)) {
       throw new ErrorType(INVALID);
     }
+    if (state.zero_day_work === true && typeof assertZeroDayWorkAvailable === 'function') {
+      assertZeroDayWorkAvailable(state);
+    }
     if (nowMs() > expiry) {
+      rejectRenamedEncryptedCopies(state);
       try {
         removeWorkDirectory(token);
         io.unlinkSync(pathForToken(token));
@@ -223,13 +267,15 @@ function createBatchJournalStore(options = {}) {
     // intentionally read-only and preserves raw parse/validation errors so
     // callers can count them without deleting an unknown local record.
     const state = readJournalRecord(token);
+    rejectEncryptedState(state);
     if (!validStateShape(state, token)) {
       throw new Error('invalid');
     }
+    rejectRenamedEncryptedCopies(state);
     return state;
   }
 
   return { writeState, readState, readStateForMaintenance };
 }
 
-module.exports = { SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, createBatchJournalStore };
+module.exports = { SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, createBatchJournalStore };

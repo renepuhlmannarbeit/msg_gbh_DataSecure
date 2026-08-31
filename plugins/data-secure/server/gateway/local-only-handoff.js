@@ -91,7 +91,13 @@ function createLocalOnlyHandoff(deps) {
   function expired() { return session && (now() - session.lastUsedAt > IDLE_TTL_MS || now() > session.expiresAt); }
   function start() {
     if (session && !expired()) {
-      return { ok: false, error: 'local_handoff_active', message: 'Eine lokale Ergebnisübergabe ist bereits aktiv. Bitte diese fortsetzen oder beenden.', raw_content_sent_to_claude: false };
+      // A terminal page was already returned with more:false. A new explicit
+      // start is also its acknowledgement boundary; no extra next() or user
+      // confirmation is needed. Incomplete pages remain protected.
+      if (!session.loaded || session.entries.length || session.nextCursor !== null) {
+        return { ok: false, error: 'local_handoff_active', message: 'Eine lokale Ergebnisübergabe ist bereits aktiv. Bitte diese fortsetzen oder beenden.', raw_content_sent_to_claude: false };
+      }
+      try { acknowledgePreviousPage(); } finally { clear(); }
     }
     if (session) clear();
     const candidates = candidatesForChat();

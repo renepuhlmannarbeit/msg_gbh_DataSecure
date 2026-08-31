@@ -1,5 +1,9 @@
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 const { createBatchDelivery } = require('../plugins/data-secure/server/gateway/batch-delivery');
 const { createSuite } = require('./helpers');
 
@@ -34,6 +38,14 @@ function fixture(options = {}) {
     path: { join: (left, right) => `${left}/${right}` },
     workPath: (batchToken) => `work:${batchToken}`,
     io: {
+      constants: { O_RDONLY: 0 },
+      openSync(target) { return target; },
+      fstatSync(target) { return { isFile: () => files.get(target) === 'file' }; },
+      readSync(_fd, buffer, offset, length) {
+        buffer.fill(0, offset, offset + length);
+        return length;
+      },
+      closeSync() {},
       existsSync(target) { events.push(`exists:${target}`); return files.has(target); },
       lstatSync(target) {
         events.push(`lstat:${target}`);
@@ -237,6 +249,81 @@ test('local finalization verifies before mutation and writes one terminal state'
   assert.strictEqual(allowed.durable().items[0].analysis_acknowledged, false);
   assert.strictEqual(allowed.events.filter((event) => event === 'write').length, 1);
   assert.strictEqual(allowed.events.filter((event) => event === 'evidence').length, 1);
+});
+
+test('all terminal cleanup callers preserve renamed legacy magic with bounded short reads', () => {
+  const candidate = item(0, 'stopped', { cleanupPending: true });
+  candidate.work_name = '001_aaaaaaaaaaaaaaaaaaaaaaaa.workcopy';
+  const bytes = Buffer.from('DSARTF01legacy ciphertext, not a real secret');
+  let readBytes = 0;
+  let unlinks = 0;
+  const stat = { dev: 1, ino: 2, size: bytes.length, mtimeMs: 1, isFile: () => true, isSymbolicLink: () => false };
+  const delivery = createBatchDelivery({
+    workPath: () => 'owned-work',
+    io: {
+      constants: { O_RDONLY: 0 }, existsSync: () => true,
+      lstatSync: () => stat, fstatSync: () => stat,
+      openSync: () => 7, closeSync() {},
+      readSync(_fd, buffer, offset, length, position) {
+        const count = Math.min(2, length);
+        bytes.copy(buffer, offset, position, position + count);
+        readBytes += count;
+        return count;
+      },
+      unlinkSync() { unlinks++; }
+    }
+  });
+  assert.throws(() => delivery.cleanupTerminalWorkCopy({ token }, candidate), (error) =>
+    error.code === 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED');
+  assert.strictEqual(readBytes, 8);
+  assert.strictEqual(unlinks, 0);
+  assert.strictEqual(candidate.work_copy_cleanup_pending, true);
+});
+
+test('whole-work cleanup preflights legacy siblings and cleans only wholly owned interrupted hard links', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-guard-'));
+  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA };
+  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+  process.env.LOCALAPPDATA = path.join(base, 'localapp');
+  const { workPath, safeRemoveWorkDirectory } = require('../plugins/data-secure/server/gateway/batch-private-store');
+  try {
+    const work = workPath(token);
+    fs.mkdirSync(work);
+    const first = path.join(work, '001_aaaaaaaaaaaaaaaaaaaaaaaa.workcopy');
+    const second = path.join(work, '002_bbbbbbbbbbbbbbbbbbbbbbbb.workcopy');
+    fs.writeFileSync(first, 'plain synthetic copy');
+    fs.writeFileSync(second, 'DSARTF01synthetic legacy envelope');
+    assert.throws(() => safeRemoveWorkDirectory(token));
+    assert.strictEqual(fs.readFileSync(first, 'utf8'), 'plain synthetic copy');
+    assert.strictEqual(fs.readFileSync(second, 'utf8'), 'DSARTF01synthetic legacy envelope');
+    fs.writeFileSync(second, 'plain synthetic second copy');
+    const temporary = path.join(work, '.001_aaaaaaaaaaaaaaaaaaaaaaaa.workcopy.cccccccccccccccccccccccc.tmp');
+    fs.linkSync(first, temporary);
+    safeRemoveWorkDirectory(token);
+    assert.strictEqual(fs.existsSync(work), false);
+    fs.mkdirSync(work);
+    fs.writeFileSync(first, 'an external hard link is not owned');
+    const original = path.join(base, 'synthetic-original.txt');
+    fs.linkSync(first, original);
+    assert.throws(() => safeRemoveWorkDirectory(token));
+    assert.strictEqual(fs.readFileSync(original, 'utf8'), 'an external hard link is not owned');
+    assert.strictEqual(fs.existsSync(first), true);
+    fs.unlinkSync(original);
+    const nested = path.join(work, 'nested');
+    fs.mkdirSync(nested);
+    const nestedCopy = path.join(nested, 'regular.txt');
+    fs.writeFileSync(nestedCopy, 'DSARTF01nested legacy envelope');
+    assert.throws(() => safeRemoveWorkDirectory(token));
+    assert.strictEqual(fs.existsSync(first), true, 'nested legacy preflight protects the whole tree');
+    fs.writeFileSync(nestedCopy, 'regular synthetic helper file');
+    safeRemoveWorkDirectory(token);
+    assert.strictEqual(fs.existsSync(work), false, 'journal-owned nested regular helpers retain their discard contract');
+  } finally {
+    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local]]) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });
 
 test('the batch composition root preserves every delivery facade', () => {

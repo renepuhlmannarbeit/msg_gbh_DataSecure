@@ -27,6 +27,7 @@ function createBatchRetentionProtection(options = {}) {
       return { ids, complete: false };
     }
     for (const entry of entries) {
+      if (entry.name === 'active-processing.json') continue;
       if (!entry.isFile || !entry.isFile() || !entry.name.endsWith('.json')) continue;
       let state;
       try {
@@ -34,7 +35,7 @@ function createBatchRetentionProtection(options = {}) {
       } catch {
         return { ids, complete: false };
       }
-      if (state?.schema !== 'datasecure-batch/1' || !Array.isArray(state.items)) {
+      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4'].includes(state?.schema) || !Array.isArray(state.items)) {
         return { ids, complete: false };
       }
       for (const item of state.items) {

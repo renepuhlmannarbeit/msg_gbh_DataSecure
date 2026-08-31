@@ -207,13 +207,21 @@ test('no npm runtime dependencies are declared', () => {
 test('native Windows launcher has a reproducible source and release build contract', () => {
   assert.strictEqual(
     pkg.scripts.pretest,
-    'npm run test:p0-private && npm run native:verify && npm run test:legacy-input && npm run test:result-grades'
+    'npm run test:staging && npm run test:executor-lifecycle && npm run test:p0-private && npm run native:verify && npm run test:legacy-input && npm run test:result-grades'
   );
+  for (const name of ['pretest:ci', 'pretest:fast-path']) {
+    assert.ok(pkg.scripts[name].startsWith('npm run test:staging && npm run test:executor-lifecycle && '));
+  }
+  assert.strictEqual(pkg.scripts['test:executor-lifecycle'],
+    'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-workflow-diagnostics.js');
   assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');
   assert.strictEqual(pkg.scripts['native:analyze'], 'node scripts/build-native.mjs --analyze');
-  assert.strictEqual(pkg.scripts.posttest, 'node tests/test-docx-differential.js && node tests/test-native-launcher.js');
+  assert.strictEqual(pkg.scripts.posttest, 'node tests/test-docx-structure.js && node tests/test-docx-differential.js && node tests/test-native-launcher.js');
+  assert.strictEqual(pkg.scripts['posttest:ci'], 'npm run test:parser-contract && npm run test:rc81-review');
+  assert.match(pkg.scripts['test:rc81-review'], /test-native-picker-lifecycle\.js/);
+  assert.strictEqual(pkg.scripts['test:parser-contract'], 'node tests/test-content-graph.js && node tests/test-parser-isolation.js && node tests/test-docx-structure.js && node tests/test-docx-differential.js');
   for (const rel of [
     'native/windows/datasecure-sandbox.cpp',
     'scripts/build-native.mjs',

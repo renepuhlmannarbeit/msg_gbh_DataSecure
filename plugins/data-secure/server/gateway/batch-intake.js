@@ -1,6 +1,8 @@
 'use strict';
 
 const { notProcessedDocumentResult, normalizeDocumentResultReasonCode } = require('./document-result-grade');
+const { createBatchIntakeIntent } = require('./batch-intake-intent');
+const { DEFAULT_RETENTION_DAYS } = require('./retention');
 
 function createBatchIntake(options = {}) {
   const SafeError = options.SafeError;
@@ -22,7 +24,7 @@ function createBatchIntake(options = {}) {
   const batchPath = options.batchPath;
   const workPath = options.workPath;
   const copySnapshotFile = options.copySnapshotFile;
-  const privateArtifactCrypto = options.privateArtifactCrypto;
+  const privateWorkStore = options.privateWorkStore;
   const batchTtlMs = options.batchTtlMs;
   const createPrivateIoSummary = options.createPrivateIoSummary;
   const writeState = options.writeState;
@@ -31,6 +33,7 @@ function createBatchIntake(options = {}) {
   const publicProgress = options.publicProgress;
   const platform = options.platform || process.platform;
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
+  const intakeIntent = options.intakeIntent || createBatchIntakeIntent(options);
 
   function journalPublicationState(expected) {
     try {
@@ -148,18 +151,29 @@ function createBatchIntake(options = {}) {
     const candidates = admissionPlan.filter((planned) => planned.admission === 'candidate');
     assertStagingCapacity(candidates.map((planned) => planned.entry), beginOptions.statfs || io.statfsSync);
     const token = requestedToken || crypto.randomBytes(32).toString('hex');
-    if (io.existsSync(batchPath(token)) || io.existsSync(workPath(token))) {
+    if (io.existsSync(batchPath(token)) || io.existsSync(workPath(token)) || io.existsSync(intakeIntent.intentPath(token))) {
       throw new SafeError('Die lokale Batch-Sitzung ist bereits belegt.');
     }
     const now = Date.now();
     const work = workPath(token);
     let state;
+    let createdWork = false;
+    let workIdentity;
+    let intent;
+    const ttl = batchTtlMs();
     try {
-      if (!privateArtifactCrypto || typeof privateArtifactCrypto.ensureReady !== 'function') {
-        throw new SafeError('Die Verschlüsselung privater Stapelkopien ist nicht verfügbar. Es wurden keine Quelldaten übernommen.');
+      if (!privateWorkStore || typeof privateWorkStore.ensureReady !== 'function') {
+        throw new SafeError('Der lokale Speicher privater Stapelkopien ist nicht verfügbar. Es wurden keine Quelldaten übernommen.');
       }
-      privateArtifactCrypto.ensureReady();
+      privateWorkStore.ensureReady();
       io.mkdirSync(work, { recursive: false, mode: 0o700 });
+      createdWork = true;
+      const created = io.lstatSync(work, { bigint: true });
+      if (!created.isDirectory() || created.isSymbolicLink()) throw new Error('BATCH_INTAKE_WORK_UNSAFE');
+      workIdentity = { dev: String(created.dev), ino: String(created.ino), birthtimeNs: String(created.birthtimeNs) };
+      // The empty directory precedes the intent; no source byte is copied
+      // until its ownership record has been durably written.
+      intent = intakeIntent.create(token, new Date(now + ttl).toISOString(), workIdentity);
       const items = admissionPlan.map((planned, index) => {
         const entry = planned.entry;
         const id = crypto.randomBytes(16).toString('hex');
@@ -178,11 +192,10 @@ function createBatchIntake(options = {}) {
             processing_duration_ms: 0
           };
         }
-        const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}.dsart`;
+        const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}.workcopy`;
         const copied = copySnapshotFile(entry.full, path.join(work, workName), entry.stat, {
           expectedSha256: planned.source_sha256,
-          artifactCrypto: privateArtifactCrypto,
-          binding: { purpose: 'batch-snapshot', objectId: `${token}:${id}` }
+          privateWorkStore
         });
         return {
           id,
@@ -191,16 +204,17 @@ function createBatchIntake(options = {}) {
           size: copied.size,
           sha256: copied.sha256,
           work_name: workName,
-          private_artifact_encrypted: true,
+          private_artifact_plain: true,
           status: 'pending',
           checkpoint: 'sealed'
         };
       });
       state = {
-        schema: 'datasecure-batch/3',
+        schema: 'datasecure-batch/4',
         token,
         created_at: new Date(now).toISOString(),
-        expires_at: new Date(now + batchTtlMs()).toISOString(),
+        expires_at: new Date(now + (ttl === 0 ? DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000 : ttl)).toISOString(),
+        ...(ttl === 0 ? { zero_day_work: true, intake_owner_pid: process.pid } : {}),
         profile,
         remove_images: beginOptions.removeImages === true,
         io_summary: createPrivateIoSummary({
@@ -211,14 +225,18 @@ function createBatchIntake(options = {}) {
         items
       };
       writeState(state);
+      try { intakeIntent.remove(token); } catch { /* a published journal owns this tree now */ }
       return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
     } catch (error) {
       // A parent-directory fsync can fail after the complete journal rename.
       // Preserve its matching sealed work tree so recovery never sees a
       // journal without bytes. Before publication, remove only this token's
       // private work tree. Cleanup failure never masks the primary error.
-      if (!state || journalPublicationState(state) === 'absent') {
-        try { safeRemoveWorkDirectory(token); } catch { /* preserve primary error */ }
+      if (createdWork && workIdentity && (!state || journalPublicationState(state) === 'absent')) {
+        try {
+          safeRemoveWorkDirectory(token, { expectedIdentity: workIdentity });
+          if (intent) intakeIntent.remove(token);
+        } catch { /* preserve primary error and ownership evidence */ }
       }
       if (error instanceof SafeError) throw error;
       if (typeof error?.code === 'string' && error.code.startsWith('PRIVATE_ARTIFACT_')) {

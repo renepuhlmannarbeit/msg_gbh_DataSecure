@@ -14,6 +14,16 @@ const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/1';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
+function reviewSizeError() {
+  const error = new SafeError('Die lokale Prüfgruppe ist zu groß. Kleinere Gruppen sind erforderlich; bereits geprüfte Ergebnisse bleiben erhalten.');
+  error.code = 'LOCAL_REVIEW_TOO_LARGE';
+  return error;
+}
+
+function reviewDocumentLabel(index, count) {
+  return count === 1 ? '' : `\n\n===== Dokument ${index + 1} von ${count} =====\n\n`;
+}
+
 function exactContextLine(text, start, end) {
   const source = String(text || '');
   const lineStart = source.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
@@ -109,6 +119,14 @@ function buildBatchReviewDraft(documents, progress = {}) {
   if (!Array.isArray(documents) || documents.length < 1 || documents.length > LIMITS.MAX_BATCH_FILES) {
     throw new SafeError('Der lokale Stapelreview enthält keine zulässige Anzahl von Dokumenten.');
   }
+  // Bound before normalization, span detection and joined copies are allocated.
+  for (const field of ['original_text', 'anonymized_text']) {
+    let length = 0;
+    for (let index = 0; index < documents.length; index++) {
+      length += String(documents[index]?.[field] || '').length + reviewDocumentLabel(index, documents.length).length;
+      if (length > MAX_REVIEW_CHARS) throw reviewSizeError();
+    }
+  }
   const originals = [];
   const anonymized = [];
   const ambiguities = [];
@@ -129,7 +147,7 @@ function buildBatchReviewDraft(documents, progress = {}) {
       document.ambiguities || [],
       { batchIndex: index + 1, batchTotal: documents.length }
     );
-    const label = `\n\n===== Dokument ${index + 1} von ${documents.length} =====\n\n`;
+    const label = reviewDocumentLabel(index, documents.length);
     originals.push(label, individual.original_text);
     anonymized.push(label, individual.anonymized_text);
     originalOffset += label.length;
@@ -157,7 +175,7 @@ function buildBatchReviewDraft(documents, progress = {}) {
   const originalText = originals.join('');
   const anonymizedText = anonymized.join('');
   if (originalText.length > MAX_REVIEW_CHARS || anonymizedText.length > MAX_REVIEW_CHARS) {
-    throw new SafeError('Der lokale Stapelreview ist zu groß und wurde nicht freigegeben.');
+    throw reviewSizeError();
   }
   const draft = buildReviewDraft(originalText, anonymizedText, 'general', ambiguities, {
     batchIndex: 1,
@@ -659,6 +677,7 @@ module.exports = {
   REVIEW_SCHEMA,
   BATCH_REVIEW_SCHEMA,
   MAX_REVIEW_CHARS,
+  reviewSizeError,
   buildReviewDraft,
   buildBatchReviewDraft,
   groupForCandidate,

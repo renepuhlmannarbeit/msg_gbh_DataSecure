@@ -54,6 +54,16 @@ function createBatchProcessingOrchestrator(options = {}) {
       try {
         entry = exactPendingEntry(state, item);
       } catch (error) {
+        if (['PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED', 'LEGACY_ENCRYPTED_ARTIFACT_UNAVAILABLE'].includes(error?.code)) {
+          // This is not tampering with a new snapshot. Preserve old envelopes
+          // and the journal exactly; there is deliberately no decrypt fallback.
+          return {
+            ok: false,
+            error: 'LEGACY_ENCRYPTED_ARTIFACT_UNAVAILABLE',
+            message: 'Der alte verschlüsselte Stapel bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.',
+            raw_content_sent_to_claude: false
+          };
+        }
         invalidateUnpublishedBatchCopies(state, { ...deps, writeState });
         return {
           ok: false,

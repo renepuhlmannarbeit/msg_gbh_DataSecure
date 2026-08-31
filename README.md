@@ -1,10 +1,17 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC57
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC81
 
 > **Sicherheits-Hinweis:** Niemals echte Mitarbeiter-, Bewerber-, Kunden- oder Vertragsdokumente, Mapping-Dateien, Privacy-Output oder Zugangsdaten committen. Das gilt unabhängig davon, dass das Repository privat ist — ein Commit ist dauerhaft, repliziert in jeden Klon und unterliegt keiner Löschfrist. Repository-Tests verwenden ausschließlich synthetische Daten. Siehe [SECURITY.md](SECURITY.md).
 
 DataSecure ist jetzt **Plugin-first** aufgebaut: Claude Skills übernehmen Routing, Zweck-/Profilwahl und Governance; ein gebündelter lokaler MCP-Server bildet die technische Privacy-Grenze und verarbeitet Quelldateien, bevor Claude deren Inhalt verwendet.
 
-> **Ist und Ziel nicht verwechseln:** Der ausführbare RC57-Umfang wird in dieser
+**Lokale Ablage ab RC80:** Arbeitskopien und Reviewdateien werden ohne zusätzliche
+Verschlüsselung gespeichert. Kein Windows-Schlüsselbund, keine Schlüsseldatei,
+kein Passwort und keine zusätzliche Einrichtung. Dateien sind mit passenden
+Dateirechten lesbar; an Claude gehen weiterhin nur freigegebene Ergebnisse.
+Originale bleiben unverändert. Verschlüsselte Altbestände werden nicht angefasst;
+für diese Dateien wählen Sie das Original erneut aus.
+
+> **Ist und Ziel nicht verwechseln:** Der ausführbare RC81-Umfang wird in dieser
 > README und im Betriebshandbuch beschrieben. Alle verbindlich getroffenen
 > Produktentscheidungen und das einzige gültige Entwicklungsbacklog stehen im
 > [kanonischen Dokumentensystem](docs/canonical/README.md).
@@ -23,7 +30,7 @@ lokalen Claude-Code-Host und benötigt dafür eine eigene Installationsabnahme.
 ## Zielworkflow
 
 ```text
-DOCX / TXT (beaufsichtigter Pilot)
+TXT / Markdown / CSV / DOCX (beaufsichtigter Pilot)
           ↓
    lokaler Privacy-MCP
           ↓
@@ -35,12 +42,14 @@ DOCX / TXT (beaufsichtigter Pilot)
  ├─ manifest.json
  └─ audit.json
           ↓
+ Lokaler Abschluss (Cowork-Startaufgabe ist bereits beendet)
+          ↓ erst nach neuem ausdrücklichem Auswertungsauftrag
         Claude
 ```
 
 Wenn Rohdaten **vor** der Modellverarbeitung bereinigt werden müssen, wird das Original weder direkt in den Chat hochgeladen noch hineinkopiert. Nach außen gibt es einen Einstieg: „Anonymisiere eine oder mehrere Dateien lokal.“ DataSecure wählt den passenden lokalen Weg und verwendet danach nur die erzeugten Privacy-Pakete.
 
-Bis zu 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MiB werden einmal im lokalen Mehrfach-Dateidialog gewählt. Auf ausdrücklichen Wunsch kann stattdessen ein Ordner rekursiv gewählt werden; Links, Junctions und Reparse Points werden nie verfolgt und relative Unterordner erscheinen nur im lokalen Mapping. Sichere Einzeldateigrenzen gelten zusätzlich: TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes sowie DOCX 64 MiB komprimiert und 128 MiB entpackt. Es gibt keine feste Seitenbegrenzung; diese Ressourcenlimits bleiben maßgeblich. Mit **„Öffnen“** ist die einzige Normalbestätigung erteilt. DataSecure prüft den vollständigen Stapel zuerst nur lesend. Erst danach erzeugt der getrennte lokale Worker verschlüsselte private Arbeitskopien für zulässige Kandidaten; ungültige, verschlüsselte oder noch nicht freigegebene Dateien erhalten ohne Quellkopie einen lokalen Einzelstopp, während die übrigen Dateien weiterlaufen. Anzahl, Identitäten und Hashes bleiben lokal. Die Quelle bleibt unverändert – auch bei einer späteren SharePoint-Anbindung darf DataSecure dort nur Leserechte verwenden. Ein Stopp wird serverseitig festgehalten, Änderungen am Original verändern den gestarteten Snapshot nicht. Der Standard `local_only` erzeugt lokal Markdown, Mapping und einen inhaltsfreien Nachweis, ohne dass Claude Ergebnisse lesen oder bestätigen muss. Nur bei ausdrücklich verlangter Folgeauswertung liest der gebündelte Cowork-Aufruf höchstens fünf freigegebene Markdown-Ergebnisse gleichzeitig, jeweils mit kurzlebiger Berechtigung. Ein Chat- oder Serverabbruch liefert dasselbe verifizierte Paket erneut, statt die Quelle doppelt zu verarbeiten. Jede Datei erhält einen ausschließlich lokalen Status in `DataSecure-Export/DataSecure-Mapping.csv`; nur erfolgreiche Dateien besitzen eine Ergebniskennung. Terminale Stapel ergänzen dort einen inhaltsfreien JSON-Nachweis ohne Namen, Pfade oder Dokumentinhalte. Markdown-Links, HTML und Bildreferenzen werden nicht geladen, sondern nur als Text durch die Datenschutzregeln verarbeitet. CSV-Zellen werden ausschließlich als Text verarbeitet und niemals ausgeführt. PDF und alle weiteren Formate bleiben im Pilot gesperrt.
+Bis zu 100 TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MiB werden einmal im lokalen Mehrfach-Dateidialog gewählt. Auf ausdrücklichen Wunsch kann stattdessen ein Ordner rekursiv gewählt werden; Links, Junctions und Reparse Points werden nie verfolgt und relative Unterordner erscheinen nur im lokalen Mapping. Sichere Einzeldateigrenzen gelten zusätzlich: TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes sowie DOCX 64 MiB komprimiert und 128 MiB entpackt. Es gibt keine feste Seitenbegrenzung; diese Ressourcenlimits bleiben maßgeblich. Mit **„Öffnen“** ist die einzige Normalbestätigung erteilt. DataSecure prüft den vollständigen Stapel zuerst nur lesend. Erst danach erzeugt der getrennte lokale Worker private lokale Arbeitskopien ohne zusätzliche Verschlüsselung für zulässige Kandidaten; ungültige, verschlüsselte oder noch nicht freigegebene Dateien erhalten ohne Quellkopie einen lokalen Einzelstopp, während die übrigen Dateien weiterlaufen. Anzahl, Identitäten und Hashes bleiben lokal. Die Quelle bleibt unverändert – auch bei einer späteren SharePoint-Anbindung darf DataSecure dort nur Leserechte verwenden. Ein Stopp wird serverseitig festgehalten, Änderungen am Original verändern den gestarteten Snapshot nicht. Der Standard `local_only` erzeugt lokal Markdown, Mapping und einen inhaltsfreien Nachweis, ohne dass Claude Ergebnisse lesen oder bestätigen muss. Nur bei ausdrücklich verlangter Folgeauswertung liest der gebündelte Cowork-Aufruf höchstens fünf freigegebene Markdown-Ergebnisse gleichzeitig, jeweils mit kurzlebiger Berechtigung. Ein Chat- oder Serverabbruch liefert dasselbe verifizierte Paket erneut, statt die Quelle doppelt zu verarbeiten. Jede Datei erhält einen ausschließlich lokalen Status in `DataSecure-Export/DataSecure-Mapping.csv`; nur erfolgreiche Dateien besitzen eine Ergebniskennung. Terminale Stapel ergänzen dort einen inhaltsfreien JSON-Nachweis ohne Namen, Pfade oder Dokumentinhalte. Markdown-Links, HTML und Bildreferenzen werden nicht geladen, sondern nur als Text durch die Datenschutzregeln verarbeitet. CSV-Zellen werden ausschließlich als Text verarbeitet und niemals ausgeführt. PDF und alle weiteren Formate bleiben im Pilot gesperrt.
 
 Windows x64 besitzt die vollständigere Engineering-Grenze mit nativem Job Object und lokalem Text-Review. macOS und Linux verwenden für TXT/Markdown/CSV/DOCX den Node-Permission-Prozess; er ist Defense-in-depth und keine harte Sicherheitsgrenze für native Speicherallokationen oder Prozessbäume. Beim Plugin-ZIP ist die dafür nötige Node-22.13+-Auflösung noch nicht installationsfrei belegt; beim MCPB stellt Claude Desktop eine eingebaute Node-Runtime bereit. Linux nutzt für begrenzte Zertifikatsentscheidungen Zenity oder KDialog ohne Rohtext in Argumenten. Der vorhandene macOS-Review ist wegen eines bekannten AppleScript-Aktionsfehlers derzeit nicht freigegeben. Freie Redaktionen und Bild/OCR-Freigabe sind außerhalb des Windows-Engineering-Pfads noch nicht produktionsreif. Bilder bleiben lokal oder werden auf ausdrücklichen Wunsch entfernt. Echte Mac-/Linux-Freigaben setzen harte Ressourcenlimits, CI und manuelle Zielplattformtests voraus.
 
@@ -112,8 +121,8 @@ npm run build
 
 Erzeugt werden:
 
-- `DataSecure-Privacy-Preflight-v3.2.0-rc66.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
-- `DataSecure-Privacy-Gateway-v3.2.0-rc66.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
+- `DataSecure-Privacy-Preflight-v3.2.0-rc81.zip` – Claude-Plugin für manuellen Plugin-Marketplace-Upload/Engineering-Abnahme
+- `DataSecure-Privacy-Gateway-v3.2.0-rc81.mcpb` – plattformneutraler Standalone-Fallback für Claude Desktop Extensions
 
 Der Plugin-ZIP-/Marketplace-Weg startet derzeit den Befehl `node`. Ob Claude diesen
 in der jeweiligen Plugin-Oberfläche aus seiner eingebauten Runtime oder nur aus dem

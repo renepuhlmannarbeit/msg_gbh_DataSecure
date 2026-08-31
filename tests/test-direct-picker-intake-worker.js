@@ -180,7 +180,7 @@ async function main() {
     for (const expected of [
       'intake_worker_spawned', 'intake_ipc_dispatched', 'intake_checkpoint_created',
       'intake_processing_started', 'intake_terminal_state', 'completion_notice_started',
-      'completion_notice_finished', 'intake_worker_exited'
+      'completion_notice_dispatched', 'intake_worker_exited'
     ]) assert.ok(eventNames.includes(expected), `missing lifecycle event ${expected}`);
     assert.doesNotMatch(JSON.stringify(workflowEvents), /source\.txt|beispiel@example\.test|Beispielperson/u);
     assert.strictEqual(validatePrivateIoSummary(state.io_summary), true);

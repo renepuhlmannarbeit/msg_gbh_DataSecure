@@ -1,13 +1,21 @@
 # DataSecure IT-Betriebshandbuch
 
-Version 3.2.0 RC66 · Stand 27.08.2026
+Version 3.2.0 RC81 · Stand 31.08.2026
 
 Dieses Handbuch richtet sich an IT-Administration, Pilotverantwortliche und
-Support. RC66 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
+Support. RC81 ist ein Engineering-Build für synthetische Testdaten. Es ist weder
 produktionsfreigegeben noch signiert und darf nicht mit echten Beschäftigten-,
 Bewerber-, Kunden- oder Vertragsdokumenten pilotiert werden.
 
 ## 1. Betriebsmodell und Sicherheitsgrenze
+
+Seit RC80 / DS-065 liegen neue private Arbeitskopien und Reviewdaten lokal ohne
+zusätzliche Verschlüsselung vor. Keine Einrichtung von Schlüsselbund, Schlüsseldatei
+oder Passwort, keiner zusätzlichen VM und keines zusätzlichen Windows-Kontos.
+Dateien sind mit passenden Dateirechten lesbar. Bestehende verschlüsselte V3-/
+`.dsart`-Artefakte samt Metadaten nicht löschen, migrieren oder per Keyring öffnen;
+bei Bedarf die Originale neu auswählen. Alte Installationsschlüssel werden von
+DataSecure nicht verändert. Native Keyring-Abnahmetests sind obsolet, nicht bestanden.
 
 DataSecure verarbeitet Originaldateien lokal und veröffentlicht ausschließlich
 verifiziertes Markdown. Sämtliche Bildpixel bleiben im öffentlichen Pilot lokal.
@@ -17,22 +25,32 @@ Leseberechtigung aus demselben Lauf abrufbar.
 
 Es existieren zwei Auslieferungswege:
 
-| Artefakt | Ziel | Status RC66 |
+| Artefakt | Ziel | Status RC81 |
 |---|---|---|
-| `DataSecure-Privacy-Preflight-v3.2.0-rc66.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
-| `DataSecure-Privacy-Gateway-v3.2.0-rc66.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
+| `DataSecure-Privacy-Preflight-v3.2.0-rc81.zip` | Claude-Cowork-Plugin/Organisations-Marketplace | führender Anwenderweg; Skills, lokaler MCP und nativer x64-Launcher; Paket-Skill-Abnahme automatisiert, Runtime-Auflösung in der Zielumgebung noch abzunehmen |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc81.mcpb` | lokale Claude-Desktop-Extension | plattformneutraler Engineering-Fallback; frische Installation je Zielplattform noch abzunehmen |
 
 Der lokale MCP öffnet keinen Netzwerklistener. Der private Companion verwendet
 authentifizierte geerbte stdio-Kanäle. Das ersetzt keine Codesignatur oder
 Installationsherkunft.
 
-Plugin-Skills können in Chat und Cowork erscheinen. Der lokale Dateipfad funktioniert
-nur in einem Claude-Desktop-Host oder in Claude Code und nur, wenn `privacy_status`
-in der konkreten Unterhaltung verfügbar ist. Das wurde im Zielbuild auch in Cowork
-Desktop beobachtet, ist aber vor jeder Freigabe versionsspezifisch zu testen. Web und
-Mobil dürfen keine Originaldatei für diesen Preflight erhalten.
+Plugin-Skills können in Chat und Cowork erscheinen. Das beweist keinen lokalen MCP.
+Der Normalmodus bietet acht Werkzeuge, keine `privacy_status`- oder Diagnoseabfrage.
+Ein Picker-Abbruchtest prüft die Erreichbarkeit ohne Originalzugriff. Er ist keine
+Host-Attestierung: Die Desktop-Oberfläche kann auch Cloud-Ausführung vermitteln.
+Ausführungsart, lokale MCP-Runtime und Datengrenze sind separat versionsgebunden
+mit synthetischen Daten zu belegen. Die konservative
+[Hostmatrix](canonical/HOST_MATRIX_V1.json) bleibt maßgeblich; keine Freigabe von
+Web/Mobil/Cloud allein aufgrund neuer Claude-Funktionen.
 
 ## 2. Voraussetzungen
+
+RC80 liefert außerdem eine **standardmäßig deaktivierte passive Startkarte**.
+Sie ist kein Live-Status und erfordert keine Änderung des Anwenderablaufs.
+Nur Engineering darf sie mit synthetischen Daten nach dem
+[MCP-App-Pilotvertrag](canonical/STATUS_APP_PILOT_V1.md) prüfen. Text-/OS-Fallback
+bleiben maßgeblich; echte Cowork-/A11y-Freigabe fehlt. Kein neues Supporttool,
+kein zusätzliches Nutzerpaket und keine Internetverbindung der lokalen Engine.
 
 - Unterstützter Engineering-Test: Windows 10/11 x64 mit aktueller Claude-Desktop-Version.
 - Windows ARM64 bleibt gesperrt, bis ein separat gebauter und getesteter Launcher
@@ -44,7 +62,7 @@ Mobil dürfen keine Originaldatei für diesen Preflight erhalten.
 - Keine Cloud-OCR-, Remote-MCP- oder Upload-Fallbacks für Originaldaten zulassen.
 - Nur Artefakte aus demselben grünen `main`-Commit verwenden; SHA-256 vor der
   Installation mit der Release-Evidenz vergleichen.
-- `privacy_status` muss für Parser und Bildverarbeitung `windows_job_object` melden.
+- Im getrennten IT-Supporttest muss `privacy_status` auf Windows für Parser und Bildverarbeitung `windows_job_object` melden.
   Andernfalls bleibt Textverarbeitung gesperrt beziehungsweise werden Grafiken sicher
   zurückgehalten; niemals PowerShell oder Node manuell als Ausweichweg starten.
 
@@ -66,7 +84,8 @@ Zusage machen.
    - Grafikmodus: `strict`;
    - Aufbewahrung: `7` Tage für den Engineering-Test.
 5. Claude Desktop vollständig beenden und neu starten.
-6. Im Chat „Prüfe bitte den Status von DataSecure“ ausführen.
+6. In einer neuen Aufgabe „Dateien anonymisieren“ ausführen und den lokalen Picker
+   ohne Dateiauswahl abbrechen. Diagnose ist kein normaler Installationsschritt.
 7. Extension-Status und Logs unter `Settings → Extensions` prüfen, falls die Tools
    fehlen.
 
@@ -95,7 +114,10 @@ Aktuelle offizielle Referenzen:
 
 ## 5. Technische Startprüfung
 
-Ein grüner Startnachweis umfasst mindestens:
+Der normale Erreichbarkeitstest ist der Picker-Abbruch ohne Datei. Die folgenden
+technischen Statusabfragen erfolgen ausschließlich im befristeten Supportmodus
+nach Abschnitt 8; ihr Erfolg ersetzt weder Host- noch Parserabnahme.
+Ein technischer Startnachweis umfasst mindestens:
 
 - `privacy_status` antwortet mit Version, Retention und formatbezogenen Fähigkeiten;
 - `privacy_status` meldet auf Windows x64 `parser_boundary: windows_job_object` und
@@ -128,12 +150,21 @@ Die vollständige Abnahme steht in [PILOT-ABNAHME.md](PILOT-ABNAHME.md).
 
 | Bereich | Inhalt | Standardverhalten |
 |---|---|---|
-| Private Batchdaten | versiegelte Arbeitskopien und Checkpoints | nach Erfolg sofort, sonst spätestens nach 14 Tagen; künftig OS-benutzergebunden verschlüsselt |
+| Private Batchdaten | lokale Plain-Arbeitskopien und Checkpoints ohne zusätzliche Verschlüsselung | neue Rohkopien nach Erfolg sofort, sonst spätestens nach 14 Tagen; verschlüsselte Altbestände bleiben unangetastet (DS-065) |
 | `Processed` (Altbestand) | mögliche Originale aus historischen Builds | dauerhaft geschützt; niemals durch Retention, Null-Tage-Regel, Purge, Update oder Deinstallation automatisch löschen |
 | `Output` | freigegebene Markdown-Pakete | dauerhaft; nur ausdrücklich bestätigt löschbar; Lesen nur mit kurzlebiger Berechtigung |
+| `.datasecure-staging` | noch nicht veröffentlichte Pakete und inhaltsfreie Besitznachweise | RC80: nach Erfolg/Fehler gezielt bereinigt; nach Crash nur bei gültiger Identitätsbindung und eindeutig beendetem Besitzer, einmal bei Laufvorbereitung |
 | `Needs Visual Review` | lokal zurückgehaltene Vorschauen | keine Freigabe über Claude; Preview verfällt |
 | `DataSecure-Export` | dauerhaftes Mapping und inhaltsfreier Batchnachweis | keine automatische Löschung |
 | Audit | datensparsame Zähler/Status | keine Rohwerte, Namen, Pfade oder Inhalts-Hashes |
+
+RC81 präzisiert eine ausdrücklich konfigurierte Aufbewahrung von **0 Tagen**:
+ein aktiver Stapel darf fertiglaufen; am Laufende werden noch offene Arbeitskopien
+beendet und bereinigt. Auch vertagte Prüfungen sind dann nicht wiederaufnehmbar.
+Für diese Dateien sind die unveränderten Originale neu auszuwählen. Fertige
+Outputs und dauerhafte Exporte bleiben erhalten. Ein kleiner `.intake`-Nachweis
+ermöglicht die spätere gezielte Bereinigung eigener abgelaufener Kopierreste nach
+einem Prozessabbruch vor dem ersten Journal; unbekannte Bereiche bleiben bestehen.
 
 Im Pilot werden ausschließlich TXT, Markdown (`.md`), CSV und DOCX über den lokalen
 Mehrfachpicker verarbeitet. CSV-Zellen werden nur als Text in eine Markdown-Tabelle
@@ -141,6 +172,17 @@ Mehrfachpicker verarbeitet. CSV-Zellen werden nur als Text in eine Markdown-Tabe
 Einen ausführbaren Input-Ordner- oder Inbox-Fallback gibt es nicht. Löschfehler werden gemeldet und beim nächsten
 Cleanup erneut versucht. Unbekannte Verzeichnisse, Symlinks und Junctions werden
 nicht aggressiv entfernt.
+
+Der Stagingbereich liegt neben `Output` auf demselben Dateisystem; er ist kein
+Eingabeordner und wird von der Quellauswahl ausgeschlossen. Die Recovery löscht
+keine Originale und keine bereits veröffentlichten Pakete. Alte Output-Dotordner
+ohne Besitznachweis werden nicht nach Namensmuster bereinigt. Ein Crash vor dem
+ersten vollständigen Besitznachweis kann einen leeren ungebundenen Bereich
+hinterlassen. Bei `STAGING_RECOVERY_BLOCKED` oder `PACKAGE_STAGING_*` lokal durch
+IT prüfen lassen, keine pauschalen Löschbefehle ausführen. Defekte oder manipulierte
+Bindungen bleiben erhalten; unklare/lebende PIDs werden nicht durch ihr Alter
+überstimmt. Fsync von Verzeichnis-Metadaten ist auf POSIX vorgesehen, kein
+plattformübergreifender Stromausfallnachweis wird daraus behauptet.
 
 Der Standardarbeitsbereich liegt nicht unter `Dokumente`, sondern im lokalen
 App-Datenbereich des Betriebssystems. Bekannte OneDrive-, iCloud-Drive-, Dropbox-,
@@ -208,6 +250,31 @@ Codesignatur ist keine Voraussetzung und darf nicht behauptet werden.
 
 ## 8. Support und Diagnose
 
+### Befristete IT-Diagnose, nicht Anwender-Onboarding
+
+1. Keine aktive Verarbeitung oder offene lokale Prüfung verändern. Zunächst
+   regulär abschließen/vertagen; niemals Rohdaten, Schlüssel oder Journale löschen.
+2. IT ermittelt lokal die tatsächlich verwendete MCP-Registrierung und den
+   installierten Build. Nicht den flüchtigen Plugin-Cache editieren. Nur wenn die
+   verwaltete Registrierung eine lokale Server-Umgebung unterstützt, dort im
+   vorhandenen `env`-Objekt vorübergehend `"EU_PRIVACY_SUPPORT_MODE": "1"` ergänzen.
+   Andere Einstellungen unverändert lassen und den vorherigen Wert lokal sichern.
+3. Claude vollständig beenden/neustarten, neue isolierte Supportaufgabe ohne
+   Anhänge verwenden. Der Modus exponiert **25 statt 8 Werkzeuge**, darunter
+   zustandsverändernde Supportfunktionen. Nur die explizit beauftragten read-only
+   `privacy_status`/`diagnostic_status` nutzen; keine pauschalen Auto-Freigaben.
+4. Ausschließlich die unten erlaubten Metadaten dokumentieren. Bei unzugänglicher
+   Registrierung ist diese Diagnose **BLOCKED**. Kein Versprechen eines Cowork-
+   Konfigurationsfeldes, kein stilles Umstellen auf Remote-MCP. Ein separater lokaler
+   CLI-Test darf die Engine prüfen, belegt aber nicht die installierte Cowork-Instanz.
+5. Den vorherigen Umgebungswert wiederherstellen (normal: Variable nicht gesetzt),
+   vollständig neustarten und in einer neuen Aufgabe die normale Oberfläche prüfen:
+   acht Werkzeuge, keine Diagnose-/Supportwerkzeuge. Erst dann UAT fortsetzen.
+
+Für eine rein lokale Entwickler-Strukturprüfung ohne Modellaufruf:
+`npm run validate:claude-local`. Eine fehlende Claude CLI wird als BLOCKED gemeldet,
+nicht automatisch installiert. Diese Prüfung verändert keine Hostkonfiguration.
+
 Das read-only Werkzeug `diagnostic_status` liefert die letzten maximal 50 Einträge
 aus einem lokal auf 14 Tage und 200 Ereignisse begrenzten Journal. Es enthält nur
 Verarbeitungsphase, Formatklasse, Profil, Zähler und feste Fehlercodes. Dateiname,
@@ -222,9 +289,13 @@ privates IPC, Checkpoint, Verarbeitungsstart, Review-Rekonstruktion, Start und E
 der lokalen Prüfoberfläche, Terminalzustand, Workerende und lokale Abschlussanzeige.
 Zulässig sind nur begrenzte Zähler, Dauer, Exit-/Fehlercode und
 der feste Ereignisname; Batch-Token, PID, Pfad, Dateiname, Inhalt und Hash fehlen.
-Liegt zuletzt `completion_notice_started`, aber kein `completion_notice_finished`
-vor, blockiert die lokale Abschlussanzeige. Fehlt bereits `intake_worker_spawned`,
-liegt der Fehler vor dem Workerstart.
+Seit RC80 sind auch Restzustands-/Fehleranzeigen abgekoppelt:
+`completion_notice_dispatched` bestätigt nur die Startanforderung, nicht die
+Sichtbarkeit oder das Schließen des Fensters. `completion_notice_finished` bleibt
+für historische synchrone Aufrufe lesbar. Ein fehlendes Folgeereignis beweist allein
+keinen blockierenden Dialog. `*_worker_exited` wird erst beim tatsächlichen Exit
+und höchstens einmal gemeldet; fehlgeschlagener Spawn ohne PID verwendet
+`*_ipc_failed` mit `LOCAL_WORKER_SPAWN_FAILED`, nicht ein erfundenes Prozessende.
 
 Für eine zurückgestellte Fachprüfung startet die bestätigte Cowork-Fortsetzung einen
 abgekoppelten lokalen Review-Worker und kehrt sofort zurück. Der Batch-Token wird nur

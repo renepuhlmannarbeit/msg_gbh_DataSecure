@@ -2,15 +2,21 @@
 
 ## Gestoppte Verarbeitung
 
-Wiederhole einen gestoppten Lauf niemals automatisch. Im lokalen Stapel wird jede bestätigte
-Datei in einem getrennten Aufruf mit demselben `batch_token` versucht. Der Server markiert
-Stopps dauerhaft in dieser Sitzung und setzt mit der nächsten Datei fort. Eine Änderung am
-bestätigten Picker-Snapshot invalidiert den gesamten Stapel.
+Wiederhole einen gestoppten Lauf niemals automatisch. Der getrennte lokale Worker
+verwaltet jede bestätigte Datei selbst; Claude steuert weder Einzeldateiaufrufe noch
+Batch-Token. Der Server speichert Stopps und verarbeitet weitere zulässige Positionen.
+Eine Änderung am privaten bestätigten Snapshot invalidiert den Stapel; spätere Änderungen
+an den Originalen ändern die versiegelte Arbeitskopie nicht.
 
-Rufe `diagnostic_status` auf und erkläre nur dessen feste Fehlercodes:
+Im Normalmodus sind Diagnosewerkzeuge absichtlich nicht verfügbar. Erkläre den bereits
+gemeldeten festen Fehlercode, falls einer vorliegt, und verweise bei Diagnosebedarf an
+die IT. Starte kein Statuspolling und leite aus einem fehlenden Supportwerkzeug keinen
+fehlenden Connector ab. Nur im ausdrücklich von der IT aktivierten Supportmodus darf
+auf Diagnosewunsch `diagnostic_status` aufgerufen werden. Erkläre nur dessen feste Codes:
 
-- `AMBIGUITY_REVIEW_REQUIRED`: Die konkrete Stelle muss lokal als „erhalten“ oder
-  „anonymisieren“ entschieden werden. Diese Entscheidung ist nicht überspringbar.
+- `AMBIGUITY_REVIEW_REQUIRED`: Vor einer Freigabe muss die konkrete Stelle lokal als
+  „erhalten“ oder „anonymisieren“ entschieden werden. Vertagen ist möglich, erteilt aber
+  keine Freigabe. Eine später ausdrücklich bestätigte Fortsetzung startet die lokale Prüfung.
 - `PARSER_ISOLATION_FAILED`: Neuinstallation oder IT-Prüfung erforderlich. Starte den
   Parser niemals direkt als Umgehung.
 - `PARSER_RESOURCE_LIMIT`: Nichts wurde freigegeben; keine automatische Wiederholung.
@@ -24,7 +30,7 @@ Rufe `diagnostic_status` auf und erkläre nur dessen feste Fehlercodes:
   Zuordnungsübersicht nicht sicher aktualisiert werden konnte. Nicht automatisch
   wiederholen; die lokale Speicherberechtigung beziehungsweise den Exportordner prüfen.
 
-Im Stapel stoppt nur die betroffene Datei, solange der Snapshot unverändert ist. Arbeite
+Im Stapel stoppt nur die betroffene Datei, solange der Snapshot unverändert ist.
 Im Normalweg verwaltet der lokale Ergebnis-Handoff Paketkennungen und Leseberechtigungen
 vollständig serverseitig. Nur im IT-Supportmodus darf mit `package_id` und
 `read_capability` gearbeitet werden, die derselbe erfolgreiche Aufruf meldet. Die
@@ -59,6 +65,8 @@ Das Diagnosejournal ist auf 14 Tage beziehungsweise 200 Ereignisse begrenzt und 
 keine Dateinamen, Pfade, Inhalte, erkannten Werte oder Dokument-Hashes. Ein separater,
 metadatenbasierter Audit-Nachweis bleibt ohne diese Rohdaten außerhalb der Frist bestehen.
 
+`purge_local_data` ist nur im ausdrücklich aktivierten IT-Supportmodus verfügbar.
+Im Normalmodus verweise an die IT; keine Löschung über allgemeine Dateisystemwerkzeuge.
 Für `purge_local_data` muss der Anwender Umfang und Bestätigung ausdrücklich nennen;
 beides darf nicht hergeleitet oder erweitert werden. `Output` und `Review` sind die
 löschbaren Bereiche. `scope=processed` stoppt bei geschützten Altquellen; `scope=all`

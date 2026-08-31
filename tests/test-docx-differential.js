@@ -2,9 +2,10 @@
 
 // Mammoth is an independent DOCX-to-HTML implementation. It is deliberately a
 // dev-only oracle: the product parser remains the small, fail-closed OOXML
-// reader on the privacy boundary. This comparison covers ordinary main-body and
-// table text only; it does not claim coverage for Word stories Mammoth handles
-// differently.
+// reader on the privacy boundary. This comparison covers main-body and nested
+// table text. Mammoth ignores modern wps text boxes: the outer-run differential
+// below explicitly records that limit instead of treating missing oracle text
+// as permission to drop it from the product parser.
 const fs = require('fs');
 const path = require('path');
 const mammoth = require('mammoth');
@@ -28,11 +29,65 @@ function run(text) {
 function docx(body, rows) {
   const table = `<w:tbl>${rows.map((row) => `<w:tr>${row.map((cell) =>
     `<w:tc>${run(cell)}</w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`;
+  return rawDocx(body.map(run).join('') + table);
+}
+
+function rawDocx(body) {
   return zipStore([
     ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'],
     ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-    ['word/document.xml', `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body.map(run).join('')}${table}<w:sectPr/></w:body></w:document>`]
+    ['word/document.xml', `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><w:body>${body}<w:sectPr/></w:body></w:document>`]
   ]);
+}
+
+function orderedOnce(text, tokens, label) {
+  let previous = -1;
+  for (const token of tokens) {
+    const position = text.indexOf(token);
+    assert.ok(position > previous, `${label}: missing or reordered token ${token}`);
+    assert.strictEqual(text.indexOf(token, position + token.length), -1, `${label}: duplicated token ${token}`);
+    previous = position;
+  }
+}
+
+async function verifyNestedTables() {
+  for (let index = 0; index < 24; index++) {
+    const expected = [`CASE_${index}_START_`, `CASE_${index}_CORE_`];
+    let table = `<w:tbl><w:tr><w:tc>${run(expected[1])}</w:tc></w:tr></w:tbl>`;
+    for (let depth = 0; depth < 1 + index % 6; depth++) {
+      const before = `CASE_${index}_DEPTH_${depth}_BEFORE_`;
+      const after = `CASE_${index}_DEPTH_${depth}_AFTER_`;
+      const neighbor = `CASE_${index}_DEPTH_${depth}_NEIGHBOR_`;
+      const nextRow = `CASE_${index}_DEPTH_${depth}_NEXT_ROW_`;
+      expected.splice(1, 0, before);
+      expected.push(after, neighbor, nextRow);
+      table = `<w:tbl><w:tr><w:tc>${run(before)}${table}${run(after)}</w:tc><w:tc>${run(neighbor)}</w:tc></w:tr><w:tr><w:tc>${run(nextRow)}</w:tc></w:tr></w:tbl>`;
+    }
+    expected.push(`CASE_${index}_END_`);
+    const buffer = rawDocx(run(expected[0]) + table + run(expected[expected.length - 1]));
+    const local = parseOoxml(buffer, '.docx');
+    const oracle = await mammoth.extractRawText({ buffer });
+    assert.deepStrictEqual(local.warnings, [], `local nested-table case ${index}`);
+    assert.deepStrictEqual(oracle.messages, [], `Mammoth nested-table case ${index}`);
+    orderedOnce(local.markdown, expected, 'local nested tables');
+    orderedOnce(oracle.value, expected, 'Mammoth nested tables');
+  }
+}
+
+async function verifyOuterTextboxRuns() {
+  for (let index = 0; index < 16; index++) {
+    const tokens = [`OUTER_${index}_BEFORE_`, `BOX_${index}_CONTENT_`, `OUTER_${index}_AFTER_`];
+    const buffer = rawDocx(`<w:p><w:r><w:t>${tokens[0]}</w:t></w:r><w:r><w:drawing><wps:wsp><wps:txbx><w:txbxContent>${run(tokens[1])}</w:txbxContent></wps:txbx></wps:wsp></w:drawing></w:r><w:r><w:t>${tokens[2]}</w:t></w:r></w:p>`);
+    const local = parseOoxml(buffer, '.docx');
+    const oracle = await mammoth.extractRawText({ buffer });
+    assert.deepStrictEqual(local.warnings, []);
+    orderedOnce(local.markdown, tokens, 'local outer and inner text');
+    orderedOnce(oracle.value, [tokens[0], tokens[2]], 'Mammoth outer runs');
+    // This is a documented oracle limitation, not a product success criterion.
+    assert.strictEqual(oracle.messages.length, 1);
+    assert.match(oracle.messages[0].message, /unrecognised element.*wordprocessingShape.*wsp/);
+    assert.ok(!oracle.value.includes(tokens[1]));
+  }
 }
 
 async function verifyPinnedOracle() {
@@ -86,5 +141,7 @@ async function verifyBodyAndTables() {
 (async () => {
   await testAsync('Mammoth is exactly pinned as a BSD-2-Clause dev-only oracle', verifyPinnedOracle);
   await testAsync('our DOCX main-body and table tokens agree with Mammoth for 96 documents', verifyBodyAndTables);
+  await testAsync('24 nested-table documents agree with Mammoth on order and exactly-once text coverage', verifyNestedTables);
+  await testAsync('16 textbox documents retain outer runs like Mammoth plus independently verified inner text', verifyOuterTextboxRuns);
   done();
 })();

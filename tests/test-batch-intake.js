@@ -6,6 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchIntake } = require('../plugins/data-secure/server/gateway/batch-intake');
+const { createBatchIntakeIntent } = require('../plugins/data-secure/server/gateway/batch-intake-intent');
+const { createBatchRecovery } = require('../plugins/data-secure/server/gateway/batch-recovery');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch intake boundary');
@@ -20,9 +22,9 @@ function fixture(options = {}) {
   const events = [];
   const io = {
     ...fs,
-    lstatSync(target) {
+    lstatSync(target, settings) {
       events.push(`lstat:${target}`);
-      return fs.lstatSync(target);
+      return fs.lstatSync(target, settings);
     },
     mkdirSync(target, settings) {
       events.push(`mkdir:${target}`);
@@ -50,11 +52,13 @@ function fixture(options = {}) {
     batchPath: () => journal,
     workPath: () => work,
     copySnapshotFile(from, to, stat) {
+      const intent = JSON.parse(fs.readFileSync(path.join(root, `${token}.intake`), 'utf8'));
+      assert.strictEqual(intent.schema, 'datasecure-intake/1', 'ownership is durable before any source copying');
       events.push(`copy:${from}:${to}`);
       fs.copyFileSync(from, to);
       return { size: stat.size, sha256: 'b'.repeat(64) };
     },
-    privateArtifactCrypto: { ensureReady() { events.push('crypto-ready'); } },
+    privateWorkStore: { ensureReady() { events.push('store-ready'); } },
     batchTtlMs: () => 60_000,
     createPrivateIoSummary: (value) => value,
     writeState(state) {
@@ -100,6 +104,64 @@ test('the declared filename must equal the bound path basename before any source
     assert.strictEqual(fs.existsSync(item.work), false);
     assert.strictEqual(fs.readFileSync(item.source, 'utf8'), 'sealed source');
   } finally { item.cleanup(); }
+});
+
+test('recovery and TTL cleanup find only expired dead-owner intake copies, not unknown work or originals', () => {
+  for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    const item = fixture({ writeError: new Error('CRASH_BEFORE_JOURNAL'), cleanupError: new Error('SIMULATED_PROCESS_LOSS') });
+    try {
+      assert.throws(() => item.begin([item.queueEntry()]));
+      const unknown = path.join(item.root, `${'b'.repeat(64)}.work`);
+      fs.mkdirSync(unknown);
+      fs.writeFileSync(path.join(unknown, 'old.txt'), 'unknown original');
+      let alive = true;
+      const intent = createBatchIntakeIntent({
+        io: fs, batchPath: () => item.journal, workPath: () => item.work,
+        processAlive: () => alive,
+        safeRemoveWorkDirectory: () => fs.rmSync(item.work, { recursive: true })
+      });
+      const recovery = createBatchRecovery({
+        io: fs, batchRoot: () => item.root, intakeIntent: intent,
+        nowMs: () => Date.now() + 120_000,
+        readActiveLock: () => null, processAlive: () => false,
+        acquireActiveLock() {}, releaseActiveLock() {}
+      });
+      assert.strictEqual(recovery[method]().removed, 0, 'live intake is protected');
+      alive = false;
+      assert.strictEqual(recovery.localCleanupStatus().expired_batch_cleanup_pending, 1);
+      assert.strictEqual(recovery[method]().removed, 1);
+      assert.strictEqual(fs.existsSync(item.work), false);
+      assert.strictEqual(fs.existsSync(path.join(item.root, `${token}.intake`)), false);
+      assert.strictEqual(fs.readFileSync(item.source, 'utf8'), 'sealed source');
+      assert.strictEqual(fs.readFileSync(path.join(unknown, 'old.txt'), 'utf8'), 'unknown original');
+    } finally { item.cleanup(); }
+  }
+});
+
+test('a replaced work directory or invalid ownership intent never authorizes orphan cleanup', () => {
+  for (const scenario of ['replacement', 'malformed', 'not-expired']) {
+    const item = fixture({ writeError: new Error('CRASH'), cleanupError: new Error('CRASH') });
+    try {
+      assert.throws(() => item.begin([item.queueEntry()]));
+      const intentPath = path.join(item.root, `${token}.intake`);
+      if (scenario === 'replacement') {
+        fs.renameSync(item.work, `${item.work}.retained`);
+        fs.mkdirSync(item.work);
+        fs.writeFileSync(path.join(item.work, 'unknown.txt'), 'preserve');
+      }
+      if (scenario === 'malformed') fs.writeFileSync(intentPath, '{');
+      let removed = 0;
+      const intent = createBatchIntakeIntent({
+        io: fs, batchPath: () => item.journal, workPath: () => item.work,
+        processAlive: () => false, safeRemoveWorkDirectory() { removed++; }
+      });
+      if (scenario === 'not-expired') assert.strictEqual(intent.cleanup(token, Date.now()), false);
+      else assert.throws(() => intent.cleanup(token, Date.now() + 120_000));
+      assert.strictEqual(removed, 0);
+      assert.strictEqual(fs.existsSync(intentPath), true);
+      assert.strictEqual(fs.readFileSync(item.source, 'utf8'), 'sealed source');
+    } finally { item.cleanup(); }
+  }
 });
 
 test('duplicate absolute picker paths are rejected before any source metadata read', () => {
@@ -193,7 +255,7 @@ test('mixed admission journals every position but snapshots only candidates', ()
     assert.ok(item.events.includes('capacity:2'));
     assert.strictEqual(fs.readdirSync(item.work).length, 2);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
-    assert.strictEqual(state.schema, 'datasecure-batch/3');
+    assert.strictEqual(state.schema, 'datasecure-batch/4');
     assert.deepStrictEqual(state.items.map((entry) => entry.status), [
       'pending', 'preflight_mapping_pending', 'pending', 'preflight_mapping_pending'
     ]);
@@ -225,7 +287,7 @@ test('an all-stopped admission creates a durable repair checkpoint without sourc
     assert.strictEqual(item.events.some((event) => event.startsWith('copy:')), false);
     assert.deepStrictEqual(fs.readdirSync(item.work), []);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
-    assert.strictEqual(state.schema, 'datasecure-batch/3');
+    assert.strictEqual(state.schema, 'datasecure-batch/4');
     assert.strictEqual(state.items[0].status, 'preflight_mapping_pending');
     assert.strictEqual(state.items[0].document_result.grade, 'not-processed');
     assert.strictEqual(state.items[0].document_result.reason_code, 'SOURCE_TEXT_INVALID');

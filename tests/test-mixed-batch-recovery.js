@@ -5,14 +5,22 @@ const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
 const { zipStore } = require('./lib/zip');
+// Exercise the default product path, not an injected crypto adapter. A new
+// import of any retired keyring component immediately fails this regression.
+const Module = require('module');
+const originalLoad = Module._load;
+Module._load = function guardedLoad(request, parent, isMain) {
+  if (/(?:installation-secret-store|private-artifact-runtime|@napi-rs[\\/]keyring)/u.test(String(request))) {
+    throw new Error('RETIRED_KEYRING_COMPONENT_LOADED');
+  }
+  return originalLoad.call(this, request, parent, isMain);
+};
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-mixed-recovery-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch, processBatchNext, resumeBatch, acknowledgeDeliveredPackage, _test } = require('../plugins/data-secure/server/gateway/batch');
-const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
 const { testAsync, done, assert } = createSuite('Mixed-format batch recovery');
 const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -25,6 +33,20 @@ async function processAndAcknowledge(token, convertDocument) {
 
 async function main() {
   await testAsync('TXT, CSV and DOCX release exactly once across an explicit interruption and resume', async () => {
+    // Old encrypted journals coexist without being read/decrypted/expired or
+    // blocking a new plaintext batch on this same account and local root.
+    const legacyToken = 'f'.repeat(64);
+    const legacyRoot = _test.workPath(legacyToken);
+    fs.mkdirSync(legacyRoot, { mode: 0o700 });
+    const legacySnapshot = path.join(legacyRoot, '001_aaaaaaaaaaaaaaaaaaaaaaaa.dsart');
+    fs.writeFileSync(legacySnapshot, 'DSARTF01legacy ciphertext');
+    const legacyJournal = path.join(_test.batchRoot(), legacyToken + '.json');
+    fs.writeFileSync(legacyJournal, JSON.stringify({
+      schema: 'datasecure-batch/3', token: legacyToken, expires_at: '2020-01-01T00:00:00.000Z',
+      items: [{ id: 'a'.repeat(32), work_name: path.basename(legacySnapshot), private_artifact_encrypted: true, status: 'pending' }]
+    }));
+    const legacyBefore = [hash(legacyJournal), hash(legacySnapshot)];
+    assert.strictEqual(_test.recoverableBatchStates().length, 0);
     const input = fs.mkdtempSync(path.join(base, 'picker-'));
     fs.writeFileSync(path.join(input, 'one.txt'), 'Kontakt: Alice Beispiel, alice@example.test\nFachtext bleibt.', 'utf8');
     fs.writeFileSync(path.join(input, 'two.csv'), 'Wert\n"=HYPERLINK(""mailto:bob@example.test"",""Bob Beispiel"")"', 'utf8');
@@ -41,23 +63,38 @@ async function main() {
     );
     const queue = sources.map((full) => { const stat = fs.lstatSync(full); return { name: path.basename(full), full, stat, sourceBytes: stat.size }; });
     const batch = beginBatch({ expectedCount: 3, profile: 'auto', queue });
+    const plaintextState = _test.readState(batch.batch_token);
+    assert.strictEqual(plaintextState.schema, 'datasecure-batch/4');
+    for (let index = 0; index < plaintextState.items.length; index++) {
+      const item = plaintextState.items[index];
+      assert.strictEqual(item.private_artifact_plain, true);
+      assert.ok(!Object.hasOwn(item, 'private_artifact_encrypted'));
+      assert.deepStrictEqual(fs.readFileSync(path.join(_test.workPath(batch.batch_token), item.work_name)), fs.readFileSync(sources[index]));
+    }
     const first = await processAndAcknowledge(batch.batch_token, convertDocument);
     assert.strictEqual(first.released, 1, JSON.stringify(first));
     const interrupted = await processBatchNext(batch.batch_token, { convertDocument: async () => {
       const error = new Error('interrupted'); error.code = 'REQUEST_CANCELLED'; throw error;
     } });
     assert.strictEqual(interrupted.retryable, 1);
+    // Exercise an existing plaintext v2 checkpoint in the same resume path.
+    const compatibilityState = _test.readState(batch.batch_token);
+    compatibilityState.schema = 'datasecure-batch/2';
+    for (const item of compatibilityState.items) delete item.private_artifact_plain;
+    _test.writeState(compatibilityState);
     assert.strictEqual((await processAndAcknowledge(batch.batch_token, convertDocument)).released, 2);
     assert.strictEqual(resumeBatch(batch.batch_token).ok, true);
     const final = await processAndAcknowledge(batch.batch_token, convertDocument);
     assert.strictEqual(final.complete, true);
     const state = _test.readState(batch.batch_token);
+    assert.strictEqual(state.schema, 'datasecure-batch/4');
     assert.strictEqual(state.items.filter((item) => item.status === 'released').length, 3);
     assert.strictEqual(new Set(state.items.map((item) => item.package_id)).size, 3);
     const markdown = state.items.map((item) => fs.readFileSync(path.join(roots().output, item.package_id, `${item.package_id}.md`), 'utf8')).join('\n');
     for (const value of ['Alice Beispiel', 'Bob Beispiel', 'Carla Beispiel', 'alice@example.test', 'bob@example.test']) assert.doesNotMatch(markdown, new RegExp(value, 'u'));
     assert.match(markdown, /Scrum\.org PSM I/u);
     assert.deepStrictEqual(sources.map(hash), before);
+    assert.deepStrictEqual([hash(legacyJournal), hash(legacySnapshot)], legacyBefore);
   });
   done();
 }

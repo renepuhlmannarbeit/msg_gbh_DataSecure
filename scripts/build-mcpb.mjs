@@ -11,9 +11,9 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
+import { includeInProduct, collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
-import { verifyKeyringArtifacts } from './lib/keyring-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -42,7 +42,10 @@ try {
     fs.cpSync(src, path.join(stage, rel), { recursive: true });
   }
 
-  fs.cpSync(path.join(pluginDir, 'server'), path.join(stage, 'server'), { recursive: true });
+  fs.cpSync(path.join(pluginDir, 'server'), path.join(stage, 'server'), {
+    recursive: true,
+    filter: (source) => includeInProduct(path.relative(pluginDir, source))
+  });
 
   const nativeBin = path.join(pluginDir, 'server', 'native');
   verifyNativeArtifact(
@@ -50,7 +53,6 @@ try {
     path.join(nativeBin, 'windows-x64', 'datasecure-sandbox.sha256')
   );
   const posixSupervisors = verifyPosixSupervisorArtifacts(nativeBin);
-  verifyKeyringArtifacts(path.join(pluginDir, 'server', 'vendor', 'keyring'));
 
   fs.mkdirSync(path.join(stage, 'scripts'), { recursive: true });
   for (const helper of ['windows-ocr.ps1', 'rasterize-image.ps1']) {
@@ -69,9 +71,11 @@ try {
       posixExecutableEntries.add(`server/ocr-runtime/${file.archivePath}`);
     }
   }
-  const result = writeZip(out, collectFiles(stage).map((file) => ({
+  const files = collectProductFiles(stage).map((file) => ({
     ...file, mode: posixExecutableEntries.has(file.archivePath) ? 0o100755 : 0o100644
-  })));
+  }));
+  verifyKeyringFreeProductFiles(files);
+  const result = writeZip(out, files);
   const hash = crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex');
   console.log(`${out}\n  entries=${result.entries} bytes=${result.bytes}\n  sha256=${hash}`);
 } finally {

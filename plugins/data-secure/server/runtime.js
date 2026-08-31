@@ -13,6 +13,7 @@ const {
   visualBridgeStatus
 } = require('./windows-visual');
 const { verifyNativeLauncherArtifact } = require('./native-launcher');
+const { resolveSeaParserRole } = require('./sea-parser-role');
 const {
   portableOcrStatus,
   ocrPngDetailedPortable
@@ -20,6 +21,8 @@ const {
 
 class SafeError extends Error {}
 let nativeHostProbeCache;
+const SEA_EXECUTION_OVERRIDES = ['execPath', 'platform', 'arch', 'nodeVersion', 'launcherPath', 'launcherBytes',
+  'launcherExpectedSha256', 'existsSync', 'spawn', 'spawnSync', 'posixSupervisorPath', 'posixSupervisorBase', 'hostProbeStatus'];
 
 function safeError(message, code) {
   const error = new SafeError(message);
@@ -78,6 +81,16 @@ function dataRoot() {
 // Text processing has no end-user-installed dependency. On Windows its bundled
 // native boundary must also be present and match the packaged checksum.
 function nativeParserStatus(options = {}) {
+  let seaRole;
+  try {
+    seaRole = resolveSeaParserRole();
+    if (seaRole && SEA_EXECUTION_OVERRIDES.some(key => options[key] !== undefined)) throw new Error('override');
+  }
+  catch { return { available: false, mode: 'unavailable', reason: 'sea_parser_role_invalid',
+    resource_boundary: 'unavailable', hard_process_limits: false }; }
+  // Do not read execution options again after validation: getters/proxies could
+  // change values between accesses. The real SEA path uses only fixed defaults.
+  if (seaRole) options = {};
   const platform = options.platform || process.platform;
   if (platform === 'darwin' || platform === 'linux') {
     const supervisor = verifyPosixSupervisor({
@@ -92,7 +105,7 @@ function nativeParserStatus(options = {}) {
     // A packaged-but-invalid supervisor is never permitted to fall back to the
     // weaker Node-only boundary. During the transition, absence still retains
     // the existing non-release portable path until target packages exist.
-    if (options.posixSupervisorPath || options.posixSupervisorBase) {
+    if (seaRole || options.posixSupervisorPath || options.posixSupervisorBase) {
       return { available: false, mode: 'unavailable', reason: supervisor.reason,
         resource_boundary: 'unavailable', hard_process_limits: false };
     }
@@ -208,7 +221,7 @@ const MAX_PARSER_RESPONSE_BYTES = 48 * 1024 * 1024;
 const MAX_ATTACHMENT_BASE64_CHARS = 12 * 1024 * 1024;
 const { validateContentGraph } = require('./content-graph');
 
-function validateParserResult(value) {
+function validateParserResult(value, expectedExt) {
   if (!value || typeof value !== 'object' || typeof value.markdown !== 'string' ||
     value.markdown.length > 8_000_000 || !Array.isArray(value.attachments) ||
     value.attachments.length > 150 || !Array.isArray(value.warnings) || value.warnings.length > 200) {
@@ -231,7 +244,7 @@ function validateParserResult(value) {
     throw new SafeError('Der isolierte Dokumentparser lieferte ungültige Warnungen.');
   }
   try {
-    validateContentGraph(value.content_graph, value.markdown, value.attachments);
+    validateContentGraph(value.content_graph, value.markdown, value.attachments, expectedExt);
   } catch {
     throw new SafeError('Der isolierte Dokumentparser lieferte keinen gültigen Content-Graph.');
   }
@@ -254,6 +267,15 @@ async function convertDocument(source, options = {}) {
     'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben.',
     'FORMAT_COVERAGE_UNVERIFIED'
   );
+  let seaRole;
+  try {
+    seaRole = resolveSeaParserRole();
+    if (seaRole && SEA_EXECUTION_OVERRIDES.some(key => options[key] !== undefined)) {
+      throw new Error('SEA_EXECUTION_OVERRIDE_DENIED');
+    }
+  } catch {
+    throw safeError('Die gebundene lokale Parserrolle ist nicht einsatzbereit.', 'PARSER_ISOLATION_FAILED');
+  }
   // pdf-lite remains available only for adversarial parser tests. Its extraction
   // is not a coverage proof: fonts, the page tree and every visual object cannot
   // yet be accounted for. Never let that best-effort result enter the release
@@ -261,40 +283,42 @@ async function convertDocument(source, options = {}) {
   // docs/PDF_ENGINE_DECISION.md has passed all release gates.
   const worker = path.join(__dirname, 'parser-worker.js');
   const networkDeny = path.join(__dirname, 'network-deny.cjs');
-  const spawn = options.spawn || childProcess.spawn;
-  const platform = options.platform || process.platform;
-  const arch = options.arch || process.arch;
-  const nodeExecutable = options.execPath || process.execPath;
+  const launchOptions = seaRole ? {} : options;
+  const spawn = launchOptions.spawn || childProcess.spawn;
+  const platform = launchOptions.platform || process.platform;
+  const arch = launchOptions.arch || process.arch;
+  const nodeExecutable = seaRole?.executable || launchOptions.execPath || process.execPath;
   const nodeFlags = [
     '--permission', `--allow-fs-read=${__dirname}`, `--require=${networkDeny}`, '--disable-proto=throw',
     '--max-old-space-size=384', worker, ext
   ];
+  const workerArgs = seaRole ? [ext, '0'] : [...nodeFlags, '0'];
   let command = nodeExecutable;
-  let args = [...nodeFlags, '0'];
+  let args = workerArgs;
   let stdio;
   if (platform === 'win32') {
     if (arch !== 'x64') {
       throw safeError('Die native Windows-Parserbegrenzung ist für diese Prozessorarchitektur nicht verfügbar.', 'PARSER_ISOLATION_FAILED');
     }
-    const launcher = options.launcherPath || path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
-    command = verifyNativeLauncher(launcher, options);
+    const launcher = launchOptions.launcherPath || path.join(__dirname, 'native', 'windows-x64', 'datasecure-sandbox.exe');
+    command = verifyNativeLauncher(launcher, launchOptions);
     args = [
       '--memory-mib', String(PARSER_JOB_MEMORY_MIB),
       '--cpu-ms', String(PARSER_JOB_CPU_MS),
       '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable,
-      ...nodeFlags, '0'
+      ...workerArgs
     ];
   } else if (platform === 'darwin' || platform === 'linux') {
-    const portable = nativeParserStatus({ platform, arch, nodeVersion: options.nodeVersion,
+    const portable = nativeParserStatus(seaRole ? {} : { platform, arch, nodeVersion: options.nodeVersion,
       posixSupervisorPath: options.posixSupervisorPath, posixSupervisorBase: options.posixSupervisorBase,
       spawnSync: options.spawnSync });
-    if (!portable.available) {
+    if (!portable.available || (seaRole && portable.mode !== 'posix_native_supervisor')) {
       throw safeError('Die portable Node-Parserbegrenzung benötigt Node.js 22.13 oder neuer.', 'PARSER_ISOLATION_FAILED');
     }
     if (portable.mode === 'posix_native_supervisor') {
       command = portable.executable;
       args = ['--memory-mib', String(PARSER_JOB_MEMORY_MIB), '--cpu-ms', String(PARSER_JOB_CPU_MS),
-        '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable, ...nodeFlags, '0'];
+        '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable, ...workerArgs];
     }
   } else {
     throw safeError('Für dieses Betriebssystem ist keine lokale Parserbegrenzung freigegeben.', 'PARSER_ISOLATION_FAILED');
@@ -378,6 +402,9 @@ async function convertDocument(source, options = {}) {
   }
   let child;
   try {
+    // Recheck after source inspection, immediately before the path-based spawn.
+    // This narrows but cannot eliminate OS-level verify/exec races.
+    if (seaRole && resolveSeaParserRole()?.executable !== nodeExecutable) throw new Error('role_changed');
     child = spawn(command, args, {
       stdio,
       windowsHide: true,
@@ -484,7 +511,7 @@ async function convertDocument(source, options = {}) {
         finish(new SafeError(`Die ${ext.slice(1).toUpperCase()}-Datei konnte nicht sicher lokal gelesen werden.`));
         return;
       }
-      try { finish(null, validateParserResult(response.result)); }
+      try { finish(null, validateParserResult(response.result, ext)); }
       catch (error) { finish(error); }
     });
   });

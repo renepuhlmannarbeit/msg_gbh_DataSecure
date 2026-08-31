@@ -1,9 +1,9 @@
 # Kanonisches Dokumentensystem
 
-Stand: 25.08.2026
+Stand: 31.08.2026
 
 Dieser Ordner ist die verbindliche Quelle für die Weiterentwicklung von GBH
-DataSecure. Er trennt das heute ausführbare RC44-System vom beschlossenen
+DataSecure. Er trennt den aktuellen Engineering-Stand vom beschlossenen
 Produktziel. Ältere Architektur-, Review- und Backlogdateien bleiben als
 Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
 überschreiben.
@@ -16,7 +16,7 @@ Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
 4. [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) – technische Zielgrenzen.
 5. [REFACTORING_PLAN.md](REFACTORING_PLAN.md) – verbindliche Phasen-, Migrations-, Gate- und Rollback-Reihenfolge.
 6. [BACKLOG.md](BACKLOG.md) – einzige priorisierte Arbeitsliste für das Zielprodukt.
-7. [CURRENT_STATE.md](CURRENT_STATE.md) – belegter RC44-Ist-Abgleich, damit vorhandene
+7. [CURRENT_STATE.md](CURRENT_STATE.md) – belegter Ist-Abgleich, damit vorhandene
    Funktionen nicht erneut geplant werden.
 8. [TRACEABILITY.md](TRACEABILITY.md) – Zuordnung jeder Entscheidung zu Umsetzung
    und Abnahmenachweis.
@@ -32,6 +32,12 @@ Entstehungsnachweis erhalten, dürfen aber keine Entscheidung in diesem Ordner
    Stories mit kompaktem Abschlussnachweis; nicht als aktive Arbeitsliste verwenden.
 14. Bestehende Betriebs-, Test- und Architekturunterlagen – beschreiben den freigegebenen Iststand oder
    liefern Detailwissen, sind aber nicht entscheidungsführend.
+
+Aktuelle Revalidierung: [Claude-Best-Practices vom 31.08.2026](../REVIEW_CLAUDE_BEST_PRACTICES_2026-08-31.md).
+Ihre Befunde sind vorhandenen Stories zugeordnet; sie ersetzt keine Entscheidung.
+
+RC68-Teilschnitt: [passiver MCP-App-Startstatus](STATUS_APP_PILOT_V1.md),
+standardmäßig deaktiviert; BL-042.3 bleibt mit Rest-E0 und E1/E2 in Arbeit.
 
 Für die tatsächlich erforderlichen menschlichen Nachweise gibt es zusätzlich den
 vollständig synthetischen, nicht kanonischen

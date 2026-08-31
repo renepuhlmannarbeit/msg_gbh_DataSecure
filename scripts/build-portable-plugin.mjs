@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectFiles, writeZip } from './lib/zip.mjs';
+import { writeZip } from './lib/zip.mjs';
+import { includeInProduct, collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
 import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,7 +28,10 @@ if (canonicalEvidence && canonicalEvidence.manifestSha256 !== runtimeEvidence.ma
 }
 fs.rmSync(stage, { recursive: true, force: true });
 try {
-  fs.cpSync(pluginSource, stage, { recursive: true, errorOnExist: true, force: false });
+  fs.cpSync(pluginSource, stage, {
+    recursive: true, errorOnExist: true, force: false,
+    filter: (source) => includeInProduct(path.relative(pluginSource, source))
+  });
   if (!canonicalEvidence) {
     fs.cpSync(runtime, path.join(stage, 'server', 'ocr-runtime'), {
       recursive: true, errorOnExist: true, force: false
@@ -41,10 +45,11 @@ try {
   if (!relativeArchive || relativeArchive.startsWith('..') || path.isAbsolute(relativeArchive)) {
     throw new Error('PORTABLE_PLUGIN_OUTPUT_OUTSIDE_DIST');
   }
-  const files = collectFiles(stage).map((file) => ({
+  const files = collectProductFiles(stage).map((file) => ({
     ...file,
     mode: executableOcrEntries.has(file.archivePath) ? 0o100755 : 0o100644
   }));
+  verifyKeyringFreeProductFiles(files);
   fs.rmSync(archive, { force: true });
   const result = writeZip(archive, files);
   const hash = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');

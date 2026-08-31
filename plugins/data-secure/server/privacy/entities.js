@@ -92,10 +92,14 @@ function collectContextOrganizations(text) {
         previousEnd = party.index + party[0].length;
       }
     }
-    if (!table && !labelled && !clause) candidates.push(trimmed);
+    if (!table && !labelled && !clause &&
+        !/^(?:Zertifikat|Bescheinigung|Certificate|Credential)\s+(?:für|for)\s+/iu.test(trimmed)) candidates.push(trimmed);
     for (const candidate of candidates) {
       const organizationCandidate = (!table && !labelled && !clause)
         ? candidate.replace(PROFESSIONAL_ORG_PREFIX_RE, '')
+          // A compact credential followed by "bei" names a separate party,
+          // not one very long legal-form company including the title.
+          .replace(/^[^,;\n]{0,100}\b(?:Expert|Professional|Tester|Practitioner|Zertifikat)\s+bei\s+/iu, '')
         : candidate;
       const match = organizationCandidate.match(SEGMENT_COMPANY_RE);
       if (match) out.push(normalizeSpaces(match[1]));
@@ -276,9 +280,9 @@ function collectPersonAnchors(text) {
   // The issuer remains professional content, but the holder is still PII.
   const credentialHolder = new RegExp(
     `(?:Zertifikat|Bescheinigung|certificate|credential)\\s+(?:für|for)\\s+` +
-      `((?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,2})` +
-      `(?=\\s*(?:,|;|\\(|$))`,
-    'giu'
+      `((?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){1,2}?)` +
+      `(?=[ \\t]*(?:[,;.(]|$)|\\s+(?:ausgestellt|zertifiziert|verliehen|erteilt|issued|awarded|certified)\\b)`,
+    'gimu'
   );
   while ((m = credentialHolder.exec(src))) pushPerson(out, m[1], 'credential_holder');
 
@@ -526,7 +530,7 @@ function collectOrganizations(text) {
     const v = normalizeSpaces(m[1]);
     if (v) out.push(v);
   }
-  return [...new Set(out)];
+  return [...new Set(out.map((value) => value.replace(/^Bei\s+/u, '')))];
 }
 
 function makeRegistry() {

@@ -1,11 +1,13 @@
 'use strict';
 
-const path = require('path');
-
 const SCHEMA = 'data-secure-content-graph/v1';
 const POSITION = 'TextPositionSelector';
 const FRAGMENT = 'FragmentSelector';
 const MAX_NODES = 1000;
+// Archive references, never OS paths. `!/` separates nested containers.
+const PART_PATTERN = /^(?![\s\S]*[\u0000-\u001f\u007f-\u009f\u2028\u2029:\\])(?!(?:[\s\S]*[!/])?\.{1,2}(?:[!/]|$))[^/!]+(?:\/[^/!]+)*(?:!\/[^/!]+(?:\/[^/!]+)*)*$/u;
+const FORMAT_PATTERN = /^[a-z0-9]+$(?![\s\S])/u;
+const IMAGE_MIME_PATTERN = /^image\/[a-z0-9.+-]+$(?![\s\S])/u;
 
 function exactKeys(value, expected) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
@@ -13,12 +15,17 @@ function exactKeys(value, expected) {
 }
 
 function cleanPart(value) {
-  const part = typeof value === 'string' ? value.replace(/\\/gu, '/') : '';
-  if (!part || part.length > 500 || part.startsWith('/') || part.includes(':') ||
-    part.split('/').some((item) => !item || item === '.' || item === '..')) {
+  if (typeof value !== 'string' || value.length > 500 || !PART_PATTERN.test(value)) {
     throw new Error('CONTENT_GRAPH_SOURCE_PART_INVALID');
   }
-  return part;
+  return value;
+}
+
+function sourceFormat(ext) {
+  if (typeof ext !== 'string' || !ext.startsWith('.') || !FORMAT_PATTERN.test(ext.slice(1))) {
+    throw new Error('CONTENT_GRAPH_FORMAT_INVALID');
+  }
+  return ext.slice(1);
 }
 
 function mainKind(ext) {
@@ -28,6 +35,10 @@ function mainKind(ext) {
 function createContentGraph(markdown, attachments, ext, sections = []) {
   if (typeof markdown !== 'string' || !Array.isArray(attachments) || !Array.isArray(sections)) {
     throw new Error('CONTENT_GRAPH_INPUT_INVALID');
+  }
+  const format = sourceFormat(ext);
+  if (Math.max(1, sections.length) + attachments.length > MAX_NODES) {
+    throw new Error('CONTENT_GRAPH_NODE_LIMIT');
   }
   const nodes = [];
   let cursor = 0;
@@ -66,15 +77,17 @@ function createContentGraph(markdown, attachments, ext, sections = []) {
   });
   return {
     schema: SCHEMA,
-    source_format: path.extname(`x${ext}`).slice(1).toLowerCase(),
+    source_format: format,
     coordinate_space: 'normalized-markdown:utf16',
     nodes
   };
 }
 
-function validateContentGraph(graph, markdown, attachments) {
-  if (!exactKeys(graph, ['schema', 'source_format', 'coordinate_space', 'nodes']) ||
-    graph.schema !== SCHEMA || !/^[a-z0-9]+$/u.test(graph.source_format) ||
+function validateContentGraph(graph, markdown, attachments, expectedExt) {
+  if (typeof markdown !== 'string' || !Array.isArray(attachments) ||
+    !exactKeys(graph, ['schema', 'source_format', 'coordinate_space', 'nodes']) ||
+    graph.schema !== SCHEMA || typeof graph.source_format !== 'string' || !FORMAT_PATTERN.test(graph.source_format) ||
+    (expectedExt !== undefined && graph.source_format !== sourceFormat(expectedExt)) ||
     graph.coordinate_space !== 'normalized-markdown:utf16' ||
     !Array.isArray(graph.nodes) || graph.nodes.length < 1 || graph.nodes.length > MAX_NODES) {
     throw new Error('CONTENT_GRAPH_INVALID');
@@ -111,8 +124,10 @@ function validateContentGraph(graph, markdown, attachments) {
       imagePhase = true;
       if (!exactKeys(node, ['id', 'kind', 'asset_index', 'media_type', 'locator']) ||
         !Number.isSafeInteger(node.asset_index) || node.asset_index !== imageCount ||
+        typeof node.media_type !== 'string' || !IMAGE_MIME_PATTERN.test(node.media_type) ||
         node.media_type !== attachments[node.asset_index]?.mimeType ||
         !exactKeys(node.locator, ['source_part', 'selector']) ||
+        node.locator.source_part !== attachments[node.asset_index]?.source_part ||
         cleanPart(node.locator.source_part) !== node.locator.source_part ||
         !exactKeys(node.locator.selector, ['type', 'value']) ||
         node.locator.selector.type !== FRAGMENT ||

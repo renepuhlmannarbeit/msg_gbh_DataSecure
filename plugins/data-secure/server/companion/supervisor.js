@@ -5,9 +5,11 @@ const crypto = require('crypto');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
 const { signFrame } = require('./ipc-session');
+const { launchBackgroundRole } = require('../background-role-launcher');
 
 const REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
+const READY_TIMEOUT_MS = 10_000;
 const ENV_ALLOWLIST = new Set([
   'SYSTEMROOT', 'WINDIR', 'HOME', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA',
   'TMP', 'TEMP', 'TMPDIR', 'PATH', 'LANG', 'LC_ALL', 'DISPLAY',
@@ -43,34 +45,54 @@ function terminateProcessTree(child, options = {}) {
 }
 
 function launchCompanion(options = {}) {
-  const spawn = options.spawn || childProcess.spawn;
   const secret = crypto.randomBytes(32);
-  const server = options.server || path.join(__dirname, 'stdio-server.js');
-  const networkDeny = options.networkDeny || path.join(__dirname, '..', 'network-deny.cjs');
-  const child = spawn(options.execPath || process.execPath, [`--require=${networkDeny}`, server], {
-    stdio: ['pipe', 'pipe', 'ignore', 'pipe'],
-    windowsHide: true,
-    shell: false,
-    env: companionEnvironment(options.env || process.env)
-  });
-  child.stdio[3].end(secret);
-
+  let child;
+  try {
+    child = launchBackgroundRole('companion', {
+      spawn: options.spawn, execPath: options.execPath, server: options.server, networkDeny: options.networkDeny,
+      env: companionEnvironment(options.env || process.env)
+    });
+  } catch {
+    secret.fill(0);
+    throw new SafeError('Companion-Prozess konnte nicht sicher gestartet werden.');
+  }
   let buffer = '';
   let descriptor;
   let readyResolve;
   let readyReject;
   let closed = false;
+  let hasExited = false;
+  let terminationRequested = false;
   let nextSequence = 1;
   const pending = new Map();
   const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+  let exitedResolve;
+  const exited = new Promise(resolve => { exitedResolve = resolve; });
+  const readyDeadline = setTimeout(() => {
+    abort(new SafeError('Companion-Start hat das lokale Zeitlimit überschritten.'));
+  }, READY_TIMEOUT_MS);
+  readyDeadline.unref?.();
 
   function rejectAll(error) {
+    clearTimeout(readyDeadline);
     readyReject(error);
     for (const item of pending.values()) {
       clearTimeout(item.timer);
       item.reject(error);
     }
     pending.clear();
+  }
+
+  function abort(error) {
+    closed = true;
+    secret.fill(0);
+    rejectAll(error);
+    // Local session disposal cannot depend on a successful OS kill. Conversely,
+    // never target a PID again after exit or a prior termination attempt.
+    if (!hasExited && !terminationRequested) {
+      terminationRequested = true;
+      terminateProcessTree(child, options);
+    }
   }
 
   function handleLine(line) {
@@ -81,6 +103,7 @@ function launchCompanion(options = {}) {
         throw new SafeError('Companion meldet keinen privaten Transport.');
       }
       descriptor = message;
+      clearTimeout(readyDeadline);
       readyResolve(message);
       return;
     }
@@ -103,8 +126,7 @@ function launchCompanion(options = {}) {
   child.stdout.on('data', (chunk) => {
     buffer += chunk;
     if (Buffer.byteLength(buffer, 'utf8') > MAX_RESPONSE_BYTES) {
-      rejectAll(new SafeError('Companion-IPC-Antwort ist zu groß.'));
-      terminateProcessTree(child, options);
+      abort(new SafeError('Companion-IPC-Antwort ist zu groß.'));
       return;
     }
     let newline;
@@ -112,15 +134,27 @@ function launchCompanion(options = {}) {
       const line = buffer.slice(0, newline).trim();
       buffer = buffer.slice(newline + 1);
       if (!line) continue;
-      try { handleLine(line); } catch (error) { rejectAll(error); terminateProcessTree(child, options); return; }
+      try { handleLine(line); } catch (error) { abort(error); return; }
     }
   });
-  child.once('error', () => rejectAll(new SafeError('Companion-Prozess konnte nicht gestartet werden.')));
-  child.once('exit', () => {
+  child.once('error', () => {
+    if (!child.pid) { hasExited = true; exitedResolve(null); }
+    abort(new SafeError('Companion-Prozess konnte nicht gestartet werden.'));
+  });
+  child.once('exit', (code) => {
+    hasExited = true;
     closed = true;
     secret.fill(0);
     rejectAll(new SafeError('Companion-Prozess wurde beendet.'));
+    exitedResolve(code);
   });
+  child.stdio[3].once('error', () => {
+    abort(new SafeError('Companion-Bootstrap konnte nicht privat übertragen werden.'));
+  });
+  try { child.stdio[3].end(secret); }
+  catch {
+    abort(new SafeError('Companion-Bootstrap konnte nicht privat übertragen werden.'));
+  }
 
   async function request(command, params = {}) {
     await ready;
@@ -130,8 +164,9 @@ function launchCompanion(options = {}) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(sequence);
-        reject(new SafeError('Companion-Anfrage hat das lokale Zeitlimit überschritten.'));
-        terminateProcessTree(child, options);
+        const error = new SafeError('Companion-Anfrage hat das lokale Zeitlimit überschritten.');
+        reject(error);
+        abort(error);
       }, options.timeoutMs || REQUEST_TIMEOUT_MS);
       pending.set(sequence, { resolve, reject, timer });
       child.stdin.write(`${JSON.stringify(frame)}\n`, (error) => {
@@ -151,12 +186,14 @@ function launchCompanion(options = {}) {
     child.stdin.end();
   }
 
-  return { ready, request, close };
+  return { ready, request, close, exited,
+    terminate: () => abort(new SafeError('Companion-Session wurde lokal beendet.')) };
 }
 
 module.exports = {
   REQUEST_TIMEOUT_MS,
   MAX_RESPONSE_BYTES,
+  READY_TIMEOUT_MS,
   companionEnvironment,
   terminateProcessTree,
   launchCompanion

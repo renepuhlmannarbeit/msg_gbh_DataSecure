@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataSecure · Start Status</title>
+<style>
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; color: #202124; background: #fff; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: min(1rem, 16px); line-height: 1.6; overflow-wrap: anywhere; }
+section { max-width: 46rem; margin-inline: auto; }
+h1 { font-size: 1.1rem; margin: 0 0 .75rem; }
+h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
+p { margin: .5rem 0; }
+.language { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; }
+select { font: inherit; color: inherit; background: inherit; padding: .3rem; border: 1px solid currentColor; border-radius: .25rem; min-height: 2.75rem; min-width: 0; max-width: 100%; }
+#status { padding: min(1rem, 16px); border: 1px solid #737373; border-radius: .5rem; }
+#snapshot { font-weight: 600; }
+details { margin-top: 1rem; }
+summary { padding-block: .5rem; cursor: pointer; min-height: 2.75rem; }
+:focus-visible { outline: 3px solid #005fcc; outline-offset: 3px; }
+@media (prefers-color-scheme: dark) { :root { color: #f5f5f5; background: #171717; } :focus-visible { outline-color: #9fcbff; } }
+@media (forced-colors: active) { :focus-visible { outline-color: Highlight; } }
+</style>
+</head>
+<body>
+<section aria-labelledby="title">
+<h1 id="title">DataSecure · Lokaler Start</h1>
+<div class="language"><label id="language-label" for="language">Sprache / Language</label><select id="language"><option value="de">Deutsch</option><option value="en">English</option></select></div>
+<p id="snapshot">Momentaufnahme beim Startversuch; keine Live-Anzeige.</p>
+<div id="status" role="status" aria-live="polite" aria-atomic="true"><h2 id="state">Status nicht verfügbar.</h2><p id="explanation">Der lokale Zustand ist hier nicht bestätigt. Daraus folgt weder Abschluss noch Abbruch.</p></div>
+<details><summary id="details">Was passiert danach?</summary><p id="help">Die Abschlussmeldung erscheint lokal. Eine Auswertung in Claude erfordert danach einen neuen ausdrücklichen Auftrag. Diese Karte startet keine Aktionen.</p></details>
+<noscript>Diese Anzeige benötigt JavaScript. Verwende die Textantwort und die lokale Abschlussmeldung. / Use the text response and local completion notice.</noscript>
+</section>
+<!-- STATUS_APP_SCRIPT -->
+</body>
+</html>

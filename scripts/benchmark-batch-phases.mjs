@@ -37,8 +37,6 @@ async function runWorker(count) {
   process.env.EU_PRIVACY_RETENTION_DAYS = '7';
   const { roots } = require('../plugins/data-secure/server/gateway/common');
   const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, _test } = require('../plugins/data-secure/server/gateway/batch');
-  const { installBatchPrivateArtifactCrypto } = require('../tests/lib/private-artifact-test-runtime');
-  installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
   const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
   const { PHASES } = require('../plugins/data-secure/server/gateway/performance');
 
@@ -66,8 +64,12 @@ async function runWorker(count) {
     const batch = beginBatch({ expectedCount: count, profile: 'general', queue });
     claimLocalBatchExecutor(batch.batch_token, process.pid);
     const result = await runLocalBatchExecutor(batch.batch_token, {
-      convertDocument: async (source) => parseDocumentBuffer(fs.readFileSync(source), path.extname(source).toLowerCase())
+      convertDocument: async (source, options = {}) => {
+        if (!Buffer.isBuffer(options.inputBuffer)) throw new Error('BENCHMARK_PRIVATE_INPUT_REQUIRED');
+        return parseDocumentBuffer(options.inputBuffer, path.extname(options.sourceName || source).toLowerCase());
+      }
     });
+    if (result.released !== count || result.stopped !== 0) throw new Error('BENCHMARK_INCOMPLETE');
     const elapsedMs = Math.max(0, Math.trunc(performance.now() - startedAt));
     const cpu = process.cpuUsage(cpuStart);
     const state = _test.readState(batch.batch_token);
@@ -107,5 +109,5 @@ if (Number.isInteger(workerCount) && workerCount > 0 && workerCount <= 100) {
     if (!report || !Array.isArray(report.runs)) throw new Error('BENCHMARK_WORKER_INVALID');
     runs.push(...report.runs);
   }
-  process.stdout.write(`${JSON.stringify({ schema: 'datasecure-batch-phase-benchmark/2', clock: 'monotonic', runs }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ schema: 'datasecure-batch-phase-benchmark/2', clock: 'monotonic', execution_mode: 'local-in-process-parser-not-cowork', private_storage: 'local-plain', runs }, null, 2)}\n`);
 }

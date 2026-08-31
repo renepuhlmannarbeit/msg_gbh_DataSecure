@@ -17,10 +17,36 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, waitingPickerFixture = false, statusAppPilot = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [serverEntry], {
+    // Test-only dependency substitution: exercise the real stdio dispatch and
+    // response with a synthetic selection, without opening a native dialog or
+    // starting a worker. Production exposes no bypass or fixture environment.
+    const entryArgs = localStartFixture ? ['--eval', `
+      const gateway = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway'))});
+      gateway.genericStatus = () => ({engine_ready: true});
+      gateway.startLocalIntakeExecutor = () => {
+        if (${waitingPickerFixture}) process.stderr.write('UNEXPECTED_INTAKE_STARTED');
+        return {ok: true, local_intake_pending: true, batch_token: 'a'.repeat(64)};
+      };
+      const picker = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'file-picker'))});
+      picker.pickSourcesAsync = async () => ['synthetic-private-source.txt'];
+      picker.batchQueueFromSelection = (selected) => selected;
+      if (${waitingPickerFixture}) {
+        const waitForSelection = ({ signal } = {}) => new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(['synthetic-private-source.txt']), 100);
+          signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(['synthetic-private-source.txt']); }, { once: true });
+        });
+        picker.pickSourcesAsync = waitForSelection;
+        const folder = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'source-folder'))});
+        folder.pickSourceFolderAsync = waitForSelection;
+        folder.enumerateSourceFolder = (selected) => selected;
+      }
+      require(${JSON.stringify(serverEntry)});
+    `] : [serverEntry];
+    const child = spawn(process.execPath, entryArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
       env: {
         ...process.env,
         EU_PRIVACY_ROOT: privacyRoot,
@@ -28,7 +54,8 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
         EU_PRIVACY_LANGUAGE: 'de',
         EU_PRIVACY_VISUAL_MODE: 'strict',
         EU_PRIVACY_RETENTION_DAYS: '7',
-        EU_PRIVACY_SUPPORT_MODE: supportMode ? '1' : '0'
+        EU_PRIVACY_SUPPORT_MODE: supportMode ? '1' : '0',
+        EU_PRIVACY_STATUS_APP_PILOT: statusAppPilot ? '1' : '0'
       }
     });
 
@@ -52,16 +79,45 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
       }
     });
 
+    let received = 0;
+    const expected = messages.reduce((sum, msg) => sum + (typeof msg === 'string'
+      ? msg.split('\n').filter((line) => line.trim()).length
+      : (Object.hasOwn(msg, 'id') ? 1 : 0)), 0);
+    child.stdout.on('data', () => {
+      received = out.split('\n').filter((line) => line.trim()).length;
+      // EOF is a host shutdown/cancellation, not a normal tool completion.
+      // Keep stdio open until the asynchronous calls have returned.
+      if (received >= expected) child.stdin.end();
+    });
     for (const msg of messages) {
       child.stdin.write(typeof msg === 'string' ? `${msg}\n` : `${JSON.stringify(msg)}\n`);
     }
-    child.stdin.end();
+    if (!expected) child.stdin.end();
   });
 }
 
 const rpc = (id, method, params) => ({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) });
 
 async function main() {
+  for (const source_kind of ['files', 'folder']) await testAsync(`MCP cancellation reaches the pending ${source_kind} picker and prevents intake`, async () => {
+    const { responses, stderr } = await talk([
+      rpc(1, 'tools/call', { name: 'start_document_batch_from_picker', arguments: { source_kind } }),
+      rpc(2, 'ping'),
+      rpc(3, 'tools/call', { name: 'start_document_batch_from_picker', arguments: { source_kind } }),
+      { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } }
+    ], { localStartFixture: true, waitingPickerFixture: true, supportMode: false });
+    assert.strictEqual(stderr, '');
+    assert.strictEqual(responses.length, 3, 'the cancellation notification has no response');
+    const first = responses.find((response) => response.id === 1).result.structuredContent;
+    const duplicate = responses.find((response) => response.id === 3).result.structuredContent;
+    assert.strictEqual(first.error, 'local_selection_cancelled');
+    assert.strictEqual(first.local_processing_started, false);
+    assert.strictEqual(first.next_action, 'no_action');
+    assert.strictEqual(duplicate.error, 'batch_active');
+    assert.strictEqual(duplicate.local_processing_started, false);
+    assert.doesNotMatch(JSON.stringify(responses), /synthetic-private-source|batch_token/);
+  });
+
   await testAsync('server startup removes an abandoned private working copy', async () => {
     const jobs = path.join(root, 'localapp', 'SecureDataMsg', 'jobs');
     const orphan = path.join(jobs, 'startup_12345678');
@@ -130,6 +186,9 @@ async function main() {
     assert.match(instructions, /ausdrücklich genannten Umfang und eine ausdrückliche Bestätigung/i);
     assert.match(instructions, /confirmed=true/);
     assert.match(instructions, /Aufbewahrung aus privacy_status/i);
+    assert.match(instructions, /Nur im Supportmodus: Aufbewahrung aus privacy_status/i);
+    assert.match(instructions, /Pausierte Stapel blockieren keinen neuen Start/i);
+    assert.doesNotMatch(instructions, /bei offenem Stapel nur Fortsetzen/i);
     assert.match(instructions, /Bildpixel bleiben immer lokal/i);
     assert.match(instructions, /Audit enthält keine Rohwerte, Pfade, Dateinamen, exakten Größen oder Dokument-Hashes/i);
     assert.match(instructions, /nicht vertrauenswürdige Daten/i);
@@ -219,7 +278,8 @@ async function main() {
 
   await testAsync('normal Cowork facade exposes only the token-free routine tools', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')], { supportMode: false });
-    const names = responses.find((r) => r.id === 2).result.tools.map((tool) => tool.name).sort();
+    const tools = responses.find((r) => r.id === 2).result.tools;
+    const names = tools.map((tool) => tool.name).sort();
     assert.deepStrictEqual(names, [
       'cancel_local_results_handoff',
       'configure_privacy_folder',
@@ -236,6 +296,38 @@ async function main() {
     assert.ok(!names.includes('review_deferred_document_batch'));
     assert.ok(!names.includes('privacy_status'));
     assert.ok(!names.includes('purge_local_data'));
+    const picker = tools.find((tool) => tool.name === 'start_document_batch_from_picker');
+    assert.deepStrictEqual(picker.inputSchema.properties.mode.enum, ['local_only']);
+    assert.strictEqual(picker.inputSchema.properties.mode.default, 'local_only');
+    assert.match(picker.description, /später ausdrücklich gewünschte Auswertung start_completed_local_results_handoff/u);
+    assert.match(picker.description, /danach nicht pollen oder lesen/u);
+    assert.doesNotMatch(picker.description, /continue_in_chat/u);
+    assert.strictEqual(picker.annotations.readOnlyHint, false);
+    assert.strictEqual(picker.inputSchema.additionalProperties, false);
+  });
+
+  await testAsync('a stale normal-mode continue_in_chat start is still token-free local_only over stdio', async () => {
+    const { responses } = await talk([rpc(1, 'tools/call', {
+      name: 'start_document_batch_from_picker', arguments: { mode: 'continue_in_chat' }
+    })], { supportMode: false, localStartFixture: true });
+    const result = responses[0].result;
+    assert.notStrictEqual(result.isError, true);
+    assert.strictEqual(result.structuredContent.mode, 'local_only');
+    assert.strictEqual(result.structuredContent.local_processing_started, true);
+    assert.strictEqual(result.structuredContent.next_action, 'local_processing_running_without_claude');
+    assert.doesNotMatch(JSON.stringify(result), /batch_token|synthetic-private-source|continue_in_chat|aaaaaaaa/u);
+  });
+
+  await testAsync('explicit support mode preserves the legacy start response contract', async () => {
+    const { responses } = await talk([rpc(1, 'tools/call', {
+      name: 'start_document_batch_from_picker', arguments: { mode: 'continue_in_chat' }
+    })], { supportMode: true, localStartFixture: true });
+    const result = responses[0].result.structuredContent;
+    assert.strictEqual(result.mode, 'continue_in_chat');
+    assert.strictEqual(result.local_processing_started, true);
+    assert.strictEqual(result.batch_token, 'a'.repeat(64));
+    assert.strictEqual(result.next_action, 'wait_for_local_release_before_continue_in_chat');
+    assert.doesNotMatch(JSON.stringify(result), /synthetic-private-source/u);
   });
 
   await testAsync('normal Cowork rejects removed legacy and support-only tools', async () => {
@@ -249,6 +341,88 @@ async function main() {
       assert.strictEqual(response.result.isError, true);
       assert.match(response.result.structuredContent.message, /lokalen Supportmodus/u);
     }
+  });
+
+  await testAsync('normal Cowork rejects all 17 support tools even with model-supplied support flags', async () => {
+    const supportNames = [
+      'privacy_status', 'diagnostic_status', 'export_diagnostic_package', 'open_privacy_folder',
+      'continue_anonymized_batch_in_chat', 'document_batch_status', 'list_document_batch_results',
+      'review_deferred_document_batch', 'acknowledge_batch_document', 'resume_document_batch',
+      'read_anonymized_document', 'read_anonymized_documents', 'acknowledge_batch_documents',
+      'list_visual_review_items', 'open_visual_review_folder', 'purge_local_data', 'open_output_folder'
+    ];
+    const { responses } = await talk(supportNames.map((name, index) => rpc(index + 1, 'tools/call', {
+      name, arguments: { confirmed: true, supportMode: true, EU_PRIVACY_SUPPORT_MODE: '1' }
+    })), { supportMode: false });
+    assert.strictEqual(responses.length, supportNames.length);
+    for (const response of responses) {
+      assert.strictEqual(response.result.isError, true);
+      assert.match(response.result.structuredContent.message, /lokalen Supportmodus/u);
+      assert.strictEqual(response.result.structuredContent.raw_content_sent_to_claude, false);
+    }
+  });
+
+  await testAsync('default and support mode never expose status-app resources even for a capable host', async () => {
+    const uri = 'ui://data-secure/status-card-v1.html';
+    const capabilities = { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } };
+    for (const options of [{ supportMode: false }, { supportMode: true, statusAppPilot: true }]) {
+      const { responses } = await talk([
+        rpc(1, 'initialize', { capabilities }), rpc(2, 'tools/list'),
+        rpc(3, 'resources/list'), rpc(4, 'resources/read', { uri })
+      ], options);
+      assert.strictEqual(responses.find((r) => r.id === 1).result.capabilities.resources, undefined);
+      for (const tool of responses.find((r) => r.id === 2).result.tools) assert.strictEqual(tool._meta?.ui, undefined);
+      assert.strictEqual(responses.find((r) => r.id === 3).error.code, -32601);
+      assert.strictEqual(responses.find((r) => r.id === 4).error.code, -32601);
+    }
+  });
+
+  await testAsync('discovery without initialize cannot activate the optional status app', async () => {
+    const capabilities = { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } };
+    const { responses } = await talk([
+      rpc(1, 'server/discover', { capabilities }), rpc(2, 'tools/list'),
+      rpc(3, 'resources/list'), rpc(4, 'resources/read', { uri: 'ui://data-secure/status-card-v1.html' })
+    ], { supportMode: false, statusAppPilot: true });
+    assert.strictEqual(responses.find((r) => r.id === 1).result.capabilities.resources, undefined);
+    for (const tool of responses.find((r) => r.id === 2).result.tools) assert.strictEqual(tool._meta?.ui, undefined);
+    assert.strictEqual(responses.find((r) => r.id === 3).error.code, -32601);
+    assert.strictEqual(responses.find((r) => r.id === 4).error.code, -32601);
+  });
+
+  await testAsync('negotiated pilot exposes one passive resource and keeps picker text response unchanged', async () => {
+    const uri = 'ui://data-secure/status-card-v1.html';
+    const capabilities = { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } };
+    const { responses } = await talk([
+      rpc(1, 'initialize', { capabilities }), rpc(2, 'tools/list'), rpc(3, 'resources/list'),
+      rpc(4, 'resources/read', { uri }), rpc(5, 'resources/read', { uri: `${uri}?path=../private` }),
+      rpc(6, 'tools/call', { name: 'start_document_batch_from_picker', arguments: {} }),
+      rpc(7, 'tools/call', { name: 'cancel_local_results_handoff', arguments: {} })
+    ], { supportMode: false, statusAppPilot: true, localStartFixture: true });
+    const byId = new Map(responses.map((response) => [response.id, response]));
+    assert.deepStrictEqual(byId.get(1).result.capabilities.resources, { subscribe: false, listChanged: false });
+    const tools = byId.get(2).result.tools;
+    assert.strictEqual(tools.length, 8);
+    for (const tool of tools) {
+      assert.deepStrictEqual(tool._meta.ui.visibility, ['model']);
+      assert.strictEqual(tool._meta.ui.resourceUri, tool.name === 'start_document_batch_from_picker' ? uri : undefined);
+    }
+    assert.strictEqual(byId.get(3).result.resources.length, 1);
+    assert.strictEqual(byId.get(4).result.contents[0].uri, uri);
+    assert.strictEqual(byId.get(4).result.contents[0].mimeType, 'text/html;profile=mcp-app');
+    assert.deepStrictEqual(byId.get(4).result.contents[0]._meta.ui.csp, {
+      connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: []
+    });
+    assert.strictEqual(byId.get(5).error.code, -32602);
+    const normal = await talk([rpc(1, 'tools/call', { name: 'start_document_batch_from_picker', arguments: {} })], {
+      supportMode: false, localStartFixture: true
+    });
+    const decorated = byId.get(6).result;
+    assert.deepStrictEqual(decorated.content, normal.responses[0].result.content);
+    assert.deepStrictEqual(decorated.structuredContent, normal.responses[0].result.structuredContent);
+    assert.deepStrictEqual(decorated._meta['datasecure/status'], {
+      schema: 'datasecure-status-card/v1', locale: 'de', state: 'local_start_confirmed', snapshot: true
+    });
+    assert.strictEqual(byId.get(7).result._meta?.['datasecure/status'], undefined);
   });
 
   await testAsync('read tools are annotated read only and write tools are not', async () => {

@@ -49,11 +49,37 @@ test('the target contract records the agreed platforms, formats and limits exact
   assert.deepStrictEqual(target.manual_runtime_installation, []);
 });
 
+test('DS-062 excludes an additional system VM from runtime and acceptance planning', () => {
+  assert.ok(target.decision_ids.includes('DS-062'));
+  assert.deepStrictEqual(target.additional_system_vm, { runtime: false, acceptance_tests: false });
+  assert.match(decisions, /## DS-062 – Keine zusätzliche System-VM/u);
+  assert.match(read('docs/canonical/BACKLOG.md'), /Keine VM oder zusätzliches Windows-Konto bereitstellen/u);
+});
+
+test('DS-063 excludes an additional Windows account and keeps test isolation as development work', () => {
+  assert.ok(target.decision_ids.includes('DS-063'));
+  assert.deepStrictEqual(target.additional_windows_account, { runtime: false, acceptance_tests: false });
+  assert.match(decisions, /## DS-063 – Kein zusätzliches Windows-Benutzerkonto/u);
+  assert.match(read('docs/canonical/BACKLOG.md'), /Die bisherige Kontoanforderung ist gestrichen/u);
+});
+
 test('the released capability manifest remains the narrow RC30 allowlist', () => {
   assert.deepStrictEqual(current.formats, ['csv', 'docx', 'markdown', 'txt']);
   assert.deepStrictEqual(current.blocked_formats, ['pdf']);
   assert.match(current.status, /^release-candidate$/);
   assert.notDeepStrictEqual(current.formats, target.formats.map((format) => format.id));
+});
+
+test('DS-065 removes private-copy encryption and keyring requirements explicitly', () => {
+  assert.ok(target.decision_ids.includes('DS-065'));
+  assert.strictEqual(target.working_copies.private_storage_encryption, 'none-local-files');
+  assert.strictEqual(target.working_copies.keyring_required, false);
+  assert.strictEqual(target.working_copies.originals_never_moved_or_deleted, true);
+  assert.match(read('plugins/data-secure/server/gateway/status.js'), /private_work_encryption:\s*false/u);
+  for (const name of ['batch.js', 'review.js', 'visuals.js', 'private-work-store.js']) {
+    assert.doesNotMatch(read(`plugins/data-secure/server/gateway/${name}`),
+      /require\(['"][^'"]*(?:private-artifact-runtime|installation-secret-store|@napi-rs\/keyring)/u);
+  }
 });
 
 test('runtime modules cannot import or expose the target contract as current state', () => {
@@ -136,7 +162,7 @@ test('the Cowork human test kit preserves the one-picker local-only normal path'
 
 test('the target contract is documentation, not a shipped plugin runtime input', () => {
   const pluginBuilder = read('scripts/build-plugin.mjs');
-  assert.match(pluginBuilder, /collectFiles\(pluginDir\)/u);
+  assert.match(pluginBuilder, /collectProductFiles\(pluginDir\)/u);
   assert.doesNotMatch(pluginBuilder, /TARGET_CAPABILITIES/u);
   assert.strictEqual(fs.existsSync(path.join(root, 'plugins', 'data-secure', 'TARGET_CAPABILITIES.json')), false);
 });

@@ -46,6 +46,19 @@ function harness(overrides = {}) {
 }
 
 async function main() {
+await testAsync('legacy encryption stop never invalidates, rewrites or processes private copies', async () => {
+  for (const code of ['PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED', 'LEGACY_ENCRYPTED_ARTIFACT_UNAVAILABLE']) {
+    const h = harness({ exactPendingEntry() { const error = new TestSafeError('old envelope'); error.code = code; throw error; } });
+    const before = JSON.stringify(h.state);
+    const result = await h.processBatchNext(h.token, h.deps);
+    assert.strictEqual(result.error, 'LEGACY_ENCRYPTED_ARTIFACT_UNAVAILABLE');
+    assert.strictEqual(result.raw_content_sent_to_claude, false);
+    assert.strictEqual(JSON.stringify(h.state), before);
+    assert.ok(!h.calls.some(([name]) => ['invalidate', 'write', 'process'].includes(name)));
+    assert.strictEqual(h.calls.filter(([name]) => name === 'release').length, 1);
+  }
+});
+
 await testAsync('an active token is rejected before every dependency and lock action', async () => {
   const h = harness();
   h.active.add(h.token);

@@ -288,7 +288,10 @@ async function main() {
     const reviewsBefore = fs.existsSync(reviewDir) ? fs.readdirSync(reviewDir).length : 0;
     let ocrCalls = 0;
     await assert.rejects(gw.anonymizeNext('customer', {
-      totalTimeoutMs: 10,
+      // Keep this synthetic timeout test independent of the real OS keyring.
+      // Installation metadata is intentionally retained by production cleanup.
+      privateArtifactCrypto: reviewCrypto,
+      totalTimeoutMs: 1000,
       convertDocument: async () => ({
         markdown: '# Fachinhalt\n\nRolle: Product Owner', warnings: [],
         attachments: [1, 2].map((n) => ({
@@ -302,6 +305,7 @@ async function main() {
         return new Promise(() => {});
       }
     }), /kein vollständiges Output-Paket/);
+    assert.strictEqual(ocrCalls, 2, 'the timeout must exercise the second visual, not expire during setup');
     assert.strictEqual(fs.existsSync(source), true, 'source must be restored to Input');
     assert.strictEqual(fs.readdirSync(outputDir).length, outputsBefore, 'no partial package may remain');
     assert.strictEqual(fs.readdirSync(reviewDir).length, reviewsBefore, 'no partial review item may remain');
@@ -862,6 +866,98 @@ async function main() {
     assert.ok(fs.existsSync(locked), 'historical Processed entries are protected permanently');
     assert.ok(fs.existsSync(path.join(blockedReview, 'locked-entry')));
     assert.ok(gw.genericStatus({ retentionDays: 0 }).retention_last_cleanup.errors > 0);
+  });
+
+  await testAsync('zero-day batch retention spans intake and the full worker, then preserves results and originals', async () => {
+    const batch = require(path.join(runtimeDir, 'gateway', 'batch.js'));
+    const { RETENTION_ENV } = require(path.join(runtimeDir, 'gateway', 'retention.js'));
+    const { parseDocumentBuffer } = require(path.join(runtimeDir, 'document-parser.js'));
+    const previous = process.env[RETENTION_ENV];
+    process.env[RETENTION_ENV] = '0';
+    try {
+      const sources = [queueBuffer('zero-batch-one.txt', 'E-Mail: synthetic.one@example.test\nFachtext bleibt.'),
+        queueBuffer('zero-batch-two.txt', 'E-Mail: synthetic.two@example.test\nZweiter Fachtext.')];
+      const before = sources.map(sourceIdentity);
+      const begun = batch.beginBatch({ expectedCount: sources.length, profile: 'general', queue: sources.map((full) => ({
+        name: path.basename(full), full, sourceBytes: fs.statSync(full).size
+      })) });
+      const token = begun.batch_token;
+      const afterIntake = batch._test.readState(token);
+      assert.strictEqual(afterIntake.zero_day_work, true);
+      assert.ok(Date.parse(afterIntake.expires_at) > Date.parse(afterIntake.created_at));
+      assert.strictEqual(batch.claimLocalBatchExecutor(token, process.pid).ok, true);
+      const result = await batch.runLocalBatchExecutor(token, {
+        executorPid: process.pid,
+        convertDocument: async (_source, options) => parseDocumentBuffer(options.inputBuffer, '.txt')
+      });
+      assert.strictEqual(result.complete, true, JSON.stringify(result));
+      assert.strictEqual(result.released, 2, JSON.stringify(result));
+      assert.strictEqual(fs.existsSync(batch._test.workPath(token)), false);
+      assert.strictEqual(batch._test.readState(token).zero_day_work_cleaned, true);
+      assert.ok(batch.completedLocalOnlyCandidates().some((candidate) => candidate.token === token));
+      const results = batch.listBatchResults(token);
+      assert.strictEqual(results.results.length, 2);
+      for (let index = 0; index < sources.length; index++) assertSourceUnchanged(sources[index], before[index]);
+    } finally {
+      if (previous === undefined) delete process.env[RETENTION_ENV]; else process.env[RETENTION_ENV] = previous;
+    }
+  });
+
+  await testAsync('zero-day paused batches discard source copies at the worker boundary and cannot silently resume', async () => {
+    const batch = require(path.join(runtimeDir, 'gateway', 'batch.js'));
+    const { RETENTION_ENV } = require(path.join(runtimeDir, 'gateway', 'retention.js'));
+    const previous = process.env[RETENTION_ENV];
+    process.env[RETENTION_ENV] = '0';
+    try {
+      const source = queueBuffer('zero-batch-pause.txt', 'E-Mail: paused.synthetic@example.test');
+      const before = sourceIdentity(source);
+      const begun = batch.beginBatch({ expectedCount: 1, profile: 'general', queue: [{
+        name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
+      }] });
+      const token = begun.batch_token;
+      assert.strictEqual(batch.claimLocalBatchExecutor(token, process.pid).ok, true);
+      const result = await batch.runLocalBatchExecutor(token, {
+        executorPid: process.pid,
+        convertDocument: async () => { throw Object.assign(new Error('synthetic pause'), { code: 'REQUEST_CANCELLED' }); }
+      });
+      assert.strictEqual(result.stopped, 1, JSON.stringify(result));
+      assert.strictEqual(result.retryable, 0);
+      assert.strictEqual(fs.existsSync(batch._test.workPath(token)), false);
+      assert.strictEqual(batch._test.readState(token).items[0].checkpoint, 'work_retention_expired');
+      assert.strictEqual(batch.resumeBatch(token).ok, false);
+      assertSourceUnchanged(source, before);
+    } finally {
+      if (previous === undefined) delete process.env[RETENTION_ENV]; else process.env[RETENTION_ENV] = previous;
+    }
+  });
+
+  await testAsync('abandoned zero-day checkpoints are read-only unavailable until locked recovery cleans their own copies', async () => {
+    const batch = require(path.join(runtimeDir, 'gateway', 'batch.js'));
+    const { RETENTION_ENV } = require(path.join(runtimeDir, 'gateway', 'retention.js'));
+    const previous = process.env[RETENTION_ENV];
+    process.env[RETENTION_ENV] = '0';
+    try {
+      const source = queueBuffer('zero-batch-abandoned.txt', 'E-Mail: abandoned.synthetic@example.test');
+      const before = sourceIdentity(source);
+      const begun = batch.beginBatch({ expectedCount: 1, profile: 'general', queue: [{
+        name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
+      }] });
+      const token = begun.batch_token;
+      const state = batch._test.readStateForMaintenance(token);
+      delete state.intake_owner_pid; // synthetic process-loss boundary, no live worker
+      batch._test.writeState(state);
+      assert.throws(() => batch._test.readState(token), /Originaldateien neu auswählen/u);
+      assert.strictEqual(fs.existsSync(batch._test.workPath(token)), true, 'reader must not delete outside the maintenance lock');
+      assert.ok(batch.localCleanupStatus().expired_batch_cleanup_pending >= 1);
+      assert.ok(!batch._test.recoverableBatchStates().some((candidate) => candidate.token === token));
+      batch.recoverBatches();
+      assert.strictEqual(fs.existsSync(batch._test.workPath(token)), false);
+      assert.strictEqual(batch._test.readState(token).zero_day_work_cleaned, true);
+      assert.strictEqual(batch.resumeBatch(token).ok, false);
+      assertSourceUnchanged(source, before);
+    } finally {
+      if (previous === undefined) delete process.env[RETENTION_ENV]; else process.env[RETENTION_ENV] = previous;
+    }
   });
 
   await testAsync('zero-day retention preserves the original and leaves the new package readable', async () => {

@@ -6,9 +6,22 @@ const { SafeError } = require('../runtime');
 const { createCompanionSession } = require('./ipc-session');
 
 function readBootstrapSecret(fd = 3) {
-  const secret = fs.readFileSync(fd);
-  if (secret.length !== 32) throw new SafeError('Ungültiger privater Companion-Bootstrap.');
-  return secret;
+  // Read one extra byte to reject an oversized bootstrap without buffering an
+  // unbounded pipe. The supervisor owns the finite startup deadline.
+  const bootstrap = Buffer.alloc(33);
+  try {
+    let length = 0;
+    while (length < bootstrap.length) {
+      const count = fs.readSync(fd, bootstrap, length, bootstrap.length - length, null);
+      if (!Number.isInteger(count) || count < 0 || count > bootstrap.length - length) {
+        throw new SafeError('Ungültiger privater Companion-Bootstrap.');
+      }
+      if (count === 0) break;
+      length += count;
+    }
+    if (length !== 32) throw new SafeError('Ungültiger privater Companion-Bootstrap.');
+    return Buffer.from(bootstrap.subarray(0, 32));
+  } finally { bootstrap.fill(0); }
 }
 
 function write(value) {

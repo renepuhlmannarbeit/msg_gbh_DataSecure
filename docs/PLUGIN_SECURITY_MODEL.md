@@ -1,5 +1,18 @@
 # Security model
 
+## RC80 storage scope (DS-065)
+
+New private snapshots and review copies are ordinary local files, without added
+encryption, an OS keyring, a key file or a password. They are readable by the user
+account and other processes with sufficient file permissions. Local is not the
+same as encrypted or approved for model access. Source protection, anonymization,
+release gates and retention of new plain copies remain unchanged.
+
+Old encrypted V3 batches, `.dsart` artifacts and their metadata remain untouched:
+no keyring access, decryption, migration or automatic deletion. Re-select the
+unchanged original to process it again. Historical keyring acceptance requirements
+below are superseded, not passed. No new formats or hosts are enabled by this change.
+
 ## Where the boundary is
 
 The Skill layer is **not** the privacy boundary. A Skill is a procedure Claude

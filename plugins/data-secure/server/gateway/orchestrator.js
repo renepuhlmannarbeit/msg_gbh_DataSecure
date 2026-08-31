@@ -15,6 +15,7 @@ const {
   safePackageId,
   uniqueDir,
   safeRemovePrivateTree,
+  isManagedStagingPath,
   detectProfileFromMarkdown
 } = require('./common');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
@@ -36,6 +37,7 @@ const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('
 const { processAlive } = require('./process-liveness');
 const { readSourceToPrivateMemory } = require('./read-only-source-snapshot');
 const { releasedDocumentResult } = require('./document-result-grade');
+const { createStage, assertStage, publishStage, discardStage, recoverAbandonedStages } = require('./package-staging');
 
 // A batch worker gets one unforgeable in-process preparation capability after
 // its maintenance and audit checks succeeded.  Individual document calls keep
@@ -184,6 +186,13 @@ function bestEffortDiagnostic(deps, event) {
 }
 
 function prepareProcessingRun(deps = {}) {
+  const stagingCleanup = (deps.recoverAbandonedStages || recoverAbandonedStages)();
+  if (stagingCleanup.failures || stagingCleanup.unbound) {
+    const error = new SafeError('Private temporäre Ausgaben konnten nicht sicher zugeordnet oder bereinigt werden. Bitte lokale IT-Prüfung durchführen; Originale und fertige Ergebnisse bleiben unverändert.');
+    error.code = 'STAGING_RECOVERY_BLOCKED';
+    bestEffortDiagnostic(deps, { route: 'startup', stage: 'recovery', result: 'stopped', error_code: error.code });
+    throw error;
+  }
   bestEffortRetentionCleanup(deps);
   const workingCleanup = (deps.cleanupAbandonedWorkingJobs || cleanupAbandonedWorkingJobs)({ now: deps.now });
   if (workingCleanup.failures) {
@@ -245,10 +254,16 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
   const selectedInput = queue[queueIndex];
   const originalSource = selectedInput.full;
+  if (originalSource && isManagedStagingPath(originalSource)) {
+    throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
+  }
   const originalName = selectedInput.name;
-  const encryptedInput = selectedInput.private_artifact_encrypted === true && Buffer.isBuffer(selectedInput.private_bytes);
-  if (encryptedInput && (typeof originalName !== 'string' || originalName.length === 0)) {
-    throw new SafeError('Die verschlüsselte private Arbeitskopie besitzt keine gültige Formatbindung.');
+  if (selectedInput.private_artifact_encrypted === true) {
+    throw Object.assign(new SafeError('Verschlüsselte Altbestände bleiben unverändert. Bitte die Originaldatei erneut auswählen.'), { code: 'LEGACY_ENCRYPTED_ARTIFACT_UNAVAILABLE' });
+  }
+  const privateInput = selectedInput.private_artifact_plain === true && Buffer.isBuffer(selectedInput.private_bytes);
+  if (privateInput && (typeof originalName !== 'string' || originalName.length === 0)) {
+    throw new SafeError('Die private Arbeitskopie besitzt keine gültige Formatbindung.');
   }
   const ext = path.extname(originalName || originalSource).toLowerCase();
   if (!PILOT_SUPPORTED.has(ext)) {
@@ -263,25 +278,27 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     });
     throw error;
   }
-  const selectedBytes = encryptedInput ? selectedInput.private_bytes.length : selectedInput.stat?.size;
+  const selectedBytes = privateInput ? selectedInput.private_bytes.length : selectedInput.stat?.size;
   if (!Number.isSafeInteger(selectedBytes) || selectedBytes < 0 || selectedBytes > MAX_INPUT_BYTES) {
     throw new SafeError('Eingabedatei überschreitet die absolute lokale Größenbegrenzung.');
   }
 
   const r = roots();
   const jobId = newJobId();
+  const jobOwnerNonce = crypto.randomBytes(16).toString('hex');
   const jobDir = path.join(r.jobs, jobId);
   fs.mkdirSync(jobDir, { recursive: true });
   fs.writeFileSync(
     path.join(jobDir, '.owner.json'),
-    JSON.stringify({ pid: process.pid, created_at: new Date().toISOString(), nonce: crypto.randomBytes(16).toString('hex') }),
+    JSON.stringify({ pid: process.pid, created_at: new Date().toISOString(), nonce: jobOwnerNonce }),
     { encoding: 'utf8', mode: 0o600, flag: 'wx' }
   );
 
   let source = originalSource || originalName;
-  let sourceBuffer = encryptedInput ? selectedInput.private_bytes : null;
+  let sourceBuffer = privateInput ? selectedInput.private_bytes : null;
   let claimed = false;
   let stagePackage = null;
+  let stageHandle = null;
   let reviewPackageId = null;
   let auditReceiptRetained = false;
   let diagnosticStage = 'started';
@@ -293,7 +310,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   };
   try {
     throwIfAborted(deps.abortSignal);
-    if (!encryptedInput) {
+    if (!privateInput) {
       const memorySnapshot = readSourceToPrivateMemory({
         source: originalSource,
         expectedStat: selectedInput.stat,
@@ -367,8 +384,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     const packageId = path.basename(finalPackage);
     reviewPackageId = packageId;
-    stagePackage = path.join(r.output, `.${packageId}.tmp_${crypto.randomBytes(3).toString('hex')}`);
-    fs.mkdirSync(stagePackage, { recursive: true });
+    stageHandle = createStage(packageId, { jobId, ownerNonce: jobOwnerNonce });
+    stagePackage = stageHandle.path;
 
     const removeImages = deps.removeImages === true &&
       ['.docx', '.xlsx', '.pptx'].includes(ext) &&
@@ -377,6 +394,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       ...deps,
       removeImages
     });
+    assertStage(stageHandle);
     throwIfAborted(deps.abortSignal);
     const included = vis.results.filter((x) => x.status === 'included').length;
     const review = vis.results.filter((x) => x.status === 'review_required').length;
@@ -448,6 +466,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       reviewedText = reviewResult.text;
     }
     diagnosticStage = 'text_reviewed';
+    assertStage(stageHandle);
 
     const mdName = `${packageId}.md`;
     const mdPath = path.join(stagePackage, mdName);
@@ -570,7 +589,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // byte-identical at its original path on every success and failure path.
     if (!sourceBuffer) fs.unlinkSync(source);
     claimed = false;
-    publishPackage(stagePackage, finalPackage);
+    publishStage(stageHandle, finalPackage, publishPackage);
     diagnosticStage = 'published';
     try {
       if (deps.afterPublish) {
@@ -592,6 +611,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       throw error;
     }
     stagePackage = null;
+    stageHandle = null;
     auditReceiptRetained = retainAudit(auditReceipt, {
       preparedAuditRun: deps.preparedRun?.preparedAuditRun,
       assertWritableCapacity: capacity
@@ -651,11 +671,12 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         );
       }
     }
-    if (stagePackage && fs.existsSync(stagePackage)) {
+    if (stageHandle) {
       try {
-        safeRemovePrivateTree(r.output, path.basename(stagePackage));
+        discardStage(stageHandle);
       } catch {
-        /* the staging directory is best-effort cleanup only */
+        // Retain the durable ownership record for a later recovery attempt.
+        bestEffortDiagnostic(deps, { ...diagnostic, stage: 'recovery', result: 'stopped', error_code: 'STAGING_RECOVERY_BLOCKED' });
       }
     }
     if (reviewPackageId) {
@@ -680,7 +701,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     const failure = new SafeError(
       'Verarbeitung wurde sicher gestoppt. Es wurde kein vollständiges Output-Paket freigegeben.'
     );
-    if (['LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE'].includes(e?.code)) {
+    if (['LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE'].includes(e?.code) ||
+        (typeof e?.code === 'string' && e.code.startsWith('PACKAGE_STAGING_') && classifyDiagnosticError(e) === e.code)) {
       failure.code = e.code;
     }
     throw failure;

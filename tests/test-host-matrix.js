@@ -10,10 +10,17 @@ const matrix = JSON.parse(fs.readFileSync(
   'utf8'
 ));
 
-test('matrix has a versioned schema and one runtime gate', () => {
+test('matrix is acceptance policy, not a support-only runtime or host attestation', () => {
   assert.strictEqual(matrix.schema, 'datasecure-host-matrix/v1');
   assert.match(matrix.checked_at, /^\d{4}-\d{2}-\d{2}$/u);
-  assert.strictEqual(matrix.original_processing_gate, 'successful_privacy_status_in_current_session');
+  assert.strictEqual(matrix.contract_scope, 'acceptance-policy-not-runtime-host-attestation');
+  assert.strictEqual(matrix.original_processing_gate, 'approved_host_evidence_and_local_picker_boundary');
+  assert.strictEqual(matrix.normal_readiness_probe, 'start_document_batch_from_picker_then_cancel_without_selection');
+  assert.strictEqual(matrix.support_status_is_host_attestation, false);
+  assert.strictEqual(matrix.desktop_surface_proves_local_execution, false);
+  assert.deepStrictEqual(matrix.host_evidence_required, [
+    'claude_version_and_execution_mode', 'installed_artifact_and_local_runtime', 'raw_data_boundary_observed'
+  ]);
 });
 
 test('all unsafe fallback paths are forbidden', () => {
@@ -45,6 +52,13 @@ test('web, mobile, cloud/scheduled and disconnected desktop stay NO-GO for origi
 test('source claims remain attributable without changing the conservative gate', () => {
   assert.ok(matrix.sources.length >= 4);
   assert.ok(matrix.sources.every((source) => source.startsWith('https://support.claude.com/')));
+});
+
+test('human matrix does not claim an implicit host attestation', () => {
+  const guide = fs.readFileSync(path.join(__dirname, '..', 'docs', 'canonical', 'HOST_MATRIX_V1.md'), 'utf8');
+  assert.match(guide, /keine technisch implementierte Erkennung/u);
+  assert.match(guide, /Erreichbarkeit ist keine Host-Attestierung/u);
+  assert.doesNotMatch(guide, /prüft Engine und (?:lokale )?Hostbindung implizit/u);
 });
 
 done();

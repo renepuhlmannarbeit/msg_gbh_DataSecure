@@ -506,6 +506,51 @@ test('a preview inspection error is reported and never mistaken for missing byte
   assert.ok(!meta.preview_expired);
 });
 
+test('encrypted legacy previews and their records survive retention and purge', () => {
+  const root = sandbox('legacy-cipher');
+  const dir = path.join(root.review, 'legacy'); fs.mkdirSync(dir);
+  const records = [
+    { preview_file: 'asset.dsart', preview_encrypted: true },
+    { preview_file: 'renamed.png', preview_encrypted: false },
+    { preview_file: 'marker-only.png', preview_encrypted: true }
+  ];
+  records.forEach((meta, index) => {
+    file(path.join(dir, meta.preview_file), index === 2 ? 'opaque-old' : 'DSARTF01old');
+    file(path.join(dir, `${index}.review.json`), JSON.stringify(meta));
+  });
+  old(dir);
+  const before = new Map(fs.readdirSync(dir).map((name) => [name, fs.readFileSync(path.join(dir, name))]));
+  for (const force of [false, true]) {
+    const result = cleanupLocalData({ roots: root, scope: 'review', now: NOW, force });
+    assert.strictEqual(result.removed_review_previews, 0);
+    for (const [name, bytes] of before) assert.deepStrictEqual(fs.readFileSync(path.join(dir, name)), bytes);
+  }
+});
+
+test('retention detects a renamed encrypted preview across partial reads', () => {
+  const root = sandbox('legacy-short-read'); const dir = reviewItem(root, 'entry', 10);
+  file(path.join(dir, 'asset-001.png'), 'DSARTF01cipher'); old(dir);
+  const io = Object.create(fs);
+  io.readSync = (fd, buffer, offset, length, position) => fs.readSync(fd, buffer, offset, Math.min(length, 2), position);
+  const result = cleanupLocalData({ roots: root, scope: 'review', now: NOW, fs: io });
+  assert.strictEqual(result.removed_review_previews, 0);
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'asset-001.png'), 'utf8'), 'DSARTF01cipher');
+});
+
+test('preview metadata inspection remains linear in preview count', () => {
+  const root = sandbox('linear'); const dir = path.join(root.review, 'entry'); fs.mkdirSync(dir);
+  const count = 40;
+  for (let i = 0; i < count; i++) {
+    file(path.join(dir, `${i}.png`), 'plain preview');
+    file(path.join(dir, `${i}.review.json`), JSON.stringify({ preview_file: `${i}.png`, preview_encrypted: false }));
+  }
+  old(dir); let reads = 0; const io = Object.create(fs);
+  io.readFileSync = (filePath, ...args) => { if (String(filePath).endsWith('.review.json')) reads++; return fs.readFileSync(filePath, ...args); };
+  const result = cleanupLocalData({ roots: root, scope: 'review', now: NOW, fs: io });
+  assert.strictEqual(result.removed_review_previews, count);
+  assert.ok(reads <= count * 4, `metadata reads must be linear, got ${reads}`);
+});
+
 try {
   fs.rmSync(base, { recursive: true, force: true });
 } catch {

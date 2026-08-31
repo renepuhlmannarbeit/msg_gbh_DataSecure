@@ -45,7 +45,10 @@ function fakeChild(action) {
   child.stdout = new PassThrough();
   child.killed = false;
   child.kill = () => { child.killed = true; queueMicrotask(() => child.emit('close', null)); return true; };
-  queueMicrotask(() => action(child));
+  // A real process cannot finish reading stdin before the local stream has
+  // flushed. Let stream callbacks run first, including when a test resumes
+  // from an awaited promise; a microtask-only fake races Node's nextTick queue.
+  setImmediate(() => { if (!child.killed) action(child); });
   return child;
 }
 
@@ -58,6 +61,21 @@ function parserResult(markdown) {
 }
 
 async function main() {
+  await testAsync('worker source-format substitution is rejected on Windows, macOS and Linux launch paths', async () => {
+    for (const platform of ['win32', 'darwin', 'linux']) {
+      await assert.rejects(convertDocument('opaque-private-artifact', {
+        ...nativeOptions, platform, nodeVersion: '22.13.0',
+        inputBuffer: Buffer.from('synthetic source'), sourceName: 'source.txt',
+        spawn: () => fakeChild((child) => {
+          const result = parserResult('safe');
+          result.content_graph.source_format = 'docx';
+          child.stdout.end(JSON.stringify({ schema: 'data-secure-parser-result/1', ok: true, result }));
+          child.emit('close', 0);
+        })
+      }), (error) => error instanceof SafeError && /Content-Graph/.test(error.message));
+    }
+  });
+
   await testAsync('authenticated in-memory input reaches the isolated parser through stdin without a plaintext path', async () => {
     const secret = Buffer.from('sensitive marker', 'utf8');
     let invocation;

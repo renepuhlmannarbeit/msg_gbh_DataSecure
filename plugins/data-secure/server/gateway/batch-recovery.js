@@ -3,6 +3,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const { TOKEN_RE, batchRoot, batchPath, safeRemoveWorkDirectory } = require('./batch-private-store');
+const { createBatchIntakeIntent, SUFFIX: INTAKE_SUFFIX } = require('./batch-intake-intent');
 
 function createBatchRecovery(options = {}) {
   const io = options.io || fs;
@@ -31,6 +32,14 @@ function createBatchRecovery(options = {}) {
   const deferredReviewStatus = options.deferredReviewStatus || 'deferred_review';
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
+  const intakeIntent = options.intakeIntent || createBatchIntakeIntent({ ...options, batchPath: journalPath });
+  const finishZeroDayWork = options.finishZeroDayWork || (() => false);
+
+  function intakeToken(entry) {
+    if (!entry.isFile() || !entry.name.endsWith(INTAKE_SUFFIX)) return null;
+    const token = entry.name.slice(0, -INTAKE_SUFFIX.length);
+    return tokenPattern.test(token) ? token : null;
+  }
 
   function incompleteBatchState(state) {
     return !state.invalidated && (state.items || []).some((item) =>
@@ -54,6 +63,8 @@ function createBatchRecovery(options = {}) {
       if (!tokenPattern.test(token)) continue;
       try {
         const state = readMaintenanceState(token);
+        if (state.zero_day_work === true && state.zero_day_work_cleaned !== true &&
+            !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid)) continue;
         if (nowMs() <= Date.parse(state.expires_at) && incompleteBatchState(state) &&
             (callOptions.includeActiveExecutors === true || !liveLocalExecutor(state))) states.push(state);
       } catch { /* malformed and expired snapshots remain unavailable */ }
@@ -88,12 +99,18 @@ function createBatchRecovery(options = {}) {
       return { private_work_copy_cleanup_pending: 0, expired_batch_cleanup_pending: 0 };
     }
     for (const entry of entries) {
+      const orphanToken = intakeToken(entry);
+      if (orphanToken) {
+        try { if (intakeIntent.orphan(orphanToken, nowMs())) expiredPending++; } catch { pending++; }
+        continue;
+      }
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
       const token = entry.name.slice(0, -'.json'.length);
       if (!tokenPattern.test(token)) continue;
       try {
         const state = readMaintenanceState(token);
-        if (nowMs() > Date.parse(state.expires_at)) {
+        if (nowMs() > Date.parse(state.expires_at) || (state.zero_day_work === true &&
+            state.zero_day_work_cleaned !== true && !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid))) {
           expiredPending++;
         } else {
           pending += (state.items || []).filter((item) => item.work_copy_cleanup_pending === true).length;
@@ -126,12 +143,18 @@ function createBatchRecovery(options = {}) {
       try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
       catch { return { recovered, removed, failures: 1, skipped_active: false }; }
       for (const entry of entries) {
+        const orphanToken = intakeToken(entry);
+        if (orphanToken) {
+          try { if (intakeIntent.cleanup(orphanToken, now)) removed++; } catch { failures++; }
+          continue;
+        }
         if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
         const tokenFromName = entry.name.slice(0, -'.json'.length);
         if (!tokenPattern.test(tokenFromName)) continue;
         try {
           const state = readMaintenanceState(tokenFromName);
           if (liveLocalExecutor(state)) continue;
+          if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
           if (now > Date.parse(state.expires_at)) {
             if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
             removeWorkDirectory(state.token);
@@ -188,12 +211,18 @@ function createBatchRecovery(options = {}) {
       try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
       catch { return { removed, failures: 1, skipped_active: false }; }
       for (const entry of entries) {
+        const orphanToken = intakeToken(entry);
+        if (orphanToken) {
+          try { if (intakeIntent.cleanup(orphanToken, now)) removed++; } catch { failures++; }
+          continue;
+        }
         if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
         const tokenFromName = entry.name.slice(0, -'.json'.length);
         if (!tokenPattern.test(tokenFromName)) continue;
         try {
           const state = readMaintenanceState(tokenFromName);
           if (liveLocalExecutor(state)) continue;
+          if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
           if (now <= Date.parse(state.expires_at)) continue;
           if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
           removeWorkDirectory(state.token);

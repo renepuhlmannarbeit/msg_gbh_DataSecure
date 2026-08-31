@@ -7,7 +7,7 @@
   "required": ["schema", "source_format", "coordinate_space", "nodes"],
   "properties": {
     "schema": { "const": "data-secure-content-graph/v1" },
-    "source_format": { "type": "string", "pattern": "^[a-z0-9]+$" },
+    "source_format": { "type": "string", "pattern": "^[a-z0-9]+$(?![\\s\\S])" },
     "coordinate_space": { "const": "normalized-markdown:utf16" },
     "nodes": {
       "type": "array",
@@ -22,7 +22,10 @@
     }
   },
   "$defs": {
-    "part": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "part": {
+      "type": "string", "minLength": 1, "maxLength": 500,
+      "pattern": "^(?![\\s\\S]*[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029:\\\\])(?!(?:[\\s\\S]*[!/])?\\.{1,2}(?:[!/]|$))[^/!]+(?:/[^/!]+)*(?:!/[^/!]+(?:/[^/!]+)*)*$"
+    },
     "position": {
       "type": "object",
       "additionalProperties": false,
@@ -68,7 +71,7 @@
         "id": { "type": "string", "pattern": "^node-[0-9]{6}$" },
         "kind": { "const": "image" },
         "asset_index": { "type": "integer", "minimum": 0 },
-        "media_type": { "type": "string", "pattern": "^image/[a-z0-9.+-]+$" },
+        "media_type": { "type": "string", "pattern": "^image/[a-z0-9.+-]+$(?![\\s\\S])" },
         "locator": {
           "type": "object",
           "additionalProperties": false,

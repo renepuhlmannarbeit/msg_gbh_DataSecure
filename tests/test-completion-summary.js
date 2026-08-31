@@ -106,6 +106,17 @@ test('every resting batch phase has one content-free notice and one next action'
   assert.strictEqual(shown, 1);
 });
 
+test('invalid state points to IT support without an unavailable normal-mode diagnostic action', () => {
+  const notice = batchStateNoticeText({
+    batch_phase: 'invalid_local_state', complete: false,
+    source_path: '/private/secret.docx', detail: 'Private Person'
+  });
+  assert.match(notice.message, /IT-Support/u);
+  assert.match(notice.message, /Originale bleiben unverändert/u);
+  assert.match(notice.message, /Keine Originaldateien oder Dokumentinhalte in den Chat laden/u);
+  assert.doesNotMatch(notice.message, /diagnostic_status|Diagnosestatus|secret|Private Person|\/private/u);
+});
+
 test('Windows command contains only fixed wording and bounded counters', () => {
   const spec = completionSummaryCommand({ selected_count: 3, released_count: 2, failed_count: 1 }, {
     platform: 'win32', env: { SystemRoot: 'C:\\Windows' }
@@ -186,6 +197,105 @@ test('the product terminal notice is detached and cannot block batch completion'
   assert.strictEqual(call.options.shell, false);
   assert.strictEqual(call.options.stdio, 'ignore');
   assert.strictEqual(child.unrefCalled, true);
+});
+
+test('all product batch-state and intake notices return before dialog closure without a synchronous process', () => {
+  const originalSpawn = childProcess.spawn;
+  const originalSpawnSync = childProcess.spawnSync;
+  const env = { SystemRoot: 'C:\\Windows', NODE_OPTIONS: '--inspect', PRIVATE_SENTINEL: 'private-value' };
+  const cases = [
+    ...['awaiting_local_review', 'awaiting_explicit_resume', 'awaiting_local_mapping_repair',
+      'awaiting_delivery_acknowledgement', 'ready_for_next_document', 'invalid_local_state']
+      .map((batch_phase) => (options) => showBatchStateNotice({ batch_phase, complete: false }, options)),
+    (options) => showBatchStateNotice({ complete: true, batch_total: 2, released: 1, stopped: 1 }, options),
+    ...['before_checkpoint', 'after_checkpoint'].map((stage) => (options) => showLocalIntakeNotice(stage, options))
+  ];
+  childProcess.spawnSync = () => { throw new Error('Product notice must never wait synchronously'); };
+  try {
+    for (const show of cases) {
+      let expected;
+      assert.strictEqual(show({ platform: 'win32', env, runner(command, args) {
+        expected = { command, args };
+        return { status: 0, stdout: 'SHOWN' };
+      } }), true);
+      const child = new EventEmitter();
+      let unrefCalled = false;
+      child.unref = () => { unrefCalled = true; };
+      let actual;
+      childProcess.spawn = (command, args, options) => { actual = { command, args, options }; return child; };
+      assert.strictEqual(show({ platform: 'win32', env }), true);
+      assert.deepStrictEqual({ command: actual.command, args: actual.args }, expected, 'native command and wording remain identical');
+      assert.strictEqual(actual.options.detached, true);
+      assert.strictEqual(actual.options.windowsHide, true);
+      assert.strictEqual(actual.options.stdio, 'ignore');
+      assert.strictEqual(actual.options.shell, false);
+      assert.strictEqual(actual.options.env.SystemRoot, env.SystemRoot);
+      assert.strictEqual(actual.options.env.NODE_OPTIONS, undefined);
+      assert.strictEqual(actual.options.env.PRIVATE_SENTINEL, undefined);
+      assert.strictEqual(unrefCalled, true, 'return must not require exit, close or SHOWN evidence');
+      assert.strictEqual(child.listenerCount('exit'), 0);
+      assert.strictEqual(child.listenerCount('close'), 0);
+      assert.doesNotThrow(() => child.emit('error', Object.assign(new Error('private-path'), { code: 'EACCES' })));
+    }
+  } finally {
+    childProcess.spawn = originalSpawn;
+    childProcess.spawnSync = originalSpawnSync;
+  }
+});
+
+test('injected batch-state and intake runners retain synchronous shown-evidence checks', () => {
+  for (const show of [
+    (options) => showBatchStateNotice({ complete: false, batch_phase: 'awaiting_explicit_resume' }, options),
+    (options) => showLocalIntakeNotice('after_checkpoint', options)
+  ]) {
+    assert.throws(() => show({ platform: 'win32', runner: () => ({ status: 0, stdout: '' }) }), /konnte nicht geöffnet/);
+    assert.throws(() => show({ platform: 'win32', runner: () => ({ status: 1, stdout: 'SHOWN' }) }), /konnte nicht geöffnet/);
+  }
+});
+
+test('detached Linux notices try KDialog only after an asynchronous missing-Zenity error', () => {
+  const originalSpawn = childProcess.spawn;
+  const calls = [];
+  childProcess.spawn = (command, args, options) => {
+    const child = new EventEmitter();
+    child.unref = () => { child.unrefCalled = true; };
+    calls.push({ command, args, options, child });
+    return child;
+  };
+  try {
+    assert.strictEqual(showLocalIntakeNotice('before_checkpoint', { platform: 'linux' }), true);
+    assert.deepStrictEqual(calls.map((call) => call.command), ['zenity']);
+    calls[0].child.emit('error', { code: 'ENOENT' });
+    assert.deepStrictEqual(calls.map((call) => call.command), ['zenity', 'kdialog']);
+    assert.ok(calls.every((call) => call.child.unrefCalled && call.options.detached && call.options.shell === false));
+    assert.doesNotThrow(() => calls[1].child.emit('error', { code: 'ENOENT' }));
+    showLocalIntakeNotice('after_checkpoint', { platform: 'linux' });
+    calls[2].child.emit('error', { code: 'EACCES' });
+    assert.strictEqual(calls.length, 3, 'permission failures must not launch an alternative presenter');
+  } finally {
+    childProcess.spawn = originalSpawn;
+  }
+});
+
+test('detached native launch exceptions are sanitized and fallback failures never escape an error callback', () => {
+  const originalSpawn = childProcess.spawn;
+  childProcess.spawn = () => { throw new Error('private-executable-path'); };
+  try {
+    assert.throws(() => showLocalIntakeNotice('before_checkpoint', { platform: 'win32' }), (error) =>
+      error.message === 'Die lokale Abschlussansicht konnte nicht geöffnet werden.' && error.cause === undefined);
+    const child = new EventEmitter();
+    child.unref = () => {};
+    let calls = 0;
+    childProcess.spawn = () => {
+      if (++calls === 1) return child;
+      throw new Error('private-fallback-path');
+    };
+    assert.strictEqual(showBatchStateNotice({ batch_phase: 'awaiting_explicit_resume' }, { platform: 'linux' }), true);
+    assert.doesNotThrow(() => child.emit('error', { code: 'ENOENT' }));
+    assert.strictEqual(calls, 2);
+  } finally {
+    childProcess.spawn = originalSpawn;
+  }
 });
 
 test('the real Windows completion form initializes and closes through the test-only path', () => {

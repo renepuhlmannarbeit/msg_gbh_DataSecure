@@ -77,6 +77,20 @@ test('a complete journal scan returns all delivery and mapping package protectio
   assert.deepStrictEqual([...result.ids].sort(), [delivery, mapping]);
 });
 
+test('current v4 and all historical journals protect pending output, ignoring the lock record', () => {
+  for (const version of [1, 2, 3, 4]) {
+    const id = `ds_${String(version).repeat(32)}`;
+    const result = _test.openBatchPackageProtection({
+      readdirSync: () => [fileEntry('active-processing.json'), fileEntry('a.json')],
+      readFileSync(target) {
+        assert.ok(!target.endsWith('active-processing.json'));
+        return JSON.stringify({ schema: `datasecure-batch/${version}`, items: [{ status: 'delivery_pending', package_id: id }] });
+      }
+    });
+    assert.deepStrictEqual(result, { ids: new Set([id]), complete: true });
+  }
+});
+
 test('one unreadable or malformed journal invalidates the whole automatic cleanup proof', () => {
   const valid = JSON.stringify({
     schema: 'datasecure-batch/1',

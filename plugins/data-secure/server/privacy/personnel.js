@@ -1,7 +1,7 @@
 'use strict';
 
 const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName, IBAN_RE } = require('./base');
-const { collectOrganizations, markdownTableColumnValues } = require('./entities');
+const { collectOrganizations, markdownTableColumnValues, markdownTableCells } = require('./entities');
 const { credentialContextSpans } = require('./credentials');
 
 const EMPLOYER_LABEL = '(?:Unternehmen|Arbeitgeber|Firma|Aktueller\\s+Arbeitgeber|Entsendendes\\s+Unternehmen|Company|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)';
@@ -99,12 +99,25 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     findings.push({ type: 'LOCATION', value_hash: hashShort(value) });
   }
   let lineOffset = 0;
+  let projectSection = false;
+  let professionalSection = false;
 
-  for (const rawLine of String(text).split('\n')) {
+  const allLines = String(text).split('\n');
+  for (let lineIndex = 0; lineIndex < allLines.length; lineIndex++) {
+    const rawLine = allLines[lineIndex];
     const lineEnd = lineOffset + rawLine.length;
     const credentialLine = ranges.some((r) => lineOffset < r.end && r.start < lineEnd);
     lineOffset = lineEnd + 1;
     let line = rawLine;
+    const cells = markdownTableCells(rawLine);
+    const nextCells = markdownTableCells(allLines[lineIndex + 1] || '');
+    if (cells && nextCells && cells.length === nextCells.length &&
+        nextCells.every((cell) => /^:?-{3,}:?$/u.test(cell))) {
+      // A column header is not the key/value field "Arbeitgeber | value".
+      // Keeping it also preserves the separate credential column ranges.
+      out.push(line);
+      continue;
+    }
 
     const tableEmployer = line.match(TABLE_EMPLOYER_RE);
     if (tableEmployer) {
@@ -159,9 +172,20 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     }
 
     const [, prefix, content] = line.match(PREFIX_RE);
+    const sectionTitle = content.trim().replace(/:$/u, '');
+    if (/^(?:Projekterfahrung|Berufserfahrung|Projekte|Projects?|Experience|Employment)$/iu.test(sectionTitle)) {
+      projectSection = true;
+      professionalSection = false;
+    } else if (/^(?:Kenntnisse|Skillset|Skills?|Kompetenzen|Technologien|Technologies|Standards?|Methoden|Zertifizierungen|Zertifikate|Ausbildung)$/iu.test(sectionTitle)) {
+      projectSection = false;
+      professionalSection = true;
+    } else if (/^\s*#{1,6}\s/u.test(rawLine)) {
+      projectSection = false;
+      professionalSection = false;
+    }
 
     // "<Customer> – <Project>" project headings.
-    const dash = credentialLine ? null : content.match(DASH_SPLIT_RE);
+    const dash = credentialLine || professionalSection ? null : content.match(DASH_SPLIT_RE);
     if (dash) {
       const left = normalizeSpaces(dash[1]);
       const right = normalizeSpaces(dash[2]);
@@ -191,7 +215,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
           // Only an exact standalone organisation is eligible for this rule.
           legalOrganizations.some((organization) => key(organization) === key(s)) ||
           DOMAIN_SHAPE_RE.test(s) ||
-          /^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9 .&+\-]{2,40}$/u.test(s);
+          (projectSection && /^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9 .&+\-]{2,40}$/u.test(s));
         if (isCapsOrLegal) {
           const customer = reg.assign('CUSTOMER', s);
           reg.map.set(`ORG:${key(s)}`, customer);

@@ -9,6 +9,25 @@ Formate, Plattformen oder Cowork-Oberflächen. Laufende Teilnachweise bleiben im
 [aktiven Backlog](BACKLOG.md), im [Ist-Abgleich](CURRENT_STATE.md) und in der
 [Traceability](TRACEABILITY.md).
 
+## RC81: abgeschlossener Defectschnitt, nicht Abschluss der Mutterstories
+
+31.08.2026: R80-01–17 aus dem unabhängigen RC80-Review sind korrigiert und lokal
+regressionsgeprüft. Vollständige `test:ci` mit Pre-/Posttests, ZIP-/MCPB-Build und
+offizieller Claude-Strukturvalidator PASS. [Detailnachweise und Grenzen](../RC81_DEFECT_ABSCHLUSS_2026-08-31.md).
+
+| Befunde | Storybezug | Abgeschlossener E0-Anteil |
+|---|---|---|
+| R80-01–05 | BL-031.1, BL-050 | positionsbezogene Zertifikats-/Organisationsrollen, Gesundheits-IT, Produktnamen und Gateway-Regression |
+| R80-06, -10, -11 | BL-041.7 | präzise Dateizuordnung, lokale Fertigmeldung, tatsächliche Werkzeug-/Bildwege |
+| R80-07–09 | BL-041.1, BL-041.7, BL-011.3 | Stapelauswahl, Unicode, terminaler Handoff, signalgebundener asynchroner Picker |
+| R80-12–14, -17 | BL-011.13, BL-011.3 | Intake-Orphan-Nachweis, Legacy-Erhalt, Zero-Day-Laufende, Journal-v4-Schutzscan |
+| R80-15–16 | BL-041.9, BL-047.1, BL-050.3 | begrenzte Reviewgruppen samt Abbruch/Teilergebnissen, 4 statt 10 Journalwrites pro Normaldatei |
+
+Echte Cowork-/Windows-/macOS-/Linux-Nachweise bleiben im aktiven Backlog; keine
+Format-, universelle Runtime- oder vollständige Privacyfreigabe aus E0 ableiten.
+
+## Früher abgeschlossene Stories
+
 | Story | Abschluss | Nachweis |
 |---|---|---|
 | BL-001.1 | Open-Source-first-Regel und Komponentenregister verbindlich | DS-038, `OPEN_SOURCE_COMPONENTS.md`, kanonischer Prüftest |

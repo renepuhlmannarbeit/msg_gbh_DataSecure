@@ -1,6 +1,6 @@
 # DOCX-Story-Coverage V1
 
-Stand: 23.08.2026 · Story: BL-022.1 · Status: in Arbeit
+Stand: 31.08.2026 · Story: BL-022.1 · Status: in Arbeit
 
 ## Zweck und Grenze
 
@@ -39,6 +39,33 @@ Bildziele und Medien unter einem anderen Beziehungstyp werden weder als lokales
 Sichtprüf-Asset ausgegeben noch freigegeben; sie erzeugen eine inhaltsfreie
 Coverage-Warnung.
 
+## RC69: verschachtelte Tabellen und Textfelder
+
+Ein begrenzter struktureller Durchlauf ersetzt das flache Zeilen-/Zellen-Matching.
+Äußere Textläufe vor, zwischen und nach Textfeldern sowie Zellen und Zeilen nach
+einer eingebetteten Tabelle bleiben in Quellreihenfolge genau einmal erhalten.
+Dies gilt für den Hauptteil und alle fünf oben genannten Neben-Stories.
+Verschachtelte Tabellen werden innerhalb einer Markdown-Zelle mit escaped
+Trennzeichen und Zeilenumbrüchen dargestellt; die Originalformatierung wird nicht
+rekonstruiert. Fachinhalte bleiben Text, Namen und Kontakte durchlaufen weiterhin
+denselben Datenschutz-Gate. Moderne Choice-Inhalte ersetzen den Fallback ohne
+Textduplikation.
+
+Fehlerhafte Tag-/Tabellen-/Textfeldverschachtelung oder uneindeutige Attribute
+liefern kein Teilresultat. Die Strukturgrenzen betragen 128 XML-Ebenen,
+200.000 behaltene Strukturknoten, 1.000.000 XML-Elemente und 8.000.000 gerenderte
+Zeichen je Story. Dies sind Ressourcenbudgets, keine Seitenzahlgrenze.
+Ein Fehler ist inhaltsfrei (`DOCX_STRUCTURE_UNSAFE`/`DOCX_STRUCTURE_LIMIT` intern;
+der Worker gibt weiterhin nur den festen Parserfehler zurück).
+Text wird nicht für jeden übergeordneten Tabellenknoten erneut eingelesen oder
+escaped; Ausgabeexpansion durch Tabellenauffüllung ist ebenfalls begrenzt.
+
+`test-docx-structure.js` umfasst 30 Prüfgruppen einschließlich 48 missgebildeter
+Story-Fälle, Tiefengrenzen, 5.000 Zeilen, übermäßiger Tabellenauffüllung und
+De-Identifizierung zuvor verlorener Textpositionen bei Erhalt von Qualifikationen.
+`npm run test:parser-contract` bündelt Struktur, Graph, Isolation und Differential;
+die regulären Tests führen diese Nachweise automatisch mit aus.
+
 ## Nicht abgedeckt
 
 Glossarien, Subdocuments, beliebige unbekannte `word/`-Parts, aktive
@@ -65,8 +92,13 @@ zulässigen Story- und Relationship-Varianten.
 Die Part-/Relationship-Struktur folgt Open Packaging Conventions und
 WordprocessingML. Mammoth 1.12.1 ist als exakt gelocktes Entwicklungsorakel
 eingebunden: `test-docx-differential.js` vergleicht den Token-Erhalt des
-Hauptteils und gewöhnlicher Tabellen in 24 synthetisch erzeugten gültigen DOCX
-mit der unabhängigen HTML-Konvertierung. Mammoth ist weder Runtime- noch
+Hauptteils und gewöhnlicher Tabellen in 96 synthetisch erzeugten gültigen DOCX
+mit der unabhängigen HTML-Konvertierung. RC69 ergänzt 24 Dokumente mit
+verschachtelten Tabellen (Reihenfolge/einmaliger Token-Erhalt) und 16 Dokumente
+mit Textfeldern. Bei letzteren belegt Mammoth nur die äußeren Textläufe; moderne
+`wps`-Textfelder werden vom Orakel ausgelassen, deshalb prüfen feste unabhängige
+Sollwerte deren inneren Text zusätzlich. Es wird keine vollständige Orakel-
+Übereinstimmung für Textfelder behauptet. Mammoth ist weder Runtime- noch
 Pluginabhängigkeit und kann keine fehlende fail-closed-Coverage-Prüfung oder
 Interoperabilitätsabnahme mit realen Word-Generatoren ersetzen. Rest: praktische
 Drei-OS- und Word-Generator-Abnahme.

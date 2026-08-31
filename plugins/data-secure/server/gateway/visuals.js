@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { rasterizeToPng, ocrPngDetailed } = require('../runtime');
+const { rasterizeToPng, ocrPngDetailed, SafeError } = require('../runtime');
 const { VisualBudgetError } = require('../windows-visual');
 const {
   decodePng,
@@ -13,7 +13,7 @@ const {
 } = require('../image-sanitizer');
 const { LIMITS, roots, sha256Buffer, sha256File } = require('./common');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
-const { productPrivateArtifactCrypto } = require('./private-artifact-runtime');
+const { createPrivateWorkStore } = require('./private-work-store');
 
 const { MAX_ASSET_BYTES } = LIMITS;
 const VISUAL_TOTAL_TIMEOUT_MS = 3 * 60 * 1000;
@@ -134,38 +134,39 @@ function writeReviewItem(packageId, assetId, res, packageDir, deps = {}) {
   const dir = path.join(r.review, packageId);
   fs.mkdirSync(dir, { recursive: true });
   const capacity = deps.assertWritableCapacity || assertWritableCapacity;
+  const metaPath = path.join(dir, `${assetId}.review.json`);
+  if (fs.existsSync(metaPath)) throw new SafeError('Vorhandene Review-Daten werden nicht überschrieben.');
 
   const reviewId = `${packageId}__${assetId}`;
   let file = null;
   if (res.reviewData) {
-    const artifactCrypto = deps.privateArtifactCrypto || productPrivateArtifactCrypto(r.review);
-    artifactCrypto.ensureReady();
-    file = `${assetId}.dsart`;
-    capacity({ directory: dir, bytes: res.reviewData.length + 128 });
+    const privateWorkStore = deps.privateWorkStore || createPrivateWorkStore({ privateRoot: r.review });
+    privateWorkStore.ensureReady();
+    file = safeReviewFilename(assetId, res.reviewExt === 'dsart' ? 'bin' : res.reviewExt);
+    capacity({ directory: dir, bytes: res.reviewData.length });
     try {
-      artifactCrypto.writeEncrypted(path.join(dir, file), res.reviewData, {
-        purpose: 'review-preview', objectId: reviewId
-      });
+      privateWorkStore.writeFile(path.join(dir, file), res.reviewData);
     }
     catch (error) { throw normalizePostPreflightWriteError(error); }
   }
 
   const meta = {
+    schema_version: 2,
     review_id: reviewId,
     package_id: packageId,
     asset_id: assetId,
     reason: res.reason,
     preview_file: file,
     preview_sha256: file ? sha256File(path.join(dir, file)) : null,
-    preview_plain_sha256: file ? sha256Buffer(res.reviewData) : null,
-    preview_encrypted: !!file,
+    preview_storage: 'local-plain',
+    preview_encrypted: false,
     created_at: new Date().toISOString(),
     approved: false,
     package_dir: path.basename(packageDir)
   };
   const serialized = JSON.stringify(meta, null, 2);
   capacity({ directory: dir, bytes: Buffer.byteLength(serialized, 'utf8') });
-  try { fs.writeFileSync(path.join(dir, `${assetId}.review.json`), serialized, 'utf8'); }
+  try { fs.writeFileSync(metaPath, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' }); }
   catch (error) { throw normalizePostPreflightWriteError(error); }
   return meta;
 }

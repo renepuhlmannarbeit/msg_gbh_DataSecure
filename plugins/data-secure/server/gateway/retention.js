@@ -149,18 +149,23 @@ function previewFiles(reviewDir, fsApi = fs) {
 // preview; overwriting one in a Map would leave stale evidence behind.
 function reviewMetaIndex(reviewDir, fsApi = fs) {
   const index = new Map();
+  const protectedPreviewNames = new Set();
   const failures = [];
   let entries = [];
   try {
     entries = fsApi.readdirSync(reviewDir, { withFileTypes: true });
   } catch {
-    return { index, failures };
+    return { index, failures, protectedPreviewNames };
   }
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.review.json')) continue;
     const metaPath = path.join(reviewDir, entry.name);
     try {
       const meta = JSON.parse(fsApi.readFileSync(metaPath, 'utf8'));
+      if (meta.preview_encrypted === true || /\.dsart$/i.test(String(meta.preview_file || ''))) {
+        if (meta.preview_file) protectedPreviewNames.add(String(meta.preview_file));
+        continue;
+      }
       if (meta.preview_file) {
         const name = String(meta.preview_file);
         const paths = index.get(name) || [];
@@ -171,7 +176,7 @@ function reviewMetaIndex(reviewDir, fsApi = fs) {
       failures.push(err);
     }
   }
-  return { index, failures };
+  return { index, failures, protectedPreviewNames };
 }
 
 function markPreviewExpired(metaPath, at, fsApi = fs) {
@@ -249,6 +254,9 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
   const evidence = reviewMetaIndex(reviewDir, fsApi);
   const failures = [...evidence.failures];
   let removed = 0;
+  // Unknown metadata could name an encrypted legacy file: preserve this one
+  // directory, report once, and let unrelated directories continue normally.
+  if (failures.length) return { removed, failures };
 
   for (const file of previewFiles(reviewDir, fsApi)) {
     const name = path.basename(file);
@@ -258,6 +266,25 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
       if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
         throw new Error('Review-Preview ist kein freigegebener Dateipfad.');
       }
+      // Old ciphertext remains untouched, including renamed files. A plain
+      // metadata record must not turn a legacy encrypted preview into garbage.
+      if (name.toLowerCase().endsWith('.dsart')) continue;
+      if (evidence.protectedPreviewNames.has(name)) continue;
+      const probe = Buffer.alloc(8);
+      const fd = fsApi.openSync(file, fsApi.constants.O_RDONLY | (fsApi.constants.O_NOFOLLOW || 0));
+      let encrypted;
+      try {
+        if (!sameFile(fileStat, fsApi.fstatSync(fd))) throw new Error('Review-Preview wurde ersetzt.');
+        let offset = 0;
+        while (offset < probe.length) {
+          const count = fsApi.readSync(fd, probe, offset, probe.length - offset, offset);
+          if (count === 0) break;
+          if (!Number.isSafeInteger(count) || count < 0 || count > probe.length - offset) throw new Error('Review-Preview ist nicht lesbar.');
+          offset += count;
+        }
+        encrypted = probe.equals(Buffer.from('DSARTF01'));
+      } finally { fsApi.closeSync(fd); }
+      if (encrypted) continue;
       fsApi.unlinkSync(file);
       removed++;
       for (const metaPath of evidence.index.get(name) || []) {
@@ -276,6 +303,10 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
   const reconciliation = reconcileMissingPreviews(reviewDir, root, at, fsApi);
   failures.push(...reconciliation.failures);
   return { removed, failures };
+}
+
+function sameFile(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && right.isFile();
 }
 
 function selectedScopes(scope) {

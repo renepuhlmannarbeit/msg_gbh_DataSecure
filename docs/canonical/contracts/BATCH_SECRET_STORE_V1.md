@@ -1,7 +1,13 @@
 # Vertrag: lokaler Batch-Secret-Store v1
 
-Status: Integrationsvertrag, noch kein Produkt-Release · Story: BL-030.2 ·
+Status: **historischer nicht-produktiver Vertrag; Keyring-Pflicht durch DS-065 superseded** · Story: BL-030.2 ·
 Abhängigkeiten: BL-011.1, BL-030.1, BL-010.1
+
+Keine Aktivierung dieses OS-Secret-Stores und keine native Keyring-Abnahme mehr.
+BL-030.2 bleibt für einen minimalen lokalen, nicht zusätzlich verschlüsselten
+neustartfesten Pseudonymkontext offen. Die RC80-Snapshot-Umstellung aktiviert diese
+Funktion nicht. Nachfolgende Keyring-/Fallbackregeln dokumentieren nur das alte
+Design; sie sind keine aktuelle Implementierungs- oder Releasepflicht.
 
 ## Zweck und Grenze
 

@@ -13,7 +13,7 @@ Das Plugin verbindet:
 1. Schreibe in einer neuen Claude-Cowork-Unterhaltung: **„Dateien anonymisieren“**. Lade sensible Originale nicht als Chat-Anhang hoch.
 2. Der lokale Mehrfach-Dateidialog öffnet sich. Wähle eine oder mehrere Dateien und klicke **„Öffnen“**. Das ist die einzige Normalbestätigung; Anzahl, Größe, Formate und Bildstandard werden lokal geprüft.
 3. Der getrennte lokale Ablauf liest die Auswahl nur lesend, erstellt eine private Arbeitskopie und verarbeitet den Stapel automatisch. Die Quelle bleibt unverändert; nur die von DataSecure selbst erzeugte Arbeitskopie wird nach Abschluss oder Ablauf der Frist bereinigt.
-4. Bei der Standardanfrage endet Claude danach: Markdown, Mapping und Nachweis bleiben lokal. Nur wenn du zusätzlich eine Zusammenfassung oder Weiterverarbeitung verlangst, liest Claude in einem gebündelten Aufruf höchstens fünf verifizierte, anonymisierte Markdown-Ergebnisse.
+4. Nach dem Start endet Claudes Antwort: Markdown, Mapping und Nachweis bleiben lokal. Bitte erst nach dem lokalen Abschluss ausdrücklich um die Auswertung; dann kann Claude begrenzt anonymisierte Ergebnisse übernehmen. Auch bei einem kombinierten Startwunsch ist dieser spätere Auftrag erforderlich; der Start pollt oder liest nicht automatisch.
 5. Alle Grafiken bleiben lokal unter `Needs Visual Review`. Dieser Engineering-Build besitzt keinen Freigabeweg für visuelle Inhalte; das Öffnen des Ordners macht sie für Claude nicht lesbar.
 6. Ein Mehrdatei-Stapel zeigt nach dem lokalen Abschluss nur die drei Abschlusszähler. Die dauerhafte lokale Zuordnung liegt in `DataSecure-Export/DataSecure-Mapping.csv` und wird ausschließlich auf Wunsch geöffnet.
 
@@ -47,7 +47,10 @@ Cloud-Synchronisation oder Chat-Upload umgehen.
 
 Die normale `.md` enthält nie Bildpixel. Deshalb bleibt bei „nur Markdown“ oder „Bilder nicht an Claude geben“ der Standard aktiv: Grafiken bleiben lokal und sicher erkannter Bildtext kann nach derselben Prüfung erhalten bleiben. Nur wenn lokale Bildanlagen selbst verworfen werden sollen, ist der strenge Modus vorgesehen; er übernimmt keinen Bildtext und stoppt bei unbekannten eingebetteten Objekten sicher.
 
-Bei einem lokalen Abbruch zeigt `diagnostic_status` die letzte Verarbeitungsphase,
+Bei einem lokalen Abbruch nicht automatisch erneut starten. Melde nur den festen
+Fehlercode an den IT-Support, keine Dateien oder internen Kennungen.
+`diagnostic_status` ist ausschließlich im vorübergehend aktivierten IT-Supportmodus
+verfügbar, nicht im normalen Cowork-Ablauf. Es zeigt die letzte Verarbeitungsphase,
 eine getrennte inhaltsfreie Ablaufspur von Picker bis Abschlussanzeige und einen
 festen Fehlercode. Das Verarbeitungsjournal ist auf 14 Tage und 200 Ereignisse
 begrenzt und enthält keine Dateinamen, Pfade, Inhalte, erkannten Werte,

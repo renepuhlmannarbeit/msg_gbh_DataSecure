@@ -86,6 +86,8 @@ function genericStatus(options = {}) {
     folders_ready: true,
     storage_safe: storage.safe,
     storage_mode: storage.mode,
+    private_work_storage: 'local-plain',
+    private_work_encryption: false,
     supported_inputs: [
       'Word (.docx)',
       'Markdown (.md)',

@@ -37,4 +37,15 @@ for (const text of [guide, review, anonymize, explain, boundary]) {
 }
 assert.match(all, /(?:sichtbarer Skill|Plugin-Eintrag)[^\n]{0,140}(?:genügt nicht|kein Nachweis|niemals aus)/iu);
 
+assert.match(guide, /Cowork-Aufgabe endet dagegen bereits nach dem lokalen Start/iu);
+assert.match(guide, /späteren Auftrag/iu);
+assert.doesNotMatch(guide, /Claude\s+nennt am Ende dieselben Zähler/iu);
+assert.match(guide, /bedeutet nicht, dass sie lokal gelöscht wurden/iu);
+assert.match(guide, /Privacy-Ordners ist nur im ausdrücklich aktivierten IT-Supportmodus/iu);
+assert.match(guide, /endet jedoch keinen bereits erfolgreich/iu);
+const { complianceHeader } = require('../plugins/data-secure/server/gateway/compliance');
+const header = complianceHeader('general', { ext: '.txt', passes: 1, entityCount: 0, included: 0, review: 0 });
+assert.doesNotMatch(header, /Persistente Rückzuordnung: nein/iu);
+assert.match(header, /lokale Zuordnung von Originaldatei und Ergebnis vorhanden/iu);
+
 console.log('COWORK DOCUMENTATION CONTRACT PASS');

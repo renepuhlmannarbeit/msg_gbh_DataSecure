@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { collectFiles, readCentralModes } from './lib/zip.mjs';
+import { readCentralModes } from './lib/zip.mjs';
+import { collectProductFiles, verifyKeyringFreeProductEntries } from './lib/product-files.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -14,7 +15,8 @@ const archive = path.resolve(process.argv[2] || path.join(root, 'dist',
 const archiveBytes = fs.readFileSync(archive);
 const entries = readZip(archiveBytes);
 const modes = readCentralModes(archiveBytes);
-const sourceFiles = collectFiles(path.join(root, 'plugins', 'data-secure'));
+const sourceFiles = collectProductFiles(path.join(root, 'plugins', 'data-secure'));
+verifyKeyringFreeProductEntries(entries);
 for (const file of sourceFiles) {
   if (!entries.get(file.archivePath)?.equals(fs.readFileSync(file.fullPath))) {
     throw new Error(`PORTABLE_PLUGIN_SOURCE_MISMATCH_${file.archivePath}`);

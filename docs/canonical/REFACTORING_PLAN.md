@@ -15,6 +15,12 @@ Datenschutz-, Originalschutz-, Durability- oder Coverage-Grenze abschwächen.
 
 ## Durchgängige Arbeitsregeln
 
+DS-065 ersetzt den Verschlüsselungsumfang: neue private Arbeitskopien ohne
+zusätzliche Verschlüsselung, Keyring, Keyfile oder Passwort. Zuerst Plain-Speicher,
+Fortsetzung und Altbestandsschutz prüfen, danach den normalen Cowork-Ablauf.
+Native Keyring-Smoke-Tests und zusätzliche Engineering-Keyring-Infrastruktur sind
+obsolet, nicht bestanden. Originalschutz und Freigabe-Gates bleiben erhalten.
+
 1. Vor jeder Verhaltensänderung wird der bestehende Vertrag durch
    Charakterisierungs-, Negativ- und Recoverytests festgehalten.
 2. Strukturänderung und Produktverhalten werden nicht im selben Commit vermischt.
@@ -260,6 +266,12 @@ entfernt und die Upgrade-Migration ist als `legacy-input-migration.js` isoliert.
   jeder Aufnahme. Relative Unterordner bleiben ausschließlich im lokalen Mapping.
 
 ### R4 – Benutzergebundene Verschlüsselung
+
+**Historischer Schnitt, seit DS-065 superseded.** Der folgende RC66-Nachweis
+bleibt zur Nachvollziehbarkeit erhalten; keine aktuelle Verschlüsselungs- oder
+Keyring-Releasepflicht. RC80 setzt stattdessen
+`contracts/PRIVATE_WORK_STORAGE_V1.md` um. Verschlüsselte Altbestände werden weder
+entschlüsselt, migriert noch gelöscht; neues Verarbeiten erfordert Originalauswahl.
 
 Status: **R4b-E0 produktiv integriert; E1/E3 offen** · Stories: BL-011.13, BL-030.2
 

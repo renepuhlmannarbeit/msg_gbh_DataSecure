@@ -9,6 +9,10 @@ const attempts = [
   ['dns-promises', () => require('node:dns').promises.lookup('localhost')],
   ['dns-resolve', () => require('node:dns').resolveTxt('localhost', () => {})],
   ['dns-resolver', () => new (require('node:dns').Resolver)().resolveTxt('localhost', () => {})],
+  // Invalid names keep these regression probes network-free even if a guard
+  // regresses: the original API only reaches its argument validation.
+  ['dns-promises-resolver', () => new (require('node:dns').promises.Resolver)().resolveTxt(null)],
+  ['dns-promises-module-resolver', () => new (require('node:dns/promises').Resolver)().resolveTxt(null)],
   ['udp', () => require('node:dgram').createSocket('udp4')],
   ['http2', () => require('node:http2').connect('http://127.0.0.1:9')],
   ['fetch', () => globalThis.fetch('http://127.0.0.1:9/')],

@@ -1,17 +1,720 @@
 # Testing
 
+Aktuelle Testpriorität nach DS-065 / RC81: Plain-Snapshot-/Reviewpfad ohne
+Schlüsselbund, Keyfile oder Passwort; neue/fortgesetzte Stapel, Originalschutz und
+unangetastete verschlüsselte Altbestände. 18 Storetests und 24 Retentiontests PASS.
+Die vollständige lokale RC81-Gesamtregression `npm run test:ci` einschließlich
+Pre-/Posttests und `npm run build` bestehen. Ein erster Sandboxlauf stoppte an
+Esbuild-Verzeichnisrechten; der gesonderte Test und die vollständige Suite
+außerhalb dieser Einschränkung bestehen. Keine GitHub Actions ausgeführt.
+
+## RC81-Defectregression (31.08.2026)
+
+- `npm run test:rc81-review`: Semantik13, Zertifikatskatalog24, nativer Picker12,
+  Reviewmodell7, Revieworchestrator17, Item-Processor14 und Dokumentationsvertrag.
+  Das Gate ist in `posttest:ci` eingebunden.
+- Die übrige CI prüft unter anderem Gateway-E2E43, MCP39, echte gemischte
+  TXT/CSV/DOCX-Fortsetzung, Intake12, Delivery11 und Retention-Schutz9.
+- Zusätzlich `node tests/test-batch-session.js`: **67/67 PASS**, inklusive echter
+  100-Dateien-Verarbeitung und Test-Worker-Abbrüchen an Position 1/50/100 mit
+  anschließender Wiederaufnahme. Protokoll: `dist/rc81-batch-session.log`.
+  Der unterbrochene Vorgängerlauf ist kein Erfolg; der vollständige Wiederholungslauf
+  prüft auch den korrigierten Prozessereignis-Doppelgänger und RAM-Checkpoint-Vertrag.
+- `npm run build`: ZIP/MCPB-Quellparität und 150 Vertragsvarianten, Statusartefakte,
+  SBOM und Ausschluss der nicht ausgelieferten Keyring-Komponenten PASS.
+- `npm run validate:claude-local`: offizieller CLI-Strukturvalidator 2.1.233,
+  Plugin und Marketplace PASS. Keine Modell-/Cowork-Abnahme daraus ableiten.
+- Separater Phasenbenchmark für 10 TXT/CSV/DOCX-Dateien: cold 11.398 ms,
+  warm 11.227 ms; 20/20 freigegeben, 0 gestoppt, Peak-RSS 72/74 MiB.
+  `dist/rc81-benchmark.json`; In-Process-Parser, nicht Cowork, kein kontrollierter
+  RC80-/RC81-Vergleich und keine zugesicherte Zielhardware-Laufzeit.
+- Einzelbefunde, zusätzliche Langläufe und Grenzen:
+  [RC81-Defectabschluss](RC81_DEFECT_ABSCHLUSS_2026-08-31.md).
+
+Lokale Protokolle: `dist/rc81-test-ci.log`, `dist/rc81-build.log`. Kein Test liest
+produktive Dokumente oder verwendet produktive Schlüssel. Sichtbare Cowork- und
+macOS-/Linux-Abnahmen bleiben im kanonischen Backlog offen.
+
+Native Keyring-Smoke-Tests und zusätzlicher Engineering-Keyring-Session-Unterbau
+sind wegen Scopewechsel obsolet, nicht bestanden. Keine VM, kein Zusatzkonto und
+keine produktiven Credentials für Tests. Historische Testergebnisse unten bleiben
+unverändert; deren Keyring-Aufträge nicht erneut ausführen. Normale echte
+Cowork-/Zielsystemabnahme bleibt erforderlich.
+
+## DS-063-Komponentenschnitt (RC79-Folgearbeit, 31.08.2026)
+
+- `npm run test:engineering-keyring`: **52 PASS** (24 Memory-Komponenten-/
+  Negativtests, 18 Quell-/Packaging-Gates, 10 Verifier-Verträge). Keine OS-Keys.
+- `npm run test:ci`: **PASS**, inklusive Pre-/Post-Gates. Vollständiges lokales
+  Protokoll: `dist/same-account-test-ci.log`. Keine GitHub Actions.
+- Security-/Architekturreview: Wiederholungsfehler nach ungewisser Speicherung
+  gefunden und behoben. Pinning des erwarteten Schreibwerts, synchroner Readback
+  und terminale Fehlerbindung verhindern spätere Adoption eines falschen Keys.
+  Drei Wiederholungen, fehlender Readback, spätere Schlüsseländerung und
+  Promise-/Non-void-Backendausgänge als Regression geprüft; Gegenreview bestätigt.
+- Der bestehende SEA-Verifier stoppt auch mit historischer Konto-Bestätigung
+  vor Assembly-I/O (`SEA_BATCH_TEST_ISOLATION_PENDING`). Produktcode/-version
+  unverändert; Adapter außerhalb des Pluginbaums, keine Laufzeit-/Dialogkosten.
+- Das Backend der neuen Integrationstests ist explizit **Memory**. Das
+  Produktfeld `backend: native_os_keyring` wird nicht als OS-Evidenz benutzt.
+  Kleine, frisch erzeugte synthetische Testverzeichnisse bleiben erhalten;
+  keine Credential-Löschung oder Bereinigung echter Nutzerdaten.
+- Native Backendprobe und private Session-/Scope-/Buildbindung über sämtliche
+  Engineering-Prozesse bleiben offen. Keine VM, kein Zusatzkonto, kein
+  Commit/Push und keine neue Produkt-/OS-/Cowork-Abnahme.
+
+## Verbindliche Testumgebung (DS-062/DS-063, 31.08.2026)
+
+Keine zusätzliche System-VM und kein zusätzliches Windows-Benutzerkonto.
+Die früher unten beschriebene Kontoanforderung ist verworfen. Sichere Testtrennung
+im vorhandenen Konto ist offene E0-Entwicklungsarbeit, keine Nutzeraufgabe.
+Der bestehende SEA-Produkt-Keyring-Harness darf bis zum geprüften Neuentwurf nicht
+ausgeführt werden; `--isolated-test-account` weder entfernen noch im vorhandenen
+Konto zur Umgehung setzen. Temporäre Dateiordner isolieren den Schlüsselbund nicht.
+Produktcredentials bleiben unberührt. Produktfreie synthetische Tests bleiben
+möglich; sie belegen keine unveränderte Produkt-/OS-Abnahme.
+
 ```bash
 npm test                # the whole suite
 npm run test:ci         # short, security-relevant set used by the one automatic CI job
 npm run test:golden     # regenerate the golden expected output after an intended change
 npm run test:windows-visual # real Windows OCR/redaction acceptance (Windows only)
 npm run test:skills     # local German skill/contract acceptance
+npm run validate:claude-local # official local structure validator; no model run or CLI installation
 npm run test:intake-worker-stress # 50 real detached intake-worker starts
 npm run test:legacy-input # versionierte, datenbewahrende Upgrade-Migration
 npm run benchmark:detectors # aggregate detector quality on the synthetic ground truth
 npm run build:plugin && npm run test:plugin-zip # same acceptance against the built ZIP
-node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # engineering-only MCP proof
+npm run test:sea-gates   # assembly/evidence, resolver and simulated dispatch; not a release gate result
+node scripts/verify-sea-launcher.mjs --target <target> --launcher <binary> # legacy NO-GO probe, not the real parent-dispatch test
 ```
+
+## Lokaler RC79-Nachweis 31.08.2026
+
+BL-010.8: Architektur-/Implementierungsfachagenten und unabhängiges Lifecycle-
+Gegenreview. Kein blockierender Gegenreviewbefund. DS-062 nimmt die frühere
+System-VM-Testoption zurück; Tests hier laufen direkt auf dem lokalen Rechner,
+ohne Produktimporte, Credential Store oder Originaldateien.
+
+- `test-sea-process-observer-contract.mjs`: **47 PASS**. Neue Fälle erzwingen den
+  Parent-Modus, Ereignisreihenfolge, fehlende/doppelte/vorzeitige Parentnachweise,
+  geschlossene Metadaten und Ablehnung bei fehlendem Worker-/Helferabschluss.
+- Nativer Build `dist/sea-observer-rc79-a`: **PASS**, vorhandenes MSVC/SDK,
+  `/W4 /WX`, 156672 Bytes, SHA-256
+  `0f23066f883248a82507af39cef37a1d3c7ac48af1220a082b5e300033e1f30b`.
+  Zweiter Build in `dist/sea-observer-rc79-b`: **byte-identisch**.
+- `sea-process-observer-native.mjs dist/sea-observer-rc79-a`: **17 PASS**.
+  Zehn RC78-Fälle bleiben erhalten; neu sind native Parent-/Worker-Reihenfolge
+  bei kontrolliertem Parentende und Parentkill, Worker-first-Ablehnung, lebender
+  Parent bis Deadline, Observerabbruch, falsche Nonce und Parent-/Worker-PID-Kollision.
+
+Alle Nachweise sind Engineering-/synthetische Windows-Prozessnachweise, keine
+Produktstapel-, Fortsetzungs-, Prozessabstammungs- oder Privacy-Freigabe. Tests
+beenden ausschließlich ihre eigenen Prozesse. Produkt-Harness-Anbindung und
+vollständiger Ergebnisvergleich bleiben eigenständig offen. Native Spezialfälle
+für frühen Parentexit und falsches Parent-Image folgen beim Anschluss;
+Ablehnungscode bereits vorhanden, nicht als ausgeführt behauptet.
+
+Kanonvalidator: **PASS**, 62 Entscheidungen, 24 Epics, 66 Stories. Capability-
+Vertrag einschließlich VM-Ausschluss: **11 PASS**. `npm run test:ci` einschließlich
+Vor-/Nachtests: **PASS, Exit 0**. `npm run build`: **PASS**, ZIP 430 und MCPB 605
+Einträge, gepackte 13 Skill-/Vertrags- und 150 Anonymisierungsfälle, Quellparität,
+SBOM-/Status-App-Nachweise bestanden. Nach diesem Eintrag wird das MCPB mit der
+finalen Dokumentation neu gebaut und nochmals geprüft; finale Hashes stehen in
+`dist/SHA256SUMS`. Der native Engineering-Beobachter bleibt außerhalb der Pakete.
+Keine GitHub Actions, keine VM, kein Commit/Push. Ein OS-Testkonto wurde nicht angelegt.
+
+## Lokaler RC78-Nachweis 31.08.2026
+
+BL-010.8, Architektur-/Security-Gegenreview: separater Engineering-Beobachter,
+keine Produktimporte/Keyringjobs. Keine produktive Parser-/Supervisoränderung.
+
+- `test-sea-process-observer-contract.mjs`: **37 PASS**, reine Protokoll-/Budget-
+  Prüfungen; keine nativen Prozesse im automatischen SEA-Testgate.
+- `build-sea-process-observer.mjs --output-directory dist/sea-observer-rc78-c`:
+  **PASS**, MSVC 19.50.35725, SDK 10.0.26100.0, `/W4 /WX`, statische CRT.
+  EXE 156160 Bytes, SHA-256
+  `cd1a7a86b58209a519769d3c88bc2672ad624e38ecd506cc446937177babffa3`.
+  Zweiter finaler Build in `dist/sea-observer-rc78-d`: **byte-identisch**.
+  Builder und C++-Quelle bleiben an die vor Buildbeginn erfassten Bytes gebunden.
+- `tests/manual/sea-process-observer-native.mjs dist/sea-observer-rc78-c`:
+  **10 native synthetische Fälle PASS**: normaler Exit, signalisierter Exit 259,
+  kontrolliertes Parentende, Parentkill mit detached-Enkel, fremde PID bei
+  gleichem Image, falsches Image, falsche Nonce, Verbindungsdeadline,
+  Worker-Wartedeadline und abgebrochener Observer ohne Exitnachweis.
+
+Frühe Läufe schlugen korrekt fehl: der noch nicht detached gestartete Enkel
+endete beim Parentende mit Code 0 statt seinem eigenen erwarteten Code 7.
+Die Fixture wurde unabhängig gestartet; feste Exitfrist und gehaltene Pipes
+begrenzen ihre Lebensdauer. Alleine daraus folgt keine Produktfortsetzung.
+Gegenreviewfunde zu beliebigen Fehlern als Negativ-PASS und unbegrenzter Ausgabe
+sind korrigiert. Zusätzliche ungültige Protokollzeilen werden auch bei erwarteten
+Fehlern abgelehnt. Native Ergebnisse sind ausschließlich synthetische Windows-
+Evidenz, kein SEA-Stapel-/OS-Isolations-/POSIX-/Cowork- oder Power-Loss-Nachweis.
+
+`npm run test:ci` einschließlich Pre-/Posttests: **PASS, Exit 0**. Kanonischer
+Dokumentenvalidator: **PASS**, 61 Entscheidungen, 24 Epics, 66 Stories.
+`npm run build`: **PASS, Exit 0**; ZIP 430 und MCPB 605 Einträge, Quellparität,
+13 gepackte Skill-/Vertragsfälle und 150 gepackte Anonymisierungsfälle bestanden.
+SBOM-/Status-App-Archivprüfung ebenfalls PASS. Nach diesem Nachweiseintrag wird
+das MCPB mit finaler Dokumentation neu gebaut und nochmals geprüft; finale
+Artefakthashes stehen in `dist/SHA256SUMS`. Keine GitHub Actions,
+kein Commit/Push in diesem Schnitt.
+Rollenvertrag und Backlog trennen implementierten Observer und offene
+Produkt-Harness-Integration. Standardstart bleibt `node`, Helfer nicht im ZIP/MCPB.
+
+## Lokaler RC77-Nachweis 31.08.2026
+
+BL-010.1/BL-010.8: rekonstruierte Parent-Buildprovenienz, begleitet von Architektur-
+und Security-Agenten. Keine native SEA-Ausführung, keine Produkt-Keyringjobs.
+
+- `test-sea-launcher-provenance.mjs`: **38 PASS**. Quellen-/Bootstrap-/Config-/Toolchain-
+  Manipulation, Standortunabhängigkeit, geschlossene V2-Buildfelder, Nullrolle,
+  Binärhash/-länge und falsche Typen. Commander-Code wird zusätzlich erfasst.
+- `test-sea-plugin-assembly.js`: **84 PASS** im gezielten Lauf, einschließlich
+  frischer MCP-Nachweise bei veralteter Parentprovenienz und gleichzeitiger
+  Neudefinition aller Build-/MCP-Nachweise nach erster Quellenaufnahme. Beides
+  stoppt vor Stage-Erstellung. Explizites NO-GO für noch nicht paketierte Parserrollen.
+- Launcher-/Worker-Verträge verwenden die wirkliche gemeinsame SEA-Konfiguration.
+  Gegenreviewfunde: Quellen-Rebaselining, fehlende Commander-Abhängigkeit und
+  Array-als-Hash wurden korrigiert. Builder bindet archivgeprüftes und kopiertes
+  Nodeprogramm an denselben vorher erfassten Hash.
+
+Ein erster `test:sea-gates`-Lauf scheiterte an einem veralteten Konfigurations-
+Stringtest, der angepasst wurde. Der Folgelauf erreichte den Parserbundle-Test,
+scheiterte dort aber an Sandbox-Leserechten für esbuild. Die Tests werden mit
+erweiterten lokalen Rechten wiederholt, ohne Testgates abzuschwächen.
+`npm run test:ci` mit Pre-/Posttests: **PASS, Exit 0**. Zusätzlich finaler
+Provenienzlauf **38 PASS**, Assembly **84 PASS**, kanonischer Dokumentenvalidator
+**PASS** (61 Entscheidungen, 24 Epics, 66 Stories), `git diff --check` sauber.
+Die Rekonstruktion gegen den echten installierten Toolbestand wurde separat
+read-only geprüft: 27 Toolchain-Dateien. Dabei wurde die Commander-Auflösung
+an dessen tatsächlich exportierten Einstieg angepasst; Fixtures bilden die
+Sperre von `commander/package.json` nun ebenfalls ab.
+`npm run build`: **PASS, Exit 0**. ZIP **430** und MCPB **605** Einträge;
+Quellparität, 13 gepackte Skill-/Vertragsfälle und 150 gepackte Anonymisierungsfälle
+bestanden. SBOM-/Status-App-Archivprüfung ebenfalls PASS. Das Security-Gegenreview
+bestätigt alle drei Befunde als geschlossen. Nach Eintrag dieser Ergebnisse wird
+das MCPB einmal mit der finalen Dokumentation neu gebaut und auf Quellparität
+geprüft; finale Artefakthashes stehen in `dist/SHA256SUMS`.
+
+Buildkonsistenz ist keine Binär-/Hostattestierung oder Laufzeitimmutabilität
+externer Module. Kein Format freigeschaltet, kein zusätzlicher Dialog, keine
+per-Dokument-Hashinventur. Öffentlicher Node-Start bleibt erhalten.
+Kein Commit/Push und keine GitHub Actions in diesem Schnitt.
+
+## Lokaler RC76-Nachweis 31.08.2026
+
+BL-010.8/BL-011.8/BL-011.11: besitzgebundene Staging-Recovery mit Architektur-,
+Security- und Testgegenreview. Der Einzeldateinamen-Vertragskonflikt wurde vor
+Abschluss behoben und integriert getestet.
+
+- `test-package-staging.js`: **24 PASS**. Root-/Owner-/Payloadbindung, Publish,
+  Discard, tote/lebende Besitzer, Wiederholung, unbekannte Altdaten, Root-/Stage-
+  Austausch, ungültige Kennungen, defekte/hardverlinkte Records, Links/Hardlinks,
+  belegtes/fremdes Finalziel, fehlendes Payload nach Rename.
+- `test-safe-private-tree.js`: **7 PASS**, inklusive vollständiger gebundener
+  Baumprüfung vor erster Löschung und exakter Parent-/Zielidentitäten.
+- `test-source-folder.js`: **8 PASS**; private Stages werden weder direkt noch
+  rekursiv als Quellen übernommen; ähnliche Originalordnernamen bleiben zulässig.
+- `test-package-staging-integration.js`: **5 Gruppen PASS**. Echter eigener
+  Node-Kindprozess hart beendet vor Publish; separater Exit nach Rename vor
+  Receiptabschluss. Produktive Startwartung entfernt nur eindeutig gebundene
+  Reste; bereits fertiges Paket und Originalbytes bleiben unverändert. Erfolgs-
+  und Fehlerpfad ohne feste Batchpaket-ID, PII-Gate und Qualifikationserhalt.
+  Drei serielle Dokumente nutzen genau eine vorbereitende Recoveryinventur.
+- `test-sea-batch-result-contract.js`: **17 PASS**, einschließlich schreibfreier
+  Staging-Abnahme. Restzähler, Fehler, fehlende oder falsch typisierte Werte
+  dürfen kein PASS liefern; vorhandene Outputinventur bleibt streng.
+- Zusätzliche Regression: Gateway **40 PASS**, Companion-Verarbeitung **39 PASS**,
+  datensparsame Diagnostik **8 PASS**, Performance-Verträge **6 PASS**.
+
+`test:staging` ist in Pretest/Pretest-CI/Pretest-Fast-Path eingebunden. Die
+Integration nutzt synthetische Quellen und einen festen In-Memory-Konverter,
+keinen Produkt-Keyring, keine GUI und kein Internet. Sie ist keine native SEA-,
+Cowork-, POSIX- oder Power-Loss-Abnahme. Kleine eigene Testbäume bleiben erhalten.
+Der SEA-Oracle prüft Output und Staging streng, ohne selbst zu bereinigen.
+
+`npm run test:ci` einschließlich Pre-/Posttests: **PASS, Exit 0**. Zuvor wurden
+ein unzulässiger Dokumentationsstatus und die alte exakte Pretest-Liste im
+Manifesttest korrigiert; die erneute komplette Suite besteht. Anschließende
+Fehlerpfad-Härtung des Testharness (Fixture auch bei fehlgeschlagener Beobachtung
+beenden, danach `close` abwarten) separat erneut geprüft: fünf Gruppen PASS.
+
+`npm run build`: **PASS, Exit 0**, mit Plugin-ZIP/MCPB-Quellparität,
+13 gepackten Skill-/Vertragsfällen, 150 gepackten Anonymisierungsfällen,
+SBOM und Status-App-Archivprüfung. RC76: **430 ZIP-/605 MCPB-Einträge**.
+Nach Abschluss dieser Dokumentation wird das MCPB nochmals gebaut und auf
+Quellparität geprüft; verbindliche finale Hashes stehen in `dist/SHA256SUMS`.
+Kein Commit/Push und keine GitHub Actions in diesem Korrekturschnitt.
+
+## Lokaler RC75-Nachweis 31.08.2026
+
+BL-010.8/BL-011.11: Architektur-, Security- und Testagenten haben den neuen
+Worker-Crash-/Resume-Harness unabhängig geprüft. Der echte native Lauf ist hier
+**nicht ausgeführt**, weil die sichere Credential-Trennung fehlte. Der dafür
+zunächst vorgesehene zusätzliche Kontoansatz ist seit DS-063 verworfen.
+Das normale Plugin bleibt beim Node-Start.
+
+- `test-sea-batch-resume-contract.js`: **44 PASS**. Echtes privates Predicate,
+  Zustands-/ID-/Paketbindung, readonly Journal, Parser-`close` vor `onExtracted`,
+  letzter bildfreier DOCX. Sparse-Array-Gegenreviewfund behoben; keine Behauptung,
+  dass echte JSON-Journale Arraylöcher enthalten.
+- `test-sea-batch-resume-lifecycle.js`: **17 Gruppen PASS**. Echte private
+  Orchestrierungsfunktionen im VM mit synthetischem Journal, Speicherdateien,
+  Child-Events und virtueller Uhr: Erhalt zweier fertiger Pakete; tatsächliche
+  Exit-/Disconnect-Events vor Fortsetzung; Lease vor IPC; verpasster Crashpunkt,
+  natürlicher Exit, fehlgeschlagener Kill/Claim/IPC, fremder Token, veränderte
+  Pakete, fehlerhafte Abschlussframes, Journal- und Cleanup-Timeouts.
+- `test-sea-batch-result-contract.js`: **16 PASS**. PII-/Qualifikationsoracle und
+  alle drei festen TXT/CSV/DOCX-Fixtures; der reale In-Memory-OOXML-Parser liest
+  auch das vergrößerte letzte Resume-DOCX ohne Warnungen/Bilder. Keine Worker,
+  kein Keyring; dies ersetzt keinen nativen Parser-/Stapel-/Performancenachweis.
+- `test-sea-batch-probe-contract.js`: **41 PASS**, einschließlich gültigem
+  Resume-Scope und Netzwerkguard vor Produktimport. Die Sandbox verweigerte
+  zunächst den Elternpfad-Realpath; derselbe Test bestand mit lokal erweiterter
+  Leseberechtigung. Keine abgeschwächte Pfadprüfung.
+- `test-sea-batch-verifier.mjs`: **neun PASS**. Standardmäßig drei serielle
+  Szenarien, zwei obligatorische Resume-Ergebnisflags, kein falsches Resume-PASS
+  für positive/Disconnect-Läufe. Fehlendes Opt-in und ungültige Szenarien stoppen
+  vor nativen Jobs. `test-sea-background-bootstrap.js`: **27 PASS**.
+
+Alle sechs Testsuiten (154 Testgruppen insgesamt) sind in `test:sea-gates` integriert.
+
+Gesamtnachweise: `npm run test:ci` einschließlich Pre-/Posttests **PASS, Exit 0**;
+`npm run build` einschließlich Plugin-ZIP-/MCPB-Parität, 13 Vertragsfällen,
+150 Anonymisierungsfällen, SBOM und Status-App-Archivprüfung **PASS, Exit 0**.
+RC75-Archive enthalten 429 (Plugin-ZIP) beziehungsweise 604 (MCPB) Einträge;
+verbindliche Hashes stehen in `dist/SHA256SUMS`. Nach Aufnahme dieses Nachweises
+wird das MCPB mit der aktualisierten Dokumentation erneut paketiert/geprüft.
+Neue Tests nur per Intent-to-add registriert; kein Commit/Push, keine GitHub
+Actions gestartet. Die bestehende Gesamtsuite enthält weiterhin einen
+automatisch geschlossenen lokalen Windows-Formulartest.
+
+`extracted` ist ein non-durable Zwischenmarker: kein Power-Loss-/Fsync-Nachweis.
+Der Headless-Test nutzt Fortsetzungs-/Worker-/Lease-APIs, nicht den GUI-Starter
+`startLocalBatchExecutor`; Cowork, Parent-Crash und plattformweite Abnahme offen.
+`cleanup_safe` ist kein allgemeiner Prozessbaum-Cleanup-Beleg. Die synthetischen
+nativen Testbäume bleiben immer erhalten.
+
+**Historischer Produktbefund (RC76-Korrektur oben):** Ein Hard-Crash während des `extracted`-Abschnitts kann
+ein unveröffentlichtes `Output/.ds_*.tmp_*` zurücklassen: nur der Orchestrator-
+`catch` entfernt es; Resume und Retention tun dies nicht. Architektur und Security
+haben den Quellpfad bestätigt, keine native Reproduktion. Das Verzeichnis kann
+noch leer sein; keine Rohdatenoffenlegung aus diesem Befund ableiten. Der Harness
+behält die vollständige Output-Inventur und muss dann `SEA_BATCH_RESULT_INVALID`
+melden. Herkunfts-/identitätsgebundene Recovery wurde anschließend in RC76 ergänzt.
+
+## Lokaler RC74-Nachweis 31.08.2026
+
+BL-010.1/BL-010.8: Architektur-, Security- und Testfachagenten begleiteten den
+Opt-in-Harness `scripts/verify-sea-batch.mjs`. Er erzeugt nur feste synthetische
+TXT/CSV/DOCX und verwendet für positiven Stapel und IPC-Trennung den echten
+Produktworker. Der Security-Gegenreviewfund zu nur teilweise entfernten Namen
+ist im Fixture-Orakel korrigiert und mit Formatierungsvarianten abgesichert.
+
+- `test-sea-batch-probe-contract.js`: **41 PASS**; SEA-/IPC-/Frame-/Scopegrenzen,
+  zwei Dateiwurzeln, Startabbruch, Worker-Exit/Disconnect in beiden Reihenfolgen,
+  einmalige Killanforderung und Cleanup-Timeout mit virtueller Uhr. Gültiger
+  `worker-resume`-Scope stoppt vor Produktimport mit `SEA_BATCH_RESUME_PENDING`.
+- `test-sea-batch-result-contract.js`: **11 PASS**; einzelne Namensbestandteile,
+  Zeilenumbrüche, Markdown, unsichtbare Zeichen, Unicode und fehlende Qualifikation.
+- `test-sea-batch-verifier.mjs`: **acht PASS**; zwingendes Opt-in, geschlossene
+  Argumente/Ergebnisfelder, ausschließlich serielle Fälle und keine positiven
+  nativen Jobs in CI. Fehlendes Opt-in/Resume ergeben auch im realen normalen
+  Node-CLI-Prozess feste Ablehnungen vor Artefaktzugriff.
+- `test-sea-background-bootstrap.js`: **27 PASS**, davon fünf neue Gruppen zum
+  privaten Probe-Einstieg, Parserbindung, IPC und inhaltsfreien Fehlerbericht.
+  Alle vier Testsuiten sind in `test:sea-gates` integriert.
+- Synthetische DOCX zusätzlich vollständig im vorhandenen In-Memory-Parser
+  gelesen: **PASS**, keine Warnungen; Qualifikation und Kontakt-Testwerte vor
+  Anonymisierung vorhanden. Kein Keyring oder Worker beteiligt.
+- Vollständiges lokales `npm run test:ci` einschließlich Pre-/Posttests:
+  **PASS, Exit 0**. Erster Lauf stoppte am bestehenden Tracking-Gate für eine
+  neue Quelldatei; die sechs neuen Dateien wurden anschließend mit Intent-to-add
+  registriert. Keine Prüfung abgeschwächt, kein Commit/Push durchgeführt.
+  Neue Archive werden über `npm run build` erzeugt; verbindliche Größen und
+  SHA-256-Nachweise stehen in `dist/SHA256SUMS` und den Buildreports.
+
+Dies sind Vertrags-/Negativ-/VM-Nachweise, **kein nativer positiver Stapellauf**.
+Für letzteren muss zuerst sichere Testtrennung im vorhandenen Konto entwickelt werden (DS-063).
+Die frühere System-VM-Option ist seit DS-062 ausgeschlossen; `VM` in den reinen
+JavaScript-Vertragstests bezeichnet lediglich `node:vm`, keine Betriebssystem-VM.
+Temporäre `EU_PRIVACY_ROOT`-/`LOCALAPPDATA`-Ordner isolieren nicht den Keyring;
+die Operator-Erklärung ist ausdrücklich keine technische OS-Attestierung.
+Die neuen Tests benutzen keinen Produktcredential und starten keine Dialoge.
+Die bestehende Gesamtprüfung enthält weiterhin ihren automatisch geschlossenen
+Windows-Formulartest; keine GitHub Actions gestartet.
+Worker-Resume, Parent-Crash, gesamte Nebenrollen-/Bootstrapbindung, POSIX und
+finale V2-Evidenz bleiben offen. Anleitung und Grenzen stehen im
+[Rollenvertrag](canonical/contracts/SEA_PARSER_ROLE_V1.md).
+
+## Lokaler RC73-Nachweis 31.08.2026
+
+BL-010.8/BL-041.9/BL-012.6: Architektur-/Lifecycle-Gegenreview und zwei unabhängige
+Implementierungs-/Testaufträge. Vier konkrete Befunde geschlossen: unbehandeltes
+Spawn-`error`, veralteter Review-Rückruf, unvollständige IPC-Fehlerbereinigung und
+blockierende Restzustands-/Fehleranzeigen. Zusätzlich im Gegenreview entdeckt:
+voreiliges/doppeltes Exit-Logging. Exit wird jetzt nur einmal nach tatsächlichem
+Prozessende gemeldet, asynchroner Dialogstart heißt `completion_notice_dispatched`.
+
+- `npm run test:executor-lifecycle`: **22 Startup-, 17 Completion-, sechs
+  Diagnosegruppen PASS**. In Pretests von `test`, `test:ci` und `test:fast-path`
+  verankert. Pending/Lease bleiben bei signalisiertem, aber noch nicht beendetem
+  Prozess erhalten; späte Rückrufe beeinflussen keinen Nachfolgestart.
+- Reale isolierte Node-ENOENT-Probe für Batch/Intake/Review: fehlendes Programm
+  liefert `error`/`close`, keinen `exit`; Elternprozess bleibt kontrolliert.
+  Kein Produkt-Keyring oder echtes Journal beteiligt. Zusätzlich bestehende
+  elf Picker- und drei Review-Executor-Gruppen PASS.
+- Dialogbefehle und Umgebung für Windows/macOS/Linux vertraglich geprüft;
+  Windows-Formular lokal automatisch geöffnet/geschlossen. Kein beobachteter
+  Cowork-, Fokus-, Screenreader- oder realer macOS-/Linux-UX-Nachweis.
+- Abschließendes `npm run test:ci`: **PASS, Exit 0**. `npm run build`: ZIP mit
+  427 Einträgen/26.292.416 Bytes/SHA-256
+  `6cfcb2f6c48fb4d41c8922ec50a83c66c9d177c813f6b4fcdf4391e44d5eceac`;
+  MCPB mit 602 Einträgen/26.763.790 Bytes/SHA-256
+  `b699be0864faef0030372e965733e0bd62c153f1456b1994893390bfe228a4c1`.
+  Quellparität, Modus-/Manifest-, native Artefakt-, SBOM- und Status-App-Gates
+  PASS. Keine GitHub Actions gestartet.
+
+Der [Rollenvertrag](canonical/contracts/SEA_PARSER_ROLE_V1.md) enthält jetzt den
+fachlich gegengeprüften positiven SEA-Stapel-/Crash-/Resume-Testplan. Ein Temp-
+Ordner isoliert **nicht** den OS-Keyring. Der zunächst vorgesehene separate
+Kontoansatz ist seit DS-063 verworfen; sichere Testtrennung im vorhandenen Konto
+ist noch zu entwickeln. Keine zusätzliche System-VM und keine
+Produktionscredentials für Testzwecke ändern (DS-062/DS-063).
+Harness-/Integrationsarbeit bleibt offen, ebenso echte E1/E2-Abnahme. Keine neue
+SEA-Freigabe, keine behauptete Anonymisierungs-Beschleunigung in Millisekunden.
+
+## Lokaler RC72-Nachweis 31.08.2026
+
+BL-010.1/BL-010.8: drei Fachagenten für Architektur, festen Rollenstarter und
+reale IPC-Probe. Keine neuen Normaltools, Anwenderabfragen, Abhängigkeiten oder
+zusätzlichen Node-Binärkopien für Batch/Review/Companion. Öffentliche Starts
+bleiben `node`, SEA ist nicht freigegeben.
+
+- 42 Launcher-, 22 Bootstrap-, neun Companion-Start- und sechs Probe-Lifecycle-
+  Gruppen PASS. Zusammen mit den RC71-Gruppen: **228 SEA-Vertragsgruppen**.
+  Simulierte Plattformen sind kein realer macOS-/Linux-Nachweis.
+- Elf bestehende Companion-Supervisortests, drei Review-Executor-, elf direkte
+  Picker-, zwei echte Intake-Worker- und vier Netzwerkgrenzgruppen PASS.
+- Zwei P2-Gegenreviewbefunde geschlossen und erneut geprüft: nach Exit keine
+  erneut verwendbare PID beenden; Abbruch/Timeout bereinigt Sitzung und Geheimnis
+  auch ohne erfolgreiches Prozessende. FD3-Lesen auf 33 Bytes begrenzt, nur
+  exakt 32 akzeptiert; technische Ready-Deadline zehn Sekunden.
+- Erster echter Hintergrundlauf FAIL bei sofortigem IPC-Disconnect: Der Worker
+  war bereits mit Code 2 beendet, aber Node/Windows lieferte kein `close`.
+  Auch mit gewöhnlichem Node reproduziert. Probe korrigiert auf OS-Exit **plus**
+  IPC-Disconnect; Companion-Pipes warten weiter auf `close`. Sechs dauerhafte
+  VM-Negativ-/Reihenfolgentests sichern ab, dass ein Ereignis allein nicht reicht.
+- Frischer Engineering-Parser `dist/sea-parser-engineering-rc72-b/datasecure-parser.exe`:
+  87.249.408 Bytes, SHA-256
+  `102158f1c2a3576f1ecdeb4b91d15907f5ff77f637a4a3b7f5f431f9c6fc8037`.
+  Binäridentisch zu RC71, Provenance gegen aktuelle Quellen/Toolchain neu geprüft.
+  `verify-sea-parser.mjs --directory dist/sea-parser-engineering-rc72-b`:
+  **19/19 reale Windows-Gruppen PASS** (Format/Rechte/Netzwerk, nativer Supervisor).
+- Engineering-Parent `dist/sea-parent-engineering-rc72-d/datasecure-mcp.exe`:
+  87.131.136 Bytes, SHA-256
+  `6d4f1408ab099d47ee75aa69a80f64da069d46eb14d5d5a7691618cb5f05a202`.
+  `verify-sea-parent-parser.mjs`: **14 echte Gruppen PASS** inklusive neun internen
+  Nebenrollenfällen: fehlerhafte Starts, frühes Disconnect, fehlendes Journal,
+  ungültige Intake-Queue, echte HMAC-Anfrage/Antwort und falsches Startgeheimnis.
+  Parserkonvertierungen TXT/MD/Markdown/CSV/DOCX, MCP-Start und Manipulations-
+  Gegenproben bleiben enthalten. Live-Symlinkprobe mangels Hostrecht übersprungen.
+- Erster Gesamtlauf stoppte am alten Quelltexttest, der das Preload noch direkt
+  im Supervisor/Executor suchte. Er prüft jetzt den gemeinsamen Launcher und alle
+  drei Aufrufstellen sowie den SEA-Guard vor Rollenimport; nicht entfernt oder
+  durch eine pauschale Erfolgserwartung ersetzt.
+- Abschließendes `npm run test:ci` mit Pre-/Posttests: **PASS, Exit 0**, lokal auf
+  Windows/Node 24.18.0. Darunter 228 SEA-, 101 Format-, 40 Gateway-, 37 MCP-,
+  17 Parserisolations- und 30 DOCX-Strukturgruppen sowie das unabhängige
+  96/24/16-Dokument-Orakel. Keine GitHub Actions gestartet.
+- Paketabschluss über `npm run build`: normale Node-ZIP-/MCPB-Pakete, Quellparität,
+  Modus-/Manifest-, native Artefakt- und Status-App-Gates. Artefaktnamen und
+  verbindliche Prüfsummen stehen in `dist/SHA256SUMS`; Engineering-SEA-Binärdateien
+  werden nicht in die normalen Pakete aufgenommen.
+
+Nur synthetische private Testbäume verwendet; keine Originaldateien verändert.
+Die Probe erzeugt keine positive V2-Evidenz. `background_full_job_verified` und
+`privacy_release_verified` bleiben **false**: positiver kompletter SEA-Stapel,
+Resume/Parent-Abbruch nach Start, ganze Nebenrollen-Quellbindung, finale Assembly
+und POSIX-/Cowork-Evidenz bleiben im kanonischen Backlog offen. Der Windows-
+Prozessbaum-Kill hat ein separates Budget; keine harte Acht-Sekunden-Gesamtlatenz.
+
+## Lokaler RC71-Nachweis 31.08.2026
+
+BL-010.1/BL-010.8: Drei Software-/Architektur-Fachagenten für Rollenresolver,
+Dispatch-Gegenreview und echten Parent-Abnahmetest. Keine neue Anwenderabfrage,
+kein Runtime-Release. Architektur-Gegenreview fand einen Getter-TOCTOU bei
+Ausführungsoptionen; SEA liest sie jetzt nach der Validierung nicht erneut.
+Abschließendes begrenztes Getter-Gegenreview ohne verbleibenden Fund.
+
+- Rollenresolver 25/25: feste Zielheader/-pfade, unveränderbare vollständige
+  Metadaten, begrenzte Reads, Cache-Invalidierung aller gebundenen Quellen,
+  Links/Hardlinks, Identitätswechsel. Vier Ziele simuliert, kein Vier-Host-Nachweis.
+- Nativer SEA-Dispatch 8/8: exakte Supervisor-/Parserargumente auf vier simulierten
+  Zielen, fehlende Rolle, verbotene Overrides, fehlender POSIX-Supervisor und
+  wechselnde Getter. Bestehende Parserisolation 17/17 unverändert grün.
+- Frische Offline-Engineering-Builds, ausschließlich synthetische Eingaben:
+  `dist/sea-parser-engineering-rc71-a/datasecure-parser.exe` (87.249.408 Bytes,
+  SHA-256 `102158f1c2a3576f1ecdeb4b91d15907f5ff77f637a4a3b7f5f431f9c6fc8037`),
+  `dist/sea-parent-engineering-rc71-a/datasecure-mcp.exe` (87.128.064 Bytes,
+  SHA-256 `99dd7047550b1acb6e196a749337c98f9fee71a9d962acaa08486573c2794073`).
+  Der Parser ist binäridentisch zu RC70; aktuelle Provenance neu geprüft.
+- `verify-sea-parser.mjs --directory dist/sea-parser-engineering-rc71-a`:
+  **19/19 echte Windows-Prüfgruppen PASS**, nach dem abschließenden Runtimefix
+  erneut ausgeführt. Unabhängige Bundle-Rekonstruktion plus Format-/Rechte- und
+  Netzwerkproben; ersetzt nicht die Parent-/Privacy-Integration.
+- `verify-sea-parent-parser.mjs --parent dist/sea-parent-engineering-rc71-a/datasecure-mcp.exe --parser-directory dist/sea-parser-engineering-rc71-a`:
+  **8 echte Windows-Prüfgruppen PASS**, nach dem Getterfix erneut ausgeführt.
+  Je Parent zwei Runden TXT/MD/Markdown/CSV/DOCX, vor und nach Negativproben;
+  normaler MCP-Start mit acht Tools. Fremdes CWD/Unicodepfad, leerer `PATH` und
+  ungültiges `NODE_OPTIONS`; kein `execPath`-/Spawn-Seam im Konvertierungspfad.
+  Zusatzargument, geänderte/fehlende Parserbinärdatei, geänderte gebundene Quelle
+  und Hardlink werden geschlossen abgewiesen. **Symlink-Liveprobe übersprungen**,
+  auf diesem Host nicht verfügbar; kein bestandener Live-Symlinknachweis behauptet.
+- Abschließendes `npm run test:ci` inklusive Pre-/Posttests auf Windows und
+  Node 24.18.0 **PASS (Exit 0)**: unter anderem 149 SEA-, 101 Format-, 40 Gateway-,
+  37 MCP-, 17 Parserisolations- und 30 DOCX-Strukturgruppen. Zusätzlich 96 normale,
+  24 verschachtelte Tabellen- und 16 Textfelddokumente im unabhängigen DOCX-Orakel.
+- Normale RC71-ZIP-/MCPB-Artefakte werden anschließend über `npm run build`
+  einschließlich Quellparität, Dateimodi, nativer Artefakte und Status-App-Vertrag
+  geprüft. Verbindliche Paketprüfsummen stehen in `dist/SHA256SUMS`.
+
+Die Parentprobe prüft Konvertierung, nicht eine freigegebene anonymisierte
+Cowork-Ausgabe. `release_enabled` und `privacy_release_verified` bleiben `false`;
+keine positive V2-MCP-Evidenz geschrieben. Parser-Closurebindung ist keine
+Attestierung der gesamten Parentimplementierung. Kein belegter Performancegewinn;
+Cache spart nur das Wiederhashen unveränderter Dateien. Weitere Nebenrollen,
+finale Rollenassembly und reale POSIX-Strecke bleiben eigenständige E0-Arbeit.
+Öffentliche ZIP/MCPB weiterhin `node`, keine experimentellen SEA-Binärdateien.
+Keine Originaldaten verarbeitet/verändert, keine GitHub Actions gestartet.
+
+## Lokaler RC70-Nachweis 31.08.2026
+
+BL-010.1/BL-010.8: Architektur-/Security-Review und begrenztes Gegenreview.
+Produktiv korrigiert: Parsergrenze **vor** Modulimport/Eingabelesen sowie
+Netzwerk-Guard für `dns.promises.Resolver`. Keine Änderung am Anwenderablauf oder
+der öffentlichen Node-Konfiguration. Separater SEA-Parser bleibt Engineering.
+
+- Workergrenze 8/8 und Netzwerkgrenze 4/4 jeweils real unter Node 22.23.2 sowie
+  24.18.0 PASS. Die DNS-Promise-Regression wurde vor dem Fix ohne DNS-Anfrage
+  reproduziert (`wrong-error`), danach verlangt sie `DATASECURE_NETWORK_DENIED`.
+- SEA-Rollenvertrag 5/5, vollständige Provenance 13/13 PASS: realer Bundle-
+  Neuaufbau, vollständiges Inventar, deterministische Wiederholung, fehlende/
+  doppelte/geänderte Quellen, Konfiguration und Toolchain-/Lock-Bindung.
+  Zusammen mit den bisherigen 90 und den acht Workergruppen: 116 SEA-Gruppen.
+- Frischer korrigierter Windows-x64-Parser aus dem lokal vorhandenen offiziellen
+  Node-Archiv: 87.249.408 Bytes, SHA-256
+  `102158f1c2a3576f1ecdeb4b91d15907f5ff77f637a4a3b7f5f431f9c6fc8037`.
+  Artefakt getrennt unter `dist/sea-parser-engineering-rc70-c/`, nicht im Plugin.
+  Vorherige Engineering-Artefakte bleiben unverändert.
+- `verify-sea-parser.mjs --directory dist/sea-parser-engineering-rc70-c`:
+  **19/19 echte Prüfgruppen PASS**. TXT/MD/Markdown/CSV/DOCX gegen direkten
+  Parservergleich, sieben Rechteproben, 15 Netzwerk-API-Proben innerhalb der
+  Grenzgruppe; fremdes CWD, Leerzeichen/Umlaut im Programmpfad, leerer `PATH`,
+  ignoriertes `NODE_OPTIONS`, abgewiesene Skripte/Flags/Descriptoren und kaputte
+  DOCX. Native Supervisor-Usagefehler 120 bei fehlenden Argumenten getrennt vom
+  Parser-JSON-Fehler 2 geprüft; kein Timeout als Erfolg gewertet.
+- Gegenreview-Funde DNS-Promise-Resolver und unvollständiges Evidence-Inventar
+  geschlossen; abschließendes begrenztes Gegenreview ohne neue Findings.
+- Gesamtlauf zuerst an noch nicht synchronisiertem RC70-Produktheader, danach
+  am noch nicht Git-vorgemerkten neuen Parser-Testhelfer gestoppt. Beides ohne
+  Abschwächen der Gates korrigiert.
+- Abschließendes `npm run test:ci` einschließlich Pre-/Posttests PASS (Exit 0,
+  Windows/Node 24.18.0): unter anderem 116 SEA-, 101 Format-, 40 Gateway-, 37
+  MCP-, 17 Parserisolations- und 30 DOCX-Strukturgruppen plus Differentialtests.
+- Normale RC70-Artefakte werden über `npm run build` mit unverändertem
+  Produktstart gebaut. ZIP-/MCPB-Quellparität, Modus-, Supply-Chain- und
+  Status-App-Prüfungen bleiben verpflichtend; Prüfsummen in `dist/SHA256SUMS`.
+  Der experimentelle Parser ist ausdrücklich **nicht** Teil dieser Archive.
+
+Dieser Nachweis belegt **keine** MCP-Parent-/Nebenrollen-/POSIX-Integration,
+Cowork-Abnahme, Anonymisierungsfreigabe oder Geschwindigkeitsverbesserung.
+Keine positive V2-MCP-Evidenz erzeugt. Der bisherige MCP-Launcher bleibt am
+Worker-Dispatch blockiert. Details und nächste E0-Pakete im
+[Rollenvertrag](canonical/contracts/SEA_PARSER_ROLE_V1.md) und kanonischen Backlog.
+Keine Originaldateien verarbeitet oder verändert; keine GitHub Actions gestartet.
+
+Informeller lokaler Start-/Parservergleich (Windows x64, Node 22.23.2, nativer
+Supervisor, je zwei Aufwärm- und sieben Messstarts, Median einschließlich
+Prozessstart und JSON-Rückgabe):
+
+| Synthetische Eingabe | Separate SEA-Rolle | Standard-Node mit Parserrechten |
+|---|---:|---:|
+| TXT, 31 Bytes | 106,01 ms | 111,12 ms |
+| DOCX, 5.000 Absätze, 320.995 Bytes | 133,82 ms | 139,82 ms |
+
+Messung während weiterer lokaler Regressionen, ohne Statistik-/SLA-Anspruch.
+Keine PII-Erkennung, Dateidialog-, Keyring- oder Cowork-Latenz gemessen. Diese
+kleine Stichprobe begründet keinen Architekturwechsel; der zusätzliche
+Node-Binäranteil pro Rolle bleibt ein zu prüfender Distributionsnachteil.
+
+## Lokaler RC69-Nachweis 31.08.2026
+
+### Zusätzlicher SEA-Engineering-Schnitt (kein Runtime-Release)
+
+Zwei Software-/Architektur-Fachagenten: sichere Paketierung, Source-Evidenz und
+isolierte Workergrenze. Produktversion und öffentliche Node-Konfiguration bleiben
+RC69; keine zusätzlichen Nutzerabfragen und keine GitHub Actions.
+
+- `test:sea-gates`: 12 Source-Evidence-, 66 dynamische Assembly-, sechs
+  Launcher-Vertrags- und sechs Worker-NO-GO-Prüfgruppen. Ausschließlich
+  synthetische positive Assemblyfixtures, keine erfundenen Zielsystemnachweise.
+- Frischer Windows-x64-Launcher aus vorhandener gepinnter Offline-Nodequelle:
+  87.126.016 Bytes, SHA-256
+  `4642932f05b339ca0aef33d9a0d62d1eaa0ed4560e925194f1b39403d9d9b24a`.
+  Leerer `PATH` und ignoriertes `NODE_OPTIONS`: Normalmodus mit acht Tools und
+  explizite Supportdiagnose PASS. Danach echter synthetischer TXT-/DOCX-Kernlauf
+  **FAIL: `SEA_PARSER_CORE_FAILED:txt,docx`**. Keine positive MCP-Evidenz geschrieben.
+- Ein älterer lokaler Launcher scheiterte bereits am veralteten Einstiegspfad
+  (`SEA_MCP_PROCESS_FAILED:1:ENOENT`). Alte Binärdatei unverändert behalten;
+  der neue Probe-Build liegt separat unter `dist/sea-rc69-boundary/`.
+- Grüne NO-GO-Tests bedeuten nur: die Freigabesicherung erkennt den fehlenden
+  Worker-Dispatch. Permission-/Netzwerk-Negativmatrix, echte vier Zielsysteme,
+  Cowork-Fresh-Install und Lifecycle sind weiterhin offen. Details:
+  [SEA-Paketvertrag](canonical/contracts/SEA_ASSEMBLY_EVIDENCE_V2.md).
+- `npm run test:ci` einschließlich Pretests und Parser-Posttests erneut PASS
+  (Windows/Node 24.18.0, Exit 0). 101 Formatfälle, Gateway 40, MCP 37 und
+  Originalschutz unverändert grün; keine echte installierte Cowork-Abnahme.
+- Unabhängiges Gegenreview fand nach dem ersten Assembly-Schnitt einen
+  späteren Stage-/ZIP-Payloadtausch bei weiterhin korrekten Dateimodi. Der finale
+  ZIP-Inhalt muss deshalb zusätzlich gegen das aus geprüften Schreibbytes
+  abgeleitete Sollinventar bestehen; gezielte Spätänderungs-Regressionen ergänzen
+  die erste Assembly-Matrix.
+
+### Graph und DOCX
+
+BL-020.1/BL-020.2/BL-022.1: begrenzte Korrekturscheibe für DOCX-Inhaltserhalt und
+Graph-/Parserbindung. Zwei Code-Experten und unabhängiges Gegenreview; keine
+neuen Formate, keine Produkt-UI-/Dialogänderung, keine GitHub-Actions.
+
+- Vor Fix: fünf neue Graph-Prüfgruppen scheiterten erwartungsgemäß. Danach
+  17/17 PASS, einschließlich 1.200 deterministischer Unicode-/Containerfälle
+  gegen einen unabhängigen Segmentvergleich. Das Gegenreview fand zusätzlich
+  einen U+2028/U+2029-Lookahead-Bypass; korrigiert und mit acht gezielten Fällen
+  abgesichert. Schema und Runtime verwenden dieselbe kanonische Grammatik.
+- Parser-Isolation 17/17 PASS: tatsächliche Eingabeextension statt Worker-
+  Selbstauskunft, drei injizierte Plattformverträge, Fehler-/Abbruch-/EPIPE-Pfade.
+  Fake-Prozessende auf die nächste Eventloop-Phase verschoben, damit Stream-
+  Flush nicht künstlich überholt wird; Produktions-Transfergate unverändert.
+- DOCX-Struktur 30/30 PASS: alle sechs Stories, verschachtelte Tabellen und
+  Textfelder, äußere Läufe/Nachbarzellen, Quellreihenfolge/einmalige Ausgabe,
+  48 fehlerhafte Story-Kombinationen, Attribute, Unicode-/Texttokenisierung,
+  Tiefen-/Knoten-/Element-/Ausgabebudgets und 5.000 Zeilen. Die anschließend
+  de-identifizierten Namen/Kontakte fehlen, Zertifikat und Fachtext bleiben.
+- Mammoth-Differential 4/4 Gruppen mit 136 Dokumenten PASS: 96 reguläre,
+  24 verschachtelte Tabellen und 16 Textfelder. Mammoth ignoriert moderne
+  `wps`-Textfelder; dort nur äußere Läufe im Vergleich, innere Texte über feste
+  unabhängige Sollwerte. Kein vollständiger DOCX-Renderer behauptet.
+- Separat Parser 70, Zertifikatskatalog 24, Text 8, CSV 11 und POSIX-Vertrag 2
+  PASS. Abschließendes Renderer-Gegenreview ohne neuen konkreten Befund.
+- Kompletter `npm run test:ci` einschließlich Pretests und neu integriertem
+  `posttest:ci` / `test:parser-contract` PASS (Exit 0) auf Windows/Node 24.18.0.
+  Einschließlich 101 Formatfällen, Gateway, MCP, Datenschutz, Originalschutz,
+  Verschlüsselung, Resume und Angriffstests. Kein installierter Cowork-/macOS-Test.
+- Erster Gesamtlauf war am Offline-Bundler durch die Agent-Sandbox blockiert;
+  Wiederholung mit genehmigtem lokalem Zugriff. Der Manifesttest wurde auf den
+  bewusst erweiterten Posttest-Vertrag synchronisiert, nicht abgeschwächt.
+- RC69-ZIP/MCPB werden über `npm run build` einschließlich Lieferkettenprüfung,
+  Quell-/Dateimodusparität, extrahierter ZIP-Akzeptanz und UI-Artefaktprüfung gebaut.
+  Aktuelle finale Archiv-/SPDX-Prüfsummen: `dist/SHA256SUMS`. Alte RC68-Archive
+  bleiben unverändert; keine Prüfsumme wird rekursiv ins MCPB geschrieben.
+
+Informelle warme Parsermessung auf diesem Windows-Rechner, jeweils drei
+Aufwärm- und zehn Messläufe mit ausschließlich synthetischen Dokumenten:
+
+| Dokument | Eingabe / Markdown in Bytes | Median | Min–Max |
+|---|---:|---:|---:|
+| 5.000 flache Tabellenzeilen | 389.900 / 118.897 | 16,66 ms | 13,24–22,65 ms |
+| 12 Verschachtelungsebenen, 1.000 innere Zeilen | 82.438 / 30.815 | 2,62 ms | 2,40–4,05 ms |
+
+Dies misst nur den Parser, nicht De-Identifizierung, Keyring, Dateiauswahl oder
+Cowork-Latenz. Kein plattformübergreifender Performance-Gate oder SLA. Die
+Stories bleiben teilweise: feinere Locators, weitere Story-Coverage und reale
+Word-/Zielsystem-/UX-Abnahme fehlen weiterhin.
+
+## Lokaler RC68-Nachweis 31.08.2026
+
+BL-042.3: passive, standardmäßig deaktivierte Start-Momentaufnahme. Architektur-/
+Security- und UX-Gegenprüfung; abschließendes Code-Gegenreview ohne verbleibenden
+konkreten Befund im engen Pilotschnitt. Keine installierte Cowork-/macOS-Abnahme.
+
+- Status-Modell/View: 24 Checks; Status-Server: 11 Negativ-/Fallbackchecks PASS.
+- MCP-Protokoll: 37 stdio-Tests PASS, einschließlich Default/Support/Discovery,
+  ausgehandelter Ressource und bytegleich bleibender Startantwort.
+- Deterministischer Offline-Build, ausführbare JavaScript-Syntax,
+  Hash/Größe/Schema sowie exakte Bundle-/Lizenzinventare PASS. HTML: 506.951 Bytes,
+  unter dem 768-KiB-Budget; vier tatsächlich gebündelte Abhängigkeiten. Im
+  deaktivierten Normalweg kein HTML-Zugriff, im Pilot einmalige Prüfung/Caching.
+- Synthetischer Browserhost mit dem echten SDK: Handshake PASS, keine ausgehenden
+  Methoden außer `ui/initialize` und `ui/notifications/initialized`; keine Anzeige
+  des Rohtext-Canarys. Deutsch/320 px normal: axe 20 Prüfgruppen ohne Befund;
+  Englisch/320 px/vierfache Schrift nach Reflowfix: axe 21 ohne Befund, kein
+  horizontales Überlaufen. Visuell geprüft. Dies ist weder vollständige WCAG-
+  Abnahme noch echter Browserzoom; Tastatur-/Screenreader-/Dark-/Forced-Colors-
+  und echte Hostprüfung bleiben offen. Der Browseradapter konnte die
+  iframe-Tastatursteuerung nicht direkt adressieren; kein Tastatur-PASS erfunden.
+- Beim ersten Smoke korrigiert: JavaScript-$-Sequenzen wurden durch String-
+  Replacement verändert; Callback-Replacement plus Syntaxgate verhindert dies.
+  Beim Reflowtest korrigiert: überbreites Sprachfeld bei vierfacher Schrift.
+- Im ersten vollständigen Regressionslauf RV-06 gefunden: Der visuelle Timeout-
+  Test verwendete produktiven Keyring statt Testkryptografie und zählte zwei
+  dauerhaft erhaltene Schlüsselmetadaten als Reviewreste. Synthetische Experten-
+  Reproduktion bestätigt korrekten Dokument-Cleanup. Test isoliert, Resteprüfung
+  unverändert streng; zwei OCR-Aufrufe werden nun ausdrücklich verlangt.
+- Offizielle lokale Claude CLI 2.1.233: Plugin und Marketplace Strukturvalidierung
+  PASS; keine Modellanfrage/Installation. Skill-Korpus 14, Abschlussdialog 13 und
+  Angriffssuite 20 Prüfungen zusätzlich PASS.
+- Nach RV-06-Korrektur: kompletter `npm run test:ci` einschließlich Pretests auf
+  RC68 PASS (Exit 0), darunter 101 Formatfälle, 40 Gateway- und 37 MCP-Tests.
+- RC68-ZIP: 423 Einträge, 26.278.276 Bytes, Quell-/Modusparität und extrahierte
+  Paketakzeptanz (13 + 150 Vertragsfälle) PASS. SHA-256:
+  `fe99cd1b9e9b1a336ac746b94c6cf85d1ef1f85508939f687f7796022763499b`.
+- RC68-MCPB: 596 Einträge, Quellparität PASS. SPDX erzeugt; zusätzliche
+  `test-status-app-artifacts.mjs --archives` prüft exakte UI-Bytes in beiden
+  Archiven und alle vier SDK-Komponenten im SPDX-Inventar: PASS. Vollständige
+  native/OCR-SBOM-Abdeckung wird damit nicht behauptet; deren eigene Manifeste
+  und Original-Lizenztexte bleiben Paketbestandteil.
+- Kein Commit, Push oder GitHub-Action-Lauf durch diese Prüfung. Finale
+  ZIP-/MCPB-/SPDX-Prüfsummen stehen in `dist/SHA256SUMS`, nicht rekursiv im MCPB.
+
+Der [Pilotvertrag](canonical/STATUS_APP_PILOT_V1.md) hält Rest-E0 und E1/E2 fest.
+BL-042.3 bleibt **in Arbeit**; keine Änderung der Format-/Hostfreigabe. Die
+normale Anonymisierung bleibt ohne Zusatzschritt, Laden der Karte oder neue Berechtigung.
+
+## Lokaler RC67-Nachweis 31.08.2026 (historischer Arbeitsstand)
+
+Revalidierung von RC66 (`afdb1dc`), anschließend Korrekturscheibe RV-01 bis RV-05.
+Zwei unabhängige Architektur-/UX-Reviews und zusätzliche Gegenprüfung der Änderungen.
+E0-Nachweise auf Windows mit Node v24.18.0; keine installierte Cowork-/macOS-Abnahme:
+
+- `npm run test:ci`: vollständig PASS, einschließlich Pretests für Verschlüsselung,
+  Originalschutz, Journal/Recovery, Formatmatrix, 40 Gateway- und 34 MCP-Protokolltests.
+  Dieser Lauf erfolgte auf dem vollständigen Codefix vor der reinen RC67-Versionssync.
+- Danach RC67: `npm run test:docs`, Manifest (19), Skill-Korpus (14 für 33 spezifizierte
+  Fälle), Hostmatrix (6), Cowork-Dokumentvertrag und Abschlussdialog (13) PASS.
+- `node scripts/validate-claude-local.mjs --cli <lokale-Claude-CLI>`:
+  Claude Code 2.1.233, Plugin- und Marketplace-Validierung PASS. Keine Modellanfrage,
+  kein Installationsnachweis. Sechs lokale Validator-Vertragsszenarien prüfen auch
+  fehlende CLI, Timeout, Signal und erfolglose Marketplace-Validierung.
+- `npm run build`: Native-/Keyring-/OCR-Lieferkettenprüfung, ZIP-/MCPB-Quellparität
+  und Skillakzeptanz im extrahierten ZIP (13 + 150 Fälle) PASS. SBOM erstellt.
+- `git diff --check`: PASS. Keine neue/gestartete GitHub Action.
+
+Artefakte dieses lokalen Arbeitsstands (nicht als committiert/publiziert ausgeben):
+
+| Artefakt | Einträge | SHA-256 |
+|---|---:|---|
+| `DataSecure-Privacy-Preflight-v3.2.0-rc67.zip` | 417 | `1fb6bd5e36d31d45bb419570b731bd68fecc7c8069bbe834f7fff6a9ebb8ac47` |
+| `DataSecure-Privacy-Gateway-v3.2.0-rc67.mcpb` | 589 | siehe generiertes `dist/SHA256SUMS`; dieses Handbuch ist selbst Paketbestandteil und enthält deshalb nicht den eigenen Pakethash |
+
+Für den manuellen Test die aktualisierte
+[Schritt-für-Schritt-Anleitung](acceptance/RC63_UAT_TEST_KIT/STEP-BY-STEP.md)
+verwenden, nicht den alten Diagnose-Einstieg aus früheren UAT-ZIPs. Die bestehenden
+111 synthetischen Eingänge bleiben gültig. Reale Ausführungsart, Fresh Install ohne
+System-Node, Berechtigungen, Modellverhalten und beobachtete UX bleiben E1/E2/E3.
+Der Korpus ist kein ausgeführter Modelltest; Host-/Formatfreigaben bleiben unverändert.
 
 ## Lokaler RC63-Nachweis 27.08.2026
 

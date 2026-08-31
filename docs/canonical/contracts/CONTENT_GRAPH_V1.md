@@ -32,6 +32,23 @@ mindestens einem Knoten zugeordnet.
 Ein Graph schaltet kein Format frei; die veröffentlichte Capability-Liste bleibt
 unverändert.
 
+Seit RC69 wird das Format zusätzlich gegen die vertrauenswürdige Extension des
+isolierten Parseraufrufs geprüft (nicht nur gegen die Selbstauskunft des Workers).
+`source_format` und Bild-MIME müssen echte Strings sein. Jeder Bildlocator stimmt
+exakt mit `attachments[asset_index].source_part` überein; der MIME-Typ ist unabhängig
+als Bildtyp validiert. Derselbe Quellteilvertrag gilt für beide Seiten der Bindung:
+relative Slash-Segmente ohne leere, `.`- oder `..`-Segmente, ohne Backslash,
+Doppelpunkt, C0-/C1-Steuerzeichen oder Unicode-Zeilentrenner U+2028/U+2029.
+`!/` ist ausschließlich ein Containertrenner; jede Teilkette erfüllt dieselben
+Regeln. Quellteile bleiben Strukturreferenzen und dürfen nicht als OS-Pfad verwendet
+werden. Das gemeinsame 1.000-Knoten-Budget greift bereits vor der Konstruktion.
+
+Wichtig: Die vollständige Abdeckung des **erzeugten Markdown** beweist allein noch
+keine vollständige Extraktion des **Originals**. Dafür bleiben die formatspezifischen
+Story-/Relationship-/Inhaltserhalt-Gates einschließlich unabhängiger Parsertests nötig.
+`test-content-graph.js` prüft die Schema-Grammatik und Runtime auch gegen einen
+unabhängigen Segmentvergleich mit 1.200 deterministischen Unicode-/Containerfällen.
+
 V1 bildet die bestehende Parsergrenze verlustfrei als Text-, Tabellen- und
 Bildknoten ab. OOXML-Abschnitte besitzen bereits containerinterne Part-Locators für
 DOCX-Hauptteil, Kopf-/Fußzeilen, Kommentare, Fuß-/Endnoten, XLSX-Arbeitsblätter,

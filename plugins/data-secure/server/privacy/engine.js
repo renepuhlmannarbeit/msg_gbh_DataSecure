@@ -27,9 +27,12 @@ const { findStructuredSpans, scanStructured, replaceStructured } = require('./st
 const { placeholderSpans, applySpans } = require('./spans');
 const {
   credentialContextSpans,
+  credentialContextDetails,
   inCredentialContext,
   isCredentialIssuerDomain,
-  isCatalogTechnologyTerm
+  isCatalogTechnologyTerm,
+  credentialOrganizationRole,
+  isTechnologyOrganizationSpan
 } = require('./credentials');
 
 // Entity priorities. Structured identifiers (80-90) always win over entity
@@ -64,7 +67,8 @@ function growOverHonorific(text, span) {
 
 function findLiteralSpans(text, needle, replacement, type, priority) {
   if (!needle) return [];
-  const re = new RegExp(`${NB}${escapeRegExp(needle)}${NA}`, 'giu');
+  const literal = String(needle).split(/\s+/u).map(escapeRegExp).join('[ \\t\\r\\n]+');
+  const re = new RegExp(`${NB}${literal}${NA}`, 'giu');
   const spans = [];
   let m;
   while ((m = re.exec(text))) {
@@ -220,7 +224,7 @@ function anonymize(text, profile = 'general', options = {}) {
   // fields as personnel profiles.  Applying the bounded label/table path to
   // both prevents a labelled applicant location from surviving the release.
   if (profile === 'personnel_profile' || profile === 'applicant') out = anonymizePersonnel(out, reg, findings, personKeys);
-  const credentialRanges = credentialContextSpans(out);
+  const credentialRanges = credentialContextDetails(out);
 
   const dictionary = [
     ...buildPersonDictionary(seeds, reg),
@@ -255,7 +259,8 @@ function anonymize(text, profile = 'general', options = {}) {
       if ((entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS') &&
           organizationCoverage.some((org) => span.start >= org.start && span.end <= org.end)) continue;
       if ((entry.type === 'ORGANIZATION' || entry.type === 'PROJECT') &&
-          inCredentialContext(out, span.start, span.end, credentialRanges)) continue;
+          (credentialOrganizationRole(out, span.start, span.end, credentialRanges) !== 'private' ||
+           isTechnologyOrganizationSpan(out, span.start, span.end))) continue;
       spans.push(
         span.type === 'PERSON' || span.type === 'PERSON_ALIAS' ? growOverHonorific(out, span) : span
       );
@@ -294,7 +299,10 @@ function anonymize(text, profile = 'general', options = {}) {
     text: out,
     findings,
     counts: reg.counts,
-    dictionary: dictionary.map((d) => d.value),
+    // Typed entries travel through the existing gateway gate unchanged. They
+    // let the verifier distinguish a private person alias from a vendor with
+    // a separate, position-bound professional role. No registry is persisted.
+    dictionary: dictionary.map(({value,type}) => ({value,type})),
     strongPersonAnchor: strongPersonAnchors.length > 0,
     reidentification_risk: profile === 'personnel_profile' ? 'high' : 'context_dependent'
   };
@@ -306,7 +314,7 @@ function anonymize(text, profile = 'general', options = {}) {
 // redactor claimed to have replaced survives in the output.
 function scanResidual(text, profile = 'general', knownValues = [], options = {}) {
   const clean = normalizeText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
-  const credentialRanges = credentialContextSpans(clean);
+  const credentialRanges = credentialContextDetails(clean);
   const out = scanStructured(clean)
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .map((f) => ({ type: f.type, text: f.text }));
@@ -345,18 +353,22 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   if (profile === 'personnel_profile') {
     for (const org of collectOrganizations(clean)) {
       const occurrences=findLiteralSpans(clean,org,'','ORGANIZATION',PRIORITY.ORGANIZATION);
-      if (occurrences.some((s)=>!inCredentialContext(clean,s.start,s.end,credentialRanges))) {
+      if (occurrences.some((s)=>credentialOrganizationRole(clean,s.start,s.end,credentialRanges)==='private' &&
+          !isTechnologyOrganizationSpan(clean,s.start,s.end))) {
         out.push({ type: 'ORGANIZATION_CANDIDATE', text: org });
       }
     }
   }
 
   for (const value of knownValues || []) {
-    const v = normalizeSpaces(value);
+    const typed = value && typeof value === 'object';
+    const v = normalizeSpaces(typed ? value.value : value);
     if (v.length < 3) continue;
     const occurrences=findLiteralSpans(clean,v,'','RESIDUAL_ENTITY',0);
-    const credentialOrg=residualOrgKeys.has(key(v));
-    if (occurrences.some((s)=>!(credentialOrg && inCredentialContext(clean,s.start,s.end,credentialRanges)))) {
+    const credentialOrg=typed ? ['ORGANIZATION','PROJECT'].includes(value.type) : residualOrgKeys.has(key(v));
+    if (occurrences.some((s)=>!(credentialOrg &&
+        (credentialOrganizationRole(clean,s.start,s.end,credentialRanges)!=='private' ||
+         isTechnologyOrganizationSpan(clean,s.start,s.end))))) {
       out.push({ type: 'RESIDUAL_ENTITY', text: v });
     }
   }

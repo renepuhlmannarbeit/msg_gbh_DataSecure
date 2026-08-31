@@ -115,7 +115,7 @@ function batchStateNoticeText(progress) {
     },
     invalid_local_state: {
       title: 'DataSecure – Lokaler Zustand nicht verwendbar',
-      message: 'Der Stapel wurde sicher gestoppt und es wird nichts weiter freigegeben.\r\n\r\nNächster Schritt: Öffne in Cowork den DataSecure-Diagnosestatus.'
+      message: 'Der Stapel wurde sicher gestoppt und es wird nichts weiter freigegeben. Originale bleiben unverändert.\r\n\r\nNächster Schritt: Wende dich mit dem Hinweis „Lokaler Zustand nicht verwendbar“ an deinen IT-Support. Keine Originaldateien oder Dokumentinhalte in den Chat laden.'
     }
   };
   return messages[phase];
@@ -240,11 +240,46 @@ function showLocalMessage(notice, options = {}) {
 }
 
 function showLocalIntakeNotice(stage, options = {}) {
-  return showLocalMessage(intakeNoticeText(stage), options);
+  return showDetachedLocalMessage(intakeNoticeText(stage), options);
 }
 
 function showBatchStateNotice(progress, options = {}) {
-  return showLocalMessage(batchStateNoticeText(progress), options);
+  return showDetachedLocalMessage(batchStateNoticeText(progress), options);
+}
+
+function showDetachedLocalMessage(notice, options = {}) {
+  // An explicit runner remains synchronous for tests and support tooling.
+  // Product notices must not hold the MCP event loop or a worker while the
+  // user reads them. A true result acknowledges dispatch, not dialog closure.
+  if (options.runner) return showLocalMessage(notice, options);
+  const commands = localMessageCommands(notice.title, notice.message, options);
+  const environment = uiProcessEnvironment(options.env || process.env);
+  const launch = (index) => {
+    const spec = commands[index];
+    let child;
+    try {
+      child = childProcess.spawn(spec.command, spec.args, {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+        shell: false,
+        env: environment
+      });
+    } catch (error) {
+      if (error?.code === 'ENOENT' && index + 1 < commands.length) return launch(index + 1);
+      throw new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.');
+    }
+    child.once('error', (error) => {
+      // Preserve the Linux Zenity/KDialog fallback only for a missing command.
+      // Detached presentation failures never escape into the processing host.
+      if (error?.code === 'ENOENT' && index + 1 < commands.length) {
+        try { launch(index + 1); } catch { /* no further local presenter is available */ }
+      }
+    });
+    child.unref();
+    return true;
+  };
+  return launch(0);
 }
 
 // The MCP batch path publishes only this bounded progress object.  Keeping the
@@ -260,21 +295,7 @@ function showTerminalBatchSummary(progress, options = {}) {
     result_omission_counts: progress.result_omission_counts,
     result_grades_verified: progress.result_grades_verified
   };
-  // Injected runners remain synchronous so tests and explicit support tooling
-  // can verify exact UI results. The product completion path detaches the fixed,
-  // content-free notice so closing it can never hold a worker or Cowork call.
-  if (options.runner) return showCompletionSummary(summary, options);
-  const spec = completionSummaryCommand(summary, options);
-  const child = childProcess.spawn(spec.command, spec.args, {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-    shell: false,
-    env: uiProcessEnvironment(options.env || process.env)
-  });
-  child.once?.('error', () => {});
-  child.unref();
-  return true;
+  return showDetachedLocalMessage(completionSummaryText(summary), options);
 }
 
 module.exports = {

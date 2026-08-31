@@ -1,7 +1,12 @@
 # Vertrag: verschlüsselte private Artefakte v1
 
-Status: R4b-E0 produktiv integriert, noch kein Produkt-Release · Story: BL-011.13 ·
+Status: **superseded durch DS-065 / RC80; historischer RC66-Vertrag, nicht mehr produktiv zu aktivieren** · Story: BL-011.13 ·
 Abhängigkeiten: DS-050, `BATCH_SECRET_STORE_V1.md`, `BATCH_SNAPSHOT_V1.md`
+
+Aktueller Vertrag: [lokale Plain-Arbeitskopien](PRIVATE_WORK_STORAGE_V1.md).
+Keine neue Verschlüsselung, Schlüsselbundabfrage oder Migration verschlüsselter
+Altbestände. Die unten beschriebene native Keyring-Abnahme ist wegen Scopewechsel
+obsolet, nicht bestanden. Der historische Inhalt bleibt als Kontext erhalten.
 
 ## Zweck und Geltungsbereich
 

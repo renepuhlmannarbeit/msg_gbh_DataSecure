@@ -4,25 +4,41 @@
 
 Anfrage: „Anonymisiere diese Verträge und vergleiche anschließend die Kündigungsfristen.“
 
-Wähle intern `contract`, verarbeite die lokal ausgewählten Dateien, lies alle im aktuellen
-Lauf freigegebenen Markdown-Pakete vollständig und vergleiche erst danach die Fristen.
+Erkläre vor dem Start knapp: Zuerst erfolgt die lokale Verarbeitung; für den Vergleich
+ist nach ihrem Abschluss ein neuer ausdrücklicher Auftrag nötig. Wähle intern `contract`
+und starte genau einmal `start_document_batch_from_picker(mode=local_only)`.
+Antworte danach nur „Die lokale Verarbeitung wurde gestartet.“ und beende die Aufgabe.
+Kein Polling, kein Ergebnislesen und keine automatische Fortsetzung des Vergleichs.
+
+Spätere Anfrage nach lokalem Abschluss: „Verwende jetzt die anonymisierten Ergebnisse
+und vergleiche die Kündigungsfristen.“
+
+Rufe `start_completed_local_results_handoff` auf und verwende für weitere Seiten nur
+`continue_local_results_handoff`, solange weitere Seiten gemeldet werden. Vergleiche
+ausschließlich die verifiziert übergebenen Markdown-Inhalte. Nenne Auslassungen und
+behaupte bei einem Teilerfolg keine vollständige Prüfung aller Originale. Bleiben keine
+freigegebenen Ergebnisse, führe keinen Vergleich aus und starte keine Diagnose automatisch.
 
 ## Gemischter Stapel
 
 Anfrage: „Bereite den Ordner mit Vertrag, Ausschreibung und Mitarbeiterprofil für Claude vor.“
 
-Verwende `auto`; verlange keine Einzelklassifizierung. Jede Datei wird unabhängig behandelt.
-Erkläre einen Teilerfolg anhand der Zähler und verwende nur die Paket-IDs dieses Laufs.
+Verwende `auto` und `source_kind=folder`; verlange keine Einzelklassifizierung.
+Der lokale Worker verarbeitet die Auswahl unabhängig vom Modell. Der Start beendet
+die Cowork-Aufgabe. Erst eine später ausdrücklich gewünschte Auswertung verwendet
+den tokenfreien Handoff; Kennungen und Leseberechtigungen bleiben im lokalen Server.
 
 ## Reine Textausgabe
 
 Anfrage: „Entferne die Bilder aus dem Ergebnis, anonymisiere alle Dateien und fasse danach die Qualifikationen zusammen.“
 
-Verwende `remove_images=false`: Das Ergebnis ist ohnehin Markdown ohne Bildpixel. Grafiken
-bleiben lokal zurückgehalten; sicher erkannter Bildtext kann nach derselben Datenschutzprüfung
-im Markdown bleiben. Lies danach alle freigegebenen Markdown-Dateien und fasse ausschließlich
-deren fachliche Inhalte zusammen.
+Lasse den Bildstandard unverändert: Das Ergebnis ist ohnehin Markdown ohne Bildpixel.
+Der normale Picker hat kein `remove_images`-Argument. Grafiken bleiben lokal zurückgehalten;
+sicher erkannter Bildtext kann nach derselben Datenschutzprüfung im Markdown bleiben.
+Erkläre vor dem Start den getrennten späteren Auswertungsauftrag. Nach dem Start kein Lesen;
+erst nach lokalem Abschluss und neuem ausdrücklichem Auftrag die freigegebenen Ergebnisse
+über den tokenfreien Handoff zusammenfassen.
 
-`remove_images=true` ist nur für den engeren Wunsch geeignet, die **lokalen** Bildanlagen selbst
-zu verwerfen. Das kann bei unbekannten Office-Objekten sicher stoppen und lässt keinen Bildtext
-in die Markdown-Ausgabe einfließen.
+Ein Wunsch, die **lokalen** Bildanlagen selbst zu verwerfen, ist enger und benötigt eine
+gesonderte Klärung. Erfinde dafür kein Argument des Normalwerkzeugs und führe keine
+Löschung aus; verweise für nicht verfügbare Optionen an den IT-Support.

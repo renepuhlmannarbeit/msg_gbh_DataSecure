@@ -81,33 +81,6 @@ function relMap(entries, relPath, baseDir) {
   }
   return out;
 }
-function paragraphText(xml, textTag='w:t') {
-  let s='';
-  const tokenRe = new RegExp(`<${textTag.replace(':','\\:')}\\b[^>]*>([\\s\\S]*?)<\\/${textTag.replace(':','\\:')}>|<w:tab\\b[^>]*/>|<w:(?:br|cr)\\b[^>]*/>`,'gi');
-  let m; while((m=tokenRe.exec(xml))) { if(m[1]!==undefined)s+=xmlDecode(m[1]); else if(/^<w:tab/i.test(m[0])) s+='\t'; else s+='\n'; }
-  return s.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
-}
-function renderWordParagraph(p) {
-  const txt=paragraphText(p); if(!txt) return '';
-  const style=/<w:pStyle\b[^>]*w:val="([^"]+)"/i.exec(p)?.[1]||'';
-  const lvl=/heading\s*([1-6])/i.exec(style)?.[1] || /^Heading([1-6])$/i.exec(style)?.[1];
-  const bullet=/<w:numPr\b/i.test(p);
-  if(lvl) return `${'#'.repeat(Number(lvl))} ${txt}`;
-  if(bullet) return `- ${txt}`;
-  return txt;
-}
-function renderWordTable(table) {
-  const rows=[]; let rm; const rr=/<w:tr\b[\s\S]*?<\/w:tr>/gi;
-  while((rm=rr.exec(table))) {
-    const cells=[]; let cm; const cr=/<w:tc\b[\s\S]*?<\/w:tc>/gi;
-    while((cm=cr.exec(rm[0]))) cells.push(paragraphText(cm[0]).replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\n/g,'<br>'));
-    rows.push(cells);
-  }
-  if(!rows.length) return '';
-  const cols=Math.max(...rows.map(r=>r.length));
-  const norm=rows.map(r=>Array.from({length:cols},(_,i)=>r[i]||''));
-  return '| '+norm[0].join(' | ')+' |\n| '+norm[0].map(()=> '---').join(' | ')+' |'+(norm.length>1?'\n'+norm.slice(1).map(r=>'| '+r.join(' | ')+' |').join('\n'):'');
-}
 function escapeMarkdownTableCell(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
 }
@@ -155,32 +128,181 @@ function wordPartScope(xml, rootTag) {
   return new RegExp(`<w:${escaped}\\b[^>]*>([\\s\\S]*?)<\\/w:${escaped}>`, 'i').exec(xml)?.[1] || '';
 }
 function renderWordPart(xml, rootTag) {
-  // Word stores visible text boxes as paragraphs nested inside an outer
-  // drawing paragraph. A flat non-greedy paragraph regex stops at the first
-  // nested closing tag and silently loses the remaining text-box paragraphs.
-  // Prefer the modern AlternateContent choice and walk balanced p/tbl tags.
-  // This applies to every WordprocessingML story, not only document.xml:
-  // headers, footers, comments and notes can carry the same structures.
-  const source=String(xml).replace(/<mc:Fallback\b[^>]*>[\s\S]*?<\/mc:Fallback>/gi,'');
-  const body=wordPartScope(source, rootTag);
-  if(!body) return '';
-  const root={type:'root',children:[]}; const stack=[root]; let m;
-  const tags=/<(\/?)w:(p|tbl)\b([^>]*)>/gi;
-  while((m=tags.exec(body))) {
-    const closing=Boolean(m[1]), type=m[2].toLowerCase();
-    const selfClosing=!closing && /\/\s*$/.test(m[3]);
-    if(selfClosing) continue;
-    if(!closing) { stack.push({type,start:m.index,children:[]}); continue; }
-    const node=stack.pop();
-    if(!node || node.type!==type) continue;
-    const raw=body.slice(node.start,tags.lastIndex);
-    let block='';
-    if(type==='tbl') block=renderWordTable(raw);
-    else if(node.children.length) block=node.children.filter(Boolean).join('\n\n');
-    else block=renderWordParagraph(raw);
-    stack[stack.length-1].children.push(block);
+  const body = wordPartScope(String(xml), rootTag);
+  if (!body) return '';
+  return renderWordStructure(parseWordStructure(body));
+}
+
+// These are structural/resource bounds, not a page-count limit. Each XML token
+// is visited once and each retained node is rendered once. In particular, never
+// re-scan or repeatedly escape a nested table's entire subtree.
+const MAX_WORD_XML_DEPTH = 128;
+const MAX_WORD_STRUCTURE_NODES = 200000;
+const MAX_WORD_XML_ELEMENTS = 1000000;
+const MAX_WORD_RENDERED_CHARS = 8000000;
+function wordStructureError(limit = false) {
+  const error = new Error(limit
+    ? 'DOCX-Struktur überschreitet die sichere Verarbeitungsgrenze.'
+    : 'DOCX-Struktur ist nicht eindeutig lesbar; Verarbeitung wird blockiert.');
+  error.code = limit ? 'DOCX_STRUCTURE_LIMIT' : 'DOCX_STRUCTURE_UNSAFE';
+  return error;
+}
+function parseWordStructure(body) {
+  const root = { type: 'root', children: [] };
+  const stack = [{ name: '', node: root, skipped: false, boxes: 0 }];
+  // Quoted attribute values may contain `>`; an unquoted `<` is never a tag.
+  const tag = /<(\/)?([A-Za-z_][\w.:-]*)(?=[\s/>])((?:[^<>"']|"[^"<]*"|'[^'<]*')*)>/y;
+  const attribute = /([A-Za-z_][\w.:-]*)\s*=\s*(?:"([^"<]*)"|'([^'<]*)')/gy;
+  let cursor = 0, nodes = 0, elements = 0;
+  function flush(node) {
+    if (node.type !== 'p' || !node.pending.length) return;
+    const value = node.pending.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (value) node.children.push(value);
+    node.pending.length = 0;
   }
-  return root.children.filter(Boolean).join('\n\n');
+  while (cursor < body.length) {
+    const frame = stack[stack.length - 1];
+    if (body[cursor] !== '<') {
+      const next = body.indexOf('<', cursor);
+      const end = next === -1 ? body.length : next;
+      if (!frame.skipped && frame.name === 'w:t') {
+        try { frame.node.pending.push(xmlDecode(body.slice(cursor, end))); }
+        catch { throw wordStructureError(); }
+      } else if (!frame.skipped && /^(?:|w:p|w:tbl|w:tr|w:tc)$/.test(frame.name) && /\S/.test(body.slice(cursor, end))) {
+        throw wordStructureError();
+      }
+      cursor = end;
+      continue;
+    }
+    // Comments/PIs cannot contribute Word text. CDATA may contribute only in
+    // a text run. Declarations (including DTD/entity declarations) are rejected.
+    const special = body.startsWith('<!--', cursor) ? ['-->', 4]
+      : body.startsWith('<?', cursor) ? ['?>', 2]
+        : body.startsWith('<![CDATA[', cursor) ? [']]>', 9] : null;
+    if (special) {
+      const end = body.indexOf(special[0], cursor + special[1]);
+      if (end === -1) throw wordStructureError();
+      if (special[1] === 9 && !frame.skipped) {
+        if (frame.name !== 'w:t') throw wordStructureError();
+        frame.node.pending.push(body.slice(cursor + special[1], end));
+      }
+      cursor = end + special[0].length;
+      continue;
+    }
+    tag.lastIndex = cursor;
+    const token = tag.exec(body);
+    if (!token) throw wordStructureError();
+    cursor = tag.lastIndex;
+    const [, closing, name, rawAttributes] = token;
+    const selfClosing = /\/\s*$/.test(rawAttributes);
+    const attributes = selfClosing ? rawAttributes.slice(0, rawAttributes.lastIndexOf('/')) : rawAttributes;
+    if (closing) {
+      if (selfClosing || attributes.trim() || stack.length === 1 || frame.name !== name) throw wordStructureError();
+      if (frame.created) flush(frame.node);
+      stack.pop();
+      continue;
+    }
+    if (++elements > MAX_WORD_XML_ELEMENTS || stack.length > MAX_WORD_XML_DEPTH) throw wordStructureError(true);
+    const attrs = new Map();
+    let offset = 0;
+    while (offset < attributes.length) {
+      while (/\s/.test(attributes[offset] || '') && offset < attributes.length) offset++;
+      if (offset === attributes.length) break;
+      attribute.lastIndex = offset;
+      const match = attribute.exec(attributes);
+      if (!match || attrs.has(match[1])) throw wordStructureError();
+      attrs.set(match[1], match[2] ?? match[3]);
+      offset = attribute.lastIndex;
+      if (offset < attributes.length && !/\s/.test(attributes[offset])) throw wordStructureError();
+    }
+    const skipped = frame.skipped || name === 'mc:Fallback';
+    const boxes = frame.boxes + (name === 'w:txbxContent' ? 1 : 0);
+    let node = frame.node, created = false;
+    if (!skipped) {
+      if (frame.name === 'w:t') throw wordStructureError();
+      const type = /^w:(p|tbl|tr|tc)$/.exec(name)?.[1];
+      if (type) {
+        const allowed = type === 'tr' ? node.type === 'tbl'
+          : type === 'tc' ? node.type === 'tr'
+            : node.type === 'root' || node.type === 'tc' || (node.type === 'p' && boxes > node.boxes);
+        if (!allowed) throw wordStructureError();
+        if (++nodes > MAX_WORD_STRUCTURE_NODES) throw wordStructureError(true);
+        flush(node);
+        const child = { type, children: [], boxes, ...(type === 'p' ? { pending: [], prefix: '' } : {}) };
+        node.children.push(child);
+        node = child;
+        created = true;
+      } else if (name === 'w:t' || name === 'w:tab' || name === 'w:br' || name === 'w:cr') {
+        if (node.type !== 'p') throw wordStructureError();
+        if (name !== 'w:t') node.pending.push(name === 'w:tab' ? '\t' : '\n');
+      } else if (node.type === 'p' && name === 'w:pStyle') {
+        const level = /^heading\s*([1-6])$/i.exec(attrs.get('w:val') || '')?.[1];
+        if (level) node.prefix = '#'.repeat(Number(level)) + ' ';
+      } else if (node.type === 'p' && name === 'w:numPr' && !node.prefix) node.prefix = '- ';
+    }
+    if (!selfClosing) stack.push({ name, node, skipped, boxes, created });
+    else if (created) flush(node);
+  }
+  if (stack.length !== 1) throw wordStructureError();
+  return root;
+}
+function renderWordStructure(root) {
+  const output = [];
+  let chars = 0;
+  function write(value) {
+    chars += value.length;
+    if (chars > MAX_WORD_RENDERED_CHARS) throw wordStructureError(true);
+    output.push(value);
+  }
+  function repeat(value, count) {
+    if (chars + value.length * count > MAX_WORD_RENDERED_CHARS) throw wordStructureError(true);
+    if (count) write(value.repeat(count));
+  }
+  function content(node) {
+    if (typeof node === 'string') return Boolean(node);
+    // Memoization visits each node only once, including empty drawing wrappers.
+    if (node.visible === undefined) node.visible = node.type === 'tbl'
+      ? node.children.some(row => row.children.length)
+      : node.children.some(content);
+    return node.visible;
+  }
+  function children(node, inCell) {
+    let emitted = false;
+    for (const child of node.children) {
+      if (!content(child)) continue;
+      if (emitted) write(inCell ? '<br>' : '\n\n');
+      if (typeof child === 'string') {
+        if (!inCell && !emitted) write(node.prefix || '');
+        write(inCell ? escapeMarkdownTableCell(child) : child);
+      } else emit(child, inCell);
+      emitted = true;
+    }
+  }
+  function emit(node, inCell) {
+    if (node.type !== 'tbl') { children(node, inCell); return; }
+    let columns = 0;
+    for (const row of node.children) columns = Math.max(columns, row.children.length);
+    if (!columns) return;
+    const pipe = inCell ? '\\|' : '|';
+    for (let rowIndex = 0; rowIndex < node.children.length; rowIndex++) {
+      if (rowIndex) write(inCell ? '<br>' : '\n');
+      write(pipe + ' ');
+      const cells = node.children[rowIndex].children;
+      for (let column = 0; column < cells.length; column++) {
+        if (column) write(' ' + pipe + ' ');
+        children(cells[column], true);
+      }
+      repeat(' ' + pipe + ' ', columns - Math.max(1, cells.length));
+      write(' ' + pipe);
+      if (!inCell && rowIndex === 0) {
+        write('\n| ---');
+        repeat(' | ---', columns - 1);
+        write(' |');
+      }
+    }
+  }
+  emit(root, false);
+  return output.join('');
 }
 function renderWordBody(xml) { return renderWordPart(xml, 'body'); }
 function docxMainRelationshipIssueCount(entries) {

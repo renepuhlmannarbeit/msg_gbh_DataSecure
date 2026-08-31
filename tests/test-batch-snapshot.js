@@ -18,25 +18,16 @@ const {
 } = require('../plugins/data-secure/server/gateway/batch-snapshot');
 const { batchRoot, batchPath, workPath } = require('../plugins/data-secure/server/gateway/batch-private-store');
 const { _test } = require('../plugins/data-secure/server/gateway/batch');
-const { createPrivateArtifactCrypto } = require('../plugins/data-secure/server/gateway/private-artifact-crypto');
+const { createPrivateWorkStore } = require('../plugins/data-secure/server/gateway/private-work-store');
 const { test, done, assert } = createSuite('Batch snapshot module');
 
-const artifactKey = Buffer.alloc(32, 0x51);
-const artifactCrypto = createPrivateArtifactCrypto({
-  privateRoot: base,
-  secretStore: {
-    prepareWrite() {
-      return { key: Buffer.from(artifactKey), keyId: '1'.repeat(32), generation: 1, commit() {}, abort() {} };
-    },
-    resolveRead() { return Buffer.from(artifactKey); }
-  }
-});
+const privateWorkStore = createPrivateWorkStore({ privateRoot: base });
 
-function encryptedDeps(overrides = {}, objectId = crypto.randomBytes(8).toString('hex')) {
+function plainDeps(overrides = {}, objectId = crypto.randomBytes(8).toString('hex')) {
   return {
     fs,
     hasReparseComponent: () => false,
-    artifactCrypto,
+    privateWorkStore,
     binding: { purpose: 'batch-snapshot', objectId },
     ...overrides
   };
@@ -71,7 +62,7 @@ test('an all-stopped admission needs no source staging capacity probe', () => {
   assert.strictEqual(calls, 0);
 });
 
-test('snapshot copy completes correctly across positive partial reads and persists ciphertext only', () => {
+test('snapshot copy completes correctly across positive partial reads and persists an exact plaintext private copy', () => {
   const { source, expected } = sourceFixture('partial.txt');
   const destination = path.join(base, 'partial.copy');
   const io = ioWith({
@@ -79,10 +70,10 @@ test('snapshot copy completes correctly across positive partial reads and persis
       return fs.readSync(fd, buffer, offset, Math.min(3, length), position);
     }
   });
-  const copied = copySnapshotFile(source, destination, expected, encryptedDeps({ fs: io }, 'partial'));
+  const copied = copySnapshotFile(source, destination, expected, plainDeps({ fs: io }, 'partial'));
   assert.strictEqual(copied.size, expected.size);
-  assert.notDeepStrictEqual(fs.readFileSync(destination), fs.readFileSync(source));
-  assert.deepStrictEqual(artifactCrypto.readEncrypted(destination, {
+  assert.deepStrictEqual(fs.readFileSync(destination), fs.readFileSync(source));
+  assert.deepStrictEqual(privateWorkStore.readFile(destination, {
     purpose: 'batch-snapshot', objectId: 'partial'
   }), fs.readFileSync(source));
 });
@@ -91,19 +82,19 @@ test('snapshot copy is cryptographically bound to the preflight bytes', () => {
   const { source, expected } = sourceFixture('bound-digest.txt');
   const destination = path.join(base, 'bound-digest.copy');
   const digest = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
-  const copied = copySnapshotFile(source, destination, expected, encryptedDeps({ expectedSha256: digest }, 'bound'));
+  const copied = copySnapshotFile(source, destination, expected, plainDeps({ expectedSha256: digest }, 'bound'));
   assert.strictEqual(copied.sha256, digest);
 
   const rejected = path.join(base, 'bound-digest-rejected.copy');
   assert.throws(() => copySnapshotFile(source, rejected, expected,
-    encryptedDeps({ expectedSha256: '0'.repeat(64) }, 'bound-rejected')),
+    plainDeps({ expectedSha256: '0'.repeat(64) }, 'bound-rejected')),
   /zwischen Prüfung und lokaler Übernahme verändert/i);
   assert.strictEqual(fs.existsSync(rejected), false);
   assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
 });
 
-test('read, encryption and close failures remove the exact encrypted copy', () => {
-  for (const mode of ['short-read', 'encryption-error', 'close-error']) {
+test('read, write and close failures remove the exact private copy', () => {
+  for (const mode of ['short-read', 'write-error', 'close-error']) {
     const { source, expected } = sourceFixture(`${mode}.txt`);
     const destination = path.join(base, `${mode}.copy`);
     let reads = 0;
@@ -120,11 +111,11 @@ test('read, encryption and close failures remove the exact encrypted copy', () =
       }
     });
     let failure;
-    const selectedCrypto = mode === 'encryption-error'
-      ? { writeEncrypted() { throw new Error('cipher failed'); } }
-      : artifactCrypto;
+    const selectedCrypto = mode === 'write-error'
+      ? { writeFile() { throw new Error('write failed'); } }
+      : privateWorkStore;
     try {
-      copySnapshotFile(source, destination, expected, encryptedDeps({ fs: io, artifactCrypto: selectedCrypto }, mode));
+      copySnapshotFile(source, destination, expected, plainDeps({ fs: io, privateWorkStore: selectedCrypto }, mode));
     }
     catch (error) { failure = error; }
     assert.ok(failure, mode);
@@ -132,6 +123,16 @@ test('read, encryption and close failures remove the exact encrypted copy', () =
     assert.strictEqual(fs.existsSync(destination), false, mode);
     assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload', mode);
   }
+});
+
+test('a destination collision combined with source-close failure never deletes the existing file', () => {
+  const { source, expected } = sourceFixture('collision-source.txt');
+  const destination = path.join(base, 'existing.copy');
+  fs.writeFileSync(destination, 'existing data');
+  const io = ioWith({ closeSync(fd) { fs.closeSync(fd); throw new Error('close failed'); } });
+  assert.throws(() => copySnapshotFile(source, destination, expected, plainDeps({ fs: io })));
+  assert.strictEqual(fs.readFileSync(destination, 'utf8'), 'existing data');
+  assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
 });
 
 test('an in-place metadata change during copying invalidates and removes the snapshot', () => {
@@ -152,18 +153,18 @@ test('an in-place metadata change during copying invalidates and removes the sna
     }
   });
   assert.throws(
-    () => copySnapshotFile(source, destination, expected, encryptedDeps({ fs: io }, 'ctime')),
+    () => copySnapshotFile(source, destination, expected, plainDeps({ fs: io }, 'ctime')),
     /verändert/i
   );
   assert.strictEqual(fs.existsSync(destination), false);
   assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
 });
 
-test('pending entry binding authenticates and returns only in-memory plaintext', () => {
+test('pending entry binding verifies the snapshot digest and returns in-memory bytes', () => {
   const plaintext = Buffer.alloc(123, 0x61);
   const digest = crypto.createHash('sha256').update(plaintext).digest('hex');
   const calls = [];
-  const state = { token: 'a'.repeat(64) };
+  const state = { schema: 'datasecure-batch/2', token: 'a'.repeat(64) };
   const item = {
     name: 'Quelle.docx',
     work_name: `001_${'b'.repeat(24)}.docx`,
@@ -174,10 +175,10 @@ test('pending entry binding authenticates and returns only in-memory plaintext',
   const result = exactPendingEntry(state, item, {
     path: { join(left, right) { calls.push(`join:${left}:${right}`); return `${left}/${right}`; } },
     workPath(value) { calls.push(`work:${value}`); return `work-${value}`; },
-    regularFileStat(target) { calls.push(`stat:${target}`); return { size: 999, marker: 'encrypted' }; },
-    artifactCrypto: {
-      readEncrypted(target, binding) {
-        calls.push(`read:${target}:${binding.objectId}`);
+    regularFileStat(target) { calls.push(`stat:${target}`); return { size: 999, marker: 'plain' }; },
+    privateWorkStore: {
+      readFile(target) {
+        calls.push(`read:${target}`);
         return Buffer.from(plaintext);
       }
     }
@@ -186,13 +187,13 @@ test('pending entry binding authenticates and returns only in-memory plaintext',
     name: 'Quelle.docx',
     private_bytes: plaintext,
     expected_sha256: digest,
-    private_artifact_encrypted: true
+    private_artifact_plain: true
   });
   assert.deepStrictEqual(calls, [
     `work:${state.token}`,
     `join:work-${state.token}:${item.work_name}`,
     `stat:work-${state.token}/${item.work_name}`,
-    `read:work-${state.token}/${item.work_name}:${state.token}:${item.id}`
+    `read:work-${state.token}/${item.work_name}`
   ]);
 });
 
@@ -209,7 +210,7 @@ test('pending entry binding rejects every unsafe work name before filesystem acc
   let statCalls = 0;
   for (const workName of invalid) {
     assert.throws(() => exactPendingEntry(
-      { token: 'a'.repeat(64) },
+      { schema: 'datasecure-batch/2', token: 'a'.repeat(64) },
       { work_name: workName, size: 1 },
       { workPath: () => 'work', regularFileStat: () => { statCalls++; return { size: 1 }; } }
     ), /Arbeitskopie ist ungültig/);
@@ -217,18 +218,18 @@ test('pending entry binding rejects every unsafe work name before filesystem acc
   assert.strictEqual(statCalls, 0);
 });
 
-test('pending entry binding preserves regular-file errors and rejects authenticated byte changes', () => {
-  const item = { id: 'f'.repeat(32), name: 'Quelle.txt', work_name: `001_${'d'.repeat(24)}.dsart`, size: 10, sha256: 'e'.repeat(64) };
+test('pending entry binding preserves regular-file errors and rejects snapshot byte changes', () => {
+  const item = { id: 'f'.repeat(32), name: 'Quelle.txt', work_name: `001_${'d'.repeat(24)}.workcopy`, size: 10, sha256: 'e'.repeat(64) };
   const regularError = new Error('REGULAR_FILE_REJECTED');
   assert.throws(() => exactPendingEntry(
-    { token: 'a'.repeat(64) }, item,
-    { workPath: () => 'work', regularFileStat: () => { throw regularError; }, artifactCrypto: { readEncrypted() {} } }
+    { schema: 'datasecure-batch/2', token: 'a'.repeat(64) }, item,
+    { workPath: () => 'work', regularFileStat: () => { throw regularError; }, privateWorkStore: { readFile() {} } }
   ), /REGULAR_FILE_REJECTED/);
   assert.throws(() => exactPendingEntry(
-    { token: 'a'.repeat(64) }, item,
+    { schema: 'datasecure-batch/2', token: 'a'.repeat(64) }, item,
     {
       workPath: () => 'work', regularFileStat: () => ({ size: 99 }),
-      artifactCrypto: { readEncrypted: () => Buffer.alloc(10, 0x61) }
+      privateWorkStore: { readFile: () => Buffer.alloc(10, 0x61) }
     }
   ), /wurde verändert/);
 });

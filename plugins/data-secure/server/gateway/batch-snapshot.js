@@ -127,15 +127,14 @@ function regularFileStat(target) {
 function copySnapshotFile(source, destination, expected, deps = {}) {
   const io = deps.fs || fs;
   const reparseCheck = deps.hasReparseComponent || hasReparseComponent;
-  const artifactCrypto = deps.artifactCrypto;
-  const binding = deps.binding;
-  if (!artifactCrypto || typeof artifactCrypto.writeEncrypted !== 'function' ||
-      !binding || binding.purpose !== 'batch-snapshot') {
-    throw new SafeError('Die Verschlüsselung privater Stapelkopien ist nicht verfügbar. Es wurden keine Quelldaten übernommen.');
+  const privateWorkStore = deps.privateWorkStore;
+  if (!privateWorkStore || typeof privateWorkStore.writeFile !== 'function') {
+    throw new SafeError('Der lokale Speicher privater Stapelkopien ist nicht verfügbar. Es wurden keine Quelldaten übernommen.');
   }
   const noFollow = io.constants.O_NOFOLLOW || 0;
   let input;
   let plaintext;
+  let destinationCreated = false;
   const expectedSha256 = String(deps.expectedSha256 || '').toLowerCase();
   if (expectedSha256 && !/^[a-f0-9]{64}$/u.test(expectedSha256)) {
     throw new SafeError('Die geprüfte Quelldatei besitzt keine gültige Integritätsbindung.');
@@ -179,7 +178,8 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
         throw new SafeError('Eine ausgewählte Datei wurde zwischen Prüfung und lokaler Übernahme verändert.');
       }
     }
-    artifactCrypto.writeEncrypted(destination, plaintext, binding);
+    privateWorkStore.writeFile(destination, plaintext);
+    destinationCreated = true;
     return { size: position, sha256: copiedSha256 };
   } finally {
     let closeError;
@@ -188,7 +188,7 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
     }
     if (plaintext) plaintext.fill(0);
     if (closeError) {
-      try { if (io.existsSync(destination)) io.unlinkSync(destination); } catch { /* outer cleanup remains the guard */ }
+      try { if (destinationCreated && io.existsSync(destination)) io.unlinkSync(destination); } catch { /* outer cleanup remains the guard */ }
       throw closeError;
     }
   }
@@ -201,16 +201,27 @@ function exactPendingEntry(state, item, deps = {}) {
   if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item?.work_name || ''))) {
     throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
   }
-  const artifactCrypto = deps.artifactCrypto;
-  if (!artifactCrypto || typeof artifactCrypto.readEncrypted !== 'function') {
-    throw new SafeError('Die Verschlüsselung privater Stapelkopien ist nicht verfügbar.');
+  if (!['datasecure-batch/2', 'datasecure-batch/4'].includes(state.schema) ||
+      Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
+      /\.dsart$/iu.test(item.work_name) ||
+      (state.schema === 'datasecure-batch/4' && item.private_artifact_plain !== true)) {
+    const error = new SafeError('Eine alte verschlüsselte oder unbekannte Arbeitskopie bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.');
+    error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';
+    throw error;
+  }
+  const privateWorkStore = deps.privateWorkStore;
+  if (!privateWorkStore || typeof privateWorkStore.readFile !== 'function') {
+    throw new SafeError('Der lokale Speicher privater Stapelkopien ist nicht verfügbar.');
   }
   const full = pathApi.join(pathForWork(state.token), item.work_name);
   statRegularFile(full);
-  const privateBytes = artifactCrypto.readEncrypted(full, {
-    purpose: 'batch-snapshot',
-    objectId: `${state.token}:${item.id}`
-  });
+  const privateBytes = privateWorkStore.readFile(full);
+  if (privateBytes.subarray(0, 8).equals(Buffer.from('DSARTF01'))) {
+    privateBytes.fill(0);
+    const error = new SafeError('Eine alte verschlüsselte Arbeitskopie bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.');
+    error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';
+    throw error;
+  }
   const actualSha256 = crypto.createHash('sha256').update(privateBytes).digest('hex');
   if (privateBytes.length !== item.size || !/^[a-f0-9]{64}$/u.test(String(item.sha256 || '')) ||
       !crypto.timingSafeEqual(Buffer.from(actualSha256, 'hex'), Buffer.from(item.sha256, 'hex'))) {
@@ -221,7 +232,7 @@ function exactPendingEntry(state, item, deps = {}) {
     name: item.name,
     private_bytes: privateBytes,
     expected_sha256: item.sha256,
-    private_artifact_encrypted: true
+    private_artifact_plain: true
   };
 }
 

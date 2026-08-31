@@ -148,8 +148,9 @@ test('batch secret-store contract pins the native candidate and keeps every fall
   assert.match(text, /Rechnerneustart zwischen Set und Get/u);
 });
 
-test('private artifact encryption contract stays create-only and release-gated', () => {
+test('historical encryption contract remains traceable but is superseded by DS-065', () => {
   const text = read('PRIVATE_ARTIFACT_ENCRYPTION_V1.md');
+  assert.match(text, /DS-065/u);
   for (const required of [
     'BL-011.13', 'AES-256-GCM', '256-Bit-Installationsschlüssel', '96-Bit',
     '128-Bit', 'Authenticated Data', 'create-only', 'Create-if-absent-Hardlink',
@@ -158,7 +159,7 @@ test('private artifact encryption contract stays create-only and release-gated',
   ]) assert.ok(text.includes(required), `private-artifact contract missing: ${required}`);
   assert.match(text, /keinen Datei-, Umgebungsvariablen-, CLI-, Cloud-/u);
   assert.match(text, /zweite Klartextdatei ist kein[\s\S]*Integrationsweg/u);
-  assert.match(text, /noch kein Produkt-Release/u);
+  assert.match(text, /superseded durch DS-065/u);
   const facade = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'private-artifact-crypto.js'), 'utf8');
   assert.match(facade, /createCipheriv\('aes-256-gcm'/u);
   assert.match(facade, /PRIVATE_ARTIFACT_ALREADY_EXISTS/u);

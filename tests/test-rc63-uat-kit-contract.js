@@ -104,4 +104,15 @@ test('one documented generator command has pinned prerequisites and verifies its
   assert.match(readme, /exakt 111 Dateien/u);
 });
 
+test('normal onboarding uses picker cancellation, not unavailable support diagnostics', () => {
+  const steps = read(path.join(kit, 'STEP-BY-STEP.md'));
+  const preparation = steps.split('## 2.')[0];
+  assert.match(preparation, /`Dateien anonymisieren\.`/u);
+  assert.match(preparation, /\*\*Abbrechen\*\*/u);
+  assert.match(preparation, /ohne eine Datei auszuwählen/u);
+  assert.doesNotMatch(preparation, /Schreibe: `Zeige mir den DataSecure-Diagnosestatus/u);
+  assert.match(preparation, /beweist keinen Verbindungsfehler/u);
+  assert.match(preparation, /nicht die Ausführungsart oder Produktfreigabe/u);
+});
+
 done();

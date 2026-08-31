@@ -4,9 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
-const { LIMITS, hasReparseComponent } = require('../gateway/common');
+const { LIMITS, hasReparseComponent, isManagedStagingPath } = require('../gateway/common');
 const { uiProcessEnvironment } = require('./ui-process-policy');
-const { SOURCE_TYPES, validateSelectedPath, selectionCancelledError } = require('./file-picker');
+const { SOURCE_TYPES, validateSelectedPath, selectionCancelledError, runPickerAsync, throwIfSelectionAborted, WINDOWS_PICKER_UTF8 } = require('./file-picker');
 
 const SOURCE_FOLDER_TITLE = 'Ordner mit DataSecure lokal anonymisieren';
 const SOURCE_FOLDER_CANCELLED = '__DATASECURE_SOURCE_FOLDER_CANCELLED__';
@@ -23,6 +23,7 @@ function sourceFolderPickerCommands(platform = process.platform, env = process.e
   if (platform === 'win32') {
     const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const script = [
+      WINDOWS_PICKER_UTF8,
       'Add-Type -AssemblyName System.Windows.Forms',
       '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
       `$dialog.Description = '${SOURCE_FOLDER_TITLE}'`, '$dialog.ShowNewFolderButton = $false',
@@ -57,6 +58,27 @@ function pickSourceFolder(options = {}) {
   throw new SafeError('Kein Quellordner ausgewählt.');
 }
 
+async function pickSourceFolderAsync(options = {}) {
+  const runner = options.runner || runPickerAsync;
+  let unavailable = 0;
+  throwIfSelectionAborted(options.signal);
+  for (const spec of sourceFolderPickerCommands(options.platform, options.env)) {
+    throwIfSelectionAborted(options.signal);
+    const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal);
+    throwIfSelectionAborted(options.signal);
+    if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
+    if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) throw new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.');
+    if (result?.error && typeof result.error.code !== 'number') throw new SafeError('Der lokale Ordnerdialog konnte nicht gestartet werden.');
+    const selected = String(result?.stdout || '').trim();
+    if (selected === SOURCE_FOLDER_CANCELLED || (result?.status !== 0 && !selected)) throw selectionCancelledError();
+    if (result?.status !== 0) throw new SafeError('Die lokale Ordnerauswahl konnte nicht sicher gelesen werden.');
+    if (!path.isAbsolute(selected)) throw new SafeError('Der ausgewählte Quellordner ist nicht absolut.');
+    return path.resolve(selected);
+  }
+  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter lokaler Ordnerdialog verfügbar.');
+  throw new SafeError('Kein Quellordner ausgewählt.');
+}
+
 function normalizedSourceLabel(root, target) {
   const relative = path.relative(root, target).split(path.sep).join('/');
   if (!relative || relative.startsWith('../') || path.isAbsolute(relative) || relative.length > 1024) {
@@ -79,6 +101,7 @@ function enumerateSourceFolder(root, options = {}) {
     throw new SafeError('Der ausgewählte Quellordner ist nicht absolut.');
   }
   const resolvedRoot = path.resolve(rawRoot);
+  if (isManagedStagingPath(resolvedRoot)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
   if (reparse(resolvedRoot)) {
     throw new SafeError('Der ausgewählte Quellordner liegt hinter einem Link oder Reparse-Punkt.');
   }
@@ -103,6 +126,7 @@ function enumerateSourceFolder(root, options = {}) {
       entriesSeen++;
       if (entriesSeen > limits.maxEntries) throw new SafeError('Der ausgewählte Ordner enthält zu viele Dateisystemeinträge.');
       const full = path.join(current.directory, entry.name);
+      if (isManagedStagingPath(full)) throw new SafeError('Der Quellordner enthält private temporäre Ausgaben; bitte nur Originalordner auswählen.');
       if (reparse(full)) throw new SafeError('Der ausgewählte Ordner enthält einen Link oder Reparse-Punkt.');
       let stat;
       try { stat = io.lstatSync(full); } catch { throw new SafeError('Der ausgewählte Ordner hat sich während der Prüfung verändert.'); }
@@ -135,5 +159,5 @@ function enumerateSourceFolder(root, options = {}) {
 
 module.exports = {
   SOURCE_FOLDER_TITLE, SOURCE_FOLDER_CANCELLED, TREE_LIMITS,
-  sourceFolderPickerCommands, pickSourceFolder, enumerateSourceFolder
+  sourceFolderPickerCommands, pickSourceFolder, pickSourceFolderAsync, enumerateSourceFolder
 };

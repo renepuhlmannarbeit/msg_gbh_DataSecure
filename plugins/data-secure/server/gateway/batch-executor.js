@@ -1,8 +1,7 @@
 'use strict';
 
-const path = require('path');
 const crypto = require('crypto');
-const { fork } = require('child_process');
+const { launchBackgroundRole } = require('../background-role-launcher');
 const { SafeError } = require('../runtime');
 const {
   claimLocalBatchExecutor,
@@ -49,6 +48,37 @@ function afterIpcDrain(options, callback) {
   const schedule = options.scheduleExitFinalization || ((next) => setTimeout(next, 100));
   try { schedule(callback); }
   catch { callback(); }
+}
+
+// Attach before checking pid: a failed spawn returns a ChildProcess without a
+// pid and emits `error` on the next turn. An outer synchronous catch cannot
+// consume that event. IPC errors may also happen after successful startup.
+function observeWorker(child, onFailure, onExit) {
+  if (!child || typeof child.once !== 'function') throw new Error('invalid child');
+  const pid = Number.isSafeInteger(child.pid) && child.pid > 0 ? child.pid : null;
+  let ended = false;
+  let failed = false;
+  let terminationRequested = false;
+  function end(code) {
+    if (ended) return;
+    ended = true;
+    onExit(code, failed, pid);
+  }
+  function fail(code) {
+    if (ended || failed) return;
+    failed = true;
+    onFailure(code);
+    if (pid === null) { end(null); return; }
+    // A failed send does not prove the worker stopped. Keep its pending slot
+    // and lease until actual exit; kill only this owned, not-yet-exited child.
+    if (!terminationRequested && child.exitCode == null && child.signalCode == null) {
+      terminationRequested = true;
+      try { child.kill?.(); } catch { /* retain ownership until confirmed exit */ }
+    }
+  }
+  (child.on || child.once).call(child, 'error', () => fail(pid === null ? 'LOCAL_WORKER_SPAWN_FAILED' : 'LOCAL_IPC_FAILED'));
+  child.once('exit', end);
+  return { fail, get ended() { return ended; }, get failed() { return failed; } };
 }
 
 const PRESENTABLE_BATCH_PHASES = new Set([
@@ -144,18 +174,37 @@ function durableBatchStateProgress(token, type, options = {}) {
 
 function startLocalBatchExecutor(token, options = {}) {
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
-  const forkProcess = options.forkProcess || fork;
+  const forkProcess = options.forkProcess;
   const record = options.recordWorkflowEvent || recordWorkflowEvent;
   const lifecycle = (event) => { try { record(event); } catch { /* diagnostics never changes processing */ } };
   let child;
+  let worker;
+  let claimedLease = false;
+  let noticeShown = false;
+  const showNoticeOnce = (progress) => {
+    if (noticeShown || !progress) return;
+    noticeShown = true;
+    try { (options.showBatchStateNotice || showBatchStateNotice)(progress); }
+    catch { /* presentation never changes the privacy state */ }
+  };
+  const finalizeExit = () => afterIpcDrain(options, () => {
+    if (noticeShown) return;
+    showNoticeOnce(durableBatchStateProgress(token, 'local-batch-state', options));
+    if (noticeShown) return;
+    noticeShown = true;
+    try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
+    catch { /* presentation never changes the privacy state */ }
+  });
   try {
-    child = forkProcess(path.join(__dirname, 'batch-worker.js'), [], {
-      detached: true,
-      windowsHide: true,
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
-      execArgv: [`--require=${path.join(__dirname, '..', 'network-deny.cjs')}`],
-      env: batchWorkerEnvironment(options.env || process.env),
-      serialization: 'json'
+    child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment(options.env || process.env) });
+    worker = observeWorker(child, (errorCode) => {
+      lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: errorCode });
+    }, (code, failed, pid) => {
+      if (pid === null) return; // a never-started process has no OS exit
+      if (failed && claimedLease) releaseLocalBatchExecutor(token, pid);
+      lifecycle({ event: 'intake_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', exit_code: code,
+        error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_WORKER_EXITED' });
+      if (claimedLease) finalizeExit();
     });
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
@@ -163,16 +212,10 @@ function startLocalBatchExecutor(token, options = {}) {
     lifecycle({ event: 'intake_worker_spawned', outcome: 'ok' });
     const claimed = claimLocalBatchExecutor(token, child.pid);
     if (claimed.ok === false) {
-      try { child.kill(); } catch { /* only the just-created helper is targeted */ }
+      worker.fail('LOCAL_WORKER_SPAWN_FAILED');
       return claimed;
     }
-    let noticeShown = false;
-    const showNoticeOnce = (progress) => {
-      if (noticeShown || !progress) return;
-      noticeShown = true;
-      try { (options.showBatchStateNotice || showBatchStateNotice)(progress); }
-      catch { /* presentation never changes the privacy state */ }
-    };
+    claimedLease = true;
     const presentProgress = (progress) => {
       if (progress) lifecycle({
         event: 'intake_terminal_state', outcome: progress.complete ? 'ok' : 'progress',
@@ -185,27 +228,14 @@ function startLocalBatchExecutor(token, options = {}) {
       const progress = localBatchStateProgress(message);
       presentProgress(progress);
     });
-    child.once?.('exit', (code) => {
-      lifecycle({ event: 'intake_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', exit_code: code,
-        error_code: code === 0 ? 'NONE' : 'LOCAL_WORKER_EXITED' });
-      // On Windows the child exit event can overtake the final IPC message.
-      // Give that already-sent bounded state envelope one event-loop grace
-      // window before presenting a false failure notice.
-      afterIpcDrain(options, () => {
-        if (noticeShown) return;
-        showNoticeOnce(durableBatchStateProgress(token, 'local-batch-state', options));
-        if (noticeShown) return;
-        noticeShown = true;
-        try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
-        catch { /* presentation never changes the privacy state */ }
-      });
-    });
     child.send({ type: 'start-local-batch', batch_token: token }, (error) => {
+      if (worker.ended || worker.failed) return;
+      if (error) { worker.fail('LOCAL_IPC_FAILED'); return; }
       lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
         error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
-      if (error) releaseLocalBatchExecutor(token, child.pid);
       child.unref?.();
     });
+    if (worker.failed) throw new Error('worker start failed');
     return {
       ok: true,
       local_processing_started: true,
@@ -213,11 +243,8 @@ function startLocalBatchExecutor(token, options = {}) {
       raw_content_sent_to_claude: false
     };
   } catch {
-    lifecycle({ event: 'intake_worker_exited', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
-    if (child && Number.isSafeInteger(child.pid)) {
-      releaseLocalBatchExecutor(token, child.pid);
-      try { child.kill(); } catch { /* only the just-created helper is targeted */ }
-    }
+    if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
+    else lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
     throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
   }
 }
@@ -230,22 +257,22 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   if (!Array.isArray(queue) || queue.length < 1) throw new SafeError('Keine Datei für die lokale Übernahme ausgewählt.');
   if (pendingIntakes.size > 0) throw new SafeError('Ein lokaler DataSecure-Stapel wird bereits vorbereitet.');
   const token = crypto.randomBytes(32).toString('hex');
-  const forkProcess = options.forkProcess || fork;
+  const forkProcess = options.forkProcess;
   const showIntakeNotice = options.showLocalIntakeNotice || showLocalIntakeNotice;
   const showState = options.showBatchStateNotice || options.showTerminalBatchSummary || showBatchStateNotice;
   const workflowRecorder = options.recordWorkflowEvent || recordWorkflowEvent;
   const lifecycle = (event) => { try { workflowRecorder(event); } catch { /* diagnostics never changes processing */ } };
   const itemCount = queue.length;
   let child;
+  let worker;
+  let onWorkerFailure = (errorCode) => lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount, error_code: errorCode });
+  let onWorkerExit = (code, failed, pid) => {
+    if (pid !== null) lifecycle({ event: 'intake_worker_exited', outcome: 'stopped', item_count: itemCount,
+      exit_code: code, error_code: 'LOCAL_WORKER_EXITED' });
+  };
   try {
-    child = forkProcess(path.join(__dirname, 'batch-worker.js'), [], {
-      detached: true,
-      windowsHide: true,
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
-      execArgv: [`--require=${path.join(__dirname, '..', 'network-deny.cjs')}`],
-      env: batchWorkerEnvironment(options.env || process.env),
-      serialization: 'json'
-    });
+    child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment(options.env || process.env) });
+    worker = observeWorker(child, code => onWorkerFailure(code), (...args) => onWorkerExit(...args));
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
     }
@@ -257,7 +284,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
       try {
         showIntakeNotice(stage);
-        lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: itemCount });
+        lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', item_count: itemCount });
       } catch {
         lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
           error_code: 'LOCAL_NOTICE_FAILED' });
@@ -275,7 +302,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
       try {
         showState(progress);
-        lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: itemCount });
+        lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', item_count: itemCount });
       } catch {
         lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
           error_code: 'LOCAL_NOTICE_FAILED' });
@@ -300,16 +327,20 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         showFailureNotice(message.stage === 'after_checkpoint' ? 'after_checkpoint' : 'before_checkpoint');
       }
     });
-    child.once?.('exit', (code) => {
-      lifecycle({ event: 'intake_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', item_count: itemCount,
-        exit_code: code, error_code: code === 0 ? 'NONE' : 'LOCAL_WORKER_EXITED' });
-      pendingIntakes.delete(token);
+    onWorkerFailure = (errorCode) => {
+      lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount, error_code: errorCode });
+    };
+    onWorkerExit = (code, failed, pid) => {
+      lifecycle({ event: 'intake_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', item_count: itemCount,
+        exit_code: code, error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_WORKER_EXITED' });
+      if (pendingIntakes.get(token) === intake) pendingIntakes.delete(token);
+      if (failed && intake.checkpointCreated) releaseLocalBatchExecutor(token, pid);
       afterIpcDrain(options, () => {
         if (intake.noticeShown) return;
         showStateOnce(durableBatchStateProgress(token, 'local-intake-state', options));
         if (!intake.noticeShown) showFailureNotice(intake.checkpointCreated ? 'after_checkpoint' : 'before_checkpoint');
       });
-    });
+    };
     child.send({
       type: 'start-local-intake',
       batch_token: token,
@@ -319,21 +350,18 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         sourceLabel: entry.sourceLabel || entry.name
       }))
     }, (error) => {
+      if (worker.ended || worker.failed) return;
+      if (error) { worker.fail('LOCAL_IPC_FAILED'); return; }
       lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
         item_count: itemCount, error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
-      if (error) {
-        showFailureNotice('before_checkpoint');
-        pendingIntakes.delete(token);
-        try { child.kill?.(); } catch { /* only the just-created helper is targeted */ }
-      }
       child.unref?.();
     });
+    if (worker.failed) throw new Error('worker start failed');
     return { ok: true, batch_token: token, local_intake_pending: true, raw_content_sent_to_claude: false };
   } catch {
-    lifecycle({ event: 'intake_worker_exited', outcome: 'stopped', item_count: itemCount,
+    if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
+    else lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount,
       error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
-    pendingIntakes.delete(token);
-    try { child?.kill?.(); } catch { /* only the just-created helper is targeted */ }
     throw new SafeError('Die lokale Stapelübernahme konnte nicht sicher gestartet werden.');
   }
 }
@@ -359,55 +387,54 @@ function contentFreeReviewStart(progress, started) {
 function startLocalReviewExecutor(token, options = {}) {
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
   if (pendingReviews.size > 0) throw new SafeError('Eine lokale DataSecure-Prüfung läuft bereits.');
-  const forkProcess = options.forkProcess || fork;
+  const forkProcess = options.forkProcess;
   const record = options.recordWorkflowEvent || recordWorkflowEvent;
   const claimExecutor = options.claimLocalBatchExecutor || claimLocalBatchExecutor;
   const releaseExecutor = options.releaseLocalBatchExecutor || releaseLocalBatchExecutor;
   const lifecycle = (event) => { try { record(event); } catch { /* diagnostics never changes review state */ } };
   let child;
+  let worker;
+  let onWorkerFailure = (errorCode) => lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
+  let onWorkerExit = (code, failed, pid) => {
+    if (pid !== null) lifecycle({ event: 'review_worker_exited', outcome: 'stopped', exit_code: code,
+      error_code: 'LOCAL_REVIEW_WORKER_EXITED' });
+  };
+  let claimedLease = false;
   try {
-    child = forkProcess(path.join(__dirname, 'review-worker.js'), [], {
-      detached: true,
-      windowsHide: true,
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
-      execArgv: [`--require=${path.join(__dirname, '..', 'network-deny.cjs')}`],
-      env: batchWorkerEnvironment(options.env || process.env),
-      serialization: 'json'
-    });
+    child = launchBackgroundRole('review', { forkProcess, env: batchWorkerEnvironment(options.env || process.env) });
+    worker = observeWorker(child, code => onWorkerFailure(code), (...args) => onWorkerExit(...args));
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
     }
     lifecycle({ event: 'review_worker_spawned', outcome: 'ok' });
     const claimed = claimExecutor(token, child.pid);
     if (claimed.ok === false) {
-      try { child.kill(); } catch { /* only the just-created helper is targeted */ }
+      worker.fail('LOCAL_WORKER_SPAWN_FAILED');
       return contentFreeReviewStart(claimed, false);
     }
-    pendingReviews.set(token, child.pid);
-    child.once?.('exit', (code) => {
-      lifecycle({ event: 'review_worker_exited', outcome: code === 0 ? 'ok' : 'stopped', exit_code: code,
-        error_code: code === 0 ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
-      releaseExecutor(token, child.pid);
-      pendingReviews.delete(token);
-    });
+    claimedLease = true;
+    pendingReviews.set(token, child);
+    onWorkerFailure = (errorCode) => {
+      lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
+    };
+    onWorkerExit = (code, failed, pid) => {
+      lifecycle({ event: 'review_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', exit_code: code,
+        error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
+      if (claimedLease) releaseExecutor(token, pid);
+      if (pendingReviews.get(token) === child) pendingReviews.delete(token);
+    };
     child.send({ type: 'start-local-review', batch_token: token }, (error) => {
+      if (worker.ended || worker.failed) return;
+      if (error) { worker.fail('LOCAL_IPC_FAILED'); return; }
       lifecycle({ event: error ? 'review_ipc_failed' : 'review_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
         error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
-      if (error) {
-        releaseExecutor(token, child.pid);
-        pendingReviews.delete(token);
-        try { child.kill?.(); } catch { /* only the just-created helper is targeted */ }
-      }
       child.unref?.();
     });
+    if (worker.failed) throw new Error('worker start failed');
     return contentFreeReviewStart(claimed, true);
   } catch {
-    lifecycle({ event: 'review_worker_exited', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
-    pendingReviews.delete(token);
-    if (child && Number.isSafeInteger(child.pid)) {
-      releaseExecutor(token, child.pid);
-      try { child.kill?.(); } catch { /* only the just-created helper is targeted */ }
-    }
+    if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
+    else lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
     throw new SafeError('Die lokale Stapelprüfung konnte nicht sicher gestartet werden.');
   }
 }

@@ -3,6 +3,13 @@
 Status: verbindlicher Zielvertrag · Story: BL-030.1 · Entscheidungen: DS-011,
 DS-012, DS-019, DS-020 und DS-021
 
+**Scopekorrektur DS-065:** Die nachfolgende historische Secret-/Keyring-Architektur
+ist nicht produktiv zu aktivieren. Ziel bleibt die fachliche Stabilität innerhalb
+eines Stapels; der minimale neustartfeste Kontext soll lokal ohne zusätzliche
+Verschlüsselung, Keyring, Keyfile oder Passwort auskommen. Diese Integration ist
+weiterhin BL-030.2, nicht durch den RC80-Plain-Snapshot-Pfad implementiert. Die
+alten nativen Keyring-Testpflichten sind obsolet, nicht bestanden.
+
 ## Ziel und Aussagegrenze
 
 Gleich erkannte Personen beziehungsweise Organisationen erhalten innerhalb eines

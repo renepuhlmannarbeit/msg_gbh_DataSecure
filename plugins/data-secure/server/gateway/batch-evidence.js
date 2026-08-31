@@ -22,7 +22,7 @@ const OLDEST_LEGACY_SCHEMA = 'datasecure-batch-evidence/1';
 const FILE_NAME = 'DataSecure-Batch-Nachweis.json';
 const OUTBOX_PREFIX = 'batch_evidence_pending_';
 const RECEIPT_ID_RE = /^[a-f0-9]{32}$/;
-const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3']);
+const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const LEGACY_V2_RECORD_KEYS = [
   'schema', 'receipt_id', 'recorded_at', 'batch_started_at', 'batch_finished_at', 'profile', 'image_handling',

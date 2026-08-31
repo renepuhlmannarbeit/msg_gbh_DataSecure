@@ -41,6 +41,7 @@ const dnsMethods = ['lookup', 'lookupService', 'resolve', 'resolve4', 'resolve6'
 replace(dns, dnsMethods);
 replace(dns.promises, dnsMethods);
 replace(dns.Resolver?.prototype, dnsMethods);
+replace(dns.promises?.Resolver?.prototype, dnsMethods);
 
 const dgram = require('node:dgram');
 replace(dgram, ['createSocket']);

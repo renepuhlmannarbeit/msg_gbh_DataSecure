@@ -14,9 +14,11 @@
     "DS-043", "DS-044", "DS-045", "DS-046", "DS-047", "DS-048",
     "DS-049", "DS-050", "DS-051", "DS-052", "DS-053", "DS-054",
     "DS-055", "DS-056", "DS-057", "DS-058", "DS-059", "DS-060",
-    "DS-061"
+    "DS-061", "DS-062", "DS-063", "DS-064", "DS-065"
   ],
   "primary_product": "claude-plugin",
+  "additional_system_vm": { "runtime": false, "acceptance_tests": false },
+  "additional_windows_account": { "runtime": false, "acceptance_tests": false },
   "distribution": {
     "equivalent_primary_channels": ["zip", "private-marketplace"],
     "engineering_fallback": "mcpb",
@@ -60,7 +62,11 @@
   "working_copies": {
     "originals_unchanged": true,
     "originals_never_moved_or_deleted": true,
-    "private_storage_encryption": "os-user-bound",
+    "private_storage_encryption": "none-local-files",
+    "keyring_required": false,
+    "keyfile_required": false,
+    "password_required": false,
+    "encrypted_legacy_artifacts": "preserve-without-keyring-reselect-original",
     "successful_copy_retention_days": 0,
     "open_copy_maximum_retention_days": 14
   },
@@ -79,7 +85,7 @@
     "ocr_languages": ["de", "en"],
     "completion": "nonblocking-content-free-actions",
     "encrypted_inputs": "do-not-copy-or-decrypt",
-    "pseudonym_scope": "batch-encrypted-resumable",
+    "pseudonym_scope": "batch-local-resumable",
     "maximum_cowork_call_seconds": 10,
     "memory_budget": "min(25%-ram,2-gib)",
     "adaptive_parallelism": true

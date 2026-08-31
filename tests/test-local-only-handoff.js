@@ -171,4 +171,69 @@ test('an acknowledgement failure wipes every retained snapshot and stops the han
   assert.strictEqual(handoff.next().error, 'no_active_local_handoff');
 });
 
+test('a terminal page can be followed immediately by a new explicit start', () => {
+  let acknowledgements = 0;
+  let disposed = 0;
+  let candidateCalls = 0;
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => {
+      candidateCalls++;
+      if (candidateCalls > 1) {
+        assert.strictEqual(acknowledgements, candidateCalls - 1, 'finish the delivered page before enumerating new candidates');
+        return candidateCalls === 2 ? [{ token: 'b'.repeat(64), released: 1, stopped: 0 }] : [];
+      }
+      return [{ token: 'a'.repeat(64), released: 1, stopped: 0 }];
+    },
+    listBatchResults: () => ({ results: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43) }], next_cursor: null }),
+    openVerifiedMarkdownSnapshot: () => ({ bytes: 1, read: () => ({ text: 'x', next_offset: 1, has_more: false }), dispose: () => { disposed++; } }),
+    acknowledgeDeliveredPackages: () => { acknowledgements++; }
+  });
+  assert.strictEqual(handoff.start().more, false);
+  assert.strictEqual(acknowledgements, 0, 'never acknowledge before a response has been returned');
+  const second = handoff.start();
+  assert.strictEqual(second.ok, true);
+  assert.strictEqual(second.more, false);
+  assert.strictEqual(handoff._test.session().token, 'b'.repeat(64));
+  assert.strictEqual(acknowledgements, 1);
+  assert.strictEqual(disposed, 1);
+  assert.strictEqual(handoff.start().error, 'no_completed_local_batch');
+  assert.strictEqual(acknowledgements, 2);
+  assert.strictEqual(disposed, 2);
+  assert.strictEqual(handoff._test.session(), null);
+});
+
+for (const pagedDocument of [true, false]) test(`a new start preserves an unfinished ${pagedDocument ? 'document' : 'result-list'} page`, () => {
+  let reads = 0;
+  let acknowledgements = 0;
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => [{ token: 'a'.repeat(64), released: 2, stopped: 0 }],
+    listBatchResults: () => ({ results: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43) }], next_cursor: pagedDocument ? null : 'next' }),
+    readOutputs: () => { reads++; return { documents: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', text: 'x', has_more: pagedDocument, next_offset: 1 }] }; },
+    acknowledgeDeliveredPackages: () => { acknowledgements++; }
+  });
+  assert.strictEqual(handoff.start().more, true);
+  const session = handoff._test.session();
+  assert.strictEqual(handoff.start().error, 'local_handoff_active');
+  assert.strictEqual(handoff._test.session(), session);
+  assert.strictEqual(reads, 1);
+  assert.strictEqual(acknowledgements, 0);
+  handoff.cancel();
+});
+
+test('failure acknowledging a terminal session on a new start wipes it without loading new results', () => {
+  let candidates = 0;
+  let disposed = 0;
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => { candidates++; return [{ token: 'a'.repeat(64), released: 1, stopped: 0 }]; },
+    listBatchResults: () => ({ results: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43) }], next_cursor: null }),
+    openVerifiedMarkdownSnapshot: () => ({ bytes: 1, read: () => ({ text: 'x', next_offset: 1, has_more: false }), dispose: () => { disposed++; } }),
+    acknowledgeDeliveredPackages: () => { throw new Error('acknowledgement failed'); }
+  });
+  assert.strictEqual(handoff.start().more, false);
+  assert.throws(() => handoff.start(), /acknowledgement failed/);
+  assert.strictEqual(candidates, 1);
+  assert.strictEqual(disposed, 1);
+  assert.strictEqual(handoff._test.session(), null);
+});
+
 done();

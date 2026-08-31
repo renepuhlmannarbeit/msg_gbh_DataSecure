@@ -5,9 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { collectFiles, readCentralModes } from './lib/zip.mjs';
+import { readCentralModes } from './lib/zip.mjs';
+import { collectProductFiles, verifyKeyringFreeProductEntries } from './lib/product-files.mjs';
 import { verifyDataSecureArchiveModes } from './lib/archive-modes.mjs';
-import { verifyKeyringArtifacts } from './lib/keyring-artifacts.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -19,7 +19,7 @@ if (!fs.existsSync(archive)) throw new Error(`Plugin ZIP fehlt: ${path.basename(
 const target = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-plugin-zip-'));
 try {
   const entries = readZip(fs.readFileSync(archive));
-  const sourceFiles = collectFiles(path.join(root, 'plugins', 'data-secure'));
+  const sourceFiles = collectProductFiles(path.join(root, 'plugins', 'data-secure'));
   const sourceNames = sourceFiles.map((file) => file.archivePath).sort();
   const archiveNames = [...entries.keys()].sort();
   if (JSON.stringify(archiveNames) !== JSON.stringify(sourceNames)) {
@@ -55,7 +55,7 @@ try {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, bytes, { flag: 'wx' });
   }
-  verifyKeyringArtifacts(path.join(target, 'server', 'vendor', 'keyring'));
+  verifyKeyringFreeProductEntries(entries);
   for (const test of ['test-contract-skill-acceptance.js', 'test-contract-skill-matrix.js']) {
     const acceptance = spawnSync(
       process.execPath,

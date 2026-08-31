@@ -1,7 +1,12 @@
 {
   "schema": "datasecure-host-matrix/v1",
-  "checked_at": "2026-08-23",
-  "original_processing_gate": "successful_privacy_status_in_current_session",
+  "checked_at": "2026-08-31",
+  "contract_scope": "acceptance-policy-not-runtime-host-attestation",
+  "original_processing_gate": "approved_host_evidence_and_local_picker_boundary",
+  "normal_readiness_probe": "start_document_batch_from_picker_then_cancel_without_selection",
+  "support_status_is_host_attestation": false,
+  "desktop_surface_proves_local_execution": false,
+  "host_evidence_required": ["claude_version_and_execution_mode", "installed_artifact_and_local_runtime", "raw_data_boundary_observed"],
   "fallbacks_forbidden": [
     "chat_upload",
     "computer_use",

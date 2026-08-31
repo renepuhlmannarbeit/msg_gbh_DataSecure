@@ -424,5 +424,8 @@ function createPrivateArtifactCrypto(options = {}) {
 module.exports = Object.freeze({
   ENVELOPE_VERSION,
   HEADER_BYTES,
-  createPrivateArtifactCrypto
+  createPrivateArtifactCrypto,
+  createPathGuard,
+  ensureSafeTarget,
+  sameIdentity
 });

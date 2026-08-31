@@ -1,6 +1,309 @@
 # Entscheidungs-Traceability
 
-Stand: 25.08.2026
+Stand: 31.08.2026
+
+## RC81: Gegenreview-Defects unter unverändertem DS-065
+
+R80-01–05 → BL-031.1/BL-050 (Erkennung/Fachsprache); R80-06/10/11 → BL-041.7
+(Aussagen/Anleitung); R80-07–09 → BL-041.1/BL-041.7/BL-011.3 (Auswahl/Handoff/
+Abbruch); R80-12–14/17 → BL-011.13/BL-011.3 (Plain-Lifecycle/Legacy); R80-15–16
+→ BL-041.9/BL-047.1/BL-050.3 (Reviewbudget/Journal-I/O).
+
+Der [RC81-Defectbericht](../RC81_DEFECT_ABSCHLUSS_2026-08-31.md) bindet jeden Befund
+an konkrete Regressionen. `test:rc81-review` läuft als zusätzliches Post-CI-Gate;
+vollständige lokale CI und Paketbauprüfung PASS. Keine automatische menschliche
+Freigabe, neue Dialogpflicht oder Lockerung der Originalschutzregel. E1/E2/E3 und
+Runtime-/Formatfreigaben bleiben unabhängig offen. Historische RC80-Baseline folgt.
+
+## RC80 / DS-065: Plain-Arbeitskopien statt Schlüsselverwaltung
+
+BL-011.13: `gateway/private-work-store.js` ist die lokale Dateiablage ohne Keyring,
+Schlüsseldatei oder Passwort. Batchschema `datasecure-batch/4` verwendet
+`private_artifact_plain: true` (kein `private_artifact_encrypted`-Feld).
+Reviewmetadaten verwenden `schema_version: 2`, `preview_storage: local-plain`
+und `preview_encrypted: false`. Status nennt `private_work_storage: local-plain`
+und `private_work_encryption: false`.
+
+Geprüfte V2-Plain-Stapel können ohne erneutes Kopieren zu V4 übernommen werden;
+V3-/`.dsart`-Altbestände und zugehörige Metadaten bleiben unverändert gesperrt.
+Keine Entschlüsselung, Migration verschlüsselter Daten oder Keyringabfrage.
+Originale werden erneut ausgewählt, nicht verändert. Siehe
+`contracts/PRIVATE_WORK_STORAGE_V1.md` für den aktuellen Speichervertrag.
+
+Nachweisstand: Store18/Retention24, Gateway-E2E40, MCP37, gemischte Fortsetzung,
+vollständiges `npm run test:ci` (inklusive Pre-/Posttests) und `npm run build` PASS.
+`test-keyring-artifacts.mjs` prüft die schlüsselfreie Produktprojektion; ZIP/MCPB
+enthalten keine nativen Keyringmodule. `test-batch-performance-contract.js` verlangt
+erfolgreiche Verarbeitung aller Benchmarkdateien, nicht bloß gemessene Stopps.
+Ein echter Cowork-/Zielsystemnachweis bleibt offen. Native Keyring-Smoke-Tests
+und zusätzlicher Engineering-Keyring-Unterbau sind wegen Scopewechsel obsolet,
+nicht bestanden. Nachfolgende RC66–RC79-Einträge bleiben historische Nachweise.
+Stapelweite persistente Pseudonyme (BL-030.2) werden dadurch nicht aktiviert.
+
+## DS-063: Engineering-Testtrennung, BL-010.8/BL-011.13
+
+`scripts/lib/engineering-keyring-session.mjs` ist ein nicht ausgelieferter Adapter
+über den bestehenden `Entry`-Injektionspunkt: fester eigener Service, intern
+zufälliger Account, kein impliziter Nativeimport, keine ENV-/Dateiumleitung oder
+Löschung. `tests/test-engineering-keyring-session.mjs` belegt 24 Memoryfälle mit
+produktiven AES-/Commit-/Read-Modulen, einschließlich terminaler Fehlerbindung
+nach einem Security-Gegenreviewfund. `tests/test-engineering-keyring-boundary.mjs`
+prüft Produkt-/Packaginggrenzen und eingeschleuste Gegenbeispiele (18 Quelltests,
+zwei zusätzliche Archivprüfungen mit `--archives`). Beide liegen im P0-Testgate;
+das normale Build prüft auch beide fertigen Archive. Der historische Verifier
+bleibt trotz gültiger Konto-Bestätigung vor Assembly-I/O gesperrt (10 Verträge).
+Kein neuer Runtime-Release, kein OS-Keyring-Nachweis. Private Session-/Scope-/
+Buildbindung über alle Engineering-Prozesse sowie native Backendprobe bleiben E0.
+
+## RC79: gehaltene Parent-/Worker-Endreihenfolge, BL-010.8
+
+`native/sea/process-observer.cpp` ergänzt optional ein ebenfalls gehaltenes
+Parenthandle mit denselben minimalen Rechten und Image-/Lebendprüfung. Die
+native Wartefolge priorisiert ein bereits beendetes Workerobjekt und verlangt
+nach Parentende einen noch lebenden Worker. Erst dann gilt `parent-exited`.
+`sea-process-observer.mjs` verlangt dieses zusätzliche Ereignis ausdrücklich
+im neuen Modus; Worker-only bleibt abwärtskompatibel. 47 Unit-/Negativprüfungen
+und 17 native synthetische Szenarien. Kein Beweis der Prozessabstammung, kein
+fertiger SEA-Produktstapel und keine Bereinigungsfreigabe.
+
+Das Architekturreview trennte den nativen Sequenznachweis von noch offener
+Engineering-Worker-Anbindung vor Netzwerkguard, Controllerbindung und neuem
+Ergebnisprüfprozess. Letzterer muss unveränderte Originale/Finalpakete, Journal,
+Mapping und vollständige Staginginventur prüfen. DS-062 wurde in Entscheidung,
+Zielvertrag, Vision, Architektur, Backlog und Testplan konsistent aufgenommen;
+der Kanonvalidator erzwingt den VM-Ausschluss im maschinellen Zielvertrag.
+
+## RC78: nativer Prozessbeobachter, BL-010.8
+
+- `native/sea/process-observer.cpp`: ausschließlich Beobachtung, ein gehaltenes
+  Synchronisations-/Abfragehandle, lokale First-Instance-Pipe, Client-/Image-
+  Prüfung, begrenzter Handshake und begrenztes Warten. Pending I/O bleibt bis zur
+  bestätigten Completion am Leben; ohne Cancel-Drain kein Stack-Unwinding.
+- `scripts/build-sea-process-observer.mjs`: expliziter Windows-x64-Build in neuem
+  Engineering-Verzeichnis, gepinnte vorhandene Toolchain, Quell-/Binärnachweis.
+- `scripts/lib/sea-process-observer.mjs`: geschlossener monotone Zustandsvertrag,
+  uint32-Exitcodes nur nach `armed`, gelatchtes gemeinsames Ausgabebudget.
+- `tests/test-sea-process-observer-contract.mjs`: 37 reine Tests im SEA-Testgate.
+- `tests/manual/sea-process-observer-native.mjs` und eigene Fixture: 10 echte
+  synthetische Szenarien, keine Produktimporte, keine OS-Credentials. Erwartete
+  Fehlercodes/Eventfolgen werden exakt geprüft, kein beliebiger Fehler als PASS.
+
+Architektur-/Security-Agenten revalidierten Rechte, Handle-/I/O-Lifetime und
+False-PASS-Risiken. Beide Testbefunde korrigiert. Windows-Testworker bewusst
+detached und mit kurzer eigener Exitfrist; ein Exit nach Parentende ist keine
+Evidenz produktiver Fortsetzung, Datenpersistenz oder Prozessbaum-Cleanup.
+Produktverifier/Assembly/Runtime unverändert, vollständiger Parent-Crash noch E0.
+
+## RC77: Parent-Buildkonsistenz, BL-010.1/BL-010.8
+
+`scripts/lib/sea-launcher-provenance.mjs` rekonstruiert Bootstrap, feste SEA-
+Konfiguration, vollständige Plugin-Source-Evidenz und geschlossene Toolchain-
+Dateiinventare (inklusive tatsächlich aufgelöstem Commander). Der Builder nutzt
+diese Bytes und prüft vor Evidenzveröffentlichung erneut. Die offizielle Node-
+Archivprüfung und das kopierte Nodeprogramm sind an denselben Eingangs-Hash gebunden.
+`build-sea-plugin.mjs` sowie die drei Parent-Verifier erzwingen V2-Nachweise vor
+Staging/Spawn; Staging bleibt an der ursprünglichen Quellenaufnahme gebunden.
+
+`test-sea-launcher-provenance.mjs`, erweiterte Assembly-, Launcher- und Worker-
+Vertragstests prüfen Quellen-/Toolchainmutation, Konfigurationsdrift, Typen und
+geschlossene Schemas. Gegenreview schloss drei P2-Befunde: Quellen-Rebaselining,
+fehlende Commanderbindung und implizite Hash-Typkonvertierung. Siehe
+`contracts/SEA_ASSEMBLY_EVIDENCE_V2.md` und `docs/TESTING.md`.
+Kein Produktions-Hotpath geändert; keine neue Runtime-/Hostfreigabe.
+
+Offen bleibt die unveränderbare Laufzeitbindung externer Nebenrollenmodule:
+Buildkonsistenz ist keine kryptografische Binärattestierung. Finale Rollenassembly,
+Parent-Crash- und reale Zielsystem-/Cowork-Evidenz bleiben eigene Arbeitsanteile.
+
+## RC76: Staging-Recovery, BL-010.8/BL-011.8/BL-011.11
+
+`gateway/package-staging.js` besitzt den getrennten `.datasecure-staging`-Bereich
+neben Output: gebundener Rootmarker, unveränderlicher/fsync-bestätigter Ownerrecord,
+Capability vor dem ersten Schreiben in die Stage, Rename auf demselben Dateisystem. Keine
+zusätzliche Laufzeitbibliothek: vorhandene Node-Datei-/Kryptoprimitiven und
+`batch-journal-io.js` werden wiederverwendet. Der neue kleine Koordinator bindet
+produktspezifische Paket-/Jobidentitäten; ein generischer Tempordner-Cleaner
+besitzt diese Eigentumsinformation nicht. Keine
+Rücknahme fertiger Pakete bei anschließendem Receiptfehler. `common.js` erweitert
+private Baumreinigung um exakte Parent-/Zielidentität und vollständige Preflight-
+Inventur vor der ersten Löschung; Links und Hardlinks führen zum sicheren Stopp.
+`orchestrator.js` führt Recovery einmal im Vorbereitungskontext aus und nutzt
+gebundene Publish-/Discard-Operationen. Lebende und unbekannte PIDs bleiben geschützt.
+
+`test-package-staging.js`, `test-package-staging-integration.js`,
+`test-safe-private-tree.js`, `test-source-folder.js` und `test:staging` prüfen
+Besitzbindung, Manipulation, Abbruch und vorangegangene Ergebnisse. Integration
+ohne `deps.packageId` deckt den im Gegenreview gefundenen Einzeldateinamenskonflikt
+ab. Das normale Gateway bleibt kompatibel. `sea-batch-probe.js` erweitert die
+vollständige Outputinventur um eine schreibfreie Staginginventur; kein Verstecken
+von Resten durch die neue Ablage. Tests sind keine Cowork-/SEA-/Power-Loss-Abnahme.
+
+Alte Output-Dotverzeichnisse und vor vollständiger Bindung entstandene leere
+Initialisierungsreste werden weder übernommen noch automatisch gelöscht. Bei
+unklaren aktuellen Stagingdaten: `STAGING_RECOVERY_BLOCKED`, lokale IT-Prüfung.
+Keine Rohinhalte/Pfade/Ownerdaten in diesem Diagnoseereignis.
+
+## RC75: Worker-Crash/Fortsetzung, BL-010.8/BL-011.11
+
+`sea-batch-probe.js` beobachtet read-only das letzte `processing/extracted`-Item
+nach Parser-`close`, erfasst zuvor freigegebene Paketdateien und beendet nur den
+eigenen Worker. Anormaler Exit plus Disconnect, akzeptierte Killanforderung,
+unveränderte Item-IDs und weiterhin nicht veröffentlichter letzter Eintrag sind
+Voraussetzungen für `continueMostRecentBatch`. Token, Lease und
+`start-local-batch` sind an dieselbe Fortsetzung gebunden; frühere Pakete werden
+vor/nach Fortsetzung auf Bytes, Hashes und Identitäten geprüft.
+
+`test-sea-batch-resume-contract.js` prüft echte private Predicates und die
+Parser-`close`/`onExtracted`-Kopplung; Sparse-Array-Gegenreviewfund geschlossen.
+`test-sea-batch-resume-lifecycle.js` ergänzt isolierte Ablauf-/Fehler-VM-Tests.
+Keiner davon startet Produktworker oder lädt den Keyring. Verifier und Bootstrap
+prüfen den erweiterten Ergebnisvertrag. Echte native Ausführung offen; kein
+GUI-Starter-/Cowork-/Parent-Crash-/Power-Loss-Nachweis. Siehe `docs/TESTING.md`.
+
+Neuer Quellbefund **BL-010.8/BL-011.8/BL-011.11**: `orchestrator.js` erstellt
+Output-Staging-Verzeichnisse vor der Textanonymisierung und entfernt sie bei
+Fehler nur im `catch`. Hard-Crash umgeht diesen; Resume/Retention bereinigen die
+Dot-Verzeichnisse nicht. Native Reproduktion ausstehend, kein belegter Rohdatenleck.
+Strikte Output-Inventur bleibt unverändert; Recovery mit sicherer Eigentümerschaft
+und Negativtests wurden anschließend in RC76 ergänzt (siehe oben).
+
+## RC74: native Stapelprobe, BL-010.1/BL-010.8
+
+`scripts/verify-sea-batch.mjs` fordert ein ausdrückliches Testkonto-Opt-in vor
+Artefaktzugriff/Spawn, bindet Parenthash und rekonstruierte Parserrolle, kopiert
+den geprüften Quellbaum in einen frischen synthetischen Scope und startet zwei
+Fälle seriell. Kein CI-Aufruf des nativen Harness, kein Credential-Override und
+keine Löschung bei ungewissem Workerende. Dieser Teilvertrag attestiert nicht
+die gesamte eingebettete Parent-/Nebenrollenimplementierung oder OS-Isolation.
+
+Der feste Branch in `native/sea/bootstrap.cjs` und `sea-batch-probe.js` prüfen
+SEA/Windows/IPC, geschlossenen Startframe, linkfreie Scopeidentität und beide
+Dateiwurzeln vor Produktimport. Nach dem realen Workerabschluss werden Journal,
+eindeutige Pakete, Manifestgrade, PII, Qualifikation, Mapping und unveränderte
+Originalbytes geprüft. `sea-batch-probe-fixtures.js` enthält nur feste synthetische
+TXT/CSV/DOCX-Daten. Der Security-Gegenreviewfund zur unvollständigen Namensprüfung
+ist durch Bestandteil-/Formatierungsprüfungen und Negativtests geschlossen.
+
+`test-sea-batch-probe-contract.js`, `test-sea-batch-result-contract.js`,
+`test-sea-batch-verifier.mjs` und erweiterte Bootstraptests laufen in
+`test:sea-gates`, ohne native Positivjobs oder Keyringzugriffe. Reale positive
+Läufe sind nicht belegt. Worker-Resume wurde anschließend in RC75 ergänzt;
+Parent-Crash bleibt offen. Keine V2-/SEA-Freigabe.
+
+## RC73: Executor-/Anzeigen-Lifecycle, BL-010.8/BL-041.9/BL-012.6
+
+`gateway/batch-executor.js` registriert Fehlerbehandlung vor der PID-Prüfung.
+Spawn-/IPC-Fehler werden nur als feste Diagnosen ausgegeben; ein fehlendes
+Exit-Ereignis darf nicht als beendeter gestarteter Worker gelten. Fehlerpfade
+beenden nur das eigene Kind, behalten Pending/Lease bis zum Ende und schützen
+Nachfolger vor verspäteten Callback-/Exit-Ereignissen. Keine Pollingschleifen,
+zusätzlichen Benutzerabfragen oder teuren Journalaktionen im erfolgreichen Start.
+
+`companion/completion-summary.js` entkoppelt auch Restzustands-/Fehlerhinweise vom
+MCP-Prozess. Reale GUI-Erreichbarkeit/Fokus und Cowork-Permissions bleiben E1/E2;
+die Vertragstests belegen den nicht blockierenden Programmaufruf. Nachweise und
+Reviewgrenzen stehen in `docs/TESTING.md`.
+`test-batch-executor-startup.js` prüft zusätzlich voreiliges/doppeltes Exit-Logging;
+`workflow-diagnostics.js` und sein Test unterscheiden asynchronen Anzeigenstart
+(`completion_notice_dispatched`) von einem abgeschlossenen synchronen Aufruf.
+
+Der Testplan für positiven SEA-Stapel/Crash/Resume bleibt im Rollenvertrag.
+Sein echter OS-Keyring ist nur in einer bereitgestellten isolierten Testumgebung
+zu benutzen: temporäre Rootpfade allein genügen nicht. Keine neue Secretstore-
+Umgebungsoption und keine Veränderung bestehender Produktcredentials.
+
+## RC72: feste Nebenrollen und Companion-Lifecycle, BL-010.1/BL-010.8
+
+`background-role-launcher.js` vereinheitlicht drei feste Rollen; Batch-Intake und
+Fortsetzung teilen die Batchrolle. `native/sea/bootstrap.cjs` prüft Windows/SEA,
+IPC, gebundene Parserrolle, linkfreie Einträge und den unveränderbaren Netzwerk-
+Guard vor Rollenimport. Node-Aufrufe bleiben erhalten. SEA erlaubt keine
+ausführungsändernden Testoptionen oder geerbten Node-Start-/IPC-Variablen.
+
+42 Launcher-, 22 Bootstrap-, neun Companion-Start- und sechs Probe-Lifecyclegruppen
+ergänzen den Vertrag.
+`sea-background-probe.js` ergänzt den echten Parent-Verifier um private IPC- und
+Negativfälle; keine vollständige positive Job-/Privacy-Freigabe. Ein hängender
+Ready-Handshake endet technisch begrenzt; Schlüsselbereinigung und Ablehnung
+offener Anfragen hängen nicht von einem späteren Exit ab. Beobachtete Exits und
+bereits angeforderte Beendigungen verhindern erneutes Beenden einer alten PID.
+Fachagenten-Gegenreview und konkrete Testergebnisse: `docs/TESTING.md`.
+
+DS-004/DS-052/DS-053/DS-060 bleiben unverändert. Gesamte Nebenrollen-Quellbindung,
+positiver Stapel-/Resume-Lifecycle, finale Assembly/V2 und reale POSIX-Nachweise
+bleiben E0; echte Cowork-Installation und Bedienung E1/E2.
+
+## RC71: echter gebundener Parent-/Parser-Dispatch, BL-010.1/BL-010.8
+
+`sea-parser-role.js` validiert die unveränderbar in `native/sea/bootstrap.cjs`
+eingebettete Rolle, feste Zielpfade, Binärformat/-hash und vollständige Parser-
+Closure. Identitätscache, begrenztes FD-Lesen und erneute Pfadprüfung verhindern
+unnötiges Wiederhashen und erkennen beobachtbare Änderungen. `runtime.js` nutzt
+den Resolver nur bei echtem SEA, verbietet Start-Seams und schwachen POSIX-Fallback.
+Getter-Negativtests sichern die einmalige Optionsauswertung ab.
+
+25 Resolver- und acht Dispatchgruppen ergänzen den Vertrag. Die echte Probe
+`verify-sea-parent-parser.mjs` prüft fünf Textformate wiederholt im SEA-Parent,
+MCP-Start und feste Manipulationsfehler ohne Host-Node im Childpfad. Kein E1-,
+Privacy-Release- oder kombinierter V2-Nachweis; Quellbindung ist keine Attestierung
+der ganzen Parent-Implementierung. Weitere Rollen/Assembly/POSIX bleiben E0.
+[Rollenvertrag](contracts/SEA_PARSER_ROLE_V1.md), DS-004/DS-052/DS-053/DS-060.
+
+## RC70: feste Parserrolle und vorgezogene Workergrenze, BL-010.1/BL-010.8
+
+`parser-worker.js` prüft Rechte/Guard vor Import. `network-deny.cjs` schützt nun
+auch `dns.promises.Resolver`; beide Korrekturen real unter Node 22/24 getestet.
+`native/sea/parser-bootstrap.cjs` bettet den Parser mit fester Startkonfiguration
+ein. Builder/Verifier rekonstruieren die komplette Closure und prüfen Config,
+Toolchain, Quell- und Binärhash; 13 Provenance-, fünf Rollen- und acht
+Workergrenz-Prüfgruppen ergänzen `test:sea-gates`. Die echte Windows-Probe bleibt
+getrennt von den noch fehlenden MCP-Parent-/Nebenrollen-/POSIX-Nachweisen.
+[Rollenvertrag](contracts/SEA_PARSER_ROLE_V1.md), DS-004/DS-052/DS-053/DS-060;
+keine Änderung an Formatfreigabe, Anwenderablauf oder öffentlichem Node-Start.
+
+## RC69: SEA-Engineering-Gates, BL-010.1/BL-010.8
+
+`sea-source-evidence.mjs` bindet Version, Pluginbaum, Launcher-Vertrag und
+Dispatcher. `build-sea-plugin.mjs` prüft V2-Nachweise, linkfreie begrenzte Eingaben,
+exklusive Ausgabe und POSIX-Modi. `test-sea-source-evidence.mjs`,
+`test-sea-plugin-assembly.js`, `test-sea-worker-boundary.js` sowie
+`test-sea-launcher-contract.js` bilden `test:sea-gates`.
+Echter frischer Windows-Start PASS, Parserkern TXT/DOCX FAIL; Vier-Ziel-Worker-
+Dispatch und Rechte-/Netzwerk-Negativmatrix bleiben E0-offen. Die historischen
+Start-only-Nachweise unten sind **keine aktuelle positive Parser-/V2-Evidenz**.
+[Paketvertrag](contracts/SEA_ASSEMBLY_EVIDENCE_V2.md); DS-004/DS-052/DS-053/DS-060
+und die produktive `node`-Konfiguration bleiben unverändert.
+
+## RC68: BL-042.3, DS-042/DS-043/DS-051/DS-055/DS-056
+
+Passive Start-Momentaufnahme statt zusätzlichem Steuerpfad. `status-app/model.js`
+projiziert ausschließlich feste öffentliche Startzustände; `server.js` verknüpft
+nur den Picker und liefert genau eine hashgeprüfte Offline-Ressource nach lokaler
+Pilotfreigabe und UI-Aushandlung. Alle Tools bleiben für die App unsichtbar/nicht
+aufrufbar (`visibility: ['model']`); der Host muss diese Sichtbarkeit durchsetzen.
+`ui/status-card/` verwendet das offizielle SDK ohne Anwendungsaktionen/Netzwerk.
+Nachweis: `test-status-app-model.mjs`, `test-status-app-server.js`, erweiterte
+`test-mcp-protocol.js`, `build-status-app.mjs --check` und synthetischer Browser-
+Host mit axe. [Pilotvertrag](STATUS_APP_PILOT_V1.md). Keine Cowork- oder
+Barrierefreiheitsfreigabe; DS-056-Gates und Rest-E0 bleiben offen.
+
+RV-06 / BL-011.13: `test-gateway-e2e.js` injiziert auch im visuellen Timeoutfall
+`reviewCrypto`, hält die strenge Resteprüfung bei und fordert zwei OCR-Aufrufe.
+DS-020/DS-050-Schutz bleibt unverändert; Produktions-Keyring-Metadaten werden nicht
+als Teil eines Dokument-Cleanups gelöscht. Diagnose per synthetischem In-Memory-
+Keyring bestätigt; keine neue Runtimefunktion.
+
+## RC67-Korrekturscheibe: bestehende Entscheidungen, kein neuer Scope
+
+RV-01 bis RV-05 aus dem [offiziellen Claude-Abgleich](../REVIEW_CLAUDE_BEST_PRACTICES_2026-08-31.md)
+sind bestehenden Stories zugeordnet: BL-012.2/BL-012.6/BL-052.1 (Fehlerhilfe/UAT),
+BL-041.7/BL-042.2 (Normal-/Supportvertrag), BL-041.2/BL-041.4 (Skill/Eval),
+BL-010.8/BL-051.1 (lokaler Validator), BL-010.7/BL-051.6 (Hostevidenz).
+Nachweise: `test-mcp-protocol.js`, `test-completion-summary.js`,
+`test-rc63-uat-kit-contract.js`, `test-skill-eval-corpus.js`,
+`test-claude-local-validation.mjs`, `test-host-matrix.js` und lokale
+`claude plugin validate`-Aufrufe. Diese E0-Korrekturen ersetzen keine E1/E2/E3-
+Nachweise; bestehende DS-Entscheidungen und Releasegrenzen bleiben unverändert.
 
 Jede angenommene Entscheidung muss mindestens einer Backlogposition zugeordnet sein.
 „Zielnachweis“ beschreibt die verlangte Evidenz, nicht den heutigen RC36-Status.
@@ -70,6 +373,10 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | DS-059 | BL-011, BL-030 | verschlüsselter neustartfester Pseudonymkontext und terminale Löschung |
 | DS-060 | BL-001, BL-010, BL-020, BL-024, BL-051 | gepinnte Offline-Lieferkette, Integrität, Lizenz, SBOM und keine Runtime-Downloads |
 | DS-061 | BL-003, BL-011 | verbindliche Refactoring-/Migrationsreihenfolge, getrennte Struktur-/Verhaltensänderungen, Pflichtgates und Rollback |
+| DS-062 | BL-010, BL-011, BL-050, BL-051 | keine zusätzliche System-VM für Produkt oder Abnahme; echte lokale Zielsysteme, OS-Testkonto nur nach Abstimmung, keine produktiven Credentials für Tests verwenden |
+| DS-063 | BL-010, BL-011, BL-050, BL-051 | ersetzt Kontooption aus DS-062: kein zusätzliches Windows-Konto; sichere Testtrennung im vorhandenen Konto ist E0, keine Nutzer-Infrastrukturaufgabe oder Freigabe für produktive Credentials |
+| DS-064 | BL-010, BL-011, BL-041, BL-050, BL-051 | vorhandene Memorytests plus kleiner nativer Schlüsselbund-Smoke-Test; zusätzlicher Engineering-Session-Unterbau und vollständige Keyring-/Crash-Matrix zurückgestellt; normaler Cowork-Ablauf hat Vorrang, Produktschutz unverändert |
+| DS-065 | BL-010, BL-011, BL-030, BL-040, BL-041, BL-050, BL-051 | ersetzt Verschlüsselungs-/Keyring-Pflichten aus DS-050/DS-059/DS-061/DS-063/DS-064: lokale Plain-Arbeitskopien ohne Keyring, Keyfile oder Passwort; Original-/Releasegrenze und Aufbewahrung neuer Kopien bleiben; verschlüsselte Altbestände unverändert bewahren, Original neu auswählen; native Keyring-Testaufgaben obsolet, nicht bestanden |
 
 ## Offene Review-Nachweise vom 23.08.2026
 
@@ -79,7 +386,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | BL-011.9 | V8-Heap/Parent-Timeout ersetzen auf POSIX keine harte native Ressourcen- und Prozessbaumgrenze | gebündelter Supervisor plus reale CPU-/RAM-/Flood-/Child-/Timeout-Matrix auf macOS x64/ARM64 und Linux x64 |
 | BL-012.8 | macOS-AppleScript referenziert bei vertagbarem Review einen nicht angebotenen Cancel-Button | validierter Aktionsbuilder, Unit-Invarianten und echter `osascript`-/Fresh-Install-E2E-Nachweis |
 | BL-010.7 | Cowork-Dokumentation zu local MCP in Cloud-/Web-/Mobil-Sitzungen ist widersprüchlich | `HOST_MATRIX_V1.json`, kanonischer Host-Gate-Text und `test-host-matrix` umgesetzt; beobachtete versionsgebundene Hostabnahme bleibt offen |
-| BL-010.8 | Plugin-ZIP startet weiterhin `node`; die MCPB-Runtimegarantie gilt nicht automatisch. Der unveröffentlichte SEA-Pilot bindet Node 22.23.2/postject, vier Herstellerarchive und einen festen Ein-Plugin-Dispatcher. Windows x64 bestand byteidentischen Doppelbuild sowie echten `initialize`-/`privacy_status`-Handshake bei leerem `PATH`; Produktumschaltung bleibt geschlossen. | manuelle echte macOS-x64-/ARM64- und Linux-x64-Zellen, universelles ZIP-/Marketplace-Assembly, frisches Konto/VM ohne System-Node, Update und Rollback |
+| BL-010.8 | Plugin-ZIP bleibt bei `node`. RC71 bindet den separaten Parser, RC72 feste Nebenrollen an den Windows-Parent; Rechte, Parserclosure, Dispatch und IPC geprüft. Native POSIX-Pflicht simuliert; V2-Assembly/Dateimodetests implementiert, keine positive kombinierte V2-Hostevidenz. | zuerst E0: positiver SEA-Stapel-/Resume-Lifecycle, ganze Nebenrollenbindung, reale POSIX-Integration, finale Rollenassembly und kombinierte Rechte-/Netzwerkmatrix; danach echte Vier-Ziel-Kernläufe, ZIP-/Marketplace-Fresh-Install, Update und Rollback |
 | BL-041.4 | Direkte Prompts und Skill boten bei offenen Stapeln nicht dieselben Entscheidungen | kanonischer Drei-Wege-Vertrag und Contract-Tests umgesetzt; Modelltest und beobachtete Fresh-Install-Startparität bleiben offen |
 | BL-041.5 | Maximalstapel konnte bis zu 26.700 Modell-Leseaufrufe erzeugen | abgekoppelter Worker, Crash 1/50/100, MCP-Prozesswechsel, getrennte lokale Freigabe und begrenzter namenfreier Leseplan umgesetzt; 500-MB-/Host-/Rechnerneustart-/Drei-OS-/Cowork-Gates offen |
 | BL-042.2 | MCP-Tools besitzen keine vollständige destruktiv/read-only/idempotent Semantik | Strict-Validator, Policy-Test und echte Cowork-Manual-/Auto-/Skip-Abnahme |
@@ -143,7 +450,7 @@ Stories erhalten zusätzlich unten einen überprüfbaren Umsetzungsnachweis.
 | BL-051.3/BL-052.1/BL-052.3 RC63-UAT-Vorbereitung (E0) | `generate_synthetic_acceptance_data.py`, `fixture-layout.json`, `requirements.txt`, `RC63_UAT_TEST_KIT/README.md`, `STEP-BY-STEP.md`, `EXPECTED_RESULTS.csv`, `EVIDENCE_LOG.csv` und `test-rc63-uat-kit-contract.js` liefern einen einzigen reproduzierbaren Weg zu exakt 111 synthetischen Eingängen (4 positiv, 2 Review, 5 gesperrt, 100 Batch). Pfade, Gruppenzähler und tatsächliche Preflight-Codes sind maschinengeprüft; Build- und Produktversion bleiben für die prüfende Person leer. Menschliche E1/E2/E3-Abnahme bleibt ausdrücklich offen. |
 | BL-011.8 (Teilnachweis) | `gateway/common.js`, `gateway/batch.js` und `test-batch-session.js` belegen zentrale literale Kindverzeichnisse, wiederholte Link-/Containment-/Geräte-/Inode-Prüfung, einen echten Windows-Junction-Stopp sowie reale Austauschproben direkt vor Snapshot und Recovery und einen verschachtelten Linkstopp vor Cleanup. Das Cleanup verwendet keine rekursive OS-Löschung mehr, sondern lstat-/inode-gebundene Einzelobjekt-Entfernung. Gerettete und externe Daten bleiben unverändert. Native sonstige Reparse-Attribute, echte POSIX-Matrix und vollständig handle-relative Löschprimitive bleiben offen. |
 | BL-011.9 (Teilnachweis) | `native/ocr/pilot/posix-sandbox.c`, `server/posix-supervisor.js`, `runtime.js`, `scripts/lib/posix-supervisor-artifacts.mjs`, `scripts/build-plugin.mjs`, `scripts/build-mcpb.mjs`, `contracts/POSIX_SUPERVISOR_PACKAGING_V1.md`, `test-posix-supervisor.js` und `test-posix-supervisor-packaging.mjs` pinnen CPU-, Core-, Adressraum-, Daten-, Dateigrößen-, Dateideskriptor-, RSS- und Wallclockgrenzen, Prozessgruppe/Reaping und einen inhaltsfreien Vertragsmarker. Der allgemeine Parser nutzt einen vorhandenen POSIX-Supervisor nur nach fester Zielauflösung, no-link Binär-/Hash-/Format- und Contract-Prüfung; ein vorhandenes defektes Artefakt stoppt ohne Parser-Spawn. ZIP- und MCPB-Builds verweigern jede unvollständige, verlinkte, falsch formatierte oder falsch gehashte zukünftig vorhandene POSIX-Zielanlage und setzen nur deren Ausführmodus. Paketierte Zielbinärhashes sowie adversariale macOS-/Linux-Proben bleiben offen. |
-| BL-010.8 (Windows-Teilnachweis, kein Release) | `launcher-contract.json`, `bootstrap.cjs`, `datasecure-mcp`, Build-/Verifikations-/Assemblyskripte, `test-sea-launcher-contract.js`, `test-sea-plugin-assembly.js` und der nur manuell startbare Vier-Ziel-Workflow belegen feste Quellen/Hashes, deterministischen Windows-Doppelbuild, echten installationsfreien MCP-Handshake und fail-closed Vier-Artefakt-Assembly. `RUNTIME_START_MATRIX_V1.json` hält die Produktumschaltung bis zu allen übrigen OS-/Lifecycle-Nachweisen geschlossen. |
+| BL-010.8 (Teilnachweise, kein Release) | Gepinnter Launcher-Vertrag, historischer Windows-Doppelbuild und erneuter MCP-Start PASS. RC69 ergänzt begrenzte source-gebundene V2-Assembly, sichere Ausgabe und Modetests; echte TXT-/DOCX-Verarbeitung per SEA FAIL. `test:sea-gates` belegt den NO-GO-Status, keine erfolgreiche Workerisolation. Produktumschaltung bleibt bis zu technischem Workerfix UND Zielsystem-/Lifecycle-Nachweisen geschlossen. |
 | BL-011.5 | `gateway/batch.js`, `gateway/batch-maintenance.js`, `index.js`, `test-batch-session.js` und `test-batch-maintenance.js` belegen sofortige oder nachgelagerte, reguläre-Datei-gebundene Arbeitskopienbereinigung, eine globale Owner-Sperre für Startup-Recovery und periodische Ablaufbereinigung, begrenztes sechs-stündiges Scheduling, Fehlerisolation und das einmalige Stoppen beim Server-Shutdown; ein lebender Batch wird weder umklassifiziert noch bereinigt |
 | BL-011.7 (Teilnachweis) | `gateway/batch.js`, `gateway/status.js`, der Dokument-Skill sowie Batch-/MCP-Tests belegen einen inhaltsfreien Aktiv-Wahrheitswert, der konkurrierende Auswahl- und Fortsetzungsdialoge verhindert. Seit RC64 ist die Crash-Recovery-Evidenz aus dem Repository reproduzierbar: `tests/lib/crash-batch-worker.js` ist getrackte Testquelle statt einer unversionierten Datei unter dem pauschal ignorierten `tests/fixtures/`, und `test-batch-session.js` läuft mit 67 von 67 Fällen einschließlich Absturz und Fortsetzung an Position 1, 50 und 100 ohne Doppelfreigabe. `test-architecture-contracts.js` prüft, dass jedes von einem Test über einen literalen Pfad adressierte Projektskript existiert und getrackt ist, damit dieselbe Lücke nicht erneut entsteht. Beobachtete Gebrauchstauglichkeit auf den Zielsystemen bleibt E1/E2. |
 | BL-012.6 (Teilnachweis) | `gateway/batch.js` und `test-batch-user-status.js` belegen für jede unterstützte Batchphase einen kurzen deutschen Anwenderstatus und genau eine sichere nächste Aktion. Status, Restzeit und unbekannte Persistenzphasen enthalten keine Namen, Pfade, Endungen oder Token; eine unbekannte Phase darf nie in eine weitere Verarbeitung fallen. Die native Fortschritts- und Zielplattformabnahme bleibt offen. |
@@ -347,8 +654,31 @@ Der zehnte Content-Graph-Vertragstest `validation rejects hidden text gaps,
 overlapping nodes, reordered ids and text after images` schließt die Validatorlücke:
 fortlaufende IDs, geordnete nicht überlappende Textbereiche, vollständige Abdeckung
 aller Nicht-Leerraumzeichen und die Reihenfolge Text vor Assets sind jetzt zwingend.
-Damit ist ein syntaktisch valider, aber inhaltlich lückenhafter Parsergraph kein
-akzeptierter Coverage-Nachweis.
+Damit ist ein syntaktisch valider Graph mit Lücken im erzeugten Markdown kein
+akzeptierter Coverage-Nachweis. Dies beweist allein nicht, dass der Parser alle
+Inhalte des Originaldokuments extrahiert hat.
+
+RC69 (BL-020.1/BL-020.2/BL-022.1): Die Parsergrenze bindet das Graphformat an die
+vertrauenswürdige Eingabeextension und Bildlocators exakt an Attachment-Quellteile.
+MIME-Typen werden unabhängig typgeprüft; Schema und Runtime sperren Steuerzeichen,
+Unicode-Zeilentrenner und nichtkanonische `!/`-Ketten. 17 Graph-Testgruppen enthalten
+1.200 Fälle gegen einen unabhängigen Segmentvergleich; 17 Isolationstests prüfen
+auch Format-Substitution über drei injizierte Plattformverträge. Der Fake-Worker
+lässt vor seinem Abschluss reale Stream-Flush-Callbacks laufen; EPIPE und
+unvollständige Übertragung bleiben gesperrt. Das 1.000-Knotenlimit greift vor Aufbau.
+DOCX-Story-/Differentialtests ergänzen den getrennten Original-Inhaltserhaltnachweis
+für verschachtelte Tabellen und Text neben Textfeldern. Keine neue Formatfreigabe.
+
+`test-docx-structure.js` ergänzt 30 Prüfgruppen mit Body, Header, Footer,
+Kommentaren, Fuß- und Endnoten, 48 missgebildeten Story-Kombinationen, 5.000
+flachen Zeilen sowie Tiefen-/Ausgabebudgets. Namen und Kontakte in zuvor
+verlorenen Positionen werden nach Extraktion de-identifiziert; Scrum.org-PSPO-I
+und Health-IT-Fachtext bleiben erhalten. Das Mammoth-Orakel umfasst jetzt
+96 reguläre und 24 verschachtelte Tabellendokumente sowie 16 Textfelddokumente.
+Mammoth ignoriert moderne `wps`-Textfelder: nur äußere Läufe werden damit
+verglichen, innere Texte haben separate feste Sollwerte. Kein Vollrenderer-
+oder realer Word-Generator-Nachweis. `npm run test:parser-contract` ist als
+Posttest in `test:ci` integriert; `npm test` enthält die Strukturtests ebenfalls.
 
 Der elfte Test `embedded OOXML locators retain the complete container chain` belegt,
 dass auch rekursive Einbettungen bis zum inneren OOXML-Part eindeutig lokalisierbar

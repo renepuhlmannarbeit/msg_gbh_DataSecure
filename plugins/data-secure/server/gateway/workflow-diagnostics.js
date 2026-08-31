@@ -21,7 +21,7 @@ const EVENTS = new Set([
   'intake_worker_spawned', 'intake_ipc_dispatched', 'intake_ipc_failed',
   'intake_checkpoint_created', 'intake_processing_started', 'intake_terminal_state',
   'intake_worker_exited', 'completion_notice_started', 'completion_notice_finished',
-  'completion_notice_failed', 'mcp_start_response',
+  'completion_notice_dispatched', 'completion_notice_failed', 'mcp_start_response',
   'review_worker_spawned', 'review_ipc_dispatched', 'review_ipc_failed',
   'review_reconstruction_started', 'review_reconstruction_finished', 'review_reconstruction_failed',
   'review_ui_started', 'review_ui_finished', 'review_ui_failed',
@@ -36,7 +36,7 @@ const PHASES = new Set([
 const ERROR_CODES = new Set([
   'NONE', 'LOCAL_SELECTION_CANCELLED', 'LOCAL_PICKER_FAILED', 'LOCAL_WORKER_SPAWN_FAILED',
   'LOCAL_IPC_FAILED', 'LOCAL_WORKER_EXITED', 'LOCAL_NOTICE_FAILED', 'INTERNAL_FAILURE',
-  'LOCAL_REVIEW_FAILED', 'LOCAL_REVIEW_TIMEOUT', 'LOCAL_REVIEW_CANCELLED',
+  'LOCAL_REVIEW_FAILED', 'LOCAL_REVIEW_TIMEOUT', 'LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_TOO_LARGE',
   'LOCAL_REVIEW_WORKER_EXITED'
 ]);
 

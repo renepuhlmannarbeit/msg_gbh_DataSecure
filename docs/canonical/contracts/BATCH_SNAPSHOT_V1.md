@@ -3,6 +3,12 @@
 Status: verbindlicher Zielvertrag · Story: BL-011.1 · Entscheidungen: DS-010,
 DS-020, DS-021, DS-022 und DS-036
 
+RC80 / DS-065: Neue Snapshots sind lokale Plain-Arbeitskopien ohne zusätzliche
+Verschlüsselung. `datasecure-batch/4` und `private_artifact_plain: true` trennen sie
+eindeutig von alten verschlüsselten V3-Beständen. Details und Altbestandsschutz:
+[lokaler Speichervertrag](PRIVATE_WORK_STORAGE_V1.md). Original- und
+Integritätsbindungen dieses Vertrags bleiben erhalten.
+
 ## Sicherheitsziel
 
 Ein gestarteter Auftrag verarbeitet ausschließlich private Arbeitskopien, deren Bytes

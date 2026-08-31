@@ -26,7 +26,7 @@ function verified(item) {
 }
 
 test('mixed terminal V2 and encrypted V3 batches project the exact grades and allowed omissions', () => {
-  for (const schema of ['datasecure-batch/2', 'datasecure-batch/3']) {
+  for (const schema of ['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4']) {
     const projected = projectBatchResults({
       schema,
       items: [

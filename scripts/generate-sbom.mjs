@@ -1,9 +1,8 @@
 // Generates a deterministic SPDX 2.3 SBOM for the two distributable archives.
 //
-// DataSecure intentionally has no third-party runtime dependencies. The SBOM
-// therefore describes the product package and binds it to the exact ZIP/MCPB
-// files through SHA-256 checksums. SHA256SUMS is generated separately so an
-// operator can verify downloaded release files without an SPDX parser.
+// No runtime package installation is required. Embedded components have their
+// own versioned manifests/notices; the status-card inventory is included below.
+// This archive inventory is not a full inventory of every native/OCR dependency.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -49,9 +48,23 @@ const nativeInputs = [
 });
 
 const safeId = (name) => `SPDXRef-File-${name.replace(/[^A-Za-z0-9.-]+/gu, '-')}`;
+const statusPrefix = 'plugins/data-secure/server/status-app/';
+const statusFiles = ['status-card.html', 'artifact.json', 'THIRD_PARTY_NOTICES.md', 'bundled-dependencies.json'].map(name => {
+  const bytes = fs.readFileSync(path.join(root, statusPrefix + name));
+  return { name: statusPrefix + name, sha1: crypto.createHash('sha1').update(bytes).digest('hex'), sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
+});
+const statusInventory = JSON.parse(fs.readFileSync(path.join(root, statusPrefix, 'bundled-dependencies.json'), 'utf8'));
+if (statusInventory.schema !== 'datasecure-status-app-dependencies/v1' || !statusInventory.dependencies.length) throw new Error('Invalid status-card inventory');
+const statusPackages = statusInventory.dependencies.map(item => ({
+  name: item.name, SPDXID: `SPDXRef-StatusPackage-${item.name.replace(/[^A-Za-z0-9.-]+/gu, '-')}`,
+  versionInfo: item.version, downloadLocation: 'NOASSERTION', filesAnalyzed: false,
+  licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION',
+  comment: `Bundled into the default-disabled status-card.html. Exact npm integrity: ${item.integrity}. Full original license text in status-app/THIRD_PARTY_NOTICES.md; license SHA-256: ${item.license_sha256}.`
+}));
 const packageId = 'SPDXRef-Package-DataSecure';
 const containedFiles = [
   ...artefacts,
+  ...statusFiles,
   nativeInputs.find(({ kind }) => kind === 'native-launcher')
 ];
 const packageVerificationCode = crypto.createHash('sha1')
@@ -80,12 +93,12 @@ const sbom = {
     downloadLocation: 'NOASSERTION',
     filesAnalyzed: true,
     packageVerificationCode: { packageVerificationCodeValue: packageVerificationCode },
-    comment: `Runtime dependency inventory: none; the shipped implementation uses Node.js core modules plus a Windows launcher with statically linked MSVC CRT. Repository source and reviewed binary are linked below; toolchain: ${buildInfo.native_toolchain}.`,
+    comment: `No runtime package download or native keyring dependency. Embedded UI components are listed below; OCR inventories and original notices travel with the archives. This is not a full native/OCR dependency SBOM. Toolchain: ${buildInfo.native_toolchain}.`,
     licenseConcluded: 'NOASSERTION',
     licenseDeclared: 'NOASSERTION',
     copyrightText: 'NOASSERTION'
-  }],
-  files: [...artefacts, ...nativeInputs].map(({ name, sha1, sha256 }) => ({
+  }, ...statusPackages],
+  files: [...artefacts, ...nativeInputs, ...statusFiles].map(({ name, sha1, sha256 }) => ({
     fileName: `./${name}`,
     SPDXID: safeId(name),
     checksums: [
@@ -96,6 +109,8 @@ const sbom = {
     copyrightText: 'NOASSERTION'
   })),
   relationships: [
+    ...statusFiles.map(({ name }) => ({ spdxElementId: packageId, relationshipType: 'CONTAINS', relatedSpdxElement: safeId(name) })),
+    ...statusPackages.map(item => ({ spdxElementId: safeId(statusPrefix + 'status-card.html'), relationshipType: 'GENERATED_FROM', relatedSpdxElement: item.SPDXID })),
     ...artefacts.map(({ name }) => ({
       spdxElementId: packageId,
       relationshipType: 'CONTAINS',
@@ -139,4 +154,4 @@ const checksums = [...artefacts, { name: sbomName, sha256: sbomHash }]
   .join('\n');
 fs.writeFileSync(path.join(dist, 'SHA256SUMS'), `${checksums}\n`, 'utf8');
 
-console.log(`${sbomPath}\n  files=${artefacts.length + nativeInputs.length}\n${path.join(dist, 'SHA256SUMS')}`);
+console.log(`${sbomPath}\n  files=${sbom.files.length}, status-packages=${statusPackages.length}\n${path.join(dist, 'SHA256SUMS')}`);

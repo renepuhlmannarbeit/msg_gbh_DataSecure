@@ -81,12 +81,16 @@ test('manual benchmark covers real TXT, CSV and DOCX parsing with bounded cold/w
   ], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 30_000 });
   assert.strictEqual(result.status, 0, result.stderr || 'benchmark failed');
   const report = JSON.parse(result.stdout);
-  assert.deepStrictEqual(Object.keys(report).sort(), ['clock', 'runs', 'schema']);
+  assert.deepStrictEqual(Object.keys(report).sort(), ['clock', 'execution_mode', 'private_storage', 'runs', 'schema']);
   assert.strictEqual(report.schema, 'datasecure-batch-phase-benchmark/2');
   assert.strictEqual(report.clock, 'monotonic');
+  assert.strictEqual(report.execution_mode, 'local-in-process-parser-not-cowork');
+  assert.strictEqual(report.private_storage, 'local-plain');
   assert.deepStrictEqual(report.runs.map((run) => run.temperature), ['cold', 'warm']);
   for (const run of report.runs) {
     assert.strictEqual(run.files, 3);
+    assert.strictEqual(run.released, 3, 'a fast stopped DOCX is not a successful performance result');
+    assert.strictEqual(run.stopped, 0);
     assert.deepStrictEqual(run.formats_exercised, ['csv', 'docx', 'txt']);
     assert.deepStrictEqual(Object.keys(run).sort(), ['cpu_ms', 'files', 'formats_exercised', 'item_latency', 'peak_rss_mib', 'phases', 'released', 'stopped', 'temperature', 'total_time_ms', 'unattributed_time_ms']);
     assert.deepStrictEqual(Object.keys(run.phases).sort(), [...PHASES].sort());

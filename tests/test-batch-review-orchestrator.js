@@ -78,6 +78,133 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('an already aborted review never captures, opens UI or publishes', async () => {
+    const value = fixture();
+    const controller = new AbortController();
+    controller.abort();
+    const result = await value.orchestrator.reviewDeferredBatch(value.token, { ...value.deps, abortSignal: controller.signal });
+    assert.strictEqual(result.error, 'LOCAL_REVIEW_CANCELLED');
+    assert.ok(!value.events.some((event) => event === 'ui' || event === 'publish' || event.startsWith('capture:')));
+    assert.strictEqual(value.active.size, 0);
+  });
+
+  for (const failure of ['abort-with-carry', 'abort-after-capture', 'abort-after-ui', 'capture', 'binding']) {
+    await testAsync(`later group ${failure} preserves earlier publication and stops further work`, async () => {
+      const items = [0, 1, 2].map((id) => ({ id, size: failure === 'abort-with-carry' ? 100 : 4_000_000, status: 'deferred_review' }));
+      const text = 'x'.repeat(4_000_000);
+      const active = new Set();
+      const controller = new AbortController();
+      const sequence = [];
+      const value = createBatchReviewOrchestrator({
+        SafeError, active, acquireActiveLock() {}, releaseActiveLock() {},
+        readState: () => ({ items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
+        reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
+        publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
+        captureDeferredReviewInput: async (_state, item) => {
+          sequence.push(`capture:${item.id}`);
+          if (item.id === 1 && failure === 'capture') throw codedError('CAPTURE_FAILED', 'Es wurde nichts freigegeben.');
+          if (item.id === 1 && failure === 'abort-after-capture') controller.abort();
+          return { original_text: text, anonymized_text: text, id: item.id };
+        },
+        runBatchReviewLocally: async (drafts) => {
+          sequence.push(`ui:${drafts[0].id}`);
+          if (drafts[0].id === 1 && failure === 'abort-after-ui') controller.abort();
+          return { action: 'reviewed', documents: [] };
+        },
+        publishReviewedBatch: async (_state, selected) => {
+          sequence.push(`publish:${selected[0].id}`);
+          if (selected[0].id === 1 && failure === 'binding') throw codedError('BATCH_REVIEW_DECISION_BINDING_INVALID', 'Es wurde nichts freigegeben.');
+          selected[0].status = 'released';
+          if (failure === 'abort-with-carry') controller.abort();
+          return { packages: [], locallyReleased: 1, failed: 0 };
+        },
+        markDeferredReview: (_state, selected, code) => { for (const item of selected) { item.status = 'deferred_review'; item.error_code = code; } },
+        writeTerminalEvidence: () => true
+      });
+      const result = await value.reviewDeferredBatch('synthetic', { localFinalize: true, abortSignal: controller.signal });
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.locally_released, 1);
+      assert.strictEqual(result.reviewed_documents, 1);
+      assert.strictEqual(items[0].status, 'released');
+      assert.match(result.message, /bereits geprüfte Ergebnisse bleiben erhalten/iu);
+      assert.doesNotMatch(result.message, /nichts freigegeben/iu);
+      assert.ok(!sequence.includes('capture:2'));
+      if (failure.startsWith('abort')) {
+        assert.strictEqual(result.error, 'LOCAL_REVIEW_CANCELLED');
+        assert.ok(!sequence.includes('publish:1'));
+        if (failure !== 'abort-after-ui') assert.ok(!sequence.includes('ui:1'));
+      }
+      assert.strictEqual(active.size, 0);
+    });
+  }
+
+  for (const useSourceEstimate of [true, false]) {
+    await testAsync(`large reviews publish bounded groups without reconstructing the whole batch (source estimate ${useSourceEstimate})`, async () => {
+      const items = Array.from({ length: 3 }, (_, id) => ({ id, size: useSourceEstimate ? 4_000_000 : 100, status: 'deferred_review' }));
+      const state = { items };
+      const sequence = [];
+      const active = new Set();
+      const text = 'x'.repeat(4_000_000);
+      const orchestrator = createBatchReviewOrchestrator({
+        SafeError, active, acquireActiveLock() {}, releaseActiveLock() {},
+        readState: () => state, assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
+        reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
+        publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
+        captureDeferredReviewInput: async (_state, item) => {
+          sequence.push(`capture:${item.id}`);
+          return { original_text: text, anonymized_text: text, id: item.id };
+        },
+        runBatchReviewLocally: async (drafts) => {
+          assert.strictEqual(drafts.length, 1);
+          sequence.push(`review:${drafts[0].id}`);
+          return { action: 'reviewed', documents: [{ document_index: 1, decisions: [] }] };
+        },
+        publishReviewedBatch: async (_state, selected, drafts, decisions) => {
+          assert.strictEqual(selected[0].id, drafts[0].id);
+          assert.strictEqual(decisions[0].document_index, 1);
+          sequence.push(`publish:${selected[0].id}`);
+          selected[0].status = 'released';
+          return { packages: [], locallyReleased: 1, failed: 0 };
+        },
+        markDeferredReview() { throw new Error('unexpected deferral'); }, writeTerminalEvidence: () => true
+      });
+      const result = await orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+      assert.strictEqual(result.locally_released, 3);
+      assert.strictEqual(result.reviewed_documents, 3);
+      assert.strictEqual(result.local_evidence_exported, true);
+      assert.ok(sequence.indexOf('publish:0') < sequence.indexOf('capture:2'));
+      if (useSourceEstimate) assert.ok(sequence.indexOf('publish:0') < sequence.indexOf('capture:1'));
+      assert.strictEqual(sequence.filter((event) => event.startsWith('capture:')).length, 3, 'carried draft is not reconstructed twice');
+      assert.strictEqual(active.size, 0);
+    });
+  }
+
+  await testAsync('cancel in a later group preserves published groups and does not capture more files', async () => {
+    const items = [0, 1, 2].map((id) => ({ id, size: 4_000_000, status: 'deferred_review' }));
+    const text = 'x'.repeat(4_000_000);
+    let uiCalls = 0;
+    let captures = 0;
+    const value = createBatchReviewOrchestrator({
+      SafeError, active: new Set(), acquireActiveLock() {}, releaseActiveLock() {},
+      readState: () => ({ items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
+      reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
+      publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
+      captureDeferredReviewInput: async () => { captures++; return { original_text: text, anonymized_text: text }; },
+      runBatchReviewLocally: async () => ++uiCalls === 1 ? { action: 'reviewed', documents: [] } : { action: 'cancelled' },
+      publishReviewedBatch: async (_state, selected) => { selected[0].status = 'released'; return { packages: [], locallyReleased: 1, failed: 0 }; },
+      markDeferredReview: (_state, selected, code) => { for (const item of selected) { item.status = 'deferred_review'; item.error_code = code; } },
+      writeTerminalEvidence: () => true
+    });
+    const result = await value.reviewDeferredBatch('synthetic', { localFinalize: true });
+    assert.strictEqual(result.error, 'LOCAL_REVIEW_CANCELLED');
+    assert.strictEqual(result.locally_released, 1);
+    assert.strictEqual(result.reviewed_documents, 1);
+    assert.strictEqual(items[0].status, 'released');
+    assert.strictEqual(items[2].error_code, 'LOCAL_REVIEW_CANCELLED');
+    assert.strictEqual(captures, 2);
+    assert.strictEqual(uiCalls, 2);
+  });
+
   await testAsync('not-ready exits after reconciliation without capture, UI or publication', async () => {
     const value = fixture({ notReady: true, publishedReconciled: true });
     const result = await value.orchestrator.reviewDeferredBatch(value.token, value.deps);
@@ -106,7 +233,9 @@ async function main() {
     for (const options of [
       { outcome: { action: 'deferred', documents: [] }, expected: 'LOCAL_REVIEW_DEFERRED' },
       { outcome: { action: 'cancelled', documents: [] }, expected: 'LOCAL_REVIEW_CANCELLED' },
-      { uiError: codedError('LOCAL_REVIEW_TIMEOUT'), expected: 'LOCAL_REVIEW_CANCELLED' }
+      { uiError: codedError('LOCAL_REVIEW_TIMEOUT'), expected: 'LOCAL_REVIEW_TIMEOUT' },
+      { uiError: codedError('LOCAL_REVIEW_TOO_LARGE'), expected: 'LOCAL_REVIEW_TOO_LARGE' },
+      { uiError: new Error('failure'), expected: 'LOCAL_REVIEW_FAILED' }
     ]) {
       const value = fixture(options);
       const result = await value.orchestrator.reviewDeferredBatch(value.token, value.deps);

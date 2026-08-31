@@ -1,19 +1,18 @@
 // Packages plugins/data-secure as an installable Claude plugin ZIP.
 //
 // The plugin directory is the canonical product: it contains the runtime, the
-// PowerShell helpers and the skills. Nothing is substituted at build time, so
-// what a marketplace install resolves from the repository is byte-identical to
-// what this ZIP contains.
+// PowerShell helpers and the skills. Shipped bytes are unchanged; legacy
+// credential experiments are excluded by the shared product projection.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { collectFiles, writeZip } from './lib/zip.mjs';
+import { writeZip } from './lib/zip.mjs';
+import { collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
 import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
-import { verifyKeyringArtifacts } from './lib/keyring-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pluginDir = path.join(root, 'plugins', 'data-secure');
@@ -29,7 +28,6 @@ const nativeLauncher = path.join(pluginDir, 'server', 'native', 'windows-x64', '
 const nativeChecksum = `${nativeLauncher.slice(0, -4)}.sha256`;
 verifyNativeArtifact(nativeLauncher, nativeChecksum);
 const posixSupervisors = verifyPosixSupervisorArtifacts(path.join(pluginDir, 'server', 'native'));
-verifyKeyringArtifacts(path.join(pluginDir, 'server', 'vendor', 'keyring'));
 const portableOcr = path.join(pluginDir, 'server', 'ocr-runtime');
 if (!fs.existsSync(portableOcr)) throw new Error('vendored OCR runtime missing');
 const ocrEvidence = validateUniversalRuntime(portableOcr, { releaseEnabled: false });
@@ -70,10 +68,11 @@ for (const skill of fs.readdirSync(path.join(pluginDir, 'skills'))) {
 }
 
 fs.rmSync(out, { force: true });
-const files = collectFiles(pluginDir).map((file) => ({
+const files = collectProductFiles(pluginDir).map((file) => ({
   ...file,
   mode: executableOcrEntries.has(file.archivePath) ? 0o100755 : 0o100644
 }));
+verifyKeyringFreeProductFiles(files);
 const result = writeZip(out, files);
 const hash = crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex');
 

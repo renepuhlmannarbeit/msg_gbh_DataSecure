@@ -66,6 +66,13 @@ test('review diagnostics identify reconstruction, local UI and terminal boundari
   assert.doesNotMatch(JSON.stringify(status), /"private"|Mitarbeiterprofil|Mustermann|"filename":|"raw_content":|"token":/i);
 });
 
+test('a detached notice dispatch is distinct from a completed synchronous notice', () => {
+  for (const name of ['completion_notice_dispatched', 'completion_notice_finished']) {
+    const event = sanitizeWorkflowEvent({ event: name, outcome: 'ok' }, { now: NOW });
+    assert.strictEqual(event.event, name);
+  }
+});
+
 test('workflow journal applies retention and a hard event cap', () => {
   const dataRoot = path.join(base, 'retention');
   recordWorkflowEvent({ timestamp: new Date(NOW - (WORKFLOW_RETENTION_DAYS + 1) * 86400000).toISOString(),

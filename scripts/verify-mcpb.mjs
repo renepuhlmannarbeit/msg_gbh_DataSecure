@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { collectFiles, readCentralModes } from './lib/zip.mjs';
+import { includeInProduct, verifyKeyringFreeProductEntries } from './lib/product-files.mjs';
 import { verifyDataSecureArchiveModes } from './lib/archive-modes.mjs';
-import { verifyKeyringArtifacts } from './lib/keyring-artifacts.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -18,6 +18,7 @@ if (!fs.existsSync(archive)) throw new Error(`MCPB fehlt: ${path.basename(archiv
 
 const expected = new Map();
 function addFile(archivePath, fullPath) {
+  if (!includeInProduct(archivePath)) return;
   if (expected.has(archivePath)) throw new Error(`Doppelter erwarteter MCPB-Pfad: ${archivePath}`);
   expected.set(archivePath, fs.readFileSync(fullPath));
 }
@@ -51,6 +52,6 @@ for (const [name, bytes] of expected) {
   if (!actual.get(name)?.equals(bytes)) throw new Error(`MCPB ist gegenüber dem aktuellen Quellstand veraltet: ${name}`);
 }
 
-verifyKeyringArtifacts(path.join(root, 'plugins', 'data-secure', 'server', 'vendor', 'keyring'));
+verifyKeyringFreeProductEntries(actual);
 
 console.log(`MCPB source parity: PASS (${actual.size} entries)`);

@@ -1,6 +1,6 @@
 # Kanonische Zielarchitektur
 
-Stand: 25.08.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
+Stand: 31.08.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
 
 ## Architekturprinzip
 
@@ -9,6 +9,13 @@ Cowork-Desktop-Sitzung darf den Plugin-MCP starten. Cloud-, Web-, Mobil- und
 Scheduled-Sitzungen erhalten niemals einen Ersatzpfad zu Originalen. Ein sichtbarer
 Skill oder Plugin-Eintrag ist kein Nachweis einer aktiven lokalen Privacy-Grenze.
 
+DS-062/DS-063 schließen zusätzliche System-VMs und Windows-Benutzerkonten aus.
+DS-065 entfernt die zusätzliche Verschlüsselung lokaler Arbeitsdaten: kein
+Keyring, Ersatzkeyfile oder Passwort. Private Dateien sind lokal und für das
+Benutzerkonto lesbar; sie sind deshalb noch nicht zur Modellverarbeitung
+freigegeben. Der frühere native Keyring-Testunterbau ist wegen Scopewechsel
+obsolet, nicht bestanden. Normale Stapel-/Recoverytests bleiben erforderlich.
+
 ```text
 Cowork / Skill
   |  inhaltsfreier Start, Status, Abschluss
@@ -16,7 +23,7 @@ Cowork / Skill
 lokaler Plugin-MCP ------------- optionales inhaltsfreies MCP-App-UI
   |
   +-- OS-Datei-/Ordnerpicker
-  +-- verschlüsselter Checkpoint- und Snapshotbereich
+  +-- lokaler Checkpoint- und Snapshotbereich ohne zusätzliche Verschlüsselung
   +-- begrenzter Hintergrundworker
   +-- lokale rohdatenhaltige Reviewoberfläche
   +-- lokaler Mapping-/Exportbereich
@@ -36,7 +43,7 @@ Claude-Modell
    Originalzugriffsentscheidung.
 4. Der vollständige Umfang wird vor dem Start gegen Format-, Struktur-, Link-,
    Datei- und Stapelgrenzen geprüft. Es gibt keine stille Teilmenge.
-5. Quellen werden in unveränderliche, benutzergebunden verschlüsselte Snapshots
+5. Quellen werden in identitäts- und hashgeprüfte lokale Plain-Snapshots
    übernommen. Ein kurzer MCP-Aufruf kehrt nach durablem Checkpoint zurück.
 6. Der lokale Hintergrundworker verarbeitet mit adaptiver kleiner Parallelität.
 7. Klare Ergebnisse werden veröffentlicht. Unsicherheiten bleiben lokal in einer
@@ -66,9 +73,14 @@ Claude-Modell
 - Quellen können während der Verarbeitung geändert werden, ohne den Snapshot zu
   verändern. Eine Änderung während der Snapshot-Aufnahme führt zu genau einem
   erneuten Versuch, danach zum lokalen Pausieren dieser Datei.
-- Private Roh-/Review-Daten liegen im lokalen OS-Anwendungsdatenbereich,
-  verschlüsselt über einen durch DPAPI beziehungsweise Keychain geschützten
-  Installationsschlüssel. Es gibt keinen Klartext- oder Passwortfallback.
+- Neue private Roh-/Review-Daten liegen unverschlüsselt im lokalen
+  OS-Anwendungsdatenbereich. Kein Installationsschlüssel, Keyring oder Passwort.
+  Dateirechte und Original-/Freigabegrenzen bleiben bestehen; ein SHA-256-Abgleich
+  prüft unveränderte Bytes, bietet aber keine Verschlüsselung.
+- Verschlüsselte V3-/`.dsart`-Altbestände und ihre Metadaten bleiben unangetastet;
+  kein Lesen über den Keyring, keine automatische Migration oder Löschung. Eine
+  erneute Originalauswahl erzeugt einen neuen Plain-Stapel. Neue Plain-Stapel
+  besitzen einen eindeutigen versionierten Vertrag und bleiben fortsetzbar.
 - Mapping und anonymisierte Exporte sind lesbar, dauerhaft und technisch von der
   MCP-Lesegrenze getrennt.
 
@@ -115,4 +127,3 @@ Claude-Modell
   Diagnoseschema nicht darstellbar.
 - Aufbewahrung höchstens 14 Tage; Diagnoseexport nur lokal und ausdrücklich.
 - Keine automatische Telemetrie oder Crashübermittlung.
-

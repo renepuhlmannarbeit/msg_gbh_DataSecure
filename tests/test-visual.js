@@ -21,8 +21,6 @@ const { prepareVisual, processVisuals, assetsMarkdown, safeReviewFilename } = re
   path.join(runtime, 'gateway', 'visuals.js')
 );
 const { VisualBudgetError } = require(path.join(runtime, 'windows-visual.js'));
-const { createTestPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
-const reviewCrypto = createTestPrivateArtifactCrypto(path.join(root, 'Needs Visual Review'));
 
 const { testAsync, test, done, assert } = createSuite('Visual gate');
 
@@ -203,7 +201,6 @@ async function main() {
   await testAsync('a withheld visual writes a review item and no package asset', async () => {
     const stage = fs.mkdtempSync(path.join(root, 'stage-'));
     const out = await processVisuals([attachment()], 'personnel_profile', 'Paket_Test_1', stage, {
-      privateArtifactCrypto: reviewCrypto,
       ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)])
     });
     assert.strictEqual(out.results.length, 1);
@@ -214,14 +211,18 @@ async function main() {
     const reviewDir = path.join(root, 'Needs Visual Review', 'Paket_Test_1');
     const files = fs.readdirSync(reviewDir);
     assert.ok(files.includes('asset-001.review.json'), 'review metadata must be written');
-    assert.ok(files.includes('asset-001.dsart'), 'an encrypted local preview candidate must be written');
-    assert.ok(!files.includes('asset-001.png'), 'no plaintext preview may remain at rest');
+    assert.ok(files.includes('asset-001.png'), 'a local plaintext preview candidate must be written');
+    assert.ok(!files.includes('asset-001.dsart'), 'no encrypted preview is created');
+    const meta = JSON.parse(fs.readFileSync(path.join(reviewDir, 'asset-001.review.json'), 'utf8'));
+    assert.strictEqual(meta.schema_version, 2);
+    assert.strictEqual(meta.preview_storage, 'local-plain');
+    assert.strictEqual(meta.preview_encrypted, false);
+    assert.deepStrictEqual(fs.readFileSync(path.join(reviewDir, meta.preview_file)), CLEAN_PNG);
   });
 
   await testAsync('a customer visual is never staged as a package asset', async () => {
     const stage = fs.mkdtempSync(path.join(root, 'stage-'));
     const out = await processVisuals([attachment()], 'customer', 'Paket_Test_2', stage, {
-      privateArtifactCrypto: reviewCrypto,
       ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)])
     });
     assert.strictEqual(out.results[0].status, 'review_required');
@@ -229,11 +230,29 @@ async function main() {
     assert.strictEqual(fs.readdirSync(path.join(stage, 'assets')).length, 0);
   });
 
+  await testAsync('a repeated package id cannot overwrite existing encrypted review metadata or bytes', async () => {
+    const packageId = 'Paket_Legacy_Review';
+    const stage = fs.mkdtempSync(path.join(root, 'stage-'));
+    const dir = path.join(root, 'Needs Visual Review', packageId);
+    fs.mkdirSync(dir, { recursive: true });
+    const metaPath = path.join(dir, 'asset-001.review.json');
+    const encryptedPath = path.join(dir, 'asset-001.dsart');
+    const oldMeta = JSON.stringify({ preview_file: 'asset-001.dsart', preview_encrypted: true });
+    const encrypted = Buffer.from('DSARTF01synthetic-existing-preview');
+    fs.writeFileSync(metaPath, oldMeta);
+    fs.writeFileSync(encryptedPath, encrypted);
+    await assert.rejects(processVisuals([attachment()], 'customer', packageId, stage, {
+      ocrPngDetailed: stubOcr([ocrWords(HARMLESS_WORDS)])
+    }), /nicht überschrieben/u);
+    assert.strictEqual(fs.readFileSync(metaPath, 'utf8'), oldMeta);
+    assert.deepStrictEqual(fs.readFileSync(encryptedPath), encrypted);
+    assert.strictEqual(fs.existsSync(path.join(dir, 'asset-001.png')), false);
+  });
+
   await testAsync('explicit text-only mode removes visuals without OCR or review bytes', async () => {
     const stage = fs.mkdtempSync(path.join(root, 'stage-'));
     let ocrCalled = false;
     const out = await processVisuals([attachment()], 'personnel_profile', 'Paket_Text_Only', stage, {
-      privateArtifactCrypto: reviewCrypto,
       removeImages: true,
       ocrPngDetailed: async () => { ocrCalled = true; throw new Error('must not run'); }
     });
@@ -254,7 +273,6 @@ async function main() {
   await testAsync('OCR text of a withheld visual is carried over for the text gate', async () => {
     const stage = fs.mkdtempSync(path.join(root, 'stage-'));
     const out = await processVisuals([attachment()], 'personnel_profile', 'Paket_Test_3', stage, {
-      privateArtifactCrypto: reviewCrypto,
       ocrPngDetailed: stubOcr([ocrWords(['Kunde', 'Max', 'Mustermann'])])
     });
     assert.ok(out.ocrExtras.includes('Extrahierter Bildtext 1'), 'image text section must be added');
@@ -265,7 +283,6 @@ async function main() {
   await testAsync('the document-wide visual deadline aborts instead of releasing a partial package', async () => {
     const stage = fs.mkdtempSync(path.join(root, 'stage-'));
     await assert.rejects(processVisuals([attachment()], 'customer', 'Paket_Timeout', stage, {
-      privateArtifactCrypto: reviewCrypto,
       totalTimeoutMs: 5,
       ocrPngDetailed: async () => new Promise(() => {})
     }), VisualBudgetError);

@@ -1,6 +1,6 @@
 ---
 name: gbh-datasecure-dokument-anonymisieren
-description: Lokale TXT-/Markdown-/CSV-/DOCX-Dateien vor Claude de-identifizieren, pseudonymisieren oder datenschutzprüfen. Nicht für reine Datenschutz-Erklärfragen.
+description: TXT/Markdown/CSV/DOCX lokal anonymisieren; DataSecure-Ergebnisse später übergeben, Stapel fortsetzen und Support-/Löschgrenzen erklären. Keine reine Datenschutz-Erklärung.
 ---
 
 # GBH DataSecure – Dokumente anonymisieren
@@ -8,6 +8,8 @@ description: Lokale TXT-/Markdown-/CSV-/DOCX-Dateien vor Claude de-identifiziere
 DataSecure bereitet Originale vollständig lokal vor. Claude erhält ausschließlich freigegebenes Markdown, niemals Originalbytes, Dateinamen, Pfade, Bildpixel oder Dokument-Hashes.
 
 Dieser Ablauf gilt nur in einer lokalen Claude-Desktop-/Cowork-Sitzung mit tatsächlich verbundenem `data-secure-local`. Ein sichtbarer Skill oder Plugin-Eintrag genügt nicht. In Cloud-Cowork, Web, Mobil oder geplanten Cloud-Aufgaben keine Originale auswählen oder hochladen; dort nur bereits lokal freigegebene Ergebnisse verwenden.
+
+Die Desktop-App allein beweist keine lokale Sitzung: Auch dort kann Cowork cloud-gehostet sein. In unbekannten oder nicht freigegebenen Host-Konstellationen stoppen; Computer-Use, allgemeiner Dateizugriff und andere Connectoren sind kein Ersatz für den lokalen Picker.
 
 ## Normalablauf
 
@@ -19,6 +21,7 @@ Dieser Ablauf gilt nur in einer lokalen Claude-Desktop-/Cowork-Sitzung mit tats�
 5. Bilder bleiben standardmäßig lokal und blockieren den Textlauf nicht. Nur bei einer tatsächlich unsicheren lokalen Sichtprüfung oder einem ausdrücklichen Wunsch, lokale Bildanlagen zu verwerfen, ist eine weitere Entscheidung nötig.
    - Benötigt ein offener Stapel eine Fachentscheidung, reicht die ausdrückliche Auswahl „Fortsetzen“. `continue_most_recent_document_batch(confirmed=true)` startet die lokale Prüfung selbst in einem getrennten Prozess. Rufe im Normalweg niemals zusätzlich `review_deferred_document_batch` auf; dieses tokenbasierte Werkzeug ist ausschließlich technischer Support. Die lokale Oberfläche entscheidet, Claude nicht.
 6. Bei `local_only` endet der Claude-Ablauf direkt nach der Startantwort: **keinen** Status pollen, keine Ergebnisliste aufrufen, kein Markdown lesen und nichts bestätigen. Antworte genau einmal knapp mit „Die lokale Verarbeitung wurde gestartet.“ und beende die Cowork-Aufgabe sofort. Verwende keine offene Formulierung wie „Sag Bescheid“, „ich warte“ oder „danach können wir“, denn eine spätere Auswertung ist eine neue Anwenderaufgabe. DataSecure verarbeitet und speichert Markdown, Mapping und Nachweis lokal; nach dem terminalen Lauf zeigt das Betriebssystem einmalig eine rein zählerbasierte Abschlussübersicht. Sie enthält keine Dokumentdaten und hält den Worker nicht an.
+   - Bei einem kombinierten Wunsch wie „anonymisieren und anschließend zusammenfassen“ erkläre **vor dem Startaufruf** knapp die zwei getrennten Schritte: jetzt lokale Verarbeitung; eine Auswertung in Claude erfordert nach lokalem Abschluss einen neuen ausdrücklichen Auftrag. Der kombinierte Erstauftrag löst keine automatische Ergebnisübergabe aus. Danach gilt dieselbe kurze Startantwort ohne Polling oder Lesen.
 7. Nur wenn der Anwender nach dem lokalen Abschluss ausdrücklich eine Auswertung, Zusammenfassung oder Weiterverarbeitung in Claude verlangt: Rufe `start_completed_local_results_handoff` auf. Bei mehreren passenden Stapeln erscheint genau eine lokale Auswahl mit festen Zählern; bei einem Stapel kein Dialog. Token, Paket-/Dateikennungen, Cursor und Leseberechtigungen bleiben vollständig im lokalen Server. Die erste Seite enthält einmalig die verifizierten Stapelzähler; `not-processed` erzeugt nie ein Dokument.
 8. Für weitere Seiten verwende ausschließlich `continue_local_results_handoff`. Jeder Aufruf liefert höchstens fünf freigegebene Markdown-Ergebnisse, die lokal verifiziert wurden, ohne Dateinamen oder technische Kennungen. Ein Ergebnis kann `complete` oder `usable-with-omissions` sein; bei Auslassungen nenne die feste deutsche Anzeige knapp und behaupte niemals Vollständigkeit. Weitere Textseiten desselben Dokuments behalten denselben Grad. Bei einer späteren Aufgabe nutze erneut den Startaufruf. Bei einem unterbrochenen Stapel startet `continue_most_recent_document_batch(confirmed=true)` nach ausdrücklicher Zustimmung die technische Fortsetzung oder lokale Fachprüfung selbst. Antworte danach knapp, dass die lokale Fortsetzung beziehungsweise Prüfung gestartet wurde, und beende die Cowork-Aufgabe; keine zweite Bestätigung, kein Polling und keine Support-Werkzeuge nachschieben.
    - Möchte der Anwender nur die laufende Ergebnisübergabe beenden, verwende `cancel_local_results_handoff`. Das löscht weder Originale noch lokale Ergebnisse.
@@ -34,4 +37,16 @@ Dieser Ablauf gilt nur in einer lokalen Claude-Desktop-/Cowork-Sitzung mit tats�
 - Einen Privacy-Ordner nur auf ausdrücklichen Wunsch mit `configure_privacy_folder(confirmed=true)` ändern. Der lokale Dialog gibt den Pfad nicht an Claude zurück.
 - Diagnoseexport und Löschung nur nach ausdrücklichem Wunsch und Bestätigung ausführen.
 - Nur im ausdrücklich aktivierten IT-Supportmodus `privacy_status`, `diagnostic_status`, `export_diagnostic_package`, `open_output_folder`, `list_visual_review_items`, `open_visual_review_folder` oder `open_privacy_folder` verwenden. Diese Werkzeuge sind keine Schritte des Normalablaufs. Einen technischen Eingangsordner gibt es nicht mehr. `open_export_folder` ist davon getrennt als optionale, lokale Anwenderaktion sichtbar; sein Inhalt wird nicht an Claude übertragen.
+- Bei einer Diagnose- oder Löschanfrage im Normalmodus erkläre die Supportgrenze und verweise an die IT. Fehlende Supportwerkzeuge bedeuten nicht, dass der lokale Connector fehlt. Aktiviere den Supportmodus nicht selbst und verwende keine Shell-/Dateiwerkzeuge als Ersatz. `purge_local_data` ist ebenfalls nur im aktivierten IT-Supportmodus verfügbar.
 - `continue_anonymized_batch_in_chat`, `read_anonymized_document` und `acknowledge_batch_document` bleiben nur für bereits begonnene Support-/Kompatibilitätsläufe verfügbar; der Normalweg verwendet ausschließlich die tokenfreie lokale Ergebnisübergabe.
+
+## Vertiefung bei Bedarf
+
+Lies nur die zur konkreten Frage passende Referenz; der Normalstart benötigt keine zusätzliche Referenzrunde.
+
+- Kombinierte Aufträge und spätere Auswertung: [Beispiele](references/beispiele.md).
+- Formate, Grenzen und Ordnerauswahl: [Unterstützte Formate](references/unterstuetzte-formate.md).
+- Fachliche Erhaltung und Profilwahl: [Profilregeln](references/profilregeln.md).
+- Hostwechsel, Upload oder fehlender lokaler Connector: [Sicherheitsgrenze](references/sicherheitsgrenze.md).
+- Sichere Stopps, IT-Support und Löschung: [Fehler und Datenhaltung](references/fehler-und-datenhaltung.md).
+- Fragen zum Installationspaket: [Plugin oder MCPB](references/plugin-oder-mcpb.md).

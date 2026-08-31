@@ -1,6 +1,387 @@
 # Aktueller Ist-Abgleich zum kanonischen Backlog
 
-Stand: 28.08.2026 · geprüfter Produktstand: RC66
+Stand: 31.08.2026 · RC81; lokale Gesamtregression und ZIP-/MCPB-Prüfung bestanden
+
+## RC81: 17 Reviewbefunde korrigiert, echte Bedienabnahme weiter offen
+
+R80-01–17 sind mit drei Fachagenten bearbeitet und integriert. Zertifikatsrollen,
+Fachbegriffe und Produktnamen bleiben positionsbezogen erhalten; Personen- und
+Arbeitgeberangaben werden geprüft. Windows-Auswahl/Unicode, nächster Handoff,
+signalgebundener Picker, Intake-Orphans, Legacy-Cleanup, Zero-Day-Laufende und
+Journal-v4-Schutzscan sind korrigiert. Große Reviews laufen in begrenzten Gruppen
+mit erhaltenen Teilergebnissen. Normale Item-Verarbeitung braucht vier statt zehn
+Journalwrites (vier statt fünf durable); kein prozentualer Laufzeitgewinn behauptet.
+
+Vollständige `npm run test:ci` einschließlich Pre-/Posttests und `npm run build`
+PASS. Gateway-E2E43, MCP39, neue Semantik13, nativer Picker12, Reviewmodell7,
+Revieworchestrator17 und Item-Processor14 bestehen. Claude CLI 2.1.233 validiert
+Plugin und Marketplace. [Defectbericht](../RC81_DEFECT_ABSCHLUSS_2026-08-31.md)
+enthält Einzelzuordnung, zusätzliche Prüfungen und Grenzen.
+
+Zusätzlicher Stapel-Langlauf: 67/67 PASS, einschließlich 100-Dateien-Stapel und
+realer Test-Worker-Abbrüche an Position 1/50/100 ohne doppelte Freigabe. Separater
+lokaler TXT/CSV/DOCX-Benchmark (In-Process-Parser, nicht Cowork): 10 Dateien cold
+11.398 ms / warm 11.227 ms, Peak-RSS 72/74 MiB, insgesamt 20/20 freigegeben.
+Kein kontrollierter Vorher-/Nachher-Geschwindigkeitsvergleich.
+
+Keine echte Cowork- oder plattformweite Abnahme; verbleibende Runtime-/Format-
+und Marketplace-Kanalarbeit bleibt offen. Kein Keyring, keine Ersatzverschlüsselung,
+keine VM oder weiteren Konten. Der folgende RC80-Stand bleibt historische Baseline.
+
+## RC80: lokale Arbeitskopien ohne zusätzliche Verschlüsselung (DS-065)
+
+Der Speicherpfad ist auf lokale Plain-Snapshots und Reviewkopien umgestellt:
+kein Schlüsselbund, keine Schlüsseldatei und kein Passwort. `private-work-store.js`
+verwendet normale lokale Dateien; diese sind mit passenden Dateirechten lesbar.
+Originalschutz, lokale Anonymisierung und Freigabe-Gates bleiben bestehen.
+Neue Plain-Stapel müssen nach Abbruch fortsetzbar bleiben. Verschlüsselte
+V3-/`.dsart`-Altbestände und ihre Metadaten bleiben unangetastet; kein Keyring,
+keine Migration oder automatische Löschung, zur Verarbeitung Original neu wählen.
+
+Belegt: `npm run test:ci` einschließlich Pre-/Posttests und `npm run build` PASS.
+18 Storetests, 24 Retentiontests, 40 Gateway-E2E-, 37 MCP-Protokolltests und der
+echte synthetische TXT/CSV/DOCX-Abbruch-/Fortsetzungstest bestehen. Letzterer
+verwendet den Default-Pfad mit Importverbot für alte Keyringkomponenten und
+bewahrt gleichzeitig einen alten V3-Stapel. Verschlüsselte Altbytes bleiben
+auch unter falschem Plain-Dateinamen bei Ablauf und Bereinigung erhalten.
+ZIP/MCPB prüfen die Abwesenheit der nativen Keyringmodule; 30 Dateien mit rund
+9,05 MB Rohgröße entfallen. Frühere CI-Versuche gegen den noch unvollständigen
+Dokumentationsstand sind durch den vollständigen grünen Lauf ersetzt.
+
+Lokaler Benchmark ohne Cowork und mit In-Process-Parser: 3 Dateien cold/warm
+4314/4353 ms, 10 Dateien 12345/12163 ms; alle 26 Eingaben freigegeben, 0 gestoppt.
+Veraltete DOCX-Benchmarkfixtures wurden OPC-konform ergänzt und der Adapter auf
+den privaten Inputbuffer umgestellt. Ein unvollständiger Lauf gilt nicht mehr
+als erfolgreicher Performancewert. Kein Vorher-/Nachher-Geschwindigkeitsnachweis
+und keine neue echte Cowork-/macOS-Zielsystemabnahme daraus ableiten.
+
+Native Keyring-Smoke-Tests sowie zusätzliche Engineering-Keyring-Session-/
+Kombinationsinfrastruktur sind durch Scopewechsel obsolet, nicht bestanden.
+Die folgenden RC66–RC79-Nachweise sind Historie; frühere Verschlüsselungs- und
+Keyring-Arbeitsaufträge darin sind durch DS-065 ersetzt, nicht neu auszuführen.
+
+## RC79: native Parent-/Worker-Reihenfolge und VM-Ausschluss
+
+BL-010.8: Der Engineering-Beobachter unterstützt optional `--parent-pid`.
+Beide Prozesshandles bleiben gehalten. Vor `armed` sind beide lebend geprüft;
+danach hat Workerende Vorrang, auch wenn beide Handles signalisiert sind.
+Nur beobachtetes Parentende plus unmittelbar noch lebender Worker erzeugen
+`parent-exited`; ein folgendes Workerende ist zusätzlich erforderlich.
+JS-Ereignisreihenfolge alleine genügt nicht mehr für den neuen Modus.
+
+47 Vertragsprüfungen und 17 native synthetische Fälle bestehen. Bisheriger
+Worker-only-Modus bleibt unverändert. Kein Produkt-Hotpath-/Supervisorwechsel,
+kein zusätzlicher Dialog, keine Produktimporte oder Keyringjobs bei der Probe.
+Noch offen: produktive Engineering-Worker-Anbindung, privater Controller und
+separater Ergebnisprüfer nach Parentende. Echte Produktabnahme bleibt unbehauptet.
+
+DS-062/DS-063 schließen zusätzliche System-VMs und Windows-Benutzerkonten aus.
+Die frühere Kontoanforderung ist gestrichen. Sichere Testtrennung im vorhandenen
+Konto ist offene E0-Entwicklungsarbeit für BL-010.8/BL-011.13, keine vom Nutzer
+zu beschaffende Infrastruktur. Bis zum geprüften Testdesign bleiben die bisherigen
+SEA-Produkt-Keyring-Proben gesperrt; produktive Schlüssel und Originale bleiben
+unberührt. Die Komponentenbasis ist inzwischen implementiert, aber native
+Prozessbindung und Produkt-/OS-Abnahme sind damit nicht erledigt (siehe unten).
+
+## DS-063-Folgeschnitt: Engineering-Schlüsseladapter, kein Produktwechsel
+
+BL-010.8/BL-011.13: `scripts/lib/engineering-keyring-session.mjs` nutzt den bereits
+vorhandenen `Entry`-Injektionspunkt ohne Änderung des Produktstores. Fest eigener
+Service, intern zufälliger Account, kein nativer Defaultimport, keine ENV-Auswahl,
+kein Dateifallback und keine Credential-Löschung. Belegte Einträge werden nicht
+übernommen. Schreibwert-Digest, synchroner Readback und gelatchte Fehler verhindern
+Adoption eines falschen Schlüssels nach einem fehlgeschlagenen Versuch. `close()`
+sperrt alte/neue Adapterinstanzen ohne Datenlöschung.
+
+24 Memory-Komponenten-/Negativtests nutzen die echte AES-/Commit-/Read-Fassade;
+18 Boundary-Tests prüfen Produktquellen/Packaging und eingeschleuste Gegenbeispiele.
+Der historische Verifier blockiert vor Assembly-I/O mit
+`SEA_BATCH_TEST_ISOLATION_PENDING`; alle 10 Verifier-Verträge bestehen. Die
+Konto-Argumentprüfung bleibt erhalten, ist aber keine Ausführungserlaubnis mehr.
+Security-Gegenreviewfund zur Wiederholung nach ungewisser Speicherung geschlossen.
+Kein neuer Benutzerdialog, keine Produkt-Hotpath-Kosten, keine neue Abhängigkeit.
+
+**Offen:** kleiner nativer Backend-Smoke-Test und echte Produkt-/Cowork-Evidenz.
+Session-/Scope-/Buildbindung über alle Engineering-Prozesse ist nach DS-064
+zurückgestellt. Kein nativer Schlüsselbund
+wurde benutzt. `ensureReady().backend` aus dem Produktcode ist bei injiziertem
+Memory-Backend kein Nachweis von OS-Persistenz. Produktversion bleibt RC79.
+
+## RC78: unabhängiger nativer Prozessbeobachter, nur Engineering
+
+BL-010.8: Ein separater Windows-x64-Helfer hält genau ein Prozesshandle mit
+Synchronisations-/Abfragerechten. Vor `armed` bindet er den erwarteten eigenen
+Worker über Pipe-Client-PID, Imagepfad, nichtleere Erstellungszeit und begrenzten
+Nonce-Handshake. Nach `armed` wird das Handle niemals durch erneute PID-Suche
+ersetzt. Nur ein signalisiertes Handle plus gelesener Exitcode zählt als Ende.
+
+37 reine Vertrags-/Budgettests und 10 native synthetische Szenarien bestehen,
+einschließlich Exitcode 259, kontrolliertem und erzwungenem Parentende,
+Identitäts-/Noncefehlern und Timeouts. Der getrennte Testworker beendet sich nach
+IPC-Ende selbst; dies belegt keine produktive Workerfortsetzung. Der native
+Builder nutzt vorhandenes MSVC/Windows-SDK ohne neue Bibliothek. Normale Tests
+starten den nativen Helfer nicht, ZIP/MCPB enthalten ihn nicht.
+
+Keine Produkt-/Keyringjobs in diesem Konto, keine Quelllöschung, kein veränderter
+Anonymisierungs-Hotpath oder zusätzlicher Nutzerdialog. Die echte Einbindung in
+den SEA-Parent-Crash-Harness und dessen Ergebnisoracle bleibt E0; sichere
+Testtrennung im vorhandenen Konto, POSIX, Laufzeitimmutabilität, finale Assembly und Cowork-Abnahme
+bleiben offen. `parent_crash_verified` im Produktverifier bleibt `false`.
+Details/Gegenreview und Testgrenzen: `docs/TESTING.md` und Rollenvertrag.
+
+## RC77: rekonstruierte Parent-Buildprovenienz
+
+BL-010.1/BL-010.8: Der SEA-Builder verwendet nun genau den Bootstrap und die
+Konfiguration, deren Bytes der gemeinsame Provenienzhelfer erfasst. Neben der
+Parserrolle bindet er den vollständigen Pluginbaum als konservative Obermenge der
+Nebenrollen-Abhängigkeiten, Buildrezepte, Paket-/Lockdateien und Postject samt
+Commander. Geänderte Abhängigkeiten benötigen eine erneute Vertragsprüfung.
+Vor Veröffentlichung wird die Provenienz erneut rekonstruiert.
+
+Assembly und alle drei Parent-Verifier verlangen geschlossene V2-Buildnachweise.
+Ihre Staging-Sollwerte bleiben an dieselbe geprüfte Quellenaufnahme gebunden;
+späteres erneutes Lesen darf keinen neuen Sollstand definieren. Alte V1-Records,
+fehlende/zusätzliche Felder, falsche Typen oder abweichende Quellen stoppen.
+Der bisherige Vier-Ziel-Assembler lehnt Parentdateien mit eingebetteter Parserrolle
+ausdrücklich ab, bis er die zugehörigen Parserprogramme mit paketiert.
+
+Architektur-/Security-Gegenreview und synthetische Manipulationstests; keine
+native SEA-Ausführung in diesem Schnitt. Die Änderung betrifft Build/Abnahme,
+nicht den Dokumenten-Hotpath. Keine zusätzliche Laufzeitabhängigkeit, kein neuer
+Dialog. Hashrecords sind weder Signaturen noch eine Bindung zwischen beliebig
+behaupteten Quellen und Binärbytes. Laufzeitimmutabilität der extern geladenen
+Nebenrollenmodule, Parent-Crash, POSIX, finale Rollenassembly und Cowork-Abnahme
+bleiben offen. Standardstart weiterhin `node`. Nachweise: `docs/TESTING.md`.
+
+## RC76: besitzgebundene Recovery unveröffentlichter Pakete
+
+BL-010.8/BL-011.8/BL-011.11: Neue Pakete werden unter
+`<Privacy-Ordner>/.datasecure-staging` auf demselben Dateisystem wie `Output`
+vorbereitet. Unveränderliche, exklusiv geschriebene/fsync-bestätigte Records binden
+Root-, Payload- und Outputidentität sowie Job, Nonce und PID. Erst danach erhalten
+Dokumentschreiber eine prozessgebundene Stage-Capability. Veröffentlichung erfolgt
+weiter per Rename, ohne Copy/Delete-Fallback. Die Startwartung bereinigt einmal
+pro Lauf ausschließlich gebundene Stages nach sicher festgestelltem Ownerende.
+Lebende/unklare PIDs werden nie durch ein Zeitlimit überstimmt.
+
+Originale und fertige Pakete bleiben außerhalb dieser Recovery. Alte
+`Output/.tmp`-Reste, unbekannte Verzeichnisse, ausgetauschte Identitäten und
+beschädigte Records werden nicht pauschal gelöscht. Ein Crash vor dem ersten
+Besitznachweis kann einen leeren ungebundenen Bereich hinterlassen; dieser erfordert
+lokale IT-Prüfung. Der Quellpicker nimmt den aktuellen privaten Stagingbereich
+auch bei rekursiver Auswahl nicht auf. Der SEA-Harness prüft zusätzlich zur
+vollständigen Outputinventur eine restlose, schreibfreie Staginginventur.
+
+Architektur-, Security- und Testfachagenten begleiteten die Umsetzung. Ihr Fund
+zum Einzeldatei-Paketnamensvertrag wurde korrigiert und integriert getestet.
+Reale isolierte Node-Kindprozessabbrüche vor Publish und nach Rename bestehen;
+kein nativer SEA-, Cowork-, POSIX- oder Power-Loss-Nachweis daraus abgeleitet.
+Weitere Nachweise und Grenzen: `docs/TESTING.md`. Standardstart bleibt `node`.
+
+## RC75: Worker-Crash/Fortsetzung als begrenzter Engineering-Harness
+
+Der Opt-in-Prüfer hat jetzt drei serielle Szenarien. Worker-Resume beobachtet
+ausschließlich das letzte, bildfreie DOCX nach Parser-`close`: zwei Einträge sind
+bereits freigegeben, der dritte steht auf `processing/extracted` ohne Paket-ID.
+Read-only-Journalpolling ist auf 20-ms-Intervalle, acht tolerierte Lesefehler und
+die bestehende Gesamtlaufzeit begrenzt. Kein künstlicher Halt im Produktcode.
+Nur der eigene Child-Handle wird beendet; anormaler Exit und Disconnect müssen
+wirklich beobachtet werden. Ein verpasster Abbruchpunkt gilt nicht als PASS.
+
+Die Fortsetzung verwendet `continueMostRecentBatch`, denselben Token und echte
+Worker-/Lease-/IPC-APIs. Die ersten beiden Pakete müssen unveränderte Bytes,
+Hashes und Dateidentitäten behalten. Dies ist ein Headless-Gateway-/Workerpfad,
+kein Nachweis von `startLocalBatchExecutor`, GUI, Cowork oder Parent-Crash.
+`extracted` ist ein non-durable Zwischenmarker, kein Fsync-/Power-Loss-Beleg.
+`cleanup_safe` belegt das direkte Workerende, nicht einen allgemeinen
+Prozessbaum-Cleanup; die synthetischen Testbäume werden ohnehin nicht gelöscht.
+
+Architektur-, Security- und Testgegenreview durchgeführt. Ein Sparse-Array-Fund
+im privaten Crashpredicate ist geschlossen; reale JSON-Journale enthalten keine
+solchen Arraylöcher. **Damals offener, in RC76 korrigierter Produktbefund:** Output-Staging-Verzeichnisse
+werden nur im `catch` des Orchestrators bereinigt. Ein Hard-Crash kann diesen
+Handler umgehen; Resume/Retention entfernen die Dot-Verzeichnisse nicht.
+Die vollständige Output-Inventur bleibt streng und muss dann fehlschlagen.
+Kein nativer Repro behauptet, keine Rohdatenoffenlegung aus möglicherweise leeren
+Resten abgeleitet. Korrektur siehe RC76; Altreste werden nicht ungeprüft übernommen.
+
+Ausgeführt werden hier nur isolierte Vertrags-/VM-Tests und normale lokale
+Regression/Paketierung (Nachweise in `docs/TESTING.md`). Die echten SEA-Jobs mit
+Produkt-Keyring bleiben bis zu einem geprüften Testdesign im vorhandenen Konto
+ausgesetzt. Die frühere VM-Option ist seit DS-062 ausgeschlossen; DS-063 verwirft
+auch den separaten Kontoansatz. Bestehende Harness-Schutzschalter bleiben erhalten.
+Öffentlicher Start bleibt `node`, keine neue Format-/Host-/Privacy-Freigabe.
+
+## RC74: Opt-in-Harness für positive native Stapel und IPC-Trennung
+
+BL-010.1/BL-010.8: Ein fester interner SEA-Probeaufruf und ein separater lokaler
+Verifier sind implementiert. Der folgende historische Konto-Pfad ist seit DS-063
+nicht mehr zur Ausführung vorgesehen. Nach ausdrücklicher Testkonto-Erklärung und geprüftem
+frischem Scope erzeugt die Probe synthetisches TXT/CSV/DOCX und startet den echten
+Produktworker. Vorgesehen sind zwei serielle Fälle: vollständiger Stapel und
+IPC-Trennung nach bestätigtem Verarbeitungsstart. Journal, drei eindeutige Pakete,
+Manifestgrade, Originalidentität, PII-Entfernung, Qualifikation und Mapping werden
+unabhängig geprüft. Ein `exit` allein oder eine Killanforderung reicht nicht als
+vollständiger Prozess-/IPC-Abschluss. Der äußere Prüfer wartet zusätzlich auf
+geschlossene Ausgabepipes; Testdaten bleiben bei unsicherem Ende liegen.
+
+Architektur-, Security- und Testexperten begleiteten diesen begrenzten Schnitt.
+Ein Gegenreviewfund wurde geschlossen: Auch stehen gebliebene Namensbestandteile,
+Zeilenumbrüche und Markdown-/Unicode-Formatierungen lassen die Fixtureprüfung
+fehlschlagen. Die neuen Tests benötigen keinen Produkt-Keyring und keine GUI.
+Konkrete lokale Nachweise: `docs/TESTING.md`.
+
+**Nicht ausgeführt:** echte positive native Stapel unter einem separaten OS-Konto.
+`--isolated-test-account` ist nur eine Erklärung der ausführenden Person, keine
+technische Konto-Attestierung. Temporäre Privacy-/Journalpfade ersetzen keinen
+eigenen Credential Store. Keine Produktcredentials dieses Kontos wurden für den
+neuen Harness benutzt. Der damals noch fehlende Worker-Resume-Harness wurde
+in RC75 ergänzt; Parent-Crash benötigt zusätzlich sicheren Besitz des
+verwaisten Windows-Prozesshandles. Parent-Crash bleibt E0-offen,
+ebenso ganze Nebenrollen-/Bootstrapbindung, POSIX und finale V2-Assembly. Kein
+neues Normaltool, keine zusätzliche Anwenderabfrage oder Format-/SEA-Freigabe.
+
+## RC73: Startfehler und Abschlussanzeigen
+
+Das nächste Architektur-/Anwendungsreview fand vier bereits vorhandene Lücken:
+asynchrone Spawnfehler ohne Errorhandler, vorzeitige Freigabe von Workerbesitz bei
+IPC-Fehlern, ein verspätetes Review-Exit mit Zugriff auf den Nachfolger und
+synchron blockierende Restzustands-/Fehleranzeigen. Die Korrektur erfasst alle
+drei Executor-Einstiege (Intake, Fortsetzung, Review), ohne neue Normaltools,
+Anwenderbestätigungen oder Änderungen an der Anonymisierung einzuführen.
+Fachagenten-Gegenreview und ausgeführte Tests: `docs/TESTING.md`.
+
+Die Abschlussanzeige darf weder den MCP-Elternprozess noch den Worker bis zum
+Schließen eines Fensters blockieren. Ein Fehler allein beweist dagegen kein
+Prozessende: Pending/Lease bleiben bis zum beobachteten Exit bestehen, wenn ein
+Kind gestartet wurde. Ein fehlgeschlagener Spawn ohne PID wird sicher behandelt.
+Exit-Logging erfolgt ausschließlich beim beobachteten Prozessende, höchstens
+einmal. `completion_notice_dispatched` unterscheidet die asynchrone
+Startanforderung vom historischen synchronen Abschlussereignis; es behauptet
+weder Sichtbarkeit noch eine menschliche Bestätigung des Fensters.
+
+Der positive SEA-Stapel-/Crash-/Resume-Nachweis bleibt offen. Das Architekturreview
+hat dafür eine bisher ungenügend beschriebene Voraussetzung klargestellt: Ein
+temporärer `EU_PRIVACY_ROOT` isoliert nicht den festen Produkt-Keyringeintrag.
+Der dafür zunächst vorgesehene lokale Windows-Testkonto-Weg ist seit DS-063
+verworfen. Sichere Testtrennung im vorhandenen Konto ist noch zu entwickeln;
+vorhandene Produktcredentials werden hierfür weder gelesen noch überschrieben.
+Der [Rollenvertrag](contracts/SEA_PARSER_ROLE_V1.md) enthält den konkreten Testplan.
+Weitere technische E0-Arbeit bleibt möglich; keine pauschale Freigabe behauptet.
+
+## RC72: feste SEA-Nebenrollen und begrenzter Companion-Start
+
+Batch, Intake, Review und Companion verwenden einen gemeinsamen Rollenstarter.
+Im Windows-SEA-Build starten drei feste interne Flags dasselbe Elternprogramm;
+keine zusätzlichen Node-Binärkopien, freien Skriptpfade oder Startoptionen.
+Batch/Review behalten private JSON-IPC, der Companion seinen authentifizierten
+Pipekanal. Nicht belegte SEA-POSIX-Rollen stoppen geschlossen; der normale
+Node-Pfad bleibt unverändert. Keine neue Anwenderabfrage oder öffentliche Tools.
+
+Architektur-, Launcher- und Integrationsexperten begleiteten den Schnitt. Zwei
+Gegenreviewbefunde im Companion sind korrigiert: Nach beobachtetem Prozessende
+wird keine möglicherweise neu vergebene PID beendet; Timeout/Abbruch schließen
+die Sitzung und löschen das Startgeheimnis auch ohne Exit-Ereignis. Der technische
+Ready-Timeout beträgt zehn Sekunden, nicht die Zeit für menschliche Entscheidungen.
+Das Geheimnis wird auf exakt 32 Bytes begrenzt eingelesen.
+
+Verträge und echte Engineering-Proben sind in `docs/TESTING.md` getrennt.
+Noch E0-offen: vollständiger positiver SEA-Stapellauf einschließlich Fortsetzung
+und Parent-Abbruch nach Start, gesamte Nebenrollen-Quellbindung, finale Assembly,
+kombinierte V2-Evidenz, reale POSIX-Integration und Größen-/Latenzvergleich.
+BL-010.1/BL-010.8 bleiben teilweise; öffentliche Konfiguration weiterhin `node`.
+Keine zusätzliche Format-, Cowork- oder Privacy-Freigabe.
+
+## RC71: gebundener SEA-Parent-/Parser-Dispatch
+
+Der echte Windows-SEA-Elternprozess verarbeitet synthetisches TXT, MD/Markdown,
+CSV und DOCX über die separate Parserrolle unter dem nativen Supervisor, ohne
+System-Node oder injizierte Startoptionen. Auch der normale MCP-Start mit acht
+Tools besteht. Drei Fachagenten begleiteten Architektur, Rollenresolver und
+reale Integration; ein Getter-TOCTOU wurde im Gegenreview gefunden und geschlossen.
+
+Binärhash/-länge und die vollständige Parser-Quellclosure sind unveränderbar im
+Elternprogramm gebunden. Identitätsgeprüftes Caching vermeidet erneutes Hashen
+unveränderter Dateien. Der SEA-Pfad erzwingt auch für POSIX den nativen Supervisor;
+die POSIX-Dispatchtests sind simulierte Verträge, keine realen Zielsystemläufe.
+Manipulation, fehlende Rolle, fremde Startoptionen und Links stoppen geschlossen.
+
+Noch E0-offen: Batch-/Review-/Companion-Rollen, gemeinsame finale Assembly mit
+kombinierter V2-Grenzevidenz, POSIX-Artefakte und Größen-/Latenzvergleich. Die
+Quellbindung umfasst den Parser, nicht die gesamte Parent-Implementierung.
+Keine installierte Cowork-/Anonymisierungsfreigabe, keine positive V2-MCP-Evidenz,
+öffentlicher Start weiterhin `node`. BL-010.1/BL-010.8 bleiben teilweise.
+Details: [Rollenvertrag](contracts/SEA_PARSER_ROLE_V1.md), `docs/TESTING.md`.
+
+## RC70: Worker-Startschutz und separate SEA-Parserrolle
+
+Architektur-/Security-Gegenreview: Der normale Worker prüft Startrechte und den
+unveränderbaren Netzwerk-Guard vor Parserimport und stdin-Lesen. Beide
+DNS-Resolver-Varianten sind jetzt geschützt; die Promise-Variante war bislang
+nicht vom API-Guard erfasst. Reale Negativtests unter Node 22.23.2 und 24.18.0.
+
+Ein separat gebauter, vollständig eingebetteter Engineering-Parser besteht die
+echten Windows-Format-/Rechte-/Netzwerkproben unter dem nativen Supervisor.
+Sein Verifier rekonstruiert die vollständige aktuelle Bundle-Closure und bindet
+Buildkonfiguration/Lock statt nur die gelieferten Inventareinträge zu prüfen.
+Der [Rollenvertrag](contracts/SEA_PARSER_ROLE_V1.md) trennt das von der weiterhin
+fehlenden MCP-Parent-, Batch-/Review-/Companion- und POSIX-Integration. Öffentliche
+Node-Konfiguration und Formatfreigabe unverändert; kein selbsttragender ZIP-Release.
+BL-010.1/BL-010.8 bleiben teilweise mit eigenständiger E0-Arbeit. Nachweise in
+`docs/TESTING.md`; keine zusätzliche Anwenderaktion eingeführt.
+
+## RC69: DOCX-Inhaltserhalt und vertrauenswürdige Parserzuordnung
+
+Zwei unabhängige Code-Experten fanden unbemerkten DOCX-Textverlust sowie Lücken
+in der Graphbindung. RC69 korrigiert die Bildlocator-/Attachment-Zuordnung,
+MIME-Typprüfung und Formatbindung an den tatsächlichen Parserauftrag. Quellteile
+und verschachtelte `!/`-Ketten erhalten eine gemeinsame kanonische Grammatik;
+Unicode-Zeilentrenner können die Traversal-/Steuerzeichenprüfung nicht umgehen.
+Das Knotenbudget wird vor dem Aufbau geprüft, ohne weitere Inhaltskopien oder
+zusätzliche Anwenderaktionen. Schema-/Runtime-Negativtests umfassen einen
+unabhängigen Segmentvergleich mit 1.200 deterministischen Fällen.
+
+Die DOCX-Korrektur erhält Text vor/nach Textfeldern sowie Inhalte verschachtelter
+Tabellen einschließlich nachfolgender und benachbarter Zellen. Synthetische
+Story-/Negativtests und das unabhängige Mammoth-Orakel prüfen Inhaltserhalt.
+Graph-Coverage belegt nur das erzeugte Markdown, nicht von sich aus das Original.
+BL-020.1/BL-020.2/BL-022.1 bleiben teilweise; keine neue Format-/Hostfreigabe.
+Lokale Nachweise stehen in `docs/TESTING.md`; echte Word-/Cowork-Abnahme fehlt.
+
+## RC68: passive MCP-App-Startkarte, kein neuer Produktpfad
+
+BL-042.3 erhält einen bewusst begrenzten E0-Teilschnitt: eine feste Start-
+Momentaufnahme über das offizielle MCP-Apps-SDK. Kein Fortschritt, kein Polling,
+keine Aktionen und kein Zugriff auf Dokumente, IDs, Rohwerte oder Handoff-Daten.
+Der Normalbetrieb bleibt unverändert textbasiert. Nur ein expliziter lokaler
+Engineering-Schalter, Normalmodus, ausgehandelte UI-Capability und ein geprüftes
+Offline-Artefakt gemeinsam erlauben die Karte. Ein defektes/fehlendes UI-Artefakt
+deaktiviert nur die Anzeige, nicht Start/Worker/Text-/OS-Abschluss.
+Der [Pilotvertrag](STATUS_APP_PILOT_V1.md) dokumentiert Schema, SDK/Lizenzen,
+Grenzen und Tests. Browser-Smoke ist ein synthetischer Host, keine Cowork-Abnahme.
+Echte Host-/A11y-Abnahme sowie der weitergehende terminale UI-Vertrag bleiben offen.
+
+Zusatzfund RV-06 im Gesamtregressionslauf: Der synthetische Gateway-Timeout-Test
+nutzte versehentlich den produktiven Secret-Store und zählte zwei dauerhaft
+erhaltene Schlüsselmetadaten als Reviewreste. Expertenreproduktion bestätigt
+korrekten dokumentbezogenen Cleanup. Der Test injiziert nun Testkryptografie und
+belegt das Erreichen der zweiten Grafik; keine produktive Löschlogik verändert.
+
+## RC67: Claude-Vertrag revalidiert, keine neue Host- oder Formatfreigabe
+
+Die [Revalidierung](../REVIEW_CLAUDE_BEST_PRACTICES_2026-08-31.md) korrigiert
+RV-01 bis RV-05: Normalmodus-Schema nur local_only, Supportsperre und sichere
+Legacy-Normalisierung, erreichbare Fehlerhilfe, UAT ohne Diagnosepflicht sowie
+Skill-/Referenz-/Eval-Abgleich für Start und spätere explizite Übergabe.
+33 Eval-Szenarien sind Spezifikation, keine 33 bestandenen Modellläufe.
+Der neue lokale offizielle CLI-Validator prüft Struktur ohne Modellkosten.
+Die Hostmatrix ist ausdrücklich Abnahmepolicy, keine Runtime-Attestierung;
+Desktop-UI oder Diagnoseerfolg allein beweisen keine lokale Sitzungsausführung.
+Der komplette lokale `npm run test:ci`-Lauf inklusive Sicherheit, Recovery,
+Formatmatrix und 34 MCP-Protokolltests bestand auf dem Korrekturstand vor der
+reinen RC67-Versionssynchronisierung. Paket-/Versionsabschluss: `docs/TESTING.md`.
+Windows-/macOS-Fresh-Install, reale Permissions und beobachtete Bedienung bleiben
+offen. Der selbsttragende ZIP-Start ohne System-Node ist weiterhin nicht belegt.
 
 Dieser Nachweis verhindert Doppelarbeit. `erledigt` bedeutet vollständig gegen das
 Ziel abgenommen, `teilweise` bedeutet wiederverwendbare Implementierung mit klarer
@@ -37,7 +418,7 @@ und die manuelle Claude-Abnahme auf Windows, macOS sowie dem Linux-Claude-Code-H
 | Ergebnisse | V3-Pakete, Journal/Mapping V2, Batch-Evidence v3 und Audit-Receipt v4 binden DS-045 crashsicher; RC63 projiziert terminale Grade in Abschluss/Results/Progress/Cowork; automatische Output-Löschung deaktiviert | neutrale dauerhafte Exporte/Mapping, nur explizit löschen | E0 abgeschlossen; E1/E3 offen |
 | Formate | TXT/Markdown/CSV/DOCX; Auswahl überwiegend endungsgeführt | Signatur+Struktur; drei Ergebnisgrade; alle Zielformate gestuft | P1 Content, danach Formate |
 | Performance | serieller Produktpfad, adaptiver geschlossener Zwei-Slot-Gleitfenster-Harness und reale lokale Benchmarks | adaptive kleine Parallelität, 2-s-/10-s-/10%-Budgets | E0 Policy/Scheduler abgeschlossen; Aktivierung nach E1 |
-| Cowork-UI | Text/OS-Dialoge, keine MCP-App | inhaltsfreie progressive MCP-App mit vollem Fallback | P2 Komfort |
+| Cowork-UI | Text/OS-Dialoge; passive RC68-Startkarte nur im deaktivierten Engineering-Pilot | inhaltsfreie progressive MCP-App mit vollem Fallback | P2 Komfort; BL-042.3 teilweise, E1/E2 offen |
 
 RC53 schließt den ersten R3-Originalschutzschnitt: Auch die verbliebene direkte
 Orchestratorgrenze verarbeitet Neuquellen ausschließlich über eine identitäts- und
@@ -100,8 +481,8 @@ Rest: nur laufende Vertragspflege bei jeder Capability-Änderung.
 
 ## BL-010 – Plattformpakete
 
-Status: **BL-050.1 und BL-050.2 abgeschlossen; weitere Format- und
-Angriffsausweitung bleibt in ihren jeweiligen Freigabe-Stories offen**
+Status: **teilweise implementiert; SEA-Worker-Dispatch und echte Zielsystem-
+Nachweise offen (BL-010.1/BL-010.8)**
 
 Vorhanden: Plugin-ZIP und MCPB, bytegenaue Paketparität, Windows-x64-Launcher sowie
 Dateiauswahladapter für Windows, macOS und Linux. Rest: automatische OS-Paketwahl,
@@ -120,8 +501,8 @@ Entwicklerrechner funktioniert, belegt keinen ZIP-/Marketplace-Start auf einem
 frischen Konto ohne System-Node; die ausdrücklich dokumentierte eingebaute
 Node-Runtime des MCPB darf nicht auf den Plugin-ZIP übertragen werden. Zusätzlich
 sind die Herstellerangaben zu lokalem MCP in Cowork-Web-/Mobil-/Cloud-Sitzungen
-widersprüchlich. Deshalb ist nur ein erfolgreicher `privacy_status` in der aktuellen
-Sitzung ein positives Hostgate. BL-010.7 und BL-010.8 sind P0; Cowork, ZIP und
+widersprüchlich. Ein erfolgreicher Support-`privacy_status` belegt lediglich
+Erreichbarkeit, nicht Host-Attestierung. BL-010.7 und BL-010.8 sind P0; Cowork, ZIP und
 Marketplace bleiben bis zu ihren Fresh-Install-/Negativmatrizen unbelegt.
 
 `RUNTIME_START_MATRIX_V1.json` macht diese Grenze maschinenlesbar: MCPB nutzt laut
@@ -142,10 +523,32 @@ Build- und MCP-Evidenz gebundenen Zielprogramme, verändert nur einen temporäre
 Stagingbaum und erzeugt bei unvollständigem Satz kein ZIP; ein erfolgreiches
 universelles Assembly wurde noch nicht behauptet.
 
+Revalidierung 31.08.2026, RC69: Der historische MCP-Startnachweis reicht nicht.
+Ein frisch aus dem aktuellen Bootstrap gebauter Windows-Launcher bestand erneut
+Normalmodus (acht Tools) und expliziten Supportmodus bei leerem `PATH`, scheiterte
+danach aber mit `SEA_PARSER_CORE_FAILED:txt,docx`. Workerargumente gelangen in
+`index.js`; die SEA-Konfiguration übernimmt deren Permission-Flags nicht.
+Der Prüfer erzeugt deshalb keine positive MCP-Evidenz. Das ist ein eigenständig
+zu implementierender E0-Rest, keine ausschließlich menschliche Testaufgabe.
+
+RC70 isoliert den nächsten technischen Teilschnitt: ein eigener gebündelter
+Windows-Parser besteht echte Format-/Rechte-/Netzwerkproben ohne lesbares
+Installationsverzeichnis. Seine vollständige Quellclosure wird neu rekonstruiert.
+Der MCP-Elternprozess sowie Batch-/Review-/Companion-Rollen sind noch nicht
+umgestellt; POSIX-Supervisorzwang und kombinierte V2-Evidence bleiben E0-offen.
+Der separate Erfolg hebt deshalb den obigen MCP-NO-GO-Nachweis nicht auf.
+
+Assembly verlangt jetzt quell-/versionsgebundene V2-Evidenz und echte positive
+TXT-/DOCX- sowie negative Rechte-/Netzwerknachweise. Alte Start-only-Nachweise
+reichen nicht mehr. Link-/Hardlink-Eingaben, veraltete Belege und vorhandene
+Ausgaben stoppen; private neue Stages ersetzen die feste Löschablage.
+Native-/OCR-POSIX-Modi bleiben erhalten. Details und Sicherheitsgrenzen:
+[SEA-Engineering-Paketvertrag](contracts/SEA_ASSEMBLY_EVIDENCE_V2.md).
+
 Der Hostvertrag ist inzwischen zusätzlich in `HOST_MATRIX_V1.json` und
-`HOST_MATRIX_V1.md` versioniert. Direkte Prompts und der Anonymisierungs-Skill
-stoppen vor Datei-/Ordnerzugriff, wenn `privacy_status` in genau der aktuellen
-Sitzung nicht erfolgreich ist; Skill-/Plugin-Sichtbarkeit, Desktop-App, Upload,
+`HOST_MATRIX_V1.md` versioniert. Im Normalweg startet der Picker ohne vorgeschaltete
+Supportdiagnose; nicht unterstützte Hosts müssen vor Originalzugriff stoppen.
+Skill-/Plugin-Sichtbarkeit, Desktop-App, Upload,
 Computer-Use, allgemeines Dateisystem und andere Connectoren gelten nicht als
 Nachweis oder Ersatz. Vier Evalfälle prüfen Web, Mobil, Cloud-/Scheduled und einen
 getrennten Desktop-Connector. Damit ist die Policy automatisiert belegt, nicht aber
@@ -689,6 +1092,12 @@ vertauschte IDs, Überlappungen, nicht lokalisierter Nicht-Leerraum und Textknot
 nach Bildknoten fail-closed abgelehnt werden. Ein elfter belegt vollständige
 Containerketten für rekursiv eingebettete OOXML-Pakete.
 
+RC69 ergänzt sechs Graph-Testgruppen (insgesamt 17): Asset-Umetikettierung,
+MIME-Typen, vertrauenswürdige Formatbindung, kanonische Quellteile, frühes Budget
+und 1.200 Unicode-/Containerkombinationen. 17 Parser-Isolationstests umfassen
+Format-Substitution im injizierten Windows-/macOS-/Linux-Startvertrag. Das ist
+kein Nachweis einer realen macOS-/Linux-Ausführung.
+
 Der kleine Locator-Kern übernimmt nur die Semantik von W3C
 `TextPositionSelector` und `FragmentSelector`; JSON-LD oder Apache Tika werden nicht
 als Runtime-Abhängigkeit eingeführt. Rest: feinere stabile Locators für Absätze,
@@ -766,7 +1175,13 @@ Dokumente positiv abdecken.
 
 Zusätzlich vergleicht eine reine, exakt gelockte Entwicklungsabhängigkeit Mammoth
 1.12.1 96 reguläre Hauptteil-/Tabellen-DOCX mit mehreren Hauptteilabsätzen und
-Tabellenzeilen gegen die lokale Extraktion. Das ist
+Tabellenzeilen gegen die lokale Extraktion. RC69 ergänzt 24 verschachtelte
+Tabellendokumente und 16 Textfelddokumente (bei letzteren prüft Mammoth nur die
+äußeren Textläufe; innere `wps`-Texte haben separate feste Sollwerte). 30 neue
+Strukturprüfgruppen testen alle sechs Stories, missgebildete Verschachtelung,
+Ressourcenbudgets, genau-einmalige Quellreihenfolge und die nachgelagerte
+De-Identifizierung zuvor verlorener Textpositionen bei Erhalt von Zertifikaten.
+Das ist
 kein Freigabebeweis für weitere Word-Stories oder reale Word-Generatoren und wird
 nicht in Plugin oder MCPB ausgeliefert.
 
@@ -1269,6 +1684,12 @@ versiegelten lokalen Arbeitskopie.
 ## BL-042 – Kommunikation und Diagnose
 
 Status: **teilweise**
+
+RC68 ergänzt BL-042.3 um die passive, default-off MCP-App-Startkarte mit exakt
+vier statischen Metadatenfeldern, SDK-Verbindung ohne Anwendungsaktionen,
+DE/EN-Texten und Offline-/Paketprüfung. Der Text-/OS-Pfad bleibt ohne UI vollständig.
+Dies ist kein lebender Fortschritts- oder Abschlussbildschirm. Technischer Vertrag
+und verbleibende Gates: [STATUS_APP_PILOT_V1.md](STATUS_APP_PILOT_V1.md).
 
 Vorhanden: datensparsames Diagnosejournal mit fester Whitelist, Statuswerkzeug,
 Retention, Rechts-/Zertifizierungsgrenzen und technische Fehlercodes hinter Details.

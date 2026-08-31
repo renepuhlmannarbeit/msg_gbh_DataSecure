@@ -62,6 +62,12 @@ for (const id of decisions) {
   if (!backlogText.includes(id)) throw new Error(`decision missing from backlog: ${id}`);
 }
 if (target.contract !== 'target-only-not-runtime') throw new Error('target capability contract is not clearly target-only');
+if (target.additional_system_vm?.runtime !== false || target.additional_system_vm?.acceptance_tests !== false) {
+  throw new Error('DS-062 excludes additional system VMs from runtime and acceptance tests');
+}
+if (target.additional_windows_account?.runtime !== false || target.additional_windows_account?.acceptance_tests !== false) {
+  throw new Error('DS-063 excludes additional Windows accounts from runtime and acceptance tests');
+}
 if (JSON.stringify(target.decision_ids) !== JSON.stringify(decisions)) {
   throw new Error('target capability contract does not cover the accepted decisions exactly');
 }
@@ -83,7 +89,9 @@ for (const id of collect(traceText, /\b(BL-\d{3})\b/g)) {
 for (const file of required.slice(1)) {
   if (!indexText.includes(`(${file})`)) throw new Error(`canonical index does not link ${file}`);
 }
-for (const token of ['Ist-Zustand RC66', '100 Dateien', '500 MiB', 'Windows', 'macOS', 'Linux']) {
+const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const currentLabel = /-rc(\d+)$/u.exec(version);
+for (const token of [`Ist-Zustand ${currentLabel ? `RC${currentLabel[1]}` : version}`, '100 Dateien', '500 MiB', 'Windows', 'macOS', 'Linux']) {
   if (!productText.includes(token)) throw new Error(`canonical product is missing: ${token}`);
 }
 if (target.reuse_policy?.open_source_first !== true ||

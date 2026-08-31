@@ -1,8 +1,8 @@
 'use strict';
 
-const { normalizeSpaces, normalizeText, ORG_SUFFIX } = require('./base');
+const { normalizeSpaces, normalizeText, ORG_SUFFIX, TECH_TERMS, escapeRegExp, NB, NA } = require('./base');
 const { matchers: credentialCatalogMatchers } = require('./credential-catalog');
-const { markdownTableCells } = require('./entities');
+const { markdownTableCells, collectOrganizations } = require('./entities');
 
 // The table path must recognise the same narrowly tested certification
 // headings as profile detection. Otherwise a CSV row containing a credential
@@ -21,6 +21,7 @@ const CERT_CODE_RE = credentialCatalogMatchers.code;
 // programmes/issuers rather than every current exam title, so newly introduced
 // credentials inherit protection without requiring a release first.
 const CERT_ISSUER_RE = credentialCatalogMatchers.issuer;
+const MAX_TECH_TERM_LENGTH = Math.max(...Array.from(TECH_TERMS, (term) => term.length));
 const CERT_TITLE_RE = /\b(?:certified|certification|certificate|credential|professional|associate|expert|specialist|foundation|practitioner|agilist|master|product\s+owner|architect|developer|engineer|administrator|analyst|manager|auditor|security|cloud|devops|testing|test\s+automation|requirements\s+engineering|usability|user\s+experience|business\s+analysis|product\s+ownership|system\s+administrator|solutions?\s+architect|kubernetes|FHIR|CDA|healthcare\s+information|digital\s+health)\b/iu;
 // Originally label-only ("Kunde: ABC GmbH"). Real CVs also name a customer or
 // employer in prose inside a certification section ("Zertifikat ausgestellt
@@ -117,10 +118,16 @@ function credentialContextDetails(text) {
     // Portfolio matching is for compact CV entries.  Applying it to arbitrary
     // prose would make a project paragraph containing e.g. "SAP" and
     // "Product Owner" credential context and could hide a customer name.
-    const recognisedPortfolio = clean.length <= 180 &&
-      CERT_ISSUER_RE.test(clean) && hasCredentialTitle(clean);
+    const issuer = clean.match(CERT_ISSUER_RE);
+    const recognisedPortfolio = clean.length <= 180 && issuer && issuer.index === 0 &&
+      hasCredentialTitle(clean.slice(issuer[0].length));
+    // Unknown compact titles can also introduce an unresolved training-party
+    // relationship. A section heading is not required for local review.
+    const unknownPortfolio = clean.length <= 240 &&
+      /\b(?:Expert|Professional|Tester|Practitioner)\s+bei\s+/u.test(clean) &&
+      collectOrganizations(clean).length > 0;
     const explicitCue = hasCredentialCue(clean);
-    if((section && clean && !/^:?-{3,}:?$/.test(clean)) || explicitCue || recognisedPortfolio) {
+    if((section && clean && !/^:?-{3,}:?$/.test(clean)) || explicitCue || recognisedPortfolio || unknownPortfolio) {
       spans.push({
         start:offset,
         end:offset+line.length,
@@ -138,15 +145,6 @@ function credentialContextSpans(text) {
   return credentialContextDetails(text).map(({ start, end }) => ({ start, end }));
 }
 
-function lineRanges(text) {
-  const ranges=[]; let offset=0;
-  for(const line of String(text || '').split('\n')) {
-    ranges.push({ start: offset, end: offset + line.length, text: line });
-    offset += line.length + 1;
-  }
-  return ranges;
-}
-
 function literalMatches(text, value) {
   const result=[]; const haystack=String(text).toLocaleLowerCase('de-DE');
   const needle=String(value).toLocaleLowerCase('de-DE');
@@ -158,35 +156,78 @@ function literalMatches(text, value) {
   return result;
 }
 
+// Redaction changes offsets and may consume a line break in a wrapped holder
+// name. Align the surviving literal fragments around placeholders, instead of
+// assuming that source/output line numbers or repeated-name ordinals match.
+function preservedTextRanges(original, anonymized) {
+  const ranges=[];
+  const placeholders=/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu;
+  let outputStart=0; let originalCursor=0;
+  const add=(end)=> {
+    let fragment=anonymized.slice(outputStart,end);
+    if(!fragment) return;
+    let start=original.indexOf(fragment,originalCursor);
+    let leading=0;
+    if(start<0) {
+      // Key/value table redaction can normalize boundary padding.
+      leading=fragment.length-fragment.trimStart().length;
+      fragment=fragment.trim();
+      if(!fragment) return;
+      start=original.indexOf(fragment,originalCursor);
+    }
+    if(start<0) return;
+    ranges.push({ original_start:start, original_end:start+fragment.length, anonymized_start:outputStart+leading });
+    originalCursor=start+fragment.length;
+  };
+  let match;
+  while((match=placeholders.exec(anonymized))!==null) {
+    add(match.index);
+    outputStart=match.index+match[0].length;
+  }
+  add(anonymized.length);
+  return ranges;
+}
+
 /**
- * Return only genuinely ambiguous issuer-shaped occurrences. Explicit
- * certification wording and certification sections remain automatic. The
- * returned objects contain offsets and stable IDs, never copied raw values.
+ * Return unresolved organisation roles, including unknown legal-form names
+ * inside explicit sections. Context is evidence for review, not permission to
+ * release every company on the same line. Only offsets leave this helper.
  */
 function credentialIssuerAmbiguities(originalText, anonymizedText) {
   const original=normalizeText(originalText); const anonymized=String(anonymizedText || '');
-  const originalLines=lineRanges(original); const anonymizedLines=lineRanges(anonymized);
+  const preserved=preservedTextRanges(original,anonymized);
   const details=credentialContextDetails(original); const candidates=[]; const used=new Set();
-  const issuerRe=new RegExp(CERT_ISSUER_RE.source, `${CERT_ISSUER_RE.flags.includes('g') ? CERT_ISSUER_RE.flags : `${CERT_ISSUER_RE.flags}g`}`);
-  for(const context of details.filter((item)=>item.reason==='catalog')) {
-    const lineIndex=originalLines.findIndex((line)=>line.start===context.start && line.end===context.end);
-    if(lineIndex<0 || !anonymizedLines[lineIndex]) continue;
-    issuerRe.lastIndex=0; let match;
-    while((match=issuerRe.exec(originalLines[lineIndex].text))!==null) {
-      const originalStart=context.start+match.index; const originalEnd=originalStart+match[0].length;
-      if(!inCredentialContext(original,originalStart,originalEnd,details)) continue;
-      const options=literalMatches(anonymizedLines[lineIndex].text,match[0]);
-      const mapped=options.find((item)=>!used.has(`${lineIndex}:${item.start}:${item.end}`));
-      if(!mapped) continue; // the normal privacy engine already anonymised it
-      used.add(`${lineIndex}:${mapped.start}:${mapped.end}`);
-      candidates.push({
-        ambiguity_id:`credential:v2:${String(candidates.length+1).padStart(6,'0')}`,
-        type:'credential_issuer_ambiguous',
-        original_start:originalStart,
-        original_end:originalEnd,
-        anonymized_start:anonymizedLines[lineIndex].start+mapped.start,
-        anonymized_end:anonymizedLines[lineIndex].start+mapped.end
-      });
+  for(const context of details) {
+    const contextText=original.slice(context.start,context.end);
+    const issuerRe=new RegExp(CERT_ISSUER_RE.source, `${CERT_ISSUER_RE.flags.replace(/g/g,'')}g`);
+    const values=[...collectOrganizations(contextText), ...Array.from(contextText.matchAll(issuerRe), (match)=>match[0])];
+    const spans=values.flatMap((value)=>literalMatches(contextText,value))
+      .sort((a,b)=>a.start-b.start || b.end-a.end);
+    const covered=[];
+    for(const span of spans) {
+      if(covered.some((item)=>item.start<=span.start && item.end>=span.end)) continue;
+      covered.push(span);
+      const originalStart=context.start+span.start; const originalEnd=context.start+span.end;
+      if(credentialOrganizationRole(original,originalStart,originalEnd,details)!=='ambiguous') continue;
+      const retained=preserved.find((item)=>originalStart>=item.original_start && originalEnd<=item.original_end);
+      const options=retained ? [{
+        start:retained.anonymized_start+originalStart-retained.original_start,
+        end:retained.anonymized_start+originalEnd-retained.original_start
+      }] : literalMatches(anonymized,contextText.slice(span.start,span.end));
+      // If exact fragment alignment was unavailable, require review of every
+      // surviving candidate rather than silently guessing the first homonym.
+      for(const mapped of options) {
+        if(used.has(`${mapped.start}:${mapped.end}`)) continue;
+        used.add(`${mapped.start}:${mapped.end}`);
+        candidates.push({
+          ambiguity_id:`credential:v2:${String(candidates.length+1).padStart(6,'0')}`,
+          type:'credential_issuer_ambiguous',
+          original_start:originalStart,
+          original_end:originalEnd,
+          anonymized_start:mapped.start,
+          anonymized_end:mapped.end
+        });
+      }
     }
   }
   return candidates;
@@ -268,7 +309,58 @@ function inCredentialContext(text,start,end,ranges=credentialContextSpans(text))
 // on the immediately preceding line, so a short two-line block ("Zertifikat
 // ausgestellt von\nScrum.org") still protects its issuer without treating
 // the whole certification section as a domain allowlist.
-const ISSUER_ATTRIBUTION_BEFORE_RE = /(?:ausgestellt\s+(?:von|durch)|zertifiziert\s+(?:von|durch)|akkreditiert\s+(?:von|durch)|issued\s+by|certified\s+by|accredited\s+by)\s*:?\s*$/iu;
+const ISSUER_ATTRIBUTION_BEFORE_RE = /(?:(?:ausgestellt|zertifiziert|akkreditiert|verliehen|erteilt)\s+(?:von|durch)|(?:issued|certified|accredited|awarded)\s+by)\s*:?\s*$/iu;
+
+// Resolve the role of this occurrence, never of the global vendor literal.
+// Ambiguous spans remain available to the mandatory local-review gate; unlike
+// issuers they must not be silently published merely because of a heading.
+function credentialOrganizationRole(text,start,end,ranges=credentialContextDetails(text)) {
+  if(!inCredentialContext(text,start,end,ranges)) return 'private';
+  const src=String(text);
+  const range=ranges.find((item)=>start>=item.start && end<=item.end);
+  if(!range) return 'private';
+  const lineStart=src.lastIndexOf('\n',Math.max(0,start-1))+1;
+  const before=src.slice(lineStart,start);
+  const previous=src.slice(Math.max(0,src.lastIndexOf('\n',Math.max(0,lineStart-2))+1),start);
+  if(ISSUER_ATTRIBUTION_BEFORE_RE.test(before) || (!before.trim() && ISSUER_ATTRIBUTION_BEFORE_RE.test(previous))) return 'issuer';
+  const after=src.slice(end,range.end).replace(ORG_SUFFIX_GAP_RE,'');
+  // "bei X" may denote a trainer, location or employer. A nearby title
+  // cannot decide that role, even if the company is also a catalogued issuer.
+  if(/\b(?:bei|at|with)\s*$/iu.test(before)) return 'ambiguous';
+  const exactIssuer=new RegExp(`^(?:${CERT_ISSUER_RE.source})$`,CERT_ISSUER_RE.flags);
+  const leadingTitle=hasLeadingCredentialTitle(after);
+  const startsEntry=!plainLine(src.slice(range.start,start)).replace(/^(?:Zertifikat|Certificate)\s*:\s*/iu,'').trim();
+  const compactTitle=startsEntry && after.length<=180 && /^\s+[A-ZÄÖÜ0-9]/u.test(after) &&
+    hasCredentialTitle(after) && !/\b(?:bei|für|at|with)\b/iu.test(after);
+  if(leadingTitle || compactTitle) {
+    // Catalog-only entries intentionally keep the established local decision.
+    if(range.reason==='catalog' && exactIssuer.test(src.slice(start,end))) return 'ambiguous';
+    return 'issuer';
+  }
+  return 'ambiguous';
+}
+
+// Products must survive a vendor alias registered elsewhere as an employer.
+// Only a strictly longer, known professional term can shield that substring;
+// an explicit organisation label at this position always wins.
+function isTechnologyOrganizationSpan(text,start,end) {
+  const src=String(text || '');
+  const lineStart=src.lastIndexOf('\n',Math.max(0,start-1))+1;
+  if(NON_ISSUER_LABEL_RE.test(src.slice(lineStart,start)) || NON_ISSUER_PREFIX_RE.test(src.slice(start,end))) return false;
+  // Search only the occurrence neighbourhood, not the full document once per
+  // term and alias. The maximum known term length bounds all possible covers.
+  const from=Math.max(lineStart,start-MAX_TECH_TERM_LENGTH);
+  const neighbourhood=src.slice(from,end+MAX_TECH_TERM_LENGTH);
+  for(const term of TECH_TERMS) {
+    if(term.length<=end-start) continue;
+    const matcher=new RegExp(`${NB}${escapeRegExp(term)}${NA}`,'giu');
+    let match;
+    while((match=matcher.exec(neighbourhood))!==null) {
+      if(start>=from+match.index && end<=from+match.index+match[0].length) return true;
+    }
+  }
+  return false;
+}
 
 function isCredentialIssuerDomain(text,start,end,ranges=credentialContextSpans(text)) {
   if(!inCredentialContext(text,start,end,ranges)) return false;
@@ -305,6 +397,8 @@ module.exports={
   inCredentialContext,
   isCredentialIssuerDomain,
   isCatalogTechnologyTerm,
+  credentialOrganizationRole,
+  isTechnologyOrganizationSpan,
   CERT_SECTION_RE,
   CERT_CUE_RE,
   CERT_CODE_RE,

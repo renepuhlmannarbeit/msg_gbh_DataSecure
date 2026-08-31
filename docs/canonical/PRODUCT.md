@@ -1,6 +1,20 @@
 # Kanonisches Produktziel
 
-Stand: 28.08.2026 · Zielbild aus `PRODUCT_VISION.md` · Ist-Zustand RC66
+Stand: 31.08.2026 · Zielbild aus `PRODUCT_VISION.md` · Ist-Zustand RC81
+
+RC78/RC79 erweitern nur die Engineering-Abnahme um einen nativen Prozessbeobachter
+mit optionaler Parent-/Worker-Reihenfolgeprüfung. DS-062 schließt zusätzliche
+System-VMs für DataSecure und unsere Testplanung aus. DS-063 schließt zusätzlich
+ein separates Windows-Benutzerkonto aus; sichere Testtrennung ist Entwicklungsarbeit.
+Kein neuer Nutzerschritt, keine Laufzeit-/Formatfreigabe und keine behauptete
+Beschleunigung des Anonymisierers. Standardstart bleibt Node; selbsttragende
+SEA-Pakete benötigen weiterhin die E0-/Zielsystemnachweise aus dem Backlog.
+
+DS-065 ersetzt die frühere Verschlüsselungspflicht: neue lokale Arbeitskopien
+ohne zusätzliche Verschlüsselung, Schlüsselbund, Schlüsseldatei oder Passwort.
+Sie bleiben lokal, sind aber mit passenden Dateirechten lesbar. Die RC80-Umstellung
+und ihre Regression werden in `CURRENT_STATE.md` getrennt von der echten
+Cowork-Abnahme nachgewiesen.
 
 ## Ziel in einem Satz
 
@@ -35,6 +49,11 @@ freigegebenes Markdown an Claude. Die Grenze von 100 Dateien und 500 MiB beschre
 die lokale Aufbereitung, nicht einen Modellkontext; eine Seitenbegrenzung gibt es
 nicht.
 
+Ist-Grenze RC75: Auch ein kombinierter Erstauftrag startet zunächst ausschließlich
+lokal. Die Auswertung benötigt danach einen neuen ausdrücklichen Auftrag; der
+Start pollt oder liest nicht automatisch. Die weitergehende nahtlose Zielreise
+bleibt BL-041.2 und wird durch diese Vertragskorrektur nicht als fertig erklärt.
+
 ## Zielformate und Ergebnisgrade
 
 | Eingang | Zielbehandlung |
@@ -64,8 +83,12 @@ layoutidentische Kopie.
   Ordner werden ausschließlich lesend verwendet.
 - Symlinks, Junctions, Reparse Points und externe Nachladebeziehungen werden nicht
   verfolgt; Makros, Skripte und aktive Inhalte werden nie ausgeführt.
-- Private Snapshots und Reviewdaten sind pro Benutzer OS-gebunden verschlüsselt.
-  Erfolgreiche Rohkopien werden sofort, offene spätestens nach 14 Tagen gelöscht.
+- Private Snapshots und Reviewdaten sind lokale, unverschlüsselte Arbeitsdateien
+  (DS-065). Kein Schlüsselbund, Schlüsseldatei oder Passwort erforderlich.
+  Erfolgreiche neue Rohkopien werden sofort, offene spätestens nach 14 Tagen
+  gelöscht; neue Reviewkopien folgen ihrer konfigurierten Frist. Verschlüsselte
+  Altbestände samt Metadaten bleiben unverändert und werden nicht automatisch
+  migriert oder gelöscht; zur Verarbeitung das Original erneut auswählen.
 - Freigegebene Exporte und das ausschließlich lokale Mapping bleiben dauerhaft.
   Relative Quellpfade erscheinen nur, wenn eine Ordnerhierarchie sonst mehrdeutig
   wäre; eine Rohentitätstabelle wird nicht geführt.
@@ -77,6 +100,11 @@ layoutidentische Kopie.
 Cowork ist Einstieg, inhaltsfreier Status und Ergebnisort. Datei-/Ordnerwahl und
 rohdatenhaltige Prüfung erfolgen lokal. Eine optionale inhaltsfreie MCP-App ist nur
 progressive Verbesserung; OS- und Textfallback bleiben vollständig.
+
+RC68 enthält dafür nur eine standardmäßig deaktivierte passive Startkarte. Sie
+zeigt eine Momentaufnahme, keinen Live-Fortschritt und keinen bestätigten Abschluss.
+Sie führt keine Aktionen aus und erhält keine Dokumentdaten. Produktaktivierung
+bleibt von echter Cowork-/A11y-Evidenz abhängig (BL-042.3).
 
 Picker und Startannahme sollen je innerhalb von zwei Sekunden reagieren; kein
 Verarbeitungs-MCP-Aufruf darf Cowork länger als zehn Sekunden blockieren. Adaptive
@@ -97,19 +125,20 @@ offene Stapel. Piloten dürfen unsigniert sein; eigene native Sicherheitskompone
 werden vor breitem Unternehmenseinsatz signiert. Deutsch, Englisch und
 WCAG-orientierte Abnahmen gehören zum Releasevertrag.
 
-## Ist-Zustand RC66
+## Implementierungsbasis RC66 und Scopekorrektur RC80
 
 Aktuell freigegeben sind TXT, Markdown, CSV und DOCX im synthetisch belegten
 Engineering-Pfad. Die Stapelgrenze beträgt 100 Dateien und 500 MiB; zusätzlich
 gelten TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes und DOCX 64 MiB
 komprimiert/128 MiB entpackt. Fortsetzbare Checkpoints, lokales Mapping,
 Hintergrund-Intake und Sicherheitsgates bestehen. Rekursive Ordnerauswahl und
-OS-benutzergebundene Verschlüsselung der privaten Batch-/Reviewartefakte sind E0
-integriert; die adaptive Zwei-Slot-Policy ist synthetisch belegt, bleibt im
+der lokale Snapshot-/Reviewpfad sind E0 integriert; RC80 stellt dessen Speicherweg
+gemäß DS-065 ohne zusätzliche Verschlüsselung um. Die adaptive Zwei-Slot-Policy
+ist synthetisch belegt, bleibt im
 Produktpfad aber bis zur realen Zielhardware-Evidenz seriell geschlossen.
 
 Noch nicht erfüllt sind insbesondere selbsttragende Windows-/macOS-Pakete, echte
-Cowork-Abnahmen, reale Keyring-/Dateisystemevidenz, selbsttragende Zielpakete,
+Cowork-Abnahmen, reale Dateisystemevidenz, selbsttragende Zielpakete,
 adaptive Produktparallelität und
 die Freigabe von XLSX, PPTX, PDF/Scan-PDF sowie Rasterbildern. Der genaue IST/SOLL-
 Abgleich steht in `CURRENT_STATE.md`; nur `BACKLOG.md` priorisiert die Restarbeit.

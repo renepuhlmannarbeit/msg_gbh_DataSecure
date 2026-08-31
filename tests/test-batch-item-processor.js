@@ -156,6 +156,26 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('10 and 100 item batches use four bounded durable writes per successful item', async () => {
+    for (const count of [10, 100]) {
+      const fixtures = Array.from({ length: count }, () => fixture());
+      const items = fixtures.map((value) => value.item);
+      let serializedBytes = 0;
+      let writeCount = 0;
+      for (const value of fixtures) {
+        value.state.items = items;
+        const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+        assert.strictEqual(result.package_id, value.expectedPackageId);
+        for (const write of value.writes) {
+          serializedBytes += Buffer.byteLength(JSON.stringify(write.snapshot));
+          assert.notStrictEqual(write.writeOptions?.durable, false);
+        }
+        writeCount += value.writes.length;
+      }
+      assert.strictEqual(writeCount, 4 * count);
+      assert.ok(serializedBytes < count * count * 2000, 'bounded metadata workload, not a wall-clock claim');
+    }
+  });
   await testAsync('happy path preserves identity, safety options, order, counters and facade', async () => {
     const value = fixture({ auditReceipt: true });
     const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
@@ -169,7 +189,8 @@ async function main() {
     });
     assert.ok(value.events.indexOf('mapping-pending') > value.events.indexOf('phase:publication'));
     assert.ok(value.events.indexOf('mapping-commit') > value.events.indexOf('cleanup'));
-    assert.strictEqual(value.writes.filter((entry) => entry.writeOptions?.durable === false).length, 5);
+    assert.strictEqual(value.writes.filter((entry) => entry.writeOptions?.durable === false).length, 0);
+    assert.strictEqual(value.writes.length, 4, 'only durable processing, publication/mapping, outbox and delivery checkpoints');
     assert.deepStrictEqual(value.events.filter((event) => /^(phase|review|outbox|mapping-pending|cleanup|mapping-commit|io:)/u.test(event)), [
       'phase:intake_and_preparation',
       'phase:conversion_and_visual_scan',
@@ -198,14 +219,8 @@ async function main() {
     assert.strictEqual(initial.item.status, 'processing');
     assert.ok(!initial.events.includes('anonymize'));
 
-    for (const writeFailureCall of [2, 3, 4, 5]) {
-      const value = fixture({ writeFailureCall });
-      const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
-      assert.strictEqual(result.error, 'PROCESSING_INTERRUPTED', `write ${writeFailureCall}`);
-      assert.strictEqual(value.item.status, 'retryable', `write ${writeFailureCall}`);
-      assert.ok(!value.events.includes('mapping-stopped'), `write ${writeFailureCall}`);
-      assert.ok(!value.events.includes('outbox'), `write ${writeFailureCall}`);
-    }
+    // There are no further pre-publication disk writes for diagnostic phases.
+    // Parser/review failures are covered separately and remain retryable/stopped.
   });
 
   await testAsync('deferred, retryable and stopped failures retain exact pre-publication semantics', async () => {
@@ -262,7 +277,7 @@ async function main() {
   });
 
   await testAsync('every post-publication journal failure remains recoverable and never becomes stopped', async () => {
-    for (const writeFailureCall of [6, 7, 8, 9, 10]) {
+    for (const writeFailureCall of [2, 3, 4]) {
       const value = fixture({ writeFailureCall });
       const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
       assert.strictEqual(result.ok, false, `write ${writeFailureCall}`);
@@ -277,10 +292,10 @@ async function main() {
   });
 
   await testAsync('persistent journal failure propagates without downgrading the published in-memory state', async () => {
-    const value = fixture({ writeFailureFromCall: 6 });
+    const value = fixture({ writeFailureFromCall: 2 });
     await assert.rejects(
       value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps),
-      /write 7 failed/u
+      /write 3 failed/u
     );
     assert.strictEqual(value.item.status, 'processing');
     assert.strictEqual(value.item.checkpoint, 'package_published');
