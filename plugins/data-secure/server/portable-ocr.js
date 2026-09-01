@@ -168,6 +168,12 @@ async function ocrPngDetailedPortable(buffer, language = 'de-DE', options = {}) 
   if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > MAX_INPUT_BYTES) {
     throw new PortableOcrError('OCR_INPUT_LIMIT');
   }
+  const signal = options.signal;
+  if (signal && (typeof signal.addEventListener !== 'function' ||
+    typeof signal.removeEventListener !== 'function')) {
+    throw new PortableOcrError('OCR_INPUT_INVALID');
+  }
+  if (signal?.aborted) throw new PortableOcrError('OCR_CANCELLED');
   const status = portableOcrStatus(options);
   if (!status.available) throw new PortableOcrError('OCR_BACKEND_UNAVAILABLE');
   const { width, height } = decodePng(buffer);
@@ -175,7 +181,8 @@ async function ocrPngDetailedPortable(buffer, language = 'de-DE', options = {}) 
   const args = [
     '--memory-mib', String(OCR_MEMORY_MIB), '--cpu-ms', String(OCR_CPU_MS),
     '--wall-ms', String(OCR_WALL_MS), '--', options.execPath || process.execPath,
-    '--no-warnings', '--permission', `--allow-fs-read=${status.root}`, '--allow-worker',
+    '--no-warnings', '--require', status.networkDeny,
+    '--permission', `--allow-fs-read=${status.root}`, '--allow-worker',
     '--disable-proto=throw', '--max-old-space-size=512', status.worker
   ];
   let child;
@@ -184,8 +191,7 @@ async function ocrPngDetailedPortable(buffer, language = 'de-DE', options = {}) 
       stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true, shell: false,
       env: {
         DATASECURE_OCR_IMAGE_WIDTH: String(width),
-        DATASECURE_OCR_IMAGE_HEIGHT: String(height),
-        NODE_OPTIONS: `--require=${status.networkDeny}`
+        DATASECURE_OCR_IMAGE_HEIGHT: String(height)
       }
     });
   } catch {
@@ -195,13 +201,16 @@ async function ocrPngDetailedPortable(buffer, language = 'de-DE', options = {}) 
     let settled = false;
     let terminationError = null;
     let terminationTimer = null;
+    let timer = null;
     let bytes = 0;
     const chunks = [];
+    const abort = () => terminate(new PortableOcrError('OCR_CANCELLED'));
     const finish = (error, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       clearTimeout(terminationTimer);
+      signal?.removeEventListener('abort', abort);
       if (error) reject(error); else resolve(result);
     };
     const terminate = (error) => {
@@ -214,10 +223,15 @@ async function ocrPngDetailedPortable(buffer, language = 'de-DE', options = {}) 
         return;
       }
       terminationTimer = setTimeout(() => finish(new PortableOcrError('OCR_BACKEND_UNAVAILABLE')),
-        options.terminationGraceMs || 10_000);
+        Number.isSafeInteger(options.terminationGraceMs) && options.terminationGraceMs > 0
+          ? Math.min(options.terminationGraceMs, 10_000) : 10_000);
     };
-    const timer = setTimeout(() => terminate(new PortableOcrError('OCR_TIMEOUT')),
-      Math.min(options.timeoutMs || OCR_TIMEOUT_MS, OCR_TIMEOUT_MS));
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    const requestedTimeout = Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
+      ? options.timeoutMs : OCR_TIMEOUT_MS;
+    timer = setTimeout(() => terminate(new PortableOcrError('OCR_TIMEOUT')),
+      Math.min(requestedTimeout, OCR_TIMEOUT_MS));
     child.stdout.on('data', (chunk) => {
       bytes += chunk.length;
       if (bytes > MAX_OUTPUT_BYTES) {

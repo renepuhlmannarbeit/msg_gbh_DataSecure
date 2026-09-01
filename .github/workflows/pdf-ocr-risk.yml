@@ -1,4 +1,7 @@
-name: PDF and OCR three-platform risk preflight
+name: Future-format PDF and OCR risk preflight (non-release)
+
+# Manual research only. Passing this workflow cannot enable PDF/OCR or change
+# the current product format allowlist.
 
 on:
   workflow_dispatch:

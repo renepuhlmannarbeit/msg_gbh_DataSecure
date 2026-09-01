@@ -76,6 +76,15 @@ makePackage('run-two', '# Freigegeben zwei');
 makePackage('run-long', Array.from({ length: 2500 }, (_, index) => `Zeile ${String(index).padStart(4, '0')}: freigegebene synthetische Fachinformation.`).join('\n'));
 makePackage('run-unicode', `${'a'.repeat(4799)}🚀Ä Ende`);
 makePackage('run-unicode-many', 'A🚀Ä漢e\u0301|'.repeat(3000));
+makePackage('run-large-snapshot', 'L'.repeat(5 * 1024 * 1024 + 17));
+makePackage('run-invalid-utf8', '# placeholder');
+const invalidUtf8Document = path.join(root, 'Output', 'run-invalid-utf8', 'run-invalid-utf8.md');
+const invalidUtf8Bytes = Buffer.from([0x23, 0x20, 0x66, 0x6f, 0x80]);
+fs.writeFileSync(invalidUtf8Document, invalidUtf8Bytes);
+const invalidUtf8ManifestPath = path.join(root, 'Output', 'run-invalid-utf8', 'manifest.json');
+const invalidUtf8Manifest = JSON.parse(fs.readFileSync(invalidUtf8ManifestPath, 'utf8'));
+invalidUtf8Manifest.document_sha256 = sha256(invalidUtf8Bytes);
+fs.writeFileSync(invalidUtf8ManifestPath, JSON.stringify(invalidUtf8Manifest), 'utf8');
 
 test('a package id alone is never sufficient', () => {
   assert.throws(() => readOutput('run-one'), /Leseberechtigung/);
@@ -91,6 +100,31 @@ test('one run capability reads only its own verified document and asset', () => 
   assert.strictEqual(listAssets('run-one', grant.read_capability).assets.length, 1);
   assert.ok(readAsset('run-one', grant.read_capability, 'asset-001').__image.data.length > 0);
   assert.throws(() => readOutput('run-two', grant.read_capability), /Leseberechtigung/);
+});
+
+test('a capability cannot be rebound by replacing package content and its manifest hash', () => {
+  const id = 'run-capability-binding';
+  makePackage(id, '# Freigegebene Fachinformation');
+  const grant = issueReadCapability(id);
+  const dir = path.join(root, 'Output', id);
+  const documentPath = path.join(dir, `${id}.md`);
+  const manifestPath = path.join(dir, 'manifest.json');
+  const replacement = '# Alice Mustermann Rohdaten';
+  fs.writeFileSync(documentPath, replacement, 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.document_sha256 = sha256(Buffer.from(replacement, 'utf8'));
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+  assert.throws(
+    () => readOutput(id, grant.read_capability),
+    (error) => /seit Erteilung/u.test(error.message) && !error.message.includes('Alice')
+  );
+});
+
+test('an oversized manifest is refused before JSON materialization', () => {
+  const id = 'run-oversized-manifest';
+  makePackage(id, '# Freigegeben');
+  fs.writeFileSync(path.join(root, 'Output', id, 'manifest.json'), Buffer.alloc(1024 * 1024 + 1, 32));
+  assert.throws(() => issueReadCapability(id), /Größenbegrenzung|Paketmanifest/u);
 });
 
 test('v3 packages require a grade consistent with their exact omission signals', () => {
@@ -294,20 +328,179 @@ test('verified handoff snapshot preserves Unicode at a page boundary', () => {
   snapshot.dispose();
 });
 
-test('indexed snapshot reassembles many multibyte pages without replacement or omission', () => {
+test('direct fallback paging preserves Unicode at a page boundary', () => {
+  const expected = `${'a'.repeat(4799)}🚀Ä Ende`;
+  const grant = issueReadCapability('run-unicode');
+  const first = readOutput('run-unicode', grant.read_capability, 0, 4800);
+  const second = readOutput('run-unicode', grant.read_capability, first.next_offset, 4800);
+  assert.strictEqual(first.next_offset, first.text.length);
+  assert.strictEqual(`${first.text}${second.text}`, expected);
+  assert.strictEqual(Buffer.from(first.text, 'utf8').toString('utf8'), first.text);
+  assert.strictEqual(Buffer.from(second.text, 'utf8').toString('utf8'), second.text);
+});
+
+test('direct fallback rejects hash-valid Markdown with invalid UTF-8 bytes', () => {
+  const grant = issueReadCapability('run-invalid-utf8');
+  assert.throws(
+    () => readOutput('run-invalid-utf8', grant.read_capability),
+    /nicht gültig UTF-8-kodiert/u
+  );
+});
+
+test('direct and snapshot paging reject an offset inside a Unicode surrogate pair', () => {
+  const grant = issueReadCapability('run-unicode');
+  assert.throws(
+    () => readOutput('run-unicode', grant.read_capability, 4800, 4800),
+    /Ergebnisoffset liegt innerhalb eines Unicode-Zeichens/u
+  );
+  const snapshot = openVerifiedMarkdownSnapshot('run-unicode', grant.read_capability);
+  try {
+    assert.throws(
+      () => snapshot.read(4800, 4800),
+      /Ergebnisoffset liegt innerhalb eines Unicode-Zeichens/u
+    );
+  } finally {
+    snapshot.dispose();
+  }
+});
+
+test('descriptor close failures remain content-free and fail closed', () => {
+  const grant = issueReadCapability('run-one');
+  const originalClose = fs.closeSync;
+  fs.closeSync = (descriptor) => {
+    originalClose(descriptor);
+    throw new Error(`native close detail: ${path.join(root, 'private-name.md')}`);
+  };
+  try {
+    assert.throws(
+      () => readOutput('run-one', grant.read_capability),
+      (error) => error && error.message === 'Paketdatei ist nicht freigegeben.'
+    );
+  } finally {
+    fs.closeSync = originalClose;
+  }
+});
+
+test('pre-open filesystem failures remain content-free and fail closed', () => {
+  const grant = issueReadCapability('run-one');
+  const originalLstat = fs.lstatSync;
+  fs.lstatSync = (value, ...args) => {
+    if (String(value).endsWith(`${path.sep}run-one.md`)) {
+      throw new Error(`native pre-open detail: ${value}`);
+    }
+    return originalLstat(value, ...args);
+  };
+  try {
+    assert.throws(
+      () => readOutput('run-one', grant.read_capability),
+      (error) => error && error.message === 'Paketdatei ist nicht freigegeben.'
+    );
+  } finally {
+    fs.lstatSync = originalLstat;
+  }
+});
+
+test('package-directory and snapshot-size filesystem failures remain content-free', () => {
+  const grant = issueReadCapability('run-one');
+  const originalLstat = fs.lstatSync;
+  fs.lstatSync = (value, ...args) => {
+    if (String(value).endsWith(`${path.sep}Output${path.sep}run-one`)) {
+      throw new Error(`native package detail: ${value}`);
+    }
+    return originalLstat(value, ...args);
+  };
+  try {
+    assert.throws(
+      () => readOutput('run-one', grant.read_capability),
+      (error) => error && error.message === 'Paketpfad ist nicht freigegeben.'
+    );
+  } finally {
+    fs.lstatSync = originalLstat;
+  }
+
+  const originalStat = fs.statSync;
+  fs.statSync = (value, ...args) => {
+    if (String(value).endsWith(`${path.sep}run-one.md`)) {
+      throw new Error(`native snapshot detail: ${value}`);
+    }
+    return originalStat(value, ...args);
+  };
+  try {
+    assert.strictEqual(openVerifiedMarkdownSnapshot('run-one', grant.read_capability), null);
+  } finally {
+    fs.statSync = originalStat;
+  }
+});
+
+test('direct and indexed snapshot paging reassemble multibyte text across varied page sizes', () => {
   const expected = 'A🚀Ä漢e\u0301|'.repeat(3000);
-  const grant = issueReadCapability('run-unicode-many');
-  const snapshot = openVerifiedMarkdownSnapshot('run-unicode-many', grant.read_capability);
-  const pages = [];
-  let offset = 0;
-  do {
-    const page = snapshot.read(offset, 1000);
-    pages.push(page.text);
-    offset = page.next_offset;
-    if (!page.has_more) break;
-  } while (pages.length < 100);
-  assert.strictEqual(pages.join(''), expected);
-  assert.doesNotMatch(pages.join(''), /\uFFFD/u);
+  for (const pageSize of [1000, 1001, 1002, 4095, 4096, 4097]) {
+    const grant = issueReadCapability('run-unicode-many');
+    const snapshot = openVerifiedMarkdownSnapshot('run-unicode-many', grant.read_capability);
+    const snapshotPages = [];
+    const directPages = [];
+    let snapshotOffset = 0;
+    let directOffset = 0;
+    do {
+      const page = snapshot.read(snapshotOffset, pageSize);
+      snapshotPages.push(page.text);
+      snapshotOffset = page.next_offset;
+      if (!page.has_more) break;
+    } while (snapshotPages.length < 100);
+    do {
+      const page = readOutput('run-unicode-many', grant.read_capability, directOffset, pageSize);
+      directPages.push(page.text);
+      directOffset = page.next_offset;
+      if (!page.has_more) break;
+    } while (directPages.length < 100);
+    assert.strictEqual(snapshotPages.join(''), expected, `snapshot page size ${pageSize}`);
+    assert.strictEqual(directPages.join(''), expected, `direct page size ${pageSize}`);
+    assert.doesNotMatch(snapshotPages.join(''), /\uFFFD/u);
+    assert.doesNotMatch(directPages.join(''), /\uFFFD/u);
+    snapshot.dispose();
+  }
+});
+
+test('reissuing an unchanged package reuses one grant without revoking active readers', () => {
+  const first = issueReadCapability('run-one');
+  const second = issueReadCapability('run-one');
+  assert.strictEqual(second.read_capability, first.read_capability);
+  assert.strictEqual(second.read_capability_expires_at, first.read_capability_expires_at);
+  assert.doesNotThrow(() => requireReadCapability('run-one', first.read_capability));
+  assert.doesNotThrow(() => requireReadCapability('run-one', second.read_capability));
+});
+
+test('manifest asset size and uniqueness are bound before listing or reading', () => {
+  const id = 'run-asset-size-mismatch';
+  makePackage(id, '# Freigegeben');
+  const dir = path.join(root, 'Output', id);
+  const asset = Buffer.alloc(2 * 1024 * 1024, 7);
+  fs.writeFileSync(path.join(dir, 'assets', 'asset-001.png'), asset);
+  const manifestPath = path.join(dir, 'manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.assets[0].sha256 = sha256(asset);
+  manifest.assets[0].bytes = 1;
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  assert.throws(() => issueReadCapability(id), /Assetgröße|Manifest/iu);
+
+  const duplicateId = 'run-asset-duplicate';
+  makePackage(duplicateId, '# Freigegeben');
+  const duplicateManifestPath = path.join(root, 'Output', duplicateId, 'manifest.json');
+  const duplicate = JSON.parse(fs.readFileSync(duplicateManifestPath, 'utf8'));
+  duplicate.assets.push({ ...duplicate.assets[0] });
+  fs.writeFileSync(duplicateManifestPath, JSON.stringify(duplicate));
+  assert.throws(() => issueReadCapability(duplicateId), /Manifest/iu);
+});
+
+test('a document above the former four MiB threshold is snapshotted once for Cowork paging', () => {
+  const grant = issueReadCapability('run-large-snapshot');
+  const snapshot = openVerifiedMarkdownSnapshot('run-large-snapshot', grant.read_capability);
+  assert.ok(snapshot);
+  assert.ok(snapshot.bytes > 5 * 1024 * 1024);
+  const first = snapshot.read(0, 4800);
+  const second = snapshot.read(first.next_offset, 4800);
+  assert.strictEqual(first.text.length, 4800);
+  assert.strictEqual(second.text.length, 4800);
   snapshot.dispose();
 });
 

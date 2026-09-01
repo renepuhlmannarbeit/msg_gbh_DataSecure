@@ -149,6 +149,14 @@ function exactKeys(value, expected) {
     Object.keys(value).sort().join(',') === expected.join(',');
 }
 
+function validSourceLabel(value) {
+  const label = String(value || '');
+  if (!label || label.length > 1024 || label.includes('\\') || label.startsWith('/') ||
+      /[\0-\x1f\x7f]/u.test(label) || /^[A-Za-z]:/u.test(label)) return false;
+  const segments = label.split('/');
+  return segments.every((segment) => segment && segment !== '.' && segment !== '..');
+}
+
 function validOutboxEntry(value, allowFile = false) {
   const candidate = allowFile && value && Object.hasOwn(value, 'file')
     ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'file'))
@@ -159,7 +167,7 @@ function validOutboxEntry(value, allowFile = false) {
     typeof candidate.entry_id === 'string' &&
     /^[a-f0-9]{32}$/.test(candidate.entry_id) && typeof candidate.package_id === 'string' &&
     /^ds_[a-f0-9]{32}$/.test(candidate.package_id) && typeof candidate.original_basename === 'string' &&
-    path.basename(candidate.original_basename) === candidate.original_basename && candidate.state === 'pending';
+    validSourceLabel(candidate.original_basename) && candidate.state === 'pending';
   if (!common) return false;
   if (candidate.schema === LEGACY_OUTBOX_SCHEMA) return true;
   try { positiveDocumentResult(candidate.document_result); return true; }
@@ -232,7 +240,7 @@ function readOutboxEntries(options = {}) {
 function ensureMappingOutbox(originalName, packageId, documentResult, options = {}) {
   const io = options.fs || fs;
   const name = String(originalName || '');
-  if (path.basename(name) !== name || !/^ds_[a-f0-9]{32}$/.test(String(packageId || ''))) {
+  if (!validSourceLabel(name) || !/^ds_[a-f0-9]{32}$/.test(String(packageId || ''))) {
     throw new SafeError('Die lokale Zuordnungswarteschlange konnte nicht sicher aktualisiert werden.');
   }
   if (documentResult !== undefined && documentResult !== null) positiveDocumentResult(documentResult);
@@ -348,7 +356,7 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
   if (mappingReference && !/^[a-f0-9]{32}$/i.test(mappingReference)) {
     throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
   }
-  if (path.basename(name) !== name || !(validReleased || validStopped)) {
+  if (!validSourceLabel(name) || !(validReleased || validStopped)) {
     throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
   }
   const io = options.fs || fs;

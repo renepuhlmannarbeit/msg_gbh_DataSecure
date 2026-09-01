@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { encodePng } = require('../plugins/data-secure/server/images/png');
 const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 
 const root = path.join(__dirname, 'fixtures');
 fs.mkdirSync(root, { recursive: true });
@@ -34,8 +35,8 @@ const docxBody = [
 fs.writeFileSync(
   path.join(root, 'synthetic_profile.docx'),
   zipStore([
-    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-    ['word/document.xml', `<w:document xmlns:w="w"><w:body>${docxBody}</w:body></w:document>`],
+    ...opcControlEntries('docx'),
+    ['word/document.xml', `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${docxBody}</w:body></w:document>`],
     ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>'],
     ['word/media/image1.png', img]
   ])
@@ -44,7 +45,7 @@ fs.writeFileSync(
 fs.writeFileSync(
   path.join(root, 'synthetic_customer.xlsx'),
   zipStore([
-    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ...opcControlEntries('xlsx'),
     ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Kunden" r:id="rId1"/></sheets></workbook>'],
     ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
     [
@@ -69,7 +70,7 @@ fs.writeFileSync(
 fs.writeFileSync(
   path.join(root, 'synthetic_contract.pptx'),
   zipStore([
-    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
+    ...opcControlEntries('pptx'),
     ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
     ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
     [

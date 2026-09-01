@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '22.13.0'
+          node-version: '22.23.2'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm test
@@ -52,18 +52,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '22.13.0'
+          node-version: '22.23.2'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run test:ci
+      - run: npm run test:product:ci
       - run: npm run native:repro
+      - name: Fetch and attest pinned official Windows product runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = 'node-v22.23.2-win-x64.zip'
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v22.23.2/$archive" -OutFile $archive
+          node scripts/build-runtime-target.mjs --target windows-x64 --archive $archive --output dist/windows-x64
       - run: npm run build
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: data-secure-release-${{ github.sha }}
           path: |
-            dist/*.zip
-            dist/*.mcpb
+            dist/DataSecure-Privacy-Preflight-windows-x64-v*.zip
             dist/*.spdx.json
             dist/SHA256SUMS
           retention-days: 7

@@ -18,6 +18,7 @@ const {
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
 const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 const { createTestPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
 const { confirmationCommands, confirmAutomaticRelease } = require('../plugins/data-secure/server/companion/local-confirmation');
 const {
@@ -109,8 +110,8 @@ async function main() {
     workspace('docx-release');
     const file = path.join(base, 'text-only.docx');
     fs.writeFileSync(file, zipStore([
-      ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-      ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Kontakt: Max Mustermann, max@example.de</w:t></w:r></w:p><w:p><w:r><w:t>Rolle: Architekt</w:t></w:r></w:p></w:body></w:document>']
+      ...opcControlEntries('docx'),
+      ['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Kontakt: Max Mustermann, max@example.de</w:t></w:r></w:p><w:p><w:r><w:t>Rolle: Architekt</w:t></w:r></w:p></w:body></w:document>']
     ]));
     const job = createJob({ profile: 'personnel_profile', source_type: 'docx' });
     const result = await processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true });
@@ -611,8 +612,8 @@ async function main() {
     const r = workspace('unsupported-docx-part');
     const file = path.join(base, 'embedded.docx');
     fs.writeFileSync(file, zipStore([
-      ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-      ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Kontakt: Max Mustermann</w:t></w:r></w:p></w:body></w:document>'],
+      ...opcControlEntries('docx'),
+      ['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Kontakt: Max Mustermann</w:t></w:r></w:p></w:body></w:document>'],
       ['word/embeddings/oleObject1.bin', Buffer.from('embedded private content')]
     ]));
     const job = createJob({ profile: 'customer', source_type: 'docx' });

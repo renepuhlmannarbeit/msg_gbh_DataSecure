@@ -1,6 +1,6 @@
 # Product Vision
 
-Stand: 25.08.2026 · verbindliches Zielbild nach dem Cowork-/UX-/Privacy-Grill
+Stand: 01.09.2026 · verbindliches Zielbild nach dem Cowork-/UX-/Privacy-Grill
 
 ## Vision in einem Satz
 
@@ -16,6 +16,11 @@ Sichere Testtrennung im vorhandenen Konto ist Entwicklungsarbeit.
 DS-065 vereinfacht lokale Arbeitsdaten: keine zusätzliche Verschlüsselung,
 kein Schlüsselbund, keine Schlüsseldatei und kein Passwort. Der Normalweg bleibt
 Dateien auswählen → lokal anonymisieren → Ergebnisse verwenden.
+DS-067 legt zusätzlich genau einen Nutzerweg fest: Plugin-ZIP oder derselbe private
+Marketplace-Build. Ein MCPB bleibt internes Engineering. Bilder besitzen keinen
+auswählbaren Modus und bleiben lokal zurückgehalten. Nur temporäre Arbeits- und
+Reviewdaten unterliegen 0–14 Tagen; Quellen/Originale und fertige Exporte werden
+niemals automatisch gelöscht.
 
 ## Nutzerproblem
 
@@ -34,8 +39,9 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 
 ## Wertversprechen
 
-1. **Cowork-gesteuert, lokal ausgeführt:** Cowork ist Einstieg, Status- und
-   Ergebnisort; Originale und rohdatenhaltige Entscheidungen bleiben lokal.
+1. **Cowork-gesteuert, Originale lokal verarbeitet:** Cowork ist Einstieg, Status-
+   und Ergebnisort; die Modellverarbeitung darf cloudbasiert sein, Originale und
+   rohdatenhaltige Entscheidungen bleiben an der lokalen DataSecure-Grenze.
 2. **Eine bewusste Normalaktion:** Datei oder Ordner auswählen und anschließend
    nur bei einer echten fachlichen Unsicherheit entscheiden.
 3. **Fachinhalt vor Formularismus:** Rollen, Methoden, Technologien,
@@ -98,9 +104,10 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Anwender installieren weder Node.js noch Python. Zielpakete enthalten die
   benötigte Laufzeit.
 - Ein organisationsverwaltetes Marketplace-Produkt; manuell getrennte
-  Windows-x64- und macOS-Universal-ZIPs. MCPB bleibt ein optionaler Fallback.
-- Entwicklungspiloten dürfen unsigniert sein. Eigene native
-  Sicherheitskomponenten müssen vor breitem Unternehmenseinsatz signiert sein.
+  Windows-x64-, macOS-x64- und macOS-arm64-ZIPs. MCPB bleibt ausschließlich
+  internes Engineering-Artefakt und ist kein Anwenderweg.
+- Es gibt keine Signierungs- oder Zertifizierungspflicht. Reproduzierbare Builds,
+  Hashbindung, SBOM, Paketgrenzen und echte Zielsystemabnahmen bleiben Pflicht.
 
 ## Erfolgskriterien
 
@@ -130,5 +137,5 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 1. synthetischer Technikpilot,
 2. interner Abnahmepilot mit synthetischen oder ausdrücklich freigegebenen Daten,
 3. kontrollierter Echtdatenpilot nach Datenschutz-/Security-Freigabe,
-4. Unternehmensrollout nach Plattform-, Signierungs- und Lifecycle-Evidenz,
+4. Unternehmensrollout nach Plattform-, Paketintegritäts- und Lifecycle-Evidenz,
 5. öffentlicher Marketplace erst nach erfolgreichem internem Rollout.

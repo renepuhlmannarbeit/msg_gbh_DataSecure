@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeZip } from './lib/zip.mjs';
-import { includeInProduct, collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
+import { collectFiles, writeZip } from './lib/zip.mjs';
+import { includeInProduct, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
 import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,11 +32,14 @@ try {
     recursive: true, errorOnExist: true, force: false,
     filter: (source) => includeInProduct(path.relative(pluginSource, source))
   });
-  if (!canonicalEvidence) {
-    fs.cpSync(runtime, path.join(stage, 'server', 'ocr-runtime'), {
-      recursive: true, errorOnExist: true, force: false
-    });
-  }
+  // The normal product allowlist deliberately excludes the disabled OCR
+  // runtime. This explicit Engineering builder must add the already verified
+  // bundle back after copying the product tree; otherwise it silently emits a
+  // "portable" archive without the backend it claims to exercise.
+  fs.cpSync(runtime, path.join(stage, 'server', 'ocr-runtime'), {
+    recursive: true, errorOnExist: true, force: false
+  });
+  validateUniversalRuntime(path.join(stage, 'server', 'ocr-runtime'), { releaseEnabled: false });
   const plugin = JSON.parse(fs.readFileSync(path.join(stage, '.claude-plugin', 'plugin.json'), 'utf8'));
   const archive = outputIndex >= 0 && process.argv[outputIndex + 1]
     ? path.resolve(process.argv[outputIndex + 1])
@@ -45,11 +48,20 @@ try {
   if (!relativeArchive || relativeArchive.startsWith('..') || path.isAbsolute(relativeArchive)) {
     throw new Error('PORTABLE_PLUGIN_OUTPUT_OUTSIDE_DIST');
   }
-  const files = collectProductFiles(stage).map((file) => ({
+  if (archive === stage || archive.startsWith(`${stage}${path.sep}`)) {
+    throw new Error('PORTABLE_PLUGIN_OUTPUT_RESERVED');
+  }
+  const staged = collectFiles(stage);
+  const normalProductFiles = staged.filter((file) => !file.archivePath.replaceAll('\\', '/').startsWith('server/ocr-runtime/'));
+  // Non-OCR entries still obey the exact user-product exclusion boundary.
+  for (const file of normalProductFiles) {
+    if (!includeInProduct(file.archivePath)) throw new Error(`PORTABLE_PLUGIN_NON_PRODUCT_FILE:${file.archivePath}`);
+  }
+  verifyKeyringFreeProductFiles(normalProductFiles);
+  const files = staged.map((file) => ({
     ...file,
     mode: executableOcrEntries.has(file.archivePath) ? 0o100755 : 0o100644
   }));
-  verifyKeyringFreeProductFiles(files);
   fs.rmSync(archive, { force: true });
   const result = writeZip(archive, files);
   const hash = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');

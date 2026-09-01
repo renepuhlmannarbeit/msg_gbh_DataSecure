@@ -106,4 +106,18 @@ test('Cowork handoff candidates require the identity-bound terminal projection',
   assert.strictEqual(candidates(true)[0].grades_verified, true);
 });
 
+test('result paging does not advertise an empty page containing only stopped or acknowledged items', () => {
+  const journal = state('datasecure-batch/2', complete);
+  journal.items = Array.from({ length: 5 }, () => ({
+    status: 'released', package_id: packageId, analysis_acknowledged: false, document_result: complete
+  }));
+  journal.items.push({ status: 'stopped' });
+  journal.items.push({ status: 'released', package_id: packageId, analysis_acknowledged: true, document_result: complete });
+  const fixture = access(journal, { state: 'verified', document_result: complete });
+  const page = fixture.api.listBatchResults(token, { limit: 5 });
+  assert.strictEqual(page.results.length, 5);
+  assert.strictEqual(page.next_cursor, null);
+  assert.strictEqual(fixture.issued(), 5);
+});
+
 done();

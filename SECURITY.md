@@ -26,8 +26,9 @@ to the repository owner rather than posting exploitable details.
 ## Design boundary
 
 The gateway processes originals locally and exposes to Claude only verified
-Markdown and explicitly released visual assets. It is a technical privacy
-control, not a legal certification of anonymity, GDPR compliance, or EU AI Act
+Markdown. Image pixels remain local and there is no user- or model-controlled
+visual-release path in the current product. It is a technical privacy control,
+not a legal certification of anonymity, GDPR compliance, or EU AI Act
 compliance.
 
 See [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md) for where the
@@ -35,17 +36,24 @@ boundary sits, what reaches Claude, and every fail-closed point.
 
 ## Build provenance
 
-Every CI build publishes the plugin ZIP and MCPB together with an SPDX 2.3 SBOM
-and `SHA256SUMS`. The SBOM records that the shipped Node.js implementation and
-statically linked native Windows launcher have no third-party runtime package
-dependencies and cryptographically binds the two archives to the release metadata.
-Separate CodeQL jobs analyze JavaScript and the C++ launcher on pull requests and
-pushes to `main`.
+The user-facing product build creates the plugin ZIP together with an SPDX 2.3
+SBOM and `SHA256SUMS`. The private Marketplace uses the same plugin source. MCPB
+is an internal engineering artefact and is neither a user channel nor part of
+the normal product build. The SBOM cryptographically binds the product archive,
+the native Windows launcher and the disabled status-card inventory to the build
+metadata. It is not an exhaustive component-level inventory of the bundled OCR
+tree; that tree carries its own manifest and licence notices inside the archive.
+
+The cost-capped default CI runs the product regression gates. Manual evidence
+workflows cover the more expensive platform, native, CodeQL and release checks;
+therefore a local build or an arbitrary CI run must not be described as a
+three-platform release approval.
 
 GitHub CodeQL supports uploading results for public repositories and private
 organisation repositories with GitHub Code Security enabled. This private repo
-does not depend on that paid upload/UI feature: CI runs the analysis locally,
-fails when the generated SARIF contains a finding, and archives the SARIF as a
-14-day workflow artefact. A missing or malformed report also fails closed. If
-GitHub Code Security is enabled later, SARIF upload can be added without changing
-the release gate. All workflow Actions are pinned to immutable commit SHAs.
+does not depend on that paid upload/UI feature: the dedicated manual workflow
+runs the analysis locally, fails when the generated SARIF contains a finding,
+and archives the SARIF as a time-limited workflow artefact. A missing or
+malformed report also fails closed. If GitHub Code Security is enabled later,
+SARIF upload can be added without changing that gate. Workflow Actions are
+pinned to immutable commit SHAs.

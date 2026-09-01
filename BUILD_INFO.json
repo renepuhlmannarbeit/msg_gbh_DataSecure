@@ -1,8 +1,8 @@
 {
-  "version": "3.2.0-rc81",
-  "build_date": "2026-08-22",
-  "target": "Claude Desktop Windows x64 / MCPB manifest 0.4",
-  "runtime": "bundled Node.js core plus native Job Object launcher with statically linked MSVC CRT; no npm/Python runtime install",
+  "version": "3.2.0-rc84",
+  "build_date": "2026-09-01",
+  "target": "Claude Plugin ZIP / private Marketplace; Windows x64 and macOS Intel/ARM Fresh Install pending; Linux later",
+  "runtime": "Bundled local runtime target; plugin-ZIP start without system Node pending Fresh Install; no end-user npm/Python setup",
   "native_toolchain": "MSVC 19.50.35725 / VC Tools 14.50.35717 / Windows SDK 10.0.26100.0",
   "native_source": "native/windows/datasecure-sandbox.cpp",
   "profiles": [
@@ -20,7 +20,13 @@
     "txt"
   ],
   "blocked_formats": [
-    "pdf"
+    "xlsx",
+    "pptx",
+    "pdf",
+    "scan-pdf",
+    "png",
+    "jpeg",
+    "bmp"
   ],
   "real_regression_fixture_embedded": false,
   "synthetic_golden_regression_enforced": true,

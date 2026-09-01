@@ -1,24 +1,26 @@
 # Eingebettete und aktive Inhalte V1
 
-Status: **Engineering-Vertrag, erste Runtime-Scheibe aktiv** · Story: BL-020.2 ·
+Status: **Engineering-Vertrag; in freigegebenen Formaten fail-closed gesperrt** · Story: BL-020.2 ·
 Entscheidung: DS-017
 
 Dieser Vertrag erweitert keine veröffentlichte Eingabeformatliste. Er regelt, wie
 bereits geöffnete OOXML-Container mit eingebetteten Dateien umgehen, ohne Inhalte
 auszuführen, nachzuladen oder unbemerkt auszulassen.
 
-## Unterstützte statische Einbettungen
+## Statische Einbettungen im aktuellen Produkt
 
-Nur echte OOXML-Pakete mit den internen Endungen `.docx`, `.xlsx` oder `.pptx` in
-`word/embeddings`, `xl/embeddings` oder `ppt/embeddings` werden rekursiv durch
-dieselbe isolierte Parser- und Datenschutzgrenze verarbeitet. Jede Einbettung muss
-über genau eine eindeutige interne Paketbeziehung erreichbar sein und darf
-nicht zugleich über eine aktive Beziehung referenziert werden. Verwaiste Parts,
-fehlende Ziele und mehrdeutige aktive Referenzen werden nicht anhand ihres
-Dateinamens verarbeitet. Die Containerkette
-bleibt im `source_part` des Content-Graph erhalten. Beschädigte oder andersartige
-Pakete erzeugen ausschließlich eine inhaltsfreie Coverage-Warnung und verhindern
-die Freigabe.
+Jeder Part unter `word/embeddings`, `xl/embeddings` oder `ppt/embeddings` wird bereits
+in der lokalen Verzeichnisvorprüfung als aktiver beziehungsweise nicht vollständig
+abgedeckter Inhalt erkannt. Die Eingangsdatei wird vor Snapshot und Parserfreigabe
+mit einem inhaltsfreien Fehler gestoppt. Das gilt auch für statische `.docx`-,
+`.xlsx`- und `.pptx`-Einbettungen. Der aktuelle Produktpfad behauptet daher **keine**
+rekursive Freigabe eingebetteter Office-Dateien.
+
+Der rekursive OOXML-Parser und seine Container-Locators bleiben ein isolierter
+Engineering-Harness für eine mögliche spätere Formatstory. Sie erweitern weder die
+Allowlist noch umgehen sie die frühere Quellprüfung. Eine spätere Freigabe erfordert
+einen vollständigen eigenen Preflight-, Relationship-, Ressourcen- und
+Datenschutz-Nachweis für jedes Kindpaket.
 
 Die `package`-Beziehung muss außerdem aus einem vom formatspezifischen Parser
 tatsächlich erreichten Inhalts-Part stammen. Eine Beziehung aus einem verwaisten
@@ -49,7 +51,7 @@ zu einer späteren lokalen Entscheidung gesperrt.
 
 ## Nachweisgrenze
 
-Die erste Runtime-Scheibe belegt rekursive OOXML-Pakete, Container-Locators,
-Tiefen-/Anzahl-/Archiv-/Entpackbudgets sowie negative Makro-, OLE- und
-Korruptionspfade. Weitere eingebettete statische Formate, vollständige Beziehungs-
-Coverage und echte Drei-OS-Ressourcenabnahmen bleiben offen.
+Der Produktnachweis belegt das frühe Sperren aller Einbettungen sowie negative
+Makro-, OLE-, ActiveX- und Korruptionspfade. Der Engineering-Harness belegt zusätzlich
+Container-Locators und feste Tiefen-/Anzahl-/Archiv-/Entpackbudgets, ist aber kein
+Freigabenachweis. Eine rekursive Produktfreigabe bleibt ausdrücklich offen.

@@ -3,9 +3,11 @@
 const fs = require('fs');
 const path = require('path');
 const { SafeError } = require('../runtime');
-const { roots } = require('./common');
+const { roots, safeRemovePrivateTree } = require('./common');
+const { writeReviewMetaAtomically } = require('./review');
 
 const DEFAULT_RETENTION_DAYS = 7;
+const MAX_RETENTION_DAYS = 14;
 const RETENTION_ENV = 'EU_PRIVACY_RETENTION_DAYS';
 const SCOPES = new Set(['processed', 'output', 'review']);
 
@@ -30,7 +32,9 @@ function retentionDays(env = process.env) {
   const raw = String(env[RETENTION_ENV] ?? '').trim();
   if (!raw) return DEFAULT_RETENTION_DAYS;
   const value = Number(raw);
-  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_RETENTION_DAYS;
+  return Number.isInteger(value) && value >= 0
+    ? Math.min(value, MAX_RETENTION_DAYS)
+    : DEFAULT_RETENTION_DAYS;
 }
 
 function nowMs(value) {
@@ -117,6 +121,20 @@ function removalPlan(target, root, fsApi = fs) {
 }
 
 function safeRemoveEntry(target, root, fsApi = fs) {
+  if (fsApi === fs) {
+    const name = path.basename(target);
+    if (path.dirname(path.resolve(target)) !== path.resolve(root) || !name || name === '.' || name === '..') {
+      throw new Error('Retention-Ziel liegt außerhalb des erlaubten Bereichs.');
+    }
+    const identity = (value) => {
+      const stat = fs.lstatSync(value, { bigint: true });
+      return { dev: String(stat.dev), ino: String(stat.ino), birthtimeNs: String(stat.birthtimeNs) };
+    };
+    return safeRemovePrivateTree(root, name, {
+      expectedParentIdentity: identity(root),
+      expectedIdentity: identity(target)
+    });
+  }
   const plan = removalPlan(target, root, fsApi);
   for (const file of plan.files) fsApi.unlinkSync(file);
   for (const dir of plan.dirs) fsApi.rmdirSync(dir);
@@ -185,7 +203,7 @@ function markPreviewExpired(metaPath, at, fsApi = fs) {
   meta.preview_sha256 = null;
   meta.preview_expired = true;
   meta.preview_expired_at = new Date(at).toISOString();
-  fsApi.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+  writeReviewMetaAtomically(metaPath, meta, fsApi);
 }
 
 // Heals records whose claimed preview no longer exists on disk. Without this the
@@ -263,6 +281,7 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
     try {
       assertInside(file, root);
       const fileStat = fsApi.lstatSync(file);
+      const boundFileStat = fsApi === fs ? fs.lstatSync(file, { bigint: true }) : null;
       if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
         throw new Error('Review-Preview ist kein freigegebener Dateipfad.');
       }
@@ -285,7 +304,20 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
         encrypted = probe.equals(Buffer.from('DSARTF01'));
       } finally { fsApi.closeSync(fd); }
       if (encrypted) continue;
-      fsApi.unlinkSync(file);
+      if (fsApi === fs) {
+        const parentStat = fs.lstatSync(reviewDir, { bigint: true });
+        const identity = (value) => ({
+          dev: String(value.dev),
+          ino: String(value.ino),
+          birthtimeNs: String(value.birthtimeNs)
+        });
+        safeRemovePrivateTree(reviewDir, name, {
+          expectedParentIdentity: identity(parentStat),
+          expectedIdentity: identity(boundFileStat)
+        });
+      } else {
+        fsApi.unlinkSync(file);
+      }
       removed++;
       for (const metaPath of evidence.index.get(name) || []) {
         try {
@@ -490,6 +522,7 @@ function purgeLocalData(scope = 'all', confirmed = false, options = {}) {
 
 module.exports = {
   DEFAULT_RETENTION_DAYS,
+  MAX_RETENTION_DAYS,
   RETENTION_ENV,
   retentionDays,
   inspectProcessedProtection,

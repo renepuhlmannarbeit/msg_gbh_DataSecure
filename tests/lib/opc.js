@@ -6,11 +6,13 @@ const TYPES = Object.freeze({
   pptx: Object.freeze({ part: 'ppt/presentation.xml', contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml' })
 });
 
-function opcControlEntries(kind, { standardPackageMetadata = false } = {}) {
+function opcControlEntries(kind, { standardPackageMetadata = false, additionalOverrides = [] } = {}) {
   const type = TYPES[kind];
   if (!type) throw new Error('unknown OPC test type');
   const contentTypes = [
-    `<Override PartName="/${type.part}" ContentType="${type.contentType}"/>`
+    `<Override PartName="/${type.part}" ContentType="${type.contentType}"/>`,
+    ...additionalOverrides.map(({ part, contentType }) =>
+      `<Override PartName="/${part}" ContentType="${contentType}"/>`)
   ];
   const relationships = [
     `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="${type.part}"/>`

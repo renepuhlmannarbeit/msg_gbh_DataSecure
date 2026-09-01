@@ -12,7 +12,8 @@ const {
   titleCase,
   isStopToken,
   looksName,
-  looksSurname
+  looksSurname,
+  ROLE_WORDS
 } = require('./base');
 
 // Some brands and their registered legal forms are intentionally written in
@@ -34,16 +35,24 @@ const PARTY_COMPANY_RE = new RegExp(
   'giu'
 );
 const COMPANY_LABEL_RE =
-  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)\s*:\s*(.+)$/iu;
+  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Organisation|Company|Organization|Employer(?:\s+Name)?|Customer(?:\s+Organization)?|Contract\s+party|Client|Vendor|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)\s*:\s*(.+)$/iu;
 const COMPANY_TABLE_RE =
-  /^\|\s*(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)\s*:?\s*\|\s*([^|]+)\|/iu;
+  /^\|?\s*(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Organisation|Company|Organization|Employer(?:\s+Name)?|Customer(?:\s+Organization)?|Contract\s+party|Client|Vendor|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)\s*:?\s*\|\s*([^|]+)\|?/iu;
 const PARTY_CLAUSE_RE =
   /\b(?:Vertragsparteien?\s+(?:sind|:)|(?:Vertrag|Vereinbarung)\s+zwischen|Parties\s+(?:are|:)|(?:Service\s+)?Agreement\s+between)\s+(.+)$/iu;
 // A role before "für/bei" is professional content, not the first words of a
 // legal-form organisation. Without this boundary a complete standalone line
 // such as "Testmanager für Fiktive Gesundheit GmbH" could be consumed as one
 // organisation by the deliberately broad standalone-line matcher.
-const PROFESSIONAL_ORG_PREFIX_RE = /^(?:(?:Senior\s+|Lead\s+)?(?:Product\s+Owner|Scrum\s+Master|Softwareentwickler(?:in)?|Entwickler(?:in)?|Testmanager(?:in)?|Tester(?:in)?|Business\s+Analyst(?:in)?|QA\s+Engineer|IT-?Projektleiter(?:in)?|FHIR-Entwickler(?:in)?))\s+(?:für|bei|at)\s+/iu;
+const PROFESSIONAL_ORG_PREFIX_RE = /^(?:(?:Senior\s+|Lead\s+)?(?:Product\s+Owner|Scrum\s+Master|Software\s+Engineer|Softwareentwickler(?:in)?|Entwickler(?:in)?|Entwicklung|Softwareentwicklung|Architektur|Konzeption|Beratung|Testmanager(?:in)?|Testmanagement|Tester(?:in)?(?:\s+im\s+Projekt)?|Training|Aufgaben|Projekt|Business\s+Analyst(?:in)?|QA\s+Engineer|IT-?Projektleiter(?:in)?|FHIR-(?:Entwickler(?:in)?|Entwicklung))|Worked|Employed|Working)\s+(?:für|bei|at|for|with)\s+/iu;
+const STRONG_SUFFIXLESS_ORG_LABEL_RE =
+  /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Unternehmen|Firma|Organisation|Company|Organization|Employer(?:\s+Name)?|Customer(?:\s+Organization)?|Contract\s+party|Client|Vendor|Supplier)\s*:/iu;
+
+function labelledOrganizationValue(value) {
+  const clean = normalizeSpaces(value).replace(/[.,;:]\s*$/u, '');
+  if (!clean || clean.length > 160 || clean.startsWith('[') || /[<>]/u.test(clean)) return null;
+  return clean;
+}
 
 const CLAUSE_ABBREVIATIONS = new Set([
   'dr', 'prof', 'nr', 'hd', 'str', 'bzw', 'ca', 'ggf', 'inkl', 'zzgl', 'u', 'a'
@@ -80,7 +89,15 @@ function collectContextOrganizations(text) {
     const labelled = labelText.match(COMPANY_LABEL_RE);
     const clause = trimmed.match(PARTY_CLAUSE_RE);
     const candidates = [];
+    if (table && STRONG_SUFFIXLESS_ORG_LABEL_RE.test(trimmed.replace(/^\|\s*/u, ''))) {
+      const value = labelledOrganizationValue(table[1]);
+      if (value) out.push(value);
+    }
     if (table) candidates.push(table[1]);
+    if (labelled && STRONG_SUFFIXLESS_ORG_LABEL_RE.test(labelText)) {
+      const value = labelledOrganizationValue(labelled[1]);
+      if (value) out.push(value);
+    }
     if (labelled) candidates.push(labelled[1]);
     if (clause) {
       PARTY_COMPANY_RE.lastIndex = 0;
@@ -105,7 +122,10 @@ function collectContextOrganizations(text) {
       if (match) out.push(normalizeSpaces(match[1]));
     }
   }
-  for (const value of markdownTableColumnValues(text, /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Company|Contract\s+party|Client|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever):?$/iu)) {
+  for (const value of markdownTableColumnValues(text, /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Unternehmen|Firma|Organisation|Company|Organization|Employer(?:\s+Name)?|Customer(?:\s+Organization)?|Contract\s+party|Client|Vendor|Supplier):?$/iu)) {
+    const labelled = labelledOrganizationValue(value); if (labelled) out.push(labelled);
+  }
+  for (const value of markdownTableColumnValues(text, /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Arbeitgeber|Unternehmen|Firma|Organisation|Company|Organization|Employer(?:\s+Name)?|Customer(?:\s+Organization)?|Contract\s+party|Client|Vendor|Supplier|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever):?$/iu)) {
     const match = value.match(SEGMENT_COMPANY_RE);
     if (match) out.push(normalizeSpaces(match[1]));
   }
@@ -113,7 +133,7 @@ function collectContextOrganizations(text) {
 }
 
 const PERSON_LABEL =
-  '(?:Name|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
+  '(?:Name|Full\\s+Name|Employee\\s+Name|Candidate\\s+Name|Contact\\s+Name|Mitarbeitername|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
   '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|(?:(?:Interner|Technischer|Fachlicher)\\s+)?Kontakt|Sachbearbeiter(?:in)?' +
   '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Autor(?:in)?|Verfasser(?:in)?|Manager(?:in)?' +
   '|Eigentümer(?:in)?|Bearbeiter(?:in)?|(?:Zuletzt\\s+)?(?:geändert|erstellt)\\s+von' +
@@ -123,11 +143,12 @@ const HONORIFIC = '(?:Herrn?|Frau|Dr\\.?|Prof\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm)\\.?|
 
 function markdownTableCells(line) {
   const source = String(line || '').trim();
-  if (!source.startsWith('|') || !source.endsWith('|')) return null;
+  if (!source.includes('|')) return null;
+  const body = source.replace(/^\|/u, '').replace(/\|$/u, '');
   const cells = [];
   let value = '';
   let escaped = false;
-  for (const char of source.slice(1, -1)) {
+  for (const char of body) {
     if (escaped) {
       value += char;
       escaped = false;
@@ -142,7 +163,7 @@ function markdownTableCells(line) {
   }
   if (escaped) value += '\\';
   cells.push(value.trim());
-  return cells;
+  return cells.length >= 2 ? cells : null;
 }
 
 function markdownTableColumnValues(text, label) {
@@ -212,7 +233,7 @@ const ABSTRACT_NOUN_ENDING_RE =
 function hasAbstractNounShape(value) {
   return normalizeSpaces(value.replace(',', ' '))
     .split(/\s+/)
-    .filter((token) => !/^(?:von|van|de|del|der|den|zu|zur|zum)$/iu.test(token))
+    .filter((token) => !/^(?:von|van|de|del|des|der|die|das|dem|den|ein(?:e|er|es|em|en)?|zu|zur|zum)$/iu.test(token))
     .every((token) => ABSTRACT_NOUN_ENDING_RE.test(token));
 }
 
@@ -229,19 +250,77 @@ function pushPerson(out, value, confidence) {
   out.push({ value: cleaned, confidence });
 }
 
-function pushExplicitPerson(out, value, confidence) {
+function pushFullPerson(out, value, confidence) {
   const cleaned = stripHonorifics(value);
-  if (!cleaned || cleaned.length > 80) return;
-  const token = new RegExp(`^(?:${NAME_TOKEN}|${CAPS_TOKEN})$`, 'u');
-  const particle = /^(?:von|van|de|del|der|den|zu|zur|zum)$/iu;
-  const tokens = cleaned.split(/\s+/u);
-  if (tokens.length < 1 || tokens.length > 4 || !tokens.every((item) => token.test(item) || particle.test(item))) return;
-  if (!tokens.some((item) => token.test(item))) return;
+  if (!cleaned || !looksName(cleaned)) return;
   out.push({ value: cleaned, confidence });
 }
 
+function pushExplicitPerson(out, value, confidence) {
+  const raw = String(value || '').trim();
+  let visible = raw.replace(/<\/?[A-Za-z][^>\n]{0,1000}>/gu, '').trim();
+  const link = visible.match(/^!?\[([^\n]{1,500}?)\]\([^\n)]{1,2000}\)$/u);
+  if (link) visible = link[1];
+  const referenceLink = visible.match(/^!?\[([^\n]{1,500}?)\]\[[^\n]{0,500}\]$/u);
+  if (referenceLink) visible = referenceLink[1];
+  visible = visible.replace(/^(?:\*\*|__|~~|`{1,3})(.*?)(?:\*\*|__|~~|`{1,3})$/u, '$1');
+  // Explicit fields frequently append the professional role on the same line.
+  // Keep that role verbatim and restrict the person span to the value before a
+  // clear delimiter. A comma is a delimiter only when every following token is
+  // known professional vocabulary, so "Mustermann, Dr. Max" remains a name.
+  const roleSuffix = (value) => {
+    const parts = normalizeSpaces(value).replace(/[.,;:]$/u, '').split(/\s+/u).filter(Boolean);
+    return parts.length > 0 && parts.every((part) => ROLE_WORDS.has(part.toLocaleUpperCase('de-DE')));
+  };
+  let rawMatch = null;
+  const visibleBoundary = visible.match(/^(.*?)[ \t]+(?:\||[–—])[ \t]+(.+)$/u);
+  if (visibleBoundary && roleSuffix(visibleBoundary[2])) {
+    visible = visibleBoundary[1].trim();
+    const rawBoundary = raw.match(/^(.*?)[ \t]+(?:\||[–—])[ \t]+(.+)$/u);
+    rawMatch = rawBoundary ? rawBoundary[1].trim() : visible;
+  } else {
+    const commaBoundary = visible.match(/^(.*),[ \t]*([^,]+)$/u);
+    if (commaBoundary && roleSuffix(commaBoundary[2])) {
+      visible = commaBoundary[1].trim();
+      const rawBoundary = raw.match(/^(.*),[ \t]*([^,]+)$/u);
+      rawMatch = rawBoundary ? rawBoundary[1].trim() : visible;
+    }
+  }
+  const cleaned = stripHonorifics(visible);
+  if (!cleaned || cleaned.length > 80) return;
+  const token = new RegExp(`^(?:${NAME_TOKEN}|${CAPS_TOKEN})$`, 'u');
+  const labelledToken = /^[\p{L}\p{M}][\p{L}\p{M}'’\-]{1,30}$/u;
+  const cjkToken = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]$/u;
+  const compactCjkName = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]{2,16}$/u;
+  const initialToken = /^[\p{L}\p{M}]\.$/u;
+  const particle = /^(?:von|van|de|del|der|den|zu|zur|zum)$/iu;
+  const validPart = (item) => token.test(item) || labelledToken.test(item) || cjkToken.test(item) || initialToken.test(item) || particle.test(item);
+  let canonical = cleaned;
+  const comma = cleaned.match(/^([^,]{1,48}),[ \t]*([^,]{1,48})$/u);
+  if (comma) canonical = `${normalizeSpaces(comma[2])} ${normalizeSpaces(comma[1])}`;
+  canonical = stripHonorifics(canonical);
+  const tokens = canonical.split(/\s+/u);
+  const suffixToken = /^(?:Jr|Sr|II|III|IV)\.?$/iu;
+  const validIdentityPart = (item) => validPart(item) || suffixToken.test(item);
+  if (tokens.length < 1 || tokens.length > 10 || !tokens.every(validIdentityPart)) return;
+  const identityTokens = tokens.filter((item) => !particle.test(item) && !initialToken.test(item) && !suffixToken.test(item));
+  const compactCjk = tokens.length === 1 && compactCjkName.test(tokens[0]);
+  if ((!compactCjk && identityTokens.length < 1) || !identityTokens.some((item) => token.test(item) || labelledToken.test(item) || cjkToken.test(item))) return;
+  const seed = { value: canonical, confidence };
+  // Keep an exact source spelling when inline markup splits a visible name.
+  // The clean value assigns the stable pseudonym; the raw spelling lets the
+  // replacement consume the markup-obfuscated identifier in one span. Links
+  // are handled separately so their non-PII target/reference can survive.
+  if (rawMatch) {
+    seed.matchValue = rawMatch;
+  } else if ((raw !== canonical || cleaned !== canonical) && !/^!?\[[^\n]+\](?:\([^\n)]*\)|\[[^\n]*\])$/u.test(raw)) {
+    seed.matchValue = raw;
+  }
+  out.push(seed);
+}
+
 // High-confidence anchors: the document itself says "this is a person".
-function collectPersonAnchors(text) {
+function collectPersonAnchors(text, profile = 'general') {
   const src = String(text || '');
   const out = [];
   let m;
@@ -254,13 +333,62 @@ function collectPersonAnchors(text) {
   while ((m = honor.exec(src))) pushPerson(out, m[1], 'honorific');
 
   // "Name: Erika Beispiel", also inside markdown tables.
-  const label = new RegExp(`^\\s*(?:>\\s*)?(?:[-*+]\\s+)?${PERSON_LABEL}\\s*:\\s*(.+)$`, 'gimu');
+  const linkLabel = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*!?\\[([^\\n]{1,500}?)\\]\\([^\\n)]{1,2000}\\)`, 'gimu');
+  while ((m = linkLabel.exec(src))) pushExplicitPerson(out, m[1], 'label');
+
+  const referenceLinkLabel = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*!?\\[([^\\n]{1,500}?)\\]\\[[^\\n]{0,500}\\]`, 'gimu');
+  while ((m = referenceLinkLabel.exec(src))) pushExplicitPerson(out, m[1], 'label');
+
+  const partialLinkLabel = new RegExp(
+    `^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*` +
+      `!?\\[(${NAME_TOKEN}|${CAPS_TOKEN})\\](?:\\([^\\n)]{0,2000}\\)|\\[[^\\n]{0,500}\\])` +
+      `[ \\t]+(${NAME_TOKEN}|${CAPS_TOKEN})[ \\t]*$`,
+    'gimu'
+  );
+  while ((m = partialLinkLabel.exec(src))) {
+    const raw = m[0].slice(m[0].indexOf(':') + 1).trim();
+    const seed = { value: `${m[1]} ${m[2]}`, confidence: 'label', matchValue: raw };
+    out.push(seed);
+  }
+
+  // Link labels and quoted titles remain in the Markdown sent to Claude even
+  // when they are not rendered as normal body text.
+  const profileDocument = profile === 'personnel_profile' || profile === 'applicant';
+  if (profileDocument) {
+    const markdownLink = /!?\[([^\]\n]{1,120})\](?:\(([^\n)]{0,2000})\)|\[([^\]\n]{0,500})\])/gu;
+    while ((m = markdownLink.exec(src))) {
+      // Only profile documents make a generic person-shaped label relevant.
+      // Explicit person-labelled links above remain strong evidence in every
+      // profile, while professional labels are filtered by the term catalog.
+      pushFullPerson(out, m[1], 'markdown_link_label');
+      const target = m[2] || '';
+      const title = target.match(/(?:^|\s)(["'])([^\n]{1,120}?)\1\s*$/u);
+      if (title) pushFullPerson(out, title[2], 'markdown_metadata');
+    }
+  }
+
+  const label = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*(.+)$`, 'gimu');
   while ((m = label.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
-  const inline = new RegExp(`${PERSON_LABEL}\\s*:\\s*(${NAME_TOKEN}[ \\t]+${NAME_TOKEN})`, 'giu');
+  // Additional visible Markdown structures. These are deliberately limited
+  // to person-shaped values and profile documents so ordinary prose lists do
+  // not become a broad name dictionary.
+  if (profileDocument) {
+    const structuredValue = /^(?:[ \t]*(?:\d+[.)][ \t]+|[-*+][ \t]+\[[ xX]\][ \t]+|\[\^[^\]\n]{1,100}\]:[ \t]+))(.{1,120})$/gmu;
+    while ((m = structuredValue.exec(src))) pushFullPerson(out, m[1], 'markdown_structure');
+  }
+
+  // Reference definitions are not rendered as body text, but they remain in
+  // the Markdown handed to Claude. A quoted title can therefore carry PII.
+  if (profileDocument) {
+    const referenceTitle = /^[ \t]*\[[^\]\n]{1,100}\]:[ \t]*\S+(?:[ \t]+|[ \t]*\()(["'])([^\n]{1,120}?)\1\)?[ \t]*$/gmu;
+    while ((m = referenceTitle.exec(src))) pushFullPerson(out, m[2], 'markdown_metadata');
+  }
+
+  const inline = new RegExp(`(?<![\\p{L}\\p{N}_])${PERSON_LABEL}(?![\\p{L}\\p{N}_])[ \\t]*:[ \\t]*(${NAME_TOKEN}[ \\t]+${NAME_TOKEN})`, 'giu');
   while ((m = inline.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
-  const table = new RegExp(`^\\|\\s*${PERSON_LABEL}\\s*:?\\s*\\|\\s*([^|\\n]+)\\|`, 'gimu');
+  const table = new RegExp(`^\\|[ \\t]*${PERSON_LABEL}[ \\t]*:?[ \\t]*\\|[ \\t]*([^|\\n]+)\\|`, 'gimu');
   while ((m = table.exec(src))) {
     // A parser-generated CSV header starts exactly like a two-column
     // key/value table ("| Name | E-Mail |"), but its next line is the
@@ -441,7 +569,7 @@ function collectContextualNameCandidates(text, profile) {
   const src = String(text || '');
   const out = [];
   const before =
-    /(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/i;
+    /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/iu;
   const after = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b/i;
   // Contracts and customer records name the counterparty through connectors
   // rather than honorifics: "Vertrag zwischen Alpha GmbH und Max Mustermann".
@@ -462,6 +590,7 @@ function collectContextualNameCandidates(text, profile) {
         const window = run.slice(i, i + size);
         const cand = normalizeSpaces(window.map((t) => t.text).join(' '));
         if (!looksName(cand)) continue;
+        if (hasAbstractNounShape(cand)) continue;
 
         const start = window[0].start;
         const end = window[window.length - 1].end;
@@ -499,7 +628,7 @@ function collectPersonSeeds(
   precomputedAnchors = null,
   strongPersonAnchorOverride = null
 ) {
-  const anchors = precomputedAnchors === null ? collectPersonAnchors(text) : precomputedAnchors;
+  const anchors = precomputedAnchors === null ? collectPersonAnchors(text, profile) : precomputedAnchors;
   const anchorInText = anchors.length > 0 || PERSON_PLACEHOLDER_RE.test(String(text || ''));
   const hasStrongPersonAnchor =
     strongPersonAnchorOverride === null ? anchorInText : Boolean(strongPersonAnchorOverride);
@@ -508,6 +637,15 @@ function collectPersonSeeds(
     ...collectHeaderNameCandidates(text, profile, 40, hasStrongPersonAnchor),
     ...collectContextualNameCandidates(text, profile)
   ];
+  if (profile === 'personnel_profile' || profile === 'applicant') {
+    let seen = 0;
+    for (const line of lines(text)) {
+      if (String(line).trim() && ++seen > 12) break;
+      const match = String(line).match(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)(.+?)\s*$/u);
+      if (match && looksName(match[1]) && !hasAbstractNounShape(match[1])) pushPerson(seeds, match[1], 'profile_structure');
+      if (HEADER_SECTION_RE.test(String(line).replace(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)/u, '').trim())) break;
+    }
+  }
   const byKey = new Map();
   for (const seed of seeds) {
     const k = key(seed.value);
@@ -518,8 +656,8 @@ function collectPersonSeeds(
 }
 
 // Backwards-compatible view used by the residual gate.
-function collectNameSeeds(text) {
-  return collectPersonAnchors(text).map((s) => s.value);
+function collectNameSeeds(text, profile = 'general') {
+  return collectPersonAnchors(text, profile).map((s) => s.value);
 }
 
 function collectOrganizations(text) {
@@ -527,7 +665,7 @@ function collectOrganizations(text) {
   COMPANY_RE.lastIndex = 0;
   let m;
   while ((m = COMPANY_RE.exec(text))) {
-    const v = normalizeSpaces(m[1]);
+    const v = normalizeSpaces(m[1].replace(PROFESSIONAL_ORG_PREFIX_RE, ''));
     if (v) out.push(v);
   }
   return [...new Set(out.map((value) => value.replace(/^Bei\s+/u, '')))];

@@ -5,6 +5,7 @@ const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
 const { uiProcessEnvironment } = require('./ui-process-policy');
+const { WINDOWS_PICKER_UTF8, runPickerAsync, throwIfSelectionAborted, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
 
 const FOLDER_PICKER_CANCELLED = '__DATASECURE_FOLDER_PICKER_CANCELLED__';
 const FOLDER_PICKER_TITLE = 'DataSecure-Privacy-Ordner auswählen';
@@ -20,6 +21,7 @@ function pickerCommands(platform = process.platform, env = process.env) {
   if (platform === 'win32') {
     const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const script = [
+      WINDOWS_PICKER_UTF8,
       'Add-Type -AssemblyName System.Windows.Forms',
       '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
       `$dialog.Description = '${FOLDER_PICKER_TITLE}'`, '$dialog.ShowNewFolderButton = $true',
@@ -29,7 +31,8 @@ function pickerCommands(platform = process.platform, env = process.env) {
   }
   if (platform === 'darwin') return [{
     command: '/usr/bin/osascript',
-    args: ['-e', `POSIX path of (choose folder with prompt "${FOLDER_PICKER_TITLE}")`]
+    args: ['-e', ['try', `POSIX path of (choose folder with prompt "${FOLDER_PICKER_TITLE}")`,
+      'on error number -128', `return "${FOLDER_PICKER_CANCELLED}"`, 'end try'].join('\n')]
   }];
   if (platform === 'linux') return [
     { command: 'zenity', args: ['--file-selection', '--directory', `--title=${FOLDER_PICKER_TITLE}`] },
@@ -52,8 +55,9 @@ function pickFolder(options = {}) {
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
     if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die Auswahl des Privacy-Ordners wurde wegen Zeitüberschreitung beendet.');
     if (result?.error) throw new SafeError('Der lokale Ordnerdialog konnte nicht gestartet werden.');
-    const selected = String(result?.stdout || '').trim();
-    if (selected === FOLDER_PICKER_CANCELLED || (result?.status !== 0 && !selected)) throw selectionCancelledError();
+    const selected = String(result?.stdout || '').replace(/\r?\n$/u, '');
+    if (selected === FOLDER_PICKER_CANCELLED || documentedNativeCancellation(result, selected, options.platform)) throw selectionCancelledError();
+    if (result?.status !== 0) throw new SafeError('Die lokale Ordnerauswahl konnte nicht sicher gelesen werden.');
     if (!path.isAbsolute(selected)) throw new SafeError('Der ausgewählte Privacy-Ordner ist nicht absolut.');
     let stat;
     try { stat = fs.lstatSync(selected); } catch { throw new SafeError('Der ausgewählte Privacy-Ordner ist nicht verfügbar.'); }
@@ -64,4 +68,28 @@ function pickFolder(options = {}) {
   throw new SafeError('Kein Privacy-Ordner ausgewählt.');
 }
 
-module.exports = { FOLDER_PICKER_CANCELLED, FOLDER_PICKER_TITLE, pickerCommands, selectionCancelledError, pickFolder };
+async function pickFolderAsync(options = {}) {
+  const runner = options.runner || runPickerAsync;
+  let unavailable = 0;
+  throwIfSelectionAborted(options.signal);
+  for (const spec of pickerCommands(options.platform, options.env)) {
+    throwIfSelectionAborted(options.signal);
+    const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal, pickerOutputMaxBuffer(1));
+    throwIfSelectionAborted(options.signal);
+    if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
+    if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) throw new SafeError('Die Auswahl des Privacy-Ordners wurde wegen Zeitüberschreitung beendet.');
+    if (result?.error && typeof result.error.code !== 'number') throw new SafeError('Der lokale Ordnerdialog konnte nicht gestartet werden.');
+    const selected = String(result?.stdout || '').replace(/\r?\n$/u, '');
+    if (selected === FOLDER_PICKER_CANCELLED || documentedNativeCancellation(result, selected, options.platform)) throw selectionCancelledError();
+    if (result?.status !== 0) throw new SafeError('Die lokale Ordnerauswahl konnte nicht sicher gelesen werden.');
+    if (!path.isAbsolute(selected)) throw new SafeError('Der ausgewählte Privacy-Ordner ist nicht absolut.');
+    let stat;
+    try { stat = fs.lstatSync(selected); } catch { throw new SafeError('Der ausgewählte Privacy-Ordner ist nicht verfügbar.'); }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new SafeError('Der ausgewählte Privacy-Ordner ist kein regulärer lokaler Ordner.');
+    return path.resolve(selected);
+  }
+  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter lokaler Ordnerdialog verfügbar.');
+  throw new SafeError('Kein Privacy-Ordner ausgewählt.');
+}
+
+module.exports = { FOLDER_PICKER_CANCELLED, FOLDER_PICKER_TITLE, pickerCommands, selectionCancelledError, pickFolder, pickFolderAsync };

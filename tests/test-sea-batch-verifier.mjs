@@ -101,7 +101,7 @@ test('native runs are opt-in, piped completion is drained and no broad cleanup/s
   assert.doesNotMatch(source, /rmSync|rmdirSync|unlinkSync|deletePassword|setPassword|setPrivateArtifactCryptoProviderForTests/);
   const pkg = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8'));
   for (const name of ['test', 'test:ci', 'pretest', 'pretest:ci', 'test:sea-gates']) {
-    assert.doesNotMatch(pkg.scripts[name], /verify-sea-batch\.mjs|--isolated-test-account/);
+    assert.doesNotMatch(String(pkg.scripts[name] || ''), /verify-sea-batch\.mjs|--isolated-test-account/);
   }
 });
 done();

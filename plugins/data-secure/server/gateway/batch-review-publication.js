@@ -23,6 +23,8 @@ function createBatchReviewPublication(options = {}) {
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const retryableCodes = options.retryableCodes || new Set();
   const mappingStoppedStatus = options.mappingStoppedStatus || 'sicher gestoppt';
+  const withBatchPseudonymRegistry = options.withBatchPseudonymRegistry ||
+    (async (_state, action) => action(undefined));
 
   function invalidBinding() {
     return invalidDecisionError(
@@ -114,8 +116,9 @@ function createBatchReviewPublication(options = {}) {
       let publishedDocumentResult;
       try {
         const entry = exactPendingEntry(state, item);
-        const result = await anonymizeNext(state.profile, {
+        const result = await withBatchPseudonymRegistry(state, (pseudonymRegistry) => anonymizeNext(state.profile, {
           ...deps,
+          pseudonymRegistry,
           inputQueue: [entry],
           copyClaim: true,
           removeImages: state.remove_images,
@@ -125,7 +128,8 @@ function createBatchReviewPublication(options = {}) {
             positiveDocumentResult(details?.document_result);
             verifiedDocumentResult = details.document_result;
             item.checkpoint = 'package_verified';
-            writeState(state, { durable: false });
+            if (pseudonymRegistry) state.pseudonym_registry_state = pseudonymRegistry.exportState();
+            writeState(state);
             if (deps.beforePublish) await deps.beforePublish(details);
           },
           afterPublish: async (details) => {
@@ -140,7 +144,7 @@ function createBatchReviewPublication(options = {}) {
             item.checkpoint = 'package_published';
             writeState(state, { durable: false });
           }
-        });
+        }));
         if (!packagePublished || typeof result?.package_id !== 'string' || result.package_id !== publishedPackageId ||
           !sameDocumentResult(result?.document_result, verifiedDocumentResult) ||
           !sameDocumentResult(result?.document_result, publishedDocumentResult)) {

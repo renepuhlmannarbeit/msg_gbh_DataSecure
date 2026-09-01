@@ -7,11 +7,18 @@ const childProcess = require('child_process');
 const { createSuite } = require('./helpers');
 const { pickSourcesAsync, PICKER_CANCELLED } = require('../plugins/data-secure/server/companion/file-picker');
 const { pickSourceFolderAsync, SOURCE_FOLDER_CANCELLED } = require('../plugins/data-secure/server/companion/source-folder');
+const { pickFolderAsync, FOLDER_PICKER_CANCELLED } = require('../plugins/data-secure/server/companion/folder-picker');
 const completed = require('../plugins/data-secure/server/companion/completed-batch-picker');
 const { test, testAsync, assert, done } = createSuite('Native picker lifecycle');
 
 const selectedPath = path.resolve(__dirname, 'synthetic-not-read.txt');
-const validation = { hasReparseComponent: () => false, fs: { lstatSync: () => ({ size: 12, isFile: () => true, isSymbolicLink: () => false }) } };
+const syntheticStat = { size: 12, isFile: () => true, isSymbolicLink: () => false };
+const validation = {
+  hasReparseComponent: () => false,
+  hasReparseComponentAsync: async () => false,
+  fs: { lstatSync: () => syntheticStat },
+  fsPromises: { lstat: async () => syntheticStat }
+};
 const candidates = [{ ordinal: 1, released: 2, stopped: 0 }, { ordinal: 2, released: 1, stopped: 1 }];
 
 test('completed Windows picker fills the list silently before selecting the first item', () => {
@@ -20,11 +27,57 @@ test('completed Windows picker fills the list silently before selecting the firs
   assert.ok(script.lastIndexOf('$list.Items.Add(') < script.indexOf('$list.SelectedIndex = 0'));
 });
 
+async function main() {
+  await testAsync('multi-file validation stays asynchronous and observes cancellation between files', async () => {
+    const controller = new AbortController();
+    let stats = 0;
+    let timerObserved = false;
+    const secondPath = path.resolve(__dirname, 'synthetic-not-read-2.txt');
+    const pending = pickSourcesAsync({
+      ...validation,
+      platform: 'linux',
+      signal: controller.signal,
+      runner: async () => ({ status: 0, stdout: `${selectedPath}\n${secondPath}\n` }),
+      fsPromises: {
+        async lstat() {
+          stats++;
+          await new Promise((resolve) => setImmediate(resolve));
+          if (stats === 1) setImmediate(() => controller.abort());
+          return syntheticStat;
+        }
+      }
+    });
+    setImmediate(() => { timerObserved = true; });
+    await assert.rejects(pending, (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+    assert.strictEqual(timerObserved, true, 'validation must yield to the Cowork event loop');
+    assert.ok(stats <= 2, 'cancellation stops validation without scanning the remaining batch');
+  });
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    await testAsync(`completed ${platform}: nonzero exits, timeouts and malformed ordinals cannot select a batch`, async () => {
+      for (const result of [
+        { status: 1, stdout: '1', error: { code: 1 } },
+        { status: null, stdout: '1', error: { code: 'ETIMEDOUT' } },
+        { status: null, stdout: '', error: { killed: true } },
+        { status: null, stdout: '', signal: 'SIGTERM' },
+        { status: 2, stdout: '' },
+        { status: 0, stdout: '1', error: { code: 'EIO' } },
+        ...['0', '3', '1e0', '0x1', '1.0', '1\n2', ''].map(stdout => ({ status: 0, stdout }))
+      ]) {
+        let calls = 0;
+        await assert.rejects(completed.pickCompletedBatch(candidates, { platform, runner: async () => { calls++; return result; } }));
+        assert.strictEqual(calls, 1, 'failure does not reopen or fall back');
+      }
+      for (const ordinal of [1, 2]) assert.strictEqual(await completed.pickCompletedBatch(candidates, {
+        platform, runner: async () => ({ status: 0, stdout: `${ordinal}\n` })
+      }), ordinal);
+    });
+  }
 if (process.platform === 'win32') {
   test('real PowerShell picker preambles preserve umlauts and non-Latin source names', () => {
     const { pickerCommands } = require('../plugins/data-secure/server/companion/file-picker');
     const { sourceFolderPickerCommands } = require('../plugins/data-secure/server/companion/source-folder');
-    for (const spec of [pickerCommands('win32')[0], sourceFolderPickerCommands('win32')[0]]) {
+    const { pickerCommands: privacyFolderPickerCommands } = require('../plugins/data-secure/server/companion/folder-picker');
+    for (const spec of [pickerCommands('win32')[0], sourceFolderPickerCommands('win32')[0], privacyFolderPickerCommands('win32')[0]]) {
       const prefix = spec.args.at(-1).split('$dialog =')[0];
       assert.doesNotMatch(prefix, /ShowDialog/);
       const result = childProcess.spawnSync(spec.command, [...spec.args.slice(0, -1), `${prefix}[Console]::Out.Write('Müller 東京')`],
@@ -34,7 +87,7 @@ if (process.platform === 'win32') {
       assert.strictEqual(result.stdout, 'Müller 東京');
     }
   });
-  for (const ordinal of [1, 2, null]) test(`real Windows list construction returns only ${ordinal ?? 'cancellation'} without opening a dialog`, () => {
+  for (const ordinal of [1, 2, null]) await testAsync(`real Windows list construction returns only ${ordinal ?? 'cancellation'} without opening a dialog`, async () => {
     const runner = (command, args) => {
       const original = args.at(-1);
       assert.strictEqual(original.split('$form.ShowDialog()').length, 2);
@@ -50,26 +103,28 @@ if (process.platform === 'win32') {
       assert.strictEqual(result.stdout, ordinal === null ? completed.PICKER_CANCELLED : String(ordinal));
       return result;
     };
-    if (ordinal === null) assert.throws(() => completed.pickCompletedBatch(candidates, { platform: 'win32', runner }), (error) => error.code === completed.PICKER_CANCELLED);
-    else assert.strictEqual(completed.pickCompletedBatch(candidates, { platform: 'win32', runner }), ordinal);
+    if (ordinal === null) await assert.rejects(() => completed.pickCompletedBatch(candidates, { platform: 'win32', runner }), (error) => error.code === completed.PICKER_CANCELLED);
+    else assert.strictEqual(await completed.pickCompletedBatch(candidates, { platform: 'win32', runner }), ordinal);
   });
 }
 
-async function main() {
   await testAsync('a cancellation immediately before intake does not start a worker; successful workers remain independent', async () => {
     const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
-    const source = code.slice(code.indexOf('let pickerSelectionActive='), code.indexOf('function continueAnonymizedBatchInChat('));
+    const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     assert.ok(source.includes('async function startPickerBatch('));
     let starts = 0;
+    let reservationHeld = false;
     let cancelOnAccepted = true;
     let controller = new AbortController();
     const context = vm.createContext({
       process: { env: {} }, setImmediate,
-      genericStatus: () => ({ engine_ready: true }),
+      reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'd'.repeat(64) }; },
+      releaseIntake: () => { reservationHeld = false; return true; },
+      genericStatus: (options) => { assert.strictEqual(options.ignoreIntakeReservation, true); return { engine_ready: true }; },
       pickSourcesAsync: async () => [{ sourcePath: selectedPath, sourceBytes: 12 }],
       batchQueueFromSelection: (selected) => selected,
       recordWorkflowEvent: (event) => { if (cancelOnAccepted && event.event === 'picker_selection_accepted') controller.abort(); },
-      startLocalIntakeExecutor: () => { starts++; return { ok: true, local_intake_pending: true }; },
+      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true }; },
       localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
     });
     vm.runInContext(source, context);
@@ -84,14 +139,65 @@ async function main() {
     assert.strictEqual(starts, 1, 'there is no cancellation hook attached to the independent intake worker');
   });
 
+  await testAsync('privacy-root mutation and source intake share one native interaction owner', async () => {
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
+    let resolveFolder;
+    let resolveSources;
+    let saves = 0;
+    let clears = 0;
+    let starts = 0;
+    let sourcePickerCalls = 0;
+    let reservationHeld = false;
+    const status = { engine_ready: true, local_intake_pending: false, batch_processing_active: false, recoverable_batches: 0 };
+    const context = vm.createContext({
+      process: { env: {} }, setImmediate,
+      reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'e'.repeat(64) }; },
+      releaseIntake: () => { reservationHeld = false; return true; },
+      SafeError: class SafeError extends Error {},
+      genericStatus: () => ({ ...status }),
+      LOCAL_ONLY_HANDOFF: { isActive: () => false, finalizeTerminal: () => false },
+      pickFolderAsync: () => new Promise((resolve) => { resolveFolder = resolve; }),
+      storageStatus: () => ({ safe: true }),
+      saveConfiguredPrivacyRoot: () => { saves++; },
+      clearConfiguredPrivacyRoot: () => { clears++; },
+      pickSourcesAsync: () => { sourcePickerCalls++; return new Promise((resolve) => { resolveSources = resolve; }); },
+      pickSourceFolderAsync: async () => path.dirname(selectedPath),
+      enumerateSourceFolderAsync: async () => [],
+      batchQueueFromSelection: (selected) => selected,
+      recordWorkflowEvent: () => {},
+      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true }; },
+      localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
+    });
+    vm.runInContext(source, context);
+
+    const configuring = context.configurePrivacyFolder({ confirmed: true });
+    const blockedStart = await context.startPickerBatch({});
+    assert.strictEqual(blockedStart.error, 'batch_active');
+    assert.strictEqual(sourcePickerCalls, 0);
+    resolveFolder(path.dirname(selectedPath));
+    await configuring;
+    assert.strictEqual(saves, 1);
+
+    const starting = context.startPickerBatch({});
+    await new Promise((resolve) => setImmediate(resolve));
+    await assert.rejects(context.configurePrivacyFolder({ confirmed: true, reset_to_default: true }), /bereits geöffnet|unverändert/iu);
+    assert.strictEqual(clears, 0);
+    resolveSources([{ sourcePath: selectedPath, sourceBytes: 12 }]);
+    await starting;
+    assert.strictEqual(starts, 1);
+  });
+
   for (const [name, picker, marker, output] of [
     ['files', pickSourcesAsync, PICKER_CANCELLED, selectedPath],
-    ['folder', pickSourceFolderAsync, SOURCE_FOLDER_CANCELLED, path.dirname(selectedPath)]
+    ['folder', pickSourceFolderAsync, SOURCE_FOLDER_CANCELLED, path.dirname(selectedPath)],
+    ['completed', (options) => completed.pickCompletedBatch(candidates, options), completed.PICKER_CANCELLED, '2']
   ]) {
+    const cancelCode = name === 'completed' ? completed.PICKER_CANCELLED : 'LOCAL_SELECTION_CANCELLED';
     await testAsync(`${name}: pre-abort opens no process and late selection cannot win over cancellation`, async () => {
       const controller = new AbortController();
       controller.abort(new Error('private host reason'));
-      await assert.rejects(picker({ signal: controller.signal, runner: () => { throw new Error('must not run'); } }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED' && !error.message.includes('private'));
+      await assert.rejects(picker({ signal: controller.signal, runner: () => { throw new Error('must not run'); } }), (error) => error.code === cancelCode && !error.message.includes('private'));
       const late = new AbortController();
       let calls = 0;
       await assert.rejects(picker({ ...validation, platform: 'linux', signal: late.signal, runner: async (_command, _args, _input, _env, signal) => {
@@ -99,7 +205,7 @@ async function main() {
         assert.strictEqual(signal, late.signal);
         late.abort();
         return { status: 0, stdout: output };
-      } }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+      } }), (error) => error.code === cancelCode);
       assert.strictEqual(calls, 1);
     });
 
@@ -108,14 +214,14 @@ async function main() {
       await assert.rejects(picker({ platform: 'linux', runner: async (command) => {
         commands.push(command);
         return command === 'zenity' ? { error: { code: 'ENOENT' } } : { error: { code: 1 }, status: 1, stdout: '' };
-      } }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+      } }), (error) => error.code === cancelCode);
       assert.deepStrictEqual(commands, ['zenity', 'kdialog']);
       let calls = 0;
-      await assert.rejects(picker({ platform: 'linux', runner: async () => { calls++; return { status: 0, stdout: marker }; } }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+      await assert.rejects(picker({ platform: 'linux', runner: async () => { calls++; return { status: 0, stdout: marker }; } }), (error) => error.code === cancelCode);
       assert.strictEqual(calls, 1);
       const result = await picker({ ...validation, platform: 'linux', runner: async () => ({ status: 0, stdout: output }) });
       if (name === 'files') assert.strictEqual(result[0].sourcePath, selectedPath);
-      else assert.strictEqual(result, path.dirname(selectedPath));
+      else assert.strictEqual(result, name === 'completed' ? 2 : path.dirname(selectedPath));
     });
 
     await testAsync(`${name}: a real asynchronous owned child is killed on abort while the event loop remains responsive`, async () => {
@@ -139,7 +245,7 @@ async function main() {
       try {
         const pending = picker({ ...validation, signal: controller.signal, env: { ...process.env, NODE_OPTIONS: '--invalid-host-option' } });
         timer = setTimeout(() => { aborted = true; controller.abort(); }, 100);
-        await assert.rejects(pending, (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+        await assert.rejects(pending, (error) => error.code === cancelCode);
         assert.strictEqual(aborted, true);
         await closed;
         assert.ok(child.exitCode !== null || child.signalCode !== null);
@@ -151,6 +257,17 @@ async function main() {
       }
     });
   }
+
+  await testAsync('privacy folder: cancellation owns and aborts only its asynchronous dialog', async () => {
+    const controller = new AbortController();
+    let observed;
+    await assert.rejects(pickFolderAsync({ platform: 'win32', signal: controller.signal, runner: async (_c, _a, _i, _e, signal) => {
+      observed = signal; controller.abort(); return { status: 0, stdout: path.dirname(selectedPath) };
+    } }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+    assert.strictEqual(observed, controller.signal);
+    await assert.rejects(pickFolderAsync({ platform: 'win32', runner: async () => ({ status: 0, stdout: FOLDER_PICKER_CANCELLED }) }),
+      (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+  });
   done();
 }
 

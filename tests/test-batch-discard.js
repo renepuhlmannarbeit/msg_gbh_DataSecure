@@ -42,6 +42,12 @@ function fixture(options = {}) {
       events.push(`work:${token}`);
       if (options.failWork === token) throw new Error('WORK_FAILED');
     },
+    removeState(state) {
+      const target = `journal:${state.token}`;
+      events.push(`path:${state.token}`);
+      events.push(`unlink:${target}`);
+      if (options.failUnlink === target) throw new Error('UNLINK_FAILED');
+    },
     batchPath(token) {
       events.push(`path:${token}`);
       return `journal:${token}`;

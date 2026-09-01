@@ -1,5 +1,9 @@
 # Zielarchitektur: Claude Plugin + lokaler Privacy MCP
 
+> **Historischer Zielstand.** Aktuell maßgeblich sind
+> [`canonical/DECISIONS.md`](canonical/DECISIONS.md) und
+> [`canonical/TARGET_ARCHITECTURE.md`](canonical/TARGET_ARCHITECTURE.md).
+
 > **Historische Zielarchitektur:** Für aktuelle Produktentscheidungen, Grenzen und
 > Prioritäten gelten [canonical/PRODUCT.md](canonical/PRODUCT.md) und
 > [canonical/BACKLOG.md](canonical/BACKLOG.md).

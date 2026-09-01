@@ -108,6 +108,16 @@ test('external or active relationships anywhere in the package are rejected', ()
   assert.strictEqual(result.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
 });
 
+test('foreign relationship namespaces are rejected even when their final name looks supported', () => {
+  const relationships = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="https://evil.invalid/header" Target="header1.xml"/></Relationships>';
+  const result = inspect('foreign-namespace.docx', docx({}, [
+    ['word/_rels/document.xml.rels', relationships],
+    ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>']
+  ]));
+  assert.strictEqual(result.verdict, 'rejected');
+  assert.strictEqual(result.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+});
+
 test('each blocked internal relationship type remains fail-closed', () => {
   const blockedTypes = [
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/package',

@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { createSuite, assertAbsent, assertPresent } = require('./helpers');
 const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-format-matrix-'));
 process.env.EU_PRIVACY_ROOT = root;
@@ -210,8 +211,8 @@ function docx(text) {
     `<w:p><w:r><w:t>${line.replace(/&/g, '&amp;')}</w:t></w:r></w:p>`
   ).join('');
   return zipStore([
-    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-    ['word/document.xml', `<w:document xmlns:w="w"><w:body>${body}</w:body></w:document>`]
+    ...opcControlEntries('docx'),
+    ['word/document.xml', `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`]
   ]);
 }
 

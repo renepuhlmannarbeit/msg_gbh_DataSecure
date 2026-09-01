@@ -6,7 +6,7 @@ const {
   provisionBatchPseudonymContext,
   withBatchPseudonymRegistry,
   removeBatchPseudonymContext
-} = require('../plugins/data-secure/server/batch-pseudonym-context');
+} = require('./legacy/keyring/batch-pseudonym-context');
 const { CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 
 const { test, done, assert } = createSuite('Batch pseudonym context lifecycle');
@@ -117,7 +117,7 @@ test('processing callback errors retain their fixed code while the registry is d
 });
 
 test('the lifecycle module contains no persistence, environment, CLI or cryptographic fallback', () => {
-  const source = require('fs').readFileSync(require.resolve('../plugins/data-secure/server/batch-pseudonym-context'), 'utf8');
+  const source = require('fs').readFileSync(require.resolve('./legacy/keyring/batch-pseudonym-context'), 'utf8');
   assert.doesNotMatch(source, /writeFile|readFile|process\.env|child_process|createCipher|createDecipher/iu);
 });
 

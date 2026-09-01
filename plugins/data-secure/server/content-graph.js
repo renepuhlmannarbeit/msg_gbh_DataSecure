@@ -112,7 +112,7 @@ function validateContentGraph(graph, markdown, attachments, expectedExt) {
         node.locator.selector.type !== POSITION ||
         !Number.isSafeInteger(node.locator.selector.start) ||
         !Number.isSafeInteger(node.locator.selector.end) ||
-        node.locator.selector.start < 0 || node.locator.selector.end < node.locator.selector.start ||
+        node.locator.selector.start < 0 || node.locator.selector.end <= node.locator.selector.start ||
         node.locator.selector.end > markdown.length) throw new Error('CONTENT_GRAPH_TEXT_LOCATOR_INVALID');
       if (node.locator.selector.start < textEnd ||
         markdown.slice(textEnd, node.locator.selector.start).trim() !== '') {

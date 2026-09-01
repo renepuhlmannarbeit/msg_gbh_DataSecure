@@ -205,10 +205,18 @@ function readStatus() {
   };
 }
 
+function portableOcrOptions(options = {}) {
+  const portable = { ...(options.portableOcr || {}) };
+  if (portable.timeoutMs === undefined && options.timeoutMs !== undefined) portable.timeoutMs = options.timeoutMs;
+  if (portable.signal === undefined && options.signal !== undefined) portable.signal = options.signal;
+  return portable;
+}
+
 async function ocrPng(buffer, language, options = {}) {
-  const portable = portableOcrStatus(options.portableOcr || {});
+  const portableOptions = portableOcrOptions(options);
+  const portable = portableOcrStatus(portableOptions);
   if (portable.available) {
-    return ocrPngDetailedPortable(buffer, language, options.portableOcr || {});
+    return ocrPngDetailedPortable(buffer, language, portableOptions);
   }
   return ocrPngDetailed(buffer, language, options);
 }
@@ -222,9 +230,11 @@ const MAX_ATTACHMENT_BASE64_CHARS = 12 * 1024 * 1024;
 const { validateContentGraph } = require('./content-graph');
 
 function validateParserResult(value, expectedExt) {
+  const forbiddenControls = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u;
   if (!value || typeof value !== 'object' || typeof value.markdown !== 'string' ||
     value.markdown.length > 8_000_000 || !Array.isArray(value.attachments) ||
-    value.attachments.length > 150 || !Array.isArray(value.warnings) || value.warnings.length > 200) {
+    value.attachments.length > 150 || !Array.isArray(value.warnings) || value.warnings.length > 200 ||
+    forbiddenControls.test(value.markdown)) {
     throw new SafeError('Der isolierte Dokumentparser lieferte kein gültiges Ergebnis.');
   }
   let decodedAttachmentBytes = 0;
@@ -240,7 +250,7 @@ function validateParserResult(value, expectedExt) {
     decodedAttachmentBytes += decodedBytes;
   }
   if (decodedAttachmentBytes > 24 * 1024 * 1024) throw new SafeError('Die isoliert extrahierten Assets sind insgesamt zu groß.');
-  if (!value.warnings.every((item) => typeof item === 'string' && item.length <= 1000)) {
+  if (!value.warnings.every((item) => typeof item === 'string' && item.length <= 1000 && !forbiddenControls.test(item))) {
     throw new SafeError('Der isolierte Dokumentparser lieferte ungültige Warnungen.');
   }
   try {
@@ -534,5 +544,6 @@ module.exports = {
   convertDocument,
   rasterizeToPng,
   ocrPngDetailed: ocrPng,
+  portableOcrOptions,
   portableOcrStatus
 };

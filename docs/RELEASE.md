@@ -1,135 +1,78 @@
-# Release and distribution
+# Release- und Distributionsvertrag
 
-## Artefacts
+Stand: 01.09.2026 · 3.2.0-rc84
 
-```bash
-npm run version:sync -- <version>  # propagate a new version everywhere
-npm test
+## Nutzerprodukt
+
+Das Releaseprodukt ist ein selbstenthaltendes, zielsystemspezifisches Plugin-ZIP
+für Windows x64 oder macOS Intel/ARM. Ein ZIP nur aus `plugins/data-secure` und
+interne Engineering-Artefakte sind keine Nutzerprodukte oder Fallbacks.
+
+Für einen GitHub-synchronisierten privaten Marketplace muss das angeschlossene
+private/interne Repository einen self-contained Plugin-Ordner mit relativer
+`source` enthalten. Externe HTTPS-Archive sind dafür kein unterstützter Ersatz.
+Der aktuelle Quellordner mit `command: node` ist nur Entwicklung und noch kein
+Marketplace-Release. Ein manuell hochgeladenes Plugin-ZIP ist laut Anthropic auf
+50 MB begrenzt; DataSecure-Zielpakete bleiben unter 45 MiB. Ein universelles
+Marketplace-Paket darf erst angeboten werden, wenn es self-contained, unter dem
+geltenden Limit und auf Windows sowie beiden macOS-Architekturen abgenommen ist.
+
+## Produktbuild
+
+```text
+npm ci
+npm run test:docs
+npm run test:ci
+npm run runtime:target -- --target <Ziel> --archive <offizielles-Node-Archiv> --output dist/<Ziel>
+npm run build:plugin
+npm run test:plugin-zip
 npm run build
-node scripts/generate-sbom.mjs
 ```
 
-| Artefact | Purpose |
-|---|---|
-| `dist/DataSecure-Privacy-Preflight-v<version>.zip` | primary Claude plugin |
-| `dist/DataSecure-Privacy-Gateway-v<version>.mcpb` | standalone Claude Desktop extension, fallback |
-| `dist/DataSecure-Privacy-Preflight-v<version>.spdx.json` | SPDX 2.3 software bill of materials with archive hashes |
-| `dist/SHA256SUMS` | SHA-256 verification for ZIP, MCPB and SBOM |
+`runtime:target` läuft auf dem jeweiligen Zielhost und prüft den fest
+eingetragenen Downloadhash, Architektur, Lizenzdatei und den echten Start der
+Runtime. `build` erzeugt und prüft ZIP, SPDX-SBOM und `SHA256SUMS`. Das Endprodukt
+startet offline und setzt keine System-Node-/Python-Installation voraus.
+Der manuelle, kostensparende Workflow `bundled-runtime-release.yml` baut bei
+Bedarf die drei Ziel-ZIPs und prüft eine universelle Marketplace-Projektion; er
+läuft niemals automatisch. Eine zu große oder unvollständige Projektion stoppt
+und wird nicht als Release veröffentlicht.
 
-Both archives use a `node:zlib` ZIP writer without an external `zip` binary.
-Normal tests and archive builds use `npm run native:verify` and never overwrite the
-reviewed launcher. A release maintainer updates it explicitly with
-`npm run native:update`; `npm run native:repro` then rebuilds into a temporary
-directory with MSVC 19.50.35725 / VC Tools 14.50.35717, Windows SDK 10.0.26100.0
-and `/Brepro` and compares it byte-for-byte with the tracked x64 binary. The build
-fails if this pinned toolchain is unavailable. Both archive builders independently check
-SHA-256 and PE AMD64 before packaging. Archive entries carry a fixed timestamp.
-The native CodeQL job uses `native:analyze` with the same source and pinned Windows
-SDK plus the runner MSVC. CodeQL instrumentation changes compiler discovery/output
-bytes, so the independent CI build job owns the exact MSVC pin and byte-for-byte
-`native:repro` gate for the same commit SHA.
+## Engineeringbuild
 
-`plugins/data-secure` is the canonical tree. The build substitutes nothing: what
-a marketplace install resolves from the repository is what the ZIP contains.
+```text
+npm run build:engineering
+npm run test:engineering-artifacts
+```
 
-## Distribution modes
+Diese Befehle sind optional für interne Vergleichs- und Legacy-Gates. Ihr Erfolg
+ist keine Produktfreigabe.
 
-1. **Pilot:** manual upload of the plugin ZIP to a Claude plugin marketplace.
-2. **Organisation rollout:** GitHub-synced marketplace. This requires the
-   repository to be **private or internal** first.
-3. **Fallback:** the standalone MCPB, installed directly as a Claude Desktop
-   extension.
+## Freigabekriterien
 
-All three run the same local privacy runtime and the same fail-closed release
-model.
+- Versionsgleichheit in Paket, Pluginmanifest, Skill und Buildmetadaten.
+- Exakt zwei sichtbare Skills; keine Hooks/Subagenten.
+- TXT/Markdown/CSV/DOCX positiv; XLSX/PPTX/PDF/Scan-PDF/Bilder fail-closed.
+- Kein auswählbarer Bildmodus; Pixel bleiben lokal.
+- 0–14 Tage nur für temporäre Arbeits-/Reviewdaten.
+- Quellen/Originale und fertige Exporte nie automatisch löschen.
+- Fresh Install von ZIP und Marketplace auf Windows x64 und macOS Intel/ARM.
+- Runtime-Evidence, Node-Lizenz, Zielarchitektur, Dateimodi, SBOM und SHA-256.
+- Kernfall, Stopps, Resume, 100 Dateien/500 MiB, Update und Rollback.
+- aktueller Claude-/Cowork-Hostvertrag und Berechtigungsdialoge.
+- UAT, Accessibility, IT/Health-IT, Datenschutz, Security und Architektur.
+- null offene P0/P1-Defects.
 
-For custom MCPB installation use Claude Desktop **Settings → Extensions →
-Advanced settings → Install Extension…**. Claude Desktop provides the Node.js
-runtime for desktop extensions. Plugin ZIP distribution uses **Customize →
-Plugins** or an organisation marketplace. Re-check both official workflows before
-every rollout because the Claude UI and admin controls can change:
+## Formate im Erstrelease
 
-- <https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop>
-- <https://support.claude.com/en/articles/13837433-manage-plugins-for-your-organization>
+Freigegeben sind TXT, Markdown, CSV und DOCX. Alle anderen sichtbaren Formate
+werden mit unveränderter Quelle und ohne Teiloutput sicher gestoppt.
 
-## Release gate
+## Rollback
 
-Do not mark a build production-ready until all of these hold:
+Rollback darf Quellen, fertige Exporte, Mapping und unbekannte/verschlüsselte
+Altbestände weder verändern noch löschen. Nach Rollback werden Picker, Kernfall,
+Resume, Mapping und Version mit synthetischen Daten geprüft.
 
-- [ ] CI repository guards are green on Linux and the supported runtime suite is green on Windows
-- [ ] JavaScript and native C++ CodeQL SARIF gates plus the complete-history Gitleaks
-      scan are green
-- [ ] `npm run version:sync` reports "all files already in sync"
-- [ ] packaged ZIP and MCPB answer `initialize` and report `windows_job_object` for
-      both parser and visual boundary (CI verifies this)
-- [ ] `claude plugin validate ./plugins/data-secure --strict` and
-      `claude plugin validate . --strict` pass with the Claude CLI version recorded
-      in the release evidence; until an official stable CI validator is pinned, this
-      remains an explicit release-workstation gate
-- [ ] the extracted plugin ZIP passes `npm run test:plugin-zip`: German skill
-      contracts, the 150-case end-to-end matrix, the 1.000-case detector corpus and preservation controls are green
-- [ ] every model offered in the pilot passes all 20 cases from
-      `evals/skill-behavior-cases.json` according to `docs/SKILL_EVALUATION.md`;
-      corpus validation in `npm test` is not a substitute for these model runs
-- [ ] the packaged plugin contains `server/native/windows-x64/datasecure-sandbox.exe`
-      and its matching SHA-256 sidecar, and contains no reserved top-level `bin/`
-      directory (CI and the build verify this)
-- [ ] ZIP, MCPB, SPDX SBOM and `SHA256SUMS` are present in the same CI artefact
-- [ ] downloaded release files match `SHA256SUMS`
-- [ ] no Office/PDF file is tracked (CI verifies this)
-- [ ] the golden output diff has been reviewed for this release
-- [ ] repository visibility is still private/internal (required for organisation
-      sync; currently satisfied, re-check before each release in case it changed)
-
-## Windows acceptance run
-
-CI exercises the real Windows OCR/redaction path under the native Job Object and
-refuses a malformed EMF. Before a pilot, repeat the following on the supported target
-Windows versions because the GitHub runner is not a representative end-user install:
-
-The real OCR/redaction path passed on 2026-08-21 with
-`npm run test:windows-visual` on the target Windows machine. The remaining
-unchecked items still require installed-product or human acceptance; unit tests
-alone do not close them.
-
-- [x] the real Windows text-review form initializes, marks a manually selected
-      synthetic alias, updates the release preview and returns the exact range
-      while preserving the professional text (automated native-form acceptance,
-      2026-08-21)
-- [ ] the plugin installs and the local MCP starts without any runtime install
-- [ ] `privacy_status` reports `visual_bridge: available` and
-      `visual_boundary: windows_job_object`
-- [ ] the privacy folder opens
-- [ ] TXT and DOCX preflight work on synthetic files; XLSX, PPTX and all other
-      non-pilot formats stop without publishing output
-- [ ] every PDF stops with `PDF_COVERAGE_UNVERIFIED`, restores its source and publishes no package
-- [x] a scanned image is OCR'd, and PII inside it is blacked out
-- [ ] an EMF/WMF graphic either rasterises safely or is withheld
-- [ ] applicant and personnel visuals stay local and unavailable to Claude
-- [ ] only released Markdown with the current run's package-bound read capability
-      is readable by Claude; a package ID alone and historical package enumeration fail
-- [ ] `privacy_status` reports the configured retention window and due counts
-- [ ] an expired synthetic Output package and pending review preview are removed,
-      while possible originals in `Processed`, hidden staging directories and
-      metadata-only audit receipts remain
-- [ ] `purge_local_data` requires explicit confirmation and cleans only the
-      selected scope
-- [ ] with retention set to `0`, the pending review bytes disappear immediately,
-      possible originals in `Processed` remain protected and the newly created
-      package is still readable
-
-If `privacy_status` reports `visual_bridge: unavailable`, the text path still
-works and every graphic is withheld — that is the intended degraded mode, not a
-silent failure.
-
-The native-form checkbox proves control initialization and the exact automated
-selection/button path with synthetic text. It is not evidence that the interface
-is understandable to employees; that belongs to the pilot acceptance run in
-`PILOT-ABNAHME.md`.
-
-## What must never ship
-
-- a real employee, applicant, customer or contract document
-- a plugin or MCPB containing any source-document identifier
-- a build whose bundled PowerShell helpers are placeholders (the build script
-  refuses this)
+Artefakt-SHA-256 und Testergebnisse werden releaseextern veröffentlicht; keine
+rekursiv selbstbezüglichen Prüfsummen im Produktarchiv.

@@ -1,6 +1,7 @@
 'use strict';
 
 const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor } = require('./batch');
+const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation');
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
@@ -8,7 +9,9 @@ const startDeadline = setTimeout(() => process.exit(2), 30_000);
 process.once('message', async (message) => {
   const validToken = /^[a-f0-9]{64}$/.test(String(message?.batch_token || ''));
   const isExistingBatch = message?.type === 'start-local-batch';
-  const isNewIntake = message?.type === 'start-local-intake' && Array.isArray(message?.queue) && message.queue.length > 0;
+  const reservationId = String(message?.intake_reservation_id || '');
+  const isNewIntake = message?.type === 'start-local-intake' && RESERVATION_ID_RE.test(reservationId) &&
+    Array.isArray(message?.queue) && message.queue.length > 0;
   if (started || !validToken || (!isExistingBatch && !isNewIntake)) {
     process.exit(2);
     return;
@@ -35,10 +38,12 @@ process.once('message', async (message) => {
         confirmStart: () => true
       });
       if (begun.ok !== true) {
+        releaseIntake(reservationId);
         process.exit(1);
         return;
       }
       checkpointCreated = true;
+      if (!releaseIntake(reservationId)) throw new Error('INTAKE_RESERVATION_RELEASE_FAILED');
       await notify({ type: 'local-intake-checkpoint-created' });
       const claimed = claimLocalBatchExecutor(message.batch_token, process.pid);
       if (claimed.ok !== true) {
@@ -65,6 +70,7 @@ process.once('message', async (message) => {
     });
     process.exit(0);
   } catch {
+    if (isNewIntake) releaseIntake(reservationId);
     await notify({
       type: isNewIntake ? 'local-intake-stopped' : 'local-batch-stopped',
       stage: checkpointCreated || isExistingBatch ? 'after_checkpoint' : 'before_checkpoint'

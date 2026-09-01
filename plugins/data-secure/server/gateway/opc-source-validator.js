@@ -10,6 +10,10 @@ const OFFICE_REL_NAMESPACES = Object.freeze([
   'http://schemas.openxmlformats.org/officedocument/2006/relationships/',
   'http://purl.oclc.org/ooxml/officedocument/relationships/'
 ]);
+const PACKAGE_REL_NAMESPACES = Object.freeze([
+  'http://schemas.openxmlformats.org/package/2006/relationships/',
+  'http://purl.oclc.org/ooxml/package/relationships/'
+]);
 const BLOCKED_OFFICE_RELATIONSHIP_NAMES = new Set([
   'oleobject',
   'package',
@@ -228,6 +232,12 @@ function isBlockedRelationshipType(value) {
   return false;
 }
 
+function hasSupportedRelationshipNamespace(value) {
+  const type = String(value || '').toLowerCase();
+  return [...OFFICE_REL_NAMESPACES, ...PACKAGE_REL_NAMESPACES]
+    .some((namespace) => type.startsWith(namespace) && type.length > namespace.length);
+}
+
 function validateOpcControls({ declaredType, entries, controlParts }) {
   const expected = MAIN[declaredType];
   if (!expected || !(entries instanceof Set) || !controlParts || typeof controlParts !== 'object') {
@@ -260,6 +270,9 @@ function validateOpcControls({ declaredType, entries, controlParts }) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (isBlockedRelationshipType(type)) {
+        throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+      }
+      if (!hasSupportedRelationshipNamespace(type)) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       const resolvedTarget = resolveRelationshipTarget(name, target);

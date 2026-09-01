@@ -5,6 +5,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { readCentralModes } from './lib/zip.mjs';
 import { collectProductFiles, verifyKeyringFreeProductEntries } from './lib/product-files.mjs';
+import { validateUniversalManifest } from './lib/ocr-universal.mjs';
+import { verifyDataSecureArchiveModes } from './lib/archive-modes.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -16,22 +18,18 @@ const archiveBytes = fs.readFileSync(archive);
 const entries = readZip(archiveBytes);
 const modes = readCentralModes(archiveBytes);
 const sourceFiles = collectProductFiles(path.join(root, 'plugins', 'data-secure'));
-verifyKeyringFreeProductEntries(entries);
+const prefix = 'server/ocr-runtime/';
+verifyKeyringFreeProductEntries(new Map([...entries].filter(([name]) => !name.startsWith(prefix))));
 for (const file of sourceFiles) {
   if (!entries.get(file.archivePath)?.equals(fs.readFileSync(file.fullPath))) {
     throw new Error(`PORTABLE_PLUGIN_SOURCE_MISMATCH_${file.archivePath}`);
   }
 }
-const prefix = 'server/ocr-runtime/';
 const manifestBytes = entries.get(`${prefix}bundle-manifest.json`);
 if (!manifestBytes) throw new Error('PORTABLE_PLUGIN_RUNTIME_MANIFEST_MISSING');
 const manifest = JSON.parse(manifestBytes.toString('utf8'));
-if (manifest.schema !== 'data-secure-ocr-runtime-bundle/v2' || manifest.target !== 'universal' ||
-  manifest.release_enabled !== false) throw new Error('PORTABLE_PLUGIN_RUNTIME_GATE_INVALID');
-const targetOrder = ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64'];
-if (JSON.stringify(manifest.targets?.map((item) => item.target)) !== JSON.stringify(targetOrder)) {
-  throw new Error('PORTABLE_PLUGIN_RUNTIME_TARGETS_INVALID');
-}
+try { validateUniversalManifest(manifest, { releaseEnabled: false }); }
+catch { throw new Error('PORTABLE_PLUGIN_RUNTIME_GATE_INVALID'); }
 const expectedRuntime = new Set(['bundle-manifest.json', ...manifest.files.map((item) => item.path)]);
 const actualRuntime = [...entries.keys()].filter((name) => name.startsWith(prefix))
   .map((name) => name.slice(prefix.length));
@@ -45,14 +43,15 @@ for (const item of manifest.files) {
     throw new Error(`PORTABLE_PLUGIN_RUNTIME_HASH_FAILED_${item.path}`);
   }
 }
-for (const item of manifest.targets) {
-  const name = `${prefix}${item.launcher}`;
-  const executable = item.target === 'windows-x64' ? 0 : 0o111;
-  if (!entries.has(name) || (modes.get(name) & 0o111) !== executable) {
-    throw new Error(`PORTABLE_PLUGIN_LAUNCHER_MODE_INVALID_${item.target}`);
-  }
-}
 if ([...entries.keys()].some((name) => name === 'bin' || name.startsWith('bin/'))) {
   throw new Error('PORTABLE_PLUGIN_RESERVED_BIN');
 }
+const expectedEntries = new Set([
+  ...sourceFiles.map((file) => file.archivePath),
+  ...[...expectedRuntime].map((name) => `${prefix}${name}`)
+]);
+if (entries.size !== expectedEntries.size || [...entries.keys()].some((name) => !expectedEntries.has(name))) {
+  throw new Error('PORTABLE_PLUGIN_ARCHIVE_INVENTORY_MISMATCH');
+}
+verifyDataSecureArchiveModes(modes, expectedEntries);
 process.stdout.write(`Portable engineering plugin ZIP: ${entries.size} entries verified, OCR gate disabled.\n`);

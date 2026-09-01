@@ -11,6 +11,7 @@ const { companionCapabilities } = require('../companion/job-store');
 const { companionRetentionStatus } = require('../companion/retention');
 const { recoverableBatchStatus, localCleanupStatus, openBatchPackageProtection } = require('./batch');
 const { localIntakeActive } = require('./batch-executor');
+const { intakeReservationActive } = require('./batch-intake-reservation');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { runtimeInfo } = require('../runtime-info');
 
@@ -51,7 +52,8 @@ function genericStatus(options = {}) {
     visual_bridge: engine.visual_bridge,
     visual_bridge_reason: engine.visual_bridge_reason,
     visual_boundary: engine.visual_boundary,
-    local_intake_pending: localIntakeActive(),
+    local_intake_pending: localIntakeActive() ||
+      (options.ignoreIntakeReservation !== true && intakeReservationActive()),
     ...batches,
     ...localCleanup,
     anonymized_packages: listPackageDirs().filter((p) =>

@@ -1,0 +1,45 @@
+{
+  "schema": "datasecure-bundled-runtime/v1",
+  "node_version": "22.23.2",
+  "plugin_command": "${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node",
+  "runtime_entry": "${CLAUDE_PLUGIN_ROOT}/server/index.js",
+  "archive_limit_bytes": 52428800,
+  "direct_upload_limit_bytes": 47185920,
+  "targets": [
+    {
+      "id": "windows-x64",
+      "os": "win32",
+      "arch": "x64",
+      "archive": "node-v22.23.2-win-x64.zip",
+      "archive_sha256": "1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97",
+      "node_path": "node-v22.23.2-win-x64/node.exe",
+      "license_path": "node-v22.23.2-win-x64/LICENSE",
+      "launcher": "datasecure-node.exe"
+    },
+    {
+      "id": "macos-x64",
+      "os": "darwin",
+      "arch": "x64",
+      "archive": "node-v22.23.2-darwin-x64.tar.gz",
+      "archive_sha256": "58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026",
+      "node_path": "node-v22.23.2-darwin-x64/bin/node",
+      "license_path": "node-v22.23.2-darwin-x64/LICENSE",
+      "launcher": "node"
+    },
+    {
+      "id": "macos-arm64",
+      "os": "darwin",
+      "arch": "arm64",
+      "archive": "node-v22.23.2-darwin-arm64.tar.gz",
+      "archive_sha256": "61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6",
+      "node_path": "node-v22.23.2-darwin-arm64/bin/node",
+      "license_path": "node-v22.23.2-darwin-arm64/LICENSE",
+      "launcher": "node"
+    }
+  ],
+  "sources": {
+    "node_release": "https://nodejs.org/dist/v22.23.2/",
+    "claude_plugins": "https://code.claude.com/docs/en/plugins-reference",
+    "claude_marketplaces": "https://code.claude.com/docs/en/plugin-marketplaces"
+  }
+}

@@ -9,11 +9,43 @@ Formate, Plattformen oder Cowork-Oberflächen. Laufende Teilnachweise bleiben im
 [aktiven Backlog](BACKLOG.md), im [Ist-Abgleich](CURRENT_STATE.md) und in der
 [Traceability](TRACEABILITY.md).
 
+## RC83: E0-Defect der unterbrochenen Handoff-Übergabe korrigiert
+
+31.08.2026: BL-011.3/BL-041.7 zählen nach bereits bestätigten Seiten nur noch
+ungelesene Ergebnisse in der Restzusammenfassung. Der vollständige Nachweis bleibt
+unverändert vorgeschaltet. 20 integrierte Abbruch-/Neustart-/Negativtests bestehen;
+keine echte Cowork-/Geräteabnahme daraus abgeleitet.
+Ein zusätzlicher Pagingtest verhindert eine leere Cowork-Folgeseite nach fünf
+Ergebnissen. Der direkte Dateipaging-Ausweichpfad bleibt auch an
+Unicode-Surrogatgrenzen verlustfrei, stoppt ungültiges UTF-8 und fremde
+Teilzeichen-Offsets und neutralisiert Schließfehler. Die POSIX-Mehrfachauswahl
+akzeptiert case-sensitive Dateinamen. Weitere Negativtests schließen Teilausgaben
+fehlgeschlagener lokaler Helfer, Windows-Unicodepfade, native Dateisystemfehler und
+eine Handoff-Zählerrace sowie beschädigte Ergebnisseiten; insgesamt 32 neue
+Defectregressionen.
+[Nachweis](../archive/2026-08/releases/RC83_HANDOFF_FORTSETZUNG_2026-08-31.md).
+
+## RC82: Ergebniswahl und Marketplace-Quellbaum korrigiert
+
+31.08.2026: Drei abgegrenzte Defects korrigiert, ohne Mutterstories fälschlich
+als vollständig abgenommen zu markieren. [Abschlussbericht](../archive/2026-08/releases/RC82_DIALOG_MARKETPLACE_FIXES_2026-08-31.md).
+
+| Korrektur | Storybezug | E0-Nachweis |
+|---|---|---|
+| blockierende Auswahl fertiger Stapel | BL-041.1, BL-041.7, BL-011.3 | asynchroner Prozess, Hostabbruch/Cancel, Doppelstartschutz; Handoff16/Picker18/MCP41 PASS |
+| Fehler-/Timeout-Teilausgabe als erfolgreiche Wahl | BL-041.1, BL-041.7 | negative Prozessergebnisse/Ordinale auf drei Plattformverträgen, kein Lesen vor Bestätigung |
+| historische Keyring-Dateien im Marketplace-Produktpfad | BL-010.5, BL-051.2 | 30 Dateien in isolierte Testfixtures ausgelagert, rohe Quelle = Archivprojektion, Quell-/Artefakttests15 PASS |
+
+Vollständige lokale CI mit Pre-/Posttests, Paketbau, 150 gepackte Vertragsfälle
+und offizielle Claude-Strukturprüfung PASS. Originale unverändert, kein
+Schlüsselbundzugriff und keine neue Anwenderbestätigung. Echte Cowork-/OS- und
+Marketplace-Installationsabnahmen bleiben offen.
+
 ## RC81: abgeschlossener Defectschnitt, nicht Abschluss der Mutterstories
 
 31.08.2026: R80-01–17 aus dem unabhängigen RC80-Review sind korrigiert und lokal
 regressionsgeprüft. Vollständige `test:ci` mit Pre-/Posttests, ZIP-/MCPB-Build und
-offizieller Claude-Strukturvalidator PASS. [Detailnachweise und Grenzen](../RC81_DEFECT_ABSCHLUSS_2026-08-31.md).
+offizieller Claude-Strukturvalidator PASS. [Detailnachweise und Grenzen](../archive/2026-08/releases/RC81_DEFECT_ABSCHLUSS_2026-08-31.md).
 
 | Befunde | Storybezug | Abgeschlossener E0-Anteil |
 |---|---|---|

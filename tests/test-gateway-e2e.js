@@ -678,16 +678,23 @@ async function main() {
     const approval = gw.approveReviewAsset(mine[0].review_id, true);
     assert.ok(approval.ok);
     assert.strictEqual(approval.preview_removed, true);
+    assert.match(approval.read_capability, /^[A-Za-z0-9_-]{43}$/u);
+    assert.throws(() => gw.listAssets(packageId, readCapability), /verändert|Leseberechtigung/u, 'the pre-approval grant is revoked');
     assert.ok(!fs.existsSync(preview), 'the redundant review preview must be deleted');
     assert.ok(fs.existsSync(reviewMeta), 'the review evidence must remain');
     const after = JSON.parse(fs.readFileSync(reviewMeta, 'utf8'));
-    assert.strictEqual(after.approved, true);
-    assert.ok(after.approved_at);
-    assert.strictEqual(after.preview_file, null);
+    assert.strictEqual(after.approved, false, 'review evidence remains immutable');
+    assert.strictEqual(after.preview_file, before.preview_file, 'manifest is the approval source');
 
-    const released = gw.listAssets(packageId, readCapability);
+    globalThis.__profileCapability = approval.read_capability;
+    const released = gw.listAssets(packageId, approval.read_capability);
     assert.strictEqual(released.assets.length, 1);
-    assert.ok(gw.readAsset(packageId, readCapability, released.assets[0].asset_id).__image.data.length > 20);
+    assert.ok(gw.readAsset(packageId, approval.read_capability, released.assets[0].asset_id).__image.data.length > 20);
+    const retry = gw.approveReviewAsset(mine[0].review_id, true);
+    assert.strictEqual(retry.already_approved, true);
+    assert.match(retry.read_capability, /^[A-Za-z0-9_-]{43}$/u);
+    assert.strictEqual(gw.listAssets(packageId, retry.read_capability).assets.length, 1);
+    globalThis.__profileCapability = retry.read_capability;
     globalThis.__profileAsset = released.assets[0];
   });
 
@@ -696,8 +703,14 @@ async function main() {
     const readCapability = globalThis.__profileCapability;
     const asset = globalThis.__profileAsset;
     const assetPath = path.join(root, 'Output', packageId, asset.file);
-    fs.appendFileSync(assetPath, Buffer.from([0]));
-    assert.throws(() => gw.readAsset(packageId, readCapability, asset.asset_id), /verändert/);
+    const original = fs.readFileSync(assetPath);
+    try {
+      fs.appendFileSync(assetPath, Buffer.from([0]));
+      assert.throws(() => gw.readAsset(packageId, readCapability, asset.asset_id), /verändert|Assetgröße/u);
+    } finally {
+      fs.writeFileSync(assetPath, original);
+      original.fill(0);
+    }
   });
 
   await testAsync('approval refuses to re-bless a Markdown file that was tampered with', async () => {

@@ -1,5 +1,8 @@
 # DataSecure RC63 - UAT-Testpaket
 
+> **Historischer UAT-Stand.** Nicht als aktuelle Anleitung verwenden. Der aktuelle
+> Einstieg ist das [versionneutrale UAT-Kit](../UAT_TEST_KIT/README.md).
+
 Dieses Paket enthält ausschließlich synthetische Daten. Es prüft den mit RC63
 eingeführten Claude-Cowork-Vertrag gegen den jeweils aktuell gebauten DataSecure-
 Stand. Echte Personal-, Kunden- oder

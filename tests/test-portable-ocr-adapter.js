@@ -10,6 +10,7 @@ const { encodePng } = require('../plugins/data-secure/server/images/png');
 const {
   runtimeTarget, portableOcrStatus, ocrPngDetailedPortable, PortableOcrError
 } = require('../plugins/data-secure/server/portable-ocr');
+const { portableOcrOptions } = require('../plugins/data-secure/server/runtime');
 
 let passed = 0;
 async function test(name, fn) {
@@ -52,6 +53,24 @@ function fakeSpawn(result, exitCode = 0) {
       child.emit('close', exitCode);
     });
     child.kill = () => true;
+    return child;
+  };
+}
+function recordingSpawn(record, result) {
+  return (command, args, options) => {
+    record.command = command;
+    record.args = args;
+    record.options = options;
+    return fakeSpawn(result)();
+  };
+}
+function hangingSpawn() {
+  return () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stdin = new EventEmitter();
+    child.stdin.end = () => {};
+    child.kill = () => { setImmediate(() => child.emit('close', null)); return true; };
     return child;
   };
 }
@@ -104,6 +123,28 @@ function fakeSpawn(result, exitCode = 0) {
       assert.strictEqual(actual.text, 'Hallo');
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
+  await test('passes the network preload as an argv item when the installation path contains spaces', async () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'portable ocr parent-'));
+    const original = fixture(true);
+    const root = path.join(base, 'Data Secure Plugin');
+    fs.renameSync(original, root);
+    const result = {
+      schema: 'data-secure-ocr-result/v1', status: 'empty', languages: ['deu', 'eng'],
+      image: { width: 1, height: 1 }, text: '', confidence: 100, words: [],
+      quality: { requires_visual_review: true, reasons: ['NON_TEXTUAL_MEANING_UNVERIFIED', 'OCR_EMPTY'] }
+    };
+    const record = {};
+    const png = encodePng({ width: 1, height: 1, rgba: Buffer.from([255, 255, 255, 255]) });
+    try {
+      await ocrPngDetailedPortable(png, 'de-DE', {
+        runtimeRoot: root, platform: 'win32', arch: 'x64', spawn: recordingSpawn(record, result)
+      });
+      const requireIndex = record.args.indexOf('--require');
+      assert.ok(requireIndex > 0);
+      assert.strictEqual(record.args[requireIndex + 1], path.join(root, 'network-deny.cjs'));
+      assert.strictEqual(Object.hasOwn(record.options.env, 'NODE_OPTIONS'), false);
+    } finally { fs.rmSync(base, { recursive: true, force: true }); }
+  });
   await test('returns only a fixed error when the worker fails', async () => {
     const root = fixture(true);
     const png = encodePng({ width: 1, height: 1, rgba: Buffer.from([0, 0, 0, 255]) });
@@ -112,6 +153,36 @@ function fakeSpawn(result, exitCode = 0) {
         runtimeRoot: root, platform: 'win32', arch: 'x64', spawn: fakeSpawn(null, 125)
       }), (error) => error instanceof PortableOcrError && error.code === 'OCR_RESOURCE_LIMIT' &&
         !error.message.includes(root));
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('propagates the visual timeout and cancellation signal into portable OCR', () => {
+    const signal = new AbortController().signal;
+    assert.deepStrictEqual(portableOcrOptions({ timeoutMs: 1234, signal, portableOcr: { noCache: true } }),
+      { noCache: true, timeoutMs: 1234, signal });
+    assert.deepStrictEqual(portableOcrOptions({ timeoutMs: 1234, portableOcr: { timeoutMs: 99 } }),
+      { timeoutMs: 99 });
+  });
+  await test('stops a running worker with the stable cancellation code', async () => {
+    const root = fixture(true);
+    const png = encodePng({ width: 1, height: 1, rgba: Buffer.from([0, 0, 0, 255]) });
+    const controller = new AbortController();
+    try {
+      const pending = ocrPngDetailedPortable(png, 'de-DE', {
+        runtimeRoot: root, platform: 'win32', arch: 'x64', spawn: hangingSpawn(),
+        signal: controller.signal, terminationGraceMs: 100
+      });
+      controller.abort();
+      await assert.rejects(pending, (error) => error instanceof PortableOcrError && error.code === 'OCR_CANCELLED');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('honours a shorter caller timeout and terminates the worker', async () => {
+    const root = fixture(true);
+    const png = encodePng({ width: 1, height: 1, rgba: Buffer.from([0, 0, 0, 255]) });
+    try {
+      await assert.rejects(() => ocrPngDetailedPortable(png, 'de-DE', {
+        runtimeRoot: root, platform: 'win32', arch: 'x64', spawn: hangingSpawn(),
+        timeoutMs: 1, terminationGraceMs: 100
+      }), (error) => error instanceof PortableOcrError && error.code === 'OCR_TIMEOUT');
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
   await test('uses only errors from the canonical OCR V1 vocabulary', () => {

@@ -164,6 +164,34 @@ test('a replaced work directory or invalid ownership intent never authorizes orp
   }
 });
 
+test('an intake-intent replacement between ownership read and deletion is preserved', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intake-swap-'));
+  const work = path.join(root, `${token}.work`);
+  const target = path.join(root, `${token}.intake`);
+  const retained = `${target}.retained`;
+  try {
+    fs.mkdirSync(work);
+    const intent = createBatchIntakeIntent({
+      io: fs,
+      batchPath: () => path.join(root, `${token}.json`),
+      workPath: () => work,
+      processAlive: () => false,
+      safeRemoveWorkDirectory() {
+        fs.renameSync(target, retained);
+        fs.writeFileSync(target, 'foreign replacement', { mode: 0o600 });
+        fs.rmSync(work, { recursive: true });
+      }
+    });
+    const workIdentity = fs.lstatSync(work, { bigint: true });
+    intent.create(token, new Date(Date.now() - 1_000).toISOString(), {
+      dev: String(workIdentity.dev), ino: String(workIdentity.ino), birthtimeNs: String(workIdentity.birthtimeNs)
+    });
+    assert.throws(() => intent.cleanup(token, Date.now()), /BATCH_INTAKE_INTENT_INVALID/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), 'foreign replacement');
+    assert.strictEqual(fs.existsSync(retained), true, 'the originally bound intent is retained for support review');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('duplicate absolute picker paths are rejected before any source metadata read', () => {
   const item = fixture();
   try {

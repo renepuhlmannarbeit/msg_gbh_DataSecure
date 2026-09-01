@@ -1,9 +1,8 @@
 'use strict';
 
 const path = require('path');
-const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
-const { uiProcessEnvironment } = require('./ui-process-policy');
+const { runPickerAsync } = require('./file-picker');
 
 const PICKER_CANCELLED = 'LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED';
 const PICKER_TITLE = 'DataSecure – anonymisierte Ergebnisse auswerten';
@@ -38,6 +37,7 @@ function pickerCommands(candidates, options = {}) {
     const quote = (value) => value.replace(/'/g, "''");
     const items = labels.map((label) => `[void]$list.Items.Add('${quote(label)}')`).join('; ');
     const script = [
+      "$ErrorActionPreference = 'Stop'",
       'Add-Type -AssemblyName System.Windows.Forms',
       '$form = New-Object System.Windows.Forms.Form',
       `$form.Text = '${quote(PICKER_TITLE)}'`,
@@ -83,21 +83,41 @@ function cancelledError() {
   return error;
 }
 
-function defaultRunner(command, args, _input, env = process.env) {
-  return childProcess.spawnSync(command, args, { encoding: 'utf8', windowsHide: true, timeout: 10 * 60 * 1000, maxBuffer: 64 * 1024, shell: false, env: uiProcessEnvironment(env) });
+function selectionError(code, message) {
+  const error = new SafeError(message);
+  error.code = code;
+  return error;
 }
 
-function pickCompletedBatch(candidates, options = {}) {
+function checkAbort(signal) {
+  if (signal?.aborted) throw cancelledError();
+}
+
+async function pickCompletedBatch(candidates, options = {}) {
+  checkAbort(options.signal);
   const entries = validateCandidates(candidates);
-  const runner = options.runner || defaultRunner;
+  const runner = options.runner || runPickerAsync;
   let unavailable = 0;
   for (const spec of pickerCommands(entries, options)) {
-    const result = runner(spec.command, spec.args, undefined, options.env || process.env);
+    checkAbort(options.signal);
+    const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal);
+    checkAbort(options.signal);
     const output = String(result?.stdout || '').trim();
-    if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
-    if (output === PICKER_CANCELLED || (result?.status !== 0 && !output)) throw cancelledError();
+    if (result?.error?.code === 'ENOENT' && !output) { unavailable++; continue; }
+    if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) {
+      throw selectionError('LOCAL_COMPLETED_BATCH_SELECTION_TIMEOUT', 'Die lokale Stapelauswahl wurde wegen Zeitüberschreitung beendet.');
+    }
+    // Only the documented Linux Cancel exit is a cancellation. A failed or
+    // timed-out helper must never authenticate a partially written ordinal.
+    const linuxCancel = (options.platform || process.platform) === 'linux' &&
+      result?.status === 1 && !output && (!result.error || result.error.code === 1);
+    if (linuxCancel) throw cancelledError();
+    if (result?.error || result?.status !== 0) {
+      throw selectionError('LOCAL_COMPLETED_BATCH_SELECTION_FAILED', 'Die lokale Stapelauswahl konnte nicht abgeschlossen werden. Bitte die Auswertung erneut starten.');
+    }
+    if (output === PICKER_CANCELLED) throw cancelledError();
     const ordinal = Number(output);
-    if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > entries.length) {
+    if (!/^[1-9][0-9]*$/.test(output) || !Number.isSafeInteger(ordinal) || ordinal > entries.length) {
       throw new SafeError('Die lokale Auswahl anonymisierter Ergebnisse konnte nicht sicher gelesen werden.');
     }
     return ordinal;

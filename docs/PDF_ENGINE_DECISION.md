@@ -1,5 +1,8 @@
 # Architekturentscheidung: lokaler PDF-Pfad
 
+> **Historischer PDF-Spike.** PDF und Scan-PDF sind aktuell nicht freigegeben.
+> Aktueller Status: [`FORMAT_COVERAGE_MATRIX.md`](FORMAT_COVERAGE_MATRIX.md).
+
 Stand: 21.08.2026 · Entscheidung für RC21
 
 ## Entscheidung

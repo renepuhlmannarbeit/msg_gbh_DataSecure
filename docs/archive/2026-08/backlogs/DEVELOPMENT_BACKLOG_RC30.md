@@ -614,7 +614,7 @@ belegen:
    Anwenderanleitung, Skills und technische Handbücher wurden konsistent aktualisiert.
 2. **DS-007 (M):** einen empfohlenen Plugin-ZIP-Installationsweg auf frischem Windows
    einschließlich Start, Upgrade, Rollback, Prüfsummen, SBOM, Codesignatur sowie
-   minimalem CodeQL-/Secret-Scan nachweisen; MCPB bleibt Fallback.
+   minimalem CodeQL-/Secret-Scan nachweisen; MCPB bleibt internes Testartefakt.
 3. **DS-003 (technisch in RC14, menschliche Abnahme offen):** Pflichtdialog nutzt eine
    Frage, zwei Antworten und Zurück/Ändern. Mit mindestens fünf fachfremden Personen
    synthetisch testen. Visuelle Freigabe bleibt deaktiviert.

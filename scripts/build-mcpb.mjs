@@ -11,7 +11,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
-import { includeInProduct, collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
+import { collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
 import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
 
@@ -21,6 +21,8 @@ const dist = path.join(root, 'dist');
 
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 const out = path.join(dist, `DataSecure-Privacy-Gateway-v${manifest.version}.mcpb`);
+// Validate the raw Marketplace source before staging, not a filtered copy.
+verifyKeyringFreeProductFiles(collectProductFiles(pluginDir));
 const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcpb-'));
 
 // Documents that describe the security boundary travel with the extension.
@@ -42,10 +44,7 @@ try {
     fs.cpSync(src, path.join(stage, rel), { recursive: true });
   }
 
-  fs.cpSync(path.join(pluginDir, 'server'), path.join(stage, 'server'), {
-    recursive: true,
-    filter: (source) => includeInProduct(path.relative(pluginDir, source))
-  });
+  fs.cpSync(path.join(pluginDir, 'server'), path.join(stage, 'server'), { recursive: true });
 
   const nativeBin = path.join(pluginDir, 'server', 'native');
   verifyNativeArtifact(

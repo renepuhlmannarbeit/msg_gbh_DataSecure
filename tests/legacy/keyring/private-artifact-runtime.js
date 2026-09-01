@@ -1,7 +1,8 @@
 'use strict';
 
-const { roots } = require('./common');
-const { createPrivateArtifactCrypto } = require('./private-artifact-crypto');
+// Historical test fixture only; never part of the Marketplace product tree.
+const { roots } = require('../../../plugins/data-secure/server/gateway/common');
+const { createPrivateArtifactCrypto } = require('../../../plugins/data-secure/server/gateway/private-artifact-crypto');
 const { createInstallationSecretStore } = require('./installation-secret-store');
 
 const cached = new Map();

@@ -1,0 +1,133 @@
+name: Manual self-contained Cowork plugin build
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Build one direct-upload ZIP or all targets plus the universal Marketplace archive.
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - windows-x64
+          - macos-x64
+          - macos-arm64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bundled-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      matrix: ${{ steps.matrix.outputs.value }}
+    steps:
+      - id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          case '${{ inputs.target }}' in
+            windows-x64) value='{"include":[{"id":"windows-x64","os":"windows-latest","archive":"node-v22.23.2-win-x64.zip"}]}' ;;
+            macos-x64) value='{"include":[{"id":"macos-x64","os":"macos-15-intel","archive":"node-v22.23.2-darwin-x64.tar.gz"}]}' ;;
+            macos-arm64) value='{"include":[{"id":"macos-arm64","os":"macos-14","archive":"node-v22.23.2-darwin-arm64.tar.gz"}]}' ;;
+            all) value='{"include":[{"id":"windows-x64","os":"windows-latest","archive":"node-v22.23.2-win-x64.zip"},{"id":"macos-x64","os":"macos-15-intel","archive":"node-v22.23.2-darwin-x64.tar.gz"},{"id":"macos-arm64","os":"macos-14","archive":"node-v22.23.2-darwin-arm64.tar.gz"}]}' ;;
+            *) exit 64 ;;
+          esac
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+  runtime:
+    needs: select
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Download, hash-check, extract and execute the official target runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 \
+            --output '${{ matrix.archive }}' \
+            'https://nodejs.org/dist/v22.23.2/${{ matrix.archive }}'
+          node scripts/build-runtime-target.mjs \
+            --target '${{ matrix.id }}' \
+            --archive '${{ matrix.archive }}' \
+            --output 'dist/${{ matrix.id }}'
+      - run: node tests/test-bundled-runtime.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: datasecure-runtime-${{ matrix.id }}-${{ github.sha }}
+          path: dist/${{ matrix.id }}/
+          retention-days: 7
+
+  package:
+    needs: runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          pattern: datasecure-runtime-*-${{ github.sha }}
+          path: dist/runtime-download
+      - name: Normalize target evidence and build requested packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/runtime-all
+          for artifact in dist/runtime-download/datasecure-runtime-*-${GITHUB_SHA}; do
+            id=${artifact#dist/runtime-download/datasecure-runtime-}
+            id=${id%-${GITHUB_SHA}}
+            mv "$artifact" "dist/runtime-all/$id"
+          done
+          if [[ '${{ inputs.target }}' == all ]]; then
+            for id in windows-x64 macos-x64 macos-arm64; do
+              node scripts/build-runtime-plugin.mjs --runtimes dist/runtime-all --target "$id"
+            done
+            node scripts/build-runtime-plugin.mjs --runtimes dist/runtime-all --target universal
+          else
+            node scripts/build-runtime-plugin.mjs --runtimes dist/runtime-all --target '${{ inputs.target }}'
+          fi
+      - name: Validate product ZIPs and generate exact runtime SBOM/checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/test-bundled-runtime.mjs
+          sbom_args=()
+          status_args=()
+          shopt -s nullglob
+          archives=(dist/DataSecure-Privacy-Preflight-*-v*.zip)
+          if [[ ${#archives[@]} -eq 0 ]]; then exit 66; fi
+          for archive in "${archives[@]}"; do
+            node scripts/verify-plugin-zip.mjs --archive "$archive"
+            sbom_args+=(--archive "$archive")
+            status_args+=(--archive "$archive")
+          done
+          node scripts/generate-sbom.mjs "${sbom_args[@]}"
+          node tests/test-status-app-artifacts.mjs "${status_args[@]}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: datasecure-cowork-plugin-${{ inputs.target }}-${{ github.sha }}
+          path: |
+            dist/DataSecure-Privacy-Preflight-*-v*.zip
+            dist/DataSecure-Privacy-Preflight-v*.spdx.json
+            dist/SHA256SUMS
+          retention-days: 7

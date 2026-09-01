@@ -20,8 +20,11 @@ function localOnlyStartResponse(started) {
     ok: true,
     mode: 'local_only',
     local_intake_pending: started?.local_intake_pending === true,
-    local_processing_started: started?.local_intake_pending === true,
-    next_action: 'local_processing_running_without_claude',
+    // The detached worker has accepted the private handoff, but its durable
+    // batch checkpoint is created asynchronously.  Do not claim that document
+    // processing has started before that checkpoint exists.
+    local_processing_started: false,
+    next_action: 'local_intake_accepted_checkpoint_pending',
     raw_content_sent_to_claude: false
   });
 }

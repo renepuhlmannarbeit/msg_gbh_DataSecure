@@ -10,13 +10,13 @@ const { createSuite } = require('./helpers');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-ipc-'));
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
 
-const { PICKER_CANCELLED, PICKER_TITLE, validateSelectedPath, pickerCommands, pickSource, pickSources, batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
-const { FOLDER_PICKER_CANCELLED, FOLDER_PICKER_TITLE, pickerCommands: folderPickerCommands, pickFolder } = require('../plugins/data-secure/server/companion/folder-picker');
+const { PICKER_CANCELLED, PICKER_TITLE, validateSelectedPath, pickerCommands, pickSource, pickSources, pickSourcesAsync, batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
+const { FOLDER_PICKER_CANCELLED, FOLDER_PICKER_TITLE, pickerCommands: folderPickerCommands, pickFolder, pickFolderAsync } = require('../plugins/data-secure/server/companion/folder-picker');
 const { readConfiguredPrivacyRoot, saveConfiguredPrivacyRoot, clearConfiguredPrivacyRoot } = require('../plugins/data-secure/server/gateway/privacy-config');
 const { startConfirmationText, startConfirmationCommands, confirmBatchStart } = require('../plugins/data-secure/server/companion/batch-start-confirmation');
 const { IPC_VERSION, signFrame, createCompanionSession } = require('../plugins/data-secure/server/companion/ipc-session');
 
-const { test, done, assert } = createSuite('Companion private IPC and file picker');
+const { test, testAsync, done, assert } = createSuite('Companion private IPC and file picker');
 const secret = crypto.randomBytes(32);
 
 function frame(sessionId, sequence, command, params = {}, key = secret) {
@@ -150,6 +150,19 @@ test('Windows multi-picker validates up to 100 distinct local files', () => {
   }), /höchstens 1/);
 });
 
+test('Linux multi-picker keeps case-distinct files instead of applying Windows path identity', () => {
+  const upper = path.join(root, 'CaseDistinct.txt');
+  const lower = path.join(root, 'casedistinct.txt');
+  fs.writeFileSync(upper, 'upper');
+  fs.writeFileSync(lower, 'lower');
+  const selected = pickSources({
+    platform: 'linux',
+    allowedTypes: ['txt'],
+    runner: () => ({ status: 0, stdout: `${upper}\n${lower}` })
+  });
+  assert.deepStrictEqual(selected.map((item) => item.sourcePath), [upper, lower]);
+});
+
 test('picker selections keep equal basenames as independently sealed local sources', () => {
   const first = path.join(root, 'first.txt');
   const second = path.join(root, 'second.csv');
@@ -184,13 +197,60 @@ test('Windows picker disposes the dialog and reports closing as an explicit canc
   }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
 });
 
-test('macOS and Linux dialog closing is the same explicit terminal cancellation', () => {
-  for (const platform of ['darwin', 'linux']) {
-    assert.throws(() => pickSources({
-      platform,
-      runner: () => ({ status: 1, stdout: '' })
-    }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED', `${platform} closing must not become a retryable picker error`);
+test('macOS cancellation is normalized to a marker and Linux accepts only its documented cancel exit', () => {
+  assert.match(pickerCommands('darwin', {}, ['txt'], true)[0].args.at(-1), new RegExp(PICKER_CANCELLED));
+  assert.throws(() => pickSources({ platform: 'darwin', runner: () => ({ status: 0, stdout: PICKER_CANCELLED }) }),
+    (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+  assert.throws(() => pickSources({ platform: 'linux', runner: () => ({ status: 1, stdout: '' }) }),
+    (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+});
+
+test('native helper crashes without stdout are technical failures, never user cancellation', () => {
+  for (const platform of ['win32', 'darwin', 'linux']) for (const status of [2, 5, 139]) {
+    for (const picker of [pickSource, pickSources]) {
+      assert.throws(() => picker({ platform, runner: () => ({ status, stdout: '' }) }),
+        (error) => error.code !== 'LOCAL_SELECTION_CANCELLED');
+    }
+    assert.throws(() => pickFolder({ platform, runner: () => ({ status, stdout: '' }) }),
+      (error) => error.code !== 'LOCAL_SELECTION_CANCELLED');
   }
+});
+
+testAsync('async privacy picker is abortable and 100-file selection receives a bounded long-path buffer', async () => {
+  const controller = new AbortController();
+  let privacySignal;
+  const pending = pickFolderAsync({ platform: 'win32', signal: controller.signal, runner: async (_c, _a, _i, _e, signal) => {
+    privacySignal = signal;
+    controller.abort();
+    return { status: 0, stdout: root };
+  } });
+  await assert.rejects(pending, (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+  assert.strictEqual(privacySignal, controller.signal);
+
+  let maxBuffer = 0;
+  await pickSourcesAsync({
+    platform: 'linux', maxSources: 100,
+    fs: { lstatSync: () => ({ size: 1, isFile: () => true, isSymbolicLink: () => false }) },
+    fsPromises: { lstat: async () => ({ size: 1, isFile: () => true, isSymbolicLink: () => false }) },
+    hasReparseComponent: () => false,
+    runner: async (_c, _a, _i, _e, _s, budget) => { maxBuffer = budget; return { status: 0, stdout: path.resolve(root, 'long.txt') }; }
+  });
+  assert.ok(maxBuffer > 1024 * 1024 && maxBuffer < 16 * 1024 * 1024);
+});
+
+test('synchronous file and privacy-folder pickers never accept partial stdout from a failed native helper', () => {
+  const source = path.join(root, 'partial-helper-output.txt');
+  fs.writeFileSync(source, 'synthetic');
+  for (const picker of [pickSource, pickSources]) {
+    assert.throws(() => picker({
+      platform: 'linux',
+      runner: () => ({ status: 2, stdout: source })
+    }), /nicht sicher gelesen|nicht gestartet/u);
+  }
+  assert.throws(() => pickFolder({
+    platform: 'linux',
+    runner: () => ({ status: 2, stdout: root })
+  }), /nicht sicher gelesen|nicht gestartet/u);
 });
 
 test('picker timeout is distinguished from a start failure', () => {

@@ -1,79 +1,28 @@
-// Packages plugins/data-secure as an installable Claude plugin ZIP.
-//
-// The plugin directory is the canonical product: it contains the runtime, the
-// PowerShell helpers and the skills. Shipped bytes are unchanged; legacy
-// credential experiments are excluded by the shared product projection.
+// Canonical product build: assemble a self-contained Claude Cowork plugin
+// from a previously verified, platform-native Node runtime. Source-only ZIPs
+// are intentionally not a product artefact.
 
-import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { writeZip } from './lib/zip.mjs';
-import { collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
-import { verifyNativeArtifact } from './lib/native-artifact.mjs';
-import { validateUniversalRuntime } from './lib/ocr-universal.mjs';
-import { verifyPosixSupervisorArtifacts } from './lib/posix-supervisor-artifacts.mjs';
+import { buildRuntimePlugin } from './build-runtime-plugin.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pluginDir = path.join(root, 'plugins', 'data-secure');
-const dist = path.join(root, 'dist');
 
-const plugin = JSON.parse(fs.readFileSync(path.join(pluginDir, '.claude-plugin', 'plugin.json'), 'utf8'));
-const out = path.join(dist, `DataSecure-Privacy-Preflight-v${plugin.version}.zip`);
-
-// Fail closed on a plugin tree that would not start on the user's machine.
-const entryPoint = path.join(pluginDir, 'server', 'index.js');
-if (!fs.existsSync(entryPoint)) throw new Error('plugin runtime entry point missing');
-const nativeLauncher = path.join(pluginDir, 'server', 'native', 'windows-x64', 'datasecure-sandbox.exe');
-const nativeChecksum = `${nativeLauncher.slice(0, -4)}.sha256`;
-verifyNativeArtifact(nativeLauncher, nativeChecksum);
-const posixSupervisors = verifyPosixSupervisorArtifacts(path.join(pluginDir, 'server', 'native'));
-const portableOcr = path.join(pluginDir, 'server', 'ocr-runtime');
-if (!fs.existsSync(portableOcr)) throw new Error('vendored OCR runtime missing');
-const ocrEvidence = validateUniversalRuntime(portableOcr, { releaseEnabled: false });
-const provenance = JSON.parse(fs.readFileSync(path.join(pluginDir, 'server',
-  'ocr-runtime.provenance.json'), 'utf8'));
-if (provenance.schema !== 'data-secure-vendored-ocr-provenance/v1' ||
-  provenance.bundle_manifest_sha256 !== ocrEvidence.manifestSha256 ||
-  provenance.files !== ocrEvidence.files || provenance.bytes !== ocrEvidence.bytes ||
-  provenance.release_enabled !== false || !Number.isSafeInteger(provenance.source_workflow_run) ||
-  !/^[a-f0-9]{40}$/u.test(String(provenance.source_commit))) {
-  throw new Error('vendored OCR provenance mismatch');
-}
-const executableOcrEntries = new Set(ocrEvidence.manifest.targets
-  .filter((target) => target.target !== 'windows-x64')
-  .map((target) => `server/ocr-runtime/${target.launcher}`));
-for (const target of posixSupervisors) executableOcrEntries.add(`server/native/${target}/datasecure-sandbox`);
-
-const entrySource = fs.readFileSync(entryPoint, 'utf8');
-if (/require\((['"])(?:\.\.\/){2,}/.test(entrySource)) {
-  throw new Error('plugin entry point requires a path outside the plugin root');
+function option(name) {
+  const index = process.argv.indexOf(name);
+  if (index < 0) return null;
+  if (!process.argv[index + 1]) throw new Error(`PRODUCT_BUILD_ARGUMENT_MISSING:${name}`);
+  return process.argv[index + 1];
 }
 
-const mcp = JSON.parse(fs.readFileSync(path.join(pluginDir, '.mcp.json'), 'utf8'));
-const arg = mcp?.['data-secure-local']?.args?.[0];
-if (arg !== '${CLAUDE_PLUGIN_ROOT}/server/index.js') throw new Error('unexpected MCP entry point');
-
-for (const helper of ['windows-ocr.ps1', 'rasterize-image.ps1']) {
-  const file = path.join(pluginDir, 'scripts', helper);
-  if (!fs.existsSync(file)) throw new Error(`bundled helper missing: ${helper}`);
-  if (fs.readFileSync(file, 'utf8').includes('sync incomplete')) {
-    throw new Error(`bundled helper is still a placeholder: ${helper}`);
-  }
+function hostTarget() {
+  if (process.platform === 'win32' && process.arch === 'x64') return 'windows-x64';
+  if (process.platform === 'darwin' && process.arch === 'x64') return 'macos-x64';
+  if (process.platform === 'darwin' && process.arch === 'arm64') return 'macos-arm64';
+  throw new Error('PRODUCT_BUILD_HOST_UNSUPPORTED');
 }
 
-for (const skill of fs.readdirSync(path.join(pluginDir, 'skills'))) {
-  const file = path.join(pluginDir, 'skills', skill, 'SKILL.md');
-  if (!fs.existsSync(file)) throw new Error(`skill ${skill} has no SKILL.md`);
-}
-
-fs.rmSync(out, { force: true });
-const files = collectProductFiles(pluginDir).map((file) => ({
-  ...file,
-  mode: executableOcrEntries.has(file.archivePath) ? 0o100755 : 0o100644
-}));
-verifyKeyringFreeProductFiles(files);
-const result = writeZip(out, files);
-const hash = crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex');
-
-console.log(`${out}\n  entries=${result.entries} bytes=${result.bytes}\n  sha256=${hash}`);
+const targetId = option('--target') || hostTarget();
+const runtimesRoot = path.resolve(option('--runtimes') || path.join(root, 'dist'));
+const result = buildRuntimePlugin({ repositoryRoot: root, runtimesRoot, targetId });
+process.stdout.write(`${JSON.stringify(result)}\n`);

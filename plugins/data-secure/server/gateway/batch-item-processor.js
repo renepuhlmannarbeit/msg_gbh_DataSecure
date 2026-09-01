@@ -114,6 +114,18 @@ function createBatchItemProcessor(options = {}) {
           verifiedDocumentResult = details.document_result;
           incrementPrivateIoSummary(state.io_summary, 'final_gate_runs');
           checkpoint('package_verified', 'verification');
+          // Alias bindings must be durable before the package rename. A crash
+          // may otherwise publish document N while document N+1 restarts with
+          // a surname-only alias that no longer resolves to the same person.
+          // Persist only the alias contract at the last durable processing
+          // boundary. `package_verified` is diagnostic in-memory progress and
+          // must not become a recovery promise before the atomic publication.
+          if (deps.persistPseudonymContext) {
+            const transientCheckpoint = item.checkpoint;
+            item.checkpoint = 'processing_started';
+            try { deps.persistPseudonymContext(); }
+            finally { item.checkpoint = transientCheckpoint; }
+          }
           if (deps.beforePublish) await deps.beforePublish(details);
         },
         afterPublish: async (details) => {

@@ -59,6 +59,10 @@ const {
 const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('../companion/text-review');
 const { createPrivateWorkStore } = require('./private-work-store');
 const { migrateLegacyBatchState } = require('./batch-private-artifact-migration');
+const {
+  createBatchPseudonymState,
+  withBatchPseudonymRegistry
+} = require('../batch-pseudonym-context');
 
 const active = new Set();
 const RETRYABLE_CODES = new Set(['REQUEST_CANCELLED', 'PARSER_TIMEOUT', 'PARSER_START_FAILED', 'PROCESSING_INTERRUPTED', 'LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE']);
@@ -101,13 +105,16 @@ function batchTtlMs() {
   return retentionDays() * 24 * 60 * 60 * 1000;
 }
 
-const { writeState, readState, readStateForMaintenance } = createBatchJournalStore({
+const { writeState, readState, readStateForMaintenance, removeState } = createBatchJournalStore({
   assertZeroDayWorkAvailable(state) {
     if (state.zero_day_work_ended !== true && !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid)) {
       throw new SafeError('Die Aufbewahrung der privaten Arbeitskopien ist nach dem Laufende abgelaufen. Bitte die Originaldateien neu auswählen.');
     }
   }
 });
+
+const withDurableBatchPseudonymRegistry = (state, action) =>
+  withBatchPseudonymRegistry(state, action, { persist: writeState });
 
 // Zero days controls SOURCE COPIES, not the time allowed to run a batch or
 // discover its completed exports. Journals keep the normal seven-day result
@@ -198,7 +205,8 @@ const { beginBatch } = createBatchIntake({
   readStateForMaintenance,
   safeRemoveWorkDirectory,
   publicProgress,
-  preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING
+  preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING,
+  createBatchPseudonymState
 });
 
 const {
@@ -292,6 +300,7 @@ const {
   reconcileTerminalEvidence: writeTerminalEvidence,
   repairPendingEvidenceOutbox,
   finishZeroDayWork,
+  removeState,
   deliveryPendingStatus: DELIVERY_PENDING,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
@@ -307,7 +316,8 @@ const { discardIncompleteBatches } = createBatchDiscard({
   acquireActiveLock,
   releaseActiveLock,
   recoverableBatchStates,
-  liveLocalExecutor
+  liveLocalExecutor,
+  removeState
 });
 
 const { resumeBatch, continueMostRecentBatch } = createBatchContinuation({
@@ -355,7 +365,8 @@ const { captureDeferredReviewInput } = createBatchReviewCapture({
   anonymizeNext,
   exactPendingEntry: plainExactPendingEntry,
   packageIdForItem,
-  localReviewError
+  localReviewError,
+  withBatchPseudonymRegistry: withDurableBatchPseudonymRegistry
 });
 
 const { markDeferredReview, deferredReviewPlan } = createBatchReviewState({
@@ -377,7 +388,8 @@ const { publishReviewedBatch } = createBatchReviewPublication({
   invalidDecisionError: localReviewError,
   deliveryPendingStatus: DELIVERY_PENDING,
   retryableCodes: RETRYABLE_CODES,
-  mappingStoppedStatus: MAPPING_STOPPED
+  mappingStoppedStatus: MAPPING_STOPPED,
+  withBatchPseudonymRegistry: withDurableBatchPseudonymRegistry
 });
 
 const { reviewDeferredBatch } = createBatchReviewOrchestrator({
@@ -447,7 +459,8 @@ const { processBatchNext: processBatchNextInternal } = createBatchProcessingOrch
   writeState,
   processSingleBatchItem,
   writeTerminalEvidence,
-  deliveryPendingStatus: DELIVERY_PENDING
+  deliveryPendingStatus: DELIVERY_PENDING,
+  withBatchPseudonymRegistry: withDurableBatchPseudonymRegistry
 });
 
 async function processBatchNext(token, deps = {}) {

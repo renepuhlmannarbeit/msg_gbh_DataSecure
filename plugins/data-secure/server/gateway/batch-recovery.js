@@ -34,6 +34,7 @@ function createBatchRecovery(options = {}) {
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
   const intakeIntent = options.intakeIntent || createBatchIntakeIntent({ ...options, batchPath: journalPath });
   const finishZeroDayWork = options.finishZeroDayWork || (() => false);
+  const removeState = options.removeState;
 
   function intakeToken(entry) {
     if (!entry.isFile() || !entry.name.endsWith(INTAKE_SUFFIX)) return null;
@@ -158,7 +159,7 @@ function createBatchRecovery(options = {}) {
           if (now > Date.parse(state.expires_at)) {
             if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
             removeWorkDirectory(state.token);
-            io.unlinkSync(journalPath(state.token));
+            removeState(state);
             removed++;
             continue;
           }
@@ -226,7 +227,7 @@ function createBatchRecovery(options = {}) {
           if (now <= Date.parse(state.expires_at)) continue;
           if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
           removeWorkDirectory(state.token);
-          io.unlinkSync(journalPath(state.token));
+          removeState(state);
           removed++;
         } catch { failures++; }
       }

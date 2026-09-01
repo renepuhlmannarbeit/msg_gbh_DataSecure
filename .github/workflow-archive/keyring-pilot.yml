@@ -1,0 +1,17 @@
+# ARCHIVED 2026-09-01 — historical engineering evidence only.
+# DS-065 removed operating-system keyrings from the product and engineering
+# release path. GitHub ignores this location; retain solely for traceability.
+name: Archived native keyring smoke pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archived:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Archived; do not execute."

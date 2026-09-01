@@ -17,8 +17,8 @@ test('exposes only fixed local-only state and never a private batch capability',
     ok: true,
     mode: 'local_only',
     local_intake_pending: true,
-    local_processing_started: true,
-    next_action: 'local_processing_running_without_claude',
+    local_processing_started: false,
+    next_action: 'local_intake_accepted_checkpoint_pending',
     raw_content_sent_to_claude: false
   });
   assert.strictEqual(Object.isFrozen(result), true);

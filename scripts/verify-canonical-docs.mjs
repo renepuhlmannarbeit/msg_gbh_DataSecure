@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = path.join(root, 'docs', 'canonical');
-const required = ['README.md', 'DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md', 'REFACTORING_PLAN.md', 'DOCUMENT_REGISTER.md', 'BACKLOG.md', 'BACKLOG_ARCHIVE_2026-08.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md', 'BACKLOG_EVIDENCE_MATRIX.md'];
+const required = ['README.md', 'DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md', 'REFACTORING_PLAN.md', 'DOCUMENT_REGISTER.md', 'BACKLOG.md', 'BACKLOG_ARCHIVE_2026-08.md', 'BACKLOG_ARCHIVE_2026-09.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md', 'BACKLOG_EVIDENCE_MATRIX.md'];
 
 for (const file of required) {
   if (!fs.existsSync(path.join(canonical, file))) throw new Error(`missing canonical document: ${file}`);
@@ -13,13 +13,14 @@ for (const file of required) {
 const read = (file) => fs.readFileSync(path.join(canonical, file), 'utf8');
 const decisionsText = read('DECISIONS.md');
 const backlogText = read('BACKLOG.md');
-const archiveText = read('BACKLOG_ARCHIVE_2026-08.md');
+const archiveText = `${read('BACKLOG_ARCHIVE_2026-08.md')}\n${read('BACKLOG_ARCHIVE_2026-09.md')}`;
 const currentText = read('CURRENT_STATE.md');
 const traceText = read('TRACEABILITY.md');
 const indexText = read('README.md');
 const productText = read('PRODUCT.md');
 const openSourceText = read('OPEN_SOURCE_COMPONENTS.md');
 const target = JSON.parse(read('TARGET_CAPABILITIES.json'));
+const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 
 const collect = (text, pattern) => [...text.matchAll(pattern)].map((match) => match[1]);
 const decisions = collect(decisionsText, /^## (DS-\d{3})\b/gm);
@@ -27,7 +28,7 @@ const backlog = collect(backlogText, /^### (BL-\d{3})\b/gm);
 const stories = collect(backlogText, /^\| (BL-\d{3}\.\d+) \|/gm);
 const archivedStories = collect(archiveText, /^\| (BL-\d{3}\.\d+) \|/gm);
 const traceDecisions = collect(traceText, /^\| (DS-\d{3}) \|/gm);
-const currentBacklog = collect(currentText, /^## (BL-\d{3})\b/gm);
+const currentBacklog = collect(currentText, /^#{2,3} (BL-\d{3})\b/gm);
 
 const unique = (values, label) => {
   const duplicates = values.filter((value, index) => values.indexOf(value) !== index);
@@ -41,6 +42,10 @@ unique(traceDecisions, 'traceability decision ids');
 unique(currentBacklog, 'current-state backlog ids');
 if (!decisions.length || !backlog.length || !stories.length) {
   throw new Error('canonical decisions, epics, or stories are empty');
+}
+if (!/\*\*ersetzt:\*\*[^\n]*DS-050[^\n]*DS-065/u.test(decisionsText) ||
+    !decisionsText.includes('teilweise präzisiert')) {
+  throw new Error('decision register does not distinguish active and superseded decisions');
 }
 
 for (const id of stories) {
@@ -62,6 +67,7 @@ for (const id of decisions) {
   if (!backlogText.includes(id)) throw new Error(`decision missing from backlog: ${id}`);
 }
 if (target.contract !== 'target-only-not-runtime') throw new Error('target capability contract is not clearly target-only');
+if (target.baseline !== version) throw new Error(`target baseline is stale: ${target.baseline} != ${version}`);
 if (target.additional_system_vm?.runtime !== false || target.additional_system_vm?.acceptance_tests !== false) {
   throw new Error('DS-062 excludes additional system VMs from runtime and acceptance tests');
 }
@@ -89,7 +95,6 @@ for (const id of collect(traceText, /\b(BL-\d{3})\b/g)) {
 for (const file of required.slice(1)) {
   if (!indexText.includes(`(${file})`)) throw new Error(`canonical index does not link ${file}`);
 }
-const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const currentLabel = /-rc(\d+)$/u.exec(version);
 for (const token of [`Ist-Zustand ${currentLabel ? `RC${currentLabel[1]}` : version}`, '100 Dateien', '500 MiB', 'Windows', 'macOS', 'Linux']) {
   if (!productText.includes(token)) throw new Error(`canonical product is missing: ${token}`);

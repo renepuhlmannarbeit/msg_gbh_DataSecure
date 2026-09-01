@@ -4,8 +4,8 @@ const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName, IBAN
 const { collectOrganizations, markdownTableColumnValues, markdownTableCells } = require('./entities');
 const { credentialContextSpans } = require('./credentials');
 
-const EMPLOYER_LABEL = '(?:Unternehmen|Arbeitgeber|Firma|Aktueller\\s+Arbeitgeber|Entsendendes\\s+Unternehmen|Company|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)';
-const CUSTOMER_LABEL = '(?:Kunde|Kundenunternehmen|Projektkunde|Auftraggeber|Client|Cliente|Klant)';
+const EMPLOYER_LABEL = '(?:Unternehmen|Arbeitgeber|Firma|Organisation|Aktueller\\s+Arbeitgeber|Entsendendes\\s+Unternehmen|Company|Organization|Employer(?:\\s+Name)?|Entreprise|Employeur|Société|Empresa|Empleador|Compañía|Bedrijf|Werkgever)';
+const CUSTOMER_LABEL = '(?:Kunde|Kundenunternehmen|Projektkunde|Auftraggeber|Client|Customer\\s+Organization|Vendor|Supplier|Cliente|Klant)';
 const LOCATION_LABEL =
   '(?:Standort(?:\\s+des\\s+Projekts)?|Projektstandort|Einsatzort|Dienstort|Wohnort|Wohnsitz|Adresse|Anschrift|Ort)';
 
@@ -51,12 +51,18 @@ function rememberLocation(reg, value) {
   }
 }
 
+function rememberOrganization(reg, value, placeholder, persistent = true) {
+  if (!persistent && typeof reg.rememberEphemeral === 'function') reg.rememberEphemeral('ORG', value, placeholder);
+  else if (typeof reg.remember === 'function') reg.remember('ORG', value, placeholder);
+  else reg.map.set(`ORG:${key(value)}`, placeholder);
+}
+
 function registerEmployer(reg, findings, value) {
   const clean = normalizeSpaces(value);
   if (!clean) return null;
   findings.push({ type: 'EMPLOYER', value_hash: hashShort(clean) });
-  for (const org of collectOrganizations(clean)) reg.map.set(`ORG:${key(org)}`, EMPLOYER_PLACEHOLDER);
-  reg.map.set(`ORG:${key(clean)}`, EMPLOYER_PLACEHOLDER);
+  for (const org of collectOrganizations(clean)) rememberOrganization(reg, org, EMPLOYER_PLACEHOLDER, false);
+  rememberOrganization(reg, clean, EMPLOYER_PLACEHOLDER, false);
   return EMPLOYER_PLACEHOLDER;
 }
 
@@ -65,8 +71,8 @@ function registerCustomer(reg, findings, value) {
   if (!clean) return null;
   const placeholder = reg.assign('CUSTOMER', clean);
   findings.push({ type: 'CUSTOMER', value_hash: hashShort(clean) });
-  for (const org of collectOrganizations(clean)) reg.map.set(`ORG:${key(org)}`, placeholder);
-  reg.map.set(`ORG:${key(clean)}`, placeholder);
+  for (const org of collectOrganizations(clean)) rememberOrganization(reg, org, placeholder);
+  rememberOrganization(reg, clean, placeholder);
   return placeholder;
 }
 
@@ -194,7 +200,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
       if (looksLikeOrgSide(left, personKeys) && right.length >= 3) {
         const customer = reg.assign('CUSTOMER', left);
         const project = reg.assign('PROJECT', right);
-        reg.map.set(`ORG:${key(left)}`, customer);
+        rememberOrganization(reg, left, customer);
         findings.push(
           { type: 'CUSTOMER', value_hash: hashShort(left) },
           { type: 'PROJECT', value_hash: hashShort(right) }
@@ -218,7 +224,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
           (projectSection && /^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9 .&+\-]{2,40}$/u.test(s));
         if (isCapsOrLegal) {
           const customer = reg.assign('CUSTOMER', s);
-          reg.map.set(`ORG:${key(s)}`, customer);
+          rememberOrganization(reg, s, customer);
           findings.push({ type: 'CUSTOMER', value_hash: hashShort(s) });
           out.push(prefix + customer);
           continue;

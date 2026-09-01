@@ -72,6 +72,28 @@ test('startup replay writes an idempotent private mapping only for a verified pu
   assert.strictEqual(fs.existsSync(mappingOutboxDir()), true);
 });
 
+test('recursive folder labels survive outbox replay and remain distinct in the local mapping', () => {
+  const first = `ds_${crypto.randomBytes(16).toString('hex')}`;
+  const second = `ds_${crypto.randomBytes(16).toString('hex')}`;
+  publishVerifiedPackage(first, COMPLETE);
+  publishVerifiedPackage(second, COMPLETE);
+  ensureMappingOutbox('a/profil.txt', first, COMPLETE);
+  ensureMappingOutbox('b/profil.txt', second, COMPLETE);
+  const replay = _test.replayMappingOutbox();
+  assert.strictEqual(replay.repaired, 2);
+  assert.strictEqual(replay.pending, 0);
+  assert.deepStrictEqual(readOutboxEntries(), []);
+  const mapping = fs.readFileSync(mappingPath(), 'utf8');
+  assert.match(mapping, /"a\/profil\.txt";"ds_[a-f0-9]{32}"/u);
+  assert.match(mapping, /"b\/profil\.txt";"ds_[a-f0-9]{32}"/u);
+});
+
+test('mapping labels reject traversal, absolute and platform-dependent separators', () => {
+  for (const label of ['../profil.txt', 'a/../profil.txt', '/profil.txt', 'C:/profil.txt', 'a\\profil.txt']) {
+    assert.throws(() => ensureMappingOutbox(label, `ds_${crypto.randomBytes(16).toString('hex')}`, COMPLETE));
+  }
+});
+
 test('orphaned intent is removed and cannot create a guessed mapping row', () => {
   const packageId = `ds_${crypto.randomBytes(16).toString('hex')}`;
   ensureMappingOutbox('Nicht-veroeffentlicht.txt', packageId);

@@ -14,6 +14,7 @@ const { uiProcessEnvironment } = require('./ui-process-policy');
 const PASSWORD_CANCELLED = '__DATASECURE_PASSWORD_CANCELLED__';
 const PASSWORD_TITLE = 'DataSecure – lokales Dokumentpasswort';
 const MAX_PASSWORD_BYTES = 4096;
+const PASSWORD_CANCELLED_BYTES = Buffer.from(PASSWORD_CANCELLED, 'utf8');
 
 function passwordPromptCommands(options = {}) {
   const platform = options.platform || process.platform;
@@ -82,7 +83,7 @@ function secretFromOutput(output) {
     if (end > MAX_PASSWORD_BYTES) throw new SafeError('Die lokale Passworteingabe ist zu lang.');
     const secret = Buffer.alloc(end);
     source.copy(secret, 0, 0, end);
-    if (!secret.length || secret.toString('utf8') === PASSWORD_CANCELLED) {
+    if (!secret.length || (secret.length === PASSWORD_CANCELLED_BYTES.length && secret.equals(PASSWORD_CANCELLED_BYTES))) {
       secret.fill(0);
       throw cancelled();
     }
@@ -100,15 +101,21 @@ async function withLocalPassword(consumer, options = {}) {
   let unavailable = 0;
   for (const spec of passwordPromptCommands(options)) {
     const result = runner(spec.command, spec.args, undefined, options.env || process.env);
-    if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
-    if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Passworteingabe wurde wegen Zeitüberschreitung beendet.');
-    if (result?.error) throw new SafeError('Der lokale Passwortdialog konnte nicht gestartet werden.');
-    if (result?.status !== 0 && !result?.stdout) throw cancelled();
-    const password = secretFromOutput(result?.stdout);
     try {
-      return await consumer(password);
+      if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
+      if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Passworteingabe wurde wegen Zeitüberschreitung beendet.');
+      if (result?.error) throw new SafeError('Der lokale Passwortdialog konnte nicht gestartet werden.');
+      if (result?.status !== 0) throw cancelled();
+      const password = secretFromOutput(result?.stdout);
+      try {
+        return await consumer(password);
+      } finally {
+        password.fill(0);
+      }
     } finally {
-      password.fill(0);
+      // Error, timeout, cancellation and unavailable-helper paths may all
+      // carry partial child output. No branch may retain it.
+      if (Buffer.isBuffer(result?.stdout)) result.stdout.fill(0);
     }
   }
   if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter lokaler Passwortdialog verfügbar.');

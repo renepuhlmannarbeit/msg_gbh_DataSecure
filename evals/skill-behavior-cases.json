@@ -33,17 +33,17 @@
     },
     {
       "id": "mixed-format-folder",
-      "category": "positive",
+      "category": "boundary",
       "prompt": "Bereite den Ordner mit Vertrag, Ausschreibung, Präsentation und Mitarbeiterprofil für Claude vor.",
       "expected_skill": "anonymize",
       "expected_route": "folder",
       "expected_profile": "auto",
       "remove_images": false,
-      "required_outcomes": ["no_direct_upload", "single_local_picker_confirmation", "start_local_only_once", "end_task_after_start", "keep_visuals_local", "no_per_file_classification", "source_kind_folder"],
-      "forbidden_outcomes": ["request_path", "read_original_with_other_tool", "poll_after_start", "read_results_after_start", "call_support_tools", "model_call_per_document", "automatic_retry"],
+      "required_outcomes": ["no_direct_upload", "single_local_picker_confirmation", "start_local_only_once", "source_kind_folder", "complete_folder_preflight", "stop_whole_folder_on_blocked_format", "report_content_free_counts"],
+      "forbidden_outcomes": ["request_path", "read_original_with_other_tool", "poll_after_start", "read_results_after_start", "call_support_tools", "model_call_per_document", "automatic_retry", "silently_process_supported_subset", "claim_batch_started"],
       "session_mode": "normal",
       "expected_tools": ["start_document_batch_from_picker"],
-      "workflow_stage": "start",
+      "workflow_stage": "preflight-stop",
       "expected_mode": "local_only"
     },
     {

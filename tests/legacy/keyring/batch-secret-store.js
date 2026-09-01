@@ -1,6 +1,7 @@
 'use strict';
 
-// Pilot adapter for BL-030.2.  It deliberately has no file, environment or
+// Historical test-only pilot adapter for BL-030.2, outside the product tree.
+// It deliberately has no file, environment or
 // self-encryption fallback: a resumable batch must not start unless the native
 // OS credential store is usable.  The runtime does not call this adapter until
 // a locked, bundled keyring has passed the target-platform evidence gates.

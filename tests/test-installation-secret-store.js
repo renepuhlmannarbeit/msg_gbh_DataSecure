@@ -10,7 +10,7 @@ const {
   ACCOUNT_NAME,
   loadNativeKeyring,
   createInstallationSecretStore
-} = require('../plugins/data-secure/server/gateway/installation-secret-store');
+} = require('./legacy/keyring/installation-secret-store');
 
 const { test, done, assert } = createSuite('Installation secret store');
 

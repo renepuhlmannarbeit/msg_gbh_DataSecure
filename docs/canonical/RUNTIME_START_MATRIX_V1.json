@@ -4,30 +4,33 @@
   "user_runtime_install_required": false,
   "paths": [
     {
-      "id": "desktop-extension-mcpb",
+      "id": "engineering-mcpb",
       "package": "mcpb",
       "host": "claude-desktop",
       "command": "node",
-      "runtime_evidence": "official-built-in-node",
-      "status": "documented-fallback",
-      "source": "https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop"
+      "runtime_evidence": "engineering-package-test-only",
+      "status": "engineering-only-not-a-product-fallback",
+      "product_path": false,
+      "source": "docs/canonical/DECISIONS.md#ds-067"
     },
     {
       "id": "plugin-zip-marketplace-desktop-cowork",
       "package": "plugin",
       "host": "claude-desktop-cowork",
-      "command": "node",
+      "command": "${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node",
       "runtime_evidence": "fresh-install-observation-required",
       "status": "no-go-until-observed",
+      "product_path": true,
       "source": "https://support.claude.com/en/articles/13837440-use-plugins-in-claude"
     },
     {
       "id": "plugin-zip-claude-code",
       "package": "plugin",
       "host": "claude-code",
-      "command": "node",
+      "command": "${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node",
       "runtime_evidence": "host-or-path-resolution-required",
       "status": "conditional",
+      "product_path": true,
       "source": "https://code.claude.com/docs/en/plugins-reference"
     }
   ],
@@ -40,7 +43,7 @@
       "release_enabled": false,
       "node_version": "22.23.2",
       "postject_version": "1.0.0-alpha.6",
-      "plugin_command": "${CLAUDE_PLUGIN_ROOT}/bin/datasecure-mcp",
+      "plugin_command": "${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node",
       "windows_x64": {
         "status": "local-reproducible-mcp-proof",
         "sha256": "f468253dd97e7e80ca876a1d9d8d648284ae1234b75417a5822b157ca14158d2",

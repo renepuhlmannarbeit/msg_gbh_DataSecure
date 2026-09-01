@@ -12,7 +12,10 @@ process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { encodePng } = require('../plugins/data-secure/server/image-sanitizer');
-const { migrateLegacyReviewPreviews, listReviewItems, approveReviewAsset, removePreviewAfterDecision } = require('../plugins/data-secure/server/gateway/review');
+const {
+  migrateLegacyReviewPreviews, listReviewItems, approveReviewAsset,
+  removePreviewAfterDecision, writeFileAtomically
+} = require('../plugins/data-secure/server/gateway/review');
 const { test, done, assert } = createSuite('Review plaintext and legacy preservation');
 const png = encodePng({ width: 2, height: 2, rgba: Buffer.alloc(16, 255) });
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -125,6 +128,113 @@ test('PNG with appended bytes is not accepted as a metadata-free preview', () =>
   const h = fixture({}, Buffer.concat([png, Buffer.from('synthetic metadata')]));
   assert.throws(() => approveReviewAsset(h.reviewId, true), /PNG/u);
   assert.strictEqual(fs.existsSync(path.join(h.packageDir, 'assets')), false);
+});
+
+test('review metadata cannot redirect an approval into another package', () => {
+  const h = fixture();
+  const originalMarkdown = fs.readFileSync(h.markdownPath);
+  const tampered = JSON.parse(fs.readFileSync(h.metaPath, 'utf8'));
+  tampered.package_id = `ds_${crypto.randomBytes(16).toString('hex')}`;
+  fs.writeFileSync(h.metaPath, JSON.stringify(tampered));
+  assert.throws(() => approveReviewAsset(h.reviewId, true), /stimmen nicht überein/u);
+  assert.deepStrictEqual(fs.readFileSync(h.markdownPath), originalMarkdown);
+  assert.strictEqual(fs.existsSync(path.join(h.packageDir, 'assets')), false);
+});
+
+test('approval refuses an assets link and never writes outside the package', () => {
+  const h = fixture();
+  const outside = fs.mkdtempSync(path.join(base, 'outside-assets-'));
+  const assets = path.join(h.packageDir, 'assets');
+  fs.symlinkSync(outside, assets, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => approveReviewAsset(h.reviewId, true), /PRIVACY_STORAGE_UNSAFE|Link|Reparse|Verzeichnis|Review-Pfad/u);
+  assert.deepStrictEqual(fs.readdirSync(outside), []);
+  assert.strictEqual(JSON.parse(fs.readFileSync(h.metaPath, 'utf8')).approved, false);
+});
+
+test('approval refuses a linked review directory and never rewrites external metadata', () => {
+  const h = fixture();
+  const outside = path.join(base, `outside-review-${crypto.randomBytes(6).toString('hex')}`);
+  fs.renameSync(h.dir, outside);
+  fs.symlinkSync(outside, h.dir, process.platform === 'win32' ? 'junction' : 'dir');
+  const outsideMeta = path.join(outside, path.basename(h.metaPath));
+  const before = fs.readFileSync(outsideMeta);
+  assert.throws(() => approveReviewAsset(h.reviewId, true), /PRIVACY_STORAGE_UNSAFE|Link|Reparse|Verzeichnis|Review-Pfad/u);
+  assert.deepStrictEqual(fs.readFileSync(outsideMeta), before);
+  assert.strictEqual(fs.existsSync(path.join(h.packageDir, 'assets')), false);
+});
+
+test('legacy approved metadata cannot authorize an unapproved package manifest', () => {
+  const h = fixture({ approved: true });
+  const before = fs.readFileSync(h.metaPath);
+  assert.ok(listReviewItems().items.some((item) => item.review_id === h.reviewId),
+    'manifest-pending review stays visible even if legacy metadata says approved');
+  const result = approveReviewAsset(h.reviewId, true);
+  assert.strictEqual(result.already_approved, undefined);
+  assert.strictEqual(result.approved, true);
+  const manifest = JSON.parse(fs.readFileSync(path.join(h.packageDir, 'manifest.json'), 'utf8'));
+  assert.strictEqual(manifest.assets[0].status, 'included');
+  assert.strictEqual(manifest.assets[0].human_reviewed, true);
+  assert.deepStrictEqual(fs.readFileSync(h.metaPath), before);
+});
+
+test('a manifest commit failure leaves the released package and review retryable', () => {
+  const h = fixture();
+  const originalMarkdown = fs.readFileSync(h.markdownPath);
+  const originalManifest = fs.readFileSync(path.join(h.packageDir, 'manifest.json'));
+  assert.throws(() => approveReviewAsset(h.reviewId, true, {
+    writeFileAtomically(target, input) {
+      if (path.basename(target) === 'manifest.json') throw new Error('synthetic manifest commit failure');
+      return writeFileAtomically(target, input);
+    }
+  }), /synthetic manifest commit failure/u);
+  assert.deepStrictEqual(fs.readFileSync(h.markdownPath), originalMarkdown);
+  assert.deepStrictEqual(fs.readFileSync(path.join(h.packageDir, 'manifest.json')), originalManifest);
+  assert.strictEqual(JSON.parse(fs.readFileSync(h.metaPath, 'utf8')).approved, false);
+  assert.strictEqual(fs.existsSync(path.join(h.packageDir, 'assets', 'asset-001_reviewed.png')), false);
+  assert.strictEqual(approveReviewAsset(h.reviewId, true).approved, true, 'a clean retry succeeds');
+});
+
+test('post-rename manifest uncertainty preserves a successfully committed reviewed asset', () => {
+  const h = fixture();
+  const result = approveReviewAsset(h.reviewId, true, {
+    writeFileAtomically(target, input) {
+      const written = writeFileAtomically(target, input);
+      if (path.basename(target) === 'manifest.json') throw new Error('synthetic post-rename uncertainty');
+      return written;
+    }
+  });
+  assert.strictEqual(result.approved, true);
+  assert.deepStrictEqual(fs.readFileSync(path.join(h.packageDir, 'assets', 'asset-001_reviewed.png')), png);
+  const manifest = JSON.parse(fs.readFileSync(path.join(h.packageDir, 'manifest.json'), 'utf8'));
+  assert.strictEqual(manifest.assets[0].status, 'included');
+  assert.strictEqual(manifest.assets[0].human_reviewed, true);
+  assert.strictEqual(manifest.assets[0].file, 'assets/asset-001_reviewed.png');
+  assert.strictEqual(JSON.parse(fs.readFileSync(h.metaPath, 'utf8')).approved, false,
+    'the immutable review evidence is not rewritten after manifest commit');
+});
+
+test('preview cleanup preserves a replacement created after identity inspection', () => {
+  const h = fixture();
+  const displaced = `${h.preview}.old`;
+  const originalLstat = fs.lstatSync;
+  let replaced = false;
+  fs.lstatSync = function hooked(target, options) {
+    const stat = originalLstat.call(fs, target, options);
+    if (!replaced && path.resolve(target) === path.resolve(h.preview)) {
+      replaced = true;
+      fs.renameSync(h.preview, displaced);
+      fs.writeFileSync(h.preview, Buffer.from('replacement must survive'));
+    }
+    return stat;
+  };
+  try {
+    assert.strictEqual(removePreviewAfterDecision(h.dir, h.meta), false);
+  } finally {
+    fs.lstatSync = originalLstat;
+  }
+  assert.strictEqual(fs.readFileSync(h.preview, 'utf8'), 'replacement must survive');
+  assert.strictEqual(h.meta.preview_file, 'asset-001.png');
+  fs.unlinkSync(displaced);
 });
 
 try { done(); } finally { fs.rmSync(base, { recursive: true, force: true }); }

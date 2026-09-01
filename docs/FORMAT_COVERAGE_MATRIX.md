@@ -1,55 +1,48 @@
-# Format-Coverage-Matrix
+# Aktuelle Format-Coverage
 
-## Öffentliche Pilot-Allowlist
+Stand: 01.09.2026 · Produktversion 3.2.0 RC84
 
-Nur TXT, Markdown (`.md` und `.markdown`), CSV und DOCX dürfen ein Privacy-Paket veröffentlichen. Alle anderen sichtbaren
-Dateien stoppen mit einem festen Fehlercode; es gibt keinen Upload- oder
-Parser-Fallback. Jede Parserwarnung stoppt ebenfalls. Bildpixel aus DOCX bleiben
-unabhängig vom erkannten Typ lokal und werden im öffentlichen Pilot nicht an Claude
-freigegeben.
+Diese Matrix beschreibt den belegten Produktpfad. Zielwünsche aus älteren
+Architekturpapieren sind keine Freigabe.
 
-Diese Matrix beschreibt belegte Extraktion, nicht nur akzeptierte Dateiendungen.
-Der fortsetzbare `Input`-Ablauf mit einem getrennten sequenziellen lokalen Executor
-ist der Standard auf allen Plattformen; Claude-Lesen ist davon getrennt. Windows x64 besitzt zusätzlich die native Job-Object-Grenze; die
-bearbeitbare lokale Textprüfung gehört zum getrennten Companion-Engineeringpfad und
-wird im einfachen Standardablauf nicht geöffnet.
-macOS/Linux sind für TXT/Markdown/CSV/DOCX textbasiert freigegeben, halten visuelle Inhalte zurück
-und stoppen bei einer notwendigen Mehrdeutigkeitsentscheidung sicher.
+| Format | Aktueller Status | Freigegebener Inhalt | Verbindliches Verhalten |
+|---|---|---|---|
+| TXT | freigegeben | strikt validierter UTF-8-Text | vollständige Privacy- und Residual-Prüfung |
+| Markdown (`.md`, `.markdown`) | freigegeben | normalisierter Text; Links/HTML bleiben inert | keine externen Inhalte laden |
+| CSV | freigegeben | strikt validierte Tabelle als Markdown | defekte Struktur stoppt fail-closed |
+| DOCX | freigegeben | belegte Dokument- und Tabellenbereiche | Bildpixel bleiben lokal; unbekannte inhaltsfähige Bereiche stoppen |
+| XLSX | gesperrt | nichts | `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger fail-closed Stopp |
+| PPTX | gesperrt | nichts | `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger fail-closed Stopp |
+| PDF / Scan-PDF | gesperrt | nichts | kein Lite-Parser als Produktfallback |
+| PNG, JPEG, BMP | gesperrt | nichts | OCR-/Bildpfad ist noch kein Produktpfad |
+| unbekannt, beschädigt oder verschlüsselt | gesperrt | nichts | kein Teilresultat und keine Entschlüsselung |
 
-| Format | Belegte Textbereiche | Visuelle Behandlung | Plattformstatus | Bekannte Grenzen / nächstes Gate |
-|---|---|---|---|---|
-| TXT | gesamter UTF-8-Text innerhalb der Größenlimits | keine | Windows/macOS/Linux Textpfad | Encoding außerhalb UTF-8 nicht zugesichert |
-| DOCX | Dokumenttext einschließlich Tabellen und verschachtelter DrawingML-Textfelder | bekannte Medien entfernen oder zurückhalten; unbekannte inhaltsfähige Parts blockieren | Windows vollständigere Prüfung; macOS/Linux Textpfad fail-closed | Kommentare, Kopf-/Fußzeilen und weitere OOXML-Parts erst nach expliziter Coverage freigeben |
-| PDF | `pdf-lite` nur noch als Test-/Gegenprobenparser; kein Release-Pfad | nicht freigegeben | **nein** | jeder PDF-Lauf stoppt mit `PDF_COVERAGE_UNVERIFIED`; Zielarchitektur und Gates siehe `PDF_ENGINE_DECISION.md` |
-| XLSX | Shared-/Inline-Strings und einfache Zellwerte | bekannte Medien über Visual-Gate | nein | Kommentare, Formeln/Anzeigeformat, Charts, Zeichnungen, versteckte Bereiche und externe Beziehungen systematisch abdecken |
-| PPTX | Folientext und Sprechernotizen | bekannte Medien über Visual-Gate | nein | Master/Layout, Charts, SmartArt, eingebettete Objekte und externe Beziehungen systematisch abdecken |
-| MD | gesamter fatal validierter, NFC-/LF-normalisierter UTF-8-Text innerhalb der Größenlimits | referenzierte externe Inhalte werden nicht geladen | Windows/macOS/Linux Textpfad | Links, HTML und Bildreferenzen bleiben inert; `.md` und `.markdown` nutzen denselben Textpfad, eingebettete Daten bleiben gesperrt |
-| CSV | endlicher, strikt validierter UTF-8-CSV-Parser; Ausgabe ausschließlich als Markdown-Tabelle | keine; Zellen werden nie ausgeführt | Windows/macOS/Linux Textpfad | Quote-Defekte, ungleiche Spaltenbreiten und leere Tabellen stoppen; Formelzeichen bleiben literal; praktische Drei-OS-Abnahme bleibt offen |
-| PNG/BMP/JPEG | OCR-Text nur über lokalen Visual-Gate | Pixelprüfung, Schwärzung und Kontroll-OCR soweit Codec unterstützt; Windows-Prozess läuft im Job Object | nein | ausdrückliches Profil; Codec-Varianten, AppContainer und Dateisystemgrenze weiter härten |
+## Gemeinsame Freigaberegel
 
-## PDF-Freigabekriterien für den privaten Dialog
+Eine erlaubte Endung genügt nicht. Signatur, Container, Parsercoverage,
+Entitätsprüfung und Residual-Gate müssen gemeinsam bestehen. Parserwarnungen oder
+nicht belegte Inhaltsbereiche stoppen die betroffene Datei; der übrige Stapel darf
+weiterlaufen. Originale werden nur gelesen und niemals automatisch verändert oder
+gelöscht.
 
-PDF darf erst als „textbasiert“ in der normalen Dateiauswahl erscheinen, wenn alle
-folgenden Punkte automatisiert mit synthetischen und real erzeugten Testdateien belegt
-sind:
+## Bilder in DOCX
 
-1. Catalog, Pages-Baum, jede Page und sämtliche `Contents`-Referenzen werden lückenlos
-   aufgelöst; unreferenzierte Decoy-Streams können keinen Erfolg vortäuschen.
-2. Text wird gemäß Font-Encoding, `Differences`, Type0/CIDFont und `ToUnicode` so
-   dekodiert, wie er gerendert wird. Nicht unterstützte Fonts stoppen die Freigabe.
-3. Image-XObjects, Inline-Images, Form-XObjects, Annotationen, Formulare,
-   eingebettete Dateien und Vektor-/Outline-Inhalt werden vollständig verarbeitet oder
-   als technische Unsicherheit blockiert.
-4. Direkte, indirekte und Array-Filter sowie `DecodeParms` sind entweder korrekt
-   unterstützt oder fail-closed. Verschlüsselung und Objektstreams werden bewusst
-   behandelt.
-5. Ein PDF mit irgendeinem visuellen Bereich kann den Text-only-Vertrag nicht durch ein
-   positives OCR-Ergebnis umgehen.
-6. Gegenproben umfassen Word-, LibreOffice- und Browser-PDFs sowie Custom-CMap,
-   Decoy-Stream, Inline-Image, Vektorlogo, Form-XObject, indirekten Filter und beschädigte
-   Container.
+Es gibt keinen auswählbaren Bildmodus. Bildpixel werden weder veröffentlicht noch
+an Claude übergeben. Ein Dokument kann je nach belegtem Inhalt als verwendbar mit
+klar benannter Auslassung enden oder bis zu einer lokalen Entscheidung gesperrt
+bleiben. DataSecure löscht Bilder niemals aus der Originaldatei.
 
-Bis diese Kriterien erfüllt sind, stoppt das Plugin PDF auch im lokalen `Input`-Pfad
-vor der Extraktion. Das Original wird wiederhergestellt, es entsteht kein Paket und
-Claude erhält keine Rohbytes. Der alte Lite-Parser bleibt ausschließlich für
-adversariale Tests erhalten und ist kein Produktpfad.
+## Plattformstatus
+
+Code- und Paketverträge sind plattformübergreifend ausgelegt. Eine reale
+Produktfreigabe für Windows oder macOS folgt erst nach dem jeweiligen aktuellen
+Cowork-/Desktop-UAT. Linux ist ein separates Claude-Code-Hostziel und keine Zusage
+für Claude Desktop. Details stehen im
+[aktuellen Zustand](canonical/CURRENT_STATE.md) und im
+[UAT-Kit](acceptance/UAT_TEST_KIT/README.md).
+
+## Spätere Freigaben
+
+XLSX, PPTX, PDF/Scan-PDF und eigenständige Bilder bleiben im Backlog. Ein Format
+wird erst freigegeben, wenn Extraktion, visuelle Grenze, Ressourcenlimits,
+Negativtests, Paketierung und reale Zielsystemevidenz vollständig vorliegen.

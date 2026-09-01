@@ -1,13 +1,17 @@
 # Kanonische Zielarchitektur
 
-Stand: 31.08.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
+Stand: 01.09.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
 
 ## Architekturprinzip
 
-DataSecure ist **Cowork-gesteuert und lokal ausgeführt**. Eine lokale
-Cowork-Desktop-Sitzung darf den Plugin-MCP starten. Cloud-, Web-, Mobil- und
-Scheduled-Sitzungen erhalten niemals einen Ersatzpfad zu Originalen. Ein sichtbarer
-Skill oder Plugin-Eintrag ist kein Nachweis einer aktiven lokalen Privacy-Grenze.
+DataSecure ist **Cowork-gesteuert; die Originalvorverarbeitung läuft lokal**.
+Originale dürfen nur in einer lokalen Cowork-Sitzung der Claude-Desktop-App oder
+in Claude Code dem tatsächlich verbundenen lokalen Plugin-MCP über dessen
+Betriebssystempicker zugeführt werden. Lokale Plugin-MCPs laufen laut aktueller
+Anthropic-Dokumentation nicht in Cloud-Sitzungen – auch dann nicht, wenn eine
+Cloud-Sitzung in der Desktop-App angezeigt wird. Web, Mobil, geplante Aufgaben,
+verbundene Ordner oder der Desktop-Dateibroker sind daher kein Ersatzpfad. Ein
+sichtbarer Skill oder Plugin-Eintrag ist kein Nachweis einer lokalen Privacy-Grenze.
 
 DS-062/DS-063 schließen zusätzliche System-VMs und Windows-Benutzerkonten aus.
 DS-065 entfernt die zusätzliche Verschlüsselung lokaler Arbeitsdaten: kein
@@ -108,15 +112,20 @@ Claude-Modell
 
 ## Distribution und Lifecycle
 
-- Marketplace liefert ein Produkt; manuelle ZIPs sind plattformspezifisch.
-- Die Laufzeit ist installationsfrei gebündelt. Ein vorhandenes System-Node oder
-  Python ist weder Voraussetzung noch Vertrauensanker.
+- Marketplace und manuelles Plugin-ZIP liefern dasselbe Produkt. MCPB bleibt ein
+  internes Engineering-Artefakt und ist kein Desktop- oder Fehler-Fallback.
+- Das Quellplugin bleibt mit `command: node` entwickelbar. Der Produktbuild ersetzt
+  diesen Wert deterministisch durch `${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node`
+  und bündelt die hashgebundene Node-Runtime für Windows x64 oder macOS Intel/ARM.
+  Ein reales Windows-E0 ohne System-Node ist grün; macOS- und Cowork-Fresh-Install
+  bleiben Releaseblocker und sind kein Nutzer-Setupschritt.
 - Plugin-Code und Nutzerdaten liegen getrennt. Update, Deinstallation oder Rollback
   löschen keine Originale, Exporte, Mappings oder offenen Stapel.
 - Datenmigrationen sind versioniert, vorab gesichert und reversibel. Bei Fehlern
   bleibt der vorherige durable Zustand nutzbar.
-- Eigene native Sicherheitskomponenten werden vor Unternehmensrollout signiert;
-  Prüfsummen und SBOM bleiben zusätzliche Integritätsnachweise.
+- Eine Produktsignatur ist nach DS-067 keine Lieferpflicht. Zielgebundene Hashes,
+  reproduzierbare Paketverifikation und SBOM bleiben Integritätsnachweise; reale
+  macOS-Quarantäne-/Installationsbeobachtung ist trotzdem erforderlich.
 
 ## Diagnose- und Netzgrenze
 
@@ -125,5 +134,11 @@ Claude-Modell
   zufällige Vorgangs-/Positions-IDs und feste Fehlercodes.
 - Namen, Pfade, Inhalte, Rohwerte, Passwörter, Hashes und Zugriffstoken sind im
   Diagnoseschema nicht darstellbar.
-- Aufbewahrung höchstens 14 Tage; Diagnoseexport nur lokal und ausdrücklich.
+- Temporäre Arbeits- und Reviewdaten: konfigurierbar 0–14 Tage. Quellen,
+  Originale und fertige Exporte sind kein Ziel automatischer Aufbewahrungs-
+  oder Löschläufe. Diagnoseexport nur lokal und ausdrücklich.
+- Kein auswählbarer Bildmodus: Bildpixel bleiben lokal zurückgehalten; der
+  Normalweg kann sie weder an Claude freigeben noch aus Originalen löschen.
 - Keine automatische Telemetrie oder Crashübermittlung.
+- Cowork selbst kann eine Internetverbindung und cloudbasierte Modellverarbeitung
+  benötigen; daraus folgt keine Netzwerkfreigabe für den lokalen DataSecure-Prozess.

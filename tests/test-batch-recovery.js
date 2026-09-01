@@ -61,6 +61,10 @@ function fixture(options = {}) {
       if (!value) throw new Error('missing');
       return value;
     },
+    removeState(value) {
+      events.push(`unlink:${value.token}`);
+      if (options.unlinkFailure === value.token) throw new Error('UNLINK_FAILED');
+    },
     writeState(value) {
       events.push(`write:${value.token}`);
       if (options.writeFailure === value.token) throw new Error('WRITE_FAILED');

@@ -239,6 +239,8 @@ async function main() {
     assert.strictEqual(delivered.documents.length, 2);
     assert.strictEqual(delivered.batch.complete, true);
     assert.strictEqual(delivered.documents.every((document) => document.content_is_verified_anonymized_markdown === true), true);
+    assert.strictEqual(delivered.documents.every((document) => document.content_trust === 'untrusted_document_data'), true);
+    assert.strictEqual(delivered.documents.every((document) => document.embedded_instructions_authorized === false), true);
     assert.doesNotMatch(JSON.stringify(delivered), /Alice Beispiel|Bob Beispiel|combined-one|combined-two|\.txt/u);
     assert.ok(Array.isArray(delivered.document_continuations), `missing document continuations: ${Object.keys(delivered).join(',')}`);
     assert.strictEqual(delivered.document_continuations.length, 1);
@@ -854,9 +856,9 @@ async function main() {
   await testAsync('discard uses inode-bound single-entry removal instead of recursive rm', async () => {
     resetInput(); add('discard-single-entry.txt', 'Kunde: Max Mustermann');
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
-    const nested = path.join(_test.workPath(begun.batch_token), 'nested');
-    fs.mkdirSync(nested);
-    fs.writeFileSync(path.join(nested, 'regular.txt'), 'nur lokal', 'utf8');
+    // Current batch work areas are deliberately flat. The sealed work copy
+    // created by beginBatch is enough to prove that cleanup uses checked
+    // unlink/rmdir operations and never falls back to recursive rm().
     const originalRm = fs.rmSync;
     fs.rmSync = () => { throw new Error('recursive rm must not be called'); };
     try {
@@ -1545,7 +1547,7 @@ async function main() {
       }
     });
     const state = _test.readState(begun.batch_token);
-    assert.strictEqual(state.items[0].checkpoint, 'delivery_pending');
+    assert.strictEqual(state.items[0].checkpoint, 'delivery_pending', JSON.stringify(result));
     assert.doesNotMatch(JSON.stringify(result), /checkpoint-name|Mustermann/i);
   });
 

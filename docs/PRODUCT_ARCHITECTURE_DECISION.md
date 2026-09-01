@@ -1,5 +1,9 @@
 # Produkt- und Architekturentscheidung vNext
 
+> **Historischer Architekturstand.** Aktuell maßgeblich sind
+> [`canonical/DECISIONS.md`](canonical/DECISIONS.md) und
+> [`canonical/TARGET_ARCHITECTURE.md`](canonical/TARGET_ARCHITECTURE.md).
+
 > **Historische Architekturgrundlage:** Neuere verbindliche Entscheidungen stehen im
 > [kanonischen Entscheidungsregister](canonical/DECISIONS.md). Insbesondere sind eine
 > Signierungspflicht und frühere Mengen-/Formatgrenzen nicht mehr das Ziel.

@@ -280,7 +280,7 @@ test('all terminal cleanup callers preserve renamed legacy magic with bounded sh
   assert.strictEqual(candidate.work_copy_cleanup_pending, true);
 });
 
-test('whole-work cleanup preflights legacy siblings and cleans only wholly owned interrupted hard links', () => {
+test('whole-work cleanup preflights siblings and leaves unexpected nested trees untouched', () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-guard-'));
   const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA };
   process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
@@ -316,8 +316,10 @@ test('whole-work cleanup preflights legacy siblings and cleans only wholly owned
     assert.throws(() => safeRemoveWorkDirectory(token));
     assert.strictEqual(fs.existsSync(first), true, 'nested legacy preflight protects the whole tree');
     fs.writeFileSync(nestedCopy, 'regular synthetic helper file');
-    safeRemoveWorkDirectory(token);
-    assert.strictEqual(fs.existsSync(work), false, 'journal-owned nested regular helpers retain their discard contract');
+    assert.throws(() => safeRemoveWorkDirectory(token));
+    assert.strictEqual(fs.existsSync(work), true, 'unexpected nested trees remain for explicit local support review');
+    assert.strictEqual(fs.readFileSync(first, 'utf8'), 'an external hard link is not owned');
+    assert.strictEqual(fs.readFileSync(nestedCopy, 'utf8'), 'regular synthetic helper file');
   } finally {
     for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local]]) {
       if (value === undefined) delete process.env[name]; else process.env[name] = value;

@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
-const { LIMITS, hasReparseComponent, isManagedStagingPath } = require('../gateway/common');
+const { LIMITS, hasReparseComponent, hasReparseComponentAsync, isManagedStagingPath } = require('../gateway/common');
 const { sourceLimitForExtension } = require('../resource-limits');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 
@@ -13,6 +13,7 @@ const MAX_SELECTED_SOURCES = LIMITS.MAX_BATCH_FILES;
 const PICKER_CANCELLED = '__DATASECURE_PICKER_CANCELLED__';
 const PICKER_TITLE = 'Dateien mit DataSecure lokal anonymisieren';
 const WINDOWS_PICKER_UTF8 = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)';
+const MAX_NATIVE_PATH_UTF8_BYTES = 32767 * 3;
 const SOURCE_TYPES = Object.freeze({
   '.pdf': 'pdf',
   '.docx': 'docx',
@@ -28,12 +29,17 @@ const SOURCE_TYPES = Object.freeze({
   '.bmp': 'bmp'
 });
 
-function defaultRunner(command, args, _input, env = process.env) {
+function pickerOutputMaxBuffer(maxSources = 1) {
+  const count = Math.min(MAX_SELECTED_SOURCES, Math.max(1, Number(maxSources) || 1));
+  return Math.max(1024 * 1024, Math.ceil(count) * (MAX_NATIVE_PATH_UTF8_BYTES + 2) + 256);
+}
+
+function defaultRunner(command, args, _input, env = process.env, _signal, maxBuffer = 1024 * 1024) {
   return childProcess.spawnSync(command, args, {
     encoding: 'utf8',
     windowsHide: true,
     timeout: 10 * 60 * 1000,
-    maxBuffer: 1024 * 1024,
+    maxBuffer,
     shell: false,
     env: uiProcessEnvironment(env)
   });
@@ -42,12 +48,12 @@ function defaultRunner(command, args, _input, env = process.env) {
 // execFile keeps MCP stdio responsive while the native dialog is open. Node's
 // signal support terminates only this owned dialog process, never an already
 // detached intake/processing worker or other applications.
-function runPickerAsync(command, args, _input, env = process.env, signal) {
+function runPickerAsync(command, args, _input, env = process.env, signal, maxBuffer = 1024 * 1024) {
   if (signal?.aborted) return Promise.reject(selectionCancelledError());
   return new Promise((resolve) => {
     childProcess.execFile(command, args, {
       encoding: 'utf8', windowsHide: true, timeout: 10 * 60 * 1000,
-      maxBuffer: 1024 * 1024, shell: false, env: uiProcessEnvironment(env), signal
+      maxBuffer, shell: false, env: uiProcessEnvironment(env), signal
     }, (error, stdout) => resolve({
       error, stdout,
       status: error ? (typeof error.code === 'number' ? error.code : null) : 0
@@ -106,7 +112,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
   }
   if (platform === 'darwin') {
-    const script = multiple
+    const selection = multiple
       ? [
           `set selectedFiles to choose file with prompt "${PICKER_TITLE}" of type ${macTypeFilter} with multiple selections allowed`,
           'set selectedPaths to {}',
@@ -117,6 +123,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
           'return selectedPaths as text'
         ].join('\n')
       : `POSIX path of (choose file with prompt "${PICKER_TITLE}" of type ${macTypeFilter})`;
+    const script = ['try', selection, 'on error number -128', `return "${PICKER_CANCELLED}"`, 'end try'].join('\n');
     return [
       {
         command: '/usr/bin/osascript',
@@ -142,10 +149,12 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
   throw new SafeError('Für dieses Betriebssystem ist kein lokaler Dateidialog verfügbar.');
 }
 
+function stripPickerLineEnding(value) { return String(value ?? '').replace(/\r?\n$/u, ''); }
+
 function validateSelectedPath(selected, options = {}) {
   const fsApi = options.fs || fs;
   const pathHasReparseComponent = options.hasReparseComponent || hasReparseComponent;
-  const candidate = String(selected || '').trim();
+  const candidate = String(selected || '');
   if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
   if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
   if (isManagedStagingPath(candidate)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
@@ -174,29 +183,63 @@ function validateSelectedPath(selected, options = {}) {
   return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
 }
 
+async function validateSelectedPathAsync(selected, options = {}) {
+  const fsApi = options.fs || fs;
+  const io = options.fsPromises || fsApi.promises || fs.promises;
+  const pathHasReparseComponent = options.hasReparseComponentAsync ||
+    ((target) => options.hasReparseComponent ? options.hasReparseComponent(target) : hasReparseComponentAsync(target, fsApi));
+  const candidate = String(selected || '');
+  if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
+  if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
+  if (isManagedStagingPath(candidate)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
+  throwIfSelectionAborted(options.signal);
+  if (await pathHasReparseComponent(candidate)) {
+    throw new SafeError('Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.');
+  }
+  throwIfSelectionAborted(options.signal);
+  const extension = path.extname(candidate).toLowerCase();
+  const sourceType = SOURCE_TYPES[extension];
+  if (!sourceType) throw new SafeError('Das ausgewählte Dateiformat wird nicht unterstützt.');
+  if (options.allowedTypes && !new Set(options.allowedTypes).has(sourceType)) {
+    throw new SafeError('Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.');
+  }
+  let stat;
+  try { stat = await io.lstat(candidate); }
+  catch { throw new SafeError('Die ausgewählte Datei ist nicht mehr verfügbar.'); }
+  throwIfSelectionAborted(options.signal);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Die Auswahl ist keine reguläre lokale Datei.');
+  const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
+  if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
+    throw new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.');
+  }
+  return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
+}
+
 function selectionCancelledError() {
   const error = new SafeError('Die lokale Dateiauswahl wurde abgebrochen.');
   error.code = 'LOCAL_SELECTION_CANCELLED';
   return error;
 }
 
+function documentedNativeCancellation(result, output, platform = process.platform) {
+  return platform === 'linux' && result?.status === 1 && !output &&
+    (!result?.error || result.error.code === 1);
+}
+
 function pickSource(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
   for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes)) {
-    const result = runner(spec.command, spec.args, undefined, options.env || process.env);
+    const result = runner(spec.command, spec.args, undefined, options.env || process.env, undefined, pickerOutputMaxBuffer(1));
     if (result?.error?.code === 'ENOENT') {
       unavailable++;
       continue;
     }
     if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
     if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
-    const output = String(result?.stdout || '').trim();
-    // Windows prints a fixed marker. macOS (user-cancelled AppleScript) and
-    // Linux dialog helpers conventionally return a non-zero exit with no
-    // selection. Both are terminal user cancellations, never a reason to
-    // reopen a picker or create a replacement batch.
-    if (output === PICKER_CANCELLED || (result?.status !== 0 && !output)) throw selectionCancelledError();
+    const output = stripPickerLineEnding(result?.stdout || '');
+    if (output === PICKER_CANCELLED || documentedNativeCancellation(result, output, options.platform)) throw selectionCancelledError();
+    if (result?.status !== 0) throw new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.');
     return validateSelectedPath(output, options);
   }
   if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
@@ -207,15 +250,17 @@ function pickSources(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
   for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true)) {
-    const result = runner(spec.command, spec.args, undefined, options.env || process.env);
+    const result = runner(spec.command, spec.args, undefined, options.env || process.env, undefined,
+      pickerOutputMaxBuffer(options.maxSources ?? MAX_SELECTED_SOURCES));
     if (result?.error?.code === 'ENOENT') {
       unavailable++;
       continue;
     }
     if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
     if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
-    const output = String(result?.stdout || '').trim();
-    if (output === PICKER_CANCELLED || (result?.status !== 0 && !output)) throw selectionCancelledError();
+    const output = stripPickerLineEnding(result?.stdout || '');
+    if (output === PICKER_CANCELLED || documentedNativeCancellation(result, output, options.platform)) throw selectionCancelledError();
+    if (result?.status !== 0) throw new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.');
     return validateSelectedPaths(output, options);
   }
   if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
@@ -223,12 +268,16 @@ function pickSources(options = {}) {
 }
 
 function validateSelectedPaths(output, options) {
-  const selectedPaths = output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+  const selectedPaths = output.split(/\r?\n/);
+  if(selectedPaths.some((value)=>value.length===0))throw new SafeError('Die lokale Dateiauswahl enthält einen nicht eindeutig abbildbaren Dateinamen.');
   if (!selectedPaths.length) throw new SafeError('Keine Datei ausgewählt.');
   if (selectedPaths.length > (options.maxSources ?? MAX_SELECTED_SOURCES)) {
     throw new SafeError(`Bitte höchstens ${options.maxSources ?? MAX_SELECTED_SOURCES} Dateien gleichzeitig auswählen.`);
   }
-  if (new Set(selectedPaths.map((value) => value.toLowerCase())).size !== selectedPaths.length) {
+  const selectedPathKeys = selectedPaths.map((value) =>
+    (options.platform || process.platform) === 'win32' ? value.toLowerCase() : value
+  );
+  if (new Set(selectedPathKeys).size !== selectedPaths.length) {
     throw new SafeError('Eine Datei wurde mehrfach ausgewählt.');
   }
   const selected = selectedPaths.map((selected) => validateSelectedPath(selected, options));
@@ -239,22 +288,56 @@ function validateSelectedPaths(output, options) {
   return selected;
 }
 
+async function validateSelectedPathsAsync(output, options = {}) {
+  const selectedPaths = output.split(/\r?\n/);
+  if (selectedPaths.some((value) => value.length === 0)) {
+    throw new SafeError('Die lokale Dateiauswahl enthält einen nicht eindeutig abbildbaren Dateinamen.');
+  }
+  if (!selectedPaths.length) throw new SafeError('Keine Datei ausgewählt.');
+  if (selectedPaths.length > (options.maxSources ?? MAX_SELECTED_SOURCES)) {
+    throw new SafeError(`Bitte höchstens ${options.maxSources ?? MAX_SELECTED_SOURCES} Dateien gleichzeitig auswählen.`);
+  }
+  const selectedPathKeys = selectedPaths.map((value) =>
+    (options.platform || process.platform) === 'win32' ? value.toLowerCase() : value
+  );
+  if (new Set(selectedPathKeys).size !== selectedPaths.length) {
+    throw new SafeError('Eine Datei wurde mehrfach ausgewählt.');
+  }
+  const selected = [];
+  let total = 0;
+  for (const candidate of selectedPaths) {
+    throwIfSelectionAborted(options.signal);
+    const item = await validateSelectedPathAsync(candidate, options);
+    selected.push(item);
+    total += item.sourceBytes;
+    if (total > (options.maxTotalBytes ?? LIMITS.MAX_BATCH_TOTAL_BYTES)) {
+      throw new SafeError('Die ausgewählten Dateien sind zusammen größer als 500 MB.');
+    }
+    // Give Cowork cancellation and unrelated MCP requests a scheduling point
+    // even when a platform reports cached file metadata immediately.
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throwIfSelectionAborted(options.signal);
+  return selected;
+}
+
 async function pickSourcesAsync(options = {}) {
   const runner = options.runner || runPickerAsync;
   let unavailable = 0;
   throwIfSelectionAborted(options.signal);
   for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true)) {
     throwIfSelectionAborted(options.signal);
-    const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal);
+    const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal,
+      pickerOutputMaxBuffer(options.maxSources ?? MAX_SELECTED_SOURCES));
     throwIfSelectionAborted(options.signal);
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
     if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
     // Native macOS/Linux cancellations use a nonzero numeric exit status.
     if (result?.error && typeof result.error.code !== 'number') throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
-    const output = String(result?.stdout || '').trim();
-    if (output === PICKER_CANCELLED || (result?.status !== 0 && !output)) throw selectionCancelledError();
+    const output = stripPickerLineEnding(result?.stdout || '');
+    if (output === PICKER_CANCELLED || documentedNativeCancellation(result, output, options.platform)) throw selectionCancelledError();
     if (result?.status !== 0) throw new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.');
-    return validateSelectedPaths(output, options);
+    return validateSelectedPathsAsync(output, options);
   }
   if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
   throw new SafeError('Keine Datei ausgewählt.');
@@ -268,21 +351,38 @@ function batchQueueFromSelection(selected) {
   if (!Array.isArray(selected) || selected.length < 1) {
     throw new SafeError('Keine Datei für den lokalen Stapel ausgewählt.');
   }
-  return selected.map((item) => {
+  const prepared = selected.map((item) => {
     const full = String(item?.sourcePath || '');
     const sourceBytes = item?.sourceBytes;
     if (!path.isAbsolute(full) || !Number.isSafeInteger(sourceBytes) || sourceBytes < 1) {
       throw new SafeError('Die lokale Dateiauswahl ist ungültig.');
     }
-    const name = path.basename(full);
-    // Equal basenames from different local folders are valid. The sealed batch
-    // assigns every copied source an independent random item id and work name;
-    // neither the source path nor a path-derived hash has to be persisted or
-    // shown to Claude. The picker already rejects selecting the exact same
-    // absolute path twice.
-    const sourceLabel = typeof item?.sourceLabel === 'string' ? item.sourceLabel : name;
-    return { name, full, sourceBytes, sourceLabel };
+    return { item, name: path.basename(full), full, sourceBytes };
   });
+  const labels = prepared.map(({ item, name }) => typeof item?.sourceLabel === 'string' ? item.sourceLabel : name);
+  const duplicateNames = new Set(prepared.map(({ name }) => name).filter((name, index, names) =>
+    names.findIndex((candidate) => candidate === name) !== index));
+  for (const duplicate of duplicateNames) {
+    const indices = prepared.map(({ name }, index) => name === duplicate ? index : -1).filter((index) => index >= 0);
+    const parts = indices.map((index) => {
+      const full = prepared[index].full;
+      const root = path.parse(full).root;
+      return { root: root.replace(/[^A-Za-z0-9_-]/gu, '') || 'root',
+        segments: path.relative(root, full).split(path.sep) };
+    });
+    const key = (value) => process.platform === 'win32' ? value.toLowerCase() : value;
+    let resolved = null;
+    const depthLimit = Math.max(...parts.map(({ segments }) => segments.length));
+    for (let depth = 2; depth <= depthLimit; depth++) {
+      const candidates = parts.map(({ segments }) => segments.slice(-depth).join('/'));
+      if (new Set(candidates.map(key)).size === candidates.length) { resolved = candidates; break; }
+    }
+    if (!resolved) resolved = parts.map(({ root, segments }) => `${root}/${segments.join('/')}`);
+    for (let offset = 0; offset < indices.length; offset++) labels[indices[offset]] = resolved[offset];
+  }
+  return prepared.map(({ name, full, sourceBytes }, index) => ({
+    name, full, sourceBytes, sourceLabel: labels[index]
+  }));
 }
 
 module.exports = {
@@ -293,11 +393,15 @@ module.exports = {
   SOURCE_TYPES,
   pickerCommands,
   validateSelectedPath,
+  validateSelectedPathAsync,
+  validateSelectedPathsAsync,
   selectionCancelledError,
   pickSource,
   pickSources,
   pickSourcesAsync,
   runPickerAsync,
+  pickerOutputMaxBuffer,
+  documentedNativeCancellation,
   WINDOWS_PICKER_UTF8,
   throwIfSelectionAborted,
   batchQueueFromSelection

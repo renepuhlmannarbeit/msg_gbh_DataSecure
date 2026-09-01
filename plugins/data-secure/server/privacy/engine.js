@@ -5,10 +5,12 @@ const {
   NB,
   NA,
   normalizeText,
+  canonicalizeRenderedText,
   normalizeSpaces,
   key,
   hashShort,
   escapeRegExp,
+  ORG_SUFFIX_TAIL_RE,
   isAllowedOrg,
   orgAlias,
   titleCase,
@@ -16,6 +18,7 @@ const {
   looksSurname
 } = require('./base');
 const {
+  PERSON_LABEL,
   collectPersonAnchors,
   collectPersonSeeds,
   collectNameSeeds,
@@ -48,7 +51,9 @@ const PRIORITY = {
 };
 
 function isProtectedProfessionalDomain(text, start, end, credentialRanges) {
-  return isCredentialIssuerDomain(text, start, end, credentialRanges) ||
+  const visibleCredentialLabel = text[start - 1] === '[' && text[end] === ']' &&
+    inCredentialContext(text, start, end, credentialRanges);
+  return visibleCredentialLabel || isCredentialIssuerDomain(text, start, end, credentialRanges) ||
     isCatalogTechnologyTerm(text, start, end);
 }
 
@@ -63,6 +68,33 @@ function growOverHonorific(text, span) {
   const m = before.match(HONORIFIC_PREFIX_RE);
   if (!m) return span;
   return { ...span, start: span.start - m[1].length };
+}
+
+function growOverMarkdownLabel(text, span) {
+  if (span.start > 0 && span.end < text.length && text[span.start - 1] === '[' &&
+      text[span.end] === ']' && (text[span.end + 1] === '(' || text[span.end + 1] === '[')) {
+    return { ...span, start: span.start - 1, end: span.end + 1 };
+  }
+  return span;
+}
+
+function isExplicitPersonOccurrence(text, span, coveringOrganizations = []) {
+  const before = text.slice(Math.max(0, span.start - 180), span.start);
+  const linePrefix = before.slice(before.lastIndexOf('\n') + 1);
+  if (new RegExp(`(?:^|\\|)\\s*${PERSON_LABEL}\\s*(?::|\\|)\\s*$`, 'iu').test(linePrefix)) {
+    // "Kunde" is intentionally accepted as a person label for documents such
+    // as "Kunde: Max Mustermann", but it is also a strong organisation label.
+    // A legal-form organisation at this exact position wins; otherwise the
+    // same words would be emitted twice as ORGANIZATION and PERSON spans and
+    // OCR would over-redact company names. Suffixless values keep the person
+    // interpretation, while an explicit person occurrence elsewhere remains
+    // independent from this position-bound decision.
+    const ambiguousCustomerLabel = /(?:^|\|)[ \t]*(?:Kunde|Kundin)[ \t]*(?::|\|)[ \t]*$/iu.test(linePrefix);
+    if (ambiguousCustomerLabel && coveringOrganizations.some((org) => ORG_SUFFIX_TAIL_RE.test(org.text))) return false;
+    return true;
+  }
+  if (HONORIFIC_PREFIX_RE.test(before)) return true;
+  return /(?:Zertifikat|Bescheinigung|certificate|credential)\s+(?:für|for)\s*$/iu.test(linePrefix);
 }
 
 function findLiteralSpans(text, needle, replacement, type, priority) {
@@ -99,6 +131,9 @@ function buildPersonDictionary(seeds, reg) {
     const canonical = titleCase(seed.value);
     const ph = reg.assign('PERSON', canonical);
     entries.push({ value: seed.value, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
+    if (seed.matchValue && seed.matchValue !== seed.value) {
+      entries.push({ value: seed.matchValue, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
+    }
     if (canonical !== seed.value) {
       entries.push({ value: canonical, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
     }
@@ -106,6 +141,7 @@ function buildPersonDictionary(seeds, reg) {
     const surname = toks[toks.length - 1];
     if (!seed.noSurnameAlias && looksSurname(surname) && surname.length >= 3 && !surnameToPlaceholder.has(key(surname))) {
       surnameToPlaceholder.set(key(surname), ph);
+      if (typeof reg.remember === 'function') reg.remember('PERSON', surname, ph);
     }
   }
 
@@ -117,6 +153,9 @@ function buildPersonDictionary(seeds, reg) {
     const ph = existing || reg.assign('PERSON', canonical);
     if (!existing) surnameToPlaceholder.set(key(canonical), ph);
     entries.push({ value: seed.value, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
+    if (seed.matchValue && seed.matchValue !== seed.value) {
+      entries.push({ value: seed.matchValue, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
+    }
     if (canonical !== seed.value) {
       entries.push({ value: canonical, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
     }
@@ -142,8 +181,10 @@ function buildOrgDictionary(text, reg, profile, findings) {
   for (const org of orgs) {
     const existing = reg.lookup('ORG', org);
     const ph = existing || reg.assign(profile === 'personnel_profile' ? 'CUSTOMER' : 'ORG', org);
-    if (typeof reg.remember === 'function') reg.remember('ORG', org, ph);
-    else reg.map.set(`ORG:${key(org)}`, ph);
+    if (!existing) {
+      if (typeof reg.remember === 'function') reg.remember('ORG', org, ph);
+      else reg.map.set(`ORG:${key(org)}`, ph);
+    }
     findings.push({ type: 'ORGANIZATION', value_hash: hashShort(org) });
   }
 
@@ -159,7 +200,8 @@ function buildOrgDictionary(text, reg, profile, findings) {
       priority: PRIORITY.ORGANIZATION
     });
     const alias = orgAlias(value);
-    if (alias.length >= 5 && alias !== value && !isAllowedOrg(alias)) {
+    const distinctiveAlias = /\s/u.test(alias) || /^(?=.*[A-ZÄÖÜ])[A-ZÄÖÜ0-9&.+\-]{3,}$/u.test(alias);
+    if (alias.length >= 5 && alias !== value && distinctiveAlias && !isAllowedOrg(alias)) {
       entries.push({
         value: alias,
         placeholder: ph,
@@ -184,7 +226,7 @@ function buildOrgDictionary(text, reg, profile, findings) {
 }
 
 function anonymize(text, profile = 'general', options = {}) {
-  const src = normalizeText(text);
+  const src = canonicalizeRenderedText(text);
   const findings = [];
   const reg = options.registry || makeRegistry();
   const sourceCredentialRanges = credentialContextSpans(src);
@@ -192,7 +234,7 @@ function anonymize(text, profile = 'general', options = {}) {
     findLiteralSpans(src,org,'','ORGANIZATION',PRIORITY.ORGANIZATION)
   );
 
-  const strongPersonAnchors = collectPersonAnchors(src);
+  const strongPersonAnchors = collectPersonAnchors(src, profile);
   const seeds = collectPersonSeeds(src, profile, strongPersonAnchors).filter((seed) => {
     const occurrences=findLiteralSpans(src,seed.value,'','PERSON',PRIORITY.PERSON);
     if(!occurrences.length) return true;
@@ -200,7 +242,7 @@ function anonymize(text, profile = 'general', options = {}) {
     // exactly like a person's full name. If every occurrence is contained in
     // a longer legal-form organisation, the organisation interpretation is
     // unambiguous and must win before person priorities are applied.
-    if (occurrences.every((span) =>
+    if (!['label', 'honorific', 'credential_holder'].includes(seed.confidence) && occurrences.every((span) =>
       sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)
     )) return false;
     // A certification section is professional content in every document type.
@@ -256,13 +298,19 @@ function anonymize(text, profile = 'general', options = {}) {
   for (const entry of dictionary) {
     const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority);
     for (const span of found) {
+      const coveringOrganizations = organizationCoverage.filter((org) =>
+        span.start >= org.start && span.end <= org.end
+      );
       if ((entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS') &&
-          organizationCoverage.some((org) => span.start >= org.start && span.end <= org.end)) continue;
+          coveringOrganizations.length > 0 &&
+          !isExplicitPersonOccurrence(out, span, coveringOrganizations)) continue;
       if ((entry.type === 'ORGANIZATION' || entry.type === 'PROJECT') &&
           (credentialOrganizationRole(out, span.start, span.end, credentialRanges) !== 'private' ||
            isTechnologyOrganizationSpan(out, span.start, span.end))) continue;
       spans.push(
-        span.type === 'PERSON' || span.type === 'PERSON_ALIAS' ? growOverHonorific(out, span) : span
+        span.type === 'PERSON' || span.type === 'PERSON_ALIAS'
+          ? growOverMarkdownLabel(out, growOverHonorific(out, span))
+          : span
       );
     }
   }
@@ -313,7 +361,7 @@ function anonymize(text, profile = 'general', options = {}) {
 // things: that no direct identifier pattern is left, and that no literal the
 // redactor claimed to have replaced survives in the output.
 function scanResidual(text, profile = 'general', knownValues = [], options = {}) {
-  const clean = normalizeText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
+  const clean = canonicalizeRenderedText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
   const credentialRanges = credentialContextDetails(clean);
   const out = scanStructured(clean)
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
@@ -424,7 +472,11 @@ function sensitiveSpans(text, profile = 'general') {
       // name-shaped substring inside a longer legal-form organisation is not
       // a second person finding. A separate occurrence outside that company
       // span remains detectable as a person.
-      if (sourceOrgSpans.some((org) => span.start >= org.start && span.end <= org.end)) continue;
+      const coveringOrganizations = sourceOrgSpans.filter((org) =>
+        span.start >= org.start && span.end <= org.end
+      );
+      if (coveringOrganizations.length > 0 &&
+          !isExplicitPersonOccurrence(src, span, coveringOrganizations)) continue;
       add('PERSON', span.start, span.end, span.text);
     }
   }

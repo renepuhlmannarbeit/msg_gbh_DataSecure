@@ -56,11 +56,17 @@ function plainLine(line) {
 function markdownTableCellRanges(line, offset) {
   const ranges = [];
   const source = String(line || '');
-  if (!source.trimStart().startsWith('|')) return ranges;
-  let start = source.indexOf('|') + 1;
+  if (!source.includes('|')) return ranges;
+  const leading = source.match(/^\s*/u)[0].length;
+  const trailing = source.match(/\s*$/u)[0].length;
+  const startsWithPipe = source[leading] === '|';
+  const visibleEnd = source.length - trailing;
+  const endsWithPipe = source[visibleEnd - 1] === '|';
+  let start = startsWithPipe ? leading + 1 : leading;
+  const bodyEnd = endsWithPipe ? visibleEnd - 1 : visibleEnd;
   let escaped = false;
-  for (let index = start; index <= source.length; index++) {
-    const atEnd = index === source.length;
+  for (let index = start; index <= bodyEnd; index++) {
+    const atEnd = index === bodyEnd;
     const char = source[index];
     if (!atEnd && escaped) { escaped = false; continue; }
     if (!atEnd && char === '\\') { escaped = true; continue; }
@@ -123,9 +129,10 @@ function credentialContextDetails(text) {
       hasCredentialTitle(clean.slice(issuer[0].length));
     // Unknown compact titles can also introduce an unresolved training-party
     // relationship. A section heading is not required for local review.
-    const unknownPortfolio = clean.length <= 240 &&
-      /\b(?:Expert|Professional|Tester|Practitioner)\s+bei\s+/u.test(clean) &&
-      collectOrganizations(clean).length > 0;
+    const unknownPortfolio = clean.length <= 240 && (
+      /\b(?:Expert|Professional|Tester|Practitioner)\s+bei\s+/u.test(clean) && collectOrganizations(clean).length > 0 ||
+      /\b(?:Zertifikat\s+erworben|Schulung|Training)\s+bei\s+[\p{Lu}\p{Lt}][^\n,;]{0,120}\b(?:Akademie|Academy|Institut|Institute|Universität|University|Stiftung|Foundation|Verband|Association|Board|Council|Organisation|Organization)\b/iu.test(clean)
+    );
     const explicitCue = hasCredentialCue(clean);
     if((section && clean && !/^:?-{3,}:?$/.test(clean)) || explicitCue || recognisedPortfolio || unknownPortfolio) {
       spans.push({
@@ -200,7 +207,18 @@ function credentialIssuerAmbiguities(originalText, anonymizedText) {
   for(const context of details) {
     const contextText=original.slice(context.start,context.end);
     const issuerRe=new RegExp(CERT_ISSUER_RE.source, `${CERT_ISSUER_RE.flags.replace(/g/g,'')}g`);
-    const values=[...collectOrganizations(contextText), ...Array.from(contextText.matchAll(issuerRe), (match)=>match[0])];
+    const unknownIssuerRe=/\b(?:bei|at|with)\s+([\p{Lu}\p{Lt}][\p{L}\p{M}\p{N}.&'’+\-]*(?:[ \t]+[\p{Lu}\p{Lt}][\p{L}\p{M}\p{N}.&'’+\-]*){0,5}[ \t]+(?:Akademie|Academy|Institut|Institute|Universität|University|Stiftung|Foundation|Verband|Association|Board|Council|Organisation|Organization))(?=[ \t]*(?:(?:für|of|in|am|aus)\b|[.,;:]|$))/giu;
+    const values=[
+      ...collectOrganizations(contextText),
+      ...Array.from(contextText.matchAll(issuerRe), (match)=>match[0]),
+      ...Array.from(contextText.matchAll(unknownIssuerRe), (match)=>match[1])
+    ].map((value) => {
+      // Broad legal-form extraction intentionally accepts leading sentence
+      // words elsewhere. For a credential decision, keep that professional
+      // wording outside the selectable organisation span.
+      const parts=String(value).split(/\b(?:für|bei|von|durch|at|with)\s+/iu);
+      return normalizeSpaces(parts[parts.length-1]);
+    });
     const spans=values.flatMap((value)=>literalMatches(contextText,value))
       .sort((a,b)=>a.start-b.start || b.end-a.end);
     const covered=[];

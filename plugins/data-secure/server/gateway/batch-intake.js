@@ -34,6 +34,8 @@ function createBatchIntake(options = {}) {
   const platform = options.platform || process.platform;
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
   const intakeIntent = options.intakeIntent || createBatchIntakeIntent(options);
+  const createBatchPseudonymState = options.createBatchPseudonymState ||
+    require('../batch-pseudonym-context').createBatchPseudonymState;
 
   function journalPublicationState(expected) {
     try {
@@ -217,6 +219,7 @@ function createBatchIntake(options = {}) {
         ...(ttl === 0 ? { zero_day_work: true, intake_owner_pid: process.pid } : {}),
         profile,
         remove_images: beginOptions.removeImages === true,
+        ...createBatchPseudonymState({ randomBytes: crypto.randomBytes }),
         io_summary: createPrivateIoSummary({
           snapshot_preflight_runs: 1,
           snapshot_copy_files: candidates.length,
@@ -225,7 +228,7 @@ function createBatchIntake(options = {}) {
         items
       };
       writeState(state);
-      try { intakeIntent.remove(token); } catch { /* a published journal owns this tree now */ }
+      try { intakeIntent.remove(token, intent); } catch { /* a published journal owns this tree now */ }
       return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
     } catch (error) {
       // A parent-directory fsync can fail after the complete journal rename.
@@ -235,7 +238,7 @@ function createBatchIntake(options = {}) {
       if (createdWork && workIdentity && (!state || journalPublicationState(state) === 'absent')) {
         try {
           safeRemoveWorkDirectory(token, { expectedIdentity: workIdentity });
-          if (intent) intakeIntent.remove(token);
+          if (intent) intakeIntent.remove(token, intent);
         } catch { /* preserve primary error and ownership evidence */ }
       }
       if (error instanceof SafeError) throw error;

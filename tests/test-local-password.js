@@ -47,4 +47,26 @@ test('the consumer sees an ephemeral Buffer that is wiped after success and fail
   assert.ok(observed.every((byte) => byte === 0));
 });
 
+test('a failed password helper cannot authenticate partial stdout', async () => {
+  const partial = Buffer.from('partial-secret');
+  let consumed = false;
+  await assert.rejects(() => withLocalPassword(async () => {
+    consumed = true;
+  }, {
+    platform: 'linux', runner: () => ({ status: 2, stdout: partial })
+  }), (error) => error.code === 'LOCAL_PASSWORD_CANCELLED');
+  assert.strictEqual(consumed, false);
+  assert.ok(partial.every((byte) => byte === 0));
+});
+
+test('timeout and startup errors wipe every partial password byte', async () => {
+  for (const code of ['ETIMEDOUT', 'EIO', 'ENOENT']) {
+    const partial = Buffer.from(`partial-${code}`);
+    await assert.rejects(() => withLocalPassword(async () => assert.fail('no consumer'), {
+      platform: 'linux', runner: () => ({ error: { code }, stdout: partial })
+    }));
+    assert.ok(partial.every((byte) => byte === 0), `${code} must wipe child output`);
+  }
+});
+
 done();

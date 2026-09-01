@@ -29,6 +29,15 @@ function hasReparseComponent(target){
   while(true){if(fs.existsSync(probe)){try{if(fs.lstatSync(probe).isSymbolicLink())return true;}catch{return true;}}
     const parent=path.dirname(probe);if(parent===probe)return false;probe=parent;}
 }
+async function hasReparseComponentAsync(target,fsApi=fs){
+  let probe=path.resolve(String(target));
+  const io=fsApi.promises||fs.promises;
+  while(true){
+    try{if((await io.lstat(probe)).isSymbolicLink())return true;}
+    catch(error){if(error?.code!=='ENOENT')return true;}
+    const parent=path.dirname(probe);if(parent===probe)return false;probe=parent;
+  }
+}
 function isManagedStagingPath(target){
   const relative=path.relative(path.join(privacyRoot(),'.datasecure-staging'),path.resolve(String(target)));
   return relative===''||(!path.isAbsolute(relative)&&relative!=='..'&&!relative.startsWith(`..${path.sep}`));
@@ -203,4 +212,4 @@ function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();cons
 };
   if(score.personnel_profile>=3)return'personnel_profile';const ranked=Object.entries(score).filter(([k])=>k!=='personnel_profile').sort((a,b)=>b[1]-a[1]);return ranked[0][1]>=2?ranked[0][0]:'general';}
 
-module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,isManagedStagingPath,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};
+module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,hasReparseComponentAsync,isManagedStagingPath,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};

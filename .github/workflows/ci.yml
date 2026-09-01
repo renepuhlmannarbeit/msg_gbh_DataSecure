@@ -10,6 +10,7 @@ on:
       - '.github/workflows/**'
       - 'benchmarks/**'
       - 'docs/canonical/**'
+      - 'docs/acceptance/UAT_TEST_KIT/**'
       - 'native/**'
       - 'plugins/**'
       - 'scripts/**'
@@ -23,6 +24,7 @@ on:
       - '.github/workflows/**'
       - 'benchmarks/**'
       - 'docs/canonical/**'
+      - 'docs/acceptance/UAT_TEST_KIT/**'
       - 'native/**'
       - 'plugins/**'
       - 'scripts/**'
@@ -71,5 +73,5 @@ jobs:
       - name: Install locked development-only test oracles
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Run the cost-capped security regression set
-        run: npm run test:ci
+      - name: Run the cost-capped product regression set
+        run: npm run test:product:ci

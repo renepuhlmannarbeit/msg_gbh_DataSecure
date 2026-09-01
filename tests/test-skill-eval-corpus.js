@@ -73,6 +73,18 @@ test('each local start finishes without polling or reading and uses the right pi
   assert.strictEqual(byId.get('no-image-removal-consent').expected_route, 'dialog');
 });
 
+test('a mixed recursive folder stops as a whole instead of becoming a silent supported subset', () => {
+  const item = byId.get('mixed-format-folder');
+  assert.strictEqual(item.workflow_stage, 'preflight-stop');
+  assert.strictEqual(item.expected_route, 'folder');
+  assert.deepStrictEqual(item.expected_tools, ['start_document_batch_from_picker']);
+  requireOutcomes(item.id, 'required_outcomes', [
+    'source_kind_folder', 'complete_folder_preflight',
+    'stop_whole_folder_on_blocked_format', 'report_content_free_counts'
+  ]);
+  requireOutcomes(item.id, 'forbidden_outcomes', ['silently_process_supported_subset', 'claim_batch_started']);
+});
+
 test('combined initial requests explain two steps but never authorize automatic handoff', () => {
   for (const id of ['single-contract-docx', 'multiple-mixed-docx', 'no-image-removal-consent', 'tender-and-contract-comparison']) {
     requireOutcomes(id, 'required_outcomes', ['explain_two_steps_before_start', 'require_later_explicit_handoff_request']);

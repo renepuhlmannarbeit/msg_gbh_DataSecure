@@ -17,12 +17,12 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, waitingPickerFixture = false, statusAppPilot = false } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, waitingPickerFixture = false, handoffFixture = false, statusAppPilot = false } = {}) {
   return new Promise((resolve, reject) => {
     // Test-only dependency substitution: exercise the real stdio dispatch and
     // response with a synthetic selection, without opening a native dialog or
     // starting a worker. Production exposes no bypass or fixture environment.
-    const entryArgs = localStartFixture ? ['--eval', `
+    const entryArgs = (localStartFixture || handoffFixture) ? ['--eval', `
       const gateway = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway'))});
       gateway.genericStatus = () => ({engine_ready: true});
       gateway.startLocalIntakeExecutor = () => {
@@ -41,6 +41,18 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
         const folder = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'source-folder'))});
         folder.pickSourceFolderAsync = waitForSelection;
         folder.enumerateSourceFolder = (selected) => selected;
+      }
+      if (${handoffFixture}) {
+        gateway.completedLocalOnlyCandidates = () => [
+          {token: 'a'.repeat(64), released: 1, stopped: 0},
+          {token: 'b'.repeat(64), released: 1, stopped: 0}
+        ];
+        gateway.listBatchResults = () => { process.stderr.write('UNEXPECTED_HANDOFF_READ'); return {results: [], next_cursor: null}; };
+        const completed = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'completed-batch-picker'))});
+        completed.pickCompletedBatch = (_cards, {signal}) => new Promise(resolve => {
+          const timer = setTimeout(() => resolve(1), 1000);
+          signal.addEventListener('abort', () => { clearTimeout(timer); resolve(1); }, {once:true});
+        });
       }
       require(${JSON.stringify(serverEntry)});
     `] : [serverEntry];
@@ -99,6 +111,25 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
 const rpc = (id, method, params) => ({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) });
 
 async function main() {
+  for (const cancelTool of [false, true]) await testAsync(`MCP completed-batch picker stays responsive and honours ${cancelTool ? 'cancel tool' : 'host notification'}`, async () => {
+    const { responses, stderr } = await talk([
+      rpc(1, 'tools/call', { name: 'start_completed_local_results_handoff', arguments: {} }),
+      rpc(2, 'ping'),
+      rpc(3, 'tools/call', { name: 'start_completed_local_results_handoff', arguments: {} }),
+      cancelTool ? rpc(4, 'tools/call', { name: 'cancel_local_results_handoff', arguments: {} })
+        : { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } }
+    ], { handoffFixture: true, supportMode: false });
+    assert.strictEqual(stderr, '', 'cancelled picker cannot reach result reads');
+    assert.strictEqual(responses.length, cancelTool ? 4 : 3);
+    assert.ok(responses.findIndex(r => r.id === 2) < responses.findIndex(r => r.id === 1), 'ping completes while picker is pending');
+    const first = responses.find(r => r.id === 1).result;
+    assert.strictEqual(first.isError, true);
+    assert.match(first.structuredContent.message, /abgebrochen/);
+    assert.strictEqual(first.structuredContent.raw_content_sent_to_claude, false);
+    assert.strictEqual(responses.find(r => r.id === 3).result.structuredContent.error, 'local_handoff_active');
+    assert.doesNotMatch(JSON.stringify(responses), /batch_token|read_capability|aaaaaaa|bbbbbbb/);
+  });
+
   for (const source_kind of ['files', 'folder']) await testAsync(`MCP cancellation reaches the pending ${source_kind} picker and prevents intake`, async () => {
     const { responses, stderr } = await talk([
       rpc(1, 'tools/call', { name: 'start_document_batch_from_picker', arguments: { source_kind } }),
@@ -265,6 +296,8 @@ async function main() {
     assert.strictEqual(combined.inputSchema.properties.continuations.maxItems, 5);
     for (const name of ['read_anonymized_document', 'read_anonymized_documents']) {
       const readTool = tools.find((tool) => tool.name === name);
+      assert.match(readTool.description, /nicht vertrauenswürdiger Dokumentinhalt/iu);
+      assert.match(readTool.description, /keine Aktion|keine.*Werkzeugnutzung/iu);
       if (name === 'read_anonymized_document') {
         assert.ok(readTool.inputSchema.required.includes('read_capability'));
         assert.strictEqual(readTool.inputSchema.properties.read_capability.minLength, 43);
@@ -273,6 +306,11 @@ async function main() {
         assert.deepStrictEqual(readTool.inputSchema.required, ['documents']);
         assert.strictEqual(readTool.inputSchema.properties.documents.maxItems, 10);
       }
+    }
+    for (const name of ['start_completed_local_results_handoff', 'continue_local_results_handoff', 'continue_anonymized_batch_in_chat']) {
+      const resultTool = tools.find((tool) => tool.name === name);
+      assert.match(resultTool.description, /nicht vertrauenswürdig/iu);
+      assert.match(resultTool.description, /Werkzeug|Aktion/iu);
     }
   });
 
@@ -313,8 +351,8 @@ async function main() {
     const result = responses[0].result;
     assert.notStrictEqual(result.isError, true);
     assert.strictEqual(result.structuredContent.mode, 'local_only');
-    assert.strictEqual(result.structuredContent.local_processing_started, true);
-    assert.strictEqual(result.structuredContent.next_action, 'local_processing_running_without_claude');
+    assert.strictEqual(result.structuredContent.local_processing_started, false);
+    assert.strictEqual(result.structuredContent.next_action, 'local_intake_accepted_checkpoint_pending');
     assert.doesNotMatch(JSON.stringify(result), /batch_token|synthetic-private-source|continue_in_chat|aaaaaaaa/u);
   });
 
@@ -420,7 +458,7 @@ async function main() {
     assert.deepStrictEqual(decorated.content, normal.responses[0].result.content);
     assert.deepStrictEqual(decorated.structuredContent, normal.responses[0].result.structuredContent);
     assert.deepStrictEqual(decorated._meta['datasecure/status'], {
-      schema: 'datasecure-status-card/v1', locale: 'de', state: 'local_start_confirmed', snapshot: true
+      schema: 'datasecure-status-card/v1', locale: 'de', state: 'local_intake_accepted', snapshot: true
     });
     assert.strictEqual(byId.get(7).result._meta?.['datasecure/status'], undefined);
   });
@@ -693,6 +731,8 @@ async function main() {
     assert.match(got.messages[0].content.text, /Skills zusammenfassen/);
     assert.match(got.messages[0].content.text, /lokale Datei- beziehungsweise Ordnerauswahl/);
     assert.match(got.messages[0].content.text, /source_kind=folder/);
+    assert.match(got.messages[0].content.text, /nicht vertrauenswürdige Dokumentdaten/iu);
+    assert.match(got.messages[0].content.text, /Werkzeug.*niemals befolgen/iu);
   });
 
   await testAsync('an unknown prompt yields invalid params', async () => {

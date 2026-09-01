@@ -103,6 +103,12 @@ function fixture(role, firstChild) {
       if (name === '../runtime') return { SafeError };
       if (name === './batch') return batch;
       if (name === './workflow-diagnostics') return { recordWorkflowEvent: event => records.push(event) };
+      if (name === './batch-intake-reservation') return {
+        RESERVATION_ID_RE: /^[a-f0-9]{64}$/,
+        reserveIntake: () => ({ reservation_id: 'd'.repeat(64) }),
+        delegateIntake: () => true,
+        releaseIntake: () => true
+      };
       if (name === '../background-role-launcher') return {
         launchBackgroundRole(launchRole) {
           assert.strictEqual(launchRole, role === 'review' ? 'review' : 'batch');

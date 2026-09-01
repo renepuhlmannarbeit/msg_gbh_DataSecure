@@ -168,6 +168,11 @@ async function main() {
     assert.ok(value.events.includes('reviewed:FIRST:a-1'));
     assert.ok(value.events.includes('reviewed:SECOND:a-2'));
     assert.deepStrictEqual(value.items.map((item) => item.status), ['delivery_pending', 'delivery_pending']);
+    const verifiedWrites = value.writes.filter(({ snapshot }) =>
+      snapshot.items.some((item) => item.checkpoint === 'package_verified'));
+    assert.ok(verifiedWrites.length >= 2, 'each reviewed document is durably checkpointed before publication');
+    assert.ok(verifiedWrites.every(({ writeOptions }) => writeOptions === undefined),
+      'pre-publication pseudonym state must never use the non-durable journal shortcut');
   });
 
   await testAsync('later parser failure preserves the first publication and remains retryable', async () => {

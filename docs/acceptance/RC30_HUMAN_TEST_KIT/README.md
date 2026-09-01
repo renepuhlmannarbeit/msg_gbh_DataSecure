@@ -1,5 +1,8 @@
 # DataSecure RC30 – menschliches Abnahmepaket
 
+> **Historische Fixture-Basis.** Nicht als aktuelle Anleitung verwenden. Der
+> aktuelle Einstieg ist das [versionneutrale UAT-Kit](../UAT_TEST_KIT/README.md).
+
 Dieses Paket verwendet ausschließlich künstliche Daten. Es trennt die einfache
 Cowork-Nutzerreise von technischen Grenz- und Sicherheitsnachweisen. Echte Dateien
 gehören weder in den Test noch per Büroklammer in Claude.

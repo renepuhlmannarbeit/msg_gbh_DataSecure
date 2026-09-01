@@ -1,67 +1,85 @@
 # Vertrag: fortsetzbare stapelweite Pseudonyme v1
 
-Status: verbindlicher Zielvertrag · Story: BL-030.1 · Entscheidungen: DS-011,
-DS-012, DS-019, DS-020 und DS-021
-
-**Scopekorrektur DS-065:** Die nachfolgende historische Secret-/Keyring-Architektur
-ist nicht produktiv zu aktivieren. Ziel bleibt die fachliche Stabilität innerhalb
-eines Stapels; der minimale neustartfeste Kontext soll lokal ohne zusätzliche
-Verschlüsselung, Keyring, Keyfile oder Passwort auskommen. Diese Integration ist
-weiterhin BL-030.2, nicht durch den RC80-Plain-Snapshot-Pfad implementiert. Die
-alten nativen Keyring-Testpflichten sind obsolet, nicht bestanden.
+Status: **E0 implementiert** · Story: BL-030.2 · Entscheidungen: DS-011,
+DS-012, DS-019, DS-020, DS-021, DS-059 und DS-065
 
 ## Ziel und Aussagegrenze
 
-Gleich erkannte Personen beziehungsweise Organisationen erhalten innerhalb eines
-Stapelauftrags denselben Platzhalter, auch nach Programm- oder Rechnerneustart.
-Zwischen Stapeln entsteht absichtlich keine stabile Verknüpfung. Eine persistente
-Tabelle aus Rohwert und Platzhalter ist verboten.
+Dieselbe erkannte Person oder Organisation erhält innerhalb eines Stapels denselben
+Platzhalter – auch nach Prozess- oder Rechnerneustart. Zwischen Stapeln entsteht
+absichtlich keine stabile Verknüpfung. Das ist Pseudonymisierung beziehungsweise
+De-Identifizierung, keine rechtlich garantierte Anonymisierung.
 
-## Ableitung
+Der Produktpfad verwendet **keinen** Windows-Schlüsselbund, keine macOS-Keychain,
+kein Keyfile, kein Passwort und keine zusätzliche Verschlüsselung. Der für die
+Fortsetzung erforderliche Kontext liegt ausschließlich im ohnehin privaten lokalen
+DataSecure-Journal. Frühere Keyring-Verträge sind historische, nicht produktive
+Entwürfe.
 
-- Beim Snapshot-Commit entsteht ein kryptografisch zufälliger 256-Bit-`batch_secret`.
-- Der Secret wird im betriebssystemspezifischen Benutzerschutz gespeichert: Windows
-  DPAPI, macOS Keychain und Linux Secret Service. Ist der Schutz nicht verfügbar,
-  darf ein fortsetzbarer Auftrag nicht starten; Klartext-Fallback ist verboten.
-- Die Entitätsauflösung erzeugt aus Typ, versionierter Normalform und kanonischer
-  Entitätsidentität einen UTF-8-Ableitungswert. Aliasauflösung findet vor der
-  Pseudonymbildung statt.
-- Der sichtbare Bezeichner wird deterministisch aus
-  `HMAC-SHA-256(batch_secret, ruleset_version || entity_type || canonical_value)`
-  abgeleitet und als typisierter, kollisionsgeprüfter Base32-Wert ausgegeben, zum
-  Beispiel `[PERSON_7K4M2Q]`. Rohwert und Normalform werden nicht persistiert.
-- Eine Kollision innerhalb eines Stapels wird mit einer versionierten Domänentrennung
-  deterministisch verlängert. Ein stilles Zusammenführen zweier Entitäten ist
-  verboten.
-- Die laufzeitinterne Alias-Map ist nicht als Property zugänglich oder mutierbar.
-  Die PII-Engine erhält nur die begrenzten Methoden `remember` und
-  `entriesForKind` für die notwendige Aliasauflösung; die Registry selbst bleibt
-  nicht serialisierbar.
+## Persistierter Zustand
 
-## Lebenszyklus und Datenschutz
+Beim Snapshot-Commit entstehen:
 
-Der geschützte Secret gehört zum privaten Snapshot, ist niemals Teil von Mapping,
-Ergebnis, Audit, Diagnose oder MCP-Antwort und wird nach Abschluss des Stapels sofort
-gelöscht. Für pausierte oder fortsetzbare Aufträge gilt dieselbe maximale Frist von
-14 Tagen wie für Arbeitskopien. Nach Verlust oder abgelaufener Löschung des Secrets
-wird nicht mit neuen Pseudonymen weitergearbeitet; die offene Datei erhält einen
-festen terminalen Fehlercode.
+- `pseudonym_contract_version = batch-pseudonym/v1`,
+- eine feste `pseudonym_ruleset_version`,
+- ein kryptografisch zufälliger 256-Bit-`pseudonym_seed`,
+- optional eine Registry aus HMAC-Aliasbindungen und
+  Platzhalter/Kollisions-Digests.
 
-Die deterministische Ableitung ist Pseudonymisierung, keine rechtliche Anonymisierung.
-Wer Secret und Kandidatenwerte besitzt, kann Zuordnungen testen. Deshalb gelten
-Secret und Arbeitskopien als besonders schützenswerter lokaler Auftragszustand.
+Rohwerte, normalisierte Namen, Aliastexte und Originalfundstellen dürfen nie in
+Journal, Mapping, Audit, Diagnose oder MCP-Antwort geschrieben werden. Die
+persistierten Registry-Schlüssel sind HMAC-SHA-256-Werte; sie erlauben die
+Fortsetzung, aber kein Zurückrechnen des Rohwerts ohne Kandidatenprüfung und Seed.
 
-## Versions- und Wiederaufnahmeregel
+## Ableitung und Aliasregel
 
-Snapshot und Ergebnis speichern nur `pseudonym_contract_version` und
-`ruleset_version`. Eine begonnene Charge bleibt auf diesen Versionen fixiert. Ein
-Plugin-Update darf sie nur fortsetzen, wenn ein explizit getesteter kompatibler Leser
-vorliegt; andernfalls bleibt sie pausiert und bietet Rückrolle oder kontrollierten
-Neustart an. Bereits freigegebene Dateien werden nie erneut pseudonymisiert.
+Der Platzhalter wird deterministisch aus der versionierten Normalform abgeleitet:
+
+`HMAC-SHA-256(seed, ruleset || entity_type || canonical_value)`
+
+Die Ausgabe ist typisiert und Base32-kodiert, zum Beispiel
+`[PERSON_7K4M2Q9X4P]`. Personen, Organisationen, Kunden und Projekte verwenden
+getrennte Domänen. Kollisionen werden deterministisch verlängert; zwei Entitäten
+dürfen nie still zusammengeführt werden.
+
+Aliasformen werden vor dem nächsten Dokument als HMAC-Bindung persistiert. Teilt
+sich mehr als eine Person denselben Nachnamen, erhält dieser mehrdeutige Alias einen
+eigenen stabilen Platzhalter und wird keinem Vollnamen nachträglich neu zugeordnet.
+Statische fachliche Arbeitgebermarker wie `[ARBEITGEBER_001]` bleiben absichtlich
+nur aktionslokal und werden nicht als Rohwertbindung persistiert.
+
+## Laufzeit- und Fehlergrenze
+
+Während genau einer begrenzten Verarbeitung darf eine flüchtige Rohwert-Aliasmap im
+Speicher existieren. Vor einer Dokumentveröffentlichung wird ihr rohwertfreier
+Registryzustand dauerhaft ins Journal geschrieben. Danach – auch bei Parser-,
+Publikations- oder Persistenzfehler – werden Registry und Seedkopie verworfen.
+
+Fehlende, teilweise, manipulierte, übergroße oder inkompatible Zustände stoppen
+fail-closed. Maximal 10.000 Bindungen und 10.000 Kollisionsreservierungen sind
+zulässig; das gesamte Journal ist zusätzlich auf 2 MiB begrenzt. Bereits
+veröffentlichte Dateien werden bei einer Fortsetzung nicht erneut verarbeitet.
+
+## Lebenszyklus
+
+Seed und HMAC-Bindungen bleiben nur so lange erhalten wie das private lokale
+Stapeljournal: bis Abschluss und kontrollierter Bereinigung, ausdrücklichem
+Verwerfen/Purge oder Ablauf der konfigurierten Frist von 0 bis 14 Tagen. Eine
+„sichere physische Löschung“ auf SSD, synchronisierten Dateisystemen oder Backups
+wird nicht versprochen. Quellen und fertige Exporte sind niemals Ziel dieser
+automatischen Bereinigung.
 
 ## Verpflichtende Gegenproben
 
-Tests müssen gleiche Entitäten über mehrere Dateien und Neustarts, unterschiedliche
-Stapel, Aliasformen, Unicode-Normalisierung, Typtrennung, künstliche Kollisionen,
-Secret-Verlust, Ablauf nach 14 Tagen, Rollback sowie die Abwesenheit von Rohwerten in
-Snapshot, Journal, Export, Diagnose und MCP-Ausgaben belegen.
+Automatisierte Tests belegen:
+
+- gleiche Entität und Aliasformen über mehrere Registry-Instanzen/Neustarts,
+- unterschiedliche Stapel, Typtrennung, Unicode-Normalisierung und Kollisionen,
+- geteilte Nachnamen ohne Rebinding,
+- manipulierte, inkompatible und übergroße Zustände fail-closed,
+- dauerhaftes Pre-Publish-Checkpointing,
+- Cleanup auch bei Aktions- oder Persistenzfehlern,
+- keine Rohwerte im serialisierten Zustand.
+
+Echte Windows-/macOS-Crash-, Neustart- und Cowork-Fortsetzung bleiben E1/E2-
+Abnahme und sind keine weitere Keyring-Aufgabe.

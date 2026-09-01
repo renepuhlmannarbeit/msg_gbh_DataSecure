@@ -8,8 +8,10 @@ const { createSuite } = require('./helpers');
 const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
 const {
   DEFAULT_RETENTION_DAYS,
+  MAX_RETENTION_DAYS,
   retentionDays,
   inspectProcessedProtection,
+  removeReviewPreviews,
   cleanupLocalData,
   dueCounts,
   purgeLocalData,
@@ -62,6 +64,7 @@ test('retention configuration defaults safely and accepts zero', () => {
   assert.strictEqual(retentionDays({}), DEFAULT_RETENTION_DAYS);
   assert.strictEqual(retentionDays({ EU_PRIVACY_RETENTION_DAYS: '0' }), 0);
   assert.strictEqual(retentionDays({ EU_PRIVACY_RETENTION_DAYS: '14' }), 14);
+  assert.strictEqual(retentionDays({ EU_PRIVACY_RETENTION_DAYS: '365' }), MAX_RETENTION_DAYS);
   assert.strictEqual(retentionDays({ EU_PRIVACY_RETENTION_DAYS: '-1' }), DEFAULT_RETENTION_DAYS);
   assert.strictEqual(retentionDays({ EU_PRIVACY_RETENTION_DAYS: 'n/a' }), DEFAULT_RETENTION_DAYS);
 });
@@ -104,6 +107,33 @@ test('automatic retention cleans review previews but preserves output and histor
   assert.strictEqual(meta.preview_expired, true);
   assert.strictEqual(meta.preview_file, null);
   assert.ok(fs.existsSync(audit), 'audit evidence must never be part of retention cleanup');
+});
+
+test('review cleanup preserves a replacement that appears after descriptor inspection', () => {
+  const r = sandbox('preview-replacement-race');
+  const dir = reviewItem(r, 'review', 8);
+  const preview = path.join(dir, 'asset-001.png');
+  const originalClose = fs.closeSync;
+  let replaced = false;
+  fs.closeSync = (fd) => {
+    originalClose(fd);
+    if (!replaced) {
+      replaced = true;
+      fs.unlinkSync(preview);
+      fs.writeFileSync(preview, 'replacement that must survive');
+    }
+  };
+  let result;
+  try {
+    result = removeReviewPreviews(dir, r.review, NOW);
+  } finally {
+    fs.closeSync = originalClose;
+  }
+  assert.strictEqual(result.removed, 0);
+  assert.ok(result.failures.length >= 1);
+  assert.strictEqual(fs.readFileSync(preview, 'utf8'), 'replacement that must survive');
+  const meta = JSON.parse(fs.readFileSync(path.join(dir, 'asset-001.review.json'), 'utf8'));
+  assert.strictEqual(meta.preview_file, 'asset-001.png');
 });
 
 test('hidden staging and current-job directories are never touched', () => {
@@ -372,11 +402,11 @@ test('evidence write failures stay visible without leaking a document name and h
   const dir = reviewItem(root, 'Paket_sensitive-customer', 9);
   const metaPath = path.join(dir, 'asset-001.review.json');
   const failingFs = Object.create(fs);
-  failingFs.writeFileSync = (target, ...args) => {
+  failingFs.renameSync = (source, target) => {
     if (path.resolve(target) === path.resolve(metaPath)) {
       throw new Error('cannot update Paket_sensitive-customer');
     }
-    return fs.writeFileSync(target, ...args);
+    return fs.renameSync(source, target);
   };
 
   const failed = cleanupLocalData({

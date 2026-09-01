@@ -1,89 +1,88 @@
 'use strict';
 
-// Lifecycle half of BATCH_PSEUDONYM_V1. The caller persists only the opaque
-// batch token plus CONTRACT_VERSION; the secret itself lives exclusively in
-// the native OS credential store. This module is intentionally not wired to
-// MCP until the native keyring matrix has passed on every released target.
+// Restart-stable batch pseudonyms without a keyring or a raw-value mapping.
+// The random seed is part of the already-private local batch journal. It is
+// never projected into MCP responses, diagnostics, mappings or result packs.
 
 const crypto = require('crypto');
-const { createBatchSecretStore } = require('./batch-secret-store');
+const { PRIVACY_RULESET_VERSION } = require('./privacy/policy');
 const {
   SECRET_BYTES,
   CONTRACT_VERSION,
   createBatchPseudonymRegistry
 } = require('./batch-pseudonym-registry');
 
+const ENCODED_SEED_RE = /^[A-Za-z0-9_-]{43}$/u;
+
 function unavailable(message = 'Der lokale Stapel-Pseudonymkontext ist nicht verfügbar.') {
   const error = new Error(message);
-  error.code = 'PSEUDONYM_SECRET_UNAVAILABLE';
+  error.code = 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE';
   return error;
 }
 
-function storeFor(batchToken, options = {}) {
-  const factory = options.createStore || createBatchSecretStore;
-  try {
-    return factory(batchToken, options.storeOptions || {});
-  } catch {
-    throw unavailable();
-  }
-}
-
-function provisionBatchPseudonymContext(batchToken, options = {}) {
-  const store = storeFor(batchToken, options);
+function createBatchPseudonymState(options = {}) {
   const randomBytes = options.randomBytes || crypto.randomBytes;
-  let secret;
+  let seed;
   try {
-    secret = randomBytes(SECRET_BYTES);
-    if (!Buffer.isBuffer(secret) || secret.length !== SECRET_BYTES) throw unavailable();
-    store.set(secret);
-    return Object.freeze({
-      contract: CONTRACT_VERSION,
-      account: String(batchToken)
-    });
-  } catch {
-    // A backend may fail after partially writing. Best-effort removal is the
-    // only safe rollback; no file or locally encrypted fallback is permitted.
-    try { store.remove(); } catch { /* original fixed failure remains */ }
-    throw unavailable();
+    seed = randomBytes(SECRET_BYTES);
+    if (!Buffer.isBuffer(seed) || seed.length !== SECRET_BYTES) throw unavailable();
+    return {
+      pseudonym_contract_version: CONTRACT_VERSION,
+      pseudonym_ruleset_version: PRIVACY_RULESET_VERSION,
+      pseudonym_seed: seed.toString('base64url')
+    };
   } finally {
-    if (Buffer.isBuffer(secret)) secret.fill(0);
+    if (Buffer.isBuffer(seed)) seed.fill(0);
   }
 }
 
-async function withBatchPseudonymRegistry(batchToken, action, options = {}) {
+function validateBatchPseudonymState(state) {
+  if (!state || state.pseudonym_contract_version !== CONTRACT_VERSION ||
+      state.pseudonym_ruleset_version !== PRIVACY_RULESET_VERSION ||
+      typeof state.pseudonym_seed !== 'string' || !ENCODED_SEED_RE.test(state.pseudonym_seed)) {
+    throw unavailable('Der Stapel besitzt keinen kompatiblen Pseudonymkontext. Bitte die Originaldateien neu auswählen.');
+  }
+  const seed = Buffer.from(state.pseudonym_seed, 'base64url');
+  if (seed.length !== SECRET_BYTES) {
+    seed.fill(0);
+    throw unavailable('Der Stapel besitzt keinen kompatiblen Pseudonymkontext. Bitte die Originaldateien neu auswählen.');
+  }
+  return seed;
+}
+
+async function withBatchPseudonymRegistry(state, action, options = {}) {
   if (typeof action !== 'function') throw unavailable();
-  const store = storeFor(batchToken, options);
-  let secret;
+  let seed;
   let registry;
   try {
-    secret = store.get();
-    if (!Buffer.isBuffer(secret) || secret.length !== SECRET_BYTES) throw unavailable();
-    registry = createBatchPseudonymRegistry(secret);
+    seed = validateBatchPseudonymState(state);
+    registry = createBatchPseudonymRegistry(seed, {
+      rulesetVersion: state.pseudonym_ruleset_version,
+      persistedState: state.pseudonym_registry_state
+    });
     return await action(registry);
   } catch (error) {
-    if (error?.code === 'PSEUDONYM_SECRET_UNAVAILABLE') throw error;
-    // Errors raised by the processing callback must retain their existing
-    // fixed code. Only keyring/read/registry setup failures are normalized.
-    if (registry) throw error;
+    // Processing failures retain their domain-specific error. Only context
+    // setup/validation is normalized to a fixed, content-free failure.
+    if (registry || error?.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE') throw error;
     throw unavailable();
   } finally {
-    if (registry) registry.dispose();
-    if (Buffer.isBuffer(secret)) secret.fill(0);
-  }
-}
-
-function removeBatchPseudonymContext(batchToken, options = {}) {
-  const store = storeFor(batchToken, options);
-  try {
-    store.remove();
-    return true;
-  } catch {
-    throw unavailable('Der lokale Stapel-Pseudonymkontext konnte nicht sicher gelöscht werden.');
+    try {
+      if (registry) {
+        const snapshot = registry.exportState();
+        state.pseudonym_registry_state = snapshot;
+        if (typeof options.persist === 'function') options.persist(state);
+      }
+    } finally {
+      if (registry) registry.dispose();
+      if (Buffer.isBuffer(seed)) seed.fill(0);
+    }
   }
 }
 
 module.exports = {
-  provisionBatchPseudonymContext,
-  withBatchPseudonymRegistry,
-  removeBatchPseudonymContext
+  ENCODED_SEED_RE,
+  createBatchPseudonymState,
+  validateBatchPseudonymState,
+  withBatchPseudonymRegistry
 };

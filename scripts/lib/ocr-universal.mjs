@@ -4,6 +4,45 @@ import path from 'node:path';
 
 const TARGETS = ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64'];
 
+function validateUniversalManifest(manifest, options = {}) {
+  const keys = ['components', 'contract', 'files', 'models', 'release_enabled', 'schema', 'target', 'targets'];
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) ||
+    Object.keys(manifest).sort().join(',') !== keys.join(',') ||
+    manifest.schema !== 'data-secure-ocr-runtime-bundle/v2' || manifest.target !== 'universal' ||
+    manifest.release_enabled !== (options.releaseEnabled ?? false) ||
+    manifest.contract !== 'data-secure-ocr-result/v1' ||
+    JSON.stringify(manifest.models) !== JSON.stringify(['deu', 'eng']) ||
+    !Array.isArray(manifest.components) || manifest.components.length !== 13 ||
+    manifest.components.some((item) => !item || typeof item !== 'object' || Array.isArray(item) ||
+      Object.keys(item).sort().join(',') !== 'license,license_file,name,version' ||
+      !['license', 'license_file', 'name', 'version'].every((key) => typeof item[key] === 'string' && item[key])) ||
+    !Array.isArray(manifest.files) || manifest.files.length !== 243 ||
+    JSON.stringify(manifest.targets?.map((item) => item.target)) !== JSON.stringify(TARGETS)) {
+    throw new Error('OCR_UNIVERSAL_MANIFEST_INVALID');
+  }
+  for (const item of manifest.targets) {
+    const name = item.target === 'windows-x64' ? 'datasecure-ocr-sandbox.exe' : 'datasecure-ocr-sandbox';
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+      Object.keys(item).sort().join(',') !== 'launcher,source_manifest_sha256,target' ||
+      item.launcher !== `targets/${item.target}/${name}` ||
+      !/^[a-f0-9]{64}$/u.test(String(item.source_manifest_sha256))) {
+      throw new Error('OCR_UNIVERSAL_TARGET_INVALID');
+    }
+  }
+  const expected = new Set();
+  for (const item of manifest.files) {
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+      Object.keys(item).sort().join(',') !== 'bytes,path,sha256' || expected.has(item.path) ||
+      !Number.isSafeInteger(item.bytes) || item.bytes < 0 || !/^[a-f0-9]{64}$/u.test(String(item.sha256)) ||
+      typeof item.path !== 'string' || item.path.includes('\\') ||
+      item.path.split('/').some((part) => !part || part === '.' || part === '..')) {
+      throw new Error('OCR_UNIVERSAL_INVENTORY_INVALID');
+    }
+    expected.add(item.path);
+  }
+  return expected;
+}
+
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
@@ -29,31 +68,9 @@ function validateUniversalRuntime(directory, options = {}) {
     throw new Error('OCR_UNIVERSAL_MANIFEST_INVALID');
   }
   const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
-  if (manifest.schema !== 'data-secure-ocr-runtime-bundle/v2' || manifest.target !== 'universal' ||
-    manifest.release_enabled !== (options.releaseEnabled ?? false) ||
-    manifest.contract !== 'data-secure-ocr-result/v1' ||
-    JSON.stringify(manifest.models) !== JSON.stringify(['deu', 'eng']) ||
-    !Array.isArray(manifest.components) || manifest.components.length !== 13 ||
-    !Array.isArray(manifest.files) || manifest.files.length !== 243 ||
-    JSON.stringify(manifest.targets?.map((item) => item.target)) !== JSON.stringify(TARGETS)) {
-    throw new Error('OCR_UNIVERSAL_MANIFEST_INVALID');
-  }
-  for (const item of manifest.targets) {
-    const name = item.target === 'windows-x64' ? 'datasecure-ocr-sandbox.exe' : 'datasecure-ocr-sandbox';
-    if (item.launcher !== `targets/${item.target}/${name}` ||
-      !/^[a-f0-9]{64}$/u.test(String(item.source_manifest_sha256))) {
-      throw new Error('OCR_UNIVERSAL_TARGET_INVALID');
-    }
-  }
-  const expected = new Set();
+  const expected = validateUniversalManifest(manifest, options);
   let bytes = 0;
   for (const item of manifest.files) {
-    if (!item || expected.has(item.path) || !Number.isSafeInteger(item.bytes) || item.bytes < 0 ||
-      !/^[a-f0-9]{64}$/u.test(String(item.sha256)) || item.path.includes('\\') ||
-      item.path.split('/').some((part) => !part || part === '.' || part === '..')) {
-      throw new Error('OCR_UNIVERSAL_INVENTORY_INVALID');
-    }
-    expected.add(item.path);
     bytes += item.bytes;
     const file = path.join(root, ...item.path.split('/'));
     const info = fs.lstatSync(file);
@@ -72,4 +89,4 @@ function validateUniversalRuntime(directory, options = {}) {
   return { root, manifest, manifestSha256: sha256(manifestFile), bytes, files: manifest.files.length + 1 };
 }
 
-export { TARGETS, validateUniversalRuntime };
+export { TARGETS, validateUniversalManifest, validateUniversalRuntime };

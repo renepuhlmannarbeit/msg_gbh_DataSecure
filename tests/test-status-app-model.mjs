@@ -16,6 +16,7 @@ for (const [error, next_action, state, started = false] of [
   ['local_start_failed', 'restart_only_on_explicit_request', 'start_blocked'],
   ['local_engine_unavailable', 'restart_only_on_explicit_request', 'engine_unavailable'],
   ['batch_active', 'wait_for_local_release_before_retry', 'already_running', true],
+  ['batch_active', 'no_action', 'already_running', false],
 ]) test(error, () => assert.equal(model.projectStartResult({ ok: false, error, next_action, local_processing_started: started, raw_content_sent_to_claude: false }).state, state));
 test('malformed/conflicting start data cannot confirm completion or start', () => {
   for (const result of [null, [], {}, { ...success, ok: 'true' }, { ...success, local_processing_started: false }, { ...success, raw_content_sent_to_claude: true }, { ...success, mode: 'continue_in_chat' }, { ...success, next_action: 'completed' }]) assert.equal(model.projectStartResult(result).state, 'unavailable');

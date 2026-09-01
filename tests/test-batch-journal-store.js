@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
-const { createBatchJournalStore } = require('../plugins/data-secure/server/gateway/batch-journal-store');
+const { createBatchJournalStore, MAX_JOURNAL_BYTES } = require('../plugins/data-secure/server/gateway/batch-journal-store');
 const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { createSuite } = require('./helpers');
 
@@ -96,6 +96,17 @@ test('writeState integrates positive short writes and zero-progress failure atom
   }
 });
 
+test('writeState rejects an oversized otherwise-valid journal before creating a temp file', () => {
+  const item = fixture();
+  try {
+    const oversized = state({ pseudonym_contract_version: 'batch-pseudonym/v1',
+      pseudonym_ruleset_version: 'de-business/2', pseudonym_seed: 'A'.repeat(43),
+      pseudonym_registry_state: { labels: [], bindings: [] }, padding: 'x'.repeat(MAX_JOURNAL_BYTES) });
+    assert.throws(() => item.store.writeState(oversized), /BATCH_JOURNAL_SIZE_LIMIT/);
+    assert.strictEqual(fs.existsSync(item.target), false);
+  } finally { item.cleanup(); }
+});
+
 test('failures before rename preserve the old journal and clean only the exact temp file', () => {
   for (const phase of ['file-fsync', 'close', 'rename']) {
     const item = fixture();
@@ -116,7 +127,11 @@ test('failures before rename preserve the old journal and clean only the exact t
       });
       assert.throws(() => failing.writeState(state({ revision: 2 })), new RegExp(phase.replace('-', '_'), 'i'));
       assert.strictEqual(raw(item.target), before, phase);
-      assert.strictEqual(fs.existsSync(item.temporary), false, phase);
+      assert.strictEqual(fs.existsSync(item.temporary), phase === 'rename', phase);
+      if (phase === 'rename') {
+        assert.strictEqual(JSON.parse(raw(item.temporary)).revision, 2,
+          'when quarantine rename is unavailable, the bound temp is preserved rather than unlinked by path');
+      }
     } finally {
       item.cleanup();
     }
@@ -175,7 +190,7 @@ test('transient Windows rename failures retry bounded without weakening atomic p
       retryDelay: () => {}
     });
     assert.throws(() => bounded.writeState(state({ revision: 3 }), { durable: false }), /still busy/);
-    assert.strictEqual(attempts, 4);
+    assert.strictEqual(attempts, 5, 'four bounded publication attempts plus one identity-bound temp cleanup');
     assert.strictEqual(JSON.parse(raw(item.target)).revision, 2);
   } finally {
     item.cleanup();
@@ -216,7 +231,7 @@ test('a replaced journal target is never overwritten by a transient rename retry
       () => guarded.writeState(state({ revision: 2 }), { durable: false }),
       /BATCH_JOURNAL_TARGET_CHANGED/
     );
-    assert.strictEqual(attempts, 1, 'replacement is detected before another rename');
+    assert.strictEqual(attempts, 2, 'replacement is detected before another publication rename; cleanup uses its own quarantine rename');
     assert.strictEqual(JSON.parse(raw(item.target)).revision, 99);
   } finally {
     item.cleanup();

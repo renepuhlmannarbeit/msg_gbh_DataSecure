@@ -5,11 +5,11 @@ const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
 const {
-  SOURCE_FOLDER_CANCELLED, sourceFolderPickerCommands, pickSourceFolder, enumerateSourceFolder
+  SOURCE_FOLDER_CANCELLED, sourceFolderPickerCommands, pickSourceFolder, enumerateSourceFolder, enumerateSourceFolderAsync
 } = require('../plugins/data-secure/server/companion/source-folder');
 const { batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
 
-const { test, done, assert } = createSuite('Secure recursive source folder');
+const { test, testAsync, done, assert } = createSuite('Secure recursive source folder');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-source-folder-'));
 
 function clean(name = 'input') {
@@ -36,18 +36,40 @@ test('folder selection cancellation is terminal and never falls back to another 
   assert.strictEqual(calls, 1);
 });
 
+test('source-folder picker never accepts partial stdout from a failed native helper', () => {
+  const root = clean('partial-picker-output');
+  assert.throws(() => pickSourceFolder({
+    platform: 'linux',
+    runner: () => ({ status: 2, stdout: root })
+  }), /nicht sicher gelesen|nicht gestartet/iu);
+});
+
 test('nested supported files are deterministic and retain collision-free relative mapping labels', () => {
   const root = clean();
   fs.mkdirSync(path.join(root, 'a'));
   fs.mkdirSync(path.join(root, 'b'));
   fs.writeFileSync(path.join(root, 'b', 'same.txt'), 'B');
   fs.writeFileSync(path.join(root, 'a', 'same.txt'), 'A');
-  fs.writeFileSync(path.join(root, 'ignored.exe'), 'not admitted');
   const selected = enumerateSourceFolder(root, { hasReparseComponent: () => false });
   assert.deepStrictEqual(selected.map((entry) => entry.sourceLabel), ['a/same.txt', 'b/same.txt']);
   const queue = batchQueueFromSelection(selected);
   assert.deepStrictEqual(queue.map((entry) => entry.name), ['same.txt', 'same.txt']);
   assert.deepStrictEqual(queue.map((entry) => entry.sourceLabel), ['a/same.txt', 'b/same.txt']);
+});
+
+test('a mixed tree is rejected as a whole instead of silently selecting supported files', () => {
+  const root = clean('mixed-formats');
+  fs.mkdirSync(path.join(root, 'nested'));
+  fs.writeFileSync(path.join(root, 'contract.docx'), 'synthetic');
+  fs.writeFileSync(path.join(root, 'nested', 'notes.txt'), 'synthetic');
+  fs.writeFileSync(path.join(root, 'presentation.pptx'), 'synthetic');
+  fs.writeFileSync(path.join(root, 'unknown.bin'), 'synthetic');
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false }), (error) => {
+    assert.match(error.message, /4 reguläre Dateien, davon 2 nicht freigegebene oder unbekannte Formate/iu);
+    assert.match(error.message, /kein Stapel gestartet/iu);
+    assert.doesNotMatch(error.message, /contract|notes|presentation|unknown|\.pptx|\.bin/iu);
+    return true;
+  });
 });
 
 test('any link or special traversal ambiguity rejects the whole tree before admission', () => {
@@ -77,7 +99,7 @@ test('depth, entry, file-count and aggregate-byte limits fail before returning a
 test('an empty or unsupported-only folder stops honestly', () => {
   const root = clean('empty');
   fs.writeFileSync(path.join(root, 'readme.exe'), 'x');
-  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false }), /keine unterstützten Dateien/iu);
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false }), /1 reguläre Datei.*1 nicht freigegebene/iu);
 });
 
 test('empty and relative roots never resolve implicitly to the process working directory', () => {
@@ -109,4 +131,82 @@ test('managed staging is excluded from both direct and recursive source intake w
   }
 });
 
-done();
+test('a selected root replacement during listing rejects the complete synchronous queue', () => {
+  const root = clean('sync-root-swap');
+  const replacement = clean('sync-root-replacement');
+  const parked = path.join(base, 'sync-root-original');
+  fs.rmSync(parked, { recursive: true, force: true });
+  fs.writeFileSync(path.join(root, 'expected.txt'), 'expected');
+  fs.writeFileSync(path.join(replacement, 'unexpected.txt'), 'unexpected');
+  const io = Object.create(fs);
+  let swapped = false;
+  io.readdirSync = (target, options) => {
+    if (!swapped && path.resolve(target) === path.resolve(root)) {
+      swapped = true;
+      fs.renameSync(root, parked);
+      fs.renameSync(replacement, root);
+    }
+    return fs.readdirSync(target, options);
+  };
+  assert.throws(() => enumerateSourceFolder(root, { fs: io, hasReparseComponent: () => false }), /verändert/iu);
+  assert.strictEqual(swapped, true);
+  assert.strictEqual(fs.readFileSync(path.join(parked, 'expected.txt'), 'utf8'), 'expected');
+  assert.strictEqual(fs.readFileSync(path.join(root, 'unexpected.txt'), 'utf8'), 'unexpected');
+});
+
+async function main() {
+  await testAsync('normal Cowork folder enumeration yields and honours cancellation without returning a partial queue', async () => {
+    const root = clean('async-cancel');
+    for (let index = 0; index < 40; index++) fs.writeFileSync(path.join(root, `${index}.txt`), 'synthetic');
+    const controller = new AbortController();
+    let yields = 0;
+    await assert.rejects(() => enumerateSourceFolderAsync(root, {
+      signal: controller.signal,
+      hasReparseComponent: () => false,
+      yieldEvery: 4,
+      yieldControl: async () => { yields++; controller.abort(); }
+    }), (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+    assert.strictEqual(yields, 1);
+  });
+  await testAsync('async enumeration also rejects a mixed tree without returning a supported subset', async () => {
+    const root = clean('async-mixed-formats');
+    fs.writeFileSync(path.join(root, 'supported.md'), 'synthetic');
+    fs.writeFileSync(path.join(root, 'blocked.pdf'), 'synthetic');
+    await assert.rejects(() => enumerateSourceFolderAsync(root, {
+      hasReparseComponentAsync: async () => false
+    }), (error) => {
+      assert.match(error.message, /2 reguläre Dateien, davon 1 nicht freigegebene oder unbekannte Formate/iu);
+      assert.doesNotMatch(error.message, /supported|blocked|\.md|\.pdf/iu);
+      return true;
+    });
+  });
+  await testAsync('a selected root replacement during async listing rejects the complete queue', async () => {
+    const root = clean('async-root-swap');
+    const replacement = clean('async-root-replacement');
+    const parked = path.join(base, 'async-root-original');
+    fs.rmSync(parked, { recursive: true, force: true });
+    fs.writeFileSync(path.join(root, 'expected.txt'), 'expected');
+    fs.writeFileSync(path.join(replacement, 'unexpected.txt'), 'unexpected');
+    let swapped = false;
+    const fsPromises = {
+      lstat: (...args) => fs.promises.lstat(...args),
+      readdir: async (target, options) => {
+        if (!swapped && path.resolve(target) === path.resolve(root)) {
+          swapped = true;
+          await fs.promises.rename(root, parked);
+          await fs.promises.rename(replacement, root);
+        }
+        return fs.promises.readdir(target, options);
+      }
+    };
+    await assert.rejects(() => enumerateSourceFolderAsync(root, {
+      fsPromises, hasReparseComponentAsync: async () => false
+    }), /verändert/iu);
+    assert.strictEqual(swapped, true);
+    assert.strictEqual(fs.readFileSync(path.join(parked, 'expected.txt'), 'utf8'), 'expected');
+    assert.strictEqual(fs.readFileSync(path.join(root, 'unexpected.txt'), 'utf8'), 'unexpected');
+  });
+  done();
+}
+
+main().catch((error) => { console.error(error); process.exitCode = 1; });

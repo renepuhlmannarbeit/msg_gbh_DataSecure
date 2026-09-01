@@ -82,7 +82,7 @@ test('packaging scripts and desktop launch manifest do not reference the adapter
 
 test('the archived credential adapter keeps its old namespace without enabling it in product', () => {
   const source = fs.readFileSync(path.join(root,
-    'plugins/data-secure/server/gateway/installation-secret-store.js'), 'utf8');
+    'tests/legacy/keyring/installation-secret-store.js'), 'utf8');
   assert.match(source, /const SERVICE_NAME = 'de\.msg\.datasecure\.private-artifacts\.v1';/u);
   assert.match(source, /const ACCOUNT_NAME = 'installation-key-v1';/u);
   assert.match(source, /new native\.Entry\(SERVICE_NAME, ACCOUNT_NAME\)/u);
@@ -125,7 +125,11 @@ test('ordinary production credential references remain allowed', () => {
 
 if (process.argv.includes('--archives')) {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  for (const archive of [`DataSecure-Privacy-Preflight-v${pkg.version}.zip`,
+  const host = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
+    : process.platform === 'darwin' && process.arch === 'x64' ? 'macos-x64'
+      : process.platform === 'darwin' && process.arch === 'arm64' ? 'macos-arm64' : null;
+  if (!host) throw new Error('ENGINEERING_ARCHIVE_HOST_UNSUPPORTED');
+  for (const archive of [`DataSecure-Privacy-Preflight-${host}-v${pkg.version}.zip`,
     `DataSecure-Privacy-Gateway-v${pkg.version}.mcpb`]) {
     test(`the current ${path.extname(archive)} contains no executable engineering adapter`, () => {
       const entries = readZip(fs.readFileSync(path.join(root, 'dist', archive)));

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc44",
+  "baseline": "3.2.0-rc84",
   "decision_ids": [
     "DS-001", "DS-002", "DS-003", "DS-004", "DS-005", "DS-006",
     "DS-007", "DS-008", "DS-009", "DS-010", "DS-011", "DS-012",
@@ -14,16 +14,17 @@
     "DS-043", "DS-044", "DS-045", "DS-046", "DS-047", "DS-048",
     "DS-049", "DS-050", "DS-051", "DS-052", "DS-053", "DS-054",
     "DS-055", "DS-056", "DS-057", "DS-058", "DS-059", "DS-060",
-    "DS-061", "DS-062", "DS-063", "DS-064", "DS-065"
+    "DS-061", "DS-062", "DS-063", "DS-064", "DS-065", "DS-066",
+    "DS-067"
   ],
   "primary_product": "claude-plugin",
   "additional_system_vm": { "runtime": false, "acceptance_tests": false },
   "additional_windows_account": { "runtime": false, "acceptance_tests": false },
   "distribution": {
     "equivalent_primary_channels": ["zip", "private-marketplace"],
-    "engineering_fallback": "mcpb",
+    "internal_engineering_artifact": "mcpb",
     "bundled_runtime": true,
-    "manual_packages": ["windows-x64", "macos-universal"]
+    "manual_packages": ["windows-x64", "macos-x64", "macos-arm64"]
   },
   "surfaces": {
     "local_original_processing": ["claude-desktop", "claude-code"],
@@ -67,7 +68,10 @@
     "keyfile_required": false,
     "password_required": false,
     "encrypted_legacy_artifacts": "preserve-without-keyring-reselect-original",
-    "successful_copy_retention_days": 0,
+    "temporary_work_and_review_retention_minimum_days": 0,
+    "temporary_work_and_review_retention_maximum_days": 14,
+    "sources_subject_to_automatic_retention": false,
+    "completed_exports_subject_to_automatic_retention": false,
     "open_copy_maximum_retention_days": 14
   },
   "output": {
@@ -77,6 +81,8 @@
     "persistent_receipt_json": true,
     "mapping_visible_to_mcp": false,
     "image_pixels_visible_to_model": false,
+    "selectable_visual_mode": false,
+    "embedded_image_default": "pixels-withheld-locally",
     "result_grades": ["complete", "usable-with-omissions", "not-processed"],
     "automatic_retention": "exports-and-mapping-excluded"
   },

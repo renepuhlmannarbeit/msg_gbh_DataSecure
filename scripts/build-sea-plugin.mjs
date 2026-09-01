@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { writeZip, readCentralModes } from './lib/zip.mjs';
-import { includeInProduct, verifyKeyringFreeProductEntries } from './lib/product-files.mjs';
+import { includeInEngineering, verifyKeyringFreeEngineeringEntries } from './lib/product-files.mjs';
 import { expectedExecutableEntries } from './lib/archive-modes.mjs';
 import { prepareLauncherProvenance, assertLauncherBuildEvidence } from './lib/sea-launcher-provenance.mjs';
 import { assertSeaDirectory, readSeaFile, seaTreeInventory, seaHash,
@@ -97,7 +97,7 @@ function assertArchivePayload(archiveBytes, expected) {
   try { entries = readZip(archiveBytes, { maxEntries: MAX_ASSEMBLY_ENTRIES, maxUncompressed: MAX_ASSEMBLY_BYTES }); }
   catch { throw new Error('SEA_ARCHIVE_PAYLOAD_INVALID'); }
   if (entries.size !== expected.files.size) throw new Error('SEA_ARCHIVE_PAYLOAD_MISMATCH');
-  verifyKeyringFreeProductEntries(entries);
+  verifyKeyringFreeEngineeringEntries(entries);
   for (const [name, bytes] of entries) {
     const record = expected.files.get(name);
     if (!record || record.bytes !== bytes.length || record.sha256 !== seaHash(bytes)) throw new Error('SEA_ARCHIVE_PAYLOAD_MISMATCH');
@@ -186,7 +186,7 @@ export function assembleSeaPlugin({ repositoryRoot = root, launchersRoot, output
   const expected = { files: new Map(), bytes: 0 };
   try {
     for (const entry of seaTreeInventory(source)) {
-      if (!includeInProduct(entry.path)) continue;
+      if (!includeInEngineering(entry.path)) continue;
       const bytes = readSeaFile(path.join(source, entry.path));
       if (bytes.length !== entry.bytes || seaHash(bytes) !== entry.sha256) throw new Error('SEA_SOURCE_CHANGED');
       writeStageFile(stage, expected, entry.path, bytes);

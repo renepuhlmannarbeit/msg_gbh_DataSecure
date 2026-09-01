@@ -13,6 +13,7 @@ const {
   positiveDocumentResult
 } = require('./document-result-grade');
 const { validatePackageIdentity } = require('./package-identity');
+const { identity, bindPrivateFile, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
 
 const SCHEMA = 'datasecure-batch/4';
 const ENCRYPTED_SCHEMA = 'datasecure-batch/3';
@@ -22,6 +23,9 @@ const NOT_FOUND = 'Batch-Sitzung wurde nicht gefunden oder ist ungültig. Bitte 
 const INVALID = 'Batch-Sitzung ist ungültig. Bitte den Eingang erneut bestätigen.';
 const EXPIRED = 'Batch-Sitzung ist abgelaufen. Bitte den Eingang erneut bestätigen.';
 const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const PSEUDONYM_VERSION_RE = /^[a-z0-9][a-z0-9._/-]{0,63}$/u;
+const PSEUDONYM_SEED_RE = /^[A-Za-z0-9_-]{43}$/u;
+const MAX_JOURNAL_BYTES = 2 * 1024 * 1024;
 
 function createBatchJournalStore(options = {}) {
   const io = options.io || fs;
@@ -39,6 +43,7 @@ function createBatchJournalStore(options = {}) {
   const ErrorType = options.SafeError || SafeError;
   const maxBatchFiles = options.maxBatchFiles || RESOURCE_LIMITS.MAX_BATCH_FILES;
   const assertZeroDayWorkAvailable = options.assertZeroDayWorkAvailable;
+  const journalBindings = new WeakMap();
 
   function temporaryJournalPath(target) {
     return `${target}.tmp_${randomBytes(6).toString('hex')}`;
@@ -61,6 +66,11 @@ function createBatchJournalStore(options = {}) {
   }
 
   function publishJournal(temporary, target) {
+    const parent = path.dirname(target);
+    const parentBefore = io.lstatSync(parent, { bigint: true });
+    const temporaryBefore = io.lstatSync(temporary, { bigint: true });
+    if (!parentBefore.isDirectory() || parentBefore.isSymbolicLink() || !temporaryBefore.isFile() ||
+        temporaryBefore.isSymbolicLink() || temporaryBefore.nlink !== 1n) throw new Error('BATCH_JOURNAL_TEMP_UNSAFE');
     const expected = targetBinding(target);
     if (!expected) throw new Error('BATCH_JOURNAL_TARGET_UNSAFE');
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -69,7 +79,20 @@ function createBatchJournalStore(options = {}) {
       }
       try {
         io.renameSync(temporary, target);
-        return;
+        const parentAfter = io.lstatSync(parent, { bigint: true });
+        const published = io.lstatSync(target, { bigint: true });
+        if (!parentAfter.isDirectory() || parentAfter.isSymbolicLink() ||
+            parentAfter.dev !== parentBefore.dev || parentAfter.ino !== parentBefore.ino ||
+            !published.isFile() || published.isSymbolicLink() || published.nlink !== 1n ||
+            published.dev !== temporaryBefore.dev || published.ino !== temporaryBefore.ino) {
+          throw new Error('BATCH_JOURNAL_PUBLICATION_UNCERTAIN');
+        }
+        return Object.freeze({
+          target: path.resolve(target),
+          parent: path.resolve(parent),
+          file: identity(published),
+          parentIdentity: Object.freeze({ dev: String(parentAfter.dev), ino: String(parentAfter.ino) })
+        });
       } catch (error) {
         if (!TRANSIENT_RENAME_CODES.has(error?.code) || attempt === 3) throw error;
         retryDelay(10 * (attempt + 1));
@@ -82,10 +105,16 @@ function createBatchJournalStore(options = {}) {
   // unconditional; only the two power-loss flushes are skipped.
   function writeState(state, writeOptions = {}) {
     rejectEncryptedState(state);
+    if (!validPseudonymState(state)) throw new Error('BATCH_PSEUDONYM_STATE_INVALID');
     const durable = writeOptions.durable !== false;
     const target = pathForToken(state.token);
     const temporary = temporaryJournalPath(target);
     const payload = Buffer.from(`${JSON.stringify(state)}\n`, 'utf8');
+    if (payload.length < 1 || payload.length > MAX_JOURNAL_BYTES) {
+      throw new Error('BATCH_JOURNAL_SIZE_LIMIT');
+    }
+    let temporaryBinding;
+    let temporaryObject;
     try {
       const fd = io.openSync(
         temporary,
@@ -93,18 +122,41 @@ function createBatchJournalStore(options = {}) {
         0o600
       );
       try {
+        const opened = io.fstatSync(fd, { bigint: true });
+        if (!opened.isFile() || opened.isSymbolicLink?.() || opened.nlink !== 1n) {
+          throw new Error('BATCH_JOURNAL_TEMP_UNSAFE');
+        }
+        temporaryObject = { dev: String(opened.dev), ino: String(opened.ino) };
         writeAll(fd, payload, io);
         if (durable) io.fsyncSync(fd);
       } finally {
         io.closeSync(fd);
       }
-      publishJournal(temporary, target);
+      temporaryBinding = bindPrivateFile(temporary, { io });
+      const binding = publishJournal(temporary, target);
+      journalBindings.set(state, binding);
       if (durable) syncParent(target, io, platform);
     } catch (error) {
       // Cleanup is deliberately bounded to the exact random temp path. After
       // rename the new complete journal may already be authoritative even if
       // the parent-directory fsync fails; the original error remains visible.
-      try { io.unlinkSync(temporary); } catch { /* absent or already renamed */ }
+      try {
+        const current = io.lstatSync(temporary, { bigint: true });
+        if (!temporaryBinding && temporaryObject && current.isFile() && !current.isSymbolicLink() &&
+            current.nlink === 1n && String(current.dev) === temporaryObject.dev && String(current.ino) === temporaryObject.ino) {
+          const parent = path.dirname(path.resolve(temporary));
+          const parentStat = io.lstatSync(parent, { bigint: true });
+          if (parentStat.isDirectory() && !parentStat.isSymbolicLink()) {
+            temporaryBinding = Object.freeze({
+              target: path.resolve(temporary),
+              parent,
+              file: identity(current),
+              parentIdentity: Object.freeze({ dev: String(parentStat.dev), ino: String(parentStat.ino) })
+            });
+          }
+        }
+        if (temporaryBinding) safeUnlinkBoundPrivateFile(temporary, { io, binding: temporaryBinding, randomBytes });
+      } catch { /* absent, already renamed or identity uncertain: never delete a replacement */ }
       throw error;
     }
   }
@@ -113,21 +165,81 @@ function createBatchJournalStore(options = {}) {
     const target = pathForToken(token);
     let descriptor;
     try {
+      const parent = path.dirname(target);
+      const parentBefore = io.lstatSync(parent, { bigint: true });
+      const named = io.lstatSync(target, { bigint: true });
       descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
-      const stat = io.fstatSync(descriptor);
-      const named = io.lstatSync(target);
-      if (!stat.isFile() || named.isSymbolicLink() || named.dev !== stat.dev || named.ino !== stat.ino) {
+      const stat = io.fstatSync(descriptor, { bigint: true });
+      if (typeof parentBefore.isDirectory !== 'function' || !parentBefore.isDirectory() ||
+          typeof parentBefore.isSymbolicLink !== 'function' || parentBefore.isSymbolicLink() ||
+          typeof stat.isFile !== 'function' || !stat.isFile() || stat.nlink !== 1n ||
+          typeof named.isSymbolicLink !== 'function' || named.isSymbolicLink() || named.nlink !== 1n || named.dev !== stat.dev || named.ino !== stat.ino ||
+          stat.size < 1n || stat.size > BigInt(MAX_JOURNAL_BYTES)) {
         throw new Error('unsafe');
       }
-      return JSON.parse(io.readFileSync(descriptor, 'utf8'));
+      const bytes = io.readFileSync(descriptor);
+      const after = io.fstatSync(descriptor, { bigint: true });
+      const namedAfter = io.lstatSync(target, { bigint: true });
+      const parentAfter = io.lstatSync(parent, { bigint: true });
+      if (BigInt(bytes.length) !== stat.size || after.dev !== stat.dev || after.ino !== stat.ino ||
+          after.size !== stat.size || after.mtimeNs !== stat.mtimeNs || after.ctimeNs !== stat.ctimeNs ||
+          namedAfter.dev !== stat.dev || namedAfter.ino !== stat.ino || namedAfter.nlink !== 1n ||
+          namedAfter.size !== stat.size || namedAfter.mtimeNs !== stat.mtimeNs || namedAfter.ctimeNs !== stat.ctimeNs ||
+          parentAfter.dev !== parentBefore.dev || parentAfter.ino !== parentBefore.ino) throw new Error('unsafe');
+      const record = JSON.parse(bytes.toString('utf8'));
+      if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('unsafe');
+      journalBindings.set(record, Object.freeze({
+        target: path.resolve(target),
+        parent: path.resolve(parent),
+        file: identity(stat),
+        parentIdentity: Object.freeze({ dev: String(parentBefore.dev), ino: String(parentBefore.ino) })
+      }));
+      return record;
     } finally {
       if (descriptor !== undefined) io.closeSync(descriptor);
     }
   }
 
+  function removeState(state) {
+    const binding = journalBindings.get(state);
+    if (!binding) throw new Error('BATCH_JOURNAL_BINDING_MISSING');
+    const removed = safeUnlinkBoundPrivateFile(pathForToken(state.token), { io, binding, randomBytes });
+    if (removed) journalBindings.delete(state);
+    return removed;
+  }
+
   function validExpiry(value) {
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  function validPseudonymState(state) {
+    const fields = ['pseudonym_contract_version', 'pseudonym_ruleset_version', 'pseudonym_seed'];
+    const present = fields.filter((field) => Object.hasOwn(state || {}, field));
+    // Pre-RC batches remain listable/retirable, but processing refuses them in
+    // batch-pseudonym-context. Partial or malformed state is never accepted.
+    if (present.length === 0) return !Object.hasOwn(state || {}, 'pseudonym_registry_state');
+    if (!(present.length === fields.length &&
+      PSEUDONYM_VERSION_RE.test(String(state.pseudonym_contract_version || '')) &&
+      PSEUDONYM_VERSION_RE.test(String(state.pseudonym_ruleset_version || '')) &&
+      typeof state.pseudonym_seed === 'string' && PSEUDONYM_SEED_RE.test(state.pseudonym_seed) &&
+      Buffer.from(state.pseudonym_seed, 'base64url').length === 32)) return false;
+    if (!Object.hasOwn(state, 'pseudonym_registry_state')) return true;
+    const snapshot = state.pseudonym_registry_state;
+    if (!snapshot || Object.keys(snapshot).sort().join(',') !== 'bindings,labels' ||
+        !Array.isArray(snapshot.bindings) || !Array.isArray(snapshot.labels) ||
+        snapshot.bindings.length > 10000 || snapshot.labels.length > 10000) return false;
+    const placeholders = new Set();
+    for (const pair of snapshot.labels) {
+      if (!Array.isArray(pair) || pair.length !== 2 ||
+          !/^\[(?:PERSON|ORGANISATION|KUNDE|PROJEKT)_[A-Z2-7]{10,52}\]$/u.test(String(pair[0])) ||
+          !/^[A-Za-z0-9_-]{43}$/u.test(String(pair[1])) || placeholders.has(String(pair[0]))) return false;
+      placeholders.add(String(pair[0]));
+    }
+    const aliases = new Set();
+    return snapshot.bindings.every((pair) => Array.isArray(pair) && pair.length === 2 &&
+      /^[A-Za-z0-9_-]{43}$/u.test(String(pair[0])) && placeholders.has(String(pair[1])) &&
+      !aliases.has(String(pair[0])) && Boolean(aliases.add(String(pair[0]))));
   }
 
   function validPreflightItem(item, schema) {
@@ -228,7 +340,7 @@ function createBatchJournalStore(options = {}) {
 
   function validStateShape(state, token) {
     const supportedSchema = [SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
-    return state?.token === token && supportedSchema &&
+    return state?.token === token && supportedSchema && validPseudonymState(state) &&
       Array.isArray(state?.items) && state.items.length > 0 &&
       state.items.length <= maxBatchFiles &&
       state.items.every((item) => validPreflightItem(item, state.schema)) &&
@@ -255,7 +367,7 @@ function createBatchJournalStore(options = {}) {
       rejectRenamedEncryptedCopies(state);
       try {
         removeWorkDirectory(token);
-        io.unlinkSync(pathForToken(token));
+        removeState(state);
       } catch { /* fail closed below */ }
       throw new ErrorType(EXPIRED);
     }
@@ -275,7 +387,7 @@ function createBatchJournalStore(options = {}) {
     return state;
   }
 
-  return { writeState, readState, readStateForMaintenance };
+  return { writeState, readState, readStateForMaintenance, removeState };
 }
 
-module.exports = { SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, createBatchJournalStore };
+module.exports = { SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, MAX_JOURNAL_BYTES, createBatchJournalStore };

@@ -35,7 +35,7 @@ test('a locally picked queue creates a sealed batch without manual Input staging
   assert.strictEqual(fs.readFileSync(source, 'utf8'), original, 'discarding DataSecure work never deletes or changes the source');
 });
 
-test('equal basenames from different folders receive independent opaque batch identities', () => {
+test('equal basenames receive independent identities and minimally disambiguated local mapping labels', () => {
   const leftDir = path.join(base, 'left');
   const rightDir = path.join(base, 'right');
   fs.mkdirSync(leftDir, { recursive: true });
@@ -53,9 +53,10 @@ test('equal basenames from different folders receive independent opaque batch id
   assert.strictEqual(batch.ok, true);
   const state = _test.readState(batch.batch_token);
   assert.deepStrictEqual(state.items.map((item) => item.name), ['profil.txt', 'profil.txt']);
+  assert.deepStrictEqual(state.items.map((item) => item.source_label), ['left/profil.txt', 'right/profil.txt']);
   assert.strictEqual(new Set(state.items.map((item) => item.id)).size, 2);
   assert.strictEqual(new Set(state.items.map((item) => item.work_name)).size, 2);
-  assert.doesNotMatch(JSON.stringify(state), /\\left\\|\\right\\|\/left\/|\/right\//u);
+  assert.doesNotMatch(JSON.stringify(state), new RegExp(base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'u'));
   assert.strictEqual(fs.readFileSync(left, 'utf8'), 'Kontakt: Erika Beispiel');
   assert.strictEqual(fs.readFileSync(right, 'utf8'), 'Kontakt: Max Beispiel');
   assert.strictEqual(discardIncompleteBatches({ confirmed: true }).ok, true);

@@ -1,9 +1,10 @@
 # Architekturentscheidung v3.2 RC2
 
-Statushinweis RC14 (21.08.2026): Die Grundentscheidung gilt fort. Der aktuelle
-Umsetzungs- und Release-Stand steht in `README.md`, `docs/RELEASE.md` und
-`docs/COMPANION_IPC_V1.md`; bei abweichenden Detailaussagen sind diese neueren
-Dokumente maßgeblich.
+Historischer Stand. Dieses Dokument ist nicht mehr entscheidungsführend. Maßgeblich
+sind `docs/canonical/DECISIONS.md`, `docs/canonical/TARGET_ARCHITECTURE.md`,
+`docs/canonical/BACKLOG.md` und der aktuelle Release-Stand in `README.md`.
+Insbesondere ersetzen DS-002 und DS-066 den früheren MCPB-Primärweg sowie die
+Annahme, Cowork selbst müsse lokal ausgeführt werden.
 
 ## Entscheidung
 

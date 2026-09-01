@@ -32,8 +32,8 @@ function app(options = {}) { return createStatusApp({ env: enabledEnv, ...option
 const started = {
   content: [{ type: 'text', text: 'unchanged text' }],
   structuredContent: {
-    ok: true, mode: 'local_only', local_intake_pending: true, local_processing_started: true,
-    next_action: 'local_processing_running_without_claude', raw_content_sent_to_claude: false
+    ok: true, mode: 'local_only', local_intake_pending: true, local_processing_started: false,
+    next_action: 'local_intake_accepted_checkpoint_pending', raw_content_sent_to_claude: false
   }, isError: false
 };
 
@@ -99,7 +99,7 @@ try {
     assert.strictEqual(response.structuredContent, started.structuredContent);
     assert.strictEqual(response.isError, started.isError);
     assert.deepStrictEqual(response._meta['datasecure/status'], {
-      schema: 'datasecure-status-card/v1', locale: 'en', state: 'local_start_confirmed', snapshot: true
+      schema: 'datasecure-status-card/v1', locale: 'en', state: 'local_intake_accepted', snapshot: true
     });
     assert.strictEqual(server.toolResult('continue_local_results_handoff', started), started);
     assert.strictEqual(server.toolResult('diagnostic_status', started), started);

@@ -15,6 +15,7 @@ function createBatchDiscard(options = {}) {
   const releaseActiveLock = options.releaseActiveLock;
   const recoverableBatchStates = options.recoverableBatchStates;
   const liveLocalExecutor = options.liveLocalExecutor;
+  const removeState = options.removeState;
 
   function discardIncompleteBatches() {
     const maintenanceToken = randomBytes(32).toString('hex');
@@ -30,7 +31,7 @@ function createBatchDiscard(options = {}) {
         // snapshot. It never touches originals, published output packages,
         // the durable local mapping ledger or terminal evidence.
         removeWorkDirectory(state.token);
-        io.unlinkSync(journalPath(state.token));
+        removeState(state);
         discarded += 1;
       }
       return { ok: true, discarded_batches: discarded, raw_content_sent_to_claude: false };

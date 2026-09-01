@@ -503,6 +503,23 @@ test('the same words can be an organisation alias and an explicit person without
   assert.deepStrictEqual(residual, []);
 });
 
+test('an ambiguous customer label distinguishes a legal-form company from a natural person', () => {
+  const company = anonymizeVerified('Kunde: Google Germany GmbH', 'customer');
+  assert.match(company.text, /^Kunde: \[ORGANISATION_\d+\]$/u);
+  assert.doesNotMatch(company.text, /\[PERSON_\d+\]/u);
+  assert.deepStrictEqual(company.residual, []);
+
+  const person = anonymizeVerified('Kunde: Max Mustermann', 'customer');
+  assert.match(person.text, /^Kunde: \[PERSON_\d+\]$/u);
+  assert.doesNotMatch(person.text, /\[ORGANISATION_\d+\]/u);
+  assert.deepStrictEqual(person.residual, []);
+
+  const spans = pii.sensitiveSpans('Kunde: Google Germany GmbH', 'customer');
+  assert.deepStrictEqual(spans.map(({ type, text }) => ({ type, text })), [
+    { type: 'ORGANIZATION', text: 'Google Germany GmbH' }
+  ]);
+});
+
 test('ordinary prose connectors never pull professional text into an organisation span', () => {
   const cases = [
     ['Leistung: Entwicklung und Test der SAP SE Schnittstelle.', 'Leistung: Entwicklung und Test der [ORGANISATION_001] Schnittstelle.'],
@@ -999,6 +1016,341 @@ test('the anchor parameter defaults to the safe direction', () => {
   );
   const suppressed = collectHeaderNameCandidates('Jung, Dennis\n', 'personnel_profile', 40, true);
   assert.deepStrictEqual(suppressed, [], 'an explicit anchor still enables the exclusion');
+});
+
+test('rendered Markdown and HTML encodings cannot hide direct identifiers', () => {
+  const variants = [
+    'Name: Anna&#32;Beispiel',
+    'Name: **Anna Beispiel**',
+    'Name: `Anna Beispiel`',
+    'Name: <span>Anna Beispiel</span>',
+    'Name: [Anna Beispiel](mailto:anna@example.de)',
+    'Name: [Anna Beispiel][profil]\n\n[profil]: https://example.invalid/profil',
+    'Name: Anna<span></span> Beispiel',
+    'E-Mail: anna@example&#46;de'
+  ];
+  for (const source of variants) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assert.doesNotMatch(result.text, /Anna|Beispiel|anna@example/iu, source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+});
+
+test('GFM tables with optional outer pipes use the same privacy labels', () => {
+  for (const outer of [false, true]) {
+    const open = outer ? '| ' : '';
+    const close = outer ? ' |' : '';
+    const source = [
+      `${open}Full Name | Zertifizierungen${close}`,
+      `${open}--- | ---${close}`,
+      `${open}Anna Beispiel | Scrum.org PSM I${close}`
+    ].join('\n');
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assertAbsent(result.text, 'Anna Beispiel', 'table person');
+    assertPresent(result.text, 'Scrum.org PSM I', 'credential');
+    assert.deepStrictEqual(result.residual, []);
+  }
+});
+
+test('common CSV and DOCX-style person and organisation headers are covered', () => {
+  for (const header of ['Full Name', 'Employee Name', 'Candidate Name', 'Contact Name', 'Mitarbeitername']) {
+    const result = anonymizeVerified(`| ${header} | E-Mail |\n| --- | --- |\n| Anna Beispiel | anna@example.de |`, 'personnel_profile');
+    assertAbsent(result.text, 'Anna Beispiel', header);
+    assert.deepStrictEqual(result.residual, []);
+  }
+  for (const header of ['Organization', 'Employer Name', 'Customer Organization', 'Vendor', 'Supplier']) {
+    const result = anonymizeVerified(`| ${header} | Rolle |\n| --- | --- |\n| ACME | Product Owner |`, 'personnel_profile');
+    assertAbsent(result.text, 'ACME', header);
+    assertPresent(result.text, 'Product Owner', 'role');
+    assert.deepStrictEqual(result.residual, []);
+  }
+});
+
+test('explicit contract and customer labels redact suffixless organisations', () => {
+  for (const [profile, source] of [
+    ['contract', 'Vertragspartei: ACME'],
+    ['contract', 'Vertragspartei: Universitätsklinikum Köln'],
+    ['customer', 'Client: North Health Service'],
+    ['customer', 'Company: ACME']
+  ]) {
+    const result = anonymizeVerified(source, profile);
+    assert.match(result.text, /\[ORGANISATION_\d+\]/u, source);
+    assert.deepStrictEqual(result.residual, []);
+  }
+});
+
+test('German public-sector and partnership legal forms are organisations', () => {
+  for (const organization of [
+    'Beispiel Klinik gGmbH', 'Beispiel Genossenschaft eG', 'Beispiel Partner PartG',
+    'Beispiel Klinik AöR', 'Beispiel Versorgung KdöR', 'Beispiel Stiftung'
+  ]) {
+    const result = anonymizeVerified(`Vertragspartei: ${organization}`, 'contract');
+    assertAbsent(result.text, organization, 'legal-form organisation');
+    assert.deepStrictEqual(result.residual, []);
+  }
+});
+
+test('professional relationship prefixes remain while the same organisation stays consistent', () => {
+  for (const prefix of ['Softwareentwicklung für', 'Training bei', 'Testmanagement bei', 'FHIR-Entwicklung für', 'Aufgaben bei']) {
+    const result = anonymizeVerified(`${prefix} Contoso GmbH\nContoso GmbH`, 'personnel_profile');
+    assert.match(result.text, new RegExp(`^${prefix} \\[KUNDE_001\\]`, 'u'));
+    assert.strictEqual((result.text.match(/\[KUNDE_001\]/gu) || []).length, 2);
+    assert.strictEqual((result.text.match(/\[KUNDE_002\]/gu) || []).length, 0);
+  }
+});
+
+test('Unicode spaces and dashes do not bypass identifier detection', () => {
+  for (const source of [
+    'IBAN: DE89\u00a03704\u202f0044\u20070532\u00a00130\u00a000',
+    'Telefon: +49\u00a0221\u202f555\u20071234',
+    'Adresse: 50667\u00a0Köln',
+    'Telefon: +49\u2011221\u2010555\u20131234',
+    'Telefon: +49\u2212221\u2212555\u22121234'
+  ]) {
+    const result = anonymizeVerified(source, 'customer');
+    assert.deepStrictEqual(result.residual, [], source);
+    assert.match(result.text, /\[(?:BANK_DATA|PHONE|LOCATION)_REDACTED\]/u, source);
+  }
+});
+
+test('profile names in headings, quotes and lists are direct identifiers', () => {
+  for (const prefix of ['# ', '## ', '> ', '- ']) {
+    const result = anonymizeVerified(`${prefix}Anna Beispiel`, 'personnel_profile');
+    assertAbsent(result.text, 'Anna Beispiel', prefix);
+    assert.deepStrictEqual(result.residual, []);
+  }
+});
+
+test('credential review selects the precise organisation and unknown academies', () => {
+  for (const source of [
+    'Zertifizierungen\nProjekt für Contoso GmbH',
+    'Zertifizierungen\nZertifikat erworben bei Nordlicht Akademie',
+    'Zertifizierungen\nTraining bei Contoso Academy'
+  ]) {
+    const anonymized = anonymize(source, 'personnel_profile').text;
+    const ambiguities = credentialIssuerAmbiguities(source, anonymized);
+    assert.strictEqual(ambiguities.length, 1, source);
+    const selected = anonymized.slice(ambiguities[0].anonymized_start, ambiguities[0].anonymized_end);
+    assert.doesNotMatch(selected, /Projekt für|Training bei|erworben bei/iu, source);
+    assert.match(selected, /Contoso GmbH|Nordlicht Akademie|Contoso Academy/u, source);
+  }
+});
+
+test('rendered markup, named entities and metadata cannot hide identifiers', () => {
+  for (const source of [
+    'Name: Anna&Tab;Beispiel',
+    'E-Mail: anna@example&period;de',
+    'Name: An<!--synthetic-->na Beispiel',
+    'Name: **Anna** Beispiel',
+    'Name: [Anna](synthetic-profile) Beispiel',
+    '[Profil](https://example.test "Anna Beispiel")',
+    '![Anna Beispiel](photo.png)',
+    '<img src="photo.png" alt="Anna Beispiel">',
+    '<abbr title="Anna Beispiel">Profil</abbr>'
+  ]) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assertAbsent(result.text, 'Anna Beispiel', source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+});
+
+test('entity projection is idempotent and cannot introduce forbidden controls', () => {
+  for (const source of ['Fachtext: A&amp;nbsp;B', 'Fachtext: &amp;lt;tag&amp;gt;', 'Name: Anna&amp;#32;Beispiel']) {
+    const once = anonymize(source, 'personnel_profile').text;
+    const twice = anonymize(once, 'personnel_profile').text;
+    assert.strictEqual(twice, once, source);
+  }
+  for (const source of ['Text: &#0; Ende', 'Text: &#1; Ende']) {
+    const output = anonymize(source, 'general').text;
+    assert.doesNotMatch(output, /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u);
+  }
+});
+
+test('multiple structural profile names and suffixless customer labels are all private', () => {
+  const people = anonymizeVerified('# Anna Beispiel\nAnsprechpartner: Bob Muster', 'personnel_profile');
+  assertAbsent(people.text, 'Anna Beispiel');
+  assertAbsent(people.text, 'Bob Muster');
+  for (const source of ['Kunde: medidata', 'Customer: ACME']) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assert.match(result.text, /\[KUNDE_001\]/u, source);
+  }
+});
+
+test('extended legal forms and relationship prose preserve only professional context', () => {
+  for (const organization of [
+    'Beispiel gUG (haftungsbeschränkt)', 'Beispiel e.K.', 'Beispiel VVaG', 'Beispiel PartG mbB',
+    'Beispiel Anstalt des öffentlichen Rechts', 'Beispiel S.L.', 'Beispiel N.V.', 'Beispiel S.r.l.'
+  ]) {
+    const result = anonymizeVerified(`Projekt für ${organization}`, 'personnel_profile');
+    assert.strictEqual(result.text, 'Projekt für [KUNDE_001]', organization);
+  }
+  for (const prefix of ['Entwicklung für', 'Beratung für', 'Konzeption für', 'Architektur bei', 'Software Engineer at', 'Tester im Projekt bei', 'Worked at']) {
+    const result = anonymizeVerified(`${prefix} Contoso GmbH`, 'personnel_profile');
+    assert.strictEqual(result.text, `${prefix} [KUNDE_001]`, prefix);
+  }
+});
+
+test('credential links retain visible issuer wording and unknown qualified issuers require review', () => {
+  const linked = anonymizeVerified('Zertifizierungen\n[Scrum.org](https://www.scrum.org) Professional Scrum Master I', 'personnel_profile');
+  assertPresent(linked.text, '[Scrum.org]([URL_REDACTED]) Professional Scrum Master I');
+  for (const source of [
+    'Zertifizierungen\nZertifikat erworben bei Nordlicht Akademie für Weiterbildung',
+    'Schulung bei Nordlicht Akademie in Berlin'
+  ]) {
+    const output = anonymize(source, 'personnel_profile').text;
+    assert.strictEqual(credentialIssuerAmbiguities(source, output).length, 1, source);
+  }
+});
+
+test('explicit person fields redact lower-case values in text and CSV tables', () => {
+  for (const source of ['Name: anna beispiel', 'Ansprechpartner: anna beispiel']) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assertAbsent(result.text, 'anna beispiel', source);
+    assert.match(result.text, /\[PERSON_001\]/u, source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+  const csvMarkdown = '| Name | Firma |\n| --- | --- |\n| anna beispiel | Beispiel GmbH |';
+  const result = anonymizeVerified(csvMarkdown, 'personnel_profile');
+  assertAbsent(result.text, 'anna', 'lower-case CSV forename');
+  assertAbsent(result.text, 'beispiel', 'lower-case CSV surname');
+  assert.deepStrictEqual(result.residual, []);
+});
+
+test('explicit person fields cover comma names, initials, particles and spaced CJK names', () => {
+  const cases = [
+    ['Name: Mustermann, Max', 'Mustermann, Max'],
+    ['Name: Max A. Mustermann', 'Max A. Mustermann'],
+    ["Name: O'Connor, Liam", "O'Connor, Liam"],
+    ['Name: van der Meer, Jan', 'van der Meer, Jan'],
+    ['姓名: 李 小龙', '李 小龙'],
+    ['姓名: 王 伟', '王 伟'],
+    ['姓名: 김 민준', '김 민준']
+  ];
+  for (const [source, privateValue] of cases) {
+    const { text, residual } = anonymizeVerified(source, 'personnel_profile');
+    assertAbsent(text, privateValue, 'explicit person value');
+    assert.match(text, /\[PERSON_\d+\]/u);
+    assert.deepStrictEqual(residual, []);
+  }
+});
+
+test('explicit person fields cover single values, long particles, suffixes and titled comma names', () => {
+  const cases = [
+    ['Vorname: Anna', 'Anna'],
+    ['Nachname: Mustermann', 'Mustermann'],
+    ['Name: Li', 'Li'],
+    ['Name: 李', '李'],
+    ['Name: María del Carmen de la Cruz', 'María del Carmen de la Cruz'],
+    ['Name: Martin Luther King Jr.', 'Martin Luther King Jr.'],
+    ['Name: Mustermann, Dr. Max', 'Mustermann, Dr. Max']
+  ];
+  for (const [source, privateValue] of cases) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assertAbsent(result.text, privateValue, source);
+    assert.match(result.text, /\[PERSON_\d+\]/u, source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+});
+
+test('same-line professional roles stay outside explicit person spans', () => {
+  const cases = [
+    'Name: Martin Luther King Jr. – Product Owner',
+    'Name: Mustermann, Dr. Max | Product Owner',
+    'Name: María del Carmen de la Cruz, Product Owner',
+    'Name: Martin Luther King Jr., Product Owner'
+  ];
+  for (const source of cases) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assert.match(result.text, /^Name: \[PERSON_\d+\].*Product Owner$/u, source);
+    assert.strictEqual((result.text.match(/Product Owner/gu) || []).length, 1, source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+});
+
+test('rendered HTML boundaries cannot join or hide an explicit person name', () => {
+  for (const source of ['Name: Anna<br>Beispiel', 'Name: <div>Anna</div><div>Beispiel</div>']) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assertAbsent(result.text, 'Anna', source);
+    assertAbsent(result.text, 'Beispiel', source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+});
+
+test('generic Markdown structures are not person evidence outside profile documents', () => {
+  const sources = [
+    '1. Digital Health', '1. Data Governance', '[^1]: Clinical Research',
+    '[Privacy Policy](https://example.org)', '![Company Logo](logo.png)'
+  ];
+  for (const profile of ['general', 'contract', 'customer']) {
+    for (const source of sources) {
+      const result = anonymizeVerified(source, profile);
+      assert.doesNotMatch(result.text, /\[PERSON_\d+\]/u, `${profile}: ${source}`);
+      assert.deepStrictEqual(result.residual, [], `${profile}: ${source}`);
+    }
+  }
+});
+
+test('professional Markdown phrases remain content rather than person candidates', () => {
+  const cases = [
+    'Kompetenzen\n1. Digitale Transformation',
+    'Aufgaben\n- [ ] Cloud Migration',
+    '[^1]: Medical Informatics',
+    'Kompetenzen: [Digitale Transformation](https://example.org)',
+    'Technologien: [Azure Functions](https://example.org)'
+  ];
+  for (const source of cases) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assert.doesNotMatch(result.text, /\[PERSON_\d+\]/u);
+    assert.deepStrictEqual(result.residual, []);
+  }
+});
+
+test('ordered lists, task lists, footnotes and reference titles cannot carry a profile name', () => {
+  for (const source of [
+    '1. Anna Beispiel', '1) Anna Beispiel', '- [ ] Anna Beispiel', '- [x] Anna Beispiel',
+    '[^1]: Anna Beispiel', '[Profil]: /intern "Anna Beispiel"\nSiehe [Profil].'
+  ]) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assertAbsent(result.text, 'Anna Beispiel', source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+});
+
+test('bidi controls and every Unicode space separator cannot split a labelled name', () => {
+  for (const separator of ['\u2066', '\u2067', '\u2068', '\u202A', '\u202B', '\u202C', '\u202D', '\u202E', '\u2003', '\u1680', '\u205F', '\u3000']) {
+    const result = anonymizeVerified(`Name: Anna${separator}Beispiel`, 'personnel_profile');
+    assertAbsent(result.text, 'Anna', `separator U+${separator.codePointAt(0).toString(16)}`);
+    assert.deepStrictEqual(result.residual, [], separator);
+  }
+});
+
+test('escaped comparisons and programming generics remain visible content', () => {
+  const escaped = anonymizeVerified('Grenzwert &lt; 5 und Leistung &gt; 3', 'general');
+  assert.strictEqual(escaped.text, 'Grenzwert < 5 und Leistung > 3');
+  const generic = anonymizeVerified('List<Customer> und Map<String, Object>', 'general');
+  assert.strictEqual(generic.text, 'List<Customer> und Map<String, Object>');
+});
+
+test('a one-word legal-form alias does not replace ordinary prose globally', () => {
+  for (const alias of ['Beispiel', 'Muster', 'Partner', 'Projekt', 'System', 'Service', 'Consulting', 'Testfall']) {
+    const result = anonymizeVerified(`Arbeitgeber: ${alias} GmbH\nDies ist ein ${alias.toLocaleLowerCase('de-DE')} für Testautomatisierung.`, 'personnel_profile');
+    assert.match(result.text, /^Arbeitgeber: \[ARBEITGEBER_001\]/u, alias);
+    assertPresent(result.text, `ein ${alias.toLocaleLowerCase('de-DE')} für`, alias);
+  }
+});
+
+test('credential review keeps professional sentence prefixes outside the organisation span', () => {
+  for (const source of [
+    'Zertifizierungen\nWorkshop für Contoso GmbH',
+    'Zertifizierungen\nFallstudie für Contoso GmbH',
+    'Zertifizierungen\nPraxisprojekt bei Contoso GmbH',
+    'Zertifizierungen\nProjektübung für Contoso GmbH'
+  ]) {
+    const output = anonymize(source, 'personnel_profile').text;
+    const ambiguities = credentialIssuerAmbiguities(source, output);
+    assert.strictEqual(ambiguities.length, 1, source);
+    assert.strictEqual(output.slice(ambiguities[0].anonymized_start, ambiguities[0].anonymized_end), 'Contoso GmbH', source);
+  }
 });
 
 done();

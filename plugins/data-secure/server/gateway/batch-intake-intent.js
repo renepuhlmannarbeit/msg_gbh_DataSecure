@@ -4,6 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 const { TOKEN_RE, batchPath, workPath, safeRemoveWorkDirectory } = require('./batch-private-store');
+const {
+  identity: boundIdentity,
+  bindPrivateFile,
+  safeUnlinkBoundPrivateFile
+} = require('./bound-private-file');
 const { processAlive } = require('./process-liveness');
 
 const SUFFIX = '.intake';
@@ -17,7 +22,10 @@ function createBatchIntakeIntent(options = {}) {
   const journalPath = options.batchPath || batchPath;
   const workDirectory = options.workPath || workPath;
   const removeWork = options.safeRemoveWorkDirectory || safeRemoveWorkDirectory;
+  const bindFile = options.bindPrivateFile || bindPrivateFile;
+  const unlinkBoundFile = options.safeUnlinkBoundPrivateFile || safeUnlinkBoundPrivateFile;
   const alive = options.processAlive || processAlive;
+  const bindings = new WeakMap();
   const intentPath = (token) => {
     if (!TOKEN_RE.test(token)) throw new Error('BATCH_INTAKE_INTENT_INVALID');
     return path.join(path.dirname(journalPath(token)), `${token}${SUFFIX}`);
@@ -37,27 +45,40 @@ function createBatchIntakeIntent(options = {}) {
       io.fsyncSync(fd);
     } finally { io.closeSync(fd); }
     syncParentDirectory(target, io, options.platform || process.platform);
+    bindings.set(record, bindFile(target, { io }));
     return record;
   }
 
   function read(token) {
     const target = intentPath(token);
+    const binding = bindFile(target, { io });
     let fd;
     try {
-      const named = io.lstatSync(target);
       fd = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
-      const opened = io.fstatSync(fd);
-      if (!named.isFile() || named.isSymbolicLink() || !opened.isFile() || opened.nlink !== 1 ||
-          opened.dev !== named.dev || opened.ino !== named.ino || opened.size > 2048 || opened.size < 1) throw new Error('BATCH_INTAKE_INTENT_INVALID');
+      const opened = io.fstatSync(fd, { bigint: true });
+      if (!opened.isFile() || opened.nlink !== 1n ||
+          Object.entries(boundIdentity(opened)).some(([key, value]) => binding.file[key] !== value) ||
+          opened.size > 2048n || opened.size < 1n) throw new Error('BATCH_INTAKE_INTENT_INVALID');
       const record = JSON.parse(io.readFileSync(fd, 'utf8'));
+      const after = io.fstatSync(fd, { bigint: true });
+      if (Object.entries(boundIdentity(after)).some(([key, value]) => binding.file[key] !== value)) {
+        throw new Error('BATCH_INTAKE_INTENT_INVALID');
+      }
       if (record.schema !== 'datasecure-intake/1' || record.token !== token ||
           !Number.isSafeInteger(record.pid) || record.pid <= 0 ||
           !Number.isFinite(Date.parse(record.expires_at)) || !validIdentity(record.work_identity)) throw new Error('BATCH_INTAKE_INTENT_INVALID');
+      bindings.set(record, binding);
       return record;
     } finally { if (fd !== undefined) io.closeSync(fd); }
   }
 
-  function remove(token) { io.unlinkSync(intentPath(token)); }
+  function remove(token, record) {
+    const target = intentPath(token);
+    const binding = record ? bindings.get(record) : bindFile(target, { io });
+    if (!binding) throw new Error('BATCH_INTAKE_INTENT_INVALID');
+    try { unlinkBoundFile(target, { io, binding }); }
+    catch { throw new Error('BATCH_INTAKE_INTENT_INVALID'); }
+  }
 
   function orphan(token, now) {
     try { io.lstatSync(journalPath(token)); return null; }
@@ -75,7 +96,7 @@ function createBatchIntakeIntent(options = {}) {
     const record = orphan(token, now);
     if (!record) return false;
     removeWork(token, { expectedIdentity: record.work_identity });
-    remove(token);
+    remove(token, record);
     return true;
   }
 

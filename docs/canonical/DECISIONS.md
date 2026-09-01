@@ -1,9 +1,22 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 31.08.2026 · Status aller folgenden Entscheidungen: **angenommen**
+Stand: 01.09.2026
+
+Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
+bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
+
+- **aktiv:** DS-001 bis DS-049, DS-051 bis DS-058, DS-060 sowie DS-062 bis
+  DS-067, jeweils mit den unten genannten Präzisierungen;
+- **ersetzt:** DS-050 durch DS-065;
+- **teilweise präzisiert:** DS-002, DS-009, DS-020, DS-023 und DS-053 durch
+  DS-067; DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067.
+
+Der aktuelle operative Status steht in
+[`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still
+umgedeutet.
 
 Diese Entscheidungen stammen aus dem Produkt-Grill und bestätigten Ergänzungen. Sie beschreiben
-das Zielprodukt, nicht den Funktionsumfang von RC30.
+das Zielprodukt, nicht automatisch den freigegebenen Funktionsumfang von RC84.
 
 ## DS-001 – Produktzweck und Aussagegrenze
 
@@ -15,8 +28,9 @@ DSGVO-, AI-Act- oder sonstige Zertifizierung.
 ## DS-002 – Primäres Produkt und Verteilungswege
 
 Das Claude-Plugin ist das Hauptprodukt. Direkter ZIP-Import und privater
-Organisations-Marketplace sind gleichwertig unterstützte Verteilungswege. Das MCPB
-bleibt technischer Fallback und Engineering-Artefakt.
+Organisations-Marketplace sind gleichwertig unterstützte Verteilungswege. Ein MCPB
+wird ausschließlich intern als Engineering-Artefakt gebaut und ist weder
+Produktkanal noch Anwender-Fallback.
 
 ## DS-003 – Unterstützte Claude-Oberflächen
 
@@ -386,12 +400,16 @@ Silicon. Die Engine bleibt portabel; Linux und Windows ARM64 folgen erst mit eig
 Hostevidenz. Diese Entscheidung ersetzt DS-004 und DS-034, soweit diese eine
 gleichzeitige Drei-Plattform-Freigabe verlangen.
 
-## DS-053 – Selbsttragende Distribution und Signierung
+## DS-053 – Selbsttragende Distribution ohne Signierungszwang
 
 Anwender installieren weder Node.js noch Python. Marketplace und manuelle
-Windows-x64-/macOS-universal-ZIPs enthalten alle Laufzeiten; MCPB ist nur Fallback.
-Piloten dürfen unsigniert sein, eigene native Sicherheitskomponenten müssen vor
-breitem Unternehmenseinsatz signiert sein. Diese Entscheidung ersetzt DS-030.
+zielsystemspezifische Windows-x64-, macOS-x64- und macOS-arm64-ZIPs enthalten
+alle Laufzeiten; MCPB ist nur ein internes Engineering-Artefakt und kein
+Anwender-Fallback. Ein universeller Marketplace-Ordner ist nur zulässig, wenn er
+self-contained, innerhalb der geltenden Paketgrenze und auf allen enthaltenen
+Zielen abgenommen ist. Es besteht keine Produktpflicht zur Signierung oder
+Zertifizierung; Hashbindung, reproduzierbarer Build, SBOM und Zielsystemtests
+bleiben Pflicht. Diese Fassung bestätigt DS-030 und wird durch DS-067 präzisiert.
 
 ## DS-054 – Datenwahrender Lifecycle
 
@@ -542,3 +560,53 @@ Engineering-Keyring-Session-Infrastruktur und deren Kombinationsmatrix sind
 wegen Scopewechsel obsolet, nicht bestanden. Vorhandene historische Nachweise
 bleiben dokumentiert; normale lokale Stapel-, Abbruch-/Fortsetzungs-, Paket- und
 Cowork-Tests haben Vorrang.
+
+## DS-066 – Lokale DataSecure-Grenze bei Cloud- und Local-Cowork
+
+Bestätigt am 01.09.2026: Die belastbare Produktzusage lautet: **Originale werden
+ausschließlich durch den lokalen DataSecure-Prozess verarbeitet; Claude erhält nur
+freigegebene, de-identifizierte Ergebnisse.** Eine sichtbare Desktop-Oberfläche
+und ein installiertes Plugin belegen weder eine lokale Cowork-Sitzung noch einen
+aktiven lokalen MCP.
+
+Originale dürfen nur in einer lokalen Cowork-Sitzung der Desktop-App oder in
+Claude Code über den Betriebssystempicker eines tatsächlich verbundenen lokalen
+Plugin-MCPs angenommen werden. Lokale Plugin-MCPs laufen nach aktueller
+Herstellerdokumentation nicht in Cloud-Sitzungen. Deshalb sind Cloud-Cowork in
+Desktop, Web/Mobil, geplante Aufgaben und der lokale Dateibroker kein Ersatz;
+über den Broker geöffnete Bytes würden cloudseitig verarbeitet. Chat-Upload,
+Computer Use, verbundene Ordner, allgemeine Dateifreigabe und Remote-MCP sind
+ebenfalls kein Ersatz. Die DataSecure-Engine bleibt netzwerkfrei.
+
+ZIP/Marketplace bleiben Hauptprodukt. Das Quellplugin verwendet für Entwicklung
+`command: node`; Produktarchive ersetzen ihn durch einen pluginrelativen Launcher
+und enthalten die hashgebundene Zielruntime. Ein realer Windows-E0 ohne System-Node
+ist belegt; native macOS- und Cowork-Fresh-Install-Läufe bleiben P0-Evidenz. Das
+interne MCPB darf diesen Nachweis nicht ersetzen und wird Anwendern nicht angeboten.
+Plattformkompatibilität ist keine
+Freigabeevidenz: Windows, macOS und Linux werden erst nach realer Zielsystemabnahme
+als freigegeben bezeichnet. Organisationsrichtlinien dürfen lokalen MCP,
+Extensions oder dauerhafte Werkzeugfreigaben blockieren; DataSecure umgeht sie
+nicht.
+
+Diese Entscheidung präzisiert und ersetzt die Ausführungsortannahmen aus DS-003,
+DS-041 und DS-052, nicht deren lokale Datenschutz- oder Plattformziele.
+
+## DS-067 – Ein Produktweg, wahrheitsgemäße Aufbewahrung und fester Bildschutz
+
+Bestätigt am 01.09.2026: Anwender installieren DataSecure ausschließlich als
+Plugin-ZIP oder über den privaten Marketplace. Beide Kanäle liefern dasselbe
+Produkt. Ein MCPB bleibt nur ein internes Engineering-Artefakt für Paket- und
+Paritätsprüfungen und erscheint weder in der Anwenderanleitung noch als
+Fehler-Fallback.
+
+Es gibt keinen auswählbaren Grafik-Datenschutzmodus. Bildpixel bleiben im Pilot
+immer lokal; unsichere Grafiken werden lokal zurückgehalten oder auf ausdrücklichen
+Wunsch lokal entfernt. Eine sichtbare Einstellung darf keine nicht vorhandene
+Abstufung versprechen.
+
+Die konfigurierbare Aufbewahrung temporärer Arbeits- und Reviewdaten liegt zwischen
+0 und höchstens 14 Tagen. Original-/Quelldateien und fertige Exportpakete werden
+niemals automatisch gelöscht. Die Oberfläche, Runtime und Tests müssen denselben
+Vertrag verwenden. Diese Entscheidung präzisiert DS-002, DS-014, DS-016, DS-038,
+DS-055 und DS-066.

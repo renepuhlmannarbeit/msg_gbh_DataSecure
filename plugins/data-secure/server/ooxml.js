@@ -10,10 +10,50 @@ const MAX_EMBEDDED_EXPANDED_BYTES = 100 * 1024 * 1024;
 const SUPPORTED_EMBEDDED = /^(?:word|xl|ppt)\/embeddings\/[^/]+\.(docx|xlsx|pptx)$/i;
 
 function xmlDecode(s='') {
-  return String(s)
-    .replace(/&#x([0-9a-f]+);/gi, (_,h)=>String.fromCodePoint(parseInt(h,16)))
-    .replace(/&#([0-9]+);/g, (_,d)=>String.fromCodePoint(parseInt(d,10)))
+  const decodeCodePoint = (digits, radix) => {
+    const value = Number.parseInt(digits, radix);
+    // Deliberately stricter than XML 1.0 for C1 controls: those characters can
+    // split identifiers without being visible in Markdown or residual scans.
+    if (!Number.isSafeInteger(value) || value <= 0 || value > 0x10ffff ||
+        (value >= 0xd800 && value <= 0xdfff) ||
+        (value < 0x20 && ![0x09, 0x0a, 0x0d].includes(value)) ||
+        (value >= 0x7f && value <= 0x9f)) {
+      const error = new Error('OOXML enthält ein unzulässiges XML-Zeichen.');
+      error.code = 'OOXML_XML_CHARACTER_INVALID';
+      throw error;
+    }
+    return String.fromCodePoint(value);
+  };
+  const source = String(s);
+  // XML defines exactly five named entities. Leaving an unknown entity or a
+  // naked ampersand in extracted text can split identifiers before the PII
+  // gate and must therefore fail closed.
+  if (/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-f]+;)/iu.test(source)) {
+    const error = new Error('OOXML enthält eine ungültige XML-Entität.');
+    error.code = 'OOXML_XML_CHARACTER_INVALID';
+    throw error;
+  }
+  return source
+    .replace(/&#x([0-9a-f]+);/gi, (_,h)=>decodeCodePoint(h,16))
+    .replace(/&#([0-9]+);/g, (_,d)=>decodeCodePoint(d,10))
     .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&');
+}
+
+const OFFICE_RELATIONSHIP_NAMESPACES = Object.freeze([
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/',
+  'http://purl.oclc.org/ooxml/officeDocument/relationships/'
+]);
+const PACKAGE_CORE_PROPERTIES_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties';
+function relationshipKind(value) {
+  const source = String(value || '');
+  if (source === PACKAGE_CORE_PROPERTIES_RELATIONSHIP) return 'core-properties';
+  for (const namespace of OFFICE_RELATIONSHIP_NAMESPACES) {
+    if (!source.startsWith(namespace)) continue;
+    const name = source.slice(namespace.length);
+    return /^[A-Za-z][A-Za-z0-9_-]*$/u.test(name) ? name : null;
+  }
+  return null;
 }
 function stripTags(s='') { return xmlDecode(String(s).replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim(); }
 function textTags(xml, tag='a:t') {
@@ -123,14 +163,152 @@ function pptSlideTableSections(xml, sourcePart) {
     issues: balanced && tables.length <= opened ? 0 : 1
   };
 }
+const WORDPROCESSINGML_NAMESPACES = new Set([
+  'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+  'http://purl.oclc.org/ooxml/wordprocessingml/main'
+]);
+const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+const OFFICE_MATH_NAMESPACES = new Set([
+  'http://schemas.openxmlformats.org/officeDocument/2006/math',
+  'http://purl.oclc.org/ooxml/officeDocument/math'
+]);
+const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
+
+function normalizedWordQName(qname, namespaces, attribute = false) {
+  const parts = String(qname).split(':');
+  if (parts.length > 2) throw wordStructureError();
+  const prefix = parts.length === 2 ? parts[0] : '';
+  const localName = parts.at(-1);
+  const namespace = prefix ? namespaces.get(prefix) : (attribute ? '' : (namespaces.get('') || ''));
+  if (prefix && !namespace) throw wordStructureError();
+  if (WORDPROCESSINGML_NAMESPACES.has(namespace)) return `w:${localName}`;
+  if (namespace === MARKUP_COMPATIBILITY_NAMESPACE) return `mc:${localName}`;
+  if (OFFICE_MATH_NAMESPACES.has(namespace)) return `m:${localName}`;
+  // A misleading `w:` or `mc:` binding must never acquire the semantics of
+  // the canonical vocabulary merely because its textual prefix looks right.
+  if (prefix === 'w' || prefix === 'mc' || prefix === 'm') return `unsupported:${localName}`;
+  return qname;
+}
+
 function wordPartScope(xml, rootTag) {
-  const escaped = String(rootTag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`<w:${escaped}\\b[^>]*>([\\s\\S]*?)<\\/w:${escaped}>`, 'i').exec(xml)?.[1] || '';
+  const source = String(xml);
+  if (!source || /<!DOCTYPE|<!ENTITY/iu.test(source)) throw wordStructureError();
+  const stack = [];
+  const output = [];
+  const tag = /<(\/)?([A-Za-z_][\w.:-]*)(?=[\s/>])((?:[^<>"']|"[^"<]*"|'[^'<]*')*)>/y;
+  const attribute = /([A-Za-z_][\w.:-]*)\s*=\s*(?:"([^"<]*)"|'([^'<]*)')/gy;
+  let cursor = 0;
+  let documentRoot = null;
+  let rootClosed = false;
+  let target = null;
+  let found = false;
+
+  function append(value) { if (target) output.push(value); }
+  function parseAttributes(raw, inherited) {
+    const namespaces = new Map(inherited || [['xml', XML_NAMESPACE]]);
+    const parsed = [];
+    let offset = 0;
+    while (offset < raw.length) {
+      while (offset < raw.length && /\s/u.test(raw[offset])) offset++;
+      if (offset === raw.length) break;
+      attribute.lastIndex = offset;
+      const match = attribute.exec(raw);
+      if (!match) throw wordStructureError();
+      const name = match[1];
+      const value = match[2] ?? match[3];
+      if (parsed.some((item) => item.name === name)) throw wordStructureError();
+      parsed.push({ name, value });
+      offset = attribute.lastIndex;
+      if (offset < raw.length && !/\s/u.test(raw[offset])) throw wordStructureError();
+    }
+    for (const item of parsed) {
+      if (item.name === 'xmlns') namespaces.set('', xmlDecode(item.value));
+      else if (item.name.startsWith('xmlns:')) namespaces.set(item.name.slice(6), xmlDecode(item.value));
+    }
+    return { parsed, namespaces };
+  }
+  function normalizedAttributes(parsed, namespaces) {
+    const names = new Set();
+    const values = [];
+    for (const item of parsed) {
+      if (item.name === 'xmlns' || item.name.startsWith('xmlns:')) continue;
+      const name = normalizedWordQName(item.name, namespaces, true);
+      if (names.has(name)) throw wordStructureError();
+      names.add(name);
+      values.push(` ${name}="${item.value.replace(/"/gu, '&quot;')}"`);
+    }
+    return values.join('');
+  }
+
+  while (cursor < source.length) {
+    if (source[cursor] !== '<') {
+      const next = source.indexOf('<', cursor);
+      const end = next === -1 ? source.length : next;
+      const value = source.slice(cursor, end);
+      if (!stack.length && /\S/u.test(value)) throw wordStructureError();
+      append(value);
+      cursor = end;
+      continue;
+    }
+    const special = source.startsWith('<!--', cursor) ? ['-->', 4]
+      : source.startsWith('<?', cursor) ? ['?>', 2]
+        : source.startsWith('<![CDATA[', cursor) ? [']]>', 9] : null;
+    if (special) {
+      const end = source.indexOf(special[0], cursor + special[1]);
+      if (end === -1) throw wordStructureError();
+      append(source.slice(cursor, end + special[0].length));
+      cursor = end + special[0].length;
+      continue;
+    }
+    if (source.startsWith('<!', cursor)) throw wordStructureError();
+    tag.lastIndex = cursor;
+    const token = tag.exec(source);
+    if (!token) throw wordStructureError();
+    cursor = tag.lastIndex;
+    const [, closing, qname, rawAttributes] = token;
+    const selfClosing = /\/\s*$/u.test(rawAttributes);
+    const raw = selfClosing ? rawAttributes.slice(0, rawAttributes.lastIndexOf('/')) : rawAttributes;
+    if (closing) {
+      if (selfClosing || raw.trim() || !stack.length || stack.at(-1).qname !== qname) throw wordStructureError();
+      const frame = stack.pop();
+      if (frame === target) {
+        target = null;
+        found = true;
+      } else append(`</${frame.normalized}>`);
+      if (!stack.length) rootClosed = true;
+      continue;
+    }
+    if (rootClosed) throw wordStructureError();
+    const { parsed, namespaces } = parseAttributes(raw, stack.at(-1)?.namespaces);
+    const normalized = normalizedWordQName(qname, namespaces);
+    const frame = { qname, normalized, namespaces };
+    if (!documentRoot) {
+      documentRoot = frame;
+      const expected = rootTag === 'body' ? 'w:document' : `w:${rootTag}`;
+      if (normalized !== expected) return { found: false, body: '' };
+    }
+    const isTarget = rootTag === 'body'
+      ? stack.length === 1 && stack[0] === documentRoot && normalized === 'w:body'
+      : frame === documentRoot;
+    if (isTarget) {
+      if (target || found) throw wordStructureError();
+      if (selfClosing) found = true;
+      else target = frame;
+    } else if (target) append(`<${normalized}${normalizedAttributes(parsed, namespaces)}${selfClosing ? '/>' : '>'}`);
+    if (!selfClosing) stack.push(frame);
+    else if (!stack.length) rootClosed = true;
+  }
+  // EOF before the selected root closes is a part-coverage failure rather
+  // than a partially renderable scope. An already closed body may still be
+  // rendered; the separate document-root coverage check will block release
+  // if only the outer document close is missing.
+  if (!documentRoot || target) return { found: false, body: '' };
+  return { found, body: output.join('') };
 }
 function renderWordPart(xml, rootTag) {
-  const body = wordPartScope(String(xml), rootTag);
-  if (!body) return '';
-  return renderWordStructure(parseWordStructure(body));
+  const scope = wordPartScope(String(xml), rootTag);
+  if (!scope.found || !scope.body) return '';
+  return renderWordStructure(parseWordStructure(scope.body));
 }
 
 // These are structural/resource bounds, not a page-count limit. Each XML token
@@ -167,8 +345,14 @@ function parseWordStructure(body) {
       const end = next === -1 ? body.length : next;
       if (!frame.skipped && frame.name === 'w:t') {
         try { frame.node.pending.push(xmlDecode(body.slice(cursor, end))); }
-        catch { throw wordStructureError(); }
-      } else if (!frame.skipped && /^(?:|w:p|w:tbl|w:tr|w:tc)$/.test(frame.name) && /\S/.test(body.slice(cursor, end))) {
+        catch (error) {
+          if (error?.code === 'OOXML_XML_CHARACTER_INVALID') throw error;
+          throw wordStructureError();
+        }
+      } else if (!frame.skipped && /\S/.test(body.slice(cursor, end))) {
+        // Text outside a canonical Word text node is content, not formatting.
+        // Silently dropping vendor/extension text would create a coverage gap
+        // before anonymization, so every such construct stops fail closed.
         throw wordStructureError();
       }
       cursor = end;
@@ -215,7 +399,13 @@ function parseWordStructure(body) {
       offset = attribute.lastIndex;
       if (offset < attributes.length && !/\s/.test(attributes[offset])) throw wordStructureError();
     }
-    const skipped = frame.skipped || name === 'mc:Fallback';
+    // These canonical Word constructs are already counted by the package
+    // coverage gate below.  Keep their payload out of the structural renderer
+    // so the caller receives the intended content-free coverage warning.
+    // Unknown/foreign elements are deliberately not skipped: direct text in
+    // those elements must still fail closed instead of disappearing.
+    const blockedWordElement = /^(?:w:(?:instrText|fldSimple|delText|del|ins|moveFrom|moveTo)|m:(?:oMath|oMathPara|t))$/u.test(name);
+    const skipped = frame.skipped || name === 'mc:Fallback' || blockedWordElement;
     const boxes = frame.boxes + (name === 'w:txbxContent' ? 1 : 0);
     let node = frame.node, created = false;
     if (!skipped) {
@@ -316,7 +506,7 @@ function docxMainRelationshipIssueCount(entries) {
   let issues = 0;
   for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
     const attrs = match[1];
-    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
     if (type !== 'officeDocument') continue;
     const target = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
     const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
@@ -340,14 +530,11 @@ function docxMainWordRootIssueCount(entries) {
   return hasCompleteWordRoot(xml, 'document') && hasCompleteWordRoot(xml, 'body') ? 0 : 1;
 }
 function hasCompleteWordRoot(xml, rootTag) {
-  // The renderer needs a complete XML scope.  Merely finding an opening Word
-  // tag is not coverage evidence: a truncated part would otherwise render as
-  // empty and could appear safe to the downstream gate.  Empty self-closing
-  // secondary stories are valid and contain no text, so keep that case.
-  const opening = new RegExp(`<w:${rootTag}\\b[^>]*>`, 'i').exec(xml);
-  if (!opening) return false;
-  if (/\/\s*>$/u.test(opening[0])) return true;
-  return new RegExp(`</w:${rootTag}\\s*>`, 'i').test(xml.slice(opening.index + opening[0].length));
+  // Prefix spelling is irrelevant; the namespace URI is authoritative. The
+  // same bounded parser used for rendering also proves that the complete XML
+  // scope closes and that a misleading `w:` binding is not accepted.
+  try { return wordPartScope(xml, rootTag).found; }
+  catch { return false; }
 }
 function hasCompleteXmlRoot(xml, rootTag) {
   // XLSX has no single mandatory namespace prefix. A truncated part must not
@@ -357,6 +544,47 @@ function hasCompleteXmlRoot(xml, rootTag) {
   if (!opening) return false;
   if (/\/\s*>$/u.test(opening[0])) return true;
   return new RegExp(`</(?:(?:[A-Za-z_][\\w.-]*):)?${escaped}\\s*>`, 'i').test(xml.slice(opening.index + opening[0].length));
+}
+function docxReferencedHeaderFooter(entries) {
+  const main = entries.get('word/document.xml');
+  if (!main) return { present: false, orderedParts: [], issues: 1 };
+  let body;
+  try { body = wordPartScope(main.toString('utf8'), 'body').body; }
+  catch { return { present: false, orderedParts: [], issues: 1 }; }
+  const references = [];
+  for (const match of body.matchAll(/<w:(headerReference|footerReference)\b([^>]*)>/giu)) {
+    const id = /\br:id=["']([^"']+)["']/iu.exec(match[2])?.[1];
+    references.push({ type: match[1] === 'headerReference' ? 'header' : 'footer', id });
+  }
+  if (!references.length) return { present: false, orderedParts: [], issues: 0 };
+  const rels = entries.get('word/_rels/document.xml.rels');
+  if (!rels) return { present: true, orderedParts: [], issues: references.length };
+  const byId = new Map();
+  let issues = 0;
+  for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/giu)) {
+    const attrs = match[1];
+    const id = /\bId=["']([^"']+)["']/iu.exec(attrs)?.[1];
+    const type = relationshipKind(/\bType=["']([^"']+)["']/iu.exec(attrs)?.[1]);
+    if (!['header', 'footer'].includes(type)) continue;
+    if (!id || byId.has(id)) { issues++; continue; }
+    byId.set(id, { type, attrs });
+  }
+  const orderedParts = [];
+  for (const reference of references) {
+    const relation = reference.id ? byId.get(reference.id) : null;
+    if (!relation || relation.type !== reference.type) { issues++; continue; }
+    const target = xmlDecode(/\bTarget=["']([^"']+)["']/iu.exec(relation.attrs)?.[1] || '');
+    const external = /\bTargetMode\s*=\s*["']External["']/iu.test(relation.attrs);
+    if (external || !target || /[\\?#\0]/u.test(target) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(target) ||
+        /(?:^|\/)\.\.(?:\/|$)/u.test(target)) { issues++; continue; }
+    const resolved = path.posix.normalize(path.posix.join('word', target));
+    const expected = reference.type === 'header' ? /^word\/header\d+\.xml$/iu : /^word\/footer\d+\.xml$/iu;
+    const root = reference.type === 'header' ? 'hdr' : 'ftr';
+    if (!expected.test(resolved) || !entries.has(resolved) ||
+        !hasCompleteWordRoot(entries.get(resolved).toString('utf8'), root)) { issues++; continue; }
+    if (!orderedParts.includes(resolved)) orderedParts.push(resolved);
+  }
+  return { present: true, orderedParts, issues };
 }
 function packageMainRelationshipIssueCount(entries, expectedMainPart) {
   // Every OOXML family is an OPC package. A coincidentally named main part
@@ -368,7 +596,7 @@ function packageMainRelationshipIssueCount(entries, expectedMainPart) {
   let issues = 0;
   for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
     const attrs = match[1];
-    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
     if (type !== 'officeDocument') continue;
     const target = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
     const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
@@ -386,10 +614,11 @@ function docxStoryRelationshipIssueCount(entries) {
   // from the main document through its declared internal relationship.
   const relPath = 'word/_rels/document.xml.rels';
   const rels = entries.get(relPath);
+  const headerFooter = docxReferencedHeaderFooter(entries);
   const stories = [...entries.keys()].filter((name) =>
     /^word\/(?:header\d+|footer\d+|comments|footnotes|endnotes)\.xml$/i.test(name)
   );
-  if (!stories.length) return 0;
+  if (!stories.length) return headerFooter.issues;
   if (!rels) return stories.length;
   const expected = new Map([
     ['header', { part: /^word\/header\d+\.xml$/i, root: 'hdr' }],
@@ -400,11 +629,12 @@ function docxStoryRelationshipIssueCount(entries) {
   ]);
   const reachable = new Set();
   const relationshipCounts = new Map();
-  let issues = 0;
+  let issues = headerFooter.issues;
   for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
     const attrs = match[1];
-    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
     if (!expected.has(type)) continue;
+    if (headerFooter.present && (type === 'header' || type === 'footer')) continue;
     const target = /\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '';
     const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
     // A target is relative to word/document.xml. POSIX normalization is only
@@ -433,7 +663,10 @@ function docxStoryRelationshipIssueCount(entries) {
   // More than one edge to the same story is an ambiguity. Do not let a
   // duplicated relationship masquerade as a single fully-covered story.
   for (const count of relationshipCounts.values()) if (count !== 1) issues++;
-  for (const story of stories) if (!reachable.has(story)) issues++;
+  for (const story of stories) {
+    if (headerFooter.present && /^word\/(?:header\d+|footer\d+)\.xml$/iu.test(story)) continue;
+    if (!reachable.has(story)) issues++;
+  }
   return issues;
 }
 function docxImageRelationshipCoverage(entries) {
@@ -451,9 +684,12 @@ function docxImageRelationshipCoverage(entries) {
     if (!/^word\/(?:_rels\/)?[^/]+\.rels$/i.test(relPath)) continue;
     const base = relationshipBase(relPath);
     if (base === null) continue;
+    const sourcePart = relPath.replace('/_rels/', '/').replace(/\.rels$/i, '');
+    const sourceExists = entries.has(sourcePart) &&
+      /^word\/(?:document|header\d+|footer\d+|comments|footnotes|endnotes)\.xml$/i.test(sourcePart);
     for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
       const attrs = match[1];
-      const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+      const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
       const rawTarget = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
       const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
       if (!rawTarget) continue;
@@ -466,9 +702,9 @@ function docxImageRelationshipCoverage(entries) {
       }
       const target = path.posix.normalize(path.posix.join(base, rawTarget));
       if (type === 'image') {
-        if (!media.has(target)) issues++;
+        if (!sourceExists || !media.has(target)) issues++;
         else safeTargets.add(target);
-      } else if (media.has(target)) {
+      } else if (sourceExists && media.has(target)) {
         issues++;
       }
     }
@@ -501,7 +737,7 @@ function packageImageRelationshipCoverage(entries, packageRoot, label, allowedSo
     const sourceAllowed = !allowedSourceParts || allowedSourceParts.has(sourcePart);
     for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
       const attrs = match[1];
-      const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+      const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
       const rawTarget = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
       const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
       if (!rawTarget) continue;
@@ -576,6 +812,7 @@ function docxCoverageWarnings(entries) {
     return overrideTypes.get(normalized) || null;
   }
   let unsupported = 0;
+  const declaredOverrides = new Map();
   for (const [name, data] of entries) {
     if (!supported.some((pattern) => pattern.test(name))) unsupported++;
     if (/\.rels$/i.test(name)) {
@@ -583,7 +820,7 @@ function docxCoverageWarnings(entries) {
       const relationships = xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi);
       for (const match of relationships) {
         const attrs = match[1];
-        const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+        const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
         if (!type || !relationshipTypes.has(type)) unsupported++;
         if (/\bTargetMode\s*=\s*["']External["']/i.test(attrs)) unsupported++;
       }
@@ -596,11 +833,45 @@ function docxCoverageWarnings(entries) {
         const part = /\bPartName=["']([^"']+)["']/i.exec(attrs)?.[1];
         const contentType = /\bContentType=["']([^"']+)["']/i.exec(attrs)?.[1];
         const expected = expectedOverrideType(part);
-        if (!expected || contentType !== expected || !entries.has(String(part || '').replace(/^\//, ''))) {
+        const normalizedPart = String(part || '').replace(/^\//, '');
+        if (!expected || contentType !== expected || !entries.has(normalizedPart) || declaredOverrides.has(normalizedPart)) {
           unsupported++;
+        } else {
+          declaredOverrides.set(normalizedPart, contentType);
         }
       }
     }
+    if (/^word\/(?:document|header\d+|footer\d+|comments|footnotes|endnotes)\.xml$/i.test(name)) {
+      const xml = data.toString('utf8');
+      const rootTag = name === 'word/document.xml' ? 'body'
+        : /^word\/header\d+\.xml$/i.test(name) ? 'hdr'
+          : /^word\/footer\d+\.xml$/i.test(name) ? 'ftr'
+            : path.posix.basename(name, '.xml');
+      let inspected;
+      try { inspected = wordPartScope(xml, rootTag).body; }
+      catch { unsupported++; continue; }
+      // Until a namespace-aware field/revision/math renderer exists, these
+      // inhaltsfähigen constructs must stop instead of silently disappearing.
+      const blocked = [
+        /<w:(?:instrText|fldSimple|delText|del|ins|moveFrom|moveTo)\b/iu,
+        /<m:(?:oMath|oMathPara|t)\b/iu,
+        /<mc:AlternateContent\b/iu,
+        /<w:(?:comment|comments)\b[^>]*\bw:(?:author|initials)=/iu
+      ];
+      for (const pattern of blocked) if (pattern.test(inspected)) unsupported++;
+    }
+    if (name === 'word/settings.xml') {
+      try {
+        if (/<w:docVar\b/iu.test(wordPartScope(data.toString('utf8'), 'settings').body)) unsupported++;
+      } catch { unsupported++; }
+    }
+  }
+  // Rendering a correctly related story under an unrelated content type is
+  // not safe. Require one exact override for every supported content-bearing
+  // Word part instead of validating only declarations that happen to exist.
+  for (const name of entries.keys()) {
+    const expected = expectedOverrideType(name);
+    if (expected && declaredOverrides.get(name) !== expected) unsupported++;
   }
   unsupported += docxMainRelationshipIssueCount(entries);
   unsupported += docxMainWordRootIssueCount(entries);
@@ -613,7 +884,13 @@ function parseDocx(entries) {
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
   const sections=[]; const body=renderWordBody(main.toString('utf8'));
   if(body)sections.push({kind:'text',source_part:'word/document.xml',markdown:body});
-  for(const [name,data] of entries) if(/^word\/(header|footer)\d+\.xml$/i.test(name)) {
+  const headerFooter = docxReferencedHeaderFooter(entries);
+  const orderedStories = headerFooter.present ? headerFooter.orderedParts : [
+    ...[...entries.keys()].filter((name) => /^word\/header\d+\.xml$/iu.test(name)).sort((left, right) => left.localeCompare(right, 'en')),
+    ...[...entries.keys()].filter((name) => /^word\/footer\d+\.xml$/iu.test(name)).sort((left, right) => left.localeCompare(right, 'en'))
+  ];
+  for(const name of orderedStories) {
+    const data = entries.get(name);
     const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root);
     if(t) sections.push({kind:'text',source_part:name,markdown:`## ${root==='hdr'?'Kopfzeile':'Fußzeile'}\n\n${t}`});
   }
@@ -640,7 +917,7 @@ function xlsxSheetRelationshipMap(entries) {
   for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
     const attrs = match[1];
     const id = /\bId=["']([^"']+)["']/i.exec(attrs)?.[1];
-    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
     const target = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
     const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
     if (!id) { issues++; continue; }
@@ -661,7 +938,7 @@ function internalRelationshipTargets(entries, relPath, expectedType, allowedTarg
   let issues = 0;
   for (const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
     const attrs = match[1];
-    const type = /\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+    const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
     if (type !== expectedType) continue;
     const raw = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
     const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
@@ -755,7 +1032,7 @@ function xlsxCoverageWarnings(entries, sheetMeta) {
     if (!supportedParts.some((pattern) => pattern.test(name))) issues++;
     if (/\.rels$/i.test(name)) {
       for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
-        const type = /\bType=["']([^"']+)["']/i.exec(match[1])?.[1]?.split('/').pop();
+        const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(match[1])?.[1]);
         if (!type || !knownRelationshipTypes.has(type)) issues++;
       }
     }
@@ -797,7 +1074,7 @@ function pptRelationshipTarget(entries, relPath, id, expectedType, base) {
   const xml=entries.get(relPath)?.toString('utf8'); if(!xml)return null;
   let resolvedTarget=null;
   for(const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)){
-    const attrs=match[1],rid=/\bId=["']([^"']+)["']/i.exec(attrs)?.[1],type=/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop(),raw=xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1]||'');
+    const attrs=match[1],rid=/\bId=["']([^"']+)["']/i.exec(attrs)?.[1],type=relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]),raw=xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1]||'');
     if(id ? rid!==id : type!==expectedType)continue;
     if(type!==expectedType||/\bTargetMode\s*=\s*["']External["']/i.test(attrs)||!raw||/[\\?#\0]/u.test(raw)||/^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(raw))return null;
     const target=path.posix.normalize(path.posix.join(base,raw)); if(!target.startsWith('ppt/')||!entries.has(target))return null;
@@ -918,7 +1195,7 @@ function pptxCoverageWarnings(entries, slides, safeNotes, masterCoverage) {
     if (!supportedParts.some((pattern) => pattern.test(name))) issues++;
     if (/\.rels$/i.test(name)) {
       for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
-        const type = /\bType=["']([^"']+)["']/i.exec(match[1])?.[1]?.split('/').pop();
+        const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(match[1])?.[1]);
         if (!type || !knownRelationshipTypes.has(type)) issues++;
       }
     }
@@ -972,7 +1249,7 @@ function genericSecurityWarnings(entries) {
     if(/\.rels$/i.test(name)){
       const xml=data.toString('utf8');
       for(const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)){
-        const attrs=match[1],type=/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+        const attrs=match[1],type=relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
         if(/\bTargetMode\s*=\s*["']External["']/i.test(attrs))external++;
         if(['vbaProject','oleObject','control','externalLink','attachedTemplate'].includes(type))active++;
       }
@@ -1003,7 +1280,7 @@ function embeddedRelationshipCoverage(entries, reachableParts) {
     const base=relationshipBase(name),owner=relationshipOwner(name);if(base===null||owner===null)continue;
     const xml=data.toString('utf8');
     for(const match of xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)){
-      const attrs=match[1],type=/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]?.split('/').pop();
+      const attrs=match[1],type=relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
       const rawTarget=xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1]||'');
       const external=/\bTargetMode\s*=\s*["']External["']/i.test(attrs);
       if(!rawTarget||external)continue;

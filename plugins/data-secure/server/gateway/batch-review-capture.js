@@ -5,14 +5,17 @@ function createBatchReviewCapture(options = {}) {
   const exactPendingEntry = options.exactPendingEntry;
   const packageIdForItem = options.packageIdForItem;
   const localReviewError = options.localReviewError;
+  const withBatchPseudonymRegistry = options.withBatchPseudonymRegistry ||
+    (async (_state, action) => action(undefined));
 
   async function captureDeferredReviewInput(state, item, deps = {}) {
     const entry = exactPendingEntry(state, item);
     let captured;
     let captureStoppedPipeline = false;
     try {
-      await anonymizeNext(state.profile, {
+      await withBatchPseudonymRegistry(state, (pseudonymRegistry) => anonymizeNext(state.profile, {
         ...deps,
+        pseudonymRegistry,
         inputQueue: [entry],
         copyClaim: true,
         removeImages: state.remove_images,
@@ -22,7 +25,7 @@ function createBatchReviewCapture(options = {}) {
           captured = input;
           throw localReviewError('BATCH_REVIEW_CAPTURED', 'Lokaler Stapelreview-Entwurf erfasst.');
         }
-      });
+      }));
     } catch (error) {
       if (error?.code !== 'BATCH_REVIEW_CAPTURED') throw error;
       captureStoppedPipeline = true;

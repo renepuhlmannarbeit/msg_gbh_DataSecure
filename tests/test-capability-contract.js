@@ -53,19 +53,19 @@ test('DS-062 excludes an additional system VM from runtime and acceptance planni
   assert.ok(target.decision_ids.includes('DS-062'));
   assert.deepStrictEqual(target.additional_system_vm, { runtime: false, acceptance_tests: false });
   assert.match(decisions, /## DS-062 – Keine zusätzliche System-VM/u);
-  assert.match(read('docs/canonical/BACKLOG.md'), /Keine VM oder zusätzliches Windows-Konto bereitstellen/u);
+  assert.match(read('docs/canonical/BACKLOG.md'), /DS-062/u);
 });
 
 test('DS-063 excludes an additional Windows account and keeps test isolation as development work', () => {
   assert.ok(target.decision_ids.includes('DS-063'));
   assert.deepStrictEqual(target.additional_windows_account, { runtime: false, acceptance_tests: false });
   assert.match(decisions, /## DS-063 – Kein zusätzliches Windows-Benutzerkonto/u);
-  assert.match(read('docs/canonical/BACKLOG.md'), /Die bisherige Kontoanforderung ist gestrichen/u);
+  assert.match(read('docs/canonical/BACKLOG.md'), /DS-063/u);
 });
 
-test('the released capability manifest remains the narrow RC30 allowlist', () => {
+test('the released capability manifest remains the narrow current allowlist', () => {
   assert.deepStrictEqual(current.formats, ['csv', 'docx', 'markdown', 'txt']);
-  assert.deepStrictEqual(current.blocked_formats, ['pdf']);
+  assert.deepStrictEqual(current.blocked_formats, ['xlsx', 'pptx', 'pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']);
   assert.match(current.status, /^release-candidate$/);
   assert.notDeepStrictEqual(current.formats, target.formats.map((format) => format.id));
 });
@@ -113,13 +113,20 @@ test('runtime, MCP schema, skills and active handbooks retain the 100-file/500-M
     const text = read(rel);
     assert.match(text, /100/u, `${rel} omits the current batch maximum`);
     assert.match(text, /500 MiB/u, `${rel} omits the current batch-size limit`);
-    assert.match(text, /8\.000\.000/u, `${rel} omits the TXT/Markdown source limit`);
-    assert.match(text, /1\.500\.000/u, `${rel} omits the CSV source limit`);
-    assert.match(text, /64 MiB/u, `${rel} omits the DOCX source limit`);
     assert.match(text, /TXT/u, `${rel} omits TXT`);
     assert.match(text, /Markdown/u, `${rel} omits Markdown`);
     assert.match(text, /CSV/u, `${rel} omits CSV`);
     assert.match(text, /DOCX/u, `${rel} omits DOCX`);
+  }
+  for (const rel of [
+    'docs/ANLEITUNG.md',
+    'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md',
+    'plugins/data-secure/skills/gbh-datasecure-datenschutz-erklaeren/SKILL.md'
+  ]) {
+    const text = read(rel);
+    assert.match(text, /8\.000\.000/u, `${rel} omits the TXT/Markdown source limit`);
+    assert.match(text, /1\.500\.000/u, `${rel} omits the CSV source limit`);
+    assert.match(text, /64 MiB/u, `${rel} omits the DOCX source limit`);
   }
 });
 
@@ -135,26 +142,22 @@ test('marketplace and plugin manifests promise only the released formats', () =>
   }
 });
 
-test('the pilot acceptance guide distinguishes active and blocked RC30 formats', () => {
+test('the pilot acceptance guide distinguishes active and blocked current formats', () => {
   const pilot = read('docs/PILOT-ABNAHME.md');
-  assert.match(pilot, /TXT, Markdown, CSV und vollständig abgedeckte DOCX/u);
-  assert.match(pilot, /XLSX, PPTX, eigenständige PNG\/JPEG\/BMP und PDF/u);
-  assert.doesNotMatch(pilot, /XLSX,\s*PPTX,\s*MD,\s*CSV/u,
-    'the acceptance guide must not list active Markdown/CSV as stop cases');
-  assert.match(pilot, /Privacy-Ordner[\s\S]*Output[\s\S]*DataSecure-Export/u,
-    'the acceptance guide must expose the permanent mapping-export area');
+  assert.match(pilot, /Kernformate \| TXT, Markdown, CSV und DOCX positiv/u);
+  assert.match(pilot, /Stopps \| XLSX, PPTX, PDF, Scan-PDF, Bilder, beschädigte und verschlüsselte Dateien sicher negativ/u);
+  assert.match(pilot, /Quellen\/Originale und fertige Exporte nie automatisch löschen/u);
+  assert.match(pilot, /UAT-04 – Gesperrte und beschädigte Dateien stoppen sicher/u);
 });
 
-test('the Cowork human test kit preserves the one-picker local-only normal path', () => {
-  const readme = read('docs/acceptance/RC30_HUMAN_TEST_KIT/README.md');
-  const cases = read('docs/acceptance/RC30_HUMAN_TEST_KIT/TEST_CASES.md');
-  assert.match(readme, /eine DataSecure-Entscheidung/u);
-  assert.match(readme, /nativen lokalen Mehrfachdialog/u);
+test('the current Cowork UAT kit preserves the one-picker local-only normal path', () => {
+  const readme = read('docs/acceptance/UAT_TEST_KIT/README.md');
+  const steps = read('docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md');
+  assert.match(readme, /einen lokalen Mehrfachpicker/u);
   assert.match(readme, /DataSecure-Mapping\.csv/u);
-  assert.match(cases, /direkten\s+lokalen Mehrfachdialog/u);
-  assert.match(cases, /`local_only`/u);
-  assert.match(readme, /macOS Cowork Desktop[\s\S]*BLOCKED/u);
-  for (const source of [readme, cases]) {
+  assert.match(steps, /lokale Verarbeitung wurde gestartet/u);
+  assert.match(steps, /Windows oder macOS/u);
+  for (const source of [readme, steps]) {
     assert.doesNotMatch(source, /begin_document_batch|start_document_batch_processing|document_batch_status|list_document_batch_results/u);
     assert.doesNotMatch(source, /in\s+`Input`\s+kopieren/u);
   }
@@ -162,8 +165,10 @@ test('the Cowork human test kit preserves the one-picker local-only normal path'
 
 test('the target contract is documentation, not a shipped plugin runtime input', () => {
   const pluginBuilder = read('scripts/build-plugin.mjs');
-  assert.match(pluginBuilder, /collectProductFiles\(pluginDir\)/u);
-  assert.doesNotMatch(pluginBuilder, /TARGET_CAPABILITIES/u);
+  const runtimeBuilder = read('scripts/build-runtime-plugin.mjs');
+  assert.match(pluginBuilder, /buildRuntimePlugin/u);
+  assert.match(runtimeBuilder, /collectProductFiles\(pluginRoot\)/u);
+  assert.doesNotMatch(`${pluginBuilder}\n${runtimeBuilder}`, /TARGET_CAPABILITIES/u);
   assert.strictEqual(fs.existsSync(path.join(root, 'plugins', 'data-secure', 'TARGET_CAPABILITIES.json')), false);
 });
 

@@ -10,6 +10,12 @@ const {
 } = require('./batch');
 const { validateSummary, showLocalIntakeNotice, showBatchStateNotice } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
+const {
+  reserveIntake,
+  delegateIntake,
+  releaseIntake,
+  RESERVATION_ID_RE
+} = require('./batch-intake-reservation');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const pendingIntakes = new Map();
@@ -256,6 +262,13 @@ function startLocalBatchExecutor(token, options = {}) {
 function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   if (!Array.isArray(queue) || queue.length < 1) throw new SafeError('Keine Datei für die lokale Übernahme ausgewählt.');
   if (pendingIntakes.size > 0) throw new SafeError('Ein lokaler DataSecure-Stapel wird bereits vorbereitet.');
+  const reserve = options.reserveIntake || reserveIntake;
+  const delegate = options.delegateIntake || delegateIntake;
+  const release = options.releaseIntake || releaseIntake;
+  const suppliedReservation = String(options.intakeReservationId || '');
+  const reservationId = RESERVATION_ID_RE.test(suppliedReservation)
+    ? suppliedReservation
+    : reserve().reservation_id;
   const token = crypto.randomBytes(32).toString('hex');
   const forkProcess = options.forkProcess;
   const showIntakeNotice = options.showLocalIntakeNotice || showLocalIntakeNotice;
@@ -265,6 +278,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   const itemCount = queue.length;
   let child;
   let worker;
+  let reservationDelegated = false;
   let onWorkerFailure = (errorCode) => lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount, error_code: errorCode });
   let onWorkerExit = (code, failed, pid) => {
     if (pid !== null) lifecycle({ event: 'intake_worker_exited', outcome: 'stopped', item_count: itemCount,
@@ -276,6 +290,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
     }
+    delegate(reservationId, child.pid);
+    reservationDelegated = true;
     lifecycle({ event: 'intake_worker_spawned', outcome: 'ok', item_count: itemCount });
     const intake = { checkpointCreated: false, processingStarted: false, noticeShown: false };
     const showFailureNotice = (stage) => {
@@ -334,6 +350,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', item_count: itemCount,
         exit_code: code, error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_WORKER_EXITED' });
       if (pendingIntakes.get(token) === intake) pendingIntakes.delete(token);
+      release(reservationId);
       if (failed && intake.checkpointCreated) releaseLocalBatchExecutor(token, pid);
       afterIpcDrain(options, () => {
         if (intake.noticeShown) return;
@@ -344,6 +361,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     child.send({
       type: 'start-local-intake',
       batch_token: token,
+      intake_reservation_id: reservationId,
       profile,
       queue: queue.map((entry) => ({
         name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
@@ -362,6 +380,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
     else lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount,
       error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
+    if (!reservationDelegated) release(reservationId);
     throw new SafeError('Die lokale Stapelübernahme konnte nicht sicher gestartet werden.');
   }
 }

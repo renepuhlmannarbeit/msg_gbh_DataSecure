@@ -16,6 +16,8 @@ function createBatchProcessingOrchestrator(options = {}) {
   const processSingleBatchItem = options.processSingleBatchItem;
   const writeTerminalEvidence = options.writeTerminalEvidence || (() => undefined);
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
+  const withBatchPseudonymRegistry = options.withBatchPseudonymRegistry ||
+    (async (_state, action) => action(undefined));
 
   async function processBatchNext(token, deps = {}) {
     if (active.has(token)) {
@@ -78,7 +80,16 @@ function createBatchProcessingOrchestrator(options = {}) {
 
       // Security boundary: keep in-process and filesystem locks until the
       // delegated asynchronous pipeline has resolved or rejected.
-      return await processSingleBatchItem(state, item, entry, deps);
+      return await withBatchPseudonymRegistry(state, (pseudonymRegistry) =>
+        processSingleBatchItem(state, item, entry,
+          pseudonymRegistry ? {
+            ...deps,
+            pseudonymRegistry,
+            persistPseudonymContext() {
+              state.pseudonym_registry_state = pseudonymRegistry.exportState();
+              writeState(state);
+            }
+          } : deps));
     } finally {
       active.delete(token);
       releaseActiveLock(token);

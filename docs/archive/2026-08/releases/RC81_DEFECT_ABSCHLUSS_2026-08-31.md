@@ -106,4 +106,7 @@ großes Dokument wird nicht heimlich geteilt oder als Benutzerabbruch ausgegeben
 - Kein nativer Kill-/Stromausfallnachweis allein durch den Intake-Orphan-Test.
 - Kein allgemeiner Beweis vollständiger Anonymisierung beliebiger Dokumente.
 
-Keine GitHub Actions gestartet, kein Commit oder Push im Rahmen dieses Pakets.
+Historischer Stand zum Abschluss der RC81-Implementierung: keine GitHub Actions,
+damals noch kein Commit/Push. RC81 wurde anschließend als `1cbefa0` veröffentlicht.
+Die oben noch offene Marketplace-Quellbaumbereinigung wird im
+[RC82-Folgebericht](RC82_DIALOG_MARKETPLACE_FIXES_2026-08-31.md) fortgeführt.

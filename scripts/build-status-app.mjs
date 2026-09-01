@@ -2,15 +2,51 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = path.join(root, 'plugins/data-secure/server/status-app');
 const check = process.argv.includes('--check');
+const localRequire = createRequire(import.meta.url);
 const sdk = JSON.parse(fs.readFileSync(path.join(root, 'node_modules/@modelcontextprotocol/ext-apps/package.json'), 'utf8'));
 if (sdk.version !== '1.7.5') throw new Error('Unexpected status UI SDK version');
-const result = await build({ absWorkingDir: root, entryPoints: ['ui/status-card/entry.mjs'], bundle: true, minify: true, write: false, platform: 'browser', format: 'iife', target: ['chrome120', 'safari17'], metafile: true, legalComments: 'inline' });
+const entry = path.join(root, 'ui/status-card/entry.mjs');
+const repositoryResolver = {
+  name: 'repository-bound-resolver',
+  setup(context) {
+    context.onResolve({ filter: /^\.\.?\// }, (args) => ({ path: path.resolve(args.resolveDir, args.path) }));
+    context.onResolve({ filter: /^(?:@[^/]+\/|[A-Za-z0-9_-])/ }, (args) => {
+      const resolved = localRequire.resolve(args.path, { paths: [root] });
+      const real = fs.realpathSync(resolved);
+      const repository = `${fs.realpathSync(root)}${path.sep}`;
+      if (!real.startsWith(repository)) throw new Error(`Status UI dependency escaped repository: ${args.path}`);
+      return { path: real };
+    });
+  }
+};
+const result = await build({
+  absWorkingDir: root,
+  // Feeding the already-bound local entry as stdin prevents esbuild from
+  // interpreting a Windows path as a package name or walking parent folders.
+  // resolveDir still gives imported modules the normal repository boundary.
+  stdin: {
+    contents: fs.readFileSync(entry, 'utf8'),
+    resolveDir: path.dirname(entry),
+    sourcefile: 'entry.mjs',
+    loader: 'js'
+  },
+  plugins: [repositoryResolver],
+  bundle: true,
+  minify: true,
+  write: false,
+  platform: 'browser',
+  format: 'iife',
+  target: ['chrome120', 'safari17'],
+  metafile: true,
+  legalComments: 'inline'
+});
 const script = result.outputFiles[0].text.replaceAll('</script', '<\\/script');
 const template = fs.readFileSync(path.join(root, 'ui/status-card/template.html'), 'utf8');
 // A function replacement keeps JavaScript's $&, $` and $' literal.

@@ -60,6 +60,11 @@ test('validation rejects duplicate ids, uncovered assets and forged locator boun
   assert.throws(() => validateContentGraph(outside, 'safe', attachments), /TEXT_LOCATOR_INVALID/);
 });
 
+test('empty text nodes cannot satisfy the complete-content locator contract', () => {
+  const graph = createContentGraph('', [], '.txt');
+  assert.throws(() => validateContentGraph(graph, '', [], '.txt'), /TEXT_LOCATOR_INVALID/);
+});
+
 test('validation rejects traversal-shaped structural parts and extra fields', () => {
   assert.throws(() => createContentGraph('safe', [{ mimeType: 'image/png', source_part: '../x' }], '.docx'),
     /SOURCE_PART_INVALID/);
@@ -203,10 +208,10 @@ test('DOCX locators distinguish body, header and comments while keeping parser s
     ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
     ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
     ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
-    ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Hauptinhalt</w:t></w:r></w:p></w:body></w:document>'],
+    ['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hauptinhalt</w:t></w:r></w:p></w:body></w:document>'],
     ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>'],
-    ['word/header1.xml', '<w:hdr xmlns:w="w"><w:p><w:r><w:t>Kopftext</w:t></w:r></w:p></w:hdr>'],
-    ['word/comments.xml', '<w:comments xmlns:w="w"><w:comment><w:p><w:r><w:t>Kommentartext</w:t></w:r></w:p></w:comment></w:comments>'],
+    ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Kopftext</w:t></w:r></w:p></w:hdr>'],
+    ['word/comments.xml', '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment><w:p><w:r><w:t>Kommentartext</w:t></w:r></w:p></w:comment></w:comments>'],
     ['docProps/core.xml', '<cp:coreProperties xmlns:cp="cp" xmlns:dc="dc"><dc:creator>Erika Beispiel</dc:creator><cp:lastModifiedBy>Max Muster</cp:lastModifiedBy></cp:coreProperties>'],
     ['word/media/image1.png', Buffer.from([0x89, 0x50, 0x4e, 0x47])]
   ]), '.docx');
@@ -263,10 +268,10 @@ test('PPTX locators distinguish slide, notes, chart, layout and master data', ()
 test('embedded OOXML locators retain the complete container chain', () => {
   const inner = zipStore([[
     'word/document.xml',
-    '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Innerer Inhalt</w:t></w:r></w:p></w:body></w:document>'
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Innerer Inhalt</w:t></w:r></w:p></w:body></w:document>'
   ]]);
   const outer = zipStore([
-    ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Äußerer Inhalt</w:t></w:r></w:p></w:body></w:document>'],
+    ['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Äußerer Inhalt</w:t></w:r></w:p></w:body></w:document>'],
     ['word/embeddings/inner.docx', inner],
     ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="embeddings/inner.docx"/></Relationships>']
   ]);

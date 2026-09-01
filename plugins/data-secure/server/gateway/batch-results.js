@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { publicPositiveDocumentResult } = require('./batch-result-projection');
+const { publicPositiveDocumentResult, projectBatchResults, emptyGradeCounts, emptyOmissionCounts } = require('./batch-result-projection');
 
 function createBatchResultAccess(deps) {
   const {
@@ -86,10 +86,16 @@ function createBatchResultAccess(deps) {
     const available = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true).length;
     const used = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged === true).length;
     const progress = publicProgress(state);
+    const nextResultIndex = state.items.findIndex((item, index) =>
+      index >= nextIndex && item.status === 'released' && item.analysis_acknowledged !== true
+    );
     return {
       ok: true,
       results,
-      next_cursor: nextIndex < state.items.length ? resultCursor(token, nextIndex) : null,
+      // Stopped and already acknowledged journal items are not result pages.
+      // Point directly at the next unread result instead of making Cowork call
+      // the tool once more only to receive an empty page.
+      next_cursor: nextResultIndex >= 0 ? resultCursor(token, nextResultIndex) : null,
       used,
       available,
       still_open: progress.remaining + progress.processing + progress.retryable + progress.deferred_review + progress.mapping_pending + progress.delivery_pending,
@@ -122,13 +128,29 @@ function createBatchResultAccess(deps) {
           ? progress.result_grades_verified === true
           : releasedItems.every((item) => verifiedResultPackage(state, item));
         if (releasedItems.length === 0 || !verified) continue;
+        // Durable evidence and publicProgress describe the whole batch. The
+        // handoff describes only unread results (plus stopped documents). Derive
+        // that subset only AFTER the full projection has verified its bindings;
+        // never compare a filtered checkpoint to full-batch terminal evidence.
+        // Reuse those verified in-memory results, without another package hash
+        // pass. Legacy/failed full projections remain explicitly unavailable.
+        const projection = progress.result_grades_verified === true
+          ? projectBatchResults({
+              schema: state.schema,
+              items: state.items.filter((item) => item.status !== 'released' || item.analysis_acknowledged !== true)
+            }, { verifyPositive: (item) => ({ state: 'verified', document_result: item.document_result }) })
+          : {
+              grade_counts: emptyGradeCounts(releasedItems.length + progress.stopped),
+              omission_counts: emptyOmissionCounts(),
+              grades_verified: false
+            };
         candidates.push({
           token,
           released: releasedItems.length,
           stopped: progress.stopped,
-          grade_counts: progress.result_grade_counts,
-          omission_counts: progress.result_omission_counts,
-          grades_verified: progress.result_grades_verified,
+          grade_counts: projection.grade_counts,
+          omission_counts: projection.omission_counts,
+          grades_verified: projection.grades_verified,
           completedAt: String(state.completed_at || state.updated_at || state.created_at || '')
         });
       } catch {

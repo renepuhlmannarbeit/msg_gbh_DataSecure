@@ -17,8 +17,9 @@ const NAME_TOKEN = `(?:[${UPPER}][${NAME_BODY}]{1,30}|${CJK_NAME_TOKEN})`;
 const CAPS_TOKEN = `(?:[${UPPER}][${UPPER}\\p{M}'’\\-]{1,30}|${CJK_NAME_TOKEN})`;
 
 const ORG_SUFFIX =
-  '(?:GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|AG|SE(?:\\s*&\\s*Co\\.?\\s*KGaA)?|KGaA|KG|OHG|GbR|e\\.?V\\.?|B\\.?V\\.?' +
-  '|Ltd\\.?|Limited|Inc\\.?|LLC|SAS|SARL|S\\.?A\\.?|PLC' +
+  '(?:gGmbH|gUG(?:\\s*\\(haftungsbeschränkt\\))?|GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|AG|SE(?:\\s*&\\s*Co\\.?\\s*KGaA)?|KGaA|KG|OHG|GbR|e\\.?V\\.?|B\\.?V\\.?' +
+  '|eG|e\\.?K\\.?|PartG(?:\\s+mbB)?|VVaG|AöR|KdöR|Anstalt\\s+des\\s+öffentlichen\\s+Rechts|Stiftung' +
+  '|Ltd\\.?|Limited|Inc\\.?|LLC|SAS|SARL|S\\.?A\\.?|S\\.?L\\.?|N\\.?V\\.?|S\\.?r\\.?l\\.?|PLC' +
   '|UG(?:\\s*\\(haftungsbeschränkt\\))?)';
 
 const COMPANY_RE = new RegExp(
@@ -58,15 +59,19 @@ const CONTACT_URI_RE = new RegExp(
 // swallow the following paragraph. A postal address written with `\s+` matched
 // "20457 Hamburg\n\nAngebot AN" as one address and left "-2026-0815" glued to
 // the placeholder.
-const SEP_CHARS = ' \\t'; // for use inside a character class
+// Unicode no-break spaces are ordinary visual separators in documents copied
+// from Office/PDF exports. Keep them in the detector grammar instead of
+// changing document-wide typography merely to make identifiers detectable.
+const SEP_CHARS = ' \\t\\u00A0\\u202F\\u2007'; // for use inside a character class
 const SEP = `[${SEP_CHARS}]`; // for standalone use
+const DASH_CHARS = '\\-\\u2010\\u2011\\u2012\\u2013\\u2212';
 
 // Shape only. Whether a shape is treated as a phone number is decided in
 // structured.js so that the residual gate and the redactor cannot disagree.
 const PHONE_RE = new RegExp(
-  `${NB}(?:\\+\\d{1,3}[${SEP_CHARS}./\\-]?(?:\\(0\\)[${SEP_CHARS}./\\-]?)?)?` +
+  `${NB}(?:\\+\\d{1,3}[${SEP_CHARS}./${DASH_CHARS}]?(?:\\(0\\)[${SEP_CHARS}./${DASH_CHARS}]?)?)?` +
     `(?:\\(?\\d{2,5}\\)?)` +
-    `(?:[${SEP_CHARS}./\\-]?\\d{3,8}(?:[${SEP_CHARS}./\\-]\\d{1,6}){0,2}` +
+    `(?:[${SEP_CHARS}./${DASH_CHARS}]?\\d{3,8}(?:[${SEP_CHARS}./${DASH_CHARS}]\\d{1,6}){0,2}` +
     // The subscriber block is also commonly grouped into short 2-digit pairs
     // (e.g. "030 12 34 56 78"). That shape needs its own branch requiring a
     // real separator before the first group: making the plain 3-8 digit
@@ -74,7 +79,7 @@ const PHONE_RE = new RegExp(
     // plus a short unseparated remainder, e.g. "1000" in "kontakt.1000@..."),
     // turning every 4+ digit number after a "kontakt"-labelled line into a
     // false-positive phone match.
-    `|[${SEP_CHARS}./\\-]\\d{2,4}(?:[${SEP_CHARS}./\\-]\\d{2,4}){2,4})${NA}`,
+    `|[${SEP_CHARS}./${DASH_CHARS}]\\d{2,4}(?:[${SEP_CHARS}./${DASH_CHARS}]\\d{2,4}){2,4})${NA}`,
   'gu'
 );
 const PHONE_LABEL_RE = /(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|handy|fax|kontakt|durchwahl|rufnummer|erreichbar(?:\s+unter)?|zu\s+erreichen(?:\s+unter)?|unter\s+der\s+(?:ruf)?nummer|anzurufen\s+unter)\s*\.?\s*:?\s*$/iu;
@@ -82,11 +87,11 @@ const PHONE_LABEL_RE = /(?:tel|telefon|téléphone|telephone|phone|teléfono|tel
 // after a one-digit area code. Keep that shape separate from PHONE_RE so a
 // broadened generic matcher cannot mistake short technical number runs for PII.
 const FRENCH_PHONE_RE = new RegExp(
-  `${NB}(?:(?:\\+33|0)[${SEP_CHARS}./\\-]?[1-9](?:[${SEP_CHARS}./\\-]?\\d{2}){4})${NA}`,
+  `${NB}(?:(?:\\+33|0)[${SEP_CHARS}./${DASH_CHARS}]?[1-9](?:[${SEP_CHARS}./${DASH_CHARS}]?\\d{2}){4})${NA}`,
   'gu'
 );
 
-const IBAN_RE = new RegExp(`${NB}[A-Z]{2}\\d{2}(?:[ ]?[A-Z0-9]){11,30}${NA}`, 'giu');
+const IBAN_RE = new RegExp(`${NB}[A-Z]{2}\\d{2}(?:${SEP}?[A-Z0-9]){11,30}${NA}`, 'giu');
 
 // A bare BIC is indistinguishable from an ordinary German word in upper case:
 // /\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\b/ matches SOFTWARE, PROJEKTE,
@@ -210,6 +215,7 @@ const ROLE_WORDS = new Set([
 // profiles are supposed to preserve.
 const TECH_TERMS = new Set([
   'SPRING BOOT', 'VISUAL STUDIO', 'VISUAL BASIC', 'AZURE DEVOPS',
+  'SAP COMMERCE',
   'MICROSOFT AZURE', 'AMAZON WEB SERVICES', 'GOOGLE CLOUD', 'RED HAT',
   'SQL SERVER', 'ORACLE DATABASE', 'POWER BI', 'POWER APPS', 'POWER AUTOMATE',
   'MICROSOFT TEAMS', 'MICROSOFT OFFICE', 'OPEN SOURCE', 'MACHINE LEARNING',
@@ -219,6 +225,10 @@ const TECH_TERMS = new Set([
   'PAIR PROGRAMMING', 'CODE REVIEW', 'DEUTSCHE BAHN', 'ARTIFICIAL INTELLIGENCE',
   'NODE JS', 'REACT NATIVE', 'ENTITY FRAMEWORK', 'CRYSTAL REPORTS',
   'SOFTWARE ARCHITECTURE', 'REQUIREMENTS ENGINEERING', 'BUSINESS ANALYSIS',
+  'DIGITAL TRANSFORMATION', 'DIGITALE TRANSFORMATION', 'CLOUD MIGRATION',
+  'AZURE FUNCTIONS', 'MEDICAL INFORMATICS', 'HEALTH INFORMATICS',
+  'CLINICAL INFORMATICS', 'DIGITAL HEALTH', 'DATA GOVERNANCE',
+  'CLINICAL RESEARCH', 'PRIVACY POLICY', 'COMPANY LOGO',
   'TEST MANAGEMENT', 'TEST AUTOMATION', 'EXPLORATORY TESTING',
   'REGRESSION TESTING', 'ACCEPTANCE TESTING', 'PERFORMANCE TESTING',
   'SECURITY TESTING', 'RISK BASED TESTING', 'QUALITY ASSURANCE',
@@ -247,7 +257,11 @@ const ORG_ALLOW = new Set([
 // reader. The soft hyphen is the practically relevant one: Word inserts it for
 // justified text, so "Mül<U+00AD>ler" is an ordinary German document, and every
 // name pattern would silently miss it.
-const INVISIBLE_RE = /[­​‌‍⁠﻿]/gu;
+const INVISIBLE_JOINER_RE = /[­​‌‍⁠﻿]/gu;
+const BIDI_BOUNDARY_RE = /[\u202A-\u202E\u2066-\u2069]/gu;
+// Backwards-compatible complete detector for modules/tests that inspect the
+// privacy character class without applying its context-sensitive rewrite.
+const INVISIBLE_RE = /[­​‌‍⁠﻿\u202A-\u202E\u2066-\u2069]/gu;
 
 // Text entering the engine is normalised once. Without NFC a decomposed umlaut
 // ("Mu" + U+0308) does not match the name character classes at all, which is
@@ -257,7 +271,71 @@ const INVISIBLE_RE = /[­​‌‍⁠﻿]/gu;
 function normalizeText(s) {
   return String(s || '')
     .normalize('NFC')
-    .replace(INVISIBLE_RE, '');
+    // Formatting joiners embedded by Office/browser exports belong to the
+    // surrounding token (for example Mu<soft-hyphen>eller). Bidi controls are
+    // different: treating them as an empty string could join two attacker-
+    // controlled name tokens into one synthetic word. Preserve that boundary.
+    .replace(INVISIBLE_JOINER_RE, '')
+    .replace(BIDI_BOUNDARY_RE, ' ')
+    // Office, PDF and browser exports use the complete Unicode Space
+    // Separator family. Privacy matching must see the same token boundary for
+    // all of them; retaining the visual width is less important than avoiding
+    // an invisible split that the residual gate cannot classify.
+    .replace(/\p{Zs}/gu, ' ');
+}
+
+// The privacy engine receives Markdown, including parser-generated Markdown.
+// Detecting only source syntax is unsafe because a renderer can reveal a
+// different string (HTML entities, emphasis, links or inline HTML). This
+// bounded canonicalisation preserves visible wording while removing syntax
+// that can split identifiers. It never executes HTML and never fetches links.
+function canonicalizeRenderedText(s) {
+  let value = normalizeText(s);
+  // Remove only actual, common HTML tags from the source representation.
+  // Entity-escaped comparisons and programming generics are visible text and
+  // must not turn into markup after entity decoding.
+  const htmlBoundaryTag = /<\/?(?:address|article|aside|blockquote|br|caption|col|colgroup|dd|details|div|dl|dt|figcaption|figure|footer|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|summary|table|tbody|td|tfoot|th|thead|tr|ul)(?:\s[^<>\n]{0,2000})?\s*\/?>/giu;
+  const htmlInlineTag = /<\/?(?:a|abbr|b|cite|code|del|dfn|em|i|img|ins|kbd|mark|picture|q|s|samp|small|source|span|strong|sub|sup|time|u|var)(?:\s[^<>\n]{0,2000})?\s*\/?>/giu;
+  value=value.replace(/<!--[\s\S]*?-->/gu,'').replace(htmlBoundaryTag,' ').replace(htmlInlineTag,'');
+  const named = {
+    nbsp:' ',tab:' ',newline:'\n',ensp:' ',emsp:' ',thinsp:' ',hairsp:' ',mediumspace:' ',verythinspace:' ',
+    amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",period:'.',commat:'@',colon:':',semi:';',comma:',',sol:'/',bsol:'\\',
+    auml:'ä',ouml:'ö',uuml:'ü',auml_upper:'Ä',ouml_upper:'Ö',uuml_upper:'Ü',szlig:'ß',
+    eacute:'é',egrave:'è',ecirc:'ê',ccedil:'ç',ntilde:'ñ',aacute:'á',iacute:'í',oacute:'ó',uacute:'ú'
+  };
+  const decodeLayer = (input) => input
+    .replace(/&#(?:x([0-9a-f]{1,6})|([0-9]{1,7}));/giu, (match, hex, dec) => {
+      const code = Number.parseInt(hex || dec, hex ? 16 : 10);
+      if(!Number.isSafeInteger(code)||code<0||code>0x10ffff||(code>=0xd800&&code<=0xdfff))return '\uFFFD';
+      if((code<0x20&&!['9','10','13'].includes(String(code)))||(code>=0x7f&&code<=0x9f))return '\uFFFD';
+      return String.fromCodePoint(code);
+    })
+    .replace(/&([A-Za-z][A-Za-z0-9]{1,31});/gu, (match, rawName) => {
+      const exact = rawName === 'Auml' ? 'auml_upper' : rawName === 'Ouml' ? 'ouml_upper' : rawName === 'Uuml' ? 'uuml_upper' : rawName.toLocaleLowerCase('en-US');
+      return Object.prototype.hasOwnProperty.call(named, exact) ? named[exact] : match;
+    });
+  for(let depth=0;depth<16;depth++){
+    const decoded=decodeLayer(value);
+    if(decoded===value)break;
+    value=decoded;
+  }
+  // More than sixteen nested layers are not meaningful document content. Do
+  // not leave a value that changes classification on a later anonymisation.
+  value=value.replace(/&(?=(?:#(?:x[0-9a-f]{1,6}|[0-9]{1,7})|[A-Za-z][A-Za-z0-9]{1,31});)/giu,'\uFFFD');
+  // Preserve rendered wording, but remove metadata and inactive markup before
+  // privacy detection. No target is fetched or executed.
+  // Keep Markdown link syntax inert and intact. Labels, titles and targets are
+  // scanned by the entity/structured rules; flattening the link here would
+  // silently change document content and break the promised Markdown result.
+  value=value.replace(/\*\*\*([^*\n]+)\*\*\*/gu,'$1');
+  value=value.replace(/\*\*([^*\n]+)\*\*/gu,'$1');
+  value=value.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/gu,'$1');
+  value=value.replace(/___([^_\n]+)___/gu,'$1');
+  value=value.replace(/__([^_\n]+)__/gu,'$1');
+  value=value.replace(/(?<![\p{L}\p{N}\]])_([^_\n]+)_(?![\p{L}\p{N}\[])/gu,'$1');
+  value=value.replace(/~~([^~\n]+)~~/gu,'$1');
+  value=value.replace(/`+([^`\n]+)`+/gu,'$1');
+  return normalizeText(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu,'\uFFFD');
 }
 
 function normalizeSpaces(s) {
@@ -408,6 +486,7 @@ module.exports = {
   TECH_TERMS,
   ORG_ALLOW,
   normalizeText,
+  canonicalizeRenderedText,
   INVISIBLE_RE,
   normalizeSpaces,
   key,

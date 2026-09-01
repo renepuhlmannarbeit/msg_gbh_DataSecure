@@ -32,7 +32,7 @@ function createPrivateWorkStore(options = {}) {
     try {
       fd = io.openSync(temporary, io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL, 0o600);
       identity = io.fstatSync(fd);
-      if (!identity.isFile() || !sameIdentity(identity, io.lstatSync(temporary))) throw failure('PRIVATE_ARTIFACT_PATH_INVALID');
+      if (!identity.isFile() || identity.nlink !== 1 || !sameIdentity(identity, io.lstatSync(temporary))) throw failure('PRIVATE_ARTIFACT_PATH_INVALID');
       writeFully(fd, bytes, io);
       io.fsyncSync(fd);
       const closing = fd;
@@ -45,9 +45,16 @@ function createPrivateWorkStore(options = {}) {
       io.linkSync(temporary, target);
       published = true;
       validate(target);
-      if (!sameIdentity(parent, io.lstatSync(path.dirname(target))) ||
-          !sameIdentity(identity, io.lstatSync(target))) throw failure('PRIVATE_ARTIFACT_PATH_INVALID');
+      const linkedTemporary = io.lstatSync(temporary);
+      const linkedTarget = io.lstatSync(target);
+      if (!sameIdentity(parent, io.lstatSync(path.dirname(target))) || linkedTemporary.nlink !== 2 ||
+          linkedTarget.nlink !== 2 || !sameIdentity(identity, linkedTemporary) ||
+          !sameIdentity(identity, linkedTarget)) throw failure('PRIVATE_ARTIFACT_DURABILITY_UNCERTAIN');
       io.unlinkSync(temporary);
+      const publishedTarget = io.lstatSync(target);
+      if (publishedTarget.nlink !== 1 || !sameIdentity(identity, publishedTarget)) {
+        throw failure('PRIVATE_ARTIFACT_DURABILITY_UNCERTAIN');
+      }
       syncParentDirectory(target, io, platform);
       return { bytes: bytes.length, encrypted: false };
     } catch (error) {

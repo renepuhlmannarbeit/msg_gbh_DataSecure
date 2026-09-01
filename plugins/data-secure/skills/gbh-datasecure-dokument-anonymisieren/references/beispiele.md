@@ -7,7 +7,7 @@ Anfrage: „Anonymisiere diese Verträge und vergleiche anschließend die Kündi
 Erkläre vor dem Start knapp: Zuerst erfolgt die lokale Verarbeitung; für den Vergleich
 ist nach ihrem Abschluss ein neuer ausdrücklicher Auftrag nötig. Wähle intern `contract`
 und starte genau einmal `start_document_batch_from_picker(mode=local_only)`.
-Antworte danach nur „Die lokale Verarbeitung wurde gestartet.“ und beende die Aufgabe.
+Antworte bei `local_intake_accepted_checkpoint_pending` danach nur „Die lokale Auswahl wurde übernommen und wird lokal vorbereitet.“ und beende die Aufgabe. Behaupte vor einem dauerhaften Checkpoint keinen Verarbeitungsstart.
 Kein Polling, kein Ergebnislesen und keine automatische Fortsetzung des Vergleichs.
 
 Spätere Anfrage nach lokalem Abschluss: „Verwende jetzt die anonymisierten Ergebnisse

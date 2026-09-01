@@ -1,34 +1,35 @@
 # DataSecure-Hostmatrix V1
 
-Diese Matrix ist die menschenlesbare Fassung von `HOST_MATRIX_V1.json`. Sie bewertet
-nicht, ob eine Claude-Oberfläche grundsätzlich Skills anzeigen kann. Sie entscheidet
-nur, ob DataSecure in diesem Pilot lokale **Originale** verarbeiten darf.
+Stand: 01.09.2026 · offizielle Anthropic-Dokumentation erneut geprüft
+
+Diese Matrix bewertet nicht, wo ein Skill sichtbar ist. Sie entscheidet nur, ob
+DataSecure lokale **Originale** annehmen darf.
 
 | Hostklasse | Originale | Bereits bereinigtes Markdown | Bedingung |
 |---|---:|---:|---|
-| Cowork Desktop mit Local MCP | konditional | ja | genehmigte Host-/Datengrenzenevidenz plus erreichbarer lokaler Picker |
-| Claude Code lokal mit Local MCP | konditional | ja | genehmigte Host-/Datengrenzenevidenz plus erreichbarer lokaler Picker |
-| Desktop ohne erreichbaren Local MCP | nein | ja | sichtbarer Skill/Plugin-Eintrag genügt nicht |
-| Claude Web | nein | ja | im Pilot nicht als Originalpfad freigegeben |
-| Claude Mobile | nein | ja | im Pilot nicht als Originalpfad freigegeben |
-| Cloud-/Scheduled-Sitzung | nein | ja | im Pilot nicht als Originalpfad freigegeben |
+| Lokale Cowork-Sitzung in Claude Desktop mit lokalem Plugin-MCP | konditional | ja | lokaler Ausführungsmodus, gestartete Runtime und erreichbarer DataSecure-Picker sind beobachtet |
+| Cloud-Cowork, auch in Claude Desktop angezeigt | nein | ja | lokale Plugin-MCPs laufen laut Hersteller nicht in Cloud-Sitzungen |
+| Claude Code lokal mit lokalem Plugin-MCP | konditional | ja | gestartete Runtime und erreichbarer DataSecure-Picker sind beobachtet |
+| Lokale Desktop-Sitzung ohne Local MCP | nein | ja | sichtbarer Skill/Plugin-Eintrag genügt nicht |
+| Web oder Mobil | nein | ja | Cowork läuft dort in der Cloud; kein lokaler Plugin-MCP |
+| Geplante oder andere Cloud-Sitzung | nein | ja | kein lokaler Plugin-MCP |
 
 ## Erreichbarkeit ist keine Host-Attestierung
 
-Diese Matrix ist eine Abnahmepolicy, keine technisch implementierte Erkennung der
-Claude-Ausführungsart. Der Normalstart prüft lokale Enginebereitschaft, attestiert
-aber nicht den Sitzungsort. Ein Picker-Abbruch ohne Auswahl belegt Erreichbarkeit;
-separat sind Claude-Version/Ausführungsart, installierte Runtime und beobachtete
-Rohdatengrenze zu dokumentieren. Auch Desktop kann Cloud-Ausführung vermitteln.
-Eine sichtbare lokale Oberfläche ist deshalb kein hinreichender Nachweis.
-`privacy_status` und Diagnose sind support-only und ebenfalls keine Host-Attestierung.
-Ein zusätzlicher modellseitiger Statusaufruf ist kein normaler Voraussetzungsschritt.
-Chat-Upload,
-Computer-Use, allgemeiner Dateizugriff und andere Connectoren sind keine Ersatzwege.
-Bei ungeklärter Konfiguration bleibt der Originalpfad gesperrt; IT muss die
-vorgesehene Hostkonfiguration mit synthetischen Daten prüfen. Neue Brokerfähigkeit
-bedeutet keine automatische Freigabe von Web, Mobil oder Cloud.
+Nach aktueller [Cowork-Architektur](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview)
+laufen lokale Plugin-MCPs nur in **lokalen** Desktop-Sitzungen. Cloud-Sitzungen
+können zwar über die Desktop-App auf ausdrücklich verbundene lokale Dateien
+zugreifen; dabei würden diese Dateien jedoch in der Cloud verarbeitet. Das ist kein
+zulässiger Ersatz für DataSecure und keine „Desktop-Brücke“ zum lokalen MCP.
 
-Die Quellen und ihr Prüfdatum stehen in der JSON-Fassung. Widersprüchliche oder neue
-Herstellerangaben ändern diese konservative Pilotfreigabe erst nach einer separaten,
-beobachteten Abnahme.
+Der Normalstart prüft die lokale Enginebereitschaft, kann aber die Cowork-
+Ausführungsart nicht selbst sicher attestieren. Ein Picker-Abbruch ohne Auswahl
+belegt nur die Erreichbarkeit. Zusätzlich sind Claude-Version/Ausführungsmodus,
+installierte Runtime und beobachtete Rohdatengrenze mit synthetischen Daten
+abzunehmen. `privacy_status` und Diagnose sind support-only und keine normale
+Voraussetzung.
+
+Chat-Upload, Computer Use, verbundene Ordner, allgemeiner Dateizugriff, Remote-MCP
+und andere Connectoren sind keine Ersatzwege. In Web, Mobil, Cloud oder bei
+unklarer Hostklasse darf der Skill ausschließlich bereits lokal freigegebenes
+Markdown verwenden und muss Originalverarbeitung ablehnen.

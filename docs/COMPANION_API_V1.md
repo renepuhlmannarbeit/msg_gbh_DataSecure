@@ -1,5 +1,13 @@
 # DataSecure Companion API v1
 
+> **Historischer Engineering-Vertrag – nicht normativ.** Diese Datei hält einen
+> früheren Companion-/Jobentwurf fest und darf keine aktuelle Produkt-,
+> Bedienungs- oder Releasezusage begründen. Maßgeblich sind das
+> [kanonische Dokumentenregister](canonical/DOCUMENT_REGISTER.md), der
+> [aktuelle Iststand](canonical/CURRENT_STATE.md) und die
+> [Entscheidungen](canonical/DECISIONS.md). „Companion“ bezeichnet hier einen
+> internen lokalen Broker/Worker, keine separate Anwenderanwendung.
+
 Status: Vertrag, Job-Retention, privater IPC sowie TXT-/Markdown-/CSV-/DOCX-Vertical-Slice mit
 lokalem File Picker und bearbeitbarer Windows-Review-UI implementiert;
 plattformübergreifende UI und signiertes Packaging noch nicht implementiert.

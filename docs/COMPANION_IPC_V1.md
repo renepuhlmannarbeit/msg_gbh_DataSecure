@@ -1,5 +1,13 @@
 # DataSecure Companion IPC v1
 
+> **Historischer Engineering-Vertrag – nicht normativ.** Diese Datei beschreibt
+> einen früheren IPC-/Supervisorstand und darf keine aktuelle Produkt-,
+> Plattform- oder Packagingzusage begründen. Maßgeblich sind das
+> [kanonische Dokumentenregister](canonical/DOCUMENT_REGISTER.md), der
+> [aktuelle Iststand](canonical/CURRENT_STATE.md) und die
+> [Zielarchitektur](canonical/TARGET_ARCHITECTURE.md). „Companion“ bezeichnet
+> hier einen internen lokalen Broker/Worker, keine separate Anwenderanwendung.
+
 Status: privater IPC, MCP-Supervisor und TXT-/Markdown-/CSV-/DOCX-Vertical-Slice mit nativer
 Dateiauswahl sowie lokaler Redaktionsprüfung unter Windows implementiert;
 plattformübergreifende Review-UI, Packaging und Codesignatur noch nicht implementiert.

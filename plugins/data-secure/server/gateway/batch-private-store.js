@@ -81,24 +81,10 @@ function safeRemoveWorkDirectory(token, options = {}) {
     // files. Retain that existing explicit-discard contract, but preflight ALL
     // headers before removal. Intake-orphan intents authorize only flat copies.
     if (!options.expectedIdentity && entries.some((entry) => entry.isDirectory())) {
-      const pending = [{ full: target, depth: 0 }];
-      let inspected = 0;
-      while (pending.length) {
-        const current = pending.pop();
-        if (++inspected > 10000 || current.depth > 32) throw new Error('BATCH_WORK_UNSAFE');
-        const child = fs.lstatSync(current.full);
-        if (child.isSymbolicLink()) throw new Error('BATCH_WORK_UNSAFE');
-        if (child.isFile()) assertPlainWorkFile(current.full);
-        else if (child.isDirectory()) {
-          for (const name of fs.readdirSync(current.full)) {
-            pending.push({ full: path.join(current.full, name), depth: current.depth + 1 });
-          }
-        } else throw new Error('BATCH_WORK_UNSAFE');
-      }
-      safeRemovePrivateTree(root, `${value}.work`, {
-        expectedIdentity: identity(stat), expectedParentIdentity: rootIdentity
-      });
-      return;
+      // Current work areas are flat. A nested historical tree cannot be
+      // classified and deleted atomically with portable Node path APIs, so it
+      // remains untouched for explicit local support review.
+      throw new Error('BATCH_WORK_UNSAFE');
     }
     // Batch work areas are flat. Preflight every sibling before the first
     // deletion, including interrupted atomic-write temporary files.

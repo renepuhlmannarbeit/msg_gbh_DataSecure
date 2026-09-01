@@ -44,7 +44,7 @@ async function main() {
     const inputDir = path.join(root, 'Input');
     fs.mkdirSync(inputDir, { recursive: true });
     const docx = zipStore([
-      ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Synthetischer OCR-Test</w:t></w:r></w:p></w:body></w:document>'],
+      ['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Synthetischer OCR-Test</w:t></w:r></w:p></w:body></w:document>'],
       ['word/media/image1.png', fs.readFileSync(imagePath)]
     ]);
     const source = path.join(inputDir, 'synthetic-ocr.docx');

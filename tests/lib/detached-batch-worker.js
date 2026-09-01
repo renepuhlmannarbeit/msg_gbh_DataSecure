@@ -6,6 +6,7 @@
 // exercised without writing test secrets to the user's credential store.
 
 const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, _test } = require('../../plugins/data-secure/server/gateway/batch');
+const { releaseIntake, RESERVATION_ID_RE } = require('../../plugins/data-secure/server/gateway/batch-intake-reservation');
 const { installBatchPrivateArtifactCrypto } = require('./private-artifact-test-runtime');
 
 installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
@@ -16,7 +17,9 @@ const startDeadline = setTimeout(() => process.exit(2), 30_000);
 process.once('message', async (message) => {
   const validToken = /^[a-f0-9]{64}$/u.test(String(message?.batch_token || ''));
   const existing = message?.type === 'start-local-batch';
-  const intake = message?.type === 'start-local-intake' && Array.isArray(message?.queue) && message.queue.length > 0;
+  const reservationId = String(message?.intake_reservation_id || '');
+  const intake = message?.type === 'start-local-intake' && RESERVATION_ID_RE.test(reservationId) &&
+    Array.isArray(message?.queue) && message.queue.length > 0;
   if (started || !validToken || (!existing && !intake)) return process.exit(2);
   started = true;
   clearTimeout(startDeadline);
@@ -35,7 +38,8 @@ process.once('message', async (message) => {
         queue: message.queue,
         confirmStart: () => true
       });
-      if (begun.ok !== true) return process.exit(1);
+      if (begun.ok !== true) { releaseIntake(reservationId); return process.exit(1); }
+      if (!releaseIntake(reservationId)) throw new Error('INTAKE_RESERVATION_RELEASE_FAILED');
       await notify({ type: 'local-intake-checkpoint-created' });
       if (claimLocalBatchExecutor(message.batch_token, process.pid).ok !== true) return process.exit(1);
       await notify({ type: 'local-intake-processing-started' });
@@ -54,6 +58,7 @@ process.once('message', async (message) => {
     });
     process.exit(0);
   } catch {
+    if (intake) releaseIntake(reservationId);
     process.exit(1);
   }
 });

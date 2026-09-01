@@ -5,7 +5,9 @@ Das verbindliche Arbeitsprogramm steht ausschließlich in
 optionaler zeitlich begrenzter Review-/Übergabeauftrag und darf das kanonische
 Backlog oder Entscheidungsregister nicht verändern. Jeder neue Umsetzungsauftrag muss
 mindestens eine konkrete Story `BL-nnn.x` nennen; reine Backlogpflege darf `BL-001`
-zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`.
+zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`. Der
+einzige aktuelle unabhängige Reviewauftrag ist
+[`CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`](CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md).
 
 Konvention für einen Auftrag:
 

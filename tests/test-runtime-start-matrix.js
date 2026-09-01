@@ -9,19 +9,26 @@ const root = path.join(__dirname, '..');
 const matrix = JSON.parse(fs.readFileSync(path.join(root, 'docs', 'canonical', 'RUNTIME_START_MATRIX_V1.json'), 'utf8'));
 const pluginMcp = JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'data-secure', '.mcp.json'), 'utf8'));
 const mcpb = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+const runtimeContract = JSON.parse(fs.readFileSync(path.join(root, 'native', 'runtime', 'runtime-contract.json'), 'utf8'));
 
-test('matrix distinguishes the documented MCPB runtime from the unproven plugin host path', () => {
+test('matrix excludes MCPB from product and fallback claims', () => {
   assert.strictEqual(matrix.schema, 'datasecure-runtime-start-matrix/v1');
   const byId = new Map(matrix.paths.map((item) => [item.id, item]));
-  assert.strictEqual(byId.get('desktop-extension-mcpb').runtime_evidence, 'official-built-in-node');
+  assert.strictEqual(byId.get('engineering-mcpb').runtime_evidence, 'engineering-package-test-only');
+  assert.strictEqual(byId.get('engineering-mcpb').status, 'engineering-only-not-a-product-fallback');
+  assert.strictEqual(byId.get('engineering-mcpb').product_path, false);
   assert.strictEqual(byId.get('plugin-zip-marketplace-desktop-cowork').status, 'no-go-until-observed');
+  assert.strictEqual(byId.get('plugin-zip-marketplace-desktop-cowork').product_path, true);
   assert.notStrictEqual(byId.get('plugin-zip-claude-code').runtime_evidence, 'official-built-in-node');
 });
 
-test('the current packages use exactly the command whose fresh-host resolution remains under test', () => {
+test('the current artefacts remain explicit while only plugin paths are products', () => {
   assert.strictEqual(pluginMcp['data-secure-local'].command, 'node');
   assert.strictEqual(mcpb.server.mcp_config.command, 'node');
-  assert.ok(matrix.paths.every((item) => item.command === 'node'));
+  assert.ok(matrix.paths.filter((item) => item.product_path).every((item) => item.command === runtimeContract.plugin_command));
+  assert.notStrictEqual(runtimeContract.plugin_command, pluginMcp['data-secure-local'].command,
+    'the source tree remains an engineering input; product packages rewrite the command');
+  assert.ok(matrix.paths.filter((item) => item.package === 'mcpb').every((item) => item.product_path === false));
 });
 
 test('no user install, online bootstrap, silent fallback or three-plugin workaround is allowed', () => {

@@ -4,8 +4,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { createRequire } = require('module');
-const { hasReparseComponent } = require('./common');
-const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+// Historical test fixture only; never part of the Marketplace product tree.
+const { hasReparseComponent } = require('../../../plugins/data-secure/server/gateway/common');
+const { writeFully, syncParentDirectory } = require('../../../plugins/data-secure/server/gateway/batch-journal-io');
 
 const SERVICE_NAME = 'de.msg.datasecure.private-artifacts.v1';
 const ACCOUNT_NAME = 'installation-key-v1';
@@ -21,7 +22,7 @@ function failure(code, message) {
   return error;
 }
 
-function vendorRequire(baseDir = path.join(__dirname, '..', 'vendor', 'keyring')) {
+function vendorRequire(baseDir = path.join(__dirname, 'vendor', 'keyring')) {
   return createRequire(path.join(baseDir, 'package.json'));
 }
 

@@ -1,0 +1,35 @@
+{
+  "schema": "datasecure-synthetic-uat-layout/2",
+  "file_count": 111,
+  "groups": {
+    "01-positive": {
+      "files": [
+        "personnel-profile.txt",
+        "personnel-profile.md",
+        "personnel-profile.csv",
+        "personnel-profile.docx"
+      ]
+    },
+    "02-review": {
+      "files": [
+        "ambiguous-certificate-provider.txt",
+        "personnel-profile-with-image.docx"
+      ]
+    },
+    "03-blocked": {
+      "files": [
+        "blocked-text.pdf",
+        "blocked-workbook.xlsx",
+        "blocked-slides.pptx",
+        "blocked-image.png",
+        "malformed.docx"
+      ]
+    },
+    "04-batch-100": {
+      "sequence": {
+        "pattern": "batch-{index:03}.txt",
+        "count": 100
+      }
+    }
+  }
+}

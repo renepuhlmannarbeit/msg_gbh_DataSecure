@@ -1,5 +1,13 @@
 # DSGVO / EU AI Act – technische Einordnung
 
+> **Historischer Hintergrund – nicht normativ und keine Rechtsberatung.** Der
+> Quellenstand und die Formulierungen dieser Datei sind zeitgebunden. Aktuelle
+> Produktzusagen, Sicherheitsgrenzen und Entscheidungspflichten stehen im
+> [kanonischen Dokumentenregister](canonical/DOCUMENT_REGISTER.md), im
+> [Produktvertrag](canonical/PRODUCT.md) und im
+> [aktuellen Iststand](canonical/CURRENT_STATE.md). Diese Datei ist weder
+> Konformitätsnachweis noch Rechtsgrundlage.
+
 ## Was der Gateway leistet
 
 - lokale Datenminimierung und De-Identifizierung vor Claude

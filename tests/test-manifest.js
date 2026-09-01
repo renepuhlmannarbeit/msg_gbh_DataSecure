@@ -92,30 +92,35 @@ test('MCPB manifest declares the fields the runtime relies on', () => {
   assert.deepStrictEqual(mcpb.compatibility.platforms, ['win32', 'darwin', 'linux']);
   assert.strictEqual(mcpb.compatibility.runtimes.node, '>=22.13.0');
   assert.match(mcpb.compatibility.runtimes.node, /^>=\s*2[2-9]/);
-  for (const key of ['root_dir', 'language', 'visual_mode', 'retention_days']) {
+  for (const key of ['root_dir', 'language', 'retention_days']) {
     assert.ok(mcpb.user_config[key], `user_config.${key} missing`);
   }
-  for (const key of ['root_dir', 'language', 'visual_mode', 'retention_days']) {
+  assert.strictEqual(mcpb.user_config.visual_mode, undefined);
+  for (const key of ['root_dir', 'language', 'retention_days']) {
     assert.ok(
       JSON.stringify(mcpb.server.mcp_config.env).includes(`user_config.${key}`),
       `env does not wire user_config.${key}`
     );
   }
+  assert.strictEqual(mcpb.server.mcp_config.env.EU_PRIVACY_VISUAL_MODE, 'strict');
+  assert.strictEqual(mcpb.user_config.retention_days.max, 14);
+  assert.match(mcpb.user_config.retention_days.description, /Original- und Quelldateien.*niemals automatisch gelöscht/su);
+  assert.match(mcpb.user_config.retention_days.description, /fertige Exportpakete.*niemals automatisch gelöscht/su);
 });
 
-test('public host wording distinguishes Linux engine support from Claude Desktop availability', () => {
+test('host wording does not turn portable code into a platform release claim', () => {
   const readme = readText(path.join(root, 'README.md'));
   const guide = readText(path.join(root, 'docs', 'ANLEITUNG.md'));
-  assert.doesNotMatch(mcpb.description, /Claude-Desktop[^\n]{0,80}Linux/iu);
-  assert.match(mcpb.long_description, /Linux ist ein lokaler Claude-Code-Host-Zielpfad/u);
-  assert.match(readme, /Claude-Desktop-App ist kein Linux-Auslieferungsweg/u);
-  assert.match(guide, /nicht auf Linux/u);
+  assert.match(mcpb.long_description, /ohne reale Zielsystem- und Cowork-Abnahme keine Plattformfreigabe/u);
+  assert.doesNotMatch(mcpb.long_description, /Claude Desktop ist für Linux als Beta verfügbar/u);
+  assert.match(readme, /Cloud-Cowork[\s\S]{0,100}keinen lokalen Plugin-MCP[\s\S]{0,100}keine Originale verarbeiten/u);
+  assert.match(guide, /Originale niemals per Büroklammer in den Chat/u);
 });
 
 test('PDF is declared blocked until the native coverage contract is released', () => {
   assert.deepStrictEqual(buildInfo.formats, ['csv', 'docx', 'markdown', 'txt'], 'BUILD_INFO must promise exactly the pilot formats');
-  assert.deepStrictEqual(buildInfo.blocked_formats, ['pdf']);
-  assert.match(mcpb.long_description, /PDF.*sicher gesperrt/u);
+  assert.deepStrictEqual(buildInfo.blocked_formats, ['xlsx', 'pptx', 'pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']);
+  assert.match(mcpb.long_description, /XLSX, PPTX, PDF, Scan-PDF, eigenständige Bilder und unbekannte Formate stoppen sicher/u);
   assert.match(readText(path.join(runtime, 'runtime.js')), /PDF_COVERAGE_UNVERIFIED/u);
   assert.strictEqual(fs.existsSync(path.join(runtime, 'pdf-lite.js')), false, 'legacy PDF parser must not ship');
   assert.strictEqual(fs.existsSync(path.join(root, 'tests', 'helpers', 'legacy-pdf-lite.js')), true);
@@ -201,25 +206,26 @@ test('the MCP config uses the plugin root placeholder', () => {
 
 test('no npm runtime dependencies are declared', () => {
   assert.ok(!pkg.dependencies, 'the offline promise forbids runtime dependencies');
-  assert.strictEqual(buildInfo.runtime.includes('no npm'), true);
+  assert.match(buildInfo.runtime, /no end-user npm\/Python setup/u);
 });
 
 test('native Windows launcher has a reproducible source and release build contract', () => {
-  assert.strictEqual(
-    pkg.scripts.pretest,
-    'npm run test:staging && npm run test:executor-lifecycle && npm run test:p0-private && npm run native:verify && npm run test:legacy-input && npm run test:result-grades'
-  );
-  for (const name of ['pretest:ci', 'pretest:fast-path']) {
-    assert.ok(pkg.scripts[name].startsWith('npm run test:staging && npm run test:executor-lifecycle && '));
+  assert.strictEqual(pkg.scripts.test, 'npm run test:product');
+  assert.strictEqual(pkg.scripts['test:ci'], 'npm run test:product:ci');
+  assert.strictEqual(pkg.scripts['test:product'], 'node tests/run-product-suite.js full');
+  assert.strictEqual(pkg.scripts['test:product:ci'], 'node tests/run-product-suite.js ci');
+  const productRunner = readText(path.join(root, 'tests', 'run-product-suite.js'));
+  for (const required of ['test-package-staging.js', 'test-batch-executor-startup.js',
+    'test-private-work-store.js', 'verify-native.mjs', 'test-batch-maintenance.js']) {
+    assert.ok(productRunner.includes(required), `product runner missing ${required}`);
   }
+  assert.doesNotMatch(productRunner, /test-(?:engineering-keyring|keyring-pilot|private-artifact-crypto|pdfium-spike|ocr-session-harness)\./iu);
   assert.strictEqual(pkg.scripts['test:executor-lifecycle'],
     'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-workflow-diagnostics.js');
   assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');
   assert.strictEqual(pkg.scripts['native:analyze'], 'node scripts/build-native.mjs --analyze');
-  assert.strictEqual(pkg.scripts.posttest, 'node tests/test-docx-structure.js && node tests/test-docx-differential.js && node tests/test-native-launcher.js');
-  assert.strictEqual(pkg.scripts['posttest:ci'], 'npm run test:parser-contract && npm run test:rc81-review');
   assert.match(pkg.scripts['test:rc81-review'], /test-native-picker-lifecycle\.js/);
   assert.strictEqual(pkg.scripts['test:parser-contract'], 'node tests/test-content-graph.js && node tests/test-parser-isolation.js && node tests/test-docx-structure.js && node tests/test-docx-differential.js');
   for (const rel of [
@@ -233,10 +239,12 @@ test('native Windows launcher has a reproducible source and release build contra
   ]) {
     assert.ok(fs.existsSync(path.join(root, rel)), `native boundary input missing: ${rel}`);
   }
-  for (const rel of ['scripts/build-plugin.mjs', 'scripts/build-mcpb.mjs']) {
-    assert.match(readText(path.join(root, rel)), /datasecure-sandbox\.exe/,
-      `${rel} does not enforce native launcher packaging`);
-  }
+  assert.match(readText(path.join(root, 'scripts', 'build-plugin.mjs')), /buildRuntimePlugin/u,
+    'product build must delegate to the self-contained runtime assembler');
+  assert.match(readText(path.join(root, 'scripts', 'build-runtime-plugin.mjs')), /collectProductFiles\(pluginRoot\)/u,
+    'runtime assembler must include the verified product inventory');
+  assert.match(readText(path.join(root, 'scripts', 'build-mcpb.mjs')), /datasecure-sandbox\.exe/u,
+    'engineering MCPB must retain its explicit native launcher boundary');
   const binary = path.join(root, 'plugins', 'data-secure', 'server', 'native', 'windows-x64', 'datasecure-sandbox.exe');
   const expected = readText(binary.replace(/\.exe$/u, '.sha256')).trim();
   const actual = crypto.createHash('sha256').update(fs.readFileSync(binary)).digest('hex');
@@ -251,9 +259,10 @@ test('Claude plugin build no longer rejects the officially documented executable
 });
 
 test('every test referenced by the npm test script exists', () => {
-  const script = pkg.scripts.test;
-  const referenced = [...script.matchAll(/node\s+(tests\/[\w.-]+)/g)].map((m) => m[1]);
-  assert.ok(referenced.length >= 5, 'test script does not reference the suite');
+  const script = readText(path.join(root, 'tests', 'run-product-suite.js'));
+  const referenced = [...script.matchAll(/['"]((?:(?:tests|scripts)\/)?(?:test-[\w.-]+|[\w.-]+\.mjs|make-fixtures\.js))['"]/g)]
+    .map((m) => m[1].includes('/') ? m[1] : `tests/${m[1]}`);
+  assert.ok(referenced.length >= 40, 'product runner does not reference the suite');
   for (const rel of referenced) {
     assert.ok(fs.existsSync(path.join(root, rel)), `test script references missing file ${rel}`);
   }

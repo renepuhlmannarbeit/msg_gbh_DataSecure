@@ -63,7 +63,7 @@ Die bereits produktseitig geltenden kleineren Grenzwerte werden übernommen:
 | Ergebnistext | 5.000.000 Zeichen | `OCR_OUTPUT_LIMIT` |
 | Wörter | 100.000 | `OCR_OUTPUT_LIMIT` |
 | Worttext | 1.000 Zeichen | `OCR_RESULT_INVALID` |
-| isolierte Standardausgabe | 64 KiB | `OCR_OUTPUT_LIMIT` |
+| isolierte Standardausgabe | 32 MiB | `OCR_OUTPUT_LIMIT` |
 | Node-Heap des Piloten | 512 MiB | Prozess wird beendet |
 | Wächterzeit des Piloten | 50 Sekunden | `OCR_TIMEOUT` |
 

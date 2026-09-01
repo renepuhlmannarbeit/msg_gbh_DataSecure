@@ -5,7 +5,7 @@ const { createSuite } = require('./helpers');
 const {
   SECRET_BYTES, KEYRING_PACKAGE, SERVICE_NAME,
   accountForBatch, loadNativeKeyring, createBatchSecretStore
-} = require('../plugins/data-secure/server/batch-secret-store');
+} = require('./legacy/keyring/batch-secret-store');
 
 const { test, done, assert } = createSuite('Batch secret-store pilot');
 const token = 'a'.repeat(64);
@@ -92,7 +92,7 @@ test('missing, malformed and backend-failure secrets stop without exposing a bac
 });
 
 test('the pilot has no filesystem, environment, CLI or self-encryption fallback path', () => {
-  const source = require('fs').readFileSync(require.resolve('../plugins/data-secure/server/batch-secret-store'), 'utf8');
+  const source = require('fs').readFileSync(require.resolve('./legacy/keyring/batch-secret-store'), 'utf8');
   assert.doesNotMatch(source, /require\(['"]fs['"]\)|writeFile|readFile|process\.env|child_process|\b(?:spawn|exec|execFile)\s*\(|createCipher|createDecipher/iu);
 });
 

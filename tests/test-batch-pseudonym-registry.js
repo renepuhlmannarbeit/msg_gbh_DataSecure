@@ -41,6 +41,21 @@ test('the existing release gate accepts only an injected in-memory batch registr
   secret.fill(0);
 });
 
+test('personnel organizations, employers and locations work through the batch registry', () => {
+  const secret = Buffer.alloc(SECRET_BYTES, 3);
+  const registry = createBatchPseudonymRegistry(secret);
+  const result = pii.anonymize([
+    'Arbeitgeber: Interne Arbeitgeber AG',
+    'Kunde: Externe Klinik GmbH',
+    'Standort: Berlin, Privatstraße 12'
+  ].join('\n'), 'personnel_profile', { registry });
+  assert.match(result.text, /\[ARBEITGEBER_001\]/u);
+  assert.match(result.text, /\[KUNDE_[A-Z2-7]+\]/u);
+  assert.doesNotMatch(result.text, /Interne Arbeitgeber|Externe Klinik|Privatstraße/u);
+  registry.dispose();
+  secret.fill(0);
+});
+
 test('different secrets unlink batches while entity kinds remain separated', () => {
   const firstSecret = Buffer.alloc(SECRET_BYTES, 1);
   const secondSecret = Buffer.alloc(SECRET_BYTES, 2);

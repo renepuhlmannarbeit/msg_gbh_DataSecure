@@ -1,4 +1,7 @@
-name: PDFium engineering spike
+name: Future-format PDFium engineering spike (non-release)
+
+# Manual research only. PDF remains blocked in the product. This workflow must
+# neither build nor attest MCPB/product release support.
 
 on:
   workflow_dispatch:
@@ -43,15 +46,13 @@ jobs:
           output: codeql-pdfium-probe-results
       - name: Enforce clean native CodeQL result
         run: node scripts/check-sarif.mjs codeql-pdfium-probe-results
-      - name: Prove release archives exclude the spike payload
+      - name: Prove the product ZIP excludes the spike payload
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           npm run build
-          $archives = @(Get-ChildItem -LiteralPath dist -File | Where-Object {
-            $_.Extension -in @('.zip', '.mcpb')
-          })
-          if ($archives.Count -ne 2) { throw 'Expected exactly two release archives.' }
+          $archives = @(Get-ChildItem -LiteralPath dist -File -Filter 'DataSecure-Privacy-Preflight-v*.zip')
+          if ($archives.Count -ne 1) { throw 'Expected exactly one product ZIP.' }
           foreach ($archive in $archives) {
             $entries = @(tar -tf $archive.FullName)
             $forbidden = @($entries | Where-Object {

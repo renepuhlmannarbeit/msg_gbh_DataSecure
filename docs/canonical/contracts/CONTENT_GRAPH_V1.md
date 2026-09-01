@@ -1,6 +1,7 @@
 # Content-Graph und Locator V1
 
-Status: **Engineering-Vertrag, nicht als neue Formatfreigabe wirksam**
+Status: **E0 für TXT, Markdown, CSV und DOCX implementiert; für gesperrte
+Zielcontainer weiterhin Engineering-Vertrag**
 
 Der Vertrag `data-secure-content-graph/v1` vereinheitlicht Parserausgaben, ohne
 Dokumentinhalt ein zweites Mal zu speichern. `markdown` bleibt die einzige
@@ -29,8 +30,8 @@ IDs sind exakt fortlaufend. Text-, Tabellen- und Metadatenknoten stehen geordnet
 überlappungsfrei vor den Bildknoten; zwischen und nach ihnen darf ausschließlich
 Leerraum unlokalisiert bleiben. Dadurch ist jedes nicht-leere Zeichen des Markdown
 mindestens einem Knoten zugeordnet.
-Ein Graph schaltet kein Format frei; die veröffentlichte Capability-Liste bleibt
-unverändert.
+Ein Graph schaltet kein weiteres Format frei; die veröffentlichte Capability-Liste
+bleibt unverändert.
 
 Seit RC69 wird das Format zusätzlich gegen die vertrauenswürdige Extension des
 isolierten Parseraufrufs geprüft (nicht nur gegen die Selbstauskunft des Workers).

@@ -27,7 +27,16 @@ const stories = [
 function documentFor(content, story = stories[0]) {
   const [tag, part, relation, item] = story;
   const main = part ? paragraph('MAIN_CONTROL') : content;
-  const entries = [...opcControlEntries('docx'),
+  const storyContentType = {
+    header: 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
+    footer: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
+    comments: 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml',
+    footnotes: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
+    endnotes: 'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml'
+  }[relation];
+  const entries = [...opcControlEntries('docx', {
+    additionalOverrides: part ? [{ part: `word/${part}`, contentType: storyContentType }] : []
+  }),
     ['word/document.xml', `<w:document ${namespaces}><w:body>${main}</w:body></w:document>`]];
   if (part) entries.push(
     [`word/${part}`, `<w:${tag} ${namespaces}>${item ? `<w:${item} w:id="1">${content}</w:${item}>` : content}</w:${tag}>`],
@@ -36,6 +45,12 @@ function documentFor(content, story = stories[0]) {
   return zipStore(entries);
 }
 function parse(content, story) { return parseOoxml(documentFor(content, story), '.docx'); }
+function parseMainXml(xml) {
+  return parseOoxml(zipStore([
+    ...opcControlEntries('docx'),
+    ['word/document.xml', xml]
+  ]), '.docx');
+}
 function onceInOrder(markdown, expected) {
   let previous = -1;
   for (const token of expected) {
@@ -52,6 +67,34 @@ function rejects(content, story, code = 'DOCX_STRUCTURE_UNSAFE') {
     return true;
   });
 }
+
+test('WordprocessingML uses namespace URIs instead of trusting the textual prefix', () => {
+  const uri = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const result = parseMainXml(`<doc:document xmlns:doc="${uri}"><body:body xmlns:body="${uri}"><para:p xmlns:para="${uri}"><run:r xmlns:run="${uri}"><text:t xmlns:text="${uri}">ALTERNATIVE_PREFIX</text:t></run:r></para:p></body:body></doc:document>`);
+  assert.deepStrictEqual(result.warnings, []);
+  assertPresent(result.markdown, 'ALTERNATIVE_PREFIX');
+
+  const defaultNamespace = parseMainXml(`<document xmlns="${uri}"><body><p><r><t>DEFAULT_NAMESPACE</t></r></p></body></document>`);
+  assert.deepStrictEqual(defaultNamespace.warnings, []);
+  assertPresent(defaultNamespace.markdown, 'DEFAULT_NAMESPACE');
+
+  const falseNamespace = parseMainXml('<w:document xmlns:w="urn:not-wordprocessingml"><w:body><w:p><w:r><w:t>FALSE_NAMESPACE</w:t></w:r></w:p></w:body></w:document>');
+  assert.strictEqual(falseNamespace.markdown, '');
+  assert.ok(falseNamespace.warnings.length > 0);
+  assertAbsent(falseNamespace.warnings.join(' '), 'FALSE_NAMESPACE');
+});
+
+test('blocked Word constructs cannot evade coverage with another valid prefix', () => {
+  const uri = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const result = parseMainXml(`<x:document xmlns:x="${uri}"><x:body><x:p><x:r><x:instrText>PRIVATE_FIELD</x:instrText><x:t>VISIBLE</x:t></x:r></x:p></x:body></x:document>`);
+  assert.ok(result.warnings.length > 0);
+  assert.match(result.warnings.join(' '), /nicht unterstützte inhaltsfähige OOXML-Part/iu);
+
+  const math = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
+  const mathResult = parseMainXml(`<x:document xmlns:x="${uri}" xmlns:formula="${math}"><x:body><formula:oMath><formula:r><formula:t>PRIVATE_FORMULA</formula:t></formula:r></formula:oMath></x:body></x:document>`);
+  assert.ok(mathResult.warnings.length > 0);
+  assertAbsent(mathResult.warnings.join(' '), 'PRIVATE_FORMULA');
+});
 
 for (const story of stories) {
   test(`${story[0]} preserves nested tables, following cells and rows once in source order`, () => {
@@ -130,6 +173,10 @@ test('malformed tags, attributes and out-of-paragraph text runs fail closed', ()
     '<w:t>SECRET</w:t>', '<w:p><w:r><w:t>SECRET</w:t></w:r></w:p extra="1">',
     '<!DOCTYPE w:p><w:p/>', '<w:p><!-- SECRET</w:p>', '<w:p><![CDATA[SECRET]]></w:p>'
   ]) rejects(malformed);
+});
+
+test('foreign namespace elements cannot hide direct text from coverage', () => {
+  rejects('<w:p><ext:secret xmlns:ext="urn:private">PRIVATE_HIDDEN</ext:secret>' + run('VISIBLE') + '</w:p>');
 });
 
 test('unterminated attribute whitespace is rejected without scanning subtrees repeatedly', () => {

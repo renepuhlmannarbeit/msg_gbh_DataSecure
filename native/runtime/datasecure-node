@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+SELF_DIR=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
+PLATFORM=$(uname -s 2>/dev/null || true)
+MACHINE=$(uname -m 2>/dev/null || true)
+
+case "${PLATFORM}:${MACHINE}" in
+  Darwin:x86_64) TARGET=macos-x64 ;;
+  Darwin:arm64) TARGET=macos-arm64 ;;
+  *)
+    printf '%s\n' 'DATASECURE_RUNTIME_UNSUPPORTED' >&2
+    exit 126
+    ;;
+esac
+
+RUNTIME="${SELF_DIR}/targets/${TARGET}/node"
+if [ ! -f "${RUNTIME}" ] || [ ! -x "${RUNTIME}" ] || [ -L "${RUNTIME}" ]; then
+  printf '%s\n' 'DATASECURE_RUNTIME_MISSING' >&2
+  exit 126
+fi
+exec "${RUNTIME}" "$@"

@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 const { createSuite, assertPresent } = require('./helpers');
 const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 
 const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
 const { convertDocument, SafeError } = require(path.join(runtime, 'runtime.js'));
@@ -33,11 +34,33 @@ const write = (name, data) => {
 
 function docx(paragraphs, extra = []) {
   const body = paragraphs.map((t) => `<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`).join('');
-  return zipStore([
-    ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-    ['word/document.xml', `<w:document xmlns:w="w"><w:body>${body}</w:body></w:document>`],
+  const contentTypeFor = (part) => {
+    if (/^word\/header\d+\.xml$/iu.test(part)) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
+    if (/^word\/footer\d+\.xml$/iu.test(part)) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml';
+    const known = {
+      'word/comments.xml': 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml',
+      'word/footnotes.xml': 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
+      'word/endnotes.xml': 'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml',
+      'word/settings.xml': 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml',
+      'docProps/core.xml': 'application/vnd.openxmlformats-package.core-properties+xml',
+      'docProps/app.xml': 'application/vnd.openxmlformats-officedocument.extended-properties+xml',
+      'docProps/custom.xml': 'application/vnd.openxmlformats-officedocument.custom-properties+xml'
+    };
+    const embedded = /^word\/embeddings\/[^/]+\.(docx|xlsx|pptx)$/iu.exec(part)?.[1]?.toLowerCase();
+    return known[part] || ({
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    })[embedded];
+  };
+  const hasExplicitTypes = extra.some(([name]) => name === '[Content_Types].xml');
+  const controls = hasExplicitTypes ? opcControlEntries('docx').filter(([name]) => name !== '[Content_Types].xml') :
+    opcControlEntries('docx', { additionalOverrides: extra.map(([part]) => ({ part, contentType: contentTypeFor(part) })).filter((item) => item.contentType) });
+  return zipStore([...new Map([
+    ...controls,
+    ['word/document.xml', `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`],
     ...extra
-  ]);
+  ])]);
 }
 
 function embeddedDocx(paragraphs, embedded, relationshipType = 'package') {
@@ -69,7 +92,7 @@ test('DOCX requires one internal root officeDocument relationship', () => {
     ['duplicate root relationship', [['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>']]]
   ];
   for (const [label, extra] of cases) {
-    const entries = [['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Vertraulicher Inhalt</w:t></w:r></w:p></w:body></w:document>'], ...extra];
+    const entries = [['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Vertraulicher Inhalt</w:t></w:r></w:p></w:body></w:document>'], ...extra];
     const result = parseOoxml(zipStore(entries), '.docx');
     assert.strictEqual(result.warnings.length, 1, `${label} must block coverage`);
     assert.doesNotMatch(result.warnings[0], /example\.invalid|other\.xml|Vertraulicher/u, `${label} warning stays content-free`);
@@ -79,7 +102,7 @@ test('DOCX requires one internal root officeDocument relationship', () => {
 test('DOCX requires the WordprocessingML main-document root before rendering', () => {
   const result = parseOoxml(zipStore([
     ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-    ['word/document.xml', '<w:unsupported xmlns:w="w"><w:p><w:r><w:t>Vertraulicher Inhalt</w:t></w:r></w:p></w:unsupported>']
+    ['word/document.xml', '<w:unsupported xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulicher Inhalt</w:t></w:r></w:p></w:unsupported>']
   ]), '.docx');
   assert.strictEqual(result.warnings.length, 1, 'a named but non-renderable main part must block coverage');
   assert.strictEqual(result.markdown, '', 'the unsupported main root must not be rendered');
@@ -87,9 +110,72 @@ test('DOCX requires the WordprocessingML main-document root before rendering', (
 });
 
 test('DOCX XML entities are decoded', () => {
-  const result = parseOoxml(docx(['M&amp;A Beratung &#8211; 2026', 'Preis &lt; 100 &euro;']), '.docx');
+  const result = parseOoxml(docx(['M&amp;A Beratung &#8211; 2026', 'Preis &lt; 100 &#8364;']), '.docx');
   assertPresent(result.markdown, 'M&A Beratung', 'ampersand entity');
-  assertPresent(result.markdown, 'Preis < 100', 'less-than entity');
+  assertPresent(result.markdown, 'Preis < 100 €', 'less-than and numeric entities');
+});
+
+test('DOCX numeric XML references cannot hide identifiers with forbidden controls', () => {
+  for (const encoded of ['&#0;', '&#x0;', '&#x1f;', '&#127;', '&#x85;', '&#xD800;', '&#x110000;']) {
+    assert.throws(() => parseOoxml(docx([`Max${encoded}Mustermann`]), '.docx'), (error) => {
+      assert.strictEqual(error.code, 'OOXML_XML_CHARACTER_INVALID');
+      assert.doesNotMatch(error.message, /Mustermann/u);
+      return true;
+    });
+  }
+});
+
+test('DOCX rejects unknown entities and naked ampersands before identifier detection', () => {
+  for (const fragmented of [
+    'DE89&bogus;370400440532013000',
+    'DE89&370400440532013000'
+  ]) {
+    assert.throws(() => parseOoxml(docx([fragmented]), '.docx'), (error) => {
+      assert.strictEqual(error.code, 'OOXML_XML_CHARACTER_INVALID');
+      assert.doesNotMatch(error.message, /DE89|37040044|bogus/u);
+      return true;
+    });
+  }
+});
+
+test('DOCX active fields, revisions, math, alternate content and hidden metadata stop fail closed', () => {
+  const cases = [
+    '<w:p><w:r><w:instrText>DDEAUTO private</w:instrText></w:r></w:p>',
+    '<w:fldSimple w:instr="PRIVATE"><w:r><w:t>value</w:t></w:r></w:fldSimple>',
+    '<w:ins w:author="Private Person"><w:r><w:t>value</w:t></w:r></w:ins>',
+    '<m:oMath><m:r><m:t>private</m:t></m:r></m:oMath>',
+    '<mc:AlternateContent><mc:Choice><w:p><w:r><w:t>private</w:t></w:r></w:p></mc:Choice></mc:AlternateContent>'
+  ];
+  for (const content of cases) {
+    try {
+      const result = parseOoxml(docx([], [['word/document.xml', `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><w:body>${content}</w:body></w:document>`]]), '.docx');
+      assert.strictEqual(result.warnings.length, 1);
+      assert.doesNotMatch(result.warnings[0], /private|author|DDEAUTO/iu);
+    } catch (error) {
+      assert.ok(['DOCX_STRUCTURE_UNSAFE', 'OOXML_XML_CHARACTER_INVALID'].includes(error.code));
+      assert.doesNotMatch(error.message, /private|author|DDEAUTO/iu);
+    }
+  }
+  const settings = parseOoxml(docx(['visible'], [[
+    'word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docVars><w:docVar w:name="secret" w:val="private"/></w:docVars></w:settings>'
+  ]]), '.docx');
+  assert.strictEqual(settings.warnings.length, 1);
+  assert.doesNotMatch(settings.warnings[0], /secret|private/iu);
+});
+
+test('DOCX content-bearing stories require one exact OPC content-type override', () => {
+  const header = '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Private Header</w:t></w:r></w:p></w:hdr>';
+  const rels = '<Relationships><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>';
+  for (const contentTypes of [
+    '<Types><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    '<Types><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/header1.xml" ContentType="application/xml"/></Types>'
+  ]) {
+    const result = parseOoxml(docx(['body'], [
+      ['[Content_Types].xml', contentTypes], ['word/header1.xml', header], ['word/_rels/document.xml.rels', rels]
+    ]), '.docx');
+    assert.ok(result.warnings.length >= 1);
+    assert.doesNotMatch(result.warnings.join(' '), /Private Header/u);
+  }
 });
 
 test('DOCX DrawingML text boxes retain all certification text', () => {
@@ -109,7 +195,7 @@ test('DOCX DrawingML text boxes retain all certification text', () => {
     '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
   ],[
     'word/document.xml',
-    `<w:document xmlns:w="w" xmlns:mc="mc" xmlns:wps="wps"><w:body>${drawing}<w:p><w:r><w:t>Qualifikationen</w:t></w:r></w:p></w:body></w:document>`
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><w:body>${drawing}<w:p><w:r><w:t>Qualifikationen</w:t></w:r></w:p></w:body></w:document>`
   ]]), '.docx');
   assertPresent(result.markdown, 'Scrum.org Professional Scrum Product Owner I (PSPO I)', 'text-box certificate issuer');
   assertPresent(result.markdown, 'SAFe Agilist', 'text-box certificate');
@@ -120,11 +206,11 @@ test('DOCX DrawingML text boxes retain all certification text', () => {
 
 test('DOCX secondary stories retain structured text before the privacy gate', () => {
   const result = parseOoxml(docx(['Haupttext'], [
-    ['word/header1.xml', '<w:hdr xmlns:w="w"><w:p><w:r><w:t>Vertraulich</w:t><w:tab/><w:t>Max Mustermann</w:t></w:r></w:p></w:hdr>'],
-    ['word/footer1.xml', '<w:ftr xmlns:w="w"><w:p><w:r><w:t>Beispiel GmbH</w:t><w:br/><w:t>Seite 1</w:t></w:r></w:p></w:ftr>'],
-    ['word/comments.xml', '<w:comments xmlns:w="w"><w:comment><w:p><w:r><w:t>Kommentar von Erika Beispiel</w:t></w:r></w:p></w:comment></w:comments>'],
-    ['word/footnotes.xml', '<w:footnotes xmlns:w="w"><w:footnote><w:p><w:r><w:t>Fußnote: kundenintern</w:t></w:r></w:p></w:footnote></w:footnotes>'],
-    ['word/endnotes.xml', '<w:endnotes xmlns:w="w"><w:endnote><w:p><w:r><w:t>Endnote: Projekt Alpha</w:t></w:r></w:p></w:endnote></w:endnotes>'],
+    ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulich</w:t><w:tab/><w:t>Max Mustermann</w:t></w:r></w:p></w:hdr>'],
+    ['word/footer1.xml', '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Beispiel GmbH</w:t><w:br/><w:t>Seite 1</w:t></w:r></w:p></w:ftr>'],
+    ['word/comments.xml', '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment><w:p><w:r><w:t>Kommentar von Erika Beispiel</w:t></w:r></w:p></w:comment></w:comments>'],
+    ['word/footnotes.xml', '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote><w:p><w:r><w:t>Fußnote: kundenintern</w:t></w:r></w:p></w:footnote></w:footnotes>'],
+    ['word/endnotes.xml', '<w:endnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:endnote><w:p><w:r><w:t>Endnote: Projekt Alpha</w:t></w:r></w:p></w:endnote></w:endnotes>'],
     ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes" Target="endnotes.xml"/></Relationships>']
   ]), '.docx');
   assertPresent(result.markdown, 'Vertraulich\tMax Mustermann', 'header tab');
@@ -143,14 +229,14 @@ test('DOCX secondary stories retain structured text before the privacy gate', ()
 
 test('DOCX secondary stories require matching internal relationships', () => {
   const orphan = parseOoxml(docx(['Sichtbarer Text'], [
-    ['word/header1.xml', '<w:hdr xmlns:w="w"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>']
+    ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>']
   ]), '.docx');
   assert.strictEqual(orphan.warnings.length, 1, 'an orphan header must block coverage');
 
   const missing = parseOoxml(docx(['Sichtbarer Text'], [[
     'word/_rels/document.xml.rels',
     '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header9.xml"/></Relationships>'
-  ], ['word/header1.xml', '<w:hdr xmlns:w="w"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>']]), '.docx');
+  ], ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>']]), '.docx');
   assert.strictEqual(missing.warnings.length, 1, 'a missing or mismatched relationship target must block coverage');
   assert.doesNotMatch(missing.warnings[0], /header9|Vertraulicher/u, 'coverage warning stays content-free');
 });
@@ -163,7 +249,7 @@ test('DOCX secondary-story relationship traversal, external targets and type mis
   ];
   for (const [label, type, target, mode = ''] of cases) {
     const result = parseOoxml(docx(['Sichtbarer Text'], [
-      ['word/header1.xml', '<w:hdr xmlns:w="w"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>'],
+      ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>'],
       ['word/_rels/document.xml.rels', `<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"${mode}/></Relationships>`]
     ]), '.docx');
     assert.strictEqual(result.warnings.length, 1, `${label} must block coverage`);
@@ -171,14 +257,50 @@ test('DOCX secondary-story relationship traversal, external targets and type mis
   }
 });
 
+test('DOCX never authorizes a story from a foreign relationship namespace', () => {
+  const result = parseOoxml(docx(['Sichtbarer Text'], [
+    ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>EVIL_REL_HEADER</w:t></w:r></w:p></w:hdr>'],
+    ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="https://evil.invalid/header" Target="header1.xml"/></Relationships>']
+  ]), '.docx');
+  assert.ok(result.warnings.length > 0);
+  assert.doesNotMatch(result.warnings.join(' '), /EVIL_REL_HEADER|evil\.invalid/u);
+});
+
+test('DOCX resolves header and footer stories from document references in semantic order', () => {
+  const word = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const main = `<w:document xmlns:w="${word}" xmlns:r="${rel}"><w:body><w:p><w:r><w:t>BODY</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rId2"/><w:footerReference w:type="default" r:id="rId3"/></w:sectPr></w:body></w:document>`;
+  const relationships = `<Relationships><Relationship Id="rId1" Type="${rel}/header" Target="header1.xml"/><Relationship Id="rId2" Type="${rel}/header" Target="header2.xml"/><Relationship Id="rId3" Type="${rel}/footer" Target="footer1.xml"/></Relationships>`;
+  const result = parseOoxml(docx([], [
+    ['word/document.xml', main],
+    ['word/header1.xml', `<w:hdr xmlns:w="${word}"><w:p><w:r><w:t>UNREFERENCED</w:t></w:r></w:p></w:hdr>`],
+    ['word/header2.xml', `<w:hdr xmlns:w="${word}"><w:p><w:r><w:t>REFERENCED_HEADER</w:t></w:r></w:p></w:hdr>`],
+    ['word/footer1.xml', `<w:ftr xmlns:w="${word}"><w:p><w:r><w:t>REFERENCED_FOOTER</w:t></w:r></w:p></w:ftr>`],
+    ['word/_rels/document.xml.rels', relationships]
+  ]), '.docx');
+  assert.deepStrictEqual(result.warnings, []);
+  assert.doesNotMatch(result.markdown, /UNREFERENCED/u);
+  assert.ok(result.markdown.indexOf('BODY') < result.markdown.indexOf('REFERENCED_HEADER'));
+  assert.ok(result.markdown.indexOf('REFERENCED_HEADER') < result.markdown.indexOf('REFERENCED_FOOTER'));
+});
+
+test('DOCX stops when a header or footer reference has no matching relationship', () => {
+  const word = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const main = `<w:document xmlns:w="${word}" xmlns:r="${rel}"><w:body><w:p><w:r><w:t>VISIBLE</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rMissing"/></w:sectPr></w:body></w:document>`;
+  const result = parseOoxml(docx([], [['word/document.xml', main]]), '.docx');
+  assert.ok(result.warnings.length > 0);
+  assert.doesNotMatch(result.warnings.join(' '), /rMissing|VISIBLE/u);
+});
+
 test('DOCX secondary stories reject duplicate relationships and mismatched Word roots', () => {
   const cases = [
     ['duplicate relationship', [
-      ['word/header1.xml', '<w:hdr xmlns:w="w"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>'],
+      ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:hdr>'],
       ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>']
     ]],
     ['mismatched Word root', [
-      ['word/header1.xml', '<w:ftr xmlns:w="w"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:ftr>'],
+      ['word/header1.xml', '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulicher Kopf</w:t></w:r></w:p></w:ftr>'],
       ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>']
     ]]
   ];
@@ -192,14 +314,14 @@ test('DOCX secondary stories reject duplicate relationships and mismatched Word 
 test('DOCX rejects truncated main and secondary story roots instead of silently rendering them empty', () => {
   const truncatedMain = parseOoxml(zipStore([
     ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
-    ['word/document.xml', '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Vertraulicher Inhalt</w:t></w:r></w:p>']
+    ['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Vertraulicher Inhalt</w:t></w:r></w:p>']
   ]), '.docx');
   assert.strictEqual(truncatedMain.warnings.length, 1, 'a truncated main body must block coverage');
   assert.strictEqual(truncatedMain.markdown, '', 'a truncated main body must not yield partial text');
   assert.doesNotMatch(truncatedMain.warnings[0], /Vertraulicher/u, 'the warning stays content-free');
 
   const truncatedStory = parseOoxml(docx(['Sichtbarer Text'], [
-    ['word/comments.xml', '<w:comments xmlns:w="w"><w:comment><w:p><w:r><w:t>Vertraulicher Kommentar</w:t></w:r></w:p></w:comment>'],
+    ['word/comments.xml', '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment><w:p><w:r><w:t>Vertraulicher Kommentar</w:t></w:r></w:p></w:comment>'],
     ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/></Relationships>']
   ]), '.docx');
   assert.strictEqual(truncatedStory.warnings.length, 1, 'a truncated secondary story must block coverage');
@@ -217,7 +339,7 @@ test('DOCX enforces the relationship and root contract for every supported secon
   for (const [relationshipType, part, root] of storyTypes) {
     const wrongRoot = root === 'hdr' ? 'ftr' : 'hdr';
     const result = parseOoxml(docx(['Sichtbarer Text'], [
-      [`word/${part}`, `<w:${wrongRoot} xmlns:w="w"><w:p><w:r><w:t>Vertraulicher ${relationshipType}</w:t></w:r></w:p></w:${wrongRoot}>`],
+      [`word/${part}`, `<w:${wrongRoot} xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulicher ${relationshipType}</w:t></w:r></w:p></w:${wrongRoot}>`],
       ['word/_rels/document.xml.rels', `<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${relationshipType}" Target="${part}"/></Relationships>`]
     ]), '.docx');
     assert.strictEqual(result.warnings.length, 1, `${relationshipType} must require its matching Word root`);
