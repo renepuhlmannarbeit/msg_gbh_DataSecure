@@ -12,6 +12,10 @@ function createBatchExecutorLease(deps) {
     publicProgress
   } = deps;
   const nowIso = deps.nowIso || (() => new Date().toISOString());
+  // DS-022: at most one batch is processed per user. The per-journal lease
+  // alone cannot enforce that; a claim must also fail closed while any other
+  // journal still has a live executor.
+  const otherLiveExecutor = deps.otherLiveExecutor || (() => false);
 
   function assertLocalExecutorAccess(state, executorPid) {
     if (!liveLocalExecutor(state)) {
@@ -37,6 +41,9 @@ function createBatchExecutorLease(deps) {
       const state = readState(token);
       if (liveLocalExecutor(state)) {
         throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
+      }
+      if (otherLiveExecutor(token)) {
+        throw new SafeError('Ein anderer lokaler DataSecure-Stapel wird bereits verarbeitet.');
       }
       delete state.local_executor_pid;
       delete state.local_executor_started_at;

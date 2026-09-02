@@ -50,10 +50,24 @@ function fixture(options = {}) {
         local_processing_active: liveLocalExecutor(state)
       };
     },
-    nowIso: () => fixedTime
+    nowIso: () => fixedTime,
+    ...(options.otherLiveExecutor ? { otherLiveExecutor(value) { events.push(`other:${value}`); return options.otherLiveExecutor(value); } } : {})
   });
   return { lease, events, state: () => clone(persisted) };
 }
+
+test('a live executor on any other journal blocks the claim without touching this journal', () => {
+  const original = { token, remaining: 1 };
+  const { lease, events, state } = fixture({ state: original, alive: [222], otherLiveExecutor: () => true });
+  assert.throws(() => lease.claimLocalBatchExecutor(token, 222), /anderer lokaler DataSecure-Stapel/iu);
+  assert.deepStrictEqual(state(), original);
+  assert.ok(!events.includes('write'));
+  assert.deepStrictEqual(events, [`alive:222`, `acquire:${token}`, `read:${token}`, `other:${token}`, `release:${token}`]);
+
+  const free = fixture({ state: original, alive: [222], otherLiveExecutor: () => false });
+  assert.strictEqual(free.lease.claimLocalBatchExecutor(token, 222).ok, true);
+  assert.strictEqual(free.state().local_executor_pid, 222);
+});
 
 test('invalid or conclusively dead candidate PID fails before taking the global lock', () => {
   for (const pid of [0, -1, 1.5, '12', 222]) {

@@ -281,6 +281,12 @@ function acknowledgeBatchDocuments(args){
   return acknowledgeDeliveredPackages(args.batch_token,args.package_ids);
 }
 function continueMostRecentDocumentBatch(){
+  // DS-022: a continuation must not start a second executor next to a running
+  // intake or batch worker. The paused batch stays durable for a later request.
+  const status=genericStatus();
+  if(status.local_intake_pending===true||status.batch_processing_active===true){
+    return{ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Die Fortsetzung wurde nicht gestartet und bleibt später möglich.',local_processing_started:false,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false};
+  }
   const continued=continueMostRecentBatch();
   if(continued.ok!==true)return continued;
   const token=continued.batch_token;

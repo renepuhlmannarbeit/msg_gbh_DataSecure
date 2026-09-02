@@ -222,7 +222,11 @@ const {
   releaseActiveLock,
   readState,
   writeState,
-  publicProgress
+  publicProgress,
+  // The claimant holds the global item lock at this point, so the scan must
+  // ignore that lock and look at every other journal's durable lease instead.
+  otherLiveExecutor: (token) => recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true })
+    .some((state) => state.token !== token && liveLocalExecutor(state))
 });
 
 const {
