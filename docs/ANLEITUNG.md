@@ -1,17 +1,22 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 01.09.2026 · Version 3.2.0 RC86
+Stand: 02.09.2026 · Version 3.2.0 RC86
 
 ## Vor dem ersten Lauf
 
-Installieren Sie das bereitgestellte Plugin-ZIP oder das gleichnamige Plugin aus
-dem privaten Organisations-Marketplace. Starten Sie Claude Desktop vollständig
-neu. Laden Sie sensible Originale niemals per Büroklammer in den Chat.
+Installieren Sie das für Ihr Betriebssystem bereitgestellte Plugin-ZIP. Der
+private Organisations-Marketplace liefert künftig dasselbe Plugin; bis seine
+selbsttragende Fassung freigegeben ist, ist das ZIP der Installationsweg.
+Starten Sie Claude Desktop vollständig neu.
+Laden Sie sensible Originale niemals per Büroklammer in den Chat.
 
 ## Normalweg
 
-1. Öffnen Sie eine neue lokale Cowork-Aufgabe.
-2. Schreiben Sie **„Dateien anonymisieren“** oder wählen Sie den DataSecure-Skill.
+1. Öffnen Sie eine neue **lokale** Cowork-Aufgabe. Cowork startet Aufgaben
+   standardmäßig in der Cloud; DataSecure funktioniert nur in einer lokalen
+   Sitzung, weil nur dort der lokale Plugin-MCP läuft.
+2. Schreiben Sie **„Dateien anonymisieren“** oder wählen Sie den Skill
+   `gbh-datasecure-dokument-anonymisieren`.
 3. Beim ersten Lauf wählen Sie einmalig den bereits mit Cowork verbundenen
    Arbeitsordner. DataSecure speichert diese Wahl lokal und erstellt darin
    `DataSecure-Output`. Diese Auswahl wird in späteren Läufen nicht wiederholt.
@@ -72,15 +77,20 @@ Positionen werden nicht wiederholt.
 Die sichtbaren Ergebnisse liegen unter
 `<einmalig gewählter Cowork-Arbeitsordner>/DataSecure-Output/Lauf-…/` und heißen
 neutral `Dokument-001-anonymisiert.md`, `Dokument-002-anonymisiert.md` usw. Den
-Zielordner ändern Sie auf ausdrücklichen Wunsch über
-**„DataSecure-Ergebnisordner ändern“**; sein Pfad wird nicht an Claude gemeldet.
-Ein Ziel in OneDrive, iCloud, Dropbox oder Google Drive kann die freigegebenen
-Ergebnisse mit diesem Dienst synchronisieren.
+Zielordner ändern Sie auf ausdrücklichen Wunsch mit der Chat-Bitte
+**„Ändere den DataSecure-Ergebnisordner“** (Werkzeug „Ergebnisordner
+festlegen“); sein Pfad wird nicht an Claude gemeldet. Das ist erst möglich, wenn
+kein Stapel mehr offen ist. Ein Ziel in OneDrive, iCloud, Dropbox oder Google
+Drive kann die freigegebenen, aber nicht garantiert rechtlich anonymen
+Ergebnisse mit diesem Dienst synchronisieren; Claude weist bei der Auswahl
+einmal darauf hin. Gelöschte oder bearbeitete Ergebnisdateien werden nicht
+wiederhergestellt oder überschrieben.
 
 Der private Standardbereich liegt unter `SecureDataMsg`.
-Mit **„Privacy-Ordner ändern“** wählen Sie einen anderen lokalen Ordner; die Änderung
-gilt nach einem Neustart. Cloud-Sync, Netzlaufwerke, Symlinks und Junctions sind
-gesperrt.
+Mit der Chat-Bitte **„Ändere den DataSecure-Privacy-Ordner“** (Werkzeug
+„Privacy-Ordner lokal festlegen“) wählen Sie einen anderen lokalen Ordner; die
+Änderung gilt nach einem Neustart. Cloud-Sync, Netzlaufwerke, Symlinks und
+Junctions sind gesperrt.
 
 - Temporäre DataSecure-Arbeits- und Reviewdaten: Aufbewahrung 0–14 Tage.
 - Quellen/Originale: niemals automatisch verändern oder löschen.
@@ -106,8 +116,9 @@ wird nicht automatisch an Claude übertragen.
 
 | Sichtbares Verhalten | Nächste Aktion |
 |---|---|
-| Kein lokaler Picker | Claude einmal vollständig neu starten; danach IT melden, nicht hochladen |
+| Kein lokaler Picker | Prüfen, ob die Aufgabe eine lokale Cowork-Sitzung ist; Claude einmal vollständig neu starten; danach IT melden (lokale Plugin-MCPs erlaubt?), nicht hochladen |
 | Ergebnisordnerwahl erscheint | Beim ersten Lauf den verbundenen Cowork-Arbeitsordner wählen; später nur auf Wunsch ändern |
+| Ergebnisordner wurde abgelehnt | Grund lesen (etwa: Ordner liegt im privaten DataSecure-Bereich); beim nächsten Start einen anderen Ordner wählen |
 | Sichtbarer Export vorübergehend fehlgeschlagen | Interne Ergebnisse bleiben erhalten; beim nächsten Pluginstart wird erneut exportiert |
 | Picker geschlossen | Nur auf ausdrücklichen Wunsch neu starten |
 | Datei sicher gestoppt | Nicht automatisch wiederholen; Klartextmeldung lesen, technischen Code nur an IT nennen |

@@ -70,15 +70,19 @@ erscheinen nie in Claude.
 
 1. „Dateien anonymisieren“ starten und im nativen Picker den Ordner
    `inputs/03-blocked` öffnen.
-2. Prüfen, dass PDF, XLSX, PPTX und PNG im Filter nicht auswählbar sind. Den Picker
-   abbrechen; das ist in diesem Teilschritt das erwartete Verhalten.
+2. Prüfen, dass PDF, XLSX, PPTX und PNG im Dateifilter des Pickers nicht angeboten
+   werden. Den Picker abbrechen; das ist in diesem Teilschritt das erwartete
+   Verhalten. Hinweis: Ein Windows-Dateidialog nimmt einen getippten Dateinamen
+   mit anderer Endung entgegen; die Sperre greift dann erst lokal im Server.
 3. Erneut starten, nur `malformed.docx` auswählen und öffnen.
 4. Terminalen Status abwarten und lokal prüfen, dass kein Ergebnis existiert.
 
-PASS: vier gesperrte Formate sind im Produktpicker nicht auswählbar; die beschädigte
-DOCX stoppt klar und sicher; alle fünf Quellen bleiben unverändert und kein Inhalt
-erscheint in Claude. Nicht versuchen, den Filter oder die lokale Sicherheitsgrenze
-zu umgehen.
+PASS: vier gesperrte Formate werden im Produktpicker nicht angeboten; wird eine
+davon trotzdem (etwa per getipptem Namen) übergeben, stoppt sie sicher ohne
+Ergebnis; die beschädigte DOCX stoppt klar und sicher; alle fünf Quellen bleiben
+unverändert und kein Inhalt erscheint in Claude. Eine erzwungene Auswahl, die
+sicher stoppt, ist kein FAIL. Nicht versuchen, die lokale Sicherheitsgrenze zu
+umgehen.
 
 Details für IT: Die beschädigte DOCX stoppt typischerweise mit
 `SOURCE_CONTAINER_CORRUPT` oder `SOURCE_TYPE_MISMATCH`. Ein anderer fail-closed

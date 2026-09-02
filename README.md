@@ -47,10 +47,13 @@ sicher gestoppt und lokal gesondert gemeldet.
 
 ## Einfacher Cowork-Ablauf
 
-1. Plugin-ZIP installieren oder dasselbe Plugin aus dem privaten Marketplace
-   beziehen; Claude Desktop neu starten.
-2. In einer neuen Cowork-Aufgabe **„Dateien anonymisieren“** schreiben oder den
-   gleichnamigen Skill wählen.
+1. Das zielsystemspezifische Plugin-ZIP installieren; Claude Desktop neu
+   starten. Der private Marketplace wird dasselbe Produkt liefern; seine
+   selbsttragende Projektion ist noch nicht freigegeben.
+2. In einer neuen **lokalen** Cowork-Aufgabe **„Dateien anonymisieren“**
+   schreiben oder den Skill `gbh-datasecure-dokument-anonymisieren` wählen.
+   Cowork startet Aufgaben laut Hersteller standardmäßig in der Cloud; lokale
+   Plugin-MCPs laufen nur in einer lokalen Sitzung.
 3. Nur beim ersten Lauf den bereits mit Cowork verbundenen Arbeitsordner als
    Ergebnisziel wählen. DataSecure merkt ihn sich und legt dort
    `DataSecure-Output` an.
@@ -67,6 +70,8 @@ sicher gestoppt und lokal gesondert gemeldet.
 
 Keine sensiblen Originale als Chat-Anhang hochladen. Cloud-Cowork – auch in der
 Desktop-App – startet keinen lokalen Plugin-MCP und darf keine Originale verarbeiten.
+Erscheint kein lokaler Picker, ist meist die Sitzung eine Cloud-Sitzung oder die
+Organisation hat lokale Plugin-MCPs deaktiviert; siehe IT-Betriebshandbuch.
 
 ## Dokumentation
 

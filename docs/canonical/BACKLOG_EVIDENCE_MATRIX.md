@@ -8,7 +8,7 @@ Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 
 | Bereich / Stories | E0 | Noch erforderlich |
 |---|---|---|
-| BL-010.8 | gebündelter Runtimevertrag, drei Zielpaketprojektionen, Lizenz-/Hash-/Architekturgates und realer Windows-Smoke ohne System-Node | E1 macOS Intel/ARM und E2 Cowork-Fresh-Install |
+| BL-010.8 | gebündelter Runtimevertrag, drei Zielpaketprojektionen, Lizenz-/Hash-/Architekturgates und realer Windows-Smoke ohne System-Node | E0 selbsttragende Marketplace-Projektion (heutiger Quellordner: `command: node`, OCR-Engineering-Baum, kein Runtime); E1 macOS Intel/ARM und E2 Cowork-Fresh-Install |
 | BL-011.8 | identitätsgebundene Journal-/Intent-/Workcopy-Lese-, Publikations- und Cleanupgates; Größen-, Link-, Swap-, Abbruch- und Negativtests | E1 Windows/macOS-Dateisystem und E3 Security |
 | BL-020.1 | Content-Graph/Locator für TXT, Markdown, CSV und DOCX einschließlich Unicode-, Part-, Asset- und Leerabdeckung | spätere Container/feinere Locators in ihren Formatstories |
 | BL-020.2 | Produktpreflight sperrt OOXML-Einbettungen; aktive/rekursive DOCX-Strukturen, falsche Content Types und Beziehungen fail-closed | E1 Office-Korpus und E3 Security |

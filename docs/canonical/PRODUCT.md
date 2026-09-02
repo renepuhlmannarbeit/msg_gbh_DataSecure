@@ -58,8 +58,10 @@ Einbettungen, Größen und Parserwarnungen werden fail-closed geprüft.
 
 ## Claude- und Plattformvertrag
 
-Plugin-ZIP und privater Marketplace liefern dasselbe Nutzerprodukt. Das intern
-erzeugte MCPB ist kein Anwenderweg. Windows x64 sowie macOS Intel/ARM sind die
+Plugin-ZIP und privater Marketplace liefern dasselbe Nutzerprodukt. Bis die
+selbsttragende Marketplace-Projektion freigegeben ist, ist das Plugin-ZIP der
+einzige freigegebene Installationsweg. Das intern erzeugte MCPB ist kein
+Anwenderweg. Windows x64 sowie macOS Intel/ARM sind die
 Erstreleaseziele, Linux folgt getrennt. Alle nötigen Laufzeiten müssen im Produkt
 enthalten sein; Anwender installieren weder Node.js noch Python.
 

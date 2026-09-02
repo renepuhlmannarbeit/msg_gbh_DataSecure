@@ -92,7 +92,7 @@ DS-062, DS-063, DS-064, DS-065, DS-066, DS-067, DS-068 und DS-069.
 
 | Story | Noch erforderlicher Nachweis | Status |
 |---|---|---|
-| BL-010.8 | Selbsttragende Runtime und drei Zielpaketprojektionen sind E0 fertig; reale macOS-Intel-/ARM-Ausführung und Cowork-Fresh-Install fehlen. | **blockiert** |
+| BL-010.8 | Selbsttragende Runtime und drei Zielpaketprojektionen sind E0 fertig; reale macOS-Intel-/ARM-Ausführung und Cowork-Fresh-Install fehlen. Die selbsttragende Marketplace-Projektion (ohne `command: node`, ohne OCR-Engineering-Baum, unter 50 MiB) ist noch nicht gebaut; der Marketplace-Quellordner ist ein Entwicklungskatalog. | **blockiert** |
 | BL-010.7 | Lokale Cowork-Sitzung mit Plugin-MCP positiv sowie Desktop-Cloud/Web/Mobil ohne Local-MCP negativ prüfen. | **blockiert** |
 | BL-010.1 | Portablen Pluginstart auf jedem freizugebenden Zielsystem ohne vorinstallierte Runtime nachweisen; Windows-E0 ist grün, macOS und echter Cowork-Host fehlen. | **blockiert** |
 | BL-010.2 | Windows-x64 Fresh Install, Kernlauf, Update und Entfernen. | **offen** |
@@ -130,7 +130,7 @@ DS-062, DS-063, DS-064, DS-065, DS-066, DS-067, DS-068 und DS-069.
 | BL-049.1 | Format-/Strukturgates und Ergebnisgrade durch Security auf Zielsystemen abnehmen. | **blockiert** |
 | BL-050.3 | Referenzwerte und reales Dateisystem-/Power-Loss-Verhalten erfassen. | **blockiert** |
 | BL-051.1 | Plugin-ZIP auf Windows x64 und macOS Intel/ARM frisch installieren. | **offen** |
-| BL-051.2 | Privaten Marketplace auf Windows/macOS installieren, aktualisieren und entfernen. | **offen** |
+| BL-051.2 | Erst nach Bereitstellung der selbsttragenden Marketplace-Projektion: privaten Marketplace auf Windows/macOS installieren, aktualisieren und entfernen. | **offen** |
 | BL-051.3 | Versionneuen UAT-Serienlauf mit 100 Dateien und bis zu 500 MiB durchführen. | **offen** |
 | BL-051.4 | Produktrollback auf Windows/macOS abnehmen. | **offen** |
 | BL-051.5 | ZIP-/Marketplace-Lebenszyklus in Cowork real abnehmen. | **offen** |

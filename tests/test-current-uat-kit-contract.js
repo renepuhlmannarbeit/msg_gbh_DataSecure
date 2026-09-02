@@ -88,7 +88,11 @@ test('release GO is strict and UAT-04/05 are executable through the product UI',
   assert.match(readme, /alle sechs Fälle als `PASS` auf jedem freizugebenden/u);
   assert.match(readme, /Marketplace[\s\S]*Installieren, Aktualisieren und Zurückrollen/u);
   assert.match(readme, /test:batch-500mb-local/u);
-  assert.match(steps, /vier gesperrte Formate sind im Produktpicker nicht auswählbar/u);
+  // The Windows file dialog accepts a typed name with another extension; the
+  // executable PASS rule is "not offered in the filter, and a forced hand-over
+  // stops safely without a result" (reviewer A-09).
+  assert.match(steps, /vier gesperrte Formate werden im Produktpicker nicht angeboten/u);
+  assert.match(steps, /erzwungene Auswahl, die\s+sicher stoppt, ist kein FAIL/u);
   assert.match(steps, /nur `malformed\.docx` auswählen/u);
   assert.match(steps, /Sobald \*\*„Der Auftrag wurde lokal übergeben\.“\*\*/u);
   assert.doesNotMatch(steps, /mindestens UAT-01 und UAT-02/u);

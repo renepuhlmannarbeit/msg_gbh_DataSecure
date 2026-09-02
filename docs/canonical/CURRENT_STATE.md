@@ -11,7 +11,12 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
 
 ## Belegter Produktumfang
 
-- Anwenderkanäle: benutzerdefiniertes Plugin-ZIP und privater Marketplace.
+- Anwenderkanal heute: das zielsystemspezifische, selbsttragende Plugin-ZIP.
+  Der private Marketplace ist der gleichwertige Zielkanal (DS-002/DS-067), aber
+  noch nicht freigegeben: Der aktuelle Marketplace-Quellordner startet mit
+  `command: node`, enthält den gesperrten OCR-Engineering-Baum (rund 57 MiB,
+  über dem 50-MB-Limit) und keine gebündelte Runtime. Die selbsttragende
+  Marketplace-Projektion bleibt offene Arbeit unter BL-010.8/BL-051.2.
 - MCPB: internes Engineering-Artefakt, kein Installations-, Fallback- oder
   Supportweg für Anwender.
 - Freigegebene Eingaben: TXT, Markdown (`.md`, `.markdown`), CSV und DOCX.

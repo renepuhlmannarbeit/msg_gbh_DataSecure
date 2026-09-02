@@ -5,8 +5,10 @@ Stand: aktueller Produktbaum; die Paketversion aus `package.json` und
 
 DataSecure installiert auf dem Endgerät keine npm-, Python- oder sonstigen
 Pakete nach und lädt keine OCR-Modelle zur Laufzeit aus dem Netz. Das
-Endnutzer-Plugin und der Marketplace verwenden denselben Produktdateisatz. Der
-Produktbuild muss Engineering-Spikes, insbesondere den unten inventarisierten
+Endnutzer-Plugin-ZIP und die künftige Marketplace-Projektion müssen denselben
+Produktdateisatz verwenden; der heutige Marketplace-Quellordner ist ein
+Entwicklungskatalog, der den OCR-Engineering-Baum noch enthält (siehe RELEASE.md).
+Der Produktbuild muss Engineering-Spikes, insbesondere den unten inventarisierten
 OCR-Baum, ausschließen. Zielabhängig gebündelte Laufzeiten und native Helfer
 müssen im jeweiligen Distributionsartefakt und seiner SBOM ausgewiesen sein;
 eine Quellbaum- oder Engineering-Inventur allein belegt keine Produktfreigabe.

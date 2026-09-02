@@ -1,6 +1,24 @@
 # Claude-/Cowork-Revalidierung
 
 Stand: 02.09.2026 · Produktarbeitsstand RC86 · zeitgebundener Herstellerabgleich
+(alle unten genannten Quellen am 02.09.2026 erneut abgerufen)
+
+## Am 02.09.2026 wörtlich belegte Herstelleraussagen
+
+| Quelle | Belegte Aussage | Folge für DataSecure |
+|---|---|---|
+| Plugins reference | `name` ist das einzige Pflichtfeld in `plugin.json`; `${CLAUDE_PLUGIN_ROOT}` „changes when the plugin updates“ | Manifeste konform; ein Edit im installierten Plugin (z. B. Supportmodus) ist nicht update-fest |
+| Plugins reference | Plugin-MCP-Server starten automatisch mit dem Plugin; in Cowork/Cloud werden Skills als `<name>@synced` geladen | Normalweg braucht keinen Startaufruf; in Cloud-Sitzungen ist der Skill sichtbar, der lokale MCP nicht |
+| Plugin marketplaces | Pflichtfelder `name`, `owner.name`, `plugins[].name`, `plugins[].source`; Archive über 256 MiB werden abgelehnt | `marketplace.json` konform |
+| Skills reference | Kürzung von `description` + `when_to_use` bei 1.536 Zeichen in der Skill-Liste | 200-Zeichen-Grenze ist DataSecure-Konvention, kein Herstellerlimit |
+| Subagents | Frontmatter `tools`, `disallowedTools`, `model`, `effort`, `maxTurns` | die drei Projektagenten sind formal gültig |
+| Permissions | MCP-Tools mit `requiresUserInteraction` fragen weiterhin nach | Host-Berechtigungsdialoge sind nicht abschaltbar (DS-040) |
+| Use plugins in Claude | Plugins dürfen lokale MCP-Server enthalten, die auf dem Rechner laufen | lokaler Plugin-MCP ist ein zulässiger Hostvertrag |
+| Manage plugins for your organization | „The file must be a valid .zip under 50 MB.“ | 45-MiB-Ziel für Direkt-Upload ist begründet |
+| Cowork architecture overview | „Local MCP servers don't run in sessions in the cloud.“; „Cowork sessions run in the cloud by default“; lokale Ausführung bleibt für Desktop-Deployments verfügbar; Admins können Cloud-Sitzungen aus- und lokale anlassen; MDM `isLocalDevMcpEnabled=false` deaktiviert Plugin-MCPs | Anwender müssen eine lokale Sitzung wählen; IT muss lokale Plugin-MCPs erlauben; Dateibroker ist kein lokaler Lauf |
+| Get started with Cowork | Plugins mit lokalen MCP-Servern funktionieren nur über die Desktop-App | Web/Mobil bleiben NO-GO für Originale |
+| MCP-Spezifikation 2025-06-18 (tools) | Clients müssen Tool-Annotationen als nicht vertrauenswürdig behandeln; Defaults `destructiveHint=true`, `openWorldHint=true` | Server setzt alle vier Annotationen explizit |
+| alle Quellen | kein Vertrag, der dem lokalen MCP den verbundenen Cowork-Arbeitsordner mitteilt | Pfad wird nicht geraten (DS-069) |
 
 ## Urteil
 

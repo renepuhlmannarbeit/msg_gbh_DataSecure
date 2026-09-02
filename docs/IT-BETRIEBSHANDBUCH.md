@@ -1,13 +1,17 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 01.09.2026 · 3.2.0-rc86
+Stand: 02.09.2026 · 3.2.0-rc86
 
 ## Produktkanäle
 
-IT verteilt das Plugin-ZIP oder denselben Pluginbaum über einen privaten
-Marketplace. Vor Rollout werden ZIP und Marketplace getrennt frisch installiert,
-aktualisiert und zurückgerollt. Zusätzliche Engineering-Artefakte sind kein
-Nutzer-, Fallback- oder Supportweg.
+IT verteilt heute das zielsystemspezifische Plugin-ZIP. Der private Marketplace
+ist der gleichwertige Zielkanal, aber noch nicht freigegeben: Der aktuelle
+Marketplace-Quellordner im Repository startet mit `command: node`, enthält den
+gesperrten OCR-Engineering-Baum und keine gebündelte Runtime; er ist ein
+Entwicklungskatalog (siehe RELEASE.md). Vor Rollout werden ZIP und – nach
+Bereitstellung der selbsttragenden Projektion – Marketplace getrennt frisch
+installiert, aktualisiert und zurückgerollt. Zusätzliche Engineering-Artefakte
+sind kein Nutzer-, Fallback- oder Supportweg.
 
 Der aktuelle Produktpfad verarbeitet TXT, Markdown, CSV und DOCX. XLSX, PPTX,
 PDF/Scan-PDF, eigenständige Bilder, beschädigte und verschlüsselte Dateien bleiben
@@ -15,8 +19,12 @@ fail-closed gesperrt.
 
 ## Voraussetzungen und Hostgate
 
-- unterstützte Claude-Desktop-/Cowork-Version;
-- lokale Plugin-MCPs durch Organisations-/Geräterichtlinie erlaubt;
+- unterstützte Claude-Desktop-/Cowork-Version mit verfügbarer **lokaler**
+  Cowork-Ausführung: Cowork-Sitzungen laufen laut Hersteller standardmäßig in
+  der Cloud; die Organisation kann Cloud-Sitzungen ab- und lokale Sitzungen
+  anlassen. Nur eine lokale Sitzung startet den Plugin-MCP.
+- lokale Plugin-MCPs durch Organisations-/Geräterichtlinie erlaubt (MDM-Schlüssel
+  `isLocalDevMcpEnabled` darf nicht auf `false` stehen);
 - lokaler, nicht synchronisierter Privacy-Ordner;
 - genügend Speicher für höchstens 100 Dateien/500 MiB plus temporäre Kopien;
 - alle Laufzeiten aus dem Paket, keine manuelle Node-/Python-Installation.
@@ -51,9 +59,13 @@ Ersatz verwenden. Plugin-/Connectorstatus, Claude-Version und Richtlinien prüfe
 Sichtbare Ergebnisse werden getrennt unter
 `<gewählter Cowork-Arbeitsordner>/DataSecure-Output/Lauf-…/` abgelegt. Dort dürfen
 nur neutrale `Dokument-NNN-anonymisiert.md`-Dateien liegen. Mapping, Originale,
-Audit, Review und Recovery bleiben im privaten Bereich. Über
-**„DataSecure-Ergebnisordner ändern“** kann die IT/Nutzerin den Zielordner später
-bewusst neu wählen; während eines offenen Stapels bleibt er unverändert. Ein
+Audit, Review und Recovery bleiben im privaten Bereich. Mit der Chat-Bitte
+**„Ändere den DataSecure-Ergebnisordner“** (Werkzeug „Ergebnisordner festlegen“)
+kann der Zielordner später bewusst neu gewählt werden; solange ein Stapel offen,
+pausiert oder vertagt ist, bleibt er unverändert (zuerst fortsetzen, abschließen
+oder verwerfen). Nur ein fehlgeschlagener Export wird nachgeholt; abgeschlossene
+Exporte sind endgültig, gelöschte oder bearbeitete Ergebnisdateien werden nicht
+wiederhergestellt, und ein Zielwechsel spiegelt keine alten Läufe. Ein
 Cloud-Sync-Ziel kann die freigegebenen Ergebnisse synchronisieren und ist daher
 eine bewusste Betriebsentscheidung, kein lokaler Privacy-Speicher.
 | verschlüsselte Altartefakte | unangetastet lassen; kein Keyringversuch; Original neu wählen |
@@ -65,8 +77,13 @@ Stapel und nach Neustart.
 ## Supportmodus und Logs
 
 Der normale Anwenderweg besitzt keine Diagnoseabfrage. IT aktiviert den begrenzten
-Supportmodus nur für einen konkreten Fall und deaktiviert ihn danach. Erlaubte
-Supportdaten: Version, Plattform, Phase, Zähler, fester Fehlercode und Zeitpunkt.
+Supportmodus nur für einen konkreten Fall und deaktiviert ihn danach. Der einzige
+Schalter ist die Umgebungsvariable `EU_PRIVACY_SUPPORT_MODE=1` im
+`data-secure-local`-Eintrag der Plugin-`.mcp.json`. Sie wird nur in einer
+gesondert bereitgestellten Supportkopie des Plugins gesetzt, nie im
+Anwenderprodukt: Ein Edit im installierten Plugin ist laut Hersteller nicht
+update-fest und kein Anwenderweg. Erlaubte Supportdaten: Version, Plattform,
+Phase, Zähler, fester Fehlercode und Zeitpunkt.
 
 Verboten: Inhalte, erkannte Rohwerte, Dateinamen, Pfade, Dokumenthashes,
 Paketkennungen, Tokens oder Capabilities. Die inhaltsfreie Ereignisspur ist auf
