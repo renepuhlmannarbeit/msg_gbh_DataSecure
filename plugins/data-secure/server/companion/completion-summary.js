@@ -113,23 +113,23 @@ function batchStateNoticeText(progress) {
   const messages = {
     awaiting_local_review: {
       title: 'DataSecure – Lokale Prüfung erforderlich',
-      message: 'Der Stapel ist sicher angehalten. Offene Inhalte bleiben ausschließlich lokal.\r\n\r\nNächster Schritt: Wähle in Cowork „Lokale Prüfung fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+      message: 'Der Stapel ist sicher angehalten. Offene Inhalte bleiben ausschließlich lokal.\r\n\r\nNächster Schritt: Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“; die lokale Prüfung öffnet sich dann. Die Dateiauswahl öffnet sich nicht erneut.'
     },
     awaiting_explicit_resume: {
       title: 'DataSecure – Fortsetzung erforderlich',
-      message: 'Der Stapel wurde nach einer technischen Unterbrechung sicher gespeichert.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+      message: 'Der Stapel wurde nach einer technischen Unterbrechung sicher gespeichert.\r\n\r\nNächster Schritt: Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“. Die Dateiauswahl öffnet sich nicht erneut.'
     },
     awaiting_local_mapping_repair: {
       title: 'DataSecure – Zuordnung vervollständigen',
-      message: 'Die anonymisierten Ergebnisse sind lokal gesichert; ihre lokale Zuordnung ist noch nicht vollständig.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+      message: 'Die anonymisierten Ergebnisse sind lokal gesichert; ihre lokale Zuordnung ist noch nicht vollständig.\r\n\r\nNächster Schritt: Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“. Die Dateiauswahl öffnet sich nicht erneut.'
     },
     awaiting_delivery_acknowledgement: {
       title: 'DataSecure – Lokaler Abschluss ausstehend',
-      message: 'Ein lokal anonymisiertes Ergebnis wartet noch auf den sicheren Abschluss.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+      message: 'Ein lokal anonymisiertes Ergebnis wartet noch auf den sicheren Abschluss.\r\n\r\nNächster Schritt: Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“. Die Dateiauswahl öffnet sich nicht erneut.'
     },
     ready_for_next_document: {
       title: 'DataSecure – Verarbeitung sicher angehalten',
-      message: 'Der vorhandene Stapel wurde gespeichert, aber noch nicht vollständig verarbeitet.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+      message: 'Der vorhandene Stapel wurde gespeichert, aber noch nicht vollständig verarbeitet.\r\n\r\nNächster Schritt: Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“. Die Dateiauswahl öffnet sich nicht erneut.'
     },
     invalid_local_state: {
       title: 'DataSecure – Lokaler Zustand nicht verwendbar',
@@ -143,7 +143,7 @@ function intakeNoticeText(stage) {
   if (stage === 'after_checkpoint') {
     return {
       title: 'DataSecure – Lokale Verarbeitung angehalten',
-      message: 'Die lokale Verarbeitung wurde sicher angehalten. Es wurde kein weiteres Paket freigegeben.\r\n\r\nNächster Schritt: Wähle in Cowork „Stapel fortsetzen“. Die Dateiauswahl öffnet sich nicht erneut.'
+      message: 'Die lokale Verarbeitung wurde sicher angehalten. Es wurde kein weiteres Paket freigegeben.\r\n\r\nNächster Schritt: Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“. Die Dateiauswahl öffnet sich nicht erneut.'
     };
   }
   if (stage !== 'before_checkpoint') throw new SafeError('Ungültiger lokaler Intake-Hinweis.');

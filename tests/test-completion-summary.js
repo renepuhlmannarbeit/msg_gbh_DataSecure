@@ -113,7 +113,10 @@ test('intake failure notices contain only fixed local wording', () => {
   const before = intakeNoticeText('before_checkpoint');
   const after = intakeNoticeText('after_checkpoint');
   assert.match(before.message, /keine Datei an Claude übertragen/i);
-  assert.match(after.message, /Stapel fortsetzen/i);
+  // One continuation phrase everywhere: the local dialogs, the user guide and
+  // the skill all name the same chat request instead of a non-existent button.
+  assert.match(after.message, /Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“/u);
+  assert.doesNotMatch(after.message, /Wähle in Cowork/u);
   assert.match(after.message, /Dateiauswahl öffnet sich nicht erneut/i);
   assert.match(before.message, /DataSecure-Dienst neu/i);
   assert.doesNotMatch(JSON.stringify({ before, after }), /filename|source|path|hash|token|error/i);
