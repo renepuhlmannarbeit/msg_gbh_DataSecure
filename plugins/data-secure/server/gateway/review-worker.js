@@ -13,6 +13,7 @@ const {
 const { showBatchStateNotice } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
+const { terminalVisibleExport } = require('./result-export');
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
@@ -42,9 +43,9 @@ process.once('message', async (message) => {
       onReviewLifecycle: lifecycle,
       reviewOptions: { timeoutMs: DETACHED_REVIEW_TIMEOUT_MS }
     });
-    const visibleExport = result.complete === true
-      ? exportCompletedBatchResults(token)
-      : { exported: 0, pending: 0, available: false };
+    // A failing visible export must not discard the completed local review
+    // result; the released packages stay pending for the next export replay.
+    const visibleExport = terminalVisibleExport(result, () => exportCompletedBatchResults(token));
     const presentedResult = {
       ...result,
       result_exported_count: visibleExport.exported,

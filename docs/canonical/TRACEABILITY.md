@@ -91,6 +91,12 @@ frühere Code-/Testzuordnungen bleiben im
 Historische RC- und Keyring-Nachweise sind weiterhin auditierbar, aber keine
 aktuelle Produktzusage.
 
+## E0-Bugrunde 02.09.2026 – Gesamtgegenreview RC86
+
+| Story | Korrektur / Befund | Code- und Testnachweis |
+|---|---|---|
+| BL-040.5 | Ein beschädigter oder mit dem Journal konfligierender privater Export-Record sowie ein unterbrochener Record-Schreibvorgang (`.tmp`) ließen `exportCompletedState` werfen bzw. zählten als Replay-Fehler; der Batch-/Review-Worker hätte einen vollständig abgeschlossenen Stapel dadurch als „Lokale Verarbeitung angehalten“ präsentiert. Jetzt bleibt der sichtbare Export fail-closed `pending`/`available:false`, interne Pakete bleiben unberührt, Worker binden den Export über `terminalVisibleExport` konsistent an die terminale Zählerhülle. | `gateway/result-export.js`, `gateway/batch-worker.js`, `gateway/review-worker.js`; `tests/test-result-folder-export.js` (beschädigter Record, Record-/Journalkonflikt, liegengebliebene Temporärdatei, fremder Eintrag, inkonsistente Exporterantwort) |
+
 ## E0-Bugrunde 01.09.2026
 
 | Story | Korrektur / Befund | Code- und Testnachweis |

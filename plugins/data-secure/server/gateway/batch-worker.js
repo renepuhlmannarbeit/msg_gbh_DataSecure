@@ -2,6 +2,7 @@
 
 const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, exportCompletedBatchResults } = require('./batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation');
+const { terminalVisibleExport } = require('./result-export');
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
@@ -53,9 +54,10 @@ process.once('message', async (message) => {
       await notify({ type: 'local-intake-processing-started' });
     }
     const completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
-    const visibleExport = completed.complete === true
-      ? exportCompletedBatchResults(message.batch_token)
-      : { exported: 0, pending: 0, available: false };
+    // The durable processing result is authoritative. A failing visible export
+    // stays pending for the next start or folder change; it never converts the
+    // completed batch into the "stopped" failure envelope below.
+    const visibleExport = terminalVisibleExport(completed, () => exportCompletedBatchResults(message.batch_token));
     // Every automatic run ends with exactly one bounded local state envelope,
     // including non-terminal rest states such as review, mapping repair or an
     // explicit resume. No token, source identifier or document content crosses

@@ -19,7 +19,7 @@ const {
   resultOutputDirectory, isCommonSyncFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
-  exportCompletedState, replayPendingResultExports, recordPath
+  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport
 } = require('../plugins/data-secure/server/gateway/result-export');
 
 function packageFixture(id, text) {
@@ -79,6 +79,54 @@ try {
   assert.deepStrictEqual(exportCompletedState(pendingState), { exported: 0, pending: 1, available: false });
   assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(pendingState.token), 'utf8')).complete, false);
   assert.ok(replayPendingResultExports().failures >= 1, 'tampered source remains pending');
+
+  // A damaged or conflicting private export record is a fail-closed pending
+  // result. It must never surface as an exception that a detached worker would
+  // present as a processing stop for an already completed batch.
+  const id4 = `ds_${'4'.repeat(32)}`;
+  packageFixture(id4, '# Viertes Dokument');
+  const damagedState = {
+    token: 'c'.repeat(64), created_at: '2026-09-02T14:00:00.000Z',
+    items: [{ status: 'released', package_id: id4 }]
+  };
+  assert.deepStrictEqual(exportCompletedState(damagedState), { exported: 1, pending: 0, available: true });
+  fs.writeFileSync(recordPath(damagedState.token), '{"schema":"garbage"}');
+  assert.deepStrictEqual(exportCompletedState(damagedState), { exported: 0, pending: 1, available: false },
+    'a damaged export record stays pending without throwing');
+  const conflictState = {
+    token: 'd'.repeat(64), created_at: '2026-09-02T14:30:00.000Z',
+    items: [{ status: 'released', package_id: id4 }]
+  };
+  assert.deepStrictEqual(exportCompletedState(conflictState), { exported: 1, pending: 0, available: true });
+  const conflicting = { ...conflictState, items: [...conflictState.items, { status: 'released', package_id: id1 }] };
+  assert.deepStrictEqual(exportCompletedState(conflicting), { exported: 0, pending: 2, available: false },
+    'a record/items conflict stays pending without throwing');
+  assert.strictEqual(fs.readFileSync(path.join(roots().output, id4, `${id4}.md`), 'utf8'), '# Viertes Dokument',
+    'internal packages are never touched by a failed visible export');
+
+  // An interrupted atomic record write leaves a private temporary file behind.
+  // It carries no export state: replay neither counts it as a damaged record
+  // nor removes a file that a concurrent worker may still be writing.
+  const outbox = path.dirname(recordPath(damagedState.token));
+  const staleTemporary = path.join(outbox, `re_${'e'.repeat(32)}.json.4242.0123abcd.tmp`);
+  fs.writeFileSync(staleTemporary, 'interrupted');
+  const replayed = replayPendingResultExports();
+  assert.strictEqual(replayed.failures, 2, 'exactly the tampered and the damaged record fail; the temporary is ignored');
+  assert.ok(fs.existsSync(staleTemporary), 'replay never removes a possibly live temporary record');
+  fs.writeFileSync(path.join(outbox, 'foreign.txt'), 'x');
+  assert.strictEqual(replayPendingResultExports().failures, 3, 'a foreign entry still counts as a failure');
+
+  // Detached workers attach the visible export to their terminal envelope.
+  const neverCalled = () => { throw new Error('exporter must not run for a non-terminal batch'); };
+  assert.deepStrictEqual(terminalVisibleExport({ complete: false, released: 3 }, neverCalled), { exported: 0, pending: 0, available: false });
+  assert.deepStrictEqual(terminalVisibleExport({ complete: true, released: 2 }, () => { throw new Error('RESULT_EXPORT_STATE_CONFLICT'); }),
+    { exported: 0, pending: 2, available: false }, 'an exporter failure keeps the released results pending');
+  assert.deepStrictEqual(terminalVisibleExport({ complete: true, released: 2 }, () => ({ exported: 2, pending: 0, available: true })),
+    { exported: 2, pending: 0, available: true });
+  assert.deepStrictEqual(terminalVisibleExport({ complete: true, released: 2 }, () => ({ exported: 1, pending: 0, available: true })),
+    { exported: 0, pending: 2, available: false }, 'an inconsistent exporter result is never presented');
+  assert.deepStrictEqual(terminalVisibleExport({ complete: true, released: 1 }, () => ({ exported: 0, pending: 1, available: true })),
+    { exported: 0, pending: 1, available: false }, 'pending results can never be announced as available');
 
   // The normal product path persists a one-time local choice; no model-visible
   // path or repeated picker is required on subsequent runs.

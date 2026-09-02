@@ -10,6 +10,10 @@ const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 
 const SCHEMA = 'datasecure-result-export/1';
 const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
+// An interrupted atomic record write leaves exactly this temporary name behind.
+// It carries no export state and must neither count as a damaged record nor be
+// removed while a concurrent worker may still be writing it.
+const TEMPORARY_RECORD_RE = /^re_[a-f0-9]{32}\.json\.\d+\.[a-f0-9]{8}\.tmp$/u;
 const PACKAGE_RE = /^ds_[a-f0-9]{32}$/u;
 
 function outboxDirectory() {
@@ -137,8 +141,18 @@ function exportOne(runDirectory, item) {
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
   }
 }
+function releasedCount(state) {
+  return Array.isArray(state?.items) ? state.items.filter((item) => item?.status === 'released').length : 0;
+}
+// The visible export is a convenience projection of already verified internal
+// packages. Every failure here – including a damaged or conflicting export
+// record – is a fail-closed "pending" result and never an exception: the
+// terminal batch outcome must not be presented as a processing stop, and no
+// internal result is touched.
 function exportCompletedState(state) {
-  const plan = ensureRecord(state);
+  let plan;
+  try { plan = ensureRecord(state); }
+  catch { return { exported: 0, pending: releasedCount(state), available: false }; }
   if (plan.value.items.length === 0) return { exported: 0, pending: 0, available: true };
   try {
     const destination = activeDestination();
@@ -160,7 +174,9 @@ function replayPendingResultExports() {
   try { entries = fs.readdirSync(outboxDirectory(), { withFileTypes: true }); }
   catch { return { exported, pending, failures: 1 }; }
   for (const entry of entries) {
-    if (!entry.isFile() || entry.isSymbolicLink() || !RECORD_RE.test(entry.name)) { failures++; continue; }
+    if (!entry.isFile() || entry.isSymbolicLink()) { failures++; continue; }
+    if (TEMPORARY_RECORD_RE.test(entry.name)) continue;
+    if (!RECORD_RE.test(entry.name)) { failures++; continue; }
     try {
       const target = path.join(outboxDirectory(), entry.name);
       const record = readRecord(target);
@@ -175,5 +191,24 @@ function replayPendingResultExports() {
   }
   return { exported, pending, failures };
 }
+// Detached workers attach the visible export to their single terminal
+// envelope. A non-terminal batch has no visible export; an exporter failure
+// keeps the verified released count pending instead of turning the completed
+// batch into a "stopped" notice.
+function terminalVisibleExport(completed, exporter) {
+  if (completed?.complete !== true) return { exported: 0, pending: 0, available: false };
+  const released = Number.isSafeInteger(completed.released) && completed.released >= 0 ? completed.released : 0;
+  try {
+    const visible = exporter();
+    if (!visible || ![visible.exported, visible.pending].every(Number.isSafeInteger) || typeof visible.available !== 'boolean' ||
+        visible.exported < 0 || visible.pending < 0 || visible.exported + visible.pending !== released ||
+        (visible.pending > 0 && visible.available)) {
+      return { exported: 0, pending: released, available: false };
+    }
+    return { exported: visible.exported, pending: visible.pending, available: visible.available };
+  } catch {
+    return { exported: 0, pending: released, available: false };
+  }
+}
 
-module.exports = { SCHEMA, recordPath, validRecord, exportCompletedState, replayPendingResultExports };
+module.exports = { SCHEMA, recordPath, validRecord, exportCompletedState, replayPendingResultExports, terminalVisibleExport };
