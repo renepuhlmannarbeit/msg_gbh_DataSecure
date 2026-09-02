@@ -344,6 +344,55 @@ async function main() {
     assertRetainedWhileAlive(f, child, 'intake');
     assertEndedAndRetry(f, child, 'intake');
   });
+  await testAsync('intake: a flushed send callback alone never confirms the handoff', async () => {
+    const child = fakeChild();
+    const f = fixture('intake', child);
+    const started = f.start({ ipcAckTimeoutMs: 10 });
+    child.callbacks[0](null); // the message left the parent process
+    let settled = null;
+    started.ipcAcknowledgement.then(() => { settled = 'resolved'; }, () => { settled = 'rejected'; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(settled, null, 'Node\'s send callback is not a worker acknowledgement');
+    assert.strictEqual(child.unrefs, 1, 'dispatch still detaches the owned worker');
+    f.drain(); // the bounded acknowledgement timer fires
+    await assert.rejects(started.ipcAcknowledgement, /timeout/iu);
+    assert.strictEqual(child.kills, 1, 'a worker that never acknowledges is stopped');
+    assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_TIMEOUT'));
+    assertRetainedWhileAlive(f, child, 'intake');
+    assertEndedAndRetry(f, child, 'intake');
+  });
+  await testAsync('intake: the worker acceptance envelope confirms the handoff and later timers or duplicates are inert', async () => {
+    const child = fakeChild();
+    const f = fixture('intake', child);
+    const started = f.start({ ipcAckTimeoutMs: 10 });
+    child.callbacks[0](null);
+    child.emit('message', { type: 'local-intake-accepted' });
+    await started.ipcAcknowledgement;
+    f.drain();
+    assert.strictEqual(child.kills, 0, 'an acknowledged worker is never stopped by the bounded timer');
+    assert.strictEqual(f.active(), true, 'the acknowledged intake keeps its pending slot');
+    assert.doesNotThrow(() => child.emit('message', { type: 'local-intake-accepted' }), 'a duplicate acceptance is inert');
+    assert.doesNotThrow(() => child.emit('message', { type: 'local-intake-accepted', batch_token: TOKEN }), 'unexpected fields are ignored');
+    assert.ok(!f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_TIMEOUT'));
+    assert.ok(!f.records.some(event => event.outcome === 'stopped'), 'an acknowledged handoff records no failure');
+    assert.doesNotMatch(JSON.stringify(f.records), /PRIVATE|customer-secret|batch_token|[a-f0-9]{64}/);
+    child.exit(0);
+    f.drain();
+    assert.strictEqual(f.active(), false);
+  });
+  await testAsync('intake: a worker that exits before acknowledging rejects the handoff immediately', async () => {
+    const child = fakeChild();
+    const f = fixture('intake', child);
+    const started = f.start({ ipcAckTimeoutMs: 30000 });
+    child.callbacks[0](null);
+    child.exit(1);
+    await assert.rejects(started.ipcAcknowledgement, /ended before/iu);
+    f.drain();
+    assert.strictEqual(f.active(), false, 'a confirmed exit clears the pending intake');
+    assert.strictEqual(child.kills, 0, 'an exited worker is not signalled');
+    assert.doesNotThrow(() => child.emit('message', { type: 'local-intake-accepted' }), 'a late acceptance cannot revive the handoff');
+    assertBoundedDiagnostics(f);
+  });
   await testAsync('intake: cancellation while waiting for IPC fails the acknowledgement without a second start', async () => {
     const child = fakeChild();
     const f = fixture('intake', child);

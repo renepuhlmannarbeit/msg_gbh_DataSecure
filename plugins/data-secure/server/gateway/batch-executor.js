@@ -346,6 +346,45 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       }
     };
     pendingIntakes.set(token, intake);
+    // Bounded worker-side acknowledgement. The handoff counts as confirmed only
+    // when the worker reports that it received and accepted the private intake
+    // message; the send() callback below merely proves that the message left
+    // this process. Tests and support callers may ignore the promise; the
+    // normal picker awaits it. Keep a rejection from becoming process-global.
+    let resolveIpc;
+    let rejectIpc;
+    const ipcAcknowledgement = new Promise((resolve, reject) => { resolveIpc = resolve; rejectIpc = reject; });
+    ipcAcknowledgement.catch(() => {});
+    const requestedAckTimeout = Number(options.ipcAckTimeoutMs);
+    const ackTimeoutMs = Number.isSafeInteger(requestedAckTimeout) && requestedAckTimeout >= 10 && requestedAckTimeout <= 30000
+      ? requestedAckTimeout : DEFAULT_IPC_ACK_TIMEOUT_MS;
+    let ipcSettled = false;
+    let abortListener;
+    let ackTimer;
+    const settleIpc = (error) => {
+      if (ipcSettled) return false;
+      ipcSettled = true;
+      clearTimeout(ackTimer);
+      if (abortListener) options.signal?.removeEventListener?.('abort', abortListener);
+      if (error) rejectIpc(error);
+      else resolveIpc();
+      return true;
+    };
+    ackTimer = setTimeout(() => {
+      if (!settleIpc(new Error('bounded IPC acknowledgement timeout'))) return;
+      worker.fail('LOCAL_IPC_ACK_TIMEOUT');
+    }, ackTimeoutMs);
+    ackTimer.unref?.();
+    if (options.signal?.aborted) {
+      settleIpc(new Error('IPC acknowledgement cancelled'));
+      worker.fail('LOCAL_IPC_ACK_CANCELLED');
+    } else if (options.signal?.addEventListener) {
+      abortListener = () => {
+        if (!settleIpc(new Error('IPC acknowledgement cancelled'))) return;
+        worker.fail('LOCAL_IPC_ACK_CANCELLED');
+      };
+      options.signal.addEventListener('abort', abortListener, { once: true });
+    }
     const showStateOnce = (progress) => {
       if (!progress || intake.noticeShown) return false;
       intake.noticeShown = true;
@@ -366,6 +405,12 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     };
     child.on?.('message', (message) => {
       if (!message || typeof message !== 'object') return;
+      if (message.type === 'local-intake-accepted') {
+        // A duplicate or post-timeout acceptance is inert; a timed-out worker
+        // has already been failed and is not revived by a late envelope.
+        settleIpc();
+        return;
+      }
       if (message.type === 'local-intake-checkpoint-created') {
         intake.checkpointCreated = true;
         lifecycle({ event: 'intake_checkpoint_created', outcome: 'ok', item_count: itemCount });
@@ -386,6 +431,9 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount, error_code: errorCode });
     };
     onWorkerExit = (code, failed, pid) => {
+      // A worker that ends before acknowledging cannot confirm the handoff;
+      // reject immediately instead of waiting for the bounded timer.
+      settleIpc(new Error('worker ended before IPC acknowledgement'));
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', item_count: itemCount,
         exit_code: code, error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_WORKER_EXITED' });
       if (pendingIntakes.get(token) === intake) pendingIntakes.delete(token);
@@ -397,42 +445,6 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         if (!intake.noticeShown) showFailureNotice(intake.checkpointCreated ? 'after_checkpoint' : 'before_checkpoint');
       });
     };
-    let resolveIpc;
-    let rejectIpc;
-    const ipcAcknowledgement = new Promise((resolve, reject) => { resolveIpc = resolve; rejectIpc = reject; });
-    // Tests and support callers may deliberately ignore the acknowledgement;
-    // the normal picker awaits it. Keep a rejection from becoming process-
-    // global while preserving it for the awaiting normal path.
-    ipcAcknowledgement.catch(() => {});
-    const requestedAckTimeout = Number(options.ipcAckTimeoutMs);
-    const ackTimeoutMs = Number.isSafeInteger(requestedAckTimeout) && requestedAckTimeout >= 10 && requestedAckTimeout <= 30000
-      ? requestedAckTimeout : DEFAULT_IPC_ACK_TIMEOUT_MS;
-    let ipcSettled = false;
-    let abortListener;
-    const settleIpc = (error) => {
-      if (ipcSettled) return false;
-      ipcSettled = true;
-      clearTimeout(ackTimer);
-      if (abortListener) options.signal?.removeEventListener?.('abort', abortListener);
-      if (error) rejectIpc(error);
-      else resolveIpc();
-      return true;
-    };
-    const ackTimer = setTimeout(() => {
-      if (!settleIpc(new Error('bounded IPC acknowledgement timeout'))) return;
-      worker.fail('LOCAL_IPC_ACK_TIMEOUT');
-    }, ackTimeoutMs);
-    ackTimer.unref?.();
-    if (options.signal?.aborted) {
-      settleIpc(new Error('IPC acknowledgement cancelled'));
-      worker.fail('LOCAL_IPC_ACK_CANCELLED');
-    } else if (options.signal?.addEventListener) {
-      abortListener = () => {
-        if (!settleIpc(new Error('IPC acknowledgement cancelled'))) return;
-        worker.fail('LOCAL_IPC_ACK_CANCELLED');
-      };
-      options.signal.addEventListener('abort', abortListener, { once: true });
-    }
     child.send({
         type: 'start-local-intake',
         batch_token: token,
@@ -449,9 +461,10 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
           settleIpc(error || new Error('worker ended before IPC acknowledgement'));
           return;
         }
+        // Dispatched, not acknowledged: the worker's acceptance envelope or
+        // the bounded timer settles the handoff.
         lifecycle({ event: 'intake_ipc_dispatched', outcome: 'ok', item_count: itemCount, error_code: 'NONE' });
         child.unref?.();
-        settleIpc();
       });
     if (worker.failed) throw new Error('worker start failed');
     const response = { ok: true, batch_token: token, local_intake_pending: true, raw_content_sent_to_claude: false };

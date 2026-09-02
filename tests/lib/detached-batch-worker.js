@@ -29,6 +29,9 @@ process.once('message', async (message) => {
       process.send(payload, () => resolve(true));
     } catch { resolve(false); }
   });
+  // Mirror the product worker: the parent's bounded handoff acknowledgement is
+  // this explicit acceptance, not the parent's send() callback.
+  await notify({ type: 'local-intake-accepted' });
   try {
     if (intake) {
       const begun = beginBatch({

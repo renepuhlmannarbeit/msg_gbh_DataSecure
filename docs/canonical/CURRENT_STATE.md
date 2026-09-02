@@ -139,7 +139,8 @@ BL-040.5 ergänzt den einmalig gewählten Cowork-Ergebnisordner. Der Export prü
 das Paket erneut, schreibt ausschließlich Markdown atomar unter neutralem Namen
 und bietet im lokalen Abschluss „Ergebnisse öffnen“. Der MCP erhält weder Zielpfad
 noch Mapping. Die erfolgreiche MCP-Startantwort wartet höchstens fünf Sekunden auf
-das Worker-IPC-ACK; Timeout und Abbruch räumen die Aufnahme fail-closed auf. Reale
+die ausdrückliche, inhaltsfreie Empfangsbestätigung des Intake-Workers; Timeout,
+Worker-Exit vor der Bestätigung und Abbruch räumen die Aufnahme fail-closed auf. Reale
 Windows-/macOS-Cowork-Abnahme bleibt offen.
 
 ### BL-041 – Claude-Übergabe
@@ -151,8 +152,9 @@ Der Normalweg endet nach einem lokalen Start ohne Polling. Ergebnisse werden ers
 auf späteren ausdrücklichen Auftrag gelesen. Ein vollständig klarer Stapel öffnet
 keinen Reviewdialog; nur echte Mehrdeutigkeiten wechseln in den lokalen
 Sammelreview. Nach der einmaligen Ergebnisordnerwahl benötigt jeder weitere reine
-Anonymisierungslauf nur noch die Quellauswahl. Die Startantwort wird erst nach
-bestätigter IPC-Übergabe an den unabhängigen Worker als Erfolg ausgegeben.
+Anonymisierungslauf nur noch die Quellauswahl. Die Startantwort wird erst als
+Erfolg ausgegeben, nachdem der unabhängige Worker den Empfang der privaten
+Intake-Nachricht ausdrücklich bestätigt hat.
 
 ### BL-044 – Sichere Datei- und Ordnerquellen
 Mehrfachauswahl und rekursiver Ordnervertrag sind E0 implementiert; reale Link-/Race-

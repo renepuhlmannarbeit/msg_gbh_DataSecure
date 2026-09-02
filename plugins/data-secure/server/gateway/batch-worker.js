@@ -28,6 +28,12 @@ process.once('message', async (message) => {
       resolve(false); // local parent may already be gone
     }
   });
+  // The parent reports a confirmed handoff to Cowork only after this explicit,
+  // content-free acceptance. Node's send() callback in the parent proves merely
+  // that the message left the parent; this envelope proves that a live worker
+  // with loaded gateway modules holds the private intake message. It carries no
+  // token, path, name or count and precedes every durable or expensive step.
+  await notify({ type: 'local-intake-accepted' });
   try {
     if (isNewIntake) {
       const begun = beginBatch({
