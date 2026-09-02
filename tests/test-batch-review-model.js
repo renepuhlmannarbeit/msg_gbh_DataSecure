@@ -3,6 +3,7 @@
 const { createSuite } = require('./helpers');
 const {
   BATCH_REVIEW_SCHEMA,
+  batchReviewSummary,
   buildBatchReviewDraft,
   groupForCandidate,
   linuxReviewTextLocally,
@@ -47,6 +48,10 @@ test('builds one anonymous local draft and maps choices back to the source posit
   ], { allowDefer: true });
   assert.strictEqual(bundle.draft.batch_review.schema, BATCH_REVIEW_SCHEMA);
   assert.strictEqual(bundle.draft.batch_review.document_count, 2);
+  assert.strictEqual(bundle.draft.batch_review.review_document_count, 2);
+  assert.strictEqual(bundle.draft.batch_review.review_finding_count, 2);
+  assert.strictEqual(bundle.draft.batch_review.automatically_completed_count, 0);
+  assert.strictEqual(bundle.draft.batch_review.review_pending_count, 2);
   assert.strictEqual(bundle.draft.batch_review.display, 'anonymous_document_sequence');
   assert.match(bundle.draft.original_text, /Dokument 1 von 2/);
   assert.match(bundle.draft.original_text, /Dokument 2 von 2/);
@@ -65,6 +70,30 @@ test('builds one anonymous local draft and maps choices back to the source posit
       { document_index: 2, decisions: [{ ambiguity_id: 'credential:v2:000001', decision: 'redact' }] }
     ]
   });
+});
+
+test('projects a content-free batch summary for the short local review flow', () => {
+  const original = 'Scrum.org Zertifikat';
+  const bundle = buildBatchReviewDraft([{
+    original_text: original, anonymized_text: original, profile: 'personnel_profile',
+    ambiguities: [ambiguity('credential:v2:000001', original, original, 'Scrum.org')]
+  }], {
+    batchTotal: 5,
+    automaticallyCompleted: 2,
+    safelyStopped: 1,
+    previouslyReviewed: 1,
+    reviewPendingTotal: 1
+  });
+  assert.strictEqual(bundle.draft.batch_review.batch_total, 5);
+  assert.match(batchReviewSummary(bundle.draft), /Automatisch abgeschlossen: 2/u);
+  assert.match(batchReviewSummary(bundle.draft), /Bereits lokal geprüft: 1/u);
+  assert.match(batchReviewSummary(bundle.draft), /Jetzt zu prüfen: 1 Stellen in 1 Dateien/u);
+  assert.match(batchReviewSummary(bundle.draft), /Sicher gestoppt: 1/u);
+  assert.doesNotMatch(batchReviewSummary(bundle.draft), /Scrum\.org|Zertifikat/u);
+  assert.throws(() => buildBatchReviewDraft([{
+    original_text: original, anonymized_text: original, profile: 'personnel_profile',
+    ambiguities: [ambiguity('credential:v2:000001', original, original, 'Scrum.org')]
+  }], { batchTotal: 2, automaticallyCompleted: 2 }), /Fortschritt/u);
 });
 
 test('never accepts free ranges or missing decisions for the shared batch review', () => {

@@ -1,6 +1,6 @@
 # Aktuelles Anwender- und UX-Review
 
-Stand: 01.09.2026 · 3.2.0 RC84
+Stand: 01.09.2026 · 3.2.0 RC85
 
 ## Ergebnis
 
@@ -18,6 +18,9 @@ gehören nicht in die Nutzerreise.
 - Fortsetzung erfolgt ohne erneute Auswahl und ohne Duplikate.
 - Bilder bleiben lokal; unklare Zertifikats-/Organisationsstellen werden nicht
   automatisch geraten.
+- Klare Dateien öffnen keinen Reviewdialog. Der lokale Sammelreview zeigt nur
+  wirklich mehrdeutige Dateien, inhaltsfreie Fortschrittszähler und direkte
+  fachliche Aktionen statt einer missverständlichen Ja/Nein-Frage.
 - Mapping und Ergebnisübersicht bleiben lokal.
 
 ## Verbleibende UX-Risiken
@@ -42,6 +45,8 @@ Eine fachfremde Person kann mit dem
 3. einen Stapel ohne Neuauswahl fortsetzen,
 4. Bilder und Originalschutz korrekt beschreiben,
 5. zwischen lokalem Abschluss und späterer Claude-Auswertung unterscheiden.
+6. im Mischstapel erklären, welche Dateien bereits automatisch abgeschlossen
+   wurden und warum nur gelbe Fundstellen zur Entscheidung erscheinen.
 
 Der frühere RC34-Bericht bleibt im
 [Archiv](archive/2026-08/reviews/ANWENDERREVIEW_RC34.md).

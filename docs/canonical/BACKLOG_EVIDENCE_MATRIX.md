@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 01.09.2026 · 3.2.0-rc84
+Stand: 01.09.2026 · 3.2.0-rc85
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
@@ -20,6 +20,7 @@ Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 | BL-047.1 | bounded Handoff-Seiten und 64-MiB-Sitzungsbudget; asynchrones größenbegrenztes Snapshot-Lesen, Hashen und UTF-8-Indizieren mit Event-Loop-Yield-Nachweis an 6 MiB | E1-Referenzmessung; adaptive Parallelisierung nur bei belegtem Nutzen |
 | BL-010.1–3, BL-010.6–9, BL-011.3/6/7/9–13 | umfangreich vorbereitet; BL-010.1 Windows-E0 grün | E1 Windows/macOS; für Bedienung zusätzlich E2 |
 | BL-012.2/3/5–8, BL-032.1 | Dialog-/Statusverträge automatisiert | E1 + E2, teilweise E3 |
+| BL-012.9/10, BL-043.1 | gebündelter lokaler Review, anonyme Prüfgruppen, direkte Aktionen, inhaltsfreie Fortschrittszähler, Windows-Kürzel, Klarstapel ohne UI und Mischstapel-Schnellpfad | E1/E2 Windows/macOS sowie E3 IT-/Health-IT und Security |
 | BL-021.1/2, BL-022.1 | Parser-/Differential-/Formatgates | E1 und Fachprüfung E3 |
 | BL-022.2/3, BL-023.1–4, BL-024.3 | NO-GO-/Negativgates | vollständige E0-Coverage, danach E1 + E3 |
 | BL-031.1 | Kontext- und Regressionskorpus | IT-/Health-IT-Fachprüfung E3 |

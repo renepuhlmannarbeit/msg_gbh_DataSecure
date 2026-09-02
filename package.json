@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc84",
+  "version": "3.2.0-rc85",
   "private": true,
   "description": "Plattformneutrales Claude-Plugin zur lokalen De-Identifizierung von Dokumenten",
   "main": "plugins/data-secure/server/index.js",

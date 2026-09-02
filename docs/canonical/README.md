@@ -37,6 +37,10 @@ Historische RC-Berichte und frühere Vollstände liegen unter
 [`docs/archive`](../archive/README.md). Sie sind zugänglich, aber nicht
 entscheidungsführend.
 
+Der aktuelle lokale Reviewvertrag steht in
+[`contracts/BATCH_REVIEW_V2.md`](contracts/BATCH_REVIEW_V2.md). Version 1 bleibt
+als ersetzter Entwurfsvertrag erhalten.
+
 ## Änderungsablauf
 
 Entscheidung → Vision/Produkt/Architektur → Backlog → Code/Tests → Iststand und

@@ -610,3 +610,25 @@ Die konfigurierbare Aufbewahrung temporärer Arbeits- und Reviewdaten liegt zwis
 niemals automatisch gelöscht. Die Oberfläche, Runtime und Tests müssen denselben
 Vertrag verwenden. Diese Entscheidung präzisiert DS-002, DS-014, DS-016, DS-038,
 DS-055 und DS-066.
+
+## DS-068 – Lokaler Sammelreview mit klarem automatischem Schnellpfad
+
+Bestätigt am 01.09.2026: Der bestehende lokale Sammelreview bleibt der einzige
+Produktweg für fachlich mehrdeutige Textstellen. Klare Dateien werden ohne
+Reviewdialog automatisch lokal abgeschlossen. Ein Mischstapel wartet nicht mit
+klaren Dateien auf unklare Dateien und legt im Review ausschließlich die wirklich
+offenen Dokumente vor.
+
+Aus PII-Shield werden die guten Interaktionsmuster übernommen, nicht dessen
+Ausführungs- oder Datenarchitektur: farbliche Fundstellen, direkte Aktionen
+„Zertifikatsanbieter behalten“/„Organisation anonymisieren“, sichtbarer
+inhaltsfreier Fortschritt, Rückgängig, bewusstes Vertagen, Tastaturkürzel und eine
+abschließende Freigabe. Rohtext bleibt im lokalen UI-Prozess; Claude, MCP-Antwort,
+Journal und Diagnose erhalten nur inhaltsfreie Zähler. Eine Cloud-/MCP-App mit
+Rohdaten, reversible Mappings, Laufzeitdownloads und stilles automatisches Raten
+werden nicht übernommen.
+
+Freie Bereichsredaktionen bleiben im Sammelreview bis zu einer nachweislich
+positionssicheren Dokumentabbildung gesperrt. Die vollständigen Kriterien stehen
+in `contracts/BATCH_REVIEW_V2.md`. Diese Entscheidung präzisiert DS-014, DS-027,
+DS-028, DS-032, DS-040 und DS-043.

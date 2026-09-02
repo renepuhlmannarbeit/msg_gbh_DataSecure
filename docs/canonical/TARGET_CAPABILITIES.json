@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc84",
+  "baseline": "3.2.0-rc85",
   "decision_ids": [
     "DS-001", "DS-002", "DS-003", "DS-004", "DS-005", "DS-006",
     "DS-007", "DS-008", "DS-009", "DS-010", "DS-011", "DS-012",
@@ -15,7 +15,7 @@
     "DS-049", "DS-050", "DS-051", "DS-052", "DS-053", "DS-054",
     "DS-055", "DS-056", "DS-057", "DS-058", "DS-059", "DS-060",
     "DS-061", "DS-062", "DS-063", "DS-064", "DS-065", "DS-066",
-    "DS-067"
+    "DS-067", "DS-068"
   ],
   "primary_product": "claude-plugin",
   "additional_system_vm": { "runtime": false, "acceptance_tests": false },

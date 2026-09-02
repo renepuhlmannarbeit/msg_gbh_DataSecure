@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 01.09.2026 · Version 3.2.0 RC84
+Stand: 01.09.2026 · Version 3.2.0 RC85
 
 ## Vor dem ersten Lauf
 
@@ -45,6 +45,12 @@ Originaldatei.
 Unklare Organisations-/Zertifikatsstellen werden nicht geraten. Sie bleiben bis
 zu einem ausdrücklichen lokalen Sammelreview gesperrt. Abbrechen oder Vertagen ist
 zulässig; später schreiben Sie **„Setze den letzten DataSecure-Stapel fort.“**
+Klare Dateien sind zu diesem Zeitpunkt bereits fertig und werden im Review nicht
+noch einmal vorgelegt. Der lokale Dialog zeigt gelbe offene Stellen und die
+direkten Aktionen **„Zertifikatsanbieter behalten“** beziehungsweise
+**„Organisation anonymisieren“**. Rot markierte Stellen sind bereits anonymisiert.
+Auf Windows funktionieren zusätzlich `Alt+Z`, `Alt+O`, `Alt+R`, `Strg+Enter` und
+`Esc`; die Schaltflächen bleiben der normale Weg.
 
 ## Unterbrechung und Fortsetzung
 

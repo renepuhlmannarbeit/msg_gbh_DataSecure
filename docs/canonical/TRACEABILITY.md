@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 01.09.2026 · 3.2.0-rc84
+Stand: 01.09.2026 · 3.2.0-rc85
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -75,6 +75,7 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-065 | aktiv | BL-011.13, BL-030.2; Plain-Arbeitskopien |
 | DS-066 | aktiv | BL-010.7, BL-041, BL-051.6; Local-Cowork/Local-MCP versus Cloud-NO-GO |
 | DS-067 | aktiv und aktuell | BL-010, BL-011, BL-012, BL-024, BL-040, BL-051; fester Bildschutz, 0–14 nur temporär, Quellen/Exporte nie Auto-Löschziel, ZIP/Marketplace |
+| DS-068 | aktiv und aktuell | BL-012.9/10, BL-032.1, BL-043.1; lokaler Sammelreview, PII-Shield-inspirierte Interaktion und automatischer Klar-Datei-Pfad |
 
 ## DS-067 – konkrete Umsetzung
 

@@ -57,6 +57,10 @@ function createBatchReviewOrchestrator(options = {}) {
       let locallyReleasedCount = 0;
       let failedCount = 0;
       const allPackages = [];
+      const batchTotal = Number.isSafeInteger(progress.batch_total) ? progress.batch_total : state.items.length;
+      const automaticallyCompleted = Number.isSafeInteger(progress.released) ? progress.released : 0;
+      const safelyStopped = Number.isSafeInteger(progress.stopped) ? progress.stopped : 0;
+      const otherPending = Math.max(0, batchTotal - automaticallyCompleted - safelyStopped - items.length);
       const deliverySummary = () => ({
         ...(deps.localFinalize === true ? { locally_released: locallyReleasedCount } : { packages: allPackages }),
         reviewed_documents: reviewedCount,
@@ -125,6 +129,14 @@ function createBatchReviewOrchestrator(options = {}) {
         outcome = await runBatchReviewLocally(drafts, {
           platform: deps.platform || currentPlatform(),
           allowDefer: true,
+          batchSummary: {
+            batchTotal,
+            automaticallyCompleted,
+            safelyStopped,
+            otherPending,
+            previouslyReviewed: reviewedCount,
+            reviewPendingTotal: items.length - reviewedCount
+          },
           reviewTextLocally: deps.reviewTextLocally || reviewTextLocally,
           ...(deps.reviewOptions || {})
         });

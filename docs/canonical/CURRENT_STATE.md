@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 01.09.2026 · 3.2.0-rc84 · Git-Arbeitsstand nach Dokumentenkonsolidierung
+Stand: 01.09.2026 · 3.2.0-rc85 · Git-Arbeitsstand nach Reviewvereinfachung
 
 ## Produkt in einem Satz
 
@@ -79,8 +79,12 @@ Zwei-Prozess-Test lässt genau eine Aufnahme zu. Reale Cowork-Messungen auf
 Windows/macOS bleiben BL-011.10.
 
 ### BL-012 – Nutzerreise und lokaler Review
-Ein Pickerstart und ein gebündelter lokaler Review sind implementiert. Reale UX-,
-macOS- und Accessibility-Abnahme bleibt offen.
+Ein Pickerstart und ein gebündelter lokaler Review sind implementiert. Klare
+Dateien umgehen den Review vollständig; Mischstapel schließen klare Positionen
+vorher ab und legen nur mehrdeutige Dokumente lokal vor. Der Review zeigt
+inhaltsfreie Fortschrittszähler, rot/gelbe Fundstellen, direkte
+Beibehalten-/Anonymisieren-Aktionen, Rückgängig, exakte Gruppenaktionen und auf
+Windows Tastaturkürzel. Reale UX-, macOS- und Accessibility-Abnahme bleibt offen.
 
 ### BL-020 – Gemeinsame Inhaltsgrenze
 Content-Graph und rekursive Sicherheitsgrenzen existieren, sind aber noch nicht
@@ -130,7 +134,9 @@ Berechtigungs-, Skill- und Hostabnahme bleibt offen.
 
 ### BL-043 – Cowork-Fast-Path
 Der Normalweg endet nach einem lokalen Start ohne Polling. Ergebnisse werden erst
-auf späteren ausdrücklichen Auftrag gelesen.
+auf späteren ausdrücklichen Auftrag gelesen. Ein vollständig klarer Stapel öffnet
+keinen Reviewdialog; nur echte Mehrdeutigkeiten wechseln in den lokalen
+Sammelreview.
 
 ### BL-044 – Sichere Datei- und Ordnerquellen
 Mehrfachauswahl und rekursiver Ordnervertrag sind E0 implementiert; reale Link-/Race-

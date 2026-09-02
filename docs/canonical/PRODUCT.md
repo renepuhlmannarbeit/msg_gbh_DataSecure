@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 01.09.2026 · Ist-Zustand RC84
+Stand: 01.09.2026 · Ist-Zustand RC85
 
 ## Ziel
 
@@ -15,8 +15,8 @@ keine Personal- oder Fachentscheidung.
 2. Im lokalen Mehrfachpicker bis zu 100 Dateien mit zusammen höchstens 500 MiB
    auswählen und einmal „Öffnen“ klicken.
 3. DataSecure liest Quellen nur, prüft den gesamten Stapel und verarbeitet ihn
-   lokal im Hintergrund. Ein sicherer Stopp einer Datei blockiert den Reststapel
-   nicht.
+   lokal im Hintergrund. Klare Dateien werden ohne Reviewdialog abgeschlossen;
+   ein sicherer Stopp oder eine Mehrdeutigkeit blockiert den Reststapel nicht.
 4. Die lokale Abschlussmeldung zeigt nur Zähler. Markdown und
    `DataSecure-Mapping.csv` bleiben lokal.
 5. Erst ein späterer ausdrücklicher Auftrag übergibt benötigte freigegebene
@@ -24,7 +24,8 @@ keine Personal- oder Fachentscheidung.
 
 Kein Profil-, Bildmodus-, Einzeldatei- oder Ergebnislesedialog gehört zum
 Normalstart. Ein zurückgestellter Sammelreview wird ausdrücklich und lokal
-fortgesetzt.
+fortgesetzt. Er zeigt nur die tatsächlich mehrdeutigen Dateien, direkte
+Beibehalten-/Anonymisieren-Aktionen und inhaltsfreie Fortschrittszähler.
 
 ## Eingaben und Ergebnisse
 

@@ -21,7 +21,7 @@ Der Ordner ist ein Vertragsarchiv mit unterschiedlichen Geltungsständen, nicht
 pauschal ein Satz aktuell erfüllter Produktverträge:
 
 - **aktuelle Produkt- und Sicherheitsgrenzen:** `BATCH_EVIDENCE_V1.md`,
-  `BATCH_PARALLELISM_V1.md`, `BATCH_REVIEW_V1.md`, `BATCH_SNAPSHOT_V1.md`,
+  `BATCH_PARALLELISM_V1.md`, `BATCH_REVIEW_V2.md`, `BATCH_SNAPSHOT_V1.md`,
   `CONTENT_GRAPH_V1.md`, `CSV_SOURCE_V1.md`, `DOCX_STORY_COVERAGE_V1.md`,
   `EMBEDDED_CONTENT_V1.md`, `NETWORK_BOUNDARY_V1.md`, `OUTPUT_CAPACITY_V1.md`,
   `POSIX_SUPERVISOR_PACKAGING_V1.md`, `PRIVATE_WORK_STORAGE_V1.md`,
@@ -30,7 +30,8 @@ pauschal ein Satz aktuell erfüllter Produktverträge:
   `OCR_BATCH_SESSION_V1.md`, `OCR_RESULT_V1.md`,
   `PDF_OCR_RISK_GATE_V1.md`, `SEA_ASSEMBLY_EVIDENCE_V2.md` und
   `SEA_PARSER_ROLE_V1.md`;
-- **historisch oder superseded:** `BATCH_SECRET_STORE_V1.md` und
+- **historisch oder superseded:** `BATCH_REVIEW_V1.md`,
+  `BATCH_SECRET_STORE_V1.md` und
   `PRIVATE_ARTIFACT_ENCRYPTION_V1.md`. `BATCH_PSEUDONYM_V1.md` enthält noch den
   historischen Keyring-Entwurf; nur das ausdrücklich durch DS-065 korrigierte
   fachliche Ziel einer stapelweit stabilen, lokalen Zuordnung bleibt offen.

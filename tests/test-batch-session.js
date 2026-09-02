@@ -1005,6 +1005,26 @@ async function main() {
     assert.strictEqual(acknowledgeDeliveredPackage(begun.batch_token, result.package_id).complete, true);
   });
 
+  await testAsync('an entirely clear multi-file batch completes without opening any review UI', async () => {
+    resetInput();
+    ordered('clear-first.txt', 'Kunde: Max Mustermann\nRolle: Entwickler', 1);
+    ordered('clear-second.txt', 'Kunde: Erika Musterfrau\nRolle: Testmanagerin', 2);
+    const begun = beginBatch({ expectedCount: 2, profile: 'personnel_profile' });
+    let reviewCalls = 0;
+    const withoutReview = {
+      ...deps,
+      reviewTextLocally: () => { reviewCalls++; throw new Error('clear files must not open local review'); }
+    };
+    const first = await processAndAcknowledge(begun.batch_token, withoutReview);
+    const second = await processAndAcknowledge(begun.batch_token, withoutReview);
+    assert.strictEqual(first.ok, true);
+    assert.strictEqual(second.ok, true);
+    assert.strictEqual(second.complete, true);
+    assert.strictEqual(second.completion_percent, 100);
+    assert.strictEqual(reviewCalls, 0);
+    assert.ok(_test.readState(begun.batch_token).items.every((item) => item.status === 'released'));
+  });
+
   await testAsync('cancelling the central credential decision is terminal and does not make the raw draft durable', async () => {
     resetInput();
     add('cancelled-profile.txt', 'Microsoft Azure Administrator Associate\nRolle: Cloud Engineer');
@@ -1044,7 +1064,13 @@ async function main() {
     assert.strictEqual(resumeBatch(begun.batch_token).error, 'batch_review_required');
     const deferredItem = _test.readState(begun.batch_token).items.find((item) => item.status === 'deferred_review');
     assert.doesNotMatch(JSON.stringify(deferredItem), /Microsoft|Azure|Cloud Engineer/u);
-    const reviewed = await reviewDeferredBatch(begun.batch_token, { ...deps, platform: 'linux', reviewTextLocally: (draft) => ({ action: 'reviewed', redactions: [], decisions: draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' })) }) });
+    const reviewed = await reviewDeferredBatch(begun.batch_token, { ...deps, platform: 'linux', reviewTextLocally: (draft) => {
+      assert.strictEqual(draft.batch_review.batch_total, 2);
+      assert.strictEqual(draft.batch_review.automatically_completed_count, 1);
+      assert.strictEqual(draft.batch_review.review_document_count, 1);
+      assert.strictEqual(draft.batch_review.review_pending_count, 1);
+      return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' })) };
+    } });
     assert.ok(reviewed.ok, JSON.stringify(reviewed));
   });
 

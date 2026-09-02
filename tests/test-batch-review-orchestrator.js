@@ -54,6 +54,14 @@ function fixture(options = {}) {
       events.push('ui');
       assert.deepStrictEqual(value, drafts);
       assert.strictEqual(callOptions.allowDefer, true);
+      assert.deepStrictEqual(callOptions.batchSummary, {
+        batchTotal: 2,
+        automaticallyCompleted: 0,
+        safelyStopped: 0,
+        otherPending: 0,
+        previouslyReviewed: 0,
+        reviewPendingTotal: 2
+      });
       if (options.uiError) throw options.uiError;
       return options.outcome || { action: 'reviewed', documents: [{ document_index: 1 }, { document_index: 2 }] };
     },

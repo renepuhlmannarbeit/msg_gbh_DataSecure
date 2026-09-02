@@ -29,6 +29,7 @@ const {
   powershellReviewScript,
   darwinDialogContract,
   darwinReviewScript,
+  linuxReviewContext,
   linuxViewerCommands,
   linuxChoiceCommand,
   linuxFinalChoiceCommand,
@@ -304,6 +305,7 @@ async function main() {
       }
     }
     assert.throws(() => darwinDialogContract('unknown', true), /macOS-Dialogvertrag/u);
+    assert.doesNotThrow(() => new Function(darwinReviewScript()), 'generated macOS JXA must remain syntactically valid');
     assert.doesNotMatch(darwinReviewScript(), /Weitere Optionen/u);
     assert.match(darwinReviewScript(), /number === -128 && draft\.allow_defer/u);
   });
@@ -403,16 +405,23 @@ async function main() {
       }]
     }]);
     assert.match(powershellReviewScript(), /lokale Stapelprüfung/u);
+    assert.match(powershellReviewScript(), /Automatisch abgeschlossen/u);
+    assert.match(powershellReviewScript(), /Zertifikatsanbieter behalten/u);
+    assert.match(powershellReviewScript(), /Organisation anonymisieren/u);
+    assert.match(powershellReviewScript(), /KeyPreview/u);
+    assert.match(powershellReviewScript(), /Control.*Enter/u);
     assert.match(powershellReviewScript(), /\$redact\.Visible = \(\$null -eq \$draft\.batch_review\)/u);
     assert.match(powershellReviewScript(), /Gleiche behalten/u);
     assert.match(powershellReviewScript(), /Decide-Group/u);
     assert.match(darwinReviewScript(), /draft\.batch_review/u);
+    assert.match(darwinReviewScript(), /Automatisch abgeschlossen/u);
     assert.match(darwinReviewScript(), /Später entscheiden/u);
     assert.match(darwinReviewScript(), /Nur diese Stelle/u);
     assert.match(darwinReviewScript(), /Gleiche Stellen/u);
     assert.match(darwinReviewScript(), /decideGroup/u);
     assert.doesNotMatch(darwinReviewScript(), /cancelButton: "Abbrechen"[^\n]+Später entscheiden/u);
     assert.match(linuxViewerCommands(true)[0].args.join(' '), /lokale Stapelprüfung/u);
+    assert.match(linuxReviewContext(bundle.draft, bundle.draft.ambiguities[0], 0), /Automatisch abgeschlossen: 0/u);
     assert.match(linuxChoiceCommand('zenity', 0, 1, true, true).args.join(' '), /Stapelentscheidung/u);
     assert.match(linuxChoiceCommand('zenity', 0, 1, true, true, true).args.join(' '), /gleiche Stellen/u);
     assert.strictEqual(bundle.draft.batch_review.document_count, 1);

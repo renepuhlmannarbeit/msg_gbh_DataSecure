@@ -1,9 +1,33 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC84
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC85
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
 verarbeitet und niemals automatisch verändert oder gelöscht. Claude erhält nur
 freigegebene Markdown-Ergebnisse.
+
+## Wofür DataSecure gedacht ist
+
+DataSecure ist nicht nur ein Anweisungs-Skill oder ein einzelner PII-Detektor,
+sondern ein lokales Privacy-Gateway für die gesamte Dokumentreise:
+
+**lokal auswählen → Struktur prüfen → kontextbezogen de-identifizieren →
+Restbefunde prüfen → lokal dokumentieren → Ergebnisse später kontrolliert an
+Claude übergeben**
+
+Das Plugin verbindet dabei Eigenschaften, die bei reinen Skills oder
+Detektor-Bibliotheken erst zusätzlich gebaut werden müssten:
+
+- Originalbytes, Pfade, Dateinamen und Bildpixel bleiben außerhalb von Claude.
+- Unsichere Formate, Containerstrukturen oder Restbefunde stoppen fail-closed.
+- Fachlich benötigte Rollen, Skills, Technologien und Zertifizierungen sollen
+  erhalten bleiben, während direkte Identifikatoren ersetzt werden.
+- Stapel sind fortsetzbar und verwenden innerhalb eines Stapels konsistente,
+  nicht stapelübergreifend verknüpfte Pseudonyme.
+- Claude liest Ergebnisse nicht automatisch, sondern erst nach einem späteren
+  ausdrücklichen Auftrag als erneut verifiziertes Markdown.
+
+Die Skills steuern diesen einfachen Ablauf und erklären seine Grenzen. Die
+technische Datenschutzgrenze bildet der lokale Plugin-MCP, nicht der Skilltext.
 
 ## Aktueller Umfang
 
@@ -28,7 +52,10 @@ sicher gestoppt und lokal gesondert gemeldet.
 2. In einer neuen Cowork-Aufgabe **„Dateien anonymisieren“** schreiben oder den
    gleichnamigen Skill wählen.
 3. Dateien im lokalen Mehrfachpicker wählen und einmal **„Öffnen“** klicken.
-4. Lokalen Abschluss abwarten. Erst danach ausdrücklich um die Auswertung der
+4. Klare Dateien werden ohne weiteren Dialog abgeschlossen. Nur bei echten
+   Mehrdeutigkeiten erscheint ein lokaler Sammelreview mit den direkten Aktionen
+   **„Zertifikatsanbieter behalten“** und **„Organisation anonymisieren“**.
+5. Lokalen Abschluss abwarten. Erst danach ausdrücklich um die Auswertung der
    fertigen Ergebnisse bitten.
 
 Keine sensiblen Originale als Chat-Anhang hochladen. Cloud-Cowork – auch in der

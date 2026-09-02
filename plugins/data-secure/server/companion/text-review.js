@@ -10,7 +10,7 @@ const { uiProcessEnvironment } = require('./ui-process-policy');
 const { DEFAULT_REVIEW_TIMEOUT_MS } = require('./review-timeouts');
 
 const REVIEW_SCHEMA = 'data-secure-text-review/2';
-const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/1';
+const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/2';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
@@ -22,6 +22,45 @@ function reviewSizeError() {
 
 function reviewDocumentLabel(index, count) {
   return count === 1 ? '' : `\n\n===== Dokument ${index + 1} von ${count} =====\n\n`;
+}
+
+function batchReviewProgress(documentCount, findingCount, progress = {}) {
+  const integers = {
+    batch_total: progress.batchTotal ?? documentCount,
+    automatically_completed_count: progress.automaticallyCompleted ?? 0,
+    safely_stopped_count: progress.safelyStopped ?? 0,
+    other_pending_count: progress.otherPending ?? 0,
+    previously_reviewed_count: progress.previouslyReviewed ?? 0,
+    review_pending_count: progress.reviewPendingTotal ?? documentCount
+  };
+  if (!Number.isSafeInteger(documentCount) || documentCount < 1 ||
+      !Number.isSafeInteger(findingCount) || findingCount < 1 ||
+      Object.values(integers).some((value) => !Number.isSafeInteger(value) || value < 0) ||
+      integers.batch_total < 1 || integers.batch_total > LIMITS.MAX_BATCH_FILES ||
+      integers.review_pending_count < documentCount ||
+      integers.automatically_completed_count + integers.safely_stopped_count + integers.other_pending_count +
+        integers.previously_reviewed_count + integers.review_pending_count !== integers.batch_total) {
+    throw new SafeError('Der lokale Stapelreview-Fortschritt ist ungültig.');
+  }
+  return {
+    ...integers,
+    review_document_count: documentCount,
+    review_finding_count: findingCount
+  };
+}
+
+function batchReviewSummary(draft) {
+  const review = draft?.batch_review;
+  if (!review) return '';
+  const parts = [
+    `Automatisch abgeschlossen: ${review.automatically_completed_count}.`,
+    `Bereits lokal geprüft: ${review.previously_reviewed_count}.`,
+    `Jetzt zu prüfen: ${review.review_finding_count} Stellen in ${review.review_document_count} Dateien.`,
+    `Danach noch offen: ${Math.max(0, review.review_pending_count - review.review_document_count)} Dateien.`
+  ];
+  if (review.safely_stopped_count > 0) parts.push(`Sicher gestoppt: ${review.safely_stopped_count}.`);
+  if (review.other_pending_count > 0) parts.push(`Weitere lokale Schritte offen: ${review.other_pending_count}.`);
+  return parts.join(' ');
 }
 
 function exactContextLine(text, start, end) {
@@ -186,6 +225,7 @@ function buildBatchReviewDraft(documents, progress = {}) {
     schema: BATCH_REVIEW_SCHEMA,
     document_count: documents.length,
     display: 'anonymous_document_sequence',
+    ...batchReviewProgress(documents.length, draft.ambiguities.length, progress),
     // Candidate IDs are opaque local handles. The raw context used to prove
     // equality remains only in the already displayed local draft and is never
     // copied into this metadata, a journal, MCP response or diagnostic.
@@ -235,7 +275,10 @@ function resolveBatchReviewResult(bundle, value) {
 // material. Keeping the coordinator here makes the one-UI-call invariant easy
 // to test independently from later batch publication mechanics.
 async function reviewBatchTextLocally(documents, options = {}) {
-  const bundle = buildBatchReviewDraft(documents, { allowDefer: options.allowDefer === true });
+  const bundle = buildBatchReviewDraft(documents, {
+    allowDefer: options.allowDefer === true,
+    ...(options.batchSummary || {})
+  });
   const reviewer = options.reviewTextLocally || reviewTextLocally;
   const answer = await reviewer(bundle.draft, options);
   return resolveBatchReviewResult(bundle, answer);
@@ -260,12 +303,13 @@ function powershellReviewScript() {
     'if ($null -ne $draft.batch_review) { $form.Text = "DataSecure - lokale Stapelprüfung" }',
     'if ([int]$draft.batch_total -gt 1) { $form.Text += " - Datei " + [int]$draft.batch_index + " von " + [int]$draft.batch_total }',
     '$form.Width = 1200; $form.Height = 760; $form.StartPosition = "CenterScreen"; $form.TopMost = $true; $form.ShowInTaskbar = $true',
+    '$form.KeyPreview = $true',
     '$form.Add_Shown({ $form.Activate(); $form.BringToFront() })',
     '$form.FormBorderStyle = "Sizable"; $form.MinimizeBox = $true',
     '$info = New-Object System.Windows.Forms.Label',
     '$info.Dock = "Top"; $info.Height = 52; $info.Padding = [System.Windows.Forms.Padding]::new(10, 8, 10, 4)',
     '$info.Text = "Prüfe nur die gelben Stellen. Rot wurde bereits anonymisiert. Rechts unten siehst du die fertige Fassung für Claude."',
-    'if ($null -ne $draft.batch_review) { $info.Text = "Stapelprüfung: Entscheide die gelb markierten Zertifikatsstellen. Freie Bereichsanonymisierungen sind in diesem Schritt gesperrt." }',
+    'if ($null -ne $draft.batch_review) { $remaining = [int]$draft.batch_review.review_pending_count - [int]$draft.batch_review.review_document_count; $info.Text = "Automatisch abgeschlossen: " + [int]$draft.batch_review.automatically_completed_count + ". Bereits lokal geprüft: " + [int]$draft.batch_review.previously_reviewed_count + ". Jetzt: " + [int]$draft.batch_review.review_finding_count + " gelbe Stellen in " + [int]$draft.batch_review.review_document_count + " Dateien. Danach offen: " + $remaining + "."; if ([int]$draft.batch_review.safely_stopped_count -gt 0) { $info.Text += " Sicher gestoppt: " + [int]$draft.batch_review.safely_stopped_count + "." }; if ([int]$draft.batch_review.other_pending_count -gt 0) { $info.Text += " Weitere lokale Schritte offen: " + [int]$draft.batch_review.other_pending_count + "." } }',
     '$split = New-Object System.Windows.Forms.SplitContainer',
     '$split.Dock = "Fill"; $split.Orientation = "Vertical"; $split.SplitterDistance = 570',
     '$left = New-Object System.Windows.Forms.RichTextBox',
@@ -288,16 +332,16 @@ function powershellReviewScript() {
     '$split.Panel1.Controls.Add($left); $split.Panel2.Controls.Add($rightLayout)',
     '$buttons = New-Object System.Windows.Forms.FlowLayoutPanel',
     '$buttons.Dock = "Bottom"; $buttons.Height = 86; $buttons.FlowDirection = "RightToLeft"; $buttons.Padding = [System.Windows.Forms.Padding]::new(8)',
-    '$approve = New-Object System.Windows.Forms.Button; $approve.Text = "Geprüft freigeben"; $approve.Width = 150',
+    '$approve = New-Object System.Windows.Forms.Button; $approve.Text = "&Geprüft freigeben"; $approve.Width = 150',
     '$redact = New-Object System.Windows.Forms.Button; $redact.Text = "Auswahl anonymisieren"; $redact.Width = 165',
     '$skip = New-Object System.Windows.Forms.Button; $skip.Text = "Prüfung überspringen"; $skip.Width = 160',
     '$cancel = New-Object System.Windows.Forms.Button; $cancel.Text = "Abbrechen"; $cancel.Width = 110',
-    '$defer = New-Object System.Windows.Forms.Button; $defer.Text = "Später entscheiden"; $defer.Width = 155',
-    '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "Ja, beibehalten"; $keep.Width = 145',
-    '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "Nein, Namen ersetzen"; $anonOrg.Width = 170',
+    '$defer = New-Object System.Windows.Forms.Button; $defer.Text = "&Später entscheiden"; $defer.Width = 155',
+    '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "&Zertifikatsanbieter behalten"; $keep.Width = 205',
+    '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "&Organisation anonymisieren"; $anonOrg.Width = 205',
     '$keepGroup = New-Object System.Windows.Forms.Button; $keepGroup.Text = "Gleiche behalten"; $keepGroup.Width = 155',
     '$redactGroup = New-Object System.Windows.Forms.Button; $redactGroup.Text = "Gleiche anonymisieren"; $redactGroup.Width = 175',
-    '$back = New-Object System.Windows.Forms.Button; $back.Text = "Zurück / ändern"; $back.Width = 140',
+    '$back = New-Object System.Windows.Forms.Button; $back.Text = "&Rückgängig / ändern"; $back.Width = 155',
     '$ambiguityInfo = New-Object System.Windows.Forms.Label; $ambiguityInfo.Width = 330; $ambiguityInfo.Height = 38',
     '$script:answer = $null; $script:redactions = New-Object System.Collections.ArrayList; $script:decisions = @{}; $script:current = 0',
     'function Ambiguity-Redactions { $items = New-Object System.Collections.ArrayList; foreach ($candidate in $draft.ambiguities) { if ($script:decisions[[string]$candidate.ambiguity_id] -eq "redact") { [void]$items.Add(@{ start = [int]$candidate.anonymized_start; end = [int]$candidate.anonymized_end }) } }; return $items }',
@@ -318,6 +362,9 @@ function powershellReviewScript() {
     '$cancel.Add_Click({ $script:answer = @{ action = "cancelled" }; $form.Close() })',
     '$defer.Add_Click({ $script:answer = @{ action = "deferred" }; $form.Close() })',
     '$form.Add_FormClosing({ if ($null -eq $script:answer) { $script:answer = @{ action = "cancelled" } } })',
+    '$form.AcceptButton = $approve',
+    'if ([bool]$draft.allow_defer) { $form.CancelButton = $defer } else { $form.CancelButton = $cancel }',
+    '$form.Add_KeyDown({ if ($_.Alt -and $_.KeyCode -eq [System.Windows.Forms.Keys]::Z -and $keep.Enabled) { $keep.PerformClick(); $_.SuppressKeyPress = $true } elseif ($_.Alt -and $_.KeyCode -eq [System.Windows.Forms.Keys]::O -and $anonOrg.Enabled) { $anonOrg.PerformClick(); $_.SuppressKeyPress = $true } elseif ($_.Alt -and $_.KeyCode -eq [System.Windows.Forms.Keys]::R -and $back.Enabled) { $back.PerformClick(); $_.SuppressKeyPress = $true } elseif ($_.Control -and $_.KeyCode -eq [System.Windows.Forms.Keys]::Enter -and $approve.Enabled) { $approve.PerformClick(); $_.SuppressKeyPress = $true } })',
     '$skip.Visible = ($draft.ambiguities.Count -eq 0)',
     '$defer.Visible = [bool]$draft.allow_defer',
     '$redact.Visible = ($null -eq $draft.batch_review)',
@@ -373,6 +420,8 @@ function darwinReviewScript() {
     '  var draft = JSON.parse(source);',
     `  var contracts = ${contracts};`,
     '  var title = draft.batch_review ? "DataSecure – lokale Stapelprüfung" : "DataSecure – lokale Zertifikatsprüfung";',
+    '  var progress = draft.batch_review ? "Automatisch abgeschlossen: " + draft.batch_review.automatically_completed_count + ". Bereits lokal geprüft: " + draft.batch_review.previously_reviewed_count + ". Jetzt zu prüfen: " + draft.batch_review.review_finding_count + " Stellen in " + draft.batch_review.review_document_count + " Dateien.\\n\\n" : "";',
+    '  if (draft.batch_review && draft.batch_review.safely_stopped_count > 0) progress += "Sicher gestoppt: " + draft.batch_review.safely_stopped_count + ".\\n\\n";',
     '  try {',
     '    function dialogContract(phase) { var contract = contracts[phase][draft.allow_defer ? "defer" : "cancel"]; if (contract.buttons.indexOf(contract.defaultButton) < 0 || contract.buttons.indexOf(contract.cancelButton) < 0) throw new Error("invalid dialog contract"); return contract; }',
     '    function showDialog(message, phase) { var contract = dialogContract(phase); var answer = app.displayDialog(message, { withTitle: title, buttons: contract.buttons, defaultButton: contract.defaultButton, cancelButton: contract.cancelButton }); return { button: answer.buttonReturned, cancelAction: contract.cancelAction }; }',
@@ -388,7 +437,7 @@ function darwinReviewScript() {
     '      var value = draft.original_text.substring(item.original_start, item.original_end);',
     '      var before = draft.original_text.substring(Math.max(0, item.original_start - 100), item.original_start);',
     '      var after = draft.original_text.substring(item.original_end, Math.min(draft.original_text.length, item.original_end + 100));',
-    '      var message = "Stelle " + (index + 1) + " von " + draft.ambiguities.length + ":\\n\\n" + before + "[" + value + "]" + after + "\\n\\nIst die markierte Organisation der Aussteller einer Zertifizierung?";',
+    '      var message = progress + "Stelle " + (index + 1) + " von " + draft.ambiguities.length + ":\\n\\n" + before + "[" + value + "]" + after + "\\n\\nIst die markierte Organisation der Aussteller einer Zertifizierung?";',
     // Standard Additions maps to NSAlert and supports at most three buttons.
     // Defer/cancel is therefore the first real button and also the Esc action.
     '      var answer = showDialog(message, "decision");',
@@ -415,6 +464,7 @@ function linuxReviewContext(draft, item, index) {
   const after = draft.original_text.slice(item.original_end, Math.min(draft.original_text.length, item.original_end + 300));
   return [
     `DataSecure – ${draft.batch_review ? 'lokale Stapelprüfung' : 'lokale Zertifikatsprüfung'} (${index + 1} von ${draft.ambiguities.length})`,
+    ...(draft.batch_review ? ['', batchReviewSummary(draft)] : []),
     '',
     'Die eckig markierte Stelle wird nur lokal angezeigt.',
     'Ist sie der Aussteller einer Zertifizierung?',
@@ -680,6 +730,8 @@ module.exports = {
   reviewSizeError,
   buildReviewDraft,
   buildBatchReviewDraft,
+  batchReviewProgress,
+  batchReviewSummary,
   groupForCandidate,
   resolveBatchReviewResult,
   reviewBatchTextLocally,

@@ -1,7 +1,8 @@
 # Vertrag: gebündelte lokale Batch-Entscheidung v1
 
-Status: verbindlicher Zielvertrag · Stories: BL-012.1 bis BL-012.3, BL-031.1,
-BL-032.1 · Entscheidungen: DS-013, DS-014, DS-020 bis DS-022, DS-028
+Status: durch [`BATCH_REVIEW_V2.md`](BATCH_REVIEW_V2.md) ersetzt; nur historische
+Entwurfsbasis · Stories: BL-012.1 bis BL-012.3, BL-031.1, BL-032.1 ·
+Entscheidungen: DS-013, DS-014, DS-020 bis DS-022, DS-028
 
 ## Ziel
 

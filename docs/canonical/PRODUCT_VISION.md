@@ -64,6 +64,9 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Höchstens eine nutzerseitige Batch-Freigabe für die beabsichtigte
   Claude-Auswertung, soweit der Host dies zulässt.
 - Alltagssprache zuerst; technische Details nur bei Bedarf.
+- Klare Dateien benötigen keinen Review. Mehrdeutigkeiten werden nach der Analyse
+  in einem einzigen lokalen Sammelreview mit direkten fachlichen Aktionen,
+  sichtbarem Fortschritt und ausdrücklicher Abschlussfreigabe entschieden.
 
 ## Datenschutz- und Sicherheitsversprechen
 
