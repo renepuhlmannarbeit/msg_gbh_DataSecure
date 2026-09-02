@@ -51,10 +51,25 @@ test('nested supported files are deterministic and retain collision-free relativ
   fs.writeFileSync(path.join(root, 'b', 'same.txt'), 'B');
   fs.writeFileSync(path.join(root, 'a', 'same.txt'), 'A');
   const selected = enumerateSourceFolder(root, { hasReparseComponent: () => false });
-  assert.deepStrictEqual(selected.map((entry) => entry.sourceLabel), ['a/same.txt', 'b/same.txt']);
+  assert.deepStrictEqual(selected.map((entry) => path.basename(entry.sourcePath)), ['same.txt', 'same.txt']);
+  assert.ok(selected.every((entry) => entry.sourceLabel === undefined && entry.treeOrder === undefined),
+    'the folder walk emits no label of its own; the queue derives the minimal one');
   const queue = batchQueueFromSelection(selected);
   assert.deepStrictEqual(queue.map((entry) => entry.name), ['same.txt', 'same.txt']);
   assert.deepStrictEqual(queue.map((entry) => entry.sourceLabel), ['a/same.txt', 'b/same.txt']);
+});
+
+test('unique basenames in a folder selection map to bare basenames (DS-058)', () => {
+  // Sub-folder names are frequently person names or assessments. They must not
+  // enter the durable mapping unless bare basenames would otherwise collide.
+  const root = clean('unique-basenames');
+  fs.mkdirSync(path.join(root, 'Erika Synthetisch (abgelehnt)'));
+  fs.mkdirSync(path.join(root, 'Max Beispiel'));
+  fs.writeFileSync(path.join(root, 'Erika Synthetisch (abgelehnt)', 'lebenslauf.txt'), 'A');
+  fs.writeFileSync(path.join(root, 'Max Beispiel', 'anschreiben.txt'), 'B');
+  const queue = batchQueueFromSelection(enumerateSourceFolder(root, { hasReparseComponent: () => false }));
+  assert.deepStrictEqual(queue.map((entry) => entry.sourceLabel), ['lebenslauf.txt', 'anschreiben.txt']);
+  assert.doesNotMatch(JSON.stringify(queue.map((entry) => entry.sourceLabel)), /Erika|Max|abgelehnt/u);
 });
 
 test('a mixed tree is rejected as a whole instead of silently selecting supported files', () => {

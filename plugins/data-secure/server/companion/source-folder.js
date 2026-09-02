@@ -185,9 +185,13 @@ function enumerateSourceFolder(root, options = {}) {
   }
   if (!candidates.length) throw new SafeError('Der ausgewählte Ordner enthält keine unterstützten Dateien.');
 
-  // Re-bind every selected file only after tree traversal succeeded.
+  // Re-bind every selected file only after tree traversal succeeded. The
+  // relative path orders the queue deterministically but is not emitted as a
+  // mapping label: DS-058 allows a relative source path in the durable mapping
+  // only where bare basenames would collide, and batchQueueFromSelection
+  // derives exactly that minimal disambiguation from the full paths.
   const selected = candidates.map(({ full, sourceLabel }) => ({
-    ...validateSelectedPath(full, { ...options, fs: io, allowedTypes }), sourceLabel
+    ...validateSelectedPath(full, { ...options, fs: io, allowedTypes }), treeOrder: sourceLabel
   }));
   for (const [directory, identity] of directoryIdentities) {
     let current;
@@ -199,7 +203,8 @@ function enumerateSourceFolder(root, options = {}) {
   if (total > (options.maxTotalBytes ?? LIMITS.MAX_BATCH_TOTAL_BYTES)) {
     throw new SafeError('Die unterstützten Dateien im ausgewählten Ordner sind zusammen größer als 500 MB.');
   }
-  return selected.sort((a, b) => a.sourceLabel.localeCompare(b.sourceLabel));
+  return selected.sort((a, b) => a.treeOrder.localeCompare(b.treeOrder))
+    .map(({ treeOrder, ...entry }) => entry);
 }
 
 // The normal Cowork path uses the same fail-closed traversal contract but
@@ -297,7 +302,7 @@ async function enumerateSourceFolderAsync(root, options = {}) {
   for (const { full, sourceLabel } of candidates) {
     selected.push({ ...await validateSelectedPathAsync(full, {
       ...options, fs: io, fsPromises: asyncIo, hasReparseComponentAsync: reparse, allowedTypes
-    }), sourceLabel });
+    }), treeOrder: sourceLabel });
     await checkpoint();
   }
   for (const [directory, identity] of directoryIdentities) {
@@ -312,7 +317,8 @@ async function enumerateSourceFolderAsync(root, options = {}) {
     throw new SafeError('Die unterstützten Dateien im ausgewählten Ordner sind zusammen größer als 500 MB.');
   }
   throwIfSelectionAborted(options.signal);
-  return selected.sort((a, b) => a.sourceLabel.localeCompare(b.sourceLabel));
+  return selected.sort((a, b) => a.treeOrder.localeCompare(b.treeOrder))
+    .map(({ treeOrder, ...entry }) => entry);
 }
 
 module.exports = {
