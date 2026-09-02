@@ -1,5 +1,12 @@
 'use strict';
 
+// Historical evidence only (moved here 02.09.2026). This file pins RC63-era
+// contract texts – keyring, secret store, private-artifact encryption, PDF/OCR
+// pilots and a POSIX supervisor hook in build-plugin.mjs – several of which are
+// superseded (DS-065/DS-067) or no longer exist. It is deliberately not part of
+// any npm script; the still-valid tracked-test-source guard lives in
+// tests/test-test-path-separation.js.
+
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');

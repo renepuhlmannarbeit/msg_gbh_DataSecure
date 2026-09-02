@@ -16,7 +16,7 @@
 # tests/make-fixtures.js only. Test *source* — shared builders and helper
 # processes a test starts by path — belongs in tests/lib/ or tests/helpers/,
 # which stay tracked. A helper placed here would silently never reach a clone;
-# tests/test-architecture-contracts.js fails if that happens again.
+# tests/test-test-path-separation.js fails if that happens again.
 /tests/fixtures/
 /docs/acceptance/RC63_UAT_TEST_KIT/inputs/
 /docs/acceptance/UAT_TEST_KIT/inputs/

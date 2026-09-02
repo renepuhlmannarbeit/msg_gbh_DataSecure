@@ -46,6 +46,70 @@ test('automatic and release workflows use product gates and publish no MCPB', ()
   assert.ok(fs.existsSync(path.join(root, '.github', 'workflow-archive', 'keyring-pilot.yml')));
 });
 
+test('every current product test is reachable through an npm script or the product runner', () => {
+  // A test that no script and no runner ever executes is dead evidence. It
+  // silently rots (the former tests/test-architecture-contracts.js asserted a
+  // build-script symbol that no longer exists) while the canon still cites it.
+  const referenced = new Set();
+  for (const match of runner.matchAll(/'(?:tests\/)?(test-[A-Za-z0-9.-]+\.(?:js|mjs))'/gu)) referenced.add(match[1]);
+  for (const script of Object.values(pkg.scripts)) {
+    for (const match of script.matchAll(/tests\/(test-[A-Za-z0-9.-]+\.(?:js|mjs))/gu)) referenced.add(match[1]);
+  }
+  const present = fs.readdirSync(__dirname).filter((name) => /^test-.*\.(?:js|mjs)$/u.test(name));
+  // Manual, host-bound or argument-driven probes are documented exceptions.
+  const manual = new Set(['test-visual.js', 'test-windows-visual.js', 'test-bundled-runtime-smoke.mjs',
+    'test-ocr-runtime-bundle.mjs', 'test-ocr-runtime-smoke.mjs', 'test-keyring-artifacts.mjs', 'test-keyring-pilot.js',
+    'test-batch-secret-store.js']);
+  const orphaned = present.filter((name) => !referenced.has(name) && !manual.has(name));
+  assert.deepStrictEqual(orphaned, [], `tests referenced by no npm script or runner: ${orphaned.join(', ')}`);
+});
+
+test('every project script a test addresses by path exists and is tracked by Git', () => {
+  // tests/fixtures/ is ignored wholesale, so a helper forked from there never
+  // reaches a clone and its test dies with a generic exit code instead of
+  // proving anything. Test sources belong in tests/lib/ or tests/helpers/.
+  const childProcess = require('child_process');
+  const joinPattern = /path\.join\(\s*(__dirname|root)\s*((?:,\s*'[^'\n]+'\s*)+)\)/gu;
+  const repoRootDeclaration = /^const root = path\.resolve\(__dirname, '\.\.'\);$/mu;
+  const scripts = new Map();
+  const collect = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) { if (entry.name !== 'fixtures') collect(full); continue; }
+      if (!/\.(?:js|mjs|cjs)$/u.test(entry.name)) continue;
+      const source = fs.readFileSync(full, 'utf8');
+      const rootIsRepository = repoRootDeclaration.test(source);
+      joinPattern.lastIndex = 0;
+      let match;
+      while ((match = joinPattern.exec(source)) !== null) {
+        if (match[1] === 'root' && !rootIsRepository) continue;
+        const segments = [...match[2].matchAll(/'([^'\n]+)'/gu)].map((part) => part[1]);
+        if (!/\.(?:js|mjs|cjs)$/u.test(segments.at(-1))) continue;
+        const target = path.resolve(match[1] === 'root' ? root : path.dirname(full), ...segments);
+        const relative = path.relative(root, target).split(path.sep).join('/');
+        if (relative.startsWith('..')) continue;
+        if (!scripts.has(relative)) scripts.set(relative, new Set());
+        scripts.get(relative).add(path.relative(root, full).split(path.sep).join('/'));
+      }
+    }
+  };
+  collect(__dirname);
+  assert.ok(scripts.size >= 20, `path-referenced script scan collected only ${scripts.size} entries`);
+  assert.ok(scripts.has('tests/lib/crash-batch-worker.js'), 'the detached crash worker must stay a path-referenced, tracked test helper');
+  let gitAvailable = true;
+  try { childProcess.execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' }); }
+  catch { gitAvailable = false; }
+  for (const [relative, referees] of scripts) {
+    const by = [...referees].sort().join(', ');
+    assert.ok(fs.existsSync(path.join(root, relative)), `${relative} is addressed by ${by} but missing`);
+    if (!gitAvailable) continue;
+    let tracked = true;
+    try { childProcess.execFileSync('git', ['ls-files', '--error-unmatch', '--', relative], { cwd: root, stdio: 'ignore' }); }
+    catch { tracked = false; }
+    assert.ok(tracked, `${relative} is addressed by ${by} but not tracked by Git`);
+  }
+});
+
 test('future PDF workflows remain manual and explicitly non-release', () => {
   for (const name of ['pdfium-spike.yml', 'pdf-ocr-risk.yml']) {
     const source = workflow(name);

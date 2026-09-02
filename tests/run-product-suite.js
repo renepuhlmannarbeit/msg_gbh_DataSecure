@@ -38,7 +38,11 @@ const ciFiles = [
   'test-direct-picker-intake-worker.js', 'test-local-only-handoff.js',
   'test-local-handoff-resume.js', 'test-mixed-batch-recovery.js',
   'test-archive-modes.mjs', 'test-batch-performance-contract.js',
-  'test-gateway-e2e.js', 'test-mcp-protocol.js', 'test-adversarial.js'
+  'test-gateway-e2e.js', 'test-mcp-protocol.js', 'test-adversarial.js',
+  // DS-022/DS-069 core gates: single active batch, cross-process intake
+  // reservation, executor lease, recovery and the visible result export.
+  'test-batch-intake-reservation.js', 'test-batch-executor-lease.js',
+  'test-batch-active-lock.js', 'test-batch-recovery.js', 'test-result-folder-export.js'
 ];
 
 const fullOnly = [
@@ -57,7 +61,20 @@ const fullOnly = [
   'test-mapping-outbox.js', 'test-batch-lease-store.js', 'test-storage-reservation-store.js',
   'test-batch-session.js', 'exploratory-review-20.js', 'exploratory-anonymization-2000.js',
   'test-sarif-check.mjs', 'test-docx-structure.js', 'test-docx-differential.js',
-  'test-native-launcher.js'
+  'test-native-launcher.js',
+  // Batch intake, continuation, review, journal, reconciliation, delivery and
+  // mapping gates previously reachable only through `pretest:fast-path`.
+  'test-batch-intake.js', 'test-batch-discard.js', 'test-batch-continuation.js',
+  'test-batch-snapshot-invalidation.js', 'test-batch-executor-runner.js',
+  'test-batch-review-capture.js', 'test-batch-review-state.js',
+  'test-batch-review-publication.js', 'test-batch-review-orchestrator.js',
+  'test-batch-journal-store.js', 'test-batch-reconciliation.js', 'test-batch-delivery.js',
+  'test-batch-mapping-maintenance.js', 'test-local-review-executor.js',
+  'test-native-picker-lifecycle.js', 'test-legacy-input-migration.js', 'test-rc80-semantics.js',
+  // Product tests that were referenced by no npm script at all.
+  'test-batch-pseudonym-context.js', 'test-storage-capacity.js', 'test-image-sanitizer.js',
+  'test-zip-permissions.mjs', 'test-parser-worker-boundary.js', 'test-background-role-launcher.js',
+  'test-companion-startup-boundary.js'
 ];
 
 function run(file) {
