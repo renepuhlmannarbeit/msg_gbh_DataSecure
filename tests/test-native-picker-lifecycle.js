@@ -233,6 +233,42 @@ if (process.platform === 'win32') {
     assert.strictEqual(sourcePickerCalls, 0, 'no source picker opens without a result folder');
   });
 
+  await testAsync('a continuation never starts a second executor next to a running intake or batch (DS-022)', async () => {
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const source = code.slice(code.indexOf('function continueMostRecentDocumentBatch('), code.indexOf('const LOCAL_ONLY_HANDOFF='));
+    assert.ok(source.includes('batch_active'), 'the continuation guard must exist');
+    let continuations = 0;
+    let batchStarts = 0;
+    let reviewStarts = 0;
+    const status = { local_intake_pending: false, batch_processing_active: false };
+    const context = vm.createContext({
+      genericStatus: () => ({ ...status }),
+      continueMostRecentBatch: () => { continuations++; return { ok: true, batch_token: 'c'.repeat(64), remaining: 1, delivery_pending: 0, mapping_pending: 0, deferred_review: 0, batch_total: 1, released: 0, stopped: 0 }; },
+      startLocalBatchExecutor: () => { batchStarts++; return { local_processing_started: true }; },
+      startLocalReviewExecutor: () => { reviewStarts++; return { ok: true }; },
+      recordWorkflowEvent: () => {}
+    });
+    vm.runInContext(source, context);
+    for (const active of [{ local_intake_pending: true }, { batch_processing_active: true }]) {
+      Object.assign(status, { local_intake_pending: false, batch_processing_active: false }, active);
+      const blocked = context.continueMostRecentDocumentBatch();
+      assert.strictEqual(blocked.ok, false);
+      assert.strictEqual(blocked.error, 'batch_active');
+      assert.strictEqual(blocked.local_processing_started, false);
+      assert.strictEqual(blocked.next_action, 'wait_for_local_release_before_retry');
+      assert.doesNotMatch(JSON.stringify(blocked), /batch_token|[a-f0-9]{64}/u);
+    }
+    assert.strictEqual(continuations, 0, 'no durable continuation is touched while another executor lives');
+    assert.strictEqual(batchStarts + reviewStarts, 0, 'no second worker is launched');
+    Object.assign(status, { local_intake_pending: false, batch_processing_active: false });
+    const resumed = context.continueMostRecentDocumentBatch();
+    assert.strictEqual(resumed.ok, true);
+    assert.strictEqual(resumed.local_processing_started, true);
+    assert.strictEqual(continuations, 1);
+    assert.strictEqual(batchStarts, 1);
+    assert.doesNotMatch(JSON.stringify(resumed), /batch_token|[a-f0-9]{64}/u, 'the token never crosses the MCP boundary');
+  });
+
   await testAsync('privacy-root mutation and source intake share one native interaction owner', async () => {
     const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
