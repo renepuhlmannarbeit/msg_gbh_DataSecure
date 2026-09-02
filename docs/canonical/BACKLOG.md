@@ -90,6 +90,25 @@ DS-062, DS-063, DS-064, DS-065, DS-066, DS-067, DS-068 und DS-069.
 | BL-024.2 | Der Engineering-Portable-Build übernimmt das verifizierte Universal-OCR-Bundle vollständig. Geschlossene Manifest-/Inventar-/Modus-/Hashgates, Installationspfade mit Leerzeichen, Adapter-Timeout und laufender Abbruch sind regressionsgetestet; der SEA-Engineering-Build behält das belegte OCR-Testbundle. Offen bleiben die kohärente Aufnahme in freizugebende Produktziele, ein nicht allein per Manifest aktivierbares Produktgate und ein echter Paket-zu-Adapter-zu-OCR-End-to-End-Test. PNG/JPEG/BMP-Freigabe bleibt getrennt BL-024.3. | **in Arbeit** |
 | BL-042.3 | Inhaltsfreie Status-App um terminale bounded Zustände, vollständige Textfallback-Matrix und automatisierte Browser-/A11y-/DE-EN-DOM-Gates ergänzen. Der Windows-/CWD-unabhängige reproduzierbare Build sowie beide zulässigen Varianten für „Stapel läuft bereits“ sind korrigiert und regressionsgetestet. | **in Arbeit** |
 
+### Offene Restbefunde aus dem Gesamtgegenreview 02.09.2026
+
+Belegte, nicht behobene Befunde des Claude-Code-Gesamtgegenreviews (Bericht
+`tasks/CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md`). Sie sind ihren bestehenden
+Storys zugeordnet und keine neuen Storys; Unterredaktion wiegt schwerer als
+Komfort.
+
+| Befund | Story | Prio | Rest |
+|---|---|---|---|
+| Liveness nur über `kill(pid, 0)`: eine wiederverwendete PID lässt eine tote Executor-Lease oder einen toten Lock „lebendig“ wirken; die gespeicherte Startzeit wird nie geprüft. | BL-011.11 | P2 | Design (Startzeit-Helfer oder exklusiver Lock-Handle je Executor) und reale Crash-Evidenz |
+| Unicode-Kompatibilitätsvarianten (Fullwidth `＠`/Ziffern, Dot-Leader) umgehen E-Mail-/IBAN-/Telefon-Detektoren und Residual-Gate; `CONTACT_URI_RE` frisst ohne Trennzeichen angrenzenden Text (Überredaktion). | BL-021.1 | P3 | NFKC-/Confusable-Regel für Erkennung und Residual-Gate ohne Fachinhaltsverlust |
+| Support-Review `review_deferred_document_batch` rekonstruiert Rohtext im MCP-Hauptprozess ohne `network-deny`. | BL-020.3 | P3 | Supportweg über den detached Review-Worker leiten oder als Ausnahme im Netzwerkvertrag dokumentieren |
+| Resume-/Review-Start melden Erfolg ohne die für den Pickerstart eingeführte Worker-Empfangsbestätigung. | BL-043 | P3 | dieselbe begrenzte Bestätigung für `startLocalBatchExecutor`/`startLocalReviewExecutor` |
+| Ein nach ACK-Timeout gestoppter Intake lässt bereits kopierte Arbeitskopien bis zum Intent-Ablauf liegen. | BL-011.8 | P3 | toten Intake-Owner ohne Journal sofort bereinigen |
+| Synchrones SHA-256 im Listing-Pfad neben dem asynchronen Snapshot-Hash; der 6-MiB-Yield-Test prüft nur `turns > 0`. | BL-047.1 | P3 | Listing-Verifikation an den asynchronen Hash koppeln; Maximal-Stall messen |
+| `visibleResultTreeOverlaps` ohne Cache (Realpath je Datei und Wurzel). | BL-044.1 | P3 | Quantifizierung auf Referenzhardware; Cache nur bei belegtem Bedarf |
+| Skill-Evals und MCPB-Manifest ohne DS-069-Fälle (Ordnerwechsel, Reset, `result_folder_required`, Sync-Hinweis). | BL-041.10 | P3 | Eval-Fälle ergänzen; MCPB bleibt Engineering-only |
+| `test:product` (Profil `full`) startet über den Picker-Lifecycle-Test reale, fensterlose PowerShell-Prozesse (nur Windows, zeitbegrenzt). | BL-002 | P3 | akzeptiert; bei Bedarf in ein Windows-Only-Gate auslagern |
+
 ## B. Technisch vorbereitet – menschliche Evidenz offen
 
 | Story | Noch erforderlicher Nachweis | Status |

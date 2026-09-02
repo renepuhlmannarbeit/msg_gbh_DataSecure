@@ -9,7 +9,7 @@ Ledger: [`CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`](CLAUDE-CODE-ARBEITSBACKLOG-RC86.m
 | Punkt | Wert |
 |---|---|
 | Start-Commit | `487f1db` (`docs: prepare Claude Code comprehensive review`), `main`, Fast-Forward von `e7aa1d1`, Arbeitsbaum sauber |
-| End-Commit | siehe Abschnitt 7 (alle Commits lokal, **nicht gepusht**) |
+| End-Commit | der abschließende Dokumentationscommit des Folgeauftrags, siehe Abschnitt 7 (18 Commits seit `487f1db`, alle lokal, **nicht gepusht**) |
 | Produktversion | 3.2.0-rc86 in `package.json`, `plugin.json`, `VERSION`, `version.js`, `manifest.json`, `BUILD_INFO.json` |
 | Host | Windows 11 Pro 10.0.26200, MSYS-Shell; Node v24.18.0; npm 11.16.0; Claude Code CLI 2.1.233 |
 | Netz | offizielle Herstellerquellen am 02.09.2026 abgerufen; `node-v22.23.2-win-x64.zip` (SHA-256 `1177b413…99f97`, gegen Runtime-Vertrag geprüft) und `npm ci` nach ausdrücklicher Nutzerfreigabe |
@@ -48,7 +48,7 @@ Gegencheck nach den Fixes standen die Typen `runtime-quality-reviewer` und
 | cowork-plugin-reviewer | Prüfpaket A, Herstellerabgleich (11 Quellen), CLI-Validierung | ~8 min | A-01…A-11 (2× P2, 9× P3), 22 Herstellerbelege |
 | privacy-threat-reviewer | Prüfpaket B, adversariale Fixtures (r1–r7) | ~16 min | B-01 (P1), B-02/B-03 (P2), B-04…B-07 (P3) |
 | runtime-quality-reviewer | Prüfpakete C, D, E, Testprotokoll | ~14 min | C-01…C-09, D-01…D-05, E-01…E-05 |
-| Gegencheck (runtime + privacy) | Read-only-Prüfung der 14 Fixcommits | siehe Abschnitt 6 | siehe Abschnitt 6 |
+| Gegencheck (runtime + privacy) | Read-only-Prüfung der 13 Fixcommits `61f2d0e`…`2f95f2e` | siehe Abschnitt 6 | siehe Abschnitt 6 |
 
 Alle Findings wurden in der Hauptsession reproduziert oder gegen Code/Kanon
 revalidiert; Dubletten wurden zusammengeführt (H-02 = C-01 = E-01; H-01 = C-04;
@@ -80,7 +80,7 @@ Cowork-Arbeitsordner mitteilt. Die Tabelle steht in
 Vollständige Tabelle mit Datei:Zeile, Reproduktion, Ist/Soll, Auswirkung und
 BL/DS: Ledger, Abschnitt „Konsolidierte Findings“. Zusammenfassung:
 
-### Behoben (14 Commits)
+### Behoben (13 Fixcommits vor dem Gegencheck, 2 danach; vollständige Liste in Abschnitt 7)
 
 | ID | Prio | Thema | Commit |
 |---|---|---|---|
@@ -112,6 +112,22 @@ BL/DS: Ledger, Abschnitt „Konsolidierte Findings“. Zusammenfassung:
 | A-11 | P3 | Evals/MCPB ohne DS-069-Abdeckung | Engineering-Korpus |
 | E-04 | P3 | 6-MiB-Yield-Test prüft nur `turns > 0` | Messkriterium fehlt (E1) |
 
+### Offener Restumfang des Auftrags (nicht geliefert)
+
+Die eigenständig lieferbaren Backloganteile aus Abschnitt 8 des Auftrags wurden
+nur teilweise bearbeitet. Ehrlich offen bleiben:
+
+| Ledger | Story | Nicht geliefert |
+|---|---|---|
+| CC-10 | BL-042.3 | bounded Abschlussprojektion der Status-App, vollständige Textfallback-Matrix, automatisierter Browser-/A11y-/DE-EN-DOM-Lauf (nur `test:status-app` geprüft) |
+| CC-11 | BL-022.1 | realer Word-/LibreOffice-/`python-docx`-Korpus, realistische Kommentare, konsistente AlternateContent-Policy (nur Case-Härtung B-02 geliefert) |
+| CC-12 | BL-024.2 | kohärente Aufnahme des OCR-Bundles in freizugebende Produktziele, nicht allein per Manifest aktivierbares Produktgate, Paket-zu-Adapter-zu-OCR-End-to-End-Test; `test:engineering` nicht ausgeführt |
+
+Diese Punkte stehen unverändert im kanonischen Backlog (Abschnitt A „in Arbeit“).
+Alle offenen technischen Findings dieses Reviews sind zusätzlich unter ihren
+bestehenden BL-IDs im Backlog verankert („Offene Restbefunde aus dem
+Gesamtgegenreview 02.09.2026“); es wurden keine neuen BL-Storys angelegt.
+
 ### DECISION_REQUIRED
 
 | Thema | Optionen | Empfehlung |
@@ -128,6 +144,7 @@ BL/DS: Ledger, Abschnitt „Konsolidierte Findings“. Zusammenfassung:
 | `npm run test:product` (nach Erweiterung um 29 Tests, Zwischenstand) | PASS, 14m14s (111 direkte Testdateien + 23 Basisdateien) |
 | `npm run test:product` (Baum `705bcaa`, zweiter Checkpoint) | PASS, 17m24s (parallel zu Build und Gegenchecks) |
 | `npm run test:product` (finaler Codestand `7ea3b68`) | siehe Abschnitt 7 |
+| `npm run test:product` (Folgeauftrag, Runner ohne Doppelläufe, `91465e0` + Doku) | PASS, 16m05s, „23 base + 108 direct test files“ (sechs zuvor doppelt gelaufene Dateien laufen je Profil genau einmal) |
 | `npm run test:docs` | PASS |
 | `npm run test:status-app` | PASS (nach `npm ci`; vorher `ERR_MODULE_NOT_FOUND esbuild`) |
 | `npm run test:skills` | PASS (13 + 150) |
@@ -226,7 +243,12 @@ kompaktem Abschlussauftrag fortgesetzt; keine Repo-Änderung.
 | `2f95f2e` | docs: canon, guides, UAT kit, skill aligned with vendor state (D-02, A-01, A-03, A-04, A-09, A-10, D-04) |
 | `705bcaa` | test(batch): batch_active continuation guard covered (Gegencheck G-R1) |
 | `7ea3b68` | fix(export): every written result final on its own (Gegencheck G-P1) |
-| (dieser Commit) | docs: Bericht, Ledger, Register, Backlog-Evidenz |
+| `590fe08` | docs: Bericht, Ledger, Register, Backlog-Evidenz |
+| `91465e0` | test(product): jede Testdatei läuft je Profil genau einmal (Dedupe + Guard) |
+| (Folgeauftrag, dieser Commit) | docs: D-01/D-05 erledigt, Commitzahlen berichtigt, offene Findings im Backlog, CC-10–CC-12 als Restumfang |
+
+Insgesamt 18 Commits seit `487f1db`: 13 Fixcommits vor dem Gegencheck, 2 nach dem
+Gegencheck, 3 Dokumentations-/Testinfrastrukturcommits.
 
 ### Finaler Suitelauf
 
