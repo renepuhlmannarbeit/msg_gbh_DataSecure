@@ -31,10 +31,12 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
   gewählt, die Output-Anlage geprüft und das Ziel erst danach identitätsgebunden
   gespeichert. Nur verifiziertes Markdown mit
   neutralen Namen gelangt nach `DataSecure-Output/Lauf-…`; Mapping, Originale,
-  Review und Recovery bleiben privat. Ein fehlgeschlagener Export wird lokal
-  vorgemerkt und beim nächsten Start oder Ordnerwechsel erneut versucht. Zielwechsel,
-  Löschung oder Manipulation sichtbarer Ergebnisse lösen eine erneute Prüfung und
-  gegebenenfalls Reparatur aus; der Outputbaum ist als rekursive Quelle gesperrt.
+  Review und Recovery bleiben privat. Nur ein fehlgeschlagener Export wird lokal
+  vorgemerkt und beim nächsten Start oder Ordnerwechsel genau einmal nachgeholt.
+  Ein abgeschlossener Export ist endgültig: vom Anwender gelöschte oder bearbeitete
+  sichtbare Ergebnisse werden weder überschrieben noch wiederhergestellt, und ein
+  späterer Ordnerwechsel spiegelt keine früheren Läufe in den neuen Ordner. Der
+  Outputbaum ist als rekursive Quelle gesperrt.
 
 ## Claude-/Cowork-Grenze
 

@@ -58,16 +58,42 @@ try {
   assert.strictEqual(fs.readFileSync(path.join(resultOutputDirectory(), runs[0], visible[0]), 'utf8'), '# Bereinigtes Dokument\n\n[PERSON_1]');
   assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true }, 'retry is idempotent');
 
+  // DS-023: visible results stay until the user deletes them. DS-069: only a
+  // failed export is replayed. A completed record is final; user deletions are
+  // respected and a destination change never mirrors earlier runs.
+  const firstVisible = path.join(resultOutputDirectory(), runs[0], 'Dokument-001-anonymisiert.md');
+  fs.unlinkSync(firstVisible);
+  assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true }, 'a completed record stays final');
+  assert.strictEqual(fs.existsSync(firstVisible), false, 'a visible result deleted by the user is not re-created');
+  assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 }, 'startup replay skips completed records');
+  assert.strictEqual(fs.existsSync(firstVisible), false);
   const secondCowork = path.join(base, 'cowork-second');
   fs.mkdirSync(secondCowork);
   process.env.EU_PRIVACY_RESULT_ROOT = secondCowork;
-  assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true }, 'a destination change re-exports');
-  const secondRun = fs.readdirSync(resultOutputDirectory())[0];
-  const secondVisible = path.join(resultOutputDirectory(), secondRun, 'Dokument-001-anonymisiert.md');
-  assert.strictEqual(fs.readFileSync(secondVisible, 'utf8'), '# Bereinigtes Dokument\n\n[PERSON_1]');
-  fs.unlinkSync(secondVisible);
-  assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true }, 'a deleted visible result is repaired');
-  assert.strictEqual(fs.readFileSync(secondVisible, 'utf8'), '# Bereinigtes Dokument\n\n[PERSON_1]');
+  assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true });
+  assert.deepStrictEqual(fs.readdirSync(resultOutputDirectory()), [], 'a destination change does not mirror completed runs');
+  assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 });
+  assert.deepStrictEqual(fs.readdirSync(resultOutputDirectory()), []);
+
+  // A genuinely failed export (no destination at completion time) is replayed
+  // exactly once as soon as a destination exists, then becomes final.
+  delete process.env.EU_PRIVACY_RESULT_ROOT;
+  const idLate = `ds_${'5'.repeat(32)}`;
+  packageFixture(idLate, '# Spätes Dokument');
+  const lateState = {
+    token: 'e'.repeat(64), created_at: '2026-09-02T15:00:00.000Z',
+    items: [{ status: 'released', package_id: idLate }]
+  };
+  assert.deepStrictEqual(exportCompletedState(lateState), { exported: 0, pending: 1, available: false }, 'no destination keeps the export pending');
+  assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(lateState.token), 'utf8')).complete, false);
+  process.env.EU_PRIVACY_RESULT_ROOT = secondCowork;
+  assert.deepStrictEqual(replayPendingResultExports(), { exported: 1, pending: 0, failures: 0 }, 'the failed export is replayed once');
+  const lateRuns = fs.readdirSync(resultOutputDirectory());
+  assert.strictEqual(lateRuns.length, 1);
+  assert.deepStrictEqual(fs.readdirSync(path.join(resultOutputDirectory(), lateRuns[0])), ['Dokument-001-anonymisiert.md']);
+  assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(lateState.token), 'utf8')).complete, true);
+  assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 }, 'a replayed record is final');
+  process.env.EU_PRIVACY_RESULT_ROOT = cowork;
 
   const id3 = `ds_${'3'.repeat(32)}`;
   const third = packageFixture(id3, '# Sicher');

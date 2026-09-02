@@ -154,6 +154,11 @@ function exportCompletedState(state) {
   try { plan = ensureRecord(state); }
   catch { return { exported: 0, pending: releasedCount(state), available: false }; }
   if (plan.value.items.length === 0) return { exported: 0, pending: 0, available: true };
+  // DS-069 replays only a failed export; DS-023 leaves visible results to the
+  // user until they delete them. A completed record is therefore final: it is
+  // neither re-verified nor re-materialised after a user deletion, and a later
+  // destination change does not mirror earlier runs into the new folder.
+  if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0, available: true };
   try {
     const destination = activeDestination();
     if (!destination) return { exported: 0, pending: plan.value.items.length, available: false };
@@ -180,7 +185,8 @@ function replayPendingResultExports() {
     try {
       const target = path.join(outboxDirectory(), entry.name);
       const record = readRecord(target);
-      if (record.items.length === 0) continue;
+      // Only a failed (incomplete) export is replayed; see exportCompletedState.
+      if (record.items.length === 0 || record.complete === true) continue;
       const destination = activeDestination();
       if (!destination) { pending += record.items.length; continue; }
       const run = ensurePlainDirectory(destination.output, record.run_directory);
