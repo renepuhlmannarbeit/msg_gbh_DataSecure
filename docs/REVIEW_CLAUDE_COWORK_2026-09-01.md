@@ -1,6 +1,6 @@
 # Claude-/Cowork-Revalidierung
 
-Stand: 01.09.2026 · Produktarbeitsstand RC84 · zeitgebundener Herstellerabgleich
+Stand: 02.09.2026 · Produktarbeitsstand RC86 · zeitgebundener Herstellerabgleich
 
 ## Urteil
 
@@ -18,6 +18,14 @@ Ablauf in der jeweils aktuellen Desktop-App.
 
 - [Plugins reference](https://code.claude.com/docs/en/plugins-reference):
   Pluginstruktur, Manifest, Skills und Plugin-MCP-Konfiguration.
+- [Claude Code memory](https://code.claude.com/docs/en/memory) und
+  [Best practices](https://code.claude.com/docs/en/best-practices): knapper
+  versionierter Projektkontext in `CLAUDE.md`; umfangreiche einmalige Aufträge
+  bleiben außerhalb dieser dauerhaft geladenen Datei.
+- [Claude Code subagents](https://code.claude.com/docs/en/subagents) und
+  [Agents](https://code.claude.com/docs/en/agents): projektbezogene Prüfrollen
+  unter `.claude/agents`; DataSecure setzt sie nur read-only für unabhängige
+  Reviews ein und lässt eine Hauptsession Änderungen konsolidieren.
 - [Use plugins in Claude](https://support.claude.com/en/articles/13837440-use-plugins-in-claude):
   Installation und Verwendung von Plugins in Claude/Cowork.
 - [Manage plugins for your organization](https://support.claude.com/en/articles/13837433-manage-plugins-for-your-organization):
@@ -40,6 +48,9 @@ Web-/Mobilzugriff, verbundene Ordner oder Remote-MCP sind kein Ersatz.
 - Plugin und Marketplace sind lokal streng validierbar.
 - Genau zwei Skills und ein lokaler Plugin-MCP bilden die sichtbare Oberfläche.
 - Der Normalweg pollt nicht und liest Ergebnisse nicht automatisch.
+- Beim ersten Lauf wird der bereits verbundene Cowork-Arbeitsordner einmal lokal
+  als Ergebnisziel gewählt. Danach benötigt der Normalweg nur die Quellenwahl;
+  ausschließlich freigegebenes Markdown wird unter `DataSecure-Output` sichtbar.
 - TXT, Markdown, CSV und DOCX sind freigegeben; weitere Formate stoppen fail-closed.
 - Bildpixel bleiben lokal; es gibt keinen auswählbaren Bildmodus.
 - Nur temporäre Arbeits-/Reviewdaten haben 0–14 Tage Aufbewahrung. Originale und

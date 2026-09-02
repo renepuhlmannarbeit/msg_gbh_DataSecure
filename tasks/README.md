@@ -6,8 +6,10 @@ optionaler zeitlich begrenzter Review-/Übergabeauftrag und darf das kanonische
 Backlog oder Entscheidungsregister nicht verändern. Jeder neue Umsetzungsauftrag muss
 mindestens eine konkrete Story `BL-nnn.x` nennen; reine Backlogpflege darf `BL-001`
 zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`. Der
-einzige aktuelle unabhängige Reviewauftrag ist
+einzige aktuelle unabhängige Review- und Fixauftrag ist
 [`CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`](CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md).
+Sein abgeleitetes, nicht kanonisches Ausführungsledger ist
+[`CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`](CLAUDE-CODE-ARBEITSBACKLOG-RC86.md).
 
 Konvention für einen Auftrag:
 
