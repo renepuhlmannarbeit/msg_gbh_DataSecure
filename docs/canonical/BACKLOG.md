@@ -32,7 +32,9 @@ synthetische Dateien. Produkt-, Engineering- und Legacy-Pfade sind getrennt;
 Dokumentation, Hostmatrix, Ordnerannahme, Startstatus und Prompt-Injection-Vertrag
 sind automatisiert geprüft. Der gebündelte Runtimevertrag deckt Windows x64 sowie
 macOS Intel/ARM ab. Ein reales Windows-x64-Artefakt startete mit leerem `PATH`,
-bestand MCP-Handshake/Status-Smoke und blieb mit 34.845.038 Byte unter 45 MiB.
+bestand MCP-Handshake/Status-Smoke und blieb unter 45 MiB (Build 01.09.2026:
+34.845.038 Byte; lokaler Build 02.09.2026 nach dem Gesamtgegenreview:
+34.913.330 Byte, SHA-256 `c34211c0…3815c`).
 Reale macOS-Ausführung, Cowork-Fresh-Install und Marketplace-Lebenszyklus bleiben
 menschliche Freigabeevidenz; bis dahin bleibt der breite Rollout NO-GO.
 

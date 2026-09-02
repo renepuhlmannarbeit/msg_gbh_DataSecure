@@ -9,7 +9,10 @@ zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`. Der
 einzige aktuelle unabhängige Review- und Fixauftrag ist
 [`CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`](CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md).
 Sein abgeleitetes, nicht kanonisches Ausführungsledger ist
-[`CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`](CLAUDE-CODE-ARBEITSBACKLOG-RC86.md).
+[`CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`](CLAUDE-CODE-ARBEITSBACKLOG-RC86.md), der
+zugehörige Abschlussbericht
+[`CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md`](CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md).
+Beide werden gemäß Auftrag erst nach Annahme archiviert.
 
 Konvention für einen Auftrag:
 

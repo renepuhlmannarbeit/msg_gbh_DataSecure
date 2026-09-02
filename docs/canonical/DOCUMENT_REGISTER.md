@@ -53,7 +53,7 @@ Abnahme.
 | `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | aktueller zeitgebundener Herstellerabgleich |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
-| `tasks/CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`, `tasks/CLAUDE-CODE-ARBEITSBACKLOG-RC86.md` | aktueller ausführbarer Claude-Code-Auftrag und ihm untergeordnetes Arbeitsledger; kein zweites Produktbacklog |
+| `tasks/CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`, `tasks/CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`, `tasks/CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md` | aktueller ausführbarer Claude-Code-Auftrag, ihm untergeordnetes Arbeitsledger und der zeitgebundene Abschlussbericht; kein zweites Produktbacklog |
 
 ## Historisch, nicht entscheidungsführend
 
