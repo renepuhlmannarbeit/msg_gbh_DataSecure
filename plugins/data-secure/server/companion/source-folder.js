@@ -5,7 +5,7 @@ const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
 const { LIMITS, hasReparseComponent, hasReparseComponentAsync, isManagedStagingPath } = require('../gateway/common');
-const { readConfiguredResultRoot } = require('../gateway/result-folder-config');
+const { visibleResultTreeOverlaps } = require('../gateway/result-folder-config');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 const { SOURCE_TYPES, validateSelectedPath, validateSelectedPathAsync, selectionCancelledError, runPickerAsync, throwIfSelectionAborted, WINDOWS_PICKER_UTF8, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
 
@@ -95,16 +95,11 @@ function normalizedSourceLabel(root, target) {
   return relative;
 }
 
+// Real-path and case-folded comparison against the configured and the last
+// recorded result root, so 8.3 aliases and a replaced folder cannot re-admit
+// the visible output tree as a source.
 function overlapsVisibleResultTree(root) {
-  const configured = readConfiguredResultRoot();
-  if (!configured) return false;
-  const output = path.join(path.resolve(configured), 'DataSecure-Output');
-  const selected = path.resolve(root);
-  const relative = path.relative(selected, output);
-  const selectedContainsOutput = relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
-  const reverse = path.relative(output, selected);
-  const outputContainsSelected = reverse === '' || (!path.isAbsolute(reverse) && reverse !== '..' && !reverse.startsWith(`..${path.sep}`));
-  return selectedContainsOutput || outputContainsSelected;
+  return visibleResultTreeOverlaps(root);
 }
 
 // The complete tree is validated before a single source byte is admitted.

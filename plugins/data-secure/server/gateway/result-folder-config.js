@@ -60,6 +60,59 @@ function readConfiguredResultRoot() {
   }
   return readRecord()?.root || '';
 }
+// The last recorded destination path, even when its identity no longer
+// matches (replaced folder). It is never used as an export target – only to
+// keep shielding that path from becoming a source again.
+function recordedResultRootPath() {
+  const environment = String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim();
+  if (environment && path.isAbsolute(environment)) return path.resolve(environment);
+  try {
+    const file = configPath();
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 4096) return '';
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return value?.schema === SCHEMA && typeof value.root === 'string' && path.isAbsolute(value.root) ? path.resolve(value.root) : '';
+  } catch { return ''; }
+}
+// Canonical, case-folded comparison path: the real path of the longest existing
+// prefix plus the remaining segments. This resolves Windows 8.3 aliases and
+// symbolic prefixes so that two spellings of one location compare equal.
+function comparablePath(target) {
+  const requested = path.resolve(String(target || ''));
+  let probe = requested;
+  const suffix = [];
+  while (!fs.existsSync(probe)) {
+    const parent = path.dirname(probe);
+    if (parent === probe) break;
+    suffix.unshift(path.basename(probe));
+    probe = parent;
+  }
+  let resolved;
+  try { resolved = fs.realpathSync.native(probe); } catch { resolved = probe; }
+  const full = path.join(resolved, ...suffix);
+  return process.platform === 'win32' ? full.toLowerCase() : full;
+}
+function insideOrEqual(base, candidate) {
+  const relative = path.relative(base, candidate);
+  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+}
+// True when `target` is the visible DataSecure-Output tree of the configured or
+// last recorded result root, lies inside it, or contains it. Released results
+// must never re-enter the pipeline as sources (DS-069).
+function visibleResultTreeOverlaps(target) {
+  const roots = new Set();
+  const configured = readConfiguredResultRoot();
+  if (configured) roots.add(configured);
+  const recorded = recordedResultRootPath();
+  if (recorded) roots.add(recorded);
+  if (!roots.size) return false;
+  const selected = comparablePath(target);
+  for (const root of roots) {
+    const output = comparablePath(path.join(path.resolve(root), 'DataSecure-Output'));
+    if (insideOrEqual(selected, output) || insideOrEqual(output, selected)) return true;
+  }
+  return false;
+}
 function saveConfiguredResultRoot(root) {
   const selected = inspectRoot(root);
   const directory = ensureConfigDirectory();
@@ -93,7 +146,7 @@ function isCommonSyncFolder(root) {
 }
 
 module.exports = {
-  CONFIG_NAME, SCHEMA, configPath, inspectRoot, readConfiguredResultRoot,
+  CONFIG_NAME, SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, recordedResultRootPath,
   saveConfiguredResultRoot, clearConfiguredResultRoot, resultOutputDirectory,
-  isCommonSyncFolder
+  isCommonSyncFolder, visibleResultTreeOverlaps
 };

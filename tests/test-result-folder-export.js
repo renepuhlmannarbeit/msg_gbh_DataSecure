@@ -172,6 +172,44 @@ try {
   fs.symlinkSync(realTarget, linkedTarget, process.platform === 'win32' ? 'junction' : 'dir');
   assert.throws(() => inspectRoot(linkedTarget), /RESULT_ROOT_UNSAFE/);
 
+  // Released results never re-enter the pipeline: neither through the file
+  // picker nor through a spelling or a replaced folder the string comparison
+  // would not recognise.
+  const { validateSelectedPath } = require('../plugins/data-secure/server/companion/file-picker');
+  const { enumerateSourceFolder } = require('../plugins/data-secure/server/companion/source-folder');
+  const shieldRoot = path.join(base, 'Cowork Projektordner');
+  fs.mkdirSync(shieldRoot);
+  saveConfiguredResultRoot(shieldRoot);
+  const shieldOutput = resultOutputDirectory();
+  const shieldRun = path.join(shieldOutput, 'Lauf-20260902-150000-abcdef01');
+  fs.mkdirSync(shieldRun);
+  const releasedFile = path.join(shieldRun, 'Dokument-001-anonymisiert.md');
+  fs.writeFileSync(releasedFile, '# Bereits anonymisiert');
+  assert.throws(() => validateSelectedPath(releasedFile), /sichtbaren DataSecure-Output/u, 'the file picker rejects a released result');
+  assert.throws(() => validateSelectedPath(releasedFile.toUpperCase()), /sichtbaren DataSecure-Output/u, 'case variants are the same location');
+  assert.throws(() => enumerateSourceFolder(shieldRun, { hasReparseComponent: () => false }), /DataSecure-Output|getrennten Ordner/u);
+  const originalsDirectory = path.join(shieldRoot, 'Originale');
+  fs.mkdirSync(originalsDirectory);
+  fs.writeFileSync(path.join(originalsDirectory, 'quelle.txt'), 'synthetische Quelle');
+  assert.strictEqual(validateSelectedPath(path.join(originalsDirectory, 'quelle.txt')).sourceType, 'txt', 'siblings of the output stay selectable');
+  if (process.platform === 'win32') {
+    const shortName = require('child_process').spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      `(New-Object -ComObject Scripting.FileSystemObject).GetFile('${releasedFile.replace(/'/g, "''")}').ShortPath`],
+    { encoding: 'utf8', windowsHide: true, timeout: 30000 }).stdout.trim();
+    if (shortName && shortName.toLowerCase() !== releasedFile.toLowerCase()) {
+      assert.throws(() => validateSelectedPath(shortName), /sichtbaren DataSecure-Output/u, 'an 8.3 alias of a released result is rejected');
+    }
+  }
+  const replacedRoot = path.join(base, 'Cowork Projektordner (alt)');
+  fs.renameSync(shieldRoot, replacedRoot);
+  fs.mkdirSync(shieldRoot);
+  fs.mkdirSync(path.join(shieldRoot, 'DataSecure-Output'));
+  fs.writeFileSync(path.join(shieldRoot, 'DataSecure-Output', 'Dokument-001-anonymisiert.md'), '# Alt');
+  assert.strictEqual(readConfiguredResultRoot(), '', 'a replaced destination is not trusted as export target');
+  assert.throws(() => validateSelectedPath(path.join(shieldRoot, 'DataSecure-Output', 'Dokument-001-anonymisiert.md')),
+    /sichtbaren DataSecure-Output/u, 'the recorded path keeps shielding the output tree after a replacement');
+  assert.throws(() => enumerateSourceFolder(shieldRoot, { hasReparseComponent: () => false }), /DataSecure-Output|getrennten Ordner/u);
+
   console.log('RESULT FOLDER EXPORT PASS');
 } finally {
   fs.rmSync(base, { recursive: true, force: true });

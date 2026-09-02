@@ -7,6 +7,8 @@ const { SafeError } = require('../runtime');
 const { LIMITS, hasReparseComponent, hasReparseComponentAsync, isManagedStagingPath } = require('../gateway/common');
 const { sourceLimitForExtension } = require('../resource-limits');
 const { uiProcessEnvironment } = require('./ui-process-policy');
+const { visibleResultTreeOverlaps } = require('../gateway/result-folder-config');
+const VISIBLE_OUTPUT_SOURCE_MESSAGE = 'Die ausgewählte Datei liegt im sichtbaren DataSecure-Output. Bitte nur Originaldateien auswählen.';
 
 const MAX_SOURCE_BYTES = LIMITS.MAX_INPUT_BYTES;
 const MAX_SELECTED_SOURCES = LIMITS.MAX_BATCH_FILES;
@@ -158,6 +160,9 @@ function validateSelectedPath(selected, options = {}) {
   if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
   if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
   if (isManagedStagingPath(candidate)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
+  // Released results must not re-enter the pipeline through the file picker
+  // either; the folder picker applies the same gate to the whole tree.
+  if (visibleResultTreeOverlaps(candidate)) throw new SafeError(VISIBLE_OUTPUT_SOURCE_MESSAGE);
   if (pathHasReparseComponent(candidate)) {
     throw new SafeError('Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.');
   }
@@ -192,6 +197,7 @@ async function validateSelectedPathAsync(selected, options = {}) {
   if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
   if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
   if (isManagedStagingPath(candidate)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
+  if (visibleResultTreeOverlaps(candidate)) throw new SafeError(VISIBLE_OUTPUT_SOURCE_MESSAGE);
   throwIfSelectionAborted(options.signal);
   if (await pathHasReparseComponent(candidate)) {
     throw new SafeError('Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.');
