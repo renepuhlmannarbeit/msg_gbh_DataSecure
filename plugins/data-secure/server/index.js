@@ -141,7 +141,7 @@ async function configureResultFolder(args={},context={}){
   const owner='result_folder';
   if(!acquireNativeInteraction(owner))throw new SafeError('Eine lokale DataSecure-Auswahl ist bereits geöffnet. Der Ergebnisordner bleibt unverändert.');
   try{
-    if(rootMutationBlocked())throw new SafeError('Ein lokaler Stapel oder eine Ergebnisübergabe ist noch offen. Der Ergebnisordner bleibt bis zum Abschluss unverändert.');
+    if(rootMutationBlocked())throw new SafeError('Ein lokaler Stapel oder eine Ergebnisübergabe ist noch offen. Bitte zuerst fortsetzen, abschließen oder verwerfen; bis dahin bleibt der Ergebnisordner unverändert.');
     if(args.reset===true){clearConfiguredResultRoot();return{ok:true,configuration_changed:true,result_folder_configured:false,raw_content_sent_to_claude:false};}
     const selected=await chooseAndSaveResultFolder(context);
     const replay=replayPendingResultExports();
@@ -199,7 +199,10 @@ async function startPickerBatch(args,context={}){
     try{resultFolderSyncNotice=(await chooseAndSaveResultFolder(context)).sync_notice===true;}
     catch(error){
       if(context.signal?.aborted||error?.code==='LOCAL_SELECTION_CANCELLED')return cancelled();
-      return{ok:false,error:'result_folder_required',message:'Es wurde kein Ergebnisordner gewählt. Es wurde keine Dateiauswahl geöffnet und kein Stapel gestartet.',mode,local_processing_started:false,next_action:'choose_result_folder',raw_content_sent_to_claude:false};
+      // Name the actual, path-free reason: the user did choose a folder. A
+      // native error text could carry a path and is replaced by a fixed reason.
+      const reason=error instanceof SafeError?error.message:'Der gewählte Ergebnisordner konnte nicht sicher verwendet werden (Link, Reparse-Punkt oder fehlende Schreibrechte für DataSecure-Output).';
+      return{ok:false,error:'result_folder_required',message:`${reason} Es wurde keine Dateiauswahl geöffnet und kein Stapel gestartet; die Ergebnisordnerwahl erscheint beim nächsten Start erneut.`,mode,local_processing_started:false,next_action:'choose_result_folder',raw_content_sent_to_claude:false};
     }
   }
   try{intakeReservation=reserveIntake();}

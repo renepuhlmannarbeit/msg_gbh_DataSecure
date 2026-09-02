@@ -196,6 +196,43 @@ if (process.platform === 'win32') {
     assert.strictEqual(saves, 0, 'validation and output creation must complete before the choice is stored');
   });
 
+  await testAsync('a rejected result folder reports its honest, path-free reason and reopens next time', async () => {
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
+    class SafeError extends Error {}
+    const privateRoot = path.resolve(__dirname, 'synthetic-private-root');
+    let outputFailure = null;
+    let saves = 0;
+    let sourcePickerCalls = 0;
+    const context = vm.createContext({
+      require, process: { env: {} }, setImmediate, SafeError,
+      roots: () => ({ root: privateRoot }),
+      readConfiguredResultRoot: () => '',
+      pickFolderAsync: async () => outputFailure ? path.resolve(__dirname, 'synthetic-cowork-root') : path.join(privateRoot, 'inside'),
+      resultOutputDirectory: () => { if (outputFailure) throw outputFailure; },
+      saveConfiguredResultRoot: () => { saves++; },
+      isCommonSyncFolder: () => false,
+      reserveIntake: () => ({ reservation_id: 'a'.repeat(64) }),
+      releaseIntake: () => true,
+      genericStatus: () => ({ engine_ready: true }),
+      pickSourcesAsync: async () => { sourcePickerCalls++; return []; },
+      recordWorkflowEvent: () => {}
+    });
+    vm.runInContext(source, context);
+    const overlapping = await context.startPickerBatch({});
+    assert.strictEqual(overlapping.error, 'result_folder_required');
+    assert.match(overlapping.message, /außerhalb des privaten DataSecure-Arbeitsbereichs/u);
+    assert.match(overlapping.message, /beim nächsten Start erneut/u);
+    assert.doesNotMatch(overlapping.message, /synthetic-private-root|inside/u);
+    outputFailure = Object.assign(new Error(`EACCES: permission denied, mkdir '${privateRoot}\\secret-path'`), { code: 'EACCES' });
+    const unusable = await context.startPickerBatch({});
+    assert.strictEqual(unusable.error, 'result_folder_required');
+    assert.match(unusable.message, /nicht sicher verwendet werden/u);
+    assert.doesNotMatch(unusable.message, /EACCES|secret-path|synthetic/u);
+    assert.strictEqual(saves, 0, 'a rejected choice is never persisted');
+    assert.strictEqual(sourcePickerCalls, 0, 'no source picker opens without a result folder');
+  });
+
   await testAsync('privacy-root mutation and source intake share one native interaction owner', async () => {
     const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
