@@ -46,6 +46,21 @@ test('automatic and release workflows use product gates and publish no MCPB', ()
   assert.ok(fs.existsSync(path.join(root, '.github', 'workflow-archive', 'keyring-pilot.yml')));
 });
 
+test('the product runner lists are disjoint, so no file runs twice in one profile', () => {
+  // baseFiles run in every profile, ciFiles in ci and full, fullOnly in full
+  // only. A file listed in two lists (as test-workflow-diagnostics.js,
+  // test-completion-summary.js, test-retention.js, test-pii-regression.js,
+  // test-mapping.js and test-mapping-outbox.js once were) runs twice per full
+  // run and adds minutes without evidence.
+  const suite = require('./run-product-suite');
+  assert.deepStrictEqual(suite.duplicateEntries(), []);
+  const all = [...suite.baseFiles.map((file) => file.replace(/^tests\//u, '')), ...suite.ciFiles, ...suite.fullOnly];
+  assert.strictEqual(new Set(all).size, all.length, 'no test file may appear in more than one runner list');
+  for (const list of [suite.ciFiles, suite.fullOnly]) {
+    assert.ok(list.every((file) => !file.includes('/')), 'ciFiles and fullOnly hold bare names under tests/');
+  }
+});
+
 test('every current product test is reachable through an npm script or the product runner', () => {
   // A test that no script and no runner ever executes is dead evidence. It
   // silently rots (the former tests/test-architecture-contracts.js asserted a
