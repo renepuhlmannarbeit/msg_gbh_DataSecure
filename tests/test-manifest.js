@@ -67,11 +67,17 @@ test('every skill uses only supported frontmatter and relies on the plugin versi
     assert.match(text, /^name:\s*[a-z0-9-]+$/m, `${name}/SKILL.md has no valid name`);
     assert.match(text, /^description:\s*.+$/m, `${name}/SKILL.md has no description`);
     const description = text.match(/^description:\s*(.+)$/m)?.[1] || '';
-    assert.ok(description.length <= 200, `${name}/SKILL.md description exceeds Claude's 200-character limit`);
+    // DataSecure convention, not a vendor limit: the official skills reference
+    // (02.09.2026) truncates description+when_to_use at 1,536 characters in the
+    // skill listing; 200 keeps the description scannable well below that.
+    assert.ok(description.length <= 200, `${name}/SKILL.md description exceeds the DataSecure 200-character convention`);
   }
 });
 
-test('MCP instructions fit the documented Claude 2 KB limit', () => {
+test('MCP instructions stay within the DataSecure 2 KB convention', () => {
+  // No official Anthropic/MCP document fixes an instructions size limit
+  // (checked 02.09.2026); 2 KB is a deliberate DataSecure budget that keeps
+  // the server instructions short and stable across hosts.
   const source = readText(path.join(runtime, 'index.js'));
   const match = source.match(/const INSTRUCTIONS=\[([\s\S]*?)\]\.join\(' '\);/u);
   assert.ok(match, 'could not locate MCP instructions');
