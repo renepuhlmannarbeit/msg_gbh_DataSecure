@@ -1036,6 +1036,31 @@ test('rendered Markdown and HTML encodings cannot hide direct identifiers', () =
   }
 });
 
+test('mailto and other contact URIs redact the complete address in every profile', () => {
+  // The CONTACT_URI span outranks the EMAIL span and an overlapping loser is
+  // dropped entirely. A URI class without `@` therefore left the personal or
+  // organisational domain behind, and the residual gate no longer saw an
+  // e-mail once the local part had become a placeholder.
+  const variants = [
+    'Schreiben Sie an [Erika](mailto:erika@erika-synthetisch.de).',
+    'Kontakt: <mailto:erika.synthetisch@kanzlei-synthetisch.de>',
+    'mailto:max.synthetisch@example.org',
+    '[Mail](mailto:erika@erika-synthetisch.de?subject=Bewerbung)',
+    'Rückfragen an mailto:erika@ärzte-synthetisch.de bitte.',
+    'sip:erika.synthetisch@voip-synthetisch.de'
+  ];
+  for (const profile of ['general', 'contract', 'customer', 'applicant', 'personnel_profile']) {
+    for (const source of variants) {
+      const result = anonymizeVerified(source, profile);
+      assert.doesNotMatch(result.text, /synthetisch\.de|example\.org|kanzlei|ärzte|@/u, `${profile}: ${source}`);
+      assert.match(result.text, /\[CONTACT_REDACTED\]/u, `${profile}: ${source}`);
+      assert.deepStrictEqual(result.residual, [], `${profile}: ${source}`);
+    }
+  }
+  assert.strictEqual(anonymizeVerified('Schreiben Sie an [Erika](mailto:erika@erika-synthetisch.de).', 'general').text,
+    'Schreiben Sie an [Erika]([CONTACT_REDACTED]).');
+});
+
 test('GFM tables with optional outer pipes use the same privacy labels', () => {
   for (const outer of [false, true]) {
     const open = outer ? '| ' : '';

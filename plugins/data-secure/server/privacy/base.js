@@ -49,8 +49,12 @@ const EMAIL_RE = new RegExp(
 // encoded (for example mailto:max%2Emuster%40example%2Ede). The ordinary
 // mail and telephone matchers operate on human-readable text; this bounded
 // URI shape closes that encoding bypass without decoding or evaluating input.
+// The payload class must cover the complete plain address as well: this span
+// outranks the EMAIL span, and an overlapping loser is dropped, not trimmed.
+// Without `@` and Unicode letters, `mailto:erika@erika-synthetisch.de` matched
+// only up to the `@` and the personal domain survived in released Markdown.
 const CONTACT_URI_RE = new RegExp(
-  `${NB}(?:mailto|tel|sms|callto|sip|xmpp):[A-Za-z0-9%+._~:/?&=\\-]+`,
+  `${NB}(?:mailto|tel|sms|callto|sip|xmpp):[\\p{L}\\p{N}%+._~:/?&=@\\-]+`,
   'giu'
 );
 
