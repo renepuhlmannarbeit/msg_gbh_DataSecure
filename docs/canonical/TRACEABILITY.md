@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 01.09.2026 · 3.2.0-rc85
+Stand: 02.09.2026 · 3.2.0-rc86
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -76,6 +76,7 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-066 | aktiv | BL-010.7, BL-041, BL-051.6; Local-Cowork/Local-MCP versus Cloud-NO-GO |
 | DS-067 | aktiv und aktuell | BL-010, BL-011, BL-012, BL-024, BL-040, BL-051; fester Bildschutz, 0–14 nur temporär, Quellen/Exporte nie Auto-Löschziel, ZIP/Marketplace |
 | DS-068 | aktiv und aktuell | BL-012.9/10, BL-032.1, BL-043.1; lokaler Sammelreview, PII-Shield-inspirierte Interaktion und automatischer Klar-Datei-Pfad |
+| DS-069 | aktiv und aktuell | BL-040.5, BL-041.7, BL-041.10, BL-043.1; einmalige Ergebnisordnerwahl, neutraler verifizierter Markdown-Export und lokales Öffnen |
 
 ## DS-067 – konkrete Umsetzung
 
@@ -99,6 +100,7 @@ aktuelle Produktzusage.
 | BL-042.3 | Beide zulässigen `batch_active`-Statusformen werden als bereits laufender Stapel dargestellt | Statusmodell-/UI-/Server-/Artefakttests |
 | BL-011.10 | Kollisionsfreie rekursive Mappinglabels sowie atomare prozessübergreifende Intake-Reservierung von Pickerstart bis dauerhaftem Worker-Checkpoint einschließlich Delegation und Recovery | `gateway/mapping.js`, `gateway/batch-intake-reservation.js`, `gateway/batch-executor.js`; Mapping-, Picker-, Startup- und echter Zwei-Prozess-Reservierungstest |
 | BL-047.1 | Bounded Handoff mit asynchronem, größenbegrenztem Snapshot-Read, SHA-256 und UTF-8-Index außerhalb langer synchroner MCP-Arbeit | `gateway/local-only-handoff.js`, `gateway/package-store.js`; Handoff-/Capability- und 6-MiB-Event-Loop-Yield-Test |
+| BL-040.5 | Erst nach Output-Prüfung dauerhaft lokal gewählter Cowork-Ergebnisordner, zielidentitätsgebundener neutraler Markdown-Export, Rootwechsel-/Manipulations-Replay, Output-als-Quelle-Gate, begrenztes Worker-ACK und inhaltsfreier Abschluss mit Öffnen-Aktion | `gateway/result-folder-config.js`, `gateway/result-export.js`, `gateway/batch-executor.js`, `companion/source-folder.js`, `companion/completion-summary.js`; Ergebnisordner-, Export-, Worker-, MCP-, Source-Folder- und Picker-Lifecycle-Tests |
 
 ## Aktueller E0-Abschluss BL-011.8 / BL-020.1 / BL-020.2 / BL-030.2
 

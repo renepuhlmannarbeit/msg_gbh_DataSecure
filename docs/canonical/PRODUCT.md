@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 01.09.2026 · Ist-Zustand RC85
+Stand: 02.09.2026 · Ist-Zustand RC86
 
 ## Ziel
 
@@ -12,14 +12,19 @@ keine Personal- oder Fachentscheidung.
 ## Normalreise
 
 1. In Cowork „Dateien anonymisieren“ schreiben oder den gleichnamigen Skill wählen.
-2. Im lokalen Mehrfachpicker bis zu 100 Dateien mit zusammen höchstens 500 MiB
+2. Nur beim ersten Lauf den bereits mit Cowork verbundenen Arbeitsordner als
+   Ergebnisziel wählen. DataSecure merkt sich ihn lokal und legt darunter
+   `DataSecure-Output` an; spätere Läufe überspringen diesen Schritt.
+3. Im lokalen Mehrfachpicker bis zu 100 Dateien mit zusammen höchstens 500 MiB
    auswählen und einmal „Öffnen“ klicken.
-3. DataSecure liest Quellen nur, prüft den gesamten Stapel und verarbeitet ihn
+4. DataSecure liest Quellen nur, prüft den gesamten Stapel und verarbeitet ihn
    lokal im Hintergrund. Klare Dateien werden ohne Reviewdialog abgeschlossen;
    ein sicherer Stopp oder eine Mehrdeutigkeit blockiert den Reststapel nicht.
-4. Die lokale Abschlussmeldung zeigt nur Zähler. Markdown und
-   `DataSecure-Mapping.csv` bleiben lokal.
-5. Erst ein späterer ausdrücklicher Auftrag übergibt benötigte freigegebene
+5. Die lokale Abschlussmeldung zeigt nur Zähler und bietet „Ergebnisse öffnen“.
+   Nur verifiziertes Markdown mit neutralen Namen liegt sichtbar unter
+   `DataSecure-Output/Lauf-…`; `DataSecure-Mapping.csv`, Originale, Review- und
+   Recoverydaten bleiben im privaten DataSecure-Bereich.
+6. Erst ein späterer ausdrücklicher Auftrag übergibt benötigte freigegebene
    Markdown-Ergebnisse begrenzt an Claude.
 
 Kein Profil-, Bildmodus-, Einzeldatei- oder Ergebnislesedialog gehört zum

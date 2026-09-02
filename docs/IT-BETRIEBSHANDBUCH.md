@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 01.09.2026 · 3.2.0-rc85
+Stand: 01.09.2026 · 3.2.0-rc86
 
 ## Produktkanäle
 
@@ -29,8 +29,12 @@ und keinen Originalzugriff erhalten.
 1. Plugin installieren, Claude vollständig beenden und neu starten.
 2. Neue lokale Cowork-Aufgabe öffnen.
 3. „Dateien anonymisieren“ schreiben.
-4. Erwartet: genau ein lokaler Mehrfachpicker. Mit Abbrechen schließen.
-5. Anschließend mit synthetischen Daten das
+4. Beim ersten Lauf erwartet: zuerst einmalig die lokale Ergebnisordnerwahl. Einen
+   leeren, bereits mit Cowork verbundenen Test-Arbeitsordner wählen. Danach öffnet
+   sich genau ein lokaler Mehrfachpicker; diesen mit Abbrechen schließen.
+5. Beim zweiten Start erwartet: nur der Mehrfachpicker, keine erneute Ergebnis-
+   ordner-, Start-, Bild- oder Exportbestätigung.
+6. Anschließend mit synthetischen Daten das
    [UAT-Kit](acceptance/UAT_TEST_KIT/README.md) durchführen.
 
 Fehlt der Picker, keinen Chat-Upload, anderen Connector oder Engineeringweg als
@@ -43,6 +47,15 @@ Ersatz verwenden. Plugin-/Connectorstatus, Claude-Version und Richtlinien prüfe
 | Quelle/Original | nur lesen; nie verschieben, überschreiben oder automatisch löschen |
 | temporäre Arbeits-/Reviewdaten | 0–14 Tage, danach nur eindeutig DataSecure-eigene Daten bereinigen |
 | fertige Outputs/Export/Mapping | niemals automatisch löschen; nur ausdrückliche lokale Nutzeraktion |
+
+Sichtbare Ergebnisse werden getrennt unter
+`<gewählter Cowork-Arbeitsordner>/DataSecure-Output/Lauf-…/` abgelegt. Dort dürfen
+nur neutrale `Dokument-NNN-anonymisiert.md`-Dateien liegen. Mapping, Originale,
+Audit, Review und Recovery bleiben im privaten Bereich. Über
+**„DataSecure-Ergebnisordner ändern“** kann die IT/Nutzerin den Zielordner später
+bewusst neu wählen; während eines offenen Stapels bleibt er unverändert. Ein
+Cloud-Sync-Ziel kann die freigegebenen Ergebnisse synchronisieren und ist daher
+eine bewusste Betriebsentscheidung, kein lokaler Privacy-Speicher.
 | verschlüsselte Altartefakte | unangetastet lassen; kein Keyringversuch; Original neu wählen |
 
 Der Privacy-Ordner darf nicht in OneDrive, iCloud, Dropbox, Google Drive,

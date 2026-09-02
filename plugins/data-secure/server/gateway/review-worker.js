@@ -7,7 +7,8 @@
 const {
   reviewDeferredBatch,
   releaseLocalBatchExecutor,
-  readBatchProgress
+  readBatchProgress,
+  exportCompletedBatchResults
 } = require('./batch');
 const { showBatchStateNotice } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
@@ -41,6 +42,15 @@ process.once('message', async (message) => {
       onReviewLifecycle: lifecycle,
       reviewOptions: { timeoutMs: DETACHED_REVIEW_TIMEOUT_MS }
     });
+    const visibleExport = result.complete === true
+      ? exportCompletedBatchResults(token)
+      : { exported: 0, pending: 0, available: false };
+    const presentedResult = {
+      ...result,
+      result_exported_count: visibleExport.exported,
+      result_export_pending_count: visibleExport.pending,
+      result_output_available: visibleExport.available
+    };
     lifecycle({
       event: 'review_terminal_state',
       outcome: result.ok === true && result.complete === true ? 'ok' : 'stopped',
@@ -54,7 +64,7 @@ process.once('message', async (message) => {
     });
     try {
       lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: before.batch_total });
-      showBatchStateNotice(result);
+      showBatchStateNotice(presentedResult);
       lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: before.batch_total });
     } catch {
       lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: before.batch_total,

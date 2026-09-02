@@ -37,10 +37,12 @@ const expectedNormal = [
   'continue_most_recent_document_batch',
   'discard_incomplete_document_batches',
   'configure_privacy_folder',
+  'configure_result_folder',
+  'open_result_folder',
   'open_export_folder'
 ];
 
-assert.strictEqual(declaredTools.length, 25, 'support surface must contain exactly 25 reviewed tools');
+assert.strictEqual(declaredTools.length, 27, 'support surface must contain exactly 27 reviewed tools');
 assert.deepStrictEqual(normalTools, expectedNormal, 'normal Cowork tool surface drifted');
 assert.strictEqual(new Set(declaredTools).size, declaredTools.length, 'duplicate MCP tool name');
 assert.ok(index.includes('const SUPPORT_TOOL_NAMES'), 'support-tool complement must be explicit');
@@ -61,4 +63,4 @@ for (const removed of ['open_input_folder', 'begin_document_batch', 'start_docum
 
 assert.match(index, /delete safe\.batch_token/u, 'normal continuation must remove the private batch token');
 assert.match(index, /startLocalReviewExecutor\(token\)/u, 'normal continuation must launch review asynchronously');
-console.log('COWORK TOOL SURFACE CONTRACT PASS (8 normal, 17 support-only)');
+console.log('COWORK TOOL SURFACE CONTRACT PASS (10 normal, 17 support-only)');

@@ -20,6 +20,7 @@ const {
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const pendingIntakes = new Map();
 const pendingReviews = new Map();
+const DEFAULT_IPC_ACK_TIMEOUT_MS = 5000;
 const WORKER_ENV_KEYS = Object.freeze([
   'SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP', 'LOCALAPPDATA', 'APPDATA',
   'HOME', 'XDG_DATA_HOME', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_LANGUAGE',
@@ -46,7 +47,12 @@ function terminalIntakeProgress(message) {
     stopped: progress.stopped,
     result_grade_counts: progress.result_grade_counts,
     result_omission_counts: progress.result_omission_counts,
-    result_grades_verified: progress.result_grades_verified
+    result_grades_verified: progress.result_grades_verified,
+    ...(Object.hasOwn(progress, 'result_exported_count') ? {
+      result_exported_count: progress.result_exported_count,
+      result_export_pending_count: progress.result_export_pending_count,
+      result_output_available: progress.result_output_available
+    } : {})
   } : null;
 }
 
@@ -100,9 +106,13 @@ const PRESENTABLE_BATCH_PHASES = new Set([
 function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake-state', 'local-batch-state'])) {
   if (!message || !acceptedTypes.has(message.type)) return null;
   const resultKeys = ['result_grade_counts', 'result_omission_counts', 'result_grades_verified'];
+  const exportKeys = ['result_exported_count', 'result_export_pending_count', 'result_output_available'];
   const presentResultKeys = resultKeys.filter((key) => Object.hasOwn(message, key));
-  const allowedKeys = new Set(['type', 'complete', 'batch_phase', 'batch_total', 'released', 'stopped', ...resultKeys]);
-  if (Object.keys(message).some((key) => !allowedKeys.has(key)) || (presentResultKeys.length !== 0 && presentResultKeys.length !== resultKeys.length)) return null;
+  const presentExportKeys = exportKeys.filter((key) => Object.hasOwn(message, key));
+  const allowedKeys = new Set(['type', 'complete', 'batch_phase', 'batch_total', 'released', 'stopped', ...resultKeys, ...exportKeys]);
+  if (Object.keys(message).some((key) => !allowedKeys.has(key)) ||
+      (presentResultKeys.length !== 0 && presentResultKeys.length !== resultKeys.length) ||
+      (presentExportKeys.length !== 0 && presentExportKeys.length !== exportKeys.length)) return null;
   const batchTotal = message.batch_total;
   const released = message.released;
   const stopped = message.stopped;
@@ -116,6 +126,13 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
   if ((complete || batchPhase === 'complete') && (batchPhase !== 'complete' || released + stopped !== batchTotal)) return null;
   if (!complete && batchPhase === 'complete') return null;
   if (!complete && released + stopped >= batchTotal) return null;
+  const exported = presentExportKeys.length ? message.result_exported_count : 0;
+  const exportPending = presentExportKeys.length ? message.result_export_pending_count : 0;
+  const outputAvailable = presentExportKeys.length ? message.result_output_available : false;
+  if (![exported, exportPending].every(Number.isSafeInteger) || exported < 0 || exportPending < 0 ||
+      typeof outputAvailable !== 'boolean' || (!complete && (exported !== 0 || exportPending !== 0 || outputAvailable)) ||
+      (complete && presentExportKeys.length && exported + exportPending !== released) ||
+      (exportPending > 0 && outputAvailable)) return null;
   let validated;
   if (!complete) {
     const gradeCounts = presentResultKeys.length ? message.result_grade_counts :
@@ -151,7 +168,12 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
     stopped,
     result_grade_counts: validated.gradeCounts,
     result_omission_counts: validated.omissionCounts,
-    result_grades_verified: validated.gradesVerified
+    result_grades_verified: validated.gradesVerified,
+    ...(presentExportKeys.length ? {
+      result_exported_count: exported,
+      result_export_pending_count: exportPending,
+      result_output_available: outputAvailable
+    } : {})
   };
 }
 
@@ -162,7 +184,7 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
 function durableBatchStateProgress(token, type, options = {}) {
   try {
     const progress = (options.readBatchProgress || readBatchProgress)(token);
-    return localBatchStateProgress({
+    const projection = localBatchStateProgress({
       type,
       complete: progress.complete,
       batch_phase: progress.batch_phase,
@@ -173,6 +195,23 @@ function durableBatchStateProgress(token, type, options = {}) {
       result_omission_counts: progress.result_omission_counts,
       result_grades_verified: progress.result_grades_verified
     });
+    if (projection?.complete !== true) return projection;
+    try {
+      const exporter = options.exportCompletedBatchResults ||
+        ((batchToken) => require('./batch').exportCompletedBatchResults(batchToken));
+      const visible = exporter(token);
+      return localBatchStateProgress({
+        ...projection,
+        type,
+        result_exported_count: visible.exported,
+        result_export_pending_count: visible.pending,
+        result_output_available: visible.available
+      });
+    } catch {
+      // The durable processing result remains authoritative even if the
+      // convenience export cannot be repaired in this fallback pass.
+      return projection;
+    }
   } catch {
     return null;
   }
@@ -358,24 +397,66 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         if (!intake.noticeShown) showFailureNotice(intake.checkpointCreated ? 'after_checkpoint' : 'before_checkpoint');
       });
     };
+    let resolveIpc;
+    let rejectIpc;
+    const ipcAcknowledgement = new Promise((resolve, reject) => { resolveIpc = resolve; rejectIpc = reject; });
+    // Tests and support callers may deliberately ignore the acknowledgement;
+    // the normal picker awaits it. Keep a rejection from becoming process-
+    // global while preserving it for the awaiting normal path.
+    ipcAcknowledgement.catch(() => {});
+    const requestedAckTimeout = Number(options.ipcAckTimeoutMs);
+    const ackTimeoutMs = Number.isSafeInteger(requestedAckTimeout) && requestedAckTimeout >= 10 && requestedAckTimeout <= 30000
+      ? requestedAckTimeout : DEFAULT_IPC_ACK_TIMEOUT_MS;
+    let ipcSettled = false;
+    let abortListener;
+    const settleIpc = (error) => {
+      if (ipcSettled) return false;
+      ipcSettled = true;
+      clearTimeout(ackTimer);
+      if (abortListener) options.signal?.removeEventListener?.('abort', abortListener);
+      if (error) rejectIpc(error);
+      else resolveIpc();
+      return true;
+    };
+    const ackTimer = setTimeout(() => {
+      if (!settleIpc(new Error('bounded IPC acknowledgement timeout'))) return;
+      worker.fail('LOCAL_IPC_ACK_TIMEOUT');
+    }, ackTimeoutMs);
+    ackTimer.unref?.();
+    if (options.signal?.aborted) {
+      settleIpc(new Error('IPC acknowledgement cancelled'));
+      worker.fail('LOCAL_IPC_ACK_CANCELLED');
+    } else if (options.signal?.addEventListener) {
+      abortListener = () => {
+        if (!settleIpc(new Error('IPC acknowledgement cancelled'))) return;
+        worker.fail('LOCAL_IPC_ACK_CANCELLED');
+      };
+      options.signal.addEventListener('abort', abortListener, { once: true });
+    }
     child.send({
-      type: 'start-local-intake',
-      batch_token: token,
-      intake_reservation_id: reservationId,
-      profile,
-      queue: queue.map((entry) => ({
-        name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
-        sourceLabel: entry.sourceLabel || entry.name
-      }))
-    }, (error) => {
-      if (worker.ended || worker.failed) return;
-      if (error) { worker.fail('LOCAL_IPC_FAILED'); return; }
-      lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
-        item_count: itemCount, error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
-      child.unref?.();
-    });
+        type: 'start-local-intake',
+        batch_token: token,
+        intake_reservation_id: reservationId,
+        profile,
+        queue: queue.map((entry) => ({
+          name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
+          sourceLabel: entry.sourceLabel || entry.name
+        }))
+      }, (error) => {
+        if (ipcSettled) return;
+        if (error || worker.ended || worker.failed) {
+          worker.fail('LOCAL_IPC_FAILED');
+          settleIpc(error || new Error('worker ended before IPC acknowledgement'));
+          return;
+        }
+        lifecycle({ event: 'intake_ipc_dispatched', outcome: 'ok', item_count: itemCount, error_code: 'NONE' });
+        child.unref?.();
+        settleIpc();
+      });
     if (worker.failed) throw new Error('worker start failed');
-    return { ok: true, batch_token: token, local_intake_pending: true, raw_content_sent_to_claude: false };
+    const response = { ok: true, batch_token: token, local_intake_pending: true, raw_content_sent_to_claude: false };
+    Object.defineProperty(response, 'ipcAcknowledgement', { value: ipcAcknowledgement, enumerable: false });
+    return response;
   } catch {
     if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
     else lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount,

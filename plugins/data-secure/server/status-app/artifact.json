@@ -1,7 +1,7 @@
 {
   "schema": "datasecure-status-app-artifact/v1",
-  "sha256": "de085ef8fae0177fecc0bd5ff2f6646763d7b83fb186505c107e457754e17a78",
-  "bytes": 757218,
+  "sha256": "60571424bf4394fd708a210b849c4bbb8fcbe198d1abc2d2d515a3a8014c2d6c",
+  "bytes": 757208,
   "sdk_version": "1.7.5",
   "release_enabled": false
 }

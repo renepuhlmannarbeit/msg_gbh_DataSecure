@@ -1,6 +1,6 @@
 # Kanonisches Dokumentensystem
 
-Stand: 01.09.2026
+Stand: 02.09.2026
 
 ## Rangfolge
 

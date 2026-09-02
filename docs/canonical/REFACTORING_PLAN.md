@@ -1,6 +1,6 @@
 # Aktiver Refactoring- und Migrationsplan
 
-Stand: 01.09.2026 · Grundlage DS-065, DS-066 und DS-067
+Stand: 02.09.2026 · Grundlage DS-065 bis DS-069
 
 Der frühere Keyring-/Verschlüsselungsplan ist historisch und liegt im
 [Archiv](../archive/2026-09/canonical-history/REFACTORING_PLAN_HISTORY_THROUGH_RC84.md).

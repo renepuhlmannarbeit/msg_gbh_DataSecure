@@ -75,7 +75,7 @@ Die Skills enthalten keine Rohdatenverarbeitung. Sie wählen Profile, erklären 
 
 Der lokale MCP übernimmt ausschließlich deterministische bzw. lokal kontrollierte Verarbeitung. Er darf Rohdaten lesen, aber nur bereinigte Outputs an Claude zurückgeben.
 
-Die normale Cowork-Oberfläche bleibt auf acht Aufgabenwerkzeuge begrenzt:
+Die normale Cowork-Oberfläche bleibt auf zehn Aufgabenwerkzeuge begrenzt:
 
 - `start_document_batch_from_picker`
 - `start_completed_local_results_handoff`
@@ -84,7 +84,17 @@ Die normale Cowork-Oberfläche bleibt auf acht Aufgabenwerkzeuge begrenzt:
 - `continue_most_recent_document_batch`
 - `discard_incomplete_document_batches`
 - `configure_privacy_folder`
+- `configure_result_folder`
+- `open_result_folder`
 - `open_export_folder`
+
+Beim ersten Lauf wählt der Anwender einmalig den bereits verbundenen Cowork-
+Arbeitsordner. DataSecure speichert den Pfad ausschließlich lokal und exportiert
+nur verifiziertes Markdown mit neutralen Namen nach
+`DataSecure-Output/Lauf-…`. Der Pfad ist kein MCP-Ergebnis. Originale, Mapping,
+Audit, Review und Recovery bleiben im privaten DataSecure-Bereich. Kann der
+sichtbare Export nicht atomar abgeschlossen werden, bleibt ein privater
+Wiederholungsauftrag erhalten; das verifizierte interne Paket geht nicht verloren.
 
 Diagnose, Detailstatus, technische Lesewerkzeuge und lokale Ordneraktionen bleiben
 im ausdrücklich aktivierten IT-Supportmodus. Seit RC55 erzeugt auch die Runtime

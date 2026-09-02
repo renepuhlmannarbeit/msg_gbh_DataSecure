@@ -5,6 +5,7 @@ const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
 const { LIMITS, hasReparseComponent, hasReparseComponentAsync, isManagedStagingPath } = require('../gateway/common');
+const { readConfiguredResultRoot } = require('../gateway/result-folder-config');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 const { SOURCE_TYPES, validateSelectedPath, validateSelectedPathAsync, selectionCancelledError, runPickerAsync, throwIfSelectionAborted, WINDOWS_PICKER_UTF8, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
 
@@ -94,6 +95,18 @@ function normalizedSourceLabel(root, target) {
   return relative;
 }
 
+function overlapsVisibleResultTree(root) {
+  const configured = readConfiguredResultRoot();
+  if (!configured) return false;
+  const output = path.join(path.resolve(configured), 'DataSecure-Output');
+  const selected = path.resolve(root);
+  const relative = path.relative(selected, output);
+  const selectedContainsOutput = relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+  const reverse = path.relative(output, selected);
+  const outputContainsSelected = reverse === '' || (!path.isAbsolute(reverse) && reverse !== '..' && !reverse.startsWith(`..${path.sep}`));
+  return selectedContainsOutput || outputContainsSelected;
+}
+
 // The complete tree is validated before a single source byte is admitted.
 // Links/reparse points and special files stop the whole selection rather than
 // producing a silently incomplete batch.
@@ -108,6 +121,7 @@ function enumerateSourceFolder(root, options = {}) {
     throw new SafeError('Der ausgewählte Quellordner ist nicht absolut.');
   }
   const resolvedRoot = path.resolve(rawRoot);
+  if (overlapsVisibleResultTree(resolvedRoot)) throw new SafeError('Der ausgewählte Quellordner enthält den DataSecure-Output oder liegt darin. Bitte einen getrennten Ordner mit Originaldateien auswählen.');
   if (isManagedStagingPath(resolvedRoot)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
   if (reparse(resolvedRoot)) {
     throw new SafeError('Der ausgewählte Quellordner liegt hinter einem Link oder Reparse-Punkt.');
@@ -217,6 +231,7 @@ async function enumerateSourceFolderAsync(root, options = {}) {
   const rawRoot = String(root || '');
   if (!rawRoot || !path.isAbsolute(rawRoot)) throw new SafeError('Der ausgewählte Quellordner ist nicht absolut.');
   const resolvedRoot = path.resolve(rawRoot);
+  if (overlapsVisibleResultTree(resolvedRoot)) throw new SafeError('Der ausgewählte Quellordner enthält den DataSecure-Output oder liegt darin. Bitte einen getrennten Ordner mit Originaldateien auswählen.');
   if (isManagedStagingPath(resolvedRoot)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
   throwIfSelectionAborted(options.signal);
   if (await reparse(resolvedRoot)) throw new SafeError('Der ausgewählte Quellordner liegt hinter einem Link oder Reparse-Punkt.');

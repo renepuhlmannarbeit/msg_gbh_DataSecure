@@ -19,6 +19,7 @@ try {
     env: {
       ...process.env,
       EU_PRIVACY_ROOT: privacyRoot,
+      EU_PRIVACY_RESULT_ROOT: privacyRoot,
       LOCALAPPDATA: privacyRoot,
       EU_PRIVACY_SUPPORT_MODE: '1'
     },
@@ -32,7 +33,7 @@ try {
   assert.strictEqual(result.stderr, '', `unexpected stderr: ${result.stderr}`);
   const replies = result.stdout.trim().split(/\r?\n/u).map((line) => JSON.parse(line));
   const tools = replies.find((reply) => reply.id === 2)?.result?.tools;
-  assert.strictEqual(tools?.length, 25, 'support tools/list must return the reviewed inventory');
+  assert.strictEqual(tools?.length, 27, 'support tools/list must return the reviewed inventory');
 
   const destructive = new Set([
     'review_deferred_document_batch', 'acknowledge_batch_document', 'acknowledge_batch_documents',
@@ -58,7 +59,7 @@ try {
     assert.strictEqual(tool.annotations.idempotentHint, idempotent.has(tool.name), `${tool.name} idempotentHint drift`);
     assert.ok(!(tool.annotations.readOnlyHint && tool.annotations.destructiveHint), `${tool.name} cannot be read-only and destructive`);
   }
-  console.log('MCP TOOL ANNOTATIONS PASS (25 tools, four explicit hints each)');
+  console.log('MCP TOOL ANNOTATIONS PASS (27 tools, four explicit hints each)');
 } finally {
   fs.rmSync(privacyRoot, { recursive: true, force: true });
 }

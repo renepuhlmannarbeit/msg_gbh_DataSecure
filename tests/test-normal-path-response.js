@@ -18,7 +18,7 @@ test('exposes only fixed local-only state and never a private batch capability',
     mode: 'local_only',
     local_intake_pending: true,
     local_processing_started: false,
-    next_action: 'local_intake_accepted_checkpoint_pending',
+    next_action: 'local_intake_handoff_confirmed',
     raw_content_sent_to_claude: false
   });
   assert.strictEqual(Object.isFrozen(result), true);
@@ -36,6 +36,12 @@ test('fails closed to a fixed non-start acknowledgement for malformed worker out
     next_action: 'restart_only_on_explicit_request',
     raw_content_sent_to_claude: false
   });
+});
+
+test('reports the one-time sync-folder notice without exposing a path', () => {
+  const result = localOnlyStartResponse({ ok: true, local_intake_pending: true }, { syncFolderNotice: true });
+  assert.strictEqual(result.sync_folder_notice, true);
+  assert.doesNotMatch(JSON.stringify(result), /OneDrive|Dropbox|[A-Z]:[\\/]/iu);
 });
 
 done();

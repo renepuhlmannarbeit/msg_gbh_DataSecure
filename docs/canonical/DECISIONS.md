@@ -6,7 +6,7 @@ Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenomme
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-049, DS-051 bis DS-058, DS-060 sowie DS-062 bis
-  DS-067, jeweils mit den unten genannten Präzisierungen;
+  DS-069, jeweils mit den unten genannten Präzisierungen;
 - **ersetzt:** DS-050 durch DS-065;
 - **teilweise präzisiert:** DS-002, DS-009, DS-020, DS-023 und DS-053 durch
   DS-067; DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067.
@@ -632,3 +632,28 @@ Freie Bereichsredaktionen bleiben im Sammelreview bis zu einer nachweislich
 positionssicheren Dokumentabbildung gesperrt. Die vollständigen Kriterien stehen
 in `contracts/BATCH_REVIEW_V2.md`. Diese Entscheidung präzisiert DS-014, DS-027,
 DS-028, DS-032, DS-040 und DS-043.
+
+## DS-069 – Einmaliger Cowork-Ergebnisordner ohne Bestätigungsorgie
+
+Bestätigt am 02.09.2026: Beim ersten lokalen Anonymisierungslauf wählt der Anwender
+einmalig den bereits mit Cowork verbundenen Arbeitsordner als sichtbares
+Ergebnisziel. DataSecure speichert diese Wahl ausschließlich lokal und legt darin
+`DataSecure-Output` an. Danach benötigt jeder reine Anonymisierungslauf nur noch
+die lokale Datei- beziehungsweise Ordnerauswahl; es gibt keine zusätzliche Start-,
+Bild-, Export- oder Einzeldateibestätigung. Der Zielordner kann später über eine
+ausdrücklich aufgerufene Plugin-Funktion geändert oder zurückgesetzt werden.
+
+In `DataSecure-Output` gelangen ausschließlich erneut verifizierte, freigegebene
+Markdown-Dateien mit neutralen Namen. Originale, Quellpfade, Mapping, Audit,
+Review-, Arbeits- und Wiederaufnahmedaten bleiben im privaten DataSecure-Bereich.
+Ein fehlgeschlagener sichtbarer Export vernichtet kein internes Ergebnis; ein
+lokaler, dauerhafter Exportauftrag wird beim nächsten Start oder Ordnerwechsel
+erneut ausgeführt. Der Abschlussdialog nennt nur Zähler und bietet
+„Ergebnisse öffnen“.
+
+Der MCP erhält den gewählten Pfad nicht. Eine automatisch sichere Erkennung des
+verbundenen Cowork-Ordners ist kein belastbarer Hostvertrag; deshalb wird der Pfad
+nicht geraten. Ein Cloud-Sync-Ziel ist zulässig, kann die bereits freigegebenen,
+aber nicht garantiert rechtlich anonymen Ergebnisse zum jeweiligen Dienst
+synchronisieren und wird deshalb als bewusste Nutzerwahl dokumentiert. Diese
+Entscheidung präzisiert DS-008, DS-023, DS-040, DS-041, DS-051, DS-058 und DS-064.

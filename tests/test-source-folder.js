@@ -131,6 +131,22 @@ test('managed staging is excluded from both direct and recursive source intake w
   }
 });
 
+test('the visible result tree cannot recursively become a source again', () => {
+  const cowork = clean('cowork-source-overlap');
+  const output = path.join(cowork, 'DataSecure-Output');
+  fs.mkdirSync(output);
+  fs.writeFileSync(path.join(output, 'Dokument-001-anonymisiert.md'), 'synthetic released result');
+  const original = process.env.EU_PRIVACY_RESULT_ROOT;
+  process.env.EU_PRIVACY_RESULT_ROOT = cowork;
+  try {
+    assert.throws(() => enumerateSourceFolder(cowork, { hasReparseComponent: () => false }), /DataSecure-Output|getrennten Ordner/iu);
+    assert.throws(() => enumerateSourceFolder(output, { hasReparseComponent: () => false }), /DataSecure-Output|getrennten Ordner/iu);
+  } finally {
+    if (original === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT;
+    else process.env.EU_PRIVACY_RESULT_ROOT = original;
+  }
+});
+
 test('a selected root replacement during listing rejects the complete synchronous queue', () => {
   const root = clean('sync-root-swap');
   const replacement = clean('sync-root-replacement');
@@ -155,6 +171,22 @@ test('a selected root replacement during listing rejects the complete synchronou
 });
 
 async function main() {
+  await testAsync('async recursion also rejects the configured visible result tree', async () => {
+    const cowork = clean('cowork-source-overlap-async');
+    const output = path.join(cowork, 'DataSecure-Output');
+    fs.mkdirSync(output);
+    fs.writeFileSync(path.join(output, 'Dokument-001-anonymisiert.md'), 'synthetic released result');
+    const original = process.env.EU_PRIVACY_RESULT_ROOT;
+    process.env.EU_PRIVACY_RESULT_ROOT = cowork;
+    try {
+      await assert.rejects(() => enumerateSourceFolderAsync(cowork, {
+        hasReparseComponentAsync: async () => false
+      }), /DataSecure-Output|getrennten Ordner/iu);
+    } finally {
+      if (original === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT;
+      else process.env.EU_PRIVACY_RESULT_ROOT = original;
+    }
+  });
   await testAsync('normal Cowork folder enumeration yields and honours cancellation without returning a partial queue', async () => {
     const root = clean('async-cancel');
     for (let index = 0; index < 40; index++) fs.writeFileSync(path.join(root, `${index}.txt`), 'synthetic');

@@ -3,7 +3,7 @@
 // The local-only start acknowledgement crosses the MCP boundary. Keep it
 // intentionally smaller than the private worker result: the background batch
 // token is not useful to Claude until the user explicitly asks to continue.
-function localOnlyStartResponse(started) {
+function localOnlyStartResponse(started, options = {}) {
   if (started?.ok !== true || started?.local_intake_pending !== true) {
     return Object.freeze({
       ok: false,
@@ -20,11 +20,11 @@ function localOnlyStartResponse(started) {
     ok: true,
     mode: 'local_only',
     local_intake_pending: started?.local_intake_pending === true,
-    // The detached worker has accepted the private handoff, but its durable
-    // batch checkpoint is created asynchronously.  Do not claim that document
-    // processing has started before that checkpoint exists.
+    // The detached worker has acknowledged the private IPC handoff. The
+    // potentially large durable source snapshot is created asynchronously.
     local_processing_started: false,
-    next_action: 'local_intake_accepted_checkpoint_pending',
+    next_action: 'local_intake_handoff_confirmed',
+    ...(options.syncFolderNotice === true ? { sync_folder_notice: true } : {}),
     raw_content_sent_to_claude: false
   });
 }

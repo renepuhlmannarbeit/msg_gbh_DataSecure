@@ -1,6 +1,6 @@
 'use strict';
 
-const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor } = require('./batch');
+const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, exportCompletedBatchResults } = require('./batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation');
 
 let started = false;
@@ -53,6 +53,9 @@ process.once('message', async (message) => {
       await notify({ type: 'local-intake-processing-started' });
     }
     const completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
+    const visibleExport = completed.complete === true
+      ? exportCompletedBatchResults(message.batch_token)
+      : { exported: 0, pending: 0, available: false };
     // Every automatic run ends with exactly one bounded local state envelope,
     // including non-terminal rest states such as review, mapping repair or an
     // explicit resume. No token, source identifier or document content crosses
@@ -66,7 +69,10 @@ process.once('message', async (message) => {
       stopped: completed.stopped,
       result_grade_counts: completed.result_grade_counts,
       result_omission_counts: completed.result_omission_counts,
-      result_grades_verified: completed.result_grades_verified
+      result_grades_verified: completed.result_grades_verified,
+      result_exported_count: visibleExport.exported,
+      result_export_pending_count: visibleExport.pending,
+      result_output_available: visibleExport.available
     });
     process.exit(0);
   } catch {

@@ -162,7 +162,7 @@ test('MCPB prompt texts use the same direct-picker contract as the runtime', () 
     assert.strictEqual(prompt.text, manifestPromptText(prompt.name), `${prompt.name} prompt contract drift`);
     assert.match(prompt.text, /genau einmal start_document_batch_from_picker/u, `${prompt.name} must use the direct local picker`);
     assert.match(prompt.text, /weder privacy_status noch ein Ordner-, Status- oder Supportwerkzeug/u, `${prompt.name} must not add a redundant preliminary step`);
-    assert.match(prompt.text, /keine zusätzliche Bild- oder Startfrage/u, `${prompt.name} must not add a redundant confirmation`);
+    assert.match(prompt.text, /keine zusätzliche Bild-, Start- oder Exportfrage/u, `${prompt.name} must not add a redundant confirmation`);
     assert.match(prompt.text, /Originale nie per Chat-Anhang oder Fremdwerkzeug/u, `${prompt.name} must forbid upload workarounds`);
     assert.match(prompt.text, /bei batch_active/iu, `${prompt.name} must wait for an active local batch`);
     assert.ok(prompt.text.includes(OPEN_BATCH_DECISION_TEXT), `${prompt.name} must use the canonical open-batch decision`);
@@ -221,7 +221,7 @@ test('native Windows launcher has a reproducible source and release build contra
   }
   assert.doesNotMatch(productRunner, /test-(?:engineering-keyring|keyring-pilot|private-artifact-crypto|pdfium-spike|ocr-session-harness)\./iu);
   assert.strictEqual(pkg.scripts['test:executor-lifecycle'],
-    'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-workflow-diagnostics.js');
+    'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js');
   assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');

@@ -17,26 +17,26 @@ function defaultRunner(command, args, env = process.env) {
   });
 }
 
-function pickerCommands(platform = process.platform, env = process.env) {
+function pickerCommands(platform = process.platform, env = process.env, title = FOLDER_PICKER_TITLE) {
   if (platform === 'win32') {
     const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const script = [
       WINDOWS_PICKER_UTF8,
       'Add-Type -AssemblyName System.Windows.Forms',
       '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-      `$dialog.Description = '${FOLDER_PICKER_TITLE}'`, '$dialog.ShowNewFolderButton = $true',
+      `$dialog.Description = '${String(title).replace(/'/g, "''")}'`, '$dialog.ShowNewFolderButton = $true',
       'try { $result = $dialog.ShowDialog(); if ($result -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) } else { [Console]::Out.Write(\'' + FOLDER_PICKER_CANCELLED + '\') } } finally { $dialog.Dispose() }'
     ].join('; ');
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
   }
   if (platform === 'darwin') return [{
     command: '/usr/bin/osascript',
-    args: ['-e', ['try', `POSIX path of (choose folder with prompt "${FOLDER_PICKER_TITLE}")`,
+    args: ['-e', ['try', `POSIX path of (choose folder with prompt "${String(title).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`,
       'on error number -128', `return "${FOLDER_PICKER_CANCELLED}"`, 'end try'].join('\n')]
   }];
   if (platform === 'linux') return [
-    { command: 'zenity', args: ['--file-selection', '--directory', `--title=${FOLDER_PICKER_TITLE}`] },
-    { command: 'kdialog', args: ['--getexistingdirectory', '.', FOLDER_PICKER_TITLE] }
+    { command: 'zenity', args: ['--file-selection', '--directory', `--title=${title}`] },
+    { command: 'kdialog', args: ['--getexistingdirectory', '.', String(title)] }
   ];
   throw new SafeError('Für dieses Betriebssystem ist kein lokaler Ordnerdialog verfügbar.');
 }
@@ -50,7 +50,7 @@ function selectionCancelledError() {
 function pickFolder(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
-  for (const spec of pickerCommands(options.platform, options.env)) {
+  for (const spec of pickerCommands(options.platform, options.env, options.title)) {
     const result = runner(spec.command, spec.args, options.env || process.env);
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
     if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die Auswahl des Privacy-Ordners wurde wegen Zeitüberschreitung beendet.');
@@ -72,7 +72,7 @@ async function pickFolderAsync(options = {}) {
   const runner = options.runner || runPickerAsync;
   let unavailable = 0;
   throwIfSelectionAborted(options.signal);
-  for (const spec of pickerCommands(options.platform, options.env)) {
+  for (const spec of pickerCommands(options.platform, options.env, options.title)) {
     throwIfSelectionAborted(options.signal);
     const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal, pickerOutputMaxBuffer(1));
     throwIfSelectionAborted(options.signal);

@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC85
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC86
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -37,7 +37,7 @@ technische Datenschutzgrenze bildet der lokale Plugin-MCP, nicht der Skilltext.
 | sicher gesperrt | XLSX, PPTX, PDF, Scan-PDF und eigenständige Bilder |
 | Stapel | bis 100 Dateien, zusammen höchstens 500 MiB |
 | Bilder in DOCX | Pixel bleiben lokal; kein auswählbarer Bildmodus |
-| Ausgabe | Markdown je positiver Datei und dauerhaft lokales Mapping |
+| Ausgabe | freigegebenes Markdown im einmalig gewählten Cowork-Arbeitsordner; Mapping bleibt privat |
 | Speicherung | lokale Arbeits-/Reviewkopien ohne Schlüsselbund oder Passwort |
 | automatische Aufbewahrung | 0–14 Tage nur für temporäre Arbeits-/Reviewdaten |
 
@@ -51,12 +51,19 @@ sicher gestoppt und lokal gesondert gemeldet.
    beziehen; Claude Desktop neu starten.
 2. In einer neuen Cowork-Aufgabe **„Dateien anonymisieren“** schreiben oder den
    gleichnamigen Skill wählen.
-3. Dateien im lokalen Mehrfachpicker wählen und einmal **„Öffnen“** klicken.
-4. Klare Dateien werden ohne weiteren Dialog abgeschlossen. Nur bei echten
+3. Nur beim ersten Lauf den bereits mit Cowork verbundenen Arbeitsordner als
+   Ergebnisziel wählen. DataSecure merkt ihn sich und legt dort
+   `DataSecure-Output` an.
+4. Dateien im lokalen Mehrfachpicker wählen und einmal **„Öffnen“** klicken.
+   Bei allen späteren Läufen beginnt der Ablauf direkt mit dieser Quellauswahl.
+5. Klare Dateien werden ohne weiteren Dialog abgeschlossen. Nur bei echten
    Mehrdeutigkeiten erscheint ein lokaler Sammelreview mit den direkten Aktionen
    **„Zertifikatsanbieter behalten“** und **„Organisation anonymisieren“**.
-5. Lokalen Abschluss abwarten. Erst danach ausdrücklich um die Auswertung der
-   fertigen Ergebnisse bitten.
+6. Die lokale Abschlussmeldung mit **„Ergebnisse öffnen“** verwenden. Im
+   Cowork-Arbeitsordner liegen ausschließlich neutrale freigegebene Markdown-
+   Dateien; Originale, Mapping, Review und Recovery bleiben im privaten Bereich.
+7. Erst danach bei Bedarf ausdrücklich um die Auswertung der fertigen Ergebnisse
+   bitten.
 
 Keine sensiblen Originale als Chat-Anhang hochladen. Cloud-Cowork – auch in der
 Desktop-App – startet keinen lokalen Plugin-MCP und darf keine Originale verarbeiten.

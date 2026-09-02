@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 01.09.2026 · Produktstand 3.2.0-rc85
+Stand: 02.09.2026 · Produktstand 3.2.0-rc86
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -46,6 +46,7 @@ menschliche Freigabeevidenz; bis dahin bleibt der breite Rollout NO-GO.
 | BL-030.2 | zufälliger Stapelseed plus rohwertfreie HMAC-Alias-/Kollisionsbindungen werden dauerhaft gecheckpointet; Neustart, Alias, Manipulation und Fehlercleanup sind getestet – ohne Keyring oder Zusatzverschlüsselung. | echte Cowork-/OS-Neustart- und Crash-Fortsetzung über BL-011.3/BL-011.11 | **erledigt** |
 | BL-011.10 | Eine atomare, prozessübergreifende Intake-Reservierung gilt vom Pickerstart bis zum dauerhaften Stapelcheckpoint. Die Reservierung kann sicher an den Worker delegiert werden; verwaiste Eigentümer werden fail-closed erkannt und zwei reale konkurrierende Prozesse lassen genau eine Aufnahme zu. | Mehrfachauswahl und Hintergrundstart in echter Cowork-Bedienung auf Windows/macOS messen | **erledigt** |
 | BL-047.1 | Freigegebene Markdown-Snapshots werden asynchron und größenbegrenzt gelesen, gehasht und UTF-8-indiziert; ein 6-MiB-Regressionslauf belegt, dass der MCP-Ereignisloop währenddessen weiterläuft. | Referenzhardware messen und erst danach eine adaptive Parallelisierung bewerten; Produktstandard bleibt seriell | **erledigt** |
+| BL-040.5 | Beim ersten Lauf wird der Cowork-Ergebnisordner erst nach erfolgreicher Anlage von `DataSecure-Output` dauerhaft gespeichert. Nur verifiziertes Markdown wird atomar mit neutralen Namen exportiert; Zielidentität, Zielwechsel, fehlende oder manipulierte Ergebnisse und Export-Replay werden geprüft. Private Daten bleiben getrennt, der Abschluss bietet „Ergebnisse öffnen“, rekursive Quellen dürfen den sichtbaren Output nicht wieder aufnehmen und die MCP-Startantwort wartet begrenzt auf bestätigten Worker-Hand-off. | Fresh Install, Neustart, Ordnerwechsel und Abschlussaktion in echter Cowork-Bedienung auf Windows/macOS beobachten | **erledigt** |
 
 ### P0 – einfacher lokaler Sammelreview nach DS-068
 
@@ -77,7 +78,7 @@ DS-026, DS-027, DS-028, DS-029, DS-030, DS-031, DS-032, DS-033, DS-034,
 DS-035, DS-036, DS-037, DS-038, DS-039, DS-040, DS-041, DS-042, DS-043,
 DS-044, DS-045, DS-046, DS-047, DS-048, DS-049, DS-050, DS-051, DS-052,
 DS-053, DS-054, DS-055, DS-056, DS-057, DS-058, DS-059, DS-060, DS-061,
-DS-062, DS-063, DS-064, DS-065, DS-066, DS-067 und DS-068.
+DS-062, DS-063, DS-064, DS-065, DS-066, DS-067, DS-068 und DS-069.
 
 ## A. Eigenständig lieferbare Entwicklung
 
@@ -124,6 +125,7 @@ DS-062, DS-063, DS-064, DS-065, DS-066, DS-067 und DS-068.
 | BL-041.7 | Werkzeugberechtigungen, Pickerabbruch und Ergebnisübergabe in aktueller Cowork-Version prüfen. | **blockiert** |
 | BL-041.8 | MCP-Tasks/Benachrichtigungen versionsgebunden prüfen; ohne Nachweis kein Produktpfad. | **blockiert** |
 | BL-041.9 | Nicht blockierenden Sammelreview und Abschluss auf Windows/macOS beobachten. | **blockiert** |
+| BL-041.10 | Die gelieferte einmalige Ergebnisordnerwahl, Wiederverwendung ohne neue Abfrage, Ordnerwechsel, Exportwiederholung und „Ergebnisse öffnen“ in echter lokaler Cowork-Bedienung auf Windows/macOS abnehmen. | **blockiert** |
 | BL-044.1 | Rekursive Ordnerquelle mit Link-/Race-Gegenproben auf Zielsystemen prüfen. | **blockiert** |
 | BL-049.1 | Format-/Strukturgates und Ergebnisgrade durch Security auf Zielsystemen abnehmen. | **blockiert** |
 | BL-050.3 | Referenzwerte und reales Dateisystem-/Power-Loss-Verhalten erfassen. | **blockiert** |

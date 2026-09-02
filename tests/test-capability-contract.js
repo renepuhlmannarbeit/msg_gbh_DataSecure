@@ -155,7 +155,8 @@ test('the current Cowork UAT kit preserves the one-picker local-only normal path
   const steps = read('docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md');
   assert.match(readme, /einen lokalen Mehrfachpicker/u);
   assert.match(readme, /DataSecure-Mapping\.csv/u);
-  assert.match(steps, /lokale Verarbeitung wurde gestartet/u);
+  assert.match(steps, /Der Auftrag wurde lokal übergeben/u);
+  assert.match(steps, /DataSecure-Output/u);
   assert.match(steps, /Windows oder macOS/u);
   for (const source of [readme, steps]) {
     assert.doesNotMatch(source, /begin_document_batch|start_document_batch_processing|document_batch_status|list_document_batch_results/u);

@@ -20,6 +20,8 @@ function tableNames(table) {
 
 const toolDescriptions = new Map(manifest.tools.map((tool) => [tool.name, tool.description]));
 toolDescriptions.set('configure_privacy_folder', 'Öffnet nach ausdrücklicher Bestätigung einen lokalen Ordnerdialog, um den Privacy-Ordner auf diesem Gerät festzulegen.');
+toolDescriptions.set('configure_result_folder', 'Öffnet einen lokalen Ordnerdialog für den dauerhaften Cowork-Ergebnisordner. Dort wird ausschließlich freigegebenes Markdown unter DataSecure-Output abgelegt.');
+toolDescriptions.set('open_result_folder', 'Öffnet den dauerhaft gewählten DataSecure-Output-Ordner lokal, ohne Pfad oder Inhalt an Claude zu übertragen.');
 toolDescriptions.set('start_document_batch_from_picker', 'Öffnet eine lokale Mehrfach-Dateiauswahl. Mit „Öffnen“ startet der bestätigte Stapel automatisch; Pfade und Namen bleiben lokal.');
 toolDescriptions.set('continue_anonymized_batch_in_chat', 'Liest bei einer ausdrücklich gewünschten Folgeauswertung bis zu fünf verifizierte anonymisierte Markdown-Ergebnisse zusammen mit dem sicheren Batchstatus.');
 toolDescriptions.set('start_completed_local_results_handoff', 'Startet auf ausdrücklichen Wunsch die tokenfreie lokale Übergabe abgeschlossener anonymisierter Ergebnisse an Claude.');

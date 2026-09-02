@@ -1,6 +1,6 @@
 # Kanonische Zielarchitektur
 
-Stand: 01.09.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
+Stand: 02.09.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
 
 ## Architekturprinzip
 

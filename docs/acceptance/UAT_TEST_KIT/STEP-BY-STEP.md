@@ -12,15 +12,18 @@
    --archive <Archiv> --output dist/<Ziel>` attestieren und danach
    `npm run build:plugin` ausführen. Kein reines Quell-ZIP verwenden.
 4. Claude Desktop vollständig beenden und neu starten.
-5. Neue lokale Cowork-Aufgabe öffnen, „Dateien anonymisieren“ schreiben und den
-   Picker einmal mit **Abbrechen** schließen. Öffnet er nicht, `BLOCKED`; nicht
-   durch Upload umgehen.
+5. Einen leeren, mit Cowork verbundenen Test-Arbeitsordner anlegen. Neue lokale
+   Cowork-Aufgabe öffnen und „Dateien anonymisieren“ schreiben. Beim ersten Lauf
+   diesen Arbeitsordner einmalig als Ergebnisziel wählen. Danach den Quellpicker
+   einmal mit **Abbrechen** schließen. Öffnet einer der erwarteten Dialoge nicht,
+   `BLOCKED`; nicht durch Upload umgehen.
 6. Build, Pluginversion, Artefakt-SHA-256, Betriebssystem und Claude-Version im
    Evidence-Log erfassen – keine Pfade oder Dokumentkennungen.
 
 Nach einer bestätigten Auswahl lautet die erwartete kurze Claude-Antwort:
-**„Die lokale Verarbeitung wurde gestartet.“** Statusabfragen oder automatisches
-Ergebnislesen dürfen daran nicht anschließen.
+**„Der Auftrag wurde lokal übergeben. DataSecure zeigt nach Abschluss den
+Ergebnisordner an.“** Statusabfragen oder automatisches Ergebnislesen dürfen daran
+nicht anschließen.
 
 ## UAT-01 – Ein Mitarbeiterprofil sicher de-identifizieren
 
@@ -30,7 +33,9 @@ Ergebnislesen dürfen daran nicht anschließen.
 2. Nur `inputs/01-positive/personnel-profile.txt` wählen und einmal öffnen.
 3. Lokalen Abschluss abwarten. Danach ausdrücklich um Auswertung des fertigen
    Ergebnisses bitten.
-4. Markdown und Mapping lokal prüfen.
+4. In der Abschlussmeldung **„Ergebnisse öffnen“** wählen. Markdown im
+   `DataSecure-Output` des Test-Arbeitsordners und Mapping getrennt im privaten
+   DataSecure-Bereich prüfen.
 
 PASS: genau ein Ergebnis; Direktidentifikatoren, Arbeitgeber und Kunde fehlen;
 Product Owner, Java, SQL, HL7 FHIR, Testautomatisierung, ISTQB und Scrum.org bleiben.
@@ -85,7 +90,7 @@ den aktuellen Source-Preflight geprüft werden.
 [Ziel und PASS-Regel](CASE_CATALOG.md#uat-05)
 
 1. `batch-001.txt` bis `batch-010.txt` wählen und öffnen.
-2. Sobald **„Die lokale Verarbeitung wurde gestartet.“** sichtbar ist, Claude
+2. Sobald **„Der Auftrag wurde lokal übergeben.“** sichtbar ist, Claude
    Desktop vollständig beenden: Windows über „Beenden“ im Taskleistenmenü,
    macOS mit `Cmd+Q`. Nicht auf eine Abschlussmeldung warten.
 3. Claude Desktop neu starten und „Setze den unvollständigen DataSecure-Stapel
@@ -107,8 +112,9 @@ erneuter Picker ist `FAIL`, nicht `BLOCKED`.
 3. Ergebnisse später ausdrücklich gesammelt anfordern und bis `more=false`
    fortsetzen.
 
-PASS: 100 eindeutige terminale Positionen, 100 Mappingzeilen, genau eine lokale
-Abschlussübersicht, keine internen Kennungen im Chat.
+PASS: 100 eindeutige terminale Positionen, 100 Mappingzeilen, 100 neutrale
+Markdown-Dateien im gewählten `DataSecure-Output`, genau eine lokale
+Abschlussübersicht mit **„Ergebnisse öffnen“**, keine internen Kennungen im Chat.
 
 ## Abschluss
 

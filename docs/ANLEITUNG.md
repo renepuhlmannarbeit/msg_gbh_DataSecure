@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 01.09.2026 · Version 3.2.0 RC85
+Stand: 01.09.2026 · Version 3.2.0 RC86
 
 ## Vor dem ersten Lauf
 
@@ -12,16 +12,23 @@ neu. Laden Sie sensible Originale niemals per Büroklammer in den Chat.
 
 1. Öffnen Sie eine neue lokale Cowork-Aufgabe.
 2. Schreiben Sie **„Dateien anonymisieren“** oder wählen Sie den DataSecure-Skill.
-3. Im lokalen Mehrfachpicker wählen Sie bis zu 100 Dateien mit zusammen höchstens
+3. Beim ersten Lauf wählen Sie einmalig den bereits mit Cowork verbundenen
+   Arbeitsordner. DataSecure speichert diese Wahl lokal und erstellt darin
+   `DataSecure-Output`. Diese Auswahl wird in späteren Läufen nicht wiederholt.
+4. Im lokalen Mehrfachpicker wählen Sie bis zu 100 Dateien mit zusammen höchstens
    500 MiB und klicken einmal **„Öffnen“**.
-4. DataSecure prüft und verarbeitet lokal. Ein Fehler in einer Datei hält den
+5. DataSecure prüft und verarbeitet lokal. Ein Fehler in einer Datei hält den
    übrigen Stapel nicht automatisch an.
-5. Warten Sie auf die lokale Abschlussmeldung. Claude pollt den Lauf nicht.
-6. Bitten Sie erst danach ausdrücklich: **„Verwende die fertigen anonymisierten
+6. Warten Sie auf die lokale Abschlussmeldung. Mit **„Ergebnisse öffnen“** gelangen
+   Sie direkt zu den neutral benannten Markdown-Dateien. Claude pollt den Lauf nicht.
+7. Bitten Sie erst danach ausdrücklich: **„Verwende die fertigen anonymisierten
    DataSecure-Ergebnisse.“**
 
-Das ist der vollständige Normalweg. Es gibt keine Profilfrage, keinen Bildmodus,
-keine Einzeldateibestätigung und keine Bestätigung für jedes Ergebnis.
+Das ist der vollständige Normalweg. Nach der einmaligen Ergebnisordnerwahl gibt es
+pro Stapel nur die Quellauswahl; keine Profilfrage, keinen Bildmodus, keine
+Einzeldateibestätigung und keine Bestätigung für jedes Ergebnis. Claude-eigene
+Werkzeugfreigaben kann das Plugin nicht abschalten, aber der reine lokale Lauf
+benötigt nur einen MCP-Startaufruf.
 
 ## Unterstützte Dateien
 
@@ -62,14 +69,24 @@ Positionen werden nicht wiederholt.
 
 ## Lokale Ablage
 
-Der Standard liegt im lokalen DataSecure-App-Datenbereich unter `SecureDataMsg`.
+Die sichtbaren Ergebnisse liegen unter
+`<einmalig gewählter Cowork-Arbeitsordner>/DataSecure-Output/Lauf-…/` und heißen
+neutral `Dokument-001-anonymisiert.md`, `Dokument-002-anonymisiert.md` usw. Den
+Zielordner ändern Sie auf ausdrücklichen Wunsch über
+**„DataSecure-Ergebnisordner ändern“**; sein Pfad wird nicht an Claude gemeldet.
+Ein Ziel in OneDrive, iCloud, Dropbox oder Google Drive kann die freigegebenen
+Ergebnisse mit diesem Dienst synchronisieren.
+
+Der private Standardbereich liegt unter `SecureDataMsg`.
 Mit **„Privacy-Ordner ändern“** wählen Sie einen anderen lokalen Ordner; die Änderung
 gilt nach einem Neustart. Cloud-Sync, Netzlaufwerke, Symlinks und Junctions sind
 gesperrt.
 
 - Temporäre DataSecure-Arbeits- und Reviewdaten: Aufbewahrung 0–14 Tage.
 - Quellen/Originale: niemals automatisch verändern oder löschen.
-- Fertige Exporte und `DataSecure-Mapping.csv`: niemals automatisch löschen.
+- Fertige Exporte: niemals automatisch löschen. Das gilt auch für die private
+  `DataSecure-Mapping.csv`. Mapping, Originalbezüge, Review- und Recoverydaten werden
+  nicht in `DataSecure-Output` kopiert.
 - Manuelles Aufräumen betrifft ausschließlich eindeutig DataSecure-eigene Daten
   und braucht eine ausdrückliche Bestätigung.
 
@@ -90,6 +107,8 @@ wird nicht automatisch an Claude übertragen.
 | Sichtbares Verhalten | Nächste Aktion |
 |---|---|
 | Kein lokaler Picker | Claude einmal vollständig neu starten; danach IT melden, nicht hochladen |
+| Ergebnisordnerwahl erscheint | Beim ersten Lauf den verbundenen Cowork-Arbeitsordner wählen; später nur auf Wunsch ändern |
+| Sichtbarer Export vorübergehend fehlgeschlagen | Interne Ergebnisse bleiben erhalten; beim nächsten Pluginstart wird erneut exportiert |
 | Picker geschlossen | Nur auf ausdrücklichen Wunsch neu starten |
 | Datei sicher gestoppt | Nicht automatisch wiederholen; Klartextmeldung lesen, technischen Code nur an IT nennen |
 | Stapel unterbrochen | „Setze den letzten DataSecure-Stapel fort“ |

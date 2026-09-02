@@ -18,9 +18,12 @@ reproduzierbare Historie erhalten, sind aber keine Anleitung.
    [STEP-BY-STEP.md](STEP-BY-STEP.md) durchführen und
    [EVIDENCE_LOG.csv](EVIDENCE_LOG.csv) ausfüllen.
 
-Der Normalweg verwendet genau einen lokalen Mehrfachpicker und eine Bestätigung mit
-„Öffnen“. Die dauerhafte lokale `DataSecure-Mapping.csv` wird geprüft, aber niemals
-in den Chat gelesen.
+Beim allerersten Lauf wird einmalig ein dedizierter, bereits mit Cowork verbundener
+synthetischer Test-Arbeitsordner als Ergebnisziel gewählt. Danach verwendet jeder
+Stapel genau einen lokalen Mehrfachpicker und eine Bestätigung mit „Öffnen“.
+Freigegebenes Markdown muss in dessen `DataSecure-Output` erscheinen. Die
+dauerhafte lokale `DataSecure-Mapping.csv` bleibt im privaten Bereich und wird
+geprüft, aber niemals in den Chat oder den Cowork-Ergebnisordner gelesen.
 
 Produktivdaten und Chat-Uploads sind verboten. Die Erzeugung wird automatisiert
 mit `npm run test:uat-fixtures` gegen Dateizahl, Struktur, Reproduzierbarkeit und

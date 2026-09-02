@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 01.09.2026 · 3.2.0-rc85 · Git-Arbeitsstand nach Reviewvereinfachung
+Stand: 02.09.2026 · 3.2.0-rc86 · Git-Arbeitsstand nach Cowork-Ergebnisexport
 
 ## Produkt in einem Satz
 
@@ -27,6 +27,14 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
 - Ergebnis: Markdown pro freigegebener Datei plus dauerhaft lokale
   `DataSecure-Mapping.csv`; rekursive relative Labels und gleiche Basenames aus
   unterschiedlichen lokalen Ordnern bleiben darin kollisionsfrei unterscheidbar.
+- Sichtbarer Cowork-Export: Beim ersten Lauf wird ein Ergebnisordner einmal lokal
+  gewählt, die Output-Anlage geprüft und das Ziel erst danach identitätsgebunden
+  gespeichert. Nur verifiziertes Markdown mit
+  neutralen Namen gelangt nach `DataSecure-Output/Lauf-…`; Mapping, Originale,
+  Review und Recovery bleiben privat. Ein fehlgeschlagener Export wird lokal
+  vorgemerkt und beim nächsten Start oder Ordnerwechsel erneut versucht. Zielwechsel,
+  Löschung oder Manipulation sichtbarer Ergebnisse lösen eine erneute Prüfung und
+  gegebenenfalls Reparatur aus; der Outputbaum ist als rekursive Quelle gesperrt.
 
 ## Claude-/Cowork-Grenze
 
@@ -127,6 +135,12 @@ fehlt.
 
 ### BL-040 – Lokaler Export und Nachweis
 Mapping und inhaltsfreie Nachweise sind implementiert; Quellen bleiben unverändert.
+BL-040.5 ergänzt den einmalig gewählten Cowork-Ergebnisordner. Der Export prüft
+das Paket erneut, schreibt ausschließlich Markdown atomar unter neutralem Namen
+und bietet im lokalen Abschluss „Ergebnisse öffnen“. Der MCP erhält weder Zielpfad
+noch Mapping. Die erfolgreiche MCP-Startantwort wartet höchstens fünf Sekunden auf
+das Worker-IPC-ACK; Timeout und Abbruch räumen die Aufnahme fail-closed auf. Reale
+Windows-/macOS-Cowork-Abnahme bleibt offen.
 
 ### BL-041 – Claude-Übergabe
 Nur verifizierte Markdown-Ergebnisse werden begrenzt übergeben. Reale
@@ -136,7 +150,9 @@ Berechtigungs-, Skill- und Hostabnahme bleibt offen.
 Der Normalweg endet nach einem lokalen Start ohne Polling. Ergebnisse werden erst
 auf späteren ausdrücklichen Auftrag gelesen. Ein vollständig klarer Stapel öffnet
 keinen Reviewdialog; nur echte Mehrdeutigkeiten wechseln in den lokalen
-Sammelreview.
+Sammelreview. Nach der einmaligen Ergebnisordnerwahl benötigt jeder weitere reine
+Anonymisierungslauf nur noch die Quellauswahl. Die Startantwort wird erst nach
+bestätigter IPC-Übergabe an den unabhängigen Worker als Erfolg ausgegeben.
 
 ### BL-044 – Sichere Datei- und Ordnerquellen
 Mehrfachauswahl und rekursiver Ordnervertrag sind E0 implementiert; reale Link-/Race-

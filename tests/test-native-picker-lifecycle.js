@@ -118,6 +118,7 @@ if (process.platform === 'win32') {
     let controller = new AbortController();
     const context = vm.createContext({
       process: { env: {} }, setImmediate,
+      readConfiguredResultRoot: () => 'already-configured',
       reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'd'.repeat(64) }; },
       releaseIntake: () => { reservationHeld = false; return true; },
       genericStatus: (options) => { assert.strictEqual(options.ignoreIntakeReservation, true); return { engine_ready: true }; },
@@ -139,6 +140,62 @@ if (process.platform === 'win32') {
     assert.strictEqual(starts, 1, 'there is no cancellation hook attached to the independent intake worker');
   });
 
+  await testAsync('the result folder is selected once and reused without another confirmation', async () => {
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
+    let configured = false;
+    let resultPickerCalls = 0;
+    let sourcePickerCalls = 0;
+    let reservationHeld = false;
+    const resultRoot = path.resolve(__dirname, 'synthetic-cowork-root');
+    const context = vm.createContext({
+      require, process: { env: {} }, setImmediate,
+      SafeError: class SafeError extends Error {},
+      roots: () => ({ root: path.resolve(__dirname, 'synthetic-private-root') }),
+      readConfiguredResultRoot: () => configured ? resultRoot : '',
+      pickFolderAsync: async () => { resultPickerCalls++; return resultRoot; },
+      saveConfiguredResultRoot: () => { configured = true; },
+      clearConfiguredResultRoot: () => { configured = false; },
+      resultOutputDirectory: () => path.join(resultRoot, 'DataSecure-Output'),
+      isCommonSyncFolder: () => false,
+      replayPendingResultExports: () => ({ exported: 0, pending: 0, failures: 0 }),
+      reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'f'.repeat(64) }; },
+      releaseIntake: () => { reservationHeld = false; return true; },
+      genericStatus: () => ({ engine_ready: true, local_intake_pending: false, batch_processing_active: false }),
+      pickSourcesAsync: async () => { sourcePickerCalls++; return [{ sourcePath: selectedPath, sourceBytes: 12 }]; },
+      pickSourceFolderAsync: async () => path.dirname(selectedPath),
+      enumerateSourceFolderAsync: async () => [],
+      batchQueueFromSelection: (selected) => selected,
+      recordWorkflowEvent: () => {},
+      startLocalIntakeExecutor: () => { reservationHeld = false; return { ok: true, local_intake_pending: true }; },
+      localOnlyStartResponse: () => ({ ok: true, next_action: 'local_intake_handoff_confirmed' })
+    });
+    vm.runInContext(source, context);
+    assert.strictEqual((await context.startPickerBatch({})).ok, true);
+    assert.strictEqual((await context.startPickerBatch({})).ok, true);
+    assert.strictEqual(resultPickerCalls, 1, 'the persistent result choice is not repeated');
+    assert.strictEqual(sourcePickerCalls, 2, 'each new batch still asks for its sources');
+  });
+
+  await testAsync('an unusable result folder is never persisted', async () => {
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
+    const resultRoot = path.resolve(__dirname, 'synthetic-unusable-result-root');
+    let saves = 0;
+    const context = vm.createContext({
+      require, process: { env: {} }, setImmediate,
+      SafeError: class SafeError extends Error {},
+      roots: () => ({ root: path.resolve(__dirname, 'synthetic-private-root') }),
+      pickFolderAsync: async () => resultRoot,
+      resultOutputDirectory: () => { throw new Error('synthetic access denied'); },
+      saveConfiguredResultRoot: () => { saves++; },
+      isCommonSyncFolder: () => false
+    });
+    vm.runInContext(source, context);
+    await assert.rejects(() => context.chooseAndSaveResultFolder({}), /access denied/iu);
+    assert.strictEqual(saves, 0, 'validation and output creation must complete before the choice is stored');
+  });
+
   await testAsync('privacy-root mutation and source intake share one native interaction owner', async () => {
     const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
@@ -152,6 +209,7 @@ if (process.platform === 'win32') {
     const status = { engine_ready: true, local_intake_pending: false, batch_processing_active: false, recoverable_batches: 0 };
     const context = vm.createContext({
       process: { env: {} }, setImmediate,
+      readConfiguredResultRoot: () => 'already-configured',
       reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'e'.repeat(64) }; },
       releaseIntake: () => { reservationHeld = false; return true; },
       SafeError: class SafeError extends Error {},

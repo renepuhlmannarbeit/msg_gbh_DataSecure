@@ -19,6 +19,8 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 // exits. Each case gets a fresh process so state cannot leak between them.
 function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, waitingPickerFixture = false, handoffFixture = false, statusAppPilot = false } = {}) {
   return new Promise((resolve, reject) => {
+    const resultRoot = path.join(privacyRoot, '..', 'cowork-results');
+    fs.mkdirSync(resultRoot, { recursive: true });
     // Test-only dependency substitution: exercise the real stdio dispatch and
     // response with a synthetic selection, without opening a native dialog or
     // starting a worker. Production exposes no bypass or fixture environment.
@@ -62,6 +64,7 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
       env: {
         ...process.env,
         EU_PRIVACY_ROOT: privacyRoot,
+        EU_PRIVACY_RESULT_ROOT: resultRoot,
         LOCALAPPDATA: path.join(privacyRoot, 'localapp'),
         EU_PRIVACY_LANGUAGE: 'de',
         EU_PRIVACY_VISUAL_MODE: 'strict',
@@ -234,10 +237,12 @@ async function main() {
   await testAsync('tools/list exposes every tool with a strict input schema', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/list')]);
     const tools = responses.find((r) => r.id === 2).result.tools;
-    assert.strictEqual(tools.length, 25, `expected exactly 25 tools, got ${tools.length}`);
+    assert.strictEqual(tools.length, 27, `expected exactly 27 tools, got ${tools.length}`);
     assert.ok(!tools.some((tool) => tool.name === 'open_input_folder'));
     assert.ok(tools.some((tool) => tool.name === 'open_export_folder'));
     assert.ok(tools.some((tool) => tool.name === 'configure_privacy_folder'));
+    assert.ok(tools.some((tool) => tool.name === 'configure_result_folder'));
+    assert.ok(tools.some((tool) => tool.name === 'open_result_folder'));
     assert.ok(tools.some((tool) => tool.name === 'start_document_batch_from_picker'));
     assert.ok(tools.some((tool) => tool.name === 'continue_anonymized_batch_in_chat'));
     assert.ok(tools.some((tool) => tool.name === 'start_completed_local_results_handoff'));
@@ -321,10 +326,12 @@ async function main() {
     assert.deepStrictEqual(names, [
       'cancel_local_results_handoff',
       'configure_privacy_folder',
+      'configure_result_folder',
       'continue_local_results_handoff',
       'continue_most_recent_document_batch',
       'discard_incomplete_document_batches',
       'open_export_folder',
+      'open_result_folder',
       'start_completed_local_results_handoff',
       'start_document_batch_from_picker'
     ]);
@@ -352,7 +359,7 @@ async function main() {
     assert.notStrictEqual(result.isError, true);
     assert.strictEqual(result.structuredContent.mode, 'local_only');
     assert.strictEqual(result.structuredContent.local_processing_started, false);
-    assert.strictEqual(result.structuredContent.next_action, 'local_intake_accepted_checkpoint_pending');
+    assert.strictEqual(result.structuredContent.next_action, 'local_intake_handoff_confirmed');
     assert.doesNotMatch(JSON.stringify(result), /batch_token|synthetic-private-source|continue_in_chat|aaaaaaaa/u);
   });
 
@@ -439,7 +446,7 @@ async function main() {
     const byId = new Map(responses.map((response) => [response.id, response]));
     assert.deepStrictEqual(byId.get(1).result.capabilities.resources, { subscribe: false, listChanged: false });
     const tools = byId.get(2).result.tools;
-    assert.strictEqual(tools.length, 8);
+    assert.strictEqual(tools.length, 10);
     for (const tool of tools) {
       assert.deepStrictEqual(tool._meta.ui.visibility, ['model']);
       assert.strictEqual(tool._meta.ui.resourceUri, tool.name === 'start_document_batch_from_picker' ? uri : undefined);

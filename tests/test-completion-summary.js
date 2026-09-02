@@ -2,6 +2,9 @@
 
 const childProcess = require('child_process');
 const { EventEmitter } = require('events');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { createSuite } = require('./helpers');
 const {
   validateSummary,
@@ -49,6 +52,46 @@ test('partial and stopped wording distinguish released from withheld results', (
   const stopped = completionSummaryText(graded(2, 0, 0, 2));
   assert.match(stopped.message, /Sicher nicht verarbeitet: 2/);
   assert.match(stopped.message, /0 anonymisierte Ergebnisse/);
+});
+
+test('a completed visible export offers one local open-results action', () => {
+  const summary = {
+    ...graded(2, 2, 0, 0),
+    result_exported_count: 2,
+    result_export_pending_count: 0,
+    result_output_available: true
+  };
+  const notice = completionSummaryText(summary);
+  assert.strictEqual(notice.open_results, true);
+  assert.match(notice.message, /DataSecure-Output-Ordner/u);
+  assert.match(notice.message, /Ergebnisse öffnen oder schließen/u);
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-completion-output-'));
+  const prior = process.env.EU_PRIVACY_RESULT_ROOT;
+  try {
+    process.env.EU_PRIVACY_RESULT_ROOT = root;
+    const windows = completionSummaryCommands(summary, {
+      platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, openResults: true
+    })[0];
+    assert.match(windows.args.at(-1), /Ergebnisse öffnen/u);
+    assert.match(windows.args.at(-1), /explorer\.exe/u);
+    const mac = completionSummaryCommands(summary, { platform: 'darwin', openResults: true })[0];
+    assert.match(mac.args.at(-1), /Ergebnisse öffnen/u);
+    assert.match(mac.args.at(-1), /Finder/u);
+  } finally {
+    if (prior === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT;
+    else process.env.EU_PRIVACY_RESULT_ROOT = prior;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+
+  const pending = completionSummaryText({
+    ...graded(2, 2, 0, 0),
+    result_exported_count: 0,
+    result_export_pending_count: 2,
+    result_output_available: false
+  });
+  assert.strictEqual(pending.open_results, false);
+  assert.match(pending.message, /internen Ergebnisse bleiben sicher erhalten/u);
 });
 
 test('legacy summaries never invent a result grade', () => {

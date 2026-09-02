@@ -139,12 +139,12 @@ function fixture(role, firstChild) {
     owner: () => owner,
     queue: child => children.push(child),
     loseJournal() { journalReadable = false; },
-    start() {
+    start(options = {}) {
       if (role === 'batch') return api.startLocalBatchExecutor(TOKEN);
       if (role === 'review') return api.startLocalReviewExecutor(TOKEN);
       return api.startLocalIntakeExecutor([
         { name: 'customer-secret.docx', full: PRIVATE_DETAIL, sourceBytes: 16 }
-      ]);
+      ], 'auto', options);
     },
     active() {
       return role === 'intake' ? api.localIntakeActive() :
@@ -330,6 +330,34 @@ async function main() {
       assertBoundedDiagnostics(f);
     });
   }
+  await testAsync('intake: missing IPC acknowledgement times out and late callbacks cannot revive the handoff', async () => {
+    const child = fakeChild();
+    const f = fixture('intake', child);
+    const started = f.start({ ipcAckTimeoutMs: 10 });
+    assert.strictEqual(started.ok, true);
+    f.drain();
+    await assert.rejects(started.ipcAcknowledgement, /timeout/iu);
+    assert.strictEqual(child.kills, 1, 'the owned worker is stopped after the bounded acknowledgement timeout');
+    assert.doesNotThrow(() => child.callbacks[0](null), 'a late callback is inert');
+    assert.strictEqual(child.unrefs, 0, 'a late callback cannot detach a timed-out worker');
+    assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_TIMEOUT'));
+    assertRetainedWhileAlive(f, child, 'intake');
+    assertEndedAndRetry(f, child, 'intake');
+  });
+  await testAsync('intake: cancellation while waiting for IPC fails the acknowledgement without a second start', async () => {
+    const child = fakeChild();
+    const f = fixture('intake', child);
+    const controller = new AbortController();
+    const started = f.start({ ipcAckTimeoutMs: 30000, signal: controller.signal });
+    controller.abort();
+    await assert.rejects(started.ipcAcknowledgement, /cancelled/iu);
+    assert.strictEqual(child.kills, 1);
+    assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_CANCELLED'));
+    assert.doesNotThrow(() => child.callbacks[0](null));
+    child.exit(1);
+    f.drain();
+    assert.strictEqual(f.active(), false);
+  });
   test('real ENOENT children for all three starts cannot crash an isolated parent process', () => {
     const { spawnSync } = require('node:child_process');
     const result = spawnSync(process.execPath, [__filename, '--enoent-probe'], {

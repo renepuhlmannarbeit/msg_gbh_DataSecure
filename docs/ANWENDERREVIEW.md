@@ -1,6 +1,6 @@
 # Aktuelles Anwender- und UX-Review
 
-Stand: 01.09.2026 · 3.2.0 RC85
+Stand: 02.09.2026 · 3.2.0 RC86
 
 ## Ergebnis
 

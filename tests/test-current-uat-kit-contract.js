@@ -90,7 +90,7 @@ test('release GO is strict and UAT-04/05 are executable through the product UI',
   assert.match(readme, /test:batch-500mb-local/u);
   assert.match(steps, /vier gesperrte Formate sind im Produktpicker nicht auswählbar/u);
   assert.match(steps, /nur `malformed\.docx` auswählen/u);
-  assert.match(steps, /Sobald \*\*„Die lokale Verarbeitung wurde gestartet\.“\*\*/u);
+  assert.match(steps, /Sobald \*\*„Der Auftrag wurde lokal übergeben\.“\*\*/u);
   assert.doesNotMatch(steps, /mindestens UAT-01 und UAT-02/u);
   const evidence = parseCsv('EVIDENCE_LOG.csv');
   for (const row of evidence) {

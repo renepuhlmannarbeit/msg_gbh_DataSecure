@@ -49,6 +49,15 @@ function validateSummary(summary) {
 
 function completionSummaryText(summary) {
   const { selected, released, failed, gradeCounts, omissionCounts, gradesVerified } = validateSummary(summary);
+  const exported = summary?.result_exported_count;
+  const exportPending = summary?.result_export_pending_count;
+  const outputAvailable = summary?.result_output_available;
+  const hasExportState = [exported, exportPending].every(Number.isSafeInteger) &&
+    exported >= 0 && exportPending >= 0 && exported + exportPending === released &&
+    typeof outputAvailable === 'boolean' && !(exportPending > 0 && outputAvailable);
+  if ([exported, exportPending, outputAvailable].some((value) => value !== undefined) && !hasExportState) {
+    throw new SafeError('Ungültige lokale Abschlusszusammenfassung.');
+  }
   const counters = [
     `Ausgewählt: ${selected}`,
     `Vollständig verarbeitet: ${gradeCounts.complete}`,
@@ -63,9 +72,15 @@ function completionSummaryText(summary) {
   const resultWord = released === 1 ? 'anonymisiertes Ergebnis' : 'anonymisierte Ergebnisse';
   const fileWord = failed === 1 ? 'Datei' : 'Dateien';
   const outcome = `${released} ${resultWord} und die Zuordnung wurden lokal gespeichert. Für ${failed} ${fileWord} wurde kein Ergebnis freigegeben.`;
+  const exportNotice = hasExportState
+    ? (exportPending > 0
+        ? `\r\n\r\n${exportPending} freigegebene Ergebnisse warten noch auf den Export in den gewählten Ergebnisordner. Die internen Ergebnisse bleiben sicher erhalten.`
+        : `\r\n\r\n${exported} freigegebene Ergebnisse liegen im gewählten DataSecure-Output-Ordner.`)
+    : '';
   return {
     title: 'DataSecure – Verarbeitung abgeschlossen',
-    message: `${counters.join('\r\n')}${omissionBlock}\r\n\r\n${outcome}\r\n\r\nNächster Schritt: Schließen.`
+    message: `${counters.join('\r\n')}${omissionBlock}\r\n\r\n${outcome}${exportNotice}\r\n\r\nNächster Schritt: ${hasExportState && exported > 0 ? 'Ergebnisse öffnen oder schließen.' : 'Schließen.'}`,
+    open_results: hasExportState && exported > 0 && exportPending === 0 && outputAvailable === true
   };
 }
 
@@ -87,7 +102,10 @@ function batchStateNoticeText(progress) {
       failed_count: progress.stopped,
       result_grade_counts: progress.result_grade_counts,
       result_omission_counts: progress.result_omission_counts,
-      result_grades_verified: progress.result_grades_verified
+      result_grades_verified: progress.result_grades_verified,
+      result_exported_count: progress.result_exported_count,
+      result_export_pending_count: progress.result_export_pending_count,
+      result_output_available: progress.result_output_available
     });
   }
   const phase = String(progress.batch_phase || '');
@@ -154,11 +172,18 @@ function completionSummaryCommands(summary, options = {}) {
 
 function localMessageCommands(title, message, options = {}) {
   const platform = options.platform || process.platform;
+  let resultDirectory = '';
+  if (options.openResults === true) {
+    try { resultDirectory = require('../gateway/result-folder-config').resultOutputDirectory(); }
+    catch { resultDirectory = ''; }
+  }
   if (platform === 'darwin') {
     const escape = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n');
+    const buttons = resultDirectory ? 'buttons {"Schließen", "Ergebnisse öffnen"} default button "Ergebnisse öffnen"' : 'buttons {"Schließen"} default button "Schließen"';
+    const open = resultDirectory ? `; if button returned of result is "Ergebnisse öffnen" then tell application "Finder" to open POSIX file "${escape(resultDirectory)}"` : '';
     return [{
       command: '/usr/bin/osascript',
-      args: ['-e', `display dialog "${escape(message)}" with title "${escape(title)}" buttons {"Schließen"} default button "Schließen"; return "SHOWN"`]
+      args: ['-e', `display dialog "${escape(message)}" with title "${escape(title)}" ${buttons}${open}; return "SHOWN"`]
     }];
   }
   if (platform === 'linux') {
@@ -190,11 +215,20 @@ function localMessageCommands(title, message, options = {}) {
     "$button.Text = 'Schließen'",
     '$button.Location = New-Object System.Drawing.Point(476,304)',
     '$button.Size = New-Object System.Drawing.Size(120,32)',
-    "$button.DialogResult = 'OK'",
+    "$button.DialogResult = 'Cancel'",
     '$form.AcceptButton = $button',
     '$form.CancelButton = $button',
     '$form.Controls.Add($label)',
     '$form.Controls.Add($button)',
+    ...(resultDirectory ? [
+      '$openButton = New-Object System.Windows.Forms.Button',
+      "$openButton.Text = 'Ergebnisse öffnen'",
+      '$openButton.Location = New-Object System.Drawing.Point(316,304)',
+      '$openButton.Size = New-Object System.Drawing.Size(150,32)',
+      "$openButton.Add_Click({ Start-Process -FilePath 'explorer.exe' -ArgumentList @('${escape(resultDirectory)}'); $form.Close() })",
+      '$form.AcceptButton = $openButton',
+      '$form.Controls.Add($openButton)'
+    ] : []),
     ...(options.testAutoClose === true ? [
       '$timer = New-Object System.Windows.Forms.Timer',
       '$timer.Interval = 100',
@@ -218,7 +252,7 @@ function showCompletionSummary(summary, options = {}) {
 function showLocalMessage(notice, options = {}) {
   const platform = options.platform || process.platform;
   let unavailable = 0;
-  for (const spec of localMessageCommands(notice.title, notice.message, options)) {
+  for (const spec of localMessageCommands(notice.title, notice.message, { ...options, openResults: notice.open_results === true })) {
     const result = (options.runner || defaultRunner)(
       spec.command,
       spec.args,
@@ -252,7 +286,7 @@ function showDetachedLocalMessage(notice, options = {}) {
   // Product notices must not hold the MCP event loop or a worker while the
   // user reads them. A true result acknowledges dispatch, not dialog closure.
   if (options.runner) return showLocalMessage(notice, options);
-  const commands = localMessageCommands(notice.title, notice.message, options);
+  const commands = localMessageCommands(notice.title, notice.message, { ...options, openResults: notice.open_results === true });
   const environment = uiProcessEnvironment(options.env || process.env);
   const launch = (index) => {
     const spec = commands[index];
@@ -293,7 +327,10 @@ function showTerminalBatchSummary(progress, options = {}) {
     failed_count: progress.stopped,
     result_grade_counts: progress.result_grade_counts,
     result_omission_counts: progress.result_omission_counts,
-    result_grades_verified: progress.result_grades_verified
+    result_grades_verified: progress.result_grades_verified,
+    result_exported_count: progress.result_exported_count,
+    result_export_pending_count: progress.result_export_pending_count,
+    result_output_available: progress.result_output_available
   };
   return showDetachedLocalMessage(completionSummaryText(summary), options);
 }

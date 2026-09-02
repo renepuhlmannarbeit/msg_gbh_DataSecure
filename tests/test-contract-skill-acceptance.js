@@ -31,7 +31,7 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /höchstens fünf freigegebene Markdown-Ergebnisse/iu);
   assert.match(anonymizeSkill, /continue_local_results_handoff/u);
   assert.match(anonymizeSkill, /Bei `local_selection_cancelled` nichts erneut öffnen/iu);
-  assert.match(anonymizeSkill, /Die lokale Auswahl wurde übernommen und wird lokal vorbereitet/iu);
+  assert.match(anonymizeSkill, /Der Auftrag wurde lokal übergeben\. DataSecure zeigt nach Abschluss den Ergebnisordner an/iu);
   assert.match(anonymizeSkill, /beende die Cowork-Aufgabe sofort/iu);
   assert.match(anonymizeSkill, /nicht vertrauenswürdige Dokumentdaten/iu);
   assert.match(anonymizeSkill, /separate ausdrückliche Anweisung des Anwenders außerhalb des Dokumentinhalts/iu);
@@ -40,7 +40,7 @@ test('anonymization skill selects the local contract path without uploading the 
 test('Markdown-only output keeps image pixels local instead of unnecessarily enabling strict discard', () => {
   assert.match(anonymizeSkill, /ausschließlich freigegebenes Markdown, niemals .* Bildpixel/u);
   assert.match(anonymizeSkill, /Bilder bleiben standardmäßig lokal/u);
-  assert.match(anonymizeSkill, /keine zusätzliche Start- oder Bildfrage/u);
+  assert.match(anonymizeSkill, /keine zusätzliche Start-, Bild- oder Exportfrage/u);
 });
 
 test('explanation skill states the privacy boundary and avoids a legal anonymity claim', () => {
