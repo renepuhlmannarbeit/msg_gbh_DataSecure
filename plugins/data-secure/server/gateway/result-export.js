@@ -36,9 +36,17 @@ function validRecord(value) {
     /^Lauf-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$/u.test(value.run_directory) &&
     typeof value.complete === 'boolean' && /^(?:|[a-f0-9]{64})$/u.test(value.destination_id) &&
     Array.isArray(value.items) && value.items.length <= 100 &&
-    value.items.every((item, index) => exactKeys(item, ['package_id', 'file', 'sha256']) &&
+    value.items.every((item, index) => (exactKeys(item, ['package_id', 'file', 'sha256']) ||
+        (exactKeys(item, ['package_id', 'file', 'sha256', 'exported']) && item.exported === true)) &&
       PACKAGE_RE.test(item.package_id) && /^[a-f0-9]{64}$/u.test(item.sha256) &&
       item.file === `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`);
+}
+// Every item that has been written once is final on its own (DS-023): it is
+// never re-checked or re-created, even while a sibling item of the same run
+// still fails and keeps the record as a whole incomplete.
+function planItem(item) {
+  const { exported, ...plain } = item;
+  return plain;
 }
 function writeRecord(target, value) {
   const temporary = `${target}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
@@ -94,7 +102,7 @@ function ensureRecord(state) {
   const items = state.items.filter((item) => item.status === 'released').map((item, index) => packageItem(item.package_id, index));
   if (fs.existsSync(target)) {
     const existing = readRecord(target);
-    if (JSON.stringify(existing.items) !== JSON.stringify(items)) throw new Error('RESULT_EXPORT_STATE_CONFLICT');
+    if (JSON.stringify(existing.items.map(planItem)) !== JSON.stringify(items)) throw new Error('RESULT_EXPORT_STATE_CONFLICT');
     return { target, value: existing };
   }
   const value = { schema: SCHEMA, run_directory: runDirectoryName(state.created_at), items, complete: items.length === 0, destination_id: '' };
@@ -144,6 +152,30 @@ function exportOne(runDirectory, item) {
 function releasedCount(state) {
   return Array.isArray(state?.items) ? state.items.filter((item) => item?.status === 'released').length : 0;
 }
+function exportedCount(record) {
+  return record.items.filter((item) => item.exported === true).length;
+}
+// Exports the still-open items of one record into the active destination and
+// persists every single success immediately, so a later failure of a sibling
+// item can never make an already written (and possibly user-deleted) result
+// eligible again. Throws after persisting the progress when an item fails.
+function exportOpenItems(target, record, destination) {
+  const run = ensurePlainDirectory(destination.output, record.run_directory);
+  let current = record;
+  for (let index = 0; index < current.items.length; index++) {
+    const item = current.items[index];
+    if (item.exported === true) continue;
+    exportOne(run, item);
+    const items = current.items.map((entry, position) => position === index ? { ...planItem(entry), exported: true } : entry);
+    current = { ...current, items };
+    writeRecord(target, current);
+  }
+  if (current.items.every((item) => item.exported === true)) {
+    current = { ...current, complete: true, destination_id: destination.id };
+    writeRecord(target, current);
+  }
+  return current;
+}
 // The visible export is a convenience projection of already verified internal
 // packages. Every failure here – including a damaged or conflicting export
 // record – is a fail-closed "pending" result and never an exception: the
@@ -159,16 +191,19 @@ function exportCompletedState(state) {
   // neither re-verified nor re-materialised after a user deletion, and a later
   // destination change does not mirror earlier runs into the new folder.
   if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0, available: true };
+  const total = plan.value.items.length;
+  const pendingResult = () => {
+    let done = exportedCount(plan.value);
+    try { done = exportedCount(readRecord(plan.target)); } catch { /* keep the last known progress */ }
+    return { exported: done, pending: total - done, available: false };
+  };
   try {
     const destination = activeDestination();
-    if (!destination) return { exported: 0, pending: plan.value.items.length, available: false };
-    const run = ensurePlainDirectory(destination.output, plan.value.run_directory);
-    for (const item of plan.value.items) exportOne(run, item);
-    const complete = { ...plan.value, complete: true, destination_id: destination.id };
-    writeRecord(plan.target, complete);
-    return { exported: complete.items.length, pending: 0, available: true };
+    if (!destination) return pendingResult();
+    const finished = exportOpenItems(plan.target, plan.value, destination);
+    return finished.complete === true ? { exported: total, pending: 0, available: true } : pendingResult();
   } catch {
-    return { exported: 0, pending: plan.value.items.length, available: false };
+    return pendingResult();
   }
 }
 function replayPendingResultExports() {
@@ -188,11 +223,17 @@ function replayPendingResultExports() {
       // Only a failed (incomplete) export is replayed; see exportCompletedState.
       if (record.items.length === 0 || record.complete === true) continue;
       const destination = activeDestination();
-      if (!destination) { pending += record.items.length; continue; }
-      const run = ensurePlainDirectory(destination.output, record.run_directory);
-      for (const item of record.items) exportOne(run, item);
-      writeRecord(target, { ...record, complete: true, destination_id: destination.id });
-      exported += record.items.length;
+      if (!destination) { pending += record.items.length - exportedCount(record); continue; }
+      const before = exportedCount(record);
+      try {
+        const finished = exportOpenItems(target, record, destination);
+        exported += exportedCount(finished) - before;
+      } catch (error) {
+        let after = before;
+        try { after = exportedCount(readRecord(target)); } catch { /* keep the last known progress */ }
+        exported += after - before;
+        throw error;
+      }
     } catch { failures++; }
   }
   return { exported, pending, failures };

@@ -75,6 +75,40 @@ try {
   assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 });
   assert.deepStrictEqual(fs.readdirSync(resultOutputDirectory()), []);
 
+  // Per-item finality: when one item of a run keeps failing, the items that
+  // were already written stay final. A user deletion of such a file is
+  // respected on every later replay although the record as a whole is still
+  // incomplete (counter-check finding, DS-023).
+  process.env.EU_PRIVACY_RESULT_ROOT = cowork;
+  const idGood = `ds_${'6'.repeat(32)}`;
+  const idBad = `ds_${'7'.repeat(32)}`;
+  packageFixture(idGood, '# Gut');
+  const bad = packageFixture(idBad, '# Defekt');
+  fs.appendFileSync(path.join(bad, `${idBad}.md`), ' manipuliert');
+  const partialState = {
+    token: 'f'.repeat(64), created_at: '2026-09-02T16:00:00.000Z',
+    items: [{ status: 'released', package_id: idGood }, { status: 'released', package_id: idBad }]
+  };
+  assert.deepStrictEqual(exportCompletedState(partialState), { exported: 1, pending: 1, available: false }, 'progress is counted per item');
+  const partialRecord = JSON.parse(fs.readFileSync(recordPath(partialState.token), 'utf8'));
+  assert.strictEqual(partialRecord.complete, false);
+  assert.deepStrictEqual(partialRecord.items.map((item) => item.exported === true), [true, false], 'the written item is persisted as final');
+  const partialRun = path.join(resultOutputDirectory(), partialRecord.run_directory);
+  const writtenGood = path.join(partialRun, 'Dokument-001-anonymisiert.md');
+  assert.strictEqual(fs.readFileSync(writtenGood, 'utf8'), '# Gut');
+  fs.unlinkSync(writtenGood);
+  const partialReplay = replayPendingResultExports();
+  assert.strictEqual(partialReplay.failures >= 1, true, 'the defective item keeps failing');
+  assert.strictEqual(fs.existsSync(writtenGood), false, 'a user-deleted final item is not re-created by the replay');
+  assert.deepStrictEqual(exportCompletedState(partialState), { exported: 1, pending: 1, available: false });
+  assert.strictEqual(fs.existsSync(writtenGood), false, 'nor by a later terminal-state export');
+  assert.deepStrictEqual(fs.readdirSync(partialRun), [], 'no other visible file appeared');
+  // Once the defective source is repaired, only the open item is written.
+  fs.writeFileSync(path.join(bad, `${idBad}.md`), '# Defekt');
+  assert.deepStrictEqual(exportCompletedState(partialState), { exported: 2, pending: 0, available: true });
+  assert.deepStrictEqual(fs.readdirSync(partialRun), ['Dokument-002-anonymisiert.md'], 'only the previously open item is exported');
+  assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(partialState.token), 'utf8')).complete, true);
+
   // A genuinely failed export (no destination at completion time) is replayed
   // exactly once as soon as a destination exists, then becomes final.
   delete process.env.EU_PRIVACY_RESULT_ROOT;

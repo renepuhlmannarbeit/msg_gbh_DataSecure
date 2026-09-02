@@ -38,7 +38,8 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
   neutralen Namen gelangt nach `DataSecure-Output/Lauf-…`; Mapping, Originale,
   Review und Recovery bleiben privat. Nur ein fehlgeschlagener Export wird lokal
   vorgemerkt und beim nächsten Start oder Ordnerwechsel genau einmal nachgeholt.
-  Ein abgeschlossener Export ist endgültig: vom Anwender gelöschte oder bearbeitete
+  Jede einmal geschriebene Ergebnisdatei ist endgültig, auch wenn ein anderes
+  Item desselben Laufs noch offen ist: vom Anwender gelöschte oder bearbeitete
   sichtbare Ergebnisse werden weder überschrieben noch wiederhergestellt, und ein
   späterer Ordnerwechsel spiegelt keine früheren Läufe in den neuen Ordner. Der
   Outputbaum ist als rekursive Quelle gesperrt.
