@@ -811,10 +811,27 @@ function docxCoverageWarnings(entries) {
     if (embedded === 'pptx') return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     return overrideTypes.get(normalized) || null;
   }
+  // OPC part names are case-insensitive (ECMA-376 Part 2), but every gate,
+  // relationship lookup and renderer here addresses fixed parts by their
+  // canonical spelling. A part that matches a supported name only case-
+  // insensitively (`word/Comments.xml`, `Word/Document.xml`) would pass the
+  // inventory, never be rendered and never be reported – a silent story
+  // omission graded "complete". Such spellings are unsupported parts instead.
+  const canonicalCase = [
+    /^\[Content_Types\]\.xml$/,
+    /^_rels\/\.rels$/,
+    /^docProps\/(?:core|app|custom)\.xml$/,
+    /^word\/(?:document|styles|settings|numbering|fontTable|webSettings|comments|footnotes|endnotes|header\d+|footer\d+)\.xml$/,
+    /^word\/_rels\/(?:document|header\d+|footer\d+|comments|footnotes|endnotes)\.xml\.rels$/,
+    /^word\/theme\/theme\d+\.xml$/,
+    /^word\/media\/[^/]+$/,
+    /^word\/embeddings\/[^/]+$/
+  ];
   let unsupported = 0;
   const declaredOverrides = new Map();
   for (const [name, data] of entries) {
     if (!supported.some((pattern) => pattern.test(name))) unsupported++;
+    else if (!canonicalCase.some((pattern) => pattern.test(name))) unsupported++;
     if (/\.rels$/i.test(name)) {
       const xml = data.toString('utf8');
       const relationships = xml.matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi);

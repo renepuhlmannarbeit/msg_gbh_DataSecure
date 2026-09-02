@@ -84,6 +84,44 @@ test('WordprocessingML uses namespace URIs instead of trusting the textual prefi
   assertAbsent(falseNamespace.warnings.join(' '), 'FALSE_NAMESPACE');
 });
 
+test('OPC part names in a non-canonical case cannot bypass the story coverage gate', () => {
+  // ECMA-376 treats part names case-insensitively, while every gate here
+  // addresses fixed parts by their canonical spelling. A case-variant story
+  // passed the inventory, was never rendered and was never reported.
+  const commentsType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml';
+  const footnotesType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml';
+  const relationships = (relation, target) => `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${relation}" Target="${target}"/></Relationships>`;
+  for (const [part, relation, contentType, tag, item] of [
+    ['Comments.xml', 'comments', commentsType, 'comments', 'comment'],
+    ['FOOTNOTES.xml', 'footnotes', footnotesType, 'footnotes', 'footnote']
+  ]) {
+    const result = parseOoxml(zipStore([
+      ...opcControlEntries('docx', { additionalOverrides: [{ part: `word/${part}`, contentType }] }),
+      ['word/document.xml', `<w:document ${namespaces}><w:body>${paragraph('MAIN_CONTROL')}</w:body></w:document>`],
+      [`word/${part}`, `<w:${tag} ${namespaces}><w:${item} w:id="1">${paragraph('SECRET_STORY_TEXT')}</w:${item}></w:${tag}>`],
+      ['word/_rels/document.xml.rels', relationships(relation, part)]
+    ]), '.docx');
+    assert.ok(result.warnings.length > 0, `${part} must produce a coverage warning`);
+    assertAbsent(result.markdown, 'SECRET_STORY_TEXT');
+    assertAbsent(result.warnings.join(' '), 'SECRET_STORY_TEXT');
+    assertAbsent(result.warnings.join(' '), part);
+  }
+  // A second main part that differs only in case is one ambiguous OPC part.
+  assert.throws(() => parseOoxml(zipStore([
+    ...opcControlEntries('docx'),
+    ['word/document.xml', `<w:document ${namespaces}><w:body>${paragraph('MAIN_CONTROL')}</w:body></w:document>`],
+    ['Word/Document.xml', `<w:document ${namespaces}><w:body>${paragraph('SECRET_STORY_TEXT')}</w:body></w:document>`]
+  ]), '.docx'), (error) => {
+    assert.match(error.message, /doppelten Eintrag/u);
+    assert.doesNotMatch(error.message, /SECRET|Document\.xml/u);
+    return true;
+  });
+  // The canonical spelling keeps rendering exactly once.
+  const canonical = parse(paragraph('CANONICAL_COMMENT'), stories[3]);
+  assert.deepStrictEqual(canonical.warnings, []);
+  assertPresent(canonical.markdown, 'CANONICAL_COMMENT');
+});
+
 test('blocked Word constructs cannot evade coverage with another valid prefix', () => {
   const uri = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const result = parseMainXml(`<x:document xmlns:x="${uri}"><x:body><x:p><x:r><x:instrText>PRIVATE_FIELD</x:instrText><x:t>VISIBLE</x:t></x:r></x:p></x:body></x:document>`);

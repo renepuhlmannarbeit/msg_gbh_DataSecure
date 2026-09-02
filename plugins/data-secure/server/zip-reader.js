@@ -73,6 +73,10 @@ function inspectZipDirectory(buf, limits={}) {
 
   const cdEnd = cdOffset + cdSize;
   const names = new Set();
+  // OPC part names are case-insensitively unique and case-insensitive file
+  // systems cannot hold both spellings either: two entries that differ only in
+  // case are one ambiguous part, never two independent files.
+  const foldedNames = new Set();
   let p = cdOffset;
   let total = 0;
   let files = 0;
@@ -92,9 +96,10 @@ function inspectZipDirectory(buf, limits={}) {
     p += 46 + nameLen + extraLen + commentLen;
     if (!name || name.endsWith('/')) continue;
     if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
-    if (names.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
+    if (names.has(name) || foldedNames.has(name.toLowerCase())) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
     if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.', 'ZIP_LIMIT');
     names.add(name);
+    foldedNames.add(name.toLowerCase());
     total += uncompSize;
     files++;
   }
@@ -178,6 +183,10 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
   const centralDirectory = readRangeFromFd(fd, cdSize, cdOffset, readSync);
   // Rebase the directory to zero while retaining the original archive limits.
   const names = new Set();
+  // OPC part names are case-insensitively unique and case-insensitive file
+  // systems cannot hold both spellings either: two entries that differ only in
+  // case are one ambiguous part, never two independent files.
+  const foldedNames = new Set();
   let p = 0;
   let total = 0;
   let files = 0;
@@ -258,9 +267,10 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     occupiedRanges.push({ start: localOffset, end: entryEnd });
     if (!name || name.endsWith('/')) continue;
     if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
-    if (names.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
+    if (names.has(name) || foldedNames.has(name.toLowerCase())) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
     if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.', 'ZIP_LIMIT');
     names.add(name);
+    foldedNames.add(name.toLowerCase());
     if (name === '[Content_Types].xml') hasContentTypes = true;
     if (name === '_rels/.rels') hasRootRelationships = true;
     if (name === 'word/document.xml') officeKinds.add('docx');
@@ -317,6 +327,8 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
 function readZip(buf, limits={}) {
   if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
   rejectEncryptedOfficeContainer(buf);
+  // Same case-insensitive uniqueness rule as the directory preflights above.
+  const foldedOut = new Set();
   const maxEntries = limits.maxEntries || 20000;
   const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
   const eocd = findEocd(buf);
@@ -349,7 +361,8 @@ function readZip(buf, limits={}) {
     p += 46 + nameLen + extraLen + commentLen;
     if (!name || name.endsWith('/')) continue;
     if (name.startsWith('/') || name.includes('../')) throw new ZipError('Unsicherer ZIP-Pfad erkannt.');
-    if (out.has(name)) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
+    if (out.has(name) || foldedOut.has(name.toLowerCase())) throw new ZipError('ZIP enthält einen mehrdeutigen doppelten Eintrag.');
+    foldedOut.add(name.toLowerCase());
     if (uncompSize > maxUncompressed - total) throw new ZipError('ZIP-Inhalt ist insgesamt zu groß.');
 
     if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== 0x04034b50) throw new ZipError('ZIP-Lokaleintrag beschädigt.');
