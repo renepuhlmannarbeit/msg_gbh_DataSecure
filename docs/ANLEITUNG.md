@@ -10,6 +10,26 @@ selbsttragende Fassung freigegeben ist, ist das ZIP der Installationsweg.
 Starten Sie Claude Desktop vollständig neu.
 Laden Sie sensible Originale niemals per Büroklammer in den Chat.
 
+## Plugin aktualisieren
+
+Cowork führt Plugins aus seinem eigenen Speicher („My Uploads“) aus. Eine
+Installation über den Bereich „Claude Code“ oder die Kommandozeile erreicht
+Cowork nicht, und ein bereits hochgeladenes Plugin wird durch einen erneuten
+Upload nicht zuverlässig ersetzt. Deshalb:
+
+1. Einstellungen → Anpassen → Plugins → „GBH DataSecure“ öffnen und das Plugin
+   **entfernen**.
+2. Claude Desktop vollständig beenden (Taskleistensymbol → Beenden) und neu
+   starten.
+3. Plugins → Plugin hinzufügen → **Aus Datei hochladen** → das neue ZIP wählen.
+4. Auf der Plugin-Seite prüfen: Die Version entspricht dem bereitgestellten
+   Build, „Dateien“ zeigt den Plugininhalt und „Zuletzt aktualisiert“ nennt den
+   heutigen Zeitpunkt. Erscheinen zunächst keine Dateien, warten oder erneut
+   vollständig neu starten, aber noch keine Aufgabe beginnen.
+5. Eine **neue** Cowork-Aufgabe starten. Die Startantwort nennt die laufende
+   Version; nur wenn sie mit dem Build übereinstimmt, ist die Aktualisierung
+   wirksam.
+
 ## Normalweg
 
 1. Öffnen Sie eine neue **lokale** Cowork-Aufgabe. Cowork startet Aufgaben
@@ -22,8 +42,12 @@ Laden Sie sensible Originale niemals per Büroklammer in den Chat.
    `DataSecure-Output`. Diese Auswahl wird in späteren Läufen nicht wiederholt.
 4. Im lokalen Mehrfachpicker wählen Sie bis zu 100 Dateien mit zusammen höchstens
    500 MiB und klicken einmal **„Öffnen“**.
-5. DataSecure prüft und verarbeitet lokal. Ein Fehler in einer Datei hält den
-   übrigen Stapel nicht automatisch an.
+5. Claude antwortet kurz „Der Auftrag wurde lokal übergeben …“ und nennt in
+   Klammern die laufende DataSecure-Version. Fehlt die Version oder stimmt sie
+   nicht mit dem bereitgestellten Build überein, verarbeitet eine ältere
+   Plugin-Kopie; siehe „Plugin aktualisieren“ unten. DataSecure prüft und
+   verarbeitet lokal. Ein Fehler in einer Datei hält den übrigen Stapel nicht
+   automatisch an.
 6. Warten Sie auf die lokale Abschlussmeldung. Mit **„Ergebnisse öffnen“** gelangen
    Sie direkt zu den neutral benannten Markdown-Dateien. Claude pollt den Lauf nicht.
 7. Bitten Sie erst danach ausdrücklich: **„Verwende die fertigen anonymisierten
@@ -120,6 +144,7 @@ wird nicht automatisch an Claude übertragen.
 | Ergebnisordnerwahl erscheint | Beim ersten Lauf den verbundenen Cowork-Arbeitsordner wählen; später nur auf Wunsch ändern |
 | Ergebnisordner wurde abgelehnt | Grund lesen (etwa: Ordner liegt im privaten DataSecure-Bereich); beim nächsten Start einen anderen Ordner wählen |
 | Sichtbarer Export vorübergehend fehlgeschlagen | Interne Ergebnisse bleiben erhalten; beim nächsten Pluginstart wird erneut exportiert |
+| Antwort nennt keine oder eine ältere DataSecure-Version | Cowork verarbeitet mit einer älteren Plugin-Kopie; Plugin gemäß „Plugin aktualisieren“ neu bereitstellen und neue Aufgabe starten |
 | Picker geschlossen | Nur auf ausdrücklichen Wunsch neu starten |
 | Datei sicher gestoppt | Nicht automatisch wiederholen; Klartextmeldung lesen, technischen Code nur an IT nennen |
 | Stapel unterbrochen | „Setze den letzten DataSecure-Stapel fort“ |

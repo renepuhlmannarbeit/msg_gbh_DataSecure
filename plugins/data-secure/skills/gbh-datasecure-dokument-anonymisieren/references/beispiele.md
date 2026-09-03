@@ -10,7 +10,8 @@ und starte genau einmal `start_document_batch_from_picker(mode=local_only)`.
 Beim ersten Lauf lässt DataSecure einmalig den Cowork-Ergebnisordner wählen; bei
 späteren Läufen erscheint nur der Quellpicker. Antworte bei
 `local_intake_handoff_confirmed` danach nur „Der Auftrag wurde lokal übergeben.
-DataSecure zeigt nach Abschluss den Ergebnisordner an.“ und beende die Aufgabe.
+DataSecure zeigt nach Abschluss den Ergebnisordner an. (DataSecure-Version:
+<gateway_version aus der Antwort>)“ und beende die Aufgabe.
 Der Erfolg bedeutet bestätigte Worker-Übergabe, nicht bereits abgeschlossene
 Dokumentverarbeitung.
 Kein Polling, kein Ergebnislesen und keine automatische Fortsetzung des Vergleichs.

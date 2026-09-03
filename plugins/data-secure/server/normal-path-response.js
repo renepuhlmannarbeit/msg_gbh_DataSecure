@@ -1,8 +1,12 @@
 'use strict';
 
+const { VERSION } = require('./version');
+
 // The local-only start acknowledgement crosses the MCP boundary. Keep it
 // intentionally smaller than the private worker result: the background batch
 // token is not useful to Claude until the user explicitly asks to continue.
+// The running gateway version is the one content-free datum every run names,
+// so a stale plugin copy in the host cache becomes visible in the chat.
 function localOnlyStartResponse(started, options = {}) {
   if (started?.ok !== true || started?.local_intake_pending !== true) {
     return Object.freeze({
@@ -24,6 +28,7 @@ function localOnlyStartResponse(started, options = {}) {
     // potentially large durable source snapshot is created asynchronously.
     local_processing_started: false,
     next_action: 'local_intake_handoff_confirmed',
+    gateway_version: VERSION,
     ...(options.syncFolderNotice === true ? { sync_folder_notice: true } : {}),
     raw_content_sent_to_claude: false
   });

@@ -22,8 +22,12 @@
 
 Nach einer bestätigten Auswahl lautet die erwartete kurze Claude-Antwort:
 **„Der Auftrag wurde lokal übergeben. DataSecure zeigt nach Abschluss den
-Ergebnisordner an.“** Statusabfragen oder automatisches Ergebnislesen dürfen daran
-nicht anschließen.
+Ergebnisordner an.“** ergänzt um **„(DataSecure-Version: …)“** mit der Version
+des zu prüfenden Builds. Nennt die Antwort eine andere oder keine Version, läuft
+in Cowork eine ältere Plugin-Kopie: Lauf als `BLOCKED` erfassen, Plugin gemäß
+Anleitung („Plugin aktualisieren“) neu bereitstellen und erst dann fortsetzen.
+Statusabfragen oder automatisches Ergebnislesen dürfen daran nicht anschließen.
+Dieselbe Version steht in der letzten Zeile jedes lokalen DataSecure-Fensters.
 
 ## UAT-01 – Ein Mitarbeiterprofil sicher de-identifizieren
 

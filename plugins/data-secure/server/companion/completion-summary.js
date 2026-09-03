@@ -6,6 +6,7 @@ const { SafeError } = require('../runtime');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 const { LIMITS } = require('../gateway/common');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { VERSION } = require('../version');
 
 function validateSummary(summary) {
   const selected = summary?.selected_count;
@@ -170,8 +171,12 @@ function completionSummaryCommands(summary, options = {}) {
   return localMessageCommands(title, message, options);
 }
 
-function localMessageCommands(title, message, options = {}) {
+function localMessageCommands(title, rawMessage, options = {}) {
   const platform = options.platform || process.platform;
+  // Every native DataSecure window names the running version. It is the only
+  // place a user sees which plugin copy actually processed the batch; hosts
+  // may keep an older cached copy alive next to a newer installation.
+  const message = `${rawMessage}\r\n\r\nDataSecure ${VERSION}`;
   let resultDirectory = '';
   if (options.openResults === true) {
     try { resultDirectory = require('../gateway/result-folder-config').resultOutputDirectory(); }
