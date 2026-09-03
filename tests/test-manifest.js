@@ -227,7 +227,7 @@ test('native Windows launcher has a reproducible source and release build contra
   }
   assert.doesNotMatch(productRunner, /test-(?:engineering-keyring|keyring-pilot|private-artifact-crypto|pdfium-spike|ocr-session-harness)\./iu);
   assert.strictEqual(pkg.scripts['test:executor-lifecycle'],
-    'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js');
+    'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-worker-terminal-presentation.js && node tests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js');
   assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');
