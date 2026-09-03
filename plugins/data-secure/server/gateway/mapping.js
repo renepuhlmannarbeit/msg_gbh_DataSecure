@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { roots } = require('./common');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
-const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const {
   GRADES,
   OMISSION_CODES,
@@ -183,7 +183,7 @@ function durableAtomicWrite(target, temporary, payload, options = {}) {
     io.fsyncSync(descriptor);
     io.closeSync(descriptor);
     descriptor = undefined;
-    io.renameSync(temporary, target);
+    renameWithTransientRetry(temporary, target, io);
     syncParentDirectory(target, io, options.platform || process.platform);
   } catch (error) {
     try { if (descriptor !== undefined) io.closeSync(descriptor); } catch { /* preserve primary failure */ }
@@ -212,7 +212,7 @@ function readOutboxEntries(options = {}) {
         if (!validOutboxEntry(value) || entry.name !== `.mo_${value.entry_id}.tmp`) throw new Error('invalid temp');
         const promoted = path.join(dir, `mo_${value.entry_id}.json`);
         if (io.existsSync(promoted)) throw new Error('conflicting intent');
-        io.renameSync(temporary, promoted);
+        renameWithTransientRetry(temporary, promoted, io);
         syncParentDirectory(promoted, io, options.platform || process.platform);
         result.push({ ...value, file: promoted });
         continue;

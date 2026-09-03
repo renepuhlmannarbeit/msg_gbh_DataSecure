@@ -3,6 +3,7 @@
 // A ZIP-installed plugin has no host-managed environment-value editor. Store
 // only the chosen root locally; never expose the path in MCP responses/audit.
 const fs = require('fs');
+const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
 
@@ -35,7 +36,7 @@ function saveConfiguredPrivacyRoot(root) {
   const directory = ensureConfigDirectory();
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.tmp`);
   fs.writeFileSync(temporary, JSON.stringify({ version: 1, root: selected }), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try { fs.renameSync(temporary, configPath()); }
+  try { renameWithTransientRetry(temporary, configPath()); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
 }
 function clearConfiguredPrivacyRoot() { try { fs.unlinkSync(configPath()); } catch (error) { if (error?.code !== 'ENOENT') throw error; } }

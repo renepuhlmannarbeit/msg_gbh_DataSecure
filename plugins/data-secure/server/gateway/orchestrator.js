@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError, convertDocument } = require('../runtime');
@@ -583,7 +584,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     throwIfAborted(deps.abortSignal);
 
-    const publishPackage = deps.publishPackage || ((from, to) => fs.renameSync(from, to));
+    const publishPackage = deps.publishPackage || ((from, to) => renameWithTransientRetry(from, to));
 
     // Only the private working copy is disposable. The selected source remains
     // byte-identical at its original path on every success and failure path.

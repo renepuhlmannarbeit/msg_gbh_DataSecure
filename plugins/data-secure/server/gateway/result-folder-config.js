@@ -3,6 +3,7 @@
 // The user-visible result destination is deliberately separate from the
 // private DataSecure workspace. Only released Markdown is copied there.
 const fs = require('fs');
+const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
 
@@ -120,7 +121,7 @@ function saveConfiguredResultRoot(root) {
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.${Date.now()}.tmp`);
   const payload = JSON.stringify({ schema: SCHEMA, root: selected.root, identity: selected.identity });
   fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try { fs.renameSync(temporary, target); }
+  try { renameWithTransientRetry(temporary, target); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
 }
 function clearConfiguredResultRoot() {

@@ -7,7 +7,7 @@ const { roots, sha256Buffer, sha256File, assertPrivateDirectory, ensurePrivateDi
 const { safeResolvePackage, safeFile, issueReadCapability } = require('./package-store');
 const { createPrivateWorkStore } = require('./private-work-store');
 const { decodePng, encodePng } = require('../image-sanitizer');
-const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 
 function writeFileAtomically(target, input, io = fs, platform = process.platform) {
   const temporary = `${target}.tmp_${require('crypto').randomBytes(8).toString('hex')}`;
@@ -18,7 +18,7 @@ function writeFileAtomically(target, input, io = fs, platform = process.platform
     writeFully(fd, payload, io);
     io.fsyncSync(fd);
     io.closeSync(fd); fd = undefined;
-    io.renameSync(temporary, target);
+    renameWithTransientRetry(temporary, target, io);
     syncParentDirectory(target, io, platform);
   } finally {
     payload.fill(0);

@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
@@ -180,7 +181,7 @@ function recordDiagnostic(record, options = {}) {
     io.writeFileSync(temp, serialized, {
       encoding: 'utf8', mode: 0o600, flag: 'wx'
     });
-    io.renameSync(temp, file);
+    renameWithTransientRetry(temp, file, io);
     return true;
   } catch {
     writeErrors++;
@@ -277,7 +278,7 @@ function exportDiagnosticPackage(options = {}) {
       bytes: Buffer.byteLength(serialized, 'utf8')
     });
     io.writeFileSync(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    io.renameSync(temporary, target);
+    renameWithTransientRetry(temporary, target, io);
   } catch {
     try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch { /* preserve the prior export */ }
     throw new Error('The local diagnostic export could not be created safely.');

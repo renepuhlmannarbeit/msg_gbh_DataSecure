@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { SUPPORTED, privacyRoot, roots } = require('./common');
 const { processAlive } = require('./process-liveness');
-const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 
 const SCHEMA = 'datasecure-legacy-input-migration/1';
 const MARKER_NAME = 'legacy-input-v1.json';
@@ -97,7 +97,7 @@ function writeMarker(target, value, options = {}) {
     io.fsyncSync(descriptor);
     io.closeSync(descriptor);
     descriptor = undefined;
-    io.renameSync(temporary, target);
+    renameWithTransientRetry(temporary, target, io);
     syncParentDirectory(target, io, options.platform || process.platform);
   } finally {
     if (descriptor !== undefined) io.closeSync(descriptor);

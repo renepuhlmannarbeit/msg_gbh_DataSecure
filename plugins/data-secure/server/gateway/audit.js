@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const crypto = require('crypto');
 const { VERSION } = require('../version');
@@ -149,7 +150,7 @@ function atomicWriteJson(file, value, options = {}) {
   try {
     capacity({ directory: dir, bytes: Buffer.byteLength(serialized, 'utf8') });
     io.writeFileSync(temp, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    io.renameSync(temp, file);
+    renameWithTransientRetry(temp, file, io);
   } catch (error) {
     try {
       io.unlinkSync(temp);

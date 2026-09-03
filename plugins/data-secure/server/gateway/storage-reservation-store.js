@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
@@ -137,7 +138,7 @@ function claimStorageReservation(directory, value, options = {}) {
     // Any crash before the rename leaves an unexpected entry and therefore
     // blocks the future parallel path rather than triggering broad cleanup.
     materialize(temporaryData, request.reservedBytes, io);
-    io.renameSync(temporaryData, target.data);
+    renameWithTransientRetry(temporaryData, target.data, io);
     const record = {
       schema: RESERVATION_SCHEMA,
       batch_token: request.batchToken,
@@ -148,7 +149,7 @@ function claimStorageReservation(directory, value, options = {}) {
     const temporary = `${target.record}.${reservationId}.tmp`;
     try {
       io.writeFileSync(temporary, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-      io.renameSync(temporary, target.record);
+      renameWithTransientRetry(temporary, target.record, io);
     } catch (error) {
       try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch { /* exact temporary only */ }
       throw error;

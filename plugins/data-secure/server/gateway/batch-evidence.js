@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { VERSION, roots } = require('./common');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
-const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const {
   GRADES,
   OMISSION_CODES,
@@ -263,7 +263,7 @@ function atomicWriteJson(target, value, options = {}) {
     io.fsyncSync(descriptor);
     io.closeSync(descriptor);
     descriptor = undefined;
-    io.renameSync(temporary, target);
+    renameWithTransientRetry(temporary, target, io);
     syncParentDirectory(target, io, options.platform || process.platform);
   } catch (error) {
     try { if (descriptor !== undefined) io.closeSync(descriptor); } catch { /* preserve the primary failure */ }

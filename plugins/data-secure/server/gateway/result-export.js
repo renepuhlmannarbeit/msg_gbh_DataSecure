@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
-const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 
 const SCHEMA = 'datasecure-result-export/1';
 const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
@@ -57,7 +57,7 @@ function writeRecord(target, value) {
     fs.fsyncSync(descriptor);
     fs.closeSync(descriptor);
     descriptor = undefined;
-    fs.renameSync(temporary, target);
+    renameWithTransientRetry(temporary, target);
     syncParentDirectory(target, fs, process.platform);
   } finally {
     try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
@@ -138,7 +138,7 @@ function exportOne(runDirectory, item) {
     fs.fsyncSync(descriptor);
     fs.closeSync(descriptor);
     descriptor = undefined;
-    fs.renameSync(temporary, target);
+    renameWithTransientRetry(temporary, target);
     syncParentDirectory(target, fs, process.platform);
     const written = fs.lstatSync(target);
     if (!written.isFile() || written.isSymbolicLink() || written.size !== bytes.length ||

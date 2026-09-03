@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const common = require('./common');
-const { writeFully, syncParentDirectory } = require('./batch-journal-io');
+const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const { processAlive } = require('./process-liveness');
 
 const ROOT_NAME = '.datasecure-staging';
@@ -248,7 +248,7 @@ function assertStage(stage) {
   } catch (error) { throw failure(error?.code?.startsWith('PACKAGE_STAGING_') ? error.code : 'PACKAGE_STAGING_UNSAFE'); }
 }
 
-function publishStage(stage, finalPackage, publishFn = fs.renameSync) {
+function publishStage(stage, finalPackage, publishFn = (from, to) => renameWithTransientRetry(from, to)) {
   const state = capabilities.get(stage);
   try {
     assertStage(stage);

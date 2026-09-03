@@ -6,6 +6,7 @@
 // stopped: picker, worker spawn, private IPC, checkpoint, processing or local
 // completion notice.
 const fs = require('fs');
+const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
@@ -136,7 +137,7 @@ function recordWorkflowEvent(record, options = {}) {
     temporary = path.join(directory, `.workflow_${crypto.randomBytes(6).toString('hex')}.tmp`);
     (options.assertWritableCapacity || assertWritableCapacity)({ directory, bytes: Buffer.byteLength(serialized, 'utf8') });
     io.writeFileSync(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    io.renameSync(temporary, file);
+    renameWithTransientRetry(temporary, file, io);
     return true;
   } catch {
     workflowWriteErrors++;

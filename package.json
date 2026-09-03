@@ -46,7 +46,7 @@
     "test:golden": "node tests/make-fixtures.js && node tests/test-pii-regression.js --update",
     "test:docx-differential": "node tests/test-docx-differential.js",
     "test:locks": "node tests/test-batch-active-lock.js && node tests/test-batch-executor-lease.js && node tests/test-batch-processing-lock.js && node tests/test-batch-processing-orchestrator.js",
-    "test:journal": "node tests/test-batch-retention-protection.js && node tests/test-batch-journal-store.js",
+    "test:journal": "node tests/test-batch-retention-protection.js && node tests/test-batch-journal-store.js && node tests/test-transient-rename-retry.js",
     "test:reconciliation": "node tests/test-batch-next-maintenance.js && node tests/test-batch-reconciliation.js && node tests/test-batch-results.js && node tests/test-batch-mapping-maintenance.js && node tests/test-mapping-outbox.js && node tests/test-mixed-batch-recovery.js",
     "test:recovery": "node tests/test-batch-recovery.js && node tests/test-mixed-batch-recovery.js && node tests/test-batch-post-publish-recovery.js",
     "test:delivery": "node tests/test-batch-evidence.js && node tests/test-batch-terminal-evidence.js && node tests/test-batch-delivery.js && node tests/test-package-read-capabilities.js && node tests/test-package-snapshot-async.js && node tests/test-local-only-handoff.js && node tests/test-local-handoff-resume.js",

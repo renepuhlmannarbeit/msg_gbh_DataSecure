@@ -14,7 +14,7 @@ const { spawnSync } = require('child_process');
 const baseFiles = [
   'tests/test-package-staging.js', 'tests/test-safe-private-tree.js',
   'tests/test-package-staging-integration.js', 'tests/test-batch-executor-startup.js',
-  'tests/test-completion-summary.js', 'tests/test-worker-terminal-presentation.js', 'tests/test-workflow-diagnostics.js',
+  'tests/test-completion-summary.js', 'tests/test-worker-terminal-presentation.js', 'tests/test-workflow-diagnostics.js', 'tests/test-transient-rename-retry.js',
   'tests/test-private-work-store.js', 'tests/test-batch-private-artifact-migration.js',
   'tests/test-review-private-artifact-migration.js', 'tests/test-retention.js',
   'tests/test-source-format-inspector.js', 'tests/test-source-opc-preflight.js',

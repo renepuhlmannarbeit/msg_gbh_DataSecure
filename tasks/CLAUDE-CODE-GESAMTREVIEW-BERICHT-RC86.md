@@ -304,6 +304,7 @@ reviewer) wurden angesetzt; ihre Ergebnisse sind unten konsolidiert.
 | U-03 | P3 | `gateway/batch-executor.js:25-29` vs. `gateway/result-folder-config.js:56-68` | `EU_PRIVACY_RESULT_ROOT` wird nicht an den Worker weitergegeben; Worker-Export bleibt bei Env-Konfiguration `pending` bis zum nächsten Serverstart. | BL-040.5 |
 | U-04 | P3 | `index.js:29` vs. `skills/…/SKILL.md:23`, `STEP-BY-STEP.md:23` | Pflichtantwort nach Übergabe in Serverinstruktion und Skill wortverschieden. | BL-041.1 |
 | U-05 | Host | Claude Desktop/Cowork | Persönlicher ZIP-Upload in „My Uploads“ übernimmt neue Versionen nicht zuverlässig (offizielle Doku ohne Update-Mechanik für Uploads; GitHub #69020, #65426, knowledge-work-plugins #158). Kein Repo-Defekt; Anleitung/UAT-Kit brauchen den Prüfweg. | BL-051.5, BL-010.7 |
+| U-06 | P2 | atomare Schreibpfade (`gateway/workflow-diagnostics.js:136-139`, `gateway/batch-journal-io.js`/`batch-journal-store.js publishJournal`, `gateway/result-export.js writeRecord/exportOne`, Package-Staging) | Unter aktivem Windows-Defender-Echtzeitscan schlägt `fs.renameSync(tmp → ziel)` sporadisch mit `EPERM` fehl (Messung 03.09.2026: 27 von 1.515 Journal-Schreibvorgängen). Die Produktpfade sind fail-closed (Export bleibt `pending`, Diagnose zählt `write_errors`, Publikation stoppt sicher), aber ein Dokument kann dadurch grundlos als „sicher gestoppt“ enden. Nicht behoben: ein kurzer, begrenzter Rename-Retry bei `EPERM`/`EBUSY` wäre ein kleiner, risikoarmer Fix, betrifft aber mehrere Kernpfade und braucht einen eigenen Negativtest je Pfad. | BL-050.3, BL-002 |
 
 Datenschutz-Review zu U-01: unbedenklich mit Auflage „dauerhafter Einmal-Marker
 statt Prozessflag“ (umgesetzt: `terminal_notice` im Journal unter Active-Lock).
@@ -316,7 +317,9 @@ selbst; Originale und Mapping sind vom Elternprozess-Ende unberührt (geprüft).
 |---|---|---|---|
 | `165b281` | fix(worker): Worker zeigt den Abschlussdialog selbst, wenn der MCP-Elternprozess fehlt (U-01) | `gateway/batch.js` (`claimTerminalNotice`), `gateway/worker-terminal-presentation.js` (neu), `gateway/batch-worker.js`, `gateway/batch-executor.js`, `tests/lib/detached-batch-worker.js`, `tests/test-worker-terminal-presentation.js` (neu, 11), `tests/test-direct-picker-intake-worker.js` (+1 Negativtest: Eltern trennt IPC nach Start), `tests/test-batch-executor-startup.js` (+6), `tests/run-product-suite.js`, `package.json` | `test:executor-lifecycle`, `test:journal`, `test:locks`, `test:delivery`, `test-direct-picker-intake-worker` grün |
 | `69a2be1` | test(manifest): Lifecycle-Skript inkl. neuem Präsentationstest festschreiben | `tests/test-manifest.js` | `test-manifest` grün |
-| (Folgecommit) | fix(export): `EU_PRIVACY_RESULT_ROOT` an den Worker weitergeben (U-03) | `server/gateway/batch-executor.js`, `tests/test-result-folder-export.js` | `test-result-folder-export`, `test-batch-executor-startup`, `test-direct-picker-intake-worker` grün |
+| (Folgecommit) | fix(io): begrenzter Retry für transiente Umbenennfehler bei jeder Temp-Datei-Publikation (U-06) | `gateway/batch-journal-io.js` (`renameWithTransientRetry`), `audit.js`, `batch-evidence.js`, `diagnostics.js`, `legacy-input-migration.js`, `mapping.js`, `review.js`, `storage-reservation-store.js`, `privacy-config.js`, `result-folder-config.js`, `workflow-diagnostics.js`, `result-export.js`, `package-staging.js`, `orchestrator.js`; `tests/test-transient-rename-retry.js` (neu, 5), `tests/run-product-suite.js`, `package.json` (`test:journal`) | 30 betroffene Suiten einzeln grün (u. a. `test-gateway-e2e`, `test-package-staging*`, `test-mapping*`, `test-audit-privacy`, `test-workflow-diagnostics`, `test-result-folder-export`, `test-batch-evidence`, `test-legacy-input-migration`, `test-retention`, `test-storage-capacity`) |
+| `cd2aa10` | chore(release): 3.2.0-rc87, Builddatum 03.09.2026, Kanon-Baseline und Dokumentlabels | `package.json`, `package-lock.json`, `manifest.json`, `plugin.json`, `BUILD_INFO.json`, `VERSION`, `server/version.js`, Kanon (`PRODUCT.md`, `CURRENT_STATE.md`, `TRACEABILITY.md`, `TARGET_CAPABILITIES.json`), aktuelle Dokumente, Skill-Beispiel, `tests/test-current-documentation-contract.js` | `test-manifest`, `test:docs:fast`, `test-capability-contract` grün |
+| `6ac069f` | fix(export): `EU_PRIVACY_RESULT_ROOT` an den Worker weitergeben (U-03) | `server/gateway/batch-executor.js`, `tests/test-result-folder-export.js` | `test-result-folder-export`, `test-batch-executor-startup`, `test-direct-picker-intake-worker` grün |
 | `379808e` | docs(cowork): verlässlicher Update-/Rollback-Pfad für Cowork-Uploads in IT-Handbuch und UAT-Kit (U-05) | `docs/IT-BETRIEBSHANDBUCH.md`, `docs/acceptance/UAT_TEST_KIT/README.md`, `docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md` | `test:docs` grün |
 | `943596d` | feat(version): laufende Version in Startantwort, Pflichtantwort und jedem lokalen Fenster (U-02, U-04) | `server/normal-path-response.js`, `server/companion/completion-summary.js`, `server/index.js` (Instruktion vereinheitlicht), `server/prompt-contract.js`, `manifest.json` (sync), Skill `SKILL.md`/`references/beispiele.md`, `docs/ANLEITUNG.md`, `docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md`, `tests/test-normal-path-response.js` | `test-normal-path-response`, `test-completion-summary`, `test-manifest`, `test-mcp-protocol`, `test-capability-contract`, `test-cowork-tool-surface-contract`, `test-status-app-server`, `test-native-picker-lifecycle`, `test:skills`, `test:docs` grün |
 
@@ -329,3 +332,26 @@ Zweiter Flake gleicher Art: `npm run test:docs:fast` lässt am 03.09.2026 in 3 v
 (Identitätsvergleich lstat/fstat unmittelbar nach dem Schreiben der 111
 Fixtures); alleinstehend und in jeder manuellen Zweiersequenz grün. Generator und
 Format-Inspector sind von diesem Nachtrag unberührt. Zuordnung BL-002.
+Gemeinsame Wurzel (nachgemessen): Unter aktivem Defender-Echtzeitscan liefert
+`fs.renameSync` auf frisch geschriebene temporäre Dateien sporadisch `EPERM`
+(1,8 % der Journal-Schreibvorgänge in einer 1.515er-Messreihe); dadurch fielen
+nacheinander `test-mixed-batch-recovery`, `test-uat-fixture-generation`,
+`test-format-acceptance-matrix` (`PACKAGE_STAGING_PUBLISH_FAILED`) und
+`test-workflow-diagnostics` (299 statt 300 Ereignisse) jeweils einmal, jeder Test
+alleinstehend mehrfach grün. Siehe U-06.
+
+### Gates und Artefakt des Nachtrags (Stand `cd2aa10`)
+
+| Gate | Ergebnis |
+|---|---|
+| `npm run test:docs` (fast) | grün; `test-uat-fixture-generation` in der npm-Kette intermittierend `SOURCE_IDENTITY_CHANGED` (siehe Flakes), letzter Lauf grün |
+| `npm run test:status-app`, `test:skills`, `test:source-preflight`, `test:parser-contract`, `test:executor-lifecycle`, `test:journal`, `test:locks`, `test:delivery` | grün |
+| `npm run test:recovery` | `test-mixed-batch-recovery` in der Kette rot (vorbestehender Flake, siehe oben), isoliert grün |
+| `npm run build` | `dist/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc87.zip`, 166 Einträge, 34.917.307 Bytes, SHA-256 `c8d844cc769bb15f1de0706f084b761fe9d97da274f463c5203c9cc660542fbd`; SBOM `DataSecure-Privacy-Preflight-v3.2.0-rc87.spdx.json`; `test:plugin-zip` PASS |
+| `claude plugin validate plugins/data-secure --strict`, `claude plugin validate . --strict` (CLI 2.1.229) | Validation passed |
+| `git diff --check` | sauber |
+| `npm run test:product` | Lauf 1 brach in `test-format-acceptance-matrix` (applicant-variant-7 DOCX, `PACKAGE_STAGING_PUBLISH_FAILED`) ab; isoliert zweimal 101/101 grün; Lauf 2 siehe letzte Zeile |
+
+Host: Windows 11 Enterprise 10.0.26200, Node v24.19.0 (Build/Tests), gebündeltes
+Runtime Node v22.23.2, npm 11.17.0, Claude Desktop 1.40609.1 (laufend) /
+1.44121.4 (installiert), Claude Code CLI 2.1.229. Nichts gepusht.
