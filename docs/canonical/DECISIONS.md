@@ -98,6 +98,12 @@ Zertifikatsaussteller bleibt im eindeutigen Zertifizierungskontext erhalten, wir
 Arbeitgeber, Kunde oder Vertragspartner jedoch anonymisiert. Kataloge unterstützen,
 entscheiden aber nie allein.
 
+Präzisierung 03.09.2026 (RC93, Codex-Befund C-04): Eine geschlechtliche Anrede
+am Personennamen („Herr“, „Frau“, „Mr.“, „Mrs.“, „Ms“) ist ein
+Quasi-Identifikator und wird mit dem Namen entfernt. Akademische und berufliche
+Titel („Dr. med.“, „Prof.“, „Dipl.-Ing.“, „Dr.-Ing.“) sind fachlich benötigte
+Qualifikationen und bleiben vor dem Pseudonym erhalten.
+
 ## DS-013 – Ein gebündelter Abschlussdialog
 
 Der Stapel wird ohne Zwischenfragen vollständig abgearbeitet. Mehrdeutigkeiten und
