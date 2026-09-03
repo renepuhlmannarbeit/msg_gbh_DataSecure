@@ -373,6 +373,10 @@ cleanupLocalData({trigger:'startup',protectedIds:OUTPUT_RETENTION_PROTECTION.ids
 cleanupCompanionJobs({trigger:'startup'});
 const BATCH_RECOVERY=recoverBatches();
 const MAPPING_OUTBOX_RECOVERY=replayMappingOutbox();
+// Deliberately not fail-closed: the visible export is a projection of already
+// verified packages. A pending or unreadable export record stays `pending`
+// (result-export.js) and is retried on the next start; it must never keep the
+// gateway from starting, unlike journal, outbox and migration recovery below.
 const RESULT_EXPORT_RECOVERY=replayPendingResultExports();
 const batchMaintenance=startBatchMaintenance(cleanupExpiredBatchSnapshots);
 if(BATCH_RECOVERY.failures)throw new Error('Batch recovery failed closed.');
