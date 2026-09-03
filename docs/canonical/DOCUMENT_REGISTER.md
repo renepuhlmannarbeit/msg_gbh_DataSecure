@@ -54,6 +54,7 @@ Abnahme.
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
 | `tasks/CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`, `tasks/CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`, `tasks/CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md` | aktueller ausführbarer Claude-Code-Auftrag, ihm untergeordnetes Arbeitsledger und der zeitgebundene Abschlussbericht; kein zweites Produktbacklog |
+| `tasks/CODEX-AUFTRAG-REVIEW-RC92.md` | zeitgebundener Read-only-Gegenreview-Auftrag an Codex zu rc92; erzeugt nur einen Bericht, ändert weder Code noch Kanon |
 
 ## Historisch, nicht entscheidungsführend
 
@@ -79,4 +80,5 @@ Aussagen gelten nicht für das aktuelle Produkt.
 
 Jede aktuelle Datei braucht einen Zweck, einen eindeutigen Geltungsbereich und
 Links zum Kanon. Ein RC-Bericht wird nach Übernahme seiner offenen Punkte
-archiviert. Im Root von `tasks/` liegt höchstens ein aktueller Auftrag.
+archiviert. Im Root von `tasks/` liegt höchstens ein aktueller schreibender
+Auftrag; daneben darf genau ein zeitgebundener Read-only-Reviewauftrag liegen.

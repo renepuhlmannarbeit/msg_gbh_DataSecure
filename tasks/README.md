@@ -12,7 +12,11 @@ Sein abgeleitetes, nicht kanonisches Ausführungsledger ist
 [`CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`](CLAUDE-CODE-ARBEITSBACKLOG-RC86.md), der
 zugehörige Abschlussbericht
 [`CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md`](CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md).
-Beide werden gemäß Auftrag erst nach Annahme archiviert.
+Beide werden gemäß Auftrag erst nach Annahme archiviert. Daneben liegt der
+zeitgebundene Read-only-Gegenreview-Auftrag
+[`CODEX-AUFTRAG-REVIEW-RC92.md`](CODEX-AUFTRAG-REVIEW-RC92.md); sein Ergebnis ist
+allein der Bericht `CODEX-REVIEW-BERICHT-RC92.md`, Fixes setzt danach die
+schreibende Hauptsession um.
 
 Konvention für einen Auftrag:
 
