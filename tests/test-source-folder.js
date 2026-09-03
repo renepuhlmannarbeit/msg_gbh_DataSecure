@@ -23,8 +23,8 @@ test('picker commands are shell-free native folder dialogs on Windows, macOS and
   const windows = sourceFolderPickerCommands('win32', { SystemRoot: 'C:\\Windows' })[0];
   // Explorer-style COM folder picker (IFileOpenDialog with FOS_PICKFOLDERS) with
   // the legacy tree dialog only as a fallback when the interop cannot compile.
-  assert.match(windows.args.at(-1), /IFileOpenDialog[sS]*FolderPicker]::Pick(/u);
-  assert.match(windows.args.at(-1), /if ($modern)[sS]*else { $dialog = New-Object System.Windows.Forms.FolderBrowserDialog/u);
+  assert.match(windows.args.at(-1), /IFileOpenDialog[\s\S]*FolderPicker\]::Pick\(/u);
+  assert.match(windows.args.at(-1), /if \(\$modern\)[\s\S]*else \{ \$dialog = New-Object System\.Windows\.Forms\.FolderBrowserDialog/u);
   assert.match(windows.args.at(-1), /FolderBrowserDialog/u);
   assert.strictEqual(windows.command, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
   assert.strictEqual(sourceFolderPickerCommands('darwin')[0].command, '/usr/bin/osascript');
