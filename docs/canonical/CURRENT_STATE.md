@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 03.09.2026 · 3.2.0-rc91 · Git-Arbeitsstand nach Tabellen-Labelgate, Handoff-Antworttexten und Abschlussfenster-Diagnose
+Stand: 03.09.2026 · 3.2.0-rc92 · Git-Arbeitsstand nach dritter Review-Runde: Erkennungslücken in Formularlayouts, nachvollziehbarer Start, Laufkennung
 
 ## Produkt in einem Satz
 
