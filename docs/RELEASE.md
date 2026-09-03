@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 02.09.2026 · 3.2.0-rc87
+Stand: 03.09.2026 · 3.2.0-rc87
 
 ## Nutzerprodukt
 
@@ -8,14 +8,27 @@ Das Releaseprodukt ist ein selbstenthaltendes, zielsystemspezifisches Plugin-ZIP
 für Windows x64 oder macOS Intel/ARM. Ein ZIP nur aus `plugins/data-secure` und
 interne Engineering-Artefakte sind keine Nutzerprodukte oder Fallbacks.
 
-Für einen GitHub-synchronisierten privaten Marketplace muss das angeschlossene
-private/interne Repository einen self-contained Plugin-Ordner mit relativer
-`source` enthalten. Externe HTTPS-Archive sind dafür kein unterstützter Ersatz.
+Für einen GitHub-synchronisierten privaten Marketplace kann das angeschlossene
+private/interne Repository entweder einen self-contained Plugin-Ordner mit
+relativer `source` enthalten oder laut Plugin-Marketplace-Referenz (Stand
+03.09.2026) je Plugin eine `archive`-Quelle mit HTTPS-URL und SHA-256 des
+gebauten ZIPs nennen; letztere hält die gebündelte Runtime aus der Git-Historie.
 Der aktuelle Quellordner mit `command: node` ist nur Entwicklung und noch kein
-Marketplace-Release. Ein manuell hochgeladenes Plugin-ZIP ist laut Anthropic auf
-50 MB begrenzt; DataSecure-Zielpakete bleiben unter 45 MiB. Ein universelles
-Marketplace-Paket darf erst angeboten werden, wenn es self-contained, unter dem
-geltenden Limit und auf Windows sowie beiden macOS-Architekturen abgenommen ist.
+Marketplace-Release. Der Build erzeugt dafür `dist/marketplace.release.json`
+mit der Prüfsumme des Zielpakets; die Ablage-URL setzt IT beim Bereitstellen
+(`DATASECURE_ARCHIVE_BASE_URL`). Die offiziell genannten Grenzen liegen bei
+200 MB entpackt je Plugin und 512 MB je Marketplace-Archiv; die 45-MiB-Grenze für
+Zielpakete und 50 MiB für Archive ist die eigene, konservativere Produktgrenze
+aus dem Runtime-Vertrag. Ein universelles Marketplace-Paket darf erst angeboten
+werden, wenn es self-contained, unter dem geltenden Limit und auf Windows sowie
+beiden macOS-Architekturen abgenommen ist.
+
+Der persönliche Datei-Upload in Cowork („My Uploads“) besitzt laut offizieller
+Dokumentation keinen Update-Mechanismus; ein erneuter Upload derselben
+Plugin-Kennung ersetzte am 03.09.2026 die gecachte Kopie nicht (offene Meldungen
+anthropics/claude-code #69020, #65426 als „not planned“). Der Upload bleibt der
+Pilotweg mit dem im IT-Handbuch beschriebenen Entfernen-Neustart-Upload-Ablauf;
+der versionierte Marketplace ist der Zielkanal.
 
 ## Produktbuild
 

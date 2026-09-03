@@ -115,6 +115,10 @@ Cowork hält hochgeladene Plugins in einem eigenen, sitzungsgebundenen Cache
 erneuter Upload derselben Plugin-Kennung und ein Neustart der App ersetzen die
 gecachte Kopie nach Beobachtung vom 03.09.2026 nicht zuverlässig; Cowork
 verarbeitete weiter mit der alten Version, ohne dass die Oberfläche das anzeigte.
+Das ist ein beim Hersteller offen gemeldeter Hostfehler (anthropics/claude-code
+#69020 offen, #65426 „not planned“); der folgende Ablauf ist ein Workaround, keine
+Behebung. Der versionierte Marketplace (RELEASE.md) mit Prüfsummen-Pinning ist
+der Zielkanal; der Build legt dafür `dist/marketplace.release.json` ab.
 Verlässlicher Ablauf für Upgrade wie Rollback: Plugin auf der Plugin-Seite
 entfernen, Claude Desktop vollständig beenden und neu starten, gewünschtes ZIP
 hochladen, auf der Plugin-Seite Version, Dateiansicht und Aktualisierungszeit
