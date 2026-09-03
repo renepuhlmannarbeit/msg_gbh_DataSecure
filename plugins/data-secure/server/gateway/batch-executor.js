@@ -44,9 +44,12 @@ function acknowledgeTerminalNotice(child) {
 }
 const pendingReviews = new Map();
 const DEFAULT_IPC_ACK_TIMEOUT_MS = 5000;
+// EU_PRIVACY_RESULT_ROOT is forwarded so the worker exports into the same
+// visible destination the parent resolved; it shares the trust boundary of
+// EU_PRIVACY_ROOT and is re-validated by inspectRoot() in the worker.
 const WORKER_ENV_KEYS = Object.freeze([
   'SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP', 'LOCALAPPDATA', 'APPDATA',
-  'HOME', 'XDG_DATA_HOME', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_LANGUAGE',
+  'HOME', 'XDG_DATA_HOME', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'EU_PRIVACY_LANGUAGE',
   'EU_PRIVACY_VISUAL_MODE', 'EU_PRIVACY_RETENTION_DAYS'
 ]);
 

@@ -244,6 +244,23 @@ try {
     /sichtbaren DataSecure-Output/u, 'the recorded path keeps shielding the output tree after a replacement');
   assert.throws(() => enumerateSourceFolder(shieldRoot, { hasReparseComponent: () => false }), /DataSecure-Output|getrennten Ordner/u);
 
+  // The detached worker exports with the parent's allowlisted environment. A
+  // destination override the parent honours must therefore reach the worker,
+  // otherwise the worker-side export stays pending until the next server start.
+  const { WORKER_ENV_KEYS, batchWorkerEnvironment } = require('../plugins/data-secure/server/gateway/batch-executor');
+  assert.ok(WORKER_ENV_KEYS.includes('EU_PRIVACY_RESULT_ROOT'), 'the result root override is forwarded to the worker');
+  const overrideRoot = path.join(base, 'override-cowork');
+  fs.mkdirSync(overrideRoot);
+  const forwarded = batchWorkerEnvironment({ ...process.env, EU_PRIVACY_RESULT_ROOT: overrideRoot, DATASECURE_UNRELATED: 'secret' });
+  assert.strictEqual(forwarded.EU_PRIVACY_RESULT_ROOT, overrideRoot);
+  assert.strictEqual('DATASECURE_UNRELATED' in forwarded, false, 'the allowlist still drops everything else');
+  const childView = require('child_process').spawnSync(process.execPath, ['-e',
+    "process.stdout.write(require(process.argv[1]).readConfiguredResultRoot())",
+    path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'gateway', 'result-folder-config.js')
+  ], { encoding: 'utf8', windowsHide: true, timeout: 30000, env: forwarded });
+  assert.strictEqual(childView.status, 0, childView.stderr);
+  assert.strictEqual(childView.stdout, path.resolve(overrideRoot), 'a child with the worker environment resolves the same destination');
+
   console.log('RESULT FOLDER EXPORT PASS');
 } finally {
   fs.rmSync(base, { recursive: true, force: true });
