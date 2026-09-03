@@ -330,6 +330,52 @@ async function main() {
       assertBoundedDiagnostics(f);
     });
   }
+  // Review rc90: a continuation whose completion window could not be shown left
+  // no trace at all, unlike the intake path. The presentation failure must be
+  // recorded content-free so a missing dialog after a resume is diagnosable.
+  test('batch: a failing completion window is recorded as completion_notice_failed', () => {
+    const child = fakeChild();
+    const f = fixture('batch', child);
+    const options = {
+      claimTerminalNotice: () => true,
+      showBatchStateNotice: () => { throw new Error('C:\\Users\\someone\\WindowsPowerShell missing'); }
+    };
+    const started = f.api.startLocalBatchExecutor(TOKEN, options);
+    assert.strictEqual(started.ok, true);
+    child.callbacks[0](null);
+    child.emit('message', {
+      type: 'local-batch-state', complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+      result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+      result_grades_verified: true
+    });
+    const events = f.records.map(record => record.event);
+    assert.ok(events.includes('completion_notice_started'), 'the attempt is recorded');
+    assert.ok(events.includes('completion_notice_failed'), 'the failed presentation is recorded');
+    assert.ok(!events.includes('completion_notice_dispatched'));
+    const failed = f.records.find(record => record.event === 'completion_notice_failed');
+    assert.strictEqual(failed.error_code, 'LOCAL_NOTICE_FAILED');
+    assert.doesNotMatch(JSON.stringify(f.records), /Users|PowerShell|[a-f0-9]{64}/u, 'the trace stays content-free');
+    child.exit(0);
+    f.drain();
+    assert.strictEqual(f.records.filter(record => record.event === 'completion_notice_started').length, 1, 'exit finalization does not retry the window');
+  });
+
+  test('batch: the exit fallback notice records its presentation outcome as well', () => {
+    const child = fakeChild();
+    const f = fixture('batch', child);
+    const options = { claimTerminalNotice: () => true, showLocalIntakeNotice: () => { throw new Error('boom'); } };
+    assert.strictEqual(f.api.startLocalBatchExecutor(TOKEN, options).ok, true);
+    child.callbacks[0](null);
+    // Without a readable journal the exit fallback presents the generic notice.
+    f.loseJournal();
+    child.exit(0);
+    f.drain();
+    const events = f.records.map(record => record.event);
+    assert.ok(events.includes('completion_notice_started') && events.includes('completion_notice_failed'),
+      `fallback presentation outcome recorded, got ${JSON.stringify(events)}`);
+  });
+
   for (const role of ['batch', 'intake']) {
     test(`${role}: the parent claims the terminal notice durably and acknowledges the worker before presenting`, () => {
       const child = fakeChild();

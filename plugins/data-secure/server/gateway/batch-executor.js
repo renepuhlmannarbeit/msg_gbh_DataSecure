@@ -252,13 +252,24 @@ function startLocalBatchExecutor(token, options = {}) {
   let worker;
   let claimedLease = false;
   let noticeShown = false;
+  // Presentation never changes the privacy state, but a window that could not
+  // be shown must leave the same content-free trace as on the intake path, or
+  // a missing completion dialog after a continuation is undiagnosable.
+  const present = (show) => {
+    lifecycle({ event: 'completion_notice_started', outcome: 'progress' });
+    try {
+      show();
+      lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok' });
+    } catch {
+      lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', error_code: 'LOCAL_NOTICE_FAILED' });
+    }
+  };
   const showNoticeOnce = (progress) => {
     if (noticeShown || !progress) return;
     noticeShown = true;
     if (!claimTerminalNoticeAsParent(token, options)) return;
     acknowledgeTerminalNotice(child);
-    try { (options.showBatchStateNotice || showBatchStateNotice)(progress); }
-    catch { /* presentation never changes the privacy state */ }
+    present(() => (options.showBatchStateNotice || showBatchStateNotice)(progress));
   };
   const finalizeExit = () => afterIpcDrain(options, () => {
     if (noticeShown) return;
@@ -266,8 +277,7 @@ function startLocalBatchExecutor(token, options = {}) {
     if (noticeShown) return;
     noticeShown = true;
     if (!claimTerminalNoticeAsParent(token, options)) return;
-    try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
-    catch { /* presentation never changes the privacy state */ }
+    present(() => (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'));
   });
   try {
     child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment(options.env || process.env) });
