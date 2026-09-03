@@ -1459,6 +1459,18 @@ test('form layouts, title qualifiers, phone label variants and multilingual birt
   assertPresent(header.text, '| Name | Telefonnummer |', 'the header row stays readable');
 });
 
+// A nested title/qualifier repetition backtracked exponentially on long runs of
+// title-like tokens and stalled the batch-session suite; the flat chain must
+// stay linear.
+test('long runs of title-like tokens are anonymized in linear time', () => {
+  const run = `${'Dipl.-Ing. Ing. Dr. med. '.repeat(60)}Anna Beispiel und ${'Prof. Dr. h. c. '.repeat(40)}Erik Muster`;
+  const started = Date.now();
+  const result = anonymize(`Ansprechpartner: ${run}\nKontakt: Dr. med. Erika Beispiel\nRolle: Leitung`, 'personnel_profile');
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed < 2000, `title runs must not backtrack (took ${elapsed} ms)`);
+  assertAbsent(result.text, 'Erika Beispiel', 'an ordinary titled name in the same document');
+});
+
 test('credential review keeps professional sentence prefixes outside the organisation span', () => {
   for (const source of [
     'Zertifizierungen\nWorkshop für Contoso GmbH',
