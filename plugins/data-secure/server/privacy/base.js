@@ -584,7 +584,11 @@ function buildTableIndex(text) {
     let row = index + 1;
     while (row < rows.length) {
       const cells = splitTableRow(rows[row]);
-      if (!cells || cells.length !== headers.length) break;
+      if (!cells) break;
+      // A data row of a different width (merged or spilled cells) still belongs
+      // to this table; every cell is bound to the header of its own column and
+      // surplus cells simply carry no label. Refusing the whole table left
+      // labelled identifiers in clear (counter-review rc93).
       headersByLine.set(row, cleaned);
       row++;
     }

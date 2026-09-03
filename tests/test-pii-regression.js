@@ -1539,6 +1539,23 @@ test('month-year prose remains while real prepositional street addresses are red
   }
 });
 
+// Counter-review rc93: a data row whose width differs from the header (merged or
+// spilled cells) lost every column label, so a Steuer-ID under a labelled
+// header stayed in clear and the gate shared the blind spot.
+test('table rows of unequal width keep their column labels', () => {
+  for (const source of [
+    '| Name | Steuer-ID | Ort |\n|---|---|---|\n| Max Mustermann | 26954371827 | Berlin | extra |',
+    '| Name | Steuer-ID | Ort | Menge |\n|---|---|---|---|\n| Max Mustermann | 26954371827 | Berlin |',
+    '| Name | Geburtsdatum | Telefon |\n|---|---|---|\n| Max Mustermann | 01.01.1980 | 030 12345678 | Notiz |\n| Erika Beispiel | 05.05.1975 |'
+  ]) {
+    const result = anonymize(source, 'general');
+    for (const value of ['26954371827', '01.01.1980', '05.05.1975', '030 12345678']) assertAbsent(result.text, value, `unequal width: ${value}`);
+    if (source.includes('Berlin')) assertPresent(result.text, 'Berlin', 'a plain city cell without a PII label stays');
+    if (source.includes('Notiz')) assertPresent(result.text, 'Notiz', 'a surplus cell without a header stays');
+    assert.deepStrictEqual(require('../plugins/data-secure/server/privacy/engine').scanResidual(result.text, 'general', result.dictionary, { strongPersonAnchor: result.strongPersonAnchor }), []);
+  }
+});
+
 // A nested title/qualifier repetition backtracked exponentially on long runs of
 // title-like tokens and stalled the batch-session suite; the flat chain must
 // stay linear.
