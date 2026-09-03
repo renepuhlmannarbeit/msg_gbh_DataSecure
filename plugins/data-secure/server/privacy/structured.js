@@ -22,9 +22,12 @@ const {
   DE_SV_RE,
   CREDIT_RE,
   LABELED_ID_RE,
+  ID_LABEL_HEADER_RE,
+  TABLE_ID_CELL_RE,
   hashShort,
   luhnValid,
   hasLabelBefore,
+  tableHeaderAt,
   sameLineHasIban
 } = require('./base');
 const { placeholderSpans, applySpans } = require('./spans');
@@ -93,6 +96,18 @@ const DETECTORS = [
     priority: 82,
     valueGroup: 3,
     trimValue: true
+  },
+  {
+    // The same reference labels as a Markdown table header: every bare
+    // identifier cell below "| Personalnummer |" belongs to that label.
+    type: 'REFERENCE_ID',
+    re: TABLE_ID_CELL_RE,
+    placeholder: '[ID_REDACTED]',
+    priority: 82,
+    accept: (value, text, index) => {
+      const header = tableHeaderAt(text, index);
+      return header !== null && ID_LABEL_HEADER_RE.test(header);
+    }
   },
   {
     type: 'DATE_OF_BIRTH',

@@ -1364,6 +1364,35 @@ test('a one-word legal-form alias does not replace ordinary prose globally', () 
   }
 });
 
+// Review rc90 (F1): CSV and DOCX tables carry the label in the header row and
+// the value two lines below. Same-line label adjacency let tax ids, dates of
+// birth, phone numbers, plates and reference numbers through in that shape,
+// and the residual gate shared the blind spot.
+test('label-gated identifiers in Markdown table columns are redacted and caught by the residual gate', () => {
+  const { csvToMarkdown } = require('../plugins/data-secure/server/document-parser');
+  const csv = 'Name;Steuer-ID;Geburtsdatum;Telefon;Kennzeichen;Personalnummer;Menge\n' +
+    'Max Mustermann;26954371827;01.01.1980;030 12345678;M-AB 1234;P-4711;12345678901\n' +
+    'Erika Beispiel;65 929 970 489;05.05.1975;040 87654321;B-CD 5678;P-4712;100\n';
+  const md = csvToMarkdown(csv);
+  const result = anonymize(md, 'general');
+  for (const value of ['26954371827', '65 929 970 489', '01.01.1980', '05.05.1975', '030 12345678', '040 87654321', 'M-AB 1234', 'B-CD 5678', 'P-4711', 'P-4712']) {
+    assertAbsent(result.text, value, 'table cell under a label header');
+  }
+  assertPresent(result.text, '| Name | Steuer-ID | Geburtsdatum | Telefon | Kennzeichen | Personalnummer | Menge |', 'header row stays readable');
+  assertPresent(result.text, '12345678901', 'a quantity column without a PII label is not redacted');
+  assertPresent(result.text, '| 100 |', 'plain quantities survive');
+  const residual = require('../plugins/data-secure/server/privacy/engine').scanResidual(result.text, 'general', result.dictionary, { strongPersonAnchor: result.strongPersonAnchor });
+  assert.deepStrictEqual(residual, [], 'the release bytes carry no residual identifier');
+  const gate = require('../plugins/data-secure/server/privacy/engine').scanResidual(md, 'general', new Map(), {});
+  assert.ok(gate.some((hit) => hit.type === 'DE_TAX_ID') && gate.some((hit) => hit.type === 'DATE_OF_BIRTH') && gate.some((hit) => hit.type === 'PHONE'),
+    'the independent gate itself sees the table-shaped identifiers');
+  // Hand-written table with escaped pipes and a trailing "(1)" header suffix.
+  const hand = ['| Mitarbeiter (1) | Steuer-ID (1) | Notiz |', '|:---|---:|---|', '| Max Mustermann | 26 954 371 827 | a \\| b |'].join('\n');
+  const handResult = anonymize(hand, 'general');
+  assertAbsent(handResult.text, '26 954 371 827', 'aligned table with escaped pipe');
+  assertPresent(handResult.text, 'a \\| b', 'escaped pipe content stays');
+});
+
 test('credential review keeps professional sentence prefixes outside the organisation span', () => {
   for (const source of [
     'Zertifizierungen\nWorkshop für Contoso GmbH',

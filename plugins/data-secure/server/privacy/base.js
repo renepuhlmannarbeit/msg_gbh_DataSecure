@@ -169,6 +169,11 @@ const LABELED_ID_RE = new RegExp(
   `(${ID_LABELS})([ \\t]*[:=][ \\t]*|[ \\t]+)((?:[A-Z0-9][A-Z0-9./\\-]*)(?:[ ][A-Z0-9][A-Z0-9./\\-]*){0,3})`,
   'giu'
 );
+// The same labels as table headers: "| Personalnummer |" above a column of
+// bare identifiers carries the label for every cell below it.
+const ID_LABEL_HEADER_RE = new RegExp(`^(?:${ID_LABELS})\\s*:?\\s*$`, 'iu');
+// A bare identifier cell: at least one digit, no spaces, id-like characters.
+const TABLE_ID_CELL_RE = new RegExp(`${NB}(?=[A-Z0-9./\\-]*\\d)[A-Z0-9][A-Z0-9./\\-]{2,}${NA}`, 'giu');
 
 // Honorifics and job/section vocabulary must never end up inside a person
 // pseudonym. "Herr Müller" used to be registered as the full name, so the same
@@ -434,13 +439,109 @@ function luhnValid(digits) {
 }
 
 // Shared by every label-gated detector: does `label` appear immediately before
-// the match, on the same line?
+// the match, on the same line, or in the header cell of the Markdown table
+// column the match sits in? CSV and DOCX tables put the label in the header
+// row and the value two or more lines below; same-line adjacency alone let
+// tax ids, dates of birth, phone numbers and plates through in that shape.
 function hasLabelBefore(text, index, labelRe, window = 40) {
   const start = Math.max(0, index - window);
   let before = String(text).slice(start, index);
   const nl = before.lastIndexOf('\n');
   if (nl >= 0) before = before.slice(nl + 1);
-  return labelRe.test(before.replace(/[|\s]+$/, (m) => m.replace(/\|/g, ' ')));
+  if (labelRe.test(before.replace(/[|\s]+$/, (m) => m.replace(/\|/g, ' ')))) return true;
+  const header = tableHeaderAt(text, index);
+  return header !== null && labelRe.test(header);
+}
+
+function splitTableRow(line) {
+  const source = String(line || '').trim();
+  if (!source.includes('|')) return null;
+  const leading = source.startsWith('|') ? 1 : 0;
+  const body = source.slice(leading).replace(/\|$/u, '');
+  const cells = [];
+  let value = '';
+  let escaped = false;
+  for (const char of body) {
+    if (escaped) {
+      value += char;
+      escaped = false;
+    } else if (char === '\\') {
+      escaped = true;
+    } else if (char === '|') {
+      cells.push(value.trim());
+      value = '';
+    } else {
+      value += char;
+    }
+  }
+  if (escaped) value += '\\';
+  cells.push(value.trim());
+  return cells.length >= 2 ? cells : null;
+}
+
+// One pass per text: for every data row of a Markdown table, remember the
+// header cells so a detector can ask which label owns the column of a match.
+// The cache holds the last text only; the engine scans one document at a time.
+let tableIndexText = null;
+let tableIndex = null;
+function buildTableIndex(text) {
+  const src = String(text || '');
+  const starts = [0];
+  for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) starts.push(i + 1);
+  const rows = src.split('\n');
+  const headersByLine = new Map();
+  for (let index = 0; index + 2 < rows.length; index++) {
+    const headers = splitTableRow(rows[index]);
+    const separator = splitTableRow(rows[index + 1]);
+    if (!headers || !separator || headers.length !== separator.length ||
+      !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
+    const cleaned = headers.map((header) => header.replace(/\s+\(\d+\)$/u, ''));
+    let row = index + 2;
+    while (row < rows.length) {
+      const cells = splitTableRow(rows[row]);
+      if (!cells || cells.length !== headers.length) break;
+      headersByLine.set(row, cleaned);
+      row++;
+    }
+    index = row - 1;
+  }
+  return { starts, rows, headersByLine };
+}
+
+function tableHeaderAt(text, index) {
+  const src = String(text || '');
+  if (tableIndexText !== src) {
+    tableIndex = buildTableIndex(src);
+    tableIndexText = src;
+  }
+  const { starts, rows, headersByLine } = tableIndex;
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= index) lo = mid;
+    else hi = mid - 1;
+  }
+  const headers = headersByLine.get(lo);
+  if (!headers) return null;
+  const line = rows[lo];
+  const offsetInLine = index - starts[lo];
+  const trimmedStart = line.length - line.trimStart().length;
+  let column = 0;
+  let escaped = false;
+  let seenLeading = false;
+  for (let i = trimmedStart; i < offsetInLine && i < line.length; i++) {
+    const char = line[i];
+    if (escaped) {
+      escaped = false;
+    } else if (char === '\\') {
+      escaped = true;
+    } else if (char === '|') {
+      if (!seenLeading && i === trimmedStart) seenLeading = true;
+      else column++;
+    }
+  }
+  return column < headers.length ? headers[column] : null;
 }
 
 function sameLineHasIban(text, index) {
@@ -507,5 +608,8 @@ module.exports = {
   looksSurname,
   luhnValid,
   hasLabelBefore,
+  tableHeaderAt,
+  ID_LABEL_HEADER_RE,
+  TABLE_ID_CELL_RE,
   sameLineHasIban
 };
