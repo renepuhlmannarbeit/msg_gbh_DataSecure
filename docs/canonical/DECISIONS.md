@@ -6,11 +6,11 @@ Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenomme
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-049, DS-051 bis DS-058, DS-060 sowie DS-062 bis
-  DS-070, jeweils mit den unten genannten Präzisierungen;
+  DS-070 und DS-071, jeweils mit den unten genannten Präzisierungen;
 - **ersetzt:** DS-050 durch DS-065;
 - **teilweise präzisiert:** DS-002, DS-009, DS-020, DS-023 und DS-053 durch
   DS-067; DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067; DS-020 und
-  DS-044 durch DS-070.
+  DS-044 durch DS-070; DS-026 und DS-048 durch DS-071.
 
 Der aktuelle operative Status steht in
 [`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still
@@ -679,3 +679,24 @@ Hash gestoppt; Größen-, Zeit-, Inode- oder Gerätewechsel stoppen weiterhin ü
 die Identität. Ausgenommen bleiben die Selbstprüfungen der gebündelten
 Programmdateien (SEA-Rolle, Statusanzeige), die über Prüfsummen abgesichert sind.
 Diese Entscheidung präzisiert DS-020 und DS-044.
+
+## DS-071 – Laufkennung und verweigerter Start bleiben inhaltsfrei nachvollziehbar
+
+Bestätigt am 03.09.2026 nach dem Nachvollziehbarkeits-Review: Jedes Ereignis der
+inhaltsfreien Ablaufspur trägt eine Laufkennung `run_id` von acht Hexzeichen. Sie
+wird vom Elternprozess beim Start eines Laufs zufällig erzeugt, dem getrennten
+Worker über seine Umgebung mitgegeben und ist aus nichts abgeleitet: weder aus
+Batch-Token, Pfad, Dokument-Hash noch Prozesskennung. Sie erlaubt der IT nur, die
+Ereignisse eines Laufs aus Elternprozess und Worker zusammenzuführen, und
+verletzt damit DS-026 nicht, das Freitext, Pfade, Namen, Inhalte, Tokens, PIDs und
+Dokument-Hashes aus dem Schema ausschließt.
+
+Verweigert der Dienst den Start fail-closed, hinterlässt er statt eines rohen
+Stacktrace mit Pfaden ein Ereignis `startup_refused` mit festem Code in der
+Ablaufspur, eine Markerdatei `startup-refused.json` mit Zeitpunkt, Version und
+Code sowie genau eine pfadfreie Zeile auf dem Fehlerkanal. Im gebündelten Paket
+wird die laufende Programmdatei beim Start gegen `RUNTIME-EVIDENCE.json`
+geprüft; eine Abweichung stoppt mit `RUNTIME_INTEGRITY_FAILED`. Diese Prüfung
+erkennt Beschädigung und Austausch nach dem Build, ersetzt aber nicht die
+Prüfsumme des Pakets vor der Installation. Diese Entscheidung präzisiert DS-026
+und DS-048.

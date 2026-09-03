@@ -73,7 +73,8 @@
     "DS-067",
     "DS-068",
     "DS-069",
-    "DS-070"
+    "DS-070",
+    "DS-071"
   ],
   "primary_product": "claude-plugin",
   "additional_system_vm": {

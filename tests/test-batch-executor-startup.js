@@ -175,7 +175,9 @@ function assertBoundedDiagnostics(f) {
   assert.ok(f.records.some(event => event.outcome === 'stopped' && /^LOCAL_[A-Z_]+$/.test(event.error_code)),
     'failure must produce a bounded local error diagnosis');
   const keys = new Set(['event', 'outcome', 'error_code', 'item_count', 'exit_code',
-    'phase', 'released_count', 'stopped_count']);
+    'phase', 'released_count', 'stopped_count', 'run_id']);
+  // DS-071: every event carries a short random run id (one per start).
+  for (const event of f.records) assert.match(String(event.run_id), /^[a-f0-9]{8}$/u, 'the run id is a short random nonce');
   for (const event of f.records) {
     assert.ok(Object.keys(event).every(key => keys.has(key)), 'diagnostics must remain content-free');
     for (const value of Object.values(event)) {
@@ -355,6 +357,10 @@ async function main() {
     assert.ok(!events.includes('completion_notice_dispatched'));
     const failed = f.records.find(record => record.event === 'completion_notice_failed');
     assert.strictEqual(failed.error_code, 'LOCAL_NOTICE_FAILED');
+    // DS-071: one start, one run id on every event, and the worker receives it.
+    const runIds = new Set(f.records.map(record => record.run_id));
+    assert.strictEqual(runIds.size, 1, 'every event of one run carries the same run id');
+    assert.match([...runIds][0], /^[a-f0-9]{8}$/u);
     assert.doesNotMatch(JSON.stringify(f.records), /Users|PowerShell|[a-f0-9]{64}/u, 'the trace stays content-free');
     child.exit(0);
     f.drain();

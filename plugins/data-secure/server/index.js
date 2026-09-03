@@ -2,6 +2,7 @@
 const {SafeError,roots,genericStatus,diagnosticStatus,exportDiagnosticPackage,openFolder,startLocalBatchExecutor,startLocalIntakeExecutor,startLocalReviewExecutor,readBatchProgress,listBatchResults,completedLocalOnlyCandidates,reviewDeferredBatch,resumeBatch,continueMostRecentBatch,discardIncompleteBatches,acknowledgeDeliveredPackage,acknowledgeDeliveredPackages,recoverBatches,replayMappingOutbox,cleanupExpiredBatchSnapshots,openBatchPackageProtection,readOutput,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,listReviewItems,migrateLegacyReviewPreviews,cleanupLocalData,purgeLocalData}=require('./gateway');
 const {VERSION}=require('./version');
 const {buildDiagnostic,causeFromError,completeDiagnostic}=require('./gateway/diagnostic-causes');
+const {refuseStartup,verifyBundledRuntime}=require('./gateway/startup-guard');
 const {migrateLegacyAuditReceipts}=require('./gateway/audit');
 const {cleanupCompanionJobs}=require('./companion/retention');
 const {cleanupAbandonedWorkingJobs}=require('./gateway/orchestrator');
@@ -366,6 +367,12 @@ async function handle(req){if(!req||req.jsonrpc!=='2.0'||typeof req.method!=='st
 if(req.method==='notifications/cancelled'){ACTIVE_REQUESTS.get(requestKey(req.params?.requestId))?.abort();return;}
 if(!Object.hasOwn(req,'id'))return;
 if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const dispatched=await dispatch(req.params?.name,req.params?.arguments||{},{signal:controller.signal});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=completeDiagnostic(dispatched);const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult(withDiagnostic({ok:false,error:e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
+// Fail-closed startup. A refusal leaves a content-free journal line, a marker
+// file and one fixed stderr sentence instead of a raw stack trace with paths
+// (stdout is the MCP channel; the host does not surface stderr).
+let batchMaintenance;
+try{
+verifyBundledRuntime();
 migrateLegacyAuditReceipts();
 // RC80: no startup migration or key-store access for private working copies.
 const OUTPUT_RETENTION_PROTECTION=openBatchPackageProtection();
@@ -377,14 +384,19 @@ const MAPPING_OUTBOX_RECOVERY=replayMappingOutbox();
 // verified packages. A pending or unreadable export record stays `pending`
 // (result-export.js) and is retried on the next start; it must never keep the
 // gateway from starting, unlike journal, outbox and migration recovery below.
-const RESULT_EXPORT_RECOVERY=replayPendingResultExports();
-const batchMaintenance=startBatchMaintenance(cleanupExpiredBatchSnapshots);
+replayPendingResultExports();
+batchMaintenance=startBatchMaintenance(cleanupExpiredBatchSnapshots);
 if(BATCH_RECOVERY.failures)throw new Error('Batch recovery failed closed.');
 if(MAPPING_OUTBOX_RECOVERY.failures)throw new Error('Mapping outbox recovery failed closed.');
 const LEGACY_INPUT_MIGRATION=migrateLegacyInputV1();
 if(LEGACY_INPUT_MIGRATION.failures||LEGACY_INPUT_MIGRATION.active)throw new Error('Legacy input migration failed closed.');
 const WORKING_CLEANUP=cleanupAbandonedWorkingJobs();
 if(WORKING_CLEANUP.failures)throw new Error('Private working-copy cleanup failed closed.');
+}catch(startupError){
+try{batchMaintenance?.stop();}catch{}
+refuseStartup(startupError);
+throw startupError;
+}
 function schedule(request){const task=Promise.resolve(handle(request)).catch(()=>{if(Object.hasOwn(request,'id'))rpcError(request.id,-32603,'Interner Fehler');}).finally(()=>IN_FLIGHT.delete(task));IN_FLIGHT.add(task);}
 let shutdownPromise=null;
 function gracefulShutdown(exitCode=0){if(shutdownPromise)return shutdownPromise;shuttingDown=true;batchMaintenance.stop();for(const controller of ACTIVE_REQUESTS.values())controller.abort();shutdownPromise=(async()=>{await Promise.race([Promise.allSettled([...IN_FLIGHT]),new Promise(resolve=>setTimeout(resolve,15000))]);await new Promise(resolve=>process.stdout.write('',resolve));process.exit(exitCode);})();return shutdownPromise;}

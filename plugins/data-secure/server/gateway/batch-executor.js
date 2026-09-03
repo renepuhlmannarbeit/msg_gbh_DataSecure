@@ -9,7 +9,10 @@ const {
   readBatchProgress
 } = require('./batch');
 const { validateSummary, showLocalIntakeNotice, showBatchStateNotice } = require('../companion/completion-summary');
-const { recordWorkflowEvent } = require('./workflow-diagnostics');
+const { recordWorkflowEvent, newRunId: mintRunId } = require('./workflow-diagnostics');
+// Harnesses replace ./workflow-diagnostics with a bare recorder; the run id then
+// still has to exist so every event of one run can be grouped (DS-071).
+const newRunId = typeof mintRunId === 'function' ? mintRunId : () => crypto.randomBytes(4).toString('hex');
 const {
   reserveIntake,
   delegateIntake,
@@ -50,7 +53,7 @@ const DEFAULT_IPC_ACK_TIMEOUT_MS = 5000;
 const WORKER_ENV_KEYS = Object.freeze([
   'SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP', 'LOCALAPPDATA', 'APPDATA',
   'HOME', 'XDG_DATA_HOME', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'EU_PRIVACY_LANGUAGE',
-  'EU_PRIVACY_VISUAL_MODE', 'EU_PRIVACY_RETENTION_DAYS'
+  'EU_PRIVACY_VISUAL_MODE', 'EU_PRIVACY_RETENTION_DAYS', 'DATASECURE_RUN_ID'
 ]);
 
 function batchWorkerEnvironment(source = process.env) {
@@ -247,7 +250,8 @@ function startLocalBatchExecutor(token, options = {}) {
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
   const forkProcess = options.forkProcess;
   const record = options.recordWorkflowEvent || recordWorkflowEvent;
-  const lifecycle = (event) => { try { record(event); } catch { /* diagnostics never changes processing */ } };
+  const runId = newRunId();
+  const lifecycle = (event) => { try { record({ run_id: runId, ...event }); } catch { /* diagnostics never changes processing */ } };
   let child;
   let worker;
   let claimedLease = false;
@@ -280,7 +284,7 @@ function startLocalBatchExecutor(token, options = {}) {
     present(() => (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'));
   });
   try {
-    child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment(options.env || process.env) });
+    child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment({ ...(options.env || process.env), DATASECURE_RUN_ID: runId }) });
     worker = observeWorker(child, (errorCode) => {
       lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: errorCode });
     }, (code, failed, pid) => {
@@ -352,7 +356,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   const showIntakeNotice = options.showLocalIntakeNotice || showLocalIntakeNotice;
   const showState = options.showBatchStateNotice || options.showTerminalBatchSummary || showBatchStateNotice;
   const workflowRecorder = options.recordWorkflowEvent || recordWorkflowEvent;
-  const lifecycle = (event) => { try { workflowRecorder(event); } catch { /* diagnostics never changes processing */ } };
+  const runId = newRunId();
+  const lifecycle = (event) => { try { workflowRecorder({ run_id: runId, ...event }); } catch { /* diagnostics never changes processing */ } };
   const itemCount = queue.length;
   let child;
   let worker;
@@ -363,7 +368,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       exit_code: code, error_code: 'LOCAL_WORKER_EXITED' });
   };
   try {
-    child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment(options.env || process.env) });
+    child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment({ ...(options.env || process.env), DATASECURE_RUN_ID: runId }) });
     worker = observeWorker(child, code => onWorkerFailure(code), (...args) => onWorkerExit(...args));
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
@@ -549,7 +554,8 @@ function startLocalReviewExecutor(token, options = {}) {
   const record = options.recordWorkflowEvent || recordWorkflowEvent;
   const claimExecutor = options.claimLocalBatchExecutor || claimLocalBatchExecutor;
   const releaseExecutor = options.releaseLocalBatchExecutor || releaseLocalBatchExecutor;
-  const lifecycle = (event) => { try { record(event); } catch { /* diagnostics never changes review state */ } };
+  const runId = newRunId();
+  const lifecycle = (event) => { try { record({ run_id: runId, ...event }); } catch { /* diagnostics never changes review state */ } };
   let child;
   let worker;
   let onWorkerFailure = (errorCode) => lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
@@ -559,7 +565,7 @@ function startLocalReviewExecutor(token, options = {}) {
   };
   let claimedLease = false;
   try {
-    child = launchBackgroundRole('review', { forkProcess, env: batchWorkerEnvironment(options.env || process.env) });
+    child = launchBackgroundRole('review', { forkProcess, env: batchWorkerEnvironment({ ...(options.env || process.env), DATASECURE_RUN_ID: runId }) });
     worker = observeWorker(child, code => onWorkerFailure(code), (...args) => onWorkerExit(...args));
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');

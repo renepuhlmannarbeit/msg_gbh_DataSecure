@@ -89,8 +89,13 @@ update-fest und kein Anwenderweg. Erlaubte Supportdaten: Version, Plattform,
 Phase, Zähler, fester Fehlercode und Zeitpunkt.
 
 Verboten: Inhalte, erkannte Rohwerte, Dateinamen, Pfade, Dokumenthashes,
-Paketkennungen, Tokens oder Capabilities. Die inhaltsfreie Ereignisspur ist auf
-14 Tage und 200 Einträge begrenzt.
+Paketkennungen, Tokens oder Capabilities. Es gibt zwei inhaltsfreie Spuren unter
+`%LOCALAPPDATA%\SecureDataMsg\diagnostics\`: `events.jsonl` mit einem Ergebnis je
+Dokument (14 Tage, 200 Einträge) und `workflow-events.jsonl` mit den
+Ablaufereignissen je Lauf (14 Tage, 300 Einträge, etwa elf Ereignisse je Lauf).
+Zwei große Stapel am selben Tag können in `events.jsonl` die ältesten
+Dokumentergebnisse verdrängen; `diagnostic_status` nennt die tatsächlich
+vorgehaltene Anzahl.
 
 ## Fehlercodes – immer mit Klartext
 
@@ -102,6 +107,22 @@ Paketkennungen, Tokens oder Capabilities. Die inhaltsfreie Ereignisspur ist auf
 | `PARSER_ISOLATION_FAILED` | Die lokale Sicherheitsgrenze ist nicht bereit. | Plugin reparieren/neu installieren, nicht umgehen |
 | `PARSER_RESOURCE_LIMIT` | Die Datei überschreitet ein lokales Sicherheitsbudget. | nicht automatisch wiederholen |
 | `UNSAFE_STORAGE_LOCATION` | Der Privacy-Ordner ist kein sicherer lokaler Ort. | anderen lokalen Ordner wählen |
+| `STARTUP_RECOVERY_FAILED`, `STARTUP_OUTBOX_RECOVERY_FAILED`, `STARTUP_MIGRATION_FAILED`, `STARTUP_CLEANUP_FAILED` | Der lokale Dienst hat den Start sicher verweigert, weil ein Wiederherstellungsschritt nicht abgeschlossen werden konnte. | `%LOCALAPPDATA%\SecureDataMsg` auf Rechte, Sperren und Restbestände prüfen; nichts löschen, IT einbeziehen |
+| `RUNTIME_INTEGRITY_FAILED` | Die gebündelte Laufzeit stimmt nicht mit dem Paketnachweis überein. | Plugin aus dem verifizierten ZIP neu installieren; Prüfsumme gegen `SHA256SUMS` vergleichen |
+
+## Verweigerter Start
+
+Verweigert der Dienst den Start (fail-closed), erscheint in Cowork nur ein
+fehlender Connector. Der Grund steht lokal an drei Stellen: als Ereignis
+`startup_refused` mit festem Code in `workflow-events.jsonl`, in der Datei
+`%LOCALAPPDATA%\SecureDataMsg\diagnostics\startup-refused.json` (Zeitpunkt,
+Version, Code) und als eine Zeile auf dem Fehlerkanal des Prozesses, die kein
+Pfad und keine Rohdaten enthält. Beim Start im gebündelten Paket wird die
+laufende Programmdatei zusätzlich gegen `RUNTIME-EVIDENCE.json` geprüft; eine
+beschädigte oder ausgetauschte Laufzeit stoppt mit `RUNTIME_INTEGRITY_FAILED`.
+Jedes Ablaufereignis trägt eine zufällige Laufkennung `run_id` (8 Hexzeichen,
+aus nichts abgeleitet), mit der die Ereignisse eines Laufs aus Elternprozess und
+Worker zusammengehören.
 
 ## Upgrade und Rollback
 

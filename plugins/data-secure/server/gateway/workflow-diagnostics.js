@@ -26,7 +26,8 @@ const EVENTS = new Set([
   'review_worker_spawned', 'review_ipc_dispatched', 'review_ipc_failed',
   'review_reconstruction_started', 'review_reconstruction_finished', 'review_reconstruction_failed',
   'review_ui_started', 'review_ui_finished', 'review_ui_failed',
-  'review_terminal_state', 'review_worker_exited', 'mcp_review_response'
+  'review_terminal_state', 'review_worker_exited', 'mcp_review_response',
+  'startup_refused'
 ]);
 const OUTCOMES = new Set(['progress', 'ok', 'stopped']);
 const PHASES = new Set([
@@ -39,8 +40,15 @@ const ERROR_CODES = new Set([
   'LOCAL_PICKER_TIMEOUT', 'LOCAL_IPC_ACK_TIMEOUT', 'LOCAL_IPC_ACK_CANCELLED', 'LOCAL_WORKER_SPAWN_FAILED',
   'LOCAL_IPC_FAILED', 'LOCAL_WORKER_EXITED', 'LOCAL_NOTICE_FAILED', 'INTERNAL_FAILURE',
   'LOCAL_REVIEW_FAILED', 'LOCAL_REVIEW_TIMEOUT', 'LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_TOO_LARGE',
-  'LOCAL_REVIEW_WORKER_EXITED'
+  'LOCAL_REVIEW_WORKER_EXITED',
+  'UNSAFE_STORAGE_LOCATION', 'STARTUP_RECOVERY_FAILED', 'STARTUP_OUTBOX_RECOVERY_FAILED',
+  'STARTUP_MIGRATION_FAILED', 'STARTUP_CLEANUP_FAILED', 'RUNTIME_INTEGRITY_FAILED', 'STARTUP_FAILED'
 ]);
+
+const RUN_ID_RE = /^[a-f0-9]{8}$/u;
+function newRunId() {
+  return crypto.randomBytes(4).toString('hex');
+}
 
 let workflowWriteErrors = 0;
 let workflowInspectionErrors = 0;
@@ -67,10 +75,16 @@ function sanitizeWorkflowEvent(record = {}, options = {}) {
   const phase = String(record.phase || 'none');
   const errorCode = String(record.error_code || 'NONE').toUpperCase();
   const exitCode = Number(record.exit_code);
+  // A run id is a random 8-hex nonce minted by the parent when a run starts and
+  // handed to the detached worker through its environment. It is derived from
+  // nothing (no token, path, hash or PID) and only lets support group the events
+  // of one run (DS-071).
+  const runId = String(record.run_id || (options.env || process.env).DATASECURE_RUN_ID || '');
   return {
     schema: WORKFLOW_DIAGNOSTIC_SCHEMA,
     timestamp: safeTimestamp(record.timestamp, now),
     gateway_version: VERSION,
+    run_id: RUN_ID_RE.test(runId) ? runId : 'none',
     event: EVENTS.has(event) ? event : 'mcp_start_response',
     outcome: OUTCOMES.has(outcome) ? outcome : 'stopped',
     phase: PHASES.has(phase) ? phase : 'none',
@@ -174,5 +188,7 @@ module.exports = {
   sanitizeWorkflowEvent,
   recordWorkflowEvent,
   workflowDiagnosticStatus,
+  newRunId,
+  RUN_ID_RE,
   _test: { workflowDiagnosticFile, readWorkflowEvents }
 };

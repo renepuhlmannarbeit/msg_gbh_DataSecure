@@ -78,6 +78,7 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-068 | aktiv und aktuell | BL-012.9/10, BL-032.1, BL-043.1; lokaler Sammelreview, PII-Shield-inspirierte Interaktion und automatischer Klar-Datei-Pfad |
 | DS-069 | aktiv und aktuell | BL-040.5, BL-041.7, BL-041.10, BL-043.1; einmalige Ergebnisordnerwahl, neutraler verifizierter Markdown-Export und lokales Öffnen |
 | DS-070 | aktiv und aktuell | BL-011.8, BL-049.1, BL-050.3; Dateiidentität über Gerät, Inode, Größe und mtime plus verpflichtenden Preflight-SHA-256, Änderungszeit ausgenommen |
+| DS-071 | aktiv und aktuell | BL-042, BL-041.10; zufällige Laufkennung `run_id` in jedem Ablaufereignis (Eltern- und Worker-Prozess), verweigerter Start mit `startup_refused`, Markerdatei und einer pfadfreien Fehlerzeile, Laufzeit-Selbstprüfung gegen `RUNTIME-EVIDENCE.json` im gebündelten Paket; `startup-guard.js`, `workflow-diagnostics.js`, `batch-executor.js`; `test-startup-guard`, `test-batch-executor-startup`, `test-workflow-diagnostics` |
 
 ## DS-067 – konkrete Umsetzung
 
