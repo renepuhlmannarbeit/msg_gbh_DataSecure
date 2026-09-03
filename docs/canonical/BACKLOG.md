@@ -108,6 +108,8 @@ Komfort.
 | `visibleResultTreeOverlaps` ohne Cache (Realpath je Datei und Wurzel). | BL-044.1 | P3 | Quantifizierung auf Referenzhardware; Cache nur bei belegtem Bedarf |
 | Skill-Evals und MCPB-Manifest ohne DS-069-Fälle (Ordnerwechsel, Reset, `result_folder_required`, Sync-Hinweis). | BL-041.10 | P3 | Eval-Fälle ergänzen; MCPB bleibt Engineering-only |
 | `test:product` (Profil `full`) startet über den Picker-Lifecycle-Test reale, fensterlose PowerShell-Prozesse (nur Windows, zeitbegrenzt). | BL-002 | P3 | akzeptiert; bei Bedarf in ein Windows-Only-Gate auslagern |
+| Die Abschlussfenster-Übernahme (`terminal_notice`) wird dauerhaft geschrieben, bevor das Fenster tatsächlich erscheint; stirbt der Elternprozess oder scheitert die Präsentation dazwischen, zeigt auch der Worker kein Fenster mehr (Review rc90). Seit rc91 ist der Fehlschlag inhaltsfrei protokolliert. | BL-041.10 | P3 | zweiphasige Übernahme (vorläufig → nach Präsentation bestätigt) entwerfen; Zeitfenster nur nativ auf dem Cowork-Host belegbar |
+| Zwei parallel gepflegte Allowlists (`diagnostic-causes.js` `CAUSES` und `workflow-diagnostics.js` `ERROR_CODES`); IPC-Ack-Klassifikation über festen Fehlertext statt `.code` (Review rc90, kein Abfluss). | BL-041.1 | P3 | eine gemeinsame Codeliste; `.code` an den beiden festen IPC-Fehlern |
 
 ## B. Technisch vorbereitet – menschliche Evidenz offen
 
