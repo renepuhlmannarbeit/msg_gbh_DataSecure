@@ -314,6 +314,18 @@ reviewer) wurden angesetzt; ihre Ergebnisse sind unten konsolidiert.
 | U-16 | P3 → behoben | `gateway/batch-intake.js:130`, `tests/test-batch-session.js:473` | `next_action: restart_only_on_request` neben dem überall sonst genutzten `restart_only_on_explicit_request` (toter Zweig im aktuellen Worker, aber über `companion/ipc-session.js` erreichbar). Vereinheitlicht. | BL-002 |
 | U-17 | P3 → dokumentiert | `server/index.js` Startsequenz | `RESULT_EXPORT_RECOVERY.failures` war als einziger Recovery-Schritt nicht fail-closed und unkommentiert. Absicht (sichtbarer Export ist Projektion bereits verifizierter Pakete, bleibt `pending`, Wiederholung beim nächsten Start) jetzt am Aufruf dokumentiert; Verhalten unverändert. | BL-002 |
 | U-18 | Host | Claude Desktop/Cowork | Die in dieser Session live eingespielten MCP-Serverinstruktionen entsprechen dem Wortlaut eines älteren RC (kein Versionszusatz, keine Ergebnisordnerwahl, alter Schlüssel `local_intake_accepted_checkpoint_pending`), während `index.js` rc90/rc91 trägt: erneuter Beleg für den Kontocache aus U-05/U-09; kein Repo-Defekt. | BL-051.5, BL-010.7 |
+| U-19 | **P1 → behoben** | `privacy/base.js` (`hasLabelBefore`, `previousLabelLine`) | Label allein auf der Zeile über dem Wert („Geburtsdatum\n01.01.1980“, Definitionslisten „: 269…“, Listenpunkte) wurde nie erkannt: der Labelblick endete an der aktuellen Zeile. Steuer-ID, Geburtsdatum, Telefon und Kennzeichen blieben im Klartext, Residual-Gate `[]`. Jetzt zählt bei einem Wert am Zeilenanfang die nächste kurze nicht leere Zeile darüber. | DS-049, DS-033 |
+| U-20 | **P1 → behoben** | `privacy/entities.js` (`HONORIFIC`, `collectPersonAnchors`), `privacy/base.js` (`looksName`, `HONORIFICS`) | Gradzusätze hinter Titeln („Dr. med.“, „Dr. h. c.“, „Dr. rer. nat.“) brachen den Titelanker; „Dr. med. Anna Beispiel“ blieb komplett im Klartext, Gate einig. Zusätzlich griff der Anker über Zeilenumbrüche („Anna Beispiel\nRolle“ als Dreitoken-Name verworfen) und kannte keine Adelspartikel („von der Heide“ blieb hinter dem Pseudonym stehen). Jetzt flache Titel-/Zusatzkette (linear, kein Backtracking; ein erster verschachtelter Entwurf ließ `test-batch-session` >9 min hängen und wurde durch einen Zeitgrenzen-Test abgesichert), Partikel im Anker und in `looksName`, Zusätze in der Stoppliste. | DS-049, DS-012, DS-033 |
+| U-21 | **P1 → behoben** | `privacy/base.js` (`PHONE_LABEL_RE`) | Das Telefon-Label musste das letzte Wort sein: „Telefonnummer“ (häufigstes deutsches Label), „Telefon (privat)“, „Mobil (dienstlich)“, „Telefoonnummer“ schalteten die Erkennung vollständig ab, inline und als Spaltenkopf. Jetzt optionales Nummer-Suffix und Klammerzusatz. | DS-049, DS-033 |
+| U-22 | **P1 → behoben** | `privacy/base.js` (`DATE_OF_BIRTH_RE`, `DATE_OF_BIRTH_LABEL_RE`) | Nur vier deutsche/englische Literale; „Date de naissance“, „Fecha de nacimiento“, „Geboortedatum“, „Data di nascita“ ließen Geburtsdaten stehen, ebenso jedes ausgeschriebene Datum („1. Januar 1980“) trotz korrektem Label. Jetzt FR/ES/NL/IT-Labels, „geboren am“, Wortdaten in fünf Sprachen; ohne Label bleibt Monatsprosa unangetastet. | DS-037, DS-049 |
+| U-23 | **P1 → behoben** | `server/index.js` (Startsequenz), `gateway/startup-guard.js` (neu) | Fail-closed-Start (z. B. Datei statt Ordner unter `SecureDataMsg\batches`, Reproduktion des Reviewers) endete als roher Node-Stacktrace mit absoluten Pfaden und Benutzernamen auf stderr, das der Host verschluckt; kein Journalereignis, keine Markerdatei, `diagnostic_status` leer. Jetzt `startup_refused` mit festem Code, `startup-refused.json`, eine pfadfreie stderr-Zeile, Exit 1; Integrationstest startet den echten Server gegen einen defekten Datenordner. | DS-048, DS-071, BL-042 |
+| U-24 | P2 → behoben | `gateway/startup-guard.js` (`verifyBundledRuntime`), `.mcp.json` | Die gebündelte Node-Laufzeit (die den gesamten Produktcode ausführt) wurde nur beim Build gehasht; der schmalere Sandbox-Launcher dagegen bei jedem Spawn. Jetzt prüft der Start im selbsttragenden Paket Größe und SHA-256 von `process.execPath` gegen `RUNTIME-EVIDENCE.json` (≈3 s für 87 MB, gemessen im Smoke); manipulierte Laufzeit → `RUNTIME_INTEGRITY_FAILED` (nativ verifiziert). Grenze: erkennt Beschädigung/Austausch nach dem Build, ersetzt nicht die Paketprüfsumme vor Installation. Laufzeit 22.23.2 ist der aktuelle 22.x-Patch (endoflife.date, 03.09.2026), Wartung bis 30.04.2027. | DS-066, DS-071 |
+| U-25 | P2 → behoben | `gateway/workflow-diagnostics.js`, `gateway/batch-executor.js` | Kein Ereignis ließ sich einem Lauf zuordnen; zwei kurz aufeinander folgende Läufe waren im Journal nur über Zeitnähe trennbar. Jetzt zufällige `run_id` (8 Hex, aus nichts abgeleitet) pro Start, an den Worker über `DATASECURE_RUN_ID` weitergegeben, in jedem Ereignis; DS-071 präzisiert DS-026. | DS-026, DS-071, BL-042 |
+| U-26 | P3 → behoben | `docs/IT-BETRIEBSHANDBUCH.md` | Handbuch nannte eine Spur mit „200 Einträgen“; tatsächlich zwei Journale (`events.jsonl` 200, `workflow-events.jsonl` 300) mit unterschiedlicher Semantik. Rechnung: ein 100-Dateien-Stapel schreibt ≈11 Ablaufereignisse, aber ≈100 Dokumentergebnisse; zwei große Stapel am Tag verdrängen die ältesten. Jetzt beide Spuren, Grenzen und die neuen Startcodes dokumentiert. | BL-042 |
+| U-27 | P3 → behoben | Skill `datenschutz-erklaeren/SKILL.md:3`, `references/beispiele.md:43` | Beschreibung der Erklär-Skill ohne Gegen-Abgrenzung zur Anonymisier-Skill (nur einseitig vorhanden); Beispieltext behauptete einen Bildtext-Pfad, den der Pilot nicht hat (FORMAT_COVERAGE_MATRIX: OCR kein Produktpfad). Beides korrigiert; Beschreibung unter der 200-Zeichen-Konvention. | DS-005, DS-009 |
+| U-28 | P3 offen | `privacy/base.js` (`buildTableIndex`), Engine | Zweizeilige Tabellenköpfe („Personal“/„nummer“): Kopfzelle „Personal“ wird als Person pseudonymisiert (Überredaktion), die Kennungsspalte nicht label-gebunden. Außerdem „Im Januar 1980 …“ → `[LOCATION_REDACTED]` (bestehende Überredaktion, im Regressionstest umschifft). | DS-008, BL-021.1 |
+| U-29 | P3 offen (Design) | Skill-Texte, `prompt-contract.js`, `index.js` INSTRUCTIONS, Tool-Beschreibungen | Dieselben Schutzsätze werden an bis zu neun Stellen parallel gepflegt (Quantifizierung im Review); SKILL.md erfüllt die 500-Zeilen-Empfehlung nur durch sehr lange Zeilen (58 Zeilen, 1.562 Wörter). Kein Regelverstoß; Konsolidierung mit progressiver Offenlegung als eigene Story. `claude plugin eval` ist für die Organisation noch nicht freigeschaltet; Eval-Fälle liegen nur als Entwurf unter `evals/`. Kein `outputSchema` an den Tools (Kandidat, MCP-Spezifikation nicht abschließend geprüft). | BL-041.1, BL-041.10 |
+| U-30 | P3 offen (Verfügbarkeit) | `server/ooxml.js:842` | Jede externe Beziehung (`TargetMode="External"`, also jeder normale Hyperlink) blockiert das ganze DOCX fail-closed. Sicher, aber im Widerspruch zur Freigabe „DOCX“ ohne diese Einschränkung in der Coverage-Matrix. Entscheidung offen: Linkziel verwerfen und Anzeigetext prüfen, oder Einschränkung dokumentieren. | DS-007, DS-049 |
 | U-07 | P2 → behoben (DS-070) | `gateway/batch-snapshot.js:146-152` (`copySnapshotFile`) | Die Quellidentität wird auch über `ctimeMs` gebunden. Unter aktivem Defender-Echtzeitscan ändert sich die NTFS-Änderungszeit frisch geschriebener Dateien sporadisch, worauf die Übernahme fail-closed mit „Datei während der Übernahme verändert“ stoppt (`test-mixed-batch-recovery` in 3 von 7 Kettenläufen, isoliert stets grün). Sicher, aber ein grundloser Stopp im Realbetrieb ist möglich. **DECISION_REQUIRED**: `ctime` aus der Identitätsbindung nehmen (Metadaten-Änderungen ohne Inhaltsänderung tolerieren, Inhalt bleibt über Größe/mtime/inode/SHA-256 gebunden) oder bewusst beibehalten und im IT-Handbuch als bekannten Windows-Effekt dokumentieren. Empfehlung: Option 1 mit Negativtest. | BL-050.3, BL-011.x |
 | U-06 | P2 | atomare Schreibpfade (`gateway/workflow-diagnostics.js:136-139`, `gateway/batch-journal-io.js`/`batch-journal-store.js publishJournal`, `gateway/result-export.js writeRecord/exportOne`, Package-Staging) | Unter aktivem Windows-Defender-Echtzeitscan schlägt `fs.renameSync(tmp → ziel)` sporadisch mit `EPERM` fehl (Messung 03.09.2026: 27 von 1.515 Journal-Schreibvorgängen). Die Produktpfade sind fail-closed (Export bleibt `pending`, Diagnose zählt `write_errors`, Publikation stoppt sicher), aber ein Dokument kann dadurch grundlos als „sicher gestoppt“ enden. Nicht behoben: ein kurzer, begrenzter Rename-Retry bei `EPERM`/`EBUSY` wäre ein kleiner, risikoarmer Fix, betrifft aber mehrere Kernpfade und braucht einen eigenen Negativtest je Pfad. | BL-050.3, BL-002 |
 
@@ -341,6 +353,13 @@ selbst; Originale und Mapping sind vom Elternprozess-Ende unberührt (geprüft).
 | `65d6fb0` | docs(startup): Export-Recovery bewusst nicht fail-closed (U-17) | `server/index.js` (Kommentar) | Serverstart, `test-mcp-protocol` grün |
 | `cb5ff2b` | fix(executor): Abschlussfenster-Ergebnis auf dem Fortsetzungspfad protokolliert (U-15) | `gateway/batch-executor.js`, `tests/test-batch-executor-startup.js` (+2) | `test-batch-executor-startup` (35), `test-direct-picker-intake-worker`, `test-worker-terminal-presentation` grün |
 | `73feb74` | docs(skill): feste Antworten für die vier Handoff-Fehlerzustände (U-14) | `SKILL.md`, `prompt-contract.js`, `manifest.json` (sync) | `test-manifest`, `test-cowork-tool-surface-contract`, `test-mcp-protocol`, `test-capability-contract`, `test:skills` grün |
+| `c7bba3b` | fix(privacy): Label über dem Wert, Titelzusätze, Telefon-/Geburtsdatum-Labelvarianten (U-19 bis U-22) | `privacy/base.js`, `privacy/entities.js`, `tests/test-pii-regression.js` (+1 Sammeltest, 30 Formen) | `test-pii-regression` (109), `test-adversarial`, `test-format-acceptance-matrix`, `test-gateway-e2e`, `test:skills` grün |
+| `1ba633c` | docs(skill): Erklär-Skill grenzt sich ab (U-27) | `datenschutz-erklaeren/SKILL.md` | `test-manifest` grün |
+| `8f08c0e` | feat(diagnostics): nachvollziehbarer Startabbruch, Laufzeit-Selbstprüfung, Laufkennung (U-23 bis U-26, DS-071) | `gateway/startup-guard.js` (neu), `server/index.js`, `gateway/workflow-diagnostics.js`, `gateway/batch-executor.js`; `tests/test-startup-guard.js` (neu, 6), `test-batch-executor-startup.js`; Kanon `DECISIONS.md` (DS-071), `TRACEABILITY.md`, `TARGET_CAPABILITIES.json`, `BACKLOG.md`; `docs/IT-BETRIEBSHANDBUCH.md` | `test-startup-guard`, `test-workflow-diagnostics`, `test-batch-executor-startup` (35), `test-mcp-protocol`, `test-batch-session` (68, 3:41 min), `test:docs:fast` grün |
+| `13c79d7` | test(privacy): lange Titelketten bleiben linear | `tests/test-pii-regression.js` (+1) | `test-pii-regression` (110) grün |
+| `c86f1fc` | chore(release): 3.2.0-rc92 | Versionsstellen, Kanon-Baseline, Dokumentlabels | `test:docs:fast`, `test-manifest` grün |
+| `4e04cf8` | chore(scripts): Trennzeichen in der Lifecycle-Kette | `package.json`, `tests/test-manifest.js` | `test-manifest` grün |
+| `415857f` | docs(skill): Bildtext-Pfad als Zielverhalten gekennzeichnet (U-27) | `references/beispiele.md` | `test:skills`, `test:docs:fast` grün |
 | `2448d8f` | chore(release): 3.2.0-rc91 | Versionsstellen, Kanon-Baseline, Dokumentlabels | `test:docs:fast`, `test-manifest` grün |
 | `e17be48` | chore(release): 3.2.0-rc90 | Versionsstellen, Kanon-Baseline, Dokumentlabels | `test:docs:fast`, `test-manifest` grün |
 | `b4ff2f5` | fix(identity): Dateiidentität ohne ctime, Preflight-SHA-256 verpflichtend (U-07, DS-070) | `gateway/batch-snapshot.js`, `batch-source-admission.js`, `source-format-inspector.js`, `private-work-store.js`, `retention.js`, `batch-journal-store.js`, `bound-private-file.js`; Kanon `DECISIONS.md` (DS-070), `TRACEABILITY.md`, `BACKLOG.md`, `TARGET_CAPABILITIES.json`, `contracts/BATCH_SNAPSHOT_V1.md`, `contracts/SOURCE_PREFLIGHT_V1.md`; Tests `test-batch-snapshot.js` (+3 Negativtests: ctime-Drift toleriert, Inhaltsaustausch bei gleicher Größe/mtime stoppt über Hash, fehlender Hash stoppt), `test-batch-source-admission.js`, `test-source-format-inspector.js` | `test-batch-snapshot`, `-source-admission`, `-source-format-inspector`, `-batch-intake`, `-read-only-source-snapshot`, `-private-work-store`, `-retention`, `-batch-journal-store`, `-mixed-batch-recovery`, `verify-canonical-docs`, `test:docs:fast` grün |
@@ -493,3 +512,49 @@ SHA-256 `61b977c920481fb0e38cf2f2f79eca15be544f1c42b14fcf33bd7438260e84c3`.
 rc91 und liefert für `start_completed_local_results_handoff` ohne Stapel
 `error: no_completed_local_batch`, `diagnostic.cause: NO_COMPLETED_LOCAL_BATCH`.
 Volle Produktsuite Lauf 12 (rc91): 120 Suiten, 0 Fehlschläge.
+
+### Nachtrag rc92 (03.09.2026, 18:45) – dritte Review-Runde
+
+Auftrag: technische Perspektiven (Logging und Fehlerfindung, Technologiebasis,
+Anthropic-Standards) plus die offenen Punkte der zweiten Runde. Fünf
+Hintergrundläufe: Fehlerinjektion/Nachvollziehbarkeit (runtime-quality-reviewer),
+Skill-Qualität gegen die offizielle Skills-Dokumentation (cowork-plugin-reviewer),
+Laufzeit/Lieferkette/Prozessgrenzen (privacy-threat-reviewer), Engine-Fuzzing mit
+26 Layoutformen plus DOCX-Randteile (privacy-threat-reviewer), offizielle
+Eval-Werkzeuge (claude-code-guide). Findings U-19 bis U-30, Umsetzung sequenziell.
+
+Fachlich schwer wiegen U-19 bis U-22: vier unabhängige Erkennungslücken, bei denen
+das Residual-Gate jeweils „sauber“ meldete, weil Redaktion und Gate dieselben
+Detektoren teilen. Alle 26 Fuzz-Formen des Reviewers laufen jetzt in einem
+Sammeltest; als korrekt bestätigt wurden IBAN und Sozialversicherungsnummer ohne
+Labelbindung, Adressen über Zellen, Tabellen ohne Außenpipes, verdeckter Text
+(`w:vanish`), Textfelder und Hyperlink-Anzeigetexte in DOCX (alle geprüft), Feldcodes
+und Alt-Texte fail-closed. Prozessseitig bestätigt: kein `console.*` im Produkt,
+Worker-Abstürze mit Exit-Code protokolliert, `network-deny` in jedem Rohinhalts-Worker
+(einzige bekannte Ausnahme BL-020.3), PowerShell ohne `-ExecutionPolicy Bypass`,
+Argumente als Single-Quote-Literale, COM-Interop mit Legacy-Rückfall unter
+Constrained Language Mode, Umgebungs-Allowlist für alle UI-Prozesse, SBOM mit
+Lizenzen für alle Fremdkomponenten, OCR-/node_modules-Bäume nicht im ZIP
+(Build-Gate). Konformität: Plugin-Struktur, Skill-Frontmatter (197/197 Zeichen),
+MCP-Tool-Annotationen (`readOnlyHint` u. a.) und strenge Eingabeschemata entsprechen
+der Dokumentation; `claude plugin validate --strict` überall grün.
+
+Nicht erreicht (Turn-Limits der Reviewer): Pfadtraversal/Symlinks in Export und
+`purge_local_data` (Item 6 Sicherheitsreview), End-to-End-Nachweis, dass vertagte
+Items nie in den Export gelangen (Code-Lesung ohne Befund, kein Harness-Lauf),
+vollständiger Abgleich der Skill-Behauptungen zu Token-Semantik und
+`usable-with-omissions`, Cowork-Supportartikel zu Upload-Limits. Als Folgearbeit
+vermerkt, nicht als behoben.
+
+Build rc92 bei `c86f1fc`: `dist/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc92.zip`,
+169 Einträge, 34.933.101 Bytes, SHA-256
+`1ab9f50c56cbc346fdeeeb5ba4a383a8066af1eb7b09af772fcd660dedbec241`; SBOM
+`702e3632…4be7`; Upload-Variante `…-rc92-data-secure-rc92.zip`, 34.933.108 Bytes,
+SHA-256 `055f77eeeab2e4e966f6237babd33fc4238add7e814606a704f44dbf0ccb5253`. Beide
+entpackt `claude plugin validate --strict` grün; MCP-Smoke über die gebündelte
+Runtime mit aktiver Laufzeit-Selbstprüfung: Start in 3,4 s, `serverInfo.version`
+rc92, Fehlerantwort mit `NO_ACTIVE_LOCAL_HANDOFF`; manipulierte Laufzeit (ein
+angehängtes Byte) → Exit 1, genau eine stderr-Zeile
+`RUNTIME_INTEGRITY_FAILED`, Markerdatei mit `journal_recorded: true`.
+`npm run test:plugin-zip` grün. Volle Produktsuite Lauf 13 (rc92-Arbeitsstand):
+121 Suiten, 0 Fehlschläge.
