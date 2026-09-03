@@ -1,8 +1,11 @@
 'use strict';
 
-const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, exportCompletedBatchResults } = require('./batch');
+const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, exportCompletedBatchResults, claimTerminalNotice } = require('./batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation');
 const { terminalVisibleExport } = require('./result-export');
+const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
+const { showBatchStateNotice, showLocalIntakeNotice } = require('../companion/completion-summary');
+const { recordWorkflowEvent } = require('./workflow-diagnostics');
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
@@ -67,8 +70,9 @@ process.once('message', async (message) => {
     // Every automatic run ends with exactly one bounded local state envelope,
     // including non-terminal rest states such as review, mapping repair or an
     // explicit resume. No token, source identifier or document content crosses
-    // this private presentation channel.
-    await notify({
+    // this private presentation channel. The parent presents the notice while
+    // it still listens; a parent ended by the Cowork host leaves that to us.
+    const envelope = {
       type: isNewIntake ? 'local-intake-state' : 'local-batch-state',
       complete: completed.complete === true,
       batch_phase: completed.batch_phase,
@@ -81,14 +85,36 @@ process.once('message', async (message) => {
       result_exported_count: visibleExport.exported,
       result_export_pending_count: visibleExport.pending,
       result_output_available: visibleExport.available
+    };
+    const { type, ...progress } = envelope;
+    await presentTerminalEnvelope({
+      token: message.batch_token,
+      envelope,
+      claim: claimTerminalNotice,
+      present: () => { showBatchStateNotice(progress); },
+      record: recordWorkflowEvent,
+      evidence: {
+        event: 'intake_terminal_state', outcome: envelope.complete ? 'ok' : 'progress',
+        phase: envelope.batch_phase, item_count: envelope.batch_total,
+        released_count: envelope.released, stopped_count: envelope.stopped
+      }
     });
     process.exit(0);
   } catch {
     if (isNewIntake) releaseIntake(reservationId);
-    await notify({
-      type: isNewIntake ? 'local-intake-stopped' : 'local-batch-stopped',
-      stage: checkpointCreated || isExistingBatch ? 'after_checkpoint' : 'before_checkpoint'
-    });
+    const stage = checkpointCreated || isExistingBatch ? 'after_checkpoint' : 'before_checkpoint';
+    try {
+      await presentTerminalEnvelope({
+        token: message.batch_token,
+        envelope: { type: isNewIntake ? 'local-intake-stopped' : 'local-batch-stopped', stage },
+        // Before the checkpoint no journal exists to arbitrate; a live parent
+        // acknowledges instead, an absent parent leaves the notice to us.
+        claim: stage === 'after_checkpoint' ? claimTerminalNotice : () => true,
+        present: () => { showLocalIntakeNotice(stage); },
+        record: recordWorkflowEvent,
+        evidence: { event: 'intake_terminal_state', outcome: 'stopped', error_code: 'LOCAL_WORKER_EXITED' }
+      });
+    } catch { /* presentation never changes the durable checkpoint */ }
     // No document-derived error reaches stdout/stderr. The durable batch
     // checkpoint is the sole recovery source for the next explicit action.
     process.exit(1);

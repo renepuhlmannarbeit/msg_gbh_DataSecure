@@ -500,6 +500,35 @@ function exportCompletedBatchResults(token) {
   return exportCompletedState(state);
 }
 
+// Exactly one local presenter may show the content-free terminal notice of a
+// batch: the MCP parent while it still listens, otherwise the detached worker
+// that outlives the Cowork tool call. The durable journal is the sole arbiter,
+// so a parent that dies after receiving the envelope and a worker whose parent
+// vanished can never both open a window. Without a readable journal (before the
+// checkpoint or after expiry) presenting is preferred over silence.
+const TERMINAL_NOTICE_PRESENTERS = new Set(['worker', 'parent']);
+function sleepBriefly(milliseconds) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds); } catch { /* best effort */ }
+}
+function claimTerminalNotice(token, presenter) {
+  if (!TOKEN_RE.test(String(token || '')) || !TERMINAL_NOTICE_PRESENTERS.has(presenter)) return false;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try { acquireActiveLock(token); } catch { sleepBriefly(25); continue; }
+    try {
+      const state = readState(token);
+      if (state.terminal_notice && typeof state.terminal_notice === 'object') return false;
+      state.terminal_notice = { presenter, at: new Date().toISOString() };
+      writeState(state);
+      return true;
+    } catch {
+      return true;
+    } finally {
+      releaseActiveLock(token);
+    }
+  }
+  return true;
+}
+
 const { runLocalBatchExecutor } = createBatchExecutorRunner({
   SafeError,
   readState,
@@ -520,4 +549,4 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox, setPrivateArtifactCryptoProviderForTests } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox, setPrivateArtifactCryptoProviderForTests } };

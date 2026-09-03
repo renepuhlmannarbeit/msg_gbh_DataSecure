@@ -146,7 +146,7 @@ Komfort.
 | BL-041.7 | Werkzeugberechtigungen, Pickerabbruch und Ergebnisübergabe in aktueller Cowork-Version prüfen. | **blockiert** |
 | BL-041.8 | MCP-Tasks/Benachrichtigungen versionsgebunden prüfen; ohne Nachweis kein Produktpfad. | **blockiert** |
 | BL-041.9 | Nicht blockierenden Sammelreview und Abschluss auf Windows/macOS beobachten. | **blockiert** |
-| BL-041.10 | Die gelieferte einmalige Ergebnisordnerwahl, Wiederverwendung ohne neue Abfrage, Ordnerwechsel, Exportwiederholung und „Ergebnisse öffnen“ in echter lokaler Cowork-Bedienung auf Windows/macOS abnehmen. | **blockiert** |
+| BL-041.10 | Die gelieferte einmalige Ergebnisordnerwahl, Wiederverwendung ohne neue Abfrage, Ordnerwechsel, Exportwiederholung und „Ergebnisse öffnen“ in echter lokaler Cowork-Bedienung auf Windows/macOS abnehmen. Beobachtung 03.09.2026 (Windows, rc85): Cowork beendet den MCP-Elternprozess kurz nach der Tool-Antwort; die Abschlussmeldung erschien in 4 von 5 Läufen nicht. Seit dem Worker-seitigen Abschlussdialog (E0) ist nativ zu belegen, dass genau ein Fenster erscheint. | **blockiert** |
 | BL-044.1 | Rekursive Ordnerquelle mit Link-/Race-Gegenproben auf Zielsystemen prüfen. | **blockiert** |
 | BL-049.1 | Format-/Strukturgates und Ergebnisgrade durch Security auf Zielsystemen abnehmen. | **blockiert** |
 | BL-050.3 | Referenzwerte und reales Dateisystem-/Power-Loss-Verhalten erfassen. | **blockiert** |

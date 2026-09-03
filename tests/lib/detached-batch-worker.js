@@ -5,11 +5,28 @@
 // key shared by the parent process so the process-boundary contract can be
 // exercised without writing test secrets to the user's credential store.
 
-const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, _test } = require('../../plugins/data-secure/server/gateway/batch');
+const fs = require('fs');
+const path = require('path');
+const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, claimTerminalNotice, _test } = require('../../plugins/data-secure/server/gateway/batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('../../plugins/data-secure/server/gateway/batch-intake-reservation');
+const { presentTerminalEnvelope } = require('../../plugins/data-secure/server/gateway/worker-terminal-presentation');
+const { recordWorkflowEvent } = require('../../plugins/data-secure/server/gateway/workflow-diagnostics');
 const { installBatchPrivateArtifactCrypto } = require('./private-artifact-test-runtime');
 
 installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
+
+// The product worker opens a native window when its parent is gone. The test
+// double records that decision as a content-free sentinel file instead, so the
+// process-boundary protocol can be asserted without any dialog.
+// The worker environment is an allowlist (WORKER_ENV_KEYS), so the sentinel
+// lives at a fixed name below the forwarded LOCALAPPDATA test root.
+const SENTINEL_NAME = 'test-terminal-notice-sentinel.json';
+function presentSentinel(envelope) {
+  const { type, stage } = envelope;
+  fs.writeFileSync(path.join(process.env.LOCALAPPDATA, SENTINEL_NAME),
+    JSON.stringify({ type, stage: stage || null, pid: process.pid }), { flag: 'wx' });
+}
+const parentGraceMs = 1500;
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
@@ -48,7 +65,7 @@ process.once('message', async (message) => {
       await notify({ type: 'local-intake-processing-started' });
     }
     const completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
-    await notify({
+    const envelope = {
       type: intake ? 'local-intake-state' : 'local-batch-state',
       complete: completed.complete === true,
       batch_phase: completed.batch_phase,
@@ -58,6 +75,19 @@ process.once('message', async (message) => {
       result_grade_counts: completed.result_grade_counts,
       result_omission_counts: completed.result_omission_counts,
       result_grades_verified: completed.result_grades_verified
+    };
+    await presentTerminalEnvelope({
+      token: message.batch_token,
+      envelope,
+      claim: claimTerminalNotice,
+      present: presentSentinel,
+      record: recordWorkflowEvent,
+      graceMs: parentGraceMs,
+      evidence: {
+        event: 'intake_terminal_state', outcome: envelope.complete ? 'ok' : 'progress',
+        phase: envelope.batch_phase, item_count: envelope.batch_total,
+        released_count: envelope.released, stopped_count: envelope.stopped
+      }
     });
     process.exit(0);
   } catch {

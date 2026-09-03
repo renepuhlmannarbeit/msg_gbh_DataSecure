@@ -193,9 +193,63 @@ async function main() {
       assert.ok([0, 1].includes(state.io_summary[key]), `${key} remains a bounded real-work counter`);
     }
     assert.strictEqual(state.io_summary.output_packages_committed, completed.released);
+    // The live parent claimed and presented; the worker stayed silent.
+    assert.strictEqual(_test.readState(started.batch_token).terminal_notice?.presenter, 'parent',
+      'a live parent owns the single terminal notice');
+    assert.strictEqual(fs.existsSync(sentinelPath()), false, 'the worker never opens a second window beside a live parent');
+  });
+
+  await testAsync('a worker whose parent disconnects after the start presents the terminal notice itself', async () => {
+    const source = path.join(base, 'source-orphan.txt');
+    fs.writeFileSync(source, 'Kunde: Beispielperson\nE-Mail: beispiel@example.test\nVertragliche Leistung', 'utf8');
+    let child = null;
+    const parentNotices = [];
+    const workflowEvents = [];
+    const started = startLocalIntakeExecutor([{
+      name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
+    }], 'customer', {
+      forkProcess: (_modulePath, args, options) => {
+        child = fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options);
+        // Cowork may end the MCP parent right after the tool response. Closing
+        // the private IPC channel once processing has started reproduces that
+        // without killing this test process.
+        child.on('message', (message) => {
+          if (message?.type === 'local-intake-processing-started') setImmediate(() => child.disconnect());
+        });
+        return child;
+      },
+      showLocalIntakeNotice: (stage) => { parentNotices.push({ type: 'failure', stage }); },
+      showTerminalBatchSummary: (summary) => { parentNotices.push({ type: 'state', summary }); return true; },
+      recordWorkflowEvent: (event) => { workflowEvents.push(event); return true; }
+    });
+    assert.strictEqual(started.ok, true);
+    const completed = await waitForSettledProgress(started.batch_token, () => null);
+    assert.strictEqual(completed.complete, true);
+    const sentinelDeadline = Date.now() + 10_000;
+    while (!fs.existsSync(sentinelPath()) && Date.now() < sentinelDeadline) await pause(25);
+    assert.ok(fs.existsSync(sentinelPath()), 'the orphaned worker must present the terminal notice itself');
+    const sentinel = JSON.parse(fs.readFileSync(sentinelPath(), 'utf8'));
+    assert.strictEqual(sentinel.type, 'local-intake-state');
+    assert.strictEqual(sentinel.pid, child.pid, 'the detached worker is the presenter');
+    const state = _test.readState(started.batch_token);
+    assert.strictEqual(state.terminal_notice?.presenter, 'worker', 'the durable journal records the single presenter');
+    const exitDeadline = Date.now() + 10_000;
+    while (!workflowEvents.some((event) => event.event === 'intake_worker_exited') && Date.now() < exitDeadline) await pause(25);
+    assert.strictEqual(parentNotices.length, 0, 'the parent must not add a second window after the worker claimed');
+    // The worker wrote the lifecycle evidence the parent could no longer observe.
+    const journal = path.join(base, 'localapp', 'SecureDataMsg', 'diagnostics', 'workflow-events.jsonl');
+    const workerEvents = fs.readFileSync(journal, 'utf8').trim().split('\n').map((line) => JSON.parse(line).event);
+    for (const expected of ['intake_terminal_state', 'completion_notice_started', 'completion_notice_dispatched']) {
+      assert.ok(workerEvents.includes(expected), `worker-side evidence must contain ${expected}`);
+    }
+    assert.doesNotMatch(fs.readFileSync(journal, 'utf8'), /source-orphan|beispiel@example\.test|Beispielperson|[a-f0-9]{64}/u);
   });
   await removeTestRoot();
   done();
+}
+
+function sentinelPath() {
+  return path.join(base, 'localapp', 'test-terminal-notice-sentinel.json');
 }
 
 main().catch(async (error) => {

@@ -281,3 +281,42 @@ P1-Defekte (falscher Handoff-Erfolg, `mailto:`-Unterredaktion) sowie die
 P1-Testlücke und die P1-Dokumentendrift zum Marketplace sind behoben. Kein
 Release: Zielhost-, Cowork- und Fachevidenz fehlen weiterhin; der breite Rollout
 bleibt NO-GO gemäß Backlog.
+
+## 10. Nachtrag 03.09.2026 – UAT-Beobachtung auf Windows/Cowork
+
+Anlass: Erster nativer UAT-Versuch (UAT-01) auf Windows 11 mit Claude Desktop
+1.40609.1/Cowork. Fünf Läufe liefen unbemerkt mit rc85 aus dem Cowork-Cache
+(„My Uploads“), obwohl rc86 über die Desktop-Oberfläche installiert war; die
+Installation landete im Claude-Code-Speicher `~/.claude/plugins/marketplaces/
+local-desktop-app-uploads`, nicht in „My Uploads“. Nachgestellt mit dem echten
+gebündelten Runtime: rc86 fragt den Ergebnisordner vor dem Quellpicker ab und
+exportiert nach `DataSecure-Output`; rc85 kennt beides nicht.
+
+Drei Read-only-Reviewer (cowork-plugin-, runtime-quality-, privacy-threat-
+reviewer) wurden angesetzt; ihre Ergebnisse sind unten konsolidiert.
+
+### Findings
+
+| ID | Prio | Datei:Zeile | Befund | BL/DS |
+|---|---|---|---|---|
+| U-01 | P1 | `gateway/batch-worker.js:71-84`, `gateway/batch-executor.js` (Nachrichten-/Exit-Pfade) | Abschlussmeldung und Terminal-Diagnose hingen allein am MCP-Elternprozess; Cowork beendet ihn kurz nach der Tool-Antwort. In 4 von 5 Läufen fehlten `intake_terminal_state`, `completion_notice_*`, `intake_worker_exited`; der Worker lief durch, kein Fenster erschien. Repro: `child.disconnect()` nach `local-intake-processing-started` (neuer Test). | BL-041.6, BL-041.9, BL-041.10 |
+| U-02 | P2 | `index.js:67-101`, `companion/completion-summary.js`, Skill | Aktive Plugin-Version ist in Cowork für Anwender unsichtbar (`privacy_status` ist Support-only, Abschlussfenster ohne Version); Versionsdrift blieb einen Vormittag unbemerkt. | BL-041.7, BL-051.5 |
+| U-03 | P3 | `gateway/batch-executor.js:25-29` vs. `gateway/result-folder-config.js:56-68` | `EU_PRIVACY_RESULT_ROOT` wird nicht an den Worker weitergegeben; Worker-Export bleibt bei Env-Konfiguration `pending` bis zum nächsten Serverstart. | BL-040.5 |
+| U-04 | P3 | `index.js:29` vs. `skills/…/SKILL.md:23`, `STEP-BY-STEP.md:23` | Pflichtantwort nach Übergabe in Serverinstruktion und Skill wortverschieden. | BL-041.1 |
+| U-05 | Host | Claude Desktop/Cowork | Persönlicher ZIP-Upload in „My Uploads“ übernimmt neue Versionen nicht zuverlässig (offizielle Doku ohne Update-Mechanik für Uploads; GitHub #69020, #65426, knowledge-work-plugins #158). Kein Repo-Defekt; Anleitung/UAT-Kit brauchen den Prüfweg. | BL-051.5, BL-010.7 |
+
+Datenschutz-Review zu U-01: unbedenklich mit Auflage „dauerhafter Einmal-Marker
+statt Prozessflag“ (umgesetzt: `terminal_notice` im Journal unter Active-Lock).
+Reservierungen und Leases bleiben PID-gebunden und heilen sich nach Worker-Ende
+selbst; Originale und Mapping sind vom Elternprozess-Ende unberührt (geprüft).
+
+### Fixes (lokal, nicht gepusht)
+
+| Commit | Thema | Dateien | Gezielte Tests |
+|---|---|---|---|
+| (dieser Commit) | fix(worker): Worker zeigt den Abschlussdialog selbst, wenn der MCP-Elternprozess fehlt (U-01) | `gateway/batch.js` (`claimTerminalNotice`), `gateway/worker-terminal-presentation.js` (neu), `gateway/batch-worker.js`, `gateway/batch-executor.js`, `tests/lib/detached-batch-worker.js`, `tests/test-worker-terminal-presentation.js` (neu, 11), `tests/test-direct-picker-intake-worker.js` (+1 Negativtest: Eltern trennt IPC nach Start), `tests/test-batch-executor-startup.js` (+6), `tests/run-product-suite.js`, `package.json` | `test:executor-lifecycle`, `test:journal`, `test:locks`, `test:delivery`, `test-direct-picker-intake-worker` grün |
+
+Beobachteter Flake (nicht behoben, vorbestehend): `npm run test:recovery` lässt
+`test-mixed-batch-recovery.js` nach `test-batch-recovery.js` mit „Datei während
+der Übernahme verändert“ scheitern; isoliert und ohne diese Änderung in der
+Reihenfolge gleich; alleinstehend dreimal grün. Zuordnung BL-002.

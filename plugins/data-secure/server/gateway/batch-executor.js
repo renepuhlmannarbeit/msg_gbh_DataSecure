@@ -18,7 +18,30 @@ const {
 } = require('./batch-intake-reservation');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
+// Mirrors PARENT_ACK_TYPE in ./worker-terminal-presentation.js (kept literal so
+// the executor keeps its narrow dependency surface). The parent sends it after
+// it has durably claimed the terminal notice; the detached worker then ends
+// without presenting a second window.
+const TERMINAL_NOTICE_ACK = 'local-terminal-notice-claimed';
 const pendingIntakes = new Map();
+
+// The durable journal decides who presents the terminal notice: this parent
+// while it is still alive, otherwise the detached worker (the Cowork host may
+// end this process shortly after the tool response). Without a journal claim
+// function the parent presents as before.
+function claimTerminalNoticeAsParent(token, options = {}) {
+  try {
+    const claim = options.claimTerminalNotice || require('./batch').claimTerminalNotice;
+    return typeof claim === 'function' ? claim(token, 'parent') !== false : true;
+  } catch {
+    return true;
+  }
+}
+
+function acknowledgeTerminalNotice(child) {
+  try { child?.send?.({ type: TERMINAL_NOTICE_ACK }, () => {}); }
+  catch { /* an ended worker needs no acknowledgement */ }
+}
 const pendingReviews = new Map();
 const DEFAULT_IPC_ACK_TIMEOUT_MS = 5000;
 const WORKER_ENV_KEYS = Object.freeze([
@@ -229,6 +252,8 @@ function startLocalBatchExecutor(token, options = {}) {
   const showNoticeOnce = (progress) => {
     if (noticeShown || !progress) return;
     noticeShown = true;
+    if (!claimTerminalNoticeAsParent(token, options)) return;
+    acknowledgeTerminalNotice(child);
     try { (options.showBatchStateNotice || showBatchStateNotice)(progress); }
     catch { /* presentation never changes the privacy state */ }
   };
@@ -237,6 +262,7 @@ function startLocalBatchExecutor(token, options = {}) {
     showNoticeOnce(durableBatchStateProgress(token, 'local-batch-state', options));
     if (noticeShown) return;
     noticeShown = true;
+    if (!claimTerminalNoticeAsParent(token, options)) return;
     try { (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'); }
     catch { /* presentation never changes the privacy state */ }
   });
@@ -336,6 +362,10 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     const showFailureNotice = (stage) => {
       if (intake.noticeShown) return;
       intake.noticeShown = true;
+      // Before the checkpoint there is no journal to arbitrate; the worker then
+      // presents only when this parent never acknowledged.
+      if (intake.checkpointCreated && !claimTerminalNoticeAsParent(token, options)) return;
+      acknowledgeTerminalNotice(child);
       lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
       try {
         showIntakeNotice(stage);
@@ -393,6 +423,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         phase: progress.batch_phase, item_count: progress.batch_total,
         released_count: progress.released, stopped_count: progress.stopped
       });
+      if (!claimTerminalNoticeAsParent(token, options)) return true;
+      acknowledgeTerminalNotice(child);
       lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
       try {
         showState(progress);

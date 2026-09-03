@@ -330,6 +330,85 @@ async function main() {
       assertBoundedDiagnostics(f);
     });
   }
+  for (const role of ['batch', 'intake']) {
+    test(`${role}: the parent claims the terminal notice durably and acknowledges the worker before presenting`, () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const claims = [];
+      const options = { claimTerminalNotice: (token, presenter) => { claims.push({ token, presenter }); return true; } };
+      const started = role === 'batch' ? f.api.startLocalBatchExecutor(TOKEN, options) : f.start(options);
+      assert.strictEqual(started.ok, true);
+      child.callbacks[0](null);
+      child.emit('message', {
+        type: role === 'intake' ? 'local-intake-state' : 'local-batch-state',
+        complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+        result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+        result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+        result_grades_verified: true
+      });
+      assert.strictEqual(claims.length, 1);
+      assert.strictEqual(claims[0].presenter, 'parent');
+      assert.match(claims[0].token, /^[a-f0-9]{64}$/u, 'the claim addresses the batch journal by its opaque token');
+      if (role === 'batch') assert.strictEqual(claims[0].token, TOKEN);
+      assert.strictEqual(f.notices.length, 1);
+      const acknowledgements = child.messages.filter(message => message?.type === 'local-terminal-notice-claimed');
+      assert.strictEqual(acknowledgements.length, 1, 'exactly one acknowledgement releases the waiting worker');
+      assert.doesNotMatch(JSON.stringify(acknowledgements), /[a-f0-9]{64}/u, 'the acknowledgement carries no token');
+      child.exit(0);
+      f.drain();
+      assert.strictEqual(f.notices.length, 1, 'exit finalization never repeats a presented notice');
+      assert.strictEqual(claims.length, 1);
+    });
+
+    test(`${role}: a notice already claimed by the worker is never presented a second time by the parent`, () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const options = { claimTerminalNotice: () => false };
+      const started = role === 'batch' ? f.api.startLocalBatchExecutor(TOKEN, options) : f.start(options);
+      assert.strictEqual(started.ok, true);
+      child.callbacks[0](null);
+      child.emit('message', {
+        type: role === 'intake' ? 'local-intake-state' : 'local-batch-state',
+        complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+        result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+        result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+        result_grades_verified: true
+      });
+      child.exit(0);
+      f.drain();
+      assert.strictEqual(f.notices.length, 0, 'the worker already presented this batch');
+      assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 0);
+      if (role === 'intake') {
+        assert.ok(f.records.some(event => event.event === 'intake_terminal_state'), 'the parent still records the observed terminal state');
+      }
+      assert.doesNotMatch(JSON.stringify(f.records), /PRIVATE|customer-secret|[a-f0-9]{64}/);
+    });
+
+    test(`${role}: a throwing acknowledgement channel never blocks the parent presentation`, () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const started = role === 'batch' ? f.api.startLocalBatchExecutor(TOKEN, {}) : f.start({});
+      assert.strictEqual(started.ok, true);
+      child.callbacks[0](null);
+      // The worker may already be gone when the parent acknowledges; Node then
+      // throws from send(). The private error text must neither escape nor
+      // suppress the single local presentation.
+      child.send = () => { throw privateError(); };
+      assert.doesNotThrow(() => child.emit('message', {
+        type: role === 'intake' ? 'local-intake-state' : 'local-batch-state',
+        complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+        result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+        result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+        result_grades_verified: true
+      }));
+      assert.strictEqual(f.notices.length, 1, 'the parent presents once despite a dead acknowledgement channel');
+      child.exit(0);
+      f.drain();
+      assert.strictEqual(f.notices.length, 1);
+      assert.doesNotMatch(JSON.stringify(f.records), /PRIVATE|customer-secret|[a-f0-9]{64}/);
+    });
+  }
+
   await testAsync('intake: missing IPC acknowledgement times out and late callbacks cannot revive the handoff', async () => {
     const child = fakeChild();
     const f = fixture('intake', child);
