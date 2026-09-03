@@ -109,7 +109,7 @@ if (process.platform === 'win32') {
 }
 
   await testAsync('a cancellation immediately before intake does not start a worker; successful workers remain independent', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     assert.ok(source.includes('async function startPickerBatch('));
     let starts = 0;
@@ -141,7 +141,7 @@ if (process.platform === 'win32') {
   });
 
   await testAsync('the result folder is selected once and reused without another confirmation', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     let configured = false;
     let resultPickerCalls = 0;
@@ -178,7 +178,7 @@ if (process.platform === 'win32') {
   });
 
   await testAsync('an unusable result folder is never persisted', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     const resultRoot = path.resolve(__dirname, 'synthetic-unusable-result-root');
     let saves = 0;
@@ -197,7 +197,7 @@ if (process.platform === 'win32') {
   });
 
   await testAsync('a rejected result folder reports its honest, path-free reason and reopens next time', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     class SafeError extends Error {}
     const privateRoot = path.resolve(__dirname, 'synthetic-private-root');
@@ -234,7 +234,7 @@ if (process.platform === 'win32') {
   });
 
   await testAsync('a continuation never starts a second executor next to a running intake or batch (DS-022)', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('function continueMostRecentDocumentBatch('), code.indexOf('const LOCAL_ONLY_HANDOFF='));
     assert.ok(source.includes('batch_active'), 'the continuation guard must exist');
     let continuations = 0;
@@ -271,7 +271,7 @@ if (process.platform === 'win32') {
   });
 
   await testAsync('privacy-root mutation and source intake share one native interaction owner', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     let resolveFolder;
     let resolveSources;
@@ -391,7 +391,7 @@ if (process.platform === 'win32') {
   }
 
   await testAsync('a deliberately rejected selection names its path-free reason instead of a generic start failure', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     class SafeError extends Error {}
     const { buildDiagnostic, causeFromError, CAUSES } = require('../plugins/data-secure/server/gateway/diagnostic-causes');

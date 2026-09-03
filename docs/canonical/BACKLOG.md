@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 03.09.2026 · Produktstand 3.2.0-rc92
+Stand: 03.09.2026 · Produktstand 3.2.0-rc93
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -37,6 +37,17 @@ bestand MCP-Handshake/Status-Smoke und blieb unter 45 MiB (Build 01.09.2026:
 34.913.330 Byte, SHA-256 `c34211c0…3815c`).
 Reale macOS-Ausführung, Cowork-Fresh-Install und Marketplace-Lebenszyklus bleiben
 menschliche Freigabeevidenz; bis dahin bleibt der breite Rollout NO-GO.
+
+### Codex-Gegenreview RC92 – in RC93 E0 geschlossen
+
+Die Befunde C-01 bis C-08 sind technisch behoben und regressionsgebunden.
+C-04 wurde gegen DS-012 fachlich präzisiert: Anreden werden entfernt,
+Qualifikationen bleiben. C-09 war kein Rohdatenabfluss; DS-071 grenzt die
+Laufkennung nun ausdrücklich auf zwei vom Anwender beziehungsweise Support
+aktivierte Diagnoseflächen ein. Es entsteht kein neuer Dialog. Die Änderungen
+gehören zu BL-021.1, BL-042, BL-044.1 und BL-002. Echte Zielhost-, Cowork- und
+Fachabnahme bleibt im Abschnitt B offen; insbesondere ersetzt die Regression
+keinen Vollständigkeitsbeweis für alle künftigen Dokumentdarstellungen.
 
 ### In diesem Schnitt E0 abgeschlossen
 

@@ -68,7 +68,7 @@ for(const profile of ['customer','applicant','personnel_profile','contract','gen
 // it, or this test contains an explicit, reviewed reason why no instruction is
 // appropriate. Keep the source slices narrow so names in TOOLS do not satisfy
 // their own coverage check.
-const indexSource=fs.readFileSync(path.join(pluginRoot,'server','index.js'),'utf8');
+const indexSource=fs.readFileSync(path.join(pluginRoot,'server','mcp-server.js'),'utf8');
 const toolsStart=indexSource.indexOf('const TOOLS=[');
 const toolsEnd=indexSource.indexOf('];',toolsStart);
 assert.notStrictEqual(toolsStart,-1,'TOOLS table missing');

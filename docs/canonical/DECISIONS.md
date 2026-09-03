@@ -691,6 +691,15 @@ Ereignisse eines Laufs aus Elternprozess und Worker zusammenzuführen, und
 verletzt damit DS-026 nicht, das Freitext, Pfade, Namen, Inhalte, Tokens, PIDs und
 Dokument-Hashes aus dem Schema ausschließt.
 
+Die Laufkennung gehört ausschließlich zur lokalen Supportdiagnose. Sie erscheint
+nicht im normalen Cowork-Ablauf, in den Skills, in Ergebnisdateien oder im
+Mapping. Nur ein ausdrücklich aufgerufenes Supportwerkzeug `diagnostic_status`
+darf sie in einer inhaltsfreien MCP-Diagnose anzeigen; der ebenfalls
+ausdrücklich bestätigte lokale Diagnoseexport darf denselben Status enthalten.
+Beide Flächen dienen der technischen Zuordnung eines Fehlers und ändern die
+Anonymisierung nicht. Diese begrenzte Sichtbarkeit ist beabsichtigt und keine
+allgemeine Freigabe von Laufkennungen.
+
 Verweigert der Dienst den Start fail-closed, hinterlässt er statt eines rohen
 Stacktrace mit Pfaden ein Ereignis `startup_refused` mit festem Code in der
 Ablaufspur, eine Markerdatei `startup-refused.json` mit Zeitpunkt, Version und

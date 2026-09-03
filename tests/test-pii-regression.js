@@ -1459,6 +1459,86 @@ test('form layouts, title qualifiers, phone label variants and multilingual birt
   assertPresent(header.text, '| Name | Telefonnummer |', 'the header row stays readable');
 });
 
+test('fragmented and two-row PII table headers redact every labelled identifier', () => {
+  const tables = [
+    '| Steuer<br>ID | Geburts<br>datum | Telefon<br>(privat) | Personal<br>nummer | Menge |\n' +
+      '| --- | --- | --- | --- | --- |\n' +
+      '| 26954371827 | 01.01.1980 | 030 12345678 | P-4711 | 1980 |',
+    '| Steuer | Geburts | Telefon | Personal | Menge |\n' +
+      '| ID | datum | privat | nummer | Stück |\n' +
+      '| --- | --- | --- | --- | --- |\n' +
+      '| 26954371827 | 01.01.1980 | 030 12345678 | P-4711 | 1980 |'
+  ];
+  for (const source of tables) {
+    const result = anonymize(source, 'general');
+    for (const value of ['26954371827', '01.01.1980', '030 12345678', 'P-4711']) {
+      assertAbsent(result.text, value, 'identifier below a fragmented header');
+    }
+    assertPresent(result.text, '1980', 'unlabelled quantity remains professional content');
+    assert.deepStrictEqual(pii.scanResidual(result.text, 'general', result.dictionary, {
+      strongPersonAnchor: result.strongPersonAnchor
+    }), []);
+    const rawGate = pii.scanResidual(source, 'general');
+    assert.ok(rawGate.some((hit) => hit.type === 'DATE_OF_BIRTH'), 'independent gate sees the table birth date');
+    assert.ok(rawGate.some((hit) => hit.type === 'PHONE'), 'independent gate sees the table phone');
+  }
+});
+
+test('ISO birth dates and common German phone layouts are redacted only behind strong labels', () => {
+  for (const [source, value, type] of [
+    ['Geboren: 01.01.1980', '01.01.1980', 'DATE_OF_BIRTH'],
+    ['Geburtsdatum: 1980-01-01', '1980-01-01', 'DATE_OF_BIRTH'],
+    ['Date of birth: 1980/01/01', '1980/01/01', 'DATE_OF_BIRTH'],
+    ['Telefon: 0049 30 12345678', '0049 30 12345678', 'PHONE'],
+    ['Telefon: 030 / 123456', '030 / 123456', 'PHONE'],
+    ['Telefon: +49 (0) 30 12345678', '+49 (0) 30 12345678', 'PHONE']
+  ]) {
+    const result = anonymize(source, 'general');
+    assertAbsent(result.text, value, source);
+    assert.ok(pii.scanResidual(source, 'general').some((hit) => hit.type === type), `raw gate sees ${source}`);
+    assert.deepStrictEqual(pii.scanResidual(result.text, 'general', result.dictionary, {
+      strongPersonAnchor: result.strongPersonAnchor
+    }), []);
+  }
+  for (const source of ['Projektstart: 1980-01-01', 'Version 0049.30', 'Auftrag 030 / 123456']) {
+    const result = anonymize(source, 'general');
+    assert.strictEqual(result.text, source, `unlabelled business value remains: ${source}`);
+    assert.deepStrictEqual(pii.scanResidual(result.text, 'general', result.dictionary), []);
+  }
+});
+
+test('the conservative labelled gate remains broader than the redactor', () => {
+  const spacedDate = 'Geburtsdatum: 1980 - 01 - 01';
+  const repeatedSeparatorPhone = 'Telefon: 030 -- 123456';
+  assert.strictEqual(anonymize(spacedDate, 'general').text, spacedDate, 'redactor stays precise');
+  assert.strictEqual(anonymize(repeatedSeparatorPhone, 'general').text, repeatedSeparatorPhone, 'redactor stays precise');
+  assert.ok(pii.scanResidual(spacedDate, 'general').some((hit) => hit.type === 'DATE_OF_BIRTH'));
+  assert.ok(pii.scanResidual(repeatedSeparatorPhone, 'general').some((hit) => hit.type === 'PHONE'));
+});
+
+test('gendered salutations are removed while professional academic titles remain', () => {
+  for (const [source, expectedPrefix] of [
+    ['Ansprechpartner: Frau Dr. med. Anna Beispiel', 'Ansprechpartner: Dr. med. [PERSON_001]'],
+    ['Ansprechpartner: Herr Prof. Dr. rer. nat. Erik Muster', 'Ansprechpartner: Prof. Dr. rer. nat. [PERSON_001]'],
+    ['Ansprechpartner: Dr. h. c. Erika Beispiel', 'Ansprechpartner: Dr. h. c. [PERSON_001]']
+  ]) {
+    const result = anonymize(source, 'general');
+    assert.strictEqual(result.text, expectedPrefix);
+    assert.deepStrictEqual(pii.scanResidual(result.text, 'general', result.dictionary, {
+      strongPersonAnchor: result.strongPersonAnchor
+    }), []);
+  }
+});
+
+test('month-year prose remains while real prepositional street addresses are redacted', () => {
+  for (const source of ['Im Januar 1980 wurde das Projekt gestartet.', 'Im Dezember 2025 endete das Projekt.']) {
+    assert.strictEqual(anonymize(source, 'general').text, source);
+  }
+  for (const source of ['Am Markt 12', 'Im Grund 5', 'Zur Alten Post 7']) {
+    assertPresent(anonymize(source, 'general').text, '[LOCATION_REDACTED]', source);
+  }
+});
+
 // A nested title/qualifier repetition backtracked exponentially on long runs of
 // title-like tokens and stalled the batch-session suite; the flat chain must
 // stay linear.

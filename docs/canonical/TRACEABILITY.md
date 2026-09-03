@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 03.09.2026 · 3.2.0-rc92
+Stand: 03.09.2026 · 3.2.0-rc93
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -78,7 +78,7 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-068 | aktiv und aktuell | BL-012.9/10, BL-032.1, BL-043.1; lokaler Sammelreview, PII-Shield-inspirierte Interaktion und automatischer Klar-Datei-Pfad |
 | DS-069 | aktiv und aktuell | BL-040.5, BL-041.7, BL-041.10, BL-043.1; einmalige Ergebnisordnerwahl, neutraler verifizierter Markdown-Export und lokales Öffnen |
 | DS-070 | aktiv und aktuell | BL-011.8, BL-049.1, BL-050.3; Dateiidentität über Gerät, Inode, Größe und mtime plus verpflichtenden Preflight-SHA-256, Änderungszeit ausgenommen |
-| DS-071 | aktiv und aktuell | BL-042, BL-041.10; zufällige Laufkennung `run_id` in jedem Ablaufereignis (Eltern- und Worker-Prozess), verweigerter Start mit `startup_refused`, Markerdatei und einer pfadfreien Fehlerzeile, Laufzeit-Selbstprüfung gegen `RUNTIME-EVIDENCE.json` im gebündelten Paket; `startup-guard.js`, `workflow-diagnostics.js`, `batch-executor.js`; `test-startup-guard`, `test-batch-executor-startup`, `test-workflow-diagnostics` |
+| DS-071 | aktiv und aktuell | BL-042, BL-041.10; zufällige Laufkennung `run_id` in jedem Ablaufereignis (Eltern- und Worker-Prozess), sichtbar nur im ausdrücklich aufgerufenen Supportstatus und bestätigten lokalen Diagnoseexport, nicht in Skills/Normalablauf/Ergebnissen; verweigerter Start mit `startup_refused`, Markerdatei und pfadfreier Fehlerzeile, Laufzeit-Selbstprüfung gegen `RUNTIME-EVIDENCE.json`; `index.js`, `mcp-server.js`, `startup-guard.js`, `workflow-diagnostics.js`; `test-startup-guard`, `test-workflow-diagnostics`, `test-diagnostics` |
 
 ## DS-067 – konkrete Umsetzung
 
@@ -92,6 +92,17 @@ frühere Code-/Testzuordnungen bleiben im
 
 Historische RC- und Keyring-Nachweise sind weiterhin auditierbar, aber keine
 aktuelle Produktzusage.
+
+## E0-Bugrunde 03.09.2026 – Codex-Gegenreview RC92
+
+| Story | Korrektur / Entscheidung | Code- und Testnachweis |
+|---|---|---|
+| BL-021.1, DS-049 | Fragmentierte sowie zweizeilige Tabellenköpfe werden spaltengebunden normalisiert; `Geboren`, ISO-Geburtsdaten, `0049` und Leerraum um Telefonseparatoren werden erkannt. Ein eigener konservativer, labelgebundener Residual-Kanal verwendet bewusst breitere Formen als die Redaktion. | `privacy/base.js`, `privacy/engine.js`; `test-pii-regression.js` |
+| BL-021.1, DS-012/049 | Geschlechtliche Anreden werden am erkannten Namen entfernt, akademische und berufliche Qualifikationen bleiben erhalten. Die Straßenkorrektur nimmt ausschließlich die belegte Form „Im <Monat> <Jahr>“ aus; echte präpositionale Anschriften bleiben geschützt. | `privacy/entities.js`, `privacy/engine.js`, `privacy/structured.js`; `test-pii-regression.js` |
+| BL-042, DS-048/071 | `server/index.js` ist ein kleiner fail-closed Bootstrap. Auch ein Fehler beim Laden der Produktimplementierung oder des regulären Startschutzes erzeugt keinen Node-Stacktrace mit lokalem Pfad; die Implementierung liegt in `mcp-server.js`. | `server/index.js`, `server/mcp-server.js`; `test-startup-guard.js`, Manifest-/Cowork-Vertragstests |
+| BL-044.1, DS-049/071 | Startmarker folgen keinem verlinkten Diagnoseordner. Ergebniswurzel, `DataSecure-Output` und Laufordner werden identitätsgebunden und vor jedem Schreib-/Umbenennungsschritt erneut geprüft; ein nach der Auswahl ausgetauschtes Ziel stoppt fail-closed. | `startup-guard.js`, `result-export.js`; `test-startup-guard.js`, `test-result-folder-export.js` |
+| BL-042, DS-026/071 | `run_id` bleibt bewusst eine zufällige, inhaltsfreie Supportkennung: sichtbar nur über expliziten Supportstatus und bestätigten lokalen Diagnoseexport, nie im normalen Ablauf oder Ergebnis. | `DECISIONS.md`, `IT-BETRIEBSHANDBUCH.md`; `test-diagnostics.js`, Dokumentengates |
+| BL-002 | Der zuvor vertippte direkte Executor-Lifecycle-Befehl (`nodetests/...`) startet den Workflow-Diagnosetest wieder tatsächlich. | `package.json`, `test-manifest.js`; `npm run test:executor-lifecycle` |
 
 ## E0-Bugrunde 02.09.2026 – Gesamtgegenreview RC86
 

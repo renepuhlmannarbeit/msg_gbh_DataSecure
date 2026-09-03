@@ -46,6 +46,19 @@ function markerFile(options = {}) {
   return path.join(options.dataRoot || dataRoot(), 'diagnostics', 'startup-refused.json');
 }
 
+function plainDirectoryIdentity(directory, io = fs) {
+  const stat = io.lstatSync(directory);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('unsafe marker directory');
+  const realpath = io.realpathSync.native ? io.realpathSync.native(directory) : io.realpathSync(directory);
+  if (path.resolve(realpath) !== path.resolve(directory)) throw new Error('unsafe marker directory');
+  return { dev: stat.dev, ino: stat.ino, realpath: path.resolve(realpath) };
+}
+
+function sameDirectoryIdentity(directory, expected, io = fs) {
+  const current = plainDirectoryIdentity(directory, io);
+  return current.dev === expected.dev && current.ino === expected.ino && current.realpath === expected.realpath;
+}
+
 // Best effort on every channel; a refusal must never throw a second time.
 function recordStartupRefusal(error, options = {}) {
   const code = startupCodeFor(error);
@@ -56,7 +69,17 @@ function recordStartupRefusal(error, options = {}) {
   try {
     const io = options.fs || fs;
     const file = markerFile(options);
-    io.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const root = path.dirname(path.dirname(file));
+    const directory = path.dirname(file);
+    io.mkdirSync(root, { recursive: true, mode: 0o700 });
+    const rootIdentity = plainDirectoryIdentity(root, io);
+    if (!io.existsSync(directory)) io.mkdirSync(directory, { recursive: false, mode: 0o700 });
+    const directoryIdentity = plainDirectoryIdentity(directory, io);
+    if (path.dirname(directoryIdentity.realpath) !== rootIdentity.realpath) throw new Error('unsafe marker directory');
+    if (io.existsSync(file)) {
+      const target = io.lstatSync(file);
+      if (!target.isFile() || target.isSymbolicLink()) throw new Error('unsafe marker file');
+    }
     const temporary = `${file}.${crypto.randomBytes(4).toString('hex')}.tmp`;
     io.writeFileSync(temporary, `${JSON.stringify({
       schema: 'data-secure-startup-refusal/1',
@@ -65,6 +88,11 @@ function recordStartupRefusal(error, options = {}) {
       code,
       journal_recorded: recorded
     })}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    const written = io.lstatSync(temporary);
+    if (!written.isFile() || written.isSymbolicLink() || written.nlink !== 1 ||
+        !sameDirectoryIdentity(root, rootIdentity, io) || !sameDirectoryIdentity(directory, directoryIdentity, io)) {
+      throw new Error('unsafe marker path');
+    }
     io.renameSync(temporary, file);
     marker = true;
   } catch { /* marker directory unavailable */ }

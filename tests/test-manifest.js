@@ -49,7 +49,7 @@ test('the runtime version module matches package.json', () => {
 
 test('no runtime module hard-codes a version literal of its own', () => {
   const literal = /['"`]\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?['"`]/;
-  for (const rel of ['gateway/common.js', 'index.js']) {
+  for (const rel of ['gateway/common.js', 'index.js', 'mcp-server.js']) {
     const text = readText(path.join(runtime, rel));
     assert.ok(
       !literal.test(text),
@@ -78,7 +78,7 @@ test('MCP instructions stay within the DataSecure 2 KB convention', () => {
   // No official Anthropic/MCP document fixes an instructions size limit
   // (checked 02.09.2026); 2 KB is a deliberate DataSecure budget that keeps
   // the server instructions short and stable across hosts.
-  const source = readText(path.join(runtime, 'index.js'));
+  const source = readText(path.join(runtime, 'mcp-server.js'));
   const match = source.match(/const INSTRUCTIONS=\[([\s\S]*?)\]\.join\(' '\);/u);
   assert.ok(match, 'could not locate MCP instructions');
   const literals = [...match[1].matchAll(/'((?:[^'\\]|\\.)*)'/gu)].map((entry) =>
@@ -136,7 +136,7 @@ test('PDF is declared blocked until the native coverage contract is released', (
 // Reading the names out of the source keeps this check free of a server import.
 function declaredNames(source, table) {
   const start = source.indexOf(`const ${table}=[`);
-  assert.notStrictEqual(start, -1, `could not find const ${table}=[ in server/index.js`);
+  assert.notStrictEqual(start, -1, `could not find const ${table}=[ in server/mcp-server.js`);
   const end = source.indexOf('];', start);
   const body = source.slice(start, end === -1 ? source.length : end);
   // Only top level entries carry a title; nested argument objects do not.
@@ -144,7 +144,7 @@ function declaredNames(source, table) {
 }
 
 test('MCPB tool list matches the tools the server exposes', () => {
-  const index = readText(path.join(runtime, 'index.js'));
+  const index = readText(path.join(runtime, 'mcp-server.js'));
   const exposed = declaredNames(index, 'TOOLS');
   const declared = mcpb.tools.map((t) => t.name);
   assert.ok(exposed.length > 0, 'could not read the server tool table');
@@ -156,7 +156,7 @@ test('MCPB tool list matches the tools the server exposes', () => {
 });
 
 test('MCPB prompt list matches the prompts the server exposes', () => {
-  const index = readText(path.join(runtime, 'index.js'));
+  const index = readText(path.join(runtime, 'mcp-server.js'));
   const exposed = declaredNames(index, 'PROMPTS');
   const declared = mcpb.prompts.map((p) => p.name);
   assert.deepStrictEqual([...declared].sort(), [...exposed].sort(), 'prompt lists disagree');
@@ -191,8 +191,11 @@ test('marketplace entry points at the plugin directory that exists', () => {
 
 test('the plugin ships a runnable MCP entry point', () => {
   const serverEntry = path.join(root, 'plugins', 'data-secure', 'server', 'index.js');
+  const implementation = path.join(root, 'plugins', 'data-secure', 'server', 'mcp-server.js');
   assert.ok(fs.existsSync(serverEntry), 'plugin server/index.js missing');
+  assert.ok(fs.existsSync(implementation), 'plugin server/mcp-server.js missing');
   const text = readText(serverEntry);
+  assert.match(text, /require\('\.\/mcp-server'\)/u, 'entry point must load the product behind the startup boundary');
   assert.ok(
     !/require\((['"])(?:\.\.\/){2,}/.test(text),
     'plugin server entry point escapes the plugin root; a marketplace install would not resolve it'
@@ -227,7 +230,7 @@ test('native Windows launcher has a reproducible source and release build contra
   }
   assert.doesNotMatch(productRunner, /test-(?:engineering-keyring|keyring-pilot|private-artifact-crypto|pdfium-spike|ocr-session-harness)\./iu);
   assert.strictEqual(pkg.scripts['test:executor-lifecycle'],
-    'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-worker-terminal-presentation.js && node tests/test-diagnostic-causes.js && node tests/test-startup-guard.js && nodetests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js');
+    'node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-worker-terminal-presentation.js && node tests/test-diagnostic-causes.js && node tests/test-startup-guard.js && node tests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js');
   assert.strictEqual(pkg.scripts.prebuild, 'npm run native:verify');
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');

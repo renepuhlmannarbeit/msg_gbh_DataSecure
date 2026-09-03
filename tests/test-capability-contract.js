@@ -15,6 +15,7 @@ const target = json(targetPath);
 const decisions = read('docs/canonical/DECISIONS.md');
 const runtimeFiles = [
   'plugins/data-secure/server/index.js',
+  'plugins/data-secure/server/mcp-server.js',
   'plugins/data-secure/server/gateway/common.js',
   'plugins/data-secure/server/gateway/batch.js',
   'plugins/data-secure/server/gateway/orchestrator.js',

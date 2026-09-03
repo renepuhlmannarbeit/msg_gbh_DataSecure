@@ -13,7 +13,7 @@ const explain = read('plugins/data-secure/skills/gbh-datasecure-datenschutz-erkl
 const boundary = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/sicherheitsgrenze.md');
 const installation = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/plugin-oder-mcpb.md');
 const readme = read('README.md');
-const server = read('plugins/data-secure/server/index.js');
+const server = read('plugins/data-secure/server/mcp-server.js');
 const all = [guide, review, anonymize, explain, boundary].join('\n');
 
 for (const text of [guide, review, anonymize, explain, boundary]) {

@@ -69,13 +69,14 @@ const CONTACT_URI_RE = new RegExp(
 const SEP_CHARS = ' \\t\\u00A0\\u202F\\u2007'; // for use inside a character class
 const SEP = `[${SEP_CHARS}]`; // for standalone use
 const DASH_CHARS = '\\-\\u2010\\u2011\\u2012\\u2013\\u2212';
+const PHONE_SEPARATOR = `(?:[${SEP_CHARS}]+|[${SEP_CHARS}]*[./${DASH_CHARS}][${SEP_CHARS}]*)`;
 
 // Shape only. Whether a shape is treated as a phone number is decided in
 // structured.js so that the residual gate and the redactor cannot disagree.
 const PHONE_RE = new RegExp(
-  `${NB}(?:\\+\\d{1,3}[${SEP_CHARS}./${DASH_CHARS}]?(?:\\(0\\)[${SEP_CHARS}./${DASH_CHARS}]?)?)?` +
+  `${NB}(?:(?:\\+|00)\\d{1,3}(?:${PHONE_SEPARATOR})?(?:\\(0\\)(?:${PHONE_SEPARATOR})?)?)?` +
     `(?:\\(?\\d{2,5}\\)?)` +
-    `(?:[${SEP_CHARS}./${DASH_CHARS}]?\\d{3,8}(?:[${SEP_CHARS}./${DASH_CHARS}]\\d{1,6}){0,2}` +
+    `(?:(?:${PHONE_SEPARATOR})?\\d{3,8}(?:${PHONE_SEPARATOR}\\d{1,6}){0,2}` +
     // The subscriber block is also commonly grouped into short 2-digit pairs
     // (e.g. "030 12 34 56 78"). That shape needs its own branch requiring a
     // real separator before the first group: making the plain 3-8 digit
@@ -83,7 +84,7 @@ const PHONE_RE = new RegExp(
     // plus a short unseparated remainder, e.g. "1000" in "kontakt.1000@..."),
     // turning every 4+ digit number after a "kontakt"-labelled line into a
     // false-positive phone match.
-    `|[${SEP_CHARS}./${DASH_CHARS}]\\d{2,4}(?:[${SEP_CHARS}./${DASH_CHARS}]\\d{2,4}){2,4})${NA}`,
+    `|${PHONE_SEPARATOR}\\d{2,4}(?:${PHONE_SEPARATOR}\\d{2,4}){2,4})${NA}`,
   'gu'
 );
 // The keyword may carry a "-nummer"/"number" suffix ("Telefonnummer",
@@ -154,13 +155,13 @@ const MONTH_NAME = '(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|Sep
   '|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre' +
   '|januari|februari|maart|mei|augustus|oktober)';
 const DATE_OF_BIRTH_RE = new RegExp(
-  `${NB}(?:\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|\\d{1,2}\\.?(?:er)?\\s+(?:de\\s+)?${MONTH_NAME}\\.?\\s+(?:de\\s+)?\\d{4}|${MONTH_NAME}\\.?\\s+\\d{1,2},?\\s+\\d{4})${NA}`,
+  `${NB}(?:\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|\\d{4}[./-]\\d{1,2}[./-]\\d{1,2}|\\d{1,2}\\.?(?:er)?\\s+(?:de\\s+)?${MONTH_NAME}\\.?\\s+(?:de\\s+)?\\d{4}|${MONTH_NAME}\\.?\\s+\\d{1,2},?\\s+\\d{4})${NA}`,
   'giu'
 );
 // Review rc91 (F4): only German/English literals were known; French, Spanish,
 // Dutch and Italian headers left birth dates in clear.
 const DATE_OF_BIRTH_LABEL_RE = new RegExp(
-  '(?:geburtsdatum|geburtstag|geboren\\s+am|geb\\.|date\\s+of\\s+birth|birth\\s*date|birthday|dob' +
+  '(?:geburtsdatum|geburtstag|geboren(?:\\s+am)?|geb\\.|date\\s+of\\s+birth|birth\\s*date|birthday|dob' +
   '|date\\s+de\\s+naissance|née?\\s+le|fecha\\s+de\\s+nacimiento|nacid[oa]\\s+el|geboortedatum|geboren\\s+op|data\\s+di\\s+nascita)' +
   `${LABEL_QUALIFIER}\\s*:?\\s*$`,
   'iu'
@@ -487,7 +488,7 @@ function hasLabelBefore(text, index, labelRe, window = 40) {
   let before = String(text).slice(start, index);
   const nl = before.lastIndexOf('\n');
   if (nl >= 0) before = before.slice(nl + 1);
-  if (labelRe.test(before.replace(/[|\s]+$/, (m) => m.replace(/\|/g, ' ')))) return true;
+  if (labelRe.test(normalizeSensitiveLabel(before.replace(/[|\s]+$/, (m) => m.replace(/\|/g, ' '))))) return true;
   const header = tableHeaderAt(text, index);
   if (header !== null && labelRe.test(header)) return true;
   // Form layouts put the label alone on the line above the value
@@ -495,9 +496,20 @@ function hasLabelBefore(text, index, labelRe, window = 40) {
   // value starts its own line, the nearest short non-empty line above counts.
   if (/^[\s|:>*+\-–•]*$/u.test(before)) {
     const label = previousLabelLine(text, index);
-    if (label !== null && labelRe.test(label)) return true;
+    if (label !== null && labelRe.test(normalizeSensitiveLabel(label))) return true;
   }
   return false;
+}
+
+// Office line breaks inside narrow header cells often split a closed PII label
+// into two visible words. Normalize only this bounded vocabulary; document-wide
+// whitespace folding would alter prose and create unrelated false positives.
+function normalizeSensitiveLabel(value) {
+  return String(value || '')
+    .replace(/\bsteuer[ \t]+id\b/giu, 'Steuer-ID')
+    .replace(/\bgeburts[ \t]+datum\b/giu, 'Geburtsdatum')
+    .replace(/\b(tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|mobile|handy|fax)[ \t]+(privat|dienstlich|geschäftlich|geschaeftlich|business|private)\b/giu, '$1 ($2)')
+    .replace(/\b(personal|mitarbeiter|kunden|auftrags|vertrags|rechnungs|bestell|versicherungs|sozialversicherungs|patienten|fall|akten|lieferanten|debitoren|kreditoren)[ \t]+(nummer|nr\.?|zeichen)\b/giu, '$1$2');
 }
 
 function previousLabelLine(text, index) {
@@ -549,13 +561,27 @@ function buildTableIndex(text) {
   for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) starts.push(i + 1);
   const rows = src.split('\n');
   const headersByLine = new Map();
-  for (let index = 0; index + 2 < rows.length; index++) {
-    const headers = splitTableRow(rows[index]);
-    const separator = splitTableRow(rows[index + 1]);
-    if (!headers || !separator || headers.length !== separator.length ||
-      !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
-    const cleaned = headers.map((header) => header.replace(/\s+\(\d+\)$/u, ''));
-    let row = index + 2;
+  for (let index = 1; index + 1 < rows.length; index++) {
+    const separator = splitTableRow(rows[index]);
+    if (!separator || !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
+    const immediate = splitTableRow(rows[index - 1]);
+    if (!immediate || immediate.length !== separator.length) continue;
+    let headers = immediate;
+    const preceding = index > 1 ? splitTableRow(rows[index - 2]) : null;
+    if (preceding && preceding.length === immediate.length) {
+      const combined = preceding.map((header, column) => normalizeSensitiveLabel(`${header} ${immediate[column]}`));
+      const createsSensitiveLabel = combined.some((header, column) =>
+        (DATE_OF_BIRTH_LABEL_RE.test(header) || PHONE_LABEL_RE.test(header) || DE_TAX_LABEL_RE.test(header) || ID_LABEL_HEADER_RE.test(header)) &&
+        ![preceding[column], immediate[column]].some((part) => {
+          const normalized = normalizeSensitiveLabel(part);
+          return DATE_OF_BIRTH_LABEL_RE.test(normalized) || PHONE_LABEL_RE.test(normalized) ||
+            DE_TAX_LABEL_RE.test(normalized) || ID_LABEL_HEADER_RE.test(normalized);
+        })
+      );
+      if (createsSensitiveLabel) headers = combined;
+    }
+    const cleaned = headers.map((header) => normalizeSensitiveLabel(header.replace(/\s+\(\d+\)$/u, '')));
+    let row = index + 1;
     while (row < rows.length) {
       const cells = splitTableRow(rows[row]);
       if (!cells || cells.length !== headers.length) break;
@@ -668,6 +694,7 @@ module.exports = {
   luhnValid,
   hasLabelBefore,
   tableHeaderAt,
+  normalizeSensitiveLabel,
   NAME_PARTICLE,
   NAME_PARTICLES,
   ID_LABEL_HEADER_RE,

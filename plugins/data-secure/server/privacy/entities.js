@@ -147,9 +147,12 @@ const PERSON_LABEL =
 // The title and qualifier vocabularies are disjoint and the chain is a flat
 // repetition, so the pattern stays linear (no nested optional groups that
 // could backtrack exponentially on long title-like runs).
-const HONORIFIC_TITLE = '(?:Herrn?|Frau|Dr\\.?|Prof\\.?|PD|Priv\\.-Doz\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm|Psych|Päd)\\.?|Mag\\.?)';
+const GENDERED_SALUTATION = '(?:Herrn?|Frau)';
+const ACADEMIC_TITLE = '(?:Dr\\.?|Prof\\.?|PD|Priv\\.-Doz\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm|Psych|Päd)\\.?|Mag\\.?)';
+const HONORIFIC_TITLE = `(?:${GENDERED_SALUTATION}|${ACADEMIC_TITLE})`;
 const HONORIFIC_QUALIFIER = '(?:med|dent|vet|jur|phil|theol|oec|habil|h\\.\\s?c|rer\\.\\s?(?:nat|pol|soc|medic))\\.?';
 const HONORIFIC = `(?:${HONORIFIC_TITLE}(?:\\s+(?:${HONORIFIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;
+const ACADEMIC_HONORIFIC = `(?:${ACADEMIC_TITLE}(?:\\s+(?:${ACADEMIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;
 
 function markdownTableCells(line) {
   const source = String(line || '').trim();
@@ -718,6 +721,8 @@ function makeRegistry() {
 module.exports = {
   PERSON_LABEL,
   HONORIFIC,
+  GENDERED_SALUTATION,
+  ACADEMIC_HONORIFIC,
   isStructuralLine,
   isLabelLine,
   markdownTableCells,

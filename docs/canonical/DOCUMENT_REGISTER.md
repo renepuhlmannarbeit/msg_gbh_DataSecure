@@ -53,8 +53,9 @@ Abnahme.
 | `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | aktueller zeitgebundener Herstellerabgleich |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
-| `tasks/CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`, `tasks/CLAUDE-CODE-ARBEITSBACKLOG-RC86.md`, `tasks/CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md` | aktueller ausführbarer Claude-Code-Auftrag, ihm untergeordnetes Arbeitsledger und der zeitgebundene Abschlussbericht; kein zweites Produktbacklog |
+| `tasks/CLAUDE-CODE-FOLGEAUFTRAG-GEGENREVIEW-RC93.md` | aktueller ausführbarer Claude-Code-Gegenreview- und Fixauftrag zu RC93; die kanonische Arbeit bleibt BL-021.1, BL-042, BL-044.1 und BL-002 zugeordnet |
 | `tasks/CODEX-AUFTRAG-REVIEW-RC92.md` | zeitgebundener Read-only-Gegenreview-Auftrag an Codex zu rc92; erzeugt nur einen Bericht, ändert weder Code noch Kanon |
+| `tasks/CODEX-REVIEW-BERICHT-RC92.md` | Ergebnis des unabhängigen RC92-Gegenreviews; die Umsetzung und fachliche Präzisierung seiner Befunde ist im Nachtrag sowie in `BACKLOG.md` und `TRACEABILITY.md` dokumentiert |
 
 ## Historisch, nicht entscheidungsführend
 

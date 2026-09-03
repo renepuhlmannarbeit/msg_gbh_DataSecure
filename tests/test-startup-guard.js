@@ -68,6 +68,23 @@ test('a refusal never throws when neither journal nor marker directory is writab
   assert.match(stderr, /UNSAFE_STORAGE_LOCATION/u);
 });
 
+test('a refusal never follows a linked diagnostics directory', () => {
+  const dataRoot = path.join(base, 'linked-refusal');
+  const outside = path.join(base, 'linked-refusal-outside');
+  fs.mkdirSync(dataRoot);
+  fs.mkdirSync(outside);
+  const diagnostics = path.join(dataRoot, 'diagnostics');
+  fs.symlinkSync(outside, diagnostics, process.platform === 'win32' ? 'junction' : 'dir');
+  const outcome = guard.recordStartupRefusal(new Error('synthetic'), {
+    dataRoot,
+    recordWorkflowEvent: () => false,
+    stderr: { write() {} }
+  });
+  assert.strictEqual(outcome.marker, false);
+  assert.strictEqual(fs.existsSync(path.join(outside, 'startup-refused.json')), false, 'external target stays untouched');
+  fs.rmSync(diagnostics);
+});
+
 test('refuseStartup records and exits with code 1', () => {
   const exits = [];
   guard.refuseStartup(new Error('Legacy input migration failed closed.'), {
@@ -130,6 +147,43 @@ test('the real server refuses a broken data root with one content-free line and 
   assert.strictEqual(events.at(-1).event, 'startup_refused');
   assert.strictEqual(events.at(-1).error_code, 'UNSAFE_STORAGE_LOCATION');
   assert.strictEqual(marker.journal_recorded, true);
+});
+
+test('an early product-module load failure is caught by the tiny bootstrap without a stack trace', () => {
+  const localAppData = path.join(base, 'early-load-localappdata');
+  const entry = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'index.js');
+  const child = [
+    "const Module=require('module')",
+    'const original=Module._load',
+    "Module._load=function(request){if(request==='./mcp-server')throw new Error('synthetic C:\\\\Users\\\\someone\\\\secret.js load failure');return original.apply(this,arguments)}",
+    `require(${JSON.stringify(entry)})`
+  ].join(';');
+  const result = spawnSync(process.execPath, ['-e', child], {
+    encoding: 'utf8', timeout: 30000, windowsHide: true,
+    env: { ...process.env, LOCALAPPDATA: localAppData, EU_PRIVACY_ROOT: '', EU_PRIVACY_SUPPORT_MODE: '0' }
+  });
+  assert.strictEqual(result.status, 1);
+  assert.strictEqual(result.stdout, '');
+  const lines = result.stderr.split(/\r?\n/u).filter(Boolean);
+  assert.strictEqual(lines.length, 1, JSON.stringify(result.stderr));
+  assert.match(lines[0], /^DataSecure-Start verweigert: STARTUP_FAILED \(DataSecure-Version: /u);
+  assert.doesNotMatch(result.stderr, /secret|someone|\.js| at |\\|\//u);
+  const marker = JSON.parse(fs.readFileSync(path.join(localAppData, 'SecureDataMsg', 'diagnostics', 'startup-refused.json'), 'utf8'));
+  assert.strictEqual(marker.code, 'STARTUP_FAILED');
+});
+
+test('bootstrap fallback stays path-free even when the regular startup guard cannot load', () => {
+  const entry = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'index.js');
+  const child = [
+    "const Module=require('module')",
+    'const original=Module._load',
+    "Module._load=function(request){if(request==='./mcp-server'||request==='./gateway/startup-guard')throw new Error('synthetic C:\\\\Users\\\\someone\\\\secret.js load failure');return original.apply(this,arguments)}",
+    `require(${JSON.stringify(entry)})`
+  ].join(';');
+  const result = spawnSync(process.execPath, ['-e', child], { encoding: 'utf8', timeout: 30000, windowsHide: true });
+  assert.strictEqual(result.status, 1);
+  assert.strictEqual(result.stdout, '');
+  assert.strictEqual(result.stderr, 'DataSecure-Start verweigert: STARTUP_FAILED. Lokale Verarbeitung ist nicht verfügbar.\n');
 });
 
 done(() => fs.rmSync(base, { recursive: true, force: true }));

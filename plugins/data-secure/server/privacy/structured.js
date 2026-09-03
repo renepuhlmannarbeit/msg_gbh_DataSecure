@@ -36,6 +36,7 @@ const { placeholderSpans, applySpans } = require('./spans');
 // German postcode and city. Keep this semantic exclusion beside the detector
 // so the postal regex remains line-local and the gate shares the same rule.
 const POSTAL_QUANTITY_RE = /^\d{5}[ \t]+(?:Euro|EUR|Stück|Stueck|Punkte|Stunden|Tage|Monate|Jahre|Prozent|Einwohner|Exemplare|Teile|kg|km|qm|m²|Liter)(?:[ \t]|$)/iu;
+const MONTH_YEAR_STREET_FALSE_POSITIVE_RE = /^Im[ \t]+(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)[ \t]+\d{4}$/iu;
 
 // One declarative table drives both the redactor and the residual gate. The
 // previous split between scanStructured() and replaceStructured() meant the
@@ -155,7 +156,8 @@ const DETECTORS = [
     type: 'STREET_ADDRESS',
     re: STREET_ADDRESS_RE,
     placeholder: '[LOCATION_REDACTED]',
-    priority: 77
+    priority: 77,
+    accept: (value) => !MONTH_YEAR_STREET_FALSE_POSITIVE_RE.test(value)
   },
   {
     type: 'POSTAL_ADDRESS',

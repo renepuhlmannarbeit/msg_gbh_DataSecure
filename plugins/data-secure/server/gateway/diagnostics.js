@@ -246,7 +246,8 @@ function exportDiagnosticPackage(options = {}) {
   const target = diagnosticExportPath(options);
   const root = path.dirname(target);
   const artifacts = [
-    digestArtifact('mcp_server', path.join(__dirname, '..', 'index.js'), io),
+    digestArtifact('mcp_bootstrap', path.join(__dirname, '..', 'index.js'), io),
+    digestArtifact('mcp_server', path.join(__dirname, '..', 'mcp-server.js'), io),
     digestArtifact('native_launcher', path.join(__dirname, '..', 'native-launcher.js'), io)
   ];
   const native = path.join(__dirname, '..', 'native', 'windows-x64', 'datasecure-sandbox.exe');

@@ -11,6 +11,10 @@ const {
   hashShort,
   escapeRegExp,
   ORG_SUFFIX_TAIL_RE,
+  DATE_OF_BIRTH_LABEL_RE,
+  PHONE_LABEL_RE,
+  ID_LABEL_HEADER_RE,
+  hasLabelBefore,
   isAllowedOrg,
   orgAlias,
   titleCase,
@@ -19,6 +23,9 @@ const {
 } = require('./base');
 const {
   PERSON_LABEL,
+  HONORIFIC,
+  GENDERED_SALUTATION,
+  ACADEMIC_HONORIFIC,
   collectPersonAnchors,
   collectPersonSeeds,
   collectNameSeeds,
@@ -60,14 +67,19 @@ function isProtectedProfessionalDomain(text, start, end, credentialRanges) {
 // "Herr Weiß" must collapse into a single pseudonym instead of leaving
 // "Herr [PERSON_001]": the honorific is a gender quasi-identifier and carries
 // no information the released text needs.
-const HONORIFIC_PREFIX_RE =
-  /(?:^|[\s(«"'–—-])((?:Herrn?|Frau|Dr\.?|Prof\.?|Dipl\.-?(?:Ing|Inf|Kfm)\.?|Mag\.?|Mr\.?|Mrs\.?|Ms\.?)\s+)$/u;
+const HONORIFIC_PREFIX_RE = new RegExp(`(?:^|[\\s(«"'–—-])(${HONORIFIC}[ \\t]+)$`, 'iu');
+const GENDERED_PREFIX_RE = new RegExp(
+  `(?:^|[\\s(«"'–—-])(${GENDERED_SALUTATION}[ \\t]+)(${ACADEMIC_HONORIFIC}[ \\t]+)?$`,
+  'iu'
+);
 
 function growOverHonorific(text, span) {
-  const before = text.slice(Math.max(0, span.start - 24), span.start);
-  const m = before.match(HONORIFIC_PREFIX_RE);
+  const before = text.slice(Math.max(0, span.start - 192), span.start);
+  const m = before.match(GENDERED_PREFIX_RE);
   if (!m) return span;
-  return { ...span, start: span.start - m[1].length };
+  // Anrede/Geschlecht entfernen, die fachliche akademische Qualifikation nach
+  // DS-012 jedoch unverändert vor dem Personenpseudonym erhalten.
+  return { ...span, start: span.start - m[1].length - (m[2]?.length || 0), replacement: `${m[2] || ''}${span.replacement}` };
 }
 
 function growOverMarkdownLabel(text, span) {
@@ -76,6 +88,45 @@ function growOverMarkdownLabel(text, span) {
     return { ...span, start: span.start - 1, end: span.end + 1 };
   }
   return span;
+}
+
+// The residual gate intentionally does not reuse PHONE_RE or
+// DATE_OF_BIRTH_RE. These broader shapes stay behind a strong local/table label,
+// so a future redactor regression cannot silently become the gate's blind spot.
+const RESIDUAL_DATE_CANDIDATE_RE = /(?:\d{4}[ \t]*[./-][ \t]*\d{1,2}[ \t]*[./-][ \t]*\d{1,2}|\d{1,2}[ \t]*[./-][ \t]*\d{1,2}[ \t]*[./-][ \t]*\d{2,4})/gu;
+const RESIDUAL_PHONE_CANDIDATE_RE = /(?:\+|00)?\d[\d() \t\u00A0\u202F\u2007./\-\u2010\u2011\u2012\u2013\u2212]{4,28}\d/gu;
+const RESIDUAL_TABLE_ID_CANDIDATE_RE = /(?=[A-Z0-9./\- ]{3,40}\d)[A-Z0-9][A-Z0-9./\- ]{1,38}[A-Z0-9]/giu;
+
+function plausibleCalendarDate(value) {
+  const numbers = String(value).split(/[./-]/u).map((part) => Number(part.trim()));
+  if (numbers.length !== 3 || numbers.some((number) => !Number.isInteger(number))) return false;
+  const [year, month, day] = numbers[0] >= 1000
+    ? numbers
+    : [numbers[2] < 100 ? 1900 + numbers[2] : numbers[2], numbers[1], numbers[0]];
+  if (year < 1850 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function conservativeLabelledResiduals(text) {
+  const findings = [];
+  for (const match of text.matchAll(RESIDUAL_DATE_CANDIDATE_RE)) {
+    if (plausibleCalendarDate(match[0]) && hasLabelBefore(text, match.index, DATE_OF_BIRTH_LABEL_RE, 80)) {
+      findings.push({ type: 'DATE_OF_BIRTH', text: match[0] });
+    }
+  }
+  for (const match of text.matchAll(RESIDUAL_PHONE_CANDIDATE_RE)) {
+    const digits = match[0].replace(/\D/gu, '');
+    if (digits.length >= 6 && digits.length <= 15 && hasLabelBefore(text, match.index, PHONE_LABEL_RE, 80)) {
+      findings.push({ type: 'PHONE', text: match[0] });
+    }
+  }
+  for (const match of text.matchAll(RESIDUAL_TABLE_ID_CANDIDATE_RE)) {
+    if (hasLabelBefore(text, match.index, ID_LABEL_HEADER_RE, 80)) {
+      findings.push({ type: 'LABELED_ID', text: match[0].trim() });
+    }
+  }
+  return findings;
 }
 
 function isExplicitPersonOccurrence(text, span, coveringOrganizations = []) {
@@ -366,6 +417,9 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   const out = scanStructured(clean)
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .map((f) => ({ type: f.type, text: f.text }));
+  for (const finding of conservativeLabelledResiduals(clean)) {
+    if (!out.some((current) => current.type === finding.type && current.text === finding.text)) out.push(finding);
+  }
   const residualOrgKeys=new Set();
   const residualOrgSpans=[];
   for(const org of collectOrganizations(clean)) {

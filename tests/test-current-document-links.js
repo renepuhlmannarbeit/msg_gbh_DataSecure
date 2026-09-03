@@ -39,7 +39,7 @@ const files = [
   'plugins/data-secure/BUILDING.md',
   'plugins/data-secure/server/README.md',
   'tasks/README.md',
-  'tasks/CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md',
+  'tasks/CLAUDE-CODE-FOLGEAUFTRAG-GEGENREVIEW-RC93.md',
   'evals/plugin-eval/README.md'
 ];
 

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const index = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'index.js'), 'utf8');
+const index = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'mcp-server.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 const skill = fs.readFileSync(path.join(
   root, 'plugins', 'data-secure', 'skills', 'gbh-datasecure-dokument-anonymisieren', 'SKILL.md'

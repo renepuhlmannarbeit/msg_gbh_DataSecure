@@ -16,6 +16,29 @@ const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
 const TEMPORARY_RECORD_RE = /^re_[a-f0-9]{32}\.json\.\d+\.[a-f0-9]{8}\.tmp$/u;
 const PACKAGE_RE = /^ds_[a-f0-9]{32}$/u;
 
+function comparablePath(value) {
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+function bindPlainDirectory(directory, parent = null) {
+  const named = fs.lstatSync(directory);
+  const opened = fs.statSync(directory);
+  const real = fs.realpathSync.native(directory);
+  if (!named.isDirectory() || named.isSymbolicLink() || !opened.isDirectory() ||
+      named.dev !== opened.dev || named.ino !== opened.ino ||
+      comparablePath(real) !== comparablePath(directory) ||
+      (parent && comparablePath(path.dirname(real)) !== comparablePath(parent.real))) {
+    throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+  }
+  return { path: directory, real: path.resolve(real), dev: String(opened.dev), ino: String(opened.ino), birthtime: String(Math.trunc(opened.birthtimeMs)) };
+}
+function assertDirectoryBinding(binding, parent = null) {
+  const current = bindPlainDirectory(binding.path, parent);
+  if (current.dev !== binding.dev || current.ino !== binding.ino || current.birthtime !== binding.birthtime ||
+      comparablePath(current.real) !== comparablePath(binding.real)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+  return current;
+}
+
 function outboxDirectory() {
   const directory = path.join(dataRoot(), 'result-export-state');
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -91,10 +114,13 @@ function activeDestination() {
   const root = readConfiguredResultRoot();
   if (!root) return null;
   const checked = inspectRoot(root);
+  const rootBinding = bindPlainDirectory(checked.root);
+  const outputBinding = bindPlainDirectory(resultOutputDirectory({ root: checked.root }), rootBinding);
   const material = `${checked.root}\0${checked.identity.dev}\0${checked.identity.ino}\0${checked.identity.birthtime_ms}`;
   return {
     id: crypto.createHash('sha256').update(material).digest('hex'),
-    output: resultOutputDirectory({ root: checked.root })
+    root: rootBinding,
+    output: outputBinding
   };
 }
 function ensureRecord(state) {
@@ -109,15 +135,22 @@ function ensureRecord(state) {
   writeRecord(target, value);
   return { target, value };
 }
-function ensurePlainDirectory(parent, name) {
+function ensurePlainDirectory(destination, name) {
+  assertDirectoryBinding(destination.root);
+  assertDirectoryBinding(destination.output, destination.root);
+  const parent = destination.output.path;
   const target = path.join(parent, name);
   if (path.dirname(target) !== parent || name === '.' || name === '..' || /[\\/\0]/u.test(name)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
   if (!fs.existsSync(target)) fs.mkdirSync(target, { mode: 0o700 });
-  const stat = fs.lstatSync(target);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
-  return target;
+  assertDirectoryBinding(destination.root);
+  assertDirectoryBinding(destination.output, destination.root);
+  return bindPlainDirectory(target, destination.output);
 }
-function exportOne(runDirectory, item) {
+function exportOne(destination, run, item) {
+  assertDirectoryBinding(destination.root);
+  assertDirectoryBinding(destination.output, destination.root);
+  assertDirectoryBinding(run, destination.output);
+  const runDirectory = run.path;
   const target = path.join(runDirectory, item.file);
   if (path.dirname(target) !== runDirectory) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
   if (fs.existsSync(target)) {
@@ -133,13 +166,26 @@ function exportOne(runDirectory, item) {
   const temporary = path.join(runDirectory, `.${item.file}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   let descriptor;
   try {
-    descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+    assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root);
+    assertDirectoryBinding(run, destination.output);
+    descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
     writeFully(descriptor, bytes, fs);
     fs.fsyncSync(descriptor);
+    const opened = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(temporary);
+    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() || opened.nlink !== 1 || named.nlink !== 1 ||
+        opened.dev !== named.dev || opened.ino !== named.ino) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
     fs.closeSync(descriptor);
     descriptor = undefined;
+    assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root);
+    assertDirectoryBinding(run, destination.output);
     renameWithTransientRetry(temporary, target);
     syncParentDirectory(target, fs, process.platform);
+    assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root);
+    assertDirectoryBinding(run, destination.output);
     const written = fs.lstatSync(target);
     if (!written.isFile() || written.isSymbolicLink() || written.size !== bytes.length ||
         crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== expected) throw new Error('RESULT_EXPORT_VERIFY_FAILED');
@@ -160,12 +206,12 @@ function exportedCount(record) {
 // item can never make an already written (and possibly user-deleted) result
 // eligible again. Throws after persisting the progress when an item fails.
 function exportOpenItems(target, record, destination) {
-  const run = ensurePlainDirectory(destination.output, record.run_directory);
+  const run = ensurePlainDirectory(destination, record.run_directory);
   let current = record;
   for (let index = 0; index < current.items.length; index++) {
     const item = current.items[index];
     if (item.exported === true) continue;
-    exportOne(run, item);
+    exportOne(destination, run, item);
     const items = current.items.map((entry, position) => position === index ? { ...planItem(entry), exported: true } : entry);
     current = { ...current, items };
     writeRecord(target, current);
@@ -258,4 +304,7 @@ function terminalVisibleExport(completed, exporter) {
   }
 }
 
-module.exports = { SCHEMA, recordPath, validRecord, exportCompletedState, replayPendingResultExports, terminalVisibleExport };
+module.exports = {
+  SCHEMA, recordPath, validRecord, exportCompletedState, replayPendingResultExports, terminalVisibleExport,
+  _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding }
+};

@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 03.09.2026 · 3.2.0-rc92
+Stand: 03.09.2026 · 3.2.0-rc93
 
 ## Produktkanäle
 
@@ -122,7 +122,11 @@ laufende Programmdatei zusätzlich gegen `RUNTIME-EVIDENCE.json` geprüft; eine
 beschädigte oder ausgetauschte Laufzeit stoppt mit `RUNTIME_INTEGRITY_FAILED`.
 Jedes Ablaufereignis trägt eine zufällige Laufkennung `run_id` (8 Hexzeichen,
 aus nichts abgeleitet), mit der die Ereignisse eines Laufs aus Elternprozess und
-Worker zusammengehören.
+Worker zusammengehören. Diese Kennung bleibt aus Skills, Normalablauf,
+Ergebnisdateien und Mapping heraus. Sie ist nur nach ausdrücklichem Supportaufruf
+in `diagnostic_status` sowie im ausdrücklich bestätigten, rein lokalen
+Diagnoseexport sichtbar; beides enthält weiterhin weder Rohwerte noch Namen,
+Pfade, Tokens oder Dokument-Hashes.
 
 ## Upgrade und Rollback
 

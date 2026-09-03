@@ -19,7 +19,7 @@ const {
   resultOutputDirectory, isCommonSyncFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
-  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport
+  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport, _test
 } = require('../plugins/data-secure/server/gateway/result-export');
 
 function packageFixture(id, text) {
@@ -260,6 +260,20 @@ try {
   ], { encoding: 'utf8', windowsHide: true, timeout: 30000, env: forwarded });
   assert.strictEqual(childView.status, 0, childView.stderr);
   assert.strictEqual(childView.stdout, path.resolve(overrideRoot), 'a child with the worker environment resolves the same destination');
+
+  // RC92 C-08: the visible output may be replaced after activeDestination has
+  // bound it. The later write step must revalidate that identity before mkdir.
+  const boundRoot = path.join(base, 'bound-cowork');
+  const outside = path.join(base, 'bound-outside');
+  fs.mkdirSync(boundRoot);
+  fs.mkdirSync(outside);
+  process.env.EU_PRIVACY_RESULT_ROOT = boundRoot;
+  const destination = _test.activeDestination();
+  fs.rmSync(destination.output.path, { recursive: true });
+  fs.symlinkSync(outside, destination.output.path, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => _test.ensurePlainDirectory(destination, 'Lauf-20260903-120000-abcdef12'), /RESULT_EXPORT_PATH_UNSAFE/u);
+  assert.strictEqual(fs.existsSync(path.join(outside, 'Lauf-20260903-120000-abcdef12')), false, 'no directory is created outside the selected tree');
+  fs.rmSync(destination.output.path);
 
   console.log('RESULT FOLDER EXPORT PASS');
 } finally {

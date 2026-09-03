@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 03.09.2026 · 3.2.0-rc92 · Git-Arbeitsstand nach dritter Review-Runde: Erkennungslücken in Formularlayouts, nachvollziehbarer Start, Laufkennung
+Stand: 03.09.2026 · 3.2.0-rc93 · Git-Arbeitsstand nach Codex-Gegenreview: Formularerkennung, früher Startschutz und Exportpfadbindung korrigiert
 
 ## Produkt in einem Satz
 
@@ -63,6 +63,18 @@ Testjournal liegt unter
 Aktuelle Testklassen und Befehle stehen in [`docs/TESTING.md`](../TESTING.md).
 Automatisierte Tests ersetzen keine Windows-/macOS-Fresh-Install-, Cowork-, UX-,
 Accessibility-, Security- oder Fachabnahme.
+
+Das RC92-Gegenreview fand drei freigabeblockierende Erkennungslücken bei
+fragmentierten Tabellenköpfen, beschrifteten Geburtsdaten und üblichen deutschen
+Telefonformaten. RC93 schließt sie mit präziser Redaktion plus einem davon
+getrennten, konservativen Residual-Gate. Harmlose Monat-Jahr-Sätze bleiben
+erhalten; akademische Qualifikationen bleiben nach DS-012 erhalten, während eine
+geschlechtliche Anrede am Personennamen entfernt wird. Ein winziger Bootstrap
+fängt jetzt auch frühe Modul-Ladefehler pfadfrei ab. Startmarker und sichtbare
+Ergebnisexporte prüfen Link-/Junction- und Verzeichnisidentitäten erneut vor den
+Schreibschritten. Das reduziert die belegten Fehlerpfade, ist aber keine Aussage,
+dass beliebige zukünftige Dokumentdarstellungen vollständig erkannt werden;
+unabhängige Gates und die fachliche Reviewstufe bleiben verbindlich.
 
 ## Backlog-Ist je Epic
 
