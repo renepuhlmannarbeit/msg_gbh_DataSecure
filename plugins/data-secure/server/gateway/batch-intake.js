@@ -127,7 +127,7 @@ function createBatchIntake(options = {}) {
           error: 'local_batch_start_cancelled',
           message: 'Die lokale Startbestätigung wurde abgebrochen. Es wurde kein Stapel begonnen.',
           user_status: 'Lokaler Start abgebrochen: Es wurde kein Stapel begonnen.',
-          next_action: 'restart_only_on_request',
+          next_action: 'restart_only_on_explicit_request',
           input_documents_seen: queue.length,
           raw_content_sent_to_claude: false
         };

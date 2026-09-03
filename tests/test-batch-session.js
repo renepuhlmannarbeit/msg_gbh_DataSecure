@@ -470,7 +470,7 @@ async function main() {
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.error, 'local_batch_start_cancelled');
     assert.match(result.user_status, /kein Stapel begonnen/);
-    assert.strictEqual(result.next_action, 'restart_only_on_request');
+    assert.strictEqual(result.next_action, 'restart_only_on_explicit_request');
     assert.deepStrictEqual(summary, { selected_count: 1, total_bytes: Buffer.byteLength('Kunde: Max Mustermann') });
     assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).sort(), batchesBefore);
   });
