@@ -177,6 +177,10 @@ test('explicit resume starts only the existing checkpoint and never opens or reb
     on(event, handler) { listeners[`on:${event}`] = handler; },
     once(event, handler) { listeners[`once:${event}`] = handler; },
     send(value, callback) {
+      // The parent acknowledges a claimed terminal notice over the same channel;
+      // only the first message is the private start envelope.
+      (child.messages ||= []).push(value);
+      if (value?.type === 'local-terminal-notice-claimed') { callback(); return; }
       message = value;
       listeners['on:message']?.({
         type: 'local-batch-state', complete: false, batch_phase: 'awaiting_explicit_resume',
@@ -194,6 +198,8 @@ test('explicit resume starts only the existing checkpoint and never opens or reb
   assert.strictEqual(result.ok, true);
   assert.deepStrictEqual(message, { type: 'start-local-batch', batch_token: batch.batch_token });
   assert.strictEqual(message.queue, undefined);
+  assert.deepStrictEqual(child.messages.slice(1), [{ type: 'local-terminal-notice-claimed' }],
+    'the only further message is the content-free notice acknowledgement');
   listeners['once:exit']?.(0);
   assert.deepStrictEqual(states.map((state) => state.batch_phase), ['awaiting_explicit_resume']);
   assert.deepStrictEqual(failures, []);
