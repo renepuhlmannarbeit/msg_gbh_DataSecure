@@ -1393,6 +1393,72 @@ test('label-gated identifiers in Markdown table columns are redacted and caught 
   assertPresent(handResult.text, 'a \\| b', 'escaped pipe content stays');
 });
 
+// Review rc91 fuzzing (F1-F4): label on the line above, title qualifiers,
+// phone label variants and multilingual or spelled-out birth dates.
+test('form layouts, title qualifiers, phone label variants and multilingual birth dates are redacted', () => {
+  const { scanResidual } = require('../plugins/data-secure/server/privacy/engine');
+  const clean = (text, profile = 'personnel_profile') => {
+    const result = anonymize(text, profile);
+    const residual = scanResidual(result.text, profile, result.dictionary, { strongPersonAnchor: result.strongPersonAnchor });
+    return { text: result.text, residual };
+  };
+  // F1: label alone on the line above, definition list, list marker
+  for (const [input, value] of [
+    ['Geburtsdatum\n01.01.1980', '01.01.1980'],
+    ['Steuer-ID\n26954371827', '26954371827'],
+    ['Telefon\n030 123456-78', '030 123456-78'],
+    ['Steuer-ID\n: 26954371827', '26954371827'],
+    ['- Kennzeichen\n  M-AB 1234', 'M-AB 1234'],
+    ['Geburtsdatum:\n\n05.05.1975', '05.05.1975']
+  ]) {
+    const out = clean(input);
+    assertAbsent(out.text, value, `label above value: ${input.split('\n')[0]}`);
+    assert.deepStrictEqual(out.residual, [], 'gate agrees');
+  }
+  // F2: chained titles and lower-case degree qualifiers
+  for (const name of ['Dr. med. Anna Beispiel', 'Prof. Dr. med. Anna Beispiel', 'Dr. rer. nat. Erik Muster', 'Dr. h. c. Erika Beispiel', 'Dr. med. Anna von der Heide']) {
+    const out = clean(`Ansprechpartner: ${name}\nRolle: Ärztliche Leitung`);
+    assertAbsent(out.text, name.replace(/^.*?(?=[A-Z][a-z]+ [A-Z]|Anna|Erik|Erika)/u, '').split(' ').slice(-1)[0], `surname of ${name}`);
+    assertPresent(out.text, '[PERSON_001]', `title-qualified ${name}`);
+    assertPresent(out.text, 'Ärztliche Leitung', 'role survives');
+  }
+  // F3: phone label variants, inline and as table header
+  for (const [input, value] of [
+    ['Telefonnummer: 030 123456', '030 123456'],
+    ['Telefonnummer 030 123456', '030 123456'],
+    ['| Name | Telefonnummer |\n|---|---|\n| Max Mustermann | 030 123456 |', '030 123456'],
+    ['| Name | Telefoonnummer |\n|---|---|\n| Max Mustermann | 030 123456 |', '030 123456'],
+    ['| Name | Telefon (privat) | Mobil (dienstlich) |\n|---|---|---|\n| Max Mustermann | 030 123456-78 | 0170 1234567 |', '030 123456-78'],
+    ['| Name | Mobil (dienstlich) |\n|---|---|\n| Max Mustermann | 0170 1234567 |', '0170 1234567']
+  ]) {
+    const out = clean(input, 'general');
+    assertAbsent(out.text, value, `phone under ${input.split('\n')[0]}`);
+    assert.deepStrictEqual(out.residual, [], 'gate agrees');
+  }
+  // F4: multilingual birth-date headers and spelled-out dates
+  for (const [input, value] of [
+    ['| Name | Date de naissance |\n|---|---|\n| Max Mustermann | 01.01.1980 |', '01.01.1980'],
+    ['| Name | Fecha de nacimiento |\n|---|---|\n| Max Mustermann | 01.01.1980 |', '01.01.1980'],
+    ['| Name | Geboortedatum |\n|---|---|\n| Max Mustermann | 01.01.1980 |', '01.01.1980'],
+    ['| Name | Data di nascita |\n|---|---|\n| Max Mustermann | 01/01/1980 |', '01/01/1980'],
+    ['Geburtsdatum: 1. Januar 1980', '1. Januar 1980'],
+    ['Geburtsdatum\n1. Januar 1980', '1. Januar 1980'],
+    ['Date of birth: January 1, 1980', 'January 1, 1980'],
+    ['Geboren am: 12 März 1979', '12 März 1979']
+  ]) {
+    const out = clean(input, 'general');
+    assertAbsent(out.text, value, `birth date under ${input.split('\n')[0]}`);
+    assert.deepStrictEqual(out.residual, [], 'gate agrees');
+  }
+  // Controls: no label, no redaction of plain numbers or month prose
+  const control = anonymize('Projektstart war Januar 1980 mit 12 Teilprojekten. Menge: 26954371827 Stück. Kapitel 1. Januar 1980 ist ein Datum ohne Label.', 'general');
+  assertPresent(control.text, 'Projektstart war Januar 1980 mit 12 Teilprojekten', 'month prose without a label stays');
+  assertPresent(control.text, '26954371827', 'a bare 11-digit quantity stays');
+  assertPresent(control.text, '1. Januar 1980', 'a date without a birth label stays');
+  const header = anonymize('| Name | Telefonnummer |\n|---|---|\n| Max Mustermann | 030 123456 |', 'general');
+  assertPresent(header.text, '| Name | Telefonnummer |', 'the header row stays readable');
+});
+
 test('credential review keeps professional sentence prefixes outside the organisation span', () => {
   for (const source of [
     'Zertifizierungen\nWorkshop für Contoso GmbH',

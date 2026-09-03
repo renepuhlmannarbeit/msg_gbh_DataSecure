@@ -86,7 +86,16 @@ const PHONE_RE = new RegExp(
     `|[${SEP_CHARS}./${DASH_CHARS}]\\d{2,4}(?:[${SEP_CHARS}./${DASH_CHARS}]\\d{2,4}){2,4})${NA}`,
   'gu'
 );
-const PHONE_LABEL_RE = /(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|handy|fax|kontakt|durchwahl|rufnummer|erreichbar(?:\s+unter)?|zu\s+erreichen(?:\s+unter)?|unter\s+der\s+(?:ruf)?nummer|anzurufen\s+unter)\s*\.?\s*:?\s*$/iu;
+// The keyword may carry a "-nummer"/"number" suffix ("Telefonnummer",
+// "Telefoonnummer") and a bracketed qualifier ("Telefon (privat)"); review rc91
+// (F3) showed both shapes disabled the gate entirely.
+const LABEL_QUALIFIER = '(?:\\s*\\([^)\\n]{1,40}\\))?';
+const PHONE_LABEL_RE = new RegExp(
+  '(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|mobile|handy|fax|kontakt|durchwahl|rufnummer' +
+  '|erreichbar(?:\\s+unter)?|zu\\s+erreichen(?:\\s+unter)?|unter\\s+der\\s+(?:ruf)?nummer|anzurufen\\s+unter)' +
+  `(?:[\\s-]?(?:nummer|nr\\.?|number|numéro|número|numero))?${LABEL_QUALIFIER}\\s*\\.?\\s*:?\\s*$`,
+  'iu'
+);
 // France commonly groups local subscriber numbers into four two-digit pairs
 // after a one-digit area code. Keep that shape separate from PHONE_RE so a
 // broadened generic matcher cannot mistake short technical number runs for PII.
@@ -137,8 +146,25 @@ const STREET_ADDRESS_RE = new RegExp(
   'giu'
 );
 
-const DATE_OF_BIRTH_RE = new RegExp(`${NB}\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}${NA}`, 'gu');
-const DATE_OF_BIRTH_LABEL_RE = /(?:geburtsdatum|geburtstag|date of birth|dob)\s*:?\s*$/i;
+// Numeric and spelled-out dates ("1. Januar 1980", "January 1, 1980"); the
+// detector stays label-gated, so month names cannot fire on ordinary prose.
+const MONTH_NAME = '(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember' +
+  '|January|February|March|May|June|July|October|December|Jan|Feb|Mär|Apr|Jun|Jul|Aug|Sep|Sept|Okt|Oct|Nov|Dez|Dec' +
+  '|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre' +
+  '|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre' +
+  '|januari|februari|maart|mei|augustus|oktober)';
+const DATE_OF_BIRTH_RE = new RegExp(
+  `${NB}(?:\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|\\d{1,2}\\.?(?:er)?\\s+(?:de\\s+)?${MONTH_NAME}\\.?\\s+(?:de\\s+)?\\d{4}|${MONTH_NAME}\\.?\\s+\\d{1,2},?\\s+\\d{4})${NA}`,
+  'giu'
+);
+// Review rc91 (F4): only German/English literals were known; French, Spanish,
+// Dutch and Italian headers left birth dates in clear.
+const DATE_OF_BIRTH_LABEL_RE = new RegExp(
+  '(?:geburtsdatum|geburtstag|geboren\\s+am|geb\\.|date\\s+of\\s+birth|birth\\s*date|birthday|dob' +
+  '|date\\s+de\\s+naissance|née?\\s+le|fecha\\s+de\\s+nacimiento|nacid[oa]\\s+el|geboortedatum|geboren\\s+op|data\\s+di\\s+nascita)' +
+  `${LABEL_QUALIFIER}\\s*:?\\s*$`,
+  'iu'
+);
 const VEHICLE_PLATE_RE = new RegExp(`${NB}[A-ZÄÖÜ]{1,3}-[A-Z]{1,2}[ ]?\\d{1,4}[EH]?${NA}`, 'giu');
 const VEHICLE_PLATE_LABEL_RE = /(?:kennzeichen|kfz-?kennzeichen|nummernschild)\s*:?\s*$/i;
 
@@ -182,7 +208,12 @@ const TABLE_ID_CELL_RE = new RegExp(`${NB}(?=[A-Z0-9./\\-]*\\d)[A-Z0-9][A-Z0-9./
 const HONORIFICS = new Set([
   'HERR', 'HERRN', 'FRAU', 'DR', 'DR.', 'PROF', 'PROF.', 'DIPL', 'DIPL.',
   'ING', 'ING.', 'MAG', 'MAG.', 'MR', 'MRS', 'MS', 'SEHR', 'GEEHRTE',
-  'GEEHRTER', 'LIEBE', 'LIEBER', 'HALLO'
+  'GEEHRTER', 'LIEBE', 'LIEBER', 'HALLO',
+  // Degree qualifiers behind a title ("Dr. med.", "Dr. h. c.", "Dr. rer. nat.")
+  // are part of the honorific, never of the name (review rc91).
+  'MED', 'MED.', 'DENT', 'DENT.', 'VET', 'VET.', 'JUR', 'JUR.', 'PHIL', 'PHIL.',
+  'THEOL', 'THEOL.', 'OEC', 'OEC.', 'HABIL', 'HABIL.', 'H.', 'C.', 'RER', 'RER.',
+  'NAT', 'NAT.', 'POL', 'POL.', 'SOC', 'SOC.', 'PD', 'PRIV.-DOZ', 'PRIV.-DOZ.'
 ]);
 
 // Words that disqualify a title-case bigram from being read as a person name.
@@ -401,11 +432,19 @@ function isStopToken(token) {
   return ROLE_WORDS.has(up) || HONORIFICS.has(up);
 }
 
+// Nobility and origin particles sit between name tokens ("Anna von der
+// Heide", "Jean-Luc de la Croix"); they are neither the first nor the last
+// token and never count as name tokens themselves.
+const NAME_PARTICLE = '(?:von|vom|van|de|der|den|del|della|di|da|du|la|le|zu|zur|zum|y|e|of)';
+const NAME_PARTICLES = new Set(['von', 'vom', 'van', 'de', 'der', 'den', 'del', 'della', 'di', 'da', 'du', 'la', 'le', 'zu', 'zur', 'zum', 'y', 'e', 'of']);
+
 function looksName(s) {
   const v = normalizeSpaces(s);
   if (!v || v.length > 80) return false;
   if (TECH_TERMS.has(v.toLocaleUpperCase('de-DE'))) return false;
-  const toks = v.split(/\s+/);
+  const all = v.split(/\s+/);
+  if (all.length > 7) return false;
+  const toks = all.filter((t, i) => !(i > 0 && i < all.length - 1 && NAME_PARTICLES.has(t)));
   if (toks.length < 2 || toks.length > 4) return false;
   if (toks.some(isStopToken)) return false;
   const token = new RegExp(`^(?:${NAME_TOKEN}|${CAPS_TOKEN})$`, 'u');
@@ -450,7 +489,27 @@ function hasLabelBefore(text, index, labelRe, window = 40) {
   if (nl >= 0) before = before.slice(nl + 1);
   if (labelRe.test(before.replace(/[|\s]+$/, (m) => m.replace(/\|/g, ' ')))) return true;
   const header = tableHeaderAt(text, index);
-  return header !== null && labelRe.test(header);
+  if (header !== null && labelRe.test(header)) return true;
+  // Form layouts put the label alone on the line above the value
+  // ("Geburtsdatum\n01.01.1980", definition lists ": 26954371827"). When the
+  // value starts its own line, the nearest short non-empty line above counts.
+  if (/^[\s|:>*+\-–•]*$/u.test(before)) {
+    const label = previousLabelLine(text, index);
+    if (label !== null && labelRe.test(label)) return true;
+  }
+  return false;
+}
+
+function previousLabelLine(text, index) {
+  const src = String(text);
+  let lineStart = src.lastIndexOf('\n', Math.max(0, index - 1));
+  for (let hops = 0; hops < 3 && lineStart > 0; hops++) {
+    const previousStart = src.lastIndexOf('\n', lineStart - 1) + 1;
+    const line = src.slice(previousStart, lineStart).replace(/[|\s:>*+\-–•]+$/u, '').replace(/^[\s|>*+\-–•]+/u, '').trim();
+    if (line) return line.length <= 80 ? line : null;
+    lineStart = previousStart - 1;
+  }
+  return null;
 }
 
 function splitTableRow(line) {
@@ -609,6 +668,8 @@ module.exports = {
   luhnValid,
   hasLabelBefore,
   tableHeaderAt,
+  NAME_PARTICLE,
+  NAME_PARTICLES,
   ID_LABEL_HEADER_RE,
   TABLE_ID_CELL_RE,
   sameLineHasIban

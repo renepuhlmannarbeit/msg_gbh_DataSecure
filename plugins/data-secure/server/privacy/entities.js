@@ -4,6 +4,7 @@ const { lineBoundsAt } = require('./spans');
 const {
   NAME_TOKEN,
   CAPS_TOKEN,
+  NAME_PARTICLE,
   ORG_SUFFIX,
   COMPANY_RE,
   normalizeSpaces,
@@ -139,7 +140,16 @@ const PERSON_LABEL =
   '|Eigentümer(?:in)?|Bearbeiter(?:in)?|(?:Zuletzt\\s+)?(?:geändert|erstellt)\\s+von' +
   '|Author|Creator|Manager|Owner|Approver|Representative|Contact\\s+person|Last\\s+modified\\s+by|Modified\\s+by|Nom|Nombre|Naam|Имя|ФИО|Όνομα|姓名|氏名|이름)';
 
-const HONORIFIC = '(?:Herrn?|Frau|Dr\\.?|Prof\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm)\\.?|Mag\\.?)';
+// Titles may chain ("Prof. Dr.") and carry lower-case degree qualifiers
+// ("Dr. med.", "Dr. rer. nat.", "Dr. h. c."). Review rc91 (F2): the qualifier
+// broke the honorific anchor, so "Dr. med. Anna Beispiel" stayed in clear and
+// the residual gate, sharing the anchor, agreed.
+// The title and qualifier vocabularies are disjoint and the chain is a flat
+// repetition, so the pattern stays linear (no nested optional groups that
+// could backtrack exponentially on long title-like runs).
+const HONORIFIC_TITLE = '(?:Herrn?|Frau|Dr\\.?|Prof\\.?|PD|Priv\\.-Doz\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm|Psych|Päd)\\.?|Mag\\.?)';
+const HONORIFIC_QUALIFIER = '(?:med|dent|vet|jur|phil|theol|oec|habil|h\\.\\s?c|rer\\.\\s?(?:nat|pol|soc|medic))\\.?';
+const HONORIFIC = `(?:${HONORIFIC_TITLE}(?:\\s+(?:${HONORIFIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;
 
 function markdownTableCells(line) {
   const source = String(line || '').trim();
@@ -326,8 +336,15 @@ function collectPersonAnchors(text, profile = 'general') {
   let m;
 
   // "Herr Müller", "Frau Dr. Sanchez-Weiß", "Prof. Özdemir"
+  // Nobility and origin particles ("von der Heide", "de la Croix", "van den
+  // Berg") belong to the anchored name; without them "Dr. med. Anna von der
+  // Heide" left the surname in clear behind the pseudonym (review rc91).
+  // Tokens are joined by spaces or tabs only: a name never continues on the
+  // next line ("Anna Beispiel\nRolle" used to be captured as a three-token name
+  // and then rejected as a whole).
+  const particle = `(?:${NAME_PARTICLE}[ \\t]+){0,3}`;
   const honor = new RegExp(
-    `${HONORIFIC}\\s+((?:${NAME_TOKEN}|${CAPS_TOKEN})(?:\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})){0,2})`,
+    `${HONORIFIC}[ \\t]+((?:${NAME_TOKEN}|${CAPS_TOKEN})(?:[ \\t]+${particle}(?:${NAME_TOKEN}|${CAPS_TOKEN})){0,3})`,
     'gu'
   );
   while ((m = honor.exec(src))) pushPerson(out, m[1], 'honorific');
