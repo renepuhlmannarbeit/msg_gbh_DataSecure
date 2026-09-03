@@ -231,6 +231,16 @@ async function startPickerBatch(args,context={}){
   }
   catch(error){
     if(context.signal?.aborted||error?.code==='LOCAL_SELECTION_CANCELLED')return cancelled();
+    // A deliberate, path-free rejection of the chosen selection (mixed folder
+    // with blocked formats, output tree, link, too many files) is a user-facing
+    // reason, not a connector failure. Only SafeError texts are fixed strings
+    // without names or paths; anything else stays the generic start failure.
+    if(error instanceof SafeError){
+      recordWorkflowEvent({event:'picker_failed',outcome:'stopped',error_code:'LOCAL_SELECTION_REJECTED'});
+      const reason=String(error.message||'').trim();
+      const message=reason.endsWith('Es wurde kein Stapel gestartet.')?reason:`${reason} Es wurde kein Stapel gestartet.`;
+      return{ok:false,error:'local_selection_rejected',message,mode,local_processing_started:false,next_action:'choose_other_selection',raw_content_sent_to_claude:false};
+    }
     recordWorkflowEvent({event:'picker_failed',outcome:'stopped',error_code:'LOCAL_PICKER_FAILED'});
     return{ok:false,error:'local_start_failed',message:'Die lokale Auswahl konnte nicht sicher vorbereitet werden. Es wurde kein Stapel gestartet.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false};
   }

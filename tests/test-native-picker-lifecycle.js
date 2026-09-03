@@ -389,6 +389,49 @@ if (process.platform === 'win32') {
     });
   }
 
+  await testAsync('a deliberately rejected selection names its path-free reason instead of a generic start failure', async () => {
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
+    const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
+    class SafeError extends Error {}
+    const events = [];
+    const run = async (failure) => {
+      let starts = 0;
+      const context = vm.createContext({
+        process: { env: {} }, setImmediate, SafeError,
+        readConfiguredResultRoot: () => 'already-configured',
+        reserveIntake: () => ({ reservation_id: 'd'.repeat(64) }),
+        releaseIntake: () => true,
+        genericStatus: () => ({ engine_ready: true }),
+        pickSourceFolderAsync: async () => path.dirname(selectedPath),
+        enumerateSourceFolderAsync: async () => { throw failure; },
+        pickSourcesAsync: async () => { throw failure; },
+        batchQueueFromSelection: (selected) => selected,
+        recordWorkflowEvent: (event) => { events.push(event); },
+        startLocalIntakeExecutor: () => { starts++; return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+        localOnlyStartResponse: (started) => ({ ok: started.ok })
+      });
+      vm.runInContext(source, context);
+      const result = await context.startPickerBatch({ source_kind: 'folder' }, {});
+      assert.strictEqual(starts, 0, 'no worker starts after a rejected selection');
+      return result;
+    };
+    const rejected = await run(new SafeError('Der ausgewählte Ordner enthält 7 reguläre Dateien, davon 3 nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.'));
+    assert.strictEqual(rejected.ok, false);
+    assert.strictEqual(rejected.error, 'local_selection_rejected');
+    assert.strictEqual(rejected.next_action, 'choose_other_selection');
+    assert.match(rejected.message, /7 reguläre Dateien, davon 3 nicht freigegebene/u);
+    assert.strictEqual((rejected.message.match(/Es wurde kein Stapel gestartet./gu) || []).length, 1, 'the closing sentence appears once');
+    assert.doesNotMatch(JSON.stringify(rejected), /[A-Z]:[\/]|personnel|.txt/u);
+    assert.ok(events.some((event) => event.event === 'picker_failed' && event.error_code === 'LOCAL_SELECTION_REJECTED'));
+    const link = await run(new SafeError('Der ausgewählte Quellordner liegt hinter einem Link oder Reparse-Punkt.'));
+    assert.strictEqual(link.error, 'local_selection_rejected');
+    assert.match(link.message, /Reparse-Punkt. Es wurde kein Stapel gestartet.$/u);
+    const generic = await run(Object.assign(new Error('ENOENT private C:\\secret\\file.txt'), { code: 'ENOENT' }));
+    assert.strictEqual(generic.error, 'local_start_failed', 'unexpected errors stay a generic, content-free start failure');
+    assert.doesNotMatch(JSON.stringify(generic), /secret|ENOENT/u);
+    assert.ok(events.some((event) => event.error_code === 'LOCAL_PICKER_FAILED'));
+  });
+
   await testAsync('privacy folder: cancellation owns and aborts only its asynchronous dialog', async () => {
     const controller = new AbortController();
     let observed;

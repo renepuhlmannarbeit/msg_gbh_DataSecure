@@ -146,6 +146,7 @@ wird nicht automatisch an Claude übertragen.
 | Sichtbarer Export vorübergehend fehlgeschlagen | Interne Ergebnisse bleiben erhalten; beim nächsten Pluginstart wird erneut exportiert |
 | Antwort nennt keine oder eine ältere DataSecure-Version | Cowork verarbeitet mit einer älteren Plugin-Kopie; Plugin gemäß „Plugin aktualisieren“ neu bereitstellen und neue Aufgabe starten |
 | Picker geschlossen | Nur auf ausdrücklichen Wunsch neu starten |
+| Auswahl abgelehnt („enthält … nicht freigegebene oder unbekannte Formate“) | Ein Ordner wird immer vollständig verarbeitet oder gar nicht; Ordner nur mit TXT/Markdown/CSV/DOCX wählen oder die Dateien einzeln auswählen. Kein Fehler des Plugins |
 | Datei sicher gestoppt | Nicht automatisch wiederholen; Klartextmeldung lesen, technischen Code nur an IT nennen |
 | Stapel unterbrochen | „Setze den letzten DataSecure-Stapel fort“ |
 | Mehrdeutigkeit | lokalen Sammelreview starten oder vertagen |
