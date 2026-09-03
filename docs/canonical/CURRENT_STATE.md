@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 03.09.2026 · 3.2.0-rc89 · Git-Arbeitsstand nach Worker-seitigem Abschlussdialog und Versionsanzeige
+Stand: 03.09.2026 · 3.2.0-rc90 · Git-Arbeitsstand nach Diagnose-Hülle in jeder Fehlerantwort und Explorer-Ordnerdialog
 
 ## Produkt in einem Satz
 
