@@ -1,5 +1,5 @@
 {
-  "version": "3.2.0-rc87",
+  "version": "3.2.0-rc88",
   "build_date": "2026-09-03",
   "target": "Claude Plugin ZIP / private Marketplace; Windows x64 and macOS Intel/ARM Fresh Install pending; Linux later",
   "runtime": "Bundled local runtime target; plugin-ZIP start without system Node pending Fresh Install; no end-user npm/Python setup",

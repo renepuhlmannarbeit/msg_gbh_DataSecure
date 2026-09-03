@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 03.09.2026 · 3.2.0-rc87 · Git-Arbeitsstand nach Worker-seitigem Abschlussdialog und Versionsanzeige
+Stand: 03.09.2026 · 3.2.0-rc88 · Git-Arbeitsstand nach Worker-seitigem Abschlussdialog und Versionsanzeige
 
 ## Produkt in einem Satz
 
