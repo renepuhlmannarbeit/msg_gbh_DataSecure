@@ -39,8 +39,10 @@ den tokenfreien Handoff; Kennungen und Leseberechtigungen bleiben im lokalen Ser
 Anfrage: „Entferne die Bilder aus dem Ergebnis, anonymisiere alle Dateien und fasse danach die Qualifikationen zusammen.“
 
 Lasse den Bildstandard unverändert: Das Ergebnis ist ohnehin Markdown ohne Bildpixel.
-Der normale Picker hat kein `remove_images`-Argument. Grafiken bleiben lokal zurückgehalten;
-sicher erkannter Bildtext kann nach derselben Datenschutzprüfung im Markdown bleiben.
+Der normale Picker hat kein `remove_images`-Argument. Grafiken bleiben lokal zurückgehalten
+und erscheinen im lokalen Abschlussdialog zur Sichtprüfung; ein Bild-Text-Pfad (OCR) ist im
+Pilot noch kein Produktpfad. Wo er später freigegeben wird, gilt für erkannten Bildtext
+dieselbe Datenschutzprüfung wie für Dokumenttext.
 Erkläre vor dem Start den getrennten späteren Auswertungsauftrag. Nach dem Start kein Lesen;
 erst nach lokalem Abschluss und neuem ausdrücklichem Auftrag die freigegebenen Ergebnisse
 über den tokenfreien Handoff zusammenfassen.
