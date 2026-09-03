@@ -23,6 +23,16 @@ aus dem Runtime-Vertrag. Ein universelles Marketplace-Paket darf erst angeboten
 werden, wenn es self-contained, unter dem geltenden Limit und auf Windows sowie
 beiden macOS-Architekturen abgenommen ist.
 
+Zusätzlich erzeugt `node scripts/build-marketplace-repo.mjs [--plugin-name <kennung>]`
+aus dem verifizierten Zielpaket eine vollständige Git-Marketplace-Projektion
+(`dist/marketplace-repo/`: `.claude-plugin/marketplace.json` mit relativer
+Quelle und Version, `plugins/<kennung>/` als byteidentischer ZIP-Inhalt). Sie
+wird in ein eigenes privates Repository gelegt und in Claude Desktop als
+Marketplace aus Git-URL hinzugefügt; Updates laufen über den „Update“-Knopf des
+Marketplace. Eine abweichende Kennung (z. B. `data-secure-uat`) ist nur für
+Test-/UAT-Installationen gedacht, etwa wenn ein blockierter Kontoeintrag den
+Produktnamen belegt, und wird im Evidence-Log vermerkt.
+
 Der persönliche Datei-Upload in Cowork („My Uploads“) besitzt laut offizieller
 Dokumentation keinen Update-Mechanismus; ein erneuter Upload derselben
 Plugin-Kennung ersetzte am 03.09.2026 die gecachte Kopie nicht (offene Meldungen
