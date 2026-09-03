@@ -147,7 +147,9 @@ const PERSON_LABEL =
 // The title and qualifier vocabularies are disjoint and the chain is a flat
 // repetition, so the pattern stays linear (no nested optional groups that
 // could backtrack exponentially on long title-like runs).
-const GENDERED_SALUTATION = '(?:Herrn?|Frau)';
+// English salutations are gendered as well; without them "Mrs. Erika Beispiel"
+// carried neither a name anchor nor a salutation removal (counter-review rc93).
+const GENDERED_SALUTATION = '(?:Herrn?|Frau|(?<![\\p{L}])M(?:rs|r|s|x)\\.?)';
 // "Dr.-Ing." is one title token; "Dr." followed by "-Ing." broke the anchor and
 // left the whole name in clear (counter-review rc93).
 const ACADEMIC_TITLE = '(?:Dr\\.?(?:-Ing\\.?)?|Prof\\.?|PD|Priv\\.-Doz\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm|Psych|Päd)\\.?|Mag\\.?)';

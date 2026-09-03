@@ -1570,6 +1570,25 @@ test('Dr.-Ing. titles anchor the name and stay in front of the pseudonym', () =>
   }
 });
 
+// Counter-review rc93: English salutations are gendered salutations too. They
+// neither anchored the name nor were removed, leaving the full name in clear.
+test('English salutations anchor the name and are removed like German ones', () => {
+  for (const [source, expected] of [
+    ['Contact: Mrs. Erika Beispiel', 'Contact: [PERSON_001]'],
+    ['Contact: Mr. Max Mustermann', 'Contact: [PERSON_001]'],
+    ['Contact: Ms Anna Beispiel', 'Contact: [PERSON_001]'],
+    ['Contact: Mr. Dr. Max Mustermann', 'Contact: Dr. [PERSON_001]'],
+    ['Dear Mrs. Beispiel,', 'Dear [PERSON_001],']
+  ]) {
+    const result = anonymize(source, 'personnel_profile');
+    assert.strictEqual(result.text, expected, source);
+    assert.deepStrictEqual(require('../plugins/data-secure/server/privacy/engine').scanResidual(result.text, 'personnel_profile', result.dictionary, { strongPersonAnchor: result.strongPersonAnchor }), []);
+  }
+  const control = anonymize('Summr Report und Timr Werte bleiben, MRS steht für Multi Resolution Scan.', 'personnel_profile');
+  assertPresent(control.text, 'Summr Report', 'a word ending in "mr" is not a salutation');
+  assertPresent(control.text, 'Multi Resolution Scan', 'an acronym sentence stays');
+});
+
 // A nested title/qualifier repetition backtracked exponentially on long runs of
 // title-like tokens and stalled the batch-session suite; the flat chain must
 // stay linear.
