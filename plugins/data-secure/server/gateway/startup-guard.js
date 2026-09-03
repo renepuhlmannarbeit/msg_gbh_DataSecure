@@ -46,12 +46,21 @@ function markerFile(options = {}) {
   return path.join(options.dataRoot || dataRoot(), 'diagnostics', 'startup-refused.json');
 }
 
+// Windows paths are case-insensitive: LOCALAPPDATA may spell the profile folder
+// differently from the on-disk name, and the native realpath returns the
+// on-disk spelling. A pure string comparison refused the marker on such
+// profiles (counter-review rc93); links and reparse points stay refused.
+function comparableDirectoryPath(value) {
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
 function plainDirectoryIdentity(directory, io = fs) {
   const stat = io.lstatSync(directory);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('unsafe marker directory');
   const realpath = io.realpathSync.native ? io.realpathSync.native(directory) : io.realpathSync(directory);
-  if (path.resolve(realpath) !== path.resolve(directory)) throw new Error('unsafe marker directory');
-  return { dev: stat.dev, ino: stat.ino, realpath: path.resolve(realpath) };
+  if (comparableDirectoryPath(realpath) !== comparableDirectoryPath(directory)) throw new Error('unsafe marker directory');
+  return { dev: stat.dev, ino: stat.ino, realpath: comparableDirectoryPath(realpath) };
 }
 
 function sameDirectoryIdentity(directory, expected, io = fs) {

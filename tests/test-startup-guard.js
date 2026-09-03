@@ -85,6 +85,25 @@ test('a refusal never follows a linked diagnostics directory', () => {
   fs.rmSync(diagnostics);
 });
 
+// Counter-review rc93: the marker was refused when the data root was spelled
+// with a different letter case than the on-disk name (Windows is
+// case-insensitive; LOCALAPPDATA and the native realpath may differ).
+test('a differently cased data root still receives its marker on Windows', () => {
+  const canonical = path.join(base, 'CasedProfile', 'SecureDataMsg');
+  fs.mkdirSync(canonical, { recursive: true });
+  const variants = process.platform === 'win32'
+    ? [canonical.replace('CasedProfile', 'casedprofile'), canonical.charAt(0).toLowerCase() + canonical.slice(1)]
+    : [canonical];
+  for (const dataRoot of variants) {
+    const outcome = guard.recordStartupRefusal(new Error('synthetic'), {
+      dataRoot, recordWorkflowEvent: () => false, stderr: { write() {} }
+    });
+    assert.strictEqual(outcome.marker, true, `marker written for ${dataRoot === canonical ? 'canonical' : 'differently cased'} root`);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(canonical, 'diagnostics', 'startup-refused.json'), 'utf8')).code, 'STARTUP_FAILED');
+    fs.rmSync(path.join(canonical, 'diagnostics'), { recursive: true, force: true });
+  }
+});
+
 test('refuseStartup records and exits with code 1', () => {
   const exits = [];
   guard.refuseStartup(new Error('Legacy input migration failed closed.'), {
