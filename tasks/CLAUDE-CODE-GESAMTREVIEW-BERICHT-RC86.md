@@ -315,10 +315,16 @@ selbst; Originale und Mapping sind vom Elternprozess-Ende unberührt (geprüft).
 | Commit | Thema | Dateien | Gezielte Tests |
 |---|---|---|---|
 | `165b281` | fix(worker): Worker zeigt den Abschlussdialog selbst, wenn der MCP-Elternprozess fehlt (U-01) | `gateway/batch.js` (`claimTerminalNotice`), `gateway/worker-terminal-presentation.js` (neu), `gateway/batch-worker.js`, `gateway/batch-executor.js`, `tests/lib/detached-batch-worker.js`, `tests/test-worker-terminal-presentation.js` (neu, 11), `tests/test-direct-picker-intake-worker.js` (+1 Negativtest: Eltern trennt IPC nach Start), `tests/test-batch-executor-startup.js` (+6), `tests/run-product-suite.js`, `package.json` | `test:executor-lifecycle`, `test:journal`, `test:locks`, `test:delivery`, `test-direct-picker-intake-worker` grün |
-| (Folgecommit) | test(manifest): Lifecycle-Skript inkl. neuem Präsentationstest festschreiben | `tests/test-manifest.js` | `test-manifest` grün |
-| (Folgecommit) | feat(version): laufende Version in Startantwort, Pflichtantwort und jedem lokalen Fenster (U-02, U-04) | `server/normal-path-response.js`, `server/companion/completion-summary.js`, `server/index.js` (Instruktion vereinheitlicht), `server/prompt-contract.js`, `manifest.json` (sync), Skill `SKILL.md`/`references/beispiele.md`, `docs/ANLEITUNG.md`, `docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md`, `tests/test-normal-path-response.js` | `test-normal-path-response`, `test-completion-summary`, `test-manifest`, `test-mcp-protocol`, `test-capability-contract`, `test-cowork-tool-surface-contract`, `test-status-app-server`, `test-native-picker-lifecycle`, `test:skills`, `test:docs` grün |
+| `69a2be1` | test(manifest): Lifecycle-Skript inkl. neuem Präsentationstest festschreiben | `tests/test-manifest.js` | `test-manifest` grün |
+| (Folgecommit) | docs(cowork): verlässlicher Update-/Rollback-Pfad für Cowork-Uploads in IT-Handbuch und UAT-Kit (U-05) | `docs/IT-BETRIEBSHANDBUCH.md`, `docs/acceptance/UAT_TEST_KIT/README.md`, `docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md` | `test:docs` grün |
+| `943596d` | feat(version): laufende Version in Startantwort, Pflichtantwort und jedem lokalen Fenster (U-02, U-04) | `server/normal-path-response.js`, `server/companion/completion-summary.js`, `server/index.js` (Instruktion vereinheitlicht), `server/prompt-contract.js`, `manifest.json` (sync), Skill `SKILL.md`/`references/beispiele.md`, `docs/ANLEITUNG.md`, `docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md`, `tests/test-normal-path-response.js` | `test-normal-path-response`, `test-completion-summary`, `test-manifest`, `test-mcp-protocol`, `test-capability-contract`, `test-cowork-tool-surface-contract`, `test-status-app-server`, `test-native-picker-lifecycle`, `test:skills`, `test:docs` grün |
 
 Beobachteter Flake (nicht behoben, vorbestehend): `npm run test:recovery` lässt
 `test-mixed-batch-recovery.js` nach `test-batch-recovery.js` mit „Datei während
 der Übernahme verändert“ scheitern; isoliert und ohne diese Änderung in der
 Reihenfolge gleich; alleinstehend dreimal grün. Zuordnung BL-002.
+Zweiter Flake gleicher Art: `npm run test:docs:fast` lässt am 03.09.2026 in 3 von
+5 Läufen `test-uat-fixture-generation.js` mit `SOURCE_IDENTITY_CHANGED` scheitern
+(Identitätsvergleich lstat/fstat unmittelbar nach dem Schreiben der 111
+Fixtures); alleinstehend und in jeder manuellen Zweiersequenz grün. Generator und
+Format-Inspector sind von diesem Nachtrag unberührt. Zuordnung BL-002.

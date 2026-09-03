@@ -12,8 +12,11 @@ reproduzierbare Historie erhalten, sind aber keine Anleitung.
    erzeugt plattformneutral exakt 111 synthetische Dateien unter
    `docs/acceptance/UAT_TEST_KIT/inputs`; Python und historische RC-Kits werden
    dafür nicht benötigt.
-2. Aktuelles Plugin-ZIP bauen/installieren und Claude Desktop vollständig neu
-   starten.
+2. Aktuelles Plugin-ZIP bauen und in Claude Desktop über Einstellungen →
+   Anpassen → Plugins hochladen (ein vorhandenes DataSecure-Plugin vorher dort
+   entfernen), Claude Desktop vollständig neu starten und auf der Plugin-Seite
+   Version, Dateiansicht und Aktualisierungszeit prüfen. Der Bereich „Claude
+   Code“ erreicht Cowork nicht.
 3. Die sechs verständlich benannten Fälle aus
    [STEP-BY-STEP.md](STEP-BY-STEP.md) durchführen und
    [EVIDENCE_LOG.csv](EVIDENCE_LOG.csv) ausfüllen.

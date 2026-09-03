@@ -34,7 +34,10 @@ und keinen Originalzugriff erhalten.
 
 ## Installationstest
 
-1. Plugin installieren, Claude vollständig beenden und neu starten.
+1. Plugin in Claude Desktop über Einstellungen → Anpassen → Plugins → „Aus Datei
+   hochladen“ installieren, Claude vollständig beenden und neu starten. Der
+   Bereich „Claude Code“ und die Kommandozeile nutzen einen anderen Speicher
+   (`~/.claude/plugins`); Cowork startet daraus nichts.
 2. Neue lokale Cowork-Aufgabe öffnen.
 3. „Dateien anonymisieren“ schreiben.
 4. Beim ersten Lauf erwartet: zuerst einmalig die lokale Ergebnisordnerwahl. Einen
@@ -106,6 +109,20 @@ Vorher Version, Artefakt-SHA-256 und inhaltsfreie Konfiguration sichern. Quellen
 und fertige Exporte bleiben unangetastet. Verschlüsselte historische Altbestände
 werden weder migriert noch gelöscht. Nach Upgrade/Rollback: Picker-Abbruchtest,
 synthetischer Kernfall, Resume und Mapping prüfen.
+
+Cowork hält hochgeladene Plugins in einem eigenen, sitzungsgebundenen Cache
+(„My Uploads“, unter `%APPDATA%\Claude\local-agent-mode-sessions\…\rpm\`). Ein
+erneuter Upload derselben Plugin-Kennung und ein Neustart der App ersetzen die
+gecachte Kopie nach Beobachtung vom 03.09.2026 nicht zuverlässig; Cowork
+verarbeitete weiter mit der alten Version, ohne dass die Oberfläche das anzeigte.
+Verlässlicher Ablauf für Upgrade wie Rollback: Plugin auf der Plugin-Seite
+entfernen, Claude Desktop vollständig beenden und neu starten, gewünschtes ZIP
+hochladen, auf der Plugin-Seite Version, Dateiansicht und Aktualisierungszeit
+prüfen, danach eine neue Cowork-Aufgabe starten. Die tatsächlich laufende Version
+steht in der Startantwort („DataSecure-Version: …“), in der letzten Zeile jedes
+lokalen DataSecure-Fensters und für den Support als `gateway_version` in
+`%LOCALAPPDATA%\SecureDataMsg\diagnostics\workflow-events.jsonl`. Weicht sie vom
+bereitgestellten Build ab, ist kein Abnahmelauf gültig.
 
 ## Eskalation
 
