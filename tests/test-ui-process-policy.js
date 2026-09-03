@@ -104,6 +104,7 @@ test('native start, picker and completion paths use keyboard-accessible OS dialo
   const windowsFinish = completionSummaryCommand(result, { platform: 'win32', env: HOSTILE_ENV }).args.at(-1);
   assert.match(windowsStart, /MessageBox[\s\S]*YesNo/);
   assert.match(windowsPicker, /OpenFileDialog/);
+  assert.match(windowsFolderPicker, /IFileOpenDialog[sS]*FOS_PICKFOLDERS|0x20 | 0x40/);
   assert.match(windowsFolderPicker, /FolderBrowserDialog/);
   assert.match(windowsFinish, /AcceptButton.*CancelButton/);
   for (const platform of ['darwin', 'linux']) {

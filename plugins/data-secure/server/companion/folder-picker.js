@@ -5,6 +5,7 @@ const path = require('path');
 const childProcess = require('child_process');
 const { SafeError } = require('../runtime');
 const { uiProcessEnvironment } = require('./ui-process-policy');
+const { windowsFolderDialogScript } = require('./windows-folder-dialog');
 const { WINDOWS_PICKER_UTF8, runPickerAsync, throwIfSelectionAborted, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
 
 const FOLDER_PICKER_CANCELLED = '__DATASECURE_FOLDER_PICKER_CANCELLED__';
@@ -20,13 +21,10 @@ function defaultRunner(command, args, env = process.env) {
 function pickerCommands(platform = process.platform, env = process.env, title = FOLDER_PICKER_TITLE) {
   if (platform === 'win32') {
     const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    const script = [
-      WINDOWS_PICKER_UTF8,
-      'Add-Type -AssemblyName System.Windows.Forms',
-      '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-      `$dialog.Description = '${String(title).replace(/'/g, "''")}'`, '$dialog.ShowNewFolderButton = $true',
-      'try { $result = $dialog.ShowDialog(); if ($result -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) } else { [Console]::Out.Write(\'' + FOLDER_PICKER_CANCELLED + '\') } } finally { $dialog.Dispose() }'
-    ].join('; ');
+    const script = windowsFolderDialogScript({
+      preamble: WINDOWS_PICKER_UTF8, title, okLabel: 'Ordner auswählen',
+      cancelledToken: FOLDER_PICKER_CANCELLED, showNewFolderButton: true
+    });
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
   }
   if (platform === 'darwin') return [{

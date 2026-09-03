@@ -7,6 +7,7 @@ const { SafeError } = require('../runtime');
 const { LIMITS, hasReparseComponent, hasReparseComponentAsync, isManagedStagingPath } = require('../gateway/common');
 const { visibleResultTreeOverlaps } = require('../gateway/result-folder-config');
 const { uiProcessEnvironment } = require('./ui-process-policy');
+const { windowsFolderDialogScript } = require('./windows-folder-dialog');
 const { SOURCE_TYPES, validateSelectedPath, validateSelectedPathAsync, selectionCancelledError, runPickerAsync, throwIfSelectionAborted, WINDOWS_PICKER_UTF8, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
 
 const SOURCE_FOLDER_TITLE = 'Ordner mit DataSecure lokal anonymisieren';
@@ -28,13 +29,10 @@ function defaultRunner(command, args, env = process.env) {
 function sourceFolderPickerCommands(platform = process.platform, env = process.env) {
   if (platform === 'win32') {
     const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    const script = [
-      WINDOWS_PICKER_UTF8,
-      'Add-Type -AssemblyName System.Windows.Forms',
-      '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-      `$dialog.Description = '${SOURCE_FOLDER_TITLE}'`, '$dialog.ShowNewFolderButton = $false',
-      `try { $result = $dialog.ShowDialog(); if ($result -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) } else { [Console]::Out.Write('${SOURCE_FOLDER_CANCELLED}') } } finally { $dialog.Dispose() }`
-    ].join('; ');
+    const script = windowsFolderDialogScript({
+      preamble: WINDOWS_PICKER_UTF8, title: SOURCE_FOLDER_TITLE, okLabel: 'Ordner anonymisieren',
+      cancelledToken: SOURCE_FOLDER_CANCELLED, showNewFolderButton: false
+    });
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
   }
   if (platform === 'darwin') return [{
