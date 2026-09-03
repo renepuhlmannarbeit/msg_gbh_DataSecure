@@ -246,7 +246,8 @@ if (process.platform === 'win32') {
       continueMostRecentBatch: () => { continuations++; return { ok: true, batch_token: 'c'.repeat(64), remaining: 1, delivery_pending: 0, mapping_pending: 0, deferred_review: 0, batch_total: 1, released: 0, stopped: 0 }; },
       startLocalBatchExecutor: () => { batchStarts++; return { local_processing_started: true }; },
       startLocalReviewExecutor: () => { reviewStarts++; return { ok: true }; },
-      recordWorkflowEvent: () => {}
+      recordWorkflowEvent: () => {},
+      withDiagnostic: (response) => response
     });
     vm.runInContext(source, context);
     for (const active of [{ local_intake_pending: true }, { batch_processing_active: true }]) {
@@ -393,11 +394,12 @@ if (process.platform === 'win32') {
     const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/index.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
     class SafeError extends Error {}
+    const { buildDiagnostic, causeFromError, CAUSES } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
     const events = [];
     const run = async (failure) => {
       let starts = 0;
       const context = vm.createContext({
-        process: { env: {} }, setImmediate, SafeError,
+        process: { env: {} }, setImmediate, SafeError, buildDiagnostic, causeFromError,
         readConfiguredResultRoot: () => 'already-configured',
         reserveIntake: () => ({ reservation_id: 'd'.repeat(64) }),
         releaseIntake: () => true,
@@ -423,11 +425,23 @@ if (process.platform === 'win32') {
     assert.strictEqual((rejected.message.match(/Es wurde kein Stapel gestartet./gu) || []).length, 1, 'the closing sentence appears once');
     assert.doesNotMatch(JSON.stringify(rejected), /[A-Z]:[\/]|personnel|.txt/u);
     assert.ok(events.some((event) => event.event === 'picker_failed' && event.error_code === 'LOCAL_SELECTION_REJECTED'));
+    // The content-free diagnostic names version, phase, cause, hint and counters.
+    assert.strictEqual(rejected.diagnostic.cause, 'LOCAL_SELECTION_REJECTED');
+    assert.strictEqual(rejected.diagnostic.phase, 'folder_enumeration');
+    assert.strictEqual(rejected.diagnostic.hint, CAUSES.LOCAL_SELECTION_REJECTED);
+    assert.deepStrictEqual([rejected.diagnostic.files_total, rejected.diagnostic.files_rejected], [7, 3]);
+    assert.match(rejected.diagnostic.gateway_version, /^\d+\.\d+\.\d+/u);
+    const timeout = await run(Object.assign(new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' }));
+    assert.strictEqual(timeout.error, 'local_start_failed', 'a picker infrastructure failure is not a selection rejection');
+    assert.strictEqual(timeout.diagnostic.cause, 'LOCAL_PICKER_TIMEOUT');
+    assert.match(timeout.message, /^Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet. Die lokale Auswahl konnte nicht sicher vorbereitet werden/u);
+    assert.ok(events.some((event) => event.error_code === 'LOCAL_PICKER_TIMEOUT'));
     const link = await run(new SafeError('Der ausgewählte Quellordner liegt hinter einem Link oder Reparse-Punkt.'));
     assert.strictEqual(link.error, 'local_selection_rejected');
     assert.match(link.message, /Reparse-Punkt. Es wurde kein Stapel gestartet.$/u);
     const generic = await run(Object.assign(new Error('ENOENT private C:\\secret\\file.txt'), { code: 'ENOENT' }));
     assert.strictEqual(generic.error, 'local_start_failed', 'unexpected errors stay a generic, content-free start failure');
+    assert.strictEqual(generic.diagnostic.cause, 'LOCAL_PICKER_FAILED', 'unknown native codes never leak; the fallback cause applies');
     assert.doesNotMatch(JSON.stringify(generic), /secret|ENOENT/u);
     assert.ok(events.some((event) => event.error_code === 'LOCAL_PICKER_FAILED'));
   });

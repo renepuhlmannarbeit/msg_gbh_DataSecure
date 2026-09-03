@@ -43,7 +43,7 @@ function sourceFolderPickerCommands(platform = process.platform, env = process.e
     { command: 'zenity', args: ['--file-selection', '--directory', `--title=${SOURCE_FOLDER_TITLE}`] },
     { command: 'kdialog', args: ['--getexistingdirectory', '.', SOURCE_FOLDER_TITLE] }
   ];
-  throw new SafeError('Für dieses Betriebssystem ist kein lokaler Ordnerdialog verfügbar.');
+  throw Object.assign(new SafeError('Für dieses Betriebssystem ist kein lokaler Ordnerdialog verfügbar.'), { code: 'LOCAL_PICKER_UNAVAILABLE' });
 }
 
 function pickSourceFolder(options = {}) {
@@ -52,15 +52,15 @@ function pickSourceFolder(options = {}) {
   for (const spec of sourceFolderPickerCommands(options.platform, options.env)) {
     const result = runner(spec.command, spec.args, options.env || process.env);
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
-    if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.');
-    if (result?.error) throw new SafeError('Der lokale Ordnerdialog konnte nicht gestartet werden.');
+    if (result?.error?.code === 'ETIMEDOUT') throw Object.assign(new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' });
+    if (result?.error) throw Object.assign(new SafeError('Der lokale Ordnerdialog konnte nicht gestartet werden.'), { code: 'LOCAL_PICKER_FAILED' });
     const selected = String(result?.stdout || '').replace(/\r?\n$/u, '');
     if (selected === SOURCE_FOLDER_CANCELLED || documentedNativeCancellation(result, selected, options.platform)) throw selectionCancelledError();
-    if (result?.status !== 0) throw new SafeError('Die lokale Ordnerauswahl konnte nicht sicher gelesen werden.');
+    if (result?.status !== 0) throw Object.assign(new SafeError('Die lokale Ordnerauswahl konnte nicht sicher gelesen werden.'), { code: 'LOCAL_PICKER_FAILED' });
     if (!path.isAbsolute(selected)) throw new SafeError('Der ausgewählte Quellordner ist nicht absolut.');
     return path.resolve(selected);
   }
-  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter lokaler Ordnerdialog verfügbar.');
+  if (unavailable) throw Object.assign(new SafeError('Auf diesem Gerät ist kein unterstützter lokaler Ordnerdialog verfügbar.'), { code: 'LOCAL_PICKER_UNAVAILABLE' });
   throw new SafeError('Kein Quellordner ausgewählt.');
 }
 
@@ -73,15 +73,15 @@ async function pickSourceFolderAsync(options = {}) {
     const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal, pickerOutputMaxBuffer(1));
     throwIfSelectionAborted(options.signal);
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
-    if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) throw new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.');
-    if (result?.error && typeof result.error.code !== 'number') throw new SafeError('Der lokale Ordnerdialog konnte nicht gestartet werden.');
+    if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) throw Object.assign(new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' });
+    if (result?.error && typeof result.error.code !== 'number') throw Object.assign(new SafeError('Der lokale Ordnerdialog konnte nicht gestartet werden.'), { code: 'LOCAL_PICKER_FAILED' });
     const selected = String(result?.stdout || '').replace(/\r?\n$/u, '');
     if (selected === SOURCE_FOLDER_CANCELLED || documentedNativeCancellation(result, selected, options.platform)) throw selectionCancelledError();
-    if (result?.status !== 0) throw new SafeError('Die lokale Ordnerauswahl konnte nicht sicher gelesen werden.');
+    if (result?.status !== 0) throw Object.assign(new SafeError('Die lokale Ordnerauswahl konnte nicht sicher gelesen werden.'), { code: 'LOCAL_PICKER_FAILED' });
     if (!path.isAbsolute(selected)) throw new SafeError('Der ausgewählte Quellordner ist nicht absolut.');
     return path.resolve(selected);
   }
-  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter lokaler Ordnerdialog verfügbar.');
+  if (unavailable) throw Object.assign(new SafeError('Auf diesem Gerät ist kein unterstützter lokaler Ordnerdialog verfügbar.'), { code: 'LOCAL_PICKER_UNAVAILABLE' });
   throw new SafeError('Kein Quellordner ausgewählt.');
 }
 

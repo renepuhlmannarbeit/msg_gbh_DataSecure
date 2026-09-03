@@ -10,7 +10,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "test:staging": "node tests/test-package-staging.js && node tests/test-safe-private-tree.js && node tests/test-package-staging-integration.js",
-    "test:executor-lifecycle": "node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-worker-terminal-presentation.js && node tests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js",
+    "test:executor-lifecycle": "node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-worker-terminal-presentation.js && node tests/test-diagnostic-causes.js && node tests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js",
     "test:p0-private": "node tests/test-private-work-store.js && node tests/test-batch-private-artifact-migration.js && node tests/test-review-private-artifact-migration.js && node tests/test-retention.js",
     "test:legacy-private": "node tests/test-private-artifact-crypto.js && node tests/test-installation-secret-store.js && node tests/test-engineering-keyring-session.mjs && node tests/test-engineering-keyring-boundary.mjs",
     "test:engineering-keyring": "node tests/test-engineering-keyring-session.mjs && node tests/test-engineering-keyring-boundary.mjs && node tests/test-sea-batch-verifier.mjs",

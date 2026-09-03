@@ -1,6 +1,7 @@
 'use strict';
 const {SafeError,roots,genericStatus,diagnosticStatus,exportDiagnosticPackage,openFolder,startLocalBatchExecutor,startLocalIntakeExecutor,startLocalReviewExecutor,readBatchProgress,listBatchResults,completedLocalOnlyCandidates,reviewDeferredBatch,resumeBatch,continueMostRecentBatch,discardIncompleteBatches,acknowledgeDeliveredPackage,acknowledgeDeliveredPackages,recoverBatches,replayMappingOutbox,cleanupExpiredBatchSnapshots,openBatchPackageProtection,readOutput,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,listReviewItems,migrateLegacyReviewPreviews,cleanupLocalData,purgeLocalData}=require('./gateway');
 const {VERSION}=require('./version');
+const {buildDiagnostic,causeFromError,completeDiagnostic}=require('./gateway/diagnostic-causes');
 const {migrateLegacyAuditReceipts}=require('./gateway/audit');
 const {cleanupCompanionJobs}=require('./companion/retention');
 const {cleanupAbandonedWorkingJobs}=require('./gateway/orchestrator');
@@ -115,6 +116,20 @@ for(const tool of TOOLS){tool.annotations=Object.freeze({
 const PROMPTS=[{name:'anonymize_customer',title:'Kundendokument anonymisieren',description:'Bestätigte Kundendokumente lokal verarbeiten.',arguments:[{name:'task',description:'Optionale Analyseaufgabe',required:false}]},{name:'anonymize_applicant',title:'Bewerbung anonymisieren',description:'Bestätigte Bewerbungen lokal verarbeiten.',arguments:[{name:'task',description:'Optionale beschreibende Aufgabe',required:false}]},{name:'anonymize_personnel_profile',title:'Mitarbeiterprofil anonymisieren',description:'Bestätigte Mitarbeiter-/Beraterprofile lokal de-identifizieren.',arguments:[{name:'task',description:'Optionale beschreibende Aufgabe',required:false}]},{name:'anonymize_contract',title:'Vertrag anonymisieren',description:'Bestätigte Verträge lokal verarbeiten.',arguments:[{name:'task',description:'Optionale Analyseaufgabe',required:false}]}];
 function send(o){process.stdout.write(JSON.stringify(o)+'\n');}function ok(id,result,modern=false){if(modern&&result&&typeof result==='object'&&!Array.isArray(result))result={...result,_meta:{...(result._meta||{}),'io.modelcontextprotocol/serverInfo':SERVER_INFO}};send({jsonrpc:'2.0',id,result});}function rpcError(id,code,message,data){const e={code,message};if(data!==undefined)e.data=data;send({jsonrpc:'2.0',id,error:e});}function modern(req){return req?.params?._meta?.['io.modelcontextprotocol/protocolVersion']==='2026-07-28';}function sanitizeStructured(o){if(!o||typeof o!=='object')return o;const c={...o};delete c.__image;return c;}function toolResult(o,isError=false){const s=sanitizeStructured(o);if(o?.__image)return{content:[{type:'text',text:JSON.stringify(s,null,2)},{type:'image',data:o.__image.data,mimeType:o.__image.mimeType}],structuredContent:s,isError};return{content:[{type:'text',text:JSON.stringify(s,null,2)}],structuredContent:s,isError};}
 let nativeInteractionOwner=null;
+// Every ok:false answer of the normal tools carries a content-free diagnostic
+// (version, phase, fixed cause, fixed hint) so Cowork can name the actual
+// reason instead of a generic sentence. Test harnesses that load only this
+// section without the diagnostics module receive the plain response.
+function withDiagnostic(response,phase,cause,recorded,counts){
+  if(typeof buildDiagnostic!=='function'||!response||typeof response!=='object')return response;
+  return{...response,diagnostic:buildDiagnostic({phase,cause,recorded,counts})};
+}
+// Guarded like withDiagnostic: harnesses that load only this section map errors to the fallback cause.
+function causeOf(error,fallback){return typeof causeFromError==='function'?causeFromError(error,fallback):fallback;}
+function selectionCounts(message){
+  const match=/enthält (\d+) reguläre Dateien, davon (\d+) /u.exec(String(message||''));
+  return match?{total:Number(match[1]),rejected:Number(match[2])}:undefined;
+}
 function acquireNativeInteraction(owner){
   if(nativeInteractionOwner!==null)return false;
   nativeInteractionOwner=owner;
@@ -185,12 +200,12 @@ async function startPickerBatch(args,context={}){
   // handoff, even if a stale skill asks for the legacy mode value.
   const mode=process.env.EU_PRIVACY_SUPPORT_MODE==='1'&&args.mode==='continue_in_chat'?'continue_in_chat':'local_only';
   const cancelled=()=>{
-    recordWorkflowEvent({event:'picker_cancelled',outcome:'stopped',error_code:'LOCAL_SELECTION_CANCELLED'});
-    return{ok:false,error:'local_selection_cancelled',message:'Die lokale Dateiauswahl wurde abgebrochen. Es wurde kein Stapel gestartet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false};
+    const recorded=recordWorkflowEvent({event:'picker_cancelled',outcome:'stopped',error_code:'LOCAL_SELECTION_CANCELLED'});
+    return withDiagnostic({ok:false,error:'local_selection_cancelled',message:'Die lokale Dateiauswahl wurde abgebrochen. Es wurde kein Stapel gestartet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false},'source_picker','LOCAL_SELECTION_CANCELLED',recorded);
   };
   if(context.signal?.aborted)return cancelled();
   const owner='source_picker';
-  if(!acquireNativeInteraction(owner))return{ok:false,error:'batch_active',message:'Eine lokale DataSecure-Auswahl ist bereits geöffnet. Es wurde keine weitere Auswahl geöffnet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false};
+  if(!acquireNativeInteraction(owner))return withDiagnostic({ok:false,error:'batch_active',message:'Eine lokale DataSecure-Auswahl ist bereits geöffnet. Es wurde keine weitere Auswahl geöffnet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);
   let intakeReservation=null;
   let intakeReservationTransferred=false;
   let resultFolderSyncNotice=false;
@@ -202,15 +217,15 @@ async function startPickerBatch(args,context={}){
       // Name the actual, path-free reason: the user did choose a folder. A
       // native error text could carry a path and is replaced by a fixed reason.
       const reason=error instanceof SafeError?error.message:'Der gewählte Ergebnisordner konnte nicht sicher verwendet werden (Link, Reparse-Punkt oder fehlende Schreibrechte für DataSecure-Output).';
-      return{ok:false,error:'result_folder_required',message:`${reason} Es wurde keine Dateiauswahl geöffnet und kein Stapel gestartet; die Ergebnisordnerwahl erscheint beim nächsten Start erneut.`,mode,local_processing_started:false,next_action:'choose_result_folder',raw_content_sent_to_claude:false};
+      return withDiagnostic({ok:false,error:'result_folder_required',message:`${reason} Es wurde keine Dateiauswahl geöffnet und kein Stapel gestartet; die Ergebnisordnerwahl erscheint beim nächsten Start erneut.`,mode,local_processing_started:false,next_action:'choose_result_folder',raw_content_sent_to_claude:false},'result_folder',causeOf(error,'RESULT_FOLDER_REQUIRED'),false);
     }
   }
   try{intakeReservation=reserveIntake();}
-  catch{return{ok:false,error:'batch_active',message:'Eine lokale DataSecure-Auswahl oder Stapelübernahme ist bereits aktiv. Es wurde keine weitere Auswahl geöffnet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false};}
+  catch{return withDiagnostic({ok:false,error:'batch_active',message:'Eine lokale DataSecure-Auswahl oder Stapelübernahme ist bereits aktiv. Es wurde keine weitere Auswahl geöffnet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);}
   const status=genericStatus({ignoreIntakeReservation:true});
-  if(!status.engine_ready)return{ok:false,error:'local_engine_unavailable',message:'Die lokale DataSecure-Verarbeitung ist nicht bereit. Es wurde keine Dateiauswahl geöffnet.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false};
-  if(status.local_intake_pending)return{ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits vorbereitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false};
-  if(status.batch_processing_active)return{ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false};
+  if(!status.engine_ready)return withDiagnostic({ok:false,error:'local_engine_unavailable',message:'Die lokale DataSecure-Verarbeitung ist nicht bereit. Es wurde keine Dateiauswahl geöffnet.',engine_phase:status.engine_phase,mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},'engine','ENGINE_NOT_READY',false);
+  if(status.local_intake_pending)return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits vorbereitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);
+  if(status.batch_processing_active)return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);
   // Paused/recoverable work is durable and independent. It must not force the
   // user to resolve old work before starting a new batch; only an actually
   // active intake or processor owns the single active slot.
@@ -235,14 +250,18 @@ async function startPickerBatch(args,context={}){
     // with blocked formats, output tree, link, too many files) is a user-facing
     // reason, not a connector failure. Only SafeError texts are fixed strings
     // without names or paths; anything else stays the generic start failure.
-    if(error instanceof SafeError){
-      recordWorkflowEvent({event:'picker_failed',outcome:'stopped',error_code:'LOCAL_SELECTION_REJECTED'});
+    if(error instanceof SafeError&&!error.code){
+      const recorded=recordWorkflowEvent({event:'picker_failed',outcome:'stopped',error_code:'LOCAL_SELECTION_REJECTED'});
       const reason=String(error.message||'').trim();
       const message=reason.endsWith('Es wurde kein Stapel gestartet.')?reason:`${reason} Es wurde kein Stapel gestartet.`;
-      return{ok:false,error:'local_selection_rejected',message,mode,local_processing_started:false,next_action:'choose_other_selection',raw_content_sent_to_claude:false};
+      return withDiagnostic({ok:false,error:'local_selection_rejected',message,mode,local_processing_started:false,next_action:'choose_other_selection',raw_content_sent_to_claude:false},args.source_kind==='folder'?'folder_enumeration':'source_picker','LOCAL_SELECTION_REJECTED',recorded,selectionCounts(reason));
     }
-    recordWorkflowEvent({event:'picker_failed',outcome:'stopped',error_code:'LOCAL_PICKER_FAILED'});
-    return{ok:false,error:'local_start_failed',message:'Die lokale Auswahl konnte nicht sicher vorbereitet werden. Es wurde kein Stapel gestartet.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false};
+    // Picker infrastructure failures carry a fixed cause code and a fixed text;
+    // any other exception stays the generic, content-free start failure.
+    const cause=causeOf(error,'LOCAL_PICKER_FAILED');
+    const recorded=recordWorkflowEvent({event:'picker_failed',outcome:'stopped',error_code:cause});
+    const detail=error instanceof SafeError&&error.code?`${String(error.message||'').trim()} `:'';
+    return withDiagnostic({ok:false,error:'local_start_failed',message:`${detail}Die lokale Auswahl konnte nicht sicher vorbereitet werden. Es wurde kein Stapel gestartet.`,mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},'source_picker',cause,recorded);
   }
   // Allow a queued MCP cancellation to run after the native picker returns,
   // then guard the irreversible handoff to the independent intake worker.
@@ -250,9 +269,13 @@ async function startPickerBatch(args,context={}){
   if(context.signal?.aborted)return cancelled();
   let started;
   try{started=startLocalIntakeExecutor(selected,args.profile||'auto',{intakeReservationId:intakeReservation.reservation_id,signal:context.signal});intakeReservationTransferred=true;await started.ipcAcknowledgement;}
-  catch{
-    recordWorkflowEvent({event:'mcp_start_response',outcome:'stopped',item_count:selected.length,error_code:'LOCAL_WORKER_SPAWN_FAILED'});
-    return{ok:false,error:'local_start_failed',message:'Die lokale Verarbeitung wurde nicht gestartet. Es wurde kein Paket freigegeben.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false};
+  catch(error){
+    // Distinguish a worker that never started from one that did not confirm
+    // the private handoff in time; only fixed codes leave this process.
+    const text=String(error?.message||'');
+    const cause=/timeout/iu.test(text)?'LOCAL_IPC_ACK_TIMEOUT':/cancel/iu.test(text)?'LOCAL_IPC_ACK_CANCELLED':'LOCAL_WORKER_SPAWN_FAILED';
+    const recorded=recordWorkflowEvent({event:'mcp_start_response',outcome:'stopped',item_count:selected.length,error_code:cause});
+    return withDiagnostic({ok:false,error:'local_start_failed',message:'Die lokale Verarbeitung wurde nicht gestartet. Es wurde kein Paket freigegeben.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},cause==='LOCAL_WORKER_SPAWN_FAILED'?'intake_spawn':'intake_ack',cause,recorded);
   }
   if(mode==='local_only'){
     // The opaque batch token is an internal recovery capability. The ordinary
@@ -282,7 +305,7 @@ function continueAnonymizedBatchInChat(args){
   // the local worker is still writing the batch. The caller already supplied a
   // token, but this response never echoes it or any result identifier.
   if(progress.local_processing_active===true||progress.processing>0){
-    return{ok:false,error:'local_batch_still_processing',message:'Die lokale Verarbeitung läuft noch. Freigegebene Ergebnisse werden erst nach dem lokalen Abschluss für die Folgeauswertung gelesen.',batch:chatBatch,documents:[],next_cursor:null,document_continuations:[],still_open:progress.remaining+progress.processing+progress.retryable+progress.deferred_review+progress.mapping_pending+progress.delivery_pending,next_action:'wait_for_local_release_before_continue_in_chat',raw_content_sent_to_claude:false,content_is_verified_anonymized_markdown:true,content_trust:'untrusted_document_data',embedded_instructions_authorized:false};
+    return withDiagnostic({ok:false,error:'local_batch_still_processing',message:'Die lokale Verarbeitung läuft noch. Freigegebene Ergebnisse werden erst nach dem lokalen Abschluss für die Folgeauswertung gelesen.',batch:chatBatch,documents:[],next_cursor:null,document_continuations:[],still_open:progress.remaining+progress.processing+progress.retryable+progress.deferred_review+progress.mapping_pending+progress.delivery_pending,next_action:'wait_for_local_release_before_continue_in_chat',raw_content_sent_to_claude:false,content_is_verified_anonymized_markdown:true,content_trust:'untrusted_document_data',embedded_instructions_authorized:false},'handoff','LOCAL_BATCH_STILL_PROCESSING',false);
   }
   const listed=continuation.length?null:listBatchResults(token,{cursor:args.cursor,limit:5});
   const entries=continuation.length?continuation:(listed?.results||[]).map((entry)=>({package_id:entry.package_id,read_capability:entry.read_capability,offset:0}));
@@ -298,10 +321,10 @@ function continueMostRecentDocumentBatch(){
   // intake or batch worker. The paused batch stays durable for a later request.
   const status=genericStatus();
   if(status.local_intake_pending===true||status.batch_processing_active===true){
-    return{ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Die Fortsetzung wurde nicht gestartet und bleibt später möglich.',local_processing_started:false,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false};
+    return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Die Fortsetzung wurde nicht gestartet und bleibt später möglich.',local_processing_started:false,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'continuation','BATCH_ACTIVE',false);
   }
   const continued=continueMostRecentBatch();
-  if(continued.ok!==true)return continued;
+  if(continued.ok!==true)return withDiagnostic(continued,'continuation',continued.error==='no_incomplete_batch'?'NO_INCOMPLETE_BATCH':'INTERNAL_FAILURE',false);
   const token=continued.batch_token;
   const safe={...continued};delete safe.batch_token;
   if(continued.awaiting_local_review===true||continued.deferred_review>0){
@@ -319,7 +342,7 @@ function continueMostRecentDocumentBatch(){
 const LOCAL_ONLY_HANDOFF=createLocalOnlyHandoff({completedLocalOnlyCandidates,listBatchResults,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,acknowledgeDeliveredPackages});
 async function startLocalResultsHandoff(context={}){
   const owner='results_handoff';
-  if(!acquireNativeInteraction(owner))return{ok:false,error:'local_handoff_active',message:'Eine andere lokale DataSecure-Auswahl ist bereits geöffnet.',raw_content_sent_to_claude:false};
+  if(!acquireNativeInteraction(owner))return withDiagnostic({ok:false,error:'local_handoff_active',message:'Eine andere lokale DataSecure-Auswahl ist bereits geöffnet.',raw_content_sent_to_claude:false},'handoff','LOCAL_HANDOFF_ACTIVE',false);
   try{return await LOCAL_ONLY_HANDOFF.start({signal:context.signal});}
   finally{releaseNativeInteraction(owner);}
 }
@@ -342,7 +365,7 @@ async function handle(req){if(!req||req.jsonrpc!=='2.0'||typeof req.method!=='st
 // including an error response. Only the notifications/* namespace is expected.
 if(req.method==='notifications/cancelled'){ACTIVE_REQUESTS.get(requestKey(req.params?.requestId))?.abort();return;}
 if(!Object.hasOwn(req,'id'))return;
-if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const v=await dispatch(req.params?.name,req.params?.arguments||{},{signal:controller.signal});if(v===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult({ok:false,error:e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
+if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const dispatched=await dispatch(req.params?.name,req.params?.arguments||{},{signal:controller.signal});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=completeDiagnostic(dispatched);const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult(withDiagnostic({ok:false,error:e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
 migrateLegacyAuditReceipts();
 // RC80: no startup migration or key-store access for private working copies.
 const OUTPUT_RETENTION_PROTECTION=openBatchPackageProtection();

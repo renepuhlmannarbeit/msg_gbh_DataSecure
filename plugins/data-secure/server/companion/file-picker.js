@@ -148,7 +148,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
       { command: 'kdialog', args: kdialogArgs }
     ];
   }
-  throw new SafeError('Für dieses Betriebssystem ist kein lokaler Dateidialog verfügbar.');
+  throw Object.assign(new SafeError('Für dieses Betriebssystem ist kein lokaler Dateidialog verfügbar.'), { code: 'LOCAL_PICKER_UNAVAILABLE' });
 }
 
 function stripPickerLineEnding(value) { return String(value ?? '').replace(/\r?\n$/u, ''); }
@@ -241,14 +241,14 @@ function pickSource(options = {}) {
       unavailable++;
       continue;
     }
-    if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
-    if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
+    if (result?.error?.code === 'ETIMEDOUT') throw Object.assign(new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' });
+    if (result?.error) throw Object.assign(new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.'), { code: 'LOCAL_PICKER_FAILED' });
     const output = stripPickerLineEnding(result?.stdout || '');
     if (output === PICKER_CANCELLED || documentedNativeCancellation(result, output, options.platform)) throw selectionCancelledError();
-    if (result?.status !== 0) throw new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.');
+    if (result?.status !== 0) throw Object.assign(new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.'), { code: 'LOCAL_PICKER_FAILED' });
     return validateSelectedPath(output, options);
   }
-  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
+  if (unavailable) throw Object.assign(new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.'), { code: 'LOCAL_PICKER_UNAVAILABLE' });
   throw new SafeError('Keine Datei ausgewählt.');
 }
 
@@ -262,14 +262,14 @@ function pickSources(options = {}) {
       unavailable++;
       continue;
     }
-    if (result?.error?.code === 'ETIMEDOUT') throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
-    if (result?.error) throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
+    if (result?.error?.code === 'ETIMEDOUT') throw Object.assign(new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' });
+    if (result?.error) throw Object.assign(new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.'), { code: 'LOCAL_PICKER_FAILED' });
     const output = stripPickerLineEnding(result?.stdout || '');
     if (output === PICKER_CANCELLED || documentedNativeCancellation(result, output, options.platform)) throw selectionCancelledError();
-    if (result?.status !== 0) throw new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.');
+    if (result?.status !== 0) throw Object.assign(new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.'), { code: 'LOCAL_PICKER_FAILED' });
     return validateSelectedPaths(output, options);
   }
-  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
+  if (unavailable) throw Object.assign(new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.'), { code: 'LOCAL_PICKER_UNAVAILABLE' });
   throw new SafeError('Keine Datei ausgewählt.');
 }
 
@@ -337,15 +337,15 @@ async function pickSourcesAsync(options = {}) {
       pickerOutputMaxBuffer(options.maxSources ?? MAX_SELECTED_SOURCES));
     throwIfSelectionAborted(options.signal);
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
-    if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) throw new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.');
+    if (result?.error?.code === 'ETIMEDOUT' || result?.error?.killed) throw Object.assign(new SafeError('Die lokale Dateiauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' });
     // Native macOS/Linux cancellations use a nonzero numeric exit status.
-    if (result?.error && typeof result.error.code !== 'number') throw new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.');
+    if (result?.error && typeof result.error.code !== 'number') throw Object.assign(new SafeError('Der lokale Dateidialog konnte nicht gestartet werden.'), { code: 'LOCAL_PICKER_FAILED' });
     const output = stripPickerLineEnding(result?.stdout || '');
     if (output === PICKER_CANCELLED || documentedNativeCancellation(result, output, options.platform)) throw selectionCancelledError();
-    if (result?.status !== 0) throw new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.');
+    if (result?.status !== 0) throw Object.assign(new SafeError('Die lokale Dateiauswahl konnte nicht sicher gelesen werden.'), { code: 'LOCAL_PICKER_FAILED' });
     return validateSelectedPathsAsync(output, options);
   }
-  if (unavailable) throw new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.');
+  if (unavailable) throw Object.assign(new SafeError('Auf diesem Gerät ist kein unterstützter Dateidialog verfügbar.'), { code: 'LOCAL_PICKER_UNAVAILABLE' });
   throw new SafeError('Keine Datei ausgewählt.');
 }
 

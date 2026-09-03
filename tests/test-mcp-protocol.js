@@ -388,6 +388,47 @@ async function main() {
     }
   });
 
+  await testAsync('every normal-mode error result carries a content-free diagnostic with a fixed cause', async () => {
+    const { CAUSE_CODES, PHASES } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
+    const { responses } = await talk([
+      rpc(1, 'tools/call', { name: 'continue_most_recent_document_batch', arguments: { confirmed: true } })
+    ], { supportMode: false });
+    assert.strictEqual(responses.length, 1);
+    const result = responses[0].result;
+    assert.strictEqual(result.isError, true);
+    const body = result.structuredContent;
+    assert.strictEqual(body.ok, false);
+    assert.strictEqual(body.error, 'no_incomplete_batch');
+    const diagnostic = body.diagnostic;
+    assert.ok(diagnostic, 'an error result must carry the diagnostic envelope');
+    assert.strictEqual(diagnostic.cause, 'NO_INCOMPLETE_BATCH');
+    assert.ok(CAUSE_CODES.includes(diagnostic.cause) && PHASES.includes(diagnostic.phase));
+    assert.match(diagnostic.gateway_version, /^\d+\.\d+\.\d+/u);
+    assert.ok(typeof diagnostic.hint === 'string' && diagnostic.hint.length > 10);
+    assert.deepStrictEqual(Object.keys(diagnostic).sort(), ['at', 'cause', 'gateway_version', 'hint', 'phase', 'recorded']);
+    assert.doesNotMatch(JSON.stringify(result), /[A-Za-z]:\\|\/Users\/|\.txt|\.docx|[a-f0-9]{64}/u, 'diagnostics stay free of paths, names, hashes and tokens');
+  });
+
+  await testAsync('error results of gateway modules without envelope knowledge are completed centrally', async () => {
+    const { responses } = await talk([
+      rpc(1, 'tools/call', { name: 'continue_local_results_handoff', arguments: {} }),
+      rpc(2, 'tools/call', { name: 'start_completed_local_results_handoff', arguments: { confirmed: true } })
+    ], { supportMode: false });
+    assert.strictEqual(responses.length, 2);
+    const byId = new Map(responses.map((r) => [r.id, r.result]));
+    const next = byId.get(1).structuredContent;
+    assert.strictEqual(byId.get(1).isError, true);
+    assert.strictEqual(next.ok, false);
+    assert.strictEqual(next.error, 'no_active_local_handoff');
+    assert.strictEqual(next.diagnostic?.cause, 'NO_ACTIVE_LOCAL_HANDOFF');
+    assert.strictEqual(next.diagnostic?.phase, 'handoff');
+    const start = byId.get(2).structuredContent;
+    assert.strictEqual(start.ok, false);
+    assert.ok(start.diagnostic, 'a handoff start failure must carry the envelope');
+    assert.strictEqual(start.diagnostic.cause, start.error === 'no_completed_local_batch' ? 'NO_COMPLETED_LOCAL_BATCH' : start.diagnostic.cause);
+    assert.doesNotMatch(JSON.stringify(responses), /[A-Za-z]:\\|\/Users\/|\.txt|\.docx|[a-f0-9]{64}/u);
+  });
+
   await testAsync('normal Cowork rejects all 17 support tools even with model-supplied support flags', async () => {
     const supportNames = [
       'privacy_status', 'diagnostic_status', 'export_diagnostic_package', 'open_privacy_folder',
