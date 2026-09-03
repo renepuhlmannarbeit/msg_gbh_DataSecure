@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 03.09.2026 · Produktstand 3.2.0-rc90
+Stand: 03.09.2026 · Produktstand 3.2.0-rc91
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im

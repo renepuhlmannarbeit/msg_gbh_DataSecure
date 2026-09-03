@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 03.09.2026 · 3.2.0-rc90
+Stand: 03.09.2026 · 3.2.0-rc91
 
 ## Nutzerprodukt
 
