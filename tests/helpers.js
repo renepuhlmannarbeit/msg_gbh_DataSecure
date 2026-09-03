@@ -36,7 +36,26 @@ function createSuite(title) {
     }
   }
 
-  function done() {
+  // Windows real-time scanners briefly hold freshly written files; a bounded
+  // retry keeps the cleanup effective, and a final failure is only a warning
+  // because it never changes what the suite verified.
+  function runCleanup(cleanup) {
+    for (let attempt = 1; ; attempt++) {
+      try { cleanup(); return; } catch (err) {
+        const transient = ["EPERM", "EBUSY", "ENOTEMPTY", "EACCES"].includes(err && err.code);
+        if (!transient || attempt >= 5) {
+          console.error(`${title}: cleanup did not finish (${(err && err.code) || "error"})`);
+          return;
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100 * attempt);
+      }
+    }
+  }
+
+  // Runs an optional cleanup (temporary fixture trees) before the verdict so
+  // no suite leaves state behind for the next run, even after a failure.
+  function done(cleanup) {
+    if (typeof cleanup === "function") runCleanup(cleanup);
     console.log(`${title}: ${passed} passed, ${failures.length} failed`);
     if (failures.length) {
       console.error(`\nFirst failure in "${failures[0].name}":`);
