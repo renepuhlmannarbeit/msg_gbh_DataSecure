@@ -304,6 +304,10 @@ reviewer) wurden angesetzt; ihre Ergebnisse sind unten konsolidiert.
 | U-03 | P3 | `gateway/batch-executor.js:25-29` vs. `gateway/result-folder-config.js:56-68` | `EU_PRIVACY_RESULT_ROOT` wird nicht an den Worker weitergegeben; Worker-Export bleibt bei Env-Konfiguration `pending` bis zum nächsten Serverstart. | BL-040.5 |
 | U-04 | P3 | `index.js:29` vs. `skills/…/SKILL.md:23`, `STEP-BY-STEP.md:23` | Pflichtantwort nach Übergabe in Serverinstruktion und Skill wortverschieden. | BL-041.1 |
 | U-05 | Host | Claude Desktop/Cowork | Persönlicher ZIP-Upload in „My Uploads“ übernimmt neue Versionen nicht zuverlässig (offizielle Doku ohne Update-Mechanik für Uploads; GitHub #69020, #65426, knowledge-work-plugins #158). Kein Repo-Defekt; Anleitung/UAT-Kit brauchen den Prüfweg. | BL-051.5, BL-010.7 |
+| U-08 | P2 → behoben | `server/index.js` (startPickerBatch, catch der Quellauswahl) | Eine bewusst abgelehnte Auswahl (Ordner mit nicht freigegebenen Formaten, Output-Baum, Link, zu viele Dateien) wurde als generisches `local_start_failed` „konnte nicht sicher vorbereitet werden“ gemeldet; der feste, pfadfreie Grund aus `companion/source-folder.js` ging verloren. Claude deutete das im UAT (16:03, rc85) als defekten Connector. Jetzt `local_selection_rejected` mit Grund, `next_action: choose_other_selection`, Diagnosecode `LOCAL_SELECTION_REJECTED`; Skill, Prompt-Vertrag, Anleitung erweitert; Negativtest im Picker-Lifecycle. | BL-044.1, BL-041.1 |
+| U-09 | Host | Claude Desktop „My Uploads“ | Auch ein Upload unter neuer Kennung (`data-secure-rc87`, 03.09. 15:21) landete nur im Claude-Code-Speicher; Cowork materialisiert weiter den rc85-Kontoeintrag. Die Organisation blockiert damit derzeit sowohl Entfernen als auch Neuanlage persönlicher Uploads. Ohne Admin ist kein ZIP-Weg nach Cowork möglich (Git-Marketplace-Projektion `msg_gbh_secureData` liegt als Alternative bereit, vom Nutzer nicht gewünscht). Zusätzlich ist die Legacy-Erweiterung „EU Privacy Gateway“ (MCPB) in Desktop aktiv und verwirrt den Ablauf. | BL-051.5, BL-010.7 |
+| U-11 | P2 → behoben | `server/index.js` (alle `ok:false`-Rückgaben, `tools/call`-Handler), `gateway/diagnostic-causes.js` (neu) | Fehlerantworten trugen nur einen deutschen Satz; Version, Phase und Ursache waren in Cowork nicht sichtbar, Claude deutete Ablehnungen und Host-Stopps als Connector-Defekt. Jetzt inhaltsfreies `diagnostic` (`gateway_version`, `phase`, fester `cause`, fester `hint`, `at`, `recorded`, Zähler bei abgelehnten Ordnern) in jeder Fehlerantwort; Picker-Infrastrukturfehler mit eigenen Codes (`LOCAL_PICKER_UNAVAILABLE/TIMEOUT/FAILED`), IPC-Ack-Timeout/-Abbruch getrennt vom Prozessstart. Read-only-Review (cowork-plugin-reviewer) fand die Lücke, dass Ergebnisübergabe, Ordneröffnung und Support-Werkzeuge ohne Hülle blieben; behoben durch zentrale Vervollständigung `completeDiagnostic` im `tools/call`-Handler (Abbildung fester `error`-Schlüssel auf Phase/Ursache). Privacy-Review (privacy-threat-reviewer): keine Abflusspfade, Allowlist hält auch pfadartige `error.code`; zwei Info-Hinweise (parallele Allowlists `CAUSES`/`ERROR_CODES`; IPC-Klassifikation per festem Fehlertext statt `.code`) offen als Wartungsnotiz. | BL-041.1, BL-044.1 |
+| U-12 | P3 → behoben | `tests/helpers.js:39` | `done(cleanup)` ignorierte den Callback; `test-uat-fixture-generation` und `test-source-opc-preflight` ließen ihre Temp-Bäume stehen, ein Restbaum plus Defender-Echtzeitscan ließ die Fixture-Generierung im Kettenlauf (Lauf 10, parallel zu `test:docs`) einmal mit `rm`-Fehler scheitern. Jetzt läuft der Callback vor dem Urteil mit begrenztem Retry bei `EPERM/EBUSY/ENOTEMPTY`; ein endgültiger Fehlschlag ist Warnung, nie geändertes Urteil. | BL-050.3 |
 | U-07 | P2 → behoben (DS-070) | `gateway/batch-snapshot.js:146-152` (`copySnapshotFile`) | Die Quellidentität wird auch über `ctimeMs` gebunden. Unter aktivem Defender-Echtzeitscan ändert sich die NTFS-Änderungszeit frisch geschriebener Dateien sporadisch, worauf die Übernahme fail-closed mit „Datei während der Übernahme verändert“ stoppt (`test-mixed-batch-recovery` in 3 von 7 Kettenläufen, isoliert stets grün). Sicher, aber ein grundloser Stopp im Realbetrieb ist möglich. **DECISION_REQUIRED**: `ctime` aus der Identitätsbindung nehmen (Metadaten-Änderungen ohne Inhaltsänderung tolerieren, Inhalt bleibt über Größe/mtime/inode/SHA-256 gebunden) oder bewusst beibehalten und im IT-Handbuch als bekannten Windows-Effekt dokumentieren. Empfehlung: Option 1 mit Negativtest. | BL-050.3, BL-011.x |
 | U-06 | P2 | atomare Schreibpfade (`gateway/workflow-diagnostics.js:136-139`, `gateway/batch-journal-io.js`/`batch-journal-store.js publishJournal`, `gateway/result-export.js writeRecord/exportOne`, Package-Staging) | Unter aktivem Windows-Defender-Echtzeitscan schlägt `fs.renameSync(tmp → ziel)` sporadisch mit `EPERM` fehl (Messung 03.09.2026: 27 von 1.515 Journal-Schreibvorgängen). Die Produktpfade sind fail-closed (Export bleibt `pending`, Diagnose zählt `write_errors`, Publikation stoppt sicher), aber ein Dokument kann dadurch grundlos als „sicher gestoppt“ enden. Nicht behoben: ein kurzer, begrenzter Rename-Retry bei `EPERM`/`EBUSY` wäre ein kleiner, risikoarmer Fix, betrifft aber mehrere Kernpfade und braucht einen eigenen Negativtest je Pfad. | BL-050.3, BL-002 |
 
@@ -318,6 +322,15 @@ selbst; Originale und Mapping sind vom Elternprozess-Ende unberührt (geprüft).
 |---|---|---|---|
 | `165b281` | fix(worker): Worker zeigt den Abschlussdialog selbst, wenn der MCP-Elternprozess fehlt (U-01) | `gateway/batch.js` (`claimTerminalNotice`), `gateway/worker-terminal-presentation.js` (neu), `gateway/batch-worker.js`, `gateway/batch-executor.js`, `tests/lib/detached-batch-worker.js`, `tests/test-worker-terminal-presentation.js` (neu, 11), `tests/test-direct-picker-intake-worker.js` (+1 Negativtest: Eltern trennt IPC nach Start), `tests/test-batch-executor-startup.js` (+6), `tests/run-product-suite.js`, `package.json` | `test:executor-lifecycle`, `test:journal`, `test:locks`, `test:delivery`, `test-direct-picker-intake-worker` grün |
 | `69a2be1` | test(manifest): Lifecycle-Skript inkl. neuem Präsentationstest festschreiben | `tests/test-manifest.js` | `test-manifest` grün |
+| `df34a74` | feat(release): Git-Marketplace-Projektion des verifizierten ZIPs (`scripts/build-marketplace-repo.mjs`) | Skript, `docs/RELEASE.md` | Skriptlauf, `claude plugin validate` (Marketplace und Plugin), MCP-Smoke grün |
+| `b9b081d` | feat(release): Upload-Variante mit anderer Plugin-Kennung (`scripts/rename-plugin-zip.mjs`) | Skript, `docs/RELEASE.md` | Skriptlauf, Byteidentität außer Manifest, `claude plugin validate`, MCP-Smoke grün |
+| `41af36d` | fix(picker): bewusst abgelehnte Auswahl meldet ihren pfadfreien Grund (U-08) | `server/index.js`, `gateway/workflow-diagnostics.js`, Skill, `prompt-contract.js`, `manifest.json`, `docs/ANLEITUNG.md`, `tests/test-native-picker-lifecycle.js` (+1) | `test-native-picker-lifecycle`, `test-workflow-diagnostics`, `test-mcp-protocol`, `test-manifest`, `test-capability-contract`, `test-cowork-tool-surface-contract`, `test:skills`, `test:docs:fast` grün |
+| `430854f`, `9a2fadf` | feat(picker): Explorer-Ordnerdialog (COM `IFileOpenDialog`, `FOS_PICKFOLDERS`) für Quell- und Ergebnisordner mit Legacy-Rückfall (U-10) | `server/companion/windows-folder-dialog.js` (neu), `source-folder.js`, `folder-picker.js`, `tests/test-source-folder.js`, `tests/test-ui-process-policy.js` | Skripte headless mit Stub durchlaufen (Pfad zurück), `test-source-folder`, `test-ui-process-policy`, `test-native-picker-lifecycle` (echte PowerShell-Präambel inkl. Interop-Kompilierung), `test-result-folder-export`, `test-mcp-protocol` grün |
+| `20aefea` | chore(release): 3.2.0-rc89 | Versionsstellen, Kanon-Baseline, Dokumentlabels | `verify-canonical-docs`, `test-manifest` grün |
+| `b4b007d` | chore(release): 3.2.0-rc88 | Versionsstellen, Kanon-Baseline, Dokumentlabels | `verify-canonical-docs`, `test-manifest`, `test:docs:fast` grün |
+| `89fcf91` | feat(diagnostics): inhaltsfreie Diagnose-Hülle in jeder Fehlerantwort (U-11) | `gateway/diagnostic-causes.js` (neu), `server/index.js`, `companion/source-folder.js`, `folder-picker.js`, `file-picker.js`, `gateway/workflow-diagnostics.js`, Skill (`SKILL.md`, `references/fehler-und-datenhaltung.md`), `prompt-contract.js`, `manifest.json`; `tests/test-diagnostic-causes.js` (neu, 4), `test-native-picker-lifecycle.js` (+Diagnose-Asserts, Timeout-Fall), `test-mcp-protocol.js` (+2: Fortsetzung ohne Stapel, zentrale Vervollständigung bei Ergebnisübergabe), `run-product-suite.js`, `test-manifest.js`, `package.json` | Produktsuite 120/120 grün (Lauf 11), `test:docs`, `test:skills`, `claude plugin validate --strict` (Plugin, Marketplace-Root) grün |
+| `368917f` | test(helpers): Suite-Cleanup-Callback mit begrenztem Retry (U-12) | `tests/helpers.js` | `test-uat-fixture-generation` 3× in Folge ohne Temp-Rest, `test-source-opc-preflight`, `test-batch-snapshot` grün |
+| `e17be48` | chore(release): 3.2.0-rc90 | Versionsstellen, Kanon-Baseline, Dokumentlabels | `test:docs:fast`, `test-manifest` grün |
 | `b4ff2f5` | fix(identity): Dateiidentität ohne ctime, Preflight-SHA-256 verpflichtend (U-07, DS-070) | `gateway/batch-snapshot.js`, `batch-source-admission.js`, `source-format-inspector.js`, `private-work-store.js`, `retention.js`, `batch-journal-store.js`, `bound-private-file.js`; Kanon `DECISIONS.md` (DS-070), `TRACEABILITY.md`, `BACKLOG.md`, `TARGET_CAPABILITIES.json`, `contracts/BATCH_SNAPSHOT_V1.md`, `contracts/SOURCE_PREFLIGHT_V1.md`; Tests `test-batch-snapshot.js` (+3 Negativtests: ctime-Drift toleriert, Inhaltsaustausch bei gleicher Größe/mtime stoppt über Hash, fehlender Hash stoppt), `test-batch-source-admission.js`, `test-source-format-inspector.js` | `test-batch-snapshot`, `-source-admission`, `-source-format-inspector`, `-batch-intake`, `-read-only-source-snapshot`, `-private-work-store`, `-retention`, `-batch-journal-store`, `-mixed-batch-recovery`, `verify-canonical-docs`, `test:docs:fast` grün |
 | `1f10773` | docs(release): Cowork-Upload als offener Hostfehler eingeordnet, Marketplace-`archive`-Quelle als Zielkanal, Release-Marketplace-Manifest im Build (U-05) | `docs/RELEASE.md`, `docs/IT-BETRIEBSHANDBUCH.md`, `scripts/build-release-marketplace.mjs` (neu), `package.json` (`build`) | Skriptlauf mit Platzhalter-, gültiger und ungültiger URL; `test-manifest`, `test-capability-contract`, `test-plugin-structure`, `test:docs:fast` grün |
 | `b49b850` | fix(io): begrenzter Retry für transiente Umbenennfehler bei jeder Temp-Datei-Publikation (U-06) | `gateway/batch-journal-io.js` (`renameWithTransientRetry`), `audit.js`, `batch-evidence.js`, `diagnostics.js`, `legacy-input-migration.js`, `mapping.js`, `review.js`, `storage-reservation-store.js`, `privacy-config.js`, `result-folder-config.js`, `workflow-diagnostics.js`, `result-export.js`, `package-staging.js`, `orchestrator.js`; `tests/test-transient-rename-retry.js` (neu, 5), `tests/run-product-suite.js`, `package.json` (`test:journal`) | 30 betroffene Suiten einzeln grün (u. a. `test-gateway-e2e`, `test-package-staging*`, `test-mapping*`, `test-audit-privacy`, `test-workflow-diagnostics`, `test-result-folder-export`, `test-batch-evidence`, `test-legacy-input-migration`, `test-retention`, `test-storage-capacity`) |
@@ -383,3 +396,49 @@ Marketplace-Freigabe bleiben IT-Aufgaben (BL-051.2); die Wirksamkeit gegen den
 Cache-Fehler ist nicht extern belegt. Der 50-MB-Wert in RELEASE.md war fälschlich
 Anthropic zugeschrieben und ist korrigiert (offiziell 200 MB/512 MB; 45/50 MiB
 sind die eigene Produktgrenze).
+
+### Nachtrag rc88 (03.09.2026, 16:30)
+
+Zweiter UAT-Versuch des Nutzers (15:54–16:04): Cowork lief weiterhin mit rc85
+(`gateway_version` in allen Events, Antwortwert `local_intake_accepted_checkpoint_pending`).
+Zwei Ordnerauswahlen endeten als `picker_failed`/`local_start_failed`; Ursache
+U-08 (bewusste Ablehnung eines gemischten Ordners ohne Grundangabe). Zusätzlich
+tauchte die Legacy-Erweiterung „EU Privacy Gateway“ (MCPB) im Chat auf. Der
+Upload unter neuer Kennung `data-secure-rc87` landete ebenfalls nur im
+Claude-Code-Speicher (U-09).
+
+Build rc88 bei `b4b007d`: `dist/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc88.zip`,
+166 Einträge, 34.918.705 Bytes, SHA-256
+`2cfa3043335086753280f699424f8e6e7d0564c6a098b634e8746c4ebc45c1b8`; SBOM
+`ee1cda6a…da70d`; Upload-Variante `…-rc88-data-secure-rc88.zip`, SHA-256
+`0a9caa9a7431d2fd7192ecc2cbb18d4fc27daa1414c1b567bf30749e7e553318`; beide
+`claude plugin validate` grün, MCP-Smoke meldet rc88. Volle Produktsuite: siehe
+letzte Zeile.
+
+### Nachtrag rc90 (03.09.2026, 17:10)
+
+Auftrag: Fehlerursachen direkt in Cowork sichtbar machen (U-11), vollständiger
+Anwendungs-Check inkl. Claude CLI gegen die offiziellen Anthropic-Unterlagen.
+Ergebnis des Konformitäts-Reviews (Read-only, MCP-Spezifikation Tools 2025-06-18,
+code.claude.com Plugin-Referenz): `toolResult` liefert `content` + `structuredContent`
++ `isError` spezifikationskonform; kein `outputSchema` deklariert, daher ist das
+zusätzliche Feld `diagnostic` zulässig; Plugin-Struktur (`plugin.json`, flaches
+`.mcp.json` mit `${CLAUDE_PLUGIN_ROOT}`, Skill-Frontmatter) ohne Abweichung.
+Gefundene Lücke (Werkzeuge ohne Hülle) behoben, siehe U-11.
+
+Build rc90 bei `e17be48`: `dist/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc90.zip`,
+168 Einträge, 34.925.669 Bytes, SHA-256
+`4b2dd2410d8173f234a2b7b9b870bede0a89669212585f6074a5160b6625d0f4`; SBOM
+`d49941ac…1c281`; Upload-Variante `…-rc90-data-secure-rc90.zip`, SHA-256
+`95699cae6d566f2dabd397a8f528c1d10c36e8f060514a1c71cfe5a685b71394`. Beide
+entpackt mit `claude plugin validate --strict` grün; MCP-Smoke über die
+gebündelte Runtime: `serverInfo.version` rc90, `continue_local_results_handoff`
+ohne aktive Übergabe liefert `isError: true`, `error: no_active_local_handoff`,
+`diagnostic.cause: NO_ACTIVE_LOCAL_HANDOFF`, `gateway_version` rc90, kein stderr.
+`npm run test:plugin-zip` grün. Volle Produktsuite Lauf 11 (nach zentraler
+Vervollständigung): 120 Suiten, 0 Fehlschläge.
+
+Offen (Host, keine Repo-Aufgabe): Cowork-Kontocache hält rc85; persönliche
+Uploads werden durch die Organisation weder entfernt noch neu angelegt (U-05,
+U-09). Die Legacy-Erweiterung „EU Privacy Gateway“ (MCPB) sollte in Claude
+Desktop deaktiviert werden. Menschliche E1/E2/E3-Abnahmen bleiben offen.
