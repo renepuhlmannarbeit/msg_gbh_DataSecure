@@ -33,6 +33,15 @@ Marketplace. Eine abweichende Kennung (z. B. `data-secure-uat`) ist nur für
 Test-/UAT-Installationen gedacht, etwa wenn ein blockierter Kontoeintrag den
 Produktnamen belegt, und wird im Evidence-Log vermerkt.
 
+Für den reinen ZIP-Weg erzeugt `node scripts/rename-plugin-zip.mjs --plugin-name
+<kennung>` aus dem verifizierten Zielpaket eine Upload-Variante, deren Manifest
+eine andere Plugin-Kennung trägt (Inhalt und Archivmodi bleiben byteidentisch).
+Sie wird gebraucht, wenn ein vorhandener, nicht entfernbarer Kontoeintrag den
+Produktnamen `data-secure` belegt: Ein Upload gleichen Namens ersetzt diesen
+Eintrag nicht, ein neuer Name wird als neuer Eintrag angelegt. Die Kennung
+(z. B. `data-secure-rc87`) gehört ins Evidence-Log; Werkzeuge erscheinen dann
+mit dem Präfix `plugin_<kennung>`.
+
 Der persönliche Datei-Upload in Cowork („My Uploads“) besitzt laut offizieller
 Dokumentation keinen Update-Mechanismus; ein erneuter Upload derselben
 Plugin-Kennung ersetzte am 03.09.2026 die gecachte Kopie nicht (offene Meldungen
