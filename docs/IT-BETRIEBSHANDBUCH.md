@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 03.09.2026 · 3.2.0-rc88
+Stand: 03.09.2026 · 3.2.0-rc89
 
 ## Produktkanäle
 
