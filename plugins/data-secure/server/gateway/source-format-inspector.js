@@ -39,7 +39,8 @@ function exactRead(fd, length, position, readSync) {
 
 function sameIdentity(actual, expected) {
   if (!actual || typeof actual.isFile !== 'function' || !actual.isFile()) return false;
-  for (const key of ['dev', 'ino', 'size', 'mtimeMs', 'ctimeMs']) {
+  // DS-070: ctime is no identity feature (scanner metadata writes alter it).
+  for (const key of ['dev', 'ino', 'size', 'mtimeMs']) {
     const wanted = Number(expected?.[key]);
     if (Number.isFinite(wanted) && Number(actual[key]) !== wanted) return false;
   }

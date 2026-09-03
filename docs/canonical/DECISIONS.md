@@ -1,15 +1,16 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 01.09.2026
+Stand: 03.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-049, DS-051 bis DS-058, DS-060 sowie DS-062 bis
-  DS-069, jeweils mit den unten genannten Präzisierungen;
+  DS-070, jeweils mit den unten genannten Präzisierungen;
 - **ersetzt:** DS-050 durch DS-065;
 - **teilweise präzisiert:** DS-002, DS-009, DS-020, DS-023 und DS-053 durch
-  DS-067; DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067.
+  DS-067; DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067; DS-020 und
+  DS-044 durch DS-070.
 
 Der aktuelle operative Status steht in
 [`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still
@@ -657,3 +658,24 @@ nicht geraten. Ein Cloud-Sync-Ziel ist zulässig, kann die bereits freigegebenen
 aber nicht garantiert rechtlich anonymen Ergebnisse zum jeweiligen Dienst
 synchronisieren und wird deshalb als bewusste Nutzerwahl dokumentiert. Diese
 Entscheidung präzisiert DS-008, DS-023, DS-040, DS-041, DS-051, DS-058 und DS-064.
+
+## DS-070 – Dateiidentität ohne Änderungszeit des Dateisystems
+
+Bestätigt am 03.09.2026 nach Datenschutz- und Runtime-Review: Jede
+Identitätsbindung regulärer Dateien und Ordner in DataSecure – Quellen vor und
+während der lokalen Übernahme, private Arbeitskopien, Journale, Nachweise,
+Zuordnungs- und Exportdateien – verwendet Gerät, Inode, Größe und
+Modifikationszeit (mtime). Der Inhalt einer übernommenen Quelle ist zusätzlich
+und verpflichtend über den SHA-256 des Preflights an die Arbeitskopie gebunden;
+eine Kopie ohne diesen Hash wird nicht angelegt.
+
+Die Änderungszeit des Dateisystems (ctime beziehungsweise NTFS ChangeTime) ist
+ausdrücklich kein Identitätsmerkmal. Virenscanner, Indexer und
+Attributschreibvorgänge verändern sie ohne ein einziges Byte des Inhalts; auf
+Windows 11 führte das zu grundlosen, wenn auch sicheren Stopps („Datei während
+der Übernahme verändert“) und zu abgebrochenen Testketten. Ein Inhaltsaustausch
+bei gleicher Größe und zurückgesetzter Modifikationszeit wird weiterhin durch den
+Hash gestoppt; Größen-, Zeit-, Inode- oder Gerätewechsel stoppen weiterhin über
+die Identität. Ausgenommen bleiben die Selbstprüfungen der gebündelten
+Programmdateien (SEA-Rolle, Statusanzeige), die über Prüfsummen abgesichert sind.
+Diese Entscheidung präzisiert DS-020 und DS-044.

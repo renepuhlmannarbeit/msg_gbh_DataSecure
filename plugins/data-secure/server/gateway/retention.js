@@ -67,8 +67,7 @@ function inspectProcessedProtection(processedRoot, fsApi = fs) {
     const after = fsApi.lstatSync(processedRoot);
     if (!after.isDirectory() || after.isSymbolicLink() ||
         before.dev !== after.dev || before.ino !== after.ino ||
-        before.size !== after.size || before.mtimeMs !== after.mtimeMs ||
-        before.ctimeMs !== after.ctimeMs) {
+        before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
       throw new Error('processed root changed');
     }
     return { complete: true, entries: entries.length };

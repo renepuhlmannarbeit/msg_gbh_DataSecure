@@ -77,6 +77,7 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-067 | aktiv und aktuell | BL-010, BL-011, BL-012, BL-024, BL-040, BL-051; fester Bildschutz, 0–14 nur temporär, Quellen/Exporte nie Auto-Löschziel, ZIP/Marketplace |
 | DS-068 | aktiv und aktuell | BL-012.9/10, BL-032.1, BL-043.1; lokaler Sammelreview, PII-Shield-inspirierte Interaktion und automatischer Klar-Datei-Pfad |
 | DS-069 | aktiv und aktuell | BL-040.5, BL-041.7, BL-041.10, BL-043.1; einmalige Ergebnisordnerwahl, neutraler verifizierter Markdown-Export und lokales Öffnen |
+| DS-070 | aktiv und aktuell | BL-011.8, BL-049.1, BL-050.3; Dateiidentität über Gerät, Inode, Größe und mtime plus verpflichtenden Preflight-SHA-256, Änderungszeit ausgenommen |
 
 ## DS-067 – konkrete Umsetzung
 

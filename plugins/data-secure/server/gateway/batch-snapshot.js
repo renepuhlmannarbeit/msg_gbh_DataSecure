@@ -135,8 +135,12 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
   let input;
   let plaintext;
   let destinationCreated = false;
+  // DS-070: the preflight hash is the authoritative content gate of the copy.
+  // Identity is bound by device, inode, size and mtime; the file system change
+  // time (ctime) is deliberately no identity feature because scanners alter it
+  // without touching a byte.
   const expectedSha256 = String(deps.expectedSha256 || '').toLowerCase();
-  if (expectedSha256 && !/^[a-f0-9]{64}$/u.test(expectedSha256)) {
+  if (!/^[a-f0-9]{64}$/u.test(expectedSha256)) {
     throw new SafeError('Die geprüfte Quelldatei besitzt keine gültige Integritätsbindung.');
   }
   try {
@@ -144,13 +148,11 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
     input = io.openSync(source, io.constants.O_RDONLY | noFollow);
     const opened = io.fstatSync(input);
     const named = io.lstatSync(source);
-    const expectedCtime = Number(expected.ctimeMs);
     if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
       opened.dev !== expected.dev || opened.ino !== expected.ino ||
       named.dev !== expected.dev || named.ino !== expected.ino ||
       opened.size !== expected.size || named.size !== expected.size ||
-      opened.mtimeMs !== expected.mtimeMs || named.mtimeMs !== expected.mtimeMs ||
-      (Number.isFinite(expectedCtime) && (opened.ctimeMs !== expectedCtime || named.ctimeMs !== expectedCtime))) {
+      opened.mtimeMs !== expected.mtimeMs || named.mtimeMs !== expected.mtimeMs) {
       throw new SafeError('Eine ausgewählte Datei wurde während der lokalen Übernahme verändert.');
     }
     const hash = crypto.createHash('sha256');
@@ -166,17 +168,12 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
     const rechecked = io.fstatSync(input);
     if (!after.isFile() || after.isSymbolicLink() || after.dev !== expected.dev || after.ino !== expected.ino ||
       after.size !== expected.size || after.mtimeMs !== expected.mtimeMs ||
-      rechecked.size !== expected.size || rechecked.mtimeMs !== expected.mtimeMs ||
-      (Number.isFinite(expectedCtime) && (after.ctimeMs !== expectedCtime || rechecked.ctimeMs !== expectedCtime))) {
+      rechecked.size !== expected.size || rechecked.mtimeMs !== expected.mtimeMs) {
       throw new SafeError('Eine ausgewählte Datei wurde während der lokalen Übernahme verändert.');
     }
     const copiedSha256 = hash.digest('hex');
-    if (expectedSha256) {
-      const actual = Buffer.from(copiedSha256, 'hex');
-      const wanted = Buffer.from(expectedSha256, 'hex');
-      if (!crypto.timingSafeEqual(actual, wanted)) {
-        throw new SafeError('Eine ausgewählte Datei wurde zwischen Prüfung und lokaler Übernahme verändert.');
-      }
+    if (!crypto.timingSafeEqual(Buffer.from(copiedSha256, 'hex'), Buffer.from(expectedSha256, 'hex'))) {
+      throw new SafeError('Eine ausgewählte Datei wurde zwischen Prüfung und lokaler Übernahme verändert.');
     }
     privateWorkStore.writeFile(destination, plaintext);
     destinationCreated = true;

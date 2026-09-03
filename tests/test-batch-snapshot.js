@@ -23,12 +23,16 @@ const { test, done, assert } = createSuite('Batch snapshot module');
 
 const privateWorkStore = createPrivateWorkStore({ privateRoot: base });
 
+// DS-070: every copy is bound to the preflight hash; the fixture payload is
+// 'snapshot payload' unless a test states another expectation.
+const PAYLOAD_SHA256 = crypto.createHash('sha256').update('snapshot payload').digest('hex');
 function plainDeps(overrides = {}, objectId = crypto.randomBytes(8).toString('hex')) {
   return {
     fs,
     hasReparseComponent: () => false,
     privateWorkStore,
     binding: { purpose: 'batch-snapshot', objectId },
+    expectedSha256: PAYLOAD_SHA256,
     ...overrides
   };
 }
@@ -135,12 +139,10 @@ test('a destination collision combined with source-close failure never deletes t
   assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
 });
 
-test('an in-place metadata change during copying invalidates and removes the snapshot', () => {
-  const { source, expected } = sourceFixture('ctime.txt');
-  const destination = path.join(base, 'ctime.copy');
+function driftingInput(source, field) {
   let inputFd;
   let inputStats = 0;
-  const io = ioWith({
+  return ioWith({
     openSync(target, flags, mode) {
       const fd = fs.openSync(target, flags, mode);
       if (target === source) inputFd = fd;
@@ -148,16 +150,61 @@ test('an in-place metadata change during copying invalidates and removes the sna
     },
     fstatSync(fd) {
       const stat = fs.fstatSync(fd);
-      if (fd === inputFd && ++inputStats > 1) stat.ctimeMs += 1;
+      if (fd === inputFd && ++inputStats > 1) stat[field] += 1;
       return stat;
     }
   });
+}
+
+test('an in-place modification-time change during copying invalidates and removes the snapshot', () => {
+  const { source, expected } = sourceFixture('mtime.txt');
+  const destination = path.join(base, 'mtime.copy');
   assert.throws(
-    () => copySnapshotFile(source, destination, expected, plainDeps({ fs: io }, 'ctime')),
+    () => copySnapshotFile(source, destination, expected, plainDeps({ fs: driftingInput(source, 'mtimeMs') }, 'mtime')),
     /verändert/i
   );
   assert.strictEqual(fs.existsSync(destination), false);
   assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
+});
+
+test('DS-070: a change-time drift without any byte change is tolerated during copying', () => {
+  // Windows real-time scanners alter NTFS ctime of freshly written files; the
+  // content stays bound by size, mtime, inode and the preflight SHA-256.
+  const { source, expected } = sourceFixture('ctime.txt');
+  const destination = path.join(base, 'ctime.copy');
+  const copied = copySnapshotFile(source, destination, expected, plainDeps({ fs: driftingInput(source, 'ctimeMs') }, 'ctime'));
+  assert.strictEqual(copied.sha256, PAYLOAD_SHA256);
+  assert.deepStrictEqual(fs.readFileSync(destination), fs.readFileSync(source));
+  const drifted = { ...expected, ctimeMs: expected.ctimeMs + 5000, isFile: () => true, isSymbolicLink: () => false };
+  const again = path.join(base, 'ctime-drifted.copy');
+  assert.strictEqual(copySnapshotFile(source, again, drifted, plainDeps({}, 'ctime-drifted')).sha256, PAYLOAD_SHA256,
+    'a stale ctime in the expected identity is equally irrelevant');
+});
+
+test('DS-070: a same-size content swap with a restored modification time is stopped by the preflight hash', () => {
+  const { source, expected } = sourceFixture('swap.txt');
+  const destination = path.join(base, 'swap.copy');
+  const swapped = Buffer.from('SNAPSHOT PAYLOAD', 'utf8');
+  assert.strictEqual(swapped.length, expected.size);
+  fs.writeFileSync(source, swapped);
+  fs.utimesSync(source, expected.atime, expected.mtime);
+  // Whatever identity the file now presents, it is exactly what the copy sees:
+  // only the preflight hash can tell the swapped bytes apart.
+  const presented = fs.lstatSync(source);
+  assert.strictEqual(presented.size, expected.size);
+  assert.throws(() => copySnapshotFile(source, destination, presented, plainDeps({}, 'swap')),
+    /zwischen Prüfung und lokaler Übernahme verändert/i);
+  assert.strictEqual(fs.existsSync(destination), false);
+});
+
+test('DS-070: a copy without a preflight hash fails closed before any byte is copied', () => {
+  const { source, expected } = sourceFixture('nohash.txt');
+  const destination = path.join(base, 'nohash.copy');
+  for (const expectedSha256 of [undefined, '', 'abc', 'Z'.repeat(64)]) {
+    assert.throws(() => copySnapshotFile(source, destination, expected, plainDeps({ expectedSha256 }, 'nohash')),
+      /Integritätsbindung/i);
+  }
+  assert.strictEqual(fs.existsSync(destination), false);
 });
 
 test('pending entry binding verifies the snapshot digest and returns in-memory bytes', () => {

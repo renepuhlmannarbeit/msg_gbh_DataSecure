@@ -73,6 +73,12 @@ test('descriptor identity and read failures abort the mutation-free plan instead
     }), (error) => error.code === 'SOURCE_READ_FAILED');
     assert.throws(() => planBatchAdmission([{ ...entry, stat: { ...entry.stat, size: entry.stat.size + 1 } }]),
       (error) => error.code === 'SOURCE_IDENTITY_CHANGED');
+    assert.throws(() => planBatchAdmission([{ ...entry, stat: { ...entry.stat, mtimeMs: entry.stat.mtimeMs + 1 } }]),
+      (error) => error.code === 'SOURCE_IDENTITY_CHANGED');
+    // DS-070: a drifted change time (scanner metadata write) is no identity change.
+    const drifted = planBatchAdmission([{ ...entry, stat: { ...entry.stat, ctimeMs: entry.stat.ctimeMs + 5000 } }]);
+    assert.strictEqual(drifted[0].admission, 'candidate');
+    assert.match(drifted[0].source_sha256, /^[a-f0-9]{64}$/u);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

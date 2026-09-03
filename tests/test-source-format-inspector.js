@@ -205,6 +205,10 @@ test('descriptor identity is checked before and after reads', () => {
   try {
     const changedIno = Number(stat.ino) === 0 ? 1 : 0;
     assert.notStrictEqual(changedIno, Number(stat.ino));
+    // DS-070: the change time is no identity feature; size, mtime, inode and device are.
+    assert.doesNotThrow(() => inspectSourceFormatFromFd(fd, { ...stat, ctimeMs: stat.ctimeMs + 5000 }, '.txt'));
+    assert.throws(() => inspectSourceFormatFromFd(fd, { ...stat, mtimeMs: stat.mtimeMs + 1 }, '.txt'),
+      (error) => error.code === 'SOURCE_IDENTITY_CHANGED');
     assert.throws(() => inspectSourceFormatFromFd(fd, { ...stat, ino: changedIno }, '.txt'),
       (error) => error instanceof SourceFormatError && error.code === 'SOURCE_IDENTITY_CHANGED');
     let calls = 0;

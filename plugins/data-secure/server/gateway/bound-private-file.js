@@ -13,8 +13,9 @@ function failure() {
 function identity(stat) {
   return {
     dev: String(stat.dev), ino: String(stat.ino), size: String(stat.size),
-    mtimeNs: String(stat.mtimeNs ?? BigInt(Math.trunc(Number(stat.mtimeMs) * 1e6))),
-    ctimeNs: String(stat.ctimeNs ?? BigInt(Math.trunc(Number(stat.ctimeMs) * 1e6)))
+    // DS-070: the change time (ctime) is no identity feature; scanners alter
+    // it without touching a byte.
+    mtimeNs: String(stat.mtimeNs ?? BigInt(Math.trunc(Number(stat.mtimeMs) * 1e6)))
   };
 }
 

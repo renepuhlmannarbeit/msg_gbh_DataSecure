@@ -182,9 +182,9 @@ function createBatchJournalStore(options = {}) {
       const namedAfter = io.lstatSync(target, { bigint: true });
       const parentAfter = io.lstatSync(parent, { bigint: true });
       if (BigInt(bytes.length) !== stat.size || after.dev !== stat.dev || after.ino !== stat.ino ||
-          after.size !== stat.size || after.mtimeNs !== stat.mtimeNs || after.ctimeNs !== stat.ctimeNs ||
+          after.size !== stat.size || after.mtimeNs !== stat.mtimeNs ||
           namedAfter.dev !== stat.dev || namedAfter.ino !== stat.ino || namedAfter.nlink !== 1n ||
-          namedAfter.size !== stat.size || namedAfter.mtimeNs !== stat.mtimeNs || namedAfter.ctimeNs !== stat.ctimeNs ||
+          namedAfter.size !== stat.size || namedAfter.mtimeNs !== stat.mtimeNs ||
           parentAfter.dev !== parentBefore.dev || parentAfter.ino !== parentBefore.ino) throw new Error('unsafe');
       const record = JSON.parse(bytes.toString('utf8'));
       if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('unsafe');

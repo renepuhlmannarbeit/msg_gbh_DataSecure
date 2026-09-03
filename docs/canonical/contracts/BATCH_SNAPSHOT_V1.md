@@ -25,8 +25,11 @@ werden niemals verschoben, verändert oder als Fortsetzungsbasis verwendet.
    Antworten geschrieben.
 3. Während des Kopierens werden Bytezahl und SHA-256 der Arbeitskopie gebildet. Nach
    `fsync` beziehungsweise dem plattformspezifischen Äquivalent werden Größe und
-   Quellidentität erneut geprüft. Eine Änderung während der Übernahme verwirft nur
-   diese unfertige Kopie und meldet eine erneut auswählbare Datei.
+   Quellidentität (Gerät, Inode, Größe, Modifikationszeit) erneut geprüft, und der
+   SHA-256 der Kopie muss dem Preflight-Hash entsprechen; ohne Preflight-Hash wird
+   keine Kopie angelegt. Die Änderungszeit des Dateisystems ist nach DS-070 kein
+   Identitätsmerkmal. Eine Änderung während der Übernahme verwirft nur diese
+   unfertige Kopie und meldet eine erneut auswählbare Datei.
 4. Erst wenn alle ausgewählten Dateien übernommen und die Grenzen geprüft sind, wird
    `snapshot.json.tmp` synchronisiert und atomar nach `snapshot.json` umbenannt. Vor
    diesem Commit existiert kein fortsetzbarer Stapel.
@@ -89,6 +92,9 @@ Diagnose unsichtbar. Hashes der Arbeitskopien verlassen den privaten Job Store n
 ## Verpflichtende Gegenproben
 
 Die Implementierung muss Originaländerung nach Commit, Änderung während Kopie,
-Symlink/Junction, gleichnamige Quellen, Absturz vor und nach Ergebnis-Commit,
-Stromausfallfenster, vollen Datenträger, konkurrierenden zweiten Stapel sowie
-Fortsetzung nach Prozess- und Rechnerneustart testen.
+Inhaltsaustausch bei gleicher Größe und zurückgesetzter Modifikationszeit (Stopp
+über den Preflight-Hash), reine Änderungszeit-Drift ohne Inhaltsänderung
+(toleriert), fehlenden Preflight-Hash (kein Kopieren), Symlink/Junction,
+gleichnamige Quellen, Absturz vor und nach Ergebnis-Commit, Stromausfallfenster,
+vollen Datenträger, konkurrierenden zweiten Stapel sowie Fortsetzung nach
+Prozess- und Rechnerneustart testen.

@@ -7,8 +7,9 @@ Mehrfachpicker vor jeder privaten Quellkopie verdrahtet.
 
 Der Preflight verbindet deklarierte Endung, bekannte Signatur und bei OOXML eine
 begrenzte OPC-Containerprüfung. Er liest ausschließlich über einen bereits
-geöffneten, vor und nach dem Lesen an Dateityp, Gerät, Inode, Größe, Änderungs- und
-Metadatenzeit gebundenen Descriptor. Er schreibt nichts, folgt keinen Links, lädt
+geöffneten, vor und nach dem Lesen an Dateityp, Gerät, Inode, Größe und
+Modifikationszeit gebundenen Descriptor (die Änderungszeit des Dateisystems ist
+nach DS-070 kein Merkmal). Er schreibt nichts, folgt keinen Links, lädt
 keine externen Inhalte und gibt keine Dateinamen, Pfade, Rohbytes oder Parserfehler
 zurück.
 

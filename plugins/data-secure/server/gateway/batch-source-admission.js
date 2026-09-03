@@ -29,14 +29,11 @@ function boundDescriptor(entry, deps = {}) {
     descriptor = io.openSync(entry.full, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
     const opened = io.fstatSync(descriptor);
     const named = io.lstatSync(entry.full);
-    const expectedCtime = Number(entry.stat.ctimeMs);
     if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
       opened.dev !== entry.stat.dev || opened.ino !== entry.stat.ino ||
       named.dev !== entry.stat.dev || named.ino !== entry.stat.ino ||
       opened.size !== entry.stat.size || named.size !== entry.stat.size ||
-      opened.mtimeMs !== entry.stat.mtimeMs || named.mtimeMs !== entry.stat.mtimeMs ||
-      (Number.isFinite(expectedCtime) &&
-        (opened.ctimeMs !== expectedCtime || named.ctimeMs !== expectedCtime))) {
+      opened.mtimeMs !== entry.stat.mtimeMs || named.mtimeMs !== entry.stat.mtimeMs) {
       throw new SourceFormatError('SOURCE_IDENTITY_CHANGED');
     }
     return { descriptor, stat: opened };
@@ -86,7 +83,7 @@ function planBatchAdmission(queue, deps = {}) {
           }
           const after = io.fstatSync(opened.descriptor);
           if (after.dev !== opened.stat.dev || after.ino !== opened.stat.ino || after.size !== opened.stat.size ||
-            after.mtimeMs !== opened.stat.mtimeMs || after.ctimeMs !== opened.stat.ctimeMs) {
+            after.mtimeMs !== opened.stat.mtimeMs) {
             throw new SourceFormatError('SOURCE_IDENTITY_CHANGED');
           }
           result = { ...result, source_sha256: hash.digest('hex') };

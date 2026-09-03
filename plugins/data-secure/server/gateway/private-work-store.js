@@ -96,7 +96,7 @@ function createPrivateWorkStore(options = {}) {
       validate(target);
       if (!sameIdentity(before, after) || !sameIdentity(after, io.lstatSync(target)) ||
           !sameIdentity(parent, io.lstatSync(path.dirname(target))) || before.size !== after.size ||
-          before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) throw failure('PRIVATE_ARTIFACT_READ_FAILED');
+          before.mtimeMs !== after.mtimeMs) throw failure('PRIVATE_ARTIFACT_READ_FAILED');
       if (bytes.subarray(0, 8).equals(Buffer.from('DSARTF01'))) throw failure('LEGACY_ENCRYPTED_ARTIFACT_UNAVAILABLE');
       const closing = fd;
       fd = undefined;

@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 02.09.2026 · Produktstand 3.2.0-rc86
+Stand: 03.09.2026 · Produktstand 3.2.0-rc87
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -80,7 +80,7 @@ DS-026, DS-027, DS-028, DS-029, DS-030, DS-031, DS-032, DS-033, DS-034,
 DS-035, DS-036, DS-037, DS-038, DS-039, DS-040, DS-041, DS-042, DS-043,
 DS-044, DS-045, DS-046, DS-047, DS-048, DS-049, DS-050, DS-051, DS-052,
 DS-053, DS-054, DS-055, DS-056, DS-057, DS-058, DS-059, DS-060, DS-061,
-DS-062, DS-063, DS-064, DS-065, DS-066, DS-067, DS-068 und DS-069.
+DS-062, DS-063, DS-064, DS-065, DS-066, DS-067, DS-068, DS-069 und DS-070.
 
 ## A. Eigenständig lieferbare Entwicklung
 
