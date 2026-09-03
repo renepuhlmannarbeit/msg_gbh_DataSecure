@@ -208,7 +208,7 @@ const TABLE_ID_CELL_RE = new RegExp(`${NB}(?=[A-Z0-9./\\-]*\\d)[A-Z0-9][A-Z0-9./
 // PERSON_003 as a bare "Müller".
 const HONORIFICS = new Set([
   'HERR', 'HERRN', 'FRAU', 'DR', 'DR.', 'PROF', 'PROF.', 'DIPL', 'DIPL.',
-  'ING', 'ING.', 'MAG', 'MAG.', 'MR', 'MRS', 'MS', 'SEHR', 'GEEHRTE',
+  'ING', 'ING.', 'MAG', 'MAG.', 'DR.-ING', 'DR.-ING.', 'MR', 'MRS', 'MS', 'SEHR', 'GEEHRTE',
   'GEEHRTER', 'LIEBE', 'LIEBER', 'HALLO',
   // Degree qualifiers behind a title ("Dr. med.", "Dr. h. c.", "Dr. rer. nat.")
   // are part of the honorific, never of the name (review rc91).

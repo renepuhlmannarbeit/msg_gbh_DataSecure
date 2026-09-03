@@ -148,7 +148,9 @@ const PERSON_LABEL =
 // repetition, so the pattern stays linear (no nested optional groups that
 // could backtrack exponentially on long title-like runs).
 const GENDERED_SALUTATION = '(?:Herrn?|Frau)';
-const ACADEMIC_TITLE = '(?:Dr\\.?|Prof\\.?|PD|Priv\\.-Doz\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm|Psych|Päd)\\.?|Mag\\.?)';
+// "Dr.-Ing." is one title token; "Dr." followed by "-Ing." broke the anchor and
+// left the whole name in clear (counter-review rc93).
+const ACADEMIC_TITLE = '(?:Dr\\.?(?:-Ing\\.?)?|Prof\\.?|PD|Priv\\.-Doz\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm|Psych|Päd)\\.?|Mag\\.?)';
 const HONORIFIC_TITLE = `(?:${GENDERED_SALUTATION}|${ACADEMIC_TITLE})`;
 const HONORIFIC_QUALIFIER = '(?:med|dent|vet|jur|phil|theol|oec|habil|h\\.\\s?c|rer\\.\\s?(?:nat|pol|soc|medic))\\.?';
 const HONORIFIC = `(?:${HONORIFIC_TITLE}(?:\\s+(?:${HONORIFIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;

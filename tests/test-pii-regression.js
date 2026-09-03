@@ -1556,6 +1556,20 @@ test('table rows of unequal width keep their column labels', () => {
   }
 });
 
+// Counter-review rc93: "Dr.-Ing." is one title token. "Dr." followed by "-Ing."
+// broke the honorific anchor and left the full name in clear with a blind gate.
+test('Dr.-Ing. titles anchor the name and stay in front of the pseudonym', () => {
+  for (const [source, expected] of [
+    ['Projektleiter: Dr.-Ing. Max Mustermann, Bauingenieur', 'Projektleiter: Dr.-Ing. [PERSON_001], Bauingenieur'],
+    ['Leitung: Prof. Dr.-Ing. Erika Beispiel', 'Leitung: Prof. Dr.-Ing. [PERSON_001]'],
+    ['Dr.-Ing. Max Mustermann leitet die Statik.', 'Dr.-Ing. [PERSON_001] leitet die Statik.']
+  ]) {
+    const result = anonymize(source, 'personnel_profile');
+    assert.strictEqual(result.text, expected, source);
+    assert.deepStrictEqual(require('../plugins/data-secure/server/privacy/engine').scanResidual(result.text, 'personnel_profile', result.dictionary, { strongPersonAnchor: result.strongPersonAnchor }), []);
+  }
+});
+
 // A nested title/qualifier repetition backtracked exponentially on long runs of
 // title-like tokens and stalled the batch-session suite; the flat chain must
 // stay linear.
