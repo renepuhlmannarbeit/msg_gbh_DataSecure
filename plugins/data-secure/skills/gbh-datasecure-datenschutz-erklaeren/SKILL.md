@@ -1,6 +1,6 @@
 ---
 name: gbh-datasecure-datenschutz-erklaeren
-description: Nutze diesen Skill, um Schutzmaßnahmen und Grenzen von GBH DataSecure, DSGVO- und EU-AI-Act-Aspekte, Audit-Daten, Aufbewahrung oder menschliche Prüfungen verständlich zu erklären.
+description: Erklärt Schutzmaßnahmen und Grenzen von DataSecure, DSGVO- und EU-AI-Act-Aspekte, Audit, Aufbewahrung und menschliche Prüfung. Nicht zum Anonymisieren (dafür dokument-anonymisieren).
 ---
 
 # GBH DataSecure – Datenschutz erklären
