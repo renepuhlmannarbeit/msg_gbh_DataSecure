@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 02.09.2026 · Ist-Zustand RC86
+Stand: 03.09.2026 · Ist-Zustand RC87
 
 ## Ziel
 

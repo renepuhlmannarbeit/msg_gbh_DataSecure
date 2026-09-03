@@ -1,6 +1,6 @@
 # Aktuelles DataSecure-UAT-Testpaket
 
-Stand: 01.09.2026 · gilt für den jeweils installierten, dokumentierten Build
+Stand: 03.09.2026 · gilt für den jeweils installierten, dokumentierten Build
 
 Dieses Paket verwendet ausschließlich synthetische Daten. Es ist der einzige
 aktuelle Einstieg für die menschliche Abnahme. Alte RC30-/RC63-Kits bleiben als
