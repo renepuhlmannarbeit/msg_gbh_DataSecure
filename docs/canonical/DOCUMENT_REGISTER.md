@@ -56,6 +56,7 @@ Abnahme.
 | `tasks/CLAUDE-CODE-FOLGEAUFTRAG-GEGENREVIEW-RC93.md` | aktueller ausführbarer Claude-Code-Gegenreview- und Fixauftrag zu RC93; die kanonische Arbeit bleibt BL-021.1, BL-042, BL-044.1 und BL-002 zugeordnet |
 | `tasks/CODEX-AUFTRAG-REVIEW-RC92.md` | zeitgebundener Read-only-Gegenreview-Auftrag an Codex zu rc92; erzeugt nur einen Bericht, ändert weder Code noch Kanon |
 | `tasks/CODEX-REVIEW-BERICHT-RC92.md` | Ergebnis des unabhängigen RC92-Gegenreviews; die Umsetzung und fachliche Präzisierung seiner Befunde ist im Nachtrag sowie in `BACKLOG.md` und `TRACEABILITY.md` dokumentiert |
+| `tasks/CLAUDE-CODE-GEGENREVIEW-BERICHT-RC93.md` | Ergebnis des unabhängigen Claude-Code-Gegenreviews der RC93-Korrekturen: Urteil je C-01 bis C-09, Reproduktionen, Gate-Tabelle, eigene Fixcommits, offene Zielhost-Evidenz |
 
 ## Historisch, nicht entscheidungsführend
 
