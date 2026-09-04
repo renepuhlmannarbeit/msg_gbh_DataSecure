@@ -1,6 +1,6 @@
 # DataSecure Security-Modell
 
-Stand: 03.09.2026 · 3.2.0-rc98
+Stand: 03.09.2026 · 3.2.0-rc99
 
 ## Vertrauensgrenze
 
@@ -13,7 +13,7 @@ verifiziertes Markdown mit kurzlebiger, laufgebundener Leseberechtigung.
 
 | Bedrohung | Kontrolle |
 |---|---|
-| Chat-Upload/Cloud ohne lokale Brücke | Skill-/Hostgate stoppt und verweist auf lokalen Picker |
+| Chat-Upload oder Cloud-Sitzung – unabhängig von geöffneter Desktop-App oder Brücke | Skill-/Hostgate stoppt und verweist auf eine lokale Cowork-Sitzung mit laufendem Plugin-MCP oder auf Standalone |
 | manipulierte Endung/Container | Signatur-, OPC-, CRC-, Relationship- und Strukturprüfung |
 | aktive/eingebettete Inhalte | vollständige Coverage oder fail-closed Stopp |
 | Prompt Injection im Dokument | Dokumentinhalt ist Daten, keine Werkzeuganweisung |
@@ -32,6 +32,13 @@ Arbeits- und Reviewkopien sind normale lokale Dateien ohne zusätzliche
 Verschlüsselung, Schlüsselbund, Keyfile oder Passwort. Das ist eine bewusste
 Produktentscheidung; Betriebssystemrechte und lokaler Geräteschutz sind die
 Grenze. Historische verschlüsselte Artefakte werden unangetastet bewahrt.
+
+Ein bereits kompromittierter Prozess desselben Betriebssystembenutzers liegt
+außerhalb dieses Vertrauensmodells: Er kann lokale Dateien zwischen einzelnen
+Systemaufrufen austauschen. DataSecure bindet Identitäten, prüft Links und stoppt
+erkannte Austauschfälle, verspricht ohne nativen CAS-/No-Replace-Mechanismus aber
+keine Sicherheit gegen ein absichtlich exakt in das Publikationsfenster gesetztes
+Rennen desselben Benutzers.
 
 Automatische Aufbewahrung gilt ausschließlich für eindeutig DataSecure-eigene
 temporäre Arbeits-/Reviewdaten und ist auf 0–14 Tage begrenzt. Quellen/Originale

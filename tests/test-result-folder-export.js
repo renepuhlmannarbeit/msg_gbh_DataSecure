@@ -19,7 +19,8 @@ const {
   resultOutputDirectory, isCommonSyncFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
-  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport, _test
+  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport,
+  visibleExportDirectory, visibleExportStatus, _test
 } = require('../plugins/data-secure/server/gateway/result-export');
 
 function packageFixture(id, text) {
@@ -54,6 +55,8 @@ try {
   assert.strictEqual(runs.length, 1);
   const visible = fs.readdirSync(path.join(resultOutputDirectory(), runs[0])).sort();
   assert.deepStrictEqual(visible, ['Dokument-001-anonymisiert.md', 'Dokument-002-anonymisiert.md']);
+  assert.strictEqual(visibleExportDirectory(state.token), path.join(resultOutputDirectory(), runs[0]),
+    'the local open action resolves the exact completed run');
   assert.doesNotMatch(JSON.stringify(visible), /ds_|manifest|mapping|original/iu);
   assert.strictEqual(fs.readFileSync(path.join(resultOutputDirectory(), runs[0], visible[0]), 'utf8'), '# Bereinigtes Dokument\n\n[PERSON_1]');
   assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true }, 'retry is idempotent');
@@ -72,6 +75,9 @@ try {
   process.env.EU_PRIVACY_RESULT_ROOT = secondCowork;
   assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true });
   assert.deepStrictEqual(fs.readdirSync(resultOutputDirectory()), [], 'a destination change does not mirror completed runs');
+  assert.deepStrictEqual(visibleExportStatus(state.token, 2), { exported: 2, pending: 0, available: false },
+    'a completed record from another destination is not advertised as locally available');
+  assert.strictEqual(visibleExportDirectory(state.token), '');
   assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 });
   assert.deepStrictEqual(fs.readdirSync(resultOutputDirectory()), []);
 
@@ -90,6 +96,7 @@ try {
     items: [{ status: 'released', package_id: idGood }, { status: 'released', package_id: idBad }]
   };
   assert.deepStrictEqual(exportCompletedState(partialState), { exported: 1, pending: 1, available: false }, 'progress is counted per item');
+  assert.strictEqual(visibleExportDirectory(partialState.token), '', 'an incomplete mixed batch has no visible result run');
   const partialRecord = JSON.parse(fs.readFileSync(recordPath(partialState.token), 'utf8'));
   assert.strictEqual(partialRecord.complete, false);
   assert.deepStrictEqual(partialRecord.items.map((item) => item.exported === true), [true, false], 'the written item is persisted as final');
@@ -103,11 +110,50 @@ try {
   assert.deepStrictEqual(exportCompletedState(partialState), { exported: 1, pending: 1, available: false });
   assert.strictEqual(fs.existsSync(writtenGood), false, 'nor by a later terminal-state export');
   assert.deepStrictEqual(fs.readdirSync(partialRun), [], 'no other visible file appeared');
+  process.env.EU_PRIVACY_RESULT_ROOT = secondCowork;
+  const splitAttempt = replayPendingResultExports();
+  assert.ok(splitAttempt.failures >= 1, 'a partially exported run stays bound to its first destination');
+  assert.deepStrictEqual(fs.readdirSync(resultOutputDirectory()), [], 'no sibling of a partial run is written to a new destination');
+  process.env.EU_PRIVACY_RESULT_ROOT = cowork;
   // Once the defective source is repaired, only the open item is written.
   fs.writeFileSync(path.join(bad, `${idBad}.md`), '# Defekt');
   assert.deepStrictEqual(exportCompletedState(partialState), { exported: 2, pending: 0, available: true });
   assert.deepStrictEqual(fs.readdirSync(partialRun), ['Dokument-002-anonymisiert.md'], 'only the previously open item is exported');
   assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(partialState.token), 'utf8')).complete, true);
+  assert.strictEqual(visibleExportDirectory(partialState.token), partialRun);
+
+  // A live per-record claim serializes terminal export and startup replay. It
+  // is deliberately reported as pending, never as a second writer or a false
+  // processing failure.
+  const claimedId = `ds_${'f'.repeat(32)}`;
+  packageFixture(claimedId, '# Claim');
+  const claimedState = {
+    token: '0'.repeat(64), created_at: '2026-09-02T17:00:00.000Z',
+    items: [{ status: 'released', package_id: claimedId }]
+  };
+  const claimedTarget = recordPath(claimedState.token);
+  const claim = _test.acquireExportClaim(claimedTarget);
+  assert.ok(claim, 'test owns the exclusive export claim');
+  assert.deepStrictEqual(exportCompletedState(claimedState), { exported: 0, pending: 1, available: false });
+  assert.strictEqual(fs.existsSync(claimedTarget), false, 'a second writer cannot create the record');
+  assert.strictEqual(_test.releaseExportClaim(claimedTarget, claim), true);
+  assert.deepStrictEqual(exportCompletedState(claimedState), { exported: 1, pending: 0, available: true });
+
+  // A well-formed claim owned by a dead process is recovered once. A malformed
+  // claim is never stolen because its ownership cannot be established safely.
+  const staleTarget = recordPath('1'.repeat(64));
+  const staleClaimPath = _test.claimPath(staleTarget);
+  fs.writeFileSync(staleClaimPath, `${JSON.stringify({
+    schema: 'datasecure-result-export-claim/1', claim_id: '1'.repeat(32),
+    pid: 2147483647, created_at: '2026-09-02T17:30:00.000Z'
+  })}\n`, { mode: 0o600 });
+  const recoveredClaim = _test.acquireExportClaim(staleTarget);
+  assert.ok(recoveredClaim, 'a dead-owner claim is atomically replaced');
+  assert.notStrictEqual(recoveredClaim.value.claim_id, '1'.repeat(32));
+  assert.strictEqual(_test.releaseExportClaim(staleTarget, recoveredClaim), true);
+  fs.writeFileSync(staleClaimPath, '{not-json', { mode: 0o600 });
+  assert.strictEqual(_test.acquireExportClaim(staleTarget), null, 'an unverifiable claim stays fail-closed');
+  fs.unlinkSync(staleClaimPath);
 
   // A genuinely failed export (no destination at completion time) is replayed
   // exactly once as soon as a destination exists, then becomes final.
@@ -297,6 +343,30 @@ try {
   } finally { fs.linkSync = realLink; }
   assert.strictEqual(fs.readFileSync(racedTarget, 'utf8'), '# Fremde Datei',
     'a concurrent user file is preserved byte-for-byte');
+
+  // The output subdirectory itself is part of the destination identity. A
+  // replacement between two items cannot split one run over two directories.
+  const bindingCowork = path.join(base, 'cowork-binding');
+  fs.mkdirSync(bindingCowork);
+  process.env.EU_PRIVACY_RESULT_ROOT = bindingCowork;
+  const bindGood = `ds_${'9'.repeat(32)}`;
+  const bindBad = `ds_${'a'.repeat(32)}`;
+  packageFixture(bindGood, '# Binding gut');
+  const bindBadDir = packageFixture(bindBad, '# Binding defekt');
+  fs.appendFileSync(path.join(bindBadDir, `${bindBad}.md`), ' manipuliert');
+  const bindingState = {
+    token: '9'.repeat(64), created_at: '2026-09-02T18:00:00.000Z',
+    items: [{ status: 'released', package_id: bindGood }, { status: 'released', package_id: bindBad }]
+  };
+  assert.deepStrictEqual(exportCompletedState(bindingState), { exported: 1, pending: 1, available: false });
+  const outputBeforeSwap = resultOutputDirectory();
+  const displacedOutput = `${outputBeforeSwap}-old`;
+  fs.renameSync(outputBeforeSwap, displacedOutput);
+  fs.mkdirSync(outputBeforeSwap);
+  fs.writeFileSync(path.join(bindBadDir, `${bindBad}.md`), '# Binding defekt');
+  assert.deepStrictEqual(exportCompletedState(bindingState), { exported: 1, pending: 1, available: false },
+    'a replaced output directory remains fail-closed');
+  assert.deepStrictEqual(fs.readdirSync(outputBeforeSwap), [], 'no sibling is written into the replacement');
 
   console.log('RESULT FOLDER EXPORT PASS');
 } finally {

@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 04.09.2026 · 3.2.0-rc98
+Stand: 04.09.2026 · 3.2.0-rc99
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -10,8 +10,8 @@ frühere Code-/Testzuordnungen bleiben im
 |---|---|---|
 | DS-001 | aktiv – De-Identifizierung, keine Rechtsgarantie | BL-052; README, Anleitung, Datenschutz-Skill |
 | DS-002 | aktiv, durch DS-067 präzisiert – ZIP/Marketplace für Nutzer | BL-010, BL-051; Plugin-/Marketplace-Gates |
-| DS-003 | durch DS-066 ersetzt | historische Oberflächenannahme; aktuelles Gate in Hostmatrix und DS-066 |
-| DS-004 | aktiv | BL-010, BL-051; Fresh-Install-Evidence offen |
+| DS-003 | durch DS-066 und anschließend DS-078 ersetzt | historische Oberflächenannahme; aktuelles Gate in Hostmatrix und DS-078 |
+| DS-004 | aktiv, teilweise durch DS-052 präzisiert | BL-010, BL-051; Fresh-Install-Evidence offen |
 | DS-005 | aktiv | BL-041; Manifest- und Plugin-Strukturtests |
 | DS-006 | aktiv | BL-041; Skill-/Jobvertrag, E1 offen |
 | DS-007 | aktiv | BL-021–024; Formatmatrix |
@@ -20,9 +20,9 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-010 | aktiv | BL-011, BL-051; 100 Dateien/500 MiB |
 | DS-011 | aktiv | BL-011, BL-049; Source-Preflight |
 | DS-012 | aktiv | BL-021, BL-022, BL-031; Korpus-/Regressionstests |
-| DS-013 | aktiv | BL-012, BL-041; Abschlussvertrag |
+| DS-013 | durch DS-043 ersetzt | historischer Abschlussdialog; heutiger Hintergrundabschluss über DS-043 |
 | DS-014 | aktiv | BL-012; Review-/Resume-Vertrag |
-| DS-015 | aktiv | BL-020–024, BL-049; fail-closed Formatgates |
+| DS-015 | durch DS-045 ersetzt | historischer Umgang mit unlesbaren Inhalten; heutige Ergebnisgrade über DS-045 |
 | DS-016 | durch DS-046 ersetzt | BL-023, BL-049; verschlüsselte Eingaben stoppen, niemals entschlüsseln |
 | DS-017 | aktiv | BL-020, BL-022, BL-023; Embedded-Content-Vertrag |
 | DS-018 | aktiv | BL-020, BL-024; Network-Boundary-Test |
@@ -41,7 +41,7 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-031 | aktiv | BL-010, BL-051; Rollback-Evidence offen |
 | DS-032 | aktiv | BL-012, BL-052; Nutzertexte/UAT |
 | DS-033 | aktiv | BL-050, BL-052; Qualitäts-/Freigabegates |
-| DS-034 | aktiv | BL-010, BL-051; gestufte Hostmatrix |
+| DS-034 | aktiv, teilweise durch DS-052 präzisiert | BL-010, BL-051; gestufte Hostmatrix |
 | DS-035 | aktiv | BL-001–003; archivierter Entwicklungsverlauf |
 | DS-036 | aktiv | BL-011, BL-012; Abbruch-/Fortsetzungstests |
 | DS-037 | aktiv | BL-024; OCR-Sprachvertrag |
@@ -73,7 +73,7 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-063 | aktiv | BL-010, BL-052; kein zusätzliches Windows-Konto anfordern |
 | DS-064 | aktiv | BL-012, BL-041; keine zusätzliche Testbürokratie im Nutzerweg |
 | DS-065 | aktiv | BL-011.13, BL-030.2; Plain-Arbeitskopien |
-| DS-066 | aktiv | BL-010.7, BL-041, BL-051.6; Cloud-Cowork und lokaler MCP als getrennte Ebenen, Desktop-Brücke als Original-Gate |
+| DS-066 | durch DS-078 ersetzt | frühere, nach Herstellerkorrektur verworfene Desktop-Brücken-Annahme |
 | DS-067 | aktiv und aktuell | BL-010, BL-011, BL-012, BL-024, BL-040, BL-051; fester Bildschutz, 0–14 nur temporär, Quellen/Exporte nie Auto-Löschziel, ZIP/Marketplace |
 | DS-068 | aktiv und aktuell | BL-012.9/10, BL-032.1, BL-043.1; lokaler Sammelreview, PII-Shield-inspirierte Interaktion und automatischer Klar-Datei-Pfad |
 | DS-069 | aktiv und aktuell | BL-040.5, BL-041.7, BL-041.10, BL-043.1; einmalige Ergebnisordnerwahl, neutraler verifizierter Markdown-Export und lokales Öffnen |
@@ -85,6 +85,9 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-075 | aktiv und aktuell | BL-010.9–26; eigenständiges Standalone-Produkt mit direktem Coreadapter und physisch getrenntem Datenroot, ohne MCP/Claude/Skills/Agenten; MarkItDown 0.1.7 nur als deaktivierter Byte-Stream-DOCX-Differentialadapter ohne Netzwerk/Plugins/LLM/OCR; `STANDALONE_ARCHITECTURE.md`, `server/standalone/*`, `server/converters/markitdown/*`, `runtime.js`, `batch-executor.js`; `test-standalone`, `test-markitdown-contract`; Core-Entkopplung, Cross-Product-/Offlinegates, Supervisor und weitere Formate offen; Windows-x64-Pilotpaket steht, E1/E2 offen |
 | DS-076 | aktiv und aktuell, durch DS-077 präzisiert | BL-010.11–26; reale Tauri-2-Hülle, nativer Picker, privater längengerahmter Sidecar-Dispatcher mit Ready-Handshake und 30-Sekunden-Antwortgrenze, geschlossener UI-Zustands-/IPC-Vertrag, strikte Zählerinvarianten und inhaltsfreie Rendererprojektion; Windows-x64-Engineering-Build und selbsttragendes Pilotpaket verifiziert; vier getrennte Zielpakete Windows x64/macOS x64/macOS ARM64/Linux x64 glibc, kein HTTP-Port und kein Renderer-Rohzugriff; `standalone/product-manifest.json`, `standalone/ui-contract.json`, `standalone/ui-state.js`, `standalone/desktop-ipc.js`, `standalone/desktop-sidecar.js`, `standalone/ui-projection.js`, `apps/datasecure-standalone/desktop-targets.json`, `apps/datasecure-standalone/tauri-contract/`, `STANDALONE_ARCHITECTURE.md`; JS-/Rust-/Paket-/isolierter Sidecar-Smoke grün; Endnutzerfreigabe und native macOS-/Linux-Zielhostmessung offen |
 | DS-077 | aktiv und aktuell | BL-010.20/21/25/27; Windows-x64-Engineering-Pilot mit frischer geschlossener Runtimeprojektion, gepinnter Node-Runtime, Paketmanifest, SBOM, SHA-256 und isoliertem Sidecar-Smoke; systemweites WebView2 als dokumentierte Windows-Voraussetzung; Rust-Toolchain 1.98.1 für Builder gepinnt; Lizenzprüfung, Windows-UAT und native macOS-Pakete/UAT offen |
+| DS-078 | aktiv und aktuell | BL-010.7, BL-041, BL-051.6; Originale nur in lokaler Cowork-Sitzung mit laufendem Plugin-MCP oder lokalem Claude Code; Cloud-Cowork/Web/Mobil/Scheduled dürfen nur bereits freigegebenes Markdown verwenden; Hostmatrix-, Skill-, Nutzer- und Dokumentationsgates |
+| DS-079 | aktiv und aktuell | BL-012.9/10, BL-040.6, BL-043.1; klare Positionen intern dauerhaft, sichtbarer Laufordner und Öffnen-Aktion erst nach terminalem Gesamtstapel; `terminalVisibleExport`, Export-/Standalone-/Recoverytests |
+| DS-080 | aktiv und aktuell | BL-040.5; expliziter geräte- und produktlokaler Ergebnisstamm, keine Workspace-Erkennung und kein automatischer Zielwechsel; `result-folder-config.js`, Picker-/Export-/Dokumentationsverträge |
 
 ## DS-067 – konkrete Umsetzung
 
@@ -120,7 +123,17 @@ aktuelle Produktzusage.
 | BL-041.10, DS-013/069 | Der Abschlussdialog wird zunächst kurzlebig reserviert und erst nach bestätigtem Presenter-Start dauerhaft als präsentiert markiert. Bei Startfehler wird die Reservierung freigegeben, sodass der Worker genau einen Fallbackversuch übernehmen kann. | `gateway/batch.js`, `gateway/batch-executor.js`, `gateway/worker-terminal-presentation.js`, `gateway/batch-worker.js`, `gateway/review-worker.js`; `test-worker-terminal-presentation.js`, `test-batch-executor-startup.js` |
 | BL-041.9, BL-043, DS-013/068 | Ein automatischer Hintergrundstapel wechselt bei Mehrdeutigkeiten ohne zweiten Cowork-Aufruf in den bestehenden lokalen Sammelreview. „Später“, Schließen und Abbrechen bleiben ohne Freigabe fortsetzbar und unterdrücken einen irreführenden zweiten Zustandsdialog. | `gateway/automatic-local-review.js`, `gateway/batch-worker.js`, `gateway/workflow-diagnostics.js`; `test-automatic-local-review.js`, `test-automatic-review-worker-flow.js` |
 | BL-040.5, BL-047.1, DS-069 | Der Replay offener sichtbarer Exporte läuft nach dem Listenerstart in einem zeitbegrenzten Worker und blockiert den MCP-Bootstrap nicht. Ergebnislisten binden die bereits dauerhafte Paketidentität statt synchron erneut voll zu hashen; vor einer Inhaltsübergabe bleibt der vollständige asynchrone SHA-256-Nachweis bestehen. | `gateway/result-export-replay.js`, `gateway/result-export-replay-worker.js`, `gateway/batch-results.js`, `gateway/batch.js`, `mcp-server.js`; `test-result-export-startup-replay.js`, `test-batch-results.js`, `test-package-snapshot-async.js`, `test-mcp-protocol.js` |
-| BL-010.8, BL-010.7, DS-066 | Plugin-MCP und Releaseprojektionen folgen dem offiziellen `mcpServers`-Vertrag; Cowork darf cloudseitig laufen, während der lokale Connector über die geöffnete Desktop-Brücke erreicht wird und die Originalverarbeitung lokal bleibt. Die Marketplace-Archivquelle ist strukturell strict-valid, aber eine reale URL und Zielhost-Evidenz bleiben Freigabebedingung. | `plugins/data-secure/.mcp.json`, Build-/SBOM-/ZIP-/Marketplace-Skripte, Host- und Nutzerkanon; Manifest-, Struktur-, Runtime-, Dokumenten- und `claude plugin validate --strict`-Gates |
+| BL-010.8, BL-010.7, DS-078 | Plugin-MCP und Releaseprojektionen folgen dem offiziellen `mcpServers`-Vertrag. Der Originalweg ist auf eine lokale Cowork-Sitzung mit laufendem Plugin-MCP beziehungsweise lokales Claude Code begrenzt; Cloud-Sitzungen dürfen nur freigegebene Ergebnisse verwenden. Die Marketplace-Projektion verwendet eine offiziell unterstützte relative Quelle; private/interne Git-Veröffentlichung und Zielhost-Evidenz bleiben Freigabebedingung. | `plugins/data-secure/.mcp.json`, Build-/SBOM-/ZIP-/Marketplace-Skripte, Host- und Nutzerkanon; Manifest-, Struktur-, Runtime-, Dokumenten- und `claude plugin validate --strict`-Gates |
+
+## E0-Expertenrunde 04.09.2026 – zweiter unabhängiger Konsolidierungsreview
+
+| Story | Korrektur / Entscheidung | Code- und Testnachweis |
+|---|---|---|
+| BL-010.13/14, BL-040.5/6, DS-079 | Standalone leitet Abschluss-, Review-, Fehler- und Ergebniszähler nur aus dem jüngsten Standalone-Stapel ab. Ein intern abgeschlossener Teil ohne terminalen sichtbaren Gesamtexport ist `export_pending`; offene Exporte werden beim App-Start und nach Ergebnisordnerwahl nachgeholt. Zielstamm und `DataSecure-Output` werden identitätsgebunden, pro Lauf serialisiert und nur der vollständig sichtbare aktuelle Lauf kann lokal geöffnet werden. | `standalone/application-service.js`, `gateway/batch-recovery.js`, `gateway/result-export.js`; `test-standalone.js`, `test-batch-recovery.js`, `test-result-folder-export.js` |
+| BL-010.13/14, BL-041.10 | Standalone-Worker öffnen keine Cowork-Abschluss- oder Reviewdialoge. Nach Sidecar-Neustart, IPC-Fehler oder verlorener Admission verwirft die UI die veraltete Freigabe und verlangt eine neue lokale Auswahl. | `gateway/batch-executor.js`, `gateway/batch-worker.js`, `gateway/review-worker.js`, `apps/datasecure-standalone/frontend/app.js`; `test-batch-executor-startup.js`, `test-worker-terminal-presentation.js`, `test-local-review-executor.js`, `test-standalone-desktop-contract.js` |
+| BL-010.7, BL-051.6, DS-078 | Die aktuelle Herstellerarchitektur ersetzt die frühere Desktop-Brücken-Annahme: lokale Plugin-MCPs laufen nur in lokalen Sitzungen bestehender Desktop-Deployments. Cloud-Cowork, Web, Mobil und geplante Cloud-Sitzungen dürfen ausschließlich bereits freigegebenes Markdown verwenden. | Hostmatrix, Zielarchitektur, Produkt-/Nutzer-/Skilldokumentation; `test-host-matrix.js`, `test-cowork-documentation-contract.js`, `test:skills`, `test:docs` |
+| BL-003 | Der maschinelle Kanongate verlangt jetzt auch Hostmatrix und Standalone-Sicherheitsmodell; Register, Evidence-Matrix, UML, Benchmarks und aktive Dokumentstände wurden gegen den aktuellen Code revalidiert. | `verify-canonical-docs.mjs`, `DOCUMENT_REGISTER.md`, `BACKLOG_EVIDENCE_MATRIX.md`, `UML_ARCHITECTURE.md`; `test:docs` |
+| BL-002, BL-010.25 | Der Versionsschnitt aktualisiert neben Plugin/Node auch Tauri-Konfiguration, Cargo-Paket und -Lock, Zielartefaktnamen sowie aktuelle Standalone-/Evidence-Dokumente. Ein Desktop-Vertragstest stoppt jeden gemischten Versionsstand. | `scripts/set-version.mjs`, `desktop-targets.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`; `test-standalone-desktop-contract.js`, Paketbuild RC99 |
 
 ## E0-Bugrunde 04.09.2026 – UML-, Architektur-, UX- und Fehlergegencheck
 

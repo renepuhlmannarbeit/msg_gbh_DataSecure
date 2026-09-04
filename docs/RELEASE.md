@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 03.09.2026 · 3.2.0-rc98
+Stand: 03.09.2026 · 3.2.0-rc99
 
 ## Nutzerprodukt
 
@@ -8,20 +8,15 @@ Das Releaseprodukt ist ein selbstenthaltendes, zielsystemspezifisches Plugin-ZIP
 für Windows x64 oder macOS Intel/ARM. Ein ZIP nur aus `plugins/data-secure` und
 interne Engineering-Artefakte sind keine Nutzerprodukte oder Fallbacks.
 
-Für einen GitHub-synchronisierten privaten Marketplace kann das angeschlossene
-private/interne Repository entweder einen self-contained Plugin-Ordner mit
-relativer `source` enthalten oder laut Plugin-Marketplace-Referenz (Stand
-03.09.2026) je Plugin eine `archive`-Quelle mit HTTPS-URL und SHA-256 des
-gebauten ZIPs nennen; letztere hält die gebündelte Runtime aus der Git-Historie.
-Der aktuelle Quellordner mit `command: node` ist nur Entwicklung und noch kein
-Marketplace-Release. Der Build erzeugt dafür `dist/marketplace.release.json`
-mit der Prüfsumme des Zielpakets; die Ablage-URL setzt IT beim Bereitstellen
-(`DATASECURE_ARCHIVE_BASE_URL`). Die offiziell genannten Grenzen liegen bei
-200 MB entpackt je Plugin und 512 MB je Marketplace-Archiv; die 45-MiB-Grenze für
-Zielpakete und 50 MiB für Archive ist die eigene, konservativere Produktgrenze
-aus dem Runtime-Vertrag. Ein universelles Marketplace-Paket darf erst angeboten
-werden, wenn es self-contained, unter dem geltenden Limit und auf Windows sowie
-beiden macOS-Architekturen abgenommen ist.
+Für einen GitHub-synchronisierten privaten Marketplace enthält das angeschlossene
+private/interne Repository einen selbsttragenden Plugin-Ordner mit relativer
+`source`. Das ist laut offizieller Anthropic-Dokumentation (erneut geprüft am
+04.09.2026) der einfachste unterstützte Weg. `archive`, `npm` und `command` sind
+für diesen Organisationskanal nicht unterstützt. Der aktuelle Quellordner mit
+`command: node` ist deshalb ausschließlich Entwicklung und kein
+Marketplace-Release. Ein Marketplace darf erst angeboten werden, wenn seine
+selbsttragende Projektion auf Windows und beiden macOS-Architekturen abgenommen
+ist.
 
 Zusätzlich erzeugt `node scripts/build-marketplace-repo.mjs [--plugin-name <kennung>]`
 aus dem verifizierten Zielpaket eine vollständige Git-Marketplace-Projektion

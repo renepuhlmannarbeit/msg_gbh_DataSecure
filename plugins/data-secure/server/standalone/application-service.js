@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const PRODUCT_CHANNEL = 'standalone';
 const SOURCE_KINDS = new Set(['files', 'folder']);
@@ -66,10 +67,11 @@ function defaultDependencies() {
   const sourceFolder = require('../companion/source-folder');
   const resultFolder = require('../gateway/result-folder-config');
   const supportTrace = require('../gateway/support-trace');
-  const { genericStatus } = require('../gateway/status');
+  const { replayPendingResultExports } = require('../gateway/result-export');
   const {
     continueMostRecentBatch, openBatchPackageProtection, recoverBatches,
-    replayMappingOutbox, cleanupExpiredBatchSnapshots
+    replayMappingOutbox, cleanupExpiredBatchSnapshots, recoverableBatchStatus,
+    latestProductBatchStatus, latestProductResultDirectory
   } = require('../gateway/batch');
   const { cleanupLocalData } = require('../gateway/retention');
   const { initializeProduct } = require('../core/product-bootstrap');
@@ -79,35 +81,53 @@ function defaultDependencies() {
   const { cleanupCompanionJobs } = require('../companion/retention');
   const { cleanupAbandonedWorkingJobs } = require('../gateway/orchestrator');
   const { startBatchMaintenance } = require('../gateway/batch-maintenance');
+  const batchExecutor = require('../gateway/batch-executor');
+  const intakeReservation = require('../gateway/batch-intake-reservation');
   return {
     initializeProduct() {
-      if (!standaloneStartup) standaloneStartup = initializeProduct({
-        verifyBundledRuntime,
-        // Unlike Cowork's temporary plugin projection, the Standalone package
-        // is the durable runtime. Copying the 87 MiB interpreter on every new
-        // installation delayed first paint and duplicated the product without
-        // improving worker lifetime.
-        ensureDurableRuntime: () => ({ active: false, reason: 'standalone_package_persistent' }),
-        migrateLegacyAuditReceipts,
-        openBatchPackageProtection,
-        cleanupLocalData,
-        cleanupUiJobs: cleanupCompanionJobs,
-        recoverBatches,
-        replayMappingOutbox,
-        startBatchMaintenance,
-        cleanupExpiredBatchSnapshots,
-        // Standalone owns a separate data namespace and must never import the
-        // optional Claude plugin's legacy inbox or its source references.
-        migrateLegacyInput: () => ({ ok: true, skipped: true, reason: 'standalone_namespace' }),
-        cleanupAbandonedWorkingJobs,
-        refuseStartup
-      });
+      if (!standaloneStartup) {
+        const startup = initializeProduct({
+          verifyBundledRuntime,
+          // Unlike Cowork's temporary plugin projection, the Standalone package
+          // is the durable runtime. Copying the 87 MiB interpreter on every new
+          // installation delayed first paint and duplicated the product without
+          // improving worker lifetime.
+          ensureDurableRuntime: () => ({ active: false, reason: 'standalone_package_persistent' }),
+          migrateLegacyAuditReceipts,
+          openBatchPackageProtection,
+          cleanupLocalData,
+          cleanupUiJobs: cleanupCompanionJobs,
+          recoverBatches,
+          replayMappingOutbox,
+          startBatchMaintenance,
+          cleanupExpiredBatchSnapshots,
+          // Standalone owns a separate data namespace and must never import the
+          // optional Claude plugin's legacy inbox or its source references.
+          migrateLegacyInput: () => ({ ok: true, skipped: true, reason: 'standalone_namespace' }),
+          cleanupAbandonedWorkingJobs,
+          refuseStartup
+        });
+        standaloneStartup = Object.freeze({ ...startup, result_exports: replayPendingResultExports() });
+      }
       return standaloneStartup;
     },
-    genericStatus,
-    startLocalIntakeExecutor: require('../gateway/batch-executor').startLocalIntakeExecutor,
-    startLocalBatchExecutor: require('../gateway/batch-executor').startLocalBatchExecutor,
-    startLocalReviewExecutor: require('../gateway/batch-executor').startLocalReviewExecutor,
+    // UI polling must not enumerate every historical package, review item,
+    // retention entry and companion job. Startup has already completed the
+    // full fail-closed readiness transaction; this probe reads only live
+    // intake activity and durable batch journals.
+    lightweightStatus() {
+      return {
+        engine_ready: true,
+        local_intake_pending: batchExecutor.localIntakeActive() || intakeReservation.intakeReservationActive(),
+        ...recoverableBatchStatus()
+      };
+    },
+    latestProductBatchStatus,
+    latestProductResultDirectory,
+    replayPendingResultExports,
+    startLocalIntakeExecutor: batchExecutor.startLocalIntakeExecutor,
+    startLocalBatchExecutor: batchExecutor.startLocalBatchExecutor,
+    startLocalReviewExecutor: batchExecutor.startLocalReviewExecutor,
     continueMostRecentBatch,
     openFolder: require('../gateway/common').openFolder,
     pickSourcesAsync: filePicker.pickSourcesAsync,
@@ -171,22 +191,30 @@ class StandaloneApplicationService {
   }
 
   status() {
-    const current = this.deps.genericStatus({ ignoreIntakeReservation: true });
-    const packages = Number.isSafeInteger(current.anonymized_packages) ? current.anonymized_packages : 0;
-    const reviews = Number.isSafeInteger(current.visual_review_items) ? current.visual_review_items : 0;
+    const current = this.deps.lightweightStatus();
+    const latest = this.deps.latestProductBatchStatus?.(PRODUCT_CHANNEL) || null;
+    const packages = Number.isSafeInteger(latest?.result_count)
+      ? latest.result_count
+      : 0;
+    const reviews = Number.isSafeInteger(latest?.review_count)
+      ? latest.review_count
+      : 0;
+    const exportPending = Number.isSafeInteger(latest?.export_pending_count) ? latest.export_pending_count : 0;
     const recoverable = Number.isSafeInteger(current.recoverable_batches) ? current.recoverable_batches : 0;
     const awaitingResume = Number.isSafeInteger(current.batches_awaiting_resume) ? current.batches_awaiting_resume : 0;
-    const resumableCount = Math.max(recoverable, awaitingResume);
+    const resumableCount = latest?.resumable === true ? Math.max(1, recoverable, awaitingResume) : Math.max(recoverable, awaitingResume);
     const resumable = resumableCount > 0;
-    const processing = current.local_intake_pending === true || current.batch_processing_active === true;
+    const processing = current.local_intake_pending === true || current.batch_processing_active === true || latest?.processing === true;
     const state = current.engine_ready !== true
       ? 'blocked'
       : processing
         ? 'processing'
         : reviews > 0
           ? 'review_required'
-          : resumable
-            ? 'stopped'
+        : resumable
+          ? 'stopped'
+          : exportPending > 0
+            ? 'export_pending'
           : packages > 0
             ? 'results_available'
             : 'ready';
@@ -199,6 +227,7 @@ class StandaloneApplicationService {
       resumable,
       results_available: packages > 0,
       result_count: packages,
+      export_pending_count: exportPending,
       review_count: reviews,
       resumable_count: resumableCount,
       recoverable_count: recoverable,
@@ -223,7 +252,7 @@ class StandaloneApplicationService {
       throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die lokale Auswahl ist ungültig.');
     }
     if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Eine lokale Auswahl ist bereits geöffnet.');
-    const status = this.deps.genericStatus({ ignoreIntakeReservation: true });
+    const status = this.deps.lightweightStatus();
     if (!status.engine_ready) throw fixedFailure('STANDALONE_ENGINE_NOT_READY', 'Die lokale Verarbeitung ist nicht bereit.');
     if (status.local_intake_pending || status.batch_processing_active) {
       throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
@@ -238,10 +267,14 @@ class StandaloneApplicationService {
             allowedTypes: ['txt', 'md', 'csv', 'docx'], signal
           })));
       const queue = this.deps.batchQueueFromSelection(selected);
+      const totalBytes = queue.reduce((sum, item) => sum + item.sourceBytes, 0);
+      if (!Number.isSafeInteger(totalBytes) || totalBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES) {
+        throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Der ausgewählte Stapel überschreitet die zulässige Gesamtgröße.');
+      }
       this.admittedQueue = queue;
       return {
         ok: true, event: 'selection_summarized', selected_count: queue.length,
-        total_bytes: queue.reduce((sum, item) => sum + item.sourceBytes, 0),
+        total_bytes: totalBytes,
         direct_count: queue.length, convertible_count: 0, blocked_count: 0,
         encrypted_count: 0, external_disclosure: false
       };
@@ -276,7 +309,16 @@ class StandaloneApplicationService {
         intakeReservationId: reservation.reservation_id, signal
       });
       transferred = true;
-      await started.ipcAcknowledgement;
+      try {
+        await started.ipcAcknowledgement;
+      } catch {
+        // Once the reservation has been delegated, a missing acknowledgement
+        // is an uncertain start. Never reuse the same admission: the worker may
+        // still reach its durable checkpoint after the caller timed out.
+        this.admittedQueue = null;
+        this.trace('standalone_batch_stopped', { outcome: 'stopped', error_code: 'STANDALONE_START_FAILED' });
+        throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.');
+      }
       this.admittedQueue = null;
       this.trace('standalone_batch_accepted', { outcome: 'ok', item_count: queue.length });
       return { ok: true, event: 'batch_started', selected_count: queue.length, external_disclosure: false };
@@ -286,7 +328,7 @@ class StandaloneApplicationService {
   }
 
   async continueCurrentBatch(signal) {
-    const status = this.deps.genericStatus({ ignoreIntakeReservation: true });
+    const status = this.deps.lightweightStatus();
     if (status.local_intake_pending || status.batch_processing_active) {
       throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
     }
@@ -312,7 +354,7 @@ class StandaloneApplicationService {
     let transferred = false;
     this.trace('standalone_picker_started', { trace_id: traceId });
     try {
-      const status = this.deps.genericStatus({ ignoreIntakeReservation: true });
+      const status = this.deps.lightweightStatus();
       if (!status.engine_ready) throw fixedFailure('STANDALONE_ENGINE_NOT_READY', 'Die lokale Verarbeitung ist nicht bereit.');
       if (status.local_intake_pending || status.batch_processing_active) {
         throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
@@ -360,7 +402,7 @@ class StandaloneApplicationService {
     if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Eine lokale Auswahl ist bereits geöffnet.');
     this.interactionActive = true;
     try {
-      const status = this.deps.genericStatus({ ignoreIntakeReservation: true });
+      const status = this.deps.lightweightStatus();
       if (status.local_intake_pending || status.batch_processing_active) {
         throw fixedFailure('STANDALONE_BUSY', 'Der Ergebnisordner kann während einer Verarbeitung nicht geändert werden.');
       }
@@ -371,13 +413,17 @@ class StandaloneApplicationService {
       }
       this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected);
+      this.deps.replayPendingResultExports?.();
       return { ok: true, configuration_changed: true, external_disclosure: false };
     } finally { this.interactionActive = false; }
   }
 
   async openResults() {
     this.ensureResultRoot();
-    const target = this.deps.resultOutputDirectory();
+    const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL);
+    if (!target) {
+      throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');
+    }
     const opened = this.deps.openFolder(target);
     if (!opened?.ok) {
       throw fixedFailure('STANDALONE_RESULT_OPEN_FAILED', 'Der Ergebnisordner konnte nicht geöffnet werden.');

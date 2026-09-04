@@ -97,7 +97,7 @@ test('product build and engineering artefacts are separate scripts', () => {
   assert.strictEqual(pkg.scripts['test:artifacts'], 'npm run test:plugin-zip');
 });
 
-test('distribution docs allow verified relative or archive marketplace sources without signing promises', () => {
+test('distribution docs require a self-contained relative marketplace source without signing promises', () => {
   const release = read('docs/RELEASE.md');
   const readme = read('README.md');
   const currentState = read('docs/canonical/CURRENT_STATE.md');
@@ -106,9 +106,10 @@ test('distribution docs allow verified relative or archive marketplace sources w
   const productContract = `${readme}\n${release}\n${decisions}\n${vision}`;
 
   assert.match(productContract, /relativ[^\n]{0,100}self-contained Plugin-Ordner/iu);
-  assert.match(release, /`archive`-Quelle[^\n]{0,100}HTTPS-URL[^\n]{0,100}SHA-256/iu);
+  assert.match(release, /`archive`, `npm` und `command`[\s\S]{0,140}nicht unterstützt/iu);
+  assert.match(release, /dist\/marketplace-repo/iu);
   assert.match(currentState, /streng validierbare,[\s\S]{0,120}Marketplace-Projektion/iu);
-  assert.match(currentState, /Platzhalter-URL/iu);
+  assert.doesNotMatch(currentState, /Platzhalter-URL|Marketplace-Projektion mit Archivquelle/iu);
   assert.doesNotMatch(currentState, /selbsttragende\s+Marketplace-Projektion bleibt offene Arbeit/iu);
   assert.match(`${decisions}\n${vision}`, /Windows-x64[^\n]{0,160}macOS-x64[^\n]{0,80}macOS-arm64/iu);
   assert.doesNotMatch(`${decisions}\n${vision}`, /macOS-universal/iu);

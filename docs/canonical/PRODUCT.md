@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 03.09.2026 · Ist-Zustand RC98
+Stand: 03.09.2026 · Ist-Zustand RC99
 
 ## Ziel
 
@@ -65,11 +65,11 @@ Anwenderweg. Windows x64 sowie macOS Intel/ARM sind die
 Erstreleaseziele, Linux folgt getrennt. Alle nötigen Laufzeiten müssen im Produkt
 enthalten sein; Anwender installieren weder Node.js noch Python.
 
-Lokale Originalverarbeitung ist über die geöffnete Claude-Desktop-App oder in
-Claude Code zulässig, wenn der lokale Plugin-MCP tatsächlich verbunden ist.
-Cowork darf die Sitzung in der Cloud ausführen; der Plugin-MCP und die
-Originalverarbeitung bleiben lokal. Web, Mobil und Sitzungen ohne aktive
-Desktop-Brücke dürfen keine Originale erreichen.
+Lokale Originalverarbeitung ist in einer lokalen Cowork-Sitzung eines
+bestehenden Claude-Desktop-Deployments oder in lokalem Claude Code zulässig,
+wenn der lokale Plugin-MCP tatsächlich verbunden ist. Cloud-Cowork, Web, Mobil
+und geplante Cloud-Sitzungen dürfen keine Originale erreichen; sie dürfen nur
+bereits lokal freigegebenes Markdown verwenden.
 
 ## Zweites Produkt in Entwicklung: DataSecure Standalone
 

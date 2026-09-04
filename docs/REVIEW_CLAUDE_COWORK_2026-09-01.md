@@ -1,24 +1,24 @@
 # Claude-/Cowork-Revalidierung
 
-Stand: 04.09.2026 · Produktarbeitsstand RC94 · zeitgebundener Herstellerabgleich
-(Cowork-Host- und Marketplace-Aussagen am 04.09.2026 erneut abgerufen)
+Stand: 04.09.2026 · Produktarbeitsstand RC98 · zeitgebundener Herstellerabgleich
+(Cowork-Host- und Marketplace-Aussagen am 04.09.2026 erneut abgerufen; DS-078)
 
 ## Aktuell belegte Herstelleraussagen
 
 | Quelle | Belegte Aussage | Folge für DataSecure |
 |---|---|---|
 | Plugins reference | `name` ist das einzige Pflichtfeld in `plugin.json`; `${CLAUDE_PLUGIN_ROOT}` „changes when the plugin updates“ | Manifeste konform; ein Edit im installierten Plugin (z. B. Supportmodus) ist nicht update-fest |
-| Plugins reference | Plugin-MCP-Server starten automatisch mit dem Plugin; in Cowork/Cloud werden Skills als `<name>@synced` geladen | Normalweg braucht keinen manuellen Serverstart; der lokale MCP-Prozess bleibt auf dem Rechner und kann von einer auf Desktop gestarteten Cloud-Sitzung über die aktive Desktop-Brücke erreicht werden |
+| Plugins reference | Plugin-MCP-Server starten automatisch mit dem Plugin; Skills sind in unterstützten Oberflächen sichtbar | Sichtbarkeit beweist keinen laufenden lokalen MCP; der Originalweg prüft die lokale Runtime und den Picker |
 | Plugin marketplaces | Pflichtfelder `name`, `owner.name`, `plugins[].name`, `plugins[].source`; Archive über 256 MiB werden abgelehnt | `marketplace.json` konform |
 | Skills reference | Kürzung von `description` + `when_to_use` bei 1.536 Zeichen in der Skill-Liste | 200-Zeichen-Grenze ist DataSecure-Konvention, kein Herstellerlimit |
 | Subagents | Frontmatter `tools`, `disallowedTools`, `model`, `effort`, `maxTurns` | die drei Projektagenten sind formal gültig |
 | Permissions | MCP-Tools mit `requiresUserInteraction` fragen weiterhin nach | Host-Berechtigungsdialoge sind nicht abschaltbar (DS-040) |
 | Use plugins in Claude | Plugins dürfen lokale MCP-Server enthalten, die auf dem Rechner laufen | lokaler Plugin-MCP ist ein zulässiger Hostvertrag |
 | Manage plugins for your organization | „The file must be a valid .zip under 50 MB.“ | 45-MiB-Ziel für Direkt-Upload ist begründet |
-| Use Claude Cowork on web, desktop and mobile | Cowork läuft standardmäßig in der Cloud; lokale Connectoren und Plugins mit lokalem MCP arbeiten ausschließlich über die geöffnete Desktop-App | Die Sitzung darf cloudlaufen, während DataSecure-Prozess und Originalverarbeitung lokal bleiben; Web/Mobil ohne Desktop-Brücke bleiben NO-GO für Originale |
+| Cowork architecture overview | Cowork läuft standardmäßig in der Cloud; lokale Sitzungen bleiben für bestehende Desktop-Deployments verfügbar; lokale MCP-Server laufen ausdrücklich nicht in Cloud-Sitzungen und lokale Dateien, die eine Cloud-Sitzung über Desktop öffnet, werden cloudseitig verarbeitet | Originale nur in lokaler Cowork-Sitzung mit laufendem DataSecure-MCP oder lokalem Claude Code; Cloud-Cowork/Web/Mobil/Scheduled nur für bereits freigegebenes Markdown |
 | Get started with Cowork | Cowork benötigt eine aktive Internetverbindung; Auto kann sichere Leseaktionen automatisch erlauben, Organisationsrichtlinien können trotzdem Freigaben erzwingen | „lokale Verarbeitung“ nicht mit „Claude läuft offline“ verwechseln; Skip ist kein DataSecure-Standard für sensible Dateien |
 | MCP-Spezifikation 2025-06-18 (tools) | Clients müssen Tool-Annotationen als nicht vertrauenswürdig behandeln; Defaults `destructiveHint=true`, `openWorldHint=true` | Server setzt alle vier Annotationen explizit |
-| alle Quellen | kein Vertrag, der dem lokalen MCP den verbundenen Cowork-Arbeitsordner mitteilt | Pfad wird nicht geraten (DS-069) |
+| alle Quellen | kein Vertrag, der dem lokalen MCP den verbundenen Cowork-Arbeitsordner mitteilt | Pfad wird nicht geraten; ausdrückliche Gerätewahl bleibt bestehen (DS-080) |
 
 ## Urteil
 
@@ -55,19 +55,22 @@ Ablauf in der jeweils aktuellen Desktop-App.
   Plugin-ZIP abgeleitet.
 
 Die belastbare Zusage lautet deshalb: Originalverarbeitung ist ausschließlich über
-den tatsächlich verbundenen lokalen DataSecure-MCP in der geöffneten Desktop-App
-oder in Claude Code zulässig. Cowork darf die Sitzung in der Cloud ausführen; der
-DataSecure-Prozess und die Originalverarbeitung bleiben lokal und werden über die
-Desktop-Brücke erreicht. Chat-Upload, Web-/Mobilzugriff ohne Desktop-Brücke,
-verbundene Ordner oder Remote-MCP sind kein Ersatz.
+den tatsächlich verbundenen lokalen DataSecure-MCP in einer lokalen Cowork-
+Sitzung eines bestehenden Desktop-Deployments oder in lokalem Claude Code
+zulässig. In Cloud-Sitzungen laufen lokale MCP-Server nicht; über Desktop
+geöffnete lokale Dateien werden dort cloudseitig verarbeitet. Chat-Upload,
+Cloud-Cowork, Web/Mobil, geplante Cloud-Aufgaben, verbundene Ordner oder Remote-
+MCP sind kein Ersatz.
 
 ## Aktuell belegter Technikstand
 
 - Plugin und Marketplace sind lokal streng validierbar.
 - Genau zwei Skills und ein lokaler Plugin-MCP bilden die sichtbare Oberfläche.
 - Der Normalweg pollt nicht und liest Ergebnisse nicht automatisch.
-- Beim ersten Lauf wird der bereits verbundene Cowork-Arbeitsordner einmal lokal
-  als Ergebnisziel gewählt. Danach benötigt der Normalweg nur die Quellenwahl;
+- Beim ersten Lauf wird einmal lokal ein Ergebnisordner gewählt; das kann der
+  bereits verbundene Cowork-Arbeitsordner sein. DataSecure errät keinen
+  Projektpfad und wechselt das Ziel bei einem Projektwechsel nicht. Danach
+  benötigt der Normalweg nur die Quellenwahl;
   ausschließlich freigegebenes Markdown wird unter `DataSecure-Output` sichtbar.
 - TXT, Markdown, CSV und DOCX sind freigegeben; weitere Formate stoppen fail-closed.
 - Bildpixel bleiben lokal; es gibt keinen auswählbaren Bildmodus.

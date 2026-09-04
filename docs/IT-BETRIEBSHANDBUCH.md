@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 03.09.2026 · 3.2.0-rc98
+Stand: 04.09.2026 · 3.2.0-rc99
 
 ## Produktkanäle
 
@@ -19,22 +19,20 @@ fail-closed gesperrt.
 
 ## Voraussetzungen und Hostgate
 
-- unterstützte Claude-Desktop-/Cowork-Version mit laufender Desktop-App. Cowork
-  darf die Sitzung standardmäßig in der Cloud ausführen; der lokale Plugin-MCP
-  läuft nicht in der Cloud, sondern auf dem Rechner und wird über die aktive
-  Desktop-Brücke erreicht. Der DataSecure-Prozess und seine Originalverarbeitung
-  bleiben lokal.
+- unterstützte Claude-Desktop-/Cowork-Version mit **lokaler Cowork-Sitzung**
+  eines bestehenden Desktop-Deployments. Nur dort laufen lokale Plugin-MCPs;
+  der DataSecure-Prozess und seine Originalverarbeitung bleiben lokal.
 - lokale Plugin-MCPs durch Organisations-/Geräterichtlinie erlaubt (MDM-Schlüssel
   `isLocalDevMcpEnabled` darf nicht auf `false` stehen);
 - lokaler, nicht synchronisierter Privacy-Ordner;
 - genügend Speicher für höchstens 100 Dateien/500 MiB plus temporäre Kopien;
 - alle Laufzeiten aus dem Paket, keine manuelle Node-/Python-Installation.
 
-Eine Sitzung ohne aktive lokale Desktop-Brücke darf keinen Originalpicker und
-keinen Originalzugriff erhalten. Eine in Web oder Mobil gestartete oder geplante
-Aufgabe ist deshalb kein Originaleingang. Eine auf Desktop gestartete
-Cloud-Sitzung kann bei geöffneter Desktop-App von Web oder Mobil weiter begleitet
-werden; die lokale Brücke muss für weitere lokale Zugriffe online bleiben.
+Eine Cloud-Cowork-, Web-, Mobil- oder geplante Cloud-Sitzung darf keinen
+Originalpicker und keinen Originalzugriff erhalten. Das gilt auch bei geöffneter
+Desktop-App: Die Desktop-Dateibrücke verarbeitet geöffnete lokale Dateien in
+einer Cloud-Sitzung auf Anthropic-Infrastruktur, und lokale MCP-Server laufen
+dort nicht. Solche Sitzungen dürfen nur bereits freigegebenes Markdown nutzen.
 
 ## Installationstest
 
@@ -68,7 +66,10 @@ Bestätigungen erzwingen. **Skip** ist für sensible Dokumente kein Betriebsstan
 | fertige Outputs/Export/Mapping | niemals automatisch löschen; nur ausdrückliche lokale Nutzeraktion |
 
 Sichtbare Ergebnisse werden getrennt unter
-`<gewählter Cowork-Arbeitsordner>/DataSecure-Output/Lauf-…/` abgelegt. Dort dürfen
+`<gewählter lokaler Ergebnisordner>/DataSecure-Output/Lauf-…/` abgelegt. Das kann
+ein dedizierter lokaler Ergebnisordner sein, den der Anwender optional mit Cowork
+verbindet; DataSecure kann verbundene Cowork-Ordner weder erkennen noch prüfen und
+wechselt ihn bei einem Cowork-Projektwechsel nicht automatisch. Dort dürfen
 nur neutrale `Dokument-NNN-anonymisiert.md`-Dateien liegen. Mapping, Originale,
 Audit, Review und Recovery bleiben im privaten Bereich. Mit der Chat-Bitte
 **„Ändere den DataSecure-Ergebnisordner“** (Werkzeug „Ergebnisordner festlegen“)
@@ -98,14 +99,15 @@ Erlaubte Supportdaten: Version, Phase, Dauer, fester Fehlercode und zufällige
 technische Laufkennung.
 
 Verboten: Inhalte, erkannte Rohwerte, Dateinamen, Pfade, Dokumenthashes,
-Paketkennungen, Tokens oder Capabilities. Es gibt zwei inhaltsfreie Spuren unter
-`%LOCALAPPDATA%\SecureDataMsg\diagnostics\`: `events.jsonl` mit einem Ergebnis je
-Dokument (14 Tage, 200 Einträge) und `workflow-events\` mit unveränderlichen
-JSON-Einzelereignissen je Lauf (14 Tage, 300 Einträge, etwa elf Ereignisse je
-Lauf). Dadurch gehen parallele Eltern-/Worker-Ereignisse nicht verloren. Eine
-vor dem Upgrade vorhandene `workflow-events.jsonl` wird weiterhin gelesen, aber
-nicht mehr beschrieben. Zwei große Stapel am selben Tag können in `events.jsonl` die ältesten
-Dokumentergebnisse verdrängen; `diagnostic_status` nennt die tatsächlich
+Paketkennungen, Tokens oder Capabilities. Es gibt zwei aktuelle inhaltsfreie
+Spuren unter `%LOCALAPPDATA%\SecureDataMsg\diagnostics\`: `events\` mit bis zu
+200 unveränderlichen JSON-Einzelereignissen für Dokumentergebnisse und
+`workflow-events\` mit bis zu 300 unveränderlichen JSON-Einzelereignissen für
+Ablaufzustände (jeweils höchstens 14 Tage). Dadurch gehen parallele Eltern-/
+Worker-Ereignisse nicht durch konkurrierendes Anhängen verloren. Vor dem Upgrade
+vorhandene `events.jsonl` und `workflow-events.jsonl` werden ausschließlich als
+Legacybestand gelesen, aber nicht mehr beschrieben. Das Mengenlimit kann die
+ältesten Einzelereignisse entfernen; `diagnostic_status` nennt die tatsächlich
 vorgehaltene Anzahl.
 
 Nur im Debugpaket entsteht zusätzlich
@@ -169,7 +171,8 @@ verarbeitete weiter mit der alten Version, ohne dass die Oberfläche das anzeigt
 Das ist ein beim Hersteller offen gemeldeter Hostfehler (anthropics/claude-code
 #69020 offen, #65426 „not planned“); der folgende Ablauf ist ein Workaround, keine
 Behebung. Der versionierte Marketplace (RELEASE.md) mit Prüfsummen-Pinning ist
-der Zielkanal; der Build legt dafür `dist/marketplace.release.json` ab.
+der Zielkanal; der Build legt dafür eine selbsttragende Projektion unter
+`dist/marketplace-repo` mit relativer Pluginquelle ab.
 Verlässlicher Ablauf für Upgrade wie Rollback: Plugin auf der Plugin-Seite
 entfernen, Claude Desktop vollständig beenden und neu starten, gewünschtes ZIP
 hochladen, auf der Plugin-Seite Version, Dateiansicht und Aktualisierungszeit

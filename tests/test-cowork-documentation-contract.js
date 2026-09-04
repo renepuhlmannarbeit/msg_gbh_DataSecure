@@ -13,6 +13,7 @@ const explain = read('plugins/data-secure/skills/gbh-datasecure-datenschutz-erkl
 const boundary = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/sicherheitsgrenze.md');
 const installation = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/plugin-oder-mcpb.md');
 const readme = read('README.md');
+const securityModel = read('docs/PLUGIN_SECURITY_MODEL.md');
 const server = read('plugins/data-secure/server/mcp-server.js');
 const all = [guide, review, anonymize, explain, boundary].join('\n');
 
@@ -32,14 +33,26 @@ assert.doesNotMatch(server, /if\(status\.recoverable_batches>0\)return\{ok:false
 
 assert.match(all, /lokal/iu, 'local host boundary missing');
 assert.match(all, /Cowork/iu, 'Cowork host boundary missing');
-assert.match(`${anonymize}\n${boundary}`, /Cowork darf die Sitzung (?:standardmäßig )?in der Cloud ausführen/iu,
-  'desktop-bridged local MCP path for cloud-running Cowork is missing');
-assert.match(`${anonymize}\n${boundary}`, /(?:Web|Mobil)[\s\S]{0,260}keine Originale/iu,
-  'web/mobile sessions without a desktop bridge must not process originals');
+assert.match(`${anonymize}\n${boundary}`, /lokal(?:e|en) Cowork-Sitzung/iu,
+  'local Cowork session boundary is missing');
+assert.match(`${anonymize}\n${boundary}`, /Lokale Plugin-MCPs laufen laut Hersteller nicht in Cloud-Sitzungen/iu,
+  'local-MCP cloud-session denial is missing');
+assert.match(`${anonymize}\n${boundary}`, /Cloud-Cowork[\s\S]{0,260}keine Originale/iu,
+  'cloud Cowork must not process originals');
+assert.match(securityModel, /Cloud-Sitzung[\s\S]{0,180}unabhängig von geöffneter Desktop-App oder Brücke/iu,
+  'security model must not revive the superseded desktop-bridge assumption');
 assert.match(`${guide}\n${anonymize}`, /Berechtigungsmodus[\s\S]{0,160}Auto[\s\S]{0,220}Organisationsrichtlinien/iu,
   'optional Auto mode and organization policy boundary are missing');
 assert.match(`${guide}\n${anonymize}`, /Skip[^\n]{0,120}(?:kein|nicht)[^\n]{0,80}Standard/iu,
   'Skip must not be the standard for sensitive files');
+assert.match(`${guide}\n${anonymize}`, /(?:errät|automatisch)[^\n]{0,120}(?:Projektpfad|Projektwechsel)/iu,
+  'the plugin must not claim automatic Cowork workspace detection');
+assert.match(`${guide}\n${anonymize}`, /verbundenen Ordner[^\n]{0,120}(?:nicht selbst lesen|nicht selbst prüfen|weder erkennen noch prüfen)/iu,
+  'connected-folder separation must be an honest setup and UAT prerequisite');
+assert.doesNotMatch(server, /Cowork-Arbeitsordner/u,
+  'server text must not label an arbitrary configured destination as the Cowork workspace');
+assert.match(`${guide}\n${anonymize}`, /Ändere den DataSecure-Ergebnisordner/iu,
+  'the explicit low-friction result-folder change path is missing');
 assert.match(`${guide}\n${anonymize}`, /gridSpan[\s\S]{0,100}vMerge[\s\S]{0,180}(?:gestoppt|stoppt)/iu,
   'merged DOCX table-cell stop boundary is missing');
 assert.match(all, /(?:sichtbarer Skill|Plugin-Eintrag)[^\n]{0,140}(?:genügt nicht|kein Nachweis|niemals aus)/iu);

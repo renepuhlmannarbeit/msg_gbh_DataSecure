@@ -5,7 +5,7 @@ Every adapter receives the same version-controlled, synthetic ground truth and m
 only spans plus anonymized output. No real document, network request or model download is
 part of the benchmark.
 
-## Current baseline (RC23)
+## Current baseline (3.2.0-rc99, revalidated 2026-09-04)
 
 Command:
 
@@ -13,7 +13,7 @@ Command:
 npm run benchmark:detectors
 ```
 
-The deterministic contract corpus contains 150 cases, 107,158 characters, 1,950 sensitive
+The deterministic contract corpus contains 150 cases, 107,139 characters, 1,950 sensitive
 entities and 900 explicit preservation controls. It combines 30 public company-name tokens,
 30 invented people, ten invented addresses and six layouts. The current DataSecure baseline
 detects all 1,950 entities with no extra span and retains all 900 business and certification

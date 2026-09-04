@@ -15,6 +15,7 @@ Stand: 04.09.2026
 | `TRACEABILITY.md`, `BACKLOG_EVIDENCE_MATRIX.md` | aktuelle Zuordnung und Evidencegrenzen |
 | `TARGET_CAPABILITIES.json`, `HOST_MATRIX_V1.json` | maschinenlesbare Ziel- und Hostverträge; Zielaussagen sind keine Istfreigabe |
 | `OPEN_SOURCE_COMPONENTS.md` | verbindliches Wiederverwendungsregister |
+| `DOCUMENT_INDEX.json` | maschinenlesbarer Status, Geltungsbereich, Eigentümer, Versionsregel und Ablösung aller führenden Dokumentklassen |
 
 ### Vertragsstatus unter `contracts/`
 
@@ -54,7 +55,10 @@ Abnahme.
 | `docs/PILOT-ABNAHME.md`, `docs/acceptance/UAT_TEST_KIT/*`, `docs/acceptance/STANDALONE_UAT_TEST_KIT/*` | Testverantwortliche |
 | `docs/PLUGIN_SECURITY_MODEL.md`, `SECURITY.md` | Security, Datenschutz, Architektur |
 | `docs/RELEASE.md`, `docs/TESTING.md`, `BUILD_INFO.json` | Entwicklung und Release Engineering |
-| `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | aktueller zeitgebundener Herstellerabgleich |
+| `docs/FORMAT_COVERAGE_MATRIX.md` | belegter und geplanter Formatumfang; keine Freigabe ohne zugehörige Evidence |
+| `docs/DETECTOR_BENCHMARK.md` | synthetische, reproduzierbare Detektorbaseline; keine Aussage universeller Genauigkeit |
+| `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | zeitgebundene Herstelleraufnahme; aktuelle Produktgrenze steht in DS-078 und der Hostmatrix |
+| `docs/REVIEW_BEIDE_PRODUKTE_2026-09-04.md` | aktuelles Gesamturteil zu Produkt, UX, Architektur, Security, Performance, Distribution und Evidencegrenzen beider Produkte |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
 

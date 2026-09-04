@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC98
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC99
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -42,7 +42,7 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 | sicher gesperrt | XLSX, PPTX, PDF, Scan-PDF und eigenständige Bilder |
 | Stapel | bis 100 Dateien, zusammen höchstens 500 MiB |
 | Bilder in DOCX | Pixel bleiben lokal; kein auswählbarer Bildmodus |
-| Ausgabe | freigegebenes Markdown im einmalig gewählten Cowork-Arbeitsordner; Mapping bleibt privat |
+| Ausgabe | freigegebenes Markdown im einmalig gewählten lokalen Ergebnisordner; Mapping bleibt privat |
 | Speicherung | lokale Arbeits-/Reviewkopien ohne Schlüsselbund oder Passwort |
 | automatische Aufbewahrung | 0–14 Tage nur für temporäre Arbeits-/Reviewdaten |
 
@@ -58,30 +58,29 @@ sicher gestoppt und lokal gesondert gemeldet.
 2. In einer neuen Cowork-Aufgabe der **geöffneten Claude-Desktop-App**
    **„Dateien anonymisieren“**
    schreiben oder den Skill `gbh-datasecure-dokument-anonymisieren` wählen.
-   Cowork darf die Aufgabe standardmäßig in der Cloud ausführen. Der lokale
-   DataSecure-MCP läuft dabei weiterhin auf dem Rechner und wird über die
-   geöffnete Desktop-App erreicht. Maßgeblich ist diese aktive Desktop-Brücke,
-   nicht die Ausführungsart der Cowork-Sitzung.
-3. Nur beim ersten Lauf einen dedizierten, leeren beziehungsweise ausschließlich
-   für freigegebene Ergebnisse bestimmten Cowork-Arbeitsordner als
-   Ergebnisziel wählen. DataSecure merkt ihn sich und legt dort
-   `DataSecure-Output` an.
+   Dafür ist eine **lokale Cowork-Sitzung** eines bestehenden Desktop-
+   Deployments erforderlich. In einer Cowork-Sitzung in der Cloud laufen lokale
+   MCP-Server nicht; auch eine geöffnete Desktop-App ändert das nicht.
+3. Nur beim ersten Lauf einen dedizierten lokalen Ergebnisordner wählen. Das kann
+   der bereits verbundene Cowork-Arbeitsordner sein. DataSecure merkt sich die
+   ausdrückliche Wahl auf diesem Gerät und legt dort `DataSecure-Output` an; ein
+   späterer Cowork-Projektwechsel ändert das Ziel nicht heimlich.
 4. Dateien im lokalen Mehrfachpicker wählen und einmal **„Öffnen“** klicken.
    Bei allen späteren Läufen beginnt der Ablauf direkt mit dieser Quellauswahl.
 5. Klare Dateien werden ohne weiteren Dialog abgeschlossen. Nur bei echten
    Mehrdeutigkeiten erscheint ein lokaler Sammelreview mit den direkten Aktionen
    **„Zertifikatsanbieter behalten“** und **„Organisation anonymisieren“**.
 6. Die lokale Abschlussmeldung mit **„Ergebnisse öffnen“** verwenden. Im
-   Cowork-Arbeitsordner liegen ausschließlich neutrale freigegebene Markdown-
+   gewählten Ergebnisordner liegen ausschließlich neutrale freigegebene Markdown-
    Dateien; Originale, Mapping, Review und Recovery bleiben im privaten Bereich.
 7. Erst danach bei Bedarf ausdrücklich um die Auswertung der fertigen Ergebnisse
    bitten.
 
 Die eigentliche Verarbeitung läuft lokal und offline. Cowork ist der bequeme
 Einstieg und kann die freigegebenen Markdown-Ergebnisse anschließend auswerten;
-die Anonymisierungsengine ist davon fachlich getrennt. Eine eigenständige
-Desktop-Oberfläche ohne Claude/Cowork ist als weiterer Einstieg geplant und wird
-dieselbe Engine, dieselben Prüfregeln und dasselbe Mapping verwenden.
+die Anonymisierungsengine ist davon fachlich getrennt. Die eigenständige
+Desktop-Oberfläche ohne Claude/Cowork wird als Engineering-Pilot entwickelt und
+verwendet dieselbe Engine, dieselben Prüfregeln und dasselbe Mapping.
 
 ## Standalone ohne Claude – Entwicklungsstand
 
@@ -105,11 +104,11 @@ zuverlässig bereitstellen.
 Keine sensiblen Originale als Chat-Anhang hochladen. Eine in Web oder Mobil
 gestartete Aufgabe, eine geplante Aufgabe und eine geschlossene oder getrennte
 Desktop-App können den lokalen Plugin-MCP nicht für den Originaleingang nutzen.
-Eine auf Desktop gestartete Cloud-Sitzung darf dagegen über die aktive
-Desktop-Brücke auf den lokalen MCP zugreifen und anschließend von Web oder Mobil
-weiter begleitet werden. Erscheint kein lokaler Picker, sind meist die
-Desktop-Brücke oder der Connector nicht aktiv oder die Organisation hat lokale
-Plugin-MCPs deaktiviert; siehe IT-Betriebshandbuch.
+Cloud-Cowork, Web, Mobil und geplante Cloud-Aufgaben dürfen ausschließlich
+bereits lokal freigegebenes Markdown verwenden. Erscheint in einer lokalen
+Desktop-Sitzung kein DataSecure-Picker, ist meist der Connector nicht aktiv,
+die Runtime nicht gestartet oder die Organisation hat lokale Plugin-MCPs
+deaktiviert; siehe IT-Betriebshandbuch.
 
 ## Dokumentation
 

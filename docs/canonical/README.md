@@ -2,29 +2,25 @@
 
 Stand: 04.09.2026
 
-## Rangfolge
+## Autorität nach Dokumentklasse
 
-1. [DECISIONS.md](DECISIONS.md) – angenommene, ersetzte und präzisierte Entscheidungen.
-2. [PRODUCT_VISION.md](PRODUCT_VISION.md) – Nutzen, Zielgruppen und Experience-Prinzipien.
-3. [PRODUCT.md](PRODUCT.md) – aktueller Produktvertrag und Nutzerreise.
-4. [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) – technische Zielgrenzen.
-5. [UML_ARCHITECTURE.md](UML_ARCHITECTURE.md) – codebasierte System-, Komponenten-, Sequenz-, Zustands- und Datensichten.
-6. [STANDALONE_ARCHITECTURE.md](STANDALONE_ARCHITECTURE.md) und
-   [STANDALONE_SECURITY_MODEL.md](STANDALONE_SECURITY_MODEL.md) – eigenständiges
-   zweites Produkt, Sicherheitsgrenze, gemeinsamer Core und sichere MarkItDown-Einführung.
-7. [REFACTORING_PLAN.md](REFACTORING_PLAN.md) – aktuelle sichere Lieferreihenfolge.
-8. [BACKLOG.md](BACKLOG.md) – einzige aktive Arbeitsliste.
-9. [CURRENT_STATE.md](CURRENT_STATE.md) – kompakter belegter Iststand.
-10. [TRACEABILITY.md](TRACEABILITY.md) – Entscheidung zu Backlog und Evidence.
-11. [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json),
-   [HOST_MATRIX_V1.json](HOST_MATRIX_V1.json) und `contracts/*` – maschinenlesbare
-   Ziel-/Sicherheitsverträge.
-12. [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) und
-    [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) – Evidenz und Wiederverwendung.
-13. [DOCUMENT_REGISTER.md](DOCUMENT_REGISTER.md) – Status aller aktuellen und
-    historischen Dokumentklassen.
-14. [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md) und
-    [BACKLOG_ARCHIVE_2026-09.md](BACKLOG_ARCHIVE_2026-09.md) – erledigte Stories.
+Eine einzige lineare Rangfolge wäre missverständlich: Iststand, Zielbild,
+Entscheidung und Testevidenz beantworten unterschiedliche Fragen.
+
+| Frage | Führendes Dokument | Ergänzung |
+|---|---|---|
+| Welche Produktentscheidung gilt? | [DECISIONS.md](DECISIONS.md) | [TRACEABILITY.md](TRACEABILITY.md) nennt Status und Nachweis. |
+| Was ist heute wirklich implementiert? | [CURRENT_STATE.md](CURRENT_STATE.md) | Grüne Tests und Evidence belegen nur ihren definierten Umfang. |
+| Was soll das Produkt leisten? | [PRODUCT_VISION.md](PRODUCT_VISION.md), [PRODUCT.md](PRODUCT.md) | Zielarchitektur und Verträge konkretisieren das Soll. |
+| Wie sind die technischen Grenzen? | [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md), [UML_ARCHITECTURE.md](UML_ARCHITECTURE.md) | [STANDALONE_ARCHITECTURE.md](STANDALONE_ARCHITECTURE.md) und [STANDALONE_SECURITY_MODEL.md](STANDALONE_SECURITY_MODEL.md) gelten zusätzlich für Standalone. |
+| Was wird als Nächstes gebaut? | [BACKLOG.md](BACKLOG.md) | [REFACTORING_PLAN.md](REFACTORING_PLAN.md) bestimmt die sichere Reihenfolge. |
+| Welche maschinenlesbaren Grenzen gelten? | [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json), [HOST_MATRIX_V1.json](HOST_MATRIX_V1.json), `contracts/*` | Ein Zielvertrag ist keine Istfreigabe. |
+| Welche Abnahme fehlt? | [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) | Zielhost-/UX-/Fachevidence bleibt menschlich. |
+| Welche Open-Source-Komponente ist zugelassen? | [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) | Version, Zweck und Aktivierungsgrenze sind verbindlich. |
+| Wo ist der Status einer Datei dokumentiert? | [DOCUMENT_INDEX.json](DOCUMENT_INDEX.json), [DOCUMENT_REGISTER.md](DOCUMENT_REGISTER.md) | Der Index ist maschinenlesbar; Archive bleiben zugänglich, aber nicht entscheidungsführend. |
+
+Erledigte Storys bleiben in [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md)
+und [BACKLOG_ARCHIVE_2026-09.md](BACKLOG_ARCHIVE_2026-09.md) nachvollziehbar.
 
 ## Aktuelle abgeleitete Dokumente
 
@@ -49,8 +45,10 @@ als ersetzter Entwurfsvertrag erhalten.
 ## Änderungsablauf
 
 Entscheidung → Vision/Produkt/Architektur → Backlog → Code/Tests → Iststand und
-Traceability → Anwender-/Betriebsdokumentation. Bei Widerspruch gilt das höher
-rangige aktuelle Dokument. Ersetzte Entscheidungen werden nicht gelöscht.
+Traceability → Anwender-/Betriebsdokumentation. Bei Widerspruch wird zuerst die
+Dokumentklasse bestimmt: `CURRENT_STATE` darf ein Ziel begrenzen, eine spätere
+aktive Entscheidung ersetzt eine frühere, und Testevidence belegt nur den
+benannten Testumfang. Ersetzte Entscheidungen werden nicht gelöscht.
 
 `npm run test:docs` prüft Struktur, Referenzen, UAT-Verständlichkeit und die
 DS-067-Grenzen. Automatisierte Evidenz ersetzt keine Zielsystem-, UX-, Fach- oder

@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 03.09.2026 · Version 3.2.0 RC98
+Stand: 03.09.2026 · Version 3.2.0 RC99
 
 ## Vor dem ersten Lauf
 
@@ -32,19 +32,22 @@ Upload nicht zuverlässig ersetzt. Deshalb:
 
 ## Normalweg
 
-1. Öffnen Sie in der **laufenden Claude-Desktop-App eine neue Cowork-Aufgabe**.
-   Die Aufgabe darf standardmäßig in der Cloud laufen. DataSecure selbst und die
-   Originalverarbeitung bleiben lokal; die Cowork-Sitzung erreicht den lokalen
-   Plugin-MCP über die aktive Desktop-Brücke. In Web oder Mobil gestartete und
-   geplante Aufgaben sowie eine geschlossene/getrennte Desktop-App reichen für
-   den Originaleingang nicht.
+1. Öffnen Sie in einem bestehenden Claude-Desktop-Deployment eine **lokale
+   Cowork-Sitzung**. Nur dort laufen lokale Plugin-MCPs. Cloud-Cowork, Web,
+   Mobil und geplante Cloud-Aufgaben sind kein Originaleingang – auch nicht bei
+   geöffneter Desktop-App. Dort darf nur bereits freigegebenes Markdown genutzt
+   werden.
 2. Schreiben Sie **„Dateien anonymisieren“** oder wählen Sie den Skill
    `gbh-datasecure-dokument-anonymisieren`.
-3. Beim ersten Lauf wählen Sie einmalig einen dedizierten, leeren beziehungsweise
-   ausschließlich für freigegebene Ergebnisse bestimmten und mit Cowork
-   verbundenen Arbeitsordner. Originale müssen außerhalb aller mit Cowork
-   verbundenen Ordner liegen. DataSecure speichert die Wahl lokal und erstellt darin
-   `DataSecure-Output`. Diese Auswahl wird in späteren Läufen nicht wiederholt.
+3. Beim ersten Lauf wählen Sie einmalig einen dedizierten lokalen Ergebnisordner.
+   Für die direkte Weiterarbeit können Sie genau diesen Ergebnisordner zusätzlich
+   mit Cowork verbinden. Die Originale und ihre Quellordner bleiben außerhalb
+   aller mit Cowork verbundenen Ordner. DataSecure kann die Liste der in Cowork
+   verbundenen Ordner nicht selbst lesen oder kontrollieren; diese Trennung ist
+   daher eine Setup- und UAT-Voraussetzung. DataSecure speichert die ausdrückliche
+   Wahl auf diesem Gerät, errät keinen Projektpfad und erstellt darin
+   `DataSecure-Output`. Diese Auswahl wird in späteren Läufen und bei
+   Projektwechseln nicht wiederholt oder heimlich geändert.
 4. Im lokalen Mehrfachpicker wählen Sie bis zu 100 Dateien mit zusammen höchstens
    500 MiB und klicken einmal **„Öffnen“**.
 5. Claude antwortet kurz „Der Auftrag wurde lokal übergeben …“ und nennt in
@@ -118,12 +121,14 @@ Positionen werden nicht wiederholt.
 ## Lokale Ablage
 
 Die sichtbaren Ergebnisse liegen unter
-`<einmalig gewählter Cowork-Arbeitsordner>/DataSecure-Output/Lauf-…/` und heißen
+`<einmalig gewählter Ergebnisordner>/DataSecure-Output/Lauf-…/` und heißen
 neutral `Dokument-001-anonymisiert.md`, `Dokument-002-anonymisiert.md` usw. Den
 Zielordner ändern Sie auf ausdrücklichen Wunsch mit der Chat-Bitte
 **„Ändere den DataSecure-Ergebnisordner“** (Werkzeug „Ergebnisordner
 festlegen“); sein Pfad wird nicht an Claude gemeldet. Das ist erst möglich, wenn
-kein Stapel mehr offen ist. Ein Ziel in OneDrive, iCloud, Dropbox oder Google
+kein Stapel mehr offen ist. Der Ergebnisordner kann der verbundene Cowork-
+Arbeitsordner sein, wird aber nicht automatisch aus einem Projekt erraten oder
+bei einem Projektwechsel geändert. Ein Ziel in OneDrive, iCloud, Dropbox oder Google
 Drive kann die freigegebenen, aber nicht garantiert rechtlich anonymen
 Ergebnisse mit diesem Dienst synchronisieren; Claude weist bei der Auswahl
 einmal darauf hin. Gelöschte oder bearbeitete Ergebnisdateien werden nicht
@@ -160,7 +165,7 @@ wird nicht automatisch an Claude übertragen.
 | Sichtbares Verhalten | Nächste Aktion |
 |---|---|
 | Kein lokaler Picker | Claude Desktop öffnen beziehungsweise vollständig neu starten; Connector und Richtlinie für lokale Plugin-MCPs prüfen; nicht hochladen |
-| Ergebnisordnerwahl erscheint | Beim ersten Lauf den verbundenen Cowork-Arbeitsordner wählen; später nur auf Wunsch ändern |
+| Ergebnisordnerwahl erscheint | Beim ersten Lauf einen lokalen Ergebnisordner wählen; für direkte Cowork-Nutzung kann es der verbundene Arbeitsordner sein. Später nur auf Wunsch ändern |
 | Ergebnisordner wurde abgelehnt | Grund lesen (etwa: Ordner liegt im privaten DataSecure-Bereich); beim nächsten Start einen anderen Ordner wählen |
 | Sichtbarer Export vorübergehend fehlgeschlagen | Interne Ergebnisse bleiben erhalten; beim nächsten Pluginstart wird erneut exportiert |
 | Antwort nennt keine oder eine ältere DataSecure-Version | Cowork verarbeitet mit einer älteren Plugin-Kopie; Plugin gemäß „Plugin aktualisieren“ neu bereitstellen und neue Aufgabe starten |

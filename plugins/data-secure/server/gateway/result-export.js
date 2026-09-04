@@ -7,6 +7,7 @@ const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
 const { writeFully, syncParentDirectory, renameWithTransientRetry, linkWithTransientRetry } = require('./batch-journal-io');
+const { processAlive } = require('./process-liveness');
 
 const SCHEMA = 'datasecure-result-export/1';
 const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
@@ -14,7 +15,10 @@ const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
 // It carries no export state and must neither count as a damaged record nor be
 // removed while a concurrent worker may still be writing it.
 const TEMPORARY_RECORD_RE = /^re_[a-f0-9]{32}\.json\.\d+\.[a-f0-9]{8}\.tmp$/u;
+const CLAIM_RE = /^re_[a-f0-9]{32}\.json\.claim$/u;
 const PACKAGE_RE = /^ds_[a-f0-9]{32}$/u;
+const CLAIM_SCHEMA = 'datasecure-result-export-claim/1';
+const CLAIM_ID_RE = /^[a-f0-9]{32}$/u;
 
 function comparablePath(value) {
   const resolved = path.resolve(value);
@@ -49,6 +53,63 @@ function outboxDirectory() {
 function recordPath(token) {
   const id = crypto.createHash('sha256').update(String(token)).digest('hex').slice(0, 32);
   return path.join(outboxDirectory(), `re_${id}.json`);
+}
+function claimPath(target) { return `${target}.claim`; }
+function validClaim(value) {
+  return exactKeys(value, ['schema', 'claim_id', 'pid', 'created_at']) && value.schema === CLAIM_SCHEMA &&
+    CLAIM_ID_RE.test(value.claim_id) && Number.isSafeInteger(value.pid) && value.pid > 0 &&
+    typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at));
+}
+function readClaim(target) {
+  let descriptor;
+  try {
+    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const opened = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(target);
+    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
+        opened.dev !== named.dev || opened.ino !== named.ino || opened.size < 1 || opened.size > 1024) return null;
+    const value = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
+    return validClaim(value) ? { value, dev: opened.dev, ino: opened.ino, size: opened.size } : null;
+  } catch { return null; }
+  finally { if (descriptor !== undefined) try { fs.closeSync(descriptor); } catch {} }
+}
+function removeClaimIfUnchanged(target, expected) {
+  const current = readClaim(target);
+  if (!current || current.value.claim_id !== expected.value.claim_id || current.dev !== expected.dev ||
+      current.ino !== expected.ino || current.size !== expected.size) return false;
+  try { fs.unlinkSync(target); return true; } catch { return false; }
+}
+function acquireExportClaim(recordTarget) {
+  const target = claimPath(recordTarget);
+  const existing = readClaim(target);
+  if (existing) {
+    if (processAlive(existing.value.pid) || !removeClaimIfUnchanged(target, existing)) return null;
+  } else if (fs.existsSync(target)) {
+    // A malformed, replaced or permission-hidden private claim is never stolen.
+    return null;
+  }
+  const value = { schema: CLAIM_SCHEMA, claim_id: crypto.randomBytes(16).toString('hex'),
+    pid: process.pid, created_at: new Date().toISOString() };
+  let descriptor;
+  try {
+    descriptor = fs.openSync(target, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
+      (fs.constants.O_NOFOLLOW || 0), 0o600);
+    writeFully(descriptor, Buffer.from(`${JSON.stringify(value)}\n`, 'utf8'), fs);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    syncParentDirectory(target, fs, process.platform);
+    const claim = readClaim(target);
+    return claim?.value.claim_id === value.claim_id ? claim : null;
+  } catch (error) {
+    if (error?.code === 'EEXIST') return null;
+    throw error;
+  } finally {
+    try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
+  }
+}
+function releaseExportClaim(recordTarget, claim) {
+  return claim ? removeClaimIfUnchanged(claimPath(recordTarget), claim) : false;
 }
 function exactKeys(value, keys) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
@@ -116,9 +177,11 @@ function activeDestination() {
   const checked = inspectRoot(root);
   const rootBinding = bindPlainDirectory(checked.root);
   const outputBinding = bindPlainDirectory(resultOutputDirectory({ root: checked.root }), rootBinding);
-  const material = `${checked.root}\0${checked.identity.dev}\0${checked.identity.ino}\0${checked.identity.birthtime_ms}`;
+  const legacyMaterial = `${checked.root}\0${checked.identity.dev}\0${checked.identity.ino}\0${checked.identity.birthtime_ms}`;
+  const material = `${legacyMaterial}\0${outputBinding.real}\0${outputBinding.dev}\0${outputBinding.ino}\0${outputBinding.birthtime}`;
   return {
     id: crypto.createHash('sha256').update(material).digest('hex'),
+    legacyId: crypto.createHash('sha256').update(legacyMaterial).digest('hex'),
     root: rootBinding,
     output: outputBinding
   };
@@ -217,8 +280,20 @@ function exportedCount(record) {
 // item can never make an already written (and possibly user-deleted) result
 // eligible again. Throws after persisting the progress when an item fails.
 function exportOpenItems(target, record, destination) {
-  const run = ensurePlainDirectory(destination, record.run_directory);
   let current = record;
+  if (!current.destination_id) {
+    // A partially written legacy record without a destination binding cannot
+    // be continued safely: its already exported files may live elsewhere.
+    if (exportedCount(current) > 0) throw new Error('RESULT_EXPORT_DESTINATION_UNBOUND');
+    current = { ...current, destination_id: destination.id };
+    writeRecord(target, current);
+  } else if (current.destination_id !== destination.id) {
+    if (current.destination_id === destination.legacyId && exportedCount(current) === 0) {
+      current = { ...current, destination_id: destination.id };
+      writeRecord(target, current);
+    } else throw new Error('RESULT_EXPORT_DESTINATION_CHANGED');
+  }
+  const run = ensurePlainDirectory(destination, current.run_directory);
   for (let index = 0; index < current.items.length; index++) {
     const item = current.items[index];
     if (item.exported === true) continue;
@@ -228,10 +303,50 @@ function exportOpenItems(target, record, destination) {
     writeRecord(target, current);
   }
   if (current.items.every((item) => item.exported === true)) {
-    current = { ...current, complete: true, destination_id: destination.id };
+    current = { ...current, complete: true };
     writeRecord(target, current);
   }
   return current;
+}
+
+function visibleExportStatus(token, expectedReleased = 0) {
+  const expected = Number.isSafeInteger(expectedReleased) && expectedReleased >= 0 ? expectedReleased : 0;
+  try {
+    const target = recordPath(token);
+    if (!fs.existsSync(target)) return { exported: 0, pending: expected, available: expected === 0 };
+    const record = readRecord(target);
+    const exported = exportedCount(record);
+    const pending = Math.max(0, record.items.length - exported);
+    // Status and the native Open action must agree. A completed record remains
+    // final after a configured destination changes, but it is no longer an
+    // openable result in the currently selected product destination.
+    const available = record.complete === true && pending === 0 && visibleExportDirectory(token) !== '';
+    return { exported, pending, available };
+  } catch {
+    return { exported: 0, pending: expected, available: false };
+  }
+}
+
+// Resolve exactly one completed visible run for native local UI actions. The
+// path stays inside the trusted process and is never projected to Claude,
+// renderer IPC or diagnostics.
+function visibleExportDirectory(token) {
+  try {
+    const target = recordPath(token);
+    if (!fs.existsSync(target)) return '';
+    const record = readRecord(target);
+    if (record.complete !== true || record.items.length === 0 ||
+        record.items.some((item) => item.exported !== true)) return '';
+    const destination = activeDestination();
+    if (!destination || destination.id !== record.destination_id) return '';
+    assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root);
+    const runPath = path.join(destination.output.path, record.run_directory);
+    if (!fs.existsSync(runPath)) return '';
+    return bindPlainDirectory(runPath, destination.output).path;
+  } catch {
+    return '';
+  }
 }
 // The visible export is a convenience projection of already verified internal
 // packages. Every failure here – including a damaged or conflicting export
@@ -239,29 +354,36 @@ function exportOpenItems(target, record, destination) {
 // terminal batch outcome must not be presented as a processing stop, and no
 // internal result is touched.
 function exportCompletedState(state) {
-  let plan;
-  try { plan = ensureRecord(state); }
+  const target = recordPath(state.token);
+  let claim;
+  try { claim = acquireExportClaim(target); }
   catch { return { exported: 0, pending: releasedCount(state), available: false }; }
-  if (plan.value.items.length === 0) return { exported: 0, pending: 0, available: true };
-  // DS-069 replays only a failed export; DS-023 leaves visible results to the
-  // user until they delete them. A completed record is therefore final: it is
-  // neither re-verified nor re-materialised after a user deletion, and a later
-  // destination change does not mirror earlier runs into the new folder.
-  if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0, available: true };
-  const total = plan.value.items.length;
-  const pendingResult = () => {
-    let done = exportedCount(plan.value);
-    try { done = exportedCount(readRecord(plan.target)); } catch { /* keep the last known progress */ }
-    return { exported: done, pending: total - done, available: false };
-  };
+  if (!claim) return { exported: 0, pending: releasedCount(state), available: false };
+  let plan;
   try {
-    const destination = activeDestination();
-    if (!destination) return pendingResult();
-    const finished = exportOpenItems(plan.target, plan.value, destination);
-    return finished.complete === true ? { exported: total, pending: 0, available: true } : pendingResult();
-  } catch {
-    return pendingResult();
-  }
+    try { plan = ensureRecord(state); }
+    catch { return { exported: 0, pending: releasedCount(state), available: false }; }
+    if (plan.value.items.length === 0) return { exported: 0, pending: 0, available: true };
+    // DS-069 replays only a failed export; DS-023 leaves visible results to the
+    // user until they delete them. A completed record is therefore final: it is
+    // neither re-verified nor re-materialised after a user deletion, and a later
+    // destination change does not mirror earlier runs into the new folder.
+    if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0, available: true };
+    const total = plan.value.items.length;
+    const pendingResult = () => {
+      let done = exportedCount(plan.value);
+      try { done = exportedCount(readRecord(plan.target)); } catch { /* keep the last known progress */ }
+      return { exported: done, pending: total - done, available: false };
+    };
+    try {
+      const destination = activeDestination();
+      if (!destination) return pendingResult();
+      const finished = exportOpenItems(plan.target, readRecord(plan.target), destination);
+      return finished.complete === true ? { exported: total, pending: 0, available: true } : pendingResult();
+    } catch {
+      return pendingResult();
+    }
+  } finally { releaseExportClaim(target, claim); }
 }
 function replayPendingResultExports() {
   let exported = 0;
@@ -273,9 +395,17 @@ function replayPendingResultExports() {
   for (const entry of entries) {
     if (!entry.isFile() || entry.isSymbolicLink()) { failures++; continue; }
     if (TEMPORARY_RECORD_RE.test(entry.name)) continue;
+    if (CLAIM_RE.test(entry.name)) continue;
     if (!RECORD_RE.test(entry.name)) { failures++; continue; }
+    let claim;
     try {
       const target = path.join(outboxDirectory(), entry.name);
+      claim = acquireExportClaim(target);
+      if (!claim) {
+        try { pending += Math.max(0, readRecord(target).items.filter((item) => item.exported !== true).length); }
+        catch { failures++; }
+        continue;
+      }
       const record = readRecord(target);
       // Only a failed (incomplete) export is replayed; see exportCompletedState.
       if (record.items.length === 0 || record.complete === true) continue;
@@ -292,6 +422,9 @@ function replayPendingResultExports() {
         throw error;
       }
     } catch { failures++; }
+    finally {
+      if (claim) releaseExportClaim(path.join(outboxDirectory(), entry.name), claim);
+    }
   }
   return { exported, pending, failures };
 }
@@ -316,6 +449,8 @@ function terminalVisibleExport(completed, exporter) {
 }
 
 module.exports = {
-  SCHEMA, recordPath, validRecord, exportCompletedState, replayPendingResultExports, terminalVisibleExport,
-  _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding }
+  SCHEMA, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
+  visibleExportDirectory, terminalVisibleExport,
+  _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding,
+    acquireExportClaim, releaseExportClaim, claimPath }
 };

@@ -18,11 +18,13 @@
 4. Claude Desktop vollständig beenden und neu starten. Auf der Plugin-Seite
    prüfen, dass Version, Dateiansicht und Aktualisierungszeit zum zu prüfenden
    Build passen; erst dann eine Aufgabe starten.
-5. Einen leeren, mit Cowork verbundenen Test-Arbeitsordner anlegen. Neue lokale
-   Cowork-Aufgabe öffnen und „Dateien anonymisieren“ schreiben. Beim ersten Lauf
-   diesen Arbeitsordner einmalig als Ergebnisziel wählen. Danach den Quellpicker
-   einmal mit **Abbrechen** schließen. Öffnet einer der erwarteten Dialoge nicht,
-   `BLOCKED`; nicht durch Upload umgehen.
+5. Einen leeren Test-Ergebnisordner anlegen und ausschließlich diesen Ordner mit
+   Cowork verbinden. Kontrollieren, dass `inputs`, Fixture- und sonstige
+   Quellordner **nicht** verbunden sind; DataSecure kann diese Cowork-Einstellung
+   technisch nicht selbst lesen. Neue lokale Cowork-Aufgabe öffnen und „Dateien
+   anonymisieren“ schreiben. Beim ersten Lauf den Ergebnisordner einmalig als
+   Ziel wählen. Danach den Quellpicker einmal mit **Abbrechen** schließen. Öffnet
+   einer der erwarteten Dialoge nicht, `BLOCKED`; nicht durch Upload umgehen.
 6. Build, Pluginversion, Artefakt-SHA-256, Betriebssystem und Claude-Version im
    Evidence-Log erfassen – keine Pfade oder Dokumentkennungen. Die Pluginversion
    stammt aus der Startantwort des ersten Laufs („DataSecure-Version: …“), nicht

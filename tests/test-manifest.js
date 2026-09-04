@@ -47,6 +47,17 @@ test('the runtime version module matches package.json', () => {
   assert.strictEqual(VERSION, pkg.version, 'run `npm run version:sync`');
 });
 
+test('version synchronization cannot consume the UML header newline', () => {
+  const script = readText(path.join(root, 'scripts', 'set-version.mjs'));
+  const uml = readText(path.join(root, 'docs', 'canonical', 'UML_ARCHITECTURE.md'));
+  assert.match(script, /rc\\d\+\)\?\[ \\t\]\*\)\+/u,
+    'UML version matcher must be horizontal-whitespace-only');
+  assert.doesNotMatch(script, /rc\\d\+\)\?\\s\*\)\+/u,
+    'UML version matcher must never consume a following newline');
+  assert.match(uml, /^Stand: [^\n]+\n\nDie Abschnitte/mu,
+    'UML prose must start on a new paragraph after the version header');
+});
+
 test('no runtime module hard-codes a version literal of its own', () => {
   const literal = /['"`]\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?['"`]/;
   for (const rel of ['gateway/common.js', 'index.js', 'mcp-server.js']) {
@@ -119,7 +130,7 @@ test('host wording does not turn portable code into a platform release claim', (
   const guide = readText(path.join(root, 'docs', 'ANLEITUNG.md'));
   assert.match(mcpb.long_description, /ohne reale Zielsystem- und Cowork-Abnahme keine Plattformfreigabe/u);
   assert.doesNotMatch(mcpb.long_description, /Claude Desktop ist für Linux als Beta verfügbar/u);
-  assert.match(readme, /Cowork darf die Aufgabe standardmäßig in der Cloud ausführen[\s\S]{0,180}lokale\s+DataSecure-MCP[\s\S]{0,180}auf dem Rechner/u);
+  assert.match(readme, /lokale Cowork-Sitzung[\s\S]{0,320}Cloud[\s\S]{0,180}MCP-Server nicht/u);
   assert.match(readme, /Web oder Mobil[\s\S]{0,180}lokalen Plugin-MCP nicht für den Originaleingang nutzen/u);
   assert.match(guide, /Originale niemals per Büroklammer in den Chat/u);
 });
@@ -174,7 +185,17 @@ test('MCPB prompt texts use the same direct-picker contract as the runtime', () 
     assert.match(prompt.text, /bei batch_active/iu, `${prompt.name} must wait for an active local batch`);
     assert.ok(prompt.text.includes(OPEN_BATCH_DECISION_TEXT), `${prompt.name} must use the canonical open-batch decision`);
     assert.match(prompt.text, /local_selection_cancelled nichts erneut öffnen/u, `${prompt.name} must keep picker cancellation terminal`);
+    assert.doesNotMatch(prompt.text, /Cowork-Arbeitsordner/u,
+      `${prompt.name} must not claim that DataSecure can discover the connected Cowork folder`);
   }
+});
+
+test('MCPB synchronization reads the canonical protocol table', () => {
+  const sync = readText(path.join(root, 'scripts', 'sync-mcpb-manifest.mjs'));
+  assert.match(sync, /path\.join\(runtimePath, 'mcp-server\.js'\)/u,
+    'the generator must read TOOLS and PROMPTS from mcp-server.js');
+  assert.doesNotMatch(sync, /path\.join\(runtimePath, 'index\.js'\)/u,
+    'the startup boundary does not own protocol tables');
 });
 
 test('marketplace entry points at the plugin directory that exists', () => {

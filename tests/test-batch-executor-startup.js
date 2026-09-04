@@ -402,6 +402,29 @@ async function main() {
       `fallback presentation outcome recorded, got ${JSON.stringify(events)}`);
   });
 
+  test('batch: Standalone delegates terminal state to its own window without a Cowork dialog', () => {
+    const child = fakeChild();
+    const f = fixture('batch', child);
+    let shown = 0;
+    const options = {
+      env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: 'standalone' },
+      showBatchStateNotice: () => { shown++; return true; }
+    };
+    assert.strictEqual(f.api.startLocalBatchExecutor(TOKEN, options).ok, true);
+    child.callbacks[0](null);
+    child.emit('message', {
+      type: 'local-batch-state', complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+      result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+      result_grades_verified: true
+    });
+    assert.strictEqual(shown, 0);
+    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 1);
+    assert.ok(f.records.some(event => event.event === 'completion_notice_delegated_to_product_ui'));
+    child.exit(0);
+    f.drain();
+  });
+
   await testAsync('batch: asynchronous parent presenter failure releases reservation and never acknowledges worker', async () => {
     const child = fakeChild();
     const f = fixture('batch', child);

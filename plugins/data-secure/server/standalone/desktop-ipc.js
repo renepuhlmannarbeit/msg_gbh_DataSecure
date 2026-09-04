@@ -2,6 +2,7 @@
 
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES = 768 * 1024;
+const MAX_SINGLE_PATH_BYTES = 32767;
 const PRIVATE_ACTIONS = new Set([
   'admit_selected_sources', 'cancel_admission', 'start_admitted_batch',
   'get_public_state', 'continue_current_batch', 'configure_results',
@@ -31,7 +32,8 @@ function validatePrivateMessage(message) {
       fail('DESKTOP_IPC_SOURCE_COUNT_INVALID', 'Ungültige Anzahl ausgewählter Quellen.');
     if ((message.source_kind === 'folder' || message.action === 'configure_results') && message.source_paths.length !== 1)
       fail('DESKTOP_IPC_SOURCE_COUNT_INVALID', 'Eine Ordnerauswahl muss genau einen Ordner enthalten.');
-    if (message.source_paths.some((value) => typeof value !== 'string' || value.length < 1 || value.length > 32767))
+    if (message.source_paths.some((value) => typeof value !== 'string' || value.length < 1 ||
+        Buffer.byteLength(value, 'utf8') > MAX_SINGLE_PATH_BYTES))
       fail('DESKTOP_IPC_SOURCE_INVALID', 'Ungültige lokale Quelle.');
     const pathBytes = message.source_paths.reduce((total, value) => total + Buffer.byteLength(value, 'utf8'), 0);
     if (pathBytes > MAX_ADMISSION_PATH_BYTES)

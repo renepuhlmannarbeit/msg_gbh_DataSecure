@@ -1,6 +1,6 @@
 # Aktuelles Anwender- und UX-Review
 
-Stand: 02.09.2026 · 3.2.0 RC92
+Stand: 04.09.2026 · gegen 3.2.0-rc99 und DS-078 revalidiert
 
 ## Ergebnis
 
@@ -33,7 +33,10 @@ gehören nicht in die Nutzerreise.
   „Lokal gestartet; Abschluss erscheint lokal; Ergebnisse später anfordern.“
 - Technische Codes dürfen nur als IT-Detail erscheinen. UAT-Kennungen werden immer
   mit Klartextname und Link gezeigt.
-- Eine Cloud-Session ohne lokale Desktop-Brücke muss früh und verständlich stoppen.
+- Cloud-Cowork, Web, Mobil und geplante Cloud-Aufgaben müssen für Originale früh
+  und verständlich stoppen – auch bei geöffneter Desktop-App. Der zulässige
+  Claude-Weg ist eine lokale Cowork-Sitzung mit laufendem Plugin-MCP oder lokales
+  Claude Code; alternativ steht das eigenständige Standalone-Produkt bereit.
 
 ## UX-Abnahmekriterien
 

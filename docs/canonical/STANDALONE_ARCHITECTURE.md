@@ -9,12 +9,20 @@ funktioniert ohne Claude, Cowork, Skills, MCP, Agenten, Chat, Internetzugang und
 vom Anwender installierte Node-/Python-Runtimes. Das vorhandene Claude-Plugin
 bleibt ein separates Produkt.
 
-Beide Produkte verwenden denselben DataSecure-Core: sichere Aufnahme,
-versiegelte Arbeitskopie, Format- und Coverage-Gates, Parser/Konverter,
-Content-Graph, PII-Erkennung, Residual-Gate, Sammelreview, Journal/Fortsetzung,
-Mapping, Export und inhaltsfreie Diagnose. Es gibt keine zweite
-Anonymisierungslogik. Der Core kennt jedoch weder Claude noch MCP, Skills,
-Handoff-Capabilities oder Chat-Paging.
+**Verbindliches Zielbild:** Beide Produkte verwenden denselben neutralen
+DataSecure-Core: sichere Aufnahme, versiegelte Arbeitskopie, Format- und
+Coverage-Gates, Parser/Konverter, Content-Graph, PII-Erkennung, Residual-Gate,
+Sammelreview, Journal/Fortsetzung, Mapping, Export und inhaltsfreie Diagnose. Es
+gibt keine zweite Anonymisierungslogik. Der Ziel-Core kennt weder Claude noch
+MCP, Skills, Handoff-Capabilities oder Chat-Paging.
+
+**Belegter Engineering-Iststand:** Standalone verwendet bereits dieselben
+Engine-Module und Policies, bindet sie aber noch teilweise über eine aus dem
+Plugin-Kontext entstandene Kompositionsschicht. Die vollständige Extraktion der
+neutralen Application-/Core-API sowie ein gemeinsamer Core-/Policy-Fingerprint
+für beide Produktpakete bleiben BL-010.9 und BL-010.23. Bis diese Gates grün
+sind, ist „derselbe Core“ ein verbindliches Ziel und keine vollständige
+Entkopplungszusage.
 
 Standalone besitzt mit `SecureDataMsg-Standalone` einen nicht mit dem
 Pluginroot überlappenden Daten-, Konfigurations-, Journal-, Review- und

@@ -3,7 +3,7 @@
   "product_id": "gbh-datasecure-standalone",
   "product_channel": "standalone",
   "data_namespace": "SecureDataMsg-Standalone",
-  "version": "3.2.0-rc98",
+  "version": "3.2.0-rc99",
   "release_status": "engineering_only",
   "entry": "cli.js",
   "desktop_shell_candidate": "tauri-2",
@@ -22,7 +22,12 @@
   ],
   "desktop_transport": "inherited_framed_stdio",
   "desktop_network_listener": false,
-  "interaction_model": ["select", "processing", "review", "result"],
+  "interaction_model": [
+    "select",
+    "processing",
+    "review",
+    "result"
+  ],
   "requires_claude": false,
   "requires_cowork": false,
   "requires_mcp": false,
@@ -33,6 +38,19 @@
   "windows_engineering_build_verified": true,
   "end_user_package_verified": false,
   "native_macos_verified": false,
-  "current_formats": ["txt", "md", "csv", "docx"],
-  "blocked_formats": ["xlsx", "pptx", "pdf", "scan_pdf", "png", "jpeg", "bmp"]
+  "current_formats": [
+    "txt",
+    "md",
+    "csv",
+    "docx"
+  ],
+  "blocked_formats": [
+    "xlsx",
+    "pptx",
+    "pdf",
+    "scan_pdf",
+    "png",
+    "jpeg",
+    "bmp"
+  ]
 }

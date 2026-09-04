@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 04.09.2026 · Produktstand 3.2.0-rc98
+Stand: 04.09.2026 · 3.2.0-rc99
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 kennzeichnet das UX-Zielbild und die Standalone-Sequenz ausdrücklich
@@ -452,10 +452,13 @@ flowchart LR
 ```
 
 - **Keine automatische Workspace-Vermutung:** Die MCP-Schnittstelle liefert
-  keinen belastbaren Cowork-Arbeitsordner. DataSecure behält daher einen explizit
-  vom Anwender gewählten Standard, bindet dessen Identität beim Start an den
-  Stapel und ändert ihn nur über die bewusste Einstellung „Ergebnisordner
-  ändern“. Es entsteht keine Rückfrage pro Datei oder Lauf.
+  keinen belastbaren Cowork-Arbeitsordner. DataSecure behält daher gemäß DS-080
+  einen explizit vom Anwender gewählten geräte- und produktlokalen Standard,
+  bindet dessen Identität beim Start an den Stapel und ändert ihn nur über die
+  bewusste Einstellung „Ergebnisordner ändern“. Der dedizierte Ergebnisordner
+  darf optional mit Cowork verbunden werden; DataSecure kann die Liste
+  verbundener Cowork-Ordner nicht selbst prüfen. Es entsteht keine Rückfrage pro Datei,
+  Lauf oder Projektwechsel.
 - **Ein eindeutiger Abschluss:** Erst eine lokal belegte sichtbare Oberfläche
   schließt die Präsentationsreservation. Das Fenster öffnet den konkreten
   `Lauf-*`-Ordner und bietet bei ausstehendem Export genau eine Reparaturaktion.
@@ -465,9 +468,9 @@ flowchart LR
   Einzelne Dialoge je Treffer sind lediglich ein Engineering-Fallback und kein
   freigegebener Sollweg.
 - **Sichtbarer Fortschritt ohne Interaktion:** Lange Stapel zeigen nur lokale,
-  inhaltsfreie Zähler. Bereits eindeutige Ergebnisse dürfen nach eigenständigem
-  Architekturentscheid in denselben Laufordner projiziert werden; der Ordner
-  kennzeichnet den Stapel bis zum letzten Review weiterhin als unvollständig.
+  inhaltsfreie Zähler. Bereits eindeutige Ergebnisse bleiben intern dauerhaft;
+  gemäß DS-079 entsteht der sichtbare Laufordner erst nach terminalem
+  Gesamtstapel und abgeschlossenem erforderlichem Review.
 
 Dieses Zielbild beschreibt zwei Endnutzerprodukte mit genau einem gemeinsamen
 DataSecure-Core. Das Plugin übersetzt MCP-/Cowork-Aufrufe, Standalone übersetzt
@@ -479,8 +482,9 @@ Diese Sequenz ist als Windows-Engineering-Vertikalschnitt ausführbar.
 Implementiert sind Tauri-Hülle, nativer Datei-/Ordnerpicker, Node-Application-
 Service, strenge UI-Projektion, privater längengerahmter Dispatcher,
 Sidecar-Lebensdauer und Zielkatalog. Der Windows-Prozessstart wurde geprüft.
-Offen sind das selbsttragende Endnutzerpaket und die nativen macOS-/Linux-
-Nachweise.
+Ein selbsttragendes Windows-x64-Engineering-Paket ist gebaut und isoliert
+geprüft. Offen sind Endnutzerfreigabe, Windows-UAT und die nativen macOS-/Linux-
+Pakete und -Nachweise.
 
 ```mermaid
 sequenceDiagram
@@ -509,3 +513,29 @@ sequenceDiagram
 MarkItDown darf die Engine weder umgehen noch selbst ein Format freigeben. Ein
 noch personenbezogenes Konvertat ist kein Ergebnisartefakt und wird nicht im
 sichtbaren Dateisystem abgelegt.
+
+### Standalone-Abschluss, Export und Neustart
+
+```mermaid
+stateDiagram-v2
+  [*] --> idle
+  idle --> admitted: lokale Auswahl bestätigt
+  admitted --> processing: dauerhafter Stapelcheckpoint
+  processing --> review_required: fachliche Entscheidung offen
+  processing --> export_pending: intern fertig / sichtbarer Export offen
+  review_required --> export_pending: Review abgeschlossen / Export offen
+  export_pending --> completed: sichtbarer Export vollständig
+  admitted --> idle: Sidecar-Neustart / IPC-Fehler / Admission verloren
+  processing --> stopped: sicherer Fehler oder Abbruch
+  stopped --> processing: belastbare Fortsetzung
+```
+
+Der öffentliche Stand wird ausschließlich aus dem jüngsten Stapel des jeweiligen
+Produktkanals abgeleitet. Ein interner Paketabschluss ist kein sichtbarer
+Erfolg. Offene Exporte werden beim Standalone-Start und nach einer bewussten
+Ergebnisordnerwahl erneut versucht; der Zielordner ist vor dem ersten Teilexport
+identitätsgebunden. Standalone-Worker öffnen keine Cowork-Dialoge. Die Tauri-UI
+verwirft eine lokale Aufnahmefreigabe, sobald der Sidecar die Admission nicht
+mehr kennt. Exklusiver Outbox-Claim und laufgebundenes Öffnen sind E0
+geschlossen. Der plattformübergreifende Nachweis einer tatsächlich sichtbaren
+Abschlussoberfläche bleibt zusammen mit der Zielhostbeobachtung im Backlog.

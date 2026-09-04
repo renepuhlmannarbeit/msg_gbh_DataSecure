@@ -80,8 +80,18 @@ function fixture(options = {}) {
       if (options.releaseError) throw options.releaseError;
     },
     liveLocalExecutor: (value) => value.live === true,
-    publicProgress: (value) => ({ awaiting_resume: value.items.some((item) =>
-      item.status === 'retryable' || item.status === 'processing') }),
+    publicProgress: (value) => ({
+      batch_total: value.items.length,
+      released: value.items.filter((item) => item.status === 'released').length,
+      stopped: value.items.filter((item) => item.status === 'stopped').length,
+      deferred_review: value.items.filter((item) => item.status === 'deferred_review').length,
+      processing: value.items.filter((item) => item.status === 'processing').length,
+      remaining: value.items.filter((item) => item.status === 'pending').length,
+      local_processing_active: value.live === true,
+      complete: value.items.every((item) => ['released', 'stopped'].includes(item.status)),
+      awaiting_resume: value.items.some((item) => item.status === 'retryable' || item.status === 'processing')
+    }),
+    visibleExportDirectory: (token) => options.visibleDirectories?.[token] || '',
     reconcilePublishedItems(value) {
       events.push(`published:${value.token}`);
       const changed = value.doPublished;
@@ -176,6 +186,68 @@ test('status separates live executors, resumable batches, delivery and cleanup c
   assert.deepStrictEqual(cleanup, { private_work_copy_cleanup_pending: 2, expired_batch_cleanup_pending: 1 });
   assert.doesNotMatch(JSON.stringify({ status, cleanup }), /[a-e]{64}|name|path|hash/u);
   assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
+});
+
+test('latest product status selects one channel and exposes only current-run counters', () => {
+  const olderStandalone = state(tokens[0], { items: [{ status: 'released' }] });
+  olderStandalone.product_channel = 'standalone';
+  olderStandalone.created_at = '2026-08-25T10:00:00.000Z';
+  const plugin = state(tokens[1], { items: [{ status: 'released' }, { status: 'released' }] });
+  plugin.product_channel = 'plugin';
+  plugin.created_at = '2026-08-25T11:00:00.000Z';
+  const latestStandalone = state(tokens[2], { items: [
+    { status: 'released' }, { status: 'stopped' }, { status: 'deferred_review' }
+  ] });
+  latestStandalone.product_channel = 'standalone';
+  latestStandalone.created_at = '2026-08-25T12:00:00.000Z';
+  const item = fixture({ states: [olderStandalone, plugin, latestStandalone] });
+  const status = item.recovery.latestProductBatchStatus('standalone');
+  assert.deepStrictEqual(status, {
+    selected_count: 3,
+    completed_count: 1,
+    failed_count: 1,
+    review_count: 1,
+    result_count: 1,
+    export_pending_count: 0,
+    processing: false,
+    resumable: false,
+    complete: false
+  });
+  assert.doesNotMatch(JSON.stringify(status), /[a-c]{64}|batch_token|path|name|hash/u);
+  assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
+  assert.strictEqual(fixture().recovery.latestProductBatchStatus('standalone'), null);
+  assert.throws(() => item.recovery.latestProductBatchStatus('invalid'), /PRODUCT_CHANNEL_INVALID/u);
+});
+
+test('latest product result directory resolves only the exact latest completed run', () => {
+  const older = state(tokens[0], { items: [{ status: 'released' }] });
+  older.product_channel = 'standalone';
+  older.created_at = '2026-08-25T10:00:00.000Z';
+  const latest = state(tokens[1], { items: [{ status: 'released' }] });
+  latest.product_channel = 'standalone';
+  latest.created_at = '2026-08-25T12:00:00.000Z';
+  const item = fixture({
+    states: [older, latest],
+    visibleDirectories: { [tokens[0]]: 'run:older', [tokens[1]]: 'run:latest' }
+  });
+  assert.strictEqual(item.recovery.latestProductResultDirectory('standalone'), 'run:latest');
+  assert.strictEqual(item.recovery.latestProductResultDirectory('plugin'), '');
+});
+
+test('a newer active run does not hide the latest completed visible result directory', () => {
+  const completed = state(tokens[0], { items: [{ status: 'released' }] });
+  completed.product_channel = 'standalone';
+  completed.created_at = '2026-08-25T10:00:00.000Z';
+  const active = state(tokens[1], { items: [{ status: 'processing' }] });
+  active.product_channel = 'standalone';
+  active.created_at = '2026-08-25T12:00:00.000Z';
+  const item = fixture({
+    states: [completed, active],
+    visibleDirectories: { [tokens[0]]: 'run:completed' }
+  });
+  assert.strictEqual(item.recovery.latestProductResultDirectory('standalone'), 'run:completed');
+  assert.strictEqual(item.recovery.latestProductBatchStatus('standalone').processing, true,
+    'status still reports the newer active run');
 });
 
 test('lock acquisition failure skips recovery without touching journals and root-read failure still releases once', () => {
@@ -301,7 +373,7 @@ test('lock release errors remain visible instead of reporting a false successful
 
 test('the batch composition root preserves public and internal recovery facades', () => {
   const batch = require('../plugins/data-secure/server/gateway/batch');
-  for (const name of ['recoverableBatchStatus', 'localCleanupStatus', 'recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+  for (const name of ['recoverableBatchStatus', 'latestProductBatchStatus', 'localCleanupStatus', 'recoverBatches', 'cleanupExpiredBatchSnapshots']) {
     assert.strictEqual(typeof batch[name], 'function', name);
   }
   assert.strictEqual(typeof batch._test.recoverableBatchStates, 'function');

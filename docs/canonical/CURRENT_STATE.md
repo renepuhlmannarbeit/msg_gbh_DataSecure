@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 04.09.2026 · 3.2.0-rc98 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
+Stand: 04.09.2026 · 3.2.0-rc99 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
 
 ## Produkt in einem Satz
 
@@ -13,11 +13,10 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
 
 - Anwenderkanal heute: das zielsystemspezifische, selbsttragende Plugin-ZIP.
   Der private Marketplace ist der gleichwertige Zielkanal (DS-002/DS-067), aber
-  noch nicht freigegeben: Der Build erzeugt zwar eine streng validierbare,
-  selbsttragende Marketplace-Projektion mit Archivquelle, diese verweist aber
-  noch auf eine Platzhalter-URL und besitzt noch kein dort erreichbares
-  Zielartefakt. Der Marketplace-Quellordner bleibt ausschließlich ein
-  Entwicklungskatalog; Freigabe und Zielhostnachweise bleiben BL-010.8/BL-051.2.
+  noch nicht freigegeben: Der Build erzeugt eine streng validierbare,
+  selbsttragende Git-Marketplace-Projektion mit relativer Quelle. Veröffentlichung
+  in einem privaten/internen Marketplace-Repository sowie Fresh-Install- und
+  Update-Nachweise bleiben BL-010.8/BL-051.2.
 - MCPB: internes Engineering-Artefakt, kein Installations-, Fallback- oder
   Supportweg für Anwender.
 - Freigegebene Eingaben: TXT, Markdown (`.md`, `.markdown`), CSV und DOCX.
@@ -39,21 +38,24 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
   neutralen Namen gelangt nach `DataSecure-Output/Lauf-…`; Mapping, Originale,
   Review und Recovery bleiben privat. Nur ein fehlgeschlagener Export wird lokal
   vorgemerkt und beim nächsten Start oder Ordnerwechsel genau einmal nachgeholt.
-  Jede einmal geschriebene Ergebnisdatei ist endgültig, auch wenn ein anderes
-  Item desselben Laufs noch offen ist: vom Anwender gelöschte oder bearbeitete
-  sichtbare Ergebnisse werden weder überschrieben noch wiederhergestellt, und ein
-  späterer Ordnerwechsel spiegelt keine früheren Läufe in den neuen Ordner. Der
-  Outputbaum ist als rekursive Quelle gesperrt.
+  Gemäß DS-079 entsteht der sichtbare Laufordner erst, wenn der gesamte Stapel
+  einschließlich eines nötigen Sammelreviews abgeschlossen ist. Klare Positionen
+  bleiben bis dahin nur intern dauerhaft. Nach dem sichtbaren Abschluss ist jede
+  Ergebnisdatei endgültig: vom Anwender gelöschte oder bearbeitete Ergebnisse
+  werden weder überschrieben noch wiederhergestellt, und ein späterer
+  Ordnerwechsel spiegelt keine früheren Läufe in den neuen Ordner. Der Outputbaum
+  ist als rekursive Quelle gesperrt.
 
 ## Claude-/Cowork-Grenze
 
-Der lokale Plugin-MCP kann über die laufende Claude-Desktop-App oder in Claude
-Code genutzt werden, wenn `data-secure-local` tatsächlich verbunden ist. Cowork
-darf die Sitzung in der Cloud ausführen; der Plugin-MCP und die Verarbeitung der
-Originale bleiben dabei lokal auf dem Rechner. Web, Mobil und eine getrennte
-Desktop-Brücke erhalten keinen Originalzugriff. Die lokale CLI 2.1.233 validiert
+Der lokale Plugin-MCP kann in einer lokalen Cowork-Sitzung eines bestehenden
+Claude-Desktop-Deployments oder in lokalem Claude Code genutzt werden, wenn
+`data-secure-local` tatsächlich verbunden ist. Lokale MCP-Server laufen laut
+Hersteller nicht in Cloud-Sitzungen; Cloud-Cowork, Web, Mobil und geplante
+Cloud-Aufgaben erhalten deshalb keinen Originalzugriff. Die lokale CLI 2.1.233 validiert
 Quellplugin und Marketplace streng; das ist kein Fresh-Install- oder
-Cowork-Laufnachweis. Die offizielle aktuelle Hostdokumentation wird vor jeder
+Cowork-Laufnachweis. Bereits freigegebenes Markdown darf weiterhin in diesen
+Cloud-Sitzungen verwendet werden. Die offizielle aktuelle Hostdokumentation wird vor jeder
 Freigabe erneut geprüft.
 
 ## Teststand
@@ -111,11 +113,18 @@ Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
 Paketprüfung und ein isolierter Start-/Stopp-Smoke sind grün. Der Paketbau
 erzeugt die geschlossene Runtimeprojektion immer frisch aus dem aktuellen
 Quellbaum. Die Pilotoberfläche kann Ergebnis- und privaten Zuordnungsordner über
-getrennte inhaltsfreie IPC-Aktionen öffnen. Ihre Abschlusszähler sind derzeit
-noch globale Bestandszähler und müssen vor Endnutzerfreigabe auf den aktuellen
-Lauf gebunden werden. Offen bleiben Windows-UAT, Accessibility-/Performance-Messung,
-komponentenweise Rust-Lizenzklärung sowie native Builds und UATs auf macOS
-Intel/ARM und Linux.
+getrennte inhaltsfreie IPC-Aktionen öffnen. Abschluss-, Fehler-, Review- und
+Ergebniszähler stammen aus dem jüngsten Standalone-Stapel. Ein intern
+abgeschlossenes Paket ohne vollständig sichtbaren Export erscheint ehrlich als
+`export_pending`; offene Exporte werden beim Start und nach einer
+Ergebnisordnerwahl erneut versucht. Ein Teilexport bindet sein Ziel vor dem
+ersten Item und kann deshalb nicht auf zwei Ordner verteilt werden. Standalone-
+Worker delegieren terminale Meldungen an die Tauri-Oberfläche und öffnen keinen
+Cowork-Abschlussdialog. Nach Sidecar-Neustart oder verlorenem Admission-Zustand
+setzt der Renderer seine veraltete Startfreigabe zurück. Die laufgebundene
+Öffnen-Aktion und ein exklusiver Export-Outbox-Claim sind E0 geschlossen. Offen
+bleiben Windows-UAT, Accessibility-/Performance-Messung, komponentenweise
+Rust-Lizenzklärung sowie native Builds und UATs auf macOS Intel/ARM und Linux.
 
 Microsoft MarkItDown 0.1.7 ist als gepinnter, netz-/pluginfreier
 DOCX-Differential-Bridge samt Vertrag und echtem synthetischem Smoke vorbereitet.
@@ -137,9 +146,10 @@ reale Cowork-Fresh-Install- und macOS-Nachweise bleiben offen. Linux ist kein
 aktuelles Cowork-Produktziel.
 
 Die aktuelle Plugin-MCP-Konfiguration verwendet den offiziellen
-`mcpServers`-Wrapper. Eine generierte Marketplace-Projektion mit Archivquelle wird
-streng validiert; für die Produktfreigabe fehlen weiterhin ein real erreichbares
-Zielarchiv und Fresh-Install-/Update-Evidenz auf Windows und macOS.
+`mcpServers`-Wrapper. Eine generierte Marketplace-Projektion mit relativer,
+selbsttragender Pluginquelle wird streng validiert; für die Produktfreigabe fehlen
+weiterhin die Veröffentlichung in einem privaten/internen Git-Repository sowie
+Fresh-Install-/Update-Evidenz auf Windows und macOS.
 
 ### BL-003 – Product Vision und Dokumentenkanon
 Vision und Kanon sind eingerichtet. Diese Konsolidierung trennt aktuelle Quellen
@@ -211,7 +221,9 @@ fehlt.
 
 ### BL-040 – Lokaler Export und Nachweis
 Mapping und inhaltsfreie Nachweise sind implementiert; Quellen bleiben unverändert.
-BL-040.5 ergänzt den einmalig gewählten Cowork-Ergebnisordner. Der Export prüft
+BL-040.5 ergänzt den einmalig gewählten lokalen Ergebnisordner. Dieser kann
+optional separat mit Cowork verbunden werden; DataSecure kann die verbundenen
+Cowork-Ordner weder lesen noch die Quellentrennung selbst garantieren. Der Export prüft
 das Paket erneut, schreibt ausschließlich Markdown atomar unter neutralem Namen
 und veröffentlicht exklusiv ohne vorhandene Benutzerdateien zu überschreiben.
 Readiness und eine bereits aktive Verarbeitung werden vor einer erstmaligen
@@ -221,10 +233,12 @@ die ausdrückliche, inhaltsfreie Empfangsbestätigung des Intake-Workers; Timeou
 Worker-Exit vor der Bestätigung und Abbruch räumen die Aufnahme fail-closed auf. Reale
 Windows-/macOS-Cowork-Abnahme bleibt offen.
 
-Der Ergebnisstamm ist derzeit eine globale Benutzereinstellung, nicht zusätzlich
-an den einzelnen Stapel oder das Cowork-Projekt gebunden. Eine projektbezogene
-Zielbindung sowie eine sichtbare Teilprojektion bereits klarer Positionen in
-Mischstapeln sind nach dem UML-/UX-Gegencheck offene Produktentscheidungen.
+Der Ergebnisstamm ist gemäß DS-080 eine ausdrückliche geräte- und
+produktlokale Benutzereinstellung. Er wird beim Start identitätsgebunden an den
+Stapel übernommen und nur über „Ergebnisordner ändern“ gewechselt. Cowork stellt
+keinen belastbaren Projektpfad bereit; DataSecure errät ihn nicht und fragt auch
+nicht pro Projekt oder Stapel erneut. Gemäß DS-079 gibt es keine sichtbare
+Teilprojektion bereits klarer Positionen in Mischstapeln.
 
 ### BL-041 – Claude-Übergabe
 Nur verifizierte Markdown-Ergebnisse werden begrenzt übergeben. Reale

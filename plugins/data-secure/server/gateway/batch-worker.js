@@ -20,6 +20,7 @@ const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { continueIntoLocalReview } = require('./automatic-local-review');
 
 let started = false;
+const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
 
 process.once('message', async (message) => {
@@ -121,7 +122,7 @@ process.once('message', async (message) => {
       result_output_available: visibleExport.available
     };
     const { type, ...progress } = envelope;
-    await presentTerminalEnvelope({
+    const terminalOptions = {
       token: message.batch_token,
       envelope,
       reserve: reserveTerminalNotice,
@@ -134,13 +135,19 @@ process.once('message', async (message) => {
         phase: envelope.batch_phase, item_count: envelope.batch_total,
         released_count: envelope.released, stopped_count: envelope.stopped
       }
-    });
+    };
+    if (standaloneChannel) {
+      await notify(envelope);
+      recordWorkflowEvent({ ...terminalOptions.evidence, event: 'terminal_state_delegated_to_product_ui' });
+    } else {
+      await presentTerminalEnvelope(terminalOptions);
+    }
     process.exit(0);
   } catch {
     if (isNewIntake) releaseIntake(reservationId);
     const stage = checkpointCreated || isExistingBatch ? 'after_checkpoint' : 'before_checkpoint';
     try {
-      await presentTerminalEnvelope({
+      const terminalOptions = {
         token: message.batch_token,
         envelope: { type: isNewIntake ? 'local-intake-stopped' : 'local-batch-stopped', stage },
         // Before the checkpoint no journal exists to arbitrate; a live parent
@@ -151,7 +158,13 @@ process.once('message', async (message) => {
         present: () => showLocalIntakeNoticeConfirmed(stage),
         record: recordWorkflowEvent,
         evidence: { event: 'intake_terminal_state', outcome: 'stopped', error_code: 'LOCAL_WORKER_EXITED' }
-      });
+      };
+      if (standaloneChannel) {
+        await notify(terminalOptions.envelope);
+        recordWorkflowEvent({ ...terminalOptions.evidence, event: 'terminal_state_delegated_to_product_ui' });
+      } else {
+        await presentTerminalEnvelope(terminalOptions);
+      }
     } catch { /* presentation never changes the durable checkpoint */ }
     // No document-derived error reaches stdout/stderr. The durable batch
     // checkpoint is the sole recovery source for the next explicit action.

@@ -63,6 +63,11 @@ export function buildMarketplaceRepo(options = {}) {
   if (!output.startsWith(`${dist}${path.sep}`) && path.dirname(output) !== dist) throw new Error('MARKETPLACE_REPO_OUTPUT_UNSAFE');
   const target = /-(windows-x64|macos-x64|macos-arm64)-v/u.exec(path.basename(zipFile))?.[1] || 'unknown';
 
+  // rc99 replaced the unsupported single-file archive projection with this
+  // self-contained Git repository. Remove the one known legacy build product
+  // so a release operator cannot accidentally publish the obsolete contract.
+  fs.rmSync(path.join(dist, 'marketplace.release.json'), { force: true });
+
   const entries = readZip(fs.readFileSync(zipFile));
   const pluginJsonBytes = entries.get('.claude-plugin/plugin.json');
   if (!pluginJsonBytes) throw new Error('MARKETPLACE_REPO_PLUGIN_MANIFEST_MISSING');

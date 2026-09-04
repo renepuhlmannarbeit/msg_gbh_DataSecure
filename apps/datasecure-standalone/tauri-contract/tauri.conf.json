@@ -1,6 +1,6 @@
 {
   "productName": "DataSecure Standalone",
-  "version": "3.2.0-rc98",
+  "version": "3.2.0-rc99",
   "identifier": "de.msg.datasecure.standalone",
   "build": {
     "frontendDist": "../frontend"
@@ -21,12 +21,16 @@
     ],
     "security": {
       "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self'; script-src 'self'",
-      "capabilities": ["main-window"]
+      "capabilities": [
+        "main-window"
+      ]
     }
   },
   "bundle": {
     "active": true,
-    "externalBin": ["binaries/datasecure-core"],
+    "externalBin": [
+      "binaries/datasecure-core"
+    ],
     "resources": {
       "generated-runtime/server": "server"
     }

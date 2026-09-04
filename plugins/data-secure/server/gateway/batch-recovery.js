@@ -21,6 +21,10 @@ function createBatchRecovery(options = {}) {
   const releaseActiveLock = options.releaseActiveLock;
   const liveLocalExecutor = options.liveLocalExecutor;
   const publicProgress = options.publicProgress;
+  const visibleExportStatus = options.visibleExportStatus || ((_token, released) => ({
+    exported: released, pending: 0, available: released > 0
+  }));
+  const visibleExportDirectory = options.visibleExportDirectory || (() => '');
   const reconcilePublishedItems = options.reconcilePublishedItems;
   const reconcilePendingMappings = options.reconcilePendingMappings;
   const reconcilePreflightStoppedMappings = options.reconcilePreflightStoppedMappings || (() => false);
@@ -86,6 +90,74 @@ function createBatchRecovery(options = {}) {
         state.items.some((item) => item.status === deliveryPendingStatus)).length,
       batch_processing_active: processingActive
     };
+  }
+
+  function latestProductBatchState(productChannel) {
+    if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('PRODUCT_CHANNEL_INVALID');
+    let entries = [];
+    try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); } catch { return null; }
+    let latest = null;
+    let latestCreatedAt = -1;
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      const token = entry.name.slice(0, -'.json'.length);
+      if (!tokenPattern.test(token)) continue;
+      try {
+        const state = readMaintenanceState(token);
+        if (state.product_channel !== productChannel || nowMs() > Date.parse(state.expires_at)) continue;
+        const createdAt = Date.parse(state.created_at);
+        if (!Number.isFinite(createdAt) || createdAt < latestCreatedAt) continue;
+        if (createdAt === latestCreatedAt && latest && state.token.localeCompare(latest.token) <= 0) continue;
+        latest = state;
+        latestCreatedAt = createdAt;
+      } catch { /* malformed, legacy and expired journals are not product UI state */ }
+    }
+    return latest;
+  }
+
+  function latestProductBatchStatus(productChannel) {
+    const latest = latestProductBatchState(productChannel);
+    if (!latest) return null;
+    const progress = publicProgress(latest, { skipResultProjection: true });
+    const visible = visibleExportStatus(latest.token, progress.released);
+    return Object.freeze({
+      selected_count: progress.batch_total,
+      completed_count: progress.released,
+      failed_count: progress.stopped,
+      review_count: progress.deferred_review,
+      result_count: visible.available === true ? visible.exported : 0,
+      export_pending_count: visible.pending,
+      processing: progress.local_processing_active === true || progress.processing > 0,
+      resumable: progress.awaiting_resume === true,
+      complete: progress.complete === true
+    });
+  }
+
+  function latestProductResultDirectory(productChannel) {
+    if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('PRODUCT_CHANNEL_INVALID');
+    let entries = [];
+    try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); } catch { return ''; }
+    let latestDirectory = '';
+    let latestCreatedAt = -1;
+    let latestToken = '';
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      const token = entry.name.slice(0, -'.json'.length);
+      if (!tokenPattern.test(token)) continue;
+      try {
+        const state = readMaintenanceState(token);
+        if (state.product_channel !== productChannel || nowMs() > Date.parse(state.expires_at)) continue;
+        const directory = visibleExportDirectory(state.token);
+        if (!directory) continue;
+        const createdAt = Date.parse(state.created_at);
+        if (!Number.isFinite(createdAt) || createdAt < latestCreatedAt) continue;
+        if (createdAt === latestCreatedAt && latestToken && state.token.localeCompare(latestToken) <= 0) continue;
+        latestDirectory = directory;
+        latestCreatedAt = createdAt;
+        latestToken = state.token;
+      } catch { /* malformed, expired or unavailable visible runs are skipped */ }
+    }
+    return latestDirectory;
   }
 
   function localCleanupStatus() {
@@ -241,6 +313,8 @@ function createBatchRecovery(options = {}) {
     incompleteBatchState,
     recoverableBatchStates,
     recoverableBatchStatus,
+    latestProductBatchStatus,
+    latestProductResultDirectory,
     localCleanupStatus,
     recoverBatches,
     cleanupExpiredBatchSnapshots

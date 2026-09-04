@@ -1,18 +1,18 @@
 # Kanonische Zielarchitektur
 
-Stand: 02.09.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
+Stand: 04.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-078
 
 ## Architekturprinzip
 
 DataSecure ist **Cowork-gesteuert; die Originalvorverarbeitung läuft lokal**.
-Originale dürfen nur über die geöffnete Claude-Desktop-App oder in Claude Code
-dem tatsächlich verbundenen lokalen Plugin-MCP über dessen Betriebssystempicker
-zugeführt werden. Cowork darf die Sitzung in der Cloud ausführen; lokale
-Connectoren und Plugins mit lokalem MCP werden dabei über die Desktop-App erreicht,
-während der DataSecure-Prozess und die Originalverarbeitung auf dem Rechner
-bleiben. Web, Mobil, geplante Aufgaben ohne aktive Desktop-Brücke, verbundene
-Ordner oder der Desktop-Dateibroker sind kein Ersatzpfad. Ein sichtbarer Skill
-oder Plugin-Eintrag ist kein Nachweis einer lokalen Privacy-Grenze.
+Originale dürfen nur in einer lokalen Cowork-Sitzung eines bestehenden Desktop-
+Deployments oder in lokalem Claude Code dem tatsächlich verbundenen lokalen
+Plugin-MCP über dessen Betriebssystempicker zugeführt werden. Lokale Plugin-MCPs
+laufen laut Hersteller nicht in Cloud-Sitzungen. Cloud-Cowork, Web, Mobil,
+geplante Cloud-Aufgaben, verbundene Ordner oder der Desktop-Dateibroker sind
+kein Ersatzpfad; dort ist nur bereits freigegebenes Markdown zulässig. Ein
+sichtbarer Skill oder Plugin-Eintrag ist kein Nachweis einer lokalen Privacy-
+Grenze.
 
 DS-062/DS-063 schließen zusätzliche System-VMs und Windows-Benutzerkonten aus.
 DS-065 entfernt die zusätzliche Verschlüsselung lokaler Arbeitsdaten: kein

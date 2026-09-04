@@ -8,7 +8,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const manifestPath = path.join(root, 'manifest.json');
 const runtimePath = path.join(root, 'plugins', 'data-secure', 'server');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const source = fs.readFileSync(path.join(runtimePath, 'index.js'), 'utf8');
+// The protocol tables live in mcp-server.js. index.js is intentionally only
+// the small startup boundary and must not become a second protocol source.
+const source = fs.readFileSync(path.join(runtimePath, 'mcp-server.js'), 'utf8');
 const { manifestPromptText } = await import(pathToFileURL(path.join(runtimePath, 'prompt-contract.js')).href);
 
 function tableNames(table) {

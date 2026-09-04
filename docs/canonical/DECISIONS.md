@@ -5,17 +5,19 @@ Stand: 04.09.2026
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
-- **aktiv:** DS-001 bis DS-015, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-077, jeweils mit den unten
+- **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-080, jeweils mit den unten
   genannten Präzisierungen;
-- **ersetzt:** DS-016 durch DS-046, DS-019 durch DS-059 und DS-050 durch DS-065;
+- **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
+  DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
 - **teilweise präzisiert:** DS-002, DS-009, DS-020, DS-023 und DS-053 durch
   DS-067; DS-003 und DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067; DS-020 und
   DS-044 durch DS-070; DS-026 und DS-048 durch DS-071; DS-003, DS-040,
   DS-041, DS-048, DS-063, DS-064, DS-067 und DS-069 durch DS-072; DS-008, DS-026 und DS-072
   durch DS-073; DS-007, DS-018, DS-024, DS-038, DS-049, DS-060 und DS-072
   durch DS-075; DS-004, DS-028, DS-030 und DS-075 durch DS-076; DS-004,
-  DS-075 und DS-076 durch DS-077.
+  DS-075 und DS-076 durch DS-077; DS-004 und DS-034 teilweise durch DS-052;
+  DS-023 und DS-069 durch DS-080.
 
 Der aktuelle operative Status steht in
 [`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still
@@ -596,7 +598,11 @@ wegen Scopewechsel obsolet, nicht bestanden. Vorhandene historische Nachweise
 bleiben dokumentiert; normale lokale Stapel-, Abbruch-/Fortsetzungs-, Paket- und
 Cowork-Tests haben Vorrang.
 
-## DS-066 – Lokale DataSecure-Grenze bei Cloud- und Local-Cowork
+## DS-066 – Lokale DataSecure-Grenze bei Cloud- und Local-Cowork (historisch; durch DS-078 ersetzt)
+
+**Nicht mehr normativ:** Die in diesem Abschnitt beschriebene Desktop-Brücke für
+lokale Plugin-MCPs in Cloud-Sitzungen wurde durch DS-078 vollständig ersetzt.
+Aktuell gilt ausschließlich DS-078 samt Hostmatrix.
 
 Bestätigt am 01.09.2026: Die belastbare Produktzusage lautet: **Originale werden
 ausschließlich durch den lokalen DataSecure-Prozess verarbeitet; Claude erhält nur
@@ -913,3 +919,66 @@ inventarisieren, aber keine abgeschlossene Lizenzprüfung behaupten. Drag-and-
 drop und Pausieren bleiben Zielumfang, bis ein echter Befehl, Recoveryvertrag
 und UI-/Negativtests existieren. Diese Entscheidung präzisiert DS-004, DS-075
 und DS-076.
+
+## DS-078 – Lokale MCPs nur in lokaler Cowork-Sitzung
+
+Bestätigt am 04.09.2026 nach erneuter Prüfung der aktuellen offiziellen
+Cowork-Architekturdokumentation: Originale dürfen im Claude-Produkt nur in
+einer **lokalen Cowork-Sitzung eines bestehenden Desktop-Deployments** oder in
+lokal ausgeführtem Claude Code verarbeitet werden, wenn der lokale
+DataSecure-Plugin-MCP tatsächlich läuft und sein Betriebssystempicker
+erreichbar ist.
+
+Eine Cowork-Sitzung in der Cloud darf zwar verbundene lokale Dateien und den
+Browser über die geöffnete Desktop-App erreichen; diese Dateien werden dabei
+jedoch auf Anthropic-Infrastruktur verarbeitet. Lokale MCP-Server laufen laut
+Hersteller ausdrücklich nicht in Cloud-Sitzungen. Deshalb sind Cloud-Cowork,
+Web, Mobil und geplante Cloud-Aufgaben für DataSecure-Originale NO-GO – auch
+bei geöffneter Desktop-App. Sie dürfen ausschließlich bereits lokal
+freigegebenes, de-identifiziertes Markdown verwenden.
+
+Der Skill darf weder eine Desktop-Brücke als MCP-Brücke ausgeben noch einen
+Cloud-Start als lokale Vorverarbeitung bestätigen. Wenn der Host keine lokale
+Cowork-Sitzung mit verbundenem Plugin-MCP belegt, stoppt der Originalweg früh
+und verweist auf eine lokale Sitzung beziehungsweise auf DataSecure
+Standalone. Diese Entscheidung ersetzt DS-066 und präzisiert DS-002, DS-041,
+DS-051, DS-067 und die Hostmatrix.
+
+## DS-079 – Sichtbare Ergebnisse erst nach Abschluss des gesamten Stapels
+
+Bestätigt am 04.09.2026 nach Produkt-, UX-, Architektur- und Sicherheitsreview:
+Klare Dateien dürfen in einem Mischstapel intern bereits verarbeitet und als
+einzelne Positionen dauerhaft abgeschlossen sein. Der sichtbare Laufordner wird
+jedoch erst bereitgestellt, wenn alle Dateien des Stapels terminal sind und ein
+erforderlicher lokaler Sammelreview abgeschlossen wurde.
+
+Damit sieht der Anwender genau einen vollständigen, zusammengehörigen Lauf statt
+eines scheinbar fertigen Teilbestands. Abbruch und Vertagung verlieren keine
+interne Arbeit; nach Fortsetzung wird nur der noch offene Rest bearbeitet. Vor
+dem terminalen Abschluss melden Cowork und Standalone keine sichtbaren Ergebnisse
+und bieten den Laufordner nicht zum Öffnen an. Diese Entscheidung präzisiert
+DS-023, DS-043, DS-068 und DS-069.
+
+## DS-080 – Ein expliziter Ergebnisordner statt Workspace-Erkennung
+
+Bestätigt am 04.09.2026 nach Produkt-, Cowork-, UX-, Architektur- und
+Sicherheitsgegencheck: Cowork stellt dem lokalen Plugin-MCP keinen belastbaren
+aktuellen Projekt- oder Workspacepfad bereit. DataSecure errät ihn deshalb nicht
+und wechselt das Ausgabeziel bei einem Cowork-Projektwechsel niemals unbemerkt.
+
+Cowork-Plugin und Standalone speichern auf dem jeweiligen Gerät genau einen vom
+Anwender ausdrücklich gewählten lokalen Ergebnisstamm. Beim Cowork-Plugin kann
+der dedizierte Ergebnisordner zusätzlich mit Cowork verbunden werden, damit Claude
+freigegebene Ergebnisse anschließend verwenden kann. DataSecure erhält jedoch
+keine Liste verbundener Cowork-Ordner und kann die Trennung vom Quellordner nicht
+selbst attestieren; sie bleibt Setup- und UAT-Voraussetzung. DataSecure legt
+darunter ausschließlich `DataSecure-Output` an. Originale, Mapping, Review-,
+Diagnose- und Recoverydaten bleiben außerhalb.
+
+Nach erfolgreicher Erstwahl gibt es keine erneute Ergebnisfrage pro Datei,
+Stapel oder Cowork-Projekt. Der Anwender kann das Ziel jederzeit über die
+ausdrückliche Einstellung „Ergebnisordner ändern“ wechseln, sofern kein Stapel
+offen ist. Ein Wechsel wirkt nur für künftige sichtbare Exporte und spiegelt
+keine abgeschlossenen Läufe. Diese Entscheidung präzisiert DS-023, DS-069 und
+DS-079 und schließt die projektbezogene Zielbindung bewusst ohne zusätzliche
+Bestätigungsorgie.

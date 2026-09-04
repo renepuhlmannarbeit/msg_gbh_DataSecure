@@ -15,6 +15,7 @@ const {
 } = require('./batch');
 const { showBatchStateNoticeConfirmed } = require('../companion/completion-summary');
 const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
+const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
 const { terminalVisibleExport } = require('./result-export');
@@ -81,7 +82,12 @@ process.once('message', async (message) => {
       result_output_available: visibleExport.available
     };
     const deliberatelyPaused = ['LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_DEFERRED'].includes(result.error);
-    if (!deliberatelyPaused) await presentTerminalEnvelope({
+    if (!deliberatelyPaused && standaloneChannel) {
+      await notify(envelope);
+      recordWorkflowEvent({ event: 'terminal_state_delegated_to_product_ui', outcome: 'ok',
+        phase: presentedResult.batch_phase, item_count: presentedResult.batch_total,
+        released_count: presentedResult.released, stopped_count: presentedResult.stopped });
+    } else if (!deliberatelyPaused) await presentTerminalEnvelope({
       token,
       envelope,
       reserve: reserveTerminalNotice,

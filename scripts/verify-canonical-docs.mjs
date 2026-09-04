@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const canonical = path.join(root, 'docs', 'canonical');
-const required = ['README.md', 'DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md', 'UML_ARCHITECTURE.md', 'STANDALONE_ARCHITECTURE.md', 'REFACTORING_PLAN.md', 'DOCUMENT_REGISTER.md', 'BACKLOG.md', 'BACKLOG_ARCHIVE_2026-08.md', 'BACKLOG_ARCHIVE_2026-09.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'OPEN_SOURCE_COMPONENTS.md', 'BACKLOG_EVIDENCE_MATRIX.md'];
+const required = ['README.md', 'DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md', 'UML_ARCHITECTURE.md', 'STANDALONE_ARCHITECTURE.md', 'STANDALONE_SECURITY_MODEL.md', 'REFACTORING_PLAN.md', 'DOCUMENT_REGISTER.md', 'DOCUMENT_INDEX.json', 'BACKLOG.md', 'BACKLOG_ARCHIVE_2026-08.md', 'BACKLOG_ARCHIVE_2026-09.md', 'CURRENT_STATE.md', 'TRACEABILITY.md', 'TARGET_CAPABILITIES.json', 'HOST_MATRIX_V1.json', 'OPEN_SOURCE_COMPONENTS.md', 'BACKLOG_EVIDENCE_MATRIX.md'];
 
 for (const file of required) {
   if (!fs.existsSync(path.join(canonical, file))) throw new Error(`missing canonical document: ${file}`);
@@ -20,7 +20,28 @@ const indexText = read('README.md');
 const productText = read('PRODUCT.md');
 const openSourceText = read('OPEN_SOURCE_COMPONENTS.md');
 const target = JSON.parse(read('TARGET_CAPABILITIES.json'));
+const documentIndex = JSON.parse(read('DOCUMENT_INDEX.json'));
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+
+if (documentIndex.schema !== 'datasecure-document-index/1' || !Array.isArray(documentIndex.documents)) {
+  throw new Error('canonical document index is invalid');
+}
+const documentIds = new Set();
+const documentPaths = new Set();
+for (const entry of documentIndex.documents) {
+  const fields = ['id', 'path', 'class', 'status', 'products', 'owner', 'version_policy', 'superseded_by', 'decisions', 'backlog_ids'];
+  if (!entry || Object.keys(entry).sort().join('|') !== fields.sort().join('|') ||
+      !/^[A-Z0-9-]+$/u.test(entry.id) || !['active', 'historical', 'superseded'].includes(entry.status) ||
+      !Array.isArray(entry.products) || entry.products.length === 0 || !Array.isArray(entry.decisions) ||
+      !Array.isArray(entry.backlog_ids)) throw new Error(`invalid document index entry: ${entry?.id || 'unknown'}`);
+  if (documentIds.has(entry.id) || documentPaths.has(entry.path)) throw new Error(`duplicate document index entry: ${entry.id}`);
+  documentIds.add(entry.id);
+  documentPaths.add(entry.path);
+  if (!fs.existsSync(path.join(root, entry.path))) throw new Error(`indexed document is missing: ${entry.path}`);
+}
+for (const file of required) {
+  if (!documentPaths.has(`docs/canonical/${file}`)) throw new Error(`canonical document missing from machine index: ${file}`);
+}
 
 const collect = (text, pattern) => [...text.matchAll(pattern)].map((match) => match[1]);
 const decisions = collect(decisionsText, /^## (DS-\d{3})\b/gm);
@@ -43,9 +64,18 @@ unique(currentBacklog, 'current-state backlog ids');
 if (!decisions.length || !backlog.length || !stories.length) {
   throw new Error('canonical decisions, epics, or stories are empty');
 }
-if (!/\*\*ersetzt:\*\*[^\n]*DS-050[^\n]*DS-065/u.test(decisionsText) ||
+if (!/\*\*ersetzt:\*\*[\s\S]*?DS-050 durch DS-065/u.test(decisionsText) ||
     !decisionsText.includes('teilweise präzisiert')) {
   throw new Error('decision register does not distinguish active and superseded decisions');
+}
+for (const pair of [['DS-013', 'DS-043'], ['DS-015', 'DS-045'], ['DS-066', 'DS-078']]) {
+  if (!decisionsText.includes(`${pair[0]} durch ${pair[1]}`)) {
+    throw new Error(`decision register is missing supersession ${pair[0]} -> ${pair[1]}`);
+  }
+  const traceRow = traceText.match(new RegExp(`^\\| ${pair[0]} \\|[^\\n]+$`, 'm'))?.[0] ?? '';
+  if (!traceRow.includes(`durch ${pair[1]} ersetzt`)) {
+    throw new Error(`traceability is missing supersession ${pair[0]} -> ${pair[1]}`);
+  }
 }
 
 for (const id of stories) {
@@ -105,6 +135,19 @@ if (target.reuse_policy?.open_source_first !== true ||
 }
 if (!backlogText.includes('Code, Tests, `BACKLOG.md`, `CURRENT_STATE.md` und')) {
   throw new Error('definition of done does not require backlog progress maintenance');
+}
+
+const registerText = read('DOCUMENT_REGISTER.md');
+for (const evidenceDoc of ['docs/FORMAT_COVERAGE_MATRIX.md', 'docs/DETECTOR_BENCHMARK.md']) {
+  if (!registerText.includes(evidenceDoc)) throw new Error(`document register is missing ${evidenceDoc}`);
+}
+if (!fs.readFileSync(path.join(root, 'docs', 'IT-BETRIEBSHANDBUCH.md'), 'utf8').includes('`events\\`')) {
+  throw new Error('operations handbook does not describe the current immutable diagnostic spool');
+}
+const host = JSON.parse(read('HOST_MATRIX_V1.json'));
+if (host.cloud_session_local_mcp_access !== 'not_available' ||
+    host.hosts.find((entry) => entry.id === 'cloud_cowork_web_or_mobile')?.originals_allowed_after_gate !== false) {
+  throw new Error('host matrix must deny originals to cloud sessions and local MCP access in cloud');
 }
 
 console.log(`Canonical documentation: PASS (${decisions.length} decisions, ${backlog.length} epics, ${stories.length} stories)`);

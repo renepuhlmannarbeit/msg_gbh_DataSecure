@@ -4,7 +4,6 @@
   "windows": ["main"],
   "local": true,
   "permissions": [
-    "core:default",
     "allow-select-files",
     "allow-select-folder",
     "allow-cancel-admission",

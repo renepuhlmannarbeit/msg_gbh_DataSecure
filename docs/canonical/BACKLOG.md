@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 04.09.2026 · Produktstand 3.2.0-rc98
+Stand: 04.09.2026 · Produktstand 3.2.0-rc99
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -23,7 +23,7 @@ folgenden Produkt- und Zielhostnachweise nicht.
 | 1 | BL-002, BL-051.2, BL-052.1 | Produkt-, Legacy- und Engineering-Tests sowie GitHub-Workflows trennen; aktuellen UAT-Generator wirklich ausführen; Batch-Maintenance in die Produktregression aufnehmen. | **E0 erledigt** |
 | 2 | BL-001, BL-002, BL-003 | `SECURITY.md`, Third-Party-Notices, Companion-/Governance-Altverträge, Register, Archivlinks und dokumentgesteuerte Link-/Driftgates auf den aktuellen Produktvertrag bringen. | **erledigt** |
 | 3 | BL-012.2, BL-041.7, BL-044.1 | Keine stille Ordnerteilmenge, ehrliche Startbestätigung erst nach dauerhaftem Checkpoint und ausdrücklicher Prompt-Injection-Vertrag für übergebenes Markdown. | **E0 erledigt** |
-| 4 | BL-010.7, BL-010.1, BL-041.7 | Cowork-Hostmatrix auf die zwei getrennten Ebenen festlegen: Cowork läuft standardmäßig in der Cloud, der Plugin-MCP und die Originalverarbeitung lokal über die aktive Desktop-Brücke; nur Web/Mobil/geplante Sitzungen ohne diese Brücke sind NO-GO für Originale. | **E0 erledigt** |
+| 4 | BL-010.7, BL-010.1, BL-041.7 | Cowork-Hostmatrix gemäß DS-078 korrigieren: Originale nur in lokaler Cowork-Sitzung eines bestehenden Desktop-Deployments mit laufendem Plugin-MCP oder lokalem Claude Code; Cloud-Cowork/Web/Mobil/Scheduled nutzen ausschließlich bereits freigegebenes Markdown. | **E0 erledigt; Zielhostevidenz offen** |
 | 5 | BL-010.8, BL-010.1, BL-010.2, BL-010.3 | Selbsttragende Plugin-Runtime ohne System-Node für Windows x64 und macOS Intel/ARM bauen, paketieren und automatisiert prüfen. | **E0 implementiert; Zielhostevidenz offen** |
 | 6 | BL-051.1, BL-051.2, BL-051.3, BL-051.5, BL-052.1–BL-052.5 | Fresh Install, Marketplace-Lebenszyklus, sichtbarer Cowork-Ablauf, Accessibility, Fach-/Security-/Datenschutz- und Anwenderabnahme mit dem ausführbaren UAT-Kit. | **menschliche Evidenz nach 1–5** |
 
@@ -119,8 +119,6 @@ diese Claude-Temporärprojektion und bindet Produktzustand und Runtime-Cache an
 das bestehende reguläre Windows-Benutzerprofil (DS-073). Der RC97-
 Wiederholungslauf bleibt E1-Evidenz.
 
-| Story | Lieferung | Status |
-|---|---|---|
 #### Standalone ohne Claude/Cowork und sichere MarkItDown-Konvertierung
 
 Detailarchitektur: [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
@@ -137,8 +135,8 @@ Windows-x64-Engineering-Piloten, WebView2-Voraussetzung und Evidencegrenzen.
 | BL-010.10 | Schlanke technische CLI für Datei-/Ordnerwahl, automatische Profilerkennung, Standard-Ergebnisordner und Ergebnisordneröffnung. Keine Rohpfade in Argumenten oder Ausgaben; kein Endnutzer-Terminal im freigegebenen Produkt. | **erledigt** |
 | BL-010.11 | Native Desktop-Hülle: Tauri 2 ist gemäß DS-076/077 gesetzt. Reale Rust-Hülle, Tauri-CSP/Capability-Grenze, nativer Datei-/Ordnerpicker, korrelierter bidirektionaler Core-Dispatcher mit begrenzten Längenframes, 30-Sekunden-Antwortgrenze, Ready-Handshake, Neustart nach IPC-Fehler, Sidecar-Lifecycle und inhaltsfreie Rendererprojektion sind implementiert. Der Renderer besitzt keine direkten Dialog-, Datei-, Shell- oder Netzrechte. Windows x64 ist kompiliert und als laufender Engineering-Prozess sowie im selbsttragenden Pilot-ZIP geprüft. Offen sind Kaltstart p50 ≤1,5 s/p95 ≤2,5 s, Hülle ≤20 MiB ohne Core, Tastatur/Screenreader, Update/Rollback, Null-Listener-Nachweis und native Zielhost-Spikes auf macOS Intel/ARM und Linux x64. | **in Arbeit** |
 | BL-010.12 | Ein Bestätigungsbild mit Anzahl und grober Größe; danach passiver Fortschritt ohne Modal je Datei. Native Mehrfachauswahl und Ordnerauswahl führen die Pfade nur im privaten Rust-Core-Kanal; der Core prüft absolute Pfade, NUL/leer/Duplikate und startet erst nach **Anonymisierung starten**, ohne zweiten Picker. Zähler-/Größenprojektion und Grundfluss stehen. Offen sind die UI-Aufteilung direkt/konvertierbar/gesperrt/verschlüsselt sowie E2 für 100 Dateien und 500 MiB. | **in Arbeit** |
-| BL-010.13 | Bestehenden Sammelreview und Klar-Datei-Pfad wiederverwenden. **Ergebnisse öffnen** und **Zuordnung öffnen** sind über getrennte geschlossene IPC-Aktionen implementiert; der Renderer erhält weder Pfad noch Zuordnungsinhalt. Offen bleibt, Abschlusszähler und Ergebnisordner identitätsgebunden auf exakt den aktuellen Lauf statt auf globale Bestände zu beziehen. Im ersten Tauri-Spike bleibt der bestehende lokale Core-Reviewer zuständig. Ein integrierter Tauri-Review erfordert später einen eigenen, größenbegrenzten Review-Draft-/Entscheidungsvertrag; bis dahin keine funktionslose `submit_review`-Aktion im Renderer. | **in Arbeit** |
-| BL-010.14 | Absturz-/Abbruchfortsetzung, genau ein aktiver Stapel, keine Doppelverarbeitung, Quellen unverändert und niemals automatisch gelöscht. Der öffentliche Stand zeigt vorhandene fortsetzbare Stapel jetzt als `stopped`/`resumable`; echter Desktop-Absturz-/Neustart-UAT bleibt offen. | **in Arbeit** |
+| BL-010.13 | Bestehenden Sammelreview und Klar-Datei-Pfad wiederverwenden. **Ergebnisse öffnen** und **Zuordnung öffnen** sind über getrennte geschlossene IPC-Aktionen implementiert; der Renderer erhält weder Pfad noch Zuordnungsinhalt. Abschluss-, Fehler-, Review- und sichtbare Ergebniszähler stammen nur aus dem jüngsten Standalone-Stapel; ein interner Paketabschluss ohne sichtbaren Export erscheint ehrlich als `export_pending`. Der Export-Outbox wird beim App-Start und nach Ergebnisordnerwahl nachgeholt. **Ergebnisse öffnen** bindet jetzt exakt den vollständig sichtbaren aktuellen `Lauf-*`-Ordner und verweigert offene Mischstapel. Im ersten Tauri-Spike bleibt der bestehende lokale Core-Reviewer zuständig. Ein integrierter Tauri-Review erfordert später einen eigenen, größenbegrenzten Review-Draft-/Entscheidungsvertrag. | **in Arbeit** |
+| BL-010.14 | Absturz-/Abbruchfortsetzung, genau ein aktiver Stapel, keine Doppelverarbeitung, Quellen unverändert und niemals automatisch gelöscht. Der öffentliche Stand zeigt vorhandene fortsetzbare Stapel als `stopped`/`resumable`; nach Sidecar-Neustart oder verlorenem Admission-Zustand setzt der Renderer die veraltete Startfreigabe zurück und verlangt eine neue lokale Auswahl. Echter Desktop-Absturz-/Neustart-UAT bleibt offen. | **in Arbeit** |
 | BL-010.15 | MarkItDown 0.1.7 als gepinnter, deaktivierter DOCX-Differentialadapter: Byte-Stream, nur expliziter DOCX-Konverter, Plugins/Built-ins/Netzwerk/LLM/OCR aus, keine persistierte rohe Markdown-Datei. Engineering-Bridge startet mit `-I -S`, erbt weder Host-TEMP noch PATH und kennzeichnet ihr ungerahmtes stdin/stdout ehrlich als nicht authentisierten Testpfad. | **in Arbeit** |
 | BL-010.16 | Exakt gepinnte portable CPython-3.12-Patchversion und zunächst nur `markitdown[docx]==0.1.7` samt Hash-Wheellock für Windows x64, macOS Intel/ARM und Linux x64 glibc offline bündeln; NOTICE, SBOM, reproduzierbare Inventur, kein Runtime-Install. | **offen** |
 | BL-010.17 | MarkItDown als gleichrangigen isolierten Worker über Windows-/POSIX-Supervisor anbinden: CPU/RAM/Zeit/Ausgabe/Prozessgruppe begrenzen, exklusiv geerbte gerahmte IPC mit Prozessbesitz statt eines schein-authentisierten offenen Kanals, private produktgebundene Tempwurzel, Crash und Abbruch fortsetzbar. Netzwerkbehauptung bleibt auf nachweislich fehlende Produktfunktion und negative Canaries begrenzt; keine unbelegte Kernel-Sandbox-Zusage. | **offen** |
@@ -153,6 +151,32 @@ Windows-x64-Engineering-Piloten, WebView2-Voraussetzung und Evidencegrenzen.
 | BL-010.26 | Diagnose- und Fehlerübersetzung: neutrales Core-Journal, getrennte Plugin- und Standalone-Ereignisse, PII-Sentineltests über Quelle/Konverter/OCR/Fehler; jeder feste Domaincode erhält eine kurze handlungsfähige UI-Meldung. Geschlossene Standalone-Startspur steht E0. | **in Arbeit** |
 | BL-010.27 | Releasehygiene des Standalone-Piloten: Windows verwendet das vorhandene System-WebView2 ohne Laufzeitdownload; verständlicher Fehlhinweis und UAT bei fehlender Runtime. Rust-Toolchain für Builder exakt pinnen. Vor Endnutzerfreigabe alle ausgelieferten Rust-Crates komponentenweise lizenzprüfen und das SBOM mit belastbaren Lizenzwerten ergänzen. Drag-and-drop und Pause bleiben bis zu eigener Implementierung und Recovery-/UI-Tests außerhalb der Istzusage. | **in Arbeit** |
 
+### Zweiter unabhängiger Konsolidierungsreview 04.09.2026
+
+Code-/Architektur- und Kanonreview wurden unabhängig durchgeführt und gegen die
+aktuelle Herstellerdokumentation revalidiert. E0 geschlossen sind die
+laufgebundenen Standalone-Zähler, der ehrliche `export_pending`-Zustand, Replay
+offener Exporte beim Start/Ordnerwechsel, feste Zielbindung vor dem ersten
+Teilexport, keine Cowork-Abschlussdialoge aus dem Standalone-Worker sowie der
+UI-Reset nach verlorenem Sidecar-Admission. DS-078 korrigiert die frühere
+Cloud-/Desktop-Brücken-Annahme. Der RC-Synchronisierer bindet nun auch Tauri-
+Konfiguration, Rust-Paket, Zielartefaktnamen und alle aktuellen Standalone-
+Nachweise; ein Vertragstest verhindert künftig gemischte Produktversionen.
+Das dimensionsübergreifende Abschlussurteil mit der getrennten Evidencegrenze
+für beide Produkte steht in
+[`REVIEW_BEIDE_PRODUKTE_2026-09-04.md`](../REVIEW_BEIDE_PRODUKTE_2026-09-04.md).
+
+| Restbefund | Story | Prio | Nächste Lieferung |
+|---|---|---|---|
+| `get_public_state` rief vor dem jüngsten Stapelstatus den umfangreichen globalen Status ab. | BL-047.1, BL-010.13 | erledigt | eigenständige leichte Standalone-Statusabfrage liest nur Startup-, Aktivitäts- und Recovery-Zustand; 100-Dateien-Zielhostbenchmark bleibt E1 |
+| Ein offener Export-Outbox-Eintrag besitzt keinen exklusiven prozessweiten Claim. | BL-040.6 | erledigt | atomarer Claim serialisiert Terminalexport und Replay; Live-Claim und Wiederanlauf regressionsgetestet |
+| „Ergebnisse öffnen“ öffnet den globalen Outputstamm statt exakt den aktuellen Lauf. | BL-010.13, BL-040.6 | erledigt | laufgebundene, inhaltsfreie Öffnen-Aktion verweigert unvollständige Läufe |
+| Worker-Empfangsbestätigung liegt noch vor dem dauerhaften ersten Stapelcheckpoint. | BL-011.8, BL-043 | P2 | Handoff- und Checkpointstatus trennen; ACK-/Crash-Negativtests |
+| PID-Wiederverwendung kann eine tote Executor-Lease als lebendig erscheinen lassen. | BL-011.11 | P2 | exklusiver prozessgebundener Lock-Handle statt PID-Helfer |
+| Presenter-Start beweist noch keine sichtbare Abschlussdarstellung. | BL-041.10, BL-012.2 | P1 | plattformneutraler `SHOWN`-Handshake plus genau ein Fallback |
+| Core-/Policy-Fingerprint und vollständige neutrale Core-API fehlen zwischen beiden Produkten. | BL-010.9, BL-010.23 | P1 | Plugin-Komposition entkoppeln und Golden-Korpus produktübergreifend binden |
+| Dokumentkanon besaß keinen vollständigen maschinenlesbaren Index aller aktuellen Dokumentklassen. | BL-003.9 | erledigt | `DOCUMENT_INDEX.json` bindet Status, Geltungsbereich, Eigentümer, Supersession und Entscheidungen; Driftgate läuft in `test:docs` |
+
 ### P0 – einfacher lokaler Sammelreview nach DS-068
 
 Der verbindliche Detailvertrag ist
@@ -164,7 +188,7 @@ Anwenderevidenz bleibt ausdrücklich getrennt.
 |---|---|---|---|
 | 1 · BL-012.9 | Den bestehenden lokalen Sammelreview als einzigen Reviewweg behalten. Nur `deferred_review`-Dateien werden lokal rekonstruiert; Reviewtext bleibt in `stdin`/Speicher, Journal, MCP und Diagnose bleiben inhaltsfrei. Abbruch, Vertagung, Timeout und Teilpublikation bewahren vorhandene Ergebnisse. | ein begrenzter Reviewer-Aufruf je Prüfgruppe; keine Rohdaten in Argumenten/Metadaten; Negativ- und Teilabbruchtests grün | **E0 erledigt** · E1/E2 Windows/macOS offen |
 | 2 · BL-012.10 | PII-Shield-Interaktionen sicher übernehmen: rot/gelb, direkte fachliche Aktionen, automatisch/bereits/jetzt/danach-Zähler, Rückgängig, exakte Gruppenaktion, eine Schlussfreigabe und Windows-Kürzel `Alt+Z`, `Alt+O`, `Alt+R`, `Strg+Enter`, `Esc`. | UI-Vertrag für Windows/macOS/Linux, Fortschrittsmodell und inhaltsfreie Projektion getestet | **E0 erledigt** · Fokus/A11y/Verständlichkeit E2 offen |
-| 3 · BL-043.1 | Klare Dateien automatisch lokal abschließen. Mischstapel veröffentlichen klare Positionen vor dem Review; vollständig klare Stapel öffnen keine Review-UI. Die Reviewgruppe enthält nur tatsächlich mehrdeutige Dateien. | vollständiger Klarstapel: null Reviewaufrufe und 100 Prozent abgeschlossen; Mischstapel: korrekte Zähler und nur eine offene Datei im Review | **E0 erledigt** · beobachteter Cowork-Lauf E2 offen |
+| 3 · BL-043.1 | Klare Dateien automatisch intern abschließen. Gemäß DS-079 bleibt der sichtbare Laufordner eines Mischstapels bis zum abgeschlossenen Review verborgen; vollständig klare Stapel öffnen keine Review-UI. Die Reviewgruppe enthält nur tatsächlich mehrdeutige Dateien. | vollständiger Klarstapel: null Reviewaufrufe und 100 Prozent abgeschlossen; Mischstapel: korrekte Zähler, nur offene Dateien im Review und kein sichtbarer Teillauf | **E0 erledigt** · beobachteter Cowork-Lauf E2 offen |
 
 | Aus PII-Shield bewertete Idee | Entscheidung | Backlogfolge |
 |---|---|---|
@@ -184,7 +208,7 @@ DS-035, DS-036, DS-037, DS-038, DS-039, DS-040, DS-041, DS-042, DS-043,
 DS-044, DS-045, DS-046, DS-047, DS-048, DS-049, DS-050, DS-051, DS-052,
 DS-053, DS-054, DS-055, DS-056, DS-057, DS-058, DS-059, DS-060, DS-061,
 DS-062, DS-063, DS-064, DS-065, DS-066, DS-067, DS-068, DS-069, DS-070,
-DS-071, DS-072, DS-073 und DS-074.
+DS-071, DS-072, DS-073, DS-074, DS-075, DS-076, DS-077, DS-078, DS-079 und DS-080.
 
 ## A. Eigenständig lieferbare Entwicklung
 
@@ -194,11 +218,13 @@ DS-071, DS-072, DS-073 und DS-074.
 | BL-024.2 | Der Engineering-Portable-Build übernimmt das verifizierte Universal-OCR-Bundle vollständig. Geschlossene Manifest-/Inventar-/Modus-/Hashgates, Installationspfade mit Leerzeichen, Adapter-Timeout und laufender Abbruch sind regressionsgetestet; der SEA-Engineering-Build behält das belegte OCR-Testbundle. Offen bleiben die kohärente Aufnahme in freizugebende Produktziele, ein nicht allein per Manifest aktivierbares Produktgate und ein echter Paket-zu-Adapter-zu-OCR-End-to-End-Test. PNG/JPEG/BMP-Freigabe bleibt getrennt BL-024.3. | **in Arbeit** |
 | BL-042.3 | Inhaltsfreie Status-App um terminale bounded Zustände, vollständige Textfallback-Matrix und automatisierte Browser-/A11y-/DE-EN-DOM-Gates ergänzen. Der Windows-/CWD-unabhängige reproduzierbare Build sowie beide zulässigen Varianten für „Stapel läuft bereits“ sind korrigiert und regressionsgetestet. | **in Arbeit** |
 | BL-042.4 | Gemäß DS-074 UML-basierte Supportdiagnose: separate manuelle Debug-ZIP-Variante, gleicher Enginepfad, geschlossene JSON-Ereignisse an MCP-, Picker-, Worker-, Review- und Exportgrenzen. Fach-, Workflow- und Supportdiagnose verwenden dieselbe mehrprozesssichere Einzelereignis-Komponente; Alters- und Mengengrenzen werden physisch bereinigt, historisches JSONL bleibt nur lesbarer Upgradebestand. Keine Rohkommunikation und keine Wirkung auf Freigaben. E0 ist erledigt; echter Cowork-Supportlauf bleibt E1. | **in Arbeit** |
+| BL-040.6 | Sichtbaren Export je Lauf und Zielunterordner identitätsgebunden serialisieren; ein Prozessclaim verhindert konkurrierende Record-Schreiber, ein ausgetauschter `DataSecure-Output` stoppt den Restexport, und lokale Öffnen-Aktionen wählen nur den vollständig abgeschlossenen aktuellen Lauf. Mischstapel bleiben gemäß DS-079 bis zum Gesamtabschluss unsichtbar. | **erledigt** |
+| BL-003.9 | Maschinenlesbarer Dokumentindex mit Klasse, Status, Produktgeltung, Eigentümer, Versionsregel, Ablösung und Backlogbindung; Driftgate prüft Existenz, Eindeutigkeit und Kanonvollständigkeit. | **erledigt** |
 
 ### Offene Restbefunde aus dem Gesamtgegenreview 02.09.2026
 
 Belegte, nicht behobene Befunde des Claude-Code-Gesamtgegenreviews (Bericht
-`tasks/CLAUDE-CODE-GESAMTREVIEW-BERICHT-RC86.md`). Sie sind ihren bestehenden
+`tasks/archiv/2026-09-03-claude-code-gesamtreview-bericht-rc86.md`). Sie sind ihren bestehenden
 Storys zugeordnet und keine neuen Storys; Unterredaktion wiegt schwerer als
 Komfort.
 
@@ -216,31 +242,39 @@ Komfort.
 ### Restbefunde aus UML-, Architektur-, UX- und Fehlergegencheck 04.09.2026
 
 Die UML-Prüfung hat die Zustandsmodelle von Dokumentposition, abgeleiteter
-Stapelphase und kurzlebiger Reservation getrennt. Fünf technische Defekte sind
+Stapelphase und kurzlebiger Reservation getrennt. Sechs technische Defekte sind
 E0 geschlossen: Setupdialoge erst nach Readiness-/Aktivitätsprüfung,
 zweckspezifische Pickerfehler, mehrprozesssichere und physisch bereinigte
 Diagnoseereignisse sowie exklusive Ergebnisveröffentlichung ohne
-Überschreibungsrennen und eine begrenzte JSON-RPC-Frameaufnahme. Die folgenden Punkte bleiben echte Lieferungen und werden
+Überschreibungsrennen, eine begrenzte JSON-RPC-Frameaufnahme und die wieder
+aus der kanonischen Protokolldatei erzeugte MCPB-Engineering-Metadatenprojektion.
+Das veraltete Marketplace-Einzeldateiartefakt wird beim Build entfernt. Die folgenden Punkte bleiben echte Lieferungen und werden
 nicht durch Diagramme als erledigt dargestellt:
 
 | Befund | Story | Prio | Nächste Lieferung |
 |---|---|---|---|
 | Der Abschluss gilt nach erfolgreichem Presenter-Start als übernommen, nicht erst nach einer belegten sichtbaren Darstellung. | BL-041.10, BL-012.2 | P1 | plattformneutraler `SHOWN`-Handshake mit genau einem Fallback und E1-Cowork-Beobachtung |
-| Der Ergebnisstamm ist eine globale Einstellung. Ein Wechsel des Cowork-Projekts kann daher unbemerkt weiter in den zuvor gewählten Projektordner exportieren. Cowork stellt dem MCP keinen belastbaren aktuellen Workspacepfad bereit; DataSecure darf ihn nicht erraten. | BL-040.5 | P1 | explizit gewählten Standard beim Start identitätsgebunden an den Stapel binden; Änderung nur über „Ergebnisordner ändern“, keine Rückfrage pro Lauf |
-| Klare Positionen eines Mischstapels sind intern veröffentlicht, der sichtbare Export wartet aber auf den terminalen Gesamtstapel. | BL-043.1, BL-040.5 | P1 · Entscheidung | sichere Teilprojektion mit eindeutigem Status oder heutige terminale Semantik ausdrücklich beibehalten |
+| Der Ergebnisstamm ist eine ausdrückliche geräte- und produktlokale Einstellung. Cowork stellt dem MCP keinen belastbaren aktuellen Workspacepfad bereit; DataSecure darf ihn nicht erraten. | BL-040.5 | entschieden | DS-080: Ziel beim Start identitätsgebunden an den Stapel binden; Änderung nur über „Ergebnisordner ändern“, keine Rückfrage und kein heimlicher Wechsel pro Projekt oder Lauf |
+| Klare Positionen eines Mischstapels sind intern dauerhaft, der sichtbare Export wartet auf den terminalen Gesamtstapel. | BL-043.1, BL-040.6 | entschieden | DS-079 behält die terminale sichtbare Semantik ausdrücklich bei; E0-Negativtest verhindert Teillauföffnung |
 | Windows besitzt einen echten Sammelreview; macOS/Linux verwenden weiterhin einzelne modale Entscheidungen. | BL-012.9, BL-012.10 | P1 | ein gemeinsames Review-View-Model und je freigegebenem Zielhost genau ein lokaler Sammeladapter; einzelne Dialoge bleiben Engineering-Fallback, nicht Produktweg |
-| „Ergebnisse öffnen“ öffnet den Output-Stamm statt zwingend den aktuellen Lauf; Linux besitzt noch keine gleichwertige Öffnen-Aktion. | BL-041.10 | P2 | aktuellen `Lauf-*`-Ordner identitätsgebunden öffnen und Linux-Aktion/Fallback konkretisieren |
-| Ein offener Export-Outbox-Eintrag besitzt noch keinen exklusiven prozessweiten Claim. | BL-040.5 | P2 | Replay/Terminalexport über atomaren Claim serialisieren; Wiederanlauf und Crash testen |
+| „Ergebnisse öffnen“ öffnete den Output-Stamm statt zwingend den aktuellen Lauf. | BL-010.13, BL-040.6 | erledigt | exakter vollständiger `Lauf-*`-Ordner wird im vertrauenswürdigen Prozess auf allen unterstützten Shellpfaden geöffnet; Zielhostbeobachtung bleibt E1 |
+| Ein offener Export-Outbox-Eintrag besaß keinen exklusiven prozessweiten Claim. | BL-040.6 | erledigt | Replay und Terminalexport sind über atomaren Claim serialisiert; Live-Claim, Zielaustausch und Wiederanlauf sind regressionsgetestet |
 | Die Worker-Empfangsbestätigung belegt validierte Nachrichtenannahme, aber noch keinen dauerhaften ersten Stapelcheckpoint. | BL-011.8, BL-043 | P2 | Handoff- und Checkpoint-Semantik trennen und den Nutzerstatus entsprechend benennen |
 | Lange Stapel besitzen außerhalb geöffneter lokaler Fenster keine passive lokale Fortschrittsanzeige. | BL-012.6, BL-042.3 | P2 | inhaltsfreie, nicht störende lokale Fortschrittsprojektion ohne Polling durch Claude |
 | Skill und Server spiegeln Teile der Zustandsentscheidung und können sprachlich oder logisch auseinanderlaufen. | BL-041.1 | P3 | Skill auf Intent/Toolwahl begrenzen, Serverantwort als einzige Zustandswahrheit kontraktprüfen |
+| GitHub-synchronisierte Organisations-Marketplaces unterstützen die zuvor erzeugte `archive`-Quelle nicht. | BL-010.8 | erledigt | Build und Dokumentation erzeugen ausschließlich die selbsttragende relative Git-Projektion; Veröffentlichung und Zielhost-UAT bleiben menschliche Evidenz |
+| DataSecure kann verbundene Cowork-Ordner nicht auslesen und damit die Trennung von Quellen und Ergebnisziel nicht technisch attestieren. | BL-040.5, BL-041.7 | entschieden | ehrliche Setup-/UAT-Regel: nur dedizierten Ergebnisordner verbinden, Quellordner nicht verbinden; keine zusätzliche Laufbestätigung |
+| Nativer Standalone-Admission-Pfad prüfte die 500-MiB-Gesamtgrenze nicht und eine verlorene Worker-Bestätigung ließ dieselbe Auswahl erneut starten. | BL-010.12, BL-011.10 | erledigt | Gesamtbudget vor Start, einmaliger Verbrauch nach delegiertem Start und Regressionstests |
+| Ein neuerer aktiver Standalone-Stapel verdeckte den jüngsten vollständig sichtbaren Ergebnislauf. | BL-010.13, BL-040.6 | erledigt | Status bleibt auf dem neuesten Stapel, „Ergebnisse öffnen“ sucht getrennt den neuesten tatsächlich sichtbaren Lauf |
+| Tauri und Node-Sidecar hatten abweichende Pfadbudgets und die UI besaß `core:default`. | BL-010.12, BL-010.15 | erledigt | identische UTF-8-Einzel-/Gesamtbudgets, nicht-UTF-8 fail-closed und nur explizite DataSecure-Kommandorechte |
+| Atomare Journalpublikation erkennt viele Austauschfälle, kann aber ohne betriebssystemweites CAS keinen feindlichen gleichzeitigen Austausch durch denselben lokalen Benutzer ausschließen. | BL-011.8, BL-011.11 | P3 | bewusst außerhalb des aktuellen lokalen Vertrauensmodells; für ein später verschärftes Modell immutable Generationen oder nativen No-Replace-/CAS-Vertrag entwerfen, ohne Anwenderdialog |
 
 ## B. Technisch vorbereitet – menschliche Evidenz offen
 
 | Story | Noch erforderlicher Nachweis | Status |
 |---|---|---|
-| BL-010.8 | Selbsttragende Runtime und drei Zielpaketprojektionen sind E0 fertig; reale macOS-Intel-/ARM-Ausführung und Cowork-Fresh-Install fehlen. Der Build erzeugt eine streng validierbare Marketplace-Projektion mit offiziell unterstützter Archivquelle; vor einer Freigabe fehlen noch die echte, erreichbare Archiv-URL, deren Zielartefakt sowie Installation und Update auf den Zielhosts. Der Marketplace-Quellordner bleibt Entwicklungskatalog. | **blockiert** |
-| BL-010.7 | Auf Desktop gestartete Cloud- beziehungsweise bestehende lokale Cowork-Sitzung mit Plugin-MCP positiv sowie Web/Mobil/geplante Sitzung ohne aktive Desktop-Brücke negativ prüfen. | **blockiert** |
+| BL-010.8 | Selbsttragende Runtime und drei Zielpaketprojektionen sind E0 fertig; reale macOS-Intel-/ARM-Ausführung und Cowork-Fresh-Install fehlen. Der Build erzeugt die von Anthropic unterstützte selbsttragende Git-Marketplace-Projektion mit relativer Quelle. Vor einer Freigabe fehlen Veröffentlichung in einem privaten/internen Marketplace-Repository sowie Installation und Update auf den Zielhosts. | **blockiert** |
+| BL-010.7 | Lokale Cowork-Sitzung eines bestehenden Desktop-Deployments mit Plugin-MCP positiv sowie Cloud-Cowork/Web/Mobil/Scheduled – auch bei geöffneter Desktop-App – negativ für Originale prüfen. | **blockiert** |
 | BL-010.1 | Portablen Pluginstart auf jedem freizugebenden Zielsystem ohne vorinstallierte Runtime nachweisen; Windows-E0 ist grün, macOS und echter Cowork-Host fehlen. | **blockiert** |
 | BL-010.2 | Windows-x64 Fresh Install, Kernlauf, Update und Entfernen. | **offen** |
 | BL-010.3 | macOS Intel/ARM Fresh Install, Kernlauf, Quarantäne und Entfernen. | **offen** |
@@ -281,7 +315,7 @@ nicht durch Diagramme als erledigt dargestellt:
 | BL-051.3 | Versionneuen UAT-Serienlauf mit 100 Dateien und bis zu 500 MiB durchführen. | **offen** |
 | BL-051.4 | Produktrollback auf Windows/macOS abnehmen. | **offen** |
 | BL-051.5 | ZIP-/Marketplace-Lebenszyklus in Cowork real abnehmen. | **offen** |
-| BL-051.6 | Desktop-Cloud-/Web-/Mobil-/Scheduled- und Desktop-Local-ohne-MCP negativ auf Originalzugriff prüfen. | **blockiert** |
+| BL-051.6 | Cloud-Cowork/Web/Mobil/Scheduled – auch bei geöffneter Desktop-App – sowie lokale Desktop-Sitzung ohne MCP negativ auf Originalzugriff prüfen. | **blockiert** |
 | BL-052.1 | Beobachtete Anwenderabnahme mit dem aktuellen UAT-Kit durchführen. | **offen** |
 | BL-052.2 | IT-/Health-IT-Fachabnahme durchführen. | **offen** |
 | BL-052.3 | Datenschutzabnahme mit synthetischen Daten durchführen. | **offen** |

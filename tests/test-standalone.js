@@ -20,7 +20,8 @@ function fakeDependencies(overrides = {}) {
   const traces = [];
   return {
     traces,
-    genericStatus: () => ({ engine_ready: true, local_intake_pending: false, batch_processing_active: false }),
+    lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false, batch_processing_active: false }),
+    latestProductResultDirectory: () => 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
     readConfiguredResultRoot: () => 'C:\\Results',
     saveConfiguredResultRoot: () => {},
     resultOutputDirectory: () => 'C:\\Results\\DataSecure-Output',
@@ -62,8 +63,10 @@ test('CLI accepts only automatic file or folder processing', () => {
 
 test('Standalone projects engine state into a small product-neutral status', () => {
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
-    genericStatus: () => ({ engine_ready: true, local_intake_pending: false,
-      batch_processing_active: false, visual_review_items: 2, anonymized_packages: 3 })
+    latestProductBatchStatus: () => ({
+      selected_count: 5, completed_count: 3, failed_count: 0, review_count: 2,
+      result_count: 3, export_pending_count: 0, processing: false, resumable: false, complete: false
+    })
   }) });
   assert.deepStrictEqual(service.status(), {
     ok: true,
@@ -74,6 +77,7 @@ test('Standalone projects engine state into a small product-neutral status', () 
     resumable: false,
     results_available: true,
     result_count: 3,
+    export_pending_count: 0,
     review_count: 2,
     resumable_count: 0,
     recoverable_count: 0,
@@ -82,11 +86,44 @@ test('Standalone projects engine state into a small product-neutral status', () 
   });
 });
 
+test('Standalone status uses the latest product batch instead of historical global totals', () => {
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false,
+      batch_processing_active: false }),
+    latestProductBatchStatus: () => ({
+      selected_count: 4, completed_count: 2, failed_count: 1, review_count: 1,
+      result_count: 2, processing: false, resumable: false, complete: false
+    })
+  }) });
+  const status = service.status();
+  assert.strictEqual(status.state, 'review_required');
+  assert.strictEqual(status.result_count, 2);
+  assert.strictEqual(status.review_count, 1);
+  assert.strictEqual(status.results_available, true);
+});
+
+test('Standalone reports an incomplete visible export instead of a false finished state', () => {
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false,
+      batch_processing_active: false }),
+    latestProductBatchStatus: () => ({
+      selected_count: 2, completed_count: 2, failed_count: 0, review_count: 0,
+      result_count: 0, export_pending_count: 2, processing: false, resumable: false, complete: true
+    })
+  }) });
+  const status = service.status();
+  assert.strictEqual(status.state, 'export_pending');
+  assert.strictEqual(status.results_available, false);
+  assert.strictEqual(status.result_count, 0);
+  assert.strictEqual(status.export_pending_count, 2);
+});
+
 test('Standalone exposes a recoverable batch as a resumable stopped state', () => {
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
-    genericStatus: () => ({ engine_ready: true, local_intake_pending: false,
-      batch_processing_active: false, visual_review_items: 0, anonymized_packages: 1,
-      recoverable_batches: 2, batches_awaiting_resume: 1 })
+    lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false,
+      batch_processing_active: false, recoverable_batches: 2, batches_awaiting_resume: 1 }),
+    latestProductBatchStatus: () => ({ result_count: 1, review_count: 0, export_pending_count: 0,
+      processing: false, resumable: true, complete: false })
   }) });
   assert.deepStrictEqual(service.status(), {
     ok: true,
@@ -97,6 +134,7 @@ test('Standalone exposes a recoverable batch as a resumable stopped state', () =
     resumable: true,
     results_available: true,
     result_count: 1,
+    export_pending_count: 0,
     review_count: 0,
     resumable_count: 2,
     recoverable_count: 2,
@@ -106,8 +144,8 @@ test('Standalone exposes a recoverable batch as a resumable stopped state', () =
 });
 
 test('Standalone exposes an awaiting-resume batch even before recovery counting converges', () => {
-  const deps = fakeDependencies({ genericStatus: () => ({
-    engine_ready: true, anonymized_packages: 0, visual_review_items: 0,
+  const deps = fakeDependencies({ lightweightStatus: () => ({
+    engine_ready: true,
     recoverable_batches: 0, batches_awaiting_resume: 1,
     local_intake_pending: false, batch_processing_active: false
   }) });
@@ -240,6 +278,8 @@ test('private desktop IPC is framed, bounded and independent of line endings', (
   const tooManyPathBytes = { ...message, source_paths: Array.from({ length: 100 }, () => 'x'.repeat(8000)) };
   assert.throws(() => encodeFrame(tooManyPathBytes),
     (error) => error.code === 'DESKTOP_IPC_SOURCE_BYTES_INVALID');
+  assert.throws(() => encodeFrame({ ...message, source_paths: ['ä'.repeat(20000)] }),
+    (error) => error.code === 'DESKTOP_IPC_SOURCE_INVALID');
 });
 
 test('renderer projection cannot expose paths, raw text, mapping or diagnostics', () => {
@@ -303,9 +343,46 @@ async function admittedServiceCase() {
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
 }
 
+async function oversizedAdmissionCase() {
+  const threeHundredMib = 300 * 1024 * 1024;
+  let started = false;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    validateSelectedPathAsync: async (sourcePath) => ({
+      sourcePath, sourceType: 'txt', sourceBytes: threeHundredMib
+    }),
+    startLocalIntakeExecutor: () => {
+      started = true;
+      return { ipcAcknowledgement: Promise.resolve() };
+    }
+  }) });
+  await assert.rejects(
+    service.admitSelectedSources(['C:\\Source\\a.txt', 'C:\\Source\\b.txt']),
+    (error) => error.code === 'STANDALONE_SELECTION_INVALID'
+  );
+  await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
+  assert.strictEqual(started, false, 'an oversized aggregate selection never reaches the worker');
+}
+
+async function uncertainAdmissionStartCase() {
+  let starts = 0;
+  let releases = 0;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    releaseIntake: () => { releases += 1; },
+    startLocalIntakeExecutor: () => {
+      starts += 1;
+      return { ipcAcknowledgement: Promise.reject(new Error('ACK_LOST')) };
+    }
+  }) });
+  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_START_FAILED');
+  await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
+  assert.strictEqual(starts, 1, 'an uncertain delegated start cannot be submitted twice');
+  assert.strictEqual(releases, 0, 'the delegated reservation remains owned by the worker');
+}
+
 async function busyCase() {
   const deps = fakeDependencies({
-    genericStatus: () => ({ engine_ready: true, local_intake_pending: false, batch_processing_active: true })
+    lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false, batch_processing_active: true })
   });
   const service = new StandaloneApplicationService({ dependencies: deps });
   await assert.rejects(service.anonymize(), (error) => error.code === 'STANDALONE_BUSY');
@@ -343,6 +420,30 @@ async function openResultsFailureCase() {
   await assert.rejects(service.openResults(), (error) => error.code === 'STANDALONE_RESULT_OPEN_FAILED');
 }
 
+async function openExactResultsCase() {
+  const opened = [];
+  const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    latestProductResultDirectory: (channel) => {
+      assert.strictEqual(channel, PRODUCT_CHANNEL);
+      return run;
+    },
+    openFolder: (target) => { opened.push(target); return { ok: true }; }
+  }) });
+  assert.deepStrictEqual(await service.openResults(), { ok: true, opened: true, external_disclosure: false });
+  assert.deepStrictEqual(opened, [run], 'only the exact completed run is opened');
+}
+
+async function missingResultsCase() {
+  let opened = false;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    latestProductResultDirectory: () => '',
+    openFolder: () => { opened = true; return { ok: true }; }
+  }) });
+  await assert.rejects(service.openResults(), (error) => error.code === 'STANDALONE_RESULTS_MISSING');
+  assert.strictEqual(opened, false);
+}
+
 async function openLedgerCase() {
   const opened = [];
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
@@ -369,10 +470,14 @@ async function missingLedgerCase() {
 (async () => {
   await testAsync('Standalone calls the engine directly without MCP or JSON-RPC', directServiceCase);
   await testAsync('native desktop admission validates once and starts without a second picker', admittedServiceCase);
+  await testAsync('native desktop admission enforces the aggregate 500 MB limit', oversizedAdmissionCase);
+  await testAsync('a missing worker acknowledgement consumes the admission exactly once', uncertainAdmissionStartCase);
   await testAsync('a running batch stops a second start with a fixed domain code', busyCase);
   await testAsync('CLI exposes only fixed, content-free completion and error text', cliCase);
   await testAsync('CLI status uses a fixed local product message', cliStatusCase);
   await testAsync('Standalone does not report a failed result-folder open as success', openResultsFailureCase);
+  await testAsync('Standalone opens exactly the latest completed run', openExactResultsCase);
+  await testAsync('Standalone refuses to open results before a complete visible run exists', missingResultsCase);
   await testAsync('Standalone opens only the private ledger folder and never returns its path', openLedgerCase);
   await testAsync('Standalone refuses a missing local ledger without opening a folder', missingLedgerCase);
   done();

@@ -13,6 +13,13 @@ const capability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/ca
 const cargo = fs.readFileSync(path.join(root, 'tauri-contract/Cargo.toml'), 'utf8');
 const rust = fs.readFileSync(path.join(root, 'tauri-contract/src/main.rs'), 'utf8');
 const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
+const productVersion = require('../package.json').version;
+
+test('desktop manifests, Rust package and artifact names use the product version', () => {
+  assert.strictEqual(config.version, productVersion);
+  assert.match(cargo, new RegExp(`^version = "${productVersion.replaceAll('.', '\\.') }"$`, 'mu'));
+  for (const target of targets.targets) assert.ok(target.package_filename.includes(productVersion));
+});
 
 test('one target catalog binds product names to exact Rust target triples', () => {
   assert.strictEqual(targets.release_status, 'engineering_only');
@@ -47,8 +54,8 @@ test('Tauri renderer has no direct file, dialog, shell or network permission', (
   assert.deepStrictEqual(capability.windows, ['main']);
   assert.strictEqual(capability.local, true);
   assert.doesNotMatch(serialized, /(?:dialog|shell|opener|fs|http):/iu);
-  assert.ok(capability.permissions.every((permission) =>
-    permission === 'core:default' || /^allow-[a-z-]+$/u.test(permission)));
+  assert.doesNotMatch(serialized, /core:default|core:path:/u);
+  assert.ok(capability.permissions.every((permission) => /^allow-[a-z-]+$/u.test(permission)));
   assert.strictEqual(config.build.devUrl, undefined);
   assert.deepStrictEqual(config.bundle.externalBin, ['binaries/datasecure-core']);
   assert.deepStrictEqual(config.app.security.capabilities, ['main-window']);
@@ -68,6 +75,12 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /choose\('select_files'\)/u);
   assert.doesNotMatch(frontend, /setInterval\s*\(/u);
   assert.match(frontend, /refreshInFlight/u);
+  assert.match(frontend, /function resetAdmissionUi\(\)/u);
+  assert.match(frontend, /code === 'STANDALONE_NO_ADMISSION'/u);
+  assert.match(frontend, /code === 'STANDALONE_START_FAILED'/u);
+  assert.match(frontend, /STANDALONE_SELECTION_INVALID/u);
+  assert.match(frontend, /code === 'STANDALONE_IPC_FAILED'/u);
+  assert.match(frontend, /code === 'STANDALONE_IPC_TIMEOUT'/u);
   assert.match(frontend, /configure_results/u);
   assert.match(frontend, /open_local_ledger/u);
   assert.ok(capability.permissions.includes('allow-open-local-ledger'));
@@ -79,6 +92,15 @@ test('package contract excludes Claude, Cowork, MCP and skill material', () => {
   for (const marker of ['.claude-plugin', '.mcp.json', 'skills/', 'mcp-server.js', 'claude', 'cowork']) {
     assert.ok(forbidden.includes(marker));
   }
+});
+
+test('converter runtime is required only when MarkItDown conversion is enabled', () => {
+  assert.ok(!targets.required_package_entries.includes('architecture-matched converter runtime'));
+  assert.deepStrictEqual(targets.feature_gated_package_entries.markitdown_conversion_enabled,
+    ['architecture-matched converter runtime']);
+  const runtime = JSON.parse(fs.readFileSync(path.join(__dirname,
+    '../plugins/data-secure/server/converters/markitdown/runtime-contract.json'), 'utf8'));
+  assert.strictEqual(runtime.product_enabled, false);
 });
 
 test('macOS instructions use a narrow Gatekeeper exception without terminal bypasses', () => {

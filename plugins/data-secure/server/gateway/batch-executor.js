@@ -66,6 +66,16 @@ function terminalNoticeTransaction(token, options = {}) {
 }
 
 function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = {}, itemCount) {
+  const productChannel = String(options.env?.DATASECURE_PRODUCT_CHANNEL || process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin');
+  if (productChannel === 'standalone') {
+    // The Tauri window polls the durable journal and is the only Standalone
+    // presenter. Acknowledge the worker so it cannot open the Cowork fallback
+    // dialog when the sidecar parent is still alive.
+    acknowledgeTerminalNotice(child);
+    lifecycle({ event: 'completion_notice_delegated_to_product_ui', outcome: 'ok',
+      ...(itemCount ? { item_count: itemCount } : {}) });
+    return true;
+  }
   const transaction = terminalNoticeTransaction(token, options);
   if (!transaction) return false;
   lifecycle({ event: 'completion_notice_started', outcome: 'progress', ...(itemCount ? { item_count: itemCount } : {}) });

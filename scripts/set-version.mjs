@@ -59,6 +59,16 @@ patchJson('plugins/data-secure/.claude-plugin/plugin.json', (d) => {
 patchJson('plugins/data-secure/server/standalone/product-manifest.json', (d) => {
   d.version = target;
 });
+patchJson('apps/datasecure-standalone/tauri-contract/tauri.conf.json', (d) => {
+  d.version = target;
+});
+patchJson('apps/datasecure-standalone/desktop-targets.json', (d) => {
+  for (const item of d.targets || []) {
+    if (typeof item.product_target === 'string') {
+      item.package_filename = `DataSecure-Standalone-${target}-${item.product_target}.zip`;
+    }
+  }
+});
 patchJson('BUILD_INFO.json', (d) => {
   d.version = target;
 });
@@ -71,6 +81,16 @@ patchText(
   'plugins/data-secure/server/version.js',
   /VERSION: '[^']*'/,
   `VERSION: '${target}'`
+);
+patchText(
+  'apps/datasecure-standalone/tauri-contract/Cargo.toml',
+  /^(\[package\][\s\S]*?^version = ")[^"]+("$)/mu,
+  `$1${target}$2`
+);
+patchText(
+  'apps/datasecure-standalone/tauri-contract/Cargo.lock',
+  /^(\[\[package\]\]\r?\nname = "datasecure-standalone"\r?\nversion = ")[^"]+("$)/mu,
+  `$1${target}$2`
 );
 
 // Keep the small set of user-facing, current-release documents in sync as well.
@@ -86,12 +106,15 @@ const rcLabel = (version) => {
 for (const rel of [
   'README.md',
   'docs/ANLEITUNG.md',
+  'docs/ANWENDERREVIEW.md',
+  'docs/DETECTOR_BENCHMARK.md',
   'docs/FORMAT_COVERAGE_MATRIX.md',
   'docs/IT-BETRIEBSHANDBUCH.md',
   'docs/PILOT-ABNAHME.md',
   'docs/PLUGIN_SECURITY_MODEL.md',
   'docs/RELEASE.md',
   'docs/TESTING.md',
+  'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
   'plugins/data-secure/README.md',
   'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/unterstuetzte-formate.md'
 ]) {
@@ -120,9 +143,33 @@ patchText(
   /^(Stand: [^\n]*· Produktstand )\S+/mu,
   `$1${target}`
 );
-for (const rel of ['docs/canonical/CURRENT_STATE.md', 'docs/canonical/TRACEABILITY.md']) {
+for (const rel of [
+  'docs/canonical/BACKLOG_EVIDENCE_MATRIX.md',
+  'docs/canonical/CURRENT_STATE.md',
+  'docs/canonical/TRACEABILITY.md'
+]) {
   patchText(rel, /^(Stand: [^·\n]+· )\S+/mu, (_, prefix) => `${prefix}${target}`);
 }
+patchText(
+  'docs/canonical/UML_ARCHITECTURE.md',
+  /^(Stand: [^·\n]+· (?:Produktstand )?)(?:\d+\.\d+\.\d+(?:-rc\d+)?[ \t]*)+/mu,
+  (_, prefix) => `${prefix}${target}`
+);
+patchText(
+  'docs/ANWENDERREVIEW.md',
+  /^(Stand: [^\n]*?gegen )\d+\.\d+\.\d+(?:-rc\d+)?/mu,
+  `$1${target}`
+);
+patchText(
+  'docs/DETECTOR_BENCHMARK.md',
+  /^(## Current baseline \()\d+\.\d+\.\d+(?:-rc\d+)?/mu,
+  `$1${target}`
+);
+patchText(
+  'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
+  /^(Stand: [^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?/mu,
+  `$1${target}`
+);
 patchText(
   'docs/canonical/PRODUCT.md',
   /^(Stand: [^·\n]+· Ist-Zustand )\S+/mu,

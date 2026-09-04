@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 04.09.2026 · 3.2.0-rc98
+Stand: 04.09.2026 · 3.2.0-rc99
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -49,7 +49,7 @@ Runtime-Evidence, Binärhash, Node-Lizenz, Dateimodi, Größenbudget und den
 umgeschriebenen Startbefehl. `npm run build` ergänzt SPDX-SBOM und SHA-256.
 MCPB, SEA und deaktivierte OCR-Artefakte erfüllen diese Produktgates nicht.
 
-Der RC98-Vertrag ergänzt echte Worker-ACKs für Intake, Resume und Review,
+Der RC99-Vertrag ergänzt echte Worker-ACKs für Intake, Resume und Review,
 zweiphasige Abschlusspräsentation, den automatischen Übergang in den lokalen
 Sammelreview sowie den zeitbegrenzten Export-Replay außerhalb des MCP-Startpfads.
 Die zugehörigen Direktgates sind `test-batch-executor-startup`,

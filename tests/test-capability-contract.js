@@ -31,10 +31,24 @@ const currentPublicFiles = [
 ];
 
 test('the target contract is explicitly non-runtime and covers every accepted decision', () => {
-  assert.strictEqual(target.schema_version, 1);
+  assert.strictEqual(target.schema_version, 2);
   assert.strictEqual(target.contract, 'target-only-not-runtime');
   const accepted = [...decisions.matchAll(/^## (DS-\d{3})\b/gm)].map((match) => match[1]);
   assert.deepStrictEqual(target.decision_ids, accepted);
+});
+
+test('the target contract separates the two products from their shared core', () => {
+  assert.deepStrictEqual(target.products, {
+    shared_core: 'one-policy-and-engine-baseline',
+    cowork_plugin: 'optional-local-cowork-and-local-claude-code-product',
+    standalone: 'independent-local-desktop-product'
+  });
+  assert.deepStrictEqual(target.surfaces.local_original_processing, [
+    'claude-desktop-local-cowork', 'claude-code-local', 'datasecure-standalone-local'
+  ]);
+  assert.strictEqual(Object.hasOwn(target, 'primary_product'), false);
+  assert.strictEqual(Object.hasOwn(target.standalone_desktop, 'native_build_verified'), false,
+    'target-only contract must not carry current evidence');
 });
 
 test('the target contract records the agreed platforms, formats and limits exactly', () => {
@@ -46,6 +60,14 @@ test('the target contract records the agreed platforms, formats and limits exact
   assert.strictEqual(target.batch.maximum_total_bytes, 500 * 1024 * 1024);
   assert.strictEqual(target.batch.maximum_pages_slides_or_sheets, null);
   assert.strictEqual(target.batch.maximum_active_batches, 1);
+  assert.strictEqual(target.output.mixed_batch_visible_export,
+    'after-terminal-whole-batch-and-required-review');
+  assert.strictEqual(target.output.result_folder_scope,
+    'per-product-device-local-explicit-choice');
+  assert.strictEqual(target.output.automatic_cowork_workspace_detection, false);
+  assert.strictEqual(target.output.automatic_result_folder_change_on_project_switch, false);
+  assert.strictEqual(target.output.result_folder_change,
+    'explicit-settings-action-when-no-batch-is-open');
   assert.deepStrictEqual(target.distribution.equivalent_primary_channels, ['zip', 'private-marketplace']);
   assert.deepStrictEqual(target.manual_runtime_installation, []);
 });

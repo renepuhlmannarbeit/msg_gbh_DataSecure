@@ -15,6 +15,8 @@ use std::{
 use tauri::{AppHandle, Manager, State};
 
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
+const MAX_ADMISSION_PATH_BYTES: usize = 768 * 1024;
+const MAX_SINGLE_PATH_BYTES: usize = 32767;
 const IPC_SCHEMA: &str = "datasecure-standalone-private-ipc/1";
 const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -202,6 +204,27 @@ fn read_frame(reader: &mut impl Read) -> Result<Value, String> {
     serde_json::from_slice(&response).map_err(|_| "STANDALONE_IPC_FAILED".to_string())
 }
 
+fn strict_path_strings(paths: &[PathBuf]) -> Result<Vec<&str>, String> {
+    let mut total = 0usize;
+    let mut values = Vec::with_capacity(paths.len());
+    for path in paths {
+        let value = path
+            .to_str()
+            .ok_or_else(|| "STANDALONE_SELECTION_INVALID".to_string())?;
+        if value.is_empty() || value.len() > MAX_SINGLE_PATH_BYTES {
+            return Err("STANDALONE_SELECTION_INVALID".to_string());
+        }
+        total = total
+            .checked_add(value.len())
+            .ok_or_else(|| "STANDALONE_SELECTION_INVALID".to_string())?;
+        if total > MAX_ADMISSION_PATH_BYTES {
+            return Err("STANDALONE_SELECTION_INVALID".to_string());
+        }
+        values.push(value);
+    }
+    Ok(values)
+}
+
 fn rpc(
     state: &DesktopState,
     action: &str,
@@ -214,10 +237,7 @@ fn rpc(
         if action == "admit_selected_sources" {
             request["source_kind"] = json!(source_kind.unwrap_or("files"));
         }
-        request["source_paths"] = json!(paths
-            .iter()
-            .map(|path| path.to_string_lossy())
-            .collect::<Vec<_>>());
+        request["source_paths"] = json!(strict_path_strings(paths)?);
     }
     let payload = serde_json::to_vec(&request).map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
     if payload.len() > MAX_FRAME_BYTES {
@@ -421,5 +441,26 @@ mod tests {
             read_frame(&mut Cursor::new(frame(b"not-json"))).unwrap_err(),
             "STANDALONE_IPC_FAILED"
         );
+    }
+
+    #[test]
+    fn accepts_only_the_sidecar_path_budget() {
+        let mut within = vec![PathBuf::from("a".repeat(MAX_SINGLE_PATH_BYTES)); 24];
+        within.push(PathBuf::from("b".repeat(24)));
+        assert_eq!(strict_path_strings(&within).expect("within aggregate limit").len(), 25);
+        let mut above = vec![PathBuf::from("a".repeat(MAX_SINGLE_PATH_BYTES)); 24];
+        above.push(PathBuf::from("b".repeat(25)));
+        assert_eq!(strict_path_strings(&above).unwrap_err(), "STANDALONE_SELECTION_INVALID");
+        assert_eq!(strict_path_strings(&[PathBuf::from("a".repeat(MAX_SINGLE_PATH_BYTES + 1))]).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_non_utf8_source_paths() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+        let path = PathBuf::from(OsString::from_vec(vec![b'a', 0xff, b'b']));
+        assert_eq!(strict_path_strings(&[path]).unwrap_err(), "STANDALONE_SELECTION_INVALID");
     }
 }

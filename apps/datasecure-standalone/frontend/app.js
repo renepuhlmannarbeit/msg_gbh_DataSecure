@@ -6,7 +6,9 @@ const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue'
 const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
   STANDALONE_ENGINE_NOT_READY: 'Die lokale Verarbeitung ist noch nicht bereit.',
+  STANDALONE_SELECTION_INVALID: 'Die Dateiauswahl überschreitet eine sichere Grenze oder enthält einen nicht unterstützten Pfad.',
   STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
+  STANDALONE_START_FAILED: 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
   STANDALONE_RUNTIME_MISSING: 'Der lokale DataSecure-Core fehlt.',
   STANDALONE_RUNTIME_START_FAILED: 'Der lokale DataSecure-Core konnte nicht gestartet werden.',
@@ -14,6 +16,7 @@ const messages = {
   STANDALONE_IPC_TIMEOUT: 'Die lokale Verarbeitung antwortete nicht rechtzeitig. Die Verbindung wird beim nächsten Versuch neu gestartet.',
   STANDALONE_RESULT_ROOT_UNSAFE: 'Der Ergebnisordner darf nicht im privaten DataSecure-Bereich liegen.',
   STANDALONE_RESULT_OPEN_FAILED: 'Der Ergebnisordner konnte nicht geöffnet werden.',
+  STANDALONE_RESULTS_MISSING: 'Es ist noch kein vollständiger Ergebnislauf verfügbar.',
   STANDALONE_LEDGER_MISSING: 'Es ist noch keine lokale Zuordnung vorhanden.',
   STANDALONE_LEDGER_OPEN_FAILED: 'Der Ordner mit der lokalen Zuordnung konnte nicht geöffnet werden.'
 };
@@ -27,6 +30,15 @@ function status(title, text) { byId('status-title').textContent = title; byId('s
 function showError(error) {
   const code = String(error || 'STANDALONE_OPERATION_FAILED');
   status('Sicher gestoppt', messages[code] || 'Der lokale Vorgang wurde sicher gestoppt.');
+}
+
+function resetAdmissionUi() {
+  admitted = false;
+  byId('summary').hidden = true;
+  visible('select-files', true);
+  visible('select-folder', true);
+  visible('start', false);
+  visible('cancel', false);
 }
 
 async function choose(command) {
@@ -46,7 +58,14 @@ async function choose(command) {
 async function call(command) {
   busy(true);
   try { return await invoke(command); }
-  catch (error) { showError(error); return null; }
+  catch (error) {
+    const code = String(error || 'STANDALONE_OPERATION_FAILED');
+    if (code === 'STANDALONE_NO_ADMISSION' || code === 'STANDALONE_START_FAILED' || code === 'STANDALONE_IPC_FAILED' || code === 'STANDALONE_IPC_TIMEOUT') {
+      resetAdmissionUi();
+    }
+    showError(code);
+    return null;
+  }
   finally { busy(false); }
 }
 
@@ -54,9 +73,8 @@ byId('select-files').addEventListener('click', () => choose('select_files'));
 byId('select-folder').addEventListener('click', () => choose('select_folder'));
 byId('cancel').addEventListener('click', async () => {
   if (!await call('cancel_admission')) return;
-  admitted = false; byId('summary').hidden = true;
+  resetAdmissionUi();
   status('Bereit', 'Wähle Dateien oder einen ganzen Ordner aus.');
-  visible('select-files', true); visible('select-folder', true); visible('start', false); visible('cancel', false);
   scheduleRefresh(0);
 });
 byId('start').addEventListener('click', async () => {
@@ -96,6 +114,7 @@ async function refresh() {
     }
     else if (state.state === 'review_required') status('Prüfung erforderlich', `${state.review_count} Datei${state.review_count === 1 ? '' : 'en'} benötigt eine lokale Entscheidung.`);
     else if (state.state === 'stopped') status('Fortsetzung möglich', `${state.resumable_count} unterbrochene${state.resumable_count === 1 ? 'r Stapel kann' : ' Stapel können'} fortgesetzt werden.`);
+    else if (state.state === 'export_pending') status('Ergebnis wird bereitgestellt', `${state.export_pending_count} anonymisierte${state.export_pending_count === 1 ? 's Ergebnis wird' : ' Ergebnisse werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`);
     else if (state.state === 'results_available') status('Fertig', `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`);
     else if (state.state === 'blocked') status('Nicht bereit', 'Der lokale DataSecure-Core konnte nicht gestartet werden.');
   } catch (error) { showError(error); }
