@@ -1,11 +1,23 @@
 'use strict';
 
-const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, exportCompletedBatchResults, claimTerminalNotice } = require('./batch');
+const {
+  beginBatch,
+  claimLocalBatchExecutor,
+  releaseLocalBatchExecutor,
+  runLocalBatchExecutor,
+  reviewDeferredBatch,
+  readBatchProgress,
+  exportCompletedBatchResults,
+  reserveTerminalNotice,
+  markTerminalNoticePresented,
+  releaseTerminalNoticeReservation
+} = require('./batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation');
 const { terminalVisibleExport } = require('./result-export');
 const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
-const { showBatchStateNotice, showLocalIntakeNotice } = require('../companion/completion-summary');
+const { showBatchStateNoticeConfirmed, showLocalIntakeNoticeConfirmed } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
+const { continueIntoLocalReview } = require('./automatic-local-review');
 
 let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
@@ -36,7 +48,7 @@ process.once('message', async (message) => {
   // that the message left the parent; this envelope proves that a live worker
   // with loaded gateway modules holds the private intake message. It carries no
   // token, path, name or count and precedes every durable or expensive step.
-  await notify({ type: 'local-intake-accepted' });
+  await notify({ type: isNewIntake ? 'local-intake-accepted' : 'local-batch-accepted' });
   try {
     if (isNewIntake) {
       const begun = beginBatch({
@@ -62,7 +74,29 @@ process.once('message', async (message) => {
       }
       await notify({ type: 'local-intake-processing-started' });
     }
-    const completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
+    let completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
+    // The picker already confirmed this local run. If analysis found genuine
+    // ambiguities, open the existing local batch reviewer now instead of
+    // returning to Cowork for another tool call. A defer/cancel/error remains
+    // an `awaiting_local_review` checkpoint and is therefore safely resumable.
+    const reviewed = await continueIntoLocalReview(message.batch_token, completed, {
+      executorPid: process.pid,
+      claimLocalBatchExecutor,
+      releaseLocalBatchExecutor,
+      reviewDeferredBatch,
+      readBatchProgress,
+      onReviewLifecycle: recordWorkflowEvent
+    });
+    completed = reviewed.progress;
+    if (reviewed.attempted === true &&
+        ['LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_DEFERRED'].includes(completed?.error)) {
+      // The user already made the local "close/later" choice. Do not answer
+      // that with another dialog. Tell a still-live MCP parent only to suppress
+      // its exit fallback; a later explicit continuation remains possible.
+      await notify({ type: 'local-review-paused' });
+      process.exit(0);
+      return;
+    }
     // The durable processing result is authoritative. A failing visible export
     // stays pending for the next start or folder change; it never converts the
     // completed batch into the "stopped" failure envelope below.
@@ -90,8 +124,10 @@ process.once('message', async (message) => {
     await presentTerminalEnvelope({
       token: message.batch_token,
       envelope,
-      claim: claimTerminalNotice,
-      present: () => { showBatchStateNotice(progress); },
+      reserve: reserveTerminalNotice,
+      markPresented: markTerminalNoticePresented,
+      release: releaseTerminalNoticeReservation,
+      present: () => showBatchStateNoticeConfirmed(progress),
       record: recordWorkflowEvent,
       evidence: {
         event: 'intake_terminal_state', outcome: envelope.complete ? 'ok' : 'progress',
@@ -109,8 +145,10 @@ process.once('message', async (message) => {
         envelope: { type: isNewIntake ? 'local-intake-stopped' : 'local-batch-stopped', stage },
         // Before the checkpoint no journal exists to arbitrate; a live parent
         // acknowledges instead, an absent parent leaves the notice to us.
-        claim: stage === 'after_checkpoint' ? claimTerminalNotice : () => true,
-        present: () => { showLocalIntakeNotice(stage); },
+        reserve: stage === 'after_checkpoint' ? reserveTerminalNotice : () => ({ ok: true, state: 'unavailable', reservation_id: null }),
+        markPresented: markTerminalNoticePresented,
+        release: releaseTerminalNoticeReservation,
+        present: () => showLocalIntakeNoticeConfirmed(stage),
         record: recordWorkflowEvent,
         evidence: { event: 'intake_terminal_state', outcome: 'stopped', error_code: 'LOCAL_WORKER_EXITED' }
       });

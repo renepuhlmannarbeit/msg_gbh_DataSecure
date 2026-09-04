@@ -9,6 +9,10 @@ const { VERSION } = require('../version');
 const { roots } = require('./common');
 const { assertWritableCapacity } = require('./storage-capacity');
 const { workflowDiagnosticStatus } = require('./workflow-diagnostics');
+const { supportTraceStatus } = require('./support-trace');
+const {
+  publishEvent, eventFiles: spoolEventFiles, pruneEvents, pruneExpiredLegacyFile
+} = require('./diagnostic-event-spool');
 
 const DIAGNOSTIC_SCHEMA = 'data-secure-diagnostic/1';
 const RETENTION_DAYS = 14;
@@ -121,30 +125,41 @@ function diagnosticFile(options = {}) {
   return path.join(options.dataRoot || dataRoot(), 'diagnostics', 'events.jsonl');
 }
 
-function readEvents(options = {}) {
+function diagnosticDirectory(options = {}) {
+  return path.join(options.dataRoot || dataRoot(), 'diagnostics', 'events');
+}
+
+function diagnosticEventFiles(options = {}) {
+  return spoolEventFiles({ ...options, directory: diagnosticDirectory(options) });
+}
+
+function readDiagnosticFile(file, options = {}) {
   const io = options.fs || fs;
-  const file = diagnosticFile(options);
   let fd;
-  let contents;
   try {
-    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0);
-    try { fd = io.openSync(file, flags); }
-    catch (error) {
-      if (error?.code === 'ENOENT') return [];
-      throw error;
-    }
+    fd = io.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
     const opened = io.fstatSync(fd);
     const named = io.lstatSync(file);
-    if (!opened.isFile() || opened.size > MAX_FILE_BYTES || named.isSymbolicLink() ||
-        opened.dev !== named.dev || opened.ino !== named.ino) return [];
-    contents = io.readFileSync(fd, 'utf8');
-  } finally {
-    if (fd !== undefined) io.closeSync(fd);
-  }
+    if (!opened.isFile() || opened.size < 1 || opened.size > MAX_FILE_BYTES || named.isSymbolicLink() ||
+        opened.dev !== named.dev || opened.ino !== named.ino) return '';
+    return io.readFileSync(fd, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return '';
+    throw error;
+  } finally { if (fd !== undefined) io.closeSync(fd); }
+}
+
+function readEvents(options = {}) {
   const now = options.now instanceof Date ? options.now.valueOf() : Number(options.now ?? Date.now());
   const cutoff = now - RETENTION_DAYS * 24 * 60 * 60 * 1000;
   const events = [];
-  for (const line of contents.split(/\r?\n/)) {
+  // The former rolling JSONL file remains read-only upgrade input. New writers
+  // use unique immutable files and therefore cannot overwrite one another.
+  const payloads = [readDiagnosticFile(diagnosticFile(options), options)];
+  for (const name of diagnosticEventFiles(options).slice(-MAX_EVENTS * 2)) {
+    payloads.push(readDiagnosticFile(path.join(diagnosticDirectory(options), name), options));
+  }
+  for (const line of payloads.join('\n').split(/\r?\n/)) {
     if (!line.trim()) continue;
     try {
       const raw = JSON.parse(line);
@@ -160,34 +175,17 @@ function readEvents(options = {}) {
 
 function recordDiagnostic(record, options = {}) {
   const io = options.fs || fs;
-  const file = diagnosticFile(options);
-  const dir = path.dirname(file);
-  let temp = null;
+  const directory = diagnosticDirectory(options);
   try {
-    io.mkdirSync(dir, { recursive: true });
-    const dirStat = io.lstatSync(dir);
-    if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) throw new Error('unsafe diagnostics directory');
-    if (io.existsSync(file)) {
-      const fileStat = io.lstatSync(file);
-      if (!fileStat.isFile() || fileStat.isSymbolicLink()) throw new Error('unsafe diagnostics file');
-    }
-    const events = [...readEvents(options), sanitizeDiagnostic(record, options)].slice(-MAX_EVENTS);
-    const serialized = `${events.map((event) => JSON.stringify(event)).join('\n')}\n`;
-    temp = path.join(dir, `.events_${crypto.randomBytes(6).toString('hex')}.tmp`);
-    (options.assertWritableCapacity || assertWritableCapacity)({
-      directory: dir,
-      bytes: Buffer.byteLength(serialized, 'utf8')
-    });
-    io.writeFileSync(temp, serialized, {
-      encoding: 'utf8', mode: 0o600, flag: 'wx'
-    });
-    renameWithTransientRetry(temp, file, io);
+    const event = sanitizeDiagnostic(record, options);
+    const serialized = `${JSON.stringify(event)}\n`;
+    publishEvent(serialized, { ...options, fs: io, directory,
+      timestamp: Date.parse(event.timestamp), assertWritableCapacity: options.assertWritableCapacity || assertWritableCapacity });
+    pruneEvents({ ...options, fs: io, directory, retentionDays: RETENTION_DAYS, maximum: MAX_EVENTS });
+    pruneExpiredLegacyFile(diagnosticFile(options), { ...options, fs: io, retentionDays: RETENTION_DAYS });
     return true;
   } catch {
     writeErrors++;
-    if (temp) {
-      try { if (io.existsSync(temp)) io.unlinkSync(temp); } catch { /* best effort */ }
-    }
     return false;
   }
 }
@@ -195,7 +193,12 @@ function recordDiagnostic(record, options = {}) {
 function diagnosticStatus(limit = 20, options = {}) {
   const boundedLimit = Math.max(1, Math.min(50, Number.isSafeInteger(Number(limit)) ? Number(limit) : 20));
   let retained = [];
-  try { retained = readEvents(options); } catch { inspectionErrors++; }
+  try {
+    pruneEvents({ ...options, directory: diagnosticDirectory(options), retentionDays: RETENTION_DAYS,
+      maximum: MAX_EVENTS });
+    pruneExpiredLegacyFile(diagnosticFile(options), { ...options, retentionDays: RETENTION_DAYS });
+    retained = readEvents(options);
+  } catch { inspectionErrors++; }
   const events = retained.slice(-boundedLimit).reverse();
   return {
     ok: true,
@@ -205,6 +208,7 @@ function diagnosticStatus(limit = 20, options = {}) {
     returned_events: events.length,
     events,
     workflow: workflowDiagnosticStatus(boundedLimit, options),
+    support_trace: supportTraceStatus(boundedLimit, options),
     write_errors: writeErrors,
     inspection_errors: inspectionErrors,
     raw_content_logged: false,
@@ -296,5 +300,5 @@ module.exports = {
   recordDiagnostic,
   diagnosticStatus,
   exportDiagnosticPackage,
-  _test: { diagnosticFile, readEvents, diagnosticExportPath, digestArtifact }
+  _test: { diagnosticFile, diagnosticDirectory, diagnosticEventFiles, readEvents, diagnosticExportPath, digestArtifact }
 };

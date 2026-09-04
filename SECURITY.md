@@ -34,6 +34,19 @@ compliance.
 See [docs/PLUGIN_SECURITY_MODEL.md](docs/PLUGIN_SECURITY_MODEL.md) for where the
 boundary sits, what reaches Claude, and every fail-closed point.
 
+## Standalone boundary
+
+The planned Standalone desktop product is a separate distribution and data
+namespace, not a privileged mode of the Claude plugin. It reuses the same local
+engine but does not import the plugin's legacy inbox, journals or review state.
+Its renderer receives neither source paths nor raw document content and has no
+direct file-system, dialog, shell or network capability. Native dialogs and the
+engine sidecar belong to the narrow desktop shell. There is no localhost HTTP
+listener. These contracts and the Tauri shell have been compiled and exercised
+in a self-contained Windows x64 engineering package. That is implementation
+evidence, not a released end-user boundary: Windows UAT and native macOS
+Intel/ARM builds and UAT remain mandatory before release.
+
 ## Build provenance
 
 The user-facing product build creates the plugin ZIP together with an SPDX 2.3

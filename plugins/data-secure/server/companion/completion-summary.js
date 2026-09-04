@@ -113,8 +113,8 @@ function batchStateNoticeText(progress) {
   if (!RESTING_BATCH_PHASES.has(phase)) throw new SafeError('Ungültiger lokaler Stapelstatus.');
   const messages = {
     awaiting_local_review: {
-      title: 'DataSecure – Lokale Prüfung erforderlich',
-      message: 'Der Stapel ist sicher angehalten. Offene Inhalte bleiben ausschließlich lokal.\r\n\r\nNächster Schritt: Schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“; die lokale Prüfung öffnet sich dann. Die Dateiauswahl öffnet sich nicht erneut.'
+      title: 'DataSecure – Lokale Prüfung vertagt',
+      message: 'Die lokale Prüfung wurde geschlossen oder konnte nicht abgeschlossen werden. Offene Inhalte bleiben ausschließlich lokal und der Stapel ist sicher fortsetzbar.\r\n\r\nNächster Schritt: Wenn du weiterarbeiten möchtest, schreibe in Cowork „Setze den letzten DataSecure-Stapel fort“. Die Dateiauswahl öffnet sich nicht erneut.'
     },
     awaiting_explicit_resume: {
       title: 'DataSecure – Fortsetzung erforderlich',
@@ -286,6 +286,14 @@ function showBatchStateNotice(progress, options = {}) {
   return showDetachedLocalMessage(batchStateNoticeText(progress), options);
 }
 
+function showLocalIntakeNoticeConfirmed(stage, options = {}) {
+  return showDetachedLocalMessageConfirmed(intakeNoticeText(stage), options);
+}
+
+function showBatchStateNoticeConfirmed(progress, options = {}) {
+  return showDetachedLocalMessageConfirmed(batchStateNoticeText(progress), options);
+}
+
 function showDetachedLocalMessage(notice, options = {}) {
   // An explicit runner remains synchronous for tests and support tooling.
   // Product notices must not hold the MCP event loop or a worker while the
@@ -321,6 +329,49 @@ function showDetachedLocalMessage(notice, options = {}) {
   return launch(0);
 }
 
+// Product terminal-notice arbitration needs evidence that the native process
+// actually spawned, not merely that spawn() returned a ChildProcess object.
+// This promise rejects only with fixed local errors and retains the platform
+// fallback sequence without exposing command lines or paths.
+function showDetachedLocalMessageConfirmed(notice, options = {}) {
+  if (options.runner) return Promise.resolve(showLocalMessage(notice, options));
+  const commands = localMessageCommands(notice.title, notice.message, { ...options, openResults: notice.open_results === true });
+  const environment = uiProcessEnvironment(options.env || process.env);
+  return new Promise((resolve, reject) => {
+    const launch = (index) => {
+      const spec = commands[index];
+      let child;
+      try {
+        child = childProcess.spawn(spec.command, spec.args, {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+          shell: false,
+          env: environment
+        });
+      } catch (error) {
+        if (error?.code === 'ENOENT' && index + 1 < commands.length) return launch(index + 1);
+        reject(new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.'));
+        return;
+      }
+      let settled = false;
+      child.once('spawn', () => {
+        if (settled) return;
+        settled = true;
+        resolve(true);
+      });
+      child.once('error', (error) => {
+        if (settled) return;
+        settled = true;
+        if (error?.code === 'ENOENT' && index + 1 < commands.length) launch(index + 1);
+        else reject(new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.'));
+      });
+      child.unref();
+    };
+    launch(0);
+  });
+}
+
 // The MCP batch path publishes only this bounded progress object.  Keeping the
 // adapter here prevents the native UI from ever receiving a source identifier,
 // package id, path, filename or document content.
@@ -349,6 +400,8 @@ module.exports = {
   completionSummaryCommands,
   showCompletionSummary,
   showLocalIntakeNotice,
+  showLocalIntakeNoticeConfirmed,
   showBatchStateNotice,
+  showBatchStateNoticeConfirmed,
   showTerminalBatchSummary
 };

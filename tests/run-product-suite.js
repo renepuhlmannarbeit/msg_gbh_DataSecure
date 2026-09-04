@@ -12,15 +12,21 @@
 const { spawnSync } = require('child_process');
 
 const baseFiles = [
+  'tests/test-product-bootstrap.js', 'tests/test-standalone.js',
+  'tests/test-standalone-sidecar.js',
+  'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
+  'tests/test-support-trace.js',
+  'tests/test-debug-skill-contract.js',
   'tests/test-package-staging.js', 'tests/test-safe-private-tree.js',
   'tests/test-package-staging-integration.js', 'tests/test-batch-executor-startup.js',
-  'tests/test-completion-summary.js', 'tests/test-worker-terminal-presentation.js', 'tests/test-workflow-diagnostics.js', 'tests/test-transient-rename-retry.js', 'tests/test-diagnostic-causes.js', 'tests/test-startup-guard.js',
+  'tests/test-completion-summary.js', 'tests/test-worker-terminal-presentation.js', 'tests/test-workflow-diagnostics.js', 'tests/test-workflow-diagnostics-concurrency.js', 'tests/test-transient-rename-retry.js', 'tests/test-diagnostic-causes.js', 'tests/test-startup-guard.js',
   'tests/test-private-work-store.js', 'tests/test-batch-private-artifact-migration.js',
   'tests/test-review-private-artifact-migration.js', 'tests/test-retention.js',
   'tests/test-source-format-inspector.js', 'tests/test-source-opc-preflight.js',
   'tests/test-batch-source-admission.js', 'tests/test-document-result-grade.js',
   'tests/test-batch-result-projection.js', 'scripts/verify-native.mjs',
   'tests/test-bundled-runtime.mjs',
+  'tests/test-stable-data-root.js',
   'tests/make-fixtures.js', 'scripts/verify-canonical-docs.mjs',
   'tests/test-current-documentation-contract.js', 'tests/test-current-document-links.js',
   'tests/test-current-uat-kit-contract.js', 'tests/test-uat-fixture-generation.js'
@@ -37,17 +43,19 @@ const ciFiles = [
   'test-test-path-separation.js',
   'test-plugin-structure.js', 'test-host-matrix.js', 'test-runtime-start-matrix.js',
   'test-parsers.js', 'test-network-boundary.js', 'test-ui-process-policy.js',
-  'test-local-password.js', 'test-pii-regression.js', 'test-format-acceptance-matrix.js',
+  'test-pii-regression.js', 'test-format-acceptance-matrix.js',
   'test-batch-review-policy.js', 'test-mapping.js', 'test-mapping-outbox.js',
   'test-normal-path-response.js', 'test-direct-picker-batch.js',
   'test-direct-picker-intake-worker.js', 'test-local-only-handoff.js',
+  'test-automatic-local-review.js', 'test-automatic-review-worker-flow.js',
   'test-local-handoff-resume.js', 'test-mixed-batch-recovery.js',
   'test-archive-modes.mjs', 'test-batch-performance-contract.js',
   'test-gateway-e2e.js', 'test-mcp-protocol.js', 'test-adversarial.js',
   // DS-022/DS-069 core gates: single active batch, cross-process intake
   // reservation, executor lease, recovery and the visible result export.
   'test-batch-intake-reservation.js', 'test-batch-executor-lease.js',
-  'test-batch-active-lock.js', 'test-batch-recovery.js', 'test-result-folder-export.js'
+  'test-batch-active-lock.js', 'test-batch-recovery.js', 'test-result-folder-export.js',
+  'test-result-export-startup-replay.js'
 ];
 
 const fullOnly = [
@@ -77,8 +85,9 @@ const fullOnly = [
   'test-batch-mapping-maintenance.js', 'test-local-review-executor.js',
   'test-native-picker-lifecycle.js', 'test-legacy-input-migration.js', 'test-rc80-semantics.js',
   // Product tests that were referenced by no npm script at all.
-  'test-batch-pseudonym-context.js', 'test-storage-capacity.js', 'test-image-sanitizer.js',
+  'test-storage-capacity.js', 'test-image-sanitizer.js',
   'test-zip-permissions.mjs', 'test-parser-worker-boundary.js', 'test-background-role-launcher.js',
+  'test-durable-runtime-cache.js',
   'test-companion-startup-boundary.js'
 ];
 

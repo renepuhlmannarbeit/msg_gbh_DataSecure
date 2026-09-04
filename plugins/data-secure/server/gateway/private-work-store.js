@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { randomBytes } = require('crypto');
-const { createPathGuard, ensureSafeTarget, sameIdentity } = require('./private-artifact-crypto');
+const { createPathGuard, ensureSafeTarget, sameIdentity } = require('./private-path-guard');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
 
 function failure(code) { return Object.assign(new Error(code), { code }); }

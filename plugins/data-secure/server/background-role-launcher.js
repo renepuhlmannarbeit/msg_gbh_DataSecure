@@ -3,6 +3,7 @@
 const path = require('node:path');
 const childProcess = require('node:child_process');
 const { resolveSeaParserRole } = require('./sea-parser-role');
+const { resolveDurableRuntimeRoot } = require('./durable-runtime-cache');
 
 const ROLE_FLAGS = Object.freeze({
   batch: '--datasecure-batch-worker',
@@ -43,11 +44,14 @@ function launchBackgroundRole(role, options = {}) {
   if (sea !== true && sea !== false) invalid();
 
   if (sea === false) {
+    const durable = resolveDurableRuntimeRoot();
+    const serverRoot = durable ? path.join(durable.root, 'server') : __dirname;
+    const executable = durable?.executable || options.execPath || process.execPath;
     if (role === 'companion') {
       const spawn = options.spawn || childProcess.spawn;
-      const server = options.server || path.join(__dirname, 'companion', 'stdio-server.js');
-      const networkDeny = options.networkDeny || path.join(__dirname, 'network-deny.cjs');
-      return spawn(options.execPath || process.execPath, [`--require=${networkDeny}`, server], {
+      const server = options.server || path.join(serverRoot, 'companion', 'stdio-server.js');
+      const networkDeny = options.networkDeny || path.join(serverRoot, 'network-deny.cjs');
+      return spawn(executable, [`--require=${networkDeny}`, server], {
         stdio: ['pipe', 'pipe', 'ignore', 'pipe'],
         windowsHide: true,
         shell: false,
@@ -55,11 +59,12 @@ function launchBackgroundRole(role, options = {}) {
       });
     }
     const forkProcess = options.forkProcess || childProcess.fork;
-    return forkProcess(path.join(__dirname, 'gateway', `${role}-worker.js`), [], {
+    return forkProcess(path.join(serverRoot, 'gateway', `${role}-worker.js`), [], {
       detached: true,
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
-      execArgv: [`--require=${path.join(__dirname, 'network-deny.cjs')}`],
+      execArgv: [`--require=${path.join(serverRoot, 'network-deny.cjs')}`],
+      execPath: executable,
       env: options.env,
       serialization: 'json'
     });

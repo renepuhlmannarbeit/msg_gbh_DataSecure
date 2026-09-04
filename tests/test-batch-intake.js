@@ -79,7 +79,8 @@ function fixture(options = {}) {
       fs.rmSync(work, { recursive: true, force: true });
     },
     publicProgress: (state) => ({ total: state.items.length }),
-    platform: 'win32'
+    platform: 'win32',
+    productChannel: options.productChannel
   });
   const queueEntry = (name = path.basename(source), full = source) => ({
     name,
@@ -284,6 +285,7 @@ test('mixed admission journals every position but snapshots only candidates', ()
     assert.strictEqual(fs.readdirSync(item.work).length, 2);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
     assert.strictEqual(state.schema, 'datasecure-batch/4');
+    assert.strictEqual(state.product_channel, 'plugin');
     assert.deepStrictEqual(state.items.map((entry) => entry.status), [
       'pending', 'preflight_mapping_pending', 'pending', 'preflight_mapping_pending'
     ]);
@@ -299,6 +301,15 @@ test('mixed admission journals every position but snapshots only candidates', ()
       assert.strictEqual(Object.hasOwn(stopped, 'package_id'), false);
     }
     assert.strictEqual(state.io_summary.snapshot_copy_files, 2);
+  } finally { item.cleanup(); }
+});
+
+test('Standalone intake binds its product channel into the durable journal', () => {
+  const item = fixture({ productChannel: 'standalone' });
+  try {
+    item.begin([item.queueEntry()]);
+    const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
+    assert.strictEqual(state.product_channel, 'standalone');
   } finally { item.cleanup(); }
 });
 

@@ -12,7 +12,16 @@ const legacyFiles = new Set([
 
 function excludedEngineeringFile(normalized) {
   return normalized === 'server/ocr-runtime' || normalized.startsWith('server/ocr-runtime/') ||
-    normalized === 'server/ocr-runtime.provenance.json';
+    normalized === 'server/ocr-runtime.provenance.json' ||
+    normalized === 'server/ocr-session-harness.js' ||
+    normalized === 'server/parallel-preparation-harness.js' ||
+    normalized === 'server/sea-background-probe.js' ||
+    normalized === 'server/sea-parent-parser-probe.js' ||
+    normalized === 'server/sea-batch-probe.js' ||
+    normalized === 'server/sea-batch-probe-fixtures.js' ||
+    normalized === 'server/standalone' || normalized.startsWith('server/standalone/') ||
+    normalized === 'server/converters/markitdown' ||
+    normalized.startsWith('server/converters/markitdown/');
 }
 
 export function includeInEngineering(name) {
@@ -24,8 +33,8 @@ export function includeInProduct(name) {
   const normalized = String(name).replaceAll('\\', '/').toLowerCase();
   return !legacyFiles.has(normalized) && normalized !== 'server/vendor/keyring' &&
     !normalized.startsWith('server/vendor/keyring/') &&
-    // OCR remains a closed engineering spike. Shipping ~55 MiB of disabled
-    // binaries made the end-user ZIP larger without enabling a user feature.
+    // OCR and MarkItDown remain closed engineering pilots. Disabled runtime or
+    // bridge files must not change the current end-user product inventory.
     !excludedEngineeringFile(normalized);
 }
 

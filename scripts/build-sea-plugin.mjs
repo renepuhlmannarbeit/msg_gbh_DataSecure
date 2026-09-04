@@ -205,11 +205,12 @@ export function assembleSeaPlugin({ repositoryRoot = root, launchersRoot, output
     let mcp;
     const mcpBytes = readExpectedStageFile(stage, expected, '.mcp.json');
     try { mcp = JSON.parse(mcpBytes); } catch { throw new Error('SEA_PLUGIN_MCP_INVALID'); }
+    const server = mcp?.mcpServers?.['data-secure-local'];
     if (!mcp || typeof mcp !== 'object' || Array.isArray(mcp) ||
-        !mcp['data-secure-local'] || typeof mcp['data-secure-local'] !== 'object' ||
-        Array.isArray(mcp['data-secure-local'])) throw new Error('SEA_PLUGIN_MCP_INVALID');
-    mcp['data-secure-local'].command = contract.plugin_command;
-    mcp['data-secure-local'].args = [];
+        !mcp.mcpServers || typeof mcp.mcpServers !== 'object' || Array.isArray(mcp.mcpServers) ||
+        !server || typeof server !== 'object' || Array.isArray(server)) throw new Error('SEA_PLUGIN_MCP_INVALID');
+    server.command = contract.plugin_command;
+    server.args = [];
     writeStageFile(stage, expected, '.mcp.json', JSON.stringify(mcp, null, 2) + '\n', true);
     writeStageFile(stage, expected, 'SEA-ENGINEERING-EVIDENCE.json', JSON.stringify({
       schema: 'datasecure-sea-plugin-assembly/v2', release_enabled: false,

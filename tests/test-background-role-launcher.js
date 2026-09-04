@@ -49,6 +49,9 @@ function load(configuration = {}) {
         if (configuration.seaError) throw new Error('private-sea-error');
         return Object.hasOwn(configuration, 'sea') ? configuration.sea : true;
       } };
+      if (name === './durable-runtime-cache') return {
+        resolveDurableRuntimeRoot() { return configuration.durable || null; }
+      };
       assert.strictEqual(name, './sea-parser-role');
       return { resolveSeaParserRole() {
         state.resolutions++;
@@ -97,6 +100,7 @@ for (const target of targets) for (const role of Object.keys(flags)) {
       assert.deepStrictEqual(call.options.stdio, ['ignore', 'ignore', 'ignore', 'ipc']);
       assert.strictEqual(call.options.detached, true);
       assert.strictEqual(call.options.serialization, 'json');
+      assert.strictEqual(call.options.execPath, f.command);
     }
   });
 }
@@ -114,8 +118,23 @@ for (const role of ['batch', 'review']) test(`Node ${role} preserves injected fo
   assert.strictEqual(capture.executable, f.targetPath.join(f.server, 'gateway', `${role}-worker.js`));
   assert.strictEqual(capture.options.env, env);
   assert.deepStrictEqual(Object.keys(capture.options).sort(),
-    ['detached', 'windowsHide', 'stdio', 'execArgv', 'env', 'serialization'].sort());
+    ['detached', 'windowsHide', 'stdio', 'execArgv', 'execPath', 'env', 'serialization'].sort());
   assert.strictEqual(capture.options.serialization, 'json');
+  assert.strictEqual(capture.options.execPath, 'ignored-executable');
+});
+
+test('Node roles use the durable projection after the temporary plugin tree is gone', () => {
+  const targetPath = path.win32;
+  const root = 'C:\\Users\\synthetic\\SecureDataMsg\\runtime-cache\\rc96';
+  const executable = targetPath.join(root, 'runtime', 'datasecure-node.exe');
+  const f = load({ sea: false, durable: { root, executable } });
+  f.launch('batch', { env: {} });
+  const call = f.state.calls[0];
+  assert.strictEqual(call.executable, targetPath.join(root, 'server', 'gateway', 'batch-worker.js'));
+  assert.strictEqual(call.options.execPath, executable);
+  assert.deepStrictEqual(call.options.execArgv, [
+    `--require=${targetPath.join(root, 'server', 'network-deny.cjs')}`
+  ]);
 });
 
 test('Node companion preserves its existing command, preload and spawn test seams', () => {

@@ -5,13 +5,14 @@ Stand: 02.09.2026 · abgeleitet aus `DECISIONS.md` und `PRODUCT_VISION.md`
 ## Architekturprinzip
 
 DataSecure ist **Cowork-gesteuert; die Originalvorverarbeitung läuft lokal**.
-Originale dürfen nur in einer lokalen Cowork-Sitzung der Claude-Desktop-App oder
-in Claude Code dem tatsächlich verbundenen lokalen Plugin-MCP über dessen
-Betriebssystempicker zugeführt werden. Lokale Plugin-MCPs laufen laut aktueller
-Anthropic-Dokumentation nicht in Cloud-Sitzungen – auch dann nicht, wenn eine
-Cloud-Sitzung in der Desktop-App angezeigt wird. Web, Mobil, geplante Aufgaben,
-verbundene Ordner oder der Desktop-Dateibroker sind daher kein Ersatzpfad. Ein
-sichtbarer Skill oder Plugin-Eintrag ist kein Nachweis einer lokalen Privacy-Grenze.
+Originale dürfen nur über die geöffnete Claude-Desktop-App oder in Claude Code
+dem tatsächlich verbundenen lokalen Plugin-MCP über dessen Betriebssystempicker
+zugeführt werden. Cowork darf die Sitzung in der Cloud ausführen; lokale
+Connectoren und Plugins mit lokalem MCP werden dabei über die Desktop-App erreicht,
+während der DataSecure-Prozess und die Originalverarbeitung auf dem Rechner
+bleiben. Web, Mobil, geplante Aufgaben ohne aktive Desktop-Brücke, verbundene
+Ordner oder der Desktop-Dateibroker sind kein Ersatzpfad. Ein sichtbarer Skill
+oder Plugin-Eintrag ist kein Nachweis einer lokalen Privacy-Grenze.
 
 DS-062/DS-063 schließen zusätzliche System-VMs und Windows-Benutzerkonten aus.
 DS-065 entfernt die zusätzliche Verschlüsselung lokaler Arbeitsdaten: kein
@@ -66,6 +67,28 @@ Claude-Modell
   lokale OS-Oberflächen.
 - Ohne nachgewiesene MCP-App-Unterstützung bleibt der Text-/OS-Fallback gleichwertig.
 - Eine separate native Companion-Anwendung ist kein Normalbestandteil.
+
+## Eigenständiges zweites Produkt ohne Cowork
+
+- DataSecure Standalone besitzt eine eigene Desktop-Hülle, Distribution,
+  Konfiguration und einen eigenen Produktdatenroot. Es funktioniert ohne
+  Claude, Cowork, Skills, MCP, Agenten und Internet.
+- Desktop-Hülle und optionale Support-CLI rufen eine neutrale Application API
+  unterhalb von MCP direkt auf. MCP-/JSON-RPC-Protokolle, Toolnamen,
+  Handoff-Capabilities und Claude-Antwortfelder sind im Standalone-Produkt
+  unzulässig.
+- Standalone besitzt keine zweite Parser-, PII-, Review-, Journal-, Mapping-
+  oder Freigabelogik. Beide Produkte binden denselben Core-/Policy-Fingerprint
+  und bestehen denselben Golden-Korpus, dürfen ihre Journale, Reviewdaten und
+  Exporte jedoch weder finden noch lesen.
+- Microsoft MarkItDown ist ausschließlich ein isolierter Formatkonverter nach
+  Admission und versiegeltem Snapshot. Er erhält Bytes statt Pfad oder URL und
+  liefert noch nicht freigegebenes Markdown ausschließlich privat zurück.
+- Der Konverter läuft offline mit expliziten Einzelkonvertern; Built-ins,
+  Plugins, LLM-Clients und `markitdown-ocr` bleiben aus. Eine breite
+  Konverterfähigkeit ist keine DataSecure-Coverage oder Formatfreigabe.
+- Die verbindliche Lieferfolge und UX stehen in
+  [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 
 ## Job-, Daten- und Recoverymodell
 
@@ -140,5 +163,10 @@ Claude-Modell
 - Kein auswählbarer Bildmodus: Bildpixel bleiben lokal zurückgehalten; der
   Normalweg kann sie weder an Claude freigeben noch aus Originalen löschen.
 - Keine automatische Telemetrie oder Crashübermittlung.
+- Ein gesondertes Debug-ZIP darf für einen konkreten Supportfall dieselbe Engine
+  mit einem ausschließlich manuell aufrufbaren Skill starten. Es speichert je
+  Prozess unveränderliche JSON-Einzelereignisse aus geschlossenen Katalogen;
+  Roh-JSON-RPC, Argumente, Ergebnisse und nutzer- oder dokumentbezogene Werte
+  bleiben strukturell ausgeschlossen. Danach wird wieder das Normalpaket genutzt.
 - Cowork selbst kann eine Internetverbindung und cloudbasierte Modellverarbeitung
   benötigen; daraus folgt keine Netzwerkfreigabe für den lokalen DataSecure-Prozess.

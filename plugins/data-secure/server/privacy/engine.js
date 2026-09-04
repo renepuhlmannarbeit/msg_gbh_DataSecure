@@ -15,6 +15,7 @@ const {
   PHONE_LABEL_RE,
   ID_LABEL_HEADER_RE,
   hasLabelBefore,
+  hasAmbiguousSensitiveTable,
   isAllowedOrg,
   orgAlias,
   titleCase,
@@ -420,6 +421,9 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   for (const finding of conservativeLabelledResiduals(clean)) {
     if (!out.some((current) => current.type === finding.type && current.text === finding.text)) out.push(finding);
   }
+  // Structure is an independent release condition. A shifted/merged table row
+  // cannot be assigned to a sensitive header by position without guessing.
+  if (hasAmbiguousSensitiveTable(clean)) out.push({ type: 'TABLE_STRUCTURE_AMBIGUOUS', text: '' });
   const residualOrgKeys=new Set();
   const residualOrgSpans=[];
   for(const org of collectOrganizations(clean)) {

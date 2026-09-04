@@ -1459,13 +1459,21 @@ test('form layouts, title qualifiers, phone label variants and multilingual birt
   assertPresent(header.text, '| Name | Telefonnummer |', 'the header row stays readable');
 });
 
-test('fragmented and two-row PII table headers redact every labelled identifier', () => {
+test('fragmented PII table headers of up to three rows redact every labelled identifier', () => {
   const tables = [
     '| Steuer<br>ID | Geburts<br>datum | Telefon<br>(privat) | Personal<br>nummer | Menge |\n' +
       '| --- | --- | --- | --- | --- |\n' +
       '| 26954371827 | 01.01.1980 | 030 12345678 | P-4711 | 1980 |',
     '| Steuer | Geburts | Telefon | Personal | Menge |\n' +
-      '| ID | datum | privat | nummer | Stück |\n' +
+    '| ID | datum | privat | nummer | Stück |\n' +
+      '| --- | --- | --- | --- | --- |\n' +
+      '| 26954371827 | 01.01.1980 | 030 12345678 | P-4711 | 1980 |',
+    '| Steuer | Geburts | Telefon | Personal | Menge |\n' +
+      '| - | - |  | - | Stück |\n' +
+      '| ID | datum | privat | nummer | Anzahl |\n' +
+      '| --- | --- | --- | --- | --- |\n' +
+      '| 26954371827 | 01.01.1980 | 030 12345678 | P-4711 | 1980 |',
+    '| Steuer<br>-<br>ID | Geburts<br>-<br>datum | Telefon<br>-<br>privat | Personal<br>-<br>nummer | Menge |\n' +
       '| --- | --- | --- | --- | --- |\n' +
       '| 26954371827 | 01.01.1980 | 030 12345678 | P-4711 | 1980 |'
   ];
@@ -1539,20 +1547,57 @@ test('month-year prose remains while real prepositional street addresses are red
   }
 });
 
-// Counter-review rc93: a data row whose width differs from the header (merged or
-// spilled cells) lost every column label, so a Steuer-ID under a labelled
-// header stayed in clear and the gate shared the blind spot.
-test('table rows of unequal width keep their column labels', () => {
+// Counter-review rc94: shifted, merged or spilled rows cannot be bound to a
+// sensitive header safely by position. They must stop at the independent gate.
+test('ambiguous sensitive table structures fail closed instead of guessing columns', () => {
   for (const source of [
     '| Name | Steuer-ID | Ort |\n|---|---|---|\n| Max Mustermann | 26954371827 | Berlin | extra |',
+    '| Name | Steuer-ID | Ort |\n|---|---|---|\n| Zusatz | Max Mustermann | 26954371827 | Berlin |',
     '| Name | Steuer-ID | Ort | Menge |\n|---|---|---|---|\n| Max Mustermann | 26954371827 | Berlin |',
     '| Name | Geburtsdatum | Telefon |\n|---|---|---|\n| Max Mustermann | 01.01.1980 | 030 12345678 | Notiz |\n| Erika Beispiel | 05.05.1975 |'
   ]) {
     const result = anonymize(source, 'general');
-    for (const value of ['26954371827', '01.01.1980', '05.05.1975', '030 12345678']) assertAbsent(result.text, value, `unequal width: ${value}`);
-    if (source.includes('Berlin')) assertPresent(result.text, 'Berlin', 'a plain city cell without a PII label stays');
-    if (source.includes('Notiz')) assertPresent(result.text, 'Notiz', 'a surplus cell without a header stays');
-    assert.deepStrictEqual(require('../plugins/data-secure/server/privacy/engine').scanResidual(result.text, 'general', result.dictionary, { strongPersonAnchor: result.strongPersonAnchor }), []);
+    for (const candidate of [
+      pii.scanResidual(source, 'general'),
+      pii.scanResidual(result.text, 'general', result.dictionary, { strongPersonAnchor: result.strongPersonAnchor })
+    ]) assert.ok(candidate.some((hit) => hit.type === 'TABLE_STRUCTURE_AMBIGUOUS'), source);
+  }
+});
+
+test('overlong and mismatched sensitive table headers fail closed', () => {
+  for (const source of [
+    '| Steuer | Menge |\n| vertrauliche | Anzahl |\n| Identifikations | Nummer |\n| nummer | Stück |\n| --- | --- |\n| 26954371827 | 42 |',
+    '| Steuer | Geburts |\n| ID | datum |\n| --- | --- | --- |\n| 26954371827 | 01.01.1980 |'
+  ]) {
+    const result = anonymize(source, 'general');
+    assert.ok(pii.scanResidual(source, 'general').some((hit) => hit.type === 'TABLE_STRUCTURE_AMBIGUOUS'), source);
+    assert.ok(pii.scanResidual(result.text, 'general', result.dictionary, {
+      strongPersonAnchor: result.strongPersonAnchor
+    }).some((hit) => hit.type === 'TABLE_STRUCTURE_AMBIGUOUS'), source);
+  }
+  assert.throws(
+    () => anonymizeMarkdown('| Name | Steuer-ID | Ort |\n| --- | --- | --- |\n| Zusatz | Max Mustermann | 26954371827 | Berlin |', 'general'),
+    /TABLE_STRUCTURE_AMBIGUOUS/u,
+    'the publishing compliance path must stop an ambiguous sensitive table'
+  );
+});
+
+test('professional three-row headers and title-like technology names stay unchanged', () => {
+  const controls = [
+    '| Projekt | Version | Menge |\n| - | - | - |\n| ID | Nummer | Stück |\n| --- | --- | --- |\n| PRJ-4711 | 3.2.0 | 42 |',
+    'Technologie: Mx Graph API',
+    'Produkt: Ms Project Server',
+    'Framework: Mr Robot Framework',
+    'Stack: MS Project Server und Microsoft Graph API',
+    'Radiologie: Imaging Protocol, Image Reconstruction und Scanner Calibration',
+    'Klinik: Treatment Protocol und Spectroscopy Report'
+  ];
+  for (const source of controls) {
+    const result = anonymize(source, 'personnel_profile');
+    assert.strictEqual(result.text, source, source);
+    assert.deepStrictEqual(pii.scanResidual(result.text, 'personnel_profile', result.dictionary, {
+      strongPersonAnchor: result.strongPersonAnchor
+    }), [], source);
   }
 });
 
@@ -1577,6 +1622,7 @@ test('English salutations anchor the name and are removed like German ones', () 
     ['Contact: Mrs. Erika Beispiel', 'Contact: [PERSON_001]'],
     ['Contact: Mr. Max Mustermann', 'Contact: [PERSON_001]'],
     ['Contact: Ms Anna Beispiel', 'Contact: [PERSON_001]'],
+    ['Contact: Mx Alex Taylor', 'Contact: [PERSON_001]'],
     ['Contact: Mr. Dr. Max Mustermann', 'Contact: Dr. [PERSON_001]'],
     ['Dear Mrs. Beispiel,', 'Dear [PERSON_001],']
   ]) {

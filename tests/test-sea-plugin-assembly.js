@@ -47,7 +47,7 @@ function withFixture(fn) {
   const source = path.join(directory, 'plugins', 'data-secure');
   const sourceEntries = [
     ['.claude-plugin/plugin.json', JSON.stringify({ name: 'synthetic-test-only', version: '1.0.0-test' })],
-    ['.mcp.json', JSON.stringify({ 'data-secure-local': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/server/index.js'] } })],
+    ['.mcp.json', JSON.stringify({ mcpServers: { 'data-secure-local': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/server/index.js'] } } })],
     ['server/index.js', '// SYNTHETIC TEST ONLY\n'],
     ['server/gateway/batch-worker.js', '// SYNTHETIC BACKGROUND ENTRY\n'],
     ['server/gateway/batch-executor.js', '// SYNTHETIC BACKGROUND DEPENDENCY\n'],
@@ -169,8 +169,9 @@ function rewriteArchivePayload(buffer, change) {
     assert.strictEqual(fs.lstatSync(result.archive).nlink, 1);
     assert.deepStrictEqual(seaTreeInventory(f.source), before);
     const mcp = JSON.parse(entries.get('.mcp.json'));
-    assert.strictEqual(mcp['data-secure-local'].command, '${CLAUDE_PLUGIN_ROOT}/bin/datasecure-mcp');
-    assert.deepStrictEqual(mcp['data-secure-local'].args, []);
+    assert.deepStrictEqual(Object.keys(mcp), ['mcpServers']);
+    assert.strictEqual(mcp.mcpServers['data-secure-local'].command, '${CLAUDE_PLUGIN_ROOT}/bin/datasecure-mcp');
+    assert.deepStrictEqual(mcp.mcpServers['data-secure-local'].args, []);
     const assembly = JSON.parse(entries.get('SEA-ENGINEERING-EVIDENCE.json'));
     assert.strictEqual(assembly.schema, 'datasecure-sea-plugin-assembly/v2');
     assert.strictEqual(assembly.release_enabled, false);
@@ -409,7 +410,7 @@ function rewriteArchivePayload(buffer, change) {
           changed = true;
           const stage = path.dirname(path.dirname(file));
           original(path.join(stage, relative), relative === '.mcp.json'
-            ? JSON.stringify({ 'data-secure-local': { command: 'synthetic-changed', env: { SYNTHETIC_UNEXPECTED: '1' } } })
+            ? JSON.stringify({ mcpServers: { 'data-secure-local': { command: 'synthetic-changed', env: { SYNTHETIC_UNEXPECTED: '1' } } } })
             : '// mutation after source validation');
         }
         return result;

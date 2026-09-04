@@ -8,7 +8,11 @@ const {
   releaseLocalBatchExecutor,
   readBatchProgress
 } = require('./batch');
-const { validateSummary, showLocalIntakeNotice, showBatchStateNotice } = require('../companion/completion-summary');
+const {
+  validateSummary,
+  showLocalIntakeNoticeConfirmed,
+  showBatchStateNoticeConfirmed
+} = require('../companion/completion-summary');
 const { recordWorkflowEvent, newRunId: mintRunId } = require('./workflow-diagnostics');
 // Harnesses replace ./workflow-diagnostics with a bare recorder; the run id then
 // still has to exist so every event of one run can be grouped (DS-071).
@@ -32,18 +36,66 @@ const pendingIntakes = new Map();
 // while it is still alive, otherwise the detached worker (the Cowork host may
 // end this process shortly after the tool response). Without a journal claim
 // function the parent presents as before.
-function claimTerminalNoticeAsParent(token, options = {}) {
-  try {
-    const claim = options.claimTerminalNotice || require('./batch').claimTerminalNotice;
-    return typeof claim === 'function' ? claim(token, 'parent') !== false : true;
-  } catch {
-    return true;
-  }
-}
-
 function acknowledgeTerminalNotice(child) {
   try { child?.send?.({ type: TERMINAL_NOTICE_ACK }, () => {}); }
   catch { /* an ended worker needs no acknowledgement */ }
+}
+
+function terminalNoticeTransaction(token, options = {}) {
+  // Preserve the narrow one-phase injection used by older tests/support
+  // callers. Product code always uses the explicit durable transaction.
+  if (typeof options.claimTerminalNotice === 'function' && !options.reserveTerminalNotice) {
+    const claimed = options.claimTerminalNotice(token, 'parent') !== false;
+    return claimed ? { reservationId: null, mark: () => true, release: () => true } : null;
+  }
+  try {
+    const batch = require('./batch');
+    const reserve = options.reserveTerminalNotice || batch.reserveTerminalNotice;
+    const mark = options.markTerminalNoticePresented || batch.markTerminalNoticePresented;
+    const release = options.releaseTerminalNoticeReservation || batch.releaseTerminalNoticeReservation;
+    const reserved = reserve(token, 'parent');
+    if (reserved?.ok !== true) return null;
+    return {
+      reservationId: reserved.reservation_id,
+      mark: () => mark(token, 'parent', reserved.reservation_id),
+      release: () => release(token, 'parent', reserved.reservation_id)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = {}, itemCount) {
+  const transaction = terminalNoticeTransaction(token, options);
+  if (!transaction) return false;
+  lifecycle({ event: 'completion_notice_started', outcome: 'progress', ...(itemCount ? { item_count: itemCount } : {}) });
+  const failed = () => {
+    try { transaction.release(); } catch { /* worker fallback owns recovery */ }
+    lifecycle({ event: 'completion_notice_failed', outcome: 'stopped',
+      ...(itemCount ? { item_count: itemCount } : {}), error_code: 'LOCAL_NOTICE_FAILED' });
+    return false;
+  };
+  const presented = () => {
+    let marked = false;
+    try { marked = transaction.mark() !== false; } catch { marked = false; }
+    if (!marked) return failed();
+    lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', ...(itemCount ? { item_count: itemCount } : {}) });
+    // A worker is released only after both native spawn confirmation and the
+    // durable presented transition. Parent death/error before then leaves it
+    // free to take over after its bounded grace period.
+    acknowledgeTerminalNotice(child);
+    return true;
+  };
+  try {
+    const outcome = show();
+    if (outcome && typeof outcome.then === 'function') {
+      outcome.then(presented, failed).catch(() => {});
+      return true;
+    }
+    return presented();
+  } catch {
+    return failed();
+  }
 }
 const pendingReviews = new Map();
 const DEFAULT_IPC_ACK_TIMEOUT_MS = 5000;
@@ -52,8 +104,10 @@ const DEFAULT_IPC_ACK_TIMEOUT_MS = 5000;
 // EU_PRIVACY_ROOT and is re-validated by inspectRoot() in the worker.
 const WORKER_ENV_KEYS = Object.freeze([
   'SystemRoot', 'WINDIR', 'PATH', 'TEMP', 'TMP', 'LOCALAPPDATA', 'APPDATA',
-  'HOME', 'XDG_DATA_HOME', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'EU_PRIVACY_LANGUAGE',
-  'EU_PRIVACY_VISUAL_MODE', 'EU_PRIVACY_RETENTION_DAYS', 'DATASECURE_RUN_ID'
+  'HOME', 'XDG_DATA_HOME', 'EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'EU_PRIVACY_LANGUAGE',
+  'EU_PRIVACY_VISUAL_MODE', 'EU_PRIVACY_RETENTION_DAYS', 'DATASECURE_RUN_ID',
+  'DATASECURE_PRODUCT_CHANNEL',
+  'DATASECURE_DURABLE_RUNTIME_ROOT'
 ]);
 
 function batchWorkerEnvironment(source = process.env) {
@@ -120,6 +174,51 @@ function observeWorker(child, onFailure, onExit) {
   (child.on || child.once).call(child, 'error', () => fail(pid === null ? 'LOCAL_WORKER_SPAWN_FAILED' : 'LOCAL_IPC_FAILED'));
   child.once('exit', end);
   return { fail, get ended() { return ended; }, get failed() { return failed; } };
+}
+
+function createWorkerAcceptance(worker, acceptedType, options) {
+  if (options.requireIpcAcknowledgement !== true) {
+    return { promise: Promise.resolve(), accept: () => false, reject: () => false };
+  }
+  let resolveAck;
+  let rejectAck;
+  let settled = false;
+  let timer;
+  let abortListener;
+  const promise = new Promise((resolve, reject) => { resolveAck = resolve; rejectAck = reject; });
+  promise.catch(() => {});
+  const requested = Number(options.ipcAckTimeoutMs);
+  const timeoutMs = Number.isSafeInteger(requested) && requested >= 10 && requested <= 30000
+    ? requested : DEFAULT_IPC_ACK_TIMEOUT_MS;
+  const settle = (error) => {
+    if (settled) return false;
+    settled = true;
+    clearTimeout(timer);
+    if (abortListener) options.signal?.removeEventListener?.('abort', abortListener);
+    if (error) rejectAck(error); else resolveAck();
+    return true;
+  };
+  timer = setTimeout(() => {
+    if (!settle(new Error('bounded IPC acknowledgement timeout'))) return;
+    worker.fail('LOCAL_IPC_ACK_TIMEOUT');
+  }, timeoutMs);
+  timer.unref?.();
+  if (options.signal?.aborted) {
+    if (settle(new Error('IPC acknowledgement cancelled'))) worker.fail('LOCAL_IPC_ACK_CANCELLED');
+  } else if (options.signal?.addEventListener) {
+    abortListener = () => {
+      if (settle(new Error('IPC acknowledgement cancelled'))) worker.fail('LOCAL_IPC_ACK_CANCELLED');
+    };
+    options.signal.addEventListener('abort', abortListener, { once: true });
+  }
+  return {
+    promise,
+    accept(message) {
+      if (!message || Object.keys(message).length !== 1 || message.type !== acceptedType) return false;
+      return settle();
+    },
+    reject(error = new Error('worker ended before IPC acknowledgement')) { return settle(error); }
+  };
 }
 
 const PRESENTABLE_BATCH_PHASES = new Set([
@@ -254,42 +353,31 @@ function startLocalBatchExecutor(token, options = {}) {
   const lifecycle = (event) => { try { record({ run_id: runId, ...event }); } catch { /* diagnostics never changes processing */ } };
   let child;
   let worker;
+  let acceptance;
   let claimedLease = false;
   let noticeShown = false;
-  // Presentation never changes the privacy state, but a window that could not
-  // be shown must leave the same content-free trace as on the intake path, or
-  // a missing completion dialog after a continuation is undiagnosable.
-  const present = (show) => {
-    lifecycle({ event: 'completion_notice_started', outcome: 'progress' });
-    try {
-      show();
-      lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok' });
-    } catch {
-      lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', error_code: 'LOCAL_NOTICE_FAILED' });
-    }
-  };
   const showNoticeOnce = (progress) => {
     if (noticeShown || !progress) return;
     noticeShown = true;
-    if (!claimTerminalNoticeAsParent(token, options)) return;
-    acknowledgeTerminalNotice(child);
-    present(() => (options.showBatchStateNotice || showBatchStateNotice)(progress));
+    presentTerminalNoticeAsParent(token, child,
+      () => (options.showBatchStateNotice || showBatchStateNoticeConfirmed)(progress), lifecycle, options);
   };
   const finalizeExit = () => afterIpcDrain(options, () => {
     if (noticeShown) return;
     showNoticeOnce(durableBatchStateProgress(token, 'local-batch-state', options));
     if (noticeShown) return;
     noticeShown = true;
-    if (!claimTerminalNoticeAsParent(token, options)) return;
-    present(() => (options.showLocalIntakeNotice || showLocalIntakeNotice)('after_checkpoint'));
+    presentTerminalNoticeAsParent(token, child,
+      () => (options.showLocalIntakeNotice || showLocalIntakeNoticeConfirmed)('after_checkpoint'), lifecycle, options);
   });
   try {
     child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment({ ...(options.env || process.env), DATASECURE_RUN_ID: runId }) });
     worker = observeWorker(child, (errorCode) => {
       lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: errorCode });
     }, (code, failed, pid) => {
+      acceptance?.reject();
       if (pid === null) return; // a never-started process has no OS exit
-      if (failed && claimedLease) releaseLocalBatchExecutor(token, pid);
+      if (claimedLease) releaseLocalBatchExecutor(token, pid);
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', exit_code: code,
         error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_WORKER_EXITED' });
       if (claimedLease) finalizeExit();
@@ -304,6 +392,7 @@ function startLocalBatchExecutor(token, options = {}) {
       return claimed;
     }
     claimedLease = true;
+    acceptance = createWorkerAcceptance(worker, 'local-batch-accepted', options);
     const presentProgress = (progress) => {
       if (progress) lifecycle({
         event: 'intake_terminal_state', outcome: progress.complete ? 'ok' : 'progress',
@@ -313,6 +402,11 @@ function startLocalBatchExecutor(token, options = {}) {
       showNoticeOnce(progress);
     };
     child.on?.('message', (message) => {
+      if (acceptance.accept(message)) return;
+      if (message && Object.keys(message).length === 1 && message.type === 'local-review-paused') {
+        noticeShown = true;
+        return;
+      }
       const progress = localBatchStateProgress(message);
       presentProgress(progress);
     });
@@ -324,12 +418,14 @@ function startLocalBatchExecutor(token, options = {}) {
       child.unref?.();
     });
     if (worker.failed) throw new Error('worker start failed');
-    return {
+    const response = {
       ok: true,
       local_processing_started: true,
       ...readBatchProgress(token),
       raw_content_sent_to_claude: false
     };
+    Object.defineProperty(response, 'ipcAcknowledgement', { value: acceptance.promise, enumerable: false });
+    return response;
   } catch {
     if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
     else lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
@@ -353,8 +449,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     : reserve().reservation_id;
   const token = crypto.randomBytes(32).toString('hex');
   const forkProcess = options.forkProcess;
-  const showIntakeNotice = options.showLocalIntakeNotice || showLocalIntakeNotice;
-  const showState = options.showBatchStateNotice || options.showTerminalBatchSummary || showBatchStateNotice;
+  const showIntakeNotice = options.showLocalIntakeNotice || showLocalIntakeNoticeConfirmed;
+  const showState = options.showBatchStateNotice || options.showTerminalBatchSummary || showBatchStateNoticeConfirmed;
   const workflowRecorder = options.recordWorkflowEvent || recordWorkflowEvent;
   const runId = newRunId();
   const lifecycle = (event) => { try { workflowRecorder({ run_id: runId, ...event }); } catch { /* diagnostics never changes processing */ } };
@@ -382,16 +478,16 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       intake.noticeShown = true;
       // Before the checkpoint there is no journal to arbitrate; the worker then
       // presents only when this parent never acknowledged.
-      if (intake.checkpointCreated && !claimTerminalNoticeAsParent(token, options)) return;
-      acknowledgeTerminalNotice(child);
-      lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
-      try {
-        showIntakeNotice(stage);
-        lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', item_count: itemCount });
-      } catch {
-        lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
-          error_code: 'LOCAL_NOTICE_FAILED' });
+      if (intake.checkpointCreated) {
+        presentTerminalNoticeAsParent(token, child, () => showIntakeNotice(stage), lifecycle, options, itemCount);
+        return;
       }
+      // Before the first checkpoint there is no durable journal. Presenting
+      // locally is still preferred over leaving a failed intake invisible.
+      lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
+      try { showIntakeNotice(stage); lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', item_count: itemCount }); }
+      catch { lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
+        error_code: 'LOCAL_NOTICE_FAILED' }); }
     };
     pendingIntakes.set(token, intake);
     // Bounded worker-side acknowledgement. The handoff counts as confirmed only
@@ -441,20 +537,15 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         phase: progress.batch_phase, item_count: progress.batch_total,
         released_count: progress.released, stopped_count: progress.stopped
       });
-      if (!claimTerminalNoticeAsParent(token, options)) return true;
-      acknowledgeTerminalNotice(child);
-      lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
-      try {
-        showState(progress);
-        lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', item_count: itemCount });
-      } catch {
-        lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
-          error_code: 'LOCAL_NOTICE_FAILED' });
-      }
+      presentTerminalNoticeAsParent(token, child, () => showState(progress), lifecycle, options, itemCount);
       return true;
     };
     child.on?.('message', (message) => {
       if (!message || typeof message !== 'object') return;
+      if (Object.keys(message).length === 1 && message.type === 'local-review-paused') {
+        intake.noticeShown = true;
+        return;
+      }
       if (message.type === 'local-intake-accepted') {
         // A duplicate or post-timeout acceptance is inert; a timed-out worker
         // has already been failed and is not revived by a late envelope.
@@ -558,6 +649,7 @@ function startLocalReviewExecutor(token, options = {}) {
   const lifecycle = (event) => { try { record({ run_id: runId, ...event }); } catch { /* diagnostics never changes review state */ } };
   let child;
   let worker;
+  let acceptance;
   let onWorkerFailure = (errorCode) => lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
   let onWorkerExit = (code, failed, pid) => {
     if (pid !== null) lifecycle({ event: 'review_worker_exited', outcome: 'stopped', exit_code: code,
@@ -577,11 +669,21 @@ function startLocalReviewExecutor(token, options = {}) {
       return contentFreeReviewStart(claimed, false);
     }
     claimedLease = true;
+    acceptance = createWorkerAcceptance(worker, 'local-review-accepted', options);
     pendingReviews.set(token, child);
+    child.on?.('message', (message) => {
+      if (acceptance.accept(message)) return;
+      const progress = localBatchStateProgress(message, new Set(['local-review-state']));
+      if (!progress) return;
+      presentTerminalNoticeAsParent(token, child,
+        () => (options.showBatchStateNotice || showBatchStateNoticeConfirmed)(progress), lifecycle, options,
+        progress.batch_total);
+    });
     onWorkerFailure = (errorCode) => {
       lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
     };
     onWorkerExit = (code, failed, pid) => {
+      acceptance.reject();
       lifecycle({ event: 'review_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', exit_code: code,
         error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
       if (claimedLease) releaseExecutor(token, pid);
@@ -595,7 +697,9 @@ function startLocalReviewExecutor(token, options = {}) {
       child.unref?.();
     });
     if (worker.failed) throw new Error('worker start failed');
-    return contentFreeReviewStart(claimed, true);
+    const response = contentFreeReviewStart(claimed, true);
+    Object.defineProperty(response, 'ipcAcknowledgement', { value: acceptance.promise, enumerable: false });
+    return response;
   } catch {
     if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
     else lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });

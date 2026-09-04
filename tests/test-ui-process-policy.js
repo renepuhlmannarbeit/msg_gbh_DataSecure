@@ -55,18 +55,13 @@ const HOSTILE_ENV = Object.freeze({
 
 test('all native UI helpers have an explicit immutable data classification', () => {
   assert.deepStrictEqual(Object.keys(UI_PROCESS_POLICIES).sort(), [
-    'batch_start_confirmation', 'completion_summary', 'count_confirmation', 'folder_opener', 'password_prompt', 'path_picker', 'text_review'
+    'batch_start_confirmation', 'completion_summary', 'count_confirmation', 'folder_opener', 'path_picker', 'text_review'
   ]);
   assert.strictEqual(uiProcessPolicy('path_picker').raw_content, false);
   assert.strictEqual(uiProcessPolicy('count_confirmation').raw_content, false);
   assert.strictEqual(uiProcessPolicy('batch_start_confirmation').raw_content, false);
   assert.strictEqual(uiProcessPolicy('completion_summary').raw_content, false);
   assert.strictEqual(uiProcessPolicy('folder_opener').raw_content, false);
-  const password = uiProcessPolicy('password_prompt');
-  assert.strictEqual(password.input_class, 'user_entered_secret');
-  assert.strictEqual(password.output_class, 'ephemeral_secret_buffer');
-  assert.strictEqual(password.raw_content, false);
-  assert.strictEqual(password.os_network_sandbox_required, true);
   const review = uiProcessPolicy('text_review');
   assert.strictEqual(review.raw_content, true);
   assert.strictEqual(review.os_network_sandbox_required, true);

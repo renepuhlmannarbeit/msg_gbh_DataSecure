@@ -328,6 +328,45 @@ test('whole-work cleanup preflights siblings and leaves unexpected nested trees 
   }
 });
 
+test('whole-work cleanup retries bounded transient Windows delete failures without weakening identity checks', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-retry-'));
+  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA };
+  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+  process.env.LOCALAPPDATA = path.join(base, 'localapp');
+  const { workPath, safeRemoveWorkDirectory } = require('../plugins/data-secure/server/gateway/batch-private-store');
+  const originalUnlink = fs.unlinkSync;
+  const originalRmdir = fs.rmdirSync;
+  let unlinkAttempts = 0;
+  let rmdirAttempts = 0;
+  try {
+    const work = workPath(token);
+    fs.mkdirSync(work);
+    const source = path.join(work, '001_aaaaaaaaaaaaaaaaaaaaaaaa.workcopy');
+    fs.writeFileSync(source, 'plain synthetic copy');
+    fs.unlinkSync = (target) => {
+      unlinkAttempts += 1;
+      if (unlinkAttempts === 1) throw Object.assign(new Error('scanner race'), { code: 'EPERM' });
+      return originalUnlink(target);
+    };
+    fs.rmdirSync = (target) => {
+      rmdirAttempts += 1;
+      if (rmdirAttempts === 1) throw Object.assign(new Error('scanner race'), { code: 'EBUSY' });
+      return originalRmdir(target);
+    };
+    safeRemoveWorkDirectory(token);
+    assert.strictEqual(unlinkAttempts, 2);
+    assert.strictEqual(rmdirAttempts, 2);
+    assert.strictEqual(fs.existsSync(work), false);
+  } finally {
+    fs.unlinkSync = originalUnlink;
+    fs.rmdirSync = originalRmdir;
+    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local]]) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test('the batch composition root preserves every delivery facade', () => {
   const batch = require('../plugins/data-secure/server/gateway/batch');
   for (const name of ['acknowledgeDeliveredPackage', 'acknowledgeDeliveredPackages', 'finalizePublishedPackageLocally']) {

@@ -1,0 +1,49 @@
+[[permission]]
+identifier = "allow-select-files"
+description = "Öffnet die native Mehrfach-Dateiauswahl und übergibt Pfade nur an den lokalen Core."
+commands.allow = ["select_files"]
+
+[[permission]]
+identifier = "allow-select-folder"
+description = "Öffnet die native Ordnerauswahl und übergibt den Pfad nur an den lokalen Core."
+commands.allow = ["select_folder"]
+
+[[permission]]
+identifier = "allow-cancel-admission"
+description = "Verwirft eine noch nicht gestartete lokale Auswahl."
+commands.allow = ["cancel_admission"]
+
+[[permission]]
+identifier = "allow-start-admitted-batch"
+description = "Startet ausschließlich die bereits lokal geprüfte Auswahl."
+commands.allow = ["start_admitted_batch"]
+
+[[permission]]
+identifier = "allow-get-public-state"
+description = "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand."
+commands.allow = ["get_public_state"]
+
+[[permission]]
+identifier = "allow-continue-current-batch"
+description = "Setzt den letzten lokal fortsetzbaren Stapel fort."
+commands.allow = ["continue_current_batch"]
+
+[[permission]]
+identifier = "allow-configure-results"
+description = "Ändert den Ergebnisordner über eine native lokale Ordnerauswahl."
+commands.allow = ["configure_results"]
+
+[[permission]]
+identifier = "allow-open-current-results"
+description = "Öffnet den festgelegten lokalen Ergebnisordner."
+commands.allow = ["open_current_results"]
+
+[[permission]]
+identifier = "allow-open-local-ledger"
+description = "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt."
+commands.allow = ["open_local_ledger"]
+
+[[permission]]
+identifier = "allow-shutdown"
+description = "Beendet den privaten lokalen Core-Prozess."
+commands.allow = ["shutdown"]

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc93",
+  "baseline": "3.2.0-rc98",
   "decision_ids": [
     "DS-001",
     "DS-002",
@@ -74,7 +74,13 @@
     "DS-068",
     "DS-069",
     "DS-070",
-    "DS-071"
+    "DS-071",
+    "DS-072",
+    "DS-073",
+    "DS-074",
+    "DS-075",
+    "DS-076",
+    "DS-077"
   ],
   "primary_product": "claude-plugin",
   "additional_system_vm": {
@@ -113,6 +119,22 @@
     "macos",
     "linux"
   ],
+  "standalone_desktop": {
+    "shell_candidate": "tauri-2",
+    "shell_release_status": "contract-ready-build-pending",
+    "transport": "inherited-framed-stdio",
+    "network_listener": false,
+    "renderer_source_access": false,
+    "end_user_rust_installation": false,
+    "native_build_verified": false,
+    "macos_minimum_system_version": "13.5",
+    "target_packages": [
+      "windows-x64",
+      "macos-x64",
+      "macos-arm64",
+      "linux-x64-glibc"
+    ]
+  },
   "initial_cowork_release_platforms": [
     "windows-x64",
     "macos-x64",

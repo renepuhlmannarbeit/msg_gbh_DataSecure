@@ -12,12 +12,11 @@ process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { readBatchProgress, _test } = require('../plugins/data-secure/server/gateway/batch');
-const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
 const { startLocalIntakeExecutor, localBatchStateProgress, terminalIntakeProgress } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { IO_SUMMARY_SCHEMA, validatePrivateIoSummary } = require('../plugins/data-secure/server/gateway/performance');
+const workflowDiagnostics = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 const { testAsync, done, assert } = createSuite('Direct picker intake worker');
 
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 function pause(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -237,12 +236,13 @@ async function main() {
     while (!workflowEvents.some((event) => event.event === 'intake_worker_exited') && Date.now() < exitDeadline) await pause(25);
     assert.strictEqual(parentNotices.length, 0, 'the parent must not add a second window after the worker claimed');
     // The worker wrote the lifecycle evidence the parent could no longer observe.
-    const journal = path.join(base, 'localapp', 'SecureDataMsg', 'diagnostics', 'workflow-events.jsonl');
-    const workerEvents = fs.readFileSync(journal, 'utf8').trim().split('\n').map((line) => JSON.parse(line).event);
+    const workflowRoot = path.join(base, 'localapp', 'SecureDataMsg');
+    const recorded = workflowDiagnostics._test.readWorkflowEvents({ dataRoot: workflowRoot });
+    const workerEvents = recorded.map((event) => event.event);
     for (const expected of ['intake_terminal_state', 'completion_notice_started', 'completion_notice_dispatched']) {
       assert.ok(workerEvents.includes(expected), `worker-side evidence must contain ${expected}`);
     }
-    assert.doesNotMatch(fs.readFileSync(journal, 'utf8'), /source-orphan|beispiel@example\.test|Beispielperson|[a-f0-9]{64}/u);
+    assert.doesNotMatch(JSON.stringify(recorded), /source-orphan|beispiel@example\.test|Beispielperson|[a-f0-9]{64}/u);
   });
   await removeTestRoot();
   done();

@@ -25,6 +25,8 @@ function state(schema, documentResult, includeResult = true) {
 
 function access(journal, published) {
   let issued = 0;
+  let fullChecks = 0;
+  let identityChecks = 0;
   const api = createBatchResultAccess({
     SafeError: Error,
     fs: { readdirSync: () => [] },
@@ -35,15 +37,34 @@ function access(journal, published) {
     publicProgress: () => ({ remaining: 0, processing: 0, retryable: 0, deferred_review: 0,
       mapping_pending: 0, delivery_pending: 0, stopped: 0, complete: true }),
     liveLocalExecutor: () => false,
-    publishedPackageRecord: () => published,
+    publishedPackageRecord: () => { fullChecks++; return published; },
+    publishedPackageIdentityRecord: () => { identityChecks++; return published; },
     sameDocumentResult: (left, right) => JSON.stringify(left) === JSON.stringify(right),
     issueReadCapability: () => {
       issued++;
       return { read_capability: 'c'.repeat(43), read_capability_expires_at: 'later' };
     }
   });
-  return { api, issued: () => issued };
+  return { api, issued: () => issued, fullChecks: () => fullChecks, identityChecks: () => identityChecks };
 }
+
+test('modern identity-bound listing avoids the synchronous full hash before asynchronous handoff verification', () => {
+  const journal = state('datasecure-batch/4', complete);
+  journal.product_channel = 'plugin';
+  journal.items[0].package_identity = { manifest: {}, document: {} };
+  const fixture = access(journal, { state: 'verified', document_result: complete });
+  assert.strictEqual(fixture.api.listBatchResults(token).results.length, 1);
+  assert.strictEqual(fixture.identityChecks(), 1, 'the durable identity is checked once');
+  assert.strictEqual(fixture.fullChecks(), 0, 'listing must not synchronously hash the Markdown');
+  assert.strictEqual(fixture.issued(), 1);
+});
+
+test('legacy or unbound listing retains the synchronous full integrity verifier', () => {
+  const fixture = access(state('datasecure-batch/2', complete), { state: 'verified', document_result: complete });
+  assert.strictEqual(fixture.api.listBatchResults(token).results.length, 1);
+  assert.strictEqual(fixture.fullChecks(), 1);
+  assert.strictEqual(fixture.identityChecks(), 0);
+});
 
 test('matching V2 journal and verified V3 package issue exactly one capability', () => {
   const fixture = access(state('datasecure-batch/2', complete), { state: 'verified', document_result: complete });
@@ -118,6 +139,35 @@ test('result paging does not advertise an empty page containing only stopped or 
   assert.strictEqual(page.results.length, 5);
   assert.strictEqual(page.next_cursor, null);
   assert.strictEqual(fixture.issued(), 5);
+});
+
+test('pre-channel v4 plugin journals remain readable after the Standalone split', () => {
+  const journal = state('datasecure-batch/4', complete);
+  const fixture = access(journal, { state: 'verified', document_result: complete });
+  assert.strictEqual(fixture.api.listBatchResults(token).results.length, 1);
+  assert.strictEqual(fixture.issued(), 1);
+});
+
+test('Standalone batches are never readable or discoverable through the Claude handoff facade', () => {
+  const journal = state('datasecure-batch/4', complete);
+  journal.product_channel = 'standalone';
+  const fixture = access(journal, { state: 'verified', document_result: complete });
+  assert.throws(() => fixture.api.listBatchResults(token), /gehört nicht zum Claude-Plugin/u);
+  assert.strictEqual(fixture.issued(), 0);
+
+  const api = createBatchResultAccess({
+    SafeError: Error,
+    fs: { readdirSync: () => [{ isFile: () => true, name: `${token}.json` }] },
+    tokenPattern: /^[a-f0-9]{64}$/u,
+    batchRoot: () => '.',
+    readStateForMaintenance: () => journal,
+    publicProgress: () => ({ complete: true }),
+    liveLocalExecutor: () => false,
+    publishedPackageRecord: () => ({ state: 'verified', document_result: complete }),
+    sameDocumentResult: () => true,
+    issueReadCapability: () => { throw new Error('must not issue'); }
+  });
+  assert.deepStrictEqual(api.completedLocalOnlyCandidates(), []);
 });
 
 done();

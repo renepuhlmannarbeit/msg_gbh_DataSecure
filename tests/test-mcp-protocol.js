@@ -686,6 +686,12 @@ async function main() {
     assert.strictEqual(result.filenames_logged, false);
     assert.strictEqual(result.paths_logged, false);
     assert.strictEqual(result.hashes_logged, false);
+    assert.strictEqual(result.support_trace.enabled, true);
+    assert.ok(result.support_trace.events.length > 0);
+    assert.strictEqual(result.support_trace.raw_json_rpc_logged, false);
+    assert.strictEqual(result.support_trace.arguments_logged, false);
+    assert.strictEqual(result.support_trace.results_logged, false);
+    assert.strictEqual(result.support_trace.tokens_logged, false);
   });
 
   await testAsync('removed Input intake tools stay unavailable in support mode', async () => {
@@ -739,6 +745,15 @@ async function main() {
     const { responses } = await talk(['{not json at all']);
     assert.strictEqual(responses[0].error.code, -32700);
     assert.strictEqual(responses[0].id, null);
+  });
+
+  await testAsync('an oversized unterminated frame is bounded and the next request still works', async () => {
+    const oversized = `{"jsonrpc":"2.0","id":1,"method":"${'x'.repeat(1024 * 1024)}"}`;
+    const { responses } = await talk([oversized, rpc(2, 'ping')]);
+    assert.strictEqual(responses.length, 2);
+    assert.strictEqual(responses[0].error.code, -32600);
+    assert.strictEqual(responses[0].id, null);
+    assert.strictEqual(responses[1].id, 2);
   });
 
   await testAsync('a request without jsonrpc 2.0 is rejected as invalid', async () => {

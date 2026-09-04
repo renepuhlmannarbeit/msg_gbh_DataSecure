@@ -31,7 +31,6 @@ const docs = [
   'README.md',
   'SECURITY.md',
   'LICENSE',
-  'ARCHITECTURE_DECISION.md',
   'THIRD_PARTY_NOTICES.md',
   'assets',
   'docs'

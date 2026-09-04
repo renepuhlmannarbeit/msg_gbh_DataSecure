@@ -16,13 +16,30 @@ function runtimeInfo() {
     const candidate = ({ 'win32/x64': 'windows-x64', 'darwin/x64': 'macos-x64',
       'darwin/arm64': 'macos-arm64' })[`${process.platform}/${process.arch}`];
     if (candidate) {
-      const expected = candidate === 'windows-x64'
-        ? path.resolve(__dirname, '..', 'runtime', 'datasecure-node.exe')
-        : path.resolve(__dirname, '..', 'runtime', 'targets', candidate, 'node');
+      const standalone = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
+      const standaloneName = ({
+        'windows-x64': 'datasecure-core-x86_64-pc-windows-msvc.exe',
+        'macos-x64': 'datasecure-core-x86_64-apple-darwin',
+        'macos-arm64': 'datasecure-core-aarch64-apple-darwin'
+      })[candidate];
+      const expected = standalone
+        ? path.resolve(__dirname, '..', standaloneName)
+        : candidate === 'windows-x64'
+          ? path.resolve(__dirname, '..', 'runtime', 'datasecure-node.exe')
+          : path.resolve(__dirname, '..', 'runtime', 'targets', candidate, 'node');
+      // Detached Standalone workers run from the private durable cache under
+      // the normalized launcher name. They remain hash-bound by the copied
+      // evidence and must not silently fall back to host-node semantics.
+      const durableExpected = standalone
+        ? path.resolve(__dirname, '..', 'runtime', process.platform === 'win32' ? 'datasecure-node.exe' : 'datasecure-node')
+        : null;
       try {
-        const stat = fs.lstatSync(expected);
-        if (stat.isFile() && !stat.isSymbolicLink() && fs.realpathSync(expected) === fs.realpathSync(process.execPath)) {
-          target = candidate;
+        for (const executable of [expected, durableExpected].filter(Boolean)) {
+          const stat = fs.lstatSync(executable);
+          if (stat.isFile() && !stat.isSymbolicLink() && fs.realpathSync(executable) === fs.realpathSync(process.execPath)) {
+            target = candidate;
+            break;
+          }
         }
       } catch { /* source checkout or externally managed Node */ }
     }

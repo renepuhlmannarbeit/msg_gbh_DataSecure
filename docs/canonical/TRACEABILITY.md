@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 03.09.2026 · 3.2.0-rc93
+Stand: 04.09.2026 · 3.2.0-rc98
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -10,7 +10,7 @@ frühere Code-/Testzuordnungen bleiben im
 |---|---|---|
 | DS-001 | aktiv – De-Identifizierung, keine Rechtsgarantie | BL-052; README, Anleitung, Datenschutz-Skill |
 | DS-002 | aktiv, durch DS-067 präzisiert – ZIP/Marketplace für Nutzer | BL-010, BL-051; Plugin-/Marketplace-Gates |
-| DS-003 | aktiv | BL-010, BL-041, BL-051; Hostmatrix |
+| DS-003 | durch DS-066 ersetzt | historische Oberflächenannahme; aktuelles Gate in Hostmatrix und DS-066 |
 | DS-004 | aktiv | BL-010, BL-051; Fresh-Install-Evidence offen |
 | DS-005 | aktiv | BL-041; Manifest- und Plugin-Strukturtests |
 | DS-006 | aktiv | BL-041; Skill-/Jobvertrag, E1 offen |
@@ -23,10 +23,10 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-013 | aktiv | BL-012, BL-041; Abschlussvertrag |
 | DS-014 | aktiv | BL-012; Review-/Resume-Vertrag |
 | DS-015 | aktiv | BL-020–024, BL-049; fail-closed Formatgates |
-| DS-016 | aktiv | BL-023, BL-049; verschlüsselte Eingaben stoppen |
+| DS-016 | durch DS-046 ersetzt | BL-023, BL-049; verschlüsselte Eingaben stoppen, niemals entschlüsseln |
 | DS-017 | aktiv | BL-020, BL-022, BL-023; Embedded-Content-Vertrag |
 | DS-018 | aktiv | BL-020, BL-024; Network-Boundary-Test |
-| DS-019 | aktiv | BL-030; Pseudonymkontext |
+| DS-019 | durch DS-059 ersetzt | BL-030; neustartfester Pseudonymkontext |
 | DS-020 | aktiv, durch DS-065/067 präzisiert | BL-011, BL-040; Read-only/Retention |
 | DS-021 | aktiv | BL-011, BL-012; Resume-/Recoverytests |
 | DS-022 | aktiv | BL-011; Active-Lock-/Lease-Vertrag |
@@ -73,12 +73,18 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-063 | aktiv | BL-010, BL-052; kein zusätzliches Windows-Konto anfordern |
 | DS-064 | aktiv | BL-012, BL-041; keine zusätzliche Testbürokratie im Nutzerweg |
 | DS-065 | aktiv | BL-011.13, BL-030.2; Plain-Arbeitskopien |
-| DS-066 | aktiv | BL-010.7, BL-041, BL-051.6; Local-Cowork/Local-MCP versus Cloud-NO-GO |
+| DS-066 | aktiv | BL-010.7, BL-041, BL-051.6; Cloud-Cowork und lokaler MCP als getrennte Ebenen, Desktop-Brücke als Original-Gate |
 | DS-067 | aktiv und aktuell | BL-010, BL-011, BL-012, BL-024, BL-040, BL-051; fester Bildschutz, 0–14 nur temporär, Quellen/Exporte nie Auto-Löschziel, ZIP/Marketplace |
 | DS-068 | aktiv und aktuell | BL-012.9/10, BL-032.1, BL-043.1; lokaler Sammelreview, PII-Shield-inspirierte Interaktion und automatischer Klar-Datei-Pfad |
 | DS-069 | aktiv und aktuell | BL-040.5, BL-041.7, BL-041.10, BL-043.1; einmalige Ergebnisordnerwahl, neutraler verifizierter Markdown-Export und lokales Öffnen |
 | DS-070 | aktiv und aktuell | BL-011.8, BL-049.1, BL-050.3; Dateiidentität über Gerät, Inode, Größe und mtime plus verpflichtenden Preflight-SHA-256, Änderungszeit ausgenommen |
 | DS-071 | aktiv und aktuell | BL-042, BL-041.10; zufällige Laufkennung `run_id` in jedem Ablaufereignis (Eltern- und Worker-Prozess), sichtbar nur im ausdrücklich aufgerufenen Supportstatus und bestätigten lokalen Diagnoseexport, nicht in Skills/Normalablauf/Ergebnissen; verweigerter Start mit `startup_refused`, Markerdatei und pfadfreier Fehlerzeile, Laufzeit-Selbstprüfung gegen `RUNTIME-EVIDENCE.json`; `index.js`, `mcp-server.js`, `startup-guard.js`, `workflow-diagnostics.js`; `test-startup-guard`, `test-workflow-diagnostics`, `test-diagnostics` |
+| DS-072 | aktiv und aktuell | BL-010.8, BL-011.10, BL-041.7, BL-051.5; dauerhafte versionsgebundene Runtimeprojektion für Cowork-Worker; Standalone ist nach DS-075 ein getrenntes Produkt mit eigener Runtimeprojektion; `durable-runtime-cache.js`, `background-role-launcher.js`; `test-durable-runtime-cache`, `test-background-role-launcher`; echter RC96-UAT offen |
+| DS-073 | aktiv und aktuell | BL-010.8, BL-041.7, BL-041.10, BL-051.5; Claude-Temporärumleitung von `LOCALAPPDATA` nicht als Produktzustand verwenden, normale/umgezogene Pfade unverändert; `runtime.js`, `durable-runtime-cache.js`; `test-stable-data-root`, `verify-plugin-zip`; echter RC97-UAT offen |
+| DS-074 | aktiv und aktuell | BL-042.4; manueller Debug-Skill nur im gekennzeichneten Support-ZIP, gleiche Engine, geschlossene inhaltsfreie JSON-Ereignisse als unveränderliche Einzeldateien; `support-trace.js`, `workflow-diagnostics.js`, `mcp-server.js`, `build-runtime-plugin.mjs`; `test-support-trace`, `test-debug-skill-contract`, `test-mcp-protocol`, `test-workflow-diagnostics` |
+| DS-075 | aktiv und aktuell | BL-010.9–26; eigenständiges Standalone-Produkt mit direktem Coreadapter und physisch getrenntem Datenroot, ohne MCP/Claude/Skills/Agenten; MarkItDown 0.1.7 nur als deaktivierter Byte-Stream-DOCX-Differentialadapter ohne Netzwerk/Plugins/LLM/OCR; `STANDALONE_ARCHITECTURE.md`, `server/standalone/*`, `server/converters/markitdown/*`, `runtime.js`, `batch-executor.js`; `test-standalone`, `test-markitdown-contract`; Core-Entkopplung, Cross-Product-/Offlinegates, Supervisor und weitere Formate offen; Windows-x64-Pilotpaket steht, E1/E2 offen |
+| DS-076 | aktiv und aktuell, durch DS-077 präzisiert | BL-010.11–26; reale Tauri-2-Hülle, nativer Picker, privater längengerahmter Sidecar-Dispatcher mit Ready-Handshake und 30-Sekunden-Antwortgrenze, geschlossener UI-Zustands-/IPC-Vertrag, strikte Zählerinvarianten und inhaltsfreie Rendererprojektion; Windows-x64-Engineering-Build und selbsttragendes Pilotpaket verifiziert; vier getrennte Zielpakete Windows x64/macOS x64/macOS ARM64/Linux x64 glibc, kein HTTP-Port und kein Renderer-Rohzugriff; `standalone/product-manifest.json`, `standalone/ui-contract.json`, `standalone/ui-state.js`, `standalone/desktop-ipc.js`, `standalone/desktop-sidecar.js`, `standalone/ui-projection.js`, `apps/datasecure-standalone/desktop-targets.json`, `apps/datasecure-standalone/tauri-contract/`, `STANDALONE_ARCHITECTURE.md`; JS-/Rust-/Paket-/isolierter Sidecar-Smoke grün; Endnutzerfreigabe und native macOS-/Linux-Zielhostmessung offen |
+| DS-077 | aktiv und aktuell | BL-010.20/21/25/27; Windows-x64-Engineering-Pilot mit frischer geschlossener Runtimeprojektion, gepinnter Node-Runtime, Paketmanifest, SBOM, SHA-256 und isoliertem Sidecar-Smoke; systemweites WebView2 als dokumentierte Windows-Voraussetzung; Rust-Toolchain 1.98.1 für Builder gepinnt; Lizenzprüfung, Windows-UAT und native macOS-Pakete/UAT offen |
 
 ## DS-067 – konkrete Umsetzung
 
@@ -97,12 +103,34 @@ aktuelle Produktzusage.
 
 | Story | Korrektur / Entscheidung | Code- und Testnachweis |
 |---|---|---|
-| BL-021.1, DS-049 | Fragmentierte sowie zweizeilige Tabellenköpfe werden spaltengebunden normalisiert; `Geboren`, ISO-Geburtsdaten, `0049` und Leerraum um Telefonseparatoren werden erkannt. Ein eigener konservativer, labelgebundener Residual-Kanal verwendet bewusst breitere Formen als die Redaktion. | `privacy/base.js`, `privacy/engine.js`; `test-pii-regression.js` |
+| BL-021.1, DS-049 | Fragmentierte Tabellenköpfe werden bis höchstens drei gleich breite Zeilen nur zu bekannten sensiblen Labels spaltengebunden normalisiert; verschobene, anders breite oder überlange sensible Strukturen liefern `TABLE_STRUCTURE_AMBIGUOUS` und stoppen den Publish-Pfad. `Geboren`, ISO-Geburtsdaten, `0049` und Leerraum um Telefonseparatoren werden erkannt. | `privacy/base.js`, `privacy/engine.js`, `gateway/compliance.js`; `test-pii-regression.js` |
+| BL-021.1, DS-012/049 | Exakte technische Titelkontexte (`Graph API`, `Project Server`, `Robot Framework`) und ausgewählte Health-IT-Phrasen bleiben erhalten; echte englische Anreden einschließlich `Mx` ankern weiterhin Namen. | `privacy/base.js`, `privacy/entities.js`; `test-pii-regression.js` |
+| BL-022.1, DS-017/049 | Horizontale und vertikale DOCX-Zellverbindungen (`w:gridSpan`, `w:vMerge`) stoppen mit `DOCX_STRUCTURE_UNSAFE`, solange der Renderer keine koordinatentreue Spaltenabbildung trägt. Normale Tabellen bleiben unterstützt. | `ooxml.js`; `test-docx-structure.js`, `test:parser-contract` |
 | BL-021.1, DS-012/049 | Geschlechtliche Anreden werden am erkannten Namen entfernt, akademische und berufliche Qualifikationen bleiben erhalten. Die Straßenkorrektur nimmt ausschließlich die belegte Form „Im <Monat> <Jahr>“ aus; echte präpositionale Anschriften bleiben geschützt. | `privacy/entities.js`, `privacy/engine.js`, `privacy/structured.js`; `test-pii-regression.js` |
 | BL-042, DS-048/071 | `server/index.js` ist ein kleiner fail-closed Bootstrap. Auch ein Fehler beim Laden der Produktimplementierung oder des regulären Startschutzes erzeugt keinen Node-Stacktrace mit lokalem Pfad; die Implementierung liegt in `mcp-server.js`. | `server/index.js`, `server/mcp-server.js`; `test-startup-guard.js`, Manifest-/Cowork-Vertragstests |
 | BL-044.1, DS-049/071 | Startmarker folgen keinem verlinkten Diagnoseordner. Ergebniswurzel, `DataSecure-Output` und Laufordner werden identitätsgebunden und vor jedem Schreib-/Umbenennungsschritt erneut geprüft; ein nach der Auswahl ausgetauschtes Ziel stoppt fail-closed. | `startup-guard.js`, `result-export.js`; `test-startup-guard.js`, `test-result-folder-export.js` |
 | BL-042, DS-026/071 | `run_id` bleibt bewusst eine zufällige, inhaltsfreie Supportkennung: sichtbar nur über expliziten Supportstatus und bestätigten lokalen Diagnoseexport, nie im normalen Ablauf oder Ergebnis. | `DECISIONS.md`, `IT-BETRIEBSHANDBUCH.md`; `test-diagnostics.js`, Dokumentengates |
 | BL-002 | Der zuvor vertippte direkte Executor-Lifecycle-Befehl (`nodetests/...`) startet den Workflow-Diagnosetest wieder tatsächlich. | `package.json`, `test-manifest.js`; `npm run test:executor-lifecycle` |
+
+## E0-Expertenrunde 04.09.2026 – RC95
+
+| Story | Korrektur / Entscheidung | Code- und Testnachweis |
+|---|---|---|
+| BL-043, BL-040.5 | Intake, Fortsetzung und lokaler Review liefern erst nach der ausdrücklichen inhaltsfreien Bestätigung des jeweiligen Workers eine erfolgreiche Startantwort. Timeout, früher Exit und Abbruch stoppen fail-closed. | `gateway/batch-executor.js`, `gateway/batch-worker.js`, `gateway/review-worker.js`, `mcp-server.js`; `test-batch-executor-startup.js`, `test-local-review-executor.js`, `test-mcp-protocol.js` |
+| BL-041.10, DS-013/069 | Der Abschlussdialog wird zunächst kurzlebig reserviert und erst nach bestätigtem Presenter-Start dauerhaft als präsentiert markiert. Bei Startfehler wird die Reservierung freigegeben, sodass der Worker genau einen Fallbackversuch übernehmen kann. | `gateway/batch.js`, `gateway/batch-executor.js`, `gateway/worker-terminal-presentation.js`, `gateway/batch-worker.js`, `gateway/review-worker.js`; `test-worker-terminal-presentation.js`, `test-batch-executor-startup.js` |
+| BL-041.9, BL-043, DS-013/068 | Ein automatischer Hintergrundstapel wechselt bei Mehrdeutigkeiten ohne zweiten Cowork-Aufruf in den bestehenden lokalen Sammelreview. „Später“, Schließen und Abbrechen bleiben ohne Freigabe fortsetzbar und unterdrücken einen irreführenden zweiten Zustandsdialog. | `gateway/automatic-local-review.js`, `gateway/batch-worker.js`, `gateway/workflow-diagnostics.js`; `test-automatic-local-review.js`, `test-automatic-review-worker-flow.js` |
+| BL-040.5, BL-047.1, DS-069 | Der Replay offener sichtbarer Exporte läuft nach dem Listenerstart in einem zeitbegrenzten Worker und blockiert den MCP-Bootstrap nicht. Ergebnislisten binden die bereits dauerhafte Paketidentität statt synchron erneut voll zu hashen; vor einer Inhaltsübergabe bleibt der vollständige asynchrone SHA-256-Nachweis bestehen. | `gateway/result-export-replay.js`, `gateway/result-export-replay-worker.js`, `gateway/batch-results.js`, `gateway/batch.js`, `mcp-server.js`; `test-result-export-startup-replay.js`, `test-batch-results.js`, `test-package-snapshot-async.js`, `test-mcp-protocol.js` |
+| BL-010.8, BL-010.7, DS-066 | Plugin-MCP und Releaseprojektionen folgen dem offiziellen `mcpServers`-Vertrag; Cowork darf cloudseitig laufen, während der lokale Connector über die geöffnete Desktop-Brücke erreicht wird und die Originalverarbeitung lokal bleibt. Die Marketplace-Archivquelle ist strukturell strict-valid, aber eine reale URL und Zielhost-Evidenz bleiben Freigabebedingung. | `plugins/data-secure/.mcp.json`, Build-/SBOM-/ZIP-/Marketplace-Skripte, Host- und Nutzerkanon; Manifest-, Struktur-, Runtime-, Dokumenten- und `claude plugin validate --strict`-Gates |
+
+## E0-Bugrunde 04.09.2026 – UML-, Architektur-, UX- und Fehlergegencheck
+
+| Story | Korrektur / Befund | Code- und Testnachweis |
+|---|---|---|
+| BL-041.10, BL-040.5 | Eine erstmalige Ergebnisordnerwahl erfolgte vor Readiness- und Aktivitätsprüfung. Dadurch konnte ein nicht startfähiger Lauf unnötig einen Dialog öffnen und die globale Zielkonfiguration verändern. Die Guards laufen jetzt vor dem Setupdialog; Abbruch und Fehler benennen Ergebnis- und Quellpicker getrennt. | `mcp-server.js`, `companion/folder-picker.js`; `tests/test-native-picker-lifecycle.js` |
+| BL-042.4, DS-071/074 | Die allgemeine Diagnose schrieb weiterhin per Lesen-Ändern-Ersetzen in eine gemeinsame JSONL-Datei und konnte bei parallelen Prozessen Ereignisse verlieren; niedrige Aktivität ließ alte Ereignisdateien außerdem physisch liegen. Fach-, Workflow- und Supportdiagnose nutzen jetzt dieselbe unveränderliche Einzelereignis-Komponente mit physischer Alters-/Mengengrenze, sicherer Pfadprüfung und begrenztem Windows-Retry. Historische JSONL-Dateien sind nur lesbarer Upgradebestand. | `gateway/diagnostic-event-spool.js`, `gateway/diagnostics.js`, `gateway/workflow-diagnostics.js`, `gateway/support-trace.js`; `test-diagnostics.js`, `test-workflow-diagnostics.js`, `test-support-trace.js`, `test-workflow-diagnostics-concurrency.js` |
+| BL-040.5 | Zwischen Existenzprüfung und Rename konnte auf POSIX ein fremdes Ziel entstehen und überschrieben werden. Die sichtbare Projektion verwendet jetzt eine exklusive atomare Hardlink-Veröffentlichung, verifiziert Quell-/Zielidentität und entfernt erst danach die temporäre Datei. Ein konkurrierend entstandenes Ziel bleibt unverändert; der Export bleibt offen. | `gateway/batch-journal-io.js`, `gateway/result-export.js`; `tests/test-result-folder-export.js`, `tests/test-transient-rename-retry.js` |
+| BL-020.3, BL-041.1 | Die zeilenbasierte stdio-Aufnahme konnte vor einem Zeilenende unbegrenzt wachsen. Sie verwirft jetzt Frames oberhalb 1 MiB begrenzt und fail-closed, hält keine übergroßen Bytes weiter im Speicher und verarbeitet nach dem nächsten Zeilenende wieder gültige JSON-RPC-Anfragen. | `mcp-server.js`, `gateway/support-trace.js`; `tests/test-mcp-protocol.js` |
+| BL-011/012/040/041/043 | Die frühere UML vermischte persistierte Item-Status, abgeleitete `batch_phase` und kurzlebige Reservationen und setzte interne Paketfreigabe mit sichtbarem Export gleich. Die korrigierte Sicht trennt Zustand, Ownership, Checkpoint, Review, Mapping/Delivery, sichtbare Projektion, Host-Dateizugriff und Diagnosegrenzen. Offene UX-/Architekturentscheidungen stehen ausdrücklich im Backlog. | `docs/canonical/UML_ARCHITECTURE.md`; Kanonprüfung über `test:docs` |
 
 ## E0-Bugrunde 02.09.2026 – Gesamtgegenreview RC86
 

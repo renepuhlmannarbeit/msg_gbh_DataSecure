@@ -22,9 +22,7 @@
 
 const fs = require('fs');
 const { claimLocalBatchExecutor, runLocalBatchExecutor, _test } = require('../../plugins/data-secure/server/gateway/batch');
-const { installBatchPrivateArtifactCrypto } = require('./private-artifact-test-runtime');
 
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 const TOKEN_RE = /^[a-f0-9]{64}$/u;
 

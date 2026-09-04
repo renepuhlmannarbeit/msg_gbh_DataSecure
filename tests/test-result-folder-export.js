@@ -249,6 +249,7 @@ try {
   // otherwise the worker-side export stays pending until the next server start.
   const { WORKER_ENV_KEYS, batchWorkerEnvironment } = require('../plugins/data-secure/server/gateway/batch-executor');
   assert.ok(WORKER_ENV_KEYS.includes('EU_PRIVACY_RESULT_ROOT'), 'the result root override is forwarded to the worker');
+  assert.ok(WORKER_ENV_KEYS.includes('EU_PRIVACY_DATA_ROOT'), 'a standalone product namespace is forwarded to the worker');
   const overrideRoot = path.join(base, 'override-cowork');
   fs.mkdirSync(overrideRoot);
   const forwarded = batchWorkerEnvironment({ ...process.env, EU_PRIVACY_RESULT_ROOT: overrideRoot, DATASECURE_UNRELATED: 'secret' });
@@ -274,6 +275,28 @@ try {
   assert.throws(() => _test.ensurePlainDirectory(destination, 'Lauf-20260903-120000-abcdef12'), /RESULT_EXPORT_PATH_UNSAFE/u);
   assert.strictEqual(fs.existsSync(path.join(outside, 'Lauf-20260903-120000-abcdef12')), false, 'no directory is created outside the selected tree');
   fs.rmSync(destination.output.path);
+
+  // A file appearing after the existence check must never be overwritten.
+  // POSIX rename would replace it; the product uses atomic create-if-absent.
+  fs.mkdirSync(destination.output.path);
+  const raceId = `ds_${'8'.repeat(32)}`;
+  packageFixture(raceId, '# Freigegeben');
+  const raceState = { token: '8'.repeat(64), created_at: '2026-09-03T13:00:00.000Z',
+    items: [{ status: 'released', package_id: raceId }] };
+  const realLink = fs.linkSync;
+  let racedTarget = '';
+  fs.linkSync = (source, target) => {
+    if (String(target).endsWith('Dokument-001-anonymisiert.md')) {
+      racedTarget = target;
+      fs.writeFileSync(target, '# Fremde Datei', 'utf8');
+    }
+    return realLink(source, target);
+  };
+  try {
+    assert.deepStrictEqual(exportCompletedState(raceState), { exported: 0, pending: 1, available: false });
+  } finally { fs.linkSync = realLink; }
+  assert.strictEqual(fs.readFileSync(racedTarget, 'utf8'), '# Fremde Datei',
+    'a concurrent user file is preserved byte-for-byte');
 
   console.log('RESULT FOLDER EXPORT PASS');
 } finally {

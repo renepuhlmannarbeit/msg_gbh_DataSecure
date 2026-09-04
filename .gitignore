@@ -44,6 +44,9 @@ secrets.*
 dist/
 .tmp-runtime/
 node_modules/
+/apps/datasecure-standalone/tauri-contract/target/
+/apps/datasecure-standalone/tauri-contract/binaries/
+/apps/datasecure-standalone/tauri-contract/generated-runtime/
 !/tests/legacy/keyring/vendor/keyring/node_modules/
 !/tests/legacy/keyring/vendor/keyring/node_modules/**
 !/plugins/data-secure/server/ocr-runtime/

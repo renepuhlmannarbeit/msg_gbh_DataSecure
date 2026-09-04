@@ -1,0 +1,20 @@
+{
+  "schema": "data-secure-markitdown-runtime/1",
+  "component": "Microsoft MarkItDown",
+  "upstream": "https://github.com/microsoft/markitdown",
+  "version": "0.1.7",
+  "license": "MIT",
+  "python": ">=3.10",
+  "runtime_install_allowed": false,
+  "network_allowed": false,
+  "plugins_allowed": false,
+  "llm_clients_allowed": false,
+  "markitdown_ocr_allowed": false,
+  "product_enabled": false,
+  "stage": "docx_differential_oracle",
+  "input_transport": "unframed_snapshot_bytes_over_inherited_stdio_engineering_only",
+  "output_transport": "unframed_private_markdown_over_inherited_stdio_engineering_only",
+  "transport_authenticated": false,
+  "persist_raw_markdown": false,
+  "allowed_extensions": [".docx"]
+}

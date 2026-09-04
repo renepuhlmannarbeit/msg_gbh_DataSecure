@@ -1,6 +1,6 @@
 # Kanonisches Dokumentenregister
 
-Stand: 02.09.2026
+Stand: 04.09.2026
 
 ## Normativ aktuell
 
@@ -8,7 +8,8 @@ Stand: 02.09.2026
 |---|---|
 | `DECISIONS.md` | Entscheidungen mit aktuellem Status |
 | `PRODUCT_VISION.md`, `PRODUCT.md` | Ziel und Produktvertrag |
-| `TARGET_ARCHITECTURE.md`, `REFACTORING_PLAN.md` | Architektur und Lieferreihenfolge |
+| `STANDALONE_ARCHITECTURE.md`, `STANDALONE_SECURITY_MODEL.md` | Standalone-Nutzerfluss, Sicherheitsgrenze, MarkItDown-Vertrauensgrenze, Lieferstufen und Diagnosevertrag |
+| `TARGET_ARCHITECTURE.md`, `UML_ARCHITECTURE.md`, `REFACTORING_PLAN.md` | Architektur, codebasierte UML-Prüfsichten und Lieferreihenfolge |
 | `BACKLOG.md` | einzige aktive Arbeitsliste |
 | `CURRENT_STATE.md` | aktueller belegter Iststand |
 | `TRACEABILITY.md`, `BACKLOG_EVIDENCE_MATRIX.md` | aktuelle Zuordnung und Evidencegrenzen |
@@ -25,16 +26,19 @@ pauschal ein Satz aktuell erfüllter Produktverträge:
   `CONTENT_GRAPH_V1.md`, `CSV_SOURCE_V1.md`, `DOCX_STORY_COVERAGE_V1.md`,
   `EMBEDDED_CONTENT_V1.md`, `NETWORK_BOUNDARY_V1.md`, `OUTPUT_CAPACITY_V1.md`,
   `POSIX_SUPERVISOR_PACKAGING_V1.md`, `PRIVATE_WORK_STORAGE_V1.md`,
-  `RESULT_GRADES_V1.md`, `SOURCE_PREFLIGHT_V1.md` und `TEXT_SOURCE_V1.md`;
+  `RESULT_GRADES_V1.md`, `SOURCE_PREFLIGHT_V1.md`, `SUPPORT_TRACE_V1.md` und
+  `TEXT_SOURCE_V1.md`;
 - **Ziel-/NO-GO-Verträge ohne aktuelle Produktfreigabe:**
   `OCR_BATCH_SESSION_V1.md`, `OCR_RESULT_V1.md`,
   `PDF_OCR_RISK_GATE_V1.md`, `SEA_ASSEMBLY_EVIDENCE_V2.md` und
   `SEA_PARSER_ROLE_V1.md`;
-- **historisch oder superseded:** `BATCH_REVIEW_V1.md`,
-  `BATCH_SECRET_STORE_V1.md` und
-  `PRIVATE_ARTIFACT_ENCRYPTION_V1.md`. `BATCH_PSEUDONYM_V1.md` enthält noch den
-  historischen Keyring-Entwurf; nur das ausdrücklich durch DS-065 korrigierte
-  fachliche Ziel einer stapelweit stabilen, lokalen Zuordnung bleibt offen.
+- **historisch oder superseded:** `BATCH_REVIEW_V1.md`; die alten
+  Schlüsselbund-/Verschlüsselungsverträge liegen als
+  `BATCH_SECRET_STORE_V1_LEGACY.md` und
+  `PRIVATE_ARTIFACT_ENCRYPTION_V1_LEGACY.md` ausschließlich unter
+  `docs/archive/2026-09/retired-active-docs`. `BATCH_PSEUDONYM_V1.md` beschreibt
+  den aktuellen rohwertfreien, stapelweit stabilen und neustartfesten
+  Pseudonymkontext ohne Schlüsselbund.
 
 Der Statuskopf des einzelnen Vertrags und `CURRENT_STATE.md` entscheiden bei
 Widersprüchen. Ein vorhandener Vertrag belegt weder Implementierung noch E1-/E2-
@@ -47,16 +51,12 @@ Abnahme.
 | `README.md`, `docs/ANLEITUNG.md` | Interessierte und Anwender |
 | `docs/ANWENDERREVIEW.md` | Product Owner, UX, UAT |
 | `docs/IT-BETRIEBSHANDBUCH.md` | IT-Betrieb und Support |
-| `docs/PILOT-ABNAHME.md`, `docs/acceptance/UAT_TEST_KIT/*` | Testverantwortliche |
+| `docs/PILOT-ABNAHME.md`, `docs/acceptance/UAT_TEST_KIT/*`, `docs/acceptance/STANDALONE_UAT_TEST_KIT/*` | Testverantwortliche |
 | `docs/PLUGIN_SECURITY_MODEL.md`, `SECURITY.md` | Security, Datenschutz, Architektur |
 | `docs/RELEASE.md`, `docs/TESTING.md`, `BUILD_INFO.json` | Entwicklung und Release Engineering |
 | `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | aktueller zeitgebundener Herstellerabgleich |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
-| `tasks/CLAUDE-CODE-FOLGEAUFTRAG-GEGENREVIEW-RC93.md` | aktueller ausführbarer Claude-Code-Gegenreview- und Fixauftrag zu RC93; die kanonische Arbeit bleibt BL-021.1, BL-042, BL-044.1 und BL-002 zugeordnet |
-| `tasks/CODEX-AUFTRAG-REVIEW-RC92.md` | zeitgebundener Read-only-Gegenreview-Auftrag an Codex zu rc92; erzeugt nur einen Bericht, ändert weder Code noch Kanon |
-| `tasks/CODEX-REVIEW-BERICHT-RC92.md` | Ergebnis des unabhängigen RC92-Gegenreviews; die Umsetzung und fachliche Präzisierung seiner Befunde ist im Nachtrag sowie in `BACKLOG.md` und `TRACEABILITY.md` dokumentiert |
-| `tasks/CLAUDE-CODE-GEGENREVIEW-BERICHT-RC93.md` | Ergebnis des unabhängigen Claude-Code-Gegenreviews der RC93-Korrekturen: Urteil je C-01 bis C-09, Reproduktionen, Gate-Tabelle, eigene Fixcommits, offene Zielhost-Evidenz |
 
 ## Historisch, nicht entscheidungsführend
 
@@ -66,13 +66,12 @@ Abnahme.
 - `tasks/archiv`: abgeschlossene Claude-/Codex-Aufträge und Berichte.
 - `docs/acceptance/RC30_HUMAN_TEST_KIT` und `RC63_UAT_TEST_KIT`: reproduzierbare
   historische Fixture-/UAT-Basen; der aktuelle Einstieg ist `UAT_TEST_KIT`.
-- `ARCHITECTURE_DECISION.md`, `docs/PRODUCT_ARCHITECTURE_DECISION.md`,
-  `docs/PLUGIN_TARGET_ARCHITECTURE.md` und `docs/PDF_*`: frühere Architektur- und
-  Spike-Nachweise. Ihre historischen Pfade bleiben wegen Test-/Querverweisen
-  erhalten; jeder Einstieg ist sichtbar als historisch markiert.
-- `docs/*BENCHMARK*`, `docs/SKILL_EVALUATION.md`, `docs/COMPANION_*` und
-  `docs/AI_ACT_AND_GDPR.md`: spezialisierte Evidenz bzw. Hintergrund, keine
-  aktuelle Produktzusage und kein zweites Backlog.
+- `docs/archive/2026-09/retired-active-docs`: frühere Architektur-, Companion-,
+  Rechts-, PDF- und PII-Shield-Unterlagen, die wegen überholter Aussagen zu
+  MCPB, Signierung, VM, Keyring, Mapping oder Recovery nicht mehr im aktiven
+  Dokumentbaum liegen.
+- `docs/*BENCHMARK*` und `docs/SKILL_EVALUATION.md`: verbleibende spezialisierte
+  Evidenz bzw. Hintergrund, keine aktuelle Produktzusage und kein zweites Backlog.
 
 Historische Dateien dürfen Keyring, verschlüsselte Arbeitskopien, MCPB als
 Nutzerweg, auswählbare Bildmodi oder alte Retentionmodelle beschreiben. Diese

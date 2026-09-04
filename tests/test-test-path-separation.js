@@ -16,7 +16,8 @@ test('default and CI aliases enter only the canonical product runner', () => {
   assert.strictEqual(pkg.scripts['test:product'], 'node tests/run-product-suite.js full');
   assert.strictEqual(pkg.scripts['test:product:ci'], 'node tests/run-product-suite.js ci');
   for (const retired of ['private-artifact-crypto', 'installation-secret-store',
-    'keyring-pilot', 'pdfium-spike', 'ocr-session-harness']) {
+    'batch-pseudonym-context', 'batch-secret-store', 'keyring-pilot',
+    'pdfium-spike', 'ocr-session-harness']) {
     assert.ok(!runner.includes(`test-${retired}.`), `retired test entered product runner: ${retired}`);
   }
   assert.match(runner, /test-batch-maintenance\.js/u);
@@ -26,8 +27,9 @@ test('engineering and historical evidence have explicit opt-in scripts', () => {
   assert.match(pkg.scripts['test:engineering'], /test:sea-gates/u);
   assert.match(pkg.scripts['test:engineering'], /test-pdfium-spike/u);
   assert.match(pkg.scripts['test:engineering'], /test-ocr-session-harness/u);
-  assert.match(pkg.scripts['test:legacy'], /test:legacy-private/u);
   assert.match(pkg.scripts['test:legacy'], /tests\/legacy\/test-rc63-uat-kit-contract/u);
+  assert.strictEqual(pkg.scripts['test:legacy-private'], undefined);
+  assert.strictEqual(pkg.scripts['test:engineering-keyring'], undefined);
 });
 
 test('fast documentation validation cannot trigger SEA, apps or Claude CLI', () => {
@@ -73,8 +75,7 @@ test('every current product test is reachable through an npm script or the produ
   const present = fs.readdirSync(__dirname).filter((name) => /^test-.*\.(?:js|mjs)$/u.test(name));
   // Manual, host-bound or argument-driven probes are documented exceptions.
   const manual = new Set(['test-visual.js', 'test-windows-visual.js', 'test-bundled-runtime-smoke.mjs',
-    'test-ocr-runtime-bundle.mjs', 'test-ocr-runtime-smoke.mjs', 'test-keyring-artifacts.mjs', 'test-keyring-pilot.js',
-    'test-batch-secret-store.js']);
+    'test-ocr-runtime-bundle.mjs', 'test-ocr-runtime-smoke.mjs']);
   const orphaned = present.filter((name) => !referenced.has(name) && !manual.has(name));
   assert.deepStrictEqual(orphaned, [], `tests referenced by no npm script or runner: ${orphaned.join(', ')}`);
 });

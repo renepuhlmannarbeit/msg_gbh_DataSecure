@@ -210,17 +210,17 @@ den vollständigen vereinbarten Prüfpfad, nicht durch diesen Plan.
 `scripts/verify-sea-batch.mjs` setzt den Positivlauf und den separaten Disconnect-
 Fall aus dem obigen Plan um; RC75 ergänzt Worker-Crash/Fortsetzung.
 **Noch kein ausgeführter nativer Positivnachweis.**
-Die Prüfung ist nicht Teil von CI/Build. Der bisherige Startvertrag verlangt ein
-eigens bereitgestelltes Testkonto und ist seit DS-063 nicht mehr zur Ausführung
-vorgesehen. Bis zum sicheren Neuentwurf nicht im vorhandenen Konto starten.
-`--isolated-test-account` ist eine verpflichtende Operator-Erklärung, keine
-technische Isolationserkennung. Ein zusätzliches Verzeichnis allein reicht nicht.
+Die Prüfung ist nicht Teil von CI/Build. Ein älterer Startvertrag verlangte ein
+eigens bereitgestelltes Testkonto; diese Anforderung ist durch DS-062, DS-063 und
+DS-065 aufgehoben und darf nicht als aktuelle Abnahmevoraussetzung verwendet
+werden. Aktuelle Proben verwenden ausschließlich synthetische Daten und einen
+eigenen temporären Dateisystembereich, niemals Nutzerquellen oder Credentials.
 
 Feste synthetische Quellen werden exklusiv in einem frischen markierten Scope
 erstellt; `LOCALAPPDATA` und `EU_PRIVACY_ROOT` sind exakt an zwei Unterpfade
 gebunden. Alle Scope-Eltern müssen linkfrei und unverändert sein. Die Fälle
-laufen seriell, weil getrennte Dateiordner keine parallelen Keyring-Initialisierungen
-isolieren. Die Probe verwendet den Produktworker ohne Parser-/Krypto-Overrides.
+laufen seriell, weil sie denselben synthetischen Produktzustand prüfen. Die Probe
+verwendet den Produktworker ohne Parser- oder Speicher-Overrides.
 Sie verlangt Worker-Exit plus IPC-Ende, terminales Journal, drei eindeutig gebundene
 Pakete/Manifestgrade, erhaltene Qualifikation, keine verbleibenden synthetischen
 Namensbestandteile/Kontakte und genau eine Mappingzeile pro unverändertem Original.
@@ -415,61 +415,10 @@ Windows/macOS/Linux-Zielsysteme, Cowork-Fresh-Install und Update/Rollback.
 
 ## DS-063: Engineering-Testtrennung im vorhandenen Konto
 
-Der erste Komponentenschnitt liegt ausschließlich unter
-`scripts/lib/engineering-keyring-session.mjs`, außerhalb des Produkts. Er
-verwendet die vorhandene `Entry`-Injektion, ohne Produkt-Service/-Account oder
-Runtime-Konfiguration zu ändern. Der Service ist fest
-`de.msg.datasecure.engineering.private-artifacts.v1`; der Account entsteht intern
-einmal pro Session aus 32 kryptografisch zufälligen Bytes. Service/Account/Session-ID
-sind keine frei übergebbaren Parameter. Der bisherige Produktnamen-Aufruf wird
-vor Backendzugriff exakt geprüft und nur auf dieses eigene Paar abgebildet.
-
-Backend-Entry muss explizit injiziert werden. Kein nativer Defaultimport,
-Credential-Listing, Löschpfad, Dateifallback oder ENV-Umschalter. Ein belegter
-Testeintrag wird weder übernommen noch ersetzt. Erster Schreibwert wird per Digest
-gebunden; `setPassword` muss synchron `undefined` liefern und ein anschließender
-Readback denselben Schlüssel bestätigen. Backend-/Readback-/Digestfehler bleiben
-terminal. `close()` sperrt alle Entry-Instanzen ohne Dateisystem- oder
-Credential-Bereinigung. Es gibt keine Rekonstruktion aus fremden Session-IDs.
-
-Ausgeführt wurden ausschließlich Memory-Spy-Backends mit einem unangetasteten
-Produkt-Sentinel und frisch erzeugten synthetischen Dateiwurzeln. 24 Komponenten-
-und Negativfälle prüfen unter anderem echte AES-/Commit-/Wiederöffnungspfade für
-Snapshots/Review, falsche Bindung/Session, Ciphertext-Manipulation, Schlüsselverlust,
-Kollisionen, ungewisse Speicherung und Wiederholungsversuche. 18 statische
-Boundary-Gates (plus zwei Archivprüfungen mit `--archives`) halten den Adapter aus
-Produktquellen/Launch-Konfiguration/ausführbaren ZIP-/MCPB-Inhalten heraus.
-Dies ist eine bekannte Marker-Regressionsprüfung, kein allgemeiner Codebeweis.
-
-Der Produktstore bezeichnet auch einen injizierten Memory-Entry in `ensureReady()`
-als `native_os_keyring`. Deshalb benennt der Testbericht unabhängig den wirklichen
-Backendtyp: **Memory, kein Nachweis nativer OS-Persistenz**. Getrennte Namen sind
-außerdem keine Sicherheitsgrenze gegen beliebigen anderen Code im selben OS-Konto
-und beweisen keine plattformweite Kollisions-/Atomizitätsgarantie. Der Backend-
-Adapter ist eine explizit vertrauenswürdige Engineering-Abhängigkeit, keine
-Sandbox für bösartige JavaScript-Implementierungen.
-
-Die alte Verifier-CLI blockiert nach den bestehenden Argumentprüfungen zwingend
-vor Assembly-I/O mit `SEA_BATCH_TEST_ISOLATION_PENDING` (10 Vertragsfälle).
-Dies schaltet weder alte Binärartefakte um noch gibt es native Proben frei.
-
-Früher geplanter E0-Ausbau, **seit DS-064 zurückgestellt** (nicht erledigt):
-
-1. Fester privater Session-/Scope-/Buildvertrag zwischen Engineering-Controller,
-   Worker, Fortsetzung und frischem Ergebnisprüfer. Alle müssen vor dem ersten
-   Artefaktzugriff denselben isolierten Testkontext erhalten; keine globale
-   Require-Manipulation, Produkt-ENV oder Schlüsseltransport über Logs/Argumente.
-2. Separat gegengeprüfte native Backendprobe nur im eigenen Engineering-Namensraum,
-   ohne Produktcredential-Zugriff. Aufbewahrung und spätere Bereinigung eigener
-   Testcredentials vor Ausführung festlegen; keine automatisierte globale Löschung.
-3. Erst danach neue quellgebundene SEA-Artefakte, echte Stapel-/Abbruch-/Resume-
-   und Ergebnisprüfungen. Bis dahin keinerlei SEA-/OS-/Cowork-Freigabe aus dem
-   Memory-Komponentenschnitt ableiten.
-
-**Aktuelle Reihenfolge DS-064:** vorhandene Memory-Komponenten-/Recoverytests,
-kleiner nativer Windows-Schlüsselbund-Smoke-Test mit eindeutig eigenem temporären
-Eintrag (Schreiben, Lesen/Vergleich, nur diesen Eintrag entfernen), danach normaler
-Cowork-Ablauf. Kein Namespace-Manager, kein zusätzlicher Testdienst und keine
-prozessübergreifende Testsession als Vorbedingung. Der kleine Smoke-Test ist noch
-zu implementieren und auszuführen; die vorhandene alte SEA-Verifier-Sperre bleibt.
-Das Fehlen der vollen Kombinationsmatrix bleibt als Testgrenze dokumentiert.
+Dieser frühere Keyring-Testplan wurde durch DS-065 vollständig ersetzt. Er gehört
+nicht mehr zum aktiven SEA-Vertrag: Produkt und Produktgates verwenden weder einen
+OS-Schlüsselbund noch Passwort, Keyfile oder zusätzliche Arbeitskopienverschlüsselung.
+Die historischen Entwürfe und Evidenzen bleiben ausschließlich im Dokumentarchiv
+nachvollziehbar. Für aktuelle SEA- oder Desktop-Nachweise dürfen daraus weder eine
+Laufzeitvoraussetzung noch ein Testkonto, ein Credential-Smoke oder eine neue
+Anwenderinteraktion abgeleitet werden.

@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 03.09.2026 · Ist-Zustand RC93
+Stand: 03.09.2026 · Ist-Zustand RC98
 
 ## Ziel
 
@@ -65,10 +65,25 @@ Anwenderweg. Windows x64 sowie macOS Intel/ARM sind die
 Erstreleaseziele, Linux folgt getrennt. Alle nötigen Laufzeiten müssen im Produkt
 enthalten sein; Anwender installieren weder Node.js noch Python.
 
-Lokale Originalverarbeitung ist nur in einer lokalen Claude-Desktop-/Cowork-
-Sitzung oder in Claude Code zulässig, wenn der lokale Plugin-MCP tatsächlich
-startet. Cloud-Sitzungen starten keinen lokalen Plugin-MCP und dürfen unabhängig
-von ihrer sichtbaren Oberfläche keine Originale erreichen.
+Lokale Originalverarbeitung ist über die geöffnete Claude-Desktop-App oder in
+Claude Code zulässig, wenn der lokale Plugin-MCP tatsächlich verbunden ist.
+Cowork darf die Sitzung in der Cloud ausführen; der Plugin-MCP und die
+Originalverarbeitung bleiben lokal. Web, Mobil und Sitzungen ohne aktive
+Desktop-Brücke dürfen keine Originale erreichen.
+
+## Zweites Produkt in Entwicklung: DataSecure Standalone
+
+DataSecure Standalone ist eine eigenständige lokale Desktopanwendung ohne
+Claude, Cowork, MCP, Skills, Agenten oder Internet. Sie teilt ausschließlich den
+geprüften DataSecure-Core mit dem Plugin und besitzt einen getrennten Datenroot,
+ein eigenes Paket und einen eigenen Update-/Rollbackvertrag. Der E0-Unterbau,
+die Tauri-Hülle und ein selbsttragendes Windows-x64-Engineering-Paket sind
+vorhanden und automatisch verifiziert, aber noch kein freigegebenes
+Endnutzerpaket. Microsoft MarkItDown 0.1.7 ist ausschließlich als deaktivierter
+DOCX-Differentialpfad vorbereitet. Bis Zielhost-UAT, breite Coverage und native
+macOS-Pakete vorliegen, gelten die oben
+genannten vier freigegebenen Formate unverändert; Details stehen in
+[`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 
 ## Grenzen vor Freigabe
 

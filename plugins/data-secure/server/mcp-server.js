@@ -5,25 +5,30 @@ const {SafeError,roots,genericStatus,diagnosticStatus,exportDiagnosticPackage,op
 const {VERSION}=require('./version');
 const {buildDiagnostic,causeFromError,completeDiagnostic}=require('./gateway/diagnostic-causes');
 const {refuseStartup,verifyBundledRuntime}=require('./gateway/startup-guard');
+const {ensureDurableRuntime}=require('./durable-runtime-cache');
 const {migrateLegacyAuditReceipts}=require('./gateway/audit');
 const {cleanupCompanionJobs}=require('./companion/retention');
 const {cleanupAbandonedWorkingJobs}=require('./gateway/orchestrator');
 const {migrateLegacyInputV1}=require('./gateway/legacy-input-migration');
 const {startBatchMaintenance}=require('./gateway/batch-maintenance');
+const {initializeProduct}=require('./core/product-bootstrap');
 const {promptText}=require('./prompt-contract');
 const {storageStatus}=require('./gateway/common');
 const {saveConfiguredPrivacyRoot,clearConfiguredPrivacyRoot}=require('./gateway/privacy-config');
 const {readConfiguredResultRoot,saveConfiguredResultRoot,clearConfiguredResultRoot,resultOutputDirectory,isCommonSyncFolder}=require('./gateway/result-folder-config');
 const {replayPendingResultExports}=require('./gateway/result-export');
+const {schedulePendingResultExportReplay}=require('./gateway/result-export-replay');
 const {pickFolderAsync}=require('./companion/folder-picker');
 const {pickSourcesAsync,batchQueueFromSelection}=require('./companion/file-picker');
 const {pickSourceFolderAsync,enumerateSourceFolderAsync}=require('./companion/source-folder');
 const {localOnlyStartResponse}=require('./normal-path-response');
 const {createLocalOnlyHandoff}=require('./gateway/local-only-handoff');
 const {recordWorkflowEvent}=require('./gateway/workflow-diagnostics');
+const {recordSupportTrace,newTraceId}=require('./gateway/support-trace');
 const {reserveIntake,releaseIntake}=require('./gateway/batch-intake-reservation');
 const {createStatusApp}=require('./status-app/server');
 const STATUS_APP=createStatusApp();
+let STARTUP_RESULT_EXPORT_REPLAY={settled:Promise.resolve({exported:0,pending:0,failures:0}),cancel(){}};
 const SERVER_INFO={name:'eu-privacy-document-gateway',version:VERSION,title:'GBH DataSecure – Dokumente anonymisieren'};
 const INSTRUCTIONS=[
   'Lokales Datenschutz-Gateway. Originale nie per Chat, Einfügen oder Fremdwerkzeug an Claude geben oder lesen.',
@@ -145,15 +150,23 @@ function pathsOverlap(left,right){
   return inside(a,b)||inside(b,a);
 }
 async function chooseAndSaveResultFolder(context={}){
-  const selected=await pickFolderAsync({signal:context.signal,title:'Cowork-Arbeitsordner für anonymisierte Ergebnisse auswählen'});
-  if(context.signal?.aborted)throw new SafeError('Die Auswahl des Ergebnisordners wurde abgebrochen.');
-  if(pathsOverlap(roots().root,selected))throw new SafeError('Der Ergebnisordner muss außerhalb des privaten DataSecure-Arbeitsbereichs liegen.');
-  // Prove that the visible output child can be created and is not a link
-  // before persisting the choice. A failed first choice must reopen the
-  // one-time picker on the next run instead of becoming a durable dead end.
-  resultOutputDirectory({root:selected});
-  saveConfiguredResultRoot(selected);
-  return{sync_notice:isCommonSyncFolder(selected)};
+  recordWorkflowEvent({event:'result_folder_picker_requested',outcome:'progress'});
+  try{
+    const selected=await pickFolderAsync({signal:context.signal,title:'Cowork-Arbeitsordner für anonymisierte Ergebnisse auswählen',purpose:'result'});
+    if(context.signal?.aborted)throw new SafeError('Die Auswahl des Ergebnisordners wurde abgebrochen.');
+    if(pathsOverlap(roots().root,selected))throw new SafeError('Der Ergebnisordner muss außerhalb des privaten DataSecure-Arbeitsbereichs liegen.');
+    // Prove that the visible output child can be created and is not a link
+    // before persisting the choice. A failed first choice must reopen the
+    // one-time picker on the next run instead of becoming a durable dead end.
+    resultOutputDirectory({root:selected});
+    saveConfiguredResultRoot(selected);
+    recordWorkflowEvent({event:'result_folder_picker_accepted',outcome:'ok'});
+    return{sync_notice:isCommonSyncFolder(selected)};
+  }catch(error){
+    recordWorkflowEvent({event:'result_folder_picker_failed',outcome:'stopped',
+      error_code:context.signal?.aborted?'LOCAL_SELECTION_CANCELLED':'RESULT_FOLDER_REQUIRED'});
+    throw error;
+  }
 }
 async function configureResultFolder(args={},context={}){
   const owner='result_folder';
@@ -162,6 +175,10 @@ async function configureResultFolder(args={},context={}){
     if(rootMutationBlocked())throw new SafeError('Ein lokaler Stapel oder eine Ergebnisübergabe ist noch offen. Bitte zuerst fortsetzen, abschließen oder verwerfen; bis dahin bleibt der Ergebnisordner unverändert.');
     if(args.reset===true){clearConfiguredResultRoot();return{ok:true,configuration_changed:true,result_folder_configured:false,raw_content_sent_to_claude:false};}
     const selected=await chooseAndSaveResultFolder(context);
+    // Never race the startup recovery worker against an explicit destination
+    // change.  A failed worker leaves every record pending; the synchronous
+    // replay below then performs the requested, user-visible retry.
+    await STARTUP_RESULT_EXPORT_REPLAY.settled;
     const replay=replayPendingResultExports();
     return{ok:true,configuration_changed:true,result_folder_configured:true,sync_folder_notice:selected.sync_notice,
       pending_exports:replay.pending+replay.failures,exported_now:replay.exported,raw_content_sent_to_claude:false};
@@ -202,9 +219,13 @@ async function startPickerBatch(args,context={}){
   // local support mode.  Normal Cowork always uses the later token-free
   // handoff, even if a stale skill asks for the legacy mode value.
   const mode=process.env.EU_PRIVACY_SUPPORT_MODE==='1'&&args.mode==='continue_in_chat'?'continue_in_chat':'local_only';
-  const cancelled=()=>{
+  const cancelled=(phase='source_picker')=>{
     const recorded=recordWorkflowEvent({event:'picker_cancelled',outcome:'stopped',error_code:'LOCAL_SELECTION_CANCELLED'});
-    return withDiagnostic({ok:false,error:'local_selection_cancelled',message:'Die lokale Dateiauswahl wurde abgebrochen. Es wurde kein Stapel gestartet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false},'source_picker','LOCAL_SELECTION_CANCELLED',recorded);
+    const resultFolder=phase==='result_folder';
+    return withDiagnostic({ok:false,error:'local_selection_cancelled',message:resultFolder
+      ?'Die Auswahl des Ergebnisordners wurde abgebrochen. Es wurde keine Quelldateiauswahl geöffnet und kein Stapel gestartet.'
+      :'Die lokale Quelldateiauswahl wurde abgebrochen. Es wurde kein Stapel gestartet.',mode,local_processing_started:false,
+      next_action:resultFolder?'choose_result_folder':'no_action',raw_content_sent_to_claude:false},phase,'LOCAL_SELECTION_CANCELLED',recorded);
   };
   if(context.signal?.aborted)return cancelled();
   const owner='source_picker';
@@ -213,22 +234,25 @@ async function startPickerBatch(args,context={}){
   let intakeReservationTransferred=false;
   let resultFolderSyncNotice=false;
   try{
-  if(!readConfiguredResultRoot()){
-    try{resultFolderSyncNotice=(await chooseAndSaveResultFolder(context)).sync_notice===true;}
-    catch(error){
-      if(context.signal?.aborted||error?.code==='LOCAL_SELECTION_CANCELLED')return cancelled();
-      // Name the actual, path-free reason: the user did choose a folder. A
-      // native error text could carry a path and is replaced by a fixed reason.
-      const reason=error instanceof SafeError?error.message:'Der gewählte Ergebnisordner konnte nicht sicher verwendet werden (Link, Reparse-Punkt oder fehlende Schreibrechte für DataSecure-Output).';
-      return withDiagnostic({ok:false,error:'result_folder_required',message:`${reason} Es wurde keine Dateiauswahl geöffnet und kein Stapel gestartet; die Ergebnisordnerwahl erscheint beim nächsten Start erneut.`,mode,local_processing_started:false,next_action:'choose_result_folder',raw_content_sent_to_claude:false},'result_folder',causeOf(error,'RESULT_FOLDER_REQUIRED'),false);
-    }
-  }
   try{intakeReservation=reserveIntake();}
   catch{return withDiagnostic({ok:false,error:'batch_active',message:'Eine lokale DataSecure-Auswahl oder Stapelübernahme ist bereits aktiv. Es wurde keine weitere Auswahl geöffnet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);}
   const status=genericStatus({ignoreIntakeReservation:true});
   if(!status.engine_ready)return withDiagnostic({ok:false,error:'local_engine_unavailable',message:'Die lokale DataSecure-Verarbeitung ist nicht bereit. Es wurde keine Dateiauswahl geöffnet.',engine_phase:status.engine_phase,mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},'engine','ENGINE_NOT_READY',false);
   if(status.local_intake_pending)return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits vorbereitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);
   if(status.batch_processing_active)return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Es wurde keine neue Dateiauswahl geöffnet.',mode,local_processing_started:true,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);
+  // Never ask the user for a destination while the engine is unavailable or
+  // another processor owns the active slot. The one-time folder choice is a
+  // setup step of an actually admissible run, not a readiness probe.
+  if(!readConfiguredResultRoot()){
+    try{resultFolderSyncNotice=(await chooseAndSaveResultFolder(context)).sync_notice===true;}
+    catch(error){
+      if(context.signal?.aborted||error?.code==='LOCAL_SELECTION_CANCELLED')return cancelled('result_folder');
+      // Name the actual, path-free reason: the user did choose a folder. A
+      // native error text could carry a path and is replaced by a fixed reason.
+      const reason=error instanceof SafeError?error.message:'Der gewählte Ergebnisordner konnte nicht sicher verwendet werden (Link, Reparse-Punkt oder fehlende Schreibrechte für DataSecure-Output).';
+      return withDiagnostic({ok:false,error:'result_folder_required',message:`${reason} Es wurde keine Dateiauswahl geöffnet und kein Stapel gestartet; die Ergebnisordnerwahl erscheint beim nächsten Start erneut.`,mode,local_processing_started:false,next_action:'choose_result_folder',raw_content_sent_to_claude:false},'result_folder',causeOf(error,'RESULT_FOLDER_REQUIRED'),false);
+    }
+  }
   // Paused/recoverable work is durable and independent. It must not force the
   // user to resolve old work before starting a new batch; only an actually
   // active intake or processor owns the single active slot.
@@ -319,7 +343,7 @@ function continueAnonymizedBatchInChat(args){
 function acknowledgeBatchDocuments(args){
   return acknowledgeDeliveredPackages(args.batch_token,args.package_ids);
 }
-function continueMostRecentDocumentBatch(){
+async function continueMostRecentDocumentBatch(context={}){
   // DS-022: a continuation must not start a second executor next to a running
   // intake or batch worker. The paused batch stays durable for a later request.
   const status=genericStatus();
@@ -331,13 +355,21 @@ function continueMostRecentDocumentBatch(){
   const token=continued.batch_token;
   const safe={...continued};delete safe.batch_token;
   if(continued.awaiting_local_review===true||continued.deferred_review>0){
-    const started=startLocalReviewExecutor(token);
+    const started=startLocalReviewExecutor(token,{requireIpcAcknowledgement:true,signal:context.signal});
+    try{await started.ipcAcknowledgement;}catch(error){
+      const cause=/cancel/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_CANCELLED':/timeout/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_TIMEOUT':'LOCAL_REVIEW_WORKER_EXITED';
+      return withDiagnostic({ok:false,error:'local_start_failed',message:'Die lokale Stapelprüfung wurde nicht gestartet. Es wurde kein Paket freigegeben.',local_review_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},'review_ack',cause,false);
+    }
     recordWorkflowEvent({event:'mcp_review_response',outcome:started.ok?'ok':'stopped',item_count:continued.batch_total,
       released_count:continued.released,stopped_count:continued.stopped,error_code:started.ok?'NONE':'LOCAL_REVIEW_FAILED'});
     return{...safe,...started,raw_content_sent_to_claude:false};
   }
   if(continued.remaining>0||continued.delivery_pending>0||continued.mapping_pending>0){
-    const started=startLocalBatchExecutor(token);
+    const started=startLocalBatchExecutor(token,{requireIpcAcknowledgement:true,signal:context.signal});
+    try{await started.ipcAcknowledgement;}catch(error){
+      const cause=/cancel/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_CANCELLED':/timeout/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_TIMEOUT':'LOCAL_WORKER_EXITED';
+      return withDiagnostic({ok:false,error:'local_start_failed',message:'Die lokale Fortsetzung wurde nicht gestartet. Es wurde kein Paket freigegeben.',local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},'continuation_ack',cause,false);
+    }
     return{...safe,local_processing_started:started.local_processing_started===true,raw_content_sent_to_claude:false};
   }
   return safe;
@@ -349,57 +381,58 @@ async function startLocalResultsHandoff(context={}){
   try{return await LOCAL_ONLY_HANDOFF.start({signal:context.signal});}
   finally{releaseNativeInteraction(owner);}
 }
-async function dispatch(name,args={},context={}){if(name==='privacy_status')return genericStatus();if(name==='diagnostic_status')return diagnosticStatus(args.limit??20);if(name==='export_diagnostic_package'){if(args.confirmed!==true)throw new SafeError('Der Diagnoseexport erfordert eine ausdrückliche Bestätigung.');return exportDiagnosticPackage({confirmed:true});}if(name==='open_privacy_folder')return openFolder(roots().root);if(name==='configure_privacy_folder')return configurePrivacyFolder(args,context);if(name==='configure_result_folder')return configureResultFolder(args,context);if(name==='open_result_folder'){const target=resultOutputDirectory();if(!target)throw new SafeError('Es ist noch kein Ergebnisordner festgelegt.');return openFolder(target);}if(name==='start_document_batch_from_picker')return startPickerBatch(args,context);if(name==='start_completed_local_results_handoff')return startLocalResultsHandoff(context);if(name==='continue_local_results_handoff')return LOCAL_ONLY_HANDOFF.nextAsync({signal:context.signal});if(name==='cancel_local_results_handoff')return LOCAL_ONLY_HANDOFF.cancel();if(name==='continue_anonymized_batch_in_chat')return continueAnonymizedBatchInChat(args);if(name==='open_output_folder')return openFolder(roots().output);if(name==='open_export_folder')return openFolder(roots().exports);if(name==='open_visual_review_folder')return openFolder(roots().review);if(name==='document_batch_status')return readBatchProgress(args.batch_token);if(name==='list_document_batch_results')return listBatchResults(args.batch_token,{cursor:args.cursor,limit:args.limit??10});if(name==='review_deferred_document_batch')return reviewDeferredBatch(args.batch_token,{abortSignal:context.signal,localFinalize:true});if(name==='acknowledge_batch_document')return acknowledgeDeliveredPackage(args.batch_token,args.package_id);if(name==='acknowledge_batch_documents')return acknowledgeBatchDocuments(args);if(name==='continue_most_recent_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return continueMostRecentDocumentBatch();}if(name==='discard_incomplete_document_batches'){if(args.confirmed!==true)throw new SafeError('Das Verwerfen unvollständiger Stapel erfordert eine ausdrückliche Bestätigung.');return discardIncompleteBatches();}if(name==='resume_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return resumeBatch(args.batch_token);}if(name==='read_anonymized_document')return readOutput(args.package_id,args.read_capability,args.offset??0,args.max_chars??16000);if(name==='read_anonymized_documents')return readOutputs(args.documents);if(name==='list_visual_review_items')return listReviewItems();if(name==='purge_local_data'){const purged=purgeLocalData(args.scope||'all',args.confirmed);const outbox=replayMappingOutbox();if(outbox.failures)throw new SafeError('Die lokale Zuordnungswarteschlange konnte nicht sicher bereinigt werden.');return{...purged,mapping_outbox_pending:outbox.pending,mapping_outbox_orphaned_removed:outbox.orphaned_removed};}return null;}
+async function dispatch(name,args={},context={}){if(name==='privacy_status')return genericStatus();if(name==='diagnostic_status')return diagnosticStatus(args.limit??20);if(name==='export_diagnostic_package'){if(args.confirmed!==true)throw new SafeError('Der Diagnoseexport erfordert eine ausdrückliche Bestätigung.');return exportDiagnosticPackage({confirmed:true});}if(name==='open_privacy_folder')return openFolder(roots().root);if(name==='configure_privacy_folder')return configurePrivacyFolder(args,context);if(name==='configure_result_folder')return configureResultFolder(args,context);if(name==='open_result_folder'){const target=resultOutputDirectory();if(!target)throw new SafeError('Es ist noch kein Ergebnisordner festgelegt.');return openFolder(target);}if(name==='start_document_batch_from_picker')return startPickerBatch(args,context);if(name==='start_completed_local_results_handoff')return startLocalResultsHandoff(context);if(name==='continue_local_results_handoff')return LOCAL_ONLY_HANDOFF.nextAsync({signal:context.signal});if(name==='cancel_local_results_handoff')return LOCAL_ONLY_HANDOFF.cancel();if(name==='continue_anonymized_batch_in_chat')return continueAnonymizedBatchInChat(args);if(name==='open_output_folder')return openFolder(roots().output);if(name==='open_export_folder')return openFolder(roots().exports);if(name==='open_visual_review_folder')return openFolder(roots().review);if(name==='document_batch_status')return readBatchProgress(args.batch_token);if(name==='list_document_batch_results')return listBatchResults(args.batch_token,{cursor:args.cursor,limit:args.limit??10});if(name==='review_deferred_document_batch')return reviewDeferredBatch(args.batch_token,{abortSignal:context.signal,localFinalize:true});if(name==='acknowledge_batch_document')return acknowledgeDeliveredPackage(args.batch_token,args.package_id);if(name==='acknowledge_batch_documents')return acknowledgeBatchDocuments(args);if(name==='continue_most_recent_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return continueMostRecentDocumentBatch(context);}if(name==='discard_incomplete_document_batches'){if(args.confirmed!==true)throw new SafeError('Das Verwerfen unvollständiger Stapel erfordert eine ausdrückliche Bestätigung.');return discardIncompleteBatches();}if(name==='resume_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return resumeBatch(args.batch_token);}if(name==='read_anonymized_document')return readOutput(args.package_id,args.read_capability,args.offset??0,args.max_chars??16000);if(name==='read_anonymized_documents')return readOutputs(args.documents);if(name==='list_visual_review_items')return listReviewItems();if(name==='purge_local_data'){const purged=purgeLocalData(args.scope||'all',args.confirmed);const outbox=replayMappingOutbox();if(outbox.failures)throw new SafeError('Die lokale Zuordnungswarteschlange konnte nicht sicher bereinigt werden.');return{...purged,mapping_outbox_pending:outbox.pending,mapping_outbox_orphaned_removed:outbox.orphaned_removed};}return null;}
 const dispatchCore=dispatch;
 dispatch=async function guardedDispatch(name,args={},context={}){
+  const traceId=context.traceId||newTraceId();
+  const startedAt=Date.now();
+  recordSupportTrace({trace_id:traceId,event:'tool_started',method:'tools/call',operation:name,outcome:'progress'});
   if(process.env.EU_PRIVACY_SUPPORT_MODE!=='1'){
     if(!NORMAL_TOOL_NAMES.has(name)){
+      recordSupportTrace({trace_id:traceId,event:'tool_failed',method:'tools/call',operation:name,
+        outcome:'stopped',duration_ms:Date.now()-startedAt,error_code:'SUPPORT_MODE_REQUIRED'});
       throw new SafeError('Dieses DataSecure-Werkzeug ist nur im ausdrücklich aktivierten lokalen Supportmodus verfügbar.');
     }
   }
-  return dispatchCore(name,args,context);
+  try{
+    const result=await dispatchCore(name,args,context);
+    recordSupportTrace({trace_id:traceId,event:result?.ok===false?'tool_failed':'tool_completed',method:'tools/call',
+      operation:name,outcome:result?.ok===false?'stopped':'ok',duration_ms:Date.now()-startedAt,
+      error_code:result?.ok===false?'TOOL_RETURNED_STOP':'NONE'});
+    return result;
+  }catch(error){
+    recordSupportTrace({trace_id:traceId,event:'tool_failed',method:'tools/call',operation:name,outcome:'stopped',
+      duration_ms:Date.now()-startedAt,error_code:error?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':'INTERNAL_FAILURE'});
+    throw error;
+  }
 };
 const ACTIVE_REQUESTS=new Map();
 const IN_FLIGHT=new Set();
 let shuttingDown=false;
 function requestKey(id){try{return JSON.stringify(id);}catch{return String(id);}}
-async function handle(req){if(!req||req.jsonrpc!=='2.0'||typeof req.method!=='string'){if(req&&Object.hasOwn(req,'id'))rpcError(req.id,-32600,'Ungültige Anfrage');return;}const isModern=modern(req)||req.method==='server/discover',id=req.id;
+async function handle(req,traceId){if(!req||req.jsonrpc!=='2.0'||typeof req.method!=='string'){if(req&&Object.hasOwn(req,'id'))rpcError(req.id,-32600,'Ungültige Anfrage');return;}const isModern=modern(req)||req.method==='server/discover',id=req.id;
 // A request without an id is a notification: JSON-RPC forbids any response,
 // including an error response. Only the notifications/* namespace is expected.
 if(req.method==='notifications/cancelled'){ACTIVE_REQUESTS.get(requestKey(req.params?.requestId))?.abort();return;}
 if(!Object.hasOwn(req,'id'))return;
-if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const dispatched=await dispatch(req.params?.name,req.params?.arguments||{},{signal:controller.signal});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=completeDiagnostic(dispatched);const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult(withDiagnostic({ok:false,error:e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
+if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const dispatched=await dispatch(req.params?.name,req.params?.arguments||{},{signal:controller.signal,traceId});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=completeDiagnostic(dispatched);const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult(withDiagnostic({ok:false,error:e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
 // Fail-closed startup. A refusal leaves a content-free journal line, a marker
 // file and one fixed stderr sentence instead of a raw stack trace with paths
 // (stdout is the MCP channel; the host does not surface stderr).
 let batchMaintenance;
-try{
-verifyBundledRuntime();
-migrateLegacyAuditReceipts();
-// RC80: no startup migration or key-store access for private working copies.
-const OUTPUT_RETENTION_PROTECTION=openBatchPackageProtection();
-cleanupLocalData({trigger:'startup',protectedIds:OUTPUT_RETENTION_PROTECTION.ids,outputProtectionComplete:OUTPUT_RETENTION_PROTECTION.complete});
-cleanupCompanionJobs({trigger:'startup'});
-const BATCH_RECOVERY=recoverBatches();
-const MAPPING_OUTBOX_RECOVERY=replayMappingOutbox();
-// Deliberately not fail-closed: the visible export is a projection of already
-// verified packages. A pending or unreadable export record stays `pending`
-// (result-export.js) and is retried on the next start; it must never keep the
-// gateway from starting, unlike journal, outbox and migration recovery below.
-replayPendingResultExports();
-batchMaintenance=startBatchMaintenance(cleanupExpiredBatchSnapshots);
-if(BATCH_RECOVERY.failures)throw new Error('Batch recovery failed closed.');
-if(MAPPING_OUTBOX_RECOVERY.failures)throw new Error('Mapping outbox recovery failed closed.');
-const LEGACY_INPUT_MIGRATION=migrateLegacyInputV1();
-if(LEGACY_INPUT_MIGRATION.failures||LEGACY_INPUT_MIGRATION.active)throw new Error('Legacy input migration failed closed.');
-const WORKING_CLEANUP=cleanupAbandonedWorkingJobs();
-if(WORKING_CLEANUP.failures)throw new Error('Private working-copy cleanup failed closed.');
-}catch(startupError){
-try{batchMaintenance?.stop();}catch{}
-refuseStartup(startupError);
-throw startupError;
-}
-function schedule(request){const task=Promise.resolve(handle(request)).catch(()=>{if(Object.hasOwn(request,'id'))rpcError(request.id,-32603,'Interner Fehler');}).finally(()=>IN_FLIGHT.delete(task));IN_FLIGHT.add(task);}
+batchMaintenance=initializeProduct({verifyBundledRuntime,ensureDurableRuntime,migrateLegacyAuditReceipts,
+openBatchPackageProtection,cleanupLocalData,cleanupUiJobs:cleanupCompanionJobs,recoverBatches,replayMappingOutbox,
+startBatchMaintenance,cleanupExpiredBatchSnapshots,migrateLegacyInput:migrateLegacyInputV1,
+cleanupAbandonedWorkingJobs,refuseStartup}).batchMaintenance;
+function schedule(request){const traceId=newTraceId(),startedAt=Date.now(),method=String(request?.method||'');recordSupportTrace({trace_id:traceId,event:'rpc_received',method,outcome:'progress'});const task=Promise.resolve(handle(request,traceId)).then(()=>{recordSupportTrace({trace_id:traceId,event:'rpc_completed',method,outcome:'ok',duration_ms:Date.now()-startedAt});}).catch(()=>{recordSupportTrace({trace_id:traceId,event:'rpc_failed',method,outcome:'stopped',duration_ms:Date.now()-startedAt,error_code:'INTERNAL_FAILURE'});if(Object.hasOwn(request,'id'))rpcError(request.id,-32603,'Interner Fehler');}).finally(()=>IN_FLIGHT.delete(task));IN_FLIGHT.add(task);}
 let shutdownPromise=null;
-function gracefulShutdown(exitCode=0){if(shutdownPromise)return shutdownPromise;shuttingDown=true;batchMaintenance.stop();for(const controller of ACTIVE_REQUESTS.values())controller.abort();shutdownPromise=(async()=>{await Promise.race([Promise.allSettled([...IN_FLIGHT]),new Promise(resolve=>setTimeout(resolve,15000))]);await new Promise(resolve=>process.stdout.write('',resolve));process.exit(exitCode);})();return shutdownPromise;}
-let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>{input+=c;let i;while((i=input.indexOf('\n'))>=0){const line=input.slice(0,i).trim();input=input.slice(i+1);if(!line)continue;let r;try{r=JSON.parse(line);}catch{rpcError(null,-32700,'Ungültiges JSON');continue;}schedule(r);}});process.stdin.on('end',()=>{void gracefulShutdown(0);});process.on('SIGINT',()=>{void gracefulShutdown(0);});process.on('SIGTERM',()=>{void gracefulShutdown(0);});
+function gracefulShutdown(exitCode=0){if(shutdownPromise)return shutdownPromise;shuttingDown=true;batchMaintenance.stop();STARTUP_RESULT_EXPORT_REPLAY.cancel();for(const controller of ACTIVE_REQUESTS.values())controller.abort();shutdownPromise=(async()=>{await Promise.race([Promise.allSettled([...IN_FLIGHT]),new Promise(resolve=>setTimeout(resolve,15000))]);await new Promise(resolve=>process.stdout.write('',resolve));process.exit(exitCode);})();return shutdownPromise;}
+const MAX_RPC_FRAME_CHARS=1024*1024;
+let input='',discardingOversizedFrame=false;
+function rejectOversizedRpcFrame(){recordSupportTrace({trace_id:newTraceId(),event:'rpc_parse_failed',method:'unknown',outcome:'stopped',error_code:'RPC_FRAME_TOO_LARGE'});rpcError(null,-32600,'Anfrage zu groß');}
+function acceptRpcLine(line){const trimmed=line.trim();if(!trimmed)return;let request;try{request=JSON.parse(trimmed);}catch{recordSupportTrace({trace_id:newTraceId(),event:'rpc_parse_failed',method:'unknown',outcome:'stopped',error_code:'INVALID_JSON'});rpcError(null,-32700,'Ungültiges JSON');return;}schedule(request);}
+process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{let remaining=chunk;while(remaining.length){if(discardingOversizedFrame){const newline=remaining.indexOf('\n');if(newline<0)return;remaining=remaining.slice(newline+1);discardingOversizedFrame=false;continue;}const newline=remaining.indexOf('\n');if(newline<0){if(input.length+remaining.length>MAX_RPC_FRAME_CHARS){input='';discardingOversizedFrame=true;rejectOversizedRpcFrame();}else input+=remaining;return;}const part=remaining.slice(0,newline);remaining=remaining.slice(newline+1);if(input.length+part.length>MAX_RPC_FRAME_CHARS){input='';rejectOversizedRpcFrame();continue;}const line=input+part;input='';acceptRpcLine(line);}});process.stdin.on('end',()=>{void gracefulShutdown(0);});process.on('SIGINT',()=>{void gracefulShutdown(0);});process.on('SIGTERM',()=>{void gracefulShutdown(0);});
+// Visible-result recovery is convenience work over already verified packages.
+// Starting it only after the protocol listeners exist keeps initialize and
+// tools/list responsive even when a large failed export must be re-hashed.
+STARTUP_RESULT_EXPORT_REPLAY=schedulePendingResultExportReplay();

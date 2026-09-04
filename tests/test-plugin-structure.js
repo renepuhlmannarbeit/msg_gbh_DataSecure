@@ -17,10 +17,11 @@ assert.ok(entry,'data-secure marketplace entry missing');
 assert.strictEqual(entry.source,'./plugins/data-secure');
 
 const mcp=readJson(path.join(pluginRoot,'.mcp.json'));
-assert.ok(mcp['data-secure-local'],'local MCP config missing');
-assert.strictEqual(mcp['data-secure-local'].command,'node');
-assert.deepStrictEqual(mcp['data-secure-local'].args,['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
-assert.strictEqual(mcp['data-secure-local'].env.EU_PRIVACY_ROOT,'',
+assert.deepStrictEqual(Object.keys(mcp),['mcpServers'],'documented mcpServers wrapper required');
+assert.ok(mcp.mcpServers['data-secure-local'],'local MCP config missing');
+assert.strictEqual(mcp.mcpServers['data-secure-local'].command,'node');
+assert.deepStrictEqual(mcp.mcpServers['data-secure-local'].args,['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
+assert.strictEqual(mcp.mcpServers['data-secure-local'].env.EU_PRIVACY_ROOT,'',
   'plugin customization must expose an optional privacy-root field');
 
 const requiredSkills=[

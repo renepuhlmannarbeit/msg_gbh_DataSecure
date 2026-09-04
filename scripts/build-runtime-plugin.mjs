@@ -28,7 +28,7 @@ function copyRegular(source, destination, mode = 0o600) {
   return bytes;
 }
 
-export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, targetId, output } = {}) {
+export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, targetId, output, supportMode = false } = {}) {
   const repository = path.resolve(repositoryRoot);
   const contract = readContract(repository);
   const selected = targetId === 'universal' ? contract.targets : contract.targets.filter((item) => item.id === targetId);
@@ -36,7 +36,7 @@ export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, target
   const pluginRoot = path.join(repository, 'plugins', 'data-secure');
   const plugin = JSON.parse(readRegular(path.join(pluginRoot, '.claude-plugin', 'plugin.json'), 64 * 1024));
   const dist = path.join(repository, 'dist');
-  const suffix = targetId === 'universal' ? 'universal-marketplace' : targetId;
+  const suffix = `${targetId === 'universal' ? 'universal-marketplace' : targetId}${supportMode ? '-debug' : ''}`;
   const archive = output ? path.resolve(output) : path.join(dist, `DataSecure-Privacy-Preflight-${suffix}-v${plugin.version}.zip`);
   if (path.dirname(archive) !== dist || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.zip$/u.test(path.basename(archive))) {
     throw new Error('BUNDLED_PLUGIN_OUTPUT_UNSAFE');
@@ -63,13 +63,23 @@ export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, target
     const sourceFiles = collectProductFiles(pluginRoot);
     verifyKeyringFreeProductFiles(sourceFiles);
     for (const file of sourceFiles) copyRegular(file.fullPath, path.join(stage, ...file.archivePath.split('/')));
+    if (supportMode) {
+      const supportSkill = path.join(repository, 'support', 'skills', 'gbh-datasecure-debug-anonymisieren', 'SKILL.md');
+      copyRegular(supportSkill, path.join(stage, 'skills', 'gbh-datasecure-debug-anonymisieren', 'SKILL.md'));
+      const manifestFile = path.join(stage, '.claude-plugin', 'plugin.json');
+      const stagedManifest = JSON.parse(readRegular(manifestFile, 64 * 1024));
+      stagedManifest.displayName = `${stagedManifest.displayName} – Debug`;
+      stagedManifest.description = `${stagedManifest.description} Manuell aktivierbare, inhaltsfreie Supportdiagnose.`;
+      fs.writeFileSync(manifestFile, `${JSON.stringify(stagedManifest, null, 2)}\n`, { flag: 'w', mode: 0o600 });
+    }
     const mcpFile = path.join(stage, '.mcp.json');
     const mcp = JSON.parse(readRegular(mcpFile, 64 * 1024));
-    const server = mcp?.['data-secure-local'];
+    const server = mcp?.mcpServers?.['data-secure-local'];
     if (!server || server.command !== 'node' || JSON.stringify(server.args) !== JSON.stringify([contract.runtime_entry])) {
       throw new Error('BUNDLED_PLUGIN_MCP_SOURCE_INVALID');
     }
     server.command = contract.plugin_command;
+    if (supportMode) server.env.EU_PRIVACY_SUPPORT_MODE = '1';
     fs.writeFileSync(mcpFile, `${JSON.stringify(mcp, null, 2)}\n`, { flag: 'w', mode: 0o600 });
 
     const executable = new Set();
@@ -92,7 +102,8 @@ export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, target
       path.join(stage, 'runtime', 'LICENSE.node.txt'));
     fs.writeFileSync(path.join(stage, 'RUNTIME-EVIDENCE.json'), `${JSON.stringify({
       schema: 'datasecure-bundled-plugin/v1', product_version: plugin.version,
-      mode: targetId === 'universal' ? 'marketplace-universal' : 'direct-upload-target',
+      mode: supportMode ? 'direct-upload-debug-target' :
+        (targetId === 'universal' ? 'marketplace-universal' : 'direct-upload-target'),
       host_node_required: false, runtime_dependency_install: false,
       plugin_command: contract.plugin_command, targets: targetEvidence
     }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });

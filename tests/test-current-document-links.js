@@ -35,11 +35,12 @@ const files = [
   'docs/acceptance/UAT_TEST_KIT/README.md',
   'docs/acceptance/UAT_TEST_KIT/CASE_CATALOG.md',
   'docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md',
+  'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
+  'docs/canonical/STANDALONE_SECURITY_MODEL.md',
   'plugins/data-secure/README.md',
   'plugins/data-secure/BUILDING.md',
   'plugins/data-secure/server/README.md',
   'tasks/README.md',
-  'tasks/CLAUDE-CODE-FOLGEAUFTRAG-GEGENREVIEW-RC93.md',
   'evals/plugin-eval/README.md'
 ];
 

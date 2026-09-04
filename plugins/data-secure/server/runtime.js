@@ -69,10 +69,44 @@ function verifyNativeLauncher(launcher, options = {}) {
   }
 }
 
+function isClaudeTemporaryLocalData(candidate, platform = process.platform) {
+  if (platform !== 'win32' || !candidate || !path.isAbsolute(candidate)) return false;
+  const normalized = path.resolve(candidate).replaceAll('/', '\\').toLowerCase();
+  return normalized.includes('\\appdata\\local\\temp\\claude\\') ||
+    normalized.includes('\\appdata\\roaming\\claude\\local-agent-mode-sessions\\');
+}
+
+function stableWindowsLocalData(environment = process.env, home = os.homedir(), io = fs) {
+  const configured = String(environment.LOCALAPPDATA || '').trim();
+  if (!isClaudeTemporaryLocalData(configured, 'win32')) return configured;
+
+  // Cowork can project a local MCP into a per-call environment and redirect
+  // LOCALAPPDATA into that disposable projection. Product state and detached
+  // workers must not inherit that lifetime. Use the user's established Windows
+  // Local AppData only for this narrowly recognised Claude temporary path.
+  const profile = String(environment.USERPROFILE || home || '').trim();
+  if (!profile || !path.isAbsolute(profile)) return configured;
+  const candidate = path.resolve(profile, 'AppData', 'Local');
+  try {
+    const stat = io.lstatSync(candidate);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return configured;
+    const real = io.realpathSync.native ? io.realpathSync.native(candidate) : io.realpathSync(candidate);
+    if (path.resolve(real).toLowerCase() !== candidate.toLowerCase()) return configured;
+    return candidate;
+  } catch { return configured; }
+}
+
 function dataRoot() {
-  const base = process.env.LOCALAPPDATA || (process.platform === 'darwin'
-    ? path.join(os.homedir(), 'Library', 'Application Support')
-    : process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'));
+  const isolatedProductRoot = String(process.env.EU_PRIVACY_DATA_ROOT || '').trim();
+  if (isolatedProductRoot) {
+    if (!path.isAbsolute(isolatedProductRoot)) throw new Error('DATA_ROOT_UNSAFE');
+    return path.resolve(isolatedProductRoot);
+  }
+  const base = process.platform === 'win32'
+    ? stableWindowsLocalData()
+    : process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
   // Keep the user-visible local root short and recognisable. The old RC30 root
   // is deliberately not migrated automatically: it may contain originals.
   return path.join(base, 'SecureDataMsg');
@@ -290,7 +324,7 @@ async function convertDocument(source, options = {}) {
   // is not a coverage proof: fonts, the page tree and every visual object cannot
   // yet be accounted for. Never let that best-effort result enter the release
   // pipeline. The current release keeps PDF fail-closed until the native PDFium contract in
-  // docs/PDF_ENGINE_DECISION.md has passed all release gates.
+  // docs/canonical/BACKLOG.md and docs/FORMAT_COVERAGE_MATRIX.md have passed all release gates.
   const worker = path.join(__dirname, 'parser-worker.js');
   const networkDeny = path.join(__dirname, 'network-deny.cjs');
   const launchOptions = seaRole ? {} : options;
@@ -530,6 +564,8 @@ async function convertDocument(source, options = {}) {
 module.exports = {
   SafeError,
   dataRoot,
+  isClaudeTemporaryLocalData,
+  stableWindowsLocalData,
   runtimeReady,
   readStatus,
   visualBridgeStatus,

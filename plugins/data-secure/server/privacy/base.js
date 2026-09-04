@@ -269,6 +269,9 @@ const TECH_TERMS = new Set([
   'DIGITAL TRANSFORMATION', 'DIGITALE TRANSFORMATION', 'CLOUD MIGRATION',
   'AZURE FUNCTIONS', 'MEDICAL INFORMATICS', 'HEALTH INFORMATICS',
   'CLINICAL INFORMATICS', 'DIGITAL HEALTH', 'DATA GOVERNANCE',
+  'GRAPH API', 'MICROSOFT GRAPH API', 'PROJECT SERVER', 'ROBOT FRAMEWORK',
+  'IMAGING PROTOCOL', 'IMAGE RECONSTRUCTION', 'TREATMENT PROTOCOL',
+  'SCANNER CALIBRATION', 'SPECTROSCOPY REPORT',
   'CLINICAL RESEARCH', 'PRIVACY POLICY', 'COMPANY LOGO',
   'TEST MANAGEMENT', 'TEST AUTOMATION', 'EXPLORATORY TESTING',
   'REGRESSION TESTING', 'ACCEPTANCE TESTING', 'PERFORMANCE TESTING',
@@ -506,10 +509,10 @@ function hasLabelBefore(text, index, labelRe, window = 40) {
 // whitespace folding would alter prose and create unrelated false positives.
 function normalizeSensitiveLabel(value) {
   return String(value || '')
-    .replace(/\bsteuer[ \t]+id\b/giu, 'Steuer-ID')
-    .replace(/\bgeburts[ \t]+datum\b/giu, 'Geburtsdatum')
-    .replace(/\b(tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|mobile|handy|fax)[ \t]+(privat|dienstlich|geschäftlich|geschaeftlich|business|private)\b/giu, '$1 ($2)')
-    .replace(/\b(personal|mitarbeiter|kunden|auftrags|vertrags|rechnungs|bestell|versicherungs|sozialversicherungs|patienten|fall|akten|lieferanten|debitoren|kreditoren)[ \t]+(nummer|nr\.?|zeichen)\b/giu, '$1$2');
+    .replace(/\bsteuer(?:[ \t]+|[ \t]*-[ \t]*)id\b/giu, 'Steuer-ID')
+    .replace(/\bgeburts(?:[ \t]+|[ \t]*-[ \t]*)datum\b/giu, 'Geburtsdatum')
+    .replace(/\b(tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|mobile|handy|fax)(?:[ \t]+|[ \t]*-[ \t]*)(privat|dienstlich|geschäftlich|geschaeftlich|business|private)\b/giu, '$1 ($2)')
+    .replace(/\b(personal|mitarbeiter|kunden|auftrags|vertrags|rechnungs|bestell|versicherungs|sozialversicherungs|patienten|fall|akten|lieferanten|debitoren|kreditoren)(?:[ \t]+|[ \t]*-[ \t]*)(nummer|nr\.?|zeichen)\b/giu, '$1$2');
 }
 
 function previousLabelLine(text, index) {
@@ -555,54 +558,122 @@ function splitTableRow(line) {
 // The cache holds the last text only; the engine scans one document at a time.
 let tableIndexText = null;
 let tableIndex = null;
+
+function isSensitiveTableHeader(value) {
+  const header = normalizeSensitiveLabel(value);
+  return DATE_OF_BIRTH_LABEL_RE.test(header) || PHONE_LABEL_RE.test(header) ||
+    DE_TAX_LABEL_RE.test(header) || ID_LABEL_HEADER_RE.test(header);
+}
+
+function combineHeaderRows(rows) {
+  return rows[0].map((_, column) =>
+    normalizeSensitiveLabel(rows.map((row) => row[column]).join(' '))
+  );
+}
+
+// A known PII label may be split by Word across at most three visible header
+// rows. Longer or structurally inconsistent shapes are not guessed: the final
+// residual gate receives an explicit structural finding and stops the file.
+const SENSITIVE_HEADER_FRAGMENT_RE = /\b(?:steuer|geburts|telefon|telephone|phone|téléphone|teléfono|telefono|telefoon|mobil|mobile|handy|fax|personal|mitarbeiter|sozialversicherungs|patienten|kunden|auftrags|vertrags|rechnungs|bestell|versicherungs|fall|akten|lieferanten|debitoren|kreditoren)\b/iu;
+
 function buildTableIndex(text) {
   const src = String(text || '');
   const starts = [0];
   for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) starts.push(i + 1);
   const rows = src.split('\n');
   const headersByLine = new Map();
+  const ambiguousSensitiveLines = new Set();
   for (let index = 1; index + 1 < rows.length; index++) {
     const separator = splitTableRow(rows[index]);
     if (!separator || !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
     const immediate = splitTableRow(rows[index - 1]);
-    if (!immediate || immediate.length !== separator.length) continue;
-    let headers = immediate;
-    const preceding = index > 1 ? splitTableRow(rows[index - 2]) : null;
-    if (preceding && preceding.length === immediate.length) {
-      const combined = preceding.map((header, column) => normalizeSensitiveLabel(`${header} ${immediate[column]}`));
-      const createsSensitiveLabel = combined.some((header, column) =>
-        (DATE_OF_BIRTH_LABEL_RE.test(header) || PHONE_LABEL_RE.test(header) || DE_TAX_LABEL_RE.test(header) || ID_LABEL_HEADER_RE.test(header)) &&
-        ![preceding[column], immediate[column]].some((part) => {
-          const normalized = normalizeSensitiveLabel(part);
-          return DATE_OF_BIRTH_LABEL_RE.test(normalized) || PHONE_LABEL_RE.test(normalized) ||
-            DE_TAX_LABEL_RE.test(normalized) || ID_LABEL_HEADER_RE.test(normalized);
-        })
-      );
-      if (createsSensitiveLabel) headers = combined;
+    if (!immediate) continue;
+    if (immediate.length !== separator.length) {
+      const precedingRows = [];
+      for (let distance = 1; distance <= 4 && index >= distance; distance++) {
+        const preceding = splitTableRow(rows[index - distance]);
+        if (!preceding) break;
+        if (preceding.every((cell) => /^:?-{3,}:?$/u.test(cell))) break;
+        precedingRows.unshift(preceding);
+      }
+      if (precedingRows.flat().some((header) =>
+        isSensitiveTableHeader(header) || SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header)))) {
+        let unsafeRow = index + 1;
+        while (unsafeRow < rows.length && splitTableRow(rows[unsafeRow])) {
+          ambiguousSensitiveLines.add(unsafeRow++);
+        }
+        index = unsafeRow - 1;
+      }
+      continue;
+    }
+    let headers = immediate.map(normalizeSensitiveLabel);
+    const headerBlock = [];
+    let headerCursor = index - 1;
+    while (headerCursor >= 0 && headerBlock.length < 4) {
+      const preceding = splitTableRow(rows[headerCursor]);
+      if (!preceding) break;
+      if (preceding.every((cell) => /^:?-{3,}:?$/u.test(cell))) break;
+      headerBlock.unshift(preceding);
+      headerCursor--;
+    }
+    const mismatchedHeaderWidth = headerBlock.some((row) => row.length !== immediate.length);
+    const candidates = [];
+    for (let candidate = headerBlock.length - 1; candidate >= 0 && candidates.length < 3; candidate--) {
+      if (headerBlock[candidate].length !== immediate.length) break;
+      candidates.unshift(headerBlock[candidate]);
+    }
+    if (!headers.some(isSensitiveTableHeader)) {
+      // Prefer the shortest unambiguous reconstruction. This preserves a
+      // complete immediate header and only joins a closed known vocabulary.
+      for (let count = 2; count <= candidates.length; count++) {
+        const combined = combineHeaderRows(candidates.slice(-count));
+        if (combined.some(isSensitiveTableHeader)) {
+          headers = combined;
+          break;
+        }
+      }
     }
     const cleaned = headers.map((header) => normalizeSensitiveLabel(header.replace(/\s+\(\d+\)$/u, '')));
+    const hasSensitiveHeader = cleaned.some(isSensitiveTableHeader);
+    const headerHasSensitiveFragment = headerBlock
+      .flat()
+      .some((header) => SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header)));
+    const unresolvedSensitiveHeader = !hasSensitiveHeader && headerHasSensitiveFragment;
+    const overlongSensitiveHeader = (headerBlock.length > 3 && headerHasSensitiveFragment) ||
+      (mismatchedHeaderWidth && headerHasSensitiveFragment);
     let row = index + 1;
     while (row < rows.length) {
       const cells = splitTableRow(rows[row]);
       if (!cells) break;
-      // A data row of a different width (merged or spilled cells) still belongs
-      // to this table; every cell is bound to the header of its own column and
-      // surplus cells simply carry no label. Refusing the whole table left
-      // labelled identifiers in clear (counter-review rc93).
-      headersByLine.set(row, cleaned);
+      if (unresolvedSensitiveHeader || overlongSensitiveHeader ||
+          (hasSensitiveHeader && cells.length !== immediate.length)) {
+        ambiguousSensitiveLines.add(row);
+      } else if (cells.length === immediate.length) {
+        headersByLine.set(row, cleaned);
+      }
       row++;
     }
     index = row - 1;
   }
-  return { starts, rows, headersByLine };
+  return { starts, rows, headersByLine, ambiguousSensitiveLines };
 }
 
-function tableHeaderAt(text, index) {
+function tableAnalysis(text) {
   const src = String(text || '');
   if (tableIndexText !== src) {
     tableIndex = buildTableIndex(src);
     tableIndexText = src;
   }
+  return tableIndex;
+}
+
+function hasAmbiguousSensitiveTable(text) {
+  return tableAnalysis(text).ambiguousSensitiveLines.size > 0;
+}
+
+function tableHeaderAt(text, index) {
+  const src = String(text || '');
+  tableAnalysis(src);
   const { starts, rows, headersByLine } = tableIndex;
   let lo = 0;
   let hi = starts.length - 1;
@@ -698,6 +769,7 @@ module.exports = {
   luhnValid,
   hasLabelBefore,
   tableHeaderAt,
+  hasAmbiguousSensitiveTable,
   normalizeSensitiveLabel,
   NAME_PARTICLE,
   NAME_PARTICLES,

@@ -399,6 +399,13 @@ function parseWordStructure(body) {
       offset = attribute.lastIndex;
       if (offset < attributes.length && !/\s/.test(attributes[offset])) throw wordStructureError();
     }
+    // Merged Word table cells do not have a one-to-one column coordinate.
+    // Rendering them as ordinary Markdown cells would let values shift under a
+    // different privacy label. Until the renderer carries gridSpan/vMerge
+    // semantics end to end, stop the document instead of guessing.
+    if (!frame.skipped && (name === 'w:gridSpan' || name === 'w:vMerge')) {
+      throw wordStructureError();
+    }
     // These canonical Word constructs are already counted by the package
     // coverage gate below.  Keep their payload out of the structural renderer
     // so the caller receives the intended content-free coverage warning.

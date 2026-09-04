@@ -21,6 +21,7 @@ const STARTUP_CODES = Object.freeze({
   STARTUP_MIGRATION_FAILED: 'Die Migration älterer lokaler Daten ist fail-closed gestoppt oder noch aktiv.',
   STARTUP_CLEANUP_FAILED: 'Die Bereinigung privater Arbeitskopien ist fail-closed gestoppt.',
   RUNTIME_INTEGRITY_FAILED: 'Die gebündelte Laufzeit stimmt nicht mit dem Nachweis des Pakets überein.',
+  DURABLE_RUNTIME_FAILED: 'Die lokale Hintergrundlaufzeit konnte nicht vollständig bereitgestellt werden.',
   STARTUP_FAILED: 'Der Start wurde aus einem anderen Grund sicher verweigert.'
 });
 

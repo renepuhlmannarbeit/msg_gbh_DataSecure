@@ -170,7 +170,7 @@ async function main() {
   test('unproved SEA stays outside the productive entry and the assembly release gate rejects promotion', () => {
     assert.strictEqual(contract.release_enabled, false);
     assert.strictEqual(contract.dispatch_status, 'unreleased-fixed-single-plugin-dispatcher');
-    const mcp = JSON.parse(read('plugins/data-secure/.mcp.json'))['data-secure-local'];
+    const mcp = JSON.parse(read('plugins/data-secure/.mcp.json')).mcpServers['data-secure-local'];
     assert.strictEqual(mcp.command, 'node');
     assert.deepStrictEqual(mcp.args, ['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
     const assembler = read('scripts/build-sea-plugin.mjs');

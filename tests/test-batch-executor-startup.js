@@ -61,6 +61,7 @@ function fixture(role, firstChild) {
   let owner = null;
   let randomCounter = 0;
   let journalReadable = true;
+  let terminalNotice = null;
   const progress = {
     ok: true, complete: false, batch_phase: 'awaiting_local_review',
     batch_total: 1, released: 0, stopped: 0, deferred_review: 1,
@@ -86,6 +87,23 @@ function fixture(role, firstChild) {
     readBatchProgress() {
       if (!journalReadable) throw privateError();
       return { ...progress };
+    },
+    reserveTerminalNotice(token, presenter) {
+      if (terminalNotice) return { ok: false, state: terminalNotice.state };
+      terminalNotice = { state: 'reserved', token, presenter, reservation_id: 'e'.repeat(32) };
+      return { ok: true, state: 'reserved', reservation_id: terminalNotice.reservation_id };
+    },
+    markTerminalNoticePresented(token, presenter, reservationId) {
+      if (terminalNotice?.token !== token || terminalNotice?.presenter !== presenter ||
+          terminalNotice?.reservation_id !== reservationId) return false;
+      terminalNotice = { state: 'presented', token, presenter };
+      return true;
+    },
+    releaseTerminalNoticeReservation(token, presenter, reservationId) {
+      if (terminalNotice?.token !== token || terminalNotice?.presenter !== presenter ||
+          terminalNotice?.reservation_id !== reservationId) return false;
+      terminalNotice = null;
+      return true;
     }
   };
   const module = { exports: {} };
@@ -128,7 +146,9 @@ function fixture(role, firstChild) {
           };
         },
         showLocalIntakeNotice: stage => notices.push({ type: 'failure', stage }),
-        showBatchStateNotice: state => notices.push({ type: 'state', state })
+        showBatchStateNotice: state => notices.push({ type: 'state', state }),
+        showLocalIntakeNoticeConfirmed: stage => { notices.push({ type: 'failure', stage }); return true; },
+        showBatchStateNoticeConfirmed: state => { notices.push({ type: 'state', state }); return true; }
       };
       throw new Error(`Unexpected dependency: ${name}`);
     }
@@ -140,8 +160,8 @@ function fixture(role, firstChild) {
     queue: child => children.push(child),
     loseJournal() { journalReadable = false; },
     start(options = {}) {
-      if (role === 'batch') return api.startLocalBatchExecutor(TOKEN);
-      if (role === 'review') return api.startLocalReviewExecutor(TOKEN);
+      if (role === 'batch') return api.startLocalBatchExecutor(TOKEN, options);
+      if (role === 'review') return api.startLocalReviewExecutor(TOKEN, options);
       return api.startLocalIntakeExecutor([
         { name: 'customer-secret.docx', full: PRIVATE_DETAIL, sourceBytes: 16 }
       ], 'auto', options);
@@ -382,7 +402,74 @@ async function main() {
       `fallback presentation outcome recorded, got ${JSON.stringify(events)}`);
   });
 
+  await testAsync('batch: asynchronous parent presenter failure releases reservation and never acknowledges worker', async () => {
+    const child = fakeChild();
+    const f = fixture('batch', child);
+    const calls = [];
+    const options = {
+      reserveTerminalNotice: () => ({ ok: true, state: 'reserved', reservation_id: 'f'.repeat(32) }),
+      markTerminalNoticePresented: () => { calls.push('marked'); return true; },
+      releaseTerminalNoticeReservation: () => { calls.push('released'); return true; },
+      showBatchStateNotice: async () => { throw privateError(); }
+    };
+    assert.strictEqual(f.api.startLocalBatchExecutor(TOKEN, options).ok, true);
+    child.callbacks[0](null);
+    child.emit('message', {
+      type: 'local-batch-state', complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+      result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 }, result_grades_verified: true
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(calls, ['released']);
+    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 0);
+    assert.ok(f.records.some(event => event.error_code === 'LOCAL_NOTICE_FAILED'));
+    assert.doesNotMatch(JSON.stringify(f.records), /PRIVATE|customer-secret|[a-f0-9]{64}/u);
+    child.exit(0);
+    f.drain();
+  });
+
+  await testAsync('batch: parent acknowledges only after spawn confirmation and durable presented transition', async () => {
+    const child = fakeChild();
+    const f = fixture('batch', child);
+    const order = [];
+    let confirmSpawn;
+    const options = {
+      reserveTerminalNotice: () => ({ ok: true, state: 'reserved', reservation_id: '9'.repeat(32) }),
+      markTerminalNoticePresented: () => { order.push('presented'); return true; },
+      releaseTerminalNoticeReservation: () => { order.push('released'); return true; },
+      showBatchStateNotice: () => new Promise(resolve => { order.push('spawn-started'); confirmSpawn = () => { order.push('spawn-confirmed'); resolve(true); }; })
+    };
+    assert.strictEqual(f.api.startLocalBatchExecutor(TOKEN, options).ok, true);
+    child.callbacks[0](null);
+    child.emit('message', {
+      type: 'local-batch-state', complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+      result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 }, result_grades_verified: true
+    });
+    assert.deepStrictEqual(order, ['spawn-started']);
+    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 0);
+    confirmSpawn();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(order, ['spawn-started', 'spawn-confirmed', 'presented']);
+    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 1);
+    child.exit(0);
+    f.drain();
+  });
+
   for (const role of ['batch', 'intake']) {
+    test(`${role}: a deliberate automatic-review pause suppresses the parent's exit fallback notice`, () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const started = role === 'batch' ? f.api.startLocalBatchExecutor(TOKEN, {}) : f.start({});
+      assert.strictEqual(started.ok, true);
+      child.callbacks[0](null);
+      child.emit('message', { type: 'local-review-paused' });
+      child.exit(0);
+      f.drain();
+      assert.strictEqual(f.notices.length, 0, 'the user already chose Later/close in the local review');
+      assert.ok(!f.records.some(event => event.event === 'completion_notice_started'));
+    });
+
     test(`${role}: the parent claims the terminal notice durably and acknowledges the worker before presenting`, () => {
       const child = fakeChild();
       const f = fixture(role, child);
@@ -458,6 +545,59 @@ async function main() {
       f.drain();
       assert.strictEqual(f.notices.length, 1);
       assert.doesNotMatch(JSON.stringify(f.records), /PRIVATE|customer-secret|[a-f0-9]{64}/);
+    });
+  }
+
+  for (const role of ['batch', 'review']) {
+    const acceptedType = role === 'batch' ? 'local-batch-accepted' : 'local-review-accepted';
+    await testAsync(`${role}: a flushed send callback alone cannot confirm worker receipt`, async () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const started = f.start({ requireIpcAcknowledgement: true, ipcAckTimeoutMs: 10 });
+      child.callbacks[0](null);
+      let settled = false;
+      started.ipcAcknowledgement.finally(() => { settled = true; }).catch(() => {});
+      await new Promise(resolve => setImmediate(resolve));
+      assert.strictEqual(settled, false);
+      f.drain();
+      await assert.rejects(started.ipcAcknowledgement, /timeout/iu);
+      assert.strictEqual(child.kills, 1);
+      assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_TIMEOUT'));
+      assertRetainedWhileAlive(f, child, role);
+      child.exit(1);
+      f.drain();
+    });
+
+    await testAsync(`${role}: only the exact content-free worker acceptance confirms the start`, async () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const started = f.start({ requireIpcAcknowledgement: true, ipcAckTimeoutMs: 10 });
+      child.callbacks[0](null);
+      child.emit('message', { type: acceptedType, private: PRIVATE_DETAIL });
+      let settled = false;
+      started.ipcAcknowledgement.then(() => { settled = true; });
+      await new Promise(resolve => setImmediate(resolve));
+      assert.strictEqual(settled, false, 'an acceptance with additional fields is ignored');
+      child.emit('message', { type: acceptedType });
+      await started.ipcAcknowledgement;
+      f.drain();
+      assert.strictEqual(child.kills, 0);
+      assert.ok(f.active());
+      assert.doesNotMatch(JSON.stringify(f.records), /PRIVATE|customer-secret|[a-f0-9]{64}/u);
+      child.exit(0);
+      f.drain();
+    });
+
+    await testAsync(`${role}: worker exit before acceptance rejects immediately and releases only after exit`, async () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const started = f.start({ requireIpcAcknowledgement: true, ipcAckTimeoutMs: 30000 });
+      child.callbacks[0](null);
+      child.exit(1);
+      await assert.rejects(started.ipcAcknowledgement, /ended before/iu);
+      f.drain();
+      assert.strictEqual(f.active(), false);
+      assert.ok(f.releases.every(release => !release.alive));
     });
   }
 

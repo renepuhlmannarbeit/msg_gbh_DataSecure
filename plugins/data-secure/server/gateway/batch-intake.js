@@ -36,6 +36,8 @@ function createBatchIntake(options = {}) {
   const intakeIntent = options.intakeIntent || createBatchIntakeIntent(options);
   const createBatchPseudonymState = options.createBatchPseudonymState ||
     require('../batch-pseudonym-context').createBatchPseudonymState;
+  const productChannel = String(options.productChannel || process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin');
+  if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('PRODUCT_CHANNEL_INVALID');
 
   function journalPublicationState(expected) {
     try {
@@ -213,6 +215,7 @@ function createBatchIntake(options = {}) {
       });
       state = {
         schema: 'datasecure-batch/4',
+        product_channel: productChannel,
         token,
         created_at: new Date(now).toISOString(),
         expires_at: new Date(now + (ttl === 0 ? DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000 : ttl)).toISOString(),

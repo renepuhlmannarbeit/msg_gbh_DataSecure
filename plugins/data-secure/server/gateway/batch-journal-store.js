@@ -340,7 +340,9 @@ function createBatchJournalStore(options = {}) {
 
   function validStateShape(state, token) {
     const supportedSchema = [SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
-    return state?.token === token && supportedSchema && validPseudonymState(state) &&
+    const validProductChannel = !Object.hasOwn(state || {}, 'product_channel') ||
+      ['plugin', 'standalone'].includes(state.product_channel);
+    return state?.token === token && supportedSchema && validProductChannel && validPseudonymState(state) &&
       Array.isArray(state?.items) && state.items.length > 0 &&
       state.items.length <= maxBatchFiles &&
       state.items.every((item) => validPreflightItem(item, state.schema)) &&

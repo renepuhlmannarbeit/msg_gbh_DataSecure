@@ -68,23 +68,17 @@ export function buildReleaseMarketplace() {
   const release = {
     $schema: catalogue.$schema,
     name: catalogue.name,
-    description: `${catalogue.description} Release-Projektion ${pkg.version}: selbsttragende Zielpakete mit SHA-256-Pinning.`,
+    description: `${catalogue.description} Release-Projektion ${pkg.version}: selbsttragende Zielpakete mit SHA-256-Pinning.${placeholder ? ' Nicht bereitstellbarer Platzhalter: DATASECURE_ARCHIVE_BASE_URL setzen und neu bauen.' : ''}`,
     owner: catalogue.owner,
-    metadata: {
-      generated_by: 'scripts/build-release-marketplace.mjs',
-      product_version: pkg.version,
-      archive_base_url_is_placeholder: placeholder,
-      note: placeholder
-        ? 'Platzhalter-URL: vor der Bereitstellung DATASECURE_ARCHIVE_BASE_URL setzen und den Build wiederholen.'
-        : 'Ablage-URL aus DATASECURE_ARCHIVE_BASE_URL; Prüfsummen aus dist/SHA256SUMS.'
-    },
     plugins
   };
   const output = path.join(dist, 'marketplace.release.json');
   const serialized = `${JSON.stringify(release, null, 2)}\n`;
   fs.writeFileSync(output, serialized, 'utf8');
   const verified = readJson(output);
-  if (verified.plugins.length !== archives.length ||
+  if (JSON.stringify(Object.keys(verified).sort()) !== JSON.stringify(['$schema', 'description', 'name', 'owner', 'plugins'].sort()) ||
+      (placeholder && !verified.description.includes('Nicht bereitstellbarer Platzhalter')) ||
+      verified.plugins.length !== archives.length ||
       !verified.plugins.every((entry) => entry.source.source === 'archive' && HEX.test(entry.source.sha256) && entry.source.url.startsWith('https://'))) {
     throw new Error('RELEASE_MARKETPLACE_OUTPUT_INVALID');
   }

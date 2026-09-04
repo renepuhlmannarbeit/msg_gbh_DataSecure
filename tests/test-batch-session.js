@@ -11,9 +11,7 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 const { roots, privacyRoot, storageStatus, ensurePrivateDirectory } = require('../plugins/data-secure/server/gateway/common');
-const { beginBatch: beginBatchFromQueue, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
-const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
+const { beginBatch: beginBatchFromQueue, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
 const { startLocalBatchExecutor } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { csvField } = require('../plugins/data-secure/server/gateway/mapping');
 const { evidencePath, SCHEMA, validateEvidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
@@ -129,6 +127,36 @@ async function mcpBatchCalls(calls, { supportMode = false } = {}) {
 }
 
 async function main() {
+  await testAsync('terminal notice reservation is recoverable until presentation becomes durable', async () => {
+    resetInput(); add('notice.txt', 'Kontakt: Max Mustermann');
+    const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
+    const parentReservation = '1'.repeat(32);
+    const parent = reserveTerminalNotice(begun.batch_token, 'parent', parentReservation);
+    assert.deepStrictEqual(parent, { ok: true, state: 'reserved', reservation_id: parentReservation });
+    assert.deepStrictEqual(reserveTerminalNotice(begun.batch_token, 'worker', '2'.repeat(32)),
+      { ok: false, state: 'reserved' });
+    assert.strictEqual(releaseTerminalNoticeReservation(begun.batch_token, 'worker', parentReservation), false,
+      'another presenter cannot release the reservation');
+    const stale = _test.readState(begun.batch_token);
+    stale.terminal_notice.at = new Date(Date.now() - 60_000).toISOString();
+    _test.writeState(stale);
+    const takeoverReservation = '2'.repeat(32);
+    assert.deepStrictEqual(reserveTerminalNotice(begun.batch_token, 'worker', takeoverReservation),
+      { ok: true, state: 'reserved', reservation_id: takeoverReservation },
+      'a dead parent reservation cannot suppress the worker fallback forever');
+    assert.strictEqual(releaseTerminalNoticeReservation(begun.batch_token, 'parent', parentReservation), false,
+      'the replaced parent reservation is inert');
+    assert.strictEqual(releaseTerminalNoticeReservation(begun.batch_token, 'worker', takeoverReservation), true);
+    const workerReservation = '3'.repeat(32);
+    assert.strictEqual(reserveTerminalNotice(begun.batch_token, 'worker', workerReservation).ok, true);
+    assert.strictEqual(markTerminalNoticePresented(begun.batch_token, 'worker', workerReservation), true);
+    const state = _test.readState(begun.batch_token);
+    assert.deepStrictEqual(Object.keys(state.terminal_notice).sort(), ['at', 'presenter', 'status']);
+    assert.strictEqual(state.terminal_notice.status, 'presented');
+    assert.deepStrictEqual(reserveTerminalNotice(begun.batch_token, 'parent', '4'.repeat(32)),
+      { ok: false, state: 'presented' });
+    discardIncompleteBatches();
+  });
   await testAsync('background executor receives its token only over private IPC and exposes content-free progress', async () => {
     resetInput(); add('worker.txt', 'Kunde: Max Mustermann');
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });

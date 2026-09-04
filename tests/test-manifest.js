@@ -119,7 +119,8 @@ test('host wording does not turn portable code into a platform release claim', (
   const guide = readText(path.join(root, 'docs', 'ANLEITUNG.md'));
   assert.match(mcpb.long_description, /ohne reale Zielsystem- und Cowork-Abnahme keine Plattformfreigabe/u);
   assert.doesNotMatch(mcpb.long_description, /Claude Desktop ist für Linux als Beta verfügbar/u);
-  assert.match(readme, /Cloud-Cowork[\s\S]{0,100}keinen lokalen Plugin-MCP[\s\S]{0,100}keine Originale verarbeiten/u);
+  assert.match(readme, /Cowork darf die Aufgabe standardmäßig in der Cloud ausführen[\s\S]{0,180}lokale\s+DataSecure-MCP[\s\S]{0,180}auf dem Rechner/u);
+  assert.match(readme, /Web oder Mobil[\s\S]{0,180}lokalen Plugin-MCP nicht für den Originaleingang nutzen/u);
   assert.match(guide, /Originale niemals per Büroklammer in den Chat/u);
 });
 
@@ -204,7 +205,8 @@ test('the plugin ships a runnable MCP entry point', () => {
 
 test('the MCP config uses the plugin root placeholder', () => {
   const mcp = readJson(path.join(root, 'plugins', 'data-secure', '.mcp.json'));
-  const server = mcp['data-secure-local'];
+  assert.deepStrictEqual(Object.keys(mcp), ['mcpServers'], '.mcp.json must use the documented mcpServers wrapper');
+  const server = mcp.mcpServers['data-secure-local'];
   assert.ok(server, 'data-secure-local server missing');
   assert.strictEqual(server.command, 'node');
   assert.deepStrictEqual(server.args, ['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
@@ -235,7 +237,8 @@ test('native Windows launcher has a reproducible source and release build contra
   assert.strictEqual(pkg.scripts['native:update'], 'node scripts/build-native.mjs --update');
   assert.strictEqual(pkg.scripts['native:repro'], 'node scripts/build-native.mjs --verify-reproducible');
   assert.strictEqual(pkg.scripts['native:analyze'], 'node scripts/build-native.mjs --analyze');
-  assert.match(pkg.scripts['test:rc81-review'], /test-native-picker-lifecycle\.js/);
+  assert.match(productRunner, /test-native-picker-lifecycle\.js/,
+    'the current product runner must retain the native picker lifecycle gate');
   assert.strictEqual(pkg.scripts['test:parser-contract'], 'node tests/test-content-graph.js && node tests/test-parser-isolation.js && node tests/test-docx-structure.js && node tests/test-docx-differential.js');
   for (const rel of [
     'native/windows/datasecure-sandbox.cpp',

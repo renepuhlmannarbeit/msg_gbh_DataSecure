@@ -28,7 +28,7 @@ function addTree(prefix, directory) {
   }
 }
 
-for (const rel of ['manifest.json', 'README.md', 'SECURITY.md', 'LICENSE', 'ARCHITECTURE_DECISION.md', 'THIRD_PARTY_NOTICES.md']) {
+for (const rel of ['manifest.json', 'README.md', 'SECURITY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
   const full = path.join(root, rel);
   if (fs.existsSync(full)) addFile(rel, full);
 }

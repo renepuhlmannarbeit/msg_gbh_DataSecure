@@ -19,7 +19,6 @@ const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
-const { createTestPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
 const { confirmationCommands, confirmAutomaticRelease } = require('../plugins/data-secure/server/companion/local-confirmation');
 const {
   REVIEW_SCHEMA,
@@ -580,7 +579,6 @@ async function main() {
       processCompanionJob(job.job_id, file, job.profile, {
         confirmAutomaticRelease: () => { confirmationCalled = true; return true; },
         gatewayDeps: {
-          privateArtifactCrypto: createTestPrivateArtifactCrypto(r.review),
           ocrPngDetailed: async () => ({ text: '', words: [] }),
           rasterizeToPng: async () => { throw new Error('not available'); }
         }

@@ -6,6 +6,24 @@ const { SafeError, dataRoot } = require('../runtime');
 const { ensurePrivateDirectory, hasReparseComponent, safeRemovePrivateTree } = require('./common');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
+const TRANSIENT_DELETE_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+function retryDelay(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function retryTransientDelete(operation, revalidate) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      operation();
+      return;
+    } catch (error) {
+      if (!TRANSIENT_DELETE_CODES.has(error?.code) || attempt === 3) throw error;
+      retryDelay(10 * (attempt + 1));
+      revalidate();
+    }
+  }
+}
 
 function batchRoot() {
   // Resolve dynamically: tests and supported configuration can change the
@@ -111,11 +129,26 @@ function safeRemoveWorkDirectory(token, options = {}) {
       const current = assertPlainWorkFile(file.full);
       if (current.dev !== file.stat.dev || current.ino !== file.stat.ino || current.size !== file.stat.size ||
           current.mtimeMs !== file.stat.mtimeMs || current.nlink !== links.get(file.key)) throw new Error('BATCH_WORK_UNSAFE');
-      fs.unlinkSync(file.full);
+      retryTransientDelete(
+        () => fs.unlinkSync(file.full),
+        () => {
+          verifyDirectories();
+          const retryStat = assertPlainWorkFile(file.full);
+          if (retryStat.dev !== file.stat.dev || retryStat.ino !== file.stat.ino ||
+              retryStat.size !== file.stat.size || retryStat.mtimeMs !== file.stat.mtimeMs ||
+              retryStat.nlink !== links.get(file.key)) throw new Error('BATCH_WORK_UNSAFE');
+        }
+      );
       links.set(file.key, links.get(file.key) - 1);
     }
     verifyDirectories();
-    fs.rmdirSync(target);
+    retryTransientDelete(
+      () => fs.rmdirSync(target),
+      () => {
+        verifyDirectories();
+        if (fs.readdirSync(target).length !== 0) throw new Error('BATCH_WORK_UNSAFE');
+      }
+    );
   } catch {
     throw new SafeError('Der lokale Arbeitsbereich konnte nicht sicher bereinigt werden.');
   }

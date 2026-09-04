@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 03.09.2026 · 3.2.0-rc93 · Git-Arbeitsstand nach Codex-Gegenreview: Formularerkennung, früher Startschutz und Exportpfadbindung korrigiert
+Stand: 04.09.2026 · 3.2.0-rc98 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
 
 ## Produkt in einem Satz
 
@@ -13,10 +13,11 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
 
 - Anwenderkanal heute: das zielsystemspezifische, selbsttragende Plugin-ZIP.
   Der private Marketplace ist der gleichwertige Zielkanal (DS-002/DS-067), aber
-  noch nicht freigegeben: Der aktuelle Marketplace-Quellordner startet mit
-  `command: node`, enthält den gesperrten OCR-Engineering-Baum (rund 57 MiB,
-  über dem 50-MB-Limit) und keine gebündelte Runtime. Die selbsttragende
-  Marketplace-Projektion bleibt offene Arbeit unter BL-010.8/BL-051.2.
+  noch nicht freigegeben: Der Build erzeugt zwar eine streng validierbare,
+  selbsttragende Marketplace-Projektion mit Archivquelle, diese verweist aber
+  noch auf eine Platzhalter-URL und besitzt noch kein dort erreichbares
+  Zielartefakt. Der Marketplace-Quellordner bleibt ausschließlich ein
+  Entwicklungskatalog; Freigabe und Zielhostnachweise bleiben BL-010.8/BL-051.2.
 - MCPB: internes Engineering-Artefakt, kein Installations-, Fallback- oder
   Supportweg für Anwender.
 - Freigegebene Eingaben: TXT, Markdown (`.md`, `.markdown`), CSV und DOCX.
@@ -46,10 +47,11 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
 
 ## Claude-/Cowork-Grenze
 
-Der lokale Plugin-MCP kann nur in einer **lokalen** Claude-Desktop-/Cowork-
-Ausführung oder in Claude Code genutzt werden, die lokale Plugin-MCPs tatsächlich
-startet. Cloud-Sitzungen – auch in Desktop, Web oder Mobil – erhalten keinen
-Originalzugriff; eine Dateibrücke wäre kein lokaler DataSecure-Lauf. Die lokale CLI 2.1.233 validiert
+Der lokale Plugin-MCP kann über die laufende Claude-Desktop-App oder in Claude
+Code genutzt werden, wenn `data-secure-local` tatsächlich verbunden ist. Cowork
+darf die Sitzung in der Cloud ausführen; der Plugin-MCP und die Verarbeitung der
+Originale bleiben dabei lokal auf dem Rechner. Web, Mobil und eine getrennte
+Desktop-Brücke erhalten keinen Originalzugriff. Die lokale CLI 2.1.233 validiert
 Quellplugin und Marketplace streng; das ist kein Fresh-Install- oder
 Cowork-Laufnachweis. Die offizielle aktuelle Hostdokumentation wird vor jeder
 Freigabe erneut geprüft.
@@ -64,17 +66,66 @@ Aktuelle Testklassen und Befehle stehen in [`docs/TESTING.md`](../TESTING.md).
 Automatisierte Tests ersetzen keine Windows-/macOS-Fresh-Install-, Cowork-, UX-,
 Accessibility-, Security- oder Fachabnahme.
 
-Das RC92-Gegenreview fand drei freigabeblockierende Erkennungslücken bei
-fragmentierten Tabellenköpfen, beschrifteten Geburtsdaten und üblichen deutschen
-Telefonformaten. RC93 schließt sie mit präziser Redaktion plus einem davon
-getrennten, konservativen Residual-Gate. Harmlose Monat-Jahr-Sätze bleiben
-erhalten; akademische Qualifikationen bleiben nach DS-012 erhalten, während eine
-geschlechtliche Anrede am Personennamen entfernt wird. Ein winziger Bootstrap
-fängt jetzt auch frühe Modul-Ladefehler pfadfrei ab. Startmarker und sichtbare
-Ergebnisexporte prüfen Link-/Junction- und Verzeichnisidentitäten erneut vor den
-Schreibschritten. Das reduziert die belegten Fehlerpfade, ist aber keine Aussage,
-dass beliebige zukünftige Dokumentdarstellungen vollständig erkannt werden;
-unabhängige Gates und die fachliche Reviewstufe bleiben verbindlich.
+Der aktuelle Kern erkennt und entfernt direkte Identifikatoren einschließlich
+mehrsprachiger Namensfelder, Anreden, Kontakt-URIs, Telefon-, Adress-, Steuer- und
+Bankdaten. Mehrzeilige sensible Tabellenköpfe werden nur bis zur belegten
+eindeutigen Struktur ausgewertet; verschobene, ungleich breite oder längere
+Strukturen stoppen am unabhängigen Residual-Gate. Zusammengeführte DOCX-Zellen
+stoppen, bis sie koordinatentreu unterstützt werden. Zertifizierungsanbieter und
+IT-/Health-IT-Fachbegriffe bleiben kontextgebunden erhalten.
+
+Intake, Fortsetzung und Review gelten erst nach echtem Worker-ACK als gestartet.
+Der lokale Hintergrundlauf geht nach der vollständigen Stapelanalyse direkt in
+einen erforderlichen Sammelreview; „Später“ pausiert ohne Freigabe und ohne
+zweiten Picker. Abschlussanzeige und sichtbarer Export besitzen getrennte,
+dauerhafte Zustände. Detached Worker und Parser starten aus einem geprüften
+versionsgebundenen Runtime-Cache; bei einer eindeutig erkannten temporären
+Claude-Umleitung wird nur unter Windows das reguläre LocalAppData des bestehenden
+Benutzerprofils verwendet. Der entsprechende echte Cowork-Wiederholungslauf auf
+Windows und alle macOS-Zielhostnachweise bleiben offen.
+
+Der Unterbau des eigenständigen DataSecure-Standalone-Produkts ist als
+E0-Vertikalschnitt vorhanden: eine kleine technische CLI ruft die lokale Engine
+direkt auf, ohne MCP-/JSON-RPC-Umweg. Vor Laden des Core wird ein eigener
+`SecureDataMsg-Standalone`-Datenroot aktiviert und an Hintergrundworker
+weitergereicht. Plugin und Standalone verwenden dieselbe neutrale geordnete
+Start-/Recovery-Transaktion. Damit
+sind Journale, Einstellungen, Review und Exporte physisch vom Claude-Plugin
+getrennt. Die neutrale Core-API muss noch weiter von Pluginbegriffen gelöst und
+durch Cross-Product-Gates abgesichert werden. Eine reale Tauri-2-Hülle mit
+nativem Datei-/Ordnerdialog, privatem längengerahmtem Sidecar-Kanal und
+inhaltsfreier Rendererprojektion ist auf Windows x64 kompiliert und im
+laufenden Prozess geprüft. Ein eigenes selbsttragendes Windows-x64-
+Engineering-Paket wurde gebaut, verifiziert und in einem isolierten Pfad ohne
+System-Node gestartet. Zielsystem-UAT und native macOS-Pakete fehlen; der
+Schnitt ist deshalb noch kein freigegebenes Standalone-Produkt.
+Ein geschlossener UI-Zustands-/IPC-Vertrag verhindert
+Rohpfade, Rohbytes und Dateisystemzugriff im Renderer; Pflichtzähler und
+Zustandsübergänge stoppen bei fehlenden, regressiven oder widersprüchlichen
+Werten. Der Zielkatalog bindet vier getrennte Pakete an exakte Rust-Triples:
+Windows x64, macOS Intel, macOS Apple Silicon und Linux x64 glibc. Für beide
+macOS-Pakete gilt wegen der gebündelten Node-Laufzeit mindestens macOS 13.5.
+Rust und Tauri sind ausschließlich Buildwerkzeuge; Anwender installieren weder
+Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
+2.11.5 und MSVC erfolgreich gebaut; `cargo test --locked`, Clippy,
+Paketprüfung und ein isolierter Start-/Stopp-Smoke sind grün. Der Paketbau
+erzeugt die geschlossene Runtimeprojektion immer frisch aus dem aktuellen
+Quellbaum. Die Pilotoberfläche kann Ergebnis- und privaten Zuordnungsordner über
+getrennte inhaltsfreie IPC-Aktionen öffnen. Ihre Abschlusszähler sind derzeit
+noch globale Bestandszähler und müssen vor Endnutzerfreigabe auf den aktuellen
+Lauf gebunden werden. Offen bleiben Windows-UAT, Accessibility-/Performance-Messung,
+komponentenweise Rust-Lizenzklärung sowie native Builds und UATs auf macOS
+Intel/ARM und Linux.
+
+Microsoft MarkItDown 0.1.7 ist als gepinnter, netz-/pluginfreier
+DOCX-Differential-Bridge samt Vertrag und echtem synthetischem Smoke vorbereitet.
+Der Engineeringpfad läuft isoliert mit `-I -S`, ohne Host-PATH/-TEMP, und wird
+ehrlich als ungerahmter, nicht authentisierter Testtransport geführt;
+aber `product_enabled` bleibt `false`. Die Python-Runtime wird noch nicht
+ausgeliefert und MarkItDown ist nicht mit dem Produktionsparser verdrahtet.
+XLSX, PPTX, PDF, Scan-PDF und Bilder bleiben unverändert gesperrt. Architektur,
+Lieferstufen und offene User Stories stehen in
+[`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md) und BL-010.9.
 
 ## Backlog-Ist je Epic
 
@@ -84,6 +135,11 @@ ist für Windows x64 sowie macOS Intel/ARM gebaut, hash-/architekturgebunden und
 paketvertraglich geprüft. Ein reales Windows-Paket startete ohne System-Node;
 reale Cowork-Fresh-Install- und macOS-Nachweise bleiben offen. Linux ist kein
 aktuelles Cowork-Produktziel.
+
+Die aktuelle Plugin-MCP-Konfiguration verwendet den offiziellen
+`mcpServers`-Wrapper. Eine generierte Marketplace-Projektion mit Archivquelle wird
+streng validiert; für die Produktfreigabe fehlen weiterhin ein real erreichbares
+Zielarchiv und Fresh-Install-/Update-Evidenz auf Windows und macOS.
 
 ### BL-003 – Product Vision und Dokumentenkanon
 Vision und Kanon sind eingerichtet. Diese Konsolidierung trennt aktuelle Quellen
@@ -157,11 +213,18 @@ fehlt.
 Mapping und inhaltsfreie Nachweise sind implementiert; Quellen bleiben unverändert.
 BL-040.5 ergänzt den einmalig gewählten Cowork-Ergebnisordner. Der Export prüft
 das Paket erneut, schreibt ausschließlich Markdown atomar unter neutralem Namen
-und bietet im lokalen Abschluss „Ergebnisse öffnen“. Der MCP erhält weder Zielpfad
+und veröffentlicht exklusiv ohne vorhandene Benutzerdateien zu überschreiben.
+Readiness und eine bereits aktive Verarbeitung werden vor einer erstmaligen
+Ergebnisordnerwahl geprüft. Der lokale Abschluss bietet „Ergebnisse öffnen“; der MCP erhält weder Zielpfad
 noch Mapping. Die erfolgreiche MCP-Startantwort wartet höchstens fünf Sekunden auf
 die ausdrückliche, inhaltsfreie Empfangsbestätigung des Intake-Workers; Timeout,
 Worker-Exit vor der Bestätigung und Abbruch räumen die Aufnahme fail-closed auf. Reale
 Windows-/macOS-Cowork-Abnahme bleibt offen.
+
+Der Ergebnisstamm ist derzeit eine globale Benutzereinstellung, nicht zusätzlich
+an den einzelnen Stapel oder das Cowork-Projekt gebunden. Eine projektbezogene
+Zielbindung sowie eine sichtbare Teilprojektion bereits klarer Positionen in
+Mischstapeln sind nach dem UML-/UX-Gegencheck offene Produktentscheidungen.
 
 ### BL-041 – Claude-Übergabe
 Nur verifizierte Markdown-Ergebnisse werden begrenzt übergeben. Reale
@@ -175,6 +238,9 @@ Sammelreview. Nach der einmaligen Ergebnisordnerwahl benötigt jeder weitere rei
 Anonymisierungslauf nur noch die Quellauswahl. Die Startantwort wird erst als
 Erfolg ausgegeben, nachdem der unabhängige Worker den Empfang der privaten
 Intake-Nachricht ausdrücklich bestätigt hat.
+Gerät der Stapel in einen fachlichen Reviewzustand, startet derselbe lokale Worker
+den vorhandenen Sammelreview unmittelbar. Nur „Später“ oder ein sicherer Fehler
+lassen ihn fortsetzbar ruhen; Claude muss keinen zweiten Toolaufruf auslösen.
 
 ### BL-044 – Sichere Datei- und Ordnerquellen
 Mehrfachauswahl und rekursiver Ordnervertrag sind E0 implementiert; reale Link-/Race-
@@ -188,6 +254,17 @@ Handoff-Sitzung gehalten. Lesen, Hashen und Erzeugen des UTF-8-Index erfolgen im
 Produktpfad asynchron und größenbegrenzt; ein 6-MiB-Regressionslauf belegt das
 Yielding des MCP-Ereignisloops. Referenzmessungen und die Entscheidung über eine
 adaptive Parallelisierung bleiben BL-047.1.
+Der Replay fehlgeschlagener sichtbarer Exporte ist aus dem MCP-Startpfad entfernt
+und zeitlich begrenzt. Ergebnislisten führen keine zweite synchrone Vollhashrunde
+aus; die eigentliche Inhaltsübergabe bleibt unverändert vollständig und asynchron
+verifiziert.
+
+Fach-, Workflow- und Supportdiagnose schreiben unveränderliche, zufällig benannte
+JSON-Einzelereignisse. Damit können Eltern-, Intake- und Reviewprozess parallel
+protokollieren, ohne eine gemeinsame JSONL-Datei per Lesen-und-Ersetzen zu
+verlieren. Alters- und Mengengrenzen werden auf Datenträgerebene bereinigt;
+historische JSONL-Dateien bleiben nur lesbarer Upgradebestand. Ein Diagnosefehler
+bleibt ohne Einfluss auf Verarbeitung oder Freigabe.
 
 ### BL-049 – Inhalts- und Formatgrenze
 Signatur-/Strukturprüfung und drei Ergebnisgrade sind implementiert; XLSX/PPTX/PDF/
@@ -199,6 +276,12 @@ einen reproduzierbaren, vom Aufruf-CWD unabhängigen Offline-Build, DE/EN und ei
 Textfallback. Terminale Zustände und echte automatisierte Browser-/A11y-Gates
 fehlen; sie ist deshalb noch nicht als vollständige progressive Bedienoberfläche
 freigegeben.
+
+Für konkrete Supportfälle existiert zusätzlich ein separat gebautes Debug-ZIP.
+Es ergänzt einen ausschließlich manuell aufrufbaren Debug-Skill, aktiviert den
+vorhandenen Supportmodus und schreibt geschlossene JSON-Ereignisse je Prozess als
+unveränderliche Einzeldateien. Der normale Build behält zwei Skills und erzeugt
+diese zusätzliche Spur nicht. Ein echter Cowork-Supportlauf ist E1-offen.
 
 ### BL-050 – Korpus und Qualitätsmetriken
 Synthetische Korpora, 2.000 Variationen und lokale Benchmarks bestehen. Reale

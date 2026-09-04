@@ -10,8 +10,6 @@ process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch, discardIncompleteBatches, releaseLocalBatchExecutor, _test } = require('../plugins/data-secure/server/gateway/batch');
-const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 const { startLocalBatchExecutor, startLocalIntakeExecutor, localIntakeActive } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { batchQueueFromSelection, validateSelectedPath } = require('../plugins/data-secure/server/companion/file-picker');
 const { sourceLimitForExtension } = require('../plugins/data-secure/server/resource-limits');
@@ -204,7 +202,8 @@ test('explicit resume starts only the existing checkpoint and never opens or reb
   assert.deepStrictEqual(states.map((state) => state.batch_phase), ['awaiting_explicit_resume']);
   assert.deepStrictEqual(failures, []);
   assert.doesNotMatch(JSON.stringify(message), /resume-existing|sourceBytes|path/i);
-  assert.strictEqual(releaseLocalBatchExecutor(batch.batch_token, process.pid), true);
+  assert.strictEqual(releaseLocalBatchExecutor(batch.batch_token, process.pid), false,
+    'the confirmed worker exit already releases the exact executor lease');
   assert.strictEqual(discardIncompleteBatches({ confirmed: true }).ok, true);
 });
 
@@ -260,6 +259,7 @@ test('a resting intake state shows exactly one local next-action notice and exit
     { name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size }
   ], 'general', {
     forkProcess: () => child,
+    claimTerminalNotice: () => true,
     showBatchStateNotice: (state) => states.push(state),
     showLocalIntakeNotice: (stage) => failures.push(stage)
   });
@@ -288,6 +288,7 @@ test('a final IPC state that arrives just after worker exit suppresses a false f
     { name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size }
   ], 'general', {
     forkProcess: () => child,
+    claimTerminalNotice: () => true,
     showBatchStateNotice: (state) => states.push(state),
     showLocalIntakeNotice: (stage) => failures.push(stage),
     scheduleExitFinalization: (callback) => { finalizeExit = callback; }
@@ -322,6 +323,7 @@ test('a durable terminal checkpoint suppresses a false failure when final IPC is
     { name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size }
   ], 'general', {
     forkProcess: () => child,
+    claimTerminalNotice: () => true,
     readBatchProgress: () => ({
       complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0
     }),

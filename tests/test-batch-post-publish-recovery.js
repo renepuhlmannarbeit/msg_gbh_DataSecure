@@ -15,8 +15,6 @@ const {
   acknowledgeDeliveredPackage,
   _test
 } = require('../plugins/data-secure/server/gateway/batch');
-const { installBatchPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 const { testAsync, done, assert } = createSuite('Post-publication batch recovery integration');
 

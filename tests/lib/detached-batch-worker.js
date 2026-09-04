@@ -7,13 +7,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, claimTerminalNotice, _test } = require('../../plugins/data-secure/server/gateway/batch');
+const { beginBatch, claimLocalBatchExecutor, runLocalBatchExecutor, reserveTerminalNotice,
+  markTerminalNoticePresented, releaseTerminalNoticeReservation, _test } = require('../../plugins/data-secure/server/gateway/batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('../../plugins/data-secure/server/gateway/batch-intake-reservation');
 const { presentTerminalEnvelope } = require('../../plugins/data-secure/server/gateway/worker-terminal-presentation');
 const { recordWorkflowEvent } = require('../../plugins/data-secure/server/gateway/workflow-diagnostics');
-const { installBatchPrivateArtifactCrypto } = require('./private-artifact-test-runtime');
 
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 // The product worker opens a native window when its parent is gone. The test
 // double records that decision as a content-free sentinel file instead, so the
@@ -48,7 +47,7 @@ process.once('message', async (message) => {
   });
   // Mirror the product worker: the parent's bounded handoff acknowledgement is
   // this explicit acceptance, not the parent's send() callback.
-  await notify({ type: 'local-intake-accepted' });
+  await notify({ type: intake ? 'local-intake-accepted' : 'local-batch-accepted' });
   try {
     if (intake) {
       const begun = beginBatch({
@@ -79,7 +78,9 @@ process.once('message', async (message) => {
     await presentTerminalEnvelope({
       token: message.batch_token,
       envelope,
-      claim: claimTerminalNotice,
+      reserve: reserveTerminalNotice,
+      markPresented: markTerminalNoticePresented,
+      release: releaseTerminalNoticeReservation,
       present: presentSentinel,
       record: recordWorkflowEvent,
       graceMs: parentGraceMs,

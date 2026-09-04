@@ -89,6 +89,8 @@ test('the detached local UI contract outlives a synchronous Cowork tool request'
     'utf8'
   );
   assert.match(worker, /reviewOptions:\s*\{\s*timeoutMs:\s*DETACHED_REVIEW_TIMEOUT_MS\s*\}/u);
+  assert.match(worker, /deliberatelyPaused\s*=\s*\['LOCAL_REVIEW_CANCELLED',\s*'LOCAL_REVIEW_DEFERRED'\]/u,
+    'a local Later/close choice must not be followed by another notice');
 });
 
 done();

@@ -24,5 +24,6 @@ function hostTarget() {
 
 const targetId = option('--target') || hostTarget();
 const runtimesRoot = path.resolve(option('--runtimes') || path.join(root, 'dist'));
-const result = buildRuntimePlugin({ repositoryRoot: root, runtimesRoot, targetId });
+const supportMode = process.argv.includes('--support');
+const result = buildRuntimePlugin({ repositoryRoot: root, runtimesRoot, targetId, supportMode });
 process.stdout.write(`${JSON.stringify(result)}\n`);

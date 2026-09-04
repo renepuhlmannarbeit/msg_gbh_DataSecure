@@ -131,7 +131,8 @@ export function buildMarketplaceRepo(options = {}) {
   const expected = [...entries.keys()].map(safeRelative).filter((name) => !name.endsWith('/')).sort();
   if (JSON.stringify(files.sort()) !== JSON.stringify(expected) || written !== expected.length) throw new Error('MARKETPLACE_REPO_OUTPUT_INVALID');
   const mcp = JSON.parse(fs.readFileSync(path.join(pluginRoot, '.mcp.json'), 'utf8'));
-  if (!mcp['data-secure-local'] || !String(mcp['data-secure-local'].command).includes('${CLAUDE_PLUGIN_ROOT}/runtime/')) throw new Error('MARKETPLACE_REPO_MCP_INVALID');
+  const server = mcp?.mcpServers?.['data-secure-local'];
+  if (!server || !String(server.command).includes('${CLAUDE_PLUGIN_ROOT}/runtime/')) throw new Error('MARKETPLACE_REPO_MCP_INVALID');
   return { output, pluginName, files: files.length, zip: path.basename(zipFile), target };
 }
 

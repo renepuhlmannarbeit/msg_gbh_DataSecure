@@ -5,9 +5,10 @@ Stand: 01.09.2026 · verbindliches Zielbild nach dem Cowork-/UX-/Privacy-Grill
 ## Vision in einem Satz
 
 GBH DataSecure ermöglicht Fachanwenderinnen und Fachanwendern, sensible
-Geschäftsdokumente aus Claude Cowork heraus mit einer einzigen bewussten lokalen
-Auswahl offline zu de-identifizieren, bevor Claude ausschließlich freigegebene
-Markdown-Arbeitsfassungen verwendet.
+Geschäftsdokumente vollständig lokal und offline zu de-identifizieren. Dafür
+gibt es zwei getrennte Endnutzerprodukte mit demselben geprüften Core: das
+Claude-/Cowork-Plugin und DataSecure Standalone ohne Claude, Cowork, MCP,
+Agenten oder Internet.
 
 DataSecure benötigt keine zusätzliche System-VM. Auch die Abnahmeplanung
 verwendet echte lokale Zielrechner statt eigens eingerichteter VMs (DS-062).
@@ -42,18 +43,22 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 1. **Cowork-gesteuert, Originale lokal verarbeitet:** Cowork ist Einstieg, Status-
    und Ergebnisort; die Modellverarbeitung darf cloudbasiert sein, Originale und
    rohdatenhaltige Entscheidungen bleiben an der lokalen DataSecure-Grenze.
-2. **Eine bewusste Normalaktion:** Datei oder Ordner auswählen und anschließend
+2. **Eigenständiges Standalone-Produkt:** Standalone verwendet denselben Core
+   und dieselben fachlichen Gates, besitzt aber eine eigene Desktop-UI,
+   Distribution und getrennte Produktdaten. Es enthält keinen Claude-
+   Folgeschritt und benötigt weder MCP noch Skills oder Agenten.
+3. **Eine bewusste Normalaktion:** Datei oder Ordner auswählen und anschließend
    nur bei einer echten fachlichen Unsicherheit entscheiden.
-3. **Fachinhalt vor Formularismus:** Rollen, Methoden, Technologien,
+4. **Fachinhalt vor Formularismus:** Rollen, Methoden, Technologien,
    Zertifizierungen, Tätigkeiten und Zeiträume bleiben möglichst erhalten.
-4. **Fortsetzen statt neu beginnen:** Dauerhafte Checkpoints sichern bereits
+5. **Fortsetzen statt neu beginnen:** Dauerhafte Checkpoints sichern bereits
    abgeschlossene Arbeit über Fehler, Abbruch und Neustart hinweg.
-5. **Ehrliche Ergebnisse:** vollständig verarbeitet, sicher verwendbar mit
+6. **Ehrliche Ergebnisse:** vollständig verarbeitet, sicher verwendbar mit
    transparenten Auslassungen oder sicher gestoppt.
 
 ## Experience-Prinzipien
 
-- Ein Plugin, ein Anonymisierungs-Skill und zwei natürliche Absichten:
+- Im Plugin: ein Anonymisierungs-Skill und zwei natürliche Absichten:
   `nur anonymisieren` sowie `anonymisieren und auswerten`.
 - Keine separate Companion-App im Normalweg. OS-eigene Picker und ausschließlich
   lokale Rohdatenprüfung bilden die sichtbare Sicherheitsgrenze.
@@ -67,6 +72,8 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Klare Dateien benötigen keinen Review. Mehrdeutigkeiten werden nach der Analyse
   in einem einzigen lokalen Sammelreview mit direkten fachlichen Aktionen,
   sichtbarem Fortschritt und ausdrücklicher Abschlussfreigabe entschieden.
+- Im Standalone-Produkt: ein Fenster mit Auswahl, Verarbeitung, Sammelprüfung
+  und Ergebnis; im Erfolgsfall nur **Auswählen** und **Anonymisieren**.
 
 ## Datenschutz- und Sicherheitsversprechen
 

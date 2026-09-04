@@ -32,10 +32,16 @@ assert.doesNotMatch(server, /if\(status\.recoverable_batches>0\)return\{ok:false
 
 assert.match(all, /lokal/iu, 'local host boundary missing');
 assert.match(all, /Cowork/iu, 'Cowork host boundary missing');
-assert.match(`${anonymize}\n${boundary}`, /lokale Plugin-MCPs laufen nicht in Cloud-Cowork/iu,
-  'cloud Cowork must not be described as a bridged local-MCP path');
-assert.match(`${anonymize}\n${boundary}`, /(?:Web|Desktop-Cloud)[\s\S]{0,220}keine Originale/iu,
-  'cloud/web sessions must not process originals');
+assert.match(`${anonymize}\n${boundary}`, /Cowork darf die Sitzung (?:standardmäßig )?in der Cloud ausführen/iu,
+  'desktop-bridged local MCP path for cloud-running Cowork is missing');
+assert.match(`${anonymize}\n${boundary}`, /(?:Web|Mobil)[\s\S]{0,260}keine Originale/iu,
+  'web/mobile sessions without a desktop bridge must not process originals');
+assert.match(`${guide}\n${anonymize}`, /Berechtigungsmodus[\s\S]{0,160}Auto[\s\S]{0,220}Organisationsrichtlinien/iu,
+  'optional Auto mode and organization policy boundary are missing');
+assert.match(`${guide}\n${anonymize}`, /Skip[^\n]{0,120}(?:kein|nicht)[^\n]{0,80}Standard/iu,
+  'Skip must not be the standard for sensitive files');
+assert.match(`${guide}\n${anonymize}`, /gridSpan[\s\S]{0,100}vMerge[\s\S]{0,180}(?:gestoppt|stoppt)/iu,
+  'merged DOCX table-cell stop boundary is missing');
 assert.match(all, /(?:sichtbarer Skill|Plugin-Eintrag)[^\n]{0,140}(?:genügt nicht|kein Nachweis|niemals aus)/iu);
 
 for (const text of [guide, readme]) {

@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 03.09.2026 · 3.2.0-rc93
+Stand: 03.09.2026 · 3.2.0-rc98
 
 ## Nutzerprodukt
 
@@ -63,8 +63,11 @@ npm run build
 
 `runtime:target` läuft auf dem jeweiligen Zielhost und prüft den fest
 eingetragenen Downloadhash, Architektur, Lizenzdatei und den echten Start der
-Runtime. `build` erzeugt und prüft ZIP, SPDX-SBOM und `SHA256SUMS`. Das Endprodukt
-startet offline und setzt keine System-Node-/Python-Installation voraus.
+Runtime. `build` erzeugt und prüft ZIP, SPDX-SBOM und `SHA256SUMS`. Die gebündelte
+DataSecure-Runtime verarbeitet ohne eigenen Netzwerkzugriff und setzt keine
+System-Node-/Python-Installation voraus. Claude Desktop und Cowork benötigen
+für die Sitzung weiterhin eine Internetverbindung; das ändert nichts daran,
+dass Originaldateien nur der lokalen DataSecure-Runtime zugeführt werden.
 Der manuelle, kostensparende Workflow `bundled-runtime-release.yml` baut bei
 Bedarf die drei Ziel-ZIPs und prüft eine universelle Marketplace-Projektion; er
 läuft niemals automatisch. Eine zu große oder unvollständige Projektion stoppt
@@ -79,6 +82,27 @@ npm run test:engineering-artifacts
 
 Diese Befehle sind optional für interne Vergleichs- und Legacy-Gates. Ihr Erfolg
 ist keine Produktfreigabe.
+
+## Separates Standalone-Produkt
+
+Standalone ist nicht Bestandteil des Plugin-ZIPs oder Marketplace-Artefakts.
+Eine kompilierte und automatisch geprüfte Windows-x64-Hülle samt selbsttragendem
+Engineering-Paket existiert. Sie ist noch kein Standalone-Release: Windows-UAT
+und native macOS-Intel-/ARM-Pakete samt UAT fehlen. Der Zielbuild liefert
+selbsttragende Pakete für Windows x64, macOS Intel, macOS Apple Silicon und
+Linux x64 glibc; Anwender installieren
+weder Rust noch Node noch Python separat. Für macOS gilt mindestens 13.5. Die
+ersten internen Pakete dürfen unsigniert sein und verwenden ausschließlich die
+enge Gatekeeper-Freigabe über „Datenschutz & Sicherheit“; globale oder
+kommandozeilenbasierte Schutzabschaltungen sind kein Supportweg. Für eine breite,
+reibungsarme Verteilung bleibt Signierung/Notarisierung eine spätere
+Produktentscheidung.
+
+Der kleine Windows-Pilot nutzt das auf Windows 10/11 vorhandene beziehungsweise
+von der Organisation bereitgestellte Microsoft Edge WebView2-Systemruntime. Es
+wird nicht von DataSecure heruntergeladen oder gebündelt. Fehlt es, stoppt die
+UAT mit verständlichem Hinweis; Node, Rust und Python bleiben weiterhin keine
+Anwender-Voraussetzungen.
 
 ## Freigabekriterien
 

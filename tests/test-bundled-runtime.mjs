@@ -49,8 +49,8 @@ function fixture() {
   fs.copyFileSync(new URL('../native/runtime/runtime-contract.json', import.meta.url), path.join(directory, 'native/runtime/runtime-contract.json'));
   fs.copyFileSync(new URL('../native/runtime/datasecure-node', import.meta.url), path.join(directory, 'native/runtime/datasecure-node'));
   fs.writeFileSync(path.join(directory, 'plugins/data-secure/.claude-plugin/plugin.json'), JSON.stringify({ name: 'data-secure', version: '1.0.0-test' }));
-  fs.writeFileSync(path.join(directory, 'plugins/data-secure/.mcp.json'), JSON.stringify({ 'data-secure-local': {
-    command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/server/index.js'], env: { EU_PRIVACY_VISUAL_MODE: 'strict' }
+  fs.writeFileSync(path.join(directory, 'plugins/data-secure/.mcp.json'), JSON.stringify({ mcpServers: {
+    'data-secure-local': { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/server/index.js'], env: { EU_PRIVACY_VISUAL_MODE: 'strict' } }
   } }));
   fs.writeFileSync(path.join(directory, 'plugins/data-secure/server/index.js'), 'process.stdin.resume();\n');
   fs.writeFileSync(path.join(directory, 'plugins/data-secure/server/ocr-runtime/disabled.bin'), 'MUST NOT SHIP');
@@ -116,8 +116,9 @@ for (const targetId of ['windows-x64', 'macos-x64', 'macos-arm64', 'universal'])
       const result = buildRuntimePlugin({ repositoryRoot: f.directory, runtimesRoot: f.runtimes, targetId });
       const bytes = fs.readFileSync(result.archive), entries = readZip(bytes), modes = readCentralModes(bytes);
       const mcp = JSON.parse(entries.get('.mcp.json'));
-      assert.equal(mcp['data-secure-local'].command, f.contract.plugin_command);
-      assert.deepEqual(mcp['data-secure-local'].args, [f.contract.runtime_entry]);
+      assert.deepEqual(Object.keys(mcp), ['mcpServers']);
+      assert.equal(mcp.mcpServers['data-secure-local'].command, f.contract.plugin_command);
+      assert.deepEqual(mcp.mcpServers['data-secure-local'].args, [f.contract.runtime_entry]);
       assert.ok(entries.has('RUNTIME-EVIDENCE.json'));
       assert.ok(entries.has('runtime/LICENSE.node.txt'));
       assert.ok(![...entries.keys()].some((name) => name === 'bin' || name.startsWith('bin/') || name.startsWith('server/ocr-runtime')));

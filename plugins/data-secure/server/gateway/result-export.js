@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
-const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
+const { writeFully, syncParentDirectory, renameWithTransientRetry, linkWithTransientRetry } = require('./batch-journal-io');
 
 const SCHEMA = 'datasecure-result-export/1';
 const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
@@ -181,7 +181,18 @@ function exportOne(destination, run, item) {
     assertDirectoryBinding(destination.root);
     assertDirectoryBinding(destination.output, destination.root);
     assertDirectoryBinding(run, destination.output);
-    renameWithTransientRetry(temporary, target);
+    // Publish without replacement. A plain rename is atomic but may overwrite
+    // a file created after the earlier existence check on POSIX. A same-volume
+    // hard link is an atomic create-if-absent operation on all release targets.
+    linkWithTransientRetry(temporary, target);
+    const linkedTemporary = fs.lstatSync(temporary);
+    const linkedTarget = fs.lstatSync(target);
+    if (!linkedTemporary.isFile() || !linkedTarget.isFile() || linkedTemporary.isSymbolicLink() ||
+        linkedTarget.isSymbolicLink() || linkedTemporary.nlink !== 2 || linkedTarget.nlink !== 2 ||
+        linkedTemporary.dev !== linkedTarget.dev || linkedTemporary.ino !== linkedTarget.ino) {
+      throw new Error('RESULT_EXPORT_VERIFY_FAILED');
+    }
+    fs.unlinkSync(temporary);
     syncParentDirectory(target, fs, process.platform);
     assertDirectoryBinding(destination.root);
     assertDirectoryBinding(destination.output, destination.root);

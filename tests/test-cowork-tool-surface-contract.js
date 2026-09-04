@@ -62,5 +62,11 @@ for (const removed of ['open_input_folder', 'begin_document_batch', 'start_docum
 }
 
 assert.match(index, /delete safe\.batch_token/u, 'normal continuation must remove the private batch token');
-assert.match(index, /startLocalReviewExecutor\(token\)/u, 'normal continuation must launch review asynchronously');
+assert.match(index, /async function continueMostRecentDocumentBatch\(context=\{\}\)/u,
+  'normal continuation must be able to await a bounded worker acknowledgement');
+assert.match(index,
+  /startLocalReviewExecutor\(token,\{requireIpcAcknowledgement:true,signal:context\.signal\}\)/u,
+  'normal continuation must launch review through the acknowledged detached worker contract');
+assert.match(index, /await started\.ipcAcknowledgement/u,
+  'normal continuation must not report success before the detached worker confirms receipt');
 console.log('COWORK TOOL SURFACE CONTRACT PASS (10 normal, 17 support-only)');

@@ -23,10 +23,11 @@ test('matrix excludes MCPB from product and fallback claims', () => {
 });
 
 test('the current artefacts remain explicit while only plugin paths are products', () => {
-  assert.strictEqual(pluginMcp['data-secure-local'].command, 'node');
+  assert.deepStrictEqual(Object.keys(pluginMcp), ['mcpServers']);
+  assert.strictEqual(pluginMcp.mcpServers['data-secure-local'].command, 'node');
   assert.strictEqual(mcpb.server.mcp_config.command, 'node');
   assert.ok(matrix.paths.filter((item) => item.product_path).every((item) => item.command === runtimeContract.plugin_command));
-  assert.notStrictEqual(runtimeContract.plugin_command, pluginMcp['data-secure-local'].command,
+  assert.notStrictEqual(runtimeContract.plugin_command, pluginMcp.mcpServers['data-secure-local'].command,
     'the source tree remains an engineering input; product packages rewrite the command');
   assert.ok(matrix.paths.filter((item) => item.package === 'mcpb').every((item) => item.product_path === false));
 });

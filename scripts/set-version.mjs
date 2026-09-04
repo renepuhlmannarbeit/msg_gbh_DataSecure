@@ -56,8 +56,14 @@ patchJson('manifest.json', (d) => {
 patchJson('plugins/data-secure/.claude-plugin/plugin.json', (d) => {
   d.version = target;
 });
+patchJson('plugins/data-secure/server/standalone/product-manifest.json', (d) => {
+  d.version = target;
+});
 patchJson('BUILD_INFO.json', (d) => {
   d.version = target;
+});
+patchJson('docs/canonical/TARGET_CAPABILITIES.json', (d) => {
+  d.baseline = target;
 });
 
 writeIfChanged('plugins/data-secure/VERSION', `${target}\n`);
@@ -83,6 +89,9 @@ for (const rel of [
   'docs/FORMAT_COVERAGE_MATRIX.md',
   'docs/IT-BETRIEBSHANDBUCH.md',
   'docs/PILOT-ABNAHME.md',
+  'docs/PLUGIN_SECURITY_MODEL.md',
+  'docs/RELEASE.md',
+  'docs/TESTING.md',
   'plugins/data-secure/README.md',
   'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/unterstuetzte-formate.md'
 ]) {
@@ -95,6 +104,30 @@ for (const rel of [
     .replaceAll(rcLabel(previous), rcLabel(target));
   writeIfChanged(rel, next);
 }
+
+for (const rel of ['docs/PLUGIN_SECURITY_MODEL.md', 'docs/RELEASE.md', 'docs/TESTING.md']) {
+  patchText(
+    rel,
+    /^(Stand:[^\n]*?)(\d+\.\d+\.\d+(?:-rc\d+| RC\d+))/mu,
+    (_, prefix, previousLabel) => prefix + (previousLabel.includes(' RC') ? releaseLabel(target) : target)
+  );
+}
+
+// Canonical documents contain historical RC references that must not be
+// rewritten globally. Only their explicit current-state header is versioned.
+patchText(
+  'docs/canonical/BACKLOG.md',
+  /^(Stand: [^\n]*· Produktstand )\S+/mu,
+  `$1${target}`
+);
+for (const rel of ['docs/canonical/CURRENT_STATE.md', 'docs/canonical/TRACEABILITY.md']) {
+  patchText(rel, /^(Stand: [^·\n]+· )\S+/mu, (_, prefix) => `${prefix}${target}`);
+}
+patchText(
+  'docs/canonical/PRODUCT.md',
+  /^(Stand: [^·\n]+· Ist-Zustand )\S+/mu,
+  (_, prefix) => `${prefix}${rcLabel(target)}`
+);
 
 console.log(`version ${target}`);
 if (changed.length) {

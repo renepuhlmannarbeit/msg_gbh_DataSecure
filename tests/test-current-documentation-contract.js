@@ -28,6 +28,21 @@ const activeDocs = [
   'docs/canonical/BACKLOG.md'
 ];
 
+const versionedDocs = [
+  'README.md',
+  'docs/ANLEITUNG.md',
+  'docs/FORMAT_COVERAGE_MATRIX.md',
+  'docs/IT-BETRIEBSHANDBUCH.md',
+  'docs/PLUGIN_SECURITY_MODEL.md',
+  'docs/RELEASE.md',
+  'docs/TESTING.md',
+  'docs/canonical/CURRENT_STATE.md',
+  'docs/canonical/BACKLOG.md',
+  'docs/canonical/PRODUCT.md',
+  'docs/canonical/TRACEABILITY.md',
+  'plugins/data-secure/README.md'
+];
+
 test('active user documentation has no obsolete RC or internal product path', () => {
   const text = userDocs.map(read).join('\n');
   for (const file of userDocs) {
@@ -38,6 +53,19 @@ test('active user documentation has no obsolete RC or internal product path', ()
   assert.doesNotMatch(text, /\bMCPB\b|\.mcpb\b|remove_images|visual_mode/u);
   assert.match(text, /Plugin-ZIP/u);
   assert.match(text, /Marketplace/u);
+});
+
+test('every current release header matches the package version', () => {
+  const version = JSON.parse(read('package.json')).version;
+  const match = /^(\d+\.\d+\.\d+)-rc(\d+)$/iu.exec(version);
+  const label = match ? `${match[1]} RC${match[2]}` : version;
+  const stateLabel = match ? `Ist-Zustand RC${match[2]}` : `Ist-Zustand ${version}`;
+  for (const file of versionedDocs) {
+    const header = read(file).split(/\r?\n/u).slice(0, 8).join('\n');
+    assert.ok(header.includes(version) || header.includes(label) ||
+      (file === 'docs/canonical/PRODUCT.md' && header.includes(stateLabel)),
+      `${file} does not carry current version ${version}`);
+  }
 });
 
 test('DS-067 deletion and retention wording is present across active contracts', () => {
@@ -69,15 +97,19 @@ test('product build and engineering artefacts are separate scripts', () => {
   assert.strictEqual(pkg.scripts['test:artifacts'], 'npm run test:plugin-zip');
 });
 
-test('distribution docs require relative self-contained marketplace sources without signing promises', () => {
+test('distribution docs allow verified relative or archive marketplace sources without signing promises', () => {
   const release = read('docs/RELEASE.md');
   const readme = read('README.md');
+  const currentState = read('docs/canonical/CURRENT_STATE.md');
   const decisions = read('docs/canonical/DECISIONS.md');
   const vision = read('docs/canonical/PRODUCT_VISION.md');
   const productContract = `${readme}\n${release}\n${decisions}\n${vision}`;
 
   assert.match(productContract, /relativ[^\n]{0,100}self-contained Plugin-Ordner/iu);
-  assert.doesNotMatch(`${readme}\n${release}`, /HTTPS-Archiv[^\n]{0,100}(?:Marketplace|referenziert)/iu);
+  assert.match(release, /`archive`-Quelle[^\n]{0,100}HTTPS-URL[^\n]{0,100}SHA-256/iu);
+  assert.match(currentState, /streng validierbare,[\s\S]{0,120}Marketplace-Projektion/iu);
+  assert.match(currentState, /Platzhalter-URL/iu);
+  assert.doesNotMatch(currentState, /selbsttragende\s+Marketplace-Projektion bleibt offene Arbeit/iu);
   assert.match(`${decisions}\n${vision}`, /Windows-x64[^\n]{0,160}macOS-x64[^\n]{0,80}macOS-arm64/iu);
   assert.doesNotMatch(`${decisions}\n${vision}`, /macOS-universal/iu);
   assert.doesNotMatch(`${decisions}\n${vision}`,
@@ -109,14 +141,18 @@ test('security and third-party notices match the current product boundary', () =
   }
 });
 
-test('legacy companion and legal notes cannot pose as current contracts', () => {
-  for (const file of ['docs/COMPANION_API_V1.md', 'docs/COMPANION_IPC_V1.md',
-    'docs/AI_ACT_AND_GDPR.md']) {
-    const header = read(file).split(/\r?\n/u).slice(0, 14).join('\n');
-    assert.match(header, /Historischer/u, `${file} lacks a historical banner`);
-    assert.match(header, /nicht normativ/u, `${file} lacks a non-normative banner`);
-    assert.match(header, /canonical\/DOCUMENT_REGISTER\.md/u,
-      `${file} does not point back to the canonical register`);
+test('legacy companion, legal and architecture notes live only in the archive', () => {
+  const active = ['ARCHITECTURE_DECISION.md', 'docs/COMPANION_API_V1.md',
+    'docs/COMPANION_IPC_V1.md', 'docs/AI_ACT_AND_GDPR.md',
+    'docs/PRODUCT_ARCHITECTURE_DECISION.md', 'docs/PLUGIN_TARGET_ARCHITECTURE.md',
+    'docs/PDF_ENGINE_DECISION.md', 'docs/PDFIUM_SPIKE_EVIDENCE.md',
+    'docs/PII_SHIELD_BENCHMARK.md'];
+  for (const file of active) assert.strictEqual(fs.existsSync(path.join(root, file)), false,
+    `${file} must not remain in active documentation`);
+  const archive = 'docs/archive/2026-09/retired-active-docs';
+  for (const file of ['ARCHITECTURE_DECISION_LEGACY.md', 'COMPANION_API_V1_LEGACY.md',
+    'COMPANION_IPC_V1_LEGACY.md', 'AI_ACT_AND_GDPR_LEGACY.md']) {
+    assert.strictEqual(fs.existsSync(path.join(root, archive, file)), true, `${file} missing from archive`);
   }
 });
 
@@ -126,8 +162,11 @@ test('canonical register distinguishes active, no-go, and superseded contracts',
   assert.match(register, /aktuelle Produkt- und Sicherheitsgrenzen/u);
   assert.match(register, /Ziel-\/NO-GO-Verträge ohne aktuelle Produktfreigabe/u);
   assert.match(register, /historisch oder superseded/u);
-  assert.match(register, /BATCH_SECRET_STORE_V1\.md/u);
-  assert.match(register, /PRIVATE_ARTIFACT_ENCRYPTION_V1\.md/u);
+  for (const file of ['BATCH_SECRET_STORE_V1_LEGACY.md', 'PRIVATE_ARTIFACT_ENCRYPTION_V1_LEGACY.md']) {
+    assert.match(register, new RegExp(file.replace('.', '\\.')));
+    assert.strictEqual(fs.existsSync(path.join(root, 'docs/canonical/contracts', file.replace('_LEGACY', ''))), false);
+    assert.strictEqual(fs.existsSync(path.join(root, 'docs/archive/2026-09/retired-active-docs', file)), true);
+  }
 });
 
 done();

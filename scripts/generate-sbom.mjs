@@ -54,8 +54,8 @@ const artefacts = productArguments().map((file) => {
     throw new Error('SBOM_RUNTIME_EVIDENCE_INVALID');
   }
   const mcp = JSON.parse(entries.get('.mcp.json') || 'null');
-  if (mcp?.['data-secure-local']?.command !== contract.plugin_command ||
-      JSON.stringify(mcp?.['data-secure-local']?.args) !== JSON.stringify([contract.runtime_entry])) {
+  if (mcp?.mcpServers?.['data-secure-local']?.command !== contract.plugin_command ||
+      JSON.stringify(mcp?.mcpServers?.['data-secure-local']?.args) !== JSON.stringify([contract.runtime_entry])) {
     throw new Error('SBOM_PRODUCT_START_COMMAND_INVALID');
   }
   for (const target of evidence.targets) {

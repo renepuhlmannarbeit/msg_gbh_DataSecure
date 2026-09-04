@@ -44,10 +44,18 @@ function retryDelay(milliseconds) {
 }
 
 function renameWithTransientRetry(from, to, io = fs, options = {}) {
+  return filesystemOperationWithTransientRetry(() => io.renameSync(from, to), options);
+}
+
+function linkWithTransientRetry(from, to, io = fs, options = {}) {
+  return filesystemOperationWithTransientRetry(() => io.linkSync(from, to), options);
+}
+
+function filesystemOperationWithTransientRetry(operation, options = {}) {
   const delay = typeof options.retryDelay === 'function' ? options.retryDelay : retryDelay;
   for (let attempt = 0; attempt < RENAME_ATTEMPTS; attempt++) {
     try {
-      return io.renameSync(from, to);
+      return operation();
     } catch (error) {
       if (!TRANSIENT_RENAME_CODES.has(error?.code) || attempt === RENAME_ATTEMPTS - 1) throw error;
       delay(10 * (attempt + 1));
@@ -56,4 +64,4 @@ function renameWithTransientRetry(from, to, io = fs, options = {}) {
   return undefined;
 }
 
-module.exports = { writeFully, syncParentDirectory, renameWithTransientRetry, TRANSIENT_RENAME_CODES, RENAME_ATTEMPTS };
+module.exports = { writeFully, syncParentDirectory, renameWithTransientRetry, linkWithTransientRetry, TRANSIENT_RENAME_CODES, RENAME_ATTEMPTS };

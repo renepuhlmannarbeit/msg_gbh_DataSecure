@@ -114,6 +114,65 @@ async function main() {
     assert.doesNotMatch(JSON.stringify(h.events), /PRIVATE/u);
   });
 
+  await testAsync('an asynchronous presenter failure releases its reservation for worker fallback', async () => {
+    const channel = fakeChannel({ connected: false });
+    const calls = [];
+    const events = [];
+    const result = await presentTerminalEnvelope({
+      token: TOKEN, envelope: ENVELOPE, channel, evidence: EVIDENCE,
+      reserve: () => ({ ok: true, state: 'reserved', reservation_id: 'c'.repeat(32) }),
+      markPresented: () => { calls.push('marked'); return true; },
+      release: (_token, presenter, reservationId) => { calls.push({ presenter, reservationId }); return true; },
+      present: async () => { throw new Error('PRIVATE asynchronous spawn error'); },
+      record: event => events.push(event)
+    });
+    assert.strictEqual(result.presenter, 'none');
+    assert.deepStrictEqual(calls, [{ presenter: 'worker', reservationId: 'c'.repeat(32) }]);
+    assert.strictEqual(events.at(-1).error_code, 'LOCAL_NOTICE_FAILED');
+    assert.doesNotMatch(JSON.stringify(events), /PRIVATE|[a-f0-9]{64}/u);
+  });
+
+  await testAsync('presentation is marked durable only after asynchronous spawn confirmation', async () => {
+    const channel = fakeChannel({ connected: false });
+    const order = [];
+    let confirmSpawn;
+    const spawnConfirmed = new Promise(resolve => { confirmSpawn = resolve; });
+    const running = presentTerminalEnvelope({
+      token: TOKEN, envelope: ENVELOPE, channel,
+      reserve: () => { order.push('reserved'); return { ok: true, state: 'reserved', reservation_id: 'd'.repeat(32) }; },
+      markPresented: () => { order.push('presented'); return true; },
+      release: () => { order.push('released'); return true; },
+      present: async () => { order.push('spawn-started'); await spawnConfirmed; order.push('spawn-confirmed'); },
+      record: () => {}
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(order, ['reserved', 'spawn-started']);
+    confirmSpawn();
+    const result = await running;
+    assert.strictEqual(result.presenter, 'worker');
+    assert.deepStrictEqual(order, ['reserved', 'spawn-started', 'spawn-confirmed', 'presented']);
+  });
+
+  await testAsync('a live unexpired parent reservation is retried before the worker takes over', async () => {
+    const channel = fakeChannel({ connected: false });
+    const calls = [];
+    const reservations = [
+      { ok: false, state: 'reserved' },
+      { ok: true, state: 'reserved', reservation_id: 'e'.repeat(32) }
+    ];
+    const result = await presentTerminalEnvelope({
+      token: TOKEN, envelope: ENVELOPE, channel,
+      reserve: () => { calls.push('reserve'); return reservations.shift(); },
+      markPresented: () => { calls.push('presented'); return true; },
+      release: () => true,
+      wait: async () => { calls.push('wait'); },
+      present: async () => { calls.push('spawn'); },
+      record: () => {}
+    });
+    assert.strictEqual(result.presenter, 'worker');
+    assert.deepStrictEqual(calls, ['reserve', 'wait', 'reserve', 'spawn', 'presented']);
+  });
+
   await testAsync('invalid envelopes or presenters are rejected before any channel use', async () => {
     const channel = fakeChannel();
     await assert.rejects(presentTerminalEnvelope({ token: TOKEN, envelope: null, channel, present: () => {} }), /TERMINAL_PRESENTATION_INVALID/u);
@@ -148,13 +207,20 @@ async function main() {
   test('parent executor and worker agree on the acknowledgement type and the worker is wired to the presenter', () => {
     const executor = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/gateway/batch-executor.js'), 'utf8');
     assert.ok(executor.includes(`'${PARENT_ACK_TYPE}'`), 'the executor acknowledges with the same literal type');
-    assert.ok(executor.includes('claimTerminalNoticeAsParent('), 'the parent claims before presenting');
+    assert.ok(executor.includes('presentTerminalNoticeAsParent('), 'the parent uses the two-phase presenter');
     const worker = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/gateway/batch-worker.js'), 'utf8');
-    for (const marker of ['presentTerminalEnvelope(', 'claim: claimTerminalNotice', 'showBatchStateNotice(', 'showLocalIntakeNotice(', 'record: recordWorkflowEvent']) {
+    for (const marker of ['presentTerminalEnvelope(', 'reserve: reserveTerminalNotice', 'markPresented: markTerminalNoticePresented', 'release: releaseTerminalNoticeReservation', 'showBatchStateNoticeConfirmed(', 'showLocalIntakeNoticeConfirmed(', 'record: recordWorkflowEvent']) {
       assert.ok(worker.includes(marker), `batch-worker.js must contain ${marker}`);
     }
     assert.ok(!/await notify\(\{\s*type: isNewIntake \? 'local-intake-state'/u.test(worker),
       'the terminal envelope no longer bypasses the presenter');
+    assert.ok(worker.includes("'local-batch-accepted'"), 'continuation worker explicitly acknowledges receipt');
+    const reviewWorker = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/gateway/review-worker.js'), 'utf8');
+    assert.ok(reviewWorker.includes("'local-review-accepted'"), 'review worker explicitly acknowledges receipt');
+    for (const marker of ['presentTerminalEnvelope(', 'reserve: reserveTerminalNotice',
+      'markPresented: markTerminalNoticePresented', 'release: releaseTerminalNoticeReservation']) {
+      assert.ok(reviewWorker.includes(marker), `review-worker.js must contain ${marker}`);
+    }
     const testDouble = fs.readFileSync(path.join(__dirname, 'lib', 'detached-batch-worker.js'), 'utf8');
     assert.ok(testDouble.includes('presentTerminalEnvelope('), 'the test double mirrors the product protocol');
   });

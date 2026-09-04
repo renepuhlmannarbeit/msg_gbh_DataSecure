@@ -8,9 +8,13 @@ const {
   reviewDeferredBatch,
   releaseLocalBatchExecutor,
   readBatchProgress,
-  exportCompletedBatchResults
+  exportCompletedBatchResults,
+  reserveTerminalNotice,
+  markTerminalNoticePresented,
+  releaseTerminalNoticeReservation
 } = require('./batch');
-const { showBatchStateNotice } = require('../companion/completion-summary');
+const { showBatchStateNoticeConfirmed } = require('../companion/completion-summary');
+const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
 const { terminalVisibleExport } = require('./result-export');
@@ -34,9 +38,19 @@ process.once('message', async (message) => {
   }
   started = true;
   clearTimeout(startDeadline);
+  const notify = (payload) => new Promise((resolve) => {
+    try {
+      if (typeof process.send !== 'function') return resolve(false);
+      process.send(payload, (error) => resolve(!error));
+    } catch { resolve(false); }
+  });
+  // A send callback in the parent is only dispatch evidence. This fixed,
+  // content-free envelope confirms that the loaded review worker accepted the
+  // command before the tool reports a successful start.
+  await notify({ type: 'local-review-accepted' });
   let exitCode = 1;
   try {
-    const before = readBatchProgress(token);
+    readBatchProgress(token);
     const result = await reviewDeferredBatch(token, {
       executorPid: process.pid,
       localFinalize: true,
@@ -52,25 +66,41 @@ process.once('message', async (message) => {
       result_export_pending_count: visibleExport.pending,
       result_output_available: visibleExport.available
     };
-    lifecycle({
-      event: 'review_terminal_state',
-      outcome: result.ok === true && result.complete === true ? 'ok' : 'stopped',
-      phase: result.batch_phase,
-      item_count: result.batch_total,
-      released_count: result.released,
-      stopped_count: result.stopped,
-      error_code: result.ok === true ? 'NONE' :
-        (result.error === 'LOCAL_REVIEW_CANCELLED' || result.error === 'LOCAL_REVIEW_DEFERRED'
-          ? 'LOCAL_REVIEW_CANCELLED' : 'LOCAL_REVIEW_FAILED')
+    const envelope = {
+      type: 'local-review-state',
+      complete: result.complete === true,
+      batch_phase: result.batch_phase,
+      batch_total: result.batch_total,
+      released: result.released,
+      stopped: result.stopped,
+      result_grade_counts: result.result_grade_counts,
+      result_omission_counts: result.result_omission_counts,
+      result_grades_verified: result.result_grades_verified,
+      result_exported_count: visibleExport.exported,
+      result_export_pending_count: visibleExport.pending,
+      result_output_available: visibleExport.available
+    };
+    const deliberatelyPaused = ['LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_DEFERRED'].includes(result.error);
+    if (!deliberatelyPaused) await presentTerminalEnvelope({
+      token,
+      envelope,
+      reserve: reserveTerminalNotice,
+      markPresented: markTerminalNoticePresented,
+      release: releaseTerminalNoticeReservation,
+      present: () => showBatchStateNoticeConfirmed(presentedResult),
+      record: recordWorkflowEvent,
+      evidence: {
+        event: 'review_terminal_state',
+        outcome: result.ok === true && result.complete === true ? 'ok' : 'stopped',
+        phase: result.batch_phase,
+        item_count: result.batch_total,
+        released_count: result.released,
+        stopped_count: result.stopped,
+        error_code: result.ok === true ? 'NONE' :
+          (result.error === 'LOCAL_REVIEW_CANCELLED' || result.error === 'LOCAL_REVIEW_DEFERRED'
+            ? 'LOCAL_REVIEW_CANCELLED' : 'LOCAL_REVIEW_FAILED')
+      }
     });
-    try {
-      lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: before.batch_total });
-      showBatchStateNotice(presentedResult);
-      lifecycle({ event: 'completion_notice_finished', outcome: 'ok', item_count: before.batch_total });
-    } catch {
-      lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: before.batch_total,
-        error_code: 'LOCAL_NOTICE_FAILED' });
-    }
     // A deliberate cancel/defer is a handled, safely persisted local outcome,
     // not a crashed worker.  The next explicit continuation can open it again.
     exitCode = result.ok === true || ['LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_DEFERRED'].includes(result.error) ? 0 : 1;

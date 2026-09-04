@@ -177,6 +177,37 @@ if (process.platform === 'win32') {
     assert.strictEqual(sourcePickerCalls, 2, 'each new batch still asks for its sources');
   });
 
+  await testAsync('readiness and active-processing guards run before the one-time result-folder picker', async () => {
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
+    const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
+    for (const status of [
+      { engine_ready: false, local_intake_pending: false, batch_processing_active: false },
+      { engine_ready: true, local_intake_pending: false, batch_processing_active: true }
+    ]) {
+      let resultPickerCalls = 0;
+      let sourcePickerCalls = 0;
+      let reservationHeld = false;
+      const context = vm.createContext({
+        require, process: { env: {} }, setImmediate,
+        SafeError: class SafeError extends Error {},
+        readConfiguredResultRoot: () => '',
+        reserveIntake: () => { reservationHeld = true; return { reservation_id: 'e'.repeat(64) }; },
+        releaseIntake: () => { reservationHeld = false; return true; },
+        genericStatus: () => ({ ...status }),
+        pickFolderAsync: async () => { resultPickerCalls++; return path.resolve(__dirname); },
+        pickSourcesAsync: async () => { sourcePickerCalls++; return []; },
+        recordWorkflowEvent: () => {},
+        withDiagnostic: (response) => response
+      });
+      vm.runInContext(source, context);
+      const result = await context.startPickerBatch({});
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(resultPickerCalls, 0, 'no destination dialog opens for a run that cannot start');
+      assert.strictEqual(sourcePickerCalls, 0, 'no source dialog opens for a run that cannot start');
+      assert.strictEqual(reservationHeld, false, 'the rejected readiness probe releases its intake reservation');
+    }
+  });
+
   await testAsync('an unusable result folder is never persisted', async () => {
     const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
     const source = code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat('));
@@ -189,7 +220,8 @@ if (process.platform === 'win32') {
       pickFolderAsync: async () => resultRoot,
       resultOutputDirectory: () => { throw new Error('synthetic access denied'); },
       saveConfiguredResultRoot: () => { saves++; },
-      isCommonSyncFolder: () => false
+      isCommonSyncFolder: () => false,
+      recordWorkflowEvent: () => {}
     });
     vm.runInContext(source, context);
     await assert.rejects(() => context.chooseAndSaveResultFolder({}), /access denied/iu);
@@ -235,24 +267,26 @@ if (process.platform === 'win32') {
 
   await testAsync('a continuation never starts a second executor next to a running intake or batch (DS-022)', async () => {
     const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
-    const source = code.slice(code.indexOf('function continueMostRecentDocumentBatch('), code.indexOf('const LOCAL_ONLY_HANDOFF='));
+    const source = code.slice(code.indexOf('async function continueMostRecentDocumentBatch('), code.indexOf('const LOCAL_ONLY_HANDOFF='));
     assert.ok(source.includes('batch_active'), 'the continuation guard must exist');
     let continuations = 0;
     let batchStarts = 0;
     let reviewStarts = 0;
+    let acknowledgement = Promise.resolve();
+    let deferredReview = 0;
     const status = { local_intake_pending: false, batch_processing_active: false };
     const context = vm.createContext({
       genericStatus: () => ({ ...status }),
-      continueMostRecentBatch: () => { continuations++; return { ok: true, batch_token: 'c'.repeat(64), remaining: 1, delivery_pending: 0, mapping_pending: 0, deferred_review: 0, batch_total: 1, released: 0, stopped: 0 }; },
-      startLocalBatchExecutor: () => { batchStarts++; return { local_processing_started: true }; },
-      startLocalReviewExecutor: () => { reviewStarts++; return { ok: true }; },
+      continueMostRecentBatch: () => { continuations++; return { ok: true, batch_token: 'c'.repeat(64), remaining: deferredReview ? 0 : 1, delivery_pending: 0, mapping_pending: 0, deferred_review: deferredReview, batch_total: 1, released: 0, stopped: 0 }; },
+      startLocalBatchExecutor: () => { batchStarts++; return { local_processing_started: true, ipcAcknowledgement: acknowledgement }; },
+      startLocalReviewExecutor: () => { reviewStarts++; return { ok: true, ipcAcknowledgement: acknowledgement }; },
       recordWorkflowEvent: () => {},
       withDiagnostic: (response) => response
     });
     vm.runInContext(source, context);
     for (const active of [{ local_intake_pending: true }, { batch_processing_active: true }]) {
       Object.assign(status, { local_intake_pending: false, batch_processing_active: false }, active);
-      const blocked = context.continueMostRecentDocumentBatch();
+      const blocked = await context.continueMostRecentDocumentBatch();
       assert.strictEqual(blocked.ok, false);
       assert.strictEqual(blocked.error, 'batch_active');
       assert.strictEqual(blocked.local_processing_started, false);
@@ -262,12 +296,28 @@ if (process.platform === 'win32') {
     assert.strictEqual(continuations, 0, 'no durable continuation is touched while another executor lives');
     assert.strictEqual(batchStarts + reviewStarts, 0, 'no second worker is launched');
     Object.assign(status, { local_intake_pending: false, batch_processing_active: false });
-    const resumed = context.continueMostRecentDocumentBatch();
+    const resumed = await context.continueMostRecentDocumentBatch();
     assert.strictEqual(resumed.ok, true);
     assert.strictEqual(resumed.local_processing_started, true);
     assert.strictEqual(continuations, 1);
     assert.strictEqual(batchStarts, 1);
     assert.doesNotMatch(JSON.stringify(resumed), /batch_token|[a-f0-9]{64}/u, 'the token never crosses the MCP boundary');
+
+    acknowledgement = Promise.reject(new Error('bounded IPC acknowledgement timeout'));
+    const failedBatch = await context.continueMostRecentDocumentBatch();
+    assert.strictEqual(failedBatch.ok, false);
+    assert.strictEqual(failedBatch.local_processing_started, false);
+    assert.strictEqual(failedBatch.raw_content_sent_to_claude, false);
+    assert.doesNotMatch(JSON.stringify(failedBatch), /batch_token|[a-f0-9]{64}|timeout/u,
+      'worker acknowledgement details never cross the MCP boundary');
+
+    deferredReview = 1;
+    acknowledgement = Promise.reject(new Error('worker ended before IPC acknowledgement'));
+    const failedReview = await context.continueMostRecentDocumentBatch();
+    assert.strictEqual(failedReview.ok, false);
+    assert.strictEqual(failedReview.local_review_started, false);
+    assert.strictEqual(failedReview.raw_content_sent_to_claude, false);
+    assert.doesNotMatch(JSON.stringify(failedReview), /batch_token|[a-f0-9]{64}|worker ended/u);
   });
 
   await testAsync('privacy-root mutation and source intake share one native interaction owner', async () => {
@@ -455,6 +505,8 @@ if (process.platform === 'win32') {
     assert.strictEqual(observed, controller.signal);
     await assert.rejects(pickFolderAsync({ platform: 'win32', runner: async () => ({ status: 0, stdout: FOLDER_PICKER_CANCELLED }) }),
       (error) => error.code === 'LOCAL_SELECTION_CANCELLED');
+    await assert.rejects(pickFolderAsync({ platform: 'win32', purpose: 'result', runner: async () => ({ status: 0, stdout: FOLDER_PICKER_CANCELLED }) }),
+      (error) => error.code === 'LOCAL_SELECTION_CANCELLED' && /Ergebnisordners/u.test(error.message));
   });
   done();
 }

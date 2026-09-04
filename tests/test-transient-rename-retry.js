@@ -1,16 +1,16 @@
 'use strict';
 
 // Windows real-time scanners briefly hold freshly written temporary files, so
-// the publication rename of an atomic write fails with EPERM although nothing
-// is wrong. Every temp-file publication retries such transient codes a bounded
-// number of times and otherwise fails closed exactly as before.
+// a publication operation can fail with EPERM although nothing is wrong.
+// Every temp-file publication retries such transient codes a bounded number of
+// times and otherwise fails closed exactly as before.
 
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createSuite } = require('./helpers');
 const {
-  renameWithTransientRetry, TRANSIENT_RENAME_CODES, RENAME_ATTEMPTS
+  renameWithTransientRetry, linkWithTransientRetry, TRANSIENT_RENAME_CODES, RENAME_ATTEMPTS
 } = require('../plugins/data-secure/server/gateway/batch-journal-io');
 
 const { test, assert, done } = createSuite('Transient rename retry');
@@ -60,6 +60,24 @@ test('non-transient errors are never retried', () => {
   assert.strictEqual(TRANSIENT_RENAME_CODES.has('EXDEV'), false, 'a cross-device rename is a real error');
 });
 
+test('a transient hard-link publication failure is retried without weakening create-if-absent', () => {
+  const from = path.join(base, 'linked.tmp');
+  const to = path.join(base, 'linked.json');
+  fs.writeFileSync(from, '{}');
+  let calls = 0;
+  const io = Object.create(fs);
+  io.linkSync = (source, target) => {
+    calls++;
+    if (calls === 1) throw Object.assign(new Error('EPERM synthetic'), { code: 'EPERM' });
+    return fs.linkSync(source, target);
+  };
+  linkWithTransientRetry(from, to, io, { retryDelay: () => {} });
+  assert.strictEqual(calls, 2);
+  assert.strictEqual(fs.readFileSync(to, 'utf8'), '{}');
+  assert.throws(() => linkWithTransientRetry(from, to, io, { retryDelay: () => {} }), /EEXIST/u,
+    'an existing destination is never replaced or retried');
+});
+
 test('the workflow journal survives a transient rename failure without losing the event', () => {
   const { recordWorkflowEvent, _test } = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
   const dataRoot = path.join(base, 'journal');
@@ -76,7 +94,7 @@ test('the workflow journal survives a transient rename failure without losing th
     'no temporary file is left behind after a successful retry');
 });
 
-test('the visible result export retries the publication rename of a released document', () => {
+test('the visible result export retries exclusive publication of a released document', () => {
   const { exportCompletedState } = require('../plugins/data-secure/server/gateway/result-export');
   const { roots } = require('../plugins/data-secure/server/gateway/common');
   const cowork = path.join(base, 'cowork');
@@ -91,22 +109,22 @@ test('the visible result export retries the publication rename of a released doc
     schema: 'eu-privacy-package/2', package_id: id, profile: 'general', created_at: '2026-09-03T12:00:00.000Z',
     document: `${id}.md`, document_sha256: require('node:crypto').createHash('sha256').update(bytes).digest('hex'), assets: []
   }));
-  const realRename = fs.renameSync;
+  const realLink = fs.linkSync;
   let injected = 0;
-  fs.renameSync = function (from, to) {
+  fs.linkSync = function (from, to) {
     if (String(to).endsWith('Dokument-001-anonymisiert.md') && injected++ === 0) {
       throw Object.assign(new Error('EPERM synthetic'), { code: 'EPERM' });
     }
-    return realRename.call(fs, from, to);
+    return realLink.call(fs, from, to);
   };
   try {
     const result = exportCompletedState({ token: 'a'.repeat(64), created_at: '2026-09-03T12:00:00.000Z', items: [{ status: 'released', package_id: id }] });
     assert.deepStrictEqual(result, { exported: 1, pending: 0, available: true }, 'one transient failure does not leave the export pending');
   } finally {
-    fs.renameSync = realRename;
+    fs.linkSync = realLink;
     delete process.env.EU_PRIVACY_RESULT_ROOT;
   }
-  assert.strictEqual(injected, 2, 'one failed attempt plus the successful retry reached the rename');
+  assert.strictEqual(injected, 2, 'one failed attempt plus the successful retry reached the exclusive link');
 });
 
 try { fs.rmSync(base, { recursive: true, force: true }); } catch {}

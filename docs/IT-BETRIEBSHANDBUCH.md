@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 03.09.2026 · 3.2.0-rc93
+Stand: 03.09.2026 · 3.2.0-rc98
 
 ## Produktkanäle
 
@@ -19,18 +19,22 @@ fail-closed gesperrt.
 
 ## Voraussetzungen und Hostgate
 
-- unterstützte Claude-Desktop-/Cowork-Version mit verfügbarer **lokaler**
-  Cowork-Ausführung: Cowork-Sitzungen laufen laut Hersteller standardmäßig in
-  der Cloud; die Organisation kann Cloud-Sitzungen ab- und lokale Sitzungen
-  anlassen. Nur eine lokale Sitzung startet den Plugin-MCP.
+- unterstützte Claude-Desktop-/Cowork-Version mit laufender Desktop-App. Cowork
+  darf die Sitzung standardmäßig in der Cloud ausführen; der lokale Plugin-MCP
+  läuft nicht in der Cloud, sondern auf dem Rechner und wird über die aktive
+  Desktop-Brücke erreicht. Der DataSecure-Prozess und seine Originalverarbeitung
+  bleiben lokal.
 - lokale Plugin-MCPs durch Organisations-/Geräterichtlinie erlaubt (MDM-Schlüssel
   `isLocalDevMcpEnabled` darf nicht auf `false` stehen);
 - lokaler, nicht synchronisierter Privacy-Ordner;
 - genügend Speicher für höchstens 100 Dateien/500 MiB plus temporäre Kopien;
 - alle Laufzeiten aus dem Paket, keine manuelle Node-/Python-Installation.
 
-Eine Cloud-Session ohne aktive lokale Desktop-Brücke darf keinen Originalpicker
-und keinen Originalzugriff erhalten.
+Eine Sitzung ohne aktive lokale Desktop-Brücke darf keinen Originalpicker und
+keinen Originalzugriff erhalten. Eine in Web oder Mobil gestartete oder geplante
+Aufgabe ist deshalb kein Originaleingang. Eine auf Desktop gestartete
+Cloud-Sitzung kann bei geöffneter Desktop-App von Web oder Mobil weiter begleitet
+werden; die lokale Brücke muss für weitere lokale Zugriffe online bleiben.
 
 ## Installationstest
 
@@ -38,10 +42,11 @@ und keinen Originalzugriff erhalten.
    hochladen“ installieren, Claude vollständig beenden und neu starten. Der
    Bereich „Claude Code“ und die Kommandozeile nutzen einen anderen Speicher
    (`~/.claude/plugins`); Cowork startet daraus nichts.
-2. Neue lokale Cowork-Aufgabe öffnen.
+2. In der geöffneten Claude-Desktop-App eine neue Cowork-Aufgabe öffnen.
 3. „Dateien anonymisieren“ schreiben.
 4. Beim ersten Lauf erwartet: zuerst einmalig die lokale Ergebnisordnerwahl. Einen
-   leeren, bereits mit Cowork verbundenen Test-Arbeitsordner wählen. Danach öffnet
+   dedizierten leeren, bereits mit Cowork verbundenen Test-Arbeitsordner wählen.
+   Originale liegen außerhalb dieses Ordners. Danach öffnet
    sich genau ein lokaler Mehrfachpicker; diesen mit Abbrechen schließen.
 5. Beim zweiten Start erwartet: nur der Mehrfachpicker, keine erneute Ergebnis-
    ordner-, Start-, Bild- oder Exportbestätigung.
@@ -50,6 +55,9 @@ und keinen Originalzugriff erhalten.
 
 Fehlt der Picker, keinen Chat-Upload, anderen Connector oder Engineeringweg als
 Ersatz verwenden. Plugin-/Connectorstatus, Claude-Version und Richtlinien prüfen.
+Der optionale Berechtigungsmodus **Auto** kann Host-Rückfragen verringern, sofern
+die Organisation ihn zulässt. Organisationsrichtlinien können einzelne
+Bestätigungen erzwingen. **Skip** ist für sensible Dokumente kein Betriebsstandard.
 
 ## Lokale Verzeichnisse und Löschung
 
@@ -79,23 +87,41 @@ Stapel und nach Neustart.
 
 ## Supportmodus und Logs
 
-Der normale Anwenderweg besitzt keine Diagnoseabfrage. IT aktiviert den begrenzten
-Supportmodus nur für einen konkreten Fall und deaktiviert ihn danach. Der einzige
-Schalter ist die Umgebungsvariable `EU_PRIVACY_SUPPORT_MODE=1` im
-`data-secure-local`-Eintrag der Plugin-`.mcp.json`. Sie wird nur in einer
-gesondert bereitgestellten Supportkopie des Plugins gesetzt, nie im
-Anwenderprodukt: Ein Edit im installierten Plugin ist laut Hersteller nicht
-update-fest und kein Anwenderweg. Erlaubte Supportdaten: Version, Plattform,
-Phase, Zähler, fester Fehlercode und Zeitpunkt.
+Der normale Anwenderweg besitzt keine Diagnoseabfrage. Für einen konkreten Fall
+installiert IT vorübergehend das separat gebaute, sichtbar als **Debug**
+gekennzeichnete ZIP. Es setzt intern `EU_PRIVACY_SUPPORT_MODE=1` und ergänzt den
+nur manuell aufrufbaren Skill `gbh-datasecure-debug-anonymisieren`. Installierte
+Dateien werden nicht bearbeitet. Debug- und Normalpaket werden nicht parallel
+betrieben; nach der Untersuchung wird das Debugpaket entfernt und das normale
+ZIP wieder installiert. Beide verwenden exakt dieselbe Anonymisierungsengine.
+Erlaubte Supportdaten: Version, Phase, Dauer, fester Fehlercode und zufällige
+technische Laufkennung.
 
 Verboten: Inhalte, erkannte Rohwerte, Dateinamen, Pfade, Dokumenthashes,
 Paketkennungen, Tokens oder Capabilities. Es gibt zwei inhaltsfreie Spuren unter
 `%LOCALAPPDATA%\SecureDataMsg\diagnostics\`: `events.jsonl` mit einem Ergebnis je
-Dokument (14 Tage, 200 Einträge) und `workflow-events.jsonl` mit den
-Ablaufereignissen je Lauf (14 Tage, 300 Einträge, etwa elf Ereignisse je Lauf).
-Zwei große Stapel am selben Tag können in `events.jsonl` die ältesten
+Dokument (14 Tage, 200 Einträge) und `workflow-events\` mit unveränderlichen
+JSON-Einzelereignissen je Lauf (14 Tage, 300 Einträge, etwa elf Ereignisse je
+Lauf). Dadurch gehen parallele Eltern-/Worker-Ereignisse nicht verloren. Eine
+vor dem Upgrade vorhandene `workflow-events.jsonl` wird weiterhin gelesen, aber
+nicht mehr beschrieben. Zwei große Stapel am selben Tag können in `events.jsonl` die ältesten
 Dokumentergebnisse verdrängen; `diagnostic_status` nennt die tatsächlich
 vorgehaltene Anzahl.
+
+Nur im Debugpaket entsteht zusätzlich
+`%LOCALAPPDATA%\SecureDataMsg\diagnostics\support-events\`. Jede JSON-Datei ist
+ein unveränderliches technisches Ereignis. Dadurch können MCP-Elternprozess,
+Intake- und Reviewworker einander keine Diagnosezeilen überschreiben. Höchstens
+2.000 Ereignisse und 14 Tage werden berücksichtigt. Rohes JSON-RPC, Argumente,
+Ergebnisse und freie Fehlermeldungen werden gerade **nicht** gespeichert. Für
+macOS und Linux liegt dasselbe relative Verzeichnis unter dem jeweiligen
+Produktdatenstamm. Der Anwender muss diese Ordner nicht vorher anlegen.
+
+Windows benötigt ausschließlich den regulären lokalen Produktdatenstamm unter
+`%LOCALAPPDATA%\SecureDataMsg`. `%APPDATA%\SecureDataMsg` und
+`%USERPROFILE%\.local\share\SecureDataMsg` sind keine Windows-Produktpfade und
+müssen weder existieren noch beschreibbar sein; `.local/share` ist nur der
+Linux/POSIX-Fallback.
 
 ## Fehlercodes – immer mit Klartext
 
@@ -114,7 +140,7 @@ vorgehaltene Anzahl.
 
 Verweigert der Dienst den Start (fail-closed), erscheint in Cowork nur ein
 fehlender Connector. Der Grund steht lokal an drei Stellen: als Ereignis
-`startup_refused` mit festem Code in `workflow-events.jsonl`, in der Datei
+`startup_refused` mit festem Code unter `workflow-events\`, in der Datei
 `%LOCALAPPDATA%\SecureDataMsg\diagnostics\startup-refused.json` (Zeitpunkt,
 Version, Code) und als eine Zeile auf dem Fehlerkanal des Prozesses, die kein
 Pfad und keine Rohdaten enthält. Beim Start im gebündelten Paket wird die
@@ -150,7 +176,7 @@ hochladen, auf der Plugin-Seite Version, Dateiansicht und Aktualisierungszeit
 prüfen, danach eine neue Cowork-Aufgabe starten. Die tatsächlich laufende Version
 steht in der Startantwort („DataSecure-Version: …“), in der letzten Zeile jedes
 lokalen DataSecure-Fensters und für den Support als `gateway_version` in
-`%LOCALAPPDATA%\SecureDataMsg\diagnostics\workflow-events.jsonl`. Weicht sie vom
+`%LOCALAPPDATA%\SecureDataMsg\diagnostics\workflow-events\`. Weicht sie vom
 bereitgestellten Build ab, ist kein Abnahmelauf gültig.
 
 ## Eskalation

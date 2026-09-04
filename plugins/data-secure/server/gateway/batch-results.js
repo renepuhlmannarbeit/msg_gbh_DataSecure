@@ -14,12 +14,20 @@ function createBatchResultAccess(deps) {
     publicProgress,
     liveLocalExecutor,
     publishedPackageRecord,
+    publishedPackageIdentityRecord,
     sameDocumentResult,
     issueReadCapability
   } = deps;
 
   function verifiedResultPackage(state, item) {
-    const published = publishedPackageRecord(item.package_id);
+    // Modern terminal journals already bind manifest and Markdown identities.
+    // Reuse that durable O(1) binding for the metadata-only listing. The handoff
+    // snapshot still performs the full asynchronous SHA-256 verification before
+    // returning any document byte. Legacy journals without a binding retain the
+    // full synchronous verifier.
+    const published = state.schema !== 'datasecure-batch/1' && item?.package_identity && publishedPackageIdentityRecord
+      ? publishedPackageIdentityRecord(item)
+      : publishedPackageRecord(item.package_id);
     if (published?.state !== 'verified') return null;
     const hasJournalResult = Object.hasOwn(item, 'document_result');
     const hasPackageResult = published.document_result !== null && published.document_result !== undefined;
@@ -29,6 +37,16 @@ function createBatchResultAccess(deps) {
     return hasJournalResult && hasPackageResult && sameDocumentResult(item.document_result, published.document_result)
       ? published
       : null;
+  }
+
+  function pluginHandoffState(state) {
+    if (state?.product_channel === 'plugin') return true;
+    // Journals written before product_channel was introduced belong to the
+    // plugin namespace. Standalone always writes an explicit channel and uses
+    // a physically separate root, so preserving v1-v4 compatibility does not
+    // make a Standalone batch discoverable here.
+    return !Object.hasOwn(state || {}, 'product_channel') &&
+      ['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4'].includes(state?.schema);
   }
 
   function invalidCursor() {
@@ -66,6 +84,9 @@ function createBatchResultAccess(deps) {
     const limit = Number(options.limit ?? 10);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new SafeError('Ergebnislimit muss zwischen 1 und 20 liegen.');
     const state = readState(token);
+    if (!pluginHandoffState(state)) {
+      throw new SafeError('Dieser lokale Stapel gehört nicht zum Claude-Plugin.');
+    }
     const start = parseResultCursor(token, options.cursor);
     if (start > state.items.length) throw invalidCursor();
     const results = [];
@@ -120,6 +141,7 @@ function createBatchResultAccess(deps) {
       if (!tokenPattern.test(token)) continue;
       try {
         const state = readStateForMaintenance(token);
+        if (!pluginHandoffState(state)) continue;
         if (Date.now() > Date.parse(state.expires_at)) continue;
         const progress = publicProgress(state);
         if (liveLocalExecutor(state) || !progress.complete) continue;

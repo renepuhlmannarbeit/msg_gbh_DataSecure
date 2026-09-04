@@ -192,6 +192,20 @@ test('run joining, paragraph styles, empty cells and paragraph boundaries remain
   assert.strictEqual(result.markdown, '## First part\tsecond\nthird\n\n| A<br>B |  |\n| --- | --- |\n| C |  |');
 });
 
+test('ordinary table cells remain supported while merged Word cells fail closed', () => {
+  const ordinary = parse(table([[paragraph('Name'), paragraph('Steuer-ID')], [paragraph('Max Mustermann'), paragraph('26954371827')]]));
+  assert.deepStrictEqual(ordinary.warnings, []);
+  assertPresent(ordinary.markdown, '| Name | Steuer-ID |');
+
+  for (const property of [
+    '<w:gridSpan w:val="2"/>',
+    '<w:vMerge w:val="restart"/>',
+    '<w:vMerge/>'
+  ]) {
+    rejects(`<w:tbl><w:tr><w:tc><w:tcPr>${property}</w:tcPr>${paragraph('SECRET')}</w:tc></w:tr></w:tbl>`);
+  }
+});
+
 test('modern text-box choice does not duplicate fallback text or drop outer runs', () => {
   const result = parse(`<w:p>${run('BEFORE')}<w:r><mc:AlternateContent><mc:Choice Requires="wps">${textbox(paragraph('CHOICE'))}</mc:Choice><mc:Fallback>${textbox(paragraph('FALLBACK'))}</mc:Fallback></mc:AlternateContent></w:r>${run('AFTER')}</w:p>`);
   onceInOrder(result.markdown, ['BEFORE', 'CHOICE', 'AFTER']);

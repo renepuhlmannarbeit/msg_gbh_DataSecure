@@ -1,0 +1,42 @@
+{
+  "schema": "datasecure-standalone-ui/1",
+  "shell_candidate": "tauri-2",
+  "transport": "inherited_framed_stdio",
+  "network_listener": false,
+  "renderer_file_system_access": false,
+  "renderer_receives_source_paths": false,
+  "renderer_receives_raw_content": false,
+  "states": ["select", "confirm", "processing", "review", "result", "stopped"],
+  "commands": [
+    "select_files",
+    "select_folder",
+    "cancel_admission",
+    "start_admitted_batch",
+    "get_public_state",
+    "continue_current_batch",
+    "configure_results",
+    "open_current_results",
+    "open_local_ledger",
+    "shutdown"
+  ],
+  "events": [
+    "selection_summarized",
+    "batch_started",
+    "progress_changed",
+    "review_required",
+    "batch_completed",
+    "batch_stopped"
+  ],
+  "forbidden_payload_fields": [
+    "path",
+    "source_path",
+    "source_name",
+    "raw_content",
+    "markdown",
+    "ocr_text",
+    "mapping",
+    "token",
+    "environment",
+    "command_line"
+  ]
+}

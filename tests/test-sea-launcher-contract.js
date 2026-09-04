@@ -88,7 +88,8 @@ test('pilot verifier distinguishes normal/support startup and refuses unproved w
 test('postject is development-only and the released product command remains unchanged', () => {
   assert.strictEqual(pkg.devDependencies.postject, contract.postject_version);
   assert.ok(!pkg.dependencies || !pkg.dependencies.postject);
-  assert.strictEqual(pluginMcp['data-secure-local'].command, 'node');
+  assert.deepStrictEqual(Object.keys(pluginMcp), ['mcpServers']);
+  assert.strictEqual(pluginMcp.mcpServers['data-secure-local'].command, 'node');
 });
 
 done();

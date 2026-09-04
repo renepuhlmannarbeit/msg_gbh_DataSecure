@@ -1,23 +1,29 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 03.09.2026
+Stand: 04.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
-- **aktiv:** DS-001 bis DS-049, DS-051 bis DS-058, DS-060 sowie DS-062 bis
-  DS-070 und DS-071, jeweils mit den unten genannten Präzisierungen;
-- **ersetzt:** DS-050 durch DS-065;
+- **aktiv:** DS-001 bis DS-015, DS-017 bis DS-018, DS-020 bis DS-049,
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-077, jeweils mit den unten
+  genannten Präzisierungen;
+- **ersetzt:** DS-016 durch DS-046, DS-019 durch DS-059 und DS-050 durch DS-065;
 - **teilweise präzisiert:** DS-002, DS-009, DS-020, DS-023 und DS-053 durch
-  DS-067; DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067; DS-020 und
-  DS-044 durch DS-070; DS-026 und DS-048 durch DS-071.
+  DS-067; DS-003 und DS-041 durch DS-066; DS-059 und DS-061 durch DS-065/DS-067; DS-020 und
+  DS-044 durch DS-070; DS-026 und DS-048 durch DS-071; DS-003, DS-040,
+  DS-041, DS-048, DS-063, DS-064, DS-067 und DS-069 durch DS-072; DS-008, DS-026 und DS-072
+  durch DS-073; DS-007, DS-018, DS-024, DS-038, DS-049, DS-060 und DS-072
+  durch DS-075; DS-004, DS-028, DS-030 und DS-075 durch DS-076; DS-004,
+  DS-075 und DS-076 durch DS-077.
 
 Der aktuelle operative Status steht in
 [`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still
 umgedeutet.
 
 Diese Entscheidungen stammen aus dem Produkt-Grill und bestätigten Ergänzungen. Sie beschreiben
-das Zielprodukt, nicht automatisch den freigegebenen Funktionsumfang von RC84.
+das Zielprodukt, nicht automatisch den freigegebenen Funktionsumfang des aktuellen
+Release Candidates. Der belegte Stand steht ausschließlich in `CURRENT_STATE.md`.
 
 ## DS-001 – Produktzweck und Aussagegrenze
 
@@ -33,7 +39,7 @@ Organisations-Marketplace sind gleichwertig unterstützte Verteilungswege. Ein M
 wird ausschließlich intern als Engineering-Artefakt gebaut und ist weder
 Produktkanal noch Anwender-Fallback.
 
-## DS-003 – Unterstützte Claude-Oberflächen
+## DS-003 – Unterstützte Claude-Oberflächen (durch DS-066 ersetzt)
 
 Lokale Originalverarbeitung ist nur in Claude Desktop oder Claude Code zulässig,
 wenn `privacy_status` in der konkreten Unterhaltung erfolgreich verfügbar ist.
@@ -42,6 +48,11 @@ aktueller Herstellerdokumentation auf Windows und macOS angeboten; Linux ist nur
 lokaler Claude-Code-Host-Zielpfad vorgesehen und braucht eine eigene Abnahme. Web,
 Mobil und Remote-Sitzungen dürfen nur bereits bereinigte Ergebnisse verwenden oder
 den Schutz erklären.
+
+Diese historische Oberflächenannahme wurde durch DS-066 ersetzt: Cowork darf
+standardmäßig in der Cloud laufen. Entscheidend ist nicht „lokal oder Cloud“,
+sondern die aktive, auf Desktop gestartete Verbindung zum lokal auf dem
+Anwenderrechner laufenden Plugin-MCP.
 
 ## DS-004 – Plattformziel und Installation
 
@@ -110,6 +121,13 @@ Der Stapel wird ohne Zwischenfragen vollständig abgearbeitet. Mehrdeutigkeiten 
 fachlich nicht vollständig übertragbare Bereiche erscheinen danach in genau einem
 lokalen Dialog. Entscheidungen gelten fundstellenbezogen; gleichartige Stellen im
 aktuellen Stapel können bewusst gemeinsam behandelt werden.
+
+Präzisierung 04.09.2026 (RC95): Erreicht der automatische Hintergrundlauf den
+Reviewzustand, öffnet derselbe lokale Worker unmittelbar den einen Sammelreview.
+Claude muss dafür keinen weiteren Toolaufruf veranlassen. „Später“, Schließen oder
+Abbrechen pausiert den Review ohne Freigabe und ohne nachgeschalteten zweiten
+Zustandsdialog. Nach der Entscheidung wird ausschließlich der tatsächlich
+terminale Abschluss präsentiert.
 
 ## DS-014 – Später entscheiden
 
@@ -377,6 +395,15 @@ Notizen, Kommentare und relevante versteckte Office-Bereiche gehören zur Covera
 Ein Nulltreffer wird nur nach vollständigem Parse und unabhängigem Residual-Gate
 freigegeben.
 
+Präzisierung 03.09.2026 (RC94): Fragmentierte Tabellenköpfe werden nur dann
+automatisch spaltengebunden zusammengesetzt, wenn höchstens drei gleich breite
+Kopfzeilen je Spalte ein bereits bekanntes sensibles Label ergeben. Abweichende
+Zeilenbreiten, mehr als drei sensible Kopfzeilen oder nicht eindeutig
+koordinierbare Zellen stoppen am unabhängigen Restprüfungsgate; es wird keine
+Spaltenposition geraten. DOCX-Tabellen mit horizontal oder vertikal verbundenen
+Zellen stoppen bis zu einer koordinatentreuen OOXML-Abbildung ebenfalls
+fail-closed. Dafür entsteht keine neue Anwenderbestätigung.
+
 ## DS-050 – Benutzergebundene Verschlüsselung und sichere Löschung
 
 Private Snapshots und Reviewdaten werden pro OS-Benutzer mit einem über DPAPI oder
@@ -532,8 +559,9 @@ oder Produktfreigabe ableiten. Normale echte Installation, Dokumentverarbeitung
 und relevante Abbruch-/Fortsetzungsabläufe bleiben praktisch abzunehmen.
 Bekannte reproduzierbare Fehler werden weiterhin behoben.
 
-Nächste Priorität: kleiner Schlüsselbund-Smoke-Test, dann den normalen lokalen
-Cowork-Ablauf mit synthetischen Dokumenten zuverlässig zum Abschluss bringen.
+Historischer damaliger Folgeschritt war ein kleiner Schlüsselbund-Smoke-Test.
+DS-065 hat diese Priorität später ausdrücklich verworfen; sie ist weder aktuelle
+Produktarbeit noch eine offene Nutzeraufgabe.
 
 ## DS-065 – Lokale Arbeitskopien ohne zusätzliche Verschlüsselung
 
@@ -573,17 +601,17 @@ Cowork-Tests haben Vorrang.
 Bestätigt am 01.09.2026: Die belastbare Produktzusage lautet: **Originale werden
 ausschließlich durch den lokalen DataSecure-Prozess verarbeitet; Claude erhält nur
 freigegebene, de-identifizierte Ergebnisse.** Eine sichtbare Desktop-Oberfläche
-und ein installiertes Plugin belegen weder eine lokale Cowork-Sitzung noch einen
-aktiven lokalen MCP.
+und ein installiertes Plugin belegen noch keinen aktiven lokalen MCP.
 
-Originale dürfen nur in einer lokalen Cowork-Sitzung der Desktop-App oder in
-Claude Code über den Betriebssystempicker eines tatsächlich verbundenen lokalen
-Plugin-MCPs angenommen werden. Lokale Plugin-MCPs laufen nach aktueller
-Herstellerdokumentation nicht in Cloud-Sitzungen. Deshalb sind Cloud-Cowork in
-Desktop, Web/Mobil, geplante Aufgaben und der lokale Dateibroker kein Ersatz;
-über den Broker geöffnete Bytes würden cloudseitig verarbeitet. Chat-Upload,
-Computer Use, verbundene Ordner, allgemeine Dateifreigabe und Remote-MCP sind
-ebenfalls kein Ersatz. Die DataSecure-Engine bleibt netzwerkfrei.
+Originale dürfen nur über die geöffnete Desktop-App oder in Claude Code über den
+Betriebssystempicker eines tatsächlich verbundenen lokalen Plugin-MCPs angenommen
+werden. Cowork darf die Sitzung in der Cloud ausführen; lokale Connectoren und
+Plugin-MCPs werden dort über die aktive Desktop-Brücke erreicht, während der
+DataSecure-Prozess und die Originalverarbeitung auf dem Rechner bleiben. Web,
+Mobil, geplante Aufgaben ohne aktive Desktop-Brücke und der lokale Dateibroker
+sind kein Ersatz. Chat-Upload, Computer Use, verbundene Ordner, allgemeine
+Dateifreigabe und Remote-MCP sind ebenfalls kein Ersatz. Die DataSecure-Engine
+bleibt netzwerkfrei.
 
 ZIP/Marketplace bleiben Hauptprodukt. Das Quellplugin verwendet für Entwicklung
 `command: node`; Produktarchive ersetzen ihn durch einen pluginrelativen Launcher
@@ -598,6 +626,20 @@ nicht.
 
 Diese Entscheidung präzisiert und ersetzt die Ausführungsortannahmen aus DS-003,
 DS-041 und DS-052, nicht deren lokale Datenschutz- oder Plattformziele.
+
+Am 04.09.2026 nochmals gegen die aktuellen Anthropic-Seiten revalidiert:
+**„Cloud-Cowork“ und „lokaler DataSecure-MCP“ sind kein Widerspruch.** Cowork
+läuft standardmäßig in der Cloud; der lokale MCP-Prozess läuft niemals dort,
+sondern auf dem Anwenderrechner. Eine auf Desktop gestartete Cloud-Sitzung erreicht
+ihn bei geöffneter Desktop-App über die Anthropic-vermittelte Desktop-Brücke.
+Bestehende Desktop-Deployments können Cowork weiterhin lokal ausführen. Der
+Produktkanon verwendet deshalb nicht mehr die missverständliche Kurzform
+„lokale Cowork-Sitzung“ als Voraussetzung, sondern stets das überprüfbare Gate
+„in Desktop gestartet, Desktop-Brücke aktiv, lokaler MCP und Picker erreichbar“.
+Eine in Web oder Mobil gestartete Aufgabe und eine geplante Cloud-Aufgabe besitzen
+diesen Originaleingang nicht; eine auf Desktop gestartete Aufgabe darf bei
+weiterhin geöffneter Desktop-App lediglich von Web oder Mobil weiter begleitet
+werden.
 
 ## DS-067 – Ein Produktweg, wahrheitsgemäße Aufbewahrung und fester Bildschutz
 
@@ -654,9 +696,15 @@ In `DataSecure-Output` gelangen ausschließlich erneut verifizierte, freigegeben
 Markdown-Dateien mit neutralen Namen. Originale, Quellpfade, Mapping, Audit,
 Review-, Arbeits- und Wiederaufnahmedaten bleiben im privaten DataSecure-Bereich.
 Ein fehlgeschlagener sichtbarer Export vernichtet kein internes Ergebnis; ein
-lokaler, dauerhafter Exportauftrag wird beim nächsten Start oder Ordnerwechsel
-erneut ausgeführt. Der Abschlussdialog nennt nur Zähler und bietet
+lokaler, dauerhafter Exportauftrag wird nach dem nächsten Start in einem
+zeitbegrenzten Hintergrundworker oder beim Ordnerwechsel erneut ausgeführt; er
+blockiert den MCP-Start nicht. Der Abschlussdialog nennt nur Zähler und bietet
 „Ergebnisse öffnen“.
+
+Die Übernahme dieses Abschlussdialogs ist zweiphasig: Eine kurzlebige Reservierung
+verhindert Doppeldialoge; dauerhaft als präsentiert gilt sie erst nach bestätigtem
+Start des lokalen Presenters. Scheitert der Start, darf der Worker die Anzeige
+übernehmen. Das verändert weder Exportdaten noch Freigabestatus.
 
 Der MCP erhält den gewählten Pfad nicht. Eine automatisch sichere Erkennung des
 verbundenen Cowork-Ordners ist kein belastbarer Hostvertrag; deshalb wird der Pfad
@@ -715,3 +763,153 @@ geprüft; eine Abweichung stoppt mit `RUNTIME_INTEGRITY_FAILED`. Diese Prüfung
 erkennt Beschädigung und Austausch nach dem Build, ersetzt aber nicht die
 Prüfsumme des Pakets vor der Installation. Diese Entscheidung präzisiert DS-026
 und DS-048.
+
+## DS-072 – Hintergrundlaufzeit überlebt den kurzlebigen Cowork-Pluginordner
+
+Bestätigt am 04.09.2026 nach dem ersten Windows-Cowork-Lauf mit RC95: Die
+erfolgreiche IPC-Übergabe an den Intake-Worker beweist noch keinen abgeschlossenen
+Stapel. Cowork darf seinen temporären Pluginordner nach Ende des MCP-Aufrufs
+entfernen. Ein bereits gestarteter Worker muss Parser, Review und Abschluss daher
+aus einer dauerhaften lokalen Laufzeitprojektion starten können.
+
+Das selbsttragende Plugin kopiert beim MCP-Start ausschließlich die geprüfte
+Programmlaufzeit und den Produktcode in einen versions- und fingerprintgebundenen
+Unterordner von `SecureDataMsg/runtime-cache`. Dokumente, Dateinamen, Quellpfade,
+Mappings, Journale, Review- und Ergebnisdaten gehören ausdrücklich nicht in
+diesen Cache. Ist die Projektion unvollständig oder verändert, stoppt der Server
+mit `DURABLE_RUNTIME_FAILED`. Erst danach dürfen Intake-, Review-, Companion- und
+Parserprozesse daraus gestartet werden. Ein Regressionstest entfernt den
+ursprünglichen Pluginordner vor dem Workerstart vollständig.
+
+Der DataSecure-Core darf zusätzlich durch ein eigenständiges zweites
+Endnutzerprodukt verwendet werden. DataSecure Standalone besitzt eine eigene
+Desktop-Oberfläche, Distribution und getrennte Produktdaten, benötigt weder
+Claude noch Cowork, MCP, Agenten oder Internet und bietet keine optionale
+Claude-Übergabe an. Nur die geprüfte Anonymisierungsengine bleibt gemeinsam.
+Diese Entscheidung präzisiert DS-003, DS-040, DS-041, DS-048, DS-067 und
+DS-069.
+
+## DS-073 – Cowork-Temporärpfade sind kein Produktdatenspeicher
+
+Bestätigt am 04.09.2026 durch den zweiten Windows-Cowork-UAT: Cowork kann dem
+lokalen Plugin eine `LOCALAPPDATA`-Adresse innerhalb einer kurzlebigen
+`Temp/claude`-Projektion geben. Dieser Pfad verschwindet zusammen mit dem
+Toolaufruf. Er darf deshalb weder Ergebnisordnerkonfiguration, Journale und
+Reviewdaten noch die dauerhafte Programmlaufzeit aus DS-072 aufnehmen.
+
+Nur wenn `LOCALAPPDATA` eindeutig als Claude-Temporärprojektion erkannt wird,
+verwendet DataSecure unter Windows stattdessen das bereits vorhandene reguläre
+`AppData/Local` des Benutzerprofils. Ein normaler oder bewusst umgezogener
+`LOCALAPPDATA`-Pfad bleibt unverändert. Ist das reguläre Ziel kein bestehendes,
+reguläres Verzeichnis oder ist es ein Link, wird die Hostadresse nicht
+umgeschrieben. Der Pakettest startet die echte selbsttragende Runtime mit einer
+synthetischen Claude-Temporäradresse und verlangt den Cache im stabilen
+Testprofil. Diese Entscheidung präzisiert DS-008, DS-026 und DS-072.
+
+## DS-074 – Debug ist eine manuelle, inhaltsfreie Projektion derselben Engine
+
+Bestätigt am 04.09.2026 nach UML-, Datenschutz-, Betriebs- und
+Performanceprüfung: Der normale Produktbuild bleibt frei von zusätzlicher
+Supportinteraktion. Für gezielte Fehleranalysen darf ein separat gebautes und
+sichtbar als **Debug** gekennzeichnetes Plugin-ZIP installiert werden. Es ergänzt
+genau einen nur manuell aufrufbaren Debug-Skill und aktiviert den bestehenden
+lokalen Supportmodus. Es dupliziert weder Anonymisierungsregeln noch Worker,
+Review, Speicher- oder Freigabelogik.
+
+Die Debugspur protokolliert nicht die Kommunikation selbst, sondern nur eine
+geschlossene, inhaltsfreie JSON-Projektion ihrer technischen Grenzen. Rohes
+JSON-RPC, Argumente, Ergebnisse, Inhalte, Namen, Pfade, Hashes, Tokens,
+Capabilities und freie Meldungen sind nicht darstellbar. Jeder Prozess schreibt
+unveränderliche Einzelereignisse, damit Eltern-, Intake- und Reviewprozess keine
+Zeilen gegenseitig überschreiben. Fehler der Diagnose sind wirkungslos für jede
+Datenschutzentscheidung. Nach dem Supportfall wird wieder das normale Paket
+installiert. Diese Entscheidung präzisiert DS-026, DS-048 und DS-071.
+
+## DS-075 – Standalone ist ein zweites Produkt mit gemeinsamem Core
+
+Bestätigt am 04.09.2026 nach Produkt-, UX-, Architektur-, Security-,
+Performance- und Betriebsreview: DataSecure Standalone ist ein eigenständiges,
+vollständig lokales Endnutzerprodukt ohne Claude, Cowork, Skills, MCP, Agenten,
+Chat oder Internet. Seine Desktop-UI und optionale Support-CLI rufen eine
+neutrale DataSecure-Application-API direkt auf; ein MCP-/JSON-RPC-Umweg ist
+unzulässig. Das Claude-Plugin bleibt ein getrenntes Produkt und lediglich ein
+zweiter Adapter auf denselben Core. Eine zweite Erkennungs- oder
+Freigabelogik ist unzulässig.
+
+Standalone und Plugin besitzen getrennte Daten-, Konfigurations-, Journal-,
+Review- und Exportnamespaces sowie getrennte Pakete, SBOMs, Update-, Rollback-
+und Deinstallationsverträge. Standalone-Stapel dürfen niemals Claude-Handoff-
+Kandidaten werden. Beide Produkte müssen denselben Core-/Policy-Fingerprint
+und Golden-Korpus bestehen. Gemeinsam bleiben nur Admission, Snapshot,
+Parser/Konverter, Content-Graph, PII-/Residual-Gates, Sammelreview,
+Journal/Fortsetzung, Mapping, Export und neutrale Diagnose.
+
+Microsoft MarkItDown 0.1.7 darf als gebündelte Offline-Komponente zur
+Formatkonvertierung aufgenommen werden, ist aber weder Sicherheitsgate noch
+Anonymisierer. Der Konverter erhält nur bereits zugelassene, versiegelte
+Snapshot-Bytes in einem isolierten, ressourcenbegrenzten Worker. Er darf keine
+Pfade oder URLs öffnen, kein Netzwerk, keine Plugins, keine LLM-Clients und
+insbesondere nicht `markitdown-ocr` verwenden. Noch personenbezogenes Markdown
+bleibt ausschließlich im privaten Prozess-/Speicherpfad und wird nicht als
+sichtbare Zwischenablage persistiert. Nur das nach DataSecure-Prüfung
+freigegebene anonymisierte Markdown wird exportiert.
+
+Jedes neue Format benötigt weiterhin einen eigenen DataSecure-Coverage-,
+Angriffs-, Offline-, Paket- und Zielsystemnachweis. Die erste Integration ist
+ein deaktiviertes DOCX-Differentialorakel; sie verändert den aktuell
+freigegebenen Formatumfang nicht. „Ohne KI“ wird belastbar als „ohne Claude,
+Agenten, generative KI oder externe KI-Dienste“ kommuniziert; spätere lokale
+OCR ist eine separat freizugebende Extraktionskomponente. Diese Entscheidung
+präzisiert DS-007, DS-018, DS-024, DS-038, DS-049, DS-060 und DS-072.
+
+## DS-076 – Tauri-2-Spike und vier eigenständige Desktopziele
+
+Bestätigt am 04.09.2026 nach UX-, Desktop-, Packaging-, Security- und
+Performancegegencheck: Für die Standalone-Desktop-Hülle ist Tauri 2 der
+verbindliche Engineering-Kandidat. Die Auswahl beruht auf nativen
+Dateidialogen, der Betriebssystem-WebView, einer kleinen Rust-Hülle und der
+Möglichkeit, den vorhandenen DataSecure-Core als zielgebundenes Sidecar
+mitzuliefern. Eine Produktfreigabe folgt daraus noch nicht; der Spike muss die
+definierten Start-, Größen-, Barrierefreiheits-, Offline-, Abbruch- und
+Rollbackwerte auf echten Zielsystemen erfüllen.
+
+Es entstehen vier selbsttragende Artefakte: Windows x64, macOS x64, macOS
+ARM64 und Linux x64 glibc. Ein Universal-macOS-Binary ist für die erste
+Lieferung nicht erforderlich. Kein Paket setzt vom Anwender installiertes
+Node, Python, Rust oder Claude voraus. Der Renderer erhält weder Rohbytes noch
+Quellpfade, Mapping, private Verzeichnisse oder direkten Dateisystemzugriff.
+Nur die Rust-Hülle öffnet den nativen Picker und übergibt die Auswahl intern an
+den Core. UI und Core kommunizieren lokal über begrenzte, gerahmte Nachrichten
+auf geerbten Prozesskanälen; ein lokaler HTTP-/WebSocket-Port ist unzulässig.
+
+Signierung und Apple-Notarisierung bleiben nach DS-030 keine technische
+Freigabepflicht. Ein unsigniertes macOS-Paket muss aber ehrlich auf die zu
+erwartende Gatekeeper-Handhabung hinweisen und diese im macOS-UAT prüfen; es
+darf nicht als reibungslose öffentliche Installation beworben werden. Diese
+Entscheidung präzisiert DS-004, DS-028, DS-030 und DS-075.
+
+## DS-077 – Windows-Standalone-Pilot, WebView2 und Evidencegrenze
+
+Bestätigt am 04.09.2026 nach zweitem Architektur-, UX-, Packaging- und
+Supply-Chain-Gegencheck: Der Windows-x64-Standalone-Vertikalschnitt wird als
+**Engineering-Pilot** selbsttragend paketiert. Er enthält die Tauri-Hülle, eine
+gepinnt und herkunftsgeprüft gebündelte Node-Runtime, die beim Paketbau frisch
+aus dem aktuellen Quellstand erzeugte geschlossene Coreprojektion, Manifest,
+Runtime-Evidence, SBOM, Lizenzhinweise und Prüfsummen. Anwender installieren
+weder Node, Rust noch Python. Automatische Paketprüfung und isolierter
+Sidecar-Smoke sind E0-Evidence, aber keine Endnutzerfreigabe.
+
+Für die kleine Windows-Auslieferung wird das von Windows beziehungsweise der
+Organisation bereitgestellte Microsoft Edge WebView2-Systemruntime vorausgesetzt.
+DataSecure lädt es weder nach noch bündelt es einen Fixed-Version-WebView2-
+Baum. Fehlt es, muss Installation beziehungsweise UAT verständlich stoppen.
+Diese bewusste Betriebssystemvoraussetzung ist nicht mit einer zusätzlichen
+Entwickler-Toolchain gleichzusetzen.
+
+Vor Endnutzerfreigabe bleiben Windows-UAT, native macOS-Intel-/ARM-Pakete und
+UAT sowie die komponentenweise Lizenzklärung der ausgelieferten Rust-Crates
+Pflicht. Das Engineering-SBOM darf unbekannte Crate-Lizenzen als `NOASSERTION`
+inventarisieren, aber keine abgeschlossene Lizenzprüfung behaupten. Drag-and-
+drop und Pausieren bleiben Zielumfang, bis ein echter Befehl, Recoveryvertrag
+und UI-/Negativtests existieren. Diese Entscheidung präzisiert DS-004, DS-075
+und DS-076.

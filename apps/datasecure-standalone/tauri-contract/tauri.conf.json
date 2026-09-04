@@ -1,0 +1,34 @@
+{
+  "productName": "DataSecure Standalone",
+  "version": "3.2.0-rc98",
+  "identifier": "de.msg.datasecure.standalone",
+  "build": {
+    "frontendDist": "../frontend"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "DataSecure Standalone",
+        "width": 960,
+        "height": 720,
+        "minWidth": 720,
+        "minHeight": 560,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self'; script-src 'self'",
+      "capabilities": ["main-window"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "externalBin": ["binaries/datasecure-core"],
+    "resources": {
+      "generated-runtime/server": "server"
+    }
+  }
+}

@@ -50,7 +50,9 @@ test('the persistent batch worker strips proxy, Node and cloud credential contro
   const clean = batchWorkerEnvironment({
     SystemRoot: 'C:\\Windows',
     LOCALAPPDATA: 'C:\\Local',
+    EU_PRIVACY_DATA_ROOT: 'C:\\StandaloneData',
     EU_PRIVACY_ROOT: 'C:\\Privacy',
+    DATASECURE_PRODUCT_CHANNEL: 'standalone',
     HTTPS_PROXY: 'https://proxy.invalid',
     NODE_OPTIONS: '--inspect=0.0.0.0:9229',
     AWS_SECRET_ACCESS_KEY: 'secret',
@@ -59,7 +61,9 @@ test('the persistent batch worker strips proxy, Node and cloud credential contro
   assert.deepStrictEqual({ ...clean }, {
     SystemRoot: 'C:\\Windows',
     LOCALAPPDATA: 'C:\\Local',
-    EU_PRIVACY_ROOT: 'C:\\Privacy'
+    EU_PRIVACY_DATA_ROOT: 'C:\\StandaloneData',
+    EU_PRIVACY_ROOT: 'C:\\Privacy',
+    DATASECURE_PRODUCT_CHANNEL: 'standalone'
   });
 });
 

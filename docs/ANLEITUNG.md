@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 03.09.2026 · Version 3.2.0 RC93
+Stand: 03.09.2026 · Version 3.2.0 RC98
 
 ## Vor dem ersten Lauf
 
@@ -32,13 +32,18 @@ Upload nicht zuverlässig ersetzt. Deshalb:
 
 ## Normalweg
 
-1. Öffnen Sie eine neue **lokale** Cowork-Aufgabe. Cowork startet Aufgaben
-   standardmäßig in der Cloud; DataSecure funktioniert nur in einer lokalen
-   Sitzung, weil nur dort der lokale Plugin-MCP läuft.
+1. Öffnen Sie in der **laufenden Claude-Desktop-App eine neue Cowork-Aufgabe**.
+   Die Aufgabe darf standardmäßig in der Cloud laufen. DataSecure selbst und die
+   Originalverarbeitung bleiben lokal; die Cowork-Sitzung erreicht den lokalen
+   Plugin-MCP über die aktive Desktop-Brücke. In Web oder Mobil gestartete und
+   geplante Aufgaben sowie eine geschlossene/getrennte Desktop-App reichen für
+   den Originaleingang nicht.
 2. Schreiben Sie **„Dateien anonymisieren“** oder wählen Sie den Skill
    `gbh-datasecure-dokument-anonymisieren`.
-3. Beim ersten Lauf wählen Sie einmalig den bereits mit Cowork verbundenen
-   Arbeitsordner. DataSecure speichert diese Wahl lokal und erstellt darin
+3. Beim ersten Lauf wählen Sie einmalig einen dedizierten, leeren beziehungsweise
+   ausschließlich für freigegebene Ergebnisse bestimmten und mit Cowork
+   verbundenen Arbeitsordner. Originale müssen außerhalb aller mit Cowork
+   verbundenen Ordner liegen. DataSecure speichert die Wahl lokal und erstellt darin
    `DataSecure-Output`. Diese Auswahl wird in späteren Läufen nicht wiederholt.
 4. Im lokalen Mehrfachpicker wählen Sie bis zu 100 Dateien mit zusammen höchstens
    500 MiB und klicken einmal **„Öffnen“**.
@@ -59,6 +64,11 @@ Einzeldateibestätigung und keine Bestätigung für jedes Ergebnis. Claude-eigen
 Werkzeugfreigaben kann das Plugin nicht abschalten, aber der reine lokale Lauf
 benötigt nur einen MCP-Startaufruf.
 
+Der Berechtigungsmodus **Auto** kann zusätzliche Claude-Rückfragen reduzieren,
+sofern Ihre Organisation ihn erlaubt. Organisationsrichtlinien können trotzdem
+eine Freigabe pro Aufgabe oder Werkzeug erzwingen. **Skip** ist für sensible
+Dokumente nicht der empfohlene Standard.
+
 ## Unterstützte Dateien
 
 | Freigegeben | Sicher gesperrt |
@@ -69,6 +79,12 @@ Ein gesperrtes Format bleibt unverändert und erhält kein Teilresultat. Eine
 passwortgeschützte oder verschlüsselte Datei wird nicht entschlüsselt; DataSecure
 legt auch keine private Arbeitskopie davon an und meldet sie am Ende gesondert.
 
+DOCX-Dateien mit horizontal oder vertikal verbundenen Tabellenzellen
+(`w:gridSpan` oder `w:vMerge`) werden derzeit ebenfalls vollständig und ohne
+Teilresultat gestoppt. Normale Tabellen bleiben unterstützt. Diese Grenze
+verhindert, dass Text wegen einer nicht koordinatentreu abbildbaren Tabellenstruktur
+dem falschen Feld oder Label zugeordnet wird.
+
 Zusätzliche Einzelgrenzen: TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes,
 DOCX 64 MiB komprimiert und 128 MiB entpackt. Es gibt keine feste Seitenzahl.
 
@@ -78,9 +94,12 @@ Bildpixel aus DOCX bleiben immer lokal und werden nicht an Claude freigegeben.
 Es gibt keinen auswählbaren Bildmodus. DataSecure löscht Bilder niemals aus der
 Originaldatei.
 
-Unklare Organisations-/Zertifikatsstellen werden nicht geraten. Sie bleiben bis
-zu einem ausdrücklichen lokalen Sammelreview gesperrt. Abbrechen oder Vertagen ist
-zulässig; später schreiben Sie **„Setze den letzten DataSecure-Stapel fort.“**
+Unklare Organisations-/Zertifikatsstellen werden nicht geraten. Nach der
+automatischen Analyse öffnet DataSecure dafür selbstständig genau einen lokalen
+Sammelreview; ein zweiter Cowork-Auftrag oder Werkzeugaufruf ist nicht nötig.
+Abbrechen, Schließen oder **„Später entscheiden“** ist zulässig und lässt den
+Stapel sicher fortsetzbar; erst dann schreiben Sie später bei Bedarf
+**„Setze den letzten DataSecure-Stapel fort.“**
 Klare Dateien sind zu diesem Zeitpunkt bereits fertig und werden im Review nicht
 noch einmal vorgelegt. Der lokale Dialog zeigt gelbe offene Stellen und die
 direkten Aktionen **„Zertifikatsanbieter behalten“** beziehungsweise
@@ -140,7 +159,7 @@ wird nicht automatisch an Claude übertragen.
 
 | Sichtbares Verhalten | Nächste Aktion |
 |---|---|
-| Kein lokaler Picker | Prüfen, ob die Aufgabe eine lokale Cowork-Sitzung ist; Claude einmal vollständig neu starten; danach IT melden (lokale Plugin-MCPs erlaubt?), nicht hochladen |
+| Kein lokaler Picker | Claude Desktop öffnen beziehungsweise vollständig neu starten; Connector und Richtlinie für lokale Plugin-MCPs prüfen; nicht hochladen |
 | Ergebnisordnerwahl erscheint | Beim ersten Lauf den verbundenen Cowork-Arbeitsordner wählen; später nur auf Wunsch ändern |
 | Ergebnisordner wurde abgelehnt | Grund lesen (etwa: Ordner liegt im privaten DataSecure-Bereich); beim nächsten Start einen anderen Ordner wählen |
 | Sichtbarer Export vorübergehend fehlgeschlagen | Interne Ergebnisse bleiben erhalten; beim nächsten Pluginstart wird erneut exportiert |
@@ -149,7 +168,7 @@ wird nicht automatisch an Claude übertragen.
 | Auswahl abgelehnt („enthält … nicht freigegebene oder unbekannte Formate“) | Ein Ordner wird immer vollständig verarbeitet oder gar nicht; Ordner nur mit TXT/Markdown/CSV/DOCX wählen oder die Dateien einzeln auswählen. Kein Fehler des Plugins |
 | Datei sicher gestoppt | Nicht automatisch wiederholen; Klartextmeldung lesen, technischen Code nur an IT nennen |
 | Stapel unterbrochen | „Setze den letzten DataSecure-Stapel fort“ |
-| Mehrdeutigkeit | lokalen Sammelreview starten oder vertagen |
+| Mehrdeutigkeit | der Sammelreview öffnet automatisch; fachlich entscheiden oder „Später entscheiden“ wählen |
 | Echter Name im Ergebnis | sofort aufhören und Datenschutz/IT informieren |
 
 IT benötigt Version, Betriebssystem, Zeitpunkt, Klartextphase und festen Fehlercode,

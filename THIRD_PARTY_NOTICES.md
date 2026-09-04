@@ -25,6 +25,13 @@ Design- und Testreferenzen, die bei der Architektur berücksichtigt wurden:
 - Tesseract.js (Apache-2.0) – Architekturgrundlage und Bestandteil des lokalen
   Engineering-OCR-Baums, nicht des Endnutzer-Plugins
 - Microsoft Presidio – Referenz für OCR → PII → Bounding-Box-Redaction
+- Microsoft MarkItDown 0.1.7 (MIT) – derzeit ausschließlich gepinntes,
+  deaktiviertes DOCX-Differentialorakel für den geplanten Standalone-Konverter;
+  nicht im Endnutzerarchiv, keine zusätzliche Formatfreigabe
+- Tauri 2 (MIT oder Apache-2.0) – Desktop-Hülle des getrennten Standalone-
+  Engineering-Piloten. Auf Windows x64 kompiliert und selbsttragend paketiert,
+  aber noch nicht als Endnutzerprodukt freigegeben. Rust/Tauri werden nur auf
+  Buildsystemen benötigt; Anwender installieren keine Toolchain.
 
 Es wird kein Code aus diesen Projekten als Runtime-Paket nachinstalliert.
 
@@ -49,6 +56,13 @@ zugehörigen Original-Lizenztext als `runtime/LICENSE.node.txt`; Hash, Plattform
 und Architektur sind im Runtime-Evidenzdatensatz gebunden.
 
 ## Nur Engineering, nicht im Endnutzer-Plugin
+
+- Microsoft MarkItDown 0.1.7 (MIT) und seine Python-Abhängigkeiten: Der
+  Quellbaum enthält nur Vertrag und netzgesperrte Byte-Stream-Bridge; die
+  temporäre Entwicklungsinstallation ist kein Repository- oder Paketbestandteil.
+  Vor einer Auslieferung müssen die je Plattform tatsächlich benötigten Wheels,
+  vollständigen Lizenztexte, Hashes und SBOM-Einträge reproduzierbar gebündelt
+  werden. Plugins, LLM-Clients und `markitdown-ocr` sind ausgeschlossen.
 
 - Offline-OCR-Baum: `tesseract.js` 7.0.0, `tesseract.js-core` 7.0.0,
   `bmp-js` 0.1.0, `idb-keyval` 6.3.0, `is-url` 1.2.4, `node-fetch` 2.7.0,

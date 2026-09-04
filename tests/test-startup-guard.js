@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { createSuite } = require('./helpers');
 const guard = require('../plugins/data-secure/server/gateway/startup-guard');
+const workflowDiagnostics = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 const { VERSION } = require('../plugins/data-secure/server/version');
 
 const { test, done, assert } = createSuite('Startup guard');
@@ -161,8 +162,7 @@ test('the real server refuses a broken data root with one content-free line and 
   assert.doesNotMatch(result.stderr, /Users|msg_gbh|\.js|\\|\//u, 'no stack trace, no path');
   const marker = JSON.parse(fs.readFileSync(path.join(localAppData, 'SecureDataMsg', 'diagnostics', 'startup-refused.json'), 'utf8'));
   assert.strictEqual(marker.code, 'UNSAFE_STORAGE_LOCATION');
-  const journal = fs.readFileSync(path.join(localAppData, 'SecureDataMsg', 'diagnostics', 'workflow-events.jsonl'), 'utf8');
-  const events = journal.split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const events = workflowDiagnostics._test.readWorkflowEvents({ dataRoot: path.join(localAppData, 'SecureDataMsg') });
   assert.strictEqual(events.at(-1).event, 'startup_refused');
   assert.strictEqual(events.at(-1).error_code, 'UNSAFE_STORAGE_LOCATION');
   assert.strictEqual(marker.journal_recorded, true);

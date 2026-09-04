@@ -20,8 +20,6 @@ const {
   discardIncompleteBatches,
   _test
 } = require('../../plugins/data-secure/server/gateway/batch');
-const { installBatchPrivateArtifactCrypto } = require('../lib/private-artifact-test-runtime');
-installBatchPrivateArtifactCrypto(_test, _test.batchRoot());
 
 const started = Date.now();
 const rssBefore = process.memoryUsage().rss;

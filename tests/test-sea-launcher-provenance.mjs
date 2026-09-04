@@ -38,7 +38,7 @@ for (const relative of ['native/sea/bootstrap.cjs', 'native/sea/launcher-contrac
   write(relative, fs.readFileSync(path.join(repository, relative)));
 }
 write('plugins/data-secure/.claude-plugin/plugin.json', JSON.stringify({ version: '1.2.3-test' }));
-write('plugins/data-secure/.mcp.json', JSON.stringify({ 'data-secure-local': { command: 'node', args: ['server/index.js'] } }));
+write('plugins/data-secure/.mcp.json', JSON.stringify({ mcpServers: { 'data-secure-local': { command: 'node', args: ['server/index.js'] } } }));
 for (const relative of sourceFiles) write('plugins/data-secure/' + relative, '// synthetic fixture: ' + relative + '\n');
 for (const relative of toolFiles) write(relative, relative === 'package.json'
   ? JSON.stringify({ name: 'synthetic-sea-fixture', version: '1.2.3-test', devDependencies: { postject: contract.postject_version } })

@@ -20,8 +20,6 @@ const orchestrator = require(path.join(runtimeDir, 'gateway', 'orchestrator.js')
 const pii = require(path.join(runtimeDir, 'pii-engine.js'));
 const { splitReviewId, approveReviewAsset } = require(path.join(runtimeDir, 'gateway', 'review.js'));
 const { migrateLegacyInputV1 } = require(path.join(runtimeDir, 'gateway', 'legacy-input-migration.js'));
-const { createTestPrivateArtifactCrypto } = require('./lib/private-artifact-test-runtime');
-const reviewCrypto = createTestPrivateArtifactCrypto(path.join(root, 'Needs Visual Review'));
 
 const suite = createSuite('Gateway end to end');
 const { done, assert } = suite;
@@ -58,7 +56,6 @@ function isolatedMarkerDir() {
 function depsFor(mode) {
   let count = 0;
   return {
-    privateArtifactCrypto: reviewCrypto,
     rasterizeToPng: async () => blankPng,
     ocrPngDetailed: async () => {
       if (mode !== 'pii') return { text: '', words: [] };
@@ -106,7 +103,7 @@ function currentQueue() {
 const gw = {
   ...gateway,
   approveReviewAsset(reviewId, confirmed) {
-    return approveReviewAsset(reviewId, confirmed, { privateArtifactCrypto: reviewCrypto });
+    return approveReviewAsset(reviewId, confirmed);
   },
   anonymizeNext(profile, deps = {}) {
     return orchestrator.anonymizeNext(profile, { inputQueue: currentQueue(), ...deps });
@@ -288,9 +285,6 @@ async function main() {
     const reviewsBefore = fs.existsSync(reviewDir) ? fs.readdirSync(reviewDir).length : 0;
     let ocrCalls = 0;
     await assert.rejects(gw.anonymizeNext('customer', {
-      // Keep this synthetic timeout test independent of the real OS keyring.
-      // Installation metadata is intentionally retained by production cleanup.
-      privateArtifactCrypto: reviewCrypto,
       totalTimeoutMs: 1000,
       convertDocument: async () => ({
         markdown: '# Fachinhalt\n\nRolle: Product Owner', warnings: [],

@@ -1,21 +1,24 @@
 # Aktuelle Format-Coverage
 
-Stand: 01.09.2026 · Produktversion 3.2.0 RC93
+Stand: 01.09.2026 · Produktversion 3.2.0 RC98
 
 Diese Matrix beschreibt den belegten Produktpfad. Zielwünsche aus älteren
 Architekturpapieren sind keine Freigabe.
 
-| Format | Aktueller Status | Freigegebener Inhalt | Verbindliches Verhalten |
-|---|---|---|---|
-| TXT | freigegeben | strikt validierter UTF-8-Text | vollständige Privacy- und Residual-Prüfung |
-| Markdown (`.md`, `.markdown`) | freigegeben | normalisierter Text; Links/HTML bleiben inert | keine externen Inhalte laden |
-| CSV | freigegeben | strikt validierte Tabelle als Markdown | defekte Struktur stoppt fail-closed |
-| DOCX | freigegeben | belegte Dokument- und Tabellenbereiche | Bildpixel bleiben lokal; unbekannte inhaltsfähige Bereiche stoppen |
-| XLSX | gesperrt | nichts | `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger fail-closed Stopp |
-| PPTX | gesperrt | nichts | `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger fail-closed Stopp |
-| PDF / Scan-PDF | gesperrt | nichts | kein Lite-Parser als Produktfallback |
-| PNG, JPEG, BMP | gesperrt | nichts | OCR-/Bildpfad ist noch kein Produktpfad |
-| unbekannt, beschädigt oder verschlüsselt | gesperrt | nichts | kein Teilresultat und keine Entschlüsselung |
+„Engine“ bezeichnet die gemeinsame Format-Coverage. Das Claude-Plugin und
+Standalone besitzen trotzdem getrennte Release-Evidence.
+
+| Format | Gemeinsame Engine-Coverage | Claude-Plugin | Standalone-Pilot | Freigegebener Inhalt / Verhalten |
+|---|---|---|---|---|
+| TXT | belegt | freigegeben | E0 belegt, UAT offen | strikt validierter UTF-8-Text; vollständige Privacy- und Residual-Prüfung |
+| Markdown (`.md`, `.markdown`) | belegt | freigegeben | E0 belegt, UAT offen | normalisierter Text; Links/HTML bleiben inert und werden nicht geladen |
+| CSV | belegt | freigegeben | E0 belegt, UAT offen | strikt validierte Tabelle als Markdown; defekte Struktur stoppt fail-closed |
+| DOCX | belegt für dokumentierte Bereiche | freigegeben | E0 belegt, UAT offen | Bildpixel bleiben lokal; unbekannte inhaltsfähige Bereiche stoppen |
+| XLSX | nicht belegt | gesperrt | gesperrt | nichts; `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger Stopp |
+| PPTX | nicht belegt | gesperrt | gesperrt | nichts; `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger Stopp |
+| PDF / Scan-PDF | nicht belegt | gesperrt | gesperrt | nichts; kein Lite-Parser als Produktfallback |
+| PNG, JPEG, BMP | nicht belegt | gesperrt | gesperrt | nichts; OCR-/Bildpfad ist noch kein Produktpfad |
+| unbekannt, beschädigt oder verschlüsselt | nicht zulässig | gesperrt | gesperrt | kein Teilresultat und keine Entschlüsselung |
 
 ## Gemeinsame Freigaberegel
 
@@ -36,8 +39,10 @@ bleiben. DataSecure löscht Bilder niemals aus der Originaldatei.
 
 Code- und Paketverträge sind plattformübergreifend ausgelegt. Eine reale
 Produktfreigabe für Windows oder macOS folgt erst nach dem jeweiligen aktuellen
-Cowork-/Desktop-UAT. Linux ist ein separates Claude-Code-Hostziel und keine Zusage
-für Claude Desktop. Details stehen im
+Cowork-/Desktop-UAT. Das Windows-x64-Standalone-ZIP ist ein automatisch
+verifizierter Engineering-Pilot, noch kein Endnutzerrelease. Linux ist beim
+Plugin ein separates Claude-Code-Hostziel und beim Standalone-Produkt ein
+eigenes späteres Desktopziel. Details stehen im
 [aktuellen Zustand](canonical/CURRENT_STATE.md) und im
 [UAT-Kit](acceptance/UAT_TEST_KIT/README.md).
 

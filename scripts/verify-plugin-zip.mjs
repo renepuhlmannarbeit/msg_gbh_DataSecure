@@ -51,6 +51,7 @@ const entries = readZip(bytes);
 const evidenceBytes = entries.get('RUNTIME-EVIDENCE.json');
 if (!evidenceBytes) throw new Error('PRODUCT_RUNTIME_EVIDENCE_MISSING');
 const evidence = JSON.parse(evidenceBytes.toString('utf8'));
+const debugBuild = evidence.mode === 'direct-upload-debug-target';
 if (evidence.schema !== 'datasecure-bundled-plugin/v1' || evidence.product_version !== pkg.version ||
     evidence.host_node_required !== false || evidence.runtime_dependency_install !== false ||
     evidence.plugin_command !== contract.plugin_command || !Array.isArray(evidence.targets) || !evidence.targets.length) {
@@ -81,17 +82,27 @@ if ([...entries.keys()].some((name) => name === 'bin' || name.startsWith('bin/')
   throw new Error('PRODUCT_ENGINEERING_PAYLOAD_FORBIDDEN');
 }
 const mcp = JSON.parse(entries.get('.mcp.json') || 'null');
-assert.equal(mcp?.['data-secure-local']?.command, contract.plugin_command);
-assert.deepEqual(mcp?.['data-secure-local']?.args, [contract.runtime_entry]);
+assert.deepEqual(Object.keys(mcp || {}), ['mcpServers']);
+assert.equal(mcp?.mcpServers?.['data-secure-local']?.command, contract.plugin_command);
+assert.deepEqual(mcp?.mcpServers?.['data-secure-local']?.args, [contract.runtime_entry]);
+if (debugBuild) assert.equal(mcp?.mcpServers?.['data-secure-local']?.env?.EU_PRIVACY_SUPPORT_MODE, '1');
+else assert.notEqual(mcp?.mcpServers?.['data-secure-local']?.env?.EU_PRIVACY_SUPPORT_MODE, '1');
 
 // Every canonical product source byte must be present unchanged, except for
 // .mcp.json (rewritten to the bundled launcher); runtime evidence is additive.
 for (const file of collectProductFiles(path.join(root, 'plugins', 'data-secure'))) {
-  if (file.archivePath === '.mcp.json') continue;
+  if (file.archivePath === '.mcp.json' || (debugBuild && file.archivePath === '.claude-plugin/plugin.json')) continue;
   if (!entries.get(file.archivePath)?.equals(fs.readFileSync(file.fullPath))) {
     throw new Error(`PRODUCT_ARCHIVE_SOURCE_DRIFT:${file.archivePath}`);
   }
 }
+const debugSkillName = 'skills/gbh-datasecure-debug-anonymisieren/SKILL.md';
+if (debugBuild) {
+  const expected = fs.readFileSync(path.join(root, 'support', debugSkillName));
+  if (!entries.get(debugSkillName)?.equals(expected)) throw new Error('DEBUG_ARCHIVE_SKILL_INVALID');
+  const manifest = JSON.parse(entries.get('.claude-plugin/plugin.json') || 'null');
+  if (!String(manifest?.displayName || '').endsWith('– Debug')) throw new Error('DEBUG_ARCHIVE_LABEL_MISSING');
+} else if (entries.has(debugSkillName)) throw new Error('PRODUCT_DEBUG_SKILL_FORBIDDEN');
 verifyKeyringFreeProductEntries(entries);
 const modes = readCentralModes(bytes);
 if (modes.size !== entries.size) throw new Error('PRODUCT_ARCHIVE_MODE_INVENTORY');
@@ -101,6 +112,8 @@ for (const name of entries.keys()) {
 }
 
 const target = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-zip-'));
+const runtimeData = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-runtime-'));
+const runtimeProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-profile-'));
 try {
   for (const [name, value] of entries) {
     const destination = path.resolve(target, ...name.split('/'));
@@ -108,12 +121,49 @@ try {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, value, { flag: 'wx' });
   }
-  for (const test of ['test-contract-skill-acceptance.js', 'test-contract-skill-matrix.js']) {
+  for (const test of debugBuild ? [] : ['test-contract-skill-acceptance.js', 'test-contract-skill-matrix.js']) {
     const result = spawnSync(process.execPath, [path.join(root, 'tests', test), target], { cwd: root, stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) process.exit(result.status || 1);
   }
+  const hostTarget = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
+    : process.platform === 'darwin' && process.arch === 'x64' ? 'macos-x64'
+      : process.platform === 'darwin' && process.arch === 'arm64' ? 'macos-arm64' : null;
+  if (hostTarget && targetIds.includes(hostTarget)) {
+    const stableRuntimeData = process.platform === 'win32'
+      ? path.join(runtimeProfile, 'AppData', 'Local') : runtimeData;
+    const advertisedRuntimeData = process.platform === 'win32'
+      ? path.join(stableRuntimeData, 'Temp', 'claude', 'zip-gate-session') : runtimeData;
+    fs.mkdirSync(advertisedRuntimeData, { recursive: true });
+    const executable = process.platform === 'win32'
+      ? path.join(target, 'runtime', 'datasecure-node.exe')
+      : path.join(target, 'runtime', 'datasecure-node');
+    const started = spawnSync(executable, [path.join(target, 'server', 'index.js')], {
+      cwd: target, encoding: 'utf8', timeout: 30000, windowsHide: true,
+      input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {
+        protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'zip-gate', version: '1' }
+      } })}\n`,
+      env: { ...process.env, USERPROFILE: runtimeProfile, LOCALAPPDATA: advertisedRuntimeData,
+        EU_PRIVACY_ROOT: path.join(stableRuntimeData, 'privacy'),
+        EU_PRIVACY_RESULT_ROOT: path.join(stableRuntimeData, 'results') }
+    });
+    if (started.error || started.status !== 0 || !String(started.stdout).includes(pkg.version)) {
+      throw new Error('PRODUCT_ARCHIVE_RUNTIME_START_FAILED');
+    }
+    // Windows Cowork may advertise a disposable LOCALAPPDATA below
+    // Temp\claude. The product archive must prove that its durable runtime is
+    // instead created below the established user profile.
+    const cacheBase = path.join(stableRuntimeData, 'SecureDataMsg', 'runtime-cache');
+    const caches = fs.readdirSync(cacheBase, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    assert.equal(caches.length, 1);
+    const cache = path.join(cacheBase, caches[0].name);
+    assert.ok(fs.statSync(path.join(cache, 'server', 'gateway', 'batch-worker.js')).isFile());
+    assert.ok(fs.statSync(path.join(cache, 'runtime', process.platform === 'win32'
+      ? 'datasecure-node.exe' : 'datasecure-node')).isFile());
+  }
 } finally {
   fs.rmSync(target, { recursive: true });
+  fs.rmSync(runtimeData, { recursive: true });
+  fs.rmSync(runtimeProfile, { recursive: true });
 }
 console.log(`Self-contained product ZIP: PASS (${path.basename(archive)}, ${entries.size} entries, ${targetIds.join(', ')})`);

@@ -5,15 +5,12 @@ Das verbindliche Arbeitsprogramm steht ausschließlich in
 optionaler zeitlich begrenzter Review-/Übergabeauftrag und darf das kanonische
 Backlog oder Entscheidungsregister nicht verändern. Jeder neue Umsetzungsauftrag muss
 mindestens eine konkrete Story `BL-nnn.x` nennen; reine Backlogpflege darf `BL-001`
-zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`. Der
-einzige aktuelle unabhängige Review- und Fixauftrag ist
-[`CLAUDE-CODE-FOLGEAUFTRAG-GEGENREVIEW-RC93.md`](CLAUDE-CODE-FOLGEAUFTRAG-GEGENREVIEW-RC93.md).
+zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`. Derzeit
+liegt kein aktiver ausführbarer Review- oder Fixauftrag vor. Der abgeschlossene
+RC93-Gegenreview-Auftrag und sein um den RC94-Gegencheck ergänzter Bericht liegen
+im Archiv.
 Der abgeschlossene RC86-Auftrag, sein nicht kanonisches Ausführungsledger und
-sein Abschlussbericht liegen im Archiv. Daneben liegt der
-zeitgebundene Read-only-Gegenreview-Auftrag
-[`CODEX-AUFTRAG-REVIEW-RC92.md`](CODEX-AUFTRAG-REVIEW-RC92.md); sein Ergebnis ist
-allein der Bericht `CODEX-REVIEW-BERICHT-RC92.md`, Fixes setzt danach die
-schreibende Hauptsession um.
+sein Abschlussbericht liegen ebenfalls im Archiv.
 
 Konvention für einen Auftrag:
 

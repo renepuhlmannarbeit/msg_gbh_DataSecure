@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC93
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC98
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -29,6 +29,11 @@ Detektor-Bibliotheken erst zusätzlich gebaut werden müssten:
 Die Skills steuern diesen einfachen Ablauf und erklären seine Grenzen. Die
 technische Datenschutzgrenze bildet der lokale Plugin-MCP, nicht der Skilltext.
 
+Für einen konkreten Supportfall kann IT ein getrennt gekennzeichnetes Debug-ZIP
+installieren. Es nutzt dieselbe Engine und ergänzt ausschließlich eine manuell
+aufrufbare, inhaltsfreie JSON-Ablaufspur; Rohkommunikation, Dokumentdaten, Namen,
+Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davon.
+
 ## Aktueller Umfang
 
 | Funktion | Stand |
@@ -50,11 +55,15 @@ sicher gestoppt und lokal gesondert gemeldet.
 1. Das zielsystemspezifische Plugin-ZIP installieren; Claude Desktop neu
    starten. Der private Marketplace wird dasselbe Produkt liefern; seine
    selbsttragende Projektion ist noch nicht freigegeben.
-2. In einer neuen **lokalen** Cowork-Aufgabe **„Dateien anonymisieren“**
+2. In einer neuen Cowork-Aufgabe der **geöffneten Claude-Desktop-App**
+   **„Dateien anonymisieren“**
    schreiben oder den Skill `gbh-datasecure-dokument-anonymisieren` wählen.
-   Cowork startet Aufgaben laut Hersteller standardmäßig in der Cloud; lokale
-   Plugin-MCPs laufen nur in einer lokalen Sitzung.
-3. Nur beim ersten Lauf den bereits mit Cowork verbundenen Arbeitsordner als
+   Cowork darf die Aufgabe standardmäßig in der Cloud ausführen. Der lokale
+   DataSecure-MCP läuft dabei weiterhin auf dem Rechner und wird über die
+   geöffnete Desktop-App erreicht. Maßgeblich ist diese aktive Desktop-Brücke,
+   nicht die Ausführungsart der Cowork-Sitzung.
+3. Nur beim ersten Lauf einen dedizierten, leeren beziehungsweise ausschließlich
+   für freigegebene Ergebnisse bestimmten Cowork-Arbeitsordner als
    Ergebnisziel wählen. DataSecure merkt ihn sich und legt dort
    `DataSecure-Output` an.
 4. Dateien im lokalen Mehrfachpicker wählen und einmal **„Öffnen“** klicken.
@@ -68,10 +77,39 @@ sicher gestoppt und lokal gesondert gemeldet.
 7. Erst danach bei Bedarf ausdrücklich um die Auswertung der fertigen Ergebnisse
    bitten.
 
-Keine sensiblen Originale als Chat-Anhang hochladen. Cloud-Cowork – auch in der
-Desktop-App – startet keinen lokalen Plugin-MCP und darf keine Originale verarbeiten.
-Erscheint kein lokaler Picker, ist meist die Sitzung eine Cloud-Sitzung oder die
-Organisation hat lokale Plugin-MCPs deaktiviert; siehe IT-Betriebshandbuch.
+Die eigentliche Verarbeitung läuft lokal und offline. Cowork ist der bequeme
+Einstieg und kann die freigegebenen Markdown-Ergebnisse anschließend auswerten;
+die Anonymisierungsengine ist davon fachlich getrennt. Eine eigenständige
+Desktop-Oberfläche ohne Claude/Cowork ist als weiterer Einstieg geplant und wird
+dieselbe Engine, dieselben Prüfregeln und dasselbe Mapping verwenden.
+
+## Standalone ohne Claude – Entwicklungsstand
+
+Standalone ist ein **eigenes, noch nicht freigegebenes Produkt** mit derselben
+lokalen DataSecure-Engine. Ziel ist eine gewöhnliche Desktop-App: Dateien oder
+Ordner wählen, einmal starten, nur bei echten Mehrdeutigkeiten gesammelt prüfen
+und den Ergebnisordner öffnen. Tauri 2 ist ausschließlich die kleine native
+Fenster- und Dialoghülle. Rust, Node und Python sind Buildwerkzeuge beziehungsweise
+gebündelte Laufzeiten und werden nicht auf Anwenderrechnern installiert.
+
+Heute sind Application-Service, getrenntes Datenverzeichnis, UI-Zustandsvertrag,
+privates gerahmtes IPC, Sidecar-Lifecycle und Zielpaketkatalog implementiert.
+Die Tauri-App ist auf Windows x64 kompiliert; ein selbsttragendes Windows-
+Engineering-Paket wurde gebaut, verifiziert und ohne installiertes System-Node
+isoliert gestartet. Es bleibt bewusst ein **Engineering-Pilot**, bis Windows-UAT
+und native Builds/UATs auf macOS Intel und Apple Silicon vorliegen. Eine reine
+Browser-Webanwendung ist nicht vorgesehen: Ohne lokale Komponente kann sie die
+zugesagte lokale, offlinefähige Dateiverarbeitung und Betriebssystemdialoge nicht
+zuverlässig bereitstellen.
+
+Keine sensiblen Originale als Chat-Anhang hochladen. Eine in Web oder Mobil
+gestartete Aufgabe, eine geplante Aufgabe und eine geschlossene oder getrennte
+Desktop-App können den lokalen Plugin-MCP nicht für den Originaleingang nutzen.
+Eine auf Desktop gestartete Cloud-Sitzung darf dagegen über die aktive
+Desktop-Brücke auf den lokalen MCP zugreifen und anschließend von Web oder Mobil
+weiter begleitet werden. Erscheint kein lokaler Picker, sind meist die
+Desktop-Brücke oder der Connector nicht aktiv oder die Organisation hat lokale
+Plugin-MCPs deaktiviert; siehe IT-Betriebshandbuch.
 
 ## Dokumentation
 
@@ -90,6 +128,8 @@ Organisation hat lokale Plugin-MCPs deaktiviert; siehe IT-Betriebshandbuch.
 npm ci
 npm run test:docs
 npm run test:ci
+npm run test:standalone
+npm run build:standalone:windows:portable
 npm run runtime:target -- --target <Ziel> --archive <offizielles-Node-Archiv> --output dist/<Ziel>
 npm run build:plugin
 npm run test:plugin-zip
