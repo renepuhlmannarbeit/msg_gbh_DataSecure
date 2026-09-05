@@ -62,3 +62,8 @@ commands.allow = ["open_diagnostic_folder"]
 identifier = "allow-shutdown"
 description = "Beendet den privaten lokalen Core-Prozess."
 commands.allow = ["shutdown"]
+
+[[permission]]
+identifier = "allow-frontend-ready"
+description = "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat."
+commands.allow = ["frontend_ready"]

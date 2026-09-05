@@ -703,9 +703,18 @@ async fn shutdown(state: State<'_, DesktopState>) -> Result<Value, String> {
     blocking_rpc(state.inner().clone(), "shutdown").await
 }
 
+#[tauri::command]
+fn frontend_ready() -> Value {
+    diagnostic_event("frontend_ready", None, "ready", None, None);
+    json!({ "ok": true })
+}
+
 fn main() {
     diagnostic_event("application_started", None, "ready", None, None);
     tauri::Builder::default()
+        .on_page_load(|_webview, _payload| {
+            diagnostic_event("page_loaded", None, "ready", None, None);
+        })
         .setup(|app| {
             let state = DesktopState {
                 app: app.handle().clone(),
@@ -727,7 +736,8 @@ fn main() {
             open_current_results,
             open_local_ledger,
             open_diagnostic_folder,
-            shutdown
+            shutdown,
+            frontend_ready
         ])
         .run(tauri::generate_context!())
         .expect("DataSecure Standalone konnte nicht gestartet werden");

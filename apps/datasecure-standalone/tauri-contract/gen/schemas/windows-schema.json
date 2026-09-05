@@ -201,6 +201,12 @@
           "markdownDescription": "Setzt den letzten lokal fortsetzbaren Stapel fort."
         },
         {
+          "description": "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat.",
+          "type": "string",
+          "const": "allow-frontend-ready",
+          "markdownDescription": "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat."
+        },
+        {
           "description": "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand.",
           "type": "string",
           "const": "allow-get-public-state",

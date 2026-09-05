@@ -194,6 +194,7 @@ async function refresh() {
 }
 
 (async function bootstrap() {
+  await invoke('frontend_ready');
   await refreshUiContext();
   await refresh();
 })();

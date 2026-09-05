@@ -78,6 +78,8 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
     'Node must not receive a Windows verbatim path in its preload argument');
   assert.match(rust, /DATASECURE_STANDALONE_DIAGNOSTIC_SESSION/u);
   assert.match(rust, /"session_id": diagnostic_session\(\)/u);
+  assert.match(rust, /diagnostic_event\("page_loaded"/u);
+  assert.match(rust, /fn frontend_ready\(\)/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);
   assert.doesNotMatch(frontend, /source_path|source_paths|raw_content|mapping|fetch\s*\(/u);
@@ -92,6 +94,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /code === 'STANDALONE_IPC_TIMEOUT'/u);
   assert.match(frontend, /configure_results/u);
   assert.match(frontend, /get_ui_context/u);
+  assert.match(frontend, /await invoke\('frontend_ready'\)/u);
   assert.match(frontend, /textContent = context\.result_folder/u,
     'local paths are rendered as text and never interpreted as markup');
   assert.match(frontend, /open_local_ledger/u);
@@ -105,6 +108,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.ok(capability.permissions.includes('allow-open-diagnostic-folder'));
   assert.ok(capability.permissions.includes('allow-ack-terminal-presented'));
   assert.ok(capability.permissions.includes('allow-get-ui-context'));
+  assert.ok(capability.permissions.includes('allow-frontend-ready'));
   assert.match(rust, /async fn open_local_ledger/u);
   assert.match(rust, /async fn open_diagnostic_folder/u);
   assert.match(rust, /async fn ack_terminal_presented/u);

@@ -63,8 +63,10 @@ npm run test:standalone:native-windows
 
 Der Test extrahiert den angegebenen Kandidaten in einen frischen Pfad und
 verlangt über eine pro Prozess eindeutige Diagnose-Session `sidecar_started`,
-`service_initialized` sowie bestätigte `get_ui_context`- und
-`get_public_state`-Antworten. Er ist ein Windows-E0-Gate,
+`service_initialized`, `page_loaded`, `frontend_ready` sowie bestätigte
+`get_ui_context`- und `get_public_state`-Antworten. Er muss in einer echten
+interaktiven Windows-Sitzung laufen; eine Dateisystem-Sandbox, die WebView2
+nicht initialisiert, ist keine gültige Zielhost-Evidenz. Er ist ein Windows-E0-Gate,
 aber kein Ersatz für den sichtbaren Anwenderlauf mit Dateiauswahl und Export.
 
 `PKG-04` ist das reproduzierbare Windows-Paketgate. Es akzeptiert ausschließlich

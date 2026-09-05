@@ -16,6 +16,7 @@
     "allow-open-current-results",
     "allow-open-local-ledger",
     "allow-open-diagnostic-folder",
-    "allow-shutdown"
+    "allow-shutdown",
+    "allow-frontend-ready"
   ]
 }

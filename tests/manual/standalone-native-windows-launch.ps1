@@ -52,8 +52,11 @@ try {
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw "STANDALONE_NATIVE_EXECUTABLE_MISSING: $executable"
     }
+    # Keep the unattended acceptance window out of the user's way. The explicit
+    # page-loaded and frontend-ready events below prove that hiding the native
+    # window did not defer WebView2 initialization.
     $process = Start-Process -FilePath $executable -WindowStyle Hidden -PassThru -ErrorAction Stop
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(20)
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
     do {
         Start-Sleep -Milliseconds 100
         $desktop = Read-InteractionEvents $desktopLog
@@ -71,9 +74,11 @@ try {
         $uiContext = @($desktopSession | Where-Object {
             $_.event -eq 'ipc_response_ok' -and $_.action -eq 'get_ui_context'
         }).Count -gt 0
+        $pageLoaded = @($desktopSession | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
+        $frontendReady = @($desktopSession | Where-Object { $_.event -eq 'frontend_ready' }).Count -gt 0
         $sidecarStarted = @($sidecarSession | Where-Object { $_.event -eq 'sidecar_started' }).Count -gt 0
         $serviceInitialized = @($sidecarSession | Where-Object { $_.event -eq 'service_initialized' }).Count -gt 0
-        if ($publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized) {
+        if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized) {
             $passed = $true
             break
         }
