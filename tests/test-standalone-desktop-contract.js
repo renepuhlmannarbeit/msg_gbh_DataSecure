@@ -214,8 +214,11 @@ test('native cleanup allows only the exact post-exit cache junction without foll
   assert.doesNotMatch(preflight, /AllowCacheJunction/u);
   assert.match(cleanup, /0x02200000/u, 'metadata identity handles must open the reparse point, not follow it');
   assert.match(cleanup, /Content\.IE5/u);
-  assert.match(cleanup, /LinkType -cne 'Junction'/u);
-  assert.match(cleanup, /\$targets\.Count -ne 1/u);
+  assert.match(cleanup, /ReadMountPoint\(\$Item\.FullName\)/u);
+  assert.match(cleanup, /BitConverter\.ToUInt32\(buffer, 0\) != 0xa0000003u/u);
+  assert.match(cleanup, /\$native\.Target -ne \$expectedTarget/u);
+  assert.doesNotMatch(cleanup, /\$Item\.(?:Target|LinkType)/u,
+    'PowerShell 5 display properties are not native junction proof');
   assert.match(cleanup, /\[System\.IO\.Directory\]::Delete\(\$Stamp\.Path\)/u);
   assert.doesNotMatch(cleanup, /(?:Get-ChildItem|Remove-Item)[^\n]*-Recurse/u);
   assert.doesNotMatch(cleanup, /Directory\]::Delete\([^\n]*,/u);

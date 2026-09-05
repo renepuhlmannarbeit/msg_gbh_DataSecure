@@ -87,6 +87,18 @@ einer von Windows angelegten Cache-Junction im frischen Testprofil. Dieser
 Testrest bleibt unverändert; der unvollständige PKG-04-Lauf erhält keine
 INT-13-Bindung. Ein korrigierter Testharness benötigt einen neuen Quellcommit
 und erneut zwei vollständige Builds und Smokes.
+Der Gegenlauf mit dem ersten korrigierten Harness bestätigte den nativen Start,
+zeigte aber einen weiteren Testadapterfehler: Windows PowerShell lieferte für
+die echte Cache-Junction keine Link-Metadaten. Auch dieser neue Testrest bleibt
+erhalten. Der Harness liest nun den exakten Mount-Point-Tag und das Ziel direkt
+über einen No-follow-Windows-Handle; synthetische Null-Provider- und Bufferfälle
+ergänzen den Gegencheck. Kein fehlender Anzeigename erlaubt eine pauschale
+Linkfreigabe. Eine erfolgreiche neue PKG-04-Kette bleibt Voraussetzung.
+Der anschließend neu gestartete isolierte native Lauf bestand Start, beide
+IPC-Antworten und die vollständige Bereinigung von 426 eigenen Testeinträgen.
+Die zwei früheren Testprofile blieben unangetastet. Damit ist die
+Harness-Korrektur E0-belegt, nicht jedoch die noch ausstehende Zweifachbindung
+des abschließenden Produktcommits.
 
 Neue Standalone-Läufe führen auch gestoppte Quellen mit festem Fehlercode in
 ihrer eigenen Zuordnung. Der aktuelle Laufresolver fällt niemals auf frühere

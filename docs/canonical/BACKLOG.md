@@ -45,6 +45,11 @@ Der neue Testharness ist inzwischen implementiert: zwölf Desktop-Vertragstests
 einschließlich acht synthetischer Cleanup-Gruppen prüfen zulässigen Cache-Link,
 unveränderten Zielinhalt, falsche Ziele und ausgetauschte Objektidentitäten.
 Der echte neue Zweifach-Build bleibt separat nachzuweisen.
+Ein weiterer echter Smoke zeigte leere Junction-Providerfelder unter Windows
+PowerShell. Der native No-follow-Tag-/Zielcheck ersetzt diese Anzeigeheuristik;
+12/12 Desktop-Verträge sowie ein frischer vollständiger nativer Lauf inklusive
+Bereinigung sind grün. Beide alten Testreste bleiben erhalten. PKG-04 wird erst
+nach dem letzten Produktfix erneut ausgeführt.
 
 Das unabhängige Gegenreview aus Test/CI, Dokumentation/UAT sowie Architektur,
 Security, Performance, UX und aktueller Claude-Cowork-Sicht ist bis zum Abschluss

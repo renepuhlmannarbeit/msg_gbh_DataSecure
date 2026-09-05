@@ -129,16 +129,47 @@ Remove-NativeTestTree $fixture.Context -AllowCacheJunction
 Write-Output 'PASS junction parent rejected without traversal'
 
 $fixture = New-Fixture
-foreach ($kind in @('SymbolicLink', 'Unknown', '')) {
-    $pretend = [pscustomobject]@{ FullName = $fixture.Link; PSIsContainer = $true;
-        Attributes = [System.IO.FileAttributes]::ReparsePoint; LinkType = $kind; Target = @($fixture.Target) }
-    Assert-Refused { Get-NativeCacheJunction $fixture.Context $pretend } 'STANDALONE_NATIVE_CLEANUP_REPARSE_POINT'
+$null = New-FixtureLink $fixture $fixture.Link $fixture.Target
+$actual = Get-Item -LiteralPath $fixture.Link -Force -ErrorAction Stop
+$nullProvider = [pscustomobject]@{ FullName = $actual.FullName; PSIsContainer = $actual.PSIsContainer;
+    Attributes = $actual.Attributes; CreationTimeUtc = $actual.CreationTimeUtc; LinkType = $null; Target = $null }
+$native = [DataSecure.NativeTestIdentity]::ReadMountPoint($fixture.Link)
+Assert-Test ($native.Tag -eq [uint32] 2684354563 -and $native.Target -eq $fixture.Target) 'native tag and substitute target'
+$bound = Get-NativeCacheJunction $fixture.Context $nullProvider
+Assert-Test ($bound.Identity -eq $native.Identity -and $bound.Target -eq $fixture.Target) 'null provider properties use native proof'
+Assert-Refused { Get-CheckedNativeTree $fixture.Context } 'STANDALONE_NATIVE_CLEANUP_REPARSE_POINT'
+
+# Windows-created cache junctions need not have a PrintName. Exercise the exact
+# native buffer decoder with empty PrintName, with and without null termination.
+$substitute = [System.Text.Encoding]::Unicode.GetBytes(('\??\' + $fixture.Target))
+foreach ($trailingNullBytes in @(0, 2)) {
+    $bytes = [byte[]]::new(16 + $substitute.Length + $trailingNullBytes)
+    [BitConverter]::GetBytes([uint32] 2684354563).CopyTo($bytes, 0)
+    [BitConverter]::GetBytes([uint16] ($bytes.Length - 8)).CopyTo($bytes, 4)
+    [BitConverter]::GetBytes([uint16] $substitute.Length).CopyTo($bytes, 10)
+    $substitute.CopyTo($bytes, 16)
+    Assert-Test ([DataSecure.NativeTestIdentity]::DecodeMountPoint($bytes, $bytes.Length) -eq $fixture.Target) 'empty PrintName decoder'
 }
-foreach ($targets in @(@(), @($fixture.Target, $fixture.Target), @('..\IE'))) {
-    $pretend = [pscustomobject]@{ FullName = $fixture.Link; PSIsContainer = $true;
-        Attributes = [System.IO.FileAttributes]::ReparsePoint; LinkType = 'Junction'; Target = $targets }
-    Assert-Refused { Get-NativeCacheJunction $fixture.Context $pretend } 'STANDALONE_NATIVE_CLEANUP_REPARSE_POINT'
+foreach ($case in @('wrong-tag', 'wrong-length', 'odd-offset', 'odd-print-length', 'empty-target', 'bad-utf16', 'bad-prefix', 'truncated')) {
+    $invalid = [byte[]] $bytes.Clone()
+    $returned = $invalid.Length
+    switch ($case) {
+        'wrong-tag' { [BitConverter]::GetBytes([uint32] 2684354572).CopyTo($invalid, 0) }
+        'wrong-length' { [BitConverter]::GetBytes([uint16] 65534).CopyTo($invalid, 10) }
+        'odd-offset' { $invalid[8] = 1 }
+        'odd-print-length' { $invalid[14] = 1 }
+        'empty-target' { $invalid[10] = 0; $invalid[11] = 0 }
+        'bad-utf16' { $invalid[16] = 0; $invalid[17] = 216 }
+        'bad-prefix' { $invalid[16] = 65 }
+        'truncated' { $returned = 15 }
+    }
+    $failed = $false
+    try { [DataSecure.NativeTestIdentity]::DecodeMountPoint($invalid, $returned) | Out-Null }
+    catch { $failed = $_.Exception.ToString().Contains('STANDALONE_NATIVE_REPARSE_INVALID') }
+    Assert-Test $failed "native decoder rejects $case"
 }
+Remove-NativeCacheJunction $fixture.Context $bound
+Assert-Test ([System.IO.File]::ReadAllText($fixture.Sentinel) -eq 'synthetic-owned-content') 'null-provider unlink preserves sentinel'
 Remove-NativeTestTree $fixture.Context
-Write-Output 'PASS non-junction and malformed target metadata rejected'
+Write-Output 'PASS null provider metadata; native tag/target; empty PrintName; malformed native buffers rejected'
 Write-Output 'STANDALONE NATIVE CLEANUP CONTRACT PASS (8 groups)'

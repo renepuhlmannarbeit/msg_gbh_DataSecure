@@ -108,6 +108,11 @@ nicht rekursiv dessen Ziel. Unbekannte oder ausgetauschte Links, Elternpfade und
 Dateiidentitäten sowie gesperrte Dateien stoppen die Bereinigung. Der Helfer
 erzeugt stets einen neuen Scope; zurückbehaltene Alt-Testprofile werden nicht
 automatisch erneut bereinigt und gehören nicht in Git oder Release-Evidence.
+Windows PowerShell kann für echte Cache-Junctions leere `LinkType`-/`Target`-
+Metadaten liefern. Deshalb verwendet der Test die Windows-Reparse-Daten am
+No-follow-Handle: ausschließlich Mount-Point-Tag, geprüfte Buffergrenzen und
+`SubstituteName`; der reine Anzeigename ist keine Zielautorität. Dieser Vertrag
+folgt dem [Windows-Reparse-Datenformat](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_reparse_data_buffer).
 
 Der RC102-Vertrag ergänzt echte Worker-ACKs für Intake, Resume und Review,
 zweiphasige Abschlusspräsentation, den automatischen Übergang in den lokalen
