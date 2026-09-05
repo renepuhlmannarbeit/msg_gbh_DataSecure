@@ -28,6 +28,12 @@ Laufzuordnung. Der nächste Kandidat wird erst nach sauberem Quellcommit durch
 zwei bytegleiche PKG-04-Builds samt Paket- und nativen Startsmokes an INT-13
 gebunden; der Receipt unter `dist/pkg-04/<commit>/` ist der Nachweis, nicht
 dieser Testplan. Sichtbare Dragdrop-/Finder-/Explorer-Abnahme bleibt separat.
+Der erste RC106-Paketlauf bestand die vierformatige Verarbeitung; der native
+WebView-Start war in der Sandbox blockiert und bestand unverändert mit normalen
+Hostrechten. Der unabhängige Gegencheck begrenzt außerdem den neuen Fenster-Hook
+auf optional vorhandenen Zustand bei tatsächlichem Drop, damit frühe
+Fensterereignisse vor dem Tauri-Setup keinen Panic auslösen können. Der finale
+PKG-04-Lauf muss deshalb aus dem korrigierten Folgecommit neu gebaut werden.
 
 ## Belegter Produktumfang
 

@@ -131,7 +131,7 @@ Vertrauensgrenzenentscheid. DS-076/DS-077 binden die Tauri-Hülle, den
 Windows-x64-Engineering-Piloten, WebView2-Voraussetzung und Evidencegrenzen.
 
 | Story | Lieferung / Abnahme | Status |
-|---|---|---|
+  |---|---|---|
 | BL-010.9 | Direkte Standalone-Application-Schicht unterhalb von MCP: keine Toolnamen, Protokollversionen, Claude-Antwortfelder oder Handofflogik. Eigener Daten-/Konfigurations-/Review-/Exportroot wird vor Laden des Core aktiviert und an Worker weitergegeben. E0 steht einschließlich neutraler gemeinsamer Start-/Recovery-Transaktion; Core-API-Extraktion aus verbleibenden Pluginbegriffen bleibt offen. | **in Arbeit** |
 | BL-010.10 | Schlanke technische CLI für Datei-/Ordnerwahl, automatische Profilerkennung, Standard-Ergebnisordner und Ergebnisordneröffnung. Keine Rohpfade in Argumenten oder Ausgaben; kein Endnutzer-Terminal im freigegebenen Produkt. | **erledigt** |
 | BL-010.11 | Native Desktop-Hülle: Tauri 2 ist gemäß DS-076/077 gesetzt. Reale Rust-Hülle, Tauri-CSP/Capability-Grenze, nativer Datei-/Ordnerpicker, korrelierter bidirektionaler Core-Dispatcher mit begrenzten Längenframes, 30-Sekunden-Antwortgrenze, Ready-Handshake, Neustart nach IPC-Fehler, Sidecar-Lifecycle und inhaltsfreie Rendererprojektion sind implementiert. Der Renderer besitzt keine direkten Dialog-, Datei-, Shell- oder Netzrechte. Windows x64 ist kompiliert und als laufender Engineering-Prozess sowie im selbsttragenden Pilot-ZIP geprüft. Offen sind Kaltstart p50 ≤1,5 s/p95 ≤2,5 s, Hülle ≤20 MiB ohne Core, Tastatur/Screenreader, Update/Rollback, Null-Listener-Nachweis und native Zielhost-Spikes auf macOS Intel/ARM und Linux x64. | **in Arbeit** |
@@ -171,6 +171,13 @@ Reihenfolge nach dem laufenden Fehler-/UX-Schnitt; keine neuen doppelten Storys:
 | UX, Diagnose und Paketnachweis | BL-010.19/21/26/28 | Beide Modi gleich bedienen (Picker/Drop → Ziel → Start → Fortschritt → Ergebnis/Zuordnung), **nicht anonymisiert** dauerhaft sichtbar ohne Bestätigungsserie. Inhaltsfreie Ereignisse inkl. Modus/Coverage/Export, Rohwert-Sentinels in Logs. Reales Paket ohne Systemruntime mit beiden Modi, Crash/Resume und Mac-Zielhost testen. | offen |
 
 ### Aktueller produktübergreifender UX-/Konsistenzschnitt
+
+BL-010.13: Der zweite native Gegencheck verhindert einen möglichen Zugriff
+auf noch nicht registrierten Desktopzustand bei frühen Fensterereignissen.
+Der Hook nutzt `try_state()` ausschließlich im Drop-Arm. Der erste native
+RC106-Start war durch die Sandbox/WebView-Umgebung blockiert; dasselbe ZIP
+bestand mit normalen Hostrechten. Dies ist kein Ersatz für den finalen
+PKG-04-Neubau aus dem korrigierten Commit und die sichtbare Zielhost-UAT.
 
 | Befund / Verbesserung | Zugeordnet | Engineering-Status und verbleibende Evidenz |
 |---|---|---|

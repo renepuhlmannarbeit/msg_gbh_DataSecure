@@ -1020,10 +1020,13 @@ fn main() {
             if window.label() != "main" {
                 return;
             }
-            let state = window.state::<DesktopState>();
             match event {
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
-                    native_drop(&state, paths.clone())
+                    // Configured windows can emit events before setup manages
+                    // DesktopState. Early events must not panic during startup.
+                    if let Some(state) = window.try_state::<DesktopState>() {
+                        native_drop(&state, paths.clone());
+                    }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Enter { .. }) => {
                     let _ = window.emit("datasecure-native-drop", json!({"phase": "enter"}));

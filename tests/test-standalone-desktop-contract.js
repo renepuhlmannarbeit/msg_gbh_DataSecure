@@ -139,6 +139,10 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
 test('native drag-drop shares admission with pickers and keeps an explicit Start', () => {
   assert.strictEqual(config.app.windows[0].dragDropEnabled, true);
   assert.match(rust, /WindowEvent::DragDrop\(DragDropEvent::Drop/u);
+  const windowHook = rust.slice(rust.indexOf('.on_window_event('), rust.indexOf('.invoke_handler('));
+  assert.doesNotMatch(windowHook, /\.state::<DesktopState>/u,
+    'configured windows can emit events before application setup manages state');
+  assert.match(windowHook, /DragDropEvent::Drop[\s\S]*if let Some\(state\) = window\.try_state::<DesktopState>\(\)/u);
   assert.match(rust, /admit_native_sources\(&worker, &paths, kind\)/u);
   assert.match(rust, /admit_native_sources\(&owned, &paths, "files"\)/u);
   assert.match(rust, /admit_native_sources\(&owned, &\[path\], "folder"\)/u);
