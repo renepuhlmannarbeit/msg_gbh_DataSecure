@@ -1,6 +1,6 @@
 'use strict';
 
-const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName, IBAN_RE } = require('./base');
+const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName, IBAN_RE, ORG_SUFFIX_TAIL_RE } = require('./base');
 const { collectOrganizations, markdownTableColumnValues, markdownTableCells } = require('./entities');
 const { credentialContextSpans } = require('./credentials');
 
@@ -95,6 +95,11 @@ function looksLikeOrgSide(value, personKeys) {
 function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
   const out = [];
   const ranges = credentialContextSpans(text);
+  // A customer can be a natural person. Leave a proven person value for the
+  // shared person dictionary instead of assigning two identities to the same
+  // customer in its field and in the following prose.
+  const isPersonCustomer = (value) => personKeys.has(key(value)) && looksName(titleCase(value)) &&
+    !collectOrganizations(value).some((org) => ORG_SUFFIX_TAIL_RE.test(org));
   // CSV sources are rendered as multi-column Markdown tables. Register the
   // labelled values up front so the normal literal pass can redact the cells
   // without mistaking adjacent certificate cells for the same context.
@@ -102,7 +107,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     registerEmployer(reg, findings, value);
   }
   for (const value of markdownTableColumnValues(text, new RegExp(`^${CUSTOMER_LABEL}:?$`, 'iu'))) {
-    registerCustomer(reg, findings, value);
+    if (!isPersonCustomer(value)) registerCustomer(reg, findings, value);
   }
   for (const value of markdownTableColumnValues(text, new RegExp(`^${LOCATION_LABEL}:?$`, 'iu'))) {
     rememberLocation(reg, value);
@@ -139,7 +144,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     }
 
     const tableCustomer = line.match(TABLE_CUSTOMER_RE);
-    if (tableCustomer) {
+    if (tableCustomer && !isPersonCustomer(tableCustomer[2])) {
       const ph = registerCustomer(reg, findings, tableCustomer[2]);
       if (ph) {
         out.push(line.replace(TABLE_CUSTOMER_RE, `$1${ph} $3`));
@@ -165,7 +170,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     }
 
     const lineCustomer = line.match(LINE_CUSTOMER_RE);
-    if (lineCustomer) {
+    if (lineCustomer && !isPersonCustomer(lineCustomer[2])) {
       const ph = registerCustomer(reg, findings, lineCustomer[2]);
       if (ph) {
         out.push(lineCustomer[1] + ph);

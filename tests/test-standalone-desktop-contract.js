@@ -165,11 +165,45 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
 });
 
 test('the native Windows smoke exercises the visible WebView lifecycle', () => {
-  assert.match(nativeSmoke, /Start-Process -FilePath \$executable -PassThru/u);
+  assert.match(nativeSmoke, /\[System\.Diagnostics\.Process\]::Start\(\$startInfo\)/u);
+  assert.match(nativeSmoke, /ProcessWindowStyle\]::Normal/u);
   assert.doesNotMatch(nativeSmoke, /WindowStyle\s+(?:Hidden|Minimized)/iu,
     'hidden or minimized startup can defer WebView2 page loading');
   assert.match(nativeSmoke, /page_loaded/u);
   assert.match(nativeSmoke, /frontend_ready/u);
+});
+
+test('native smoke isolates data, Documents, diagnostics and WebView before product startup', () => {
+  const isolation = fs.readFileSync(path.join(root, 'tauri-contract/src/native_smoke.rs'), 'utf8');
+  assert.match(nativeSmoke, /EnvironmentVariables\.Clear\(\)/u);
+  assert.doesNotMatch(nativeSmoke, /\$env:(?:USERPROFILE|HOME|LOCALAPPDATA|APPDATA|TEMP|TMP|CODEX_HOME)\s*=/iu);
+  for (const key of ['USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'DATASECURE_STANDALONE_DOCUMENTS_DIR', 'WEBVIEW2_USER_DATA_FOLDER']) {
+    assert.ok(nativeSmoke.includes(key));
+    assert.ok(isolation.includes(key));
+  }
+  assert.match(nativeSmoke, /STANDALONE_NATIVE_ISOLATION_UNSUPPORTED/u, 'old binaries must not be launched');
+  assert.match(nativeSmoke, /ValidateIsolationOnly/u);
+  const polling = nativeSmoke.slice(nativeSmoke.indexOf('    do {'), nativeSmoke.indexOf('    } while ('));
+  assert.ok(polling.indexOf('Assert-NativeProcessRunning $process') >= 0);
+  assert.ok(polling.indexOf('Assert-NativeProcessRunning $process') < polling.indexOf('Read-InteractionEvents'),
+    'exit before the first application event must be reported before the no-events continue branch');
+  assert.match(isolation, /executable\.ancestors\(\)\.any\(is_reserved_root\)/u);
+  assert.match(nativeSmoke, /Get-CheckedTree/u);
+  assert.doesNotMatch(nativeSmoke, /(?:Get-ChildItem|Remove-Item)[^\n]*-Recurse/u);
+  const main = rust.slice(rust.indexOf('fn main()'), rust.indexOf('#[cfg(test)]\nmod tests'));
+  assert.ok(main.indexOf('native_smoke::from_environment()') < main.indexOf('diagnostic_event('));
+  assert.match(main, /Err\(_\) => std::process::exit\(65\)/u);
+  assert.match(main, /window\.create = false/u);
+  assert.match(main, /\.data_directory\(profile\.webview\.join/u);
+  assert.match(rust, /command\.env\("DATASECURE_STANDALONE_DOCUMENTS_DIR", &profile\.documents\)/u);
+  if (process.platform === 'win32') {
+    const { spawnSync } = require('node:child_process');
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), '-ValidateIsolationOnly'],
+    { encoding: 'utf8', timeout: 30000, windowsHide: true });
+    assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /ISOLATION CONTRACT PASS/u);
+  }
 });
 
 test('package contract excludes Claude, Cowork, MCP and skill material', () => {

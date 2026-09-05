@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 05.09.2026 · 3.2.0-rc106
+Stand: 05.09.2026 · 3.2.0-rc107
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -54,7 +54,7 @@ MCPB, SEA und deaktivierte OCR-Artefakte erfüllen diese Produktgates nicht.
 Nach `npm run build:standalone:windows:portable` prüft der Paket-Smoke auch das
 von Tauri verwendete Windows-Verbatim-Pfadformat (`\\?\C:\…`). Zusätzlich
 startet der folgende lokale Zielhost-Test die wirklich gebaute Tauri-EXE
-verdeckt, wartet auf bestätigte Antworten des gepackten Sidecars und beendet
+kurz sichtbar, wartet auf bestätigte Antworten des gepackten Sidecars und beendet
 ausschließlich seinen eigenen Testprozess:
 
 ```text
@@ -62,6 +62,12 @@ npm run test:standalone:native-windows
 ```
 
 Der Test extrahiert den angegebenen Kandidaten in einen frischen Pfad und
+bindet vor dem ersten Produktzugriff ein eigenes Testprofil für AppData,
+Dokumente, temporäre Dateien, Diagnosen und WebView. Ein fehlendes oder
+unvollständiges Profil an einem reservierten Smoke-Pfad stoppt vor dem Start;
+ältere Binaries ohne diesen Vertrag werden nicht gestartet. Die reale
+Anwenderinstallation, deren Recovery und deren Aufbewahrungsdaten bleiben
+außerhalb des Tests. Der Test
 verlangt über eine pro Prozess eindeutige Diagnose-Session `sidecar_started`,
 `service_initialized`, `page_loaded`, `frontend_ready` sowie bestätigte
 `get_ui_context`- und `get_public_state`-Antworten. Er muss in einer echten
@@ -101,13 +107,26 @@ Die zugehörigen Direktgates sind `test-batch-executor-startup`,
 `test-automatic-review-worker-flow` und `test-result-export-startup-replay`; sie
 sind außerdem genau einmal in `test:product` einsortiert.
 
-RC106 ergänzt die spawn-bestätigten, unter Windows ausdrücklich sichtbaren
+Der aktuelle Vertrag umfasst die spawn-bestätigten, unter Windows ausdrücklich sichtbaren
 Öffnen-Aktionen, die exakte Markierung der laufbezogenen Zuordnungsdatei und den zweigeteilten Standalone-Ablauf
 **Verarbeiten / Ergebnisse**. Die direkten Regressionen liegen in
 `test-ui-process-policy`, `test-standalone`, `test-standalone-frontend` und
 `test-standalone-desktop-contract`. `test-result-folder-export` prüft zusätzlich
 atomare Zuordnungspublikation, RC103-Migration, Manipulationsstopp und die
 harte Produktgrenze: Originalnamen erscheinen nie im Cowork-Ergebnisordner.
+
+Die RC107-Gegenprüfung ergänzt timer- und generationsgebundene Frontendtests
+im regulären Produktgate, zwei schnelle Folgestapel, unsichere Startbestätigung,
+Firmenkurzformen mit kollidierenden Rechtsformen und eine eigene Standalone-
+Laufübersicht auch bei ausschließlich gestoppten Dateien. Ausstehende
+Abschlussmetadaten werden getrennt von Dokumentzählern geprüft; ein Replay darf
+weder veröffentlichte Dateien überschreiben noch historische Pläne verändern.
+`test-standalone-sidecar` prüft außerdem sieben echte Prozess-/Workerfälle für
+EOF, wartende Aktionen, unvollständige/ungültige Frames, Shutdown und geschlossene
+Ausgabepipes: der Steuerprozess endet, akzeptierte Arbeit wird autonom fertig.
+Die Fixture verändert nur das Timing. Der reale Paket-Smoke verarbeitet nach
+dem erfolgreichen Vierformatlauf einen vollständig fehlerhaften CSV-Stapel und
+verlangt dessen eigene Zuordnung statt eines Rückfalls auf den Vorgängerlauf.
 
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird

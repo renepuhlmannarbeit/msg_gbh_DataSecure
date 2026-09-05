@@ -216,4 +216,124 @@ test('alias types cannot cross entity kinds and readable sequence exhaustion is 
   } finally { registry.dispose(); secret.fill(0); }
 });
 
+for (const contractVersion of ['batch-pseudonym/v1', READABLE_CONTRACT_VERSION]) {
+  test(`${contractVersion}: company customer and its short name share one company, never a person`, () => {
+    const registry = createBatchPseudonymRegistry(Buffer.alloc(SECRET_BYTES, 21), { contractVersion });
+    try {
+      const result = anonymizeMarkdown('Kunde: Nordstern Medizin GmbH\nNordstern Medizin liefert Software.\nMedizin ist die Branche.',
+        'personnel_profile', { registry });
+      const marker = result.text.match(/^Kunde: (\[[A-Z_0-9]+\])/u)?.[1];
+      assert.ok(marker, result.text);
+      assert.ok(result.text.includes(`${marker} liefert Software.`), result.text);
+      assert.ok(result.text.includes('Medizin ist die Branche.'), 'company word must not become a surname alias');
+      assert.doesNotMatch(result.text, /\[PERSON_/u);
+      assert.doesNotMatch(result.text, /Nordstern/u);
+    } finally { registry.dispose(); }
+  });
+
+  test(`${contractVersion}: shared company alias is unresolved, not assigned to the first legal entity`, () => {
+    for (const companies of [['GmbH', 'AG'], ['AG', 'GmbH']]) {
+      const registry = createBatchPseudonymRegistry(Buffer.alloc(SECRET_BYTES, 22), { contractVersion });
+      try {
+        const result = anonymizeMarkdown(`Arbeitgeber: Nordstern Medizin ${companies[0]}\nKunde: Nordstern Medizin ${companies[1]}\nNordstern Medizin liefert Software.`,
+          'personnel_profile', { registry });
+        const employer = result.text.match(/^Arbeitgeber: (\[[A-Z_0-9]+\])/u)?.[1];
+        const customer = result.text.match(/\nKunde: (\[[A-Z_0-9]+\])/u)?.[1];
+        const alias = result.text.match(/\n(\[[A-Z_0-9]+\]) liefert/u)?.[1];
+        assert.ok(employer && customer && alias, result.text);
+        assert.notStrictEqual(employer, customer, 'full legal identities remain distinct');
+        assert.notStrictEqual(alias, employer);
+        assert.notStrictEqual(alias, customer);
+        assert.match(alias, contractVersion === READABLE_CONTRACT_VERSION
+          ? /^\[UNTERNEHMEN_UNKLAR_\d{3,}\]$/u : /^\[ORGANISATION_UNKLAR\]$/u);
+        assert.doesNotMatch(result.text, /Nordstern|\[PERSON_/u);
+      } finally { registry.dispose(); }
+    }
+  });
+
+  test(`${contractVersion}: real person customer keeps one person identity in label, table and prose`, () => {
+    for (const text of [
+      'Kunde: Max Mustermann\nMax Mustermann liefert Software.',
+      '| Kunde | Max Mustermann |\nMax Mustermann liefert Software.',
+      '| Kunde | Rolle |\n| --- | --- |\n| Max Mustermann | Product Owner |\nMax Mustermann liefert Software.'
+    ]) {
+      const registry = createBatchPseudonymRegistry(Buffer.alloc(SECRET_BYTES, 23), { contractVersion });
+      try {
+        const result = anonymizeMarkdown(text, 'personnel_profile', { registry });
+        const markers = [...result.text.matchAll(/\[PERSON_[A-Z_0-9]+\]/gu)].map((match) => match[0]);
+        assert.strictEqual(markers.length, 2, result.text);
+        assert.strictEqual(new Set(markers).size, 1, 'field/table and prose refer to the same person');
+        assert.doesNotMatch(result.text, /Max|Mustermann|\[(?:KUNDE|ORGANISATION|UNTERNEHMEN)_/u);
+      } finally { registry.dispose(); }
+    }
+  });
+
+  test(`${contractVersion}: suffixless one-word company customer remains an organisation`, () => {
+    const registry = createBatchPseudonymRegistry(Buffer.alloc(SECRET_BYTES, 26), { contractVersion });
+    try {
+      const result = anonymizeMarkdown('Kunde: medidata', 'personnel_profile', { registry });
+      assert.match(result.text, /^Kunde: \[(?:KUNDE|UNTERNEHMEN)_[A-Z_0-9]+\]$/u);
+    } finally { registry.dispose(); }
+  });
+
+  test(`${contractVersion}: explicit person occurrence remains a person beside a matching company short name`, () => {
+    const registry = createBatchPseudonymRegistry(Buffer.alloc(SECRET_BYTES, 24), { contractVersion });
+    try {
+      const result = anonymizeMarkdown('Kunde: Nordstern Medizin GmbH\nName: Nordstern Medizin\nNordstern Medizin liefert Software.',
+        'personnel_profile', { registry });
+      assert.match(result.text, /\nName: \[PERSON_[A-Z_0-9]+\]/u);
+      const customer = result.text.match(/^Kunde: (\[[A-Z_0-9]+\])/u)?.[1];
+      assert.ok(customer && result.text.includes(`${customer} liefert Software.`), result.text);
+      assert.doesNotMatch(result.text, /Nordstern/u);
+    } finally { registry.dispose(); }
+  });
+
+  test(`${contractVersion}: quoted and listed person fields keep their type beside company aliases after resume`, () => {
+    for (const prefix of ['- ', '* ', '+ ', '> ', '> - ', '  > + ']) {
+      const secret = Buffer.alloc(SECRET_BYTES, 27);
+      let registry = createBatchPseudonymRegistry(secret, { contractVersion });
+      try {
+        const source = `${prefix}Kunde: Nordstern Medizin GmbH\n${prefix}Name: Nordstern Medizin\nNordstern Medizin liefert Software.`;
+        const first = anonymizeMarkdown(source, 'personnel_profile', { registry });
+        const company = first.text.match(/Kunde: (\[[A-Z_0-9]+\])/u)?.[1];
+        const person = first.text.match(/Name: (\[PERSON_[A-Z_0-9]+\])/u)?.[1];
+        assert.ok(company && !company.startsWith('[PERSON_'), first.text);
+        assert.ok(person && person !== company, first.text);
+        assert.ok(first.text.includes(`${company} liefert Software.`), 'an explicit person field must not retag unlabelled company occurrences');
+        assert.doesNotMatch(first.text, /Nordstern|Medizin/u);
+        const state = JSON.parse(JSON.stringify(registry.exportState()));
+        registry.dispose();
+        registry = createBatchPseudonymRegistry(secret, { contractVersion, persistedState: state });
+        const resumed = anonymizeMarkdown(source, 'personnel_profile', { registry });
+        assert.strictEqual(resumed.text, first.text, 'typed identities and structural prefixes must survive resume unchanged');
+      } finally { registry.dispose(); secret.fill(0); }
+    }
+  });
+}
+
+test('readable company alias ambiguity survives serialization without merging full names', () => {
+  const secret = Buffer.alloc(SECRET_BYTES, 25);
+  const options = { contractVersion: READABLE_CONTRACT_VERSION };
+  let registry = createBatchPseudonymRegistry(secret, options);
+  try {
+    anonymizeMarkdown('Kunde: Nordstern Medizin GmbH\nNordstern Medizin liefert Software.', 'personnel_profile', { registry });
+    const snapshot = registry.exportState();
+    registry.dispose();
+    registry = createBatchPseudonymRegistry(secret, { ...options, persistedState: JSON.parse(JSON.stringify(snapshot)) });
+    const second = anonymizeMarkdown('Kunde: Nordstern Medizin AG\nNordstern Medizin liefert Software.', 'personnel_profile', { registry });
+    assert.match(second.text, /^Kunde: \[UNTERNEHMEN_002\]/u);
+    assert.match(second.text, /\[UNTERNEHMEN_UNKLAR_001\] liefert Software\./u);
+    assert.strictEqual(registry.lookup('ORG', 'Nordstern Medizin GmbH'), '[UNTERNEHMEN_001]');
+    assert.strictEqual(registry.lookup('ORG', 'Nordstern Medizin AG'), '[UNTERNEHMEN_002]');
+    const repeated = anonymizeMarkdown('Kunde: Nordstern Medizin GmbH\nNordstern Medizin liefert Software.', 'personnel_profile', { registry });
+    assert.match(repeated.text, /^Kunde: \[UNTERNEHMEN_001\]/u);
+    assert.match(repeated.text, /\[UNTERNEHMEN_UNKLAR_001\] liefert Software\./u);
+    const finalSnapshot = registry.exportState();
+    registry.dispose();
+    registry = createBatchPseudonymRegistry(secret, { ...options, persistedState: JSON.parse(JSON.stringify(finalSnapshot)) });
+    const aliasOnly = anonymizeMarkdown('Kunde: Nordstern Medizin\nNordstern Medizin liefert Software.', 'personnel_profile', { registry });
+    assert.strictEqual(aliasOnly.text, 'Kunde: [UNTERNEHMEN_UNKLAR_001]\n[UNTERNEHMEN_UNKLAR_001] liefert Software.');
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
 done();

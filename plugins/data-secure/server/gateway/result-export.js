@@ -142,12 +142,18 @@ function validRecord(value) {
   const topLevelKeys = legacy
     ? ['schema', 'run_directory', 'items', 'complete', 'destination_id']
     : ['schema', 'run_directory', 'items', 'complete', 'destination_id', 'product_channel'];
+  if (!legacy && Object.hasOwn(value || {}, 'stopped_items')) topLevelKeys.push('stopped_items');
   return exactKeys(value, topLevelKeys) &&
     [SCHEMA, LEGACY_SCHEMA].includes(value.schema) &&
     (legacy || ['plugin', 'standalone'].includes(value.product_channel)) &&
     /^Lauf-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$/u.test(value.run_directory) &&
     typeof value.complete === 'boolean' && /^(?:|[a-f0-9]{64})$/u.test(value.destination_id) &&
     Array.isArray(value.items) && value.items.length <= 100 &&
+    (!Object.hasOwn(value, 'stopped_items') || (value.product_channel === 'standalone' &&
+      Array.isArray(value.stopped_items) && value.stopped_items.length > 0 &&
+      value.stopped_items.length + value.items.length <= 100 &&
+      value.stopped_items.every((item) => exactKeys(item, ['source_label', 'error_code']) &&
+        validSourceLabel(item.source_label) && /^[A-Z][A-Z0-9_]{0,95}$/u.test(item.error_code)))) &&
     value.items.every((item, index) => (legacy
       ? (exactKeys(item, ['package_id', 'file', 'sha256']) ||
         (exactKeys(item, ['package_id', 'file', 'sha256', 'exported']) && item.exported === true))
@@ -182,7 +188,9 @@ function writeRecord(target, value) {
 }
 function readRecord(target) {
   const stat = fs.lstatSync(target);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 32768) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+  // Up to 100 relative source labels (1024 characters each), JSON escaping,
+  // fixed error codes and hashes must fit without relaxing item/string bounds.
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 1024 * 1024) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   const value = JSON.parse(fs.readFileSync(target, 'utf8'));
   if (!validRecord(value)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   return value;
@@ -244,17 +252,34 @@ function ensureRecord(state) {
   const target = recordPath(state.token);
   const released = state.items.filter((item) => item.status === 'released');
   const items = released.map((item, index) => packageItem(item.package_id, index, item.source_label || item.name));
+  const stoppedItems = state.product_channel === 'standalone'
+    ? state.items.filter((item) => item.status === 'stopped').map((item) => ({
+      source_label: String(item.source_label || item.name || ''),
+      error_code: /^[A-Z][A-Z0-9_]{0,95}$/u.test(String(item.error_code || ''))
+        ? item.error_code : 'PROCESSING_STOPPED'
+    })) : [];
+  if (stoppedItems.some((item) => !validSourceLabel(item.source_label))) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
   if (fs.existsSync(target)) {
     let existing = readRecord(target);
     if (existing.schema === LEGACY_SCHEMA) {
       existing = migrateLegacyRecord(target, existing, items.map((item) => item.source_label), state.product_channel);
     }
     if (JSON.stringify(existing.items.map(planItem)) !== JSON.stringify(items)) throw new Error('RESULT_EXPORT_STATE_CONFLICT');
+    if (existing.stopped_items && JSON.stringify(existing.stopped_items) !== JSON.stringify(stoppedItems)) {
+      throw new Error('RESULT_EXPORT_STATE_CONFLICT');
+    }
+    // An already published mapping is user-owned and must never be rewritten.
+    // Older empty records published nothing, so they can gain their missing summary.
+    if (stoppedItems.length && !existing.stopped_items && existing.items.length === 0) {
+      existing = { ...existing, stopped_items: stoppedItems, complete: false };
+      writeRecord(target, existing);
+    }
     return { target, value: existing };
   }
   if (!['plugin', 'standalone'].includes(state.product_channel)) throw new Error('RESULT_EXPORT_PRODUCT_CHANNEL_INVALID');
   const value = { schema: SCHEMA, run_directory: runDirectoryName(state.created_at), items,
-    complete: items.length === 0, destination_id: '', product_channel: state.product_channel };
+    complete: items.length === 0 && stoppedItems.length === 0, destination_id: '', product_channel: state.product_channel,
+    ...(stoppedItems.length ? { stopped_items: stoppedItems } : {}) };
   writeRecord(target, value);
   return { target, value };
 }
@@ -334,6 +359,9 @@ function visibleMappingBytes(record) {
     throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
   }
   const rows = record.items.map((item) => [item.source_label, item.file].map(csvField).join(';'));
+  for (const item of record.stopped_items || []) {
+    rows.push([item.source_label, `Kein Ergebnis – gestoppt (${item.error_code})`].map(csvField).join(';'));
+  }
   return Buffer.from(VISIBLE_MAPPING_HEADER + rows.join('\r\n') + (rows.length ? '\r\n' : ''), 'utf8');
 }
 function exportVisibleMapping(destination, run, record) {
@@ -437,21 +465,26 @@ function visibleExportStatus(token, expectedReleased = 0) {
     // final after a configured destination changes, but it is no longer an
     // openable result in the currently selected product destination.
     const available = record.complete === true && pending === 0 && visibleExportDirectory(token) !== '';
-    return { exported, pending, available };
+    const completionPending = record.complete !== true && pending === 0 &&
+      (record.items.length > 0 || record.stopped_items?.length > 0);
+    // All documents may already be final while the run mapping or final record
+    // write still fails. Keep that debt separate: document counters must retain
+    // exported + pending == released, including an all-stopped (zero-result) run.
+    return { exported, pending, available, ...(completionPending ? { completion_pending: true } : {}) };
   } catch {
     return { exported: 0, pending: expected, available: false };
   }
 }
 
 // Resolve exactly one completed visible run for native local UI actions. The
-// path stays inside the trusted process and is never projected to Claude,
-// renderer IPC or diagnostics.
+// path may be displayed through the private Standalone UI contract, but is
+// never projected to Claude, public MCP responses or diagnostics.
 function visibleExportDirectory(token) {
   try {
     const target = recordPath(token);
     if (!fs.existsSync(target)) return '';
     const record = readRecord(target);
-    if (record.complete !== true || record.items.length === 0 ||
+    if (record.complete !== true || (record.items.length === 0 && !record.stopped_items?.length) ||
         record.items.some((item) => item.exported !== true)) return '';
     const destination = activeDestination();
     if (!destination || destination.id !== record.destination_id) return '';
@@ -482,7 +515,7 @@ function exportCompletedState(state) {
     outcome = (() => {
       try { plan = ensureRecord(state); }
       catch { return { exported: 0, pending: releasedCount(state), available: false }; }
-      if (plan.value.items.length === 0) return { exported: 0, pending: 0, available: true };
+      if (plan.value.items.length === 0 && !plan.value.stopped_items?.length) return { exported: 0, pending: 0, available: true };
       // DS-069 replays only a failed export; DS-023 leaves visible results to the
       // user until they delete them. A completed record is therefore final: it is
       // neither re-verified nor re-materialised after a user deletion, and a later
@@ -536,7 +569,7 @@ function replayPendingResultExports() {
       // already planned neutral documents, but only ensureRecord() can upgrade
       // it with the owning journal and add a Standalone-only mapping.
       // Only a failed (incomplete) export is replayed; see exportCompletedState.
-      if (record.items.length === 0 || record.complete === true) continue;
+      if ((record.items.length === 0 && !record.stopped_items?.length) || record.complete === true) continue;
       const destination = activeDestination();
       if (!destination) { pending += record.items.length - exportedCount(record); continue; }
       const before = exportedCount(record);

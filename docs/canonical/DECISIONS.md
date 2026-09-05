@@ -1040,7 +1040,13 @@ Gegencheck: Ein Standalone-Lauf gilt erst dann als sichtbar vollständig, wenn
 neben allen neutral benannten anonymisierten Markdown-Dateien auch eine
 `DataSecure-Zuordnung.csv` für genau diesen Lauf atomar veröffentlicht wurde.
 Sie enthält ausschließlich die lokale Quellbezeichnung und den neutralen
-Ergebnisnamen; Tabellenformeln werden neutralisiert. Der Knopf
+Ergebnisnamen; für gestoppte Positionen steht in derselben Ergebnisspalte
+„Kein Ergebnis – gestoppt (FEHLERCODE)“. Auch ein vollständig gestoppter
+Standalone-Lauf erhält eine eigene Übersicht, niemals die eines Vorgängers.
+Ein Fehler beim Schreiben dieser Übersicht ist eine ausstehende
+Abschlussveröffentlichung und ändert keine Dokumentzähler. Bereits
+veröffentlichte Altzuordnungen bleiben unverändert. Tabellenformeln werden
+neutralisiert. Der Knopf
 **„Zuordnungsdatei anzeigen“** markiert genau diese Datei im letzten sichtbaren
 Laufordner. Die dauerhafte globale `DataSecure-Mapping.csv` bleibt weiterhin im
 privaten Produktdatenbereich für Recovery und Nachvollziehbarkeit.
@@ -1065,6 +1071,14 @@ Gleiche Schreibweise ist kein Beweis realer Identität; Namensvarianten und
 mehrdeutige Nachnamen dürfen nicht als vollautomatische Personenauflösung
 verkauft werden. Bereits bestehende v1-Stapel und das Cowork-Plugin behalten
 ihren vereinbarten HMAC-Platzhaltervertrag; keine nachträgliche Umnummerierung.
+
+Ein Kurzverweis, der zu mehreren vollständigen Firmennamen mit verschiedenen
+Rechtsformen passt, wird keiner dieser Firmen zugeschlagen. Neue Standalone-
+Stapel verwenden dafür eine stabile `[UNTERNEHMEN_UNKLAR_…]`-Kennung; im
+Plugin-/v1-Vertrag bleibt der Verweis neutral als `[ORGANISATION_UNKLAR]`.
+Ausdrückliche Personenfelder, auch in Markdown-Listen und Zitaten, bleiben
+positionsgebunden Personen. Bereits veröffentlichte Dokumente werden nicht
+nachträglich umgeschrieben, wenn später ein zusätzlicher Namenskonflikt entsteht.
 
 Dateien oder ein Ordner können nativ in Standalone hineingezogen werden. Drop
 nutzt dieselbe Core-Aufnahme wie die Picker, zeigt zunächst die lokale Auswahl

@@ -209,8 +209,11 @@ in einem getrennten, ressourcenbegrenzten Worker.
   Formatkonverter;
 - keine URL-/Pfad-Konvertierung, kein Netzwerk und keine LLM-Clients;
 - `markitdown-ocr` wird nicht eingebunden;
-- rohe Markdown-Konvertate werden weder gerendert noch als sichtbare Datei
-  gespeichert; für Resume wird der versiegelte Snapshot neu konvertiert.
+- Im Anonymisierungsmodus werden rohe Markdown-Zwischenkonvertate weder
+  gerendert noch als sichtbare Datei gespeichert; für Resume wird der
+  versiegelte Snapshot neu konvertiert. Der zweite Modus nach DS-085 exportiert
+  dagegen bewusst nicht anonymisierte Markdown-Endartefakte in einen getrennten
+  Zielbaum. Seine Artefakt-/Recovery-/Exportkette ist noch zu implementieren.
 
 Die erste Stufe nutzt DOCX als Differentialorakel gegen den vorhandenen Parser.
 XLSX, PPTX, Text-PDF, Scan-PDF und Bilder werden erst nach je eigenem Coverage-,

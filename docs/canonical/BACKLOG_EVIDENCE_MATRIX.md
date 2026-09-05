@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 05.09.2026 · 3.2.0-rc106
+Stand: 05.09.2026 · 3.2.0-rc107
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
@@ -36,6 +36,19 @@ Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 | BL-052.1–5 | synthetisches UAT-Kit und leere Evidenzvorlage | benannte Anwender-, Fach-, Datenschutz-, UX-, Architektur- und Securityrollen |
 
 ## Aktueller DS-067-Nachweis
+
+Der RC107-Korrekturschnitt ergänzt unter den vorhandenen Storys Regressionen
+für verlorene Frontend-Polltimer, veraltete Folgelaufanzeigen, aktuelle
+Standalone-Zuordnung auch bei gestoppten Dateien, ausstehende
+Abschlussmetadaten ohne verfälschte Dokumentzähler und typstabile
+Unternehmenskurzformen sowie den expliziten Sidecar-Abschluss bei EOF und
+defektem IPC ohne Abbruch dauerhaft übergebener Worker. Produktsuite (40 Basis-
+und 111 direkte Dateien) und abschließendes Standalone-/Rust-Gate sind grün.
+Der native Windows-Test besitzt jetzt eine vor dem
+Bootstrap validierte private Umgebung einschließlich WebView und Dokumenten.
+Neue Paket-Evidence muss aus dem neuen Commit erstellt werden; der
+historische RC106-Receipt beweist weder diese Korrekturen noch die neue
+Testdatenisolation. Sichtbare Explorer-/Finder-Bedienung und macOS bleiben E1/E2.
 
 - Manifest/Runtime begrenzen temporäre Aufbewahrung auf 0–14 Tage.
 - Retentiontests bewahren Quellen, `Processed`, fertige `Output`-Pakete und

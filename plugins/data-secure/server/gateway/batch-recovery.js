@@ -135,9 +135,12 @@ function createBatchRecovery(options = {}) {
       review_count: progress.deferred_review,
       result_count: visible.available === true ? visible.exported : 0,
       export_pending_count: visible.pending,
+      ...(visible.completion_pending === true ? { completion_pending: true } : {}),
       processing: progress.local_processing_active === true || progress.processing > 0,
       resumable: progress.awaiting_resume === true,
-      complete: progress.complete === true
+      complete: progress.complete === true,
+      ...(progress.complete === true && progress.stopped > 0
+        ? { completion_available: visible.available === true && visibleExportDirectory(latest.token) !== '' } : {})
     });
   }
 
@@ -198,6 +201,14 @@ function createBatchRecovery(options = {}) {
 
   function latestProductResultDirectory(productChannel, options = {}) {
     if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('PRODUCT_CHANNEL_INVALID');
+    if (options.latestBatchOnly === true) {
+      const latest = latestProductBatchState(productChannel);
+      if (!latest || publicProgress(latest, { skipResultProjection: true }).complete !== true) return '';
+      if (options.ensureExport === true) {
+        try { exportCompletedState(latest); } catch { return ''; }
+      }
+      return visibleExportDirectory(latest.token);
+    }
     let entries = [];
     try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); } catch { return ''; }
     let latestDirectory = '';

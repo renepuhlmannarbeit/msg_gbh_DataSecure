@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC106
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC107
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -13,16 +13,11 @@ const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf
 const zip = path.resolve(process.argv[2] || path.join(root, 'dist', `DataSecure-Standalone-${version}-windows-x64.zip`));
 const extraction = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
 const install = path.join(extraction, 'Leerzeichen ünicode');
-const data = path.join(extraction, 'Daten');
 const sourceDirectory = path.join(extraction, 'Quellen');
 const resultDirectory = path.join(extraction, 'Ergebnisse');
 
 function safeRemove() {
-  const resolved = path.resolve(extraction);
-  if (path.dirname(resolved) !== root || !path.basename(resolved).startsWith('.tmp-standalone-package-')) {
-    throw new Error('STANDALONE_SMOKE_CLEANUP_UNSAFE');
-  }
-  fs.rmSync(resolved, { recursive: true, force: true });
+  removePackageSmokeScope(root, extraction);
 }
 
 function frame(value) {
@@ -64,6 +59,7 @@ function protocolClient(child, stderr) {
     }
   });
   child.once('error', () => failAll(new Error('STANDALONE_SMOKE_SPAWN_FAILED')));
+  child.stdin.on('error', () => failAll(new Error('STANDALONE_SMOKE_STDIN_FAILED')));
   child.once('exit', (code) => failAll(new Error(`STANDALONE_SMOKE_EXIT:${code}`)));
   return {
     request(value) {
@@ -81,7 +77,9 @@ function protocolClient(child, stderr) {
 
 let child;
 let childClosed = false;
+let closePromise;
 try {
+  const environment = isolatedSidecarEnvironment(root, extraction);
   fs.mkdirSync(install, { recursive: true });
   const entries = readZip(fs.readFileSync(zip), { maxEntries: 500, maxUncompressed: 256 * 1024 * 1024 });
   const prefix = `DataSecure-Standalone-${version}-windows-x64/`;
@@ -94,7 +92,6 @@ try {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, bytes, { flag: 'wx' });
   }
-  fs.mkdirSync(data, { recursive: true });
   fs.mkdirSync(sourceDirectory, { recursive: true });
   fs.mkdirSync(resultDirectory, { recursive: true });
   // Exercise the shipped parser/worker chain, not a replacement worker or one
@@ -115,17 +112,27 @@ try {
   child = childProcess.spawn(childProcessPath(runtime), ['--require=../network-deny.cjs', path.basename(sidecar)], {
     cwd: childProcessPath(path.dirname(sidecar)), windowsHide: true, shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { SystemRoot: process.env.SystemRoot, ComSpec: process.env.ComSpec,
-      USERPROFILE: data, LOCALAPPDATA: path.join(data, 'Local'), PATH: '' }
+    env: environment
   });
+  closePromise = new Promise((resolve) => child.once('close', (code) => {
+    childClosed = true;
+    resolve(code);
+  }));
   const stderr = { value: '' };
-  child.stderr.on('data', (chunk) => { stderr.value += chunk.toString('utf8'); });
+  child.stderr.on('data', (chunk) => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
   const { request } = protocolClient(child, stderr);
   const status = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16), action: 'get_public_state' });
   assert.equal(status.schema, 'datasecure-standalone-private-response/1');
   assert.equal(status.request_id, 'a'.repeat(16));
   assert.equal(status.ok, true);
   assert.equal(status.result.product_channel, 'standalone');
+  const freshContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: '9'.repeat(16), action: 'get_ui_context' });
+  assert.equal(freshContext.ok, true);
+  assert.equal(freshContext.result.result_folder, path.join(environment.DATASECURE_STANDALONE_DOCUMENTS_DIR, 'SecureDataMsg'),
+    'fresh default Documents must be isolated before configuring an explicit result destination');
+  assert.equal(freshContext.result.latest_result_folder, '', 'a fresh profile must not recover any real-user run');
+  assert.equal(fs.statSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl')).isFile(), true);
   const admitted = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b'.repeat(16),
     action: 'admit_selected_sources', source_kind: 'files', source_paths: sourceFiles });
   assert.equal(admitted.ok, true);
@@ -194,11 +201,64 @@ try {
   assert.deepEqual(resolvedMapping.result, {
     ok: true, target_kind: 'file', local_path: mapping, external_disclosure: false
   });
+  if (Number.isSafeInteger(terminal.presentation_generation)) {
+    await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: '4'.repeat(16),
+      action: 'ack_terminal_presented', presentation_generation: terminal.presentation_generation });
+  }
+  // A syntactically broken CSV passes safe UTF-8 intake but must fail in the
+  // real packaged parser. Its own completed run must never resolve run A's CSV.
+  const failedSourceName = 'synthetisch-offenes-zitat.csv';
+  const failedSource = path.join(sourceDirectory, failedSourceName);
+  const failedOriginal = Buffer.from('Name,Wert\nBeispiel,"nicht abgeschlossen\n', 'utf8');
+  fs.writeFileSync(failedSource, failedOriginal, { flag: 'wx' });
+  const failedAdmission = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: '5'.repeat(16),
+    action: 'admit_selected_sources', source_kind: 'files', source_paths: [failedSource] });
+  assert.equal(failedAdmission.ok, true, 'malformed CSV remains an admissible regular UTF-8 source');
+  assert.equal(failedAdmission.result.selected_count, 1);
+  const failedStart = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: '6'.repeat(16), action: 'start_admitted_batch' });
+  assert.equal(failedStart.ok, true);
+  let failedTerminal;
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    const polled = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: (0x1000 + attempt).toString(16).padStart(16, '0'), action: 'get_public_state' });
+    assert.equal(polled.ok, true);
+    if (polled.result.selected_count === 1 && polled.result.state === 'completed_without_results') {
+      failedTerminal = polled.result; break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  assert.ok(failedTerminal, 'the real parser failure must finish its own batch instead of returning the previous successful batch');
+  assert.equal(failedTerminal.result_count, 0);
+  assert.equal(failedTerminal.failed_count, 1);
+  assert.equal(failedTerminal.ledger_available, true);
+  const failedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: '7'.repeat(16), action: 'get_ui_context' });
+  assert.equal(failedContext.ok, true);
+  const failedRun = failedContext.result.latest_result_folder;
+  assert.equal(path.dirname(failedRun), path.join(resultDirectory, 'DataSecure-Output'));
+  assert.notEqual(failedRun, exactRun);
+  assert.deepEqual(fs.readdirSync(failedRun), ['DataSecure-Zuordnung.csv']);
+  const failedMapping = path.join(failedRun, 'DataSecure-Zuordnung.csv');
+  const failureText = fs.readFileSync(failedMapping, 'utf8');
+  assert.ok(failureText.includes(failedSourceName));
+  assert.match(failureText, /Kein Ergebnis – gestoppt/u);
+  assert.doesNotMatch(failureText, /personnel-profile|Dokument-\d+-anonymisiert/u);
+  const resolvedFailureMapping = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: '8'.repeat(16), action: 'resolve_local_ledger' });
+  assert.deepEqual(resolvedFailureMapping.result, {
+    ok: true, target_kind: 'file', local_path: failedMapping, external_disclosure: false
+  });
+  assert.deepEqual(fs.readFileSync(failedSource), failedOriginal, 'the parser failure must not modify its source');
+  assert.equal(fs.readFileSync(mapping, 'utf8'), mappingText, 'the previous successful mapping remains unchanged');
+  sourceFiles.forEach((file, index) => assert.deepEqual(fs.readFileSync(file), originals[index]));
+  if (Number.isSafeInteger(failedTerminal.presentation_generation)) {
+    await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a1'.repeat(8),
+      action: 'ack_terminal_presented', presentation_generation: failedTerminal.presentation_generation });
+  }
   await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);
-    child.once('close', (code) => {
-      childClosed = true;
+    closePromise.then((code) => {
       clearTimeout(timer);
       code === 0 ? resolve() : reject(new Error(`STANDALONE_SMOKE_SHUTDOWN:${code}`));
     });
@@ -207,7 +267,7 @@ try {
 } finally {
   if (child && !childClosed && child.exitCode === null) {
     child.kill();
-    await new Promise((resolve) => child.once('close', () => { childClosed = true; resolve(); }));
+    await closePromise;
   }
   if (process.env.DATASECURE_SMOKE_KEEP === '1') process.stderr.write(`STANDALONE_SMOKE_KEPT:${extraction}\n`);
   else safeRemove();

@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 05.09.2026 · Produktstand 3.2.0-rc106
+Stand: 05.09.2026 · Produktstand 3.2.0-rc107
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -12,6 +12,26 @@ offener Zielsystem- oder Anwenderabnahme bleibt hier als „menschliche Evidenz
 offen“ sichtbar, wird aber nicht als weitere Entwicklungsarbeit dargestellt.
 
 ## Aktiver Umsetzungsblock – Gesamtgegenreview 01.09.2026
+
+### Korrekturblock aus dem erneuten RC106-Review – RC107 E0 geschlossen
+
+| Befund | Bestehende Storys | Umsetzung / verbleibender Nachweis |
+|---|---|---|
+| Nativer Starttest verwendete reale Anwendungsdaten statt isolierter Testdaten. | BL-010.13, BL-051.1, BL-002 | **E0 erledigt:** explizites, vor Bootstrap validiertes Native-Smoke-Profil für Daten, Dokumente, Diagnosen und WebView einschließlich fehlendem Marker und Pfad-/Link-Negativtests. Neuer Paketnachweis aus dem Korrekturcommit erforderlich. Keine VM und kein Zusatzkonto. |
+| Polling blieb nach langen Aktionen stehen; schnelle Folgeläufe zeigten alte Ziele. | BL-010.12/13, BL-002 | **E0 erledigt:** Poll-Lebenszyklus und beide asynchronen Antwortgrenzen an Operationsgeneration gebunden; 14 Frontendfälle decken schnelle Folgestapel, verzögerte Picker/Start/Abbruch und fehlende Zuordnung ab. |
+| Geschlossener Desktop ließ einen Steuerprozess mit offenem Worker-IPC weiterleben. | BL-010.13, BL-011.3, BL-002 | **E0 erledigt:** EOF beendet nur den Standalone-Steuerprozess; wartende Requests starten nicht nach. Dauerhaft übergebene Worker behalten ihren Fortsetzungsvertrag. Sieben echte Prozess-/Worker-Negativszenarien grün; Cowork besitzt bereits einen begrenzten Shutdown. |
+| Vollständig gestoppter Stapel öffnete die Zuordnung eines erfolgreichen Vorgängers. | BL-040.5/6, BL-010.19, BL-002 | **E0 erledigt:** eigene Standalone-Laufübersicht auch ohne Ergebnisdateien; Fehlercode pro gestoppter Quelle, kein Altstapelfallback. Fail-/Mischlauf, offene Abschlussmetadaten, Exportfehler, Replay, Crashfenster bereits veröffentlichter Altzuordnungen und Plugin-Abgrenzung regressionsgeprüft. |
+| Firmenkurzformen wurden durch konkurrierende Personensamen falsch typisiert. | BL-030.2, BL-021.1, BL-002 | **E0 erledigt:** eindeutige Firmenaliasbindung, unklare Organisation bei Rechtsformkonflikt; natürliche Kundenpersonen und explizite Namensfelder auch in Listen bleiben Personen. Registry 26/26 und PII 120/120; beide Produktkontexte und Resume geprüft. |
+| Grüne Tests und Dokumentation überzeichneten den Abschlussumfang. | BL-002, BL-051.1 | **E0 erledigt:** Frontendtests im Produktgate, historische PKG-04-Evidence exakt benannt, UML-IST/SOLL und Markdown-Zwischen-/Endartefakte getrennt. Produktsuite 40 Basis- und 111 direkte Dateien grün, geänderte Standalone-Kette abschließend erneut geprüft. PKG-04/INT-13 benötigen den neuen Kandidaten; E1/E2 bleiben offen. |
+
+BL-010.28 bleibt ein eigenständiger verbindlicher Funktionsausbau, kein bereits
+erledigter Bugfix. Der technische Gegencheck identifiziert Modusbindung durch
+Admission/IPC/Worker/Journal, inhaltstreue Parser ohne Privacy-Normalisierung,
+eine separate Konvertat-Artefaktklasse mit Ablehnung an allen MCP-Lesegates,
+modusgebundene Recovery/Delivery und `DataSecure-Markdown`-Export. Erst die
+vollständige Kette mit echten Vierformat-/Crash-/Negativtests aktiviert den Modus.
+MarkItDown ist für die ersten vier Formate nicht erforderlich; breitere Formate
+bleiben ausdrücklich Teil der nachfolgenden Konverterlieferung.
 
 Das unabhängige Gegenreview aus Test/CI, Dokumentation/UAT sowie Architektur,
 Security, Performance, UX und aktueller Claude-Cowork-Sicht ist bis zum Abschluss
@@ -176,8 +196,10 @@ BL-010.13: Der zweite native Gegencheck verhindert einen möglichen Zugriff
 auf noch nicht registrierten Desktopzustand bei frühen Fensterereignissen.
 Der Hook nutzt `try_state()` ausschließlich im Drop-Arm. Der erste native
 RC106-Start war durch die Sandbox/WebView-Umgebung blockiert; dasselbe ZIP
-bestand mit normalen Hostrechten. Dies ist kein Ersatz für den finalen
-PKG-04-Neubau aus dem korrigierten Commit und die sichtbare Zielhost-UAT.
+bestand mit normalen Hostrechten. Der finale PKG-04-Neubau aus `17a2160` wurde
+nachgewiesen (siehe CURRENT_STATE). Seine native Testdatenisolation war jedoch
+unzureichend und ist Gegenstand des aktuellen Korrekturblocks; sichtbare
+Zielhost-UAT bleibt offen.
 
 | Befund / Verbesserung | Zugeordnet | Engineering-Status und verbleibende Evidenz |
 |---|---|---|

@@ -251,6 +251,7 @@ class StandaloneApplicationService {
       ? latest.failed_count
       : 0;
     const exportPending = Number.isSafeInteger(latest?.export_pending_count) ? latest.export_pending_count : 0;
+    const completionPending = latest?.completion_pending === true;
     const recoverable = Number.isSafeInteger(current.recoverable_batches) ? current.recoverable_batches : 0;
     const awaitingResume = Number.isSafeInteger(current.batches_awaiting_resume) ? current.batches_awaiting_resume : 0;
     const resumableCount = latest?.resumable === true ? Math.max(1, recoverable, awaitingResume) : Math.max(recoverable, awaitingResume);
@@ -270,7 +271,7 @@ class StandaloneApplicationService {
           ? 'review_required'
         : resumable
           ? 'stopped'
-          : exportPending > 0
+          : exportPending > 0 || completionPending
             ? 'export_pending'
           : packages > 0
             ? 'results_available'
@@ -291,7 +292,9 @@ class StandaloneApplicationService {
       selected_count: selected,
       completed_count: completed,
       failed_count: failed,
+      ...(latest?.complete === true && failed > 0 ? { ledger_available: latest.completion_available === true } : {}),
       export_pending_count: exportPending,
+      ...(completionPending ? { completion_pending: true } : {}),
       review_count: reviews,
       resumable_count: resumableCount,
       recoverable_count: recoverable,
@@ -390,7 +393,7 @@ class StandaloneApplicationService {
     // already completed run.  Older export records did not contain the fields
     // required for the run-scoped mapping.  Resolve with ensureExport so the
     // UI never advertises a completed run whose visible projection is stale.
-    try { latestResultFolder = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true }) || ''; }
+    try { latestResultFolder = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true }) || ''; }
     catch { /* A local display hint must never affect processing. */ }
     return {
       ok: true,
@@ -571,7 +574,7 @@ class StandaloneApplicationService {
   resolveResults() {
     this.ensureResultRoot();
     try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
-    const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true });
+    const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true });
     if (!target || !path.isAbsolute(target)) {
       throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');
     }

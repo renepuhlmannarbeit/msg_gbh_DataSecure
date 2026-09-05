@@ -1,10 +1,25 @@
 # Entscheidungs-Traceability
 
-Stand: 05.09.2026 · 3.2.0-rc106
+Stand: 05.09.2026 · 3.2.0-rc107
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC107 aus dem RC106-Folgereview: DS-023/DS-069/DS-082/DS-083 binden den Standalone-Abschluss an den
+aktuellen Lauf einschließlich gestoppter Quellen; Tests in
+`test-result-folder-export`, `test-batch-recovery`, `test-standalone` und
+`test-standalone-frontend`. DS-084 bindet Firmenalias-/Personenkonflikte an
+`test-batch-pseudonym-registry` und die gemeinsame Engine. PKG-04/INT-13 behalten
+ihre Quellcommitbindung; native Testdatenisolation wird im Desktop-Vertrag
+und Rust-Testprofil geprüft. DS-085 bleibt als vollständige zweite Kernfunktion
+offen, nicht lediglich als noch fehlende Schaltfläche.
+
+BL-010.13/BL-011.3 binden den Desktop-EOF an das Ende des Steuerprozesses,
+nicht an das Ende dauerhaft übergebener Worker. `desktop-sidecar.js` und
+`test-standalone-sidecar.js` prüfen Queue-Stopp, Shutdown, defekte Frames und
+Pipes mit echten Worker-Abschlüssen. Die reine Timing-Fixture
+`tests/lib/standalone-sidecar-lifecycle.cjs` gehört nicht zum Produktpaket.
 
 | Entscheidung | Aktueller Status | Backlog / Nachweis |
 |---|---|---|

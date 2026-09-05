@@ -206,6 +206,32 @@ test('Standalone exposes a recoverable batch as a resumable stopped state', () =
   });
 });
 
+test('Standalone separates pending completion metadata from document counts in mixed and all-stopped runs', () => {
+  for (const released of [0, 2]) {
+    let pending = true;
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      latestProductBatchStatus: () => ({
+        selected_count: released + 1, completed_count: released, failed_count: 1, review_count: 0,
+        result_count: pending ? 0 : released, export_pending_count: 0,
+        processing: false, resumable: false, complete: true, completion_available: !pending,
+        ...(pending ? { completion_pending: true } : {})
+      })
+    }) });
+    const status = service.status();
+    assert.strictEqual(status.state, 'export_pending');
+    assert.strictEqual(status.completion_pending, true);
+    assert.strictEqual(status.completed_count, released);
+    assert.strictEqual(status.export_pending_count, 0, 'no fabricated document debt');
+    assert.strictEqual(status.ledger_available, false);
+    assert.strictEqual(status.results_available, false);
+    pending = false;
+    const afterRetry = service.status();
+    assert.strictEqual(afterRetry.state, released ? 'results_available' : 'completed_without_results');
+    assert.strictEqual(afterRetry.ledger_available, true);
+    assert.strictEqual(afterRetry.completion_pending, undefined);
+  }
+});
+
 test('Standalone exposes an awaiting-resume batch even before recovery counting converges', () => {
   const deps = fakeDependencies({ lightweightStatus: () => ({
     engine_ready: true,
@@ -318,7 +344,7 @@ test('Standalone exposes the private ledger only for terminal visible outcomes',
   const source = fs.readFileSync(path.join(__dirname,
     '../apps/datasecure-standalone/frontend/app.js'), 'utf8');
   assert.match(source,
-    /visible\('ledger', state\.results_available === true \|\| state\.state === 'completed_without_results'\)/u);
+    /visible\('ledger', state\.results_available === true \|\|[\s\S]{0,100}state\.state === 'completed_without_results' && state\.ledger_available === true/u);
   assert.doesNotMatch(source, /visible\('ledger',[^^\n]*failed_count/u);
 });
 
@@ -604,6 +630,7 @@ async function cliTerminalStatusCases() {
   const cases = [
     [{ ok: true, state: 'stopped' }, /fortgesetzt/u],
     [{ ok: true, state: 'export_pending' }, /bereitgestellt/u],
+    [{ ok: true, state: 'export_pending', completion_pending: true }, /^Die lokale Abschlussübersicht wird bereitgestellt\.\n$/u],
     [{ ok: true, state: 'completed_without_results', failed_count: 1 }, /1 Datei wurde sicher gestoppt/u],
     [{ ok: true, state: 'completed_without_results', failed_count: 2 }, /2 Dateien wurden sicher gestoppt/u]
   ];
@@ -632,7 +659,7 @@ async function openExactResultsCase() {
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     latestProductResultDirectory: (channel, options) => {
       assert.strictEqual(channel, PRODUCT_CHANNEL);
-      assert.deepStrictEqual(options, { ensureExport: true });
+      assert.deepStrictEqual(options, { ensureExport: true, latestBatchOnly: true });
       return run;
     },
     openFolder: (target) => { opened.push(target); return { ok: true }; }
@@ -669,7 +696,7 @@ function privateTargetResolutionCase() {
   const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     latestProductResultDirectory: (_channel, options) => {
-      assert.deepStrictEqual(options, { ensureExport: true });
+      assert.deepStrictEqual(options, { ensureExport: true, latestBatchOnly: true });
       return run;
     },
     fs: { mkdirSync() {}, existsSync: () => true }

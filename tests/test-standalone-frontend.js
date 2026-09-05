@@ -194,10 +194,264 @@ async function restoredAdmissionCase() {
   assert.ok(!calls.some((call) => call.action === 'start_admitted_batch'));
 }
 
+const settleFrontend = () => new Promise((resolve) => setImmediate(resolve));
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+function localContext(run = 'Lauf-1', selectedFiles = []) {
+  return { local_ui_only: true, external_disclosure: false, result_folder: 'C:\\Ergebnisse',
+    latest_result_folder: `C:\\Ergebnisse\\DataSecure-Output\\${run}`,
+    source_folders: ['C:\\Quellen'], selected_files: selectedFiles };
+}
+async function frontendHarness(overrides = {}) {
+  const elements = {};
+  const timers = new Map();
+  const calls = [];
+  let timerId = 0;
+  let nativeListener;
+  const invoke = async (action, args) => {
+    calls.push({ action, args });
+    if (overrides[action]) return overrides[action](args);
+    if (action === 'get_ui_context') return localContext();
+    if (action === 'get_public_state') return { state: 'ready', results_available: false };
+    return { ok: true };
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), {
+    window: { __TAURI__: { core: { invoke }, event: { listen: async (_name, callback) => {
+      nativeListener = callback; return () => {};
+    } } }, addEventListener() {} },
+    document: { getElementById: (id) => elements[id] ||= element() },
+    setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
+    clearTimeout(id) { timers.delete(id); }, requestAnimationFrame: (callback) => callback(), console
+  });
+  await settleFrontend();
+  return {
+    elements, calls, timers,
+    click: (id) => elements[id].listeners.click(),
+    native: (payload) => nativeListener({ payload }),
+    runTimer() {
+      assert.strictEqual(timers.size, 1, 'exactly one next status timer must exist');
+      const [id, timer] = timers.entries().next().value;
+      timers.delete(id);
+      return timer.callback();
+    },
+    count: (action) => calls.filter((call) => call.action === action).length
+  };
+}
+
+async function pickerTimerCancellationCase() {
+  const picker = deferred();
+  const harness = await frontendHarness({ select_files: () => picker.promise });
+  const choosing = harness.click('select-files');
+  const priorCalls = harness.count('get_public_state');
+  await harness.runTimer();
+  assert.strictEqual(harness.count('get_public_state'), priorCalls, 'busy picker must not cause competing IPC');
+  assert.strictEqual(harness.timers.size, 1, 'a consumed busy timer must retain its successor');
+  picker.resolve({ cancelled: true });
+  await choosing;
+  await harness.runTimer();
+  assert.strictEqual(harness.count('get_public_state'), priorCalls + 1, 'polling resumes after cancelling the picker');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Bereit');
+  assert.strictEqual(harness.timers.size, 1);
+}
+
+async function uncertainStartPollingCase() {
+  const start = deferred();
+  let state = { state: 'ready', results_available: false };
+  const harness = await frontendHarness({
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Profil.txt']) }),
+    start_admitted_batch: () => start.promise,
+    get_public_state: () => state
+  });
+  await harness.click('select-files');
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit');
+  const starting = harness.click('start');
+  await harness.runTimer();
+  state = { state: 'processing', selected_count: 1, completed_count: 0, results_available: false };
+  start.reject('STANDALONE_START_FAILED');
+  await starting;
+  assert.match(harness.elements['status-title'].textContent, /STANDALONE_START_FAILED/u);
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Anonymisierung läuft');
+  assert.strictEqual(harness.elements.start.hidden, true);
+  state = { state: 'results_available', result_count: 1, results_available: true };
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Fertig');
+  assert.strictEqual(harness.count('start_admitted_batch'), 1, 'an uncertain start is observed, never implicitly retried');
+}
+
+async function restoredAdmissionUncertainStartCase() {
+  const harness = await frontendHarness({
+    frontend_ready: () => ({ ok: true, admission_prepared: true }),
+    get_ui_context: () => localContext('Lauf-1', ['Profil.txt']),
+    start_admitted_batch: () => { throw 'STANDALONE_START_FAILED'; },
+    get_public_state: () => ({ state: 'processing', selected_count: 1, completed_count: 0 })
+  });
+  assert.strictEqual(harness.timers.size, 0, 'restoring an admission does not poll over the selection');
+  await harness.click('start');
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Anonymisierung läuft');
+  assert.strictEqual(harness.count('start_admitted_batch'), 1);
+}
+
+async function consecutiveTerminalRunsCase() {
+  let currentRun = 'Lauf-A';
+  let presentationGeneration;
+  const harness = await frontendHarness({
+    get_ui_context: () => localContext(currentRun),
+    get_public_state: () => ({ state: 'results_available', result_count: 1, results_available: true,
+      presentation_generation: presentationGeneration }),
+    select_files: () => ({ selected_count: 1, ui_context: localContext(currentRun, ['Neues-Profil.txt']) }),
+    start_admitted_batch: () => { currentRun = 'Lauf-B'; return { ok: true }; }
+  });
+  assert.match(harness.elements['result-folder-results'].textContent, /Lauf-A$/u);
+  await harness.click('select-files');
+  await harness.click('start');
+  await harness.runTimer();
+  assert.match(harness.elements['result-folder-results'].textContent, /Lauf-B$/u,
+    'identical terminal state and counts do not identify the previous run');
+  const contextCalls = harness.count('get_ui_context');
+  await harness.runTimer();
+  assert.strictEqual(harness.count('get_ui_context'), contextCalls, 'unchanged terminal polls do not repeatedly resolve exports');
+  currentRun = 'Lauf-C';
+  presentationGeneration = 3;
+  await harness.runTimer();
+  assert.match(harness.elements['result-folder-results'].textContent, /Lauf-C$/u,
+    'a fresh backend presentation generation also invalidates the terminal context');
+}
+
+async function stalePollAfterStartCase() {
+  const oldPoll = deferred();
+  let held = false;
+  let currentRun = 'Lauf-A';
+  const harness = await frontendHarness({
+    get_ui_context: () => localContext(currentRun),
+    get_public_state: () => held ? oldPoll.promise : { state: 'results_available', result_count: 1, results_available: true },
+    select_files: () => ({ selected_count: 1, ui_context: localContext(currentRun, ['Neu.txt']) }),
+    start_admitted_batch: () => { currentRun = 'Lauf-B'; return { ok: true }; }
+  });
+  held = true;
+  const polling = harness.runTimer();
+  await harness.click('select-files');
+  await harness.click('start');
+  held = false;
+  oldPoll.resolve({ state: 'ready', results_available: false });
+  await polling;
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Stapel wird vorbereitet',
+    'a pre-selection response remains stale even after admission was consumed by Start');
+  await harness.runTimer();
+  assert.match(harness.elements['result-folder-results'].textContent, /Lauf-B$/u);
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Fertig');
+}
+
+async function staleContextAfterAdmissionCase(startNewRun = false) {
+  const pendingContext = deferred();
+  let holdContext = false;
+  let generation = 1;
+  let currentRun = 'Lauf-A';
+  const harness = await frontendHarness({
+    get_ui_context: () => holdContext ? pendingContext.promise : localContext(currentRun),
+    get_public_state: () => ({ state: 'results_available', result_count: 1, results_available: true,
+      presentation_generation: generation }),
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-A', ['Neu.txt']) }),
+    start_admitted_batch: () => { currentRun = 'Lauf-B'; return { ok: true }; }
+  });
+  holdContext = true;
+  generation = 2;
+  const polling = harness.runTimer();
+  await settleFrontend();
+  await harness.click('select-files');
+  if (startNewRun) await harness.click('start');
+  holdContext = false;
+  pendingContext.resolve(localContext('Lauf-Alt', ['Alt.txt']));
+  await polling;
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Neu.txt');
+  assert.strictEqual(harness.elements['status-title'].textContent, startNewRun ? 'Stapel wird vorbereitet' : 'Auswahl bereit');
+  assert.strictEqual(harness.elements.start.hidden, startNewRun);
+  if (startNewRun) {
+    await harness.runTimer();
+    assert.match(harness.elements['result-folder-results'].textContent, /Lauf-B$/u);
+  }
+}
+
+async function cancelledAdmissionContextRaceCase() {
+  const pendingContext = deferred();
+  let holdContext = false;
+  const harness = await frontendHarness({
+    get_ui_context: () => holdContext ? pendingContext.promise : localContext(),
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Alt.txt']) })
+  });
+  await harness.click('select-files');
+  holdContext = true;
+  const cancellation = harness.click('cancel');
+  await settleFrontend();
+  harness.native({ phase: 'checking' });
+  harness.native({ phase: 'accepted', result: { selected_count: 1, ui_context: localContext('Lauf-1', ['Neu.txt']) } });
+  pendingContext.resolve(localContext('Lauf-1'));
+  await cancellation;
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Neu.txt');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit',
+    'late cancellation context must not reset a fresh native admission to Ready');
+  assert.strictEqual(harness.elements.start.hidden, false);
+}
+
+async function failedRunLedgerAvailabilityCase() {
+  let ledgerAvailable;
+  const harness = await frontendHarness({
+    get_public_state: () => ({ state: 'completed_without_results', results_available: false,
+      failed_count: 2, ledger_available: ledgerAvailable })
+  });
+  assert.strictEqual(harness.elements.ledger.hidden, true, 'missing availability is not a promise of a run ledger');
+  assert.match(harness.elements['status-text'].textContent, /Diagnose öffnen/u);
+  assert.doesNotMatch(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
+  ledgerAvailable = false;
+  await harness.runTimer();
+  assert.strictEqual(harness.elements.ledger.hidden, true);
+  ledgerAvailable = true;
+  await harness.runTimer();
+  assert.strictEqual(harness.elements.ledger.hidden, false);
+  assert.match(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
+}
+
+async function completionPendingCase() {
+  let completionPending = true;
+  const harness = await frontendHarness({
+    get_public_state: () => completionPending
+      ? { state: 'export_pending', result_count: 0, results_available: false,
+        export_pending_count: 0, completion_pending: true, failed_count: 1 }
+      : { state: 'results_available', result_count: 2, results_available: true,
+        export_pending_count: 0, failed_count: 1 }
+  });
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Abschlussübersicht wird bereitgestellt');
+  assert.match(harness.elements['status-text'].textContent, /Zuordnungsdatei|Abschlussnachweis/u);
+  assert.doesNotMatch(harness.elements['status-text'].textContent, /0 anonymisierte|kein anonymisiertes Ergebnis/u);
+  assert.strictEqual(harness.elements.ledger.hidden, true);
+  assert.strictEqual(harness.elements.results.hidden, true);
+  completionPending = false;
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Fertig');
+  assert.strictEqual(harness.elements.ledger.hidden, false);
+  assert.strictEqual(harness.elements.results.hidden, false);
+}
+
 (async () => {
   await testAsync('a successful status poll clears an earlier IPC error atomically', recoveredStatusCase);
   await testAsync('result and ledger actions show a separate confirmed handoff', openFeedbackCase);
   await testAsync('native drops prepare without starting and preserve admission across races', nativeDropCase);
   await testAsync('a renderer reload restores a prepared selection and listener failure preserves picker fallback', restoredAdmissionCase);
+  await testAsync('a poll timer consumed by a cancelled picker keeps polling alive', pickerTimerCancellationCase);
+  await testAsync('an unconfirmed slow start is observed until completion without restarting the batch', uncertainStartPollingCase);
+  await testAsync('an unconfirmed start of a restored admission starts status recovery', restoredAdmissionUncertainStartCase);
+  await testAsync('fast consecutive terminal runs refresh their exact result folder without repeated idle export reads', consecutiveTerminalRunsCase);
+  await testAsync('a stale poll cannot overwrite a new run after selection and Start both completed', stalePollAfterStartCase);
+  await testAsync('a delayed terminal context cannot overwrite a newly prepared selection', staleContextAfterAdmissionCase);
+  await testAsync('a delayed terminal context remains stale after the new selection was already started', () => staleContextAfterAdmissionCase(true));
+  await testAsync('late cancellation context preserves a freshly dropped selection', cancelledAdmissionContextRaceCase);
+  await testAsync('a failed run offers its ledger only when the backend confirms availability', failedRunLedgerAvailabilityCase);
+  await testAsync('completion metadata debt is visible without claiming zero missing documents or no results', completionPendingCase);
   done();
 })();

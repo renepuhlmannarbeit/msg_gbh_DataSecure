@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 05.09.2026 · 3.2.0-rc106
+Stand: 05.09.2026 · 3.2.0-rc107
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -481,7 +481,10 @@ lokale UI-Aktionen. Produktdaten und Handoffzustände bleiben strikt getrennt.
 
 ### Standalone- und Konvertersequenz nach DS-075
 
-Diese Sequenz ist als Windows-Engineering-Vertikalschnitt ausführbar.
+Der direkte Anonymisierungspfad dieser Sequenz ist als Windows-Engineering-
+Vertikalschnitt ausführbar. Der ausdrücklich markierte MarkItDown-Zweig ist
+SOLL/Engineering, nicht produktiv integriert; reine Konvertierung nach DS-085
+ist ebenfalls noch kein ausführbarer Produktpfad.
 Implementiert sind Tauri-Hülle, nativer Datei-/Ordnerpicker, Node-Application-
 Service, strenge UI-Projektion, privater längengerahmter Dispatcher,
 Sidecar-Lebensdauer und Zielkatalog. Der Windows-Prozessstart wurde geprüft.
@@ -509,7 +512,7 @@ sequenceDiagram
   E->>I: prüfen und versiegelten Snapshot erzeugen
   alt direkt unterstütztes Textformat
     I->>P: Content Graph
-  else freigegebener Konvertertyp
+  else SOLL: künftig freigegebener Konvertertyp (noch nicht produktiv)
     I->>M: Snapshot-Bytes über geerbtes stdin
     M-->>P: private Markdown-Repräsentation über stdout
   end

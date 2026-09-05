@@ -1,6 +1,6 @@
 # DataSecure Standalone – UAT-Testkit
 
-Stand: 05.09.2026 · Engineering-Pilot 3.2.0-rc106
+Stand: 05.09.2026 · Engineering-Pilot 3.2.0-rc107
 
 Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien
@@ -28,13 +28,17 @@ verwenden.
 | S06 | **Zuordnungsdatei anzeigen** | Explorer/Finder markiert `DataSecure-Zuordnung.csv` im letzten Laufordner; jede Quelle ist genau einem neutralen Ergebnisnamen zugeordnet. |
 | S07 | **Ergebnisordner ändern**, neuen leeren Ordner wählen, zweiten Lauf starten | Ein Ordnerpicker; neue Ergebnisse landen nur dort, bestehende Exporte werden nicht gespiegelt oder gelöscht. |
 | S08 | Picker abbrechen | Ruhiger Abbruch, kein automatischer zweiter Picker und kein erfundener Erfolg. |
-| S09 | Während eines synthetischen Stapels App beenden und erneut starten | Stapel erscheint als gestoppt/fortsetzbar; Fortsetzung verarbeitet nichts doppelt. |
+| S09 | Während eines synthetischen Stapels App beenden und erneut starten | Der bereits übergebene Worker darf lokal weiterarbeiten. Beim Neustart erscheint der tatsächliche Zustand: laufend, abgeschlossen oder bei einer echten Unterbrechung fortsetzbar. Kein Doppelstart und keine doppelte Verarbeitung. Fensterschließen allein ist kein zugesagter Stapelabbruch. |
 | S10 | Passwortgeschützte oder nicht freigegebene Testdatei wählen | Datei bleibt unverändert, wird verständlich als nicht verarbeitet gemeldet; andere sichere Stapelpositionen bleiben konsistent. |
 | S11 | **Diagnose öffnen** | Der lokale Diagnoseordner öffnet sich. `desktop-interactions.jsonl` und `sidecar-interactions.jsonl` enthalten nur feste Ereignisse, Aktionen, Laufzeiten und Fehlercodes – keine Dateinamen, Quell-/Zielpfade oder Inhalte. |
 | S12 | Vier Dateien aus `inputs/01-positive` hineinziehen, noch nicht starten | Lokale Dateinamen und Quellenordner erscheinen; **Anonymisierung starten** ist die einzige Startaktion. Ohne Klick entstehen keine Ergebnisse. Klick-/Tastaturauswahl bleibt gleichwertig. |
 | S13 | Während vorbereiteter Auswahl erneut Dateien hineinziehen; anschließend Auswahl verwerfen | Zweiter Drop ersetzt die erste Auswahl nicht. Verständlicher Hinweis; danach ist eine neue Auswahl möglich. Dateien plus Ordner zusammen werden als gemischte Auswahl abgelehnt. |
 | S14 | Den vierformatigen neuen Stapel starten und die vier erzeugten Markdown-Dateien vergleichen | Dieselbe synthetische Person ist überall `[PERSON_001]`; Arbeitgeber und Kunde tragen zwei unterschiedliche, dokumentübergreifend identische `[UNTERNEHMEN_…]`-Kennungen. Keine ursprünglichen Personen-/Firmennamen. Die Zuordnung enthält alle vier Eingaben und Ergebnisse. |
 | S15 | Betriebsart ansehen | **Nur in Markdown umwandeln – noch in Entwicklung** bleibt sichtbar, aber deaktiviert. Kein Klick darf einen scheinbaren Konvertierungslauf auslösen. Für den späteren vollständigen Konvertierungs-UAT gilt BL-010.28/DS-085. |
+| S16 | Nach einem erfolgreichen Lauf sofort **Neuen Stapel vorbereiten** wählen und einen zweiten kleinen Stapel starten | Die Verarbeitung läuft ohne erneutes Öffnen der App weiter. Unter **Ergebnisse** steht der neue Laufordner; beide Öffnen-Aktionen gehören zum neuen Lauf, nicht zum Vorgänger. |
+| S17 | Einen Picker länger offen lassen, abbrechen und anschließend einen kleinen Stapel starten | Nach dem Abbruch bleibt die App bedienbar; Fortschritt und Abschluss aktualisieren sich wieder selbständig. |
+| S18 | Nach einem erfolgreichen Stapel nur `../UAT_TEST_KIT/inputs/03-blocked/malformed.docx` starten; danach diese Datei gemeinsam mit `../UAT_TEST_KIT/inputs/01-positive/personnel-profile.txt` wählen | Der reine Fehlerlauf meldet keine anonymisierten Ergebnisse, bietet aber seine eigene Zuordnung mit Fehlercodes. Der Mischlauf enthält fertige Ergebnisse und gestoppte Quellen in seiner Zuordnung. Nie wird eine alte Zuordnung als aktuelle angeboten. Falls die Übersicht nicht geschrieben werden kann, erscheint ein ausdrücklicher Hinweis statt „Fertig“. |
+| S19 | Zwei synthetische Dokumente mit `Kunde: Nordstern Medizin GmbH` beziehungsweise `Kunde: Nordstern Medizin AG` und zusätzlich dem Kurzverweis `Nordstern Medizin` verarbeiten | Beide vollständigen Firmen bleiben unterschiedliche Unternehmenskennungen. Der mehrdeutige Kurzverweis erscheint als `[UNTERNEHMEN_UNKLAR_…]`, nicht als Person. Ein ausdrücklicher natürlicher Kundenname wie `Max Mustermann` bleibt eine Personenkennung. |
 
 Der Standard-Ergebnisordner wird bereits beim Start angezeigt, aber erst beim
 Start des ersten Stapels sicher angelegt und gespeichert. Eine ausdrückliche

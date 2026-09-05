@@ -133,7 +133,10 @@ function conservativeLabelledResiduals(text) {
 function isExplicitPersonOccurrence(text, span, coveringOrganizations = []) {
   const before = text.slice(Math.max(0, span.start - 180), span.start);
   const linePrefix = before.slice(before.lastIndexOf('\n') + 1);
-  if (new RegExp(`(?:^|\\|)\\s*${PERSON_LABEL}\\s*(?::|\\|)\\s*$`, 'iu').test(linePrefix)) {
+  // Use the same bounded quote/list prefixes as collectPersonAnchors. Their
+  // label applies only at this occurrence, not to every matching company alias.
+  const labelledPrefix = linePrefix.replace(/^[ \t]*(?:>[ \t]*)?(?:[-*+][ \t]+)?/u, '');
+  if (new RegExp(`(?:^|\\|)\\s*${PERSON_LABEL}\\s*(?::|\\|)\\s*$`, 'iu').test(labelledPrefix)) {
     // "Kunde" is intentionally accepted as a person label for documents such
     // as "Kunde: Max Mustermann", but it is also a strong organisation label.
     // A legal-form organisation at this exact position wins; otherwise the
@@ -141,8 +144,8 @@ function isExplicitPersonOccurrence(text, span, coveringOrganizations = []) {
     // OCR would over-redact company names. Suffixless values keep the person
     // interpretation, while an explicit person occurrence elsewhere remains
     // independent from this position-bound decision.
-    const ambiguousCustomerLabel = /(?:^|\|)[ \t]*(?:Kunde|Kundin)[ \t]*(?::|\|)[ \t]*$/iu.test(linePrefix);
-    if (ambiguousCustomerLabel && coveringOrganizations.some((org) => ORG_SUFFIX_TAIL_RE.test(org.text))) return false;
+    const ambiguousCustomerLabel = /(?:^|\|)[ \t]*(?:Kunde|Kundin)[ \t]*(?::|\|)[ \t]*$/iu.test(labelledPrefix);
+    if (ambiguousCustomerLabel && coveringOrganizations.some((org) => org.provenCompany === true || ORG_SUFFIX_TAIL_RE.test(org.text))) return false;
     return true;
   }
   if (HONORIFIC_PREFIX_RE.test(before)) return true;
@@ -167,6 +170,12 @@ function findLiteralSpans(text, needle, replacement, type, priority) {
     if (m[0].length === 0) re.lastIndex++;
   }
   return spans;
+}
+
+function distinctiveOrganizationAlias(value) {
+  const alias = orgAlias(value);
+  const distinctive = /\s/u.test(alias) || /^(?=.*[A-ZÄÖÜ])[A-ZÄÖÜ0-9&.+\-]{3,}$/u.test(alias);
+  return alias.length >= 5 && alias !== value && distinctive && !isAllowedOrg(alias) ? alias : null;
 }
 
 // The dictionary is the single source of truth for "which literal maps to which
@@ -228,9 +237,11 @@ function buildPersonDictionary(seeds, reg) {
   return entries;
 }
 
-function buildOrgDictionary(text, reg, profile, findings) {
+function buildOrgDictionary(text, reg, profile, findings, personKeys = new Set()) {
   const entries = [];
-  const orgs = collectOrganizations(text);
+  const orgs = collectOrganizations(text).filter((org) =>
+    ORG_SUFFIX_TAIL_RE.test(org) || !personKeys.has(key(org))
+  );
 
   for (const org of orgs) {
     const existing = reg.lookup('ORG', org);
@@ -244,25 +255,41 @@ function buildOrgDictionary(text, reg, profile, findings) {
 
   // Includes organisations registered by the personnel line rules.
   const orgPairs = typeof reg.entriesForKind === 'function' ? reg.entriesForKind('ORG').map(({ value, placeholder }) => [`ORG:${value}`, placeholder]) : reg.map;
+  const aliases = new Map();
   for (const [mapKey, ph] of orgPairs) {
     if (!mapKey.startsWith('ORG:')) continue;
     const value = mapKey.slice(4);
+    if (!ORG_SUFFIX_TAIL_RE.test(value) && personKeys.has(key(value))) continue;
     entries.push({
       value,
       placeholder: ph,
       type: 'ORGANIZATION',
       priority: PRIORITY.ORGANIZATION
     });
-    const alias = orgAlias(value);
-    const distinctiveAlias = /\s/u.test(alias) || /^(?=.*[A-ZÄÖÜ])[A-ZÄÖÜ0-9&.+\-]{3,}$/u.test(alias);
-    if (alias.length >= 5 && alias !== value && distinctiveAlias && !isAllowedOrg(alias)) {
-      entries.push({
-        value: alias,
-        placeholder: ph,
-        type: 'ORGANIZATION',
-        priority: PRIORITY.ORGANIZATION
-      });
+    const alias = distinctiveOrganizationAlias(value);
+    if (alias) {
+      const aliasKey = key(alias);
+      if (!aliases.has(aliasKey)) aliases.set(aliasKey, { value: alias, identities: new Map() });
+      aliases.get(aliasKey).identities.set(key(value), ph);
     }
+  }
+
+  // A short name shared by two legal entities is not proof that they are the
+  // same company. Resolve aliases once, after all full names are registered,
+  // instead of letting equal-priority span order silently choose the first.
+  const resolvedAliases = [];
+  for (const { value, identities } of aliases.values()) {
+    let placeholder = identities.values().next().value;
+    if (reg.readable === true) {
+      for (const ph of identities.values()) reg.remember('ORG', value, ph);
+      placeholder = reg.lookup('ORG', value);
+    } else if (identities.size > 1) {
+      // Legacy personnel employers use a role placeholder that is deliberately
+      // not a persistent entity reservation. Do not pretend its alias names a
+      // specific employer/customer, or write it into the HMAC registry.
+      placeholder = '[ORGANISATION_UNKLAR]';
+    }
+    resolvedAliases.push({ value, placeholder, type: 'ORGANIZATION', priority: PRIORITY.ORGANIZATION });
   }
 
   const projectPairs = typeof reg.entriesForKind === 'function' ? reg.entriesForKind('PROJECT').map(({ value, placeholder }) => [`PROJECT:${value}`, placeholder]) : reg.map;
@@ -276,7 +303,8 @@ function buildOrgDictionary(text, reg, profile, findings) {
     });
   }
 
-  return entries;
+  return entries.filter((entry) => entry.type !== 'ORGANIZATION' || !aliases.has(key(entry.value)))
+    .concat(resolvedAliases);
 }
 
 function anonymize(text, profile = 'general', options = {}) {
@@ -284,12 +312,40 @@ function anonymize(text, profile = 'general', options = {}) {
   const findings = [];
   const reg = options.registry || makeRegistry();
   const sourceCredentialRanges = credentialContextSpans(src);
-  const sourceOrgSpans = collectOrganizations(src).flatMap((org) =>
+  const sourceOrganizations = collectOrganizations(src);
+  const sourceOrgSpans = sourceOrganizations.flatMap((org) =>
     findLiteralSpans(src,org,'','ORGANIZATION',PRIORITY.ORGANIZATION)
   );
+  const legalOrganizationNames = [...new Set(sourceOrganizations
+    .filter((org) => ORG_SUFFIX_TAIL_RE.test(org)).flatMap((org) =>
+      [org, distinctiveOrganizationAlias(org)].filter(Boolean)
+    ))];
+  // V2 aliases are privately retained across resume. A typed company already
+  // known in this batch must not turn into a new person merely because the
+  // following document uses its customer label without the legal suffix.
+  if (reg.readable === true) {
+    for (const org of sourceOrganizations) {
+      if (reg.lookup('ORG', org) && !legalOrganizationNames.includes(org)) legalOrganizationNames.push(org);
+    }
+  }
+  const legalOrganizationSpans = legalOrganizationNames.flatMap((org) =>
+    findLiteralSpans(src, org, '', 'ORGANIZATION', PRIORITY.ORGANIZATION)
+      .map((span) => ({ ...span, provenCompany: true }))
+  );
+  const organizationOnlySeed = (seed) => {
+    const occurrences = findLiteralSpans(src, seed.value, '', 'PERSON', PRIORITY.PERSON);
+    return occurrences.length > 0 && occurrences.every((span) => {
+      const covering = legalOrganizationSpans.filter((org) => span.start >= org.start && span.end <= org.end);
+      return covering.length > 0 && !isExplicitPersonOccurrence(src, span, covering);
+    });
+  };
 
-  const strongPersonAnchors = collectPersonAnchors(src, profile);
+  // "Kunde" can introduce a person, but a proven legal company (including
+  // its repeated short name) must not create a global PERSON/surname alias.
+  // Explicit Name/Herr/holder occurrences remain independent evidence.
+  const strongPersonAnchors = collectPersonAnchors(src, profile).filter((seed) => !organizationOnlySeed(seed));
   const seeds = collectPersonSeeds(src, profile, strongPersonAnchors).filter((seed) => {
+    if (organizationOnlySeed(seed)) return false;
     const occurrences=findLiteralSpans(src,seed.value,'','PERSON',PRIORITY.PERSON);
     if(!occurrences.length) return true;
     // A capitalised organisation alias such as "Deutsche Telekom" can look
@@ -324,7 +380,7 @@ function anonymize(text, profile = 'general', options = {}) {
 
   const dictionary = [
     ...buildPersonDictionary(seeds, reg),
-    ...buildOrgDictionary(src, reg, profile, findings)
+    ...buildOrgDictionary(src, reg, profile, findings, personKeys)
   ];
 
   for (const seed of seeds) findings.push({ type: 'PERSON', value_hash: hashShort(seed.value) });
@@ -346,9 +402,15 @@ function anonymize(text, profile = 'general', options = {}) {
   const spans = [...findStructuredSpans(out)].filter((span) =>
     !(span.type === 'URL' && isProtectedProfessionalDomain(out,span.start,span.end,credentialRanges))
   );
-  const organizationCoverage = collectOrganizations(out).flatMap((org) =>
+  const organizationCoverage = collectOrganizations(out).filter((org) =>
+    ORG_SUFFIX_TAIL_RE.test(org) || !personKeys.has(key(org))
+  ).flatMap((org) =>
     findLiteralSpans(out, org, '', 'ORGANIZATION', PRIORITY.ORGANIZATION)
   );
+  organizationCoverage.push(...legalOrganizationNames.flatMap((org) =>
+    findLiteralSpans(out, org, '', 'ORGANIZATION', PRIORITY.ORGANIZATION)
+      .map((span) => ({ ...span, provenCompany: true }))
+  ));
   for (const entry of dictionary) {
     const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority);
     for (const span of found) {

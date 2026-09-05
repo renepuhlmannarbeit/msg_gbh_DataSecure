@@ -13,6 +13,7 @@ const { spawnSync } = require('child_process');
 
 const baseFiles = [
   'tests/test-product-bootstrap.js', 'tests/test-standalone.js',
+  'tests/test-standalone-frontend.js',
   'tests/test-standalone-sidecar.js',
   'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
   'tests/test-support-trace.js',

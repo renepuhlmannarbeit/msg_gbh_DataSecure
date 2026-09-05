@@ -38,6 +38,8 @@ if (Test-Path -LiteralPath $evidenceRoot) { throw 'PKG04_EVIDENCE_ALREADY_EXISTS
 New-Item -ItemType Directory -Path $evidenceRoot | Out-Null
 
 $candidates = @()
+Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    'tests/manual/standalone-native-windows-launch.ps1', '-ValidateIsolationOnly')
 foreach ($label in @('candidate-a', 'candidate-b')) {
     Invoke-Checked $cargo @('clean', '--manifest-path', 'apps/datasecure-standalone/tauri-contract/Cargo.toml')
     Invoke-Checked 'npm.cmd' @('run', 'build:standalone:windows:portable')
@@ -62,6 +64,7 @@ foreach ($label in @('candidate-a', 'candidate-b')) {
         package_smoke = 'passed'
         worker_handoff_smoke = 'passed'
         native_binary_smoke = 'passed'
+        native_smoke_isolation = 'fresh-private-profile-documents-temp-webview'
     }
 }
 

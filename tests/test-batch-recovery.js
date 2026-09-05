@@ -94,6 +94,7 @@ function fixture(options = {}) {
       awaiting_resume: value.items.some((item) => item.status === 'retryable' || item.status === 'processing')
     }),
     visibleExportDirectory: (token) => options.visibleDirectories?.[token] || '',
+    ...(options.visibleExportStatus ? { visibleExportStatus: options.visibleExportStatus } : {}),
     exportCompletedState(value) {
       events.push(`export:${value.token}`);
       if (options.exportOnEnsure && options.visibleDirectories) {
@@ -300,8 +301,47 @@ test('a newer active run does not hide the latest completed visible result direc
     visibleDirectories: { [tokens[0]]: 'run:completed' }
   });
   assert.strictEqual(item.recovery.latestProductResultDirectory('standalone'), 'run:completed');
+  assert.strictEqual(item.recovery.latestProductResultDirectory('standalone', { latestBatchOnly: true }), '',
+    'the current-batch UI cannot silently resolve an earlier completed run');
   assert.strictEqual(item.recovery.latestProductBatchStatus('standalone').processing, true,
     'status still reports the newer active run');
+});
+
+test('current-batch resolution never falls back after an all-stopped batch', () => {
+  const older = state(tokens[0], { items: [{ status: 'released' }] });
+  older.product_channel = 'standalone';
+  older.created_at = '2026-08-25T10:00:00.000Z';
+  const failed = state(tokens[1], { items: [{ status: 'stopped' }] });
+  failed.product_channel = 'standalone';
+  failed.created_at = '2026-08-25T12:00:00.000Z';
+  const directories = { [tokens[0]]: 'run:older' };
+  const item = fixture({ states: [older, failed], visibleDirectories: directories });
+  assert.strictEqual(item.recovery.latestProductResultDirectory('standalone', { latestBatchOnly: true }), '');
+  assert.strictEqual(item.recovery.latestProductBatchStatus('standalone').completion_available, false);
+  directories[tokens[1]] = 'run:failed-summary';
+  assert.strictEqual(item.recovery.latestProductResultDirectory('standalone', { latestBatchOnly: true }), 'run:failed-summary');
+});
+
+test('both product status paths carry completion debt separately from released documents', () => {
+  let pending = true;
+  const stopped = state(tokens[0], { items: [{ status: 'released' }, { status: 'stopped' }] });
+  stopped.product_channel = 'standalone';
+  stopped.created_at = '2026-08-25T12:00:00.000Z';
+  const item = fixture({
+    states: [stopped], visibleDirectories: { [tokens[0]]: 'run:summary' },
+    visibleExportStatus: () => ({ exported: 1, pending: 0, available: !pending,
+      ...(pending ? { completion_pending: true } : {}) })
+  });
+  for (const status of [item.recovery.latestProductBatchStatus('standalone'), item.recovery.productStatusSnapshot('standalone').latest]) {
+    assert.strictEqual(status.completion_pending, true);
+    assert.strictEqual(status.export_pending_count, 0);
+    assert.strictEqual(status.completed_count, 1);
+    assert.strictEqual(status.result_count, 0);
+    assert.strictEqual(status.completion_available, false);
+  }
+  pending = false;
+  assert.strictEqual(item.recovery.productStatusSnapshot('standalone').latest.completion_pending, undefined);
+  assert.strictEqual(item.recovery.latestProductBatchStatus('standalone').completion_available, true);
 });
 
 test('lock acquisition failure skips recovery without touching journals and root-read failure still releases once', () => {

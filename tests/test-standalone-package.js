@@ -51,3 +51,55 @@ test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () 
   assert.match(releaseGate, /Write-JsonUtf8NoBom \$receiptPath \$receipt 8/u);
   assert.match(releaseGate, /Write-JsonUtf8NoBom \$bindingPath \$binding 5/u);
 });
+
+test('package smoke uses a private environment and refuses links before cleanup', async () => {
+  const { isolatedSidecarEnvironment, removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
+  const directory = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
+  let linked = false;
+  const link = path.join(directory, 'link');
+  try {
+    const environment = isolatedSidecarEnvironment(root, directory, {
+      SystemRoot: 'C:\\Windows', ComSpec: 'C:\\Windows\\System32\\cmd.exe',
+      HOME: 'do-not-use', TEMP: 'do-not-use', EU_PRIVACY_ROOT: 'do-not-use', NODE_OPTIONS: 'do-not-use'
+    });
+    assert.equal(environment.PATH, '');
+    assert.equal(environment.EU_PRIVACY_ROOT, undefined);
+    assert.equal(environment.NODE_OPTIONS, undefined);
+    for (const key of ['USERPROFILE', 'HOME', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'TMP', 'TMPDIR',
+      'XDG_DATA_HOME', 'DATASECURE_STANDALONE_DOCUMENTS_DIR', 'DATASECURE_STANDALONE_DIAGNOSTIC_DIR']) {
+      assert.ok(environment[key].startsWith(directory + path.sep));
+      assert.equal(fs.lstatSync(environment[key]).isDirectory(), true);
+    }
+    assert.throws(() => removePackageSmokeScope(root, root), /STANDALONE_SMOKE_CLEANUP_UNSAFE/u);
+    const synthetic = path.join(directory, 'synthetic');
+    fs.mkdirSync(synthetic);
+    const sentinel = path.join(synthetic, 'source.txt');
+    fs.writeFileSync(sentinel, 'synthetic untouched fixture');
+    fs.symlinkSync(synthetic, link, process.platform === 'win32' ? 'junction' : 'dir');
+    linked = true;
+    assert.throws(() => removePackageSmokeScope(root, directory), /STANDALONE_SMOKE_CLEANUP_UNSAFE/u);
+    assert.equal(fs.readFileSync(sentinel, 'utf8'), 'synthetic untouched fixture');
+    assert.equal(fs.existsSync(environment.LOCALAPPDATA), true, 'a rejected tree is not partially removed');
+  } finally {
+    if (linked) {
+      assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
+      fs.unlinkSync(link);
+    }
+    removePackageSmokeScope(root, directory);
+  }
+  assert.equal(fs.existsSync(directory), false);
+});
+
+test('package smoke exercises a real failed CSV after success and resolves its own mapping', () => {
+  const smoke = fs.readFileSync(path.join(root, 'tests', 'test-standalone-package-smoke.mjs'), 'utf8');
+  assert.match(smoke, /env: environment/u);
+  assert.match(smoke, /isolatedSidecarEnvironment\(root, extraction\)/u);
+  assert.match(smoke, /removePackageSmokeScope\(root, extraction\)/u);
+  assert.match(smoke, /failedSourceName = 'synthetisch-offenes-zitat\.csv'/u);
+  assert.match(smoke, /assert\.notEqual\(failedRun, exactRun\)/u);
+  assert.match(smoke, /failedTerminal\.ledger_available, true/u);
+  assert.match(smoke, /local_path: failedMapping/u);
+  assert.match(smoke, /fs\.readFileSync\(failedSource\), failedOriginal/u);
+  const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
+  assert.throws(() => parseDocumentBuffer(Buffer.from('Name,Wert\nBeispiel,"nicht abgeschlossen\n'), '.csv'), /CSV_QUOTE_INVALID/u);
+});

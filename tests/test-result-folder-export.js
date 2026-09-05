@@ -89,8 +89,82 @@ try {
   assert.ok(fs.existsSync(path.join(resultOutputDirectory(), runs[0], 'DataSecure-Zuordnung.csv')));
   assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true }, 'retry is idempotent');
 
+  {
+  const failedState = {
+    token: '71'.repeat(32), created_at: '2026-09-05T12:00:00.000Z', product_channel: 'standalone',
+    items: [{ status: 'stopped', source_label: 'kaputt.docx', error_code: 'DOCX_STRUCTURE_UNSUPPORTED' }]
+  };
+  assert.deepStrictEqual(exportCompletedState(failedState), { exported: 0, pending: 0, available: true });
+  const failedRun = visibleExportDirectory(failedState.token);
+  assert.ok(failedRun && failedRun !== visibleExportDirectory(state.token));
+  assert.deepStrictEqual(fs.readdirSync(failedRun), ['DataSecure-Zuordnung.csv']);
+  assert.match(fs.readFileSync(path.join(failedRun, 'DataSecure-Zuordnung.csv'), 'utf8'),
+    /"kaputt.docx";"Kein Ergebnis – gestoppt \(DOCX_STRUCTURE_UNSUPPORTED\)"/u);
+  assert.deepStrictEqual(visibleExportStatus(failedState.token, 0), { exported: 0, pending: 0, available: true });
+
+  const mixedState = { ...failedState, token: '81'.repeat(32), items: [released(id1, 'gut.txt'), ...failedState.items] };
+  assert.deepStrictEqual(exportCompletedState(mixedState), { exported: 1, pending: 0, available: true });
+  const mixedCsv = fs.readFileSync(path.join(visibleExportDirectory(mixedState.token), 'DataSecure-Zuordnung.csv'), 'utf8');
+  assert.match(mixedCsv, /"gut.txt";"Dokument-001-anonymisiert.md"/u);
+  assert.match(mixedCsv, /"kaputt.docx";"Kein Ergebnis – gestoppt/u);
+
+  // A failed-only completion can be replayed without creating or copying raw files.
+  const pendingState = { ...failedState, token: '91'.repeat(32) };
+  const mixedPendingState = { ...failedState, token: '92'.repeat(32),
+    items: [released(id1, 'bereits-fertig.txt'), ...failedState.items] };
+  const nativeLink = fs.linkSync;
+  fs.linkSync = function (from, to, ...args) {
+    if (String(to).endsWith('DataSecure-Zuordnung.csv')) throw Object.assign(new Error('test'), { code: 'EIO' });
+    return nativeLink.call(this, from, to, ...args);
+  };
+  try {
+    assert.deepStrictEqual(exportCompletedState(pendingState), { exported: 0, pending: 0, available: false });
+    assert.strictEqual(visibleExportDirectory(pendingState.token), '');
+    assert.deepStrictEqual(visibleExportStatus(pendingState.token, 0),
+      { exported: 0, pending: 0, available: false, completion_pending: true });
+    assert.deepStrictEqual(exportCompletedState(mixedPendingState), { exported: 1, pending: 0, available: false });
+    assert.strictEqual(visibleExportDirectory(mixedPendingState.token), '');
+    assert.deepStrictEqual(visibleExportStatus(mixedPendingState.token, 1),
+      { exported: 1, pending: 0, available: false, completion_pending: true },
+      'an existing document is final even while publishing its run mapping fails');
+  } finally { fs.linkSync = nativeLink; }
+  const completedDocument = path.join(resultOutputDirectory(),
+    JSON.parse(fs.readFileSync(recordPath(mixedPendingState.token), 'utf8')).run_directory,
+    'Dokument-001-anonymisiert.md');
+  const documentBeforeReplay = fs.readFileSync(completedDocument);
+  assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 });
+  assert.ok(visibleExportDirectory(pendingState.token));
+  assert.strictEqual(fs.readdirSync(visibleExportDirectory(pendingState.token)).length, 1);
+  assert.deepStrictEqual(visibleExportStatus(pendingState.token, 0), { exported: 0, pending: 0, available: true });
+  assert.deepStrictEqual(visibleExportStatus(mixedPendingState.token, 1), { exported: 1, pending: 0, available: true });
+  assert.deepStrictEqual(fs.readFileSync(completedDocument), documentBeforeReplay);
+  assert.match(fs.readFileSync(path.join(visibleExportDirectory(mixedPendingState.token), 'DataSecure-Zuordnung.csv'), 'utf8'),
+    /"kaputt.docx";"Kein Ergebnis – gestoppt/u);
+
+  const pluginFailure = { ...failedState, token: '61'.repeat(32), product_channel: 'plugin' };
+  exportCompletedState(pluginFailure);
+  assert.strictEqual(visibleExportDirectory(pluginFailure.token), '', 'Cowork never receives source-label failure summaries');
+  assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(pluginFailure.token), 'utf8')).stopped_items, undefined);
+  }
+
   // The shared exporter must not leak source labels into a Cowork-connected
   // folder. Only the standalone product receives the convenient run mapping.
+  {
+    // A crash after legacy mapping publication but before complete=true must
+    // finish that immutable plan, not conflict with newly added stopped rows.
+    const oldMixed = { ...state, token: '51'.repeat(32), items: [released(id1, 'alt.txt')] };
+    assert.strictEqual(exportCompletedState(oldMixed).available, true);
+    const originalRun = visibleExportDirectory(oldMixed.token);
+    const oldMapping = fs.readFileSync(path.join(originalRun, 'DataSecure-Zuordnung.csv'));
+    const oldRecord = JSON.parse(fs.readFileSync(recordPath(oldMixed.token), 'utf8'));
+    fs.writeFileSync(recordPath(oldMixed.token), JSON.stringify({ ...oldRecord, complete: false }));
+    const recovered = { ...oldMixed, items: [...oldMixed.items,
+      { status: 'stopped', source_label: 'alt-gestoppt.docx', error_code: 'PROCESSING_STOPPED' }] };
+    assert.deepStrictEqual(exportCompletedState(recovered), { exported: 1, pending: 0, available: true });
+    assert.strictEqual(visibleExportDirectory(oldMixed.token), originalRun);
+    assert.deepStrictEqual(fs.readFileSync(path.join(originalRun, 'DataSecure-Zuordnung.csv')), oldMapping);
+  }
+
   const pluginId = `ds_${'d'.repeat(32)}`;
   packageFixture(pluginId, '# Plugin-Ergebnis');
   const pluginState = {

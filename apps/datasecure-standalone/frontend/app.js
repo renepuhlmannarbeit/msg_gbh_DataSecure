@@ -41,6 +41,7 @@ let acknowledgedPresentationGeneration = null;
 let activeView = 'process';
 let viewChosenByUser = false;
 let lastPublicState = null;
+let lastTerminalContextKey = null;
 let operationInFlight = false;
 let foregroundOperationInFlight = false;
 let nativeDropInFlight = false;
@@ -48,6 +49,9 @@ let unlistenNativeDrop = null;
 let pageClosed = false;
 
 function busy(value) {
+  // A foreground operation can replace the current selection or run while a
+  // previous status/context request is still in flight. Invalidate that reply.
+  if (value) admissionGeneration += 1;
   foregroundOperationInFlight = value;
   applyBusyState();
 }
@@ -111,9 +115,15 @@ async function refreshUiContext() {
   const generation = admissionGeneration;
   try {
     const context = await invoke('get_ui_context');
-    if (!nativeDropInFlight && admissionGeneration === generation && !pageClosed) renderUiContext(context);
+    if (!operationInFlight && admissionGeneration === generation && !pageClosed) {
+      renderUiContext(context);
+      return true;
+    }
   }
-  catch (error) { showError(error); }
+  catch (error) {
+    if (!operationInFlight && admissionGeneration === generation && !pageClosed) showError(error);
+  }
+  return false;
 }
 function showError(error) {
   const code = String(error || 'STANDALONE_OPERATION_FAILED');
@@ -152,6 +162,7 @@ function handleNativeDrop(event) {
   if (payload.phase === 'enter') {
     if (updateDropAvailability()) byId('drop-zone').className = 'drop-zone active';
   } else if (payload.phase === 'checking') {
+    admissionGeneration += 1;
     nativeDropInFlight = true;
     applyBusyState();
     switchView('process', true);
@@ -189,6 +200,9 @@ async function call(command) {
     const code = String(error || 'STANDALONE_OPERATION_FAILED');
     if (code === 'STANDALONE_NO_ADMISSION' || code === 'STANDALONE_START_FAILED' || code === 'STANDALONE_IPC_FAILED' || code === 'STANDALONE_IPC_TIMEOUT') {
       resetAdmissionUi();
+      // A restored admission has no running poll yet. An unconfirmed start can
+      // still be processing in the backend, so recover via status, never retry.
+      scheduleRefresh(1200);
     }
     showError(code);
     return null;
@@ -219,8 +233,9 @@ byId('select-folder').addEventListener('click', () => choose('select_folder'));
 byId('cancel').addEventListener('click', async () => {
   if (!await call('cancel_admission')) return;
   resetAdmissionUi();
-  await refreshUiContext();
-  status('Bereit', 'Wähle Dateien oder einen ganzen Ordner aus.');
+  if (await refreshUiContext() && !admitted && !operationInFlight) {
+    status('Bereit', 'Wähle Dateien oder einen ganzen Ordner aus.');
+  }
   scheduleRefresh(0);
 });
 byId('start').addEventListener('click', async () => {
@@ -274,21 +289,38 @@ function acknowledgeRenderedTerminalState(generation) {
 }
 
 async function refresh() {
-  if (admitted || operationInFlight || refreshInFlight || pageClosed) return;
+  if (pageClosed || refreshInFlight) return;
+  if (admitted || operationInFlight) {
+    // A timer consumed while a native dialog or uncertain start is pending
+    // must not permanently stop polling. No IPC is sent while it is busy.
+    scheduleRefresh(admitted && !operationInFlight ? 5000 : 1200);
+    return;
+  }
+  const generation = admissionGeneration;
   refreshInFlight = true;
   let nextDelay = 5000;
   try {
     const state = await invoke('get_public_state');
-    if (admitted || operationInFlight || pageClosed) return;
-    if ((state.state === 'results_available' || state.state === 'completed_without_results') &&
-        state.state !== lastPublicState) await refreshUiContext();
-    if (admitted || operationInFlight || pageClosed) return;
+    if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
+    if (state.state === 'results_available' || state.state === 'completed_without_results') {
+      // Two fast consecutive runs may both be first observed as terminal. A
+      // state-name comparison alone would retain the preceding run's folder.
+      // The presentation generation covers new backend notices; the local
+      // operation generation also covers runs finishing before their first poll.
+      const contextKey = `${state.state}:${state.presentation_generation ?? ''}:${generation}`;
+      if (contextKey !== lastTerminalContextKey) {
+        if (!await refreshUiContext()) return;
+        lastTerminalContextKey = contextKey;
+      }
+    } else lastTerminalContextKey = null;
+    if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
     lastPublicState = state.state;
     updateDropAvailability();
     byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');
     visible('results', state.results_available === true);
-    visible('ledger', state.results_available === true || state.state === 'completed_without_results');
+    visible('ledger', state.results_available === true ||
+      (state.state === 'completed_without_results' && state.ledger_available === true));
     visible('select-files', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
     visible('select-folder', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
     if (state.state === 'preparing') {
@@ -305,19 +337,35 @@ async function refresh() {
     }
     else if (state.state === 'review_required') { status('Prüfung erforderlich', `${state.review_count} Datei${state.review_count === 1 ? '' : 'en'} benötigt eine lokale Entscheidung.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
     else if (state.state === 'stopped') { status('Fortsetzung möglich', `${state.resumable_count} unterbrochene${state.resumable_count === 1 ? 'r Stapel kann' : ' Stapel können'} fortgesetzt werden.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
-    else if (state.state === 'export_pending') { status('Ergebnis wird bereitgestellt', `${state.export_pending_count} anonymisierte${state.export_pending_count === 1 ? 's Ergebnis wird' : ' Ergebnisse werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
+    else if (state.state === 'export_pending') {
+      if (state.completion_pending === true) {
+        status('Abschlussübersicht wird bereitgestellt',
+          'Die Verarbeitung ist abgeschlossen, aber die lokale Zuordnungsdatei oder der Abschlussnachweis konnte noch nicht vollständig gespeichert werden. Bitte den Ergebnisordner prüfen und erneut auswählen.');
+      } else {
+        status('Ergebnis wird bereitgestellt', `${state.export_pending_count} anonymisierte${state.export_pending_count === 1 ? 's Ergebnis wird' : ' Ergebnisse werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`);
+      }
+      acknowledgeRenderedTerminalState(state.presentation_generation);
+    }
     else if (state.state === 'results_available') {
       status('Fertig', `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`);
       if (!viewChosenByUser && !admitted) switchView('results');
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
-    else if (state.state === 'completed_without_results') { status('Sicher abgeschlossen', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} gestoppt. Es ist kein anonymisiertes Ergebnis verfügbar; Details stehen in der lokalen Zuordnung.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
+    else if (state.state === 'completed_without_results') {
+      const details = state.ledger_available === true
+        ? 'Details stehen in der lokalen Zuordnung.'
+        : 'Eine Zuordnungsdatei ist für diesen Lauf nicht verfügbar. Bitte die Diagnose öffnen.';
+      status('Sicher abgeschlossen', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} gestoppt. Es ist kein anonymisiertes Ergebnis verfügbar. ${details}`);
+      acknowledgeRenderedTerminalState(state.presentation_generation);
+    }
     else if (state.state === 'blocked') { acknowledgedPresentationGeneration = null; status('Nicht bereit', 'Der lokale DataSecure-Core konnte nicht gestartet werden.'); }
     else {
       acknowledgedPresentationGeneration = null;
       status('Bereit', 'Wähle Dateien oder einen ganzen Ordner aus.');
     }
-  } catch (error) { showError(error); }
+  } catch (error) {
+    if (!admitted && !operationInFlight && !pageClosed && generation === admissionGeneration) showError(error);
+  }
   finally {
     refreshInFlight = false;
     scheduleRefresh(nextDelay);

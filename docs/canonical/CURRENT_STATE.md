@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 05.09.2026 · 3.2.0-rc106 · integrierter Expertenstand: lesbare Standalone-Kennungen, native Aufnahme und Cowork-Abschlussparität
+Stand: 05.09.2026 · 3.2.0-rc107 · integrierter Expertenstand: lesbare Standalone-Kennungen, native Aufnahme und Cowork-Abschlussparität
 
 ## Produkt in einem Satz
 
@@ -19,21 +19,57 @@ denselben Admissionvertrag wie der Picker und verlangt weiterhin den expliziten
 Start. Die Cowork-Abschlussansicht bindet ihren Öffnen-Knopf an den konkreten
 sichtbaren Exportlauf und behauptet bei nicht verfügbarem Ziel keinen Erfolg.
 
-Lokaler Gegencheck am 05.09.2026: `test:product` vollständig grün (39 Basis-
+RC106-Gegencheck am 05.09.2026: `test:product` vollständig grün (39 Basis-
 und 111 direkt registrierte Testdateien, einschließlich 2.000 variierender
 Eingaben), zusätzlich Standalone-/Rust-, Dokumentations-, Skill- und
 Status-App-Gates. Der Paket-Smoke verlangt jetzt vier echte TXT/Markdown/CSV/
 DOCX-Eingaben, stabile lesbare Kennungen, unveränderte Originale und die genaue
-Laufzuordnung. Der nächste Kandidat wird erst nach sauberem Quellcommit durch
-zwei bytegleiche PKG-04-Builds samt Paket- und nativen Startsmokes an INT-13
-gebunden; der Receipt unter `dist/pkg-04/<commit>/` ist der Nachweis, nicht
-dieser Testplan. Sichtbare Dragdrop-/Finder-/Explorer-Abnahme bleibt separat.
+Laufzuordnung. Der RC106-Kandidat wurde aus `17a21608223dcefd96c20e4b739ff6e39d638b58`
+zweimal bytegleich gebaut und an INT-13 gebunden: 36.056.971 Byte, SHA-256
+`12ea72d69ff65ae6f10c3319852cd8a0b4cc5182e6607582900602bf7faecbec`.
+Der Receipt unter `dist/pkg-04/17a21608223dcefd96c20e4b739ff6e39d638b58/`
+belegt diesen historischen Kandidaten, nicht spätere Änderungen.
+Sichtbare Dragdrop-/Finder-/Explorer-Abnahme bleibt separat.
 Der erste RC106-Paketlauf bestand die vierformatige Verarbeitung; der native
 WebView-Start war in der Sandbox blockiert und bestand unverändert mit normalen
 Hostrechten. Der unabhängige Gegencheck begrenzt außerdem den neuen Fenster-Hook
 auf optional vorhandenen Zustand bei tatsächlichem Drop, damit frühe
-Fensterereignisse vor dem Tauri-Setup keinen Panic auslösen können. Der finale
-PKG-04-Lauf muss deshalb aus dem korrigierten Folgecommit neu gebaut werden.
+Fensterereignisse vor dem Tauri-Setup keinen Panic auslösen können.
+
+### Nachprüfung und aktueller Korrekturschnitt
+
+Der erneute unabhängige Review fand trotz grüner RC106-Gates eine ungetrennte
+native Testdatenumgebung, verlorene Polltimer, veraltete Laufanzeigen, eine
+Zuordnungszusage für den falschen Vorgängerlauf und Firmenkurzformen mit falscher
+PERSON-Kennung. Diese Fehler sind unter den bestehenden Storys im Backlog
+mit Regressionen geschlossen. Der alte native Startnachweis belegt keine Testdatenisolation und
+keine sichtbare Explorer-/Finder-Bedienung; es ist kein Datenverlust nachgewiesen.
+Neue native Tests dürfen erst den explizit isolierten Profilvertrag verwenden.
+Frontend-Regressionsfälle gehören jetzt zum normalen `test:product`-Profil.
+
+Der abschließende Lifecycle-Gegencheck korrigiert außerdem einen nach Desktop-EOF
+weiterlebenden Steuerprozess: EOF, defekte Frames und abgebrochene Ausgabepipes
+beenden nur den Sidecar; bereits dauerhaft übergebene Stapelworker dürfen weiter
+abschließen. Wartende Desktopaktionen starten nicht nach. Sieben echte
+Prozess-/Worker-Szenarien und zwei Protokoll-/Startfälle prüfen das Verhalten;
+Cowork besitzt bereits einen getrennten begrenzten Shutdown und benötigt keine
+entsprechende Produktänderung.
+
+Lokale RC107-E0-Evidence: `test:product` vollständig grün (40 Basis- und 111
+direkte Testdateien, einschließlich 2.000 Eingaben und echter 100-Dateien-
+Crash-/Fortsetzungsläufe). Nach den letzten Gegencheck-Korrekturen wurde
+`test:standalone` nochmals vollständig ausgeführt: 38 Produkttests, 14
+Frontendfälle, die echten Sidecar-Lifecyclefälle, 11 Desktop-, 5 Paket-, 9
+MarkItDown-Vertrags- sowie 12 Rust-Tests grün. Dies ist kein Nachweis für
+fehlerfreie beliebige Eingaben oder sichtbare Zielhostbedienung.
+
+Neue Standalone-Läufe führen auch gestoppte Quellen mit festem Fehlercode in
+ihrer eigenen Zuordnung. Der aktuelle Laufresolver fällt niemals auf frühere
+Ergebnisse zurück. Bereits veröffentlichte Altzuordnungen bleiben unverändert;
+ein leeres Altrecord ohne veröffentlichte Dateien kann seine fehlende Übersicht
+nachliefern. Cowork erhält weder diese Zuordnungen noch Quelldateinamen.
+Ein neuer Freigabekandidat benötigt erneut Commit-, Build- und Smoke-Evidence;
+die RC106-Bindung darf nicht nachträglich umetikettiert werden.
 
 ## Belegter Produktumfang
 
@@ -115,9 +151,12 @@ Die häufige Standalone-Statusabfrage enumeriert Recovery-Zähler und den jüngs
 Standalone-Lauf gemeinsam. Auch bei 1.000 aufbewahrten Journalen gibt es pro
 Poll genau einen Verzeichnisscan und höchstens einen Read je Journal; die
 Produktoberfläche zeigt die laufbezogene Zuordnung eines Mischstapels erst nach
-einem terminalen sichtbaren Ergebnis. Ein vollständig gestoppter Lauf besitzt
-keine sichtbaren Ergebnisse und daher keine laufbezogene Ergebniszuordnung; die
-private globale Zuordnung bleibt für die lokale Nachvollziehbarkeit erhalten.
+einem terminalen sichtbaren Ergebnis. Seit RC107 besitzt auch ein vollständig
+gestoppter Standalone-Lauf eine eigene Übersicht mit Quellen und festen
+Fehlercodes, aber keine anonymisierten Ergebnisdateien. Scheitert nur die
+Abschlussübersicht, bleibt die Anzeige ausdrücklich `export_pending`, ohne
+bereits fertige Dokumente als fehlgeschlagen zu zählen. Die private globale
+Zuordnung bleibt zusätzlich für die lokale Nachvollziehbarkeit erhalten.
 
 Der aktuelle Kern erkennt und entfernt direkte Identifikatoren einschließlich
 mehrsprachiger Namensfelder, Anreden, Kontakt-URIs, Telefon-, Adress-, Steuer- und

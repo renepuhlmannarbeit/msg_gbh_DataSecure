@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod native_smoke;
+
 use serde_json::{json, Value};
 use std::{
     fs::OpenOptions,
@@ -24,6 +26,7 @@ const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static DIAGNOSTIC_LOCK: Mutex<()> = Mutex::new(());
 static DIAGNOSTIC_SESSION: OnceLock<String> = OnceLock::new();
+static NATIVE_SMOKE_PROFILE: OnceLock<Option<native_smoke::Profile>> = OnceLock::new();
 
 fn diagnostic_session() -> &'static str {
     DIAGNOSTIC_SESSION.get_or_init(|| {
@@ -385,7 +388,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
             command.env(key, value);
         }
     }
-    if let Ok(documents) = app.path().document_dir() {
+    // Windows Known Folders ignore an isolated child's USERPROFILE. The
+    // validated smoke profile must override this before product bootstrap.
+    if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
+        command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", &profile.documents);
+    } else if let Ok(documents) = app.path().document_dir() {
         command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", documents);
     }
     command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
@@ -1000,6 +1007,20 @@ fn frontend_ready(state: State<'_, DesktopState>, native_drop_ready: Option<bool
 }
 
 fn main() {
+    let profile = match native_smoke::from_environment() {
+        Ok(profile) => profile,
+        Err(_) => std::process::exit(65),
+    };
+    let isolated_smoke = profile.is_some();
+    let _ = NATIVE_SMOKE_PROFILE.set(profile);
+    let mut context = tauri::generate_context!();
+    if isolated_smoke {
+        // Do not let configured windows create a real-user WebView directory
+        // before setup. The builder below receives an absolute private path.
+        for window in &mut context.config_mut().app.windows {
+            window.create = false;
+        }
+    }
     diagnostic_event("application_started", None, "ready", None, None);
     tauri::Builder::default()
         .on_page_load(|_webview, _payload| {
@@ -1014,6 +1035,13 @@ fn main() {
                 frontend_ready: Arc::new(AtomicBool::new(false)),
             };
             app.manage(state);
+            if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
+                for config in &app.config().app.windows {
+                    tauri::WebviewWindowBuilder::from_config(app, config)?
+                        .data_directory(profile.webview.join(&config.label))
+                        .build()?;
+                }
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1021,6 +1049,18 @@ fn main() {
                 return;
             }
             match event {
+                WindowEvent::CloseRequested { .. }
+                    if NATIVE_SMOKE_PROFILE
+                        .get()
+                        .and_then(Option::as_ref)
+                        .is_some() =>
+                {
+                    if let Some(state) = window.try_state::<DesktopState>() {
+                        if let Ok(mut process) = state.sidecar.lock() {
+                            process.take();
+                        }
+                    }
+                }
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
                     // Configured windows can emit events before setup manages
                     // DesktopState. Early events must not panic during startup.
@@ -1053,7 +1093,7 @@ fn main() {
             shutdown,
             frontend_ready
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("DataSecure Standalone konnte nicht gestartet werden");
 }
 
