@@ -8,8 +8,12 @@ const { safeResolvePackage, readVerifiedFile } = require('./package-store');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
 const { writeFully, syncParentDirectory, renameWithTransientRetry, linkWithTransientRetry } = require('./batch-journal-io');
 const { processAlive } = require('./process-liveness');
+const { csvField } = require('./mapping');
 
-const SCHEMA = 'datasecure-result-export/1';
+const SCHEMA = 'datasecure-result-export/2';
+const LEGACY_SCHEMA = 'datasecure-result-export/1';
+const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
+const VISIBLE_MAPPING_HEADER = 'Originaldatei;Anonymisiertes Ergebnis\r\n';
 const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
 // An interrupted atomic record write leaves exactly this temporary name behind.
 // It carries no export state and must neither count as a damaged record nor be
@@ -127,13 +131,29 @@ function exactKeys(value, keys) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
     Object.keys(value).sort().join(',') === [...keys].sort().join(',');
 }
+function validSourceLabel(value) {
+  const label = String(value || '');
+  if (!label || label.length > 1024 || label.includes('\\') || label.startsWith('/') ||
+      /[\0-\x1f\x7f]/u.test(label) || /^[A-Za-z]:/u.test(label)) return false;
+  return label.split('/').every((segment) => segment && segment !== '.' && segment !== '..');
+}
 function validRecord(value) {
-  return exactKeys(value, ['schema', 'run_directory', 'items', 'complete', 'destination_id']) && value.schema === SCHEMA &&
+  const legacy = value?.schema === LEGACY_SCHEMA;
+  const topLevelKeys = legacy
+    ? ['schema', 'run_directory', 'items', 'complete', 'destination_id']
+    : ['schema', 'run_directory', 'items', 'complete', 'destination_id', 'product_channel'];
+  return exactKeys(value, topLevelKeys) &&
+    [SCHEMA, LEGACY_SCHEMA].includes(value.schema) &&
+    (legacy || ['plugin', 'standalone'].includes(value.product_channel)) &&
     /^Lauf-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$/u.test(value.run_directory) &&
     typeof value.complete === 'boolean' && /^(?:|[a-f0-9]{64})$/u.test(value.destination_id) &&
     Array.isArray(value.items) && value.items.length <= 100 &&
-    value.items.every((item, index) => (exactKeys(item, ['package_id', 'file', 'sha256']) ||
-        (exactKeys(item, ['package_id', 'file', 'sha256', 'exported']) && item.exported === true)) &&
+    value.items.every((item, index) => (legacy
+      ? (exactKeys(item, ['package_id', 'file', 'sha256']) ||
+        (exactKeys(item, ['package_id', 'file', 'sha256', 'exported']) && item.exported === true))
+      : ((exactKeys(item, ['package_id', 'file', 'sha256', 'source_label']) ||
+        (exactKeys(item, ['package_id', 'file', 'sha256', 'source_label', 'exported']) && item.exported === true)) &&
+        validSourceLabel(item.source_label))) &&
       PACKAGE_RE.test(item.package_id) && /^[a-f0-9]{64}$/u.test(item.sha256) &&
       item.file === `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`);
 }
@@ -174,14 +194,36 @@ function runDirectoryName(createdAt) {
     : new Date().toISOString().replace(/[-:]/gu, '').replace('T', '-').slice(0, 15);
   return `Lauf-${stamp}-${crypto.randomBytes(4).toString('hex')}`;
 }
-function packageItem(packageId, index) {
+function packageItem(packageId, index, sourceLabel) {
   const { m } = safeResolvePackage(packageId);
   if (!m || !/^[a-f0-9]{64}$/u.test(String(m.document_sha256 || ''))) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
-  return {
+  const item = {
     package_id: packageId,
     file: `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`,
-    sha256: m.document_sha256
+    sha256: m.document_sha256,
+    source_label: String(sourceLabel || '')
   };
+  if (!validSourceLabel(item.source_label)) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
+  return item;
+}
+function migrateLegacyRecord(target, record, sourceLabels, productChannel) {
+  if (record.schema !== LEGACY_SCHEMA) return record;
+  const labels = sourceLabels;
+  if (!Array.isArray(labels) || labels.length !== record.items.length || labels.some((label) => !validSourceLabel(label))) {
+    throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
+  }
+  if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('RESULT_EXPORT_PRODUCT_CHANNEL_INVALID');
+  const migrated = {
+    ...record,
+    schema: SCHEMA,
+    product_channel: productChannel,
+    items: record.items.map((item, index) => ({ ...item, source_label: labels[index] })),
+    // A v1 record could only prove document export. v2 becomes complete after
+    // the run-scoped mapping has also been published and verified.
+    complete: record.items.length === 0
+  };
+  writeRecord(target, migrated);
+  return migrated;
 }
 function activeDestination() {
   const root = readConfiguredResultRoot();
@@ -200,13 +242,19 @@ function activeDestination() {
 }
 function ensureRecord(state) {
   const target = recordPath(state.token);
-  const items = state.items.filter((item) => item.status === 'released').map((item, index) => packageItem(item.package_id, index));
+  const released = state.items.filter((item) => item.status === 'released');
+  const items = released.map((item, index) => packageItem(item.package_id, index, item.source_label || item.name));
   if (fs.existsSync(target)) {
-    const existing = readRecord(target);
+    let existing = readRecord(target);
+    if (existing.schema === LEGACY_SCHEMA) {
+      existing = migrateLegacyRecord(target, existing, items.map((item) => item.source_label), state.product_channel);
+    }
     if (JSON.stringify(existing.items.map(planItem)) !== JSON.stringify(items)) throw new Error('RESULT_EXPORT_STATE_CONFLICT');
     return { target, value: existing };
   }
-  const value = { schema: SCHEMA, run_directory: runDirectoryName(state.created_at), items, complete: items.length === 0, destination_id: '' };
+  if (!['plugin', 'standalone'].includes(state.product_channel)) throw new Error('RESULT_EXPORT_PRODUCT_CHANNEL_INVALID');
+  const value = { schema: SCHEMA, run_directory: runDirectoryName(state.created_at), items,
+    complete: items.length === 0, destination_id: '', product_channel: state.product_channel };
   writeRecord(target, value);
   return { target, value };
 }
@@ -281,6 +329,61 @@ function exportOne(destination, run, item) {
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
   }
 }
+function visibleMappingBytes(record) {
+  if (record.schema !== SCHEMA || record.items.some((item) => !validSourceLabel(item.source_label))) {
+    throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
+  }
+  const rows = record.items.map((item) => [item.source_label, item.file].map(csvField).join(';'));
+  return Buffer.from(VISIBLE_MAPPING_HEADER + rows.join('\r\n') + (rows.length ? '\r\n' : ''), 'utf8');
+}
+function exportVisibleMapping(destination, run, record) {
+  assertDirectoryBinding(destination.root);
+  assertDirectoryBinding(destination.output, destination.root);
+  assertDirectoryBinding(run, destination.output);
+  const target = path.join(run.path, VISIBLE_MAPPING_FILE);
+  const bytes = visibleMappingBytes(record);
+  const expected = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (fs.existsSync(target)) {
+    const stat = fs.lstatSync(target);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== bytes.length ||
+        crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== expected) {
+      throw new Error('RESULT_EXPORT_MAPPING_CONFLICT');
+    }
+    return false;
+  }
+  const temporary = path.join(run.path, `.${VISIBLE_MAPPING_FILE}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  let descriptor;
+  try {
+    descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
+      (fs.constants.O_NOFOLLOW || 0), 0o600);
+    writeFully(descriptor, bytes, fs);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root);
+    assertDirectoryBinding(run, destination.output);
+    linkWithTransientRetry(temporary, target);
+    const linkedTemporary = fs.lstatSync(temporary);
+    const linkedTarget = fs.lstatSync(target);
+    if (!linkedTemporary.isFile() || !linkedTarget.isFile() || linkedTemporary.isSymbolicLink() ||
+        linkedTarget.isSymbolicLink() || linkedTemporary.nlink !== 2 || linkedTarget.nlink !== 2 ||
+        linkedTemporary.dev !== linkedTarget.dev || linkedTemporary.ino !== linkedTarget.ino) {
+      throw new Error('RESULT_EXPORT_VERIFY_FAILED');
+    }
+    fs.unlinkSync(temporary);
+    syncParentDirectory(target, fs, process.platform);
+    const written = fs.lstatSync(target);
+    if (!written.isFile() || written.isSymbolicLink() || written.size !== bytes.length ||
+        crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== expected) {
+      throw new Error('RESULT_EXPORT_VERIFY_FAILED');
+    }
+    return true;
+  } finally {
+    try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
+  }
+}
 function releasedCount(state) {
   return Array.isArray(state?.items) ? state.items.filter((item) => item?.status === 'released').length : 0;
 }
@@ -315,6 +418,7 @@ function exportOpenItems(target, record, destination) {
     writeRecord(target, current);
   }
   if (current.items.every((item) => item.exported === true)) {
+    if (current.product_channel === 'standalone') exportVisibleMapping(destination, run, current);
     current = { ...current, complete: true };
     writeRecord(target, current);
   }
@@ -428,6 +532,9 @@ function replayPendingResultExports() {
         continue;
       }
       const record = readRecord(target);
+      // A legacy record has no product channel. Generic replay may finish its
+      // already planned neutral documents, but only ensureRecord() can upgrade
+      // it with the owning journal and add a Standalone-only mapping.
       // Only a failed (incomplete) export is replayed; see exportCompletedState.
       if (record.items.length === 0 || record.complete === true) continue;
       const destination = activeDestination();
@@ -482,7 +589,7 @@ function terminalVisibleExport(completed, exporter) {
 }
 
 module.exports = {
-  SCHEMA, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
+  SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
   visibleExportDirectory, terminalVisibleExport,
   _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding,
     acquireExportClaim, releaseExportClaim, claimPath }

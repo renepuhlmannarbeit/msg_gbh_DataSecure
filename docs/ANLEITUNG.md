@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 03.09.2026 · Version 3.2.0 RC103
+Stand: 05.09.2026 · Version 3.2.0 RC104
 
 ## Vor dem ersten Lauf
 
@@ -143,8 +143,11 @@ Junctions sind gesperrt.
 - Temporäre DataSecure-Arbeits- und Reviewdaten: Aufbewahrung 0–14 Tage.
 - Quellen/Originale: niemals automatisch verändern oder löschen.
 - Fertige Exporte: niemals automatisch löschen. Das gilt auch für die private
-  `DataSecure-Mapping.csv`. Mapping, Originalbezüge, Review- und Recoverydaten werden
-  nicht in `DataSecure-Output` kopiert.
+  `DataSecure-Mapping.csv`. Im Cowork-Produkt werden Mapping, Originalbezüge,
+  Review- und Recoverydaten nicht in `DataSecure-Output` kopiert. Standalone
+  schreibt nach dem vollständigen Lauf zusätzlich eine auf genau diesen Lauf
+  begrenzte `DataSecure-Zuordnung.csv` neben die anonymisierten Dateien; sie
+  enthält nur Quellbezeichnung und neutralen Ergebnisnamen.
 - Manuelles Aufräumen betrifft ausschließlich eindeutig DataSecure-eigene Daten
   und braucht eine ausdrückliche Bestätigung.
 

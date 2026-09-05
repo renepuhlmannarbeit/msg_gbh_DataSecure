@@ -94,6 +94,13 @@ function fixture(options = {}) {
       awaiting_resume: value.items.some((item) => item.status === 'retryable' || item.status === 'processing')
     }),
     visibleExportDirectory: (token) => options.visibleDirectories?.[token] || '',
+    exportCompletedState(value) {
+      events.push(`export:${value.token}`);
+      if (options.exportOnEnsure && options.visibleDirectories) {
+        options.visibleDirectories[value.token] = `run:${value.token.slice(0, 4)}`;
+      }
+      return { exported: value.items.length, pending: 0, available: true };
+    },
     reconcilePublishedItems(value) {
       events.push(`published:${value.token}`);
       const changed = value.doPublished;
@@ -268,6 +275,17 @@ test('latest product result directory resolves only the exact latest completed r
   });
   assert.strictEqual(item.recovery.latestProductResultDirectory('standalone'), 'run:latest');
   assert.strictEqual(item.recovery.latestProductResultDirectory('plugin'), '');
+});
+
+test('an explicit local open refreshes a legacy terminal export from its owning journal', () => {
+  const completed = state(tokens[0], { items: [{ status: 'released' }] });
+  completed.product_channel = 'standalone';
+  completed.created_at = '2026-08-25T10:00:00.000Z';
+  const visibleDirectories = {};
+  const item = fixture({ states: [completed], visibleDirectories, exportOnEnsure: true });
+  assert.strictEqual(item.recovery.latestProductResultDirectory('standalone'), '');
+  assert.strictEqual(item.recovery.latestProductResultDirectory('standalone', { ensureExport: true }), 'run:aaaa');
+  assert.strictEqual(item.events.filter((event) => event === `export:${tokens[0]}`).length, 1);
 });
 
 test('a newer active run does not hide the latest completed visible result directory', () => {

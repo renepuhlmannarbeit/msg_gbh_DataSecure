@@ -297,6 +297,7 @@ const {
   releaseActiveLock,
   liveLocalExecutor,
   publicProgress,
+  exportCompletedState,
   visibleExportStatus,
   visibleExportDirectory,
   reconcilePublishedItems,

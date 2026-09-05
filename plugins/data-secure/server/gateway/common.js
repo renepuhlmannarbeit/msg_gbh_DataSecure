@@ -225,7 +225,10 @@ async function openLocalPath(target,options={}){
     try{
       timer=setTimeout(()=>finish({ok:false,message:'Der lokale Öffnungsvorgang wurde nicht bestätigt.'}),timeoutMs);
       child=(options.spawn||spawn)(invocation.command,invocation.args,{
-        detached:true,stdio:'ignore',windowsHide:true,shell:false,
+        // This process *is* the requested UI. Hiding it on Windows can make a
+        // successfully spawned explorer.exe invisible while the application
+        // incorrectly reports that the handoff worked.
+        detached:true,stdio:'ignore',windowsHide:false,shell:false,
         env:uiProcessEnvironment(options.env||process.env)
       });
       if(!child||typeof child.once!=='function'||typeof child.unref!=='function')throw new Error('local opener did not start');

@@ -2,7 +2,7 @@
   "schema_version": 2,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc103",
+  "baseline": "3.2.0-rc104",
   "decision_ids": [
     "DS-001",
     "DS-002",
@@ -85,7 +85,8 @@
     "DS-079",
     "DS-080",
     "DS-081",
-    "DS-082"
+    "DS-082",
+    "DS-083"
   ],
   "products": {
     "shared_core": "one-policy-and-engine-baseline",
@@ -262,6 +263,8 @@
     "mixed_batch_visible_export": "after-terminal-whole-batch-and-required-review",
     "private_artifacts_excluded_from_cowork_result_folder": true,
     "persistent_mapping_csv": true,
+    "standalone_run_mapping_csv": true,
+    "cowork_run_mapping_csv": false,
     "persistent_receipt_json": true,
     "mapping_visible_to_mcp": false,
     "image_pixels_visible_to_model": false,

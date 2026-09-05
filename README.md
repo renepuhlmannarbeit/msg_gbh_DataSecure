@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC103
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC104
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -74,8 +74,11 @@ sicher gestoppt und lokal gesondert gemeldet.
    Mehrdeutigkeiten erscheint ein lokaler Sammelreview mit den direkten Aktionen
    **„Zertifikatsanbieter behalten“** und **„Organisation anonymisieren“**.
 6. Die lokale Abschlussmeldung mit **„Ergebnisse öffnen“** verwenden. Im
-   gewählten Ergebnisordner liegen ausschließlich neutrale freigegebene Markdown-
-   Dateien; Originale, Mapping, Review und Recovery bleiben im privaten Bereich.
+   Cowork-Ergebnisordner liegen ausschließlich neutrale freigegebene Markdown-
+   Dateien; Originalnamen, Mapping, Review und Recovery bleiben privat. Die
+   eigenständige Standalone-App ergänzt dagegen lokal im jeweiligen Laufordner
+   `DataSecure-Zuordnung.csv`, damit Anwender Quelle und neutrales Ergebnis ohne
+   einen versteckten AppData-Pfad zuordnen können.
 7. Erst danach bei Bedarf ausdrücklich um die Auswertung der fertigen Ergebnisse
    bitten.
 

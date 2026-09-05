@@ -1032,3 +1032,23 @@ als Claude-sicheres Ergebnis erscheinen. Sie bleibt im Piloten sichtbar als
 nicht freigegebene Option, bis ein eigener gekennzeichneter Exportbereich,
 Quellenidentitätsprüfung, Abbruch/Fortsetzung, Mapping und Negativtests
 implementiert sind. Diese Entscheidung präzisiert DS-075 bis DS-077.
+
+## DS-083 – Laufbezogene Zuordnung nur im Standalone-Ergebnis
+
+Bestätigt am 05.09.2026 nach Windows-Standalone-UAT und Produktgrenzen-
+Gegencheck: Ein Standalone-Lauf gilt erst dann als sichtbar vollständig, wenn
+neben allen neutral benannten anonymisierten Markdown-Dateien auch eine
+`DataSecure-Zuordnung.csv` für genau diesen Lauf atomar veröffentlicht wurde.
+Sie enthält ausschließlich die lokale Quellbezeichnung und den neutralen
+Ergebnisnamen; Tabellenformeln werden neutralisiert. Der Knopf
+**„Zuordnungsdatei anzeigen“** markiert genau diese Datei im letzten sichtbaren
+Laufordner. Die dauerhafte globale `DataSecure-Mapping.csv` bleibt weiterhin im
+privaten Produktdatenbereich für Recovery und Nachvollziehbarkeit.
+
+Diese Komfortprojektion gilt ausdrücklich nicht für das Cowork-Plugin. Ein mit
+Cowork verbundener Ergebnisordner enthält weiterhin ausschließlich neutral
+benannte anonymisierte Ergebnisse, damit Originalnamen nicht automatisch in
+die Modellgrenze geraten. Alte Exportrecords ohne Produktkanal werden nur
+zusammen mit ihrem eigenen privaten Stapeljournal migriert; ein generischer
+Startup-Replay darf den Produktkanal nicht erraten. Diese Entscheidung
+präzisiert DS-023, DS-069, DS-079 und DS-080.

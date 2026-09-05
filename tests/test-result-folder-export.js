@@ -19,7 +19,7 @@ const {
   resultOutputDirectory, isCommonSyncFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
-  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport,
+  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport, LEGACY_SCHEMA,
   visibleExportDirectory, visibleExportStatus, _test
 } = require('../plugins/data-secure/server/gateway/result-export');
 
@@ -37,6 +37,10 @@ function packageFixture(id, text) {
   return directory;
 }
 
+function released(packageId, sourceLabel) {
+  return { status: 'released', package_id: packageId, source_label: sourceLabel };
+}
+
 try {
   assert.strictEqual(inspectRoot(cowork).root, path.resolve(cowork));
   assert.strictEqual(path.basename(resultOutputDirectory()), 'DataSecure-Output');
@@ -47,19 +51,56 @@ try {
   packageFixture(id1, '# Bereinigtes Dokument\n\n[PERSON_1]');
   packageFixture(id2, '# Zweites Dokument\n\n[ORGANISATION_1]');
   const state = {
-    token: 'a'.repeat(64), created_at: '2026-09-02T12:34:56.000Z',
-    items: [{ status: 'released', package_id: id1 }, { status: 'released', package_id: id2 }]
+    token: 'a'.repeat(64), created_at: '2026-09-02T12:34:56.000Z', product_channel: 'standalone',
+    items: [released(id1, 'profil-a.txt'), released(id2, 'unterordner/profil-b.docx')]
   };
   assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true });
   const runs = fs.readdirSync(resultOutputDirectory());
   assert.strictEqual(runs.length, 1);
   const visible = fs.readdirSync(path.join(resultOutputDirectory(), runs[0])).sort();
-  assert.deepStrictEqual(visible, ['Dokument-001-anonymisiert.md', 'Dokument-002-anonymisiert.md']);
+  assert.deepStrictEqual(visible, ['DataSecure-Zuordnung.csv', 'Dokument-001-anonymisiert.md', 'Dokument-002-anonymisiert.md']);
+  assert.strictEqual(fs.readFileSync(path.join(resultOutputDirectory(), runs[0], 'DataSecure-Zuordnung.csv'), 'utf8'),
+    'Originaldatei;Anonymisiertes Ergebnis\r\n"profil-a.txt";"Dokument-001-anonymisiert.md"\r\n' +
+    '"unterordner/profil-b.docx";"Dokument-002-anonymisiert.md"\r\n');
   assert.strictEqual(visibleExportDirectory(state.token), path.join(resultOutputDirectory(), runs[0]),
     'the local open action resolves the exact completed run');
   assert.doesNotMatch(JSON.stringify(visible), /ds_|manifest|mapping|original/iu);
-  assert.strictEqual(fs.readFileSync(path.join(resultOutputDirectory(), runs[0], visible[0]), 'utf8'), '# Bereinigtes Dokument\n\n[PERSON_1]');
+  assert.strictEqual(fs.readFileSync(path.join(resultOutputDirectory(), runs[0], 'Dokument-001-anonymisiert.md'), 'utf8'),
+    '# Bereinigtes Dokument\n\n[PERSON_1]');
+
+  // Existing rc103 installations own v1 records without source labels or a
+  // product channel. Re-presenting the owning terminal journal upgrades that
+  // exact run without recreating result documents.
+  const firstRecordPath = recordPath(state.token);
+  const v2Record = JSON.parse(fs.readFileSync(firstRecordPath, 'utf8'));
+  const { product_channel: _productChannel, ...legacyRecord } = v2Record;
+  fs.writeFileSync(firstRecordPath, JSON.stringify({
+    ...legacyRecord,
+    schema: LEGACY_SCHEMA,
+    items: v2Record.items.map(({ source_label: _sourceLabel, ...item }) => item)
+  }));
+  fs.unlinkSync(path.join(resultOutputDirectory(), runs[0], 'DataSecure-Zuordnung.csv'));
+  assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true });
+  const migrated = JSON.parse(fs.readFileSync(firstRecordPath, 'utf8'));
+  assert.strictEqual(migrated.schema, 'datasecure-result-export/2');
+  assert.strictEqual(migrated.complete, true);
+  assert.deepStrictEqual(migrated.items.map((item) => item.source_label),
+    ['profil-a.txt', 'unterordner/profil-b.docx']);
+  assert.ok(fs.existsSync(path.join(resultOutputDirectory(), runs[0], 'DataSecure-Zuordnung.csv')));
   assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true }, 'retry is idempotent');
+
+  // The shared exporter must not leak source labels into a Cowork-connected
+  // folder. Only the standalone product receives the convenient run mapping.
+  const pluginId = `ds_${'d'.repeat(32)}`;
+  packageFixture(pluginId, '# Plugin-Ergebnis');
+  const pluginState = {
+    token: '2'.repeat(64), created_at: '2026-09-02T12:40:00.000Z', product_channel: 'plugin',
+    items: [released(pluginId, 'vertraulicher-name.txt')]
+  };
+  assert.deepStrictEqual(exportCompletedState(pluginState), { exported: 1, pending: 0, available: true });
+  const pluginRecord = JSON.parse(fs.readFileSync(recordPath(pluginState.token), 'utf8'));
+  assert.deepStrictEqual(fs.readdirSync(path.join(resultOutputDirectory(), pluginRecord.run_directory)),
+    ['Dokument-001-anonymisiert.md']);
 
   // DS-023: visible results stay until the user deletes them. DS-069: only a
   // failed export is replayed. A completed record is final; user deletions are
@@ -92,8 +133,8 @@ try {
   const bad = packageFixture(idBad, '# Defekt');
   fs.appendFileSync(path.join(bad, `${idBad}.md`), ' manipuliert');
   const partialState = {
-    token: 'f'.repeat(64), created_at: '2026-09-02T16:00:00.000Z',
-    items: [{ status: 'released', package_id: idGood }, { status: 'released', package_id: idBad }]
+    token: 'f'.repeat(64), created_at: '2026-09-02T16:00:00.000Z', product_channel: 'standalone',
+    items: [released(idGood, 'gut.txt'), released(idBad, 'defekt.txt')]
   };
   assert.deepStrictEqual(exportCompletedState(partialState), { exported: 1, pending: 1, available: false }, 'progress is counted per item');
   assert.strictEqual(visibleExportDirectory(partialState.token), '', 'an incomplete mixed batch has no visible result run');
@@ -119,7 +160,8 @@ try {
   // Once the defective source is repaired, only the open item is written.
   fs.writeFileSync(path.join(bad, `${idBad}.md`), '# Defekt');
   assert.deepStrictEqual(exportCompletedState(partialState), { exported: 2, pending: 0, available: true });
-  assert.deepStrictEqual(fs.readdirSync(partialRun), ['Dokument-002-anonymisiert.md'], 'only the previously open item is exported');
+  assert.deepStrictEqual(fs.readdirSync(partialRun), ['DataSecure-Zuordnung.csv', 'Dokument-002-anonymisiert.md'],
+    'only the previously open item and the terminal mapping are exported');
   assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(partialState.token), 'utf8')).complete, true);
   assert.strictEqual(visibleExportDirectory(partialState.token), partialRun);
 
@@ -129,8 +171,8 @@ try {
   const claimedId = `ds_${'f'.repeat(32)}`;
   packageFixture(claimedId, '# Claim');
   const claimedState = {
-    token: '0'.repeat(64), created_at: '2026-09-02T17:00:00.000Z',
-    items: [{ status: 'released', package_id: claimedId }]
+    token: '0'.repeat(64), created_at: '2026-09-02T17:00:00.000Z', product_channel: 'standalone',
+    items: [released(claimedId, 'claim.txt')]
   };
   const claimedTarget = recordPath(claimedState.token);
   const claim = _test.acquireExportClaim(claimedTarget);
@@ -162,8 +204,8 @@ try {
   const idLate = `ds_${'5'.repeat(32)}`;
   packageFixture(idLate, '# Spätes Dokument');
   const lateState = {
-    token: 'e'.repeat(64), created_at: '2026-09-02T15:00:00.000Z',
-    items: [{ status: 'released', package_id: idLate }]
+    token: 'e'.repeat(64), created_at: '2026-09-02T15:00:00.000Z', product_channel: 'standalone',
+    items: [released(idLate, 'spaet.txt')]
   };
   assert.deepStrictEqual(exportCompletedState(lateState), { exported: 0, pending: 1, available: false }, 'no destination keeps the export pending');
   assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(lateState.token), 'utf8')).complete, false);
@@ -171,7 +213,8 @@ try {
   assert.deepStrictEqual(replayPendingResultExports(), { exported: 1, pending: 0, failures: 0 }, 'the failed export is replayed once');
   const lateRuns = fs.readdirSync(resultOutputDirectory());
   assert.strictEqual(lateRuns.length, 1);
-  assert.deepStrictEqual(fs.readdirSync(path.join(resultOutputDirectory(), lateRuns[0])), ['Dokument-001-anonymisiert.md']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(resultOutputDirectory(), lateRuns[0])).sort(),
+    ['DataSecure-Zuordnung.csv', 'Dokument-001-anonymisiert.md']);
   assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(lateState.token), 'utf8')).complete, true);
   assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 }, 'a replayed record is final');
   process.env.EU_PRIVACY_RESULT_ROOT = cowork;
@@ -180,8 +223,8 @@ try {
   const third = packageFixture(id3, '# Sicher');
   fs.appendFileSync(path.join(third, `${id3}.md`), ' manipuliert');
   const pendingState = {
-    token: 'b'.repeat(64), created_at: '2026-09-02T13:00:00.000Z',
-    items: [{ status: 'released', package_id: id3 }]
+    token: 'b'.repeat(64), created_at: '2026-09-02T13:00:00.000Z', product_channel: 'standalone',
+    items: [released(id3, 'sicher.txt')]
   };
   assert.deepStrictEqual(exportCompletedState(pendingState), { exported: 0, pending: 1, available: false });
   assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(pendingState.token), 'utf8')).complete, false);
@@ -193,19 +236,19 @@ try {
   const id4 = `ds_${'4'.repeat(32)}`;
   packageFixture(id4, '# Viertes Dokument');
   const damagedState = {
-    token: 'c'.repeat(64), created_at: '2026-09-02T14:00:00.000Z',
-    items: [{ status: 'released', package_id: id4 }]
+    token: 'c'.repeat(64), created_at: '2026-09-02T14:00:00.000Z', product_channel: 'standalone',
+    items: [released(id4, 'vier.txt')]
   };
   assert.deepStrictEqual(exportCompletedState(damagedState), { exported: 1, pending: 0, available: true });
   fs.writeFileSync(recordPath(damagedState.token), '{"schema":"garbage"}');
   assert.deepStrictEqual(exportCompletedState(damagedState), { exported: 0, pending: 1, available: false },
     'a damaged export record stays pending without throwing');
   const conflictState = {
-    token: 'd'.repeat(64), created_at: '2026-09-02T14:30:00.000Z',
-    items: [{ status: 'released', package_id: id4 }]
+    token: 'd'.repeat(64), created_at: '2026-09-02T14:30:00.000Z', product_channel: 'standalone',
+    items: [released(id4, 'vier.txt')]
   };
   assert.deepStrictEqual(exportCompletedState(conflictState), { exported: 1, pending: 0, available: true });
-  const conflicting = { ...conflictState, items: [...conflictState.items, { status: 'released', package_id: id1 }] };
+  const conflicting = { ...conflictState, items: [...conflictState.items, released(id1, 'profil-a.txt')] };
   assert.deepStrictEqual(exportCompletedState(conflicting), { exported: 0, pending: 2, available: false },
     'a record/items conflict stays pending without throwing');
   assert.strictEqual(fs.readFileSync(path.join(roots().output, id4, `${id4}.md`), 'utf8'), '# Viertes Dokument',
@@ -328,8 +371,8 @@ try {
   fs.mkdirSync(destination.output.path);
   const raceId = `ds_${'8'.repeat(32)}`;
   packageFixture(raceId, '# Freigegeben');
-  const raceState = { token: '8'.repeat(64), created_at: '2026-09-03T13:00:00.000Z',
-    items: [{ status: 'released', package_id: raceId }] };
+  const raceState = { token: '8'.repeat(64), created_at: '2026-09-03T13:00:00.000Z', product_channel: 'standalone',
+    items: [released(raceId, 'race.txt')] };
   const realLink = fs.linkSync;
   let racedTarget = '';
   fs.linkSync = (source, target) => {
@@ -356,8 +399,8 @@ try {
   const bindBadDir = packageFixture(bindBad, '# Binding defekt');
   fs.appendFileSync(path.join(bindBadDir, `${bindBad}.md`), ' manipuliert');
   const bindingState = {
-    token: '9'.repeat(64), created_at: '2026-09-02T18:00:00.000Z',
-    items: [{ status: 'released', package_id: bindGood }, { status: 'released', package_id: bindBad }]
+    token: '9'.repeat(64), created_at: '2026-09-02T18:00:00.000Z', product_channel: 'standalone',
+    items: [released(bindGood, 'bindung-gut.txt'), released(bindBad, 'bindung-defekt.txt')]
   };
   assert.deepStrictEqual(exportCompletedState(bindingState), { exported: 1, pending: 1, available: false });
   const outputBeforeSwap = resultOutputDirectory();
@@ -375,8 +418,8 @@ try {
   const claimFailureId = `ds_${'b'.repeat(32)}`;
   packageFixture(claimFailureId, '# Claim-Freigabe');
   const claimFailureState = {
-    token: 'b'.repeat(64), created_at: '2026-09-04T08:00:00.000Z',
-    items: [{ status: 'released', package_id: claimFailureId }]
+    token: 'b'.repeat(64), created_at: '2026-09-04T08:00:00.000Z', product_channel: 'standalone',
+    items: [released(claimFailureId, 'claim-fehler.txt')]
   };
   const claimFailurePath = _test.claimPath(recordPath(claimFailureState.token));
   const realUnlink = fs.unlinkSync;
@@ -400,8 +443,8 @@ try {
   const replayClaimId = `ds_${'c'.repeat(32)}`;
   packageFixture(replayClaimId, '# Replay-Claim');
   const replayClaimState = {
-    token: 'c'.repeat(64), created_at: '2026-09-04T08:01:00.000Z',
-    items: [{ status: 'released', package_id: replayClaimId }]
+    token: 'c'.repeat(64), created_at: '2026-09-04T08:01:00.000Z', product_channel: 'standalone',
+    items: [released(replayClaimId, 'replay-claim.txt')]
   };
   assert.deepStrictEqual(exportCompletedState(replayClaimState), { exported: 0, pending: 1, available: false });
   process.env.EU_PRIVACY_RESULT_ROOT = bindingCowork;

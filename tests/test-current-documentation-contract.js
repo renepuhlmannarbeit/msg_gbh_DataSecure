@@ -82,7 +82,7 @@ test('build metadata describes current product channels and complete blocked for
   const info = JSON.parse(read('BUILD_INFO.json'));
   const pkg = JSON.parse(read('package.json'));
   assert.strictEqual(info.version, pkg.version);
-  assert.strictEqual(info.build_date, '2026-09-03');
+  assert.strictEqual(info.build_date, '2026-09-05');
   assert.match(info.target, /Plugin ZIP \/ private Marketplace/u);
   assert.doesNotMatch(info.target + info.runtime, /MCPB|built-in Node/u);
   assert.deepStrictEqual(new Set(info.formats), new Set(['txt', 'markdown', 'csv', 'docx']));

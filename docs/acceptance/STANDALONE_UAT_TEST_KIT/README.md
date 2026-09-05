@@ -1,6 +1,6 @@
 # DataSecure Standalone – UAT-Testkit
 
-Stand: 04.09.2026 · Engineering-Pilot 3.2.0-rc103
+Stand: 05.09.2026 · Engineering-Pilot 3.2.0-rc104
 
 Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien
@@ -24,8 +24,8 @@ verwenden.
 | S02 | **Dateien auswählen** und einen kleinen gemischten Satz aus `docs/acceptance/UAT_TEST_KIT/inputs` wählen | Genau ein Mehrfachpicker; danach Anzahl, gewählte Dateinamen, Quellenordner und der aktuelle Ergebnisordner im ausschließlich lokalen Fenster. |
 | S03 | **Anonymisierung starten** | Passiver Fortschritt; klare Dateien laufen ohne Einzelbestätigung. |
 | S04 | Falls Review erscheint, eine Gruppe entscheiden und abschließen | Eine Sammelprüfung; keine zweite Quellauswahl. |
-| S05 | **Ergebnisse öffnen** | Nur freigegebene `.md`-Ergebnisse im gewählten Ergebnisordner; Originale unverändert. |
-| S06 | **Zuordnung öffnen** | Lokale Zuordnung ist verständlich; sie liegt nicht im Ergebnisordner für Claude. |
+| S05 | **Ergebnisse öffnen** | Explorer/Finder öffnet exakt den angezeigten `Lauf-*`-Ordner; dort liegen freigegebene `.md`-Ergebnisse und `DataSecure-Zuordnung.csv`; Originale bleiben unverändert. |
+| S06 | **Zuordnungsdatei anzeigen** | Explorer/Finder markiert `DataSecure-Zuordnung.csv` im letzten Laufordner; jede Quelle ist genau einem neutralen Ergebnisnamen zugeordnet. |
 | S07 | **Ergebnisordner ändern**, neuen leeren Ordner wählen, zweiten Lauf starten | Ein Ordnerpicker; neue Ergebnisse landen nur dort, bestehende Exporte werden nicht gespiegelt oder gelöscht. |
 | S08 | Picker abbrechen | Ruhiger Abbruch, kein automatischer zweiter Picker und kein erfundener Erfolg. |
 | S09 | Während eines synthetischen Stapels App beenden und erneut starten | Stapel erscheint als gestoppt/fortsetzbar; Fortsetzung verarbeitet nichts doppelt. |

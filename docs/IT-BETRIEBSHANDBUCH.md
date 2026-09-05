@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 04.09.2026 · 3.2.0-rc103
+Stand: 05.09.2026 · 3.2.0-rc104
 
 ## Produktkanäle
 
@@ -69,9 +69,11 @@ Sichtbare Ergebnisse werden getrennt unter
 `<gewählter lokaler Ergebnisordner>/DataSecure-Output/Lauf-…/` abgelegt. Das kann
 ein dedizierter lokaler Ergebnisordner sein, den der Anwender optional mit Cowork
 verbindet; DataSecure kann verbundene Cowork-Ordner weder erkennen noch prüfen und
-wechselt ihn bei einem Cowork-Projektwechsel nicht automatisch. Dort dürfen
-nur neutrale `Dokument-NNN-anonymisiert.md`-Dateien liegen. Mapping, Originale,
-Audit, Review und Recovery bleiben im privaten Bereich. Mit der Chat-Bitte
+wechselt ihn bei einem Cowork-Projektwechsel nicht automatisch. Im Cowork-
+Produkt dürfen dort nur neutrale `Dokument-NNN-anonymisiert.md`-Dateien liegen.
+Standalone ergänzt im vollständig abgeschlossenen Lauf eine lokale
+`DataSecure-Zuordnung.csv`; die private globale Zuordnung, Originale, Audit,
+Review und Recovery bleiben im privaten Bereich. Mit der Chat-Bitte
 **„Ändere den DataSecure-Ergebnisordner“** (Werkzeug „Ergebnisordner festlegen“)
 kann der Zielordner später bewusst neu gewählt werden; solange ein Stapel offen,
 pausiert oder vertagt ist, bleibt er unverändert (zuerst fortsetzen, abschließen

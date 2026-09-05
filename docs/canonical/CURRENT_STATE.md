@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 05.09.2026 · 3.2.0-rc103 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
+Stand: 05.09.2026 · 3.2.0-rc104 · integrierter Expertenstand: sichtbarer Standalone-Abschluss mit laufbezogener Zuordnung
 
 ## Produkt in einem Satz
 
@@ -29,14 +29,16 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
 - Aufbewahrung: konfigurierbar 0–14 Tage nur für temporäre DataSecure-Arbeits-
   und Reviewdaten. Quellen/Originale und fertige Exporte werden niemals
   automatisch gelöscht.
-- Ergebnis: Markdown pro freigegebener Datei plus dauerhaft lokale
+- Ergebnis: Markdown pro freigegebener Datei plus dauerhaft lokale private
   `DataSecure-Mapping.csv`; rekursive relative Labels und gleiche Basenames aus
   unterschiedlichen lokalen Ordnern bleiben darin kollisionsfrei unterscheidbar.
+  Standalone projiziert nach vollständigem Abschluss zusätzlich eine atomar
+  erzeugte `DataSecure-Zuordnung.csv` in genau den sichtbaren Laufordner.
 - Sichtbarer Cowork-Export: Beim ersten Lauf wird ein Ergebnisordner einmal lokal
   gewählt, die Output-Anlage geprüft und das Ziel erst danach identitätsgebunden
   gespeichert. Nur verifiziertes Markdown mit
-  neutralen Namen gelangt nach `DataSecure-Output/Lauf-…`; Mapping, Originale,
-  Review und Recovery bleiben privat. Nur ein fehlgeschlagener Export wird lokal
+  neutralen Namen gelangt nach `DataSecure-Output/Lauf-…`; die private globale
+  Zuordnung, Originale, Review und Recovery bleiben privat. Nur ein fehlgeschlagener Export wird lokal
   vorgemerkt und beim nächsten Start oder Ordnerwechsel genau einmal nachgeholt.
   Gemäß DS-079 entsteht der sichtbare Laufordner erst, wenn der gesamte Stapel
   einschließlich eines nötigen Sammelreviews abgeschlossen ist. Klare Positionen
@@ -86,8 +88,10 @@ Mock-/Scheinerfolgsfehler ab.
 Die häufige Standalone-Statusabfrage enumeriert Recovery-Zähler und den jüngsten
 Standalone-Lauf gemeinsam. Auch bei 1.000 aufbewahrten Journalen gibt es pro
 Poll genau einen Verzeichnisscan und höchstens einen Read je Journal; die
-Produktoberfläche zeigt die private Zuordnung eines Mischstapels erst nach einem
-terminalen sichtbaren Ergebnis oder einem vollständig gestoppten Abschluss.
+Produktoberfläche zeigt die laufbezogene Zuordnung eines Mischstapels erst nach
+einem terminalen sichtbaren Ergebnis. Ein vollständig gestoppter Lauf besitzt
+keine sichtbaren Ergebnisse und daher keine laufbezogene Ergebniszuordnung; die
+private globale Zuordnung bleibt für die lokale Nachvollziehbarkeit erhalten.
 
 Der aktuelle Kern erkennt und entfernt direkte Identifikatoren einschließlich
 mehrsprachiger Namensfelder, Anreden, Kontakt-URIs, Telefon-, Adress-, Steuer- und
@@ -137,7 +141,7 @@ Worker-Fallback zuständig. Der Cowork-Abschluss nutzt unter Windows ebenfalls
 ein echtes natives `Shown`-Ereignis statt eines bloßen Prozessstarts. Der
 gleichwertige macOS-Sichtbarkeitsnachweis ist noch nicht erbracht und bleibt
 Zielhostevidenz.
-RC103 ordnet den Standalone-Ablauf in die zwei Hauptansichten **Verarbeiten**
+RC104 ordnet den Standalone-Ablauf in die zwei Hauptansichten **Verarbeiten**
 und **Ergebnisse**. Nach einem sichtbaren Gesamtabschluss wechselt die App zur
 Ergebnisansicht, zeigt den exakten letzten Laufordner und bietet dort
 **Ergebnisse öffnen** als primäre Aktion sowie
@@ -147,6 +151,13 @@ behandelt und kann den Sidecar nicht mehr nach einer falschen Erfolgsantwort
 beenden. Die Oberfläche bestätigt den Handoff getrennt vom fachlichen
 Abschlussstatus. Die Diagnose protokolliert dabei ausschließlich Aktion,
 Ausgang und festen Fehlercode, niemals Pfad, Dateiname oder Inhalt.
+Der Windows-Öffner wird dabei ausdrücklich nicht als versteckter Prozess
+gestartet. Ein Standalone-Lauf gilt erst dann als sichtbar abgeschlossen, wenn
+alle neutralen Markdown-Ergebnisse und seine atomar veröffentlichte
+`DataSecure-Zuordnung.csv` vorhanden sind. Die Zuordnung enthält nur die lokale
+Quellbezeichnung und den neutralen Ergebnisnamen. Bestehende RC103-Läufe werden
+beim nächsten expliziten Öffnen anhand ihres eigenen privaten Stapeljournals
+einmalig ergänzt. Der Cowork-Export erhält diese Datei ausdrücklich nicht.
 Ein geschlossener UI-Zustands-/IPC-Vertrag verhindert Rohbytes und direkten
 Dateisystemzugriff im Renderer. Ausgewählte Dateinamen, Quellenordner und das
 Ergebnisziel werden ausschließlich im lokalen Standalone-Fenster angezeigt und
@@ -163,7 +174,7 @@ Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
 2.11.5 und MSVC erfolgreich gebaut; `cargo test --locked`, Clippy,
 Paketprüfung und ein isolierter Start-/Stopp-Smoke sind grün. Der Paketbau
 erzeugt die geschlossene Runtimeprojektion immer frisch aus dem aktuellen
-Quellbaum. Die Pilotoberfläche kann Ergebnis- und privaten Zuordnungsordner über
+Quellbaum. Die Pilotoberfläche kann Ergebnisordner und laufbezogene Zuordnungsdatei über
 getrennte inhaltsfreie IPC-Aktionen öffnen. Abschluss-, Fehler-, Review- und
 Ergebniszähler stammen aus dem jüngsten Standalone-Stapel. Ein intern
 abgeschlossenes Paket ohne vollständig sichtbaren Export erscheint ehrlich als

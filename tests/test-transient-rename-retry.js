@@ -118,7 +118,12 @@ test('the visible result export retries exclusive publication of a released docu
     return realLink.call(fs, from, to);
   };
   try {
-    const result = exportCompletedState({ token: 'a'.repeat(64), created_at: '2026-09-03T12:00:00.000Z', items: [{ status: 'released', package_id: id }] });
+    const result = exportCompletedState({
+      token: 'a'.repeat(64),
+      created_at: '2026-09-03T12:00:00.000Z',
+      product_channel: 'standalone',
+      items: [{ status: 'released', package_id: id, source_label: 'profil.txt' }]
+    });
     assert.deepStrictEqual(result, { exported: 1, pending: 0, available: true }, 'one transient failure does not leave the export pending');
   } finally {
     fs.linkSync = realLink;

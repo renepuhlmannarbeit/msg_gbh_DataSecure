@@ -86,6 +86,7 @@ asyncOpenerCases.push(['folder opening waits for a cross-platform shell-free OS 
   }
   for (const call of calls) {
     assert.strictEqual(call.options.shell, false);
+    assert.strictEqual(call.options.windowsHide, false, 'the requested native UI must remain visible');
     assert.strictEqual(call.options.env.HTTP_PROXY, undefined);
     assert.strictEqual(call.options.env.OPENAI_API_KEY, undefined);
     assert.strictEqual(call.args[0], 'C:\\DataSecure\\Input');

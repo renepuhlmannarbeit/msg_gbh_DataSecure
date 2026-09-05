@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 03.09.2026 · Ist-Zustand RC103
+Stand: 05.09.2026 · Ist-Zustand RC104
 
 ## Ziel
 
@@ -22,8 +22,10 @@ keine Personal- oder Fachentscheidung.
    ein sicherer Stopp oder eine Mehrdeutigkeit blockiert den Reststapel nicht.
 5. Die lokale Abschlussmeldung zeigt nur Zähler und bietet „Ergebnisse öffnen“.
    Nur verifiziertes Markdown mit neutralen Namen liegt sichtbar unter
-   `DataSecure-Output/Lauf-…`; `DataSecure-Mapping.csv`, Originale, Review- und
-   Recoverydaten bleiben im privaten DataSecure-Bereich.
+   `DataSecure-Output/Lauf-…`. In Standalone liegt dort zusätzlich die lokale
+   `DataSecure-Zuordnung.csv` für genau diesen Lauf. Im Cowork-Produkt bleiben
+   Originalnamen und die dauerhafte `DataSecure-Mapping.csv` privat; Originale,
+   Review- und Recoverydaten bleiben in beiden Produkten im privaten Bereich.
 6. Erst ein späterer ausdrücklicher Auftrag übergibt benötigte freigegebene
    Markdown-Ergebnisse begrenzt an Claude.
 

@@ -650,15 +650,16 @@ async function missingResultsCase() {
 
 async function openLedgerCase() {
   const opened = [];
+  const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
-    mappingPath: () => 'C:\\Private\\DataSecure-Export\\DataSecure-Mapping.csv',
+    latestProductResultDirectory: () => run,
     fs: { mkdirSync() {}, existsSync: () => true },
     revealFile: (target) => { opened.push(target); return { ok: true }; }
   }) });
   assert.deepStrictEqual(await service.openLedger(), {
     ok: true, handoff_confirmed: true, external_disclosure: false
   });
-  assert.deepStrictEqual(opened, ['C:\\Private\\DataSecure-Export\\DataSecure-Mapping.csv']);
+  assert.deepStrictEqual(opened, [`${run}\\DataSecure-Zuordnung.csv`]);
 }
 
 async function missingLedgerCase() {
@@ -688,7 +689,7 @@ async function missingLedgerCase() {
   await testAsync('Standalone does not report a failed result-folder open as success', openResultsFailureCase);
   await testAsync('Standalone opens exactly the latest completed run', openExactResultsCase);
   await testAsync('Standalone refuses to open results before a complete visible run exists', missingResultsCase);
-  await testAsync('Standalone reveals only the exact private ledger file and never returns its path', openLedgerCase);
+  await testAsync('Standalone reveals only the exact mapping of the latest visible run and never returns its path', openLedgerCase);
   await testAsync('Standalone refuses a missing local ledger without opening a folder', missingLedgerCase);
   done();
 })();

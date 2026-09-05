@@ -27,6 +27,7 @@ function createBatchRecovery(options = {}) {
     exported: released, pending: 0, available: released > 0
   }));
   const visibleExportDirectory = options.visibleExportDirectory || (() => '');
+  const exportCompletedState = options.exportCompletedState || (() => ({ exported: 0, pending: 0, available: false }));
   const reconcilePublishedItems = options.reconcilePublishedItems;
   const reconcilePendingMappings = options.reconcilePendingMappings;
   const reconcilePreflightStoppedMappings = options.reconcilePreflightStoppedMappings || (() => false);
@@ -195,7 +196,7 @@ function createBatchRecovery(options = {}) {
     });
   }
 
-  function latestProductResultDirectory(productChannel) {
+  function latestProductResultDirectory(productChannel, options = {}) {
     if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('PRODUCT_CHANNEL_INVALID');
     let entries = [];
     try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); } catch { return ''; }
@@ -209,6 +210,9 @@ function createBatchRecovery(options = {}) {
       try {
         const state = readMaintenanceState(token);
         if (state.product_channel !== productChannel || nowMs() > Date.parse(state.expires_at)) continue;
+        if (options.ensureExport === true && publicProgress(state, { skipResultProjection: true }).complete === true) {
+          try { exportCompletedState(state); } catch { /* visible result remains unavailable below */ }
+        }
         const directory = visibleExportDirectory(state.token);
         if (!directory) continue;
         const createdAt = Date.parse(state.created_at);

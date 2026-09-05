@@ -1,10 +1,10 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 04.09.2026 · 3.2.0-rc103
+Stand: 05.09.2026 · 3.2.0-rc104
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
-Abschnitt 11 kennzeichnet das UX-Zielbild und die Standalone-Sequenz ausdrücklich
-als Zielarchitektur; eine dargestellte Kante ist dort kein Implementierungsbeleg.
+Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
+offener Zielhostevidenz; eine als offen bezeichnete Kante ist kein Implementierungsbeleg.
 Dieses Dokument ist
 eine Navigations- und Prüfsicht auf `mcp-server.js`, die getrennten Worker, die
 Batch-Module, den lokalen Review, die Ergebnisprojektion und die Diagnose. Der
@@ -441,7 +441,7 @@ beobachtbare UX-Abnahme zusätzlich offen; die technische Pfadtrennung selbst is
 bereits implementiert. Die unter Punkt 10 genannten Zielhostnachweise sind
 bewusst nicht durch UML-Dokumentation vorgetäuscht, sondern im Backlog getrennt offen.
 
-## 11. Zielarchitektur: UX und Standalone
+## 11. Implementierter UX- und Standalone-Vertikalschnitt
 
 ```mermaid
 flowchart LR
@@ -450,7 +450,8 @@ flowchart LR
   Work -->|alles eindeutig| Done[ein Abschlussfenster]
   Work -->|Entscheidung nötig| Review[ein Sammelreview]
   Review --> Done
-  Done --> Open[aktuellen Laufordner öffnen]
+  Done --> Map[Standalone: laufbezogene Zuordnung fertig]
+  Map --> Open[aktuellen Laufordner sichtbar öffnen]
 ```
 
 - **Keine automatische Workspace-Vermutung:** Die MCP-Schnittstelle liefert
@@ -541,3 +542,7 @@ verwirft eine lokale Aufnahmefreigabe, sobald der Sidecar die Admission nicht
 mehr kennt. Exklusiver Outbox-Claim und laufgebundenes Öffnen sind E0
 geschlossen. Der plattformübergreifende Nachweis einer tatsächlich sichtbaren
 Abschlussoberfläche bleibt zusammen mit der Zielhostbeobachtung im Backlog.
+Unter Standalone umfasst `completed` sowohl alle neutralen Ergebnisdateien als
+auch `DataSecure-Zuordnung.csv`; beim Plugin bleibt die Zuordnung außerhalb des
+Cowork-Ergebnisordners. Ein Öffnen-Auftrag startet Explorer/Finder ausdrücklich
+sichtbar und bleibt von der inhaltsfreien Diagnose getrennt.

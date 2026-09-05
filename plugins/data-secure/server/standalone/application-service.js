@@ -6,6 +6,7 @@ const path = require('node:path');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const PRODUCT_CHANNEL = 'standalone';
+const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
 const SOURCE_KINDS = new Set(['files', 'folder']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 let standaloneStartup;
@@ -95,7 +96,6 @@ function defaultDependencies() {
   const { initializeProduct } = require('../core/product-bootstrap');
   const { verifyBundledRuntime, refuseStartup } = require('../gateway/startup-guard');
   const { migrateLegacyAuditReceipts } = require('../gateway/audit');
-  const { mappingPath } = require('../gateway/mapping');
   const { cleanupCompanionJobs } = require('../companion/retention');
   const { cleanupAbandonedWorkingJobs } = require('../gateway/orchestrator');
   const { startBatchMaintenance } = require('../gateway/batch-maintenance');
@@ -179,7 +179,6 @@ function defaultDependencies() {
     readConfiguredResultRoot: resultFolder.readConfiguredResultRoot,
     saveConfiguredResultRoot: resultFolder.saveConfiguredResultRoot,
     resultOutputDirectory: resultFolder.resultOutputDirectory,
-    mappingPath,
     recordSupportTrace: supportTrace.recordSupportTrace,
     newTraceId: supportTrace.newTraceId,
     fs
@@ -545,7 +544,8 @@ class StandaloneApplicationService {
 
   async openResults() {
     this.ensureResultRoot();
-    const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL);
+    try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
+    const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true });
     if (!target) {
       throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');
     }
@@ -557,9 +557,11 @@ class StandaloneApplicationService {
   }
 
   async openLedger() {
-    const target = this.deps.mappingPath();
+    try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
+    const run = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true });
+    const target = run ? path.join(run, VISIBLE_MAPPING_FILE) : '';
     if (!this.deps.fs.existsSync(target)) {
-      throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Es ist noch keine lokale Zuordnung vorhanden.');
+      throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Für den letzten sichtbaren Ergebnislauf ist noch keine Zuordnungsdatei vorhanden.');
     }
     const opened = await (this.deps.revealFile
       ? this.deps.revealFile(target)
