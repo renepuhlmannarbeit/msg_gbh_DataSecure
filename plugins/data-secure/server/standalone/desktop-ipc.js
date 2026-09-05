@@ -3,9 +3,10 @@
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES = 768 * 1024;
 const MAX_SINGLE_PATH_BYTES = 32767;
+const MAX_PRESENTATION_GENERATION = Number.MAX_SAFE_INTEGER;
 const PRIVATE_ACTIONS = new Set([
   'admit_selected_sources', 'cancel_admission', 'start_admitted_batch',
-  'get_public_state', 'continue_current_batch', 'configure_results',
+  'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
   'open_current_results', 'open_local_ledger', 'shutdown'
 ]);
 
@@ -21,6 +22,12 @@ function validatePrivateMessage(message) {
   if (!PRIVATE_ACTIONS.has(message.action))
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
+  if (message.action === 'ack_terminal_presented') {
+    allowedFields.add('presentation_generation');
+    if (!Number.isSafeInteger(message.presentation_generation) || message.presentation_generation < 1 ||
+        message.presentation_generation > MAX_PRESENTATION_GENERATION)
+      fail('DESKTOP_IPC_PRESENTATION_GENERATION_INVALID', 'Ungültige Darstellungskennung.');
+  }
   if (message.action === 'admit_selected_sources' || message.action === 'configure_results') {
     allowedFields.add('source_paths');
     if (message.action === 'admit_selected_sources') {
@@ -90,6 +97,6 @@ class FrameDecoder {
 }
 
 module.exports = {
-  MAX_FRAME_BYTES, MAX_ADMISSION_PATH_BYTES, PRIVATE_ACTIONS,
+  MAX_FRAME_BYTES, MAX_ADMISSION_PATH_BYTES, MAX_PRESENTATION_GENERATION, PRIVATE_ACTIONS,
   validatePrivateMessage, encodeFrame, FrameDecoder
 };

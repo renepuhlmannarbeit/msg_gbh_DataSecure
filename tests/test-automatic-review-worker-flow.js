@@ -78,6 +78,9 @@ async function runWorker(reviewOutcome, initial = waiting) {
       };
       if (name === './workflow-diagnostics') return { recordWorkflowEvent(event) { calls.events.push(event); return true; } };
       if (name === './automatic-local-review') return { continueIntoLocalReview };
+      if (name === './batch-queue-envelope') {
+        return require('../plugins/data-secure/server/gateway/batch-queue-envelope');
+      }
       throw new Error(`Unexpected dependency ${name}`);
     }
   }, { filename: workerFile, timeout: 1000 });

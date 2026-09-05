@@ -26,6 +26,8 @@ function fixture(options = {}) {
     releaseActiveLock(token) {
       events.push(`release:${token}`);
       if (options.failRelease) throw new Error('RELEASE_FAILED');
+      if (options.refuseRelease) return false;
+      return true;
     },
     recoverableBatchStates(callOptions) {
       scanCalls++;
@@ -131,8 +133,8 @@ test('partial multi-batch failure preserves the existing non-atomic contract', (
 });
 
 test('lock release failure remains visible and the public facade is unchanged', () => {
-  const value = fixture({ failRelease: true });
-  assert.throws(() => value.discard(), /RELEASE_FAILED/);
+  const value = fixture({ refuseRelease: true });
+  assert.throws(() => value.discard(), /nicht sicher freigegeben/u);
   assert.strictEqual(typeof batchFacade.discardIncompleteBatches, 'function');
 });
 

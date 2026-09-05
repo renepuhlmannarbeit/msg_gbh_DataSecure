@@ -106,6 +106,7 @@ try {
   fs.unlinkSync(writtenGood);
   const partialReplay = replayPendingResultExports();
   assert.strictEqual(partialReplay.failures >= 1, true, 'the defective item keeps failing');
+  assert.strictEqual(partialReplay.pending, 1, 'a failed replay still reports every open item');
   assert.strictEqual(fs.existsSync(writtenGood), false, 'a user-deleted final item is not re-created by the replay');
   assert.deepStrictEqual(exportCompletedState(partialState), { exported: 1, pending: 1, available: false });
   assert.strictEqual(fs.existsSync(writtenGood), false, 'nor by a later terminal-state export');
@@ -367,6 +368,57 @@ try {
   assert.deepStrictEqual(exportCompletedState(bindingState), { exported: 1, pending: 1, available: false },
     'a replaced output directory remains fail-closed');
   assert.deepStrictEqual(fs.readdirSync(outputBeforeSwap), [], 'no sibling is written into the replacement');
+
+  // A Windows claim-release failure must never turn an uncertain export into
+  // a clean success. Transient failures are retried with identity checks; a
+  // persistent failure leaves the exact claim for safe later recovery.
+  const claimFailureId = `ds_${'b'.repeat(32)}`;
+  packageFixture(claimFailureId, '# Claim-Freigabe');
+  const claimFailureState = {
+    token: 'b'.repeat(64), created_at: '2026-09-04T08:00:00.000Z',
+    items: [{ status: 'released', package_id: claimFailureId }]
+  };
+  const claimFailurePath = _test.claimPath(recordPath(claimFailureState.token));
+  const realUnlink = fs.unlinkSync;
+  let releaseAttempts = 0;
+  fs.unlinkSync = (target) => {
+    if (path.resolve(String(target)) === path.resolve(claimFailurePath)) {
+      releaseAttempts++;
+      throw Object.assign(new Error('SIMULATED_CLAIM_BUSY'), { code: 'EPERM' });
+    }
+    return realUnlink(target);
+  };
+  try {
+    assert.deepStrictEqual(exportCompletedState(claimFailureState),
+      { exported: 0, pending: 1, available: false });
+  } finally { fs.unlinkSync = realUnlink; }
+  assert.strictEqual(releaseAttempts, 4, 'claim release uses the bounded transient retry contract');
+  assert.strictEqual(fs.existsSync(claimFailurePath), true, 'the uncertain owned claim remains recoverable');
+  fs.unlinkSync(claimFailurePath);
+
+  delete process.env.EU_PRIVACY_RESULT_ROOT;
+  const replayClaimId = `ds_${'c'.repeat(32)}`;
+  packageFixture(replayClaimId, '# Replay-Claim');
+  const replayClaimState = {
+    token: 'c'.repeat(64), created_at: '2026-09-04T08:01:00.000Z',
+    items: [{ status: 'released', package_id: replayClaimId }]
+  };
+  assert.deepStrictEqual(exportCompletedState(replayClaimState), { exported: 0, pending: 1, available: false });
+  process.env.EU_PRIVACY_RESULT_ROOT = bindingCowork;
+  const replayClaimPath = _test.claimPath(recordPath(replayClaimState.token));
+  fs.unlinkSync = (target) => {
+    if (path.resolve(String(target)) === path.resolve(replayClaimPath)) {
+      throw Object.assign(new Error('SIMULATED_REPLAY_CLAIM_BUSY'), { code: 'EPERM' });
+    }
+    return realUnlink(target);
+  };
+  let uncertainReplay;
+  try { uncertainReplay = replayPendingResultExports(); }
+  finally { fs.unlinkSync = realUnlink; }
+  assert.ok(uncertainReplay.failures >= 1, 'replay reports a persistent claim-release failure');
+  assert.ok(uncertainReplay.pending >= 1, 'replay keeps the uncertain record pending');
+  assert.strictEqual(fs.existsSync(replayClaimPath), true);
+  fs.unlinkSync(replayClaimPath);
 
   console.log('RESULT FOLDER EXPORT PASS');
 } finally {

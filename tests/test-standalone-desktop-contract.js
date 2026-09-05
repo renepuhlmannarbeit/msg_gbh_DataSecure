@@ -43,9 +43,11 @@ test('both macOS packages require 13.5 and native target-host evidence', () => {
   for (const target of macTargets) {
     assert.strictEqual(target.minimum_system_version, '13.5');
     assert.strictEqual(target.native_execution_required, true);
-    assert.strictEqual(target.unsigned_gatekeeper_guide, 'MACOS-START.md');
+    assert.strictEqual(target.gatekeeper_guide, 'MACOS-START.md');
   }
   assert.strictEqual(macConfig.bundle.macOS.minimumSystemVersion, '13.5');
+  assert.strictEqual(macConfig.bundle.macOS.signingIdentity, '-',
+    'certificate-free macOS pilots require an explicit ad-hoc signature');
   assert.deepStrictEqual(macConfig.bundle.targets, ['app']);
 });
 
@@ -69,6 +71,13 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /to_be_bytes\(\)/u);
   assert.match(rust, /read_exact/u);
   assert.match(rust, /env_clear\(\)/u);
+  assert.match(rust, /fn child_process_path\(path: &Path\)/u);
+  assert.match(rust, /Command::new\(child_process_path\(&executable\)\)/u);
+  assert.match(rust, /current_dir\(child_process_path\(script_directory\)\)/u);
+  assert.match(rust, /\.arg\("--require=\.\.\/network-deny\.cjs"\)/u,
+    'Node must not receive a Windows verbatim path in its preload argument');
+  assert.match(rust, /DATASECURE_STANDALONE_DIAGNOSTIC_SESSION/u);
+  assert.match(rust, /"session_id": diagnostic_session\(\)/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);
   assert.doesNotMatch(frontend, /source_path|source_paths|raw_content|mapping|fetch\s*\(/u);
@@ -82,9 +91,25 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /code === 'STANDALONE_IPC_FAILED'/u);
   assert.match(frontend, /code === 'STANDALONE_IPC_TIMEOUT'/u);
   assert.match(frontend, /configure_results/u);
+  assert.match(frontend, /get_ui_context/u);
+  assert.match(frontend, /textContent = context\.result_folder/u,
+    'local paths are rendered as text and never interpreted as markup');
   assert.match(frontend, /open_local_ledger/u);
+  assert.match(frontend, /open_diagnostic_folder/u);
+  assert.match(frontend, /requestAnimationFrame\(\(\) => requestAnimationFrame/u,
+    'terminal visibility is acknowledged only after a paint opportunity');
+  assert.match(frontend, /ack_terminal_presented/u);
+  assert.match(frontend, /presentationGeneration: generation/u,
+    'terminal acknowledgement is correlated to the rendered public state');
   assert.ok(capability.permissions.includes('allow-open-local-ledger'));
+  assert.ok(capability.permissions.includes('allow-open-diagnostic-folder'));
+  assert.ok(capability.permissions.includes('allow-ack-terminal-presented'));
+  assert.ok(capability.permissions.includes('allow-get-ui-context'));
   assert.match(rust, /async fn open_local_ledger/u);
+  assert.match(rust, /async fn open_diagnostic_folder/u);
+  assert.match(rust, /async fn ack_terminal_presented/u);
+  assert.match(rust, /async fn get_ui_context/u);
+  assert.match(rust, /presentation_generation: u64/u);
 });
 
 test('package contract excludes Claude, Cowork, MCP and skill material', () => {

@@ -155,6 +155,14 @@ async function main() {
     assert.strictEqual(state.terminal_notice.status, 'presented');
     assert.deepStrictEqual(reserveTerminalNotice(begun.batch_token, 'parent', '4'.repeat(32)),
       { ok: false, state: 'presented' });
+    const historicalPresented = _test.readState(begun.batch_token);
+    historicalPresented.terminal_notice = {
+      status: 'presented', presenter: 'worker', reservation_id: workerReservation, at: new Date().toISOString()
+    };
+    _test.writeState(historicalPresented);
+    assert.deepStrictEqual(reserveTerminalNotice(begun.batch_token, 'worker', workerReservation),
+      { ok: false, state: 'presented' },
+      'a historical presented marker cannot become reserved again through its old reservation id');
     discardIncompleteBatches();
   });
   await testAsync('background executor receives its token only over private IPC and exposes content-free progress', async () => {

@@ -2,7 +2,8 @@
   "bundle": {
     "targets": ["app"],
     "macOS": {
-      "minimumSystemVersion": "13.5"
+      "minimumSystemVersion": "13.5",
+      "signingIdentity": "-"
     }
   }
 }

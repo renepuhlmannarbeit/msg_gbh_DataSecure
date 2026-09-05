@@ -185,6 +185,10 @@ test('MCPB prompt texts use the same direct-picker contract as the runtime', () 
     assert.match(prompt.text, /bei batch_active/iu, `${prompt.name} must wait for an active local batch`);
     assert.ok(prompt.text.includes(OPEN_BATCH_DECISION_TEXT), `${prompt.name} must use the canonical open-batch decision`);
     assert.match(prompt.text, /local_selection_cancelled nichts erneut öffnen/u, `${prompt.name} must keep picker cancellation terminal`);
+    assert.match(prompt.text, /sync_folder_notice=true/u,
+      `${prompt.name} must preserve the one-time cloud-sync disclosure`);
+    assert.match(prompt.text, /nicht garantiert rechtlich anonymen Ergebnisse können mit diesem Dienst synchronisiert werden/u,
+      `${prompt.name} must use the canonical cloud-sync disclosure`);
     assert.doesNotMatch(prompt.text, /Cowork-Arbeitsordner/u,
       `${prompt.name} must not claim that DataSecure can discover the connected Cowork folder`);
   }

@@ -7,10 +7,10 @@ Anfrage: „Anonymisiere diese Verträge und vergleiche anschließend die Kündi
 Erkläre vor dem Start knapp: Zuerst erfolgt die lokale Verarbeitung; für den Vergleich
 ist nach ihrem Abschluss ein neuer ausdrücklicher Auftrag nötig. Wähle intern `contract`
 und starte genau einmal `start_document_batch_from_picker(mode=local_only)`.
-Beim ersten Lauf lässt DataSecure einmalig den Cowork-Ergebnisordner wählen; bei
+Beim ersten Lauf lässt DataSecure einmalig einen dedizierten lokalen Ergebnisordner wählen; bei
 späteren Läufen erscheint nur der Quellpicker. Antworte bei
-`local_intake_handoff_confirmed` danach nur „Der Auftrag wurde lokal übergeben.
-DataSecure zeigt nach Abschluss den Ergebnisordner an. (DataSecure-Version:
+`local_intake_accepted_checkpoint_pending` danach nur „Die lokale Übernahme wurde gestartet.
+DataSecure bereitet den wiederaufnehmbaren Stapel vor und zeigt nach Abschluss den Ergebnisordner an. (DataSecure-Version:
 <gateway_version aus der Antwort>)“ und beende die Aufgabe.
 Der Erfolg bedeutet bestätigte Worker-Übergabe, nicht bereits abgeschlossene
 Dokumentverarbeitung.

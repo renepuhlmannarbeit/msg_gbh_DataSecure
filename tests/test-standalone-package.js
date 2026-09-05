@@ -18,7 +18,11 @@ test('standalone package build uses pinned runtime and a closed resource project
   assert.match(build, /engineering_pilot/u);
   assert.match(build, /requires_webview2: true/u);
   assert.match(build, /writeStandaloneRuntime/u);
+  assert.match(build, /productTarget/u);
   assert.doesNotMatch(build, /copyTree\([^\n]*generated-runtime/u);
+  const projection = fs.readFileSync(path.join(root, 'scripts', 'lib', 'standalone-runtime-projection.mjs'), 'utf8');
+  assert.match(projection, /native\/windows-x64\/datasecure-sandbox\.exe/u);
+  assert.match(projection, /native\/windows-x64\/datasecure-sandbox\.sha256/u);
   const toolchain = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone',
     'tauri-contract', 'rust-toolchain.toml'), 'utf8');
   assert.match(toolchain, /channel\s*=\s*"1\.98\.1"/u);
@@ -30,5 +34,6 @@ test('release runtime lookup cannot fall back to the developer checkout', () => 
   assert.match(source, /if cfg!\(debug_assertions\)/u);
   const releaseCandidates = source.slice(source.indexOf('fn runtime_paths'), source.indexOf('fn spawn_sidecar'));
   assert.match(releaseCandidates, /resource\.join\(target\)/u);
-  assert.match(source, /--require=\{\}/u);
+  assert.match(source, /\.arg\("--require=\.\.\/network-deny\.cjs"\)/u);
+  assert.match(source, /\.current_dir\(child_process_path\(script_directory\)\)/u);
 });

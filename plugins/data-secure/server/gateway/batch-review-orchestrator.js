@@ -1,5 +1,7 @@
 'use strict';
 
+const { releaseOwnedLock } = require('./batch-lock-release');
+
 const { MAX_REVIEW_CHARS, reviewSizeError } = require('../companion/text-review');
 
 // Covers both per-document separator labels (at most 100 documents).
@@ -33,6 +35,7 @@ function createBatchReviewOrchestrator(options = {}) {
     if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
     acquireActiveLock(token);
     active.add(token);
+    let primaryError = false;
     try {
       const state = readState(token);
       assertLocalExecutorAccess(state, deps.executorPid);
@@ -182,9 +185,12 @@ function createBatchReviewOrchestrator(options = {}) {
         ...deliverySummary(),
         raw_content_sent_to_claude: false
       };
+    } catch (error) {
+      primaryError = true;
+      throw error;
     } finally {
       active.delete(token);
-      releaseActiveLock(token);
+      releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
     }
   }
 

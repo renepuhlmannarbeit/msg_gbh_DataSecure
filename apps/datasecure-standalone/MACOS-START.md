@@ -13,7 +13,7 @@ nicht gebaut oder auf echten Intel-/Apple-Silicon-Macs abgenommen.
 Das ZIP muss `SHA256SUMS`, die SBOM und Lizenznachweise enthalten. Vor der
 Installation ist die veröffentlichte SHA-256-Prüfsumme zu vergleichen.
 
-## Installation eines unsignierten internen Pilotpakets
+## Installation eines ad-hoc-signierten internen Pilotpakets
 
 1. Das passende ZIP im Finder öffnen.
 2. `DataSecure Standalone.app` nach **Programme** ziehen.
@@ -27,10 +27,12 @@ Die Ausnahme gilt nur für diese App. Gatekeeper darf weder global abgeschaltet
 noch mit `xattr`- oder `spctl`-Befehlen umgangen werden. Auf verwalteten Macs
 kann die Organisation das Öffnen nicht freigegebener Apps unterbinden.
 
-Eine unsignierte und nicht notarisierte App erzeugt zusätzliche Reibung und
-wird deshalb nur als interner Pilotweg angeboten. Signierung und Notarisierung
-bleiben eine optionale spätere Verbesserung für eine bequemere breite
-Verteilung; sie sind keine fachliche Voraussetzung für DataSecure.
+Das Pilotpaket wird beim nativen macOS-Build ohne Apple-Zertifikat ausdrücklich
+ad-hoc signiert (`signingIdentity: "-"`), aber nicht notariell beglaubigt. Diese
+kostenfreie technische Signatur ersetzt weder Developer-ID-Signierung noch
+Notarisierung und kann die Gatekeeper-Rückfrage deshalb nicht vermeiden. Der
+Weg bleibt ein interner Pilot. Developer-ID-Signierung und Notarisierung sind
+optionale spätere Verbesserungen für eine bequemere breite Verteilung.
 
 ## Zielhost-Abnahme
 

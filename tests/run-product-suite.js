@@ -19,7 +19,9 @@ const baseFiles = [
   'tests/test-debug-skill-contract.js',
   'tests/test-package-staging.js', 'tests/test-safe-private-tree.js',
   'tests/test-package-staging-integration.js', 'tests/test-batch-executor-startup.js',
-  'tests/test-completion-summary.js', 'tests/test-worker-terminal-presentation.js', 'tests/test-workflow-diagnostics.js', 'tests/test-workflow-diagnostics-concurrency.js', 'tests/test-transient-rename-retry.js', 'tests/test-diagnostic-causes.js', 'tests/test-startup-guard.js',
+  'tests/test-batch-queue-envelope.js', 'tests/test-batch-worker-queue-rejection.js',
+  'tests/test-completion-summary.js', 'tests/test-completion-summary-confirmed.js',
+  'tests/test-worker-terminal-presentation.js', 'tests/test-workflow-diagnostics.js', 'tests/test-workflow-diagnostics-concurrency.js', 'tests/test-transient-rename-retry.js', 'tests/test-diagnostic-causes.js', 'tests/test-startup-guard.js',
   'tests/test-private-work-store.js', 'tests/test-batch-private-artifact-migration.js',
   'tests/test-review-private-artifact-migration.js', 'tests/test-retention.js',
   'tests/test-source-format-inspector.js', 'tests/test-source-opc-preflight.js',
@@ -53,7 +55,7 @@ const ciFiles = [
   'test-gateway-e2e.js', 'test-mcp-protocol.js', 'test-adversarial.js',
   // DS-022/DS-069 core gates: single active batch, cross-process intake
   // reservation, executor lease, recovery and the visible result export.
-  'test-batch-intake-reservation.js', 'test-batch-executor-lease.js',
+  'test-batch-intake-reservation.js', 'test-process-identity.js', 'test-batch-executor-lease.js',
   'test-batch-active-lock.js', 'test-batch-recovery.js', 'test-result-folder-export.js',
   'test-result-export-startup-replay.js'
 ];

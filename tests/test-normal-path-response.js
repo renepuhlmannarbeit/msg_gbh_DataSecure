@@ -19,7 +19,7 @@ test('exposes only fixed local-only state and never a private batch capability',
     mode: 'local_only',
     local_intake_pending: true,
     local_processing_started: false,
-    next_action: 'local_intake_handoff_confirmed',
+    next_action: 'local_intake_accepted_checkpoint_pending',
     gateway_version: VERSION,
     raw_content_sent_to_claude: false
   });

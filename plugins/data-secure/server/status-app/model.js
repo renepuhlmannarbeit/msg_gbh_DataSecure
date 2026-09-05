@@ -13,7 +13,7 @@ function snapshot(state = 'unavailable', locale = 'de') {
 function projectStartResult(result, locale = 'de') {
   let state = 'unavailable';
   if (result && typeof result === 'object' && !Array.isArray(result) && result.raw_content_sent_to_claude === false) {
-    if (result.ok === true && result.mode === 'local_only' && result.local_intake_pending === true && result.local_processing_started === false && result.next_action === 'local_intake_handoff_confirmed') state = 'local_intake_accepted';
+    if (result.ok === true && result.mode === 'local_only' && result.local_intake_pending === true && result.local_processing_started === false && result.next_action === 'local_intake_accepted_checkpoint_pending') state = 'local_intake_accepted';
     else if (result.ok === true && result.mode === 'local_only' && result.local_intake_pending === true && result.local_processing_started === true && result.next_action === 'local_processing_running_without_claude') state = 'local_start_confirmed';
     else if (result.ok === false && result.error === 'batch_active' && (
       (result.local_processing_started === true && result.next_action === 'wait_for_local_release_before_retry') ||

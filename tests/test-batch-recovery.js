@@ -78,6 +78,8 @@ function fixture(options = {}) {
     releaseActiveLock(token) {
       events.push(`release:${token}`);
       if (options.releaseError) throw options.releaseError;
+      if (options.refuseRelease) return false;
+      return true;
     },
     liveLocalExecutor: (value) => value.live === true,
     publicProgress: (value) => ({
@@ -217,6 +219,40 @@ test('latest product status selects one channel and exposes only current-run cou
   assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
   assert.strictEqual(fixture().recovery.latestProductBatchStatus('standalone'), null);
   assert.throws(() => item.recovery.latestProductBatchStatus('invalid'), /PRODUCT_CHANNEL_INVALID/u);
+});
+
+test('one product status snapshot scans and reads every retained journal at most once', () => {
+  const retained = Array.from({ length: 1000 }, (_, index) => {
+    const token = index.toString(16).padStart(64, '0');
+    const value = state(token, { items: [{ status: index === 999 ? 'retryable' : 'released' }] });
+    value.product_channel = 'standalone';
+    value.created_at = new Date(now - (1000 - index) * 1000).toISOString();
+    return value;
+  });
+  const item = fixture({ states: retained });
+  const snapshot = item.recovery.productStatusSnapshot('standalone');
+  assert.strictEqual(item.events.filter((event) => event === 'readdir').length, 1);
+  assert.strictEqual(item.events.filter((event) => event.startsWith('read:')).length, retained.length);
+  assert.strictEqual(snapshot.recovery.recoverable_batches, 1);
+  assert.strictEqual(snapshot.recovery.batches_awaiting_resume, 1);
+  assert.strictEqual(snapshot.latest.resumable, true);
+  assert.doesNotMatch(JSON.stringify(snapshot), /[a-f0-9]{64}|batch_token|path|name|hash/u);
+});
+
+test('one product snapshot preserves latest counters while a global owner is active', () => {
+  const latest = state(tokens[0], { live: true, items: [{ status: 'processing' }] });
+  latest.product_channel = 'standalone';
+  latest.created_at = '2026-08-25T11:00:00.000Z';
+  const options = { owner: { pid: 42 }, alive: [42], states: [latest] };
+  const combined = fixture(options);
+  const snapshot = combined.recovery.productStatusSnapshot('standalone');
+  const separate = fixture(options);
+  assert.deepStrictEqual(snapshot.recovery, separate.recovery.recoverableBatchStatus());
+  assert.deepStrictEqual(snapshot.latest, separate.recovery.latestProductBatchStatus('standalone'));
+  assert.strictEqual(snapshot.recovery.batch_processing_active, true);
+  assert.strictEqual(snapshot.latest.processing, true);
+  assert.strictEqual(combined.events.filter((event) => event === 'readdir').length, 1);
+  assert.strictEqual(combined.events.filter((event) => event.startsWith('read:')).length, 1);
 });
 
 test('latest product result directory resolves only the exact latest completed run', () => {
@@ -366,9 +402,11 @@ test('evidence outbox and terminal repair run under the same lock without changi
 });
 
 test('lock release errors remain visible instead of reporting a false successful maintenance result', () => {
-  const item = fixture({ releaseError: new Error('RELEASE_FAILED') });
-  assert.throws(() => item.recovery.recoverBatches(), /RELEASE_FAILED/);
-  assert.throws(() => item.recovery.cleanupExpiredBatchSnapshots(), /RELEASE_FAILED/);
+  for (const options of [{ releaseError: new Error('EPERM') }, { refuseRelease: true }]) {
+    const item = fixture(options);
+    assert.throws(() => item.recovery.recoverBatches(), /nicht sicher freigegeben/u);
+    assert.throws(() => item.recovery.cleanupExpiredBatchSnapshots(), /nicht sicher freigegeben/u);
+  }
 });
 
 test('the batch composition root preserves public and internal recovery facades', () => {

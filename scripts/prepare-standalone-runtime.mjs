@@ -32,7 +32,11 @@ if (!fs.statSync(destination).isFile() || fs.statSync(destination).size !== fs.s
 }
 const generatedRuntime = path.join(app, 'tauri-contract', 'generated-runtime');
 fs.rmSync(generatedRuntime, { recursive: true, force: true });
-const projection = writeStandaloneRuntime(path.join(root, 'plugins', 'data-secure', 'server'), path.join(generatedRuntime, 'server'));
+const projection = writeStandaloneRuntime(
+  path.join(root, 'plugins', 'data-secure', 'server'),
+  path.join(generatedRuntime, 'server'),
+  target.product_target
+);
 process.stdout.write(JSON.stringify({ ok: true, product_target: productTarget,
   rust_target: target.rust_target, node_version: contract.node_version,
   runtime_sha256: sha256(runtimeBytes), sidecar: target.sidecar_filename,

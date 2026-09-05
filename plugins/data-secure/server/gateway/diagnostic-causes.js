@@ -30,6 +30,7 @@ const CAUSES = Object.freeze({
   LOCAL_WORKER_SPAWN_FAILED: 'Der lokale Verarbeitungsprozess konnte nicht gestartet werden (gebündeltes Runtime oder Prozessstart). Neu starten; bleibt es, IT einbeziehen.',
   LOCAL_IPC_ACK_TIMEOUT: 'Der lokale Verarbeitungsprozess hat die Übernahme nicht rechtzeitig bestätigt. Es wurde kein Stapel gestartet; erneut versuchen.',
   LOCAL_IPC_ACK_CANCELLED: 'Die Übernahme wurde vom Host abgebrochen, bevor der lokale Prozess sie bestätigen konnte. Kein Stapel wurde gestartet.',
+  LOCAL_QUEUE_SCHEMA_INVALID: 'Die interne lokale Dateiliste war unvollständig oder widersprüchlich. Es wurde kein Stapel bestätigt; DataSecure aktualisieren oder den Supportbericht öffnen.',
   LOCAL_BATCH_STILL_PROCESSING: 'Die lokale Verarbeitung läuft noch. Ergebnisse stehen erst nach dem lokalen Abschluss bereit.',
   LOCAL_HANDOFF_ACTIVE: 'Eine andere lokale DataSecure-Auswahl oder Übergabe ist bereits geöffnet.',
   NO_INCOMPLETE_BATCH: 'Es liegt kein unvollständiger Stapel zum Fortsetzen oder Verwerfen vor.',

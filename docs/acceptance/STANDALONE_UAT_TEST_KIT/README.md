@@ -1,6 +1,6 @@
 # DataSecure Standalone – UAT-Testkit
 
-Stand: 04.09.2026 · Engineering-Pilot 3.2.0-rc99
+Stand: 04.09.2026 · Engineering-Pilot 3.2.0-rc102
 
 Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien
@@ -21,7 +21,7 @@ verwenden.
 | Schritt | Aktion | Erwartung / PASS |
 |---|---|---|
 | S01 | `DataSecure Standalone.exe` doppelklicken | Ein Fenster erscheint; kein Terminal, Download oder zweiter Prozessdialog wird verlangt. |
-| S02 | **Dateien auswählen** und einen kleinen gemischten Satz aus `docs/acceptance/UAT_TEST_KIT/fixtures` wählen | Genau ein Mehrfachpicker; danach verständliche Stapelübersicht, keine Rohpfade im Fenster. |
+| S02 | **Dateien auswählen** und einen kleinen gemischten Satz aus `docs/acceptance/UAT_TEST_KIT/inputs` wählen | Genau ein Mehrfachpicker; danach Anzahl, gewählte Dateinamen, Quellenordner und der aktuelle Ergebnisordner im ausschließlich lokalen Fenster. |
 | S03 | **Anonymisierung starten** | Passiver Fortschritt; klare Dateien laufen ohne Einzelbestätigung. |
 | S04 | Falls Review erscheint, eine Gruppe entscheiden und abschließen | Eine Sammelprüfung; keine zweite Quellauswahl. |
 | S05 | **Ergebnisse öffnen** | Nur freigegebene `.md`-Ergebnisse im gewählten Ergebnisordner; Originale unverändert. |
@@ -30,6 +30,13 @@ verwenden.
 | S08 | Picker abbrechen | Ruhiger Abbruch, kein automatischer zweiter Picker und kein erfundener Erfolg. |
 | S09 | Während eines synthetischen Stapels App beenden und erneut starten | Stapel erscheint als gestoppt/fortsetzbar; Fortsetzung verarbeitet nichts doppelt. |
 | S10 | Passwortgeschützte oder nicht freigegebene Testdatei wählen | Datei bleibt unverändert, wird verständlich als nicht verarbeitet gemeldet; andere sichere Stapelpositionen bleiben konsistent. |
+| S11 | **Diagnose öffnen** | Der lokale Diagnoseordner öffnet sich. `desktop-interactions.jsonl` und `sidecar-interactions.jsonl` enthalten nur feste Ereignisse, Aktionen, Laufzeiten und Fehlercodes – keine Dateinamen, Quell-/Zielpfade oder Inhalte. |
+
+Der Standard-Ergebnisordner wird bereits beim Start angezeigt, aber erst beim
+Start des ersten Stapels sicher angelegt und gespeichert. Eine ausdrückliche
+Wahl über **Ergebnisordner ändern** ersetzt diesen Standard. Für Diagnosezwecke
+ist kein Server und kein Terminal zu starten; **Diagnose öffnen** führt zum
+festen lokalen Protokollordner.
 
 ## Pflichtbeobachtungen
 

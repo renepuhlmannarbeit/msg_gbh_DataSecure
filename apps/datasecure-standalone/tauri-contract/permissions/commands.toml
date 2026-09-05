@@ -24,6 +24,16 @@ description = "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand."
 commands.allow = ["get_public_state"]
 
 [[permission]]
+identifier = "allow-get-ui-context"
+description = "Liest ausschließlich für die lokale Oberfläche den gewählten Quell- und Ergebnisort."
+commands.allow = ["get_ui_context"]
+
+[[permission]]
+identifier = "allow-ack-terminal-presented"
+description = "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenster gerendert wurde."
+commands.allow = ["ack_terminal_presented"]
+
+[[permission]]
 identifier = "allow-continue-current-batch"
 description = "Setzt den letzten lokal fortsetzbaren Stapel fort."
 commands.allow = ["continue_current_batch"]
@@ -42,6 +52,11 @@ commands.allow = ["open_current_results"]
 identifier = "allow-open-local-ledger"
 description = "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt."
 commands.allow = ["open_local_ledger"]
+
+[[permission]]
+identifier = "allow-open-diagnostic-folder"
+description = "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfreien Interaktionsprotokollen."
+commands.allow = ["open_diagnostic_folder"]
 
 [[permission]]
 identifier = "allow-shutdown"

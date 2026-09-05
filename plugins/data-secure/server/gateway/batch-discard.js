@@ -4,6 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { batchPath, safeRemoveWorkDirectory } = require('./batch-private-store');
+const { releaseOwnedLock } = require('./batch-lock-release');
 
 function createBatchDiscard(options = {}) {
   const io = options.io || fs;
@@ -20,6 +21,7 @@ function createBatchDiscard(options = {}) {
   function discardIncompleteBatches() {
     const maintenanceToken = randomBytes(32).toString('hex');
     acquireActiveLock(maintenanceToken);
+    let primaryError = false;
     try {
       const states = recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true });
       if (states.some((state) => liveLocalExecutor(state))) {
@@ -35,8 +37,11 @@ function createBatchDiscard(options = {}) {
         discarded += 1;
       }
       return { ok: true, discarded_batches: discarded, raw_content_sent_to_claude: false };
+    } catch (error) {
+      primaryError = true;
+      throw error;
     } finally {
-      releaseActiveLock(maintenanceToken);
+      releaseOwnedLock(releaseActiveLock, maintenanceToken, ErrorType, primaryError);
     }
   }
 

@@ -33,7 +33,7 @@ const started = {
   content: [{ type: 'text', text: 'unchanged text' }],
   structuredContent: {
     ok: true, mode: 'local_only', local_intake_pending: true, local_processing_started: false,
-    next_action: 'local_intake_handoff_confirmed', raw_content_sent_to_claude: false
+    next_action: 'local_intake_accepted_checkpoint_pending', raw_content_sent_to_claude: false
   }, isError: false
 };
 

@@ -17,32 +17,42 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, waitingPickerFixture = false, handoffFixture = false, statusAppPilot = false } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, statusAppPilot = false } = {}) {
   return new Promise((resolve, reject) => {
     const resultRoot = path.join(privacyRoot, '..', 'cowork-results');
+    const syntheticSource = path.join(privacyRoot, 'synthetic-private-source.txt');
     fs.mkdirSync(resultRoot, { recursive: true });
+    fs.mkdirSync(path.dirname(syntheticSource), { recursive: true });
+    fs.writeFileSync(syntheticSource, 'synthetic local fixture', 'utf8');
     // Test-only dependency substitution: exercise the real stdio dispatch and
     // response with a synthetic selection, without opening a native dialog or
     // starting a worker. Production exposes no bypass or fixture environment.
-    const entryArgs = (localStartFixture || handoffFixture) ? ['--eval', `
+    const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture) ? ['--eval', `
       const gateway = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway'))});
       gateway.genericStatus = () => ({engine_ready: true});
-      gateway.startLocalIntakeExecutor = () => {
+      gateway.startLocalIntakeExecutor = (queue) => {
         if (${waitingPickerFixture}) process.stderr.write('UNEXPECTED_INTAKE_STARTED');
-        return {ok: true, local_intake_pending: true, batch_token: 'a'.repeat(64)};
+        if (!Array.isArray(queue) || queue.length !== 1 || queue[0].full !== ${JSON.stringify(syntheticSource)} ||
+            queue[0].name !== 'synthetic-private-source.txt' || !Number.isSafeInteger(queue[0].sourceBytes)) {
+          throw new Error('REAL_QUEUE_SHAPE_NOT_USED');
+        }
+        const started = {ok: true, local_intake_pending: true, batch_token: 'a'.repeat(64)};
+        if (${invalidStartFixture}) return started;
+        Object.defineProperty(started, 'ipcAcknowledgement', {value: Promise.resolve(), enumerable: false});
+        return started;
       };
       const picker = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'file-picker'))});
-      picker.pickSourcesAsync = async () => ['synthetic-private-source.txt'];
-      picker.batchQueueFromSelection = (selected) => selected;
+      const descriptor = {sourcePath: ${JSON.stringify(syntheticSource)}, sourceBytes: ${fs.statSync(syntheticSource).size}};
+      picker.pickSourcesAsync = async () => [descriptor];
       if (${waitingPickerFixture}) {
         const waitForSelection = ({ signal } = {}) => new Promise((resolve) => {
-          const timer = setTimeout(() => resolve(['synthetic-private-source.txt']), 100);
-          signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(['synthetic-private-source.txt']); }, { once: true });
+          const timer = setTimeout(() => resolve([descriptor]), 100);
+          signal?.addEventListener('abort', () => { clearTimeout(timer); resolve([descriptor]); }, { once: true });
         });
         picker.pickSourcesAsync = waitForSelection;
         const folder = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'source-folder'))});
-        folder.pickSourceFolderAsync = waitForSelection;
-        folder.enumerateSourceFolder = (selected) => selected;
+        folder.pickSourceFolderAsync = async () => ${JSON.stringify(path.dirname(syntheticSource))};
+        folder.enumerateSourceFolderAsync = async () => [descriptor];
       }
       if (${handoffFixture}) {
         gateway.completedLocalOnlyCandidates = () => [
@@ -359,7 +369,7 @@ async function main() {
     assert.notStrictEqual(result.isError, true);
     assert.strictEqual(result.structuredContent.mode, 'local_only');
     assert.strictEqual(result.structuredContent.local_processing_started, false);
-    assert.strictEqual(result.structuredContent.next_action, 'local_intake_handoff_confirmed');
+    assert.strictEqual(result.structuredContent.next_action, 'local_intake_accepted_checkpoint_pending');
     assert.doesNotMatch(JSON.stringify(result), /batch_token|synthetic-private-source|continue_in_chat|aaaaaaaa/u);
   });
 
@@ -373,6 +383,18 @@ async function main() {
     assert.strictEqual(result.batch_token, 'a'.repeat(64));
     assert.strictEqual(result.next_action, 'wait_for_local_release_before_continue_in_chat');
     assert.doesNotMatch(JSON.stringify(result), /synthetic-private-source/u);
+  });
+
+  await testAsync('Cowork refuses a worker response without the private acknowledgement promise', async () => {
+    const { responses } = await talk([rpc(1, 'tools/call', {
+      name: 'start_document_batch_from_picker', arguments: { mode: 'local_only' }
+    })], { supportMode: false, invalidStartFixture: true });
+    const result = responses[0].result;
+    assert.strictEqual(result.isError, true);
+    assert.strictEqual(result.structuredContent.ok, false);
+    assert.strictEqual(result.structuredContent.local_processing_started, false);
+    assert.strictEqual(result.structuredContent.next_action, 'restart_only_on_explicit_request');
+    assert.doesNotMatch(JSON.stringify(result), /batch_token|synthetic-private-source|aaaaaaaa/u);
   });
 
   await testAsync('normal Cowork rejects removed legacy and support-only tools', async () => {

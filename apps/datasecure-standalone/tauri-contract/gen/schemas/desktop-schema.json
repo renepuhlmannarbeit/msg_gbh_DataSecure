@@ -177,6 +177,12 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenster gerendert wurde.",
+          "type": "string",
+          "const": "allow-ack-terminal-presented",
+          "markdownDescription": "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenster gerendert wurde."
+        },
+        {
           "description": "Verwirft eine noch nicht gestartete lokale Auswahl.",
           "type": "string",
           "const": "allow-cancel-admission",
@@ -201,10 +207,22 @@
           "markdownDescription": "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand."
         },
         {
+          "description": "Liest ausschließlich für die lokale Oberfläche den gewählten Quell- und Ergebnisort.",
+          "type": "string",
+          "const": "allow-get-ui-context",
+          "markdownDescription": "Liest ausschließlich für die lokale Oberfläche den gewählten Quell- und Ergebnisort."
+        },
+        {
           "description": "Öffnet den festgelegten lokalen Ergebnisordner.",
           "type": "string",
           "const": "allow-open-current-results",
           "markdownDescription": "Öffnet den festgelegten lokalen Ergebnisordner."
+        },
+        {
+          "description": "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfreien Interaktionsprotokollen.",
+          "type": "string",
+          "const": "allow-open-diagnostic-folder",
+          "markdownDescription": "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfreien Interaktionsprotokollen."
         },
         {
           "description": "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt.",

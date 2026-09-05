@@ -37,17 +37,25 @@ Dieser Ablauf beschreibt das freizugebende Ziel. Die native Windows-Hülle ist
 als Engineering-Pilot vorhanden; Drag-and-drop und echtes Pausieren sind noch
 Zielumfang und dürfen in der Pilotoberfläche nicht als verfügbar erscheinen.
 
-Im Erfolgsfall gibt es genau zwei bewusste Handlungen:
+Im Erfolgsfall der Anonymisierung gibt es genau zwei bewusste Handlungen:
 
 1. Dateien, einen Ordner oder per Drag-and-drop Quellen auswählen.
 2. Die kurze Stapelzusammenfassung mit **Anonymisieren** starten.
+
+Das Hauptfenster zeigt dabei lokal den aktuellen Quellenordner, die gewählten
+Dateinamen und den Ergebnisordner. Diese Anzeige ist kein Diagnoseinhalt und
+wird ausschließlich als Text gerendert. Die Betriebsart **Nur in Markdown
+umwandeln** ist gemäß DS-082 als getrenntes Ziel vorgesehen, im Engineering-
+Piloten jedoch noch nicht freigegeben: nicht anonymisierte Konvertate dürfen
+niemals in den anonymisierten Ergebnisweg fallen.
 
 Die Oberfläche besteht aus vier Zuständen im selben Fenster:
 
 1. **Auswahl:** `Dateien auswählen`, `Ordner auswählen`, Drag-and-drop und
    `Letzte Ergebnisse öffnen`.
-2. **Verarbeitung:** nichtmodaler Fortschritt; ein Dateifehler stoppt nicht den
-   übrigen Stapel. Der Anwender kann sicher pausieren.
+2. **Verarbeitung:** nichtmodaler, inhaltsfreier Fortschritt mit
+   `abgeschlossen/ausgewählt`; ein Dateifehler stoppt nicht den übrigen Stapel.
+   Eine Pause bleibt außerhalb der Istzusage, bis Befehl und Recovery belegt sind.
 3. **Prüfung:** nur echte Mehrdeutigkeiten, gesammelt in einer Liste mit
    `Anonymisieren`, `Beibehalten`, `Für gleiche Treffer übernehmen` und
    `Später`.
@@ -109,14 +117,27 @@ Tauri 2 ist nach dem Technologiegegencheck der verbindliche Engineering-
 Kandidat für die Desktop-Hülle. Im Ziel öffnet die Rust-Schicht den nativen
 Datei- oder Ordnerdialog und startet den zielgebunden mitgelieferten
 DataSecure-Core als Sidecar. Der Renderer verwendet dann nur das geschlossene UI-View-Model aus
-`server/standalone/ui-contract.json`; er sieht weder Quellpfade noch Rohbytes,
-Mapping oder private Core-Verzeichnisse. `ui-state.js` definiert die einzige
-sichtbare Zustandsfolge, und `ui-projection.js` projiziert interne Vorgänge auf
-eine feste, inhaltsfreie Feldliste. Zwischen Hülle und Core sind über
+`server/standalone/ui-contract.json`; er sieht ausschließlich die für den
+Anwender bestimmte lokale Textanzeige von Auswahl und Ziel, niemals Rohbytes,
+Mapping oder private Core-Verzeichnisse. Diese Anzeige wird nicht protokolliert
+und besitzt keinen Netzwerkkanal. Die einzige produktive Zustandsquelle ist der
+inhaltsfreie, kombinierte `get_public_state`-Snapshot; der Renderer fragt ihn
+sequenziell und ohne überlappende Polls ab. Frühere, nicht angebundene
+Event-/Reducer-Prototypen wurden entfernt. Zwischen Hülle und Core sind über
 `desktop-ipc.js` nur höchstens 1 MiB große, längengeführte Nachrichten auf
 exklusiv geerbten Prozesskanälen zulässig, niemals ein lokaler HTTP- oder
 WebSocket-Port. Quellpfade existieren nur im privaten Hülle-Core-Kanal und nie
 in einem Rendererereignis.
+
+Der Renderer bestätigt einen terminalen Zustand erst nach zwei aufeinander
+folgenden `requestAnimationFrame`-Takten über den ausschließlich dafür
+zugelassenen Befehl `ack_terminal_presented`. Dieses inhaltsfreie ACK trennt
+„Core fertig“ von „im Fenster tatsächlich gerendert“. Eine nur pro ausstehender
+Darstellung gültige, inhaltsfreie Generationsnummer bindet das ACK exakt an den
+angezeigten Zustand; ein verspätetes ACK kann keinen späteren Stapel bestätigen. Bleibt es aus, bestätigt
+die Hülle nichts und genau der vorhandene Worker-Fallback darf den lokalen
+Abschluss anzeigen. Vorbereitung und laufender Fortschritt bleiben passiv im
+selben Fenster; es entsteht kein weiterer Bestätigungsdialog.
 
 Der Windows-Engineering-Spike einschließlich selbsttragendem Pilotpaket ist
 erfolgreich; die Produktfreigabe erfolgt erst
@@ -130,8 +151,10 @@ gemeinsamen Core und seine Sicherheitsgates nicht.
 Vier getrennte Pakete sind vorgesehen: Windows x64, macOS Intel, macOS Apple
 Silicon und Linux x64 glibc. Die beiden macOS-Artefakte werden auf macOS gebaut
 und jeweils nativ getestet; ein Universal-Binary ist zunächst kein Ziel. Eine
-Signatur oder Notarisierung ist keine Produktpflicht, aber die daraus folgende
-Gatekeeper-Bedienung muss im macOS-UAT sichtbar und dokumentiert sein. Wegen
+Developer-ID-Signatur oder Notarisierung ist keine Produktpflicht. Die
+zertifikatsfreien Piloten verwenden aber ausdrücklich Tauri-Ad-hoc-Signierung
+(`signingIdentity: "-"`); die verbleibende Gatekeeper-Bedienung muss im macOS-UAT
+sichtbar und dokumentiert sein. Wegen
 der gebündelten Node-24-Core-Runtime ist für beide Mac-Pakete mindestens macOS
 13.5 fest vorgegeben. Der maschinenlesbare Ziel- und Sidecarvertrag liegt in
 `apps/datasecure-standalone/desktop-targets.json`; die Pilotanleitung in

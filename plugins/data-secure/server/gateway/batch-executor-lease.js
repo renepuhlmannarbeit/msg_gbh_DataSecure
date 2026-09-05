@@ -12,34 +12,47 @@ function createBatchExecutorLease(deps) {
     publicProgress
   } = deps;
   const nowIso = deps.nowIso || (() => new Date().toISOString());
+  const processInstanceIdentity = deps.processInstanceIdentity;
+  if (typeof processInstanceIdentity !== 'function') throw new Error('PROCESS_IDENTITY_PROVIDER_REQUIRED');
+  const leaseLive = (state) => {
+    if (!Number.isSafeInteger(state?.local_executor_pid) || state.local_executor_pid <= 0 ||
+        !processAlive(state.local_executor_pid)) return false;
+    if (typeof state.local_executor_birth_id !== 'string') return true;
+    const actual = processInstanceIdentity(state.local_executor_pid);
+    return !actual || actual === state.local_executor_birth_id;
+  };
   // DS-022: at most one batch is processed per user. The per-journal lease
   // alone cannot enforce that; a claim must also fail closed while any other
   // journal still has a live executor.
   const otherLiveExecutor = deps.otherLiveExecutor || (() => false);
 
   function assertLocalExecutorAccess(state, executorPid) {
-    if (!liveLocalExecutor(state)) {
+    if (!leaseLive(state)) {
       if (state.local_executor_pid !== undefined) {
         delete state.local_executor_pid;
         delete state.local_executor_started_at;
+        delete state.local_executor_birth_id;
         writeState(state);
       }
       return;
     }
-    if (state.local_executor_pid !== executorPid) {
+    const identity = processInstanceIdentity(executorPid);
+    if (state.local_executor_pid !== executorPid || state.local_executor_birth_id !== identity) {
       throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
     }
   }
 
   function claimLocalBatchExecutor(token, pid) {
-    if (!Number.isSafeInteger(pid) || pid <= 0 || !processAlive(pid)) {
+    const candidateAlive = Number.isSafeInteger(pid) && pid > 0 && processAlive(pid);
+    const processBirthId = candidateAlive ? processInstanceIdentity(pid) : null;
+    if (!candidateAlive || !processBirthId) {
       throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
     }
     acquireActiveLock(token);
     let primaryError = null;
     try {
       const state = readState(token);
-      if (liveLocalExecutor(state)) {
+      if (leaseLive(state)) {
         throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
       }
       if (otherLiveExecutor(token)) {
@@ -47,6 +60,7 @@ function createBatchExecutorLease(deps) {
       }
       delete state.local_executor_pid;
       delete state.local_executor_started_at;
+      delete state.local_executor_birth_id;
       const progress = publicProgress(state);
       if (progress.complete || (
         progress.remaining === 0 && progress.delivery_pending === 0 && progress.mapping_pending === 0 &&
@@ -55,6 +69,7 @@ function createBatchExecutorLease(deps) {
         return { ok: false, error: 'batch_not_runnable', ...progress, raw_content_sent_to_claude: false };
       }
       state.local_executor_pid = pid;
+      state.local_executor_birth_id = processBirthId;
       state.local_executor_started_at = nowIso();
       writeState(state);
       return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
@@ -74,9 +89,11 @@ function createBatchExecutorLease(deps) {
     let releasedLease = false;
     try {
       const state = readState(token);
-      if (state.local_executor_pid !== pid) return false;
+      const processBirthId = processInstanceIdentity(pid);
+      if (state.local_executor_pid !== pid || !processBirthId || state.local_executor_birth_id !== processBirthId) return false;
       delete state.local_executor_pid;
       delete state.local_executor_started_at;
+      delete state.local_executor_birth_id;
       writeState(state);
       releasedLease = true;
     } catch {

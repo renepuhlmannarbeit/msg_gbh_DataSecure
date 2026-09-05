@@ -240,8 +240,8 @@ function localMessageCommands(title, rawMessage, options = {}) {
       '$timer.Add_Tick({ $timer.Stop(); $form.Close() })',
       '$timer.Start()'
     ] : []),
+    "$form.Add_Shown({ [Console]::Out.WriteLine('SHOWN'); [Console]::Out.Flush() })",
     '[void]$form.ShowDialog()',
-    "[Console]::Out.Write('SHOWN')"
   ].join('; ');
   const env = options.env || process.env;
   return [{
@@ -329,10 +329,10 @@ function showDetachedLocalMessage(notice, options = {}) {
   return launch(0);
 }
 
-// Product terminal-notice arbitration needs evidence that the native process
-// actually spawned, not merely that spawn() returned a ChildProcess object.
-// This promise rejects only with fixed local errors and retains the platform
-// fallback sequence without exposing command lines or paths.
+// On Windows the form emits SHOWN from its native Shown event. Other platform
+// helpers do not yet expose a trustworthy visibility event, so their existing
+// dispatch acknowledgement remains explicitly weaker until target-host work
+// can replace it. No path, token or document content crosses this channel.
 function showDetachedLocalMessageConfirmed(notice, options = {}) {
   if (options.runner) return Promise.resolve(showLocalMessage(notice, options));
   const commands = localMessageCommands(notice.title, notice.message, { ...options, openResults: notice.open_results === true });
@@ -341,10 +341,11 @@ function showDetachedLocalMessageConfirmed(notice, options = {}) {
     const launch = (index) => {
       const spec = commands[index];
       let child;
+      const requireShown = (options.platform || process.platform) === 'win32';
       try {
         child = childProcess.spawn(spec.command, spec.args, {
           detached: true,
-          stdio: 'ignore',
+          stdio: requireShown ? ['ignore', 'pipe', 'ignore'] : 'ignore',
           windowsHide: true,
           shell: false,
           env: environment
@@ -355,16 +356,39 @@ function showDetachedLocalMessageConfirmed(notice, options = {}) {
         return;
       }
       let settled = false;
+      let timer;
+      let output = '';
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (requireShown) child.stdout?.destroy?.();
+        if (error) reject(new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.'));
+        else resolve(true);
+      };
       child.once('spawn', () => {
         if (settled) return;
-        settled = true;
-        resolve(true);
+        if (!requireShown) return finish();
+        timer = setTimeout(() => {
+          try { child.kill(); } catch { /* worker fallback owns visibility */ }
+          finish(true);
+        }, 2000);
+        timer.unref?.();
       });
+      if (requireShown) child.stdout?.on?.('data', (chunk) => {
+        if (settled) return;
+        output += String(chunk);
+        if (Buffer.byteLength(output) > 16) return finish(true);
+        if (output.includes('\n')) finish(output.trim() !== 'SHOWN');
+      });
+      child.once('exit', () => { if (!settled) finish(true); });
       child.once('error', (error) => {
         if (settled) return;
-        settled = true;
-        if (error?.code === 'ENOENT' && index + 1 < commands.length) launch(index + 1);
-        else reject(new SafeError('Die lokale Abschlussansicht konnte nicht geöffnet werden.'));
+        clearTimeout(timer);
+        if (error?.code === 'ENOENT' && index + 1 < commands.length) {
+          settled = true;
+          launch(index + 1);
+        } else finish(true);
       });
       child.unref();
     };

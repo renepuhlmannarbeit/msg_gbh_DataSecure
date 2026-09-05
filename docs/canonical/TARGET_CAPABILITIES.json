@@ -2,7 +2,7 @@
   "schema_version": 2,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc99",
+  "baseline": "3.2.0-rc102",
   "decision_ids": [
     "DS-001",
     "DS-002",
@@ -83,7 +83,9 @@
     "DS-077",
     "DS-078",
     "DS-079",
-    "DS-080"
+    "DS-080",
+    "DS-081",
+    "DS-082"
   ],
   "products": {
     "shared_core": "one-policy-and-engine-baseline",

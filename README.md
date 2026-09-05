@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC99
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC102
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -61,8 +61,11 @@ sicher gestoppt und lokal gesondert gemeldet.
    Dafür ist eine **lokale Cowork-Sitzung** eines bestehenden Desktop-
    Deployments erforderlich. In einer Cowork-Sitzung in der Cloud laufen lokale
    MCP-Server nicht; auch eine geöffnete Desktop-App ändert das nicht.
-3. Nur beim ersten Lauf einen dedizierten lokalen Ergebnisordner wählen. Das kann
-   der bereits verbundene Cowork-Arbeitsordner sein. DataSecure merkt sich die
+3. Nur beim ersten Lauf einen **dedizierten lokalen Ergebnisordner** wählen, der
+   ausschließlich für freigegebene Ergebnisse bestimmt ist. Originale bleiben
+   außerhalb jedes mit Cowork verbundenen Ordners. Optional kann der dedizierte
+   Ergebnisordner innerhalb des bereits verbundenen Cowork-Ordners liegen, wenn
+   die Ergebnisse anschließend direkt ausgewertet werden sollen. DataSecure merkt sich die
    ausdrückliche Wahl auf diesem Gerät und legt dort `DataSecure-Output` an; ein
    späterer Cowork-Projektwechsel ändert das Ziel nicht heimlich.
 4. Dateien im lokalen Mehrfachpicker wählen und einmal **„Öffnen“** klicken.

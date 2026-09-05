@@ -27,7 +27,11 @@ function fixture(options = {}) {
     SafeError,
     active,
     acquireActiveLock(value) { events.push(`acquire:${value}`); if (options.acquireError) throw options.acquireError; },
-    releaseActiveLock(value) { events.push(`release:${value}`); if (options.releaseError) throw options.releaseError; },
+    releaseActiveLock(value) {
+      events.push(`release:${value}`);
+      if (options.releaseError) throw options.releaseError;
+      return options.refuseRelease !== true;
+    },
     readState(value) { events.push(`read:${value}`); if (options.readError) throw options.readError; return state; },
     assertLocalExecutorAccess(value, pid) { events.push(`lease:${pid}`); assert.strictEqual(value, state); if (options.leaseError) throw options.leaseError; },
     reconcilePublishedItems() { events.push('reconcile:published'); return options.publishedReconciled === true; },
@@ -104,7 +108,7 @@ async function main() {
       const controller = new AbortController();
       const sequence = [];
       const value = createBatchReviewOrchestrator({
-        SafeError, active, acquireActiveLock() {}, releaseActiveLock() {},
+        SafeError, active, acquireActiveLock() {}, releaseActiveLock() { return true; },
         readState: () => ({ items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
         reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
         publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
@@ -154,7 +158,7 @@ async function main() {
       const active = new Set();
       const text = 'x'.repeat(4_000_000);
       const orchestrator = createBatchReviewOrchestrator({
-        SafeError, active, acquireActiveLock() {}, releaseActiveLock() {},
+        SafeError, active, acquireActiveLock() {}, releaseActiveLock() { return true; },
         readState: () => state, assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
         reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
         publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
@@ -193,7 +197,7 @@ async function main() {
     let uiCalls = 0;
     let captures = 0;
     const value = createBatchReviewOrchestrator({
-      SafeError, active: new Set(), acquireActiveLock() {}, releaseActiveLock() {},
+      SafeError, active: new Set(), acquireActiveLock() {}, releaseActiveLock() { return true; },
       readState: () => ({ items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
       reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
       publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
@@ -305,11 +309,10 @@ async function main() {
   });
 
   await testAsync('release failure propagates after the shared active guard is cleared', async () => {
-    const releaseError = new Error('release failed');
-    const value = fixture({ releaseError });
+    const value = fixture({ refuseRelease: true });
     await assert.rejects(
       value.orchestrator.reviewDeferredBatch(value.token, value.deps),
-      (error) => error === releaseError
+      (error) => error instanceof SafeError && /nicht sicher freigegeben/u.test(error.message)
     );
     assert.strictEqual(value.active.size, 0);
     assert.strictEqual(value.events.at(-1), 'release:token');

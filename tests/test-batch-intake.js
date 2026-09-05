@@ -125,7 +125,7 @@ test('recovery and TTL cleanup find only expired dead-owner intake copies, not u
         io: fs, batchRoot: () => item.root, intakeIntent: intent,
         nowMs: () => Date.now() + 120_000,
         readActiveLock: () => null, processAlive: () => false,
-        acquireActiveLock() {}, releaseActiveLock() {}
+        acquireActiveLock() {}, releaseActiveLock() { return true; }
       });
       assert.strictEqual(recovery[method]().removed, 0, 'live intake is protected');
       alive = false;

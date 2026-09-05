@@ -19,6 +19,11 @@ const CLAIM_RE = /^re_[a-f0-9]{32}\.json\.claim$/u;
 const PACKAGE_RE = /^ds_[a-f0-9]{32}$/u;
 const CLAIM_SCHEMA = 'datasecure-result-export-claim/1';
 const CLAIM_ID_RE = /^[a-f0-9]{32}$/u;
+const TRANSIENT_CLAIM_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+function claimRetryDelay(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
 
 function comparablePath(value) {
   const resolved = path.resolve(value);
@@ -73,11 +78,18 @@ function readClaim(target) {
   } catch { return null; }
   finally { if (descriptor !== undefined) try { fs.closeSync(descriptor); } catch {} }
 }
-function removeClaimIfUnchanged(target, expected) {
-  const current = readClaim(target);
-  if (!current || current.value.claim_id !== expected.value.claim_id || current.dev !== expected.dev ||
-      current.ino !== expected.ino || current.size !== expected.size) return false;
-  try { fs.unlinkSync(target); return true; } catch { return false; }
+function removeClaimIfUnchanged(target, expected, attempts = 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const current = readClaim(target);
+    if (!current || current.value.claim_id !== expected.value.claim_id || current.dev !== expected.dev ||
+        current.ino !== expected.ino || current.size !== expected.size) return false;
+    try { fs.unlinkSync(target); return true; }
+    catch (error) {
+      if (!TRANSIENT_CLAIM_CODES.has(error?.code) || attempt === attempts - 1) return false;
+      claimRetryDelay(10 * (attempt + 1));
+    }
+  }
+  return false;
 }
 function acquireExportClaim(recordTarget) {
   const target = claimPath(recordTarget);
@@ -109,7 +121,7 @@ function acquireExportClaim(recordTarget) {
   }
 }
 function releaseExportClaim(recordTarget, claim) {
-  return claim ? removeClaimIfUnchanged(claimPath(recordTarget), claim) : false;
+  return claim ? removeClaimIfUnchanged(claimPath(recordTarget), claim, 4) : false;
 }
 function exactKeys(value, keys) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
@@ -360,30 +372,35 @@ function exportCompletedState(state) {
   catch { return { exported: 0, pending: releasedCount(state), available: false }; }
   if (!claim) return { exported: 0, pending: releasedCount(state), available: false };
   let plan;
+  let outcome;
+  let released = false;
   try {
-    try { plan = ensureRecord(state); }
-    catch { return { exported: 0, pending: releasedCount(state), available: false }; }
-    if (plan.value.items.length === 0) return { exported: 0, pending: 0, available: true };
-    // DS-069 replays only a failed export; DS-023 leaves visible results to the
-    // user until they delete them. A completed record is therefore final: it is
-    // neither re-verified nor re-materialised after a user deletion, and a later
-    // destination change does not mirror earlier runs into the new folder.
-    if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0, available: true };
-    const total = plan.value.items.length;
-    const pendingResult = () => {
-      let done = exportedCount(plan.value);
-      try { done = exportedCount(readRecord(plan.target)); } catch { /* keep the last known progress */ }
-      return { exported: done, pending: total - done, available: false };
-    };
-    try {
-      const destination = activeDestination();
-      if (!destination) return pendingResult();
-      const finished = exportOpenItems(plan.target, readRecord(plan.target), destination);
-      return finished.complete === true ? { exported: total, pending: 0, available: true } : pendingResult();
-    } catch {
-      return pendingResult();
-    }
-  } finally { releaseExportClaim(target, claim); }
+    outcome = (() => {
+      try { plan = ensureRecord(state); }
+      catch { return { exported: 0, pending: releasedCount(state), available: false }; }
+      if (plan.value.items.length === 0) return { exported: 0, pending: 0, available: true };
+      // DS-069 replays only a failed export; DS-023 leaves visible results to the
+      // user until they delete them. A completed record is therefore final: it is
+      // neither re-verified nor re-materialised after a user deletion, and a later
+      // destination change does not mirror earlier runs into the new folder.
+      if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0, available: true };
+      const total = plan.value.items.length;
+      const pendingResult = () => {
+        let done = exportedCount(plan.value);
+        try { done = exportedCount(readRecord(plan.target)); } catch { /* keep the last known progress */ }
+        return { exported: done, pending: total - done, available: false };
+      };
+      try {
+        const destination = activeDestination();
+        if (!destination) return pendingResult();
+        const finished = exportOpenItems(plan.target, readRecord(plan.target), destination);
+        return finished.complete === true ? { exported: total, pending: 0, available: true } : pendingResult();
+      } catch {
+        return pendingResult();
+      }
+    })();
+  } finally { released = releaseExportClaim(target, claim); }
+  return released ? outcome : { exported: 0, pending: releasedCount(state), available: false };
 }
 function replayPendingResultExports() {
   let exported = 0;
@@ -397,9 +414,13 @@ function replayPendingResultExports() {
     if (TEMPORARY_RECORD_RE.test(entry.name)) continue;
     if (CLAIM_RE.test(entry.name)) continue;
     if (!RECORD_RE.test(entry.name)) { failures++; continue; }
+    const exportedBeforeEntry = exported;
+    const pendingBeforeEntry = pending;
+    const failuresBeforeEntry = failures;
     let claim;
+    let target;
     try {
-      const target = path.join(outboxDirectory(), entry.name);
+      target = path.join(outboxDirectory(), entry.name);
       claim = acquireExportClaim(target);
       if (!claim) {
         try { pending += Math.max(0, readRecord(target).items.filter((item) => item.exported !== true).length); }
@@ -417,13 +438,25 @@ function replayPendingResultExports() {
         exported += exportedCount(finished) - before;
       } catch (error) {
         let after = before;
-        try { after = exportedCount(readRecord(target)); } catch { /* keep the last known progress */ }
+        let remaining = record.items.length - before;
+        try {
+          const current = readRecord(target);
+          after = exportedCount(current);
+          remaining = current.items.length - after;
+        } catch { /* keep the last known progress and item count */ }
         exported += after - before;
+        pending += Math.max(0, remaining);
         throw error;
       }
     } catch { failures++; }
     finally {
-      if (claim) releaseExportClaim(path.join(outboxDirectory(), entry.name), claim);
+      if (claim && !releaseExportClaim(target, claim)) {
+        let itemCount = 0;
+        try { itemCount = readRecord(target).items.length; } catch { /* retain fail-closed zero */ }
+        exported = exportedBeforeEntry;
+        pending = pendingBeforeEntry + itemCount;
+        failures = Math.max(failures, failuresBeforeEntry + 1);
+      }
     }
   }
   return { exported, pending, failures };

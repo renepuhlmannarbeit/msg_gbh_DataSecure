@@ -5,7 +5,7 @@ const fs = require('fs');
 const vm = require('vm');
 const childProcess = require('child_process');
 const { createSuite } = require('./helpers');
-const { pickSourcesAsync, PICKER_CANCELLED } = require('../plugins/data-secure/server/companion/file-picker');
+const { pickSourcesAsync, PICKER_CANCELLED, batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
 const { pickSourceFolderAsync, SOURCE_FOLDER_CANCELLED } = require('../plugins/data-secure/server/companion/source-folder');
 const { pickFolderAsync, FOLDER_PICKER_CANCELLED } = require('../plugins/data-secure/server/companion/folder-picker');
 const completed = require('../plugins/data-secure/server/companion/completed-batch-picker');
@@ -123,9 +123,9 @@ if (process.platform === 'win32') {
       releaseIntake: () => { reservationHeld = false; return true; },
       genericStatus: (options) => { assert.strictEqual(options.ignoreIntakeReservation, true); return { engine_ready: true }; },
       pickSourcesAsync: async () => [{ sourcePath: selectedPath, sourceBytes: 12 }],
-      batchQueueFromSelection: (selected) => selected,
+      batchQueueFromSelection,
       recordWorkflowEvent: (event) => { if (cancelOnAccepted && event.event === 'picker_selection_accepted') controller.abort(); },
-      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true }; },
+      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
       localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
     });
     vm.runInContext(source, context);
@@ -165,10 +165,10 @@ if (process.platform === 'win32') {
       pickSourcesAsync: async () => { sourcePickerCalls++; return [{ sourcePath: selectedPath, sourceBytes: 12 }]; },
       pickSourceFolderAsync: async () => path.dirname(selectedPath),
       enumerateSourceFolderAsync: async () => [],
-      batchQueueFromSelection: (selected) => selected,
+      batchQueueFromSelection,
       recordWorkflowEvent: () => {},
-      startLocalIntakeExecutor: () => { reservationHeld = false; return { ok: true, local_intake_pending: true }; },
-      localOnlyStartResponse: () => ({ ok: true, next_action: 'local_intake_handoff_confirmed' })
+      startLocalIntakeExecutor: () => { reservationHeld = false; return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+      localOnlyStartResponse: () => ({ ok: true, next_action: 'local_intake_accepted_checkpoint_pending' })
     });
     vm.runInContext(source, context);
     assert.strictEqual((await context.startPickerBatch({})).ok, true);
@@ -346,9 +346,9 @@ if (process.platform === 'win32') {
       pickSourcesAsync: () => { sourcePickerCalls++; return new Promise((resolve) => { resolveSources = resolve; }); },
       pickSourceFolderAsync: async () => path.dirname(selectedPath),
       enumerateSourceFolderAsync: async () => [],
-      batchQueueFromSelection: (selected) => selected,
+      batchQueueFromSelection,
       recordWorkflowEvent: () => {},
-      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true }; },
+      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
       localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
     });
     vm.runInContext(source, context);
@@ -457,7 +457,7 @@ if (process.platform === 'win32') {
         pickSourceFolderAsync: async () => path.dirname(selectedPath),
         enumerateSourceFolderAsync: async () => { throw failure; },
         pickSourcesAsync: async () => { throw failure; },
-        batchQueueFromSelection: (selected) => selected,
+        batchQueueFromSelection,
         recordWorkflowEvent: (event) => { events.push(event); },
         startLocalIntakeExecutor: () => { starts++; return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
         localOnlyStartResponse: (started) => ({ ok: started.ok })

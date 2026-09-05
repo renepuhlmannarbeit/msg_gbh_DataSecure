@@ -27,6 +27,8 @@ for (const [name, value] of entries) {
 }
 for (const required of ['DataSecure Standalone.exe', 'datasecure-core-x86_64-pc-windows-msvc.exe',
   'server/standalone/desktop-sidecar.js', 'server/network-deny.cjs', 'RUNTIME-EVIDENCE.json',
+  'server/native/windows-x64/datasecure-sandbox.exe',
+  'server/native/windows-x64/datasecure-sandbox.sha256',
   'STANDALONE-MANIFEST.json', 'SBOM.spdx.json', 'SHA256SUMS', 'LICENSE', 'LICENSE.node.txt',
   'THIRD_PARTY_NOTICES.md', 'START-WINDOWS.md']) assert.ok(relative.has(required), `STANDALONE_ZIP_REQUIRED:${required}`);
 
@@ -48,7 +50,8 @@ for (const line of sums) {
   assert.ok(match, 'STANDALONE_SHA256SUMS_INVALID');
   assert.equal(crypto.createHash('sha256').update(relative.get(match[2])).digest('hex'), match[1]);
 }
-for (const executable of ['DataSecure Standalone.exe', 'datasecure-core-x86_64-pc-windows-msvc.exe']) {
+for (const executable of ['DataSecure Standalone.exe', 'datasecure-core-x86_64-pc-windows-msvc.exe',
+  'server/native/windows-x64/datasecure-sandbox.exe']) {
   assert.equal(modes.get(`${prefix}${executable}`), 0o100755);
   assert.equal(relative.get(executable)[0], 0x4d);
   assert.equal(relative.get(executable)[1], 0x5a);

@@ -61,8 +61,10 @@ Bedienung vereinfachen, ohne die lokale Datenschutzgrenze zu verschieben:
 
 - Ein vollständig klarer Mehrdateienstapel öffnet null Reviewdialoge und endet
   vollständig.
-- Ein Mischstapel veröffentlicht klare Dateien vor dem Review; der Reviewentwurf
-  enthält nur mehrdeutige Dokumente und zeigt korrekte inhaltsfreie Zähler.
+- Ein Mischstapel darf klare Dateien intern abschließen, veröffentlicht den
+  sichtbaren Stapel aber erst nach dem erforderlichen Review als Einheit. Der
+  Reviewentwurf enthält nur mehrdeutige Dokumente und zeigt korrekte
+  inhaltsfreie Zähler.
 - Genau ein lokaler Reviewer-Aufruf bearbeitet eine begrenzte Prüfgruppe.
 - Windows-, macOS- und Linux-Adapter verwenden dasselbe Aktionsvokabular und
   zeigen den Fortschritt, ohne Rohdaten in Argumenten oder Metadaten abzulegen.
@@ -73,8 +75,9 @@ Bedienung vereinfachen, ohne die lokale Datenschutzgrenze zu verschieben:
 
 - Windows und macOS: Fokus, Escape, Tastatur, Zoom, Screenreader und verständliche
   Aktionsbezeichnungen mit synthetischen Dokumenten beobachten.
-- Fachfremde Nutzer müssen erkennen, dass klare Dateien bereits fertig sind und
-  nur die gelben Stellen eine Entscheidung benötigen.
+- Fachfremde Nutzer müssen erkennen, dass klare Dateien intern bereits fertig
+  sein können, der sichtbare Gesamtstapel aber erst nach den Entscheidungen zu
+  den gelben Stellen bereitgestellt wird.
 - IT-/Health-IT-Fachvertretung prüft unterschiedliche Zertifikats- und
   Organisationskontexte. Security prüft, dass kein Reviewinhalt die lokale Grenze
   verlässt.

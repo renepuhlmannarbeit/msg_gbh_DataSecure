@@ -27,6 +27,8 @@ function fixture(options = {}) {
     releaseActiveLock(value) {
       events.push(`release:${value}`);
       if (options.failRelease) throw new Error('RELEASE_FAILED');
+      if (options.refuseRelease) return false;
+      return true;
     },
     readState(value) {
       events.push(`read:${value}`);
@@ -167,9 +169,11 @@ test('no-op resume keeps exact error priority and persists only reconciliation c
 });
 
 test('release failures stay visible instead of reporting false resume success', () => {
-  const value = fixture({ failRelease: true });
-  assert.throws(() => value.resumeBatch(token), /RELEASE_FAILED/);
-  assert.deepStrictEqual([...value.active], []);
+  for (const options of [{ failRelease: true }, { refuseRelease: true }]) {
+    const value = fixture(options);
+    assert.throws(() => value.resumeBatch(token), /nicht sicher freigegeben/u);
+    assert.deepStrictEqual([...value.active], []);
+  }
 });
 
 test('continue returns a fixed content-free no-batch response without taking a lock', () => {

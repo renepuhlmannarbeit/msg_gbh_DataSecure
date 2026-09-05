@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 04.09.2026 · 3.2.0-rc99
+Stand: 04.09.2026 · 3.2.0-rc102
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 kennzeichnet das UX-Zielbild und die Standalone-Sequenz ausdrücklich
@@ -275,8 +275,10 @@ flowchart LR
 ```
 
 Mehrere pausierte Stapel dürfen existieren; gleichzeitig aktiv sein darf nur
-eine lokale Aufnahme, Stapelverarbeitung oder Prüfung. Prozessabsturz und
-PID-Wiederverwendung bleiben deshalb besonders prüfpflichtige Lease-Grenzen.
+eine lokale Aufnahme, Stapelverarbeitung oder Prüfung. Executor-Leases binden
+deshalb PID und gehashte Betriebssystem-Startidentität: eine nachweislich
+wiederverwendete PID ist kein lebender Eigentümer, eine nicht sicher
+beobachtbare Identität blockiert dagegen fail-closed.
 
 ## 7. Review- und Fortsetzungssequenz
 
@@ -428,16 +430,16 @@ nicht protokolliert werden; gespeichert wird nur eine geschlossene Projektion.
 9. **Begrenzte Protokollaufnahme:** Ein JSON-RPC-Frame ist vor dem Parsen auf
    1 MiB begrenzt. Ein übergroßer Frame wird vollständig bis zum nächsten
    Zeilenende verworfen; nachfolgende gültige Anfragen bleiben verarbeitbar.
-10. **Offene Produktverbesserungen:** Stapelgebundener statt nur globaler
-   Ergebnisstamm, sichtbare Teilresultate bei vertagtem Review, echte
-   plattformübergreifende Sammelprüfung, bestätigte Sichtbarkeit der
-   Abschlussoberfläche und passive Fortschrittsanzeige benötigen jeweils eine
-   eigene Architektur- und UAT-Lieferung.
+10. **Evidencegrenzen:** Ergebnisstamm und sichtbarer Mischstapel sind durch
+   DS-079/080 entschieden. Standalone bestätigt Rendering und zeigt passiven
+   Fortschritt E0; Windows-Cowork bestätigt das native `Shown`-Ereignis.
+   Plattformübergreifender Sammelreview, macOS-Sichtbarkeit und echte
+   Zielhostbeobachtungen bleiben eigenständige UAT-Lieferungen.
 
-Die Punkte 4 bis 6, 8 und 9 sind als E0-Arbeitspakete umgesetzt. Punkt 2 bleibt als
+Die Punkte 4 bis 6 sowie 8 bis 10 sind als E0-Arbeitspakete umgesetzt. Punkt 2 bleibt als
 beobachtbare UX-Abnahme zusätzlich offen; die technische Pfadtrennung selbst ist
-bereits implementiert. Die unter Punkt 10 genannten Änderungen sind bewusst
-nicht durch UML-Dokumentation vorgetäuscht, sondern im Backlog getrennt offen.
+bereits implementiert. Die unter Punkt 10 genannten Zielhostnachweise sind
+bewusst nicht durch UML-Dokumentation vorgetäuscht, sondern im Backlog getrennt offen.
 
 ## 11. Zielarchitektur: UX und Standalone
 

@@ -8,6 +8,7 @@ const { createSuite } = require('./helpers');
 const { test, done, assert } = createSuite('Local batch executor lease');
 const token = 'a'.repeat(64);
 const fixedTime = '2026-08-25T12:00:00.000Z';
+const birth = (pid) => String(pid).padStart(64, '0');
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -18,8 +19,11 @@ function fixture(options = {}) {
   const events = [];
   const releaseResults = [...(options.releaseResults || [true])];
   const alive = new Set(options.alive || []);
+  const identity = (pid) => Object.prototype.hasOwnProperty.call(options.identities || {}, pid)
+    ? options.identities[pid] : birth(pid);
   const liveLocalExecutor = (state) => Number.isSafeInteger(state?.local_executor_pid) &&
-    alive.has(state.local_executor_pid);
+    alive.has(state.local_executor_pid) && (state.local_executor_birth_id === undefined ||
+      state.local_executor_birth_id === identity(state.local_executor_pid));
   const lease = createBatchExecutorLease({
     SafeError,
     processAlive(pid) { events.push(`alive:${pid}`); return alive.has(pid); },
@@ -51,6 +55,9 @@ function fixture(options = {}) {
       };
     },
     nowIso: () => fixedTime,
+    processInstanceIdentity(pid) {
+      return alive.has(pid) ? identity(pid) : null;
+    },
     ...(options.otherLiveExecutor ? { otherLiveExecutor(value) { events.push(`other:${value}`); return options.otherLiveExecutor(value); } } : {})
   });
   return { lease, events, state: () => clone(persisted) };
@@ -67,6 +74,7 @@ test('a live executor on any other journal blocks the claim without touching thi
   const free = fixture({ state: original, alive: [222], otherLiveExecutor: () => false });
   assert.strictEqual(free.lease.claimLocalBatchExecutor(token, 222).ok, true);
   assert.strictEqual(free.state().local_executor_pid, 222);
+  assert.strictEqual(free.state().local_executor_birth_id, birth(222));
 });
 
 test('invalid or conclusively dead candidate PID fails before taking the global lock', () => {
@@ -83,17 +91,44 @@ test('a stale marker is durably replaced and the public response exposes no leas
     alive: [222]
   });
   const result = lease.claimLocalBatchExecutor(token, 222);
-  assert.deepStrictEqual(events, [`alive:222`, `acquire:${token}`, `read:${token}`, 'write', `release:${token}`]);
+  assert.deepStrictEqual(events, [`alive:222`, `acquire:${token}`, `read:${token}`, 'alive:111', 'write', `release:${token}`]);
   assert.strictEqual(state().local_executor_pid, 222);
   assert.strictEqual(state().local_executor_started_at, fixedTime);
+  assert.strictEqual(state().local_executor_birth_id, birth(222));
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.local_processing_active, true);
   assert.doesNotMatch(JSON.stringify(result), /local_executor|started_at|batch_token|pid/u);
 });
 
+test('a reused live PID with a different birth identity is a stale lease, not a live owner', () => {
+  const previousBirth = 'a'.repeat(64);
+  const currentBirth = 'b'.repeat(64);
+  const { lease, state } = fixture({
+    state: { token, remaining: 1, local_executor_pid: 111,
+      local_executor_started_at: '2026-08-25T11:00:00.000Z', local_executor_birth_id: previousBirth },
+    alive: [111, 222], identities: { 111: currentBirth, 222: birth(222) }
+  });
+  const result = lease.claimLocalBatchExecutor(token, 222);
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(state().local_executor_pid, 222);
+  assert.strictEqual(state().local_executor_birth_id, birth(222));
+});
+
+test('an unavailable identity provider blocks a new lease and cannot authorize release', () => {
+  const blocked = fixture({ alive: [222], identities: { 222: null } });
+  assert.throws(() => blocked.lease.claimLocalBatchExecutor(token, 222), /nicht sicher gestartet/i);
+
+  const state = { token, remaining: 1, local_executor_pid: 222,
+    local_executor_started_at: fixedTime, local_executor_birth_id: birth(222) };
+  const release = fixture({ state, alive: [222], identities: { 222: null } });
+  assert.strictEqual(release.lease.releaseLocalBatchExecutor(token, 222), false);
+  assert.deepStrictEqual(release.state(), state);
+});
+
 test('a concurrent live owner blocks duplicate and foreign claims without rewriting its marker', () => {
   for (const candidate of [111, 222]) {
-    const original = { token, remaining: 1, local_executor_pid: 111, local_executor_started_at: 'original' };
+    const original = { token, remaining: 1, local_executor_pid: 111, local_executor_started_at: 'original',
+      local_executor_birth_id: birth(111) };
     const { lease, events, state } = fixture({ state: original, alive: [111, 222] });
     assert.throws(() => lease.claimLocalBatchExecutor(token, candidate), /bereits vollständig lokal verarbeitet/i);
     assert.deepStrictEqual(state(), original);
@@ -112,13 +147,14 @@ test('access cleans a stale marker durably, accepts its live owner and rejects a
   assert.strictEqual(stale.state().local_executor_pid, undefined);
 
   const owner = fixture({
-    state: { token, remaining: 1, local_executor_pid: 111, local_executor_started_at: 'live' },
+    state: { token, remaining: 1, local_executor_pid: 111, local_executor_started_at: 'live',
+      local_executor_birth_id: birth(111) },
     alive: [111]
   });
   owner.lease.assertLocalExecutorAccess(owner.state(), 111);
-  assert.deepStrictEqual(owner.events, []);
+  assert.deepStrictEqual(owner.events, ['alive:111']);
   assert.throws(() => owner.lease.assertLocalExecutorAccess(owner.state(), 222), /bereits vollständig lokal verarbeitet/i);
-  assert.deepStrictEqual(owner.events, []);
+  assert.deepStrictEqual(owner.events, ['alive:111', 'alive:111']);
 });
 
 test('journal failures never report a claim, release or stale cleanup as successful', () => {
@@ -129,7 +165,8 @@ test('journal failures never report a claim, release or stale cleanup as success
   assert.strictEqual(claiming.state().local_executor_pid, undefined);
 
   const releasing = fixture({
-    state: { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime },
+    state: { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime,
+      local_executor_birth_id: birth(222) },
     alive: [222], writeError
   });
   assert.strictEqual(releasing.lease.releaseLocalBatchExecutor(token, 222), false);
@@ -153,7 +190,8 @@ test('a failed global-lock release never reports a successful lease transition',
   assert.strictEqual(claiming.state().local_executor_pid, 222, 'the durable lease remains recoverable');
 
   const releasing = fixture({
-    state: { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime },
+    state: { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime,
+      local_executor_birth_id: birth(222) },
     alive: [222], releaseResults: [false]
   });
   assert.strictEqual(releasing.lease.releaseLocalBatchExecutor(token, 222), false);
@@ -161,7 +199,8 @@ test('a failed global-lock release never reports a successful lease transition',
 });
 
 test('release requires the exact PID and lock failures leave the journal untouched', () => {
-  const original = { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime };
+  const original = { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime,
+    local_executor_birth_id: birth(222) };
   const mismatch = fixture({ state: original, alive: [222] });
   assert.strictEqual(mismatch.lease.releaseLocalBatchExecutor(token, 333), false);
   assert.deepStrictEqual(mismatch.state(), original);
@@ -177,6 +216,7 @@ test('release requires the exact PID and lock failures leave the journal untouch
   assert.strictEqual(released.lease.releaseLocalBatchExecutor(token, 222), true);
   assert.strictEqual(released.state().local_executor_pid, undefined);
   assert.strictEqual(released.state().local_executor_started_at, undefined);
+  assert.strictEqual(released.state().local_executor_birth_id, undefined);
 });
 
 test('a terminal non-runnable state preserves the established no-write contract', () => {

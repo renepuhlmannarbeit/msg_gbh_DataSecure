@@ -31,8 +31,9 @@
    aus der Plugin-Seite; beide müssen übereinstimmen.
 
 Nach einer bestätigten Auswahl lautet die erwartete kurze Claude-Antwort:
-**„Der Auftrag wurde lokal übergeben. DataSecure zeigt nach Abschluss den
-Ergebnisordner an.“** ergänzt um **„(DataSecure-Version: …)“** mit der Version
+**„Die lokale Übernahme wurde gestartet. DataSecure bereitet den
+wiederaufnehmbaren Stapel vor und zeigt nach Abschluss den Ergebnisordner an.“**
+ergänzt um **„(DataSecure-Version: …)“** mit der Version
 des zu prüfenden Builds. Nennt die Antwort eine andere oder keine Version, läuft
 in Cowork eine ältere Plugin-Kopie: Lauf als `BLOCKED` erfassen, Plugin gemäß
 Anleitung („Plugin aktualisieren“) neu bereitstellen und erst dann fortsetzen.
@@ -108,7 +109,7 @@ den aktuellen Source-Preflight geprüft werden.
 [Ziel und PASS-Regel](CASE_CATALOG.md#uat-05)
 
 1. `batch-001.txt` bis `batch-010.txt` wählen und öffnen.
-2. Sobald **„Der Auftrag wurde lokal übergeben.“** sichtbar ist, Claude
+2. Sobald **„Die lokale Übernahme wurde gestartet.“** sichtbar ist, Claude
    Desktop vollständig beenden: Windows über „Beenden“ im Taskleistenmenü,
    macOS mit `Cmd+Q`. Nicht auf eine Abschlussmeldung warten.
 3. Claude Desktop neu starten und „Setze den unvollständigen DataSecure-Stapel

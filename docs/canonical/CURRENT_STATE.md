@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 04.09.2026 · 3.2.0-rc99 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
+Stand: 05.09.2026 · 3.2.0-rc102 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
 
 ## Produkt in einem Satz
 
@@ -45,6 +45,9 @@ freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
   werden weder überschrieben noch wiederhergestellt, und ein späterer
   Ordnerwechsel spiegelt keine früheren Läufe in den neuen Ordner. Der Outputbaum
   ist als rekursive Quelle gesperrt.
+  Export-Claims werden identitätsgebunden und mit begrenztem transientem Retry
+  freigegeben. Bleibt die Freigabe unsicher, melden Terminalexport und Replay
+  keinen Erfolg; der gesamte betroffene Export bleibt sichtbar ausstehend.
 
 ## Claude-/Cowork-Grenze
 
@@ -68,6 +71,24 @@ Aktuelle Testklassen und Befehle stehen in [`docs/TESTING.md`](../TESTING.md).
 Automatisierte Tests ersetzen keine Windows-/macOS-Fresh-Install-, Cowork-, UX-,
 Accessibility-, Security- oder Fachabnahme.
 
+RC102 schließt den im nativen Windows-UAT sichtbaren Startfehler
+`STANDALONE_IPC_FAILED`: Tauri lieferte den Ressourcenpfad korrekt in der
+Windows-Verbatim-Schreibweise (`\\?\C:\…`), Node beendete sich jedoch vor dem
+Sidecarstart an dem absolut übergebenen Preloadpfad. Die Desktop-Hülle prüft
+weiterhin die unveränderten Paketdateien, normalisiert ausschließlich die an den
+Kindprozess übergebene Pfadschreibweise und lädt den gebundenen Network-Deny-
+Preloader relativ zum geprüften Arbeitsverzeichnis. Rust-Unit-, Paket- und
+echter nativer EXE-Starttest verlangen bestätigte Sidecar- und IPC-Ereignisse.
+Diese Tauri-spezifische Ursache existiert im Cowork-Plugin nicht; dort sichern
+echte Worker-ACKs und Queue-Envelope-Validierung den vergleichbaren
+Mock-/Scheinerfolgsfehler ab.
+
+Die häufige Standalone-Statusabfrage enumeriert Recovery-Zähler und den jüngsten
+Standalone-Lauf gemeinsam. Auch bei 1.000 aufbewahrten Journalen gibt es pro
+Poll genau einen Verzeichnisscan und höchstens einen Read je Journal; die
+Produktoberfläche zeigt die private Zuordnung eines Mischstapels erst nach einem
+terminalen sichtbaren Ergebnis oder einem vollständig gestoppten Abschluss.
+
 Der aktuelle Kern erkennt und entfernt direkte Identifikatoren einschließlich
 mehrsprachiger Namensfelder, Anreden, Kontakt-URIs, Telefon-, Adress-, Steuer- und
 Bankdaten. Mehrzeilige sensible Tabellenköpfe werden nur bis zur belegten
@@ -76,7 +97,13 @@ Strukturen stoppen am unabhängigen Residual-Gate. Zusammengeführte DOCX-Zellen
 stoppen, bis sie koordinatentreu unterstützt werden. Zertifizierungsanbieter und
 IT-/Health-IT-Fachbegriffe bleiben kontextgebunden erhalten.
 
-Intake, Fortsetzung und Review gelten erst nach echtem Worker-ACK als gestartet.
+Intake, Fortsetzung und Review gelten erst nach echtem Worker-ACK als lokal
+angenommen. Dieses ACK ist bewusst noch kein dauerhafter Stapelcheckpoint: Die
+öffentliche Startantwort benennt bis dahin `checkpoint_pending` und behauptet
+weder laufende noch bereits fortsetzbare Verarbeitung. Executor-Leases binden
+ihren Eigentümer an PID und Betriebssystem-Startidentität; eine wiederverwendete
+PID kann daher keine alte Lease übernehmen, während ein nicht sicher
+beobachtbarer Eigentümer fail-closed blockiert.
 Der lokale Hintergrundlauf geht nach der vollständigen Stapelanalyse direkt in
 einen erforderlichen Sammelreview; „Später“ pausiert ohne Freigabe und ohne
 zweiten Picker. Abschlussanzeige und sichtbarer Export besitzen getrennte,
@@ -101,12 +128,26 @@ laufenden Prozess geprüft. Ein eigenes selbsttragendes Windows-x64-
 Engineering-Paket wurde gebaut, verifiziert und in einem isolierten Pfad ohne
 System-Node gestartet. Zielsystem-UAT und native macOS-Pakete fehlen; der
 Schnitt ist deshalb noch kein freigegebenes Standalone-Produkt.
-Ein geschlossener UI-Zustands-/IPC-Vertrag verhindert
-Rohpfade, Rohbytes und Dateisystemzugriff im Renderer; Pflichtzähler und
-Zustandsübergänge stoppen bei fehlenden, regressiven oder widersprüchlichen
-Werten. Der Zielkatalog bindet vier getrennte Pakete an exakte Rust-Triples:
+Die Standalone-Oberfläche zeigt Vorbereitung und danach passive, inhaltsfreie
+Fortschrittszähler. Einen terminalen Zustand bestätigt sie dem Worker erst nach
+einem tatsächlichen Renderer-Paint und nur mit der zu diesem Zustand gehörenden
+inhaltsfreien Generationsnummer. Verspätete und doppelte ACKs sind inert; fehlt
+das passende ACK, bleibt genau ein lokaler
+Worker-Fallback zuständig. Der Cowork-Abschluss nutzt unter Windows ebenfalls
+ein echtes natives `Shown`-Ereignis statt eines bloßen Prozessstarts. Der
+gleichwertige macOS-Sichtbarkeitsnachweis ist noch nicht erbracht und bleibt
+Zielhostevidenz.
+Ein geschlossener UI-Zustands-/IPC-Vertrag verhindert Rohbytes und direkten
+Dateisystemzugriff im Renderer. Ausgewählte Dateinamen, Quellenordner und das
+Ergebnisziel werden ausschließlich im lokalen Standalone-Fenster angezeigt und
+fehlen strukturell in Diagnose, Supportspur und externen Antworten;
+Pflichtzähler und Zustandsübergänge stoppen bei fehlenden, regressiven oder
+widersprüchlichen Werten. Der Zielkatalog bindet vier getrennte Pakete an exakte Rust-Triples:
 Windows x64, macOS Intel, macOS Apple Silicon und Linux x64 glibc. Für beide
 macOS-Pakete gilt wegen der gebündelten Node-Laufzeit mindestens macOS 13.5.
+Zertifikatsfreie macOS-Piloten werden ausdrücklich ad-hoc signiert
+(`signingIdentity: "-"`); native Builds und Gatekeeper-UAT auf Intel und Apple
+Silicon bleiben offen.
 Rust und Tauri sind ausschließlich Buildwerkzeuge; Anwender installieren weder
 Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
 2.11.5 und MSVC erfolgreich gebaut; `cargo test --locked`, Clippy,
@@ -125,6 +166,27 @@ setzt der Renderer seine veraltete Startfreigabe zurück. Die laufgebundene
 Öffnen-Aktion und ein exklusiver Export-Outbox-Claim sind E0 geschlossen. Offen
 bleiben Windows-UAT, Accessibility-/Performance-Messung, komponentenweise
 Rust-Lizenzklärung sowie native Builds und UATs auf macOS Intel/ARM und Linux.
+
+RC101 schließt den im echten Windows-Piloten reproduzierten Picker-/Admission-
+Defekt: Der Normalisierer liefert `{name, full, sourceBytes, sourceLabel}`; der
+Standalone-Service verwendet exakt dieses Schema und liefert die lokale
+Quellen-/Datei-/Ergebnisanzeige atomar mit der Aufnahmeantwort. Der zuvor
+verwendete Identitäts-Mock wurde aus den betroffenen Standalone- und Cowork-
+Vertragstests entfernt. Der selbsttragende Paket-Smoke nimmt nun eine echte
+TXT-Datei über den extrahierten Sidecar auf und konfiguriert ein echtes lokales
+Ergebnisziel. Zwei rotierende, inhaltsfreie JSONL-Spuren für Desktop und Sidecar
+sind über **Diagnose öffnen** erreichbar. Dieselbe Queue wird vor Prozessstart
+und im Worker vor dessen Annahmebestätigung schema-validiert; Cowork kann damit
+eine strukturell unbrauchbare Warteschlange nicht mehr als übergeben melden.
+
+Der wiederholte RC99-Gegencheck bindet alle globalen Lock-Freigaben an einen
+gemeinsamen fail-closed Vertrag: eine verweigerte oder fehlgeschlagene Freigabe
+kann keinen Verarbeitungserfolg mehr melden, verdeckt aber keinen bereits
+laufenden Primärfehler. Der reale verzögerte Pipeline-Test erreicht wieder beide
+Publikationsbarrieren und besitzt einen harten Timeout. Export-Replay zählt nach
+einem Recordfehler alle weiter offenen Dateien. Standalone unterscheidet nun
+Fortsetzung, offenen Export und einen vollständig sicher gestoppten Stapel auch
+in UI und CLI; eine Fortsetzung gilt erst nach Startmarker und Worker-ACK.
 
 Microsoft MarkItDown 0.1.7 ist als gepinnter, netz-/pluginfreier
 DOCX-Differential-Bridge samt Vertrag und echtem synthetischem Smoke vorbereitet.
@@ -150,6 +212,14 @@ Die aktuelle Plugin-MCP-Konfiguration verwendet den offiziellen
 selbsttragender Pluginquelle wird streng validiert; für die Produktfreigabe fehlen
 weiterhin die Veröffentlichung in einem privaten/internen Git-Repository sowie
 Fresh-Install-/Update-Evidenz auf Windows und macOS.
+
+Der Pluginserver handelt die MCP-Protokollversion gemäß DS-081 mit dem Host aus:
+Er bietet den aktuellen modernen Stand `2026-07-28` über `server/discover` an
+und bewahrt den getesteten Legacy-`initialize`-Pfad für ältere Claude-Hosts.
+`MCP26-01` ist keine offizielle Zielversion und kein geplanter Cutover. Eine
+vollständige `2026-07-28`-Konformitätsaussage ist noch nicht freigegeben; dafür
+fehlt die dokumentierte offizielle Conformance-Prüfung des ausgelieferten
+Pluginservers. Das Standalone-Produkt verwendet kein MCP.
 
 ### BL-003 – Product Vision und Dokumentenkanon
 Vision und Kanon sind eingerichtet. Diese Konsolidierung trennt aktuelle Quellen

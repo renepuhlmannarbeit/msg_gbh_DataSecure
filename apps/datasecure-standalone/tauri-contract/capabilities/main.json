@@ -9,10 +9,13 @@
     "allow-cancel-admission",
     "allow-start-admitted-batch",
     "allow-get-public-state",
+    "allow-get-ui-context",
+    "allow-ack-terminal-presented",
     "allow-continue-current-batch",
     "allow-configure-results",
     "allow-open-current-results",
     "allow-open-local-ledger",
+    "allow-open-diagnostic-folder",
     "allow-shutdown"
   ]
 }

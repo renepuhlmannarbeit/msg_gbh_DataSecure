@@ -2,24 +2,89 @@
 
 use serde_json::{json, Value};
 use std::{
+    fs::OpenOptions,
     io::{BufReader, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
         mpsc::{self, Receiver},
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager, State};
 
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES: usize = 768 * 1024;
 const MAX_SINGLE_PATH_BYTES: usize = 32767;
+const MAX_PRESENTATION_GENERATION: u64 = 9_007_199_254_740_991;
 const IPC_SCHEMA: &str = "datasecure-standalone-private-ipc/1";
 const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static DIAGNOSTIC_LOCK: Mutex<()> = Mutex::new(());
+static DIAGNOSTIC_SESSION: OnceLock<String> = OnceLock::new();
+
+fn diagnostic_session() -> &'static str {
+    DIAGNOSTIC_SESSION.get_or_init(|| {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        format!("{:08x}{nanos:032x}", std::process::id())
+    })
+}
+
+fn diagnostic_directory() -> PathBuf {
+    std::env::temp_dir().join("SecureDataMsg-Standalone")
+}
+
+fn diagnostic_event(
+    event: &str,
+    action: Option<&str>,
+    outcome: &str,
+    error_code: Option<&str>,
+    elapsed_ms: Option<u128>,
+) {
+    let Ok(_guard) = DIAGNOSTIC_LOCK.lock() else {
+        return;
+    };
+    let directory = diagnostic_directory();
+    if std::fs::create_dir_all(&directory).is_err() {
+        return;
+    }
+    let current = directory.join("desktop-interactions.jsonl");
+    if std::fs::metadata(&current)
+        .map(|value| value.len() > 2 * 1024 * 1024)
+        .unwrap_or(false)
+    {
+        let previous = directory.join("desktop-interactions.previous.jsonl");
+        let _ = std::fs::remove_file(&previous);
+        let _ = std::fs::rename(&current, &previous);
+    }
+    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(current) else {
+        return;
+    };
+    let mut record = json!({
+        "schema": "datasecure-standalone-interaction/1",
+        "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "component": "desktop",
+        "session_id": diagnostic_session(),
+        "event": event,
+        "outcome": outcome,
+        "product_version": env!("CARGO_PKG_VERSION")
+    });
+    if let Some(value) = action {
+        record["action"] = json!(value);
+    }
+    if let Some(value) = error_code {
+        record["error_code"] = json!(value);
+    }
+    if let Some(value) = elapsed_ms {
+        record["elapsed_ms"] = json!(value);
+    }
+    let _ = writeln!(file, "{record}");
+}
 
 struct SidecarProcess {
     child: Child,
@@ -55,6 +120,24 @@ fn existing(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
             .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
             .unwrap_or(false)
     })
+}
+
+// Tauri can return valid Windows resource paths in verbatim form (`\\?\C:\...`).
+// Node starts that executable, but rejects the verbatim working directory before
+// it can load the sidecar. Convert only the process-launch spelling after the
+// exact files have already passed the regular-file checks above.
+fn child_process_path(path: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let value = path.to_string_lossy();
+        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{rest}"));
+        }
+        if let Some(rest) = value.strip_prefix(r"\\?\") {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
 }
 
 fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
@@ -105,19 +188,29 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
-    let (executable, script) = runtime_paths(app)?;
+    diagnostic_event("sidecar_starting", None, "progress", None, None);
+    let (executable, script) = runtime_paths(app).inspect_err(|code| {
+        diagnostic_event(
+            "runtime_resolution_failed",
+            None,
+            "failed",
+            Some(code),
+            None,
+        );
+    })?;
+    diagnostic_event("runtime_resolved", None, "ready", None, None);
     let script_directory = script
         .parent()
         .ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
     let script_name = script
         .file_name()
         .ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
-    let network_deny = script_directory
+    let _network_deny = script_directory
         .parent()
         .map(|server| server.join("network-deny.cjs"))
         .filter(|candidate| existing([candidate.clone()]).is_some())
         .ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
-    let mut command = Command::new(executable);
+    let mut command = Command::new(child_process_path(&executable));
     command.env_clear();
     for key in [
         "SYSTEMROOT",
@@ -143,9 +236,20 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
         command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", documents);
     }
     command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
+    command.env(
+        "DATASECURE_STANDALONE_DIAGNOSTIC_SESSION",
+        diagnostic_session(),
+    );
+    command.env(
+        "DATASECURE_STANDALONE_DIAGNOSTIC_DIR",
+        diagnostic_directory(),
+    );
     command
-        .current_dir(script_directory)
-        .arg(format!("--require={}", network_deny.to_string_lossy()))
+        .current_dir(child_process_path(script_directory))
+        // The preloader was already bound as a regular packaged file. Keeping
+        // the CLI argument relative avoids passing a Windows verbatim path to
+        // Node, which exits before executing the sidecar for that spelling.
+        .arg("--require=../network-deny.cjs")
         .arg(script_name)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
@@ -159,9 +263,17 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
     }
-    let mut child = command
-        .spawn()
-        .map_err(|_| "STANDALONE_RUNTIME_START_FAILED".to_string())?;
+    let mut child = command.spawn().map_err(|_| {
+        diagnostic_event(
+            "sidecar_spawn_failed",
+            None,
+            "failed",
+            Some("STANDALONE_RUNTIME_START_FAILED"),
+            None,
+        );
+        "STANDALONE_RUNTIME_START_FAILED".to_string()
+    })?;
+    diagnostic_event("sidecar_spawned", None, "ready", None, None);
     let input = child
         .stdin
         .take()
@@ -225,20 +337,74 @@ fn strict_path_strings(paths: &[PathBuf]) -> Result<Vec<&str>, String> {
     Ok(values)
 }
 
-fn rpc(
-    state: &DesktopState,
+fn private_request(
+    request_id: &str,
     action: &str,
     source_kind: Option<&str>,
     paths: &[PathBuf],
+    presentation_generation: Option<u64>,
 ) -> Result<Value, String> {
-    let id = request_id();
-    let mut request = json!({ "schema": IPC_SCHEMA, "request_id": id, "action": action });
+    let mut request = json!({ "schema": IPC_SCHEMA, "request_id": request_id, "action": action });
     if action == "admit_selected_sources" || action == "configure_results" {
         if action == "admit_selected_sources" {
             request["source_kind"] = json!(source_kind.unwrap_or("files"));
         }
         request["source_paths"] = json!(strict_path_strings(paths)?);
     }
+    if action == "ack_terminal_presented" {
+        let generation = presentation_generation
+            .filter(|value| *value > 0 && *value <= MAX_PRESENTATION_GENERATION)
+            .ok_or_else(|| "STANDALONE_OPERATION_FAILED".to_string())?;
+        request["presentation_generation"] = json!(generation);
+    } else if presentation_generation.is_some() {
+        return Err("STANDALONE_OPERATION_FAILED".to_string());
+    }
+    Ok(request)
+}
+
+enum ValidatedPrivateResponse {
+    Success(Value),
+    Error(String),
+}
+
+fn validate_private_response(
+    response: &Value,
+    expected_request_id: &str,
+) -> Result<ValidatedPrivateResponse, ()> {
+    let object = response.as_object().ok_or(())?;
+    if object.get("schema").and_then(Value::as_str) != Some(RESPONSE_SCHEMA)
+        || object.get("request_id").and_then(Value::as_str) != Some(expected_request_id)
+    {
+        return Err(());
+    }
+    match object.get("ok").and_then(Value::as_bool) {
+        Some(true) if object.len() == 4 => object
+            .get("result")
+            .filter(|value| value.is_object())
+            .cloned()
+            .map(ValidatedPrivateResponse::Success)
+            .ok_or(()),
+        Some(false) if object.len() == 4 => object
+            .get("error_code")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(|value| ValidatedPrivateResponse::Error(value.to_string()))
+            .ok_or(()),
+        _ => Err(()),
+    }
+}
+
+fn rpc(
+    state: &DesktopState,
+    action: &str,
+    source_kind: Option<&str>,
+    paths: &[PathBuf],
+    presentation_generation: Option<u64>,
+) -> Result<Value, String> {
+    let started = Instant::now();
+    diagnostic_event("ipc_request_started", Some(action), "progress", None, None);
+    let id = request_id();
+    let request = private_request(&id, action, source_kind, paths, presentation_generation)?;
     let payload = serde_json::to_vec(&request).map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
     if payload.len() > MAX_FRAME_BYTES {
         return Err("STANDALONE_IPC_FAILED".to_string());
@@ -263,6 +429,7 @@ fn rpc(
             .write_all(&payload)
             .and_then(|_| process.input.flush())
             .map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
+        diagnostic_event("ipc_request_sent", Some(action), "progress", None, None);
         process
             .responses
             .recv_timeout(Duration::from_secs(30))
@@ -271,31 +438,63 @@ fn rpc(
     let response = match result {
         Ok(response) => response,
         Err(code) => {
+            let child_exited = process_guard
+                .as_mut()
+                .and_then(|process| process.child.try_wait().ok().flatten())
+                .is_some();
+            diagnostic_event(
+                if child_exited {
+                    "sidecar_exited_before_response"
+                } else {
+                    "ipc_request_failed"
+                },
+                Some(action),
+                "failed",
+                Some(&code),
+                Some(started.elapsed().as_millis()),
+            );
             process_guard.take();
             return Err(code);
         }
     };
-    if response.get("schema").and_then(Value::as_str) != Some(RESPONSE_SCHEMA)
-        || response.get("request_id").and_then(Value::as_str) != Some(id.as_str())
-    {
+    let validated = validate_private_response(&response, &id);
+    if validated.is_err() {
+        diagnostic_event(
+            "ipc_response_invalid",
+            Some(action),
+            "failed",
+            Some("STANDALONE_IPC_FAILED"),
+            Some(started.elapsed().as_millis()),
+        );
         process_guard.take();
         return Err("STANDALONE_IPC_FAILED".to_string());
     }
-    if response.get("ok").and_then(Value::as_bool) != Some(true) {
-        return Err(response
-            .get("error_code")
-            .and_then(Value::as_str)
-            .unwrap_or("STANDALONE_OPERATION_FAILED")
-            .to_string());
+    let validated = validated.expect("validated above");
+    if let ValidatedPrivateResponse::Error(code) = validated {
+        diagnostic_event(
+            "ipc_response_error",
+            Some(action),
+            "failed",
+            Some(&code),
+            Some(started.elapsed().as_millis()),
+        );
+        return Err(code);
     }
-    Ok(response
-        .get("result")
-        .cloned()
-        .unwrap_or_else(|| json!({ "ok": true })))
+    diagnostic_event(
+        "ipc_response_ok",
+        Some(action),
+        "ready",
+        None,
+        Some(started.elapsed().as_millis()),
+    );
+    match validated {
+        ValidatedPrivateResponse::Success(result) => Ok(result),
+        ValidatedPrivateResponse::Error(_) => unreachable!("handled above"),
+    }
 }
 
 async fn blocking_rpc(state: DesktopState, action: &'static str) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || rpc(&state, action, None, &[]))
+    tauri::async_runtime::spawn_blocking(move || rpc(&state, action, None, &[], None))
         .await
         .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
@@ -309,16 +508,43 @@ fn filters(dialog: rfd::FileDialog) -> rfd::FileDialog {
 
 #[tauri::command]
 async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
+    diagnostic_event(
+        "picker_opened",
+        Some("select_files"),
+        "progress",
+        None,
+        None,
+    );
     let selected =
         tauri::async_runtime::spawn_blocking(|| filters(rfd::FileDialog::new()).pick_files())
             .await
             .map_err(|_| "STANDALONE_SELECTION_FAILED".to_string())?;
     let Some(paths) = selected else {
+        diagnostic_event(
+            "picker_cancelled",
+            Some("select_files"),
+            "cancelled",
+            None,
+            None,
+        );
         return Ok(json!({ "ok": true, "cancelled": true }));
     };
+    diagnostic_event(
+        "picker_completed",
+        Some("select_files"),
+        "ready",
+        None,
+        None,
+    );
     let owned = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        rpc(&owned, "admit_selected_sources", Some("files"), &paths)
+        rpc(
+            &owned,
+            "admit_selected_sources",
+            Some("files"),
+            &paths,
+            None,
+        )
     })
     .await
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
@@ -326,15 +552,42 @@ async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> {
+    diagnostic_event(
+        "picker_opened",
+        Some("select_folder"),
+        "progress",
+        None,
+        None,
+    );
     let selected = tauri::async_runtime::spawn_blocking(|| rfd::FileDialog::new().pick_folder())
         .await
         .map_err(|_| "STANDALONE_SELECTION_FAILED".to_string())?;
     let Some(path) = selected else {
+        diagnostic_event(
+            "picker_cancelled",
+            Some("select_folder"),
+            "cancelled",
+            None,
+            None,
+        );
         return Ok(json!({ "ok": true, "cancelled": true }));
     };
+    diagnostic_event(
+        "picker_completed",
+        Some("select_folder"),
+        "ready",
+        None,
+        None,
+    );
     let owned = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        rpc(&owned, "admit_selected_sources", Some("folder"), &[path])
+        rpc(
+            &owned,
+            "admit_selected_sources",
+            Some("folder"),
+            &[path],
+            None,
+        )
     })
     .await
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
@@ -353,21 +606,66 @@ async fn get_public_state(state: State<'_, DesktopState>) -> Result<Value, Strin
     blocking_rpc(state.inner().clone(), "get_public_state").await
 }
 #[tauri::command]
+async fn get_ui_context(state: State<'_, DesktopState>) -> Result<Value, String> {
+    blocking_rpc(state.inner().clone(), "get_ui_context").await
+}
+#[tauri::command]
+async fn ack_terminal_presented(
+    state: State<'_, DesktopState>,
+    presentation_generation: u64,
+) -> Result<Value, String> {
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        rpc(
+            &owned,
+            "ack_terminal_presented",
+            None,
+            &[],
+            Some(presentation_generation),
+        )
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+#[tauri::command]
 async fn continue_current_batch(state: State<'_, DesktopState>) -> Result<Value, String> {
     blocking_rpc(state.inner().clone(), "continue_current_batch").await
 }
 #[tauri::command]
 async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, String> {
+    diagnostic_event(
+        "picker_opened",
+        Some("configure_results"),
+        "progress",
+        None,
+        None,
+    );
     let selected = tauri::async_runtime::spawn_blocking(|| rfd::FileDialog::new().pick_folder())
         .await
         .map_err(|_| "STANDALONE_SELECTION_FAILED".to_string())?;
     let Some(path) = selected else {
+        diagnostic_event(
+            "picker_cancelled",
+            Some("configure_results"),
+            "cancelled",
+            None,
+            None,
+        );
         return Ok(json!({ "ok": true, "cancelled": true }));
     };
+    diagnostic_event(
+        "picker_completed",
+        Some("configure_results"),
+        "ready",
+        None,
+        None,
+    );
     let owned = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || rpc(&owned, "configure_results", None, &[path]))
-        .await
-        .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        rpc(&owned, "configure_results", None, &[path], None)
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 #[tauri::command]
 async fn open_current_results(state: State<'_, DesktopState>) -> Result<Value, String> {
@@ -378,11 +676,35 @@ async fn open_local_ledger(state: State<'_, DesktopState>) -> Result<Value, Stri
     blocking_rpc(state.inner().clone(), "open_local_ledger").await
 }
 #[tauri::command]
+async fn open_diagnostic_folder() -> Result<Value, String> {
+    let directory = diagnostic_directory();
+    std::fs::create_dir_all(&directory)
+        .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
+    #[cfg(target_os = "windows")]
+    let mut command = Command::new("explorer.exe");
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    let mut command = Command::new("xdg-open");
+    command.arg(&directory);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command
+        .spawn()
+        .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
+    diagnostic_event("diagnostic_folder_opened", None, "ready", None, None);
+    Ok(json!({ "ok": true, "opened": true, "external_disclosure": false }))
+}
+#[tauri::command]
 async fn shutdown(state: State<'_, DesktopState>) -> Result<Value, String> {
     blocking_rpc(state.inner().clone(), "shutdown").await
 }
 
 fn main() {
+    diagnostic_event("application_started", None, "ready", None, None);
     tauri::Builder::default()
         .setup(|app| {
             let state = DesktopState {
@@ -398,10 +720,13 @@ fn main() {
             cancel_admission,
             start_admitted_batch,
             get_public_state,
+            get_ui_context,
+            ack_terminal_presented,
             continue_current_batch,
             configure_results,
             open_current_results,
             open_local_ledger,
+            open_diagnostic_folder,
             shutdown
         ])
         .run(tauri::generate_context!())
@@ -447,12 +772,104 @@ mod tests {
     fn accepts_only_the_sidecar_path_budget() {
         let mut within = vec![PathBuf::from("a".repeat(MAX_SINGLE_PATH_BYTES)); 24];
         within.push(PathBuf::from("b".repeat(24)));
-        assert_eq!(strict_path_strings(&within).expect("within aggregate limit").len(), 25);
+        assert_eq!(
+            strict_path_strings(&within)
+                .expect("within aggregate limit")
+                .len(),
+            25
+        );
         let mut above = vec![PathBuf::from("a".repeat(MAX_SINGLE_PATH_BYTES)); 24];
         above.push(PathBuf::from("b".repeat(25)));
-        assert_eq!(strict_path_strings(&above).unwrap_err(), "STANDALONE_SELECTION_INVALID");
-        assert_eq!(strict_path_strings(&[PathBuf::from("a".repeat(MAX_SINGLE_PATH_BYTES + 1))]).unwrap_err(),
-            "STANDALONE_SELECTION_INVALID");
+        assert_eq!(
+            strict_path_strings(&above).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
+        assert_eq!(
+            strict_path_strings(&[PathBuf::from("a".repeat(MAX_SINGLE_PATH_BYTES + 1))])
+                .unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
+    }
+
+    #[test]
+    fn terminal_acknowledgement_is_bound_to_one_safe_generation() {
+        let request = private_request(
+            "0123456789abcdef",
+            "ack_terminal_presented",
+            None,
+            &[],
+            Some(42),
+        )
+        .expect("valid generation");
+        assert_eq!(request["presentation_generation"], json!(42));
+        assert_eq!(request.as_object().expect("request object").len(), 4);
+        assert!(private_request(
+            "0123456789abcdef",
+            "ack_terminal_presented",
+            None,
+            &[],
+            None,
+        )
+        .is_err());
+        assert!(private_request(
+            "0123456789abcdef",
+            "ack_terminal_presented",
+            None,
+            &[],
+            Some(0),
+        )
+        .is_err());
+        assert!(
+            private_request("0123456789abcdef", "get_public_state", None, &[], Some(42),).is_err()
+        );
+    }
+
+    #[test]
+    fn accepts_only_exact_private_response_envelopes() {
+        let id = "0123456789abcdef";
+        let success = json!({
+            "schema": RESPONSE_SCHEMA, "request_id": id, "ok": true,
+            "result": { "ok": true }
+        });
+        match validate_private_response(&success, id).expect("valid success") {
+            ValidatedPrivateResponse::Success(result) => assert_eq!(result["ok"], json!(true)),
+            ValidatedPrivateResponse::Error(_) => panic!("unexpected domain error"),
+        }
+        let domain_error = json!({
+            "schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+            "error_code": "STANDALONE_BUSY"
+        });
+        match validate_private_response(&domain_error, id).expect("valid error") {
+            ValidatedPrivateResponse::Error(code) => assert_eq!(code, "STANDALONE_BUSY"),
+            ValidatedPrivateResponse::Success(_) => panic!("unexpected success"),
+        }
+        for malformed in [
+            json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": true }),
+            json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": true, "result": 1 }),
+            json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": true,
+                "result": {}, "extra": true }),
+            json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+                "error_code": "" }),
+        ] {
+            assert!(validate_private_response(&malformed, id).is_err());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn child_launch_removes_only_windows_verbatim_path_spelling() {
+        assert_eq!(
+            child_process_path(Path::new(r"\\?\C:\DataSecure\server\standalone")),
+            PathBuf::from(r"C:\DataSecure\server\standalone")
+        );
+        assert_eq!(
+            child_process_path(Path::new(r"\\?\UNC\server\share\DataSecure")),
+            PathBuf::from(r"\\server\share\DataSecure")
+        );
+        assert_eq!(
+            child_process_path(Path::new(r"C:\DataSecure")),
+            PathBuf::from(r"C:\DataSecure")
+        );
     }
 
     #[cfg(unix)]
@@ -461,6 +878,9 @@ mod tests {
         use std::ffi::OsString;
         use std::os::unix::ffi::OsStringExt;
         let path = PathBuf::from(OsString::from_vec(vec![b'a', 0xff, b'b']));
-        assert_eq!(strict_path_strings(&[path]).unwrap_err(), "STANDALONE_SELECTION_INVALID");
+        assert_eq!(
+            strict_path_strings(&[path]).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
     }
 }

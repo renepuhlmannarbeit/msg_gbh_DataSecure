@@ -26,7 +26,7 @@ synthetischer Test-Arbeitsordner als Ergebnisziel gewählt. Danach verwendet jed
 Stapel genau einen lokalen Mehrfachpicker und eine Bestätigung mit „Öffnen“.
 Freigegebenes Markdown muss in dessen `DataSecure-Output` erscheinen. Die
 dauerhafte lokale `DataSecure-Mapping.csv` bleibt im privaten Bereich und wird
-geprüft, aber niemals in den Chat oder den Cowork-Ergebnisordner gelesen.
+geprüft, aber niemals in den Chat oder den dedizierten lokalen Ergebnisordner gelesen.
 
 Produktivdaten und Chat-Uploads sind verboten. Die Erzeugung wird automatisiert
 mit `npm run test:uat-fixtures` gegen Dateizahl, Struktur, Reproduzierbarkeit und

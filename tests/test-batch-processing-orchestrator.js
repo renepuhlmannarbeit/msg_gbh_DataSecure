@@ -82,7 +82,7 @@ await testAsync('read, lease, invalidation and maintenance failures release exac
       SafeError: TestSafeError,
       active: h.active,
       acquireActiveLock(value) { h.calls.push(['acquire', value]); },
-      releaseActiveLock(value) { h.calls.push(['release', value, h.active.has(value)]); },
+      releaseActiveLock(value) { h.calls.push(['release', value, h.active.has(value)]); return true; },
       readState() { h.calls.push(['read']); throw failure; }
     }).processBatchNext;
     if (phase === 'lease') {
@@ -237,12 +237,11 @@ await testAsync('processor resolve and reject keep ownership until promise settl
 await testAsync('delivery promise also retains ownership and release failures remain visible', async () => {
   let resolveDelivery;
   const deliveryPromise = new Promise((resolve) => { resolveDelivery = resolve; });
-  const releaseFailure = new Error('release failed');
   const h = harness({
     deliveryResult() { h.calls.push(['delivery']); return deliveryPromise; },
     releaseActiveLock(value) {
       h.calls.push(['release', value, h.active.has(value)]);
-      throw releaseFailure;
+      return false;
     }
   });
   h.state.items = [{ status: 'delivery_pending' }];
@@ -251,7 +250,8 @@ await testAsync('delivery promise also retains ownership and release failures re
   assert.strictEqual(h.active.has(h.token), true);
   assert.strictEqual(h.calls.some(([name]) => name === 'release'), false);
   resolveDelivery({ ok: true });
-  await assert.rejects(running, (error) => error === releaseFailure);
+  await assert.rejects(running, (error) =>
+    error instanceof TestSafeError && /nicht sicher freigegeben/u.test(error.message));
   assert.strictEqual(h.active.has(h.token), false);
   const release = h.calls.find(([name]) => name === 'release');
   assert.strictEqual(release[2], false);

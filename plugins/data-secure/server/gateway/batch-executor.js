@@ -23,6 +23,7 @@ const {
   releaseIntake,
   RESERVATION_ID_RE
 } = require('./batch-intake-reservation');
+const { validateBatchQueueEnvelope, LOCAL_QUEUE_SCHEMA_INVALID } = require('./batch-queue-envelope');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 // Mirrors PARENT_ACK_TYPE in ./worker-terminal-presentation.js (kept literal so
@@ -31,6 +32,9 @@ const TOKEN_RE = /^[a-f0-9]{64}$/;
 // without presenting a second window.
 const TERMINAL_NOTICE_ACK = 'local-terminal-notice-claimed';
 const pendingIntakes = new Map();
+const STANDALONE_RENDER_ACK_MS = 2500;
+let standalonePendingNotice = null;
+let standalonePresentationGeneration = 0;
 
 // The durable journal decides who presents the terminal notice: this parent
 // while it is still alive, otherwise the detached worker (the Cowork host may
@@ -39,6 +43,21 @@ const pendingIntakes = new Map();
 function acknowledgeTerminalNotice(child) {
   try { child?.send?.({ type: TERMINAL_NOTICE_ACK }, () => {}); }
   catch { /* an ended worker needs no acknowledgement */ }
+}
+
+function pendingStandaloneTerminalNoticeGeneration() {
+  return standalonePendingNotice?.generation || null;
+}
+
+function acknowledgeStandaloneTerminalNotice(generation) {
+  const pending = standalonePendingNotice;
+  if (!pending || !Number.isSafeInteger(generation) || generation !== pending.generation) return false;
+  standalonePendingNotice = null;
+  clearTimeout(pending.timer);
+  acknowledgeTerminalNotice(pending.child);
+  pending.lifecycle({ event: 'completion_notice_rendered_by_product_ui', outcome: 'ok',
+    ...(pending.itemCount ? { item_count: pending.itemCount } : {}) });
+  return true;
 }
 
 function terminalNoticeTransaction(token, options = {}) {
@@ -68,11 +87,23 @@ function terminalNoticeTransaction(token, options = {}) {
 function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = {}, itemCount) {
   const productChannel = String(options.env?.DATASECURE_PRODUCT_CHANNEL || process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin');
   if (productChannel === 'standalone') {
-    // The Tauri window polls the durable journal and is the only Standalone
-    // presenter. Acknowledge the worker so it cannot open the Cowork fallback
-    // dialog when the sidecar parent is still alive.
-    acknowledgeTerminalNotice(child);
-    lifecycle({ event: 'completion_notice_delegated_to_product_ui', outcome: 'ok',
+    // Receiving an envelope in the sidecar is not visibility evidence. The
+    // renderer acknowledges after a paint opportunity; otherwise the worker
+    // retains the existing exactly-once native fallback.
+    if (standalonePendingNotice) return false;
+    standalonePresentationGeneration = standalonePresentationGeneration >= Number.MAX_SAFE_INTEGER
+      ? 1
+      : standalonePresentationGeneration + 1;
+    const generation = standalonePresentationGeneration;
+    const timer = setTimeout(() => {
+      if (standalonePendingNotice?.generation !== generation) return;
+      standalonePendingNotice = null;
+      lifecycle({ event: 'completion_notice_product_ui_timeout', outcome: 'stopped',
+        ...(itemCount ? { item_count: itemCount } : {}), error_code: 'LOCAL_NOTICE_FAILED' });
+    }, STANDALONE_RENDER_ACK_MS);
+    timer.unref?.();
+    standalonePendingNotice = { child, lifecycle, itemCount, timer, generation };
+    lifecycle({ event: 'completion_notice_delegated_to_product_ui', outcome: 'progress',
       ...(itemCount ? { item_count: itemCount } : {}) });
     return true;
   }
@@ -448,7 +479,12 @@ function startLocalBatchExecutor(token, options = {}) {
 // copied into the sealed batch snapshot.  Paths exist only in this private
 // IPC message and are never returned from this module or written through MCP.
 function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
-  if (!Array.isArray(queue) || queue.length < 1) throw new SafeError('Keine Datei für die lokale Übernahme ausgewählt.');
+  try { validateBatchQueueEnvelope(queue); }
+  catch {
+    throw Object.assign(new SafeError('Die lokale Stapelübergabe ist ungültig und wurde nicht gestartet.'), {
+      code: LOCAL_QUEUE_SCHEMA_INVALID
+    });
+  }
   if (pendingIntakes.size > 0) throw new SafeError('Ein lokaler DataSecure-Stapel wird bereits vorbereitet.');
   const reserve = options.reserveIntake || reserveIntake;
   const delegate = options.delegateIntake || delegateIntake;
@@ -556,10 +592,17 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         intake.noticeShown = true;
         return;
       }
-      if (message.type === 'local-intake-accepted') {
+      if (Object.keys(message).length === 1 && message.type === 'local-intake-accepted') {
         // A duplicate or post-timeout acceptance is inert; a timed-out worker
         // has already been failed and is not revived by a late envelope.
         settleIpc();
+        return;
+      }
+      if (Object.keys(message).length === 2 && message.type === 'local-intake-rejected' &&
+          message.error_code === LOCAL_QUEUE_SCHEMA_INVALID) {
+        settleIpc(Object.assign(new Error(LOCAL_QUEUE_SCHEMA_INVALID), { code: LOCAL_QUEUE_SCHEMA_INVALID }));
+        lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount,
+          error_code: LOCAL_QUEUE_SCHEMA_INVALID });
         return;
       }
       if (message.type === 'local-intake-checkpoint-created') {
@@ -723,5 +766,7 @@ function localReviewActive() { return pendingReviews.size > 0; }
 module.exports = {
   WORKER_ENV_KEYS, batchWorkerEnvironment, localBatchStateProgress, terminalIntakeProgress,
   startLocalBatchExecutor, startLocalIntakeExecutor, startLocalReviewExecutor,
-  localIntakeActive, localReviewActive, _test: { contentFreeReviewStart }
+  localIntakeActive, localReviewActive, acknowledgeStandaloneTerminalNotice,
+  pendingStandaloneTerminalNoticeGeneration,
+  _test: { contentFreeReviewStart }
 };

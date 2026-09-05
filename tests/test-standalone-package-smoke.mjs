@@ -10,10 +10,12 @@ const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
-const zip = path.join(root, 'dist', `DataSecure-Standalone-${version}-windows-x64.zip`);
+const zip = path.resolve(process.argv[2] || path.join(root, 'dist', `DataSecure-Standalone-${version}-windows-x64.zip`));
 const extraction = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
 const install = path.join(extraction, 'Leerzeichen ünicode');
 const data = path.join(extraction, 'Daten');
+const sourceDirectory = path.join(extraction, 'Quellen');
+const resultDirectory = path.join(extraction, 'Ergebnisse');
 
 function safeRemove() {
   const resolved = path.resolve(extraction);
@@ -30,19 +32,51 @@ function frame(value) {
   return Buffer.concat([header, payload]);
 }
 
-function response(child, stderr) {
-  return new Promise((resolve, reject) => {
-    let buffer = Buffer.alloc(0);
-    const timeout = setTimeout(() => reject(new Error(`STANDALONE_SMOKE_TIMEOUT:${stderr.value.slice(0, 500)}`)), 45000);
-    child.stdout.on('data', (chunk) => {
-      buffer = Buffer.concat([buffer, chunk]);
-      if (buffer.length < 4 || buffer.length < 4 + buffer.readUInt32BE(0)) return;
-      clearTimeout(timeout);
-      resolve(JSON.parse(buffer.subarray(4, 4 + buffer.readUInt32BE(0))));
-    });
-    child.once('error', reject);
-    child.once('exit', (code) => { if (code && buffer.length < 4) reject(new Error(`STANDALONE_SMOKE_EXIT:${code}`)); });
+function childProcessPath(value) {
+  if (process.platform !== 'win32') return value;
+  if (value.startsWith('\\\\?\\UNC\\')) return `\\\\${value.slice(8)}`;
+  if (value.startsWith('\\\\?\\')) return value.slice(4);
+  return value;
+}
+
+function protocolClient(child, stderr) {
+  let buffer = Buffer.alloc(0);
+  const pending = new Map();
+  const failAll = (error) => {
+    for (const waiter of pending.values()) { clearTimeout(waiter.timer); waiter.reject(error); }
+    pending.clear();
+  };
+  child.stdout.on('data', (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    while (buffer.length >= 4) {
+      const length = buffer.readUInt32BE(0);
+      if (length < 2 || length > 1024 * 1024) return failAll(new Error('STANDALONE_SMOKE_FRAME_INVALID'));
+      if (buffer.length < length + 4) return;
+      let value;
+      try { value = JSON.parse(buffer.subarray(4, 4 + length)); }
+      catch { return failAll(new Error('STANDALONE_SMOKE_RESPONSE_INVALID')); }
+      buffer = buffer.subarray(4 + length);
+      const waiter = pending.get(value.request_id);
+      if (!waiter) return failAll(new Error('STANDALONE_SMOKE_RESPONSE_UNEXPECTED'));
+      pending.delete(value.request_id);
+      clearTimeout(waiter.timer);
+      waiter.resolve(value);
+    }
   });
+  child.once('error', () => failAll(new Error('STANDALONE_SMOKE_SPAWN_FAILED')));
+  child.once('exit', (code) => failAll(new Error(`STANDALONE_SMOKE_EXIT:${code}`)));
+  return {
+    request(value) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending.delete(value.request_id);
+          reject(new Error(`STANDALONE_SMOKE_TIMEOUT:${stderr.value.slice(0, 500)}`));
+        }, 45000);
+        pending.set(value.request_id, { resolve, reject, timer });
+        child.stdin.write(frame(value));
+      });
+    }
+  };
 }
 
 let child;
@@ -61,24 +95,61 @@ try {
     fs.writeFileSync(destination, bytes, { flag: 'wx' });
   }
   fs.mkdirSync(data, { recursive: true });
-  const runtime = path.join(install, 'datasecure-core-x86_64-pc-windows-msvc.exe');
-  const sidecar = path.join(install, 'server', 'standalone', 'desktop-sidecar.js');
+  fs.mkdirSync(sourceDirectory, { recursive: true });
+  fs.mkdirSync(resultDirectory, { recursive: true });
+  const sourceFile = path.join(sourceDirectory, 'profil.txt');
+  fs.writeFileSync(sourceFile,
+    'Kunde: Beispielperson\nE-Mail: beispiel@example.test\nVertragliche Leistung',
+    { encoding: 'utf8', flag: 'wx' });
+  const launchRoot = process.platform === 'win32' ? `\\\\?\\${install}` : install;
+  const runtime = path.join(launchRoot, 'datasecure-core-x86_64-pc-windows-msvc.exe');
+  const sidecar = path.join(launchRoot, 'server', 'standalone', 'desktop-sidecar.js');
   const deny = path.join(install, 'server', 'network-deny.cjs');
-  child = childProcess.spawn(runtime, [`--require=${deny}`, sidecar], {
-    cwd: path.dirname(sidecar), windowsHide: true, shell: false,
+  assert.equal(fs.statSync(deny).isFile(), true);
+  child = childProcess.spawn(childProcessPath(runtime), ['--require=../network-deny.cjs', path.basename(sidecar)], {
+    cwd: childProcessPath(path.dirname(sidecar)), windowsHide: true, shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { SystemRoot: process.env.SystemRoot, ComSpec: process.env.ComSpec,
       USERPROFILE: data, LOCALAPPDATA: path.join(data, 'Local'), PATH: '' }
   });
   const stderr = { value: '' };
   child.stderr.on('data', (chunk) => { stderr.value += chunk.toString('utf8'); });
-  child.stdin.write(frame({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16), action: 'get_public_state' }));
-  const status = await response(child, stderr);
+  const { request } = protocolClient(child, stderr);
+  const status = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16), action: 'get_public_state' });
   assert.equal(status.schema, 'datasecure-standalone-private-response/1');
   assert.equal(status.request_id, 'a'.repeat(16));
   assert.equal(status.ok, true);
   assert.equal(status.result.product_channel, 'standalone');
-  child.stdin.write(frame({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b'.repeat(16), action: 'shutdown' }));
+  const admitted = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b'.repeat(16),
+    action: 'admit_selected_sources', source_kind: 'files', source_paths: [sourceFile] });
+  assert.equal(admitted.ok, true);
+  assert.equal(admitted.result.selected_count, 1);
+  assert.deepEqual(admitted.result.ui_context.selected_files, ['profil.txt']);
+  assert.deepEqual(admitted.result.ui_context.source_folders, [sourceDirectory]);
+  const configured = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'c'.repeat(16),
+    action: 'configure_results', source_paths: [resultDirectory] });
+  assert.equal(configured.ok, true);
+  assert.equal(configured.result.result_folder, resultDirectory);
+  const context = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'd'.repeat(16), action: 'get_ui_context' });
+  assert.equal(context.ok, true);
+  assert.equal(context.result.result_folder, resultDirectory);
+  assert.deepEqual(context.result.selected_files, ['profil.txt']);
+  const started = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'e'.repeat(16), action: 'start_admitted_batch' });
+  assert.equal(started.ok, true);
+  assert.equal(started.result.event, 'batch_accepted');
+  let terminal;
+  const terminalStates = new Set(['review_required', 'stopped', 'export_pending', 'results_available', 'completed_without_results']);
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    const requestId = attempt.toString(16).padStart(16, '0');
+    const polled = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: requestId, action: 'get_public_state' });
+    assert.equal(polled.ok, true);
+    if (terminalStates.has(polled.result.state)) { terminal = polled.result; break; }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  assert.ok(terminal, 'the real packaged worker handoff must reach a durable terminal state');
+  assert.equal(terminal.state, 'results_available');
+  assert.equal(terminal.result_count, 1);
+  await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);
     child.once('close', (code) => {
@@ -93,5 +164,6 @@ try {
     child.kill();
     await new Promise((resolve) => child.once('close', () => { childClosed = true; resolve(); }));
   }
-  safeRemove();
+  if (process.env.DATASECURE_SMOKE_KEEP === '1') process.stderr.write(`STANDALONE_SMOKE_KEPT:${extraction}\n`);
+  else safeRemove();
 }

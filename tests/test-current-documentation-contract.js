@@ -97,6 +97,21 @@ test('product build and engineering artefacts are separate scripts', () => {
   assert.strictEqual(pkg.scripts['test:artifacts'], 'npm run test:plugin-zip');
 });
 
+test('MCP protocol stays host-negotiated without a fictional cutover', () => {
+  const decisions = read('docs/canonical/DECISIONS.md');
+  const current = read('docs/canonical/CURRENT_STATE.md');
+  const backlog = read('docs/canonical/BACKLOG.md');
+  const trace = read('docs/canonical/TRACEABILITY.md');
+  const capabilities = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+
+  assert.match(decisions, /`MCP26-01` ist kein offizieller\s+MCP-Protokollbezeichner/u);
+  assert.match(decisions, /hostgesteuerte\s+Versionsaushandlung/u);
+  assert.match(current, /`2026-07-28` über `server\/discover`/u);
+  assert.match(backlog, /offiziellen MCP-Conformance-Prüfung/u);
+  assert.match(trace, /\| DS-081 \| aktiv und aktuell \|/u);
+  assert.ok(capabilities.decision_ids.includes('DS-081'));
+});
+
 test('distribution docs require a self-contained relative marketplace source without signing promises', () => {
   const release = read('docs/RELEASE.md');
   const readme = read('README.md');

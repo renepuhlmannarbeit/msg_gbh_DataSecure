@@ -1,7 +1,7 @@
 # Claude-/Cowork-Revalidierung
 
-Stand: 04.09.2026 · Produktarbeitsstand RC98 · zeitgebundener Herstellerabgleich
-(Cowork-Host- und Marketplace-Aussagen am 04.09.2026 erneut abgerufen; DS-078)
+Stand: 05.09.2026 · Produktarbeitsstand RC99 · zeitgebundener Herstellerabgleich
+(Cowork-Host- und Marketplace-Aussagen am 05.09.2026 erneut abgerufen; DS-078)
 
 ## Aktuell belegte Herstelleraussagen
 
@@ -67,8 +67,9 @@ MCP sind kein Ersatz.
 - Plugin und Marketplace sind lokal streng validierbar.
 - Genau zwei Skills und ein lokaler Plugin-MCP bilden die sichtbare Oberfläche.
 - Der Normalweg pollt nicht und liest Ergebnisse nicht automatisch.
-- Beim ersten Lauf wird einmal lokal ein Ergebnisordner gewählt; das kann der
-  bereits verbundene Cowork-Arbeitsordner sein. DataSecure errät keinen
+- Beim ersten Lauf wird einmal ein dedizierter lokaler Ergebnisordner gewählt.
+  Optional kann er innerhalb des bereits verbundenen Cowork-Ordners liegen;
+  Originale bleiben außerhalb aller mit Cowork verbundenen Ordner. DataSecure errät keinen
   Projektpfad und wechselt das Ziel bei einem Projektwechsel nicht. Danach
   benötigt der Normalweg nur die Quellenwahl;
   ausschließlich freigegebenes Markdown wird unter `DataSecure-Output` sichtbar.

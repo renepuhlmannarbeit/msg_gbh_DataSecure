@@ -14,6 +14,12 @@
       <div id="status-icon" class="status-icon">✓</div>
       <div><h2 id="status-title">Bereit</h2><p id="status-text">Wähle Dateien oder einen ganzen Ordner aus.</p></div>
       <div id="summary" class="summary" hidden></div>
+      <dl class="context" aria-label="Aktuelle Verarbeitungseinstellungen">
+        <div><dt>Verarbeitung</dt><dd>In Markdown umwandeln und anonymisieren</dd></div>
+        <div><dt>Quellenordner</dt><dd id="source-folders">Noch nicht ausgewählt</dd></div>
+        <div><dt>Dateiauswahl</dt><dd id="selected-files">Noch nicht ausgewählt</dd></div>
+        <div><dt>Ergebnisordner</dt><dd id="result-folder">Noch nicht geladen</dd></div>
+      </dl>
       <div class="actions">
         <button id="select-files" class="primary">Dateien auswählen</button>
         <button id="select-folder">Ordner auswählen</button>
@@ -23,9 +29,10 @@
         <button id="results" class="primary" hidden>Ergebnisse öffnen</button>
         <button id="ledger" hidden>Zuordnung öffnen</button>
         <button id="configure-results">Ergebnisordner ändern</button>
+        <button id="diagnostics">Diagnose öffnen</button>
       </div>
     </section>
-    <p class="privacy">Die Oberfläche erhält keine Dateinamen, Pfade oder Rohinhalte. Unterstützt: TXT, Markdown, CSV und DOCX.</p>
+    <p class="privacy">Namen und Ordner werden nur in dieser lokalen Oberfläche angezeigt und nicht diagnostisch protokolliert. Rohinhalte verlassen das Gerät nicht. Unterstützt: TXT, Markdown, CSV und DOCX.</p>
   </main>
   <script src="app.js"></script>
 </body>

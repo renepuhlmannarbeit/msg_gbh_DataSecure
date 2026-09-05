@@ -37,19 +37,37 @@ function defaultResultRoot(options = {}) {
 
 function activateStandaloneNamespace(options = {}) {
   const environment = options.environment || process.env;
+  const platform = options.platform || process.platform;
   const root = path.resolve(options.dataRoot || standaloneDataRoot(options));
   const io = options.fs || fs;
-  io.mkdirSync(root, { recursive: true, mode: 0o700 });
-  const named = io.lstatSync(root);
-  const real = io.realpathSync.native ? io.realpathSync.native(root) : io.realpathSync(root);
-  const comparable = (value) => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
-  if (!named.isDirectory() || named.isSymbolicLink() || comparable(real) !== comparable(root)) {
-    throw fixedFailure('STANDALONE_DATA_ROOT_UNSAFE', 'Der lokale DataSecure-Bereich ist nicht sicher.');
-  }
   const workspace = path.join(root, 'workspace');
-  io.mkdirSync(workspace, { recursive: true, mode: 0o700 });
-  const workspaceStat = io.lstatSync(workspace);
-  if (!workspaceStat.isDirectory() || workspaceStat.isSymbolicLink()) {
+  try {
+    io.mkdirSync(root, { recursive: true, mode: 0o700 });
+    const named = io.lstatSync(root);
+    const opened = io.statSync(root);
+    const real = io.realpathSync.native ? io.realpathSync.native(root) : io.realpathSync(root);
+    const realOpened = io.statSync(real);
+    const comparable = (value) => platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
+    const sameIdentity = (left, right) => Boolean(left && right && left.dev === right.dev && left.ino === right.ino);
+    // Windows may transparently virtualize LOCALAPPDATA for a packaged desktop
+    // process. In that case the visible path and native realpath differ although
+    // both handles identify the same directory. Reject links and identity
+    // changes, but do not reject this legitimate path spelling difference.
+    const redirectedOutsideWindows = platform !== 'win32' && comparable(real) !== comparable(root);
+    if (!named.isDirectory() || named.isSymbolicLink() || !opened.isDirectory() ||
+        !realOpened.isDirectory() || !sameIdentity(named, opened) ||
+        !sameIdentity(opened, realOpened) || redirectedOutsideWindows) {
+      throw fixedFailure('STANDALONE_DATA_ROOT_UNSAFE', 'Der lokale DataSecure-Bereich ist nicht sicher.');
+    }
+    io.mkdirSync(workspace, { recursive: true, mode: 0o700 });
+    const workspaceStat = io.lstatSync(workspace);
+    const workspaceOpened = io.statSync(workspace);
+    if (!workspaceStat.isDirectory() || workspaceStat.isSymbolicLink() ||
+        !workspaceOpened.isDirectory() || !sameIdentity(workspaceStat, workspaceOpened)) {
+      throw fixedFailure('STANDALONE_DATA_ROOT_UNSAFE', 'Der lokale DataSecure-Bereich ist nicht sicher.');
+    }
+  } catch (error) {
+    if (error?.code === 'STANDALONE_DATA_ROOT_UNSAFE') throw error;
     throw fixedFailure('STANDALONE_DATA_ROOT_UNSAFE', 'Der lokale DataSecure-Bereich ist nicht sicher.');
   }
   environment.EU_PRIVACY_DATA_ROOT = root;
@@ -70,7 +88,7 @@ function defaultDependencies() {
   const { replayPendingResultExports } = require('../gateway/result-export');
   const {
     continueMostRecentBatch, openBatchPackageProtection, recoverBatches,
-    replayMappingOutbox, cleanupExpiredBatchSnapshots, recoverableBatchStatus,
+    replayMappingOutbox, cleanupExpiredBatchSnapshots, recoverableBatchStatus, productStatusSnapshot,
     latestProductBatchStatus, latestProductResultDirectory
   } = require('../gateway/batch');
   const { cleanupLocalData } = require('../gateway/retention');
@@ -105,7 +123,13 @@ function defaultDependencies() {
           // optional Claude plugin's legacy inbox or its source references.
           migrateLegacyInput: () => ({ ok: true, skipped: true, reason: 'standalone_namespace' }),
           cleanupAbandonedWorkingJobs,
-          refuseStartup
+          // The shared plugin adapter terminates its MCP host on a refused
+          // bootstrap. Standalone must keep the desktop sidecar alive long
+          // enough to return the fixed refusal code to its local UI.
+          refuseStartup: (error) => {
+            const outcome = refuseStartup(error, { exit: () => {} });
+            throw fixedFailure(outcome.code, 'Der lokale DataSecure-Core konnte nicht sicher gestartet werden.');
+          }
         });
         standaloneStartup = Object.freeze({ ...startup, result_exports: replayPendingResultExports() });
       }
@@ -122,12 +146,25 @@ function defaultDependencies() {
         ...recoverableBatchStatus()
       };
     },
+    publicStatusSnapshot() {
+      const snapshot = productStatusSnapshot(PRODUCT_CHANNEL);
+      return Object.freeze({
+        current: Object.freeze({
+          engine_ready: true,
+          local_intake_pending: batchExecutor.localIntakeActive() || intakeReservation.intakeReservationActive(),
+          ...snapshot.recovery
+        }),
+        latest: snapshot.latest
+      });
+    },
     latestProductBatchStatus,
     latestProductResultDirectory,
     replayPendingResultExports,
     startLocalIntakeExecutor: batchExecutor.startLocalIntakeExecutor,
     startLocalBatchExecutor: batchExecutor.startLocalBatchExecutor,
     startLocalReviewExecutor: batchExecutor.startLocalReviewExecutor,
+    acknowledgeStandaloneTerminalNotice: batchExecutor.acknowledgeStandaloneTerminalNotice,
+    pendingStandaloneTerminalNoticeGeneration: batchExecutor.pendingStandaloneTerminalNoticeGeneration,
     continueMostRecentBatch,
     openFolder: require('../gateway/common').openFolder,
     pickSourcesAsync: filePicker.pickSourcesAsync,
@@ -152,6 +189,15 @@ function fixedFailure(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+function confirmedIntakeStart(started) {
+  if (started?.ok !== true || started.local_intake_pending !== true ||
+      !started.ipcAcknowledgement || typeof started.ipcAcknowledgement.then !== 'function') {
+    throw fixedFailure('STANDALONE_START_FAILED',
+      'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.');
+  }
+  return started.ipcAcknowledgement;
+}
+
 function pathsOverlap(left, right) {
   const a = path.resolve(left);
   const b = path.resolve(right);
@@ -168,6 +214,7 @@ class StandaloneApplicationService {
     this.home = options.home || os.homedir();
     this.interactionActive = false;
     this.admittedQueue = null;
+    this.selectionContext = null;
     this.startup = this.deps.initializeProduct?.();
   }
 
@@ -191,22 +238,32 @@ class StandaloneApplicationService {
   }
 
   status() {
-    const current = this.deps.lightweightStatus();
-    const latest = this.deps.latestProductBatchStatus?.(PRODUCT_CHANNEL) || null;
+    const snapshot = this.deps.publicStatusSnapshot?.();
+    const current = snapshot?.current || this.deps.lightweightStatus();
+    const latest = snapshot ? snapshot.latest : (this.deps.latestProductBatchStatus?.(PRODUCT_CHANNEL) || null);
     const packages = Number.isSafeInteger(latest?.result_count)
       ? latest.result_count
       : 0;
     const reviews = Number.isSafeInteger(latest?.review_count)
       ? latest.review_count
       : 0;
+    const failed = Number.isSafeInteger(latest?.failed_count)
+      ? latest.failed_count
+      : 0;
     const exportPending = Number.isSafeInteger(latest?.export_pending_count) ? latest.export_pending_count : 0;
     const recoverable = Number.isSafeInteger(current.recoverable_batches) ? current.recoverable_batches : 0;
     const awaitingResume = Number.isSafeInteger(current.batches_awaiting_resume) ? current.batches_awaiting_resume : 0;
     const resumableCount = latest?.resumable === true ? Math.max(1, recoverable, awaitingResume) : Math.max(recoverable, awaitingResume);
     const resumable = resumableCount > 0;
-    const processing = current.local_intake_pending === true || current.batch_processing_active === true || latest?.processing === true;
+    const intakePending = current.local_intake_pending === true;
+    const processing = current.batch_processing_active === true || latest?.processing === true;
+    const preparing = intakePending && !processing;
+    const selected = Number.isSafeInteger(latest?.selected_count) ? latest.selected_count : 0;
+    const completed = Number.isSafeInteger(latest?.completed_count) ? latest.completed_count : 0;
     const state = current.engine_ready !== true
       ? 'blocked'
+      : preparing
+        ? 'preparing'
       : processing
         ? 'processing'
         : reviews > 0
@@ -217,23 +274,39 @@ class StandaloneApplicationService {
             ? 'export_pending'
           : packages > 0
             ? 'results_available'
+            : latest?.complete === true && failed > 0
+              ? 'completed_without_results'
             : 'ready';
+    const presentationGeneration = this.deps.pendingStandaloneTerminalNoticeGeneration?.();
     return {
       ok: current.engine_ready === true,
       product_channel: PRODUCT_CHANNEL,
       state,
+      preparing,
       processing,
       review_required: reviews > 0,
       resumable,
       results_available: packages > 0,
       result_count: packages,
+      selected_count: selected,
+      completed_count: completed,
+      failed_count: failed,
       export_pending_count: exportPending,
       review_count: reviews,
       resumable_count: resumableCount,
       recoverable_count: recoverable,
       awaiting_resume_count: awaitingResume,
+      ...(Number.isSafeInteger(presentationGeneration) && presentationGeneration > 0
+        ? { presentation_generation: presentationGeneration }
+        : {}),
       external_disclosure: false
     };
+  }
+
+  acknowledgeTerminalPresented(presentationGeneration) {
+    return { ok: true,
+      acknowledged: this.deps.acknowledgeStandaloneTerminalNotice?.(presentationGeneration) === true,
+      external_disclosure: false };
   }
 
   async selectSources(sourceKind, signal) {
@@ -267,16 +340,30 @@ class StandaloneApplicationService {
             allowedTypes: ['txt', 'md', 'csv', 'docx'], signal
           })));
       const queue = this.deps.batchQueueFromSelection(selected);
+      if (!Array.isArray(queue) || queue.length < 1 || queue.some((item) =>
+        !item || typeof item.full !== 'string' || !path.isAbsolute(item.full) ||
+        typeof item.name !== 'string' || item.name.length < 1 || path.basename(item.full) !== item.name ||
+        !Number.isSafeInteger(item.sourceBytes) || item.sourceBytes < 1)) {
+        throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die lokale Dateiauswahl ist ungültig.');
+      }
       const totalBytes = queue.reduce((sum, item) => sum + item.sourceBytes, 0);
       if (!Number.isSafeInteger(totalBytes) || totalBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES) {
         throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Der ausgewählte Stapel überschreitet die zulässige Gesamtgröße.');
       }
       this.admittedQueue = queue;
+      const folders = [...new Set((sourceKind === 'folder' ? sourcePaths : queue.map((item) => path.dirname(item.full)))
+        .map((candidate) => path.resolve(candidate)))];
+      this.selectionContext = {
+        sourceKind,
+        sourceFolders: folders,
+        selectedFiles: queue.map((item) => item.name)
+      };
+      const uiContext = this.uiContext();
       return {
         ok: true, event: 'selection_summarized', selected_count: queue.length,
         total_bytes: totalBytes,
         direct_count: queue.length, convertible_count: 0, blocked_count: 0,
-        encrypted_count: 0, external_disclosure: false
+        encrypted_count: 0, ui_context: uiContext, external_disclosure: false
       };
     } catch (error) {
       this.admittedQueue = null;
@@ -291,7 +378,23 @@ class StandaloneApplicationService {
 
   cancelAdmission() {
     this.admittedQueue = null;
+    this.selectionContext = null;
     return { ok: true, event: 'admission_cancelled', external_disclosure: false };
+  }
+
+  uiContext() {
+    const selected = this.selectionContext;
+    const configured = this.deps.readConfiguredResultRoot();
+    return {
+      ok: true,
+      result_folder: configured || defaultResultRoot({ home: this.home }),
+      result_folder_is_default: !configured,
+      source_kind: selected?.sourceKind || null,
+      source_folders: selected ? [...selected.sourceFolders] : [],
+      selected_files: selected ? [...selected.selectedFiles] : [],
+      local_ui_only: true,
+      external_disclosure: false
+    };
   }
 
   async startAdmittedBatch(profile = 'auto', signal) {
@@ -310,7 +413,7 @@ class StandaloneApplicationService {
       });
       transferred = true;
       try {
-        await started.ipcAcknowledgement;
+        await confirmedIntakeStart(started);
       } catch {
         // Once the reservation has been delegated, a missing acknowledgement
         // is an uncertain start. Never reuse the same admission: the worker may
@@ -321,7 +424,7 @@ class StandaloneApplicationService {
       }
       this.admittedQueue = null;
       this.trace('standalone_batch_accepted', { outcome: 'ok', item_count: queue.length });
-      return { ok: true, event: 'batch_started', selected_count: queue.length, external_disclosure: false };
+      return { ok: true, event: 'batch_accepted', selected_count: queue.length, external_disclosure: false };
     } finally {
       if (reservation && !transferred) this.deps.releaseIntake(reservation.reservation_id);
     }
@@ -336,10 +439,22 @@ class StandaloneApplicationService {
     if (continued.ok !== true) {
       throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Es gibt keinen fortsetzbaren lokalen Stapel.');
     }
-    const started = continued.awaiting_local_review === true || continued.deferred_review > 0
+    const review = continued.awaiting_local_review === true || continued.deferred_review > 0;
+    const started = review
       ? this.deps.startLocalReviewExecutor(continued.batch_token, { requireIpcAcknowledgement: true, signal })
       : this.deps.startLocalBatchExecutor(continued.batch_token, { requireIpcAcknowledgement: true, signal });
-    await started.ipcAcknowledgement;
+    const startedMarker = review ? started?.local_review_started : started?.local_processing_started;
+    if (started?.ok !== true || startedMarker !== true) {
+      throw fixedFailure('STANDALONE_BUSY', 'Der Stapel wird bereits von einem anderen lokalen Prozess bearbeitet.');
+    }
+    if (!started.ipcAcknowledgement || typeof started.ipcAcknowledgement.then !== 'function') {
+      throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.');
+    }
+    try {
+      await started.ipcAcknowledgement;
+    } catch {
+      throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.');
+    }
     return { ok: true, event: 'batch_continued', external_disclosure: false };
   }
 
@@ -368,14 +483,14 @@ class StandaloneApplicationService {
         intakeReservationId: reservation.reservation_id, signal
       });
       transferred = true;
-      await started.ipcAcknowledgement;
+      await confirmedIntakeStart(started);
       this.trace('standalone_batch_accepted', { trace_id: traceId, outcome: 'ok', item_count: selected.length });
       return {
         ok: true,
         product_channel: PRODUCT_CHANNEL,
         operation_accepted: true,
         selected_count: selected.length,
-        state: 'processing_local',
+        state: 'preparing_local',
         external_disclosure: false
       };
     } catch (error) {
@@ -413,8 +528,13 @@ class StandaloneApplicationService {
       }
       this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected);
-      this.deps.replayPendingResultExports?.();
-      return { ok: true, configuration_changed: true, external_disclosure: false };
+      let replay = null;
+      try { replay = this.deps.replayPendingResultExports?.() || null; }
+      catch { replay = { pending: true }; }
+      return { ok: true, configuration_changed: true, result_folder: selected,
+        export_replay_pending: replay?.pending === true || Number(replay?.pending || 0) > 0 ||
+          Number(replay?.failures || 0) > 0,
+        local_ui_only: true, external_disclosure: false };
     } finally { this.interactionActive = false; }
   }
 

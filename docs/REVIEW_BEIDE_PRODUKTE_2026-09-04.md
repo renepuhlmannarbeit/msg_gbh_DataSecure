@@ -59,17 +59,50 @@ bleiben erforderlich.
 - Rust-Hülle und Node-Sidecar verwenden dieselben UTF-8-Pfadbudgets; nicht
   darstellbare POSIX-Pfade stoppen fail-closed. Die breite Tauri-Standardberechtigung
   wurde zugunsten der expliziten DataSecure-Kommandos entfernt.
+- Ein gemeinsamer Lock-Freigabevertrag verhindert, dass Verarbeitung,
+  Fortsetzung, Review, Lieferung, Verwerfen oder Recovery trotz fehlgeschlagener
+  Lock-Freigabe Erfolg melden. Ein vorhandener Primärfehler wird dabei nicht
+  verdeckt.
+- Der reale verzögerte Processing-Lock-Test verwendet wieder den aktuellen
+  Byte-Snapshot-Vertrag und stoppt hart, wenn die Publikationsbarriere nicht
+  erreicht wird. Export-Replay führt nach einem Fehler weiterhin alle offenen
+  Ergebnisse als ausstehend.
+- Standalone-Fortsetzung verlangt nun den passenden Startmarker und eine
+  Worker-Bestätigung. CLI und Oberfläche unterscheiden gestoppte Stapel,
+  ausstehenden Export und vollständig beendete Stapel ohne Ergebnis.
+- Alle vier MCP-Prompts geben den einmaligen Cloud-Sync-Hinweis konsistent aus.
+  Aktive Nutzertexte unterscheiden den dedizierten lokalen Ergebnisordner von
+  einem optional für Cowork verbundenen Ergebnisordner; Originale bleiben
+  außerhalb der Cowork-Freigabe.
+- Zertifikatsfreie macOS-Pilotpakete verwenden eine explizite Tauri-Ad-hoc-
+  Signatur. Developer-ID und Notarisierung bleiben optional; die reale Abnahme
+  auf Intel- und ARM-Macs bleibt verpflichtend offen.
+- Terminalexport und Startup-Replay melden keinen Erfolg, solange ihr
+  identitätsgebundener Export-Claim nicht sicher freigegeben wurde; persistente
+  Windows-`EPERM`-Fehler bleiben ausstehend und wiederanlauffähig.
+- Die Standalone-Statusprojektion ermittelt Recovery-Zähler und jüngsten Lauf
+  in einem gemeinsamen Scan. Ein Skalierungstest bindet 1.000 Journale an genau
+  eine Enumeration und höchstens einen Read je Journal und Poll.
+- Nichtterminale Mischstapel zeigen weder Ergebnis- noch Zuordnungsaktion. Der
+  Reviewvertrag unterscheidet nun ausdrücklich intern fertige Positionen und
+  den erst nach Gesamtabschluss sichtbaren Lauf.
+- Der reale Intake-Worker-Nachweis wartet auf den bestätigten Notice-Dispatch
+  und Worker-Exit innerhalb des Presenter-Zeitbudgets und räumt Testkinder auch
+  nach einem Fehler geordnet auf; der wiederholte Stresslauf ist stabil.
+- Bereits präsentierte historische Abschlussmarker bleiben auch mit alten
+  Reservierungsfeldern endgültig präsentiert und können keinen zweiten
+  Abschlussversuch reservieren.
 
 ## Verbleibende technische Lieferungen
 
 | Priorität | Kanonische Story | Rest |
 |---|---|---|
-| P1 | BL-041.10, BL-012.2 | Presenter-Start noch von einer belegten sichtbaren Darstellung trennen; genau ein plattformgerechter Fallback. |
+| P1 | BL-041.10, BL-012.2 | Standalone-Renderer-Paint ist E0 an eine einmalige inhaltsfreie Darstellungsgeneration gebunden und Windows-`Shown` nativ bestätigt; gleichwertigen macOS-Sichtbarkeitsnachweis und genau einen Fallback auf echten Zielhosts belegen. |
 | P1 | BL-012.9, BL-012.10 | Gemeinsames Sammelreview auf macOS/Linux produktiv statt einzelner Engineering-Dialoge belegen. |
 | P1 | BL-010.9, BL-010.23 | Vollständige neutrale Core-API und maschinenlesbaren Core-/Policy-Fingerprint zwischen beiden Produkten schließen. |
-| P2 | BL-011.8, BL-043 | Worker-Empfang und dauerhaften ersten Stapelcheckpoint semantisch trennen, ohne den Cowork-Aufruf auf die Dateikopie warten zu lassen. |
-| P2 | BL-011.11 | PID-Wiederverwendung bei Executor-Leases durch einen belastbaren prozessgebundenen Besitzvertrag ersetzen. |
-| P2 | BL-012.6, BL-042.3 | Inhaltsfreie passive lokale Langlaufanzeige ergänzen. |
+| erledigt | BL-011.8, BL-043 | Worker-Empfang und dauerhafter erster Stapelcheckpoint sind semantisch getrennt, ohne den Cowork-Aufruf auf die Dateikopie warten zu lassen. |
+| erledigt | BL-011.11 | Executor-Leases sind an PID und Betriebssystem-Startidentität gebunden; PID-Wiederverwendung und unbekannte Identität sind fail-closed getestet. |
+| erledigt | BL-012.6, BL-042.3 | Standalone zeigt inhaltsfreie passive Vorbereitung und monotone Fortschrittszähler; Zielhost-UX bleibt E2. |
 | P3 | BL-041.1 | Sprachliche Zustandslogik weiter aus dem Skill in die Serverantwort verlagern. |
 
 Diese Punkte sind keine Rechtfertigung für zusätzliche Anwenderdialoge. Sie
@@ -104,8 +137,10 @@ Quellen:
   PII-, Format-, Recovery-, Export-, Skill- und Dokumentationsregression.
 - Cowork-/Kanon-Nachlauf nach DS-080: Skillmatrix, 150 Vertragsfälle,
   Dokumentindex, Zielvertrag, Hostmatrix, Manifest und Result-Export grün.
-- Standalone: 27 Node-Produktverträge, 14 Recoveryfälle und vier Rust-
+- Standalone: 33 Node-Produktverträge, 16 Recoveryfälle und vier Rust-
   Frame-/Grenztests grün; isolierter Sidecar-Smoke aus dem fertigen ZIP grün.
+- Intake-Worker: wiederholter 10/10-Stresslauf nach dem Timingfix grün; der
+  abschließende 20/20-Nachlauf und `test:fast-path` bestätigen die Testhygiene.
 - Plugin-ZIP Windows x64:
   `DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc99.zip`, SHA-256
   `a074e6498cff04ce035320e7b6276a67ab0ea57332d718f62e5aa93c39aef4ad`.

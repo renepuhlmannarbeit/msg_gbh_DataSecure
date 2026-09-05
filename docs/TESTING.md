@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 04.09.2026 · 3.2.0-rc99
+Stand: 04.09.2026 · 3.2.0-rc102
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -49,7 +49,42 @@ Runtime-Evidence, Binärhash, Node-Lizenz, Dateimodi, Größenbudget und den
 umgeschriebenen Startbefehl. `npm run build` ergänzt SPDX-SBOM und SHA-256.
 MCPB, SEA und deaktivierte OCR-Artefakte erfüllen diese Produktgates nicht.
 
-Der RC99-Vertrag ergänzt echte Worker-ACKs für Intake, Resume und Review,
+### Gepackte Standalone-App unter Windows
+
+Nach `npm run build:standalone:windows:portable` prüft der Paket-Smoke auch das
+von Tauri verwendete Windows-Verbatim-Pfadformat (`\\?\C:\…`). Zusätzlich
+startet der folgende lokale Zielhost-Test die wirklich gebaute Tauri-EXE
+verdeckt, wartet auf bestätigte Antworten des gepackten Sidecars und beendet
+ausschließlich seinen eigenen Testprozess:
+
+```text
+npm run test:standalone:native-windows
+```
+
+Der Test extrahiert den angegebenen Kandidaten in einen frischen Pfad und
+verlangt über eine pro Prozess eindeutige Diagnose-Session `sidecar_started`,
+`service_initialized` sowie bestätigte `get_ui_context`- und
+`get_public_state`-Antworten. Er ist ein Windows-E0-Gate,
+aber kein Ersatz für den sichtbaren Anwenderlauf mit Dateiauswahl und Export.
+
+`PKG-04` ist das reproduzierbare Windows-Paketgate. Es akzeptiert ausschließlich
+einen sauberen `main`-Commit, leert den Cargo-Buildzustand vor jedem Lauf, baut
+denselben Commit zweimal und verlangt bytegleiche ZIP-, Desktop-EXE- und
+Core-EXE-Hashes. Beide getrennt aufbewahrten Kandidaten durchlaufen Paketprüfung,
+echte Worker-Übergabe bis zum dauerhaften Endzustand und nativen Binary-Smoke:
+
+```text
+npm run test:standalone:pkg-04 -- -ExpectedCommit <vollständiger Commit>
+```
+
+Erst nach `PKG-04 PASS` schreibt der Runner eine separate
+`INT-13-BINDING.json`. `INT-13` bindet damit genau einen Kandidaten an Commit,
+ZIP-SHA-256 und den Hash des PKG-04-Receipts; `latest`, Versionsnamen oder der
+überschriebene Stage-Ordner sind keine zulässige Bindung. Die Aussage ist auf
+denselben Host und die im Receipt ausgewiesene Node-/npm-/Rust-/Cargo-Toolchain
+begrenzt.
+
+Der RC102-Vertrag ergänzt echte Worker-ACKs für Intake, Resume und Review,
 zweiphasige Abschlusspräsentation, den automatischen Übergang in den lokalen
 Sammelreview sowie den zeitbegrenzten Export-Replay außerhalb des MCP-Startpfads.
 Die zugehörigen Direktgates sind `test-batch-executor-startup`,
@@ -106,7 +141,12 @@ Desktop-Vertrag läuft zusätzlich im zentralen Produkttest.
 `npm run build:standalone:windows:portable` baut und prüft darüber hinaus die
 kompilierte Windows-x64-Hülle, eine frisch erzeugte geschlossene
 Runtimeprojektion, das selbsttragende Paket und einen isolierten Sidecar-Start
-ohne System-Node. Das ersetzt keine menschliche Windows-UAT und keinen nativen
+ohne System-Node. Der Paket-Smoke führt mit dem exakt extrahierten Core eine
+reale Dateideskriptor-Normalisierung, Aufnahme, Ergebnisordnerwahl, bestätigte
+Worker-Übergabe und Verarbeitung bis zu einem dauerhaften Endzustand aus.
+Queue-Schema und Worker-Acknowledge werden vor dem positiven
+Handoff doppelt geprüft; Identitäts-Mocks dürfen diese Grenze nicht ersetzen.
+Das ersetzt keine menschliche Windows-UAT und keinen nativen
 Intel-/ARM-macOS-Nachweis.
 
 ## UAT

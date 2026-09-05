@@ -27,8 +27,9 @@ function localOnlyStartResponse(started, options = {}) {
     // The detached worker has acknowledged the private IPC handoff. The
     // potentially large durable source snapshot is created asynchronously.
     local_processing_started: false,
-    // Compatibility token: this confirms worker receipt, not a durable batch checkpoint.
-    next_action: 'local_intake_handoff_confirmed',
+    // This confirms worker receipt only. Until the worker creates the durable
+    // source snapshot and journal, the batch is not yet resumable.
+    next_action: 'local_intake_accepted_checkpoint_pending',
     gateway_version: VERSION,
     ...(options.syncFolderNotice === true ? { sync_folder_notice: true } : {}),
     raw_content_sent_to_claude: false

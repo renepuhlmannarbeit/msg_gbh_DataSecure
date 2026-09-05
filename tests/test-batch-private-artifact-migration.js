@@ -196,7 +196,7 @@ test('renamed cipher envelopes survive expiry reads and the actual maintenance c
         batchRoot: () => h.root, batchPath: () => target,
         readStateForMaintenance: journal.readStateForMaintenance,
         safeRemoveWorkDirectory() { removes++; },
-        acquireActiveLock() {}, releaseActiveLock() {}, liveLocalExecutor: () => false
+        acquireActiveLock() {}, releaseActiveLock() { return true; }, liveLocalExecutor: () => false
       });
       const result = recovery.cleanupExpiredBatchSnapshots();
       assert.strictEqual(result.removed, 0);

@@ -127,6 +127,9 @@ function fixture(role, firstChild) {
         delegateIntake: () => true,
         releaseIntake: () => true
       };
+      if (name === './batch-queue-envelope') {
+        return require('../plugins/data-secure/server/gateway/batch-queue-envelope');
+      }
       if (name === '../background-role-launcher') return {
         launchBackgroundRole(launchRole) {
           assert.strictEqual(launchRole, role === 'review' ? 'review' : 'batch');
@@ -163,7 +166,7 @@ function fixture(role, firstChild) {
       if (role === 'batch') return api.startLocalBatchExecutor(TOKEN, options);
       if (role === 'review') return api.startLocalReviewExecutor(TOKEN, options);
       return api.startLocalIntakeExecutor([
-        { name: 'customer-secret.docx', full: PRIVATE_DETAIL, sourceBytes: 16 }
+        { name: 'customer-secret.docx', full: path.resolve(__dirname, 'private-fixture', 'customer-secret.docx'), sourceBytes: 16 }
       ], 'auto', options);
     },
     active() {
@@ -181,6 +184,14 @@ function fixture(role, firstChild) {
     }
   };
 }
+
+test('an invalid private intake queue is rejected before a child is launched', () => {
+  const f = fixture('intake', fakeChild());
+  assert.throws(() => f.api.startLocalIntakeExecutor([
+    { sourcePath: path.resolve(__dirname, 'wrong-shape.txt'), sourceBytes: 12 }
+  ]), (error) => error instanceof SafeError && error.code === 'LOCAL_QUEUE_SCHEMA_INVALID');
+  assert.strictEqual(f.launched.length, 0);
+});
 
 function assertSafeStartFailure(start) {
   assert.throws(start, error => {
@@ -419,8 +430,17 @@ async function main() {
       result_grades_verified: true
     });
     assert.strictEqual(shown, 0);
-    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 1);
+    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 0,
+      'sidecar receipt is not renderer visibility');
     assert.ok(f.records.some(event => event.event === 'completion_notice_delegated_to_product_ui'));
+    const generation = f.api.pendingStandaloneTerminalNoticeGeneration();
+    assert.ok(Number.isSafeInteger(generation) && generation > 0);
+    assert.strictEqual(f.api.acknowledgeStandaloneTerminalNotice(generation - 1), false,
+      'a delayed acknowledgement cannot claim the current notice');
+    assert.strictEqual(f.api.acknowledgeStandaloneTerminalNotice(generation), true);
+    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 1);
+    assert.ok(f.records.some(event => event.event === 'completion_notice_rendered_by_product_ui'));
+    assert.strictEqual(f.api.acknowledgeStandaloneTerminalNotice(generation), false, 'render ACK is single use');
     child.exit(0);
     f.drain();
   });
@@ -451,7 +471,7 @@ async function main() {
     f.drain();
   });
 
-  await testAsync('batch: parent acknowledges only after spawn confirmation and durable presented transition', async () => {
+  await testAsync('batch: parent acknowledges only after visible confirmation and durable presented transition', async () => {
     const child = fakeChild();
     const f = fixture('batch', child);
     const order = [];
@@ -673,6 +693,22 @@ async function main() {
     child.exit(0);
     f.drain();
     assert.strictEqual(f.active(), false);
+  });
+  await testAsync('intake: an acceptance envelope with extra fields never confirms the handoff', async () => {
+    const child = fakeChild();
+    const f = fixture('intake', child);
+    const started = f.start({ ipcAckTimeoutMs: 10 });
+    child.callbacks[0](null);
+    child.emit('message', { type: 'local-intake-accepted', batch_token: TOKEN });
+    let settled = false;
+    started.ipcAcknowledgement.finally(() => { settled = true; }).catch(() => {});
+    await new Promise(resolve => setImmediate(resolve));
+    assert.strictEqual(settled, false, 'only the exact one-field worker envelope is accepted');
+    child.emit('message', { type: 'local-intake-accepted' });
+    await started.ipcAcknowledgement;
+    assert.strictEqual(child.kills, 0);
+    child.exit(0);
+    f.drain();
   });
   await testAsync('intake: a worker that exits before acknowledging rejects the handoff immediately', async () => {
     const child = fakeChild();

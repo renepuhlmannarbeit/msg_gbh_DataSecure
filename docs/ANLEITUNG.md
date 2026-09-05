@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 03.09.2026 · Version 3.2.0 RC99
+Stand: 03.09.2026 · Version 3.2.0 RC102
 
 ## Vor dem ersten Lauf
 
@@ -50,7 +50,7 @@ Upload nicht zuverlässig ersetzt. Deshalb:
    Projektwechseln nicht wiederholt oder heimlich geändert.
 4. Im lokalen Mehrfachpicker wählen Sie bis zu 100 Dateien mit zusammen höchstens
    500 MiB und klicken einmal **„Öffnen“**.
-5. Claude antwortet kurz „Der Auftrag wurde lokal übergeben …“ und nennt in
+5. Claude antwortet kurz „Die lokale Übernahme wurde gestartet …“ und nennt in
    Klammern die laufende DataSecure-Version. Fehlt die Version oder stimmt sie
    nicht mit dem bereitgestellten Build überein, verarbeitet eine ältere
    Plugin-Kopie; siehe „Plugin aktualisieren“ unten. DataSecure prüft und

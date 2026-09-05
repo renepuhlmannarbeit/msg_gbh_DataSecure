@@ -19,6 +19,16 @@ const {
 
 const { testAsync, done, assert } = createSuite('Batch processing lock integration');
 
+function enteredOrTimeout(promise) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('TEST_PUBLISH_BARRIER_NOT_REACHED')), 2000);
+    })
+  ]).finally(() => clearTimeout(timer));
+}
+
 async function main() {
   await testAsync('active and filesystem locks remain held until the item promise settles', async () => {
     const sourceDir = fs.mkdtempSync(path.join(base, 'picker-'));
@@ -33,8 +43,8 @@ async function main() {
     const publishBarrier = new Promise((resolve) => { releasePublish = resolve; });
     let pipelineRuns = 0;
     const deps = {
-      convertDocument: async (selectedSource) => ({
-        markdown: fs.readFileSync(selectedSource, 'utf8'),
+      convertDocument: async (_logicalName, options) => ({
+        markdown: options.inputBuffer.toString('utf8'),
         attachments: [], warnings: [], unreviewedVisualCount: 0, requiresExplicitProfile: false
       }),
       beforePublish: async () => {
@@ -45,7 +55,7 @@ async function main() {
     };
 
     const first = processBatchNext(begun.batch_token, deps);
-    await publishEntered;
+    await enteredOrTimeout(publishEntered);
     assert.strictEqual(fs.existsSync(_test.activeLockPath()), true);
     await assert.rejects(
       () => processBatchNext(begun.batch_token, deps),
@@ -76,8 +86,8 @@ async function main() {
     const publishBarrier = new Promise((resolve) => { releasePublish = resolve; });
     const privateSentinel = 'Erika Musterfrau C:\\private\\source.txt';
     const deps = {
-      convertDocument: async (selectedSource) => ({
-        markdown: fs.readFileSync(selectedSource, 'utf8'),
+      convertDocument: async (_logicalName, options) => ({
+        markdown: options.inputBuffer.toString('utf8'),
         attachments: [], warnings: [], unreviewedVisualCount: 0, requiresExplicitProfile: false
       }),
       beforePublish: async () => {
@@ -88,7 +98,7 @@ async function main() {
     };
 
     const first = processBatchNext(begun.batch_token, deps);
-    await publishEntered;
+    await enteredOrTimeout(publishEntered);
     assert.strictEqual(fs.existsSync(_test.activeLockPath()), true);
     await assert.rejects(
       () => processBatchNext(begun.batch_token, deps),

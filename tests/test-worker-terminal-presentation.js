@@ -132,7 +132,7 @@ async function main() {
     assert.doesNotMatch(JSON.stringify(events), /PRIVATE|[a-f0-9]{64}/u);
   });
 
-  await testAsync('presentation is marked durable only after asynchronous spawn confirmation', async () => {
+  await testAsync('presentation is marked durable only after asynchronous visible confirmation', async () => {
     const channel = fakeChannel({ connected: false });
     const order = [];
     let confirmSpawn;

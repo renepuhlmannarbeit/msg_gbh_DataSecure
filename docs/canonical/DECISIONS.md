@@ -1,12 +1,12 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 04.09.2026
+Stand: 05.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-080, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-081, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -888,9 +888,10 @@ Nur die Rust-Hülle öffnet den nativen Picker und übergibt die Auswahl intern 
 den Core. UI und Core kommunizieren lokal über begrenzte, gerahmte Nachrichten
 auf geerbten Prozesskanälen; ein lokaler HTTP-/WebSocket-Port ist unzulässig.
 
-Signierung und Apple-Notarisierung bleiben nach DS-030 keine technische
-Freigabepflicht. Ein unsigniertes macOS-Paket muss aber ehrlich auf die zu
-erwartende Gatekeeper-Handhabung hinweisen und diese im macOS-UAT prüfen; es
+Developer-ID-Signierung und Apple-Notarisierung bleiben nach DS-030 keine
+technische Freigabepflicht. Zertifikatsfreie interne macOS-Piloten werden jedoch
+mit Tauri ausdrücklich ad-hoc signiert (`signingIdentity: "-"`). Sie müssen
+ehrlich auf die zu erwartende Gatekeeper-Handhabung hinweisen und diese im macOS-UAT prüfen; es
 darf nicht als reibungslose öffentliche Installation beworben werden. Diese
 Entscheidung präzisiert DS-004, DS-028, DS-030 und DS-075.
 
@@ -982,3 +983,52 @@ offen ist. Ein Wechsel wirkt nur für künftige sichtbare Exporte und spiegelt
 keine abgeschlossenen Läufe. Diese Entscheidung präzisiert DS-023, DS-069 und
 DS-079 und schließt die projektbezogene Zielbindung bewusst ohne zusätzliche
 Bestätigungsorgie.
+
+## DS-081 – MCP-Version aushandeln statt künstlichen Cutover erzwingen
+
+Bestätigt am 05.09.2026 nach Abgleich mit der offiziellen MCP-Veröffentlichung
+und dem aktuellen TypeScript-SDK-Migrationspfad: `MCP26-01` ist kein offizieller
+MCP-Protokollbezeichner und darf weder als Zielversion noch als
+Migrationsanforderung in Produkt, Backlog oder Freigabeaussagen verwendet werden.
+Die maßgebliche moderne Protokollversion ist derzeit `2026-07-28`.
+
+Das Cowork-Plugin behält die bereits implementierte, hostgesteuerte
+Versionsaushandlung: `server/discover` bietet `2026-07-28` an; nachgewiesene
+ältere Claude-Hosts bleiben über den Legacy-`initialize`-Pfad kompatibel. Der
+Anwender wählt keine Protokollversion und erhält dafür weder eine Einstellung
+noch einen zusätzlichen Dialog. Legacy-Unterstützung wird erst entfernt, wenn
+die freigegebene Claude-Hostmatrix sie nicht mehr benötigt und die Änderung mit
+realer Zielhostevidenz belegt ist.
+
+DataSecure behauptet keine vollständige Konformität zu `2026-07-28`, bevor die
+offizielle MCP-Conformance-Prüfung für den tatsächlich ausgelieferten
+Pluginserver bestanden und dokumentiert wurde. Neue versionsgebundene
+Funktionen wie MCP-Tasks oder Benachrichtigungen bleiben bis zu ihrem eigenen
+Nachweis außerhalb des Produktpfads. Die lineare Validierung interner
+DataSecure-Graphen ist eine unabhängige Performance-/Robustheitseigenschaft und
+kein Anlass für einen MCP-Versionswechsel. Das Standalone-Produkt bleibt von
+MCP vollständig unabhängig.
+
+Offizielle Entscheidungsbasis:
+
+- [MCP-Version 2026-07-28](https://blog.modelcontextprotocol.io/posts/2026-07-28/)
+- [Migrationshinweise des offiziellen TypeScript SDK](https://ts.sdk.modelcontextprotocol.io/v2/migration/support-2026-07-28)
+
+## DS-082 – Lokale Auswahl sichtbar, reine Konvertate strikt getrennt
+
+Bestätigt am 05.09.2026 nach dem ersten Windows-Standalone-UAT: Die
+Standalone-Oberfläche zeigt den vom Anwender selbst gewählten Quellenordner,
+die aktuelle Dateiauswahl und den Ergebnisordner im Hauptfenster an. Diese
+Anzeige ist ausschließlich eine lokale, als Text gerenderte Projektion über
+den privaten geerbten IPC-Kanal. Sie darf nie in Supportspur, Diagnoseexport,
+Cowork, Mapping oder Fehlertext übernommen werden. Der Renderer behält weder
+direkten Dateisystem- noch Netzwerkzugriff.
+
+Die Standardaktion bleibt **In Markdown umwandeln und anonymisieren** mit einem
+expliziten Startknopf. **Nur in Markdown umwandeln** ist eine eigene fachliche
+Betriebsart: Ihre Ausgaben enthalten weiterhin personenbezogene Rohdaten und
+dürfen weder im `DataSecure-Output`, noch mit `anonymisiert` im Dateinamen oder
+als Claude-sicheres Ergebnis erscheinen. Sie bleibt im Piloten sichtbar als
+nicht freigegebene Option, bis ein eigener gekennzeichneter Exportbereich,
+Quellenidentitätsprüfung, Abbruch/Fortsetzung, Mapping und Negativtests
+implementiert sind. Diese Entscheidung präzisiert DS-075 bis DS-077.

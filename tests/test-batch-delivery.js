@@ -65,7 +65,11 @@ function fixture(options = {}) {
       events.push(`acquire:${batchToken}`);
       if (options.acquireError) throw options.acquireError;
     },
-    releaseActiveLock(batchToken) { events.push(`release:${batchToken}`); },
+    releaseActiveLock(batchToken) {
+      events.push(`release:${batchToken}`);
+      if (options.releaseError) throw options.releaseError;
+      return options.refuseRelease !== true;
+    },
     readState(batchToken) {
       events.push(`read:${batchToken}`);
       if (options.readError) throw options.readError;
@@ -206,6 +210,13 @@ test('lock, read and executor-access failures cannot mutate state', () => {
     assert.strictEqual(value.events.filter((event) => event === 'write').length, 0);
     assert.strictEqual(value.events.filter((event) => event.startsWith('unlink:')).length, 0);
     assert.strictEqual(value.events.filter((event) => event.startsWith('release:')).length, 1);
+  }
+});
+
+test('a refused or failed lock release cannot report delivery success', () => {
+  for (const options of [{ refuseRelease: true }, { releaseError: new Error('EPERM') }]) {
+    const value = fixture(options);
+    assert.throws(() => value.delivery.acknowledgeDeliveredPackage(token, ids[0]), /nicht sicher freigegeben/u);
   }
 });
 

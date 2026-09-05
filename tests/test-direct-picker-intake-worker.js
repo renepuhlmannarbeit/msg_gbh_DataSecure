@@ -16,10 +16,29 @@ const { startLocalIntakeExecutor, localBatchStateProgress, terminalIntakeProgres
 const { IO_SUMMARY_SCHEMA, validatePrivateIoSummary } = require('../plugins/data-secure/server/gateway/performance');
 const workflowDiagnostics = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 const { testAsync, done, assert } = createSuite('Direct picker intake worker');
+const activeChildren = new Set();
 
 
 function pause(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function trackChild(child) {
+  activeChildren.add(child);
+  // `close` follows every `exit` listener and stdio shutdown. Waiting for it
+  // prevents a later executor exit handler from recreating an empty batch root
+  // after this test has already removed its private temporary directory.
+  child.once('close', () => activeChildren.delete(child));
+  return child;
+}
+
+async function stopTestChildren() {
+  for (const child of activeChildren) {
+    try { if (child.connected) child.disconnect(); } catch {}
+    try { child.kill(); } catch {}
+  }
+  const deadline = Date.now() + 5_000;
+  while (activeChildren.size > 0 && Date.now() < deadline) await pause(25);
 }
 
 async function waitForSettledProgress(token, noticeStage) {
@@ -77,9 +96,11 @@ async function waitForSettledProgress(token, noticeStage) {
 }
 
 async function removeTestRoot() {
+  await stopTestChildren();
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       fs.rmSync(base, { recursive: true, force: true, maxRetries: 2, retryDelay: 25 });
+      if (fs.existsSync(base)) throw new Error('TEST_ROOT_CLEANUP_INCOMPLETE');
       return;
     } catch (error) {
       if (attempt === 7) throw error;
@@ -145,7 +166,8 @@ async function main() {
     const started = startLocalIntakeExecutor([{
       name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
     }], 'customer', {
-      forkProcess: (_modulePath, args, options) => fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options),
+      forkProcess: (_modulePath, args, options) => trackChild(
+        fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options)),
       showLocalIntakeNotice: (stage) => { localNotice = stage; },
       showTerminalBatchSummary: (summary) => { completionSummary = summary; return true; },
       recordWorkflowEvent: (event) => { workflowEvents.push(event); return true; }
@@ -158,8 +180,9 @@ async function main() {
     assert.strictEqual(completed.released + completed.stopped + completed.retryable, 1);
     assert.strictEqual(completed.remaining, 0);
     assert.strictEqual(completed.processing, 0);
-    const completionDeadline = Date.now() + 1_000;
-    while (!completionSummary && Date.now() < completionDeadline) await pause(10);
+    const completionDeadline = Date.now() + 10_000;
+    while ((!completionSummary || !workflowEvents.some((event) => event.event === 'intake_worker_exited')) &&
+        Date.now() < completionDeadline) await pause(10);
     // The read-side poll may observe the terminal item immediately before the
     // worker durably binds terminal evidence. The completion notice is emitted
     // only after that binding and must therefore carry the verified RC65 grade.
@@ -173,8 +196,6 @@ async function main() {
       result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
       result_grades_verified: true
     });
-    const lifecycleDeadline = Date.now() + 1_000;
-    while (!workflowEvents.some((event) => event.event === 'intake_worker_exited') && Date.now() < lifecycleDeadline) await pause(10);
     const eventNames = workflowEvents.map((event) => event.event);
     for (const expected of [
       'intake_worker_spawned', 'intake_ipc_dispatched', 'intake_checkpoint_created',
@@ -208,7 +229,7 @@ async function main() {
       name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
     }], 'customer', {
       forkProcess: (_modulePath, args, options) => {
-        child = fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options);
+        child = trackChild(fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options));
         // Cowork may end the MCP parent right after the tool response. Closing
         // the private IPC channel once processing has started reproduces that
         // without killing this test process.

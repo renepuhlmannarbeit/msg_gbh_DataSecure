@@ -32,6 +32,8 @@ const { createBatchReviewOrchestrator } = require('./batch-review-orchestrator')
 const { createBatchItemProcessor } = require('./batch-item-processor');
 const { createBatchNextMaintenance } = require('./batch-next-maintenance');
 const { createBatchProcessingOrchestrator } = require('./batch-processing-orchestrator');
+const { releaseOwnedLock } = require('./batch-lock-release');
+const { processInstanceIdentity } = require('./process-identity');
 const { exportCompletedState, visibleExportStatus, visibleExportDirectory } = require('./result-export');
 const { planBatchAdmission } = require('./batch-source-admission');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
@@ -217,6 +219,7 @@ const {
   readState,
   writeState,
   publicProgress,
+  processInstanceIdentity,
   // The claimant holds the global item lock at this point, so the scan must
   // ignore that lock and look at every other journal's durable lease instead.
   otherLiveExecutor: (token) => recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true })
@@ -273,6 +276,7 @@ const { replayMappingOutbox } = createBatchMappingMaintenance({
 const {
   recoverableBatchStates,
   recoverableBatchStatus,
+  productStatusSnapshot,
   latestProductBatchStatus,
   latestProductResultDirectory,
   localCleanupStatus,
@@ -482,10 +486,14 @@ function finishZeroDayOperation(token) {
   // Lifecycle finalization is another state mutation and therefore uses the
   // same cross-process ownership lock as processing, delivery and maintenance.
   acquireActiveLock(token);
+  let primaryError = false;
   try {
     const state = readStateForMaintenance(token);
     return finishZeroDayWork(state) ? state : null;
-  } finally { releaseActiveLock(token); }
+  } catch (error) {
+    primaryError = true;
+    throw error;
+  } finally { releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError); }
 }
 
 function readBatchProgress(token) {
@@ -516,28 +524,31 @@ function reserveTerminalNotice(token, presenter, reservationId = crypto.randomBy
       !TERMINAL_NOTICE_RESERVATION_RE.test(String(reservationId || ''))) return { ok: false, state: 'invalid' };
   for (let attempt = 0; attempt < 8; attempt++) {
     try { acquireActiveLock(token); } catch { sleepBriefly(25); continue; }
+    let result;
     try {
       const state = readState(token);
       const existing = state.terminal_notice;
       if (existing && typeof existing === 'object') {
         // Old one-phase journal entries are completed claims and remain final.
-        if (existing.status !== 'reserved') return { ok: false, state: 'presented' };
-        if (existing.presenter === presenter && existing.reservation_id === reservationId) {
-          return { ok: true, state: 'reserved', reservation_id: reservationId };
+        if (existing.status !== 'reserved') result = { ok: false, state: 'presented' };
+        else if (existing.presenter === presenter && existing.reservation_id === reservationId) {
+          result = { ok: true, state: 'reserved', reservation_id: reservationId };
         }
         const reservedAt = Date.parse(String(existing.at || ''));
-        if (Number.isFinite(reservedAt) && Date.now() - reservedAt < TERMINAL_NOTICE_RESERVATION_MS) {
-          return { ok: false, state: 'reserved' };
+        if (!result && Number.isFinite(reservedAt) && Date.now() - reservedAt < TERMINAL_NOTICE_RESERVATION_MS) {
+          result = { ok: false, state: 'reserved' };
         }
       }
-      state.terminal_notice = { status: 'reserved', presenter, reservation_id: reservationId, at: new Date().toISOString() };
-      writeState(state);
-      return { ok: true, state: 'reserved', reservation_id: reservationId };
+      if (!result) {
+        state.terminal_notice = { status: 'reserved', presenter, reservation_id: reservationId, at: new Date().toISOString() };
+        writeState(state);
+        result = { ok: true, state: 'reserved', reservation_id: reservationId };
+      }
     } catch {
-      return { ok: false, state: 'unavailable' };
-    } finally {
-      releaseActiveLock(token);
+      result = { ok: false, state: 'unavailable' };
     }
+    if (!releaseOwnedLock(releaseActiveLock, token, SafeError, true)) return { ok: false, state: 'unavailable' };
+    return result;
   }
   return { ok: false, state: 'busy' };
 }
@@ -546,6 +557,7 @@ function markTerminalNoticePresented(token, presenter, reservationId) {
   if (!TOKEN_RE.test(String(token || '')) || !TERMINAL_NOTICE_PRESENTERS.has(presenter) ||
       !TERMINAL_NOTICE_RESERVATION_RE.test(String(reservationId || ''))) return false;
   let locked = false;
+  let changed = false;
   try {
     acquireActiveLock(token);
     locked = true;
@@ -555,18 +567,20 @@ function markTerminalNoticePresented(token, presenter, reservationId) {
         existing.reservation_id !== reservationId) return false;
     state.terminal_notice = { status: 'presented', presenter, at: new Date().toISOString() };
     writeState(state);
-    return true;
+    changed = true;
   } catch {
     return false;
   } finally {
-    if (locked) releaseActiveLock(token);
+    if (locked && !releaseOwnedLock(releaseActiveLock, token, SafeError, true)) changed = false;
   }
+  return changed;
 }
 
 function releaseTerminalNoticeReservation(token, presenter, reservationId) {
   if (!TOKEN_RE.test(String(token || '')) || !TERMINAL_NOTICE_PRESENTERS.has(presenter) ||
       !TERMINAL_NOTICE_RESERVATION_RE.test(String(reservationId || ''))) return false;
   let locked = false;
+  let changed = false;
   try {
     acquireActiveLock(token);
     locked = true;
@@ -576,12 +590,13 @@ function releaseTerminalNoticeReservation(token, presenter, reservationId) {
         existing.reservation_id !== reservationId) return false;
     delete state.terminal_notice;
     writeState(state);
-    return true;
+    changed = true;
   } catch {
     return false;
   } finally {
-    if (locked) releaseActiveLock(token);
+    if (locked && !releaseOwnedLock(releaseActiveLock, token, SafeError, true)) changed = false;
   }
+  return changed;
 }
 
 // Compatibility helper for older support callers. Product presentation uses
@@ -611,4 +626,4 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

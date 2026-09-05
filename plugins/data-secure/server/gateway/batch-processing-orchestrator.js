@@ -1,5 +1,7 @@
 'use strict';
 
+const { releaseOwnedLock } = require('./batch-lock-release');
+
 function createBatchProcessingOrchestrator(options = {}) {
   const SafeError = options.SafeError;
   const active = options.active;
@@ -25,6 +27,7 @@ function createBatchProcessingOrchestrator(options = {}) {
     }
     acquireActiveLock(token);
     active.add(token);
+    let primaryError = false;
     try {
       const state = readState(token);
       assertLocalExecutorAccess(state, deps.executorPid);
@@ -90,9 +93,12 @@ function createBatchProcessingOrchestrator(options = {}) {
               writeState(state);
             }
           } : deps));
+    } catch (error) {
+      primaryError = true;
+      throw error;
     } finally {
       active.delete(token);
-      releaseActiveLock(token);
+      releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
     }
   }
 

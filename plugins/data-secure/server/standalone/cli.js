@@ -39,7 +39,10 @@ async function run(argv = process.argv.slice(2), options = {}) {
         blocked: 'DataSecure ist nicht bereit.',
         processing: 'Die Dateien werden lokal verarbeitet.',
         review_required: 'Eine lokale Prüfung ist erforderlich.',
+        stopped: 'Ein unterbrochener Stapel kann fortgesetzt werden.',
+        export_pending: 'Anonymisierte Ergebnisse werden lokal bereitgestellt.',
         results_available: `${status.result_count} anonymisierte Ergebnisse sind verfügbar.`,
+        completed_without_results: `${status.failed_count} Datei${status.failed_count === 1 ? ' wurde' : 'en wurden'} sicher gestoppt; es ist kein anonymisiertes Ergebnis verfügbar.`,
         ready: 'DataSecure ist bereit.'
       };
       output.write(`${messages[status.state] || messages.blocked}\n`);

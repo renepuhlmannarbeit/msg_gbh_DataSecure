@@ -1,6 +1,7 @@
 'use strict';
 
 const { SafeError } = require('../runtime');
+const { releaseOwnedLock } = require('./batch-lock-release');
 
 function createBatchContinuation(options = {}) {
   const ErrorType = options.SafeError || SafeError;
@@ -24,6 +25,7 @@ function createBatchContinuation(options = {}) {
     if (active.has(token)) throw new ErrorType('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
     acquireActiveLock(token);
     active.add(token);
+    let primaryError = false;
     try {
       const state = readState(token);
       assertLocalExecutorAccess(state);
@@ -63,9 +65,12 @@ function createBatchContinuation(options = {}) {
       }
       writeState(state);
       return { ok: true, resumed, ...publicProgress(state), raw_content_sent_to_claude: false };
+    } catch (error) {
+      primaryError = true;
+      throw error;
     } finally {
       active.delete(token);
-      releaseActiveLock(token);
+      releaseOwnedLock(releaseActiveLock, token, ErrorType, primaryError);
     }
   }
 

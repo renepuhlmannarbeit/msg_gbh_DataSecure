@@ -10,6 +10,12 @@ const ENTRYPOINTS = Object.freeze([
   'parser-worker.js',
   'network-deny.cjs'
 ]);
+const PLATFORM_ASSETS = Object.freeze({
+  'windows-x64': Object.freeze([
+    'native/windows-x64/datasecure-sandbox.exe',
+    'native/windows-x64/datasecure-sandbox.sha256'
+  ])
+});
 const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)/iu;
 
 function regular(file) {
@@ -32,9 +38,10 @@ function resolveRelative(source, request, serverRoot) {
   return { resolved, relative };
 }
 
-export function collectStandaloneRuntime(serverRoot) {
+export function collectStandaloneRuntime(serverRoot, productTarget) {
   const root = path.resolve(serverRoot);
-  const pending = ENTRYPOINTS.map((relative) => ({
+  const platformAssets = PLATFORM_ASSETS[productTarget] || [];
+  const pending = [...ENTRYPOINTS, ...platformAssets].map((relative) => ({
     relative,
     resolved: path.join(root, ...relative.split('/'))
   }));
@@ -58,10 +65,10 @@ export function collectStandaloneRuntime(serverRoot) {
   return [...files.values()].sort((left, right) => left.relative.localeCompare(right.relative));
 }
 
-export function writeStandaloneRuntime(serverRoot, destination) {
+export function writeStandaloneRuntime(serverRoot, destination, productTarget) {
   const output = path.resolve(destination);
   fs.mkdirSync(output, { recursive: true });
-  const files = collectStandaloneRuntime(serverRoot);
+  const files = collectStandaloneRuntime(serverRoot, productTarget);
   for (const file of files) {
     const target = path.join(output, ...file.relative.split('/'));
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -70,4 +77,8 @@ export function writeStandaloneRuntime(serverRoot, destination) {
   return files.map(({ relative, bytes }) => ({ relative: `server/${relative}`, bytes: bytes.length }));
 }
 
-export const standaloneProjectionContract = Object.freeze({ entrypoints: ENTRYPOINTS, forbidden: FORBIDDEN });
+export const standaloneProjectionContract = Object.freeze({
+  entrypoints: ENTRYPOINTS,
+  platformAssets: PLATFORM_ASSETS,
+  forbidden: FORBIDDEN
+});

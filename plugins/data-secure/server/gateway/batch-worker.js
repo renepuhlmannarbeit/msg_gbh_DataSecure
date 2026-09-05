@@ -18,6 +18,7 @@ const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
 const { showBatchStateNoticeConfirmed, showLocalIntakeNoticeConfirmed } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { continueIntoLocalReview } = require('./automatic-local-review');
+const { validateBatchQueueEnvelope, LOCAL_QUEUE_SCHEMA_INVALID } = require('./batch-queue-envelope');
 
 let started = false;
 const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
@@ -27,8 +28,7 @@ process.once('message', async (message) => {
   const validToken = /^[a-f0-9]{64}$/.test(String(message?.batch_token || ''));
   const isExistingBatch = message?.type === 'start-local-batch';
   const reservationId = String(message?.intake_reservation_id || '');
-  const isNewIntake = message?.type === 'start-local-intake' && RESERVATION_ID_RE.test(reservationId) &&
-    Array.isArray(message?.queue) && message.queue.length > 0;
+  const isNewIntake = message?.type === 'start-local-intake' && RESERVATION_ID_RE.test(reservationId);
   if (started || !validToken || (!isExistingBatch && !isNewIntake)) {
     process.exit(2);
     return;
@@ -44,6 +44,15 @@ process.once('message', async (message) => {
       resolve(false); // local parent may already be gone
     }
   });
+  if (isNewIntake) {
+    try { validateBatchQueueEnvelope(message.queue); }
+    catch {
+      await notify({ type: 'local-intake-rejected', error_code: LOCAL_QUEUE_SCHEMA_INVALID });
+      releaseIntake(reservationId);
+      process.exit(2);
+      return;
+    }
+  }
   // The parent reports a confirmed handoff to Cowork only after this explicit,
   // content-free acceptance. Node's send() callback in the parent proves merely
   // that the message left the parent; this envelope proves that a live worker

@@ -2,8 +2,10 @@
 
 const fs = require('fs');
 const crypto = require('crypto');
+const { SafeError } = require('../runtime');
 const { TOKEN_RE, batchRoot, batchPath, safeRemoveWorkDirectory } = require('./batch-private-store');
 const { createBatchIntakeIntent, SUFFIX: INTAKE_SUFFIX } = require('./batch-intake-intent');
+const { releaseOwnedLock } = require('./batch-lock-release');
 
 function createBatchRecovery(options = {}) {
   const io = options.io || fs;
@@ -39,6 +41,7 @@ function createBatchRecovery(options = {}) {
   const intakeIntent = options.intakeIntent || createBatchIntakeIntent({ ...options, batchPath: journalPath });
   const finishZeroDayWork = options.finishZeroDayWork || (() => false);
   const removeState = options.removeState;
+  const ErrorType = options.SafeError || SafeError;
 
   function intakeToken(entry) {
     if (!entry.isFile() || !entry.name.endsWith(INTAKE_SUFFIX)) return null;
@@ -117,6 +120,10 @@ function createBatchRecovery(options = {}) {
 
   function latestProductBatchStatus(productChannel) {
     const latest = latestProductBatchState(productChannel);
+    return projectProductBatchStatus(latest);
+  }
+
+  function projectProductBatchStatus(latest) {
     if (!latest) return null;
     const progress = publicProgress(latest, { skipResultProjection: true });
     const visible = visibleExportStatus(latest.token, progress.released);
@@ -130,6 +137,61 @@ function createBatchRecovery(options = {}) {
       processing: progress.local_processing_active === true || progress.processing > 0,
       resumable: progress.awaiting_resume === true,
       complete: progress.complete === true
+    });
+  }
+
+  // Standalone polls frequently. Recovery counters and the newest product
+  // state therefore share one immutable journal enumeration instead of two
+  // synchronous full scans per poll. Malformed and expired rows remain
+  // fail-closed and never escape into the renderer projection.
+  function productStatusSnapshot(productChannel) {
+    if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('PRODUCT_CHANNEL_INVALID');
+    const owner = readActiveLock();
+    const ownerActive = Boolean(owner && processAlive(owner.pid));
+    let processingActive = ownerActive;
+    let entries = [];
+    try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
+    catch {
+      return Object.freeze({
+        recovery: Object.freeze({ recoverable_batches: 0, batches_awaiting_resume: 0,
+          batches_awaiting_delivery: 0, batch_processing_active: processingActive }),
+        latest: null
+      });
+    }
+    const recoverable = [];
+    let latest = null;
+    let latestCreatedAt = -1;
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      const token = entry.name.slice(0, -'.json'.length);
+      if (!tokenPattern.test(token)) continue;
+      try {
+        const candidate = readMaintenanceState(token);
+        const expiresAt = Date.parse(candidate.expires_at);
+        const live = liveLocalExecutor(candidate);
+        if (live) processingActive = true;
+        if (!ownerActive && nowMs() <= expiresAt && incompleteBatchState(candidate) &&
+            !(candidate.zero_day_work === true && candidate.zero_day_work_cleaned !== true &&
+              !live && !processAlive(candidate.intake_owner_pid))) {
+          if (!live) recoverable.push(candidate);
+        }
+        if (candidate.product_channel !== productChannel || nowMs() > expiresAt) continue;
+        const createdAt = Date.parse(candidate.created_at);
+        if (!Number.isFinite(createdAt) || createdAt < latestCreatedAt) continue;
+        if (createdAt === latestCreatedAt && latest && candidate.token.localeCompare(latest.token) <= 0) continue;
+        latest = candidate;
+        latestCreatedAt = createdAt;
+      } catch { /* one unsafe journal cannot become public UI state */ }
+    }
+    return Object.freeze({
+      recovery: Object.freeze({
+        recoverable_batches: recoverable.length,
+        batches_awaiting_resume: recoverable.filter((candidate) => publicProgress(candidate).awaiting_resume).length,
+        batches_awaiting_delivery: recoverable.filter((candidate) =>
+          candidate.items.some((item) => item.status === deliveryPendingStatus)).length,
+        batch_processing_active: processingActive
+      }),
+      latest: projectProductBatchStatus(latest)
     });
   }
 
@@ -208,6 +270,7 @@ function createBatchRecovery(options = {}) {
     } catch {
       return { recovered, removed, failures, skipped_active: true };
     }
+    let primaryError = false;
     try {
       if (repairPendingEvidenceOutbox) {
         try { repairPendingEvidenceOutbox(); } catch { /* evidence repair never blocks batch recovery */ }
@@ -261,8 +324,11 @@ function createBatchRecovery(options = {}) {
         } catch { failures++; }
       }
       return { recovered, removed, failures, skipped_active: false };
+    } catch (error) {
+      primaryError = true;
+      throw error;
     } finally {
-      releaseActiveLock(token);
+      releaseOwnedLock(releaseActiveLock, token, ErrorType, primaryError);
     }
   }
 
@@ -275,6 +341,7 @@ function createBatchRecovery(options = {}) {
     }
     let removed = 0;
     let failures = 0;
+    let primaryError = false;
     const now = Number(callOptions.now || nowMs());
     try {
       if (repairPendingEvidenceOutbox) {
@@ -304,8 +371,11 @@ function createBatchRecovery(options = {}) {
         } catch { failures++; }
       }
       return { removed, failures, skipped_active: false };
+    } catch (error) {
+      primaryError = true;
+      throw error;
     } finally {
-      releaseActiveLock(token);
+      releaseOwnedLock(releaseActiveLock, token, ErrorType, primaryError);
     }
   }
 
@@ -313,6 +383,7 @@ function createBatchRecovery(options = {}) {
     incompleteBatchState,
     recoverableBatchStates,
     recoverableBatchStatus,
+    productStatusSnapshot,
     latestProductBatchStatus,
     latestProductResultDirectory,
     localCleanupStatus,

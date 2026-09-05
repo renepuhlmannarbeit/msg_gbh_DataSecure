@@ -76,7 +76,8 @@ copyFile(runtime, `datasecure-core-${rustTarget}.exe`, 0o700);
 // earlier desktop build.
 writeStandaloneRuntime(
   path.join(root, 'plugins', 'data-secure', 'server'),
-  path.join(stage, 'server')
+  path.join(stage, 'server'),
+  productTarget
 );
 copyFile(runtimeLicense, 'LICENSE.node.txt');
 copyFile(path.join(root, 'LICENSE'), 'LICENSE');

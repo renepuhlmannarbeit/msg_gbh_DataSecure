@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { batchRoot, TOKEN_RE } = require('./batch-private-store');
 const { processAlive: probeProcessAlive } = require('./process-liveness');
+const { processInstanceIdentity } = require('./process-identity');
 
 const LOCK_SCHEMA = 'datasecure-active-batch/1';
 const MAX_LOCK_BYTES = 4096;
@@ -30,8 +31,14 @@ function createBatchActiveLock(deps = {}) {
   }
 
   function liveLocalExecutor(state) {
-    return Number.isSafeInteger(state?.local_executor_pid) && state.local_executor_pid > 0 &&
-      processAlive(state.local_executor_pid);
+    if (!Number.isSafeInteger(state?.local_executor_pid) || state.local_executor_pid <= 0 ||
+        !processAlive(state.local_executor_pid)) return false;
+    // Legacy/unknown identities remain conservatively live. A positively
+    // observed different birth identity proves PID reuse and makes the old
+    // journal lease stale without treating an observer failure as death.
+    if (typeof state.local_executor_birth_id !== 'string') return true;
+    const actual = processInstanceIdentity(state.local_executor_pid);
+    return !actual || actual === state.local_executor_birth_id;
   }
 
   function validActiveLock(value) {

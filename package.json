@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc99",
+  "version": "3.2.0-rc102",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -10,11 +10,13 @@
   "license": "UNLICENSED",
   "scripts": {
     "standalone": "node plugins/data-secure/server/standalone/cli.js",
-    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && npm run test:standalone:rust",
+    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-frontend.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && npm run test:standalone:rust",
     "test:standalone:rust": "cd apps/datasecure-standalone/tauri-contract && cargo test --locked",
     "build:standalone:windows": "node scripts/prepare-standalone-runtime.mjs && cd apps/datasecure-standalone/tauri-contract && cargo build --release --locked",
     "build:standalone:windows:portable": "npm run build:standalone:windows && node scripts/build-standalone-package.mjs && npm run test:standalone:package",
     "test:standalone:package": "node scripts/verify-standalone-package.mjs && node tests/test-standalone-package-smoke.mjs",
+    "test:standalone:native-windows": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/manual/standalone-native-windows-launch.ps1",
+    "test:standalone:pkg-04": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-pkg-04.ps1",
     "test:staging": "node tests/test-package-staging.js && node tests/test-safe-private-tree.js && node tests/test-package-staging-integration.js",
     "test:executor-lifecycle": "node tests/test-batch-executor-startup.js && node tests/test-completion-summary.js && node tests/test-worker-terminal-presentation.js && node tests/test-diagnostic-causes.js && node tests/test-startup-guard.js && node tests/test-workflow-diagnostics.js && node tests/test-result-folder-export.js",
     "test:p0-private": "node tests/test-private-work-store.js && node tests/test-batch-private-artifact-migration.js && node tests/test-review-private-artifact-migration.js && node tests/test-retention.js",

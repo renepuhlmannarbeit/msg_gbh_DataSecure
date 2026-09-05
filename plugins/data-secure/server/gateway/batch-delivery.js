@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { SafeError } = require('../runtime');
 const { workPath, assertPlainWorkFile } = require('./batch-private-store');
+const { releaseOwnedLock } = require('./batch-lock-release');
 
 const WORK_NAME_RE = /^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i;
 
@@ -68,11 +69,15 @@ function createBatchDelivery(options = {}) {
     if (active.has(token)) throw new ErrorType('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
     acquireActiveLock(token);
     active.add(token);
+    let primaryError = false;
     try {
       return operation();
+    } catch (error) {
+      primaryError = true;
+      throw error;
     } finally {
       active.delete(token);
-      releaseActiveLock(token);
+      releaseOwnedLock(releaseActiveLock, token, ErrorType, primaryError);
     }
   }
 
