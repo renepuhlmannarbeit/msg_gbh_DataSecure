@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 01.09.2026 · Produktversion 3.2.0 RC102
+Stand: 01.09.2026 · Produktversion 3.2.0 RC103
 
 Diese Matrix beschreibt den belegten Produktpfad. Zielwünsche aus älteren
 Architekturpapieren sind keine Freigabe.

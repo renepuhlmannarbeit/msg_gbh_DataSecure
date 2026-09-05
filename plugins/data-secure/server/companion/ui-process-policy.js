@@ -43,7 +43,7 @@ const UI_PROCESS_POLICIES = Object.freeze({
   }),
   folder_opener: Object.freeze({
     input_class: 'absolute_local_folder_path',
-    output_class: 'shown_evidence',
+    output_class: 'os_handoff_confirmation',
     raw_content: false,
     os_network_sandbox_required: false,
     os_network_sandbox_verified: false

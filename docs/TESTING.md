@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 04.09.2026 · 3.2.0-rc102
+Stand: 05.09.2026 · 3.2.0-rc103
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -93,6 +93,12 @@ Die zugehörigen Direktgates sind `test-batch-executor-startup`,
 `test-worker-terminal-presentation`, `test-automatic-local-review`,
 `test-automatic-review-worker-flow` und `test-result-export-startup-replay`; sie
 sind außerdem genau einmal in `test:product` einsortiert.
+
+RC103 ergänzt die spawn-bestätigten lokalen Öffnen-Aktionen, die exakte
+Markierung der Zuordnungsdatei und den zweigeteilten Standalone-Ablauf
+**Verarbeiten / Ergebnisse**. Die direkten Regressionen liegen in
+`test-ui-process-policy`, `test-standalone`, `test-standalone-frontend` und
+`test-standalone-desktop-contract`.
 
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird

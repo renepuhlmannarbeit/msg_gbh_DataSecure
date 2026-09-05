@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 05.09.2026 · 3.2.0-rc102 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
+Stand: 05.09.2026 · 3.2.0-rc103 · integrierter Expertenstand: sicherer Ein-Schritt-Workflow und nicht blockierender Exportstart
 
 ## Produkt in einem Satz
 
@@ -137,6 +137,16 @@ Worker-Fallback zuständig. Der Cowork-Abschluss nutzt unter Windows ebenfalls
 ein echtes natives `Shown`-Ereignis statt eines bloßen Prozessstarts. Der
 gleichwertige macOS-Sichtbarkeitsnachweis ist noch nicht erbracht und bleibt
 Zielhostevidenz.
+RC103 ordnet den Standalone-Ablauf in die zwei Hauptansichten **Verarbeiten**
+und **Ergebnisse**. Nach einem sichtbaren Gesamtabschluss wechselt die App zur
+Ergebnisansicht, zeigt den exakten letzten Laufordner und bietet dort
+**Ergebnisse öffnen** als primäre Aktion sowie
+**Zuordnungsdatei anzeigen** als sekundäre Aktion. Der Betriebssystem-Auftrag
+gilt erst nach dem `spawn`-Ereignis als übergeben; ein asynchroner Fehler wird
+behandelt und kann den Sidecar nicht mehr nach einer falschen Erfolgsantwort
+beenden. Die Oberfläche bestätigt den Handoff getrennt vom fachlichen
+Abschlussstatus. Die Diagnose protokolliert dabei ausschließlich Aktion,
+Ausgang und festen Fehlercode, niemals Pfad, Dateiname oder Inhalt.
 Ein geschlossener UI-Zustands-/IPC-Vertrag verhindert Rohbytes und direkten
 Dateisystemzugriff im Renderer. Ausgewählte Dateinamen, Quellenordner und das
 Ergebnisziel werden ausschließlich im lokalen Standalone-Fenster angezeigt und

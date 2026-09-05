@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 05.09.2026 · 3.2.0-rc102
+Stand: 05.09.2026 · 3.2.0-rc103
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -132,6 +132,7 @@ aktuelle Produktzusage.
 | Story | Korrektur / Entscheidung | Code- und Testnachweis |
 |---|---|---|
 | BL-010.13/14, BL-040.5/6, DS-079 | Standalone leitet Abschluss-, Review-, Fehler- und Ergebniszähler nur aus dem jüngsten Standalone-Stapel ab. Ein intern abgeschlossener Teil ohne terminalen sichtbaren Gesamtexport ist `export_pending`; offene Exporte werden beim App-Start und nach Ergebnisordnerwahl nachgeholt. Zielstamm und `DataSecure-Output` werden identitätsgebunden, pro Lauf serialisiert und nur der vollständig sichtbare aktuelle Lauf kann lokal geöffnet werden. | `standalone/application-service.js`, `gateway/batch-recovery.js`, `gateway/result-export.js`; `test-standalone.js`, `test-batch-recovery.js`, `test-result-folder-export.js` |
+| BL-010.13/26 | Standalone trennt **Verarbeiten** und **Ergebnisse**; der exakte letzte Lauf ist lokal sichtbar. Ergebnisordner und Zuordnungsdatei werden nur über einen absoluten, shell-freien, spawn-bestätigten OS-Auftrag geöffnet beziehungsweise markiert. Asynchrone Startfehler bleiben beantwortet, inhaltsfreie Sidecar-Ereignisse und ein separater `aria-live`-Hinweis verhindern falschen oder unsichtbaren Erfolg. | `gateway/common.js`, `standalone/application-service.js`, `standalone/desktop-sidecar.js`, `frontend/*`; `test-ui-process-policy.js`, `test-standalone.js`, `test-standalone-frontend.js`, `test-standalone-desktop-contract.js` |
 | BL-010.13/14, BL-041.10 | Standalone-Worker öffnen keine Cowork-Abschluss- oder Reviewdialoge. Nach Sidecar-Neustart, IPC-Fehler oder verlorener Admission verwirft die UI die veraltete Freigabe und verlangt eine neue lokale Auswahl. | `gateway/batch-executor.js`, `gateway/batch-worker.js`, `gateway/review-worker.js`, `apps/datasecure-standalone/frontend/app.js`; `test-batch-executor-startup.js`, `test-worker-terminal-presentation.js`, `test-local-review-executor.js`, `test-standalone-desktop-contract.js` |
 | BL-010.7, BL-051.6, DS-078 | Die aktuelle Herstellerarchitektur ersetzt die frühere Desktop-Brücken-Annahme: lokale Plugin-MCPs laufen nur in lokalen Sitzungen bestehender Desktop-Deployments. Cloud-Cowork, Web, Mobil und geplante Cloud-Sitzungen dürfen ausschließlich bereits freigegebenes Markdown verwenden. | Hostmatrix, Zielarchitektur, Produkt-/Nutzer-/Skilldokumentation; `test-host-matrix.js`, `test-cowork-documentation-contract.js`, `test:skills`, `test:docs` |
 | BL-003 | Der maschinelle Kanongate verlangt jetzt auch Hostmatrix und Standalone-Sicherheitsmodell; Register, Evidence-Matrix, UML, Benchmarks und aktive Dokumentstände wurden gegen den aktuellen Code revalidiert. | `verify-canonical-docs.mjs`, `DOCUMENT_REGISTER.md`, `BACKLOG_EVIDENCE_MATRIX.md`, `UML_ARCHITECTURE.md`; `test:docs` |

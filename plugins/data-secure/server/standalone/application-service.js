@@ -167,6 +167,7 @@ function defaultDependencies() {
     pendingStandaloneTerminalNoticeGeneration: batchExecutor.pendingStandaloneTerminalNoticeGeneration,
     continueMostRecentBatch,
     openFolder: require('../gateway/common').openFolder,
+    revealFile: require('../gateway/common').revealFile,
     pickSourcesAsync: filePicker.pickSourcesAsync,
     batchQueueFromSelection: filePicker.batchQueueFromSelection,
     validateSelectedPathAsync: filePicker.validateSelectedPathAsync,
@@ -385,9 +386,13 @@ class StandaloneApplicationService {
   uiContext() {
     const selected = this.selectionContext;
     const configured = this.deps.readConfiguredResultRoot();
+    let latestResultFolder = '';
+    try { latestResultFolder = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL) || ''; }
+    catch { /* A local display hint must never affect processing. */ }
     return {
       ok: true,
       result_folder: configured || defaultResultRoot({ home: this.home }),
+      latest_result_folder: latestResultFolder,
       result_folder_is_default: !configured,
       source_kind: selected?.sourceKind || null,
       source_folders: selected ? [...selected.sourceFolders] : [],
@@ -544,11 +549,11 @@ class StandaloneApplicationService {
     if (!target) {
       throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');
     }
-    const opened = this.deps.openFolder(target);
+    const opened = await this.deps.openFolder(target);
     if (!opened?.ok) {
       throw fixedFailure('STANDALONE_RESULT_OPEN_FAILED', 'Der Ergebnisordner konnte nicht geöffnet werden.');
     }
-    return { ok: true, opened: true, external_disclosure: false };
+    return { ok: true, handoff_confirmed: true, external_disclosure: false };
   }
 
   async openLedger() {
@@ -556,11 +561,13 @@ class StandaloneApplicationService {
     if (!this.deps.fs.existsSync(target)) {
       throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Es ist noch keine lokale Zuordnung vorhanden.');
     }
-    const opened = this.deps.openFolder(path.dirname(target));
+    const opened = await (this.deps.revealFile
+      ? this.deps.revealFile(target)
+      : this.deps.openFolder(path.dirname(target)));
     if (!opened?.ok) {
-      throw fixedFailure('STANDALONE_LEDGER_OPEN_FAILED', 'Der Ordner mit der lokalen Zuordnung konnte nicht geöffnet werden.');
+      throw fixedFailure('STANDALONE_LEDGER_OPEN_FAILED', 'Die lokale Zuordnungsdatei konnte nicht angezeigt werden.');
     }
-    return { ok: true, opened: true, external_disclosure: false };
+    return { ok: true, handoff_confirmed: true, external_disclosure: false };
   }
 }
 

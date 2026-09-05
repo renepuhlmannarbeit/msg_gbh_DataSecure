@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 04.09.2026 · 3.2.0-rc102
+Stand: 04.09.2026 · 3.2.0-rc103
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder

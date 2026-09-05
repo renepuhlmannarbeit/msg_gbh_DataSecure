@@ -11,8 +11,9 @@ const config = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/tauri.
 const macConfig = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/tauri.macos.conf.json'), 'utf8'));
 const capability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/main.json'), 'utf8'));
 const cargo = fs.readFileSync(path.join(root, 'tauri-contract/Cargo.toml'), 'utf8');
-const rust = fs.readFileSync(path.join(root, 'tauri-contract/src/main.rs'), 'utf8');
-const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
+  const rust = fs.readFileSync(path.join(root, 'tauri-contract/src/main.rs'), 'utf8');
+  const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
+  const sidecar = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js'), 'utf8');
 const productVersion = require('../package.json').version;
 
 test('desktop manifests, Rust package and artifact names use the product version', () => {
@@ -95,9 +96,15 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /configure_results/u);
   assert.match(frontend, /get_ui_context/u);
   assert.match(frontend, /await invoke\('frontend_ready'\)/u);
-  assert.match(frontend, /textContent = context\.result_folder/u,
+  assert.match(frontend, /textContent = resultFolder/u,
     'local paths are rendered as text and never interpreted as markup');
   assert.match(frontend, /open_local_ledger/u);
+  assert.match(frontend, /handoff_confirmed/u);
+  assert.match(frontend, /action-feedback/u);
+  assert.match(frontend, /switchView\('results'\)/u);
+  assert.match(sidecar, /os_open_requested/u);
+  assert.match(sidecar, /os_open_handoff_confirmed/u);
+  assert.match(sidecar, /os_open_handoff_failed/u);
   assert.match(frontend, /open_diagnostic_folder/u);
   assert.match(frontend, /requestAnimationFrame\(\(\) => requestAnimationFrame/u,
     'terminal visibility is acknowledged only after a paint opportunity');

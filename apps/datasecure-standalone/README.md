@@ -13,6 +13,13 @@ Anonymisierung, Review, Recovery, Mapping und Export verbleiben vollständig im
 gemeinsamen DataSecure-Core. Der Renderer erhält keine Quellpfade, Rohtexte,
 Mappings, Tokens, Kommandozeilen oder freien Fehlertexte.
 
+Der Endnutzerablauf besitzt zwei Hauptansichten: **Verarbeiten** für Auswahl,
+Start und Fortschritt sowie **Ergebnisse** für den letzten vollständig
+sichtbaren Lauf. Lokale Öffnen-Aktionen bestätigen nur die Übergabe an den
+Dateimanager des Betriebssystems; diese Bestätigung erscheint getrennt vom
+fachlichen Laufstatus. Die Zuordnungsaktion markiert unter Windows und macOS
+die konkrete CSV-Datei, unter Linux öffnet sie deren Ordner.
+
 Entwickler bauen und prüfen die Hülle mit:
 
 ```powershell

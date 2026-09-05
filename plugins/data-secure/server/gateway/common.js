@@ -197,7 +197,47 @@ function validateBatchLimits(queue){
   return total;
 }
 function listPackageDirs(){const r=roots();return fs.readdirSync(r.output,{withFileTypes:true}).filter(x=>x.isDirectory()&&!x.name.startsWith('.')).map(x=>({id:x.name,full:path.join(r.output,x.name)}));}
-function openFolder(dir,options={}){let command,args;const platform=options.platform||process.platform;if(platform==='win32'){command='explorer.exe';args=[dir];}else if(platform==='darwin'){command='/usr/bin/open';args=[dir];}else if(platform==='linux'){command='xdg-open';args=[dir];}else{return{ok:false,message:'Für dieses Betriebssystem ist keine lokale Ordneröffnung verfügbar.'};}try{const c=(options.spawn||spawn)(command,args,{detached:true,stdio:'ignore',windowsHide:true,shell:false,env:uiProcessEnvironment(options.env||process.env)});if(!c||typeof c.unref!=='function')throw new Error('folder opener did not start');c.unref();return{ok:true,opened:true};}catch{return{ok:false,message:'Der lokale Ordner konnte nicht geöffnet werden.'};}}
+function environmentValue(environment,name){
+  const wanted=String(name).toUpperCase();
+  for(const [key,value] of Object.entries(environment||{}))if(key.toUpperCase()===wanted&&typeof value==='string')return value;
+  return'';
+}
+function localOpenCommand(target,options={}){
+  const platform=options.platform||process.platform;
+  const environment=options.env||process.env;
+  const revealFile=options.revealFile===true;
+  if(platform==='win32'){
+    const systemRoot=environmentValue(environment,'SYSTEMROOT')||environmentValue(environment,'WINDIR');
+    if(!systemRoot)return null;
+    return{command:path.win32.join(systemRoot,'explorer.exe'),args:revealFile?['/select,',target]:[target]};
+  }
+  if(platform==='darwin')return{command:'/usr/bin/open',args:revealFile?['-R',target]:[target]};
+  if(platform==='linux')return{command:'/usr/bin/xdg-open',args:[revealFile?path.dirname(target):target]};
+  return null;
+}
+async function openLocalPath(target,options={}){
+  const invocation=localOpenCommand(target,options);
+  if(!invocation)return{ok:false,message:'Für dieses Betriebssystem ist keine lokale Ordneröffnung verfügbar.'};
+  const timeoutMs=Number.isInteger(options.confirmTimeoutMs)&&options.confirmTimeoutMs>0?options.confirmTimeoutMs:2000;
+  return new Promise((resolve)=>{
+    let child;let settled=false;let timer;
+    const finish=(result)=>{if(settled)return;settled=true;if(timer)clearTimeout(timer);resolve(result);};
+    try{
+      timer=setTimeout(()=>finish({ok:false,message:'Der lokale Öffnungsvorgang wurde nicht bestätigt.'}),timeoutMs);
+      child=(options.spawn||spawn)(invocation.command,invocation.args,{
+        detached:true,stdio:'ignore',windowsHide:true,shell:false,
+        env:uiProcessEnvironment(options.env||process.env)
+      });
+      if(!child||typeof child.once!=='function'||typeof child.unref!=='function')throw new Error('local opener did not start');
+      // child_process.spawn() reports ENOENT asynchronously. Waiting for the
+      // spawn event prevents a false success and keeps a late error handled.
+      child.once('error',()=>finish({ok:false,message:'Der lokale Pfad konnte nicht geöffnet werden.'}));
+      child.once('spawn',()=>{child.unref();finish({ok:true,handoff_confirmed:true});});
+    }catch{finish({ok:false,message:'Der lokale Pfad konnte nicht geöffnet werden.'});}
+  });
+}
+function openFolder(dir,options={}){return openLocalPath(dir,{...options,revealFile:false});}
+function revealFile(file,options={}){return openLocalPath(file,{...options,revealFile:true});}
 
 function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();const score={
   // Three independently useful profile signals are sufficient for the
@@ -212,4 +252,4 @@ function detectProfileFromMarkdown(md){const t=String(md||'').toLowerCase();cons
 };
   if(score.personnel_profile>=3)return'personnel_profile';const ranked=Object.entries(score).filter(([k])=>k!=='personnel_profile').sort((a,b)=>b[1]-a[1]);return ranked[0][1]>=2?ranked[0][0]:'general';}
 
-module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,hasReparseComponentAsync,isManagedStagingPath,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listPackageDirs,validateBatchLimits,openFolder,detectProfileFromMarkdown};
+module.exports={VERSION,SUPPORTED,PILOT_SUPPORTED,PROFILES,LIMITS,configuredPrivacyRoot,privacyRoot,resolvedSafetyPath,hasReparseComponent,hasReparseComponentAsync,isManagedStagingPath,storageStatus,assertPrivateDirectory,ensurePrivateDirectory,safeRemovePrivateTree,roots,sha256Buffer,sha256File,timestamp,safePackageId,uniqueDir,uniquePath,listPackageDirs,validateBatchLimits,openLocalPath,openFolder,revealFile,detectProfileFromMarkdown};

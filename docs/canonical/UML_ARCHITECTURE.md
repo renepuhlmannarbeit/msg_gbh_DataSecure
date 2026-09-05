@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 04.09.2026 · 3.2.0-rc102
+Stand: 04.09.2026 · 3.2.0-rc103
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 kennzeichnet das UX-Zielbild und die Standalone-Sequenz ausdrücklich

@@ -1,6 +1,6 @@
 # GBH DataSecure – Claude-Plugin
 
-Version 3.2.0-rc102. Das Plugin de-identifiziert TXT, Markdown, CSV und DOCX lokal
+Version 3.2.0-rc103. Das Plugin de-identifiziert TXT, Markdown, CSV und DOCX lokal
 und übergibt nur freigegebenes Markdown an Claude. XLSX, PPTX, PDF, Scan-PDF und
 eigenständige Bilder bleiben sicher gesperrt.
 

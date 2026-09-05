@@ -2,7 +2,8 @@
 
 const invoke = window.__TAURI__.core.invoke;
 const byId = (id) => document.getElementById(id);
-const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger', 'configure-results'];
+const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger',
+  'new-batch', 'configure-results', 'diagnostics'];
 const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
   STANDALONE_ENGINE_NOT_READY: 'Die lokale Verarbeitung ist noch nicht bereit.',
@@ -27,13 +28,16 @@ const messages = {
   STANDALONE_RESULT_OPEN_FAILED: 'Der Ergebnisordner konnte nicht geöffnet werden.',
   STANDALONE_RESULTS_MISSING: 'Es ist noch kein vollständiger Ergebnislauf verfügbar.',
   STANDALONE_LEDGER_MISSING: 'Es ist noch keine lokale Zuordnung vorhanden.',
-  STANDALONE_LEDGER_OPEN_FAILED: 'Der Ordner mit der lokalen Zuordnung konnte nicht geöffnet werden.',
+  STANDALONE_LEDGER_OPEN_FAILED: 'Die lokale Zuordnungsdatei konnte nicht angezeigt werden.',
   STANDALONE_DIAGNOSTICS_OPEN_FAILED: 'Der lokale Diagnoseordner konnte nicht geöffnet werden.'
 };
 let admitted = false;
 let refreshInFlight = false;
 let refreshTimer;
 let acknowledgedPresentationGeneration = null;
+let activeView = 'process';
+let viewChosenByUser = false;
+let lastPublicState = null;
 
 function busy(value) { controls.forEach((id) => { byId(id).disabled = value; }); }
 function visible(id, value) { byId(id).hidden = !value; }
@@ -42,6 +46,24 @@ function status(title, text, icon = '✓') {
   byId('status-title').textContent = title;
   byId('status-text').textContent = text;
 }
+function actionFeedback(text, error = false) {
+  const target = byId('action-feedback');
+  target.textContent = text;
+  target.hidden = false;
+  target.className = `action-feedback${error ? ' error' : ''}`;
+}
+function switchView(view, chosenByUser = false) {
+  if (chosenByUser) viewChosenByUser = true;
+  activeView = view === 'results' ? 'results' : 'process';
+  byId('process-view').hidden = activeView !== 'process';
+  byId('results-view').hidden = activeView !== 'results';
+  for (const name of ['process', 'results']) {
+    const selected = name === activeView;
+    const tab = byId(`tab-${name}`);
+    tab.className = `tab${selected ? ' active' : ''}`;
+    tab.setAttribute('aria-selected', String(selected));
+  }
+}
 function summarize(values, emptyText) {
   if (!Array.isArray(values) || values.length === 0) return emptyText;
   const visibleValues = values.slice(0, 5);
@@ -49,9 +71,18 @@ function summarize(values, emptyText) {
 }
 function renderUiContext(context) {
   if (!context || context.local_ui_only !== true || context.external_disclosure !== false) return;
-  byId('result-folder').textContent = context.result_folder || 'Noch nicht festgelegt';
-  byId('source-folders').textContent = summarize(context.source_folders, 'Noch nicht ausgewählt');
-  byId('selected-files').textContent = summarize(context.selected_files, 'Noch nicht ausgewählt');
+  const resultFolder = context.result_folder || 'Noch nicht festgelegt';
+  const latestResultFolder = context.latest_result_folder || 'Noch kein abgeschlossener Lauf';
+  const sourceFolders = summarize(context.source_folders, 'Noch nicht ausgewählt');
+  const selectedFiles = summarize(context.selected_files, 'Noch nicht ausgewählt');
+  byId('result-folder').textContent = resultFolder;
+  byId('result-folder').title = resultFolder;
+  byId('result-folder-results').textContent = latestResultFolder;
+  byId('result-folder-results').title = latestResultFolder;
+  byId('source-folders').textContent = sourceFolders;
+  byId('source-folders').title = sourceFolders;
+  byId('selected-files').textContent = selectedFiles;
+  byId('selected-files').title = selectedFiles;
 }
 async function refreshUiContext() {
   try { renderUiContext(await invoke('get_ui_context')); }
@@ -100,6 +131,23 @@ async function call(command) {
   finally { busy(false); }
 }
 
+async function openLocal(command, label) {
+  actionFeedback(`${label} wird an das Betriebssystem übergeben …`);
+  busy(true);
+  try {
+    const result = await invoke(command);
+    if (result?.handoff_confirmed !== true) throw 'STANDALONE_OPERATION_FAILED';
+    actionFeedback(`${label} wurde an das Betriebssystem zum Öffnen übergeben.`);
+    return result;
+  } catch (error) {
+    const code = String(error || 'STANDALONE_OPERATION_FAILED');
+    actionFeedback(messages[code] || 'Der lokale Öffnungsvorgang ist fehlgeschlagen.', true);
+    return null;
+  } finally { busy(false); }
+}
+
+byId('tab-process').addEventListener('click', () => switchView('process', true));
+byId('tab-results').addEventListener('click', () => switchView('results', true));
 byId('select-files').addEventListener('click', () => choose('select_files'));
 byId('select-folder').addEventListener('click', () => choose('select_folder'));
 byId('cancel').addEventListener('click', async () => {
@@ -111,19 +159,24 @@ byId('cancel').addEventListener('click', async () => {
 });
 byId('start').addEventListener('click', async () => {
   if (!await call('start_admitted_batch')) return;
+  viewChosenByUser = false;
   admitted = false; byId('summary').hidden = true;
   status('Stapel wird vorbereitet', 'DataSecure erstellt den wiederaufnehmbaren lokalen Zwischenstand.');
   visible('start', false); visible('cancel', false);
   scheduleRefresh(0);
 });
 byId('continue').addEventListener('click', async () => { if (await call('continue_current_batch')) refresh(); });
-byId('results').addEventListener('click', () => call('open_current_results'));
-byId('ledger').addEventListener('click', () => call('open_local_ledger'));
+byId('results').addEventListener('click', () => openLocal('open_current_results', 'Der Ergebnisordner'));
+byId('ledger').addEventListener('click', () => openLocal('open_local_ledger', 'Die Zuordnungsdatei'));
+byId('new-batch').addEventListener('click', () => {
+  switchView('process', true);
+  actionFeedback('Wähle Dateien oder einen Ordner für den nächsten Stapel aus.');
+});
 byId('diagnostics').addEventListener('click', async () => {
   try {
     await invoke('open_diagnostic_folder');
-    status('Diagnose geöffnet', 'Die Protokolle enthalten technische Ereignisse und Fehlercodes, aber keine Dateinamen, Pfade oder Inhalte.');
-  } catch (error) { showError(error); }
+    actionFeedback('Der Diagnoseordner wurde an das Betriebssystem zum Öffnen übergeben. Die Protokolle enthalten keine Dateinamen, Pfade oder Inhalte.');
+  } catch (error) { actionFeedback(messages[String(error)] || 'Der Diagnoseordner konnte nicht geöffnet werden.', true); }
 });
 byId('configure-results').addEventListener('click', async () => {
   const result = await call('configure_results');
@@ -131,7 +184,7 @@ byId('configure-results').addEventListener('click', async () => {
     if (result.local_ui_only === true && result.external_disclosure === false) {
       byId('result-folder').textContent = result.result_folder || 'Noch nicht festgelegt';
     }
-    status('Ergebnisordner geändert', result.export_replay_pending === true
+    actionFeedback(result.export_replay_pending === true
       ? 'Der neue Ordner ist gespeichert. Ausstehende Ergebnisse werden beim nächsten sicheren Wiederholungsversuch bereitgestellt.'
       : 'Künftige freigegebene Ergebnisse werden dort abgelegt.');
   }
@@ -159,6 +212,10 @@ async function refresh() {
   let nextDelay = 5000;
   try {
     const state = await invoke('get_public_state');
+    if ((state.state === 'results_available' || state.state === 'completed_without_results') &&
+        state.state !== lastPublicState) await refreshUiContext();
+    lastPublicState = state.state;
+    byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');
     visible('results', state.results_available === true);
     visible('ledger', state.results_available === true || state.state === 'completed_without_results');
@@ -179,7 +236,11 @@ async function refresh() {
     else if (state.state === 'review_required') { status('Prüfung erforderlich', `${state.review_count} Datei${state.review_count === 1 ? '' : 'en'} benötigt eine lokale Entscheidung.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
     else if (state.state === 'stopped') { status('Fortsetzung möglich', `${state.resumable_count} unterbrochene${state.resumable_count === 1 ? 'r Stapel kann' : ' Stapel können'} fortgesetzt werden.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
     else if (state.state === 'export_pending') { status('Ergebnis wird bereitgestellt', `${state.export_pending_count} anonymisierte${state.export_pending_count === 1 ? 's Ergebnis wird' : ' Ergebnisse werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
-    else if (state.state === 'results_available') { status('Fertig', `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
+    else if (state.state === 'results_available') {
+      status('Fertig', `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`);
+      if (!viewChosenByUser && !admitted) switchView('results');
+      acknowledgeRenderedTerminalState(state.presentation_generation);
+    }
     else if (state.state === 'completed_without_results') { status('Sicher abgeschlossen', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} gestoppt. Es ist kein anonymisiertes Ergebnis verfügbar; Details stehen in der lokalen Zuordnung.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
     else if (state.state === 'blocked') { acknowledgedPresentationGeneration = null; status('Nicht bereit', 'Der lokale DataSecure-Core konnte nicht gestartet werden.'); }
     else {
@@ -194,7 +255,12 @@ async function refresh() {
 }
 
 (async function bootstrap() {
-  await invoke('frontend_ready');
-  await refreshUiContext();
-  await refresh();
+  try {
+    await invoke('frontend_ready');
+    await refreshUiContext();
+    await refresh();
+  } catch (error) {
+    showError(error);
+    scheduleRefresh(1500);
+  }
 })();

@@ -30,6 +30,7 @@ function fakeDependencies(overrides = {}) {
     saveConfiguredResultRoot: () => {},
     resultOutputDirectory: () => 'C:\\Results\\DataSecure-Output',
     openFolder: () => ({ ok: true }),
+    revealFile: () => ({ ok: true }),
     mappingPath: () => 'C:\\Private\\DataSecure-Mapping.csv',
     pickSourcesAsync: async () => [{ sourcePath: 'C:\\Source\\a.txt', sourceType: 'txt', sourceBytes: 4 }],
     validateSelectedPathAsync: async (sourcePath) => ({ sourcePath, sourceType: 'txt', sourceBytes: 4 }),
@@ -393,6 +394,7 @@ async function admittedServiceCase() {
     ui_context: {
       ok: true,
       result_folder: 'C:\\Results',
+      latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
       result_folder_is_default: false,
       source_kind: 'files',
       source_folders: ['C:\\Source'],
@@ -405,6 +407,7 @@ async function admittedServiceCase() {
   assert.deepStrictEqual(service.uiContext(), {
     ok: true,
     result_folder: 'C:\\Results',
+    latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
     result_folder_is_default: false,
     source_kind: 'files',
     source_folders: ['C:\\Source'],
@@ -631,7 +634,7 @@ async function openExactResultsCase() {
     },
     openFolder: (target) => { opened.push(target); return { ok: true }; }
   }) });
-  assert.deepStrictEqual(await service.openResults(), { ok: true, opened: true, external_disclosure: false });
+  assert.deepStrictEqual(await service.openResults(), { ok: true, handoff_confirmed: true, external_disclosure: false });
   assert.deepStrictEqual(opened, [run], 'only the exact completed run is opened');
 }
 
@@ -650,19 +653,19 @@ async function openLedgerCase() {
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     mappingPath: () => 'C:\\Private\\DataSecure-Export\\DataSecure-Mapping.csv',
     fs: { mkdirSync() {}, existsSync: () => true },
-    openFolder: (target) => { opened.push(target); return { ok: true }; }
+    revealFile: (target) => { opened.push(target); return { ok: true }; }
   }) });
   assert.deepStrictEqual(await service.openLedger(), {
-    ok: true, opened: true, external_disclosure: false
+    ok: true, handoff_confirmed: true, external_disclosure: false
   });
-  assert.deepStrictEqual(opened, ['C:\\Private\\DataSecure-Export']);
+  assert.deepStrictEqual(opened, ['C:\\Private\\DataSecure-Export\\DataSecure-Mapping.csv']);
 }
 
 async function missingLedgerCase() {
   let opened = false;
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     fs: { mkdirSync() {}, existsSync: () => false },
-    openFolder: () => { opened = true; return { ok: true }; }
+    revealFile: () => { opened = true; return { ok: true }; }
   }) });
   await assert.rejects(service.openLedger(), (error) => error.code === 'STANDALONE_LEDGER_MISSING');
   assert.strictEqual(opened, false);
@@ -685,7 +688,7 @@ async function missingLedgerCase() {
   await testAsync('Standalone does not report a failed result-folder open as success', openResultsFailureCase);
   await testAsync('Standalone opens exactly the latest completed run', openExactResultsCase);
   await testAsync('Standalone refuses to open results before a complete visible run exists', missingResultsCase);
-  await testAsync('Standalone opens only the private ledger folder and never returns its path', openLedgerCase);
+  await testAsync('Standalone reveals only the exact private ledger file and never returns its path', openLedgerCase);
   await testAsync('Standalone refuses a missing local ledger without opening a folder', missingLedgerCase);
   done();
 })();

@@ -86,8 +86,22 @@ async function dispatch(message) {
     case 'ack_terminal_presented': return service.acknowledgeTerminalPresented(message.presentation_generation);
     case 'continue_current_batch': return service.continueCurrentBatch();
     case 'configure_results': return service.configureResults({ path: message.source_paths[0] });
-    case 'open_current_results': return service.openResults();
-    case 'open_local_ledger': return service.openLedger();
+    case 'open_current_results':
+    case 'open_local_ledger': {
+      diagnosticEvent('os_open_requested', { action: message.action });
+      try {
+        const result = message.action === 'open_current_results'
+          ? await service.openResults() : await service.openLedger();
+        diagnosticEvent('os_open_handoff_confirmed', { action: message.action, outcome: 'ready' });
+        return result;
+      } catch (error) {
+        diagnosticEvent('os_open_handoff_failed', {
+          action: message.action, outcome: 'failed',
+          error_code: error?.code || 'STANDALONE_OPERATION_FAILED'
+        });
+        throw error;
+      }
+    }
     default: throw Object.assign(new Error('unknown action'), { code: 'DESKTOP_IPC_ACTION_INVALID' });
   }
 }

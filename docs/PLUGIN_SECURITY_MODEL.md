@@ -1,6 +1,6 @@
 # DataSecure Security-Modell
 
-Stand: 03.09.2026 · 3.2.0-rc102
+Stand: 03.09.2026 · 3.2.0-rc103
 
 ## Vertrauensgrenze
 

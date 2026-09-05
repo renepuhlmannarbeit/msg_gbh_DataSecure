@@ -5,7 +5,7 @@ Every adapter receives the same version-controlled, synthetic ground truth and m
 only spans plus anonymized output. No real document, network request or model download is
 part of the benchmark.
 
-## Current baseline (3.2.0-rc102, revalidated 2026-09-04)
+## Current baseline (3.2.0-rc103, revalidated 2026-09-04)
 
 Command:
 

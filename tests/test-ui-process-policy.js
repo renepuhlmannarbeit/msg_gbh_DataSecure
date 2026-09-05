@@ -1,6 +1,7 @@
 'use strict';
 
 const childProcess = require('child_process');
+const { EventEmitter } = require('node:events');
 const { createSuite } = require('./helpers');
 const {
   UI_PROCESS_POLICIES,
@@ -34,9 +35,10 @@ const {
   linuxChoiceCommand,
   reviewTextLocally
 } = require('../plugins/data-secure/server/companion/text-review');
-const { openFolder } = require('../plugins/data-secure/server/gateway/common');
+const { openFolder, revealFile } = require('../plugins/data-secure/server/gateway/common');
 
-const { test, done, assert } = createSuite('UI subprocess policy');
+const { test, testAsync, done, assert } = createSuite('UI subprocess policy');
+const asyncOpenerCases = [];
 
 const HOSTILE_ENV = Object.freeze({
   SystemRoot: 'C:\\Windows',
@@ -69,14 +71,17 @@ test('all native UI helpers have an explicit immutable data classification', () 
   assert.throws(() => uiProcessPolicy('unknown'), /Unknown DataSecure UI process purpose/);
 });
 
-test('folder opening is cross-platform, shell-free and receives the sanitized environment', () => {
+asyncOpenerCases.push(['folder opening waits for a cross-platform shell-free OS handoff', async () => {
   const calls = [];
   const runner = (command, args, options) => {
     calls.push({ command, args, options });
-    return { unref() {} };
+    const child = new EventEmitter();
+    child.unref = () => {};
+    queueMicrotask(() => child.emit('spawn'));
+    return child;
   };
-  for (const [platform, command] of [['win32', 'explorer.exe'], ['darwin', '/usr/bin/open'], ['linux', 'xdg-open']]) {
-    assert.deepStrictEqual(openFolder('C:\\DataSecure\\Input', { platform, env: HOSTILE_ENV, spawn: runner }), { ok: true, opened: true });
+  for (const [platform, command] of [['win32', 'C:\\Windows\\explorer.exe'], ['darwin', '/usr/bin/open'], ['linux', '/usr/bin/xdg-open']]) {
+    assert.deepStrictEqual(await openFolder('C:\\DataSecure\\Input', { platform, env: HOSTILE_ENV, spawn: runner }), { ok: true, handoff_confirmed: true });
     assert.strictEqual(calls.at(-1).command, command);
   }
   for (const call of calls) {
@@ -85,10 +90,47 @@ test('folder opening is cross-platform, shell-free and receives the sanitized en
     assert.strictEqual(call.options.env.OPENAI_API_KEY, undefined);
     assert.strictEqual(call.args[0], 'C:\\DataSecure\\Input');
   }
-  assert.deepStrictEqual(openFolder('C:\\DataSecure\\Input', { platform: 'freebsd', spawn: runner }), {
+  assert.deepStrictEqual(await openFolder('C:\\DataSecure\\Input', { platform: 'freebsd', spawn: runner }), {
     ok: false, message: 'Für dieses Betriebssystem ist keine lokale Ordneröffnung verfügbar.'
   });
-});
+}]);
+
+asyncOpenerCases.push(['an asynchronous opener failure is handled and never reported as success', async () => {
+  let unrefCalled = false;
+  const child = new EventEmitter();
+  child.unref = () => { unrefCalled = true; };
+  const pending = openFolder('C:\\DataSecure\\Input', {
+    platform: 'win32', env: HOSTILE_ENV,
+    spawn: () => child
+  });
+  queueMicrotask(() => child.emit('error', Object.assign(new Error('missing'), { code: 'ENOENT' })));
+  assert.deepStrictEqual(await pending, { ok: false, message: 'Der lokale Pfad konnte nicht geöffnet werden.' });
+  assert.strictEqual(unrefCalled, false);
+}]);
+
+asyncOpenerCases.push(['an opener without a spawn acknowledgement fails within the bounded confirmation window', async () => {
+  const child = new EventEmitter();
+  child.unref = () => { throw new Error('an unconfirmed process must not be detached'); };
+  assert.deepStrictEqual(await openFolder('C:\\DataSecure\\Input', {
+    platform: 'win32', env: HOSTILE_ENV, spawn: () => child, confirmTimeoutMs: 5
+  }), { ok: false, message: 'Der lokale Öffnungsvorgang wurde nicht bestätigt.' });
+}]);
+
+asyncOpenerCases.push(['the ledger helper reveals the exact file where the platform supports it', async () => {
+  const calls = [];
+  const runner = (command, args) => {
+    calls.push({ command, args });
+    const child = new EventEmitter(); child.unref = () => {};
+    queueMicrotask(() => child.emit('spawn'));
+    return child;
+  };
+  await revealFile('C:\\Private\\DataSecure-Mapping.csv', { platform: 'win32', env: HOSTILE_ENV, spawn: runner });
+  await revealFile('/private/DataSecure-Mapping.csv', { platform: 'darwin', env: HOSTILE_ENV, spawn: runner });
+  await revealFile('/private/DataSecure-Mapping.csv', { platform: 'linux', env: HOSTILE_ENV, spawn: runner });
+  assert.deepStrictEqual(calls[0].args, ['/select,', 'C:\\Private\\DataSecure-Mapping.csv']);
+  assert.deepStrictEqual(calls[1].args, ['-R', '/private/DataSecure-Mapping.csv']);
+  assert.deepStrictEqual(calls[2].args, ['/private']);
+}]);
 
 test('native start, picker and completion paths use keyboard-accessible OS dialogs on every target platform', () => {
   const summary = { selected_count: 2, total_bytes: 2048 };
@@ -259,4 +301,7 @@ test('fixed UI scripts contain no network-capable shell primitive', () => {
   assert.doesNotMatch(scripts, /Invoke-WebRequest|Invoke-RestMethod|System\.Net|WebClient|HttpClient|TcpClient|UdpClient|Start-BitsTransfer|\bcurl\b|\bwget\b|\bssh\b/i);
 });
 
-done();
+(async () => {
+  for (const [name, run] of asyncOpenerCases) await testAsync(name, run);
+  done();
+})();

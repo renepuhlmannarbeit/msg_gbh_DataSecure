@@ -10,27 +10,53 @@
   <main class="shell">
     <header><p class="eyebrow">GBH DataSecure</p><h1>Dateien lokal anonymisieren</h1>
       <p class="lead">Ohne Claude, Cloud oder Internet. Originaldateien bleiben unverändert.</p></header>
-    <section class="card" aria-live="polite">
-      <div id="status-icon" class="status-icon">✓</div>
-      <div><h2 id="status-title">Bereit</h2><p id="status-text">Wähle Dateien oder einen ganzen Ordner aus.</p></div>
-      <div id="summary" class="summary" hidden></div>
-      <dl class="context" aria-label="Aktuelle Verarbeitungseinstellungen">
-        <div><dt>Verarbeitung</dt><dd>In Markdown umwandeln und anonymisieren</dd></div>
-        <div><dt>Quellenordner</dt><dd id="source-folders">Noch nicht ausgewählt</dd></div>
-        <div><dt>Dateiauswahl</dt><dd id="selected-files">Noch nicht ausgewählt</dd></div>
-        <div><dt>Ergebnisordner</dt><dd id="result-folder">Noch nicht geladen</dd></div>
-      </dl>
-      <div class="actions">
-        <button id="select-files" class="primary">Dateien auswählen</button>
-        <button id="select-folder">Ordner auswählen</button>
-        <button id="start" class="primary" hidden>Anonymisierung starten</button>
-        <button id="cancel" hidden>Auswahl verwerfen</button>
-        <button id="continue" class="primary" hidden>Fortsetzen</button>
-        <button id="results" class="primary" hidden>Ergebnisse öffnen</button>
-        <button id="ledger" hidden>Zuordnung öffnen</button>
-        <button id="configure-results">Ergebnisordner ändern</button>
-        <button id="diagnostics">Diagnose öffnen</button>
+    <nav class="tabs" role="tablist" aria-label="Hauptbereiche">
+      <button id="tab-process" class="tab active" role="tab" aria-controls="process-view" aria-selected="true">Verarbeiten</button>
+      <button id="tab-results" class="tab" role="tab" aria-controls="results-view" aria-selected="false">Ergebnisse</button>
+    </nav>
+    <section class="card">
+      <div class="status-row" aria-live="polite">
+        <div id="status-icon" class="status-icon">✓</div>
+        <div><h2 id="status-title">Bereit</h2><p id="status-text">Wähle Dateien oder einen ganzen Ordner aus.</p></div>
       </div>
+
+      <div id="process-view" class="view" role="tabpanel" aria-labelledby="tab-process">
+        <div id="summary" class="summary" hidden></div>
+        <dl class="context" aria-label="Aktuelle Auswahl">
+          <div><dt>Quellenordner</dt><dd id="source-folders" title="">Noch nicht ausgewählt</dd></div>
+          <div><dt>Dateiauswahl</dt><dd id="selected-files" title="">Noch nicht ausgewählt</dd></div>
+          <div><dt>Ergebnisordner</dt><dd id="result-folder" title="">Noch nicht geladen</dd></div>
+        </dl>
+        <div class="actions">
+          <button id="select-files" class="primary">Dateien auswählen</button>
+          <button id="select-folder">Ordner auswählen</button>
+          <button id="start" class="primary" hidden>Anonymisierung starten</button>
+          <button id="cancel" hidden>Auswahl verwerfen</button>
+          <button id="continue" class="primary" hidden>Fortsetzen</button>
+        </div>
+      </div>
+
+      <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" hidden>
+        <div class="result-summary"><strong id="result-count">0</strong><span>Anonymisierte Ergebnisse im letzten abgeschlossenen Lauf</span></div>
+        <dl class="context" aria-label="Letzte Ergebnisse">
+          <div><dt>Letzter Lauf</dt><dd id="result-folder-results" title="">Noch kein abgeschlossener Lauf</dd></div>
+        </dl>
+        <div class="actions">
+          <button id="results" class="primary" hidden>Ergebnisse öffnen</button>
+          <button id="ledger" hidden>Zuordnungsdatei anzeigen</button>
+          <button id="new-batch">Neuen Stapel vorbereiten</button>
+        </div>
+      </div>
+
+      <p id="action-feedback" class="action-feedback" role="status" aria-live="polite" hidden></p>
+      <details class="settings">
+        <summary>Einstellungen und Hilfe</summary>
+        <p>Hier kannst du den künftigen Ergebnisordner ändern oder inhaltsfreie Diagnoseprotokolle öffnen.</p>
+        <div class="actions">
+          <button id="configure-results">Ergebnisordner ändern</button>
+          <button id="diagnostics">Diagnose öffnen</button>
+        </div>
+      </details>
     </section>
     <p class="privacy">Namen und Ordner werden nur in dieser lokalen Oberfläche angezeigt und nicht diagnostisch protokolliert. Rohinhalte verlassen das Gerät nicht. Unterstützt: TXT, Markdown, CSV und DOCX.</p>
   </main>
