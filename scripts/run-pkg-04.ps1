@@ -9,6 +9,12 @@ function Invoke-Checked([string] $Program, [string[]] $Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "PKG04_COMMAND_FAILED:${Program}:$LASTEXITCODE" }
 }
 
+function Write-JsonUtf8NoBom([string] $Path, $Value, [int] $Depth) {
+    $json = $Value | ConvertTo-Json -Depth $Depth
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, "$json`r`n", $encoding)
+}
+
 $branch = (& git branch --show-current).Trim()
 $commit = (& git rev-parse HEAD).Trim()
 $tree = (& git rev-parse 'HEAD^{tree}').Trim()
@@ -79,7 +85,7 @@ $receipt = [ordered]@{
     byte_identical = $true
 }
 $receiptPath = Join-Path $evidenceRoot 'PKG-04-RECEIPT.json'
-$receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8NoBOM
+Write-JsonUtf8NoBom $receiptPath $receipt 8
 $receiptHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $receiptPath).Hash.ToLowerInvariant()
 $binding = [ordered]@{
     schema = 'datasecure-int-13-binding/1'
@@ -95,6 +101,6 @@ $binding = [ordered]@{
     native_binary_smoke = 'passed'
 }
 $bindingPath = Join-Path $evidenceRoot 'INT-13-BINDING.json'
-$binding | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $bindingPath -Encoding utf8NoBOM
+Write-JsonUtf8NoBom $bindingPath $binding 5
 Write-Output "PKG-04 PASS: $receiptPath"
 Write-Output "INT-13 BOUND: $bindingPath"

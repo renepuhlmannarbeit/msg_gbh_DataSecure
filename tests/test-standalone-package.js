@@ -42,3 +42,12 @@ test('release runtime lookup cannot fall back to the developer checkout', () => 
   assert.match(source, /\.arg\("--require=\.\.\/network-deny\.cjs"\)/u);
   assert.match(source, /\.current_dir\(child_process_path\(script_directory\)\)/u);
 });
+
+test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () => {
+  const releaseGate = fs.readFileSync(path.join(root, 'scripts', 'run-pkg-04.ps1'), 'utf8');
+  assert.doesNotMatch(releaseGate, /Set-Content[^\r\n]*utf8NoBOM/u);
+  assert.match(releaseGate, /System\.Text\.UTF8Encoding\(\$false\)/u);
+  assert.match(releaseGate, /System\.IO\.File\]::WriteAllText/u);
+  assert.match(releaseGate, /Write-JsonUtf8NoBom \$receiptPath \$receipt 8/u);
+  assert.match(releaseGate, /Write-JsonUtf8NoBom \$bindingPath \$binding 5/u);
+});
