@@ -93,7 +93,7 @@ process.once('message', async (message) => {
       reserve: reserveTerminalNotice,
       markPresented: markTerminalNoticePresented,
       release: releaseTerminalNoticeReservation,
-      present: () => showBatchStateNoticeConfirmed(presentedResult),
+      present: () => showBatchStateNoticeConfirmed(presentedResult, { batchToken: token }),
       record: recordWorkflowEvent,
       evidence: {
         event: 'review_terminal_state',

@@ -222,7 +222,7 @@ function createBatchIntake(options = {}) {
         ...(ttl === 0 ? { zero_day_work: true, intake_owner_pid: process.pid } : {}),
         profile,
         remove_images: beginOptions.removeImages === true,
-        ...createBatchPseudonymState({ randomBytes: crypto.randomBytes }),
+        ...createBatchPseudonymState({ randomBytes: crypto.randomBytes, productChannel }),
         io_summary: createPrivateIoSummary({
           snapshot_preflight_runs: 1,
           snapshot_copy_files: candidates.length,

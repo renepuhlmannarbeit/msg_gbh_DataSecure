@@ -1,5 +1,7 @@
 'use strict';
 
+const { validPersistedLabel } = require('../batch-pseudonym-registry');
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -232,7 +234,7 @@ function createBatchJournalStore(options = {}) {
     const placeholders = new Set();
     for (const pair of snapshot.labels) {
       if (!Array.isArray(pair) || pair.length !== 2 ||
-          !/^\[(?:PERSON|ORGANISATION|KUNDE|PROJEKT)_[A-Z2-7]{10,52}\]$/u.test(String(pair[0])) ||
+          !validPersistedLabel(String(pair[0]), state.pseudonym_contract_version) ||
           !/^[A-Za-z0-9_-]{43}$/u.test(String(pair[1])) || placeholders.has(String(pair[0]))) return false;
       placeholders.add(String(pair[0]));
     }

@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 05.09.2026 · 3.2.0-rc105
+Stand: 05.09.2026 · 3.2.0-rc106
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -500,8 +500,12 @@ sequenceDiagram
   participant P as PII/Residual-Gate
   participant V as Sammelreview/Export
   U->>S: Dateien oder Ordner wählen
-  S->>A: Dateien/Ordner automatisch verarbeiten
-  A->>E: startBatch(sourceKind=files|folder)
+  S->>A: native Auswahl/Drop aufnehmen (ohne Start)
+  A->>E: admit_selected_sources
+  E-->>S: lokale Auswahlprojektion
+  U->>S: explizit Anonymisierung starten
+  S->>A: start_admitted_batch
+  A->>E: dauerhafte Aufnahme starten
   E->>I: prüfen und versiegelten Snapshot erzeugen
   alt direkt unterstütztes Textformat
     I->>P: Content Graph
@@ -513,9 +517,34 @@ sequenceDiagram
   V-->>U: ein Review oder klarer Abschluss
 ```
 
-MarkItDown darf die Engine weder umgehen noch selbst ein Format freigeben. Ein
-noch personenbezogenes Konvertat ist kein Ergebnisartefakt und wird nicht im
-sichtbaren Dateisystem abgelegt.
+MarkItDown darf die Engine weder umgehen noch selbst ein Format freigeben. Im
+Anonymisierungsmodus ist ein noch personenbezogenes Zwischenkonvertat kein
+Ergebnisartefakt und wird nicht im sichtbaren Dateisystem abgelegt. Der noch
+nicht freigegebene reine Konvertierungsmodus ist dagegen ausdrücklich für solche
+Inhalte vorgesehen, in einem getrennten, als nicht anonymisiert gekennzeichneten
+Ausgabebaum (DS-085).
+
+### Zwei gleichwertige Standalone-Modi – Sollvertrag DS-085
+
+Der folgende zweite Zweig ist geplant, nicht als heutige Ausführung belegt:
+
+```mermaid
+flowchart TD
+  UI[Modus und Quelle wählen / Dragdrop] --> Start[Ziel prüfen und explizit starten]
+  Start --> Journal[Modus, Quellen und Ziel dauerhaft binden]
+  Journal --> Parse[Offline-Extraktion und Coverage]
+  Parse --> Choice{dauerhafter Stapelmodus}
+  Choice -->|Markdown und anonymisieren: implementiert| PII[PII-Ersetzung / Residual / ggf. Review]
+  PII --> Anon[DataSecure-Output / Lauf: geprüfte MD + Zuordnung]
+  Choice -->|nur Markdown: noch in Entwicklung| Plain[Ausgangsinhalte unverändert erhalten]
+  Plain --> MD[DataSecure-Markdown / Lauf: nicht anonymisierte MD + Zuordnung]
+  Anon --> Result[letzten zugehörigen Lauf anzeigen / öffnen]
+  MD --> Result
+```
+
+Recovery setzt den gespeicherten Modus fort; eine UI-Defaultwahl darf ihn nicht
+ändern. Inhaltsfreie Diagnose dokumentiert Phase, Modus und Fehler, keine
+extrahierten Originalinhalte. Keine Konvertate gelangen in den Plugin-Handoff.
 
 ### Standalone-Abschluss, Export und Neustart
 

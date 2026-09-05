@@ -8,6 +8,8 @@ const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
   STANDALONE_ENGINE_NOT_READY: 'Die lokale Verarbeitung ist noch nicht bereit.',
   STANDALONE_SELECTION_INVALID: 'Die Dateiauswahl überschreitet eine sichere Grenze oder enthält einen nicht unterstützten Pfad.',
+  STANDALONE_SELECTION_PREPARED: 'Eine Auswahl ist bereits vorbereitet. Bitte starten oder die Auswahl verwerfen, bevor du neue Dateien hinzufügst.',
+  STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam ausgewählt werden.',
   STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
   STANDALONE_START_FAILED: 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
@@ -32,14 +34,35 @@ const messages = {
   STANDALONE_DIAGNOSTICS_OPEN_FAILED: 'Der lokale Diagnoseordner konnte nicht geöffnet werden.'
 };
 let admitted = false;
+let admissionGeneration = 0;
 let refreshInFlight = false;
 let refreshTimer;
 let acknowledgedPresentationGeneration = null;
 let activeView = 'process';
 let viewChosenByUser = false;
 let lastPublicState = null;
+let operationInFlight = false;
+let foregroundOperationInFlight = false;
+let nativeDropInFlight = false;
+let unlistenNativeDrop = null;
+let pageClosed = false;
 
-function busy(value) { controls.forEach((id) => { byId(id).disabled = value; }); }
+function busy(value) {
+  foregroundOperationInFlight = value;
+  applyBusyState();
+}
+function applyBusyState() {
+  operationInFlight = foregroundOperationInFlight || nativeDropInFlight;
+  controls.forEach((id) => { byId(id).disabled = operationInFlight; });
+  updateDropAvailability();
+}
+function updateDropAvailability() {
+  const available = !operationInFlight && !admitted &&
+    ['ready', 'results_available', 'completed_without_results'].includes(lastPublicState);
+  byId('drop-zone').setAttribute('aria-disabled', String(!available));
+  if (!available) byId('drop-zone').className = 'drop-zone';
+  return available;
+}
 function visible(id, value) { byId(id).hidden = !value; }
 function status(title, text, icon = '✓') {
   byId('status-icon').textContent = icon;
@@ -85,7 +108,11 @@ function renderUiContext(context) {
   byId('selected-files').title = selectedFiles;
 }
 async function refreshUiContext() {
-  try { renderUiContext(await invoke('get_ui_context')); }
+  const generation = admissionGeneration;
+  try {
+    const context = await invoke('get_ui_context');
+    if (!nativeDropInFlight && admissionGeneration === generation && !pageClosed) renderUiContext(context);
+  }
   catch (error) { showError(error); }
 }
 function showError(error) {
@@ -95,29 +122,67 @@ function showError(error) {
 
 function resetAdmissionUi() {
   admitted = false;
+  admissionGeneration += 1;
   byId('summary').hidden = true;
   visible('select-files', true);
   visible('select-folder', true);
   visible('start', false);
   visible('cancel', false);
+  updateDropAvailability();
+}
+
+function renderAdmission(result) {
+  admissionGeneration += 1;
+  renderUiContext(result.ui_context);
+  admitted = true;
+  switchView('process', true);
+  const size = Number.isSafeInteger(result.total_bytes) ? ` · ${Math.ceil(result.total_bytes / 1024)} KB` : '';
+  byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size} · vollständig lokal`;
+  byId('summary').hidden = false;
+  status('Auswahl bereit', 'Einmal starten – danach läuft der Stapel ohne weitere Bestätigung.');
+  visible('select-files', false); visible('select-folder', false); visible('start', true); visible('cancel', true);
+  byId('action-feedback').hidden = true;
+  updateDropAvailability();
+}
+
+function handleNativeDrop(event) {
+  const payload = event?.payload;
+  if (!payload || pageClosed) return;
+  byId('drop-zone').className = 'drop-zone';
+  if (payload.phase === 'enter') {
+    if (updateDropAvailability()) byId('drop-zone').className = 'drop-zone active';
+  } else if (payload.phase === 'checking') {
+    nativeDropInFlight = true;
+    applyBusyState();
+    switchView('process', true);
+    actionFeedback('Die hineingezogene Auswahl wird lokal geprüft …');
+  } else if (payload.phase === 'accepted') {
+    nativeDropInFlight = false;
+    renderAdmission(payload.result);
+    applyBusyState();
+    byId('start').focus();
+  } else if (payload.phase === 'failed' || payload.phase === 'rejected') {
+    if (payload.phase === 'failed' && nativeDropInFlight) {
+      nativeDropInFlight = false;
+      applyBusyState();
+    }
+    actionFeedback(messages[payload.error_code] || 'Die hineingezogene Auswahl konnte nicht übernommen werden.', true);
+  }
 }
 
 async function choose(command) {
+  if (operationInFlight || admitted) return;
   busy(true);
   try {
     const result = await invoke(command);
     if (result.cancelled) return;
-    renderUiContext(result.ui_context);
-    admitted = true;
-    byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'} · ${Math.ceil(result.total_bytes / 1024)} KB · vollständig lokal`;
-    byId('summary').hidden = false;
-    status('Auswahl bereit', 'Einmal starten – danach läuft der Stapel ohne weitere Bestätigung.');
-    visible('select-files', false); visible('select-folder', false); visible('start', true); visible('cancel', true);
+    renderAdmission(result);
   } catch (error) { showError(error); }
   finally { busy(false); }
 }
 
 async function call(command) {
+  if (operationInFlight) return null;
   busy(true);
   try { return await invoke(command); }
   catch (error) {
@@ -132,6 +197,7 @@ async function call(command) {
 }
 
 async function openLocal(command, label) {
+  if (operationInFlight) return null;
   actionFeedback(`${label} wird an das Betriebssystem übergeben …`);
   busy(true);
   try {
@@ -160,7 +226,7 @@ byId('cancel').addEventListener('click', async () => {
 byId('start').addEventListener('click', async () => {
   if (!await call('start_admitted_batch')) return;
   viewChosenByUser = false;
-  admitted = false; byId('summary').hidden = true;
+  admitted = false; admissionGeneration += 1; byId('summary').hidden = true;
   status('Stapel wird vorbereitet', 'DataSecure erstellt den wiederaufnehmbaren lokalen Zwischenstand.');
   visible('start', false); visible('cancel', false);
   scheduleRefresh(0);
@@ -192,6 +258,7 @@ byId('configure-results').addEventListener('click', async () => {
 
 function scheduleRefresh(delay) {
   clearTimeout(refreshTimer);
+  if (pageClosed) return;
   refreshTimer = setTimeout(refresh, delay);
 }
 
@@ -207,14 +274,17 @@ function acknowledgeRenderedTerminalState(generation) {
 }
 
 async function refresh() {
-  if (admitted || refreshInFlight) return;
+  if (admitted || operationInFlight || refreshInFlight || pageClosed) return;
   refreshInFlight = true;
   let nextDelay = 5000;
   try {
     const state = await invoke('get_public_state');
+    if (admitted || operationInFlight || pageClosed) return;
     if ((state.state === 'results_available' || state.state === 'completed_without_results') &&
         state.state !== lastPublicState) await refreshUiContext();
+    if (admitted || operationInFlight || pageClosed) return;
     lastPublicState = state.state;
+    updateDropAvailability();
     byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');
     visible('results', state.results_available === true);
@@ -256,9 +326,25 @@ async function refresh() {
 
 (async function bootstrap() {
   try {
-    const ready = await invoke('frontend_ready');
+    let nativeDropReady = false;
+    try {
+      const unlisten = await window.__TAURI__.event.listen('datasecure-native-drop', handleNativeDrop);
+      if (pageClosed) { unlisten(); return; }
+      unlistenNativeDrop = unlisten;
+      nativeDropReady = true;
+    } catch {
+      byId('drop-zone').hidden = true;
+      actionFeedback('Drag-and-drop ist gerade nicht verfügbar. Bitte „Dateien auswählen“ oder „Ordner auswählen“ verwenden.', true);
+    }
+    const ready = await invoke('frontend_ready', { nativeDropReady });
     if (ready && typeof ready.product_version === 'string' && /^\d+\.\d+\.\d+-rc\d+$/u.test(ready.product_version)) {
       byId('product-version').textContent = `Version ${ready.product_version}`;
+    }
+    if (ready?.admission_prepared === true) {
+      const context = await invoke('get_ui_context');
+      renderAdmission({ selected_count: Array.isArray(context.selected_files) ? context.selected_files.length : 0,
+        ui_context: context });
+      return;
     }
     await refreshUiContext();
     await refresh();
@@ -267,3 +353,9 @@ async function refresh() {
     scheduleRefresh(1500);
   }
 })();
+
+window.addEventListener('pagehide', () => {
+  pageClosed = true;
+  clearTimeout(refreshTimer);
+  if (unlistenNativeDrop) { unlistenNativeDrop(); unlistenNativeDrop = null; }
+});

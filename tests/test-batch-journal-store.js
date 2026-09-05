@@ -7,6 +7,8 @@ const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchJournalStore, MAX_JOURNAL_BYTES } = require('../plugins/data-secure/server/gateway/batch-journal-store');
 const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { createSuite } = require('./helpers');
+const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
+const { createBatchPseudonymRegistry } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 
 const { test, done, assert } = createSuite('Batch journal state store');
 const token = 'a'.repeat(64);
@@ -105,6 +107,32 @@ test('writeState rejects an oversized otherwise-valid journal before creating a 
     assert.throws(() => item.store.writeState(oversized), /BATCH_JOURNAL_SIZE_LIMIT/);
     assert.strictEqual(fs.existsSync(item.target), false);
   } finally { item.cleanup(); }
+});
+
+test('numbered Standalone labels survive a real journal write/read; legacy journals retain v1', () => {
+  for (const productChannel of ['standalone', 'plugin']) {
+    const item = fixture();
+    const context = createBatchPseudonymState({ productChannel });
+    const seed = Buffer.from(context.pseudonym_seed, 'base64url');
+    const registry = createBatchPseudonymRegistry(seed, { contractVersion: context.pseudonym_contract_version });
+    try {
+      const first = registry.assign('ORG', 'Muster GmbH');
+      const snapshot = registry.exportState();
+      item.store.writeState(state({ ...context, pseudonym_registry_state: snapshot }));
+      const restored = item.store.readState(token);
+      const next = createBatchPseudonymRegistry(seed, {
+        contractVersion: restored.pseudonym_contract_version,
+        persistedState: restored.pseudonym_registry_state
+      });
+      try {
+        assert.strictEqual(next.assign('ORG', 'Muster GmbH'), first);
+        if (productChannel === 'standalone') {
+          assert.strictEqual(first, '[UNTERNEHMEN_001]');
+          assert.strictEqual(next.assign('ORG', 'Andere GmbH'), '[UNTERNEHMEN_002]');
+        } else assert.match(first, /^\[ORGANISATION_[A-Z2-7]+\]$/u);
+      } finally { next.dispose(); }
+    } finally { registry.dispose(); seed.fill(0); item.cleanup(); }
+  }
 });
 
 test('failures before rename preserve the old journal and clean only the exact temp file', () => {

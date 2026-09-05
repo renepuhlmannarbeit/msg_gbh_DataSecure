@@ -16,7 +16,8 @@ const {
   showCompletionSummary,
   showLocalIntakeNotice,
   showBatchStateNotice,
-  showTerminalBatchSummary
+  showTerminalBatchSummary,
+  _test: { windowsOpenResultsHandler }
 } = require('../plugins/data-secure/server/companion/completion-summary');
 
 const { test, done, assert } = createSuite('Local completion summary');
@@ -71,11 +72,11 @@ test('a completed visible export offers one local open-results action', () => {
   try {
     process.env.EU_PRIVACY_RESULT_ROOT = root;
     const windows = completionSummaryCommands(summary, {
-      platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, openResults: true
+      platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, resultDirectory: root
     })[0];
     assert.match(windows.args.at(-1), /Ergebnisse öffnen/u);
     assert.match(windows.args.at(-1), /explorer\.exe/u);
-    const mac = completionSummaryCommands(summary, { platform: 'darwin', openResults: true })[0];
+    const mac = completionSummaryCommands(summary, { platform: 'darwin', resultDirectory: root })[0];
     assert.match(mac.args.at(-1), /Ergebnisse öffnen/u);
     assert.match(mac.args.at(-1), /Finder/u);
   } finally {
@@ -92,6 +93,73 @@ test('a completed visible export offers one local open-results action', () => {
   });
   assert.strictEqual(pending.open_results, false);
   assert.match(pending.message, /internen Ergebnisse bleiben sicher erhalten/u);
+  assert.doesNotMatch(pending.message, /Nächster Schritt: Ergebnisse öffnen/u);
+  const unavailable = completionSummaryText({
+    ...graded(2, 2, 0, 0), result_exported_count: 2,
+    result_export_pending_count: 0, result_output_available: false
+  });
+  assert.strictEqual(unavailable.open_results, false);
+  assert.match(unavailable.message, /im aktuell gewählten Ergebnisordner nicht verfügbar/u);
+  assert.doesNotMatch(unavailable.message, /liegen im gewählten|Nächster Schritt: Ergebnisse öffnen/u);
+  assert.doesNotMatch(completionSummaryCommands(summary, {
+    platform: 'win32', env: { SystemRoot: 'C:\\Windows' }
+  })[0].args.at(-1), /\$openButton/u, 'a summary never silently opens the configured parent folder');
+});
+
+test('Linux info-only completion commands give an available manual action without hiding export availability', () => {
+  const summary = {
+    ...graded(2, 2, 0, 0), result_exported_count: 2,
+    result_export_pending_count: 0, result_output_available: true
+  };
+  const unchanged = JSON.stringify(summary);
+  const commands = completionSummaryCommands(summary, { platform: 'linux', resultDirectory: path.resolve('result-run') });
+  assert.deepStrictEqual(commands.map(spec => spec.command), ['zenity', 'kdialog']);
+  for (const spec of commands) {
+    const message = spec.args.join('\n');
+    assert.match(message, /2 freigegebene Ergebnisse liegen im gewählten DataSecure-Output-Ordner/u);
+    assert.match(message, /Nächster Schritt: Hinweis schließen und den gewählten Ergebnisordner im Dateimanager öffnen\./u);
+    assert.doesNotMatch(message, /Ergebnisse öffnen oder schließen|nicht verfügbar/u);
+  }
+  assert.strictEqual(JSON.stringify(summary), unchanged);
+  assert.strictEqual(completionSummaryText(summary).open_results, true, 'the platform fallback must not falsify shared availability');
+});
+
+test('Windows result click keeps the form open on failure and quotes the exact path on success', () => {
+  if (process.platform !== 'win32') return;
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "datasecure-results user's folder "));
+  try {
+    for (const scenario of ['success', 'spawn_failure', 'missing_directory']) {
+      const target = scenario === 'missing_directory' ? path.join(directory, 'missing') : directory;
+      const script = [
+        "$ErrorActionPreference = 'Stop'",
+        '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)',
+        '$script:closed = $false; $script:called = $false; $script:received = $null',
+        "$label = [pscustomobject]@{ Text = '' }",
+        '$form = New-Object PSObject',
+        "$form | Add-Member -MemberType ScriptMethod -Name Close -Value { $script:closed = $true }",
+        'function Start-Process { [CmdletBinding()] param($FilePath, $ArgumentList, $WindowStyle);',
+        '$script:called = $true; $script:received = $ArgumentList;',
+        scenario === 'spawn_failure' ? "throw 'PRIVATE FAILURE DETAIL';" : '',
+        'if ($WindowStyle -ne "Normal") { throw "EXPECTED_VISIBLE_WINDOW" }; }',
+        windowsOpenResultsHandler(target, 'C:\\Windows\\explorer.exe'),
+        '[pscustomobject]@{closed=$script:closed;called=$script:called;argument=$script:received;label=$label.Text} | ConvertTo-Json -Compress'
+      ].join('\n');
+      const executed = childProcess.spawnSync(path.win32.join(process.env.SystemRoot || 'C:\\Windows',
+        'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+      assert.strictEqual(executed.status, 0, executed.stderr);
+      const observed = JSON.parse(executed.stdout.trim());
+      assert.strictEqual(observed.called, scenario !== 'missing_directory');
+      assert.strictEqual(observed.closed, scenario === 'success');
+      if (scenario !== 'missing_directory') assert.strictEqual(observed.argument, `"${target}"`);
+      if (scenario !== 'success') {
+        assert.match(observed.label, /konnte nicht geöffnet werden/u);
+        assert.doesNotMatch(observed.label, /PRIVATE FAILURE|datasecure-results/u);
+      }
+    }
+  } finally {
+    fs.rmdirSync(directory);
+  }
 });
 
 test('legacy summaries never invent a result grade', () => {

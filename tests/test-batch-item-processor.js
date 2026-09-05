@@ -4,6 +4,7 @@ const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchItemProcessor } = require('../plugins/data-secure/server/gateway/batch-item-processor');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { createSuite } = require('./helpers');
+const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 
 const { testAsync, done, assert } = createSuite('Batch single-item processing boundary');
 
@@ -122,6 +123,7 @@ function fixture(options = {}) {
       assert.strictEqual(callOptions.removeImages, true);
       assert.strictEqual(callOptions.packageId, expectedPackageId);
       if (options.pipelineError) throw options.pipelineError;
+      if (options.onAnonymize) options.onAnonymize(callOptions);
       await callOptions.onClaimed();
       await callOptions.onExtracted({ private: true });
       await callOptions.onDetected({ private: true });
@@ -134,6 +136,7 @@ function fixture(options = {}) {
         ? undefined
         : (options.mismatchedReturnResult ? OMITTED_DOCUMENT_RESULT : COMPLETE_DOCUMENT_RESULT);
       await callOptions.beforePublish({ private: true, document_result: verifiedResult });
+      events.push('pipeline-publish');
       if (!options.skipAfterPublish) await callOptions.afterPublish({ document_result: publishedResult });
       if (options.doubleAfterPublish) await callOptions.afterPublish({ document_result: publishedResult });
       return {
@@ -156,6 +159,43 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('numbered reservations are durable before publication and a write failure forbids publication', async () => {
+    for (const fail of [false, true]) {
+      const secret = Buffer.alloc(32, 16);
+      const registry = createBatchPseudonymRegistry(secret, { contractVersion: READABLE_CONTRACT_VERSION });
+      try {
+        let durable;
+        const value = fixture({ onAnonymize({ pseudonymRegistry }) {
+          assert.strictEqual(pseudonymRegistry.assign('PERSON', 'Max Mustermann'), '[PERSON_001]');
+          assert.strictEqual(pseudonymRegistry.assign('ORG', 'Muster GmbH'), '[UNTERNEHMEN_001]');
+        } });
+        value.deps.pseudonymRegistry = registry;
+        value.deps.persistPseudonymContext = () => {
+          assert.strictEqual(value.item.checkpoint, 'processing_started');
+          assert.ok(!value.events.includes('pipeline-publish'));
+          if (fail) throw codedError('PROCESSING_INTERRUPTED');
+          durable = JSON.parse(JSON.stringify(registry.exportState()));
+        };
+        value.deps.beforePublish = () => {
+          assert.ok(durable, 'durability must precede external publication callback');
+          const recovered = createBatchPseudonymRegistry(secret, {
+            contractVersion: READABLE_CONTRACT_VERSION, persistedState: durable
+          });
+          try {
+            assert.strictEqual(recovered.assign('PERSON', 'Max Mustermann'), '[PERSON_001]');
+            assert.strictEqual(recovered.assign('ORG', 'Muster GmbH'), '[UNTERNEHMEN_001]');
+          } finally { recovered.dispose(); }
+        };
+        const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+        assert.strictEqual(value.events.includes('pipeline-publish'), !fail);
+        if (fail) {
+          assert.strictEqual(result.error, 'PROCESSING_INTERRUPTED');
+          assert.strictEqual(value.item.status, 'retryable');
+          assert.ok(!value.events.includes('outbox'));
+        } else assert.strictEqual(result.package_id, value.expectedPackageId);
+      } finally { registry.dispose(); secret.fill(0); }
+    }
+  });
   await testAsync('10 and 100 item batches use four bounded durable writes per successful item', async () => {
     for (const count of [10, 100]) {
       const fixtures = Array.from({ length: count }, () => fixture());

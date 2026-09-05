@@ -87,6 +87,13 @@ Claude-Modell
 - Der Konverter läuft offline mit expliziten Einzelkonvertern; Built-ins,
   Plugins, LLM-Clients und `markitdown-ocr` bleiben aus. Eine breite
   Konverterfähigkeit ist keine DataSecure-Coverage oder Formatfreigabe.
+- Standalone besitzt nach DS-085 zusätzlich reine Markdown-Konvertierung als
+  gleichwertige Kernfunktion. Sie verwendet Aufnahme, Parser, Journal,
+  Recovery und Mapping gemeinsam, aber keine PII-Ersetzung und keinen
+  Anonymisierungsreview. Der dauerhafte Modus entscheidet über den getrennten
+  Export nach `DataSecure-Markdown`; diese Dateien sind nicht anonymisiert und
+  können niemals aus dem Plugin-Handoff gelesen werden. Dieser Modus ist noch
+  nicht produktiv aktiviert, bleibt aber verbindlicher Lieferumfang.
 - Die verbindliche Lieferfolge und UX stehen in
   [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 

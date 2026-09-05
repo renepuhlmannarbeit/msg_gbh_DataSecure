@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 05.09.2026 · 3.2.0-rc105
+Stand: 05.09.2026 · 3.2.0-rc106
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
@@ -14,7 +14,10 @@ Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 | BL-011.8 | identitätsgebundene Journal-/Intent-/Workcopy-Lese-, Publikations- und Cleanupgates; Größen-, Link-, Swap-, Abbruch- und Negativtests | E1 Windows/macOS-Dateisystem und E3 Security |
 | BL-020.1 | Content-Graph/Locator für TXT, Markdown, CSV und DOCX einschließlich Unicode-, Part-, Asset- und Leerabdeckung | spätere Container/feinere Locators in ihren Formatstories |
 | BL-020.2 | Produktpreflight sperrt OOXML-Einbettungen; aktive/rekursive DOCX-Strukturen, falsche Content Types und Beziehungen fail-closed | E1 Office-Korpus und E3 Security |
-| BL-030.2 | neustartfester rohwertfreier HMAC-Kontext, Alias-/Kollisionszustand, dauerhaftes Pre-Publish-Checkpointing und Manipulationsgates | E1/E2 echter Neustart/Crash/Cowork |
+| BL-030.2 | neustartfester rohwertfreier HMAC-Kontext; neue Standalone-v2-Stapel nutzen lesbare Nummern und einen gemeinsamen Unternehmensraum, v1 bleibt erhalten. Lookup-Hydration im Folgedokument für beide Produkte, Registry-/Journal-Roundtrip durch TXT/MD/CSV/DOCX, Pre-Publish-Checkpointing und Manipulationsgates | E1/E2 echter Neustart/Crash/Cowork; reale Personen-/Unternehmensvarianten im fachlichen UAT |
+| BL-010.12/13, DS-084 | Native Tauri-Dragdrop-Aufnahme über denselben Admissionpfad, Guard gegen Auswahl-/Startkonkurrenz, Reset nach IPC-Fehler, Test für veraltete Statusantworten, echte Unicode-Pfade im Rust-Test; Pickeralternative bleibt | E1/E2 tatsächliches Ziehen aus Explorer/Finder, Fokus/Zoom/Screenreader und native Mac-Pakete |
+| BL-040.6, BL-041.10 | Cowork-Presenter bindet Erstlauf/Fortsetzung/Review an exakt den eigenen sichtbaren Exportlauf. Fehlender Lauf/Zielwechsel ergibt keinen falschen Öffnen-Hinweis. Echte Plugin-Exportdateien und PowerShell-Handler mit simulierter OS-Grenze geprüft | E1/E2 tatsächliche Explorer-/Finder-Sichtbarkeit; PowerShell-Test und Prozessstart beweisen kein sichtbares Fenster |
+| BL-010.28, DS-085 | Zweite Kernfunktion in Vision, Produktvertrag, UML, Zielmodell und Backlog gebunden; Dokumentationsguard verhindert stilles Entfernen oder vermeintliche Freigabe. Keine produktive Konvertierungsevidenz | E0 Modus-/Journal-/Exportvertrag, Inhaltserhaltung, Offline-Konverter und kompletter Paketlauf; anschließend E1/E2 beider Modi |
 | BL-022.1 | Grundparser, Struktur-/Differentialtests, namespacegebundene WordprocessingML-Auswertung, geschlossene XML-Entity-/Relationship-Namespace-Gates sowie referenzgebundene kanonische Kopf-/Fußzeilenreihenfolge | realer Office-Korpus und realistische Kommentare/AlternateContent; danach E1/E3 |
 | BL-024.2 | installationsfreier Offline-Kern, vollständige Übernahme des Universal-Bundles in Engineering-Portable/SEA, geschlossene Manifest-/Inventar-/Hash-/Modusgates, Pfade mit Leerzeichen, echter Windows-OCR-Smoke sowie Timeout und laufender Abbruch bei deaktivierter Freigabe | kohärente Aufnahme in die freizugebenden Produktziele, nicht allein per Manifest aktivierbares Produktgate und echter Paket-zu-Adapter-zu-OCR-End-to-End-Test; danach E1 |
 | BL-042.3 | inhaltsfreie Startprojektion einschließlich beider `batch_active`-Varianten, DE/EN, Textfallback, Server-/Artefaktgates sowie repo- und CWD-unabhängiger Windows-Build | bounded Abschlussprojektion, vollständige Fallbackmatrix und automatisierter echter Browser-/A11y-/DE-EN-DOM-Lauf; danach E1/E2 |

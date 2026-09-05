@@ -1,6 +1,6 @@
 # Product Vision
 
-Stand: 01.09.2026 · verbindliches Zielbild nach dem Cowork-/UX-/Privacy-Grill
+Stand: 05.09.2026 · verbindliches Zielbild beider Produkte und beider Standalone-Betriebsarten
 
 ## Vision in einem Satz
 
@@ -10,13 +10,22 @@ gibt es zwei getrennte Endnutzerprodukte mit demselben geprüften Core: das
 Claude-/Cowork-Plugin und DataSecure Standalone ohne Claude, Cowork, MCP,
 Agenten oder Internet.
 
+Standalone besitzt zwei gleichwertige Kernfunktionen: **In Markdown umwandeln
+und anonymisieren** sowie **Nur in Markdown umwandeln**. Die zweite Funktion
+macht Inhalte unterschiedlicher Ausgangsformate für eine spätere KI-Nutzung
+zugänglich, ohne Namen, Unternehmen oder andere personenbezogene Inhalte zu
+entfernen. Sie ist kein optionaler Debug- oder Supportpfad und darf bei
+Refactoring nicht aus dem Produktziel verschwinden (DS-085). Heute ist sie noch
+in Entwicklung, nicht produktiv freigegeben.
+
 DataSecure benötigt keine zusätzliche System-VM. Auch die Abnahmeplanung
 verwendet echte lokale Zielrechner statt eigens eingerichteter VMs (DS-062).
 Auch ein zusätzliches Windows-Benutzerkonto wird nicht vorausgesetzt (DS-063).
 Sichere Testtrennung im vorhandenen Konto ist Entwicklungsarbeit.
 DS-065 vereinfacht lokale Arbeitsdaten: keine zusätzliche Verschlüsselung,
-kein Schlüsselbund, keine Schlüsseldatei und kein Passwort. Der Normalweg bleibt
-Dateien auswählen → lokal anonymisieren → Ergebnisse verwenden.
+kein Schlüsselbund, keine Schlüsseldatei und kein Passwort. Standalone führt
+über Auswahl → Modus/Ziel → Start → lokale Verarbeitung → Ergebnisse; im
+Plugin bleibt Anonymisierung die verbindliche Grenze vor einer KI-Auswertung.
 DS-067 legt zusätzlich genau einen Nutzerweg fest: Plugin-ZIP oder derselbe private
 Marketplace-Build. Ein MCPB bleibt internes Engineering. Bilder besitzen keinen
 auswählbaren Modus und bleiben lokal zurückgehalten. Nur temporäre Arbeits- und
@@ -44,11 +53,15 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
    und Ergebnisort; die Modellverarbeitung darf cloudbasiert sein, Originale und
    rohdatenhaltige Entscheidungen bleiben an der lokalen DataSecure-Grenze.
 2. **Eigenständiges Standalone-Produkt:** Standalone verwendet denselben Core
-   und dieselben fachlichen Gates, besitzt aber eine eigene Desktop-UI,
+   und dieselben Aufnahme-/Formatgates, besitzt aber eine eigene Desktop-UI,
    Distribution und getrennte Produktdaten. Es enthält keinen Claude-
-   Folgeschritt und benötigt weder MCP noch Skills oder Agenten.
-3. **Eine bewusste Normalaktion:** Datei oder Ordner auswählen und anschließend
-   nur bei einer echten fachlichen Unsicherheit entscheiden.
+   Folgeschritt und benötigt weder MCP noch Skills oder Agenten. Reine
+   Markdown-Konvertierung überspringt ausschließlich die Anonymisierung und
+   deren Fachreview, nicht Quellen-, Format-, Coverage- oder Exportprüfung.
+3. **Ein einfacher Normalablauf:** Standalone zeigt die gewählten Dateien,
+   den Modus und das Ziel vor einem expliziten Start. Im Plugin startet die
+   lokale Auswahl den vereinbarten Anonymisierungsauftrag; zusätzliche fachliche
+   Entscheidungen nur bei echter Unsicherheit, kein Formular je Datei.
 4. **Fachinhalt vor Formularismus:** Rollen, Methoden, Technologien,
    Zertifizierungen, Tätigkeiten und Zeiträume bleiben möglichst erhalten.
 5. **Fortsetzen statt neu beginnen:** Dauerhafte Checkpoints sichern bereits
@@ -72,8 +85,11 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Klare Dateien benötigen keinen Review. Mehrdeutigkeiten werden nach der Analyse
   in einem einzigen lokalen Sammelreview mit direkten fachlichen Aktionen,
   sichtbarem Fortschritt und ausdrücklicher Abschlussfreigabe entschieden.
-- Im Standalone-Produkt: ein Fenster mit Auswahl, Verarbeitung, Sammelprüfung
-  und Ergebnis; im Erfolgsfall nur **Auswählen** und **Anonymisieren**.
+- Im Standalone-Produkt: ein Fenster mit Betriebsart, Auswahl, Verarbeitung,
+  gegebenenfalls Sammelprüfung und Ergebnis. In beiden Betriebsarten derselbe
+  Ablauf: **Auswählen** oder **Hineinziehen**, dann **Starten**. Keine zusätzlichen
+  Freigaben pro Datei. Reine Konvertate sind sichtbar **nicht anonymisiert**;
+  der Anwender entscheidet außerhalb von DataSecure über die spätere KI-Nutzung.
 
 ## Datenschutz- und Sicherheitsversprechen
 
@@ -101,6 +117,15 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Höchstens 100 Dateien und 500 MiB je Stapel, ohne feste Seitenbegrenzung.
 - Genau ein neutral benanntes Markdown-Ergebnis pro Quelle sowie ein dauerhaftes,
   ausschließlich lokales Mapping.
+- Bei reiner Konvertierung bleibt der gesamte extrahierbare fachliche Text
+  einschließlich Namen, Unternehmen, Kontaktdaten und Tabellenwerten erhalten.
+  **Vollständig** setzt belegte Format-Coverage voraus: fehlender Scan-/Bildtext,
+  nicht extrahierbare Objekte oder Parserabbrüche werden nicht still übergangen.
+  Eine Markdown-Datei kann das ursprüngliche Office-/PDF-Layout nicht identisch
+  rekonstruieren. Auch reine Konvertierung führt keine Makros oder Fremdinhalte aus.
+- Konvertate liegen in `DataSecure-Markdown/Lauf-…`, getrennt von anonymisierten
+  Ergebnissen in `DataSecure-Output/Lauf-…`, mit eigener laufbezogener Zuordnung.
+  Es gibt keinen automatischen Upload an eine KI.
 - Bilder bleiben lokal; nur ausreichend sicherer und erneut geprüfter OCR-Text
   darf in Markdown erscheinen.
 - Passwortgeschützte oder verschlüsselte Quellen werden nicht entschlüsselt und

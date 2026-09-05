@@ -97,10 +97,16 @@ try {
   fs.mkdirSync(data, { recursive: true });
   fs.mkdirSync(sourceDirectory, { recursive: true });
   fs.mkdirSync(resultDirectory, { recursive: true });
-  const sourceFile = path.join(sourceDirectory, 'profil.txt');
-  fs.writeFileSync(sourceFile,
-    'Kunde: Beispielperson\nE-Mail: beispiel@example.test\nVertragliche Leistung',
-    { encoding: 'utf8', flag: 'wx' });
+  // Exercise the shipped parser/worker chain, not a replacement worker or one
+  // synthetic TXT path. All four fixtures describe the same synthetic parties.
+  const fixtureRoot = path.join(root, 'docs', 'acceptance', 'UAT_TEST_KIT', 'inputs', '01-positive');
+  const sourceNames = ['personnel-profile.txt', 'personnel-profile.md', 'personnel-profile.csv', 'personnel-profile.docx'];
+  const originals = sourceNames.map((name) => fs.readFileSync(path.join(fixtureRoot, name)));
+  const sourceFiles = sourceNames.map((name, index) => {
+    const destination = path.join(sourceDirectory, name);
+    fs.writeFileSync(destination, originals[index], { flag: 'wx' });
+    return destination;
+  });
   const launchRoot = process.platform === 'win32' ? `\\\\?\\${install}` : install;
   const runtime = path.join(launchRoot, 'datasecure-core-x86_64-pc-windows-msvc.exe');
   const sidecar = path.join(launchRoot, 'server', 'standalone', 'desktop-sidecar.js');
@@ -121,10 +127,10 @@ try {
   assert.equal(status.ok, true);
   assert.equal(status.result.product_channel, 'standalone');
   const admitted = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b'.repeat(16),
-    action: 'admit_selected_sources', source_kind: 'files', source_paths: [sourceFile] });
+    action: 'admit_selected_sources', source_kind: 'files', source_paths: sourceFiles });
   assert.equal(admitted.ok, true);
-  assert.equal(admitted.result.selected_count, 1);
-  assert.deepEqual(admitted.result.ui_context.selected_files, ['profil.txt']);
+  assert.equal(admitted.result.selected_count, 4);
+  assert.deepEqual([...admitted.result.ui_context.selected_files].sort(), [...sourceNames].sort());
   assert.deepEqual(admitted.result.ui_context.source_folders, [sourceDirectory]);
   const configured = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'c'.repeat(16),
     action: 'configure_results', source_paths: [resultDirectory] });
@@ -133,7 +139,7 @@ try {
   const context = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'd'.repeat(16), action: 'get_ui_context' });
   assert.equal(context.ok, true);
   assert.equal(context.result.result_folder, resultDirectory);
-  assert.deepEqual(context.result.selected_files, ['profil.txt']);
+  assert.deepEqual([...context.result.selected_files].sort(), [...sourceNames].sort());
   const started = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'e'.repeat(16), action: 'start_admitted_batch' });
   assert.equal(started.ok, true);
   assert.equal(started.result.event, 'batch_accepted');
@@ -148,7 +154,7 @@ try {
   }
   assert.ok(terminal, 'the real packaged worker handoff must reach a durable terminal state');
   assert.equal(terminal.state, 'results_available');
-  assert.equal(terminal.result_count, 1);
+  assert.equal(terminal.result_count, 4);
   const completedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '1'.repeat(16), action: 'get_ui_context' });
   assert.equal(completedContext.ok, true);
@@ -160,6 +166,24 @@ try {
   const mapping = path.join(exactRun, 'DataSecure-Zuordnung.csv');
   assert.equal(fs.statSync(mapping).isFile(), true,
     'a completed standalone run must publish its human-readable mapping in the exact run directory');
+  const mappingText = fs.readFileSync(mapping, 'utf8');
+  for (const name of sourceNames) assert.ok(mappingText.includes(name), 'every source must have a mapping row');
+  const outputs = fs.readdirSync(exactRun).filter((name) => name.endsWith('.md')).sort();
+  assert.equal(outputs.length, 4, 'the actual mixed-format run must export all four results');
+  let expectedAliases;
+  for (const name of outputs) {
+    const markdown = fs.readFileSync(path.join(exactRun, name), 'utf8');
+    assert.doesNotMatch(markdown, /Lina|Testfeld|Nordstern|Falken|lina\.testfeld/iu);
+    const persons = [...new Set(markdown.match(/\[PERSON_\d{3,}\]/gu))].sort();
+    const companies = [...new Set(markdown.match(/\[UNTERNEHMEN_\d{3,}\]/gu))].sort();
+    assert.equal(persons.length, 1, 'every result needs one readable person identity');
+    assert.equal(companies.length, 2, 'employer and customer remain distinct company identities');
+    const aliases = { persons, companies };
+    if (expectedAliases) assert.deepEqual(aliases, expectedAliases, 'the same parties keep their labels across TXT/MD/CSV/DOCX');
+    else expectedAliases = aliases;
+    assert.ok(mappingText.includes(name), 'every output must be identifiable through the local mapping');
+  }
+  sourceFiles.forEach((file, index) => assert.deepEqual(fs.readFileSync(file), originals[index], 'source bytes stay unchanged'));
   const resolvedRun = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '2'.repeat(16), action: 'resolve_current_results' });
   assert.deepEqual(resolvedRun.result, {

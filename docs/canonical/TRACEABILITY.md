@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 05.09.2026 · 3.2.0-rc105
+Stand: 05.09.2026 · 3.2.0-rc106
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -91,6 +91,8 @@ frühere Code-/Testzuordnungen bleiben im
 | DS-081 | aktiv und aktuell | BL-041.8; hostgesteuerte Aushandlung von `2026-07-28` und getesteten Legacy-Versionen, kein `MCP26-01`-Cutover und keine vollständige Konformitätsaussage ohne offizielle Conformance-Evidence; `mcp-server.js`, `test-mcp-protocol.js`, Dokumentationsvertrag |
 | DS-082 | aktiv und aktuell | BL-010.11/12/28; lokale Anzeige von Auswahl und Ziel ohne Diagnoseweitergabe, expliziter Start, strikt getrennter noch gesperrter Nur-Konvertieren-Modus; `frontend/index.html`, `frontend/app.js`, `application-service.js`, `desktop-ipc.js`, Standalone-Vertragstests |
 | DS-083 | aktiv und aktuell | BL-010.13/26, BL-040.5; Standalone veröffentlicht nach einem vollständig sichtbaren Lauf genau eine formelneutralisierte `DataSecure-Zuordnung.csv` mit Quelle → anonymisiertem Ergebnis; Cowork erhält keine Originalnamen-Projektion; `result-export.js`, `batch-recovery.js`, `standalone/application-service.js`; Export-, Recovery-, Standalone- und OS-Öffnertests |
+| DS-084 | aktiv und aktuell | BL-010.12/13, BL-030.2; neue Standalone-Stapel mit lesbaren v2-Kennungen, Firmenrollen einheitlich, Restore behält Version; native Dragdrop-Aufnahme ohne Autostart, Pickeralternative; Registry-, State-, Intake-, Rust-, Frontend- und reale Pakettests |
+| DS-085 | verbindliches Soll, noch nicht freigegeben | BL-010.28 mit BL-010.15–19; reine Markdown-Konvertierung als zweite Kernfunktion, gleicher Workflow ohne PII-Entfernung, getrennte Ausgabe und Modusbindung bei Recovery; Vision, Produktvertrag, Architektur, Target-Capabilities und Dokumentationsguard |
 
 ## DS-067 – konkrete Umsetzung
 

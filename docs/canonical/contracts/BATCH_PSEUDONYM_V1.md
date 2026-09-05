@@ -1,7 +1,7 @@
-# Vertrag: fortsetzbare stapelweite Pseudonyme v1
+# Vertrag: fortsetzbare stapelweite Pseudonyme v1 und Standalone v2
 
 Status: **E0 implementiert** · Story: BL-030.2 · Entscheidungen: DS-011,
-DS-012, DS-019, DS-020, DS-021, DS-059 und DS-065
+DS-012, DS-019, DS-020, DS-021, DS-059, DS-065 und DS-084
 
 ## Ziel und Aussagegrenze
 
@@ -37,7 +37,7 @@ Der Platzhalter wird deterministisch aus der versionierten Normalform abgeleitet
 
 `HMAC-SHA-256(seed, ruleset || entity_type || canonical_value)`
 
-Die Ausgabe ist typisiert und Base32-kodiert, zum Beispiel
+Im v1-Vertrag ist die Ausgabe typisiert und Base32-kodiert, zum Beispiel
 `[PERSON_7K4M2Q9X4P]`. Personen, Organisationen, Kunden und Projekte verwenden
 getrennte Domänen. Kollisionen werden deterministisch verlängert; zwei Entitäten
 dürfen nie still zusammengeführt werden.
@@ -47,6 +47,31 @@ sich mehr als eine Person denselben Nachnamen, erhält dieser mehrdeutige Alias 
 eigenen stabilen Platzhalter und wird keinem Vollnamen nachträglich neu zugeordnet.
 Statische fachliche Arbeitgebermarker wie `[ARBEITGEBER_001]` bleiben absichtlich
 nur aktionslokal und werden nicht als Rohwertbindung persistiert.
+
+### Neue Standalone-Stapel: v2
+
+Neue Standalone-Stapel wählen `batch-pseudonym/v2`. Ihre rohwertfreien
+HMAC-Bindungen reservieren statt einer sichtbaren Digestfolge lesbare Kennungen
+wie `[PERSON_001]`, `[UNTERNEHMEN_001]` und `[PROJEKT_001]`. Organisation, Kunde
+und Arbeitgeber teilen denselben Unternehmensnummernraum. Verschiedene
+Arbeitgeber erhalten verschiedene Kennungen; dieselbe Firma in unterschiedlichen
+Rollen behält ihre Kennung. Mehrdeutige Aliasbindungen erhalten einen eigenen
+`_UNKLAR`-Platzhalter statt einer stillen Vollnamenzuordnung.
+
+Nummern werden vor jeder Veröffentlichung mit dem Registryzustand dauerhaft
+reserviert. Fortsetzung rekonstruiert den Nummernstand aus den gespeicherten
+Labels; es wird nie nachträglich umnummeriert. Der Erstauftritt bestimmt die
+Kennung, nicht eine Bedeutung oder Reihenfolge zwischen Kunden. Gleiche Nummern
+in verschiedenen Stapeln beweisen keine gemeinsame Identität. Die Namenserkennung
+ist keine vollständige Entitätsauflösung; verschiedene reale Personen mit
+identischer Schreibweise sowie nicht erkannte Firmennamenvarianten bleiben
+eine fachliche Aussagegrenze.
+
+Plugin-Stapel sowie bereits vorhandene v1-Standalone-Stapel bleiben v1, auch
+nach Neustart. Ein Restore ändert den Vertrag nicht anhand des aktuellen Produkts.
+Gemeinsam korrigiert ist das Wiederbefüllen des flüchtigen Wörterbuchs bei
+erfolgreichem Lookup einer gespeicherten Bindung: Nur so wird die bekannte
+Firma auch im Folgedokument tatsächlich ersetzt und nicht erst am Restgate gestoppt.
 
 ## Laufzeit- und Fehlergrenze
 

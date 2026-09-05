@@ -73,7 +73,7 @@ async function runWorker(reviewOutcome, initial = waiting) {
         }
       };
       if (name === '../companion/completion-summary') return {
-        showBatchStateNoticeConfirmed(progress) { calls.notices++; calls.notice = progress; return true; },
+        showBatchStateNoticeConfirmed(progress, options) { calls.notices++; calls.notice = progress; calls.noticeOptions = options; return true; },
         showLocalIntakeNoticeConfirmed() { throw new Error('unexpected failure notice'); }
       };
       if (name === './workflow-diagnostics') return { recordWorkflowEvent(event) { calls.events.push(event); return true; } };
@@ -96,6 +96,7 @@ async function main() {
     assert.strictEqual(calls.release, 1);
     assert.strictEqual(calls.presentations, 1);
     assert.strictEqual(calls.notices, 1);
+    assert.strictEqual(calls.noticeOptions.batchToken, token, 'the orphan-worker presenter retains its local batch binding');
     assert.strictEqual(calls.envelope.batch_phase, 'complete');
     assert.strictEqual(calls.exports, 1);
     assert.strictEqual(JSON.stringify(calls.sent), JSON.stringify([{ type: 'local-batch-accepted' }]));

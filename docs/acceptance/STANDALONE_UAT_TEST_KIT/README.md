@@ -1,6 +1,6 @@
 # DataSecure Standalone – UAT-Testkit
 
-Stand: 05.09.2026 · Engineering-Pilot 3.2.0-rc105
+Stand: 05.09.2026 · Engineering-Pilot 3.2.0-rc106
 
 Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien
@@ -31,6 +31,10 @@ verwenden.
 | S09 | Während eines synthetischen Stapels App beenden und erneut starten | Stapel erscheint als gestoppt/fortsetzbar; Fortsetzung verarbeitet nichts doppelt. |
 | S10 | Passwortgeschützte oder nicht freigegebene Testdatei wählen | Datei bleibt unverändert, wird verständlich als nicht verarbeitet gemeldet; andere sichere Stapelpositionen bleiben konsistent. |
 | S11 | **Diagnose öffnen** | Der lokale Diagnoseordner öffnet sich. `desktop-interactions.jsonl` und `sidecar-interactions.jsonl` enthalten nur feste Ereignisse, Aktionen, Laufzeiten und Fehlercodes – keine Dateinamen, Quell-/Zielpfade oder Inhalte. |
+| S12 | Vier Dateien aus `inputs/01-positive` hineinziehen, noch nicht starten | Lokale Dateinamen und Quellenordner erscheinen; **Anonymisierung starten** ist die einzige Startaktion. Ohne Klick entstehen keine Ergebnisse. Klick-/Tastaturauswahl bleibt gleichwertig. |
+| S13 | Während vorbereiteter Auswahl erneut Dateien hineinziehen; anschließend Auswahl verwerfen | Zweiter Drop ersetzt die erste Auswahl nicht. Verständlicher Hinweis; danach ist eine neue Auswahl möglich. Dateien plus Ordner zusammen werden als gemischte Auswahl abgelehnt. |
+| S14 | Den vierformatigen neuen Stapel starten und die vier erzeugten Markdown-Dateien vergleichen | Dieselbe synthetische Person ist überall `[PERSON_001]`; Arbeitgeber und Kunde tragen zwei unterschiedliche, dokumentübergreifend identische `[UNTERNEHMEN_…]`-Kennungen. Keine ursprünglichen Personen-/Firmennamen. Die Zuordnung enthält alle vier Eingaben und Ergebnisse. |
+| S15 | Betriebsart ansehen | **Nur in Markdown umwandeln – noch in Entwicklung** bleibt sichtbar, aber deaktiviert. Kein Klick darf einen scheinbaren Konvertierungslauf auslösen. Für den späteren vollständigen Konvertierungs-UAT gilt BL-010.28/DS-085. |
 
 Der Standard-Ergebnisordner wird bereits beim Start angezeigt, aber erst beim
 Start des ersten Stapels sicher angelegt und gespeichert. Eine ausdrückliche

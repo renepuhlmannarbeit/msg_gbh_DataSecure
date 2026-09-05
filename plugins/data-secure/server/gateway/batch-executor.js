@@ -401,7 +401,7 @@ function startLocalBatchExecutor(token, options = {}) {
     if (noticeShown || !progress) return;
     noticeShown = true;
     presentTerminalNoticeAsParent(token, child,
-      () => (options.showBatchStateNotice || showBatchStateNoticeConfirmed)(progress), lifecycle, options);
+      () => (options.showBatchStateNotice || showBatchStateNoticeConfirmed)(progress, { batchToken: token }), lifecycle, options);
   };
   const finalizeExit = () => afterIpcDrain(options, () => {
     if (noticeShown) return;
@@ -583,7 +583,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         phase: progress.batch_phase, item_count: progress.batch_total,
         released_count: progress.released, stopped_count: progress.stopped
       });
-      presentTerminalNoticeAsParent(token, child, () => showState(progress), lifecycle, options, itemCount);
+      presentTerminalNoticeAsParent(token, child, () => showState(progress, { batchToken: token }), lifecycle, options, itemCount);
       return true;
     };
     child.on?.('message', (message) => {
@@ -729,7 +729,7 @@ function startLocalReviewExecutor(token, options = {}) {
       const progress = localBatchStateProgress(message, new Set(['local-review-state']));
       if (!progress) return;
       presentTerminalNoticeAsParent(token, child,
-        () => (options.showBatchStateNotice || showBatchStateNoticeConfirmed)(progress), lifecycle, options,
+        () => (options.showBatchStateNotice || showBatchStateNoticeConfirmed)(progress, { batchToken: token }), lifecycle, options,
         progress.batch_total);
     });
     onWorkerFailure = (errorCode) => {

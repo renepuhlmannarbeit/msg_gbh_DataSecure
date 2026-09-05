@@ -1,13 +1,15 @@
 'use strict';
 
-// In-memory half of BATCH_PSEUDONYM_V1. Only HMAC alias bindings and collision
-// digests are persisted beside the batch seed in the private journal. Raw
-// aliases remain action-local and are disposed after every bounded operation.
+// V1 retains HMAC-derived labels for existing batches and the plugin. New
+// Standalone V2 batches reserve readable labels against the same private HMAC
+// identity mechanism. Only digests and label reservations are persisted beside
+// the batch seed. Raw aliases remain action-local and are disposed afterward.
 
 const crypto = require('crypto');
 
 const SECRET_BYTES = 32;
 const CONTRACT_VERSION = 'batch-pseudonym/v1';
+const READABLE_CONTRACT_VERSION = 'batch-pseudonym/v2';
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const PREFIX = Object.freeze({
   PERSON: 'PERSON',
@@ -15,6 +17,17 @@ const PREFIX = Object.freeze({
   CUSTOMER: 'KUNDE',
   PROJECT: 'PROJEKT'
 });
+const READABLE_PREFIX = Object.freeze({ PERSON: 'PERSON', ORG: 'UNTERNEHMEN', PROJECT: 'PROJEKT' });
+const READABLE_LABEL_RE = /^\[(PERSON|UNTERNEHMEN|PROJEKT|PERSON_UNKLAR|UNTERNEHMEN_UNKLAR|PROJEKT_UNKLAR)_(\d{3,5})\]$/u;
+
+function validPersistedLabel(placeholder, contractVersion) {
+  if (contractVersion === READABLE_CONTRACT_VERSION) {
+    const match = READABLE_LABEL_RE.exec(placeholder);
+    return Boolean(match && Number(match[2]) >= 1 && Number(match[2]) <= 10000 &&
+      match[2] === String(Number(match[2])).padStart(3, '0'));
+  }
+  return /^\[(?:PERSON|ORGANISATION|KUNDE|PROJEKT)_[A-Z2-7]{10,52}\]$/u.test(placeholder);
+}
 
 function inputError(message) {
   const error = new Error(message);
@@ -66,6 +79,12 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     throw inputError('Der lokale Stapel-Secret hat nicht die erwartete Länge.');
   }
   const key = Buffer.from(secret);
+  const contractVersion = options.contractVersion || CONTRACT_VERSION;
+  const readable = contractVersion === READABLE_CONTRACT_VERSION;
+  if (![CONTRACT_VERSION, READABLE_CONTRACT_VERSION].includes(contractVersion)) {
+    key.fill(0);
+    throw inputError('Die Pseudonym-Vertragsversion ist ungültig.');
+  }
   const rulesetVersion = String(options.rulesetVersion || 'de-business/2');
   if (!/^[a-z0-9][a-z0-9._/-]{0,63}$/u.test(rulesetVersion)) {
     key.fill(0);
@@ -74,13 +93,15 @@ function createBatchPseudonymRegistry(secret, options = {}) {
   const map = new Map(); // ephemeral raw aliases for the current document only
   const bindings = new Map(); // keyed HMAC(alias) -> placeholder; safe to persist privately
   const labels = new Map(); // placeholder -> full HMAC, never raw entity value
+  const digestLabels = new Map(); // one reservation per identity, including ambiguous aliases
+  const sequences = new Map(); // reconstructed from reservations, never reset on resume
   const counts = { PERSON: 0, ORG: 0, CUSTOMER: 0, PROJECT: 0 };
   const locations = [];
   let disposed = false;
 
   function aliasId(kind, canonical) {
     return crypto.createHmac('sha256', key)
-      .update(`${CONTRACT_VERSION}\u0000${rulesetVersion}\u0000alias\u0000${kind}\u0000${canonical}`, 'utf8')
+      .update(`${contractVersion}\u0000${rulesetVersion}\u0000alias\u0000${kind}\u0000${canonical}`, 'utf8')
       .digest('base64url');
   }
 
@@ -95,18 +116,24 @@ function createBatchPseudonymRegistry(secret, options = {}) {
       for (const pair of restored.labels) {
         const placeholder = String(pair?.[0] || '');
         const digestId = String(pair?.[1] || '');
-        const match = /^\[(?:PERSON|ORGANISATION|KUNDE|PROJEKT)_([A-Z2-7]{10,52})\]$/u.exec(placeholder);
-        if (!Array.isArray(pair) || pair.length !== 2 || !match ||
-            !/^[A-Za-z0-9_-]{43}$/u.test(digestId) || labels.has(placeholder)) {
+        if (!Array.isArray(pair) || pair.length !== 2 || !validPersistedLabel(placeholder, contractVersion) ||
+            !/^[A-Za-z0-9_-]{43}$/u.test(digestId) || labels.has(placeholder) ||
+            (readable && digestLabels.has(digestId))) {
           throw inputError('Der persistierte Pseudonymzustand ist ungültig.');
         }
         const digest = Buffer.from(digestId, 'base64url');
         try {
-          if (digest.length !== 32 || !base32(digest).startsWith(match[1])) {
+          if (digest.length !== 32 || digest.toString('base64url') !== digestId ||
+              (!readable && !base32(digest).startsWith(placeholder.slice(placeholder.lastIndexOf('_') + 1, -1)))) {
             throw inputError('Der persistierte Pseudonymzustand ist ungültig.');
           }
         } finally { digest.fill(0); }
         labels.set(placeholder, digestId);
+        if (readable) {
+          digestLabels.set(digestId, placeholder);
+          const match = READABLE_LABEL_RE.exec(placeholder);
+          sequences.set(match[1], Math.max(sequences.get(match[1]) || 0, Number(match[2])));
+        }
       }
       for (const pair of restored.bindings) {
         const alias = String(pair?.[0] || '');
@@ -123,6 +150,8 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     map.clear();
     bindings.clear();
     labels.clear();
+    digestLabels.clear();
+    sequences.clear();
     throw error;
   }
 
@@ -130,9 +159,36 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     if (disposed) throw inputError('Der lokale Stapel-Pseudonymkontext wurde bereits gelöscht.');
   }
 
+  // A customer's or employer's role belongs to its field label. The same
+  // organisation must keep its identity when that role changes in another
+  // Standalone document. V1 keeps its original namespaces for old outputs.
+  function entityKind(kind) { return readable && kind === 'CUSTOMER' ? 'ORG' : kind; }
+
+  function reserve(kind, digest, ambiguous = false) {
+    if (!readable) return placeholderForDigest(kind, digest, labels);
+    const digestId = digest.toString('base64url');
+    const existing = digestLabels.get(digestId);
+    if (existing) return { placeholder: existing, digestId };
+    if (labels.size >= 10000) throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+    const prefix = READABLE_PREFIX[kind] + (ambiguous ? '_UNKLAR' : '');
+    const next = (sequences.get(prefix) || 0) + 1;
+    if (next > 10000) throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+    const placeholder = `[${prefix}_${String(next).padStart(3, '0')}]`;
+    sequences.set(prefix, next);
+    digestLabels.set(digestId, placeholder);
+    return { placeholder, digestId };
+  }
+
+  function assertAliasCapacity(alias) {
+    if (readable && !bindings.has(alias) && bindings.size >= 10000) {
+      throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+    }
+  }
+
   function assign(kind, value) {
     requireLive();
     if (!Object.hasOwn(PREFIX, kind)) throw inputError('Der Entitätstyp ist im Pseudonymvertrag nicht zugelassen.');
+    kind = entityKind(kind);
     const canonical = canonicalValue(value);
     const mapKey = `${kind}:${canonical}`;
     const existing = map.get(mapKey);
@@ -142,12 +198,13 @@ function createBatchPseudonymRegistry(secret, options = {}) {
       map.set(mapKey, bound);
       return bound;
     }
+    assertAliasCapacity(aliasId(kind, canonical));
 
     const digest = crypto.createHmac('sha256', key)
-      .update(`${CONTRACT_VERSION}\u0000${rulesetVersion}\u0000${kind}\u0000${canonical}`, 'utf8')
+      .update(`${contractVersion}\u0000${rulesetVersion}\u0000${kind}\u0000${canonical}`, 'utf8')
       .digest();
     let derived;
-    try { derived = placeholderForDigest(kind, digest, labels); }
+    try { derived = reserve(kind, digest); }
     finally { digest.fill(0); }
     labels.set(derived.placeholder, derived.digestId);
     map.set(mapKey, derived.placeholder);
@@ -159,23 +216,34 @@ function createBatchPseudonymRegistry(secret, options = {}) {
   function lookup(kind, value) {
     requireLive();
     if (!Object.hasOwn(PREFIX, kind)) return null;
+    kind = entityKind(kind);
     const canonical = canonicalValue(value);
-    return map.get(`${kind}:${canonical}`) || bindings.get(aliasId(kind, canonical)) || null;
+    const placeholder = map.get(`${kind}:${canonical}`) || bindings.get(aliasId(kind, canonical)) || null;
+    // The current document's literal dictionary is built from this ephemeral
+    // map. A persisted hit must hydrate it too, otherwise a company known from
+    // document N disappears from the replacement dictionary in document N+1.
+    if (placeholder) map.set(`${kind}:${canonical}`, placeholder);
+    return placeholder;
   }
   function remember(kind, value, placeholder) {
     requireLive();
     if (!Object.hasOwn(PREFIX, kind) || !labels.has(String(placeholder))) {
       throw inputError('Der Pseudonym-Ableitungswert ist ungültig.');
     }
+    kind = entityKind(kind);
+    if (readable && !String(placeholder).startsWith(`[${READABLE_PREFIX[kind]}_`)) {
+      throw inputError('Der Pseudonym-Ableitungswert ist ungültig.');
+    }
     const canonical = canonicalValue(value);
     const alias = aliasId(kind, canonical);
+    assertAliasCapacity(alias);
     const existing = bindings.get(alias);
     if (existing && existing !== String(placeholder)) {
       const digest = crypto.createHmac('sha256', key)
-        .update(`${CONTRACT_VERSION}\u0000${rulesetVersion}\u0000ambiguous-alias\u0000${kind}\u0000${canonical}`, 'utf8')
+        .update(`${contractVersion}\u0000${rulesetVersion}\u0000ambiguous-alias\u0000${kind}\u0000${canonical}`, 'utf8')
         .digest();
       let ambiguous;
-      try { ambiguous = placeholderForDigest(kind, digest, labels); }
+      try { ambiguous = reserve(kind, digest, true); }
       finally { digest.fill(0); }
       labels.set(ambiguous.placeholder, ambiguous.digestId);
       map.set(`${kind}:${canonical}`, ambiguous.placeholder);
@@ -190,11 +258,13 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     if (!Object.hasOwn(PREFIX, kind) || typeof placeholder !== 'string' || !placeholder) {
       throw inputError('Der Pseudonym-Ableitungswert ist ungültig.');
     }
+    kind = entityKind(kind);
     map.set(`${kind}:${canonicalValue(value)}`, placeholder);
   }
   function entriesForKind(kind) {
     requireLive();
     if (!Object.hasOwn(PREFIX, kind)) throw inputError('Der Entitätstyp ist im Pseudonymvertrag nicht zugelassen.');
+    kind = entityKind(kind);
     const prefix = `${kind}:`;
     return [...map].filter(([mapKey]) => mapKey.startsWith(prefix)).map(([mapKey, placeholder]) => ({ value: mapKey.slice(prefix.length), placeholder }));
   }
@@ -205,6 +275,8 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     key.fill(0);
     map.clear();
     labels.clear();
+    digestLabels.clear();
+    sequences.clear();
     bindings.clear();
     locations.length = 0;
   }
@@ -219,10 +291,13 @@ function createBatchPseudonymRegistry(secret, options = {}) {
 
   return Object.freeze({
     assign, lookup, remember, rememberEphemeral, entriesForKind, exportState, dispose, locations,
+    isKnownPlaceholder(value) { requireLive(); return labels.has(String(value)); },
+    readable,
     get counts() { return Object.freeze({ ...counts }); }
   });
 }
 
 module.exports = {
-  SECRET_BYTES, CONTRACT_VERSION, canonicalValue, base32, placeholderForDigest, createBatchPseudonymRegistry
+  SECRET_BYTES, CONTRACT_VERSION, READABLE_CONTRACT_VERSION, validPersistedLabel,
+  canonicalValue, base32, placeholderForDigest, createBatchPseudonymRegistry
 };

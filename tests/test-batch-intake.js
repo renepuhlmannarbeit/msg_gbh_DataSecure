@@ -286,6 +286,7 @@ test('mixed admission journals every position but snapshots only candidates', ()
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
     assert.strictEqual(state.schema, 'datasecure-batch/4');
     assert.strictEqual(state.product_channel, 'plugin');
+    assert.strictEqual(state.pseudonym_contract_version, 'batch-pseudonym/v1');
     assert.deepStrictEqual(state.items.map((entry) => entry.status), [
       'pending', 'preflight_mapping_pending', 'pending', 'preflight_mapping_pending'
     ]);
@@ -310,6 +311,7 @@ test('Standalone intake binds its product channel into the durable journal', () 
     item.begin([item.queueEntry()]);
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
     assert.strictEqual(state.product_channel, 'standalone');
+    assert.strictEqual(state.pseudonym_contract_version, 'batch-pseudonym/v2');
   } finally { item.cleanup(); }
 });
 

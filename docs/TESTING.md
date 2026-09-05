@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 05.09.2026 · 3.2.0-rc105
+Stand: 05.09.2026 · 3.2.0-rc106
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -101,7 +101,7 @@ Die zugehörigen Direktgates sind `test-batch-executor-startup`,
 `test-automatic-review-worker-flow` und `test-result-export-startup-replay`; sie
 sind außerdem genau einmal in `test:product` einsortiert.
 
-RC105 ergänzt die spawn-bestätigten, unter Windows ausdrücklich sichtbaren
+RC106 ergänzt die spawn-bestätigten, unter Windows ausdrücklich sichtbaren
 Öffnen-Aktionen, die exakte Markierung der laufbezogenen Zuordnungsdatei und den zweigeteilten Standalone-Ablauf
 **Verarbeiten / Ergebnisse**. Die direkten Regressionen liegen in
 `test-ui-process-policy`, `test-standalone`, `test-standalone-frontend` und

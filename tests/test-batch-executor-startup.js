@@ -55,6 +55,7 @@ function fixture(role, firstChild) {
   const launched = [];
   const records = [];
   const notices = [];
+  const noticeOptions = [];
   const claims = [];
   const releases = [];
   const timers = new Set();
@@ -151,14 +152,14 @@ function fixture(role, firstChild) {
         showLocalIntakeNotice: stage => notices.push({ type: 'failure', stage }),
         showBatchStateNotice: state => notices.push({ type: 'state', state }),
         showLocalIntakeNoticeConfirmed: stage => { notices.push({ type: 'failure', stage }); return true; },
-        showBatchStateNoticeConfirmed: state => { notices.push({ type: 'state', state }); return true; }
+        showBatchStateNoticeConfirmed: (state, options) => { notices.push({ type: 'state', state }); noticeOptions.push(options); return true; }
       };
       throw new Error(`Unexpected dependency: ${name}`);
     }
   }, { filename, timeout: 1000 });
   const api = module.exports;
   return {
-    api, records, notices, claims, releases, launched,
+    api, records, notices, noticeOptions, claims, releases, launched,
     owner: () => owner,
     queue: child => children.push(child),
     loseJournal() { journalReadable = false; },
@@ -192,6 +193,30 @@ test('an invalid private intake queue is rejected before a child is launched', (
   ]), (error) => error instanceof SafeError && error.code === 'LOCAL_QUEUE_SCHEMA_INVALID');
   assert.strictEqual(f.launched.length, 0);
 });
+
+for (const role of ['batch', 'intake', 'review']) {
+  test(`${role}: the native parent presenter receives only its own private batch binding`, () => {
+    const child = fakeChild();
+    const f = fixture(role, child);
+    assert.strictEqual(f.start().ok, true);
+    const batchToken = child.messages[0].batch_token;
+    child.callbacks[0](null);
+    child.emit('message', { type: `local-${role}-accepted` });
+    child.emit('message', {
+      type: `local-${role}-state`, complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+      result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
+      result_grades_verified: true, result_exported_count: 1, result_export_pending_count: 0, result_output_available: true
+    });
+    assert.strictEqual(f.noticeOptions.length, 1);
+    assert.strictEqual(f.noticeOptions[0].batchToken, batchToken);
+    assert.strictEqual(Object.keys(f.noticeOptions[0]).join(','), 'batchToken');
+    assert.doesNotMatch(JSON.stringify(f.notices), /batchToken|batch_token|[a-f0-9]{64}/u);
+    assert.doesNotMatch(JSON.stringify(f.records), /batchToken|batch_token|[a-f0-9]{64}/u);
+    child.exit(0);
+    f.drain();
+  });
+}
 
 function assertSafeStartFailure(start) {
   assert.throws(start, error => {

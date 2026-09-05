@@ -59,7 +59,8 @@ test('Tauri renderer has no direct file, dialog, shell or network permission', (
   assert.strictEqual(capability.local, true);
   assert.doesNotMatch(serialized, /(?:dialog|shell|opener|fs|http):/iu);
   assert.doesNotMatch(serialized, /core:default|core:path:/u);
-  assert.ok(capability.permissions.every((permission) => /^allow-[a-z-]+$/u.test(permission)));
+  assert.ok(capability.permissions.every((permission) => /^allow-[a-z-]+$/u.test(permission) ||
+    ['core:event:allow-listen', 'core:event:allow-unlisten'].includes(permission)));
   assert.strictEqual(config.build.devUrl, undefined);
   assert.deepStrictEqual(config.bundle.externalBin, ['binaries/datasecure-core']);
   assert.deepStrictEqual(config.app.security.capabilities, ['main-window']);
@@ -81,7 +82,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /DATASECURE_STANDALONE_DIAGNOSTIC_SESSION/u);
   assert.match(rust, /"session_id": diagnostic_session\(\)/u);
   assert.match(rust, /diagnostic_event\("page_loaded"/u);
-  assert.match(rust, /fn frontend_ready\(\)/u);
+  assert.match(rust, /fn frontend_ready\(/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);
   assert.doesNotMatch(frontend, /source_path|source_paths|raw_content|mapping|fetch\s*\(/u);
@@ -96,7 +97,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /code === 'STANDALONE_IPC_TIMEOUT'/u);
   assert.match(frontend, /configure_results/u);
   assert.match(frontend, /get_ui_context/u);
-  assert.match(frontend, /await invoke\('frontend_ready'\)/u);
+  assert.match(frontend, /await invoke\('frontend_ready', \{ nativeDropReady \}\)/u);
   assert.match(frontend, /textContent = resultFolder/u,
     'local paths are rendered as text and never interpreted as markup');
   assert.match(frontend, /open_local_ledger/u);
@@ -133,6 +134,30 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /presentation_generation: u64/u);
   assert.match(rust, /"product_version": env!\("CARGO_PKG_VERSION"\)/u);
   assert.match(frontend, /Version \$\{ready\.product_version\}/u);
+});
+
+test('native drag-drop shares admission with pickers and keeps an explicit Start', () => {
+  assert.strictEqual(config.app.windows[0].dragDropEnabled, true);
+  assert.match(rust, /WindowEvent::DragDrop\(DragDropEvent::Drop/u);
+  assert.match(rust, /admit_native_sources\(&worker, &paths, kind\)/u);
+  assert.match(rust, /admit_native_sources\(&owned, &paths, "files"\)/u);
+  assert.match(rust, /admit_native_sources\(&owned, &\[path\], "folder"\)/u);
+  assert.match(rust, /STANDALONE_DROP_MIXED/u);
+  assert.match(rust, /STANDALONE_SELECTION_PREPARED/u);
+  assert.match(rust, /drop_received/u);
+  const dropImplementation = rust.slice(rust.indexOf('fn native_drop('), rust.indexOf('fn request_id('));
+  assert.doesNotMatch(dropImplementation, /start_admitted_batch/u);
+  assert.doesNotMatch(dropImplementation, /json!\([^;]*paths/su, 'our app event does not contain a raw drop-path list; Tauri built-in events do');
+  assert.doesNotMatch(frontend, /listen\(['"]tauri:\/\/drag-drop/u);
+  assert.ok(capability.permissions.includes('core:event:allow-listen'));
+  assert.ok(!capability.permissions.includes('core:event:allow-emit'));
+  const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
+  assert.match(html, /id="drop-zone"[^>]+aria-label="Dateiaufnahme"/u);
+  assert.match(html, /100 Dateien und 500 MB/u);
+  assert.match(html, /id="select-files"/u);
+  assert.match(html, /id="select-folder"/u);
+  assert.match(html, /value="markdown-only" disabled/u, 'planned conversion-only mode is visible but has no active execution path');
+  assert.doesNotMatch(frontend, /invoke\(['"](?:convert|convert_only|start_conversion)/u);
 });
 
 test('the native Windows smoke exercises the visible WebView lifecycle', () => {

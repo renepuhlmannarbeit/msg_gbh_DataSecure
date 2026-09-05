@@ -1,13 +1,33 @@
 # Aktueller Iststand
 
-Stand: 05.09.2026 · 3.2.0-rc105 · integrierter Expertenstand: sichtbarer Standalone-Abschluss mit laufbezogener Zuordnung
+Stand: 05.09.2026 · 3.2.0-rc106 · integrierter Expertenstand: lesbare Standalone-Kennungen, native Aufnahme und Cowork-Abschlussparität
 
 ## Produkt in einem Satz
 
-DataSecure ist ein lokal arbeitendes Claude-Plugin für die De-Identifizierung von
-Geschäftsdokumenten. Originale werden ausschließlich über einen lokalen
-Betriebssystemdialog gewählt und niemals automatisch verändert oder gelöscht. Nur
-freigegebene, de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen.
+DataSecure bietet ein lokales Claude-Plugin und eine eigenständige Desktop-App
+zur De-Identifizierung von Geschäftsdokumenten. Originale werden lokal gewählt
+und niemals automatisch verändert oder gelöscht. Nur freigegebene,
+de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen. Die zweite
+Standalone-Kernfunktion **Nur in Markdown umwandeln** ohne Anonymisierung ist
+verbindlich geplant, aber noch nicht produktiv freigegeben (DS-085/BL-010.28).
+
+Neue Standalone-Stapel verwenden lesbare, neustartfeste Nummern für Personen,
+Unternehmen und Projekte; bestehende v1-Stapel und Plugin-Ausgaben behalten ihr
+Format. Eine gemeinsame Lookup-Korrektur lädt bekannte Unternehmensbindungen im
+Folgedokument wieder in die Ersetzungsliste. Native Dragdrop-Aufnahme verwendet
+denselben Admissionvertrag wie der Picker und verlangt weiterhin den expliziten
+Start. Die Cowork-Abschlussansicht bindet ihren Öffnen-Knopf an den konkreten
+sichtbaren Exportlauf und behauptet bei nicht verfügbarem Ziel keinen Erfolg.
+
+Lokaler Gegencheck am 05.09.2026: `test:product` vollständig grün (39 Basis-
+und 111 direkt registrierte Testdateien, einschließlich 2.000 variierender
+Eingaben), zusätzlich Standalone-/Rust-, Dokumentations-, Skill- und
+Status-App-Gates. Der Paket-Smoke verlangt jetzt vier echte TXT/Markdown/CSV/
+DOCX-Eingaben, stabile lesbare Kennungen, unveränderte Originale und die genaue
+Laufzuordnung. Der nächste Kandidat wird erst nach sauberem Quellcommit durch
+zwei bytegleiche PKG-04-Builds samt Paket- und nativen Startsmokes an INT-13
+gebunden; der Receipt unter `dist/pkg-04/<commit>/` ist der Nachweis, nicht
+dieser Testplan. Sichtbare Dragdrop-/Finder-/Explorer-Abnahme bleibt separat.
 
 ## Belegter Produktumfang
 

@@ -10,8 +10,22 @@ Es ist noch **kein freigegebenes Endnutzerprodukt**.
 Tauri ist ausschließlich für Fenster, native Auswahl, Sidecar-Lifecycle und
 die feste UI-Projektion zuständig. Formatprüfung, Konvertierung, PII-Erkennung,
 Anonymisierung, Review, Recovery, Mapping und Export verbleiben vollständig im
-gemeinsamen DataSecure-Core. Der Renderer erhält keine Quellpfade, Rohtexte,
-Mappings, Tokens, Kommandozeilen oder freien Fehlertexte.
+gemeinsamen DataSecure-Core. Der Renderer zeigt ausgewählte Dateinamen sowie
+Quellen- und Ergebnisordner ausschließlich lokal als Text an (DS-082). Er erhält
+keine Rohtexte, Mappinginhalte, Tokens, Kommandozeilen, freien Fehlertexte oder
+direkten Dateisystemzugriff; die lokale Pfadanzeige wird nicht protokolliert.
+
+Dateien oder ein Ordner lassen sich nativ in das Fenster ziehen. Die vorhandenen
+Auswahlbuttons bleiben als Tastatur-/Klickalternative erhalten. Beide Wege
+zeigen erst die aufgenommene Auswahl; nur **Anonymisierung starten** verarbeitet
+sie. Neue Standalone-Stapel verwenden lesbare und bei Fortsetzung stabile
+Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`; vorhandene v1-Stapel bleiben
+unverändert. Die Kennungen gelten nicht kundenübergreifend oder über neue Stapel.
+
+**Nur in Markdown umwandeln** bleibt eine zweite verbindliche Kernfunktion
+(DS-085), ist in diesem Piloten aber noch deaktiviert. Geplant ist derselbe
+komplette Workflow ohne Anonymisierung, mit allen extrahierbaren Ausgangsinhalten
+und getrenntem, als nicht anonymisiert gekennzeichnetem Markdown-Ergebnisbereich.
 
 Der Endnutzerablauf besitzt zwei Hauptansichten: **Verarbeiten** für Auswahl,
 Start und Fortschritt sowie **Ergebnisse** für den letzten vollständig

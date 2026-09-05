@@ -39,7 +39,8 @@ pauschal ein Satz aktuell erfüllter Produktverträge:
   `PRIVATE_ARTIFACT_ENCRYPTION_V1_LEGACY.md` ausschließlich unter
   `docs/archive/2026-09/retired-active-docs`. `BATCH_PSEUDONYM_V1.md` beschreibt
   den aktuellen rohwertfreien, stapelweit stabilen und neustartfesten
-  Pseudonymkontext ohne Schlüsselbund.
+  Pseudonymkontext ohne Schlüsselbund (v1 für Plugin/Altstapel, lesbares v2 für
+  neue Standalone-Stapel nach DS-084).
 
 Der Statuskopf des einzelnen Vertrags und `CURRENT_STATE.md` entscheiden bei
 Widersprüchen. Ein vorhandener Vertrag belegt weder Implementierung noch E1-/E2-

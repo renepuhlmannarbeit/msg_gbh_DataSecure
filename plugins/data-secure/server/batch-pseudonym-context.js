@@ -9,6 +9,7 @@ const { PRIVACY_RULESET_VERSION } = require('./privacy/policy');
 const {
   SECRET_BYTES,
   CONTRACT_VERSION,
+  READABLE_CONTRACT_VERSION,
   createBatchPseudonymRegistry
 } = require('./batch-pseudonym-registry');
 
@@ -27,9 +28,12 @@ function createBatchPseudonymState(options = {}) {
     seed = randomBytes(SECRET_BYTES);
     if (!Buffer.isBuffer(seed) || seed.length !== SECRET_BYTES) throw unavailable();
     return {
-      pseudonym_contract_version: CONTRACT_VERSION,
+      pseudonym_contract_version: options.productChannel === 'standalone' ? READABLE_CONTRACT_VERSION : CONTRACT_VERSION,
       pseudonym_ruleset_version: PRIVACY_RULESET_VERSION,
-      pseudonym_seed: seed.toString('base64url')
+      pseudonym_seed: seed.toString('base64url'),
+      ...(options.productChannel === 'standalone'
+        ? { pseudonym_registry_state: { bindings: [], labels: [] } }
+        : {})
     };
   } finally {
     if (Buffer.isBuffer(seed)) seed.fill(0);
@@ -37,8 +41,9 @@ function createBatchPseudonymState(options = {}) {
 }
 
 function validateBatchPseudonymState(state) {
-  if (!state || state.pseudonym_contract_version !== CONTRACT_VERSION ||
+  if (!state || ![CONTRACT_VERSION, READABLE_CONTRACT_VERSION].includes(state.pseudonym_contract_version) ||
       state.pseudonym_ruleset_version !== PRIVACY_RULESET_VERSION ||
+      (state.pseudonym_contract_version === READABLE_CONTRACT_VERSION && !state.pseudonym_registry_state) ||
       typeof state.pseudonym_seed !== 'string' || !ENCODED_SEED_RE.test(state.pseudonym_seed)) {
     throw unavailable('Der Stapel besitzt keinen kompatiblen Pseudonymkontext. Bitte die Originaldateien neu auswählen.');
   }
@@ -57,6 +62,7 @@ async function withBatchPseudonymRegistry(state, action, options = {}) {
   try {
     seed = validateBatchPseudonymState(state);
     registry = createBatchPseudonymRegistry(seed, {
+      contractVersion: state.pseudonym_contract_version,
       rulesetVersion: state.pseudonym_ruleset_version,
       persistedState: state.pseudonym_registry_state
     });
@@ -71,7 +77,7 @@ async function withBatchPseudonymRegistry(state, action, options = {}) {
       if (registry) {
         const snapshot = registry.exportState();
         state.pseudonym_registry_state = snapshot;
-        if (typeof options.persist === 'function') options.persist(state);
+        if (typeof options.persist === 'function') await options.persist(state);
       }
     } finally {
       if (registry) registry.dispose();

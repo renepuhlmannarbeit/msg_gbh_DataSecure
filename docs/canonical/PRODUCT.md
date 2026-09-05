@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 05.09.2026 · Ist-Zustand RC105
+Stand: 05.09.2026 · Ist-Zustand RC106
 
 ## Ziel
 
@@ -86,6 +86,16 @@ DOCX-Differentialpfad vorbereitet. Bis Zielhost-UAT, breite Coverage und native
 macOS-Pakete vorliegen, gelten die oben
 genannten vier freigegebenen Formate unverändert; Details stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
+
+Standalone besitzt zwei verbindliche Kernfunktionen (DS-085). Die heute
+implementierte Anonymisierung und die **noch nicht aktivierte reine
+Markdown-Konvertierung** verwenden denselben Auswahl-/Start-/Fortschritts- und
+Ergebnisablauf. Reine Konvertierung entfernt keine personenbezogenen Inhalte,
+hat keinen PII-Review und exportiert ausschließlich `.md`-Nutzdokumente samt
+lokaler Zuordnung nach `DataSecure-Markdown/Lauf-…`. Diese Dateien sind ausdrücklich
+**nicht anonymisiert** und werden niemals automatisch an Claude übergeben.
+Die Format-Zielliste bleibt für beide Modi erhalten; deren Freigabestatus darf
+nicht aus einer sichtbaren Moduswahl oder vorhandenen Dateiendung abgeleitet werden.
 
 ## Grenzen vor Freigabe
 

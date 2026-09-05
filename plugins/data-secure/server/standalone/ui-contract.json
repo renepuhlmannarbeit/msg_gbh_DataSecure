@@ -10,6 +10,15 @@
   "desktop_host_target_resolution": "sidecar-resolve-rust-open",
   "terminal_presentation_ack": "content-free-generation-correlated",
   "state_source": "polled_public_status_snapshot",
+  "source_admission": "native-picker-or-native-drag-drop-same-validator",
+  "drag_drop": {
+    "native_event": "datasecure-native-drop",
+    "accepted_shapes": ["files", "one-folder"],
+    "starts_processing": false,
+    "replaces_prepared_selection": false,
+    "app_drop_event_contains_source_paths": false,
+    "tauri_builtin_drop_event_contains_paths": true
+  },
   "states": [
     "ready",
     "preparing",

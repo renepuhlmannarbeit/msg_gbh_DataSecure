@@ -1052,3 +1052,65 @@ die Modellgrenze geraten. Alte Exportrecords ohne Produktkanal werden nur
 zusammen mit ihrem eigenen privaten Stapeljournal migriert; ein generischer
 Startup-Replay darf den Produktkanal nicht erraten. Diese Entscheidung
 präzisiert DS-023, DS-069, DS-079 und DS-080.
+
+## DS-084 – Lesbare Stapelkennungen und native Aufnahme in Standalone
+
+Bestätigt am 05.09.2026: Neue Standalone-Stapel verwenden lesbare Kennungen wie
+`[PERSON_001]`, `[UNTERNEHMEN_001]` und `[PROJEKT_001]`. Arbeitgeber, Kunde und
+allgemeine Organisation sind Rollen derselben Unternehmensidentität, keine
+getrennten Nummernräume. Die rohwertfreien Aliasbindungen und reservierten
+Nummern werden vor Veröffentlichung dauerhaft gespeichert und bei Fortsetzung
+unverändert übernommen. Nummern sind nur innerhalb dieses Stapels aussagekräftig.
+Gleiche Schreibweise ist kein Beweis realer Identität; Namensvarianten und
+mehrdeutige Nachnamen dürfen nicht als vollautomatische Personenauflösung
+verkauft werden. Bereits bestehende v1-Stapel und das Cowork-Plugin behalten
+ihren vereinbarten HMAC-Platzhaltervertrag; keine nachträgliche Umnummerierung.
+
+Dateien oder ein Ordner können nativ in Standalone hineingezogen werden. Drop
+nutzt dieselbe Core-Aufnahme wie die Picker, zeigt zunächst die lokale Auswahl
+und startet keine Verarbeitung. Die Auswahlbuttons bleiben gleichwertige
+Klick- und Tastaturalternativen. Der Core erhält die Auswahl über den nativen
+Host; der eigene Aufnahmeevent liefert dem Renderer die lokale Textprojektion,
+keine zusätzliche rohe Pfadliste und keine Dateisystemrechte. Tauri kann daneben
+native Framework-Dropevents mit lokalen Pfaden erzeugen; DataSecure abonniert
+sie im Renderer nicht. Es gibt keinen entsprechenden Dragdrop-Eingang
+für rohe Chat-Anhänge im Claude-Produkt.
+
+Entscheidungsbasis: [Tauri DragDropEvent](https://docs.rs/tauri/latest/tauri/enum.DragDropEvent.html)
+und [W3C: Alternativen zu Ziehbewegungen](https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html).
+
+## DS-085 – Reine Markdown-Konvertierung ist eine zweite Kernfunktion
+
+Am 05.09.2026 erneut ausdrücklich bestätigt: Standalone soll neben Anonymisierung
+einen vollständigen **Nur in Markdown umwandeln**-Workflow anbieten. Er bereitet
+Dokumentinhalte für eine spätere KI-Nutzung auf, ohne Anonymisierung, Pseudonyme,
+PII-Entfernung, Agenten oder KI-Aufrufe. Dies ist verbindlicher Produktumfang,
+kein verzichtbarer Prototyp. DS-082 wird präzisiert, nicht zurückgenommen.
+
+Gemeinsam bleiben Dateiauswahl/Dragdrop, Zielwahl, expliziter Start, ein aktiver
+Stapel, Größenlimits, Quellenidentität, Offline-Parser, Coverage, Fortschritt,
+Abbruch/Fortsetzung, Zuordnung und Ergebnisöffnung. Der Modus wird mit dem Stapel
+dauerhaft gebunden und bei Recovery niemals neu aus einem UI-Default abgeleitet.
+Die Umwandlung erhält Namen, Unternehmen, Kontakt-/Bankdaten und fachlichen Text.
+Nur der PII-/Residual-/Anonymisierungsreview entfällt; gefährliche aktive Inhalte,
+unsichere Container und verschlüsselte Quellen werden weiterhin nicht ausgeführt
+oder entschlüsselt. Extraktionslücken werden konkret als solche gemeldet, niemals
+als vollständige Konvertierung kaschiert.
+
+Zielartefakte sind eine `.md` pro Quelle und eine lokale Zuordnungsdatei in
+`DataSecure-Markdown/Lauf-…`, klar **nicht anonymisiert**. Ein Moduswechsel darf
+weder bestehende Ergebnisse überschreiben noch Konvertate in `DataSecure-Output`
+oder die Plugin-Handoff-Liste bringen. Es gibt keine automatische KI-Übertragung
+und keinen neuen Bestätigungsdialog je Datei. TXT, Markdown, CSV, DOCX, XLSX,
+PPTX, PDF, Scan-PDF und Bilder bleiben Zielumfang; jeder Konverter braucht seinen
+nachgewiesenen Extraktionsumfang. Layoutidentische Rekonstruktion ist kein Ziel.
+
+Iststatus: Die reine Konvertierung bleibt bis zum vollständigen Modus-/Journal-/
+Exportvertrag gesperrt. Umsetzung unter BL-010.28 mit BL-010.15–19; UI-Sichtbarkeit
+ist kein Implementierungs- oder Freigabenachweis.
+
+Herstellerabgleich am 05.09.2026: [Microsoft MarkItDown](https://github.com/microsoft/markitdown)
+zielt auf Inhalt/Struktur für Textanalyse, nicht originalgetreue Layoutkonvertierung.
+Die dort angebotenen Cloud- und LLM-Erweiterungen sind keine Bestandteile unseres
+lokalen Konvertierungsvertrags; insbesondere ersetzt `markitdown-ocr` mit
+LLM-Vision keine unabhängig belegte lokale OCR.

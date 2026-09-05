@@ -1,6 +1,6 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 04.09.2026 · Entscheidungen DS-075/DS-076 · Steuerung über BL-010.9
+Stand: 05.09.2026 · Entscheidungen DS-075/DS-076/DS-084/DS-085 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
 
@@ -34,8 +34,9 @@ ohne ihre Fachdaten zu vermischen.
 ## Ziel-Nutzerreise
 
 Dieser Ablauf beschreibt das freizugebende Ziel. Die native Windows-Hülle ist
-als Engineering-Pilot vorhanden; Drag-and-drop und echtes Pausieren sind noch
-Zielumfang und dürfen in der Pilotoberfläche nicht als verfügbar erscheinen.
+als Engineering-Pilot vorhanden; native Drag-and-drop-Aufnahme ist angebunden,
+echtes Pausieren bleibt Zielumfang. Sichtbare Drop-/Fokus- und macOS-Evidenz ist
+nicht durch den Windows-Code- und Pakettest ersetzt.
 
 Im Erfolgsfall der Anonymisierung gibt es genau zwei bewusste Handlungen:
 
@@ -45,9 +46,13 @@ Im Erfolgsfall der Anonymisierung gibt es genau zwei bewusste Handlungen:
 Das Hauptfenster zeigt dabei lokal den aktuellen Quellenordner, die gewählten
 Dateinamen und den Ergebnisordner. Diese Anzeige ist kein Diagnoseinhalt und
 wird ausschließlich als Text gerendert. Die Betriebsart **Nur in Markdown
-umwandeln** ist gemäß DS-082 als getrenntes Ziel vorgesehen, im Engineering-
-Piloten jedoch noch nicht freigegeben: nicht anonymisierte Konvertate dürfen
-niemals in den anonymisierten Ergebnisweg fallen.
+umwandeln** ist gemäß DS-082/DS-085 eine gleichwertige zweite Kernfunktion, im
+Engineering-Piloten jedoch noch nicht freigegeben. Sie besitzt denselben
+Aufnahme-/Start-/Fortschritts-/Recovery-/Mappingablauf, erhält aber alle
+extrahierbaren Ausgangsinhalte ohne PII-Ersetzung. Nicht anonymisierte Konvertate
+gehen ausschließlich nach `DataSecure-Markdown/Lauf-…`, niemals in den
+anonymisierten Ergebnisweg oder die Plugin-Handoff-Liste. Der Modus gehört in
+den dauerhaften Stapel- und Exportvertrag, nicht nur in einen UI-Schalter.
 
 Die Oberfläche besteht aus vier Zuständen im selben Fenster:
 
@@ -126,8 +131,30 @@ sequenziell und ohne überlappende Polls ab. Frühere, nicht angebundene
 Event-/Reducer-Prototypen wurden entfernt. Zwischen Hülle und Core sind über
 `desktop-ipc.js` nur höchstens 1 MiB große, längengeführte Nachrichten auf
 exklusiv geerbten Prozesskanälen zulässig, niemals ein lokaler HTTP- oder
-WebSocket-Port. Quellpfade existieren nur im privaten Hülle-Core-Kanal und nie
-in einem Rendererereignis.
+WebSocket-Port. Der eigene Aufnahmeevent liefert keine zusätzliche rohe
+Drop-Pfadliste; die bestätigte lokale Auswahlprojektion mit Namen und
+Quellenordnern darf als Text im Renderer erscheinen. Tauri erzeugt auch native
+Framework-Dropevents mit Pfaden; der DataSecure-Renderer abonniert ausschließlich
+seinen eigenen Aufnahmeevent. Es entstehen keine Rohbytes, direkten Dateirechte
+oder Netzwerkrechte. Drop und Picker verwenden denselben Admissionvertrag;
+ein nativer Guard serialisiert Auswahl, Aufnahme und Start. Ein Drop ersetzt
+keinen gerade vorbereiteten oder laufenden Stapel. Fehlversuche liefern einen
+sichtbaren, inhaltsfreien Hinweis und keine implizite Startfreigabe.
+
+### Zweiter Modus: Konvertierung ohne Anonymisierung (verbindliches Soll)
+
+BL-010.28 bindet die vollständige Nutzerreise beider Modi. Der bereits vorhandene
+lokale Parserpfad wird wiederverwendet, wo seine Extraktions-Coverage reicht;
+MarkItDown erweitert ihn erst nach BL-010.15–19. Ein bloßes Überspringen des
+Residual-Gates im bestehenden Exportpfad ist keine zulässige Implementierung.
+Auswahl und Quellen bleiben unverändert; in der Modusübersicht steht ruhig und
+dauerhaft **Nicht anonymisiert – enthält Originalinhalte**. Bei einem Fehler
+bleiben fertige Positionen checkpointgebunden erhalten; Fortsetzen nutzt denselben
+Modus, Zielordner und Mappingkontext. PII-Review entfällt in diesem Modus. Fehlende
+Extraktion/Coverage bleibt ein eigener fachlicher Fehler, keine Anonymisierungsfrage.
+Für TXT/Markdown/CSV/DOCX muss ein echter Paketlauf zuerst die vollständige
+Inhaltserhaltung belegen; XLSX/PPTX/PDF/OCR/Bilder folgen mit eigenen Formatgates.
+Die breite Formatliste bleibt Zielumfang und wird nicht als bereits aktiviert dargestellt.
 
 Der Renderer bestätigt einen terminalen Zustand erst nach zwei aufeinander
 folgenden `requestAnimationFrame`-Takten über den ausschließlich dafür

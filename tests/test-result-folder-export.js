@@ -102,6 +102,39 @@ try {
   assert.deepStrictEqual(fs.readdirSync(path.join(resultOutputDirectory(), pluginRecord.run_directory)),
     ['Dokument-001-anonymisiert.md']);
 
+  // Exercise the actual plugin exporter -> private resolver -> native presenter
+  // boundary. Only OS execution is captured; neither paths nor export state
+  // are mocked. The presenter must use this batch's exact run, not its parent.
+  const { showBatchStateNotice } = require('../plugins/data-secure/server/companion/completion-summary');
+  const pluginProgress = {
+    complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+    result_exported_count: 1, result_export_pending_count: 0, result_output_available: true
+  };
+  const pluginProgressBefore = JSON.stringify(pluginProgress);
+  function pluginPresentation() {
+    let command;
+    assert.strictEqual(showBatchStateNotice(pluginProgress, {
+      batchToken: pluginState.token, platform: 'win32', env: { SystemRoot: 'C:\\Windows' },
+      runner(_executable, args) { command = args.at(-1); return { status: 0, stdout: 'SHOWN' }; }
+    }), true);
+    assert.strictEqual(JSON.stringify(pluginProgress), pluginProgressBefore, 'the MCP progress projection is unchanged');
+    assert.doesNotMatch(command, /vertraulicher-name|222222222222/u, 'source names and batch tokens stay outside native scripts');
+    return command;
+  }
+  const pluginRun = path.join(resultOutputDirectory(), pluginRecord.run_directory);
+  const exactOpenArgument = `-ArgumentList '"${pluginRun.replace(/'/g, "''")}"'`;
+  assert.ok(pluginPresentation().includes(exactOpenArgument), 'the opened path is the exported run, not DataSecure-Output');
+  assert.ok(!pluginPresentation().includes(runs[0]), 'a different product run cannot become this batch target');
+  const displacedPluginRun = `${pluginRun}-displaced`;
+  fs.renameSync(pluginRun, displacedPluginRun);
+  try {
+    const missingRunPresentation = pluginPresentation();
+    assert.doesNotMatch(missingRunPresentation, /\$openButton/u, 'a missing run has no parent-folder fallback');
+    assert.match(missingRunPresentation, /im aktuell gewählten Ergebnisordner nicht verfügbar/u);
+  } finally {
+    fs.renameSync(displacedPluginRun, pluginRun);
+  }
+
   // DS-023: visible results stay until the user deletes them. DS-069: only a
   // failed export is replayed. A completed record is final; user deletions are
   // respected and a destination change never mirrors earlier runs.
@@ -119,6 +152,9 @@ try {
   assert.deepStrictEqual(visibleExportStatus(state.token, 2), { exported: 2, pending: 0, available: false },
     'a completed record from another destination is not advertised as locally available');
   assert.strictEqual(visibleExportDirectory(state.token), '');
+  const unavailablePresentation = pluginPresentation();
+  assert.doesNotMatch(unavailablePresentation, /\$openButton/u, 'a replaced destination cannot redirect the old batch action');
+  assert.match(unavailablePresentation, /im aktuell gewählten Ergebnisordner nicht verfügbar/u);
   assert.deepStrictEqual(replayPendingResultExports(), { exported: 0, pending: 0, failures: 0 });
   assert.deepStrictEqual(fs.readdirSync(resultOutputDirectory()), []);
 

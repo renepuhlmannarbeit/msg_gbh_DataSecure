@@ -185,4 +185,21 @@ test('canonical register distinguishes active, no-go, and superseded contracts',
   }
 });
 
+test('Standalone retains two core functions and does not pretend conversion-only is released', () => {
+  const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+  assert.deepStrictEqual(target.standalone_desktop.core_functions,
+    ['markdown-and-anonymize', 'markdown-only']);
+  assert.strictEqual(target.standalone_desktop.markdown_only_release_status, 'in-development-not-enabled');
+  assert.strictEqual(target.standalone_desktop.markdown_only_output_subdirectory, 'DataSecure-Markdown');
+  assert.strictEqual(target.standalone_desktop.markdown_only_preserves_identifiers, true);
+  assert.strictEqual(target.standalone_desktop.markdown_only_automatic_ai_upload, false);
+  for (const file of ['PRODUCT_VISION.md', 'PRODUCT.md', 'STANDALONE_ARCHITECTURE.md', 'BACKLOG.md', 'UML_ARCHITECTURE.md']) {
+    const text = read(`docs/canonical/${file}`);
+    assert.ok(text.includes('DS-085'), `${file} must bind the accepted second core function`);
+    assert.match(text, /DataSecure-Markdown/u, `${file} must separate raw conversion outputs`);
+  }
+  assert.ok(target.decision_ids.includes('DS-084'));
+  assert.strictEqual(target.processing.cowork_and_existing_v1_pseudonyms, 'hmac-v1-unchanged');
+});
+
 done();

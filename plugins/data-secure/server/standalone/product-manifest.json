@@ -3,7 +3,7 @@
   "product_id": "gbh-datasecure-standalone",
   "product_channel": "standalone",
   "data_namespace": "SecureDataMsg-Standalone",
-  "version": "3.2.0-rc105",
+  "version": "3.2.0-rc106",
   "release_status": "engineering_only",
   "entry": "cli.js",
   "desktop_shell_candidate": "tauri-2",

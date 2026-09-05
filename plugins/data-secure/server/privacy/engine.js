@@ -191,9 +191,11 @@ function buildPersonDictionary(seeds, reg) {
     }
     const toks = canonical.split(/\s+/);
     const surname = toks[toks.length - 1];
-    if (!seed.noSurnameAlias && looksSurname(surname) && surname.length >= 3 && !surnameToPlaceholder.has(key(surname))) {
+    if (!seed.noSurnameAlias && looksSurname(surname) && surname.length >= 3 &&
+        (reg.readable === true || !surnameToPlaceholder.has(key(surname)))) {
       surnameToPlaceholder.set(key(surname), ph);
       if (typeof reg.remember === 'function') reg.remember('PERSON', surname, ph);
+      if (reg.readable === true) surnameToPlaceholder.set(key(surname), reg.lookup('PERSON', surname));
     }
   }
 

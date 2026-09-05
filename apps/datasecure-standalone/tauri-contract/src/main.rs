@@ -7,13 +7,13 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{self, Receiver},
         Arc, Mutex, OnceLock,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, DragDropEvent, Emitter, Manager, State, WindowEvent};
 
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES: usize = 768 * 1024;
@@ -103,6 +103,159 @@ impl Drop for SidecarProcess {
 struct DesktopState {
     app: AppHandle,
     sidecar: Arc<Mutex<Option<SidecarProcess>>>,
+    selection_busy: Arc<AtomicBool>,
+    admission_present: Arc<AtomicBool>,
+    frontend_ready: Arc<AtomicBool>,
+}
+
+struct SelectionGuard(Arc<AtomicBool>);
+
+impl Drop for SelectionGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+fn selection_guard(
+    busy: &Arc<AtomicBool>,
+    admitted: &AtomicBool,
+    allow_admitted: bool,
+) -> Result<SelectionGuard, String> {
+    busy.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .map_err(|_| "STANDALONE_BUSY".to_string())?;
+    let guard = SelectionGuard(busy.clone());
+    if !allow_admitted && admitted.load(Ordering::Acquire) {
+        return Err("STANDALONE_SELECTION_PREPARED".to_string());
+    }
+    Ok(guard)
+}
+
+fn dropped_source_kind(paths: &[PathBuf]) -> Result<&'static str, String> {
+    if paths.is_empty() || paths.len() > 100 {
+        return Err("STANDALONE_SELECTION_INVALID".to_string());
+    }
+    strict_path_strings(paths)?;
+    let mut folders = 0;
+    for path in paths {
+        if !path.is_absolute() {
+            return Err("STANDALONE_SELECTION_INVALID".to_string());
+        }
+        let metadata = std::fs::symlink_metadata(path)
+            .map_err(|_| "STANDALONE_SELECTION_INVALID".to_string())?;
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                return Err("STANDALONE_SELECTION_INVALID".to_string());
+            }
+        }
+        if metadata.file_type().is_symlink() || (!metadata.is_dir() && !metadata.is_file()) {
+            return Err("STANDALONE_SELECTION_INVALID".to_string());
+        }
+        folders += usize::from(metadata.is_dir());
+    }
+    match (folders, paths.len()) {
+        (0, _) => Ok("files"),
+        (1, 1) => Ok("folder"),
+        _ => Err("STANDALONE_DROP_MIXED".to_string()),
+    }
+}
+
+fn admit_native_sources(
+    state: &DesktopState,
+    paths: &[PathBuf],
+    kind: &str,
+) -> Result<Value, String> {
+    let current = rpc(state, "get_public_state", None, &[], None)?;
+    if !matches!(
+        current.get("state").and_then(Value::as_str),
+        Some("ready" | "results_available" | "completed_without_results")
+    ) {
+        return Err("STANDALONE_BUSY".to_string());
+    }
+    let result = rpc(state, "admit_selected_sources", Some(kind), paths, None)?;
+    state.admission_present.store(true, Ordering::Release);
+    Ok(result)
+}
+
+// Our application event carries the existing local display context after the
+// same admission validator used by the picker. Tauri also emits its built-in
+// drag-drop event with selected paths; this UI only subscribes to our event.
+fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
+    if !state.frontend_ready.load(Ordering::Acquire) {
+        return;
+    }
+    diagnostic_event(
+        "drop_received",
+        Some("admit_selected_sources"),
+        "progress",
+        None,
+        None,
+    );
+    let guard = match selection_guard(&state.selection_busy, &state.admission_present, false) {
+        Ok(value) => value,
+        Err(code) => {
+            diagnostic_event(
+                "drop_rejected",
+                Some("admit_selected_sources"),
+                "failed",
+                Some(&code),
+                None,
+            );
+            let _ = state.app.emit_to(
+                "main",
+                "datasecure-native-drop",
+                json!({"phase": "rejected", "error_code": code}),
+            );
+            return;
+        }
+    };
+    let owned = state.clone();
+    let _ = owned.app.emit_to(
+        "main",
+        "datasecure-native-drop",
+        json!({"phase": "checking"}),
+    );
+    tauri::async_runtime::spawn(async move {
+        let _guard = guard;
+        let worker = owned.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            let kind = dropped_source_kind(&paths)?;
+            admit_native_sources(&worker, &paths, kind)
+        })
+        .await
+        .unwrap_or_else(|_| Err("STANDALONE_OPERATION_FAILED".to_string()));
+        match result {
+            Ok(result) => {
+                diagnostic_event(
+                    "drop_admitted",
+                    Some("admit_selected_sources"),
+                    "ready",
+                    None,
+                    None,
+                );
+                let _ = owned.app.emit_to(
+                    "main",
+                    "datasecure-native-drop",
+                    json!({"phase": "accepted", "result": result}),
+                );
+            }
+            Err(code) => {
+                diagnostic_event(
+                    "drop_rejected",
+                    Some("admit_selected_sources"),
+                    "failed",
+                    Some(&code),
+                    None,
+                );
+                let _ = owned.app.emit_to(
+                    "main",
+                    "datasecure-native-drop",
+                    json!({"phase": "failed", "error_code": code}),
+                );
+            }
+        }
+    });
 }
 
 fn request_id() -> String {
@@ -454,6 +607,7 @@ fn rpc(
                 Some(started.elapsed().as_millis()),
             );
             process_guard.take();
+            state.admission_present.store(false, Ordering::Release);
             return Err(code);
         }
     };
@@ -467,6 +621,7 @@ fn rpc(
             Some(started.elapsed().as_millis()),
         );
         process_guard.take();
+        state.admission_present.store(false, Ordering::Release);
         return Err("STANDALONE_IPC_FAILED".to_string());
     }
     let validated = validated.expect("validated above");
@@ -620,6 +775,7 @@ fn filters(dialog: rfd::FileDialog) -> rfd::FileDialog {
 
 #[tauri::command]
 async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
     diagnostic_event(
         "picker_opened",
         Some("select_files"),
@@ -649,21 +805,17 @@ async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
         None,
     );
     let owned = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        rpc(
-            &owned,
-            "admit_selected_sources",
-            Some("files"),
-            &paths,
-            None,
-        )
-    })
-    .await
-    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+    let result =
+        tauri::async_runtime::spawn_blocking(move || admit_native_sources(&owned, &paths, "files"))
+            .await
+            .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())??;
+    state.admission_present.store(true, Ordering::Release);
+    Ok(result)
 }
 
 #[tauri::command]
 async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
     diagnostic_event(
         "picker_opened",
         Some("select_folder"),
@@ -692,26 +844,28 @@ async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> 
         None,
     );
     let owned = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        rpc(
-            &owned,
-            "admit_selected_sources",
-            Some("folder"),
-            &[path],
-            None,
-        )
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        admit_native_sources(&owned, &[path], "folder")
     })
     .await
-    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())??;
+    state.admission_present.store(true, Ordering::Release);
+    Ok(result)
 }
 
 #[tauri::command]
 async fn cancel_admission(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "cancel_admission").await
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
+    let result = blocking_rpc(state.inner().clone(), "cancel_admission").await;
+    state.admission_present.store(false, Ordering::Release);
+    result
 }
 #[tauri::command]
 async fn start_admitted_batch(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "start_admitted_batch").await
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
+    let result = blocking_rpc(state.inner().clone(), "start_admitted_batch").await;
+    state.admission_present.store(false, Ordering::Release);
+    result
 }
 #[tauri::command]
 async fn get_public_state(state: State<'_, DesktopState>) -> Result<Value, String> {
@@ -745,6 +899,7 @@ async fn continue_current_batch(state: State<'_, DesktopState>) -> Result<Value,
 }
 #[tauri::command]
 async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
     diagnostic_event(
         "picker_opened",
         Some("configure_results"),
@@ -802,8 +957,8 @@ async fn open_current_results(state: State<'_, DesktopState>) -> Result<Value, S
 async fn open_local_ledger(state: State<'_, DesktopState>) -> Result<Value, String> {
     let owned = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let target = resolved_local_target(&owned, "resolve_local_ledger", "file")
-            .inspect_err(|code| {
+        let target =
+            resolved_local_target(&owned, "resolve_local_ledger", "file").inspect_err(|code| {
                 diagnostic_event(
                     "local_target_validation_failed",
                     Some("open_local_ledger"),
@@ -835,9 +990,13 @@ async fn shutdown(state: State<'_, DesktopState>) -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn frontend_ready() -> Value {
+fn frontend_ready(state: State<'_, DesktopState>, native_drop_ready: Option<bool>) -> Value {
+    state
+        .frontend_ready
+        .store(native_drop_ready == Some(true), Ordering::Release);
     diagnostic_event("frontend_ready", None, "ready", None, None);
-    json!({ "ok": true, "product_version": env!("CARGO_PKG_VERSION") })
+    json!({ "ok": true, "product_version": env!("CARGO_PKG_VERSION"),
+        "admission_prepared": state.admission_present.load(Ordering::Acquire) })
 }
 
 fn main() {
@@ -850,9 +1009,30 @@ fn main() {
             let state = DesktopState {
                 app: app.handle().clone(),
                 sidecar: Arc::new(Mutex::new(None)),
+                selection_busy: Arc::new(AtomicBool::new(false)),
+                admission_present: Arc::new(AtomicBool::new(false)),
+                frontend_ready: Arc::new(AtomicBool::new(false)),
             };
             app.manage(state);
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            let state = window.state::<DesktopState>();
+            match event {
+                WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
+                    native_drop(&state, paths.clone())
+                }
+                WindowEvent::DragDrop(DragDropEvent::Enter { .. }) => {
+                    let _ = window.emit("datasecure-native-drop", json!({"phase": "enter"}));
+                }
+                WindowEvent::DragDrop(DragDropEvent::Leave) => {
+                    let _ = window.emit("datasecure-native-drop", json!({"phase": "leave"}));
+                }
+                _ => {}
+            }
         })
         .invoke_handler(tauri::generate_handler![
             select_files,
@@ -890,6 +1070,94 @@ mod tests {
         let payload = br#"{"ok":true}"#;
         let value = read_frame(&mut Cursor::new(frame(payload))).expect("valid frame");
         assert_eq!(value.get("ok").and_then(Value::as_bool), Some(true));
+    }
+
+    #[test]
+    fn native_drop_classifies_real_unicode_paths_and_refuses_ambiguous_shapes() {
+        let directory = std::env::temp_dir().join(format!("datasecure-drop-{}", request_id()));
+        std::fs::create_dir(&directory).expect("exclusive test directory");
+        let source = directory.join("Kunde Müller Profil.txt");
+        let second = directory.join("Daten äöü.csv");
+        std::fs::write(&source, b"synthetic").expect("test source");
+        std::fs::write(&second, b"synthetic").expect("second source");
+        assert_eq!(
+            dropped_source_kind(&[source.clone(), second.clone()]).unwrap(),
+            "files"
+        );
+        assert_eq!(dropped_source_kind(&[directory.clone()]).unwrap(), "folder");
+        assert_eq!(
+            dropped_source_kind(&[directory.clone(), source.clone()]).unwrap_err(),
+            "STANDALONE_DROP_MIXED"
+        );
+        assert_eq!(
+            dropped_source_kind(&[directory.clone(), directory.clone()]).unwrap_err(),
+            "STANDALONE_DROP_MIXED"
+        );
+        assert_eq!(
+            dropped_source_kind(&[]).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
+        assert_eq!(
+            dropped_source_kind(&vec![source.clone(); 101]).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
+        assert_eq!(
+            dropped_source_kind(&[PathBuf::from("relative.txt")]).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
+        assert_eq!(
+            dropped_source_kind(&[directory.join("missing.txt")]).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
+        #[cfg(unix)]
+        {
+            let link = directory.join("link.txt");
+            std::os::unix::fs::symlink(&source, &link).expect("test symlink");
+            assert_eq!(
+                dropped_source_kind(&[link.clone()]).unwrap_err(),
+                "STANDALONE_SELECTION_INVALID"
+            );
+            std::fs::remove_file(link).expect("remove test symlink");
+        }
+        std::fs::remove_file(source).expect("remove test source");
+        std::fs::remove_file(second).expect("remove second test source");
+        std::fs::remove_dir(directory).expect("remove empty test directory");
+    }
+
+    #[test]
+    fn native_selection_guard_excludes_concurrent_and_already_prepared_selections() {
+        let busy = Arc::new(AtomicBool::new(false));
+        let admitted = AtomicBool::new(false);
+        let owner = selection_guard(&busy, &admitted, false).expect("first selection");
+        assert_eq!(
+            selection_guard(&busy, &admitted, false).err().unwrap(),
+            "STANDALONE_BUSY"
+        );
+        assert!(
+            busy.load(Ordering::Acquire),
+            "a refused contender cannot release the owner"
+        );
+        drop(owner);
+        admitted.store(true, Ordering::Release);
+        assert_eq!(
+            selection_guard(&busy, &admitted, false).err().unwrap(),
+            "STANDALONE_SELECTION_PREPARED"
+        );
+        assert!(
+            !busy.load(Ordering::Acquire),
+            "prepared rejection releases its own reservation"
+        );
+        let start = selection_guard(&busy, &admitted, true).expect("explicit Start or cancel");
+        assert_eq!(
+            selection_guard(&busy, &admitted, true).err().unwrap(),
+            "STANDALONE_BUSY"
+        );
+        drop(start);
+        admitted.store(false, Ordering::Release);
+        assert!(
+            selection_guard(&busy, &admitted, false).is_ok(),
+            "new selection after cancellation"
+        );
     }
 
     #[test]

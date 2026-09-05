@@ -17,6 +17,7 @@ const PREFIX_RE = /^(\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)?)([\s\S]*)$/u;
 const ORG_SHAPE_RE = /^[A-Z0-9ÄÖÜ][A-Za-z0-9ÄÖÜäöüß .&'’+\-/]{2,50}$/u;
 const DOMAIN_SHAPE_RE = /^[a-z0-9][a-z0-9.\-]+\.(?:de|com|net|org|eu)$/i;
 const PROFESSIONAL_ROLE_RE = /^(?:(?:Senior\s+|Lead\s+)?(?:Product\s+Owner|Scrum\s+Master|Softwareentwickler(?:in)?|Entwickler(?:in)?|Testmanager(?:in)?|Tester(?:in)?|Business\s+Analyst(?:in)?|QA\s+Engineer|IT-?Projektleiter(?:in)?|IT-?Projektleitung|FHIR-Entwickler(?:in)?))$/iu;
+const PROFILE_HEADING_RE = /^(?:Mitarbeiterprofil|Bewerberprofil|Personalprofil|Lebenslauf|Curriculum\s+Vitae|Profil|Übersicht|Zusammenfassung)$/iu;
 
 const TABLE_EMPLOYER_RE = new RegExp(`^(\\|\\s*${EMPLOYER_LABEL}\\s*:?\\s*\\|\\s*)([^|\\n]+)(\\|)`, 'iu');
 const TABLE_CUSTOMER_RE = new RegExp(`^(\\|\\s*${CUSTOMER_LABEL}\\s*:?\\s*\\|\\s*)([^|\\n]+)(\\|)`, 'iu');
@@ -60,15 +61,18 @@ function rememberOrganization(reg, value, placeholder, persistent = true) {
 function registerEmployer(reg, findings, value) {
   const clean = normalizeSpaces(value);
   if (!clean) return null;
+  if (reg.readable === true && reg.isKnownPlaceholder(clean)) return clean;
+  const placeholder = reg.readable === true ? reg.assign('ORG', clean) : EMPLOYER_PLACEHOLDER;
   findings.push({ type: 'EMPLOYER', value_hash: hashShort(clean) });
-  for (const org of collectOrganizations(clean)) rememberOrganization(reg, org, EMPLOYER_PLACEHOLDER, false);
-  rememberOrganization(reg, clean, EMPLOYER_PLACEHOLDER, false);
-  return EMPLOYER_PLACEHOLDER;
+  for (const org of collectOrganizations(clean)) rememberOrganization(reg, org, placeholder, reg.readable === true);
+  rememberOrganization(reg, clean, placeholder, reg.readable === true);
+  return placeholder;
 }
 
 function registerCustomer(reg, findings, value) {
   const clean = normalizeSpaces(value);
   if (!clean) return null;
+  if (reg.readable === true && reg.isKnownPlaceholder(clean)) return clean;
   const placeholder = reg.assign('CUSTOMER', clean);
   findings.push({ type: 'CUSTOMER', value_hash: hashShort(clean) });
   for (const org of collectOrganizations(clean)) rememberOrganization(reg, org, placeholder);
@@ -79,7 +83,7 @@ function registerCustomer(reg, findings, value) {
 function looksLikeOrgSide(value, personKeys) {
   const clean = normalizeSpaces(value);
   if (!clean) return false;
-  if (PROFESSIONAL_ROLE_RE.test(clean)) return false;
+  if (PROFESSIONAL_ROLE_RE.test(clean) || PROFILE_HEADING_RE.test(clean)) return false;
   if (clean.includes(':')) return false;
   if (personKeys.has(key(clean))) return false;
   if (collectOrganizations(clean).length > 0) return true;

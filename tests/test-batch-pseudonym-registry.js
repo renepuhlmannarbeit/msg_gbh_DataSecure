@@ -1,12 +1,15 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { createSuite } = require('./helpers');
 const pii = require('../plugins/data-secure/server/pii-engine');
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const {
-  SECRET_BYTES, canonicalValue, base32, placeholderForDigest, createBatchPseudonymRegistry
+  SECRET_BYTES, READABLE_CONTRACT_VERSION, canonicalValue, base32, placeholderForDigest, createBatchPseudonymRegistry
 } = require('../plugins/data-secure/server/batch-pseudonym-registry');
+const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
 
 const { test, done, assert } = createSuite('Batch pseudonym registry');
 
@@ -98,6 +101,119 @@ test('registry is memory-only and cannot be used after disposal', () => {
   assert.throws(() => registry.assign('CUSTOMER', 'Beispiel Klinik GmbH'),
     (error) => error.code === 'BATCH_PSEUDONYM_INPUT_INVALID');
   secret.fill(0);
+});
+
+test('real TXT/Markdown/CSV/DOCX parsers feed one readable identity per full person and company', () => {
+  const secret = crypto.randomBytes(SECRET_BYTES);
+  const options = { contractVersion: READABLE_CONTRACT_VERSION };
+  let registry = createBatchPseudonymRegistry(secret, options);
+  try {
+    let expectedMarkers;
+    for (const ext of ['.txt', '.md', '.csv', '.docx']) {
+      const source = fs.readFileSync(path.join(__dirname,
+        '../docs/acceptance/UAT_TEST_KIT/inputs/01-positive', `personnel-profile${ext}`));
+      const converted = parseDocumentBuffer(source, ext);
+      assert.ok(converted.markdown.length > 100, 'real parser must produce source content');
+      const result = anonymizeMarkdown(converted.markdown, ext === '.csv' ? 'general' : 'personnel_profile', { registry });
+      const markers = [...new Set(result.text.match(/\[(?:PERSON|UNTERNEHMEN)_\d+\]/gu))].sort();
+      assert.ok(markers.includes('[PERSON_001]'), result.text);
+      assert.ok(markers.includes('[UNTERNEHMEN_001]'), result.text);
+      if (expectedMarkers) assert.deepStrictEqual(markers, expectedMarkers, ext);
+      expectedMarkers = markers;
+      const snapshot = registry.exportState();
+      registry.dispose();
+      registry = createBatchPseudonymRegistry(secret, { ...options, persistedState: JSON.parse(JSON.stringify(snapshot)) });
+    }
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
+test('readable restores reject mixed versions, malformed counters, duplicate identities and unresolved aliases', () => {
+  const secret = Buffer.alloc(SECRET_BYTES, 11);
+  const options = { contractVersion: READABLE_CONTRACT_VERSION };
+  const registry = createBatchPseudonymRegistry(secret, options);
+  try {
+    registry.assign('PERSON', 'Max Mustermann');
+    const snapshot = registry.exportState();
+    for (const label of ['[PERSON_000]', '[PERSON_01]', '[PERSON_0001]', '[PERSON_10001]', '[PERSON_AAAAAAAAAA]']) {
+      const invalid = structuredClone(snapshot);
+      invalid.labels[0][0] = label;
+      invalid.bindings[0][1] = label;
+      assert.throws(() => createBatchPseudonymRegistry(secret, { ...options, persistedState: invalid }),
+        (error) => error.code === 'BATCH_PSEUDONYM_INPUT_INVALID');
+    }
+    const duplicate = structuredClone(snapshot);
+    duplicate.labels.push(['[PERSON_002]', duplicate.labels[0][1]]);
+    assert.throws(() => createBatchPseudonymRegistry(secret, { ...options, persistedState: duplicate }));
+    assert.throws(() => createBatchPseudonymRegistry(secret, { persistedState: snapshot }));
+    const invalidBinding = structuredClone(snapshot);
+    invalidBinding.bindings[0][1] = '[PERSON_002]';
+    assert.throws(() => createBatchPseudonymRegistry(secret, { ...options, persistedState: invalidBinding }));
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
+test('readable organisation namespaces remain unified across direct assignment and aliases', () => {
+  const secret = Buffer.alloc(SECRET_BYTES, 12);
+  const registry = createBatchPseudonymRegistry(secret, { contractVersion: READABLE_CONTRACT_VERSION });
+  try {
+    assert.strictEqual(registry.assign('CUSTOMER', 'Muster GmbH'), '[UNTERNEHMEN_001]');
+    assert.strictEqual(registry.assign('ORG', '  MUSTER  GMBH '), '[UNTERNEHMEN_001]');
+    assert.strictEqual(registry.assign('PERSON', 'Muster GmbH'), '[PERSON_001]');
+    assert.strictEqual(registry.assign('ORG', 'Andere GmbH'), '[UNTERNEHMEN_002]');
+    assert.strictEqual(registry.lookup('CUSTOMER', 'Andere GmbH'), '[UNTERNEHMEN_002]');
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
+test('v1 company lookup repopulates the next document dictionary after a restart', () => {
+  const secret = Buffer.alloc(SECRET_BYTES, 13);
+  let registry = createBatchPseudonymRegistry(secret);
+  try {
+    const first = anonymizeMarkdown('Unternehmen: Nordstern Medizin IT GmbH', 'general', { registry });
+    const marker = first.text.match(/\[ORGANISATION_[A-Z2-7]+\]/u)?.[0];
+    assert.ok(marker);
+    const snapshot = registry.exportState();
+    registry.dispose();
+    registry = createBatchPseudonymRegistry(secret, { persistedState: JSON.parse(JSON.stringify(snapshot)) });
+    const second = anonymizeMarkdown('| Unternehmen | Nordstern Medizin IT GmbH |', 'general', { registry });
+    assert.ok(second.text.includes(marker), second.text);
+    assert.doesNotMatch(second.text, /Nordstern|Medizin/u);
+    assert.match(marker, /^\[ORGANISATION_[A-Z2-7]+\]$/u, 'plugin labels stay v1');
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
+test('repeated privacy passes retain readable employer/customer labels and generic profile headings', () => {
+  const secret = Buffer.alloc(SECRET_BYTES, 14);
+  const registry = createBatchPseudonymRegistry(secret, { contractVersion: READABLE_CONTRACT_VERSION });
+  try {
+    const first = pii.anonymize('# Mitarbeiterprofil – vollständig synthetisch\nArbeitgeber: Muster GmbH\nKunde: Andere GmbH',
+      'personnel_profile', { registry });
+    assert.match(first.text, /^# Mitarbeiterprofil – vollständig synthetisch/u);
+    assert.match(first.text, /Arbeitgeber: \[UNTERNEHMEN_001\]/u);
+    assert.match(first.text, /Kunde: \[UNTERNEHMEN_002\]/u);
+    const before = registry.exportState();
+    const second = pii.anonymize(first.text, 'personnel_profile', { registry });
+    assert.strictEqual(second.text, first.text);
+    assert.deepStrictEqual(registry.exportState(), before);
+    assert.match(pii.anonymize('# Mitarbeiterprofil – vollständig synthetisch', 'personnel_profile').text,
+      /^# Mitarbeiterprofil – vollständig synthetisch/u, 'plain legacy engine also preserves structural headings');
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
+test('alias types cannot cross entity kinds and readable sequence exhaustion is explicit', () => {
+  const secret = Buffer.alloc(SECRET_BYTES, 15);
+  const options = { contractVersion: READABLE_CONTRACT_VERSION };
+  let registry = createBatchPseudonymRegistry(secret, options);
+  try {
+    const company = registry.assign('ORG', 'Muster GmbH');
+    assert.throws(() => registry.remember('PERSON', 'Max Mustermann', company));
+    const snapshot = structuredClone(registry.exportState());
+    snapshot.labels[0][0] = '[UNTERNEHMEN_10000]';
+    snapshot.bindings[0][1] = '[UNTERNEHMEN_10000]';
+    registry.dispose();
+    registry = createBatchPseudonymRegistry(secret, { ...options, persistedState: snapshot });
+    assert.throws(() => registry.assign('ORG', 'Andere GmbH'),
+      (error) => error.code === 'BATCH_PSEUDONYM_INPUT_INVALID');
+    assert.deepStrictEqual(registry.exportState(), snapshot, 'failed allocation does not publish an invalid reservation');
+  } finally { registry.dispose(); secret.fill(0); }
 });
 
 done();
