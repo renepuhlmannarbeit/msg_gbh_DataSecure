@@ -256,7 +256,10 @@ async function refresh() {
 
 (async function bootstrap() {
   try {
-    await invoke('frontend_ready');
+    const ready = await invoke('frontend_ready');
+    if (ready && typeof ready.product_version === 'string' && /^\d+\.\d+\.\d+-rc\d+$/u.test(ready.product_version)) {
+      byId('product-version').textContent = `Version ${ready.product_version}`;
+    }
     await refreshUiContext();
     await refresh();
   } catch (error) {

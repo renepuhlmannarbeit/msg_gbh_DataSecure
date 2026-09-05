@@ -499,6 +499,118 @@ async fn blocking_rpc(state: DesktopState, action: &'static str) -> Result<Value
         .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 
+fn resolved_local_target(
+    state: &DesktopState,
+    action: &str,
+    expected_kind: &str,
+) -> Result<PathBuf, String> {
+    let result = rpc(state, action, None, &[], None)?;
+    let object = result
+        .as_object()
+        .filter(|value| value.len() == 4)
+        .ok_or_else(|| "STANDALONE_IPC_FAILED".to_string())?;
+    if object.get("ok").and_then(Value::as_bool) != Some(true)
+        || object.get("target_kind").and_then(Value::as_str) != Some(expected_kind)
+        || object.get("external_disclosure").and_then(Value::as_bool) != Some(false)
+    {
+        return Err("STANDALONE_IPC_FAILED".to_string());
+    }
+    let value = object
+        .get("local_path")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= MAX_SINGLE_PATH_BYTES)
+        .ok_or_else(|| "STANDALONE_IPC_FAILED".to_string())?;
+    let target = PathBuf::from(value);
+    if !target.is_absolute() {
+        return Err("STANDALONE_IPC_FAILED".to_string());
+    }
+    let metadata = std::fs::symlink_metadata(&target).map_err(|_| {
+        if expected_kind == "file" {
+            "STANDALONE_LEDGER_MISSING".to_string()
+        } else {
+            "STANDALONE_RESULTS_MISSING".to_string()
+        }
+    })?;
+    if metadata.file_type().is_symlink()
+        || (expected_kind == "directory" && !metadata.is_dir())
+        || (expected_kind == "file" && !metadata.is_file())
+    {
+        return Err(if expected_kind == "file" {
+            "STANDALONE_LEDGER_OPEN_FAILED".to_string()
+        } else {
+            "STANDALONE_RESULT_OPEN_FAILED".to_string()
+        });
+    }
+    Ok(target)
+}
+
+fn native_open_command(target: &Path, kind: &str) -> Result<Command, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::ffi::OsString;
+        let mut command = Command::new("explorer.exe");
+        if kind == "file" {
+            let mut select = OsString::from("/select,");
+            select.push(target.as_os_str());
+            command.arg(select);
+        } else {
+            command.arg(target);
+        }
+        return Ok(command);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = Command::new("/usr/bin/open");
+        if kind == "file" {
+            command.arg("-R");
+        }
+        command.arg(target);
+        return Ok(command);
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let mut command = Command::new("/usr/bin/xdg-open");
+        command.arg(if kind == "file" {
+            target
+                .parent()
+                .ok_or_else(|| "STANDALONE_LEDGER_OPEN_FAILED".to_string())?
+        } else {
+            target
+        });
+        Ok(command)
+    }
+}
+
+fn open_local_target(target: &Path, kind: &str, action: &str) -> Result<Value, String> {
+    diagnostic_event("os_open_requested", Some(action), "progress", None, None);
+    let mut command = native_open_command(target, kind)?;
+    // Do not apply CREATE_NO_WINDOW or another hidden-window flag here.  The
+    // operating-system file manager is intentionally a visible user action.
+    command.spawn().map_err(|_| {
+        let code = if kind == "file" {
+            "STANDALONE_LEDGER_OPEN_FAILED"
+        } else {
+            "STANDALONE_RESULT_OPEN_FAILED"
+        };
+        diagnostic_event(
+            "os_open_handoff_failed",
+            Some(action),
+            "failed",
+            Some(code),
+            None,
+        );
+        code.to_string()
+    })?;
+    diagnostic_event(
+        "os_open_handoff_confirmed",
+        Some(action),
+        "ready",
+        None,
+        None,
+    );
+    Ok(json!({ "ok": true, "handoff_confirmed": true, "external_disclosure": false }))
+}
+
 fn filters(dialog: rfd::FileDialog) -> rfd::FileDialog {
     dialog.add_filter(
         "Unterstützte Dateien",
@@ -669,29 +781,48 @@ async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, Stri
 }
 #[tauri::command]
 async fn open_current_results(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "open_current_results").await
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let target = resolved_local_target(&owned, "resolve_current_results", "directory")
+            .inspect_err(|code| {
+                diagnostic_event(
+                    "local_target_validation_failed",
+                    Some("open_current_results"),
+                    "failed",
+                    Some(code),
+                    None,
+                );
+            })?;
+        open_local_target(&target, "directory", "open_current_results")
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 #[tauri::command]
 async fn open_local_ledger(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "open_local_ledger").await
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let target = resolved_local_target(&owned, "resolve_local_ledger", "file")
+            .inspect_err(|code| {
+                diagnostic_event(
+                    "local_target_validation_failed",
+                    Some("open_local_ledger"),
+                    "failed",
+                    Some(code),
+                    None,
+                );
+            })?;
+        open_local_target(&target, "file", "open_local_ledger")
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 #[tauri::command]
 async fn open_diagnostic_folder() -> Result<Value, String> {
     let directory = diagnostic_directory();
     std::fs::create_dir_all(&directory)
         .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
-    #[cfg(target_os = "windows")]
-    let mut command = Command::new("explorer.exe");
-    #[cfg(target_os = "macos")]
-    let mut command = Command::new("open");
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    let mut command = Command::new("xdg-open");
-    command.arg(&directory);
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
+    let mut command = native_open_command(&directory, "directory")?;
     command
         .spawn()
         .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
@@ -706,7 +837,7 @@ async fn shutdown(state: State<'_, DesktopState>) -> Result<Value, String> {
 #[tauri::command]
 fn frontend_ready() -> Value {
     diagnostic_event("frontend_ready", None, "ready", None, None);
-    json!({ "ok": true })
+    json!({ "ok": true, "product_version": env!("CARGO_PKG_VERSION") })
 }
 
 fn main() {
@@ -879,6 +1010,28 @@ mod tests {
         assert_eq!(
             child_process_path(Path::new(r"C:\DataSecure")),
             PathBuf::from(r"C:\DataSecure")
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_file_manager_commands_keep_exact_targets_visible() {
+        let directory = Path::new(r"C:\Results\DataSecure-Output\Lauf-1");
+        let command = native_open_command(directory, "directory").expect("directory command");
+        assert_eq!(command.get_program(), "explorer.exe");
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            vec![directory.as_os_str()]
+        );
+
+        let mapping = directory.join("DataSecure-Zuordnung.csv");
+        let command = native_open_command(&mapping, "file").expect("mapping command");
+        assert_eq!(command.get_program(), "explorer.exe");
+        let arguments = command.get_args().collect::<Vec<_>>();
+        assert_eq!(arguments.len(), 1);
+        assert_eq!(
+            arguments[0].to_string_lossy(),
+            format!("/select,{}", mapping.display())
         );
     }
 

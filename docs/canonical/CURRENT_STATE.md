@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 05.09.2026 · 3.2.0-rc104 · integrierter Expertenstand: sichtbarer Standalone-Abschluss mit laufbezogener Zuordnung
+Stand: 05.09.2026 · 3.2.0-rc105 · integrierter Expertenstand: sichtbarer Standalone-Abschluss mit laufbezogener Zuordnung
 
 ## Produkt in einem Satz
 
@@ -141,23 +141,26 @@ Worker-Fallback zuständig. Der Cowork-Abschluss nutzt unter Windows ebenfalls
 ein echtes natives `Shown`-Ereignis statt eines bloßen Prozessstarts. Der
 gleichwertige macOS-Sichtbarkeitsnachweis ist noch nicht erbracht und bleibt
 Zielhostevidenz.
-RC104 ordnet den Standalone-Ablauf in die zwei Hauptansichten **Verarbeiten**
+RC105 ordnet den Standalone-Ablauf in die zwei Hauptansichten **Verarbeiten**
 und **Ergebnisse**. Nach einem sichtbaren Gesamtabschluss wechselt die App zur
 Ergebnisansicht, zeigt den exakten letzten Laufordner und bietet dort
 **Ergebnisse öffnen** als primäre Aktion sowie
-**Zuordnungsdatei anzeigen** als sekundäre Aktion. Der Betriebssystem-Auftrag
-gilt erst nach dem `spawn`-Ereignis als übergeben; ein asynchroner Fehler wird
-behandelt und kann den Sidecar nicht mehr nach einer falschen Erfolgsantwort
-beenden. Die Oberfläche bestätigt den Handoff getrennt vom fachlichen
-Abschlussstatus. Die Diagnose protokolliert dabei ausschließlich Aktion,
-Ausgang und festen Fehlercode, niemals Pfad, Dateiname oder Inhalt.
-Der Windows-Öffner wird dabei ausdrücklich nicht als versteckter Prozess
-gestartet. Ein Standalone-Lauf gilt erst dann als sichtbar abgeschlossen, wenn
+**Zuordnungsdatei anzeigen** als sekundäre Aktion. Der Core löst dafür intern
+den exakten sichtbaren `Lauf-*`-Ordner beziehungsweise dessen Mappingdatei auf.
+Nur der vertrauenswürdige Rust-Host erhält dieses Ziel über den privaten
+Längenframe; der Renderer erhält aus der Öffnungsaktion weiterhin keinen Pfad.
+Rust validiert Existenz, absoluten Pfad, Typ und Linkfreiheit und startet danach
+Explorer, Finder oder `xdg-open` ohne versteckte Fensteroption. Die Oberfläche
+bestätigt den Handoff getrennt vom fachlichen Abschlussstatus. Die Diagnose
+protokolliert dabei ausschließlich Aktion, Ausgang und festen Fehlercode,
+niemals Pfad, Dateiname oder Inhalt. Ein Standalone-Lauf gilt erst dann als sichtbar abgeschlossen, wenn
 alle neutralen Markdown-Ergebnisse und seine atomar veröffentlichte
 `DataSecure-Zuordnung.csv` vorhanden sind. Die Zuordnung enthält nur die lokale
-Quellbezeichnung und den neutralen Ergebnisnamen. Bestehende RC103-Läufe werden
-beim nächsten expliziten Öffnen anhand ihres eigenen privaten Stapeljournals
-einmalig ergänzt. Der Cowork-Export erhält diese Datei ausdrücklich nicht.
+Quellbezeichnung und den neutralen Ergebnisnamen. Bestehende ältere Läufe werden
+bereits beim Laden der Ergebnisansicht anhand ihres eigenen privaten Stapeljournals
+einmalig ergänzt. Der Cowork-Export erhält diese Datei ausdrücklich nicht. Die
+Oberfläche zeigt ihre Produktversion, damit kein älterer entpackter Kandidat
+unbemerkt in eine aktuelle Abnahme gerät.
 Ein geschlossener UI-Zustands-/IPC-Vertrag verhindert Rohbytes und direkten
 Dateisystemzugriff im Renderer. Ausgewählte Dateinamen, Quellenordner und das
 Ergebnisziel werden ausschließlich im lokalen Standalone-Fenster angezeigt und

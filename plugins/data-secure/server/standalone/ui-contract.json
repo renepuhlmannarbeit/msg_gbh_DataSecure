@@ -6,6 +6,8 @@
   "renderer_file_system_access": false,
   "renderer_receives_source_paths": "local-display-only",
   "renderer_receives_raw_content": false,
+  "renderer_receives_open_target": false,
+  "desktop_host_target_resolution": "sidecar-resolve-rust-open",
   "terminal_presentation_ack": "content-free-generation-correlated",
   "state_source": "polled_public_status_snapshot",
   "states": [

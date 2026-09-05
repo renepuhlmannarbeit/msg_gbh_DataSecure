@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 05.09.2026 · 3.2.0-rc104
+Stand: 05.09.2026 · 3.2.0-rc105
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -101,7 +101,7 @@ Die zugehörigen Direktgates sind `test-batch-executor-startup`,
 `test-automatic-review-worker-flow` und `test-result-export-startup-replay`; sie
 sind außerdem genau einmal in `test:product` einsortiert.
 
-RC104 ergänzt die spawn-bestätigten, unter Windows ausdrücklich sichtbaren
+RC105 ergänzt die spawn-bestätigten, unter Windows ausdrücklich sichtbaren
 Öffnen-Aktionen, die exakte Markierung der laufbezogenen Zuordnungsdatei und den zweigeteilten Standalone-Ablauf
 **Verarbeiten / Ergebnisse**. Die direkten Regressionen liegen in
 `test-ui-process-policy`, `test-standalone`, `test-standalone-frontend` und
@@ -160,7 +160,10 @@ kompilierte Windows-x64-Hülle, eine frisch erzeugte geschlossene
 Runtimeprojektion, das selbsttragende Paket und einen isolierten Sidecar-Start
 ohne System-Node. Der Paket-Smoke führt mit dem exakt extrahierten Core eine
 reale Dateideskriptor-Normalisierung, Aufnahme, Ergebnisordnerwahl, bestätigte
-Worker-Übergabe und Verarbeitung bis zu einem dauerhaften Endzustand aus.
+Worker-Übergabe und Verarbeitung bis zu einem dauerhaften Endzustand aus. Er
+prüft anschließend den exakten `Lauf-*`-Ordner, die dort atomar veröffentlichte
+`DataSecure-Zuordnung.csv` und beide privaten Zielresolver, welche die nativen
+Öffnen-Schaltflächen verwenden.
 Queue-Schema und Worker-Acknowledge werden vor dem positiven
 Handoff doppelt geprüft; Identitäts-Mocks dürfen diese Grenze nicht ersetzen.
 Das ersetzt keine menschliche Windows-UAT und keinen nativen

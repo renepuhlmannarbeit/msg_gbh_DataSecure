@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 05.09.2026 · 3.2.0-rc104
+Stand: 05.09.2026 · 3.2.0-rc105
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -544,5 +544,27 @@ geschlossen. Der plattformübergreifende Nachweis einer tatsächlich sichtbaren
 Abschlussoberfläche bleibt zusammen mit der Zielhostbeobachtung im Backlog.
 Unter Standalone umfasst `completed` sowohl alle neutralen Ergebnisdateien als
 auch `DataSecure-Zuordnung.csv`; beim Plugin bleibt die Zuordnung außerhalb des
-Cowork-Ergebnisordners. Ein Öffnen-Auftrag startet Explorer/Finder ausdrücklich
-sichtbar und bleibt von der inhaltsfreien Diagnose getrennt.
+Cowork-Ergebnisordners. Beim Laden des lokalen UI-Kontexts repariert der Core
+eine noch alte oder unvollständige sichtbare Projektion aus dem zugehörigen
+privaten Journal. Für eine Öffnungsaktion liefert der Core das exakte Ziel nur
+über den privaten Sidecar→Rust-Kanal. Rust prüft Pfad, Dateityp und Linkfreiheit,
+startet Explorer/Finder/`xdg-open` ausdrücklich sichtbar und gibt an den
+Renderer ausschließlich die inhaltsfreie Übergabebestätigung zurück.
+
+```mermaid
+sequenceDiagram
+  participant UI as lokaler WebView-Renderer
+  participant R as Tauri/Rust-Host
+  participant S as privater Sidecar
+  participant C as DataSecure-Core/Export
+  participant OS as Explorer/Finder/xdg-open
+  UI->>R: Ergebnisse öffnen
+  R->>S: resolve_current_results
+  S->>C: latestProductResultDirectory(standalone, ensureExport)
+  C->>C: Ergebnisse + DataSecure-Zuordnung.csv verifizieren/ergänzen
+  C-->>S: exakter Laufpfad
+  S-->>R: privates absolutes Ziel
+  R->>R: Existenz, Typ, Linkfreiheit prüfen
+  R->>OS: sichtbarer nativer Öffnungsauftrag
+  R-->>UI: handoff_confirmed (ohne Zielpfad)
+```

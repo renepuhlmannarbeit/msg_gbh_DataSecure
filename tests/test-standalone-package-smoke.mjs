@@ -149,6 +149,27 @@ try {
   assert.ok(terminal, 'the real packaged worker handoff must reach a durable terminal state');
   assert.equal(terminal.state, 'results_available');
   assert.equal(terminal.result_count, 1);
+  const completedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: '1'.repeat(16), action: 'get_ui_context' });
+  assert.equal(completedContext.ok, true);
+  const exactRun = completedContext.result.latest_result_folder;
+  assert.equal(typeof exactRun, 'string');
+  assert.equal(path.dirname(exactRun), path.join(resultDirectory, 'DataSecure-Output'));
+  assert.match(path.basename(exactRun), /^Lauf-\d{8}-\d{6}-[a-f0-9]{8}$/u);
+  assert.equal(fs.statSync(exactRun).isDirectory(), true);
+  const mapping = path.join(exactRun, 'DataSecure-Zuordnung.csv');
+  assert.equal(fs.statSync(mapping).isFile(), true,
+    'a completed standalone run must publish its human-readable mapping in the exact run directory');
+  const resolvedRun = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: '2'.repeat(16), action: 'resolve_current_results' });
+  assert.deepEqual(resolvedRun.result, {
+    ok: true, target_kind: 'directory', local_path: exactRun, external_disclosure: false
+  });
+  const resolvedMapping = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: '3'.repeat(16), action: 'resolve_local_ledger' });
+  assert.deepEqual(resolvedMapping.result, {
+    ok: true, target_kind: 'file', local_path: mapping, external_disclosure: false
+  });
   await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);

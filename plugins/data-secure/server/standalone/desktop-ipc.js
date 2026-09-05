@@ -7,7 +7,7 @@ const MAX_PRESENTATION_GENERATION = Number.MAX_SAFE_INTEGER;
 const PRIVATE_ACTIONS = new Set([
   'admit_selected_sources', 'cancel_admission', 'start_admitted_batch',
   'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-  'open_current_results', 'open_local_ledger', 'shutdown'
+  'resolve_current_results', 'resolve_local_ledger', 'shutdown'
 ]);
 
 function fail(code, message) {

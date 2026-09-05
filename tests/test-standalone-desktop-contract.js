@@ -103,9 +103,18 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /handoff_confirmed/u);
   assert.match(frontend, /action-feedback/u);
   assert.match(frontend, /switchView\('results'\)/u);
-  assert.match(sidecar, /os_open_requested/u);
-  assert.match(sidecar, /os_open_handoff_confirmed/u);
-  assert.match(sidecar, /os_open_handoff_failed/u);
+  assert.match(sidecar, /local_target_requested/u);
+  assert.match(sidecar, /local_target_resolved/u);
+  assert.match(sidecar, /local_target_resolution_failed/u);
+  assert.doesNotMatch(sidecar, /openFolder\(|revealFile\(/u,
+    'the hidden sidecar resolves targets but never owns visible desktop actions');
+  assert.match(rust, /resolved_local_target\(&owned, "resolve_current_results", "directory"\)/u);
+  assert.match(rust, /resolved_local_target\(&owned, "resolve_local_ledger", "file"\)/u);
+  assert.match(rust, /native_open_command/u);
+  assert.match(rust, /os_open_handoff_confirmed/u);
+  const visibleOpenImplementation = rust.slice(rust.indexOf('fn native_open_command'), rust.indexOf('fn filters'));
+  assert.doesNotMatch(visibleOpenImplementation, /creation_flags\(0x08000000\)/u,
+    'a visible file-manager action must not inherit the hidden-sidecar launch policy');
   assert.match(frontend, /open_diagnostic_folder/u);
   assert.match(frontend, /requestAnimationFrame\(\(\) => requestAnimationFrame/u,
     'terminal visibility is acknowledged only after a paint opportunity');
@@ -122,6 +131,8 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /async fn ack_terminal_presented/u);
   assert.match(rust, /async fn get_ui_context/u);
   assert.match(rust, /presentation_generation: u64/u);
+  assert.match(rust, /"product_version": env!\("CARGO_PKG_VERSION"\)/u);
+  assert.match(frontend, /Version \$\{ready\.product_version\}/u);
 });
 
 test('the native Windows smoke exercises the visible WebView lifecycle', () => {

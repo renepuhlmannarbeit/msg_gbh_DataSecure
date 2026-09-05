@@ -386,7 +386,11 @@ class StandaloneApplicationService {
     const selected = this.selectionContext;
     const configured = this.deps.readConfiguredResultRoot();
     let latestResultFolder = '';
-    try { latestResultFolder = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL) || ''; }
+    // Reading the visible context is also the upgrade/recovery boundary for an
+    // already completed run.  Older export records did not contain the fields
+    // required for the run-scoped mapping.  Resolve with ensureExport so the
+    // UI never advertises a completed run whose visible projection is stale.
+    try { latestResultFolder = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true }) || ''; }
     catch { /* A local display hint must never affect processing. */ }
     return {
       ok: true,
@@ -543,12 +547,8 @@ class StandaloneApplicationService {
   }
 
   async openResults() {
-    this.ensureResultRoot();
-    try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
-    const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true });
-    if (!target) {
-      throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');
-    }
+    const resolved = this.resolveResults();
+    const target = resolved.local_path;
     const opened = await this.deps.openFolder(target);
     if (!opened?.ok) {
       throw fixedFailure('STANDALONE_RESULT_OPEN_FAILED', 'Der Ergebnisordner konnte nicht geöffnet werden.');
@@ -557,12 +557,8 @@ class StandaloneApplicationService {
   }
 
   async openLedger() {
-    try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
-    const run = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true });
-    const target = run ? path.join(run, VISIBLE_MAPPING_FILE) : '';
-    if (!this.deps.fs.existsSync(target)) {
-      throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Für den letzten sichtbaren Ergebnislauf ist noch keine Zuordnungsdatei vorhanden.');
-    }
+    const resolved = this.resolveLedger();
+    const target = resolved.local_path;
     const opened = await (this.deps.revealFile
       ? this.deps.revealFile(target)
       : this.deps.openFolder(path.dirname(target)));
@@ -570,6 +566,29 @@ class StandaloneApplicationService {
       throw fixedFailure('STANDALONE_LEDGER_OPEN_FAILED', 'Die lokale Zuordnungsdatei konnte nicht angezeigt werden.');
     }
     return { ok: true, handoff_confirmed: true, external_disclosure: false };
+  }
+
+  resolveResults() {
+    this.ensureResultRoot();
+    try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
+    const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true });
+    if (!target || !path.isAbsolute(target)) {
+      throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');
+    }
+    return {
+      ok: true, target_kind: 'directory', local_path: path.resolve(target), external_disclosure: false
+    };
+  }
+
+  resolveLedger() {
+    const run = this.resolveResults().local_path;
+    const target = path.join(run, VISIBLE_MAPPING_FILE);
+    if (!this.deps.fs.existsSync(target)) {
+      throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Für den letzten sichtbaren Ergebnislauf ist noch keine Zuordnungsdatei vorhanden.');
+    }
+    return {
+      ok: true, target_kind: 'file', local_path: path.resolve(target), external_disclosure: false
+    };
   }
 }
 

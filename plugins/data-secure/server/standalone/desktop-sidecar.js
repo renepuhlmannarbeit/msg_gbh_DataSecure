@@ -86,16 +86,16 @@ async function dispatch(message) {
     case 'ack_terminal_presented': return service.acknowledgeTerminalPresented(message.presentation_generation);
     case 'continue_current_batch': return service.continueCurrentBatch();
     case 'configure_results': return service.configureResults({ path: message.source_paths[0] });
-    case 'open_current_results':
-    case 'open_local_ledger': {
-      diagnosticEvent('os_open_requested', { action: message.action });
+    case 'resolve_current_results':
+    case 'resolve_local_ledger': {
+      diagnosticEvent('local_target_requested', { action: message.action });
       try {
-        const result = message.action === 'open_current_results'
-          ? await service.openResults() : await service.openLedger();
-        diagnosticEvent('os_open_handoff_confirmed', { action: message.action, outcome: 'ready' });
+        const result = message.action === 'resolve_current_results'
+          ? service.resolveResults() : service.resolveLedger();
+        diagnosticEvent('local_target_resolved', { action: message.action, outcome: 'ready' });
         return result;
       } catch (error) {
-        diagnosticEvent('os_open_handoff_failed', {
+        diagnosticEvent('local_target_resolution_failed', {
           action: message.action, outcome: 'failed',
           error_code: error?.code || 'STANDALONE_OPERATION_FAILED'
         });

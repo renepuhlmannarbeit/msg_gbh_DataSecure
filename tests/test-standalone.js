@@ -296,6 +296,8 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.strictEqual(contract.renderer_file_system_access, false);
   assert.strictEqual(contract.renderer_receives_source_paths, 'local-display-only');
   assert.strictEqual(contract.renderer_receives_raw_content, false);
+  assert.strictEqual(contract.renderer_receives_open_target, false);
+  assert.strictEqual(contract.desktop_host_target_resolution, 'sidecar-resolve-rust-open');
   assert.strictEqual(contract.state_source, 'polled_public_status_snapshot');
   assert.strictEqual(contract.events, undefined, 'the product has no second, disconnected event-state model');
   assert.ok(contract.forbidden_payload_fields.includes('path'));
@@ -308,7 +310,7 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.deepStrictEqual([...PRIVATE_ACTIONS], [
     'admit_selected_sources', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-    'open_current_results', 'open_local_ledger', 'shutdown'
+    'resolve_current_results', 'resolve_local_ledger', 'shutdown'
   ]);
 });
 
@@ -628,8 +630,9 @@ async function openExactResultsCase() {
   const opened = [];
   const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
-    latestProductResultDirectory: (channel) => {
+    latestProductResultDirectory: (channel, options) => {
       assert.strictEqual(channel, PRODUCT_CHANNEL);
+      assert.deepStrictEqual(options, { ensureExport: true });
       return run;
     },
     openFolder: (target) => { opened.push(target); return { ok: true }; }
@@ -662,6 +665,23 @@ async function openLedgerCase() {
   assert.deepStrictEqual(opened, [`${run}\\DataSecure-Zuordnung.csv`]);
 }
 
+function privateTargetResolutionCase() {
+  const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    latestProductResultDirectory: (_channel, options) => {
+      assert.deepStrictEqual(options, { ensureExport: true });
+      return run;
+    },
+    fs: { mkdirSync() {}, existsSync: () => true }
+  }) });
+  assert.deepStrictEqual(service.resolveResults(), {
+    ok: true, target_kind: 'directory', local_path: run, external_disclosure: false
+  });
+  assert.deepStrictEqual(service.resolveLedger(), {
+    ok: true, target_kind: 'file', local_path: `${run}\\DataSecure-Zuordnung.csv`, external_disclosure: false
+  });
+}
+
 async function missingLedgerCase() {
   let opened = false;
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
@@ -691,5 +711,6 @@ async function missingLedgerCase() {
   await testAsync('Standalone refuses to open results before a complete visible run exists', missingResultsCase);
   await testAsync('Standalone reveals only the exact mapping of the latest visible run and never returns its path', openLedgerCase);
   await testAsync('Standalone refuses a missing local ledger without opening a folder', missingLedgerCase);
+  test('the private desktop host resolves one exact completed run and its run-scoped mapping', privateTargetResolutionCase);
   done();
 })();

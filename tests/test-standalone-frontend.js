@@ -17,7 +17,7 @@ async function recoveredStatusCase() {
   const ids = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger',
     'configure-results', 'diagnostics', 'status-icon', 'status-title', 'status-text', 'summary',
     'result-folder', 'result-folder-results', 'source-folders', 'selected-files', 'result-count',
-    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch'];
+    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version'];
   const elements = Object.fromEntries(ids.map((id) => [id, element()]));
   const timers = [];
   let publicCalls = 0;
@@ -59,7 +59,7 @@ async function openFeedbackCase() {
   const ids = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger',
     'configure-results', 'diagnostics', 'status-icon', 'status-title', 'status-text', 'summary',
     'result-folder', 'result-folder-results', 'source-folders', 'selected-files', 'result-count',
-    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch'];
+    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version'];
   const elements = Object.fromEntries(ids.map((id) => [id, element()]));
   const calls = [];
   const invoke = async (action) => {
@@ -67,6 +67,7 @@ async function openFeedbackCase() {
     if (action === 'get_ui_context') return { ok: true, result_folder: 'C:\\Results', latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-1', source_folders: [], selected_files: [], local_ui_only: true, external_disclosure: false };
     if (action === 'get_public_state') return { ok: true, state: 'results_available', results_available: true, result_count: 4 };
     if (action === 'open_current_results' || action === 'open_local_ledger') return { ok: true, handoff_confirmed: true };
+    if (action === 'frontend_ready') return { ok: true, product_version: '3.2.0-rc105' };
     return { ok: true };
   };
   const context = {
@@ -75,6 +76,7 @@ async function openFeedbackCase() {
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), context);
   await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(elements['product-version'].textContent, 'Version 3.2.0-rc105');
   assert.strictEqual(elements['result-folder-results'].textContent, 'C:\\Results\\DataSecure-Output\\Lauf-1');
   assert.strictEqual(elements['results-view'].hidden, false, 'a completed run opens the results view');
   await elements.results.listeners.click();
