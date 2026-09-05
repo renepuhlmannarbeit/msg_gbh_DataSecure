@@ -52,10 +52,10 @@ try {
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw "STANDALONE_NATIVE_EXECUTABLE_MISSING: $executable"
     }
-    # Keep the unattended acceptance window out of the user's way. The explicit
-    # page-loaded and frontend-ready events below prove that hiding the native
-    # window did not defer WebView2 initialization.
-    $process = Start-Process -FilePath $executable -WindowStyle Hidden -PassThru -ErrorAction Stop
+    # WebView2 can defer page loading when the top-level Tauri window starts
+    # hidden or minimized. A native acceptance smoke must therefore exercise
+    # the same visible launch lifecycle as the end-user product.
+    $process = Start-Process -FilePath $executable -PassThru -ErrorAction Stop
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
     do {
         Start-Sleep -Milliseconds 100

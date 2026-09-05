@@ -11,9 +11,10 @@ const config = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/tauri.
 const macConfig = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/tauri.macos.conf.json'), 'utf8'));
 const capability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/main.json'), 'utf8'));
 const cargo = fs.readFileSync(path.join(root, 'tauri-contract/Cargo.toml'), 'utf8');
-  const rust = fs.readFileSync(path.join(root, 'tauri-contract/src/main.rs'), 'utf8');
-  const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
-  const sidecar = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js'), 'utf8');
+const rust = fs.readFileSync(path.join(root, 'tauri-contract/src/main.rs'), 'utf8');
+const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
+const sidecar = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js'), 'utf8');
+const nativeSmoke = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
 const productVersion = require('../package.json').version;
 
 test('desktop manifests, Rust package and artifact names use the product version', () => {
@@ -121,6 +122,14 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /async fn ack_terminal_presented/u);
   assert.match(rust, /async fn get_ui_context/u);
   assert.match(rust, /presentation_generation: u64/u);
+});
+
+test('the native Windows smoke exercises the visible WebView lifecycle', () => {
+  assert.match(nativeSmoke, /Start-Process -FilePath \$executable -PassThru/u);
+  assert.doesNotMatch(nativeSmoke, /WindowStyle\s+(?:Hidden|Minimized)/iu,
+    'hidden or minimized startup can defer WebView2 page loading');
+  assert.match(nativeSmoke, /page_loaded/u);
+  assert.match(nativeSmoke, /frontend_ready/u);
 });
 
 test('package contract excludes Claude, Cowork, MCP and skill material', () => {

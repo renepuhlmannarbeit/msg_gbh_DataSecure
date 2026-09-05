@@ -86,6 +86,13 @@ ZIP-SHA-256 und den Hash des PKG-04-Receipts; `latest`, Versionsnamen oder der
 denselben Host und die im Receipt ausgewiesene Node-/npm-/Rust-/Cargo-Toolchain
 begrenzt.
 
+Der native Windows-Smoke startet die Tauri-Hülle bewusst kurz sichtbar. Ein
+mit `WindowStyle Hidden` oder `Minimized` erzeugtes Top-Level-Fenster kann die
+WebView2-Seiteninitialisierung auf einem realen Windows-Host aufschieben und
+wäre deshalb kein gleichwertiger Nachweis des Endnutzerstarts. Nach bestätigtem
+`page_loaded`, `frontend_ready`, Core-Start und den ersten beiden IPC-Antworten
+beendet der Test ausschließlich seine eigene Prozessinstanz.
+
 Der RC102-Vertrag ergänzt echte Worker-ACKs für Intake, Resume und Review,
 zweiphasige Abschlusspräsentation, den automatischen Übergang in den lokalen
 Sammelreview sowie den zeitbegrenzten Export-Replay außerhalb des MCP-Startpfads.
