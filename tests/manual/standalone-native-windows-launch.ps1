@@ -8,6 +8,7 @@ if ($env:OS -ne 'Windows_NT') {
 }
 
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $PSScriptRoot 'standalone-native-cleanup.ps1')
 $package = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'package.json') | ConvertFrom-Json
 $productDirectory = "DataSecure-Standalone-$($package.version)-windows-x64"
 $archivePath = if ($ValidateIsolationOnly) {
@@ -17,7 +18,8 @@ $archivePath = if ($ValidateIsolationOnly) {
 } else {
     (Resolve-Path -LiteralPath (Join-Path $repositoryRoot "dist\$productDirectory.zip")).Path
 }
-$testRoot = Join-Path $repositoryRoot ".tmp-standalone-native-$([Guid]::NewGuid().ToString('N'))"
+$cleanupContext = New-NativeCleanupContext $repositoryRoot
+$testRoot = $cleanupContext.Root
 $extractedRoot = Join-Path $testRoot 'candidate'
 $executable = Join-Path $extractedRoot "$productDirectory\DataSecure Standalone.exe"
 $isolatedTemp = Join-Path $testRoot 'temp'
@@ -29,27 +31,9 @@ $process = $null
 $passed = $false
 
 function Get-CheckedTree([string] $Root) {
-    $rootItem = Get-Item -LiteralPath $Root -Force -ErrorAction Stop
-    if (-not $rootItem.PSIsContainer -or ($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-        throw 'STANDALONE_NATIVE_ROOT_UNSAFE'
-    }
-    $entries = [System.Collections.Generic.List[System.IO.FileSystemInfo]]::new()
-    $directories = [System.Collections.Generic.Queue[string]]::new()
-    $directories.Enqueue($rootItem.FullName)
-    while ($directories.Count -gt 0) {
-        foreach ($entry in @(Get-ChildItem -LiteralPath $directories.Dequeue() -Force -ErrorAction Stop)) {
-            # Inspect each child before descending; -Recurse would already have
-            # traversed a junction before a later reparse-point check.
-            if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or
-                -not $entry.FullName.StartsWith($rootItem.FullName + [System.IO.Path]::DirectorySeparatorChar,
-                    [System.StringComparison]::OrdinalIgnoreCase)) {
-                throw 'STANDALONE_NATIVE_CLEANUP_REPARSE_POINT'
-            }
-            $entries.Add($entry)
-            if ($entry.PSIsContainer) { $directories.Enqueue($entry.FullName) }
-        }
-    }
-    return $entries.ToArray()
+    if ($Root -ne $cleanupContext.Root) { throw 'STANDALONE_NATIVE_ROOT_UNSAFE' }
+    # Every pre-start invocation is strict; the cache exception is cleanup-only.
+    Get-CheckedNativeTree $cleanupContext
 }
 
 function New-IsolatedStartInfo([string] $FilePath) {
@@ -94,35 +78,13 @@ function Assert-NativeProcessRunning($CandidateProcess) {
 }
 
 function Remove-TestRoot {
-    if (-not (Test-Path -LiteralPath $testRoot)) { return }
-    $resolved = [System.IO.Path]::GetFullPath($testRoot)
-    if ([System.IO.Path]::GetDirectoryName($resolved) -ne [System.IO.Path]::GetFullPath($repositoryRoot) -or
-        -not [System.IO.Path]::GetFileName($resolved).StartsWith('.tmp-standalone-native-')) {
-        throw 'STANDALONE_NATIVE_CLEANUP_UNSAFE'
-    }
-    $entries = @(Get-CheckedTree $resolved)
-    Write-Output "STANDALONE NATIVE CLEANUP: $($entries.Count) owned entries"
-    foreach ($entry in @($entries | Sort-Object { $_.FullName.Length } -Descending)) {
-        # No recursive delete: every target has already been enumerated, checked
-        # and ordered deepest-first. Locked files stop cleanup without escalation.
-        $current = Get-Item -LiteralPath $entry.FullName -Force -ErrorAction Stop
-        if (($current.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or
-            $current.PSIsContainer -ne $entry.PSIsContainer) {
-            throw 'STANDALONE_NATIVE_CLEANUP_CHANGED'
-        }
-        if ($current.PSIsContainer -and @(Get-ChildItem -LiteralPath $current.FullName -Force -ErrorAction Stop).Count -gt 0) {
-            throw 'STANDALONE_NATIVE_CLEANUP_DIRECTORY_BUSY'
-        }
-        Remove-Item -LiteralPath $entry.FullName -Force -ErrorAction Stop
-    }
-    if (@(Get-ChildItem -LiteralPath $resolved -Force -ErrorAction Stop).Count -gt 0) {
-        throw 'STANDALONE_NATIVE_CLEANUP_DIRECTORY_BUSY'
-    }
-    Remove-Item -LiteralPath $resolved -Force -ErrorAction Stop
+    # A launched process must actually have exited before accepting its one
+    # known Windows cache junction. Failed setup retains strict link rejection.
+    if ($null -ne $process -and -not $process.HasExited) { throw 'STANDALONE_NATIVE_CLEANUP_PROCESS_RUNNING' }
+    Remove-NativeTestTree $cleanupContext -AllowCacheJunction:($null -ne $process -and $process.HasExited)
 }
 
 try {
-    New-Item -ItemType Directory -Path $testRoot -ErrorAction Stop | Out-Null
     foreach ($relative in @('candidate', 'profile', 'profile\Local', 'profile\Roaming', 'profile\Xdg',
         'profile\Documents', 'temp', 'webview')) {
         New-Item -ItemType Directory -Path (Join-Path $testRoot $relative) -ErrorAction Stop | Out-Null
@@ -203,7 +165,7 @@ try {
         $process.CloseMainWindow() | Out-Null
         if (-not $process.WaitForExit(35000)) {
             Stop-Process -Id $process.Id -ErrorAction Stop
-            $process.WaitForExit(3000) | Out-Null
+            if (-not $process.WaitForExit(3000)) { throw 'STANDALONE_NATIVE_CLEANUP_PROCESS_RUNNING' }
         }
     }
     Remove-TestRoot

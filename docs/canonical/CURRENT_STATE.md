@@ -78,6 +78,16 @@ bleiben grün. `PARSE_FAILED` bedeutet sichere Ablehnung, nicht zwingend einen
 alleinigen Defekt der Quelldatei: Auch abgelehnte interne Parsergrenzen bleiben
 gesperrt. Der Paketnachweis wird separat neu erbracht.
 
+Auf dem Parser-Korrekturcommit `aaecf59` bestand zusätzlich die lokale
+CI-Produktsuite (40 Basis- und 48 direkte Testdateien), ohne GitHub Actions.
+Das neu gepackte Windows-Artefakt bestand den echten Vierformatlauf, den
+vollständig abgewiesenen CSV-Folgestapel und den isolierten nativen Tauri-Start.
+Die anschließende Testbereinigung stoppte jedoch vor der ersten Löschung an
+einer von Windows angelegten Cache-Junction im frischen Testprofil. Dieser
+Testrest bleibt unverändert; der unvollständige PKG-04-Lauf erhält keine
+INT-13-Bindung. Ein korrigierter Testharness benötigt einen neuen Quellcommit
+und erneut zwei vollständige Builds und Smokes.
+
 Neue Standalone-Läufe führen auch gestoppte Quellen mit festem Fehlercode in
 ihrer eigenen Zuordnung. Der aktuelle Laufresolver fällt niemals auf frühere
 Ergebnisse zurück. Bereits veröffentlichte Altzuordnungen bleiben unverändert;

@@ -56,6 +56,14 @@ Build wurde nicht an INT-13 gebunden. `PARSE_FAILED` gegenüber Timeout/Crash wi
 im gemeinsamen Runtimevertrag korrigiert und separat regressionsgeprüft; erst
 ein neuer Quellcommit mit beiden erfolgreichen Paketläufen liefert neue Evidence.
 
+`aaecf59` bestand anschließend die lokale CI-Produktsuite (40 Basis- und 48
+direkte Dateien), den gepackten Vierformat-/Fehlerfolgelauf und den isolierten
+nativen Windows-Start. Die sichere Testbereinigung verweigerte eine vom
+Betriebssystem erzeugte Cache-Junction vor jeder Löschung; der Testrest bleibt
+erhalten. Daher weiterhin kein vollständiger RC107-PKG-04-Receipt und keine
+INT-13-Bindung aus diesem Versuch. Eine spätere erfolgreiche Bindung muss den
+neuen Harness-Commit nennen, nicht rückwirkend diesen Versuch freigeben.
+
 - Manifest/Runtime begrenzen temporäre Aufbewahrung auf 0–14 Tage.
 - Retentiontests bewahren Quellen, `Processed`, fertige `Output`-Pakete und
   `DataSecure-Export` vor automatischer Löschung.

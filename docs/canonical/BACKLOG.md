@@ -34,6 +34,18 @@ vollständige Kette mit echten Vierformat-/Crash-/Negativtests aktiviert den Mod
 MarkItDown ist für die ersten vier Formate nicht erforderlich; breitere Formate
 bleiben ausdrücklich Teil der nachfolgenden Konverterlieferung.
 
+Paketnachweis RC107 (BL-051.1/BL-002): `aaecf59` besteht die lokale CI-Produktsuite,
+den gepackten Erfolgs-/Fehlerfolgelauf und den isolierten nativen Windows-Start.
+PKG-04 bleibt aus diesem Versuch unvollständig: Die Cleanup-Inventur stoppte an
+einer internen Windows-Cache-Junction, ohne Testdaten zu löschen. Der Testrest
+bleibt erhalten. Nur ein eng geprüfter Harness-Vertrag für neu erzeugte
+Testprofile mit synthetischen Negativtests darf einen neuen Zweifachlauf
+ermöglichen; unbekannte Links bleiben verboten. INT-13 wird nicht vorab gebunden.
+Der neue Testharness ist inzwischen implementiert: zwölf Desktop-Vertragstests
+einschließlich acht synthetischer Cleanup-Gruppen prüfen zulässigen Cache-Link,
+unveränderten Zielinhalt, falsche Ziele und ausgetauschte Objektidentitäten.
+Der echte neue Zweifach-Build bleibt separat nachzuweisen.
+
 Das unabhängige Gegenreview aus Test/CI, Dokumentation/UAT sowie Architektur,
 Security, Performance, UX und aktueller Claude-Cowork-Sicht ist bis zum Abschluss
 dieses Blocks ein **NO-GO für einen breiten Rollout**. Grüne E0-Tests ersetzen die

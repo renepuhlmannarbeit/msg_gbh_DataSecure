@@ -99,6 +99,16 @@ wäre deshalb kein gleichwertiger Nachweis des Endnutzerstarts. Nach bestätigte
 `page_loaded`, `frontend_ready`, Core-Start und den ersten beiden IPC-Antworten
 beendet der Test ausschließlich seine eigene Prozessinstanz.
 
+Die Testbereinigung inventarisiert den eigenen frischen Root vor jeder Löschung
+und folgt keinen Verzeichnisverweisen. Vor dem Produktstart sind alle solchen
+Verweise verboten. Nach bestätigtem Prozessende ist ausschließlich die von
+Windows erzeugte `INetCache/Content.IE5`-Junction zum benachbarten `IE` innerhalb
+desselben Testprofils zulässig. Der Test entfernt nur den erneut geprüften Link,
+nicht rekursiv dessen Ziel. Unbekannte oder ausgetauschte Links, Elternpfade und
+Dateiidentitäten sowie gesperrte Dateien stoppen die Bereinigung. Der Helfer
+erzeugt stets einen neuen Scope; zurückbehaltene Alt-Testprofile werden nicht
+automatisch erneut bereinigt und gehören nicht in Git oder Release-Evidence.
+
 Der RC102-Vertrag ergänzt echte Worker-ACKs für Intake, Resume und Review,
 zweiphasige Abschlusspräsentation, den automatischen Übergang in den lokalen
 Sammelreview sowie den zeitbegrenzten Export-Replay außerhalb des MCP-Startpfads.

@@ -43,6 +43,9 @@ secrets.*
 # Build/runtime
 dist/
 .tmp-runtime/
+# Fresh native smoke profiles may be retained after a guarded cleanup refusal.
+# They are local test artefacts, never product source or release evidence.
+/.tmp-standalone-native-*/
 node_modules/
 /apps/datasecure-standalone/tauri-contract/target/
 /apps/datasecure-standalone/tauri-contract/binaries/

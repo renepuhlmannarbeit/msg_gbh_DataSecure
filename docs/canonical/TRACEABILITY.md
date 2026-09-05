@@ -26,6 +26,12 @@ BL-020.1/BL-011.3: `runtime.js` unterscheidet bestätigtes negatives Parserergeb
 bindet die exakte Antwort-/Exitkombination und echte fehlerhafte Dokumentbytes;
 der reale Standalone-Paket-Folgestapel verlangt die eigene Fehlerzuordnung.
 
+BL-051.1/BL-002: Der native Windows-Test bindet die Bereinigung an seinen neu
+erzeugten Scope und bestätigt das Prozessende. `standalone-native-cleanup.ps1`
+behandelt nur den exakten internen Windows-Cache-Link als nicht zu traversierendes
+Blatt; Vorabaufnahme, Verzeichnisidentitäten und unbekannte Links bleiben strikt.
+Zurückbehaltene Alt-Testprofile sind kein erfolgreicher PKG-04-Nachweis.
+
 | Entscheidung | Aktueller Status | Backlog / Nachweis |
 |---|---|---|
 | DS-001 | aktiv – De-Identifizierung, keine Rechtsgarantie | BL-052; README, Anleitung, Datenschutz-Skill |

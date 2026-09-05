@@ -206,6 +206,29 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
   }
 });
 
+test('native cleanup allows only the exact post-exit cache junction without following it', () => {
+  const cleanup = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-cleanup.ps1'), 'utf8');
+  assert.match(nativeSmoke, /AllowCacheJunction:\(\$null -ne \$process -and \$process\.HasExited\)/u);
+  assert.match(nativeSmoke, /if \(-not \$process\.WaitForExit\(3000\)\)/u);
+  const preflight = nativeSmoke.slice(nativeSmoke.indexOf('function Get-CheckedTree'), nativeSmoke.indexOf('function New-IsolatedStartInfo'));
+  assert.doesNotMatch(preflight, /AllowCacheJunction/u);
+  assert.match(cleanup, /0x02200000/u, 'metadata identity handles must open the reparse point, not follow it');
+  assert.match(cleanup, /Content\.IE5/u);
+  assert.match(cleanup, /LinkType -cne 'Junction'/u);
+  assert.match(cleanup, /\$targets\.Count -ne 1/u);
+  assert.match(cleanup, /\[System\.IO\.Directory\]::Delete\(\$Stamp\.Path\)/u);
+  assert.doesNotMatch(cleanup, /(?:Get-ChildItem|Remove-Item)[^\n]*-Recurse/u);
+  assert.doesNotMatch(cleanup, /Directory\]::Delete\([^\n]*,/u);
+  if (process.platform === 'win32') {
+    const { spawnSync } = require('node:child_process');
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(__dirname, 'manual/standalone-native-cleanup-test.ps1')],
+    { encoding: 'utf8', timeout: 30000, windowsHide: true });
+    assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /CLEANUP CONTRACT PASS \(8 groups\)/u);
+  }
+});
+
 test('package contract excludes Claude, Cowork, MCP and skill material', () => {
   const forbidden = targets.forbidden_package_entries.map((value) => value.toLowerCase());
   for (const marker of ['.claude-plugin', '.mcp.json', 'skills/', 'mcp-server.js', 'claude', 'cowork']) {
