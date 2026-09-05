@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 05.09.2026 · Produktstand 3.2.0-rc107
+Stand: 06.09.2026 · Produktstand 3.2.0-rc107
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -14,6 +14,15 @@ offen“ sichtbar, wird aber nicht als weitere Entwicklungsarbeit dargestellt.
 ## Aktiver Umsetzungsblock – Gesamtgegenreview 01.09.2026
 
 ### Korrekturblock aus dem erneuten RC106-Review – RC107 E0 geschlossen
+
+Abschließende Paket-Evidence (BL-051.1/BL-002): aus sauberem Commit
+`7b88a81ff577aaa270f1354d75365b2df4a4666e` zweimal bytegleich gebaut und beide
+ZIP-/Worker-/nativen Windows-Smokes bestanden. INT-13 ist an diesen neuen
+Kandidaten gebunden (36.071.549 Byte; SHA-256
+`01907871eb8664597d2df5e576cf9e2a490c88ec0e38e1af867a555fe1a0f015`).
+Vollständige Produktsuite 40 Basis-/111 Direktdateien und Rust 12/12 grün.
+Die folgenden Hinweise auf fehlende Paketnachweise beschreiben den jeweiligen
+früheren Korrekturversuch, nicht den abschließenden Kandidaten. E1/E2 bleiben offen.
 
 | Befund | Bestehende Storys | Umsetzung / verbleibender Nachweis |
 |---|---|---|
@@ -199,7 +208,7 @@ Windows-x64-Engineering-Piloten, WebView2-Voraussetzung und Evidencegrenzen.
 | BL-010.25 | Eigenes Standalone-Manifest, SBOM, Runtime-Evidence, manueller Update-/Rollbackweg durch Austausch des Pakets und Deinstallation. Manifest, Runtime-Evidence und Engineering-SBOM stehen; Crate-Lizenzen sind darin ehrlich `NOASSERTION`. Zunächst kein Netzwerk- oder Auto-Updater. Installation oder Entfernung verändert weder Plugininstallation noch Daten des jeweils anderen Produkts. | **in Arbeit** |
 | BL-010.26 | Diagnose- und Fehlerübersetzung: neutrales Core-Journal, getrennte Plugin- und Standalone-Ereignisse, PII-Sentineltests über Quelle/Konverter/OCR/Fehler; jeder feste Domaincode erhält eine kurze handlungsfähige UI-Meldung. Rotierende, über **Diagnose öffnen** erreichbare Desktop-/Sidecar-JSONL-Spuren enthalten keine Namen, Pfade, Inhalte oder Request-IDs. RC105 trennt `local_target_requested/resolved/failed` im Sidecar von `os_open_requested/handoff_confirmed/failed` im Rust-Host. Die sichtbare Version macht den tatsächlich ausgeführten Kandidaten prüfbar. Unit-, Frontend-, realer Paket- und native Starttests sichern die Spur. Sichtbarer RC105-Windows-UAT, macOS-Zielhost-UAT und spätere Konverter-/OCR-Ereignisse bleiben offen. | **in Arbeit** |
 | BL-010.27 | Releasehygiene des Standalone-Piloten: Windows verwendet das vorhandene System-WebView2 ohne Laufzeitdownload; verständlicher Fehlhinweis und UAT bei fehlender Runtime. Rust-Toolchain für Builder exakt pinnen. Vor Endnutzerfreigabe alle ausgelieferten Rust-Crates komponentenweise lizenzprüfen und das SBOM mit belastbaren Lizenzwerten ergänzen. Native Dragdrop-Aufnahme ist E0 implementiert; echte Zielhost-Drop-/Fokusprüfung bleibt offen. Pause bleibt außerhalb der Istzusage. | **in Arbeit** |
-| BL-010.28 | Zweite gleichwertige Standalone-Kernfunktion **Nur in Markdown umwandeln** (DS-085): derselbe komplette Workflow wie Anonymisieren, aber ohne PII-Ersetzung/-Review; Inhalte einschließlich Namen, Unternehmen, Kontakten und Tabellen bleiben erhalten. Dauerhafte Modusbindung, `DataSecure-Markdown/Lauf-…` mit Hinweis **nicht anonymisiert**, eine `.md` pro Quelle, eigene lokale Zuordnung, exakte Ergebnisöffnung, Abbruch/Fortsetzung und keine automatische KI-Übergabe. Die breite Formatliste bleibt verbindliches Ziel; Freigabe je nach belegter Coverage. Priorisierter Lieferplan und echte Abnahmekriterien unten. Im Piloten sichtbar, aber weiterhin deaktiviert. | **offen** |
+| BL-010.28 | Zweite gleichwertige Standalone-Kernfunktion **Nur in Markdown umwandeln** (DS-085): derselbe komplette Workflow wie Anonymisieren, aber ohne PII-Ersetzung/-Review; Inhalte einschließlich Namen, Unternehmen, Kontakten und Tabellen bleiben erhalten. Dauerhafte Modusbindung, `DataSecure-Markdown/Lauf-…` mit Hinweis **nicht anonymisiert**, eine `.md` pro Quelle, eigene lokale Zuordnung, exakte Ergebnisöffnung, Abbruch/Fortsetzung und keine automatische KI-Übergabe. Modusübergabe, Extraktor und getrennter Artefaktvertrag im Quellstand umgesetzt; Journal-/Worker-/Exportintegration fehlt. Im Piloten sichtbar, aber weiterhin deaktiviert. | **in Arbeit** |
 
 DS-082 bindet dazu die lokale, nicht protokollierte Anzeige von Quellenordner,
 Dateiauswahl und Ergebnisziel sowie die strikte Trennung des noch nicht
@@ -227,10 +236,10 @@ Reihenfolge nach dem laufenden Fehler-/UX-Schnitt; keine neuen doppelten Storys:
 
 | Paket | Zuständige Story | Lieferung und Nachweis | Status |
 |---|---|---|---|
-| Modusvertrag | BL-010.28 | `markdown-only` und `markdown-and-anonymize` durch UI, Admission, Journal, Worker, Recovery und Export führen; ein offener Stapel kann den Modus nicht wechseln. Altjournale bleiben explizit im Anonymisierungsmodus. Negativtests für fehlenden/ungültigen Modus und Resume nach UI-Defaultwechsel. | offen |
-| Inhaltstreue für direkte Formate | BL-010.28, BL-020.1 | TXT/Markdown/CSV/DOCX über denselben Offline-Parser aufnehmen; ohne Pseudonymisierung und ohne PII-Review. Positivfixtures behalten Personen, Firmen, IBAN und Tabellenwerte. Coverage-/Containerfehler ehrlich ausweisen; niemals einen abgeschnittenen Text als vollständige Konvertierung melden. | offen |
+| Modusvertrag | BL-010.28 | UI → Rust → private IPC → Service umgesetzt und negativ getestet. Startmodus explizit, bei Continue unzulässig, blockierte Auswahl bleibt erhalten. Zentraler Vertrag trennt Produktkanäle und historische Anonymisierungsjournale von künftigem v5. Offen: persistente v5-Validierung, Intake-/Worker-/Recovery-/Exportanbindung; produktiv weiterhin `MARKDOWN_CONVERSION_NOT_READY`. | teilweise umgesetzt |
+| Inhaltstreue für direkte Formate | BL-010.28, BL-020.1 | In-Memory-Extraktor erhält TXT/Markdown-Unicode/Zeilenenden, CSV-Originalzeilen/-Köpfe und nachgewiesene DOCX-Text-/Tabellenstruktur ohne PII-Normalisierung. Eigener Markdown-Artefaktvertrag mit Digest und negativen echten Privacy-Lesegates. Komplexe DOCX und XLSX/PPTX bleiben `incomplete`; keine behauptete vollständige Paketverarbeitung. | teilweise umgesetzt |
 | Vollständige Ergebnisreise | BL-010.28, BL-040.5/6 | Getrennter identitätsgebundener Markdown-Zielbaum, atomarer Gesamtabschluss, eine `.md` je Quelle und Zuordnung; exakter Lauf öffnet sich. Kein Export in Anonymisierungsordner, kein Plugin-Handoff, keine automatische KI-Nutzung. Abbruch, Exportfehler, Zielwechsel, Namenskollision und Neustart mit echten Dateien prüfen. | offen |
-| Breite Formate | BL-010.15–18 | Gepinnter gebündelter MarkItDown-/Konverterpfad für XLSX/PPTX, dann PDF und lokale OCR für Scan-PDF/Bilder; keine zusätzliche Installation beim Anwender. Pro Typ Inhalte und Auslassungen anhand unabhängiger Erwartungen prüfen. | offen |
+| Breite Formate | BL-010.15–18 | Office-Erhaltungspfad sowie echte lokale PDF-, PNG/BMP-OCR- und Scan-PDF-Engineering-Einstiege umgesetzt und getestet. Gepinnte Runtime-/Produktworker-/Paketintegration, JPEG-Decodierung und vollständige Coverage bleiben offen; keine zusätzliche Installation beim Anwender. Pro Typ Inhalte und Auslassungen anhand unabhängiger Erwartungen prüfen. | teilweise umgesetzt |
 | UX, Diagnose und Paketnachweis | BL-010.19/21/26/28 | Beide Modi gleich bedienen (Picker/Drop → Ziel → Start → Fortschritt → Ergebnis/Zuordnung), **nicht anonymisiert** dauerhaft sichtbar ohne Bestätigungsserie. Inhaltsfreie Ereignisse inkl. Modus/Coverage/Export, Rohwert-Sentinels in Logs. Reales Paket ohne Systemruntime mit beiden Modi, Crash/Resume und Mac-Zielhost testen. | offen |
 
 ### Aktueller produktübergreifender UX-/Konsistenzschnitt
@@ -503,8 +512,8 @@ Abschluss erforderlich. Es ist kein verdeckter Entwicklungsauftrag.
 | Story | Lieferung | Status |
 |---|---|---|
 | BL-010.4 | Linux-Paket nach dem Windows-/macOS-Erstrelease mit eigener Hostevidenz liefern. | **offen** |
-| BL-022.2 | XLSX erst nach vollständiger Formel-, Kommentar-, Chart- und Relationship-Coverage freigeben. | **offen** |
-| BL-022.3 | PPTX erst nach vollständiger Folien-, Master-, Notiz-, Chart- und Objekt-Coverage freigeben. | **offen** |
+| BL-022.2 | Extraktions-Unterbau: stille 100-Spalten-/10.000-Zeilen-Kürzung beseitigt, explizite Ressourcenfehler und Literalformel plus gespeicherter Wert; reale Negativfälle. Weiterhin `incomplete`; Zell-/Namespace-/Kommentar-/Chart-/Relationship-Coverage und Produktintegration offen. | **in Arbeit** |
+| BL-022.3 | Extraktions-Unterbau erhält Textläufe, numerische Notizen und tatsächliche Folienreihenfolge mit Regressionen. Weiterhin `incomplete`; vollständige Folien-/Master-/Notiz-/Chart-/Objekt-Coverage und Produktintegration offen. | **in Arbeit** |
 | BL-023.1 | PDF-/OCR-Risikogate bis zur vollständigen Pflichtmatrix als NO-GO erhalten. | **in Arbeit** |
 | BL-023.2 | Text-PDF nur nach vollständiger Parser-/Render-/Security-Coverage freigeben. | **offen** |
 | BL-023.3 | PDF-Formulare, Annotationen, Anhänge, Signaturen und Verschlüsselung absichern. | **offen** |

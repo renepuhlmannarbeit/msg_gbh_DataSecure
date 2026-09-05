@@ -1,6 +1,46 @@
 # Aktueller Iststand
 
-Stand: 05.09.2026 · 3.2.0-rc107 · integrierter Expertenstand: lesbare Standalone-Kennungen, native Aufnahme und Cowork-Abschlussparität
+Stand: 06.09.2026 · 3.2.0-rc107 · integrierter Expertenstand: lesbare Standalone-Kennungen, native Aufnahme und Cowork-Abschlussparität
+
+## Aktueller geprüfter Kandidat
+
+RC107 aus `7b88a81ff577aaa270f1354d75365b2df4a4666e` besteht die vollständige
+Produktsuite (40 Basis-/111 direkte Testdateien, einschließlich 2.000 Eingaben),
+zwölf Rust-Tests und den abgeschlossenen PKG-04-Zweifachbau. Beide ZIPs,
+Desktop- und Core-Binaries sind bytegleich; beide Kandidaten bestehen den echten
+Vierformat-/Fehlerfolgelauf und den isolierten nativen Windows-Start.
+ZIP: **36.071.549 Byte**, SHA-256
+`01907871eb8664597d2df5e576cf9e2a490c88ec0e38e1af867a555fe1a0f015`.
+Receipt und INT-13-Bindung liegen unter
+`dist/pkg-04/7b88a81ff577aaa270f1354d75365b2df4a4666e/`.
+Der Cowork-ZIP-Build desselben Quellstands ist ebenfalls grün.
+Dies belegt nicht den anschließenden Funktionsausbau, macOS oder die sichtbare
+Explorer-/Finder-/Cowork-Anwenderabnahme. Die unten dokumentierten früheren
+gescheiterten Paketversuche sind historische Gegencheck-Evidence.
+
+## Anschließender Quellstand: Konvertierung, noch nicht im Kandidaten
+
+Nach dem gebundenen RC107-Kandidaten wurde der neue Verarbeitungsmodus durch
+Frontend, Rust, private IPC und Service geführt. Fehlende/ungültige Startwerte
+und Moduswechsel bei Continue werden abgelehnt. Die direkte Extraktion für
+TXT/Markdown/CSV/DOCX sowie ein eigener Markdown-Artefaktvertrag sind vorhanden;
+rohe Konvertate bestehen die öffentlichen Privacy-Lesegates ausdrücklich nicht.
+XLSX/PPTX-Extraktion wurde ohne stille Tabellenkürzung ergänzt, bleibt aber
+unvollständig bewertet. PDF-/Scan-/OCR-Pfade sind separate Engineering-Einstiege,
+nicht Teil des ausgelieferten Pakets. **Die reine Konvertierung ist weiterhin
+nicht produktiv startbar:** Journal v5, Worker, Recovery und Markdown-Export
+müssen noch zusammengeführt werden. Der bestehende ZIP beweist nur `7b88a81`.
+
+Abschlussprüfung dieses anschließenden Quellstands am 06.09.2026:
+`test:product` vollständig grün (43 Basis- und 111 direkte Testdateien,
+einschließlich 2.000 Eingaben und echter 100-Dateien-Crash-/Fortsetzungsläufe),
+Rust 14/14 und `test:conversion:engineering` grün. Der letzte unabhängige
+Gegencheck schließt außerdem ein verfrühtes Scan-PDF-Abbruchsignal: Nach
+OCR-Start wird dessen bestätigtes Prozessende abgewartet; verweigerte oder
+unbestätigte Beendigung bleibt als `OCR_TERMINATION_UNCONFIRMED` erkennbar.
+Die erweiterten realen Scan-PDF-Lifecyclefälle bestehen auch mit gebündeltem
+Node 22. Das ersetzt weder den vollständigen Konvertierungsworkflow noch
+einen neuen Paket-/INT-13-Nachweis.
 
 ## Produkt in einem Satz
 

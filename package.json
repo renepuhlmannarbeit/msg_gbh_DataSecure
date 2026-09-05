@@ -85,6 +85,7 @@
     "test:product": "node tests/run-product-suite.js full",
     "test:product:ci": "node tests/run-product-suite.js ci",
     "test:engineering": "npm run test:sea-gates && node tests/test-pdfium-spike.mjs && node tests/test-portable-ocr-adapter.js && node tests/test-ocr-universal-assembler.mjs && node tests/test-ocr-universal-bundle.mjs && node tests/test-ocr-session-harness.js",
+    "test:conversion:engineering": "node --require ./plugins/data-secure/server/network-deny.cjs tests/test-pdf-markdown.mjs && node --require ./plugins/data-secure/server/network-deny.cjs tests/test-ocr-markdown.mjs && node --require ./plugins/data-secure/server/network-deny.cjs tests/test-scan-pdf-markdown.mjs",
     "test:legacy": "node tests/legacy/test-rc63-uat-kit-contract.js",
     "test:docs:fast": "node scripts/verify-canonical-docs.mjs && node tests/test-current-documentation-contract.js && node tests/test-current-document-links.js && node tests/test-current-uat-kit-contract.js && node tests/test-uat-fixture-generation.js",
     "test:docs:extended": "npm run test:docs:fast && node tests/test-ocr-result-contract.mjs && npm run test:sea-gates && node tests/test-claude-local-validation.mjs && npm run test:status-app"

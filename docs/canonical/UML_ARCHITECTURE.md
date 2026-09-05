@@ -507,7 +507,7 @@ sequenceDiagram
   A->>E: admit_selected_sources
   E-->>S: lokale Auswahlprojektion
   U->>S: explizit Anonymisierung starten
-  S->>A: start_admitted_batch
+  S->>A: start_admitted_batch(processingMode)
   A->>E: dauerhafte Aufnahme starten
   E->>I: prüfen und versiegelten Snapshot erzeugen
   alt direkt unterstütztes Textformat
@@ -528,6 +528,15 @@ Inhalte vorgesehen, in einem getrennten, als nicht anonymisiert gekennzeichneten
 Ausgabebaum (DS-085).
 
 ### Zwei gleichwertige Standalone-Modi – Sollvertrag DS-085
+
+Quellstand nach dem RC107-Paket: Der Startzweck ist bis zum Service implementiert
+(`processingMode` → Rust → `processing_mode` → Service), nicht bis zum Journal.
+`markdown-only` stoppt dort aktuell vor Mutation mit
+`MARKDOWN_CONVERSION_NOT_READY`; die vorbereitete Auswahl bleibt erhalten.
+Bei Continue wird kein neuer Zweck übertragen. Der zentrale v5-Zweckdiscriminator
+ist noch keine vollständige v5-Journalvalidierung. Direkte Extraktoren und
+getrennte `dm_`-Artefakte besitzen Tests; PDF/Scan/OCR sind weiterhin separate
+Engineering-Pfade. Daher ist der folgende vollständige zweite Zweig noch SOLL.
 
 Der folgende zweite Zweig ist geplant, nicht als heutige Ausführung belegt:
 

@@ -176,6 +176,15 @@ function removeOwnedRoot(root, initial) {
     const context = await client.send('get_ui_context', 'c'.repeat(16));
     assert.strictEqual(context.ok, true);
     assert.deepStrictEqual(context.result.selected_files, ['profil.txt']);
+    const conversion = await client.send('start_admitted_batch', '9'.repeat(16), { processing_mode: 'markdown-only' });
+    assert.strictEqual(conversion.ok, false);
+    assert.strictEqual(conversion.error_code, 'MARKDOWN_CONVERSION_NOT_READY',
+      'the real sidecar must preserve the fixed service rejection instead of masking or accepting conversion');
+    const retained = await client.send('get_ui_context', '8'.repeat(16));
+    assert.deepStrictEqual(retained.result.selected_files, ['profil.txt']);
+    const unchanged = await client.send('get_public_state', '7'.repeat(16));
+    assert.strictEqual(unchanged.result.preparing, false);
+    assert.strictEqual(unchanged.result.processing, false);
     const cancelled = await client.send('cancel_admission', 'd'.repeat(16));
     assert.strictEqual(cancelled.ok, true);
     const stopped = await client.send('shutdown', 'e'.repeat(16));
@@ -234,7 +243,9 @@ function removeOwnedRoot(root, initial) {
       assert.strictEqual((await hostClient.send('admit_selected_sources', '2'.repeat(16), {
         source_kind: 'files', source_paths: [fixtureSource]
       })).ok, true);
-      assert.strictEqual((await hostClient.send('start_admitted_batch', '3'.repeat(16))).ok, true);
+      assert.strictEqual((await hostClient.send('start_admitted_batch', '3'.repeat(16), {
+        processing_mode: 'markdown-and-anonymize'
+      })).ok, true);
       const ready = await waitForFile(path.join(caseRoot, 'worker-ready.json'));
       assert.strictEqual(ready.progress.batch_total, 1);
       assert.notStrictEqual(ready.progress.complete, true, 'worker must still own unfinished durable work');

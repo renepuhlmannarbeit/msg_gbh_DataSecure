@@ -9,6 +9,7 @@ const { testAsync, done, assert } = createSuite('Standalone frontend');
 
 function element() {
   return { disabled: false, hidden: false, textContent: '', title: '', className: '', listeners: {}, attributes: {},
+    value: 'markdown-and-anonymize',
     focus() { this.focused = true; },
     setAttribute(name, value) { this.attributes[name] = value; },
     addEventListener(type, listener) { this.listeners[type] = listener; } };
@@ -18,7 +19,7 @@ async function recoveredStatusCase() {
   const ids = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger',
     'configure-results', 'diagnostics', 'status-icon', 'status-title', 'status-text', 'summary',
     'result-folder', 'result-folder-results', 'source-folders', 'selected-files', 'result-count',
-    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version', 'drop-zone'];
+    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version', 'drop-zone', 'processing-mode'];
   const elements = Object.fromEntries(ids.map((id) => [id, element()]));
   const timers = [];
   let publicCalls = 0;
@@ -60,7 +61,7 @@ async function openFeedbackCase() {
   const ids = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger',
     'configure-results', 'diagnostics', 'status-icon', 'status-title', 'status-text', 'summary',
     'result-folder', 'result-folder-results', 'source-folders', 'selected-files', 'result-count',
-    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version', 'drop-zone'];
+    'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version', 'drop-zone', 'processing-mode'];
   const elements = Object.fromEntries(ids.map((id) => [id, element()]));
   const calls = [];
   const invoke = async (action) => {
@@ -438,6 +439,76 @@ async function completionPendingCase() {
   assert.strictEqual(harness.elements.results.hidden, false);
 }
 
+async function explicitStartModeCase() {
+  const start = deferred();
+  const harness = await frontendHarness({
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Profil.txt']) }),
+    start_admitted_batch: () => start.promise
+  });
+  assert.strictEqual(harness.elements['processing-mode'].disabled, false);
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['processing-mode'].disabled, false, 'a prepared selection has not bound its mode yet');
+  const starting = harness.click('start');
+  assert.strictEqual(harness.elements['processing-mode'].disabled, true, 'the pending start locks the selector');
+  assert.strictEqual(JSON.stringify(harness.calls.find((call) => call.action === 'start_admitted_batch').args),
+    JSON.stringify({ processingMode: 'markdown-and-anonymize' }), 'Tauri receives the selected mode under its camelCase argument');
+  harness.elements['processing-mode'].value = 'markdown-only';
+  start.resolve({ ok: true });
+  await starting;
+  assert.strictEqual(harness.elements['processing-mode'].disabled, true, 'accepted but not yet polled intake remains locked');
+  assert.strictEqual(harness.calls.find((call) => call.action === 'start_admitted_batch').args.processingMode,
+    'markdown-and-anonymize', 'a later selector change cannot mutate the submitted start');
+  assert.strictEqual(harness.count('start_admitted_batch'), 1);
+}
+
+async function unavailableModePreservesAdmissionCase() {
+  const harness = await frontendHarness({
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Profil.txt']) }),
+    start_admitted_batch: (args) => {
+      if (args.processingMode === 'markdown-only') throw 'MARKDOWN_CONVERSION_NOT_READY';
+      return { ok: true };
+    }
+  });
+  await harness.click('select-files');
+  // Disabled options cannot normally be chosen. Exercise a stale/manipulated
+  // renderer anyway: it must not silently run anonymization instead.
+  harness.elements['processing-mode'].value = 'markdown-only';
+  await harness.click('start');
+  assert.match(harness.elements['status-title'].textContent, /MARKDOWN_CONVERSION_NOT_READY/u);
+  assert.match(harness.elements['status-text'].textContent, /nicht gestartet.*Dateiauswahl bleibt erhalten/u);
+  assert.strictEqual(harness.elements.start.hidden, false);
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Profil.txt');
+  assert.strictEqual(harness.elements['processing-mode'].disabled, false);
+  await harness.runTimer();
+  assert.strictEqual(harness.count('start_admitted_batch'), 1, 'unsupported conversion never falls back automatically');
+  harness.elements['processing-mode'].value = 'markdown-and-anonymize';
+  await harness.click('start');
+  assert.strictEqual(harness.count('start_admitted_batch'), 2, 'only another explicit Start can use the supported mode');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Stapel wird vorbereitet');
+}
+
+async function recoverableModeLockCase() {
+  let state = { state: 'stopped', resumable_count: 1 };
+  const harness = await frontendHarness({ get_public_state: () => state });
+  const mode = harness.elements['processing-mode'];
+  for (const name of ['stopped', 'review_required', 'processing', 'preparing', 'export_pending', 'blocked']) {
+    state = { state: name, resumable_count: 1, review_count: 1, export_pending_count: 1 };
+    await harness.runTimer();
+    assert.strictEqual(mode.disabled, true, `${name} does not permit changing the current batch mode`);
+    await harness.click('configure-results');
+    assert.strictEqual(mode.disabled, true, `finishing an unrelated RPC must not unlock ${name}`);
+  }
+  state = { state: 'stopped', resumable_count: 1 };
+  await harness.runTimer();
+  mode.value = 'markdown-only';
+  await harness.click('continue');
+  await settleFrontend();
+  const continued = harness.calls.filter((call) => call.action === 'continue_current_batch');
+  assert.strictEqual(continued.length, 1);
+  assert.strictEqual(continued[0].args, undefined, 'continue never sends the current selector value');
+  assert.strictEqual(mode.disabled, true);
+}
+
 (async () => {
   await testAsync('a successful status poll clears an earlier IPC error atomically', recoveredStatusCase);
   await testAsync('result and ledger actions show a separate confirmed handoff', openFeedbackCase);
@@ -453,5 +524,8 @@ async function completionPendingCase() {
   await testAsync('late cancellation context preserves a freshly dropped selection', cancelledAdmissionContextRaceCase);
   await testAsync('a failed run offers its ledger only when the backend confirms availability', failedRunLedgerAvailabilityCase);
   await testAsync('completion metadata debt is visible without claiming zero missing documents or no results', completionPendingCase);
+  await testAsync('explicit Start sends one immutable camelCase processing mode and locks it before checkpoint', explicitStartModeCase);
+  await testAsync('unavailable conversion keeps the admission without a silent anonymization fallback', unavailableModePreservesAdmissionCase);
+  await testAsync('active and recoverable modes stay locked after unrelated RPCs and continue sends no mode', recoverableModeLockCase);
   done();
 })();

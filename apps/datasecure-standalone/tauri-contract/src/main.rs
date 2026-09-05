@@ -169,14 +169,21 @@ fn admit_native_sources(
     paths: &[PathBuf],
     kind: &str,
 ) -> Result<Value, String> {
-    let current = rpc(state, "get_public_state", None, &[], None)?;
+    let current = rpc(state, "get_public_state", None, &[], None, None)?;
     if !matches!(
         current.get("state").and_then(Value::as_str),
         Some("ready" | "results_available" | "completed_without_results")
     ) {
         return Err("STANDALONE_BUSY".to_string());
     }
-    let result = rpc(state, "admit_selected_sources", Some(kind), paths, None)?;
+    let result = rpc(
+        state,
+        "admit_selected_sources",
+        Some(kind),
+        paths,
+        None,
+        None,
+    )?;
     state.admission_present.store(true, Ordering::Release);
     Ok(result)
 }
@@ -503,8 +510,14 @@ fn private_request(
     source_kind: Option<&str>,
     paths: &[PathBuf],
     presentation_generation: Option<u64>,
+    processing_mode: Option<&str>,
 ) -> Result<Value, String> {
     let mut request = json!({ "schema": IPC_SCHEMA, "request_id": request_id, "action": action });
+    if action == "start_admitted_batch" {
+        request["processing_mode"] = json!(validate_processing_mode(processing_mode)?);
+    } else if processing_mode.is_some() {
+        return Err("PROCESSING_MODE_INVALID".to_string());
+    }
     if action == "admit_selected_sources" || action == "configure_results" {
         if action == "admit_selected_sources" {
             request["source_kind"] = json!(source_kind.unwrap_or("files"));
@@ -520,6 +533,19 @@ fn private_request(
         return Err("STANDALONE_OPERATION_FAILED".to_string());
     }
     Ok(request)
+}
+
+fn validate_processing_mode(value: Option<&str>) -> Result<&str, String> {
+    match value {
+        Some("markdown-and-anonymize") => Ok("markdown-and-anonymize"),
+        Some("markdown-only") => Ok("markdown-only"),
+        _ => Err("PROCESSING_MODE_INVALID".to_string()),
+    }
+}
+
+fn mode_rejected_before_start(result: &Result<Value, String>) -> bool {
+    matches!(result, Err(code) if matches!(code.as_str(),
+        "PROCESSING_MODE_INVALID" | "PROCESSING_MODE_FORBIDDEN" | "MARKDOWN_CONVERSION_NOT_READY"))
 }
 
 enum ValidatedPrivateResponse {
@@ -560,11 +586,19 @@ fn rpc(
     source_kind: Option<&str>,
     paths: &[PathBuf],
     presentation_generation: Option<u64>,
+    processing_mode: Option<&str>,
 ) -> Result<Value, String> {
     let started = Instant::now();
     diagnostic_event("ipc_request_started", Some(action), "progress", None, None);
     let id = request_id();
-    let request = private_request(&id, action, source_kind, paths, presentation_generation)?;
+    let request = private_request(
+        &id,
+        action,
+        source_kind,
+        paths,
+        presentation_generation,
+        processing_mode,
+    )?;
     let payload = serde_json::to_vec(&request).map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
     if payload.len() > MAX_FRAME_BYTES {
         return Err("STANDALONE_IPC_FAILED".to_string());
@@ -656,7 +690,7 @@ fn rpc(
 }
 
 async fn blocking_rpc(state: DesktopState, action: &'static str) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || rpc(&state, action, None, &[], None))
+    tauri::async_runtime::spawn_blocking(move || rpc(&state, action, None, &[], None, None))
         .await
         .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
@@ -666,7 +700,7 @@ fn resolved_local_target(
     action: &str,
     expected_kind: &str,
 ) -> Result<PathBuf, String> {
-    let result = rpc(state, action, None, &[], None)?;
+    let result = rpc(state, action, None, &[], None, None)?;
     let object = result
         .as_object()
         .filter(|value| value.len() == 4)
@@ -867,11 +901,31 @@ async fn cancel_admission(state: State<'_, DesktopState>) -> Result<Value, Strin
     state.admission_present.store(false, Ordering::Release);
     result
 }
-#[tauri::command]
-async fn start_admitted_batch(state: State<'_, DesktopState>) -> Result<Value, String> {
+#[tauri::command(rename_all = "camelCase")]
+async fn start_admitted_batch(
+    state: State<'_, DesktopState>,
+    processing_mode: Option<String>,
+) -> Result<Value, String> {
+    validate_processing_mode(processing_mode.as_deref())?;
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
-    let result = blocking_rpc(state.inner().clone(), "start_admitted_batch").await;
-    state.admission_present.store(false, Ordering::Release);
+    let owned = state.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        rpc(
+            &owned,
+            "start_admitted_batch",
+            None,
+            &[],
+            None,
+            processing_mode.as_deref(),
+        )
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?;
+    // These fixed errors are returned before reservation or delegation. Keep
+    // the prepared selection so the user can select the supported mode.
+    if !mode_rejected_before_start(&result) {
+        state.admission_present.store(false, Ordering::Release);
+    }
     result
 }
 #[tauri::command]
@@ -895,6 +949,7 @@ async fn ack_terminal_presented(
             None,
             &[],
             Some(presentation_generation),
+            None,
         )
     })
     .await
@@ -936,7 +991,7 @@ async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, Stri
     );
     let owned = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        rpc(&owned, "configure_results", None, &[path], None)
+        rpc(&owned, "configure_results", None, &[path], None, None)
     })
     .await
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
@@ -1244,6 +1299,62 @@ mod tests {
     }
 
     #[test]
+    fn desktop_start_requires_a_mode_and_serializes_only_snake_case() {
+        let id = "0123456789abcdef";
+        for mode in ["markdown-and-anonymize", "markdown-only"] {
+            let request = private_request(id, "start_admitted_batch", None, &[], None, Some(mode))
+                .expect("supported mode reaches the service's readiness gate");
+            assert_eq!(request["processing_mode"], json!(mode));
+            assert!(request.get("processingMode").is_none());
+            assert_eq!(request.as_object().unwrap().len(), 4);
+        }
+        for mode in [
+            None,
+            Some(""),
+            Some("auto"),
+            Some("local_only"),
+            Some("Markdown-only"),
+        ] {
+            assert_eq!(
+                private_request(id, "start_admitted_batch", None, &[], None, mode).unwrap_err(),
+                "PROCESSING_MODE_INVALID"
+            );
+        }
+        for action in [
+            "continue_current_batch",
+            "cancel_admission",
+            "get_public_state",
+            "shutdown",
+        ] {
+            assert_eq!(
+                private_request(id, action, None, &[], None, Some("markdown-only")).unwrap_err(),
+                "PROCESSING_MODE_INVALID"
+            );
+            let request = private_request(id, action, None, &[], None, None).unwrap();
+            assert!(request.get("processing_mode").is_none());
+        }
+    }
+
+    #[test]
+    fn mode_rejection_preserves_admission_but_an_uncertain_start_does_not() {
+        for code in [
+            "PROCESSING_MODE_INVALID",
+            "PROCESSING_MODE_FORBIDDEN",
+            "MARKDOWN_CONVERSION_NOT_READY",
+        ] {
+            assert!(mode_rejected_before_start(&Err(code.to_string())));
+        }
+        for code in [
+            "STANDALONE_START_FAILED",
+            "STANDALONE_IPC_FAILED",
+            "STANDALONE_IPC_TIMEOUT",
+        ] {
+            assert!(!mode_rejected_before_start(&Err(code.to_string())));
+        }
+        assert!(!mode_rejected_before_start(&Ok(json!({ "ok": true }))));
+    }
+
+    #[test]
     fn terminal_acknowledgement_is_bound_to_one_safe_generation() {
         let request = private_request(
             "0123456789abcdef",
@@ -1251,6 +1362,7 @@ mod tests {
             None,
             &[],
             Some(42),
+            None,
         )
         .expect("valid generation");
         assert_eq!(request["presentation_generation"], json!(42));
@@ -1261,6 +1373,7 @@ mod tests {
             None,
             &[],
             None,
+            None,
         )
         .is_err());
         assert!(private_request(
@@ -1269,11 +1382,18 @@ mod tests {
             None,
             &[],
             Some(0),
+            None,
         )
         .is_err());
-        assert!(
-            private_request("0123456789abcdef", "get_public_state", None, &[], Some(42),).is_err()
-        );
+        assert!(private_request(
+            "0123456789abcdef",
+            "get_public_state",
+            None,
+            &[],
+            Some(42),
+            None
+        )
+        .is_err());
     }
 
     #[test]

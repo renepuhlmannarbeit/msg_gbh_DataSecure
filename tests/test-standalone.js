@@ -394,6 +394,75 @@ test('Standalone runtime source contains no MCP or JSON-RPC transport', () => {
   assert.doesNotMatch(runtime, /legacy-input-migration/u);
 });
 
+test('desktop start requires exactly one supported purpose; continue and other actions reject purpose fields', () => {
+  const base = { schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16), action: 'start_admitted_batch' };
+  for (const mode of ['markdown-and-anonymize', 'markdown-only']) {
+    const message = { ...base, processing_mode: mode };
+    assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(message)), [message]);
+  }
+  for (const mode of [undefined, null, '', 'auto', 'local_only', false, 0, {}, ['markdown-only']]) {
+    const message = { ...base, ...(mode === undefined ? {} : { processing_mode: mode }) };
+    assert.throws(() => encodeFrame(message), (error) => error.code === 'PROCESSING_MODE_INVALID');
+    // Also exercise bytes from an old or invalid client, bypassing our encoder.
+    const payload = Buffer.from(JSON.stringify(message));
+    const header = Buffer.alloc(4); header.writeUInt32BE(payload.length, 0);
+    assert.throws(() => new FrameDecoder().push(Buffer.concat([header, payload])),
+      (error) => error.code === 'PROCESSING_MODE_INVALID');
+  }
+  for (const action of ['continue_current_batch', 'cancel_admission', 'get_public_state', 'shutdown']) {
+    assert.throws(() => encodeFrame({ ...base, action, processing_mode: 'markdown-only' }),
+      (error) => error.code === 'DESKTOP_IPC_FIELD_INVALID');
+    assert.deepStrictEqual(new FrameDecoder().push(encodeFrame({ ...base, action })), [{ ...base, action }]);
+  }
+  assert.throws(() => encodeFrame({ ...base, processingMode: 'markdown-and-anonymize' }),
+    (error) => error.code === 'PROCESSING_MODE_INVALID', 'camelCase is only for the Tauri command, not private IPC');
+});
+
+async function processingModeServiceCase() {
+  let reservations = 0;
+  let mutations = 0;
+  let launches = 0;
+  let workerOptions;
+  let workerProfile;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    readConfiguredResultRoot: () => '',
+    fs: { mkdirSync() { mutations += 1; } },
+    saveConfiguredResultRoot() { mutations += 1; },
+    reserveIntake() { reservations += 1; return { reservation_id: 'r'.repeat(32) }; },
+    startLocalIntakeExecutor(_queue, profile, options) {
+      launches += 1; workerOptions = options; workerProfile = profile;
+      return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
+    }
+  }) });
+  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  const queue = service.admittedQueue;
+  const selection = service.selectionContext;
+  for (const options of [{ processingMode: 'markdown-only' }, {}, null, [], { processingMode: null },
+    { processingMode: 'local_only' }, { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' }]) {
+    const expected = options?.processingMode === 'markdown-only' ? 'MARKDOWN_CONVERSION_NOT_READY' : 'PROCESSING_MODE_INVALID';
+    await assert.rejects(service.startAdmittedBatch(options), (error) => error.code === expected);
+    assert.strictEqual(service.admittedQueue, queue, 'rejected purpose must not consume the admission');
+    assert.strictEqual(service.selectionContext, selection);
+    assert.strictEqual(reservations, 0);
+    assert.strictEqual(mutations, 0, 'rejected conversion must not create or configure the default output');
+    assert.strictEqual(launches, 0);
+  }
+  await service.startAdmittedBatch({ processingMode: 'markdown-and-anonymize', profile: 'general' });
+  assert.strictEqual(reservations, 1);
+  assert.strictEqual(launches, 1);
+  assert.strictEqual(workerOptions.processingMode, 'markdown-and-anonymize');
+  assert.strictEqual(workerProfile, 'general');
+  assert.strictEqual(service.admittedQueue, null);
+  const direct = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    startLocalIntakeExecutor(_queue, _profile, options) {
+      assert.strictEqual(options.processingMode, 'markdown-and-anonymize', 'legacy direct calls stay explicitly anonymization-only');
+      return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
+    }
+  }) });
+  await direct.admitSelectedSources(['C:\\Source\\a.txt']);
+  await direct.startAdmittedBatch();
+}
+
 async function directServiceCase() {
   const deps = fakeDependencies();
   const service = new StandaloneApplicationService({ dependencies: deps });
@@ -722,6 +791,7 @@ async function missingLedgerCase() {
 (async () => {
   await testAsync('Standalone calls the engine directly without MCP or JSON-RPC', directServiceCase);
   await testAsync('native desktop admission validates once and starts without a second picker', admittedServiceCase);
+  await testAsync('processing purpose is rejected before mutations and never silently falls back', processingModeServiceCase);
   await testAsync('native desktop admission uses the real picker-to-queue adapter for files and folders', realAdmissionAdapterCase);
   await testAsync('native desktop admission enforces the aggregate 500 MB limit', oversizedAdmissionCase);
   await testAsync('a missing worker acknowledgement consumes the admission exactly once', uncertainAdmissionStartCase);

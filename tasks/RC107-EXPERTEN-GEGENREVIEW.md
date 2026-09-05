@@ -46,6 +46,7 @@ Snapshot ab, statt ihn still falsch weiterzuschreiben.
 | Parserfix `aaecf59` | Parser-Isolation 19/19, Itemprozessor 16/16, MCP 45/45 und lokale CI-Produktsuite mit 40 Basis-/48 Direktdateien grün. Neu gepackter Vierformat-/Fehlerfolgelauf und nativer Start bestanden. Cleanup-Inventur verweigerte Windows-Cache-Junction vor jeder Löschung; PKG-04 unvollständig. |
 | Testharness `ce8319b` | Desktop-Vertrag 12/12 einschließlich 8 synthetischer Cleanup-Gruppen. Echter Folgetest fand PowerShell-5-Providerfelder `null` trotz gültiger Junction; Start grün, Cleanup weiterhin verweigert. |
 | Native-Metadatenfix `d3d384c` | Desktop-Vertrag 12/12; echte Junction zusätzlich nur lesend validiert. Frischer nativer Start mit beiden IPC-Antworten und vollständiger Bereinigung von 426 eigenen Testeinträgen bestanden. Noch kein Zweifachbau des letzten Produktstands. |
+| Abschließender Produktstand `7b88a81` | Vollsuite 40 Basis-/111 Direktdateien einschließlich 2.000 Eingaben und Rust 12/12 grün. PKG-04 zweimal bytegleich: ZIP 36.071.549 Byte, SHA-256 `01907871eb8664597d2df5e576cf9e2a490c88ec0e38e1af867a555fe1a0f015`. Beide Kandidaten bestehen Paket-/Worker-/isolierte native Smokes. Receipt und INT-13-Bindung unter `dist/pkg-04/7b88a81ff577aaa270f1354d75365b2df4a4666e/`. |
 
 Die beiden verweigerten nativen Testprofile bleiben unverändert und sind von
 Git ausgeschlossen. Nur neu erzeugte, genau geprüfte Testobjekte wurden
@@ -58,6 +59,29 @@ Erst dann schreibt PKG-04 die hashgebundene INT-13-Bindung. Ein Versionsname ode
 ein erfolgreiches Teilgate genügt nicht.
 
 ## Offene Abnahme und Nicht-Zusagen
+
+### Anschließender Konvertierungsunterbau (separat vom PKG-04-Kandidaten)
+
+Der Folgeauftrag hat einen zentralen Modusvertrag, vollständigen Desktop-
+Parametertransport bis zum Service, inhaltstreue direkte Extraktion und einen
+getrennten Markdown-Artefaktvertrag ergänzt. Weitere Engineering-Einstiege
+verarbeiten Office, Text-PDF, Scan-PDF und PNG/BMP mit lokalen OCR-Modellen.
+Unabhängige Teilreviews prüften Modusbindung/Mutation, öffentliche Privacy-
+Cross-Reads sowie PDF-/OCR-Lifecycle. Zwei reproduzierte Fehler wurden dabei
+behoben: ein bei PDF.js-Abbruch unaufgelöster Wartezustand und die verfrühte
+Scan-PDF-Antwort vor dem OCR-Prozessende. Verweigerte Beendigung bleibt ein
+eigener Fehler, statt einen bestätigten Abbruch zu behaupten.
+
+Abschlussnachweise: Produktsuite **43 Basis-/111 Direktdateien**, Rust **14/14**
+und das reale PDF-/OCR-/Scan-PDF-Engineering-Gate grün; erweiterte Scan-PDF-
+Abbruchfälle zusätzlich mit gebündeltem Node 22 grün. Journal v5, Worker,
+Recovery, Markdown-Export und breite Runtime-Paketierung sind ausdrücklich
+noch nicht vollständig integriert. Der Unterbau schaltet die UI-Funktion
+nicht frei und ist **nicht** Bestandteil des zuvor an INT-13 gebundenen
+`7b88a81`-Pakets. Ausführungsdetails stehen im
+[Format-/Konvertierungsplan](STANDALONE-FORMATAUSBAU-IMPLEMENTIERUNGSPLAN.md).
+
+### Weiterhin offene Zielhost- und Produktnachweise
 
 - Keine neue globale Identitätsauflösung: gleiche Schreibweise allein beweist
   bei Personen oder verschiedenen Firmen keine reale Identität.

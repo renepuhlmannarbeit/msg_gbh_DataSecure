@@ -64,6 +64,57 @@ keine veränderten Originalhashes; echter ausgelieferter Sidecar ohne Systemrunt
 
 ## 2. Gemeinsamer Fähigkeitenvertrag
 
+### Implementierter erster Teilschnitt und exakte Restintegration
+
+Nach dem PKG-04-Kandidaten `7b88a81` umgesetzt: Modusvertrag und Desktoptransport,
+In-Memory-Extraktion, eigener Markdown-Artefaktvertrag sowie echte negative
+Privacy-Lesetests. TXT/MD behalten Unicode und Zeilenenden, CSV seine Original-
+Köpfe/-Zeilen, DOCX eng nachgewiesene Text-/Tabellenstrukturen. Komplexe DOCX,
+XLSX/PPTX und PDF/OCR bleiben unvollständig bewertet. XLSX verliert nicht mehr
+still Spalten ab 101 oder Zeilen ab 10.001; Übergrößen erzeugen einen expliziten
+Fehler. PPTX-Textläufe und numerische Notizen werden im Erhaltungspfad bewahrt.
+
+Die nächste Integration gehört in den vorhandenen Kern, nicht in einen zweiten
+Batchrunner:
+
+| Übergabe | Nächster konkreter Eingriff / Nachweis |
+|---|---|
+| `batch-intake-intent`, `batch-intake`, `batch-worker` | Verarbeitungszweck dauerhaft vor ACK binden; unbekannte Zwecke ablehnen; keine Pseudonymzustände für reine Konvertierung erzeugen. |
+| `batch-journal-store` | Vollständiges v5-Schema statt bloßem Zusatzfeld in v4; eigene positive Konvertierungs-Itemgrade/`dm_`-Identität. v1/v2/v4 bleiben Anonymisierung, altes verschlüsseltes v3 bleibt zurückgewiesen. |
+| `batch-item-processor`, `batch-reconciliation`, `batch-delivery` | Verarbeitung und Artefaktresolver zweckgebunden wählen; derzeit sind `anonymizeNext`, `ds_`, Privacy-Grade und Capability-Erteilung noch fest eingebunden. Crashfenster vor/nach Artefaktpublikation prüfen. |
+| `result-export`, Mapping-Outbox und native Zielresolver | Atomarer `DataSecure-Markdown`-Lauf samt Zuordnung, separate Rootidentität, beide Outputbäume aus Quellen ausschließen, fehlgeschlagene Folgeausgabe ohne Altziel. |
+| Frontend, Fähigkeitenmodell und Paket | Aktivierung erst mit kompletter Kette, festen Diagnosecodes und realem Vierformat-/Crash-/Offline-Paketnachweis; keine Übertragung der Engineering-Tests auf den alten PKG-04-Kandidaten. |
+
+PDF.js verarbeitet ausschließlich lokale Bytes. Ein echter laufender Abbruch
+konnte zuvor eine unbeantwortete Promise lassen; Cancel-Wartepunkte, einmalige
+Zerstörung und begrenzter Cleanup schließen diesen Engineering-Lifecycle-Defect.
+Scan-PDF rastert sequenziell pro Seite und verwendet ausschließlich OCR, nicht
+zusätzlich einen vorhandenen Textlayer. OCR verwendet lokale DE/EN-Modelle ohne
+PII-Normalisierung und bleibt grundsätzlich als nicht verifiziert gekennzeichnet.
+Der Prozess-/Runtime-/Paketnachweis der späteren Produktanbindung bleibt offen.
+
+Ein zweiter unabhängiger Lifecycle-Gegencheck fand und korrigierte die
+Scan-PDF/OCR-Abbruchübergabe: Ein äußeres Cancel-Race durfte nicht antworten,
+bevor der gestartete OCR-Prozess sein Ende bestätigt. Die Komposition wartet
+jetzt auf dessen begrenzten Abschluss; `OCR_TERMINATION_UNCONFIRMED` bleibt
+auch bei aktivem Abbruch erhalten. Reale Start-/Ready-Abbrüche, simuliert
+verweigerte und werfende Kill-Aufrufe sowie das anschließende natürliche
+Prozessende sind geprüft. Es gibt keinen automatischen stärkeren Kill-Retry.
+
+Der abschließende Hauptlauf besteht mit 43 Basis-/111 direkten Produktdateien
+und 14 Rust-Tests. Das separate Engineering-Gate für PDF, OCR und Scan-PDF
+ist vollständig grün; die erweiterten Scan-PDF-Fälle laufen zusätzlich mit
+gebündeltem Node 22. Alle Nachweise sind lokal und aktivieren weder die
+Produkt-Runtime noch den noch fehlenden reinen Konvertierungsworkflow.
+
+Prüfung: `npm run test:conversion:engineering` verlangt bereits installierte
+gepinnten Pilotabhängigkeiten in `native/pdfjs/pilot` und `native/ocr/pilot`
+sowie die gehashten lokalen Modelle. Der Test lädt nichts herunter und erzeugt
+seine Quellen im Speicher. Ein fehlender Pilot ist kein Produktfehler und darf
+nicht durch automatischen Download im Anwenderprogramm ersetzt werden.
+
+### Noch zu verbindender Produktvertrag
+
 Verfügbarkeit wird nach **Produkt × Modus × Format × Zielruntime** entschieden.
 Daraus werden Picker, Drag-and-drop, Aufnahme, Workerwahl, Größenlimits, UI und
 Paketprüfung abgeleitet. Eine erfolgreiche Extraktion im Konvertierungsmodus
@@ -74,12 +125,12 @@ Manifestflags allein schalten keine fehlende Runtime frei.
 
 | Format/Baustein | Vorhanden | Vor Aktivierung erforderlich |
 |---|---|---|
-| XLSX | `ooxml.js`, OPC, Shared Strings, Kommentare, Zeichnungen, Inhaltsgraph | Stille Kürzung bei 100 Spalten/10.000 Zeilen entfernen; Zelltypen, führende Nullen, Datum, Formeln, leere/ausgeblendete Blätter und Coverage prüfen. Formelwerte nicht als vollständige Formelerhaltung ausgeben. |
-| PPTX | Folienreihenfolge, Tabellen, Notizen, Master/Layout, Diagramme/Bilder | Objekt-/Namespace-Coverage, realistische Office-Dateien und Reihenfolge; keine still ignorierten Textobjekte. |
+| XLSX | `ooxml.js`, OPC, Shared Strings, Kommentare, Zeichnungen, Inhaltsgraph; Kürzung durch explizites Budget ersetzt, Literalformel plus Cachewert im Erhaltungspfad | Zelltypen, führende Nullen, Datum, leere/ausgeblendete Blätter und vollständige Namespace-/Objekt-Coverage prüfen. Formelcache nicht mit berechnetem/aktuellem Excel-Wert verwechseln. |
+| PPTX | Folienreihenfolge, Tabellen, numerische Notizen und verbundene Textläufe regressionsgeprüft; Master/Layout, Diagramme/Bilder teilweise | Objekt-/Namespace-Coverage, realistische Office-Dateien und Reihenfolge; keine still ignorierten Textobjekte. |
 | MarkItDown | Gepinnter 0.1.7-DOCX-Differentialadapter | Portable gepinnte CPython-Patchversion, Hash-Wheellock je OS/Architektur, gebündelte Runtime, gerahmter isolierter Worker. Kein `[all]`, Azure oder LLM-Plugin. |
-| Text-PDF | PDF.js-Pilot und separater PDFium-Spike | Genau einen Produktbackend wählen; Vorschlag PDF.js für Text und Rendern, PDFium bleibt Vergleich. Pilotoption `stopEventLoop` durch belegtes `stopAtErrors` korrigieren. Formulare, Annotationen, Anhänge, aktive Inhalte, Verschlüsselung und Ressourcen prüfen. |
-| Scan-PDF | PDF-Renderer plus OCR-Pilot | Seitenweise lokale Rasterung/OCR, kein fixes Seitenlimit, keine doppelte Textlayer-/OCR-Ausgabe, keine ausgelassene letzte Seite. |
-| Bilder/OCR | Tesseract.js 7, WASM, DE/EN-Modelle, portabler Adapter | Plattformgleicher Decoder inkl. JPEG, Pixelbudgets, Paket→OCR-Nachweis. Platzhaltertext ist kein konvertierter Bildinhalt. Session-Wiederverwendung erst nach Fehler-/Abbruch-/Speichertests. |
+| Text-PDF | PDF.js-Engineering-Extraktor mit `stopAtErrors`, unveränderten lokalen Bytes, Literaltext, 101-Seiten- und laufendem 1.000-Seiten-Abbruchtest; PDFium bleibt Vergleich | Vollständiger Objekt-/Aktionsumfang, Layout-/Textabdeckung, Prozess-/Ressourcen-Supervisor und Runtimeproduktentscheidung. Bisher grundsätzlich `incomplete`. |
+| Scan-PDF | Reale seitenweise PDF.js-Rasterung → lokale OCR, letzte Seite, Sourcehash, Pixelbudget und kein doppelter Textlayer getestet | Produktworker, kohärente Runtime und vollständige Paketkette; OCR bleibt potenziell unvollständig. Keine fixe Seitenanzahlgrenze. |
+| Bilder/OCR | Tesseract.js 7, lokale hashgeprüfte DE/EN-Modelle; PNG/BMP→Markdown ohne PII-Normalisierung, eigener begrenzter Prozess, 12 Testgruppen inkl. Cancel/Timeout | JPEG-Decoder, produktiver Supervisor, Paket→OCR-Nachweis auf Windows/macOS. Alle OCR-Ausgaben bleiben `incomplete`; keine automatische Vollständigkeitsfreigabe. |
 
 `sourceLimitForExtension` kennt bislang nur die vier direkten Formate; andere
 fallen auf das 500-MiB-Stapelbudget zurück. Vor neuer Aufnahme brauchen sie

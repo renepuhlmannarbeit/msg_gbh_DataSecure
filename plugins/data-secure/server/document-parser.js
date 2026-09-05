@@ -22,7 +22,7 @@ function decodeUtf8Source(buffer) {
   return text;
 }
 
-function parseCsvRows(source, delimiter) {
+function parseCsvRows(source, delimiter, options = {}) {
   if (!CSV_DELIMITERS.includes(delimiter)) throw new Error('CSV_DELIMITER_INVALID');
   const rows = [];
   let row = [];
@@ -33,7 +33,7 @@ function parseCsvRows(source, delimiter) {
   const commitField = () => { row.push(field); field = ''; quoteClosed = false; };
   const commitRow = () => {
     commitField();
-    if (touched) rows.push(row);
+    if (touched || options.preserveRecords === true) rows.push(row);
     row = [];
     touched = false;
   };
@@ -58,8 +58,9 @@ function parseCsvRows(source, delimiter) {
       if (char === delimiter) {
         commitField();
         touched = true;
-      } else if (char === '\n') {
+      } else if (char === '\n' || (char === '\r' && options.preserveRecords === true)) {
         commitRow();
+        if (char === '\r' && source[index + 1] === '\n') index++;
       } else {
         throw new Error('CSV_QUOTE_INVALID');
       }
@@ -72,8 +73,9 @@ function parseCsvRows(source, delimiter) {
     } else if (char === delimiter) {
       commitField();
       touched = true;
-    } else if (char === '\n') {
+    } else if (char === '\n' || (char === '\r' && options.preserveRecords === true)) {
       commitRow();
+      if (char === '\r' && source[index + 1] === '\n') index++;
     } else {
       field += char;
       touched = true;
@@ -84,23 +86,24 @@ function parseCsvRows(source, delimiter) {
   return rows;
 }
 
-function parseCsvDialect(source) {
+function parseCsvDialect(source, options = {}) {
   const candidates = [];
   for (const delimiter of CSV_DELIMITERS) {
     let rows;
-    try { rows = parseCsvRows(source, delimiter); } catch { continue; }
-    const widths = rows.map((row) => row.length).filter((width) => width > 0);
-    const maxWidth = Math.max(0, ...widths);
+    try { rows = parseCsvRows(source, delimiter, options); } catch { continue; }
+    const widths = rows.filter((row) => options.preserveRecords !== true || row.length !== 1 || row[0] !== '')
+      .map((row) => row.length).filter((width) => width > 0);
+    const maxWidth = widths.reduce((maximum, width) => Math.max(maximum, width), 0);
     const consistent = maxWidth > 1 && widths.length > 0 && widths.every((width) => width === maxWidth);
     candidates.push({ delimiter, maxWidth, consistent });
   }
   const viable = candidates.filter((candidate) => candidate.consistent);
-  if (!viable.length) return { delimiter: ',', rows: parseCsvRows(source, ',') }; // RFC-4180-compatible one-column data.
+  if (!viable.length) return { delimiter: ',', rows: parseCsvRows(source, ',', options) }; // RFC-4180-compatible one-column data.
   viable.sort((left, right) => right.maxWidth - left.maxWidth);
   if (viable.length > 1 && viable[0].maxWidth === viable[1].maxWidth) {
     throw new Error('CSV_DELIMITER_AMBIGUOUS');
   }
-  return { delimiter: viable[0].delimiter, rows: parseCsvRows(source, viable[0].delimiter) };
+  return { delimiter: viable[0].delimiter, rows: parseCsvRows(source, viable[0].delimiter, options) };
 }
 
 function csvDelimiter(source) {

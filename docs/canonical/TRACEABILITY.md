@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 05.09.2026 · 3.2.0-rc107
+Stand: 06.09.2026 · 3.2.0-rc107
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -14,6 +14,25 @@ aktuellen Lauf einschließlich gestoppter Quellen; Tests in
 ihre Quellcommitbindung; native Testdatenisolation wird im Desktop-Vertrag
 und Rust-Testprofil geprüft. DS-085 bleibt als vollständige zweite Kernfunktion
 offen, nicht lediglich als noch fehlende Schaltfläche.
+
+DS-085/BL-010.28, anschließender Quellstand: `core/processing-mode.js` bindet
+die exakten Zwecke und Produktkanäle, Desktop transportiert den Startzweck über
+Rust/private IPC. `markdown-contract.js`, `markdown-artifact.js` und
+`markdown-extractor.js` trennen unveränderte Extraktion und Konvertate von
+Privacy-Paketen. `test-processing-mode`, `test-markdown-artifact` und
+`test-markdown-extractor` sind einmalig im Produktregressionslauf registriert.
+Dies aktiviert noch keinen v5-Stapel: Intake, Journalvalidierung, Worker,
+Reconciliation und Export sind weiterhin Integrationsarbeit.
+
+BL-022.2/3, BL-023.1–4 und BL-024.2/3: Office-Regressionsfälle binden die
+Beseitigung stiller Kürzungen und den unvollständigen Extraktionsgrad.
+`native/pdfjs/pilot/markdown.mjs` und `scan-page.mjs` sowie der lokale OCR-
+Markdown-Worker werden über `test:conversion:engineering` mit echten PDF-/Bild-
+Bytes geprüft. Diese Tests benötigen die vorhandenen gepinnten Pilotabhängigkeiten
+und lokalen DE/EN-Modelle; sie installieren oder laden nichts herunter.
+PDF-Text, Raster-OCR und Quelle werden niemals gleichzeitig als doppelte Inhalte
+zusammengehängt. Ohne belegte Vollständigkeit entsteht kein vollständiges
+Markdown-Artefakt. Diese Evidence gehört nicht zum RC107-Paketreceipt.
 
 BL-030.2/DS-084: `matchKnownAliases` und getrennte v1-Firmenidentitäts-/Rollen-HMACs
 werden durch echte `withBatchPseudonymRegistry`-Dokumentwechsel einschließlich
@@ -38,6 +57,12 @@ erzeugten Scope und bestätigt das Prozessende. `standalone-native-cleanup.ps1`
 behandelt nur den exakten internen Windows-Cache-Link als nicht zu traversierendes
 Blatt; Vorabaufnahme, Verzeichnisidentitäten und unbekannte Links bleiben strikt.
 Zurückbehaltene Alt-Testprofile sind kein erfolgreicher PKG-04-Nachweis.
+
+Der neue Nachweis ist vollständig: `7b88a81ff577aaa270f1354d75365b2df4a4666e`
+→ zwei bytegleiche ZIP/Desktop/Core-Builds → beide Paket-/Worker-/nativen Smokes
+→ `dist/pkg-04/7b88a81ff577aaa270f1354d75365b2df4a4666e/PKG-04-RECEIPT.json`
+→ hashgebundene `INT-13-BINDING.json`. Spätere Entwicklungsänderungen sind nicht
+automatisch Teil dieses Kandidaten; menschliche Zielhost-Evidence bleibt getrennt.
 
 | Entscheidung | Aktueller Status | Backlog / Nachweis |
 |---|---|---|

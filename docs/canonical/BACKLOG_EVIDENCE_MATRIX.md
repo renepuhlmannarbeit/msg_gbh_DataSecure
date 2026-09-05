@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 05.09.2026 · 3.2.0-rc107
+Stand: 06.09.2026 · 3.2.0-rc107
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
@@ -17,7 +17,7 @@ Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 | BL-030.2 | neustartfester rohwertfreier HMAC-Kontext; neue Standalone-v2-Stapel nutzen lesbare Nummern und einen gemeinsamen Unternehmensraum, v1 bleibt erhalten. RC107: exakte bekannte Aliase im freien Folgetext nach echtem Registry-/Journal-Neuaufbau, Klammern/Separatoren, Rollenwechsel und Rechtsformkonflikte; 34 Registry, 23 State, 17 Journal, 17 Item und 120 PII grün, 32 unabhängige Gegenchecks. Optionaler bindingsgebundener HMAC-Index mit vollständigem Altjournal-Fallback und dokumentierter Altreader-Grenze | E1/E2 echter Neustart/Crash/Cowork; reale Personen-/Unternehmensvarianten im fachlichen UAT |
 | BL-010.12/13, DS-084 | Native Tauri-Dragdrop-Aufnahme über denselben Admissionpfad, Guard gegen Auswahl-/Startkonkurrenz, Reset nach IPC-Fehler, Test für veraltete Statusantworten, echte Unicode-Pfade im Rust-Test; Pickeralternative bleibt | E1/E2 tatsächliches Ziehen aus Explorer/Finder, Fokus/Zoom/Screenreader und native Mac-Pakete |
 | BL-040.6, BL-041.10 | Cowork-Presenter bindet Erstlauf/Fortsetzung/Review an exakt den eigenen sichtbaren Exportlauf. Fehlender Lauf/Zielwechsel ergibt keinen falschen Öffnen-Hinweis. Echte Plugin-Exportdateien und PowerShell-Handler mit simulierter OS-Grenze geprüft | E1/E2 tatsächliche Explorer-/Finder-Sichtbarkeit; PowerShell-Test und Prozessstart beweisen kein sichtbares Fenster |
-| BL-010.28, DS-085 | Zweite Kernfunktion in Vision, Produktvertrag, UML, Zielmodell und Backlog gebunden; Dokumentationsguard verhindert stilles Entfernen oder vermeintliche Freigabe. Keine produktive Konvertierungsevidenz | E0 Modus-/Journal-/Exportvertrag, Inhaltserhaltung, Offline-Konverter und kompletter Paketlauf; anschließend E1/E2 beider Modi |
+| BL-010.28, DS-085 | Modus UI/Rust/IPC/Service, Ablehnung vor Mutation bei erhaltener Auswahl, 4 Modus- und 16 Artefaktfälle einschließlich echter öffentlicher Privacy-Cross-Read-Gates; 38 direkte Extraktionsfälle mit erhaltenem Quellinhalt. Dokumentationsguard verhindert stilles Entfernen oder vermeintliche Freigabe. Keine produktive Konvertierungsevidenz | v5-Journal und Itemgrade, Intake/Worker/Recovery/Export, vollständiger Vierformat-/Crash-/Paketlauf; anschließend E1/E2 beider Modi |
 | BL-022.1 | Grundparser, Struktur-/Differentialtests, namespacegebundene WordprocessingML-Auswertung, geschlossene XML-Entity-/Relationship-Namespace-Gates sowie referenzgebundene kanonische Kopf-/Fußzeilenreihenfolge | realer Office-Korpus und realistische Kommentare/AlternateContent; danach E1/E3 |
 | BL-024.2 | installationsfreier Offline-Kern, vollständige Übernahme des Universal-Bundles in Engineering-Portable/SEA, geschlossene Manifest-/Inventar-/Hash-/Modusgates, Pfade mit Leerzeichen, echter Windows-OCR-Smoke sowie Timeout und laufender Abbruch bei deaktivierter Freigabe | kohärente Aufnahme in die freizugebenden Produktziele, nicht allein per Manifest aktivierbares Produktgate und echter Paket-zu-Adapter-zu-OCR-End-to-End-Test; danach E1 |
 | BL-042.3 | inhaltsfreie Startprojektion einschließlich beider `batch_active`-Varianten, DE/EN, Textfallback, Server-/Artefaktgates sowie repo- und CWD-unabhängiger Windows-Build | bounded Abschlussprojektion, vollständige Fallbackmatrix und automatisierter echter Browser-/A11y-/DE-EN-DOM-Lauf; danach E1/E2 |
@@ -29,7 +29,7 @@ Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 | BL-012.2/3/5–8, BL-032.1 | Dialog-/Statusverträge automatisiert | E1 + E2, teilweise E3 |
 | BL-012.9/10, BL-043.1 | gebündelter lokaler Review, anonyme Prüfgruppen, direkte Aktionen, inhaltsfreie Fortschrittszähler, Windows-Kürzel, Klarstapel ohne UI und Mischstapel-Schnellpfad | E1/E2 Windows/macOS sowie E3 IT-/Health-IT und Security |
 | BL-021.1/2, BL-022.1 | Parser-/Differential-/Formatgates | E1 und Fachprüfung E3 |
-| BL-022.2/3, BL-023.1–4, BL-024.3 | NO-GO-/Negativgates | vollständige E0-Coverage, danach E1 + E3 |
+| BL-022.2/3, BL-023.1–4, BL-024.3 | NO-GO-/Negativgates; Office-Erhaltungspfad ohne stille Tabellenkürzung; echte PDF-Text-/laufende Abbruchtests, PNG/BMP-OCR und Scan-PDF-Komposition im Engineeringpfad. Quellenhashes, letzte Seite und Vermeidung doppelter OCR/Textlayer geprüft. Scan-PDF wartet nach OCR-Start auf bestätigtes Ende oder meldet ausdrücklich unbestätigte Beendigung; echte Prozesse mit simuliert verweigertem Kill geprüft. Node 24 und Scan-PDF zusätzlich mit gebündeltem Node 22 geprüft | vollständige E0-Coverage, JPEG-Decoder, Produktworker-/Runtime-/Paketintegration; danach E1 + E3. Neue Komponenten sind nicht Bestandteil des an INT-13 gebundenen alten Kandidaten |
 | BL-031.1 | Kontext- und Regressionskorpus | IT-/Health-IT-Fachprüfung E3 |
 | BL-041.1–9, BL-044.1, BL-049.1, BL-050.3 | Tool-, Picker-, Handoff-, Recovery- und Performanceverträge; stdio-JSON-RPC vor dem Parsen auf 1 MiB je Frame begrenzt und nach Überschreitung wieder synchronisiert | aktuelle Cowork-/OS-/UX-/Security-Evidenz E1/E2/E3 |
 | BL-051.1–6 | ZIP-/Marketplace-/Paketgates lokal | Fresh Install, Update, Rollback, Hostmatrix und 100/500-Lauf E1 |
@@ -63,6 +63,15 @@ Betriebssystem erzeugte Cache-Junction vor jeder Löschung; der Testrest bleibt
 erhalten. Daher weiterhin kein vollständiger RC107-PKG-04-Receipt und keine
 INT-13-Bindung aus diesem Versuch. Eine spätere erfolgreiche Bindung muss den
 neuen Harness-Commit nennen, nicht rückwirkend diesen Versuch freigeben.
+
+Abschluss 06.09.2026: `7b88a81ff577aaa270f1354d75365b2df4a4666e` besitzt nun
+einen vollständigen PKG-04-Receipt und INT-13-Bindung. Beide unabhängig sauber
+gebauten ZIPs/Desktop/Core-Binaries bytegleich, beide realen Paket-/Worker- und
+nativen Windows-Smokes bestanden. Archivhash
+`01907871eb8664597d2df5e576cf9e2a490c88ec0e38e1af867a555fe1a0f015`,
+36.071.549 Byte. Vollsuite 40 Basis-/111 Direktdateien und Rust 12/12 grün.
+Die beiden alten verweigerten Testprofile bleiben unverändert. Dies ist E0,
+keine sichtbare Bedienungs- oder macOS-E1/E2-Abnahme.
 
 - Manifest/Runtime begrenzen temporäre Aufbewahrung auf 0–14 Tage.
 - Retentiontests bewahren Quellen, `Processed`, fertige `Output`-Pakete und

@@ -3,7 +3,7 @@
 const invoke = window.__TAURI__.core.invoke;
 const byId = (id) => document.getElementById(id);
 const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger',
-  'new-batch', 'configure-results', 'diagnostics'];
+  'new-batch', 'configure-results', 'diagnostics', 'processing-mode'];
 const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
   STANDALONE_ENGINE_NOT_READY: 'Die lokale Verarbeitung ist noch nicht bereit.',
@@ -12,6 +12,9 @@ const messages = {
   STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam ausgewählt werden.',
   STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
   STANDALONE_START_FAILED: 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.',
+  PROCESSING_MODE_INVALID: 'Bitte einen gültigen Verarbeitungsmodus auswählen. Der Stapel wurde nicht gestartet.',
+  PROCESSING_MODE_FORBIDDEN: 'Dieser Verarbeitungsmodus ist hier nicht verfügbar. Der Stapel wurde nicht gestartet.',
+  MARKDOWN_CONVERSION_NOT_READY: 'Reine Markdown-Konvertierung ist noch in Entwicklung. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
   STANDALONE_RUNTIME_MISSING: 'Der lokale DataSecure-Core fehlt.',
   STANDALONE_RUNTIME_START_FAILED: 'Der lokale DataSecure-Core konnte nicht gestartet werden.',
@@ -58,7 +61,13 @@ function busy(value) {
 function applyBusyState() {
   operationInFlight = foregroundOperationInFlight || nativeDropInFlight;
   controls.forEach((id) => { byId(id).disabled = operationInFlight; });
+  updateModeAvailability();
   updateDropAvailability();
+}
+function updateModeAvailability() {
+  // The selector describes the next admission, never an active/recoverable run.
+  byId('processing-mode').disabled = operationInFlight || (!admitted &&
+    !['ready', 'results_available', 'completed_without_results'].includes(lastPublicState));
 }
 function updateDropAvailability() {
   const available = !operationInFlight && !admitted &&
@@ -138,6 +147,7 @@ function resetAdmissionUi() {
   visible('select-folder', true);
   visible('start', false);
   visible('cancel', false);
+  updateModeAvailability();
   updateDropAvailability();
 }
 
@@ -152,6 +162,7 @@ function renderAdmission(result) {
   status('Auswahl bereit', 'Einmal starten – danach läuft der Stapel ohne weitere Bestätigung.');
   visible('select-files', false); visible('select-folder', false); visible('start', true); visible('cancel', true);
   byId('action-feedback').hidden = true;
+  updateModeAvailability();
   updateDropAvailability();
 }
 
@@ -192,13 +203,14 @@ async function choose(command) {
   finally { busy(false); }
 }
 
-async function call(command) {
+async function call(command, args) {
   if (operationInFlight) return null;
   busy(true);
-  try { return await invoke(command); }
+  try { return await invoke(command, args); }
   catch (error) {
     const code = String(error || 'STANDALONE_OPERATION_FAILED');
     if (code === 'STANDALONE_NO_ADMISSION' || code === 'STANDALONE_START_FAILED' || code === 'STANDALONE_IPC_FAILED' || code === 'STANDALONE_IPC_TIMEOUT') {
+      lastPublicState = null;
       resetAdmissionUi();
       // A restored admission has no running poll yet. An unconfirmed start can
       // still be processing in the backend, so recover via status, never retry.
@@ -239,9 +251,13 @@ byId('cancel').addEventListener('click', async () => {
   scheduleRefresh(0);
 });
 byId('start').addEventListener('click', async () => {
-  if (!await call('start_admitted_batch')) return;
+  if (!admitted || operationInFlight) return;
+  const processingMode = byId('processing-mode').value;
+  if (!await call('start_admitted_batch', { processingMode })) return;
   viewChosenByUser = false;
   admitted = false; admissionGeneration += 1; byId('summary').hidden = true;
+  lastPublicState = 'preparing';
+  updateModeAvailability();
   status('Stapel wird vorbereitet', 'DataSecure erstellt den wiederaufnehmbaren lokalen Zwischenstand.');
   visible('start', false); visible('cancel', false);
   scheduleRefresh(0);
@@ -315,6 +331,7 @@ async function refresh() {
     } else lastTerminalContextKey = null;
     if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
     lastPublicState = state.state;
+    updateModeAvailability();
     updateDropAvailability();
     byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');

@@ -1,5 +1,7 @@
 'use strict';
 
+const { validateProcessingMode } = require('../core/processing-mode');
+
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES = 768 * 1024;
 const MAX_SINGLE_PATH_BYTES = 32767;
@@ -22,6 +24,10 @@ function validatePrivateMessage(message) {
   if (!PRIVATE_ACTIONS.has(message.action))
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
+  if (message.action === 'start_admitted_batch') {
+    allowedFields.add('processing_mode');
+    validateProcessingMode(message.processing_mode, 'standalone');
+  }
   if (message.action === 'ack_terminal_presented') {
     allowedFields.add('presentation_generation');
     if (!Number.isSafeInteger(message.presentation_generation) || message.presentation_generation < 1 ||

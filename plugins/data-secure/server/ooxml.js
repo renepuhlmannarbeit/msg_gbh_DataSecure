@@ -85,16 +85,27 @@ const APP_PROPERTIES = [
   ['Manager','Manager'],['Company','Unternehmen'],['Template','Vorlage'],
   ['HyperlinkBase','Hyperlink-Basis'],['Application','Anwendung'],['AppVersion','Anwendungsversion']
 ];
-function metadataSection(entries, sourcePart, fields) {
+// Text from an Office document is literal content, unlike an input .md file.
+// The extraction-only renderer escapes Markdown/HTML rather than allowing its
+// punctuation to become new markup. It preserves significant whitespace.
+function extractionText(value, inCell = false) {
+  let text = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/([\\`*_[\]{}()#+.!|])/g, '\\$1')
+    .replace(/\t/g, '&#9;').replace(/\r/g, '&#13;');
+  text = text.replace(/^ +| +$/gm, (spaces) => '&#32;'.repeat(spaces.length))
+    .replace(/ {2,}/g, (spaces) => ' ' + '&#32;'.repeat(spaces.length - 1));
+  return text.replace(/\n/g, inCell ? '<br>' : '  \n');
+}
+function metadataSection(entries, sourcePart, fields, options = {}) {
   const data=entries.get(sourcePart); if(!data)return null; const xml=data.toString('utf8'), lines=[];
-  for(const [tag,label] of fields){const value=textTags(xml,tag).map(item=>String(item).replace(/\s+/g,' ').trim()).filter(Boolean).join(' | ');if(value)lines.push(`- ${label}: ${value}`);}
+  for(const [tag,label] of fields){const value=textTags(xml,tag).map(item=>options.preserveText ? extractionText(item) : String(item).replace(/\s+/g,' ').trim()).filter(Boolean).join(' | ');if(value)lines.push(`- ${label}: ${value}`);}
   return lines.length?{kind:'metadata',source_part:sourcePart,markdown:`## Dokumentmetadaten\n\n${lines.join('\n')}`}:null;
 }
-function customMetadataSection(entries) {
+function customMetadataSection(entries, options = {}) {
   const sourcePart='docProps/custom.xml',data=entries.get(sourcePart);if(!data)return null;
   const xml=data.toString('utf8'),lines=[];let match;const properties=/<property\b([^>]*)>([\s\S]*?)<\/property>/gi;
   const scalar=/^\s*<vt:(lpwstr|bstr|i1|i2|i4|i8|int|ui1|ui2|ui4|ui8|uint|r4|r8|decimal|bool|filetime|date|cy|error)\b[^>]*>([\s\S]*?)<\/vt:\1>\s*$/i;
-  while((match=properties.exec(xml))){const name=xmlDecode(/\bname=["']([^"']+)["']/i.exec(match[1])?.[1]||'').trim();const valueMatch=scalar.exec(match[2]);const value=valueMatch?stripTags(valueMatch[2]):'';if(name&&value)lines.push(`- ${name}: ${value}`);}
+  while((match=properties.exec(xml))){const rawName=xmlDecode(/\bname=["']([^"']+)["']/i.exec(match[1])?.[1]||'');const name=options.preserveText ? extractionText(rawName) : rawName.trim();const valueMatch=scalar.exec(match[2]);const value=valueMatch?(options.preserveText ? extractionText(xmlDecode(valueMatch[2])) : stripTags(valueMatch[2])):'';if(name&&value)lines.push(`- ${name}: ${value}`);}
   return lines.length?{kind:'metadata',source_part:sourcePart,markdown:`## Benutzerdefinierte Dokumentmetadaten\n\n${lines.join('\n')}`}:null;
 }
 function customMetadataWarnings(entries) {
@@ -104,11 +115,11 @@ function customMetadataWarnings(entries) {
   while((match=properties.exec(xml)))if(!scalar.test(match[1]))unsupported++;
   return unsupported?[`OOXML enthält ${unsupported} nicht unterstützte benutzerdefinierte Metadatenwerte; Freigabe wird blockiert.`]:[];
 }
-function metadataSections(entries) {
+function metadataSections(entries, options = {}) {
   return [
-    metadataSection(entries,'docProps/core.xml',CORE_PROPERTIES),
-    metadataSection(entries,'docProps/app.xml',APP_PROPERTIES),
-    customMetadataSection(entries)
+    metadataSection(entries,'docProps/core.xml',CORE_PROPERTIES,options),
+    metadataSection(entries,'docProps/app.xml',APP_PROPERTIES,options),
+    customMetadataSection(entries,options)
   ].filter(Boolean);
 }
 function relMap(entries, relPath, baseDir) {
@@ -124,7 +135,7 @@ function relMap(entries, relPath, baseDir) {
 function escapeMarkdownTableCell(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
 }
-function renderPptTable(table) {
+function renderPptTable(table, options = {}) {
   // DrawingML tables have their visible cells in a:tc/a:txBody/a:t. Render
   // them structurally instead of flattening them into slide prose.  The
   // caller has already established that the containing slide is reachable.
@@ -133,23 +144,24 @@ function renderPptTable(table) {
   while ((row = rowRe.exec(table))) {
     const cells = []; let cell;
     const cellRe = /<a:tc\b[\s\S]*?<\/a:tc>/gi;
-    while ((cell = cellRe.exec(row[0]))) cells.push(escapeMarkdownTableCell(textTags(cell[0], 'a:t').join('\n')));
+    while ((cell = cellRe.exec(row[0]))) cells.push(options.preserveText ? extractionText(drawingText(cell[0]), true) : escapeMarkdownTableCell(textTags(cell[0], 'a:t').join('\n')));
     if (cells.length) rows.push(cells);
   }
   if (!rows.length) return '';
-  const cols = Math.max(...rows.map((cells) => cells.length));
+  const cols = rows.reduce((maximum, cells) => Math.max(maximum, cells.length), 0);
   const normalized = rows.map((cells) => Array.from({ length: cols }, (_, index) => cells[index] || ''));
+  if (options.preserveText) normalized.unshift(Array.from({ length: cols }, (_, index) => `Spalte ${index + 1}`));
   return '| ' + normalized[0].join(' | ') + ' |\n| ' + normalized[0].map(() => '---').join(' | ') + ' |' +
     (normalized.length > 1 ? '\n' + normalized.slice(1).map((cells) => '| ' + cells.join(' | ') + ' |').join('\n') : '');
 }
-function pptSlideTableSections(xml, sourcePart) {
+function pptSlideTableSections(xml, sourcePart, options = {}) {
   const source = String(xml);
   const opened = (source.match(/<a:tbl\b/gi) || []).length;
   const closed = (source.match(/<\/a:tbl\s*>/gi) || []).length;
   const tables = []; let match;
   const tableRe = /<a:tbl\b[\s\S]*?<\/a:tbl>/gi;
   while ((match = tableRe.exec(source))) {
-    const markdown = renderPptTable(match[0]);
+    const markdown = renderPptTable(match[0], options);
     // An empty but structurally valid table has no text to emit. It is not a
     // coverage failure; a non-empty/unbalanced table is handled by the caller.
     if (markdown) tables.push({ kind: 'table', source_part: sourcePart, markdown: `## Tabelle\n\n${markdown}` });
@@ -305,10 +317,10 @@ function wordPartScope(xml, rootTag) {
   if (!documentRoot || target) return { found: false, body: '' };
   return { found, body: output.join('') };
 }
-function renderWordPart(xml, rootTag) {
+function renderWordPart(xml, rootTag, options = {}) {
   const scope = wordPartScope(String(xml), rootTag);
   if (!scope.found || !scope.body) return '';
-  return renderWordStructure(parseWordStructure(scope.body));
+  return renderWordStructure(parseWordStructure(scope.body, options), options);
 }
 
 // These are structural/resource bounds, not a page-count limit. Each XML token
@@ -325,7 +337,7 @@ function wordStructureError(limit = false) {
   error.code = limit ? 'DOCX_STRUCTURE_LIMIT' : 'DOCX_STRUCTURE_UNSAFE';
   return error;
 }
-function parseWordStructure(body) {
+function parseWordStructure(body, options = {}) {
   const root = { type: 'root', children: [] };
   const stack = [{ name: '', node: root, skipped: false, boxes: 0 }];
   // Quoted attribute values may contain `>`; an unquoted `<` is never a tag.
@@ -334,7 +346,8 @@ function parseWordStructure(body) {
   let cursor = 0, nodes = 0, elements = 0;
   function flush(node) {
     if (node.type !== 'p' || !node.pending.length) return;
-    const value = node.pending.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    const raw = node.pending.join('');
+    const value = options.preserveText ? raw : raw.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     if (value) node.children.push(value);
     node.pending.length = 0;
   }
@@ -432,6 +445,8 @@ function parseWordStructure(body) {
       } else if (name === 'w:t' || name === 'w:tab' || name === 'w:br' || name === 'w:cr') {
         if (node.type !== 'p') throw wordStructureError();
         if (name !== 'w:t') node.pending.push(name === 'w:tab' ? '\t' : '\n');
+      } else if (node.type === 'tr' && name === 'w:tblHeader') {
+        node.header = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
       } else if (node.type === 'p' && name === 'w:pStyle') {
         const level = /^heading\s*([1-6])$/i.exec(attrs.get('w:val') || '')?.[1];
         if (level) node.prefix = '#'.repeat(Number(level)) + ' ';
@@ -443,7 +458,7 @@ function parseWordStructure(body) {
   if (stack.length !== 1) throw wordStructureError();
   return root;
 }
-function renderWordStructure(root) {
+function renderWordStructure(root, options = {}) {
   const output = [];
   let chars = 0;
   function write(value) {
@@ -457,6 +472,7 @@ function renderWordStructure(root) {
   }
   function content(node) {
     if (typeof node === 'string') return Boolean(node);
+    if (options.preserveText && node.type === 'p') return true;
     // Memoization visits each node only once, including empty drawing wrappers.
     if (node.visible === undefined) node.visible = node.type === 'tbl'
       ? node.children.some(row => row.children.length)
@@ -470,7 +486,7 @@ function renderWordStructure(root) {
       if (emitted) write(inCell ? '<br>' : '\n\n');
       if (typeof child === 'string') {
         if (!inCell && !emitted) write(node.prefix || '');
-        write(inCell ? escapeMarkdownTableCell(child) : child);
+        write(options.preserveText ? extractionText(child, inCell) : (inCell ? escapeMarkdownTableCell(child) : child));
       } else emit(child, inCell);
       emitted = true;
     }
@@ -481,6 +497,18 @@ function renderWordStructure(root) {
     for (const row of node.children) columns = Math.max(columns, row.children.length);
     if (!columns) return;
     const pipe = inCell ? '\\|' : '|';
+    const neutralHeader = options.preserveText && !inCell &&
+      !(node.children[0]?.header && !node.children.slice(1).some((row) => row.header));
+    if (neutralHeader) {
+      write('| ');
+      for (let column = 0; column < columns; column++) {
+        if (column) write(' | ');
+        write(`Spalte ${column + 1}`);
+      }
+      write(' |\n| ---');
+      repeat(' | ---', columns - 1);
+      write(' |\n');
+    }
     for (let rowIndex = 0; rowIndex < node.children.length; rowIndex++) {
       if (rowIndex) write(inCell ? '<br>' : '\n');
       write(pipe + ' ');
@@ -491,7 +519,7 @@ function renderWordStructure(root) {
       }
       repeat(' ' + pipe + ' ', columns - Math.max(1, cells.length));
       write(' ' + pipe);
-      if (!inCell && rowIndex === 0) {
+      if (!inCell && rowIndex === 0 && !neutralHeader) {
         write('\n| ---');
         repeat(' | ---', columns - 1);
         write(' |');
@@ -501,7 +529,7 @@ function renderWordStructure(root) {
   emit(root, false);
   return output.join('');
 }
-function renderWordBody(xml) { return renderWordPart(xml, 'body'); }
+function renderWordBody(xml, options = {}) { return renderWordPart(xml, 'body', options); }
 function docxMainRelationshipIssueCount(entries) {
   // A .docx is an OPC package, not an arbitrary ZIP containing a plausible
   // word/document.xml.  The root officeDocument relationship is therefore
@@ -904,9 +932,9 @@ function docxCoverageWarnings(entries) {
     ? [`DOCX enthält ${unsupported} nicht unterstützte inhaltsfähige OOXML-Part(s); Companion-Freigabe wird blockiert.`]
     : [];
 }
-function parseDocx(entries) {
+function parseDocx(entries, options = {}) {
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
-  const sections=[]; const body=renderWordBody(main.toString('utf8'));
+  const sections=[]; const body=renderWordBody(main.toString('utf8'), options);
   if(body)sections.push({kind:'text',source_part:'word/document.xml',markdown:body});
   const headerFooter = docxReferencedHeaderFooter(entries);
   const orderedStories = headerFooter.present ? headerFooter.orderedParts : [
@@ -915,7 +943,7 @@ function parseDocx(entries) {
   ];
   for(const name of orderedStories) {
     const data = entries.get(name);
-    const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root);
+    const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root,options);
     if(t) sections.push({kind:'text',source_part:name,markdown:`## ${root==='hdr'?'Kopfzeile':'Fußzeile'}\n\n${t}`});
   }
   for(const [extra,root,label] of [
@@ -923,10 +951,10 @@ function parseDocx(entries) {
     ['word/footnotes.xml','footnotes','Fußnoten'],
     ['word/endnotes.xml','endnotes','Endnoten']
   ]) if(entries.has(extra)) {
-    const t=renderWordPart(entries.get(extra).toString('utf8'),root);
+    const t=renderWordPart(entries.get(extra).toString('utf8'),root,options);
     if(t)sections.push({kind:'text',source_part:extra,markdown:`## ${label}\n\n${t}`});
   }
-  sections.push(...metadataSections(entries));
+  sections.push(...metadataSections(entries,options));
   const imageCoverage = docxImageRelationshipCoverage(entries);
   return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries)] };
 }
@@ -1072,20 +1100,40 @@ function xlsxCoverageWarnings(entries, sheetMeta) {
     ? [`XLSX enthält ${issues} noch nicht vollständig abgedeckte Inhaltsstruktur(en); Freigabe wird blockiert.`]
     : [];
 }
-function parseXlsx(entries) {
+function xlsxRenderLimit() {
+  const error = new Error('XLSX-Inhalt überschreitet die sichere Ausgabegrenze.');
+  error.code = 'XLSX_STRUCTURE_LIMIT';
+  return error;
+}
+function parseXlsx(entries, options = {}) {
   const shared=sharedStrings(entries); const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
   const sheetMeta=[]; let issues=relationState.issues; let sm; const sr=/<sheet\b([^>]+?)\/?>(?:<\/sheet>)?/gi; while((sm=sr.exec(workbook))){const a=sm[1],name=xmlDecode(/\bname="([^"]+)"/i.exec(a)?.[1]||'Sheet'),rid=/\br:id="([^"]+)"/i.exec(a)?.[1]; const target=rid&&relationState.targets.get(rid); if(!rid||!target) { issues++; continue; } sheetMeta.push({name,target});}
   if(!workbook || !sheetMeta.length) issues++;
   const sections=[]; let formulaCells=0;
-  for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;const xml=buf.toString('utf8');const rows=[];let rm;const rr=/<row\b[\s\S]*?<\/row>/gi;while((rm=rr.exec(xml))){const vals=[];let cm;const cr=/<c\b([^>]*)>([\s\S]*?)<\/c>/gi;while((cm=cr.exec(rm[0]))){const attrs=cm[1],body=cm[2],ref=/\br="([^"]+)"/i.exec(attrs)?.[1]||'',idx=colNumber(ref)-1,t=/\bt="([^"]+)"/i.exec(attrs)?.[1]||'';if(/<f\b[^>]*>[\s\S]*?<\/f>|<f\b[^>]*\/>/i.test(body))formulaCells++;let v=/<v\b[^>]*>([\s\S]*?)<\/v>/i.exec(body)?.[1]??'';if(t==='s')v=shared[Number(v)]??v;else if(t==='inlineStr')v=textTags(body,'t').join('');else if(t==='str')v=xmlDecode(v);vals[idx<0?vals.length:idx]=String(v); } if(vals.some(v=>String(v||'').trim()))rows.push(vals);}
-    const parts=[`# Arbeitsblatt: ${s.name}`]; if(rows.length){const cols=Math.min(100,Math.max(...rows.map(r=>r.length)));const norm=rows.slice(0,10000).map(r=>Array.from({length:cols},(_,i)=>String(r[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>')));parts.push('| '+norm[0].join(' | ')+' |');parts.push('| '+norm[0].map(()=> '---').join(' | ')+' |');for(const r of norm.slice(1))parts.push('| '+r.join(' | ')+' |');if(rows.length>10000)parts.push('> Weitere Zeilen wurden aus Sicherheitsgründen nicht automatisch gerendert.');} sections.push({kind:'table',source_part:s.target,markdown:parts.join('\n\n')});
+  for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;const xml=buf.toString('utf8');const rows=[];let rm;const rr=/<row\b[\s\S]*?<\/row>/gi;while((rm=rr.exec(xml))){const vals=[];let cm;const cr=/<c\b([^>]*)>([\s\S]*?)<\/c>/gi;while((cm=cr.exec(rm[0]))){const attrs=cm[1],body=cm[2],ref=/\br="([^"]+)"/i.exec(attrs)?.[1]||'',idx=colNumber(ref)-1,t=/\bt="([^"]+)"/i.exec(attrs)?.[1]||'';if(!Number.isSafeInteger(idx)||idx>=16384)throw xlsxRenderLimit();if(/<f\b[^>]*>[\s\S]*?<\/f>|<f\b[^>]*\/>/i.test(body))formulaCells++;let v=/<v\b[^>]*>([\s\S]*?)<\/v>/i.exec(body)?.[1]??'';if(t==='s'){if(options.preserveText&&(!/^\d+$/.test(v)||!Object.hasOwn(shared,Number(v)))){const error=new Error('XLSX-Zeichenkettenverweis ist ungültig.');error.code='XLSX_SHARED_STRING_INVALID';throw error;}v=shared[Number(v)]??v;}else if(t==='inlineStr')v=textTags(body,'t').join('');else if(t==='str')v=xmlDecode(v);if(options.preserveText){const formula=/<f\b[^>]*>([\s\S]*?)<\/f>/i.exec(body);if(formula)v=`Formel: ${xmlDecode(formula[1])}\nGespeicherter Wert: ${v}`;}vals[idx<0?vals.length:idx]=String(v); } if(options.preserveText||vals.some(v=>String(v||'').trim()))rows.push(vals);}
+    const parts=[];let rendered=0;
+    const append=(part)=>{rendered+=part.length+2;if(rendered>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();parts.push(part);};
+    append(`# Arbeitsblatt: ${options.preserveText?extractionText(s.name):s.name}`);
+    if(rows.length){
+      const cols=rows.reduce((maximum,row)=>Math.max(maximum,row.length),0);
+      // A sparse far-right cell must not expand into an unbounded dense table.
+      // Stop explicitly at the output budget; never return a successful prefix.
+      if((cols*3+2)*(rows.length+2)>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();
+      if(options.preserveText){append('| '+Array.from({length:cols},(_,i)=>`Spalte ${i+1}`).join(' | ')+' |');append('| '+Array.from({length:cols},()=> '---').join(' | ')+' |');}
+      for(let index=0;index<rows.length;index++){
+        const row=rows[index];const line=Array.from({length:cols},(_,i)=>options.preserveText?extractionText(String(row[i]??''),true):String(row[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>'));
+        append('| '+line.join(' | ')+' |');
+        if(!options.preserveText&&index===0)append('| '+line.map(()=> '---').join(' | ')+' |');
+      }
+    }
+    sections.push({kind:'table',source_part:s.target,markdown:options.preserveText?parts[0]+'\n\n'+parts.slice(1).join('\n'):parts.join('\n\n')});
   }
   const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, sheetMeta);
   const commentCoverage = xlsxCommentRelationshipCoverage(entries, sheetMeta);
   for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
   for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
   for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
-  sections.push(...metadataSections(entries));
+  sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'xl', 'XLSX', supplementCoverage.safeDrawings);
   const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings];
   if(rootIssues)warnings.push(`XLSX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
@@ -1238,27 +1286,38 @@ function pptxCoverageWarnings(entries, slides, safeNotes, masterCoverage) {
     ? [`PPTX enthält ${issues} noch nicht vollständig abgedeckte Inhaltsstruktur(en); Freigabe wird blockiert.`]
     : [];
 }
-function parsePptx(entries) {
+function drawingText(xml) {
+  // Joining adjacent rich-text runs must not invent paragraph boundaries.
+  // Keep explicit line breaks and paragraphs, including numeric note text.
+  const paragraphs=[];
+  for(const paragraph of String(xml).matchAll(/<a:p\b[^>]*>([\s\S]*?)<\/a:p>/gi)) {
+    const parts=[];
+    for(const token of paragraph[1].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/?\s*>/gi))parts.push(token[1]===undefined?'\n':xmlDecode(token[1]));
+    paragraphs.push(parts.join(''));
+  }
+  return paragraphs.join('\n\n');
+}
+function parsePptx(entries, options = {}) {
   const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,tableIssues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
   const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;while((m=sr.exec(presentation))){const id=/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1],target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target);}
   if(!presentation||!slides.length)issues++;
   const notesCoverage = pptNotesRelationshipCoverage(entries, slides);
   const masterCoverage = pptMasterLayoutCoverage(entries, slides);
   const sections=[];
-  for(const s of slides){
-    const n=slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s),texts=textTags(tableCoverage.prose,'a:t'),slide=[`# Folie ${n}`];
+  for(const [slideIndex,s] of slides.entries()){
+    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),texts=options.preserveText?[extractionText(drawingText(tableCoverage.prose))]:textTags(tableCoverage.prose,'a:t'),slide=[`# Folie ${n}`];
     tableIssues+=tableCoverage.issues;
     if(texts.length)slide.push(texts.join('\n\n'));
     sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
     sections.push(...tableCoverage.tables);
     const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');
-    if(notes&&notesCoverage.safeNotes.has(notes)){const nt=textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
+    if(notes&&notesCoverage.safeNotes.has(notes)){const nt=options.preserveText?[extractionText(drawingText(entries.get(notes).toString('utf8')))]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
   }
   const chartCoverage = pptChartRelationshipCoverage(entries, slides);
   for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t'));if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
   for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
   for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
-  sections.push(...metadataSections(entries));
+  sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
   const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, slides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(rootIssues)warnings.push(`PPTX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
@@ -1347,7 +1406,7 @@ function embeddedState(context) {
   if(values.every(value=>Number.isSafeInteger(value)&&value>=0))return context;
   throw new Error('EMBEDDED_CONTEXT_INVALID');
 }
-function augmentEmbedded(result, entries, context) {
+function augmentEmbedded(result, entries, context, options = {}) {
   const state=embeddedState(context);
   const reachableParts=new Set(result.sections.map((section)=>section.source_part));
   const coverage=embeddedRelationshipCoverage(entries,reachableParts),matches=[];
@@ -1362,7 +1421,7 @@ function augmentEmbedded(result, entries, context) {
     state.budget.documents++;
     state.budget.archiveBytes+=embedded.data.length;
     let nested;
-    try{nested=parseOoxml(embedded.data,embedded.ext,{depth:state.depth+1,budget:state.budget});}
+    try{nested=parseOoxml(embedded.data,embedded.ext,{depth:state.depth+1,budget:state.budget},options);}
     catch{result.warnings.push('Eingebettetes OOXML-Dokument konnte nicht vollständig geprüft werden; Freigabe wird blockiert.');continue;}
     result.sections.push({kind:'text',source_part:embedded.name,markdown:`## Eingebettetes Dokument ${ordinal}`});
     for(const section of nested.sections)result.sections.push({...section,source_part:`${embedded.name}!/${section.source_part}`});
@@ -1372,7 +1431,7 @@ function augmentEmbedded(result, entries, context) {
   result.markdown=result.sections.map(section=>section.markdown).join('\n\n');
   return result;
 }
-function parseOoxml(buffer, ext, context) {
+function parseOoxml(buffer, ext, context, options = {}) {
   const state=embeddedState(context);
   let zipLimits={};
   if(state.depth>0){
@@ -1381,18 +1440,45 @@ function parseOoxml(buffer, ext, context) {
     zipLimits={maxUncompressed:remainingExpanded};
   }
   let entries; try{entries=readZip(buffer,zipLimits);}catch(e){if(e instanceof ZipError)throw e;throw new Error('Office-Datei konnte nicht als OOXML gelesen werden.');}
+  if(options.preserveText){
+    for(const [name,data]of entries)if(/\.(?:xml|rels)$/i.test(name)){
+      try{new TextDecoder('utf-8',{fatal:true}).decode(data);}
+      catch{const error=new Error('OOXML-Zeichencodierung ist ungültig.');error.code='OOXML_ENCODING_INVALID';throw error;}
+    }
+  }
   if(state.depth>0){
     let expanded=0;for(const data of entries.values())expanded+=data.length;
     if(expanded>MAX_EMBEDDED_EXPANDED_BYTES-state.budget.expandedBytes)throw new Error('EMBEDDED_EXPANDED_BUDGET_EXCEEDED');
     state.budget.expandedBytes+=expanded;
   }
   let result;
-  if(ext==='.docx')result=parseDocx(entries);
-  else if(ext==='.xlsx')result=parseXlsx(entries);
-  else if(ext==='.pptx')result=parsePptx(entries);
+  if(ext==='.docx')result=parseDocx(entries,options);
+  else if(ext==='.xlsx')result=parseXlsx(entries,options);
+  else if(ext==='.pptx')result=parsePptx(entries,options);
   else throw new Error('OOXML-Format nicht unterstützt.');
   if(ext!=='.docx')result.warnings.push(...genericSecurityWarnings(entries));
-  return augmentEmbedded(result,entries,state);
+  if(options.preserveText){
+    // This entry is an engineering extractor, not a format-release switch.
+    // Styles, fields, hidden content and other unmodelled object semantics may
+    // carry meaning beyond their literal text. Do not claim complete coverage.
+    if(ext!=='.docx'||docxExtractionHasUnverifiedContent(entries))result.warnings.push('MARKDOWN_SOURCE_COVERAGE_UNVERIFIED');
+  }
+  return augmentEmbedded(result,entries,state,options);
+}
+
+function docxExtractionHasUnverifiedContent(entries) {
+  const provenTags=new Set(['w:p','w:r','w:t','w:tab','w:br','w:cr','w:tbl','w:tr','w:tc','w:pPr','w:rPr',
+    'w:tblPr','w:tblGrid','w:gridCol','w:trPr','w:tcPr','w:tblHeader','w:b','w:i','w:u','w:sz','w:szCs',
+    'w:rFonts','w:color','w:highlight','w:jc','w:spacing','w:ind','w:keepNext','w:keepLines','w:widowControl',
+    'w:sectPr','w:pgSz','w:pgMar','w:cols','w:docGrid','w:tblW','w:tcW','w:tblBorders','w:tcBorders',
+    'w:top','w:left','w:bottom','w:right','w:insideH','w:insideV','w:shd','w:vAlign','w:lang','w:proofErr']);
+  // Only the explicitly modelled main story is currently proven. Other story,
+  // metadata or resource parts are still extracted where possible but remain
+  // incomplete until their semantic attachments and coverage are verified.
+  for(const name of entries.keys())if(!['[Content_Types].xml','_rels/.rels','word/document.xml'].includes(name))return true;
+  const scope=wordPartScope(entries.get('word/document.xml').toString('utf8'),'body');
+  for(const match of scope.body.matchAll(/<([A-Za-z_][\w.:-]*)\b/g))if(!provenTags.has(match[1]))return true;
+  return false;
 }
 
 module.exports={

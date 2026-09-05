@@ -164,6 +164,21 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
   assert.doesNotMatch(frontend, /invoke\(['"](?:convert|convert_only|start_conversion)/u);
 });
 
+test('processing purpose crosses only the explicit desktop Start and conversion stays gated', () => {
+  assert.match(frontend, /call\('start_admitted_batch', \{ processingMode \}\)/u);
+  assert.match(rust, /#\[tauri::command\(rename_all = "camelCase"\)\]\s*async fn start_admitted_batch/u);
+  assert.match(rust, /processing_mode: Option<String>/u);
+  assert.match(rust, /request\["processing_mode"\] = json!\(validate_processing_mode\(processing_mode\)\?\)/u);
+  assert.match(sidecar, /startAdmittedBatch\(\{ processingMode: message\.processing_mode \}\)/u);
+  assert.match(sidecar, /MARKDOWN_CONVERSION_NOT_READY/u);
+  const continuing = rust.slice(rust.indexOf('async fn continue_current_batch'), rust.indexOf('async fn configure_results'));
+  assert.doesNotMatch(continuing, /processing_mode/u);
+  assert.match(frontend, /call\('continue_current_batch'\)/u);
+  const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
+  assert.match(html, /value="markdown-only" disabled/u);
+  assert.match(html, /id="processing-mode"[^>]* disabled/u, 'startup cannot choose a mode before status is known');
+});
+
 test('the native Windows smoke exercises the visible WebView lifecycle', () => {
   assert.match(nativeSmoke, /\[System\.Diagnostics\.Process\]::Start\(\$startInfo\)/u);
   assert.match(nativeSmoke, /ProcessWindowStyle\]::Normal/u);

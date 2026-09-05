@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { MODES, assertRunnableProcessingMode } = require('../core/processing-mode');
 
 const PRODUCT_CHANNEL = 'standalone';
 const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
@@ -408,8 +409,17 @@ class StandaloneApplicationService {
     };
   }
 
-  async startAdmittedBatch(profile = 'auto', signal) {
-    validateChoice(profile, PROFILES, 'auto');
+  async startAdmittedBatch(options = 'auto', signal) {
+    // Existing direct callers remain explicitly anonymization-only. The desktop
+    // passes an options object and must name its purpose; absence is not consent
+    // to silently replace a requested conversion with anonymization.
+    if (typeof options === 'string') options = { profile: options, processingMode: MODES.ANONYMIZE };
+    if (!options || typeof options !== 'object' || Array.isArray(options) ||
+        Object.keys(options).some((key) => !['profile', 'processingMode'].includes(key))) {
+      throw fixedFailure('PROCESSING_MODE_INVALID', 'Ungültiger Verarbeitungsmodus.');
+    }
+    const processingMode = assertRunnableProcessingMode(options.processingMode, PRODUCT_CHANNEL);
+    const profile = validateChoice(options.profile, PROFILES, 'auto');
     const queue = this.admittedQueue;
     if (!Array.isArray(queue) || queue.length < 1) {
       throw fixedFailure('STANDALONE_NO_ADMISSION', 'Bitte zuerst Dateien oder einen Ordner auswählen.');
@@ -420,7 +430,7 @@ class StandaloneApplicationService {
     try {
       reservation = this.deps.reserveIntake();
       const started = this.deps.startLocalIntakeExecutor(queue, profile, {
-        intakeReservationId: reservation.reservation_id, signal
+        intakeReservationId: reservation.reservation_id, signal, processingMode
       });
       transferred = true;
       try {

@@ -16,6 +16,7 @@ const baseFiles = [
   'tests/test-standalone-frontend.js',
   'tests/test-standalone-sidecar.js',
   'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
+  'tests/test-processing-mode.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
   'tests/test-support-trace.js',
   'tests/test-debug-skill-contract.js',
   'tests/test-package-staging.js', 'tests/test-safe-private-tree.js',

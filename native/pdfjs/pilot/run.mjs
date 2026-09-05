@@ -41,7 +41,7 @@ async function openLocal(bytes) {
     disableAutoFetch: true,
     disableStream: true,
     useWorkerFetch: false,
-    stopEventLoop: true,
+    stopAtErrors: true,
     standardFontDataUrl: standardFonts
   });
   return { loadingTask, doc: await loadingTask.promise };

@@ -147,7 +147,8 @@ try {
   assert.equal(context.ok, true);
   assert.equal(context.result.result_folder, resultDirectory);
   assert.deepEqual([...context.result.selected_files].sort(), [...sourceNames].sort());
-  const started = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'e'.repeat(16), action: 'start_admitted_batch' });
+  const started = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'e'.repeat(16),
+    action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize' });
   assert.equal(started.ok, true);
   assert.equal(started.result.event, 'batch_accepted');
   let terminal;
@@ -215,7 +216,8 @@ try {
     action: 'admit_selected_sources', source_kind: 'files', source_paths: [failedSource] });
   assert.equal(failedAdmission.ok, true, 'malformed CSV remains an admissible regular UTF-8 source');
   assert.equal(failedAdmission.result.selected_count, 1);
-  const failedStart = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: '6'.repeat(16), action: 'start_admitted_batch' });
+  const failedStart = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: '6'.repeat(16),
+    action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize' });
   assert.equal(failedStart.ok, true);
   let failedTerminal;
   let lastFailureState;
