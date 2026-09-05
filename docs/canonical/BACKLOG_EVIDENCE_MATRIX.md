@@ -50,6 +50,12 @@ Neue Paket-Evidence muss aus dem neuen Commit erstellt werden; der
 historische RC106-Receipt beweist weder diese Korrekturen noch die neue
 Testdatenisolation. Sichtbare Explorer-/Finder-Bedienung und macOS bleiben E1/E2.
 
+Der reale Folgestapel im ersten RC107-Paket (`ebffe87`) deckte zusätzlich die
+fehlende terminale Klassifikation einer bestätigten Parserablehnung auf. Dieser
+Build wurde nicht an INT-13 gebunden. `PARSE_FAILED` gegenüber Timeout/Crash wird
+im gemeinsamen Runtimevertrag korrigiert und separat regressionsgeprüft; erst
+ein neuer Quellcommit mit beiden erfolgreichen Paketläufen liefert neue Evidence.
+
 - Manifest/Runtime begrenzen temporäre Aufbewahrung auf 0–14 Tage.
 - Retentiontests bewahren Quellen, `Processed`, fertige `Output`-Pakete und
   `DataSecure-Export` vor automatischer Löschung.

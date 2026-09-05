@@ -269,7 +269,7 @@ function validateParserResult(value, expectedExt) {
     value.markdown.length > 8_000_000 || !Array.isArray(value.attachments) ||
     value.attachments.length > 150 || !Array.isArray(value.warnings) || value.warnings.length > 200 ||
     forbiddenControls.test(value.markdown)) {
-    throw new SafeError('Der isolierte Dokumentparser lieferte kein gültiges Ergebnis.');
+    throw safeError('Der isolierte Dokumentparser lieferte kein gültiges Ergebnis.', 'PARSE_FAILED');
   }
   let decodedAttachmentBytes = 0;
   for (const attachment of value.attachments) {
@@ -277,20 +277,20 @@ function validateParserResult(value, expectedExt) {
       attachment.data.length > MAX_ATTACHMENT_BASE64_CHARS ||
       !/^[A-Za-z0-9+/]*={0,2}$/.test(attachment.data) ||
       Object.keys(attachment).sort().join(',') !== 'data,extension,mimeType,name,source_part,type') {
-      throw new SafeError('Ein isoliert extrahiertes Asset ist ungültig oder zu groß.');
+      throw safeError('Ein isoliert extrahiertes Asset ist ungültig oder zu groß.', 'PARSE_FAILED');
     }
     const decodedBytes = Buffer.byteLength(attachment.data, 'base64');
-    if (decodedBytes > 8 * 1024 * 1024) throw new SafeError('Ein isoliert extrahiertes Asset ist zu groß.');
+    if (decodedBytes > 8 * 1024 * 1024) throw safeError('Ein isoliert extrahiertes Asset ist zu groß.', 'PARSE_FAILED');
     decodedAttachmentBytes += decodedBytes;
   }
-  if (decodedAttachmentBytes > 24 * 1024 * 1024) throw new SafeError('Die isoliert extrahierten Assets sind insgesamt zu groß.');
+  if (decodedAttachmentBytes > 24 * 1024 * 1024) throw safeError('Die isoliert extrahierten Assets sind insgesamt zu groß.', 'PARSE_FAILED');
   if (!value.warnings.every((item) => typeof item === 'string' && item.length <= 1000 && !forbiddenControls.test(item))) {
-    throw new SafeError('Der isolierte Dokumentparser lieferte ungültige Warnungen.');
+    throw safeError('Der isolierte Dokumentparser lieferte ungültige Warnungen.', 'PARSE_FAILED');
   }
   try {
     validateContentGraph(value.content_graph, value.markdown, value.attachments, expectedExt);
   } catch {
-    throw new SafeError('Der isolierte Dokumentparser lieferte keinen gültigen Content-Graph.');
+    throw safeError('Der isolierte Dokumentparser lieferte keinen gültigen Content-Graph.', 'PARSE_FAILED');
   }
   return value;
 }
@@ -496,7 +496,7 @@ async function convertDocument(source, options = {}) {
       }, options.terminationGraceMs ?? 10_000);
     };
     const timer = setTimeout(() => {
-      terminate(new SafeError('Der isolierte Dokumentparser hat das Zeitlimit überschritten.'));
+      terminate(safeError('Der isolierte Dokumentparser hat das Zeitlimit überschritten.', 'PARSER_TIMEOUT'));
     }, options.timeoutMs ?? PARSER_TIMEOUT_MS);
     const abortHandler = () => terminate(
       safeError('Der isolierte Dokumentparser wurde auf Anforderung beendet.', 'REQUEST_CANCELLED')
@@ -550,6 +550,14 @@ async function convertDocument(source, options = {}) {
       let response;
       try { response = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* handled below */ }
       const responseKeys = response && typeof response === 'object' ? Object.keys(response).sort().join(',') : '';
+      // A complete negative worker response is a confirmed rejection, not a
+      // crashed process to retry forever. Unknown exits/protocol failures keep
+      // their existing interruption semantics; no partial result is accepted.
+      if (code === 2 && response?.schema === 'data-secure-parser-result/1' && response.ok === false &&
+          response.error === 'parse_failed' && responseKeys === 'error,ok,schema') {
+        finish(safeError(`Die ${ext.slice(1).toUpperCase()}-Datei konnte nicht sicher lokal gelesen werden.`, 'PARSE_FAILED'));
+        return;
+      }
       if (code !== 0 || response?.schema !== 'data-secure-parser-result/1' || !response?.ok ||
         responseKeys !== 'ok,result,schema') {
         finish(new SafeError(`Die ${ext.slice(1).toUpperCase()}-Datei konnte nicht sicher lokal gelesen werden.`));

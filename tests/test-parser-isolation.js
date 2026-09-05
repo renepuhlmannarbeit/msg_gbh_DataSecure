@@ -72,7 +72,7 @@ async function main() {
           child.stdout.end(JSON.stringify({ schema: 'data-secure-parser-result/1', ok: true, result }));
           child.emit('close', 0);
         })
-      }), (error) => error instanceof SafeError && /Content-Graph/.test(error.message));
+      }), (error) => error instanceof SafeError && error.code === 'PARSE_FAILED' && /Content-Graph/.test(error.message));
     }
   });
 
@@ -177,6 +177,49 @@ async function main() {
     const response = JSON.parse(result.stdout);
     assert.strictEqual(result.status, 2);
     assert.deepStrictEqual(response, { schema: 'data-secure-parser-result/1', ok: false, error: 'parse_failed' });
+  });
+
+  await testAsync('real isolated CSV parser distinguishes valid input from a confirmed permanent rejection', async () => {
+    // No conversion/worker mock: exercise the actual parser, permission/network
+    // boundary and, on Windows, the native launcher with in-memory input only.
+    const valid = await convertDocument('opaque-private-artifact', {
+      inputBuffer: Buffer.from('Feld,Wert\nRolle,Entwicklung\n'), sourceName: 'synthetic.csv'
+    });
+    assert.ok(valid.markdown.includes('Entwicklung'));
+    const invalid = Buffer.from('Name,Wert\nBeispiel,"nicht abgeschlossen\n');
+    const original = Buffer.from(invalid);
+    await assert.rejects(convertDocument('opaque-private-artifact', {
+      inputBuffer: invalid, sourceName: 'synthetic.csv'
+    }), (error) => error instanceof SafeError && error.code === 'PARSE_FAILED' &&
+      !/synthetic|Beispiel|nicht abgeschlossen/u.test(error.message));
+    assert.deepStrictEqual(invalid, original);
+  });
+
+  await testAsync('only the exact rejected-worker envelope and exit code become PARSE_FAILED', async () => {
+    const rejected = { schema: 'data-secure-parser-result/1', ok: false, error: 'parse_failed' };
+    for (const platform of ['win32', 'darwin', 'linux']) {
+      for (const [exitCode, response, expected] of [
+        [2, rejected, 'PARSE_FAILED'],
+        [0, rejected, undefined],
+        [1, rejected, undefined],
+        [null, rejected, undefined],
+        [2, { ...rejected, extra: 'PRIVATE-SENTINEL' }, undefined],
+        [2, { ...rejected, schema: 'foreign/1' }, undefined],
+        [2, { ...rejected, ok: 'false' }, undefined],
+        [2, { ...rejected, error: 'PRIVATE-SENTINEL' }, undefined],
+        [2, undefined, undefined]
+      ]) {
+        await assert.rejects(convertDocument('opaque-private-artifact', {
+          ...nativeOptions, platform, nodeVersion: '22.13.0',
+          inputBuffer: Buffer.from('synthetic'), sourceName: 'source.csv',
+          spawn: () => fakeChild((child) => {
+            if (response !== undefined) child.stdout.end(JSON.stringify(response));
+            child.emit('close', exitCode);
+          })
+        }), (error) => error instanceof SafeError && error.code === expected &&
+          !/PRIVATE-SENTINEL|synthetic|source/u.test(error.message));
+      }
+    }
   });
 
   await testAsync('Windows worker starts only through the native launcher with inherited stdin', async () => {
@@ -331,7 +374,7 @@ async function main() {
     let child;
     await assert.rejects(
       convertDocument(source('timeout.txt'), { timeoutMs: 5, spawn: () => (child = fakeChild(() => {})) }),
-      (error) => error instanceof SafeError && /Zeitlimit/.test(error.message)
+      (error) => error instanceof SafeError && error.code === 'PARSER_TIMEOUT' && /Zeitlimit/.test(error.message)
     );
     assert.strictEqual(child.killed, true);
   });
@@ -359,15 +402,18 @@ async function main() {
         child.stdout.end('{not-json}\n{"raw":"sensitive marker"}');
         child.emit('close', 0);
       })
-    }), (error) => error instanceof SafeError && !/sensitive marker/.test(error.message));
+    }), (error) => error instanceof SafeError && error.code === undefined && !/sensitive marker/.test(error.message));
   });
 
   test('worker result validator rejects oversized or structurally forged assets', () => {
     assert.throws(() => validateParserResult({
       markdown: 'safe', warnings: [],
       attachments: [{ type: 'image', mimeType: 'image/png', data: 'AAAA', name: 'x', extension: 'png', source_part: 'x', extra: true }]
-    }), /Asset/);
-    assert.throws(() => validateParserResult({ markdown: 'x'.repeat(8_000_001), attachments: [], warnings: [] }), /gültiges Ergebnis/);
+    }), (error) => error instanceof SafeError && error.code === 'PARSE_FAILED' && /Asset/u.test(error.message));
+    assert.throws(() => validateParserResult({ markdown: 'x'.repeat(8_000_001), attachments: [], warnings: [] }),
+      (error) => error instanceof SafeError && error.code === 'PARSE_FAILED' && /gültiges Ergebnis/u.test(error.message));
+    assert.throws(() => validateParserResult({ ...parserResult('safe'), warnings: ['\u0000'] }),
+      (error) => error instanceof SafeError && error.code === 'PARSE_FAILED' && /Warnungen/u.test(error.message));
   });
 
   try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* best effort */ }

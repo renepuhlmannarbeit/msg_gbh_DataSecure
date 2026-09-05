@@ -21,6 +21,11 @@ nicht an das Ende dauerhaft übergebener Worker. `desktop-sidecar.js` und
 Pipes mit echten Worker-Abschlüssen. Die reine Timing-Fixture
 `tests/lib/standalone-sidecar-lifecycle.cjs` gehört nicht zum Produktpaket.
 
+BL-020.1/BL-011.3: `runtime.js` unterscheidet bestätigtes negatives Parserergebnis
+(`PARSE_FAILED`, endgültiger Stopp) von Timeout/Unterbrechung. `test-parser-isolation`
+bindet die exakte Antwort-/Exitkombination und echte fehlerhafte Dokumentbytes;
+der reale Standalone-Paket-Folgestapel verlangt die eigene Fehlerzuordnung.
+
 | Entscheidung | Aktueller Status | Backlog / Nachweis |
 |---|---|---|
 | DS-001 | aktiv – De-Identifizierung, keine Rechtsgarantie | BL-052; README, Anleitung, Datenschutz-Skill |

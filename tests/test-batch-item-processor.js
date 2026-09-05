@@ -1,6 +1,6 @@
 'use strict';
 
-const { SafeError } = require('../plugins/data-secure/server/runtime');
+const { SafeError, convertDocument } = require('../plugins/data-secure/server/runtime');
 const { createBatchItemProcessor } = require('../plugins/data-secure/server/gateway/batch-item-processor');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { createSuite } = require('./helpers');
@@ -267,6 +267,9 @@ async function main() {
     for (const [error, status, checkpoint, expectedCode] of [
       [codedError('LOCAL_REVIEW_DEFERRED'), 'deferred_review', 'awaiting_local_review', 'LOCAL_REVIEW_DEFERRED'],
       [codedError('PARSER_TIMEOUT'), 'retryable', 'retryable', 'PARSER_TIMEOUT'],
+      [new SafeError('Unknown worker crash'), 'retryable', 'retryable', 'PROCESSING_INTERRUPTED'],
+      [new Error('Unexpected pipeline exception'), 'retryable', 'retryable', 'PROCESSING_INTERRUPTED'],
+      [codedError('PARSE_FAILED'), 'stopped', 'stopped', 'PARSE_FAILED'],
       [codedError('ALICE_MUSTERMANN'), 'stopped', 'stopped', 'INTERNAL_FAILURE']
     ]) {
       const value = fixture({ pipelineError: error });
@@ -279,6 +282,30 @@ async function main() {
       assert.strictEqual(value.events.includes('cleanup'), status === 'stopped');
       assert.ok(value.events.includes('evidence'));
     }
+  });
+
+  await testAsync('a real malformed CSV becomes a durable stopped item in the shared product pipeline', async () => {
+    let parserError;
+    try {
+      await convertDocument('opaque-private-artifact', {
+        inputBuffer: Buffer.from('Name,Wert\nBeispiel,"nicht abgeschlossen\n'), sourceName: 'synthetic.csv'
+      });
+    } catch (error) { parserError = error; }
+    assert.ok(parserError instanceof SafeError);
+    assert.strictEqual(parserError.code, 'PARSE_FAILED');
+    // Both Cowork and Standalone delegate item processing to this same module;
+    // retain the actual runtime error instead of mocking a correctly coded one.
+    const value = fixture({ pipelineError: parserError });
+    const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+    assert.strictEqual(result.error, 'PARSE_FAILED');
+    assert.strictEqual(value.item.status, 'stopped');
+    assert.strictEqual(value.item.document_result.reason_code, 'PARSE_FAILED');
+    assert.strictEqual(value.item.document_result.grade, 'not-processed');
+    assert.strictEqual(value.item.local_mapping_exported, true);
+    assert.strictEqual(value.item.work_copy_cleanup_pending, false);
+    assert.strictEqual(value.events.filter((event) => event === 'mapping-stopped').length, 1);
+    assert.ok(!value.events.includes('pipeline-publish'));
+    assert.ok(value.writes.some((write) => write.snapshot.items[0].status === 'stopped'));
   });
 
   await testAsync('snapshot change invalidates only unpublished copies', async () => {

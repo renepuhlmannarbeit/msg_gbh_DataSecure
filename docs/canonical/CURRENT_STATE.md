@@ -63,6 +63,21 @@ Frontendfälle, die echten Sidecar-Lifecyclefälle, 11 Desktop-, 5 Paket-, 9
 MarkItDown-Vertrags- sowie 12 Rust-Tests grün. Dies ist kein Nachweis für
 fehlerfreie beliebige Eingaben oder sichtbare Zielhostbedienung.
 
+Der danach erstmals ausgeführte verschärfte Paket-Folgestapel fand einen weiteren
+gemeinsamen Runtime-Fehler: Ein vollständig abgewiesener CSV-Parserlauf erhielt
+keinen Fehlercode und wurde dadurch als `PROCESSING_INTERRUPTED` wiederaufnehmbar.
+Der erste RC107-Build aus `ebffe87` ist deshalb ausdrücklich kein Kandidat für
+INT-13. Die Korrektur klassifiziert bestätigte Parserablehnungen als `PARSE_FAILED`;
+unbekannte Prozessabbrüche bleiben getrennt, Zeitüberschreitungen erhalten
+`PARSER_TIMEOUT`. Erst nach dieser Korrektur und ihren Regressionen wird die
+Commit-/Zweifach-Build-/Smoke-Kette erneut ausgeführt.
+Der unabhängige Gegencheck bestätigt die Unterscheidung; 19 Parser-Isolations-
+und 16 gemeinsame Itemprozessor-Tests sind nach der Korrektur grün, einschließlich
+echter fehlerhafter CSV-Bytes. Content-Graph- und DOCX-Vertrags-/Differentialtests
+bleiben grün. `PARSE_FAILED` bedeutet sichere Ablehnung, nicht zwingend einen
+alleinigen Defekt der Quelldatei: Auch abgelehnte interne Parsergrenzen bleiben
+gesperrt. Der Paketnachweis wird separat neu erbracht.
+
 Neue Standalone-Läufe führen auch gestoppte Quellen mit festem Fehlercode in
 ihrer eigenen Zuordnung. Der aktuelle Laufresolver fällt niemals auf frühere
 Ergebnisse zurück. Bereits veröffentlichte Altzuordnungen bleiben unverändert;

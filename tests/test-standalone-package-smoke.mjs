@@ -218,16 +218,20 @@ try {
   const failedStart = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: '6'.repeat(16), action: 'start_admitted_batch' });
   assert.equal(failedStart.ok, true);
   let failedTerminal;
+  let lastFailureState;
   for (let attempt = 0; attempt < 90; attempt += 1) {
     const polled = await request({ schema: 'datasecure-standalone-private-ipc/1',
       request_id: (0x1000 + attempt).toString(16).padStart(16, '0'), action: 'get_public_state' });
     assert.equal(polled.ok, true);
+    lastFailureState = { state: polled.result.state, selected_count: polled.result.selected_count,
+      failed_count: polled.result.failed_count, resumable: polled.result.resumable,
+      export_pending_count: polled.result.export_pending_count };
     if (polled.result.selected_count === 1 && polled.result.state === 'completed_without_results') {
       failedTerminal = polled.result; break;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  assert.ok(failedTerminal, 'the real parser failure must finish its own batch instead of returning the previous successful batch');
+  assert.ok(failedTerminal, `the real parser failure must finish its own batch; last content-free state: ${JSON.stringify(lastFailureState)}`);
   assert.equal(failedTerminal.result_count, 0);
   assert.equal(failedTerminal.failed_count, 1);
   assert.equal(failedTerminal.ledger_available, true);
