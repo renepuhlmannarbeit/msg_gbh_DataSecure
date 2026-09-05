@@ -208,6 +208,7 @@ test('alias types cannot cross entity kinds and readable sequence exhaustion is 
     const snapshot = structuredClone(registry.exportState());
     snapshot.labels[0][0] = '[UNTERNEHMEN_10000]';
     snapshot.bindings[0][1] = '[UNTERNEHMEN_10000]';
+    delete snapshot.known_alias_index; // intentionally construct a pre-index sequence-exhaustion state
     registry.dispose();
     registry = createBatchPseudonymRegistry(secret, { ...options, persistedState: snapshot });
     assert.throws(() => registry.assign('ORG', 'Andere GmbH'),
@@ -334,6 +335,156 @@ test('readable company alias ambiguity survives serialization without merging fu
     const aliasOnly = anonymizeMarkdown('Kunde: Nordstern Medizin\nNordstern Medizin liefert Software.', 'personnel_profile', { registry });
     assert.strictEqual(aliasOnly.text, 'Kunde: [UNTERNEHMEN_UNKLAR_001]\n[UNTERNEHMEN_UNKLAR_001] liefert Software.');
   } finally { registry.dispose(); secret.fill(0); }
+});
+
+for (const contractVersion of ['batch-pseudonym/v1', READABLE_CONTRACT_VERSION]) {
+  test(`${contractVersion}: exact membership index survives restore without guessing unknown words`, () => {
+    const secret = Buffer.alloc(32, 31);
+    let registry = createBatchPseudonymRegistry(secret, { contractVersion });
+    try {
+      const person = registry.assign('PERSON', 'Erika Müller');
+      const company = registry.assign('ORG', 'Nordstern & Partner');
+      const state = JSON.parse(JSON.stringify(registry.exportState()));
+      assert.doesNotMatch(JSON.stringify(state), /Erika|Müller|Nordstern|Partner/u);
+      assert.strictEqual(state.known_alias_index.schema, 'datasecure-known-alias-index/1');
+      registry.dispose();
+      registry = createBatchPseudonymRegistry(secret, { contractVersion, persistedState: state });
+      const before = registry.exportState().labels.length;
+      const hits = registry.matchKnownAliases('ERIKA\u00a0MU\u0308LLER arbeitet mit Nordstern\u2003&\tPartner. Eine unbekannte Wolke bleibt erhalten.');
+      assert.ok(hits.some((hit) => hit.kind === 'PERSON' && hit.placeholder === person));
+      assert.ok(hits.some((hit) => hit.kind === 'ORG' && hit.placeholder === company));
+      assert.strictEqual(registry.exportState().labels.length, before, 'membership checks do not create identities');
+      assert.ok(!hits.some((hit) => /unbekannte|wolke/u.test(hit.value)));
+    } finally { registry.dispose(); secret.fill(0); }
+  });
+
+  test(`${contractVersion}: removed, stale and changed indexes use a complete fallback; malformed indexes fail closed`, () => {
+    const secret = Buffer.alloc(32, 32);
+    let registry = createBatchPseudonymRegistry(secret, { contractVersion });
+    try {
+      registry.assign('ORG', 'Nordstern Medizin');
+      const state = JSON.parse(JSON.stringify(registry.exportState()));
+      for (const modify of [
+        (value) => { delete value.known_alias_index; },
+        (value) => { value.known_alias_index.starts = []; },
+        (value) => { value.known_alias_index.attestation = 'A'.repeat(43); }
+      ]) {
+        const changed = structuredClone(state);
+        modify(changed);
+        const restored = createBatchPseudonymRegistry(secret, { contractVersion, persistedState: changed });
+        try {
+          assert.ok(restored.matchKnownAliases('Nordstern Medizin liefert.').some((hit) => hit.kind === 'ORG'));
+          assert.strictEqual(Object.hasOwn(restored.exportState(), 'known_alias_index'), false);
+        } finally { restored.dispose(); }
+      }
+      const legacyState = structuredClone(state);
+      delete legacyState.known_alias_index;
+      const legacy = createBatchPseudonymRegistry(secret, { contractVersion, persistedState: legacyState });
+      let changed;
+      try {
+        legacy.assign('ORG', 'Südstern Systeme');
+        changed = legacy.exportState();
+      } finally { legacy.dispose(); }
+      // Simulate an older writer retaining an opaque index while adding aliases.
+      const stale = { ...changed, known_alias_index: state.known_alias_index };
+      const restored = createBatchPseudonymRegistry(secret, { contractVersion, persistedState: stale });
+      try { assert.ok(restored.matchKnownAliases('Südstern Systeme liefert.').some((hit) => hit.kind === 'ORG')); }
+      finally { restored.dispose(); }
+      for (const mutate of [
+        (value) => { value.known_alias_index.starts = ['Nordstern']; },
+        (value) => { value.known_alias_index.schema = 'future/99'; },
+        (value) => { value.known_alias_index.starts.push(value.known_alias_index.starts[0]); },
+        (value) => { value.known_alias_index.raw = 'Nordstern Medizin'; }
+      ]) {
+        const invalid = structuredClone(state); mutate(invalid);
+        assert.throws(() => createBatchPseudonymRegistry(secret, { contractVersion, persistedState: invalid }));
+      }
+      assert.notStrictEqual(Object.keys(state).sort().join(','), 'bindings,labels', 'old exact-shape readers reject indexed snapshots');
+    } finally { registry.dispose(); secret.fill(0); }
+  });
+}
+
+test('legacy role metadata cannot collide with ordinary entity namespaces or contain public role labels', () => {
+  const secret = Buffer.alloc(32, 33);
+  const registry = createBatchPseudonymRegistry(secret);
+  try {
+    registry.rememberOrganizationAlias('Nordstern Medizin', 'Nordstern Medizin GmbH', '[ARBEITGEBER_001]');
+    const project = registry.assign('PROJECT', 'Nordstern Medizin');
+    assert.notStrictEqual(project, registry.lookup('ORG', 'Nordstern Medizin'));
+    const state = JSON.parse(JSON.stringify(registry.exportState()));
+    assert.doesNotMatch(JSON.stringify(state), /ARBEITGEBER_001|Nordstern|Medizin/u);
+    const restored = createBatchPseudonymRegistry(secret, { persistedState: state });
+    try {
+      assert.strictEqual(restored.lookup('ORG', 'Nordstern Medizin'), '[ARBEITGEBER_001]');
+      assert.strictEqual(restored.assign('PROJECT', 'Nordstern Medizin'), project);
+    } finally { restored.dispose(); }
+    state.bindings[0][1] = '[ARBEITGEBER_001]';
+    assert.throws(() => createBatchPseudonymRegistry(secret, { persistedState: state }));
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
+test('legacy binding, label and multi-binding role allocations fail before making the journal unloadable', () => {
+  const secret = Buffer.alloc(32, 34);
+  const initial = createBatchPseudonymRegistry(secret);
+  let base;
+  try { initial.assign('PERSON', 'Erika Beispiel'); base = structuredClone(initial.exportState()); }
+  finally { initial.dispose(); }
+  delete base.known_alias_index;
+  const binding = (i) => [crypto.createHash('sha256').update(`synthetic-${i}`).digest('base64url'), base.labels[0][0]];
+  for (const count of [9999, 10000]) {
+    const state = { labels: base.labels, bindings: Array.from({ length: count }, (_, i) => binding(i)) };
+    const restored = createBatchPseudonymRegistry(secret, { persistedState: state });
+    try {
+      const before = restored.exportState();
+      assert.throws(() => restored.rememberOrganizationAlias('Nordstern Medizin', 'Nordstern Medizin GmbH', '[ARBEITGEBER_001]'));
+      if (count === 10000) assert.throws(() => restored.assign('PERSON', 'Neue Person'));
+      assert.deepStrictEqual(restored.exportState(), before);
+      const again = createBatchPseudonymRegistry(secret, { persistedState: restored.exportState() }); again.dispose();
+    } finally { restored.dispose(); }
+  }
+  const full = createBatchPseudonymRegistry(secret);
+  let fullState;
+  try {
+    for (let i = 0; i < 10000; i++) full.assign('PROJECT', `Projekt ${i}`);
+    fullState = { labels: full.exportState().labels, bindings: [] };
+  } finally { full.dispose(); }
+  const labelFull = createBatchPseudonymRegistry(secret, { persistedState: fullState });
+  try {
+    const before = labelFull.exportState();
+    assert.throws(() => labelFull.assign('PERSON', 'Neue Person'));
+    assert.throws(() => labelFull.rememberOrganizationAlias('Nordstern Medizin', 'Nordstern Medizin GmbH', '[ARBEITGEBER_001]'));
+    assert.deepStrictEqual(labelFull.exportState(), before);
+  } finally { labelFull.dispose(); secret.fill(0); }
+});
+
+test('long supported company spellings are not silently cut to ten words, while over-bound aliases stop explicitly', () => {
+  const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 35), { contractVersion: READABLE_CONTRACT_VERSION });
+  try {
+    const value = 'A B C D E F G H I J K L M N O P Q R S T GmbH';
+    const marker = registry.assign('ORG', value);
+    assert.ok(registry.matchKnownAliases(`${value} liefert Software.`).some((hit) => hit.placeholder === marker));
+    const before = registry.exportState();
+    assert.throws(() => registry.assign('ORG', 'A'.repeat(161)), (error) => error.code === 'TEXT_TOO_LARGE');
+    assert.deepStrictEqual(registry.exportState(), before);
+  } finally { registry.dispose(); }
+});
+
+test('the normal restored index probes unique text tokens rather than every possible alias window', () => {
+  const secret = Buffer.alloc(32, 36);
+  const initial = createBatchPseudonymRegistry(secret, { contractVersion: READABLE_CONTRACT_VERSION });
+  let state;
+  try { initial.assign('ORG', 'Nordstern Medizin'); state = JSON.parse(JSON.stringify(initial.exportState())); }
+  finally { initial.dispose(); }
+  const registry = createBatchPseudonymRegistry(secret, { contractVersion: READABLE_CONTRACT_VERSION, persistedState: state });
+  const createHmac = crypto.createHmac;
+  let probes = 0;
+  crypto.createHmac = function(...args) { probes++; return createHmac.apply(this, args); };
+  try {
+    const text = Array.from({ length: 25000 }, (_, i) => `wort${i.toString(36)}`).join(' ') + ' Nordstern Medizin';
+    const hits = registry.matchKnownAliases(text);
+    assert.ok(hits.some((hit) => hit.kind === 'ORG'));
+    assert.ok(probes < 26000, `bounded start filter used ${probes} probes for 25,000 unknown words`);
+  } finally { crypto.createHmac = createHmac; registry.dispose(); secret.fill(0); }
 });
 
 done();

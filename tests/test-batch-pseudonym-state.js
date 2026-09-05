@@ -1,6 +1,11 @@
 'use strict';
 
 const { createSuite } = require('./helpers');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+const { createBatchJournalStore } = require('../plugins/data-secure/server/gateway/batch-journal-store');
 const { PRIVACY_RULESET_VERSION } = require('../plugins/data-secure/server/privacy/policy');
 const { CONTRACT_VERSION, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
@@ -215,6 +220,97 @@ await test('missing numbered reservations cannot silently restart numbering afte
     (error) => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
   assert.strictEqual(called, false);
 });
+
+for (const productChannel of ['plugin', 'standalone']) {
+await test(`${productChannel}: unlabelled company/person follow-up documents survive actual journal writes and fresh registries`, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-alias-followup-'));
+  const token = crypto.randomBytes(32).toString('hex');
+  const target = path.join(root, `${token}.json`);
+  const store = createBatchJournalStore({ batchPath: () => target, syncParentDirectory: () => true });
+  let state = { schema: 'datasecure-batch/2', token, expires_at: '2099-01-01T00:00:00.000Z',
+    revision: 1, items: [{ status: 'pending' }], ...createBatchPseudonymState({ productChannel }) };
+  const run = async (text) => {
+    const result = await withBatchPseudonymRegistry(state,
+      (registry) => anonymizeMarkdown(text, 'personnel_profile', { registry }),
+      { persist(value) { store.writeState(value); } });
+    state = store.readState(token);
+    assert.doesNotMatch(fs.readFileSync(target, 'utf8'), /Erika|Müller|Nordstern|Medizin/u);
+    return result.text;
+  };
+  try {
+    const first = await run('Kunde: Nordstern Medizin GmbH\nName: Erika Müller\nNordstern Medizin liefert Software.');
+    const company = first.match(/^Kunde: (\[[A-Z_0-9]+\])/u)?.[1];
+    const person = first.match(/Name: (\[[A-Z_0-9]+\])/u)?.[1];
+    assert.ok(company && person, first);
+    const following = await run('Nordstern\u00a0Medizin liefert weitere Software. Erika\u2003Mu\u0308ller prüft das. Unbekannte Begriffe bleiben bestehen.');
+    assert.ok(following.includes(company) && following.includes(person), following);
+    assert.doesNotMatch(following, /Nordstern|Medizin|Erika|Müller/iu);
+    assert.ok(following.includes('Unbekannte Begriffe bleiben bestehen.'), following);
+    const ambiguity = await run('Kunde: Nordstern Medizin AG\nNordstern Medizin liefert Software.');
+    const other = ambiguity.match(/^Kunde: (\[[A-Z_0-9]+\])/u)?.[1];
+    assert.ok(other && other !== company, ambiguity);
+    const ambiguous = ambiguity.match(/\[(?:ORGANISATION_UNKLAR|UNTERNEHMEN_UNKLAR_001)\]/u)?.[0];
+    assert.ok(ambiguous, ambiguity);
+    const resumed = await run('Nordstern Medizin liefert Software.');
+    assert.strictEqual(resumed, `${ambiguous} liefert Software.`);
+  } finally {
+    for (const entry of fs.readdirSync(root)) fs.unlinkSync(path.join(root, entry));
+    fs.rmdirSync(root);
+  }
+});
+
+await test(`${productChannel}: company punctuation and both role orders retain exact identity after every document`, async () => {
+  for (const name of ['Nordstern & Partner', 'Nordstern + Partner', 'Nordstern - Partner', "Nordstern O'Partner", 'Nordstern O’Partner', 'Nordstern / Partner', 'Nordstern (Europa)']) {
+    for (const roles of [['Arbeitgeber', 'Kunde'], ['Kunde', 'Arbeitgeber']]) {
+      let state = createBatchPseudonymState({ productChannel });
+      const run = async (text) => {
+        const result = await withBatchPseudonymRegistry(state,
+          (registry) => anonymizeMarkdown(text, 'personnel_profile', { registry }));
+        state = JSON.parse(JSON.stringify(state));
+        return result.text;
+      };
+      let firstMarker;
+      for (const role of roles) {
+        const labelled = await run(`${role}: ${name} GmbH`);
+        const marker = labelled.match(/(\[[A-Z_0-9]+\])/u)?.[1];
+        assert.ok(marker, labelled);
+        if (productChannel === 'standalone' && firstMarker) assert.strictEqual(marker, firstMarker);
+        firstMarker ||= marker;
+        const bare = await run(`${name} liefert Software.`);
+        assert.strictEqual(bare, `${marker} liefert Software.`, `${productChannel} ${role} ${name}`);
+        assert.doesNotMatch(bare, /UNKLAR|PROJEKT_/u, 'changing the role alone must not merge or split identities');
+      }
+    }
+  }
+});
+
+await test(`${productChannel}: parenthesized exact company alias also survives an unindexed legacy journal`, async () => {
+  let state = createBatchPseudonymState({ productChannel });
+  const first = await withBatchPseudonymRegistry(state, (registry) => anonymizeMarkdown(
+    'Arbeitgeber: Nordstern (Europa) GmbH\nNordstern (Europa) liefert Software.', 'personnel_profile', { registry }));
+  const marker = first.text.match(/Arbeitgeber: (\[[A-Z_0-9]+\])/u)?.[1];
+  assert.ok(marker, first.text);
+  state = JSON.parse(JSON.stringify(state));
+  delete state.pseudonym_registry_state.known_alias_index;
+  const next = await withBatchPseudonymRegistry(state, (registry) => anonymizeMarkdown(
+    'Nordstern (Europa) liefert Software.', 'personnel_profile', { registry }));
+  assert.strictEqual(next.text, `${marker} liefert Software.`);
+});
+
+await test(`${productChannel}: a known short spelling can change role without becoming a new or ambiguous company`, async () => {
+  for (const roles of [['Arbeitgeber', 'Kunde'], ['Kunde', 'Arbeitgeber']]) {
+    let state = createBatchPseudonymState({ productChannel });
+    await withBatchPseudonymRegistry(state, (registry) => anonymizeMarkdown(
+      `${roles[0]}: Nordstern Medizin GmbH`, 'personnel_profile', { registry }));
+    state = JSON.parse(JSON.stringify(state));
+    const next = await withBatchPseudonymRegistry(state, (registry) => anonymizeMarkdown(
+      `${roles[1]}: Nordstern Medizin\nNordstern Medizin liefert Software.`, 'personnel_profile', { registry }));
+    const marker = next.text.match(/(\[[A-Z_0-9]+\])/u)?.[1];
+    assert.ok(marker && !marker.includes('UNKLAR'), next.text);
+    assert.ok(next.text.includes(`${marker} liefert Software.`), next.text);
+  }
+});
+}
 
 done();
 }

@@ -38,6 +38,15 @@ Fensterereignisse vor dem Tauri-Setup keinen Panic auslösen können.
 
 ### Nachprüfung und aktueller Korrekturschnitt
 
+Nachtrag 06.09.2026: Bekannte Firmen-/Personenformen werden auch nach dem echten
+Dokumentwechsel (neue Registry aus Journal) ohne erneutes Namensfeld abgeglichen.
+Das schließt Klammern und weitere bereits akzeptierte Namensseparatoren ein.
+Getrennte v1-Rollen-/Identitätsbindungen vermeiden falsche UNKLAR-Zuordnungen;
+verschiedene Rechtsformen bleiben getrennt. Der neue optionale HMAC-Startindex
+beschleunigt die exakte Mitgliedschaftsprüfung ohne persistierte Namen.
+34 Registry-, 23 State-, 17 Item-, 17 Journal- und 120 PII-Fälle sind grün.
+Diese gezielten Prüfungen ersetzen nicht den abschließenden neuen Zweifachbau.
+
 Der erneute unabhängige Review fand trotz grüner RC106-Gates eine ungetrennte
 native Testdatenumgebung, verlorene Polltimer, veraltete Laufanzeigen, eine
 Zuordnungszusage für den falschen Vorgängerlauf und Firmenkurzformen mit falscher

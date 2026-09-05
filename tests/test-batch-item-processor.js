@@ -316,6 +316,34 @@ async function main() {
     assert.ok(!value.events.includes('outbox'));
   });
 
+  await testAsync('known-alias resource rejection is terminal through the real privacy gate and shared item boundary', async () => {
+    const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
+    const { RESOURCE_LIMITS } = require('../plugins/data-secure/server/resource-limits');
+    for (const contractVersion of ['batch-pseudonym/v1', READABLE_CONTRACT_VERSION]) {
+      for (const source of ['Arbeitgeber: ' + 'A'.repeat(161), null]) {
+        const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 46), { contractVersion });
+        let failure;
+        try {
+          registry.assign('PERSON', 'Erika Beispiel');
+          if (source) anonymizeMarkdown(source, 'personnel_profile', { registry });
+          else registry.matchKnownAliases('x'.repeat(RESOURCE_LIMITS.MAX_TEXT_CHARS + 1));
+        } catch (error) { failure = error; }
+        finally { registry.dispose(); }
+        assert.ok(failure instanceof SafeError, 'the outer pipeline must preserve the actual resource error');
+        assert.strictEqual(failure.code, 'TEXT_TOO_LARGE');
+        const value = fixture({ pipelineError: failure });
+        const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+        assert.strictEqual(result.error, 'TEXT_TOO_LARGE');
+        assert.strictEqual(value.item.status, 'stopped');
+        assert.strictEqual(value.item.document_result.reason_code, 'TEXT_TOO_LARGE');
+        assert.strictEqual(value.item.document_result.grade, 'not-processed');
+        assert.strictEqual(value.item.local_mapping_exported, true);
+        assert.strictEqual(value.item.work_copy_cleanup_pending, false);
+        assert.ok(value.writes.some((write) => write.snapshot.items[0].status === 'stopped'));
+      }
+    }
+  });
+
   await testAsync('missing, duplicate or mismatched publication proof fails before mapping and delivery', async () => {
     for (const [options, expectedCheckpoint] of [
       [{ skipAfterPublish: true }, 'publication_unconfirmed'],

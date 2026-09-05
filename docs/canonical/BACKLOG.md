@@ -34,6 +34,16 @@ vollständige Kette mit echten Vierformat-/Crash-/Negativtests aktiviert den Mod
 MarkItDown ist für die ersten vier Formate nicht erforderlich; breitere Formate
 bleiben ausdrücklich Teil der nachfolgenden Konverterlieferung.
 
+Nachtrag 06.09.2026 zu BL-030.2/BL-021.1/BL-002: Der echte Dokumentwechsel
+mit neu aufgebauter Registry fand einen zusätzlichen Aliasdefect. Exakte bekannte
+Personen-/Firmenformen werden nun aus rohwertfreien HMAC-Bindungen auch im freien
+Folgetext ersetzt. Klammern, Separatoren, Rollenwechsel und Rechtsformkonflikte
+sind regressionsgebunden (34 Registry, 23 State, 17 Item, 17 Journal, 120 PII grün).
+Ein bindingsgebundener Anfangstokenindex verhindert die gemessene teure
+Vollfenstersuche im Normalfall; kein neuer Anwenderdialog. Alter Snapshot bleibt
+lesbar, alter Reader lehnt den neuen Index ab. Finaler Produkt-/Paketnachweis
+bleibt an den folgenden sauberen Quellcommit gebunden.
+
 Paketnachweis RC107 (BL-051.1/BL-002): `aaecf59` besteht die lokale CI-Produktsuite,
 den gepackten Erfolgs-/Fehlerfolgelauf und den isolierten nativen Windows-Start.
 PKG-04 bleibt aus diesem Versuch unvollständig: Die Cleanup-Inventur stoppte an
@@ -196,6 +206,21 @@ Dateiauswahl und Ergebnisziel sowie die strikte Trennung des noch nicht
 freigegebenen Nur-Konvertieren-Modus.
 
 #### Verbindlicher Lieferplan für reine Markdown-Konvertierung (BL-010.28)
+
+Auftragserweiterung vom 06.09.2026: Nach dem laufenden RC107-Defect-/Paketnachweis
+sind nicht nur weitere Planungen, sondern die Implementierung der zweiten
+Standalone-Betriebsart und der Formatstufen XLSX/PPTX/PDF/Scan-PDF/Bilder
+beauftragt. Die vorhandenen Storys werden fortgeführt, nicht dupliziert.
+Reihenfolge: inhaltstreue reine Konvertierung der direkten Formate mit eigener
+Artefakt-/Recovery-/Exportkette, danach Office-Container, Text-PDF und lokale OCR.
+Die Experten prüfen vorhandene Parser-/OCR-Piloten und gebündelte Runtimes auf
+Wiederverwendung. Eine Produktaktivierung erfolgt nicht allein durch Erweiterung
+einer Dateiendungsliste. Echte Inhaltserhaltung, keine Vermischung mit
+anonymisierten Ergebnissen, Offline-Paketbetrieb und Negativtests bleiben Teil
+jedes Implementierungsschritts. Keine neue Cloudfunktion oder Anwenderinstallation.
+Der [Experten-Implementierungsplan](../../tasks/STANDALONE-FORMATAUSBAU-IMPLEMENTIERUNGSPLAN.md)
+bindet die konkreten Schnittstellen, Wiederverwendung, bereits gefundenen
+Pilotlücken und Pflichtnachweise. Er führt kein eigenes Backlog.
 
 Diese Funktion wird nicht gestrichen oder durch eine reine Textvorschau ersetzt.
 Reihenfolge nach dem laufenden Fehler-/UX-Schnitt; keine neuen doppelten Storys:

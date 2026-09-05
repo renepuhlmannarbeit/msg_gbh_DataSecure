@@ -247,7 +247,8 @@ function buildOrgDictionary(text, reg, profile, findings, personKeys = new Set()
     const existing = reg.lookup('ORG', org);
     const ph = existing || reg.assign(profile === 'personnel_profile' ? 'CUSTOMER' : 'ORG', org);
     if (!existing) {
-      if (typeof reg.remember === 'function') reg.remember('ORG', org, ph);
+      if (typeof reg.rememberOrganizationAlias === 'function') reg.rememberOrganizationAlias(org, org, ph);
+      else if (typeof reg.remember === 'function') reg.remember('ORG', org, ph);
       else reg.map.set(`ORG:${key(org)}`, ph);
     }
     findings.push({ type: 'ORGANIZATION', value_hash: hashShort(org) });
@@ -280,7 +281,10 @@ function buildOrgDictionary(text, reg, profile, findings, personKeys = new Set()
   const resolvedAliases = [];
   for (const { value, identities } of aliases.values()) {
     let placeholder = identities.values().next().value;
-    if (reg.readable === true) {
+    if (typeof reg.rememberOrganizationAlias === 'function') {
+      for (const [identity, ph] of identities) reg.rememberOrganizationAlias(value, identity, ph);
+      placeholder = reg.lookup('ORG', value);
+    } else if (reg.readable === true) {
       for (const ph of identities.values()) reg.remember('ORG', value, ph);
       placeholder = reg.lookup('ORG', value);
     } else if (identities.size > 1) {
@@ -311,15 +315,16 @@ function anonymize(text, profile = 'general', options = {}) {
   const src = canonicalizeRenderedText(text);
   const findings = [];
   const reg = options.registry || makeRegistry();
+  const knownAliases = typeof reg.matchKnownAliases === 'function' ? reg.matchKnownAliases(src) : [];
   const sourceCredentialRanges = credentialContextSpans(src);
   const sourceOrganizations = collectOrganizations(src);
   const sourceOrgSpans = sourceOrganizations.flatMap((org) =>
     findLiteralSpans(src,org,'','ORGANIZATION',PRIORITY.ORGANIZATION)
   );
-  const legalOrganizationNames = [...new Set(sourceOrganizations
+  const legalOrganizationNames = [...new Set([...sourceOrganizations
     .filter((org) => ORG_SUFFIX_TAIL_RE.test(org)).flatMap((org) =>
       [org, distinctiveOrganizationAlias(org)].filter(Boolean)
-    ))];
+    ), ...knownAliases.filter((entry) => entry.kind === 'ORG').map((entry) => entry.value)])];
   // V2 aliases are privately retained across resume. A typed company already
   // known in this batch must not turn into a new person merely because the
   // following document uses its customer label without the legal suffix.
@@ -344,7 +349,16 @@ function anonymize(text, profile = 'general', options = {}) {
   // its repeated short name) must not create a global PERSON/surname alias.
   // Explicit Name/Herr/holder occurrences remain independent evidence.
   const strongPersonAnchors = collectPersonAnchors(src, profile).filter((seed) => !organizationOnlySeed(seed));
-  const seeds = collectPersonSeeds(src, profile, strongPersonAnchors).filter((seed) => {
+  const candidates = collectPersonSeeds(src, profile, strongPersonAnchors);
+  const candidateKeys = new Set(candidates.map((seed) => key(seed.value)));
+  for (const alias of knownAliases) {
+    if (alias.kind !== 'PERSON' || candidateKeys.has(key(alias.value))) continue;
+    // Existing aliases are already identity decisions. Do not infer another
+    // surname from them, and do not renumber them when this document has no label.
+    candidates.push({ value: alias.value, confidence: 'batch_alias', noSurnameAlias: true });
+    candidateKeys.add(key(alias.value));
+  }
+  const seeds = candidates.filter((seed) => {
     if (organizationOnlySeed(seed)) return false;
     const occurrences=findLiteralSpans(src,seed.value,'','PERSON',PRIORITY.PERSON);
     if(!occurrences.length) return true;
@@ -375,7 +389,11 @@ function anonymize(text, profile = 'general', options = {}) {
   // Applicant profiles contain the same direct employment and residence
   // fields as personnel profiles.  Applying the bounded label/table path to
   // both prevents a labelled applicant location from surviving the release.
-  if (profile === 'personnel_profile' || profile === 'applicant') out = anonymizePersonnel(out, reg, findings, personKeys);
+  if (profile === 'personnel_profile' || profile === 'applicant') {
+    const knownDashCompanyRanges = knownAliases.filter((alias) => alias.kind === 'ORG' && /\s-\s/u.test(alias.value))
+      .flatMap((alias) => findLiteralSpans(src, alias.value, '', 'ORGANIZATION', PRIORITY.ORGANIZATION));
+    out = anonymizePersonnel(out, reg, findings, personKeys, knownDashCompanyRanges);
+  }
   const credentialRanges = credentialContextDetails(out);
 
   const dictionary = [

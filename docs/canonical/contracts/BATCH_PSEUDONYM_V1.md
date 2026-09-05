@@ -45,8 +45,36 @@ dürfen nie still zusammengeführt werden.
 Aliasformen werden vor dem nächsten Dokument als HMAC-Bindung persistiert. Teilt
 sich mehr als eine Person denselben Nachnamen, erhält dieser mehrdeutige Alias einen
 eigenen stabilen Platzhalter und wird keinem Vollnamen nachträglich neu zugeordnet.
-Statische fachliche Arbeitgebermarker wie `[ARBEITGEBER_001]` bleiben absichtlich
-nur aktionslokal und werden nicht als Rohwertbindung persistiert.
+Der statische v1-Arbeitgebermarker `[ARBEITGEBER_001]` bleibt eine Rollenanzeige,
+keine eindeutige Unternehmensidentität. Seit RC107 werden die nachgewiesene
+vollständige Firmenidentität und ihre Rollenanzeige getrennt über HMAC-Domänen
+gebunden. Weder der Rollenmarker noch ein öffentlicher UNKLAR-Marker wird als
+Identitätsreservierung verwendet. Unterschiedliche Rechtsformen mit derselben
+Kurzform werden nicht zusammengeführt.
+
+### Wiedererkennen ohne erneutes Namensfeld
+
+Eine neue Registry pro Dokument prüft bereits bekannte Personen-/Firmenaliase
+auch im freien Folgetext durch exakte HMAC-Mitgliedschaft. Sie erfindet dabei
+keine Entität und persistiert keine Rohtexte. Zulässige Aliasformen einschließlich
+Klammern, Bindestrichen, Apostrophen und `&` werden vollständig als begrenzte
+Kandidaten geprüft. Neue Personen-/Firmenaliase sind auf 160 normalisierte Zeichen
+begrenzt; Überschreitung stoppt ausdrücklich mit `TEXT_TOO_LARGE`. Bestehende
+HMAC-only Altjournale liefern keinen rückwirkenden Nachweis beliebig langer
+früherer Rohformen. Die allgemeine Textressourcengrenze bleibt zusätzlich aktiv.
+
+Neue vollständige Zustände enthalten optional `known_alias_index` mit Schema
+`datasecure-known-alias-index/1`: nur HMACs der Anfangstokens und eine an alle
+aktuellen Bindings gebundene HMAC-Attestation. Damit entfallen bei normalen
+Folgetexten die meisten erfolglosen Fensterprüfungen. Ein alter Zustand ohne
+Index oder eine nicht passende Attestation nutzt den vollständigen begrenzten
+Abgleich; ein strukturell ungültiger Index wird abgewiesen. Es gibt keinen
+unkontrollierten Klartext-Prefixindex und keine neue Anwenderbestätigung.
+
+Rollback-Grenze: Alte Programmstände, deren Journalvertrag ausschließlich
+`bindings,labels` akzeptiert, lehnen den erweiterten Zustand ab. Ein laufender
+RC107-Stapel darf daher nicht als rückwärtskompatibel zu diesen Ständen
+bezeichnet werden. Bestehende zweifeldrige Journale bleiben vorwärts lesbar.
 
 ### Neue Standalone-Stapel: v2
 
@@ -69,9 +97,10 @@ eine fachliche Aussagegrenze.
 
 Plugin-Stapel sowie bereits vorhandene v1-Standalone-Stapel bleiben v1, auch
 nach Neustart. Ein Restore ändert den Vertrag nicht anhand des aktuellen Produkts.
-Gemeinsam korrigiert ist das Wiederbefüllen des flüchtigen Wörterbuchs bei
-erfolgreichem Lookup einer gespeicherten Bindung: Nur so wird die bekannte
-Firma auch im Folgedokument tatsächlich ersetzt und nicht erst am Restgate gestoppt.
+Gemeinsam korrigiert sind der genaue Abgleich bekannter Bindungen im Folgetext
+und das Wiederbefüllen des flüchtigen Wörterbuchs bei einem Treffer. Ein Test
+mit derselben In-Memory-Registry genügt nicht: Die Pflichtregression baut zwischen
+den Dokumenten den Registryzustand über Journal/JSON neu auf.
 
 ## Laufzeit- und Fehlergrenze
 

@@ -19,6 +19,23 @@ const PREFIX = Object.freeze({
 });
 const READABLE_PREFIX = Object.freeze({ PERSON: 'PERSON', ORG: 'UNTERNEHMEN', PROJECT: 'PROJEKT' });
 const READABLE_LABEL_RE = /^\[(PERSON|UNTERNEHMEN|PROJEKT|PERSON_UNKLAR|UNTERNEHMEN_UNKLAR|PROJEKT_UNKLAR)_(\d{3,5})\]$/u;
+// At most 160 normalized characters, including separators: this also covers
+// short legal company names containing more than ten individual words.
+const KNOWN_ALIAS_MAX_CHARS = 160;
+const KNOWN_ALIAS_MAX_TOKENS = KNOWN_ALIAS_MAX_CHARS;
+const KNOWN_ALIAS_CACHE_SIZE = 8192;
+const LEGACY_EMPLOYER_ROLE = '[ARBEITGEBER_001]';
+const { RESOURCE_LIMITS } = require('./resource-limits');
+const { SafeError } = require('./runtime');
+const KNOWN_ALIAS_INDEX_SCHEMA = 'datasecure-known-alias-index/1';
+const ALIAS_TOKEN_SOURCE = "[\\p{L}\\p{M}\\p{N}]+(?:[&.'’+\\/-][\\p{L}\\p{M}\\p{N}]+)*\\.?|[^\\s]";
+
+function validKnownAliasIndex(index) {
+  return Boolean(index && Object.keys(index).sort().join(',') === 'attestation,schema,starts' &&
+    index.schema === KNOWN_ALIAS_INDEX_SCHEMA && typeof index.attestation === 'string' && /^[A-Za-z0-9_-]{43}$/u.test(index.attestation) &&
+    Array.isArray(index.starts) && index.starts.length <= 10000 && new Set(index.starts).size === index.starts.length &&
+    index.starts.every((value) => typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/u.test(value)));
+}
 
 function validPersistedLabel(placeholder, contractVersion) {
   if (contractVersion === READABLE_CONTRACT_VERSION) {
@@ -32,6 +49,12 @@ function validPersistedLabel(placeholder, contractVersion) {
 function inputError(message) {
   const error = new Error(message);
   error.code = 'BATCH_PSEUDONYM_INPUT_INVALID';
+  return error;
+}
+
+function textLimitError() {
+  const error = new SafeError('Der Text oder eine bekannte Stapelkennung überschreitet die lokale Prüfgrenze.');
+  error.code = 'TEXT_TOO_LARGE';
   return error;
 }
 
@@ -97,6 +120,8 @@ function createBatchPseudonymRegistry(secret, options = {}) {
   const sequences = new Map(); // reconstructed from reservations, never reset on resume
   const counts = { PERSON: 0, ORG: 0, CUSTOMER: 0, PROJECT: 0 };
   const locations = [];
+  const knownStarts = new Set(); // HMAC(first token), never raw prefixes
+  let completeStartIndex = false;
   let disposed = false;
 
   function aliasId(kind, canonical) {
@@ -105,12 +130,52 @@ function createBatchPseudonymRegistry(secret, options = {}) {
       .digest('base64url');
   }
 
+  function identityDigest(namespace, kind, canonical) {
+    return crypto.createHmac('sha256', key)
+      .update(`${contractVersion}\u0000${rulesetVersion}\u0000${namespace}\u0000${kind}\u0000${canonical}`, 'utf8')
+      .digest();
+  }
+
+  function indexAttestation(starts) {
+    return crypto.createHmac('sha256', key).update(`${contractVersion}\u0000${rulesetVersion}\u0000${KNOWN_ALIAS_INDEX_SCHEMA}\u0000`, 'utf8')
+      .update(JSON.stringify({ bindings: [...bindings].sort(([a], [b]) => a.localeCompare(b)), starts: [...starts].sort() }), 'utf8')
+      .digest('base64url');
+  }
+
+  function knownStartId(canonical) {
+    const first = new RegExp(ALIAS_TOKEN_SOURCE, 'u').exec(canonical)?.[0];
+    return first ? aliasId('known-alias-start', first) : null;
+  }
+
+  function assertKnownAliasShape(kind, canonical) {
+    if (!['PERSON', 'ORG', 'CUSTOMER'].includes(kind)) return null;
+    if (canonical.length > KNOWN_ALIAS_MAX_CHARS) throw textLimitError();
+    const start = completeStartIndex ? knownStartId(canonical) : null;
+    if (start && !knownStarts.has(start) && knownStarts.size >= 10000) {
+      throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+    }
+    return start;
+  }
+
+  function visibleBinding(kind, canonical, placeholder) {
+    if (!placeholder || readable || kind !== 'ORG') return placeholder;
+    // Private V1 role/ambiguity reservations are not new public identities.
+    // Their HMAC domains are separate from ordinary ORG/PROJECT aliases.
+    const ambiguous = identityDigest('ambiguous-alias', kind, canonical);
+    try {
+      if (labels.get(placeholder) === ambiguous.toString('base64url')) return '[ORGANISATION_UNKLAR]';
+    } finally { ambiguous.fill(0); }
+    if (bindings.get(aliasId('legacy-employer-role', canonical)) === placeholder) return LEGACY_EMPLOYER_ROLE;
+    return bindings.get(aliasId('organization-display', canonical)) || placeholder;
+  }
+
   const restored = options.persistedState;
   try {
     if (restored !== undefined) {
-      if (!restored || Object.keys(restored).sort().join(',') !== 'bindings,labels' ||
+      if (!restored || !['bindings,labels', 'bindings,known_alias_index,labels'].includes(Object.keys(restored).sort().join(',')) ||
           !Array.isArray(restored.bindings) || !Array.isArray(restored.labels) ||
-          restored.bindings.length > 10000 || restored.labels.length > 10000) {
+          restored.bindings.length > 10000 || restored.labels.length > 10000 ||
+          (Object.hasOwn(restored, 'known_alias_index') && !validKnownAliasIndex(restored.known_alias_index))) {
         throw inputError('Der persistierte Pseudonymzustand ist ungültig.');
       }
       for (const pair of restored.labels) {
@@ -145,6 +210,11 @@ function createBatchPseudonymRegistry(secret, options = {}) {
         bindings.set(alias, placeholder);
       }
     }
+    completeStartIndex = bindings.size === 0;
+    if (restored?.known_alias_index && restored.known_alias_index.attestation === indexAttestation(restored.known_alias_index.starts)) {
+      completeStartIndex = true;
+      for (const value of restored.known_alias_index.starts) knownStarts.add(value);
+    }
   } catch (error) {
     key.fill(0);
     map.clear();
@@ -152,6 +222,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     labels.clear();
     digestLabels.clear();
     sequences.clear();
+    knownStarts.clear();
     throw error;
   }
 
@@ -165,7 +236,13 @@ function createBatchPseudonymRegistry(secret, options = {}) {
   function entityKind(kind) { return readable && kind === 'CUSTOMER' ? 'ORG' : kind; }
 
   function reserve(kind, digest, ambiguous = false) {
-    if (!readable) return placeholderForDigest(kind, digest, labels);
+    if (!readable) {
+      const derived = placeholderForDigest(kind, digest, labels);
+      if (!labels.has(derived.placeholder) && labels.size >= 10000) {
+        throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+      }
+      return derived;
+    }
     const digestId = digest.toString('base64url');
     const existing = digestLabels.get(digestId);
     if (existing) return { placeholder: existing, digestId };
@@ -180,7 +257,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
   }
 
   function assertAliasCapacity(alias) {
-    if (readable && !bindings.has(alias) && bindings.size >= 10000) {
+    if (!bindings.has(alias) && bindings.size >= 10000) {
       throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
     }
   }
@@ -190,13 +267,15 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     if (!Object.hasOwn(PREFIX, kind)) throw inputError('Der Entitätstyp ist im Pseudonymvertrag nicht zugelassen.');
     kind = entityKind(kind);
     const canonical = canonicalValue(value);
+    const start = assertKnownAliasShape(kind, canonical);
     const mapKey = `${kind}:${canonical}`;
     const existing = map.get(mapKey);
     if (existing) return existing;
     const bound = bindings.get(aliasId(kind, canonical));
     if (bound) {
-      map.set(mapKey, bound);
-      return bound;
+      const visible = visibleBinding(kind, canonical, bound);
+      map.set(mapKey, visible);
+      return visible;
     }
     assertAliasCapacity(aliasId(kind, canonical));
 
@@ -209,6 +288,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     labels.set(derived.placeholder, derived.digestId);
     map.set(mapKey, derived.placeholder);
     bindings.set(aliasId(kind, canonical), derived.placeholder);
+    if (start) knownStarts.add(start);
     counts[kind] += 1;
     return derived.placeholder;
   }
@@ -218,7 +298,8 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     if (!Object.hasOwn(PREFIX, kind)) return null;
     kind = entityKind(kind);
     const canonical = canonicalValue(value);
-    const placeholder = map.get(`${kind}:${canonical}`) || bindings.get(aliasId(kind, canonical)) || null;
+    const placeholder = map.get(`${kind}:${canonical}`) ||
+      visibleBinding(kind, canonical, bindings.get(aliasId(kind, canonical))) || null;
     // The current document's literal dictionary is built from this ephemeral
     // map. A persisted hit must hydrate it too, otherwise a company known from
     // document N disappears from the replacement dictionary in document N+1.
@@ -235,6 +316,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
       throw inputError('Der Pseudonym-Ableitungswert ist ungültig.');
     }
     const canonical = canonicalValue(value);
+    const start = assertKnownAliasShape(kind, canonical);
     const alias = aliasId(kind, canonical);
     assertAliasCapacity(alias);
     const existing = bindings.get(alias);
@@ -246,12 +328,14 @@ function createBatchPseudonymRegistry(secret, options = {}) {
       try { ambiguous = reserve(kind, digest, true); }
       finally { digest.fill(0); }
       labels.set(ambiguous.placeholder, ambiguous.digestId);
-      map.set(`${kind}:${canonical}`, ambiguous.placeholder);
       bindings.set(alias, ambiguous.placeholder);
+      if (start) knownStarts.add(start);
+      map.set(`${kind}:${canonical}`, visibleBinding(kind, canonical, ambiguous.placeholder));
       return;
     }
-    map.set(`${kind}:${canonical}`, String(placeholder));
     bindings.set(alias, String(placeholder));
+    if (start) knownStarts.add(start);
+    map.set(`${kind}:${canonical}`, visibleBinding(kind, canonical, String(placeholder)));
   }
   function rememberEphemeral(kind, value, placeholder) {
     requireLive();
@@ -260,6 +344,144 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     }
     kind = entityKind(kind);
     map.set(`${kind}:${canonicalValue(value)}`, placeholder);
+  }
+
+  function rememberOrganizationAlias(value, identityValue, placeholder) {
+    requireLive();
+    const identity = canonicalValue(identityValue);
+    const canonical = canonicalValue(value);
+    const start = assertKnownAliasShape('ORG', canonical);
+    if (identity.length > KNOWN_ALIAS_MAX_CHARS || canonical.length > KNOWN_ALIAS_MAX_CHARS) throw textLimitError();
+    if (readable) {
+      remember('ORG', value, placeholder);
+      return lookup('ORG', value);
+    }
+    // One proven full spelling identifies the company, independently of its
+    // legacy public employer/customer role. Neither a role label nor UNKLAR is
+    // ever passed back to remember() as though it were an entity identity.
+    if (placeholder !== LEGACY_EMPLOYER_ROLE &&
+        !(labels.has(placeholder) && /^\[(?:ORGANISATION|KUNDE)_/u.test(placeholder))) {
+      throw inputError('Der Pseudonym-Ableitungswert ist ungültig.');
+    }
+    const digest = crypto.createHmac('sha256', key)
+      .update(`${contractVersion}\u0000${rulesetVersion}\u0000ORG\u0000${identity}`, 'utf8').digest();
+    let reserved;
+    try { reserved = reserve('ORG', digest); }
+    finally { digest.fill(0); }
+    const alias = aliasId('ORG', canonical);
+    const roleId = aliasId('legacy-employer-role', canonical);
+    const displayId = aliasId('organization-display', canonical);
+    const prior = bindings.get(alias);
+    let sameIdentity = !prior || prior === reserved.placeholder;
+    // Old V1 journals stored the CUSTOMER identity directly in the ORG alias.
+    // Upgrade only when that digest proves this exact full spelling, not by
+    // comparing public role labels or guessing that equal short names merge.
+    if (!sameIdentity) {
+      const oldCustomer = crypto.createHmac('sha256', key)
+        .update(`${contractVersion}\u0000${rulesetVersion}\u0000CUSTOMER\u0000${identity}`, 'utf8').digest();
+      try { sameIdentity = labels.get(prior) === oldCustomer.toString('base64url'); }
+      finally { oldCustomer.fill(0); }
+    }
+    let target = reserved;
+    if (!sameIdentity && identity === canonical && prior) {
+      // The field repeats an already-proven exact alias, merely with a new
+      // role. Retain its known identity (or its existing ambiguity) instead of
+      // creating a second company from that same short spelling.
+      target = { placeholder: prior, digestId: labels.get(prior) };
+    } else if (!sameIdentity) {
+      const ambiguous = identityDigest('ambiguous-alias', 'ORG', canonical);
+      try { target = reserve('ORG', ambiguous, true); }
+      finally { ambiguous.fill(0); }
+    }
+    const presentationId = placeholder === LEGACY_EMPLOYER_ROLE ? roleId : displayId;
+    const requiredAliases = [alias, presentationId].filter((id) => !bindings.has(id));
+    const unusedPresentationId = placeholder === LEGACY_EMPLOYER_ROLE ? displayId : roleId;
+    if (bindings.size + requiredAliases.length - Number(bindings.has(unusedPresentationId)) > 10000) {
+      throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+    }
+    // All reservations/capacities are checked before the first mutation, so a
+    // failed action's finally-export always remains a valid resumable journal.
+    labels.set(target.placeholder, target.digestId);
+    bindings.set(alias, target.placeholder);
+    bindings.delete(unusedPresentationId);
+    bindings.set(presentationId, placeholder === LEGACY_EMPLOYER_ROLE ? target.placeholder : placeholder);
+    if (start) knownStarts.add(start);
+    const visible = visibleBinding('ORG', canonical, target.placeholder);
+    map.set(`ORG:${canonical}`, visible);
+    return visible;
+  }
+
+  function matchKnownAliases(text) {
+    requireLive();
+    const input = String(text || '');
+    if (input.length > RESOURCE_LIMITS.MAX_TEXT_CHARS) throw textLimitError();
+    if (bindings.size === 0) return [];
+    // This membership scan returns values, not source offsets. Normalize once
+    // here instead of repeating Unicode/whitespace work for every short window.
+    const src = input.normalize('NFC').replace(/\s+/gu, ' ');
+    // Bounded exact membership probes, not an entity detector. No spelling is
+    // learned unless its typed HMAC is already present in this batch. Unknown
+    // words never call assign(), and the journal remains raw-value-free.
+    const tokens = new RegExp(ALIAS_TOKEN_SOURCE, 'gu');
+    const wordBoundary = /[\p{L}\p{N}_]/u;
+    const window = [];
+    const cache = new Map();
+    const cacheOrder = new Array(KNOWN_ALIAS_CACHE_SIZE);
+    let cacheCursor = 0;
+    const matches = new Map();
+    const startCache = new Map();
+    const startOrder = new Array(KNOWN_ALIAS_CACHE_SIZE);
+    let startCursor = 0;
+    const isKnownStart = (token) => {
+      if (!completeStartIndex) return true; // pre-index journals never silently lose aliases
+      const value = token.toLowerCase();
+      if (startCache.has(value)) return startCache.get(value);
+      const hit = knownStarts.has(aliasId('known-alias-start', value));
+      if (startOrder[startCursor] !== undefined) startCache.delete(startOrder[startCursor]);
+      startOrder[startCursor] = value;
+      startCursor = (startCursor + 1) % KNOWN_ALIAS_CACHE_SIZE;
+      startCache.set(value, hit);
+      return hit;
+    };
+    const visit = (start, end) => {
+      if ((start > 0 && wordBoundary.test(src[start - 1])) ||
+          (end < src.length && wordBoundary.test(src[end]))) return;
+      const value = src.slice(start, end).toLowerCase();
+      let hits = cache.get(value);
+      if (!hits) {
+        hits = [];
+        for (const kind of ['PERSON', 'ORG']) {
+          // value is already canonical; avoid three repeated locale/Unicode
+          // normalisations per probe. Hydrate only positively known identities.
+          const placeholder = map.get(`${kind}:${value}`) ||
+            visibleBinding(kind, value, bindings.get(aliasId(kind, value)));
+          if (placeholder) {
+            map.set(`${kind}:${value}`, placeholder);
+            hits.push({ kind, value, placeholder });
+          }
+        }
+        if (cacheOrder[cacheCursor] !== undefined) cache.delete(cacheOrder[cacheCursor]);
+        cacheOrder[cacheCursor] = value;
+        cacheCursor = (cacheCursor + 1) % KNOWN_ALIAS_CACHE_SIZE;
+        cache.set(value, hits);
+      }
+      for (const hit of hits) matches.set(`${hit.kind}:${hit.value}`, hit);
+    };
+    for (const token of src.matchAll(tokens)) {
+      const start = token.index;
+      const end = start + token[0].length;
+      const previous = window[window.length - 1];
+      if (previous && !/^\s*$/u.test(src.slice(previous.end, start))) window.length = 0;
+      window.push({ start, end, known: isKnownStart(token[0]) || (token[0].endsWith('.') && isKnownStart(token[0].slice(0, -1))) });
+      while (window.length && (window.length > KNOWN_ALIAS_MAX_TOKENS ||
+          end - window[0].start > KNOWN_ALIAS_MAX_CHARS)) window.shift();
+      for (const first of window) {
+        if (!first.known) continue;
+        visit(first.start, end);
+        if (src[end - 1] === '.') visit(first.start, end - 1);
+      }
+    }
+    return [...matches.values()];
   }
   function entriesForKind(kind) {
     requireLive();
@@ -278,6 +500,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     digestLabels.clear();
     sequences.clear();
     bindings.clear();
+    knownStarts.clear();
     locations.length = 0;
   }
 
@@ -285,12 +508,15 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     requireLive();
     return Object.freeze({
       bindings: [...bindings].sort(([left], [right]) => left.localeCompare(right)).map((entry) => Object.freeze([...entry])),
-      labels: [...labels].sort(([left], [right]) => left.localeCompare(right)).map((entry) => Object.freeze([...entry]))
+      labels: [...labels].sort(([left], [right]) => left.localeCompare(right)).map((entry) => Object.freeze([...entry])),
+      ...(completeStartIndex ? { known_alias_index: Object.freeze({ schema: KNOWN_ALIAS_INDEX_SCHEMA,
+        starts: [...knownStarts].sort(), attestation: indexAttestation(knownStarts) }) } : {})
     });
   }
 
   return Object.freeze({
-    assign, lookup, remember, rememberEphemeral, entriesForKind, exportState, dispose, locations,
+    assign, lookup, remember, rememberEphemeral, rememberOrganizationAlias, matchKnownAliases,
+    entriesForKind, exportState, dispose, locations,
     isKnownPlaceholder(value) { requireLive(); return labels.has(String(value)); },
     readable,
     get counts() { return Object.freeze({ ...counts }); }
@@ -299,5 +525,6 @@ function createBatchPseudonymRegistry(secret, options = {}) {
 
 module.exports = {
   SECRET_BYTES, CONTRACT_VERSION, READABLE_CONTRACT_VERSION, validPersistedLabel,
+  KNOWN_ALIAS_MAX_TOKENS, KNOWN_ALIAS_MAX_CHARS, KNOWN_ALIAS_INDEX_SCHEMA, validKnownAliasIndex,
   canonicalValue, base32, placeholderForDigest, createBatchPseudonymRegistry
 };

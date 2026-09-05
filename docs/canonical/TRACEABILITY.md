@@ -15,6 +15,13 @@ ihre Quellcommitbindung; native Testdatenisolation wird im Desktop-Vertrag
 und Rust-Testprofil geprüft. DS-085 bleibt als vollständige zweite Kernfunktion
 offen, nicht lediglich als noch fehlende Schaltfläche.
 
+BL-030.2/DS-084: `matchKnownAliases` und getrennte v1-Firmenidentitäts-/Rollen-HMACs
+werden durch echte `withBatchPseudonymRegistry`-Dokumentwechsel einschließlich
+Journal-Roundtrip, Klammern, Separatoren und Rollenwechsel geprüft. Der optionale
+`known_alias_index` ist an alle Bindings attestiert; Negativtests decken fehlenden,
+veralteten und manipulierten Index sowie Kapazitäten und terminale Textgrenzen ab.
+Der Vertrag benennt die Vorwärtslesbarkeit und die Altreader-Rollbackgrenze.
+
 BL-010.13/BL-011.3 binden den Desktop-EOF an das Ende des Steuerprozesses,
 nicht an das Ende dauerhaft übergebener Worker. `desktop-sidecar.js` und
 `test-standalone-sidecar.js` prüfen Queue-Stopp, Shutdown, defekte Frames und

@@ -53,7 +53,8 @@ function rememberLocation(reg, value) {
 }
 
 function rememberOrganization(reg, value, placeholder, persistent = true) {
-  if (!persistent && typeof reg.rememberEphemeral === 'function') reg.rememberEphemeral('ORG', value, placeholder);
+  if (typeof reg.rememberOrganizationAlias === 'function') reg.rememberOrganizationAlias(value, value, placeholder);
+  else if (!persistent && typeof reg.rememberEphemeral === 'function') reg.rememberEphemeral('ORG', value, placeholder);
   else if (typeof reg.remember === 'function') reg.remember('ORG', value, placeholder);
   else reg.map.set(`ORG:${key(value)}`, placeholder);
 }
@@ -73,6 +74,10 @@ function registerCustomer(reg, findings, value) {
   const clean = normalizeSpaces(value);
   if (!clean) return null;
   if (reg.readable === true && reg.isKnownPlaceholder(clean)) return clean;
+  if (reg.readable !== true && reg.lookup('ORG', clean) === '[ORGANISATION_UNKLAR]') {
+    findings.push({ type: 'CUSTOMER', value_hash: hashShort(clean) });
+    return '[ORGANISATION_UNKLAR]';
+  }
   const placeholder = reg.assign('CUSTOMER', clean);
   findings.push({ type: 'CUSTOMER', value_hash: hashShort(clean) });
   for (const org of collectOrganizations(clean)) rememberOrganization(reg, org, placeholder);
@@ -92,7 +97,7 @@ function looksLikeOrgSide(value, personKeys) {
   return ORG_SHAPE_RE.test(clean) || DOMAIN_SHAPE_RE.test(clean);
 }
 
-function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
+function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDashCompanyRanges = []) {
   const out = [];
   const ranges = credentialContextSpans(text);
   // A customer can be a natural person. Leave a proven person value for the
@@ -200,7 +205,10 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set()) {
     }
 
     // "<Customer> – <Project>" project headings.
-    const dash = credentialLine || professionalSection ? null : content.match(DASH_SPLIT_RE);
+    // A hyphen inside a previously proven exact company alias is not a new
+    // customer/project separator. Keep it for the common literal dictionary.
+    const knownCompanyLine = knownDashCompanyRanges.some((range) => range.start < lineEnd && range.end > lineOffset - rawLine.length - 1);
+    const dash = credentialLine || professionalSection || knownCompanyLine ? null : content.match(DASH_SPLIT_RE);
     if (dash) {
       const left = normalizeSpaces(dash[1]);
       const right = normalizeSpaces(dash[2]);

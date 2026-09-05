@@ -166,6 +166,33 @@ test('failures before rename preserve the old journal and clean only the exact t
   }
 });
 
+test('the journal rejects malformed versioned alias indexes before publication', () => {
+  const item = fixture();
+  const pseudonyms = createBatchPseudonymState();
+  const secret = Buffer.from(pseudonyms.pseudonym_seed, 'base64url');
+  const registry = createBatchPseudonymRegistry(secret);
+  try {
+    registry.assign('ORG', 'Nordstern Medizin');
+    const snapshot = registry.exportState();
+    const valid = state({ ...pseudonyms, pseudonym_registry_state: snapshot });
+    item.store.writeState(valid);
+    const before = raw(item.target);
+    for (const mutate of [
+      (index) => { index.starts = ['Nordstern Medizin']; },
+      (index) => { index.schema = 'unrecognized/99'; },
+      (index) => { index.attestation = [index.attestation]; },
+      (index) => { index.starts.push(index.starts[0]); },
+      (index) => { index.raw_value = 'Nordstern Medizin'; }
+    ]) {
+      const invalid = structuredClone(valid);
+      mutate(invalid.pseudonym_registry_state.known_alias_index);
+      assert.throws(() => item.store.writeState(invalid));
+      assert.strictEqual(raw(item.target), before);
+    }
+    assert.doesNotMatch(before, /Nordstern|Medizin/u);
+  } finally { registry.dispose(); secret.fill(0); item.cleanup(); }
+});
+
 test('transient Windows rename failures retry bounded without weakening atomic publication', () => {
   const item = fixture();
   try {

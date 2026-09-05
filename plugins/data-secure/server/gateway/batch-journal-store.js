@@ -1,6 +1,6 @@
 'use strict';
 
-const { validPersistedLabel } = require('../batch-pseudonym-registry');
+const { validPersistedLabel, validKnownAliasIndex } = require('../batch-pseudonym-registry');
 
 const fs = require('fs');
 const path = require('path');
@@ -228,9 +228,10 @@ function createBatchJournalStore(options = {}) {
       Buffer.from(state.pseudonym_seed, 'base64url').length === 32)) return false;
     if (!Object.hasOwn(state, 'pseudonym_registry_state')) return true;
     const snapshot = state.pseudonym_registry_state;
-    if (!snapshot || Object.keys(snapshot).sort().join(',') !== 'bindings,labels' ||
+    if (!snapshot || !['bindings,labels', 'bindings,known_alias_index,labels'].includes(Object.keys(snapshot).sort().join(',')) ||
         !Array.isArray(snapshot.bindings) || !Array.isArray(snapshot.labels) ||
-        snapshot.bindings.length > 10000 || snapshot.labels.length > 10000) return false;
+        snapshot.bindings.length > 10000 || snapshot.labels.length > 10000 ||
+        (Object.hasOwn(snapshot, 'known_alias_index') && !validKnownAliasIndex(snapshot.known_alias_index))) return false;
     const placeholders = new Set();
     for (const pair of snapshot.labels) {
       if (!Array.isArray(pair) || pair.length !== 2 ||
