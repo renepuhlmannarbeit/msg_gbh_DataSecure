@@ -27,6 +27,11 @@ test('standalone package build uses pinned runtime and a closed resource project
     'tauri-contract', 'rust-toolchain.toml'), 'utf8');
   assert.match(toolchain, /channel\s*=\s*"1\.98\.1"/u);
   assert.match(toolchain, /components\s*=\s*\["clippy", "rustfmt"\]/u);
+  const cargoConfig = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone',
+    'tauri-contract', '.cargo', 'config.toml'), 'utf8');
+  assert.match(cargoConfig, /target\.x86_64-pc-windows-msvc/u);
+  assert.match(cargoConfig, /link-arg=\/Brepro/u,
+    'the Windows desktop linker must emit a reproducible PE image');
 });
 
 test('release runtime lookup cannot fall back to the developer checkout', () => {
