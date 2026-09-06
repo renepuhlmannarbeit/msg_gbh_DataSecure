@@ -3,6 +3,7 @@
 const { notProcessedDocumentResult, normalizeDocumentResultReasonCode } = require('./document-result-grade');
 const { createBatchIntakeIntent } = require('./batch-intake-intent');
 const { DEFAULT_RETENTION_DAYS } = require('./retention');
+const { MODES, validateProcessingMode } = require('../core/processing-mode');
 
 function createBatchIntake(options = {}) {
   const SafeError = options.SafeError;
@@ -87,6 +88,10 @@ function createBatchIntake(options = {}) {
   }
 
   function beginBatch(beginOptions = {}) {
+    // Resolve purpose before opening or copying any source. Explicit null or
+    // unknown purposes must not silently become the historical default.
+    const processingMode = validateProcessingMode(Object.hasOwn(beginOptions, 'processingMode')
+      ? beginOptions.processingMode : MODES.ANONYMIZE, productChannel);
     if (!storageStatus().safe) throw new SafeError('Der konfigurierte Datenschutzordner ist für die lokale Verarbeitung nicht freigegeben.');
     const expected = Number(beginOptions.expectedCount);
     if (!Number.isInteger(expected) || expected < 1 || expected > limits.MAX_BATCH_FILES) {
@@ -145,6 +150,8 @@ function createBatchIntake(options = {}) {
     try {
       admissionPlan = planBatchAdmission(queue, {
         fs: io,
+        processingMode,
+        productChannel,
         hasReparseComponent: beginOptions.hasReparseComponent || defaultHasReparseComponent
       });
     } catch (error) {
@@ -177,7 +184,9 @@ function createBatchIntake(options = {}) {
       workIdentity = { dev: String(created.dev), ino: String(created.ino), birthtimeNs: String(created.birthtimeNs) };
       // The empty directory precedes the intent; no source byte is copied
       // until its ownership record has been durably written.
-      intent = intakeIntent.create(token, new Date(now + ttl).toISOString(), workIdentity);
+      intent = intakeIntent.create(token, new Date(now + ttl).toISOString(), workIdentity, {
+        processingMode, productChannel
+      });
       const items = admissionPlan.map((planned, index) => {
         const entry = planned.entry;
         const id = crypto.randomBytes(16).toString('hex');
@@ -214,15 +223,16 @@ function createBatchIntake(options = {}) {
         };
       });
       state = {
-        schema: 'datasecure-batch/4',
+        schema: processingMode === MODES.MARKDOWN ? 'datasecure-batch/5' : 'datasecure-batch/4',
         product_channel: productChannel,
+        ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
         token,
         created_at: new Date(now).toISOString(),
         expires_at: new Date(now + (ttl === 0 ? DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000 : ttl)).toISOString(),
         ...(ttl === 0 ? { zero_day_work: true, intake_owner_pid: process.pid } : {}),
         profile,
-        remove_images: beginOptions.removeImages === true,
-        ...createBatchPseudonymState({ randomBytes: crypto.randomBytes, productChannel }),
+        remove_images: processingMode === MODES.MARKDOWN ? false : beginOptions.removeImages === true,
+        ...(processingMode === MODES.MARKDOWN ? {} : createBatchPseudonymState({ randomBytes: crypto.randomBytes, productChannel })),
         io_summary: createPrivateIoSummary({
           snapshot_preflight_runs: 1,
           snapshot_copy_files: candidates.length,

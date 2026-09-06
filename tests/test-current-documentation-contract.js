@@ -145,8 +145,16 @@ test('security and third-party notices match the current product boundary', () =
 
   assert.strictEqual(ocr.release_enabled, false);
   assert.match(notices, /release_enabled: false/u);
-  assert.match(notices, /Der Produktbuild schließt den Baum aus/u);
-  assert.match(notices, /PDF, Scan-PDF und eigenständige Bilder bleiben\s+gesperrt/u);
+  assert.match(notices, /Der Plugin-Produktbuild schließt den Baum\s+aus/u);
+  assert.match(notices, /PDF, Scan-PDF und eigenständige Bilder bleiben im Anonymisierungs-\/Cowork-\s+Pfad gesperrt/u);
+  assert.match(notices, /server\/standalone\/conversion-runtime/u);
+  for (const [name, version] of [['pdfjs-dist', '6.2.108'], ['@napi-rs/canvas', '1.0.7'],
+    ['tesseract.js', '7.0.0'], ['tesseract.js-core', '7.0.0']]) {
+    assert.ok(notices.includes(`\`${name}\` ${version}`), `conversion notice missing ${name} ${version}`);
+  }
+  assert.match(notices, /weder MarkItDown noch Python ist eine\s+Voraussetzung/u);
+  assert.match(notices, /RUNTIME\.json/u);
+  assert.match(notices, /models\/LICENSE/u);
   for (const component of ocr.components) {
     assert.ok(notices.includes(`\`${component.name}\` ${component.version}`),
       `third-party notice missing ${component.name} ${component.version}`);
@@ -185,11 +193,11 @@ test('canonical register distinguishes active, no-go, and superseded contracts',
   }
 });
 
-test('Standalone retains two core functions and does not pretend conversion-only is released', () => {
+test('Standalone retains both implemented purposes while target-host UAT stays explicit', () => {
   const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
   assert.deepStrictEqual(target.standalone_desktop.core_functions,
     ['markdown-and-anonymize', 'markdown-only']);
-  assert.strictEqual(target.standalone_desktop.markdown_only_release_status, 'in-development-not-enabled');
+  assert.strictEqual(target.standalone_desktop.markdown_only_release_status, 'implemented-target-uat-open');
   assert.strictEqual(target.standalone_desktop.markdown_only_output_subdirectory, 'DataSecure-Markdown');
   assert.strictEqual(target.standalone_desktop.markdown_only_preserves_identifiers, true);
   assert.strictEqual(target.standalone_desktop.markdown_only_automatic_ai_upload, false);
@@ -200,6 +208,45 @@ test('Standalone retains two core functions and does not pretend conversion-only
   }
   assert.ok(target.decision_ids.includes('DS-084'));
   assert.strictEqual(target.processing.cowork_and_existing_v1_pseudonyms, 'hmac-v1-unchanged');
+  for (const file of ['apps/datasecure-standalone/START-WINDOWS.md',
+    'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md']) {
+    const instructions = read(file);
+    assert.match(instructions, /Nur in Markdown umwandeln/u, file);
+    assert.match(instructions, /\*\*Starten\*\*/u, file);
+    assert.match(instructions, /DataSecure-Markdown/u, file);
+    assert.match(instructions, /Scan-PDF/u, file);
+    assert.doesNotMatch(instructions, /Nur in Markdown umwandeln[^\n]*(?:deaktiviert|noch in Entwicklung)/u, file);
+  }
+});
+
+test('conversion documentation separates eleven input types from four-format privacy and old package evidence', () => {
+  const coverage = read('docs/FORMAT_COVERAGE_MATRIX.md');
+  const parts = coverage.split('## Reine Markdown-Konvertierung: nur Standalone');
+  assert.strictEqual(parts.length, 2);
+  assert.match(parts[0], /markdown-and-anonymize/u);
+  assert.match(parts[0], /vier Formate/u);
+  for (const label of ['XLSX', 'PPTX', 'PDF / Scan-PDF', 'PNG, JPEG, BMP']) {
+    const row = parts[0].split(/\r?\n/u).find(line => line.startsWith(`| ${label} |`));
+    assert.ok(row && row.includes('| gesperrt | gesperrt |'), `${label}: privacy is not released`);
+  }
+  const conversion = parts[1].split('## Plattform- und Nachweisstatus')[0];
+  const rows = conversion.split(/\r?\n/u).filter(line => /^\| (?:TXT|Markdown|CSV|DOCX|XLSX|PPTX|PDF mit Text|Scan-PDF|PNG|JPEG|BMP)(?: | \()/u.test(line));
+  assert.strictEqual(rows.length, 11, 'eleven product input types, not eleven file extensions');
+  for (const term of ['nicht anonymisiert', 'incomplete', 'OCR_NOT_VERIFIED', 'OCR_TEXT_EMPTY',
+    'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED', 'DataSecure-Markdown',
+    'DataSecure-Output', 'DataSecure-Zuordnung.csv', 'keine Privacy-Lesecapability']) {
+    assert.ok(conversion.includes(term), `conversion coverage must explain ${term}`);
+  }
+  assert.match(conversion, /MarkItDown\/Python ist nur ein optionales\s+Differentialorakel/u);
+  for (const file of ['docs/canonical/TRACEABILITY.md', 'docs/canonical/BACKLOG_EVIDENCE_MATRIX.md',
+    'tasks/STANDALONE-FORMATAUSBAU-IMPLEMENTIERUNGSPLAN.md']) {
+    const text = read(file);
+    assert.match(text, /DS-085/u, file);
+    assert.match(text, /DataSecure-Markdown/u, file);
+    assert.match(text, /(?:v5|datasecure-batch\/5)/u, file);
+    assert.match(text, /(?:historisch\w*|alte\w*) (?:RC107-|INT-13-|Kandidat)/iu, `${file}: distinguish old package evidence`);
+    assert.doesNotMatch(text, /Keine produktive Konvertierungsevidenz|noch fehlenden reinen Konvertierungsworkflow/u, file);
+  }
 });
 
 done();

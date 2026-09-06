@@ -51,6 +51,23 @@ test('valid UTF-8 TXT, Markdown and CSV are candidates, not final verification',
   }
 });
 
+test('extended formats are candidates only for explicit standalone conversion', () => {
+  const samples = [['sheet.xlsx', officeZip('xlsx')], ['slides.pptx', officeZip('pptx')],
+    ['source.pdf', Buffer.from('%PDF-1.7\n')],
+    ['source.png', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+    ['source.jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xdb])]];
+  for (const [name, bytes] of samples) {
+    assert.strictEqual(inspectBuffer(name, bytes, { processingMode: 'markdown-only', productChannel: 'standalone' }).verdict, 'candidate');
+    for (const options of [{}, { processingMode: 'markdown-only', productChannel: 'plugin' },
+      { processingMode: 'markdown-and-anonymize', productChannel: 'standalone' }]) {
+      assert.notStrictEqual(inspectBuffer(name, bytes, options).verdict, 'candidate');
+    }
+  }
+  assert.strictEqual(inspectBuffer('mismatch.xlsx', officeZip('pptx'), {
+    processingMode: 'markdown-only', productChannel: 'standalone'
+  }).code, 'SOURCE_TYPE_MISMATCH');
+});
+
 test('invalid UTF-8, NUL and binary controls are rejected as text', () => {
   for (const [name, content] of [
     ['invalid.txt', Buffer.from([0xc3, 0x28])],

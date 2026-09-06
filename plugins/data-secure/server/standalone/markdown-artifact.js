@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const {
   PROCESSING_MODE, SOURCE_TYPES, MAX_MARKDOWN_CHARS, MarkdownContractError,
-  exactKeys, validateMarkdownText, validateMarkdownExtraction
+  exactKeys, validateMarkdownText, validateMarkdownExtraction, validateCoverage
 } = require('./markdown-contract');
 
 const ARTIFACT_SCHEMA = 'datasecure-markdown-artifact/1';
@@ -24,8 +24,9 @@ function validateMarkdownArtifact(manifest, markdown) {
       !SOURCE_VALUES.has(manifest.source_type) || manifest.document !== `${manifest.artifact_id}.md` ||
       typeof manifest.document_sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(manifest.document_sha256) ||
       !Number.isSafeInteger(manifest.document_bytes) || manifest.document_bytes < 0 ||
-      manifest.document_bytes > MAX_MARKDOWN_CHARS * 4 || manifest.extraction_grade !== 'complete' ||
-      !Array.isArray(manifest.reason_codes) || manifest.reason_codes.length !== 0) invalidArtifact();
+      manifest.document_bytes > MAX_MARKDOWN_CHARS * 4) invalidArtifact();
+  try { validateCoverage({ status: manifest.extraction_grade, reason_codes: manifest.reason_codes }); }
+  catch { invalidArtifact(); }
   validateMarkdownText(markdown);
   const bytes = Buffer.from(markdown, 'utf8');
   if (bytes.length !== manifest.document_bytes || digest(bytes) !== manifest.document_sha256) invalidArtifact();
@@ -38,10 +39,8 @@ function validateMarkdownArtifact(manifest, markdown) {
 function createMarkdownArtifact(extraction, artifactId) {
   validateMarkdownExtraction(extraction);
   if (typeof artifactId !== 'string' || !ARTIFACT_ID_RE.test(artifactId)) invalidArtifact();
-  // Unknown coverage is not an implicitly authorised partial publication.
-  if (extraction.coverage.status !== 'complete') {
-    throw new MarkdownContractError('MARKDOWN_EXTRACTION_INCOMPLETE');
-  }
+  // Conversion is deliberately not a privacy release. Partial extraction is
+  // retained with its explicit grade; consumers must display its fixed notices.
   const markdown = extraction.markdown;
   const bytes = Buffer.from(markdown, 'utf8');
   const manifest = Object.freeze({
@@ -53,12 +52,12 @@ function createMarkdownArtifact(extraction, artifactId) {
     document: `${artifactId}.md`,
     document_sha256: digest(bytes),
     document_bytes: bytes.length,
-    extraction_grade: 'complete',
-    reason_codes: Object.freeze([])
+    extraction_grade: extraction.coverage.status,
+    reason_codes: Object.freeze([...extraction.coverage.reason_codes])
   });
   return Object.freeze({ manifest, markdown });
 }
 
 module.exports = Object.freeze({
-  ARTIFACT_SCHEMA, createMarkdownArtifact, validateMarkdownArtifact
+  ARTIFACT_SCHEMA, ARTIFACT_ID_RE, createMarkdownArtifact, validateMarkdownArtifact
 });

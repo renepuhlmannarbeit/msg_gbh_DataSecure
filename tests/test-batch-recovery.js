@@ -293,7 +293,7 @@ test('a newer active run does not hide the latest completed visible result direc
   const completed = state(tokens[0], { items: [{ status: 'released' }] });
   completed.product_channel = 'standalone';
   completed.created_at = '2026-08-25T10:00:00.000Z';
-  const active = state(tokens[1], { items: [{ status: 'processing' }] });
+  const active = state(tokens[1], { live: true, items: [{ status: 'processing' }] });
   active.product_channel = 'standalone';
   active.created_at = '2026-08-25T12:00:00.000Z';
   const item = fixture({

@@ -71,6 +71,7 @@ function fixture(role, firstChild) {
     result_grades_verified: false
   };
   const batch = {
+    readBatchProcessingMode() { return 'markdown-and-anonymize'; },
     claimLocalBatchExecutor(token, pid) {
       claims.push({ token, pid });
       if (owner && launched.some(child => child.pid === owner.pid && child.alive)) {
@@ -120,6 +121,7 @@ function fixture(role, firstChild) {
     require(name) {
       if (name === 'crypto') return { randomBytes: size => Buffer.alloc(size, ++randomCounter) };
       if (name === '../runtime') return { SafeError };
+      if (name === '../core/processing-mode') return require('../plugins/data-secure/server/core/processing-mode');
       if (name === './batch') return batch;
       if (name === './workflow-diagnostics') return { recordWorkflowEvent: event => records.push(event) };
       if (name === './batch-intake-reservation') return {

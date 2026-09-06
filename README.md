@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC107
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC108
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -103,12 +103,17 @@ gleichbleibende Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`. Diese
 Nummern gelten nur im jeweiligen Stapel; bestehende v1-Ausgaben und das
 Claude-Plugin behalten ihr bisheriges Kennungsformat.
 
-**Zweite Kernfunktion in Entwicklung:** Nur in Markdown umwandeln, ohne Inhalte
-zu anonymisieren. Derselbe Ablauf soll Originalinhalte verschiedener Formate
-als `.md` für eine spätere KI-Nutzung bereitstellen – mit lokalem Mapping,
-Fortsetzung und getrenntem Ordner `DataSecure-Markdown/Lauf-…`. Solche Ergebnisse
-sind **nicht anonymisiert** und werden nicht automatisch hochgeladen. Dieser
-Modus ist noch deaktiviert; der detaillierte Lieferplan steht unter
+**Nur in Markdown umwandeln** ist der Standalone-Standard: Dateien auswählen
+oder hineinziehen, **Starten**, Ergebnisse öffnen. TXT, Markdown, CSV, DOCX,
+XLSX, PPTX, Text-PDF, Scan-PDF und PNG/JPEG/BMP werden lokal verarbeitet.
+Die App bringt Konverter und deutsche/englische OCR-Modelle mit. Ergebnisse
+und `DataSecure-Zuordnung.csv` liegen in `DataSecure-Markdown/Lauf-…` unter dem
+gewählten Ziel. Namen und andere Originalinhalte bleiben erhalten: Diese Dateien
+sind **nicht anonymisiert** und werden nicht automatisch hochgeladen.
+OCR-/Extraktionshinweise und nicht verarbeitbare Dateien stehen in der Übersicht;
+es gibt keinen PII-Review oder zusätzlichen Bestätigungsdialog. Markdown erhält
+Text und Tabellen, nicht das vollständige grafische Originallayout. Der Stand
+der technischen und menschlichen Abnahme steht unter
 [BL-010.28 im kanonischen Backlog](docs/canonical/BACKLOG.md).
 
 Heute sind Application-Service, getrenntes Datenverzeichnis, UI-Zustandsvertrag,

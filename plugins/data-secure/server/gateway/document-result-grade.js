@@ -17,6 +17,8 @@ const OMISSION_CODES = Object.freeze({
 const GRADE_VALUES = new Set(Object.values(GRADES));
 const OMISSION_VALUES = new Set(Object.values(OMISSION_CODES));
 const REASON_CODES = new Set([
+  ...require('../standalone/conversion-worker-contract').ERROR_CODES,
+  ...require('../standalone/conversion-worker-contract').LIFECYCLE_ERROR_CODES,
   'AMBIGUITY_REVIEW_REQUIRED',
   'BATCH_SNAPSHOT_CHANGED',
   'FORMAT_COVERAGE_UNVERIFIED',

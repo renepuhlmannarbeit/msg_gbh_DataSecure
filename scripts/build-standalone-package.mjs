@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
 import { readRegular, sha256, verifyTargetEvidence, readContract } from './lib/bundled-runtime.mjs';
 import { writeStandaloneRuntime } from './lib/standalone-runtime-projection.mjs';
+import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
@@ -79,6 +80,7 @@ writeStandaloneRuntime(
   path.join(stage, 'server'),
   productTarget
 );
+writeConversionRuntime(root, path.join(stage, 'server', 'standalone', 'conversion-runtime'), productTarget);
 copyFile(runtimeLicense, 'LICENSE.node.txt');
 copyFile(path.join(root, 'LICENSE'), 'LICENSE');
 copyFile(path.join(root, 'apps', 'datasecure-standalone', 'THIRD_PARTY_NOTICES.md'), 'THIRD_PARTY_NOTICES.md');
@@ -108,6 +110,11 @@ const sbom = {
       downloadLocation: `https://nodejs.org/dist/v${contract.node_version}/${target.archive}`,
       checksums: [{ algorithm: 'SHA256', checksumValue: runtimeEvidence.archive_sha256 }],
       filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION' },
+    ...JSON.parse(fs.readFileSync(path.join(stage, 'server', 'standalone', 'conversion-runtime', 'RUNTIME.json'), 'utf8')).packages
+      .map((item, index) => ({ name: item.name, SPDXID: `SPDXRef-Conversion-${index}`, versionInfo: item.version,
+        downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: item.license, licenseDeclared: item.license })),
+    { name: 'tessdata-fast', SPDXID: 'SPDXRef-Tessdata', versionInfo: '4.1.0', downloadLocation: 'NOASSERTION',
+      filesAnalyzed: false, licenseConcluded: 'Apache-2.0', licenseDeclared: 'Apache-2.0' },
     ...crates.map((crate, index) => ({ name: crate.name, SPDXID: `SPDXRef-Crate-${index}`,
       versionInfo: crate.version, downloadLocation: 'NOASSERTION', filesAnalyzed: false,
       licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION' }))

@@ -31,6 +31,10 @@ const SOURCE_TYPES = new Set([
 ]);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general', 'unknown']);
 const ERROR_CODES = new Set([
+  ...require('../standalone/conversion-worker-contract').ERROR_CODES,
+  ...require('../standalone/conversion-worker-contract').LIFECYCLE_ERROR_CODES,
+  'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID',
+  'BATCH_PROCESSING_MODE_CHANGED', 'BATCH_MARKDOWN_STATE_INVALID',
   'NONE', 'INPUT_EMPTY', 'INPUT_TOO_LARGE', 'WORKING_CLEANUP_BLOCKED',
   'STAGING_RECOVERY_BLOCKED', 'PACKAGE_STAGING_UNSAFE', 'PACKAGE_STAGING_RECORD_UNSAFE',
   'PACKAGE_STAGING_OWNER_INVALID', 'PACKAGE_STAGING_ARGUMENT_INVALID', 'PACKAGE_STAGING_CREATE_FAILED',

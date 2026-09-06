@@ -404,18 +404,25 @@ async function failedRunLedgerAvailabilityCase() {
   let ledgerAvailable;
   const harness = await frontendHarness({
     get_public_state: () => ({ state: 'completed_without_results', results_available: false,
-      failed_count: 2, ledger_available: ledgerAvailable })
+      processing_mode: 'markdown-only', failed_count: 2, ledger_available: ledgerAvailable })
   });
   assert.strictEqual(harness.elements.ledger.hidden, true, 'missing availability is not a promise of a run ledger');
   assert.match(harness.elements['status-text'].textContent, /Diagnose öffnen/u);
   assert.doesNotMatch(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
+  assert.strictEqual(harness.elements['result-warning'].hidden, false);
+  assert.match(harness.elements['result-warning'].textContent, /2 Datei.*nicht umgewandelt.*Diagnose öffnen/u);
+  assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = false;
   await harness.runTimer();
   assert.strictEqual(harness.elements.ledger.hidden, true);
+  assert.match(harness.elements['result-warning'].textContent, /Zuordnungsdatei ist nicht verfügbar.*Diagnose öffnen/u);
+  assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = true;
   await harness.runTimer();
   assert.strictEqual(harness.elements.ledger.hidden, false);
   assert.match(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
+  assert.match(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
+  assert.doesNotMatch(harness.elements['result-warning'].textContent, /Diagnose öffnen/u);
 }
 
 async function completionPendingCase() {
@@ -470,11 +477,13 @@ async function unavailableModePreservesAdmissionCase() {
     }
   });
   await harness.click('select-files');
-  // Disabled options cannot normally be chosen. Exercise a stale/manipulated
-  // renderer anyway: it must not silently run anonymization instead.
+  // A stale backend/package may reject the now-supported purpose. The UI must
+  // describe that installed-version mismatch, never silently anonymize instead.
   harness.elements['processing-mode'].value = 'markdown-only';
   await harness.click('start');
   assert.match(harness.elements['status-title'].textContent, /MARKDOWN_CONVERSION_NOT_READY/u);
+  assert.match(harness.elements['status-text'].textContent, /installierte Version.*aktuelle Standalone-Version/u);
+  assert.doesNotMatch(harness.elements['status-text'].textContent, /noch in Entwicklung/u);
   assert.match(harness.elements['status-text'].textContent, /nicht gestartet.*Dateiauswahl bleibt erhalten/u);
   assert.strictEqual(harness.elements.start.hidden, false);
   assert.strictEqual(harness.elements['selected-files'].textContent, 'Profil.txt');
@@ -509,6 +518,32 @@ async function recoverableModeLockCase() {
   assert.strictEqual(mode.disabled, true);
 }
 
+async function pureConversionCase() {
+  let state = { state: 'ready' };
+  const harness = await frontendHarness({
+    get_public_state: () => state,
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Scan.pdf']) }),
+    start_admitted_batch: () => { state = { state: 'preparing', processing_mode: 'markdown-and-anonymize' }; return { ok: true }; }
+  });
+  harness.elements['processing-mode'].value = 'markdown-only';
+  await harness.click('select-files');
+  await harness.click('start');
+  assert.strictEqual(harness.calls.find(call => call.action === 'start_admitted_batch').args.processingMode, 'markdown-only');
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['processing-mode'].value, 'markdown-only', 'intake must not reuse the previous batch purpose');
+  state = { state: 'results_available', processing_mode: 'markdown-only', results_available: true, result_count: 1, warning_count: 1 };
+  await harness.runTimer();
+  assert.match(harness.elements['status-text'].textContent, /Markdown-Datei wurde erstellt.*nicht anonymisiert/iu);
+  assert.match(harness.elements['result-warning'].textContent, /1 Datei.*Extraktionshinweise/u);
+  assert.doesNotMatch(harness.elements['result-label'].textContent, /Anonymisierte/u);
+  state = { ...state, termination_unconfirmed: true };
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Verarbeitung unterbrochen');
+  assert.strictEqual(harness.elements['status-icon'].textContent, '!');
+  assert.match(harness.elements['status-text'].textContent, /Ende.*nicht bestätigt.*nicht gestartet/u);
+  assert.doesNotMatch(harness.elements['status-text'].textContent, /sicher beendet|sicher gestoppt/u);
+}
+
 (async () => {
   await testAsync('a successful status poll clears an earlier IPC error atomically', recoveredStatusCase);
   await testAsync('result and ledger actions show a separate confirmed handoff', openFeedbackCase);
@@ -527,5 +562,6 @@ async function recoverableModeLockCase() {
   await testAsync('explicit Start sends one immutable camelCase processing mode and locks it before checkpoint', explicitStartModeCase);
   await testAsync('unavailable conversion keeps the admission without a silent anonymization fallback', unavailableModePreservesAdmissionCase);
   await testAsync('active and recoverable modes stay locked after unrelated RPCs and continue sends no mode', recoverableModeLockCase);
+  await testAsync('pure conversion stays selected during intake and reports raw results and OCR warnings honestly', pureConversionCase);
   done();
 })();

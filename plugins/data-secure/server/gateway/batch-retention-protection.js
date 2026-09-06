@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { batchRoot } = require('./batch-private-store');
+const { processingModeForBatch } = require('../core/processing-mode');
 
 function createBatchRetentionProtection(options = {}) {
   const defaultIo = options.io || fs;
@@ -10,6 +11,8 @@ function createBatchRetentionProtection(options = {}) {
   const rootPath = options.batchRoot || batchRoot;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
+  const conversionExportCommitted = options.completedMarkdownExportMatches ||
+    ((state) => require('./result-export').completedMarkdownExportMatches(state));
 
   // Cross-reference every still-open batch item with the Output scope so
   // retention never deletes a package a batch still needs for delivery or
@@ -35,8 +38,20 @@ function createBatchRetentionProtection(options = {}) {
       } catch {
         return { ids, complete: false };
       }
-      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4'].includes(state?.schema) || !Array.isArray(state.items)) {
+      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/5'].includes(state?.schema) || !Array.isArray(state.items)) {
         return { ids, complete: false };
+      }
+      if (state.schema === 'datasecure-batch/5') {
+        try { processingModeForBatch(state); } catch { return { ids, complete: false }; }
+        if (!conversionExportCommitted(state)) {
+          for (const item of state.items) {
+            // Deterministic prepublication IDs also protect a commit that the
+            // worker has not yet durably acknowledged in its journal.
+            if (!/^[a-f0-9]{32}$/u.test(String(item?.id || ''))) return { ids, complete: false };
+            ids.add(`dm_${item.id}`);
+          }
+        }
+        continue;
       }
       for (const item of state.items) {
         if ((item?.status === deliveryPendingStatus || item?.status === mappingPendingStatus) &&

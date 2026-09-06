@@ -16,8 +16,11 @@ const {
 } = require('./document-result-grade');
 const { validatePackageIdentity } = require('./package-identity');
 const { identity, bindPrivateFile, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
+const { processingModeForBatch } = require('../core/processing-mode');
+const { validateCoverage, MAX_MARKDOWN_CHARS } = require('../standalone/markdown-contract');
 
 const SCHEMA = 'datasecure-batch/4';
+const MARKDOWN_SCHEMA = 'datasecure-batch/5';
 const ENCRYPTED_SCHEMA = 'datasecure-batch/3';
 const V2_SCHEMA = 'datasecure-batch/2';
 const LEGACY_SCHEMA = 'datasecure-batch/1';
@@ -46,6 +49,23 @@ function createBatchJournalStore(options = {}) {
   const maxBatchFiles = options.maxBatchFiles || RESOURCE_LIMITS.MAX_BATCH_FILES;
   const assertZeroDayWorkAvailable = options.assertZeroDayWorkAvailable;
   const journalBindings = new WeakMap();
+  const purposeBindings = new WeakMap();
+
+  function purposeOf(state) {
+    return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}`;
+  }
+
+  function assertPurposeUnchanged(state, target) {
+    const purpose = purposeOf(state);
+    // A state returned by this store already has an immutable purpose binding;
+    // ordinary checkpoints do not pay for an additional journal read.
+    let existing = purposeBindings.get(state);
+    if (existing === undefined && io.existsSync(target)) existing = purposeOf(readJournalRecord(state.token));
+    if (existing !== undefined && existing !== purpose) {
+      throw Object.assign(new Error('BATCH_PROCESSING_MODE_CHANGED'), { code: 'BATCH_PROCESSING_MODE_CHANGED' });
+    }
+    return purpose;
+  }
 
   function temporaryJournalPath(target) {
     return `${target}.tmp_${randomBytes(6).toString('hex')}`;
@@ -110,6 +130,10 @@ function createBatchJournalStore(options = {}) {
     if (!validPseudonymState(state)) throw new Error('BATCH_PSEUDONYM_STATE_INVALID');
     const durable = writeOptions.durable !== false;
     const target = pathForToken(state.token);
+    const purpose = assertPurposeUnchanged(state, target);
+    if (state.schema === MARKDOWN_SCHEMA && !validStateShape(state, state.token)) {
+      throw Object.assign(new Error('BATCH_MARKDOWN_STATE_INVALID'), { code: 'BATCH_MARKDOWN_STATE_INVALID' });
+    }
     const temporary = temporaryJournalPath(target);
     const payload = Buffer.from(`${JSON.stringify(state)}\n`, 'utf8');
     if (payload.length < 1 || payload.length > MAX_JOURNAL_BYTES) {
@@ -137,6 +161,7 @@ function createBatchJournalStore(options = {}) {
       temporaryBinding = bindPrivateFile(temporary, { io });
       const binding = publishJournal(temporary, target);
       journalBindings.set(state, binding);
+      purposeBindings.set(state, purpose);
       if (durable) syncParent(target, io, platform);
     } catch (error) {
       // Cleanup is deliberately bounded to the exact random temp path. After
@@ -306,6 +331,45 @@ function createBatchJournalStore(options = {}) {
     return true;
   }
 
+  const markdownArtifactFields = ['artifact_id', 'artifact_sha256', 'artifact_bytes', 'extraction_grade', 'reason_codes'];
+  function validMarkdownItem(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item) || !validSourceLabel(item) ||
+        !/^[a-f0-9]{32}$/u.test(String(item.id || '')) || typeof item.name !== 'string' ||
+        item.name.length < 1 || item.name.length > 255 ||
+        ['package_id', 'package_identity', 'read_capability', 'analysis_acknowledged', 'private_artifact_encrypted', 'legacy_work_name']
+          .some((field) => Object.hasOwn(item, field)) ||
+        Object.keys(item).some((key) => key.startsWith('pseudonym_')) ||
+        /\.dsart$/iu.test(String(item.work_name || '')) ||
+        (Object.hasOwn(item, 'work_name') && item.private_artifact_plain !== true)) return false;
+    const present = markdownArtifactFields.filter((field) => Object.hasOwn(item, field));
+    if (['preflight_mapping_pending', 'stopped'].includes(item.status)) {
+      if (present.length) return false;
+      try {
+        validateDocumentResult(item.document_result);
+        return item.document_result.grade === GRADES.NOT_PROCESSED && item.document_result.reason_code === item.error_code;
+      } catch { return false; }
+    }
+    if (Object.hasOwn(item, 'document_result')) return false;
+    if (['pending', 'retryable'].includes(item.status)) return present.length === 0;
+    if (!['processing', 'mapping_pending', 'delivery_pending', 'released'].includes(item.status)) return false;
+    if (item.status === 'processing' && present.length === 0) return true;
+    // Publication can complete just before the worker loses its response. The
+    // identifier is only a recovery locator; finality still requires a freshly
+    // verified manifest and all digest/coverage fields below.
+    if (item.status === 'processing' && present.length === 1 && present[0] === 'artifact_id' &&
+        ['package_published', 'publication_unconfirmed'].includes(item.checkpoint)) {
+      return item.artifact_id === `dm_${item.id}`;
+    }
+    if (present.length !== markdownArtifactFields.length || item.artifact_id !== `dm_${item.id}` ||
+        typeof item.artifact_sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(item.artifact_sha256) ||
+        !Number.isSafeInteger(item.artifact_bytes) || item.artifact_bytes < 0 ||
+        item.artifact_bytes > MAX_MARKDOWN_CHARS * 4) return false;
+    try {
+      validateCoverage({ status: item.extraction_grade, reason_codes: item.reason_codes });
+      return true;
+    } catch { return false; }
+  }
+
   function rejectEncryptedState(state) {
     if (state?.schema === ENCRYPTED_SCHEMA || (Array.isArray(state?.items) && state.items.some((item) =>
       item && (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
@@ -342,14 +406,17 @@ function createBatchJournalStore(options = {}) {
   }
 
   function validStateShape(state, token) {
-    const supportedSchema = [SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
+    const supportedSchema = [SCHEMA, MARKDOWN_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
     const validProductChannel = !Object.hasOwn(state || {}, 'product_channel') ||
       ['plugin', 'standalone'].includes(state.product_channel);
+    try { processingModeForBatch(state); } catch { return false; }
     return state?.token === token && supportedSchema && validProductChannel && validPseudonymState(state) &&
       Array.isArray(state?.items) && state.items.length > 0 &&
       state.items.length <= maxBatchFiles &&
       state.items.every((item) => validPreflightItem(item, state.schema)) &&
-      (state.schema === LEGACY_SCHEMA || state.items.every((item) => validV2ItemResult(item, state.schema))) &&
+      (state.schema === MARKDOWN_SCHEMA ? state.items.every(validMarkdownItem) :
+        state.items.every((item) => !markdownArtifactFields.some((field) => Object.hasOwn(item, field))) &&
+        (state.schema === LEGACY_SCHEMA || state.items.every((item) => validV2ItemResult(item, state.schema)))) &&
       validExpiry(state.expires_at) !== undefined;
   }
 
@@ -365,6 +432,7 @@ function createBatchJournalStore(options = {}) {
     if (!validStateShape(state, token)) {
       throw new ErrorType(INVALID);
     }
+    purposeBindings.set(state, purposeOf(state));
     if (state.zero_day_work === true && typeof assertZeroDayWorkAvailable === 'function') {
       assertZeroDayWorkAvailable(state);
     }
@@ -388,6 +456,7 @@ function createBatchJournalStore(options = {}) {
     if (!validStateShape(state, token)) {
       throw new Error('invalid');
     }
+    purposeBindings.set(state, purposeOf(state));
     rejectRenamedEncryptedCopies(state);
     return state;
   }
@@ -395,4 +464,4 @@ function createBatchJournalStore(options = {}) {
   return { writeState, readState, readStateForMaintenance, removeState };
 }
 
-module.exports = { SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, MAX_JOURNAL_BYTES, createBatchJournalStore };
+module.exports = { SCHEMA, MARKDOWN_SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, MAX_JOURNAL_BYTES, createBatchJournalStore };

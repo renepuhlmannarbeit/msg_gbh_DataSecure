@@ -108,6 +108,7 @@ test('Standalone projects engine state into a small product-neutral status', () 
     ok: true,
     product_channel: 'standalone',
     state: 'review_required',
+    processing_mode: 'markdown-and-anonymize', warning_count: 0,
     preparing: false,
     processing: false,
     review_required: true,
@@ -188,6 +189,7 @@ test('Standalone exposes a recoverable batch as a resumable stopped state', () =
     ok: true,
     product_channel: 'standalone',
     state: 'stopped',
+    processing_mode: 'markdown-and-anonymize', warning_count: 0,
     preparing: false,
     processing: false,
     review_required: false,
@@ -295,7 +297,10 @@ test('Standalone source manifest is a separate offline product contract', () => 
   for (const field of ['requires_claude', 'requires_cowork', 'requires_mcp', 'requires_agent', 'requires_network', 'end_user_runtime_install']) {
     assert.strictEqual(manifest[field], false, `${field} must remain false`);
   }
-  assert.deepStrictEqual(manifest.current_formats, ['txt', 'md', 'csv', 'docx']);
+  assert.deepStrictEqual(manifest.current_formats, manifest.formats_by_processing_mode['markdown-only']);
+  assert.deepStrictEqual(manifest.formats_by_processing_mode['markdown-and-anonymize'], ['txt', 'md', 'csv', 'docx']);
+  assert.deepStrictEqual(manifest.current_formats, ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'scan_pdf', 'png', 'jpeg', 'bmp']);
+  assert.strictEqual(manifest.default_processing_mode, 'markdown-only');
   assert.deepStrictEqual(manifest.desktop_targets, [
     'windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64-glibc'
   ]);
@@ -344,7 +349,8 @@ test('Standalone exposes the private ledger only for terminal visible outcomes',
   const source = fs.readFileSync(path.join(__dirname,
     '../apps/datasecure-standalone/frontend/app.js'), 'utf8');
   assert.match(source,
-    /visible\('ledger', state\.results_available === true \|\|[\s\S]{0,100}state\.state === 'completed_without_results' && state\.ledger_available === true/u);
+    /const ledgerAvailable = state\.results_available === true \|\|[\s\S]{0,100}state\.state === 'completed_without_results' && state\.ledger_available === true/u);
+  assert.match(source, /visible\('ledger', ledgerAvailable\)/u);
   assert.doesNotMatch(source, /visible\('ledger',[^^\n]*failed_count/u);
 });
 
@@ -437,9 +443,9 @@ async function processingModeServiceCase() {
   await service.admitSelectedSources(['C:\\Source\\a.txt']);
   const queue = service.admittedQueue;
   const selection = service.selectionContext;
-  for (const options of [{ processingMode: 'markdown-only' }, {}, null, [], { processingMode: null },
+  for (const options of [{}, null, [], { processingMode: null },
     { processingMode: 'local_only' }, { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' }]) {
-    const expected = options?.processingMode === 'markdown-only' ? 'MARKDOWN_CONVERSION_NOT_READY' : 'PROCESSING_MODE_INVALID';
+    const expected = 'PROCESSING_MODE_INVALID';
     await assert.rejects(service.startAdmittedBatch(options), (error) => error.code === expected);
     assert.strictEqual(service.admittedQueue, queue, 'rejected purpose must not consume the admission');
     assert.strictEqual(service.selectionContext, selection);
@@ -453,6 +459,10 @@ async function processingModeServiceCase() {
   assert.strictEqual(workerOptions.processingMode, 'markdown-and-anonymize');
   assert.strictEqual(workerProfile, 'general');
   assert.strictEqual(service.admittedQueue, null);
+  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await service.startAdmittedBatch({ processingMode: 'markdown-only' });
+  assert.strictEqual(workerOptions.processingMode, 'markdown-only', 'pure conversion is handed off without an anonymization fallback');
+  assert.strictEqual(launches, 2);
   const direct = new StandaloneApplicationService({ dependencies: fakeDependencies({
     startLocalIntakeExecutor(_queue, _profile, options) {
       assert.strictEqual(options.processingMode, 'markdown-and-anonymize', 'legacy direct calls stay explicitly anonymization-only');

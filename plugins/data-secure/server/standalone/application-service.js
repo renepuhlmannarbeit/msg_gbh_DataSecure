@@ -10,6 +10,7 @@ const PRODUCT_CHANNEL = 'standalone';
 const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
 const SOURCE_KINDS = new Set(['files', 'folder']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
+const CONVERSION_TYPES = ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp'];
 let standaloneStartup;
 
 function validateChoice(value, allowed, fallback) {
@@ -284,6 +285,9 @@ class StandaloneApplicationService {
       ok: current.engine_ready === true,
       product_channel: PRODUCT_CHANNEL,
       state,
+      processing_mode: latest?.processing_mode || MODES.ANONYMIZE,
+      warning_count: Number.isSafeInteger(latest?.warning_count) ? latest.warning_count : 0,
+      ...(latest?.termination_unconfirmed === true ? { termination_unconfirmed: true } : {}),
       preparing,
       processing,
       review_required: reviews > 0,
@@ -338,10 +342,10 @@ class StandaloneApplicationService {
     try {
       const selected = sourceKind === 'folder'
         ? await this.deps.enumerateSourceFolderAsync(sourcePaths[0], {
-            allowedTypes: ['txt', 'md', 'csv', 'docx'], signal
+            allowedTypes: CONVERSION_TYPES, signal
           })
         : await Promise.all(sourcePaths.map((candidate) => this.deps.validateSelectedPathAsync(candidate, {
-            allowedTypes: ['txt', 'md', 'csv', 'docx'], signal
+            allowedTypes: CONVERSION_TYPES, signal
           })));
       const queue = this.deps.batchQueueFromSelection(selected);
       if (!Array.isArray(queue) || queue.length < 1 || queue.some((item) =>

@@ -4,6 +4,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { readContract, readRegular, sha256, verifyTargetEvidence } from './lib/bundled-runtime.mjs';
 import { writeStandaloneRuntime } from './lib/standalone-runtime-projection.mjs';
+import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const app = path.join(root, 'apps', 'datasecure-standalone');
@@ -37,7 +38,8 @@ const projection = writeStandaloneRuntime(
   path.join(generatedRuntime, 'server'),
   target.product_target
 );
+const conversion = writeConversionRuntime(root, path.join(generatedRuntime, 'server', 'standalone', 'conversion-runtime'), target.product_target);
 process.stdout.write(JSON.stringify({ ok: true, product_target: productTarget,
   rust_target: target.rust_target, node_version: contract.node_version,
   runtime_sha256: sha256(runtimeBytes), sidecar: target.sidecar_filename,
-  projected_files: projection.length }) + '\n');
+  projected_files: projection.length, conversion_runtime_files: conversion.length }) + '\n');

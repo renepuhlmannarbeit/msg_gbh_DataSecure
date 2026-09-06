@@ -1,28 +1,35 @@
 # Entscheidungs-Traceability
 
-Stand: 06.09.2026 · 3.2.0-rc107
+Stand: 06.09.2026 · 3.2.0-rc108
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
 
-RC107 aus dem RC106-Folgereview: DS-023/DS-069/DS-082/DS-083 binden den Standalone-Abschluss an den
+Historischer RC107-Schnitt aus dem RC106-Folgereview: DS-023/DS-069/DS-082/DS-083 binden den Standalone-Abschluss an den
 aktuellen Lauf einschließlich gestoppter Quellen; Tests in
 `test-result-folder-export`, `test-batch-recovery`, `test-standalone` und
 `test-standalone-frontend`. DS-084 bindet Firmenalias-/Personenkonflikte an
 `test-batch-pseudonym-registry` und die gemeinsame Engine. PKG-04/INT-13 behalten
 ihre Quellcommitbindung; native Testdatenisolation wird im Desktop-Vertrag
-und Rust-Testprofil geprüft. DS-085 bleibt als vollständige zweite Kernfunktion
-offen, nicht lediglich als noch fehlende Schaltfläche.
+und Rust-Testprofil geprüft. DS-085 war in diesem Kandidaten noch nicht als
+zweite vollständige Kernfunktion integriert.
 
-DS-085/BL-010.28, anschließender Quellstand: `core/processing-mode.js` bindet
+DS-085/BL-010.28, anschließende RC108-Integration: `core/processing-mode.js` bindet
 die exakten Zwecke und Produktkanäle, Desktop transportiert den Startzweck über
 Rust/private IPC. `markdown-contract.js`, `markdown-artifact.js` und
 `markdown-extractor.js` trennen unveränderte Extraktion und Konvertate von
 Privacy-Paketen. `test-processing-mode`, `test-markdown-artifact` und
 `test-markdown-extractor` sind einmalig im Produktregressionslauf registriert.
-Dies aktiviert noch keinen v5-Stapel: Intake, Journalvalidierung, Worker,
-Reconciliation und Export sind weiterhin Integrationsarbeit.
+`batch-queue-envelope`, Intake und `batch-journal-store` binden den Zweck jetzt
+über eigene Worker-Typen und `datasecure-batch/5`. `batch-item-processor`,
+`batch-reconciliation`, `batch-delivery` und `standalone/markdown-store` wählen
+den Konvertierungspfad ohne Pseudonymzustand, Privacy-Grade oder Capability.
+Recovery bewahrt den Stapelmodus; der UI-Default darf ihn nicht ändern.
+`result-export` veröffentlicht die typgebundenen `dm_`-Artefakte atomar nach
+`DataSecure-Markdown/Lauf-…` samt lokaler Zuordnung. Warnende Extraktionen mit
+`incomplete` und festen Gründen sind zulässig, aber nicht als vollständig
+oder anonymisiert auszuweisen. Öffentliche Privacy-Reads/Handoff lehnen sie ab.
 
 BL-022.2/3, BL-023.1–4 und BL-024.2/3: Office-Regressionsfälle binden die
 Beseitigung stiller Kürzungen und den unvollständigen Extraktionsgrad.
@@ -32,7 +39,34 @@ Bytes geprüft. Diese Tests benötigen die vorhandenen gepinnten Pilotabhängigk
 und lokalen DE/EN-Modelle; sie installieren oder laden nichts herunter.
 PDF-Text, Raster-OCR und Quelle werden niemals gleichzeitig als doppelte Inhalte
 zusammengehängt. Ohne belegte Vollständigkeit entsteht kein vollständiges
-Markdown-Artefakt. Diese Evidence gehört nicht zum RC107-Paketreceipt.
+Markdown-Artefakt mit Grad `complete`; eine erfolgreiche unvollständige
+Extraktion darf als solche gespeichert werden. Diese zusätzliche Engineering-
+Evidence gehört nicht zum RC107-Paketreceipt.
+
+RC108 ergänzt `standalone/conversion-worker.js` und `conversion-worker-child.js`
+als echten begrenzten Produktprozess für elf Eingabetypen, Scan-PDF als eigenem
+PDF-Verarbeitungsfall. Der Modus `markdown-only` bewahrt Quellinhalte; der
+Anonymisierungs-/Cowork-Pfad bleibt auf TXT, Markdown, CSV und DOCX begrenzt.
+`conversion-runtime-resolver.js`, `standalone-conversion-runtime.mjs` und die
+Standalone-Paketgates binden normales Node.js, PDF.js, Canvas, Tesseract.js und
+lokale Modelle statt Systemruntime oder Download. MarkItDown/Python bleibt
+optionales Differentialorakel, kein benötigtes Bundle.
+
+`test-standalone-conversion-worker.mjs`: 25 E0-Testgruppen mit realen Bytes,
+Namenerhaltung, Negativfällen, Start-/Ready-Abbruch, Timeout, Inputhashen und
+isolierter Umgebung. 100 TXT-Dateien benötigten lokal 15,264 Sekunden ohne
+vollständiges Wiederlesen der großen Runtime je Datei. 60 frühe Beendigungen
+prüfen die neue atomare Windows-Jobbindung über `JOB_LIST`; 7 Launcher- und
+19 Parser-Isolationstests binden die gemeinsame native Korrektur auch für
+Cowork. Keine allgemeine Performancezusage und keine macOS-/UAT-Evidence.
+
+Der hybride PDF-Gegencheck bindet native Seitenzahl plus Scan an tatsächliche
+Bildoperatoren und zusätzliche OCR ohne doppelte Textlayer-Zeilen. Dieses native
+Gate läuft über `test:standalone:conversion` verpflichtend vor PKG-04, nicht im
+kostengedeckelten Ubuntu-Quell-CI. `test-test-path-separation` sichert die Trennung.
+`test-markdown-lifecycle-review` bindet v4/v5-Abbruch nach Publikation an einen
+ehrlich fortsetzbaren UI-Zustand und genau einen Fortsetzen-Klick bis zum Export;
+lebende Executor bleiben dagegen aktiv und verhindern einen Doppelstart.
 
 BL-030.2/DS-084: `matchKnownAliases` und getrennte v1-Firmenidentitäts-/Rollen-HMACs
 werden durch echte `withBatchPseudonymRegistry`-Dokumentwechsel einschließlich
@@ -58,11 +92,14 @@ behandelt nur den exakten internen Windows-Cache-Link als nicht zu traversierend
 Blatt; Vorabaufnahme, Verzeichnisidentitäten und unbekannte Links bleiben strikt.
 Zurückbehaltene Alt-Testprofile sind kein erfolgreicher PKG-04-Nachweis.
 
-Der neue Nachweis ist vollständig: `7b88a81ff577aaa270f1354d75365b2df4a4666e`
+Der historische RC107-Nachweis ist vollständig: `7b88a81ff577aaa270f1354d75365b2df4a4666e`
 → zwei bytegleiche ZIP/Desktop/Core-Builds → beide Paket-/Worker-/nativen Smokes
 → `dist/pkg-04/7b88a81ff577aaa270f1354d75365b2df4a4666e/PKG-04-RECEIPT.json`
 → hashgebundene `INT-13-BINDING.json`. Spätere Entwicklungsänderungen sind nicht
 automatisch Teil dieses Kandidaten; menschliche Zielhost-Evidence bleibt getrennt.
+Insbesondere muss RC108 seinen vollständigen Paket-/Sidecar-E2E, zweimal
+bytegleichen PKG-04-Build aus demselben Commit, beide Smokes und die neue
+INT-13-Bindung erst separat nachweisen; dieser Text behauptet keinen Abschluss.
 
 | Entscheidung | Aktueller Status | Backlog / Nachweis |
 |---|---|---|
@@ -140,17 +177,17 @@ automatisch Teil dieses Kandidaten; menschliche Zielhost-Evidence bleibt getrenn
 | DS-072 | aktiv und aktuell | BL-010.8, BL-011.10, BL-041.7, BL-051.5; dauerhafte versionsgebundene Runtimeprojektion für Cowork-Worker; Standalone ist nach DS-075 ein getrenntes Produkt mit eigener Runtimeprojektion; `durable-runtime-cache.js`, `background-role-launcher.js`; `test-durable-runtime-cache`, `test-background-role-launcher`; echter RC96-UAT offen |
 | DS-073 | aktiv und aktuell | BL-010.8, BL-041.7, BL-041.10, BL-051.5; Claude-Temporärumleitung von `LOCALAPPDATA` nicht als Produktzustand verwenden, normale/umgezogene Pfade unverändert; `runtime.js`, `durable-runtime-cache.js`; `test-stable-data-root`, `verify-plugin-zip`; echter RC97-UAT offen |
 | DS-074 | aktiv und aktuell | BL-042.4; manueller Debug-Skill nur im gekennzeichneten Support-ZIP, gleiche Engine, geschlossene inhaltsfreie JSON-Ereignisse als unveränderliche Einzeldateien; `support-trace.js`, `workflow-diagnostics.js`, `mcp-server.js`, `build-runtime-plugin.mjs`; `test-support-trace`, `test-debug-skill-contract`, `test-mcp-protocol`, `test-workflow-diagnostics` |
-| DS-075 | aktiv und aktuell | BL-010.9–26; eigenständiges Standalone-Produkt mit direktem Coreadapter und physisch getrenntem Datenroot, ohne MCP/Claude/Skills/Agenten; MarkItDown 0.1.7 nur als deaktivierter Byte-Stream-DOCX-Differentialadapter ohne Netzwerk/Plugins/LLM/OCR; `STANDALONE_ARCHITECTURE.md`, `server/standalone/*`, `server/converters/markitdown/*`, `runtime.js`, `batch-executor.js`; `test-standalone`, `test-markitdown-contract`; Core-Entkopplung, Cross-Product-/Offlinegates, Supervisor und weitere Formate offen; Windows-x64-Pilotpaket steht, E1/E2 offen |
+| DS-075 | aktiv und aktuell | BL-010.9–28; eigenständiges Standalone mit getrenntem Datenroot ohne MCP/Claude/Agenten; beide Modi im gemeinsamen Core, lokale Konverterruntime und Supervisor integriert. MarkItDown 0.1.7/Python nur optionales Differentialorakel, kein benötigtes Bundle. `server/standalone/*`, `core/processing-mode.js`, Runtime-/Paketgates; aktuelle Paketbindung und E1/E2 offen |
 | DS-076 | aktiv und aktuell, durch DS-077 präzisiert | BL-010.11–26; reale Tauri-2-Hülle, nativer Picker, privater längengerahmter Sidecar-Dispatcher mit Ready-Handshake und 30-Sekunden-Antwortgrenze, geschlossener UI-Snapshot-/IPC-Vertrag und strikte Zählerinvarianten; Windows-x64-Engineering-Build und selbsttragendes Pilotpaket verifiziert; vier getrennte Zielpakete Windows x64/macOS x64/macOS ARM64/Linux x64 glibc, kein HTTP-Port und kein Renderer-Rohzugriff; `standalone/product-manifest.json`, `standalone/ui-contract.json`, `standalone/desktop-ipc.js`, `standalone/desktop-sidecar.js`, `apps/datasecure-standalone/desktop-targets.json`, `apps/datasecure-standalone/tauri-contract/`, `STANDALONE_ARCHITECTURE.md`; JS-/Rust-/Paket-/isolierter Sidecar-Smoke grün; Endnutzerfreigabe und native macOS-/Linux-Zielhostmessung offen |
 | DS-077 | aktiv und aktuell | BL-010.20/21/25/27; Windows-x64-Engineering-Pilot mit frischer geschlossener Runtimeprojektion, gepinnter Node-Runtime, Paketmanifest, SBOM, SHA-256 und isoliertem Sidecar-Smoke; systemweites WebView2 als dokumentierte Windows-Voraussetzung; Rust-Toolchain 1.98.1 für Builder gepinnt; Lizenzprüfung, Windows-UAT und native macOS-Pakete/UAT offen |
 | DS-078 | aktiv und aktuell | BL-010.7, BL-041, BL-051.6; Originale nur in lokaler Cowork-Sitzung mit laufendem Plugin-MCP oder lokalem Claude Code; Cloud-Cowork/Web/Mobil/Scheduled dürfen nur bereits freigegebenes Markdown verwenden; Hostmatrix-, Skill-, Nutzer- und Dokumentationsgates |
 | DS-079 | aktiv und aktuell | BL-012.9/10, BL-040.6, BL-043.1; klare Positionen intern dauerhaft, sichtbarer Laufordner und Öffnen-Aktion erst nach terminalem Gesamtstapel; `terminalVisibleExport`, Export-/Standalone-/Recoverytests |
 | DS-080 | aktiv und aktuell | BL-040.5; expliziter geräte- und produktlokaler Ergebnisstamm, keine Workspace-Erkennung und kein automatischer Zielwechsel; `result-folder-config.js`, Picker-/Export-/Dokumentationsverträge |
 | DS-081 | aktiv und aktuell | BL-041.8; hostgesteuerte Aushandlung von `2026-07-28` und getesteten Legacy-Versionen, kein `MCP26-01`-Cutover und keine vollständige Konformitätsaussage ohne offizielle Conformance-Evidence; `mcp-server.js`, `test-mcp-protocol.js`, Dokumentationsvertrag |
-| DS-082 | aktiv und aktuell | BL-010.11/12/28; lokale Anzeige von Auswahl und Ziel ohne Diagnoseweitergabe, expliziter Start, strikt getrennter noch gesperrter Nur-Konvertieren-Modus; `frontend/index.html`, `frontend/app.js`, `application-service.js`, `desktop-ipc.js`, Standalone-Vertragstests |
-| DS-083 | aktiv und aktuell | BL-010.13/26, BL-040.5; Standalone veröffentlicht nach einem vollständig sichtbaren Lauf genau eine formelneutralisierte `DataSecure-Zuordnung.csv` mit Quelle → anonymisiertem Ergebnis; Cowork erhält keine Originalnamen-Projektion; `result-export.js`, `batch-recovery.js`, `standalone/application-service.js`; Export-, Recovery-, Standalone- und OS-Öffnertests |
+| DS-082 | aktiv und aktuell | BL-010.11/12/28; lokale Auswahl-/Zielanzeige ohne Diagnoseweitergabe, expliziter Start, zwei strikt getrennte aktive Modi; aktiver oder fortsetzbarer Stapel behält Backendmodus. `frontend/index.html`, `frontend/app.js`, Rust-Commands, `application-service.js`, `desktop-ipc.js`; Standalone-Vertragstests und E1/E2 offen |
+| DS-083 | aktiv und aktuell | BL-010.13/26/28, BL-040.5; je terminal sichtbarem Standalone-Lauf eine formelneutralisierte `DataSecure-Zuordnung.csv`: Quelle → anonymisiertes Ergebnis oder ausdrücklich nicht anonymisiertes Konvertat, einschließlich Fehler-/Auslassungsgründen. `DataSecure-Output` und `DataSecure-Markdown` bleiben getrennt; Cowork erhält keine Originalnamen-Projektion. Export-, Recovery-, Standalone- und OS-Öffnertests |
 | DS-084 | aktiv und aktuell | BL-010.12/13, BL-030.2; neue Standalone-Stapel mit lesbaren v2-Kennungen, Firmenrollen einheitlich, Restore behält Version; native Dragdrop-Aufnahme ohne Autostart, Pickeralternative; Registry-, State-, Intake-, Rust-, Frontend- und reale Pakettests |
-| DS-085 | verbindliches Soll, noch nicht freigegeben | BL-010.28 mit BL-010.15–19; reine Markdown-Konvertierung als zweite Kernfunktion, gleicher Workflow ohne PII-Entfernung, getrennte Ausgabe und Modusbindung bei Recovery; Vision, Produktvertrag, Architektur, Target-Capabilities und Dokumentationsguard |
+| DS-085 | implementiert, aktuelle Paketbindung und Zielhost-UAT offen | BL-010.28 mit BL-010.15–19, BL-022.2/3, BL-023.1–4 und BL-024.2/3; zweite Standalone-Kernfunktion ohne PII-Entfernung, elf Eingabetypen einschließlich Scan-PDF, v5-Journal/`dm_`/eigene Worker-Envelope-Typen, Recovery und atomarer `DataSecure-Markdown`-Export. UI-/Rust-/IPC-/Modus-/Journal-/Artefakt-/Extraktions-/Konverter-/Cross-Read-Gates; E0 ist keine fachliche Vollständigkeits- oder UAT-Freigabe |
 
 ## DS-067 – konkrete Umsetzung
 

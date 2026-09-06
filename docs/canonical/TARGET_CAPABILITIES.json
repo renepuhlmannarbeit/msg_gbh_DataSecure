@@ -2,7 +2,7 @@
   "schema_version": 2,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc107",
+  "baseline": "3.2.0-rc108",
   "decision_ids": [
     "DS-001",
     "DS-002",
@@ -145,7 +145,7 @@
       "markdown-and-anonymize",
       "markdown-only"
     ],
-    "markdown_only_release_status": "in-development-not-enabled",
+    "markdown_only_release_status": "implemented-target-uat-open",
     "markdown_only_output_subdirectory": "DataSecure-Markdown",
     "markdown_only_preserves_identifiers": true,
     "markdown_only_automatic_ai_upload": false,

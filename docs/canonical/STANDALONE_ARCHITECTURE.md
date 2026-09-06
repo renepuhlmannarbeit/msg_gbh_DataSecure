@@ -1,6 +1,6 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 05.09.2026 · Entscheidungen DS-075/DS-076/DS-084/DS-085 · Steuerung über BL-010.9
+Stand: 06.09.2026 · Entscheidungen DS-075/DS-076/DS-084/DS-085 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
 
@@ -41,13 +41,14 @@ nicht durch den Windows-Code- und Pakettest ersetzt.
 Im Erfolgsfall der Anonymisierung gibt es genau zwei bewusste Handlungen:
 
 1. Dateien, einen Ordner oder per Drag-and-drop Quellen auswählen.
-2. Die kurze Stapelzusammenfassung mit **Anonymisieren** starten.
+2. Die kurze Stapelzusammenfassung mit **Starten** verarbeiten. Standard ist
+   **Nur in Markdown umwandeln**; Anonymisierung wird ausdrücklich gewählt.
 
 Das Hauptfenster zeigt dabei lokal den aktuellen Quellenordner, die gewählten
 Dateinamen und den Ergebnisordner. Diese Anzeige ist kein Diagnoseinhalt und
 wird ausschließlich als Text gerendert. Die Betriebsart **Nur in Markdown
 umwandeln** ist gemäß DS-082/DS-085 eine gleichwertige zweite Kernfunktion, im
-Engineering-Piloten jedoch noch nicht freigegeben. Sie besitzt denselben
+Engineering-Piloten aktiviert, mit weiterhin offener Zielhostabnahme. Sie besitzt denselben
 Aufnahme-/Start-/Fortschritts-/Recovery-/Mappingablauf, erhält aber alle
 extrahierbaren Ausgangsinhalte ohne PII-Ersetzung. Nicht anonymisierte Konvertate
 gehen ausschließlich nach `DataSecure-Markdown/Lauf-…`, niemals in den
@@ -141,7 +142,7 @@ ein nativer Guard serialisiert Auswahl, Aufnahme und Start. Ein Drop ersetzt
 keinen gerade vorbereiteten oder laufenden Stapel. Fehlversuche liefern einen
 sichtbaren, inhaltsfreien Hinweis und keine implizite Startfreigabe.
 
-### Zweiter Modus: Konvertierung ohne Anonymisierung (verbindliches Soll)
+### Zweiter Modus: Konvertierung ohne Anonymisierung (implementierter Ablauf)
 
 BL-010.28 bindet die vollständige Nutzerreise beider Modi. Der bereits vorhandene
 lokale Parserpfad wird wiederverwendet, wo seine Extraktions-Coverage reicht;
@@ -150,11 +151,17 @@ Residual-Gates im bestehenden Exportpfad ist keine zulässige Implementierung.
 Auswahl und Quellen bleiben unverändert; in der Modusübersicht steht ruhig und
 dauerhaft **Nicht anonymisiert – enthält Originalinhalte**. Bei einem Fehler
 bleiben fertige Positionen checkpointgebunden erhalten; Fortsetzen nutzt denselben
-Modus, Zielordner und Mappingkontext. PII-Review entfällt in diesem Modus. Fehlende
-Extraktion/Coverage bleibt ein eigener fachlicher Fehler, keine Anonymisierungsfrage.
-Für TXT/Markdown/CSV/DOCX muss ein echter Paketlauf zuerst die vollständige
-Inhaltserhaltung belegen; XLSX/PPTX/PDF/OCR/Bilder folgen mit eigenen Formatgates.
-Die breite Formatliste bleibt Zielumfang und wird nicht als bereits aktiviert dargestellt.
+Modus, Zielordner und Mappingkontext. PII-Review entfällt in diesem Modus.
+Extraktionshinweise werden mit lesbaren Ergebnissen gespeichert; fehlerhafte
+Dateien erhalten eine Fehlerposition in der Zuordnung. Es entsteht kein neuer
+Bestätigungsdialog. Der v5-Zweckvertrag unterscheidet sich ausdrücklich von
+alten Anonymisierungsjournals. Eigene Worker-Nachrichtentypen verhindern,
+dass ein alter Worker Konvertierung irrtümlich als Anonymisierung startet.
+TXT/Markdown/CSV/DOCX/XLSX/PPTX, Text-/Scan-PDF und PNG/JPEG/BMP laufen im
+gebündelten Konvertierungsworker. PDF.js, lokale DE/EN-Tesseract-Modelle und
+Canvas werden mit normalem Node ausgeliefert; kein System-Python oder Netzwerk.
+Der Pakettest prüft beide Betriebsarten mit tatsächlicher Prozessübergabe,
+unveränderten Quellen und exakten Zuordnungs-/Ergebniszielen.
 
 Der Renderer bestätigt einen terminalen Zustand erst nach zwei aufeinander
 folgenden `requestAnimationFrame`-Takten über den ausschließlich dafür
@@ -213,7 +220,7 @@ in einem getrennten, ressourcenbegrenzten Worker.
   gerendert noch als sichtbare Datei gespeichert; für Resume wird der
   versiegelte Snapshot neu konvertiert. Der zweite Modus nach DS-085 exportiert
   dagegen bewusst nicht anonymisierte Markdown-Endartefakte in einen getrennten
-  Zielbaum. Seine Artefakt-/Recovery-/Exportkette ist noch zu implementieren.
+  Zielbaum. Dafür existieren eigener `dm_`-Store, v5-Recovery und v3-Export.
 
 Die erste Stufe nutzt DOCX als Differentialorakel gegen den vorhandenen Parser.
 XLSX, PPTX, Text-PDF, Scan-PDF und Bilder werden erst nach je eigenem Coverage-,

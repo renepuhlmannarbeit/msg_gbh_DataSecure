@@ -162,10 +162,10 @@ int wmain(int argc, wchar_t* argv[]) {
   mutable_command.push_back(L'\0');
 
   SIZE_T attribute_bytes = 0;
-  InitializeProcThreadAttributeList(nullptr, 1, 0, &attribute_bytes);
+  InitializeProcThreadAttributeList(nullptr, 2, 0, &attribute_bytes);
   std::vector<unsigned char> attribute_storage(attribute_bytes);
   auto* attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attribute_storage.data());
-  if (!InitializeProcThreadAttributeList(attributes, 1, 0, &attribute_bytes)) {
+  if (!InitializeProcThreadAttributeList(attributes, 2, 0, &attribute_bytes)) {
     CloseIfValid(child_stdin);
     CloseIfValid(child_stdout);
     CloseIfValid(child_stderr);
@@ -174,8 +174,11 @@ int wmain(int argc, wchar_t* argv[]) {
     return kSetupError;
   }
   HANDLE inherited_handles[] = {child_stdin, child_stdout, child_stderr};
+  HANDLE child_jobs[] = {job};
   if (!UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                                 inherited_handles, sizeof(inherited_handles), nullptr, nullptr)) {
+                                 inherited_handles, sizeof(inherited_handles), nullptr, nullptr) ||
+      !UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                                 child_jobs, sizeof(child_jobs), nullptr, nullptr)) {
     DeleteProcThreadAttributeList(attributes);
     CloseIfValid(child_stdin);
     CloseIfValid(child_stdout);
@@ -194,6 +197,9 @@ int wmain(int argc, wchar_t* argv[]) {
   startup.lpAttributeList = attributes;
   PROCESS_INFORMATION process{};
   const DWORD flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT;
+  // Windows 10+ assigns the Job Object atomically during process creation.
+  // A launcher killed between CreateProcess and a later AssignProcess call
+  // otherwise leaves a suspended child outside KILL_ON_JOB_CLOSE forever.
   const BOOL created = CreateProcessW(argv[8], mutable_command.data(), nullptr, nullptr, TRUE,
                                       flags, nullptr, nullptr, &startup.StartupInfo, &process);
   DeleteProcThreadAttributeList(attributes);
@@ -206,7 +212,8 @@ int wmain(int argc, wchar_t* argv[]) {
     return kStartError;
   }
 
-  if (!AssignProcessToJobObject(job, process.hProcess)) {
+  BOOL in_job = FALSE;
+  if (!IsProcessInJob(process.hProcess, job, &in_job) || in_job == FALSE) {
     TerminateProcess(process.hProcess, kAssignError);
     CloseHandle(process.hThread);
     CloseHandle(process.hProcess);

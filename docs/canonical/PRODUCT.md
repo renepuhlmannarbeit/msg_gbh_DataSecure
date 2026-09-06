@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 05.09.2026 · Ist-Zustand RC107
+Stand: 06.09.2026 · Ist-Zustand RC108
 
 ## Ziel
 
@@ -34,7 +34,7 @@ Normalstart. Ein zurückgestellter Sammelreview wird ausdrücklich und lokal
 fortgesetzt. Er zeigt nur die tatsächlich mehrdeutigen Dateien, direkte
 Beibehalten-/Anonymisieren-Aktionen und inhaltsfreie Fortschrittszähler.
 
-## Eingaben und Ergebnisse
+## Eingaben und Ergebnisse der Anonymisierung
 
 | Bereich | Aktueller Vertrag |
 |---|---|
@@ -82,13 +82,14 @@ ein eigenes Paket und einen eigenen Update-/Rollbackvertrag. Der E0-Unterbau,
 die Tauri-Hülle und ein selbsttragendes Windows-x64-Engineering-Paket sind
 vorhanden und automatisch verifiziert, aber noch kein freigegebenes
 Endnutzerpaket. Microsoft MarkItDown 0.1.7 ist ausschließlich als deaktivierter
-DOCX-Differentialpfad vorbereitet. Bis Zielhost-UAT, breite Coverage und native
-macOS-Pakete vorliegen, gelten die oben
-genannten vier freigegebenen Formate unverändert; Details stehen in
+DOCX-Differentialpfad vorbereitet. Die oben genannten vier Formate gelten
+unverändert für die Anonymisierung; die reine Standalone-Konvertierung besitzt
+die nachfolgend beschriebenen zusätzlichen Eingabetypen. Zielhost-UAT und native
+macOS-Pakete bleiben gesondert offen; Details stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 
 Standalone besitzt zwei verbindliche Kernfunktionen (DS-085). Die heute
-implementierte Anonymisierung und die **noch nicht aktivierte reine
+implementierte Anonymisierung und die **aktivierte reine
 Markdown-Konvertierung** verwenden denselben Auswahl-/Start-/Fortschritts- und
 Ergebnisablauf. Reine Konvertierung entfernt keine personenbezogenen Inhalte,
 hat keinen PII-Review und exportiert ausschließlich `.md`-Nutzdokumente samt
@@ -96,6 +97,13 @@ lokaler Zuordnung nach `DataSecure-Markdown/Lauf-…`. Diese Dateien sind ausdr�
 **nicht anonymisiert** und werden niemals automatisch an Claude übergeben.
 Die Format-Zielliste bleibt für beide Modi erhalten; deren Freigabestatus darf
 nicht aus einer sichtbaren Moduswahl oder vorhandenen Dateiendung abgeleitet werden.
+
+Im Standalone-Konvertierungsmodus sind zusätzlich XLSX/PPTX/PDF/Scan-PDF und
+PNG/JPEG/BMP angebunden. Extrahierbarer Text und Tabellen werden übernommen;
+grafische Inhalte und OCR besitzen kenntlich gemachte Grenzen. Solche Hinweise
+werden ohne PII-Review mit den Ergebnissen gespeichert. Defekte, verschlüsselte
+oder aktiv gefährliche Eingaben erhalten eine eigene Fehlerposition, während der
+Stapel weiterläuft. Die vierformatige Anonymisierungsfreigabe erweitert sich nicht.
 
 ## Grenzen vor Freigabe
 

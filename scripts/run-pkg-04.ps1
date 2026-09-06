@@ -38,6 +38,7 @@ if (Test-Path -LiteralPath $evidenceRoot) { throw 'PKG04_EVIDENCE_ALREADY_EXISTS
 New-Item -ItemType Directory -Path $evidenceRoot | Out-Null
 
 $candidates = @()
+Invoke-Checked 'npm.cmd' @('run', 'test:standalone:conversion')
 Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
     'tests/manual/standalone-native-windows-launch.ps1', '-ValidateIsolationOnly')
 foreach ($label in @('candidate-a', 'candidate-b')) {

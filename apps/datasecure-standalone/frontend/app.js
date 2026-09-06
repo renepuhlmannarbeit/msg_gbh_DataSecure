@@ -14,7 +14,7 @@ const messages = {
   STANDALONE_START_FAILED: 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.',
   PROCESSING_MODE_INVALID: 'Bitte einen gültigen Verarbeitungsmodus auswählen. Der Stapel wurde nicht gestartet.',
   PROCESSING_MODE_FORBIDDEN: 'Dieser Verarbeitungsmodus ist hier nicht verfügbar. Der Stapel wurde nicht gestartet.',
-  MARKDOWN_CONVERSION_NOT_READY: 'Reine Markdown-Konvertierung ist noch in Entwicklung. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
+  MARKDOWN_CONVERSION_NOT_READY: 'Die installierte Version unterstützt diese Betriebsart nicht. Bitte die aktuelle Standalone-Version verwenden. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
   STANDALONE_RUNTIME_MISSING: 'Der lokale DataSecure-Core fehlt.',
   STANDALONE_RUNTIME_START_FAILED: 'Der lokale DataSecure-Core konnte nicht gestartet werden.',
@@ -50,6 +50,15 @@ let foregroundOperationInFlight = false;
 let nativeDropInFlight = false;
 let unlistenNativeDrop = null;
 let pageClosed = false;
+let lastProcessingMode = 'markdown-only';
+
+function renderModeHelp(mode) {
+  const convert = mode === 'markdown-only';
+  const help = byId('processing-mode-help');
+  if (help) help.textContent = convert
+    ? 'Nicht anonymisiert: Namen und andere Originalinhalte bleiben erhalten. Bei OCR oder grafischen Inhalten können Auslassungen entstehen; Hinweise stehen im Ergebnis.'
+    : 'Namen und weitere erkannte Identifikatoren werden ersetzt. Dieser Modus unterstützt TXT, Markdown, CSV und DOCX.';
+}
 
 function busy(value) {
   // A foreground operation can replace the current selection or run while a
@@ -242,6 +251,7 @@ byId('tab-process').addEventListener('click', () => switchView('process', true))
 byId('tab-results').addEventListener('click', () => switchView('results', true));
 byId('select-files').addEventListener('click', () => choose('select_files'));
 byId('select-folder').addEventListener('click', () => choose('select_folder'));
+byId('processing-mode').addEventListener('change', () => renderModeHelp(byId('processing-mode').value));
 byId('cancel').addEventListener('click', async () => {
   if (!await call('cancel_admission')) return;
   resetAdmissionUi();
@@ -254,6 +264,7 @@ byId('start').addEventListener('click', async () => {
   if (!admitted || operationInFlight) return;
   const processingMode = byId('processing-mode').value;
   if (!await call('start_admitted_batch', { processingMode })) return;
+  lastProcessingMode = processingMode;
   viewChosenByUser = false;
   admitted = false; admissionGeneration += 1; byId('summary').hidden = true;
   lastPublicState = 'preparing';
@@ -283,7 +294,7 @@ byId('configure-results').addEventListener('click', async () => {
     }
     actionFeedback(result.export_replay_pending === true
       ? 'Der neue Ordner ist gespeichert. Ausstehende Ergebnisse werden beim nächsten sicheren Wiederholungsversuch bereitgestellt.'
-      : 'Künftige freigegebene Ergebnisse werden dort abgelegt.');
+      : 'Künftige Ergebnisse werden dort in einem eigenen Laufordner abgelegt.');
   }
 });
 
@@ -331,13 +342,33 @@ async function refresh() {
     } else lastTerminalContextKey = null;
     if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
     lastPublicState = state.state;
+    lastProcessingMode = state.processing_mode || 'markdown-and-anonymize';
+    const converting = lastProcessingMode === 'markdown-only';
+    if (['processing', 'review_required', 'stopped', 'export_pending'].includes(state.state)) {
+      byId('processing-mode').value = lastProcessingMode;
+      renderModeHelp(lastProcessingMode);
+    }
+    if (byId('result-label')) byId('result-label').textContent = converting
+      ? 'Markdown-Dateien im letzten abgeschlossenen Lauf – nicht anonymisiert'
+      : 'Anonymisierte Ergebnisse im letzten abgeschlossenen Lauf';
+    const ledgerAvailable = state.results_available === true ||
+      (state.state === 'completed_without_results' && state.ledger_available === true);
+    if (byId('result-warning')) {
+      const warnings = Number.isSafeInteger(state.warning_count) ? state.warning_count : 0;
+      const failed = Number.isSafeInteger(state.failed_count) ? state.failed_count : 0;
+      const details = ledgerAvailable ? 'Details stehen in der Zuordnungsdatei.'
+        : 'Eine Zuordnungsdatei ist nicht verfügbar. Bitte die Diagnose öffnen.';
+      byId('result-warning').hidden = !converting;
+      byId('result-warning').textContent = converting
+        ? `Nicht anonymisiert: Die Dateien enthalten Originalinhalte.${warnings ? ` ${warnings} Datei(en) mit Extraktionshinweisen.` : ''}${failed ? ` ${failed} Datei(en) konnten nicht umgewandelt werden.` : ''} ${details}`
+        : '';
+    }
     updateModeAvailability();
     updateDropAvailability();
     byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');
     visible('results', state.results_available === true);
-    visible('ledger', state.results_available === true ||
-      (state.state === 'completed_without_results' && state.ledger_available === true));
+    visible('ledger', ledgerAvailable);
     visible('select-files', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
     visible('select-folder', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
     if (state.state === 'preparing') {
@@ -349,7 +380,7 @@ async function refresh() {
       acknowledgedPresentationGeneration = null;
       const total = Number.isInteger(state.selected_count) ? state.selected_count : 0;
       const done = Number.isInteger(state.completed_count) ? state.completed_count : 0;
-      status('Anonymisierung läuft', total > 0 ? `${done} von ${total} Dateien abgeschlossen.` : 'Die Dateien werden lokal verarbeitet.');
+      status(converting ? 'Umwandlung läuft' : 'Anonymisierung läuft', total > 0 ? `${done} von ${total} Dateien abgeschlossen.` : 'Die Dateien werden lokal verarbeitet.');
       nextDelay = 1200;
     }
     else if (state.state === 'review_required') { status('Prüfung erforderlich', `${state.review_count} Datei${state.review_count === 1 ? '' : 'en'} benötigt eine lokale Entscheidung.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
@@ -359,12 +390,12 @@ async function refresh() {
         status('Abschlussübersicht wird bereitgestellt',
           'Die Verarbeitung ist abgeschlossen, aber die lokale Zuordnungsdatei oder der Abschlussnachweis konnte noch nicht vollständig gespeichert werden. Bitte den Ergebnisordner prüfen und erneut auswählen.');
       } else {
-        status('Ergebnis wird bereitgestellt', `${state.export_pending_count} anonymisierte${state.export_pending_count === 1 ? 's Ergebnis wird' : ' Ergebnisse werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`);
+        status('Ergebnis wird bereitgestellt', `${state.export_pending_count} Ergebnis${state.export_pending_count === 1 ? ' wird' : 'se werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`);
       }
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'results_available') {
-      status('Fertig', `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`);
+      status('Fertig', converting ? `${state.result_count} Markdown-Datei${state.result_count === 1 ? ' wurde' : 'en wurden'} erstellt. Nicht anonymisiert.` : `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`);
       if (!viewChosenByUser && !admitted) switchView('results');
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
@@ -372,13 +403,17 @@ async function refresh() {
       const details = state.ledger_available === true
         ? 'Details stehen in der lokalen Zuordnung.'
         : 'Eine Zuordnungsdatei ist für diesen Lauf nicht verfügbar. Bitte die Diagnose öffnen.';
-      status('Sicher abgeschlossen', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} gestoppt. Es ist kein anonymisiertes Ergebnis verfügbar. ${details}`);
+      status('Abgeschlossen mit Hinweisen', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} nicht verarbeitet. Es ist kein${converting ? ' Markdown-' : ' anonymisiertes '}Ergebnis verfügbar. ${details}`);
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'blocked') { acknowledgedPresentationGeneration = null; status('Nicht bereit', 'Der lokale DataSecure-Core konnte nicht gestartet werden.'); }
     else {
       acknowledgedPresentationGeneration = null;
       status('Bereit', 'Wähle Dateien oder einen ganzen Ordner aus.');
+    }
+    if (state.termination_unconfirmed === true) {
+      status('Verarbeitung unterbrochen', 'Das Ende des Konvertierungsprozesses konnte nicht bestätigt werden. Übrige Dateien wurden nicht gestartet. Bitte die Diagnose prüfen.');
+      byId('status-icon').textContent = '!';
     }
   } catch (error) {
     if (!admitted && !operationInFlight && !pageClosed && generation === admissionGeneration) showError(error);

@@ -142,6 +142,8 @@ function createBatchProgress(deps) {
     const pendingIndex = items.findIndex((item) => item.status === 'pending');
     const localProcessing = liveLocalExecutor(state);
     const progress = {
+      ...(state.schema === 'datasecure-batch/5' ? { processing_mode: 'markdown-only',
+        warning_count: items.filter((item) => item.status === 'released' && item.extraction_grade === 'incomplete').length } : {}),
       batch_token: state.token,
       batch_total: items.length,
       attempted: released + stopped + retryable + deferredReview + deliveryPending + processing,

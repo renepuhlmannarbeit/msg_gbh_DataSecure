@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
-import { collectProductFiles, verifyKeyringFreeProductEntries } from './lib/product-files.mjs';
+import { collectProductFiles, verifyKeyringFreeProductEntries, verifyProductRelativeRequires } from './lib/product-files.mjs';
 import { readContract, sha256 } from './lib/bundled-runtime.mjs';
 
 const require = createRequire(import.meta.url);
@@ -104,6 +104,7 @@ if (debugBuild) {
   if (!String(manifest?.displayName || '').endsWith('– Debug')) throw new Error('DEBUG_ARCHIVE_LABEL_MISSING');
 } else if (entries.has(debugSkillName)) throw new Error('PRODUCT_DEBUG_SKILL_FORBIDDEN');
 verifyKeyringFreeProductEntries(entries);
+verifyProductRelativeRequires(entries);
 const modes = readCentralModes(bytes);
 if (modes.size !== entries.size) throw new Error('PRODUCT_ARCHIVE_MODE_INVENTORY');
 for (const name of entries.keys()) {

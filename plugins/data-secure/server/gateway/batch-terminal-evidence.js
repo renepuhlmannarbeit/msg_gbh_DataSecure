@@ -175,6 +175,12 @@ function createBatchTerminalEvidence(options = {}) {
   }
 
   function writeTerminalEvidence(state) {
+    // Conversion is not a privacy processing receipt. Its durable journal and
+    // atomic visible run/CSV are the completion record; never forge PII grades.
+    if (state.schema === 'datasecure-batch/5') {
+      return state.processing_mode === 'markdown-only' && state.product_channel === 'standalone' &&
+        terminal(state) && projectBatchResults(state).grades_verified === true;
+    }
     // The receipt is a local transparency artifact, never an authorization
     // gate. Its coordinator persists an opaque pending intent before export and
     // deduplicates recovery without changing any released or stopped item.

@@ -10,9 +10,11 @@ const {
   validateDocumentResult,
   positiveDocumentResult,
   sameDocumentResult,
+  notProcessedDocumentResult,
   validateManifestDocumentResult
 } = require('./document-result-grade');
 const { packageIdentityMatches } = require('./package-identity');
+const { artifactRoot, readMarkdownArtifact, metadata, verifyMarkdownItem } = require('../standalone/markdown-store');
 
 function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
@@ -26,6 +28,19 @@ function createBatchReconciliation(options = {}) {
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
+
+  function publishedMarkdownArtifactRecord(artifactId) {
+    if (!/^dm_[a-f0-9]{32}$/u.test(String(artifactId || ''))) return { state: 'unsafe' };
+    // Only the absence of the publication directory means "not published".
+    // A missing member of an existing directory is an incomplete/unsafe
+    // publication, not permission to overwrite that deterministic identity.
+    let target;
+    try { target = path.join(artifactRoot(), artifactId); } catch { return { state: 'unsafe' }; }
+    try { fs.lstatSync(target); }
+    catch (error) { return { state: error?.code === 'ENOENT' ? 'missing' : 'unsafe' }; }
+    try { return { state: 'verified', ...metadata(readMarkdownArtifact(artifactId).manifest) }; }
+    catch { return { state: 'unsafe' }; }
+  }
 
   function packageIdForItem(item) {
     if (!/^[a-f0-9]{32}$/i.test(String(item?.id || ''))) {
@@ -179,6 +194,21 @@ function createBatchReconciliation(options = {}) {
     let changed = false;
     for (const item of state.items || []) {
       if (item.status !== 'processing') continue;
+      if (state.schema === 'datasecure-batch/5' && state.product_channel === 'standalone' && state.processing_mode === 'markdown-only') {
+        if (!/^[a-f0-9]{32}$/u.test(String(item.id || ''))) continue;
+        const record = publishedMarkdownArtifactRecord(`dm_${item.id}`);
+        if (record.state !== 'verified') continue;
+        const { state: ignored, ...identity } = record;
+        Object.assign(item, identity);
+        delete item.document_result;
+        delete item.error_code;
+        delete item.processing_started_at_ms;
+        item.status = deliveryPendingStatus;
+        item.checkpoint = 'delivery_pending';
+        item.work_copy_cleanup_pending = true;
+        changed = true;
+        continue;
+      }
       let packageId;
       try { packageId = packageIdForItem(item); } catch { continue; }
       // Verify again inside markMappingPending. Output may change between the
@@ -200,6 +230,29 @@ function createBatchReconciliation(options = {}) {
     let recovered = 0;
     for (const item of state.items || []) {
       if (item.status !== 'processing') continue;
+      if (state.schema === 'datasecure-batch/5' && state.product_channel === 'standalone' && state.processing_mode === 'markdown-only') {
+        const publication = publishedMarkdownArtifactRecord(`dm_${item.id}`);
+        // A verified publication belongs to reconcilePublishedItems, never a
+        // fresh conversion. A missing target is safe to retry after clearing
+        // its unverified locator; unknown/mutated files are not overwritten.
+        if (publication.state === 'verified') continue;
+        for (const field of ['artifact_id', 'artifact_sha256', 'artifact_bytes', 'extraction_grade', 'reason_codes']) delete item[field];
+        if (publication.state !== 'missing') {
+          item.status = 'stopped';
+          item.checkpoint = 'recovery_failed';
+          item.error_code = 'RECOVERY_FAILED';
+          item.document_result = notProcessedDocumentResult('RECOVERY_FAILED');
+          item.local_mapping_exported = false;
+          try {
+            writeMapping(item.source_label || item.name, '', STOPPED, {
+              mappingReference: item.id, documentResult: item.document_result
+            });
+            item.local_mapping_exported = true;
+          } catch { /* the durable stopped-mapping checkpoint remains repairable */ }
+          recovered++;
+          continue;
+        }
+      }
       item.status = 'retryable';
       item.error_code = 'PROCESSING_INTERRUPTED';
       item.checkpoint = 'retryable';
@@ -211,6 +264,8 @@ function createBatchReconciliation(options = {}) {
   return {
     packageIdForItem,
     publishedPackageRecord,
+    publishedMarkdownArtifactRecord,
+    verifyMarkdownItem,
     publishedPackageIdentityRecord,
     publishedPackageState,
     regularPublishedPackage,

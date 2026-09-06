@@ -20,6 +20,7 @@ function createBatchContinuation(options = {}) {
   const deferredReviewStatus = options.deferredReviewStatus || 'deferred_review';
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
+  const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
 
   function resumeBatch(token) {
     if (active.has(token)) throw new ErrorType('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
@@ -89,7 +90,15 @@ function createBatchContinuation(options = {}) {
     const before = readState(selected.token);
     if (before.items.some((item) => item.status === 'retryable' || item.status === 'processing')) {
       const resumed = resumeBatch(selected.token);
-      if (resumed.ok === false) return resumed;
+      if (resumed.ok === false) {
+        if (resumed.error !== 'no_retryable_documents') return resumed;
+        const reconciled = readState(selected.token);
+        // Recovery may have adopted the already-published result instead of
+        // retrying extraction. That delivery is executable on this same click;
+        // it is not a failed continuation just because `resumed` is zero.
+        if (reconciled.items.some(item => ['processing', 'retryable'].includes(item.status)) ||
+            !reconciled.items.some(item => item.status === deliveryPendingStatus)) return resumed;
+      }
     }
     return {
       ok: true,

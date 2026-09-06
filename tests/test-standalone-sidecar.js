@@ -176,10 +176,9 @@ function removeOwnedRoot(root, initial) {
     const context = await client.send('get_ui_context', 'c'.repeat(16));
     assert.strictEqual(context.ok, true);
     assert.deepStrictEqual(context.result.selected_files, ['profil.txt']);
-    const conversion = await client.send('start_admitted_batch', '9'.repeat(16), { processing_mode: 'markdown-only' });
-    assert.strictEqual(conversion.ok, false);
-    assert.strictEqual(conversion.error_code, 'MARKDOWN_CONVERSION_NOT_READY',
-      'the real sidecar must preserve the fixed service rejection instead of masking or accepting conversion');
+    assert.throws(() => encodeFrame({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: '9'.repeat(16), action: 'start_admitted_batch', processing_mode: 'unknown-purpose' }),
+      { code: 'PROCESSING_MODE_INVALID' });
     const retained = await client.send('get_ui_context', '8'.repeat(16));
     assert.deepStrictEqual(retained.result.selected_files, ['profil.txt']);
     const unchanged = await client.send('get_public_state', '7'.repeat(16));

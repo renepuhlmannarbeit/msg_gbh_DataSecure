@@ -63,6 +63,10 @@ const OPERATIONS = new Set([
 const OUTCOMES = new Set(['progress', 'ok', 'stopped']);
 const PRODUCT_CHANNELS = new Set(['plugin', 'standalone']);
 const ERROR_CODES = new Set([
+  ...require('../standalone/conversion-worker-contract').ERROR_CODES,
+  ...require('../standalone/conversion-worker-contract').LIFECYCLE_ERROR_CODES,
+  'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID',
+  'BATCH_PROCESSING_MODE_CHANGED', 'BATCH_MARKDOWN_STATE_INVALID', 'RECOVERY_FAILED',
   'NONE', 'INTERNAL_FAILURE', 'INVALID_JSON', 'RPC_FRAME_TOO_LARGE', 'SUPPORT_MODE_REQUIRED',
   'TOOL_RETURNED_STOP', 'REQUEST_CANCELLED', 'LOCAL_SELECTION_CANCELLED',
   'LOCAL_SELECTION_REJECTED', 'LOCAL_PICKER_FAILED',

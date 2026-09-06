@@ -51,6 +51,24 @@ function positivePackageMatches(item, verifyPositive) {
 function projectBatchResults(state, options = {}) {
   const items = Array.isArray(state?.items) ? state.items : [];
   if (items.length === 0) return unavailableProjection(0, false);
+  if (state.schema === 'datasecure-batch/5') {
+    if (state.processing_mode !== 'markdown-only' || state.product_channel !== 'standalone') return unavailableProjection(items.length);
+    const visibleCommit = require('./result-export').completedMarkdownExportMatches(state);
+    const counts = emptyGradeCounts();
+    for (const item of items) {
+      if (item.status === 'released') {
+        if (!visibleCommit && !require('../standalone/markdown-store').verifyMarkdownItem(item)) return unavailableProjection(items.length);
+        counts[item.extraction_grade === 'complete' ? 'complete' : 'usable_with_omissions']++;
+      } else if (item.status === 'stopped' && item.local_mapping_exported !== false) {
+        try {
+          validateDocumentResult(item.document_result);
+          if (item.document_result.grade !== GRADES.NOT_PROCESSED || item.document_result.reason_code !== item.error_code) return unavailableProjection(items.length);
+        } catch { return unavailableProjection(items.length); }
+        counts.not_processed++;
+      } else counts.unavailable++;
+    }
+    return { grade_counts: counts, omission_counts: emptyOmissionCounts(), grades_verified: counts.unavailable === 0 };
+  }
   if (state.schema === 'datasecure-batch/1') return unavailableProjection(items.length, false);
   if (!['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4'].includes(state.schema)) {
     return unavailableProjection(items.length, false);

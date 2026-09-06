@@ -160,11 +160,11 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
   assert.match(html, /100 Dateien und 500 MB/u);
   assert.match(html, /id="select-files"/u);
   assert.match(html, /id="select-folder"/u);
-  assert.match(html, /value="markdown-only" disabled/u, 'planned conversion-only mode is visible but has no active execution path');
+  assert.match(html, /value="markdown-only" selected/u, 'conversion is the explicit standalone default');
   assert.doesNotMatch(frontend, /invoke\(['"](?:convert|convert_only|start_conversion)/u);
 });
 
-test('processing purpose crosses only the explicit desktop Start and conversion stays gated', () => {
+test('processing purpose crosses only the explicit desktop Start and cannot change on resume', () => {
   assert.match(frontend, /call\('start_admitted_batch', \{ processingMode \}\)/u);
   assert.match(rust, /#\[tauri::command\(rename_all = "camelCase"\)\]\s*async fn start_admitted_batch/u);
   assert.match(rust, /processing_mode: Option<String>/u);
@@ -175,7 +175,7 @@ test('processing purpose crosses only the explicit desktop Start and conversion 
   assert.doesNotMatch(continuing, /processing_mode/u);
   assert.match(frontend, /call\('continue_current_batch'\)/u);
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
-  assert.match(html, /value="markdown-only" disabled/u);
+  assert.match(html, /value="markdown-only" selected/u);
   assert.match(html, /id="processing-mode"[^>]* disabled/u, 'startup cannot choose a mode before status is known');
 });
 
@@ -254,10 +254,10 @@ test('package contract excludes Claude, Cowork, MCP and skill material', () => {
   }
 });
 
-test('converter runtime is required only when MarkItDown conversion is enabled', () => {
-  assert.ok(!targets.required_package_entries.includes('architecture-matched converter runtime'));
-  assert.deepStrictEqual(targets.feature_gated_package_entries.markitdown_conversion_enabled,
-    ['architecture-matched converter runtime']);
+test('active Markdown conversion requires its own offline runtime independently of the optional MarkItDown oracle', () => {
+  assert.ok(targets.required_package_entries.includes('architecture-matched converter runtime'));
+  assert.ok(targets.required_package_entries.includes('bundled offline German and English OCR models'));
+  assert.strictEqual(targets.feature_gated_package_entries, undefined);
   const runtime = JSON.parse(fs.readFileSync(path.join(__dirname,
     '../plugins/data-secure/server/converters/markitdown/runtime-contract.json'), 'utf8'));
   assert.strictEqual(runtime.product_enabled, false);

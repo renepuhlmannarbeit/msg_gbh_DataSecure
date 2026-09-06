@@ -3,6 +3,8 @@ import path from 'node:path';
 
 const ENTRYPOINTS = Object.freeze([
   'standalone/desktop-sidecar.js',
+  'standalone/conversion-worker.js',
+  'standalone/conversion-worker-child.js',
   'gateway/batch-worker.js',
   'gateway/review-worker.js',
   'gateway/result-export-replay-worker.js',
@@ -14,7 +16,9 @@ const PLATFORM_ASSETS = Object.freeze({
   'windows-x64': Object.freeze([
     'native/windows-x64/datasecure-sandbox.exe',
     'native/windows-x64/datasecure-sandbox.sha256'
-  ])
+  ]),
+  'macos-x64': Object.freeze(['native/macos-x64/datasecure-sandbox', 'native/macos-x64/datasecure-sandbox.sha256']),
+  'macos-arm64': Object.freeze(['native/macos-arm64/datasecure-sandbox', 'native/macos-arm64/datasecure-sandbox.sha256'])
 });
 const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)/iu;
 
@@ -72,7 +76,8 @@ export function writeStandaloneRuntime(serverRoot, destination, productTarget) {
   for (const file of files) {
     const target = path.join(output, ...file.relative.split('/'));
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, file.bytes, { flag: 'wx', mode: 0o600 });
+    const executable = /^native\/macos-(?:x64|arm64)\/datasecure-sandbox$/u.test(file.relative);
+    fs.writeFileSync(target, file.bytes, { flag: 'wx', mode: executable ? 0o700 : 0o600 });
   }
   return files.map(({ relative, bytes }) => ({ relative: `server/${relative}`, bytes: bytes.length }));
 }

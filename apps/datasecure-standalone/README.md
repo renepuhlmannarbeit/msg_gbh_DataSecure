@@ -17,15 +17,20 @@ direkten Dateisystemzugriff; die lokale Pfadanzeige wird nicht protokolliert.
 
 Dateien oder ein Ordner lassen sich nativ in das Fenster ziehen. Die vorhandenen
 Auswahlbuttons bleiben als Tastatur-/Klickalternative erhalten. Beide Wege
-zeigen erst die aufgenommene Auswahl; nur **Anonymisierung starten** verarbeitet
-sie. Neue Standalone-Stapel verwenden lesbare und bei Fortsetzung stabile
+zeigen erst die aufgenommene Auswahl; nur **Starten** verarbeitet
+sie. Neue Standalone-Stapel im Anonymisierungsmodus verwenden lesbare und bei Fortsetzung stabile
 Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`; vorhandene v1-Stapel bleiben
 unverändert. Die Kennungen gelten nicht kundenübergreifend oder über neue Stapel.
 
-**Nur in Markdown umwandeln** bleibt eine zweite verbindliche Kernfunktion
-(DS-085), ist in diesem Piloten aber noch deaktiviert. Geplant ist derselbe
-komplette Workflow ohne Anonymisierung, mit allen extrahierbaren Ausgangsinhalten
-und getrenntem, als nicht anonymisiert gekennzeichnetem Markdown-Ergebnisbereich.
+**Nur in Markdown umwandeln** ist der aktivierte Standard (DS-085): auswählen
+oder hineinziehen, starten, Ergebnisse öffnen. Unterstützt werden TXT, Markdown,
+CSV, DOCX, XLSX, PPTX, Text-/Scan-PDF sowie PNG/JPEG/BMP. Konverter und lokale
+DE/EN-OCR sind im Paket enthalten; keine zusätzliche Installation ist nötig.
+Namen und Originalinhalte bleiben erhalten. `DataSecure-Markdown/Lauf-…` enthält
+eine `.md` je erfolgreicher Quelle und `DataSecure-Zuordnung.csv` einschließlich
+Hinweisen und Fehlern. Unvollständige Extraktion wird ohne Review gespeichert
+und ausdrücklich gekennzeichnet; gesperrte/defekte Dateien werden übersprungen.
+Die Anonymisierung bleibt eine gesonderte Betriebsart für TXT/MD/CSV/DOCX.
 
 Der Endnutzerablauf besitzt zwei Hauptansichten: **Verarbeiten** für Auswahl,
 Start und Fortschritt sowie **Ergebnisse** für den letzten vollständig

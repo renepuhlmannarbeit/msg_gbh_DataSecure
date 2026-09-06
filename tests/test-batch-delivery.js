@@ -378,6 +378,92 @@ test('whole-work cleanup retries bounded transient Windows delete failures witho
   }
 });
 
+test('whole-work cleanup distinguishes exact inodes above the safe integer range', () => {
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-inode-')));
+  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA,
+    data: process.env.EU_PRIVACY_DATA_ROOT };
+  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+  process.env.LOCALAPPDATA = path.join(base, 'localapp');
+  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'private');
+  const { workPath, safeRemoveWorkDirectory } = require('../plugins/data-secure/server/gateway/batch-private-store');
+  const original = { lstatSync: fs.lstatSync, fstatSync: fs.fstatSync, openSync: fs.openSync, closeSync: fs.closeSync };
+  const descriptors = new Map();
+  let completed = false;
+  try {
+    const work = workPath(token);
+    fs.mkdirSync(work);
+    const names = ['001_aaaaaaaaaaaaaaaaaaaaaaaa.workcopy', '002_bbbbbbbbbbbbbbbbbbbbbbbb.workcopy'];
+    const ids = [9007199254740992n, 9007199254740993n];
+    assert.strictEqual(Number(ids[0]), Number(ids[1]), 'the fixture must reproduce a Number identity collision');
+    const files = new Map(names.map((name, index) => [path.join(work, name), ids[index]]));
+    for (const file of files.keys()) fs.writeFileSync(file, 'synthetic owned snapshot');
+    function exactStat(stat, id, options) {
+      assert.strictEqual(options?.bigint, true, 'identity-bearing stat calls must request exact integers');
+      stat.ino = id;
+      return stat;
+    }
+    fs.lstatSync = (file, options) => {
+      const stat = original.lstatSync(file, options);
+      return files.has(file) ? exactStat(stat, files.get(file), options) : stat;
+    };
+    fs.openSync = (file, ...args) => {
+      const fd = original.openSync(file, ...args);
+      if (files.has(file)) descriptors.set(fd, files.get(file));
+      return fd;
+    };
+    fs.fstatSync = (fd, options) => {
+      const stat = original.fstatSync(fd, options);
+      return descriptors.has(fd) ? exactStat(stat, descriptors.get(fd), options) : stat;
+    };
+    fs.closeSync = (fd) => { descriptors.delete(fd); return original.closeSync(fd); };
+    // All reads and unlink/rmdir operations use real files. Only inode values
+    // are elevated deterministically so every host covers the NTFS defect.
+    safeRemoveWorkDirectory(token);
+    assert.strictEqual(fs.existsSync(work), false);
+    completed = true;
+  } finally {
+    Object.assign(fs, original);
+    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local],
+      ['EU_PRIVACY_DATA_ROOT', previous.data]]) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+    // Never retry a failed work-tree removal. Successful execution leaves only
+    // these exact, owned, empty directories; remove each without recursion.
+    if (completed) {
+      assert.strictEqual(path.dirname(base), fs.realpathSync(os.tmpdir()));
+      for (const directory of [path.join(base, 'private', 'batches'), path.join(base, 'private'), base]) {
+        const stat = fs.lstatSync(directory);
+        assert.ok(stat.isDirectory() && !stat.isSymbolicLink());
+        assert.strictEqual(fs.realpathSync(directory), directory);
+        assert.deepStrictEqual(fs.readdirSync(directory), []);
+        fs.rmdirSync(directory);
+      }
+    }
+  }
+});
+
+test('plain-work validation rejects an inode substitution hidden by Number rounding before reading', () => {
+  const { assertPlainWorkFile } = require('../plugins/data-secure/server/gateway/batch-private-store');
+  const namedId = 9007199254740992n;
+  const openedId = 9007199254740993n;
+  assert.strictEqual(Number(namedId), Number(openedId));
+  let reads = 0, closes = 0;
+  const stat = (ino, options) => {
+    assert.strictEqual(options?.bigint, true);
+    return { isFile: () => true, isSymbolicLink: () => false, dev: 1n, ino, size: 8n, mtimeNs: 1n };
+  };
+  assert.throws(() => assertPlainWorkFile('synthetic.workcopy', {
+    constants: { O_RDONLY: 0 },
+    lstatSync: (_file, options) => stat(namedId, options),
+    fstatSync: (_fd, options) => stat(openedId, options),
+    openSync: () => 1,
+    readSync() { reads++; return 0; },
+    closeSync() { closes++; }
+  }), /BATCH_WORK_UNSAFE/);
+  assert.strictEqual(reads, 0);
+  assert.strictEqual(closes, 1);
+});
+
 test('the batch composition root preserves every delivery facade', () => {
   const batch = require('../plugins/data-secure/server/gateway/batch');
   for (const name of ['acknowledgeDeliveredPackage', 'acknowledgeDeliveredPackages', 'finalizePublishedPackageLocally']) {

@@ -8,7 +8,7 @@ Stand: 04.09.2026
 |---|---|
 | `DECISIONS.md` | Entscheidungen mit aktuellem Status |
 | `PRODUCT_VISION.md`, `PRODUCT.md` | Ziel und Produktvertrag |
-| `STANDALONE_ARCHITECTURE.md`, `STANDALONE_SECURITY_MODEL.md` | Standalone-Nutzerfluss, Sicherheitsgrenze, MarkItDown-Vertrauensgrenze, Lieferstufen und Diagnosevertrag |
+| `STANDALONE_ARCHITECTURE.md`, `STANDALONE_SECURITY_MODEL.md` | Standalone-Nutzerfluss, Sicherheits- und Konvertergrenze, Lieferstufen und Diagnosevertrag |
 | `TARGET_ARCHITECTURE.md`, `UML_ARCHITECTURE.md`, `REFACTORING_PLAN.md` | Architektur, codebasierte UML-Prüfsichten und Lieferreihenfolge |
 | `BACKLOG.md` | einzige aktive Arbeitsliste |
 | `CURRENT_STATE.md` | aktueller belegter Iststand |

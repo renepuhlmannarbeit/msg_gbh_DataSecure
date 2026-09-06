@@ -1,8 +1,8 @@
 'use strict';
 
 // Processing purpose is distinct from MCP delivery mode (local_only/analysis).
-// A converter is not a privacy-gate bypass. Keep the second core function
-// unavailable at the product boundary until its durable lifecycle is connected.
+// A converter is not a privacy-gate bypass: its durable v5 lifecycle belongs
+// exclusively to Standalone and never publishes a Claude read capability.
 const MODES = Object.freeze({
   ANONYMIZE: 'markdown-and-anonymize',
   MARKDOWN: 'markdown-only'
@@ -21,7 +21,6 @@ function validateProcessingMode(value, productChannel) {
 
 function assertRunnableProcessingMode(value, productChannel) {
   validateProcessingMode(value, productChannel);
-  if (value === MODES.MARKDOWN) fail('MARKDOWN_CONVERSION_NOT_READY');
   return value;
 }
 
@@ -38,9 +37,9 @@ function processingModeForBatch(state) {
   }
   if (state.schema !== 'datasecure-batch/5' || state.processing_mode !== MODES.MARKDOWN ||
       !Object.hasOwn(state, 'schema') || !Object.hasOwn(state, 'processing_mode') || !Object.hasOwn(state, 'product_channel') ||
-      Object.hasOwn(state, 'pseudonym_contract_version') || Object.hasOwn(state, 'pseudonym_ruleset_version') ||
-      Object.hasOwn(state, 'pseudonym_seed') || Object.hasOwn(state, 'pseudonym_registry_state') ||
-      Object.hasOwn(state, 'read_capability')) fail('PROCESSING_MODE_INVALID');
+      Object.keys(state).some((key) => key.startsWith('pseudonym_')) ||
+      Object.hasOwn(state, 'read_capability') || Object.hasOwn(state, 'package_id') ||
+      Object.hasOwn(state, 'package_identity') || state.remove_images === true) fail('PROCESSING_MODE_INVALID');
   return validateProcessingMode(state.processing_mode, channel);
 }
 

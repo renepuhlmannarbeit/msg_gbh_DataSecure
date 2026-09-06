@@ -6,11 +6,26 @@ const {
   positiveDocumentResult,
   sameDocumentResult
 } = require('./document-result-grade');
+const { validateCoverage } = require('../standalone/markdown-contract');
+const { verifyMarkdownItem } = require('../standalone/markdown-store');
+const { processingModeForBatch } = require('../core/processing-mode');
+
+function conversionBatch(state) {
+  return state?.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' && state.product_channel === 'standalone';
+}
+function conversionIdentity(value, expected) {
+  if (value?.artifact_id !== expected || !/^[a-f0-9]{64}$/u.test(String(value.artifact_sha256 || '')) ||
+      !Number.isSafeInteger(value.artifact_bytes) || value.artifact_bytes < 0) throw new Error('MARKDOWN_ARTIFACT_INVALID');
+  validateCoverage({ status: value.extraction_grade, reason_codes: value.reason_codes });
+  return { artifact_id: expected, artifact_sha256: value.artifact_sha256, artifact_bytes: value.artifact_bytes,
+    extraction_grade: value.extraction_grade, reason_codes: [...value.reason_codes] };
+}
 
 function createBatchItemProcessor(options = {}) {
   const SafeError = options.SafeError;
   const writeState = options.writeState;
   const anonymizeNext = options.anonymizeNext;
+  const convertNext = options.convertNext || require('../standalone/convert-next').convertNext;
   const packageIdForItem = options.packageIdForItem;
   const createPhaseRecorder = options.createPhaseRecorder;
   const reviewSingleBatchTextLocally = options.reviewSingleBatchTextLocally;
@@ -38,6 +53,7 @@ function createBatchItemProcessor(options = {}) {
   function publicFailureMessage(code) {
     const fixed = {
       BATCH_SNAPSHOT_CHANGED: 'Der bestätigte Dateistapel wurde verändert. Die unveröffentlichten privaten Kopien wurden sicher gestoppt.',
+      CONVERSION_TERMINATION_UNCONFIRMED: 'Die Verarbeitung wurde unterbrochen. Das Ende des Konvertierungsprozesses konnte nicht bestätigt werden. Weitere Dateien werden nicht gestartet.',
       LOCAL_REVIEW_DEFERRED: 'Die lokale Prüfung wurde vertagt. Das Dokument bleibt lokal und wird nicht freigegeben.',
       REQUEST_CANCELLED: 'Die lokale Verarbeitung wurde auf Anforderung sicher abgebrochen.'
     };
@@ -47,7 +63,13 @@ function createBatchItemProcessor(options = {}) {
   function publishedFailure(state, item, expectedPackageId, error) {
     item.status = 'processing';
     item.checkpoint = 'package_published';
-    item.package_id = expectedPackageId;
+    if (conversionBatch(state)) {
+      item.artifact_id = expectedPackageId;
+      delete item.artifact_sha256;
+      delete item.artifact_bytes;
+      delete item.extraction_grade;
+      delete item.reason_codes;
+    } else item.package_id = expectedPackageId;
     item.error_code = 'PROCESSING_INTERRUPTED';
     item.work_copy_cleanup_pending = true;
     // A failed write may have happened after markMappingPending mutated the
@@ -71,11 +93,16 @@ function createBatchItemProcessor(options = {}) {
   }
 
   async function processSingleBatchItem(state, item, entry, deps = {}) {
+    if (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only') processingModeForBatch(state);
+    const converting = conversionBatch(state);
+    if (!converting && (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only')) {
+      throw new SafeError('Die Konvertierung gehört ausschließlich zur lokalen Standalone-Anwendung.');
+    }
     item.status = 'processing';
     item.checkpoint = 'processing_started';
     item.processing_started_at_ms = nowMs();
     const phaseRecorder = createPhaseRecorder({ now: deps.performanceNow });
-    const expectedPackageId = packageIdForItem(item);
+    const expectedPackageId = converting ? `dm_${item.id}` : packageIdForItem(item);
     let packagePublished = false;
     let publishCallbackCount = 0;
     let verifiedDocumentResult;
@@ -90,12 +117,12 @@ function createBatchItemProcessor(options = {}) {
         // intermediate parser progress. Avoid rewriting the whole batch
         // five times per document just to record transient phase changes.
       };
-      const result = await anonymizeNext(state.profile, {
+      const result = await (converting ? (deps.convertNext || convertNext) : anonymizeNext)(state.profile, {
         ...deps,
         inputQueue: [entry],
         copyClaim: true,
         removeImages: state.remove_images,
-        packageId: expectedPackageId,
+        ...(converting ? { artifactId: expectedPackageId } : { packageId: expectedPackageId }),
         onClaimed: async () => {
           checkpoint('private_copy_claimed', 'intake_and_preparation');
           if (deps.onClaimed) await deps.onClaimed();
@@ -104,12 +131,18 @@ function createBatchItemProcessor(options = {}) {
           checkpoint('extracted', 'conversion_and_visual_scan');
           if (deps.onExtracted) await deps.onExtracted(converted);
         },
-        onDetected: async (details) => {
+        onDetected: converting ? undefined : async (details) => {
           checkpoint('text_privacy_checked', 'text_privacy_check');
           if (deps.onDetected) await deps.onDetected(details);
         },
-        reviewText: (input) => reviewSingleBatchTextLocally(input, state, item, deps),
+        reviewText: converting ? undefined : (input) => reviewSingleBatchTextLocally(input, state, item, deps),
         beforePublish: async (details) => {
+          if (converting) {
+            verifiedDocumentResult = conversionIdentity(details, expectedPackageId);
+            checkpoint('package_verified', 'verification');
+            if (deps.beforePublish) await deps.beforePublish(details);
+            return;
+          }
           positiveDocumentResult(details?.document_result);
           verifiedDocumentResult = details.document_result;
           incrementPrivateIoSummary(state.io_summary, 'final_gate_runs');
@@ -134,6 +167,12 @@ function createBatchItemProcessor(options = {}) {
           // Bind every subsequent validation failure to published recovery.
           packagePublished = true;
           if (publishCallbackCount !== 1) throw publicationUnconfirmed();
+          if (converting) {
+            publishedDocumentResult = conversionIdentity(details, expectedPackageId);
+            if (JSON.stringify(publishedDocumentResult) !== JSON.stringify(verifiedDocumentResult)) throw publicationUnconfirmed();
+            checkpoint('package_published', 'publication');
+            return;
+          }
           positiveDocumentResult(details?.document_result);
           if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw publicationUnconfirmed();
           publishedDocumentResult = details.document_result;
@@ -141,6 +180,29 @@ function createBatchItemProcessor(options = {}) {
         }
       });
       phaseRecorder.mark('publication');
+      if (converting) {
+        const identity = conversionIdentity(result, expectedPackageId);
+        if (!packagePublished || publishCallbackCount !== 1 ||
+            JSON.stringify(identity) !== JSON.stringify(verifiedDocumentResult) ||
+            JSON.stringify(identity) !== JSON.stringify(publishedDocumentResult) || !verifyMarkdownItem(identity)) {
+          throw publicationUnconfirmed();
+        }
+        Object.assign(item, identity);
+        delete item.document_result;
+        item.status = deliveryPendingStatus;
+        item.checkpoint = 'delivery_pending';
+        item.work_copy_cleanup_pending = true;
+        delete item.error_code;
+        item.processing_duration_ms = Math.max(0, nowMs() - Number(item.processing_started_at_ms || nowMs()));
+        item.performance_phases_ms = phaseRecorder.snapshot();
+        delete item.processing_started_at_ms;
+        // The durable journal is the source→artifact ledger. The shared visible
+        // exporter atomically materialises its human-readable run CSV at finish.
+        writeState(state);
+        try { cleanupTerminalWorkCopy(state, item, deps); } catch { item.work_copy_cleanup_pending = true; }
+        writeState(state);
+        return { ...result, ...publicProgress(state), raw_content_sent_to_claude: false };
+      }
       if (!packagePublished || publishCallbackCount !== 1 || result?.package_id !== expectedPackageId ||
         !sameDocumentResult(result?.document_result, verifiedDocumentResult) ||
         !sameDocumentResult(result?.document_result, publishedDocumentResult)) {
@@ -197,7 +259,8 @@ function createBatchItemProcessor(options = {}) {
       if (error?.code === 'BATCH_PUBLICATION_UNCONFIRMED') {
         item.status = 'processing';
         item.checkpoint = 'publication_unconfirmed';
-        item.package_id = expectedPackageId;
+        if (converting) item.artifact_id = expectedPackageId;
+        else item.package_id = expectedPackageId;
         item.error_code = 'PROCESSING_INTERRUPTED';
         item.work_copy_cleanup_pending = true;
         delete item.processing_started_at_ms;

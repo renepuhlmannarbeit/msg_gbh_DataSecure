@@ -1,10 +1,22 @@
 # Aktueller Testvertrag
 
-Stand: 05.09.2026 · 3.2.0-rc107
+Stand: 06.09.2026 · 3.2.0-rc108
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
 enthält nur die heute gültigen Testklassen und Releasebefehle.
+
+Die normale Standalone-App schreibt ihre inhaltsfreien Interaktionslogs ohne
+zusätzlichen Anwenderdialog. Für eine ausdrücklich aktivierte Supportsession
+kann der startende Prozess `EU_PRIVACY_SUPPORT_MODE=1` setzen; nur der genaue
+Wert `1` wird vom Desktop zum Sidecar und zum Stapelworker weitergereicht.
+Dann enthält der vorhandene Supportspool auch `converter_started`,
+`coverage_checked`, `converter_completed` und `converter_stopped`.
+`coverage_checked: ok` bestätigt die Vertragsprüfung, nicht fehlerfreie OCR
+oder vollständige Extraktion. Qualitätsgrade und Auslassungshinweise stehen
+im Ergebnisjournal und der Laufzuordnung. Rohes stderr, Namen, Pfade und
+Dokumentinhalte gehören niemals in diese Spur. Es gibt keinen neuen Schalter
+im normalen Umwandlungsablauf und keine globale Umgebungsänderung durch Tests.
 
 ## Schnelle Dokumenten- und Vertragsprüfung
 
@@ -25,7 +37,8 @@ Sie prüft unter anderem:
 - keinen auswählbaren Bildmodus;
 - 0–14 Tage nur für temporäre Arbeits-/Reviewdaten;
 - niemals automatische Löschung von Quellen/Originalen oder fertigen Exporten;
-- Formatallowlist TXT/Markdown/CSV/DOCX und sichere Sperre aller anderen Formate.
+- Formatallowlist TXT/Markdown/CSV/DOCX für Anonymisierung und davon getrennte
+  zusätzliche Eingaben für die reine Standalone-Konvertierung.
 - inhaltsfreie Statusprojektion, unveränderten Textfallback und einen
   reproduzierbaren Offline-Build aus Repo- und fremdem Arbeitsordner.
 - deaktivierte Supportspur im Normalprodukt, geschlossene Fehler-/Operationswerte
@@ -50,6 +63,16 @@ umgeschriebenen Startbefehl. `npm run build` ergänzt SPDX-SBOM und SHA-256.
 MCPB, SEA und deaktivierte OCR-Artefakte erfüllen diese Produktgates nicht.
 
 ### Gepackte Standalone-App unter Windows
+
+`npm run test:standalone:conversion` prüft den echten isolierten Produktkonverter
+mit Office, Text-/Scan-/Hybrid-PDF, Bildern, Abbrüchen und einer 100-TXT-Serie.
+Es benötigt die gepinnten lokalen Buildressourcen für Node, PDF.js, Canvas und
+Tesseract einschließlich DE/EN-Modellen. Es lädt nichts automatisch herunter.
+Dieses native Zielhostgate ist ausdrücklich **nicht** Teil des kostengedeckelten
+Ubuntu-Quell-CI. `PKG-04` führt es verpflichtend vor seinen zwei Builds aus;
+zusätzlich prüft jeder gepackte Sidecar-Smoke beide Modi mit echten Eingaben.
+Die neutralen Modus-, Journal-, Recovery-, Artefakt- und Exporttests bleiben im
+normalen Produktgate. Fehlende native Vorbereitung darf kein Paket-PASS ergeben.
 
 Nach `npm run build:standalone:windows:portable` prüft der Paket-Smoke auch das
 von Tauri verwendete Windows-Verbatim-Pfadformat (`\\?\C:\…`). Zusätzlich
@@ -130,7 +153,7 @@ Der aktuelle Vertrag umfasst die spawn-bestätigten, unter Windows ausdrücklich
 atomare Zuordnungspublikation, RC103-Migration, Manipulationsstopp und die
 harte Produktgrenze: Originalnamen erscheinen nie im Cowork-Ergebnisordner.
 
-Die RC107-Gegenprüfung ergänzt timer- und generationsgebundene Frontendtests
+Die RC108-Gegenprüfung ergänzt timer- und generationsgebundene Frontendtests
 im regulären Produktgate, zwei schnelle Folgestapel, unsichere Startbestätigung,
 Firmenkurzformen mit kollidierenden Rechtsformen und eine eigene Standalone-
 Laufübersicht auch bei ausschließlich gestoppten Dateien. Ausstehende

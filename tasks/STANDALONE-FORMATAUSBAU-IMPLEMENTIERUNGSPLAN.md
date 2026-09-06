@@ -1,13 +1,14 @@
 # Anschließender Funktionsausbau: Konvertierung und breite Formate
 
-Stand: 06.09.2026 · ausdrücklich beauftragt nach RC107-Korrektur/Paketnachweis.
+Stand: 06.09.2026 · 3.2.0-rc108 · Implementierung mit ausstehender neuer Paket-/UAT-Bindung.
 Dies ist der technische Ausführungsplan, keine zweite Arbeitsliste. Status und
 Priorität werden ausschließlich im [kanonischen Backlog](../docs/canonical/BACKLOG.md)
 geführt: BL-010.15–19/28, BL-022.2/3, BL-023.1–4 und BL-024.2/3.
 
 ## Expertenergebnis und Produktentscheidung
 
-Zwei eigenständige Produkte bleiben bestehen. Standalone erhält zwei gleichwertige
+Zwei eigenständige Produkte bleiben bestehen. DS-085 bindet zwei gleichwertige
+Kernfunktionen im Standalone-Produkt mit den
 Modi: `markdown-and-anonymize` und `markdown-only`. Beide verwenden dieselbe
 Quellenaufnahme, unveränderte Originale, bewusstes Starten, Fortschritt,
 Fortsetzung und Zuordnung. Nur Standalone darf bewusst nicht anonymisierte
@@ -21,7 +22,7 @@ Erkennung. Auslassungen dürfen weder unbemerkt noch als vollständige Verarbeit
 gemeldet werden. Passwortgeschützte Eingaben bleiben unverändert und erscheinen
 als zurückgestellte Positionen in der lokalen Abschlussübersicht.
 
-## 1. Vollständiger erster Schnitt: reine Konvertierung direkter Formate
+## 1. Implementierter Ablauf: reine Konvertierung
 
 1. Ein zentraler Modusvertrag validiert die beiden Werte und die Produktgrenze.
    `markdown-only` ist aus dem Plugin abzulehnen.
@@ -29,22 +30,24 @@ als zurückgestellte Positionen in der lokalen Abschlussübersicht.
    den gewählten Modus. Während eines aktiven oder fortsetzbaren Stapels bestimmt
    das Backend den unveränderlichen Modus, nicht der aktuelle Dropdown-Default.
 3. Intake-Envelope, Worker und Journal speichern den Modus vor dem Checkpoint.
-   Konvertierungsjournale erhalten einen unterscheidbaren Versionsvertrag:
-   heutige Altleser ignorieren sonst unbekannte Top-Level-Felder. Altjournale
-   bleiben ausdrücklich Anonymisierungsstapel.
+   Konvertierungsjournale verwenden `datasecure-batch/5` und eigene Worker-
+   Envelope-Typen; alte Leser dürfen sie nicht als Anonymisierung fortsetzen.
+   Altjournale bleiben ausdrücklich Anonymisierungsstapel.
 4. Ein eigener Konvertierungseinstieg nutzt sichere Snapshots und den bestehenden
-   Parser/Supervisor, aber niemals PII-Ersetzung, Pseudonymseed, Residual-Gate,
+   inhaltserhaltenden Parser und den vorhandenen Supervisor, aber niemals
+   PII-Ersetzung, Pseudonymseed, Residual-Gate,
    PII-Review oder `complianceHeader`.
-5. Der Parser braucht eine inhaltstreue Extraktionsoption: `document-parser.js`
-   verwendet derzeit Privacy-Normalisierung; CSV benennt doppelte/leere Köpfe um.
-   TXT/Markdown müssen Zeichen und Inhalt erhalten; CSV-Werte, leere Zellen,
-   Kopfwerte und Reihenfolge dürfen nicht umgedeutet werden. DOCX-Coverage und
-   unbekannte eingebettete Inhalte bleiben gesondert nachzuweisen.
+5. `markdown-extractor.js` nutzt ausschließlich den Erhaltungspfad: TXT/Markdown
+   behalten Unicode und Zeilenenden; CSV behandelt auch doppelte/leere Köpfe als
+   Daten, ohne sie umzubenennen. OOXML läuft mit `preserveText: true`.
+   Unbekannte Dokumentbereiche bleiben als unvollständig gekennzeichnet.
 6. Die vorhandene Stapelsteuerung wird wiederverwendet: Sperren, Identität,
    endgültige/retryable Fehler, Checkpoints und Mapping-Outbox. Dafür erhält sie
    eine enge modusgebundene Verarbeitungsauswahl, keine zweite Batch-Engine.
-7. Konvertate erhalten einen eigenen Artefakttyp mit Digest, Modus und
-   Extraktionsgrad. Keine Privacy-Paketmerkmale und keine Lesecapabilities.
+7. Konvertate erhalten einen eigenen `dm_`-Artefakttyp mit Digest, Modus und
+   Extraktionsgrad (`complete` oder `incomplete` mit festen `reason_codes`).
+   Keine Privacy-Paketmerkmale und keine Lesecapabilities. Warnende Extraktionen
+   werden ohne PII-Review gespeichert, nicht als vollständig ausgegeben.
 8. Atomarer Export nach `DataSecure-Markdown/Lauf-…`: eine `.md` je erfolgreicher
    Quelle, `DataSecure-Zuordnung.csv`, exakter Öffnen-Resolver. Bereits exportierte
    Ergebnisse bleiben final; Fehlerfolgeläufe bekommen keine Vorgängerzuordnung.
@@ -64,7 +67,7 @@ keine veränderten Originalhashes; echter ausgelieferter Sidecar ohne Systemrunt
 
 ## 2. Gemeinsamer Fähigkeitenvertrag
 
-### Implementierter erster Teilschnitt und exakte Restintegration
+### Implementierte Schnittstellen und verbleibende Nachweise
 
 Nach dem PKG-04-Kandidaten `7b88a81` umgesetzt: Modusvertrag und Desktoptransport,
 In-Memory-Extraktion, eigener Markdown-Artefaktvertrag sowie echte negative
@@ -74,16 +77,17 @@ XLSX/PPTX und PDF/OCR bleiben unvollständig bewertet. XLSX verliert nicht mehr
 still Spalten ab 101 oder Zeilen ab 10.001; Übergrößen erzeugen einen expliziten
 Fehler. PPTX-Textläufe und numerische Notizen werden im Erhaltungspfad bewahrt.
 
-Die nächste Integration gehört in den vorhandenen Kern, nicht in einen zweiten
-Batchrunner:
+Die anschließende RC108-Integration verwendet den vorhandenen Kern, keinen
+zweiten Batchrunner:
 
-| Übergabe | Nächster konkreter Eingriff / Nachweis |
+| Übergabe | Aktueller Vertrag / gezielter Nachweis |
 |---|---|
-| `batch-intake-intent`, `batch-intake`, `batch-worker` | Verarbeitungszweck dauerhaft vor ACK binden; unbekannte Zwecke ablehnen; keine Pseudonymzustände für reine Konvertierung erzeugen. |
-| `batch-journal-store` | Vollständiges v5-Schema statt bloßem Zusatzfeld in v4; eigene positive Konvertierungs-Itemgrade/`dm_`-Identität. v1/v2/v4 bleiben Anonymisierung, altes verschlüsseltes v3 bleibt zurückgewiesen. |
-| `batch-item-processor`, `batch-reconciliation`, `batch-delivery` | Verarbeitung und Artefaktresolver zweckgebunden wählen; derzeit sind `anonymizeNext`, `ds_`, Privacy-Grade und Capability-Erteilung noch fest eingebunden. Crashfenster vor/nach Artefaktpublikation prüfen. |
-| `result-export`, Mapping-Outbox und native Zielresolver | Atomarer `DataSecure-Markdown`-Lauf samt Zuordnung, separate Rootidentität, beide Outputbäume aus Quellen ausschließen, fehlgeschlagene Folgeausgabe ohne Altziel. |
-| Frontend, Fähigkeitenmodell und Paket | Aktivierung erst mit kompletter Kette, festen Diagnosecodes und realem Vierformat-/Crash-/Offline-Paketnachweis; keine Übertragung der Engineering-Tests auf den alten PKG-04-Kandidaten. |
+| `core/processing-mode`, Frontend, Rust, `desktop-ipc`, `application-service` | Genau zwei Modi; Auswahlmodus nur für neuen Start, Fortsetzung aus Backendzustand. Plugin lehnt `markdown-only` ab. Keine Anonymisierungszusage im Konvertierungsmodus. |
+| `batch-intake-intent`, `batch-queue-envelope`, `batch-intake`, `batch-worker` | Zweck vor Checkpoint gebunden; explizite Markdown-Envelope-Typen, unbekannte Kombinationen abgewiesen; keine Pseudonymzustände für reine Konvertierung. |
+| `batch-journal-store` | Geschlossenes v5-Schema, `artifact_id`/Digest/Bytezahl/Extraktionsgrad/Gründe statt Privacy-Paketfeldern. v1/v2/v4 bleiben Anonymisierung, altes verschlüsseltes v3 bleibt zurückgewiesen. |
+| `batch-item-processor`, `batch-reconciliation`, `batch-delivery`, `standalone/markdown-store` | `convertNext` und typgebundener Artefaktresolver statt `anonymizeNext`; eigene Recoveryprüfung vor/nach Publikation, keine Read-Capability für Konvertate. |
+| `result-export`, Mapping-Outbox und native Zielresolver | Atomarer `DataSecure-Markdown`-Lauf samt Zuordnung und festen Gründen, separate Zielidentität, beide Outputbäume aus Quellen ausgeschlossen, fehlgeschlagene Folgeausgabe ohne Altziel. |
+| `conversion-worker`, `conversion-runtime-resolver`, Paketprojektion | Gebündeltes normales Node statt SEA-Reexec, geprüfte lokale Ressourcen, ein begrenzter isolierter Prozess pro Datei. Echter Paket-/Sidecar-E2E und anschließend neuer PKG-04-/INT-13-Nachweis bleiben separat zu liefern. |
 
 PDF.js verarbeitet ausschließlich lokale Bytes. Ein echter laufender Abbruch
 konnte zuvor eine unbeantwortete Promise lassen; Cancel-Wartepunkte, einmalige
@@ -91,7 +95,13 @@ Zerstörung und begrenzter Cleanup schließen diesen Engineering-Lifecycle-Defec
 Scan-PDF rastert sequenziell pro Seite und verwendet ausschließlich OCR, nicht
 zusätzlich einen vorhandenen Textlayer. OCR verwendet lokale DE/EN-Modelle ohne
 PII-Normalisierung und bleibt grundsätzlich als nicht verifiziert gekennzeichnet.
-Der Prozess-/Runtime-/Paketnachweis der späteren Produktanbindung bleibt offen.
+Diese Pilotadapter bleiben Vergleichs- und Engineering-Evidence. Der aktive
+Produktworker komponiert PDF/OCR innerhalb eines begrenzten eigenen Prozesses;
+PDF-Seiten behalten ihren nativen Text. Textlose Seiten und tatsächlich gemalte
+Bildinhalte werden zusätzlich per OCR gelesen: Eine native Seitenzahl darf den
+gescannten Haupttext nicht unterdrücken. Bereits im Textlayer vorhandene
+OCR-Zeilen werden nicht nochmals angehängt; zusätzliche Bildtexte sind
+gekennzeichnet. Reine Textseiten und ungenutzte Bildressourcen starten keine OCR.
 
 Ein zweiter unabhängiger Lifecycle-Gegencheck fand und korrigierte die
 Scan-PDF/OCR-Abbruchübergabe: Ein äußeres Cancel-Race durfte nicht antworten,
@@ -101,11 +111,11 @@ auch bei aktivem Abbruch erhalten. Reale Start-/Ready-Abbrüche, simuliert
 verweigerte und werfende Kill-Aufrufe sowie das anschließende natürliche
 Prozessende sind geprüft. Es gibt keinen automatischen stärkeren Kill-Retry.
 
-Der abschließende Hauptlauf besteht mit 43 Basis-/111 direkten Produktdateien
+Der historische Vorintegrationslauf bestand mit 43 Basis-/111 direkten Produktdateien
 und 14 Rust-Tests. Das separate Engineering-Gate für PDF, OCR und Scan-PDF
-ist vollständig grün; die erweiterten Scan-PDF-Fälle laufen zusätzlich mit
-gebündeltem Node 22. Alle Nachweise sind lokal und aktivieren weder die
-Produkt-Runtime noch den noch fehlenden reinen Konvertierungsworkflow.
+war vollständig grün; die erweiterten Scan-PDF-Fälle liefen zusätzlich mit
+gebündeltem Node 22. Diese älteren Nachweise ersetzen weder die anschließenden
+Integrationstests noch den neuen commitgebundenen Paketnachweis.
 
 Prüfung: `npm run test:conversion:engineering` verlangt bereits installierte
 gepinnten Pilotabhängigkeiten in `native/pdfjs/pilot` und `native/ocr/pilot`
@@ -113,7 +123,7 @@ sowie die gehashten lokalen Modelle. Der Test lädt nichts herunter und erzeugt
 seine Quellen im Speicher. Ein fehlender Pilot ist kein Produktfehler und darf
 nicht durch automatischen Download im Anwenderprogramm ersetzt werden.
 
-### Noch zu verbindender Produktvertrag
+### Produktgrenze und aktivierte Fähigkeiten
 
 Verfügbarkeit wird nach **Produkt × Modus × Format × Zielruntime** entschieden.
 Daraus werden Picker, Drag-and-drop, Aufnahme, Workerwahl, Größenlimits, UI und
@@ -121,36 +131,63 @@ Paketprüfung abgeleitet. Eine erfolgreiche Extraktion im Konvertierungsmodus
 aktiviert niemals automatisch die Anonymisierung oder den Cowork-Handoff.
 Manifestflags allein schalten keine fehlende Runtime frei.
 
+Aktiv sind elf Eingabetypen im reinen Standalone-Modus: TXT, Markdown, CSV, DOCX,
+XLSX, PPTX, PDF, Scan-PDF, PNG, JPEG und BMP. Scan-PDF ist ein PDF-Verarbeitungsfall,
+keine eigene Endung. Anonymisierung und Cowork bleiben auf TXT, Markdown, CSV und
+DOCX begrenzt. Reine Konvertierung bewahrt Originalinhalte und überträgt nichts
+automatisch an KI-Dienste. Die fachlichen Auslassungsgrenzen stehen in der
+[Formatmatrix](../docs/FORMAT_COVERAGE_MATRIX.md).
+
 ## 3. Wiederverwendung und konkrete Lücken
 
-| Format/Baustein | Vorhanden | Vor Aktivierung erforderlich |
+| Format/Baustein | Implementiert | Offener Umfang / Abnahme |
 |---|---|---|
 | XLSX | `ooxml.js`, OPC, Shared Strings, Kommentare, Zeichnungen, Inhaltsgraph; Kürzung durch explizites Budget ersetzt, Literalformel plus Cachewert im Erhaltungspfad | Zelltypen, führende Nullen, Datum, leere/ausgeblendete Blätter und vollständige Namespace-/Objekt-Coverage prüfen. Formelcache nicht mit berechnetem/aktuellem Excel-Wert verwechseln. |
 | PPTX | Folienreihenfolge, Tabellen, numerische Notizen und verbundene Textläufe regressionsgeprüft; Master/Layout, Diagramme/Bilder teilweise | Objekt-/Namespace-Coverage, realistische Office-Dateien und Reihenfolge; keine still ignorierten Textobjekte. |
-| MarkItDown | Gepinnter 0.1.7-DOCX-Differentialadapter | Portable gepinnte CPython-Patchversion, Hash-Wheellock je OS/Architektur, gebündelte Runtime, gerahmter isolierter Worker. Kein `[all]`, Azure oder LLM-Plugin. |
-| Text-PDF | PDF.js-Engineering-Extraktor mit `stopAtErrors`, unveränderten lokalen Bytes, Literaltext, 101-Seiten- und laufendem 1.000-Seiten-Abbruchtest; PDFium bleibt Vergleich | Vollständiger Objekt-/Aktionsumfang, Layout-/Textabdeckung, Prozess-/Ressourcen-Supervisor und Runtimeproduktentscheidung. Bisher grundsätzlich `incomplete`. |
-| Scan-PDF | Reale seitenweise PDF.js-Rasterung → lokale OCR, letzte Seite, Sourcehash, Pixelbudget und kein doppelter Textlayer getestet | Produktworker, kohärente Runtime und vollständige Paketkette; OCR bleibt potenziell unvollständig. Keine fixe Seitenanzahlgrenze. |
-| Bilder/OCR | Tesseract.js 7, lokale hashgeprüfte DE/EN-Modelle; PNG/BMP→Markdown ohne PII-Normalisierung, eigener begrenzter Prozess, 12 Testgruppen inkl. Cancel/Timeout | JPEG-Decoder, produktiver Supervisor, Paket→OCR-Nachweis auf Windows/macOS. Alle OCR-Ausgaben bleiben `incomplete`; keine automatische Vollständigkeitsfreigabe. |
+| MarkItDown | Optionaler gepinnter 0.1.7-DOCX-Differentialadapter | Kein benötigtes Python-/Wheel-Bundle, keine Voraussetzung für den aktiven Produktweg. Kein `[all]`, Azure oder LLM-Plugin. |
+| Text-PDF | Gebündeltes PDF.js 6.2.108, lokale Ressourcen, `stopAtErrors`, bytegebundene Eingabe und isolierter Produktworker; ältere Pilotfälle mit 101 Seiten / laufendem 1.000-Seiten-Abbruch bleiben zusätzliche Evidence | Vollständiger Objekt-/Layoutumfang und Zielhost-UAT. PDF bleibt grundsätzlich `incomplete`. |
+| Scan-PDF | Seitenweise Text-oder-OCR-Auswahl im Produktworker, eine lokale OCR-Sitzung pro PDF, Quellenhash und Vermeidung doppelter Inhalte geprüft | Aktueller Paket-/Sidecar-E2E, Windows-/macOS-UAT; OCR bleibt potenziell unvollständig. Keine fixe Seitenanzahlgrenze. |
+| Bilder/OCR | PNG/BMP-Decoder und JPEG via gebündeltem Canvas 1.0.7; Tesseract.js 7 mit lokalen hashgeprüften DE/EN-Modellen, kein Modelldownload/Cachewrite. Echter Worker mit Timeout und bestätigtem Prozessende | Aktueller Paket→OCR-Nachweis und Windows-/macOS-UAT. Alle OCR-Ausgaben bleiben `incomplete`; keine automatische Vollständigkeitsfreigabe. |
 
-`sourceLimitForExtension` kennt bislang nur die vier direkten Formate; andere
-fallen auf das 500-MiB-Stapelbudget zurück. Vor neuer Aufnahme brauchen sie
-passende Dateigrößen-/Arbeits-/Pixelgrenzen und seitenweise Verarbeitung ohne
-stille inhaltliche Kürzung. Das ist eine Implementierungslücke, kein Grund,
-unverarbeitete Inhalte als erfolgreich auszugeben.
+`sourceLimitForExtension` bindet jetzt auch XLSX/PPTX, PDF und Bilder an eigene
+Dateibudgets; das 500-MiB-/100-Dateien-Stapelbudget ist keine Einzeldokumentzusage.
+TXT/MD: 8.000.000 Byte, CSV: 1.500.000 Byte, OOXML: 64 MiB, PDF/Bilder: 25 MiB.
+Hinzu kommen höchstens 8.000.000 Markdown-Zeichen, 30 Millionen Bildpixel sowie
+Speicher-/CPU-/Wandzeitbudgets. Überschreitungen stoppen statt Inhalte still zu
+kürzen. Fehlende Runtime, Isolation oder unbestätigtes Prozessende sind feste
+Lifecyclefehler, keine erfolgreichen oder freigegebenen Konvertate.
 
 ## 4. Offline-Paketierung und Lieferung
 
-Der aktuelle Produktbuild schließt OCR und MarkItDown aus. Das OCR-Inventar
-umfasst bereits 243 Dateien/57.594.844 unkomprimierte Byte. Gebündelte Python-
-und PDF-Runtimes benötigen gemessene neue Paketbudgets, SBOM, NOTICE und
-zielgebundene Hashinventare. Keine Downloads beim Anwender. PDF.js benötigt
-lokale Canvas-Binaries sowie Fonts/CMaps/ICC/WASM-Ressourcen; Tesseract lokale
-Modelle ohne automatischen Modell-Download.
+Das Plugin schließt den alten Universal-OCR-Engineeringbaum weiterhin aus.
+Standalone bündelt ausschließlich seine gesonderte Konverterprojektion unter
+`server/standalone/conversion-runtime/`: normales Node.js 22.23.2, PDF.js,
+zielgebundenes Canvas, Tesseract.js und lokale Modelle samt Lizenzen. Hashinventar,
+SPDX-SBOM, NOTICE und Paketverifizierer binden diese Ressourcen; fehlende native
+Zielabhängigkeiten stoppen den Build. MarkItDown/Python bleibt ein optionales
+Differentialorakel, nicht benötigter Bundlebestandteil. Keine Downloads beim
+Anwender. Linux-Konverterpaketierung ist noch kein unterstützter Zielpfad.
 
-Lieferreihenfolge: direkte Konvertierung → XLSX/PPTX → Text-PDF → Bilder/OCR und
-Scan-PDF. Jede Stufe enthält echte Positiv-/Negativ-/Differential-/Pakettests.
-Windows-E0 ersetzt keine Intel-/ARM-macOS-Ausführung. Beide Produkte bleiben
-gepflegt; rohe Konvertate sind ausschließlich eine Standalone-Funktion.
+Die etwa 188-MB-Runtime wird je langlebigem Executor einmal vollständig geprüft;
+folgende Dateien prüfen Identitäten und hashen geänderte Dateien neu. Der reale
+100-TXT-Lauf dauerte lokal 15,264 Sekunden ohne erneutes vollständiges Runtime-
+Lesen je Datei. 22 E0-Konvertertestgruppen decken echte Formate, Namenerhaltung,
+Inputhashes, Leerbild, fehlerhafte Bytes, private Umgebung, laufenden Abbruch,
+Timeout und unbestätigtes Ende ab. Das sind keine Endnutzer-Performancegarantien.
+
+60 frühzeitige Prozessbeendigungen decken einen realen Windows-Lifecycledefect:
+Der native Supervisor bindet das Kind jetzt atomar über `JOB_LIST` während
+`CreateProcess` an seinen Job. Die frühere Lücke zwischen Erstellen und separater
+Jobzuweisung entfällt auch für den gemeinsamen Cowork-Parser. Native Builds sind
+reproduzierbar geprüft; 7 Launcher- und 19 Parser-Isolationstests sind grün.
+
+Vor Lieferung: vollständiger aktueller Sidecar-/Paket-E2E mit beiden Modi,
+Negativfolgelauf und allen elf Konvertierungstypen; dann sauberer Quellcommit,
+zwei bytegleiche PKG-04-Builds, beide Smokes und erst danach neue INT-13-Bindung.
+Der alte Kandidat `7b88a81` deckt diese Änderungen nicht ab. Keine endgültige
+PKG-04-/UAT-Erfolgsaussage für RC108 in diesem Plan. Windows-E0 ersetzt keine
+Intel-/ARM-macOS-Ausführung. Beide Produkte bleiben gepflegt; rohe Konvertate
+sind ausschließlich eine Standalone-Funktion.
 
 ## Primärquellen des Gegenchecks
 

@@ -35,7 +35,7 @@ const EVENTS = new Set([
   'automatic_review_started', 'automatic_review_finished',
   'automatic_review_claim_failed', 'automatic_review_failed',
   'automatic_review_release_failed',
-  'startup_refused'
+  'startup_refused', 'terminal_state_delegated_to_product_ui'
 ]);
 const OUTCOMES = new Set(['progress', 'ok', 'stopped']);
 const PHASES = new Set([
@@ -44,6 +44,10 @@ const PHASES = new Set([
   'ready_for_next_document', 'invalid_local_state'
 ]);
 const ERROR_CODES = new Set([
+  ...require('../standalone/conversion-worker-contract').ERROR_CODES,
+  ...require('../standalone/conversion-worker-contract').LIFECYCLE_ERROR_CODES,
+  'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID',
+  'BATCH_PROCESSING_MODE_CHANGED', 'BATCH_MARKDOWN_STATE_INVALID', 'RECOVERY_FAILED',
   'NONE', 'LOCAL_SELECTION_CANCELLED', 'LOCAL_SELECTION_REJECTED', 'LOCAL_PICKER_FAILED', 'LOCAL_PICKER_UNAVAILABLE',
   'LOCAL_PICKER_TIMEOUT', 'LOCAL_IPC_ACK_TIMEOUT', 'LOCAL_IPC_ACK_CANCELLED', 'LOCAL_WORKER_SPAWN_FAILED',
   'LOCAL_IPC_FAILED', 'LOCAL_QUEUE_SCHEMA_INVALID', 'LOCAL_WORKER_EXITED', 'LOCAL_NOTICE_FAILED', 'INTERNAL_FAILURE',

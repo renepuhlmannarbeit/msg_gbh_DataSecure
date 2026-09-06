@@ -52,6 +52,7 @@ function createBatchRecovery(options = {}) {
 
   function incompleteBatchState(state) {
     return !state.invalidated && (state.items || []).some((item) =>
+      (item.status === 'stopped' && item.local_mapping_exported === false) ||
       ['pending', 'processing', 'retryable', deferredReviewStatus, mappingPendingStatus,
         preflightMappingPendingStatus, deliveryPendingStatus]
         .includes(item.status)
@@ -129,6 +130,9 @@ function createBatchRecovery(options = {}) {
     const progress = publicProgress(latest, { skipResultProjection: true });
     const visible = visibleExportStatus(latest.token, progress.released);
     return Object.freeze({
+      ...(latest.schema === 'datasecure-batch/5' ? { processing_mode: 'markdown-only', warning_count: progress.warning_count || 0 } : {}),
+      ...(latest.schema === 'datasecure-batch/5' && latest.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')
+        ? { termination_unconfirmed: true } : {}),
       selected_count: progress.batch_total,
       completed_count: progress.released,
       failed_count: progress.stopped,
@@ -136,7 +140,10 @@ function createBatchRecovery(options = {}) {
       result_count: visible.available === true ? visible.exported : 0,
       export_pending_count: visible.pending,
       ...(visible.completion_pending === true ? { completion_pending: true } : {}),
-      processing: progress.local_processing_active === true || progress.processing > 0,
+      // A processing checkpoint survives a dead worker. Only a live executor
+      // proves current work; otherwise the recovery counters expose Resume.
+      // A live global processing lock is independently projected in `recovery`.
+      processing: progress.local_processing_active === true,
       resumable: progress.awaiting_resume === true,
       complete: progress.complete === true,
       ...(progress.complete === true && progress.stopped > 0

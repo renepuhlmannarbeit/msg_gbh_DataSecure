@@ -20,6 +20,8 @@ const RESOURCE_LIMITS = Object.freeze({
   MAX_CSV_SOURCE_BYTES: 1_500_000,
   // A DOCX is held compressed and expanded while its content graph is built.
   MAX_DOCX_SOURCE_BYTES: 64 * MIB,
+  MAX_PDF_SOURCE_BYTES: 25 * MIB,
+  MAX_IMAGE_SOURCE_BYTES: 25 * MIB,
   MAX_OOXML_EXPANDED_BYTES: 128 * MIB
 });
 
@@ -32,7 +34,16 @@ function sourceLimitForExtension(extension) {
     case '.csv':
       return RESOURCE_LIMITS.MAX_CSV_SOURCE_BYTES;
     case '.docx':
+    case '.xlsx':
+    case '.pptx':
       return RESOURCE_LIMITS.MAX_DOCX_SOURCE_BYTES;
+    case '.pdf':
+      return RESOURCE_LIMITS.MAX_PDF_SOURCE_BYTES;
+    case '.png':
+    case '.jpg':
+    case '.jpeg':
+    case '.bmp':
+      return RESOURCE_LIMITS.MAX_IMAGE_SOURCE_BYTES;
     default:
       return RESOURCE_LIMITS.MAX_INPUT_BYTES;
   }

@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 06.09.2026 · 3.2.0-rc107 · integrierter Expertenstand: lesbare Standalone-Kennungen, native Aufnahme und Cowork-Abschlussparität
+Stand: 06.09.2026 · 3.2.0-rc108 · integrierter Expertenstand: einfache eigenständige Markdown-Konvertierung mit Offline-OCR
 
 ## Aktueller geprüfter Kandidat
 
@@ -18,20 +18,31 @@ Dies belegt nicht den anschließenden Funktionsausbau, macOS oder die sichtbare
 Explorer-/Finder-/Cowork-Anwenderabnahme. Die unten dokumentierten früheren
 gescheiterten Paketversuche sind historische Gegencheck-Evidence.
 
-## Anschließender Quellstand: Konvertierung, noch nicht im Kandidaten
+## Anschließender Quellstand: aktivierte Standalone-Konvertierung
 
-Nach dem gebundenen RC107-Kandidaten wurde der neue Verarbeitungsmodus durch
-Frontend, Rust, private IPC und Service geführt. Fehlende/ungültige Startwerte
-und Moduswechsel bei Continue werden abgelehnt. Die direkte Extraktion für
-TXT/Markdown/CSV/DOCX sowie ein eigener Markdown-Artefaktvertrag sind vorhanden;
-rohe Konvertate bestehen die öffentlichen Privacy-Lesegates ausdrücklich nicht.
-XLSX/PPTX-Extraktion wurde ohne stille Tabellenkürzung ergänzt, bleibt aber
-unvollständig bewertet. PDF-/Scan-/OCR-Pfade sind separate Engineering-Einstiege,
-nicht Teil des ausgelieferten Pakets. **Die reine Konvertierung ist weiterhin
-nicht produktiv startbar:** Journal v5, Worker, Recovery und Markdown-Export
-müssen noch zusammengeführt werden. Der bestehende ZIP beweist nur `7b88a81`.
+Nach dem gebundenen RC107-Kandidaten wurde **Nur in Markdown umwandeln** als
+Standalone-Standard durch Frontend, Rust, private IPC, Intake-v2, eigene Worker-
+Nachrichten, v5-Journal, `dm_`-Store, Recovery und v3-Export verbunden. Es gibt
+keine PII-Ersetzung, keinen Pseudonymseed und keinen PII-Review. Dateien wählen
+oder hineinziehen, starten, Ergebnisse öffnen. Namen und Inhalte bleiben erhalten;
+Ausgaben und Zuordnung liegen getrennt unter `DataSecure-Markdown/Lauf-…`.
+Text-/OCR-/Coverage-Hinweise werden ohne Zusatzdialog gespeichert; schlechte oder
+geschützte Dateien erhalten Fehlerpositionen, der übrige Stapel läuft weiter.
+TXT/MD/CSV/DOCX/XLSX/PPTX, PDF/Scan-PDF und PNG/JPEG/BMP nutzen einen gebündelten
+Offline-Worker mit normalem Node, PDF.js, Canvas, Tesseract und DE/EN-Modellen.
+Der unabhängige Integrationsreview fand und korrigierte einen gemeinsamen
+Windows-Launcher-Race bei frühem Abbruch sowie fehlende v5-Snapshot-/Recovery-
+Übergänge. Der neue vollständige Produkt-/PKG-04-Nachweis wird separat erstellt;
+der historische RC107-Receipt bleibt ausschließlich Beleg für `7b88a81`.
 
-Abschlussprüfung dieses anschließenden Quellstands am 06.09.2026:
+Die vollständige RC108-Produktsuite ist grün (48 Basis-/111 direkte Testdateien),
+ebenso Rust 15/15, Frontend 18/18, Dokumentationsgates und Cowork-Build. Der echte
+RC108-Probe-Paketlauf besteht beide Modi, elf Konvertierungsergebnisse plus
+Fehlerposition, genaue Laufzuordnung und optionale Supportereignisse. Der finale
+Zweifachbau bleibt bis zu seiner tatsächlichen Ausführung offen.
+Details: [RC108-Abschlussreview](../../tasks/archiv/2026-09-06-standalone-markdown-rc108-abschluss.md).
+
+Historische Abschlussprüfung des Zwischenstands `2f173f9` am 06.09.2026:
 `test:product` vollständig grün (43 Basis- und 111 direkte Testdateien,
 einschließlich 2.000 Eingaben und echter 100-Dateien-Crash-/Fortsetzungsläufe),
 Rust 14/14 und `test:conversion:engineering` grün. Der letzte unabhängige
@@ -49,7 +60,8 @@ zur De-Identifizierung von Geschäftsdokumenten. Originale werden lokal gewählt
 und niemals automatisch verändert oder gelöscht. Nur freigegebene,
 de-identifizierte Markdown-Ergebnisse dürfen Claude erreichen. Die zweite
 Standalone-Kernfunktion **Nur in Markdown umwandeln** ohne Anonymisierung ist
-verbindlich geplant, aber noch nicht produktiv freigegeben (DS-085/BL-010.28).
+implementiert und aktiviert; die Zielhost-/Anwenderabnahme bleibt gesondert
+offen (DS-085/BL-010.28).
 
 Neue Standalone-Stapel verwenden lesbare, neustartfeste Nummern für Personen,
 Unternehmen und Projekte; bestehende v1-Stapel und Plugin-Ausgaben behalten ihr

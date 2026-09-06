@@ -83,6 +83,9 @@ function createBatchProcessingOrchestrator(options = {}) {
 
       // Security boundary: keep in-process and filesystem locks until the
       // delegated asynchronous pipeline has resolved or rejected.
+      if (state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' && state.product_channel === 'standalone') {
+        return await processSingleBatchItem(state, item, entry, deps);
+      }
       return await withBatchPseudonymRegistry(state, (pseudonymRegistry) =>
         processSingleBatchItem(state, item, entry,
           pseudonymRegistry ? {

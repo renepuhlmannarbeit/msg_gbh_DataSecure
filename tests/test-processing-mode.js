@@ -15,7 +15,7 @@ test('exact product mode is distinct from local_only delivery', () => {
 test('raw conversion cannot enter the plugin or be enabled by a caller flag', () => {
   assert.throws(() => validateProcessingMode(MODES.MARKDOWN, 'plugin'), { code: 'PROCESSING_MODE_FORBIDDEN' });
   assert.throws(() => validateProcessingMode(MODES.MARKDOWN, 'Standalone'), { code: 'PRODUCT_CHANNEL_INVALID' });
-  assert.throws(() => assertRunnableProcessingMode(MODES.MARKDOWN, 'standalone', true), { code: 'MARKDOWN_CONVERSION_NOT_READY' });
+  assert.equal(assertRunnableProcessingMode(MODES.MARKDOWN, 'standalone'), MODES.MARKDOWN);
   assert.equal(assertRunnableProcessingMode(MODES.ANONYMIZE, 'standalone'), MODES.ANONYMIZE);
 });
 test('historical journals stay anonymization, including legacy plugin state', () => {

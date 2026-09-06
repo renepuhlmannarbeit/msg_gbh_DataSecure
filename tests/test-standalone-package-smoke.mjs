@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+import { office, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -80,8 +81,11 @@ let childClosed = false;
 let closePromise;
 try {
   const environment = isolatedSidecarEnvironment(root, extraction);
+  // Exercise the optional trace through the actual packaged child chain, not
+  // only an in-process logger double. This opt-in is scoped to this test child.
+  environment.EU_PRIVACY_SUPPORT_MODE = '1';
   fs.mkdirSync(install, { recursive: true });
-  const entries = readZip(fs.readFileSync(zip), { maxEntries: 500, maxUncompressed: 256 * 1024 * 1024 });
+  const entries = readZip(fs.readFileSync(zip), { maxEntries: 2000, maxUncompressed: 512 * 1024 * 1024 });
   const prefix = `DataSecure-Standalone-${version}-windows-x64/`;
   for (const [name, bytes] of entries) {
     assert.ok(name.startsWith(prefix));
@@ -261,6 +265,81 @@ try {
     await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a1'.repeat(8),
       action: 'ack_terminal_presented', presentation_generation: failedTerminal.presentation_generation });
   }
+  // Real second product purpose, in the very same shipped sidecar after two
+  // anonymization runs. No mocked parser, worker, journal or export endpoint.
+  const canvas = image();
+  const png = canvas.toBuffer('image/png'), jpeg = canvas.toBuffer('image/jpeg');
+  const { decodePng } = require('../plugins/data-secure/server/images/png');
+  const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
+  const extraSources = [
+    ['Tabelle.xlsx', office('xlsx')], ['Folien.pptx', office('pptx')],
+    ['Text.pdf', pdf([{ text: conversionText }])], ['Scan.pdf', pdf([{ image: jpeg }])],
+    ['Bild.png', png], ['Bild.jpeg', jpeg], ['Bild.bmp', encodeBmp(decodePng(png))]
+  ];
+  const conversionSources = [...sourceFiles, ...extraSources.map(([name, bytes]) => {
+    const destination = path.join(sourceDirectory, name);
+    fs.writeFileSync(destination, bytes, { flag: 'wx' }); return destination;
+  }), failedSource];
+  const beforeConversion = conversionSources.map(file => fs.readFileSync(file));
+  const conversionAdmission = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'c1'.repeat(8), action: 'admit_selected_sources', source_kind: 'files', source_paths: conversionSources });
+  assert.equal(conversionAdmission.ok, true);
+  assert.equal(conversionAdmission.result.selected_count, 12);
+  const conversionStart = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'c2'.repeat(8), action: 'start_admitted_batch', processing_mode: 'markdown-only' });
+  assert.equal(conversionStart.ok, true);
+  let converted;
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const polled = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: (0x2000 + attempt).toString(16).padStart(16, '0'), action: 'get_public_state' });
+    assert.equal(polled.ok, true);
+    lastFailureState = polled.result;
+    if (polled.result.processing_mode === 'markdown-only' && terminalStates.has(polled.result.state)) {
+      converted = polled.result; break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  assert.ok(converted, `conversion must finish without a review dialog: ${JSON.stringify(lastFailureState)}`);
+  assert.equal(converted.state, 'results_available', JSON.stringify(converted));
+  assert.equal(converted.result_count, 11);
+  assert.equal(converted.failed_count, 1);
+  assert.ok(converted.warning_count >= 6, 'Office/scan/image omissions are explicit and never block pure conversion');
+  const convertedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'c3'.repeat(8), action: 'get_ui_context' });
+  const convertedRun = convertedContext.result.latest_result_folder;
+  assert.equal(path.dirname(convertedRun), path.join(resultDirectory, 'DataSecure-Markdown'));
+  const convertedMapping = path.join(convertedRun, 'DataSecure-Zuordnung.csv');
+  const convertedCsv = fs.readFileSync(convertedMapping, 'utf8');
+  conversionSources.forEach((file, index) => {
+    assert.ok(convertedCsv.includes(path.basename(file)), 'every success and failure appears in the run mapping');
+    assert.deepEqual(fs.readFileSync(file), beforeConversion[index]);
+  });
+  const convertedFiles = fs.readdirSync(convertedRun).filter(name => name.endsWith('.md'));
+  assert.equal(convertedFiles.length, 11);
+  const texts = convertedFiles.map(name => fs.readFileSync(path.join(convertedRun, name), 'utf8'));
+  assert.equal(texts.filter(value => /Lina(?: |&#32;)Testfeld/u.test(value)).length, 4, 'all original four formats preserve person identities');
+  assert.equal(texts.filter(value => /Max(?: |&#32;)Mustermann/u.test(value)).length, 7, 'all new converters, including OCR, preserve person identities');
+  for (const value of texts) assert.doesNotMatch(value, /\[PERSON_|\[UNTERNEHMEN_|anonymized: true/u);
+  assert.ok(texts.includes(originals[0].toString('utf8')), 'TXT contents are not normalized or redacted');
+  assert.ok(texts.includes(originals[1].toString('utf8')), 'existing Markdown contents are preserved');
+  for (const [action, expectedPath] of [['resolve_current_results', convertedRun], ['resolve_local_ledger', convertedMapping]]) {
+    const result = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: action === 'resolve_current_results' ? 'c4'.repeat(8) : 'c5'.repeat(8), action });
+    assert.equal(result.ok, true); assert.equal(result.result.local_path, expectedPath);
+  }
+  assert.equal(fs.readFileSync(mapping, 'utf8'), mappingText, 'conversion never rewrites a previous anonymized result');
+  const supportDirectory = path.join(environment.LOCALAPPDATA, 'SecureDataMsg-Standalone', 'diagnostics', 'support-events');
+  const conversionEvents = fs.readdirSync(supportDirectory).filter(name => name.endsWith('.json'))
+    .map(name => JSON.parse(fs.readFileSync(path.join(supportDirectory, name), 'utf8')))
+    .filter(event => ['converter_started', 'coverage_checked', 'converter_completed', 'converter_stopped'].includes(event.event));
+  for (const [event, expected] of [['converter_started', 12], ['coverage_checked', 11],
+    ['converter_completed', 11], ['converter_stopped', 1]]) {
+    assert.equal(conversionEvents.filter(record => record.event === event).length, expected,
+      `the shipped worker must persist ${event} without a source/runtime mock`);
+  }
+  assert.ok(conversionEvents.every(record => record.product_channel === 'standalone'));
+  assert.doesNotMatch(JSON.stringify(conversionEvents), /Mustermann|Testfeld|Nordstern|personnel-profile|Tabelle\.xlsx|Quellen|Ergebnisse/u);
+  process.stdout.write('STANDALONE REAL MIXED MARKDOWN CONVERSION PASS (11 results, 1 failed CSV, both modes)\n');
   await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);

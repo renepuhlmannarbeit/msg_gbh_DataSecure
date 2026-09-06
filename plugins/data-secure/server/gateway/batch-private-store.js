@@ -50,12 +50,14 @@ function workPath(token) {
 // or resolve a key. Uncertain reads and renamed envelopes remain untouched.
 function assertPlainWorkFile(target, io = fs) {
   if (/\.dsart$/iu.test(target)) throw legacyCopyError();
-  const named = io.lstatSync(target);
+  // NTFS inode values can exceed Number.MAX_SAFE_INTEGER. Rounded identifiers
+  // must never merge distinct work copies or conceal an object substitution.
+  const named = io.lstatSync(target, { bigint: true });
   if (!named.isFile() || named.isSymbolicLink()) throw new Error('BATCH_WORK_UNSAFE');
   let fd;
   try {
     fd = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
-    const opened = io.fstatSync(fd);
+    const opened = io.fstatSync(fd, { bigint: true });
     if (!opened.isFile() || opened.dev !== named.dev || opened.ino !== named.ino) throw new Error('BATCH_WORK_UNSAFE');
     const header = Buffer.alloc(8);
     let offset = 0;
@@ -66,9 +68,9 @@ function assertPlainWorkFile(target, io = fs) {
       offset += count;
     }
     if (offset === 8 && header.equals(Buffer.from('DSARTF01'))) throw legacyCopyError();
-    const again = io.lstatSync(target);
+    const again = io.lstatSync(target, { bigint: true });
     if (!again.isFile() || again.isSymbolicLink() || again.dev !== opened.dev || again.ino !== opened.ino ||
-        again.size !== named.size || again.mtimeMs !== named.mtimeMs) throw new Error('BATCH_WORK_UNSAFE');
+        again.size !== named.size || again.mtimeNs !== named.mtimeNs) throw new Error('BATCH_WORK_UNSAFE');
     return again;
   } finally {
     if (fd !== undefined) io.closeSync(fd);
@@ -113,7 +115,7 @@ function safeRemoveWorkDirectory(token, options = {}) {
       const full = path.join(target, entry.name);
       const fileStat = assertPlainWorkFile(full);
       const key = `${fileStat.dev}:${fileStat.ino}`;
-      links.set(key, (links.get(key) || 0) + 1);
+      links.set(key, (links.get(key) || 0n) + 1n);
       plan.push({ full, stat: fileStat, key });
     }
     // A crash between hard-link publication and temporary-name removal leaves
@@ -128,18 +130,18 @@ function safeRemoveWorkDirectory(token, options = {}) {
       verifyDirectories();
       const current = assertPlainWorkFile(file.full);
       if (current.dev !== file.stat.dev || current.ino !== file.stat.ino || current.size !== file.stat.size ||
-          current.mtimeMs !== file.stat.mtimeMs || current.nlink !== links.get(file.key)) throw new Error('BATCH_WORK_UNSAFE');
+          current.mtimeNs !== file.stat.mtimeNs || current.nlink !== links.get(file.key)) throw new Error('BATCH_WORK_UNSAFE');
       retryTransientDelete(
         () => fs.unlinkSync(file.full),
         () => {
           verifyDirectories();
           const retryStat = assertPlainWorkFile(file.full);
           if (retryStat.dev !== file.stat.dev || retryStat.ino !== file.stat.ino ||
-              retryStat.size !== file.stat.size || retryStat.mtimeMs !== file.stat.mtimeMs ||
+              retryStat.size !== file.stat.size || retryStat.mtimeNs !== file.stat.mtimeNs ||
               retryStat.nlink !== links.get(file.key)) throw new Error('BATCH_WORK_UNSAFE');
         }
       );
-      links.set(file.key, links.get(file.key) - 1);
+      links.set(file.key, links.get(file.key) - 1n);
     }
     verifyDirectories();
     retryTransientDelete(

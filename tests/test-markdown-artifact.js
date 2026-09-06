@@ -78,11 +78,15 @@ test('empty text has an honest zero-byte digest rather than an invented placehol
   validateMarkdownArtifact(artifact.manifest, '');
 });
 
-test('all known incomplete coverage causes stop before artifact creation', () => {
+test('incomplete conversion is retained with its explicit non-anonymized grade and reasons', () => {
   for (const code of COVERAGE_REASON_CODES) {
     const result = extraction('Text', 'docx', { status: 'incomplete', reason_codes: [code] });
     assert.strictEqual(validateMarkdownExtraction(result), result);
-    assert.throws(() => createMarkdownArtifact(result, artifactId), errorCode('MARKDOWN_EXTRACTION_INCOMPLETE'));
+    const artifact = createMarkdownArtifact(result, artifactId);
+    assert.strictEqual(artifact.manifest.extraction_grade, 'incomplete');
+    assert.deepStrictEqual(artifact.manifest.reason_codes, [code]);
+    assert.strictEqual(artifact.manifest.anonymized, false);
+    assert.strictEqual(validateMarkdownArtifact(artifact.manifest, artifact.markdown), artifact.manifest);
   }
   const result = extraction('Text', 'pdf', { status: 'incomplete', reason_codes: [...COVERAGE_REASON_CODES] });
   assert.strictEqual(result.coverage.reason_codes.length, 4);

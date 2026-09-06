@@ -1,6 +1,6 @@
 # Product Vision
 
-Stand: 05.09.2026 · verbindliches Zielbild beider Produkte und beider Standalone-Betriebsarten
+Stand: 06.09.2026 · verbindliches Zielbild beider Produkte und beider Standalone-Betriebsarten
 
 ## Vision in einem Satz
 
@@ -15,8 +15,9 @@ und anonymisieren** sowie **Nur in Markdown umwandeln**. Die zweite Funktion
 macht Inhalte unterschiedlicher Ausgangsformate für eine spätere KI-Nutzung
 zugänglich, ohne Namen, Unternehmen oder andere personenbezogene Inhalte zu
 entfernen. Sie ist kein optionaler Debug- oder Supportpfad und darf bei
-Refactoring nicht aus dem Produktziel verschwinden (DS-085). Heute ist sie noch
-in Entwicklung, nicht produktiv freigegeben.
+Refactoring nicht aus dem Produktziel verschwinden (DS-085). Sie ist im aktuellen
+Standalone-Quellstand als Standard aktiviert; Zielhost-/Anwenderfreigaben bleiben
+getrennt vom technischen Implementierungsnachweis.
 
 DataSecure benötigt keine zusätzliche System-VM. Auch die Abnahmeplanung
 verwendet echte lokale Zielrechner statt eigens eingerichteter VMs (DS-062).
@@ -58,6 +59,8 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
    Folgeschritt und benötigt weder MCP noch Skills oder Agenten. Reine
    Markdown-Konvertierung überspringt ausschließlich die Anonymisierung und
    deren Fachreview, nicht Quellen-, Format-, Coverage- oder Exportprüfung.
+   Extraktions-/OCR-Hinweise verhindern dabei nicht die Ausgabe lesbarer Texte:
+   sie werden am Ende mitgeteilt, ohne weitere Bestätigungsdialoge.
 3. **Ein einfacher Normalablauf:** Standalone zeigt die gewählten Dateien,
    den Modus und das Ziel vor einem expliziten Start. Im Plugin startet die
    lokale Auswahl den vereinbarten Anonymisierungsauftrag; zusätzliche fachliche

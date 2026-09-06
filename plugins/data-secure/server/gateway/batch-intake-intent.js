@@ -10,6 +10,7 @@ const {
   safeUnlinkBoundPrivateFile
 } = require('./bound-private-file');
 const { processAlive } = require('./process-liveness');
+const { MODES, validateProcessingMode } = require('../core/processing-mode');
 
 const SUFFIX = '.intake';
 const identity = (stat) => ({ dev: String(stat.dev), ino: String(stat.ino), birthtimeNs: String(stat.birthtimeNs) });
@@ -31,11 +32,16 @@ function createBatchIntakeIntent(options = {}) {
     return path.join(path.dirname(journalPath(token)), `${token}${SUFFIX}`);
   };
 
-  function create(token, expiresAt, expectedIdentity) {
+  function create(token, expiresAt, expectedIdentity, purpose = {}) {
+    const productChannel = purpose.productChannel === undefined ? 'plugin' : purpose.productChannel;
+    const processingMode = validateProcessingMode(purpose.processingMode === undefined
+      ? MODES.ANONYMIZE : purpose.processingMode, productChannel);
     const stat = io.lstatSync(workDirectory(token), { bigint: true });
     if (!stat.isDirectory() || stat.isSymbolicLink() ||
         (expectedIdentity && !sameIdentity(identity(stat), expectedIdentity))) throw new Error('BATCH_INTAKE_INTENT_INVALID');
-    const record = { schema: 'datasecure-intake/1', token, pid: process.pid,
+    const record = { schema: processingMode === MODES.MARKDOWN ? 'datasecure-intake/2' : 'datasecure-intake/1',
+      ...(processingMode === MODES.MARKDOWN ? { product_channel: productChannel, processing_mode: processingMode } : {}),
+      token, pid: process.pid,
       expires_at: expiresAt, work_identity: identity(stat) };
     if (!validIdentity(record.work_identity)) throw new Error('BATCH_INTAKE_INTENT_INVALID');
     const target = intentPath(token);
@@ -64,7 +70,13 @@ function createBatchIntakeIntent(options = {}) {
       if (Object.entries(boundIdentity(after)).some(([key, value]) => binding.file[key] !== value)) {
         throw new Error('BATCH_INTAKE_INTENT_INVALID');
       }
-      if (record.schema !== 'datasecure-intake/1' || record.token !== token ||
+      const purposeBound = record.schema === 'datasecure-intake/2';
+      if ((purposeBound && (record.product_channel !== 'standalone' || record.processing_mode !== MODES.MARKDOWN)) ||
+          (!purposeBound && (record.schema !== 'datasecure-intake/1' ||
+            (Object.hasOwn(record, 'processing_mode') && record.processing_mode !== MODES.ANONYMIZE)))) {
+        throw new Error('BATCH_INTAKE_INTENT_INVALID');
+      }
+      if (record.token !== token ||
           !Number.isSafeInteger(record.pid) || record.pid <= 0 ||
           !Number.isFinite(Date.parse(record.expires_at)) || !validIdentity(record.work_identity)) throw new Error('BATCH_INTAKE_INTENT_INVALID');
       bindings.set(record, binding);

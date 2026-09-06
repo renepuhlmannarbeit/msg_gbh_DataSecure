@@ -109,8 +109,10 @@ function visibleResultTreeOverlaps(target) {
   if (!roots.size) return false;
   const selected = comparablePath(target);
   for (const root of roots) {
-    const output = comparablePath(path.join(path.resolve(root), 'DataSecure-Output'));
-    if (insideOrEqual(selected, output) || insideOrEqual(output, selected)) return true;
+    for (const name of ['DataSecure-Output', 'DataSecure-Markdown']) {
+      const output = comparablePath(path.join(path.resolve(root), name));
+      if (insideOrEqual(selected, output) || insideOrEqual(output, selected)) return true;
+    }
   }
   return false;
 }

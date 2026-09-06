@@ -32,6 +32,16 @@ test('engineering and historical evidence have explicit opt-in scripts', () => {
   assert.strictEqual(pkg.scripts['test:engineering-keyring'], undefined);
 });
 
+test('native conversion resources are required by PKG-04, not silently added to cost-capped source CI', () => {
+  const suite = require('./run-product-suite');
+  const nativeTest = 'test-standalone-conversion-worker.mjs';
+  assert.ok(![...suite.baseFiles.map(file => path.basename(file)), ...suite.ciFiles, ...suite.fullOnly].includes(nativeTest));
+  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/${nativeTest}`);
+  const pkg04 = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
+  assert.ok(pkg04.indexOf("@('run', 'test:standalone:conversion')") < pkg04.indexOf("foreach ($label"));
+  assert.match(pkg04, /Invoke-Checked 'npm.cmd' @\('run', 'test:standalone:conversion'\)/u);
+});
+
 test('fast documentation validation cannot trigger SEA, apps or Claude CLI', () => {
   assert.strictEqual(pkg.scripts['test:docs'], 'npm run test:docs:fast');
   assert.doesNotMatch(pkg.scripts['test:docs:fast'], /sea|status-app|claude-local/iu);

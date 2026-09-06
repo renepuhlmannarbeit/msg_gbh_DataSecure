@@ -11,4 +11,14 @@ inventarisiert. Das heutige Engineering-SBOM setzt deren Lizenzfelder bewusst
 auf `NOASSERTION`; es ersetzt keine komponentenweise Lizenzprüfung. Diese
 Prüfung ist vor einem Endnutzerrelease Pflicht.
 
+Die reine Offline-Konvertierung enthält außerdem PDF.js 6.2.108
+(Apache-2.0), Tesseract.js und Tesseract.js-core 7.0.0 (Apache-2.0),
+@napi-rs/canvas 1.0.7 (MIT) mit zielgebundener nativer Bibliothek sowie
+Tessdata-fast-4.1.0-Modelle für Deutsch und Englisch (Apache-2.0).
+Die vollständigen Lizenztexte bleiben bei den jeweiligen Komponenten unter
+`server/standalone/conversion-runtime/`. Dessen `RUNTIME.json` bindet
+Versionen und Dateihashes; `THIRD_PARTY_NOTICES.txt` führt auch transitive
+JavaScript-Abhängigkeiten auf. Das Paket-SBOM inventarisiert diese Komponenten.
+MarkItDown/Python wird für diesen Produktpfad nicht mitgeliefert oder benötigt.
+
 DataSecure selbst ist proprietär; maßgeblich ist `LICENSE`.

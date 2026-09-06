@@ -5,6 +5,11 @@ const path = require('path');
 const { SafeError } = require('../runtime');
 const { workPath, assertPlainWorkFile } = require('./batch-private-store');
 const { releaseOwnedLock } = require('./batch-lock-release');
+const { verifyMarkdownItem } = require('../standalone/markdown-store');
+
+function conversionBatch(state) {
+  return state?.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' && state.product_channel === 'standalone';
+}
 
 const WORK_NAME_RE = /^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i;
 
@@ -27,6 +32,12 @@ function createBatchDelivery(options = {}) {
   const mappingPendingStatus = options.mappingPendingStatus || 'mapping_pending';
 
   function deliveryResult(state, item) {
+    if (conversionBatch(state)) {
+      if (!verifyMarkdownItem(item)) throw new ErrorType('Das lokale Konvertat konnte nicht sicher verifiziert werden.');
+      return { ok: true, artifact_id: item.artifact_id, processing_mode: 'markdown-only', anonymized: false,
+        extraction_grade: item.extraction_grade, reason_codes: [...item.reason_codes],
+        ...publicProgress(state), raw_content_sent_to_claude: false };
+    }
     const packageId = String(item?.package_id || '');
     if (!regularPublishedPackage(packageId)) {
       throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
@@ -84,6 +95,9 @@ function createBatchDelivery(options = {}) {
   function acknowledgeDeliveredPackage(token, packageId, deps = {}) {
     return enter(token, () => {
       const state = readState(token);
+      if (state.schema === 'datasecure-batch/5' || state.processing_mode === 'markdown-only') {
+        throw new ErrorType('Nicht anonymisierte Konvertate sind keine Claude-Übergaben.');
+      }
       assertLocalExecutorAccess(state, deps.executorPid);
       const item = state.items.find((candidate) =>
         [deliveryPendingStatus, 'released'].includes(candidate.status) && candidate.package_id === packageId
@@ -124,6 +138,9 @@ function createBatchDelivery(options = {}) {
     }
     return enter(token, () => {
       const state = readState(token);
+      if (state.schema === 'datasecure-batch/5' || state.processing_mode === 'markdown-only') {
+        throw new ErrorType('Nicht anonymisierte Konvertate sind keine Claude-Übergaben.');
+      }
       assertLocalExecutorAccess(state, deps.executorPid);
       // Validate the whole page before changing any acknowledgement.
       const items = packageIds.map((packageId) => {
@@ -167,15 +184,16 @@ function createBatchDelivery(options = {}) {
     return enter(token, () => {
       const state = readState(token);
       assertLocalExecutorAccess(state, deps.executorPid);
+      const converting = conversionBatch(state);
       const item = state.items.find((candidate) =>
-        candidate.status === deliveryPendingStatus && candidate.package_id === packageId
+        candidate.status === deliveryPendingStatus && (converting ? candidate.artifact_id : candidate.package_id) === packageId
       );
-      if (!item || !regularPublishedPackage(packageId)) {
+      if (!item || !(converting ? verifyMarkdownItem(item) : regularPublishedPackage(packageId))) {
         throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher abgeschlossen werden.');
       }
       item.status = 'released';
       item.checkpoint = 'released_locally';
-      item.analysis_acknowledged = false;
+      if (!converting) item.analysis_acknowledged = false;
       try {
         cleanupTerminalWorkCopy(state, item, deps);
       } catch {

@@ -35,6 +35,27 @@ const trackedDir = path.join(root, 'plugins', 'data-secure', 'server', 'native',
 const trackedOutput = path.join(trackedDir, 'datasecure-sandbox.exe');
 const trackedChecksum = path.join(trackedDir, 'datasecure-sandbox.sha256');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-native-'));
+const temporaryIdentity = fs.lstatSync(temporary);
+function cleanupNativeBuild() {
+  if (path.dirname(temporary) !== path.resolve(os.tmpdir()) || !/^datasecure-native-[A-Za-z0-9]+$/u.test(path.basename(temporary))) {
+    throw new Error('NATIVE_BUILD_CLEANUP_UNSAFE');
+  }
+  const entries = [];
+  function inspect(target) {
+    const stat = fs.lstatSync(target);
+    if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw new Error('NATIVE_BUILD_CLEANUP_UNSAFE');
+    if (target === temporary && (stat.dev !== temporaryIdentity.dev || stat.ino !== temporaryIdentity.ino)) throw new Error('NATIVE_BUILD_CLEANUP_UNSAFE');
+    entries.push({ target, stat });
+    if (stat.isDirectory()) for (const name of fs.readdirSync(target)) inspect(path.join(target, name));
+  }
+  inspect(temporary);
+  for (const entry of entries.reverse()) {
+    const current = fs.lstatSync(entry.target);
+    if (current.isSymbolicLink() || current.dev !== entry.stat.dev || current.ino !== entry.stat.ino ||
+        current.isDirectory() !== entry.stat.isDirectory()) throw new Error('NATIVE_BUILD_CLEANUP_UNSAFE');
+    if (current.isDirectory()) fs.rmdirSync(entry.target); else fs.unlinkSync(entry.target);
+  }
+}
 const output = path.join(temporary, 'datasecure-sandbox.exe');
 const object = path.join(temporary, 'datasecure-sandbox.obj');
 if (!fs.existsSync(vcvars) || !fs.existsSync(source)) throw new Error('native launcher build inputs are incomplete');
@@ -79,5 +100,5 @@ try {
     console.log(`Native analysis build completed: sha256=${hash}\ntoolchain=runner MSVC / Windows SDK ${expectedWindowsSdk}`);
   }
 } finally {
-  fs.rmSync(temporary, { recursive: true, force: true });
+  cleanupNativeBuild();
 }

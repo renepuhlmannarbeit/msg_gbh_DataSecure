@@ -350,6 +350,13 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
     Ok((executable, script))
 }
 
+fn configure_support_trace(command: &mut Command, setting: Option<&std::ffi::OsStr>) {
+    command.env_remove("EU_PRIVACY_SUPPORT_MODE");
+    if setting == Some(std::ffi::OsStr::new("1")) {
+        command.env("EU_PRIVACY_SUPPORT_MODE", "1");
+    }
+}
+
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
     diagnostic_event("sidecar_starting", None, "progress", None, None);
     let (executable, script) = runtime_paths(app).inspect_err(|code| {
@@ -403,6 +410,12 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
         command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", documents);
     }
     command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
+    // Optional, explicitly enabled content-free support trace. No arbitrary
+    // host environment or vendor stderr is forwarded to the product worker.
+    configure_support_trace(
+        &mut command,
+        std::env::var_os("EU_PRIVACY_SUPPORT_MODE").as_deref(),
+    );
     command.env(
         "DATASECURE_STANDALONE_DIAGNOSTIC_SESSION",
         diagnostic_session(),
@@ -810,7 +823,10 @@ fn open_local_target(target: &Path, kind: &str, action: &str) -> Result<Value, S
 fn filters(dialog: rfd::FileDialog) -> rfd::FileDialog {
     dialog.add_filter(
         "Unterstützte Dateien",
-        &["txt", "md", "markdown", "csv", "docx"],
+        &[
+            "txt", "md", "markdown", "csv", "docx", "xlsx", "pptx", "pdf", "png", "jpg", "jpeg",
+            "bmp",
+        ],
     )
 }
 
@@ -1155,6 +1171,40 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn support_trace_requires_the_exact_explicit_opt_in() {
+        use std::ffi::OsStr;
+        for setting in [
+            None,
+            Some(""),
+            Some("0"),
+            Some("true"),
+            Some("1 "),
+            Some("1"),
+        ] {
+            let mut command = Command::new("synthetic-sidecar");
+            command
+                .env_clear()
+                .env("EU_PRIVACY_SUPPORT_MODE", "old-value");
+            configure_support_trace(&mut command, setting.map(OsStr::new));
+            let actual = command.get_envs().find_map(|(key, value)| {
+                if key == OsStr::new("EU_PRIVACY_SUPPORT_MODE") {
+                    value
+                } else {
+                    None
+                }
+            });
+            assert_eq!(
+                actual,
+                if setting == Some("1") {
+                    Some(OsStr::new("1"))
+                } else {
+                    None
+                }
+            );
+        }
+    }
     use std::io::Cursor;
 
     fn frame(payload: &[u8]) -> Vec<u8> {

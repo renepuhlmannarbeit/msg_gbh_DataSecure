@@ -7,6 +7,7 @@ const {
   runLocalBatchExecutor,
   reviewDeferredBatch,
   readBatchProgress,
+  readBatchProcessingMode,
   exportCompletedBatchResults,
   reserveTerminalNotice,
   markTerminalNoticePresented,
@@ -18,7 +19,8 @@ const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
 const { showBatchStateNoticeConfirmed, showLocalIntakeNoticeConfirmed } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { continueIntoLocalReview } = require('./automatic-local-review');
-const { validateBatchQueueEnvelope, LOCAL_QUEUE_SCHEMA_INVALID } = require('./batch-queue-envelope');
+const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
+const { MODES } = require('../core/processing-mode');
 
 let started = false;
 const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
@@ -26,9 +28,9 @@ const startDeadline = setTimeout(() => process.exit(2), 30_000);
 
 process.once('message', async (message) => {
   const validToken = /^[a-f0-9]{64}$/.test(String(message?.batch_token || ''));
-  const isExistingBatch = message?.type === 'start-local-batch';
+  const isExistingBatch = ['start-local-batch', 'start-local-markdown-batch'].includes(message?.type);
   const reservationId = String(message?.intake_reservation_id || '');
-  const isNewIntake = message?.type === 'start-local-intake' && RESERVATION_ID_RE.test(reservationId);
+  const isNewIntake = ['start-local-intake', 'start-local-markdown-intake'].includes(message?.type) && RESERVATION_ID_RE.test(reservationId);
   if (started || !validToken || (!isExistingBatch && !isNewIntake)) {
     process.exit(2);
     return;
@@ -53,6 +55,17 @@ process.once('message', async (message) => {
       return;
     }
   }
+  let processingMode;
+  try {
+    const existingMode = isExistingBatch ? readBatchProcessingMode(message.batch_token) : undefined;
+    processingMode = validateBatchMessagePurpose(message, standaloneChannel ? 'standalone' : 'plugin', existingMode);
+  } catch (error) {
+    await notify({ type: isNewIntake ? 'local-intake-rejected' : 'local-batch-rejected',
+      error_code: PURPOSE_ERROR_CODES.includes(error?.code) ? error.code : 'PROCESSING_MODE_INVALID' });
+    if (isNewIntake) releaseIntake(reservationId);
+    process.exit(2);
+    return;
+  }
   // The parent reports a confirmed handoff to Cowork only after this explicit,
   // content-free acceptance. Node's send() callback in the parent proves merely
   // that the message left the parent; this envelope proves that a live worker
@@ -65,6 +78,7 @@ process.once('message', async (message) => {
         token: message.batch_token,
         expectedCount: message.queue.length,
         profile: message.profile || 'auto',
+        processingMode,
         queue: message.queue,
         // The operating-system picker was the only start confirmation.
         confirmStart: () => true
@@ -75,6 +89,7 @@ process.once('message', async (message) => {
         return;
       }
       checkpointCreated = true;
+      if (readBatchProcessingMode(message.batch_token) !== processingMode) throw new Error('BATCH_PROCESSING_MODE_CHANGED');
       if (!releaseIntake(reservationId)) throw new Error('INTAKE_RESERVATION_RELEASE_FAILED');
       await notify({ type: 'local-intake-checkpoint-created' });
       const claimed = claimLocalBatchExecutor(message.batch_token, process.pid);
@@ -89,7 +104,7 @@ process.once('message', async (message) => {
     // ambiguities, open the existing local batch reviewer now instead of
     // returning to Cowork for another tool call. A defer/cancel/error remains
     // an `awaiting_local_review` checkpoint and is therefore safely resumable.
-    const reviewed = await continueIntoLocalReview(message.batch_token, completed, {
+    const reviewed = processingMode === MODES.MARKDOWN ? { progress: completed, attempted: false } : await continueIntoLocalReview(message.batch_token, completed, {
       executorPid: process.pid,
       claimLocalBatchExecutor,
       releaseLocalBatchExecutor,
@@ -140,7 +155,8 @@ process.once('message', async (message) => {
       present: () => showBatchStateNoticeConfirmed(progress, { batchToken: message.batch_token }),
       record: recordWorkflowEvent,
       evidence: {
-        event: 'intake_terminal_state', outcome: envelope.complete ? 'ok' : 'progress',
+        event: 'intake_terminal_state', outcome: completed.ok === false ? 'stopped' : (envelope.complete ? 'ok' : 'progress'),
+        ...(completed.error ? { error_code: completed.error } : {}),
         phase: envelope.batch_phase, item_count: envelope.batch_total,
         released_count: envelope.released, stopped_count: envelope.stopped
       }

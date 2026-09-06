@@ -59,6 +59,8 @@ function planBatchAdmission(queue, deps = {}) {
     let closeFailure;
     try {
       result = inspect(opened.descriptor, opened.stat, extensionForName(entry.name), {
+        processingMode: deps.processingMode,
+        productChannel: deps.productChannel,
         maxEntries: 20000,
         maxUncompressed: LIMITS.MAX_OOXML_EXPANDED_BYTES,
         fstatSync: io.fstatSync.bind(io),

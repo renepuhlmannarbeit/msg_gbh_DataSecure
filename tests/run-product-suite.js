@@ -17,7 +17,13 @@ const baseFiles = [
   'tests/test-standalone-sidecar.js',
   'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
   'tests/test-processing-mode.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
-  'tests/test-support-trace.js',
+  'tests/test-batch-processing-purpose.js', 'tests/test-markdown-batch-export.js',
+  'tests/test-markdown-retention.js',
+  'tests/test-markdown-lifecycle-review.js',
+  // Native PDF/OCR resources are a target-build prerequisite, not a dependency
+  // of the cost-capped source/CI suite. PKG-04 requires the separate real
+  // test:standalone:conversion gate before it can bind either binary.
+  'tests/test-support-trace.js', 'tests/test-converter-support-trace.js',
   'tests/test-debug-skill-contract.js',
   'tests/test-package-staging.js', 'tests/test-safe-private-tree.js',
   'tests/test-package-staging-integration.js', 'tests/test-batch-executor-startup.js',

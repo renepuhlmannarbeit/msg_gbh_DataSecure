@@ -25,12 +25,17 @@ test('500 MiB remains a batch envelope while each parser format has an honest so
 });
 
 test('format limits fail before a batch snapshot can start', () => {
-  for (const extension of ['.txt', '.md', '.markdown', '.csv', '.docx']) {
+  for (const extension of ['.txt', '.md', '.markdown', '.csv', '.docx', '.xlsx', '.pptx', '.pdf', '.png', '.jpg', '.jpeg', '.bmp']) {
     const limit = sourceLimitForExtension(extension);
     assert.strictEqual(assertSourceSize(extension, limit), limit);
     assert.throws(() => assertSourceSize(extension, limit + 1), /INPUT_FORMAT_LIMIT/);
     assert.throws(() => validateBatchLimits([entry(`source${extension}`, limit + 1)]), /INPUT_FORMAT_LIMIT/);
   }
+});
+
+test('image admission and the real decoder share the same byte ceiling', () => {
+  const { MAX_IMAGE_BYTES } = require('../plugins/data-secure/server/images/common');
+  for (const extension of ['.png', '.jpg', '.jpeg', '.bmp']) assert.strictEqual(sourceLimitForExtension(extension), MAX_IMAGE_BYTES);
 });
 
 test('the total envelope is independent from the per-file text limit', () => {

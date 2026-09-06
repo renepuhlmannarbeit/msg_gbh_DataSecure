@@ -8,7 +8,7 @@
 </head>
 <body>
   <main class="shell">
-    <header><p class="eyebrow">GBH DataSecure</p><h1>Dateien lokal anonymisieren</h1>
+    <header><p class="eyebrow">GBH DataSecure</p><h1>Dateien in Markdown umwandeln</h1>
       <p class="lead">Ohne Claude, Cloud oder Internet. Originaldateien bleiben unverändert.</p></header>
     <nav class="tabs" role="tablist" aria-label="Hauptbereiche">
       <button id="tab-process" class="tab active" role="tab" aria-controls="process-view" aria-selected="true">Verarbeiten</button>
@@ -23,13 +23,13 @@
       <div id="process-view" class="view" role="tabpanel" aria-labelledby="tab-process">
         <label for="processing-mode" class="mode-label">Verarbeitung</label>
         <select id="processing-mode" aria-describedby="processing-mode-help" disabled>
+          <option value="markdown-only" selected>Nur in Markdown umwandeln</option>
           <option value="markdown-and-anonymize">In Markdown umwandeln und anonymisieren</option>
-          <option value="markdown-only" disabled>Nur in Markdown umwandeln – noch in Entwicklung</option>
         </select>
-        <p id="processing-mode-help" class="mode-help">Reine Markdown-Konvertierung wird separat verfügbar; dabei bleiben die Inhalte unverändert und werden nicht anonymisiert.</p>
+        <p id="processing-mode-help" class="mode-help">Nicht anonymisiert: Namen und andere Originalinhalte bleiben erhalten. Text und Tabellen werden übernommen; bei Scans wird Text lokal erkannt. Hinweise zu möglichen Auslassungen stehen im Ergebnis.</p>
         <div id="drop-zone" class="drop-zone" role="region" aria-label="Dateiaufnahme" aria-disabled="true">
           <strong>Dateien oder einen Ordner hierher ziehen</strong>
-          <span>TXT, Markdown, CSV und DOCX · bis zu 100 Dateien und 500 MB pro Stapel.<br>Oder unten auswählen. Die Verarbeitung beginnt erst mit „Anonymisierung starten“.</span>
+          <span>TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF und Bilder (PNG/JPEG/BMP) · bis zu 100 Dateien und 500 MB pro Stapel.<br>Oder unten auswählen. Die Verarbeitung beginnt erst mit „Starten“.</span>
         </div>
         <div id="summary" class="summary" hidden></div>
         <dl class="context" aria-label="Aktuelle Auswahl">
@@ -40,14 +40,15 @@
         <div class="actions">
           <button id="select-files" class="primary">Dateien auswählen</button>
           <button id="select-folder">Ordner auswählen</button>
-          <button id="start" class="primary" hidden>Anonymisierung starten</button>
+          <button id="start" class="primary" hidden>Starten</button>
           <button id="cancel" hidden>Auswahl verwerfen</button>
           <button id="continue" class="primary" hidden>Fortsetzen</button>
         </div>
       </div>
 
       <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" hidden>
-        <div class="result-summary"><strong id="result-count">0</strong><span>Anonymisierte Ergebnisse im letzten abgeschlossenen Lauf</span></div>
+        <div class="result-summary"><strong id="result-count">0</strong><span id="result-label">Markdown-Dateien im letzten abgeschlossenen Lauf</span></div>
+        <p id="result-warning" class="mode-help" hidden></p>
         <dl class="context" aria-label="Letzte Ergebnisse">
           <div><dt>Letzter Lauf</dt><dd id="result-folder-results" title="">Noch kein abgeschlossener Lauf</dd></div>
         </dl>
@@ -68,7 +69,7 @@
         </div>
       </details>
     </section>
-    <p class="privacy">Namen und Ordner werden nur in dieser lokalen Oberfläche angezeigt und nicht diagnostisch protokolliert. Rohinhalte verlassen das Gerät nicht. Unterstützt: TXT, Markdown, CSV und DOCX. <span id="product-version">Version wird geladen</span></p>
+    <p class="privacy">Originale bleiben unverändert. Ohne Upload und ohne zusätzliche Runtime-Installation. Anonymisierung: TXT, Markdown, CSV und DOCX. Reine Konvertierung zusätzlich: XLSX, PPTX, PDF/Scan-PDF, PNG/JPEG/BMP. <span id="product-version">Version wird geladen</span></p>
   </main>
   <script src="app.js"></script>
 </body>

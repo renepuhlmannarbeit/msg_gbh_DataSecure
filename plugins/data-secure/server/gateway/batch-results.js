@@ -40,6 +40,7 @@ function createBatchResultAccess(deps) {
   }
 
   function pluginHandoffState(state) {
+    if (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only') return false;
     if (state?.product_channel === 'plugin') return true;
     // Journals written before product_channel was introduced belong to the
     // plugin namespace. Standalone always writes an explicit channel and uses

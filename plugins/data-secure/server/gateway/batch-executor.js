@@ -6,7 +6,8 @@ const { SafeError } = require('../runtime');
 const {
   claimLocalBatchExecutor,
   releaseLocalBatchExecutor,
-  readBatchProgress
+  readBatchProgress,
+  readBatchProcessingMode
 } = require('./batch');
 const {
   validateSummary,
@@ -23,7 +24,8 @@ const {
   releaseIntake,
   RESERVATION_ID_RE
 } = require('./batch-intake-reservation');
-const { validateBatchQueueEnvelope, LOCAL_QUEUE_SCHEMA_INVALID } = require('./batch-queue-envelope');
+const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
+const { MODES, validateProcessingMode } = require('../core/processing-mode');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 // Mirrors PARENT_ACK_TYPE in ./worker-terminal-presentation.js (kept literal so
@@ -156,6 +158,9 @@ function batchWorkerEnvironment(source = process.env) {
   for (const key of WORKER_ENV_KEYS) {
     if (typeof source[key] === 'string' && source[key].length > 0) clean[key] = source[key];
   }
+  // Explicit support opt-in only; never forward arbitrary environment values
+  // or enable diagnostics for a normal batch by implication.
+  if (source.EU_PRIVACY_SUPPORT_MODE === '1') clean.EU_PRIVACY_SUPPORT_MODE = '1';
   return clean;
 }
 
@@ -388,6 +393,17 @@ function durableBatchStateProgress(token, type, options = {}) {
 
 function startLocalBatchExecutor(token, options = {}) {
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
+  const processingMode = (options.readBatchProcessingMode || readBatchProcessingMode)(token);
+  const startMessage = {
+    type: processingMode === MODES.MARKDOWN ? 'start-local-markdown-batch' : 'start-local-batch',
+    batch_token: token,
+    ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {})
+  };
+  validateBatchMessagePurpose(startMessage,
+    (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin', processingMode);
+  if (Object.hasOwn(options, 'processingMode') && options.processingMode !== processingMode) {
+    throw Object.assign(new SafeError('Der Verarbeitungszweck des Stapels darf nicht geändert werden.'), { code: 'PROCESSING_MODE_INVALID' });
+  }
   const forkProcess = options.forkProcess;
   const record = options.recordWorkflowEvent || recordWorkflowEvent;
   const runId = newRunId();
@@ -444,6 +460,11 @@ function startLocalBatchExecutor(token, options = {}) {
     };
     child.on?.('message', (message) => {
       if (acceptance.accept(message)) return;
+      if (message?.type === 'local-batch-rejected' && Object.keys(message).length === 2 && PURPOSE_ERROR_CODES.includes(message.error_code)) {
+        acceptance.reject();
+        lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: message.error_code });
+        return;
+      }
       if (message && Object.keys(message).length === 1 && message.type === 'local-review-paused') {
         noticeShown = true;
         return;
@@ -451,7 +472,7 @@ function startLocalBatchExecutor(token, options = {}) {
       const progress = localBatchStateProgress(message);
       presentProgress(progress);
     });
-    child.send({ type: 'start-local-batch', batch_token: token }, (error) => {
+    child.send(startMessage, (error) => {
       if (worker.ended || worker.failed) return;
       if (error) { worker.fail('LOCAL_IPC_FAILED'); return; }
       lifecycle({ event: error ? 'intake_ipc_failed' : 'intake_ipc_dispatched', outcome: error ? 'stopped' : 'ok',
@@ -479,6 +500,8 @@ function startLocalBatchExecutor(token, options = {}) {
 // copied into the sealed batch snapshot.  Paths exist only in this private
 // IPC message and are never returned from this module or written through MCP.
 function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
+  const processingMode = validateProcessingMode(Object.hasOwn(options, 'processingMode')
+    ? options.processingMode : MODES.ANONYMIZE, (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin');
   try { validateBatchQueueEnvelope(queue); }
   catch {
     throw Object.assign(new SafeError('Die lokale Stapelübergabe ist ungültig und wurde nicht gestartet.'), {
@@ -599,10 +622,10 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         return;
       }
       if (Object.keys(message).length === 2 && message.type === 'local-intake-rejected' &&
-          message.error_code === LOCAL_QUEUE_SCHEMA_INVALID) {
-        settleIpc(Object.assign(new Error(LOCAL_QUEUE_SCHEMA_INVALID), { code: LOCAL_QUEUE_SCHEMA_INVALID }));
+          [LOCAL_QUEUE_SCHEMA_INVALID, ...PURPOSE_ERROR_CODES].includes(message.error_code)) {
+        settleIpc(Object.assign(new Error(message.error_code), { code: message.error_code }));
         lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount,
-          error_code: LOCAL_QUEUE_SCHEMA_INVALID });
+          error_code: message.error_code });
         return;
       }
       if (message.type === 'local-intake-checkpoint-created') {
@@ -640,10 +663,11 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       });
     };
     child.send({
-        type: 'start-local-intake',
+        type: processingMode === MODES.MARKDOWN ? 'start-local-markdown-intake' : 'start-local-intake',
         batch_token: token,
         intake_reservation_id: reservationId,
         profile,
+        ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
         queue: queue.map((entry) => ({
           name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
           sourceLabel: entry.sourceLabel || entry.name

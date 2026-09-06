@@ -2,8 +2,26 @@
 
 const path = require('node:path');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { MODES, validateProcessingMode } = require('../core/processing-mode');
 
 const LOCAL_QUEUE_SCHEMA_INVALID = 'LOCAL_QUEUE_SCHEMA_INVALID';
+const PURPOSE_ERROR_CODES = Object.freeze(['PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID']);
+
+// A distinct message type makes old workers reject conversion requests rather
+// than silently ignoring an unknown purpose field and anonymizing the sources.
+function validateBatchMessagePurpose(message, productChannel, existingMode) {
+  const type = message?.type;
+  const conversion = ['start-local-markdown-intake', 'start-local-markdown-batch'].includes(type);
+  const legacy = ['start-local-intake', 'start-local-batch'].includes(type);
+  if (!conversion && !legacy) throw Object.assign(new Error('PROCESSING_MODE_INVALID'), { code: 'PROCESSING_MODE_INVALID' });
+  const mode = validateProcessingMode(Object.hasOwn(message, 'processing_mode')
+    ? message.processing_mode : MODES.ANONYMIZE, productChannel);
+  if ((conversion && mode !== MODES.MARKDOWN) || (legacy && mode !== MODES.ANONYMIZE) ||
+      (existingMode !== undefined && mode !== existingMode)) {
+    throw Object.assign(new Error('PROCESSING_MODE_INVALID'), { code: 'PROCESSING_MODE_INVALID' });
+  }
+  return mode;
+}
 
 function invalidQueue() {
   return Object.assign(new Error(LOCAL_QUEUE_SCHEMA_INVALID), { code: LOCAL_QUEUE_SCHEMA_INVALID });
@@ -44,4 +62,4 @@ function validateBatchQueueEnvelope(queue, options = {}) {
   return queue;
 }
 
-module.exports = { LOCAL_QUEUE_SCHEMA_INVALID, validateBatchQueueEnvelope };
+module.exports = { LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES, validateBatchQueueEnvelope, validateBatchMessagePurpose };

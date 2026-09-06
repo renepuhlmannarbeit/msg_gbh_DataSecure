@@ -449,6 +449,29 @@ function cleanupLocalData(options = {}) {
     }
   }
 
+  // Custom filesystem/root fixtures must never escape into the real product
+  // namespace. Production startup/run paths use the default namespace; tests
+  // can opt in explicitly with their own EU_PRIVACY_DATA_ROOT.
+  if (fsApi === fs && (options.includeMarkdownArtifacts === true || !options.roots) &&
+      (scopes.includes('output') || options.scope === undefined)) {
+    let protection = options.protectedIds instanceof Set
+      ? { ids: options.protectedIds, complete: options.outputProtectionComplete === true }
+      : { ids: new Set(), complete: false };
+    if (!(options.protectedIds instanceof Set)) {
+      try { protection = require('./batch-retention-protection').createBatchRetentionProtection().openBatchPackageProtection(); }
+      catch { /* Unknown ownership protects all conversion artifacts. */ }
+    }
+    const conversion = require('../standalone/markdown-retention').cleanupMarkdownArtifacts({
+      cutoff, force, protectedIds: protection.ids, protectionComplete: protection.complete
+    });
+    result.removed_markdown_artifacts = conversion.removed;
+    result.markdown_cleanup_skipped = conversion.skipped;
+    if (conversion.errors) {
+      const error = new Error('MARKDOWN_RETENTION_UNSAFE'); error.code = 'MARKDOWN_RETENTION_UNSAFE';
+      recordFailure('output', error);
+    }
+  }
+
   lastCleanup = result;
   return result;
 }

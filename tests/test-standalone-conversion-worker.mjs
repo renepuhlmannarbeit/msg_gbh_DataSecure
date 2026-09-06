@@ -1,0 +1,254 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import childProcess from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { writeStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
+import { collectConversionRuntime, writeConversionRuntime } from '../scripts/lib/standalone-conversion-runtime.mjs';
+import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+
+const require = createRequire(import.meta.url);
+const { decodePng } = require('../plugins/data-secure/server/images/png');
+const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
+  : process.platform === 'darwin' && ['x64', 'arm64'].includes(process.arch) ? `macos-${process.arch}` : null;
+if (!target) throw new Error('CONVERSION_TEST_HOST_UNSUPPORTED');
+// Resolve target-native fixture dependencies only after the explicit host gate.
+const { office, image, pdf, text } = await import('./helpers/conversion-fixtures.mjs');
+const scope = fs.mkdtempSync(path.join(repo, '.tmp-standalone-package-conversion-'));
+const server = path.join(scope, 'server');
+const runtime = path.join(server, 'standalone', 'conversion-runtime');
+const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const originalSpawn = childProcess.spawn, children = [];
+let observeSpawn;
+childProcess.spawn = (...args) => {
+  const child = originalSpawn(...args);
+  const entry = { child, closed: false, kill: child.kill.bind(child) };
+  entry.done = new Promise(resolve => child.once('close', () => { entry.closed = true; resolve(); }));
+  children.push(entry); observeSpawn?.(child, args);
+  return child;
+};
+let passed = 0;
+async function test(name, fn) { await fn(); passed++; process.stdout.write(`ok ${passed} - ${name}\n`); }
+
+try {
+  await test('offline runtime is pinned, deterministic, target-specific and self-contained', () => {
+    const a = collectConversionRuntime(repo, target), b = collectConversionRuntime(repo, target);
+    assert.deepEqual(a.map(item => [item.relative, hash(item.bytes)]), b.map(item => [item.relative, hash(item.bytes)]));
+    assert.ok(a.some(item => item.relative.endsWith('.node')));
+    assert.ok(!a.some(item => item.relative.includes('/.bin/') || item.relative.includes('/pilot/')));
+    assert.throws(() => collectConversionRuntime(repo, 'unsupported-target'), /CONVERSION_PACKAGE_TARGET_UNSUPPORTED/u);
+    writeStandaloneRuntime(path.join(repo, 'plugins', 'data-secure', 'server'), server, target);
+    writeConversionRuntime(repo, runtime, target);
+    assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
+  });
+  const { convertBuffer } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  async function convert(input, extension, options) {
+    const original = hash(input);
+    const result = await convertBuffer(input, extension, options);
+    assert.equal(hash(input), original);
+    assert.equal(result.anonymized, false); assert.equal(result.processing_mode, 'markdown-only');
+    assert.ok(children.every(entry => entry.closed), 'success follows real supervisor close');
+    return result;
+  }
+  for (const extension of ['.txt', '.md', '.csv', '.docx', '.xlsx', '.pptx']) {
+    await test(`packaged real ${extension} preserves names and bank data`, async () => {
+      const bytes = ['.docx', '.xlsx', '.pptx'].includes(extension) ? office(extension.slice(1)) :
+        Buffer.from(extension === '.csv' ? `Feld,Wert\nName,${text}` : `${text}\ne\u0301\u00a0  Original\r\n`);
+      const result = await convert(bytes, extension);
+      assert.match(result.markdown, /Max(?: |&#32;)Mustermann/u); assert.match(result.markdown, /Nordstern(?: |&#32;)GmbH/u);
+      assert.match(result.markdown, /DE89370400440532013000/u);
+      if (extension === '.txt' || extension === '.md') assert.equal(result.markdown, bytes.toString('utf8'));
+    });
+  }
+  const canvas = image(), png = canvas.toBuffer('image/png'), jpeg = canvas.toBuffer('image/jpeg');
+  const bitmap = decodePng(png), bmp = encodeBmp(bitmap);
+  for (const [extension, bytes] of [['.png', png], ['.bmp', bmp], ['.jpeg', jpeg]]) {
+    await test(`packaged real ${extension} offline OCR retains identifiers with honest incomplete coverage`, async () => {
+      const result = await convert(bytes, extension);
+      assert.match(result.markdown, /Max Mustermann/u); assert.match(result.markdown, /Nordstern GmbH/u);
+      assert.equal(result.coverage.status, 'incomplete');
+      assert.deepEqual(result.coverage.reason_codes, ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
+    });
+  }
+  await test('blank image is a warned empty conversion, never a complete extraction', async () => {
+    const result = await convert(image(true).toBuffer('image/png'), '.png');
+    assert.ok(result.coverage.reason_codes.includes('OCR_TEXT_EMPTY'));
+  });
+  await test('PDF uses native text, scan OCR and mixed-page extraction automatically without duplicated text', async () => {
+    const pure = await convert(pdf([{ text }]), '.pdf');
+    assert.match(pure.markdown, /Max Mustermann/u);
+    assert.ok(!pure.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    const scan = await convert(pdf([{ image: jpeg }]), '.pdf');
+    assert.match(scan.markdown, /Max Mustermann/u); assert.ok(scan.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    const mixed = await convert(pdf([{ text: 'Text page Max Mustermann' }, { image: jpeg }]), '.pdf');
+    assert.match(mixed.markdown, /## Seite 1[\s\S]*Text page Max Mustermann[\s\S]*## Seite 2[\s\S]*Nordstern GmbH/u);
+    assert.equal((mixed.markdown.match(/Max Mustermann/gu) || []).length, 2);
+  });
+  await test('hybrid PDF retains a scan body beside native page numbers and headers with one OCR session', async () => {
+    let sessions = 0;
+    observeSpawn = child => {
+      let diagnostics = '';
+      child.stderr.on('data', chunk => { diagnostics += chunk.toString('utf8'); });
+      child.once('close', () => { sessions += (diagnostics.match(/CONVERSION_OCR_READY/gu) || []).length; });
+    };
+    try {
+      const hybrid = await convert(pdf([{ image: jpeg, text: '1' }, { image: jpeg, text: 'Customer report' }]), '.pdf');
+      assert.match(hybrid.markdown, /## Seite 1[\s\S]*1[\s\S]*Max Mustermann[\s\S]*Nordstern GmbH/u);
+      assert.match(hybrid.markdown, /## Seite 2[\s\S]*Customer report[\s\S]*Max Mustermann[\s\S]*Nordstern GmbH/u);
+      assert.equal((hybrid.markdown.match(/Customer report/gu) || []).length, 1, 'rendered native header is not appended again');
+      assert.ok(hybrid.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+      assert.equal(hybrid.coverage.status, 'incomplete');
+      assert.equal(sessions, 1, 'one real OCR session is reused for both hybrid pages');
+    } finally { observeSpawn = null; }
+  });
+  await test('hybrid text layer is retained exactly and is not duplicated by its scanned image', async () => {
+    const nativeLines = ['MAX  MUSTERMANN', 'Nordstern GmbH', 'Projektmanager Software Tester'];
+    const native = await convert(pdf([{ textLines: nativeLines, invisibleText: true }]), '.pdf');
+    const hybrid = await convert(pdf([{ image: jpeg, textLines: nativeLines, invisibleText: true }]), '.pdf');
+    assert.equal(hybrid.markdown, native.markdown, 'comparison never rewrites text extracted by PDF.js');
+    assert.match(hybrid.markdown, /MAX MUSTERMANN/u);
+    assert.equal((hybrid.markdown.match(/mustermann/giu) || []).length, 1);
+    assert.equal((hybrid.markdown.match(/Nordstern GmbH/gu) || []).length, 1);
+    assert.equal((hybrid.markdown.match(/Projektmanager Software Tester/gu) || []).length, 1);
+    assert.ok(hybrid.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    assert.doesNotMatch(hybrid.markdown, /Zusätzlicher Bildtext/u);
+  });
+  await test('native PDF text, including unused image resources, never starts OCR', async () => {
+    let starts = 0;
+    observeSpawn = child => {
+      let diagnostics = '';
+      child.stderr.on('data', chunk => { diagnostics += chunk.toString('utf8'); });
+      child.once('close', () => { starts += (diagnostics.match(/CONVERSION_OCR_STARTING/gu) || []).length; });
+    };
+    try {
+      for (const source of [{ text }, { text, image: jpeg, unpaintedImage: true }]) {
+        const result = await convert(pdf([source]), '.pdf');
+        assert.match(result.markdown, /Max Mustermann/u);
+        assert.ok(!result.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+      }
+      assert.equal(starts, 0);
+    } finally { observeSpawn = null; }
+  });
+  await test('malformed input returns fixed failures and never raw contents', async () => {
+    for (const [input, extension, code] of [[Buffer.from('"SECRET'), '.csv', 'CSV_QUOTE_INVALID'],
+      [Buffer.from('SECRET'), '.pdf', 'PDF_EXTRACTION_FAILED'], [Buffer.from('SECRET'), '.png', 'CONVERSION_IMAGE_INVALID'],
+      [Buffer.from('SECRET'), '.jpeg', 'CONVERSION_IMAGE_INVALID']]) {
+      await assert.rejects(convertBuffer(input, extension), cause => cause.code === code && !cause.message.includes('SECRET'));
+      assert.ok(children.every(entry => entry.closed));
+    }
+  });
+  await test('runtime IPC is local, restricted, fresh-environment and never source-path based', async () => {
+    observeSpawn = (_child, [command, args, options]) => {
+      assert.ok(command.startsWith(server)); assert.equal(options.windowsHide, true);
+      assert.equal(options.shell, false); assert.ok(args.some(item => item.endsWith('conversion-worker-child.js')));
+      assert.ok(args.some(item => item.endsWith('conversion-runtime\\node.exe') || item.endsWith('conversion-runtime/node')));
+      assert.ok(!Object.hasOwn(options.env, 'NODE_OPTIONS')); assert.ok(!Object.hasOwn(options.env, 'HOME'));
+      assert.ok(args.includes('--permission')); assert.ok(args.includes('--allow-addons'));
+    };
+    try { await convert(Buffer.from(text), '.txt'); } finally { observeSpawn = null; }
+  });
+  await test('bad API, pre-abort and unsupported source never launch a process', async () => {
+    const before = children.length, controller = new AbortController(); controller.abort();
+    await assert.rejects(convertBuffer(Buffer.from(text), '.txt', { signal: controller.signal }), { code: 'REQUEST_CANCELLED' });
+    await assert.rejects(convertBuffer('https://example.invalid/source', '.txt'), { code: 'CONVERSION_INPUT_INVALID' });
+    await assert.rejects(convertBuffer(Buffer.from(text), '.exe'), { code: 'MARKDOWN_FORMAT_UNSUPPORTED' });
+    await assert.rejects(convertBuffer(Buffer.from(text), 'constructor'), { code: 'MARKDOWN_FORMAT_UNSUPPORTED' });
+    await assert.rejects(convertBuffer(Buffer.from(text), '.txt', { runtime: 'anything' }), { code: 'CONVERSION_INPUT_INVALID' });
+    assert.equal(children.length, before);
+  });
+  await test('inflight cancellation after actual OCR readiness confirms supervisor termination', async () => {
+    const controller = new AbortController(); let ready = false;
+    observeSpawn = child => { let log = ''; child.stderr.on('data', chunk => {
+      log += chunk.toString(); if (!ready && log.includes('CONVERSION_OCR_READY')) { ready = true; controller.abort(); }
+    }); };
+    try { await assert.rejects(convertBuffer(png, '.png', { signal: controller.signal }), { code: 'REQUEST_CANCELLED' }); }
+    finally { observeSpawn = null; }
+    assert.equal(ready, true); assert.ok(children.every(entry => entry.closed));
+  });
+  await test('timeout confirms process termination rather than returning a hanging promise', async () => {
+    await assert.rejects(convertBuffer(png, '.png', { timeoutMs: 1 }), { code: 'CONVERSION_TIMEOUT' });
+    assert.ok(children.every(entry => entry.closed));
+  });
+  await test('native Windows assignment is atomic and 60 early cancellations leave no stdio-owning orphan', async () => {
+    if (process.platform !== 'win32') return;
+    const native = fs.readFileSync(path.join(repo, 'native', 'windows', 'datasecure-sandbox.cpp'), 'utf8');
+    assert.ok(native.indexOf('PROC_THREAD_ATTRIBUTE_JOB_LIST') < native.indexOf('const BOOL created = CreateProcessW'));
+    assert.doesNotMatch(native, /\bAssignProcessToJobObject\s*\(/u);
+    assert.match(native, /IsProcessInJob/u);
+    for (let i = 0; i < 60; i++) {
+      await assert.rejects(convertBuffer(Buffer.from(text), '.txt', { timeoutMs: 1 + i % 3 }), { code: 'CONVERSION_TIMEOUT' });
+      assert.ok(children.every(entry => entry.closed), `early termination ${i} confirmed every inherited pipe closed`);
+    }
+  });
+  await test('truncated real stdin cannot promote a successfully parseable prefix to complete Markdown', async () => {
+    observeSpawn = child => {
+      const end = child.stdin.end.bind(child.stdin);
+      child.stdin.end = (bytes, callback) => end(bytes.subarray(0, 3), callback);
+    };
+    try { await assert.rejects(convertBuffer(Buffer.from(text), '.txt'), { code: 'CONVERSION_INPUT_INCOMPLETE' }); }
+    finally { observeSpawn = null; }
+    assert.ok(children.every(entry => entry.closed));
+  });
+  await test('refused termination has a bounded distinct failure, no automatic escalation', async () => {
+    let attempts = 0;
+    const controller = new AbortController();
+    observeSpawn = child => {
+      child.stdin.end = () => child.stdin; // Real child waits for bytes; no output/result mock.
+      child.kill = () => { attempts++; return false; };
+      queueMicrotask(() => controller.abort());
+    };
+    try {
+      await assert.rejects(convertBuffer(png, '.png', { signal: controller.signal }), { code: 'CONVERSION_TERMINATION_UNCONFIRMED' });
+      assert.equal(attempts, 1); assert.equal(children.at(-1).closed, false);
+    } finally {
+      observeSpawn = null;
+      const entry = children.at(-1); if (!entry.closed) entry.kill('SIGTERM');
+      await entry.done;
+    }
+  });
+  await test('missing or changed packaged resource has no system/pilot fallback', async () => {
+    const model = path.join(runtime, 'models', 'eng.traineddata');
+    const original = fs.readFileSync(model), changed = Buffer.from(original); changed[0] ^= 1;
+    const before = children.length;
+    // All files are fresh copies under this checked disposable scope.
+    fs.writeFileSync(model, changed);
+    await assert.rejects(convertBuffer(Buffer.from(text), '.txt'), { code: 'CONVERSION_RUNTIME_UNAVAILABLE' });
+    fs.writeFileSync(model, original);
+    const runtimeManifest = path.join(runtime, 'RUNTIME.json'), manifest = fs.readFileSync(runtimeManifest);
+    fs.unlinkSync(runtimeManifest);
+    await assert.rejects(convertBuffer(Buffer.from(text), '.txt'), { code: 'CONVERSION_RUNTIME_UNAVAILABLE' });
+    fs.writeFileSync(runtimeManifest, manifest, { flag: 'wx' });
+    assert.equal(children.length, before);
+  });
+  await test('100 small sources reuse validated runtime bytes rather than rehashing 188 MB per file', async () => {
+    // Restore/cache after the deliberately changed manifest in the prior test.
+    await convert(Buffer.from(text), '.txt');
+    const originalRead = fs.readFileSync;
+    let heavyReads = 0, heavyBytes = 0;
+    fs.readFileSync = function(file, ...args) {
+      const result = originalRead.call(this, file, ...args);
+      if (typeof file === 'string' && file.startsWith(runtime + path.sep) && !file.endsWith('RUNTIME.json')) {
+        heavyReads++; heavyBytes += Buffer.byteLength(result);
+      }
+      return result;
+    };
+    const started = performance.now();
+    try { for (let i = 0; i < 100; i++) await convert(Buffer.from(`${text}\nDocument ${i}`), '.txt'); }
+    finally { fs.readFileSync = originalRead; }
+    assert.equal(heavyReads, 0); assert.equal(heavyBytes, 0);
+    process.stdout.write(`100-TXT packaged runtime: ${Math.round(performance.now() - started)} ms; repeated heavy runtime reads: ${heavyReads}\n`);
+  });
+  process.stdout.write(`${passed} packaged conversion groups passed\n`);
+} finally {
+  childProcess.spawn = originalSpawn;
+  for (const entry of children) if (!entry.closed) entry.kill('SIGTERM');
+  let timer;
+  try { await Promise.race([Promise.all(children.map(entry => entry.done)), new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('CONVERSION_TEST_CLEANUP_UNCONFIRMED')), 6000);
+  })]); } finally { clearTimeout(timer); }
+  removePackageSmokeScope(repo, scope);
+}

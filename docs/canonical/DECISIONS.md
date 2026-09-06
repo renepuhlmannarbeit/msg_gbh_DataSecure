@@ -1,6 +1,6 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 05.09.2026
+Stand: 06.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
@@ -1119,9 +1119,14 @@ und keinen neuen Bestätigungsdialog je Datei. TXT, Markdown, CSV, DOCX, XLSX,
 PPTX, PDF, Scan-PDF und Bilder bleiben Zielumfang; jeder Konverter braucht seinen
 nachgewiesenen Extraktionsumfang. Layoutidentische Rekonstruktion ist kein Ziel.
 
-Iststatus: Die reine Konvertierung bleibt bis zum vollständigen Modus-/Journal-/
-Exportvertrag gesperrt. Umsetzung unter BL-010.28 mit BL-010.15–19; UI-Sichtbarkeit
-ist kein Implementierungs- oder Freigabenachweis.
+Präzisierung 06.09.2026: Der Anwender wünscht eine einfache Konvertierung ohne
+PII-Review. Lesbare Extraktionen mit OCR-/Coverage-Hinweisen werden deshalb
+gespeichert und in der Abschlussübersicht gekennzeichnet; ein weiterer
+Freigabedialog ist nicht erforderlich. Fehlerhafte/geschützte Eingaben bleiben
+unverändert und erhalten eine Fehlerposition. Es gibt keine Vollständigkeits-
+oder Anonymitätszusage. Der Modus ist im Quellstand über v5-Journal, eigene
+Worker-Nachrichten, `dm_`-Artefakte und v3-Export verbunden (BL-010.28 mit
+BL-010.15–19). Paketnachweise und menschliche Zielhostabnahme bleiben gesondert.
 
 Herstellerabgleich am 05.09.2026: [Microsoft MarkItDown](https://github.com/microsoft/markitdown)
 zielt auf Inhalt/Struktur für Textanalyse, nicht originalgetreue Layoutkonvertierung.

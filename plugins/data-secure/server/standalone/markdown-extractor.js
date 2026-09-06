@@ -1,8 +1,8 @@
 'use strict';
 
-// Engineering-only, in-memory entry. This is deliberately not wired into a
-// gateway, UI, parser worker or package capability. No PII normalization,
-// anonymization, OCR, AI, filesystem writes or external calls happen here.
+// In-memory extraction used by the isolated Standalone conversion worker.
+// No PII normalization, anonymization, OCR, AI, filesystem writes or external
+// calls happen in this direct-format module. PDF/OCR belongs to its worker.
 const { decodeUtf8Source, parseCsvDialect } = require('../document-parser');
 const { parseOoxml } = require('../ooxml');
 const { RESOURCE_LIMITS } = require('../resource-limits');

@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 05.09.2026 · 3.2.0-rc107
+Stand: 06.09.2026 · 3.2.0-rc108
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -527,18 +527,15 @@ nicht freigegebene reine Konvertierungsmodus ist dagegen ausdrücklich für solc
 Inhalte vorgesehen, in einem getrennten, als nicht anonymisiert gekennzeichneten
 Ausgabebaum (DS-085).
 
-### Zwei gleichwertige Standalone-Modi – Sollvertrag DS-085
+### Zwei gleichwertige Standalone-Modi – Implementierung DS-085
 
-Quellstand nach dem RC107-Paket: Der Startzweck ist bis zum Service implementiert
-(`processingMode` → Rust → `processing_mode` → Service), nicht bis zum Journal.
-`markdown-only` stoppt dort aktuell vor Mutation mit
-`MARKDOWN_CONVERSION_NOT_READY`; die vorbereitete Auswahl bleibt erhalten.
-Bei Continue wird kein neuer Zweck übertragen. Der zentrale v5-Zweckdiscriminator
-ist noch keine vollständige v5-Journalvalidierung. Direkte Extraktoren und
-getrennte `dm_`-Artefakte besitzen Tests; PDF/Scan/OCR sind weiterhin separate
-Engineering-Pfade. Daher ist der folgende vollständige zweite Zweig noch SOLL.
-
-Der folgende zweite Zweig ist geplant, nicht als heutige Ausführung belegt:
+Quellstand nach RC107: Der Startzweck durchläuft `processingMode` → Rust →
+`processing_mode` → Service → Intake-v2 → eigener Worker-Nachrichtentyp →
+v5-Journal. Continue übernimmt ausschließlich den gespeicherten Zweck.
+Konvertierung verwendet versiegelte Snapshot-Bytes, einen gebündelten Offline-
+Konvertierungsworker und eigene `dm_`-Artefakte ohne Privacy-Capabilities.
+Text-PDF und Scan-Seiten werden automatisch unterschieden; OCR läuft lokal.
+Warnungen sind Teil der Extraktionsidentität und des sichtbaren v3-Exports.
 
 ```mermaid
 flowchart TD
@@ -548,7 +545,7 @@ flowchart TD
   Parse --> Choice{dauerhafter Stapelmodus}
   Choice -->|Markdown und anonymisieren: implementiert| PII[PII-Ersetzung / Residual / ggf. Review]
   PII --> Anon[DataSecure-Output / Lauf: geprüfte MD + Zuordnung]
-  Choice -->|nur Markdown: noch in Entwicklung| Plain[Ausgangsinhalte unverändert erhalten]
+  Choice -->|nur Markdown: implementiert| Plain[Ausgangsinhalte erhalten / OCR-Hinweise speichern]
   Plain --> MD[DataSecure-Markdown / Lauf: nicht anonymisierte MD + Zuordnung]
   Anon --> Result[letzten zugehörigen Lauf anzeigen / öffnen]
   MD --> Result
