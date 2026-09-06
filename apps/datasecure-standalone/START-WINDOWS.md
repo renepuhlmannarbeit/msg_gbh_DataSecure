@@ -2,12 +2,19 @@
 
 1. ZIP vollständig in einen lokalen Ordner entpacken.
 2. `DataSecure Standalone.exe` doppelklicken.
-3. Dateien oder einen Ordner auswählen (oder in das Fenster ziehen). Die
-   Standardeinstellung **Nur in Markdown umwandeln** beibehalten.
+3. Auf **Start** die gewünschte Funktion wählen: **Nur in Markdown umwandeln**
+   oder **In Markdown umwandeln und anonymisieren**. Danach Dateien oder einen
+   Ordner auswählen (oder in das Fenster ziehen). Anfangs ist kein Modus vorbelegt.
 4. Bei Bedarf **Ergebnisordner ändern** wählen, dann **Starten** drücken.
-5. Nach Abschluss **Ergebnisse öffnen** wählen. Im angezeigten Laufordner
+5. Nach Abschluss selbst **Verlauf** öffnen und beim gewünschten Lauf
+   **Ergebnisse öffnen** wählen. Im zugehörigen Laufordner
    liegen die Markdown-Dateien und `DataSecure-Zuordnung.csv` mit der Zuordnung
    zur jeweiligen Quelldatei sowie Hinweisen zu übersprungenen Dateien.
+
+**Verlauf** zeigt die letzten 20 Verarbeitungen. Jede Zeile bietet den eigenen
+Ergebnisordner, die eigene Zuordnungsdatei und – nur bei einem fortsetzbaren
+Stapel – **Fortsetzen**. Auch nach einem Neustart bleibt die Startseite sichtbar.
+Ein Abschluss öffnet weder automatisch einen Ordner noch eine andere Ansicht.
 
 Die reine Umwandlung unterstützt TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF,
 Scan-PDF und PNG/JPEG/BMP. Sie anonymisiert **nicht**: Namen und andere Inhalte

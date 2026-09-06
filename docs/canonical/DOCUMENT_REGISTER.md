@@ -1,8 +1,14 @@
 # Kanonisches Dokumentenregister
 
-Stand: 04.09.2026
+Stand: 06.09.2026
 
 ## Normativ aktuell
+
+Der RC109-Abgleich trennt aktive Produkt-/Zweckaussagen von damaligen
+Reviewurteilen. Das frühere Open-Source-Auswahlregister ist unter
+`docs/archive/2026-09/OPEN_SOURCE_COMPONENTS_BEFORE_RC109.md` vollständig
+erhalten; aktuelle Komponenten und Verwendung stehen ausschließlich im aktiven
+Register. `DOCUMENT_INDEX.json` führt diese Ablösung und DS-085/086 mit.
 
 | Dokument | Zweck |
 |---|---|
@@ -59,12 +65,16 @@ Abnahme.
 | `docs/FORMAT_COVERAGE_MATRIX.md` | belegter und geplanter Formatumfang; keine Freigabe ohne zugehörige Evidence |
 | `docs/DETECTOR_BENCHMARK.md` | synthetische, reproduzierbare Detektorbaseline; keine Aussage universeller Genauigkeit |
 | `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | zeitgebundene Herstelleraufnahme; aktuelle Produktgrenze steht in DS-078 und der Hostmatrix |
-| `docs/REVIEW_BEIDE_PRODUKTE_2026-09-04.md` | aktuelles Gesamturteil zu Produkt, UX, Architektur, Security, Performance, Distribution und Evidencegrenzen beider Produkte |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
 
 ## Historisch, nicht entscheidungsführend
 
+- `docs/REVIEW_BEIDE_PRODUKTE_2026-09-04.md`: zeitgebundener Gesamtbericht zum
+  RC99-Stand beider Produkte. Sein damaliges Urteil bleibt als Evidence
+  erhalten; aktuelle Aussagen und Nachweisgrenzen führt `CURRENT_STATE.md`.
+  Dies entspricht `historical` und `superseded_by: CANON-CURRENT` im
+  maschinenlesbaren Dokumentindex.
 - [`docs/archive`](../archive/README.md): frühere Architektur-, Review-, Release-,
   Test- und Kanonvollstände.
 - `BACKLOG_ARCHIVE_2026-08.md` und `BACKLOG_ARCHIVE_2026-09.md`: erledigte Stories.

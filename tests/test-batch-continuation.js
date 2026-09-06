@@ -2,11 +2,18 @@
 
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchContinuation } = require('../plugins/data-secure/server/gateway/batch-continuation');
+const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
+const { batchNextAction } = require('../plugins/data-secure/server/gateway/batch-next-action');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch continuation boundary');
 const token = 'a'.repeat(64);
+const { publicProgress } = createBatchProgress({
+  deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+  mappingPendingStatus: 'mapping_pending', liveLocalExecutor: () => false,
+  publishedPackageRecord: () => null
+});
 
 function state(items, createdAt = '2026-08-26T10:00:00.000Z') {
   return { token, created_at: createdAt, invalidated: false, items: structuredClone(items) };
@@ -48,6 +55,12 @@ function fixture(options = {}) {
     reconcilePublishedItems(value) {
       events.push('published');
       if (options.failPublished) throw new Error('PUBLISHED_FAILED');
+      if (options.adoptPublished) {
+        for (const item of value.items) {
+          if (item.status === 'processing') item.status = 'delivery_pending';
+        }
+        return true;
+      }
       return options.publishedChanged === true;
     },
     reconcilePendingMappings(value) {
@@ -75,11 +88,7 @@ function fixture(options = {}) {
     },
     publicProgress(value) {
       events.push('progress');
-      return {
-        remaining: value.items.filter((item) => item.status === 'pending').length,
-        retryable: value.items.filter((item) => item.status === 'retryable').length,
-        deferred_review: value.items.filter((item) => item.status === 'deferred_review').length
-      };
+      return publicProgress(value);
     },
     deferredReviewStatus: 'deferred_review',
     mappingPendingStatus: 'mapping_pending'
@@ -212,7 +221,19 @@ test('continue preserves deferred review and propagates a failed explicit resume
   const failedResult = failed.continueMostRecentBatch();
   assert.strictEqual(failedResult.ok, false);
   assert.strictEqual(failedResult.error, 'no_retryable_documents');
-  assert.strictEqual(Object.hasOwn(failedResult, 'batch_token'), false);
+  assert.strictEqual(failedResult.batch_token, token);
+});
+
+test('reconciled delivery beside deferred review continues automatic work without a second resume', () => {
+  const interrupted = state([{ status: 'deferred_review' }, { status: 'processing' }]);
+  const value = fixture({ state: interrupted, recoverable: [interrupted], adoptPublished: true });
+  const result = value.continueMostRecentBatch();
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.delivery_pending, 1);
+  assert.strictEqual(result.deferred_review, 1);
+  assert.strictEqual(batchNextAction(result), 'batch');
+  assert.strictEqual(value.continueMostRecentBatch().ok, true);
+  assert.deepStrictEqual(value.current().items.map(item => item.status), ['deferred_review', 'delivery_pending']);
 });
 
 test('public batch facade keeps both continuation functions', () => {

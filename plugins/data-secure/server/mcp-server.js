@@ -1,9 +1,11 @@
 'use strict';
 // Product MCP implementation. server/index.js is the deliberately tiny
 // fail-closed bootstrap which also catches errors while this module is loaded.
-const {SafeError,roots,genericStatus,diagnosticStatus,exportDiagnosticPackage,openFolder,startLocalBatchExecutor,startLocalIntakeExecutor,startLocalReviewExecutor,readBatchProgress,listBatchResults,completedLocalOnlyCandidates,reviewDeferredBatch,resumeBatch,continueMostRecentBatch,discardIncompleteBatches,acknowledgeDeliveredPackage,acknowledgeDeliveredPackages,recoverBatches,replayMappingOutbox,cleanupExpiredBatchSnapshots,openBatchPackageProtection,readOutput,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,listReviewItems,migrateLegacyReviewPreviews,cleanupLocalData,purgeLocalData}=require('./gateway');
+const {SafeError,roots,genericStatus,diagnosticStatus,exportDiagnosticPackage,openFolder,startLocalBatchExecutor,startLocalIntakeExecutor,startLocalReviewExecutor,readBatchProgress,listBatchResults,completedLocalOnlyCandidates,resumeBatch,continueMostRecentBatch,discardIncompleteBatches,acknowledgeDeliveredPackage,acknowledgeDeliveredPackages,recoverBatches,replayMappingOutbox,cleanupExpiredBatchSnapshots,openBatchPackageProtection,readOutput,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,listReviewItems,migrateLegacyReviewPreviews,cleanupLocalData,purgeLocalData}=require('./gateway');
 const {VERSION}=require('./version');
-const {buildDiagnostic,causeFromError,completeDiagnostic}=require('./gateway/diagnostic-causes');
+const {assertSchemaBinding,validToolArguments}=require('./mcp-input-validation');
+const {batchNextAction,batchReviewCanPrepare}=require('./core/batch-next-action');
+const {buildDiagnostic,causeFromError,completeDiagnostic,ipcAcknowledgementCause}=require('./gateway/diagnostic-causes');
 const {refuseStartup,verifyBundledRuntime}=require('./gateway/startup-guard');
 const {ensureDurableRuntime}=require('./durable-runtime-cache');
 const {migrateLegacyAuditReceipts}=require('./gateway/audit');
@@ -56,7 +58,7 @@ const TOOLS=[
 {name:'cancel_local_results_handoff',title:'Lokale Ergebnisübergabe beenden',description:'Beendet die aktuelle, nur im Arbeitsspeicher gehaltene Ergebnisübergabe. Originale und lokale Ergebnisse bleiben unverändert.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}},
 {name:'document_batch_status',title:'Lokalen Stapelstatus anzeigen',description:'Liefert ausschließlich namen- und inhaltsfreie Zähler sowie den nächsten sicheren Schritt eines bestätigten Stapels.',inputSchema:{type:'object',properties:{batch_token:{type:'string',minLength:64,maxLength:64,pattern:'^[a-f0-9]{64}$'}},required:['batch_token'],additionalProperties:false},annotations:{readOnlyHint:true,openWorldHint:false}},
 {name:'list_document_batch_results',title:'Freigegebene Stapelergebnisse auflisten',description:'Liefert eine begrenzte, paginierte und namenfreie Liste lokal freigegebener Pakete mit kurzlebigen Leseberechtigungen. Quelldateinamen und Pfade bleiben lokal.',inputSchema:{type:'object',properties:{batch_token:{type:'string',minLength:64,maxLength:64,pattern:'^[a-f0-9]{64}$'},cursor:{type:'string',maxLength:96,pattern:'^[A-Za-z0-9_-]+$'},limit:{type:'integer',minimum:1,maximum:20,default:10}},required:['batch_token'],additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}},
-{name:'review_deferred_document_batch',title:'Offene Stapelentscheidungen lokal prüfen (Support)',description:'Technischer Supportweg mit Batch-Token. Rekonstruiert vertagte Fundstellen und wartet synchron auf die lokale Stapelprüfung. Der normale Cowork-Weg verwendet stattdessen die tokenfreie, nicht blockierende Fortsetzung.',inputSchema:{type:'object',properties:{batch_token:{type:'string',minLength:64,maxLength:64,pattern:'^[a-f0-9]{64}$'}},required:['batch_token'],additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}},
+{name:'review_deferred_document_batch',title:'Offene Stapelentscheidungen lokal prüfen (Support)',description:'Technischer Supportweg mit Batch-Token. Übergibt den gewählten Stapel an den geschützten lokalen Review-Worker und wartet nur auf dessen Annahme. Rekonstruktion, lokale Entscheidung und Veröffentlichung laufen anschließend außerhalb des MCP-Hauptprozesses. Eine Annahme bestätigt noch kein sichtbares Fenster oder fertiges Ergebnis. Der normale Cowork-Weg verwendet stattdessen die tokenfreie, nicht blockierende Fortsetzung.',inputSchema:{type:'object',properties:{batch_token:{type:'string',minLength:64,maxLength:64,pattern:'^[a-f0-9]{64}$'}},required:['batch_token'],additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}},
 {name:'acknowledge_batch_document',title:'Ausgewertetes Dokument bestätigen',description:'Markiert nach erfolgreichem Lesen die KI-Auswertung eines freigegebenen Stapeldokuments. Der lokale Verarbeitungsfortschritt ist davon unabhängig; unterbrochene Auswertungen bleiben paginiert fortsetzbar.',inputSchema:{type:'object',properties:{batch_token:{type:'string',minLength:64,maxLength:64,pattern:'^[a-f0-9]{64}$'},package_id:{type:'string',minLength:16,maxLength:128,pattern:'^[A-Za-z0-9_-]+$'}},required:['batch_token','package_id'],additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}},
 {name:'resume_document_batch',title:'Unterbrochenen Dokumentstapel fortsetzen',description:'Setzt nur nach ausdrücklichem Anwenderauftrag sicher retryfähige technische Unterbrechungen desselben Batch erneut auf ausstehend. Vertagte fachliche Entscheidungen bleiben für den gemeinsamen lokalen Stapelreview gesperrt. Terminale Sicherheitsstopps bleiben unverändert.',inputSchema:{type:'object',properties:{batch_token:{type:'string',minLength:64,maxLength:64,pattern:'^[a-f0-9]{64}$'},confirmed:{type:'boolean',const:true}},required:['batch_token','confirmed'],additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}},
 {name:'continue_most_recent_document_batch',title:'Letzten offenen Dokumentstapel fortsetzen',description:'Setzt nach ausdrücklicher Bestätigung den zuletzt begonnenen unvollständigen lokalen Stapel fort. Technische Verarbeitung oder lokale Fachprüfung starten in einem getrennten lokalen Prozess; Cowork wartet nicht auf dessen Abschluss. Batch-Token, Inhalte, Pfade und Dateinamen bleiben lokal.',inputSchema:{type:'object',properties:{confirmed:{type:'boolean',const:true}},required:['confirmed'],additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}},
@@ -71,6 +73,7 @@ const TOOLS=[
 ,{name:'open_export_folder',title:'Lokale Ergebnisübersicht öffnen',description:'Öffnet den lokalen DataSecure-Export mit der dauerhaften Zuordnung zwischen Originaldatei und anonymisiertem Ergebnis. Der Export wird nicht an Claude übertragen.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:false,openWorldHint:false}}
 ];
 // Cowork should reason over the short, normal workflow rather than technical
+assertSchemaBinding(TOOLS);
 // delivery and support functions. The complete table is available only in
 // explicit IT support mode; the removed Input-folder intake is not retained.
 const NORMAL_TOOL_NAMES = Object.freeze(new Set([
@@ -306,10 +309,9 @@ async function startPickerBatch(args,context={}){
   catch(error){
     // Distinguish a worker that never started from one that did not confirm
     // the private handoff in time; only fixed codes leave this process.
-    const text=String(error?.message||'');
-    const cause=error?.code==='LOCAL_QUEUE_SCHEMA_INVALID'?'LOCAL_QUEUE_SCHEMA_INVALID':/timeout/iu.test(text)?'LOCAL_IPC_ACK_TIMEOUT':/cancel/iu.test(text)?'LOCAL_IPC_ACK_CANCELLED':'LOCAL_WORKER_SPAWN_FAILED';
+    const cause=ipcAcknowledgementCause(error,{allowLegacyMessages:true,allowQueueSchemaInvalid:true});
     const recorded=recordWorkflowEvent({event:'mcp_start_response',outcome:'stopped',item_count:selected.length,error_code:cause});
-    return withDiagnostic({ok:false,error:'local_start_failed',message:'Die lokale Verarbeitung wurde nicht gestartet. Es wurde kein Paket freigegeben.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},cause==='LOCAL_WORKER_SPAWN_FAILED'?'intake_spawn':'intake_ack',cause,recorded);
+    return withDiagnostic({ok:false,error:'local_start_failed',message:'Die lokale Übernahme wurde nicht bestätigt. Bitte den Status prüfen und nur auf ausdrücklichen Wunsch fortsetzen.',mode,local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},cause==='LOCAL_WORKER_SPAWN_FAILED'?'intake_spawn':'intake_ack',cause,recorded);
   }
   if(mode==='local_only'){
     // The opaque batch token is an internal recovery capability. The ordinary
@@ -358,28 +360,73 @@ async function continueMostRecentDocumentBatch(context={}){
     return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Die Fortsetzung wurde nicht gestartet und bleibt später möglich.',local_processing_started:false,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'continuation','BATCH_ACTIVE',false);
   }
   const continued=continueMostRecentBatch();
-  if(continued.ok!==true)return withDiagnostic(continued,'continuation',continued.error==='no_incomplete_batch'?'NO_INCOMPLETE_BATCH':'INTERNAL_FAILURE',false);
-  const token=continued.batch_token;
-  const safe={...continued};delete safe.batch_token;
-  if(continued.awaiting_local_review===true||continued.deferred_review>0){
-    const started=startLocalReviewExecutor(token,{requireIpcAcknowledgement:true,signal:context.signal});
-    try{await started.ipcAcknowledgement;}catch(error){
-      const cause=/cancel/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_CANCELLED':/timeout/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_TIMEOUT':'LOCAL_REVIEW_WORKER_EXITED';
-      return withDiagnostic({ok:false,error:'local_start_failed',message:'Die lokale Stapelprüfung wurde nicht gestartet. Es wurde kein Paket freigegeben.',local_review_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},'review_ack',cause,false);
-    }
-    recordWorkflowEvent({event:'mcp_review_response',outcome:started.ok?'ok':'stopped',item_count:continued.batch_total,
-      released_count:continued.released,stopped_count:continued.stopped,error_code:started.ok?'NONE':'LOCAL_REVIEW_FAILED'});
-    return{...safe,...started,raw_content_sent_to_claude:false};
+  // Normal and support callers share this token-free continuation response.
+  // Project only public counters; neither failed core responses nor successful
+  // worker replies may add capabilities, paths or private metadata by spread.
+  const safe={ok:continued?.ok===true,raw_content_sent_to_claude:false};
+  for(const field of ['batch_total','attempted','completed','completion_percent','released',
+    'delivery_pending','processing','stopped','retryable','deferred_review','mapping_pending','remaining','next_position']){
+    if(Number.isSafeInteger(continued?.[field])&&continued[field]>=0&&continued[field]<=100)safe[field]=continued[field];
   }
-  if(continued.remaining>0||continued.delivery_pending>0||continued.mapping_pending>0){
-    const started=startLocalBatchExecutor(token,{requireIpcAcknowledgement:true,signal:context.signal});
-    try{await started.ipcAcknowledgement;}catch(error){
-      const cause=/cancel/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_CANCELLED':/timeout/iu.test(String(error?.message||''))?'LOCAL_IPC_ACK_TIMEOUT':'LOCAL_WORKER_EXITED';
-      return withDiagnostic({ok:false,error:'local_start_failed',message:'Die lokale Fortsetzung wurde nicht gestartet. Es wurde kein Paket freigegeben.',local_processing_started:false,next_action:'restart_only_on_explicit_request',raw_content_sent_to_claude:false},'continuation_ack',cause,false);
-    }
-    return{...safe,local_processing_started:started.local_processing_started===true,raw_content_sent_to_claude:false};
+  for(const field of ['estimated_remaining_seconds','next_position']){
+    if(continued?.[field]===null)safe[field]=null;
   }
-  return safe;
+  if(Number.isSafeInteger(continued?.estimated_remaining_seconds)&&continued.estimated_remaining_seconds>=0){
+    safe.estimated_remaining_seconds=continued.estimated_remaining_seconds;
+  }
+  for(const field of ['local_processing_active','awaiting_resume','complete','result_grades_verified']){
+    if(typeof continued?.[field]==='boolean')safe[field]=continued[field];
+  }
+  for(const [field,keys] of [
+    ['result_grade_counts',['complete','usable_with_omissions','not_processed','unavailable']],
+    ['result_omission_counts',['images_removed_by_request','visual_assets_withheld_locally']]
+  ]){
+    if(keys.every(key=>Number.isSafeInteger(continued?.[field]?.[key])&&continued[field][key]>=0&&continued[field][key]<=100)){
+      safe[field]=Object.fromEntries(keys.map(key=>[key,continued[field][key]]));
+    }
+  }
+  if(safe.result_grades_verified===true&&!safe.result_grade_counts)safe.result_grades_verified=false;
+  const phases=['invalid_local_state','complete','processing_local_batch','processing_local_document',
+    'awaiting_delivery_acknowledgement','awaiting_local_review','awaiting_local_mapping_repair',
+    'awaiting_explicit_resume','ready_for_next_document'];
+  if(phases.includes(continued?.batch_phase)){
+    safe.batch_phase=continued.batch_phase;
+    const {batchUserStatus}=require('./gateway/batch-progress').createBatchProgress({});
+    Object.assign(safe,batchUserStatus(safe));
+  }
+  if(continued?.ok!==true){
+    const errors=['no_incomplete_batch','no_retryable_documents','batch_review_required','local_mapping_repair_pending'];
+    const error=errors.includes(continued?.error)?continued.error:'batch_not_runnable';
+    return withDiagnostic({...safe,ok:false,error,message:error==='no_incomplete_batch'
+      ?'Es gibt keinen unvollständigen lokalen Stapel.':'Der lokale Stapel kann in seinem aktuellen Zustand nicht fortgesetzt werden.'},
+    'continuation',error==='no_incomplete_batch'?'NO_INCOMPLETE_BATCH':'BATCH_NOT_RUNNABLE',false);
+  }
+  const action=batchNextAction(continued);
+  if(action==='none')return safe;
+  const review=action==='review';
+  const marker=review?'local_review_started':'local_processing_started';
+  const failedStart=cause=>withDiagnostic({...safe,ok:false,error:'local_start_failed',
+    message:'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und nur auf ausdrücklichen Wunsch fortsetzen.',
+    [marker]:false,next_action:'restart_only_on_explicit_request'},review?'review':'continuation',cause,false);
+  try{
+    const started=(review?startLocalReviewExecutor:startLocalBatchExecutor)(continued.batch_token,
+      {requireIpcAcknowledgement:true,signal:context.signal});
+    if(started?.ok!==true||started?.[marker]!==true||
+      !started.ipcAcknowledgement||typeof started.ipcAcknowledgement.then!=='function'){
+      return failedStart(started?.error==='batch_not_runnable'?'BATCH_NOT_RUNNABLE':'LOCAL_WORKER_SPAWN_FAILED');
+    }
+    await started.ipcAcknowledgement;
+  }catch(error){
+    const cause=ipcAcknowledgementCause(error,{allowLegacyMessages:true});
+    return failedStart(cause);
+  }
+  if(review){
+    recordWorkflowEvent({event:'mcp_review_response',outcome:'ok',item_count:safe.batch_total,
+      released_count:safe.released,stopped_count:safe.stopped,error_code:'NONE'});
+    return{...safe,local_review_started:true,batch_phase:'processing_local_review',
+      next_action:'complete_review_in_local_window',user_status:'Die lokale Stapelprüfung läuft.'};
+  }
+  return{...safe,local_processing_started:true};
 }
 const LOCAL_ONLY_HANDOFF=createLocalOnlyHandoff({completedLocalOnlyCandidates,listBatchResults,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,acknowledgeDeliveredPackages});
 async function startLocalResultsHandoff(context={}){
@@ -388,7 +435,38 @@ async function startLocalResultsHandoff(context={}){
   try{return await LOCAL_ONLY_HANDOFF.start({signal:context.signal});}
   finally{releaseNativeInteraction(owner);}
 }
-async function dispatch(name,args={},context={}){if(name==='privacy_status')return genericStatus();if(name==='diagnostic_status')return diagnosticStatus(args.limit??20);if(name==='export_diagnostic_package'){if(args.confirmed!==true)throw new SafeError('Der Diagnoseexport erfordert eine ausdrückliche Bestätigung.');return exportDiagnosticPackage({confirmed:true});}if(name==='open_privacy_folder')return openFolder(roots().root);if(name==='configure_privacy_folder')return configurePrivacyFolder(args,context);if(name==='configure_result_folder')return configureResultFolder(args,context);if(name==='open_result_folder'){const target=resultOutputDirectory();if(!target)throw new SafeError('Es ist noch kein Ergebnisordner festgelegt.');return openFolder(target);}if(name==='start_document_batch_from_picker')return startPickerBatch(args,context);if(name==='start_completed_local_results_handoff')return startLocalResultsHandoff(context);if(name==='continue_local_results_handoff')return LOCAL_ONLY_HANDOFF.nextAsync({signal:context.signal});if(name==='cancel_local_results_handoff')return LOCAL_ONLY_HANDOFF.cancel();if(name==='continue_anonymized_batch_in_chat')return continueAnonymizedBatchInChat(args);if(name==='open_output_folder')return openFolder(roots().output);if(name==='open_export_folder')return openFolder(roots().exports);if(name==='open_visual_review_folder')return openFolder(roots().review);if(name==='document_batch_status')return readBatchProgress(args.batch_token);if(name==='list_document_batch_results')return listBatchResults(args.batch_token,{cursor:args.cursor,limit:args.limit??10});if(name==='review_deferred_document_batch')return reviewDeferredBatch(args.batch_token,{abortSignal:context.signal,localFinalize:true});if(name==='acknowledge_batch_document')return acknowledgeDeliveredPackage(args.batch_token,args.package_id);if(name==='acknowledge_batch_documents')return acknowledgeBatchDocuments(args);if(name==='continue_most_recent_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return continueMostRecentDocumentBatch(context);}if(name==='discard_incomplete_document_batches'){if(args.confirmed!==true)throw new SafeError('Das Verwerfen unvollständiger Stapel erfordert eine ausdrückliche Bestätigung.');return discardIncompleteBatches();}if(name==='resume_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return resumeBatch(args.batch_token);}if(name==='read_anonymized_document')return readOutput(args.package_id,args.read_capability,args.offset??0,args.max_chars??16000);if(name==='read_anonymized_documents')return readOutputs(args.documents);if(name==='list_visual_review_items')return listReviewItems();if(name==='purge_local_data'){const purged=purgeLocalData(args.scope||'all',args.confirmed);const outbox=replayMappingOutbox();if(outbox.failures)throw new SafeError('Die lokale Zuordnungswarteschlange konnte nicht sicher bereinigt werden.');return{...purged,mapping_outbox_pending:outbox.pending,mapping_outbox_orphaned_removed:outbox.orphaned_removed};}return null;}
+async function startSupportBatchReview(args,context={}){
+  const unavailable=(cause,error='local_start_failed')=>withDiagnostic({
+    ok:false,error,local_review_started:false,raw_content_sent_to_claude:false,
+    message:'Die Übernahme der lokalen Prüfung wurde nicht bestätigt. Bitte den Stapelstatus prüfen; nicht automatisch erneut starten.',
+    next_action:'restart_only_on_explicit_request'
+  },'review',cause,false);
+  const status=genericStatus();
+  if(status.local_intake_pending===true||status.batch_processing_active===true)
+    return unavailable('BATCH_ACTIVE','batch_active');
+  // Metadata only. Reconciliation and raw reconstruction belong to the worker
+  // under its exclusive batch lease, including the support-only route.
+  const progress=readBatchProgress(args.batch_token);
+  if(!batchReviewCanPrepare(progress))return withDiagnostic({
+    ok:false,error:'batch_review_not_ready',local_review_started:false,
+    message:'Der gewählte Stapel ist noch nicht für eine lokale Prüfung bereit. Bitte seinen Status prüfen.',
+    next_action:'check_local_batch_status',raw_content_sent_to_claude:false
+  },'review','BATCH_NOT_RUNNABLE',false);
+  try{
+    const started=startLocalReviewExecutor(args.batch_token,{requireIpcAcknowledgement:true,signal:context.signal});
+    if(started?.ok!==true||started.local_review_started!==true||
+       !started.ipcAcknowledgement||typeof started.ipcAcknowledgement.then!=='function')
+      return unavailable(started?.error==='batch_not_runnable'?'BATCH_NOT_RUNNABLE':'LOCAL_WORKER_SPAWN_FAILED');
+    await started.ipcAcknowledgement;
+  }catch(error){return unavailable(ipcAcknowledgementCause(error));}
+  recordWorkflowEvent({event:'mcp_review_response',outcome:'ok',item_count:progress.batch_total,error_code:'NONE'});
+  // A worker ACK proves acceptance, not a visible window or finished review.
+  // Never spread the private progress/start objects into a model response.
+  return{ok:true,local_review_started:true,next_action:'local_review_handoff_confirmed',
+    message:'Die lokale Prüfung wurde an den geschützten Review-Worker übergeben. DataSecure prüft den Stapelstatus dort erneut und zeigt nötige Entscheidungen lokal an.',
+    raw_content_sent_to_claude:false};
+}
+async function dispatch(name,args={},context={}){if(name==='privacy_status')return genericStatus();if(name==='diagnostic_status')return diagnosticStatus(args.limit??20);if(name==='export_diagnostic_package'){if(args.confirmed!==true)throw new SafeError('Der Diagnoseexport erfordert eine ausdrückliche Bestätigung.');return exportDiagnosticPackage({confirmed:true});}if(name==='open_privacy_folder')return openFolder(roots().root);if(name==='configure_privacy_folder')return configurePrivacyFolder(args,context);if(name==='configure_result_folder')return configureResultFolder(args,context);if(name==='open_result_folder'){const target=resultOutputDirectory();if(!target)throw new SafeError('Es ist noch kein Ergebnisordner festgelegt.');return openFolder(target);}if(name==='start_document_batch_from_picker')return startPickerBatch(args,context);if(name==='start_completed_local_results_handoff')return startLocalResultsHandoff(context);if(name==='continue_local_results_handoff')return LOCAL_ONLY_HANDOFF.nextAsync({signal:context.signal});if(name==='cancel_local_results_handoff')return LOCAL_ONLY_HANDOFF.cancel();if(name==='continue_anonymized_batch_in_chat')return continueAnonymizedBatchInChat(args);if(name==='open_output_folder')return openFolder(roots().output);if(name==='open_export_folder')return openFolder(roots().exports);if(name==='open_visual_review_folder')return openFolder(roots().review);if(name==='document_batch_status')return readBatchProgress(args.batch_token);if(name==='list_document_batch_results')return listBatchResults(args.batch_token,{cursor:args.cursor,limit:args.limit??10});if(name==='review_deferred_document_batch')return startSupportBatchReview(args,context);if(name==='acknowledge_batch_document')return acknowledgeDeliveredPackage(args.batch_token,args.package_id);if(name==='acknowledge_batch_documents')return acknowledgeBatchDocuments(args);if(name==='continue_most_recent_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return continueMostRecentDocumentBatch(context);}if(name==='discard_incomplete_document_batches'){if(args.confirmed!==true)throw new SafeError('Das Verwerfen unvollständiger Stapel erfordert eine ausdrückliche Bestätigung.');return discardIncompleteBatches();}if(name==='resume_document_batch'){if(args.confirmed!==true)throw new SafeError('Die Fortsetzung erfordert eine ausdrückliche Bestätigung.');return resumeBatch(args.batch_token);}if(name==='read_anonymized_document')return readOutput(args.package_id,args.read_capability,args.offset??0,args.max_chars??16000);if(name==='read_anonymized_documents')return readOutputs(args.documents);if(name==='list_visual_review_items')return listReviewItems();if(name==='purge_local_data'){const purged=purgeLocalData(args.scope||'all',args.confirmed);const outbox=replayMappingOutbox();if(outbox.failures)throw new SafeError('Die lokale Zuordnungswarteschlange konnte nicht sicher bereinigt werden.');return{...purged,mapping_outbox_pending:outbox.pending,mapping_outbox_orphaned_removed:outbox.orphaned_removed};}return null;}
 const dispatchCore=dispatch;
 dispatch=async function guardedDispatch(name,args={},context={}){
   const traceId=context.traceId||newTraceId();
@@ -402,6 +480,9 @@ dispatch=async function guardedDispatch(name,args={},context={}){
     }
   }
   try{
+    if(TOOLS.some(tool=>tool.name===name)&&!validToolArguments(name,args)){
+      throw Object.assign(new SafeError('Ungültige Werkzeugargumente. Es wurde keine Aktion ausgeführt.'),{code:'MCP_ARGUMENT_INVALID'});
+    }
     const result=await dispatchCore(name,args,context);
     recordSupportTrace({trace_id:traceId,event:result?.ok===false?'tool_failed':'tool_completed',method:'tools/call',
       operation:name,outcome:result?.ok===false?'stopped':'ok',duration_ms:Date.now()-startedAt,
@@ -409,7 +490,7 @@ dispatch=async function guardedDispatch(name,args={},context={}){
     return result;
   }catch(error){
     recordSupportTrace({trace_id:traceId,event:'tool_failed',method:'tools/call',operation:name,outcome:'stopped',
-      duration_ms:Date.now()-startedAt,error_code:error?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':'INTERNAL_FAILURE'});
+      duration_ms:Date.now()-startedAt,error_code:causeFromError(error,'INTERNAL_FAILURE')});
     throw error;
   }
 };
@@ -422,7 +503,8 @@ async function handle(req,traceId){if(!req||req.jsonrpc!=='2.0'||typeof req.meth
 // including an error response. Only the notifications/* namespace is expected.
 if(req.method==='notifications/cancelled'){ACTIVE_REQUESTS.get(requestKey(req.params?.requestId))?.abort();return;}
 if(!Object.hasOwn(req,'id'))return;
-if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const dispatched=await dispatch(req.params?.name,req.params?.arguments||{},{signal:controller.signal,traceId});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=completeDiagnostic(dispatched);const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult(withDiagnostic({ok:false,error:e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
+if(req.method==='tools/call'&&(!req.params||typeof req.params!=='object'||Array.isArray(req.params)||typeof req.params.name!=='string'))return rpcError(id,-32602,'Ungültige Werkzeuganfrage');
+if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const dispatched=await dispatch(req.params?.name,req.params?.arguments,{signal:controller.signal,traceId});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=completeDiagnostic(dispatched);const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult(withDiagnostic({ok:false,error:e?.code==='MCP_ARGUMENT_INVALID'?'invalid_tool_arguments':e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
 // Fail-closed startup. A refusal leaves a content-free journal line, a marker
 // file and one fixed stderr sentence instead of a raw stack trace with paths
 // (stdout is the MCP channel; the host does not surface stderr).

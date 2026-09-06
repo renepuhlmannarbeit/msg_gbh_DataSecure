@@ -2,6 +2,7 @@
 
 const path = require('path');
 const { readZip, ZipError } = require('./zip-reader');
+const { createXlsxReader } = require('./xlsx-structure');
 
 const MAX_EMBEDDED_DEPTH = 3;
 const MAX_EMBEDDED_DOCUMENTS = 20;
@@ -180,11 +181,30 @@ const WORDPROCESSINGML_NAMESPACES = new Set([
   'http://purl.oclc.org/ooxml/wordprocessingml/main'
 ]);
 const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+// The structural renderer below understands the Word 2010 text-box shape
+// vocabulary. Markup-compatibility choices are selected from namespace URIs,
+// never from attacker-controlled prefix spelling. Every other choice uses its
+// declared fallback or stops safely when no fallback exists.
+const SUPPORTED_WORD_MARKUP_CHOICE_NAMESPACES = new Set([
+  'http://schemas.microsoft.com/office/word/2010/wordprocessingShape'
+]);
 const OFFICE_MATH_NAMESPACES = new Set([
   'http://schemas.openxmlformats.org/officeDocument/2006/math',
   'http://purl.oclc.org/ooxml/officeDocument/math'
 ]);
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
+// Revision properties are content-bearing too: old paragraph styles must not
+// overwrite current styles, and author/history metadata cannot vanish silently.
+// The renderer and coverage gate share this exact namespace-normalized set.
+const BLOCKED_WORD_CONTENT = new Set([
+  'instrText', 'fldSimple', 'delText', 'del', 'ins', 'moveFrom', 'moveTo',
+  'pPrChange', 'rPrChange', 'sectPrChange', 'tblGridChange', 'tblPrChange',
+  'tblPrExChange', 'trPrChange', 'tcPrChange', 'numberingChange',
+  'cellIns', 'cellDel', 'cellMerge', 'moveFromRangeStart', 'moveFromRangeEnd',
+  'moveToRangeStart', 'moveToRangeEnd', 'customXmlInsRangeStart', 'customXmlInsRangeEnd',
+  'customXmlDelRangeStart', 'customXmlDelRangeEnd', 'customXmlMoveFromRangeStart',
+  'customXmlMoveFromRangeEnd', 'customXmlMoveToRangeStart', 'customXmlMoveToRangeEnd'
+].map(name => `w:${name}`).concat(['m:oMath', 'm:oMathPara', 'm:t']));
 
 function normalizedWordQName(qname, namespaces, attribute = false) {
   const parts = String(qname).split(':');
@@ -202,7 +222,7 @@ function normalizedWordQName(qname, namespaces, attribute = false) {
   return qname;
 }
 
-function wordPartScope(xml, rootTag) {
+function wordPartScope(xml, rootTag, onElement) {
   const source = String(xml);
   if (!source || /<!DOCTYPE|<!ENTITY/iu.test(source)) throw wordStructureError();
   const stack = [];
@@ -251,6 +271,20 @@ function wordPartScope(xml, rootTag) {
     }
     return values.join('');
   }
+  function normalizedChoiceName(normalized, parsed, namespaces) {
+    // These names are internal tokens, not legal markup-compatibility input.
+    // Otherwise a source ChoiceSupported would bypass Requires resolution.
+    if (normalized === 'mc:ChoiceSupported' || normalized === 'mc:ChoiceUnsupported') throw wordStructureError();
+    if (normalized !== 'mc:Choice') return normalized;
+    const requires = parsed.find((item) => item.name === 'Requires')?.value;
+    const prefixes = xmlDecode(requires || '').trim().split(/\s+/u).filter(Boolean);
+    if (!prefixes.length || prefixes.some((prefix) => !/^[A-Za-z_][\w.-]*$/u.test(prefix))) {
+      return 'mc:ChoiceUnsupported';
+    }
+    return prefixes.every((prefix) => SUPPORTED_WORD_MARKUP_CHOICE_NAMESPACES.has(namespaces.get(prefix)))
+      ? 'mc:ChoiceSupported'
+      : 'mc:ChoiceUnsupported';
+  }
 
   while (cursor < source.length) {
     if (source[cursor] !== '<') {
@@ -293,7 +327,8 @@ function wordPartScope(xml, rootTag) {
     if (rootClosed) throw wordStructureError();
     const { parsed, namespaces } = parseAttributes(raw, stack.at(-1)?.namespaces);
     const normalized = normalizedWordQName(qname, namespaces);
-    const frame = { qname, normalized, namespaces };
+    const emittedName = normalizedChoiceName(normalized, parsed, namespaces);
+    const frame = { qname, normalized: emittedName, namespaces };
     if (!documentRoot) {
       documentRoot = frame;
       const expected = rootTag === 'body' ? 'w:document' : `w:${rootTag}`;
@@ -306,7 +341,10 @@ function wordPartScope(xml, rootTag) {
       if (target || found) throw wordStructureError();
       if (selfClosing) found = true;
       else target = frame;
-    } else if (target) append(`<${normalized}${normalizedAttributes(parsed, namespaces)}${selfClosing ? '/>' : '>'}`);
+    } else if (target) {
+      append(`<${emittedName}${normalizedAttributes(parsed, namespaces)}${selfClosing ? '/>' : '>'}`);
+      onElement?.(normalized, parsed, namespaces, stack.at(-1)?.normalized);
+    }
     if (!selfClosing) stack.push(frame);
     else if (!stack.length) rootClosed = true;
   }
@@ -396,6 +434,7 @@ function parseWordStructure(body, options = {}) {
     if (closing) {
       if (selfClosing || attributes.trim() || stack.length === 1 || frame.name !== name) throw wordStructureError();
       if (frame.created) flush(frame.node);
+      if (frame.name === 'mc:AlternateContent' && !frame.alternate?.selected) throw wordStructureError();
       stack.pop();
       continue;
     }
@@ -424,8 +463,29 @@ function parseWordStructure(body, options = {}) {
     // so the caller receives the intended content-free coverage warning.
     // Unknown/foreign elements are deliberately not skipped: direct text in
     // those elements must still fail closed instead of disappearing.
-    const blockedWordElement = /^(?:w:(?:instrText|fldSimple|delText|del|ins|moveFrom|moveTo)|m:(?:oMath|oMathPara|t))$/u.test(name);
-    const skipped = frame.skipped || name === 'mc:Fallback' || blockedWordElement;
+    const blockedWordElement = BLOCKED_WORD_CONTENT.has(name);
+    let branchSkipped = false;
+    let alternate = null;
+    if (name === 'mc:AlternateContent') {
+      alternate = { selected: false, fallbackSeen: false };
+    } else if (/^mc:(?:ChoiceSupported|ChoiceUnsupported|Fallback)$/u.test(name)) {
+      if (frame.name !== 'mc:AlternateContent' || !frame.alternate || frame.alternate.fallbackSeen) {
+        throw wordStructureError();
+      }
+      if (name === 'mc:Fallback') {
+        frame.alternate.fallbackSeen = true;
+        branchSkipped = frame.alternate.selected;
+        if (!branchSkipped) frame.alternate.selected = true;
+      } else if (name === 'mc:ChoiceSupported' && !frame.alternate.selected) {
+        frame.alternate.selected = true;
+      } else {
+        branchSkipped = true;
+      }
+    } else if (frame.name === 'mc:AlternateContent') {
+      // Choice/Fallback are the only legal direct children of AlternateContent.
+      throw wordStructureError();
+    }
+    const skipped = frame.skipped || branchSkipped || blockedWordElement;
     const boxes = frame.boxes + (name === 'w:txbxContent' ? 1 : 0);
     let node = frame.node, created = false;
     if (!skipped) {
@@ -452,8 +512,10 @@ function parseWordStructure(body, options = {}) {
         if (level) node.prefix = '#'.repeat(Number(level)) + ' ';
       } else if (node.type === 'p' && name === 'w:numPr' && !node.prefix) node.prefix = '- ';
     }
-    if (!selfClosing) stack.push({ name, node, skipped, boxes, created });
-    else if (created) flush(node);
+    if (!selfClosing) stack.push({ name, node, skipped, boxes, created, alternate });
+    else if (name === 'mc:AlternateContent' || (name === 'mc:Fallback' && !frame.alternate?.selected)) {
+      throw wordStructureError();
+    } else if (created) flush(node);
   }
   if (stack.length !== 1) throw wordStructureError();
   return root;
@@ -864,6 +926,37 @@ function docxCoverageWarnings(entries) {
   ];
   let unsupported = 0;
   const declaredOverrides = new Map();
+  const commentDefinitions = new Set();
+  const commentBindings = new Map();
+  let commentMarkers = 0;
+  function inspectComment(part, name, attributes, namespaces, parent) {
+    if (!['w:comment', 'w:commentReference', 'w:commentRangeStart', 'w:commentRangeEnd'].includes(name)) return;
+    // Comment-in-comment references are explicitly ignorable Word markup.
+    if (part === 'word/comments.xml' && name !== 'w:comment') return;
+    if (++commentMarkers > MAX_WORD_STRUCTURE_NODES) throw wordStructureError(true);
+    const attribute = attributes.find(item => item.name !== 'xmlns' && !item.name.startsWith('xmlns:') &&
+      normalizedWordQName(item.name, namespaces, true) === 'w:id');
+    const rawId = xmlDecode(attribute?.value || '').trim();
+    // IDs are decimal identifiers, not paths. Bound normalization before BigInt
+    // and compare values, including equivalent +0/00 spellings, not raw XML.
+    if (!/^[+-]?[0-9]{1,32}$/u.test(rawId)) throw wordStructureError();
+    const id = String(BigInt(rawId));
+    if (name === 'w:comment') {
+      if (part !== 'word/comments.xml' || parent !== 'w:comments' || commentDefinitions.has(id)) unsupported++;
+      commentDefinitions.add(id);
+      return;
+    }
+    const key = `${part}:${id}`;
+    let binding = commentBindings.get(key);
+    if (!binding) commentBindings.set(key, binding = { id, start: 0, end: 0, references: 0, ordered: true });
+    if (name === 'w:commentRangeStart') {
+      if (binding.end) binding.ordered = false;
+      binding.start++;
+    } else if (name === 'w:commentRangeEnd') {
+      if (!binding.start) binding.ordered = false;
+      binding.end++;
+    } else binding.references++;
+  }
   for (const [name, data] of entries) {
     if (!supported.some((pattern) => pattern.test(name))) unsupported++;
     else if (!canonicalCase.some((pattern) => pattern.test(name))) unsupported++;
@@ -900,16 +993,19 @@ function docxCoverageWarnings(entries) {
           : /^word\/footer\d+\.xml$/i.test(name) ? 'ftr'
             : path.posix.basename(name, '.xml');
       let inspected;
-      try { inspected = wordPartScope(xml, rootTag).body; }
+      let blockedContent = false;
+      try { inspected = wordPartScope(xml, rootTag, (element, attributes, namespaces, parent) => {
+        if (BLOCKED_WORD_CONTENT.has(element)) blockedContent = true;
+        inspectComment(name, element, attributes, namespaces, parent);
+      }).body; }
       catch { unsupported++; continue; }
       // Until a namespace-aware field/revision/math renderer exists, these
       // inhaltsfähigen constructs must stop instead of silently disappearing.
       const blocked = [
-        /<w:(?:instrText|fldSimple|delText|del|ins|moveFrom|moveTo)\b/iu,
-        /<m:(?:oMath|oMathPara|t)\b/iu,
         /<mc:AlternateContent\b/iu,
         /<w:(?:comment|comments)\b[^>]*\bw:(?:author|initials)=/iu
       ];
+      if (blockedContent) unsupported++;
       for (const pattern of blocked) if (pattern.test(inspected)) unsupported++;
     }
     if (name === 'word/settings.xml') {
@@ -928,6 +1024,12 @@ function docxCoverageWarnings(entries) {
   unsupported += docxMainRelationshipIssueCount(entries);
   unsupported += docxMainWordRootIssueCount(entries);
   unsupported += docxStoryRelationshipIssueCount(entries);
+  for (const binding of commentBindings.values()) {
+    // A point comment needs no range. A ranged reference needs exactly one
+    // ordered pair; any reference needs one actual, uniquely identified body.
+    if (binding.references && (!commentDefinitions.has(binding.id) || !binding.ordered ||
+        !((binding.start === 0 && binding.end === 0) || (binding.start === 1 && binding.end === 1)))) unsupported++;
+  }
   return unsupported
     ? [`DOCX enthält ${unsupported} nicht unterstützte inhaltsfähige OOXML-Part(s); Companion-Freigabe wird blockiert.`]
     : [];
@@ -958,20 +1060,13 @@ function parseDocx(entries, options = {}) {
   const imageCoverage = docxImageRelationshipCoverage(entries);
   return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries)] };
 }
-function sharedStrings(entries) {
-  const b=entries.get('xl/sharedStrings.xml'); if(!b)return[]; const xml=b.toString('utf8'), out=[]; let m; const re=/<si\b[\s\S]*?<\/si>/gi; while((m=re.exec(xml)))out.push(textTags(m[0],'t').join('')); return out;
-}
-function colNumber(ref) { const m=/^([A-Z]+)/i.exec(ref||''); if(!m)return 0; let n=0; for(const c of m[1].toUpperCase())n=n*26+(c.charCodeAt(0)-64); return n; }
-function xlsxSheetRelationshipMap(entries) {
+function xlsxSheetRelationshipMap(entries, reader) {
   const rels = entries.get('xl/_rels/workbook.xml.rels');
   if (!rels) return { targets: new Map(), issues: 1 };
   const targets = new Map(); let issues = 0;
-  for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
-    const attrs = match[1];
-    const id = /\bId=["']([^"']+)["']/i.exec(attrs)?.[1];
-    const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(attrs)?.[1]);
-    const target = xmlDecode(/\bTarget=["']([^"']+)["']/i.exec(attrs)?.[1] || '');
-    const external = /\bTargetMode\s*=\s*["']External["']/i.test(attrs);
+  for (const relationship of reader.relationships(rels.toString('utf8'))) {
+    const { id, target, external } = relationship;
+    const type = relationshipKind(relationship.type);
     if (!id) { issues++; continue; }
     if (type !== 'worksheet' || external || !target || /[\\?#\0]/u.test(target) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(target) || /(?:^|\/)\.\.(?:\/|$)/u.test(target)) { issues++; continue; }
     const resolved = path.posix.normalize(path.posix.join('xl', target));
@@ -1106,11 +1201,24 @@ function xlsxRenderLimit() {
   return error;
 }
 function parseXlsx(entries, options = {}) {
-  const shared=sharedStrings(entries); const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
-  const sheetMeta=[]; let issues=relationState.issues; let sm; const sr=/<sheet\b([^>]+?)\/?>(?:<\/sheet>)?/gi; while((sm=sr.exec(workbook))){const a=sm[1],name=xmlDecode(/\bname="([^"]+)"/i.exec(a)?.[1]||'Sheet'),rid=/\br:id="([^"]+)"/i.exec(a)?.[1]; const target=rid&&relationState.targets.get(rid); if(!rid||!target) { issues++; continue; } sheetMeta.push({name,target});}
+  const reader = createXlsxReader(xmlDecode, options);
+  // A well-formed but only partly modelled part is an honest coverage limit.
+  // Broken XML anywhere in this workbook is a source failure, never a prefix.
+  for (const [name, data] of entries) if (/\.(?:xml|rels)$/i.test(name)) reader.validate(data.toString('utf8'));
+  const sharedPart = entries.get('xl/sharedStrings.xml');
+  const shared = sharedPart ? reader.sharedStrings(sharedPart.toString('utf8')) : [];
+  const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries, reader); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
+  const sheetMeta=[]; let issues=relationState.issues;
+  for (const { name, rid } of workbook ? reader.workbook(workbook) : []) {
+    const target = rid && relationState.targets.get(rid);
+    if (!rid || !target) { issues++; continue; }
+    sheetMeta.push({ name, target });
+  }
   if(!workbook || !sheetMeta.length) issues++;
   const sections=[]; let formulaCells=0;
-  for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;const xml=buf.toString('utf8');const rows=[];let rm;const rr=/<row\b[\s\S]*?<\/row>/gi;while((rm=rr.exec(xml))){const vals=[];let cm;const cr=/<c\b([^>]*)>([\s\S]*?)<\/c>/gi;while((cm=cr.exec(rm[0]))){const attrs=cm[1],body=cm[2],ref=/\br="([^"]+)"/i.exec(attrs)?.[1]||'',idx=colNumber(ref)-1,t=/\bt="([^"]+)"/i.exec(attrs)?.[1]||'';if(!Number.isSafeInteger(idx)||idx>=16384)throw xlsxRenderLimit();if(/<f\b[^>]*>[\s\S]*?<\/f>|<f\b[^>]*\/>/i.test(body))formulaCells++;let v=/<v\b[^>]*>([\s\S]*?)<\/v>/i.exec(body)?.[1]??'';if(t==='s'){if(options.preserveText&&(!/^\d+$/.test(v)||!Object.hasOwn(shared,Number(v)))){const error=new Error('XLSX-Zeichenkettenverweis ist ungültig.');error.code='XLSX_SHARED_STRING_INVALID';throw error;}v=shared[Number(v)]??v;}else if(t==='inlineStr')v=textTags(body,'t').join('');else if(t==='str')v=xmlDecode(v);if(options.preserveText){const formula=/<f\b[^>]*>([\s\S]*?)<\/f>/i.exec(body);if(formula)v=`Formel: ${xmlDecode(formula[1])}\nGespeicherter Wert: ${v}`;}vals[idx<0?vals.length:idx]=String(v); } if(options.preserveText||vals.some(v=>String(v||'').trim()))rows.push(vals);}
+  for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;
+    const parsed = reader.worksheet(buf.toString('utf8'), shared);
+    const rows = parsed.rows; formulaCells += parsed.formulaCells;
     const parts=[];let rendered=0;
     const append=(part)=>{rendered+=part.length+2;if(rendered>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();parts.push(part);};
     append(`# Arbeitsblatt: ${options.preserveText?extractionText(s.name):s.name}`);
@@ -1121,7 +1229,7 @@ function parseXlsx(entries, options = {}) {
       if((cols*3+2)*(rows.length+2)>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();
       if(options.preserveText){append('| '+Array.from({length:cols},(_,i)=>`Spalte ${i+1}`).join(' | ')+' |');append('| '+Array.from({length:cols},()=> '---').join(' | ')+' |');}
       for(let index=0;index<rows.length;index++){
-        const row=rows[index];const line=Array.from({length:cols},(_,i)=>options.preserveText?extractionText(String(row[i]??''),true):String(row[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>'));
+        const row=rows[index]||[];const line=Array.from({length:cols},(_,i)=>options.preserveText?extractionText(String(row[i]??''),true):String(row[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>'));
         append('| '+line.join(' | ')+' |');
         if(!options.preserveText&&index===0)append('| '+line.map(()=> '---').join(' | ')+' |');
       }

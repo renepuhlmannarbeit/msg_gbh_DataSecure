@@ -9,7 +9,9 @@ const { testAsync, done, assert } = createSuite('Standalone frontend');
 
 function element() {
   return { disabled: false, hidden: false, textContent: '', title: '', className: '', listeners: {}, attributes: {},
-    value: 'markdown-and-anonymize',
+    value: '', children: [],
+    appendChild(child) { this.children.push(child); return child; },
+    replaceChildren(...children) { this.children = children; },
     focus() { this.focused = true; },
     setAttribute(name, value) { this.attributes[name] = value; },
     addEventListener(type, listener) { this.listeners[type] = listener; } };
@@ -20,7 +22,7 @@ async function recoveredStatusCase() {
     'configure-results', 'diagnostics', 'status-icon', 'status-title', 'status-text', 'summary',
     'result-folder', 'result-folder-results', 'source-folders', 'selected-files', 'result-count',
     'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version', 'drop-zone', 'processing-mode'];
-  const elements = Object.fromEntries(ids.map((id) => [id, element()]));
+  const elements = htmlElements();
   const timers = [];
   let publicCalls = 0;
   const invoke = async (action) => {
@@ -37,7 +39,7 @@ async function recoveredStatusCase() {
   };
   const context = {
     window: { __TAURI__: { core: { invoke }, event: { listen: async () => () => {} } }, addEventListener() {} },
-    document: { getElementById: (id) => elements[id] },
+    document: { getElementById: (id) => elements[id], createElement: element },
     setTimeout: (callback) => { timers.push(callback); return timers.length; },
     clearTimeout: () => {},
     requestAnimationFrame: (callback) => callback(),
@@ -62,31 +64,34 @@ async function openFeedbackCase() {
     'configure-results', 'diagnostics', 'status-icon', 'status-title', 'status-text', 'summary',
     'result-folder', 'result-folder-results', 'source-folders', 'selected-files', 'result-count',
     'action-feedback', 'tab-process', 'tab-results', 'process-view', 'results-view', 'new-batch', 'product-version', 'drop-zone', 'processing-mode'];
-  const elements = Object.fromEntries(ids.map((id) => [id, element()]));
+  const elements = htmlElements();
   const calls = [];
   const invoke = async (action) => {
     calls.push(action);
     if (action === 'get_ui_context') return { ok: true, result_folder: 'C:\\Results', latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-1', source_folders: [], selected_files: [], local_ui_only: true, external_disclosure: false };
     if (action === 'get_public_state') return { ok: true, state: 'results_available', results_available: true, result_count: 4 };
-    if (action === 'open_current_results' || action === 'open_local_ledger') return { ok: true, handoff_confirmed: true };
+    if (action === 'get_run_history') return localHistory([historyEntry('run-1')]);
+    if (action === 'open_history_results' || action === 'open_history_ledger') return { ok: true, handoff_confirmed: true };
     if (action === 'frontend_ready') return { ok: true, product_version: '3.2.0-rc105' };
     return { ok: true };
   };
   const context = {
-    window: { __TAURI__: { core: { invoke }, event: { listen: async () => () => {} } }, addEventListener() {} }, document: { getElementById: (id) => elements[id] },
+    window: { __TAURI__: { core: { invoke }, event: { listen: async () => () => {} } }, addEventListener() {} }, document: { getElementById: (id) => elements[id], createElement: element },
     setTimeout: () => 1, clearTimeout: () => {}, requestAnimationFrame: (callback) => callback(), console
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), context);
   await new Promise((resolve) => setImmediate(resolve));
   assert.strictEqual(elements['product-version'].textContent, 'Version 3.2.0-rc105');
   assert.strictEqual(elements['result-folder-results'].textContent, 'C:\\Results\\DataSecure-Output\\Lauf-1');
-  assert.strictEqual(elements['results-view'].hidden, false, 'a completed run opens the results view');
-  await elements.results.listeners.click();
-  assert.ok(calls.includes('open_current_results'));
+  assert.strictEqual(elements['home-view'].hidden, false, 'a completed run preserves the default home view');
+  elements['tab-results'].listeners.click();
+  await settleFrontend();
+  await rowActions(elements, 0)[0].listeners.click();
+  assert.ok(calls.includes('open_history_results'));
   assert.match(elements['action-feedback'].textContent, /Betriebssystem zum Öffnen übergeben/u);
   assert.strictEqual(elements['status-title'].textContent, 'Fertig', 'open feedback must not overwrite the completed run state');
-  await elements.ledger.listeners.click();
-  assert.match(elements['action-feedback'].textContent, /Zuordnungsdatei.*übergeben/u);
+  await rowActions(elements, 0)[1].listeners.click();
+  assert.match(elements['action-feedback'].textContent, /Zuordnung.*übergeben/u);
 }
 
 async function nativeDropCase() {
@@ -116,7 +121,7 @@ async function nativeDropCase() {
       assert.strictEqual(name, 'datasecure-native-drop'); nativeListener = callback;
       return () => { removed += 1; };
     } } }, addEventListener: (name, callback) => { windowEvents[name] = callback; } },
-    document: { getElementById: (id) => elements[id] },
+    document: { getElementById: (id) => elements[id], createElement: element },
     setTimeout: (callback) => { timers.push(callback); return timers.length; }, clearTimeout() {},
     requestAnimationFrame: (callback) => callback(), console
   };
@@ -136,7 +141,9 @@ async function nativeDropCase() {
       source_folders: ['C:\\Kunde Müller'], selected_files: ['Profil ä.txt', 'Daten.csv'] } } } });
   assert.strictEqual(elements['status-title'].textContent, 'Auswahl bereit');
   assert.strictEqual(elements.start.hidden, false);
-  assert.strictEqual(elements.start.focused, true);
+  assert.strictEqual(elements.start.focused, undefined, 'a drop on home must not focus a hidden processing action');
+  assert.strictEqual(elements['home-view'].hidden, false);
+  assert.strictEqual(elements.start.disabled, true, 'a drop never supplies a processing mode');
   assert.strictEqual(elements['drop-zone'].attributes['aria-disabled'], 'true');
   assert.strictEqual(elements['selected-files'].textContent, 'Profil ä.txt, Daten.csv');
   assert.strictEqual(callsByCommand('start_admitted_batch'), 0, 'dropping must never start processing');
@@ -148,6 +155,7 @@ async function nativeDropCase() {
   assert.strictEqual(elements.start.hidden, false, 'a second drop preserves the prepared selection');
   await elements['select-files'].listeners.click();
   assert.strictEqual(callsByCommand('select_files'), 0, 'prepared admission blocks another picker');
+  await elements['task-anonymize'].listeners.click();
   await elements.start.listeners.click();
   assert.strictEqual(callsByCommand('start_admitted_batch'), 1, 'only explicit Start invokes processing');
 
@@ -180,7 +188,7 @@ async function restoredAdmissionCase() {
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), {
     window: { __TAURI__: { core: { invoke }, event: { listen: async () => { throw new Error('unavailable'); } } }, addEventListener() {} },
-    document: { getElementById: (id) => elements[id] ||= element() },
+    document: { getElementById: (id) => elements[id] ||= element(), createElement: element },
     setTimeout: () => 1, clearTimeout() {}, requestAnimationFrame: (callback) => callback(), console
   });
   await new Promise((resolve) => setImmediate(resolve));
@@ -190,6 +198,9 @@ async function restoredAdmissionCase() {
   assert.strictEqual(elements['status-title'].textContent, 'Auswahl bereit');
   assert.strictEqual(elements.start.hidden, false, 'a renderer reload recovers explicit Start for an existing admission');
   assert.strictEqual(elements['selected-files'].textContent, 'Profil.txt');
+  assert.strictEqual(elements['home-view'].hidden, false);
+  assert.strictEqual(elements['processing-mode'].value, '');
+  assert.strictEqual(elements.start.disabled, true);
   assert.doesNotMatch(elements.summary.textContent, /NaN/u);
   assert.ok(!calls.some((call) => call.action === 'get_public_state'), 'ready polling must not overwrite a recovered admission');
   assert.ok(!calls.some((call) => call.action === 'start_admitted_batch'));
@@ -207,8 +218,23 @@ function localContext(run = 'Lauf-1', selectedFiles = []) {
     latest_result_folder: `C:\\Ergebnisse\\DataSecure-Output\\${run}`,
     source_folders: ['C:\\Quellen'], selected_files: selectedFiles };
 }
+function htmlElements() {
+  const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
+  return Object.fromEntries([...html.matchAll(/id="([^"]+)"/gu)].map((match) => [match[1], element()]));
+}
+function historyEntry(batchId, overrides = {}) {
+  return { batch_id: batchId, created_at: '2026-09-01T12:00:00Z', processing_mode: 'markdown-only',
+    selected_count: 2, result_count: 1, failed_count: 1, status: 'results_available',
+    results_available: true, ledger_available: true, resumable: false, ...overrides };
+}
+function localHistory(entries) { return { ok: true, local_ui_only: true, external_disclosure: false, entries }; }
+function rowActions(elements, index) {
+  return elements['history-body'].children[index].children[4].children
+    .filter((wrapper) => wrapper.children[0]?.listeners.click)
+    .map((wrapper) => wrapper.children[0]);
+}
 async function frontendHarness(overrides = {}) {
-  const elements = {};
+  const elements = htmlElements();
   const timers = new Map();
   const calls = [];
   let timerId = 0;
@@ -218,13 +244,14 @@ async function frontendHarness(overrides = {}) {
     if (overrides[action]) return overrides[action](args);
     if (action === 'get_ui_context') return localContext();
     if (action === 'get_public_state') return { state: 'ready', results_available: false };
+    if (action === 'get_run_history') return localHistory([]);
     return { ok: true };
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), {
     window: { __TAURI__: { core: { invoke }, event: { listen: async (_name, callback) => {
       nativeListener = callback; return () => {};
     } } }, addEventListener() {} },
-    document: { getElementById: (id) => elements[id] ||= element() },
+    document: { getElementById: (id) => elements[id], createElement: element },
     setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
     clearTimeout(id) { timers.delete(id); }, requestAnimationFrame: (callback) => callback(), console
   });
@@ -267,6 +294,7 @@ async function uncertainStartPollingCase() {
     start_admitted_batch: () => start.promise,
     get_public_state: () => state
   });
+  await harness.click('task-anonymize');
   await harness.click('select-files');
   await harness.runTimer();
   assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit');
@@ -293,6 +321,7 @@ async function restoredAdmissionUncertainStartCase() {
     get_public_state: () => ({ state: 'processing', selected_count: 1, completed_count: 0 })
   });
   assert.strictEqual(harness.timers.size, 0, 'restoring an admission does not poll over the selection');
+  await harness.click('task-anonymize');
   await harness.click('start');
   await harness.runTimer();
   assert.strictEqual(harness.elements['status-title'].textContent, 'Anonymisierung läuft');
@@ -310,6 +339,7 @@ async function consecutiveTerminalRunsCase() {
     start_admitted_batch: () => { currentRun = 'Lauf-B'; return { ok: true }; }
   });
   assert.match(harness.elements['result-folder-results'].textContent, /Lauf-A$/u);
+  await harness.click('task-anonymize');
   await harness.click('select-files');
   await harness.click('start');
   await harness.runTimer();
@@ -337,6 +367,7 @@ async function stalePollAfterStartCase() {
   });
   held = true;
   const polling = harness.runTimer();
+  await harness.click('task-anonymize');
   await harness.click('select-files');
   await harness.click('start');
   held = false;
@@ -365,6 +396,7 @@ async function staleContextAfterAdmissionCase(startNewRun = false) {
   generation = 2;
   const polling = harness.runTimer();
   await settleFrontend();
+  await harness.click('task-anonymize');
   await harness.click('select-files');
   if (startNewRun) await harness.click('start');
   holdContext = false;
@@ -406,7 +438,6 @@ async function failedRunLedgerAvailabilityCase() {
     get_public_state: () => ({ state: 'completed_without_results', results_available: false,
       processing_mode: 'markdown-only', failed_count: 2, ledger_available: ledgerAvailable })
   });
-  assert.strictEqual(harness.elements.ledger.hidden, true, 'missing availability is not a promise of a run ledger');
   assert.match(harness.elements['status-text'].textContent, /Diagnose öffnen/u);
   assert.doesNotMatch(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
   assert.strictEqual(harness.elements['result-warning'].hidden, false);
@@ -414,12 +445,10 @@ async function failedRunLedgerAvailabilityCase() {
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = false;
   await harness.runTimer();
-  assert.strictEqual(harness.elements.ledger.hidden, true);
   assert.match(harness.elements['result-warning'].textContent, /Zuordnungsdatei ist nicht verfügbar.*Diagnose öffnen/u);
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = true;
   await harness.runTimer();
-  assert.strictEqual(harness.elements.ledger.hidden, false);
   assert.match(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
   assert.match(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Diagnose öffnen/u);
@@ -437,13 +466,9 @@ async function completionPendingCase() {
   assert.strictEqual(harness.elements['status-title'].textContent, 'Abschlussübersicht wird bereitgestellt');
   assert.match(harness.elements['status-text'].textContent, /Zuordnungsdatei|Abschlussnachweis/u);
   assert.doesNotMatch(harness.elements['status-text'].textContent, /0 anonymisierte|kein anonymisiertes Ergebnis/u);
-  assert.strictEqual(harness.elements.ledger.hidden, true);
-  assert.strictEqual(harness.elements.results.hidden, true);
   completionPending = false;
   await harness.runTimer();
   assert.strictEqual(harness.elements['status-title'].textContent, 'Fertig');
-  assert.strictEqual(harness.elements.ledger.hidden, false);
-  assert.strictEqual(harness.elements.results.hidden, false);
 }
 
 async function explicitStartModeCase() {
@@ -453,6 +478,7 @@ async function explicitStartModeCase() {
     start_admitted_batch: () => start.promise
   });
   assert.strictEqual(harness.elements['processing-mode'].disabled, false);
+  await harness.click('task-anonymize');
   await harness.click('select-files');
   assert.strictEqual(harness.elements['processing-mode'].disabled, false, 'a prepared selection has not bound its mode yet');
   const starting = harness.click('start');
@@ -513,8 +539,9 @@ async function recoverableModeLockCase() {
   await harness.click('continue');
   await settleFrontend();
   const continued = harness.calls.filter((call) => call.action === 'continue_current_batch');
-  assert.strictEqual(continued.length, 1);
-  assert.strictEqual(continued[0].args, undefined, 'continue never sends the current selector value');
+  assert.strictEqual(continued.length, 0, 'the global button cannot resume an implicit latest run');
+  assert.strictEqual(harness.elements['results-view'].hidden, false, 'the user selects the exact run in history');
+  assert.strictEqual(harness.count('continue_history_batch'), 0, 'navigation alone never resumes a batch');
   assert.strictEqual(mode.disabled, true);
 }
 
@@ -544,7 +571,174 @@ async function pureConversionCase() {
   assert.doesNotMatch(harness.elements['status-text'].textContent, /sicher beendet|sicher gestoppt/u);
 }
 
+async function homeAndExplicitChoiceCase() {
+  let state = { state: 'results_available', results_available: true, result_count: 2, presentation_generation: 7 };
+  const harness = await frontendHarness({
+    get_public_state: () => state,
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Dokument.txt']) })
+  });
+  assert.strictEqual(harness.elements['home-view'].hidden, false);
+  assert.strictEqual(harness.elements['process-view'].hidden, true);
+  assert.strictEqual(harness.elements['results-view'].hidden, true);
+  assert.strictEqual(harness.elements['processing-mode'].value, '');
+  assert.strictEqual(harness.elements['tab-home'].attributes['aria-selected'], 'true');
+  assert.strictEqual(harness.count('get_run_history'), 0, 'opening home does not resolve historical artifacts');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Fertig', 'terminal status remains visible outside the panels');
+  assert.strictEqual(harness.calls.find((call) => call.action === 'ack_terminal_presented').args.presentationGeneration, 7);
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements.start.disabled, true);
+  await harness.click('start');
+  assert.strictEqual(harness.count('start_admitted_batch'), 0, 'missing mode blocks even a synthetic Start click');
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Dokument.txt');
+  await harness.click('task-markdown');
+  assert.strictEqual(harness.elements['processing-mode'].value, 'markdown-only');
+  assert.strictEqual(harness.elements['process-view'].hidden, false);
+  assert.strictEqual(harness.elements.start.disabled, false);
+  await harness.click('start');
+  state = { ...state, presentation_generation: 8 };
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['process-view'].hidden, false, 'completion never changes the selected panel');
+  await harness.click('tab-results');
+  await settleFrontend();
+  await harness.click('new-batch');
+  assert.strictEqual(harness.elements['home-view'].hidden, false);
+  assert.strictEqual(harness.elements['processing-mode'].value, '');
+  state = { ...state, presentation_generation: 9 };
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['home-view'].hidden, false, 'a new terminal poll does not undo the explicit return home');
+}
+
+async function accessibleTabsCase() {
+  const harness = await frontendHarness();
+  let prevented = 0;
+  const key = (id, value) => harness.elements[id].listeners.keydown({ key: value, preventDefault() { prevented += 1; } });
+  key('tab-home', 'ArrowRight');
+  assert.strictEqual(harness.elements['tab-process'].focused, true);
+  assert.strictEqual(harness.elements['tab-process'].attributes.tabindex, '0');
+  assert.strictEqual(harness.elements['tab-home'].attributes.tabindex, '-1');
+  assert.strictEqual(harness.elements['home-view'].hidden, false, 'arrows move focus; Enter or Space activates the native button');
+  key('tab-process', 'End');
+  assert.strictEqual(harness.elements['tab-results'].attributes.tabindex, '0');
+  key('tab-results', 'Home');
+  assert.strictEqual(harness.elements['tab-home'].attributes.tabindex, '0');
+  key('tab-home', 'ArrowLeft');
+  assert.strictEqual(harness.elements['tab-results'].attributes.tabindex, '0');
+  assert.strictEqual(harness.count('get_run_history'), 0, 'focus alone must not perform a history read');
+  await harness.click('tab-results');
+  await settleFrontend();
+  assert.strictEqual(harness.elements['tab-results'].attributes['aria-selected'], 'true');
+  assert.strictEqual(harness.elements['results-view'].hidden, false);
+  assert.strictEqual(prevented, 4);
+}
+
+async function historyRowBindingCase() {
+  const batchId = '<img src=x onerror=bad()> exact-run-7';
+  const entries = Array.from({ length: 25 }, (_, index) => historyEntry(index === 7 ? batchId : `run-${index}`, { resumable: index === 7 }));
+  const harness = await frontendHarness({
+    get_run_history: () => localHistory(entries),
+    open_history_results: () => ({ ok: true, handoff_confirmed: true }),
+    open_history_ledger: () => ({ ok: true, handoff_confirmed: true })
+  });
+  await harness.click('tab-results');
+  await settleFrontend();
+  assert.strictEqual(harness.elements['history-body'].children.length, 20);
+  assert.strictEqual(harness.elements['history-body'].children[7].children[0].attributes.scope, 'row');
+  assert.strictEqual(harness.elements['history-body'].children[7].children[0].children[0].textContent, `Lauf ${batchId.slice(-8)}`);
+  const buttons = rowActions(harness.elements, 7);
+  assert.strictEqual(buttons.length, 3);
+  assert.strictEqual(rowActions(harness.elements, 0)[2].disabled, true);
+  assert.match(rowActions(harness.elements, 0)[2].title, /Keine Fortsetzung/u);
+  const feedback = harness.elements['history-body'].children[7].children[4].children.at(-1);
+  assert.strictEqual(feedback.attributes.role, 'status');
+  assert.strictEqual(feedback.hidden, true);
+  for (const button of buttons) {
+    await button.listeners.click(); await settleFrontend();
+    assert.strictEqual(feedback.hidden, false);
+    assert.match(feedback.textContent, /übergeben|Fortsetzung/u, 'feedback remains next to the activated row');
+  }
+  for (const command of ['open_history_results', 'open_history_ledger', 'continue_history_batch']) {
+    const call = harness.calls.find((candidate) => candidate.action === command);
+    assert.strictEqual(JSON.stringify(call.args), JSON.stringify({ batchId }));
+  }
+  assert.strictEqual(harness.count('open_current_results'), 0);
+  assert.strictEqual(harness.count('open_local_ledger'), 0);
+  assert.strictEqual(harness.count('continue_current_batch'), 0);
+  assert.strictEqual(harness.elements['results-view'].hidden, false);
+}
+
+async function historyFreshnessCase() {
+  const older = deferred();
+  let response = localHistory([historyEntry('run-first')]);
+  let state = { state: 'processing', completed_count: 0, result_count: 0 };
+  const harness = await frontendHarness({ get_run_history: () => response, get_public_state: () => state });
+  await harness.click('tab-results');
+  await settleFrontend();
+  const initialButton = rowActions(harness.elements, 0)[0];
+  initialButton.focus();
+  const initialReads = harness.count('get_run_history');
+  state = { ...state, completed_count: 1, result_count: 1 };
+  await harness.runTimer();
+  assert.strictEqual(harness.count('get_run_history'), initialReads, 'progress polls do not repeatedly read history');
+  await harness.click('tab-results');
+  await settleFrontend();
+  assert.strictEqual(rowActions(harness.elements, 0)[0], initialButton, 'unchanged entries preserve the focused DOM row');
+  response = older.promise;
+  await harness.click('tab-results');
+  response = localHistory([historyEntry('run-new')]);
+  await harness.click('tab-home');
+  await harness.click('tab-results');
+  await settleFrontend();
+  older.resolve(localHistory([historyEntry('run-stale')]));
+  await settleFrontend();
+  assert.strictEqual(harness.elements['history-body'].children[0].children[0].children[0].textContent, 'Lauf run-new');
+  await initialButton.listeners.click();
+  assert.strictEqual(harness.count('open_history_results'), 0, 'an action from a replaced snapshot is inert');
+}
+
+async function historyPrivacyAndAvailabilityCase() {
+  let response = { ok: true, local_ui_only: false, external_disclosure: false, entries: [historyEntry('invalid-envelope')] };
+  const harness = await frontendHarness({ get_run_history: () => response });
+  await harness.click('tab-results');
+  await settleFrontend();
+  assert.strictEqual(harness.elements['history-body'].children.length, 0);
+  assert.match(harness.elements['history-feedback'].textContent, /nicht geladen/u);
+  response = localHistory([historyEntry('failed-run', { results_available: false, ledger_available: false, resumable: false, status: 'completed_without_results' })]);
+  await harness.click('tab-results');
+  await settleFrontend();
+  for (const button of rowActions(harness.elements, 0)) {
+    assert.strictEqual(button.disabled, true);
+    assert.ok(button.title.length > 0);
+    await button.listeners.click();
+  }
+  assert.strictEqual(harness.count('open_history_results'), 0);
+  assert.strictEqual(harness.count('open_history_ledger'), 0);
+  assert.strictEqual(harness.count('continue_history_batch'), 0);
+}
+
+async function historyAdmissionRaceCase() {
+  const stale = deferred();
+  let response = stale.promise;
+  const harness = await frontendHarness({ get_run_history: () => response });
+  await harness.click('tab-results');
+  harness.native({ phase: 'checking' });
+  response = localHistory([historyEntry('run-current')]);
+  harness.native({ phase: 'accepted', result: { selected_count: 1, ui_context: localContext('Lauf-1', ['Neu.txt']) } });
+  await settleFrontend();
+  stale.resolve(localHistory([historyEntry('run-obsolete')]));
+  await settleFrontend();
+  assert.strictEqual(harness.elements['history-body'].children[0].children[0].children[0].textContent, 'Lauf -current');
+  assert.strictEqual(rowActions(harness.elements, 0)[0].disabled, false, 'accepted native drop refreshes the currently visible history');
+  assert.strictEqual(harness.elements['results-view'].hidden, false, 'a drop preserves the selected panel');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit');
+}
+
 (async () => {
+  await testAsync('home is the default, mode must be explicit, and terminal updates never navigate', homeAndExplicitChoiceCase);
+  await testAsync('tabs use manual activation and roving arrow, Home and End focus', accessibleTabsCase);
+  await testAsync('history renders at most 20 rows and every action binds its exact batch ID', historyRowBindingCase);
+  await testAsync('history preserves focus, ignores progress polls and rejects stale replies and actions', historyFreshnessCase);
+  await testAsync('history requires a local-only envelope and explains disabled actions', historyPrivacyAndAvailabilityCase);
+  await testAsync('a native admission invalidates pending history and refreshes the selected panel safely', historyAdmissionRaceCase);
   await testAsync('a successful status poll clears an earlier IPC error atomically', recoveredStatusCase);
   await testAsync('result and ledger actions show a separate confirmed handoff', openFeedbackCase);
   await testAsync('native drops prepare without starting and preserve admission across races', nativeDropCase);
@@ -561,7 +755,7 @@ async function pureConversionCase() {
   await testAsync('completion metadata debt is visible without claiming zero missing documents or no results', completionPendingCase);
   await testAsync('explicit Start sends one immutable camelCase processing mode and locks it before checkpoint', explicitStartModeCase);
   await testAsync('unavailable conversion keeps the admission without a silent anonymization fallback', unavailableModePreservesAdmissionCase);
-  await testAsync('active and recoverable modes stay locked after unrelated RPCs and continue sends no mode', recoverableModeLockCase);
+  await testAsync('active and recoverable modes stay locked and global continue only opens history', recoverableModeLockCase);
   await testAsync('pure conversion stays selected during intake and reports raw results and OCR warnings honestly', pureConversionCase);
   done();
 })();

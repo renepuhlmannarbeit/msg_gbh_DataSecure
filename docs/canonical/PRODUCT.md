@@ -1,19 +1,31 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 06.09.2026 · Ist-Zustand RC108
+Stand: 06.09.2026 · Ist-Zustand RC109
 
 ## Ziel
 
-Menschen wählen lokale Geschäftsdokumente aus, DataSecure de-identifiziert sie
-lokal und Claude erhält ausschließlich freigegebene Markdown-Ergebnisse. Das
-Produkt reduziert Daten, garantiert aber keine rechtliche Anonymität und trifft
-keine Personal- oder Fachentscheidung.
+DataSecure umfasst zwei lokale Produkte mit gemeinsamem Verarbeitungskern:
+Das Cowork-Plugin de-identifiziert Geschäftsdokumente vor einer ausdrücklich
+gewünschten Claude-Auswertung. Standalone bietet unabhängig davon dieselbe
+Anonymisierung sowie reine Markdown-Konvertierung **ohne** Anonymisierung.
+Menschen wählen Dateien und Zweck; Originale bleiben unverändert. Der
+Anonymisierungsmodus reduziert Daten, garantiert aber keine rechtliche
+Anonymität. Keines der Produkte trifft Personal- oder Fachentscheidungen.
 
 ## Normalreise
 
+Die folgende Normalreise betrifft das Claude-Produkt. Standalone startet nach
+DS-086 auf **Start**, ohne vorausgewählte Betriebsart. Nach ausdrücklicher
+Funktionswahl und Dateiauswahl startet der Anwender einmal die Verarbeitung.
+**Verlauf** zeigt die letzten 20 eigenen Verarbeitungen mit Datum, Zweck,
+Zählern und Status. Jede Zeile öffnet nur ihren eigenen Ergebnisordner bzw.
+ihre Zuordnung oder setzt genau diesen Stapel fort, sofern möglich. Ein
+Abschluss oder Neustart wechselt die Ansicht nicht automatisch.
+
 1. In Cowork „Dateien anonymisieren“ schreiben oder den gleichnamigen Skill wählen.
-2. Nur beim ersten Lauf den bereits mit Cowork verbundenen Arbeitsordner als
-   Ergebnisziel wählen. DataSecure merkt sich ihn lokal und legt darunter
+2. Nur beim ersten Lauf einen lokalen Ergebnisordner ausdrücklich wählen.
+   Ein bereits mit Cowork verbundener dedizierter Ordner ist optional; DataSecure
+   erkennt verbundene Arbeitsordner nicht selbst. Es merkt sich die Wahl und legt darunter
    `DataSecure-Output` an; spätere Läufe überspringen diesen Schritt.
 3. Im lokalen Mehrfachpicker bis zu 100 Dateien mit zusammen höchstens 500 MiB
    auswählen und einmal „Öffnen“ klicken.
@@ -24,8 +36,9 @@ keine Personal- oder Fachentscheidung.
    Nur verifiziertes Markdown mit neutralen Namen liegt sichtbar unter
    `DataSecure-Output/Lauf-…`. In Standalone liegt dort zusätzlich die lokale
    `DataSecure-Zuordnung.csv` für genau diesen Lauf. Im Cowork-Produkt bleiben
-   Originalnamen und die dauerhafte `DataSecure-Mapping.csv` privat; Originale,
-   Review- und Recoverydaten bleiben in beiden Produkten im privaten Bereich.
+   Originalnamen und die dauerhafte `DataSecure-Mapping.csv` privat. Private
+   Arbeitskopien, Review- und Recoverydaten bleiben in beiden Produkten intern;
+   Originale bleiben an ihrem gewählten Quellort.
 6. Erst ein späterer ausdrücklicher Auftrag übergibt benötigte freigegebene
    Markdown-Ergebnisse begrenzt an Claude.
 

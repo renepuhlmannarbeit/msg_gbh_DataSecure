@@ -16,7 +16,8 @@ macht Inhalte unterschiedlicher Ausgangsformate für eine spätere KI-Nutzung
 zugänglich, ohne Namen, Unternehmen oder andere personenbezogene Inhalte zu
 entfernen. Sie ist kein optionaler Debug- oder Supportpfad und darf bei
 Refactoring nicht aus dem Produktziel verschwinden (DS-085). Sie ist im aktuellen
-Standalone-Quellstand als Standard aktiviert; Zielhost-/Anwenderfreigaben bleiben
+Standalone-Quellstand verfügbar; die Startseite verlangt eine ausdrückliche
+Betriebsartwahl statt einer Vorbelegung (DS-086). Zielhost-/Anwenderfreigaben bleiben
 getrennt vom technischen Implementierungsnachweis.
 
 DataSecure benötigt keine zusätzliche System-VM. Auch die Abnahmeplanung
@@ -93,6 +94,12 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
   Ablauf: **Auswählen** oder **Hineinziehen**, dann **Starten**. Keine zusätzlichen
   Freigaben pro Datei. Reine Konvertate sind sichtbar **nicht anonymisiert**;
   der Anwender entscheidet außerhalb von DataSecure über die spätere KI-Nutzung.
+- Standalone startet immer auf **Start** mit einer kurzen Erklärung beider
+  Funktionen. **Verarbeiten** und die Betriebsart sind anfangs nicht vorbelegt.
+  Abschluss, Neustart und vorhandene Stapel wechseln die Ansicht nicht automatisch.
+  **Verlauf** zeigt die letzten 20 Verarbeitungen, neueste zuerst, mit Datum,
+  Betriebsart, Dateizählern und Status. Ergebnisse, Zuordnung und Fortsetzung
+  sind jeweils an genau diesen Lauf gebunden; die Anzeigegrenze löscht nichts.
 
 ## Datenschutz- und Sicherheitsversprechen
 

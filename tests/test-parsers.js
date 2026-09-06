@@ -208,7 +208,7 @@ test('DOCX secondary stories retain structured text before the privacy gate', ()
   const result = parseOoxml(docx(['Haupttext'], [
     ['word/header1.xml', '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Vertraulich</w:t><w:tab/><w:t>Max Mustermann</w:t></w:r></w:p></w:hdr>'],
     ['word/footer1.xml', '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Beispiel GmbH</w:t><w:br/><w:t>Seite 1</w:t></w:r></w:p></w:ftr>'],
-    ['word/comments.xml', '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment><w:p><w:r><w:t>Kommentar von Erika Beispiel</w:t></w:r></w:p></w:comment></w:comments>'],
+    ['word/comments.xml', '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="1"><w:p><w:r><w:t>Kommentar von Erika Beispiel</w:t></w:r></w:p></w:comment></w:comments>'],
     ['word/footnotes.xml', '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote><w:p><w:r><w:t>Fußnote: kundenintern</w:t></w:r></w:p></w:footnote></w:footnotes>'],
     ['word/endnotes.xml', '<w:endnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:endnote><w:p><w:r><w:t>Endnote: Projekt Alpha</w:t></w:r></w:p></w:endnote></w:endnotes>'],
     ['word/_rels/document.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes" Target="endnotes.xml"/></Relationships>']
@@ -717,7 +717,7 @@ test('XLSX comment text requires one reachable worksheet comment relationship', 
   assert.ok(duplicate.warnings.some((warning) => /Kommentarstruktur/u.test(warning)));
 });
 
-test('XLSX blocks unrendered comments and truncated worksheet parts with content-free coverage warnings', () => {
+test('XLSX warns on unrendered comments but rejects truncated worksheet XML', () => {
   const common = [
     ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
     ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Blatt" r:id="rId1"/></sheets></workbook>'],
@@ -730,11 +730,9 @@ test('XLSX blocks unrendered comments and truncated worksheet parts with content
   assert.ok(comment.warnings.some((warning) => /Kommentarstruktur/u.test(warning)));
   assert.doesNotMatch(JSON.stringify(comment.warnings), /Privater Kommentar|comments1/u);
 
-  const truncated = parseOoxml(zipStore([...common.filter(([name]) => name !== 'ppt/notesSlides/notesSlide1.xml'),
+  assert.throws(() => parseOoxml(zipStore([...common,
     ['xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>Vertraulicher Wert</t></is></c></row></sheetData>']
-  ]), '.xlsx');
-  assert.ok(truncated.warnings.some((warning) => /nicht vollständig abgedeckte Inhaltsstruktur/u.test(warning)));
-  assert.doesNotMatch(JSON.stringify(truncated.warnings), /Vertraulicher Wert/u);
+  ]), '.xlsx'), error => error.code === 'XLSX_STRUCTURE_UNSAFE' && !error.message.includes('Vertraulicher Wert'));
 });
 
 test('XLSX never renders an orphan, external or non-worksheet relationship target', () => {

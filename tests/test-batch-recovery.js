@@ -1,6 +1,7 @@
 'use strict';
 
 const { createBatchRecovery } = require('../plugins/data-secure/server/gateway/batch-recovery');
+const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch recovery orchestration');
@@ -8,6 +9,11 @@ const tokens = ['a', 'b', 'c', 'd', 'e'].map((character) => character.repeat(64)
 const now = Date.parse('2026-08-25T12:00:00.000Z');
 const future = '2026-08-26T12:00:00.000Z';
 const past = '2026-08-24T12:00:00.000Z';
+const { publicProgress } = createBatchProgress({
+  deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+  mappingPendingStatus: 'mapping_pending', liveLocalExecutor: (value) => value.live === true,
+  publishedPackageRecord: () => null
+});
 
 function entry(token, file = true) {
   return { name: `${token}.json`, isFile: () => file };
@@ -82,17 +88,7 @@ function fixture(options = {}) {
       return true;
     },
     liveLocalExecutor: (value) => value.live === true,
-    publicProgress: (value) => ({
-      batch_total: value.items.length,
-      released: value.items.filter((item) => item.status === 'released').length,
-      stopped: value.items.filter((item) => item.status === 'stopped').length,
-      deferred_review: value.items.filter((item) => item.status === 'deferred_review').length,
-      processing: value.items.filter((item) => item.status === 'processing').length,
-      remaining: value.items.filter((item) => item.status === 'pending').length,
-      local_processing_active: value.live === true,
-      complete: value.items.every((item) => ['released', 'stopped'].includes(item.status)),
-      awaiting_resume: value.items.some((item) => item.status === 'retryable' || item.status === 'processing')
-    }),
+    publicProgress,
     visibleExportDirectory: (token) => options.visibleDirectories?.[token] || '',
     ...(options.visibleExportStatus ? { visibleExportStatus: options.visibleExportStatus } : {}),
     exportCompletedState(value) {
@@ -214,9 +210,10 @@ test('latest product status selects one channel and exposes only current-run cou
   const status = item.recovery.latestProductBatchStatus('standalone');
   assert.deepStrictEqual(status, {
     selected_count: 3,
-    completed_count: 1,
+    completed_count: 2,
     failed_count: 1,
     review_count: 1,
+    review_ready: true,
     result_count: 1,
     export_pending_count: 0,
     processing: false,
@@ -261,6 +258,32 @@ test('one product snapshot preserves latest counters while a global owner is act
   assert.strictEqual(snapshot.latest.processing, true);
   assert.strictEqual(combined.events.filter((event) => event === 'readdir').length, 1);
   assert.strictEqual(combined.events.filter((event) => event.startsWith('read:')).length, 1);
+});
+
+test('private Standalone observation follows an older active run and remains bound after its completion', () => {
+  const older = state(tokens[0], { live: true, items: [{ status: 'processing' }, { status: 'pending' }, { status: 'pending' }] });
+  Object.assign(older, { product_channel: 'standalone', schema: 'datasecure-batch/5',
+    processing_mode: 'markdown-only', created_at: '2026-08-25T10:00:00.000Z' });
+  const newer = state(tokens[1], { items: [{ status: 'released' }] });
+  Object.assign(newer, { product_channel: 'standalone', created_at: '2026-08-25T11:00:00.000Z' });
+  const item = fixture({ states: [older, newer] });
+  const normal = item.recovery.productStatusSnapshot('standalone');
+  assert.strictEqual(normal.latest.selected_count, 1);
+  assert.ok(!Object.hasOwn(normal, 'observed_batch_id'), 'the ordinary public snapshot never carries a token');
+  const observing = item.recovery.productStatusSnapshot('standalone', { localUiSelection: true });
+  assert.strictEqual(observing.observed_batch_id, older.token);
+  assert.strictEqual(observing.observed_is_active, true);
+  assert.strictEqual(observing.latest.selected_count, 3);
+  assert.strictEqual(observing.latest.processing_mode, 'markdown-only');
+  older.live = false;
+  older.items = [{ status: 'released' }, { status: 'released' }, { status: 'released' }];
+  const terminal = item.recovery.productStatusSnapshot('standalone', { localUiSelection: true, selectedBatchId: older.token });
+  assert.strictEqual(terminal.observed_batch_id, older.token);
+  assert.strictEqual(terminal.latest.complete, true);
+  assert.strictEqual(terminal.latest.result_count, 3);
+  assert.strictEqual(item.recovery.productStatusSnapshot('standalone', {
+    localUiSelection: true, selectedBatchId: tokens[4]
+  }).latest, null, 'a missing observed run never falls back to the newer completion');
 });
 
 test('latest product result directory resolves only the exact latest completed run', () => {
@@ -335,7 +358,7 @@ test('both product status paths carry completion debt separately from released d
   for (const status of [item.recovery.latestProductBatchStatus('standalone'), item.recovery.productStatusSnapshot('standalone').latest]) {
     assert.strictEqual(status.completion_pending, true);
     assert.strictEqual(status.export_pending_count, 0);
-    assert.strictEqual(status.completed_count, 1);
+    assert.strictEqual(status.completed_count, 2);
     assert.strictEqual(status.result_count, 0);
     assert.strictEqual(status.completion_available, false);
   }

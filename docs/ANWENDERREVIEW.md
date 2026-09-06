@@ -1,13 +1,20 @@
 # Aktuelles Anwender- und UX-Review
 
-Stand: 05.09.2026 · gegen 3.2.0-rc108 und DS-078 revalidiert
+Stand: 06.09.2026 · gegen 3.2.0-rc109, DS-078 und DS-086 revalidiert
 
 ## Ergebnis
 
-Der Zielablauf ist verständlich und schlank: ein Start, ein lokaler Mehrfachpicker, eine
-Startbestätigung, ein lokaler Abschluss und ein späterer optionaler Auftrag zur
-Ergebnisverwendung. Technische Profile, Bildmodi, Paketkennungen und Diagnosewege
-gehören nicht in die Nutzerreise.
+Der Cowork-Zielablauf bleibt schlank: ein Auftrag, ein lokaler Mehrfachpicker,
+Bestätigung dieser Auswahl, ein lokaler Abschluss und ein späterer optionaler
+Auftrag zur Ergebnisverwendung. Bei fehlendem Ergebnisstandard geht einmalig
+die Zielordnerwahl voraus. Technische Profile, Bildmodi, Paketkennungen und
+Diagnosewege gehören nicht in die Nutzerreise.
+
+Standalone beginnt dagegen auf **Start**, ohne vorausgewählten Zweck. Der
+Anwender wählt reine Markdown-Konvertierung oder Anonymisierung, Quellen per
+Picker/Drop und **Starten**. **Verlauf** zeigt die 20 neuesten Verarbeitungen
+mit exakt laufgebundenen Aktionen. Kein automatischer Ansichts-/Ordnerwechsel;
+reine Konvertierung erhält Originalinhalte und benötigt keinen PII-Review.
 
 ## Was bereits gut gelöst ist
 
@@ -18,7 +25,8 @@ gehören nicht in die Nutzerreise.
 - Fortsetzung erfolgt ohne erneute Auswahl und ohne Duplikate.
 - Bilder bleiben lokal; unklare Zertifikats-/Organisationsstellen werden nicht
   automatisch geraten.
-- Klare Dateien öffnen keinen Reviewdialog. Der lokale Sammelreview zeigt nur
+- Klare Dateien öffnen keinen Reviewdialog. Windows-Sammelreview und der
+  E0-implementierte AppKit-Sammelreview zeigen nur
   wirklich mehrdeutige Dateien, inhaltsfreie Fortschrittszähler und direkte
   fachliche Aktionen statt einer missverständlichen Ja/Nein-Frage.
 - Mapping und Ergebnisübersicht bleiben lokal.
@@ -29,6 +37,10 @@ gehören nicht in die Nutzerreise.
   erzeugen; das Plugin darf sie nicht fälschlich als eigene Dialoge zählen.
 - Lokale Picker-, Abschluss- und Reviewdialoge müssen auf Windows und macOS
   tatsächlich auf Fokus, Escape, Zoom und Screenreader geprüft werden.
+- Der einzelne AppKit-Sammelreview und der gleichwertige sichtbarkeitsbestätigte
+  Cowork-Abschlussadapter sind E0 implementiert. Vor der macOS-Abnahme fehlt
+  weiterhin die native Ausführungs-, Fokus-, Zoom- und Screenreader-Evidenz auf
+  Intel und Apple Silicon; Vertragstests allein belegen den Nutzerablauf nicht.
 - Der Start darf nicht wie ein hängender Chat wirken. Cowork muss klar sagen:
   „Lokal gestartet; Abschluss erscheint lokal; Ergebnisse später anfordern.“
 - Technische Codes dürfen nur als IT-Detail erscheinen. UAT-Kennungen werden immer

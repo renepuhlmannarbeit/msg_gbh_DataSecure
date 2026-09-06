@@ -15,6 +15,7 @@ const SUPPORTED=new Set(['.pdf','.docx','.xlsx','.pptx','.txt','.md','.markdown'
 const PILOT_SUPPORTED=new Set(['.docx','.txt','.md','.markdown','.csv']);
 const PROFILES=new Set(['auto','customer','applicant','personnel_profile','contract','general']);
 const LIMITS=RESOURCE_LIMITS;
+let verifiedRootsSession;
 
 function configuredPrivacyRoot(){return String(process.env.EU_PRIVACY_ROOT||'').trim()||readConfiguredPrivacyRoot();}
 function privacyRoot(){return path.resolve(configuredPrivacyRoot()||path.join(dataRoot(),'workspace'));}
@@ -172,7 +173,38 @@ function safeRemovePrivateTree(parent,literalChild,options={}){
   removeEntry(target);
   return true;
 }
-function roots(){const root=privacyRoot();const before=storageStatus(root);if(!before.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');fs.mkdirSync(root,{recursive:true,mode:0o700});const after=storageStatus(root);if(!after.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');const gatewayRoot=ensurePrivateDirectory(path.dirname(dataRoot()),path.basename(dataRoot()));const r={root,output:ensurePrivateDirectory(root,'Output'),processed:ensurePrivateDirectory(root,'Processed'),review:ensurePrivateDirectory(root,'Needs Visual Review'),exports:ensurePrivateDirectory(root,'DataSecure-Export'),audit:ensurePrivateDirectory(gatewayRoot,'audit'),jobs:ensurePrivateDirectory(gatewayRoot,'jobs'),migrations:ensurePrivateDirectory(gatewayRoot,'migrations')};return r;}
+function privateDirectoryIdentity(target){
+  const stat=fs.lstatSync(target,{bigint:true});
+  if(!stat.isDirectory()||stat.isSymbolicLink())throw new Error('PRIVACY_STORAGE_UNSAFE');
+  return Object.freeze({dev:String(stat.dev),ino:String(stat.ino)});
+}
+function samePrivateDirectory(target,expected){
+  try{const current=privateDirectoryIdentity(target);return current.dev===expected.dev&&current.ino===expected.ino;}
+  catch{return false;}
+}
+function roots(){
+  const root=privacyRoot();const gatewayDataRoot=path.resolve(dataRoot());const sessionKey=`${root}\0${gatewayDataRoot}`;
+  // Directory creation and full ancestor/reparse validation are intentionally
+  // paid once per process/configuration. Every later use still verifies the
+  // inode of every returned directory. A removed, replaced or redirected
+  // directory therefore fails closed instead of becoming a newly trusted
+  // root, while a 100-file batch no longer performs hundreds of thousands of
+  // identical ancestor lstat/mkdir checks.
+  if(verifiedRootsSession&&verifiedRootsSession.key===sessionKey){
+    for(const [name,target] of Object.entries(verifiedRootsSession.roots)){
+      if(!samePrivateDirectory(target,verifiedRootsSession.identities[name]))throw new Error('PRIVACY_STORAGE_UNSAFE');
+    }
+    return verifiedRootsSession.roots;
+  }
+  const before=storageStatus(root);if(!before.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');
+  fs.mkdirSync(root,{recursive:true,mode:0o700});
+  const after=storageStatus(root);if(!after.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');
+  const gatewayRoot=ensurePrivateDirectory(path.dirname(gatewayDataRoot),path.basename(gatewayDataRoot));
+  const r=Object.freeze({root,output:ensurePrivateDirectory(root,'Output'),processed:ensurePrivateDirectory(root,'Processed'),review:ensurePrivateDirectory(root,'Needs Visual Review'),exports:ensurePrivateDirectory(root,'DataSecure-Export'),audit:ensurePrivateDirectory(gatewayRoot,'audit'),jobs:ensurePrivateDirectory(gatewayRoot,'jobs'),migrations:ensurePrivateDirectory(gatewayRoot,'migrations')});
+  const identities=Object.freeze(Object.fromEntries(Object.entries(r).map(([name,target])=>[name,privateDirectoryIdentity(target)])));
+  verifiedRootsSession=Object.freeze({key:sessionKey,roots:r,identities});
+  return r;
+}
 function sha256Buffer(b){return crypto.createHash('sha256').update(b).digest('hex');}
 function sha256File(p){
   const descriptor=fs.openSync(p,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));

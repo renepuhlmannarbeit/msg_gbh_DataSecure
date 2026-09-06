@@ -1,94 +1,83 @@
 # Open-Source-Wiederverwendungsregister
 
-Stand: 04.09.2026 · Entscheidungen: DS-038, DS-076, DS-077
+Stand: 06.09.2026 · DS-038, DS-075, DS-082, DS-085, DS-086
 
-Dieses Register ist ein Auswahlfilter, keine automatische Freigabe. `Pilot` bedeutet,
-dass eine Komponente praktisch gegen synthetische Positiv-, Negativ-, Offline- und
-Pakettests geprüft wird. `Benchmark` bedeutet Testorakel oder Vergleich, nicht
-Produktabhängigkeit. `Beibehalten` bedeutet, dass die vorhandene DataSecure-Lösung
-derzeit weniger Risiko oder bessere Coverage besitzt. Eine Produktübernahme benötigt
-einen exakten Versions-/Integritäts-Lock, Lizenz-/NOTICE-/SBOM-Nachweis und die
-Abnahme auf Windows, macOS und Linux.
+Dieses Register trennt **ausgelieferte Laufzeit**, **Build-/Testwerkzeug** und
+**nicht aktivierten Piloten**. Die Integration im Quellcode ist keine
+Zielhost- oder Endnutzerfreigabe. Versionen und Integritäten stehen in
+`package-lock.json`, den Runtime-Locks und der jeweiligen Paket-SBOM.
 
-RC78 / BL-010.8: Der reine Engineering-Prozessbeobachter verwendet vorhandene
-Windows-SDK-APIs und MSVC statt einer neuen Supervisor-/Runtimebibliothek. Die
-Win32-Handlebindung ist nach dem Parentende erforderlich; ein Node-ChildProcess
-im gestorbenen Parent oder PID-Polling ersetzt sie nicht. Der produktive
-Supervisor bleibt unverändert. Keine zusätzliche Installation für Anwender,
-keine neue Paketabhängigkeit; zehn native synthetische Tests und Doppelbuild.
+## Aktuell verwendete Komponenten und Produktgrenzen
 
-## Gemeinsames Aufnahmegate
+| Komponente | Verwendung | Grenze |
+|---|---|---|
+| Node.js / eigene DataSecure-Parser | Gemeinsamer lokaler Kern; zielgebunden mitgelieferte Runtime | Keine Anwenderinstallation; Anonymisierung nur TXT/Markdown/CSV/DOCX. |
+| Tauri 2 / Rust | Eigenständige Desktop-Hülle, native Dialoge, Lifecycle, private IPC | Nur Standalone. Rust ist ausschließlich Buildvoraussetzung. Windows-Engineering vorhanden; native Mac-Nachweise und Bedienabnahme offen. |
+| PDF.js, Canvas, Tesseract.js/-core, lokale DE/EN-Modelle | Gebündelter isolierter Standalone-Konvertierungsworker für Text-/Scan-PDF und Bilder | Aktiv nur für `markdown-only`, kein Online-OCR, keine entsprechende Formatfreigabe im Cowork-Plugin oder Anonymisierungsmodus. |
+| Ajv 8.20.0 (MIT) + esbuild 0.28.2 (MIT) | Build-time-Erzeugung des MCP-Validators aus dem einzigen Toolkatalog | Plugin lädt selbsttragendes JS samt lizenziertem Unicode-Längenhelper. Kein Ajv-npm-Paket, kein Codegenerator zur Laufzeit; nicht in Standalone. |
+| Microsoft MarkItDown 0.1.7 (MIT) | Optionales deaktiviertes DOCX-Differentialorakel | Weder Python noch MarkItDown ist eine produktive Konvertervoraussetzung. Keine zusätzliche Formatfreigabe durch das Orakel. |
+| Mammoth, Papa Parse, markdown-it, fflate | Unabhängige Parser-/Format-Testorakel | Keine alleinige Sicherheits- oder Releaseentscheidung. |
+| Playwright Core 1.63.0 / axe-core 4.11.1 | Engineering-UI-/Zugänglichkeitsprüfung im bereits installierten Microsoft Edge | Exakt gepinnte Dev-Abhängigkeiten; kein Browserdownload, kein Anwenderpaket und kein Ersatz für native Bedienabnahme. |
+| MCP-App-SDK / ext-apps | Separater deaktivierter Statuskartenpilot | Keine aktive Hostfreigabe; kein Zugang zu Rohinhalten. Vollständige Lizenztexte im Pilotbundle. |
 
-1. Gepflegte Primärquelle und nachvollziehbare Release-Herkunft.
-2. Verteilbare Lizenz einschließlich transitiver und nativer Bestandteile.
-3. Vollständig lokale Byte-Eingabe; kein URL-, CDN-, Telemetrie- oder Modell-Download.
-4. Paketierbar für ZIP und Marketplace ohne manuelle Node-/Python-/Systeminstallation.
-5. Feste Ressourcen-, Rekursions-, Zeit- und Ausgabegrenzen sowie isolierbarer Worker.
-6. DataSecure-Coverage- und Angriffsfixtures bestehen; unbekannte Inhalte stoppen.
-7. Keine Rohdaten, Pfade, Namen oder Mappingwerte in Logs, Fehlern oder Diagnose.
+Der Standalone-Paketbau erzeugt zusätzlich `RUST-LICENSE-INVENTORY.json` aus
+`cargo metadata --offline --locked --filter-platform`. Er traversiert nur die
+für das konkrete Ziel erreichbaren Normal-/Build-Abhängigkeiten, schließt reine
+Dev-Kanten aus und bricht bei fehlender Lizenz- oder `license_file`-Angabe ab.
+Das aktuelle Windows-x64-Paket bindet 259 Komponenten ohne `NOASSERTION`
+komponentengenau an `SBOM.spdx.json`; die Paketprüfung vergleicht beide Dateien.
 
-## Kandidaten nach Backlog-Epic
+Standalone-Konvertierung unterstützt TXT, Markdown, CSV, DOCX, XLSX, PPTX,
+Text-/Scan-PDF sowie PNG/JPEG/BMP im eigenen Zweckvertrag. Zwischenprodukte
+und Ausgabehinweise sind von geprüften anonymisierten Ergebnissen getrennt.
+XLSX-Strukturprüfung nutzt den begrenzten lokalen XML-Reader, keine Office-
+Automation. DOCX-/OPC-Sicherheitsparser bleiben unabhängig, bis eine eigene
+Migration nachgewiesen ist.
 
-| Epic | Entscheidung | Kandidaten und Einsatz | Derzeitige Bewertung |
-|---|---|---|---|
-| BL-001 | Beibehalten | Kanonische Markdown-/JSON-Verträge und eigene Driftprüfung | Kleine sicherheitskritische Logik; externe Planungstools wären keine Runtime-Hilfe. |
-| BL-002 | Pilot | Ajv (MIT) für maschinenlesbare Manifest-/Vertragsschemas | Ergänzung möglich; bestehende semantische Drift-Tests bleiben nötig. |
-| BL-003 | Beibehalten | Markdown-/JSON-Kanon mit eigener ID-, Rang- und Driftprüfung | Externe Product-Tools dürfen keine neue Runtime- oder Entscheidungsabhängigkeit erzeugen. |
-| BL-010 | Pilot | esbuild (MIT) für JS-Bundles; offizielle Node SEA 22.23.2 und postject 1.0.0-alpha.6 (MIT) als exakt gelockter Entwicklungsbuilder; vier offizielle Node-Zielarchive mit Hersteller-SHA-256; native Artefakte separat | RC71: gebundener Windows-Parent-/Parser-Dispatch. RC72: feste Batch-/Review-/Companion-Rollen in derselben Parentbinärdatei, reale IPC-Proben; keine weiteren Node-Kopien oder neue Abhängigkeit. Positiver SEA-Stapel-/Resume-Lifecycle, ganze Nebenrollenbindung, finale Assembly und reale POSIX-Integration offen; kein kombinierter V2-Nachweis. Separate Parser-/Parent-Node-Anteile erhöhen die Paketgröße; vor Freigabe Latenz/Größe gegen lokal gebündelten Standard-Node vergleichen. `postject` bleibt Dev-only. ZIP erbt keine MCPB-Node-Garantie. macOS x64/ARM64, Linux x64, Fresh Install und Lifecycle bleiben separat offen. Kein stiller Runtime-Fallback. |
-| BL-010.11/27 | Engineering-Pilot | Tauri 2.11.5 (MIT oder Apache-2.0) als kleine Desktop-Hülle mit betriebssystemeigener WebView | Tauri übernimmt ausschließlich Fenster, native Auswahl, Lebenszyklus und den eng begrenzten Sidecar-Kanal. Die lokale DataSecure-Engine bleibt die einzige fachliche Verarbeitung. Rust/Tauri sind Buildwerkzeuge; Anwender installieren weder Rust noch Node noch Python. Rust-Hülle, Dispatcher und ein selbsttragendes Windows-x64-Pilot-ZIP sind kompiliert und automatisch verifiziert; Windows nutzt das vorhandene System-WebView2. Vor Endnutzerfreigabe fehlen komponentenweise Crate-Lizenzklärung, E1/E2 Windows, native Pakete und E1/E2 auf macOS Intel/ARM sowie Linux. Eine reine Browser-Webanwendung wird nicht verfolgt, weil sie lokale Prozessgrenzen, Offlinebetrieb, sichere Wiederaufnahme und ein einheitliches Dateisystemziel nicht ohne zusätzliche lokale Brücke verlässlich bereitstellt. |
-| BL-010.9 | Pilot, Produktgate aus | Microsoft MarkItDown 0.1.7 (MIT) als lokaler Formatkonverter, zunächst nur DOCX-Differentialorakel | Offizielle Python-Bibliothek, keine GUI. Nur `convert_stream`, expliziter `DocxConverter`, Built-ins/Plugins/Netz/LLM/`markitdown-ocr` aus; rohes Markdown nicht persistieren. Synthetischer DOCX-Smoke bestanden. Exakte Wheels/Hashes, transitive Lizenzen, Supervisor, Coverage, Plattformpakete und E1/E2 fehlen; deshalb keine aktuelle Produktabhängigkeit oder zusätzliche Formatfreigabe. |
-| BL-011 | Beibehalten + Wiederverwenden | write-file-atomic/proper-lockfile nur als Differentialvergleich; vorhandener POSIX-C-Supervisor aus BL-024 für harte Parsergrenzen | Journal-, Claim-, Recovery- und Root-Pinning-Semantik ist produktspezifisch. Für macOS/Linux-Ressourcen wird der bereits auf CPU/RAM/Wallclock/Prozessgruppe geprüfte lokale Supervisor erweitert, statt Shell-`ulimit`, Docker, cgroup- oder Adminvoraussetzungen einzuführen. Ein kleiner Win32-Reparse-Attributhelper bleibt für echte Junction-Erkennung erforderlich. |
-| BL-012 | Benchmark | Playwright (Apache-2.0) für UI-Flows; axe-core (MPL-2.0) für Barrierefreiheit | Testwerkzeuge, keine zusätzliche Anwender-Runtime. |
-| BL-020 | Referenz + OS-Piloten | W3C Web Annotation `TextPositionSelector`/`FragmentSelector`; JSON Schema Draft 2020-12; Microsoft OPC/OOXML Core Properties; Node.js Permission Model und `--require`; fflate (MIT) als ZIP-/Dekompressionsorakel; Windows AppContainer/SandboxSecurityTools, Linux Bubblewrap (MIT), Apple App Sandbox; Microsoft MXC (MIT) nur beobachten | V1 übernimmt die offizielle halb offene Positions- und Fragmentsemantik, ein maschinenlesbares striktes Schema sowie die standardisierten `docProps`-Paketorte ohne JSON-LD- oder zusätzliche XML-/Office-Runtime. Reihenfolge, lückenlose Nicht-Leerraum-Abdeckung, gehärtete Limits, Asset-Bindung und Laufzeitvalidierung bleiben produktspezifisch. Weil unterstützte Node-22/24-Versionen keine einheitliche Netzwerkerlaubnis besitzen, ergänzt ein früh geladener eigener Netzwerk-Guard das Berechtigungsmodell. AppContainer ist Kandidat für den rohen Windows-Reviewprozess; `CreateProcessInSandbox`/MXC sind noch experimentell. Apple App Sandbox verlangt ein signiertes App-Bundle und passt nicht zum unsigned ZIP-Normalweg. Bubblewrap benötigt einen Linux-Pilot und darf nicht als vorinstalliert gelten; Firejail wird wegen Installations-/SUID-Abhängigkeit abgelehnt. Apache Tika wurde wegen Java-/Server-Laufzeit und unnötiger Plugin-Komplexität nicht eingebettet. |
-| BL-021 | Referenz + Pilot | Node/WHATWG `TextDecoder`; markdown-it (MIT) als Markdown-Differentialreferenz; Papa Parse 5.5.3 (MIT) als CSV-Testorakel | Der Produktparser verwendet bereits den eingebauten fatalen UTF-8-Decoder und erhält Markdown literal, weil Rendering/Tokenisierung keinen Sicherheitsgewinn bringt und den fachlichen Quelltext verändern kann. Acht Vertragsfälle decken die erste MD-Scheibe ab; End-to-End-/Drei-OS-Gates bleiben offen. Papa Parse ist fest gelockt und vergleicht 180 eindeutige Dialekt-/Quote-Fälle, bleibt aber explizit außerhalb von Runtime und Pluginpaket. |
-| BL-022 | Pilot | Mammoth 1.12.1 (BSD-2-Clause) als exakt gelocktes, reines DOCX-Testorakel; SheetJS Community Edition (Apache-2.0) für XLSX | DOCX/XLSX ergänzen, aber unbekannte OOXML-Parts und PPTX weiter fail-closed behandeln. Mammoth bleibt wegen eigener Warnungen zu externem Dateizugriff und pathologischer Ressourcenlast ein Orakel, nicht die Sicherheitsgrenze; unterstützte eingebettete OOXML-Pakete nutzen rekursiv den bereits isolierten DataSecure-Parser. |
-| BL-023 | Pilot | Mozilla `pdfjs-dist` 6.2.108 (Apache-2.0) plus `@napi-rs/canvas` 1.0.7 (MIT); PDFium bleibt Fallback | Lockfile und Vier-Plattform-Lauf `32594467568` für Byte-Input, Text, Rendering, Action-Erkennung und null Netzwerkversuche bestanden. Coverage-, Isolations- und Produktpaketgates bleiben offen. |
-| BL-024 | Eingebettet, gesperrt | Tesseract.js 7.0.0 und tesseract.js-core 7.0.0 (Apache-2.0), offizielle `tessdata_fast`-4.1.0-Modelle `deu`/`eng`; `@napi-rs/canvas` 1.0.7 (MIT) nur als Testwerkzeug | Abhängigkeiten, Modellquellen und Lieferkette sind gelockt. Läufe `32595454727`, `32596087930` und `32596426359` belegen auf Windows x64, macOS x64/ARM64 und Linux x64 getrennten Prozess, Netzwerkverbot, OCR-V1 sowie RAM-/CPU-/Zeit-/Ausgabegrenzen. Für POSIX reichen Betriebssystem-APIs (`setrlimit`, `/proc`, `proc_pid_rusage`). Lauf `32597030060` auf `7427b3c` belegt pro Zielarchitektur das installationsfreie Bundle aus 13 Runtime-Komponenten ohne Canvas, lokalen Modellen, Dateihashes, Notices und echtem Offline-OCR. Nur `tr46@0.0.3` benötigt einen exakt versionsgebundenen vollständigen MIT-Fallback; unbekannte fehlende Lizenztexte stoppen den Build. Produktadapter und deduplizierender Universal-V2-Assembler sind integriert; Lauf `32597783210` belegt vollständigen Re-Download, Assembly und realen Offline-OCR. Dieses exakte Universal-Bundle ist mit Provenienz im kanonischen ZIP-/Marketplace-Quellbaum eingebettet, bleibt aber mit `release_enabled: false` geschlossen. BL-024.1 ist erledigt; frische Installations- und Coverage-Gates von BL-024.2 ff. bleiben offen. |
-| BL-030 | Benchmark; alter Keyring superseded | Microsoft Presidio (MIT) als synthetisches Erkennungsorakel; bisheriger `@napi-rs/keyring`-Pilot nur historisch | Presidio bleibt außerhalb der Runtime. DS-065 entfernt Keyring und zusätzliche Verschlüsselung aus dem Produktpfad; kein nativer Secret-Store als Voraussetzung oder Fallback. Frühere Keyring-Lieferkettennachweise bleiben Historie, native Keyring-Abnahmen sind obsolet, nicht bestanden. Neustartfeste Pseudonyme bleiben ohne neue Aktivierungsbehauptung BL-030.2. |
-| BL-031 | Beibehalten | Offizielle Herstellerkataloge und bestehende Kontextregeln | Externe NER entscheidet nicht allein über Zertifikats-/Organisationskontext. |
-| BL-032 | Beibehalten | Betriebssystemeigene Dialogfunktionen, keine Cloud-Komponente | Verschlüsselte oder passwortgeschützte Quellen werden nicht entschlüsselt. Fachliche Entscheidungen bleiben lokal und UI-gebunden. |
-| BL-040 | Pilot | Ajv (MIT) für Nachweisschema; csv-stringify (MIT) für robustes CSV | Mapping bleibt technisch außerhalb aller MCP-Lesewerkzeuge. |
-| BL-041 | Beibehalten | Claude-Plugin-/Skill-Verträge und MCP-SDK nur aus dem geprüften Release | Ablauf und Datenschutzgrenze sind produktspezifisch; zusätzliche Agent-Frameworks erhöhen Komplexität. |
-| BL-043 | Beibehalten + Spike | Offizielles MCP-Task-/Notification-Protokoll und Claude-/Cowork-Hostvertrag; keine zusätzliche Runtime | Ein lokaler Worker bleibt der sichere Fallback. Eine Hostfunktion wird erst nach versionsgebundenem Nachweis genutzt; Agent-Frameworks oder Remote-Queue-Dienste würden die lokale Grenze und den Ein-Aufruf-Ablauf verschlechtern. |
-| BL-044 | Pilot | Native OS-Picker; `path-scurry` nur als Differentialorakel | Eigene fail-closed Traversierung bleibt nötig, weil Links/Reparse Points niemals verfolgt werden dürfen. |
-| BL-047 | Referenz | Node Worker Threads, `p-limit` und Betriebssystemmetriken als Vergleich | Ressourcenentscheidung und deterministischer Commit bleiben produktspezifisch; keine zusätzliche Runtime vor Messnachweis. |
-| BL-049 | Referenz + Pilot | `file-type` (MIT) als Signaturorakel; vorhandene OOXML-/PDF-Parser für Strukturprüfung | Keine Magie-Datenbank allein darf ein Format freigeben; Signatur, Struktur und Coverage müssen zusammenpassen. Der kleine eingebaute OPC-Steuerteilparser akzeptiert keine DTD/Entity, lädt keine externen Relationships und hält das ZIP selbsttragend; sämtliche Payloads werden zusätzlich größen-/CRC-geprüft. |
-| BL-042 | Eingebetteter deaktivierter UI-Pilot RC68 | Offizielles `@modelcontextprotocol/ext-apps` 1.7.5; esbuild 0.28.2 nur Build | SDK samt exakter Bundle-Abhängigkeiten/Lock-Integritäten und vollständigen Lizenztexten offline eingebettet. ext-apps-LICENSE enthält eine Apache-2.0/MIT-Übergangsregel, daher nicht pauschal als MIT deklarieren. Whitelist, Fallback und Inhaltsfreiheit bleiben eigene Sicherheitslogik. `STATUS_APP_PILOT_V1.md`; keine aktive Produktfreigabe. |
-| BL-050 | Pilot | fast-check (MIT) für Property-/Fuzz-Generierung; bestehende Corpus-Runner bleiben | Erweitert synthetische Variation, ersetzt keine markierten 1.000 Dokumente. |
-| BL-051 | Pilot | esbuild (MIT), CycloneDX-Generatoren und GitHub Actions | Supply-Chain-Pins, Paketparität, frische Installation und Rückrolle bleiben eigene Gates. |
-| BL-052 | Pilot | Playwright (Apache-2.0) und axe-core (MPL-2.0) für technische UI-Abnahme | Menschliche Nutzungs-, Fach- und Datenschutzabnahme bleibt unverzichtbar. |
+## Aufnahme- und Änderungsgate
 
-## Vorläufige Ausschlüsse
+Die Wiederverwendungsprüfung bleibt für alle aktiven Epics verbindlich:
 
-- Poppler, Ghostscript und MuPDF werden wegen Copyleft-/kommerzieller
-  Lizenzfolgen nicht in das normale Plugin aufgenommen.
-- Unoffizielle PDFium-Fremdbinaries bleiben Engineering-Evidenz, nicht
-  Produktabhängigkeit.
-- LibreOffice-/Office-Automation ist wegen großer externer Installation,
-  Versionsdrift und aktiver Dokumentfunktionen kein Normalweg.
-- Cloud-OCR, externe Konverter und CDN-Nachladen widersprechen DS-018.
+| Backlogbereiche | Aktueller Wiederverwendungsentscheid |
+|---|---|
+| BL-001, BL-002, BL-003 | Markdown-/JSON-Kanon, vorhandene Driftprüfungen und generierte Ajv-Schemavalidierung; kein externer Planungsdienst nötig. |
+| BL-010, BL-051 | Offizielle Node-/Tauri-/OS-Werkzeuge und bestehender Paketbuilder; neue Runtime erst nach eigenem Paketnachweis. |
+| BL-011, BL-040, BL-044 | Bestehende Journal-, Export-, Lock- und Admissionbausteine wiederverwenden; allgemeine Dateibibliotheken ersetzen keine produktgebundenen Wiederaufnahmeverträge. |
+| BL-012, BL-032, BL-052 | Native lokale Auswahl/Review und Playwright-/Zugänglichkeitsprüfungen; kein Agent entscheidet anstelle des Anwenders. |
+| BL-020, BL-021, BL-022, BL-049 | Vorhandene strukturierte Parser und unabhängige Format-Testorakel; kein bloßer Dateiendungs- oder Konvertererfolg als Sicherheitsfreigabe. |
+| BL-023, BL-024 | PDF.js/Canvas/Tesseract nur im genannten Konvertierungszweck; Anonymisierungsausbau bleibt eigenes Gate. |
+| BL-030, BL-031, BL-050 | Vorhandene Pseudonymregistry, Kontextkataloge und synthetischer Korpus; Presidio/Property-Frameworks bleiben mögliche Orakel, keine aktive Erkennungsruntime. |
+| BL-041, BL-042, BL-043 | Schmaler MCP-/Skill-Vertrag und inhaltsfreie lokale Diagnose; keine weitere Agenten-/Cloudschicht. |
+| BL-047 | Bestehende Ressourcenbudgets und gemessene Worker-Lifecycle-Verträge; Parallelisierung nur nach Mess- und Determinismusnachweis. |
 
-## Primärquellen der ersten Piloten
+1. Gepinnte Herkunft, Lizenztexte, Integrität und transitive/native SBOM.
+2. Lokale Snapshot-Bytes, keine URL-Konvertierung, Telemetrie oder Downloads.
+3. Grenzen für Speicher, Laufzeit, Rekursion und Ausgabe; isolierter Worker.
+4. Echte Inhaltspfad- und Negativtests zusätzlich zu Mocks und Schema-Tests.
+5. Zielbezogene Pakete und Offline-Nachweise; kein stiller Runtime-Fallback.
+6. Diagnose ohne Rohtext, Pfade, Namen, Mappingwerte oder freie Exceptions.
+7. Produkt-/Zweckgrenze explizit prüfen; Konverteraktivierung erweitert kein
+   Anonymisierungsgate.
 
-- PDF.js: https://github.com/mozilla/pdf.js
-- Tesseract.js: https://github.com/naptha/tesseract.js
-- Canvas: https://github.com/Brooooooklyn/canvas
-- Mammoth: https://github.com/mwilliamson/mammoth.js
-- SheetJS: https://github.com/SheetJS/sheetjs
-- Microsoft Presidio: https://github.com/microsoft/presidio
-- fflate: https://github.com/101arrowz/fflate
-- fast-check: https://github.com/dubzzz/fast-check
-- Ajv: https://github.com/ajv-validator/ajv
-- Node.js TextDecoder: https://nodejs.org/api/util.html#class-utiltextdecoder
-- markdown-it: https://github.com/markdown-it/markdown-it
-- CommonMark: https://spec.commonmark.org/
-- Microsoft AppContainer: https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation
-- Microsoft SandboxSecurityTools: https://github.com/microsoft/SandboxSecurityTools
-- Microsoft MXC: https://github.com/microsoft/mxc
-- Apple App Sandbox: https://developer.apple.com/documentation/security/app-sandbox
-- Bubblewrap: https://github.com/containers/bubblewrap
-- Node Single Executable Applications: https://nodejs.org/api/single-executable-applications.html
-- Microsoft MarkItDown: https://github.com/microsoft/markitdown
-- Tauri: https://github.com/tauri-apps/tauri
-- Tauri 2 Voraussetzungen: https://v2.tauri.app/start/prerequisites/
-- Tauri macOS-App-Bundle: https://v2.tauri.app/distribute/macos-application-bundle/
+Ajv folgt dem offiziellen [zweistufigen Generatorverfahren](https://ajv.js.org/standalone.html).
+Nach einer Tool-Schemaänderung:
+`node scripts/generate-mcp-validators.mjs --write`.
+Ohne `--write` prüft derselbe Befehl Bytegleichheit. Startup bindet den
+generierten Validator an den Kataloghash; `test-mcp-input-validation.mjs`
+prüft Reproduzierbarkeit und Schemaausführung. Diagnose speichert nur
+`MCP_ARGUMENT_INVALID`, nie Ajv-Fehlerdetails aus Eingaben.
+
+## Nicht aktivierte Alternativen und Historie
+
+Die früheren Kandidatenbewertungen samt Primärquellen und datierten
+Engineering-Läufen stehen vollständig im
+[archivierten Auswahlregister](../archive/2026-09/OPEN_SOURCE_COMPONENTS_BEFORE_RC109.md).
+Sie sind keine aktuelle Implementierungs- oder Lieferzusage. Dies betrifft
+insbesondere den früher geplanten produktiven Python-/MarkItDown-Worker,
+SEA-/Universal-OCR-Piloten und Keyring. Die aktiven Entscheidungen bleiben in
+[DECISIONS.md](DECISIONS.md), Entwicklung und Evidenz in
+[BACKLOG.md](BACKLOG.md) und [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md).
+
+Cloud-OCR, CDN-Nachladen, Office-/LibreOffice-Automation und zusätzliche
+Agent-Frameworks bleiben außerhalb des Normalwegs. Copyleft-/kommerziell
+lizenzierte PDF-Engines werden nicht still in ein Paket übernommen.

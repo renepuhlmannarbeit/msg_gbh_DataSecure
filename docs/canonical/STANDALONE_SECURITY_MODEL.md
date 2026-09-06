@@ -1,6 +1,6 @@
 # DataSecure Standalone – Sicherheitsmodell
 
-Stand: 04.09.2026 · Entscheidungen DS-075 bis DS-077
+Stand: 06.09.2026 · Entscheidungen DS-075 bis DS-086
 
 ## Geltungsbereich
 
@@ -18,16 +18,20 @@ flowchart LR
   R -->|private gerahmte stdio-IPC| S[DataSecure-Sidecar]
   S --> C[gemeinsamer DataSecure-Core]
   C --> P[privater Standalone-Datenroot]
-  C --> O[freigegebene Markdown-Ergebnisse]
+  C --> O[anonymisierte MD oder nicht anonymisierte Konvertate]
+  C --> Z[laufbezogene lokale Zuordnung]
   X[Originale, nur lesend] --> R
   R --> S
 ```
 
-- Der Renderer erhält keine Quellpfade, Rohbytes, Dokumenttexte, Mappingdaten,
-  Tokens, Kommandozeilen oder freien Exceptions. Er hat keinen direkten Datei-,
-  Shell-, Dialog- oder Netzwerkzugriff.
-- Nur die Rust-Hülle öffnet native Datei-/Ordnerdialoge. Sie übergibt absolute
-  Quellen über den privaten Prozesskanal an den Sidecar.
+- Der Renderer zeigt nach DS-082 gewählte Quellenordner, Dateinamen und
+  Ergebnisordner als lokale Textprojektion. Er erhält keine Rohbytes,
+  Dokumenttexte, Mappinginhalte, Zugriffstokens, Kommandozeilen oder freien
+  Exceptions und hat keinen direkten Datei-, Shell-, Dialog- oder Netzwerkzugriff.
+  Opake Laufkennungen binden die erlaubten Historienaktionen an genau einen Lauf.
+- Die Rust-Hülle öffnet native Datei-/Ordnerdialoge und nimmt native Drops an.
+  Sie übergibt absolute Quellen über den privaten Prozesskanal an den Sidecar;
+  Picker und Drop verwenden dieselbe Aufnahmeprüfung und starten allein nichts.
 - Der Sidecar wird bei Bedarf gestartet. Sein Environment wird geleert und auf
   eine feste OS-/Locale-/DataSecure-Allowlist reduziert. Proxy-, Cloud-, API-
   und Agentenwerte werden nicht weitergegeben.
@@ -40,14 +44,41 @@ flowchart LR
 
 Originale werden nur lesend aufgenommen und niemals verändert, verschoben oder
 automatisch gelöscht. Private Snapshots, Journale, Review- und Recoverydaten
-liegen ausschließlich im Standalone-Datenroot. Freigegeben wird nur das nach
-Parser-, PII- und Residual-Gates verifizierte Markdown. Mapping bleibt lokal und
-ist kein Diagnose-Log.
+liegen ausschließlich im Standalone-Datenroot. Der gespeicherte Stapelzweck
+entscheidet über zwei getrennte Ausgabeverträge (DS-085):
+
+- **Markdown und anonymisieren:** Nur nach Parser-, PII- und Residual-Gates sowie
+  erforderlicher lokaler Entscheidung verifiziertes Markdown gelangt nach
+  `DataSecure-Output/Lauf-…`.
+- **Nur Markdown:** Die lokale Extraktion erhält Originalinhalte, führt keine
+  PII-Ersetzung und keinen Anonymisierungsreview aus. `dm_`-Artefakte und
+  `DataSecure-Markdown/Lauf-…` bleiben ausdrücklich **nicht anonymisiert**.
+  Coverage-/OCR-Hinweise kennzeichnen begrenzte Extraktionen; kaputte oder
+  geschützte Quellen erhalten kein Konvertat. Es entstehen keine Privacy-
+  Lesecapabilities und keine Einträge im Plugin-Handoff.
+
+Beide Zwecke veröffentlichen erst nach terminalem Gesamtstapel einen sichtbaren
+Lauf einschließlich `DataSecure-Zuordnung.csv` (DS-083). Das dauerhafte globale
+Mapping bleibt im privaten Datenbereich. Die lokale Zuordnung ist kein
+Diagnose-Log und wird nicht an das Claude-Produkt übergeben. Quellen, fertige
+Exporte und Zuordnungen fallen nicht unter die 0–14-Tage-Aufbewahrung temporärer
+Arbeits-/Reviewdaten.
 
 Ein Fehler stoppt fail-closed. Fortsetzbare Stapel erscheinen als `stopped` und
 `resumable`; die Oberfläche darf weder Erfolg noch einen neuen Stapel vortäuschen.
-Passwortgeschützte und nicht freigegebene Formate bleiben unverändert und
-erzeugen kein Teilresultat dieser Datei.
+Offene Reviewpositionen öffnen erst dann die gemeinsame Prüfung, wenn keine
+automatische Verarbeitung, wiederholbare Position, Delivery oder Mappingreparatur
+mehr aussteht. Beide Produkte nutzen denselben Corevertrag; fehlende Zähler
+belegen keine Reviewbereitschaft. Abgeschlossen zählt erfolgreiche und terminal
+gestoppte Positionen; Fehler und verfügbare Ergebnisse bleiben separat sichtbar.
+
+Die App startet gemäß DS-086 ohne vorausgewählte Betriebsart auf **Start**.
+Ein Empfangs-ACK bestätigt nur die Workerübergabe, nicht den ersten dauerhaften
+Checkpoint oder Abschluss. **Verlauf** zeigt höchstens 20 lokale Läufe; diese
+Anzeigegrenze ist keine Löschfrist. Öffnen und Fortsetzen prüfen den konkreten
+Lauf, seinen gespeicherten Zweck und sein ursprüngliches Ziel erneut. Abschluss
+und Wiederherstellung öffnen keine Ergebnisse automatisch. Ein geänderter
+Ergebnisstandard verändert keine früheren Öffnungsziele.
 
 ## Paket- und Supply-Chain-Grenze
 
@@ -56,6 +87,9 @@ Node-Runtime, eine beim Paketbau frisch erzeugte geschlossene Coreprojektion,
 Manifest, Runtime-Evidence, SBOM, Lizenzhinweise und SHA-256. Anwender
 installieren keine Rust-, Node- oder Python-Toolchain. Microsoft Edge WebView2
 ist eine dokumentierte Systemvoraussetzung und wird nicht nachgeladen.
+Der Konvertierungspfad verwendet die mitgelieferten Node-/OOXML-Parser, PDF.js,
+Canvas und lokale Tesseract-DE/EN-Modelle. MarkItDown/Python ist nur ein
+optionales Engineering-Differentialorakel und kein produktiver Konverter.
 
 Das Engineering-SBOM inventarisiert Rust-Crates, setzt deren Lizenzfelder aber
 noch auf `NOASSERTION`. Vor einem Endnutzerrelease ist eine komponentenweise
@@ -67,6 +101,8 @@ sind ebenfalls noch offen. Bis dahin ist das Paket ein Engineering-Pilot.
 - keine rechtssichere Anonymitäts- oder Zertifizierungszusage;
 - keine Entschlüsselung passwortgeschützter Quellen;
 - keine Cloud-, Remote- oder Browser-only-Verarbeitung;
-- kein Drag-and-drop oder Pausieren als Istfunktion, bevor Implementierung und
-  Recovery-/UI-Tests vorliegen;
-- keine Freigabe von XLSX, PPTX, PDF, Scan-PDF oder Bildern ohne eigene Coverage.
+- keine freie Pause-/Prozesssteuerung durch den Renderer; technische
+  Unterbrechungen und vertagte Reviews bleiben über den Core fortsetzbar;
+- keine Gleichsetzung der aktiven XLSX-/PPTX-/PDF-/Bildkonvertierung mit einer
+  Anonymisierungsfreigabe oder vollständiger grafischer Coverage. Maßgeblich ist
+  die [Formatmatrix](../FORMAT_COVERAGE_MATRIX.md).

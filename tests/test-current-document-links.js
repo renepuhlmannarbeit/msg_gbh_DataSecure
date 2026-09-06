@@ -7,7 +7,9 @@ const { createSuite } = require('./helpers');
 const { test, done, assert } = createSuite('Current documentation links');
 const root = path.resolve(__dirname, '..');
 
-const files = [
+const files = [...new Set([
+  ...JSON.parse(fs.readFileSync(path.join(root, 'docs/canonical/DOCUMENT_INDEX.json'), 'utf8'))
+    .documents.filter(doc => doc.status === 'active' && doc.path.endsWith('.md')).map(doc => doc.path),
   'README.md',
   'SECURITY.md',
   'THIRD_PARTY_NOTICES.md',
@@ -42,7 +44,7 @@ const files = [
   'plugins/data-secure/server/README.md',
   'tasks/README.md',
   'evals/plugin-eval/README.md'
-];
+])];
 
 function localTargets(file) {
   const text = fs.readFileSync(path.join(root, file), 'utf8');

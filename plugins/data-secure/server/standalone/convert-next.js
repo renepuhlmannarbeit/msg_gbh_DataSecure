@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { publishMarkdownArtifact } = require('./markdown-store');
 const { validateMarkdownExtraction } = require('./markdown-contract');
 const supportTrace = require('../gateway/support-trace');
-const { ERROR_CODES, LIFECYCLE_ERROR_CODES } = require('./conversion-worker-contract');
+const { ERROR_CODES, LIFECYCLE_ERROR_CODES } = require('../core/conversion-worker-contract');
 const TRACE_ERRORS = new Set([...ERROR_CODES, ...LIFECYCLE_ERROR_CODES, 'REQUEST_CANCELLED', 'NONE']);
 
 function conversionTrace() {

@@ -4,6 +4,10 @@ const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
 const childProcess = require('child_process');
+const { createRequire } = require('node:module');
+const { batchNextAction } = require('../plugins/data-secure/server/gateway/batch-next-action');
+const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
+const { ipcAcknowledgementCause } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
 const { createSuite } = require('./helpers');
 const { pickSourcesAsync, PICKER_CANCELLED, batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
 const { pickSourceFolderAsync, SOURCE_FOLDER_CANCELLED } = require('../plugins/data-secure/server/companion/source-folder');
@@ -117,7 +121,7 @@ if (process.platform === 'win32') {
     let cancelOnAccepted = true;
     let controller = new AbortController();
     const context = vm.createContext({
-      process: { env: {} }, setImmediate,
+      process: { env: {} }, setImmediate, ipcAcknowledgementCause,
       readConfiguredResultRoot: () => 'already-configured',
       reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'd'.repeat(64) }; },
       releaseIntake: () => { reservationHeld = false; return true; },
@@ -149,7 +153,7 @@ if (process.platform === 'win32') {
     let reservationHeld = false;
     const resultRoot = path.resolve(__dirname, 'synthetic-cowork-root');
     const context = vm.createContext({
-      require, process: { env: {} }, setImmediate,
+      require, process: { env: {} }, setImmediate, ipcAcknowledgementCause,
       SafeError: class SafeError extends Error {},
       roots: () => ({ root: path.resolve(__dirname, 'synthetic-private-root') }),
       readConfiguredResultRoot: () => configured ? resultRoot : '',
@@ -188,7 +192,7 @@ if (process.platform === 'win32') {
       let sourcePickerCalls = 0;
       let reservationHeld = false;
       const context = vm.createContext({
-        require, process: { env: {} }, setImmediate,
+        require, process: { env: {} }, setImmediate, ipcAcknowledgementCause,
         SafeError: class SafeError extends Error {},
         readConfiguredResultRoot: () => '',
         reserveIntake: () => { reservationHeld = true; return { reservation_id: 'e'.repeat(64) }; },
@@ -214,7 +218,7 @@ if (process.platform === 'win32') {
     const resultRoot = path.resolve(__dirname, 'synthetic-unusable-result-root');
     let saves = 0;
     const context = vm.createContext({
-      require, process: { env: {} }, setImmediate,
+      require, process: { env: {} }, setImmediate, ipcAcknowledgementCause,
       SafeError: class SafeError extends Error {},
       roots: () => ({ root: path.resolve(__dirname, 'synthetic-private-root') }),
       pickFolderAsync: async () => resultRoot,
@@ -237,7 +241,7 @@ if (process.platform === 'win32') {
     let saves = 0;
     let sourcePickerCalls = 0;
     const context = vm.createContext({
-      require, process: { env: {} }, setImmediate, SafeError,
+      require, process: { env: {} }, setImmediate, SafeError, ipcAcknowledgementCause,
       roots: () => ({ root: privateRoot }),
       readConfiguredResultRoot: () => '',
       pickFolderAsync: async () => outputFailure ? path.resolve(__dirname, 'synthetic-cowork-root') : path.join(privateRoot, 'inside'),
@@ -266,7 +270,8 @@ if (process.platform === 'win32') {
   });
 
   await testAsync('a continuation never starts a second executor next to a running intake or batch (DS-022)', async () => {
-    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
+    const serverPath = path.join(__dirname, '../plugins/data-secure/server/mcp-server.js');
+    const code = fs.readFileSync(serverPath, 'utf8');
     const source = code.slice(code.indexOf('async function continueMostRecentDocumentBatch('), code.indexOf('const LOCAL_ONLY_HANDOFF='));
     assert.ok(source.includes('batch_active'), 'the continuation guard must exist');
     let continuations = 0;
@@ -274,12 +279,21 @@ if (process.platform === 'win32') {
     let reviewStarts = 0;
     let acknowledgement = Promise.resolve();
     let deferredReview = 0;
+    const { publicProgress } = createBatchProgress({
+      deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+      mappingPendingStatus: 'mapping_pending', liveLocalExecutor: () => false, publishedPackageRecord: () => null
+    });
     const status = { local_intake_pending: false, batch_processing_active: false };
     const context = vm.createContext({
+      // The isolated function retains its production dependencies, including
+      // the server-relative progress formatter used by the safe projection.
+      batchNextAction, ipcAcknowledgementCause, require: createRequire(serverPath),
       genericStatus: () => ({ ...status }),
-      continueMostRecentBatch: () => { continuations++; return { ok: true, batch_token: 'c'.repeat(64), remaining: deferredReview ? 0 : 1, delivery_pending: 0, mapping_pending: 0, deferred_review: deferredReview, batch_total: 1, released: 0, stopped: 0 }; },
-      startLocalBatchExecutor: () => { batchStarts++; return { local_processing_started: true, ipcAcknowledgement: acknowledgement }; },
-      startLocalReviewExecutor: () => { reviewStarts++; return { ok: true, ipcAcknowledgement: acknowledgement }; },
+      continueMostRecentBatch: () => { continuations++; return { ok: true, ...publicProgress({
+        token: 'c'.repeat(64), items: [{ status: deferredReview ? 'deferred_review' : 'pending' }]
+      }) }; },
+      startLocalBatchExecutor: () => { batchStarts++; return { ok: true, local_processing_started: true, ipcAcknowledgement: acknowledgement }; },
+      startLocalReviewExecutor: () => { reviewStarts++; return { ok: true, local_review_started: true, ipcAcknowledgement: acknowledgement }; },
       recordWorkflowEvent: () => {},
       withDiagnostic: (response) => response
     });
@@ -317,6 +331,8 @@ if (process.platform === 'win32') {
     assert.strictEqual(failedReview.ok, false);
     assert.strictEqual(failedReview.local_review_started, false);
     assert.strictEqual(failedReview.raw_content_sent_to_claude, false);
+    assert.strictEqual(batchStarts, 2);
+    assert.strictEqual(reviewStarts, 1, 'the real readiness helper selects the review executor');
     assert.doesNotMatch(JSON.stringify(failedReview), /batch_token|[a-f0-9]{64}|worker ended/u);
   });
 
@@ -332,7 +348,7 @@ if (process.platform === 'win32') {
     let reservationHeld = false;
     const status = { engine_ready: true, local_intake_pending: false, batch_processing_active: false, recoverable_batches: 0 };
     const context = vm.createContext({
-      process: { env: {} }, setImmediate,
+      process: { env: {} }, setImmediate, ipcAcknowledgementCause,
       readConfiguredResultRoot: () => 'already-configured',
       reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'e'.repeat(64) }; },
       releaseIntake: () => { reservationHeld = false; return true; },
@@ -449,7 +465,7 @@ if (process.platform === 'win32') {
     const run = async (failure) => {
       let starts = 0;
       const context = vm.createContext({
-        process: { env: {} }, setImmediate, SafeError, buildDiagnostic, causeFromError,
+        process: { env: {} }, setImmediate, SafeError, buildDiagnostic, causeFromError, ipcAcknowledgementCause,
         readConfiguredResultRoot: () => 'already-configured',
         reserveIntake: () => ({ reservation_id: 'd'.repeat(64) }),
         releaseIntake: () => true,

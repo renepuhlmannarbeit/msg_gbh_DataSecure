@@ -40,4 +40,4 @@ function initializeProduct(deps) {
   }
 }
 
-module.exports = { initializeProduct };
+module.exports = Object.freeze({ initializeProduct });

@@ -29,6 +29,26 @@ description = "Liest ausschließlich für die lokale Oberfläche den gewählten 
 commands.allow = ["get_ui_context"]
 
 [[permission]]
+identifier = "allow-get-run-history"
+description = "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte."
+commands.allow = ["get_run_history"]
+
+[[permission]]
+identifier = "allow-open-history-results"
+description = "Öffnet ausschließlich den Ergebnisordner des lokal gebundenen Verlaufs-Eintrags."
+commands.allow = ["open_history_results"]
+
+[[permission]]
+identifier = "allow-open-history-ledger"
+description = "Zeigt ausschließlich die Zuordnungsdatei des lokal gebundenen Verlaufs-Eintrags."
+commands.allow = ["open_history_ledger"]
+
+[[permission]]
+identifier = "allow-continue-history-batch"
+description = "Setzt genau den gewählten unterbrochenen Stapel nach erneuter Zustandsprüfung fort."
+commands.allow = ["continue_history_batch"]
+
+[[permission]]
 identifier = "allow-ack-terminal-presented"
 description = "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenster gerendert wurde."
 commands.allow = ["ack_terminal_presented"]

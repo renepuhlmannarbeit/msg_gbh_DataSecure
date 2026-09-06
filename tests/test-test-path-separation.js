@@ -58,6 +58,13 @@ test('automatic and release workflows use product gates and publish no MCPB', ()
   assert.ok(fs.existsSync(path.join(root, '.github', 'workflow-archive', 'keyring-pilot.yml')));
 });
 
+test('both automatic event filters include standalone-only changes without extra jobs', () => {
+  const ci = workflow('ci.yml');
+  assert.equal((ci.match(/- 'apps\/datasecure-standalone\/\*\*'/gu) || []).length, 2);
+  assert.match(ci, /timeout-minutes: 10/u);
+  assert.match(runner, /tests\/test-test-harness\.js/u);
+});
+
 test('the product runner lists are disjoint, so no file runs twice in one profile', () => {
   // baseFiles run in every profile, ciFiles in ci and full, fullOnly in full
   // only. A file listed in two lists (as test-workflow-diagnostics.js,

@@ -168,6 +168,15 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(status.result.product_channel, 'standalone');
     assert.strictEqual(status.result.external_disclosure, false);
     assert.doesNotMatch(JSON.stringify(status), /source_path|raw_content|mapping/u);
+    const emptyHistory = await client.send('get_run_history', 'ab'.repeat(8));
+    assert.strictEqual(emptyHistory.ok, true);
+    assert.strictEqual(emptyHistory.result.local_ui_only, true);
+    assert.deepStrictEqual(emptyHistory.result.entries, []);
+    for (const action of ['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch']) {
+      const unknown = await client.send(action, 'ac'.repeat(8), { batch_id: 'd'.repeat(64) });
+      assert.strictEqual(unknown.ok, false, 'a missing history entry must not resolve or resume the latest run');
+      assert.strictEqual(unknown.error_code, 'STANDALONE_HISTORY_MISSING');
+    }
     const admitted = await client.send('admit_selected_sources', 'b'.repeat(16), {
       source_kind: 'files', source_paths: [sourceFile]
     });

@@ -40,6 +40,13 @@ const commonModules = ['conversion-runtime-resolver.js', 'conversion-worker-cont
 assert.deepEqual([...entries.keys()].filter(name => name.startsWith('server/standalone/')).sort(),
   commonModules.map(name => `server/standalone/${name}`).sort());
 assert.deepEqual(verifyProductRelativeRequires(entries), { ok: true });
+const historyStore = 'server/gateway/standalone-history-store.js';
+assert.equal(entries.has(historyStore), true, 'shared journal/export persistence ships in the actual product projection');
+const missingHistoryStore = new Map(entries);
+missingHistoryStore.delete(historyStore);
+assert.throws(() => verifyProductRelativeRequires(missingHistoryStore),
+  /PRODUCT_MODULE_DEPENDENCY_MISSING:server\/gateway\/(?:batch|result-export)\.js:\.\/standalone-history-store$/u,
+  'removing history persistence from the real product projection must fail its module closure');
 for (const name of commonModules) {
   const missing = new Map(entries);
   missing.delete(`server/standalone/${name}`);
@@ -48,7 +55,7 @@ for (const name of commonModules) {
 }
 for (const name of ['conversion-runtime/node.exe', 'conversion-runtime/node_modules/pdfjs-dist/build/pdf.mjs',
   'conversion-runtime/models/eng.traineddata', 'conversion-worker-child.js', 'markdown-extractor.js',
-  'desktop-sidecar.js', 'application-service.js', 'product-manifest.json']) {
+  'desktop-sidecar.js', 'application-service.js', 'run-history.js', 'product-manifest.json']) {
   assert.equal(includeInProduct(`server/standalone/${name}`), false, `${name} is not a Cowork payload`);
   assert.equal(entries.has(`server/standalone/${name}`), false);
 }

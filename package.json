@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc108",
+  "version": "3.2.0-rc109",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -10,7 +10,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "standalone": "node plugins/data-secure/server/standalone/cli.js",
-    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-frontend.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && node tests/test-converter-support-trace.js && npm run test:standalone:rust",
+    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-history.js && node tests/test-standalone-frontend.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && node tests/test-converter-support-trace.js && npm run test:standalone:rust",
     "test:standalone:rust": "cd apps/datasecure-standalone/tauri-contract && cargo test --locked",
     "build:standalone:windows": "node scripts/prepare-standalone-runtime.mjs && cd apps/datasecure-standalone/tauri-contract && cargo build --release --locked",
     "build:standalone:windows:portable": "npm run build:standalone:windows && node scripts/build-standalone-package.mjs && npm run test:standalone:package",
@@ -65,7 +65,7 @@
     "test:docs": "npm run test:docs:fast",
     "validate:claude-local": "node scripts/validate-claude-local.mjs",
     "build:status-app": "node scripts/build-status-app.mjs",
-    "test:status-app": "node tests/test-status-app-model.mjs && node tests/test-status-app-server.js && node scripts/build-status-app.mjs --check && node tests/test-status-app-build-cwd.mjs && node tests/test-status-app-artifacts.mjs",
+    "test:status-app": "node tests/test-status-app-model.mjs && node tests/test-status-app-server.js && node scripts/build-status-app.mjs --check && node tests/test-status-app-build-cwd.mjs && node tests/test-status-app-artifacts.mjs && node tests/test-status-app-browser.mjs",
     "test:plugin-zip": "node scripts/verify-plugin-zip.mjs",
     "test:debug-zip": "node scripts/verify-debug-plugin-zip.mjs",
     "test:mcpb": "node scripts/verify-mcpb.mjs",
@@ -93,10 +93,12 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
+    "ajv": "8.20.0",
     "axe-core": "4.11.1",
     "esbuild": "0.28.2",
     "mammoth": "1.12.1",
     "papaparse": "5.5.3",
+    "playwright-core": "1.63.0",
     "postject": "1.0.0-alpha.6"
   }
 }

@@ -37,6 +37,30 @@ function ambiguity(id, originalText, anonymizedText, value) {
   };
 }
 
+test('identifier-only compatibility detection preserves actual review locators and decision offsets', () => {
+  const pii = require('../plugins/data-secure/server/pii-engine');
+  const { buildReviewDraft } = require('../plugins/data-secure/server/companion/text-review');
+  const { reviewedBatchText } = require('../plugins/data-secure/server/gateway/batch-review-policy');
+  const { professionalText, identifierCases } = require('./lib/identifier-compatibility');
+  const email = identifierCases[0].value;
+  const original = `${professionalText}\nE-Mail: ${email}\nMicrosoft Zertifikat`;
+  const anonymized = pii.anonymize(original, 'general').text;
+  const candidate = ambiguity('credential:v2:000001', original, anonymized, 'Microsoft');
+  const draft = buildReviewDraft(original, anonymized, 'general', [candidate]);
+  assert.strictEqual(draft.original_text, original);
+  assert.strictEqual(draft.anonymized_text, `${professionalText}\nE-Mail: [EMAIL_REDACTED]\nMicrosoft Zertifikat`);
+  const locator = draft.locators.find((entry) => entry.type === 'EMAIL');
+  assert.ok(locator);
+  assert.strictEqual(draft.original_text.slice(locator.start, locator.end), email);
+  assert.strictEqual(locator.start, original.indexOf(email));
+  const bundle = buildBatchReviewDraft([{ original_text: original, anonymized_text: anonymized,
+    profile: 'general', ambiguities: [candidate] }]);
+  const resolved = resolveBatchReviewResult(bundle, { action: 'reviewed', redactions: [],
+    decisions: [{ ambiguity_id: bundle.draft.ambiguities[0].ambiguity_id, decision: 'redact' }] });
+  const reviewed = reviewedBatchText({ anonymized_text: anonymized, ambiguities: [candidate] }, resolved.documents[0].decisions);
+  assert.strictEqual(reviewed.text, `${professionalText}\nE-Mail: [EMAIL_REDACTED]\n[MANUAL_REDACTION] Zertifikat`);
+});
+
 test('builds one anonymous local draft and maps choices back to the source position', () => {
   const firstOriginal = 'Microsoft Azure Administrator';
   const firstAnonymous = 'Microsoft Azure Administrator';

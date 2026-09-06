@@ -1,15 +1,24 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 06.09.2026 · 3.2.0-rc108
+Stand: 06.09.2026 · 3.2.0-rc109
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
-offener Zielhostevidenz; eine als offen bezeichnete Kante ist kein Implementierungsbeleg.
+offener Implementierung und Zielhostevidenz; eine als offen bezeichnete Kante ist kein Implementierungsbeleg.
+Die aktuelle Produkt-/Zweckmatrix steht in
+[`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md#aktuelle-fähigkeiten-nach-produkt-und-zweck).
 Dieses Dokument ist
 eine Navigations- und Prüfsicht auf `mcp-server.js`, die getrennten Worker, die
 Batch-Module, den lokalen Review, die Ergebnisprojektion und die Diagnose. Der
 normative Produktvertrag bleibt in `PRODUCT.md`, `DECISIONS.md` und den
 Einzelverträgen unter `contracts/`.
+
+RC109: Die produktunabhängigen Verträge für nächste Stapelaktion,
+Konverterkommunikation und Ergebnisgrad liegen in `server/core/`.
+MCP- und Standaloneadapter konsumieren dieselbe Implementierung; frühere
+Importpfade sind nur Reexports. Die nachstehenden Batch-/Worker-Kanten sind
+dadurch noch keine vollständig entkoppelte Application API: Verifikation mit
+Dateizugriff und öffentliche Antwortprojektion bleiben teilweise komponiert.
 
 ## 1. Systemkontext
 
@@ -28,8 +37,17 @@ flowchart LR
 ```
 
 Originale, private Snapshots, Reviewtext, Mappings, Pfade und Dateinamen bleiben
-außerhalb der Modellgrenze. Die normale Übergabe an Cowork bestätigt nur den
+außerhalb der Modellgrenze. Der Originalweg setzt den nach DS-078 zugelassenen
+lokalen Claude-Host mit verbundenem Plugin-MCP voraus; eine vom Hersteller
+angebotene Desktop-Brücke erweitert diese Produktfreigabe nicht automatisch.
+Die normale Übergabe an Cowork bestätigt nur den
 lokalen Worker-Hand-off; sie ist kein Abschlussnachweis.
+Die eingezeichnete Sammelprüfung besitzt einen Windows-Sammeladapter und einen
+einzelnen scrollbaren AppKit-Mac-Sammeldialog. Der macOS-Abschlussadapter meldet
+erst nach einem sichtbaren Fenster `SHOWN`. Native Intel-/ARM-Ausführung,
+Fokus, Accessibility und Bedienverständlichkeit sind noch Zielhostnachweise
+(BL-012.9/10, BL-012.2/041.10), keine weitere Dialogarchitektur. Reine
+Standalone-Markdown-Konvertierung nutzt keine PII-Prüfung.
 Liegt `DataSecure-Output` in einem mit Cowork verbundenen Arbeitsordner, kann
 der Host die dort sichtbaren Dateien entsprechend seiner Ordnerberechtigung
 lesen. DataSecure steuert nur seine MCP-Rückgaben, nicht den danach möglichen
@@ -48,6 +66,7 @@ flowchart TB
   subgraph Plugin[DataSecure Plugin]
     Bootstrap[Fail-closed Bootstrap]
     MCP[MCP-Protokoll und Tool-Fassade]
+    Args[Kataloggebundene Eingabevalidatoren<br/>vor jeder bekannten Toolaktion]
     Picker[Datei- und Ordnerpicker]
     Guard[Startup- und Runtime-Gates]
     Cache[Durable Runtime Cache]
@@ -65,8 +84,9 @@ flowchart TB
 
   Skill --> Client --> Bootstrap --> Guard --> MCP
   Guard --> Cache
-  MCP --> Picker
-  MCP --> Exec
+  MCP --> Args
+  Args --> Picker
+  Args --> Exec
   Exec --> Cache
   Exec --> Batch
   Source -->|O_RDONLY; identitätsgebundener Snapshot| Batch
@@ -190,7 +210,7 @@ flowchart TD
   F -- nein --> X
   F -- ja --> G[Identitäts- und hashgebundene Snapshots]
   G --> H[Durabler Checkpoint]
-  H --> I[Adaptiv begrenzte Verarbeitung]
+  H --> I[Serielle Verarbeitung mit begrenzten Parser-/OCR-Prozessen]
   I --> J{Dateiergebnis}
   J -- klar --> K[Internes Paket veröffentlichen]
   J -- fachlich mehrdeutig --> L[deferred_review]
@@ -230,13 +250,17 @@ stateDiagram-v2
   deferred_review --> released: lokale Entscheidung und Veröffentlichung
   deferred_review --> stopped: lokale Entscheidung gegen Freigabe
   deferred_review --> deferred_review: vertagt oder abgebrochen
-  retryable --> processing: ausdrückliche Fortsetzung
+  retryable --> pending: ausdrückliche Fortsetzung
   preflight_mapping_pending --> stopped: Mapping repariert
   mapping_pending --> delivery_pending: Mapping repariert
   delivery_pending --> released: Delivery bestätigt
   released --> [*]
   stopped --> [*]
 ```
+
+`stopped` ist erst mit dauerhaft vorhandenem erforderlichem Mapping terminal.
+Ein noch gesetztes `local_mapping_exported: false` zählt zur Mappingreparatur
+und nicht zu abgeschlossenen Positionen.
 
 ### 6.2 Abgeleitete öffentliche Stapelphase
 
@@ -260,6 +284,14 @@ jeder Abfrage aus Item-Status, Executor-Lebendigkeit und terminaler Evidenz
 berechnet. `reserved` ist wiederum eine kurzlebige Intake-/UI-Reservation und
 gehört in kein persistiertes Item-Zustandsdiagramm. Ein Stapel ist nicht deshalb
 vollständig, weil der MCP-Aufruf geantwortet hat.
+`completed` zählt `released + stopped` für terminale Positionen; Ergebnis- und
+Fehlerzahlen bleiben separat. `awaiting_local_review` setzt offene Reviewpositionen
+und zugleich null verbleibende, verarbeitende, wiederholbare, Delivery- und
+Mappingpositionen voraus. `batch-next-action.js` teilt diesen Vertrag mit beiden
+Produktadaptern, Reviewplanung und automatischem Reviewübergang. Fehlende Zähler
+belegen keine Bereitschaft. Außerdem müssen terminale plus Reviewpositionen
+den gesamten Stapel abdecken. Unbekannte Itemzustände sind
+`invalid_local_state`, niemals ein ausgelassener Rest mit Reviewfreigabe.
 
 ### 6.3 Globale Ownership-Invariante
 
@@ -287,26 +319,51 @@ sequenceDiagram
   actor U as Anwender
   participant C as Cowork
   participant M as MCP
-  participant W as Review-Worker
+  participant W as lokaler Batch-/Review-Worker
   participant UI as lokale Review-UI
   participant J as Journal
 
-  alt erster automatischer Lauf erreicht deferred_review
-    M->>W: derselbe lokale Worker setzt direkt in Sammelreview fort
+  alt automatischer Lauf hat alle technische Arbeit abgeschlossen und Review ist bereit
+    W->>W: gemeinsamer Readinessvertrag erlaubt Sammelreview
   else zuvor vertagt, abgebrochen oder neu gestartet
     U->>C: letzten Stapel fortsetzen
     C->>M: continue_most_recent_document_batch
-    M->>W: Batch-Token nur über private IPC
-    W-->>M: local-review-accepted
-    M-->>C: lokale Prüfung gestartet
+    M->>J: Zustand erneut prüfen, unterbrochene Positionen fortsetzbar machen
+    M->>M: batchNextAction aus vollständigem Fortschritt
+    alt automatische Arbeit einschließlich Delivery oder Mapping offen
+      M->>W: Batch-Worker starten; Token nur über private IPC
+      W-->>M: lokales Empfangs-ACK
+      M-->>C: Fortsetzung angenommen, noch kein Abschluss
+      W->>J: offene automatische Arbeit abschließen
+      W->>W: nur bei gemeinsamer Reviewbereitschaft automatisch weiter
+    else nur Reviewentscheidungen offen
+      M->>W: Review-Worker starten; Token nur über private IPC
+      W-->>M: local-review-accepted
+      M-->>C: lokale Übernahme bestätigt; noch kein UI-/Abschlussnachweis
+    end
   end
-  W->>J: offene Positionen rekonstruieren
-  W->>UI: Rohtext nur über stdin
-  U->>UI: behalten, anonymisieren, vertagen
-  UI-->>W: strukturierte lokale Entscheidungen
-  W->>J: atomare Zustandsänderung
+  opt Review bereit
+    W->>J: ausschließlich offene Reviewpositionen rekonstruieren
+    W->>UI: Rohtext nur über stdin
+    U->>UI: behalten, anonymisieren, vertagen
+    UI-->>W: strukturierte lokale Entscheidungen
+    W->>J: atomare Zustandsänderung
+  end
   W-->>U: Abschluss oder sichere Vertagung
 ```
+
+Der ausdrücklich aktivierte Supportweg `review_deferred_document_batch` nutzt
+ebenfalls diesen festen, netzwerkgesperrten Worker. Die MCP-Seite liest nur den
+Metadatenstatus des angegebenen Stapels; sie rekonstruiert keinen Rohtext.
+`batchReviewCanPrepare` lässt zusätzlich vollständig gezählte Reparaturpositionen
+zu (Veröffentlichung, Zuordnung oder unterbrochene Verarbeitung), wenn keine
+Pending-/Retryposition und kein aktiver Worker vorliegt. Das ist **keine**
+Reviewbereitschaft: Der Worker repariert unter seinem exklusiven Lock und prüft
+danach `batchReviewReady` erneut. Ein unvollständig rekonstruierbarer Zustand
+bleibt gesperrt. Er springt niemals zum jüngsten anderen Stapel.
+Die Supportantwort endet nach `local-review-accepted`; ein Timeout/Hostabbruch
+belegt nur fehlende Bestätigung und darf keinen automatischen zweiten Start
+auslösen. Die feste Werkzeugargumentstruktur bleibt unverändert.
 
 ## 8. Datenmodell der wesentlichen Artefakte
 
@@ -433,8 +490,8 @@ nicht protokolliert werden; gespeichert wird nur eine geschlossene Projektion.
 10. **Evidencegrenzen:** Ergebnisstamm und sichtbarer Mischstapel sind durch
    DS-079/080 entschieden. Standalone bestätigt Rendering und zeigt passiven
    Fortschritt E0; Windows-Cowork bestätigt das native `Shown`-Ereignis.
-   Plattformübergreifender Sammelreview, macOS-Sichtbarkeit und echte
-   Zielhostbeobachtungen bleiben eigenständige UAT-Lieferungen.
+   Plattformübergreifender Sammelreview und macOS-Sichtbarkeit stehen E0;
+   echte Zielhostbeobachtungen bleiben eigenständige UAT-Lieferungen.
 
 Die Punkte 4 bis 6 sowie 8 bis 10 sind als E0-Arbeitspakete umgesetzt. Punkt 2 bleibt als
 beobachtbare UX-Abnahme zusätzlich offen; die technische Pfadtrennung selbst ist
@@ -444,14 +501,19 @@ bewusst nicht durch UML-Dokumentation vorgetäuscht, sondern im Backlog getrennt
 ## 11. Implementierter UX- und Standalone-Vertikalschnitt
 
 ```mermaid
-flowchart LR
-  Start[Dateien anonymisieren] --> Pick[genau eine Quellauswahl]
-  Pick --> Work[stille lokale Verarbeitung mit passivem Fortschritt]
-  Work -->|alles eindeutig| Done[ein Abschlussfenster]
-  Work -->|Entscheidung nötig| Review[ein Sammelreview]
-  Review --> Done
-  Done --> Map[Standalone: laufbezogene Zuordnung fertig]
-  Map --> Open[aktuellen Laufordner sichtbar öffnen]
+flowchart TD
+  Home[Startseite: kein Zweck vorbelegt] --> Purpose[Eine von zwei Funktionen wählen]
+  Purpose --> Pick[Vorbereitung: Quelle per Picker oder Drop / Ziel anzeigen]
+  Pick --> Start[Expliziter Start]
+  Start --> Work[Lokale Verarbeitung mit passivem Fortschritt]
+  Work -->|nur Markdown oder Anonymisierung ohne offene Entscheidung| Map[Ergebnisse und laufbezogene Zuordnung gemeinsam bereitstellen]
+  Work -->|Anonymisierung: automatische Arbeit fertig, Entscheidung offen| Review[Sammelreview]
+  Review -->|entschieden| Map
+  Review -->|vertagt oder abgebrochen| Paused[Nichtmodaler fortsetzbarer Status]
+  Map --> Done[Nichtmodaler Abschluss in der aktuellen Ansicht]
+  Home --> History[Verlauf: letzte 20 Läufe]
+  Done -.->|nur auf Anwenderaktion| History
+  History -->|konkrete Zeile wählen| Open[Ergebnisse öffnen / Zuordnung anzeigen / fortsetzen]
 ```
 
 - **Keine automatische Workspace-Vermutung:** Die MCP-Schnittstelle liefert
@@ -462,9 +524,11 @@ flowchart LR
   darf optional mit Cowork verbunden werden; DataSecure kann die Liste
   verbundener Cowork-Ordner nicht selbst prüfen. Es entsteht keine Rückfrage pro Datei,
   Lauf oder Projektwechsel.
-- **Ein eindeutiger Abschluss:** Erst eine lokal belegte sichtbare Oberfläche
-  schließt die Präsentationsreservation. Das Fenster öffnet den konkreten
-  `Lauf-*`-Ordner und bietet bei ausstehendem Export genau eine Reparaturaktion.
+- **Ein eindeutiger Abschluss:** Das Plugin verwendet seinen lokalen
+  Abschlussadapter. Standalone bestätigt die Statusdarstellung im Hauptfenster
+  über ein lauf- und generationsgebundenes ACK; es öffnet weder einen separaten
+  Abschlussdialog noch automatisch einen `Lauf-*`-Ordner. Ausstehender Export
+  bleibt als solcher sichtbar (DS-083/086).
 - **Ein Review:** Das gemeinsame Reviewmodell bleibt plattformneutral; jeder
   freigegebene Zielhost benötigt nur einen lokalen Adapter, der alle offenen
   Entscheidungen in einer Oberfläche und mit einer Schlussfreigabe darstellt.
@@ -475,81 +539,65 @@ flowchart LR
   gemäß DS-079 entsteht der sichtbare Laufordner erst nach terminalem
   Gesamtstapel und abgeschlossenem erforderlichem Review.
 
-Dieses Zielbild beschreibt zwei Endnutzerprodukte mit genau einem gemeinsamen
+Diese Sicht beschreibt zwei Endnutzerprodukte mit genau einem gemeinsamen
 DataSecure-Core. Das Plugin übersetzt MCP-/Cowork-Aufrufe, Standalone übersetzt
 lokale UI-Aktionen. Produktdaten und Handoffzustände bleiben strikt getrennt.
 
-### Standalone- und Konvertersequenz nach DS-075
+### Zwei gleichwertige Standalone-Modi – Implementierung DS-075/DS-085
 
-Der direkte Anonymisierungspfad dieser Sequenz ist als Windows-Engineering-
-Vertikalschnitt ausführbar. Der ausdrücklich markierte MarkItDown-Zweig ist
-SOLL/Engineering, nicht produktiv integriert; reine Konvertierung nach DS-085
-ist ebenfalls noch kein ausführbarer Produktpfad.
-Implementiert sind Tauri-Hülle, nativer Datei-/Ordnerpicker, Node-Application-
-Service, strenge UI-Projektion, privater längengerahmter Dispatcher,
-Sidecar-Lebensdauer und Zielkatalog. Der Windows-Prozessstart wurde geprüft.
-Ein selbsttragendes Windows-x64-Engineering-Paket ist gebaut und isoliert
-geprüft. Offen sind Endnutzerfreigabe, Windows-UAT und die nativen macOS-/Linux-
-Pakete und -Nachweise.
+Beide Zwecke sind im aktuellen Quellstand ausführbar. Der Startzweck durchläuft
+`processingMode` → Rust → `processing_mode` → Service → Intake und Journal;
+reine Konvertierung besitzt v5-Journale, eigene Worker-Nachrichten und
+`dm_`-Artefakte ohne Privacy-Capabilities. Continue übernimmt ausschließlich
+den gespeicherten Zweck. Tauri-Hülle, native Auswahl/Drop, Application-Service,
+private gerahmte IPC und laufgebundene Historie sind implementiert. Vorhandene
+Windows-Engineering-Pakete und Prozessstarts ersetzen keinen neuen
+Releasekandidaten oder menschliche Windows-/macOS-Zielhostabnahme.
 
 ```mermaid
 sequenceDiagram
   actor U as Anwender
-  participant S as Standalone-UI/CLI
+  participant S as Standalone-UI
   participant A as Standalone-Adapter
   participant E as neutrale DataSecure-Application-API
   participant I as Admission/Snapshot
-  participant M as isolierter MarkItDown-Worker
+  participant M as lokaler Node-/OOXML-/PDF-/OCR-Worker
   participant P as PII/Residual-Gate
-  participant V as Sammelreview/Export
+  participant V as Sammelreview und Export
+  U->>S: Zweck ausdrücklich auf Start wählen
   U->>S: Dateien oder Ordner wählen
   S->>A: native Auswahl/Drop aufnehmen (ohne Start)
   A->>E: admit_selected_sources
   E-->>S: lokale Auswahlprojektion
-  U->>S: explizit Anonymisierung starten
+  U->>S: vorbereiteten Stapel explizit starten
   S->>A: start_admitted_batch(processingMode)
   A->>E: dauerhafte Aufnahme starten
+  E-->>S: Empfangs-ACK, noch kein Checkpoint oder Abschluss
   E->>I: prüfen und versiegelten Snapshot erzeugen
-  alt direkt unterstütztes Textformat
-    I->>P: Content Graph
-  else SOLL: künftig freigegebener Konvertertyp (noch nicht produktiv)
-    I->>M: Snapshot-Bytes über geerbtes stdin
-    M-->>P: private Markdown-Repräsentation über stdout
+  I->>M: Snapshot-Bytes, gespeicherten Zweck und Format übergeben
+  alt Markdown und anonymisieren
+    M->>P: Content Graph des unterstützten Anonymisierungsformats
+    P->>V: geprüfte Kandidaten / Mehrdeutigkeiten
+    opt nach automatischer Arbeit tatsächlich Review bereit
+      V-->>U: lokale Sammelprüfung
+      U->>V: Entscheidungen
+    end
+    V->>V: terminale MD und Zuordnung in DataSecure-Output
+  else nur Markdown
+    M->>V: erhaltene Originalinhalte und Coverage-/OCR-Hinweise
+    V->>V: terminale MD und Zuordnung in DataSecure-Markdown
   end
-  P->>V: anonymisierte Kandidaten / Mehrdeutigkeiten
-  V-->>U: ein Review oder klarer Abschluss
+  V-->>S: Status des konkreten Laufs ohne Ansichtswechsel
 ```
 
-MarkItDown darf die Engine weder umgehen noch selbst ein Format freigeben. Im
+MarkItDown/Python ist nur ein optionales Engineering-Differentialorakel und
+gehört nicht zur produktiven Sequenz. Im
 Anonymisierungsmodus ist ein noch personenbezogenes Zwischenkonvertat kein
-Ergebnisartefakt und wird nicht im sichtbaren Dateisystem abgelegt. Der noch
-nicht freigegebene reine Konvertierungsmodus ist dagegen ausdrücklich für solche
-Inhalte vorgesehen, in einem getrennten, als nicht anonymisiert gekennzeichneten
-Ausgabebaum (DS-085).
-
-### Zwei gleichwertige Standalone-Modi – Implementierung DS-085
-
-Quellstand nach RC107: Der Startzweck durchläuft `processingMode` → Rust →
-`processing_mode` → Service → Intake-v2 → eigener Worker-Nachrichtentyp →
-v5-Journal. Continue übernimmt ausschließlich den gespeicherten Zweck.
-Konvertierung verwendet versiegelte Snapshot-Bytes, einen gebündelten Offline-
-Konvertierungsworker und eigene `dm_`-Artefakte ohne Privacy-Capabilities.
-Text-PDF und Scan-Seiten werden automatisch unterschieden; OCR läuft lokal.
-Warnungen sind Teil der Extraktionsidentität und des sichtbaren v3-Exports.
-
-```mermaid
-flowchart TD
-  UI[Modus und Quelle wählen / Dragdrop] --> Start[Ziel prüfen und explizit starten]
-  Start --> Journal[Modus, Quellen und Ziel dauerhaft binden]
-  Journal --> Parse[Offline-Extraktion und Coverage]
-  Parse --> Choice{dauerhafter Stapelmodus}
-  Choice -->|Markdown und anonymisieren: implementiert| PII[PII-Ersetzung / Residual / ggf. Review]
-  PII --> Anon[DataSecure-Output / Lauf: geprüfte MD + Zuordnung]
-  Choice -->|nur Markdown: implementiert| Plain[Ausgangsinhalte erhalten / OCR-Hinweise speichern]
-  Plain --> MD[DataSecure-Markdown / Lauf: nicht anonymisierte MD + Zuordnung]
-  Anon --> Result[letzten zugehörigen Lauf anzeigen / öffnen]
-  MD --> Result
-```
+Ergebnisartefakt und wird nicht im sichtbaren Dateisystem abgelegt. Reine
+Konvertierung speichert solche Inhalte dagegen ausdrücklich im getrennten,
+als nicht anonymisiert gekennzeichneten Ausgabebaum (DS-085). Text-PDF und
+Scan-Seiten werden automatisch unterschieden; OCR läuft lokal. Warnungen sind
+Teil der Extraktionsidentität und des sichtbaren v3-Exports.
 
 Recovery setzt den gespeicherten Modus fort; eine UI-Defaultwahl darf ihn nicht
 ändern. Inhaltsfreie Diagnose dokumentiert Phase, Modus und Fehler, keine
@@ -561,18 +609,22 @@ extrahierten Originalinhalte. Keine Konvertate gelangen in den Plugin-Handoff.
 stateDiagram-v2
   [*] --> idle
   idle --> admitted: lokale Auswahl bestätigt
-  admitted --> processing: dauerhafter Stapelcheckpoint
-  processing --> review_required: fachliche Entscheidung offen
+  admitted --> preparing: expliziter Start / Empfangs-ACK
+  preparing --> processing: dauerhafter Stapelcheckpoint und Worker aktiv
+  processing --> review_required: automatische Arbeit beendet / Review bereit
   processing --> export_pending: intern fertig / sichtbarer Export offen
   review_required --> export_pending: Review abgeschlossen / Export offen
   export_pending --> completed: sichtbarer Export vollständig
   admitted --> idle: Sidecar-Neustart / IPC-Fehler / Admission verloren
   processing --> stopped: sicherer Fehler oder Abbruch
-  stopped --> processing: belastbare Fortsetzung
+  stopped --> processing: konkrete Fortsetzung / automatische Arbeit offen
+  stopped --> review_required: konkrete Fortsetzung / nur Review offen
 ```
 
-Der öffentliche Stand wird ausschließlich aus dem jüngsten Stapel des jeweiligen
-Produktkanals abgeleitet. Ein interner Paketabschluss ist kein sichtbarer
+Der Standalone-Status beobachtet den aktiven oder ausdrücklich ausgewählten Lauf
+auch nach dessen Abschluss. Nur ohne solche Bindung ist der jüngste Stapel des
+eigenen Produktkanals der Standard. Eine historische Fortsetzung darf daher
+keinen neueren Lauf, dessen Zweck oder dessen Zähler übernehmen. Ein interner Paketabschluss ist kein sichtbarer
 Erfolg. Offene Exporte werden beim Standalone-Start und nach einer bewussten
 Ergebnisordnerwahl erneut versucht; der Zielordner ist vor dem ersten Teilexport
 identitätsgebunden. Standalone-Worker öffnen keine Cowork-Dialoge. Die Tauri-UI
@@ -596,13 +648,27 @@ sequenceDiagram
   participant S as privater Sidecar
   participant C as DataSecure-Core/Export
   participant OS as Explorer/Finder/xdg-open
-  UI->>R: Ergebnisse öffnen
-  R->>S: resolve_current_results
-  S->>C: latestProductResultDirectory(standalone, ensureExport)
-  C->>C: Ergebnisse + DataSecure-Zuordnung.csv verifizieren/ergänzen
+  UI->>R: Verlauf öffnen
+  R->>S: get_run_history
+  S->>C: eigene Journale und lokale Laufmetadaten
+  C-->>S: kanalgebundene Laufdaten
+  S-->>R: letzte 20 Läufe (Datum, Zweck, Zähler, Status)
+  R-->>UI: validierte lokale Verlaufsprojektion
+  UI->>R: Ergebnisordner einer Zeile (batchId)
+  R->>S: resolve_history_results(batch_id)
+  S->>C: konkreten Lauf und ursprüngliches Exportziel auflösen
+  C->>C: Identität, Existenz und Abschluss erneut prüfen
   C-->>S: exakter Laufpfad
   S-->>R: privates absolutes Ziel
   R->>R: Existenz, Typ, Linkfreiheit prüfen
   R->>OS: sichtbarer nativer Öffnungsauftrag
   R-->>UI: handoff_confirmed (ohne Zielpfad)
 ```
+
+DS-086 trennt **Navigation** und **Verarbeitungszustand**. Start öffnet immer
+die Startseite, die Betriebsart ist zunächst leer. Weder Abschluss noch
+wiederhergestellte Auswahl wechseln automatisch die Ansicht. Der Verlauf
+enthält höchstens 20 Zeilen, neueste zuerst; die Daten werden dadurch nicht
+gelöscht. Historienaktionen verwenden nur die konkrete Laufkennung. Fortsetzung
+prüft erneut Journal, gespeicherten Zweck und die Sperre für einen aktiven
+Stapel; ein nicht mehr fortsetzbarer Eintrag startet niemals einen anderen Lauf.

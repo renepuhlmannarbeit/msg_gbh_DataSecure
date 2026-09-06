@@ -6,6 +6,7 @@ const { SafeError } = require('../runtime');
 const { TOKEN_RE, batchRoot, batchPath, safeRemoveWorkDirectory } = require('./batch-private-store');
 const { createBatchIntakeIntent, SUFFIX: INTAKE_SUFFIX } = require('./batch-intake-intent');
 const { releaseOwnedLock } = require('./batch-lock-release');
+const { batchReviewReady } = require('./batch-next-action');
 
 function createBatchRecovery(options = {}) {
   const io = options.io || fs;
@@ -134,9 +135,10 @@ function createBatchRecovery(options = {}) {
       ...(latest.schema === 'datasecure-batch/5' && latest.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')
         ? { termination_unconfirmed: true } : {}),
       selected_count: progress.batch_total,
-      completed_count: progress.released,
+      completed_count: progress.completed,
       failed_count: progress.stopped,
       review_count: progress.deferred_review,
+      review_ready: batchReviewReady(progress),
       result_count: visible.available === true ? visible.exported : 0,
       export_pending_count: visible.pending,
       ...(visible.completion_pending === true ? { completion_pending: true } : {}),
@@ -155,8 +157,13 @@ function createBatchRecovery(options = {}) {
   // state therefore share one immutable journal enumeration instead of two
   // synchronous full scans per poll. Malformed and expired rows remain
   // fail-closed and never escape into the renderer projection.
-  function productStatusSnapshot(productChannel) {
+  function productStatusSnapshot(productChannel, selection = {}) {
     if (!['plugin', 'standalone'].includes(productChannel)) throw new Error('PRODUCT_CHANNEL_INVALID');
+    // Identity is returned only to the private Standalone application adapter.
+    // Existing public/plugin projections remain content-free and newest-first.
+    const observeRun = productChannel === 'standalone' && selection.localUiSelection === true;
+    const selectedToken = observeRun && tokenPattern.test(String(selection.selectedBatchId || ''))
+      ? selection.selectedBatchId : null;
     const owner = readActiveLock();
     const ownerActive = Boolean(owner && processAlive(owner.pid));
     let processingActive = ownerActive;
@@ -166,12 +173,15 @@ function createBatchRecovery(options = {}) {
       return Object.freeze({
         recovery: Object.freeze({ recoverable_batches: 0, batches_awaiting_resume: 0,
           batches_awaiting_delivery: 0, batch_processing_active: processingActive }),
-        latest: null
+        latest: null,
+        ...(observeRun ? { observed_batch_id: null, observed_is_active: false, observed_recoverable: false } : {})
       });
     }
     const recoverable = [];
     let latest = null;
     let latestCreatedAt = -1;
+    let selected = null;
+    let activeProduct = null;
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
       const token = entry.name.slice(0, -'.json'.length);
@@ -188,12 +198,16 @@ function createBatchRecovery(options = {}) {
         }
         if (candidate.product_channel !== productChannel || nowMs() > expiresAt) continue;
         const createdAt = Date.parse(candidate.created_at);
-        if (!Number.isFinite(createdAt) || createdAt < latestCreatedAt) continue;
+        if (!Number.isFinite(createdAt)) continue;
+        if (observeRun && candidate.token === selectedToken) selected = candidate;
+        if (observeRun && live && (!activeProduct || createdAt > Date.parse(activeProduct.created_at))) activeProduct = candidate;
+        if (createdAt < latestCreatedAt) continue;
         if (createdAt === latestCreatedAt && latest && candidate.token.localeCompare(latest.token) <= 0) continue;
         latest = candidate;
         latestCreatedAt = createdAt;
       } catch { /* one unsafe journal cannot become public UI state */ }
     }
+    const observed = observeRun ? (activeProduct || (selectedToken ? selected : latest)) : latest;
     return Object.freeze({
       recovery: Object.freeze({
         recoverable_batches: recoverable.length,
@@ -202,7 +216,10 @@ function createBatchRecovery(options = {}) {
           candidate.items.some((item) => item.status === deliveryPendingStatus)).length,
         batch_processing_active: processingActive
       }),
-      latest: projectProductBatchStatus(latest)
+      latest: projectProductBatchStatus(observed),
+      ...(observeRun ? { observed_batch_id: observed?.token || null,
+        observed_is_active: Boolean(activeProduct),
+        observed_recoverable: Boolean(observed && recoverable.some((candidate) => candidate.token === observed.token)) } : {})
     });
   }
 

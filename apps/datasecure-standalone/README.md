@@ -22,8 +22,10 @@ sie. Neue Standalone-Stapel im Anonymisierungsmodus verwenden lesbare und bei Fo
 Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`; vorhandene v1-Stapel bleiben
 unverändert. Die Kennungen gelten nicht kundenübergreifend oder über neue Stapel.
 
-**Nur in Markdown umwandeln** ist der aktivierte Standard (DS-085): auswählen
-oder hineinziehen, starten, Ergebnisse öffnen. Unterstützt werden TXT, Markdown,
+DS-086: **Keine Verarbeitung ist vorausgewählt.** Auf der Startseite wählt der
+Anwender ausdrücklich **Nur in Markdown umwandeln** oder die Anonymisierung.
+Die reine Konvertierung (DS-085) folgt Auswahl oder Drag-and-drop, **Starten**
+und bewusstem Öffnen der Ergebnisse. Unterstützt werden TXT, Markdown,
 CSV, DOCX, XLSX, PPTX, Text-/Scan-PDF sowie PNG/JPEG/BMP. Konverter und lokale
 DE/EN-OCR sind im Paket enthalten; keine zusätzliche Installation ist nötig.
 Namen und Originalinhalte bleiben erhalten. `DataSecure-Markdown/Lauf-…` enthält
@@ -32,9 +34,12 @@ Hinweisen und Fehlern. Unvollständige Extraktion wird ohne Review gespeichert
 und ausdrücklich gekennzeichnet; gesperrte/defekte Dateien werden übersprungen.
 Die Anonymisierung bleibt eine gesonderte Betriebsart für TXT/MD/CSV/DOCX.
 
-Der Endnutzerablauf besitzt zwei Hauptansichten: **Verarbeiten** für Auswahl,
-Start und Fortschritt sowie **Ergebnisse** für den letzten vollständig
-sichtbaren Lauf. Lokale Öffnen-Aktionen bestätigen nur die Übergabe an den
+Der Endnutzerablauf besitzt drei Hauptansichten: **Start**, **Verarbeiten** für
+Auswahl, Start und Fortschritt sowie **Verlauf** für die 20 neuesten
+Verarbeitungen. Ergebnis-, Zuordnungs- und Fortsetzungsaktionen beziehen sich
+jeweils auf genau den gewählten Lauf. Abschluss und Wiederherstellung wechseln
+weder die Ansicht noch öffnen sie automatisch einen Ordner. Die Anzeigegrenze
+löscht keine älteren Ergebnisse. Lokale Öffnen-Aktionen bestätigen nur die Übergabe an den
 Dateimanager des Betriebssystems; diese Bestätigung erscheint getrennt vom
 fachlichen Laufstatus. Die Zuordnungsaktion markiert unter Windows und macOS
 die konkrete CSV-Datei, unter Linux öffnet sie deren Ordner.
@@ -53,3 +58,13 @@ einer Freigabe fehlen Windows-UAT sowie native Pakete und UATs auf macOS Intel
 und Apple Silicon; der Windows-Nachweis ersetzt sie nicht. Windows verwendet
 für den kleinen Pilot das vorhandene Microsoft Edge WebView2-Systemruntime und
 lädt es nicht selbst nach.
+
+Sieben transportneutrale Core-Verträge für Start, Zweck, nächste Aktion,
+Konverterkommunikation, Ergebnisgrad, Ergebnisprojektion und Fortschritt sind
+in beiden Produktprojektionen gebunden. Breitere Format-/Profil-/Recovery-
+Goldenabdeckung bleibt ein Refactoringziel. Für Anonymisierung auf macOS ist
+der einzelne AppKit-Sammelreviewadapter E0 implementiert; seine tatsächliche
+Bedienung auf Intel und Apple Silicon ist noch Zielhostabnahme. Reine Markdown-Konvertierung
+benötigt keinen PII-Sammelreview. Maßgeblich sind der
+[aktuelle Stand](../../docs/canonical/CURRENT_STATE.md) und das
+[kanonische Backlog](../../docs/canonical/BACKLOG.md).

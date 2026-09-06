@@ -601,8 +601,6 @@ fn rpc(
     presentation_generation: Option<u64>,
     processing_mode: Option<&str>,
 ) -> Result<Value, String> {
-    let started = Instant::now();
-    diagnostic_event("ipc_request_started", Some(action), "progress", None, None);
     let id = request_id();
     let request = private_request(
         &id,
@@ -612,6 +610,39 @@ fn rpc(
         presentation_generation,
         processing_mode,
     )?;
+    rpc_request(state, action, &id, request)
+}
+
+fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Value, String> {
+    if !matches!(
+        action,
+        "resolve_history_results" | "resolve_history_ledger" | "continue_history_batch"
+    ) || batch_id.len() != 64
+        || !batch_id
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    {
+        return Err("STANDALONE_HISTORY_INVALID".to_string());
+    }
+    Ok(
+        json!({ "schema": IPC_SCHEMA, "request_id": request_id, "action": action, "batch_id": batch_id }),
+    )
+}
+
+fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Value, String> {
+    let id = request_id();
+    let request = history_request(&id, action, batch_id)?;
+    rpc_request(state, action, &id, request)
+}
+
+fn rpc_request(
+    state: &DesktopState,
+    action: &str,
+    id: &str,
+    request: Value,
+) -> Result<Value, String> {
+    let started = Instant::now();
+    diagnostic_event("ipc_request_started", Some(action), "progress", None, None);
     let payload = serde_json::to_vec(&request).map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
     if payload.len() > MAX_FRAME_BYTES {
         return Err("STANDALONE_IPC_FAILED".to_string());
@@ -714,6 +745,10 @@ fn resolved_local_target(
     expected_kind: &str,
 ) -> Result<PathBuf, String> {
     let result = rpc(state, action, None, &[], None, None)?;
+    validate_local_target(result, expected_kind)
+}
+
+fn validate_local_target(result: Value, expected_kind: &str) -> Result<PathBuf, String> {
     let object = result
         .as_object()
         .filter(|value| value.len() == 4)
@@ -953,6 +988,79 @@ async fn get_ui_context(state: State<'_, DesktopState>) -> Result<Value, String>
     blocking_rpc(state.inner().clone(), "get_ui_context").await
 }
 #[tauri::command]
+async fn get_run_history(state: State<'_, DesktopState>) -> Result<Value, String> {
+    blocking_rpc(state.inner().clone(), "get_run_history").await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn continue_history_batch(
+    state: State<'_, DesktopState>,
+    batch_id: String,
+) -> Result<Value, String> {
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        history_rpc(&owned, "continue_history_batch", &batch_id)
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+
+async fn open_history_target(
+    state: DesktopState,
+    batch_id: String,
+    action: &'static str,
+    resolve_action: &'static str,
+    kind: &'static str,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let target = history_rpc(&state, resolve_action, &batch_id)
+            .and_then(|result| validate_local_target(result, kind))
+            .inspect_err(|code| {
+                diagnostic_event(
+                    "local_target_validation_failed",
+                    Some(action),
+                    "failed",
+                    Some(code),
+                    None,
+                )
+            })?;
+        open_local_target(&target, kind, action)
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn open_history_results(
+    state: State<'_, DesktopState>,
+    batch_id: String,
+) -> Result<Value, String> {
+    open_history_target(
+        state.inner().clone(),
+        batch_id,
+        "open_history_results",
+        "resolve_history_results",
+        "directory",
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn open_history_ledger(
+    state: State<'_, DesktopState>,
+    batch_id: String,
+) -> Result<Value, String> {
+    open_history_target(
+        state.inner().clone(),
+        batch_id,
+        "open_history_ledger",
+        "resolve_history_ledger",
+        "file",
+    )
+    .await
+}
+#[tauri::command]
 async fn ack_terminal_presented(
     state: State<'_, DesktopState>,
     presentation_generation: u64,
@@ -1155,6 +1263,10 @@ fn main() {
             start_admitted_batch,
             get_public_state,
             get_ui_context,
+            get_run_history,
+            continue_history_batch,
+            open_history_results,
+            open_history_ledger,
             ack_terminal_presented,
             continue_current_batch,
             configure_results,
@@ -1171,6 +1283,38 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_requests_bind_only_exact_batch_ids_without_paths_or_modes() {
+        let id = "a".repeat(16);
+        let batch = "b".repeat(64);
+        for action in [
+            "resolve_history_results",
+            "resolve_history_ledger",
+            "continue_history_batch",
+        ] {
+            let value = history_request(&id, action, &batch).expect("valid history action");
+            assert_eq!(value.as_object().unwrap().len(), 4);
+            assert_eq!(value["batch_id"], batch);
+            assert_eq!(value["action"], action);
+            assert!(value.get("source_paths").is_none());
+            assert!(value.get("processing_mode").is_none());
+            for invalid in [
+                "".to_string(),
+                "b".repeat(63),
+                "B".repeat(64),
+                "g".repeat(64),
+                "../latest".to_string(),
+            ] {
+                assert_eq!(
+                    history_request(&id, action, &invalid).unwrap_err(),
+                    "STANDALONE_HISTORY_INVALID"
+                );
+            }
+        }
+        assert!(history_request(&id, "get_run_history", &batch).is_err());
+        assert!(history_request(&id, "start_admitted_batch", &batch).is_err());
+    }
 
     #[test]
     fn support_trace_requires_the_exact_explicit_opt_in() {

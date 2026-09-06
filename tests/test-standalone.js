@@ -100,7 +100,7 @@ test('CLI accepts only automatic file or folder processing', () => {
 test('Standalone projects engine state into a small product-neutral status', () => {
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     latestProductBatchStatus: () => ({
-      selected_count: 5, completed_count: 3, failed_count: 0, review_count: 2,
+      selected_count: 5, completed_count: 3, failed_count: 0, review_count: 2, review_ready: true,
       result_count: 3, export_pending_count: 0, processing: false, resumable: false, complete: false
     })
   }) });
@@ -132,7 +132,7 @@ test('Standalone status uses the latest product batch instead of historical glob
     lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false,
       batch_processing_active: false }),
     latestProductBatchStatus: () => ({
-      selected_count: 4, completed_count: 2, failed_count: 1, review_count: 1,
+      selected_count: 4, completed_count: 3, failed_count: 1, review_count: 1, review_ready: true,
       result_count: 2, processing: false, resumable: false, complete: false
     })
   }) });
@@ -213,7 +213,7 @@ test('Standalone separates pending completion metadata from document counts in m
     let pending = true;
     const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
       latestProductBatchStatus: () => ({
-        selected_count: released + 1, completed_count: released, failed_count: 1, review_count: 0,
+        selected_count: released + 1, completed_count: released + 1, failed_count: 1, review_count: 0,
         result_count: pending ? 0 : released, export_pending_count: 0,
         processing: false, resumable: false, complete: true, completion_available: !pending,
         ...(pending ? { completion_pending: true } : {})
@@ -222,7 +222,7 @@ test('Standalone separates pending completion metadata from document counts in m
     const status = service.status();
     assert.strictEqual(status.state, 'export_pending');
     assert.strictEqual(status.completion_pending, true);
-    assert.strictEqual(status.completed_count, released);
+    assert.strictEqual(status.completed_count, released + 1);
     assert.strictEqual(status.export_pending_count, 0, 'no fabricated document debt');
     assert.strictEqual(status.ledger_available, false);
     assert.strictEqual(status.results_available, false);
@@ -251,7 +251,7 @@ test('Standalone exposes an awaiting-resume batch even before recovery counting 
 test('Standalone reports a completed all-stopped batch instead of silently returning to ready', () => {
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     latestProductBatchStatus: () => ({
-      selected_count: 2, completed_count: 0, failed_count: 2, review_count: 0,
+      selected_count: 2, completed_count: 2, failed_count: 2, review_count: 0,
       result_count: 0, export_pending_count: 0, processing: false, resumable: false, complete: true
     })
   }) });
@@ -300,7 +300,7 @@ test('Standalone source manifest is a separate offline product contract', () => 
   assert.deepStrictEqual(manifest.current_formats, manifest.formats_by_processing_mode['markdown-only']);
   assert.deepStrictEqual(manifest.formats_by_processing_mode['markdown-and-anonymize'], ['txt', 'md', 'csv', 'docx']);
   assert.deepStrictEqual(manifest.current_formats, ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'scan_pdf', 'png', 'jpeg', 'bmp']);
-  assert.strictEqual(manifest.default_processing_mode, 'markdown-only');
+  assert.strictEqual(manifest.default_processing_mode, null, 'the user explicitly chooses a core function');
   assert.deepStrictEqual(manifest.desktop_targets, [
     'windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64-glibc'
   ]);
@@ -335,13 +335,15 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.ok(contract.forbidden_payload_fields.includes('raw_content'));
   assert.deepStrictEqual(contract.commands, [
     'select_files', 'select_folder', 'cancel_admission', 'start_admitted_batch',
-    'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
+    'get_public_state', 'get_ui_context', 'get_run_history', 'open_history_results', 'open_history_ledger', 'continue_history_batch',
+    'ack_terminal_presented', 'continue_current_batch', 'configure_results',
     'open_current_results', 'open_local_ledger', 'open_diagnostic_folder', 'shutdown'
   ]);
   assert.deepStrictEqual([...PRIVATE_ACTIONS], [
     'admit_selected_sources', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-    'resolve_current_results', 'resolve_local_ledger', 'shutdown'
+    'resolve_current_results', 'resolve_local_ledger', 'get_run_history',
+    'resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'shutdown'
   ]);
 });
 
@@ -350,8 +352,8 @@ test('Standalone exposes the private ledger only for terminal visible outcomes',
     '../apps/datasecure-standalone/frontend/app.js'), 'utf8');
   assert.match(source,
     /const ledgerAvailable = state\.results_available === true \|\|[\s\S]{0,100}state\.state === 'completed_without_results' && state\.ledger_available === true/u);
-  assert.match(source, /visible\('ledger', ledgerAvailable\)/u);
-  assert.doesNotMatch(source, /visible\('ledger',[^^\n]*failed_count/u);
+  assert.match(source, /command: 'open_history_ledger'[^\n]*available: entry\.ledger_available === true/u);
+  assert.doesNotMatch(source, /command: 'open_history_ledger'[^\n]*available:.*failed_count/u);
 });
 
 test('private desktop IPC is framed, bounded and independent of line endings', () => {
@@ -398,6 +400,21 @@ test('Standalone runtime source contains no MCP or JSON-RPC transport', () => {
   const runtime = ['application-service.js', 'cli.js'].map((name) => fs.readFileSync(path.join(directory, name), 'utf8')).join('\n');
   assert.doesNotMatch(runtime, /tools\/call|protocolVersion|jsonrpc|rpc-client|mcp-server/iu);
   assert.doesNotMatch(runtime, /legacy-input-migration/u);
+});
+
+test('history IPC binds exact opaque run IDs and refuses paths, mode changes and extra arguments', () => {
+  const base = { schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16) };
+  for (const action of ['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch']) {
+    const valid = { ...base, action, batch_id: 'b'.repeat(64) };
+    assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(valid)), [valid]);
+    for (const batch_id of [undefined, null, '', 'b'.repeat(63), 'B'.repeat(64), '../latest', '/tmp/result', 1, []]) {
+      assert.throws(() => encodeFrame({ ...valid, batch_id }), { code: 'STANDALONE_HISTORY_INVALID' });
+    }
+    assert.throws(() => encodeFrame({ ...valid, processing_mode: 'markdown-only' }), { code: 'DESKTOP_IPC_FIELD_INVALID' });
+    assert.throws(() => encodeFrame({ ...valid, source_paths: ['/tmp/result'] }), { code: 'DESKTOP_IPC_SOURCE_UNEXPECTED' });
+  }
+  assert.throws(() => encodeFrame({ ...base, action: 'get_run_history', batch_id: 'b'.repeat(64) }),
+    { code: 'DESKTOP_IPC_FIELD_INVALID' });
 });
 
 test('desktop start requires exactly one supported purpose; continue and other actions reject purpose fields', () => {
@@ -649,7 +666,8 @@ async function rejectedContinuationCase() {
     const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
       continueMostRecentBatch: () => ({
         ok: true, batch_token: 'c'.repeat(64), awaiting_local_review: review,
-        deferred_review: review ? 1 : 0
+        batch_total: 1, completed: 0, deferred_review: review ? 1 : 0, remaining: review ? 0 : 1, retryable: 0,
+        delivery_pending: 0, mapping_pending: 0, processing: 0
       }),
       startLocalBatchExecutor: () => {
         batchStarts += 1;
@@ -670,7 +688,8 @@ async function unconfirmedContinuationCase() {
   for (const acknowledgement of [undefined, Promise.reject(new Error('private'))]) {
     const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
       continueMostRecentBatch: () => ({
-        ok: true, batch_token: 'c'.repeat(64), awaiting_local_review: false, deferred_review: 0
+        ok: true, batch_token: 'c'.repeat(64), batch_total: 1, completed: 0,
+        deferred_review: 0, remaining: 1, retryable: 0, delivery_pending: 0, mapping_pending: 0, processing: 0
       }),
       startLocalBatchExecutor: () => ({
         ok: true, local_processing_started: true, ipcAcknowledgement: acknowledgement

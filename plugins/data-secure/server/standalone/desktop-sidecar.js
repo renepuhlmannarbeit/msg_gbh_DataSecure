@@ -83,7 +83,8 @@ function publicError(requestId, error) {
     'DURABLE_RUNTIME_FAILED', 'STARTUP_FAILED',
     'STANDALONE_RESULT_ROOT_UNSAFE', 'STANDALONE_RESULT_OPEN_FAILED',
     'STANDALONE_RESULTS_MISSING',
-    'STANDALONE_LEDGER_MISSING', 'STANDALONE_LEDGER_OPEN_FAILED'
+    'STANDALONE_LEDGER_MISSING', 'STANDALONE_LEDGER_OPEN_FAILED',
+    'STANDALONE_HISTORY_INVALID', 'STANDALONE_HISTORY_MISSING', 'STANDALONE_HISTORY_UNAVAILABLE'
   ]);
   return {
     schema: 'datasecure-standalone-private-response/1', request_id: requestId, ok: false,
@@ -101,15 +102,23 @@ async function dispatch(message) {
     case 'start_admitted_batch': return service.startAdmittedBatch({ processingMode: message.processing_mode });
     case 'get_public_state': return service.status();
     case 'get_ui_context': return service.uiContext();
+    case 'get_run_history': return service.history();
+    case 'continue_history_batch': return service.continueHistoryBatch(message.batch_id);
     case 'ack_terminal_presented': return service.acknowledgeTerminalPresented(message.presentation_generation);
     case 'continue_current_batch': return service.continueCurrentBatch();
     case 'configure_results': return service.configureResults({ path: message.source_paths[0] });
     case 'resolve_current_results':
-    case 'resolve_local_ledger': {
+    case 'resolve_local_ledger':
+    case 'resolve_history_results':
+    case 'resolve_history_ledger': {
       diagnosticEvent('local_target_requested', { action: message.action });
       try {
-        const result = message.action === 'resolve_current_results'
-          ? service.resolveResults() : service.resolveLedger();
+        const result = message.action === 'resolve_history_results'
+          ? service.resolveHistoryResults(message.batch_id)
+          : message.action === 'resolve_history_ledger'
+            ? service.resolveHistoryLedger(message.batch_id)
+            : message.action === 'resolve_current_results'
+              ? service.resolveResults() : service.resolveLedger();
         diagnosticEvent('local_target_resolved', { action: message.action, outcome: 'ready' });
         return result;
       } catch (error) {

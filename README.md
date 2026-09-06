@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC108
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC109
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -103,8 +103,11 @@ gleichbleibende Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`. Diese
 Nummern gelten nur im jeweiligen Stapel; bestehende v1-Ausgaben und das
 Claude-Plugin behalten ihr bisheriges Kennungsformat.
 
-**Nur in Markdown umwandeln** ist der Standalone-Standard: Dateien auswählen
-oder hineinziehen, **Starten**, Ergebnisse öffnen. TXT, Markdown, CSV, DOCX,
+Standalone öffnet eine **Startseite** mit beiden Funktionen, ohne vorausgewählte
+Betriebsart. **Nur in Markdown umwandeln** wählen, Dateien auswählen oder
+hineinziehen, **Starten**. Der **Verlauf** zeigt die letzten 20 Verarbeitungen
+mit jeweils eigenen Aktionen für Ergebnisse, Zuordnung und mögliche Fortsetzung.
+Ein Abschluss wechselt die Ansicht nicht automatisch. TXT, Markdown, CSV, DOCX,
 XLSX, PPTX, Text-PDF, Scan-PDF und PNG/JPEG/BMP werden lokal verarbeitet.
 Die App bringt Konverter und deutsche/englische OCR-Modelle mit. Ergebnisse
 und `DataSecure-Zuordnung.csv` liegen in `DataSecure-Markdown/Lauf-…` unter dem

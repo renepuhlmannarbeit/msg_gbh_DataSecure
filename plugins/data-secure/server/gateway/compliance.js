@@ -19,7 +19,8 @@ function anonymizeMarkdown(raw, profile, options = {}) {
   let strongPersonAnchor = false;
   // A batch-scoped registry is deliberately an internal dependency. The MCP
   // schema never accepts one and this function neither persists nor creates a
-  // secret: the later native secret-store gate owns that responsibility.
+  // secret: the batch-owned pseudonym context supplies that binding. No
+  // platform keyring or future secret-store gate is part of this code path.
   const anonymizeOptions = options.registry ? { registry: options.registry } : undefined;
 
   for (let pass = 1; pass <= MAX_PASSES; pass++) {

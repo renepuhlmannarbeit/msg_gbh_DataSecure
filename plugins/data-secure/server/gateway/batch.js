@@ -105,6 +105,10 @@ function batchTtlMs() {
 }
 
 const { writeState, readState, readStateForMaintenance, removeState } = createBatchJournalStore({
+  productChannel: String(process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin'),
+  onStateWritten: (state) => {
+    if (state.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneState(state);
+  },
   assertZeroDayWorkAvailable(state) {
     if (state.zero_day_work_ended !== true && !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid)) {
       throw new SafeError('Die Aufbewahrung der privaten Arbeitskopien ist nach dem Laufende abgelaufen. Bitte die Originaldateien neu auswählen.');
@@ -330,12 +334,14 @@ const { discardIncompleteBatches } = createBatchDiscard({
   removeState
 });
 
-const { resumeBatch, continueMostRecentBatch } = createBatchContinuation({
+const { resumeBatch, continueMostRecentBatch, continueStandaloneBatch } = createBatchContinuation({
   SafeError,
+  liveLocalExecutor,
   active,
   acquireActiveLock,
   releaseActiveLock,
   readState,
+  readStateForMaintenance,
   writeState,
   assertLocalExecutorAccess,
   reconcilePublishedItems,
@@ -348,6 +354,24 @@ const { resumeBatch, continueMostRecentBatch } = createBatchContinuation({
   mappingPendingStatus: MAPPING_PENDING,
   preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING
 });
+
+function readStandaloneHistoryStates() {
+  const states = [];
+  let entries;
+  try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); } catch { return states; }
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^[a-f0-9]{64}\.json$/u.test(entry.name)) continue;
+    try {
+      const state = readStateForMaintenance(entry.name.slice(0, -5));
+      if (state.product_channel === 'standalone') states.push(state);
+    } catch { /* read-only: damaged or unsupported journals remain untouched */ }
+  }
+  return states;
+}
+
+function standaloneRecoverableStates() {
+  return recoverableBatchStates().filter((state) => state.product_channel === 'standalone');
+}
 
 const { invalidateUnpublishedBatchCopies } = createBatchSnapshotInvalidation({
   appendMapping,
@@ -634,4 +658,4 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { readStandaloneHistoryStates, standaloneRecoverableStates, continueStandaloneBatch, readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

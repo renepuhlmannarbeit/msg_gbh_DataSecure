@@ -2,8 +2,8 @@
 
 const invoke = window.__TAURI__.core.invoke;
 const byId = (id) => document.getElementById(id);
-const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue', 'results', 'ledger',
-  'new-batch', 'configure-results', 'diagnostics', 'processing-mode'];
+const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue',
+  'new-batch', 'configure-results', 'diagnostics', 'processing-mode', 'task-markdown', 'task-anonymize'];
 const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
   STANDALONE_ENGINE_NOT_READY: 'Die lokale Verarbeitung ist noch nicht bereit.',
@@ -41,8 +41,7 @@ let admissionGeneration = 0;
 let refreshInFlight = false;
 let refreshTimer;
 let acknowledgedPresentationGeneration = null;
-let activeView = 'process';
-let viewChosenByUser = false;
+let activeView = 'home';
 let lastPublicState = null;
 let lastTerminalContextKey = null;
 let operationInFlight = false;
@@ -50,12 +49,22 @@ let foregroundOperationInFlight = false;
 let nativeDropInFlight = false;
 let unlistenNativeDrop = null;
 let pageClosed = false;
-let lastProcessingMode = 'markdown-only';
+let lastProcessingMode = null;
+let historyRequestGeneration = 0;
+let historyDirty = true;
+let historyStateKey = null;
+let historyButtons = [];
+let lastHistorySnapshot = null;
+let historyRenderGeneration = 0;
+const views = ['home', 'process', 'results'];
+const validMode = (mode) => ['markdown-only', 'markdown-and-anonymize'].includes(mode);
 
 function renderModeHelp(mode) {
   const convert = mode === 'markdown-only';
   const help = byId('processing-mode-help');
-  if (help) help.textContent = convert
+  if (help) help.textContent = !validMode(mode)
+    ? 'Wähle aus, ob Originalinhalte erhalten bleiben oder erkannte Identifikatoren ersetzt werden sollen.'
+    : convert
     ? 'Nicht anonymisiert: Namen und andere Originalinhalte bleiben erhalten. Bei OCR oder grafischen Inhalten können Auslassungen entstehen; Hinweise stehen im Ergebnis.'
     : 'Namen und weitere erkannte Identifikatoren werden ersetzt. Dieser Modus unterstützt TXT, Markdown, CSV und DOCX.';
 }
@@ -63,7 +72,7 @@ function renderModeHelp(mode) {
 function busy(value) {
   // A foreground operation can replace the current selection or run while a
   // previous status/context request is still in flight. Invalidate that reply.
-  if (value) admissionGeneration += 1;
+  if (value) { admissionGeneration += 1; invalidateHistory(); }
   foregroundOperationInFlight = value;
   applyBusyState();
 }
@@ -72,11 +81,21 @@ function applyBusyState() {
   controls.forEach((id) => { byId(id).disabled = operationInFlight; });
   updateModeAvailability();
   updateDropAvailability();
+  updateHistoryAvailability();
+  if (!operationInFlight && activeView === 'results' && historyDirty) refreshHistory();
 }
 function updateModeAvailability() {
   // The selector describes the next admission, never an active/recoverable run.
   byId('processing-mode').disabled = operationInFlight || (!admitted &&
     !['ready', 'results_available', 'completed_without_results'].includes(lastPublicState));
+  const needsMode = admitted && !validMode(byId('processing-mode').value);
+  byId('start').disabled = operationInFlight || !admitted || needsMode;
+  byId('start-help').hidden = !needsMode;
+  byId('task-markdown').disabled = byId('processing-mode').disabled;
+  byId('task-anonymize').disabled = byId('processing-mode').disabled;
+  const reason = byId('processing-mode').disabled ? 'Während der aktuellen Verarbeitung ist keine neue Aufgabe verfügbar.' : '';
+  byId('task-markdown').title = reason;
+  byId('task-anonymize').title = reason;
 }
 function updateDropAvailability() {
   const available = !operationInFlight && !admitted &&
@@ -97,16 +116,140 @@ function actionFeedback(text, error = false) {
   target.hidden = false;
   target.className = `action-feedback${error ? ' error' : ''}`;
 }
-function switchView(view, chosenByUser = false) {
-  if (chosenByUser) viewChosenByUser = true;
-  activeView = view === 'results' ? 'results' : 'process';
-  byId('process-view').hidden = activeView !== 'process';
-  byId('results-view').hidden = activeView !== 'results';
-  for (const name of ['process', 'results']) {
+function switchView(view) {
+  activeView = views.includes(view) ? view : 'home';
+  for (const name of views) {
     const selected = name === activeView;
+    byId(`${name}-view`).hidden = !selected;
     const tab = byId(`tab-${name}`);
     tab.className = `tab${selected ? ' active' : ''}`;
     tab.setAttribute('aria-selected', String(selected));
+    tab.setAttribute('tabindex', selected ? '0' : '-1');
+  }
+  if (activeView === 'results') refreshHistory(true);
+}
+
+function invalidateHistory() {
+  historyRequestGeneration += 1;
+  historyDirty = true;
+  updateHistoryAvailability();
+}
+function updateHistoryAvailability() {
+  for (const item of historyButtons) {
+    const blocked = item.resume === true && (admitted || ['preparing', 'processing'].includes(lastPublicState));
+    item.button.disabled = operationInFlight || historyDirty || !item.available || blocked;
+    item.button.title = !item.available ? item.reason : blocked
+      ? 'Bitte die vorbereitete Auswahl oder den laufenden Stapel zuerst abschließen.'
+      : operationInFlight || historyDirty ? 'Die lokale Übersicht wird aktualisiert.' : '';
+  }
+}
+function historyCell(row, value, tag = 'td') {
+  const cell = document.createElement(tag);
+  cell.textContent = String(value);
+  if (tag === 'th') cell.setAttribute('scope', 'row');
+  row.appendChild(cell);
+  return cell;
+}
+function renderHistory(entries) {
+  const snapshot = JSON.stringify(entries.slice(0, 20));
+  if (snapshot === lastHistorySnapshot) {
+    byId('history-feedback').textContent = historyButtons.length > 0 ? 'Bis zu 20 zuletzt angelegte Läufe. Nicht verfügbare Aktionen sind deaktiviert.' : 'Noch keine lokalen Läufe vorhanden.';
+    updateHistoryAvailability();
+    return;
+  }
+  lastHistorySnapshot = snapshot;
+  const rendered = ++historyRenderGeneration;
+  const body = byId('history-body');
+  body.replaceChildren();
+  historyButtons = [];
+  const states = { ready: 'Bereit', preparing: 'Vorbereitung', processing: 'Läuft',
+    review_required: 'Prüfung nötig', stopped: 'Unterbrochen', export_pending: 'Bereitstellung offen',
+    results_available: 'Abgeschlossen', completed_without_results: 'Ohne Ergebnisse', blocked: 'Nicht bereit',
+    completed: 'Abgeschlossen', failed: 'Fehlgeschlagen', interrupted: 'Unterbrochen' };
+  const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  for (const entry of entries.slice(0, 20)) {
+    if (!entry || typeof entry.batch_id !== 'string' || !entry.batch_id) continue;
+    const row = document.createElement('tr');
+    const runLabel = `Lauf ${entry.batch_id.slice(-8)}`;
+    const date = new Date(entry.created_at);
+    const heading = historyCell(row, Number.isNaN(date.getTime()) ? 'Datum unbekannt'
+      : date.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }), 'th');
+    const identifier = document.createElement('span');
+    identifier.className = 'run-id';
+    identifier.textContent = runLabel;
+    heading.appendChild(identifier);
+    historyCell(row, entry.processing_mode === 'markdown-only' ? 'Markdown · Originalinhalte'
+      : entry.processing_mode === 'markdown-and-anonymize' ? 'Markdown + anonymisieren' : 'Unbekannt');
+    historyCell(row, `${count(entry.selected_count)} ausgewählt · ${count(entry.result_count)} Ergebnisse · ${count(entry.failed_count)} fehlgeschlagen`);
+    historyCell(row, states[entry.status] || 'Status unbekannt');
+    const actions = historyCell(row, '');
+    actions.className = 'history-actions';
+    const feedback = document.createElement('p');
+    feedback.className = 'history-action-feedback';
+    feedback.setAttribute('role', 'status');
+    feedback.hidden = true;
+    for (const action of [
+      { command: 'open_history_results', label: 'Ergebnisordner', available: entry.results_available === true, reason: 'Kein Ergebnisordner verfügbar.' },
+      { command: 'open_history_ledger', label: 'Zuordnung', available: entry.ledger_available === true, reason: 'Keine Zuordnung verfügbar.' },
+      { command: 'continue_history_batch', label: 'Fortsetzen', available: entry.resumable === true, reason: 'Keine Fortsetzung verfügbar.', resume: true }
+    ]) {
+      const wrapper = document.createElement('div');
+      const button = document.createElement('button');
+      button.textContent = action.label;
+      button.setAttribute('aria-label', `${action.label} · ${runLabel}`);
+      button.addEventListener('click', async () => {
+        if (button.disabled || pageClosed || rendered !== historyRenderGeneration) return;
+        feedback.hidden = false;
+        feedback.textContent = `${action.label} wird angefordert …`;
+        if (action.resume) {
+          const result = await call(action.command, { batchId: entry.batch_id });
+          feedback.textContent = result?.ok === true ? 'Fortsetzung bestätigt.' : 'Fortsetzung nicht möglich. Bitte den aktuellen Status prüfen.';
+          if (result?.ok === true) { actionFeedback('Die Fortsetzung wurde angefordert. Der aktuelle Status wird geprüft.'); await refresh(); }
+        } else {
+          const result = await openLocal(action.command, action.label, { batchId: entry.batch_id });
+          feedback.textContent = result?.handoff_confirmed === true
+            ? `${action.label}: Öffnen an das Betriebssystem übergeben.`
+            : `${action.label} konnte nicht geöffnet werden. Bitte den Verlauf aktualisieren.`;
+        }
+      });
+      wrapper.appendChild(button);
+      if (!action.available) {
+        const reason = document.createElement('span');
+        reason.className = 'action-reason';
+        reason.textContent = action.reason;
+        wrapper.appendChild(reason);
+      }
+      actions.appendChild(wrapper);
+      historyButtons.push({ ...action, button });
+    }
+    actions.appendChild(feedback);
+    body.appendChild(row);
+  }
+  const hasRows = historyButtons.length > 0;
+  byId('history-table').hidden = !hasRows;
+  byId('history-feedback').textContent = hasRows ? 'Bis zu 20 zuletzt angelegte Läufe. Nicht verfügbare Aktionen sind deaktiviert.' : 'Noch keine lokalen Läufe vorhanden.';
+  updateHistoryAvailability();
+}
+async function refreshHistory(force = false) {
+  if (pageClosed || operationInFlight || (!force && !historyDirty)) return;
+  const request = ++historyRequestGeneration;
+  const generation = admissionGeneration;
+  historyDirty = true;
+  updateHistoryAvailability();
+  byId('history-feedback').textContent = 'Lokaler Verlauf wird geladen …';
+  byId('history-table').setAttribute('aria-busy', 'true');
+  try {
+    const result = await invoke('get_run_history');
+    if (request !== historyRequestGeneration || generation !== admissionGeneration || operationInFlight || pageClosed) return;
+    if (result?.ok !== true || result.local_ui_only !== true || result.external_disclosure !== false || !Array.isArray(result.entries)) throw 'STANDALONE_HISTORY_UNAVAILABLE';
+    historyDirty = false;
+    renderHistory(result.entries);
+  } catch {
+    if (request === historyRequestGeneration && generation === admissionGeneration && !pageClosed) {
+      byId('history-feedback').textContent = 'Der lokale Verlauf konnte nicht geladen werden. Öffne den Verlauf erneut, um es nochmals zu versuchen.';
+    }
+  } finally {
+    if (request === historyRequestGeneration) byId('history-table').setAttribute('aria-busy', 'false');
   }
 }
 function summarize(values, emptyText) {
@@ -151,7 +294,9 @@ function showError(error) {
 function resetAdmissionUi() {
   admitted = false;
   admissionGeneration += 1;
+  historyStateKey = null;
   byId('summary').hidden = true;
+  byId('home-selection').hidden = true;
   visible('select-files', true);
   visible('select-folder', true);
   visible('start', false);
@@ -164,7 +309,7 @@ function renderAdmission(result) {
   admissionGeneration += 1;
   renderUiContext(result.ui_context);
   admitted = true;
-  switchView('process', true);
+  byId('home-selection').hidden = false;
   const size = Number.isSafeInteger(result.total_bytes) ? ` · ${Math.ceil(result.total_bytes / 1024)} KB` : '';
   byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size} · vollständig lokal`;
   byId('summary').hidden = false;
@@ -183,15 +328,15 @@ function handleNativeDrop(event) {
     if (updateDropAvailability()) byId('drop-zone').className = 'drop-zone active';
   } else if (payload.phase === 'checking') {
     admissionGeneration += 1;
+    invalidateHistory();
     nativeDropInFlight = true;
     applyBusyState();
-    switchView('process', true);
     actionFeedback('Die hineingezogene Auswahl wird lokal geprüft …');
   } else if (payload.phase === 'accepted') {
     nativeDropInFlight = false;
     renderAdmission(payload.result);
     applyBusyState();
-    byId('start').focus();
+    if (activeView === 'process') byId(validMode(byId('processing-mode').value) ? 'start' : 'processing-mode').focus();
   } else if (payload.phase === 'failed' || payload.phase === 'rejected') {
     if (payload.phase === 'failed' && nativeDropInFlight) {
       nativeDropInFlight = false;
@@ -231,12 +376,12 @@ async function call(command, args) {
   finally { busy(false); }
 }
 
-async function openLocal(command, label) {
+async function openLocal(command, label, args) {
   if (operationInFlight) return null;
   actionFeedback(`${label} wird an das Betriebssystem übergeben …`);
   busy(true);
   try {
-    const result = await invoke(command);
+    const result = await invoke(command, args);
     if (result?.handoff_confirmed !== true) throw 'STANDALONE_OPERATION_FAILED';
     actionFeedback(`${label} wurde an das Betriebssystem zum Öffnen übergeben.`);
     return result;
@@ -247,11 +392,35 @@ async function openLocal(command, label) {
   } finally { busy(false); }
 }
 
-byId('tab-process').addEventListener('click', () => switchView('process', true));
-byId('tab-results').addEventListener('click', () => switchView('results', true));
+for (const [index, name] of views.entries()) {
+  const tab = byId(`tab-${name}`);
+  tab.addEventListener('click', () => switchView(name));
+  tab.addEventListener('keydown', (event) => {
+    let target;
+    if (event.key === 'ArrowRight') target = (index + 1) % views.length;
+    else if (event.key === 'ArrowLeft') target = (index + views.length - 1) % views.length;
+    else if (event.key === 'Home') target = 0;
+    else if (event.key === 'End') target = views.length - 1;
+    else return;
+    event.preventDefault();
+    // Manual activation keeps potentially slow local history reads out of arrow navigation.
+    for (const [position, view] of views.entries()) byId(`tab-${view}`).setAttribute('tabindex', position === target ? '0' : '-1');
+    byId(`tab-${views[target]}`).focus();
+  });
+}
+for (const [id, mode] of [['task-markdown', 'markdown-only'], ['task-anonymize', 'markdown-and-anonymize']]) {
+  byId(id).addEventListener('click', () => {
+    if (byId(id).disabled) return;
+    byId('processing-mode').value = mode;
+    renderModeHelp(mode);
+    updateModeAvailability();
+    switchView('process');
+    byId(admitted ? 'start' : 'select-files').focus();
+  });
+}
 byId('select-files').addEventListener('click', () => choose('select_files'));
 byId('select-folder').addEventListener('click', () => choose('select_folder'));
-byId('processing-mode').addEventListener('change', () => renderModeHelp(byId('processing-mode').value));
+byId('processing-mode').addEventListener('change', () => { renderModeHelp(byId('processing-mode').value); updateModeAvailability(); });
 byId('cancel').addEventListener('click', async () => {
   if (!await call('cancel_admission')) return;
   resetAdmissionUi();
@@ -263,22 +432,31 @@ byId('cancel').addEventListener('click', async () => {
 byId('start').addEventListener('click', async () => {
   if (!admitted || operationInFlight) return;
   const processingMode = byId('processing-mode').value;
+  if (!validMode(processingMode)) {
+    actionFeedback('Bitte zuerst eine Aufgabe auswählen. Die Dateiauswahl bleibt erhalten.', true);
+    updateModeAvailability();
+    return;
+  }
   if (!await call('start_admitted_batch', { processingMode })) return;
   lastProcessingMode = processingMode;
-  viewChosenByUser = false;
   admitted = false; admissionGeneration += 1; byId('summary').hidden = true;
+  historyStateKey = null;
+  byId('home-selection').hidden = true;
   lastPublicState = 'preparing';
   updateModeAvailability();
   status('Stapel wird vorbereitet', 'DataSecure erstellt den wiederaufnehmbaren lokalen Zwischenstand.');
   visible('start', false); visible('cancel', false);
   scheduleRefresh(0);
 });
-byId('continue').addEventListener('click', async () => { if (await call('continue_current_batch')) refresh(); });
-byId('results').addEventListener('click', () => openLocal('open_current_results', 'Der Ergebnisordner'));
-byId('ledger').addEventListener('click', () => openLocal('open_local_ledger', 'Die Zuordnungsdatei'));
+byId('continue').addEventListener('click', () => switchView('results'));
 byId('new-batch').addEventListener('click', () => {
-  switchView('process', true);
-  actionFeedback('Wähle Dateien oder einen Ordner für den nächsten Stapel aus.');
+  if (!byId('processing-mode').disabled) {
+    byId('processing-mode').value = '';
+    renderModeHelp('');
+    updateModeAvailability();
+  }
+  switchView('home');
+  byId('tab-home').focus();
 });
 byId('diagnostics').addEventListener('click', async () => {
   try {
@@ -342,12 +520,17 @@ async function refresh() {
     } else lastTerminalContextKey = null;
     if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
     lastPublicState = state.state;
+    const terminalHistory = !['preparing', 'processing'].includes(state.state);
+    const nextHistoryKey = JSON.stringify([state.state, state.presentation_generation,
+      terminalHistory ? state.result_count : null, terminalHistory ? state.failed_count : null,
+      state.results_available, state.ledger_available, state.resumable_count]);
+    if (historyStateKey !== nextHistoryKey) {
+      historyStateKey = nextHistoryKey;
+      invalidateHistory();
+      if (activeView === 'results') refreshHistory();
+    }
     lastProcessingMode = state.processing_mode || 'markdown-and-anonymize';
     const converting = lastProcessingMode === 'markdown-only';
-    if (['processing', 'review_required', 'stopped', 'export_pending'].includes(state.state)) {
-      byId('processing-mode').value = lastProcessingMode;
-      renderModeHelp(lastProcessingMode);
-    }
     if (byId('result-label')) byId('result-label').textContent = converting
       ? 'Markdown-Dateien im letzten abgeschlossenen Lauf – nicht anonymisiert'
       : 'Anonymisierte Ergebnisse im letzten abgeschlossenen Lauf';
@@ -367,8 +550,6 @@ async function refresh() {
     updateDropAvailability();
     byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');
-    visible('results', state.results_available === true);
-    visible('ledger', ledgerAvailable);
     visible('select-files', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
     visible('select-folder', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
     if (state.state === 'preparing') {
@@ -396,7 +577,6 @@ async function refresh() {
     }
     else if (state.state === 'results_available') {
       status('Fertig', converting ? `${state.result_count} Markdown-Datei${state.result_count === 1 ? ' wurde' : 'en wurden'} erstellt. Nicht anonymisiert.` : `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`);
-      if (!viewChosenByUser && !admitted) switchView('results');
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'completed_without_results') {
@@ -425,6 +605,10 @@ async function refresh() {
 }
 
 (async function bootstrap() {
+  byId('processing-mode').value = '';
+  renderModeHelp('');
+  switchView('home');
+  updateModeAvailability();
   try {
     let nativeDropReady = false;
     try {

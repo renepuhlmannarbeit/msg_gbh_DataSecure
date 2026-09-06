@@ -91,13 +91,16 @@ function createBatchContinuation(options = {}) {
     if (before.items.some((item) => item.status === 'retryable' || item.status === 'processing')) {
       const resumed = resumeBatch(selected.token);
       if (resumed.ok === false) {
-        if (resumed.error !== 'no_retryable_documents') return resumed;
         const reconciled = readState(selected.token);
         // Recovery may have adopted the already-published result instead of
         // retrying extraction. That delivery is executable on this same click;
         // it is not a failed continuation just because `resumed` is zero.
+        // The same applies when reconciliation leaves only review or mapping
+        // work, including a review position beside the adopted delivery.
         if (reconciled.items.some(item => ['processing', 'retryable'].includes(item.status)) ||
-            !reconciled.items.some(item => item.status === deliveryPendingStatus)) return resumed;
+            !reconciled.items.some(item => ['pending', deliveryPendingStatus, deferredReviewStatus,
+              mappingPendingStatus, preflightMappingPendingStatus].includes(item.status) ||
+              (item.status === 'stopped' && item.local_mapping_exported === false))) return resumed;
       }
     }
     return {
@@ -108,7 +111,54 @@ function createBatchContinuation(options = {}) {
     };
   }
 
-  return { resumeBatch, continueMostRecentBatch };
+  // The local history action selects one explicit journal. Re-read and check
+  // channel, lifetime and executability while owning the global batch lock;
+  // a stale renderer row must never fall through to a newer batch.
+  function continueStandaloneBatch(token) {
+    const fail = (code) => Object.assign(new ErrorType('Der ausgewählte lokale Lauf kann nicht fortgesetzt werden.'), { code });
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/u.test(token)) throw fail('STANDALONE_HISTORY_INVALID');
+    if (active.size) throw fail('STANDALONE_BUSY');
+    try { acquireActiveLock(token); } catch { throw fail('STANDALONE_BUSY'); }
+    active.add(token);
+    let primaryError = false;
+    try {
+      const candidates = recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true });
+      if (candidates.some((state) => options.liveLocalExecutor?.(state))) throw fail('STANDALONE_BUSY');
+      if (!candidates.some((state) => state.token === token && state.product_channel === 'standalone')) {
+        throw fail('STANDALONE_NOTHING_TO_CONTINUE');
+      }
+      const state = options.readStateForMaintenance(token);
+      if (state.product_channel !== 'standalone' || state.invalidated === true || Date.now() > Date.parse(state.expires_at)) {
+        throw fail('STANDALONE_NOTHING_TO_CONTINUE');
+      }
+      assertLocalExecutorAccess(state);
+      let changed = reconcilePublishedItems(state);
+      if (reconcilePendingMappings(state)) changed = true;
+      if (reconcilePreflightStoppedMappings(state)) changed = true;
+      if (markInterruptedItemsRetryable(state) > 0) changed = true;
+      for (const item of state.items) {
+        if (item.status !== 'retryable') continue;
+        item.status = 'pending'; item.checkpoint = 'resumed'; delete item.error_code;
+        changed = true;
+      }
+      if (changed) writeState(state);
+      if (!state.items.some((item) => ['pending', deliveryPendingStatus, deferredReviewStatus,
+        mappingPendingStatus, preflightMappingPendingStatus].includes(item.status) ||
+        (item.status === 'stopped' && item.local_mapping_exported === false))) {
+        throw fail('STANDALONE_NOTHING_TO_CONTINUE');
+      }
+      return { ok: true, ...publicProgress(state), batch_token: token, raw_content_sent_to_claude: false };
+    } catch (error) {
+      primaryError = true;
+      if (/^STANDALONE_/u.test(error?.code || '')) throw error;
+      throw fail('STANDALONE_NOTHING_TO_CONTINUE');
+    } finally {
+      active.delete(token);
+      releaseOwnedLock(releaseActiveLock, token, ErrorType, primaryError);
+    }
+  }
+
+  return { resumeBatch, continueMostRecentBatch, continueStandaloneBatch };
 }
 
 module.exports = { createBatchContinuation };

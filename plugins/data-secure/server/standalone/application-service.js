@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MODES, assertRunnableProcessingMode } = require('../core/processing-mode');
+const { batchNextAction } = require('../core/batch-next-action');
 
 const PRODUCT_CHANNEL = 'standalone';
 const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
@@ -84,15 +85,17 @@ function defaultDependencies() {
   // makes Standalone journals, settings, review data and exports invisible to
   // the optional Claude/MCP product even when both are installed.
   activateStandaloneNamespace();
+  const { createRunHistory } = require('./run-history');
   const filePicker = require('../companion/file-picker');
   const sourceFolder = require('../companion/source-folder');
   const resultFolder = require('../gateway/result-folder-config');
   const supportTrace = require('../gateway/support-trace');
-  const { replayPendingResultExports } = require('../gateway/result-export');
+  const { replayPendingResultExports, readStandaloneExportHistory } = require('../gateway/result-export');
   const {
     continueMostRecentBatch, openBatchPackageProtection, recoverBatches,
     replayMappingOutbox, cleanupExpiredBatchSnapshots, recoverableBatchStatus, productStatusSnapshot,
-    latestProductBatchStatus, latestProductResultDirectory
+    latestProductBatchStatus, latestProductResultDirectory, readStandaloneHistoryStates,
+    standaloneRecoverableStates, continueStandaloneBatch
   } = require('../gateway/batch');
   const { cleanupLocalData } = require('../gateway/retention');
   const { initializeProduct } = require('../core/product-bootstrap');
@@ -103,9 +106,20 @@ function defaultDependencies() {
   const { startBatchMaintenance } = require('../gateway/batch-maintenance');
   const batchExecutor = require('../gateway/batch-executor');
   const intakeReservation = require('../gateway/batch-intake-reservation');
+  const runHistory = createRunHistory({
+    readStates: readStandaloneHistoryStates,
+    readExports: readStandaloneExportHistory,
+    recoverableStates: standaloneRecoverableStates,
+    liveExecutor: require('../gateway/batch-active-lock').liveLocalExecutor
+  });
   return {
+    runHistory,
+    continueStandaloneBatch,
     initializeProduct() {
       if (!standaloneStartup) {
+        // Capture existing summaries and original export destinations before
+        // startup retention retires their source journals.
+        try { runHistory.history(); } catch { /* optional history is repairable */ }
         const startup = initializeProduct({
           verifyBundledRuntime,
           // Unlike Cowork's temporary plugin projection, the Standalone package
@@ -148,15 +162,18 @@ function defaultDependencies() {
         ...recoverableBatchStatus()
       };
     },
-    publicStatusSnapshot() {
-      const snapshot = productStatusSnapshot(PRODUCT_CHANNEL);
+    publicStatusSnapshot(selectedBatchId) {
+      const snapshot = productStatusSnapshot(PRODUCT_CHANNEL, { localUiSelection: true, selectedBatchId });
       return Object.freeze({
         current: Object.freeze({
           engine_ready: true,
           local_intake_pending: batchExecutor.localIntakeActive() || intakeReservation.intakeReservationActive(),
           ...snapshot.recovery
         }),
-        latest: snapshot.latest
+        latest: snapshot.latest,
+        observed_batch_id: snapshot.observed_batch_id,
+        observed_is_active: snapshot.observed_is_active,
+        observed_recoverable: snapshot.observed_recoverable
       });
     },
     latestProductBatchStatus,
@@ -191,6 +208,12 @@ function fixedFailure(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+function validateBatchId(value) {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/u.test(value)) {
+    throw fixedFailure('STANDALONE_HISTORY_INVALID', 'Die lokale Laufauswahl ist ungültig.');
+  }
+}
+
 function confirmedIntakeStart(started) {
   if (started?.ok !== true || started.local_intake_pending !== true ||
       !started.ipcAcknowledgement || typeof started.ipcAcknowledgement.then !== 'function') {
@@ -217,6 +240,8 @@ class StandaloneApplicationService {
     this.interactionActive = false;
     this.admittedQueue = null;
     this.selectionContext = null;
+    this.observedBatchId = null;
+    this.terminalPresentation = null;
     this.startup = this.deps.initializeProduct?.();
   }
 
@@ -239,8 +264,16 @@ class StandaloneApplicationService {
     return selected;
   }
 
+  observeCurrentRun() {
+    const snapshot = this.deps.publicStatusSnapshot?.(this.observedBatchId);
+    if (snapshot?.observed_is_active === true && /^[a-f0-9]{64}$/u.test(snapshot.observed_batch_id || '')) {
+      this.observedBatchId = snapshot.observed_batch_id;
+    }
+    return snapshot;
+  }
+
   status() {
-    const snapshot = this.deps.publicStatusSnapshot?.();
+    const snapshot = this.observeCurrentRun();
     const current = snapshot?.current || this.deps.lightweightStatus();
     const latest = snapshot ? snapshot.latest : (this.deps.latestProductBatchStatus?.(PRODUCT_CHANNEL) || null);
     const packages = Number.isSafeInteger(latest?.result_count)
@@ -249,6 +282,7 @@ class StandaloneApplicationService {
     const reviews = Number.isSafeInteger(latest?.review_count)
       ? latest.review_count
       : 0;
+    const reviewReady = latest?.review_ready === true;
     const failed = Number.isSafeInteger(latest?.failed_count)
       ? latest.failed_count
       : 0;
@@ -256,7 +290,9 @@ class StandaloneApplicationService {
     const completionPending = latest?.completion_pending === true;
     const recoverable = Number.isSafeInteger(current.recoverable_batches) ? current.recoverable_batches : 0;
     const awaitingResume = Number.isSafeInteger(current.batches_awaiting_resume) ? current.batches_awaiting_resume : 0;
-    const resumableCount = latest?.resumable === true ? Math.max(1, recoverable, awaitingResume) : Math.max(recoverable, awaitingResume);
+    const resumableCount = this.observedBatchId
+      ? (latest?.resumable === true || snapshot?.observed_recoverable === true ? 1 : 0)
+      : latest?.resumable === true ? Math.max(1, recoverable, awaitingResume) : Math.max(recoverable, awaitingResume);
     const resumable = resumableCount > 0;
     const intakePending = current.local_intake_pending === true;
     const processing = current.batch_processing_active === true || latest?.processing === true;
@@ -269,7 +305,7 @@ class StandaloneApplicationService {
         ? 'preparing'
       : processing
         ? 'processing'
-        : reviews > 0
+        : reviewReady
           ? 'review_required'
         : resumable
           ? 'stopped'
@@ -280,7 +316,11 @@ class StandaloneApplicationService {
             : latest?.complete === true && failed > 0
               ? 'completed_without_results'
             : 'ready';
-    const presentationGeneration = this.deps.pendingStandaloneTerminalNoticeGeneration?.();
+    const currentBatchId = snapshot && Object.hasOwn(snapshot, 'observed_batch_id')
+      ? snapshot.observed_batch_id : (this.observedBatchId || undefined);
+    const presentationGeneration = this.deps.pendingStandaloneTerminalNoticeGeneration?.(currentBatchId);
+    this.terminalPresentation = Number.isSafeInteger(presentationGeneration) && presentationGeneration > 0
+      ? { generation: presentationGeneration, batchId: currentBatchId } : null;
     return {
       ok: current.engine_ready === true,
       product_channel: PRODUCT_CHANNEL,
@@ -290,7 +330,7 @@ class StandaloneApplicationService {
       ...(latest?.termination_unconfirmed === true ? { termination_unconfirmed: true } : {}),
       preparing,
       processing,
-      review_required: reviews > 0,
+      review_required: reviewReady,
       resumable,
       results_available: packages > 0,
       result_count: packages,
@@ -312,9 +352,75 @@ class StandaloneApplicationService {
   }
 
   acknowledgeTerminalPresented(presentationGeneration) {
+    const presented = this.terminalPresentation;
+    const acknowledged = presented?.generation === presentationGeneration &&
+      (!this.observedBatchId || presented.batchId === this.observedBatchId) &&
+      this.deps.acknowledgeStandaloneTerminalNotice?.(presentationGeneration, presented.batchId) === true;
+    if (acknowledged) this.terminalPresentation = null;
     return { ok: true,
-      acknowledged: this.deps.acknowledgeStandaloneTerminalNotice?.(presentationGeneration) === true,
+      acknowledged: acknowledged === true,
       external_disclosure: false };
+  }
+
+  history() {
+    return this.deps.runHistory.history();
+  }
+
+  resolveHistoryResults(batchId) {
+    validateBatchId(batchId);
+    return this.deps.runHistory.resolveResults(batchId);
+  }
+
+  resolveHistoryLedger(batchId) {
+    validateBatchId(batchId);
+    return this.deps.runHistory.resolveLedger(batchId);
+  }
+
+  async continueHistoryBatch(batchId, signal) {
+    validateBatchId(batchId);
+    if (this.interactionActive || this.admittedQueue?.length > 0) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
+    const current = this.deps.lightweightStatus();
+    if (!current.engine_ready) throw fixedFailure('STANDALONE_ENGINE_NOT_READY', 'Die lokale Verarbeitung ist nicht bereit.');
+    if (current.local_intake_pending || current.batch_processing_active) {
+      throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
+    }
+    const selected = this.deps.runHistory.find(batchId);
+    if (!selected.resumable) throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Dieser lokale Lauf kann nicht fortgesetzt werden.');
+    this.interactionActive = true;
+    let reservation;
+    try {
+      try { reservation = this.deps.reserveIntake(); }
+      catch { throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.'); }
+      const continued = this.deps.continueStandaloneBatch(batchId);
+      if (continued?.ok !== true || continued.batch_token !== batchId) {
+        throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Dieser lokale Lauf kann nicht fortgesetzt werden.');
+      }
+      // Keep observing this exact run through its terminal state, even when a
+      // newer historical run exists or worker acknowledgement is uncertain.
+      this.observedBatchId = batchId;
+      this.terminalPresentation = null;
+      this.selectionContext = null;
+      const action = batchNextAction(continued);
+      if (action === 'none') return { ok: true, event: 'batch_already_completed', complete: true,
+        selected_count: continued.batch_total, completed_count: continued.completed,
+        failed_count: continued.stopped, external_disclosure: false };
+      const review = action === 'review';
+      const started = review
+        ? this.deps.startLocalReviewExecutor(batchId, { requireIpcAcknowledgement: true, signal })
+        : this.deps.startLocalBatchExecutor(batchId, { requireIpcAcknowledgement: true, signal });
+      if (started?.ok !== true || (review ? started.local_review_started : started.local_processing_started) !== true) {
+        throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
+      }
+      if (!started.ipcAcknowledgement || typeof started.ipcAcknowledgement.then !== 'function') {
+        throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.');
+      }
+      try { await started.ipcAcknowledgement; }
+      catch { throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.'); }
+      return { ok: true, event: 'batch_continued', external_disclosure: false };
+    } finally {
+      if (reservation) this.deps.releaseIntake(reservation.reservation_id);
+      this.interactionActive = false;
+    }
   }
 
   async selectSources(sourceKind, signal) {
@@ -391,6 +497,7 @@ class StandaloneApplicationService {
   }
 
   uiContext() {
+    this.observeCurrentRun();
     const selected = this.selectionContext;
     const configured = this.deps.readConfiguredResultRoot();
     let latestResultFolder = '';
@@ -398,7 +505,11 @@ class StandaloneApplicationService {
     // already completed run.  Older export records did not contain the fields
     // required for the run-scoped mapping.  Resolve with ensureExport so the
     // UI never advertises a completed run whose visible projection is stale.
-    try { latestResultFolder = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true }) || ''; }
+    try {
+      latestResultFolder = this.observedBatchId
+        ? this.deps.runHistory.resolveResults(this.observedBatchId).local_path
+        : this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true }) || '';
+    }
     catch { /* A local display hint must never affect processing. */ }
     return {
       ok: true,
@@ -414,6 +525,7 @@ class StandaloneApplicationService {
   }
 
   async startAdmittedBatch(options = 'auto', signal) {
+    if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
     // Existing direct callers remain explicitly anonymization-only. The desktop
     // passes an options object and must name its purpose; absence is not consent
     // to silently replace a requested conversion with anonymization.
@@ -433,6 +545,8 @@ class StandaloneApplicationService {
     let transferred = false;
     try {
       reservation = this.deps.reserveIntake();
+      this.observedBatchId = null;
+      this.terminalPresentation = null;
       const started = this.deps.startLocalIntakeExecutor(queue, profile, {
         intakeReservationId: reservation.reservation_id, signal, processingMode
       });
@@ -456,6 +570,8 @@ class StandaloneApplicationService {
   }
 
   async continueCurrentBatch(signal) {
+    if (this.interactionActive || this.admittedQueue?.length > 0) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
+    if (this.observedBatchId) return this.continueHistoryBatch(this.observedBatchId, signal);
     const status = this.deps.lightweightStatus();
     if (status.local_intake_pending || status.batch_processing_active) {
       throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
@@ -464,7 +580,14 @@ class StandaloneApplicationService {
     if (continued.ok !== true) {
       throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Es gibt keinen fortsetzbaren lokalen Stapel.');
     }
-    const review = continued.awaiting_local_review === true || continued.deferred_review > 0;
+    const action = batchNextAction(continued);
+    this.observedBatchId = continued.batch_token;
+    this.terminalPresentation = null;
+    this.selectionContext = null;
+    if (action === 'none') return { ok: true, event: 'batch_already_completed', complete: true,
+      selected_count: continued.batch_total, completed_count: continued.completed,
+      failed_count: continued.stopped, external_disclosure: false };
+    const review = action === 'review';
     const started = review
       ? this.deps.startLocalReviewExecutor(continued.batch_token, { requireIpcAcknowledgement: true, signal })
       : this.deps.startLocalBatchExecutor(continued.batch_token, { requireIpcAcknowledgement: true, signal });
@@ -504,6 +627,8 @@ class StandaloneApplicationService {
       const picked = await this.selectSources(sourceKind, signal);
       const selected = this.deps.batchQueueFromSelection(picked);
       this.trace('standalone_picker_completed', { trace_id: traceId, outcome: 'ok', item_count: selected.length });
+      this.observedBatchId = null;
+      this.terminalPresentation = null;
       const started = this.deps.startLocalIntakeExecutor(selected, profile, {
         intakeReservationId: reservation.reservation_id, signal
       });
@@ -551,6 +676,7 @@ class StandaloneApplicationService {
       if (pathsOverlap(dataRoot, selected)) {
         throw fixedFailure('STANDALONE_RESULT_ROOT_UNSAFE', 'Der Ergebnisordner muss außerhalb des privaten DataSecure-Bereichs liegen.');
       }
+      try { this.deps.runHistory?.history(); } catch { /* retain every safely readable prior export binding */ }
       this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected);
       let replay = null;
@@ -586,8 +712,10 @@ class StandaloneApplicationService {
   }
 
   resolveResults() {
+    this.observeCurrentRun();
     this.ensureResultRoot();
     try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
+    if (this.observedBatchId) return this.deps.runHistory.resolveResults(this.observedBatchId);
     const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true });
     if (!target || !path.isAbsolute(target)) {
       throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');

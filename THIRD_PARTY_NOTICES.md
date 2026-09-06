@@ -39,14 +39,22 @@ Es wird kein Code aus diesen Projekten als Runtime-Paket nachinstalliert.
 
 ## Produktiv ausgelieferte Komponenten
 
+- MCP-Eingabevalidierung: Ajv 8.20.0 (MIT) erzeugt während der Entwicklung
+  `server/mcp-validators.generated.js`. Das Plugin enthält nur diesen
+  schema-gebundenen Validator samt kleinem `ucs2length`-Helper und vollständigem
+  MIT-Lizenztext im Dateikopf, nicht das npm-Paket Ajv. Kein Laufzeit-Download,
+  keine Laufzeit-Codegenerierung; Standalone übernimmt diese MCP-Schicht nicht.
+
 - Deaktivierte passive MCP-App-Startkarte: `@modelcontextprotocol/ext-apps` 1.7.5,
   `@modelcontextprotocol/sdk` 1.30.0, `zod` 4.5.4 und `zod-to-json-schema` 3.25.2
   werden als geschlossenes Offline-JavaScript-Bundle ausgeliefert. Die vollständigen
   Original-Lizenztexte (einschließlich ext-apps Apache-2.0/MIT-Übergangsregel) stehen
   in `plugins/data-secure/server/status-app/THIRD_PARTY_NOTICES.md` und im
   Produktarchiv unter `server/status-app/`. Exakte Versionen, Lock-Integritäten und Lizenzhashes stehen
-  daneben in `bundled-dependencies.json`. esbuild und axe-core sind reine Build-/
-  Testwerkzeuge, werden nicht mit der Karte nachinstalliert oder ausgeliefert.
+  daneben in `bundled-dependencies.json`. esbuild, axe-core und Playwright Core
+  1.63.0 sind reine Build-/Testwerkzeuge. Playwright Core verwendet nur den
+  bereits installierten Microsoft Edge; kein Browser wird nachinstalliert oder
+  mit der Karte beziehungsweise einem Anwenderprodukt ausgeliefert.
 
 Die zielabhängig gebündelte Node.js-Laufzeit und native Sandbox-Helfer werden
 durch das jeweilige Produktartefakt, die Buildmetadaten und die SPDX-SBOM

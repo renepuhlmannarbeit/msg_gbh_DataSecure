@@ -5,6 +5,7 @@
 const { createSuite } = require('./helpers');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
+const { xlsxCounterexample } = require('./lib/conversion-counterexamples');
 const { extractMarkdownBuffer, MarkdownExtractionError } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 const { validateMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
 const { parseDocumentBuffer, parseCsvRows } = require('../plugins/data-secure/server/document-parser');
@@ -223,6 +224,40 @@ test('XLSX formulas keep literal expression plus stored value and stay incomplet
 });
 test('XLSX invalid shared-string references stop rather than becoming numeric text', () => {
   rejects(xlsx('<row r="1"><c r="A1" t="s"><v>999</v></c></row>'), '.xlsx', 'XLSX_SHARED_STRING_INVALID');
+});
+test('XLSX empty cells, sparse rows, quote styles and both namespace families preserve exact coordinates', () => {
+  for (const strict of [false, true]) for (const prefix of ['', 'sheet']) for (const quote of ['"', "'"]) {
+    const result = extract(xlsxCounterexample({ strict, prefix, quote }), '.xlsx');
+    assert.strictEqual(result.markdown, '# Arbeitsblatt: Ledger\n\n| Spalte 1 | Spalte 2 |\n| --- | --- |\n' +
+      '| Debit | Credit |\n|  | 1000 |\n|  |  |\n|  | Original &amp; literal |\n|  | Max Mustermann |');
+    assert.strictEqual(result.coverage.status, 'incomplete');
+  }
+});
+test('XLSX comment and CDATA tokens cannot manufacture cells or change text order', () => {
+  const result = extract(xlsx('<row r="1"><c r="A1" t="inlineStr"><is><t><![CDATA[A<c r="B1"/>]]><!-- ignored -->B</t></is></c><c r="B1"/></row>'), '.xlsx');
+  assert.ok(result.markdown.includes('| A&lt;c r="B1"/&gt;B |  |'));
+});
+test('XLSX duplicate coordinates, invalid rows and foreign vocabulary never overwrite or reinterpret values', () => {
+  for (const rows of ['<row r="1"><c r="A1"/><c r="A1"><v>5</v></c></row>',
+    '<row r="1"><c r="B2"><v>5</v></c></row>', '<row r="2"/><row r="1"/>',
+    '<row r="1"><c r="A0"><v>5</v></c></row>']) rejects(xlsx(rows), '.xlsx', 'XLSX_STRUCTURE_UNSAFE');
+  rejects(xlsx('', [['xl/worksheets/sheet1.xml', '<worksheet xmlns="urn:foreign"/>']]), '.xlsx', 'XLSX_STRUCTURE_UNSAFE');
+});
+test('XLSX malformed XML in any part fails even after a complete first record', () => {
+  const prefix = `<worksheet xmlns="${S}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>SYNTHETIC_SECRET</t></is></c></row>`;
+  const damaged = [prefix, prefix + '<row r="2"><c r="B2"><v>1000</v></row></sheetData></worksheet>',
+    prefix + '</sheetData></worksheet><worksheet/>', prefix + '<!-- broken -- comment --></sheetData></worksheet>',
+    prefix + '<row r="2" r="3"/></sheetData></worksheet>', prefix + '<?xml version="1.0"?></sheetData></worksheet>'];
+  for (const xml of damaged) rejects(xlsxCounterexample({ overrides: [['xl/worksheets/sheet1.xml', xml]] }), '.xlsx', 'XLSX_STRUCTURE_UNSAFE');
+  for (const part of ['xl/workbook.xml', 'xl/sharedStrings.xml', 'xl/styles.xml', 'docProps/core.xml', 'xl/_rels/workbook.xml.rels']) {
+    rejects(xlsxCounterexample({ overrides: [[part, '<root><complete/><truncated>']] }), '.xlsx', 'XLSX_STRUCTURE_UNSAFE');
+  }
+  rejects(xlsxCounterexample({ overrides: [['xl/styles.xml', '<!DOCTYPE root [<!ENTITY x "SYNTHETIC_SECRET">]><root/>']] }), '.xlsx', 'XLSX_STRUCTURE_UNSAFE');
+  rejects(xlsxCounterexample({ overrides: [['xl/styles.xml', '<root xmlns:a="urn:a" xmlns:b="urn:a" a:x="1" b:x="2"/>']] }), '.xlsx', 'XLSX_STRUCTURE_UNSAFE');
+});
+test('XLSX XML depth and sparse output are bounded independently of ZIP integrity', () => {
+  rejects(xlsxCounterexample({ overrides: [['xl/styles.xml', '<a>'.repeat(129) + '</a>'.repeat(129)]] }), '.xlsx', 'XLSX_STRUCTURE_LIMIT');
+  rejects(xlsx('<row r="1048576"><c r="XFD1048576"><v>1</v></c></row>'), '.xlsx', 'XLSX_STRUCTURE_LIMIT');
 });
 test('XLSX hidden/namespace-incomplete semantics never pass a complete gate', () => {
   assert.strictEqual(extract(xlsx('<row r="9" hidden="1"><c r="A9"><v>7</v></c></row>', [], 'state="veryHidden"'), '.xlsx').coverage.status, 'incomplete');

@@ -293,7 +293,7 @@ async function main() {
     assert.match(linuxChoiceCommand('zenity', 0, 1, true).args.join(' '), /Später entscheiden/u);
   });
 
-  await testAsync('every macOS dialog contract offers its default and cancel action', async () => {
+  await testAsync('legacy macOS dialog metadata remains internally coherent while AppKit owns the one-window review', async () => {
     for (const phase of ['decision', 'group', 'final']) {
       for (const allowDefer of [false, true]) {
         const contract = darwinDialogContract(phase, allowDefer);
@@ -306,7 +306,10 @@ async function main() {
     assert.throws(() => darwinDialogContract('unknown', true), /macOS-Dialogvertrag/u);
     assert.doesNotThrow(() => new Function(darwinReviewScript()), 'generated macOS JXA must remain syntactically valid');
     assert.doesNotMatch(darwinReviewScript(), /Weitere Optionen/u);
-    assert.match(darwinReviewScript(), /number === -128 && draft\.allow_defer/u);
+    assert.match(darwinReviewScript(), /ObjC\.import\("AppKit"\)/u);
+    assert.strictEqual((darwinReviewScript().match(/\$\.NSAlert\.alloc\.init/gu) || []).length, 1);
+    assert.match(darwinReviewScript(), /NSScrollView/u);
+    assert.match(darwinReviewScript(), /Bitte entscheiden/u);
   });
 
   await testAsync('the Windows reviewer receives content only on stdin and returns redaction ranges', async () => {
@@ -415,10 +418,10 @@ async function main() {
     assert.match(darwinReviewScript(), /draft\.batch_review/u);
     assert.match(darwinReviewScript(), /Automatisch abgeschlossen/u);
     assert.match(darwinReviewScript(), /Später entscheiden/u);
-    assert.match(darwinReviewScript(), /Nur diese Stelle/u);
-    assert.match(darwinReviewScript(), /Gleiche Stellen/u);
-    assert.match(darwinReviewScript(), /decideGroup/u);
-    assert.doesNotMatch(darwinReviewScript(), /cancelButton: "Abbrechen"[^\n]+Später entscheiden/u);
+    assert.match(darwinReviewScript(), /Geprüft freigeben/u);
+    assert.match(darwinReviewScript(), /Anonymisieren/u);
+    assert.match(darwinReviewScript(), /Beibehalten/u);
+    assert.doesNotMatch(darwinReviewScript(), /displayDialog|do shell script/u);
     assert.match(linuxViewerCommands(true)[0].args.join(' '), /lokale Stapelprüfung/u);
     assert.match(linuxReviewContext(bundle.draft, bundle.draft.ambiguities[0], 0), /Automatisch abgeschlossen: 0/u);
     assert.match(linuxChoiceCommand('zenity', 0, 1, true, true).args.join(' '), /Stapelentscheidung/u);

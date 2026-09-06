@@ -82,7 +82,7 @@ test('build metadata describes current product channels and complete blocked for
   const info = JSON.parse(read('BUILD_INFO.json'));
   const pkg = JSON.parse(read('package.json'));
   assert.strictEqual(info.version, pkg.version);
-  assert.strictEqual(info.build_date, '2026-09-05');
+  assert.strictEqual(info.build_date, '2026-09-06');
   assert.match(info.target, /Plugin ZIP \/ private Marketplace/u);
   assert.doesNotMatch(info.target + info.runtime, /MCPB|built-in Node/u);
   assert.deepStrictEqual(new Set(info.formats), new Set(['txt', 'markdown', 'csv', 'docx']));
@@ -221,6 +221,8 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
 
 test('conversion documentation separates eleven input types from four-format privacy and old package evidence', () => {
   const coverage = read('docs/FORMAT_COVERAGE_MATRIX.md');
+  assert.match(coverage, /RC108-Builds aus `a742333e8ef80b445729d4bede6a91a2b8f13207`/u,
+    'a version bump must not relabel historical commit-bound package evidence');
   const parts = coverage.split('## Reine Markdown-Konvertierung: nur Standalone');
   assert.strictEqual(parts.length, 2);
   assert.match(parts[0], /markdown-and-anonymize/u);
@@ -239,7 +241,7 @@ test('conversion documentation separates eleven input types from four-format pri
   }
   assert.match(conversion, /MarkItDown\/Python ist nur ein optionales\s+Differentialorakel/u);
   for (const file of ['docs/canonical/TRACEABILITY.md', 'docs/canonical/BACKLOG_EVIDENCE_MATRIX.md',
-    'tasks/STANDALONE-FORMATAUSBAU-IMPLEMENTIERUNGSPLAN.md']) {
+    'tasks/archiv/2026-09-06-standalone-formatausbau-implementierungsplan.md']) {
     const text = read(file);
     assert.match(text, /DS-085/u, file);
     assert.match(text, /DataSecure-Markdown/u, file);
@@ -247,6 +249,71 @@ test('conversion documentation separates eleven input types from four-format pri
     assert.match(text, /(?:historisch\w*|alte\w*) (?:RC107-|INT-13-|Kandidat)/iu, `${file}: distinguish old package evidence`);
     assert.doesNotMatch(text, /Keine produktive Konvertierungsevidenz|noch fehlenden reinen Konvertierungsworkflow/u, file);
   }
+});
+
+test('home and exact-run history stay aligned with the accepted navigation decision', () => {
+  const ui = JSON.parse(read('plugins/data-secure/server/standalone/ui-contract.json'));
+  const product = JSON.parse(read('plugins/data-secure/server/standalone/product-manifest.json'));
+  assert.strictEqual(ui.initial_view, 'home');
+  assert.strictEqual(ui.initial_processing_mode, null);
+  assert.strictEqual(product.default_processing_mode, null);
+  assert.strictEqual(ui.automatic_result_navigation, false);
+  assert.strictEqual(ui.history.limit, 20);
+  assert.strictEqual(ui.history.actions_bound_to, 'batch_id');
+  for (const file of ['PRODUCT_VISION.md', 'PRODUCT.md', 'STANDALONE_ARCHITECTURE.md',
+    'BACKLOG.md', 'UML_ARCHITECTURE.md', 'TRACEABILITY.md', 'CURRENT_STATE.md']) {
+    assert.ok(read(`docs/canonical/${file}`).includes('DS-086'), file);
+  }
+  const uat = read('docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md');
+  for (const step of ['S20', 'S21', 'S22', 'S23']) assert.ok(uat.includes(`| ${step} |`));
+  assert.match(uat, /20 neuesten Verarbeitungen/u);
+  const readme = read('apps/datasecure-standalone/README.md');
+  assert.match(readme, /Keine Verarbeitung ist vorausgewählt/u);
+  assert.match(readme, /drei Hauptansichten/u);
+  assert.match(readme, /20 neuesten\s+Verarbeitungen/u);
+  assert.doesNotMatch(readme, /aktivierte[rn]? Standard|zwei Hauptansichten/u);
+});
+
+test('architecture and test documentation reject the superseded single-purpose narrative', () => {
+  const architecture = read('docs/canonical/STANDALONE_ARCHITECTURE.md');
+  assert.doesNotMatch(architecture, /produktive MarkItDown-Worker bleiben offen|MarkItDown erweitert ihn erst|isolierter MarkItDown-Worker geplant|hashgebundene Python-Runtime und isolierter Konverter-Supervisor/u);
+  assert.match(architecture, /Differentialorakel/u);
+  assert.match(architecture, /DataSecure-Markdown/u);
+  const target = read('docs/canonical/TARGET_ARCHITECTURE.md');
+  for (const row of ['Cowork-Plugin / anonymisieren', 'Standalone / Markdown und anonymisieren', 'Standalone / nur Markdown']) {
+    assert.ok(target.includes(`| ${row} |`), row);
+  }
+  const security = read('docs/canonical/STANDALONE_SECURITY_MODEL.md');
+  assert.match(security, /gewählte Quellenordner, Dateinamen und\s+Ergebnisordner als lokale Textprojektion/u);
+  assert.match(security, /keine Rohbytes/u);
+  const testing = read('docs/TESTING.md');
+  assert.doesNotMatch(testing, /\*\*Verarbeiten \/ Ergebnisse\*\*/u);
+  assert.match(testing, /Start \/ Verarbeiten \/ Verlauf/u);
+  assert.match(testing, /interner\s+Gateway-Integritätstest einschließlich historischer Fassaden/u);
+  const gatewayTest = read('tests/test-gateway-e2e.js');
+  assert.match(gatewayTest, /Gateway internal integrity \(including legacy facades\)/u);
+  const oss = read('docs/canonical/OPEN_SOURCE_COMPONENTS.md');
+  assert.match(oss, /Ajv 8\.20\.0/u);
+  assert.match(oss, /Build-time/u);
+  assert.match(oss, /OPEN_SOURCE_COMPONENTS_BEFORE_RC109\.md/u);
+  assert.match(architecture, /gateway\/standalone-history-store\.js/u);
+  const current = read('docs/canonical/CURRENT_STATE.md');
+  assert.doesNotMatch(current, /zwei (?:Haupt)?ansichten|automatisch in die Ergebnisansicht|Zähler nur aus dem jüngsten Standalone-Stapel/iu);
+  assert.match(current, /drei Hauptansichten/u);
+  assert.match(current, /Diese Formate\s+bleiben ausschließlich für die Anonymisierung gesperrt/u);
+  const register = read('docs/canonical/DOCUMENT_REGISTER.md');
+  const historical = register.split('## Historisch, nicht entscheidungsführend');
+  assert.strictEqual(historical.length, 2);
+  assert.ok(!historical[0].includes('REVIEW_BEIDE_PRODUKTE_2026-09-04.md'));
+  assert.ok(historical[1].includes('REVIEW_BEIDE_PRODUKTE_2026-09-04.md'));
+  const runtimeReadme = read('plugins/data-secure/server/README.md');
+  assert.match(runtimeReadme, /server\/ocr-runtime` tree is excluded/u);
+  assert.match(runtimeReadme, /separate Standalone\s+Markdown-conversion runtime/u);
+  assert.doesNotMatch(runtimeReadme, /uses[\s\S]{0,160}checked-in offline\s+OCR dependency tree/u);
+  const ux = read('docs/ANWENDERREVIEW.md');
+  assert.match(ux, /Windows-Sammelreview/u);
+  assert.match(ux, /AppKit-Sammelreview[\s\S]{0,120}E0 implementiert/u);
+  assert.doesNotMatch(ux, /macOS-Abnahme fehlt noch \*\*Implementierungsarbeit\*\*/u);
 });
 
 done();

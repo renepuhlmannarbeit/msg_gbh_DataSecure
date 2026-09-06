@@ -1,6 +1,6 @@
 # Kanonisches Dokumentensystem
 
-Stand: 04.09.2026
+Stand: 06.09.2026
 
 ## Autorität nach Dokumentklasse
 
@@ -17,6 +17,7 @@ Entscheidung und Testevidenz beantworten unterschiedliche Fragen.
 | Welche maschinenlesbaren Grenzen gelten? | [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json), [HOST_MATRIX_V1.json](HOST_MATRIX_V1.json), `contracts/*` | Ein Zielvertrag ist keine Istfreigabe. |
 | Welche Abnahme fehlt? | [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) | Zielhost-/UX-/Fachevidence bleibt menschlich. |
 | Welche Open-Source-Komponente ist zugelassen? | [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) | Version, Zweck und Aktivierungsgrenze sind verbindlich. |
+| Gilt eine Funktion für beide Produkte? | Produkt-/Modusmatrix in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) | Standalone-Konvertierung ist keine Formatfreigabe der Anonymisierung oder des Cowork-Plugins. |
 | Wo ist der Status einer Datei dokumentiert? | [DOCUMENT_INDEX.json](DOCUMENT_INDEX.json), [DOCUMENT_REGISTER.md](DOCUMENT_REGISTER.md) | Der Index ist maschinenlesbar; Archive bleiben zugänglich, aber nicht entscheidungsführend. |
 
 Erledigte Storys bleiben in [BACKLOG_ARCHIVE_2026-08.md](BACKLOG_ARCHIVE_2026-08.md)
@@ -51,5 +52,9 @@ aktive Entscheidung ersetzt eine frühere, und Testevidence belegt nur den
 benannten Testumfang. Ersetzte Entscheidungen werden nicht gelöscht.
 
 `npm run test:docs` prüft Struktur, Referenzen, UAT-Verständlichkeit und die
-DS-067-Grenzen. Automatisierte Evidenz ersetzt keine Zielsystem-, UX-, Fach- oder
+DS-067-Grenzen. Aktive Dateien aus `DOCUMENT_INDEX.json` werden in die lokale
+Linkprüfung aufgenommen; DS-085/086 und negative Driftprüfungen schützen die
+Produkt-/Modustrennung. Historische Reviews bleiben Befunde zum damaligen Stand,
+nicht eine zweite offene Arbeitsliste. Ihre Auflösung steht im Backlog und im
+verlinkten Korrekturbericht. Automatisierte Evidenz ersetzt keine Zielsystem-, UX-, Fach- oder
 Datenschutzabnahme.

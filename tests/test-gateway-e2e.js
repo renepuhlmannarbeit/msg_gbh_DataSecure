@@ -1,12 +1,15 @@
 'use strict';
 
-// End to end tests through the gateway API that the MCP tools call. The OCR
-// bridge is stubbed so the whole pipeline runs on Linux CI as well.
+// Internal gateway integrity integration, including explicitly historical
+// Input-queue and visual-approval facades. OCR is adapted for source-only CI.
+// This is NOT the public MCP/host E2E contract: test-mcp-protocol.js checks
+// the actual tool surface, which cannot approve or read original image pixels.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { execFileSync } = require('node:child_process');
 const { createSuite, assertAbsent, assertPresent } = require('./helpers');
 
 const runtimeDir = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
@@ -21,7 +24,7 @@ const pii = require(path.join(runtimeDir, 'pii-engine.js'));
 const { splitReviewId, approveReviewAsset } = require(path.join(runtimeDir, 'gateway', 'review.js'));
 const { migrateLegacyInputV1 } = require(path.join(runtimeDir, 'gateway', 'legacy-input-migration.js'));
 
-const suite = createSuite('Gateway end to end');
+const suite = createSuite('Gateway internal integrity (including legacy facades)');
 const { done, assert } = suite;
 
 function clearInput() {
@@ -471,6 +474,28 @@ async function main() {
     fs.unlinkSync(source);
   });
 
+  await testAsync('real DOCX revision, missing-comment and branch-spoof inputs stop across the isolated parser before publication', async () => {
+    const fixtures = require('./lib/docx-review-fixtures');
+    const cases = [
+      ['revision', fixtures.reviewDocx(fixtures.propertyRevisions()[0][1]), 'PARSER_COVERAGE_UNVERIFIED'],
+      ['comment', fixtures.reviewDocx(fixtures.annotatedParagraph()), 'PARSER_COVERAGE_UNVERIFIED'],
+      ['branch', fixtures.invalidAlternateDocx(), 'PARSE_FAILED']
+    ];
+    const beforePackages = gw.listOutputs().packages.length;
+    let publications = 0;
+    for (const [name, bytes, code] of cases) {
+      const source = queueBuffer(`docx-structure-${name}.docx`, bytes);
+      const before = sourceIdentity(source);
+      const selected = { name: path.basename(source), full: source, stat: fs.lstatSync(source) };
+      await assert.rejects(() => orchestrator.anonymizeNext('general', {
+        inputQueue: [selected], beforePublish() { publications++; }
+      }), error => error.code === code && !/Erika|Beispiel|BODY_|WRONG_SELECTED/u.test(error.message));
+      assertSourceUnchanged(source, before, `${name}: the selected DOCX original remains untouched`);
+    }
+    assert.strictEqual(publications, 0);
+    assert.strictEqual(gw.listOutputs().packages.length, beforePackages);
+  });
+
   await testAsync('a PDF is stopped before release while coverage remains unverified', async () => {
     const source = queue(path.join(fixtures, 'synthetic_customer.pdf'));
     const before = gw.listOutputs().packages.length;
@@ -720,6 +745,63 @@ async function main() {
       /Markdown-Datei wurde verändert/,
       'approval must not launder a tampered document by rewriting its hash'
     );
+  });
+
+  await testAsync('both real product intake channels preserve professional bytes and bind compatibility redaction at publication', async () => {
+    for (const channel of ['plugin', 'standalone']) {
+      const directory = path.join(root, `identifier-${channel}`);
+      fs.mkdirSync(directory);
+      const output = execFileSync(process.execPath, [path.join(__dirname, 'lib', 'identifier-product-worker.js'), directory, channel],
+        { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+      assert.strictEqual(output, `IDENTIFIER PRODUCT ${channel}: PASS\n`);
+    }
+  });
+
+  for (const profile of ['general', 'customer']) await testAsync(`${profile}: actual package publication cannot retain a telephone URI's overlapping email local part`, async () => {
+    const { fullwidth, professionalText } = require('./lib/identifier-compatibility');
+    for (const [index, value] of ['tel:03012345678.anna@example.de', fullwidth('tel:03012345678.anna@example.de')].entries()) {
+      const source = queueBuffer(`uri-email-${profile}-${index}.txt`, `${professionalText}\n${value}`);
+      const original = sourceIdentity(source);
+      const expected = `${professionalText}\n[CONTACT_REDACTED]`;
+      let published = 0;
+      const result = await orchestrator.anonymizeSelectedSource(source, profile, { beforePublish(release) {
+        assert.strictEqual(release.reviewed_content_sha256,
+          crypto.createHash('sha256').update(expected).digest('hex'));
+        published++;
+      } });
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(published, 1);
+      const { manifest, markdown } = readPackage(result);
+      assert.strictEqual(manifest.verification.text_residual_pii, 'passed');
+      assert.match(markdown, /Datenschutz-Pässe: 1/u);
+      const readable = gw.readOutput(result.package_id, result.read_capability, 0, 30000).text;
+      assert.strictEqual(readable.slice(readable.indexOf('-->\n\n') + 5).trimEnd(), expected);
+      assert.deepStrictEqual(pii.scanResidual(readable, profile), []);
+      assertSourceUnchanged(source, original);
+    }
+  });
+
+  await testAsync('the exact post-review release gate rejects compatibility identifiers reintroduced after anonymization', async () => {
+    const { professionalText, identifierCases } = require('./lib/identifier-compatibility');
+    const before = gw.listOutputs().packages.length;
+    for (const [index, { label, value }] of identifierCases.entries()) {
+      const src = queueBuffer(`compatibility-review-${index}.txt`, professionalText);
+      const original = sourceIdentity(src);
+      let reviewed = 0, published = 0;
+      await assert.rejects(() => gw.anonymizeNext('general', {
+        inputQueue: [{ name: path.basename(src), full: src, stat: fs.lstatSync(src) }],
+        reviewText(input) {
+          assert.strictEqual(input.anonymized_text, professionalText);
+          reviewed++;
+          return { text: `${input.anonymized_text}\n${label}${value}` };
+        },
+        beforePublish() { published++; }
+      }), /Residual-Gate/u);
+      assert.strictEqual(reviewed, 1);
+      assert.strictEqual(published, 0, 'post-review PII never reaches publication');
+      assert.strictEqual(gw.listOutputs().packages.length, before);
+      assertSourceUnchanged(src, original, 'failed review preserves the selected original');
+    }
   });
 
   await testAsync('a failing residual gate releases nothing and keeps the source file', async () => {

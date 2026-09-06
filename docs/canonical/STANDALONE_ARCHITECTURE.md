@@ -1,6 +1,6 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 06.09.2026 · Entscheidungen DS-075/DS-076/DS-084/DS-085 · Steuerung über BL-010.9
+Stand: 06.09.2026 · Entscheidungen DS-075 bis DS-086 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
 
@@ -11,18 +11,26 @@ bleibt ein separates Produkt.
 
 **Verbindliches Zielbild:** Beide Produkte verwenden denselben neutralen
 DataSecure-Core: sichere Aufnahme, versiegelte Arbeitskopie, Format- und
-Coverage-Gates, Parser/Konverter, Content-Graph, PII-Erkennung, Residual-Gate,
-Sammelreview, Journal/Fortsetzung, Mapping, Export und inhaltsfreie Diagnose. Es
+Coverage-Gates, Parser/Konverter, Journal/Fortsetzung, Mapping, Export und
+inhaltsfreie Diagnose. Im Anonymisierungszweck kommen Content-Graph,
+PII-Erkennung, Residual-Gate und erforderlichenfalls Sammelreview hinzu. Es
 gibt keine zweite Anonymisierungslogik. Der Ziel-Core kennt weder Claude noch
 MCP, Skills, Handoff-Capabilities oder Chat-Paging.
 
 **Belegter Engineering-Iststand:** Standalone verwendet bereits dieselben
-Engine-Module und Policies, bindet sie aber noch teilweise über eine aus dem
-Plugin-Kontext entstandene Kompositionsschicht. Die vollständige Extraktion der
-neutralen Application-/Core-API sowie ein gemeinsamer Core-/Policy-Fingerprint
-für beide Produktpakete bleiben BL-010.9 und BL-010.23. Bis diese Gates grün
-sind, ist „derselbe Core“ ein verbindliches Ziel und keine vollständige
-Entkopplungszusage.
+Engine-Module und Policies. Sieben neutrale Coreverträge sind direkt in beide
+Produktprojektionen gebunden. BL-010.23 belegt zusätzlich den unterstützten
+Anonymisierungsumfang produktgleich; weitere Entkopplung wird nur aus einem
+konkreten Defekt abgeleitet und nicht als abstrakter Umbau fortgeführt.
+
+RC109 extrahiert als ersten geprüften Schnitt `core/batch-next-action.js`,
+`core/conversion-worker-contract.js` und `core/document-result-grade.js`.
+Die bisherigen Importpfade sind reine Reexports. Fingerprint und semantische
+Goldenläufe binden echte Plugin-/Standalone-Projektionen an identische gemeinsame
+Policybytes. TXT/Markdown/CSV/DOCX, fünf Profile, Review, Abbruch und Fortsetzung
+in einem frischen Prozess sind abgedeckt. Das ändert kein Journalformat und keine
+bestehende Pseudonymbindung. Nachweise: `test-core-contracts.mjs` und
+`test-core-policy-binding.mjs`; letzterer läuft im vollständigen Produktprofil.
 
 Standalone besitzt mit `SecureDataMsg-Standalone` einen nicht mit dem
 Pluginroot überlappenden Daten-, Konfigurations-, Journal-, Review- und
@@ -33,16 +41,19 @@ ohne ihre Fachdaten zu vermischen.
 
 ## Ziel-Nutzerreise
 
-Dieser Ablauf beschreibt das freizugebende Ziel. Die native Windows-Hülle ist
-als Engineering-Pilot vorhanden; native Drag-and-drop-Aufnahme ist angebunden,
-echtes Pausieren bleibt Zielumfang. Sichtbare Drop-/Fokus- und macOS-Evidenz ist
+Dieser Ablauf ist im Quellstand angebunden; seine Endnutzerfreigabe bleibt offen.
+Die native Windows-Hülle ist als Engineering-Pilot vorhanden; native
+Drag-and-drop-Aufnahme ist angebunden, eine freie Pausefunktion bleibt Zielumfang.
+Sichtbare Drop-/Fokus- und macOS-Evidenz ist
 nicht durch den Windows-Code- und Pakettest ersetzt.
 
-Im Erfolgsfall der Anonymisierung gibt es genau zwei bewusste Handlungen:
+Der Einstieg bleibt gemäß DS-086 immer **Start**; gespeicherte Ergebnisse und
+unterbrochene Stapel wechseln die Ansicht nicht automatisch. Beide Funktionen
+werden kurz erklärt. Es gibt keine vorbelegte Betriebsart.
 
-1. Dateien, einen Ordner oder per Drag-and-drop Quellen auswählen.
-2. Die kurze Stapelzusammenfassung mit **Starten** verarbeiten. Standard ist
-   **Nur in Markdown umwandeln**; Anonymisierung wird ausdrücklich gewählt.
+1. Die gewünschte Funktion ausdrücklich wählen.
+2. Dateien, einen Ordner oder per Drag-and-drop Quellen auswählen.
+3. Die kurze Stapelzusammenfassung mit **Starten** verarbeiten.
 
 Das Hauptfenster zeigt dabei lokal den aktuellen Quellenordner, die gewählten
 Dateinamen und den Ergebnisordner. Diese Anzeige ist kein Diagnoseinhalt und
@@ -55,25 +66,34 @@ gehen ausschließlich nach `DataSecure-Markdown/Lauf-…`, niemals in den
 anonymisierten Ergebnisweg oder die Plugin-Handoff-Liste. Der Modus gehört in
 den dauerhaften Stapel- und Exportvertrag, nicht nur in einen UI-Schalter.
 
-Die Oberfläche besteht aus vier Zuständen im selben Fenster:
+Die Navigation **Start / Verarbeiten / Verlauf** ist unabhängig vom
+Verarbeitungszustand. **Verlauf** zeigt die 20 neuesten eigenen Läufe mit
+jeweils laufgebundenen Ergebnis-/Zuordnungs- und Fortsetzungsaktionen. Der
+Backendzustand wird vor jeder Aktion erneut geprüft; Fortsetzung übernimmt
+keine Betriebsart aus der aktuellen Eingabemaske. Die Anzeigegrenze entfernt
+keine Exporte. Innerhalb dieser Navigation bestehen folgende Arbeitszustände:
 
-1. **Auswahl:** `Dateien auswählen`, `Ordner auswählen`, Drag-and-drop und
-   `Letzte Ergebnisse öffnen`.
+1. **Auswahl:** `Dateien auswählen`, `Ordner auswählen`, Drag-and-drop,
+   explizites `Starten` oder `Auswahl verwerfen`.
 2. **Verarbeitung:** nichtmodaler, inhaltsfreier Fortschritt mit
    `abgeschlossen/ausgewählt`; ein Dateifehler stoppt nicht den übrigen Stapel.
    Eine Pause bleibt außerhalb der Istzusage, bis Befehl und Recovery belegt sind.
-3. **Prüfung:** nur echte Mehrdeutigkeiten, gesammelt in einer Liste mit
+3. **Prüfung:** nur im Anonymisierungszweck und erst nach Abschluss offener
+   automatischer Arbeit; echte Mehrdeutigkeiten gesammelt in einer Liste mit
    `Anonymisieren`, `Beibehalten`, `Für gleiche Treffer übernehmen` und
    `Später`.
-4. **Ergebnis:** verständliche Zähler sowie `Ergebnisse öffnen`, `Zuordnung
-   öffnen` und `Neuer Stapel`.
+4. **Ergebnis:** nichtmodaler Status in der aktuellen Ansicht. Auf bewussten
+   Wechsel in den Verlauf folgen `Ergebnisse öffnen`, `Zuordnung anzeigen` und
+   `Fortsetzen` je Zeile beziehungsweise `Neue Aufgabe wählen`.
 
-Profile und Dokumenttypen werden pro Datei automatisch erkannt. Parsernamen,
-MarkItDown, Sicherheitsgates, technische Fehlercodes, Bildmodus und interne
-Pfade erscheinen nicht im Normalablauf. Passwortgeschützte Dateien werden
+Anonymisierungsprofile werden pro Datei automatisch erkannt; Format- und
+Quellenprüfung gelten für beide Zwecke. Parsernamen, MarkItDown,
+Sicherheitsgates und interne Pfade erfordern keine Benutzereinstellung.
+Passwortgeschützte Dateien werden
 unverändert übersprungen und im Abschluss verständlich genannt.
 
-Standardziel ist `Dokumente/SecureDataMsg/DataSecure-Output`. Eine andere Wahl
+Standard-Ergebnisstamm ist `Dokumente/SecureDataMsg`; darunter liegen je nach
+Zweck `DataSecure-Markdown/Lauf-…` oder `DataSecure-Output/Lauf-…`. Eine andere Wahl
 ist freiwillig unter **Einstellungen → Ergebnisordner** möglich und wird lokal
 gespeichert. Quellen werden niemals verändert, verschoben oder gelöscht.
 
@@ -85,7 +105,8 @@ Engineering-Vertikalschnitt vorhanden. Rust-Hülle, Windows-Mehrfachpicker,
 privater Core-Sidecar und inhaltsfreie UI-Projektion laufen auf Windows x64;
 ein selbsttragendes Windows-x64-Engineering-Paket besteht die Paket- und
 isolierte Startprüfung. Endnutzerfreigabe, native macOS-Zielhostnachweise und
-der produktive MarkItDown-Worker bleiben offen.
+die native Linux-Paketierung bleiben offen. Der produktive Node-Konverter mit
+PDF-/OCR-Komponenten ist bereits angebunden; MarkItDown gehört nicht dazu.
 
 ```mermaid
 flowchart LR
@@ -99,13 +120,17 @@ flowchart LR
   MCP --> CORE[DataSecure Application/Core API]
   SA --> CORE
   CORE --> INTAKE[Admission + versiegelter Snapshot]
-  INTAKE --> DIRECT[DataSecure-Parser]
-  INTAKE --> CONV[isolierter MarkItDown-Worker geplant; DOCX-Orakel E0]
+  INTAKE --> MODE{gespeicherter Produktzweck}
+  MODE -->|anonymisieren: beide Produkte| DIRECT[DataSecure-Parser]
+  MODE -->|nur Markdown: Standalone| CONV[Node-/OOXML-/PDF-/OCR-Konverter]
   DIRECT --> GRAPH[Content Graph]
-  CONV --> GRAPH
   GRAPH --> PII[PII-Erkennung + Residual-Gate]
-  PII --> REVIEW[lokaler Sammelreview]
-  REVIEW --> EXPORT[anonymisiertes Markdown + Mapping]
+  PII -->|Entscheidung offen und automatische Arbeit fertig| REVIEW[lokaler Sammelreview]
+  PII -->|eindeutig| EXPORT[DataSecure-Output: anonymisierte MD]
+  REVIEW --> EXPORT
+  CONV --> PLAIN[DataSecure-Markdown: Originalinhalte + Coveragehinweise]
+  EXPORT --> MAP[Standalone: laufbezogene Zuordnung vor sichtbarem Abschluss]
+  PLAIN --> MAP
 ```
 
 Standalone verwendet **kein MCP und kein JSON-RPC**. Die Desktop-Hülle und die
@@ -116,13 +141,15 @@ Engine festgelegt.
 
 Die Endnutzerpakete sind getrennt: Standalone enthält kein Pluginmanifest,
 keine Skills, keine Prompts und keine Claude-/MCP-Laufzeit. Es erhält ein
-eigenes Manifest, Runtime-Evidence, SBOM, Update- und Rollbackregeln. Beide
-Produkte binden denselben Core- und Policy-Fingerprint.
+eigenes Manifest, Runtime-Evidence, SBOM, Update- und Rollbackregeln. Die
+gemeinsame Core-/Policy-Fingerprint-Bindung des Anonymisierungsmodus bleibt
+ein Freigabegate nach BL-010.23; unterschiedliche v1-/v2-Kennungen werden
+inhaltlich statt bytegleich verglichen.
 
 Tauri 2 ist nach dem Technologiegegencheck der verbindliche Engineering-
-Kandidat für die Desktop-Hülle. Im Ziel öffnet die Rust-Schicht den nativen
+Kandidat für die Desktop-Hülle. Die implementierte Rust-Schicht öffnet den nativen
 Datei- oder Ordnerdialog und startet den zielgebunden mitgelieferten
-DataSecure-Core als Sidecar. Der Renderer verwendet dann nur das geschlossene UI-View-Model aus
+DataSecure-Core als Sidecar. Der Renderer verwendet nur das geschlossene UI-View-Model aus
 `server/standalone/ui-contract.json`; er sieht ausschließlich die für den
 Anwender bestimmte lokale Textanzeige von Auswahl und Ziel, niemals Rohbytes,
 Mapping oder private Core-Verzeichnisse. Diese Anzeige wird nicht protokolliert
@@ -146,8 +173,11 @@ sichtbaren, inhaltsfreien Hinweis und keine implizite Startfreigabe.
 
 BL-010.28 bindet die vollständige Nutzerreise beider Modi. Der bereits vorhandene
 lokale Parserpfad wird wiederverwendet, wo seine Extraktions-Coverage reicht;
-MarkItDown erweitert ihn erst nach BL-010.15–19. Ein bloßes Überspringen des
-Residual-Gates im bestehenden Exportpfad ist keine zulässige Implementierung.
+BL-010.15–19 ist mit dem gebündelten Node-/PDF-/OCR-Konvertierungspfad verbunden.
+Die [Produkt-/Zweckmatrix](TARGET_ARCHITECTURE.md#aktuelle-fähigkeiten-nach-produkt-und-zweck)
+und [Formatmatrix](../FORMAT_COVERAGE_MATRIX.md) bestimmen den aktiven Umfang.
+Der Konvertierungszweig verwendet seinen eigenen Inhaltserhaltungs- und
+Artefaktvertrag und umgeht nicht bloß ein Residual-Gate im Anonymisierungsexport.
 Auswahl und Quellen bleiben unverändert; in der Modusübersicht steht ruhig und
 dauerhaft **Nicht anonymisiert – enthält Originalinhalte**. Bei einem Fehler
 bleiben fertige Positionen checkpointgebunden erhalten; Fortsetzen nutzt denselben
@@ -163,14 +193,35 @@ Canvas werden mit normalem Node ausgeliefert; kein System-Python oder Netzwerk.
 Der Pakettest prüft beide Betriebsarten mit tatsächlicher Prozessübergabe,
 unveränderten Quellen und exakten Zuordnungs-/Ergebniszielen.
 
+Empfangs-ACK, erster dauerhafter Checkpoint und terminaler Export sind getrennte
+Ereignisse. Fortsetzung bindet den beobachteten oder ausdrücklich ausgewählten
+Lauf, auch wenn ein neuerer Verlaufseintrag existiert. Die gemeinsame
+`batch-next-action.js`-Readiness startet Review nur ohne verbleibende,
+verarbeitende, wiederholbare, Delivery- oder Mappingpositionen; unbekannte
+Zähler belegen keine Bereitschaft. Unterbrochene Mischstapel laufen zuerst im
+Batchworker weiter und wechseln erst danach automatisch in den Sammelreview.
+Der Fortschritt zählt freigegebene plus terminal gestoppte Positionen;
+Ergebnis- und Fehlerzahlen bleiben getrennt.
+
+Die gemeinsame, kanalgebundene Persistenz liegt in
+`gateway/standalone-history-store.js`: rohtextfreie Zusammenfassungen und
+ursprüngliche Verzeichnisbindungen. Die Schreibfunktionen bleiben außerhalb
+des Standalonekanals wirkungslos. `standalone/run-history.js` enthält nur die
+20er-Verlaufsprojektion und deren lokale Aktionen. Das Cowork-Paket erhält den
+Core-Store als transitive Journal-/Exportabhängigkeit, niemals den Desktop-
+Verlaufsadapter. Die echte Produktdateiprojektion prüft diese Modulgrenze auch
+ohne eine installierte Anwendung.
+
 Der Renderer bestätigt einen terminalen Zustand erst nach zwei aufeinander
 folgenden `requestAnimationFrame`-Takten über den ausschließlich dafür
 zugelassenen Befehl `ack_terminal_presented`. Dieses inhaltsfreie ACK trennt
 „Core fertig“ von „im Fenster tatsächlich gerendert“. Eine nur pro ausstehender
 Darstellung gültige, inhaltsfreie Generationsnummer bindet das ACK exakt an den
-angezeigten Zustand; ein verspätetes ACK kann keinen späteren Stapel bestätigen. Bleibt es aus, bestätigt
-die Hülle nichts und genau der vorhandene Worker-Fallback darf den lokalen
-Abschluss anzeigen. Vorbereitung und laufender Fortschritt bleiben passiv im
+angezeigten Zustand und die konkrete Laufkennung; ein verspätetes ACK kann
+keinen späteren Stapel bestätigen. Bleibt es aus, bestätigt die Hülle keine
+Darstellung und protokolliert den festen Timeout. Standalone delegiert die
+Anzeige an seine Produkt-UI und öffnet keinen automatischen nativen
+Abschlussdialog. Vorbereitung und laufender Fortschritt bleiben passiv im
 selben Fenster; es entsteht kein weiterer Bestätigungsdialog.
 
 Der Windows-Engineering-Spike einschließlich selbsttragendem Pilotpaket ist
@@ -203,29 +254,28 @@ implementieren müsste.
 
 ## MarkItDown-Vertrauensgrenze
 
-Microsoft MarkItDown ist ein Konverter, kein Anonymisierer und kein
-Sicherheitsgate. Es läuft erst **nach** Formatprüfung und versiegeltem Snapshot
-in einem getrennten, ressourcenbegrenzten Worker.
+Microsoft MarkItDown `0.1.7` mit Python `>=3.10` (MIT) ist ausschließlich ein
+optionales DOCX-Differentialorakel für Engineering. Der bestehende
+`converters/markitdown/runtime-contract.json` setzt `product_enabled: false`.
+`differential-oracle.js` und `bridge.py` sind keine produktiven Worker und
+werden nicht als erforderliche Anwender-Runtime gebündelt. Die frühere
+Erlaubnis aus DS-075 ist keine Behauptung einer solchen Produktintegration.
 
-- exakt gepinnte Version `0.1.7`, Python `>=3.10`, MIT-Lizenz;
-- keine Installation oder Downloads auf dem Endgerät;
-- nur gebündelte, hashgebundene Wheels je Zielplattform;
-- Eingabe ausschließlich als Snapshot-Bytes über geerbtes `stdin`;
-- Ausgabe ausschließlich als private Markdown-Zeichenfolge über `stdout`;
+Der begrenzte Orakelvertrag bleibt erhalten:
+
+- expliziter Engineering-Aufruf mit synthetischen zugelassenen Snapshot-Bytes;
+- Eingabe über geerbtes `stdin`, private Markdown-Ausgabe über `stdout`;
+  dieser ungerahmte Engineeringtransport ist kein produktiver IPC-Nachweis;
 - `enable_builtins=False`, `enable_plugins=False`, nur explizit erlaubte
   Formatkonverter;
 - keine URL-/Pfad-Konvertierung, kein Netzwerk und keine LLM-Clients;
 - `markitdown-ocr` wird nicht eingebunden;
-- Im Anonymisierungsmodus werden rohe Markdown-Zwischenkonvertate weder
-  gerendert noch als sichtbare Datei gespeichert; für Resume wird der
-  versiegelte Snapshot neu konvertiert. Der zweite Modus nach DS-085 exportiert
-  dagegen bewusst nicht anonymisierte Markdown-Endartefakte in einen getrennten
-  Zielbaum. Dafür existieren eigener `dm_`-Store, v5-Recovery und v3-Export.
+- keine sichtbaren Rohmarkdown-Zwischenartefakte des Orakels.
 
-Die erste Stufe nutzt DOCX als Differentialorakel gegen den vorhandenen Parser.
-XLSX, PPTX, Text-PDF, Scan-PDF und Bilder werden erst nach je eigenem Coverage-,
-Ressourcen-, Offline-, Paket- und Zielsystemnachweis freigegeben. MarkItDown
-allein ist niemals Freigabeevidenz.
+Der produktive Konverter verwendet bereits Node-/OOXML-Parser, PDF.js, Canvas
+und Tesseract-DE/EN. Neue Format- oder Zweckfreigaben brauchen weiterhin eigene
+Coverage-, Ressourcen-, Offline-, Paket- und Zielsystemnachweise. Ein positives
+MarkItDown-Differentialergebnis allein ist niemals Freigabeevidenz.
 
 ## Diagnosevertrag
 
@@ -245,18 +295,27 @@ stdout/stderr. Das Mapping ist eine lokale Fachdatei, kein Log.
 
 ## Lieferreihenfolge
 
-1. direkte Standalone-Application-API und physische Namespace-Trennung;
-2. MarkItDown-Vertrag und DOCX-Differentialtests;
-3. Tauri-2-Hülle mit Auswahl, Fortschritt, Sammelreview und Abschluss; Windows-
-   Engineering-Build steht, native Spikes auf macOS Intel/ARM und Linux folgen;
-4. hashgebundene Python-Runtime und isolierter Konverter-Supervisor je OS;
-5. XLSX/PPTX, Text-PDF und zuletzt Scan-PDF/Bilder mit lokaler OCR;
-6. vier getrennte Standalone-Pakete, Offline-/Golden-Korpus-Gates und
-   Windows-/macOS-/Linux-UAT.
+Die direkte Service-/CLI-Schicht, physische Namespace-Trennung, Tauri-Hülle,
+native Auswahl/Drop, beide Zwecke, Konvertierungsworker, Fortschritt und
+laufgebundene Historie sind bereits implementiert. Die weitere Reihenfolge
+führt diesen Stand zur Freigabe:
+
+1. Verbleibende neutrale Core-API-Extraktion und gemeinsame semantische
+   Fingerprint-/Golden-Bindung der Anonymisierung schließen (BL-010.9/BL-010.23).
+2. Beide bestehenden Zweckpfade mit Parser-, Fremderzeuger-, Negativ-,
+   Offline-, Abbruch-/Fortsetzungs-, Review- und Exportregressionen sichern.
+   MarkItDown bleibt dafür ein optionales Orakel, keine Lieferabhängigkeit.
+3. Einen neuen sauberen Kandidaten in selbsttragende, zielgebundene
+   Node-/PDF-/OCR-Pakete projizieren; Lizenz-/SBOM-Prüfung, reproduzierbare
+   Paketprüfung und native Windows-/macOS-/Linux-Builds getrennt nachweisen.
+4. Aktuelle Fresh-Install-, Tastatur-/Screenreader-, Drop-/Fokus-, Ergebnis-
+   Öffnungs-, Update-/Rollback- und Zielhost-UATs durchführen; erst danach
+   die jeweilige Produktfreigabe erteilen.
 
 Aktueller E0-Stand: Die direkte lokale Service-/CLI-Schicht, ein eigener
-Standalone-Datenroot, der MarkItDown-Vertrag und die DOCX-Engineering-Bridge
-sind implementiert und automatisiert getestet. Zielkatalog, Tauri-Konfiguration,
+Standalone-Datenroot und der produktive Node-/OOXML-/PDF-/OCR-Konverter
+sind implementiert und automatisiert getestet. Der deaktivierte MarkItDown-
+Orakelvertrag ist zusätzliche Engineering-Infrastruktur. Zielkatalog, Tauri-Konfiguration,
 Renderer-Berechtigungsgrenze und macOS-Pilotablauf sind maschinenprüfbare
 Verträge. Die reale Rust-Hülle, ein nativer Picker ohne zweite Auswahl und der
 private längengerahmte Core-Dispatcher wurden auf Windows x64 kompiliert und
@@ -265,5 +324,6 @@ verhindern einen unendlich wartenden UI-Aufruf. Das Windows-x64-Pilot-ZIP bindet
 die herkunftsgeprüfte Node-Runtime und eine frisch erzeugte geschlossene
 Coreprojektion; Paketprüfung und isolierter Sidecar-Smoke sind grün. Der Build
 ist ein technischer Vertikalschnitt, **noch kein freigegebenes
-Endnutzerprodukt**. Produktiver Konverter, breite Formatfreigabe, native
-macOS-/Linux-Pakete, Lizenzfreigabe und Zielsystem-UAT sind offen.
+Endnutzerprodukt**. Native macOS-/Linux-Pakete, Lizenzfreigabe und Zielsystem-UAT
+bleiben offen; auch vorhandene grüne Paketnachweise ersetzen keinen Nachweis
+für einen erst danach geänderten Kandidaten.

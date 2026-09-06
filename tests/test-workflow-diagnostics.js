@@ -18,6 +18,29 @@ const { test, done, assert } = createSuite('Content-free workflow diagnostics');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-workflow-diagnostics-'));
 const NOW = Date.UTC(2026, 7, 24, 12, 0, 0);
 
+test('every shared cause survives both the workflow journal and its actual support mirror', () => {
+  const { CAUSE_CODES, WORKFLOW_ERROR_CODES } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
+  const { supportTraceStatus } = require('../plugins/data-secure/server/gateway/support-trace');
+  const dataRoot = path.join(base, 'shared-catalog');
+  const env = { EU_PRIVACY_SUPPORT_MODE: '1' };
+  for (const [index, error_code] of WORKFLOW_ERROR_CODES.entries()) {
+    assert.strictEqual(sanitizeWorkflowEvent({ error_code }).error_code, error_code);
+    assert.strictEqual(recordWorkflowEvent({ event: 'mcp_start_response', outcome: 'stopped',
+      error_code, timestamp: new Date(NOW + index).toISOString(), message: 'PRIVATE_SENTINEL' },
+    { dataRoot, env, now: NOW + 1000 }), true);
+  }
+  const workflow = workflowDiagnosticStatus(100, { dataRoot, env, now: NOW + 1000 });
+  const support = supportTraceStatus(200, { dataRoot, env, now: NOW + 1000 });
+  assert.strictEqual(workflow.returned_events, 50, 'the public status remains bounded');
+  assert.strictEqual(workflow.retained_events, WORKFLOW_ERROR_CODES.length);
+  assert.deepStrictEqual(_test.readWorkflowEvents({ dataRoot, env, now: NOW + 1000 })
+    .map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
+  assert.deepStrictEqual(support.events.map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
+  assert.ok(CAUSE_CODES.every(code => support.events.some(event => event.error_code === code)));
+  assert.doesNotMatch(JSON.stringify({ workflow, support }), /PRIVATE_SENTINEL/u);
+  assert.strictEqual(sanitizeWorkflowEvent({ error_code: 'PRIVATE_CODE' }).error_code, 'INTERNAL_FAILURE');
+});
+
 test('workflow events retain only fixed lifecycle metadata', () => {
   const event = sanitizeWorkflowEvent({
     timestamp: new Date(NOW).toISOString(), event: 'picker_selection_accepted', outcome: 'ok',

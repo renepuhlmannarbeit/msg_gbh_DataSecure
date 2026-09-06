@@ -153,7 +153,23 @@ try {
             break
         }
     } while ([DateTimeOffset]::UtcNow -lt $deadline)
-    if (-not $passed) { throw 'STANDALONE_NATIVE_IPC_TIMEOUT' }
+    if (-not $passed) {
+        # Preserve bounded content-free evidence before the owned test profile is
+        # cleaned. A timeout alone cannot distinguish page loading from IPC failure.
+        $checkpoint = [ordered]@{ application = ($application.Count -gt 0); page_loaded = $pageLoaded;
+            frontend_ready = $frontendReady; public_state = $publicState; ui_context = $uiContext;
+            sidecar_started = $sidecarStarted; service_initialized = $serviceInitialized }
+        Write-Output ('STANDALONE NATIVE CHECKPOINT ' + ($checkpoint | ConvertTo-Json -Compress))
+        foreach ($record in @($desktopSession + $sidecarSession | Select-Object -Last 16)) {
+            $safe = [ordered]@{}
+            foreach ($field in @('event', 'action', 'outcome', 'error_code')) {
+                $value = [string]$record.$field
+                if ($value -cmatch '^[A-Za-z0-9_]{1,96}$') { $safe[$field] = $value }
+            }
+            Write-Output ('STANDALONE NATIVE EVENT ' + ($safe | ConvertTo-Json -Compress))
+        }
+        throw 'STANDALONE_NATIVE_IPC_TIMEOUT'
+    }
     if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'profile\Local\SecureDataMsg-Standalone\workspace') -PathType Container)) {
         throw 'STANDALONE_NATIVE_ISOLATED_WORKSPACE_MISSING'
     }

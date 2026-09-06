@@ -92,11 +92,20 @@ function createBatchIntakeIntent(options = {}) {
     catch { throw new Error('BATCH_INTAKE_INTENT_INVALID'); }
   }
 
-  function orphan(token, now) {
-    try { io.lstatSync(journalPath(token)); return null; }
+  function journalAbsent(token) {
+    try { io.lstatSync(journalPath(token)); return false; }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
+    return true;
+  }
+
+  function orphan(token) {
+    if (!journalAbsent(token)) return null;
     const record = read(token);
-    if (alive(record.pid) || now <= Date.parse(record.expires_at)) return null;
+    // The copying process writes this intent before the first private byte and
+    // itself publishes the journal. There is no journal-free worker handoff.
+    // ESRCH is the production liveness probe's only false result; unknown or
+    // reused PIDs stay protected. Once that owner is dead, TTL adds no safety.
+    if (alive(record.pid) !== false) return null;
     let stat;
     try { stat = io.lstatSync(workDirectory(token), { bigint: true }); }
     catch (error) { if (error.code === 'ENOENT') return record; throw error; }
@@ -107,6 +116,17 @@ function createBatchIntakeIntent(options = {}) {
   function cleanup(token, now) {
     const record = orphan(token, now);
     if (!record) return false;
+    // Revalidate immediately before touching the bound work tree. A new live
+    // owner, a published journal, or an intent/parent swap cancels cleanup.
+    if (alive(record.pid) !== false) return false;
+    const expected = bindings.get(record);
+    const current = bindFile(intentPath(token), { io });
+    if (!expected || current.target !== expected.target || current.parent !== expected.parent ||
+        Object.keys(expected.file).some((key) => current.file[key] !== expected.file[key]) ||
+        Object.keys(expected.parentIdentity).some((key) => current.parentIdentity[key] !== expected.parentIdentity[key])) {
+      throw new Error('BATCH_INTAKE_OWNERSHIP_CHANGED');
+    }
+    if (!journalAbsent(token)) return false;
     removeWork(token, { expectedIdentity: record.work_identity });
     remove(token, record);
     return true;

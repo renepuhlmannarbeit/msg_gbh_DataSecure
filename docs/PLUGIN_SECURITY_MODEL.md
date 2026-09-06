@@ -1,6 +1,6 @@
 # DataSecure Security-Modell
 
-Stand: 05.09.2026 · 3.2.0-rc108
+Stand: 05.09.2026 · 3.2.0-rc109
 
 ## Vertrauensgrenze
 
@@ -25,6 +25,15 @@ verifiziertes Markdown mit kurzlebiger, laufgebundener Leseberechtigung.
 | Netzwerkabfluss | netzwerkfreier Verarbeitungskern und Boundarytests |
 | Ressourcenerschöpfung | Datei-/Stapel-/CPU-/RAM-/Zeit-/Entpackbudgets |
 | unbefugtes Ergebnislesen | paket-/laufgebundene Capability, Paging und Re-Verifikation |
+
+Auch der Supportweg `review_deferred_document_batch` verwendet ausschließlich
+den festen, mit `network-deny` gestarteten Review-Worker. Der MCP-Hauptprozess
+prüft nur Metadaten und wartet auf das inhaltsfreie Empfangs-ACK. Er rekonstruiert
+keinen Review-Rohtext. Noch reparierbare Veröffentlichungs-/Zuordnungszustände
+werden im Worker unter der Stapelsperre abgeglichen; erst danach wird erneut
+über Reviewbereitschaft entschieden. Ein ACK belegt weder eine sichtbare
+Prüfoberfläche noch den Abschluss. Timeout oder Hostabbruch bedeutet eine
+unbestätigte Übernahme, nicht den Beweis, dass kein Worker gearbeitet hat.
 
 ## Lokale Speicherung
 

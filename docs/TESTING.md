@@ -1,10 +1,21 @@
 # Aktueller Testvertrag
 
-Stand: 06.09.2026 · 3.2.0-rc108
+Stand: 06.09.2026 · 3.2.0-rc109
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
 enthält nur die heute gültigen Testklassen und Releasebefehle.
+
+RC109 trennt außerdem reine Core-Verträge von den Produktadaptern.
+`test-core-contracts.mjs` prüft Exportidentität der alten Importpfade, reine
+transitive Abhängigkeiten und beide tatsächlichen Paketprojektionen.
+`test-core-policy-binding.mjs` gehört zum lokalen Vollprofil: ausgewählte
+gemeinsame Code-/Policy-Dateien werden aus beiden Projektionen gehasht und
+ein erster Golden-Korpus in getrennten Produktprozessen verarbeitet.
+Typisierte, bijektive Pseudonymnormalisierung vergleicht v1/v2 semantisch;
+unterschiedliche Personen/Firmen dürfen nicht zusammenfallen und Fachtext
+darf nicht verschwinden. Das ist keine vollständige Golden-Abdeckung und
+kein persistierter Journal-/Release-Fingerprint.
 
 Die normale Standalone-App schreibt ihre inhaltsfreien Interaktionslogs ohne
 zusätzlichen Anwenderdialog. Für eine ausdrücklich aktivierte Supportsession
@@ -145,9 +156,25 @@ Die zugehörigen Direktgates sind `test-batch-executor-startup`,
 `test-automatic-review-worker-flow` und `test-result-export-startup-replay`; sie
 sind außerdem genau einmal in `test:product` einsortiert.
 
+`npm run test:status-app` baut und prüft die default-off Cowork-Startkarte und
+startet anschließend mit exakt gepinntem `playwright-core` den bereits
+installierten Microsoft Edge. Alle sieben begrenzten Zustände werden in DE und
+EN mit axe, Rohtext-Canary und ausschließlich dem SDK-Handshake geprüft; ein
+zusätzlicher 320-px-/400%-Lauf belegt den Reflow. Es wird kein Browser geladen
+oder in ein Produktpaket übernommen. Die Karte bleibt absichtlich eine
+Start-Momentaufnahme und behauptet keinen späteren Abschluss.
+
+Die identitätsgebundene private Root-Session besitzt einen eigenen Swap-
+Negativtest. Der lokale Vorher-/Nachherlauf mit 100 TXT/CSV/DOCX-Dateien sank
+von 149,328/191,247 Sekunden auf 22,085/23,532 Sekunden (kalt/warm). Die Zahl
+der Durability-Fsyncs blieb unverändert; dies ist E0 auf dem Entwicklungsrechner,
+keine plattformübergreifende Latenzzusage.
+
 Der aktuelle Vertrag umfasst die spawn-bestätigten, unter Windows ausdrücklich sichtbaren
-Öffnen-Aktionen, die exakte Markierung der laufbezogenen Zuordnungsdatei und den zweigeteilten Standalone-Ablauf
-**Verarbeiten / Ergebnisse**. Die direkten Regressionen liegen in
+Öffnen-Aktionen, die exakte Markierung der laufbezogenen Zuordnungsdatei und den Standalone-Ablauf
+**Start / Verarbeiten / Verlauf** nach DS-086: keine vorausgewählte Betriebsart,
+kein automatischer Ansichtswechsel, die letzten 20 eigenen Verarbeitungen.
+Die direkten Regressionen liegen in
 `test-ui-process-policy`, `test-standalone`, `test-standalone-frontend` und
 `test-standalone-desktop-contract`. `test-result-folder-export` prüft zusätzlich
 atomare Zuordnungspublikation, RC103-Migration, Manipulationsstopp und die
@@ -165,6 +192,45 @@ Ausgabepipes: der Steuerprozess endet, akzeptierte Arbeit wird autonom fertig.
 Die Fixture verändert nur das Timing. Der reale Paket-Smoke verarbeitet nach
 dem erfolgreichen Vierformatlauf einen vollständig fehlerhaften CSV-Stapel und
 verlangt dessen eigene Zuordnung statt eines Rückfalls auf den Vorgängerlauf.
+
+## RC109: Endgültige Testurteile und Schnittstellengegenproben
+
+`tests/helpers.js` registriert jeden Fall vor seinem Callback. `done()` wartet
+auch bei nicht vom Aufrufer abgewartetem `testAsync` auf alle Fälle und danach
+auf genau eine Bereinigung. Späte Fehler, falsche Async-API, unaufgelöste Fälle
+und fehlgeschlagene Bereinigung liefern Nonzero-Exit; reale Childprocess-
+Sentinels stehen in `test-test-harness.js`. Keine Timer-Verzögerung ersetzt
+diesen Abschlussvertrag.
+
+`test-mcp-protocol.js` prüft echte stdio-Frames einschließlich ungültiger
+Argumente vor einer zustandsändernden Übergabe. `test-mcp-input-validation.mjs`
+prüft die aus dem Toolkatalog generierten Ajv-Validatoren. Native Auswahl und
+Prozessstart werden bei den MCP-Fortsetzungsgegenproben bewusst substituiert;
+das beweist Dispatch, nicht den nativen Zielhostdialog.
+`test-mcp-support-review.js` prüft zusätzlich den echten Support-stdio-Weg,
+einschließlich reserviertem Intake vor Journalerstellung, Reparaturdelegation,
+ACK/Abbruch und inhaltsfreier Projektion. Eine direkte Rohtextrekonstruktion
+im MCP-Elternprozess lässt die Gegenprobe fehlschlagen. Der native Worker wird
+hier adaptiert; Orchestrator-, Launcher- und Netzwerkgrenztests prüfen die
+zugehörigen produktiven Grenzen getrennt.
+`test-standalone-continuation.js` verbindet echte Fortschritts-, Fortsetzungs-,
+Review-, Delivery- und Exportlogik; Journal/Locks/UI/Prozessstart sind adaptiert.
+Der eigenständige reale Konvertertest fährt XLSX-Fehler und BMP32 dagegen durch
+die tatsächliche Aufnahme-/Worker-/Artefakt-/Exportkette.
+
+`test-gateway-e2e.js` heißt aus Kompatibilität noch so, ist aber ein **interner
+Gateway-Integritätstest einschließlich historischer Fassaden**. Seine Input-
+Queue, Bildfreigabe und Mock-OCR sind kein Beleg für aktive MCP-Werkzeuge oder
+aktuelle Bildfreigabe. Aktuelle MCP-/Cowork-Evidenz kommt aus den Protokoll-,
+Toolflächen- und Skilltests sowie gesonderter Hostabnahme. Die historischen
+Prüfungen bleiben zur Absicherung der noch referenzierten internen Fassaden.
+Die RC109-Unicode-Erweiterung dieses Tests startet zusätzlich echte, isolierte
+Plugin- und Standalone-Stapel sowie einen reinen Markdown-Stapel. Diese Fälle
+sind ausdrücklich von der historischen Fassaden-/Mock-OCR-Evidenz getrennt.
+
+Standalone-only Änderungen erreichen jetzt beide automatischen CI-Pfadfilter.
+Es bleibt bei einem kostenbegrenzten Job; native Builds und Konverterressourcen
+werden nicht ungefragt als neue automatische GitHub-Jobs ausgeführt.
 
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird

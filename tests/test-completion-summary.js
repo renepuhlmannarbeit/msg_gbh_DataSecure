@@ -17,7 +17,7 @@ const {
   showLocalIntakeNotice,
   showBatchStateNotice,
   showTerminalBatchSummary,
-  _test: { windowsOpenResultsHandler }
+  _test: { windowsOpenResultsHandler, darwinNoticeScript }
 } = require('../plugins/data-secure/server/companion/completion-summary');
 
 const { test, done, assert } = createSuite('Local completion summary');
@@ -78,7 +78,9 @@ test('a completed visible export offers one local open-results action', () => {
     assert.match(windows.args.at(-1), /explorer\.exe/u);
     const mac = completionSummaryCommands(summary, { platform: 'darwin', resultDirectory: root })[0];
     assert.match(mac.args.at(-1), /Ergebnisse öffnen/u);
-    assert.match(mac.args.at(-1), /Finder/u);
+    assert.match(mac.args.at(-1), /NSWorkspace/u);
+    assert.match(mac.args.at(-1), /isVisible/u);
+    assert.doesNotThrow(() => new Function(darwinNoticeScript('Titel', 'Text', root)));
   } finally {
     if (prior === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT;
     else process.env.EU_PRIVACY_RESULT_ROOT = prior;
@@ -245,6 +247,7 @@ test('macOS and Linux completion commands are local and content-free except fixe
   const summary = { selected_count: 3, released_count: 2, failed_count: 1 };
   const mac = completionSummaryCommand(summary, { platform: 'darwin' });
   assert.strictEqual(mac.command, '/usr/bin/osascript');
+  assert.deepStrictEqual(mac.args.slice(0, 3), ['-l', 'JavaScript', '-e']);
   assert.match(mac.args.join(' '), /SHOWN/);
   const linux = completionSummaryCommand(summary, { platform: 'linux' });
   assert.strictEqual(linux.command, 'zenity');

@@ -13,14 +13,16 @@ const workerSource = fs.readFileSync(workerFile, 'utf8');
 const token = 'b'.repeat(64);
 const waiting = Object.freeze({
   ok: true, complete: false, batch_phase: 'awaiting_local_review', batch_total: 2,
-  released: 1, stopped: 0, deferred_review: 1,
+  completed: 1, released: 1, stopped: 0, deferred_review: 1,
+  remaining: 0, retryable: 0, delivery_pending: 0, mapping_pending: 0, processing: 0,
   result_grade_counts: { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 2 },
   result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
   result_grades_verified: false, raw_content_sent_to_claude: false
 });
 const complete = Object.freeze({
   ok: true, complete: true, batch_phase: 'complete', batch_total: 2,
-  released: 2, stopped: 0, deferred_review: 0,
+  completed: 2, released: 2, stopped: 0, deferred_review: 0,
+  remaining: 0, retryable: 0, delivery_pending: 0, mapping_pending: 0, processing: 0,
   result_grade_counts: { complete: 2, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
   result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
   result_grades_verified: true, raw_content_sent_to_claude: false

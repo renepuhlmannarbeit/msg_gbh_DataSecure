@@ -5,6 +5,7 @@ const {
   NB,
   NA,
   normalizeText,
+  identifierDetectionText,
   canonicalizeRenderedText,
   normalizeSpaces,
   key,
@@ -116,10 +117,11 @@ function conservativeLabelledResiduals(text) {
       findings.push({ type: 'DATE_OF_BIRTH', text: match[0] });
     }
   }
-  for (const match of text.matchAll(RESIDUAL_PHONE_CANDIDATE_RE)) {
+  const phoneView = identifierDetectionText(text);
+  for (const match of phoneView.matchAll(RESIDUAL_PHONE_CANDIDATE_RE)) {
     const digits = match[0].replace(/\D/gu, '');
-    if (digits.length >= 6 && digits.length <= 15 && hasLabelBefore(text, match.index, PHONE_LABEL_RE, 80)) {
-      findings.push({ type: 'PHONE', text: match[0] });
+    if (digits.length >= 6 && digits.length <= 15 && hasLabelBefore(phoneView, match.index, PHONE_LABEL_RE, 80)) {
+      findings.push({ type: 'PHONE', text: text.slice(match.index, match.index + match[0].length) });
     }
   }
   for (const match of text.matchAll(RESIDUAL_TABLE_ID_CANDIDATE_RE)) {
@@ -505,7 +507,9 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   }
   // Structure is an independent release condition. A shifted/merged table row
   // cannot be assigned to a sensitive header by position without guessing.
-  if (hasAmbiguousSensitiveTable(clean)) out.push({ type: 'TABLE_STRUCTURE_AMBIGUOUS', text: '' });
+  if (hasAmbiguousSensitiveTable(clean) || hasAmbiguousSensitiveTable(identifierDetectionText(clean))) {
+    out.push({ type: 'TABLE_STRUCTURE_AMBIGUOUS', text: '' });
+  }
   const residualOrgKeys=new Set();
   const residualOrgSpans=[];
   for(const org of collectOrganizations(clean)) {

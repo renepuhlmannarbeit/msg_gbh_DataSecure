@@ -6,6 +6,7 @@ import { collectFiles, writeZip } from './lib/zip.mjs';
 import { readRegular, sha256, verifyTargetEvidence, readContract } from './lib/bundled-runtime.mjs';
 import { writeStandaloneRuntime } from './lib/standalone-runtime-projection.mjs';
 import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
+import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
@@ -96,9 +97,9 @@ const evidence = {
 };
 fs.writeFileSync(path.join(stage, 'RUNTIME-EVIDENCE.json'), `${JSON.stringify(evidence, null, 2)}\n`, { flag: 'wx' });
 
-const cargoLock = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone', 'tauri-contract', 'Cargo.lock'), 'utf8');
-const crates = [...cargoLock.matchAll(/^name = "([^"]+)"\r?\nversion = "([^"]+)"/gmu)]
-  .map((match) => ({ name: match[1], version: match[2] }));
+const cargoManifest = path.join(root, 'apps', 'datasecure-standalone', 'tauri-contract', 'Cargo.toml');
+const rustLicenses = loadCargoLicenseInventory(cargoManifest, rustTarget);
+fs.writeFileSync(path.join(stage, 'RUST-LICENSE-INVENTORY.json'), `${JSON.stringify(rustLicenses, null, 2)}\n`, { flag: 'wx' });
 const sbom = {
   spdxVersion: 'SPDX-2.3', dataLicense: 'CC0-1.0', SPDXID: 'SPDXRef-DOCUMENT',
   name: folderName, documentNamespace: `https://internal.msg.example/datasecure/${version}/${productTarget}`,
@@ -115,9 +116,10 @@ const sbom = {
         downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: item.license, licenseDeclared: item.license })),
     { name: 'tessdata-fast', SPDXID: 'SPDXRef-Tessdata', versionInfo: '4.1.0', downloadLocation: 'NOASSERTION',
       filesAnalyzed: false, licenseConcluded: 'Apache-2.0', licenseDeclared: 'Apache-2.0' },
-    ...crates.map((crate, index) => ({ name: crate.name, SPDXID: `SPDXRef-Crate-${index}`,
-      versionInfo: crate.version, downloadLocation: 'NOASSERTION', filesAnalyzed: false,
-      licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION' }))
+    ...rustLicenses.components.map((crate, index) => ({ name: crate.name, SPDXID: `SPDXRef-Crate-${index}`,
+      versionInfo: crate.version, downloadLocation: crate.source, filesAnalyzed: false,
+      licenseConcluded: crate.license, licenseDeclared: crate.license,
+      comment: crate.license_basis === 'cargo_license_file' ? `Lizenzbasis: ${crate.license_file}` : 'Lizenzangabe aus Cargo-Metadaten.' }))
   ]
 };
 fs.writeFileSync(path.join(stage, 'SBOM.spdx.json'), `${JSON.stringify(sbom, null, 2)}\n`, { flag: 'wx' });

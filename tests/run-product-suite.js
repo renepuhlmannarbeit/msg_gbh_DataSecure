@@ -12,8 +12,15 @@
 const { spawnSync } = require('child_process');
 
 const baseFiles = [
+  'tests/test-test-harness.js',
+  'tests/test-core-contracts.mjs',
+  'tests/test-cargo-license-inventory.mjs',
+  'tests/test-mcp-input-validation.mjs',
+  'tests/test-mcp-support-review.js',
+  'tests/test-standalone-continuation.js',
   'tests/test-product-bootstrap.js', 'tests/test-standalone.js',
   'tests/test-standalone-frontend.js',
+  'tests/test-standalone-history.js',
   'tests/test-standalone-sidecar.js',
   'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
   'tests/test-processing-mode.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
@@ -25,7 +32,7 @@ const baseFiles = [
   // test:standalone:conversion gate before it can bind either binary.
   'tests/test-support-trace.js', 'tests/test-converter-support-trace.js',
   'tests/test-debug-skill-contract.js',
-  'tests/test-package-staging.js', 'tests/test-safe-private-tree.js',
+  'tests/test-package-staging.js', 'tests/test-safe-private-tree.js', 'tests/test-private-root-session.js',
   'tests/test-package-staging-integration.js', 'tests/test-batch-executor-startup.js',
   'tests/test-batch-queue-envelope.js', 'tests/test-batch-worker-queue-rejection.js',
   'tests/test-completion-summary.js', 'tests/test-completion-summary-confirmed.js',
@@ -36,6 +43,7 @@ const baseFiles = [
   'tests/test-batch-source-admission.js', 'tests/test-document-result-grade.js',
   'tests/test-batch-result-projection.js', 'scripts/verify-native.mjs',
   'tests/test-bundled-runtime.mjs',
+  'tests/test-runtime-release-path.mjs',
   'tests/test-stable-data-root.js',
   'tests/make-fixtures.js', 'scripts/verify-canonical-docs.mjs',
   'tests/test-current-documentation-contract.js', 'tests/test-current-document-links.js',
@@ -53,7 +61,7 @@ const ciFiles = [
   'test-test-path-separation.js',
   'test-plugin-structure.js', 'test-host-matrix.js', 'test-runtime-start-matrix.js',
   'test-parsers.js', 'test-network-boundary.js', 'test-ui-process-policy.js',
-  'test-pii-regression.js', 'test-format-acceptance-matrix.js',
+  'test-pii-regression.js', 'test-iban-boundary.js', 'test-format-acceptance-matrix.js',
   'test-batch-review-policy.js', 'test-mapping.js', 'test-mapping-outbox.js',
   'test-normal-path-response.js', 'test-direct-picker-batch.js',
   'test-direct-picker-intake-worker.js', 'test-local-only-handoff.js',
@@ -69,6 +77,10 @@ const ciFiles = [
 ];
 
 const fullOnly = [
+  // Copied product projections and separate real processes belong to the
+  // full local gate, not the cost-capped source CI profile.
+  'test-core-policy-binding.mjs',
+  'test-product-isolation-offline.mjs',
   'test-skill-eval-corpus.js', 'test-text-source.js', 'test-csv-source.js',
   'test-csv-differential.js', 'test-parser-isolation.js', 'test-content-graph.js',
   'test-contract-skill-acceptance.js',

@@ -79,14 +79,20 @@ JavaScript bleibt ein fester Hinweis auf Textantwort und lokalen Abschluss.
 
 ## Reproduzierbare E0-Nachweise
 
-`test-status-app-model.mjs`: 24 Checks zu allen sechs Zuständen in DE/EN,
+`test-status-app-model.mjs`: 27 Checks zu allen sieben Zuständen in DE/EN,
 fehlerhaften Metadaten, Rohtext-Canaries, Duplikaten, Sprachwahl und SDK-Fehlern.
 `test-status-app-server.js`: 11 Gates für Default/Support/Capability,
 Ressourcen-URI, Größen-/Hash-/Schemafehler, Links, Austausch, Truncation,
 Nanosekunden-Zeitstempel und unveränderten Textfallback. `test-mcp-protocol.js`:
 37 echte stdio-Tests einschließlich drei UI-Protokollfälle.
 
-Synthetischer Browserhost: `node tests/manual/status-app-browser-server.mjs`.
+Das verpflichtende Gate `tests/test-status-app-browser.mjs` startet denselben
+synthetischen Host automatisch im bereits installierten Microsoft Edge. Es prüft
+alle 14 Sprach-/Zustandskombinationen mit axe, die Bridge-Allowlist und Reflow bei
+320 px und 400 % Text. `playwright-core` ist exakt gepinnt; kein Browser wird
+heruntergeladen oder an Endnutzer ausgeliefert.
+
+Der zusätzliche manuelle Browserhost `node tests/manual/status-app-browser-server.mjs`
 Er bindet nur `127.0.0.1` an einen freien Port, liest das gebaute HTML und die lokale
 axe-Testbibliothek, niemals Nutzerdokumente. Im Browser ausgeführte Fixture-JS
 simuliert den Host-Handshake; dies ist keine produktive Bridge. „Run checks“ prüft
@@ -97,9 +103,10 @@ Mit Strg+C beenden. Ergebnisse des aktuellen Laufs stehen in `docs/TESTING.md`.
 
 ## Noch offen – keine verdeckte Freigabe
 
-- **E0:** weitergehender terminaler Status-/UI-Vertrag, vollständige automatisierte
-  A11y-Matrix und zusätzliche SDK-/Host-Negativfälle. Keine Aktions-UI beiläufig
-  ergänzen; zuerst Datenschutz-/Ablaufvertrag prüfen.
+- **E0-Entscheidung:** Eine terminale Projektion wird nicht aus der einmaligen
+  Startantwort erfunden. Der automatisierte Browser-/A11y-/DE-EN-/Reflow-Vertrag
+  ist abgeschlossen; zusätzliche Hostfälle werden nur aus einem reproduzierten
+  Defekt oder einer späteren Pilotaktivierung abgeleitet.
 - **E1:** echte aktuelle Cowork-Desktop-Versionen auf Windows/macOS x64/ARM64,
   iframe-Rendering, CSP/Visibility, fehlende UI-Unterstützung, Organisationspolicy,
   SDK-/Hostabbruch und unveränderter Text-/OS-Fallback.

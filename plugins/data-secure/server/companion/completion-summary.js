@@ -203,6 +203,31 @@ function windowsOpenResultsHandler(resultDirectory, explorer) {
   ].join('; ');
 }
 
+function darwinNoticeScript(title, message, resultDirectory = '') {
+  const titleLiteral = JSON.stringify(title);
+  const messageLiteral = JSON.stringify(message);
+  const directoryLiteral = JSON.stringify(resultDirectory);
+  return [
+    'ObjC.import("AppKit"); ObjC.import("Foundation");',
+    'function writeMarker(value) { var data = $(value).dataUsingEncoding($.NSUTF8StringEncoding); $.NSFileHandle.fileHandleWithStandardOutput.writeData(data); }',
+    'function run(argv) {',
+    `  var title = ${titleLiteral}; var message = ${messageLiteral}; var directory = ${directoryLiteral};`,
+    '  var app = $.NSApplication.sharedApplication; app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);',
+    '  var alert = $.NSAlert.alloc.init; alert.messageText = $(title); alert.informativeText = $(message);',
+    '  if (directory) alert.addButtonWithTitle($("Ergebnisse öffnen"));',
+    '  alert.addButtonWithTitle($("Schließen"));',
+    '  app.activateIgnoringOtherApps(true); alert.window.makeKeyAndOrderFront(null); alert.window.displayIfNeeded();',
+    '  if (!ObjC.unwrap(alert.window.isVisible)) throw new Error("NOT_VISIBLE");',
+    '  writeMarker("SHOWN\\n");',
+    '  var response = alert.runModal;',
+    '  if (directory && response === $.NSAlertFirstButtonReturn) {',
+    '    var opened = $.NSWorkspace.sharedWorkspace.openURL($.NSURL.fileURLWithPath($(directory)));',
+    '    if (!opened) { var failure = $.NSAlert.alloc.init; failure.messageText = $("DataSecure"); failure.informativeText = $("Der Ergebnisordner konnte nicht geöffnet werden. Prüfe, ob der Ordner noch vorhanden ist."); failure.addButtonWithTitle($("Schließen")); failure.runModal; }',
+    '  }',
+    '}'
+  ].join('\n');
+}
+
 function localMessageCommands(title, rawMessage, options = {}) {
   const platform = options.platform || process.platform;
   // Every native DataSecure window names the running version. It is the only
@@ -213,20 +238,9 @@ function localMessageCommands(title, rawMessage, options = {}) {
     path.isAbsolute(options.resultDirectory) && !/[\0\r\n]/u.test(options.resultDirectory)
     ? options.resultDirectory : '';
   if (platform === 'darwin') {
-    const escape = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n');
-    const buttons = resultDirectory ? 'buttons {"Schließen", "Ergebnisse öffnen"} default button "Ergebnisse öffnen"' : 'buttons {"Schließen"} default button "Schließen"';
-    const open = resultDirectory ? [
-      'if button returned of result is "Ergebnisse öffnen" then',
-      'try',
-      `tell application "Finder" to open POSIX file "${escape(resultDirectory)}"`,
-      'on error',
-      'display alert "Der Ergebnisordner konnte nicht geöffnet werden. Prüfe, ob der Ordner noch vorhanden ist."',
-      'end try',
-      'end if'
-    ].join('\n') : '';
     return [{
       command: '/usr/bin/osascript',
-      args: ['-e', `display dialog "${escape(message)}" with title "${escape(title)}" ${buttons}\n${open}\nreturn "SHOWN"`]
+      args: ['-l', 'JavaScript', '-e', darwinNoticeScript(title, message, resultDirectory)]
     }];
   }
   if (platform === 'linux') {
@@ -374,10 +388,9 @@ function showDetachedLocalMessage(notice, options = {}) {
   return launch(0);
 }
 
-// On Windows the form emits SHOWN from its native Shown event. Other platform
-// helpers do not yet expose a trustworthy visibility event, so their existing
-// dispatch acknowledgement remains explicitly weaker until target-host work
-// can replace it. No path, token or document content crosses this channel.
+// Windows emits SHOWN from the native Shown event. macOS emits it only after
+// AppKit reports the window visible. Linux helpers still acknowledge dispatch.
+// No path, token or document content crosses this confirmation channel.
 function showDetachedLocalMessageConfirmed(notice, options = {}) {
   if (options.runner) return Promise.resolve(showLocalMessage(notice, options));
   const commands = localMessageCommands(notice.title, notice.message, { ...options, openResults: notice.open_results === true });
@@ -386,7 +399,7 @@ function showDetachedLocalMessageConfirmed(notice, options = {}) {
     const launch = (index) => {
       const spec = commands[index];
       let child;
-      const requireShown = (options.platform || process.platform) === 'win32';
+      const requireShown = ['win32', 'darwin'].includes(options.platform || process.platform);
       try {
         child = childProcess.spawn(spec.command, spec.args, {
           detached: true,
@@ -417,7 +430,7 @@ function showDetachedLocalMessageConfirmed(notice, options = {}) {
         timer = setTimeout(() => {
           try { child.kill(); } catch { /* worker fallback owns visibility */ }
           finish(true);
-        }, 2000);
+        }, (options.platform || process.platform) === 'darwin' ? 5000 : 2000);
         timer.unref?.();
       });
       if (requireShown) child.stdout?.on?.('data', (chunk) => {
@@ -461,5 +474,5 @@ module.exports = {
   showBatchStateNotice,
   showBatchStateNoticeConfirmed,
   showTerminalBatchSummary,
-  _test: { windowsOpenResultsHandler }
+  _test: { windowsOpenResultsHandler, darwinNoticeScript }
 };

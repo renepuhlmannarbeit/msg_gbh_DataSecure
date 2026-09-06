@@ -19,6 +19,20 @@ test('UTF-8 BOM is removed and line endings plus Unicode are normalized', () => 
   assert.strictEqual(parsed.markdown, '# Ärger\n\nZeile');
 });
 
+test('compatibility detection never changes parser bytes or its content-graph coordinates', () => {
+  const { originalDocument, expectedDocument } = require('./lib/identifier-compatibility');
+  for (const extension of ['.txt', '.md']) {
+    const source = Buffer.from(originalDocument);
+    const parsed = parseDocumentBuffer(source, extension);
+    assert.strictEqual(parsed.markdown, originalDocument);
+    assert.deepStrictEqual(source, Buffer.from(originalDocument));
+    assert.strictEqual(validateContentGraph(parsed.content_graph, parsed.markdown, []), parsed.content_graph);
+    assert.deepStrictEqual(parsed.content_graph.nodes[0].locator.selector,
+      { type: 'TextPositionSelector', start: 0, end: originalDocument.length });
+    assert.strictEqual(pii.anonymize(parsed.markdown, 'general').text, expectedDocument);
+  }
+});
+
 test('malformed UTF-8 fails instead of inserting a replacement character', () => {
   assert.throws(() => decodeUtf8Source(Buffer.from([0x61, 0xC3, 0x28])), /TEXT_ENCODING_INVALID/);
   assert.throws(() => decodeUtf8Source(Buffer.from([0xED, 0xA0, 0x80])), /TEXT_ENCODING_INVALID/);

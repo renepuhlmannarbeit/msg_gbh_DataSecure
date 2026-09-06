@@ -1,16 +1,20 @@
 # Kanonische Zielarchitektur
 
-Stand: 04.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-078
+Stand: 06.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-086
 
 ## Architekturprinzip
 
-DataSecure ist **Cowork-gesteuert; die Originalvorverarbeitung läuft lokal**.
-Originale dürfen nur in einer lokalen Cowork-Sitzung eines bestehenden Desktop-
-Deployments oder in lokalem Claude Code dem tatsächlich verbundenen lokalen
-Plugin-MCP über dessen Betriebssystempicker zugeführt werden. Lokale Plugin-MCPs
-laufen laut Hersteller nicht in Cloud-Sitzungen. Cloud-Cowork, Web, Mobil,
+DataSecure besitzt zwei Produkte mit gemeinsamem lokalem Core: das
+**Cowork-Plugin** und **DataSecure Standalone**. Standalone benötigt keinen
+Claude-Host. Im Claude-Produkt dürfen Originale nur in einer lokalen
+Cowork-Sitzung eines bestehenden Desktop-Deployments oder in lokalem Claude
+Code dem tatsächlich verbundenen lokalen Plugin-MCP über dessen
+Betriebssystempicker zugeführt werden (DS-078). Cloud-Cowork, Web, Mobil,
 geplante Cloud-Aufgaben, verbundene Ordner oder der Desktop-Dateibroker sind
-kein Ersatzpfad; dort ist nur bereits freigegebenes Markdown zulässig. Ein
+im freigegebenen DataSecure-Hostvertrag kein Ersatzpfad; dort ist nur bereits
+freigegebenes Markdown zulässig. Herstellerangebote für Desktop-Brücken
+erweitern diese Produktfreigabe nicht automatisch; dafür wäre eigene
+versions- und zielhostgebundene Evidenz nötig. Ein
 sichtbarer Skill oder Plugin-Eintrag ist kein Nachweis einer lokalen Privacy-
 Grenze.
 
@@ -38,7 +42,23 @@ lokaler Plugin-MCP ------------- optionales inhaltsfreies MCP-App-UI
 Claude-Modell
 ```
 
-## Normalablauf
+## Aktuelle Fähigkeiten nach Produkt und Zweck
+
+Diese Matrix beschreibt den implementierten Quellstand. Paket- und menschliche
+Zielhostfreigaben bleiben getrennt; konkrete Extraktionsgrenzen stehen in der
+[`FORMAT_COVERAGE_MATRIX.md`](../FORMAT_COVERAGE_MATRIX.md).
+
+| Produkt / Zweck | Aktiver Eingang | Prüfung und Ausgabe | Modellübergabe |
+|---|---|---|---|
+| Cowork-Plugin / anonymisieren | lokaler OS-Picker; TXT, Markdown, CSV, DOCX | Parser, PII, Residual-Gate, erforderlichenfalls Sammelreview; neutrale MD in `DataSecure-Output`; Mapping privat | nur erneut verifiziertes anonymisiertes Markdown auf späteren ausdrücklichen Auswertungsauftrag |
+| Standalone / Markdown und anonymisieren | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX | dieselben Anonymisierungsgates; MD und laufbezogene `DataSecure-Zuordnung.csv` in `DataSecure-Output` | kein MCP oder automatischer Upload |
+| Standalone / nur Markdown | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF einschließlich Scans, PNG/JPEG/BMP | Offline-Extraktion ohne PII-Ersetzung und Anonymisierungsreview; ursprüngliche Inhalte und Coveragehinweise; MD und Zuordnung in `DataSecure-Markdown`, ausdrücklich nicht anonymisiert | keine Privacy-Lesecapability; vom Plugin-Handoff ausgeschlossen |
+
+Die größere Formatmenge der reinen Konvertierung ist keine Erweiterung der
+Anonymisierungsfreigabe. Beschädigte oder geschützte Quellen erzeugen kein
+Konvertat; lesbare, begrenzt abgedeckte Extraktionen erhalten konkrete Hinweise.
+
+## Normalablauf des Cowork-Plugins
 
 1. Ein natürlicher Auftrag oder die direkte Skillauswahl startet denselben Vertrag.
 2. Der lokale Start prüft Engine, Benutzerbindung, Schreibrechte, Speicherreserve
@@ -46,18 +66,22 @@ Claude-Modell
    werden; ein ausgefallener Claude-Host wird nicht kaschiert.
 3. Ein nativer Datei- oder Ordnerpicker erteilt die einzige normale
    Originalzugriffsentscheidung.
-4. Der vollständige Umfang wird vor dem Start gegen Format-, Struktur-, Link-,
-   Datei- und Stapelgrenzen geprüft. Es gibt keine stille Teilmenge.
-5. Quellen werden in identitäts- und hashgeprüfte lokale Plain-Snapshots
-   übernommen. Ein kurzer MCP-Aufruf kehrt nach durablem Checkpoint zurück.
-6. Der lokale Hintergrundworker verarbeitet mit adaptiver kleiner Parallelität.
-7. Klare Ergebnisse werden veröffentlicht. Unsicherheiten bleiben lokal in einer
+4. Der vollständige Umfang wird gegen Format-, Struktur-, Link-, Datei- und
+   Stapelgrenzen geprüft. Unvertrauenswürdige Auswahlidentität stoppt die Aufnahme;
+   sicher festgestellte Dateifehler bleiben als gestoppte Positionen sichtbar.
+5. Nach privater Übergabe bestätigt der Intake-Worker den Empfang. Der kurze
+   MCP-Aufruf kann mit diesem ACK vor dem ersten dauerhaften Checkpoint
+   zurückkehren. Erst danach belegen identitäts- und hashgeprüfte lokale
+   Plain-Snapshots und Journale den wiederherstellbaren Stapel.
+6. Der lokale Hintergrundworker verarbeitet die Positionen aktuell seriell.
+7. Klare Ergebnisse werden intern veröffentlicht. Unsicherheiten bleiben lokal in einer
    persistenten Review-Queue ohne menschlichen Entscheidungs-Timeout.
-8. Cowork zeigt eine inhaltsfreie Abschlussansicht. Nur die ausdrückliche Absicht
-   `anonymisieren und auswerten` erlaubt eine Batch-Übergabe freigegebener Markdown-
-   Ergebnisse.
+8. Die lokale Abschlussoberfläche zeigt den terminalen Lauf beziehungsweise
+   einen konkreten Fortsetzungsschritt. Cowork erhält eine inhaltsfreie Meldung.
+   Erst ein späterer ausdrücklicher Auswertungsauftrag erlaubt die begrenzte
+   Batch-Übergabe freigegebener Markdown-Ergebnisse.
 
-## UI-Grenze
+## UI-Grenze des Cowork-Plugins
 
 - Das optionale MCP-App-UI darf nur opake Vorgangskennungen, feste Statuswerte,
   Zähler, Prozentwerte und inhaltsfreie Aktionen erhalten.
@@ -66,7 +90,8 @@ Claude-Modell
 - Datei-/Ordnerwahl und jede rohdatenhaltige Mehrdeutigkeitsprüfung erfolgen über
   lokale OS-Oberflächen.
 - Ohne nachgewiesene MCP-App-Unterstützung bleibt der Text-/OS-Fallback gleichwertig.
-- Eine separate native Companion-Anwendung ist kein Normalbestandteil.
+- Eine zusätzlich installierte Companion-Anwendung ist kein Normalbestandteil;
+  die lokalen Picker und Reviewadapter gehören zur gebündelten Runtime.
 
 ## Eigenständiges zweites Produkt ohne Cowork
 
@@ -77,33 +102,56 @@ Claude-Modell
   unterhalb von MCP direkt auf. MCP-/JSON-RPC-Protokolle, Toolnamen,
   Handoff-Capabilities und Claude-Antwortfelder sind im Standalone-Produkt
   unzulässig.
-- Standalone besitzt keine zweite Parser-, PII-, Review-, Journal-, Mapping-
-  oder Freigabelogik. Beide Produkte binden denselben Core-/Policy-Fingerprint
-  und bestehen denselben Golden-Korpus, dürfen ihre Journale, Reviewdaten und
-  Exporte jedoch weder finden noch lesen.
-- Microsoft MarkItDown ist ausschließlich ein isolierter Formatkonverter nach
-  Admission und versiegeltem Snapshot. Er erhält Bytes statt Pfad oder URL und
-  liefert noch nicht freigegebenes Markdown ausschließlich privat zurück.
-- Der Konverter läuft offline mit expliziten Einzelkonvertern; Built-ins,
-  Plugins, LLM-Clients und `markitdown-ocr` bleiben aus. Eine breite
-  Konverterfähigkeit ist keine DataSecure-Coverage oder Formatfreigabe.
+- Standalone besitzt keine zweite Anonymisierungslogik; beide Produkte verwenden
+  gemeinsame Engine-Module und Policies. Neutrale Core-API und gemeinsame
+  Core-/Policy-Fingerprint-/Golden-Bindung des unterstützten Anonymisierungsmodus
+  sind eigene grüne E0-Gates (BL-010.9/BL-010.23). Der reine Konvertierungszweck wird
+  gegen seinen Inhaltserhaltungsvertrag geprüft. Die Produkte dürfen ihre
+  Journale, Reviewdaten und Exporte nicht gegenseitig finden oder lesen.
+- RC109 besitzt sieben reine gemeinsame Verträge unter `server/core/`.
+  Fingerprint und Goldenläufe prüfen beide echten Produktprojektionen über
+  TXT/Markdown/CSV/DOCX, fünf Profile, Review, Abbruch und frische Fortsetzung.
+- Der produktive Konverter verarbeitet Snapshot-Bytes mit den vorhandenen
+  Node-/OOXML-Parsern, PDF.js, Canvas und lokaler Tesseract-DE/EN-OCR.
+  MarkItDown/Python ist ausschließlich ein optionales Engineering-
+  Differentialorakel, kein produktiver Worker und keine Anwender-Runtime.
+  LLM-Clients und `markitdown-ocr` gehören nicht zum lokalen Produktweg.
 - Standalone besitzt nach DS-085 zusätzlich reine Markdown-Konvertierung als
   gleichwertige Kernfunktion. Sie verwendet Aufnahme, Parser, Journal,
   Recovery und Mapping gemeinsam, aber keine PII-Ersetzung und keinen
   Anonymisierungsreview. Der dauerhafte Modus entscheidet über den getrennten
   Export nach `DataSecure-Markdown`; diese Dateien sind nicht anonymisiert und
-  können niemals aus dem Plugin-Handoff gelesen werden. Dieser Modus ist noch
-  nicht produktiv aktiviert, bleibt aber verbindlicher Lieferumfang.
+  können niemals aus dem Plugin-Handoff gelesen werden. Dieser Modus ist im
+  Quellstand ausführbar; seine Endnutzer- und Zielhostabnahme bleibt gesondert.
+- Nach DS-082 zeigt die lokale UI gewählte Quellenordner, Dateinamen und
+  Ergebnisziele als Text über die private IPC. Sie erhält dadurch keine freien
+  Datei-, Shell- oder Netzwerkrechte. Die Anzeige gehört weder in Diagnose noch
+  in den Claude-Produktkanal.
+- Nach DS-086 öffnet die App **Start** ohne vorausgewählten Zweck. Picker und
+  Drop bereiten vor; Verarbeitung beginnt erst mit dem expliziten Start.
+  Abschluss und Wiederherstellung lösen keine automatische Ergebnisnavigation
+  aus. **Verlauf** zeigt die letzten 20 Läufe mit laufgebundenen Aktionen;
+  diese Anzeigegrenze löscht keine Daten und ein neues Standardziel verändert
+  keine Öffnungsziele früherer Läufe.
 - Die verbindliche Lieferfolge und UX stehen in
   [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 
 ## Job-, Daten- und Recoverymodell
 
-- Pro Benutzer höchstens ein verarbeitender Stapel, daneben mehrere pausierte oder
+- Pro Produktdatenbereich höchstens ein verarbeitender Stapel, daneben mehrere pausierte oder
   zur Prüfung zurückgestellte Stapel. Ein pausierter Stapel blockiert keinen neuen.
 - Checkpoints sind monoton, atomar und unabhängig von Claude-Lesevorgängen.
 - Bereits veröffentlichte Dateien werden nach Crash oder Neustart nicht erneut
   verarbeitet. Ein ungewisser Commit blockiert fail-closed.
+- Beide Produktadapter, Fortschrittsprojektion und Reviewplanung verwenden
+  dieselbe Readiness aus `gateway/batch-next-action.js`: Review erst bei offenen
+  Reviewpositionen und ohne `pending`, `processing`, `retryable`, Delivery- oder
+  Mappingarbeit. Fortsetzung eines Mischstapels erledigt zunächst automatische
+  Arbeit und geht danach in den vorhandenen Sammelreview über. Fehlende
+  Fortschrittszähler belegen keine Reviewbereitschaft.
+- Abgeschlossen zählt freigegebene plus terminal gestoppte Positionen;
+  Ergebnis-, Fehler- und Reviewzahlen bleiben getrennt. Ein Stopp mit noch
+  offener Zuordnung ist noch nicht terminal.
 - Quellen können während der Verarbeitung geändert werden, ohne den Snapshot zu
   verändern. Eine Änderung während der Snapshot-Aufnahme führt zu genau einem
   erneuten Versuch, danach zum lokalen Pausieren dieser Datei.
@@ -115,30 +163,37 @@ Claude-Modell
   kein Lesen über den Keyring, keine automatische Migration oder Löschung. Eine
   erneute Originalauswahl erzeugt einen neuen Plain-Stapel. Neue Plain-Stapel
   besitzen einen eindeutigen versionierten Vertrag und bleiben fortsetzbar.
-- Mapping und anonymisierte Exporte sind lesbar, dauerhaft und technisch von der
-  MCP-Lesegrenze getrennt.
+- Mapping und fertige Exporte sind lesbar und dauerhaft. Das globale Mapping
+  bleibt privat; Standalone veröffentlicht nach DS-083 zusätzlich die Zuordnung
+  im zugehörigen Lauf. Beide Standalone-Zwecke binden Ziel und Modus dauerhaft.
+  Ein sichtbarer Lauf ist erst mit allen Ergebnissen und seiner Zuordnung fertig.
 
 ## Inhalts- und Formatgrenze
 
 - Dateiendung, Signatur und Containerstruktur müssen konsistent sein. Polyglotte,
   beschädigte und verschlüsselte Quellen stoppen einzeln und inhaltsfrei.
-- Parser erzeugen einen vollständigen Content-Graph für sichtbare sowie fachlich
-  relevante versteckte Bereiche. Nicht abgedeckte Inhalte werden nicht als
-  vollständig ausgegeben.
+- Parser müssen ihren belegten Extraktionsumfang ausweisen. Ein vollständiger
+  Content-Graph bleibt die Freigabeanforderung für entsprechende
+  Anonymisierungsaussagen; nicht abgedeckte Inhalte gelten nicht als vollständig.
 - Aktive Inhalte werden nie ausgeführt; externe Beziehungen werden nicht geladen.
 - Native Textschichten haben Vorrang. OCR läuft lokal nur für fehlende Bereiche.
   Unsichere OCR-Passagen werden nicht geraten, sondern transparent ausgelassen oder
   lokal geprüft.
-- Ein Nulltreffer wird nur bei vollständigem Parser-/Graph-Nachweis und unabhängigem
-  Residual-Gate freigegeben.
+- Im Anonymisierungspfad wird ein Nulltreffer nur bei vollständigem
+  Parser-/Graph-Nachweis und unabhängigem Residual-Gate freigegeben. Reine
+  Konvertierung erzeugt keine Anonymitätsaussage und verwendet diese PII-Gates nicht.
 
 ## Prozess- und Ressourcengrenze
 
 - Parser und OCR laufen in begrenzten Unterprozessen ohne Netzwerkzugriff.
-- Parallelität berücksichtigt CPU, freien Speicher, Formatklasse und OCR-Budget.
+- Der aktuelle Batchrunner verarbeitet Positionen seriell mit begrenzten
+  Parser-/OCR-Prozessen. Interne OCR-Threads sind keine parallelen Stapelpositionen.
+- Adaptive Vorbereitung anhand CPU, freiem Speicher, Formatklasse und OCR-Budget
+  ist ein noch nicht aktiviertes Performanceziel nach eigenem Nachweis.
 - Mapping, Reihenfolge und Paketveröffentlichung bleiben zentral und deterministisch.
-- Speicherdruck reduziert Parallelität. Reicht die vorab berechnete Reserve nicht,
-  pausiert der Stapel vor einer partiellen Veröffentlichung.
+- Für dieses Ziel soll Speicherdruck die Parallelität reduzieren. Schon heute
+  gelten feste Ressourcenbudgets; ein ausgeschöpftes Budget wird als Fehler oder
+  fortsetzbare Unterbrechung sichtbar und nicht als vollständiger Lauf ausgegeben.
 
 ## Distribution und Lifecycle
 

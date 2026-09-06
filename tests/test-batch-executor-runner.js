@@ -307,7 +307,4 @@ testAsync('every post-claim failure releases once and success uses fresh final p
   assert.strictEqual(typeof batchFacade.runLocalBatchExecutor, 'function');
 });
 
-(async () => {
-  await new Promise((resolve) => setImmediate(resolve));
-  done();
-})();
+done();

@@ -5,11 +5,11 @@ vollständige Node.js-Lizenztext einschließlich der Hinweise zu den von Node.js
 gebündelten Komponenten liegt als `LICENSE.node.txt` bei.
 
 Die Desktop-Hülle wird mit Tauri 2.11.5 gebaut. Tauri ist unter MIT oder
-Apache-2.0 verfügbar. Die konkret aufgelösten Rust-Komponenten und Versionen
-sind durch `Cargo.lock` im zugehörigen Quellstand gebunden und im Paket-SBOM
-inventarisiert. Das heutige Engineering-SBOM setzt deren Lizenzfelder bewusst
-auf `NOASSERTION`; es ersetzt keine komponentenweise Lizenzprüfung. Diese
-Prüfung ist vor einem Endnutzerrelease Pflicht.
+Apache-2.0 verfügbar. Die für das jeweilige Ziel tatsächlich aufgelösten
+Rust-Komponenten und Versionen sind durch `Cargo.lock` gebunden. Der
+Offline-Build erzeugt daraus `RUST-LICENSE-INVENTORY.json`; dieselben
+komponentenweisen Cargo-Lizenzangaben stehen in der Paket-SBOM. Eine
+Abhängigkeit ohne deklarierte Lizenz oder Lizenzdatei stoppt den Build.
 
 Die reine Offline-Konvertierung enthält außerdem PDF.js 6.2.108
 (Apache-2.0), Tesseract.js und Tesseract.js-core 7.0.0 (Apache-2.0),

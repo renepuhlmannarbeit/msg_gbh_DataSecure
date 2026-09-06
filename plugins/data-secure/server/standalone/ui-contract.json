@@ -10,6 +10,16 @@
   "desktop_host_target_resolution": "sidecar-resolve-rust-open",
   "terminal_presentation_ack": "content-free-generation-correlated",
   "state_source": "polled_public_status_snapshot",
+  "initial_view": "home",
+  "initial_processing_mode": null,
+  "automatic_result_navigation": false,
+  "history": {
+    "limit": 20,
+    "order": "created_at_descending",
+    "scope": "standalone-only",
+    "actions_bound_to": "batch_id",
+    "document_contents": false
+  },
   "source_admission": "native-picker-or-native-drag-drop-same-validator",
   "drag_drop": {
     "native_event": "datasecure-native-drop",
@@ -37,6 +47,10 @@
     "start_admitted_batch",
     "get_public_state",
     "get_ui_context",
+    "get_run_history",
+    "open_history_results",
+    "open_history_ledger",
+    "continue_history_batch",
     "ack_terminal_presented",
     "continue_current_batch",
     "configure_results",

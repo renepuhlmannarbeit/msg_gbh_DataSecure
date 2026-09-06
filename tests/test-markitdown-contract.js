@@ -57,7 +57,7 @@ test('oracle environment excludes host PATH, network and document metadata', () 
   });
 });
 
-test('engineering bridge disables Python site startup and does not inherit host temp paths', async () => {
+async function engineeringBridgeCase() {
   let observed;
   const spawn = (command, args, options) => {
     observed = { command, args, options };
@@ -70,7 +70,7 @@ test('engineering bridge disables Python site startup and does not inherit host 
   assert.deepStrictEqual(observed.args.slice(0, 2), ['-I', '-S']);
   assert.strictEqual(Object.hasOwn(observed.options.env, 'TEMP'), false);
   assert.strictEqual(Object.hasOwn(observed.options.env, 'TMP'), false);
-});
+}
 
 test('converter support events use only the closed content-free schema', () => {
   const event = sanitizeSupportTrace({
@@ -123,7 +123,8 @@ async function productProjectionCase() {
 }
 
 (async () => {
+  await testAsync('engineering bridge disables Python site startup and does not inherit host temp paths', engineeringBridgeCase);
   await testAsync('engineering oracle returns only private stdout and keeps product gate closed', oracleCase);
   await testAsync('disabled MarkItDown files cannot enter the current product ZIP', productProjectionCase);
-  done();
+  await done();
 })();

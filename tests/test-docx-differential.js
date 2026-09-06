@@ -12,6 +12,7 @@ const mammoth = require('mammoth');
 const { createSuite, assertPresent } = require('./helpers');
 const { zipStore } = require('./lib/zip');
 const { parseOoxml } = require('../plugins/data-secure/server/ooxml');
+const { readZip } = require('../plugins/data-secure/server/zip-reader');
 
 const { testAsync, done, assert } = createSuite('DOCX differential oracle');
 const root = path.join(__dirname, '..');
@@ -105,6 +106,23 @@ async function verifyPinnedOracle() {
   });
 }
 
+async function verifyRealWordComments() {
+  // The pinned Mammoth distribution includes this actual Word-produced DOCX;
+  // keep its package untouched instead of rebuilding only convenient XML.
+  const buffer = fs.readFileSync(path.join(root, 'node_modules/mammoth/test/test-data/comments.docx'));
+  const entries = readZip(buffer);
+  assert.match(entries.get('docProps/app.xml').toString('utf8'), /Microsoft Office Word/u);
+  const local = parseOoxml(buffer, '.docx');
+  const oracle = await mammoth.convertToHtml({ buffer }, { styleMap: 'comment-reference => sup' });
+  orderedOnce(local.markdown, ['Ouch', 'A tachyon walks into a bar.', 'Fin.'], 'actual Word comment stories');
+  orderedOnce(oracle.value, ['Ouch', 'A tachyon walks into a bar.', 'Fin.'], 'Mammoth comment stories');
+  assert.deepStrictEqual(oracle.messages, []);
+  // Author/initial metadata remains outside proven privacy coverage. Matching
+  // story text is no justification for upgrading this real package to complete.
+  assert.ok(local.warnings.length > 0);
+  assert.doesNotMatch(local.warnings.join(' '), /Michael|Williamson|tachyon|comments\.xml/u);
+}
+
 async function verifyBodyAndTables() {
   const vocabulary = [
     'Architekturentscheidung', 'ITIL 4', 'Scrum Master', 'HL7 FHIR',
@@ -143,5 +161,6 @@ async function verifyBodyAndTables() {
   await testAsync('our DOCX main-body and table tokens agree with Mammoth for 96 documents', verifyBodyAndTables);
   await testAsync('24 nested-table documents agree with Mammoth on order and exactly-once text coverage', verifyNestedTables);
   await testAsync('16 textbox documents retain outer runs like Mammoth plus independently verified inner text', verifyOuterTextboxRuns);
+  await testAsync('an actual Word comment package agrees with the configured oracle without claiming complete privacy coverage', verifyRealWordComments);
   done();
 })();

@@ -251,13 +251,15 @@ function migrateLegacyRecord(target, record, sourceLabels, productChannel) {
   writeRecord(target, migrated);
   return migrated;
 }
-function activeDestination(record) {
+function activeDestination(record, options = {}) {
   const root = readConfiguredResultRoot();
   if (!root) return null;
   const checked = inspectRoot(root);
   const rootBinding = bindPlainDirectory(checked.root);
   let outputPath;
-  if (record?.schema === MARKDOWN_SCHEMA) {
+  if (options.create === false) {
+    outputPath = path.join(checked.root, record?.schema === MARKDOWN_SCHEMA ? 'DataSecure-Markdown' : 'DataSecure-Output');
+  } else if (record?.schema === MARKDOWN_SCHEMA) {
     outputPath = path.join(checked.root, 'DataSecure-Markdown');
     if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { mode: 0o700 });
   } else outputPath = resultOutputDirectory({ root: checked.root });
@@ -536,6 +538,10 @@ function exportOpenItems(target, record, destination) {
     if (current.product_channel === 'standalone') exportVisibleMapping(destination, run, current);
     current = { ...current, complete: true };
     writeRecord(target, current);
+    try {
+      if (current.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneExport(target, current, run.path);
+    }
+    catch { /* private history cannot change a committed user export */ }
   }
   return current;
 }
@@ -590,6 +596,10 @@ function visibleExportDirectory(token) {
 // terminal batch outcome must not be presented as a processing stop, and no
 // internal result is touched.
 function exportCompletedState(state) {
+  try {
+    if (state.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneState(state);
+  }
+  catch { /* the durable batch/export records remain authoritative */ }
   const target = recordPath(state.token);
   let claim;
   try { claim = acquireExportClaim(target); }
@@ -688,6 +698,41 @@ function replayPendingResultExports() {
   }
   return { exported, pending, failures };
 }
+
+// Private Standalone history uses durable export plans even after journal
+// retention. Only neutral counters leave this module; source labels do not.
+function readStandaloneExportHistory() {
+  let entries;
+  try { entries = fs.readdirSync(outboxDirectory(), { withFileTypes: true }); } catch { return []; }
+  const rows = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !RECORD_RE.test(entry.name)) continue;
+    try {
+      const target = path.join(outboxDirectory(), entry.name);
+      const record = readRecord(target);
+      if (record.product_channel !== 'standalone') continue;
+      const stamp = /^Lauf-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-[a-f0-9]{8}$/u.exec(record.run_directory);
+      if (!stamp) continue;
+      const created = `${stamp[1]}-${stamp[2]}-${stamp[3]}T${stamp[4]}:${stamp[5]}:${stamp[6]}.000Z`;
+      if (!Number.isFinite(Date.parse(created))) continue;
+      let directory = '';
+      if (record.complete === true) {
+        try {
+          const destination = activeDestination(record, { create: false });
+          if (destination && destination.id === record.destination_id) {
+            directory = bindPlainDirectory(path.join(destination.output.path, record.run_directory), destination.output).path;
+          }
+        } catch { /* old or missing destinations remain unavailable */ }
+      }
+      const failed = record.stopped_items?.length || 0;
+      rows.push({ export_id: path.basename(entry.name, '.json'), target, directory, run_directory: record.run_directory, complete: record.complete,
+        summary: { created_at: created, processing_mode: record.processing_mode === 'markdown-only' ? 'markdown-only' : 'markdown-and-anonymize',
+          selected_count: record.items.length + failed, result_count: record.items.length, failed_count: failed,
+          completed_count: record.items.length + failed, review_count: 0, complete: true } });
+    } catch { /* damaged, legacy, or unsafe records never become local UI state */ }
+  }
+  return rows;
+}
 // Detached workers attach the visible export to their single terminal
 // envelope. A non-terminal batch has no visible export; an exporter failure
 // keeps the verified released count pending instead of turning the completed
@@ -710,7 +755,7 @@ function terminalVisibleExport(completed, exporter) {
 
 module.exports = {
   SCHEMA, MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
-  visibleExportDirectory, terminalVisibleExport,
+  visibleExportDirectory, terminalVisibleExport, readStandaloneExportHistory,
   completedMarkdownExportMatches,
   _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding,
     acquireExportClaim, releaseExportClaim, claimPath }

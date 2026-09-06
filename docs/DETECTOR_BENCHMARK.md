@@ -5,7 +5,7 @@ Every adapter receives the same version-controlled, synthetic ground truth and m
 only spans plus anonymized output. No real document, network request or model download is
 part of the benchmark.
 
-## Current baseline (3.2.0-rc108, detector baseline unchanged, revalidated 2026-09-05)
+## Current synthetic-corpus baseline (3.2.0-rc109)
 
 Command:
 
@@ -22,6 +22,13 @@ controls: precision 1.0, recall 1.0, F1 1.0 and preservation rate 1.0.
 This is a regression baseline for this synthetic corpus, not evidence of universal accuracy.
 Runtime is reported for comparison but is machine-dependent. Real pilot documents remain a
 separate, local, human-reviewed acceptance step.
+
+RC109 additionally tests a length-preserving compatibility view for structured
+identifiers (selected fullwidth characters and dot leaders) and scheme-specific
+contact-URI boundaries. Those regressions are separate from these 150 corpus
+cases. They do not claim arbitrary Unicode-confusable coverage. The original
+text and UTF-16/OCR/review positions remain authoritative; pure Markdown
+conversion never applies this privacy-only detection view.
 
 ## Metrics and adapter contract
 

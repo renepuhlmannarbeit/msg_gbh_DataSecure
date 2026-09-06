@@ -8,11 +8,12 @@
 </head>
 <body>
   <main class="shell">
-    <header><p class="eyebrow">GBH DataSecure</p><h1>Dateien in Markdown umwandeln</h1>
-      <p class="lead">Ohne Claude, Cloud oder Internet. Originaldateien bleiben unverändert.</p></header>
+    <header><p class="eyebrow">GBH DataSecure</p><h1>Dokumente lokal vorbereiten</h1>
+      <p class="lead">In Markdown umwandeln. Auf Wunsch anonymisieren. Ohne Cloud oder Internet.</p></header>
     <nav class="tabs" role="tablist" aria-label="Hauptbereiche">
-      <button id="tab-process" class="tab active" role="tab" aria-controls="process-view" aria-selected="true">Verarbeiten</button>
-      <button id="tab-results" class="tab" role="tab" aria-controls="results-view" aria-selected="false">Ergebnisse</button>
+      <button id="tab-home" class="tab active" role="tab" aria-controls="home-view" aria-selected="true" tabindex="0">Start</button>
+      <button id="tab-process" class="tab" role="tab" aria-controls="process-view" aria-selected="false" tabindex="-1">Verarbeiten</button>
+      <button id="tab-results" class="tab" role="tab" aria-controls="results-view" aria-selected="false" tabindex="-1">Verlauf</button>
     </nav>
     <section class="card">
       <div class="status-row" aria-live="polite">
@@ -20,13 +21,33 @@
         <div><h2 id="status-title">Bereit</h2><p id="status-text">Wähle Dateien oder einen ganzen Ordner aus.</p></div>
       </div>
 
-      <div id="process-view" class="view" role="tabpanel" aria-labelledby="tab-process">
+      <div id="home-view" class="view" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
+        <h2>Was möchtest du tun?</h2>
+        <p class="section-intro">Wähle eine Aufgabe, danach deine Dateien. Die Verarbeitung beginnt erst mit „Starten“.</p>
+        <div class="task-cards">
+          <article class="task-card"><h3>In Markdown umwandeln</h3>
+            <p>Text aus Dokumenten, Tabellen, Präsentationen, PDFs und Bildern übernehmen. Scans werden lokal per OCR erkannt.</p>
+            <p class="task-note">Originalinhalte bleiben erhalten – nicht anonymisiert.</p>
+            <button id="task-markdown" class="primary">Markdown erstellen</button>
+          </article>
+          <article class="task-card"><h3>Umwandeln und anonymisieren</h3>
+            <p>Erkannte Namen und weitere Identifikatoren ersetzen. Für TXT, Markdown, CSV und DOCX.</p>
+            <p class="task-note">Die Zuordnung zeigt, aus welcher Quelldatei jedes Ergebnis stammt.</p>
+            <button id="task-anonymize">Markdown anonymisieren</button>
+          </article>
+        </div>
+        <p id="home-selection" class="summary" hidden>Eine Dateiauswahl ist vorbereitet. Wähle eine Aufgabe, um sie zu starten.</p>
+        <p class="home-note">Originaldateien bleiben unverändert. Im Verlauf findest du die letzten 20 Läufe mit Ergebnissen, Zuordnung und möglicher Fortsetzung.</p>
+      </div>
+
+      <div id="process-view" class="view" role="tabpanel" aria-labelledby="tab-process" tabindex="0" hidden>
         <label for="processing-mode" class="mode-label">Verarbeitung</label>
         <select id="processing-mode" aria-describedby="processing-mode-help" disabled>
-          <option value="markdown-only" selected>Nur in Markdown umwandeln</option>
+          <option value="" selected>Bitte eine Aufgabe auswählen</option>
+          <option value="markdown-only">Nur in Markdown umwandeln</option>
           <option value="markdown-and-anonymize">In Markdown umwandeln und anonymisieren</option>
         </select>
-        <p id="processing-mode-help" class="mode-help">Nicht anonymisiert: Namen und andere Originalinhalte bleiben erhalten. Text und Tabellen werden übernommen; bei Scans wird Text lokal erkannt. Hinweise zu möglichen Auslassungen stehen im Ergebnis.</p>
+        <p id="processing-mode-help" class="mode-help">Wähle aus, ob Originalinhalte erhalten bleiben oder erkannte Identifikatoren ersetzt werden sollen.</p>
         <div id="drop-zone" class="drop-zone" role="region" aria-label="Dateiaufnahme" aria-disabled="true">
           <strong>Dateien oder einen Ordner hierher ziehen</strong>
           <span>TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF und Bilder (PNG/JPEG/BMP) · bis zu 100 Dateien und 500 MB pro Stapel.<br>Oder unten auswählen. Die Verarbeitung beginnt erst mit „Starten“.</span>
@@ -40,23 +61,32 @@
         <div class="actions">
           <button id="select-files" class="primary">Dateien auswählen</button>
           <button id="select-folder">Ordner auswählen</button>
-          <button id="start" class="primary" hidden>Starten</button>
+          <button id="start" class="primary" aria-describedby="start-help" disabled hidden>Starten</button>
           <button id="cancel" hidden>Auswahl verwerfen</button>
-          <button id="continue" class="primary" hidden>Fortsetzen</button>
+          <button id="continue" class="primary" hidden>Im Verlauf fortsetzen</button>
         </div>
+        <p id="start-help" class="mode-help" hidden>Bitte zuerst eine Aufgabe auswählen.</p>
       </div>
 
-      <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" hidden>
+      <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" tabindex="0" hidden>
+        <h2>Deine letzten Läufe</h2>
+        <p class="section-intro">Ergebnisordner und Zuordnung gehören immer zum jeweiligen Lauf. Die Übersicht bleibt auf diesem Gerät.</p>
+        <p id="history-feedback" class="mode-help" role="status">Der Verlauf wird beim Öffnen geladen.</p>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Letzte 20 Läufe">
+          <table id="history-table" hidden>
+            <caption>Die letzten 20 Läufe · neueste zuerst</caption>
+            <thead><tr><th scope="col">Lauf</th><th scope="col">Aufgabe</th><th scope="col">Dateien</th><th scope="col">Status</th><th scope="col">Aktionen</th></tr></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+        <details class="latest-details"><summary>Aktueller Abschluss im Detail</summary>
         <div class="result-summary"><strong id="result-count">0</strong><span id="result-label">Markdown-Dateien im letzten abgeschlossenen Lauf</span></div>
         <p id="result-warning" class="mode-help" hidden></p>
         <dl class="context" aria-label="Letzte Ergebnisse">
           <div><dt>Letzter Lauf</dt><dd id="result-folder-results" title="">Noch kein abgeschlossener Lauf</dd></div>
         </dl>
-        <div class="actions">
-          <button id="results" class="primary" hidden>Ergebnisse öffnen</button>
-          <button id="ledger" hidden>Zuordnungsdatei anzeigen</button>
-          <button id="new-batch">Neuen Stapel vorbereiten</button>
-        </div>
+        </details>
+        <div class="actions"><button id="new-batch">Neue Aufgabe wählen</button></div>
       </div>
 
       <p id="action-feedback" class="action-feedback" role="status" aria-live="polite" hidden></p>

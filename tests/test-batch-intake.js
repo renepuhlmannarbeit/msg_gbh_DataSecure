@@ -4,6 +4,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const vm = require('node:vm');
+const { createRequire } = require('node:module');
+const { processAlive: probeProcessAlive } = require('../plugins/data-secure/server/gateway/process-liveness');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchIntake } = require('../plugins/data-secure/server/gateway/batch-intake');
 const { createBatchIntakeIntent } = require('../plugins/data-secure/server/gateway/batch-intake-intent');
@@ -107,7 +110,7 @@ test('the declared filename must equal the bound path basename before any source
   } finally { item.cleanup(); }
 });
 
-test('recovery and TTL cleanup find only expired dead-owner intake copies, not unknown work or originals', () => {
+test('recovery and retention remove confirmed dead-owner intake copies before expiry, not unknown work or originals', () => {
   for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
     const item = fixture({ writeError: new Error('CRASH_BEFORE_JOURNAL'), cleanupError: new Error('SIMULATED_PROCESS_LOSS') });
     try {
@@ -123,12 +126,13 @@ test('recovery and TTL cleanup find only expired dead-owner intake copies, not u
       });
       const recovery = createBatchRecovery({
         io: fs, batchRoot: () => item.root, intakeIntent: intent,
-        nowMs: () => Date.now() + 120_000,
+        nowMs: () => Date.now(),
         readActiveLock: () => null, processAlive: () => false,
         acquireActiveLock() {}, releaseActiveLock() { return true; }
       });
       assert.strictEqual(recovery[method]().removed, 0, 'live intake is protected');
       alive = false;
+      assert.ok(Date.parse(intent.read(token).expires_at) > Date.now(), 'the dead-owner copy has not reached its TTL');
       assert.strictEqual(recovery.localCleanupStatus().expired_batch_cleanup_pending, 1);
       assert.strictEqual(recovery[method]().removed, 1);
       assert.strictEqual(fs.existsSync(item.work), false);
@@ -140,7 +144,7 @@ test('recovery and TTL cleanup find only expired dead-owner intake copies, not u
 });
 
 test('a replaced work directory or invalid ownership intent never authorizes orphan cleanup', () => {
-  for (const scenario of ['replacement', 'malformed', 'not-expired']) {
+  for (const scenario of ['replacement', 'malformed', 'owner-uncertain']) {
     const item = fixture({ writeError: new Error('CRASH'), cleanupError: new Error('CRASH') });
     try {
       assert.throws(() => item.begin([item.queueEntry()]));
@@ -154,9 +158,9 @@ test('a replaced work directory or invalid ownership intent never authorizes orp
       let removed = 0;
       const intent = createBatchIntakeIntent({
         io: fs, batchPath: () => item.journal, workPath: () => item.work,
-        processAlive: () => false, safeRemoveWorkDirectory() { removed++; }
+        processAlive: () => scenario === 'owner-uncertain' ? undefined : false, safeRemoveWorkDirectory() { removed++; }
       });
-      if (scenario === 'not-expired') assert.strictEqual(intent.cleanup(token, Date.now()), false);
+      if (scenario === 'owner-uncertain') assert.strictEqual(intent.cleanup(token, Date.now() + 120_000), false);
       else assert.throws(() => intent.cleanup(token, Date.now() + 120_000));
       assert.strictEqual(removed, 0);
       assert.strictEqual(fs.existsSync(intentPath), true);
@@ -191,6 +195,247 @@ test('an intake-intent replacement between ownership read and deletion is preser
     assert.strictEqual(fs.readFileSync(target, 'utf8'), 'foreign replacement');
     assert.strictEqual(fs.existsSync(retained), true, 'the originally bound intent is retained for support review');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+// Exercise the real flat-copy deletion guard and global lease with only their
+// root/process adapters replaced. No configured/live privacy profile is read.
+function orphanFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-orphan-boundary-'));
+  const io = { ...fs };
+  const load = (file, replacements) => {
+    const filename = path.join(__dirname, '../plugins/data-secure/server/gateway', file);
+    const module = { exports: {} };
+    const realRequire = createRequire(filename);
+    vm.runInNewContext(fs.readFileSync(filename, 'utf8'), {
+      module, exports: module.exports, process, Buffer, Atomics, SharedArrayBuffer, Int32Array,
+      require: name => Object.hasOwn(replacements, name) ? replacements[name] : realRequire(name)
+    }, { filename });
+    return module.exports;
+  };
+  const store = load('batch-private-store.js', {
+    fs: io,
+    '../runtime': { SafeError, dataRoot: () => path.join(root, 'private') },
+    './common': {
+      ensurePrivateDirectory(parent, name) {
+        const target = path.resolve(parent, name);
+        const relative = path.relative(root, target);
+        assert.ok(relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+        fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+        return target;
+      },
+      hasReparseComponent: require('../plugins/data-secure/server/gateway/common').hasReparseComponent
+    }
+  });
+  const source = path.join(root, 'source.txt');
+  const output = path.join(root, 'result.md');
+  fs.writeFileSync(source, 'synthetic original');
+  fs.writeFileSync(output, 'synthetic published output');
+  const work = store.workPath(token);
+  const journal = store.batchPath(token);
+  const copy = path.join(work, `001_${'c'.repeat(24)}.workcopy`);
+  fs.mkdirSync(work);
+  fs.copyFileSync(source, copy);
+  let ownerState = 'ESRCH';
+  const ownerAlive = pid => probeProcessAlive(pid, () => {
+    if (ownerState === 'live' || ownerState === 'reused') return;
+    throw Object.assign(new Error('synthetic probe failure'), { code: ownerState });
+  });
+  const intentOptions = { io, batchPath: store.batchPath, workPath: store.workPath,
+    safeRemoveWorkDirectory: store.safeRemoveWorkDirectory, processAlive: ownerAlive };
+  const intent = createBatchIntakeIntent(intentOptions);
+  intent.create(token, new Date(Date.now() + 86400000).toISOString());
+  const target = intent.intentPath(token);
+  const locks = load('batch-active-lock.js', { './batch-private-store': store }).createBatchActiveLock({
+    process: { pid: 424242, kill: pid => { if (pid !== 424242 && !ownerAlive(pid)) throw Object.assign(new Error('dead'), { code: 'ESRCH' }); } }
+  });
+  const recovery = createBatchRecovery({ io, batchRoot: store.batchRoot, batchPath: store.batchPath,
+    intakeIntent: intent, readActiveLock: locks.readActiveLock, processAlive: locks.processAlive,
+    acquireActiveLock: locks.acquireActiveLock, releaseActiveLock: locks.releaseActiveLock });
+  return { root, source, output, work, copy, journal, target, io, store, intent, intentOptions, locks, recovery,
+    setOwnerState: value => { ownerState = value; },
+    assertExternalFiles() {
+      assert.strictEqual(fs.readFileSync(source, 'utf8'), 'synthetic original');
+      assert.strictEqual(fs.readFileSync(output, 'utf8'), 'synthetic published output');
+    },
+    cleanup() { fs.rmSync(root, { recursive: true, force: true }); }
+  };
+}
+
+for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) test(`${method}: actual bound-copy deletion needs only ESRCH, not TTL expiry`, () => {
+  const item = orphanFixture();
+  try {
+    for (const state of ['live', 'reused', 'EPERM', 'EACCES', 'UNKNOWN']) {
+      item.setOwnerState(state);
+      assert.strictEqual(item.recovery[method]().removed, 0, state);
+      assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
+    }
+    item.setOwnerState('ESRCH');
+    assert.ok(Date.parse(item.intent.read(token).expires_at) > Date.now());
+    const result = item.recovery[method]();
+    assert.strictEqual(result.removed, 1);
+    assert.strictEqual(result.failures, 0);
+    assert.strictEqual(result.skipped_active, false);
+    assert.ok(!fs.existsSync(item.work) && !fs.existsSync(item.target));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
+for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) test(`${method}: the real live or unreadable global lease prevents orphan cleanup`, () => {
+  const item = orphanFixture();
+  try {
+    const ownerToken = 'b'.repeat(64);
+    item.locks.acquireActiveLock(ownerToken);
+    assert.strictEqual(item.recovery[method]().skipped_active, true);
+    assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
+    item.locks.releaseActiveLock(ownerToken);
+    fs.writeFileSync(item.locks.activeLockPath(), '{');
+    assert.strictEqual(item.recovery[method]().skipped_active, true);
+    assert.strictEqual(fs.readFileSync(item.locks.activeLockPath(), 'utf8'), '{');
+    assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
+test('a present or newly published journal and a PID reused during revalidation preserve private copies', () => {
+  for (const scenario of ['journal-present', 'journal-appears', 'pid-reused']) {
+    const item = orphanFixture();
+    try {
+      let probes = 0;
+      if (scenario === 'journal-present') fs.writeFileSync(item.journal, 'unreadable journal remains protected');
+      const intent = createBatchIntakeIntent({ ...item.intentOptions, processAlive() {
+        probes++;
+        if (probes === 2 && scenario === 'journal-appears') fs.writeFileSync(item.journal, 'published journal');
+        return probes === 2 && scenario === 'pid-reused';
+      } });
+      assert.strictEqual(intent.cleanup(token, Date.now()), false);
+      assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
+      item.assertExternalFiles();
+    } finally { item.cleanup(); }
+  }
+});
+
+test('an intent swap during dead-owner revalidation preserves the replacement and both private copies', () => {
+  const item = orphanFixture();
+  try {
+    let probes = 0;
+    const intent = createBatchIntakeIntent({ ...item.intentOptions, processAlive() {
+      if (++probes === 2) {
+        fs.renameSync(item.target, `${item.target}.retained`);
+        fs.writeFileSync(item.target, 'foreign replacement');
+      }
+      return false;
+    } });
+    assert.throws(() => intent.cleanup(token, Date.now()), /BATCH_INTAKE_OWNERSHIP_CHANGED/u);
+    assert.strictEqual(fs.readFileSync(item.target, 'utf8'), 'foreign replacement');
+    assert.ok(fs.existsSync(item.copy) && fs.existsSync(`${item.target}.retained`));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
+test('the actual deletion guard refuses a work directory substituted after the intent check', () => {
+  const item = orphanFixture();
+  try {
+    const intent = createBatchIntakeIntent({ ...item.intentOptions, safeRemoveWorkDirectory(value, options) {
+      fs.renameSync(item.work, `${item.work}.retained`);
+      fs.mkdirSync(item.work);
+      fs.writeFileSync(item.copy, 'foreign replacement copy');
+      item.store.safeRemoveWorkDirectory(value, options);
+    } });
+    assert.throws(() => intent.cleanup(token, Date.now()), /konnte nicht sicher bereinigt/u);
+    assert.strictEqual(fs.readFileSync(item.copy, 'utf8'), 'foreign replacement copy');
+    assert.ok(fs.existsSync(`${item.work}.retained`) && fs.existsSync(item.target));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
+test('an intake parent-directory swap cannot move cleanup authority to a replacement tree', () => {
+  const item = orphanFixture();
+  try {
+    let probes = 0;
+    const directory = path.dirname(item.target);
+    const retained = `${directory}.retained`;
+    const intent = createBatchIntakeIntent({ ...item.intentOptions, processAlive() {
+      if (++probes === 2) {
+        fs.renameSync(directory, retained);
+        fs.mkdirSync(directory);
+        fs.copyFileSync(path.join(retained, path.basename(item.target)), item.target);
+        fs.mkdirSync(item.work);
+        fs.writeFileSync(item.copy, 'foreign replacement copy');
+      }
+      return false;
+    } });
+    // Either the cached private-root identity or the narrower intake-owner
+    // identity may observe the parent replacement first. Both are fail-closed
+    // before cleanup authority can move to the replacement tree.
+    assert.throws(() => intent.cleanup(token, Date.now()),
+      /(?:PRIVACY_STORAGE_UNSAFE|BATCH_INTAKE_OWNERSHIP_CHANGED)/u);
+    assert.strictEqual(fs.readFileSync(item.copy, 'utf8'), 'foreign replacement copy');
+    assert.ok(fs.existsSync(path.join(retained, path.basename(item.work), path.basename(item.copy))));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
+test('an inaccessible journal path prevents orphan cleanup instead of being treated as absent', () => {
+  const item = orphanFixture();
+  try {
+    item.io.lstatSync = (target, options) => {
+      if (target === item.journal) throw Object.assign(new Error('hidden journal'), { code: 'EACCES' });
+      return fs.lstatSync(target, options);
+    };
+    const result = item.recovery.recoverBatches();
+    assert.strictEqual(result.removed, 0);
+    assert.strictEqual(result.failures, 1);
+    assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
+test('an external source or output hard link never becomes an owned deletable copy', () => {
+  for (const external of ['source', 'output']) {
+    const item = orphanFixture();
+    try {
+      fs.unlinkSync(item.copy);
+      fs.linkSync(item[external], item.copy);
+      assert.throws(() => item.intent.cleanup(token, Date.now()), /konnte nicht sicher bereinigt/u);
+      assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
+      item.assertExternalFiles();
+    } finally { item.cleanup(); }
+  }
+});
+
+test('work cleanup errors keep the ownership intent and remain failures without a broader retry', () => {
+  const item = orphanFixture();
+  try {
+    let attempts = 0;
+    item.io.unlinkSync = target => {
+      if (target === item.copy) { attempts++; throw Object.assign(new Error('locked'), { code: 'EIO' }); }
+      return fs.unlinkSync(target);
+    };
+    const result = item.recovery.recoverBatches();
+    assert.strictEqual(result.removed, 0);
+    assert.strictEqual(result.failures, 1);
+    assert.strictEqual(attempts, 1);
+    assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
+test('intent cleanup failure is reported and its missing-work remainder can be recovered safely later', () => {
+  const item = orphanFixture();
+  try {
+    item.io.renameSync = (from, to) => {
+      if (from === item.target) throw Object.assign(new Error('locked'), { code: 'EIO' });
+      return fs.renameSync(from, to);
+    };
+    const failed = item.recovery.cleanupExpiredBatchSnapshots();
+    assert.strictEqual(failed.removed, 0);
+    assert.strictEqual(failed.failures, 1);
+    assert.ok(!fs.existsSync(item.work) && fs.existsSync(item.target));
+    item.io.renameSync = fs.renameSync;
+    assert.strictEqual(item.recovery.cleanupExpiredBatchSnapshots().removed, 1);
+    assert.ok(!fs.existsSync(item.target));
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
 });
 
 test('duplicate absolute picker paths are rejected before any source metadata read', () => {

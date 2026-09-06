@@ -46,10 +46,25 @@ function createBatchJournalStore(options = {}) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
   });
   const ErrorType = options.SafeError || SafeError;
+  // The product composition root binds its namespace once. Standalone and
+  // Cowork share a schema, but a copied foreign journal is not a local run.
+  // Pure store fixtures may remain transport-neutral by omitting this option.
+  const productChannel = options.productChannel;
+  if (productChannel !== undefined && !['plugin', 'standalone'].includes(productChannel)) {
+    throw new TypeError('PRODUCT_CHANNEL_INVALID');
+  }
   const maxBatchFiles = options.maxBatchFiles || RESOURCE_LIMITS.MAX_BATCH_FILES;
   const assertZeroDayWorkAvailable = options.assertZeroDayWorkAvailable;
   const journalBindings = new WeakMap();
   const purposeBindings = new WeakMap();
+
+  function assertProductChannel(state) {
+    if (productChannel !== undefined && (state?.product_channel || 'plugin') !== productChannel) {
+      const error = new ErrorType('Der Stapel gehört nicht zu dieser lokalen Anwendung.');
+      error.code = 'BATCH_PRODUCT_CHANNEL_MISMATCH';
+      throw error;
+    }
+  }
 
   function purposeOf(state) {
     return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}`;
@@ -126,6 +141,7 @@ function createBatchJournalStore(options = {}) {
   // same-status diagnostic checkpoints. Atomic temp-file publication remains
   // unconditional; only the two power-loss flushes are skipped.
   function writeState(state, writeOptions = {}) {
+    assertProductChannel(state);
     rejectEncryptedState(state);
     if (!validPseudonymState(state)) throw new Error('BATCH_PSEUDONYM_STATE_INVALID');
     const durable = writeOptions.durable !== false;
@@ -163,6 +179,8 @@ function createBatchJournalStore(options = {}) {
       journalBindings.set(state, binding);
       purposeBindings.set(state, purpose);
       if (durable) syncParent(target, io, platform);
+      try { options.onStateWritten?.(state); }
+      catch { /* optional private projections never change a committed journal */ }
     } catch (error) {
       // Cleanup is deliberately bounded to the exact random temp path. After
       // rename the new complete journal may already be authoritative even if
@@ -427,6 +445,7 @@ function createBatchJournalStore(options = {}) {
     } catch {
       throw new ErrorType(NOT_FOUND);
     }
+    assertProductChannel(state);
     rejectEncryptedState(state);
     const expiry = validExpiry(state?.expires_at);
     if (!validStateShape(state, token)) {
@@ -452,6 +471,7 @@ function createBatchJournalStore(options = {}) {
     // intentionally read-only and preserves raw parse/validation errors so
     // callers can count them without deleting an unknown local record.
     const state = readJournalRecord(token);
+    assertProductChannel(state);
     rejectEncryptedState(state);
     if (!validStateShape(state, token)) {
       throw new Error('invalid');

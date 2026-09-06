@@ -201,6 +201,12 @@
           "markdownDescription": "Setzt den letzten lokal fortsetzbaren Stapel fort."
         },
         {
+          "description": "Setzt genau den gewählten unterbrochenen Stapel nach erneuter Zustandsprüfung fort.",
+          "type": "string",
+          "const": "allow-continue-history-batch",
+          "markdownDescription": "Setzt genau den gewählten unterbrochenen Stapel nach erneuter Zustandsprüfung fort."
+        },
+        {
           "description": "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat.",
           "type": "string",
           "const": "allow-frontend-ready",
@@ -211,6 +217,12 @@
           "type": "string",
           "const": "allow-get-public-state",
           "markdownDescription": "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand."
+        },
+        {
+          "description": "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte.",
+          "type": "string",
+          "const": "allow-get-run-history",
+          "markdownDescription": "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte."
         },
         {
           "description": "Liest ausschließlich für die lokale Oberfläche den gewählten Quell- und Ergebnisort.",
@@ -229,6 +241,18 @@
           "type": "string",
           "const": "allow-open-diagnostic-folder",
           "markdownDescription": "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfreien Interaktionsprotokollen."
+        },
+        {
+          "description": "Zeigt ausschließlich die Zuordnungsdatei des lokal gebundenen Verlaufs-Eintrags.",
+          "type": "string",
+          "const": "allow-open-history-ledger",
+          "markdownDescription": "Zeigt ausschließlich die Zuordnungsdatei des lokal gebundenen Verlaufs-Eintrags."
+        },
+        {
+          "description": "Öffnet ausschließlich den Ergebnisordner des lokal gebundenen Verlaufs-Eintrags.",
+          "type": "string",
+          "const": "allow-open-history-results",
+          "markdownDescription": "Öffnet ausschließlich den Ergebnisordner des lokal gebundenen Verlaufs-Eintrags."
         },
         {
           "description": "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt.",

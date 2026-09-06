@@ -9,6 +9,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { createSuite } = require('./helpers');
+const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
 
 const { testAsync, done, assert } = createSuite('MCP protocol');
 
@@ -17,7 +18,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, statusAppPilot = false } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, statusAppPilot = false, inputGuardFixture = false, continuationFixture = null, continuationStartFixture = 'accepted', continuationCoreRace = false, ackErrorFixture = null } = {}) {
   return new Promise((resolve, reject) => {
     const resultRoot = path.join(privacyRoot, '..', 'cowork-results');
     const syntheticSource = path.join(privacyRoot, 'synthetic-private-source.txt');
@@ -27,9 +28,78 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
     // Test-only dependency substitution: exercise the real stdio dispatch and
     // response with a synthetic selection, without opening a native dialog or
     // starting a worker. Production exposes no bypass or fixture environment.
-    const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture) ? ['--eval', `
+    const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture || inputGuardFixture || continuationFixture || continuationCoreRace) ? ['--eval', `
       const gateway = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway'))});
       gateway.genericStatus = () => ({engine_ready: true});
+      const ackErrorFixture=${JSON.stringify(ackErrorFixture)};
+      const ackError=()=>Object.assign(new Error(ackErrorFixture.message),
+        Object.hasOwn(ackErrorFixture,'code')?{code:ackErrorFixture.code}:{});
+      if (${inputGuardFixture}) {
+        const handoff = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway/local-only-handoff'))});
+        handoff.createLocalOnlyHandoff = () => ({
+          start: async () => { process.stderr.write('GUARD_ACTION'); return {ok:true}; },
+          nextAsync: async () => { process.stderr.write('GUARD_ACTION'); return {ok:true}; },
+          cancel: () => { process.stderr.write('GUARD_ACTION'); return {ok:true}; }
+        });
+      }
+      if (${JSON.stringify(continuationFixture)} || ${continuationCoreRace}) {
+        gateway.continueMostRecentBatch = () => (${JSON.stringify(continuationFixture)});
+        const { publicProgress } = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway/batch-progress'))}).createBatchProgress({
+          deliveryPendingStatus:'delivery_pending', deferredReviewStatus:'deferred_review', mappingPendingStatus:'mapping_pending',
+          liveLocalExecutor:()=>false, publishedPackageRecord:()=>null
+        });
+        if (${continuationCoreRace}) {
+          let state={token:'a'.repeat(64),created_at:new Date().toISOString(),items:[{status:'retryable'}]};
+          const continuation=require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway/batch-continuation'))}).createBatchContinuation({
+            SafeError:gateway.SafeError,active:new Set(),readState:()=>structuredClone(state),writeState:value=>{state=value;},
+            recoverableBatchStates:()=>[structuredClone(state)],
+            acquireActiveLock:()=>{state.items[0].status='stopped';},releaseActiveLock:()=>true,
+            assertLocalExecutorAccess:()=>{},reconcilePublishedItems:()=>false,reconcilePendingMappings:()=>false,
+            markInterruptedItemsRetryable:()=>0,publicProgress
+          });
+          gateway.continueMostRecentBatch=continuation.continueMostRecentBatch;
+        }
+        const start = (kind,token,options) => {
+          process.stderr.write(kind==='batch'?'BATCH_SELECTED':'REVIEW_SELECTED');
+          if(options.requireIpcAcknowledgement!==true)throw new Error('ACK_REQUIREMENT_MISSING');
+          const mode=${JSON.stringify(continuationStartFixture)};
+          const privateMetadata={batch_token:token,read_capability:'PRIVATE_RESPONSE_SENTINEL',source_path:'PRIVATE_RESPONSE_SENTINEL',
+            message:'PRIVATE_RESPONSE_SENTINEL',user_status:'PRIVATE_RESPONSE_SENTINEL',diagnostic:{private:'PRIVATE_RESPONSE_SENTINEL'}};
+          if(mode==='lease_refused') {
+            const state={token,items:[{status:'stopped'}]};
+            const lease=require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway/batch-executor-lease'))}).createBatchExecutorLease({
+              SafeError:gateway.SafeError,processAlive:()=>true,liveLocalExecutor:()=>false,acquireActiveLock:()=>{},releaseActiveLock:()=>true,
+              readState:()=>state,writeState:()=>{},publicProgress,processInstanceIdentity:()=> 'synthetic-birth'
+            });
+            return {...lease.claimLocalBatchExecutor(token,42),...privateMetadata};
+          }
+          if(mode==='throw')throw new Error('PRIVATE_RESPONSE_SENTINEL');
+          if(mode==='null_response')return null;
+          const marker=kind==='batch'?'local_processing_started':'local_review_started';
+          const started={ok:true,[marker]:true,...privateMetadata};
+          if(mode==='missing_ok')delete started.ok;
+          if(mode==='false_ok')started.ok=false;
+          if(mode==='string_ok')started.ok='true';
+          if(mode==='missing_marker')delete started[marker];
+          if(mode==='wrong_marker')started[marker]=false;
+          if(mode==='string_marker')started[marker]='true';
+          if(mode==='missing_ack')return started;
+          if(mode==='null_ack')return {...started,ipcAcknowledgement:null};
+          if(mode==='false_ack')return {...started,ipcAcknowledgement:false};
+          if(mode==='wrong_then')return {...started,ipcAcknowledgement:{then:'PRIVATE_RESPONSE_SENTINEL'}};
+          const acknowledgement=ackErrorFixture?Promise.reject(ackError())
+            :mode==='rejected_ack'?Promise.reject(new Error('PRIVATE_RESPONSE_SENTINEL'))
+            :mode==='timeout_ack'?Promise.reject(Object.assign(new Error('cancel PRIVATE_RESPONSE_SENTINEL'),{code:'LOCAL_IPC_ACK_TIMEOUT'}))
+            :mode==='cancelled_ack'?new Promise((resolve,reject)=>{
+              const abort=()=>reject(Object.assign(new Error('timeout PRIVATE_RESPONSE_SENTINEL'),{code:'LOCAL_IPC_ACK_CANCELLED'}));
+              if(options.signal?.aborted)abort();else options.signal?.addEventListener('abort',abort,{once:true});
+            }):mode==='delayed_ack'?new Promise(resolve=>setTimeout(resolve,50)):Promise.resolve();
+          acknowledgement.catch(()=>{});
+          return {...started,ipcAcknowledgement:acknowledgement};
+        };
+        gateway.startLocalBatchExecutor = (token,options) => start('batch',token,options);
+        gateway.startLocalReviewExecutor = (token,options) => start('review',token,options);
+      }
       gateway.startLocalIntakeExecutor = (queue) => {
         if (${waitingPickerFixture}) process.stderr.write('UNEXPECTED_INTAKE_STARTED');
         if (!Array.isArray(queue) || queue.length !== 1 || queue[0].full !== ${JSON.stringify(syntheticSource)} ||
@@ -38,7 +108,9 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
         }
         const started = {ok: true, local_intake_pending: true, batch_token: 'a'.repeat(64)};
         if (${invalidStartFixture}) return started;
-        Object.defineProperty(started, 'ipcAcknowledgement', {value: Promise.resolve(), enumerable: false});
+        const acknowledgement=ackErrorFixture?Promise.reject(ackError()):Promise.resolve();
+        acknowledgement.catch(()=>{});
+        Object.defineProperty(started, 'ipcAcknowledgement', {value: acknowledgement, enumerable: false});
         return started;
       };
       const picker = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'file-picker'))});
@@ -122,6 +194,21 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
 }
 
 const rpc = (id, method, params) => ({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) });
+const { publicProgress: continuationProgress } = createBatchProgress({
+  deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review', mappingPendingStatus: 'mapping_pending',
+  liveLocalExecutor: () => false, publishedPackageRecord: () => null
+});
+function continuedFixture(otherStatus) {
+  const items = ['deferred_review', 'released', 'released', 'stopped', ...(otherStatus ? [otherStatus] : [])]
+    .map(status => ({ status }));
+  return { ok: true, ...continuationProgress({ token: 'a'.repeat(64), items }, { skipResultProjection: true }) };
+}
+const continuationRequest = () => rpc(1, 'tools/call', {
+  name: 'continue_most_recent_document_batch', arguments: { confirmed: true }
+});
+function assertPrivateContinuationFieldsAbsent(responses) {
+  assert.doesNotMatch(JSON.stringify(responses), /batch_token|read_capability|source_path|PRIVATE_RESPONSE_SENTINEL|aaaaaaaa/u);
+}
 
 async function main() {
   for (const cancelTool of [false, true]) await testAsync(`MCP completed-batch picker stays responsive and honours ${cancelTool ? 'cancel tool' : 'host notification'}`, async () => {
@@ -434,7 +521,7 @@ async function main() {
   await testAsync('error results of gateway modules without envelope knowledge are completed centrally', async () => {
     const { responses } = await talk([
       rpc(1, 'tools/call', { name: 'continue_local_results_handoff', arguments: {} }),
-      rpc(2, 'tools/call', { name: 'start_completed_local_results_handoff', arguments: { confirmed: true } })
+      rpc(2, 'tools/call', { name: 'start_completed_local_results_handoff', arguments: {} })
     ], { supportMode: false });
     assert.strictEqual(responses.length, 2);
     const byId = new Map(responses.map((r) => [r.id, r.result]));
@@ -571,13 +658,201 @@ async function main() {
     assert.deepStrictEqual(purge.inputSchema.properties.scope.enum, ['processed', 'output', 'review', 'all']);
   });
 
+  await testAsync('invalid handoff arguments never invoke a stateful action over real stdio', async () => {
+    const names = ['start_completed_local_results_handoff', 'continue_local_results_handoff', 'cancel_local_results_handoff'];
+    for (const supportMode of [false, true]) {
+      let id = 0;
+      const messages = names.flatMap(name => [null, [], true, { unknown_private_value: 'private sentinel' }]
+        .map(args => rpc(++id, 'tools/call', { name, arguments: args })));
+      const { responses, stderr } = await talk(messages, { supportMode, inputGuardFixture: true });
+      assert.strictEqual(responses.length, messages.length);
+      assert.doesNotMatch(stderr, /GUARD_ACTION/u);
+      for (const response of responses) {
+        assert.strictEqual(response.result.isError, true);
+        assert.strictEqual(response.result.structuredContent.error, 'invalid_tool_arguments');
+        assert.strictEqual(response.result.structuredContent.diagnostic.cause, 'MCP_ARGUMENT_INVALID');
+      }
+      assert.doesNotMatch(JSON.stringify(responses), /private sentinel|unknown_private_value/u);
+    }
+    const valid = await talk([rpc(1, 'tools/call', { name: names[1] })], { supportMode: false, inputGuardFixture: true });
+    assert.match(valid.stderr, /GUARD_ACTION/u); // Prove the dependency substitution really is connected.
+    assert.strictEqual(valid.responses[0].result.structuredContent.ok, true);
+    const malformed = await talk([rpc(1, 'tools/call', []), rpc(2, 'tools/call', { name: null })]);
+    assert.ok(malformed.responses.every(r => r.error?.code === -32602));
+  });
+
+  for (const kind of ['intake', 'batch', 'review']) {
+    await testAsync(`${kind} ACK diagnostics use typed codes or exact legacy text and never promise that processing did not start`, async () => {
+      const cases = [
+        [{ code: 'LOCAL_IPC_ACK_TIMEOUT', message: 'cancel PRIVATE_RESPONSE_SENTINEL' }, 'LOCAL_IPC_ACK_TIMEOUT'],
+        [{ code: 'LOCAL_IPC_ACK_CANCELLED', message: 'timeout PRIVATE_RESPONSE_SENTINEL' }, 'LOCAL_IPC_ACK_CANCELLED'],
+        [{ code: 'EPERM', message: 'bounded IPC acknowledgement timeout' }, 'LOCAL_WORKER_SPAWN_FAILED'],
+        [{ message: 'bounded IPC acknowledgement timeout' }, 'LOCAL_IPC_ACK_TIMEOUT'],
+        [{ message: 'IPC acknowledgement cancelled' }, 'LOCAL_IPC_ACK_CANCELLED'],
+        [{ message: 'timeout cancel PRIVATE_RESPONSE_SENTINEL' }, 'LOCAL_WORKER_SPAWN_FAILED'],
+        [{ code: 'LOCAL_QUEUE_SCHEMA_INVALID', message: 'PRIVATE_RESPONSE_SENTINEL' },
+          kind === 'intake' ? 'LOCAL_QUEUE_SCHEMA_INVALID' : 'LOCAL_WORKER_SPAWN_FAILED']
+      ];
+      for (const supportMode of [false, true]) for (const [ackErrorFixture, expectedCause] of cases) {
+        const request = kind === 'intake'
+          ? { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'start_document_batch_from_picker', arguments: {} } }
+          : continuationRequest();
+        const { responses } = await talk([request], {
+          supportMode, ackErrorFixture, localStartFixture: kind === 'intake',
+          continuationFixture: kind === 'intake' ? null : continuedFixture(kind === 'batch' ? 'pending' : null)
+        });
+        assert.strictEqual(responses.length, 1);
+        assert.strictEqual(responses[0].result.isError, true);
+        const result = responses[0].result.structuredContent;
+        assert.strictEqual(result.error, 'local_start_failed');
+        assert.strictEqual(result.diagnostic.cause, expectedCause);
+        assert.strictEqual(result[kind === 'review' ? 'local_review_started' : 'local_processing_started'], false);
+        assert.strictEqual(result.next_action, 'restart_only_on_explicit_request');
+        assert.match(result.message, /nicht bestätigt.*Status prüfen/u);
+        assert.doesNotMatch(JSON.stringify(result), /PRIVATE_RESPONSE_SENTINEL|kein Stapel (?:wurde )?gestartet|kein Paket|wurde nicht gestartet|bounded IPC|EPERM/u);
+        assertPrivateContinuationFieldsAbsent(responses);
+      }
+    });
+  }
+
+  await testAsync('Cowork continues pending work before review using the shared progress contract', async () => {
+    for (const otherStatus of ['pending', 'retryable', 'processing', 'delivery_pending', 'mapping_pending', null]) {
+      const state = { ...continuedFixture(otherStatus), awaiting_local_review: true };
+      const { responses, stderr } = await talk([continuationRequest()], { supportMode: false, continuationFixture: state });
+      assert.strictEqual(responses[0].result.structuredContent.ok, true);
+      assert.match(stderr, otherStatus ? /BATCH_SELECTED/u : /REVIEW_SELECTED/u);
+      assert.doesNotMatch(stderr, otherStatus ? /REVIEW_SELECTED/u : /BATCH_SELECTED/u);
+      assert.strictEqual(responses[0].result.structuredContent.batch_total, otherStatus ? 5 : 4);
+      assertPrivateContinuationFieldsAbsent(responses);
+    }
+  });
+
+  for (const kind of ['batch', 'review']) {
+    await testAsync(`${kind} continuation rejects missing or false start markers and missing or malformed ACK promises`, async () => {
+      for (const continuationStartFixture of ['missing_ok', 'false_ok', 'string_ok', 'missing_marker', 'wrong_marker', 'string_marker',
+        'missing_ack', 'null_ack', 'false_ack', 'wrong_then', 'null_response', 'throw']) {
+        const { responses, stderr } = await talk([continuationRequest()], {
+          supportMode: false, continuationFixture: continuedFixture(kind === 'batch' ? 'pending' : null), continuationStartFixture
+        });
+        assert.strictEqual(stderr, kind === 'batch' ? 'BATCH_SELECTED' : 'REVIEW_SELECTED');
+        assert.strictEqual(responses[0].result.isError, true, continuationStartFixture);
+        const result = responses[0].result.structuredContent;
+        assert.strictEqual(result.ok, false);
+        assert.strictEqual(result.error, 'local_start_failed');
+        assert.strictEqual(result[kind === 'batch' ? 'local_processing_started' : 'local_review_started'], false);
+        assert.strictEqual(result.diagnostic.cause, 'LOCAL_WORKER_SPAWN_FAILED');
+        assertPrivateContinuationFieldsAbsent(responses);
+      }
+    });
+
+    await testAsync(`${kind} continuation rejects a lost, timed out or cancelled ACK in normal and support mode`, async () => {
+      for (const supportMode of [false, true]) {
+        for (const continuationStartFixture of ['rejected_ack', 'timeout_ack', 'cancelled_ack']) {
+          const messages = [continuationRequest()];
+          if (continuationStartFixture === 'cancelled_ack') messages.push({
+            jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 }
+          });
+          const { responses } = await talk(messages, {
+            supportMode, continuationFixture: continuedFixture(kind === 'batch' ? 'pending' : null), continuationStartFixture
+          });
+          assert.strictEqual(responses.length, 1);
+          assert.strictEqual(responses[0].result.isError, true);
+          const result = responses[0].result.structuredContent;
+          assert.strictEqual(result.ok, false);
+          assert.strictEqual(result.error, 'local_start_failed');
+          assert.strictEqual(result.diagnostic.cause,
+            continuationStartFixture === 'cancelled_ack' ? 'LOCAL_IPC_ACK_CANCELLED'
+              : continuationStartFixture === 'timeout_ack' ? 'LOCAL_IPC_ACK_TIMEOUT' : 'LOCAL_WORKER_SPAWN_FAILED');
+          assertPrivateContinuationFieldsAbsent(responses);
+        }
+      }
+    });
+
+    await testAsync(`${kind} continuation waits for ACK and projects only public fields in normal and support mode`, async () => {
+      for (const supportMode of [false, true]) {
+        const fixture = { ...continuedFixture(kind === 'batch' ? 'pending' : null),
+          source_path: 'PRIVATE_RESPONSE_SENTINEL', read_capability: 'PRIVATE_RESPONSE_SENTINEL',
+          user_status: 'PRIVATE_RESPONSE_SENTINEL', next_action: 'PRIVATE_RESPONSE_SENTINEL',
+          result_grade_counts: { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: kind === 'batch' ? 5 : 4,
+            extra: 'PRIVATE_RESPONSE_SENTINEL' } };
+        const { responses } = await talk([continuationRequest(), rpc(2, 'ping')], {
+          supportMode, continuationFixture: fixture, continuationStartFixture: 'delayed_ack'
+        });
+        assert.deepStrictEqual(responses.map(response => response.id), [2, 1]);
+        const result = responses[1].result;
+        assert.strictEqual(result.isError, false);
+        assert.strictEqual(result.structuredContent.ok, true);
+        assert.strictEqual(result.structuredContent[kind === 'batch' ? 'local_processing_started' : 'local_review_started'], true);
+        assert.strictEqual(result.structuredContent.completed, 3);
+        assert.strictEqual(result.structuredContent.stopped, 1);
+        assertPrivateContinuationFieldsAbsent(responses);
+      }
+    });
+  }
+
+  await testAsync('an actual lease refusal after terminal state change is never a successful MCP continuation', async () => {
+    for (const supportMode of [false, true]) {
+      const { responses, stderr } = await talk([continuationRequest()], {
+        supportMode, continuationFixture: { ok: true,
+          ...continuationProgress({ token: 'a'.repeat(64), items: [{ status: 'pending' }] }) },
+        continuationStartFixture: 'lease_refused'
+      });
+      assert.strictEqual(stderr, 'BATCH_SELECTED');
+      assert.strictEqual(responses[0].result.isError, true);
+      const result = responses[0].result.structuredContent;
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.local_processing_started, false);
+      assert.strictEqual(result.diagnostic.cause, 'BATCH_NOT_RUNNABLE');
+      assertPrivateContinuationFieldsAbsent(responses);
+    }
+  });
+
+  await testAsync('an actual failed continuation after a terminal race returns no private token and starts nothing', async () => {
+    for (const supportMode of [false, true]) {
+      const { responses, stderr } = await talk([continuationRequest()], { supportMode, continuationCoreRace: true });
+      assert.strictEqual(stderr, '');
+      assert.strictEqual(responses[0].result.isError, true);
+      const result = responses[0].result.structuredContent;
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.error, 'no_retryable_documents');
+      assert.strictEqual(result.completed, 1);
+      assert.strictEqual(result.complete, true);
+      assert.strictEqual(result.diagnostic.cause, 'BATCH_NOT_RUNNABLE');
+      assertPrivateContinuationFieldsAbsent(responses);
+    }
+  });
+
+  await testAsync('failed continuation projects only fixed errors and public progress in normal and support mode', async () => {
+    for (const supportMode of [false, true]) {
+      for (const error of ['no_incomplete_batch', 'batch_review_required', 'PRIVATE_RESPONSE_SENTINEL']) {
+        const progress = error === 'no_incomplete_batch' ? {} : continuedFixture(null);
+        const fixture = { ...progress, ok: false, error,
+          source_path: 'PRIVATE_RESPONSE_SENTINEL', read_capability: 'PRIVATE_RESPONSE_SENTINEL',
+          message: 'PRIVATE_RESPONSE_SENTINEL', user_status: 'PRIVATE_RESPONSE_SENTINEL',
+          next_action: 'PRIVATE_RESPONSE_SENTINEL', diagnostic: { private: 'PRIVATE_RESPONSE_SENTINEL' },
+          result_grade_counts: { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 4,
+            extra: 'PRIVATE_RESPONSE_SENTINEL' } };
+        const { responses, stderr } = await talk([continuationRequest()], { supportMode, continuationFixture: fixture });
+        assert.strictEqual(stderr, '');
+        assert.strictEqual(responses[0].result.isError, true);
+        const result = responses[0].result.structuredContent;
+        assert.strictEqual(result.ok, false);
+        assert.strictEqual(result.error, error === 'PRIVATE_RESPONSE_SENTINEL' ? 'batch_not_runnable' : error);
+        assert.strictEqual(result.diagnostic.cause, error === 'no_incomplete_batch' ? 'NO_INCOMPLETE_BATCH' : 'BATCH_NOT_RUNNABLE');
+        assert.strictEqual(result.completed, error === 'no_incomplete_batch' ? undefined : 3);
+        assert.strictEqual(result.stopped, error === 'no_incomplete_batch' ? undefined : 1);
+        assertPrivateContinuationFieldsAbsent(responses);
+      }
+    }
+  });
+
   await testAsync('diagnostic export rejects missing confirmation before creating a local support package', async () => {
     const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/call', {
       name: 'export_diagnostic_package', arguments: {}
     })]);
     const result = responses.find((response) => response.id === 2).result;
     assert.strictEqual(result.isError, true);
-    assert.match(result.content[0].text, /ausdrückliche Bestätigung/);
+    assert.strictEqual(result.structuredContent.error, 'invalid_tool_arguments');
   });
 
   await testAsync('purge_local_data protects historical sources and deletes only disposable scopes', async () => {
@@ -730,7 +1005,7 @@ async function main() {
   await testAsync('a failing tool reports isError and never leaks raw content', async () => {
     const { responses } = await talk([
       rpc(1, 'initialize', {}),
-      rpc(2, 'tools/call', { name: 'read_anonymized_document', arguments: { package_id: 'does-not-exist' } })
+      rpc(2, 'tools/call', { name: 'read_anonymized_document', arguments: { package_id: 'ds_' + 'a'.repeat(32), read_capability: 'a'.repeat(43) } })
     ]);
     const result = responses.find((r) => r.id === 2).result;
     assert.strictEqual(result.isError, true);

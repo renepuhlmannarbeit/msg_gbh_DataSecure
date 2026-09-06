@@ -45,16 +45,11 @@ const EMAIL_RE = new RegExp(
   'giu'
 );
 
-// Contact URIs are direct identifiers even when their payload is percent-
-// encoded (for example mailto:max%2Emuster%40example%2Ede). The ordinary
-// mail and telephone matchers operate on human-readable text; this bounded
-// URI shape closes that encoding bypass without decoding or evaluating input.
-// The payload class must cover the complete plain address as well: this span
-// outranks the EMAIL span, and an overlapping loser is dropped, not trimmed.
-// Without `@` and Unicode letters, `mailto:erika@erika-synthetisch.de` matched
-// only up to the `@` and the personal domain survived in released Markdown.
+// Only discover the scheme here. structured.js scans its payload by scheme:
+// address URIs include complete Unicode/percent-encoded addresses, whereas a
+// telephone number cannot absorb adjacent prose just because it follows a dot.
 const CONTACT_URI_RE = new RegExp(
-  `${NB}(?:mailto|tel|sms|callto|sip|xmpp):[\\p{L}\\p{N}%+._~:/?&=@\\-]+`,
+  `${NB}(mailto|tel|sms|callto|sip|xmpp):`,
   'giu'
 );
 
@@ -326,6 +321,17 @@ function normalizeText(s) {
     // all of them; retaining the visual width is less important than avoiding
     // an invisible split that the residual gate cannot classify.
     .replace(/\p{Zs}/gu, ' ');
+}
+
+// Detection-only compatibility view, never document/output normalization.
+// Every replacement is one BMP code unit, so existing UTF-16 source, OCR and
+// review offsets stay exact. Deliberately exclude structural Markdown signs,
+// ligatures, units, superscripts and cross-script lookalikes: generic NFKC
+// would change professional content and can expand a single source character.
+const IDENTIFIER_COMPAT_RE = /[\uFF10-\uFF19\uFF21-\uFF3A\uFF41-\uFF5A\uFF20\uFF0E\uFF0B\uFF0D\uFF0F\uFF1A\uFF05\uFF1F\uFF06\uFF1D\uFF08\uFF09\uFF3F\uFF5E\u2024]/gu;
+function identifierDetectionText(s) {
+  return String(s || '').replace(IDENTIFIER_COMPAT_RE, (character) =>
+    character === '\u2024' ? '.' : String.fromCharCode(character.charCodeAt(0) - 0xFEE0));
 }
 
 // The privacy engine receives Markdown, including parser-generated Markdown.
@@ -751,6 +757,7 @@ module.exports = {
   TECH_TERMS,
   ORG_ALLOW,
   normalizeText,
+  identifierDetectionText,
   canonicalizeRenderedText,
   INVISIBLE_RE,
   normalizeSpaces,

@@ -6,7 +6,7 @@ Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenomme
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-081, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-086, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -17,7 +17,7 @@ bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
   durch DS-073; DS-007, DS-018, DS-024, DS-038, DS-049, DS-060 und DS-072
   durch DS-075; DS-004, DS-028, DS-030 und DS-075 durch DS-076; DS-004,
   DS-075 und DS-076 durch DS-077; DS-004 und DS-034 teilweise durch DS-052;
-  DS-023 und DS-069 durch DS-080.
+  DS-023 und DS-069 durch DS-080; die UI-Vorbelegung aus DS-085 durch DS-086.
 
 Der aktuelle operative Status steht in
 [`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still
@@ -1133,3 +1133,33 @@ zielt auf Inhalt/Struktur für Textanalyse, nicht originalgetreue Layoutkonverti
 Die dort angebotenen Cloud- und LLM-Erweiterungen sind keine Bestandteile unseres
 lokalen Konvertierungsvertrags; insbesondere ersetzt `markitdown-ocr` mit
 LLM-Vision keine unabhängig belegte lokale OCR.
+
+## DS-086 – Startseite und laufgebundener Verlauf statt automatischem Ansichtswechsel
+
+Am 06.09.2026 ausdrücklich gewünscht: Standalone öffnet **Start** mit einer kurzen
+Erklärung beider Kernfunktionen. Weder **Verarbeiten** noch eine Betriebsart ist
+vorbelegt. Die Startseitenaktionen wählen ausdrücklich den Zweck und führen zur
+Vorbereitung; dort bleibt der explizite Start notwendig. DS-085 bleibt vollständig
+gültig; lediglich die frühere Vorbelegung mit reiner Konvertierung entfällt.
+
+Neue, abgeschlossene und wiederhergestellte Stapel lösen keinen automatischen
+Wechsel zum Ergebnisbereich oder Betriebssystemordner aus. Der sichtbare
+Status bleibt nichtmodal. **Verlauf** zeigt höchstens die letzten **20** lokalen
+Verarbeitungen, neueste zuerst, tabellarisch mit Datum, Betriebsart, Zählern,
+Status und drei Aktionen je Zeile: **Ergebnisse öffnen**, **Zuordnung anzeigen**,
+**Fortsetzen**. Fehlende oder nicht zulässige Aktionen sind mit Grund deaktiviert.
+Ein Klick ist an die konkrete Laufkennung gebunden, niemals an „den neuesten“.
+
+Fortsetzung übernimmt nur den gespeicherten Zweck und prüft erneut den aktuellen
+Zustand und die Ein-Stapel-Sperre. Bereits erledigte oder abgelaufene Läufe werden
+nicht neu gestartet. Die Anzeigegrenze löscht keine Quellen, Exporte oder
+Zuordnungen. Historienmetadaten bleiben lokal und getrennt vom Claude-Produkt;
+Dateiinhalte gehören nicht in die Historie oder Diagnose. Geänderte Ergebnisziele
+dürfen die Öffnungsziele früherer Läufe nicht verändern.
+
+UX-Abgleich: [GOV.UK Tabellen](https://design-system.service.gov.uk/components/table/)
+für scanbare Vergleichsinformationen, [W3C Tabs](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)
+für Tastatur-/Fokusbedienung und [NN/g Nutzerkontrolle](https://www.nngroup.com/articles/user-control-and-freedom/)
+für bewusst gesteuerte Navigation. Umsetzung und Nachweise: BL-010.29,
+`standalone/ui-contract.json`, `test-standalone-history`, `test-standalone-frontend`
+und private IPC-/Pakettests. Native Anwenderabnahme bleibt getrennt.

@@ -7,6 +7,7 @@ const { ensurePrivateDirectory, hasReparseComponent, safeRemovePrivateTree } = r
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const TRANSIENT_DELETE_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+let verifiedBatchRootSession;
 
 function retryDelay(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
@@ -26,10 +27,32 @@ function retryTransientDelete(operation, revalidate) {
 }
 
 function batchRoot() {
-  // Resolve dynamically: tests and supported configuration can change the
-  // private root between processes, so this path must never be module-cached.
-  const gatewayRoot = ensurePrivateDirectory(path.dirname(dataRoot()), path.basename(dataRoot()));
-  return ensurePrivateDirectory(gatewayRoot, 'batches');
+  // Resolve the configuration dynamically. The verified directory identity is
+  // cached only for the current absolute product root and is rechecked on every
+  // use; changing the supported test/product root establishes a new session.
+  const configured = path.resolve(dataRoot());
+  if (verifiedBatchRootSession?.key === configured) {
+    try {
+      const currentGateway = fs.lstatSync(verifiedBatchRootSession.gateway, { bigint: true });
+      const currentBatch = fs.lstatSync(verifiedBatchRootSession.target, { bigint: true });
+      const same = (current, expected) => current.isDirectory() && !current.isSymbolicLink() &&
+        String(current.dev) === expected.dev && String(current.ino) === expected.ino;
+      if (same(currentGateway, verifiedBatchRootSession.gatewayIdentity) &&
+          same(currentBatch, verifiedBatchRootSession.targetIdentity)) return verifiedBatchRootSession.target;
+    } catch { /* fail closed below */ }
+    throw new Error('PRIVACY_STORAGE_UNSAFE');
+  }
+  const gatewayRoot = ensurePrivateDirectory(path.dirname(configured), path.basename(configured));
+  const target = ensurePrivateDirectory(gatewayRoot, 'batches');
+  const identity = (entry) => Object.freeze({ dev: String(entry.dev), ino: String(entry.ino) });
+  verifiedBatchRootSession = Object.freeze({
+    key: configured,
+    gateway: gatewayRoot,
+    target,
+    gatewayIdentity: identity(fs.lstatSync(gatewayRoot, { bigint: true })),
+    targetIdentity: identity(fs.lstatSync(target, { bigint: true }))
+  });
+  return target;
 }
 
 function validatedToken(token) {

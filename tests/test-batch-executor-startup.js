@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { createSuite } = require('./helpers');
 
-const { test, testAsync, assert, done } = createSuite('Batch executor startup boundary');
+const assert = require('node:assert');
 const filename = path.join(__dirname, '../plugins/data-secure/server/gateway/batch-executor.js');
 const source = fs.readFileSync(filename, 'utf8');
 const TOKEN = 'a'.repeat(64);
@@ -65,7 +65,8 @@ function fixture(role, firstChild) {
   let terminalNotice = null;
   const progress = {
     ok: true, complete: false, batch_phase: 'awaiting_local_review',
-    batch_total: 1, released: 0, stopped: 0, deferred_review: 1,
+    batch_total: 1, completed: 0, released: 0, stopped: 0, deferred_review: 1,
+    remaining: 0, retryable: 0, delivery_pending: 0, mapping_pending: 0, processing: 0,
     result_grade_counts: { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: 1 },
     result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
     result_grades_verified: false
@@ -188,6 +189,7 @@ function fixture(role, firstChild) {
   };
 }
 
+function initialCases(test) {
 test('an invalid private intake queue is rejected before a child is launched', () => {
   const f = fixture('intake', fakeChild());
   assert.throws(() => f.api.startLocalIntakeExecutor([
@@ -218,6 +220,8 @@ for (const role of ['batch', 'intake', 'review']) {
     child.exit(0);
     f.drain();
   });
+}
+
 }
 
 function assertSafeStartFailure(start) {
@@ -273,6 +277,9 @@ function assertEndedAndRetry(f, child, role) {
 }
 
 async function main() {
+  // The ENOENT subprocess is a probe, not an unfinalized empty test suite.
+  const { test, testAsync, done } = createSuite('Batch executor startup boundary');
+  initialCases(test);
   for (const role of roles) {
     test(`${role}: synchronous launcher exception records only a bounded start failure`, () => {
       const f = fixture(role, privateError());
@@ -462,6 +469,12 @@ async function main() {
     assert.ok(f.records.some(event => event.event === 'completion_notice_delegated_to_product_ui'));
     const generation = f.api.pendingStandaloneTerminalNoticeGeneration();
     assert.ok(Number.isSafeInteger(generation) && generation > 0);
+    assert.strictEqual(f.api.pendingStandaloneTerminalNoticeGeneration(TOKEN), generation);
+    assert.strictEqual(f.api.pendingStandaloneTerminalNoticeGeneration('b'.repeat(64)), null,
+      'a different observed history run cannot advertise this terminal notice');
+    assert.strictEqual(f.api.acknowledgeStandaloneTerminalNotice(generation, 'b'.repeat(64)), false,
+      'even the correct generation cannot acknowledge another run');
+    assert.strictEqual(child.messages.filter(message => message?.type === 'local-terminal-notice-claimed').length, 0);
     assert.strictEqual(f.api.acknowledgeStandaloneTerminalNotice(generation - 1), false,
       'a delayed acknowledgement cannot claim the current notice');
     assert.strictEqual(f.api.acknowledgeStandaloneTerminalNotice(generation), true);
@@ -630,7 +643,7 @@ async function main() {
       await new Promise(resolve => setImmediate(resolve));
       assert.strictEqual(settled, false);
       f.drain();
-      await assert.rejects(started.ipcAcknowledgement, /timeout/iu);
+      await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_ACK_TIMEOUT' });
       assert.strictEqual(child.kills, 1);
       assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_TIMEOUT'));
       assertRetainedWhileAlive(f, child, role);
@@ -664,7 +677,7 @@ async function main() {
       const started = f.start({ requireIpcAcknowledgement: true, ipcAckTimeoutMs: 30000 });
       child.callbacks[0](null);
       child.exit(1);
-      await assert.rejects(started.ipcAcknowledgement, /ended before/iu);
+      await assert.rejects(started.ipcAcknowledgement, { code: role === 'review' ? 'LOCAL_REVIEW_WORKER_EXITED' : 'LOCAL_WORKER_EXITED' });
       f.drain();
       assert.strictEqual(f.active(), false);
       assert.ok(f.releases.every(release => !release.alive));
@@ -677,7 +690,7 @@ async function main() {
     const started = f.start({ ipcAckTimeoutMs: 10 });
     assert.strictEqual(started.ok, true);
     f.drain();
-    await assert.rejects(started.ipcAcknowledgement, /timeout/iu);
+    await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_ACK_TIMEOUT' });
     assert.strictEqual(child.kills, 1, 'the owned worker is stopped after the bounded acknowledgement timeout');
     assert.doesNotThrow(() => child.callbacks[0](null), 'a late callback is inert');
     assert.strictEqual(child.unrefs, 0, 'a late callback cannot detach a timed-out worker');
@@ -696,7 +709,7 @@ async function main() {
     assert.strictEqual(settled, null, 'Node\'s send callback is not a worker acknowledgement');
     assert.strictEqual(child.unrefs, 1, 'dispatch still detaches the owned worker');
     f.drain(); // the bounded acknowledgement timer fires
-    await assert.rejects(started.ipcAcknowledgement, /timeout/iu);
+    await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_ACK_TIMEOUT' });
     assert.strictEqual(child.kills, 1, 'a worker that never acknowledges is stopped');
     assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_TIMEOUT'));
     assertRetainedWhileAlive(f, child, 'intake');
@@ -743,7 +756,7 @@ async function main() {
     const started = f.start({ ipcAckTimeoutMs: 30000 });
     child.callbacks[0](null);
     child.exit(1);
-    await assert.rejects(started.ipcAcknowledgement, /ended before/iu);
+    await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_WORKER_EXITED' });
     f.drain();
     assert.strictEqual(f.active(), false, 'a confirmed exit clears the pending intake');
     assert.strictEqual(child.kills, 0, 'an exited worker is not signalled');
@@ -756,7 +769,7 @@ async function main() {
     const controller = new AbortController();
     const started = f.start({ ipcAckTimeoutMs: 30000, signal: controller.signal });
     controller.abort();
-    await assert.rejects(started.ipcAcknowledgement, /cancelled/iu);
+    await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_ACK_CANCELLED' });
     assert.strictEqual(child.kills, 1);
     assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_CANCELLED'));
     assert.doesNotThrow(() => child.callbacks[0](null));
@@ -764,6 +777,54 @@ async function main() {
     f.drain();
     assert.strictEqual(f.active(), false);
   });
+  for (const role of roles) {
+    for (const preAborted of [false, true]) await testAsync(`${role}: ${preAborted ? 'pre-abort' : 'abort'} has a typed ACK cause and retains ownership until exit`, async () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const controller = new AbortController();
+      if (preAborted) controller.abort();
+      let started;
+      if (preAborted) {
+        // Existing start refusal stays synchronous; the typed failure is still
+        // recorded, and no live worker's lease is released by an abort signal.
+        assert.throws(() => f.start({ requireIpcAcknowledgement: true, signal: controller.signal }), SafeError);
+      } else {
+        started = f.start({ requireIpcAcknowledgement: true, signal: controller.signal });
+        controller.abort();
+        await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_ACK_CANCELLED' });
+      }
+      assert.strictEqual(child.kills, 1);
+      assert.ok(f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_CANCELLED'));
+      assertRetainedWhileAlive(f, child, role);
+      child.exit(1);
+      f.drain();
+      assert.strictEqual(f.active(), false);
+      assert.ok(f.releases.every(release => !release.alive));
+    });
+
+    for (const channel of ['callback', 'error-event']) await testAsync(`${role}: a native ${channel} error cannot masquerade as an ACK timeout or cancel`, async () => {
+      const child = fakeChild();
+      const f = fixture(role, child);
+      const started = f.start({ requireIpcAcknowledgement: true });
+      const native = Object.assign(new Error(`timeout cancel ${PRIVATE_DETAIL}`), { code: 'EPERM' });
+      if (channel === 'callback') child.callbacks[0](native); else child.emit('error', native);
+      await assert.rejects(started.ipcAcknowledgement, error => {
+        assert.strictEqual(error.code, 'LOCAL_IPC_FAILED');
+        assert.doesNotMatch(error.message, /PRIVATE|timeout|cancel|customer/u);
+        return true;
+      });
+      assertRetainedWhileAlive(f, child, role);
+      f.drain();
+      assert.ok(!f.records.some(event => event.error_code === 'LOCAL_IPC_ACK_TIMEOUT'));
+      child.emit('message', { type: role === 'intake' ? 'local-intake-accepted' : role === 'review' ? 'local-review-accepted' : 'local-batch-accepted' });
+      await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_FAILED' });
+      assert.strictEqual(child.kills, 1);
+      child.exit(1);
+      f.drain();
+      assert.strictEqual(f.active(), false);
+      assertBoundedDiagnostics(f);
+    });
+  }
   test('real ENOENT children for all three starts cannot crash an isolated parent process', () => {
     const { spawnSync } = require('node:child_process');
     const result = spawnSync(process.execPath, [__filename, '--enoent-probe'], {

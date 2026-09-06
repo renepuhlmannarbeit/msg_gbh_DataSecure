@@ -79,7 +79,7 @@ Recovery, Markdown-Export und breite Runtime-Paketierung sind ausdrücklich
 noch nicht vollständig integriert. Der Unterbau schaltet die UI-Funktion
 nicht frei und ist **nicht** Bestandteil des zuvor an INT-13 gebundenen
 `7b88a81`-Pakets. Ausführungsdetails stehen im
-[Format-/Konvertierungsplan](STANDALONE-FORMATAUSBAU-IMPLEMENTIERUNGSPLAN.md).
+[Format-/Konvertierungsplan](2026-09-06-standalone-formatausbau-implementierungsplan.md).
 
 ### Weiterhin offene Zielhost- und Produktnachweise
 

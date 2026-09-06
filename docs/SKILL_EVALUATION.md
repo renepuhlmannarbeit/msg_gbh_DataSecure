@@ -2,9 +2,11 @@
 
 Die Engine- und Dokumenttests beweisen nicht, dass ein Claude-Modell den richtigen Skill
 aktiviert oder die richtige Werkzeugfolge wählt. `evals/skill-behavior-cases.json` enthält
-deshalb 33 synthetische Nutzeranfragen für Aktivierung, Nicht-Aktivierung, Koexistenz,
+deshalb 39 synthetische Nutzeranfragen für Aktivierung, Nicht-Aktivierung, Koexistenz,
 mehrdeutige Eingaben, Sicherheitsgrenzen, Support-Nichterreichbarkeit und die getrennte
-spätere Ergebnisweiterverarbeitung. Die Anzahl wird aus dem JSON-Korpus geprüft.
+spätere Ergebnisweiterverarbeitung. DS-069 ergänzt erstmalige Ergebnisordnerwahl,
+Wiederverwendung, ausdrücklichen Wechsel/Reset, `result_folder_required` und den
+rein informativen Sync-Hinweis. Die Anzahl wird aus dem JSON-Korpus geprüft.
 
 `npm test` validiert Schema und Abdeckungsumfang des Korpus. Es simuliert kein Claude-Modell
 und darf nicht als bestandene Modellabnahme bezeichnet werden.
@@ -21,7 +23,7 @@ und darf nicht als bestandene Modellabnahme bezeichnet werden.
    Paket-IDs oder erkannten Werte speichern.
 4. Wiederhole jeden Fall dreimal in einer frischen Sitzung. Ein zufälliger Einzelerfolg ist
    keine Abnahme.
-5. Verwende den Normalmodus mit genau den acht unter `normal_tool_names` aufgeführten
+5. Verwende den Normalmodus mit genau den zehn unter `normal_tool_names` aufgeführten
    Werkzeugen. `expected_tools` nennt die erwarteten Aufrufe ab der beschriebenen
    Ausgangslage; bei einem bereits gelieferten Toolresultat wird dieser Aufruf nicht
    wiederholt. `workflow_stage=followup` setzt einen späteren ausdrücklichen Nutzerauftrag

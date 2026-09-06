@@ -9,7 +9,8 @@ const MAX_PRESENTATION_GENERATION = Number.MAX_SAFE_INTEGER;
 const PRIVATE_ACTIONS = new Set([
   'admit_selected_sources', 'cancel_admission', 'start_admitted_batch',
   'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-  'resolve_current_results', 'resolve_local_ledger', 'shutdown'
+  'resolve_current_results', 'resolve_local_ledger', 'get_run_history',
+  'resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'shutdown'
 ]);
 
 function fail(code, message) {
@@ -24,6 +25,11 @@ function validatePrivateMessage(message) {
   if (!PRIVATE_ACTIONS.has(message.action))
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
+  if (['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch'].includes(message.action)) {
+    allowedFields.add('batch_id');
+    if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))
+      fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');
+  }
   if (message.action === 'start_admitted_batch') {
     allowedFields.add('processing_mode');
     validateProcessingMode(message.processing_mode, 'standalone');

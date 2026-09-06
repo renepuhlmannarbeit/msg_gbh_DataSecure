@@ -24,7 +24,7 @@ let started = false;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
 // The whole point of running detached is that a human decision can outlive a
 // Cowork tool call. companion/text-review.js still defaults its native-dialog
-// spawnSync to 5 minutes for the synchronous MCP path; this worker is not
+// spawnSync to 5 minutes for direct internal callers; this worker is not
 // bound by that per-request deadline, so it has no human-decision timeout.
 
 function lifecycle(event) {

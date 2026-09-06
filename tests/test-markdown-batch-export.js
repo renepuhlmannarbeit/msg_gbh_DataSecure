@@ -121,6 +121,21 @@ async function run() {
     assert.strictEqual(f.item.status, 'released');
     assert.ok(!Object.hasOwn(f.item, 'analysis_acknowledged'));
   });
+  await testAsync('Markdown-only preserves compatibility identifiers and telephone suffixes through real conversion, store and export', async () => {
+    const { originalDocument } = require('./lib/identifier-compatibility');
+    const f = processorFixture(originalDocument);
+    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractMarkdownBuffer });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.anonymized, false);
+    assert.strictEqual(store.readMarkdownArtifact(f.item.artifact_id).markdown, originalDocument);
+    deliveryFor(f.state).finalizePublishedPackageLocally(f.state.token, f.item.artifact_id);
+    assert.strictEqual(f.item.status, 'released');
+    assert.strictEqual(exportCompletedState(f.state).available, true);
+    const run = visibleExportDirectory(f.state.token);
+    assert.strictEqual(path.basename(path.dirname(run)), 'DataSecure-Markdown');
+    assert.deepStrictEqual(fs.readFileSync(path.join(run, 'Dokument-001-konvertiert.md')), Buffer.from(originalDocument));
+    assert.deepStrictEqual(fs.readFileSync(f.original), f.sourceBytes);
+  });
   await testAsync('crash after committed artifact recovers the exact identity without reconversion', async () => {
     const f = processorFixture();
     f.faults.failWrite = 2;

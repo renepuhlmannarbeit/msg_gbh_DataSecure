@@ -124,7 +124,7 @@ try {
   }));
   const stderr = { value: '' };
   child.stderr.on('data', (chunk) => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
-  const { request } = protocolClient(child, stderr);
+  let { request } = protocolClient(child, stderr);
   const status = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16), action: 'get_public_state' });
   assert.equal(status.schema, 'datasecure-standalone-private-response/1');
   assert.equal(status.request_id, 'a'.repeat(16));
@@ -340,6 +340,32 @@ try {
   assert.ok(conversionEvents.every(record => record.product_channel === 'standalone'));
   assert.doesNotMatch(JSON.stringify(conversionEvents), /Mustermann|Testfeld|Nordstern|personnel-profile|Tabelle\.xlsx|Quellen|Ergebnisse/u);
   process.stdout.write('STANDALONE REAL MIXED MARKDOWN CONVERSION PASS (11 results, 1 failed CSV, both modes)\n');
+  const historyBefore = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'd1'.repeat(8), action: 'get_run_history' });
+  assert.equal(historyBefore.ok, true);
+  assert.equal(historyBefore.result.local_ui_only, true);
+  assert.equal(historyBefore.result.entries.length, 3, 'each real run appears once, including the all-failed run');
+  const historyRows = historyBefore.result.entries;
+  assert.deepEqual(historyRows.map(row => row.processing_mode), ['markdown-only', 'markdown-and-anonymize', 'markdown-and-anonymize']);
+  assert.ok(historyRows.every(row => !row.resumable));
+  const expectedRuns = [convertedRun, failedRun, exactRun];
+  for (const [index, row] of historyRows.entries()) {
+    for (const [action, expected] of [['resolve_history_results', expectedRuns[index]],
+      ['resolve_history_ledger', path.join(expectedRuns[index], 'DataSecure-Zuordnung.csv')]]) {
+      const resolved = await request({ schema: 'datasecure-standalone-private-ipc/1',
+        request_id: 'd2'.repeat(8), action, batch_id: row.batch_id });
+      assert.equal(resolved.ok, true);
+      assert.equal(resolved.result.local_path, expected, 'history actions must never substitute the latest run');
+    }
+    const resume = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: 'd3'.repeat(8), action: 'continue_history_batch', batch_id: row.batch_id });
+    assert.equal(resume.ok, false);
+    assert.equal(resume.error_code, 'STANDALONE_NOTHING_TO_CONTINUE');
+  }
+  const nextRoot = path.join(extraction, 'Naechster-Ergebnisordner');
+  fs.mkdirSync(nextRoot);
+  assert.equal((await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'd4'.repeat(8), action: 'configure_results', source_paths: [nextRoot] })).ok, true);
   await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);
@@ -348,6 +374,34 @@ try {
       code === 0 ? resolve() : reject(new Error(`STANDALONE_SMOKE_SHUTDOWN:${code}`));
     });
   });
+  // Fresh installed control process, same isolated user namespace: no frontend
+  // cache or service double may supply the history or old destination paths.
+  childClosed = false;
+  child = childProcess.spawn(childProcessPath(runtime), ['--require=../network-deny.cjs', path.basename(sidecar)], {
+    cwd: childProcessPath(path.dirname(sidecar)), windowsHide: true, shell: false,
+    stdio: ['pipe', 'pipe', 'pipe'], env: environment
+  });
+  closePromise = new Promise(resolve => child.once('close', code => { childClosed = true; resolve(code); }));
+  child.stderr.on('data', chunk => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
+  ({ request } = protocolClient(child, stderr));
+  const restarted = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'd5'.repeat(8), action: 'get_run_history' });
+  assert.equal(restarted.ok, true);
+  assert.deepEqual(restarted.result.entries, historyRows, 'history survives fresh process and result root change');
+  for (const [index, row] of historyRows.entries()) {
+    const resolved = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: 'd6'.repeat(8), action: 'resolve_history_results', batch_id: row.batch_id });
+    assert.equal(resolved.result.local_path, expectedRuns[index]);
+  }
+  const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
+  for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');
+  assert.ok(!log.includes(exactRun) && !log.includes(convertedRun));
+  await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);
+    closePromise.then(code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(`STANDALONE_SMOKE_SHUTDOWN:${code}`)); });
+  });
+  process.stdout.write('STANDALONE REAL HISTORY PASS (both purposes, failed run, exact targets, restart, changed result root)\n');
   process.stdout.write('STANDALONE PACKAGE ISOLATED SIDECAR SMOKE PASS\n');
 } finally {
   if (child && !childClosed && child.exitCode === null) {

@@ -9,6 +9,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { createSuite } = require('./helpers');
 const { crc32 } = require('./lib/zip');
+const { bmp32 } = require('./lib/conversion-counterexamples');
 
 const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
 const {
@@ -163,6 +164,21 @@ test('a compressed or paletted BMP is refused', () => {
   bmp.writeUInt16LE(8, 28); // 8 bit per pixel
   assert.throws(() => decodeBmp(bmp), (e) => e instanceof ImageSafetyError);
 });
+test('independently generated 32-bit BI_RGB pixels ignore the unused high byte in either row order', () => {
+  const source = { width: 2, height: 2, rgba: Buffer.from([0, 0, 0, 255, 250, 128, 7, 255, 20, 30, 40, 255, 255, 255, 255, 255]) };
+  for (const topDown of [false, true]) for (const unused of [0, 1, 128, 255]) {
+    const bytes = bmp32(source, { topDown, unused }), before = Buffer.from(bytes);
+    assert.deepStrictEqual(decodeBmp(bytes).rgba, source.rgba);
+    assert.deepStrictEqual(bytes, before);
+  }
+});
+test('BMP alpha masks and inconsistent header extents are explicitly refused', () => {
+  for (const [offset, value, size] of [[30, 3, 4], [14, 108, 4], [10, 40, 4], [26, 2, 2]]) {
+    const bytes = bmp32(solidRgba(4, 4));
+    if (size === 2) bytes.writeUInt16LE(value, offset); else bytes.writeUInt32LE(value, offset);
+    assert.throws(() => decodeBmp(bytes), error => error instanceof ImageSafetyError);
+  }
+});
 
 test('a truncated BMP is refused', () => {
   const bmp = encodeBmp(solidRgba(8, 8));
@@ -243,6 +259,25 @@ test('entityRects maps character spans back to word rectangles', () => {
 test('entityRects ignores spans without finite offsets', () => {
   const flat = flattenWords({ words: [{ text: 'A', bbox: { x0: 0, y0: 0, x1: 1, y1: 1 } }] });
   assert.deepStrictEqual(entityRects([{ start: NaN, end: 3 }], flat.words), []);
+});
+
+test('compatibility identifiers map to exactly their original OCR words after UTF-16 and compatibility prefixes', () => {
+  const pii = require(path.join(runtime, 'pii-engine.js'));
+  const { professionalText, identifierCases } = require('./lib/identifier-compatibility');
+  for (const { type, label, value } of identifierCases) {
+    const flat = flattenWords({ words: [
+      { text: professionalText, bbox: { x0: 0, y0: 0, x1: 30, y1: 10 } },
+      { text: label || 'Kontakt:', bbox: { x0: 32, y0: 0, x1: 50, y1: 10 } },
+      { text: value, bbox: { x0: 52, y0: 0, x1: 90, y1: 10 } },
+      { text: '. fachlicher nachsatz', bbox: { x0: 92, y0: 0, x1: 140, y1: 10 } }
+    ] });
+    const spans = pii.sensitiveSpans(flat.text, 'general').filter((span) => span.type === type);
+    assert.ok(spans.some((span) => span.text === value));
+    for (const span of spans) assert.strictEqual(flat.text.slice(span.start, span.end), span.text);
+    assert.deepStrictEqual(entityRects(spans, flat.words), [flat.words[2].bbox], type);
+    assert.strictEqual(flat.words[0].text, professionalText);
+    assert.ok(pii.verifyRedactedText(flat.text).some((hit) => hit.type === type && hit.text === value));
+  }
 });
 
 test('redaction blackens the requested rectangle and leaves the rest intact', () => {

@@ -1,6 +1,6 @@
 # DataSecure Standalone – UAT-Testkit
 
-Stand: 06.09.2026 · Engineering-Pilot 3.2.0-rc108
+Stand: 06.09.2026 · Engineering-Pilot 3.2.0-rc109
 
 Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien
@@ -28,12 +28,12 @@ diese konkrete Paketbindung nicht.
 
 | Schritt | Aktion | Erwartung / PASS |
 |---|---|---|
-| S01 | `DataSecure Standalone.exe` doppelklicken | Ein Fenster erscheint; kein Terminal, Download oder zweiter Prozessdialog wird verlangt. |
-| S02 | **Dateien auswählen** und einen kleinen gemischten Satz aus `docs/acceptance/UAT_TEST_KIT/inputs` wählen | Genau ein Mehrfachpicker; danach Anzahl, gewählte Dateinamen, Quellenordner und der aktuelle Ergebnisordner im ausschließlich lokalen Fenster. |
-| S03 | Den Standard **Nur in Markdown umwandeln** beibehalten und **Starten** wählen | Fortschritt ohne PII-Prüfung oder Einzelbestätigung; Namen bleiben erhalten. |
+| S01 | `DataSecure Standalone.exe` doppelklicken | Die Startseite erklärt beide Funktionen; weder Verarbeiten noch eine Betriebsart ist vorbelegt. Kein Terminal, Download oder zweiter Prozessdialog wird verlangt. |
+| S02 | Auf Start **Markdown erstellen**, dann **Dateien auswählen** und einen kleinen gemischten Satz aus `docs/acceptance/UAT_TEST_KIT/inputs` wählen | Genau ein Mehrfachpicker; danach Anzahl, gewählte Dateinamen, Quellenordner und der aktuelle Ergebnisordner im ausschließlich lokalen Fenster. |
+| S03 | Die ausdrücklich gewählte Betriebsart **Nur in Markdown umwandeln** prüfen und **Starten** wählen | Fortschritt ohne PII-Prüfung oder Einzelbestätigung; Namen bleiben erhalten. Ohne gewählte Betriebsart kann kein neuer Stapel starten. |
 | S04 | Abschluss und eventuell angezeigte Extraktionshinweise ansehen | Kein Reviewdialog im reinen Konvertierungsmodus. Unvollständige/OCR-Ausgaben sind als solche gekennzeichnet; keine Behauptung vollständiger oder anonymisierter Inhalte. |
-| S05 | **Ergebnisse öffnen** | Explorer/Finder öffnet exakt den angezeigten `DataSecure-Markdown/Lauf-*`-Ordner; dort liegen `.md`-Ergebnisse und `DataSecure-Zuordnung.csv`; Originale bleiben unverändert. |
-| S06 | **Zuordnungsdatei anzeigen** | Explorer/Finder markiert `DataSecure-Zuordnung.csv` im letzten Laufordner; jede Quelle ist genau einem neutralen Ergebnisnamen zugeordnet. |
+| S05 | **Verlauf**, dann **Ergebnisordner** in der Zeile dieses Laufs | Explorer/Finder öffnet exakt dessen `DataSecure-Markdown/Lauf-*`-Ordner; dort liegen `.md`-Ergebnisse und `DataSecure-Zuordnung.csv`; Originale bleiben unverändert. Kein automatischer Ansichts- oder Explorerwechsel bei Abschluss. |
+| S06 | **Zuordnung** in derselben Zeile | Explorer/Finder markiert `DataSecure-Zuordnung.csv` genau dieses Laufs; jede Quelle ist ihrem neutralen Ergebnisnamen zugeordnet. Die Tabelle enthält keine Zuordnung von Personennamen zu Pseudonymen. |
 | S07 | **Ergebnisordner ändern**, neuen leeren Ordner wählen, zweiten Lauf starten | Ein Ordnerpicker; neue Ergebnisse landen nur dort, bestehende Exporte werden nicht gespiegelt oder gelöscht. |
 | S08 | Picker abbrechen | Ruhiger Abbruch, kein automatischer zweiter Picker und kein erfundener Erfolg. |
 | S09 | Während eines synthetischen Stapels App beenden und erneut starten | Der bereits übergebene Worker darf lokal weiterarbeiten. Beim Neustart erscheint der tatsächliche Zustand: laufend, abgeschlossen oder bei einer echten Unterbrechung fortsetzbar. Kein Doppelstart und keine doppelte Verarbeitung. Fensterschließen allein ist kein zugesagter Stapelabbruch. |
@@ -43,10 +43,14 @@ diese konkrete Paketbindung nicht.
 | S13 | Während vorbereiteter Auswahl erneut Dateien hineinziehen; anschließend Auswahl verwerfen | Zweiter Drop ersetzt die erste Auswahl nicht. Verständlicher Hinweis; danach ist eine neue Auswahl möglich. Dateien plus Ordner zusammen werden als gemischte Auswahl abgelehnt. |
 | S14 | Für einen neuen vierformatigen Stapel ausdrücklich **In Markdown umwandeln und anonymisieren** wählen, starten und die vier Ergebnisse vergleichen | Dieselbe synthetische Person ist überall `[PERSON_001]`; Arbeitgeber und Kunde tragen zwei unterschiedliche, dokumentübergreifend identische `[UNTERNEHMEN_…]`-Kennungen. Keine ursprünglichen Personen-/Firmennamen. Diese Betriebsart darf eine lokale Sammelprüfung verlangen. Ausgabe und Zuordnung liegen getrennt unter `DataSecure-Output/Lauf-*`. |
 | S15 | Wieder **Nur in Markdown umwandeln** wählen; synthetische XLSX/PPTX, Text-PDF, Scan-PDF und PNG/JPEG/BMP verarbeiten | Alle lesbaren Eingaben erzeugen je eine Markdown-Datei. Namen bleiben erhalten; OCR und nicht vollständig erfasste Objekte werden verständlich als Hinweise ausgewiesen, ohne Zusatzdialog. Kein Python-/Node-Download, keine KI-Verbindung. Ergebnisse sind ausdrücklich **nicht anonymisiert**. |
-| S16 | Nach einem erfolgreichen Lauf sofort **Neuen Stapel vorbereiten** wählen und einen zweiten kleinen Stapel starten | Die Verarbeitung läuft ohne erneutes Öffnen der App weiter. Unter **Ergebnisse** steht der neue Laufordner; beide Öffnen-Aktionen gehören zum neuen Lauf, nicht zum Vorgänger. |
+| S16 | Nach einem erfolgreichen Lauf **Neue Aufgabe wählen**, eine Funktion wählen und einen zweiten kleinen Stapel starten | Die Verarbeitung läuft ohne erneutes Öffnen der App weiter. Unter **Verlauf** stehen beide Läufe; jede Öffnen-Aktion gehört ausschließlich zu ihrer Zeile. |
 | S17 | Einen Picker länger offen lassen, abbrechen und anschließend einen kleinen Stapel starten | Nach dem Abbruch bleibt die App bedienbar; Fortschritt und Abschluss aktualisieren sich wieder selbständig. |
 | S18 | Nach einem erfolgreichen Stapel nur `../UAT_TEST_KIT/inputs/03-blocked/malformed.docx` starten; danach diese Datei gemeinsam mit `../UAT_TEST_KIT/inputs/01-positive/personnel-profile.txt` wählen | Der reine Fehlerlauf meldet keine Ergebnisse, bietet aber seine eigene Zuordnung mit Fehlercodes. Der Mischlauf enthält fertige Ergebnisse und gestoppte Quellen in seiner Zuordnung. Im reinen Konvertierungsmodus bleiben Namen erhalten. Nie wird eine alte Zuordnung als aktuelle angeboten. Falls die Übersicht nicht geschrieben werden kann, erscheint ein ausdrücklicher Hinweis statt „Fertig“. |
 | S19 | Im ausdrücklich gewählten Anonymisierungsmodus zwei synthetische Dokumente mit `Kunde: Nordstern Medizin GmbH` beziehungsweise `Kunde: Nordstern Medizin AG` und zusätzlich dem Kurzverweis `Nordstern Medizin` verarbeiten | Beide vollständigen Firmen bleiben unterschiedliche Unternehmenskennungen. Der mehrdeutige Kurzverweis erscheint als `[UNTERNEHMEN_UNKLAR_…]`, nicht als Person. Ein ausdrücklicher natürlicher Kundenname wie `Max Mustermann` bleibt eine Personenkennung. |
+| S20 | Mit bestehenden Ergebnissen App neu starten; zwischen Start, Verarbeiten und Verlauf per Tastatur wechseln | Start bleibt die erste Ansicht. Pfeiltasten/Home/End bewegen den Tab-Fokus; Enter/Leertaste aktiviert. Abschlussmeldungen springen nicht in einen anderen Tab. |
+| S21 | Nach zwei Läufen das Ergebnisziel ändern und App neu starten; im Verlauf beide alten Zeilen öffnen | Alte Ergebnisordner und Zuordnungen bleiben exakt gebunden. Gelöschte oder ausgetauschte Ziele werden nicht durch den neuesten Lauf ersetzt. Rückmeldung erscheint bei der betätigten Zeile. |
+| S22 | In einer synthetischen Testinstallation insgesamt 21 kleine Verarbeitungen abschließen | Verlauf zeigt genau die 20 neuesten Verarbeitungen, neueste zuerst. Der älteste Ergebnisordner wird dadurch nicht gelöscht. |
+| S23 | Einen älteren wirklich unterbrochenen Stapel über seine Verlaufszeile fortsetzen | Genau dessen Betriebsart, Dateien und Zähler werden fortgeführt. Kein zweiter aktiver Stapel; bei vorbereiteter neuer Auswahl bleibt Fortsetzen gesperrt. Nicht fortsetzbare Zeilen erklären den deaktivierten Knopf. |
 
 Der Standard-Ergebnisordner wird bereits beim Start angezeigt, aber erst beim
 Start des ersten Stapels sicher angelegt und gespeichert. Eine ausdrückliche

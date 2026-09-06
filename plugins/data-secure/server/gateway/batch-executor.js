@@ -47,13 +47,15 @@ function acknowledgeTerminalNotice(child) {
   catch { /* an ended worker needs no acknowledgement */ }
 }
 
-function pendingStandaloneTerminalNoticeGeneration() {
+function pendingStandaloneTerminalNoticeGeneration(token) {
+  if (token !== undefined && standalonePendingNotice?.token !== token) return null;
   return standalonePendingNotice?.generation || null;
 }
 
-function acknowledgeStandaloneTerminalNotice(generation) {
+function acknowledgeStandaloneTerminalNotice(generation, token) {
   const pending = standalonePendingNotice;
-  if (!pending || !Number.isSafeInteger(generation) || generation !== pending.generation) return false;
+  if (!pending || !Number.isSafeInteger(generation) || generation !== pending.generation ||
+      (token !== undefined && pending.token !== token)) return false;
   standalonePendingNotice = null;
   clearTimeout(pending.timer);
   acknowledgeTerminalNotice(pending.child);
@@ -90,8 +92,8 @@ function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = 
   const productChannel = String(options.env?.DATASECURE_PRODUCT_CHANNEL || process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin');
   if (productChannel === 'standalone') {
     // Receiving an envelope in the sidecar is not visibility evidence. The
-    // renderer acknowledges after a paint opportunity; otherwise the worker
-    // retains the existing exactly-once native fallback.
+    // renderer acknowledges after a paint opportunity. Standalone never opens
+    // a Cowork completion dialog; missing presentation is recovered via its UI.
     if (standalonePendingNotice) return false;
     standalonePresentationGeneration = standalonePresentationGeneration >= Number.MAX_SAFE_INTEGER
       ? 1
@@ -104,7 +106,7 @@ function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = 
         ...(itemCount ? { item_count: itemCount } : {}), error_code: 'LOCAL_NOTICE_FAILED' });
     }, STANDALONE_RENDER_ACK_MS);
     timer.unref?.();
-    standalonePendingNotice = { child, lifecycle, itemCount, timer, generation };
+    standalonePendingNotice = { child, lifecycle, itemCount, timer, generation, token };
     lifecycle({ event: 'completion_notice_delegated_to_product_ui', outcome: 'progress',
       ...(itemCount ? { item_count: itemCount } : {}) });
     return true;
@@ -222,6 +224,10 @@ function observeWorker(child, onFailure, onExit) {
   return { fail, get ended() { return ended; }, get failed() { return failed; } };
 }
 
+function ipcAcknowledgementError(code, message = 'IPC acknowledgement failed') {
+  return Object.assign(new Error(message), { code });
+}
+
 function createWorkerAcceptance(worker, acceptedType, options) {
   if (options.requireIpcAcknowledgement !== true) {
     return { promise: Promise.resolve(), accept: () => false, reject: () => false };
@@ -245,15 +251,15 @@ function createWorkerAcceptance(worker, acceptedType, options) {
     return true;
   };
   timer = setTimeout(() => {
-    if (!settle(new Error('bounded IPC acknowledgement timeout'))) return;
+    if (!settle(ipcAcknowledgementError('LOCAL_IPC_ACK_TIMEOUT', 'bounded IPC acknowledgement timeout'))) return;
     worker.fail('LOCAL_IPC_ACK_TIMEOUT');
   }, timeoutMs);
   timer.unref?.();
   if (options.signal?.aborted) {
-    if (settle(new Error('IPC acknowledgement cancelled'))) worker.fail('LOCAL_IPC_ACK_CANCELLED');
+    if (settle(ipcAcknowledgementError('LOCAL_IPC_ACK_CANCELLED', 'IPC acknowledgement cancelled'))) worker.fail('LOCAL_IPC_ACK_CANCELLED');
   } else if (options.signal?.addEventListener) {
     abortListener = () => {
-      if (settle(new Error('IPC acknowledgement cancelled'))) worker.fail('LOCAL_IPC_ACK_CANCELLED');
+      if (settle(ipcAcknowledgementError('LOCAL_IPC_ACK_CANCELLED', 'IPC acknowledgement cancelled'))) worker.fail('LOCAL_IPC_ACK_CANCELLED');
     };
     options.signal.addEventListener('abort', abortListener, { once: true });
   }
@@ -263,7 +269,7 @@ function createWorkerAcceptance(worker, acceptedType, options) {
       if (!message || Object.keys(message).length !== 1 || message.type !== acceptedType) return false;
       return settle();
     },
-    reject(error = new Error('worker ended before IPC acknowledgement')) { return settle(error); }
+    reject(error = ipcAcknowledgementError('LOCAL_WORKER_EXITED', 'worker ended before IPC acknowledgement')) { return settle(error); }
   };
 }
 
@@ -430,9 +436,10 @@ function startLocalBatchExecutor(token, options = {}) {
   try {
     child = launchBackgroundRole('batch', { forkProcess, env: batchWorkerEnvironment({ ...(options.env || process.env), DATASECURE_RUN_ID: runId }) });
     worker = observeWorker(child, (errorCode) => {
+      acceptance?.reject(ipcAcknowledgementError(errorCode));
       lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: errorCode });
     }, (code, failed, pid) => {
-      acceptance?.reject();
+      acceptance?.reject(ipcAcknowledgementError('LOCAL_WORKER_EXITED', 'worker ended before IPC acknowledgement'));
       if (pid === null) return; // a never-started process has no OS exit
       if (claimedLease) releaseLocalBatchExecutor(token, pid);
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', exit_code: code,
@@ -461,7 +468,7 @@ function startLocalBatchExecutor(token, options = {}) {
     child.on?.('message', (message) => {
       if (acceptance.accept(message)) return;
       if (message?.type === 'local-batch-rejected' && Object.keys(message).length === 2 && PURPOSE_ERROR_CODES.includes(message.error_code)) {
-        acceptance.reject();
+        acceptance.reject(ipcAcknowledgementError(message.error_code, message.error_code));
         lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: message.error_code });
         return;
       }
@@ -584,16 +591,16 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       return true;
     };
     ackTimer = setTimeout(() => {
-      if (!settleIpc(new Error('bounded IPC acknowledgement timeout'))) return;
+      if (!settleIpc(ipcAcknowledgementError('LOCAL_IPC_ACK_TIMEOUT', 'bounded IPC acknowledgement timeout'))) return;
       worker.fail('LOCAL_IPC_ACK_TIMEOUT');
     }, ackTimeoutMs);
     ackTimer.unref?.();
     if (options.signal?.aborted) {
-      settleIpc(new Error('IPC acknowledgement cancelled'));
+      settleIpc(ipcAcknowledgementError('LOCAL_IPC_ACK_CANCELLED', 'IPC acknowledgement cancelled'));
       worker.fail('LOCAL_IPC_ACK_CANCELLED');
     } else if (options.signal?.addEventListener) {
       abortListener = () => {
-        if (!settleIpc(new Error('IPC acknowledgement cancelled'))) return;
+        if (!settleIpc(ipcAcknowledgementError('LOCAL_IPC_ACK_CANCELLED', 'IPC acknowledgement cancelled'))) return;
         worker.fail('LOCAL_IPC_ACK_CANCELLED');
       };
       options.signal.addEventListener('abort', abortListener, { once: true });
@@ -623,7 +630,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       }
       if (Object.keys(message).length === 2 && message.type === 'local-intake-rejected' &&
           [LOCAL_QUEUE_SCHEMA_INVALID, ...PURPOSE_ERROR_CODES].includes(message.error_code)) {
-        settleIpc(Object.assign(new Error(message.error_code), { code: message.error_code }));
+        settleIpc(ipcAcknowledgementError(message.error_code, message.error_code));
         lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount,
           error_code: message.error_code });
         return;
@@ -645,12 +652,13 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       }
     });
     onWorkerFailure = (errorCode) => {
+      settleIpc(ipcAcknowledgementError(errorCode));
       lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount, error_code: errorCode });
     };
     onWorkerExit = (code, failed, pid) => {
       // A worker that ends before acknowledging cannot confirm the handoff;
       // reject immediately instead of waiting for the bounded timer.
-      settleIpc(new Error('worker ended before IPC acknowledgement'));
+      settleIpc(ipcAcknowledgementError('LOCAL_WORKER_EXITED', 'worker ended before IPC acknowledgement'));
       lifecycle({ event: 'intake_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', item_count: itemCount,
         exit_code: code, error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_WORKER_EXITED' });
       if (pendingIntakes.get(token) === intake) pendingIntakes.delete(token);
@@ -676,7 +684,8 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         if (ipcSettled) return;
         if (error || worker.ended || worker.failed) {
           worker.fail('LOCAL_IPC_FAILED');
-          settleIpc(error || new Error('worker ended before IPC acknowledgement'));
+          settleIpc(ipcAcknowledgementError(error ? 'LOCAL_IPC_FAILED' : 'LOCAL_WORKER_EXITED',
+            error ? 'IPC acknowledgement failed' : 'worker ended before IPC acknowledgement'));
           return;
         }
         // Dispatched, not acknowledged: the worker's acceptance envelope or
@@ -757,10 +766,11 @@ function startLocalReviewExecutor(token, options = {}) {
         progress.batch_total);
     });
     onWorkerFailure = (errorCode) => {
+      acceptance.reject(ipcAcknowledgementError(errorCode));
       lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
     };
     onWorkerExit = (code, failed, pid) => {
-      acceptance.reject();
+      acceptance.reject(ipcAcknowledgementError('LOCAL_REVIEW_WORKER_EXITED', 'worker ended before IPC acknowledgement'));
       lifecycle({ event: 'review_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', exit_code: code,
         error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
       if (claimedLease) releaseExecutor(token, pid);

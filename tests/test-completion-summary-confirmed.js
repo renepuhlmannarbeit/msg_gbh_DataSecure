@@ -75,7 +75,7 @@ async function main() {
     }
   });
 
-  await testAsync('non-Windows presenters keep their explicitly weaker spawn acknowledgement', async () => {
+  await testAsync('macOS resolves only after AppKit emits the visible-window marker', async () => {
     const original = childProcess.spawn;
     const child = fakeChild();
     let options;
@@ -84,6 +84,29 @@ async function main() {
       const shown = showBatchStateNoticeConfirmed({
         batch_phase: 'awaiting_explicit_resume', complete: false
       }, { platform: 'darwin' });
+      child.emit('spawn');
+      await turn();
+      let settled = false;
+      shown.then(() => { settled = true; }, () => { settled = true; });
+      await turn();
+      assert.strictEqual(settled, false);
+      child.stdout.write('SHOWN\n');
+      assert.strictEqual(await shown, true);
+      assert.deepStrictEqual(options.stdio, ['ignore', 'pipe', 'ignore']);
+    } finally {
+      childProcess.spawn = original;
+    }
+  });
+
+  await testAsync('Linux keeps its explicitly weaker spawn acknowledgement', async () => {
+    const original = childProcess.spawn;
+    const child = fakeChild();
+    let options;
+    childProcess.spawn = (_command, _args, value) => { options = value; return child; };
+    try {
+      const shown = showBatchStateNoticeConfirmed({
+        batch_phase: 'awaiting_explicit_resume', complete: false
+      }, { platform: 'linux' });
       child.emit('spawn');
       assert.strictEqual(await shown, true);
       assert.strictEqual(options.stdio, 'ignore');

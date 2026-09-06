@@ -1,13 +1,14 @@
 'use strict';
 
+const { batchReviewReady } = require('./batch-next-action');
+
 // The detached batch worker already owns the user's one confirmed local run.
 // When automatic analysis ends in `awaiting_local_review`, keep that same
 // local flow alive and reuse the existing batch-review orchestrator. Nothing
 // is sent back through MCP: the token and reconstructed review text stay
 // inside the detached, network-denied worker.
 async function continueIntoLocalReview(token, progress, options = {}) {
-  const deferred = Number(progress?.deferred_review || 0);
-  if (progress?.batch_phase !== 'awaiting_local_review' || deferred < 1) {
+  if (progress?.batch_phase !== 'awaiting_local_review' || !batchReviewReady(progress)) {
     return { attempted: false, progress };
   }
 

@@ -405,55 +405,48 @@ function darwinDialogContract(phase, allowDefer = false) {
 }
 
 // The macOS reviewer deliberately receives the review draft over stdin as
-// UTF-8.  Passing text through an osascript argument would expose it in the
+// UTF-8. Passing text through an osascript argument would expose it in the
 // process list; a temporary file would add an unnecessary raw-data lifecycle.
-// This focused UI decides only the known credential-issuer ambiguities.  It
-// does not pretend to offer the Windows free-range redaction editor.
+// One AppKit sheet presents every known credential ambiguity in one scrollable
+// collection. It does not pretend to offer the Windows free-range editor.
 function darwinReviewScript() {
-  const contracts = JSON.stringify(DARWIN_DIALOG_CONTRACTS);
   return [
-    'ObjC.import("Foundation");',
+    'ObjC.import("AppKit"); ObjC.import("Foundation");',
     'function run(argv) {',
-    '  var app = Application.currentApplication(); app.includeStandardAdditions = true;',
     '  var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;',
     '  var source = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding));',
     '  var draft = JSON.parse(source);',
-    `  var contracts = ${contracts};`,
     '  var title = draft.batch_review ? "DataSecure – lokale Stapelprüfung" : "DataSecure – lokale Zertifikatsprüfung";',
-    '  var progress = draft.batch_review ? "Automatisch abgeschlossen: " + draft.batch_review.automatically_completed_count + ". Bereits lokal geprüft: " + draft.batch_review.previously_reviewed_count + ". Jetzt zu prüfen: " + draft.batch_review.review_finding_count + " Stellen in " + draft.batch_review.review_document_count + " Dateien.\\n\\n" : "";',
-    '  if (draft.batch_review && draft.batch_review.safely_stopped_count > 0) progress += "Sicher gestoppt: " + draft.batch_review.safely_stopped_count + ".\\n\\n";',
+    '  var progress = draft.batch_review ? "Automatisch abgeschlossen: " + draft.batch_review.automatically_completed_count + ". Bereits lokal geprüft: " + draft.batch_review.previously_reviewed_count + ". Jetzt: " + draft.batch_review.review_finding_count + " Stellen in " + draft.batch_review.review_document_count + " Dateien." : "Prüfe die markierten Organisationen.";',
     '  try {',
-    '    function dialogContract(phase) { var contract = contracts[phase][draft.allow_defer ? "defer" : "cancel"]; if (contract.buttons.indexOf(contract.defaultButton) < 0 || contract.buttons.indexOf(contract.cancelButton) < 0) throw new Error("invalid dialog contract"); return contract; }',
-    '    function showDialog(message, phase) { var contract = dialogContract(phase); var answer = app.displayDialog(message, { withTitle: title, buttons: contract.buttons, defaultButton: contract.defaultButton, cancelButton: contract.cancelButton }); return { button: answer.buttonReturned, cancelAction: contract.cancelAction }; }',
-    '    function groupFor(item) { var groups = draft.batch_review && draft.batch_review.decision_groups; if (!Array.isArray(groups)) return null; var matches = groups.filter(function(group) { return group && Array.isArray(group.candidate_ids) && group.candidate_ids.length > 1 && group.candidate_ids.indexOf(item.ambiguity_id) >= 0; }); return matches.length === 1 ? matches[0] : null; }',
-    '    function decided(decisions, id) { return decisions.some(function(entry) { return entry.ambiguity_id === id; }); }',
-    '    function decideGroup(decisions, group, decision) { group.candidate_ids.forEach(function(id) { if (!decided(decisions, id)) decisions.push({ ambiguity_id: id, decision: decision }); }); }',
-    '    while (true) {',
-    '      var decisions = [];',
-    '      for (var index = 0; index < draft.ambiguities.length; index++) {',
-    '      var item = draft.ambiguities[index];',
-    '      if (decided(decisions, item.ambiguity_id)) continue;',
-    '      var group = groupFor(item);',
+    '    if (!Array.isArray(draft.ambiguities) || draft.ambiguities.length > 1000) throw new Error("review size");',
+    '    var app = $.NSApplication.sharedApplication; app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);',
+    '    var alert = $.NSAlert.alloc.init; alert.messageText = $(title); alert.informativeText = $(progress + "\\nAlle Entscheidungen bleiben lokal.");',
+    '    alert.addButtonWithTitle($("Geprüft freigeben"));',
+    '    if (draft.allow_defer) alert.addButtonWithTitle($("Später entscheiden"));',
+    '    alert.addButtonWithTitle($("Abbrechen"));',
+    '    var width = 760; var rowHeight = 86; var contentHeight = Math.max(80, draft.ambiguities.length * rowHeight);',
+    '    var document = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, width, contentHeight));',
+    '    var controls = [];',
+    '    draft.ambiguities.forEach(function(item, index) {',
     '      var value = draft.original_text.substring(item.original_start, item.original_end);',
-    '      var before = draft.original_text.substring(Math.max(0, item.original_start - 100), item.original_start);',
-    '      var after = draft.original_text.substring(item.original_end, Math.min(draft.original_text.length, item.original_end + 100));',
-    '      var message = progress + "Stelle " + (index + 1) + " von " + draft.ambiguities.length + ":\\n\\n" + before + "[" + value + "]" + after + "\\n\\nIst die markierte Organisation der Aussteller einer Zertifizierung?";',
-    // Standard Additions maps to NSAlert and supports at most three buttons.
-    // Defer/cancel is therefore the first real button and also the Esc action.
-    '      var answer = showDialog(message, "decision");',
-    '      if (answer.button === "Später entscheiden") return JSON.stringify({ action: "deferred" });',
-    '      if (answer.button === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
-    '      var choice = answer.button === "Beibehalten" ? "keep" : "redact";',
-    '      if (group) { var groupAnswer = showDialog("Die markierte Stelle gehört zu mehreren nachweislich gleichen lokalen Kontextzeilen. Soll die Entscheidung nur für diese Stelle oder für alle gleichen Stellen gelten?", "group"); if (groupAnswer.button === "Später entscheiden") return JSON.stringify({ action: "deferred" }); if (groupAnswer.button === "Abbrechen") return JSON.stringify({ action: "cancelled" }); if (groupAnswer.button === "Gleiche Stellen") { decideGroup(decisions, group, choice); continue; } }',
-    '      decisions.push({ ambiguity_id: item.ambiguity_id, decision: choice });',
-    '      }',
-    '      var finalAnswer = showDialog("Alle Fundstellen sind entschieden. Du kannst die Entscheidungen jetzt freigeben oder vollständig neu treffen.", "final");',
-    '      if (finalAnswer.button === "Später entscheiden") return JSON.stringify({ action: "deferred" });',
-    '      if (finalAnswer.button === "Abbrechen") return JSON.stringify({ action: "cancelled" });',
-    '      if (finalAnswer.button === "Zurück / ändern") continue;',
-    '      return JSON.stringify({ action: "reviewed", redactions: [], decisions: decisions });',
-    '    }',
-    '  } catch (error) { var number = Number(error && (error.errorNumber !== undefined ? error.errorNumber : error.number)); if (number === -128 && draft.allow_defer) return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
+    '      var before = draft.original_text.substring(Math.max(0, item.original_start - 80), item.original_start);',
+    '      var after = draft.original_text.substring(item.original_end, Math.min(draft.original_text.length, item.original_end + 80));',
+    '      var y = contentHeight - ((index + 1) * rowHeight) + 42;',
+    '      var label = $.NSTextField.wrappingLabelWithString($("Stelle " + (index + 1) + ": " + before + "[" + value + "]" + after));',
+    '      label.frame = $.NSMakeRect(0, y, 550, 40); document.addSubview(label);',
+    '      var choice = $.NSPopUpButton.alloc.initWithFramePullsDown($.NSMakeRect(570, y + 4, 180, 32), false);',
+    '      choice.addItemsWithTitles($(["Bitte entscheiden", "Beibehalten", "Anonymisieren"])); document.addSubview(choice);',
+    '      controls.push({ id: item.ambiguity_id, choice: choice });',
+    '    });',
+    '    if (draft.ambiguities.length === 0) { var empty = $.NSTextField.labelWithString($("Keine offene Zuordnung.")); empty.frame = $.NSMakeRect(0, 24, width, 32); document.addSubview(empty); }',
+    '    var scroll = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 0, width, Math.min(500, contentHeight))); scroll.hasVerticalScroller = true; scroll.documentView = document; alert.accessoryView = scroll;',
+    '    app.activateIgnoringOtherApps(true); alert.window.makeKeyAndOrderFront(null); alert.window.displayIfNeeded();',
+    '    var response = alert.runModal;',
+    '    if (response !== $.NSAlertFirstButtonReturn) { if (draft.allow_defer && response === $.NSAlertSecondButtonReturn) return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
+    '    var decisions = []; for (var index = 0; index < controls.length; index++) { var selected = ObjC.unwrap(controls[index].choice.titleOfSelectedItem); if (selected !== "Beibehalten" && selected !== "Anonymisieren") return JSON.stringify({ action: draft.allow_defer ? "deferred" : "cancelled" }); decisions.push({ ambiguity_id: controls[index].id, decision: selected === "Beibehalten" ? "keep" : "redact" }); }',
+    '    return JSON.stringify({ action: "reviewed", redactions: [], decisions: decisions });',
+    '  } catch (error) { return JSON.stringify({ action: draft.allow_defer ? "deferred" : "cancelled" }); }',
     '}'
   ].join('\n');
 }
@@ -663,11 +656,9 @@ function applyManualRedactions(text, ranges) {
   return result;
 }
 
-// The synchronous review_deferred_document_batch MCP tool call must keep this
-// well inside the supervisor's ten-minute request deadline so spawnSync tears
-// down PowerShell before the Node child can be terminated by its parent. The
-// detached, non-blocking review worker (gateway/review-worker.js) is not bound
-// by that per-request deadline and passes a much longer options.timeoutMs.
+// Direct internal callers use the bounded default. Normal and support MCP
+// routes delegate reconstruction/UI to gateway/review-worker.js instead; that
+// worker explicitly passes null so human decisions have no process timeout.
 function defaultRunner(command, args, input, env = process.env, timeoutMs = DEFAULT_REVIEW_TIMEOUT_MS) {
   const options = {
     input,

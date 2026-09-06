@@ -12,6 +12,7 @@ import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs'
 const require = createRequire(import.meta.url);
 const { decodePng } = require('../plugins/data-secure/server/images/png');
 const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
+const { xlsxCounterexample, bmp32 } = require('./lib/conversion-counterexamples');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
   : process.platform === 'darwin' && ['x64', 'arm64'].includes(process.arch) ? `macos-${process.arch}` : null;
@@ -64,6 +65,71 @@ try {
       if (extension === '.txt' || extension === '.md') assert.equal(result.markdown, bytes.toString('utf8'));
     });
   }
+  await test('XLSX corruption crosses real OPC admission and worker into a stopped item; the next source exports with exact columns', async () => {
+    const saved = new Map(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT'].map(key => [key, process.env[key]]));
+    const directory = path.join(scope, 'xlsx-regression'); fs.mkdirSync(directory);
+    process.env.EU_PRIVACY_DATA_ROOT = path.join(directory, 'data');
+    process.env.EU_PRIVACY_ROOT = path.join(directory, 'private');
+    process.env.EU_PRIVACY_RESULT_ROOT = path.join(directory, 'visible'); fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT);
+    try {
+      const { SafeError } = require(path.join(server, 'runtime'));
+      const { inspectSourceFormatFromFd } = require(path.join(server, 'gateway', 'source-format-inspector'));
+      const { createBatchItemProcessor } = require(path.join(server, 'gateway', 'batch-item-processor'));
+      const { createBatchDelivery } = require(path.join(server, 'gateway', 'batch-delivery'));
+      const store = require(path.join(server, 'standalone', 'markdown-store'));
+      const { exportCompletedState, visibleExportDirectory } = require(path.join(server, 'gateway', 'result-export'));
+      const sources = [xlsxCounterexample({ overrides: [['xl/worksheets/sheet1.xml',
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>SECRET PREFIX</t></is></c></row><row r="2"><c r="B2">']] }),
+      xlsxCounterexample({ prefix: 'sheet', quote: "'", strict: true })];
+      const state = { schema: 'datasecure-batch/5', product_channel: 'standalone', processing_mode: 'markdown-only',
+        token: crypto.randomBytes(32).toString('hex'), created_at: new Date().toISOString(), io_summary: {},
+        items: sources.map((_, index) => ({ id: crypto.randomBytes(16).toString('hex'), name: index ? 'ledger.xlsx' : 'broken.xlsx',
+          source_label: index ? 'ledger.xlsx' : 'broken.xlsx', status: 'pending' })) };
+      const prohibited = () => { throw new Error('Privacy operation invoked for standalone conversion'); };
+      const writeState = value => fs.writeFileSync(path.join(directory, 'journal.json'), JSON.stringify(value));
+      const processor = createBatchItemProcessor({ SafeError, writeState, anonymizeNext: prohibited,
+        packageIdForItem: prohibited, reviewSingleBatchTextLocally: prohibited, incrementPrivateIoSummary: prohibited,
+        ensureMappingOutbox: prohibited, markMappingPending: prohibited, commitPendingMapping: prohibited,
+        appendMapping() {}, invalidateUnpublishedBatchCopies() {}, cleanupTerminalWorkCopy(_state, item) { delete item.work_copy_cleanup_pending; },
+        createPhaseRecorder: () => ({ mark() {}, snapshot: () => ({}) }), publicProgress: () => ({}), writeTerminalEvidence: () => true });
+      for (let index = 0; index < sources.length; index++) {
+        const item = state.items[index], bytes = sources[index], source = path.join(directory, item.name);
+        fs.writeFileSync(source, bytes, { flag: 'wx' });
+        const fd = fs.openSync(source, fs.constants.O_RDONLY);
+        try {
+          const admission = inspectSourceFormatFromFd(fd, fs.fstatSync(fd), '.xlsx', { processingMode: 'markdown-only', productChannel: 'standalone' });
+          assert.equal(admission.verdict, 'candidate'); assert.equal(admission.structure.crc_verified, true);
+        } finally { fs.closeSync(fd); }
+        const entry = { name: item.name, private_bytes: Buffer.from(bytes), expected_sha256: hash(bytes) };
+        const result = await processor.processSingleBatchItem(state, item, entry, { convertBuffer });
+        assert.equal(result.ok, Boolean(index)); assert.ok(entry.private_bytes.every(byte => byte === 0));
+        assert.deepEqual(fs.readFileSync(source), bytes); assert.ok(children.every(child => child.closed));
+        if (!index) {
+          assert.equal(item.status, 'stopped'); assert.equal(item.error_code, 'XLSX_STRUCTURE_UNSAFE');
+          assert.equal(Object.hasOwn(item, 'artifact_id'), false);
+          assert.equal(fs.existsSync(path.join(store.artifactRoot(), `dm_${item.id}`)), false);
+          assert.doesNotMatch(JSON.stringify(result), /SECRET PREFIX/u);
+          assert.equal(exportCompletedState(state).available, false);
+        }
+      }
+      const item = state.items[1];
+      assert.equal(item.status, 'delivery_pending'); assert.equal(store.verifyMarkdownItem(item), true);
+      assert.match(store.readMarkdownArtifact(item.artifact_id).markdown, /\| Debit \| Credit \|\n\|  \| 1000 \|\n\|  \|  \|/u);
+      const delivery = createBatchDelivery({ SafeError, active: new Set(), acquireActiveLock() {}, releaseActiveLock() { return true; },
+        readState: () => state, writeState, assertLocalExecutorAccess() {}, regularPublishedPackage: () => false,
+        issueReadCapability: prohibited, publicProgress: () => ({}), writeTerminalEvidence: () => true });
+      delivery.finalizePublishedPackageLocally(state.token, item.artifact_id);
+      assert.equal(item.status, 'released');
+      assert.equal(exportCompletedState(state).available, true);
+      const run = visibleExportDirectory(state.token), names = fs.readdirSync(run);
+      assert.equal(names.filter(name => name.endsWith('.md')).length, 1);
+      const mapping = fs.readFileSync(path.join(run, 'DataSecure-Zuordnung.csv'), 'utf8');
+      assert.match(mapping, /broken\.xlsx/u); assert.match(mapping, /Nicht konvertiert/u); assert.match(mapping, /ledger\.xlsx/u);
+      assert.doesNotMatch(mapping, /SECRET PREFIX/u);
+    } finally {
+      for (const [key, value] of saved) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    }
+  });
   const canvas = image(), png = canvas.toBuffer('image/png'), jpeg = canvas.toBuffer('image/jpeg');
   const bitmap = decodePng(png), bmp = encodeBmp(bitmap);
   for (const [extension, bytes] of [['.png', png], ['.bmp', bmp], ['.jpeg', jpeg]]) {
@@ -74,6 +140,15 @@ try {
       assert.deepEqual(result.coverage.reason_codes, ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
     });
   }
+  await test('independent 32-bit BI_RGB with zero unused bytes remains visible through actual local OCR', async () => {
+    for (const topDown of [false, true]) {
+      const bytes = bmp32(bitmap, { topDown, unused: 0 });
+      assert.equal(bytes.readUInt16LE(28), 32); assert.equal(bytes.readUInt32LE(30), 0);
+      const result = await convert(bytes, '.bmp');
+      assert.match(result.markdown, /Max Mustermann/u); assert.match(result.markdown, /Nordstern GmbH/u);
+      assert.equal(result.coverage.status, 'incomplete'); assert.ok(!result.coverage.reason_codes.includes('OCR_TEXT_EMPTY'));
+    }
+  });
   await test('blank image is a warned empty conversion, never a complete extraction', async () => {
     const result = await convert(image(true).toBuffer('image/png'), '.png');
     assert.ok(result.coverage.reason_codes.includes('OCR_TEXT_EMPTY'));

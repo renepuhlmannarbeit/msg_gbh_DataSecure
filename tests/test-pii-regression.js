@@ -14,6 +14,7 @@ const { resolveSpans } = require('../plugins/data-secure/server/privacy/spans');
 const { trimReferenceValue } = require('../plugins/data-secure/server/privacy/structured');
 const { collectHeaderNameCandidates } = require('../plugins/data-secure/server/privacy/entities');
 const { credentialIssuerAmbiguities } = require('../plugins/data-secure/server/privacy/credentials');
+const { fullwidth, profiles, professionalText, identifierCases } = require('./lib/identifier-compatibility');
 
 const { test, done, assert } = createSuite('PII regression');
 
@@ -1059,6 +1060,132 @@ test('mailto and other contact URIs redact the complete address in every profile
   }
   assert.strictEqual(anonymizeVerified('Schreiben Sie an [Erika](mailto:erika@erika-synthetisch.de).', 'general').text,
     'Schreiben Sie an [Erika]([CONTACT_REDACTED]).');
+});
+
+test('identifier compatibility detection preserves source spelling, hashes and UTF-16 spans in every profile', () => {
+  const { identifierDetectionText, hashShort } = require('../plugins/data-secure/server/privacy/base');
+  const { findStructuredSpans } = require('../plugins/data-secure/server/privacy/structured');
+  assert.strictEqual(identifierDetectionText(professionalText).length, professionalText.length);
+  assert.strictEqual(identifierDetectionText('😀 ﬁ m² ① ㍍ ｜ ［］'), '😀 ﬁ m² ① ㍍ ｜ ［］');
+  for (const { type, label, value, replacement } of identifierCases) {
+    const source = `${professionalText}\n${label}${value}\nfachlicher nachsatz`;
+    const expected = `${professionalText}\n${label}${replacement}\nfachlicher nachsatz`;
+    const span = findStructuredSpans(source).find((hit) => hit.type === type);
+    assert.ok(span, source);
+    assert.strictEqual(span.start, source.indexOf(value));
+    assert.strictEqual(span.end, span.start + value.length);
+    assert.strictEqual(span.text, source.slice(span.start, span.end));
+    assert.strictEqual(span.text, value, 'findings must retain the actual source spelling');
+    for (const profile of profiles) {
+      const result = anonymize(source, profile);
+      assert.strictEqual(result.text, expected, `${profile}: ${source}`);
+      assert.ok(result.findings.some((finding) => finding.type === type && finding.value_hash === hashShort(value)));
+      assert.ok(pii.scanResidual(source, profile).some((hit) => hit.type === type && hit.text === value));
+      assert.deepStrictEqual(pii.scanResidual(result.text, profile, result.dictionary), []);
+      assert.strictEqual(anonymize(result.text, profile).text, result.text, 'redaction is idempotent');
+    }
+  }
+});
+
+test('compatibility labels stay column-bound and the independent telephone gate stays broader', () => {
+  const phone = fullwidth('030 12345678');
+  const header = fullwidth('Telefon');
+  const table = `| ${header} | Menge |\n| --- | --- |\n| ${phone} | ${fullwidth('12345678901')} |`;
+  assert.strictEqual(anonymize(table, 'general').text,
+    `| ${header} | Menge |\n| --- | --- |\n| [PHONE_REDACTED] | ${fullwidth('12345678901')} |`);
+  assert.ok(pii.scanResidual(table).some((hit) => hit.type === 'PHONE' && hit.text === phone));
+  const shifted = table + ' extra |';
+  assert.ok(pii.scanResidual(shifted).some((hit) => hit.type === 'TABLE_STRUCTURE_AMBIGUOUS'));
+  assert.throws(() => anonymizeMarkdown(shifted, 'general'), /fail-closed/u);
+  const broad = `Telefon: ${fullwidth('030 -- 123456')}`;
+  assert.strictEqual(anonymize(broad, 'general').text, broad);
+  assert.ok(pii.scanResidual(broad).some((hit) => hit.type === 'PHONE'));
+  assert.throws(() => anonymizeMarkdown(broad, 'general'), /fail-closed/u);
+  const bank = `${fullwidth('DE89370400440532013000')} / COBADEFFXXX`;
+  assert.ok(pii.scanResidual(bank).some((hit) => hit.type === 'BIC'), 'same-line IBAN evidence uses the same view');
+  assert.strictEqual(anonymize(bank, 'general').text, '[BANK_DATA_REDACTED] / [BANK_DATA_REDACTED]');
+  for (const source of [professionalText, `Version: ${fullwidth('1.2.3')}`,
+    `Menge: ${fullwidth('12345678901')} Stück`, `Auftrag: ${fullwidth('030 / 123456')}`,
+    '[EMAIL_REDACTED] [PHONE_REDACTED] [BANK_DATA_REDACTED]']) {
+    assert.strictEqual(anonymize(source, 'general').text, source);
+    assert.deepStrictEqual(pii.scanResidual(source), []);
+  }
+});
+
+test('telephone URIs end at their number while encoded contact addresses stay fully protected', () => {
+  for (const profile of profiles) {
+    for (const value of ['tel:03012345678', 'sms:+493012345678',
+      'tel:+49(0)3012345678', 'tel:%2B49%2030%2012345678', 'tel:%30%33%30%31%32%33%34%35%36%37%38']) {
+      for (const suffix of ['.UnveraenderterFachtext', '不可改写', '. fachlicher nachsatz', '\nfachlicher nachsatz']) {
+        assert.strictEqual(anonymizeVerified(value + suffix, profile).text, '[CONTACT_REDACTED]' + suffix);
+      }
+    }
+    for (const value of ['mailto:max%2Emuster%40example%2Ede', 'mailto:erika@ärzte-synthetisch.de',
+      'sip:erika.synthetisch@voip-synthetisch.de', 'xmpp:anna@example.de', 'callto:skype.name',
+      'callto:030123@example.de', 'callto:123alice', 'callto:123.alice', 'tel:+493012345678;ext=99', 'sms:+493012345678,+494012345678?body=Hallo',
+      'tel:%2B4930%2531%2532%2533', 'mailto:𠮷@example.de']) {
+      const source = `[Kontakt](${value}).`;
+      assert.strictEqual(anonymizeVerified(source, profile).text, '[Kontakt]([CONTACT_REDACTED]).', source);
+    }
+  }
+  assert.strictEqual(anonymize('tel:03012345678. tel:04012345678.').text, '[CONTACT_REDACTED]. [CONTACT_REDACTED].');
+  assert.strictEqual(anonymize('tel:').text, 'tel:', 'an empty scheme is not a contact identifier');
+});
+
+test('a telephone URI cannot leave a partial overlapping email in any privacy profile', () => {
+  for (const raw of ['tel:03012345678.anna@example.de', 'sms:+493012345678.anna@example.de',
+    'tel:030 12345678.anna@example.de', 'tel:(030)12345678.anna@example.de']) {
+    for (const value of [raw, fullwidth(raw)]) for (const profile of profiles) {
+      const result = anonymize(value, profile);
+      assert.strictEqual(result.text, '[CONTACT_REDACTED]', `${profile}: ${value}`);
+      assert.deepStrictEqual(pii.scanResidual(result.text, profile, result.dictionary), []);
+      const verified = anonymizeMarkdown(value, profile);
+      assert.strictEqual(verified.text, '[CONTACT_REDACTED]');
+      assert.strictEqual(verified.passes, 1, 'complete coverage must precede URL redaction and the residual gate');
+    }
+  }
+});
+
+test('the completed contact coverage keeps original UTF-16 offsets, hashes and detector priorities', () => {
+  const { findStructuredSpans, DETECTORS } = require('../plugins/data-secure/server/privacy/structured');
+  const { hashShort } = require('../plugins/data-secure/server/privacy/base');
+  for (const value of ['tel:03012345678.anna@example.de', fullwidth('tel:03012345678.anna@example.de')]) {
+    const source = `${professionalText}\n${value}\nfachlicher nachsatz`;
+    const spans = findStructuredSpans(source);
+    const contact = spans.find(span => span.type === 'CONTACT_URI');
+    assert.deepStrictEqual([contact.start, contact.end, contact.text],
+      [source.indexOf(value), source.indexOf(value) + value.length, value]);
+    assert.strictEqual(contact.priority, 91);
+    assert.strictEqual(spans.find(span => span.type === 'EMAIL').priority, 90);
+    assert.strictEqual(DETECTORS.find(detector => detector.type === 'IBAN').priority, 88);
+    assert.strictEqual(typeof DETECTORS.find(detector => detector.type === 'IBAN').boundaryEnd, 'function');
+    for (const profile of profiles) {
+      const result = anonymize(source, profile);
+      assert.strictEqual(result.text, `${professionalText}\n[CONTACT_REDACTED]\nfachlicher nachsatz`);
+      assert.ok(result.findings.some(finding => finding.type === 'CONTACT_URI' && finding.value_hash === hashShort(value)));
+      assert.strictEqual(anonymize(result.text, profile).text, result.text);
+    }
+  }
+});
+
+test('non-overlapping following contacts and professional prose keep their own boundaries', () => {
+  for (const [source, expected] of [
+    ['tel:03012345678. anna@example.de', '[CONTACT_REDACTED]. [EMAIL_REDACTED]'],
+    ['tel:03012345678.+493012345679', '[CONTACT_REDACTED].[PHONE_REDACTED]'],
+    ['tel:03012345678.UnveraenderterFachtext', '[CONTACT_REDACTED].UnveraenderterFachtext'],
+    ['tel:03012345678.\nanna@example.de', '[CONTACT_REDACTED].\n[EMAIL_REDACTED]']
+  ]) for (const profile of profiles) {
+    assert.strictEqual(anonymize(source, profile).text, expected);
+    assert.deepStrictEqual(pii.scanResidual(expected, profile), []);
+  }
+});
+
+test('multiple contact/email collisions retain complete coverage after earlier standalone or enclosed emails', () => {
+  const source = 'first@example.de mailto:other@example.de tel:03012345678.anna@example.de sms:04012345678.berta@example.de';
+  for (const profile of profiles) {
+    assert.strictEqual(anonymize(source, profile).text,
+      '[EMAIL_REDACTED] [CONTACT_REDACTED] [CONTACT_REDACTED] [CONTACT_REDACTED]');
+  }
 });
 
 test('GFM tables with optional outer pipes use the same privacy labels', () => {

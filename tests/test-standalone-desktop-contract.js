@@ -100,10 +100,12 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /await invoke\('frontend_ready', \{ nativeDropReady \}\)/u);
   assert.match(frontend, /textContent = resultFolder/u,
     'local paths are rendered as text and never interpreted as markup');
-  assert.match(frontend, /open_local_ledger/u);
+  assert.match(frontend, /open_history_ledger/u);
   assert.match(frontend, /handoff_confirmed/u);
   assert.match(frontend, /action-feedback/u);
-  assert.match(frontend, /switchView\('results'\)/u);
+  assert.match(frontend, /activeView = 'home'/u);
+  assert.strictEqual((frontend.match(/switchView\('results'\)/gu) || []).length, 1,
+    'only the explicitly clicked resume-navigation button opens history');
   assert.match(sidecar, /local_target_requested/u);
   assert.match(sidecar, /local_target_resolved/u);
   assert.match(sidecar, /local_target_resolution_failed/u);
@@ -160,7 +162,7 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
   assert.match(html, /100 Dateien und 500 MB/u);
   assert.match(html, /id="select-files"/u);
   assert.match(html, /id="select-folder"/u);
-  assert.match(html, /value="markdown-only" selected/u, 'conversion is the explicit standalone default');
+  assert.match(html, /value="" selected/u, 'purpose is an explicit user choice, not a startup default');
   assert.doesNotMatch(frontend, /invoke\(['"](?:convert|convert_only|start_conversion)/u);
 });
 
@@ -173,9 +175,10 @@ test('processing purpose crosses only the explicit desktop Start and cannot chan
   assert.match(sidecar, /MARKDOWN_CONVERSION_NOT_READY/u);
   const continuing = rust.slice(rust.indexOf('async fn continue_current_batch'), rust.indexOf('async fn configure_results'));
   assert.doesNotMatch(continuing, /processing_mode/u);
-  assert.match(frontend, /call\('continue_current_batch'\)/u);
+  assert.match(frontend, /byId\('continue'\)\.addEventListener\('click', \(\) => switchView\('results'\)\)/u);
+  assert.doesNotMatch(frontend, /call\('continue_current_batch'\)/u);
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
-  assert.match(html, /value="markdown-only" selected/u);
+  assert.match(html, /value="" selected/u);
   assert.match(html, /id="processing-mode"[^>]* disabled/u, 'startup cannot choose a mode before status is known');
 });
 
@@ -186,6 +189,22 @@ test('the native Windows smoke exercises the visible WebView lifecycle', () => {
     'hidden or minimized startup can defer WebView2 page loading');
   assert.match(nativeSmoke, /page_loaded/u);
   assert.match(nativeSmoke, /frontend_ready/u);
+});
+
+test('history actions are separately permissioned and carry only exact batch identity to the private host', () => {
+  const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
+  for (const action of ['get_run_history', 'open_history_results', 'open_history_ledger', 'continue_history_batch']) {
+    assert.ok(capability.permissions.includes(`allow-${action.replaceAll('_', '-')}`));
+    assert.ok(permissions.includes(`commands.allow = ["${action}"]`));
+    assert.ok(rust.includes(`async fn ${action}(`));
+  }
+  assert.match(rust, /fn history_request\(/u);
+  assert.match(rust, /batch_id\.len\(\) != 64/u);
+  assert.match(sidecar, /resolveHistoryResults\(message\.batch_id\)/u);
+  assert.match(sidecar, /resolveHistoryLedger\(message\.batch_id\)/u);
+  assert.match(sidecar, /continueHistoryBatch\(message\.batch_id\)/u);
+  assert.match(frontend, /batchId: entry\.batch_id/u);
+  assert.match(rust, /validate_local_target\(result, kind\)/u);
 });
 
 test('native smoke isolates data, Documents, diagnostics and WebView before product startup', () => {

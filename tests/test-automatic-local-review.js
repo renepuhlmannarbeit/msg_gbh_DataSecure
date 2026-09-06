@@ -9,9 +9,11 @@ const waiting = Object.freeze({
   ok: true,
   batch_phase: 'awaiting_local_review',
   batch_total: 4,
+  completed: 2,
   released: 2,
   stopped: 0,
   deferred_review: 2,
+  remaining: 0, retryable: 0, delivery_pending: 0, mapping_pending: 0, processing: 0,
   raw_content_sent_to_claude: false
 });
 
@@ -19,7 +21,8 @@ function harness(overrides = {}) {
   const calls = { claim: 0, release: 0, review: 0, read: 0, events: [] };
   const terminal = {
     ok: true, complete: true, batch_phase: 'complete', batch_total: 4,
-    released: 4, stopped: 0, deferred_review: 0,
+    completed: 4, released: 4, stopped: 0, deferred_review: 0,
+    remaining: 0, retryable: 0, delivery_pending: 0, mapping_pending: 0, processing: 0,
     raw_content_sent_to_claude: false
   };
   return {
@@ -108,10 +111,12 @@ testAsync('a refused review lease opens nothing and remains explicitly resumable
   assert.doesNotMatch(JSON.stringify(result), /busy-private|aaaaaaaa/u);
 });
 
-testAsync('clear or terminal batches never open review and keep one terminal presentation path', async () => {
+testAsync('clear, incomplete or terminal batches never open review and keep one terminal presentation path', async () => {
   for (const progress of [
-    { ...waiting, batch_phase: 'complete', complete: true, deferred_review: 0, released: 4 },
-    { ...waiting, batch_phase: 'awaiting_explicit_resume', deferred_review: 0 }
+    { ...waiting, batch_phase: 'complete', complete: true, deferred_review: 0, released: 4, completed: 4 },
+    { ...waiting, batch_phase: 'awaiting_explicit_resume', deferred_review: 0, retryable: 2 },
+    ...['remaining', 'retryable', 'delivery_pending', 'mapping_pending', 'processing']
+      .flatMap(field => [{ ...waiting, batch_total: 5, [field]: 1 }, { ...waiting, [field]: undefined }])
   ]) {
     const h = harness();
     const result = await continueIntoLocalReview(token, progress, h.options);
@@ -124,4 +129,4 @@ testAsync('clear or terminal batches never open review and keep one terminal pre
   assert.strictEqual(harness().calls.events.length, 0);
 });
 
-Promise.resolve().then(() => setImmediate(done));
+done();

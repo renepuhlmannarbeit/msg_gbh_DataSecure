@@ -2,7 +2,10 @@
 const {ImageSafetyError,MAX_PIXELS}=require('./common');
 function decodeBmp(buf) {
   if (buf.length<54 || buf.toString('ascii',0,2)!=='BM') throw new ImageSafetyError('BMP-Signatur ungültig.');
-  const pixelOffset=buf.readUInt32LE(10), dib=buf.readUInt32LE(14); if(dib<40) throw new ImageSafetyError('BMP-DIB nicht unterstützt.');
+  const pixelOffset=buf.readUInt32LE(10), dib=buf.readUInt32LE(14);
+  // Only the mask-free BITMAPINFOHEADER BI_RGB variant is supported. V2/V3/
+  // V4/V5 headers and BI_BITFIELDS need their own explicit mask semantics.
+  if(dib!==40 || pixelOffset<14+dib || pixelOffset>buf.length || buf.readUInt16LE(26)!==1) throw new ImageSafetyError('BMP-DIB nicht unterstützt.');
   const width=buf.readInt32LE(18), hSigned=buf.readInt32LE(22), bpp=buf.readUInt16LE(28), compression=buf.readUInt32LE(30);
   if(width<=0||hSigned===0||![24,32].includes(bpp)||compression!==0) throw new ImageSafetyError('BMP-Variante nicht sicher bearbeitbar.');
   if (width*Math.abs(hSigned)>MAX_PIXELS) throw new ImageSafetyError('BMP ist für die sichere lokale Bildverarbeitung zu groß.');
@@ -10,7 +13,9 @@ function decodeBmp(buf) {
   for(let y=0;y<height;y++){
     const sy=topDown?y:(height-1-y), base=pixelOffset+sy*rowSize;
     if(base+rowSize>buf.length) throw new ImageSafetyError('BMP-Daten unvollständig.');
-    for(let x=0;x<width;x++){const s=base+x*(bpp/8), d=(y*width+x)*4; rgba[d]=buf[s+2];rgba[d+1]=buf[s+1];rgba[d+2]=buf[s];rgba[d+3]=bpp===32?buf[s+3]:255;}
+    // In 32-bit BI_RGB the high byte is unused, even when it is zero.
+    // Treating it as alpha would erase valid black text on white before OCR.
+    for(let x=0;x<width;x++){const s=base+x*(bpp/8), d=(y*width+x)*4; rgba[d]=buf[s+2];rgba[d+1]=buf[s+1];rgba[d+2]=buf[s];rgba[d+3]=255;}
   }
   return {width,height,rgba};
 }

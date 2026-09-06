@@ -1,6 +1,6 @@
 [package]
 name = "datasecure-standalone"
-version = "3.2.0-rc108"
+version = "3.2.0-rc109"
 description = "Lokale DataSecure-Anonymisierung ohne Claude oder Cloud"
 edition = "2021"
 rust-version = "1.77.2"

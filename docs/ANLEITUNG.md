@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 05.09.2026 · Version 3.2.0 RC108
+Stand: 05.09.2026 · Version 3.2.0 RC109
 
 ## Vor dem ersten Lauf
 

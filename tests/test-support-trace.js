@@ -13,6 +13,12 @@ const {
 const enabledEnv = { EU_PRIVACY_SUPPORT_MODE: '1', DATASECURE_RUN_ID: 'abcdef12' };
 const TRACE_NOW = Date.UTC(2026, 8, 4);
 
+const { SUPPORT_ERROR_CODES } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
+for (const error_code of SUPPORT_ERROR_CODES) {
+  assert.strictEqual(sanitizeSupportTrace({ error_code }, { env: enabledEnv }).error_code, error_code,
+    'support retains every fixed code from the shared catalog');
+}
+
 assert.strictEqual(recordSupportTrace({ event: 'rpc_received', method: 'initialize' },
   { dataRoot: root, env: {} }), false, 'normal product must not create support trace events');
 assert.ok(!fs.existsSync(_test.traceDirectory({ dataRoot: root })), 'disabled trace must not create its directory');

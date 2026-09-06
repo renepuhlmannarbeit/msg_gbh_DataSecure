@@ -7,6 +7,8 @@ const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
 const { parseOoxml } = require('../plugins/data-secure/server/ooxml');
 const pii = require('../plugins/data-secure/server/pii-engine');
+const reviewFixtures = require('./lib/docx-review-fixtures');
+const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 const { test, done, assert } = createSuite('DOCX bounded structural renderer');
 
 const namespaces = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"';
@@ -210,6 +212,138 @@ test('modern text-box choice does not duplicate fallback text or drop outer runs
   const result = parse(`<w:p>${run('BEFORE')}<w:r><mc:AlternateContent><mc:Choice Requires="wps">${textbox(paragraph('CHOICE'))}</mc:Choice><mc:Fallback>${textbox(paragraph('FALLBACK'))}</mc:Fallback></mc:AlternateContent></w:r>${run('AFTER')}</w:p>`);
   onceInOrder(result.markdown, ['BEFORE', 'CHOICE', 'AFTER']);
   assertAbsent(result.markdown, 'FALLBACK');
+});
+
+test('unsupported markup choice uses exactly one declared fallback', () => {
+  const content = `<w:p>${run('BEFORE')}<mc:AlternateContent>` +
+    `<mc:Choice Requires="vendor"><w:r><w:t>UNSUPPORTED_PRIVATE</w:t></w:r></mc:Choice>` +
+    `<mc:Fallback>${run('SAFE_FALLBACK')}</mc:Fallback>` +
+    `</mc:AlternateContent>${run('AFTER')}</w:p>`;
+  const xml = `<w:document ${namespaces} xmlns:vendor="urn:vendor:unsupported"><w:body>${content}</w:body></w:document>`;
+  const result = parseMainXml(xml);
+  onceInOrder(result.markdown, ['BEFORE', 'SAFE_FALLBACK', 'AFTER']);
+  assertAbsent(result.markdown, 'UNSUPPORTED_PRIVATE');
+});
+
+test('markup choice without a supported branch or fallback stops safely', () => {
+  for (const content of [
+    '<mc:AlternateContent><mc:Choice Requires="vendor"><w:p><w:r><w:t>PRIVATE</w:t></w:r></w:p></mc:Choice></mc:AlternateContent>',
+    '<mc:AlternateContent><mc:Fallback><w:p/></mc:Fallback><mc:Fallback><w:p/></mc:Fallback></mc:AlternateContent>',
+    '<mc:Choice Requires="wps"><w:p/></mc:Choice>'
+  ]) {
+    const xml = `<w:document ${namespaces} xmlns:vendor="urn:vendor:unsupported"><w:body>${content}</w:body></w:document>`;
+    assert.throws(() => parseMainXml(xml), error => error.code === 'DOCX_STRUCTURE_UNSAFE');
+  }
+});
+
+test('realistic authored comments retain their body but author metadata keeps coverage blocked', () => {
+  const buffer = reviewFixtures.reviewDocx(reviewFixtures.annotatedParagraph(), {
+    comments: reviewFixtures.comment('42', 'COMMENT_BODY', true) + reviewFixtures.comment('43', 'POINT_COMMENT', true)
+  });
+  const result = parseOoxml(buffer, '.docx');
+  onceInOrder(result.markdown, ['BODY_BEFORE', 'BODY_ANCHOR', 'BODY_AFTER', 'COMMENT_BODY', 'POINT_COMMENT']);
+  assert.ok(result.warnings.length > 0);
+  assert.doesNotMatch(result.warnings.join(' '), /Erika|Beispiel|COMMENT_BODY|word\//u);
+  const converted = extractMarkdownBuffer(buffer, '.docx');
+  assert.strictEqual(converted.coverage.status, 'incomplete');
+  assert.ok(converted.markdown.includes('COMMENT\\_BODY'));
+});
+
+test('matching anonymous range and point comments remain covered across namespaces and quote spellings', () => {
+  for (const prefix of ['w', 'word']) for (const namespace of [reviewFixtures.W, 'http://purl.oclc.org/ooxml/wordprocessingml/main']) {
+    for (const range of [false, true]) {
+      const body = reviewFixtures.annotatedParagraph('+00042', range).replaceAll('"', "'");
+      const buffer = reviewFixtures.reviewDocx(body, { prefix, namespace, comments: reviewFixtures.comment('42').replaceAll('"', "'") });
+      const result = parseOoxml(buffer, '.docx');
+      assert.deepStrictEqual(result.warnings, []);
+      onceInOrder(result.markdown, ['BODY_BEFORE', 'BODY_ANCHOR', 'BODY_AFTER', 'COMMENT_BODY']);
+    }
+  }
+});
+
+test('missing, mismatched, duplicate or unbound comment bodies never yield a complete privacy input', () => {
+  const body = reviewFixtures.annotatedParagraph();
+  for (const options of [{}, { comments: '' }, { comments: reviewFixtures.comment('7') },
+    { comments: reviewFixtures.comment().replace(' w:id="42"', '') },
+    { comments: reviewFixtures.comment() + reviewFixtures.comment('00042', 'DUPLICATE_COMMENT') },
+    { comments: reviewFixtures.comment(), related: false }]) {
+    const result = parseOoxml(reviewFixtures.reviewDocx(body, options), '.docx');
+    assert.ok(result.warnings.length > 0);
+    assert.doesNotMatch(result.warnings.join(' '), /BODY_|COMMENT|comments\.xml|42/u);
+  }
+  for (const id of ['', 'not-an-id', '9'.repeat(33)]) {
+    const result = parseOoxml(reviewFixtures.reviewDocx(reviewFixtures.annotatedParagraph(id), { comments: reviewFixtures.comment() }), '.docx');
+    assert.ok(result.warnings.length > 0);
+  }
+});
+
+test('one missing, reversed or duplicated comment range endpoint is not a valid point comment', () => {
+  const start = '<w:commentRangeStart w:id="42"/>';
+  const end = '<w:commentRangeEnd w:id="42"/>';
+  const reference = '<w:r><w:commentReference w:id="42"/></w:r>';
+  for (const range of [start, end, end + start, start + start + end, start + end + end]) {
+    const result = parseOoxml(reviewFixtures.reviewDocx(`<w:p>${range}${run('CONTROL')}${reference}</w:p>`, { comments: reviewFixtures.comment() }), '.docx');
+    assert.ok(result.warnings.length > 0);
+  }
+});
+
+test('property revisions cannot masquerade as current formatting or bypass the revision coverage gate', () => {
+  for (const prefix of ['w', 'word']) for (const [name, body] of reviewFixtures.propertyRevisions()) {
+    const buffer = reviewFixtures.reviewDocx(body, { prefix });
+    const result = parseOoxml(buffer, '.docx');
+    assert.ok(result.warnings.length > 0, name);
+    assertPresent(result.markdown, 'VISIBLE_CONTROL');
+    assert.doesNotMatch(result.warnings.join(' '), /Erika|Beispiel|VISIBLE_CONTROL/u);
+    if (name === 'pPrChange') assert.strictEqual(result.markdown, '# VISIBLE_CONTROL', 'old Heading2 cannot replace current Heading1');
+    assert.strictEqual(extractMarkdownBuffer(buffer, '.docx').coverage.status, 'incomplete');
+  }
+  const clean = parse('<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' + run('UNCHANGED_HEADING') + '</w:p>');
+  assert.deepStrictEqual(clean.warnings, []);
+  assert.strictEqual(clean.markdown, '# UNCHANGED_HEADING');
+});
+
+test('insertions, deletions, moves and revision range metadata stay blocked in every story', () => {
+  for (const story of stories) for (const name of ['ins', 'del', 'moveFrom', 'moveTo', 'moveFromRangeStart', 'moveToRangeEnd',
+    'customXmlInsRangeStart', 'customXmlDelRangeEnd', 'customXmlMoveFromRangeStart', 'customXmlMoveToRangeEnd']) {
+    const revision = `<w:${name} w:id="7" w:author="Erika Beispiel"/>`;
+    const result = parse(paragraph('CONTROL') + revision, story);
+    assert.ok(result.warnings.length > 0, `${story[0]}:${name}`);
+    assert.doesNotMatch(result.warnings.join(' '), /Erika|Beispiel|CONTROL/u);
+  }
+});
+
+test('internal AlternateContent branch names cannot be supplied through canonical or aliased XML prefixes', () => {
+  assert.throws(() => parseOoxml(reviewFixtures.invalidAlternateDocx(), '.docx'), error => error.code === 'DOCX_STRUCTURE_UNSAFE');
+  for (const name of ['ChoiceSupported', 'ChoiceUnsupported']) {
+    const body = `<alias:AlternateContent xmlns:alias="${reviewFixtures.MC}"><alias:${name} Requires="wps">${paragraph('SECRET')}</alias:${name}><alias:Fallback>${paragraph('FALLBACK')}</alias:Fallback></alias:AlternateContent>`;
+    rejects(body);
+  }
+});
+
+test('multiple AlternateContent choices resolve every required URI and select one branch only', () => {
+  const body = `<w:p>${run('BEFORE')}<mc:AlternateContent>` +
+    `<mc:Choice Requires="wps vendor">${run('UNSUPPORTED')}</mc:Choice>` +
+    `<mc:Choice Requires="shape">${run('SELECTED')}</mc:Choice>` +
+    `<mc:Choice Requires="wps">${run('LATER_CHOICE')}</mc:Choice>` +
+    `<mc:Fallback>${run('FALLBACK')}</mc:Fallback></mc:AlternateContent>${run('AFTER')}</w:p>`;
+  const result = parseOoxml(reviewFixtures.reviewDocx(body), '.docx');
+  onceInOrder(result.markdown, ['BEFORE', 'SELECTED', 'AFTER']);
+  for (const value of ['UNSUPPORTED', 'LATER_CHOICE', 'FALLBACK']) assertAbsent(result.markdown, value);
+  const rebound = body.replace('Requires="shape"', 'Requires="shape" xmlns:shape="urn:unsupported"');
+  const next = parseOoxml(reviewFixtures.reviewDocx(rebound), '.docx');
+  onceInOrder(next.markdown, ['BEFORE', 'LATER_CHOICE', 'AFTER']);
+  assertAbsent(next.markdown, 'SELECTED');
+});
+
+test('recursive DrawingML and VML text boxes retain surrounding runs with one selected nested fallback', () => {
+  const inner = `<w:p>${run('INNER_BEFORE')}<mc:AlternateContent><mc:Choice Requires="vendor">${run('SKIPPED_INNER')}</mc:Choice><mc:Fallback>${run('INNER_FALLBACK')}</mc:Fallback></mc:AlternateContent>${run('INNER_AFTER')}</w:p>`;
+  const vml = `<w:r><w:pict><v:shape><v:textbox><w:txbxContent>${inner}</w:txbxContent></v:textbox></v:shape></w:pict></w:r>`;
+  const body = `<w:p>${run('OUTER_BEFORE')}${textbox(`<w:p>${run('BOX_BEFORE')}${vml}${run('BOX_AFTER')}</w:p>`)}${run('OUTER_AFTER')}</w:p>`;
+  const result = parseOoxml(reviewFixtures.reviewDocx(body), '.docx');
+  onceInOrder(result.markdown, ['OUTER_BEFORE', 'BOX_BEFORE', 'INNER_BEFORE', 'INNER_FALLBACK', 'INNER_AFTER', 'BOX_AFTER', 'OUTER_AFTER']);
+  assertAbsent(result.markdown, 'SKIPPED_INNER');
+  const malformed = body.replace('</v:textbox>', '</v:shape>');
+  assert.throws(() => parseOoxml(reviewFixtures.reviewDocx(malformed), '.docx'), error => error.code === 'DOCX_STRUCTURE_UNSAFE');
 });
 
 test('quoted angle brackets, comments and CDATA do not corrupt structural tokenization', () => {

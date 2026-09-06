@@ -8,7 +8,8 @@
 const { createSuite } = require('./helpers');
 const { VERSION } = require('../plugins/data-secure/server/version');
 const {
-  PHASES, CAUSES, CAUSE_CODES, buildDiagnostic, causeFromError, normalizeCause
+  PHASES, CAUSES, CAUSE_CODES, WORKFLOW_ERROR_CODES, SUPPORT_ERROR_CODES,
+  buildDiagnostic, causeFromError, ipcAcknowledgementCause, normalizeCause
 } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
 
 const { test, assert, done } = createSuite('Diagnostic causes');
@@ -24,6 +25,57 @@ test('every cause has a fixed, path-free German hint and the list is closed', ()
   assert.ok(Object.isFrozen(CAUSES) && Object.isFrozen(PHASES));
   assert.strictEqual(normalizeCause('local_selection_rejected'), 'LOCAL_SELECTION_REJECTED', 'codes are case-folded');
   assert.strictEqual(normalizeCause('C:\\private\\customer.docx'), 'INTERNAL_FAILURE', 'unknown text never becomes a cause');
+});
+
+test('the shared fixed catalog contains all public causes without making internal codes public', () => {
+  assert.strictEqual(CAUSE_CODES.length, 25, 'the public cause contract is not expanded');
+  for (const codes of [CAUSE_CODES, WORKFLOW_ERROR_CODES, SUPPORT_ERROR_CODES]) {
+    assert.ok(Object.isFrozen(codes));
+    assert.strictEqual(new Set(codes).size, codes.length);
+    for (const code of codes) assert.match(code, /^[A-Z][A-Z_]+$/u);
+  }
+  assert.ok(CAUSE_CODES.every(code => WORKFLOW_ERROR_CODES.includes(code)));
+  assert.ok(WORKFLOW_ERROR_CODES.every(code => SUPPORT_ERROR_CODES.includes(code)));
+  const contract = require('../plugins/data-secure/server/standalone/conversion-worker-contract');
+  for (const code of [...contract.ERROR_CODES, ...contract.LIFECYCLE_ERROR_CODES]) {
+    assert.ok(WORKFLOW_ERROR_CODES.includes(code));
+  }
+  for (const code of WORKFLOW_ERROR_CODES.filter(code => !CAUSE_CODES.includes(code))) {
+    assert.strictEqual(normalizeCause(code), 'INTERNAL_FAILURE');
+  }
+});
+
+test('ACK causes use fixed codes, never private or conflicting error messages', () => {
+  for (const code of ['LOCAL_IPC_ACK_TIMEOUT', 'LOCAL_IPC_ACK_CANCELLED']) {
+    const error = Object.assign(new Error('PRIVATE timeout cancel C:\\private\\customer.docx'), { code });
+    assert.strictEqual(ipcAcknowledgementCause(error), code);
+    const diagnostic = buildDiagnostic({ cause: ipcAcknowledgementCause(error) });
+    assert.doesNotMatch(JSON.stringify(diagnostic), /PRIVATE|customer|kein Stapel|erneut versuchen/u);
+    assert.match(diagnostic.hint, /unbestätigt.*Status prüfen/u);
+  }
+  for (const code of ['LOCAL_IPC_FAILED', 'LOCAL_WORKER_EXITED', 'LOCAL_REVIEW_WORKER_EXITED',
+    'LOCAL_WORKER_SPAWN_FAILED', 'LOCAL_QUEUE_SCHEMA_INVALID', 'EPERM', 'PRIVATE_CODE', null, '']) {
+    assert.strictEqual(ipcAcknowledgementCause({ code, message: 'bounded IPC acknowledgement timeout' },
+      { allowLegacyMessages: true }), 'LOCAL_WORKER_SPAWN_FAILED', 'a present code always blocks text fallback');
+  }
+  assert.strictEqual(ipcAcknowledgementCause({ code: 'LOCAL_QUEUE_SCHEMA_INVALID', message: 'PRIVATE' },
+    { allowQueueSchemaInvalid: true }), 'LOCAL_QUEUE_SCHEMA_INVALID');
+  assert.strictEqual(ipcAcknowledgementCause(null), 'LOCAL_WORKER_SPAWN_FAILED');
+});
+
+test('code-free ACK legacy messages require an explicit opt-in and an exact match', () => {
+  for (const [message, code] of [
+    ['bounded IPC acknowledgement timeout', 'LOCAL_IPC_ACK_TIMEOUT'],
+    ['IPC acknowledgement cancelled', 'LOCAL_IPC_ACK_CANCELLED']
+  ]) {
+    assert.strictEqual(ipcAcknowledgementCause(new Error(message)), 'LOCAL_WORKER_SPAWN_FAILED');
+    assert.strictEqual(ipcAcknowledgementCause(new Error(message), { allowLegacyMessages: true }), code);
+    for (const changed of [`${message} PRIVATE`, ` ${message}`, message.toUpperCase()]) {
+      assert.strictEqual(ipcAcknowledgementCause(new Error(changed), { allowLegacyMessages: true }), 'LOCAL_WORKER_SPAWN_FAILED');
+    }
+  }
+  assert.strictEqual(ipcAcknowledgementCause(new Error('worker ended before IPC acknowledgement'),
+    { allowLegacyMessages: true }), 'LOCAL_WORKER_SPAWN_FAILED');
 });
 
 test('buildDiagnostic emits only the fixed envelope fields', () => {
