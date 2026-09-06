@@ -172,4 +172,20 @@ Remove-NativeCacheJunction $fixture.Context $bound
 Assert-Test ([System.IO.File]::ReadAllText($fixture.Sentinel) -eq 'synthetic-owned-content') 'null-provider unlink preserves sentinel'
 Remove-NativeTestTree $fixture.Context
 Write-Output 'PASS null provider metadata; native tag/target; empty PrintName; malformed native buffers rejected'
-Write-Output 'STANDALONE NATIVE CLEANUP CONTRACT PASS (8 groups)'
+
+$fixture = New-Fixture
+$vanishedPath = Join-Path $fixture.Context.Root 'vanished-after-enumeration.txt'
+[System.IO.File]::WriteAllText($vanishedPath, 'ephemeral')
+$staleItem = Get-Item -LiteralPath $vanishedPath -Force -ErrorAction Stop
+Remove-Item -LiteralPath $vanishedPath -Force -ErrorAction Stop
+$vanishedStamp = Get-NativeEntryStamp $staleItem -AllowVanished
+Assert-Test ($null -eq $vanishedStamp) 'vanished entry is not stamped for deletion'
+$null = [System.IO.File]::WriteAllText($vanishedPath, 'replacement-must-survive')
+$observed = $null
+try { Get-NativeEntryStamp $staleItem -AllowVanished | Out-Null } catch { $observed = $_.Exception.Message }
+Assert-Test ($null -eq $observed) 'existing replacement remains an ordinary stamped entry'
+$null = Get-NativeEntryStamp (Get-Item -LiteralPath $vanishedPath -Force -ErrorAction Stop)
+Assert-Test ([System.IO.File]::ReadAllText($vanishedPath) -eq 'replacement-must-survive') 'stamping never deletes replacement'
+Remove-NativeTestTree $fixture.Context
+Write-Output 'PASS vanished inventory entry skipped; existing pathname never treated as absent'
+Write-Output 'STANDALONE NATIVE CLEANUP CONTRACT PASS (9 groups)'

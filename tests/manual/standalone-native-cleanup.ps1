@@ -106,13 +106,38 @@ namespace DataSecure {
     }
 }
 
-function Get-NativeEntryStamp($Item, [switch] $MetadataOnly) {
+function Test-NativeIdentityMissingError($Record) {
+    for ($error = $Record.Exception; $null -ne $error; $error = $error.InnerException) {
+        if ($error.Message -eq 'STANDALONE_NATIVE_IDENTITY_FAILED:2') { return $true }
+    }
+    return $false
+}
+
+function Get-NativeEntryStamp($Item, [switch] $MetadataOnly, [switch] $AllowVanished) {
+    $identity = $null
+    if (-not $MetadataOnly) {
+        try { $identity = [DataSecure.NativeTestIdentity]::Read($Item.FullName) }
+        catch {
+            # WebView may remove its own cache entries after the process has
+            # exited but while this test-only inventory is being captured.
+            # Accept only ERROR_FILE_NOT_FOUND, then repeat the native no-follow
+            # read. A replacement that appeared meanwhile is preserved and
+            # reported as changed; every other native error remains fail-closed.
+            if (-not $AllowVanished -or -not (Test-NativeIdentityMissingError $_)) { throw }
+            try { $null = [DataSecure.NativeTestIdentity]::Read($Item.FullName) }
+            catch {
+                if (Test-NativeIdentityMissingError $_) { return $null }
+                throw
+            }
+            throw 'STANDALONE_NATIVE_CLEANUP_CHANGED'
+        }
+    }
     [pscustomobject]@{
         Path = $Item.FullName
         Directory = [bool] $Item.PSIsContainer
         Created = $Item.CreationTimeUtc.Ticks
         Reparse = [bool] ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
-        Identity = if ($MetadataOnly) { $null } else { [DataSecure.NativeTestIdentity]::Read($Item.FullName) }
+        Identity = $identity
     }
 }
 
@@ -222,7 +247,9 @@ function Get-CheckedNativeTree($Context, [switch] $AllowCacheJunction) {
                 $entries.Add((Get-NativeCacheJunction $Context $entry))
                 continue # The junction is a leaf, NEVER a directory to visit.
             }
-            $entries.Add((Get-NativeEntryStamp $entry))
+            $stamp = Get-NativeEntryStamp $entry -AllowVanished
+            if ($null -eq $stamp) { continue }
+            $entries.Add($stamp)
             if ($entry.PSIsContainer) { $directories.Enqueue($entry.FullName) }
         }
     }

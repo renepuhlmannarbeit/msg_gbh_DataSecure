@@ -254,6 +254,9 @@ test('native cleanup allows only the exact post-exit cache junction without foll
   assert.doesNotMatch(cleanup, /\$Item\.(?:Target|LinkType)/u,
     'PowerShell 5 display properties are not native junction proof');
   assert.match(cleanup, /\[System\.IO\.Directory\]::Delete\(\$Stamp\.Path\)/u);
+  assert.match(cleanup, /Get-NativeEntryStamp \$entry -AllowVanished/u);
+  assert.match(cleanup, /STANDALONE_NATIVE_IDENTITY_FAILED:2/u);
+  assert.match(cleanup, /try \{ \$null = \[DataSecure\.NativeTestIdentity\]::Read\(\$Item\.FullName\) \}/u);
   assert.doesNotMatch(cleanup, /(?:Get-ChildItem|Remove-Item)[^\n]*-Recurse/u);
   assert.doesNotMatch(cleanup, /Directory\]::Delete\([^\n]*,/u);
   if (process.platform === 'win32') {
@@ -262,7 +265,7 @@ test('native cleanup allows only the exact post-exit cache junction without foll
       path.join(__dirname, 'manual/standalone-native-cleanup-test.ps1')],
     { encoding: 'utf8', timeout: 30000, windowsHide: true });
     assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
-    assert.match(result.stdout, /CLEANUP CONTRACT PASS \(8 groups\)/u);
+    assert.match(result.stdout, /CLEANUP CONTRACT PASS \(9 groups\)/u);
   }
 });
 
