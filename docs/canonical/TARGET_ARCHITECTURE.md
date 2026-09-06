@@ -58,6 +58,10 @@ Die größere Formatmenge der reinen Konvertierung erweitert nicht automatisch
 die Anonymisierungsfreigabe. DS-087 lässt breite Quellen im Standalone-
 Anonymisierungszweck nur bis zur neutralen Extraktionsgrenze zu. Solange die
 Coverage `incomplete` ist, stoppt die betroffene Datei vor Privacy-Publikation.
+Der mögliche Zweischritt **Nur in Markdown umwandeln** → erzeugte `.md` in einem
+neuen Anonymisierungsstapel ist keine automatische breite Freigabe: Er schützt
+nur die sichtbare Markdown-Repräsentation und beginnt einen neuen, unabhängigen
+Stapelkontext.
 Beschädigte oder geschützte Quellen erzeugen kein Konvertat; im reinen
 Konvertierungszweck erhalten lesbare, begrenzt abgedeckte Extraktionen konkrete
 Hinweise.

@@ -304,12 +304,17 @@ test('architecture and test documentation reject the superseded single-purpose n
   const current = read('docs/canonical/CURRENT_STATE.md');
   assert.doesNotMatch(current, /zwei (?:Haupt)?ansichten|automatisch in die Ergebnisansicht|Zähler nur aus dem jüngsten Standalone-Stapel/iu);
   assert.match(current, /drei Hauptansichten/u);
-  assert.match(current, /DS-087[\s\S]{0,700}Einzeldatei stoppen/u);
+  assert.match(current, /DS-087[\s\S]{0,900}automatische Verkettung[\s\S]{0,120}Einzeldatei stoppt/u);
   const register = read('docs/canonical/DOCUMENT_REGISTER.md');
   const historical = register.split('## Historisch, nicht entscheidungsführend');
   assert.strictEqual(historical.length, 2);
   assert.ok(!historical[0].includes('REVIEW_BEIDE_PRODUKTE_2026-09-04.md'));
   assert.ok(historical[1].includes('REVIEW_BEIDE_PRODUKTE_2026-09-04.md'));
+  const archiveIndex = read('docs/archive/INDEX.md');
+  assert.match(archiveIndex, /ARCH-DOC-REVIEW-BOTH-RC99/u);
+  assert.match(archiveIndex, /ARCH-TASK-RC111-WIDE/u);
+  assert.strictEqual(fs.existsSync(path.join(root,
+    'docs/archive/2026-09/reviews/REVIEW_BEIDE_PRODUKTE_2026-09-04.md')), true);
   const runtimeReadme = read('plugins/data-secure/server/README.md');
   assert.match(runtimeReadme, /server\/ocr-runtime` tree is excluded/u);
   assert.match(runtimeReadme, /separate Standalone\s+Markdown-conversion runtime/u);
@@ -331,6 +336,12 @@ test('wide standalone privacy chaining is documented without widening Cowork or 
   assert.match(matrix, /aktuelle Extraktion bleibt `incomplete`/u);
   assert.match(matrix, /Claude-Plugin bleibt[\s\S]{0,100}vier Formate/u);
   assert.match(matrix, /kein rohes Markdown-Zwischenergebnis/u);
+  assert.match(matrix, /Nur in Markdown umwandeln[\s\S]{0,180}neuen Anonymisierungsstapels/u);
+  assert.match(matrix, /keine vollständige[\s\S]{0,100}ursprünglichen/u);
+  const capabilities = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+  assert.strictEqual(capabilities.standalone_desktop.wide_format_original_container_output, false);
+  assert.match(capabilities.standalone_desktop.wide_format_manual_two_step,
+    /markdown-only-output.*new-anonymization-batch/u);
   const architecture = read('docs/canonical/STANDALONE_ARCHITECTURE.md');
   assert.match(architecture, /neutralen Extraktionsvertrag/u);
   assert.match(architecture, /aktuelle breite[\s\S]{0,100}`incomplete`/u);

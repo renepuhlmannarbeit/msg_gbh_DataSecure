@@ -612,6 +612,11 @@ DS-087 bindet den breiten Zweig ausschließlich an Standalone. Cowork erreicht
 diesen Konverterpfad nicht. Die aktuelle reale Wide-Format-Coverage bleibt
 `incomplete`; der Sequenzzweig ist deshalb heute ein belegter sicherer Stopp,
 keine Freigabezusage für XLSX/PPTX/PDF/Scan-PDF oder Bilder.
+Ein Anwender kann das sichtbar gekennzeichnete Ergebnis eines separaten
+`markdown-only`-Laufs später als `.md` in einen neuen Anonymisierungsstapel
+aufnehmen. Das ist bewusst keine Kante innerhalb derselben Sequenz: Stapel- und
+Pseudonymkontext beginnen neu, und nur der extrahierte Markdown-Inhalt wird
+geschützt.
 
 Recovery setzt den gespeicherten Modus fort; eine UI-Defaultwahl darf ihn nicht
 ändern. Inhaltsfreie Diagnose dokumentiert Phase, Modus und Fehler, keine

@@ -264,10 +264,14 @@ WebView-/IPC-Isolation in einen Erfolg umgedeutet werden.
 
 Der commitgebundene RC111-Lauf aus `d45252f` reproduzierte auf dem aktuellen
 Windows-Host den ersten Fall: Kandidat A und alle nichtvisuellen Smokes bestanden,
-der Lauf endete nach `webview_build_started`. Kandidat B und INT-13 wurden nicht
-erzeugt. Da eine aktuelle WebView2-Runtime registriert ist, aber noch zahlreiche
-ältere WebView2-Prozesse laufen, ist vor dem erneuten identischen PKG-04-Lauf ein
-Windows-Neustart erforderlich. Dieses Zielhosturteil ist kein Produktcode-Erfolg.
+der Lauf endete nach `webview_build_started`. Nach Windows-Neustart wiederholte
+der saubere Commit `c77ec592aa95f323bd5b1efe6301b111e7f2f225` dasselbe Urteil.
+Auch das historisch gebundene RC109-Archiv erreicht in der jetzigen Hostumgebung
+weder `page_loaded` noch Sidecar-Start. Der Vergleich grenzt den aktuellen
+Blocker auf Host/WebView ein; er beweist keinen RC111-Produktregressionsfehler.
+Kandidat B und INT-13 wurden korrekt nicht erzeugt. Der nächste Nachweis benötigt
+einen funktionsfähigen interaktiven Zielhost, nicht lediglich einen längeren
+Timeout oder eine gelockerte Isolation.
 
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird

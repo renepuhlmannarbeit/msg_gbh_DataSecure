@@ -37,6 +37,10 @@ und Bilder durchlaufen denselben lokalen Konverter genau einmal und werden nur
 bei vollständig belegter Extraktion an den Privacy-Core weitergegeben. Aktuell
 melden diese breiten Konverter reale Quellen noch als `incomplete`; sie stoppen
 deshalb sicher und erzeugen kein scheinbar vollständiges anonymisiertes Ergebnis.
+Der funktionale Zweischritt bleibt verfügbar: zuerst **Nur in Markdown
+umwandeln**, danach die erzeugte `.md` in einem neuen Anonymisierungsstapel
+auswählen. Dabei wird nur der extrahierte Markdown-Inhalt geschützt; ausgelassene
+Originalobjekte und der ursprüngliche Container gelten nicht als anonymisiert.
 
 Der Endnutzerablauf besitzt drei Hauptansichten: **Start**, **Verarbeiten** für
 Auswahl, Start und Fortschritt sowie **Verlauf** für die 20 neuesten

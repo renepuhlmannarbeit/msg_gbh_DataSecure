@@ -1191,6 +1191,15 @@ als bei **Nur in Markdown umwandeln** nicht. Ein Fehler blockiert nicht die
 übrigen Dateien des Stapels. Der Zwischeninhalt bleibt im Arbeitsspeicher oder
 in der bereits verwalteten privaten Arbeitskopie, nie im sichtbaren Export.
 
+Solange die breite Extraktion noch `incomplete` ist, bleibt ein ausdrücklicher
+Zweischritt zulässig: Der Anwender erstellt mit **Nur in Markdown umwandeln** ein
+sichtbar als unvollständig beziehungsweise nicht anonymisiert gekennzeichnetes
+Konvertat und wählt diese `.md` danach in einem neuen Anonymisierungsstapel. Das
+ändert die Freigabegrenze nicht: geschützt wird nur der tatsächlich extrahierte
+Markdown-Inhalt; der Originalcontainer gilt dadurch weder als vollständig
+erfasst noch als anonymisiert. Eine automatische Verkettung darf diese bewusste
+Entscheidung nicht simulieren.
+
 Die Verkettung wird zuerst im Standalone-Produkt freigegeben. Eine spätere
 Cowork-Freigabe darf denselben neutralen Extraktionskern wiederverwenden, braucht
 aber einen eigenen Paket-, Host- und Handoffnachweis; DS-087 erweitert den

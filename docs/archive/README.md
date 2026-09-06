@@ -1,12 +1,16 @@
 # Dokumentationsarchiv
 
-Stand: 01.09.2026
+Stand: 06.09.2026
 
 Dieses Verzeichnis bewahrt ersetzte Planungs-, Review-, Release- und
 Nachweisstände unverändert auf. Die Dateien sind **keine aktuelle Produktzusage**.
 Aktuell verbindlich sind ausschließlich die im
 [Dokumentenregister](../canonical/DOCUMENT_REGISTER.md) als aktiv geführten
 Dokumente.
+
+Der [stabile Archivindex](INDEX.md) vergibt dauerhafte `ARCH-*`-Kennungen für
+historische Dokumentgruppen und wichtige Einzelberichte. Diese Kennungen dienen
+als kanonische Fundstelle; sie machen historische Inhalte nicht wieder aktuell.
 
 ## 2026-08
 
@@ -23,6 +27,8 @@ Dokumente.
   Refactoring-Plan.
 - `testing/TESTING_HISTORY_THROUGH_RC84.md`: vollständiges chronologisches
   Testjournal bis einschließlich RC84.
+- `reviews/REVIEW_BEIDE_PRODUKTE_2026-09-04.md`: zeitgebundener RC99-
+  Gesamtbericht, stabil referenziert als `ARCH-DOC-REVIEW-BOTH-RC99`.
 
 Historische Aussagen zu Keyring, verschlüsselten Arbeitskopien, MCPB als
 Anwenderkanal, auswählbaren Bildmodi oder automatischer Output-Löschung sind durch

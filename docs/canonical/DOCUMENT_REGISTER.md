@@ -22,6 +22,7 @@ Register. `DOCUMENT_INDEX.json` führt diese Ablösung und DS-085/086 mit.
 | `TARGET_CAPABILITIES.json`, `HOST_MATRIX_V1.json` | maschinenlesbare Ziel- und Hostverträge; Zielaussagen sind keine Istfreigabe |
 | `OPEN_SOURCE_COMPONENTS.md` | verbindliches Wiederverwendungsregister |
 | `DOCUMENT_INDEX.json` | maschinenlesbarer Status, Geltungsbereich, Eigentümer, Versionsregel und Ablösung aller führenden Dokumentklassen |
+| `../archive/INDEX.md` | stabile `ARCH-*`-Kennungen und Fundstellen historischer Dokumentgruppen |
 
 ### Vertragsstatus unter `contracts/`
 
@@ -70,13 +71,16 @@ Abnahme.
 
 ## Historisch, nicht entscheidungsführend
 
-- `docs/REVIEW_BEIDE_PRODUKTE_2026-09-04.md`: zeitgebundener Gesamtbericht zum
+- `ARCH-DOC-REVIEW-BOTH-RC99` unter
+  `docs/archive/2026-09/reviews/REVIEW_BEIDE_PRODUKTE_2026-09-04.md`:
+  zeitgebundener Gesamtbericht zum
   RC99-Stand beider Produkte. Sein damaliges Urteil bleibt als Evidence
   erhalten; aktuelle Aussagen und Nachweisgrenzen führt `CURRENT_STATE.md`.
   Dies entspricht `historical` und `superseded_by: CANON-CURRENT` im
   maschinenlesbaren Dokumentindex.
-- [`docs/archive`](../archive/README.md): frühere Architektur-, Review-, Release-,
-  Test- und Kanonvollstände.
+- [`docs/archive`](../archive/README.md) mit
+  [stabilem Archivindex](../archive/INDEX.md): frühere Architektur-, Review-,
+  Release-, Test- und Kanonvollstände.
 - `BACKLOG_ARCHIVE_2026-08.md` und `BACKLOG_ARCHIVE_2026-09.md`: erledigte Stories.
 - `tasks/archiv`: abgeschlossene Claude-/Codex-Aufträge und Berichte.
 - `docs/acceptance/RC30_HUMAN_TEST_KIT` und `RC63_UAT_TEST_KIT`: reproduzierbare

@@ -30,6 +30,11 @@ und erhält standardisierte Dokumentmetadaten im reinen Markdown-Modus. Diese
 E0-Nachweise erweitern nicht die Anonymisierungsfreigabe. Der neue native
 Startup-Checkpoint trennt WebView-Aufbaufehler von späteren IPC-Ausfällen; eine
 INT-13-Bindung folgt ausschließlich nach bestandenem commitgebundenem PKG-04.
+Der zweite Lauf nach Windows-Neustart aus `c77ec592aa95f323bd5b1efe6301b111e7f2f225`
+stoppt erneut vor `webview_build_completed`; dasselbe tut das historisch gebundene
+RC109-Archiv in der aktuellen Hostumgebung vor `page_loaded`. Damit ist der
+aktuelle Blocker auf Host/WebView eingegrenzt, ohne eine RC111-Regression oder
+einen neuen Release-PASS zu behaupten.
 
 Der anschließende Restschuldblock bindet BL-020.3 an den echten Support-stdio-
 Dispatch und den bestehenden netzgesperrten Review-Worker (`test-mcp-support-review`,

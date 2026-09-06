@@ -19,8 +19,14 @@ DTD/Entity-Angriffe und Strukturgrenzen. PDF stoppt bei Annotationen, Outline
 oder XMP-Metadaten; standardisierte Dokumentmetadaten werden im reinen
 Markdown-Modus sichtbar und begrenzt erhalten. Die reale Konvertersuite umfasst
 30 Gruppen und prüft bei XLSX, PPTX, Text-/Scan-PDF, PNG, JPEG und BMP zusätzlich
-die derzeit beabsichtigte Privacy-Sperre. Diese Formate bleiben daher für die
-Anonymisierung fail-closed, bis ihre vollständige Inhalts-/OCR-Coverage belegt ist.
+die derzeit beabsichtigte Privacy-Sperre. Die Originalcontainer werden dabei nie
+als Originalformat anonymisiert. Standalone erzeugt zuerst eine Markdown-
+Extraktion; nur eine belegbar vollständige Extraktion darf automatisch durch den
+Privacy-Core laufen. Da die realen breiten Konverter derzeit `incomplete` melden,
+stoppt die automatische Ein-Schritt-Anonymisierung. Bereits erzeugte Ergebnisse
+aus **Nur in Markdown umwandeln** können bewusst in einem neuen Stapel als `.md`
+anonymisiert werden. Das schützt ausschließlich den extrahierten Markdown-Inhalt
+und behauptet keine Vollständigkeit des ursprünglichen Containers.
 
 Der native Windows-Launcher protokolliert nun getrennte, inhaltsfreie Checkpoints
 für Setup und WebView-Aufbau. Dadurch lässt sich ein Zielhostfehler vor
@@ -32,14 +38,19 @@ Testdateien; Rust 16/16, 30 reale Konvertergruppen, Dokumentgates sowie frische
 Cowork- und Standalone-Arbeitsbaumbauten sind grün. Diese Arbeitsbaumartefakte
 sind bewusst noch keine Release-Evidence.
 
-Der PKG-04-Lauf aus sauberem RC111-Commit `d45252f971e1f2f8737bf4af22d511c30ca3f430`
-baute Kandidat A und bestand Paket-, Worker-, History- und Sidecar-Smokes. Der
-native Zielhost erreichte den Beginn des WebView-Aufbaus, aber nicht dessen Ende
-(`STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`). Kandidat B, Receipt und INT-13-
-Bindung wurden deshalb nicht erzeugt. Die installierte WebView2-Runtime ist
-vorhanden; auf dem Host laufen jedoch noch Prozesse älterer Runtimeversionen.
-Nach Windows-Neustart ist exakt PKG-04 erneut auszuführen. RC109 bleibt bis zu
-einem vollständigen Erfolg der letzte gebundene Kandidat.
+Der erste PKG-04-Lauf aus sauberem RC111-Commit
+`d45252f971e1f2f8737bf4af22d511c30ca3f430` baute Kandidat A und bestand Paket-,
+Worker-, History- und Sidecar-Smokes. Nach dem Windows-Neustart wurde PKG-04 aus
+dem sauberen Commit `c77ec592aa95f323bd5b1efe6301b111e7f2f225` erneut
+ausgeführt. Beide Läufe erreichten `webview_build_started`, aber nicht
+`webview_build_completed` (`STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`);
+Kandidat B, Receipt und INT-13-Bindung wurden daher korrekt nicht erzeugt. Ein
+zusätzlicher Start des bereits gebundenen RC109-Archivs scheiterte auf demselben
+aktuell laufenden Host ebenfalls vor `page_loaded` und Sidecar-Start. Das grenzt
+den Befund auf die jetzige Host-/WebView-Testumgebung ein und ist kein belegter
+RC111-Produktregressionsfehler. RC109 bleibt als historisch erfolgreich
+gebundener Kandidat bestehen; eine neue Bindung erfordert einen vollständig
+grünen PKG-04-Lauf auf einem funktionsfähigen Zielhost.
 
 ## Basisstand RC109
 
@@ -77,11 +88,15 @@ Native Zielhost-/Bedien-/Fachabnahmen sind davon getrennt im Backlog geführt.
 
 DS-087 / BL-010.30 ergänzt im Standalone-Anonymisierungsmodus eine einmalige,
 neutrale Extraktion für XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP vor dem bestehenden
-Privacy-Core. Der Vertrag enthält weder Zweck noch Publikationskennung; es wird
-kein rohes Markdown-Zwischenartefakt veröffentlicht. Nur `complete` darf in PII-,
-Pseudonym-, Review- und Residualprüfung eintreten. Die heutigen realen breiten
-Konverter melden ihre Coverage weiterhin als `incomplete`, sodass diese Quellen
-aktuell sicher als Einzeldatei stoppen. Cowork bleibt auf TXT/MD/CSV/DOCX.
+Privacy-Core. Anonymisiert wird die erzeugte Markdown-Repräsentation, nie der
+Originalcontainer. Der Vertrag enthält weder Zweck noch Publikationskennung; es
+wird kein rohes Markdown-Zwischenartefakt veröffentlicht. Nur `complete` darf in
+PII-, Pseudonym-, Review- und Residualprüfung eintreten. Die heutigen realen
+breiten Konverter melden ihre Coverage weiterhin als `incomplete`, sodass die
+automatische Verkettung aktuell sicher als Einzeldatei stoppt. Der verfügbare,
+bewusste Zweischritt ist **Nur in Markdown umwandeln** und danach die erzeugte
+`.md` in einem neuen Anonymisierungsstapel auswählen. Cowork bleibt auf
+TXT/MD/CSV/DOCX.
 
 DS-086 / BL-010.29: Standalone startet auf einer kurzen Startseite. Verarbeiten
 und Betriebsart sind nicht vorausgewählt. Der Verlauf zeigt die 20 neuesten

@@ -119,6 +119,16 @@ Text und Tabellen, nicht das vollständige grafische Originallayout. Der Stand
 der technischen und menschlichen Abnahme steht unter
 [BL-010.28 im kanonischen Backlog](docs/canonical/BACKLOG.md).
 
+Im Modus **In Markdown umwandeln und anonymisieren** verarbeitet Standalone
+TXT/Markdown/CSV/DOCX direkt. Breite Quellen werden zuerst nach Markdown
+extrahiert; das automatische Weiterreichen ist nur bei belegter vollständiger
+Extraktion erlaubt. Da XLSX/PPTX/PDF/Scan-PDF/Bilder derzeit `incomplete`
+melden, stoppen sie im Ein-Schritt-Ablauf. Wer den bekannten extrahierten Inhalt
+verwenden will, kann zuerst **Nur in Markdown umwandeln** ausführen und die
+entstandene `.md` anschließend als neuen Anonymisierungseingang wählen. Das
+Ergebnis schützt diese Markdown-Repräsentation, nicht ausgelassene Inhalte oder
+den ursprünglichen Container.
+
 Heute sind Application-Service, getrenntes Datenverzeichnis, UI-Zustandsvertrag,
 privates gerahmtes IPC, Sidecar-Lifecycle und Zielpaketkatalog implementiert.
 Die Tauri-App ist auf Windows x64 kompiliert; ein selbsttragendes Windows-
@@ -147,7 +157,7 @@ deaktiviert; siehe IT-Betriebshandbuch.
 - [IT-Betriebshandbuch](docs/IT-BETRIEBSHANDBUCH.md)
 - [Security-Modell](docs/PLUGIN_SECURITY_MODEL.md)
 - [UAT-Testpaket](docs/acceptance/UAT_TEST_KIT/README.md)
-- [Dokumentenarchiv](docs/archive/README.md)
+- [Dokumentenarchiv und stabile Archiv-IDs](docs/archive/INDEX.md)
 
 ## Entwicklung
 

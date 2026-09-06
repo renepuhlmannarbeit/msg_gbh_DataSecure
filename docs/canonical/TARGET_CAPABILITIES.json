@@ -153,6 +153,8 @@
     "markdown_only_automatic_ai_upload": false,
     "wide_format_anonymization": "convert-once-then-anonymize-markdown-complete-coverage-only",
     "wide_format_anonymization_output": "anonymized-markdown-extraction-not-original-format",
+    "wide_format_manual_two_step": "markdown-only-output-can-be-selected-as-md-for-a-new-anonymization-batch",
+    "wide_format_original_container_output": false,
     "raw_intermediate_exported": false,
     "macos_minimum_system_version": "13.5",
     "target_packages": [

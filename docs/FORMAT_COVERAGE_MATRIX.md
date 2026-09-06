@@ -41,6 +41,14 @@ Direkte und konvertierte Quellen laufen mit derselben stapelgebundenen Personen-
 und Unternehmenszuordnung; die sichtbare Zuordnung zeigt direkt von der
 Originalquelle auf das anonymisierte Markdown-Ergebnis.
 
+Solange ein breiter Konverter noch `incomplete` meldet, ist der verfügbare
+Anwenderweg bewusst zweistufig: Zuerst **Nur in Markdown umwandeln**, anschließend
+die erzeugte `.md` als Quelle eines neuen Anonymisierungsstapels wählen. Dann wird
+der tatsächlich extrahierte Markdown-Inhalt anonymisiert. Ausgelassene Objekte,
+Grafiken oder nicht verifizierter OCR-Inhalt des Originalcontainers werden damit
+nicht nachträglich erfasst; die App darf deshalb keine vollständige
+Anonymisierung der ursprünglichen XLSX-, PPTX-, PDF- oder Bilddatei behaupten.
+
 ### Bilder in DOCX
 
 Es gibt keinen auswählbaren Bildmodus. Bildpixel werden weder veröffentlicht noch

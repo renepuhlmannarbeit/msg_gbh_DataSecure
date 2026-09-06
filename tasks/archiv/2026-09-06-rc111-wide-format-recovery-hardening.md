@@ -54,16 +54,26 @@ Paketgegenprüfungen ausgeführt.
   `STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`. Kandidat B, Receipt und INT-13-
   Bindung wurden deshalb regelkonform nicht erzeugt. Auf dem Zielhost ist
   WebView2 152.0.4191.66 registriert, während zahlreiche seit Tagen laufende
-  WebView2-Prozesse ältere 152.0.4191.53/.62-Binaries verwenden. Ein Windows-
-  Neustart und danach derselbe PKG-04-Lauf sind der nächste Zielhostschritt.
+  WebView2-Prozesse ältere 152.0.4191.53/.62-Binaries verwendeten.
+- Nach dem Windows-Neustart wurde PKG-04 aus dem sauberen Commit
+  `c77ec592aa95f323bd5b1efe6301b111e7f2f225` erneut ausgeführt. Er stoppt am
+  gleichen Checkpoint. Ein Vergleichsstart des früher erfolgreich gebundenen
+  RC109-Archivs stoppt auf dem jetzigen Host ebenfalls vor `page_loaded` und
+  Sidecar-Start. Damit ist der aktuelle Blocker auf die Host-/WebView-
+  Testumgebung eingegrenzt; er ist kein belegter RC111-Codefehler.
 
 ## Bewusste Grenze
 
-XLSX, PPTX, PDF/Scan-PDF und Bilder bleiben für die Anonymisierung gesperrt,
-bis ihre vollständige Container-/Objekt-/Grafik-/OCR-Coverage belegt ist. Die
-reine Markdown-Konvertierung bleibt aktiv und kennzeichnet unvollständige
-Extraktion. Native Intel-/ARM-macOS-Abnahme sowie sichtbare Windows-/macOS-UAT
-sind menschliche Zielhost-Evidence.
+XLSX, PPTX, PDF/Scan-PDF und Bilder werden nicht als Originalcontainer
+anonymisiert. Der Standalone-Pfad extrahiert sie zuerst nach Markdown und darf
+diese Repräsentation nur bei belegter `complete`-Coverage automatisch
+anonymisieren. Die heutigen realen breiten Konverter melden `incomplete`; die
+automatische Verkettung stoppt deshalb. Die reine Markdown-Konvertierung bleibt
+aktiv und kennzeichnet Auslassungen. Wer den bekannten extrahierten Umfang
+anonymisieren will, kann das erzeugte `.md` anschließend bewusst in einem neuen
+Anonymisierungsstapel wählen. Das ist keine Zusage vollständiger Anonymisierung
+des Originalcontainers. Native Intel-/ARM-macOS-Abnahme sowie sichtbare
+Windows-/macOS-UAT sind menschliche Zielhost-Evidence.
 
 INT-13 darf nur an einen Kandidaten gebunden werden, dessen zwei saubere Builds
 bytegleich sind und dessen beide Paket-, Worker- und nativen Smokes bestehen.

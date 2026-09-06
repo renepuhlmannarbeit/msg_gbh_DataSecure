@@ -188,6 +188,12 @@ an den vorhandenen Privacy-Core übergeben und niemals als rohes `dm_`-Artefakt
 veröffentlicht. Nur `complete` darf diese Grenze passieren; aktuelle breite
 Konverter melden reale XLSX/PPTX/PDF/Scan-PDF-/Bildquellen weiterhin ehrlich als
 `incomplete` und lösen deshalb einen laufbezogenen Einzelstopp aus.
+Der davon getrennte manuelle Zweischritt ist zulässig: **Nur in Markdown
+umwandeln** veröffentlicht das gekennzeichnete Konvertat; wählt der Anwender
+diese `.md` später in einem neuen Anonymisierungsstapel, verarbeitet der direkte
+Markdown-Pfad ausschließlich deren extrahierten Inhalt. Diese zwei Läufe teilen
+weder Stapelidentität noch Pseudonymregistry und ergeben keine Aussage über
+ausgelassene Bestandteile des ursprünglichen Containers.
 Auswahl und Quellen bleiben unverändert; in der Modusübersicht steht ruhig und
 dauerhaft **Nicht anonymisiert – enthält Originalinhalte**. Bei einem Fehler
 bleiben fertige Positionen checkpointgebunden erhalten; Fortsetzen nutzt denselben

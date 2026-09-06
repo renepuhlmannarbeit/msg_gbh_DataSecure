@@ -36,7 +36,9 @@ und [BACKLOG_ARCHIVE_2026-09.md](BACKLOG_ARCHIVE_2026-09.md) nachvollziehbar.
 - [Standalone-UAT-Kit](../acceptance/STANDALONE_UAT_TEST_KIT/README.md)
 
 Historische RC-Berichte und frühere Vollstände liegen unter
-[`docs/archive`](../archive/README.md). Sie sind zugänglich, aber nicht
+[`docs/archive`](../archive/README.md). Der
+[stabile Archivindex](../archive/INDEX.md) ordnet wichtigen Beständen dauerhafte
+`ARCH-*`-Kennungen zu. Sie sind zugänglich, aber nicht
 entscheidungsführend.
 
 Der aktuelle lokale Reviewvertrag steht in
