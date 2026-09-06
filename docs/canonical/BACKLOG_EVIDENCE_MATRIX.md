@@ -45,6 +45,10 @@ Zuordnung und Supportspur sind geprüft. ZIP-SHA-256:
 `807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
 Details und vollständige Hashes stehen
 in [CURRENT_STATE](CURRENT_STATE.md). E1/E2/E3 sind dadurch nicht geschlossen.
+Der RC111-Versuch aus `d45252f` besteht Quellgates und Kandidat-A-Paket-/Worker-/
+History-/Sidecar-Smokes, stoppt auf diesem Host jedoch vor
+`webview_build_completed`. Er besitzt daher weder Kandidat B noch Receipt oder
+INT-13-Bindung und ersetzt den RC109-Nachweis nicht.
 
 | Bereich / Stories | E0 | Noch erforderlich |
 |---|---|---|

@@ -32,6 +32,15 @@ Testdateien; Rust 16/16, 30 reale Konvertergruppen, Dokumentgates sowie frische
 Cowork- und Standalone-Arbeitsbaumbauten sind grün. Diese Arbeitsbaumartefakte
 sind bewusst noch keine Release-Evidence.
 
+Der PKG-04-Lauf aus sauberem RC111-Commit `d45252f971e1f2f8737bf4af22d511c30ca3f430`
+baute Kandidat A und bestand Paket-, Worker-, History- und Sidecar-Smokes. Der
+native Zielhost erreichte den Beginn des WebView-Aufbaus, aber nicht dessen Ende
+(`STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`). Kandidat B, Receipt und INT-13-
+Bindung wurden deshalb nicht erzeugt. Die installierte WebView2-Runtime ist
+vorhanden; auf dem Host laufen jedoch noch Prozesse älterer Runtimeversionen.
+Nach Windows-Neustart ist exakt PKG-04 erneut auszuführen. RC109 bleibt bis zu
+einem vollständigen Erfolg der letzte gebundene Kandidat.
+
 ## Basisstand RC109
 
 Aktueller Korrekturlauf: [archivierte Gesamtreview-Umsetzung](../../tasks/archiv/2026-09-06-rc109-review-korrekturen.md)

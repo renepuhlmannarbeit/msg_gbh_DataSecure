@@ -287,7 +287,7 @@ veröffentlicht ausschließlich ein bestehendes Privacy-Paket.
 | Privacy und Pseudonyme | vorhandene PII-/Review-/Residual-Gates; eine Personen-/Unternehmensregistry über direkte und konvertierte Quellen | RC111 prüft reale stabile Personen- und Unternehmenslabels über direkte/konvertierte Quellen und Neustart; unvollständige breite Quellen verbrauchen keine Labels. Breiter Fachkorpus bleibt E3 | **E0 umgesetzt und grün** |
 | Coverage-Gate | nur `complete` darf publizieren; `incomplete` stoppt die Datei mit festem Grund | RC111 bindet Dateiendung und `source_type`, prüft die reale Privacy-Sperre aller breiten Formate sowie OCR-/visuelle Lücken. Vollständige Container-/Grafik-/OCR-Coverage bleibt offen | **E0 umgesetzt und grün** |
 | Ergebnis und UX | ein anonymisiertes `.md` je positive Quelle; direkte Zuordnung ohne Zwischenkonvertat; klare Bezeichnung als Markdown-Extraktion | Export-/Mapping-/Historien-/UI-Tests | **E0 umgesetzt und grün** |
-| Paket und Produkte | Standalone-Runtime/SBOM/Offline-Smoke; Cowork-Allowlist unverändert | ZIP-/Runtime-/Produktisolationsgates | **RC111-Quellgates grün; commitgebundener PKG-04-Zweifachbau und INT-13-Bindung folgen erst aus sauberem Commit** |
+| Paket und Produkte | Standalone-Runtime/SBOM/Offline-Smoke; Cowork-Allowlist unverändert | ZIP-/Runtime-/Produktisolationsgates | **RC111-Kandidat A aus `d45252f` samt Paket-/Worker-/History-/Sidecar-Smokes grün; nativer Host stoppt vor abgeschlossenem WebView-Aufbau. Nach Windows-Neustart PKG-04 wiederholen; Kandidat B/INT-13 bis dahin bewusst nicht erzeugt** |
 
 #### Verbindlicher Lieferplan für reine Markdown-Konvertierung (BL-010.28)
 

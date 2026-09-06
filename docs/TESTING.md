@@ -262,6 +262,13 @@ ein späterer Ausfall bleibt `STANDALONE_NATIVE_IPC_TIMEOUT`. Beide Fehler sind
 Zielhostblocker und dürfen weder durch längere Timeouts noch durch Lockerung der
 WebView-/IPC-Isolation in einen Erfolg umgedeutet werden.
 
+Der commitgebundene RC111-Lauf aus `d45252f` reproduzierte auf dem aktuellen
+Windows-Host den ersten Fall: Kandidat A und alle nichtvisuellen Smokes bestanden,
+der Lauf endete nach `webview_build_started`. Kandidat B und INT-13 wurden nicht
+erzeugt. Da eine aktuelle WebView2-Runtime registriert ist, aber noch zahlreiche
+ältere WebView2-Prozesse laufen, ist vor dem erneuten identischen PKG-04-Lauf ein
+Windows-Neustart erforderlich. Dieses Zielhosturteil ist kein Produktcode-Erfolg.
+
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird
 der ursprüngliche Pluginbaum vollständig entfernt; erst danach muss ein echter

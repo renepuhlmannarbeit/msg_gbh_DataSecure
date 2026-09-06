@@ -46,7 +46,16 @@ Paketgegenprüfungen ausgeführt.
 - Arbeitsbaum-Build: Standalone-ZIP 110.216.131 Byte, SHA-256
   `911125e06a2b54ee692f1b3ace040fe9fbcbcdbd232aa20dc9167ac6e15bac40`;
   dieser Hash ist noch keine commitgebundene PKG-04-/INT-13-Evidence.
-- PKG-04 wird nach dem sauberen RC111-Commit versionsgebunden nachgetragen.
+- PKG-04 wurde aus dem sauberen Commit
+  `d45252f971e1f2f8737bf4af22d511c30ca3f430` gestartet. Kandidat A ist
+  bytegenau zum Arbeitsbaum-Build, Paket-/Worker-/History-/Sidecar-Smokes sind
+  grün. Der native Smoke erreicht `application_started`, `setup_started` und
+  `webview_build_started`, aber nicht `webview_build_completed`; Urteil:
+  `STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`. Kandidat B, Receipt und INT-13-
+  Bindung wurden deshalb regelkonform nicht erzeugt. Auf dem Zielhost ist
+  WebView2 152.0.4191.66 registriert, während zahlreiche seit Tagen laufende
+  WebView2-Prozesse ältere 152.0.4191.53/.62-Binaries verwenden. Ein Windows-
+  Neustart und danach derselbe PKG-04-Lauf sind der nächste Zielhostschritt.
 
 ## Bewusste Grenze
 
@@ -58,3 +67,4 @@ sind menschliche Zielhost-Evidence.
 
 INT-13 darf nur an einen Kandidaten gebunden werden, dessen zwei saubere Builds
 bytegleich sind und dessen beide Paket-, Worker- und nativen Smokes bestehen.
+Bis dahin bleibt RC109 der letzte gebundene Kandidat.
