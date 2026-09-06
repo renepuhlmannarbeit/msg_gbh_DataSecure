@@ -146,6 +146,9 @@ try {
         }).Count -gt 0
         $pageLoaded = @($desktopSession | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
         $frontendReady = @($desktopSession | Where-Object { $_.event -eq 'frontend_ready' }).Count -gt 0
+        $setupStarted = @($desktopSession | Where-Object { $_.event -eq 'setup_started' }).Count -gt 0
+        $webviewBuildStarted = @($desktopSession | Where-Object { $_.event -eq 'webview_build_started' }).Count -gt 0
+        $webviewBuildCompleted = @($desktopSession | Where-Object { $_.event -eq 'webview_build_completed' }).Count -gt 0
         $sidecarStarted = @($sidecarSession | Where-Object { $_.event -eq 'sidecar_started' }).Count -gt 0
         $serviceInitialized = @($sidecarSession | Where-Object { $_.event -eq 'service_initialized' }).Count -gt 0
         if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized) {
@@ -156,7 +159,8 @@ try {
     if (-not $passed) {
         # Preserve bounded content-free evidence before the owned test profile is
         # cleaned. A timeout alone cannot distinguish page loading from IPC failure.
-        $checkpoint = [ordered]@{ application = ($application.Count -gt 0); page_loaded = $pageLoaded;
+        $checkpoint = [ordered]@{ application = ($application.Count -gt 0); setup_started = $setupStarted;
+            webview_build_started = $webviewBuildStarted; webview_build_completed = $webviewBuildCompleted; page_loaded = $pageLoaded;
             frontend_ready = $frontendReady; public_state = $publicState; ui_context = $uiContext;
             sidecar_started = $sidecarStarted; service_initialized = $serviceInitialized }
         Write-Output ('STANDALONE NATIVE CHECKPOINT ' + ($checkpoint | ConvertTo-Json -Compress))
@@ -167,6 +171,9 @@ try {
                 if ($value -cmatch '^[A-Za-z0-9_]{1,96}$') { $safe[$field] = $value }
             }
             Write-Output ('STANDALONE NATIVE EVENT ' + ($safe | ConvertTo-Json -Compress))
+        }
+        if (($application.Count -gt 0) -and -not $pageLoaded -and -not $sidecarStarted) {
+            throw 'STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT'
         }
         throw 'STANDALONE_NATIVE_IPC_TIMEOUT'
     }

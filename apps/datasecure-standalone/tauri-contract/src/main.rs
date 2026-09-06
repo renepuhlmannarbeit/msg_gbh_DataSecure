@@ -1206,6 +1206,7 @@ fn main() {
             diagnostic_event("page_loaded", None, "ready", None, None);
         })
         .setup(|app| {
+            diagnostic_event("setup_started", None, "progress", None, None);
             let state = DesktopState {
                 app: app.handle().clone(),
                 sidecar: Arc::new(Mutex::new(None)),
@@ -1216,11 +1217,14 @@ fn main() {
             app.manage(state);
             if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
                 for config in &app.config().app.windows {
+                    diagnostic_event("webview_build_started", None, "progress", None, None);
                     tauri::WebviewWindowBuilder::from_config(app, config)?
                         .data_directory(profile.webview.join(&config.label))
                         .build()?;
+                    diagnostic_event("webview_build_completed", None, "ready", None, None);
                 }
             }
+            diagnostic_event("setup_completed", None, "ready", None, None);
             Ok(())
         })
         .on_window_event(|window, event| {

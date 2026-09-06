@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc110",
+  "version": "3.2.0-rc111",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -54,7 +54,7 @@
     "test:locks": "node tests/test-batch-active-lock.js && node tests/test-batch-executor-lease.js && node tests/test-batch-processing-lock.js && node tests/test-batch-processing-orchestrator.js",
     "test:journal": "node tests/test-batch-retention-protection.js && node tests/test-batch-journal-store.js && node tests/test-transient-rename-retry.js",
     "test:reconciliation": "node tests/test-batch-next-maintenance.js && node tests/test-batch-reconciliation.js && node tests/test-batch-results.js && node tests/test-batch-mapping-maintenance.js && node tests/test-mapping-outbox.js && node tests/test-mixed-batch-recovery.js",
-    "test:recovery": "node tests/test-batch-recovery.js && node tests/test-mixed-batch-recovery.js && node tests/test-batch-post-publish-recovery.js",
+    "test:recovery": "node tests/test-batch-recovery.js && node tests/test-mixed-batch-recovery.js && node tests/test-wide-mixed-batch-recovery.js && node tests/test-batch-post-publish-recovery.js",
     "test:delivery": "node tests/test-batch-evidence.js && node tests/test-batch-terminal-evidence.js && node tests/test-batch-delivery.js && node tests/test-package-read-capabilities.js && node tests/test-package-snapshot-async.js && node tests/test-local-only-handoff.js && node tests/test-local-handoff-resume.js",
     "test:intake": "node tests/test-batch-intake.js && node tests/test-direct-picker-batch.js",
     "benchmark:pii-shield": "node scripts/benchmark-pii-shield.mjs",

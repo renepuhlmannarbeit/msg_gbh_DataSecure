@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 06.09.2026 · Produktstand 3.2.0-rc110
+Stand: 06.09.2026 · Produktstand 3.2.0-rc111
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -283,11 +283,11 @@ veröffentlicht ausschließlich ein bestehendes Privacy-Paket.
 | Paket | Lieferung | Pflichtnachweis | Status |
 |---|---|---|---|
 | Neutraler Extraktionsvertrag | Modusfreie Extraktion; getrennte Adapter für `markdown-only` und Privacy; keine öffentliche Cross-Read-Brücke | Vertrags-/Mutations-/Cross-Read-Tests | **E0 umgesetzt und grün** |
-| Stapel und Recovery | Breite Typen im Standalone-Anonymisierungsmodus; vorhandene v4-Zweck-/Phasenbindung; kein doppelter Export bei Fortsetzung; bestätigte Konverterbeendigung vor dem nächsten Item | Mischstapel, Timeout/Startfehler wiederaufnehmbar, unbestätigte Beendigung stoppt Reststapel | **E0 umgesetzt und grün** |
-| Privacy und Pseudonyme | vorhandene PII-/Review-/Residual-Gates; eine Personen-/Unternehmensregistry über direkte und konvertierte Quellen | Multi-Format-Alias-, Rest-PII- und Cross-Read-Tests | **E0 umgesetzt und grün** |
-| Coverage-Gate | nur `complete` darf publizieren; `incomplete` stoppt die Datei mit festem Grund | OCR-leer/-unverifiziert, visuelle Lücke, unbekannter Grund | **E0 umgesetzt und grün** |
+| Stapel und Recovery | Breite Typen im Standalone-Anonymisierungsmodus; vorhandene v4-Zweck-/Phasenbindung; kein doppelter Export bei Fortsetzung; bestätigte Konverterbeendigung vor dem nächsten Item | Echte TXT/XLSX-Mischstapel in beiden Reihenfolgen, Abbruch zwischen Items, frische Fortsetzung und Exact-once-Publikation sind RC111-E0. Timeout/Startfehler und unbestätigte Beendigung bleiben durch die bestehenden Negativverträge gebunden | **E0 umgesetzt und grün** |
+| Privacy und Pseudonyme | vorhandene PII-/Review-/Residual-Gates; eine Personen-/Unternehmensregistry über direkte und konvertierte Quellen | RC111 prüft reale stabile Personen- und Unternehmenslabels über direkte/konvertierte Quellen und Neustart; unvollständige breite Quellen verbrauchen keine Labels. Breiter Fachkorpus bleibt E3 | **E0 umgesetzt und grün** |
+| Coverage-Gate | nur `complete` darf publizieren; `incomplete` stoppt die Datei mit festem Grund | RC111 bindet Dateiendung und `source_type`, prüft die reale Privacy-Sperre aller breiten Formate sowie OCR-/visuelle Lücken. Vollständige Container-/Grafik-/OCR-Coverage bleibt offen | **E0 umgesetzt und grün** |
 | Ergebnis und UX | ein anonymisiertes `.md` je positive Quelle; direkte Zuordnung ohne Zwischenkonvertat; klare Bezeichnung als Markdown-Extraktion | Export-/Mapping-/Historien-/UI-Tests | **E0 umgesetzt und grün** |
-| Paket und Produkte | Standalone-Runtime/SBOM/Offline-Smoke; Cowork-Allowlist unverändert | ZIP-/Runtime-/Produktisolationsgates | **E0 und RC110-Arbeitsbaum-Build grün; commitgebundene Release-Evidence offen** |
+| Paket und Produkte | Standalone-Runtime/SBOM/Offline-Smoke; Cowork-Allowlist unverändert | ZIP-/Runtime-/Produktisolationsgates | **RC111-Quellgates grün; commitgebundener PKG-04-Zweifachbau und INT-13-Bindung folgen erst aus sauberem Commit** |
 
 #### Verbindlicher Lieferplan für reine Markdown-Konvertierung (BL-010.28)
 
@@ -597,12 +597,12 @@ Anonymisierungsgates nicht auf. Linux bleibt eine spätere Plattformstufe.
 |---|---|---|
 | BL-010.4 | Linux-Paket nach dem Windows-/macOS-Erstrelease mit eigener Hostevidenz liefern. | **offen** |
 | BL-022.2 | Extraktions-Unterbau: stille 100-Spalten-/10.000-Zeilen-Kürzung beseitigt, explizite Ressourcenfehler und Literalformel plus gespeicherter Wert; reale Negativfälle. Weiterhin `incomplete`; Zell-/Namespace-/Kommentar-/Chart-/Relationship-Coverage und Produktintegration offen. | **in Arbeit** |
-| BL-022.3 | Extraktions-Unterbau erhält Textläufe, numerische Notizen und tatsächliche Folienreihenfolge mit Regressionen. Weiterhin `incomplete`; vollständige Folien-/Master-/Notiz-/Chart-/Objekt-Coverage und Produktintegration offen. | **in Arbeit** |
+| BL-022.3 | Extraktions-Unterbau erhält Textläufe, numerische Notizen und tatsächliche Folienreihenfolge. RC111 validiert vor der Extraktion alle vorhandenen PPTX-XML-/RELS-Teile gegen DTD/Entities und Strukturgrenzen. Weiterhin `incomplete`; vollständige Folien-/Master-/Notiz-/Chart-/Objekt-Coverage und Fachkorpus offen. | **in Arbeit** |
 | BL-023.1 | PDF-/OCR-Risikogate bis zur vollständigen Pflichtmatrix als NO-GO erhalten. | **in Arbeit** |
 | BL-023.2 | Text-PDF nur nach vollständiger Parser-/Render-/Security-Coverage freigeben. | **offen** |
-| BL-023.3 | PDF-Formulare, Annotationen, Anhänge, Signaturen und Verschlüsselung absichern. | **offen** |
-| BL-023.4 | Scan-PDF und visuelle Coverage vollständig absichern. | **offen** |
-| BL-024.3 | PNG, JPEG und BMP erst nach Decoder-, OCR-, Metadaten- und Pixelredaktionsnachweis freigeben. | **offen** |
+| BL-023.3 | RC111 stoppt PDF-Annotationen, Outline und XMP-Metadaten; standardisierte Info-Felder werden im reinen Markdown-Modus sichtbar und begrenzt erhalten. Formulare, Anhänge, Signaturen, weitere Objektarten und Verschlüsselungsvarianten bleiben bis zum vollständigen Coverage-Nachweis gesperrt. | **in Arbeit** |
+| BL-023.4 | Reale Scan-PDF-Konvertierung und Privacy-Sperre sind E0 geprüft. Visuelle Vollständigkeit, OCR-Fachqualität und Zielhostkorpus bleiben offen. | **in Arbeit** |
+| BL-024.3 | Reale PNG-/JPEG-/BMP-Konvertierung und Privacy-Sperre sind E0 geprüft. Freigabe erst nach Decoder-, OCR-, Metadaten- und Pixelredaktionsnachweis sowie E1/E3. | **in Arbeit** |
 
 ## Epics
 

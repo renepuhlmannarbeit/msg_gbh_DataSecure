@@ -3,6 +3,7 @@
 const path = require('path');
 const { readZip, ZipError } = require('./zip-reader');
 const { createXlsxReader } = require('./xlsx-structure');
+const { readXml } = require('./xml-reader');
 
 const MAX_EMBEDDED_DEPTH = 3;
 const MAX_EMBEDDED_DOCUMENTS = 20;
@@ -1263,6 +1264,20 @@ function pptRelationshipTarget(entries, relPath, id, expectedType, base) {
   }
   return resolvedTarget;
 }
+function pptxStructureError(limit = false) {
+  const error = new Error(limit ? 'PPTX-Struktur überschreitet die sichere Verarbeitungsgrenze.'
+    : 'PPTX-Struktur ist nicht eindeutig lesbar; Verarbeitung wird blockiert.');
+  error.code = limit ? 'PPTX_STRUCTURE_LIMIT' : 'PPTX_STRUCTURE_UNSAFE';
+  return error;
+}
+function validatePptxXmlEntries(entries) {
+  // Every XML/relationship part must be completely tokenizable before any
+  // slide prefix is rendered. Format-specific relationship and coverage
+  // checks below remain responsible for semantic reachability.
+  for (const [name, data] of entries) if (/\.(?:xml|rels)$/i.test(name)) {
+    readXml(data.toString('utf8'), { decode: xmlDecode, error: pptxStructureError });
+  }
+}
 function pptChartRelationshipCoverage(entries, slides) {
   const charts = new Set([...entries.keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/i.test(name)));
   const safeCharts = new Set();
@@ -1406,6 +1421,7 @@ function drawingText(xml) {
   return paragraphs.join('\n\n');
 }
 function parsePptx(entries, options = {}) {
+  validatePptxXmlEntries(entries);
   const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,tableIssues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
   const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;while((m=sr.exec(presentation))){const id=/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1],target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target);}
   if(!presentation||!slides.length)issues++;

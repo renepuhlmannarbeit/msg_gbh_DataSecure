@@ -1,8 +1,38 @@
 # Aktueller Iststand
 
-Stand: 06.09.2026 · 3.2.0-rc110 · Startseite und laufgebundener Verlauf
+Stand: 06.09.2026 · 3.2.0-rc111 · Startseite und laufgebundener Verlauf
 
-## Aktueller Entwicklungsstand RC109
+## Aktueller Entwicklungsstand RC111
+
+RC111 härtet die breite Standalone-Anonymisierung, ohne ihren Freigabeumfang
+vorzeitig zu erweitern. Der neutrale Extraktionsvertrag bindet den gemeldeten
+`source_type` jetzt an die tatsächliche Dateiendung; vertauschte oder unbekannte
+Typen stoppen mit `FORMAT_COVERAGE_UNVERIFIED`. Ein echter Mischstapel aus
+direkter TXT- und konvertierter XLSX-Quelle wurde in beiden Reihenfolgen sowie
+über Prozessabbruch und Fortsetzung geprüft. Personen- und Unternehmenslabels
+bleiben dabei stapelweit stabil und genau einmal veröffentlicht. Eine wegen
+unvollständiger Coverage gestoppte breite Quelle verbraucht keine Labels des
+folgenden direkten Dokuments.
+
+PPTX validiert vor der Extraktion sämtliche XML- und Relationship-Teile gegen
+DTD/Entity-Angriffe und Strukturgrenzen. PDF stoppt bei Annotationen, Outline
+oder XMP-Metadaten; standardisierte Dokumentmetadaten werden im reinen
+Markdown-Modus sichtbar und begrenzt erhalten. Die reale Konvertersuite umfasst
+30 Gruppen und prüft bei XLSX, PPTX, Text-/Scan-PDF, PNG, JPEG und BMP zusätzlich
+die derzeit beabsichtigte Privacy-Sperre. Diese Formate bleiben daher für die
+Anonymisierung fail-closed, bis ihre vollständige Inhalts-/OCR-Coverage belegt ist.
+
+Der native Windows-Launcher protokolliert nun getrennte, inhaltsfreie Checkpoints
+für Setup und WebView-Aufbau. Dadurch lässt sich ein Zielhostfehler vor
+`page_loaded` von einem späteren Sidecar-/IPC-Fehler unterscheiden. Der
+commitgebundene RC111-PKG-04-Nachweis wird erst nach sauberem Commit durchgeführt;
+der unten genannte RC109 bleibt bis dahin der letzte an INT-13 gebundene Kandidat.
+Die vollständige RC111-Produktsuite besteht mit 61 Basis-/114 direkten
+Testdateien; Rust 16/16, 30 reale Konvertergruppen, Dokumentgates sowie frische
+Cowork- und Standalone-Arbeitsbaumbauten sind grün. Diese Arbeitsbaumartefakte
+sind bewusst noch keine Release-Evidence.
+
+## Basisstand RC109
 
 Aktueller Korrekturlauf: [archivierte Gesamtreview-Umsetzung](../../tasks/archiv/2026-09-06-rc109-review-korrekturen.md)
 mit gemeinsamer Review-/Fortsetzungsentscheidung, konsistenten Verlaufszählern,

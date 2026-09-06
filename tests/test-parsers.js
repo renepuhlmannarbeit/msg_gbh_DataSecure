@@ -539,7 +539,7 @@ test('corrupt supported embeddings and active XLSX content remain blocked', () =
 
 test('XLSX and PPTX external or unsupported embedded content fail closed without leaking targets', () => {
   const external = parseOoxml(zipStore([
-    ['ppt/slides/slide1.xml', '<p:sld/>'],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p"/>'],
     ['ppt/slides/_rels/slide1.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://customer.example/private" TargetMode="External"/></Relationships>']
   ]), '.pptx');
   assert.ok(external.warnings.some((warning) => /externe Inhaltsbeziehung/u.test(warning)));
@@ -675,7 +675,7 @@ test('self-closing empty XLSX and PPTX parts are structurally valid rather than 
     ['_rels/.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'],
     ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
     ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
-    ['ppt/slides/slide1.xml', '<p:sld/>']
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p"/>']
   ]), '.pptx');
   assert.ok(!pptx.warnings.some((warning) => /nicht vollständig abgedeckte Inhaltsstruktur/u.test(warning)));
 });
@@ -825,15 +825,12 @@ test('PPTX DrawingML tables preserve cells as an escaped Markdown table', () => 
   assert.ok(result.sections.some((section) => section.kind === 'table' && section.source_part === 'ppt/slides/slide1.xml'));
 });
 
-test('PPTX truncated DrawingML tables trigger an inhaltsfreie slide coverage stop', () => {
-  const result = parseOoxml(zipStore([
+test('PPTX truncated DrawingML tables stop as an inhaltsfreie unsafe structure', () => {
+  assert.throws(() => parseOoxml(zipStore([
     ['ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>'],
     ['ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>'],
     ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><a:tbl><a:tr><a:tc><a:t>Vertrauliche Tabelle</a:t></a:tc></a:tr></p:spTree></p:cSld></p:sld>']
-  ]), '.pptx');
-  assert.ok(result.warnings.some((warning) => /DrawingML-Tabelle/u.test(warning)));
-  assert.doesNotMatch(result.markdown, /Vertrauliche Tabelle/u);
-  assert.doesNotMatch(JSON.stringify(result.warnings), /Vertrauliche Tabelle/u);
+  ]), '.pptx'), error => error.code === 'PPTX_STRUCTURE_UNSAFE' && !error.message.includes('Vertrauliche Tabelle'));
 });
 
 test('PPTX notes require one reachable notesSlide relationship and complete notes root', () => {
@@ -849,12 +846,10 @@ test('PPTX notes require one reachable notesSlide relationship and complete note
   assert.ok(orphan.warnings.some((warning) => /Notizstruktur/u.test(warning)));
   assert.doesNotMatch(JSON.stringify(orphan.warnings), /Private Notiz|notesSlide1/u);
 
-  const truncated = parseOoxml(zipStore([...common.filter(([name]) => name !== 'ppt/notesSlides/notesSlide1.xml'),
+  assert.throws(() => parseOoxml(zipStore([...common.filter(([name]) => name !== 'ppt/notesSlides/notesSlide1.xml'),
     ['ppt/slides/_rels/slide1.xml.rels', '<Relationships><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/></Relationships>'],
     ['ppt/notesSlides/notesSlide1.xml', '<p:notes xmlns:p="p" xmlns:a="a"><a:t>Private Notiz</a:t>']
-  ]), '.pptx');
-  assert.doesNotMatch(truncated.markdown, /Private Notiz/u);
-  assert.ok(truncated.warnings.some((warning) => /Notizstruktur/u.test(warning)));
+  ]), '.pptx'), error => error.code === 'PPTX_STRUCTURE_UNSAFE' && !error.message.includes('Private Notiz'));
 });
 
 test('PPTX does not render orphan or external slide targets', () => {
@@ -956,11 +951,9 @@ test('PPTX blocks unrendered master content and truncated slides with content-fr
   assert.ok(master.warnings.some((warning) => /Vorlagenstruktur/u.test(warning)));
   assert.doesNotMatch(JSON.stringify(master.warnings), /Vertraulicher Mastertext|slideMaster1/u);
 
-  const truncated = parseOoxml(zipStore([...common,
+  assert.throws(() => parseOoxml(zipStore([...common,
     ['ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Vertraulicher Folientext</a:t>']
-  ]), '.pptx');
-  assert.ok(truncated.warnings.some((warning) => /nicht vollständig abgedeckte Inhaltsstruktur/u.test(warning)));
-  assert.doesNotMatch(JSON.stringify(truncated.warnings), /Vertraulicher Folientext/u);
+  ]), '.pptx'), error => error.code === 'PPTX_STRUCTURE_UNSAFE' && !error.message.includes('Vertraulicher Folientext'));
 });
 
 // ---------------------------------------------------------------------------

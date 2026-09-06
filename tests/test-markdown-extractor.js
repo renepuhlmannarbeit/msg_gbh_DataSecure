@@ -38,15 +38,16 @@ function xlsx(rows, extra = [], sheetAttrs = '') {
     ...extra
   ])]);
 }
-function pptx() {
-  return zipStore([
+function pptx(extra = []) {
+  return zipStore([...new Map([
     ...opcControlEntries('pptx'),
     ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
     ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide7.xml"/></Relationships>`],
     ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Before</a:t></a:r><a:r><a:t>After</a:t></a:r><a:br/><a:r><a:t>Next</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
     ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="n1" Type="${R}/notesSlide" Target="../notesSlides/notesSlide2.xml"/></Relationships>`],
-    ['ppt/notesSlides/notesSlide2.xml', `<p:notes xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>123456</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>`]
-  ]);
+    ['ppt/notesSlides/notesSlide2.xml', `<p:notes xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>123456</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>`],
+    ...extra
+  ])]);
 }
 function extract(value, extension) {
   const buffer = Buffer.isBuffer(value) ? value : Buffer.from(value);
@@ -268,6 +269,18 @@ test('PPTX preserves numeric notes and rich-text run order, labels source sequen
   assert.ok(result.markdown.startsWith('# Folie 1\n\nBeforeAfter  \nNext'));
   assert.ok(result.markdown.includes('## Notizen\n\n123456'));
   assert.strictEqual(result.coverage.status, 'incomplete');
+});
+test('PPTX malformed XML in any package part fails before returning a readable prefix', () => {
+  for (const part of ['ppt/presentation.xml', 'ppt/_rels/presentation.xml.rels',
+    'ppt/slides/slide7.xml', 'ppt/slides/_rels/slide7.xml.rels', 'ppt/notesSlides/notesSlide2.xml']) {
+    rejects(pptx([[part, '<root>SYNTHETIC_SECRET<truncated>']]), '.pptx', 'PPTX_STRUCTURE_UNSAFE');
+  }
+  rejects(pptx([['docProps/core.xml', '<!DOCTYPE root [<!ENTITY x "SYNTHETIC_SECRET">]><root/>']]),
+    '.pptx', 'PPTX_STRUCTURE_UNSAFE');
+});
+test('PPTX XML depth is bounded independently of ZIP integrity', () => {
+  rejects(pptx([['docProps/core.xml', '<a>'.repeat(129) + '</a>'.repeat(129)]]),
+    '.pptx', 'PPTX_STRUCTURE_LIMIT');
 });
 test('malformed ZIP never returns a partial success or raw parser exception', () => {
   rejects('SYNTHETIC_SECRET', '.docx', 'MARKDOWN_EXTRACTION_FAILED');

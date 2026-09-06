@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 06.09.2026 · Produktversion 3.2.0 RC110
+Stand: 06.09.2026 · Produktversion 3.2.0 RC111
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest ist keine Freigabe für
@@ -67,8 +67,8 @@ PDF-Formats, keine eigene Dateiendung:
 | CSV | alle Originalzeilen als Markdown-Tabelle, Literalwerte statt erratener Kopfsemantik | leere/doppelte Kopfwerte, führende Nullen und formelartige Werte bleiben Daten; defekte Struktur stoppt |
 | DOCX | vorhandener OOXML-Parser im inhaltserhaltenden Text-/Tabellenpfad | einfache belegte Bereiche vollständig; unbekannte Bereiche oder visuelle Auslassungen als `incomplete` gekennzeichnet; unsichere Struktur stoppt |
 | XLSX | Text-/Zellen-/Formel- und vorhandene Cachewerte aus OOXML | stets `incomplete`; keine Excel-Neuberechnung, Layout-/Objektvollständigkeit nicht zugesagt |
-| PPTX | extrahierbare Folientexte, Tabellen und Notizen | stets `incomplete`; kein pixelgetreues Layout oder vollständiger grafischer Inhalt |
-| PDF mit Text | gebündeltes PDF.js, seitenweise Textauswertung | stets `incomplete`; unbekannte Objekt-/Layoutabdeckung wird nicht als vollständig dargestellt |
+| PPTX | vorab validierte OOXML-/RELS-Struktur; extrahierbare Folientexte, Tabellen und Notizen | stets `incomplete`; DTD/Entities und Strukturüberlauf stoppen, pixelgetreues Layout und vollständiger grafischer Inhalt sind nicht belegt |
+| PDF mit Text | gebündeltes PDF.js, seitenweise Textauswertung; standardisierte Dokumentmetadaten werden sichtbar erhalten | stets `incomplete`; Annotationen, Outline und XMP stoppen, weitere Objekt-/Layoutabdeckung ist nicht vollständig belegt |
 | Scan-PDF | Seiten ohne Text sowie tatsächlich gemalte Bildinhalte werden lokal gerastert und mit DE/EN-OCR gelesen; auch bei zusätzlicher nativer Seitenzahl | stets `incomplete`, OCR nicht verifiziert; native Texte bleiben erhalten, bereits enthaltene OCR-Zeilen werden nicht erneut angehängt |
 | PNG | lokaler Bilddecoder → lokale OCR | stets `incomplete`; Bildpixel werden nicht in Markdown eingebettet |
 | JPEG (`.jpg`, `.jpeg`) | gebündelter Canvas-Decoder → lokale OCR | stets `incomplete`; keine Cloud-Bildbeschreibung |
@@ -106,9 +106,9 @@ eigenes späteres Desktopziel. Details stehen im
 [aktuellen Zustand](canonical/CURRENT_STATE.md) und im
 [UAT-Kit](acceptance/UAT_TEST_KIT/README.md).
 
-Der lokale E0-Konverterlauf umfasst 28 Testgruppen einschließlich echter
+Der lokale E0-Konverterlauf umfasst 30 Testgruppen einschließlich echter
 Office-/PDF-/Bildbytes, Fehler, Abbruch und Ressourcenbindung. Eine Serie mit
-100 TXT-Dateien dauerte auf dem Entwicklungsrechner 15,264 Sekunden; die große
+100 TXT-Dateien dauerte in den aktuellen Gegenläufen ungefähr 15–16 Sekunden; die große
 Runtime wurde dabei nicht je Dokument erneut vollständig gelesen/gehasht.
 60 frühe Beendigungen prüfen die atomare Windows-Jobbindung. Diese Messungen
 sind keine allgemeine Geschwindigkeitszusage und kein sichtbarer Anwender-UAT.
@@ -123,6 +123,8 @@ und der frühere RC107-Kandidat
 aus `7b88a81` belegen nicht den RC109-Stand.
 Native macOS-Intel-/ARM-Ausführung und fachlicher UAT bleiben offen. Die
 DS-087-Verkettung für die **Anonymisierung** ist angebunden und fail-closed
-getestet. Vollständige Container-/Grafik-/OCR-Coverage für die breiten Formate
-bleibt eigene Backlogarbeit; deshalb erzeugen aktuelle reale breite Quellen noch
-kein freigegebenes anonymisiertes Ergebnis.
+getestet. RC111 bindet `source_type` an die Dateiendung und prüft echte
+TXT/XLSX-Mischstapel in beiden Reihenfolgen, Abbruch/Fortsetzung, Exact-once und
+stabile Personen-/Unternehmenslabels. Vollständige Container-/Grafik-/OCR-
+Coverage für die breiten Formate bleibt eigene Backlogarbeit; deshalb erzeugen
+aktuelle reale breite Quellen noch kein freigegebenes anonymisiertes Ergebnis.

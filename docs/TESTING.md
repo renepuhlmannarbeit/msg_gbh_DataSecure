@@ -1,12 +1,12 @@
 # Aktueller Testvertrag
 
-Stand: 06.09.2026 · 3.2.0-rc110
+Stand: 06.09.2026 · 3.2.0-rc111
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
 enthält nur die heute gültigen Testklassen und Releasebefehle.
 
-RC110 trennt außerdem reine Core-Verträge von den Produktadaptern.
+RC111 trennt außerdem reine Core-Verträge von den Produktadaptern.
 `test-core-contracts.mjs` prüft Exportidentität der alten Importpfade, reine
 transitive Abhängigkeiten und beide tatsächlichen Paketprojektionen.
 `test-core-policy-binding.mjs` gehört zum lokalen Vollprofil: ausgewählte
@@ -102,8 +102,9 @@ unvollständiges Profil an einem reservierten Smoke-Pfad stoppt vor dem Start;
 ältere Binaries ohne diesen Vertrag werden nicht gestartet. Die reale
 Anwenderinstallation, deren Recovery und deren Aufbewahrungsdaten bleiben
 außerhalb des Tests. Der Test
-verlangt über eine pro Prozess eindeutige Diagnose-Session `sidecar_started`,
-`service_initialized`, `page_loaded`, `frontend_ready` sowie bestätigte
+verlangt über eine pro Prozess eindeutige Diagnose-Session `setup_started`,
+`webview_build_started`, `webview_build_completed`, `setup_completed`,
+`sidecar_started`, `service_initialized`, `page_loaded`, `frontend_ready` sowie bestätigte
 `get_ui_context`- und `get_public_state`-Antworten. Er muss in einer echten
 interaktiven Windows-Sitzung laufen; eine Dateisystem-Sandbox, die WebView2
 nicht initialisiert, ist keine gültige Zielhost-Evidenz. Er ist ein Windows-E0-Gate,
@@ -132,6 +133,9 @@ WebView2-Seiteninitialisierung auf einem realen Windows-Host aufschieben und
 wäre deshalb kein gleichwertiger Nachweis des Endnutzerstarts. Nach bestätigtem
 `page_loaded`, `frontend_ready`, Core-Start und den ersten beiden IPC-Antworten
 beendet der Test ausschließlich seine eigene Prozessinstanz.
+Bleibt der Lauf bereits zwischen `application_started` und `page_loaded` ohne
+Sidecar-Start stehen, meldet er gezielt `STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`;
+ein späterer Ausfall bleibt als `STANDALONE_NATIVE_IPC_TIMEOUT` unterscheidbar.
 
 Die Testbereinigung inventarisiert den eigenen frischen Root vor jeder Löschung
 und folgt keinen Verzeichnisverweisen. Vor dem Produktstart sind alle solchen
@@ -193,7 +197,7 @@ Die Fixture verändert nur das Timing. Der reale Paket-Smoke verarbeitet nach
 dem erfolgreichen Vierformatlauf einen vollständig fehlerhaften CSV-Stapel und
 verlangt dessen eigene Zuordnung statt eines Rückfalls auf den Vorgängerlauf.
 
-## RC110: Endgültige Testurteile und Schnittstellengegenproben
+## RC111: Endgültige Testurteile und Schnittstellengegenproben
 
 `tests/helpers.js` registriert jeden Fall vor seinem Callback. `done()` wartet
 auch bei nicht vom Aufrufer abgewartetem `testAsync` auf alle Fälle und danach
@@ -224,13 +228,39 @@ Queue, Bildfreigabe und Mock-OCR sind kein Beleg für aktive MCP-Werkzeuge oder
 aktuelle Bildfreigabe. Aktuelle MCP-/Cowork-Evidenz kommt aus den Protokoll-,
 Toolflächen- und Skilltests sowie gesonderter Hostabnahme. Die historischen
 Prüfungen bleiben zur Absicherung der noch referenzierten internen Fassaden.
-Die RC110-Unicode-Erweiterung dieses Tests startet zusätzlich echte, isolierte
+Die RC111-Unicode-Erweiterung dieses Tests startet zusätzlich echte, isolierte
 Plugin- und Standalone-Stapel sowie einen reinen Markdown-Stapel. Diese Fälle
 sind ausdrücklich von der historischen Fassaden-/Mock-OCR-Evidenz getrennt.
 
 Standalone-only Änderungen erreichen jetzt beide automatischen CI-Pfadfilter.
 Es bleibt bei einem kostenbegrenzten Job; native Builds und Konverterressourcen
 werden nicht ungefragt als neue automatische GitHub-Jobs ausgeführt.
+
+### RC111: breite Format- und Recovery-Grenzen
+
+`test-wide-privacy-extraction` bindet die gemeldete Quellenart an die tatsächliche
+Dateiendung; insbesondere darf ein XLSX-Ergebnis nicht als PPTX oder umgekehrt in
+den Privacy-Core gelangen. `test-wide-mixed-batch-recovery` fährt einen echten
+Standalone-Stapel aus direkter TXT- und konvertierter XLSX-Quelle in beiden
+Reihenfolgen, beendet ihn zwischen den Items und setzt ihn in einem frischen
+Prozess fort. Personen- und Unternehmenslabels bleiben stabil, jedes Ergebnis
+wird genau einmal publiziert, Originale bleiben unverändert. Eine unvollständige
+breite Quelle stoppt vor der Pseudonymvergabe und verbraucht daher keine Nummer.
+
+Die reale Konvertersuite umfasst 30 Gruppen. XLSX, PPTX, Text-/Scan-PDF,
+PNG, JPEG und BMP müssen bei der aktuellen unvollständigen Coverage im
+Anonymisierungsmodus am Publikationsrand stoppen. PPTX-Negativfälle prüfen alle
+XML-/RELS-Teile auf DTD/Entities und Strukturgrenzen. PDF-Annotationen, Outline
+und XMP werden gestoppt; standardisierte Info-Metadaten bleiben im reinen
+Markdown-Ergebnis sichtbar erhalten.
+
+Der native Windows-Smoke unterscheidet nun die inhaltsfreien Checkpoints
+`setup_started`, `webview_build_started`, `webview_build_completed` und
+`setup_completed`. Beginnt die App, erreicht aber weder `page_loaded` noch den
+Sidecar-Start, lautet das Urteil `STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`;
+ein späterer Ausfall bleibt `STANDALONE_NATIVE_IPC_TIMEOUT`. Beide Fehler sind
+Zielhostblocker und dürfen weder durch längere Timeouts noch durch Lockerung der
+WebView-/IPC-Isolation in einen Erfolg umgedeutet werden.
 
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird

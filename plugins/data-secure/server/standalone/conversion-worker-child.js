@@ -145,13 +145,28 @@ async function pdfMarkdown(bytes) {
     // complete document conversion; active-content documents remain stopped.
     if (document.isPureXfa || await document.hasJSActions() || Object.keys(await document.getFieldObjects() || {}).length ||
         Object.keys(await document.getAttachments() || {}).length) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
-    const sections = [], reasons = new Set(['SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
-    let total = 0;
+    const outline = await document.getOutline();
+    const metadata = await document.getMetadata();
+    const metadataKeys = ['Title', 'Author', 'Subject', 'Keywords', 'Creator', 'Producer',
+      'CreationDate', 'ModDate', 'Trapped', 'Custom'];
+    if ((Array.isArray(outline) && outline.length > 0) || metadata?.metadata !== null) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+    const metadataLines = [];
+    for (const key of metadataKeys) {
+      const value = metadata?.info?.[key];
+      if (value === undefined || value === '') continue;
+      if (!['string', 'number', 'boolean'].includes(typeof value)) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+      metadataLines.push(`${key}: ${String(value)}`);
+    }
+    const sections = metadataLines.length ? [`# Dokumentmetadaten\n\n${literal(metadataLines.join('\n'))}`] : [];
+    const reasons = new Set(['SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
+    let total = sections.reduce((sum, section, index) => sum + section.length + (index ? 2 : 0), 0);
+    if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
     for (let number = 1; number <= document.numPages; number++) {
       const page = await document.getPage(number);
       let canvas;
       try {
         if (page.isPureXfa || Object.keys(await page.getJSActions() || {}).length) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+        if ((await page.getAnnotations({ intent: 'display' })).length > 0) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         const content = await page.getTextContent({ disableNormalization: true });
         let text = '';
         for (const item of content.items) {

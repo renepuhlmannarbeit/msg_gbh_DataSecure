@@ -172,6 +172,28 @@ try {
     assert.match(mixed.markdown, /## Seite 1[\s\S]*Text page Max Mustermann[\s\S]*## Seite 2[\s\S]*Nordstern GmbH/u);
     assert.equal((mixed.markdown.match(/Max Mustermann/gu) || []).length, 2);
   });
+  await test('every real wide format remains fail-closed at the privacy publication boundary', async () => {
+    const sources = [
+      ['.pptx', office('pptx')], ['.pdf', pdf([{ text }])], ['.pdf', pdf([{ image: jpeg }])],
+      ['.png', png], ['.jpg', jpeg], ['.jpeg', jpeg], ['.bmp', bmp]
+    ];
+    for (const [extension, bytes] of sources) {
+      const before = hash(bytes);
+      await assert.rejects(extractWideSourceForPrivacy(bytes, extension, { convertBuffer }),
+        cause => cause.code === 'PARSER_COVERAGE_UNVERIFIED');
+      assert.equal(hash(bytes), before, `${extension} source remains unchanged`);
+      assert.ok(children.every(entry => entry.closed), `${extension} refusal follows converter termination`);
+    }
+  });
+  await test('PDF annotations stop while standard document metadata is retained as literal source text', async () => {
+    await assert.rejects(convertBuffer(pdf([{ text, annotation: true }]), '.pdf'),
+      cause => cause.code === 'PDF_OBJECT_COVERAGE_UNVERIFIED' && !cause.message.includes('Private'));
+    const metadata = await convert(pdf([{ text }], '', { info: true }), '.pdf');
+    assert.match(metadata.markdown, /# Dokumentmetadaten/u);
+    assert.match(metadata.markdown, /Title: Private title/u);
+    assert.match(metadata.markdown, /Author: Max Mustermann/u);
+    assert.ok(children.every(entry => entry.closed));
+  });
   await test('hybrid PDF retains a scan body beside native page numbers and headers with one OCR session', async () => {
     let sessions = 0;
     observeSpawn = child => {

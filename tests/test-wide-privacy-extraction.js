@@ -57,4 +57,30 @@ testAsync('invalid source and malformed converter response fail closed', async (
     async convertBuffer() { return { markdown: 'raw' }; } }));
 });
 
+testAsync('converter source type is bound to the admitted extension', async () => {
+  const expected = new Map([
+    ['.xlsx', 'xlsx'], ['.pptx', 'pptx'], ['.pdf', 'pdf'], ['.png', 'png'],
+    ['.jpg', 'jpeg'], ['.jpeg', 'jpeg'], ['.bmp', 'bmp']
+  ]);
+  for (const [extension, sourceType] of expected) {
+    await assert.rejects(extractWideSourceForPrivacy(bytes, extension, {
+      ErrorType: SafeError,
+      async convertBuffer() {
+        return createMarkdownExtraction({ source_type: sourceType === 'pdf' ? 'png' : 'pdf',
+          markdown: 'private text', coverage: { status: 'complete', reason_codes: [] } });
+      }
+    }), error => error instanceof SafeError && error.code === 'FORMAT_COVERAGE_UNVERIFIED' &&
+      !error.message.includes('private text'));
+  }
+  const jpg = await extractWideSourceForPrivacy(bytes, '.JPG', {
+    ErrorType: SafeError,
+    async convertBuffer(_input, extension) {
+      assert.equal(extension, '.jpg');
+      return createMarkdownExtraction({ source_type: 'jpeg', markdown: 'safe',
+        coverage: { status: 'complete', reason_codes: [] } });
+    }
+  });
+  assert.equal(jpg.sourceType, 'jpeg');
+});
+
 done();

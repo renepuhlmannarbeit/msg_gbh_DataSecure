@@ -82,6 +82,10 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /DATASECURE_STANDALONE_DIAGNOSTIC_SESSION/u);
   assert.match(rust, /"session_id": diagnostic_session\(\)/u);
   assert.match(rust, /diagnostic_event\("page_loaded"/u);
+  assert.match(rust, /diagnostic_event\("setup_started"/u);
+  assert.match(rust, /diagnostic_event\("webview_build_started"/u);
+  assert.match(rust, /diagnostic_event\("webview_build_completed"/u);
+  assert.match(rust, /diagnostic_event\("setup_completed"/u);
   assert.match(rust, /fn frontend_ready\(/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);
@@ -189,6 +193,7 @@ test('the native Windows smoke exercises the visible WebView lifecycle', () => {
     'hidden or minimized startup can defer WebView2 page loading');
   assert.match(nativeSmoke, /page_loaded/u);
   assert.match(nativeSmoke, /frontend_ready/u);
+  assert.match(nativeSmoke, /STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT/u);
 });
 
 test('history actions are separately permissioned and carry only exact batch identity to the private host', () => {

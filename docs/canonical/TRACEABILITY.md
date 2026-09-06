@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 06.09.2026 · 3.2.0-rc110
+Stand: 06.09.2026 · 3.2.0-rc111
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -19,6 +19,17 @@ Standalone-Builds, beide Paket-/Worker-/nativen Windows-Smokes, den
 `807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
 Die Bindung belegt E0 auf diesem Windows-Zielhost, nicht sichtbaren UAT oder
 native Intel-/ARM-macOS-Ausführung.
+
+RC111 / DS-087 bindet den neutralen `source_type` an die tatsächliche Endung und
+ergänzt reale TXT/XLSX-Mischstapel in beiden Reihenfolgen mit Prozessabbruch,
+Fortsetzung, Exact-once und stabilen Personen-/Unternehmenslabels. Ein wegen
+Coverage gestopptes breites Item erreicht die Registry nicht. Alle realen breiten
+Formate werden zusätzlich am Privacy-Publikationsrand geprüft. BL-022.3 validiert
+sämtliche PPTX-XML-/RELS-Teile; BL-023.3 stoppt PDF-Annotationen, Outline und XMP
+und erhält standardisierte Dokumentmetadaten im reinen Markdown-Modus. Diese
+E0-Nachweise erweitern nicht die Anonymisierungsfreigabe. Der neue native
+Startup-Checkpoint trennt WebView-Aufbaufehler von späteren IPC-Ausfällen; eine
+INT-13-Bindung folgt ausschließlich nach bestandenem commitgebundenem PKG-04.
 
 Der anschließende Restschuldblock bindet BL-020.3 an den echten Support-stdio-
 Dispatch und den bestehenden netzgesperrten Review-Worker (`test-mcp-support-review`,
