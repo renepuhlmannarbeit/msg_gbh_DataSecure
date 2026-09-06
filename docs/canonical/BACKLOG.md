@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 06.09.2026 · Produktstand 3.2.0-rc109
+Stand: 06.09.2026 · Produktstand 3.2.0-rc110
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -263,11 +263,31 @@ Windows-x64-Engineering-Piloten, WebView2-Voraussetzung und Evidencegrenzen.
 | BL-010.27 | Releasehygiene des Standalone-Piloten: Windows verwendet das vorhandene System-WebView2 ohne Laufzeitdownload; verständlicher Fehlhinweis und UAT bei fehlender Runtime. Die Builder-Toolchain ist mit `rust-toolchain.toml` exakt auf Rust 1.98.1 gebunden; erreichbare ausgelieferte Crates werden komponentenweise lizenzgeprüft und mit belastbaren Lizenzwerten in das SBOM übernommen. Native Dragdrop-Aufnahme ist E0 implementiert; echte Zielhost-Drop-/Fokusprüfung bleibt offen. Pause bleibt außerhalb der Istzusage. | **in Arbeit** |
 | BL-010.28 | Zweite Standalone-Kernfunktion **Nur in Markdown umwandeln** (DS-085): verfügbare Kernfunktion ohne PII-Ersetzung/-Review; keine Vorbelegung seit DS-086. Namen und Inhalte bleiben erhalten. v5-Zweckbindung, eigener Offline-Worker, `dm_`-Artefakte, Recovery und v3-Export nach `DataSecure-Markdown/Lauf-…` mit Zuordnung sind integriert. TXT/MD/CSV/DOCX/XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP; Warnungen ohne zusätzliche Rückfragen, Fehler je Quelle. Keine KI-Übergabe. Konvertierungsfunktion samt Opt-in-Lifecycle-Diagnose und commitgebundenem Windows-PKG-04-/INT-13-Nachweis abgeschlossen; Zielhost-UAT bleibt offen. | **in Arbeit** |
 | BL-010.29 | Startseite und laufgebundener Verlauf (DS-086): Start immer sichtbar, keine automatische Ergebnisnavigation, Betriebsart anfangs leer. Die 20 neuesten Standalone-Verarbeitungen als Tabelle mit Datum, Zweck, Zählern und Status; drei Aktionen je Zeile öffnen ausschließlich den eigenen Lauf/Zuordnung oder setzen den noch fortsetzbaren Stapel mit gespeichertem Zweck fort. Historie über Neustart/Journalablauf und Ergebniszielwechsel erhalten, Ein-Stapel-Guard und geschlossene private IPC. Keine Rohinhalte oder Pfade in Diagnoselogs; 20 ist nur Anzeigegrenze. Implementierung, gezielte Tests, realer Windows-Paketlauf, zwei native Windows-Starts und commitgebundene RC109-Release-Evidence abgeschlossen; menschliche E2-Abnahme bleibt offen. | **in Arbeit** |
+| BL-010.30 | Breite Standalone-Anonymisierung nach DS-087: XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP genau einmal im isolierten Offline-Worker zu einer neutralen Markdown-Extraktion verarbeiten und bei `complete` ohne sichtbares `dm_`-Zwischenartefakt durch den vorhandenen Privacy-Core führen. `incomplete`/unbekannte Coverage, leere oder nicht verifizierte OCR und nicht extrahierte visuelle Inhalte stoppen nur die betroffene Datei. Direkte und konvertierte Quellen teilen stapelweit Personen-/Unternehmenspseudonyme, vorhandenes v4-Journal/Recovery und Mapping `Original → anonymisierte Markdown-Datei`. Cowork bleibt bis zu eigenem Paket-/Hostnachweis bei vier Formaten. Pflicht: neutraler Extraktionsvertrag, Recoverybindung, Mixed-Batch-/Resume-/Residual-/Cross-Read-/Offline-/Pakettests und ehrliche UI/Dokumentation. | **in Arbeit** |
 
 DS-082 bindet dazu die lokale, nicht protokollierte Anzeige von Quellenordner,
 Dateiauswahl und Ergebnisziel. DS-085 bindet den inzwischen implementierten
 Nur-Konvertieren-Modus mit eigenem Zweck, Artefakt- und Ergebnisbaum;
 technische Aktivierung ersetzt weder Paketnachweis noch menschliche Freigabe.
+
+#### Verbindlicher Lieferplan für breite Standalone-Anonymisierung (BL-010.30)
+
+DS-087 erweitert nicht die Originalformat-Ausgabe. Die gemeinsame
+Extraktionsschicht liefert ein neutrales, streng validiertes Ergebnis mit
+Quelltyp, Markdown und Coverage. **Nur in Markdown umwandeln** darf daraus wie
+bisher ein ausdrücklich nicht anonymisiertes `dm_`-Artefakt erzeugen.
+**In Markdown umwandeln und anonymisieren** hält dasselbe Extraktionsergebnis
+privat, bindet es an den vorhandenen stapelweiten Pseudonymzustand und
+veröffentlicht ausschließlich ein bestehendes Privacy-Paket.
+
+| Paket | Lieferung | Pflichtnachweis | Status |
+|---|---|---|---|
+| Neutraler Extraktionsvertrag | Modusfreie Extraktion; getrennte Adapter für `markdown-only` und Privacy; keine öffentliche Cross-Read-Brücke | Vertrags-/Mutations-/Cross-Read-Tests | **E0 umgesetzt und grün** |
+| Stapel und Recovery | Breite Typen im Standalone-Anonymisierungsmodus; vorhandene v4-Zweck-/Phasenbindung; kein doppelter Export bei Fortsetzung; bestätigte Konverterbeendigung vor dem nächsten Item | Mischstapel, Timeout/Startfehler wiederaufnehmbar, unbestätigte Beendigung stoppt Reststapel | **E0 umgesetzt und grün** |
+| Privacy und Pseudonyme | vorhandene PII-/Review-/Residual-Gates; eine Personen-/Unternehmensregistry über direkte und konvertierte Quellen | Multi-Format-Alias-, Rest-PII- und Cross-Read-Tests | **E0 umgesetzt und grün** |
+| Coverage-Gate | nur `complete` darf publizieren; `incomplete` stoppt die Datei mit festem Grund | OCR-leer/-unverifiziert, visuelle Lücke, unbekannter Grund | **E0 umgesetzt und grün** |
+| Ergebnis und UX | ein anonymisiertes `.md` je positive Quelle; direkte Zuordnung ohne Zwischenkonvertat; klare Bezeichnung als Markdown-Extraktion | Export-/Mapping-/Historien-/UI-Tests | **E0 umgesetzt und grün** |
+| Paket und Produkte | Standalone-Runtime/SBOM/Offline-Smoke; Cowork-Allowlist unverändert | ZIP-/Runtime-/Produktisolationsgates | **E0 und RC110-Arbeitsbaum-Build grün; commitgebundene Release-Evidence offen** |
 
 #### Verbindlicher Lieferplan für reine Markdown-Konvertierung (BL-010.28)
 

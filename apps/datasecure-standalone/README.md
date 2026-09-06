@@ -32,7 +32,11 @@ Namen und Originalinhalte bleiben erhalten. `DataSecure-Markdown/Lauf-…` enth�
 eine `.md` je erfolgreicher Quelle und `DataSecure-Zuordnung.csv` einschließlich
 Hinweisen und Fehlern. Unvollständige Extraktion wird ohne Review gespeichert
 und ausdrücklich gekennzeichnet; gesperrte/defekte Dateien werden übersprungen.
-Die Anonymisierung bleibt eine gesonderte Betriebsart für TXT/MD/CSV/DOCX.
+Die Anonymisierung verarbeitet TXT/MD/CSV/DOCX direkt. XLSX/PPTX/PDF/Scan-PDF
+und Bilder durchlaufen denselben lokalen Konverter genau einmal und werden nur
+bei vollständig belegter Extraktion an den Privacy-Core weitergegeben. Aktuell
+melden diese breiten Konverter reale Quellen noch als `incomplete`; sie stoppen
+deshalb sicher und erzeugen kein scheinbar vollständiges anonymisiertes Ergebnis.
 
 Der Endnutzerablauf besitzt drei Hauptansichten: **Start**, **Verarbeiten** für
 Auswahl, Start und Fortschritt sowie **Verlauf** für die 20 neuesten

@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 06.09.2026 · 3.2.0-rc109
+Stand: 06.09.2026 · 3.2.0-rc110
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -575,7 +575,7 @@ sequenceDiagram
   E-->>S: Empfangs-ACK, noch kein Checkpoint oder Abschluss
   E->>I: prüfen und versiegelten Snapshot erzeugen
   I->>M: Snapshot-Bytes, gespeicherten Zweck und Format übergeben
-  alt Markdown und anonymisieren
+  alt Markdown und anonymisieren: direktes Format
     M->>P: Content Graph des unterstützten Anonymisierungsformats
     P->>V: geprüfte Kandidaten / Mehrdeutigkeiten
     opt nach automatischer Arbeit tatsächlich Review bereit
@@ -583,6 +583,15 @@ sequenceDiagram
       U->>V: Entscheidungen
     end
     V->>V: terminale MD und Zuordnung in DataSecure-Output
+  else Markdown und anonymisieren: breite Standalone-Quelle
+    M->>M: neutrale Extraktion ohne Artefakt oder Zweck
+    alt Coverage complete
+      M->>P: extrahiertes Markdown an denselben Privacy-Core
+      P->>V: geprüfte Kandidaten / Mehrdeutigkeiten
+      V->>V: terminale MD und direkte Zuordnung in DataSecure-Output
+    else Coverage incomplete
+      M-->>V: sicherer Einzelstopp ohne Rohkonvertat
+    end
   else nur Markdown
     M->>V: erhaltene Originalinhalte und Coverage-/OCR-Hinweise
     V->>V: terminale MD und Zuordnung in DataSecure-Markdown
@@ -598,6 +607,11 @@ Konvertierung speichert solche Inhalte dagegen ausdrücklich im getrennten,
 als nicht anonymisiert gekennzeichneten Ausgabebaum (DS-085). Text-PDF und
 Scan-Seiten werden automatisch unterschieden; OCR läuft lokal. Warnungen sind
 Teil der Extraktionsidentität und des sichtbaren v3-Exports.
+
+DS-087 bindet den breiten Zweig ausschließlich an Standalone. Cowork erreicht
+diesen Konverterpfad nicht. Die aktuelle reale Wide-Format-Coverage bleibt
+`incomplete`; der Sequenzzweig ist deshalb heute ein belegter sicherer Stopp,
+keine Freigabezusage für XLSX/PPTX/PDF/Scan-PDF oder Bilder.
 
 Recovery setzt den gespeicherten Modus fort; eine UI-Defaultwahl darf ihn nicht
 ändern. Inhaltsfreie Diagnose dokumentiert Phase, Modus und Fehler, keine

@@ -1,6 +1,6 @@
 # Open-Source-Wiederverwendungsregister
 
-Stand: 06.09.2026 · DS-038, DS-075, DS-082, DS-085, DS-086
+Stand: 06.09.2026 · DS-038, DS-075, DS-082, DS-085, DS-086, DS-087
 
 Dieses Register trennt **ausgelieferte Laufzeit**, **Build-/Testwerkzeug** und
 **nicht aktivierten Piloten**. Die Integration im Quellcode ist keine
@@ -11,9 +11,9 @@ Zielhost- oder Endnutzerfreigabe. Versionen und Integritäten stehen in
 
 | Komponente | Verwendung | Grenze |
 |---|---|---|
-| Node.js / eigene DataSecure-Parser | Gemeinsamer lokaler Kern; zielgebunden mitgelieferte Runtime | Keine Anwenderinstallation; Anonymisierung nur TXT/Markdown/CSV/DOCX. |
+| Node.js / eigene DataSecure-Parser | Gemeinsamer lokaler Kern; zielgebunden mitgelieferte Runtime | Keine Anwenderinstallation; direkte Anonymisierung für TXT/Markdown/CSV/DOCX, breite Standalone-Quellen nur über DS-087 und vollständige Coverage. |
 | Tauri 2 / Rust | Eigenständige Desktop-Hülle, native Dialoge, Lifecycle, private IPC | Nur Standalone. Rust ist ausschließlich Buildvoraussetzung. Windows-Engineering vorhanden; native Mac-Nachweise und Bedienabnahme offen. |
-| PDF.js, Canvas, Tesseract.js/-core, lokale DE/EN-Modelle | Gebündelter isolierter Standalone-Konvertierungsworker für Text-/Scan-PDF und Bilder | Aktiv nur für `markdown-only`, kein Online-OCR, keine entsprechende Formatfreigabe im Cowork-Plugin oder Anonymisierungsmodus. |
+| PDF.js, Canvas, Tesseract.js/-core, lokale DE/EN-Modelle | Gebündelter isolierter Standalone-Konvertierungsworker für Text-/Scan-PDF und Bilder | `markdown-only` darf ehrlich unvollständige Extraktionen ausgeben. DS-087 verwendet dieselbe Extraktion im Standalone-Anonymisierungsmodus nur bei `complete`; kein Online-OCR und keine Cowork-Formatfreigabe. |
 | Ajv 8.20.0 (MIT) + esbuild 0.28.2 (MIT) | Build-time-Erzeugung des MCP-Validators aus dem einzigen Toolkatalog | Plugin lädt selbsttragendes JS samt lizenziertem Unicode-Längenhelper. Kein Ajv-npm-Paket, kein Codegenerator zur Laufzeit; nicht in Standalone. |
 | Microsoft MarkItDown 0.1.7 (MIT) | Optionales deaktiviertes DOCX-Differentialorakel | Weder Python noch MarkItDown ist eine produktive Konvertervoraussetzung. Keine zusätzliche Formatfreigabe durch das Orakel. |
 | Mammoth, Papa Parse, markdown-it, fflate | Unabhängige Parser-/Format-Testorakel | Keine alleinige Sicherheits- oder Releaseentscheidung. |

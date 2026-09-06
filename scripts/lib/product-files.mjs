@@ -23,7 +23,11 @@ const sharedStandaloneModules = new Set([
   'server/standalone/markdown-artifact.js',
   'server/standalone/markdown-contract.js',
   'server/standalone/markdown-retention.js',
-  'server/standalone/markdown-store.js'
+  'server/standalone/markdown-store.js',
+  // Small policy adapter only. Cowork cannot enter it because the orchestrator
+  // requires the standalone product channel; conversion child/runtime payloads
+  // remain excluded below.
+  'server/standalone/wide-privacy-extraction.js'
 ]);
 
 function excludedEngineeringFile(normalized) {

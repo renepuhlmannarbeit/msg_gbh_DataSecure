@@ -20,6 +20,13 @@ Standalone-Quellstand verfügbar; die Startseite verlangt eine ausdrückliche
 Betriebsartwahl statt einer Vorbelegung (DS-086). Zielhost-/Anwenderfreigaben bleiben
 getrennt vom technischen Implementierungsnachweis.
 
+Breite Standalone-Quellen werden nach DS-087 nicht durch parallele
+Anonymisierungsparser verarbeitet: Der gemeinsame lokale Konverter erzeugt eine
+neutrale Markdown-Extraktion, die entweder ausdrücklich unverändert exportiert
+oder ohne sichtbare Roh-Zwischenablage durch den gemeinsamen Privacy-Core geführt
+wird. Dadurch bleiben beide Kernfunktionen fachlich getrennt, teilen aber genau
+eine Format-Extraktionsschicht.
+
 DataSecure benötigt keine zusätzliche System-VM. Auch die Abnahmeplanung
 verwendet echte lokale Zielrechner statt eigens eingerichteter VMs (DS-062).
 Auch ein zusätzliches Windows-Benutzerkonto wird nicht vorausgesetzt (DS-063).
@@ -133,6 +140,10 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
   nicht extrahierbare Objekte oder Parserabbrüche werden nicht still übergangen.
   Eine Markdown-Datei kann das ursprüngliche Office-/PDF-Layout nicht identisch
   rekonstruieren. Auch reine Konvertierung führt keine Makros oder Fremdinhalte aus.
+- Bei breiter Standalone-Anonymisierung wird ausschließlich die nachweislich
+  vollständig extrahierte Markdown-Repräsentation anonymisiert. Das Ergebnis
+  ist keine anonymisierte XLSX-, PPTX-, PDF- oder Bilddatei. Unvollständige
+  Extraktion wird nicht als erfolgreiche Anonymisierung ausgegeben.
 - Konvertate liegen in `DataSecure-Markdown/Lauf-…`, getrennt von anonymisierten
   Ergebnissen in `DataSecure-Output/Lauf-…`, mit eigener laufbezogener Zuordnung.
   Es gibt keinen automatischen Upload an eine KI.

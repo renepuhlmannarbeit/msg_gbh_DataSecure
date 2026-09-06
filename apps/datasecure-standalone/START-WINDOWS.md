@@ -24,9 +24,13 @@ unvollständig sein; Hinweise erscheinen beim Abschluss und in der
 Zuordnungsdatei. Passwortgeschützte oder defekte Dateien werden einzeln
 übersprungen. Die übrigen Dateien werden weiter verarbeitet.
 
-Optional kann vor dem Start **In Markdown umwandeln und anonymisieren** für
-TXT, Markdown, CSV und DOCX gewählt werden. Diese getrennte Betriebsart kann
-bei unklaren personenbezogenen Angaben eine lokale Prüfung benötigen.
+Optional kann vor dem Start **In Markdown umwandeln und anonymisieren** gewählt
+werden. TXT, Markdown, CSV und DOCX laufen direkt durch den Privacy-Core. Breite
+Quellen werden einmal lokal extrahiert; nur eine vollständig belegte Extraktion
+wird anonymisiert. Aktuelle XLSX/PPTX/PDF/Scan-PDF-/Bildextraktionen bleiben
+ehrlich `incomplete` und werden deshalb als einzelne Datei sicher gestoppt. Die
+übrigen Dateien des Stapels laufen weiter. Bei unklaren personenbezogenen Angaben
+kann eine lokale Prüfung nötig sein.
 
 Node.js, Rust, Claude, Cowork und eine Internetverbindung werden nicht benötigt.
 DataSecure schreibt private Arbeitsdaten ausschließlich in den lokalen

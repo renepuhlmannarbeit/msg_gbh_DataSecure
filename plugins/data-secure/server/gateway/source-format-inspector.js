@@ -96,6 +96,7 @@ function verdict(declaredType, detectedType, status, code, structure = null) {
 
 function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
   const conversion = options.processingMode === 'markdown-only' && options.productChannel === 'standalone';
+  const widePrivacy = options.processingMode === 'markdown-and-anonymize' && options.productChannel === 'standalone';
   const readSync = options.readSync || fs.readSync;
   const fstatSync = options.fstatSync || fs.fstatSync;
   const ext = String(extension || '').toLowerCase();
@@ -177,7 +178,7 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
       if (!(error instanceof OpcValidationError)) throw error;
       return finish(verdict(declaredType, declaredType, 'rejected', error.code));
     }
-    const enabled = PILOT_TYPES.has(declaredType) || conversion;
+    const enabled = PILOT_TYPES.has(declaredType) || conversion || widePrivacy;
     const result = verdict(declaredType, declaredType, enabled ? 'candidate' : 'not_released',
       enabled ? 'SOURCE_FORMAT_CANDIDATE' : 'SOURCE_FORMAT_NOT_RELEASED', verifiedStructure);
     return finish(result);
@@ -203,8 +204,9 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
   }
 
   const matches = magic === declaredType || (declaredType === 'jpeg' && magic === 'jpeg');
-  const result = verdict(declaredType, magic, matches ? (conversion ? 'candidate' : 'not_released') : 'rejected',
-    matches ? (conversion ? 'SOURCE_FORMAT_CANDIDATE' : 'SOURCE_FORMAT_NOT_RELEASED') : 'SOURCE_TYPE_MISMATCH');
+  const enabled = conversion || widePrivacy;
+  const result = verdict(declaredType, magic, matches ? (enabled ? 'candidate' : 'not_released') : 'rejected',
+    matches ? (enabled ? 'SOURCE_FORMAT_CANDIDATE' : 'SOURCE_FORMAT_NOT_RELEASED') : 'SOURCE_TYPE_MISMATCH');
   return finish(result);
 }
 

@@ -34,6 +34,7 @@ function fixture(options = {}) {
   const item = { id: '1'.repeat(32), name: 'private-source.txt', status: 'pending' };
   const state = {
     profile: 'general',
+    product_channel: options.productChannel || 'plugin',
     remove_images: true,
     items: [item],
     io_summary: { final_gate_runs: 0, output_packages_committed: 0, audit_receipt_writes: 0 }
@@ -122,6 +123,7 @@ function fixture(options = {}) {
       assert.strictEqual(callOptions.copyClaim, true);
       assert.strictEqual(callOptions.removeImages, true);
       assert.strictEqual(callOptions.packageId, expectedPackageId);
+      assert.strictEqual(callOptions.productChannel, state.product_channel);
       if (options.pipelineError) throw options.pipelineError;
       if (options.onAnonymize) options.onAnonymize(callOptions);
       await callOptions.onClaimed();

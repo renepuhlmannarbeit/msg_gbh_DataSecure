@@ -119,6 +119,7 @@ function createBatchItemProcessor(options = {}) {
       };
       const result = await (converting ? (deps.convertNext || convertNext) : anonymizeNext)(state.profile, {
         ...deps,
+        productChannel: state.product_channel,
         inputQueue: [entry],
         copyClaim: true,
         removeImages: state.remove_images,

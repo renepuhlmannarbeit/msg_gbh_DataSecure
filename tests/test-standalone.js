@@ -298,7 +298,7 @@ test('Standalone source manifest is a separate offline product contract', () => 
     assert.strictEqual(manifest[field], false, `${field} must remain false`);
   }
   assert.deepStrictEqual(manifest.current_formats, manifest.formats_by_processing_mode['markdown-only']);
-  assert.deepStrictEqual(manifest.formats_by_processing_mode['markdown-and-anonymize'], ['txt', 'md', 'csv', 'docx']);
+  assert.deepStrictEqual(manifest.formats_by_processing_mode['markdown-and-anonymize'], manifest.current_formats);
   assert.deepStrictEqual(manifest.current_formats, ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'scan_pdf', 'png', 'jpeg', 'bmp']);
   assert.strictEqual(manifest.default_processing_mode, null, 'the user explicitly chooses a core function');
   assert.deepStrictEqual(manifest.desktop_targets, [

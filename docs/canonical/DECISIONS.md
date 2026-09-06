@@ -1163,3 +1163,36 @@ für Tastatur-/Fokusbedienung und [NN/g Nutzerkontrolle](https://www.nngroup.com
 für bewusst gesteuerte Navigation. Umsetzung und Nachweise: BL-010.29,
 `standalone/ui-contract.json`, `test-standalone-history`, `test-standalone-frontend`
 und private IPC-/Pakettests. Native Anwenderabnahme bleibt getrennt.
+
+## DS-087 – Breite Quellen einmal extrahieren und als Markdown anonymisieren
+
+Am 06.09.2026 entschieden: Die Standalone-Betriebsart **In Markdown umwandeln
+und anonymisieren** verwendet für XLSX, PPTX, PDF einschließlich Scan-PDF sowie
+PNG, JPEG und BMP denselben isolierten Offline-Konverter wie die reine
+Markdown-Konvertierung. Nach erfolgreicher Quellenprüfung entsteht genau eine
+neutrale Markdown-Extraktion. Sie wird im Anonymisierungsmodus unmittelbar an
+die bestehende PII-, Pseudonym-, Review- und Residualprüfung übergeben. Es wird
+weder ein sichtbares noch ein öffentlich lesbares nicht anonymisiertes
+Zwischenkonvertat angelegt. Der reine Konvertierungsmodus und sein ausdrücklich
+nicht anonymisierter `dm_`-Artefaktvertrag bleiben unverändert.
+
+Das Ergebnis ist eine **anonymisierte Markdown-Extraktion**, keine veränderte
+oder anonymisierte Originaldatei. Originale bleiben unverändert. Die sichtbare
+Zuordnung bindet die Originalquelle direkt an die anonymisierte `.md`-Datei;
+interne Extraktionsartefakte erscheinen nicht als zusätzlicher Nutzerschritt.
+Personen- und Unternehmenspseudonyme verwenden über direkte und konvertierte
+Quellen hinweg denselben stapelgebundenen, fortsetzbaren Registryzustand.
+
+Die Freigabe ist an belegte Extraktionsabdeckung gebunden. `complete` darf den
+normalen Privacy-Pfad betreten. `incomplete`, unbekannte Coverage, leere oder
+nicht verifizierte OCR sowie nicht extrahierte visuelle Inhalte stoppen die
+betroffene Anonymisierung fail-closed; eine Warnung allein genügt hier anders
+als bei **Nur in Markdown umwandeln** nicht. Ein Fehler blockiert nicht die
+übrigen Dateien des Stapels. Der Zwischeninhalt bleibt im Arbeitsspeicher oder
+in der bereits verwalteten privaten Arbeitskopie, nie im sichtbaren Export.
+
+Die Verkettung wird zuerst im Standalone-Produkt freigegeben. Eine spätere
+Cowork-Freigabe darf denselben neutralen Extraktionskern wiederverwenden, braucht
+aber einen eigenen Paket-, Host- und Handoffnachweis; DS-087 erweitert den
+aktuellen Cowork-Formatumfang nicht automatisch. Umsetzung und Nachweise werden
+unter BL-010.30 sowie den bestehenden BL-022.2/3, BL-023.1–4 und BL-024.3 geführt.

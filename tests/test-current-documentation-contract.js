@@ -219,7 +219,7 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
   }
 });
 
-test('conversion documentation separates eleven input types from four-format privacy and old package evidence', () => {
+test('conversion documentation separates eleven input types, strict wide privacy and old package evidence', () => {
   const coverage = read('docs/FORMAT_COVERAGE_MATRIX.md');
   assert.match(coverage, /RC109-Builds aus `6bf7d05747e151ba8f846849229495e9fca4c041`/u,
     'current format evidence must name the exact RC109 source commit');
@@ -233,7 +233,7 @@ test('conversion documentation separates eleven input types from four-format pri
   assert.match(parts[0], /vier Formate/u);
   for (const label of ['XLSX', 'PPTX', 'PDF / Scan-PDF', 'PNG, JPEG, BMP']) {
     const row = parts[0].split(/\r?\n/u).find(line => line.startsWith(`| ${label} |`));
-    assert.ok(row && row.includes('| gesperrt | gesperrt |'), `${label}: privacy is not released`);
+    assert.ok(row && row.includes('| gesperrt | sicherer Einzelstopp |'), `${label}: Cowork stays blocked and incomplete Standalone stops`);
   }
   const conversion = parts[1].split('## Plattform- und Nachweisstatus')[0];
   const rows = conversion.split(/\r?\n/u).filter(line => /^\| (?:TXT|Markdown|CSV|DOCX|XLSX|PPTX|PDF mit Text|Scan-PDF|PNG|JPEG|BMP)(?: | \()/u.test(line));
@@ -304,7 +304,7 @@ test('architecture and test documentation reject the superseded single-purpose n
   const current = read('docs/canonical/CURRENT_STATE.md');
   assert.doesNotMatch(current, /zwei (?:Haupt)?ansichten|automatisch in die Ergebnisansicht|Zähler nur aus dem jüngsten Standalone-Stapel/iu);
   assert.match(current, /drei Hauptansichten/u);
-  assert.match(current, /Diese Formate\s+bleiben ausschließlich für die Anonymisierung gesperrt/u);
+  assert.match(current, /DS-087[\s\S]{0,700}Einzeldatei stoppen/u);
   const register = read('docs/canonical/DOCUMENT_REGISTER.md');
   const historical = register.split('## Historisch, nicht entscheidungsführend');
   assert.strictEqual(historical.length, 2);
@@ -318,6 +318,22 @@ test('architecture and test documentation reject the superseded single-purpose n
   assert.match(ux, /Windows-Sammelreview/u);
   assert.match(ux, /AppKit-Sammelreview[\s\S]{0,120}E0 implementiert/u);
   assert.doesNotMatch(ux, /macOS-Abnahme fehlt noch \*\*Implementierungsarbeit\*\*/u);
+});
+
+test('wide standalone privacy chaining is documented without widening Cowork or overstating coverage', () => {
+  const product = JSON.parse(read('plugins/data-secure/server/standalone/product-manifest.json'));
+  assert.deepStrictEqual(product.formats_by_processing_mode['markdown-and-anonymize'], product.current_formats);
+  for (const file of ['DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md',
+    'STANDALONE_ARCHITECTURE.md', 'BACKLOG.md', 'TRACEABILITY.md', 'CURRENT_STATE.md']) {
+    assert.ok(read(`docs/canonical/${file}`).includes('DS-087'), file);
+  }
+  const matrix = read('docs/FORMAT_COVERAGE_MATRIX.md');
+  assert.match(matrix, /aktuelle Extraktion bleibt `incomplete`/u);
+  assert.match(matrix, /Claude-Plugin bleibt[\s\S]{0,100}vier Formate/u);
+  assert.match(matrix, /kein rohes Markdown-Zwischenergebnis/u);
+  const architecture = read('docs/canonical/STANDALONE_ARCHITECTURE.md');
+  assert.match(architecture, /neutralen Extraktionsvertrag/u);
+  assert.match(architecture, /aktuelle breite[\s\S]{0,100}`incomplete`/u);
 });
 
 done();

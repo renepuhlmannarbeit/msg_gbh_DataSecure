@@ -51,12 +51,16 @@ Zielhostfreigaben bleiben getrennt; konkrete Extraktionsgrenzen stehen in der
 | Produkt / Zweck | Aktiver Eingang | Prüfung und Ausgabe | Modellübergabe |
 |---|---|---|---|
 | Cowork-Plugin / anonymisieren | lokaler OS-Picker; TXT, Markdown, CSV, DOCX | Parser, PII, Residual-Gate, erforderlichenfalls Sammelreview; neutrale MD in `DataSecure-Output`; Mapping privat | nur erneut verifiziertes anonymisiertes Markdown auf späteren ausdrücklichen Auswertungsauftrag |
-| Standalone / Markdown und anonymisieren | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX | dieselben Anonymisierungsgates; MD und laufbezogene `DataSecure-Zuordnung.csv` in `DataSecure-Output` | kein MCP oder automatischer Upload |
+| Standalone / Markdown und anonymisieren | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX sowie breite Quellen über DS-087 | direkte Formate durch dieselben Anonymisierungsgates; XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP einmal neutral extrahiert und nur bei vollständiger Coverage anonymisiert; MD und laufbezogene `DataSecure-Zuordnung.csv` in `DataSecure-Output` | kein MCP oder automatischer Upload |
 | Standalone / nur Markdown | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF einschließlich Scans, PNG/JPEG/BMP | Offline-Extraktion ohne PII-Ersetzung und Anonymisierungsreview; ursprüngliche Inhalte und Coveragehinweise; MD und Zuordnung in `DataSecure-Markdown`, ausdrücklich nicht anonymisiert | keine Privacy-Lesecapability; vom Plugin-Handoff ausgeschlossen |
 
-Die größere Formatmenge der reinen Konvertierung ist keine Erweiterung der
-Anonymisierungsfreigabe. Beschädigte oder geschützte Quellen erzeugen kein
-Konvertat; lesbare, begrenzt abgedeckte Extraktionen erhalten konkrete Hinweise.
+Die größere Formatmenge der reinen Konvertierung erweitert nicht automatisch
+die Anonymisierungsfreigabe. DS-087 lässt breite Quellen im Standalone-
+Anonymisierungszweck nur bis zur neutralen Extraktionsgrenze zu. Solange die
+Coverage `incomplete` ist, stoppt die betroffene Datei vor Privacy-Publikation.
+Beschädigte oder geschützte Quellen erzeugen kein Konvertat; im reinen
+Konvertierungszweck erhalten lesbare, begrenzt abgedeckte Extraktionen konkrete
+Hinweise.
 
 ## Normalablauf des Cowork-Plugins
 

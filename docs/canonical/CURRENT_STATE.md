@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 06.09.2026 · 3.2.0-rc109 · Startseite und laufgebundener Verlauf
+Stand: 06.09.2026 · 3.2.0-rc110 · Startseite und laufgebundener Verlauf
 
 ## Aktueller Entwicklungsstand RC109
 
@@ -35,6 +35,14 @@ Die Status-App bleibt nach Revalidierung absichtlich eine Start-Momentaufnahme;
 eine terminale Projektion aus derselben Antwort wäre falsch. Ihr Edge-/axe-Gate
 ist jetzt reproduzierbar. Adaptive Parallelisierung wird erst nach Zielmessung bewertet.
 Native Zielhost-/Bedien-/Fachabnahmen sind davon getrennt im Backlog geführt.
+
+DS-087 / BL-010.30 ergänzt im Standalone-Anonymisierungsmodus eine einmalige,
+neutrale Extraktion für XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP vor dem bestehenden
+Privacy-Core. Der Vertrag enthält weder Zweck noch Publikationskennung; es wird
+kein rohes Markdown-Zwischenartefakt veröffentlicht. Nur `complete` darf in PII-,
+Pseudonym-, Review- und Residualprüfung eintreten. Die heutigen realen breiten
+Konverter melden ihre Coverage weiterhin als `incomplete`, sodass diese Quellen
+aktuell sicher als Einzeldatei stoppen. Cowork bleibt auf TXT/MD/CSV/DOCX.
 
 DS-086 / BL-010.29: Standalone startet auf einer kurzen Startseite. Verarbeiten
 und Betriebsart sind nicht vorausgewählt. Der Verlauf zeigt die 20 neuesten
@@ -258,8 +266,11 @@ die RC106-Bindung darf nicht nachträglich umetikettiert werden.
 - MCPB: internes Engineering-Artefakt, kein Installations-, Fallback- oder
   Supportweg für Anwender.
 - Anonymisierung in beiden Produkten: TXT, Markdown (`.md`, `.markdown`), CSV
-  und DOCX sind freigegeben; XLSX, PPTX, PDF, Scan-PDF und eigenständige Bilder
-  bleiben für diesen Zweck sicher gesperrt.
+  und DOCX sind freigegeben. Standalone nimmt breite Quellen zusätzlich in den
+  DS-087-Verkettungspfad auf; weil deren reale Extraktion derzeit nicht
+  `complete` ist, stoppen XLSX, PPTX, PDF, Scan-PDF und eigenständige Bilder vor
+  Veröffentlichung. Im Cowork-Produkt bleiben sie bereits bei der Aufnahme
+  gesperrt.
 - Reine Standalone-Konvertierung: zusätzlich XLSX, PPTX, PDF/Scan-PDF sowie
   PNG/JPEG/BMP im Produktpfad aktiviert. Extraktionshinweise und Fehler bleiben
   laufbezogen sichtbar. Der Windows-Engineering-Paketnachweis ist an den oben
@@ -482,8 +493,9 @@ ehrlich als ungerahmter, nicht authentisierter Testtransport geführt;
 aber `product_enabled` bleibt `false`. MarkItDown ist ein optionales
 Differentialorakel; seine Python-Runtime gehört nicht zum Nutzerpaket. Der
 aktive Standalone-Produktkonverter verwendet den gebündelten JS-/PDF-/OCR-Pfad
-und unterstützt auch XLSX, PPTX, PDF/Scan-PDF sowie PNG/JPEG/BMP. Diese Formate
-bleiben ausschließlich für die Anonymisierung gesperrt. Architektur,
+und unterstützt auch XLSX, PPTX, PDF/Scan-PDF sowie PNG/JPEG/BMP. DS-087 bindet
+diese Formate im Standalone-Anonymisierungsmodus an die neutrale Extraktion und
+den strikten Vollständigkeitsstopp; eine reale breite Freigabe besteht noch nicht. Architektur,
 Lieferstufen und offene User Stories stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md) und BL-010.9.
 

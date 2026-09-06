@@ -1,12 +1,12 @@
 # Aktueller Testvertrag
 
-Stand: 06.09.2026 · 3.2.0-rc109
+Stand: 06.09.2026 · 3.2.0-rc110
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
 enthält nur die heute gültigen Testklassen und Releasebefehle.
 
-RC109 trennt außerdem reine Core-Verträge von den Produktadaptern.
+RC110 trennt außerdem reine Core-Verträge von den Produktadaptern.
 `test-core-contracts.mjs` prüft Exportidentität der alten Importpfade, reine
 transitive Abhängigkeiten und beide tatsächlichen Paketprojektionen.
 `test-core-policy-binding.mjs` gehört zum lokalen Vollprofil: ausgewählte
@@ -193,7 +193,7 @@ Die Fixture verändert nur das Timing. Der reale Paket-Smoke verarbeitet nach
 dem erfolgreichen Vierformatlauf einen vollständig fehlerhaften CSV-Stapel und
 verlangt dessen eigene Zuordnung statt eines Rückfalls auf den Vorgängerlauf.
 
-## RC109: Endgültige Testurteile und Schnittstellengegenproben
+## RC110: Endgültige Testurteile und Schnittstellengegenproben
 
 `tests/helpers.js` registriert jeden Fall vor seinem Callback. `done()` wartet
 auch bei nicht vom Aufrufer abgewartetem `testAsync` auf alle Fälle und danach
@@ -224,7 +224,7 @@ Queue, Bildfreigabe und Mock-OCR sind kein Beleg für aktive MCP-Werkzeuge oder
 aktuelle Bildfreigabe. Aktuelle MCP-/Cowork-Evidenz kommt aus den Protokoll-,
 Toolflächen- und Skilltests sowie gesonderter Hostabnahme. Die historischen
 Prüfungen bleiben zur Absicherung der noch referenzierten internen Fassaden.
-Die RC109-Unicode-Erweiterung dieses Tests startet zusätzlich echte, isolierte
+Die RC110-Unicode-Erweiterung dieses Tests startet zusätzlich echte, isolierte
 Plugin- und Standalone-Stapel sowie einen reinen Markdown-Stapel. Diese Fälle
 sind ausdrücklich von der historischen Fassaden-/Mock-OCR-Evidenz getrennt.
 

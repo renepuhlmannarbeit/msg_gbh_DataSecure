@@ -17,6 +17,8 @@ function createBatchExecutorRunner(options = {}) {
   const finalizePublishedPackageLocally = options.finalizePublishedPackageLocally;
   const writeTerminalEvidence = options.writeTerminalEvidence;
   const releaseLocalBatchExecutor = options.releaseLocalBatchExecutor;
+  const appendStoppedMapping = options.appendMapping || appendMapping;
+  const stoppedMappingStatus = options.stoppedMappingStatus || STOPPED;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const maxBatchFiles = options.maxBatchFiles || 100;
 
@@ -36,7 +38,7 @@ function createBatchExecutorRunner(options = {}) {
     if (pending.length) writeState(state);
     for (const item of pending) {
       try {
-        appendMapping(item.source_label || item.name, '', STOPPED, {
+        appendStoppedMapping(item.source_label || item.name, '', stoppedMappingStatus, {
           mappingReference: item.id, documentResult: item.document_result
         });
         item.local_mapping_exported = true;
@@ -62,7 +64,8 @@ function createBatchExecutorRunner(options = {}) {
       // Expensive but mandatory housekeeping is established exactly once for a
       // claimed local batch. The opaque capability remains process-local.
       const conversion = claimed.schema === 'datasecure-batch/5' && claimed.processing_mode === 'markdown-only' && claimed.product_channel === 'standalone';
-      if (conversion && claimed.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')) {
+      const usesStandaloneConverter = claimed.product_channel === 'standalone';
+      if (usesStandaloneConverter && claimed.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')) {
         interrupted = true;
         stopUnstartedConversionItems(token);
       }
@@ -91,7 +94,7 @@ function createBatchExecutorRunner(options = {}) {
         const before = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
         const result = await processBatchNext(token, { ...batchDeps, executorPid });
         lastProgress = result;
-        if (conversion && result.error === 'CONVERSION_TERMINATION_UNCONFIRMED') {
+        if (usesStandaloneConverter && result.error === 'CONVERSION_TERMINATION_UNCONFIRMED') {
           interrupted = true;
           stopUnstartedConversionItems(token);
           break;

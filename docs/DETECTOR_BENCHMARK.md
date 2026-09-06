@@ -5,7 +5,7 @@ Every adapter receives the same version-controlled, synthetic ground truth and m
 only spans plus anonymized output. No real document, network request or model download is
 part of the benchmark.
 
-## Current synthetic-corpus baseline (3.2.0-rc109)
+## Current synthetic-corpus baseline (3.2.0-rc110)
 
 Command:
 
@@ -23,7 +23,7 @@ This is a regression baseline for this synthetic corpus, not evidence of univers
 Runtime is reported for comparison but is machine-dependent. Real pilot documents remain a
 separate, local, human-reviewed acceptance step.
 
-RC109 additionally tests a length-preserving compatibility view for structured
+RC110 additionally tests a length-preserving compatibility view for structured
 identifiers (selected fullwidth characters and dot leaders) and scheme-specific
 contact-URI boundaries. Those regressions are separate from these 150 corpus
 cases. They do not claim arbitrary Unicode-confusable coverage. The original

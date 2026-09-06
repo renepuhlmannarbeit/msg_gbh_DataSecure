@@ -5,9 +5,16 @@ const { createBatchExecutorRunner } = require('../plugins/data-secure/server/gat
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { createSuite } = require('./helpers');
 
-const { testAsync, done, assert } = createSuite('Batch executor runner boundary');
+const { test, testAsync, done, assert } = createSuite('Batch executor runner boundary');
 const token = 'e'.repeat(64);
 const pid = 4242;
+
+test('transient conversion failures remain recoverable in the production batch policy', () => {
+  assert.deepEqual(
+    batchFacade._test.retryableErrorCodes.filter(code => code.startsWith('CONVERSION_')).sort(),
+    ['CONVERSION_ISOLATION_UNAVAILABLE', 'CONVERSION_START_FAILED', 'CONVERSION_TIMEOUT']
+  );
+});
 
 function progress(overrides = {}) {
   return {
@@ -35,6 +42,7 @@ function fixture(options = {}) {
   let reads = 0;
   let processCalls = 0;
   let finalizeCalls = 0;
+  let stoppedMappings = 0;
 
   const { runLocalBatchExecutor } = createBatchExecutorRunner({
     SafeError,
@@ -101,6 +109,7 @@ function fixture(options = {}) {
       if (options.onRelease) options.onRelease(current);
       return options.releaseResult !== false;
     },
+    appendMapping() { stoppedMappings++; events.push('stopped-mapping'); },
     deliveryPendingStatus: 'delivery_pending',
     maxBatchFiles: options.maxBatchFiles || 100
   });
@@ -114,6 +123,7 @@ function fixture(options = {}) {
       ...(options.executorPid === undefined ? {} : { executorPid: options.executorPid })
     }),
     counts: () => ({ reads, processCalls, finalizeCalls }),
+    stoppedMappings: () => stoppedMappings,
     setState(value) { current = value; }
   };
 }
@@ -217,6 +227,24 @@ testAsync('both no-progress gates stop without a busy loop', async () => {
   });
   await normal.run();
   assert.strictEqual(normal.counts().processCalls, 1);
+});
+
+testAsync('unconfirmed wide privacy converter termination stops every unstarted item before another process launches', async () => {
+  const value = fixture({
+    state: {
+      schema: 'datasecure-batch/4', processing_mode: 'markdown-and-anonymize', product_channel: 'standalone',
+      token, local_executor_pid: pid,
+      items: [{ status: 'processing', name: 'first.pdf' }, { status: 'pending', name: 'second.txt' }],
+      io_summary: {}, progress: progress({ remaining: 2 })
+    },
+    process: () => ({ ...progress({ remaining: 1 }), error: 'CONVERSION_TERMINATION_UNCONFIRMED' })
+  });
+  const result = await value.run();
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'CONVERSION_TERMINATION_UNCONFIRMED');
+  assert.equal(value.counts().processCalls, 1);
+  assert.equal(value.stoppedMappings(), 1);
+  assert.equal(value.events.filter(event => event.startsWith('process:')).length, 1);
 });
 
 testAsync('a new package is finalized immediately while zero remaining does no work', async () => {

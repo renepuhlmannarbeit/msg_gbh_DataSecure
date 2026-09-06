@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 06.09.2026 · Produktversion 3.2.0 RC109
+Stand: 06.09.2026 · Produktversion 3.2.0 RC110
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest ist keine Freigabe für
@@ -8,9 +8,12 @@ Anonymisierung, Cowork oder einen breiten Endnutzerrollout.
 
 ## Anonymisierung: Claude-Plugin und Standalone
 
-Der Modus `markdown-and-anonymize` bleibt auf vier Formate begrenzt. Das Plugin
-bietet ausschließlich diesen Verarbeitungszweck; sein MCP-Lieferparameter
-`mode: local_only` ist kein Schalter für reine Konvertierung.
+Das Claude-Plugin bleibt im Modus `markdown-and-anonymize` auf vier Formate
+begrenzt. Standalone besitzt zusätzlich den DS-087-Pfad: breite Quellen werden
+genau einmal lokal zu einer neutralen Markdown-Extraktion verarbeitet und erst
+danach vom unveränderten Privacy-Core anonymisiert. Dieser Pfad veröffentlicht
+nur eine belegbar vollständige Extraktion. Sein Ergebnis ist eine anonymisierte
+Markdown-Textrepräsentation, keine anonymisierte Originaldatei.
 
 | Format | Gemeinsame Engine-Coverage | Claude-Plugin | Standalone-Pilot | Freigegebener Inhalt / Verhalten |
 |---|---|---|---|---|
@@ -18,10 +21,10 @@ bietet ausschließlich diesen Verarbeitungszweck; sein MCP-Lieferparameter
 | Markdown (`.md`, `.markdown`) | belegt | freigegeben | E0 belegt, UAT offen | normalisierter Text; Links/HTML bleiben inert und werden nicht geladen |
 | CSV | belegt | freigegeben | E0 belegt, UAT offen | strikt validierte Tabelle als Markdown; defekte Struktur stoppt fail-closed |
 | DOCX | belegt für dokumentierte Bereiche | freigegeben | E0 belegt, UAT offen | Bildpixel bleiben lokal; unbekannte inhaltsfähige Bereiche stoppen |
-| XLSX | nicht belegt | gesperrt | gesperrt | nichts; `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger Stopp |
-| PPTX | nicht belegt | gesperrt | gesperrt | nichts; `SOURCE_FORMAT_NOT_RELEASED` oder gleichwertiger Stopp |
-| PDF / Scan-PDF | nicht belegt | gesperrt | gesperrt | nichts; kein Lite-Parser als Produktfallback |
-| PNG, JPEG, BMP | nicht belegt | gesperrt | gesperrt | nichts; der reine OCR-Konverter umgeht kein Privacy-Gate |
+| XLSX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
+| PPTX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
+| PDF / Scan-PDF | Text/OCR angebunden, Vollständigkeit noch nicht belegt | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
+| PNG, JPEG, BMP | lokale OCR angebunden, OCR nicht fachlich verifiziert | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
 | unbekannt, beschädigt oder verschlüsselt | nicht zulässig | gesperrt | gesperrt | kein Teilresultat und keine Entschlüsselung |
 
 ### Privacy-Freigaberegel
@@ -31,6 +34,12 @@ Entitätsprüfung und Residual-Gate müssen gemeinsam bestehen. Parserwarnungen 
 nicht belegte Inhaltsbereiche stoppen die betroffene Datei; der übrige Stapel darf
 weiterlaufen. Originale werden nur gelesen und niemals automatisch verändert oder
 gelöscht.
+
+Der neutrale Extraktionsvertrag enthält weder Publikationskennung noch
+Verarbeitungszweck. Es wird kein rohes Markdown-Zwischenergebnis exportiert.
+Direkte und konvertierte Quellen laufen mit derselben stapelgebundenen Personen-
+und Unternehmenszuordnung; die sichtbare Zuordnung zeigt direkt von der
+Originalquelle auf das anonymisierte Markdown-Ergebnis.
 
 ### Bilder in DOCX
 
@@ -97,7 +106,7 @@ eigenes späteres Desktopziel. Details stehen im
 [aktuellen Zustand](canonical/CURRENT_STATE.md) und im
 [UAT-Kit](acceptance/UAT_TEST_KIT/README.md).
 
-Der lokale E0-Konverterlauf umfasst 27 Testgruppen einschließlich echter
+Der lokale E0-Konverterlauf umfasst 28 Testgruppen einschließlich echter
 Office-/PDF-/Bildbytes, Fehler, Abbruch und Ressourcenbindung. Eine Serie mit
 100 TXT-Dateien dauerte auf dem Entwicklungsrechner 15,264 Sekunden; die große
 Runtime wurde dabei nicht je Dokument erneut vollständig gelesen/gehasht.
@@ -112,6 +121,8 @@ Fehlerposition und genaue Laufzuordnung sind geprüft. ZIP-SHA-256:
 Historische Evidence bleibt versionsgebunden: RC108-Builds aus `a742333e8ef80b445729d4bede6a91a2b8f13207`
 und der frühere RC107-Kandidat
 aus `7b88a81` belegen nicht den RC109-Stand.
-Native macOS-Intel-/ARM-Ausführung und fachlicher UAT bleiben offen. Der Ausbau
-der **Anonymisierung** auf XLSX/PPTX/PDF/Scan-PDF/Bilder sowie vollständigere
-Container-/Grafikabdeckung bleiben eigene Backlogarbeit.
+Native macOS-Intel-/ARM-Ausführung und fachlicher UAT bleiben offen. Die
+DS-087-Verkettung für die **Anonymisierung** ist angebunden und fail-closed
+getestet. Vollständige Container-/Grafik-/OCR-Coverage für die breiten Formate
+bleibt eigene Backlogarbeit; deshalb erzeugen aktuelle reale breite Quellen noch
+kein freigegebenes anonymisiertes Ergebnis.

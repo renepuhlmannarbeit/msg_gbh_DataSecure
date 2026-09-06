@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 06.09.2026 · 3.2.0-rc109
+Stand: 06.09.2026 · 3.2.0-rc110
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -237,6 +237,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-084 | aktiv und aktuell | BL-010.12/13, BL-030.2; neue Standalone-Stapel mit lesbaren v2-Kennungen, Firmenrollen einheitlich, Restore behält Version; native Dragdrop-Aufnahme ohne Autostart, Pickeralternative; Registry-, State-, Intake-, Rust-, Frontend- und reale Pakettests |
 | DS-085 | Windows-E0 und Paketbindung abgeschlossen; Zielhost-UAT offen | BL-010.28 mit BL-010.15–19, BL-022.2/3, BL-023.1–4 und BL-024.2/3; zweite Standalone-Kernfunktion ohne PII-Entfernung, elf Eingabetypen einschließlich Scan-PDF, v5-Journal/`dm_`/eigene Worker-Envelope-Typen, Recovery und atomarer `DataSecure-Markdown`-Export. UI-/Rust-/IPC-/Modus-/Journal-/Artefakt-/Extraktions-/Konverter-/Cross-Read-Gates; E0 ist keine fachliche Vollständigkeits- oder UAT-Freigabe |
 | DS-086 | aktiv; Zielhost-UAT offen | BL-010.29; Startseite, leere Betriebsart, bewusst gewählter Tab und Verlauf der letzten 20 Verarbeitungen. `standalone/run-history.js`, `application-service.js`, private IPC, Rust-Commands, Frontend; History-/Frontend-/Sidecar-/Rust-Verträge und echte Paketläufe. Jede Aktion bindet exakt den ausgewählten Lauf, keine automatische Ergebnisnavigation. |
+| DS-087 | Implementierung E0; reale breite Coverage und Zielhost-UAT offen | BL-010.30; neutraler `datasecure-source-extraction/1`-Vertrag, Standalone-only-Admission und einmalige Konverterübergabe vor dem unveränderten Privacy-Core. Nur `complete` publiziert; `incomplete` stoppt ohne `dm_`-Zwischenartefakt. Vertrags-, Orchestrator-, Cross-Produkt- und Produktregressionstests; Cowork-Allowlist unverändert. |
 
 ## DS-067 – konkrete Umsetzung
 

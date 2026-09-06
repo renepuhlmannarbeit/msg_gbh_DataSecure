@@ -66,7 +66,7 @@ function renderModeHelp(mode) {
     ? 'Wähle aus, ob Originalinhalte erhalten bleiben oder erkannte Identifikatoren ersetzt werden sollen.'
     : convert
     ? 'Nicht anonymisiert: Namen und andere Originalinhalte bleiben erhalten. Bei OCR oder grafischen Inhalten können Auslassungen entstehen; Hinweise stehen im Ergebnis.'
-    : 'Namen und weitere erkannte Identifikatoren werden ersetzt. Dieser Modus unterstützt TXT, Markdown, CSV und DOCX.';
+    : 'Namen und weitere erkannte Identifikatoren werden in der Markdown-Ausgabe ersetzt. XLSX, PPTX, PDF/Scan-PDF und Bilder werden vorher lokal extrahiert und nur bei vollständiger Abdeckung freigegeben.';
 }
 
 function busy(value) {

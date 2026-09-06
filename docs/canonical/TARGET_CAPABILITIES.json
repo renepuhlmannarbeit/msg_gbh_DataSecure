@@ -2,7 +2,7 @@
   "schema_version": 2,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc109",
+  "baseline": "3.2.0-rc110",
   "decision_ids": [
     "DS-001",
     "DS-002",
@@ -89,7 +89,8 @@
     "DS-083",
     "DS-084",
     "DS-085",
-    "DS-086"
+    "DS-086",
+    "DS-087"
   ],
   "products": {
     "shared_core": "one-policy-and-engine-baseline",
@@ -150,6 +151,9 @@
     "markdown_only_output_subdirectory": "DataSecure-Markdown",
     "markdown_only_preserves_identifiers": true,
     "markdown_only_automatic_ai_upload": false,
+    "wide_format_anonymization": "convert-once-then-anonymize-markdown-complete-coverage-only",
+    "wide_format_anonymization_output": "anonymized-markdown-extraction-not-original-format",
+    "raw_intermediate_exported": false,
     "macos_minimum_system_version": "13.5",
     "target_packages": [
       "windows-x64",

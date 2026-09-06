@@ -104,5 +104,8 @@ sind ebenfalls noch offen. Bis dahin ist das Paket ein Engineering-Pilot.
 - keine freie Pause-/Prozesssteuerung durch den Renderer; technische
   Unterbrechungen und vertagte Reviews bleiben über den Core fortsetzbar;
 - keine Gleichsetzung der aktiven XLSX-/PPTX-/PDF-/Bildkonvertierung mit einer
-  Anonymisierungsfreigabe oder vollständiger grafischer Coverage. Maßgeblich ist
-  die [Formatmatrix](../FORMAT_COVERAGE_MATRIX.md).
+  erfolgreichen Anonymisierung oder vollständiger grafischer Coverage. DS-087
+  lässt im Standalone-Anonymisierungsmodus ausschließlich eine neutral
+  extrahierte `complete`-Quelle in den bestehenden Privacy-Core; `incomplete`
+  stoppt vor jeder Veröffentlichung. Maßgeblich ist die
+  [Formatmatrix](../FORMAT_COVERAGE_MATRIX.md).

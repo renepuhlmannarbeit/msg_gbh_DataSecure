@@ -121,14 +121,18 @@ flowchart LR
   SA --> CORE
   CORE --> INTAKE[Admission + versiegelter Snapshot]
   INTAKE --> MODE{gespeicherter Produktzweck}
-  MODE -->|anonymisieren: beide Produkte| DIRECT[DataSecure-Parser]
-  MODE -->|nur Markdown: Standalone| CONV[Node-/OOXML-/PDF-/OCR-Konverter]
+  MODE -->|anonymisieren: direkte Formate| DIRECT[DataSecure-Parser]
+  MODE -->|breite Standalone-Quelle| CONV[Node-/OOXML-/PDF-/OCR-Konverter]
+  MODE -->|nur Markdown: Standalone| CONV
+  CONV --> COVERAGE{neutrale Coverage}
+  COVERAGE -->|complete und anonymisieren| GRAPH
+  COVERAGE -->|incomplete und anonymisieren| STOP[sicherer Einzelstopp]
+  COVERAGE -->|nur Markdown| PLAIN[DataSecure-Markdown: Originalinhalte + Coveragehinweise]
   DIRECT --> GRAPH[Content Graph]
   GRAPH --> PII[PII-Erkennung + Residual-Gate]
   PII -->|Entscheidung offen und automatische Arbeit fertig| REVIEW[lokaler Sammelreview]
   PII -->|eindeutig| EXPORT[DataSecure-Output: anonymisierte MD]
   REVIEW --> EXPORT
-  CONV --> PLAIN[DataSecure-Markdown: Originalinhalte + Coveragehinweise]
   EXPORT --> MAP[Standalone: laufbezogene Zuordnung vor sichtbarem Abschluss]
   PLAIN --> MAP
 ```
@@ -178,6 +182,12 @@ Die [Produkt-/Zweckmatrix](TARGET_ARCHITECTURE.md#aktuelle-fähigkeiten-nach-pro
 und [Formatmatrix](../FORMAT_COVERAGE_MATRIX.md) bestimmen den aktiven Umfang.
 Der Konvertierungszweig verwendet seinen eigenen Inhaltserhaltungs- und
 Artefaktvertrag und umgeht nicht bloß ein Residual-Gate im Anonymisierungsexport.
+DS-087 ergänzt davor einen neutralen Extraktionsvertrag ohne Zweck oder
+Publikationskennung. Im Anonymisierungszweck wird dieses Ergebnis nur im Speicher
+an den vorhandenen Privacy-Core übergeben und niemals als rohes `dm_`-Artefakt
+veröffentlicht. Nur `complete` darf diese Grenze passieren; aktuelle breite
+Konverter melden reale XLSX/PPTX/PDF/Scan-PDF-/Bildquellen weiterhin ehrlich als
+`incomplete` und lösen deshalb einen laufbezogenen Einzelstopp aus.
 Auswahl und Quellen bleiben unverändert; in der Modusübersicht steht ruhig und
 dauerhaft **Nicht anonymisiert – enthält Originalinhalte**. Bei einem Fehler
 bleiben fertige Positionen checkpointgebunden erhalten; Fortsetzen nutzt denselben

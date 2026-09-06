@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 06.09.2026 · Ist-Zustand RC109
+Stand: 06.09.2026 · Ist-Zustand RC110
 
 ## Ziel
 
@@ -52,7 +52,8 @@ Beibehalten-/Anonymisieren-Aktionen und inhaltsfreie Fortschrittszähler.
 | Bereich | Aktueller Vertrag |
 |---|---|
 | freigegeben | TXT, Markdown, CSV, DOCX |
-| gesperrt | XLSX, PPTX, PDF, Scan-PDF, PNG, JPEG, BMP und unbekannte Formate |
+| Standalone-Verkettung nach DS-087 | XLSX, PPTX, PDF, Scan-PDF, PNG, JPEG, BMP werden lokal extrahiert und nur bei vollständiger Coverage als Markdown anonymisiert |
+| gesperrt | unbekannte Formate; breite Formate im Cowork-Plugin; breite Standalone-Quellen mit unvollständiger Extraktion |
 | verschlüsselt/passwortgeschützt | sicher stoppen, gesondert lokal melden, nicht entschlüsseln |
 | Bilder in DOCX | Pixel bleiben lokal; kein auswählbarer Modus; kein Claude-Freigabeweg |
 | Ergebnis | ein geprüftes Markdown je positiver Datei, dauerhaft lokales Mapping |
@@ -95,9 +96,13 @@ ein eigenes Paket und einen eigenen Update-/Rollbackvertrag. Der E0-Unterbau,
 die Tauri-Hülle und ein selbsttragendes Windows-x64-Engineering-Paket sind
 vorhanden und automatisch verifiziert, aber noch kein freigegebenes
 Endnutzerpaket. Microsoft MarkItDown 0.1.7 ist ausschließlich als deaktivierter
-DOCX-Differentialpfad vorbereitet. Die oben genannten vier Formate gelten
-unverändert für die Anonymisierung; die reine Standalone-Konvertierung besitzt
-die nachfolgend beschriebenen zusätzlichen Eingabetypen. Zielhost-UAT und native
+DOCX-Differentialpfad vorbereitet. Die oben genannten vier Formate bleiben der
+direkte Anonymisierungspfad. Nach DS-087 kann Standalone zusätzlich XLSX, PPTX,
+PDF/Scan-PDF und PNG/JPEG/BMP erst neutral in Markdown extrahieren und anschließend
+denselben Privacy-Core nutzen. Dabei wird nur eine anonymisierte Markdown-
+Extraktion veröffentlicht; unvollständige Coverage stoppt diese Datei. Die reine
+Standalone-Konvertierung besitzt denselben breiten Eingabeumfang, darf Hinweise
+dagegen sichtbar mit ausgeben. Zielhost-UAT und native
 macOS-Pakete bleiben gesondert offen; Details stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 

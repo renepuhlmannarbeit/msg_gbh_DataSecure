@@ -267,7 +267,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     throw new SafeError('Die private Arbeitskopie besitzt keine gültige Formatbindung.');
   }
   const ext = path.extname(originalName || originalSource).toLowerCase();
-  if (!PILOT_SUPPORTED.has(ext)) {
+  const wideStandalone = deps.productChannel === 'standalone' &&
+    require('../standalone/wide-privacy-extraction').isWidePrivacyExtension(ext);
+  if (!PILOT_SUPPORTED.has(ext) && !wideStandalone) {
     const error = new SafeError(
       'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben. ' +
       'Verwenden Sie ausschließlich TXT, Markdown, CSV oder DOCX; PDF, XLSX, PPTX und Bilddateien bleiben sicher gestoppt.'
@@ -326,11 +328,15 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     throwIfAborted(deps.abortSignal);
 
-    const converted = await (deps.convertDocument || convertDocument)(source, {
-      signal: deps.abortSignal,
-      inputBuffer: sourceBuffer,
-      sourceName: originalName
-    });
+    const converted = wideStandalone
+      ? await (deps.extractWideSourceForPrivacy || require('../standalone/wide-privacy-extraction').extractWideSourceForPrivacy)(
+        sourceBuffer, ext, { signal: deps.abortSignal, convertBuffer: deps.convertBuffer,
+          timeoutMs: deps.timeoutMs, ErrorType: SafeError })
+      : await (deps.convertDocument || convertDocument)(source, {
+        signal: deps.abortSignal,
+        inputBuffer: sourceBuffer,
+        sourceName: originalName
+      });
     throwIfAborted(deps.abortSignal);
     diagnosticStage = 'converted';
     diagnostic.parser_warning_count = (converted.warnings || []).length;

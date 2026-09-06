@@ -47,6 +47,7 @@ try {
     assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
   });
   const { convertBuffer } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  const { extractWideSourceForPrivacy } = require(path.join(server, 'standalone', 'wide-privacy-extraction.js'));
   async function convert(input, extension, options) {
     const original = hash(input);
     const result = await convertBuffer(input, extension, options);
@@ -65,6 +66,14 @@ try {
       if (extension === '.txt' || extension === '.md') assert.equal(result.markdown, bytes.toString('utf8'));
     });
   }
+  await test('real packaged wide extraction cannot bypass incomplete coverage into privacy publication', async () => {
+    const bytes = office('xlsx');
+    const before = hash(bytes);
+    await assert.rejects(extractWideSourceForPrivacy(bytes, '.xlsx', { convertBuffer }),
+      error => error?.code === 'PARSER_COVERAGE_UNVERIFIED');
+    assert.equal(hash(bytes), before);
+    assert.ok(children.every(entry => entry.closed), 'privacy refusal follows confirmed converter termination');
+  });
   await test('XLSX corruption crosses real OPC admission and worker into a stopped item; the next source exports with exact columns', async () => {
     const saved = new Map(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT'].map(key => [key, process.env[key]]));
     const directory = path.join(scope, 'xlsx-regression'); fs.mkdirSync(directory);

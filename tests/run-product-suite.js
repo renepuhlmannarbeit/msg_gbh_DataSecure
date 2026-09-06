@@ -24,6 +24,8 @@ const baseFiles = [
   'tests/test-standalone-sidecar.js',
   'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
   'tests/test-processing-mode.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
+  'tests/test-source-extraction-contract.js', 'tests/test-wide-privacy-extraction.js',
+  'tests/test-wide-privacy-orchestrator.js',
   'tests/test-batch-processing-purpose.js', 'tests/test-markdown-batch-export.js',
   'tests/test-markdown-retention.js',
   'tests/test-markdown-lifecycle-review.js',
