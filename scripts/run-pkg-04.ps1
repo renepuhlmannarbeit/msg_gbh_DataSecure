@@ -15,6 +15,28 @@ function Write-JsonUtf8NoBom([string] $Path, $Value, [int] $Depth) {
     [System.IO.File]::WriteAllText($Path, "$json`r`n", $encoding)
 }
 
+function Get-Sha256File([string] $Path) {
+    # Do not depend on Get-FileHash: minimal/offline Windows PowerShell hosts
+    # may not auto-load Microsoft.PowerShell.Utility after the native smoke.
+    # The framework SHA-256 implementation is present on every supported
+    # Windows build host and keeps the release receipt PowerShell-5.1-safe.
+    $stream = [System.IO.File]::Open(
+        $Path,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read,
+        [System.IO.FileShare]::Read
+    )
+    $sha = $null
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $digest = $sha.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($digest)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        if ($sha -ne $null) { $sha.Dispose() }
+        $stream.Dispose()
+    }
+}
+
 $branch = (& git branch --show-current).Trim()
 $commit = (& git rev-parse HEAD).Trim()
 $tree = (& git rev-parse 'HEAD^{tree}').Trim()
@@ -59,9 +81,9 @@ foreach ($label in @('candidate-a', 'candidate-b')) {
     $candidates += [ordered]@{
         label = $label
         archive = $candidateArchive
-        archive_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $candidateArchive).Hash.ToLowerInvariant()
-        desktop_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $productRoot 'DataSecure Standalone.exe')).Hash.ToLowerInvariant()
-        core_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $productRoot 'datasecure-core-x86_64-pc-windows-msvc.exe')).Hash.ToLowerInvariant()
+        archive_sha256 = Get-Sha256File $candidateArchive
+        desktop_sha256 = Get-Sha256File (Join-Path $productRoot 'DataSecure Standalone.exe')
+        core_sha256 = Get-Sha256File (Join-Path $productRoot 'datasecure-core-x86_64-pc-windows-msvc.exe')
         package_smoke = 'passed'
         worker_handoff_smoke = 'passed'
         native_binary_smoke = 'passed'
@@ -90,7 +112,7 @@ $receipt = [ordered]@{
 }
 $receiptPath = Join-Path $evidenceRoot 'PKG-04-RECEIPT.json'
 Write-JsonUtf8NoBom $receiptPath $receipt 8
-$receiptHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $receiptPath).Hash.ToLowerInvariant()
+$receiptHash = Get-Sha256File $receiptPath
 $binding = [ordered]@{
     schema = 'datasecure-int-13-binding/1'
     acceptance = 'INT-13'

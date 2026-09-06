@@ -50,6 +50,11 @@ test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () 
   assert.match(releaseGate, /System\.IO\.File\]::WriteAllText/u);
   assert.match(releaseGate, /Write-JsonUtf8NoBom \$receiptPath \$receipt 8/u);
   assert.match(releaseGate, /Write-JsonUtf8NoBom \$bindingPath \$binding 5/u);
+  assert.match(releaseGate, /function Get-Sha256File/u);
+  assert.match(releaseGate, /System\.Security\.Cryptography\.SHA256\]::Create/u);
+  assert.match(releaseGate, /Get-Sha256File \$receiptPath/u);
+  assert.doesNotMatch(releaseGate, /(?:^|[\r\n]\s*)Get-FileHash\b/mu,
+    'receipt hashing must not depend on optional PowerShell module auto-loading');
 });
 
 test('package smoke uses a private environment and refuses links before cleanup', async () => {
