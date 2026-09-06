@@ -12,11 +12,11 @@ an die reine Konvertierung. MCP-Eingabevalidierung bleibt Plugin-Schnittstelle,
 kein Standalone-Transport. F-01–F-11 samt zusätzlichen Gegenreviewbefunden und
 Tests stehen im [archivierten Korrekturbericht](../../tasks/archiv/2026-09-06-rc109-review-korrekturen.md).
 
-BL-051.1/BL-002 bindet den RC109-Quellcommit
-`6bf7d05747e151ba8f846849229495e9fca4c041` an zwei bytegleiche Windows-x64-
+BL-051.1/BL-002 bindet den aktuellen RC111-Quellcommit
+`b543589f3250a6ab57ddd5bc3a144f03a24ee026` an zwei bytegleiche Windows-x64-
 Standalone-Builds, beide Paket-/Worker-/nativen Windows-Smokes, den
 `PKG-04-RECEIPT.json` und `INT-13-BINDING.json`. Archiv-SHA-256:
-`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
+`6086d1eb0701c50b77be630bdbcce3d562fab391e92aa5d0bdfeea1eba869f8f`.
 Die Bindung belegt E0 auf diesem Windows-Zielhost, nicht sichtbaren UAT oder
 native Intel-/ARM-macOS-Ausführung.
 
@@ -37,8 +37,10 @@ Tempbaum, vollständig ersetzte Desktop-Umgebung und zwei UDF-Autoritäten. Mit
 automatischem Tauri-Fensterstart, genau einem UDF unter `LocalAppData` und erst
 im Sidecar vollständig isolierten Pfaden bestehen der RC111-Arbeitsbau und das
 historische RC109-Archiv den Start bis Frontend/Core/IPC. Der ältere Prozess
-belegt außerdem den noch fail-closed offenen Cleanup-Lockfall. Das ist noch kein
-neuer Release-PASS; PKG-04/INT-13 bleiben an sauberen Commit und Vollgates gebunden.
+belegt außerdem den fail-closed Cleanup-Lockfall des historischen Kandidaten.
+Der saubere Korrekturcommit `b543589f3250a6ab57ddd5bc3a144f03a24ee026`
+besteht danach die vollständige Regression, zwei bytegleiche Builds und beide
+nativen Starts; PKG-04 und INT-13 sind genau daran gebunden.
 
 Der anschließende Restschuldblock bindet BL-020.3 an den echten Support-stdio-
 Dispatch und den bestehenden netzgesperrten Review-Worker (`test-mcp-support-review`,

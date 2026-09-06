@@ -31,13 +31,12 @@ und behauptet keine Vollständigkeit des ursprünglichen Containers.
 Der native Windows-Launcher protokolliert nun getrennte, inhaltsfreie Checkpoints
 für WebView-Profil, Setup, Seitenaufbau, Frontend und IPC. Dadurch lässt sich
 ein Zielhostfehler vor `page_loaded` von einem späteren Sidecar-/IPC-Fehler
-unterscheiden. Der
-commitgebundene RC111-PKG-04-Nachweis wird erst nach sauberem Commit durchgeführt;
-der unten genannte RC109 bleibt bis dahin der letzte an INT-13 gebundene Kandidat.
+unterscheiden. Der commitgebundene RC111-PKG-04-Nachweis ist aus dem sauberen
+Quellcommit `b543589f3250a6ab57ddd5bc3a144f03a24ee026` abgeschlossen und INT-13
+ist an genau diesen Kandidaten gebunden.
 Die vollständige RC111-Produktsuite besteht mit 61 Basis-/114 direkten
 Testdateien; Rust 16/16, 30 reale Konvertergruppen, Dokumentgates sowie frische
-Cowork- und Standalone-Arbeitsbaumbauten sind grün. Diese Arbeitsbaumartefakte
-sind bewusst noch keine Release-Evidence.
+Cowork- und Standalone-Prüfungen sind grün.
 
 Der erste PKG-04-Lauf aus sauberem RC111-Commit
 `d45252f971e1f2f8737bf4af22d511c30ca3f430` baute Kandidat A und bestand Paket-,
@@ -62,8 +61,9 @@ Injektionen und isoliert erst den Sidecar vollständig. Ein neu gebauter RC111-
 Arbeitsstand und das unveränderte RC109-Archiv erreichten damit Frontend, Core
 und beide IPC-Startantworten. Der historische Kontrolllauf endete erst bei der
 sicheren Bereinigung einer noch gesperrten Cachedatei fail-closed. Dieser
-Arbeitsstand ist noch kein neuer Release-PASS; Commit, vollständige Regression,
-zwei bytegleiche PKG-04-Builds und INT-13-Bindung folgen in dieser Reihenfolge.
+Kontrollbefund betrifft nicht den neuen Kandidaten: Beide RC111-PKG-04-Builds
+waren bytegleich, bestanden ihre Paket-/Worker-/History-/Sidecar- und sichtbaren
+nativen Windows-Smokes und bereinigten jeweils ihr eigenes Profil vollständig.
 
 ## Basisstand RC109
 
@@ -129,24 +129,32 @@ Abschnitt.
 
 ## Aktueller geprüfter Kandidat
 
-RC109 aus sauberem `main`-Quellcommit
-`6bf7d05747e151ba8f846849229495e9fca4c041` ist an INT-13 gebunden. PKG-04
-bestand am 06.09.2026: zwei unabhängige saubere Builds, bytegleiche ZIPs,
+RC111 aus sauberem `main`-Quellcommit
+`b543589f3250a6ab57ddd5bc3a144f03a24ee026` ist an INT-13 gebunden. PKG-04
+bestand am 07.09.2026: zwei unabhängige saubere Builds, bytegleiche ZIPs,
 Desktop- und Core-Binaries sowie beide echten Paket-/Worker-/Windows-Starttests.
 Je Paket wurden beide Modi, elf Konvertierungsergebnisse plus fehlerhafte CSV,
 Namenerhaltung, konkrete Laufzuordnung und die optionale Supportspur geprüft.
-ZIP: **110.211.662 Byte**, SHA-256
-`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`;
-Desktop-SHA-256 `b4ce02e53a0f653dbefadc90bb0a5d9c58609c5ca0ab1bb4ca25372381a8c444`,
+ZIP: **110.211.527 Byte**, SHA-256
+`6086d1eb0701c50b77be630bdbcce3d562fab391e92aa5d0bdfeea1eba869f8f`;
+Desktop-SHA-256 `db320ef02f9682087b63fe668859c22f6b91422b2e4c9636a0413ff69cdc62fe`,
 Core-SHA-256 `0d0f5e39f9f3d9587bc19f73eab3c2c9c4903fd02d6dbf9c853dd81b3d95fad4`.
 Receipt und INT-13-Bindung:
-`dist/pkg-04/6bf7d05747e151ba8f846849229495e9fca4c041/`.
-Die vollständige Produktsuite (57 Basis-/114 direkte Testdateien), Rust 16/16,
-27 echte Konvertertestgruppen, Dokumentationsgates und der abschließende Cowork-
-Build sind grün. Der Cowork-ZIP enthält 194 Einträge, ist 35.007.546 Byte groß
-und hat SHA-256 `2bee8c0ab025447ba7dc6d10d9c9bd458f6253e2db6b4026b6f57eae8d5e0946`.
+`dist/pkg-04/b543589f3250a6ab57ddd5bc3a144f03a24ee026/`.
+Die vollständige Produktsuite (61 Basis-/114 direkte Testdateien), Rust 16/16,
+30 echte Konvertertestgruppen und Dokumentationsgates sind grün. Das Receipt
+bindet außerdem Windows 10.0.26200 x64 und die maschinenweit vorhandene
+WebView2-Runtime 152.0.4191.66 inhaltsfrei an den Nachweis.
 Sichtbare Anwenderabnahme und native Mac-Pakete bleiben offen;
 der Windows-Pilot ist keine allgemeine Layout-/OCR-Vollständigkeitsgarantie.
+
+## Historischer Kandidat RC109
+
+RC109 aus `6bf7d05747e151ba8f846849229495e9fca4c041` besitzt einen eigenen
+PKG-04-/INT-13-Nachweis. ZIP: 110.211.662 Byte, SHA-256
+`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
+Dieser Nachweis bleibt historisch erhalten und wird nicht als RC111-Evidence
+umetikettiert.
 
 ## Historischer Kandidat RC108
 

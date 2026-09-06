@@ -280,8 +280,11 @@ unter `LocalAppData` und isoliertem Sidecar bestehen der neu gebaute RC111-
 Arbeitsstand sowie das historische RC109-Archiv den nativen Start bis Frontend,
 Core und IPC. Der ältere RC109-Prozess hinterließ nach seinem erfolgreichen
 Kontrollstart eine gesperrte Cachedatei; das ist ein getrennt fail-closed
-behandelter Cleanup-Testbefund. Eine neue INT-13-Bindung folgt weiterhin erst
-aus einem sauberen Commit und vollständig bestandenem PKG-04.
+behandelter Cleanup-Testbefund. Der saubere Korrekturcommit
+`b543589f3250a6ab57ddd5bc3a144f03a24ee026` besteht anschließend PKG-04 mit
+zwei bytegleichen Builds und beiden sichtbaren nativen Starts; INT-13 ist an
+dieses Receipt und ZIP-SHA-256
+`6086d1eb0701c50b77be630bdbcce3d562fab391e92aa5d0bdfeea1eba869f8f` gebunden.
 
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird

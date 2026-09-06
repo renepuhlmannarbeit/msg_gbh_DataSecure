@@ -8,11 +8,11 @@ Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 
 RC109-Gesamtreviewkorrekturen sind im
 [archivierten Korrekturbericht](../../tasks/archiv/2026-09-06-rc109-review-korrekturen.md)
-gesondert nachgeführt. Der Standalone-Quellstand
-`6bf7d05747e151ba8f846849229495e9fca4c041` wurde zweimal bytegleich gebaut;
+gesondert nachgeführt. Der aktuelle Standalone-Quellstand
+`b543589f3250a6ab57ddd5bc3a144f03a24ee026` wurde zweimal bytegleich gebaut;
 beide Paket-/Worker-/nativen Windows-Smokes bestanden und INT-13 ist an genau
 diesen Commit gebunden. Code-/Protokoll-/Konverter-/Dokumenttests belegen E0;
-RC108-Evidenz wird nicht als Nachweis dieses Stands umetikettiert.
+ältere RC-Evidenz wird nicht als Nachweis dieses Stands umetikettiert.
 
 Der anschließende E0-Restschuldblock umfasst BL-020.3 (Support-Review im
 geschützten Worker), BL-041.1 (gemeinsame Diagnose/typisierte ACK-Fehler),
@@ -38,11 +38,11 @@ Der erweiterte echte Windows-Paket-Smoke prüft beide Modi, Fehlerlauf, alle
 laufgebundenen Ziele und einen frischen Sidecar nach Ergebniszielwechsel.
 Die commitgebundene PKG-04-/INT-13-Bindung ist abgeschlossen; menschliche E1/E2 bleiben offen.
 
-Aktueller Windows-Paketnachweis: RC109 aus `6bf7d057` besteht PKG-04 mit zwei
+Aktueller Windows-Paketnachweis: RC111 aus `b543589f` besteht PKG-04 mit zwei
 bytegleichen Builds, beiden echten Paket-/Worker-/nativen Smokes und neuer
 INT-13-Bindung. Beide Modi, elf Konvertierungsergebnisse plus Fehlerposition,
 Zuordnung und Supportspur sind geprüft. ZIP-SHA-256:
-`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
+`6086d1eb0701c50b77be630bdbcce3d562fab391e92aa5d0bdfeea1eba869f8f`.
 Details und vollständige Hashes stehen
 in [CURRENT_STATE](CURRENT_STATE.md). E1/E2/E3 sind dadurch nicht geschlossen.
 Der RC111-Versuch aus `d45252f` und die Wiederholung nach Windows-Neustart aus
@@ -54,8 +54,9 @@ zwei UDF-Autoritäten. Der korrigierte Arbeitsstand verwendet den automatischen
 Tauri-Start mit genau einem privaten UDF unter `LocalAppData`; RC111-Arbeitsbau
 und historisches RC109-Archiv erreichen damit Frontend, Core und IPC. RC109
 stoppt anschließend nur in der fail-closed Bereinigung einer noch gesperrten
-Cachedatei. Der Fix besitzt noch keinen commitgebundenen PKG-04-Receipt und keine
-neue INT-13-Bindung; die historische RC109-Bindung bleibt unverändert gültig.
+Cachedatei. Aus dem sauberen Korrekturcommit bestehen anschließend vollständige
+Regression, zwei bytegleiche Builds und beide nativen Starts; Receipt und
+INT-13-Bindung liegen unter `dist/pkg-04/b543589f3250a6ab57ddd5bc3a144f03a24ee026/`.
 
 | Bereich / Stories | E0 | Noch erforderlich |
 |---|---|---|

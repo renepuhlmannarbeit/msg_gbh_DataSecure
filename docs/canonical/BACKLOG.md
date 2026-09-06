@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 06.09.2026 · Produktstand 3.2.0-rc111
+Stand: 07.09.2026 · Produktstand 3.2.0-rc111
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -287,7 +287,7 @@ veröffentlicht ausschließlich ein bestehendes Privacy-Paket.
 | Privacy und Pseudonyme | vorhandene PII-/Review-/Residual-Gates; eine Personen-/Unternehmensregistry über direkte und konvertierte Quellen | RC111 prüft reale stabile Personen- und Unternehmenslabels über direkte/konvertierte Quellen und Neustart; unvollständige breite Quellen verbrauchen keine Labels. Breiter Fachkorpus bleibt E3 | **E0 umgesetzt und grün** |
 | Coverage-Gate | nur `complete` darf publizieren; `incomplete` stoppt die Datei mit festem Grund | RC111 bindet Dateiendung und `source_type`, prüft die reale Privacy-Sperre aller breiten Formate sowie OCR-/visuelle Lücken. Vollständige Container-/Grafik-/OCR-Coverage bleibt offen | **E0 umgesetzt und grün** |
 | Ergebnis und UX | ein anonymisiertes `.md` je positive Quelle; direkte Zuordnung ohne Zwischenkonvertat; klare Bezeichnung als Markdown-Extraktion | Export-/Mapping-/Historien-/UI-Tests | **E0 umgesetzt und grün** |
-| Paket und Produkte | Standalone-Runtime/SBOM/Offline-Smoke; Cowork-Allowlist unverändert | ZIP-/Runtime-/Produktisolationsgates | **Die RC111-Fehlläufe aus `d45252f`/`c77ec592` wurden auf einen Harnessfehler eingegrenzt: UDF im Checkout/Tempbaum, vollständig ersetzte Desktop-Umgebung und zwei UDF-Autoritäten. Der korrigierte automatische Tauri-Start mit genau einem UDF unter `LocalAppData` besteht im Arbeitsstand sowie mit dem historischen RC109-Archiv bis Frontend/Core/IPC. Der alte RC109-Kontrollprozess lässt eine gesperrte Cachedatei zurück; Cleanup bleibt fail-closed. Neue PKG-04-/INT-13-Evidence erst nach sauberem Commit und Vollregression** |
+| Paket und Produkte | Standalone-Runtime/SBOM/Offline-Smoke; Cowork-Allowlist unverändert | ZIP-/Runtime-/Produktisolationsgates | **RC111 aus `b543589f` besteht nach Korrektur des Harnessfehlers die vollständige Regression und PKG-04: zwei saubere bytegleiche Builds, beide Paket-/Worker-/History-/Sidecar- und sichtbaren nativen Windows-Smokes. INT-13 ist an genau diesen Commit und ZIP-SHA-256 `6086d1eb…69f8f` gebunden. Der gesperrte Cachetestrest stammt ausschließlich aus dem historischen RC109-Kontrolllauf; der neue Kandidat bereinigt beide eigenen Profile vollständig. E1/E2 und native macOS-Evidence bleiben offen.** |
 
 #### Verbindlicher Lieferplan für reine Markdown-Konvertierung (BL-010.28)
 
