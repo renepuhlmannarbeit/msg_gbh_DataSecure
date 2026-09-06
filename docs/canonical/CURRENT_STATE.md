@@ -4,6 +4,23 @@ Stand: 06.09.2026 · 3.2.0-rc108 · integrierter Expertenstand: einfache eigenst
 
 ## Aktueller geprüfter Kandidat
 
+RC108 aus sauberem `main`-Commit
+`a742333e8ef80b445729d4bede6a91a2b8f13207` ist an INT-13 gebunden. PKG-04
+bestand am 06.09.2026: zwei unabhängige saubere Builds, bytegleiche ZIPs,
+Desktop- und Core-Binaries sowie beide echten Paket-/Worker-/Windows-Starttests.
+Je Paket wurden beide Modi, elf Konvertierungsergebnisse plus fehlerhafte CSV,
+Namenerhaltung, konkrete Laufzuordnung und die optionale Supportspur geprüft.
+ZIP: **110.168.168 Byte**, SHA-256
+`d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
+Receipt und INT-13-Bindung:
+`dist/pkg-04/a742333e8ef80b445729d4bede6a91a2b8f13207/`.
+Die vollständige Produktsuite (48 Basis-/111 direkte Testdateien), Rust 15/15,
+Frontend 18/18, 25 echte Konvertertestgruppen, Dokumentationsgates und Cowork-
+Build sind grün. Sichtbare Anwenderabnahme und native Mac-Pakete bleiben offen;
+der Windows-Pilot ist keine allgemeine Layout-/OCR-Vollständigkeitsgarantie.
+
+## Historischer Kandidat RC107
+
 RC107 aus `7b88a81ff577aaa270f1354d75365b2df4a4666e` besteht die vollständige
 Produktsuite (40 Basis-/111 direkte Testdateien, einschließlich 2.000 Eingaben),
 zwölf Rust-Tests und den abgeschlossenen PKG-04-Zweifachbau. Beide ZIPs,
@@ -18,7 +35,7 @@ Dies belegt nicht den anschließenden Funktionsausbau, macOS oder die sichtbare
 Explorer-/Finder-/Cowork-Anwenderabnahme. Die unten dokumentierten früheren
 gescheiterten Paketversuche sind historische Gegencheck-Evidence.
 
-## Anschließender Quellstand: aktivierte Standalone-Konvertierung
+## Aktueller Funktionsumfang: aktivierte Standalone-Konvertierung
 
 Nach dem gebundenen RC107-Kandidaten wurde **Nur in Markdown umwandeln** als
 Standalone-Standard durch Frontend, Rust, private IPC, Intake-v2, eigene Worker-
@@ -32,14 +49,14 @@ TXT/MD/CSV/DOCX/XLSX/PPTX, PDF/Scan-PDF und PNG/JPEG/BMP nutzen einen gebündelt
 Offline-Worker mit normalem Node, PDF.js, Canvas, Tesseract und DE/EN-Modellen.
 Der unabhängige Integrationsreview fand und korrigierte einen gemeinsamen
 Windows-Launcher-Race bei frühem Abbruch sowie fehlende v5-Snapshot-/Recovery-
-Übergänge. Der neue vollständige Produkt-/PKG-04-Nachweis wird separat erstellt;
-der historische RC107-Receipt bleibt ausschließlich Beleg für `7b88a81`.
+Übergänge. Der neue vollständige Produkt-/PKG-04-Nachweis gehört ausschließlich
+zu `a742333`; der historische RC107-Receipt bleibt Beleg für `7b88a81`.
 
 Die vollständige RC108-Produktsuite ist grün (48 Basis-/111 direkte Testdateien),
 ebenso Rust 15/15, Frontend 18/18, Dokumentationsgates und Cowork-Build. Der echte
-RC108-Probe-Paketlauf besteht beide Modi, elf Konvertierungsergebnisse plus
+RC108-Paketlauf besteht beide Modi, elf Konvertierungsergebnisse plus
 Fehlerposition, genaue Laufzuordnung und optionale Supportereignisse. Der finale
-Zweifachbau bleibt bis zu seiner tatsächlichen Ausführung offen.
+Zweifachbau und beide nativen Windows-Starts sind mit dem obigen Receipt belegt.
 Details: [RC108-Abschlussreview](../../tasks/archiv/2026-09-06-standalone-markdown-rc108-abschluss.md).
 
 Historische Abschlussprüfung des Zwischenstands `2f173f9` am 06.09.2026:

@@ -104,9 +104,12 @@ Runtime wurde dabei nicht je Dokument erneut vollständig gelesen/gehasht.
 60 frühe Beendigungen prüfen die atomare Windows-Jobbindung. Diese Messungen
 sind keine allgemeine Geschwindigkeitszusage und kein sichtbarer Anwender-UAT.
 
-Der vollständige aktuelle Paket-/Sidecar-E2E-Lauf, zwei bytegleiche RC108-Builds
-aus demselben Commit, deren PKG-04-Receipt und die neue INT-13-Bindung sind separat
-nachzuweisen. Der frühere RC107-Kandidat aus `7b88a81` belegt die neue Konvertierung nicht.
+Der vollständige aktuelle Paket-/Sidecar-E2E-Lauf ist bestanden: zwei bytegleiche
+RC108-Builds aus `a742333e8ef80b445729d4bede6a91a2b8f13207`, beide Smokes,
+PKG-04-Receipt und neue INT-13-Bindung. Beide Modi sowie elf Konvertierungen plus
+Fehlerposition und genaue Laufzuordnung sind geprüft. ZIP-SHA-256:
+`d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
+Der frühere RC107-Kandidat aus `7b88a81` belegt die neue Konvertierung nicht.
 Native macOS-Intel-/ARM-Ausführung und fachlicher UAT bleiben offen. Der Ausbau
 der **Anonymisierung** auf XLSX/PPTX/PDF/Scan-PDF/Bilder sowie vollständigere
 Container-/Grafikabdeckung bleiben eigene Backlogarbeit.

@@ -1,6 +1,6 @@
 # Anschließender Funktionsausbau: Konvertierung und breite Formate
 
-Stand: 06.09.2026 · 3.2.0-rc108 · Implementierung mit ausstehender neuer Paket-/UAT-Bindung.
+Stand: 06.09.2026 · 3.2.0-rc108 · Windows-Implementierung und neue Paketbindung abgeschlossen; Zielhost-UAT offen.
 Dies ist der technische Ausführungsplan, keine zweite Arbeitsliste. Status und
 Priorität werden ausschließlich im [kanonischen Backlog](../docs/canonical/BACKLOG.md)
 geführt: BL-010.15–19/28, BL-022.2/3, BL-023.1–4 und BL-024.2/3.
@@ -87,7 +87,7 @@ zweiten Batchrunner:
 | `batch-journal-store` | Geschlossenes v5-Schema, `artifact_id`/Digest/Bytezahl/Extraktionsgrad/Gründe statt Privacy-Paketfeldern. v1/v2/v4 bleiben Anonymisierung, altes verschlüsseltes v3 bleibt zurückgewiesen. |
 | `batch-item-processor`, `batch-reconciliation`, `batch-delivery`, `standalone/markdown-store` | `convertNext` und typgebundener Artefaktresolver statt `anonymizeNext`; eigene Recoveryprüfung vor/nach Publikation, keine Read-Capability für Konvertate. |
 | `result-export`, Mapping-Outbox und native Zielresolver | Atomarer `DataSecure-Markdown`-Lauf samt Zuordnung und festen Gründen, separate Zielidentität, beide Outputbäume aus Quellen ausgeschlossen, fehlgeschlagene Folgeausgabe ohne Altziel. |
-| `conversion-worker`, `conversion-runtime-resolver`, Paketprojektion | Gebündeltes normales Node statt SEA-Reexec, geprüfte lokale Ressourcen, ein begrenzter isolierter Prozess pro Datei. Echter Paket-/Sidecar-E2E und anschließend neuer PKG-04-/INT-13-Nachweis bleiben separat zu liefern. |
+| `conversion-worker`, `conversion-runtime-resolver`, Paketprojektion | Gebündeltes normales Node statt SEA-Reexec, geprüfte lokale Ressourcen, ein begrenzter isolierter Prozess pro Datei. Echter Windows-Paket-/Sidecar-E2E und neuer PKG-04-/INT-13-Nachweis sind aus `a742333` geliefert; Mac-Evidence bleibt separat. |
 
 PDF.js verarbeitet ausschließlich lokale Bytes. Ein echter laufender Abbruch
 konnte zuvor eine unbeantwortete Promise lassen; Cancel-Wartepunkte, einmalige
@@ -146,8 +146,8 @@ automatisch an KI-Dienste. Die fachlichen Auslassungsgrenzen stehen in der
 | PPTX | Folienreihenfolge, Tabellen, numerische Notizen und verbundene Textläufe regressionsgeprüft; Master/Layout, Diagramme/Bilder teilweise | Objekt-/Namespace-Coverage, realistische Office-Dateien und Reihenfolge; keine still ignorierten Textobjekte. |
 | MarkItDown | Optionaler gepinnter 0.1.7-DOCX-Differentialadapter | Kein benötigtes Python-/Wheel-Bundle, keine Voraussetzung für den aktiven Produktweg. Kein `[all]`, Azure oder LLM-Plugin. |
 | Text-PDF | Gebündeltes PDF.js 6.2.108, lokale Ressourcen, `stopAtErrors`, bytegebundene Eingabe und isolierter Produktworker; ältere Pilotfälle mit 101 Seiten / laufendem 1.000-Seiten-Abbruch bleiben zusätzliche Evidence | Vollständiger Objekt-/Layoutumfang und Zielhost-UAT. PDF bleibt grundsätzlich `incomplete`. |
-| Scan-PDF | Seitenweise Text-oder-OCR-Auswahl im Produktworker, eine lokale OCR-Sitzung pro PDF, Quellenhash und Vermeidung doppelter Inhalte geprüft | Aktueller Paket-/Sidecar-E2E, Windows-/macOS-UAT; OCR bleibt potenziell unvollständig. Keine fixe Seitenanzahlgrenze. |
-| Bilder/OCR | PNG/BMP-Decoder und JPEG via gebündeltem Canvas 1.0.7; Tesseract.js 7 mit lokalen hashgeprüften DE/EN-Modellen, kein Modelldownload/Cachewrite. Echter Worker mit Timeout und bestätigtem Prozessende | Aktueller Paket→OCR-Nachweis und Windows-/macOS-UAT. Alle OCR-Ausgaben bleiben `incomplete`; keine automatische Vollständigkeitsfreigabe. |
+| Scan-PDF | Seitenweise native Textebene plus bedarfsabhängige OCR bei gemalten Bildinhalten im Produktworker, eine lokale OCR-Sitzung pro PDF, Quellenhash und Vermeidung doppelter Inhalte geprüft | Windows-/macOS-UAT; OCR bleibt potenziell unvollständig. Keine fixe Seitenanzahlgrenze. |
+| Bilder/OCR | PNG/BMP-Decoder und JPEG via gebündeltem Canvas 1.0.7; Tesseract.js 7 mit lokalen hashgeprüften DE/EN-Modellen, kein Modelldownload/Cachewrite. Echter Worker mit Timeout und bestätigtem Prozessende | Windows-/macOS-UAT; aktueller Paket→OCR-Nachweis ist abgeschlossen. Alle OCR-Ausgaben bleiben `incomplete`; keine automatische Vollständigkeitsfreigabe. |
 
 `sourceLimitForExtension` bindet jetzt auch XLSX/PPTX, PDF und Bilder an eigene
 Dateibudgets; das 500-MiB-/100-Dateien-Stapelbudget ist keine Einzeldokumentzusage.
@@ -171,7 +171,7 @@ Anwender. Linux-Konverterpaketierung ist noch kein unterstützter Zielpfad.
 Die etwa 188-MB-Runtime wird je langlebigem Executor einmal vollständig geprüft;
 folgende Dateien prüfen Identitäten und hashen geänderte Dateien neu. Der reale
 100-TXT-Lauf dauerte lokal 15,264 Sekunden ohne erneutes vollständiges Runtime-
-Lesen je Datei. 22 E0-Konvertertestgruppen decken echte Formate, Namenerhaltung,
+Lesen je Datei. 25 E0-Konvertertestgruppen decken echte Formate, Namenerhaltung,
 Inputhashes, Leerbild, fehlerhafte Bytes, private Umgebung, laufenden Abbruch,
 Timeout und unbestätigtes Ende ab. Das sind keine Endnutzer-Performancegarantien.
 
@@ -181,12 +181,13 @@ Der native Supervisor bindet das Kind jetzt atomar über `JOB_LIST` während
 Jobzuweisung entfällt auch für den gemeinsamen Cowork-Parser. Native Builds sind
 reproduzierbar geprüft; 7 Launcher- und 19 Parser-Isolationstests sind grün.
 
-Vor Lieferung: vollständiger aktueller Sidecar-/Paket-E2E mit beiden Modi,
-Negativfolgelauf und allen elf Konvertierungstypen; dann sauberer Quellcommit,
-zwei bytegleiche PKG-04-Builds, beide Smokes und erst danach neue INT-13-Bindung.
-Der alte Kandidat `7b88a81` deckt diese Änderungen nicht ab. Keine endgültige
-PKG-04-/UAT-Erfolgsaussage für RC108 in diesem Plan. Windows-E0 ersetzt keine
-Intel-/ARM-macOS-Ausführung. Beide Produkte bleiben gepflegt; rohe Konvertate
+Abgeschlossen für Windows: vollständiger aktueller Sidecar-/Paket-E2E mit beiden
+Modi, Negativfolgelauf und allen elf Konvertierungstypen; sauberer Quellcommit
+`a742333e8ef80b445729d4bede6a91a2b8f13207`, zwei bytegleiche PKG-04-Builds, beide
+Smokes und danach neue INT-13-Bindung. Receipt unter `dist/pkg-04/a742333e8ef80b445729d4bede6a91a2b8f13207/`;
+ZIP-SHA-256 `d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
+Der alte Kandidat `7b88a81` deckt diese Änderungen nicht ab. Windows-E0 ersetzt
+keine menschliche UAT- oder Intel-/ARM-macOS-Abnahme. Beide Produkte bleiben gepflegt; rohe Konvertate
 sind ausschließlich eine Standalone-Funktion.
 
 ## Primärquellen des Gegenchecks

@@ -1,7 +1,7 @@
 # RC108: einfache lokale Markdown-Konvertierung
 
-Stand: 06.09.2026. Aktueller Implementierungs- und Prüfbericht; die endgültige
-Paketbindung wird erst nach erfolgreichem Zweifachbau ergänzt.
+Stand: 06.09.2026. Abgeschlossener Implementierungs- und Prüfbericht zum
+Windows-Piloten; menschliche und native macOS-Abnahme bleiben separat offen.
 
 ## Gelieferter Ablauf
 
@@ -62,7 +62,28 @@ und echter 100-Dateien-/Crash-/Fortsetzungstests. Rust 15/15, Frontend 18/18,
 Dokumentationsgates und kompletter Cowork-Build sind grün. Der RC108-Probe-ZIP
 besteht die echte gemischte Konvertierung mit elf Ergebnissen und einer defekten
 CSV, beide Betriebsarten, exakte Laufzuordnung und die optionale Supportspur.
-Die definitive PKG-04-Bindung folgt aus dem anschließend sauberen Quellcommit.
+Die definitive PKG-04-Bindung ist anschließend aus dem sauberen Quellcommit
+`a742333e8ef80b445729d4bede6a91a2b8f13207` erstellt worden.
+
+### Definitiver Paketnachweis
+
+- Zwei saubere Builds aus genau diesem Commit; ZIP, Desktop und Core jeweils
+  bytegleich. Beide Paket-/Worker-/nativen Windows-Smokes bestanden.
+- ZIP: `DataSecure-Standalone-3.2.0-rc108-windows-x64.zip`, 110.168.168 Byte,
+  SHA-256 `d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
+- Desktop-SHA-256: `e5ec3409bd8a559535c4d4e8e01bec99d9bb951beed7caee818139f4856a5089`.
+- Core-SHA-256: `0d0f5e39f9f3d9587bc19f73eab3c2c9c4903fd02d6dbf9c853dd81b3d95fad4`.
+- Receipt und INT-13-Bindung unter
+  `dist/pkg-04/a742333e8ef80b445729d4bede6a91a2b8f13207/`;
+  Receipt-SHA-256 `d6217ed06bcf9b629a052e5fbc7efbcad0894799203db0a676fe0c0654454a3a`.
+- Vollständiges PKG-04-Log: `dist/rc108-pkg-04-verified.log`. Die native
+  Testbereinigung entfernte nur die eigenen frisch erzeugten Profile. Frühere
+  zurückbehaltene Fehlversuchsordner wurden nicht berührt.
+- 100 kleine TXT-Dateien im verpflichtenden neuen Konverterlauf: 14,827 Sekunden
+  auf diesem Windows-Entwicklungsrechner; keine allgemeine Performancezusage.
+
+Der dokumentierende Folgecommit ändert weder Quellcode noch diesen Kandidaten.
+Kein Push und keine GitHub Actions wurden in diesem Durchlauf ausgeführt.
 
 | Ebene | Prüfung | Was sie nicht belegt |
 | --- | --- | --- |

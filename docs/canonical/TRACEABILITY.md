@@ -97,9 +97,13 @@ Der historische RC107-Nachweis ist vollständig: `7b88a81ff577aaa270f1354d75365b
 → `dist/pkg-04/7b88a81ff577aaa270f1354d75365b2df4a4666e/PKG-04-RECEIPT.json`
 → hashgebundene `INT-13-BINDING.json`. Spätere Entwicklungsänderungen sind nicht
 automatisch Teil dieses Kandidaten; menschliche Zielhost-Evidence bleibt getrennt.
-Insbesondere muss RC108 seinen vollständigen Paket-/Sidecar-E2E, zweimal
-bytegleichen PKG-04-Build aus demselben Commit, beide Smokes und die neue
-INT-13-Bindung erst separat nachweisen; dieser Text behauptet keinen Abschluss.
+RC108 hat diesen Nachweis eigenständig erbracht: sauberer Quellcommit
+`a742333e8ef80b445729d4bede6a91a2b8f13207` → zwei bytegleiche Builds → beide
+Paket-/Worker-/nativen Windows-Smokes → PKG-04-Receipt und INT-13-Bindung unter
+`dist/pkg-04/a742333e8ef80b445729d4bede6a91a2b8f13207/`.
+ZIP-SHA-256: `d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
+48 Basis-/111 direkte Produkttestdateien, Rust 15/15, Frontend 18/18 und beide
+Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 
 | Entscheidung | Aktueller Status | Backlog / Nachweis |
 |---|---|---|
@@ -177,7 +181,7 @@ INT-13-Bindung erst separat nachweisen; dieser Text behauptet keinen Abschluss.
 | DS-072 | aktiv und aktuell | BL-010.8, BL-011.10, BL-041.7, BL-051.5; dauerhafte versionsgebundene Runtimeprojektion für Cowork-Worker; Standalone ist nach DS-075 ein getrenntes Produkt mit eigener Runtimeprojektion; `durable-runtime-cache.js`, `background-role-launcher.js`; `test-durable-runtime-cache`, `test-background-role-launcher`; echter RC96-UAT offen |
 | DS-073 | aktiv und aktuell | BL-010.8, BL-041.7, BL-041.10, BL-051.5; Claude-Temporärumleitung von `LOCALAPPDATA` nicht als Produktzustand verwenden, normale/umgezogene Pfade unverändert; `runtime.js`, `durable-runtime-cache.js`; `test-stable-data-root`, `verify-plugin-zip`; echter RC97-UAT offen |
 | DS-074 | aktiv und aktuell | BL-042.4; manueller Debug-Skill nur im gekennzeichneten Support-ZIP, gleiche Engine, geschlossene inhaltsfreie JSON-Ereignisse als unveränderliche Einzeldateien; `support-trace.js`, `workflow-diagnostics.js`, `mcp-server.js`, `build-runtime-plugin.mjs`; `test-support-trace`, `test-debug-skill-contract`, `test-mcp-protocol`, `test-workflow-diagnostics` |
-| DS-075 | aktiv und aktuell | BL-010.9–28; eigenständiges Standalone mit getrenntem Datenroot ohne MCP/Claude/Agenten; beide Modi im gemeinsamen Core, lokale Konverterruntime und Supervisor integriert. MarkItDown 0.1.7/Python nur optionales Differentialorakel, kein benötigtes Bundle. `server/standalone/*`, `core/processing-mode.js`, Runtime-/Paketgates; aktuelle Paketbindung und E1/E2 offen |
+| DS-075 | aktiv und aktuell | BL-010.9–28; eigenständiges Standalone mit getrenntem Datenroot ohne MCP/Claude/Agenten; beide Modi im gemeinsamen Core, lokale Konverterruntime und Supervisor integriert. MarkItDown 0.1.7/Python nur optionales Differentialorakel, kein benötigtes Bundle. `server/standalone/*`, `core/processing-mode.js`, Runtime-/Paketgates; RC108-Windows-Paketbindung abgeschlossen, E1/E2 offen |
 | DS-076 | aktiv und aktuell, durch DS-077 präzisiert | BL-010.11–26; reale Tauri-2-Hülle, nativer Picker, privater längengerahmter Sidecar-Dispatcher mit Ready-Handshake und 30-Sekunden-Antwortgrenze, geschlossener UI-Snapshot-/IPC-Vertrag und strikte Zählerinvarianten; Windows-x64-Engineering-Build und selbsttragendes Pilotpaket verifiziert; vier getrennte Zielpakete Windows x64/macOS x64/macOS ARM64/Linux x64 glibc, kein HTTP-Port und kein Renderer-Rohzugriff; `standalone/product-manifest.json`, `standalone/ui-contract.json`, `standalone/desktop-ipc.js`, `standalone/desktop-sidecar.js`, `apps/datasecure-standalone/desktop-targets.json`, `apps/datasecure-standalone/tauri-contract/`, `STANDALONE_ARCHITECTURE.md`; JS-/Rust-/Paket-/isolierter Sidecar-Smoke grün; Endnutzerfreigabe und native macOS-/Linux-Zielhostmessung offen |
 | DS-077 | aktiv und aktuell | BL-010.20/21/25/27; Windows-x64-Engineering-Pilot mit frischer geschlossener Runtimeprojektion, gepinnter Node-Runtime, Paketmanifest, SBOM, SHA-256 und isoliertem Sidecar-Smoke; systemweites WebView2 als dokumentierte Windows-Voraussetzung; Rust-Toolchain 1.98.1 für Builder gepinnt; Lizenzprüfung, Windows-UAT und native macOS-Pakete/UAT offen |
 | DS-078 | aktiv und aktuell | BL-010.7, BL-041, BL-051.6; Originale nur in lokaler Cowork-Sitzung mit laufendem Plugin-MCP oder lokalem Claude Code; Cloud-Cowork/Web/Mobil/Scheduled dürfen nur bereits freigegebenes Markdown verwenden; Hostmatrix-, Skill-, Nutzer- und Dokumentationsgates |
@@ -187,7 +191,7 @@ INT-13-Bindung erst separat nachweisen; dieser Text behauptet keinen Abschluss.
 | DS-082 | aktiv und aktuell | BL-010.11/12/28; lokale Auswahl-/Zielanzeige ohne Diagnoseweitergabe, expliziter Start, zwei strikt getrennte aktive Modi; aktiver oder fortsetzbarer Stapel behält Backendmodus. `frontend/index.html`, `frontend/app.js`, Rust-Commands, `application-service.js`, `desktop-ipc.js`; Standalone-Vertragstests und E1/E2 offen |
 | DS-083 | aktiv und aktuell | BL-010.13/26/28, BL-040.5; je terminal sichtbarem Standalone-Lauf eine formelneutralisierte `DataSecure-Zuordnung.csv`: Quelle → anonymisiertes Ergebnis oder ausdrücklich nicht anonymisiertes Konvertat, einschließlich Fehler-/Auslassungsgründen. `DataSecure-Output` und `DataSecure-Markdown` bleiben getrennt; Cowork erhält keine Originalnamen-Projektion. Export-, Recovery-, Standalone- und OS-Öffnertests |
 | DS-084 | aktiv und aktuell | BL-010.12/13, BL-030.2; neue Standalone-Stapel mit lesbaren v2-Kennungen, Firmenrollen einheitlich, Restore behält Version; native Dragdrop-Aufnahme ohne Autostart, Pickeralternative; Registry-, State-, Intake-, Rust-, Frontend- und reale Pakettests |
-| DS-085 | implementiert, aktuelle Paketbindung und Zielhost-UAT offen | BL-010.28 mit BL-010.15–19, BL-022.2/3, BL-023.1–4 und BL-024.2/3; zweite Standalone-Kernfunktion ohne PII-Entfernung, elf Eingabetypen einschließlich Scan-PDF, v5-Journal/`dm_`/eigene Worker-Envelope-Typen, Recovery und atomarer `DataSecure-Markdown`-Export. UI-/Rust-/IPC-/Modus-/Journal-/Artefakt-/Extraktions-/Konverter-/Cross-Read-Gates; E0 ist keine fachliche Vollständigkeits- oder UAT-Freigabe |
+| DS-085 | Windows-E0 und Paketbindung abgeschlossen; Zielhost-UAT offen | BL-010.28 mit BL-010.15–19, BL-022.2/3, BL-023.1–4 und BL-024.2/3; zweite Standalone-Kernfunktion ohne PII-Entfernung, elf Eingabetypen einschließlich Scan-PDF, v5-Journal/`dm_`/eigene Worker-Envelope-Typen, Recovery und atomarer `DataSecure-Markdown`-Export. UI-/Rust-/IPC-/Modus-/Journal-/Artefakt-/Extraktions-/Konverter-/Cross-Read-Gates; E0 ist keine fachliche Vollständigkeits- oder UAT-Freigabe |
 
 ## DS-067 – konkrete Umsetzung
 
