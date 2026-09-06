@@ -3,6 +3,7 @@ param([string] $ExpectedCommit = '')
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $repositoryRoot
+. (Join-Path $repositoryRoot 'tests\manual\standalone-native-host.ps1')
 
 function Invoke-Checked([string] $Program, [string[]] $Arguments) {
     & $Program @Arguments
@@ -53,6 +54,7 @@ if (-not (Test-Path -LiteralPath $cargo -PathType Leaf) -or -not (Test-Path -Lit
 }
 $env:Path = "$cargoDirectory;$env:Path"
 $package = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'package.json') | ConvertFrom-Json
+$webviewHost = Get-StandaloneWebViewHostFacts
 $archiveName = "DataSecure-Standalone-$($package.version)-windows-x64.zip"
 $sourceArchive = Join-Path $repositoryRoot "dist\$archiveName"
 $evidenceRoot = Join-Path $repositoryRoot "dist\pkg-04\$commit"
@@ -95,7 +97,7 @@ foreach ($field in @('archive_sha256', 'desktop_sha256', 'core_sha256')) {
     if ($candidates[0][$field] -ne $candidates[1][$field]) { throw "PKG04_NOT_BYTE_IDENTICAL:$field" }
 }
 $receipt = [ordered]@{
-    schema = 'datasecure-pkg-04-receipt/1'
+    schema = 'datasecure-pkg-04-receipt/2'
     acceptance = 'PKG-04'
     scope = 'same-host-same-toolchain-clean-build'
     source = [ordered]@{ branch = $branch; commit = $commit; tree = $tree; clean = $true }
@@ -106,6 +108,7 @@ $receipt = [ordered]@{
         npm = (& npm.cmd --version).Trim()
         rustc = (& $rustc --version).Trim()
         cargo = (& $cargo --version).Trim()
+        webview2 = $webviewHost
     }
     candidates = $candidates
     byte_identical = $true

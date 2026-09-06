@@ -101,10 +101,13 @@ Dokumente, temporäre Dateien, Diagnosen und WebView. Ein fehlendes oder
 unvollständiges Profil an einem reservierten Smoke-Pfad stoppt vor dem Start;
 ältere Binaries ohne diesen Vertrag werden nicht gestartet. Die reale
 Anwenderinstallation, deren Recovery und deren Aufbewahrungsdaten bleiben
-außerhalb des Tests. Der Test
-verlangt über eine pro Prozess eindeutige Diagnose-Session `setup_started`,
-`webview_build_started`, `webview_build_completed`, `setup_completed`,
-`sidecar_started`, `service_initialized`, `page_loaded`, `frontend_ready` sowie bestätigte
+außerhalb des Tests. Die Desktop-Hülle erbt dabei ihre normale Windows-
+Umgebung; ausschließlich bekannte DataSecure-/Node-/Tauri-/WebView-/Proxy-
+Injektionen werden entfernt. Der WebView-UDF liegt in einem zufälligen,
+identitätsgebundenen Testroot unter `LocalAppData`. Erst der Sidecar erhält die
+vollständig isolierten Profil-, Dokument-, Temp- und Diagnosepfade. Der Test
+verlangt über eine pro Prozess eindeutige Diagnose-Session `webview_profile_ready`,
+`setup_started`, `setup_completed`, `sidecar_started`, `service_initialized`, `page_loaded`, `frontend_ready` sowie bestätigte
 `get_ui_context`- und `get_public_state`-Antworten. Er muss in einer echten
 interaktiven Windows-Sitzung laufen; eine Dateisystem-Sandbox, die WebView2
 nicht initialisiert, ist keine gültige Zielhost-Evidenz. Er ist ein Windows-E0-Gate,
@@ -126,6 +129,9 @@ ZIP-SHA-256 und den Hash des PKG-04-Receipts; `latest`, Versionsnamen oder der
 überschriebene Stage-Ordner sind keine zulässige Bindung. Die Aussage ist auf
 denselben Host und die im Receipt ausgewiesene Node-/npm-/Rust-/Cargo-Toolchain
 begrenzt.
+Receipt-Schema v2 bindet zusätzlich Betriebssystembuild, Prozessarchitektur
+sowie Version und Installationsscope der verwendeten WebView2-Runtime; Pfade
+und Benutzerdaten werden nicht aufgenommen.
 
 Der native Windows-Smoke startet die Tauri-Hülle bewusst kurz sichtbar. Ein
 mit `WindowStyle Hidden` oder `Minimized` erzeugtes Top-Level-Fenster kann die
@@ -133,9 +139,11 @@ WebView2-Seiteninitialisierung auf einem realen Windows-Host aufschieben und
 wäre deshalb kein gleichwertiger Nachweis des Endnutzerstarts. Nach bestätigtem
 `page_loaded`, `frontend_ready`, Core-Start und den ersten beiden IPC-Antworten
 beendet der Test ausschließlich seine eigene Prozessinstanz.
-Bleibt der Lauf bereits zwischen `application_started` und `page_loaded` ohne
-Sidecar-Start stehen, meldet er gezielt `STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`;
-ein späterer Ausfall bleibt als `STANDALONE_NATIVE_IPC_TIMEOUT` unterscheidbar.
+Bleibt der Lauf vor `setup_started`, meldet er
+`STANDALONE_NATIVE_WEBVIEW_INITIALIZATION_TIMEOUT`. Danach unterscheiden
+`STANDALONE_NATIVE_SETUP_TIMEOUT`, `STANDALONE_NATIVE_PAGE_LOAD_TIMEOUT`,
+`STANDALONE_NATIVE_FRONTEND_READY_TIMEOUT` und `STANDALONE_NATIVE_IPC_TIMEOUT`
+die belegte letzte Phase.
 
 Die Testbereinigung inventarisiert den eigenen frischen Root vor jeder Löschung
 und folgt keinen Verzeichnisverweisen. Vor dem Produktstart sind alle solchen
@@ -255,23 +263,25 @@ und XMP werden gestoppt; standardisierte Info-Metadaten bleiben im reinen
 Markdown-Ergebnis sichtbar erhalten.
 
 Der native Windows-Smoke unterscheidet nun die inhaltsfreien Checkpoints
-`setup_started`, `webview_build_started`, `webview_build_completed` und
-`setup_completed`. Beginnt die App, erreicht aber weder `page_loaded` noch den
-Sidecar-Start, lautet das Urteil `STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT`;
-ein späterer Ausfall bleibt `STANDALONE_NATIVE_IPC_TIMEOUT`. Beide Fehler sind
-Zielhostblocker und dürfen weder durch längere Timeouts noch durch Lockerung der
-WebView-/IPC-Isolation in einen Erfolg umgedeutet werden.
+`webview_profile_ready`, `setup_started`, `setup_completed`, `page_loaded`,
+`frontend_ready` und die ersten IPC-/Sidecarantworten. Die Tauri-Hülle verwendet
+dabei denselben automatisch erzeugten Fensterpfad wie das Produkt; ein früherer
+manueller WebView-Sonderpfad wurde entfernt. Fehler dürfen weder durch längere
+Timeouts noch durch Lockerung der Sidecar-Isolation in Erfolg umgedeutet werden.
 
 Der commitgebundene RC111-Lauf aus `d45252f` reproduzierte auf dem aktuellen
 Windows-Host den ersten Fall: Kandidat A und alle nichtvisuellen Smokes bestanden,
 der Lauf endete nach `webview_build_started`. Nach Windows-Neustart wiederholte
 der saubere Commit `c77ec592aa95f323bd5b1efe6301b111e7f2f225` dasselbe Urteil.
-Auch das historisch gebundene RC109-Archiv erreicht in der jetzigen Hostumgebung
-weder `page_loaded` noch Sidecar-Start. Der Vergleich grenzt den aktuellen
-Blocker auf Host/WebView ein; er beweist keinen RC111-Produktregressionsfehler.
-Kandidat B und INT-13 wurden korrekt nicht erzeugt. Der nächste Nachweis benötigt
-einen funktionsfähigen interaktiven Zielhost, nicht lediglich einen längeren
-Timeout oder eine gelockerte Isolation.
+Die Gegenanalyse belegte anschließend den Testfehler: Der WebView-UDF lag im
+Checkout beziehungsweise im temporären Dateibaum und die Desktop-Umgebung war
+unnötig vollständig ersetzt. Mit normaler Desktop-Umgebung, einem einzigen UDF
+unter `LocalAppData` und isoliertem Sidecar bestehen der neu gebaute RC111-
+Arbeitsstand sowie das historische RC109-Archiv den nativen Start bis Frontend,
+Core und IPC. Der ältere RC109-Prozess hinterließ nach seinem erfolgreichen
+Kontrollstart eine gesperrte Cachedatei; das ist ein getrennt fail-closed
+behandelter Cleanup-Testbefund. Eine neue INT-13-Bindung folgt weiterhin erst
+aus einem sauberen Commit und vollständig bestandenem PKG-04.
 
 Zusätzlich reproduziert `test-durable-runtime-cache` die im Windows-UAT
 beobachtete Cowork-Lebenszyklusgrenze: Nach der lokalen Laufzeitprojektion wird

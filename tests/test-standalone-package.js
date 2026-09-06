@@ -53,6 +53,9 @@ test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () 
   assert.match(releaseGate, /function Get-Sha256File/u);
   assert.match(releaseGate, /System\.Security\.Cryptography\.SHA256\]::Create/u);
   assert.match(releaseGate, /Get-Sha256File \$receiptPath/u);
+  assert.match(releaseGate, /datasecure-pkg-04-receipt\/2/u);
+  assert.match(releaseGate, /Get-StandaloneWebViewHostFacts/u);
+  assert.match(releaseGate, /webview2 = \$webviewHost/u);
   assert.doesNotMatch(releaseGate, /(?:^|[\r\n]\s*)Get-FileHash\b/mu,
     'receipt hashing must not depend on optional PowerShell module auto-loading');
 });

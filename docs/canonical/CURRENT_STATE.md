@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 06.09.2026 · 3.2.0-rc111 · Startseite und laufgebundener Verlauf
+Stand: 07.09.2026 · 3.2.0-rc111 · Startseite und laufgebundener Verlauf
 
 ## Aktueller Entwicklungsstand RC111
 
@@ -29,8 +29,9 @@ anonymisiert werden. Das schützt ausschließlich den extrahierten Markdown-Inha
 und behauptet keine Vollständigkeit des ursprünglichen Containers.
 
 Der native Windows-Launcher protokolliert nun getrennte, inhaltsfreie Checkpoints
-für Setup und WebView-Aufbau. Dadurch lässt sich ein Zielhostfehler vor
-`page_loaded` von einem späteren Sidecar-/IPC-Fehler unterscheiden. Der
+für WebView-Profil, Setup, Seitenaufbau, Frontend und IPC. Dadurch lässt sich
+ein Zielhostfehler vor `page_loaded` von einem späteren Sidecar-/IPC-Fehler
+unterscheiden. Der
 commitgebundene RC111-PKG-04-Nachweis wird erst nach sauberem Commit durchgeführt;
 der unten genannte RC109 bleibt bis dahin der letzte an INT-13 gebundene Kandidat.
 Die vollständige RC111-Produktsuite besteht mit 61 Basis-/114 direkten
@@ -51,6 +52,18 @@ den Befund auf die jetzige Host-/WebView-Testumgebung ein und ist kein belegter
 RC111-Produktregressionsfehler. RC109 bleibt als historisch erfolgreich
 gebundener Kandidat bestehen; eine neue Bindung erfordert einen vollständig
 grünen PKG-04-Lauf auf einem funktionsfähigen Zielhost.
+
+Die anschließende unabhängige Startpfadanalyse hat diesen Befund präzisiert:
+Der Test verwendete einen WebView-UDF im Checkout beziehungsweise Tempbaum,
+ersetzte die Desktop-Umgebung vollständig und besaß zwei UDF-Autoritäten. Der
+korrigierte Vertrag verwendet den normalen automatischen Tauri-Fensterstart,
+genau einen zufälligen UDF unter `LocalAppData`, entfernt nur bekannte
+Injektionen und isoliert erst den Sidecar vollständig. Ein neu gebauter RC111-
+Arbeitsstand und das unveränderte RC109-Archiv erreichten damit Frontend, Core
+und beide IPC-Startantworten. Der historische Kontrolllauf endete erst bei der
+sicheren Bereinigung einer noch gesperrten Cachedatei fail-closed. Dieser
+Arbeitsstand ist noch kein neuer Release-PASS; Commit, vollständige Regression,
+zwei bytegleiche PKG-04-Builds und INT-13-Bindung folgen in dieser Reihenfolge.
 
 ## Basisstand RC109
 

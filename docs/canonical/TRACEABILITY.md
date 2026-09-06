@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 06.09.2026 · 3.2.0-rc111
+Stand: 07.09.2026 · 3.2.0-rc111
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -31,10 +31,14 @@ E0-Nachweise erweitern nicht die Anonymisierungsfreigabe. Der neue native
 Startup-Checkpoint trennt WebView-Aufbaufehler von späteren IPC-Ausfällen; eine
 INT-13-Bindung folgt ausschließlich nach bestandenem commitgebundenem PKG-04.
 Der zweite Lauf nach Windows-Neustart aus `c77ec592aa95f323bd5b1efe6301b111e7f2f225`
-stoppt erneut vor `webview_build_completed`; dasselbe tut das historisch gebundene
-RC109-Archiv in der aktuellen Hostumgebung vor `page_loaded`. Damit ist der
-aktuelle Blocker auf Host/WebView eingegrenzt, ohne eine RC111-Regression oder
-einen neuen Release-PASS zu behaupten.
+stoppt erneut vor `webview_build_completed`. Die anschließende unabhängige
+Analyse bindet den Stillstand an den damaligen Testvertrag: UDF im Checkout/
+Tempbaum, vollständig ersetzte Desktop-Umgebung und zwei UDF-Autoritäten. Mit
+automatischem Tauri-Fensterstart, genau einem UDF unter `LocalAppData` und erst
+im Sidecar vollständig isolierten Pfaden bestehen der RC111-Arbeitsbau und das
+historische RC109-Archiv den Start bis Frontend/Core/IPC. Der ältere Prozess
+belegt außerdem den noch fail-closed offenen Cleanup-Lockfall. Das ist noch kein
+neuer Release-PASS; PKG-04/INT-13 bleiben an sauberen Commit und Vollgates gebunden.
 
 Der anschließende Restschuldblock bindet BL-020.3 an den echten Support-stdio-
 Dispatch und den bestehenden netzgesperrten Review-Worker (`test-mcp-support-review`,

@@ -2,6 +2,7 @@
 //! Validate before logging, creating a WebView or starting the real sidecar.
 use std::{
     ffi::OsString,
+    io::Write,
     path::{Component, Path, PathBuf},
 };
 
@@ -10,7 +11,13 @@ const ERROR: &str = "STANDALONE_NATIVE_SMOKE_PROFILE_INVALID";
 
 #[derive(Debug)]
 pub struct Profile {
+    pub user_profile: PathBuf,
+    pub local_app_data: PathBuf,
+    pub roaming_app_data: PathBuf,
+    pub xdg_data: PathBuf,
+    pub temp: PathBuf,
     pub documents: PathBuf,
+    pub diagnostics: PathBuf,
     pub webview: PathBuf,
 }
 
@@ -81,29 +88,50 @@ pub fn validate(
     {
         return Err(ERROR.into());
     }
-    for (key, relative) in [
-        ("USERPROFILE", "profile"),
-        ("HOME", "profile"),
-        ("LOCALAPPDATA", "profile/Local"),
-        ("APPDATA", "profile/Roaming"),
-        ("XDG_DATA_HOME", "profile/Xdg"),
-        ("TEMP", "temp"),
-        ("TMP", "temp"),
-        ("TMPDIR", "temp"),
-        ("DATASECURE_STANDALONE_DOCUMENTS_DIR", "profile/Documents"),
-        ("WEBVIEW2_USER_DATA_FOLDER", "webview"),
+    for relative in [
+        "profile",
+        "profile/Local",
+        "profile/Roaming",
+        "profile/Xdg",
+        "profile/Documents",
+        "temp",
+        "temp/SecureDataMsg-Standalone",
+        "webview/main",
     ] {
-        let expected = root.join(relative);
-        let actual = environment(key).map(PathBuf::from).ok_or(ERROR)?;
-        if actual != expected {
-            return Err(ERROR.into());
-        }
-        regular_path(&actual, true)?;
+        regular_path(&root.join(relative), true)?;
+    }
+    let webview = root.join("webview/main");
+    regular_path(&webview, true)?;
+    // Native smoke uses the same automatic Tauri window creation as the
+    // product. Its test-only WebView2 override is the single UDF authority.
+    if environment("WEBVIEW2_USER_DATA_FOLDER").map(PathBuf::from) != Some(webview.clone()) {
+        return Err(ERROR.into());
     }
     Ok(Profile {
+        user_profile: root.join("profile"),
+        local_app_data: root.join("profile/Local"),
+        roaming_app_data: root.join("profile/Roaming"),
+        xdg_data: root.join("profile/Xdg"),
+        temp: root.join("temp"),
         documents: root.join("profile/Documents"),
-        webview: root.join("webview"),
+        diagnostics: root.join("temp/SecureDataMsg-Standalone"),
+        webview,
     })
+}
+
+pub fn prepare_webview_directory(profile: &Profile) -> Result<PathBuf, String> {
+    regular_path(&profile.webview, true)?;
+    let probe = profile.webview.join(".datasecure-write-probe");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .map_err(|_| ERROR.to_string())?;
+    file.write_all(b"probe").map_err(|_| ERROR.to_string())?;
+    file.sync_all().map_err(|_| ERROR.to_string())?;
+    drop(file);
+    std::fs::remove_file(&probe).map_err(|_| ERROR.to_string())?;
+    Ok(profile.webview.clone())
 }
 
 fn select_profile(
@@ -170,26 +198,29 @@ mod tests {
             root.join("candidate/DataSecure-Standalone-test-windows-x64/DataSecure Standalone.exe");
         std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
         std::fs::write(&exe, b"synthetic executable identity only").unwrap();
-        let mut variables = HashMap::new();
-        for (key, relative) in [
-            ("USERPROFILE", "profile"),
-            ("HOME", "profile"),
-            ("LOCALAPPDATA", "profile/Local"),
-            ("APPDATA", "profile/Roaming"),
-            ("XDG_DATA_HOME", "profile/Xdg"),
-            ("TEMP", "temp"),
-            ("TMP", "temp"),
-            ("TMPDIR", "temp"),
-            ("DATASECURE_STANDALONE_DOCUMENTS_DIR", "profile/Documents"),
-            ("WEBVIEW2_USER_DATA_FOLDER", "webview"),
+        for relative in [
+            "profile/Local",
+            "profile/Roaming",
+            "profile/Xdg",
+            "profile/Documents",
+            "temp/SecureDataMsg-Standalone",
         ] {
-            let value = root.join(relative);
-            std::fs::create_dir_all(&value).unwrap();
-            variables.insert(key, value.into_os_string());
+            std::fs::create_dir_all(root.join(relative)).unwrap();
         }
+        std::fs::create_dir_all(root.join("webview/main")).unwrap();
+        let mut variables = HashMap::new();
+        variables.insert(
+            "WEBVIEW2_USER_DATA_FOLDER",
+            root.join("webview/main").into_os_string(),
+        );
         let profile = validate(&root, &exe, |key| variables.get(key).cloned()).unwrap();
         assert_eq!(profile.documents, root.join("profile/Documents"));
-        assert_eq!(profile.webview, root.join("webview"));
+        assert_eq!(profile.local_app_data, root.join("profile/Local"));
+        assert_eq!(
+            profile.diagnostics,
+            root.join("temp/SecureDataMsg-Standalone")
+        );
+        assert_eq!(profile.webview, root.join("webview/main"));
         let selected = select_profile(&exe, true, |key| {
             if key == PROFILE_ENV {
                 Some(root.as_os_str().to_owned())
@@ -201,20 +232,21 @@ mod tests {
         .unwrap();
         assert_eq!(selected.documents, profile.documents);
         assert_eq!(selected.webview, profile.webview);
-        for key in variables.keys() {
-            assert!(validate(&root, &exe, |candidate| if candidate == *key {
-                None
-            } else {
-                variables.get(candidate).cloned()
-            })
-            .is_err());
-            assert!(validate(&root, &exe, |candidate| if candidate == *key {
-                Some(root.parent().unwrap().as_os_str().to_owned())
-            } else {
-                variables.get(candidate).cloned()
-            })
-            .is_err());
-        }
+        assert_eq!(
+            prepare_webview_directory(&profile).unwrap(),
+            profile.webview
+        );
+        assert!(!profile.webview.join(".datasecure-write-probe").exists());
+        assert!(validate(&root, &exe, |_| None).is_err());
+        variables.insert(
+            "WEBVIEW2_USER_DATA_FOLDER",
+            root.join("webview").into_os_string(),
+        );
+        assert!(validate(&root, &exe, |key| variables.get(key).cloned()).is_err());
+        variables.insert(
+            "WEBVIEW2_USER_DATA_FOLDER",
+            root.join("webview/main").into_os_string(),
+        );
         assert!(validate(root.parent().unwrap(), &exe, |key| variables
             .get(key)
             .cloned())
@@ -235,7 +267,9 @@ mod tests {
             "profile/Xdg",
             "profile/Documents",
             "profile",
+            "temp/SecureDataMsg-Standalone",
             "temp",
+            "webview/main",
             "webview",
         ] {
             std::fs::remove_dir(root.join(relative)).unwrap();

@@ -39,6 +39,9 @@ fn diagnostic_session() -> &'static str {
 }
 
 fn diagnostic_directory() -> PathBuf {
+    if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
+        return profile.diagnostics.clone();
+    }
     std::env::temp_dir().join("SecureDataMsg-Standalone")
 }
 
@@ -386,20 +389,41 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
         "SYSTEMROOT",
         "WINDIR",
         "COMSPEC",
-        "TEMP",
-        "TMP",
-        "TMPDIR",
-        "USERPROFILE",
-        "HOME",
-        "LOCALAPPDATA",
-        "APPDATA",
-        "XDG_DATA_HOME",
         "LANG",
         "LC_ALL",
         "LC_CTYPE",
     ] {
         if let Some(value) = std::env::var_os(key) {
             command.env(key, value);
+        }
+    }
+    if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
+        for (key, value) in [
+            ("USERPROFILE", &profile.user_profile),
+            ("HOME", &profile.user_profile),
+            ("LOCALAPPDATA", &profile.local_app_data),
+            ("APPDATA", &profile.roaming_app_data),
+            ("XDG_DATA_HOME", &profile.xdg_data),
+            ("TEMP", &profile.temp),
+            ("TMP", &profile.temp),
+            ("TMPDIR", &profile.temp),
+        ] {
+            command.env(key, value);
+        }
+    } else {
+        for key in [
+            "TEMP",
+            "TMP",
+            "TMPDIR",
+            "USERPROFILE",
+            "HOME",
+            "LOCALAPPDATA",
+            "APPDATA",
+            "XDG_DATA_HOME",
+        ] {
+            if let Some(value) = std::env::var_os(key) {
+                command.env(key, value);
+            }
         }
     }
     // Windows Known Folders ignore an isolated child's USERPROFILE. The
@@ -1191,17 +1215,19 @@ fn main() {
         Err(_) => std::process::exit(65),
     };
     let isolated_smoke = profile.is_some();
-    let _ = NATIVE_SMOKE_PROFILE.set(profile);
-    let mut context = tauri::generate_context!();
-    if isolated_smoke {
-        // Do not let configured windows create a real-user WebView directory
-        // before setup. The builder below receives an absolute private path.
-        for window in &mut context.config_mut().app.windows {
-            window.create = false;
-        }
+    if profile
+        .as_ref()
+        .is_some_and(|value| native_smoke::prepare_webview_directory(value).is_err())
+    {
+        std::process::exit(65);
     }
+    let _ = NATIVE_SMOKE_PROFILE.set(profile);
+    let context = tauri::generate_context!();
     diagnostic_event("application_started", None, "ready", None, None);
-    tauri::Builder::default()
+    if isolated_smoke {
+        diagnostic_event("webview_profile_ready", None, "ready", None, None);
+    }
+    let result = tauri::Builder::default()
         .on_page_load(|_webview, _payload| {
             diagnostic_event("page_loaded", None, "ready", None, None);
         })
@@ -1215,15 +1241,6 @@ fn main() {
                 frontend_ready: Arc::new(AtomicBool::new(false)),
             };
             app.manage(state);
-            if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
-                for config in &app.config().app.windows {
-                    diagnostic_event("webview_build_started", None, "progress", None, None);
-                    tauri::WebviewWindowBuilder::from_config(app, config)?
-                        .data_directory(profile.webview.join(&config.label))
-                        .build()?;
-                    diagnostic_event("webview_build_completed", None, "ready", None, None);
-                }
-            }
             diagnostic_event("setup_completed", None, "ready", None, None);
             Ok(())
         })
@@ -1280,8 +1297,17 @@ fn main() {
             shutdown,
             frontend_ready
         ])
-        .run(context)
-        .expect("DataSecure Standalone konnte nicht gestartet werden");
+        .run(context);
+    if result.is_err() {
+        diagnostic_event(
+            "application_run_failed",
+            None,
+            "error",
+            Some("STANDALONE_APPLICATION_RUN_FAILED"),
+            None,
+        );
+        std::process::exit(70);
+    }
 }
 
 #[cfg(test)]

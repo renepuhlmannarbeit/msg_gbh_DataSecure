@@ -83,9 +83,9 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /"session_id": diagnostic_session\(\)/u);
   assert.match(rust, /diagnostic_event\("page_loaded"/u);
   assert.match(rust, /diagnostic_event\("setup_started"/u);
-  assert.match(rust, /diagnostic_event\("webview_build_started"/u);
-  assert.match(rust, /diagnostic_event\("webview_build_completed"/u);
+  assert.match(rust, /diagnostic_event\("webview_profile_ready"/u);
   assert.match(rust, /diagnostic_event\("setup_completed"/u);
+  assert.match(rust, /diagnostic_event\(\s*"application_run_failed"/u);
   assert.match(rust, /fn frontend_ready\(/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);
@@ -193,7 +193,12 @@ test('the native Windows smoke exercises the visible WebView lifecycle', () => {
     'hidden or minimized startup can defer WebView2 page loading');
   assert.match(nativeSmoke, /page_loaded/u);
   assert.match(nativeSmoke, /frontend_ready/u);
-  assert.match(nativeSmoke, /STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT/u);
+  for (const code of ['WEBVIEW_INITIALIZATION_TIMEOUT', 'SETUP_TIMEOUT', 'PAGE_LOAD_TIMEOUT', 'FRONTEND_READY_TIMEOUT', 'IPC_TIMEOUT']) {
+    assert.ok(nativeSmoke.includes(`STANDALONE_NATIVE_${code}`));
+  }
+  assert.match(nativeSmoke, /Resolve-StandaloneArchiveIdentity/u);
+  const host = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-host.ps1'), 'utf8');
+  assert.match(host, /DataSecure-Standalone-\$version-windows-x64/u);
 });
 
 test('history actions are separately permissioned and carry only exact batch identity to the private host', () => {
@@ -214,12 +219,20 @@ test('history actions are separately permissioned and carry only exact batch ide
 
 test('native smoke isolates data, Documents, diagnostics and WebView before product startup', () => {
   const isolation = fs.readFileSync(path.join(root, 'tauri-contract/src/native_smoke.rs'), 'utf8');
-  assert.match(nativeSmoke, /EnvironmentVariables\.Clear\(\)/u);
+  const host = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-host.ps1'), 'utf8');
+  assert.doesNotMatch(nativeSmoke, /EnvironmentVariables\.Clear\(\)/u);
+  assert.match(host, /Remove-StandaloneDesktopEnvironmentOverrides/u);
+  assert.match(host, /WEBVIEW2_/u);
+  assert.match(nativeSmoke, /if \(\$ValidateIsolationOnly\)[\s\S]*GetTempPath\(\)[\s\S]*GetFullPath\(\$env:LOCALAPPDATA\)/u,
+    'the WebView profile uses normal per-user application-data ACLs, not checkout or temporary-file ACLs');
   assert.doesNotMatch(nativeSmoke, /\$env:(?:USERPROFILE|HOME|LOCALAPPDATA|APPDATA|TEMP|TMP|CODEX_HOME)\s*=/iu);
-  for (const key of ['USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'DATASECURE_STANDALONE_DOCUMENTS_DIR', 'WEBVIEW2_USER_DATA_FOLDER']) {
-    assert.ok(nativeSmoke.includes(key));
-    assert.ok(isolation.includes(key));
+  for (const key of ['USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'DATASECURE_STANDALONE_DOCUMENTS_DIR']) {
+    assert.ok((isolation + rust).includes(key));
   }
+  assert.match(nativeSmoke, /\$expected = if \(\$LegacyProfileContract\)[\s\S]*else \{\s*@\{ WEBVIEW2_USER_DATA_FOLDER = 'webview\\main' \}/u,
+    'the current desktop inherits its real Windows environment; only the historical control uses legacy redirects');
+  assert.match(nativeSmoke, /WEBVIEW2_USER_DATA_FOLDER = 'webview\\main'/u);
+  assert.match(isolation, /environment\("WEBVIEW2_USER_DATA_FOLDER"\)\.map\(PathBuf::from\)/u);
   assert.match(nativeSmoke, /STANDALONE_NATIVE_ISOLATION_UNSUPPORTED/u, 'old binaries must not be launched');
   assert.match(nativeSmoke, /ValidateIsolationOnly/u);
   const polling = nativeSmoke.slice(nativeSmoke.indexOf('    do {'), nativeSmoke.indexOf('    } while ('));
@@ -232,8 +245,11 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
   const main = rust.slice(rust.indexOf('fn main()'), rust.indexOf('#[cfg(test)]\nmod tests'));
   assert.ok(main.indexOf('native_smoke::from_environment()') < main.indexOf('diagnostic_event('));
   assert.match(main, /Err\(_\) => std::process::exit\(65\)/u);
-  assert.match(main, /window\.create = false/u);
-  assert.match(main, /\.data_directory\(profile\.webview\.join/u);
+  assert.doesNotMatch(main, /window\.create = false/u);
+  assert.match(main, /prepare_webview_directory\(value\)/u);
+  assert.doesNotMatch(main, /WebviewWindowBuilder/u);
+  assert.doesNotMatch(main, /\.data_directory\(/u);
+  assert.match(main, /application_run_failed/u);
   assert.match(rust, /command\.env\("DATASECURE_STANDALONE_DOCUMENTS_DIR", &profile\.documents\)/u);
   if (process.platform === 'win32') {
     const { spawnSync } = require('node:child_process');
@@ -243,6 +259,20 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
     assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stdout, /ISOLATION CONTRACT PASS/u);
   }
+});
+
+test('native archive identity is parsed explicitly for current and historical candidates', () => {
+  const hostPath = path.join(__dirname, 'manual/standalone-native-host.ps1');
+  const host = fs.readFileSync(hostPath, 'utf8');
+  assert.doesNotMatch(host, /\$Matches/u, 'implicit global PowerShell match state must not bind evidence');
+  assert.match(host, /Regex\]::Match/u);
+  if (process.platform !== 'win32') return;
+  const { spawnSync } = require('node:child_process');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', hostPath,
+    '-ValidateContract'],
+    { encoding: 'utf8', timeout: 30000, windowsHide: true });
+  assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /HOST CONTRACT PASS/u);
 });
 
 test('native cleanup allows only the exact post-exit cache junction without following it', () => {

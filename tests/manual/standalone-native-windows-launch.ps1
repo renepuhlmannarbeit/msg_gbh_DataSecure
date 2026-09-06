@@ -1,4 +1,8 @@
-param([string] $Archive = '', [switch] $ValidateIsolationOnly)
+param(
+    [string] $Archive = '',
+    [switch] $ValidateIsolationOnly,
+    [switch] $LegacyProfileContract
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -9,16 +13,24 @@ if ($env:OS -ne 'Windows_NT') {
 
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $PSScriptRoot 'standalone-native-cleanup.ps1')
+. (Join-Path $PSScriptRoot 'standalone-native-host.ps1')
 $package = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'package.json') | ConvertFrom-Json
-$productDirectory = "DataSecure-Standalone-$($package.version)-windows-x64"
 $archivePath = if ($ValidateIsolationOnly) {
     ''
 } elseif ($Archive) {
     (Resolve-Path -LiteralPath $Archive).Path
 } else {
-    (Resolve-Path -LiteralPath (Join-Path $repositoryRoot "dist\$productDirectory.zip")).Path
+    (Resolve-Path -LiteralPath (Join-Path $repositoryRoot "dist\DataSecure-Standalone-$($package.version)-windows-x64.zip")).Path
 }
-$cleanupContext = New-NativeCleanupContext $repositoryRoot
+$archiveIdentity = Resolve-StandaloneArchiveIdentity $archivePath ([string] $package.version)
+$expectedVersion = $archiveIdentity.Version
+$productDirectory = $archiveIdentity.ProductDirectory
+$nativeProfileParent = if ($ValidateIsolationOnly) {
+    [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\')
+} else {
+    [System.IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\')
+}
+$cleanupContext = New-NativeCleanupContext $nativeProfileParent
 $testRoot = $cleanupContext.Root
 $extractedRoot = Join-Path $testRoot 'candidate'
 $executable = Join-Path $extractedRoot "$productDirectory\DataSecure Standalone.exe"
@@ -43,17 +55,17 @@ function New-IsolatedStartInfo([string] $FilePath) {
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $false
     $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
-    $startInfo.EnvironmentVariables.Clear()
-    foreach ($key in @('SYSTEMROOT', 'WINDIR', 'COMSPEC', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432')) {
-        $value = [System.Environment]::GetEnvironmentVariable($key, 'Process')
-        if ($value) { $startInfo.EnvironmentVariables[$key] = $value }
-    }
-    $expected = @{
-        USERPROFILE = 'profile'; HOME = 'profile'; LOCALAPPDATA = 'profile\Local';
-        APPDATA = 'profile\Roaming'; XDG_DATA_HOME = 'profile\Xdg';
-        TEMP = 'temp'; TMP = 'temp'; TMPDIR = 'temp';
-        DATASECURE_STANDALONE_DOCUMENTS_DIR = 'profile\Documents';
-        WEBVIEW2_USER_DATA_FOLDER = 'webview'
+    Remove-StandaloneDesktopEnvironmentOverrides $startInfo
+    $expected = if ($LegacyProfileContract) {
+        @{
+            USERPROFILE = 'profile'; HOME = 'profile'; LOCALAPPDATA = 'profile\Local';
+            APPDATA = 'profile\Roaming'; XDG_DATA_HOME = 'profile\Xdg';
+            TEMP = 'temp'; TMP = 'temp'; TMPDIR = 'temp';
+            DATASECURE_STANDALONE_DOCUMENTS_DIR = 'profile\Documents';
+            WEBVIEW2_USER_DATA_FOLDER = 'webview'
+        }
+    } else {
+        @{ WEBVIEW2_USER_DATA_FOLDER = 'webview\main' }
     }
     foreach ($entry in $expected.GetEnumerator()) {
         $value = Join-Path $testRoot $entry.Value
@@ -86,18 +98,20 @@ function Remove-TestRoot {
 
 try {
     foreach ($relative in @('candidate', 'profile', 'profile\Local', 'profile\Roaming', 'profile\Xdg',
-        'profile\Documents', 'temp', 'webview')) {
+        'profile\Documents', 'temp', 'temp\SecureDataMsg-Standalone', 'webview', 'webview\main')) {
         New-Item -ItemType Directory -Path (Join-Path $testRoot $relative) -ErrorAction Stop | Out-Null
     }
     $startInfo = New-IsolatedStartInfo $executable
     Get-CheckedTree $testRoot | Out-Null
     if ($ValidateIsolationOnly) {
+        if ($LegacyProfileContract) { throw 'STANDALONE_NATIVE_ISOLATION_INVALID' }
         # The test owns only this child environment. Never assign USERPROFILE,
         # HOME, TEMP or any data-root variable in the parent process/session.
-        if ($startInfo.EnvironmentVariables['LOCALAPPDATA'] -eq $env:LOCALAPPDATA -or
-            $startInfo.EnvironmentVariables['TEMP'] -eq $env:TEMP -or
+        if ($startInfo.EnvironmentVariables['LOCALAPPDATA'] -ne $env:LOCALAPPDATA -or
+            $startInfo.EnvironmentVariables['TEMP'] -ne $env:TEMP -or
             $startInfo.EnvironmentVariables.ContainsKey('EU_PRIVACY_ROOT') -or
-            $startInfo.EnvironmentVariables.ContainsKey('NODE_OPTIONS')) {
+            $startInfo.EnvironmentVariables.ContainsKey('NODE_OPTIONS') -or
+            $startInfo.EnvironmentVariables['WEBVIEW2_USER_DATA_FOLDER'] -ne (Join-Path $testRoot 'webview\main')) {
             throw 'STANDALONE_NATIVE_ISOLATION_INVALID'
         }
         Assert-NativeProcessRunning ([pscustomobject]@{ HasExited = $false; ExitCode = 0 })
@@ -131,7 +145,7 @@ try {
         Assert-NativeProcessRunning $process
         $desktop = Read-InteractionEvents $desktopLog
         $application = @($desktop | Where-Object {
-            $_.product_version -eq $package.version -and $_.event -eq 'application_started' -and
+            $_.product_version -eq $expectedVersion -and $_.event -eq 'application_started' -and
             $_.session_id -match '^[a-f0-9]{16,64}$'
         } | Select-Object -Last 1)
         if ($application.Count -eq 0) { continue }
@@ -147,8 +161,7 @@ try {
         $pageLoaded = @($desktopSession | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
         $frontendReady = @($desktopSession | Where-Object { $_.event -eq 'frontend_ready' }).Count -gt 0
         $setupStarted = @($desktopSession | Where-Object { $_.event -eq 'setup_started' }).Count -gt 0
-        $webviewBuildStarted = @($desktopSession | Where-Object { $_.event -eq 'webview_build_started' }).Count -gt 0
-        $webviewBuildCompleted = @($desktopSession | Where-Object { $_.event -eq 'webview_build_completed' }).Count -gt 0
+        $setupCompleted = @($desktopSession | Where-Object { $_.event -eq 'setup_completed' }).Count -gt 0
         $sidecarStarted = @($sidecarSession | Where-Object { $_.event -eq 'sidecar_started' }).Count -gt 0
         $serviceInitialized = @($sidecarSession | Where-Object { $_.event -eq 'service_initialized' }).Count -gt 0
         if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized) {
@@ -160,10 +173,11 @@ try {
         # Preserve bounded content-free evidence before the owned test profile is
         # cleaned. A timeout alone cannot distinguish page loading from IPC failure.
         $checkpoint = [ordered]@{ application = ($application.Count -gt 0); setup_started = $setupStarted;
-            webview_build_started = $webviewBuildStarted; webview_build_completed = $webviewBuildCompleted; page_loaded = $pageLoaded;
+            setup_completed = $setupCompleted; page_loaded = $pageLoaded;
             frontend_ready = $frontendReady; public_state = $publicState; ui_context = $uiContext;
             sidecar_started = $sidecarStarted; service_initialized = $serviceInitialized }
         Write-Output ('STANDALONE NATIVE CHECKPOINT ' + ($checkpoint | ConvertTo-Json -Compress))
+        Write-Output ('STANDALONE NATIVE HOST ' + ((Get-StandaloneWebViewHostFacts) | ConvertTo-Json -Compress))
         foreach ($record in @($desktopSession + $sidecarSession | Select-Object -Last 16)) {
             $safe = [ordered]@{}
             foreach ($field in @('event', 'action', 'outcome', 'error_code')) {
@@ -172,9 +186,10 @@ try {
             }
             Write-Output ('STANDALONE NATIVE EVENT ' + ($safe | ConvertTo-Json -Compress))
         }
-        if (($application.Count -gt 0) -and -not $pageLoaded -and -not $sidecarStarted) {
-            throw 'STANDALONE_NATIVE_WEBVIEW_STARTUP_TIMEOUT'
-        }
+        if (-not $setupStarted) { throw 'STANDALONE_NATIVE_WEBVIEW_INITIALIZATION_TIMEOUT' }
+        if (-not $setupCompleted) { throw 'STANDALONE_NATIVE_SETUP_TIMEOUT' }
+        if (-not $pageLoaded) { throw 'STANDALONE_NATIVE_PAGE_LOAD_TIMEOUT' }
+        if (-not $frontendReady) { throw 'STANDALONE_NATIVE_FRONTEND_READY_TIMEOUT' }
         throw 'STANDALONE_NATIVE_IPC_TIMEOUT'
     }
     if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'profile\Local\SecureDataMsg-Standalone\workspace') -PathType Container)) {

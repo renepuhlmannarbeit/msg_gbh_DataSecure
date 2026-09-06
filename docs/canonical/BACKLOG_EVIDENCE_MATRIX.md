@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 06.09.2026 · 3.2.0-rc111
+Stand: 07.09.2026 · 3.2.0-rc111
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
@@ -48,11 +48,14 @@ in [CURRENT_STATE](CURRENT_STATE.md). E1/E2/E3 sind dadurch nicht geschlossen.
 Der RC111-Versuch aus `d45252f` und die Wiederholung nach Windows-Neustart aus
 `c77ec592aa95f323bd5b1efe6301b111e7f2f225` bestehen Quellgates und Kandidat-A-
 Paket-/Worker-/History-/Sidecar-Smokes, stoppen auf diesem Host jedoch vor
-`webview_build_completed`. Ein Vergleichsstart des historisch gebundenen RC109-
-Archivs stoppt in der aktuellen Hostumgebung ebenfalls vor `page_loaded` und
-Sidecar-Start. Der Befund ist damit Host-/WebView-bezogen; Kandidat B, Receipt
-und neue INT-13-Bindung werden weiterhin nicht erzeugt. Die historische RC109-
-Bindung bleibt unverändert gültig, ist aber kein aktueller Host-PASS.
+`webview_build_completed`. Die nachfolgende Gegenanalyse identifizierte dies als
+Harnessfehler: ungeeigneter UDF-Ort, vollständig ersetzte Desktop-Umgebung und
+zwei UDF-Autoritäten. Der korrigierte Arbeitsstand verwendet den automatischen
+Tauri-Start mit genau einem privaten UDF unter `LocalAppData`; RC111-Arbeitsbau
+und historisches RC109-Archiv erreichen damit Frontend, Core und IPC. RC109
+stoppt anschließend nur in der fail-closed Bereinigung einer noch gesperrten
+Cachedatei. Der Fix besitzt noch keinen commitgebundenen PKG-04-Receipt und keine
+neue INT-13-Bindung; die historische RC109-Bindung bleibt unverändert gültig.
 
 | Bereich / Stories | E0 | Noch erforderlich |
 |---|---|---|
