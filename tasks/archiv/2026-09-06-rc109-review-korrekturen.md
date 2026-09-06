@@ -1,8 +1,8 @@
 # RC109 – Umsetzung und Gegenprüfung des Gesamtreviews
 
-Stand: 06.09.2026 · lokaler Arbeitsbaum auf `main`, Basis `ca1a0ee`.
+Stand: 06.09.2026 · abgeschlossen; Quellkandidat `6bf7d05747e151ba8f846849229495e9fca4c041`.
 Die bereits vorhandenen RC109-Start-/Verlaufsänderungen wurden beibehalten.
-Dieser Bericht ergänzt das [archivierte unabhängige Ausgangsreview](archiv/2026-09-06-rc109-gesamtreview.md);
+Dieser Bericht ergänzt das [archivierte unabhängige Ausgangsreview](2026-09-06-rc109-gesamtreview.md);
 er ersetzt dessen damalige Befunde nicht rückwirkend. Maßgebliches Arbeitsprogramm
 bleibt das [kanonische Backlog](../docs/canonical/BACKLOG.md).
 
@@ -188,14 +188,39 @@ zusätzliche Driftassertions schützen diese konkreten Widersprüche.
   Quellabgleich, selbsttragende Runtime, 163 Vertragsfälle, SBOM,
   Marketplace-Projektion und Statusartefaktprüfung sind grün.
 
-## Grenzen und nachfolgende Lieferung
+## PKG-04-/INT-13-Abschluss
 
-Dieser Korrekturlauf ist keine PKG-04-/INT-13-Freigabe. Beide frischen RC109-ZIPs
-enthalten den aktuellen lokalen Arbeitsstand und bestehen ihre Paket-Smokes,
-sind aber noch nicht an einen sauberen Quellcommit oder zwei bytegleiche Builds
-gebunden. RC108-Bindungen bleiben ausschließlich historischer Nachweis für ihren
-exakten Commit. Keine installierte Anwenderanwendung wurde verändert, kein
-Commit/Push und keine GitHub Action ausgelöst.
+Der konsolidierte Produktstand wurde als Quellcommit
+`17ec43e1d5a9cb292002d82d208071f3b0265e71` festgeschrieben. Zwei ausschließlich
+release-technische Harnessfehler wurden danach separat korrigiert: PowerShell-
+Modulautoload durfte die SHA-256-Ermittlung nicht bestimmen (`b1d988f`) und ein
+nach Prozessende zwischen Inventur und Identitätslesung verschwundener WebView-
+Cacheeintrag musste eng als Win32-Fehler 2 behandelt werden (`6bf7d057`). Nur
+dieser exakte Fehler wird nach einem zweiten nativen No-follow-Leseversuch als
+bereits verschwunden akzeptiert; Wiederbelegung und alle anderen Fehler stoppen.
+Die beiden unvollständigen Evidence-Verzeichnisse der vorherigen Versuche bleiben
+unverändert und besitzen weder Receipt noch INT-13-Bindung.
+
+Der saubere Quellcommit `6bf7d05747e151ba8f846849229495e9fca4c041`
+wurde anschließend zweimal unabhängig mit derselben Toolchain gebaut. Beide ZIPs,
+Desktop- und Core-Binaries sind bytegleich; beide Paket-/Worker-Smokes und beide
+nativen Windows-Starts bestanden. PKG-04-Receipt und INT-13-Bindung liegen unter
+`dist/pkg-04/6bf7d05747e151ba8f846849229495e9fca4c041/`.
+
+- Standalone-ZIP: 574 Einträge, 110.211.662 Byte, SHA-256
+  `807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`
+- Desktop-Binary: SHA-256
+  `b4ce02e53a0f653dbefadc90bb0a5d9c58609c5ca0ab1bb4ca25372381a8c444`
+- Core-Binary: SHA-256
+  `0d0f5e39f9f3d9587bc19f73eab3c2c9c4903fd02d6dbf9c853dd81b3d95fad4`
+- Receipt: SHA-256
+  `c5882bb650a42a7843c15ff5860b6aa35e62c54d1a5a2f8ebfe65623671c42c8`
+- Cowork-ZIP aus demselben Quellstand: 194 Einträge, 35.007.546 Byte,
+  SHA-256 `2bee8c0ab025447ba7dc6d10d9c9bd458f6253e2db6b4026b6f57eae8d5e0946`;
+  Quellabgleich, selbsttragende Runtime, 163 Vertragsfälle, SBOM,
+  Marketplace-Projektion und Statusartefaktprüfung bestanden.
+
+## Verbleibende Nachweisgrenzen
 
 Echte macOS-Intel-/ARM-Ausführung, native Cowork-/Desktopbedienung, breiter
 realer Office-Korpus und fachliche Extraktions-/OCR-Abnahme bleiben offen.

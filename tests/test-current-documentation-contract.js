@@ -221,6 +221,10 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
 
 test('conversion documentation separates eleven input types from four-format privacy and old package evidence', () => {
   const coverage = read('docs/FORMAT_COVERAGE_MATRIX.md');
+  assert.match(coverage, /RC109-Builds aus `6bf7d05747e151ba8f846849229495e9fca4c041`/u,
+    'current format evidence must name the exact RC109 source commit');
+  assert.match(coverage, /807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1/u,
+    'current format evidence must name the bound RC109 package hash');
   assert.match(coverage, /RC108-Builds aus `a742333e8ef80b445729d4bede6a91a2b8f13207`/u,
     'a version bump must not relabel historical commit-bound package evidence');
   const parts = coverage.split('## Reine Markdown-Konvertierung: nur Standalone');

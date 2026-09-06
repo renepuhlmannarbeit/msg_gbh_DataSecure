@@ -6,11 +6,13 @@ E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
 Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 
-RC109-Gesamtreviewkorrekturen sind im [Korrekturbericht](../../tasks/RC109-REVIEW-KORREKTUREN.md)
-gesondert nachgeführt: Code-/Protokoll-/Konverter-/Dokumenttests belegen nur E0.
-Die beiden frischen RC109-ZIPs enthalten den aktuellen lokalen Korrekturstand
-und bestehen ihre Paket-Smokes. Sie sind noch nicht commit- oder PKG-04-/INT-13-
-gebunden; RC108-Evidenz wird nicht als Nachweis dieses Stands umetikettiert.
+RC109-Gesamtreviewkorrekturen sind im
+[archivierten Korrekturbericht](../../tasks/archiv/2026-09-06-rc109-review-korrekturen.md)
+gesondert nachgeführt. Der Standalone-Quellstand
+`6bf7d05747e151ba8f846849229495e9fca4c041` wurde zweimal bytegleich gebaut;
+beide Paket-/Worker-/nativen Windows-Smokes bestanden und INT-13 ist an genau
+diesen Commit gebunden. Code-/Protokoll-/Konverter-/Dokumenttests belegen E0;
+RC108-Evidenz wird nicht als Nachweis dieses Stands umetikettiert.
 
 Der anschließende E0-Restschuldblock umfasst BL-020.3 (Support-Review im
 geschützten Worker), BL-041.1 (gemeinsame Diagnose/typisierte ACK-Fehler),
@@ -32,12 +34,14 @@ Navigation. Ein Edge-/axe-Test prüft Layout und Accessibility mit synthetischer
 IPC; er ersetzt keinen nativen Dialog-/Explorer-/Finder-UAT (S20–S23).
 Der erweiterte echte Windows-Paket-Smoke prüft beide Modi, Fehlerlauf, alle
 laufgebundenen Ziele und einen frischen Sidecar nach Ergebniszielwechsel.
-Neue commitgebundene PKG-04-/INT-13-Bindung und menschliche E1/E2 bleiben offen.
+Die commitgebundene PKG-04-/INT-13-Bindung ist abgeschlossen; menschliche E1/E2 bleiben offen.
 
-Aktueller Windows-Paketnachweis: RC108 aus `a742333` besteht PKG-04 mit zwei
+Aktueller Windows-Paketnachweis: RC109 aus `6bf7d057` besteht PKG-04 mit zwei
 bytegleichen Builds, beiden echten Paket-/Worker-/nativen Smokes und neuer
 INT-13-Bindung. Beide Modi, elf Konvertierungsergebnisse plus Fehlerposition,
-Zuordnung und Supportspur sind geprüft. Details und vollständige Hashes stehen
+Zuordnung und Supportspur sind geprüft. ZIP-SHA-256:
+`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
+Details und vollständige Hashes stehen
 in [CURRENT_STATE](CURRENT_STATE.md). E1/E2/E3 sind dadurch nicht geschlossen.
 
 | Bereich / Stories | E0 | Noch erforderlich |
@@ -69,7 +73,7 @@ in [CURRENT_STATE](CURRENT_STATE.md). E1/E2/E3 sind dadurch nicht geschlossen.
 | BL-051.1–6 | ZIP-/Marketplace-/Paketgates lokal | Fresh Install, Update, Rollback, Hostmatrix und 100/500-Lauf E1 |
 | BL-052.1–5 | synthetisches UAT-Kit und leere Evidenzvorlage | benannte Anwender-, Fach-, Datenschutz-, UX-, Architektur- und Securityrollen |
 
-## RC108-Integration: neue, noch separat zu bindende Evidence
+## Historische RC108-Integration vor ihrer Paketbindung
 
 Der Codeweg ist aktiv, nicht lediglich ein freigeschaltetes Modusflag:
 `core/processing-mode` → Desktop/IPC/Service → Intake/v5-Journal →
@@ -84,9 +88,10 @@ Beendigungen prüfen den atomar an `CreateProcess` gebundenen Windows-Job;
 schließt auch im gemeinsamen Cowork-Parser das Start-/Jobzuweisungsfenster.
 Diese Messung ist keine allgemeine Performancegarantie.
 
-Der vollständige aktuelle Sidecar-E2E, neue zweimal bytegleiche Builds,
-PKG-04-Receipt und INT-13-Bindung sind noch separat zu bestätigen. Windows-
-Engineering-Evidence ersetzt weder sichtbaren UAT noch Intel-/ARM-macOS.
+Dieser Abschnitt beschreibt den damaligen Vorbindungsstand von RC108. RC108
+wurde später separat gebunden; der aktuelle RC109-Nachweis steht am Anfang
+dieser Matrix. Windows-Engineering-Evidence ersetzt weiterhin weder sichtbaren
+UAT noch Intel-/ARM-macOS.
 
 ## Historischer RC107-/DS-067-Nachweis
 

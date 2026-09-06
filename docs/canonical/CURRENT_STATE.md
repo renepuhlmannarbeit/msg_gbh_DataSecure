@@ -4,7 +4,7 @@ Stand: 06.09.2026 · 3.2.0-rc109 · Startseite und laufgebundener Verlauf
 
 ## Aktueller Entwicklungsstand RC109
 
-Aktueller Korrekturlauf: [Gesamtreview-Umsetzung](../../tasks/RC109-REVIEW-KORREKTUREN.md)
+Aktueller Korrekturlauf: [archivierte Gesamtreview-Umsetzung](../../tasks/archiv/2026-09-06-rc109-review-korrekturen.md)
 mit gemeinsamer Review-/Fortsetzungsentscheidung, konsistenten Verlaufszählern,
 struktureller XLSX-Extraktion, BMP32-Korrektur, echter MCP-Schemavalidierung und
 endgültigen Async-Testurteilen. Architektur/UML und Dokumentindex trennen beide
@@ -44,30 +44,41 @@ Ordner automatisch. Die Anzeigegrenze löscht keine älteren Ergebnisse.
 Private Laufbindung bleibt über Neustart und Ergebniszielwechsel erhalten;
 ein unbekannter oder nicht mehr verfügbarer Lauf fällt nie auf den neuesten zurück.
 Quelltests, Edge-/axe-Prüfung und echter Windows-Paket-/Worker-/History-Smoke
-stehen grün; nativer Windows-Start mit normalen Hostrechten ebenfalls.
+stehen grün; beide nativen Windows-Starts mit normalen Hostrechten ebenfalls.
 Der lokale Engineering-Kandidat ist
 `dist/DataSecure-Standalone-3.2.0-rc109-windows-x64.zip` (110.211.662 Byte,
 SHA-256 `807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`).
 [Review und Nachweisgrenzen](../../tasks/archiv/2026-09-06-rc109-start-verlauf-review.md).
-Noch kein commitgebundener RC109-Releasekandidat. Die folgende
-PKG-04-/INT-13-Bindung bleibt ausschließlich RC108; sie gilt nicht für RC109.
+Der commitgebundene RC109-Kandidat und seine Nachweisgrenzen stehen im folgenden
+Abschnitt.
 
 ## Aktueller geprüfter Kandidat
 
-RC108 aus sauberem `main`-Commit
-`a742333e8ef80b445729d4bede6a91a2b8f13207` ist an INT-13 gebunden. PKG-04
+RC109 aus sauberem `main`-Quellcommit
+`6bf7d05747e151ba8f846849229495e9fca4c041` ist an INT-13 gebunden. PKG-04
 bestand am 06.09.2026: zwei unabhängige saubere Builds, bytegleiche ZIPs,
 Desktop- und Core-Binaries sowie beide echten Paket-/Worker-/Windows-Starttests.
 Je Paket wurden beide Modi, elf Konvertierungsergebnisse plus fehlerhafte CSV,
 Namenerhaltung, konkrete Laufzuordnung und die optionale Supportspur geprüft.
-ZIP: **110.168.168 Byte**, SHA-256
-`d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
+ZIP: **110.211.662 Byte**, SHA-256
+`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`;
+Desktop-SHA-256 `b4ce02e53a0f653dbefadc90bb0a5d9c58609c5ca0ab1bb4ca25372381a8c444`,
+Core-SHA-256 `0d0f5e39f9f3d9587bc19f73eab3c2c9c4903fd02d6dbf9c853dd81b3d95fad4`.
 Receipt und INT-13-Bindung:
-`dist/pkg-04/a742333e8ef80b445729d4bede6a91a2b8f13207/`.
-Die vollständige Produktsuite (48 Basis-/111 direkte Testdateien), Rust 15/15,
-Frontend 18/18, 25 echte Konvertertestgruppen, Dokumentationsgates und Cowork-
-Build sind grün. Sichtbare Anwenderabnahme und native Mac-Pakete bleiben offen;
+`dist/pkg-04/6bf7d05747e151ba8f846849229495e9fca4c041/`.
+Die vollständige Produktsuite (57 Basis-/114 direkte Testdateien), Rust 16/16,
+27 echte Konvertertestgruppen, Dokumentationsgates und der abschließende Cowork-
+Build sind grün. Der Cowork-ZIP enthält 194 Einträge, ist 35.007.546 Byte groß
+und hat SHA-256 `2bee8c0ab025447ba7dc6d10d9c9bd458f6253e2db6b4026b6f57eae8d5e0946`.
+Sichtbare Anwenderabnahme und native Mac-Pakete bleiben offen;
 der Windows-Pilot ist keine allgemeine Layout-/OCR-Vollständigkeitsgarantie.
+
+## Historischer Kandidat RC108
+
+RC108 aus `a742333e8ef80b445729d4bede6a91a2b8f13207` besitzt einen eigenen
+PKG-04-/INT-13-Nachweis. ZIP: 110.168.168 Byte, SHA-256
+`d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
+Dieser Nachweis gilt nur für RC108 und wird nicht als RC109-Evidence verwendet.
 
 ## Historischer Kandidat RC107
 

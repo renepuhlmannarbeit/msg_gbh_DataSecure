@@ -97,7 +97,7 @@ eigenes späteres Desktopziel. Details stehen im
 [aktuellen Zustand](canonical/CURRENT_STATE.md) und im
 [UAT-Kit](acceptance/UAT_TEST_KIT/README.md).
 
-Der lokale E0-Konverterlauf umfasst 25 Testgruppen einschließlich echter
+Der lokale E0-Konverterlauf umfasst 27 Testgruppen einschließlich echter
 Office-/PDF-/Bildbytes, Fehler, Abbruch und Ressourcenbindung. Eine Serie mit
 100 TXT-Dateien dauerte auf dem Entwicklungsrechner 15,264 Sekunden; die große
 Runtime wurde dabei nicht je Dokument erneut vollständig gelesen/gehasht.
@@ -105,11 +105,13 @@ Runtime wurde dabei nicht je Dokument erneut vollständig gelesen/gehasht.
 sind keine allgemeine Geschwindigkeitszusage und kein sichtbarer Anwender-UAT.
 
 Der vollständige aktuelle Paket-/Sidecar-E2E-Lauf ist bestanden: zwei bytegleiche
-RC108-Builds aus `a742333e8ef80b445729d4bede6a91a2b8f13207`, beide Smokes,
+RC109-Builds aus `6bf7d05747e151ba8f846849229495e9fca4c041`, beide Smokes,
 PKG-04-Receipt und neue INT-13-Bindung. Beide Modi sowie elf Konvertierungen plus
 Fehlerposition und genaue Laufzuordnung sind geprüft. ZIP-SHA-256:
-`d1151365ebea6fa92e9d7b546d715e962d8787593707cedabcfb3f703c63b893`.
-Der frühere RC107-Kandidat aus `7b88a81` belegt die neue Konvertierung nicht.
+`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
+Historische Evidence bleibt versionsgebunden: RC108-Builds aus `a742333e8ef80b445729d4bede6a91a2b8f13207`
+und der frühere RC107-Kandidat
+aus `7b88a81` belegen nicht den RC109-Stand.
 Native macOS-Intel-/ARM-Ausführung und fachlicher UAT bleiben offen. Der Ausbau
 der **Anonymisierung** auf XLSX/PPTX/PDF/Scan-PDF/Bilder sowie vollständigere
 Container-/Grafikabdeckung bleiben eigene Backlogarbeit.

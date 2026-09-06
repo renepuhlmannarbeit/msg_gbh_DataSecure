@@ -10,7 +10,15 @@ RC109-Gesamtreview: DS-022/023/079/083/086 binden Fortsetzung und Anzeige an die
 gemeinsame Progress-/Reviewbereitschaft; DS-085 bindet XLSX-Struktur und BMP32
 an die reine Konvertierung. MCP-Eingabevalidierung bleibt Plugin-Schnittstelle,
 kein Standalone-Transport. F-01–F-11 samt zusätzlichen Gegenreviewbefunden und
-Tests stehen im [Korrekturbericht](../../tasks/RC109-REVIEW-KORREKTUREN.md).
+Tests stehen im [archivierten Korrekturbericht](../../tasks/archiv/2026-09-06-rc109-review-korrekturen.md).
+
+BL-051.1/BL-002 bindet den RC109-Quellcommit
+`6bf7d05747e151ba8f846849229495e9fca4c041` an zwei bytegleiche Windows-x64-
+Standalone-Builds, beide Paket-/Worker-/nativen Windows-Smokes, den
+`PKG-04-RECEIPT.json` und `INT-13-BINDING.json`. Archiv-SHA-256:
+`807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`.
+Die Bindung belegt E0 auf diesem Windows-Zielhost, nicht sichtbaren UAT oder
+native Intel-/ARM-macOS-Ausführung.
 
 Der anschließende Restschuldblock bindet BL-020.3 an den echten Support-stdio-
 Dispatch und den bestehenden netzgesperrten Review-Worker (`test-mcp-support-review`,
