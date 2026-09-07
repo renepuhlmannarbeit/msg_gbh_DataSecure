@@ -163,7 +163,12 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
   assert.ok(!capability.permissions.includes('core:event:allow-emit'));
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
   assert.match(html, /id="drop-zone"[^>]+aria-label="Dateiaufnahme"/u);
-  assert.match(html, /100 Dateien und 500 MB/u);
+  assert.match(html, /200 Dateien und 500 MB/u);
+  assert.match(frontend, /SOURCE_FOLDER_FILE_LIMIT:[^\n]*mehr als 200/u);
+  assert.match(frontend, /SOURCE_FOLDER_UNSUPPORTED_FILES:[^\n]*nicht unterstützte Datei/u);
+  assert.match(frontend, /Extraktionsstatus wird getrennt ausgewiesen/u);
+  assert.doesNotMatch(frontend, /nur bei vollständiger Abdeckung freigegeben/u);
+  assert.doesNotMatch(html, /nur vollständig extrahierter Inhalt freigegeben/u);
   assert.match(html, /id="select-files"/u);
   assert.match(html, /id="select-folder"/u);
   assert.match(html, /value="" selected/u, 'purpose is an explicit user choice, not a startup default');
@@ -171,11 +176,14 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
 });
 
 test('processing purpose crosses only the explicit desktop Start and cannot change on resume', () => {
-  assert.match(frontend, /call\('start_admitted_batch', \{ processingMode \}\)/u);
+  assert.match(frontend, /call\('start_admitted_batch', startArguments\)/u);
+  assert.match(frontend, /startArguments\.outputNamingMode = outputNamingMode/u);
   assert.match(rust, /#\[tauri::command\(rename_all = "camelCase"\)\]\s*async fn start_admitted_batch/u);
   assert.match(rust, /processing_mode: Option<String>/u);
+  assert.match(rust, /output_naming_mode: Option<String>/u);
   assert.match(rust, /request\["processing_mode"\] = json!\(validate_processing_mode\(processing_mode\)\?\)/u);
-  assert.match(sidecar, /startAdmittedBatch\(\{ processingMode: message\.processing_mode \}\)/u);
+  assert.match(rust, /request\["output_naming_mode"\] = json!\(value\)/u);
+  assert.match(sidecar, /outputNamingMode: message\.output_naming_mode/u);
   assert.match(sidecar, /MARKDOWN_CONVERSION_NOT_READY/u);
   const continuing = rust.slice(rust.indexOf('async fn continue_current_batch'), rust.indexOf('async fn configure_results'));
   assert.doesNotMatch(continuing, /processing_mode/u);
@@ -215,6 +223,15 @@ test('history actions are separately permissioned and carry only exact batch ide
   assert.match(sidecar, /continueHistoryBatch\(message\.batch_id\)/u);
   assert.match(frontend, /batchId: entry\.batch_id/u);
   assert.match(rust, /validate_local_target\(result, kind\)/u);
+});
+
+test('prepared selections can remove exactly one bounded item through the private native contract', () => {
+  const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
+  assert.ok(capability.permissions.includes('allow-remove-admitted-source'));
+  assert.ok(permissions.includes('commands.allow = ["remove_admitted_source"]'));
+  assert.match(rust, /async fn remove_admitted_source\([\s\S]{0,180}selection_index: u64/u);
+  assert.match(rust, /removal_request\(&id, selection_index\)/u);
+  assert.doesNotMatch(rust.match(/fn removal_request[\s\S]*?\n\}/u)?.[0] || '', /source_paths|raw_content/u);
 });
 
 test('native smoke isolates data, Documents, diagnostics and WebView before product startup', () => {

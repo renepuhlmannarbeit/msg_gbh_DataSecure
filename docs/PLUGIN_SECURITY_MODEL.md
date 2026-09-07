@@ -1,6 +1,6 @@
-# DataSecure Security-Modell
+# DataSecure Security-Modell für das Claude-/Cowork-Plugin
 
-Stand: 05.09.2026 · 3.2.0-rc111
+Stand: 05.09.2026 · 3.2.0-rc123
 
 ## Vertrauensgrenze
 
@@ -8,6 +8,10 @@ Die Datenschutzgrenze ist der lokale Plugin-MCP. Originale gelangen nur über de
 lokalen Betriebssystempicker hinein. Der Modellkontext erhält weder Originalbytes,
 -pfade, -dateinamen noch erkannte Rohwerte. Freigegeben wird ausschließlich erneut
 verifiziertes Markdown mit kurzlebiger, laufgebundener Leseberechtigung.
+
+Dieses Dokument gilt ausschließlich für das Plugin. Das eigenständige Produkt
+hat einen getrennten Vertrag im
+[Standalone-Sicherheitsmodell](canonical/STANDALONE_SECURITY_MODEL.md).
 
 ## Bedrohungen und Kontrollen
 
@@ -74,6 +78,6 @@ Freigabe oder menschliche Fachentscheidung.
 ## Offene Releaseevidenz
 
 Fresh Install und Hostgate auf Windows/macOS, reale Dateisystem-/Crashgrenzen,
-Cowork-Berechtigungen, Accessibility, 100 Dateien/500 MiB sowie Fach-,
+Cowork-Berechtigungen, Accessibility, 200 Dateien/500 MiB sowie Fach-,
 Datenschutz-, Security- und Architekturabnahme bleiben erforderlich. Siehe
 [`BACKLOG_EVIDENCE_MATRIX.md`](canonical/BACKLOG_EVIDENCE_MATRIX.md).

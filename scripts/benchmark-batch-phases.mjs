@@ -11,13 +11,14 @@ import { fileURLToPath } from 'url';
 import { syntheticDocument } from './lib/performance-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
+const { RESOURCE_LIMITS } = require('../plugins/data-secure/server/resource-limits.js');
 const counts = [...new Set((process.argv.find((arg) => arg.startsWith('--counts='))?.slice(9) || '1,10,100')
-  .split(',').map(Number).filter((count) => Number.isInteger(count) && count > 0 && count <= 100))]
+  .split(',').map(Number).filter((count) => Number.isInteger(count) && count > 0 && count <= RESOURCE_LIMITS.MAX_BATCH_FILES))]
   .sort((left, right) => left - right);
 const temperatures = [...new Set((process.argv.find((arg) => arg.startsWith('--temperatures='))?.slice(15) || 'cold,warm')
   .split(',').filter((value) => value === 'cold' || value === 'warm'))];
 const workerCount = Number(process.argv.find((arg) => arg.startsWith('--worker-count='))?.slice(15) || 0);
-if (counts.length === 0) throw new Error('Use --counts=1,10,100 with values from 1 to 100.');
+if (counts.length === 0) throw new Error(`Use --counts=1,10,100 with values from 1 to ${RESOURCE_LIMITS.MAX_BATCH_FILES}.`);
 if (temperatures.length === 0) throw new Error('Use --temperatures=cold,warm.');
 
 function percentile(values, percentileValue) {
@@ -96,7 +97,7 @@ async function runWorker(count) {
   }
 }
 
-if (Number.isInteger(workerCount) && workerCount > 0 && workerCount <= 100) {
+if (Number.isInteger(workerCount) && workerCount > 0 && workerCount <= RESOURCE_LIMITS.MAX_BATCH_FILES) {
   process.stdout.write(`${JSON.stringify({ runs: await runWorker(workerCount) })}\n`);
 } else {
   const runs = [];

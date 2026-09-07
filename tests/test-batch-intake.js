@@ -40,7 +40,7 @@ function fixture(options = {}) {
     path,
     crypto: { randomBytes: (size) => Buffer.alloc(size, 0xaa) },
     profiles: new Set(['auto', 'general']),
-    limits: { MAX_BATCH_FILES: 100 },
+    limits: { MAX_BATCH_FILES: 200 },
     validateBatchLimits: () => {},
     storageStatus: () => ({ safe: true }),
     hasReparseComponent: () => false,
@@ -553,9 +553,11 @@ test('mixed admission journals every position but snapshots only candidates', ()
 test('Standalone intake binds its product channel into the durable journal', () => {
   const item = fixture({ productChannel: 'standalone' });
   try {
-    item.begin([item.queueEntry()]);
+    item.begin([item.queueEntry()], { outputNamingMode: 'neutral' });
     const state = JSON.parse(fs.readFileSync(item.journal, 'utf8'));
+    assert.strictEqual(state.schema, 'datasecure-batch/6');
     assert.strictEqual(state.product_channel, 'standalone');
+    assert.strictEqual(state.output_naming_mode, 'neutral');
     assert.strictEqual(state.pseudonym_contract_version, 'batch-pseudonym/v2');
   } finally { item.cleanup(); }
 });

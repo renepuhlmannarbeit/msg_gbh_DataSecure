@@ -394,7 +394,7 @@ test('normal reads consistently reject invalid schema, token, items and expiry w
     state({ schema: 'other' }),
     state({ token: 'b'.repeat(64) }),
     state({ items: [] }),
-    state({ items: Array.from({ length: 101 }, () => ({ status: 'pending' })) }),
+    state({ items: Array.from({ length: 201 }, () => ({ status: 'pending' })) }),
     state({ items: 'not-an-array' }),
     state({ expires_at: undefined }),
     state({ expires_at: 'not-a-date' })
@@ -509,7 +509,7 @@ test('maintenance reads are mutation-free and validate their binding and expiry'
       state({ schema: 'other' }),
       state({ token: 'b'.repeat(64) }),
       state({ items: [] }),
-      state({ items: Array.from({ length: 101 }, () => ({ status: 'pending' })) }),
+      state({ items: Array.from({ length: 201 }, () => ({ status: 'pending' })) }),
       state({ expires_at: 'invalid' })
     ]) {
       fs.writeFileSync(item.target, `${JSON.stringify(invalid)}\n`, { mode: 0o600 });

@@ -39,10 +39,20 @@ optionale spätere Verbesserungen für eine bequemere breite Verteilung.
 Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
 
 - Download, Prüfsumme, Finder-Entpackung und Gatekeeper-Ablauf;
-- Mehrfachauswahl und Ordnerauswahl ohne zweiten Picker;
-- TXT, Markdown, CSV und DOCX lokal anonymisieren;
+- Startseite ohne vorbelegten Modus; Auswahl oder Drag-and-drop verarbeitet noch
+  nichts und erst **Starten** beginnt den Stapel;
+- Mehrfachauswahl und rekursive Ordnerauswahl ohne zweiten Picker;
+- **Nur in Markdown umwandeln** für TXT, Markdown, CSV, DOCX, XLSX, PPTX,
+  Text-/Scan-PDF und PNG/JPEG/BMP; Basisnamen bleiben erhalten, es entsteht
+  keine Zuordnungsdatei und kein PII-Review;
+- **In Markdown umwandeln und anonymisieren** für TXT/Markdown/CSV direkt sowie
+  DOCX und breite Quellen genau einmal Markdown-first; Extraktionsabdeckung und
+  Anonymisierungsstatus werden getrennt angezeigt;
+- bei Anonymisierung neutrale Ergebnisnamen als Standard und den Quellbasisnamen
+  mit `-anonymisiert` als ausdrückliche Alternative prüfen;
 - Review, Abbruch, App-Neustart und Fortsetzung;
-- Ergebnis- und Zuordnungsordner öffnen;
+- Verlauf mit 20 zeilengebundenen Läufen; Ergebnisordner, Zuordnung und
+  Fortsetzung öffnen stets nur den gewählten Lauf;
 - falsches Architekturpaket stoppt verständlich;
 - keine Rosetta-Pflicht auf Apple Silicon;
 - Offline-Lauf, VoiceOver, Tastatur, Zoom, Fokus und Dark Mode;

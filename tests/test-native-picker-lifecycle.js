@@ -288,6 +288,7 @@ if (process.platform === 'win32') {
       // The isolated function retains its production dependencies, including
       // the server-relative progress formatter used by the safe projection.
       batchNextAction, ipcAcknowledgementCause, require: createRequire(serverPath),
+      RESOURCE_LIMITS: require('../plugins/data-secure/server/resource-limits').RESOURCE_LIMITS,
       genericStatus: () => ({ ...status }),
       continueMostRecentBatch: () => { continuations++; return { ok: true, ...publicProgress({
         token: 'c'.repeat(64), items: [{ status: deferredReview ? 'deferred_review' : 'pending' }]
@@ -497,6 +498,14 @@ if (process.platform === 'win32') {
     assert.strictEqual(rejected.diagnostic.hint, CAUSES.LOCAL_SELECTION_REJECTED);
     assert.deepStrictEqual([rejected.diagnostic.files_total, rejected.diagnostic.files_rejected], [7, 3]);
     assert.match(rejected.diagnostic.gateway_version, /^\d+\.\d+\.\d+/u);
+    const boundedFolder = await run(Object.assign(new SafeError('Der ausgewählte Ordner enthält mehr als 200 unterstützte Dateien.'), {
+      code: 'SOURCE_FOLDER_FILE_LIMIT'
+    }));
+    assert.strictEqual(boundedFolder.error, 'local_selection_rejected',
+      'a shared recursive-folder policy error is not a Cowork picker failure');
+    assert.strictEqual(boundedFolder.next_action, 'choose_other_selection');
+    assert.match(boundedFolder.message, /mehr als 200 unterstützte Dateien/u);
+    assert.strictEqual(boundedFolder.diagnostic.cause, 'LOCAL_SELECTION_REJECTED');
     const timeout = await run(Object.assign(new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' }));
     assert.strictEqual(timeout.error, 'local_start_failed', 'a picker infrastructure failure is not a selection rejection');
     assert.strictEqual(timeout.diagnostic.cause, 'LOCAL_PICKER_TIMEOUT');

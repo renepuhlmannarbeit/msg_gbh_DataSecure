@@ -4,6 +4,7 @@ const { notProcessedDocumentResult, normalizeDocumentResultReasonCode } = requir
 const { createBatchIntakeIntent } = require('./batch-intake-intent');
 const { DEFAULT_RETENTION_DAYS } = require('./retention');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
+const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 
 function createBatchIntake(options = {}) {
   const SafeError = options.SafeError;
@@ -92,6 +93,14 @@ function createBatchIntake(options = {}) {
     // unknown purposes must not silently become the historical default.
     const processingMode = validateProcessingMode(Object.hasOwn(beginOptions, 'processingMode')
       ? beginOptions.processingMode : MODES.ANONYMIZE, productChannel);
+    let outputNamingMode = null;
+    if (processingMode === MODES.MARKDOWN && Object.hasOwn(beginOptions, 'outputNamingMode')) {
+      throw Object.assign(new Error('RESULT_NAMING_MODE_INVALID'), { code: 'RESULT_NAMING_MODE_INVALID' });
+    }
+    if (processingMode !== MODES.MARKDOWN) {
+      outputNamingMode = validateResultNamingMode(Object.hasOwn(beginOptions, 'outputNamingMode')
+        ? beginOptions.outputNamingMode : RESULT_NAMING_MODES.NEUTRAL, productChannel);
+    }
     if (!storageStatus().safe) throw new SafeError('Der konfigurierte Datenschutzordner ist für die lokale Verarbeitung nicht freigegeben.');
     const expected = Number(beginOptions.expectedCount);
     if (!Number.isInteger(expected) || expected < 1 || expected > limits.MAX_BATCH_FILES) {
@@ -223,9 +232,12 @@ function createBatchIntake(options = {}) {
         };
       });
       state = {
-        schema: processingMode === MODES.MARKDOWN ? 'datasecure-batch/5' : 'datasecure-batch/4',
+        schema: processingMode === MODES.MARKDOWN ? 'datasecure-batch/5'
+          : productChannel === 'standalone' ? 'datasecure-batch/6' : 'datasecure-batch/4',
         product_channel: productChannel,
         ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
+        ...(processingMode !== MODES.MARKDOWN && productChannel === 'standalone'
+          ? { output_naming_mode: outputNamingMode } : {}),
         token,
         created_at: new Date(now).toISOString(),
         expires_at: new Date(now + (ttl === 0 ? DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000 : ttl)).toISOString(),

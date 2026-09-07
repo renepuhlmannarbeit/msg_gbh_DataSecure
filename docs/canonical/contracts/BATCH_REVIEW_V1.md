@@ -55,7 +55,7 @@ unberührt.
 
 ## Ressourcen und Benutzeroberfläche
 
-- Der Dialog verarbeitet höchstens 100 Batchpositionen. Er lädt und zeigt jeweils
+- Der Dialog verarbeitet höchstens 200 Batchpositionen. Er lädt und zeigt jeweils
   nur eine begrenzte aktuelle Fundstelle; Navigation und Fortschritt sind lokal.
 - Windows, macOS und Linux bieten die semantisch gleichen Aktionen: beibehalten,
   anonymisieren, zurück/ändern, später entscheiden und abbrechen.

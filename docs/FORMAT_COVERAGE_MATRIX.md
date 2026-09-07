@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 06.09.2026 · Produktversion 3.2.0 RC111
+Stand: 06.09.2026 · Produktversion 3.2.0 RC123
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest ist keine Freigabe für
@@ -9,31 +9,34 @@ Anonymisierung, Cowork oder einen breiten Endnutzerrollout.
 ## Anonymisierung: Claude-Plugin und Standalone
 
 Das Claude-Plugin bleibt im Modus `markdown-and-anonymize` auf vier Formate
-begrenzt. Standalone besitzt zusätzlich den DS-087-Pfad: breite Quellen werden
+begrenzt. Standalone besitzt den DS-087/090-Pfad: DOCX und breite Quellen werden
 genau einmal lokal zu einer neutralen Markdown-Extraktion verarbeitet und erst
-danach vom unveränderten Privacy-Core anonymisiert. Dieser Pfad veröffentlicht
-nur eine belegbar vollständige Extraktion. Sein Ergebnis ist eine anonymisierte
-Markdown-Textrepräsentation, keine anonymisierte Originaldatei.
+danach vom unveränderten Privacy-Core anonymisiert. Der Pfad veröffentlicht
+gültigen, nichtleeren Markdown-Inhalt auch dann, wenn die Vollständigkeit des
+Originalcontainers nicht garantiert werden kann. Sein Ergebnis ist eine
+anonymisierte Markdown-Textrepräsentation, keine anonymisierte Originaldatei.
 
 | Format | Gemeinsame Engine-Coverage | Claude-Plugin | Standalone-Pilot | Freigegebener Inhalt / Verhalten |
 |---|---|---|---|---|
 | TXT | belegt | freigegeben | E0 belegt, UAT offen | strikt validierter UTF-8-Text; vollständige Privacy- und Residual-Prüfung |
 | Markdown (`.md`, `.markdown`) | belegt | freigegeben | E0 belegt, UAT offen | normalisierter Text; Links/HTML bleiben inert und werden nicht geladen |
 | CSV | belegt | freigegeben | E0 belegt, UAT offen | strikt validierte Tabelle als Markdown; defekte Struktur stoppt fail-closed |
-| DOCX | belegt für dokumentierte Bereiche | freigegeben | E0 belegt, UAT offen | Bildpixel bleiben lokal; unbekannte inhaltsfähige Bereiche stoppen |
-| XLSX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
-| PPTX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
-| PDF / Scan-PDF | Text/OCR angebunden, Vollständigkeit noch nicht belegt | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
-| PNG, JPEG, BMP | lokale OCR angebunden, OCR nicht fachlich verifiziert | gesperrt | sicherer Einzelstopp | erst bei `complete`; aktuelle Extraktion bleibt `incomplete` |
+| DOCX | belegt für dokumentierte Bereiche | freigegeben; unbekannte inhaltsfähige Bereiche stoppen | Markdown-Extraktion wird anonymisiert | Custom-XML/Grafiken bleiben außerhalb des Markdown; Extraktionsstatus bleibt separat, der Markdown-Inhalt durchläuft alle Privacy-Gates |
+| XLSX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Arbeitsmappe |
+| PPTX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Präsentation |
+| PDF / Scan-PDF | Text/OCR angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert | leere OCR stoppt; sonst keine Vollständigkeitszusage für das PDF |
+| PNG, JPEG, BMP | lokale OCR angebunden, OCR nicht fachlich verifiziert | gesperrt | OCR-Markdown wird anonymisiert | leere OCR stoppt; sonst keine Vollständigkeitszusage für den Bildinhalt |
 | unbekannt, beschädigt oder verschlüsselt | nicht zulässig | gesperrt | gesperrt | kein Teilresultat und keine Entschlüsselung |
 
 ### Privacy-Freigaberegel
 
-Eine erlaubte Endung genügt nicht. Signatur, Container, Parsercoverage,
-Entitätsprüfung und Residual-Gate müssen gemeinsam bestehen. Parserwarnungen oder
-nicht belegte Inhaltsbereiche stoppen die betroffene Datei; der übrige Stapel darf
-weiterlaufen. Originale werden nur gelesen und niemals automatisch verändert oder
-gelöscht.
+Eine erlaubte Endung genügt nicht. Signatur, Container, aktive Inhalte,
+Entitätsprüfung und Residual-Gate müssen gemeinsam bestehen. Im Cowork-Pfad
+stoppen Parserwarnungen weiterhin. Standalone darf bekannte Extraktionslücken
+von DOCX und breiten Quellen nur als getrennten Coverage-Status weitergeben;
+unbekannte Coverage, leeres Markdown oder unsichere Quellen stoppen. Der übrige
+Stapel darf weiterlaufen. Originale werden nur gelesen und niemals automatisch
+verändert oder gelöscht.
 
 Der neutrale Extraktionsvertrag enthält weder Publikationskennung noch
 Verarbeitungszweck. Es wird kein rohes Markdown-Zwischenergebnis exportiert.
@@ -41,13 +44,13 @@ Direkte und konvertierte Quellen laufen mit derselben stapelgebundenen Personen-
 und Unternehmenszuordnung; die sichtbare Zuordnung zeigt direkt von der
 Originalquelle auf das anonymisierte Markdown-Ergebnis.
 
-Solange ein breiter Konverter noch `incomplete` meldet, ist der verfügbare
-Anwenderweg bewusst zweistufig: Zuerst **Nur in Markdown umwandeln**, anschließend
-die erzeugte `.md` als Quelle eines neuen Anonymisierungsstapels wählen. Dann wird
-der tatsächlich extrahierte Markdown-Inhalt anonymisiert. Ausgelassene Objekte,
-Grafiken oder nicht verifizierter OCR-Inhalt des Originalcontainers werden damit
-nicht nachträglich erfasst; die App darf deshalb keine vollständige
-Anonymisierung der ursprünglichen XLSX-, PPTX-, PDF- oder Bilddatei behaupten.
+Der Anwenderweg ist einstufig: Auswahl und **In Markdown umwandeln und
+anonymisieren**. Intern bleiben Extraktion und Anonymisierung getrennte Phasen.
+Ausgelassene Objekte, Grafiken oder nicht verifizierter OCR-Inhalt des
+Originalcontainers werden nicht nachträglich erfasst; die App behauptet deshalb
+keine vollständige Anonymisierung der ursprünglichen DOCX-, XLSX-, PPTX-, PDF-
+oder Bilddatei. Sie bestätigt ausschließlich die vollständige Prüfung des tatsächlich
+extrahierten Markdown-Inhalts.
 
 ### Bilder in DOCX
 
@@ -58,8 +61,9 @@ bleiben. DataSecure löscht Bilder niemals aus der Originaldatei.
 
 ## Reine Markdown-Konvertierung: nur Standalone
 
-`markdown-only` ist als zweite Kernfunktion integriert (DS-085/BL-010.28):
-Auswahl → bewusster Start → Fortschritt → Ergebnisse/Zuordnung. Der beim Start
+`markdown-only` ist als zweite Kernfunktion integriert (DS-085/DS-088/BL-010.28):
+Auswahl → bei Bedarf einzelne Dateien entfernen → bewusster Start → Fortschritt
+→ Ergebnisse. Der beim Start
 gebundene Modus bleibt bei Abbruch/Fortsetzung unverändert. Es gibt keinen
 zusätzlichen PII-Review und keine Bestätigungsserie für warnende Extraktionen.
 Die Oberfläche kennzeichnet die Ausgabe dauerhaft als **nicht anonymisiert**.
@@ -87,14 +91,18 @@ Die festen Auslassungsgründe sind `SOURCE_COVERAGE_UNVERIFIED`,
 Eine erfolgreiche, aber unvollständige Extraktion darf mit diesen Hinweisen
 gespeichert werden; sie ist weder anonymisiert noch als vollständig bestätigt.
 Beschädigte, verschlüsselte, übergroße oder nicht sicher auswertbare Eingaben
-erhalten dagegen kein Konvertat und bleiben in der lokalen Zuordnung als Fehler
-nachvollziehbar. Es gibt keine Entschlüsselung und keine feste Seitenanzahlgrenze;
+erhalten dagegen kein Konvertat und werden mit festem Fehlercode in der lokalen
+Diagnose nachvollziehbar. Es gibt keine Entschlüsselung und keine feste Seitenanzahlgrenze;
 Byte-, Text-, Pixel-, Speicher- und Zeitbudgets gelten weiterhin.
 
 Konvertate besitzen den eigenen `dm_`-Artefakttyp und erscheinen nach terminalem
-Gesamtstapel unter `DataSecure-Markdown/Lauf-…` einschließlich
-`DataSecure-Zuordnung.csv`. Anonymisierte Dateien bleiben unter
-`DataSecure-Output/Lauf-…`. Beide Outputbäume sind als erneute Quelle gesperrt.
+Gesamtstapel unter `DataSecure-Markdown/Lauf-…`. Ihr Quellbasisname bleibt
+erhalten; nur die Endung wird `.md`, bei Kollisionen folgt eine deterministische
+Nummer. Eine Zuordnungsdatei wird nicht erzeugt. Anonymisierte Dateien bleiben unter
+`DataSecure-Output/Lauf-…`; ihr Name ist pro Stapel neutral (Standard) oder
+behält auf ausdrückliche Wahl die Quellbasis mit `-anonymisiert`. Die
+Zuordnungsdatei nennt jeweils das tatsächlich erzeugte Ziel. Beide Outputbäume
+sind als erneute Quelle gesperrt.
 Rohe Konvertate erhalten keine Privacy-Lesecapability und sind aus öffentlichen
 Paketlisten, MCP-Handoff und Cowork-Lesezugriff ausgeschlossen. Es erfolgt kein
 automatischer Upload an KI-Dienste.
@@ -112,7 +120,8 @@ verifizierter Engineering-Pilot, noch kein Endnutzerrelease. Linux ist beim
 Plugin ein separates Claude-Code-Hostziel und beim Standalone-Produkt ein
 eigenes späteres Desktopziel. Details stehen im
 [aktuellen Zustand](canonical/CURRENT_STATE.md) und im
-[UAT-Kit](acceptance/UAT_TEST_KIT/README.md).
+[Cowork-UAT-Kit](acceptance/UAT_TEST_KIT/README.md) sowie im
+[Standalone-UAT-Kit](acceptance/STANDALONE_UAT_TEST_KIT/README.md).
 
 Der lokale E0-Konverterlauf umfasst 30 Testgruppen einschließlich echter
 Office-/PDF-/Bildbytes, Fehler, Abbruch und Ressourcenbindung. Eine Serie mit
@@ -135,4 +144,5 @@ getestet. RC111 bindet `source_type` an die Dateiendung und prüft echte
 TXT/XLSX-Mischstapel in beiden Reihenfolgen, Abbruch/Fortsetzung, Exact-once und
 stabile Personen-/Unternehmenslabels. Vollständige Container-/Grafik-/OCR-
 Coverage für die breiten Formate bleibt eigene Backlogarbeit; deshalb erzeugen
-aktuelle reale breite Quellen noch kein freigegebenes anonymisiertes Ergebnis.
+aktuelle reale breite Quellen ein anonymisiertes Markdown-Ergebnis mit separat
+ausgewiesener, häufig unvollständiger Quellenextraktionsabdeckung.

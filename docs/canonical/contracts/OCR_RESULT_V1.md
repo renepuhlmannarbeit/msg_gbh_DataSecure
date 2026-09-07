@@ -3,6 +3,11 @@
 Stand: 22.08.2026 · Story: BL-024.1 · Status: verbindlicher Engineering-Vertrag,
 noch keine Produktfreigabe
 
+Die fehlende Originalbild-/Pixel-Freigabe sperrt Cowork und jede Aussage, das
+Ausgangsbild sei vollständig anonymisiert. Standalone darf ein vertraglich
+gültiges, nichtleeres OCR-Markdown nach DS-087/090 weiterverarbeiten; dessen
+Extraktionsabdeckung und Anonymisierungsstatus bleiben getrennt.
+
 ## Zweck und Primärquelle
 
 Alle OCR-Backends liefern innerhalb der lokalen Datenschutzgrenze dasselbe

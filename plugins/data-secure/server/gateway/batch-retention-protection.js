@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { batchRoot } = require('./batch-private-store');
 const { processingModeForBatch } = require('../core/processing-mode');
+const { resultNamingModeForBatch } = require('../core/result-naming-mode');
 
 function createBatchRetentionProtection(options = {}) {
   const defaultIo = options.io || fs;
@@ -38,8 +39,16 @@ function createBatchRetentionProtection(options = {}) {
       } catch {
         return { ids, complete: false };
       }
-      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/5'].includes(state?.schema) || !Array.isArray(state.items)) {
+      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6'].includes(state?.schema) || !Array.isArray(state.items)) {
         return { ids, complete: false };
+      }
+      if (state.schema === 'datasecure-batch/6') {
+        try {
+          processingModeForBatch(state);
+          resultNamingModeForBatch(state);
+        } catch {
+          return { ids, complete: false };
+        }
       }
       if (state.schema === 'datasecure-batch/5') {
         try { processingModeForBatch(state); } catch { return { ids, complete: false }; }

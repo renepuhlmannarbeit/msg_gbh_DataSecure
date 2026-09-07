@@ -1,6 +1,6 @@
 # Kanonische Zielarchitektur
 
-Stand: 06.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-086
+Stand: 07.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-092
 
 ## Architekturprinzip
 
@@ -51,17 +51,15 @@ Zielhostfreigaben bleiben getrennt; konkrete Extraktionsgrenzen stehen in der
 | Produkt / Zweck | Aktiver Eingang | Prüfung und Ausgabe | Modellübergabe |
 |---|---|---|---|
 | Cowork-Plugin / anonymisieren | lokaler OS-Picker; TXT, Markdown, CSV, DOCX | Parser, PII, Residual-Gate, erforderlichenfalls Sammelreview; neutrale MD in `DataSecure-Output`; Mapping privat | nur erneut verifiziertes anonymisiertes Markdown auf späteren ausdrücklichen Auswertungsauftrag |
-| Standalone / Markdown und anonymisieren | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX sowie breite Quellen über DS-087 | direkte Formate durch dieselben Anonymisierungsgates; XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP einmal neutral extrahiert und nur bei vollständiger Coverage anonymisiert; MD und laufbezogene `DataSecure-Zuordnung.csv` in `DataSecure-Output` | kein MCP oder automatischer Upload |
-| Standalone / nur Markdown | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF einschließlich Scans, PNG/JPEG/BMP | Offline-Extraktion ohne PII-Ersetzung und Anonymisierungsreview; ursprüngliche Inhalte und Coveragehinweise; MD und Zuordnung in `DataSecure-Markdown`, ausdrücklich nicht anonymisiert | keine Privacy-Lesecapability; vom Plugin-Handoff ausgeschlossen |
+| Standalone / Markdown und anonymisieren | native Picker oder Drop mit explizitem Start; TXT, Markdown und CSV direkt; DOCX sowie breite Quellen über DS-087/090 | DOCX/XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP einmal neutral extrahiert, gültigen nichtleeren Markdown-Inhalt anonymisiert und Quellenabdeckung separat ausgewiesen; pro Stapel neutrale Ergebnisnamen (Standard) oder Quellbasis mit `-anonymisiert`; MD und laufbezogene `DataSecure-Zuordnung.csv` in `DataSecure-Output` | kein MCP oder automatischer Upload |
+| Standalone / nur Markdown | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF einschließlich Scans, PNG/JPEG/BMP | Offline-Extraktion ohne PII-Ersetzung und Anonymisierungsreview; ursprüngliche Inhalte und Coveragehinweise; MD unter dem ursprünglichen Basisnamen in `DataSecure-Markdown`, ausdrücklich nicht anonymisiert; keine Zuordnungsdatei | keine Privacy-Lesecapability; vom Plugin-Handoff ausgeschlossen |
 
-Die größere Formatmenge der reinen Konvertierung erweitert nicht automatisch
-die Anonymisierungsfreigabe. DS-087 lässt breite Quellen im Standalone-
-Anonymisierungszweck nur bis zur neutralen Extraktionsgrenze zu. Solange die
-Coverage `incomplete` ist, stoppt die betroffene Datei vor Privacy-Publikation.
-Der mögliche Zweischritt **Nur in Markdown umwandeln** → erzeugte `.md` in einem
-neuen Anonymisierungsstapel ist keine automatische breite Freigabe: Er schützt
-nur die sichtbare Markdown-Repräsentation und beginnt einen neuen, unabhängigen
-Stapelkontext.
+Die größere Formatmenge der reinen Konvertierung erweitert das Cowork-Plugin
+nicht. DS-087/090 lässt DOCX und breite Quellen ausschließlich im Standalone-
+Anonymisierungszweck bis zum Privacy-Core zu. `incomplete` bleibt ein separater
+Extraktionsstatus und verhindert nicht die Anonymisierung gültigen, nichtleeren
+Markdowns. Ergebnis und Manifest bestätigen nur diesen extrahierten Inhalt und
+geben keine Vollständigkeitszusage für den Originalcontainer.
 Beschädigte oder geschützte Quellen erzeugen kein Konvertat; im reinen
 Konvertierungszweck erhalten lesbare, begrenzt abgedeckte Extraktionen konkrete
 Hinweise.
@@ -85,7 +83,11 @@ Hinweise.
 7. Klare Ergebnisse werden intern veröffentlicht. Unsicherheiten bleiben lokal in einer
    persistenten Review-Queue ohne menschlichen Entscheidungs-Timeout.
 8. Die lokale Abschlussoberfläche zeigt den terminalen Lauf beziehungsweise
-   einen konkreten Fortsetzungsschritt. Cowork erhält eine inhaltsfreie Meldung.
+   einen konkreten Fortsetzungsschritt mit **Ergebnisse öffnen**. Diese Aktion
+   öffnet ausschließlich den exakten sichtbaren Laufordner des aktuellsten
+   Cowork-Stapels. Solange genau dieser Lauf aktiv, fehlgeschlagen oder noch
+   nicht exportiert ist, gibt es keinen Rückfall auf ältere Ergebnisse oder den
+   allgemeinen Output-Stamm. Cowork erhält eine inhaltsfreie Meldung.
    Erst ein späterer ausdrücklicher Auswertungsauftrag erlaubt die begrenzte
    Batch-Übergabe freigegebener Markdown-Ergebnisse.
 
@@ -100,6 +102,10 @@ Hinweise.
 - Ohne nachgewiesene MCP-App-Unterstützung bleibt der Text-/OS-Fallback gleichwertig.
 - Eine zusätzlich installierte Companion-Anwendung ist kein Normalbestandteil;
   die lokalen Picker und Reviewadapter gehören zur gebündelten Runtime.
+- Rekursive Quellauswahl und ihre Datei-/Größen-/Formatgrenzen werden vom
+  gemeinsamen lokalen Adapter geprüft. Produktneutrale `SOURCE_FOLDER_*`-
+  Fehler werden in Cowork als korrigierbare Auswahlablehnung dargestellt und
+  starten weder einen Ersatzpicker noch einen Teilstapel.
 
 ## Eigenständiges zweites Produkt ohne Cowork
 
@@ -126,7 +132,7 @@ Hinweise.
   LLM-Clients und `markitdown-ocr` gehören nicht zum lokalen Produktweg.
 - Standalone besitzt nach DS-085 zusätzlich reine Markdown-Konvertierung als
   gleichwertige Kernfunktion. Sie verwendet Aufnahme, Parser, Journal,
-  Recovery und Mapping gemeinsam, aber keine PII-Ersetzung und keinen
+  Recovery und Exportmechanik gemeinsam, aber keine PII-Ersetzung und keinen
   Anonymisierungsreview. Der dauerhafte Modus entscheidet über den getrennten
   Export nach `DataSecure-Markdown`; diese Dateien sind nicht anonymisiert und
   können niemals aus dem Plugin-Handoff gelesen werden. Dieser Modus ist im
@@ -172,9 +178,11 @@ Hinweise.
   erneute Originalauswahl erzeugt einen neuen Plain-Stapel. Neue Plain-Stapel
   besitzen einen eindeutigen versionierten Vertrag und bleiben fortsetzbar.
 - Mapping und fertige Exporte sind lesbar und dauerhaft. Das globale Mapping
-  bleibt privat; Standalone veröffentlicht nach DS-083 zusätzlich die Zuordnung
-  im zugehörigen Lauf. Beide Standalone-Zwecke binden Ziel und Modus dauerhaft.
-  Ein sichtbarer Lauf ist erst mit allen Ergebnissen und seiner Zuordnung fertig.
+  bleibt privat; Standalone-Anonymisierung veröffentlicht nach DS-083 zusätzlich
+  die Zuordnung im zugehörigen Lauf. Reine Konvertierung behält den Basisnamen
+  und benötigt keine Zuordnung. Beide Standalone-Zwecke binden Ziel und Modus
+  dauerhaft. Ein sichtbarer Anonymisierungslauf ist erst mit allen Ergebnissen
+  und seiner Zuordnung fertig; ein Konvertierungslauf mit allen Konvertaten.
 
 ## Inhalts- und Formatgrenze
 
@@ -187,9 +195,11 @@ Hinweise.
 - Native Textschichten haben Vorrang. OCR läuft lokal nur für fehlende Bereiche.
   Unsichere OCR-Passagen werden nicht geraten, sondern transparent ausgelassen oder
   lokal geprüft.
-- Im Anonymisierungspfad wird ein Nulltreffer nur bei vollständigem
-  Parser-/Graph-Nachweis und unabhängigem Residual-Gate freigegeben. Reine
-  Konvertierung erzeugt keine Anonymitätsaussage und verwendet diese PII-Gates nicht.
+- Ein Nulltreffer im extrahierten Markdown wird nur nach unabhängigem
+  Residual-Gate freigegeben. Eine Aussage über den vollständigen
+  Originalcontainer erfordert zusätzlich vollständige Extraktionsabdeckung.
+  Reine Konvertierung erzeugt keine Anonymitätsaussage und verwendet diese
+  PII-Gates nicht.
 
 ## Prozess- und Ressourcengrenze
 
@@ -207,6 +217,11 @@ Hinweise.
 
 - Marketplace und manuelles Plugin-ZIP liefern dasselbe Produkt. MCPB bleibt ein
   internes Engineering-Artefakt und ist kein Desktop- oder Fehler-Fallback.
+- Der manuelle Claude-Plugin-Upload ist laut aktueller Herstellerdokumentation
+  auf 50 MB begrenzt. Die große Standalone-Konverter-/OCR-Runtime wird deshalb
+  nicht in das Cowork-ZIP kopiert; breitere Cowork-Formate benötigen eine eigene
+  kleine, zielhostgeprüfte Runtimeprojektion. Quelle:
+  <https://support.claude.com/en/articles/13837433-manage-plugins-for-your-organization>
 - Das Quellplugin bleibt mit `command: node` entwickelbar. Der Produktbuild ersetzt
   diesen Wert deterministisch durch `${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node`
   und bündelt die hashgebundene Node-Runtime für Windows x64 oder macOS Intel/ARM.

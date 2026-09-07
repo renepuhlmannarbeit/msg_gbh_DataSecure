@@ -84,9 +84,12 @@ assert.ok(!toolNames.includes('anonymize_all_documents'),'a complete multi-file 
 assert.ok(!toolNames.includes('anonymize_next_document'),'Claude must not drive the local queue one document at a time');
 assert.ok(!toolNames.includes('approve_visual_asset'),'Claude must not receive a model-callable human approval tool');
 
-const instructionsStart=indexSource.indexOf('const INSTRUCTIONS=');
-assert.notStrictEqual(instructionsStart,-1,'INSTRUCTIONS missing');
-const instructionSource=indexSource.slice(instructionsStart,toolsStart);
+assert.match(indexSource,/require\('\.\/mcp-instructions'\)/,
+  'MCP server must import the separately testable instructions module');
+const instructionSource=fs.readFileSync(path.join(pluginRoot,'server','mcp-instructions.js'),'utf8');
+assert.match(instructionSource,/const INSTRUCTIONS\s*=/,'INSTRUCTIONS missing');
+assert.match(instructionSource,/module\.exports\s*=\s*\{\s*INSTRUCTIONS\s*\}/,
+  'instructions module must export the canonical text');
 const agentGuidance=[instructionSource,...skillTexts,...referenceTexts].join('\n');
 const toolInstructionExceptions={
   continue_anonymized_batch_in_chat:'Support- und Kompatibilitätswerkzeug; der normale Cowork-Folgeweg nutzt die tokenfreie lokale Ergebnisübergabe.',

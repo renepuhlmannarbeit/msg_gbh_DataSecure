@@ -126,7 +126,7 @@ for (const file of required.slice(1)) {
   if (!indexText.includes(`(${file})`)) throw new Error(`canonical index does not link ${file}`);
 }
 const currentLabel = /-rc(\d+)$/u.exec(version);
-for (const token of [`Ist-Zustand ${currentLabel ? `RC${currentLabel[1]}` : version}`, '100 Dateien', '500 MiB', 'Windows', 'macOS', 'Linux']) {
+for (const token of [`Ist-Zustand ${currentLabel ? `RC${currentLabel[1]}` : version}`, '200 Dateien', '500 MiB', 'Windows', 'macOS', 'Linux']) {
   if (!productText.includes(token)) throw new Error(`canonical product is missing: ${token}`);
 }
 if (target.reuse_policy?.open_source_first !== true ||

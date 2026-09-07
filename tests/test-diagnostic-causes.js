@@ -95,7 +95,7 @@ test('buildDiagnostic emits only the fixed envelope fields', () => {
   assert.strictEqual(minimal.phase, 'dispatch', 'unknown phases collapse to dispatch');
   assert.strictEqual(minimal.cause, 'INTERNAL_FAILURE');
   assert.strictEqual(minimal.recorded, false, 'recorded is strictly boolean');
-  assert.strictEqual(minimal.files_total, 100, 'counters are capped at the batch limit');
+  assert.strictEqual(minimal.files_total, 200, 'counters are capped at the batch limit');
   assert.strictEqual(minimal.files_rejected, undefined, 'negative counters are dropped');
   assert.deepStrictEqual(Object.keys(minimal).sort(), ['at', 'cause', 'files_total', 'gateway_version', 'hint', 'phase', 'recorded']);
 });

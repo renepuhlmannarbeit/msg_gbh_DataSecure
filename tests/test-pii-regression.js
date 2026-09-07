@@ -1062,6 +1062,22 @@ test('mailto and other contact URIs redact the complete address in every profile
     'Schreiben Sie an [Erika]([CONTACT_REDACTED]).');
 });
 
+test('Markdown-escaped e-mail punctuation from Office conversion is redacted as one identifier', () => {
+  const cases = [
+    'E-Mail: lina\\.testfeld@privacy-example\\.test',
+    'E-Mail: max\\-muster+projekt@example\\.org',
+    '[Kontakt](mailto:erika\\.beispiel@example\\.invalid)'
+  ];
+  for (const profile of ['general', 'personnel_profile', 'customer']) {
+    for (const source of cases) {
+      const result = anonymizeVerified(source, profile);
+      assert.doesNotMatch(result.text, /lina|testfeld|max|muster|erika|beispiel|@/iu, `${profile}: ${source}`);
+      assert.match(result.text, /\[(?:EMAIL|CONTACT)_REDACTED\]/u, `${profile}: ${source}`);
+      assert.deepStrictEqual(result.residual, [], `${profile}: ${source}`);
+    }
+  }
+});
+
 test('identifier compatibility detection preserves source spelling, hashes and UTF-16 spans in every profile', () => {
   const { identifierDetectionText, hashShort } = require('../plugins/data-secure/server/privacy/base');
   const { findStructuredSpans } = require('../plugins/data-secure/server/privacy/structured');
@@ -1649,6 +1665,25 @@ test('the conservative labelled gate remains broader than the redactor', () => {
   assert.strictEqual(anonymize(repeatedSeparatorPhone, 'general').text, repeatedSeparatorPhone, 'redactor stays precise');
   assert.ok(pii.scanResidual(spacedDate, 'general').some((hit) => hit.type === 'DATE_OF_BIRTH'));
   assert.ok(pii.scanResidual(repeatedSeparatorPhone, 'general').some((hit) => hit.type === 'PHONE'));
+});
+
+test('a plain person table label anchors the name and the independent gate detects a clear residual', () => {
+  const source = [
+    '1. Projektprofil von Anna Berger bei Elbwiese Beratung GmbH.',
+    '2. Anna Berger koordiniert die Einführung.',
+    '',
+    '| Feld | Wert |',
+    '| --- | --- |',
+    '| person | Anna Berger |',
+    '| company | Elbwiese Beratung GmbH |'
+  ].join('\n');
+  const rawResidual = pii.scanResidual(source, 'general');
+  assert.ok(rawResidual.some((hit) => hit.type === 'PERSON_CANDIDATE' && hit.text === 'Anna Berger'),
+    'the release gate must not reuse PERSON_LABEL for this converted table shape');
+  const result = anonymizeVerified(source, 'general');
+  assertAbsent(result.text, 'Anna Berger', 'person in numbered prose and the explicit table row');
+  assert.match(result.text, /\[PERSON_\d+\]/u);
+  assert.deepStrictEqual(result.residual, []);
 });
 
 test('gendered salutations are removed while professional academic titles remain', () => {

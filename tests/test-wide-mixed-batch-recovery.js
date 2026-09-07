@@ -102,22 +102,28 @@ async function runIncompleteWideBeforeDirect() {
   }; });
   const batch = beginBatch({ expectedCount: 2, profile: 'personnel_profile', queue,
     processingMode: 'markdown-and-anonymize' });
-  const stopped = await processBatchNext(batch.batch_token, { convertDocument: normalDirect,
+  const wideReleased = await processAndAcknowledge(batch.batch_token, { convertDocument: normalDirect,
     async convertBuffer() { return createMarkdownExtraction({ source_type: 'xlsx',
       markdown: 'Name: Max Mustermann\nArbeitgeber: Nordstern GmbH',
       coverage: { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] } }); } });
-  assert.equal(stopped.ok, false);
-  assert.equal(stopped.error, 'PARSER_COVERAGE_UNVERIFIED');
+  assert.equal(wideReleased.released, 1, JSON.stringify(wideReleased));
   const released = await processAndAcknowledge(batch.batch_token,
     { convertDocument: normalDirect, convertBuffer: completeWide });
   assert.equal(released.complete, true, JSON.stringify(released));
   const state = _test.readState(batch.batch_token);
-  assert.equal(state.items[0].status, 'stopped');
-  assert.equal(Object.hasOwn(state.items[0], 'package_id'), false);
-  const output = fs.readFileSync(path.join(roots().output, state.items[1].package_id,
-    `${state.items[1].package_id}.md`), 'utf8');
-  assert.match(output, /\[PERSON_001\]/u);
-  assert.match(output, /\[UNTERNEHMEN_001\]/u);
+  assert.equal(state.items[0].status, 'released');
+  assert.equal(state.items[0].document_result.grade, 'complete');
+  for (const item of state.items) {
+    const output = fs.readFileSync(path.join(roots().output, item.package_id, `${item.package_id}.md`), 'utf8');
+    assert.match(output, /\[PERSON_001\]/u);
+    assert.match(output, /\[UNTERNEHMEN_001\]/u);
+    assert.doesNotMatch(output, /Max Mustermann|Nordstern GmbH/u);
+  }
+  const wideManifest = JSON.parse(fs.readFileSync(
+    path.join(roots().output, state.items[0].package_id, 'manifest.json'), 'utf8'));
+  assert.equal(wideManifest.privacy_scope, 'extracted-markdown-only');
+  assert.deepEqual(wideManifest.source_extraction_coverage,
+    { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] });
 }
 
 testAsync('both mixed source orders resume with stable readable identities and exactly-once release', async () => {

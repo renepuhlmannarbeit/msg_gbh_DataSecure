@@ -244,6 +244,30 @@ test('pending entry binding verifies the snapshot digest and returns in-memory b
   ]);
 });
 
+test('v6 naming metadata is validated before a pending private snapshot is read', () => {
+  const plaintext = Buffer.from('snapshot', 'utf8');
+  const item = {
+    id: 'f'.repeat(32),
+    name: 'Personenakte.txt',
+    work_name: `001_${'b'.repeat(24)}.txt`,
+    size: plaintext.length,
+    sha256: crypto.createHash('sha256').update(plaintext).digest('hex'),
+    private_artifact_plain: true
+  };
+  const dependencies = {
+    workPath: () => 'work',
+    regularFileStat: () => ({ size: plaintext.length }),
+    privateWorkStore: { readFile: () => Buffer.from(plaintext) }
+  };
+  assert.deepStrictEqual(exactPendingEntry({
+    schema: 'datasecure-batch/6', token: 'a'.repeat(64),
+    product_channel: 'standalone', output_naming_mode: 'neutral'
+  }, item, dependencies).private_bytes, plaintext);
+  assert.throws(() => exactPendingEntry({
+    schema: 'datasecure-batch/6', token: 'a'.repeat(64), product_channel: 'standalone'
+  }, item, dependencies), /RESULT_NAMING_MODE_INVALID/);
+});
+
 test('pending entry binding rejects every unsafe work name before filesystem access', () => {
   const invalid = [
     '../escape.txt',

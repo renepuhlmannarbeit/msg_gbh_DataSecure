@@ -93,8 +93,9 @@ patchText(
   `$1${target}$2`
 );
 
-// Keep the small set of user-facing, current-release documents in sync as well.
-// Historical backlog evidence deliberately stays on the version in which it happened.
+// Keep only the explicit current-release labels in sync. Never replace version
+// tokens throughout a document: the same files also contain commit-bound,
+// historical RC evidence whose original version must remain immutable.
 const releaseLabel = (version) => {
   const match = /^(\d+\.\d+\.\d+)-rc(\d+)$/i.exec(version);
   return match ? `${match[1]} RC${match[2]}` : version;
@@ -103,38 +104,27 @@ const rcLabel = (version) => {
   const match = /-rc(\d+)$/i.exec(version);
   return match ? `RC${match[1]}` : version;
 };
-for (const rel of [
-  'README.md',
-  'docs/ANLEITUNG.md',
-  'docs/ANWENDERREVIEW.md',
-  'docs/DETECTOR_BENCHMARK.md',
-  'docs/FORMAT_COVERAGE_MATRIX.md',
-  'docs/IT-BETRIEBSHANDBUCH.md',
-  'docs/PILOT-ABNAHME.md',
-  'docs/PLUGIN_SECURITY_MODEL.md',
-  'docs/RELEASE.md',
-  'docs/TESTING.md',
-  'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
-  'plugins/data-secure/README.md',
-  'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/unterstuetzte-formate.md'
-]) {
-  const file = path.join(root, rel);
-  if (!fs.existsSync(file)) continue;
-  const current = fs.readFileSync(file, 'utf8');
-  const next = current
-    .replaceAll(previous, target)
-    .replaceAll(releaseLabel(previous), releaseLabel(target))
-    .replaceAll(rcLabel(previous), rcLabel(target));
-  writeIfChanged(rel, next);
+patchText('README.md', /^(# GBH DataSecure .*? v)\d+\.\d+\.\d+ RC\d+$/mu,
+  `$1${releaseLabel(target)}`);
+patchText('docs/ANLEITUNG.md', /^(Stand:[^\n]*?Version )\d+\.\d+\.\d+ RC\d+$/mu,
+  `$1${releaseLabel(target)}`);
+patchText('docs/ANWENDERREVIEW.md', /^(Stand:[^\n]*?gegen )\d+\.\d+\.\d+(?:-rc\d+)?/mu,
+  `$1${target}`);
+patchText('docs/DETECTOR_BENCHMARK.md',
+  /^(## Current synthetic-corpus baseline \()\d+\.\d+\.\d+(?:-rc\d+)?/mu,
+  `$1${target}`);
+patchText('docs/FORMAT_COVERAGE_MATRIX.md',
+  /^(Stand:[^\n]*?Produktversion )\d+\.\d+\.\d+ RC\d+$/mu,
+  `$1${releaseLabel(target)}`);
+for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md',
+  'docs/RELEASE.md', 'docs/TESTING.md']) {
+  patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?$/mu, `$1${target}`);
 }
-
-for (const rel of ['docs/PLUGIN_SECURITY_MODEL.md', 'docs/RELEASE.md', 'docs/TESTING.md']) {
-  patchText(
-    rel,
-    /^(Stand:[^\n]*?)(\d+\.\d+\.\d+(?:-rc\d+| RC\d+))/mu,
-    (_, prefix, previousLabel) => prefix + (previousLabel.includes(' RC') ? releaseLabel(target) : target)
-  );
-}
+patchText('docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
+  /^(Stand:[^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?$/mu,
+  `$1${target}`);
+patchText('plugins/data-secure/README.md',
+  /^(Version )\d+\.\d+\.\d+(?:-rc\d+)?/mu, `$1${target}`);
 
 // Canonical documents contain historical RC references that must not be
 // rewritten globally. Only their explicit current-state header is versioned.
@@ -154,21 +144,6 @@ patchText(
   'docs/canonical/UML_ARCHITECTURE.md',
   /^(Stand: [^·\n]+· (?:Produktstand )?)(?:\d+\.\d+\.\d+(?:-rc\d+)?[ \t]*)+/mu,
   (_, prefix) => `${prefix}${target}`
-);
-patchText(
-  'docs/ANWENDERREVIEW.md',
-  /^(Stand: [^\n]*?gegen )\d+\.\d+\.\d+(?:-rc\d+)?/mu,
-  `$1${target}`
-);
-patchText(
-  'docs/DETECTOR_BENCHMARK.md',
-  /^(## Current baseline \()\d+\.\d+\.\d+(?:-rc\d+)?/mu,
-  `$1${target}`
-);
-patchText(
-  'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
-  /^(Stand: [^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?/mu,
-  `$1${target}`
 );
 patchText(
   'docs/canonical/PRODUCT.md',

@@ -34,7 +34,7 @@ function batchState(status = 'released', schema = 'datasecure-batch/2') {
     remove_images: false,
     items: [{
       status,
-      ...(schema === 'datasecure-batch/2' ? { document_result: result } : {}),
+      ...(schema !== 'datasecure-batch/1' ? { document_result: result } : {}),
       ...(status === 'released' ? { package_id: packageId } : { error_code: 'SOURCE_TEXT_INVALID' })
     }]
   };
@@ -76,6 +76,19 @@ test('receipt ids make append idempotent and conflicting reuse fails closed', ()
     assert.throws(() => appendEvidenceRecord(conflict, { target, platform: 'win32' }), /widersprüchlichen Beleg/);
     assert.strictEqual(fs.readFileSync(target, 'utf8'), first);
   } finally { cleanup(dir); }
+});
+
+test('v6 Standalone anonymization produces evidence without losing its snapshot identity', () => {
+  const state = {
+    ...batchState('released', 'datasecure-batch/6'),
+    product_channel: 'standalone',
+    output_naming_mode: 'neutral'
+  };
+  const record = makeEvidence(state, '2026-08-26T11:30:00.000Z', '6'.repeat(32));
+  assert.strictEqual(record.batch_snapshot_schema, 'datasecure-batch/6');
+  assert.deepStrictEqual(record.grade_counts, {
+    complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0
+  });
 });
 
 test('v1 and v2 migration preserve every legacy record without inventing grades', () => {
@@ -191,6 +204,20 @@ test('v2 terminal evidence aggregates all three grades and only the two allowed 
   });
   assert.deepStrictEqual(record.error_codes, ['SOURCE_ENCRYPTED_UNSUPPORTED']);
   assert.doesNotMatch(JSON.stringify(record), /package_id|batch_token|sha256|original_name|path/iu);
+});
+
+test('terminal evidence accepts the full 200-file product batch', () => {
+  const state = {
+    schema: 'datasecure-batch/2', created_at: '2026-09-07T10:00:00.000Z', profile: 'general', remove_images: false,
+    items: Array.from({ length: 200 }, () => ({
+      status: 'stopped', error_code: 'SOURCE_TEXT_INVALID',
+      document_result: notProcessedDocumentResult('SOURCE_TEXT_INVALID')
+    }))
+  };
+  const record = makeEvidence(state, '2026-09-07T11:00:00.000Z', 'f'.repeat(32));
+  assert.strictEqual(record.counts.total, 200);
+  assert.strictEqual(record.counts.stopped, 200);
+  assert.strictEqual(record.grade_counts.not_processed, 200);
 });
 
 test('package mismatches, missing v2 grades and content-shaped reason codes fail closed', () => {

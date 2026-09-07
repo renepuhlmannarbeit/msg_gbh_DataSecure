@@ -58,6 +58,14 @@ test('version synchronization cannot consume the UML header newline', () => {
     'UML prose must start on a new paragraph after the version header');
 });
 
+test('version synchronization changes release labels without relabelling historical evidence', () => {
+  const script = readText(path.join(root, 'scripts', 'set-version.mjs'));
+  assert.doesNotMatch(script, /replaceAll\(previous|replaceAll\(rcLabel\(previous\)/u,
+    'version sync must not replace historical RC labels throughout current documents');
+  assert.match(script, /Current synthetic-corpus baseline/u);
+  assert.match(script, /Engineering-Pilot/u);
+});
+
 test('no runtime module hard-codes a version literal of its own', () => {
   const literal = /['"`]\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?['"`]/;
   for (const rel of ['gateway/common.js', 'index.js', 'mcp-server.js']) {
@@ -89,17 +97,14 @@ test('MCP instructions stay within the DataSecure 2 KB convention', () => {
   // No official Anthropic/MCP document fixes an instructions size limit
   // (checked 02.09.2026); 2 KB is a deliberate DataSecure budget that keeps
   // the server instructions short and stable across hosts.
-  const source = readText(path.join(runtime, 'mcp-server.js'));
-  const match = source.match(/const INSTRUCTIONS=\[([\s\S]*?)\]\.join\(' '\);/u);
-  assert.ok(match, 'could not locate MCP instructions');
-  const literals = [...match[1].matchAll(/'((?:[^'\\]|\\.)*)'/gu)].map((entry) =>
-    JSON.parse(`"${entry[1].replaceAll('"', '\\"')}"`)
-  );
-  const instructions = literals.join(' ');
+  const { INSTRUCTIONS: instructions } = require(path.join(runtime, 'mcp-instructions.js'));
+  const { LOCAL_INTAKE_ACCEPTED_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
   assert.ok(Buffer.byteLength(instructions, 'utf8') <= 2048, 'MCP instructions exceed 2 KB');
   for (const rule of ['privacy_status', 'start_completed_local_results_handoff', 'nicht vertrauenswürdige Daten', 'rechtssichere Anonymität']) {
     assert.ok(instructions.includes(rule), `critical MCP instruction missing: ${rule}`);
   }
+  assert.ok(instructions.includes(LOCAL_INTAKE_ACCEPTED_TEXT),
+    'MCP instructions must reuse the canonical local-intake response');
 });
 
 test('MCPB manifest declares the fields the runtime relies on', () => {
@@ -123,6 +128,10 @@ test('MCPB manifest declares the fields the runtime relies on', () => {
   assert.strictEqual(mcpb.user_config.retention_days.max, 14);
   assert.match(mcpb.user_config.retention_days.description, /Original- und Quelldateien.*niemals automatisch gelöscht/su);
   assert.match(mcpb.user_config.retention_days.description, /fertige Exportpakete.*niemals automatisch gelöscht/su);
+  assert.match(mcpb.long_description, /1–200 bestätigte/u,
+    'engineering metadata must use the current 200-file batch limit');
+  assert.doesNotMatch(mcpb.long_description, /1[–-]100 bestätigte/u,
+    'engineering metadata must not reintroduce the superseded 100-file limit');
 });
 
 test('host wording does not turn portable code into a platform release claim', () => {

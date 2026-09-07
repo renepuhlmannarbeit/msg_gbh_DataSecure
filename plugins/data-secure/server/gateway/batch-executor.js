@@ -26,6 +26,8 @@ const {
 } = require('./batch-intake-reservation');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
+const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 // Mirrors PARENT_ACK_TYPE in ./worker-terminal-presentation.js (kept literal so
@@ -297,7 +299,7 @@ function localBatchStateProgress(message, acceptedTypes = new Set(['local-intake
   const released = message.released;
   const stopped = message.stopped;
   if (![batchTotal, released, stopped].every(Number.isSafeInteger) ||
-      batchTotal < 1 || batchTotal > 100 || released < 0 || stopped < 0 ||
+      batchTotal < 1 || batchTotal > RESOURCE_LIMITS.MAX_BATCH_FILES || released < 0 || stopped < 0 ||
       released + stopped > batchTotal) return null;
   const legacyComplete = message.type === 'local-intake-complete';
   const complete = legacyComplete || message.complete === true;
@@ -509,6 +511,15 @@ function startLocalBatchExecutor(token, options = {}) {
 function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   const processingMode = validateProcessingMode(Object.hasOwn(options, 'processingMode')
     ? options.processingMode : MODES.ANONYMIZE, (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin');
+  const productChannel = (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin';
+  let outputNamingMode = null;
+  if (processingMode === MODES.MARKDOWN && Object.hasOwn(options, 'outputNamingMode')) {
+    throw Object.assign(new Error('RESULT_NAMING_MODE_INVALID'), { code: 'RESULT_NAMING_MODE_INVALID' });
+  }
+  if (processingMode !== MODES.MARKDOWN) {
+    outputNamingMode = validateResultNamingMode(Object.hasOwn(options, 'outputNamingMode')
+      ? options.outputNamingMode : RESULT_NAMING_MODES.NEUTRAL, productChannel);
+  }
   try { validateBatchQueueEnvelope(queue); }
   catch {
     throw Object.assign(new SafeError('Die lokale Stapelübergabe ist ungültig und wurde nicht gestartet.'), {
@@ -676,6 +687,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         intake_reservation_id: reservationId,
         profile,
         ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
+        ...(outputNamingMode ? { output_naming_mode: outputNamingMode } : {}),
         queue: queue.map((entry) => ({
           name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
           sourceLabel: entry.sourceLabel || entry.name

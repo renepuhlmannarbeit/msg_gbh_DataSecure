@@ -6,7 +6,7 @@ Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenomme
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-086, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-092, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -94,7 +94,7 @@ Grafiken werden im gebündelten lokalen Abschlussdialog kenntlich gemacht.
 
 ## DS-010 – Stapelgrenzen
 
-Ein Stapel umfasst höchstens 100 Dateien und 500 MiB Gesamtdaten. Es gibt keine feste
+Ein Stapel umfasst höchstens 200 Dateien und 500 MiB Gesamtdaten. Es gibt keine feste
 Grenze für Seiten, Folien oder Tabellenblätter. Interne Ressourcen-, Entpack-,
 Verschachtelungs- und Laufzeitschranken bleiben erforderlich.
 
@@ -306,7 +306,7 @@ Restlücke.
 
 ## DS-039 – Lokale Stapelaufbereitung und Claude-Weiterverarbeitung trennen
 
-Die Grenze von 100 Dateien und 500 MiB gilt für die vollständige lokale, fortsetzbare
+Die Grenze von 200 Dateien und 500 MiB gilt für die vollständige lokale, fortsetzbare
 Aufbereitung, Prüfung und den Export. Sie ist keine Zusage, dass dieselbe Datenmenge
 in einen einzelnen Modellkontext passt oder vollständig in einer Unterhaltung gelesen
 wird. DataSecure beendet den lokalen Stapel unabhängig von der nachfolgenden
@@ -1039,13 +1039,16 @@ Bestätigt am 05.09.2026 nach Windows-Standalone-UAT und Produktgrenzen-
 Gegencheck: Ein Standalone-Lauf gilt erst dann als sichtbar vollständig, wenn
 neben allen neutral benannten anonymisierten Markdown-Dateien auch eine
 `DataSecure-Zuordnung.csv` für genau diesen Lauf atomar veröffentlicht wurde.
-Sie enthält ausschließlich die lokale Quellbezeichnung und den neutralen
-Ergebnisnamen; für gestoppte Positionen steht in derselben Ergebnisspalte
-„Kein Ergebnis – gestoppt (FEHLERCODE)“. Auch ein vollständig gestoppter
-Standalone-Lauf erhält eine eigene Übersicht, niemals die eines Vorgängers.
+Sie enthält ausschließlich die lokale Quellbezeichnung und den neutralen Namen
+eines tatsächlich veröffentlichten Ergebnisses. Gestoppte Positionen sind
+keine Zuordnung und erscheinen deshalb nur in Abschlusszustand und Diagnose.
+Ein vollständig gestoppter Standalone-Lauf erzeugt weder einen sichtbaren
+Laufordner noch eine Zuordnungsdatei; seine Ergebnis- und Zuordnungsaktionen
+bleiben deaktiviert und fallen niemals auf einen Vorgängerlauf zurück.
 Ein Fehler beim Schreiben dieser Übersicht ist eine ausstehende
 Abschlussveröffentlichung und ändert keine Dokumentzähler. Bereits
-veröffentlichte Altzuordnungen bleiben unverändert. Tabellenformeln werden
+veröffentlichte Altzuordnungen – einschließlich früherer Stopzeilen – bleiben
+als Benutzereigentum unverändert. Tabellenformeln werden
 neutralisiert. Der Knopf
 **„Zuordnungsdatei anzeigen“** markiert genau diese Datei im letzten sichtbaren
 Laufordner. Die dauerhafte globale `DataSecure-Mapping.csv` bleibt weiterhin im
@@ -1103,7 +1106,7 @@ kein verzichtbarer Prototyp. DS-082 wird präzisiert, nicht zurückgenommen.
 
 Gemeinsam bleiben Dateiauswahl/Dragdrop, Zielwahl, expliziter Start, ein aktiver
 Stapel, Größenlimits, Quellenidentität, Offline-Parser, Coverage, Fortschritt,
-Abbruch/Fortsetzung, Zuordnung und Ergebnisöffnung. Der Modus wird mit dem Stapel
+Abbruch/Fortsetzung und Ergebnisöffnung. Der Modus wird mit dem Stapel
 dauerhaft gebunden und bei Recovery niemals neu aus einem UI-Default abgeleitet.
 Die Umwandlung erhält Namen, Unternehmen, Kontakt-/Bankdaten und fachlichen Text.
 Nur der PII-/Residual-/Anonymisierungsreview entfällt; gefährliche aktive Inhalte,
@@ -1111,8 +1114,9 @@ unsichere Container und verschlüsselte Quellen werden weiterhin nicht ausgefüh
 oder entschlüsselt. Extraktionslücken werden konkret als solche gemeldet, niemals
 als vollständige Konvertierung kaschiert.
 
-Zielartefakte sind eine `.md` pro Quelle und eine lokale Zuordnungsdatei in
-`DataSecure-Markdown/Lauf-…`, klar **nicht anonymisiert**. Ein Moduswechsel darf
+Zielartefakte sind eine `.md` pro Quelle in `DataSecure-Markdown/Lauf-…`, klar
+**nicht anonymisiert**. Nach DS-088 behalten sie ihren Quellbasisnamen und
+benötigen keine lokale Zuordnungsdatei. Ein Moduswechsel darf
 weder bestehende Ergebnisse überschreiben noch Konvertate in `DataSecure-Output`
 oder die Plugin-Handoff-Liste bringen. Es gibt keine automatische KI-Übertragung
 und keinen neuen Bestätigungsdialog je Datei. TXT, Markdown, CSV, DOCX, XLSX,
@@ -1125,7 +1129,7 @@ gespeichert und in der Abschlussübersicht gekennzeichnet; ein weiterer
 Freigabedialog ist nicht erforderlich. Fehlerhafte/geschützte Eingaben bleiben
 unverändert und erhalten eine Fehlerposition. Es gibt keine Vollständigkeits-
 oder Anonymitätszusage. Der Modus ist im Quellstand über v5-Journal, eigene
-Worker-Nachrichten, `dm_`-Artefakte und v3-Export verbunden (BL-010.28 mit
+Worker-Nachrichten, `dm_`-Artefakte und v4-Export verbunden (BL-010.28 mit
 BL-010.15–19). Paketnachweise und menschliche Zielhostabnahme bleiben gesondert.
 
 Herstellerabgleich am 05.09.2026: [Microsoft MarkItDown](https://github.com/microsoft/markitdown)
@@ -1147,7 +1151,8 @@ Wechsel zum Ergebnisbereich oder Betriebssystemordner aus. Der sichtbare
 Status bleibt nichtmodal. **Verlauf** zeigt höchstens die letzten **20** lokalen
 Verarbeitungen, neueste zuerst, tabellarisch mit Datum, Betriebsart, Zählern,
 Status und drei Aktionen je Zeile: **Ergebnisse öffnen**, **Zuordnung anzeigen**,
-**Fortsetzen**. Fehlende oder nicht zulässige Aktionen sind mit Grund deaktiviert.
+**Fortsetzen**. **Zuordnung anzeigen** ist nur für Anonymisierungsläufe aktiv;
+fehlende oder nicht zulässige Aktionen sind mit Grund deaktiviert.
 Ein Klick ist an die konkrete Laufkennung gebunden, niemals an „den neuesten“.
 
 Fortsetzung übernimmt nur den gespeicherten Zweck und prüft erneut den aktuellen
@@ -1183,25 +1188,138 @@ interne Extraktionsartefakte erscheinen nicht als zusätzlicher Nutzerschritt.
 Personen- und Unternehmenspseudonyme verwenden über direkte und konvertierte
 Quellen hinweg denselben stapelgebundenen, fortsetzbaren Registryzustand.
 
-Die Freigabe ist an belegte Extraktionsabdeckung gebunden. `complete` darf den
-normalen Privacy-Pfad betreten. `incomplete`, unbekannte Coverage, leere oder
-nicht verifizierte OCR sowie nicht extrahierte visuelle Inhalte stoppen die
-betroffene Anonymisierung fail-closed; eine Warnung allein genügt hier anders
-als bei **Nur in Markdown umwandeln** nicht. Ein Fehler blockiert nicht die
-übrigen Dateien des Stapels. Der Zwischeninhalt bleibt im Arbeitsspeicher oder
-in der bereits verwalteten privaten Arbeitskopie, nie im sichtbaren Export.
+Extraktionsabdeckung und Anonymisierungsstatus sind zwei unabhängige Zustände.
+`complete` oder `incomplete` beschreibt ausschließlich, wie weit der Konverter
+den Originalcontainer nach Markdown abbilden konnte. Jeder vertraglich gültige,
+nichtleere Markdown-Inhalt darf den normalen Privacy-Pfad betreten. Erst dessen
+erfolgreiche PII-, Review- und Residualprüfung erzeugt den separaten
+Anonymisierungsstatus `complete`. Die Anwendung behauptet damit niemals, ein als
+`incomplete` extrahiertes Original vollständig anonymisiert zu haben.
 
-Solange die breite Extraktion noch `incomplete` ist, bleibt ein ausdrücklicher
-Zweischritt zulässig: Der Anwender erstellt mit **Nur in Markdown umwandeln** ein
-sichtbar als unvollständig beziehungsweise nicht anonymisiert gekennzeichnetes
-Konvertat und wählt diese `.md` danach in einem neuen Anonymisierungsstapel. Das
-ändert die Freigabegrenze nicht: geschützt wird nur der tatsächlich extrahierte
-Markdown-Inhalt; der Originalcontainer gilt dadurch weder als vollständig
-erfasst noch als anonymisiert. Eine automatische Verkettung darf diese bewusste
-Entscheidung nicht simulieren.
+Leere beziehungsweise ausschließlich aus Leerraum bestehende Extraktion,
+`OCR_TEXT_EMPTY`, unbekannte Coverage, beschädigte oder verschlüsselte Container
+und aktive Inhalte stoppen die betroffene Datei fail-closed. Ein Fehler blockiert
+nicht die übrigen Dateien des Stapels. Der Zwischeninhalt bleibt im
+Arbeitsspeicher oder in der verwalteten privaten Arbeitskopie, nie als sichtbares
+Rohkonvertat. Der Nutzer braucht keinen manuellen Zweischritt.
 
 Die Verkettung wird zuerst im Standalone-Produkt freigegeben. Eine spätere
 Cowork-Freigabe darf denselben neutralen Extraktionskern wiederverwenden, braucht
 aber einen eigenen Paket-, Host- und Handoffnachweis; DS-087 erweitert den
 aktuellen Cowork-Formatumfang nicht automatisch. Umsetzung und Nachweise werden
 unter BL-010.30 sowie den bestehenden BL-022.2/3, BL-023.1–4 und BL-024.3 geführt.
+
+## DS-088 – Bearbeitbare Auswahl und selbsterklärende reine Konvertate
+
+Am 07.09.2026 festgelegt: Eine vorbereitete Standalone-Auswahl ist vor dem
+expliziten Start vollständig korrigierbar. Der Anwender kann jede sichtbare
+Datei einzeln entfernen oder die gesamte Auswahl leeren; dies gilt identisch
+für **Nur in Markdown umwandeln** und **In Markdown umwandeln und
+anonymisieren**. Entfernen startet keine Verarbeitung und verändert keine
+Quelldatei. Doppelte Basisnamen werden in der lokalen Liste mit dem bereits
+vorhandenen eindeutigen Quelllabel unterscheidbar dargestellt. Nach dem Start
+ist die Auswahl unveränderlich; Abbruch/Fortsetzung bleibt der bestehende
+stapelgebundene Recoveryvertrag.
+
+Reine Konvertierung erzeugt verständliche Ausgabedateien: Der Basisname der
+Quelle bleibt erhalten und nur die Endung wird `.md`. Treffen mehrere Quellen
+case- oder Unicode-normalisiert auf denselben Namen, folgen deterministisch
+` (2)`, ` (3)` usw. Im reinen Konvertierungsmodus entsteht keine
+`DataSecure-Zuordnung.csv`; die Verlaufsaktion **Zuordnung** bleibt deaktiviert.
+Anonymisierung verwendete zu diesem Entscheidungsstand neutrale Ergebnisnamen und ihre
+laufbezogene Zuordnungsdatei. Bereits abgeschlossene v3-Konvertierungsexporte
+bleiben unverändert lesbar und werden nicht nachträglich umbenannt oder neu
+geschrieben. Diese Entscheidung präzisiert DS-083, DS-085 und DS-086; die feste
+Namensvorgabe wird für neue Standalone-Läufe später durch DS-091 ersetzt.
+
+## DS-089 – Standalone-Ergebnisse spiegeln die gewählte Ordnerstruktur
+
+Am 07.09.2026 nach dem rekursiven 102-Dateien-UAT festgelegt: Wählt der Anwender
+in Standalone einen Ordner, bleibt dessen vollständige relative
+Unterordnerstruktur im sichtbaren Lauf erhalten. Ordner- und Dateibezeichnungen
+werden nicht als personenbezogene Daten behandelt oder inhaltlich umbenannt;
+sie bleiben ausschließlich lokal. Der Anwender stellt sicher, dass diese Namen
+keine schutzbedürftigen Angaben enthalten. Absolute Quellpfade, der Name des
+gewählten Wurzelordners und Inhalte gelangen weder in Diagnose noch nach Claude.
+
+Im Anonymisierungsmodus wird aus `bereich/quelle.xlsx` sichtbar
+`bereich/quelle-anonymisiert.md`. Die laufbezogene `DataSecure-Zuordnung.csv`
+enthält exakt `bereich/quelle.xlsx` → `bereich/quelle-anonymisiert.md`. Im reinen
+Konvertierungsmodus entsteht `bereich/quelle.md` und weiterhin keine
+Zuordnungsdatei. Namenskollisionen innerhalb desselben Zielordners werden
+deterministisch nummeriert. Vor der Veröffentlichung wird jedes Segment erneut
+gegen absolute Pfade, Traversal, Links und Zielwechsel geprüft.
+
+Bestehende Laufordner und Exportrecords bleiben unverändert und lesbar. Das
+Cowork-Plugin behält seine neutralen flachen Ergebnisnamen und übernimmt keine
+Quellordnerstruktur in einen verbundenen Arbeitsordner. Diese Entscheidung
+ersetzt DS-058 und DS-083 ausschließlich für neue sichtbare Standalone-Dateien;
+deren Laufbindung, atomare Zuordnung und Cowork-Grenze bleiben bestehen. Die
+feste Namensvorgabe wird für spätere Standalone-Läufe durch DS-091 ersetzt.
+
+## DS-090 – Standalone verarbeitet auch DOCX konsequent Markdown-first
+
+Am 07.09.2026 nach dem realen RC120-UAT präzisiert: **In Markdown umwandeln und
+anonymisieren** verwendet in Standalone auch für DOCX zuerst denselben isolierten
+Offline-Konverter wie **Nur in Markdown umwandeln**. Anschließend wird
+ausschließlich die vertraglich geprüfte, nichtleere Markdown-Repräsentation
+anonymisiert. Word-Custom-XML, Klassifizierungsmetadaten, Grafiken oder andere
+nicht extrahierte Containerbestandteile werden nicht als verarbeitet behauptet;
+ihre bekannte Lücke bleibt separat im `source_extraction_coverage`-Status und im
+sichtbaren Ergebnishinweis erhalten.
+
+Damit ist eine erfolgreiche Anonymisierung des extrahierten Markdown-Inhalts
+nicht länger fälschlich von vollständiger DOCX-Container-Coverage abhängig.
+Beschädigte, verschlüsselte oder aktive Quellen, unbekannte Coverage und leeres
+Markdown stoppen weiterhin vor Veröffentlichung. Es entsteht kein rohes
+Zwischenartefakt und kein zusätzlicher Anwenderdialog.
+
+Diese Präzisierung gilt nur für Standalone. Das Claude-Cowork-Plugin behält den
+strengeren direkten DOCX-Vertrag: Nicht vollständig abgedeckte inhaltsfähige
+Word-Strukturen stoppen dort weiterhin. Bestehende Pakete und Journale werden
+nicht umgeschrieben. Umsetzung und Nachweise bleiben unter BL-010.30 geführt.
+
+## DS-091 – Anwender wählt die Dateinamen anonymisierter Standalone-Ergebnisse
+
+Am 07.09.2026 festgelegt: Bei **In Markdown umwandeln und anonymisieren** wählt
+der Anwender vor dem Start genau eine von zwei Varianten für den sichtbaren
+Ergebnisnamen. **Neutrale Dateinamen** ist datensparender Standard und erzeugt
+innerhalb der erhaltenen Ordnerstruktur `Dokument-001-anonymisiert.md`,
+`Dokument-002-anonymisiert.md` usw. **Originalname mit „-anonymisiert“** erzeugt
+`<Quellbasis>-anonymisiert.md` und ist für Fälle bestimmt, in denen Datei- und
+Ordnernamen keine personenbezogenen Angaben enthalten. Die vorhandene
+`DataSecure-Zuordnung.csv` verbindet in beiden Varianten den relativen
+Quellpfad mit dem tatsächlich erzeugten relativen Ergebnispfad.
+
+Die Wahl gilt pro Stapel, benötigt keine weitere Bestätigung und wird vor dem
+ersten Quellzugriff in einem eigenen `datasecure-batch/6`-Journal gebunden.
+Abbruch, Fortsetzung, Neustart und Export dürfen sie nicht ändern. Ältere
+Standalone-Anonymisierungsläufe bleiben bei ihrer bisherigen
+Quellbasisbenennung; das Cowork-Plugin bleibt immer neutral. **Nur in Markdown
+umwandeln** ist nicht betroffen: Der Quellbasisname bleibt erhalten und es
+entsteht keine Zuordnungsdatei. DS-091 ersetzt ausschließlich die festen
+Namensvorgaben aus DS-088/DS-089 für neue Standalone-Anonymisierungsläufe.
+
+## DS-092 – Cowork übernimmt Core-Fehlerkorrekturen, nicht die Standalone-Oberfläche
+
+Am 07.09.2026 festgelegt: Cowork-Plugin und Standalone verwenden weiterhin
+denselben Anonymisierungs-Core. Korrekturen an Erkennung, Pseudonymkonsistenz,
+Parsern, Recovery, Ergebnisfinalität und Restprüfung müssen deshalb in beiden
+Produktprojektionen regressionsgeprüft werden. Produktspezifische Bedien- und
+Ausgabeverträge werden nicht angeglichen, wenn dadurch die jeweils einfachere
+oder datensparsamere Lösung verloren ginge.
+
+Für Cowork bedeutet **Ergebnisse öffnen** ausschließlich den vollständig
+sichtbaren Ergebnisordner des aktuellsten Cowork-Laufs. Ein aktiver,
+fehlgeschlagener oder noch nicht exportierter aktueller Lauf darf niemals den
+Output-Stamm oder einen älteren Lauf öffnen. Rekursive Ordnergrenzen verwenden
+gemeinsame `SOURCE_FOLDER_*`-Codes und werden als korrigierbare Auswahlablehnung
+gemeldet; Pfade und Dateinamen verlassen den lokalen Prozess nicht.
+
+Cowork bleibt bei TXT, Markdown, CSV und dem strengen direkten DOCX-Vertrag,
+neutralen flachen Dateinamen sowie privatem Mapping. Standalone behält zusätzlich
+reine Markdown-Konvertierung, breite Konverter-/OCR-Formate, Startseite,
+Verlauf, sichtbare Zuordnung, erhaltene Ordnerstruktur und wählbare
+Ergebnisbenennung. DS-092 präzisiert DS-002, DS-005, DS-006, DS-040, DS-075,
+DS-087, DS-089, DS-090 und DS-091, ohne deren Sicherheits- und
+Produktgrenzen zu ersetzen.

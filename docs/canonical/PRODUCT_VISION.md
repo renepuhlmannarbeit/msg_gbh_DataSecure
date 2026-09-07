@@ -20,7 +20,7 @@ Standalone-Quellstand verfügbar; die Startseite verlangt eine ausdrückliche
 Betriebsartwahl statt einer Vorbelegung (DS-086). Zielhost-/Anwenderfreigaben bleiben
 getrennt vom technischen Implementierungsnachweis.
 
-Breite Standalone-Quellen werden nach DS-087 nicht durch parallele
+DOCX und breite Standalone-Quellen werden nach DS-087/090 nicht durch parallele
 Anonymisierungsparser verarbeitet: Der gemeinsame lokale Konverter erzeugt eine
 neutrale Markdown-Extraktion, die entweder ausdrücklich unverändert exportiert
 oder ohne sichtbare Roh-Zwischenablage durch den gemeinsamen Privacy-Core geführt
@@ -62,7 +62,8 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
    und Ergebnisort; die Modellverarbeitung darf cloudbasiert sein, Originale und
    rohdatenhaltige Entscheidungen bleiben an der lokalen DataSecure-Grenze.
 2. **Eigenständiges Standalone-Produkt:** Standalone verwendet denselben Core
-   und dieselben Aufnahme-/Formatgates, besitzt aber eine eigene Desktop-UI,
+   und dasselbe Sicherheitsframework, besitzt aber zweckbezogene Allowlisten,
+   Coverageentscheidungen sowie eine eigene Desktop-UI,
    Distribution und getrennte Produktdaten. Es enthält keinen Claude-
    Folgeschritt und benötigt weder MCP noch Skills oder Agenten. Reine
    Markdown-Konvertierung überspringt ausschließlich die Anonymisierung und
@@ -105,8 +106,9 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
   Funktionen. **Verarbeiten** und die Betriebsart sind anfangs nicht vorbelegt.
   Abschluss, Neustart und vorhandene Stapel wechseln die Ansicht nicht automatisch.
   **Verlauf** zeigt die letzten 20 Verarbeitungen, neueste zuerst, mit Datum,
-  Betriebsart, Dateizählern und Status. Ergebnisse, Zuordnung und Fortsetzung
-  sind jeweils an genau diesen Lauf gebunden; die Anzeigegrenze löscht nichts.
+  Betriebsart, Dateizählern und Status. Ergebnisse und Fortsetzung sind jeweils
+  an genau diesen Lauf gebunden; die Zuordnung ist nur für Anonymisierungsläufe
+  verfügbar. Die Anzeigegrenze löscht nichts.
 
 ## Datenschutz- und Sicherheitsversprechen
 
@@ -131,21 +133,27 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
   Ein Format wird erst nach vollständigen Sicherheits- und Coverage-Gates aktiv.
 - Datei- und rekursive Ordnerauswahl ohne Verfolgung von Symlinks, Junctions,
   Reparse Points oder externen Links.
-- Höchstens 100 Dateien und 500 MiB je Stapel, ohne feste Seitenbegrenzung.
-- Genau ein neutral benanntes Markdown-Ergebnis pro Quelle sowie ein dauerhaftes,
-  ausschließlich lokales Mapping.
+- Höchstens 200 Dateien und 500 MiB je Stapel, ohne feste Seitenbegrenzung.
+- Genau ein Markdown-Ergebnis pro Quelle. Cowork-Anonymisierung verwendet
+  stets neutrale Ergebnisnamen. Standalone erhält die gewählte relative
+  Ordnerstruktur und lässt den Anwender für Anonymisierung zwischen neutralen
+  Dateinamen (Standard) und `<Quellbasisname>-anonymisiert.md` wählen; das
+  laufbezogene Mapping nennt den tatsächlich erzeugten relativen Pfad. Reine Konvertierung behält
+  Struktur und Quellbasisnamen und benötigt keine Zuordnungsdatei (DS-089).
 - Bei reiner Konvertierung bleibt der gesamte extrahierbare fachliche Text
   einschließlich Namen, Unternehmen, Kontaktdaten und Tabellenwerten erhalten.
   **Vollständig** setzt belegte Format-Coverage voraus: fehlender Scan-/Bildtext,
   nicht extrahierbare Objekte oder Parserabbrüche werden nicht still übergangen.
   Eine Markdown-Datei kann das ursprüngliche Office-/PDF-Layout nicht identisch
   rekonstruieren. Auch reine Konvertierung führt keine Makros oder Fremdinhalte aus.
-- Bei breiter Standalone-Anonymisierung wird ausschließlich die nachweislich
-  vollständig extrahierte Markdown-Repräsentation anonymisiert. Das Ergebnis
-  ist keine anonymisierte XLSX-, PPTX-, PDF- oder Bilddatei. Unvollständige
-  Extraktion wird nicht als erfolgreiche Anonymisierung ausgegeben.
-- Konvertate liegen in `DataSecure-Markdown/Lauf-…`, getrennt von anonymisierten
-  Ergebnissen in `DataSecure-Output/Lauf-…`, mit eigener laufbezogener Zuordnung.
+- Bei der Standalone-Markdown-first-Anonymisierung wird ausschließlich die
+  vertraglich gültige, nichtleere Markdown-Repräsentation anonymisiert. Das
+  Ergebnis ist keine anonymisierte DOCX-, XLSX-, PPTX-, PDF- oder Bilddatei.
+  Eine bekannte unvollständige Quellenextraktion darf ein anonymisiertes
+  Markdown-Ergebnis liefern, wird aber separat und unmissverständlich angezeigt.
+- Konvertate liegen unter ihrem Quellbasisnamen in `DataSecure-Markdown/Lauf-…`,
+  getrennt von anonymisierten Ergebnissen in `DataSecure-Output/Lauf-…`. Nur der
+  Anonymisierungslauf besitzt eine eigene laufbezogene Zuordnung.
   Es gibt keinen automatischen Upload an eine KI.
 - Bilder bleiben lokal; nur ausreichend sicherer und erneut geprüfter OCR-Text
   darf in Markdown erscheinen.

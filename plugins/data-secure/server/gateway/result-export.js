@@ -11,12 +11,18 @@ const { processAlive } = require('./process-liveness');
 const { csvField } = require('./mapping');
 const { readMarkdownArtifact, verifyMarkdownItem } = require('../standalone/markdown-store');
 const { validateCoverage, MAX_MARKDOWN_CHARS } = require('../standalone/markdown-contract');
+const { RESOURCE_LIMITS } = require('../resource-limits');
+const { MODES: RESULT_NAMING_MODES, resultNamingModeForBatch } = require('../core/result-naming-mode');
 
 const SCHEMA = 'datasecure-result-export/2';
-const MARKDOWN_SCHEMA = 'datasecure-result-export/3';
+const MARKDOWN_SCHEMA = 'datasecure-result-export/4';
+const LEGACY_MARKDOWN_SCHEMA = 'datasecure-result-export/3';
 const LEGACY_SCHEMA = 'datasecure-result-export/1';
 const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
-const VISIBLE_MAPPING_HEADER = 'Originaldatei;Anonymisiertes Ergebnis\r\n';
+// A UTF-8 BOM makes the user-visible CSV open correctly in Windows Excel.
+// The durable private mapping remains an internal protocol artifact and is
+// intentionally unaffected.
+const VISIBLE_MAPPING_HEADER = '\uFEFFOriginaldatei;Anonymisiertes Ergebnis\r\n';
 const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
 // An interrupted atomic record write leaves exactly this temporary name behind.
 // It carries no export state and must neither count as a damaged record nor be
@@ -140,43 +146,130 @@ function validSourceLabel(value) {
       /[\0-\x1f\x7f]/u.test(label) || /^[A-Za-z]:/u.test(label)) return false;
   return label.split('/').every((segment) => segment && segment !== '.' && segment !== '..');
 }
+function validResultFile(value) {
+  const file = String(value || '');
+  return file.endsWith('.md') && validSourceLabel(file);
+}
+function outputNameFromSource(sourceLabel, suffix = '') {
+  const label = String(sourceLabel || '');
+  if (!validSourceLabel(label)) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
+  const leaf = label.split('/').at(-1);
+  const extension = path.posix.extname(leaf);
+  const stem = leaf.slice(0, extension ? -extension.length : undefined) || 'Dokument';
+  const parent = path.posix.dirname(label);
+  const name = `${stem}${suffix}.md`;
+  return parent === '.' ? name : `${parent}/${name}`;
+}
+function collisionFreeOutputNames(items, suffix = '') {
+  const used = new Set();
+  return items.map((item) => {
+    const sourceLabel = String(item.source_label || '');
+    let occurrence = 1;
+    let name = outputNameFromSource(sourceLabel, suffix);
+    while (used.has(name.normalize('NFC').toLowerCase())) {
+      occurrence += 1;
+      const leaf = sourceLabel.split('/').at(-1);
+      const extension = path.posix.extname(leaf);
+      const stem = leaf.slice(0, extension ? -extension.length : undefined) || 'Dokument';
+      const parent = path.posix.dirname(sourceLabel);
+      const resolvedLeaf = `${stem} (${occurrence})${suffix}.md`;
+      name = parent === '.' ? resolvedLeaf : `${parent}/${resolvedLeaf}`;
+    }
+    used.add(name.normalize('NFC').toLowerCase());
+    return name;
+  });
+}
+function flatMarkdownOutputNames(items) {
+  const used = new Set();
+  return items.map((item) => {
+    const leaf = String(item.source_label || '').split('/').at(-1);
+    const extension = path.posix.extname(leaf);
+    const stem = leaf.slice(0, extension ? -extension.length : undefined) || 'Dokument';
+    let occurrence = 1;
+    let name = `${stem}.md`;
+    while (used.has(name.normalize('NFC').toLowerCase())) {
+      occurrence += 1;
+      name = `${stem} (${occurrence}).md`;
+    }
+    used.add(name.normalize('NFC').toLowerCase());
+    return name;
+  });
+}
+function markdownOutputNames(items) {
+  return collisionFreeOutputNames(items);
+}
+function neutralAnonymizedOutputNames(items) {
+  return items.map((item, index) => {
+    const sourceLabel = String(item.source_label || '');
+    if (!validSourceLabel(sourceLabel)) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
+    const parent = path.posix.dirname(sourceLabel);
+    const leaf = `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`;
+    return parent === '.' ? leaf : `${parent}/${leaf}`;
+  });
+}
 function validRecord(value) {
   const legacy = value?.schema === LEGACY_SCHEMA;
-  const converting = value?.schema === MARKDOWN_SCHEMA;
+  const converting = [MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(value?.schema);
+  const sourceLabels = !legacy && Array.isArray(value?.items)
+    ? [
+        ...value.items.map((item) => item?.source_label),
+        ...(Array.isArray(value?.stopped_items) ? value.stopped_items.map((item) => item?.source_label) : [])
+      ]
+    : [];
+  // A source can have exactly one final outcome in a run.  Rejecting an
+  // ambiguous durable record here prevents a corrupt or stale stop entry from
+  // appearing next to the successful mapping of the same input file.
+  const sourceLabelsAreUnique = legacy || new Set(sourceLabels).size === sourceLabels.length;
+  const expectedMarkdownNames = converting && value?.schema === MARKDOWN_SCHEMA && Array.isArray(value.items)
+    ? markdownOutputNames(value.items) : null;
+  const legacyFlatMarkdownNames = converting && value?.schema === MARKDOWN_SCHEMA && Array.isArray(value.items)
+    ? flatMarkdownOutputNames(value.items) : null;
+  const expectedSourceAnonymizedNames = !converting && !legacy && value?.product_channel === 'standalone' && Array.isArray(value.items)
+    ? collisionFreeOutputNames(value.items, '-anonymisiert') : null;
+  const expectedNeutralAnonymizedNames = !converting && !legacy && value?.product_channel === 'standalone' && Array.isArray(value.items)
+    ? neutralAnonymizedOutputNames(value.items) : null;
   const topLevelKeys = legacy
     ? ['schema', 'run_directory', 'items', 'complete', 'destination_id']
     : ['schema', 'run_directory', 'items', 'complete', 'destination_id', 'product_channel'];
   if (!legacy && Object.hasOwn(value || {}, 'stopped_items')) topLevelKeys.push('stopped_items');
   if (converting) topLevelKeys.push('processing_mode');
   return exactKeys(value, topLevelKeys) &&
-    [SCHEMA, LEGACY_SCHEMA, MARKDOWN_SCHEMA].includes(value.schema) &&
+    [SCHEMA, LEGACY_SCHEMA, MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(value.schema) &&
     (!converting || (value.product_channel === 'standalone' && value.processing_mode === 'markdown-only')) &&
     (legacy || ['plugin', 'standalone'].includes(value.product_channel)) &&
     /^Lauf-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$/u.test(value.run_directory) &&
     typeof value.complete === 'boolean' && /^(?:|[a-f0-9]{64})$/u.test(value.destination_id) &&
-    Array.isArray(value.items) && value.items.length <= 100 &&
+    Array.isArray(value.items) && value.items.length <= RESOURCE_LIMITS.MAX_BATCH_FILES &&
+    sourceLabelsAreUnique &&
     (!Object.hasOwn(value, 'stopped_items') || (value.product_channel === 'standalone' &&
       Array.isArray(value.stopped_items) && value.stopped_items.length > 0 &&
-      value.stopped_items.length + value.items.length <= 100 &&
+      value.stopped_items.length + value.items.length <= RESOURCE_LIMITS.MAX_BATCH_FILES &&
       value.stopped_items.every((item) => exactKeys(item, ['source_label', 'error_code']) &&
         validSourceLabel(item.source_label) && /^[A-Z][A-Z0-9_]{0,95}$/u.test(item.error_code)))) &&
-    value.items.every((item, index) => converting ? validMarkdownExportItem(item, index) : (legacy
+    value.items.every((item, index) => converting ? validMarkdownExportItem(item, index, value.schema) : (legacy
       ? (exactKeys(item, ['package_id', 'file', 'sha256']) ||
         (exactKeys(item, ['package_id', 'file', 'sha256', 'exported']) && item.exported === true))
       : ((exactKeys(item, ['package_id', 'file', 'sha256', 'source_label']) ||
         (exactKeys(item, ['package_id', 'file', 'sha256', 'source_label', 'exported']) && item.exported === true)) &&
         validSourceLabel(item.source_label))) &&
       PACKAGE_RE.test(item.package_id) && /^[a-f0-9]{64}$/u.test(item.sha256) &&
-      item.file === `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`);
+      (item.file === `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md` ||
+        (value.product_channel === 'standalone' && validResultFile(item.file) &&
+          (item.file === expectedSourceAnonymizedNames?.[index] ||
+            item.file === expectedNeutralAnonymizedNames?.[index])))) &&
+    (!expectedMarkdownNames || value.items.every((item, index) =>
+      item.file === expectedMarkdownNames[index] || item.file === legacyFlatMarkdownNames[index]));
 }
-function validMarkdownExportItem(item, index) {
+function validMarkdownExportItem(item, index, schema) {
   const keys = ['artifact_id', 'artifact_bytes', 'file', 'sha256', 'source_label', 'extraction_grade', 'reason_codes'];
   if (!exactKeys(item, keys) && !exactKeys(item, [...keys, 'exported'])) return false;
   if (Object.hasOwn(item, 'exported') && item.exported !== true) return false;
   if (!/^dm_[a-f0-9]{32}$/u.test(String(item.artifact_id || '')) || !validSourceLabel(item.source_label) ||
       !Number.isSafeInteger(item.artifact_bytes) || item.artifact_bytes < 0 || item.artifact_bytes > MAX_MARKDOWN_CHARS * 4 ||
       !/^[a-f0-9]{64}$/u.test(String(item.sha256 || '')) ||
-      item.file !== `Dokument-${String(index + 1).padStart(3, '0')}-konvertiert.md`) return false;
+      (schema === LEGACY_MARKDOWN_SCHEMA
+        ? item.file !== `Dokument-${String(index + 1).padStart(3, '0')}-konvertiert.md`
+        : !validResultFile(item.file))) return false;
   try { validateCoverage({ status: item.extraction_grade, reason_codes: item.reason_codes }); }
   catch { return false; }
   return true;
@@ -206,7 +299,7 @@ function writeRecord(target, value) {
 }
 function readRecord(target) {
   const stat = fs.lstatSync(target);
-  // Up to 100 relative source labels (1024 characters each), JSON escaping,
+  // Up to 200 relative source labels (1024 characters each), JSON escaping,
   // fixed error codes and hashes must fit without relaxing item/string bounds.
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 1024 * 1024) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   const value = JSON.parse(fs.readFileSync(target, 'utf8'));
@@ -220,16 +313,17 @@ function runDirectoryName(createdAt) {
     : new Date().toISOString().replace(/[-:]/gu, '').replace('T', '-').slice(0, 15);
   return `Lauf-${stamp}-${crypto.randomBytes(4).toString('hex')}`;
 }
-function packageItem(packageId, index, sourceLabel) {
+function packageItem(packageId, index, sourceLabel, outputFile) {
   const { m } = safeResolvePackage(packageId);
   if (!m || !/^[a-f0-9]{64}$/u.test(String(m.document_sha256 || ''))) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
   const item = {
     package_id: packageId,
-    file: `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`,
+    file: outputFile || `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`,
     sha256: m.document_sha256,
     source_label: String(sourceLabel || '')
   };
   if (!validSourceLabel(item.source_label)) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
+  if (!validResultFile(item.file)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
   return item;
 }
 function migrateLegacyRecord(target, record, sourceLabels, productChannel) {
@@ -258,8 +352,8 @@ function activeDestination(record, options = {}) {
   const rootBinding = bindPlainDirectory(checked.root);
   let outputPath;
   if (options.create === false) {
-    outputPath = path.join(checked.root, record?.schema === MARKDOWN_SCHEMA ? 'DataSecure-Markdown' : 'DataSecure-Output');
-  } else if (record?.schema === MARKDOWN_SCHEMA) {
+    outputPath = path.join(checked.root, [MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(record?.schema) ? 'DataSecure-Markdown' : 'DataSecure-Output');
+  } else if ([MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(record?.schema)) {
     outputPath = path.join(checked.root, 'DataSecure-Markdown');
     if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { mode: 0o700 });
   } else outputPath = resultOutputDirectory({ root: checked.root });
@@ -280,15 +374,33 @@ function ensureRecord(state) {
   // Conversion is a single visible run: partial files stay internal until all
   // processing decisions are terminal. No early plan may freeze a subset.
   if (converting && state.items.some((item) => !['released', 'stopped'].includes(item.status))) throw new Error('RESULT_EXPORT_BATCH_INCOMPLETE');
+  const existingPlan = fs.existsSync(target) ? readRecord(target) : null;
   const completedMarkdownRecord = converting && fs.existsSync(target) && completedMarkdownExportMatches(state);
   const released = state.items.filter((item) => item.status === 'released');
+  const anonymizedItems = released.map((item) => ({
+    source_label: String(item.source_label || item.name || '')
+  }));
+  const outputNamingMode = converting ? null : resultNamingModeForBatch(state);
+  const anonymizedNames = !converting && state.product_channel === 'standalone'
+    ? outputNamingMode === RESULT_NAMING_MODES.NEUTRAL
+      ? neutralAnonymizedOutputNames(anonymizedItems)
+      : collisionFreeOutputNames(anonymizedItems, '-anonymisiert')
+    : [];
+  const markdownNames = converting
+    ? existingPlan?.items?.length === released.length
+      ? existingPlan.items.map((item) => item.file)
+      : existingPlan?.schema === LEGACY_MARKDOWN_SCHEMA
+      ? released.map((_item, index) => `Dokument-${String(index + 1).padStart(3, '0')}-konvertiert.md`)
+      : markdownOutputNames(released.map((item) => ({ source_label: String(item.source_label || item.name || '') })))
+    : [];
   const items = released.map((item, index) => {
-    if (!converting) return packageItem(item.package_id, index, item.source_label || item.name);
+    if (!converting) return packageItem(item.package_id, index, item.source_label || item.name,
+      existingPlan?.items?.length === released.length ? existingPlan.items[index].file : anonymizedNames[index]);
     if (!completedMarkdownRecord && !verifyMarkdownItem(item)) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
     const sourceLabel = String(item.source_label || item.name || '');
     if (!validSourceLabel(sourceLabel)) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
     return { artifact_id: item.artifact_id, artifact_bytes: item.artifact_bytes,
-      file: `Dokument-${String(index + 1).padStart(3, '0')}-konvertiert.md`, sha256: item.artifact_sha256,
+      file: markdownNames[index], sha256: item.artifact_sha256,
       source_label: sourceLabel, extraction_grade: item.extraction_grade, reason_codes: [...item.reason_codes] };
   });
   const stoppedItems = state.product_channel === 'standalone'
@@ -298,9 +410,9 @@ function ensureRecord(state) {
         ? item.error_code : 'PROCESSING_STOPPED'
     })) : [];
   if (stoppedItems.some((item) => !validSourceLabel(item.source_label))) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
-  if (fs.existsSync(target)) {
-    let existing = readRecord(target);
-    if (converting !== (existing.schema === MARKDOWN_SCHEMA)) throw new Error('RESULT_EXPORT_MODE_INVALID');
+  if (existingPlan) {
+    let existing = existingPlan;
+    if (converting !== [MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(existing.schema)) throw new Error('RESULT_EXPORT_MODE_INVALID');
     if (existing.schema === LEGACY_SCHEMA) {
       existing = migrateLegacyRecord(target, existing, items.map((item) => item.source_label), state.product_channel);
     }
@@ -324,7 +436,7 @@ function ensureRecord(state) {
   writeRecord(target, value);
   return { target, value };
 }
-// Once a complete, identity-bound visible conversion and its CSV were committed,
+// Once a complete, identity-bound visible conversion was committed,
 // the private dm copy may expire. This proves the historical export transaction,
 // not that the user has retained or left their visible files unchanged.
 function completedMarkdownExportMatches(state) {
@@ -333,7 +445,7 @@ function completedMarkdownExportMatches(state) {
         state.processing_mode !== 'markdown-only' || !Array.isArray(state.items) ||
         state.items.some((item) => !['released', 'stopped'].includes(item.status))) return false;
     const record = readRecord(recordPath(state.token));
-    if (record.schema !== MARKDOWN_SCHEMA || record.complete !== true || !/^[a-f0-9]{64}$/u.test(record.destination_id) ||
+    if (![MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(record.schema) || record.complete !== true || !/^[a-f0-9]{64}$/u.test(record.destination_id) ||
         record.items.some((item) => item.exported !== true)) return false;
     const released = state.items.filter((item) => item.status === 'released');
     if (released.length !== record.items.length) return false;
@@ -363,13 +475,30 @@ function ensurePlainDirectory(destination, name) {
   assertDirectoryBinding(destination.output, destination.root);
   return bindPlainDirectory(target, destination.output);
 }
+function ensureResultParent(destination, run, relativeFile) {
+  if (!validResultFile(relativeFile)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+  assertDirectoryBinding(destination.root);
+  assertDirectoryBinding(destination.output, destination.root);
+  let parent = run;
+  const segments = relativeFile.split('/');
+  const leaf = segments.pop();
+  for (const segment of segments) {
+    assertDirectoryBinding(parent, parent.path === run.path ? destination.output : null);
+    const target = path.join(parent.path, segment);
+    if (path.dirname(target) !== parent.path) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+    if (!fs.existsSync(target)) fs.mkdirSync(target, { mode: 0o700 });
+    parent = bindPlainDirectory(target, parent);
+  }
+  assertDirectoryBinding(parent, parent.path === run.path ? destination.output : null);
+  return { parent, leaf, target: path.join(parent.path, leaf) };
+}
 function exportOne(destination, run, item) {
   assertDirectoryBinding(destination.root);
   assertDirectoryBinding(destination.output, destination.root);
   assertDirectoryBinding(run, destination.output);
-  const runDirectory = run.path;
-  const target = path.join(runDirectory, item.file);
-  if (path.dirname(target) !== runDirectory) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+  const resolvedTarget = ensureResultParent(destination, run, item.file);
+  const target = resolvedTarget.target;
+  assertDirectoryBinding(resolvedTarget.parent);
   if (fs.existsSync(target)) {
     const stat = fs.lstatSync(target);
     if (!stat.isFile() || stat.isSymbolicLink() ||
@@ -390,12 +519,13 @@ function exportOne(destination, run, item) {
   }
   const expected = crypto.createHash('sha256').update(bytes).digest('hex');
   if (expected !== m.document_sha256 || expected !== item.sha256) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
-  const temporary = path.join(runDirectory, `.${item.file}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  const temporary = path.join(resolvedTarget.parent.path, `.${resolvedTarget.leaf}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   let descriptor;
   try {
     assertDirectoryBinding(destination.root);
     assertDirectoryBinding(destination.output, destination.root);
     assertDirectoryBinding(run, destination.output);
+    assertDirectoryBinding(resolvedTarget.parent);
     descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
     writeFully(descriptor, bytes, fs);
     fs.fsyncSync(descriptor);
@@ -408,6 +538,7 @@ function exportOne(destination, run, item) {
     assertDirectoryBinding(destination.root);
     assertDirectoryBinding(destination.output, destination.root);
     assertDirectoryBinding(run, destination.output);
+    assertDirectoryBinding(resolvedTarget.parent);
     // Publish without replacement. A plain rename is atomic but may overwrite
     // a file created after the earlier existence check on POSIX. A same-volume
     // hard link is an atomic create-if-absent operation on all release targets.
@@ -424,6 +555,7 @@ function exportOne(destination, run, item) {
     assertDirectoryBinding(destination.root);
     assertDirectoryBinding(destination.output, destination.root);
     assertDirectoryBinding(run, destination.output);
+    assertDirectoryBinding(resolvedTarget.parent);
     const written = fs.lstatSync(target);
     if (!written.isFile() || written.isSymbolicLink() || written.size !== bytes.length ||
         crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== expected) throw new Error('RESULT_EXPORT_VERIFY_FAILED');
@@ -434,10 +566,10 @@ function exportOne(destination, run, item) {
   }
 }
 function visibleMappingBytes(record) {
-  if (![SCHEMA, MARKDOWN_SCHEMA].includes(record.schema) || record.items.some((item) => !validSourceLabel(item.source_label))) {
+  if (![SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(record.schema) || record.items.some((item) => !validSourceLabel(item.source_label))) {
     throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
   }
-  const converting = record.schema === MARKDOWN_SCHEMA;
+  const converting = record.schema === LEGACY_MARKDOWN_SCHEMA;
   const notices = {
     OCR_NOT_VERIFIED: 'OCR-Texterkennung nicht fachlich geprüft',
     OCR_TEXT_EMPTY: 'Kein Text durch OCR erkannt',
@@ -447,10 +579,15 @@ function visibleMappingBytes(record) {
   const rows = record.items.map((item) => [item.source_label, item.file,
     ...(converting ? ['Nicht anonymisiert', item.extraction_grade === 'complete'
       ? 'Text vollständig extrahiert' : item.reason_codes.map((code) => notices[code]).join(' · ')] : [])].map(csvField).join(';'));
-  for (const item of record.stopped_items || []) {
-    rows.push([item.source_label, `Kein Ergebnis – gestoppt (${item.error_code})`, ...(converting ? ['', 'Nicht konvertiert'] : [])].map(csvField).join(';'));
+  // Current anonymization ledgers are mappings, not failure reports: every
+  // row must point to an actually published result.  Legacy conversion plans
+  // retain their previously promised stopped-row format for crash recovery.
+  if (record.schema === LEGACY_MARKDOWN_SCHEMA) {
+    for (const item of record.stopped_items || []) {
+      rows.push([item.source_label, `Kein Ergebnis – gestoppt (${item.error_code})`, '', 'Nicht konvertiert'].map(csvField).join(';'));
+    }
   }
-  const header = converting ? 'Originaldatei;Konvertiertes Markdown;Datenschutz;Extraktionshinweis\r\n' : VISIBLE_MAPPING_HEADER;
+  const header = converting ? '\uFEFFOriginaldatei;Konvertiertes Markdown;Datenschutz;Extraktionshinweis\r\n' : VISIBLE_MAPPING_HEADER;
   return Buffer.from(header + rows.join('\r\n') + (rows.length ? '\r\n' : ''), 'utf8');
 }
 function exportVisibleMapping(destination, run, record) {
@@ -535,7 +672,13 @@ function exportOpenItems(target, record, destination) {
     writeRecord(target, current);
   }
   if (current.items.every((item) => item.exported === true)) {
-    if (current.product_channel === 'standalone') exportVisibleMapping(destination, run, current);
+    // Pure conversion keeps the original basename and therefore needs no
+    // source-to-result ledger. Older v3 plans retain their already promised
+    // mapping; anonymization plans continue to publish it unchanged.
+    if (current.product_channel === 'standalone' && current.schema !== MARKDOWN_SCHEMA &&
+        (current.schema === LEGACY_MARKDOWN_SCHEMA || current.items.length > 0)) {
+      exportVisibleMapping(destination, run, current);
+    }
     current = { ...current, complete: true };
     writeRecord(target, current);
     try {
@@ -577,7 +720,7 @@ function visibleExportDirectory(token) {
     const target = recordPath(token);
     if (!fs.existsSync(target)) return '';
     const record = readRecord(target);
-    if (record.complete !== true || (record.items.length === 0 && !record.stopped_items?.length) ||
+    if (record.complete !== true || record.items.length === 0 ||
         record.items.some((item) => item.exported !== true)) return '';
     const destination = activeDestination(record);
     if (!destination || destination.id !== record.destination_id) return '';
@@ -613,11 +756,23 @@ function exportCompletedState(state) {
       try { plan = ensureRecord(state); }
       catch { return { exported: 0, pending: releasedCount(state), available: false }; }
       if (plan.value.items.length === 0 && !plan.value.stopped_items?.length) return { exported: 0, pending: 0, available: true };
+      // A current all-stopped run has no user result to publish. Preserve its
+      // private stopped-item evidence for status/history, but do not create an
+      // empty run folder or a misleading source-to-error "mapping" file.
+      if (plan.value.items.length === 0 && plan.value.stopped_items?.length &&
+          [SCHEMA, MARKDOWN_SCHEMA].includes(plan.value.schema)) {
+        if (plan.value.complete !== true) {
+          plan.value = { ...plan.value, complete: true };
+          writeRecord(plan.target, plan.value);
+        }
+        return { exported: 0, pending: 0, available: false };
+      }
       // DS-069 replays only a failed export; DS-023 leaves visible results to the
       // user until they delete them. A completed record is therefore final: it is
       // neither re-verified nor re-materialised after a user deletion, and a later
       // destination change does not mirror earlier runs into the new folder.
-      if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0, available: true };
+      if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0,
+        available: plan.value.items.length > 0 };
       const total = plan.value.items.length;
       const pendingResult = () => {
         let done = exportedCount(plan.value);
@@ -667,6 +822,11 @@ function replayPendingResultExports() {
       // it with the owning journal and add a Standalone-only mapping.
       // Only a failed (incomplete) export is replayed; see exportCompletedState.
       if ((record.items.length === 0 && !record.stopped_items?.length) || record.complete === true) continue;
+      if (record.items.length === 0 && record.stopped_items?.length &&
+          [SCHEMA, MARKDOWN_SCHEMA].includes(record.schema)) {
+        writeRecord(target, { ...record, complete: true });
+        continue;
+      }
       const destination = activeDestination(record);
       if (!destination) { pending += record.items.length - exportedCount(record); continue; }
       const before = exportedCount(record);
@@ -754,9 +914,9 @@ function terminalVisibleExport(completed, exporter) {
 }
 
 module.exports = {
-  SCHEMA, MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
+  SCHEMA, MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
   visibleExportDirectory, terminalVisibleExport, readStandaloneExportHistory,
   completedMarkdownExportMatches,
   _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding,
-    acquireExportClaim, releaseExportClaim, claimPath }
+    acquireExportClaim, releaseExportClaim, claimPath, markdownOutputNames }
 };

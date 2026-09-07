@@ -72,7 +72,9 @@ function completionSummaryText(summary) {
   const omissionBlock = omissions.length ? `\r\n\r\nAuslassungen (visuelle Bestandteile):\r\n${omissions.join('\r\n')}` : '';
   const resultWord = released === 1 ? 'anonymisiertes Ergebnis' : 'anonymisierte Ergebnisse';
   const fileWord = failed === 1 ? 'Datei' : 'Dateien';
-  const outcome = `${released} ${resultWord} und die Zuordnung wurden lokal gespeichert. Für ${failed} ${fileWord} wurde kein Ergebnis freigegeben.`;
+  const outcome = released > 0
+    ? `${released} ${resultWord} und ihre Zuordnung wurden lokal gespeichert. Für ${failed} ${fileWord} wurde kein Ergebnis freigegeben.`
+    : `Für ${failed} ${fileWord} wurde kein Ergebnis freigegeben. Es wurde keine sichtbare Zuordnungsdatei erstellt.`;
   const canOpenResults = hasExportState && exported > 0 && exportPending === 0 && outputAvailable === true;
   const exportNotice = hasExportState
     ? (exportPending > 0

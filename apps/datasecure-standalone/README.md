@@ -17,8 +17,8 @@ direkten Dateisystemzugriff; die lokale Pfadanzeige wird nicht protokolliert.
 
 Dateien oder ein Ordner lassen sich nativ in das Fenster ziehen. Die vorhandenen
 Auswahlbuttons bleiben als Tastatur-/Klickalternative erhalten. Beide Wege
-zeigen erst die aufgenommene Auswahl; nur **Starten** verarbeitet
-sie. Neue Standalone-Stapel im Anonymisierungsmodus verwenden lesbare und bei Fortsetzung stabile
+zeigen erst die aufgenommene Auswahl. Einzelne Dateien können entfernt und die
+gesamte Auswahl kann geleert werden; nur **Starten** verarbeitet sie. Neue Standalone-Stapel im Anonymisierungsmodus verwenden lesbare und bei Fortsetzung stabile
 Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`; vorhandene v1-Stapel bleiben
 unverändert. Die Kennungen gelten nicht kundenübergreifend oder über neue Stapel.
 
@@ -29,23 +29,31 @@ und bewusstem Öffnen der Ergebnisse. Unterstützt werden TXT, Markdown,
 CSV, DOCX, XLSX, PPTX, Text-/Scan-PDF sowie PNG/JPEG/BMP. Konverter und lokale
 DE/EN-OCR sind im Paket enthalten; keine zusätzliche Installation ist nötig.
 Namen und Originalinhalte bleiben erhalten. `DataSecure-Markdown/Lauf-…` enthält
-eine `.md` je erfolgreicher Quelle und `DataSecure-Zuordnung.csv` einschließlich
-Hinweisen und Fehlern. Unvollständige Extraktion wird ohne Review gespeichert
+eine `.md` je erfolgreicher Quelle. Eine gewählte Unterordnerstruktur bleibt
+im Ergebnis erhalten. Der ursprüngliche Basisname bleibt erhalten;
+nur die Endung wird `.md`, bei Kollisionen folgt ` (2)`, ` (3)` usw. Eine
+Zuordnungsdatei wird für reine Konvertierung nicht erzeugt. Unvollständige Extraktion wird ohne Review gespeichert
 und ausdrücklich gekennzeichnet; gesperrte/defekte Dateien werden übersprungen.
-Die Anonymisierung verarbeitet TXT/MD/CSV/DOCX direkt. XLSX/PPTX/PDF/Scan-PDF
-und Bilder durchlaufen denselben lokalen Konverter genau einmal und werden nur
-bei vollständig belegter Extraktion an den Privacy-Core weitergegeben. Aktuell
-melden diese breiten Konverter reale Quellen noch als `incomplete`; sie stoppen
-deshalb sicher und erzeugen kein scheinbar vollständiges anonymisiertes Ergebnis.
-Der funktionale Zweischritt bleibt verfügbar: zuerst **Nur in Markdown
-umwandeln**, danach die erzeugte `.md` in einem neuen Anonymisierungsstapel
-auswählen. Dabei wird nur der extrahierte Markdown-Inhalt geschützt; ausgelassene
-Originalobjekte und der ursprüngliche Container gelten nicht als anonymisiert.
+Die Anonymisierung verarbeitet TXT/MD/CSV direkt. DOCX, XLSX/PPTX/PDF/Scan-PDF
+und Bilder durchlaufen denselben lokalen Konverter genau einmal; jeder nichtleere,
+vertraglich gültige Markdown-Inhalt wird anschließend an den Privacy-Core
+weitergegeben. Ergebnis und Manifest weisen Extraktionsabdeckung und
+Anonymisierungsstatus getrennt aus: `incomplete` bedeutet keine Zusage über den
+gesamten Originalcontainer, nicht eine unvollständige Anonymisierung des
+extrahierten Markdown-Inhalts. Leere OCR sowie beschädigte, verschlüsselte oder
+aktive Quellen stoppen. Ein manueller Zweischritt ist dafür nicht erforderlich.
+Bei Anonymisierung wählt der Anwender pro Stapel zwischen neutralen Dateinamen
+(datensparender Standard, `Dokument-NNN-anonymisiert.md`) und dem ursprünglichen
+Basisnamen mit `-anonymisiert.md`. Die Zuordnung nennt in beiden Fällen die
+tatsächlich erzeugten relativen Pfade. Namen und Pfade bleiben lokal und werden
+nicht diagnostisch protokolliert. Die Wahl wird vor Start gebunden und bleibt
+bei Fortsetzung unverändert.
 
 Der Endnutzerablauf besitzt drei Hauptansichten: **Start**, **Verarbeiten** für
 Auswahl, Start und Fortschritt sowie **Verlauf** für die 20 neuesten
-Verarbeitungen. Ergebnis-, Zuordnungs- und Fortsetzungsaktionen beziehen sich
-jeweils auf genau den gewählten Lauf. Abschluss und Wiederherstellung wechseln
+Verarbeitungen. Ergebnis- und Fortsetzungsaktionen beziehen sich jeweils auf
+genau den gewählten Lauf. **Zuordnung** ist nur bei anonymisierten Läufen aktiv.
+Abschluss und Wiederherstellung wechseln
 weder die Ansicht noch öffnen sie automatisch einen Ordner. Die Anzeigegrenze
 löscht keine älteren Ergebnisse. Lokale Öffnen-Aktionen bestätigen nur die Übergabe an den
 Dateimanager des Betriebssystems; diese Bestätigung erscheint getrennt vom

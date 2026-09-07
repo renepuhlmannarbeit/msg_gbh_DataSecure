@@ -1,9 +1,11 @@
-# Aktuelles DataSecure-UAT-Testpaket
+# Aktuelles Cowork-Plugin-UAT-Testpaket
 
 Stand: 03.09.2026 · gilt für den jeweils installierten, dokumentierten Build
 
-Dieses Paket verwendet ausschließlich synthetische Daten. Es ist der einzige
-aktuelle Einstieg für die menschliche Abnahme. Alte RC30-/RC63-Kits bleiben als
+Dieses Paket verwendet ausschließlich synthetische Daten. Es ist der aktuelle
+Einstieg für die menschliche **Cowork-Plugin-Abnahme**. Die eigenständige App
+wird mit dem [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md)
+abgenommen. Alte RC30-/RC63-Kits bleiben als
 reproduzierbare Historie erhalten, sind aber keine Anleitung.
 
 ## In drei Schritten

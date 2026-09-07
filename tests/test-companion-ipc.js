@@ -130,7 +130,7 @@ test('linux picker falls back locally and validates the result', () => {
   assert.strictEqual(selected.sourceType, 'pdf');
 });
 
-test('Windows multi-picker validates up to 100 distinct local files', () => {
+test('Windows multi-picker validates the 200-file product boundary for distinct local files', () => {
   const first = path.join(root, 'first.txt');
   const second = path.join(root, 'second.csv');
   fs.writeFileSync(first, 'first');
@@ -216,7 +216,7 @@ test('native helper crashes without stdout are technical failures, never user ca
   }
 });
 
-testAsync('async privacy picker is abortable and 100-file selection receives a bounded long-path buffer', async () => {
+testAsync('async privacy picker is abortable and 200-file selection receives a bounded long-path buffer', async () => {
   const controller = new AbortController();
   let privacySignal;
   const pending = pickFolderAsync({ platform: 'win32', signal: controller.signal, runner: async (_c, _a, _i, _e, signal) => {
@@ -229,13 +229,14 @@ testAsync('async privacy picker is abortable and 100-file selection receives a b
 
   let maxBuffer = 0;
   await pickSourcesAsync({
-    platform: 'linux', maxSources: 100,
+    platform: 'linux', maxSources: 200,
     fs: { lstatSync: () => ({ size: 1, isFile: () => true, isSymbolicLink: () => false }) },
     fsPromises: { lstat: async () => ({ size: 1, isFile: () => true, isSymbolicLink: () => false }) },
     hasReparseComponent: () => false,
     runner: async (_c, _a, _i, _e, _s, budget) => { maxBuffer = budget; return { status: 0, stdout: path.resolve(root, 'long.txt') }; }
   });
-  assert.ok(maxBuffer > 1024 * 1024 && maxBuffer < 16 * 1024 * 1024);
+  assert.ok(maxBuffer > 16 * 1024 * 1024 && maxBuffer < 20 * 1024 * 1024,
+    '200 maximally long native paths require a bounded buffer below 20 MiB');
 });
 
 test('synchronous file and privacy-folder pickers never accept partial stdout from a failed native helper', () => {

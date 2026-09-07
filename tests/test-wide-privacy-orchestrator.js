@@ -15,9 +15,12 @@ process.env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
 fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT, { recursive: true });
 
 const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
+const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 const { anonymizeNext } = require('../plugins/data-secure/server/gateway/orchestrator');
 const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
 const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
+const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 const { testAsync, assert, done } = createSuite('Wide Standalone privacy orchestration');
 
 function privateEntry(name, text = 'opaque binary source') {
@@ -39,6 +42,8 @@ testAsync('complete wide extraction is converted once, anonymized and published 
   });
   assert.equal(conversions, 1);
   assert.equal(result.document_result.grade, 'complete');
+  assert.equal(result.privacy_scope, 'extracted-markdown-only');
+  assert.deepEqual(result.source_extraction_coverage, { status: 'complete', reason_codes: [] });
   assert.equal(result.raw_content_sent_to_claude, false);
   assert.ok(entry.private_bytes.every(byte => byte === 0));
   const released = readOutput(result.package_id, result.read_capability);
@@ -49,20 +54,70 @@ testAsync('complete wide extraction is converted once, anonymized and published 
   assert.equal(fs.existsSync(rawRoot) ? fs.readdirSync(rawRoot).length : 0, 0);
 });
 
-testAsync('incomplete wide extraction publishes nothing and keeps the original source outside the result tree', async () => {
+testAsync('incomplete but useful wide extraction anonymizes its Markdown once with an explicit scope notice', async () => {
   const entry = privateEntry('scan.png', 'unchanged source bytes');
   let conversions = 0;
-  let publications = 0;
-  await assert.rejects(anonymizeNext('general', {
+  const result = await anonymizeNext('general', {
     productChannel: 'standalone', inputQueue: [entry],
-    publishPackage() { publications++; },
     async convertBuffer() {
       conversions++;
       return createMarkdownExtraction({ source_type: 'png', markdown: 'Max Mustermann',
         coverage: { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED'] } });
     }
-  }), { code: 'PARSER_COVERAGE_UNVERIFIED' });
+  });
   assert.equal(conversions, 1);
+  assert.equal(result.document_result.grade, 'complete');
+  assert.equal(result.privacy_scope, 'extracted-markdown-only');
+  assert.deepEqual(result.source_extraction_coverage,
+    { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED'] });
+  const released = readOutput(result.package_id, result.read_capability).text;
+  assert.match(released, /ausschließlich der lokal in Markdown umgewandelte Inhalt/u);
+  assert.match(released, /\[PERSON_001\]/u);
+  assert.doesNotMatch(released, /Max Mustermann/u);
+  assert.ok(entry.private_bytes.every(byte => byte === 0));
+});
+
+testAsync('Standalone DOCX with non-rendered custom XML anonymizes extracted Markdown and reports source scope', async () => {
+  const document = '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:body><w:p><w:r><w:t>Name: Max Mustermann</w:t></w:r></w:p></w:body></w:document>';
+  const docx = zipStore([
+    ...opcControlEntries('docx', { additionalOverrides: [{
+      part: 'customXml/itemProps1.xml',
+      contentType: 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml'
+    }] }),
+    ['word/document.xml', document],
+    ['customXml/item1.xml', '<profile><department>Vertrieb</department></profile>'],
+    ['customXml/itemProps1.xml', '<ds:datastoreItem xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"/>']
+  ]);
+  const entry = { name: 'profile.docx', private_artifact_plain: true, private_bytes: Buffer.from(docx) };
+  const result = await anonymizeNext('personnel_profile', {
+    productChannel: 'standalone', inputQueue: [entry],
+    async convertBuffer(input, extension) { return extractMarkdownBuffer(input, extension); }
+  });
+  assert.equal(result.document_result.grade, 'complete');
+  assert.equal(result.privacy_scope, 'extracted-markdown-only');
+  assert.deepEqual(result.source_extraction_coverage, {
+    status: 'incomplete',
+    reason_codes: ['SOURCE_COVERAGE_UNVERIFIED']
+  });
+  const released = readOutput(result.package_id, result.read_capability).text;
+  assert.match(released, /\[PERSON_001\]/u);
+  assert.doesNotMatch(released, /Max Mustermann|Vertrieb/u);
+  assert.match(released, /Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert/u);
+  assert.ok(entry.private_bytes.every(byte => byte === 0));
+});
+
+testAsync('empty OCR publishes nothing', async () => {
+  const entry = privateEntry('scan.png', 'unchanged source bytes');
+  let publications = 0;
+  await assert.rejects(anonymizeNext('general', {
+    productChannel: 'standalone', inputQueue: [entry], publishPackage() { publications++; },
+    async convertBuffer() {
+      return createMarkdownExtraction({ source_type: 'png', markdown: '',
+        coverage: { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED', 'OCR_TEXT_EMPTY'] } });
+    }
+  }), { code: 'PARSER_COVERAGE_UNVERIFIED' });
   assert.equal(publications, 0);
   assert.ok(entry.private_bytes.every(byte => byte === 0));
 });

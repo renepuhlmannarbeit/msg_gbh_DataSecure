@@ -8,6 +8,12 @@ PDFium-Entscheidung zu einer plattformübergreifenden, reproduzierbaren GO/NO-GO
 Prüfung. Bis jede Pflichtzelle positiv belegt ist, bleiben PDF, Scan-PDF und
 eigenständige Bilder in Ist-Manifest, Picker, Skills und Marketplace gesperrt.
 
+Der Geltungsbereich ist die Cowork-Freigabe sowie eine Vollständigkeitszusage
+für Originalcontainer oder Bildpixel. Die eigenständige Standalone-App darf
+PDF-/Bildquellen lokal nach Markdown extrahieren und diesen gültigen, nichtleeren
+Markdown-Inhalt nach DS-087/090 anonymisieren. Das erfüllt dieses Gate nicht und
+behauptet weder vollständige Quellenextraktion noch Pixelanonymisierung.
+
 ## Festgelegte technische Richtung
 
 - Unter DS-038 bleibt die endgültige PDF-Engine bis zum praktischen Vergleich offen.

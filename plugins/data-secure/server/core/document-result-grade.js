@@ -1,6 +1,7 @@
 'use strict';
 
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { validateCoverage } = require('./source-extraction-contract');
 
 const { MAX_VISUAL_ASSETS } = RESOURCE_LIMITS;
 
@@ -183,6 +184,17 @@ function positiveDocumentResult(value) {
 
 function validateManifestDocumentResult(manifest) {
   if (!manifest || manifest.schema !== 'eu-privacy-package/3') throw new DocumentResultError();
+  const wideSource = new Set(['xlsx', 'pptx', 'pdf', 'png', 'jpg', 'jpeg', 'bmp']).has(manifest.source_type);
+  const hasScope = Object.hasOwn(manifest, 'privacy_scope');
+  const hasCoverage = Object.hasOwn(manifest, 'source_extraction_coverage');
+  const markdownFirstDocx = manifest.source_type === 'docx' && (hasScope || hasCoverage);
+  if (wideSource || markdownFirstDocx
+    ? (manifest.privacy_scope !== 'extracted-markdown-only' || !hasCoverage)
+    : (hasScope || hasCoverage)) throw new DocumentResultError();
+  if (wideSource || markdownFirstDocx) {
+    try { validateCoverage(manifest.source_extraction_coverage); }
+    catch { throw new DocumentResultError('Die Markdown-Extraktionsabdeckung ist ungültig.'); }
+  }
   const expected = releasedDocumentResult({
     parserWarnings: manifest.parser_warnings,
     visualResults: manifest.assets,

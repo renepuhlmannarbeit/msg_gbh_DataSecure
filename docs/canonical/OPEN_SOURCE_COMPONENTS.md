@@ -1,6 +1,6 @@
 # Open-Source-Wiederverwendungsregister
 
-Stand: 06.09.2026 · DS-038, DS-075, DS-082, DS-085, DS-086, DS-087
+Stand: 07.09.2026 · DS-038, DS-075, DS-082, DS-085, DS-086, DS-087, DS-090
 
 Dieses Register trennt **ausgelieferte Laufzeit**, **Build-/Testwerkzeug** und
 **nicht aktivierten Piloten**. Die Integration im Quellcode ist keine
@@ -11,9 +11,9 @@ Zielhost- oder Endnutzerfreigabe. Versionen und Integritäten stehen in
 
 | Komponente | Verwendung | Grenze |
 |---|---|---|
-| Node.js / eigene DataSecure-Parser | Gemeinsamer lokaler Kern; zielgebunden mitgelieferte Runtime | Keine Anwenderinstallation; direkte Anonymisierung für TXT/Markdown/CSV/DOCX, breite Standalone-Quellen nur über DS-087 und vollständige Coverage. |
+| Node.js / eigene DataSecure-Parser | Gemeinsamer lokaler Kern; zielgebunden mitgelieferte Runtime | Keine Anwenderinstallation; Cowork prüft TXT/Markdown/CSV/DOCX direkt. Standalone verarbeitet TXT/Markdown/CSV direkt und DOCX/breite Quellen Markdown-first nach DS-087/090. |
 | Tauri 2 / Rust | Eigenständige Desktop-Hülle, native Dialoge, Lifecycle, private IPC | Nur Standalone. Rust ist ausschließlich Buildvoraussetzung. Windows-Engineering vorhanden; native Mac-Nachweise und Bedienabnahme offen. |
-| PDF.js, Canvas, Tesseract.js/-core, lokale DE/EN-Modelle | Gebündelter isolierter Standalone-Konvertierungsworker für Text-/Scan-PDF und Bilder | `markdown-only` darf ehrlich unvollständige Extraktionen ausgeben. DS-087 verwendet dieselbe Extraktion im Standalone-Anonymisierungsmodus nur bei `complete`; kein Online-OCR und keine Cowork-Formatfreigabe. |
+| PDF.js, Canvas, Tesseract.js/-core, lokale DE/EN-Modelle | Gebündelter isolierter Standalone-Konvertierungsworker für Text-/Scan-PDF und Bilder | Beide Standalone-Modi dürfen bekannte `complete`- oder `incomplete`-Extraktionen mit gültigem, nichtleerem Markdown nutzen. Quellenabdeckung bleibt separat; kein Online-OCR, keine Originalcontainer- und keine Cowork-Formatfreigabe. |
 | Ajv 8.20.0 (MIT) + esbuild 0.28.2 (MIT) | Build-time-Erzeugung des MCP-Validators aus dem einzigen Toolkatalog | Plugin lädt selbsttragendes JS samt lizenziertem Unicode-Längenhelper. Kein Ajv-npm-Paket, kein Codegenerator zur Laufzeit; nicht in Standalone. |
 | Microsoft MarkItDown 0.1.7 (MIT) | Optionales deaktiviertes DOCX-Differentialorakel | Weder Python noch MarkItDown ist eine produktive Konvertervoraussetzung. Keine zusätzliche Formatfreigabe durch das Orakel. |
 | Mammoth, Papa Parse, markdown-it, fflate | Unabhängige Parser-/Format-Testorakel | Keine alleinige Sicherheits- oder Releaseentscheidung. |
@@ -45,7 +45,7 @@ Die Wiederverwendungsprüfung bleibt für alle aktiven Epics verbindlich:
 | BL-011, BL-040, BL-044 | Bestehende Journal-, Export-, Lock- und Admissionbausteine wiederverwenden; allgemeine Dateibibliotheken ersetzen keine produktgebundenen Wiederaufnahmeverträge. |
 | BL-012, BL-032, BL-052 | Native lokale Auswahl/Review und Playwright-/Zugänglichkeitsprüfungen; kein Agent entscheidet anstelle des Anwenders. |
 | BL-020, BL-021, BL-022, BL-049 | Vorhandene strukturierte Parser und unabhängige Format-Testorakel; kein bloßer Dateiendungs- oder Konvertererfolg als Sicherheitsfreigabe. |
-| BL-023, BL-024 | PDF.js/Canvas/Tesseract nur im genannten Konvertierungszweck; Anonymisierungsausbau bleibt eigenes Gate. |
+| BL-023, BL-024 | PDF.js/Canvas/Tesseract nur in der isolierten Standalone-Extraktion; Anonymisierung gilt ausschließlich für deren Markdown, nie als Freigabe des Originalcontainers oder der Pixel. |
 | BL-030, BL-031, BL-050 | Vorhandene Pseudonymregistry, Kontextkataloge und synthetischer Korpus; Presidio/Property-Frameworks bleiben mögliche Orakel, keine aktive Erkennungsruntime. |
 | BL-041, BL-042, BL-043 | Schmaler MCP-/Skill-Vertrag und inhaltsfreie lokale Diagnose; keine weitere Agenten-/Cloudschicht. |
 | BL-047 | Bestehende Ressourcenbudgets und gemessene Worker-Lifecycle-Verträge; Parallelisierung nur nach Mess- und Determinismusnachweis. |

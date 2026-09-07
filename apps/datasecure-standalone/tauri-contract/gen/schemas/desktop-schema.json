@@ -261,6 +261,12 @@
           "markdownDescription": "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt."
         },
         {
+          "description": "Entfernt genau eine Datei per Position aus der noch nicht gestarteten lokalen Auswahl.",
+          "type": "string",
+          "const": "allow-remove-admitted-source",
+          "markdownDescription": "Entfernt genau eine Datei per Position aus der noch nicht gestarteten lokalen Auswahl."
+        },
+        {
           "description": "Öffnet die native Mehrfach-Dateiauswahl und übergibt Pfade nur an den lokalen Core.",
           "type": "string",
           "const": "allow-select-files",

@@ -1,10 +1,12 @@
-# Pilot- und UAT-Abnahme
+# Cowork-Plugin: Pilot- und UAT-Abnahme
 
-Stand: 01.09.2026 · aktueller Produktvertrag
+Stand: 07.09.2026 · aktueller Cowork-Produktvertrag
 
 Diese Datei ist der Abnahmeindex, keine konkurrierende zweite Testanleitung. Die
 Durchführung steht ausschließlich im
 [aktuellen UAT-Testpaket](acceptance/UAT_TEST_KIT/README.md).
+Die getrennte Standalone-Abnahme steht im
+[Standalone-UAT-Kit](acceptance/STANDALONE_UAT_TEST_KIT/README.md).
 
 ## Vorbedingungen
 
@@ -26,7 +28,7 @@ Durchführung steht ausschließlich im
 | Retention | 0–14 Tage nur temporär; Quellen/Originale und fertige Exporte nie automatisch löschen |
 | Recovery | Unterbrechung/Fortsetzung ohne Neuauswahl oder Duplikate |
 | UX/A11y | Klartext, eine nächste Aktion, Tastatur, Fokus, Zoom, Screenreader |
-| Performance | 100 Dateien und bis zu 500 MiB auf Referenzhardware |
+| Performance | 200 Dateien und bis zu 500 MiB auf Referenzhardware |
 | Governance | IT/Health-IT, Datenschutz, Security und Architektur bestätigen ihren Bereich |
 
 ## Entscheidung

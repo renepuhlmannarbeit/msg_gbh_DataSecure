@@ -75,8 +75,10 @@ function publicError(requestId, error) {
   const allowed = new Set([
     'STANDALONE_BUSY', 'STANDALONE_ENGINE_NOT_READY', 'STANDALONE_SELECTION_CANCELLED',
     'STANDALONE_SELECTION_INVALID', 'STANDALONE_NO_ADMISSION', 'STANDALONE_NOTHING_TO_CONTINUE',
+    'SOURCE_FOLDER_FILE_LIMIT', 'SOURCE_FOLDER_SIZE_LIMIT',
+    'SOURCE_FOLDER_UNSUPPORTED_FILES', 'SOURCE_FOLDER_EMPTY',
     'STANDALONE_START_FAILED',
-    'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'MARKDOWN_CONVERSION_NOT_READY',
+    'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'RESULT_NAMING_MODE_INVALID', 'MARKDOWN_CONVERSION_NOT_READY',
     'STANDALONE_DATA_ROOT_UNSAFE',
     'UNSAFE_STORAGE_LOCATION', 'STARTUP_RECOVERY_FAILED', 'STARTUP_OUTBOX_RECOVERY_FAILED',
     'STARTUP_MIGRATION_FAILED', 'STARTUP_CLEANUP_FAILED', 'RUNTIME_INTEGRITY_FAILED',
@@ -98,8 +100,10 @@ async function dispatch(message) {
   switch (message.action) {
     case 'admit_selected_sources':
       return service.admitSelectedSources(message.source_paths, message.source_kind);
+    case 'remove_admitted_source': return service.removeAdmittedSource(message.selection_index);
     case 'cancel_admission': return service.cancelAdmission();
-    case 'start_admitted_batch': return service.startAdmittedBatch({ processingMode: message.processing_mode });
+    case 'start_admitted_batch': return service.startAdmittedBatch({ processingMode: message.processing_mode,
+      ...(message.output_naming_mode ? { outputNamingMode: message.output_naming_mode } : {}) });
     case 'get_public_state': return service.status();
     case 'get_ui_context': return service.uiContext();
     case 'get_run_history': return service.history();

@@ -9,6 +9,9 @@ import { office, image, pdf, text as conversionText } from './helpers/conversion
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
+const { xlsxCounterexample } = require('./lib/conversion-counterexamples.js');
+const { zipStore } = require('./lib/zip.js');
+const { opcControlEntries } = require('./lib/opc.js');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const zip = path.resolve(process.argv[2] || path.join(root, 'dist', `DataSecure-Standalone-${version}-windows-x64.zip`));
@@ -33,6 +36,19 @@ function childProcessPath(value) {
   if (value.startsWith('\\\\?\\UNC\\')) return `\\\\${value.slice(8)}`;
   if (value.startsWith('\\\\?\\')) return value.slice(4);
   return value;
+}
+
+function relativeFiles(rootDirectory) {
+  const files = [];
+  const visit = (directory, prefix = '') => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) visit(path.join(directory, entry.name), relative);
+      else files.push(relative);
+    }
+  };
+  visit(rootDirectory);
+  return files.sort();
 }
 
 function protocolClient(child, stderr) {
@@ -101,10 +117,12 @@ try {
   // Exercise the shipped parser/worker chain, not a replacement worker or one
   // synthetic TXT path. All four fixtures describe the same synthetic parties.
   const fixtureRoot = path.join(root, 'docs', 'acceptance', 'UAT_TEST_KIT', 'inputs', '01-positive');
-  const sourceNames = ['personnel-profile.txt', 'personnel-profile.md', 'personnel-profile.csv', 'personnel-profile.docx'];
-  const originals = sourceNames.map((name) => fs.readFileSync(path.join(fixtureRoot, name)));
+  const sourceNames = ['txt/personnel-profile.txt', 'markdown/personnel-profile.md',
+    'csv/personnel-profile.csv', 'docx/personnel-profile.docx'];
+  const originals = sourceNames.map((name) => fs.readFileSync(path.join(fixtureRoot, path.posix.basename(name))));
   const sourceFiles = sourceNames.map((name, index) => {
-    const destination = path.join(sourceDirectory, name);
+    const destination = path.join(sourceDirectory, ...name.split('/'));
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, originals[index], { flag: 'wx' });
     return destination;
   });
@@ -138,7 +156,7 @@ try {
   assert.equal(freshContext.result.latest_result_folder, '', 'a fresh profile must not recover any real-user run');
   assert.equal(fs.statSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl')).isFile(), true);
   const admitted = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b'.repeat(16),
-    action: 'admit_selected_sources', source_kind: 'files', source_paths: sourceFiles });
+    action: 'admit_selected_sources', source_kind: 'folder', source_paths: [sourceDirectory] });
   assert.equal(admitted.ok, true);
   assert.equal(admitted.result.selected_count, 4);
   assert.deepEqual([...admitted.result.ui_context.selected_files].sort(), [...sourceNames].sort());
@@ -152,7 +170,7 @@ try {
   assert.equal(context.result.result_folder, resultDirectory);
   assert.deepEqual([...context.result.selected_files].sort(), [...sourceNames].sort());
   const started = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'e'.repeat(16),
-    action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize' });
+    action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral' });
   assert.equal(started.ok, true);
   assert.equal(started.result.event, 'batch_accepted');
   let terminal;
@@ -179,12 +197,17 @@ try {
   assert.equal(fs.statSync(mapping).isFile(), true,
     'a completed standalone run must publish its human-readable mapping in the exact run directory');
   const mappingText = fs.readFileSync(mapping, 'utf8');
+  assert.equal(mappingText.charCodeAt(0), 0xfeff,
+    'the visible mapping must carry an UTF-8 BOM so Excel decodes German punctuation correctly');
   for (const name of sourceNames) assert.ok(mappingText.includes(name), 'every source must have a mapping row');
-  const outputs = fs.readdirSync(exactRun).filter((name) => name.endsWith('.md')).sort();
+  const outputs = relativeFiles(exactRun).filter((name) => name.endsWith('.md'));
   assert.equal(outputs.length, 4, 'the actual mixed-format run must export all four results');
+  assert.deepEqual(outputs, ['csv/Dokument-001-anonymisiert.md', 'docx/Dokument-002-anonymisiert.md',
+    'markdown/Dokument-003-anonymisiert.md', 'txt/Dokument-004-anonymisiert.md'],
+  'the shipped neutral naming mode must preserve folders while hiding source basenames');
   let expectedAliases;
   for (const name of outputs) {
-    const markdown = fs.readFileSync(path.join(exactRun, name), 'utf8');
+    const markdown = fs.readFileSync(path.join(exactRun, ...name.split('/')), 'utf8');
     assert.doesNotMatch(markdown, /Lina|Testfeld|Nordstern|Falken|lina\.testfeld/iu);
     const persons = [...new Set(markdown.match(/\[PERSON_\d{3,}\]/gu))].sort();
     const companies = [...new Set(markdown.match(/\[UNTERNEHMEN_\d{3,}\]/gu))].sort();
@@ -221,7 +244,7 @@ try {
   assert.equal(failedAdmission.ok, true, 'malformed CSV remains an admissible regular UTF-8 source');
   assert.equal(failedAdmission.result.selected_count, 1);
   const failedStart = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: '6'.repeat(16),
-    action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize' });
+    action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral' });
   assert.equal(failedStart.ok, true);
   let failedTerminal;
   let lastFailureState;
@@ -240,30 +263,104 @@ try {
   assert.ok(failedTerminal, `the real parser failure must finish its own batch; last content-free state: ${JSON.stringify(lastFailureState)}`);
   assert.equal(failedTerminal.result_count, 0);
   assert.equal(failedTerminal.failed_count, 1);
-  assert.equal(failedTerminal.ledger_available, true);
+  assert.equal(failedTerminal.ledger_available, false);
   const failedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '7'.repeat(16), action: 'get_ui_context' });
   assert.equal(failedContext.ok, true);
   const failedRun = failedContext.result.latest_result_folder;
-  assert.equal(path.dirname(failedRun), path.join(resultDirectory, 'DataSecure-Output'));
-  assert.notEqual(failedRun, exactRun);
-  assert.deepEqual(fs.readdirSync(failedRun), ['DataSecure-Zuordnung.csv']);
-  const failedMapping = path.join(failedRun, 'DataSecure-Zuordnung.csv');
-  const failureText = fs.readFileSync(failedMapping, 'utf8');
-  assert.ok(failureText.includes(failedSourceName));
-  assert.match(failureText, /Kein Ergebnis – gestoppt/u);
-  assert.doesNotMatch(failureText, /personnel-profile|Dokument-\d+-anonymisiert/u);
+  assert.equal(failedRun, '', 'an all-stopped run does not expose an empty result folder');
   const resolvedFailureMapping = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '8'.repeat(16), action: 'resolve_local_ledger' });
-  assert.deepEqual(resolvedFailureMapping.result, {
-    ok: true, target_kind: 'file', local_path: failedMapping, external_disclosure: false
-  });
+  assert.equal(resolvedFailureMapping.ok, false);
+  assert.equal(resolvedFailureMapping.error_code, 'STANDALONE_RESULTS_MISSING');
   assert.deepEqual(fs.readFileSync(failedSource), failedOriginal, 'the parser failure must not modify its source');
   assert.equal(fs.readFileSync(mapping, 'utf8'), mappingText, 'the previous successful mapping remains unchanged');
   sourceFiles.forEach((file, index) => assert.deepEqual(fs.readFileSync(file), originals[index]));
   if (Number.isSafeInteger(failedTerminal.presentation_generation)) {
     await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a1'.repeat(8),
       action: 'ack_terminal_presented', presentation_generation: failedTerminal.presentation_generation });
+  }
+  // Reproduce the former RC113 defect through the shipped executable: a useful
+  // XLSX extraction whose source coverage is explicitly incomplete must still
+  // have its generated Markdown anonymized. Source coverage and privacy status
+  // remain separate, visible facts; no raw intermediate Markdown is published.
+  const wideSourceName = 'Privacy-Tabelle.xlsx';
+  const wideSource = path.join(sourceDirectory, wideSourceName);
+  const strictSpreadsheetNamespace = 'http://purl.oclc.org/ooxml/spreadsheetml/main';
+  const wideOriginal = xlsxCounterexample({ prefix: 'sheet', quote: "'", strict: true, overrides: [[
+    'xl/worksheets/sheet1.xml',
+    `<sheet:worksheet xmlns:sheet='${strictSpreadsheetNamespace}'><sheet:sheetData>` +
+      `<sheet:row r='1'><sheet:c r='A1' t='inlineStr'><sheet:is><sheet:t>Feld</sheet:t></sheet:is></sheet:c>` +
+      `<sheet:c r='B1' t='inlineStr'><sheet:is><sheet:t>Wert</sheet:t></sheet:is></sheet:c></sheet:row>` +
+      `<sheet:row r='2'><sheet:c r='A2' t='inlineStr'><sheet:is><sheet:t>person</sheet:t></sheet:is></sheet:c>` +
+      `<sheet:c r='B2' t='inlineStr'><sheet:is><sheet:t>Max Mustermann</sheet:t></sheet:is></sheet:c></sheet:row>` +
+      `</sheet:sheetData></sheet:worksheet>`
+  ]] });
+  fs.writeFileSync(wideSource, wideOriginal, { flag: 'wx' });
+  const docxSourceName = 'Privacy-Profil.docx';
+  const docxSource = path.join(sourceDirectory, docxSourceName);
+  const docxOriginal = zipStore([
+    ...opcControlEntries('docx', { additionalOverrides: [{
+      part: 'customXml/itemProps1.xml',
+      contentType: 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml'
+    }] }),
+    ['word/document.xml', '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:body><w:p><w:r><w:t>Name: Lara Beispiel</w:t></w:r></w:p></w:body></w:document>'],
+    ['customXml/item1.xml', '<profile><department>Interne Testabteilung</department></profile>'],
+    ['customXml/itemProps1.xml', '<ds:datastoreItem xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"/>']
+  ]);
+  fs.writeFileSync(docxSource, docxOriginal, { flag: 'wx' });
+  const wideAdmission = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'b1'.repeat(8), action: 'admit_selected_sources', source_kind: 'files',
+    source_paths: [wideSource, docxSource] });
+  assert.equal(wideAdmission.ok, true);
+  assert.equal(wideAdmission.result.selected_count, 2);
+  const wideStart = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'b2'.repeat(8), action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize',
+    output_naming_mode: 'source-with-suffix' });
+  assert.equal(wideStart.ok, true);
+  let wideTerminal;
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    const polled = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: (0x1800 + attempt).toString(16).padStart(16, '0'), action: 'get_public_state' });
+    assert.equal(polled.ok, true);
+    if (polled.result.selected_count === 2 && terminalStates.has(polled.result.state)) {
+      wideTerminal = polled.result; break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  assert.ok(wideTerminal, 'the packaged XLSX Markdown-first privacy run must terminate');
+  assert.equal(wideTerminal.state, 'results_available', JSON.stringify(wideTerminal));
+  assert.equal(wideTerminal.result_count, 2);
+  assert.equal(wideTerminal.failed_count, 0);
+  const wideContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'b3'.repeat(8), action: 'get_ui_context' });
+  const wideRun = wideContext.result.latest_result_folder;
+  const wideOutputs = fs.readdirSync(wideRun).filter(name => name.endsWith('.md'));
+  assert.deepEqual(wideOutputs.sort(), ['Privacy-Profil-anonymisiert.md', 'Privacy-Tabelle-anonymisiert.md']);
+  const wideMarkdown = wideOutputs.map(name => fs.readFileSync(path.join(wideRun, name), 'utf8')).join('\n');
+  assert.match(wideMarkdown, /Extraktionsstatus: Markdown erzeugt; Vollständigkeit des Originalcontainers nicht garantiert/u);
+  assert.match(wideMarkdown, /Anonymisierungsstatus: extrahierter Markdown-Inhalt vollständig geprüft/u);
+  assert.doesNotMatch(wideMarkdown, /Max(?: |&#32;)Mustermann|Lara(?: |&#32;)Beispiel/u);
+  assert.match(wideMarkdown, /\[PERSON_\d{3,}\]/u);
+  assert.deepEqual(fs.readFileSync(wideSource), wideOriginal, 'wide privacy never modifies the XLSX source');
+  assert.deepEqual(fs.readFileSync(docxSource), docxOriginal, 'Markdown-first privacy never modifies the DOCX source');
+  const wideMapping = path.join(wideRun, 'DataSecure-Zuordnung.csv');
+  assert.equal(fs.statSync(wideMapping).isFile(), true);
+  const wideMappingText = fs.readFileSync(wideMapping, 'utf8');
+  assert.equal(wideMappingText.charCodeAt(0), 0xfeff,
+    'the real packaged XLSX mapping must be UTF-8 with BOM');
+  assert.equal(wideMappingText,
+    `\uFEFFOriginaldatei;Anonymisiertes Ergebnis\r\n` +
+      `"${wideSourceName}";"Privacy-Tabelle-anonymisiert.md"\r\n` +
+      `"${docxSourceName}";"Privacy-Profil-anonymisiert.md"\r\n`,
+    'the real packaged XLSX/DOCX run must map each source to exactly its final successful result');
+  assert.doesNotMatch(wideMappingText, /PARSER_COVERAGE_UNVERIFIED|Kein Ergebnis|â€“/u,
+    'a successful Markdown-first XLSX run must not retain a preliminary stop or broken punctuation');
+  if (Number.isSafeInteger(wideTerminal.presentation_generation)) {
+    await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b4'.repeat(8),
+      action: 'ack_terminal_presented', presentation_generation: wideTerminal.presentation_generation });
   }
   // Real second product purpose, in the very same shipped sidecar after two
   // anonymization runs. No mocked parser, worker, journal or export endpoint.
@@ -309,24 +406,28 @@ try {
   const convertedRun = convertedContext.result.latest_result_folder;
   assert.equal(path.dirname(convertedRun), path.join(resultDirectory, 'DataSecure-Markdown'));
   const convertedMapping = path.join(convertedRun, 'DataSecure-Zuordnung.csv');
-  const convertedCsv = fs.readFileSync(convertedMapping, 'utf8');
+  assert.equal(fs.existsSync(convertedMapping), false, 'pure conversion does not create a redundant source mapping');
   conversionSources.forEach((file, index) => {
-    assert.ok(convertedCsv.includes(path.basename(file)), 'every success and failure appears in the run mapping');
     assert.deepEqual(fs.readFileSync(file), beforeConversion[index]);
   });
-  const convertedFiles = fs.readdirSync(convertedRun).filter(name => name.endsWith('.md'));
+  const convertedFiles = relativeFiles(convertedRun).filter(name => name.endsWith('.md'));
   assert.equal(convertedFiles.length, 11);
-  const texts = convertedFiles.map(name => fs.readFileSync(path.join(convertedRun, name), 'utf8'));
+  assert.deepEqual(convertedFiles, ['Bild.md', 'Bild (2).md', 'Bild (3).md', 'Folien.md', 'Scan.md', 'Tabelle.md',
+    'Text.md', 'personnel-profile.md', 'personnel-profile (2).md', 'personnel-profile (3).md',
+    'personnel-profile (4).md'].sort(),
+  'an explicit multi-file selection has no shared root; basenames survive and deterministic collision suffixes are added');
+  const texts = convertedFiles.map(name => fs.readFileSync(path.join(convertedRun, ...name.split('/')), 'utf8'));
   assert.equal(texts.filter(value => /Lina(?: |&#32;)Testfeld/u.test(value)).length, 4, 'all original four formats preserve person identities');
   assert.equal(texts.filter(value => /Max(?: |&#32;)Mustermann/u.test(value)).length, 7, 'all new converters, including OCR, preserve person identities');
   for (const value of texts) assert.doesNotMatch(value, /\[PERSON_|\[UNTERNEHMEN_|anonymized: true/u);
   assert.ok(texts.includes(originals[0].toString('utf8')), 'TXT contents are not normalized or redacted');
   assert.ok(texts.includes(originals[1].toString('utf8')), 'existing Markdown contents are preserved');
-  for (const [action, expectedPath] of [['resolve_current_results', convertedRun], ['resolve_local_ledger', convertedMapping]]) {
-    const result = await request({ schema: 'datasecure-standalone-private-ipc/1',
-      request_id: action === 'resolve_current_results' ? 'c4'.repeat(8) : 'c5'.repeat(8), action });
-    assert.equal(result.ok, true); assert.equal(result.result.local_path, expectedPath);
-  }
+  const convertedResults = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'c4'.repeat(8), action: 'resolve_current_results' });
+  assert.equal(convertedResults.ok, true); assert.equal(convertedResults.result.local_path, convertedRun);
+  const convertedLedger = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'c5'.repeat(8), action: 'resolve_local_ledger' });
+  assert.equal(convertedLedger.ok, false); assert.equal(convertedLedger.error_code, 'STANDALONE_LEDGER_MISSING');
   assert.equal(fs.readFileSync(mapping, 'utf8'), mappingText, 'conversion never rewrites a previous anonymized result');
   const supportDirectory = path.join(environment.LOCALAPPDATA, 'SecureDataMsg-Standalone', 'diagnostics', 'support-events');
   const conversionEvents = fs.readdirSync(supportDirectory).filter(name => name.endsWith('.json'))
@@ -344,19 +445,23 @@ try {
     request_id: 'd1'.repeat(8), action: 'get_run_history' });
   assert.equal(historyBefore.ok, true);
   assert.equal(historyBefore.result.local_ui_only, true);
-  assert.equal(historyBefore.result.entries.length, 3, 'each real run appears once, including the all-failed run');
+  assert.equal(historyBefore.result.entries.length, 4, 'each real run appears once, including wide privacy and the all-failed run');
   const historyRows = historyBefore.result.entries;
-  assert.deepEqual(historyRows.map(row => row.processing_mode), ['markdown-only', 'markdown-and-anonymize', 'markdown-and-anonymize']);
+  assert.deepEqual(historyRows.map(row => row.processing_mode), ['markdown-only', 'markdown-and-anonymize',
+    'markdown-and-anonymize', 'markdown-and-anonymize']);
   assert.ok(historyRows.every(row => !row.resumable));
-  const expectedRuns = [convertedRun, failedRun, exactRun];
+  const expectedRuns = [convertedRun, wideRun, '', exactRun];
   for (const [index, row] of historyRows.entries()) {
-    for (const [action, expected] of [['resolve_history_results', expectedRuns[index]],
-      ['resolve_history_ledger', path.join(expectedRuns[index], 'DataSecure-Zuordnung.csv')]]) {
-      const resolved = await request({ schema: 'datasecure-standalone-private-ipc/1',
-        request_id: 'd2'.repeat(8), action, batch_id: row.batch_id });
-      assert.equal(resolved.ok, true);
-      assert.equal(resolved.result.local_path, expected, 'history actions must never substitute the latest run');
-    }
+    const resolvedResults = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: 'd2'.repeat(8), action: 'resolve_history_results', batch_id: row.batch_id });
+    assert.equal(resolvedResults.ok, index !== 2);
+    if (index === 2) assert.equal(resolvedResults.error_code, 'STANDALONE_RESULTS_MISSING');
+    else assert.equal(resolvedResults.result.local_path, expectedRuns[index], 'history actions must never substitute the latest run');
+    const resolvedLedger = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: 'd4'.repeat(8), action: 'resolve_history_ledger', batch_id: row.batch_id });
+    assert.equal(resolvedLedger.ok, index !== 0 && index !== 2);
+    if (index === 0 || index === 2) assert.equal(resolvedLedger.error_code, 'STANDALONE_LEDGER_MISSING');
+    else assert.equal(resolvedLedger.result.local_path, path.join(expectedRuns[index], 'DataSecure-Zuordnung.csv'));
     const resume = await request({ schema: 'datasecure-standalone-private-ipc/1',
       request_id: 'd3'.repeat(8), action: 'continue_history_batch', batch_id: row.batch_id });
     assert.equal(resume.ok, false);
@@ -365,7 +470,7 @@ try {
   const nextRoot = path.join(extraction, 'Naechster-Ergebnisordner');
   fs.mkdirSync(nextRoot);
   assert.equal((await request({ schema: 'datasecure-standalone-private-ipc/1',
-    request_id: 'd4'.repeat(8), action: 'configure_results', source_paths: [nextRoot] })).ok, true);
+    request_id: 'e4'.repeat(8), action: 'configure_results', source_paths: [nextRoot] })).ok, true);
   await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);
@@ -391,7 +496,9 @@ try {
   for (const [index, row] of historyRows.entries()) {
     const resolved = await request({ schema: 'datasecure-standalone-private-ipc/1',
       request_id: 'd6'.repeat(8), action: 'resolve_history_results', batch_id: row.batch_id });
-    assert.equal(resolved.result.local_path, expectedRuns[index]);
+    assert.equal(resolved.ok, index !== 2);
+    if (index === 2) assert.equal(resolved.error_code, 'STANDALONE_RESULTS_MISSING');
+    else assert.equal(resolved.result.local_path, expectedRuns[index]);
   }
   const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
   for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');

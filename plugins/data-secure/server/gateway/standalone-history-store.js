@@ -12,6 +12,7 @@ const { dataRoot } = require('../runtime');
 const { ensurePrivateDirectory } = require('./common');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const { createBatchProgress } = require('./batch-progress');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const ID_RE = /^[a-f0-9]{64}$/u;
 const EXPORT_RE = /^re_[a-f0-9]{32}$/u;
@@ -75,7 +76,8 @@ function validSummary(value) {
     ID_RE.test(value.batch_id) && EXPORT_RE.test(value.export_id) &&
     typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)) &&
     MODES.includes(value.processing_mode) && typeof value.complete === 'boolean' &&
-    COUNT_FIELDS.every((key) => Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= 100) &&
+    COUNT_FIELDS.every((key) => Number.isSafeInteger(value[key]) && value[key] >= 0 &&
+      value[key] <= RESOURCE_LIMITS.MAX_BATCH_FILES) &&
     value.completed_count === value.result_count + value.failed_count && value.completed_count <= value.selected_count;
 }
 function summarizeState(state) {

@@ -17,10 +17,12 @@ const {
 const { validatePackageIdentity } = require('./package-identity');
 const { identity, bindPrivateFile, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
 const { processingModeForBatch } = require('../core/processing-mode');
+const { resultNamingModeForBatch } = require('../core/result-naming-mode');
 const { validateCoverage, MAX_MARKDOWN_CHARS } = require('../standalone/markdown-contract');
 
 const SCHEMA = 'datasecure-batch/4';
 const MARKDOWN_SCHEMA = 'datasecure-batch/5';
+const NAMED_ANONYMIZATION_SCHEMA = 'datasecure-batch/6';
 const ENCRYPTED_SCHEMA = 'datasecure-batch/3';
 const V2_SCHEMA = 'datasecure-batch/2';
 const LEGACY_SCHEMA = 'datasecure-batch/1';
@@ -67,7 +69,7 @@ function createBatchJournalStore(options = {}) {
   }
 
   function purposeOf(state) {
-    return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}`;
+    return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}:${resultNamingModeForBatch(state)}`;
   }
 
   function assertPurposeUnchanged(state, target) {
@@ -147,7 +149,7 @@ function createBatchJournalStore(options = {}) {
     const durable = writeOptions.durable !== false;
     const target = pathForToken(state.token);
     const purpose = assertPurposeUnchanged(state, target);
-    if (state.schema === MARKDOWN_SCHEMA && !validStateShape(state, state.token)) {
+    if ([MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA].includes(state.schema) && !validStateShape(state, state.token)) {
       throw Object.assign(new Error('BATCH_MARKDOWN_STATE_INVALID'), { code: 'BATCH_MARKDOWN_STATE_INVALID' });
     }
     const temporary = temporaryJournalPath(target);
@@ -321,8 +323,8 @@ function createBatchJournalStore(options = {}) {
     // Storage validation must precede all status-specific early returns.
     if (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
         /\.dsart$/iu.test(String(item.work_name || ''))) return false;
-    if (Object.hasOwn(item, 'work_name') && schema === SCHEMA && item.private_artifact_plain !== true) return false;
-    if (schema !== SCHEMA && Object.hasOwn(item, 'private_artifact_plain')) return false;
+    if (Object.hasOwn(item, 'work_name') && [SCHEMA, NAMED_ANONYMIZATION_SCHEMA].includes(schema) && item.private_artifact_plain !== true) return false;
+    if (![SCHEMA, NAMED_ANONYMIZATION_SCHEMA].includes(schema) && Object.hasOwn(item, 'private_artifact_plain')) return false;
     if (Object.hasOwn(item, 'package_identity')) {
       if (item.status !== 'released') return false;
       try { validatePackageIdentity(item.package_identity); }
@@ -424,10 +426,10 @@ function createBatchJournalStore(options = {}) {
   }
 
   function validStateShape(state, token) {
-    const supportedSchema = [SCHEMA, MARKDOWN_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
+    const supportedSchema = [SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
     const validProductChannel = !Object.hasOwn(state || {}, 'product_channel') ||
       ['plugin', 'standalone'].includes(state.product_channel);
-    try { processingModeForBatch(state); } catch { return false; }
+    try { processingModeForBatch(state); resultNamingModeForBatch(state); } catch { return false; }
     return state?.token === token && supportedSchema && validProductChannel && validPseudonymState(state) &&
       Array.isArray(state?.items) && state.items.length > 0 &&
       state.items.length <= maxBatchFiles &&
@@ -484,4 +486,4 @@ function createBatchJournalStore(options = {}) {
   return { writeState, readState, readStateForMaintenance, removeState };
 }
 
-module.exports = { SCHEMA, MARKDOWN_SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, MAX_JOURNAL_BYTES, createBatchJournalStore };
+module.exports = { SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, MAX_JOURNAL_BYTES, createBatchJournalStore };

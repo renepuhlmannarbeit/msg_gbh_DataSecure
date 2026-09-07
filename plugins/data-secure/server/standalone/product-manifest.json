@@ -3,7 +3,7 @@
   "product_id": "gbh-datasecure-standalone",
   "product_channel": "standalone",
   "data_namespace": "SecureDataMsg-Standalone",
-  "version": "3.2.0-rc111",
+  "version": "3.2.0-rc123",
   "release_status": "engineering_only",
   "entry": "cli.js",
   "desktop_shell_candidate": "tauri-2",
@@ -56,6 +56,12 @@
   ],
   "blocked_formats": [],
   "default_processing_mode": null,
+  "default_anonymized_output_naming": "neutral",
+  "anonymized_output_naming_modes": [
+    "neutral",
+    "source-with-suffix"
+  ],
+  "conversion_output_naming": "source-basename",
   "formats_by_processing_mode": {
     "markdown-and-anonymize": [
       "txt",

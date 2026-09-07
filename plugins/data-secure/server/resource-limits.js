@@ -9,7 +9,7 @@ const MIB = 1024 * 1024;
 // below that boundary. They are checked before the private batch snapshot.
 const RESOURCE_LIMITS = Object.freeze({
   MAX_INPUT_BYTES: 500 * MIB,
-  MAX_BATCH_FILES: 100,
+  MAX_BATCH_FILES: 200,
   MAX_BATCH_TOTAL_BYTES: 500 * MIB,
   MAX_TEXT_CHARS: 8_000_000,
   MAX_VISUAL_ASSETS: 150,

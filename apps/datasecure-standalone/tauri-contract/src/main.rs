@@ -20,6 +20,7 @@ use tauri::{AppHandle, DragDropEvent, Emitter, Manager, State, WindowEvent};
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES: usize = 768 * 1024;
 const MAX_SINGLE_PATH_BYTES: usize = 32767;
+const MAX_BATCH_FILES: usize = 200;
 const MAX_PRESENTATION_GENERATION: u64 = 9_007_199_254_740_991;
 const IPC_SCHEMA: &str = "datasecure-standalone-private-ipc/1";
 const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
@@ -137,7 +138,7 @@ fn selection_guard(
 }
 
 fn dropped_source_kind(paths: &[PathBuf]) -> Result<&'static str, String> {
-    if paths.is_empty() || paths.len() > 100 {
+    if paths.is_empty() || paths.len() > MAX_BATCH_FILES {
         return Err("STANDALONE_SELECTION_INVALID".to_string());
     }
     strict_path_strings(paths)?;
@@ -580,6 +581,35 @@ fn validate_processing_mode(value: Option<&str>) -> Result<&str, String> {
     }
 }
 
+fn validate_output_naming_mode<'a>(value: Option<&'a str>, processing_mode: &str) -> Result<Option<&'a str>, String> {
+    match (processing_mode, value) {
+        ("markdown-and-anonymize", Some("neutral" | "source-with-suffix")) => Ok(value),
+        ("markdown-only", None) => Ok(None),
+        _ => Err("RESULT_NAMING_MODE_INVALID".to_string()),
+    }
+}
+
+fn private_start_request(
+    request_id: &str,
+    processing_mode: Option<&str>,
+    output_naming_mode: Option<&str>,
+) -> Result<Value, String> {
+    let mode = validate_processing_mode(processing_mode)?;
+    let naming = validate_output_naming_mode(output_naming_mode, mode)?;
+    let mut request = private_request(
+        request_id,
+        "start_admitted_batch",
+        None,
+        &[],
+        None,
+        Some(mode),
+    )?;
+    if let Some(value) = naming {
+        request["output_naming_mode"] = json!(value);
+    }
+    Ok(request)
+}
+
 fn mode_rejected_before_start(result: &Result<Value, String>) -> bool {
     matches!(result, Err(code) if matches!(code.as_str(),
         "PROCESSING_MODE_INVALID" | "PROCESSING_MODE_FORBIDDEN" | "MARKDOWN_CONVERSION_NOT_READY"))
@@ -651,6 +681,18 @@ fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Val
     Ok(
         json!({ "schema": IPC_SCHEMA, "request_id": request_id, "action": action, "batch_id": batch_id }),
     )
+}
+
+fn removal_request(request_id: &str, selection_index: u64) -> Result<Value, String> {
+    if selection_index >= MAX_BATCH_FILES as u64 {
+        return Err("STANDALONE_SELECTION_INVALID".to_string());
+    }
+    Ok(json!({
+        "schema": IPC_SCHEMA,
+        "request_id": request_id,
+        "action": "remove_admitted_source",
+        "selection_index": selection_index
+    }))
 }
 
 fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Value, String> {
@@ -977,22 +1019,38 @@ async fn cancel_admission(state: State<'_, DesktopState>) -> Result<Value, Strin
     result
 }
 #[tauri::command(rename_all = "camelCase")]
-async fn start_admitted_batch(
+async fn remove_admitted_source(
     state: State<'_, DesktopState>,
-    processing_mode: Option<String>,
+    selection_index: u64,
 ) -> Result<Value, String> {
-    validate_processing_mode(processing_mode.as_deref())?;
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
     let owned = state.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        rpc(
-            &owned,
-            "start_admitted_batch",
-            None,
-            &[],
-            None,
-            processing_mode.as_deref(),
-        )
+        let id = request_id();
+        let request = removal_request(&id, selection_index)?;
+        rpc_request(&owned, "remove_admitted_source", &id, request)
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())??;
+    if result.get("selected_count").and_then(Value::as_u64) == Some(0) {
+        state.admission_present.store(false, Ordering::Release);
+    }
+    Ok(result)
+}
+#[tauri::command(rename_all = "camelCase")]
+async fn start_admitted_batch(
+    state: State<'_, DesktopState>,
+    processing_mode: Option<String>,
+    output_naming_mode: Option<String>,
+) -> Result<Value, String> {
+    let mode = validate_processing_mode(processing_mode.as_deref())?;
+    validate_output_naming_mode(output_naming_mode.as_deref(), mode)?;
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
+    let owned = state.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let id = request_id();
+        let request = private_start_request(&id, processing_mode.as_deref(), output_naming_mode.as_deref())?;
+        rpc_request(&owned, "start_admitted_batch", &id, request)
     })
     .await
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?;
@@ -1280,6 +1338,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             select_files,
             select_folder,
+            remove_admitted_source,
             cancel_admission,
             start_admitted_batch,
             get_public_state,
@@ -1420,7 +1479,7 @@ mod tests {
             "STANDALONE_SELECTION_INVALID"
         );
         assert_eq!(
-            dropped_source_kind(&vec![source.clone(); 101]).unwrap_err(),
+            dropped_source_kind(&vec![source.clone(); 201]).unwrap_err(),
             "STANDALONE_SELECTION_INVALID"
         );
         assert_eq!(
@@ -1523,15 +1582,21 @@ mod tests {
     }
 
     #[test]
-    fn desktop_start_requires_a_mode_and_serializes_only_snake_case() {
+    fn desktop_start_requires_a_mode_and_an_explicit_anonymized_filename_policy() {
         let id = "0123456789abcdef";
-        for mode in ["markdown-and-anonymize", "markdown-only"] {
-            let request = private_request(id, "start_admitted_batch", None, &[], None, Some(mode))
-                .expect("supported mode reaches the service's readiness gate");
-            assert_eq!(request["processing_mode"], json!(mode));
+        for naming in ["neutral", "source-with-suffix"] {
+            let request = private_start_request(id, Some("markdown-and-anonymize"), Some(naming))
+                .expect("supported naming reaches the private service");
+            assert_eq!(request["processing_mode"], json!("markdown-and-anonymize"));
+            assert_eq!(request["output_naming_mode"], json!(naming));
             assert!(request.get("processingMode").is_none());
-            assert_eq!(request.as_object().unwrap().len(), 4);
+            assert!(request.get("outputNamingMode").is_none());
+            assert_eq!(request.as_object().unwrap().len(), 5);
         }
+        let conversion = private_start_request(id, Some("markdown-only"), None)
+            .expect("pure conversion has no anonymized filename policy");
+        assert_eq!(conversion["processing_mode"], json!("markdown-only"));
+        assert!(conversion.get("output_naming_mode").is_none());
         for mode in [
             None,
             Some(""),
@@ -1540,8 +1605,19 @@ mod tests {
             Some("Markdown-only"),
         ] {
             assert_eq!(
-                private_request(id, "start_admitted_batch", None, &[], None, mode).unwrap_err(),
+                private_start_request(id, mode, None).unwrap_err(),
                 "PROCESSING_MODE_INVALID"
+            );
+        }
+        for (mode, naming) in [
+            ("markdown-and-anonymize", None),
+            ("markdown-and-anonymize", Some("unknown")),
+            ("markdown-only", Some("neutral")),
+            ("markdown-only", Some("source-with-suffix")),
+        ] {
+            assert_eq!(
+                private_start_request(id, Some(mode), naming).unwrap_err(),
+                "RESULT_NAMING_MODE_INVALID"
             );
         }
         for action in [
@@ -1557,6 +1633,20 @@ mod tests {
             let request = private_request(id, action, None, &[], None, None).unwrap();
             assert!(request.get("processing_mode").is_none());
         }
+    }
+
+    #[test]
+    fn prepared_selection_removal_is_index_bounded_and_content_free() {
+        let id = "0123456789abcdef";
+        let request = removal_request(id, 199).expect("the last allowed selection position");
+        assert_eq!(request["action"], json!("remove_admitted_source"));
+        assert_eq!(request["selection_index"], json!(199));
+        assert_eq!(request.as_object().unwrap().len(), 4);
+        assert!(request.get("source_paths").is_none());
+        assert_eq!(
+            removal_request(id, 200).unwrap_err(),
+            "STANDALONE_SELECTION_INVALID"
+        );
     }
 
     #[test]

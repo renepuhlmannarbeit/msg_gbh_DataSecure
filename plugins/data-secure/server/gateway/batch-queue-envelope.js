@@ -5,7 +5,9 @@ const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
 
 const LOCAL_QUEUE_SCHEMA_INVALID = 'LOCAL_QUEUE_SCHEMA_INVALID';
-const PURPOSE_ERROR_CODES = Object.freeze(['PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID']);
+const PURPOSE_ERROR_CODES = Object.freeze([
+  'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID', 'RESULT_NAMING_MODE_INVALID'
+]);
 
 // A distinct message type makes old workers reject conversion requests rather
 // than silently ignoring an unknown purpose field and anonymizing the sources.

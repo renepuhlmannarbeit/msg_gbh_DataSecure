@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC111
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC123
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -34,13 +34,13 @@ installieren. Es nutzt dieselbe Engine und ergänzt ausschließlich eine manuell
 aufrufbare, inhaltsfreie JSON-Ablaufspur; Rohkommunikation, Dokumentdaten, Namen,
 Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davon.
 
-## Aktueller Umfang
+## Cowork-Plugin: aktueller Umfang
 
 | Funktion | Stand |
 |---|---|
 | Eingaben | TXT, Markdown, CSV, DOCX |
 | sicher gesperrt | XLSX, PPTX, PDF, Scan-PDF und eigenständige Bilder |
-| Stapel | bis 100 Dateien, zusammen höchstens 500 MiB |
+| Stapel | bis 200 Dateien, zusammen höchstens 500 MiB |
 | Bilder in DOCX | Pixel bleiben lokal; kein auswählbarer Bildmodus |
 | Ausgabe | freigegebenes Markdown im einmalig gewählten lokalen Ergebnisordner; Mapping bleibt privat |
 | Speicherung | lokale Arbeits-/Reviewkopien ohne Schlüsselbund oder Passwort |
@@ -49,6 +49,12 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 Quellen/Originale und fertige Exporte werden niemals automatisch gelöscht.
 Passwortgeschützte oder verschlüsselte Eingaben werden nicht entschlüsselt, sondern
 sicher gestoppt und lokal gesondert gemeldet.
+
+Die eigenständige Standalone-App besitzt einen bewusst weiteren lokalen Umfang:
+Sie konvertiert TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF/Scan-PDF sowie
+PNG/JPEG/BMP nach Markdown. Im Anonymisierungsmodus laufen TXT, Markdown und CSV
+direkt; DOCX und die breiten Formate werden genau einmal lokal nach Markdown
+extrahiert und anschließend mit demselben Privacy-Core anonymisiert.
 
 ## Einfacher Cowork-Ablauf
 
@@ -73,14 +79,25 @@ sicher gestoppt und lokal gesondert gemeldet.
 5. Klare Dateien werden ohne weiteren Dialog abgeschlossen. Nur bei echten
    Mehrdeutigkeiten erscheint ein lokaler Sammelreview mit den direkten Aktionen
    **„Zertifikatsanbieter behalten“** und **„Organisation anonymisieren“**.
-6. Die lokale Abschlussmeldung mit **„Ergebnisse öffnen“** verwenden. Im
+6. Die lokale Abschlussmeldung mit **„Ergebnisse öffnen“** verwenden. Sie öffnet
+   genau den Laufordner dieses neuesten Cowork-Stapels. Ist der aktuelle Lauf
+   noch aktiv, fehlgeschlagen oder noch nicht vollständig exportiert, wird kein
+   älterer Ergebnisordner ersatzweise geöffnet. Im
    Cowork-Ergebnisordner liegen ausschließlich neutrale freigegebene Markdown-
    Dateien; Originalnamen, Mapping, Review und Recovery bleiben privat. Die
-   eigenständige Standalone-App ergänzt dagegen lokal im jeweiligen Laufordner
-   `DataSecure-Zuordnung.csv`, damit Anwender Quelle und neutrales Ergebnis ohne
-   einen versteckten AppData-Pfad zuordnen können.
+   eigenständige Standalone-App ergänzt bei der **Anonymisierung** lokal im
+   jeweiligen Laufordner `DataSecure-Zuordnung.csv`, damit Anwender Quelle und
+   Ergebnis ohne einen versteckten AppData-Pfad zuordnen können. Standalone lässt
+   dafür pro Stapel neutrale Dateinamen (Standard) oder den Quellbasisnamen mit
+   `-anonymisiert` wählen. Jede
+   Zeile verweist auf eine tatsächlich erzeugte Datei; gestoppte Quellen stehen
+   in Abschluss und Diagnose, nicht in dieser Zuordnung.
 7. Erst danach bei Bedarf ausdrücklich um die Auswertung der fertigen Ergebnisse
    bitten.
+
+Bei einer Ordnerauswahl werden alle Unterordner sicher geprüft. Überschreitet der
+Baum die Datei-/Größengrenze oder enthält er ein gesperrtes Format, meldet
+DataSecure die Auswahl verständlich zurück und startet keinen Teilstapel.
 
 Die eigentliche Verarbeitung läuft lokal und offline. Cowork ist der bequeme
 Einstieg und kann die freigegebenen Markdown-Ergebnisse anschließend auswerten;
@@ -98,7 +115,8 @@ Fenster- und Dialoghülle. Rust, Node und Python sind Buildwerkzeuge beziehungsw
 gebündelte Laufzeiten und werden nicht auf Anwenderrechnern installiert.
 
 Die Standalone-Auswahl ist auch per Drag-and-drop möglich; erst der Startknopf
-beginnt die Verarbeitung. Neue Stapel erhalten lesbare, über alle Dokumente
+beginnt die Verarbeitung. Vorher lassen sich einzelne Dateien entfernen oder
+die gesamte Auswahl leeren. Neue Stapel erhalten lesbare, über alle Dokumente
 gleichbleibende Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`. Diese
 Nummern gelten nur im jeweiligen Stapel; bestehende v1-Ausgaben und das
 Claude-Plugin behalten ihr bisheriges Kennungsformat.
@@ -110,8 +128,12 @@ mit jeweils eigenen Aktionen für Ergebnisse, Zuordnung und mögliche Fortsetzun
 Ein Abschluss wechselt die Ansicht nicht automatisch. TXT, Markdown, CSV, DOCX,
 XLSX, PPTX, Text-PDF, Scan-PDF und PNG/JPEG/BMP werden lokal verarbeitet.
 Die App bringt Konverter und deutsche/englische OCR-Modelle mit. Ergebnisse
-und `DataSecure-Zuordnung.csv` liegen in `DataSecure-Markdown/Lauf-…` unter dem
-gewählten Ziel. Namen und andere Originalinhalte bleiben erhalten: Diese Dateien
+liegen in `DataSecure-Markdown/Lauf-…` unter dem gewählten Ziel. Bei einer
+Ordnerauswahl bleibt die relative Unterordnerstruktur erhalten. Jede Datei
+behält ihren ursprünglichen Basisnamen; nur die Endung wird `.md`. Bei gleichen
+Basisnamen wird deterministisch ` (2)`, ` (3)` usw. ergänzt. Da dadurch keine
+Zuordnung nötig ist, wird in diesem Modus keine `DataSecure-Zuordnung.csv`
+erzeugt und die Verlaufsaktion **Zuordnung** bleibt deaktiviert. Namen und andere Originalinhalte bleiben erhalten: Diese Dateien
 sind **nicht anonymisiert** und werden nicht automatisch hochgeladen.
 OCR-/Extraktionshinweise und nicht verarbeitbare Dateien stehen in der Übersicht;
 es gibt keinen PII-Review oder zusätzlichen Bestätigungsdialog. Markdown erhält
@@ -120,14 +142,14 @@ der technischen und menschlichen Abnahme steht unter
 [BL-010.28 im kanonischen Backlog](docs/canonical/BACKLOG.md).
 
 Im Modus **In Markdown umwandeln und anonymisieren** verarbeitet Standalone
-TXT/Markdown/CSV/DOCX direkt. Breite Quellen werden zuerst nach Markdown
-extrahiert; das automatische Weiterreichen ist nur bei belegter vollständiger
-Extraktion erlaubt. Da XLSX/PPTX/PDF/Scan-PDF/Bilder derzeit `incomplete`
-melden, stoppen sie im Ein-Schritt-Ablauf. Wer den bekannten extrahierten Inhalt
-verwenden will, kann zuerst **Nur in Markdown umwandeln** ausführen und die
-entstandene `.md` anschließend als neuen Anonymisierungseingang wählen. Das
-Ergebnis schützt diese Markdown-Repräsentation, nicht ausgelassene Inhalte oder
-den ursprünglichen Container.
+TXT/Markdown/CSV direkt. DOCX, XLSX, PPTX, PDF/Scan-PDF und Bilder werden genau
+einmal lokal nach Markdown extrahiert; anschließend wird dieser Markdown-Inhalt
+automatisch anonymisiert. Das Ergebnis trennt zwei Aussagen: Die Anonymisierung
+des extrahierten Markdown-Inhalts ist vollständig geprüft, während die
+Vollständigkeit der Extraktion aus dem Originalcontainer je nach Format nicht
+garantiert sein kann. Das Original bleibt unverändert und gilt nicht als
+vollständig anonymisiert. Leere OCR, beschädigte, verschlüsselte oder unsichere
+Quellen stoppen weiterhin ohne Ergebnis.
 
 Heute sind Application-Service, getrenntes Datenverzeichnis, UI-Zustandsvertrag,
 privates gerahmtes IPC, Sidecar-Lifecycle und Zielpaketkatalog implementiert.
@@ -157,6 +179,8 @@ deaktiviert; siehe IT-Betriebshandbuch.
 - [IT-Betriebshandbuch](docs/IT-BETRIEBSHANDBUCH.md)
 - [Security-Modell](docs/PLUGIN_SECURITY_MODEL.md)
 - [UAT-Testpaket](docs/acceptance/UAT_TEST_KIT/README.md)
+- [100-Dateien-Formatkorpus](docs/acceptance/STANDALONE_100_FORMAT_TEST_KIT/README.md)
+- [komplexer DOCX-Testkorpus](docs/acceptance/STANDALONE_COMPLEX_DOCX_TEST_KIT/README.md)
 - [Dokumentenarchiv und stabile Archiv-IDs](docs/archive/INDEX.md)
 
 ## Entwicklung

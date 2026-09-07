@@ -1,6 +1,6 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 06.09.2026 · Entscheidungen DS-075 bis DS-086 · Steuerung über BL-010.9
+Stand: 07.09.2026 · Entscheidungen DS-075 bis DS-091 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
 
@@ -52,15 +52,17 @@ unterbrochene Stapel wechseln die Ansicht nicht automatisch. Beide Funktionen
 werden kurz erklärt. Es gibt keine vorbelegte Betriebsart.
 
 1. Die gewünschte Funktion ausdrücklich wählen.
-2. Dateien, einen Ordner oder per Drag-and-drop Quellen auswählen.
-3. Die kurze Stapelzusammenfassung mit **Starten** verarbeiten.
+2. Bei Anonymisierung die Ergebnisbenennung wählen: neutral (Standard) oder
+   Originalname mit `-anonymisiert`.
+3. Dateien, einen Ordner oder per Drag-and-drop Quellen auswählen.
+4. Die kurze Stapelzusammenfassung mit **Starten** verarbeiten.
 
 Das Hauptfenster zeigt dabei lokal den aktuellen Quellenordner, die gewählten
 Dateinamen und den Ergebnisordner. Diese Anzeige ist kein Diagnoseinhalt und
 wird ausschließlich als Text gerendert. Die Betriebsart **Nur in Markdown
 umwandeln** ist gemäß DS-082/DS-085 eine gleichwertige zweite Kernfunktion, im
 Engineering-Piloten aktiviert, mit weiterhin offener Zielhostabnahme. Sie besitzt denselben
-Aufnahme-/Start-/Fortschritts-/Recovery-/Mappingablauf, erhält aber alle
+   Aufnahme-/Start-/Fortschritts-/Recovery-/Exportablauf, erhält aber alle
 extrahierbaren Ausgangsinhalte ohne PII-Ersetzung. Nicht anonymisierte Konvertate
 gehen ausschließlich nach `DataSecure-Markdown/Lauf-…`, niemals in den
 anonymisierten Ergebnisweg oder die Plugin-Handoff-Liste. Der Modus gehört in
@@ -74,7 +76,8 @@ keine Betriebsart aus der aktuellen Eingabemaske. Die Anzeigegrenze entfernt
 keine Exporte. Innerhalb dieser Navigation bestehen folgende Arbeitszustände:
 
 1. **Auswahl:** `Dateien auswählen`, `Ordner auswählen`, Drag-and-drop,
-   explizites `Starten` oder `Auswahl verwerfen`.
+   einzelne Dateien entfernen, explizites `Starten` oder die gesamte
+   **Auswahl leeren**.
 2. **Verarbeitung:** nichtmodaler, inhaltsfreier Fortschritt mit
    `abgeschlossen/ausgewählt`; ein Dateifehler stoppt nicht den übrigen Stapel.
    Eine Pause bleibt außerhalb der Istzusage, bis Befehl und Recovery belegt sind.
@@ -83,8 +86,23 @@ keine Exporte. Innerhalb dieser Navigation bestehen folgende Arbeitszustände:
    `Anonymisieren`, `Beibehalten`, `Für gleiche Treffer übernehmen` und
    `Später`.
 4. **Ergebnis:** nichtmodaler Status in der aktuellen Ansicht. Auf bewussten
-   Wechsel in den Verlauf folgen `Ergebnisse öffnen`, `Zuordnung anzeigen` und
-   `Fortsetzen` je Zeile beziehungsweise `Neue Aufgabe wählen`.
+   Wechsel in den Verlauf folgen `Ergebnisse öffnen`, bei Anonymisierung
+   `Zuordnung anzeigen` und `Fortsetzen` je Zeile beziehungsweise
+   `Neue Aufgabe wählen`. Reine Konvertierung behält den Quellbasisnamen und
+   deaktiviert die nicht benötigte Zuordnungsaktion.
+
+Bei einer Ordnerauswahl trägt der private Admissionvertrag den sicheren
+Wurzel-relativen Pfad jeder Datei durch Journal und Export. Der sichtbare Lauf
+spiegelt diese Unterordner. Anonymisierte Dateien heißen dort je Stapelwahl
+`Dokument-NNN-anonymisiert.md` oder `<Basisname>-anonymisiert.md`; reine
+Konvertate heißen `<Basisname>.md`. Die Zuordnung
+des Anonymisierungslaufs nennt auf beiden Seiten genau diese relativen Pfade.
+Absolute Quellpfade und der gewählte Wurzelordner werden nicht persistiert oder
+diagnostisch ausgegeben. Der Export legt jedes Zielsegment einzeln an und prüft
+es gegen Traversal, Links und ausgetauschte Verzeichnisse (DS-089).
+Die Namenswahl wird im eigenen v6-Journal vor der Verarbeitung gebunden und
+kann bei Fortsetzung nicht wechseln. Vorhandene Läufe werden nicht migriert;
+Cowork bleibt stets neutral und flach.
 
 Anonymisierungsprofile werden pro Datei automatisch erkannt; Format- und
 Quellenprüfung gelten für beide Zwecke. Parsernamen, MarkItDown,
@@ -122,11 +140,11 @@ flowchart LR
   CORE --> INTAKE[Admission + versiegelter Snapshot]
   INTAKE --> MODE{gespeicherter Produktzweck}
   MODE -->|anonymisieren: direkte Formate| DIRECT[DataSecure-Parser]
-  MODE -->|breite Standalone-Quelle| CONV[Node-/OOXML-/PDF-/OCR-Konverter]
+  MODE -->|DOCX oder breite Standalone-Quelle| CONV[über neutralen Extraktionsvertrag zum Node-/OOXML-/PDF-/OCR-Konverter]
   MODE -->|nur Markdown: Standalone| CONV
   CONV --> COVERAGE{neutrale Coverage}
-  COVERAGE -->|complete und anonymisieren| GRAPH
-  COVERAGE -->|incomplete und anonymisieren| STOP[sicherer Einzelstopp]
+  COVERAGE -->|gültig + nichtleer und anonymisieren| GRAPH
+  COVERAGE -->|unbekannt, leer oder unsicher| STOP[sicherer Einzelstopp]
   COVERAGE -->|nur Markdown| PLAIN[DataSecure-Markdown: Originalinhalte + Coveragehinweise]
   DIRECT --> GRAPH[Content Graph]
   GRAPH --> PII[PII-Erkennung + Residual-Gate]
@@ -134,7 +152,6 @@ flowchart LR
   PII -->|eindeutig| EXPORT[DataSecure-Output: anonymisierte MD]
   REVIEW --> EXPORT
   EXPORT --> MAP[Standalone: laufbezogene Zuordnung vor sichtbarem Abschluss]
-  PLAIN --> MAP
 ```
 
 Standalone verwendet **kein MCP und kein JSON-RPC**. Die Desktop-Hülle und die
@@ -182,24 +199,25 @@ Die [Produkt-/Zweckmatrix](TARGET_ARCHITECTURE.md#aktuelle-fähigkeiten-nach-pro
 und [Formatmatrix](../FORMAT_COVERAGE_MATRIX.md) bestimmen den aktiven Umfang.
 Der Konvertierungszweig verwendet seinen eigenen Inhaltserhaltungs- und
 Artefaktvertrag und umgeht nicht bloß ein Residual-Gate im Anonymisierungsexport.
-DS-087 ergänzt davor einen neutralen Extraktionsvertrag ohne Zweck oder
+DS-087/090 ergänzt davor für DOCX und breite Quellen einen neutralen
+Extraktionsvertrag ohne Zweck oder
 Publikationskennung. Im Anonymisierungszweck wird dieses Ergebnis nur im Speicher
 an den vorhandenen Privacy-Core übergeben und niemals als rohes `dm_`-Artefakt
-veröffentlicht. Nur `complete` darf diese Grenze passieren; aktuelle breite
-Konverter melden reale XLSX/PPTX/PDF/Scan-PDF-/Bildquellen weiterhin ehrlich als
-`incomplete` und lösen deshalb einen laufbezogenen Einzelstopp aus.
-Der davon getrennte manuelle Zweischritt ist zulässig: **Nur in Markdown
-umwandeln** veröffentlicht das gekennzeichnete Konvertat; wählt der Anwender
-diese `.md` später in einem neuen Anonymisierungsstapel, verarbeitet der direkte
-Markdown-Pfad ausschließlich deren extrahierten Inhalt. Diese zwei Läufe teilen
-weder Stapelidentität noch Pseudonymregistry und ergeben keine Aussage über
-ausgelassene Bestandteile des ursprünglichen Containers.
+veröffentlicht. `complete` und `incomplete` bleiben Zustände der Quellenextraktion;
+beide dürfen mit vertraglich gültigem, nichtleerem Markdown diese Grenze
+passieren. Der davon unabhängige Anonymisierungsgrad wird erst aus PII-, Review-
+und Residualsignalen abgeleitet. Ergebnis und Manifest sagen daher nie aus, dass
+ausgelassene Bestandteile des ursprünglichen Containers anonymisiert wurden.
+Unbekannte Coverage, leere OCR sowie beschädigte, verschlüsselte oder aktive
+Quellen stoppen weiterhin laufbezogen.
 Auswahl und Quellen bleiben unverändert; in der Modusübersicht steht ruhig und
 dauerhaft **Nicht anonymisiert – enthält Originalinhalte**. Bei einem Fehler
 bleiben fertige Positionen checkpointgebunden erhalten; Fortsetzen nutzt denselben
 Modus, Zielordner und Mappingkontext. PII-Review entfällt in diesem Modus.
 Extraktionshinweise werden mit lesbaren Ergebnissen gespeichert; fehlerhafte
-Dateien erhalten eine Fehlerposition in der Zuordnung. Es entsteht kein neuer
+Dateien erscheinen in Abschluss und inhaltsfreier Diagnose. Reine Konvertierung
+erzeugt keine Zuordnung; bei Anonymisierung enthält sie ausschließlich
+tatsächlich veröffentlichte Ergebnisse. Es entsteht kein neuer
 Bestätigungsdialog. Der v5-Zweckvertrag unterscheidet sich ausdrücklich von
 alten Anonymisierungsjournals. Eigene Worker-Nachrichtentypen verhindern,
 dass ein alter Worker Konvertierung irrtümlich als Anonymisierung startet.

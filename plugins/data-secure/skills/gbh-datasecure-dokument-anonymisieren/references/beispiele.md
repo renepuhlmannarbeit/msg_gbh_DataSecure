@@ -10,7 +10,7 @@ und starte genau einmal `start_document_batch_from_picker(mode=local_only)`.
 Beim ersten Lauf lässt DataSecure einmalig einen dedizierten lokalen Ergebnisordner wählen; bei
 späteren Läufen erscheint nur der Quellpicker. Antworte bei
 `local_intake_accepted_checkpoint_pending` danach nur „Die lokale Übernahme wurde gestartet.
-DataSecure bereitet den wiederaufnehmbaren Stapel vor und zeigt nach Abschluss den Ergebnisordner an. (DataSecure-Version:
+DataSecure bereitet den wiederaufnehmbaren Stapel vor und zeigt nach Abschluss eine lokale Meldung mit ‚Ergebnisse öffnen‘ an. (DataSecure-Version:
 <gateway_version aus der Antwort>)“ und beende die Aufgabe.
 Der Erfolg bedeutet bestätigte Worker-Übergabe, nicht bereits abgeschlossene
 Dokumentverarbeitung.
@@ -39,10 +39,11 @@ den tokenfreien Handoff; Kennungen und Leseberechtigungen bleiben im lokalen Ser
 Anfrage: „Entferne die Bilder aus dem Ergebnis, anonymisiere alle Dateien und fasse danach die Qualifikationen zusammen.“
 
 Lasse den Bildstandard unverändert: Das Ergebnis ist ohnehin Markdown ohne Bildpixel.
-Der normale Picker hat kein `remove_images`-Argument. Grafiken bleiben lokal zurückgehalten
-und erscheinen im lokalen Abschlussdialog zur Sichtprüfung; ein Bild-Text-Pfad (OCR) ist im
-Pilot noch kein Produktpfad. Wo er später freigegeben wird, gilt für erkannten Bildtext
-dieselbe Datenschutzprüfung wie für Dokumenttext.
+Der normale Picker hat kein `remove_images`-Argument. Grafiken bleiben lokal
+zurückgehalten. Die rein zählerbasierte Abschlussmeldung zeigt keine Grafiken;
+nötige Entscheidungen erfolgen vorher im lokalen Sammelreview. Ein Bild-Text-Pfad
+(OCR) ist im Pilot noch kein Produktpfad. Wo er später freigegeben wird, gilt für
+erkannten Bildtext dieselbe Datenschutzprüfung wie für Dokumenttext.
 Erkläre vor dem Start den getrennten späteren Auswertungsauftrag. Nach dem Start kein Lesen;
 erst nach lokalem Abschluss und neuem ausdrücklichem Auftrag die freigegebenen Ergebnisse
 über den tokenfreien Handoff zusammenfassen.

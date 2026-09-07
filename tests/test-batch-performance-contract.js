@@ -58,14 +58,14 @@ test('phase recorder clamps a backwards host clock monotonically', () => {
 test('private I/O summary has only fixed, bounded and content-free counters', () => {
   const summary = createPrivateIoSummary({
     snapshot_preflight_runs: 3,
-    snapshot_copy_files: 101,
+    snapshot_copy_files: 201,
     snapshot_copy_mib: 999,
     final_gate_runs: 2
   });
   assert.strictEqual(summary.schema, IO_SUMMARY_SCHEMA);
   assert.deepStrictEqual(Object.keys(summary).sort(), ['schema', ...IO_SUMMARY_KEYS].sort());
   assert.strictEqual(summary.snapshot_preflight_runs, 3);
-  assert.strictEqual(summary.snapshot_copy_files, 100);
+  assert.strictEqual(summary.snapshot_copy_files, 200);
   assert.strictEqual(summary.snapshot_copy_mib, 500);
   assert.strictEqual(incrementPrivateIoSummary(summary, 'audit_receipt_writes'), true);
   assert.strictEqual(summary.audit_receipt_writes, 1);

@@ -102,6 +102,24 @@ test('manifest validation binds the stored grade to the exact allowlisted signal
     document_result: { ...value.document_result, grade: GRADES.COMPLETE, omissions: [] }
   }), /Ungültiger/);
   assert.throws(() => validateManifestDocumentResult({ ...value, schema: 'eu-privacy-package/2' }), /Ungültiger/);
+  const wide = {
+    ...manifest(), source_type: 'xlsx', privacy_scope: 'extracted-markdown-only',
+    source_extraction_coverage: { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }
+  };
+  assert.strictEqual(validateManifestDocumentResult(wide).grade, GRADES.COMPLETE);
+  const standaloneDocx = { ...wide, source_type: 'docx' };
+  assert.strictEqual(validateManifestDocumentResult(standaloneDocx).grade, GRADES.COMPLETE);
+  assert.strictEqual(validateManifestDocumentResult({ ...manifest(), source_type: 'docx' }).grade, GRADES.COMPLETE);
+  assert.throws(() => validateManifestDocumentResult({ ...standaloneDocx,
+    source_extraction_coverage: undefined
+  }), /ungültig|Ungültiger/u);
+  assert.throws(() => validateManifestDocumentResult({ ...wide, privacy_scope: 'complete-source' }), /Ungültiger/);
+  assert.throws(() => validateManifestDocumentResult({ ...wide,
+    source_extraction_coverage: { status: 'complete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }
+  }), /Extraktionsabdeckung/);
+  assert.throws(() => validateManifestDocumentResult({ ...manifest(), source_type: 'txt',
+    privacy_scope: 'extracted-markdown-only', source_extraction_coverage: wide.source_extraction_coverage
+  }), /Ungültiger/);
 });
 
 done();

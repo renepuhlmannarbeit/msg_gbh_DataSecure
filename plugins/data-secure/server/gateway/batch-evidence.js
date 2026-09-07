@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { VERSION, roots } = require('./common');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const {
@@ -22,7 +23,7 @@ const OLDEST_LEGACY_SCHEMA = 'datasecure-batch-evidence/1';
 const FILE_NAME = 'DataSecure-Batch-Nachweis.json';
 const OUTBOX_PREFIX = 'batch_evidence_pending_';
 const RECEIPT_ID_RE = /^[a-f0-9]{32}$/;
-const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4']);
+const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const LEGACY_V2_RECORD_KEYS = [
   'schema', 'receipt_id', 'recorded_at', 'batch_started_at', 'batch_finished_at', 'profile', 'image_handling',
@@ -159,12 +160,12 @@ function validateEvidenceRecord(record) {
     !validTimestamp(record.batch_finished_at) || !PROFILES.has(record.profile) ||
     !['remove_requested', 'local_visual_review'].includes(record.image_handling) ||
     !exactKeys(record.counts, COUNT_KEYS) ||
-    !Object.values(record.counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 100) ||
+    !Object.values(record.counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= RESOURCE_LIMITS.MAX_BATCH_FILES) ||
     record.counts.released + record.counts.stopped + record.counts.retryable + record.counts.pending !== record.counts.total ||
     !exactKeys(record.grade_counts, GRADE_COUNT_KEYS) ||
-    !Object.values(record.grade_counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 100) ||
+    !Object.values(record.grade_counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= RESOURCE_LIMITS.MAX_BATCH_FILES) ||
     Object.values(record.grade_counts).reduce((sum, value) => sum + value, 0) !== record.counts.total ||
-    (['datasecure-batch/2', 'datasecure-batch/3'].includes(record.batch_snapshot_schema) &&
+    (['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6'].includes(record.batch_snapshot_schema) &&
       (record.grade_counts.complete + record.grade_counts.usable_with_omissions !== record.counts.released ||
        record.grade_counts.not_processed !== record.counts.stopped ||
        record.grade_counts.unavailable !== record.counts.retryable + record.counts.pending)) ||
@@ -198,7 +199,7 @@ function validateLegacyV2EvidenceRecord(record) {
     !validTimestamp(record.batch_finished_at) || !PROFILES.has(record.profile) ||
     !['remove_requested', 'local_visual_review'].includes(record.image_handling) ||
     !exactKeys(record.counts, COUNT_KEYS) ||
-    !Object.values(record.counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 100) ||
+    !Object.values(record.counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= RESOURCE_LIMITS.MAX_BATCH_FILES) ||
     record.counts.released + record.counts.stopped + record.counts.retryable + record.counts.pending !== record.counts.total ||
     !['complete', 'complete_with_stopped_documents', 'incomplete'].includes(record.outcome) ||
     !safeVersion(record.gateway_version) || !safeVersion(record.privacy_ruleset) ||

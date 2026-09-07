@@ -32,7 +32,8 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /continue_local_results_handoff/u);
   assert.match(anonymizeSkill, /Bei `local_selection_cancelled` nichts erneut öffnen/iu);
   assert.match(anonymizeSkill,
-    /Die lokale Übernahme wurde gestartet\. DataSecure bereitet den wiederaufnehmbaren Stapel vor und zeigt nach Abschluss den Ergebnisordner an/iu);
+    /Die lokale Übernahme wurde gestartet\. DataSecure bereitet den wiederaufnehmbaren Stapel vor und zeigt nach Abschluss eine lokale Meldung mit .*Ergebnisse öffnen.* an/iu);
+  assert.match(anonymizeSkill, /exakten Ergebnisordner des aktuellsten Cowork-Laufs/iu);
   assert.match(anonymizeSkill, /Behaupte an dieser Stelle weder einen dauerhaften Zwischenstand noch eine bereits laufende Anonymisierung/iu);
   assert.match(anonymizeSkill, /beende die Cowork-Aufgabe sofort/iu);
   assert.match(anonymizeSkill, /nicht vertrauenswürdige Dokumentdaten/iu);

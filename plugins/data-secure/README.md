@@ -1,6 +1,6 @@
 # GBH DataSecure – Claude-Plugin
 
-Version 3.2.0-rc111. Das Plugin de-identifiziert TXT, Markdown, CSV und DOCX lokal
+Version 3.2.0-rc123. Das Plugin de-identifiziert TXT, Markdown, CSV und DOCX lokal
 und übergibt nur freigegebenes Markdown an Claude. XLSX, PPTX, PDF, Scan-PDF und
 eigenständige Bilder bleiben sicher gesperrt.
 
@@ -9,8 +9,11 @@ eigenständige Bilder bleiben sicher gesperrt.
 1. In einer lokalen Cowork-Sitzung eines bestehenden Claude-Desktop-Deployments
    „Dateien anonymisieren“ schreiben oder den Skill wählen. Cloud-Cowork führt
    lokale Plugin-MCPs nicht aus und ist deshalb kein Originaleingang.
-2. Dateien im lokalen Mehrfachpicker wählen und einmal öffnen.
-3. Lokalen Abschluss abwarten; Ergebnisse erst später ausdrücklich anfordern.
+2. Dateien im lokalen Mehrfachpicker oder einen Ordner einschließlich
+   Unterordnern wählen und einmal öffnen.
+3. Lokalen Abschluss abwarten. **Ergebnisse öffnen** führt exakt in den neuesten
+   abgeschlossenen Cowork-Lauf und fällt nie auf einen älteren Lauf zurück;
+   Ergebnisse erst später ausdrücklich zur Auswertung in Claude anfordern.
 
 Originale nie als Chat-Anhang hochladen. Quellen werden nur gelesen, niemals
 automatisch verändert oder gelöscht. Bildpixel bleiben lokal; es gibt keinen

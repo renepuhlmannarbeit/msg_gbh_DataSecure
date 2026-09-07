@@ -118,6 +118,11 @@ function createBatchReviewPublication(options = {}) {
         const entry = exactPendingEntry(state, item);
         const result = await withBatchPseudonymRegistry(state, (pseudonymRegistry) => anonymizeNext(state.profile, {
           ...deps,
+          // Review publication must retain the same product adapter as the
+          // initial attempt. Otherwise a deferred Standalone DOCX silently
+          // falls back to the stricter Cowork parser and loses its explicit
+          // extracted-Markdown scope/coverage contract.
+          productChannel: state.product_channel,
           pseudonymRegistry,
           inputQueue: [entry],
           copyClaim: true,

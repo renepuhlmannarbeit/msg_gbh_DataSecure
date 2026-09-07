@@ -39,9 +39,15 @@ const URL_RE = new RegExp(
   'giu'
 );
 
+// Office-to-Markdown conversion may escape punctuation that is significant in
+// Markdown (for example lina\\.beispiel@example\\.de). Match those optional
+// source backslashes as part of the identifier so neither a local-part fragment
+// nor an escaped domain survives redaction. This stays a source-coordinate
+// detector: the released text is never globally unescaped or re-rendered.
 const EMAIL_RE = new RegExp(
-  `${NB}[\\p{L}\\p{N}._%+\\-]+@(?:[\\p{L}\\p{N}](?:[\\p{L}\\p{N}\\-]{0,61}[\\p{L}\\p{N}])?\\.)+` +
-    `(?:[\\p{L}]{2,63}|xn--[a-z0-9-]{2,59})${NA}`,
+  `${NB}(?:[\\p{L}\\p{N}]|\\\\?[._%+\\-])+@` +
+    `(?:[\\p{L}\\p{N}](?:(?:[\\p{L}\\p{N}]|\\\\?-){0,61}[\\p{L}\\p{N}])?\\\\?\\.)+` +
+    `(?:[\\p{L}]{2,63}|xn\\\\?-\\\\?-[a-z0-9-]{2,59})${NA}`,
   'giu'
 );
 

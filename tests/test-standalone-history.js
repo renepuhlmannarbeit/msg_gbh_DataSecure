@@ -168,6 +168,16 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(history.resolveResults(completedTwo.token).local_path, secondRun);
     await assert.rejects(service.continueHistoryBatch(completed.token), code('STANDALONE_NOTHING_TO_CONTINUE'));
 
+    const allStopped = stateFixture('4', 1500, { items: [{ id: '4'.repeat(32), name: 'blocked.docx',
+      source_label: 'blocked.docx', status: 'stopped', error_code: 'DOCX_STRUCTURE_UNSUPPORTED' }] });
+    assert.deepEqual(exportsApi.exportCompletedState(allStopped), { exported: 0, pending: 0, available: false });
+    history = makeHistory();
+    assert.equal(history.find(allStopped.token).status, 'completed_without_results');
+    assert.equal(history.find(allStopped.token).results_available, false);
+    assert.equal(history.find(allStopped.token).ledger_available, false);
+    assert.throws(() => history.resolveResults(allStopped.token), code('STANDALONE_RESULTS_MISSING'));
+    assert.throws(() => history.resolveLedger(allStopped.token), code('STANDALONE_LEDGER_MISSING'));
+
     // An older three-file converter resumed beside a newer one-file completed
     // anonymization must own mode, counters, result context and terminal ACK.
     const markdown = stateFixture('6', -20000, { schema: 'datasecure-batch/5', processing_mode: 'markdown-only',
@@ -226,7 +236,8 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(observing.acknowledgeTerminalPresented(70).acknowledged, false);
     assert.equal(observing.uiContext().latest_result_folder, markdownRun);
     assert.equal(observing.resolveResults().local_path, markdownRun);
-    assert.equal(observing.resolveLedger().local_path, path.join(markdownRun, 'DataSecure-Zuordnung.csv'));
+    assert.throws(() => observing.resolveLedger(), code('STANDALONE_LEDGER_MISSING'));
+    assert.equal(history.find(markdown.token).ledger_available, false);
     pendingNotice = { token: markdown.token, generation: 71 };
     assert.equal(observing.status().presentation_generation, 71);
     assert.equal(observing.acknowledgeTerminalPresented(71).acknowledged, true);

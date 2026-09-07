@@ -1,6 +1,7 @@
 'use strict';
 
 const { performance } = require('perf_hooks');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 // Performance evidence is deliberately local and content-free. It records no
 // wall-clock timestamp, filename, path, hash, profile or document property:
@@ -69,11 +70,14 @@ function boundedCount(value, maximum) {
   return Math.min(maximum, Math.max(0, Math.trunc(Number(value) || 0)));
 }
 
+function ioMaximum(key) {
+  return key === 'snapshot_copy_mib' ? MAX_BATCH_BYTES_MIB : RESOURCE_LIMITS.MAX_BATCH_FILES;
+}
+
 function createPrivateIoSummary(values = {}) {
   const summary = { schema: IO_SUMMARY_SCHEMA };
   for (const key of IO_SUMMARY_KEYS) {
-    const maximum = key === 'snapshot_copy_files' ? 100 :
-      key === 'snapshot_copy_mib' ? MAX_BATCH_BYTES_MIB : 100;
+    const maximum = ioMaximum(key);
     summary[key] = boundedCount(values[key], maximum);
   }
   return summary;
@@ -81,8 +85,7 @@ function createPrivateIoSummary(values = {}) {
 
 function incrementPrivateIoSummary(summary, key, amount = 1) {
   if (!summary || summary.schema !== IO_SUMMARY_SCHEMA || !IO_SUMMARY_KEYS.includes(key)) return false;
-  const maximum = key === 'snapshot_copy_files' ? 100 :
-    key === 'snapshot_copy_mib' ? MAX_BATCH_BYTES_MIB : 100;
+  const maximum = ioMaximum(key);
   summary[key] = boundedCount(summary[key] + boundedCount(amount, maximum), maximum);
   return true;
 }
@@ -90,7 +93,7 @@ function incrementPrivateIoSummary(summary, key, amount = 1) {
 function validatePrivateIoSummary(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.schema !== IO_SUMMARY_SCHEMA) return false;
   return Object.keys(value).length === IO_SUMMARY_KEYS.length + 1 && IO_SUMMARY_KEYS.every((key) => {
-    const maximum = key === 'snapshot_copy_files' ? 100 : key === 'snapshot_copy_mib' ? MAX_BATCH_BYTES_MIB : 100;
+    const maximum = ioMaximum(key);
     return Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= maximum;
   });
 }

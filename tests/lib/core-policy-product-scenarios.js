@@ -7,9 +7,13 @@ const crypto = require('node:crypto');
 const { formats, reviewProfiles, goldenFixture, reviewFixture, canonicalizeBodies } = require('./core-policy-golden');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
-// Only the local human answer and a deterministic AbortSignal are adapted.
-// Intake, parsing, PII, journal/recovery, review reconstruction, publication and
-// capability reads all use the actual projected product, across fresh processes.
+// Only the local human answer, a deterministic AbortSignal and the Standalone
+// converter process boundary are adapted. The latter calls the projected,
+// in-memory Markdown extractor: the separate package smoke proves the real
+// sandboxed worker/runtime, while this semantic test stays small enough to run
+// every profile across fresh processes. Intake, extraction semantics, PII,
+// journal/recovery, review reconstruction, publication and capability reads all
+// use the actual projected product.
 async function runProductScenarios({ directory, channel, profile, stage, server, batch, readOutput, pii, phase }) {
   const { roots } = require(path.join(server, 'gateway', 'common'));
   const { issueReadCapability } = require(path.join(server, 'gateway', 'package-store'));
@@ -51,6 +55,10 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     return result.batch_token;
   };
   const packageText = entry => readOutput(entry.package_id, entry.read_capability, 0, 30000).text;
+  const convertBuffer = channel === 'standalone'
+    ? (bytes, extension) => Promise.resolve(
+      require(path.join(server, 'standalone', 'markdown-extractor')).extractMarkdownBuffer(bytes, extension))
+    : undefined;
   const packageBody = entry => {
     const text = packageText(entry), divider = text.indexOf('-->\n\n');
     assert.ok(divider >= 0);
@@ -58,6 +66,19 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     assert.deepEqual(pii.scanResidual(body, profile), []);
     return body;
   };
+  const standaloneDocxNotice = '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. ' +
+    'Der lokale Konverter bestätigt die Extraktionsabdeckung; die Originaldatei selbst bleibt unverändert.\n\n';
+  const semanticBodies = entries => canonicalizeBodies(entries.map((entry) => {
+    const body = packageBody(entry);
+    if (channel !== 'standalone' || entry.format !== 'docx') return body;
+    assert.ok(body.startsWith(standaloneDocxNotice), 'Standalone DOCX must disclose its Markdown-only privacy scope');
+    // The conversion boundary makes Office text inert Markdown. Remove only
+    // that known presentation escaping for the cross-product semantic oracle;
+    // the package-level tests retain byte-exact coverage of the visible form.
+    return body.slice(standaloneDocxNotice.length)
+      .replace(/\\([\\`*_[\]{}()#+.!|])/gu, '$1')
+      .replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
+  }));
   const packageIdentity = entry => {
     const full = path.join(roots().output, entry.package_id, `${entry.package_id}.md`);
     const stat = fs.lstatSync(full, { bigint: true });
@@ -86,11 +107,12 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     const item = batch._test.readState(token).items.find(item => item.package_id === entry.package_id);
     assert.ok(item, 'published result must be bound to its journal item');
     assert.equal(item.document_result.grade, 'complete');
-    return { ...entry, identity: packageIdentity(entry), grade: item.document_result };
+    return { ...entry, identity: packageIdentity(entry), grade: item.document_result,
+      format: path.extname(item.name).slice(1).toLowerCase() };
   };
   const processClear = async token => {
     let publications = 0, extracted = 0;
-    const result = await batch.processBatchNext(token, { reviewTextLocally: noUi,
+    const result = await batch.processBatchNext(token, { reviewTextLocally: noUi, convertBuffer,
       onExtracted() { extracted++; }, beforePublish(release) {
         assert.match(release.reviewed_content_sha256, /^[a-f0-9]{64}$/u); publications++;
       } });
@@ -106,6 +128,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     const controller = new AbortController();
     let extracted = 0, publications = 0;
     const result = await batch.processBatchNext(token, { abortSignal: controller.signal, reviewTextLocally: noUi,
+      convertBuffer,
       onExtracted() { extracted++; controller.abort(); }, beforePublish() { publications++; } });
     assert.equal(extracted, 1);
     assert.equal(publications, 0);
@@ -130,7 +153,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     const sources = queue.map(entry => sourceIdentity(entry.full));
     const token = begin(queue), packages = [];
     for (const format of formats) { phase(`golden_release_${format}`); packages.push(await processClear(token)); }
-    assert.deepEqual(canonicalizeBodies(packages.map(packageBody)), fixtures.map(fixture => fixture.expected));
+    assert.deepEqual(semanticBodies(packages), fixtures.map(fixture => fixture.expected));
     for (const format of formats) { phase(`golden_abort_${format}`); await abortAfterExtraction(token); }
     checkPackages(packages);
     const progress = checkFacts(token, { batch_total: 8, released: 4, completed: 4, completion_percent: 50,
@@ -153,7 +176,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     const packages = [...prepared.packages];
     for (const format of formats) { phase(`golden_resume_${format}`); packages.push(await processClear(token)); }
     checkPackages(prepared.packages); checkSources(prepared.sources);
-    const canonical = canonicalizeBodies(packages.map(packageBody));
+    const canonical = semanticBodies(packages);
     assert.deepEqual(canonical, expectedGolden);
     const progress = checkFacts(token, { released: 8, completed: 8, completion_percent: 100,
       remaining: 0, retryable: 0, complete: true, next_action: 'none' });
@@ -170,7 +193,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     let publicationCalls = 0;
     for (const format of formats) {
       phase(`review_defer_${format}`);
-      const deferred = await batch.processBatchNext(reviewToken, { reviewTextLocally: noUi,
+      const deferred = await batch.processBatchNext(reviewToken, { reviewTextLocally: noUi, convertBuffer,
         beforePublish() { publicationCalls++; } });
       assert.equal(deferred.error, 'LOCAL_REVIEW_DEFERRED');
       assert.equal(deferred.package_id, undefined);
@@ -226,7 +249,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
   continueProduct(token);
   checkFacts(token, { released: 2, deferred_review: 4, next_action: 'review' });
   let calls = 0, publications = 0;
-  const reviewed = await batch.reviewDeferredBatch(token, { reviewTextLocally(draft) {
+  const reviewed = await batch.reviewDeferredBatch(token, { convertBuffer, reviewTextLocally(draft) {
     calls++;
     assert.equal(draft.batch_review.document_count, 4);
     assert.equal(draft.batch_review.automatically_completed_count, 2);
@@ -245,7 +268,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
   const repeated = await batch.reviewDeferredBatch(token, { reviewTextLocally: noUi });
   assert.equal(repeated.error, 'batch_review_not_ready'); assert.equal(uiCalls, 0);
   checkPackages(prepared.clear); checkSources(prepared.sources);
-  const canonical = canonicalizeBodies([...prepared.clear, ...packages].map(packageBody));
+  const canonical = semanticBodies([...prepared.clear, ...packages]);
   assert.deepEqual(canonical, [fixtures[0].expected, fixtures[1].expected,
     ...formats.map((format, index) => reviewFixture(format, index % 2 ? 'redact' : 'keep').expected)]);
   for (const entry of packages) batch.acknowledgeDeliveredPackage(token, entry.package_id);

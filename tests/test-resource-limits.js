@@ -16,6 +16,7 @@ const root = path.resolve(__dirname, '..');
 function entry(name, size) { return { name, full: path.join(root, name), stat: { size } }; }
 
 test('500 MiB remains a batch envelope while each parser format has an honest source limit', () => {
+  assert.strictEqual(RESOURCE_LIMITS.MAX_BATCH_FILES, 200);
   assert.strictEqual(RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES, 500 * 1024 * 1024);
   assert.strictEqual(RESOURCE_LIMITS.MAX_TEXT_CHARS, 8_000_000);
   assert.ok(sourceLimitForExtension('.txt') < RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES);

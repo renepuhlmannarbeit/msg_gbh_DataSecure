@@ -1,15 +1,15 @@
 ---
 name: gbh-datasecure-datenschutz-erklaeren
-description: Erklärt Schutzmaßnahmen und Grenzen von DataSecure, DSGVO- und EU-AI-Act-Aspekte, Audit, Aufbewahrung und menschliche Prüfung. Nicht zum Anonymisieren (dafür dokument-anonymisieren).
+description: Erklärt Schutzmaßnahmen und Grenzen des DataSecure-Cowork-Plugins, Audit, Aufbewahrung und menschliche Prüfung. Nicht zum Anonymisieren (dafür dokument-anonymisieren).
 ---
 
-# GBH DataSecure – Datenschutz erklären
+# GBH DataSecure Cowork-Plugin – Datenschutz erklären
 
 Erkläre die Architektur präzise:
 
 - Der lokale MCP-Server bildet die technische Datenschutzgrenze.
 - Skills steuern den Ablauf, sind aber selbst keine Datenschutzgrenze.
-- Wenn eine Vorverarbeitung vor dem Modell erforderlich ist, gelangen Rohdaten ausschließlich über den lokalen Betriebssystem-Mehrfachpicker hinein und nie durch einen Chat-Upload oder technischen Eingangsordner. Bis zu 100 im Picker bestätigte TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MiB werden an einen lokalen Batch-Snapshot gebunden und danach einzeln verarbeitet. Sichere Einzelgrenzen sind TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes und DOCX 64 MiB komprimiert/128 MiB entpackt; eine feste Seitenbegrenzung gibt es nicht. CSV-Zellen werden nie ausgeführt. PDF und alle weiteren Formate bleiben im Pilot gesperrt und dürfen nicht durch einen direkten Upload umgangen werden.
+- Wenn eine Vorverarbeitung vor dem Modell erforderlich ist, gelangen Rohdaten ausschließlich über den lokalen Betriebssystem-Mehrfachpicker hinein und nie durch einen Chat-Upload oder technischen Eingangsordner. Bis zu 200 im Picker bestätigte TXT-/Markdown-/CSV-/DOCX-Dateien mit zusammen höchstens 500 MiB werden an einen lokalen Batch-Snapshot gebunden und danach einzeln verarbeitet. Sichere Einzelgrenzen sind TXT/Markdown 8.000.000 Bytes, CSV 1.500.000 Bytes und DOCX 64 MiB komprimiert/128 MiB entpackt; eine feste Seitenbegrenzung gibt es nicht. CSV-Zellen werden nie ausgeführt. **Im Cowork-Plugin** bleiben PDF und alle weiteren Formate gesperrt und dürfen nicht durch einen direkten Upload umgangen werden. Die getrennte Standalone-App besitzt eigene Format- und Zweckverträge.
 - Der Schutzpfad setzt eine lokale Cowork-Sitzung eines bestehenden Claude-Desktop-Deployments oder lokales Claude Code mit tatsächlich verbundenem `data-secure-local` voraus. Lokale Plugin-MCPs laufen laut Hersteller nicht in Cloud-Sitzungen. Cloud-Cowork, Web, Mobil und geplante Cloud-Aufgaben dürfen keine Originale annehmen; sie dürfen nur bereits lokal freigegebene Ergebnisse verwenden.
 - Nach einem normalen Start endet die Cowork-Aufgabe ohne Lesen oder Polling. Erst ein neuer ausdrücklicher Auswertungsauftrag nach lokalem Abschluss startet die tokenfreie Ergebnisübergabe. Die lokale Runtime prüft und verwaltet dafür paketgebundene Leseberechtigungen; Claude erhält keine Paket-IDs, Tokens oder Cursor. Beliebige historische Pakete können nicht aufgelistet werden; zulässige abgeschlossene lokale Stapel werden ausschließlich lokal ausgewählt.
 - Alle Grafiken und sonstigen Bildpixel bleiben im öffentlichen Pilot lokal. Dieser Engineering-Build bietet keinen Freigabeweg über Claude; Vorschauen verfallen gemäß Aufbewahrungsfrist.

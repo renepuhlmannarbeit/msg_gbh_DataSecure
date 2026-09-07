@@ -98,15 +98,15 @@ test('package smoke uses a private environment and refuses links before cleanup'
   assert.equal(fs.existsSync(directory), false);
 });
 
-test('package smoke exercises a real failed CSV after success and resolves its own mapping', () => {
+test('package smoke exercises a real failed CSV without exposing a false result or mapping', () => {
   const smoke = fs.readFileSync(path.join(root, 'tests', 'test-standalone-package-smoke.mjs'), 'utf8');
   assert.match(smoke, /env: environment/u);
   assert.match(smoke, /isolatedSidecarEnvironment\(root, extraction\)/u);
   assert.match(smoke, /removePackageSmokeScope\(root, extraction\)/u);
   assert.match(smoke, /failedSourceName = 'synthetisch-offenes-zitat\.csv'/u);
-  assert.match(smoke, /assert\.notEqual\(failedRun, exactRun\)/u);
-  assert.match(smoke, /failedTerminal\.ledger_available, true/u);
-  assert.match(smoke, /local_path: failedMapping/u);
+  assert.match(smoke, /failedRun, '', 'an all-stopped run does not expose an empty result folder'/u);
+  assert.match(smoke, /failedTerminal\.ledger_available, false/u);
+  assert.match(smoke, /resolvedFailureMapping\.error_code, 'STANDALONE_RESULTS_MISSING'/u);
   assert.match(smoke, /fs\.readFileSync\(failedSource\), failedOriginal/u);
   const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
   assert.throws(() => parseDocumentBuffer(Buffer.from('Name,Wert\nBeispiel,"nicht abgeschlossen\n'), '.csv'), /CSV_QUOTE_INVALID/u);

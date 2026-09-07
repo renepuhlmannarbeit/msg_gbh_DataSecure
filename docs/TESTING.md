@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 06.09.2026 · 3.2.0-rc111
+Stand: 06.09.2026 · 3.2.0-rc123
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -48,8 +48,9 @@ Sie prüft unter anderem:
 - keinen auswählbaren Bildmodus;
 - 0–14 Tage nur für temporäre Arbeits-/Reviewdaten;
 - niemals automatische Löschung von Quellen/Originalen oder fertigen Exporten;
-- Formatallowlist TXT/Markdown/CSV/DOCX für Anonymisierung und davon getrennte
-  zusätzliche Eingaben für die reine Standalone-Konvertierung.
+- Cowork-Formatallowlist TXT/Markdown/CSV/DOCX für direkte Anonymisierung;
+  Standalone verarbeitet DOCX und breite Quellen Markdown-first mit getrenntem
+  Extraktionsstatus. Reine Standalone-Konvertierung bleibt ein eigener Zweck.
 - inhaltsfreie Statusprojektion, unveränderten Textfallback und einen
   reproduzierbaren Offline-Build aus Repo- und fremdem Arbeitsordner.
 - deaktivierte Supportspur im Normalprodukt, geschlossene Fehler-/Operationswerte
@@ -186,6 +187,15 @@ Der aktuelle Vertrag umfasst die spawn-bestätigten, unter Windows ausdrücklich
 Öffnen-Aktionen, die exakte Markierung der laufbezogenen Zuordnungsdatei und den Standalone-Ablauf
 **Start / Verarbeiten / Verlauf** nach DS-086: keine vorausgewählte Betriebsart,
 kein automatischer Ansichtswechsel, die letzten 20 eigenen Verarbeitungen.
+DS-088 ergänzt die vor Start einzeln oder vollständig korrigierbare Auswahl,
+erhaltene Basisnamen und den zuordnungslosen reinen Konvertierungsmodus. Die
+Zuordnungsaktion ist nur bei Anonymisierung aktiv.
+DS-089 bindet neue Standalone-Ordnerläufe zusätzlich an die vollständige
+Wurzel-relative Struktur. `test-source-folder` prüft die Weitergabe eindeutiger
+und gleicher Basisnamen, `test-result-folder-export` den verschachtelten
+Ergebnisbaum und die exakten CSV-Beziehungen. Der reale Standalone-Paket-Smoke
+nimmt seine vier Eingabeformate als Ordnerbaum auf und liest sämtliche Ergebnisse
+rekursiv; damit kann kein flacher Testadapter den Produktionsfehler verdecken.
 Die direkten Regressionen liegen in
 `test-ui-process-policy`, `test-standalone`, `test-standalone-frontend` und
 `test-standalone-desktop-contract`. `test-result-folder-export` prüft zusätzlich
@@ -195,7 +205,8 @@ harte Produktgrenze: Originalnamen erscheinen nie im Cowork-Ergebnisordner.
 Die RC108-Gegenprüfung ergänzt timer- und generationsgebundene Frontendtests
 im regulären Produktgate, zwei schnelle Folgestapel, unsichere Startbestätigung,
 Firmenkurzformen mit kollidierenden Rechtsformen und eine eigene Standalone-
-Laufübersicht auch bei ausschließlich gestoppten Dateien. Ausstehende
+Verlaufszeile auch bei ausschließlich gestoppten Dateien, jedoch ohne falschen
+Ergebnisordner oder Zuordnungsaktion. Ausstehende
 Abschlussmetadaten werden getrennt von Dokumentzählern geprüft; ein Replay darf
 weder veröffentlichte Dateien überschreiben noch historische Pläne verändern.
 `test-standalone-sidecar` prüft außerdem sieben echte Prozess-/Workerfälle für
@@ -203,7 +214,8 @@ EOF, wartende Aktionen, unvollständige/ungültige Frames, Shutdown und geschlos
 Ausgabepipes: der Steuerprozess endet, akzeptierte Arbeit wird autonom fertig.
 Die Fixture verändert nur das Timing. Der reale Paket-Smoke verarbeitet nach
 dem erfolgreichen Vierformatlauf einen vollständig fehlerhaften CSV-Stapel und
-verlangt dessen eigene Zuordnung statt eines Rückfalls auf den Vorgängerlauf.
+verlangt dafür weder sichtbaren Ergebnisordner noch Zuordnung statt eines
+Rückfalls auf den Vorgängerlauf.
 
 ## RC111: Endgültige Testurteile und Schnittstellengegenproben
 
@@ -252,12 +264,13 @@ den Privacy-Core gelangen. `test-wide-mixed-batch-recovery` fährt einen echten
 Standalone-Stapel aus direkter TXT- und konvertierter XLSX-Quelle in beiden
 Reihenfolgen, beendet ihn zwischen den Items und setzt ihn in einem frischen
 Prozess fort. Personen- und Unternehmenslabels bleiben stabil, jedes Ergebnis
-wird genau einmal publiziert, Originale bleiben unverändert. Eine unvollständige
-breite Quelle stoppt vor der Pseudonymvergabe und verbraucht daher keine Nummer.
+wird genau einmal publiziert, Originale bleiben unverändert. Auch eine
+unvollständige, aber nutzbare breite Extraktion durchläuft die Pseudonymvergabe;
+ihr Quellenstatus bleibt getrennt im Manifest gebunden.
 
-Die reale Konvertersuite umfasst 30 Gruppen. XLSX, PPTX, Text-/Scan-PDF,
-PNG, JPEG und BMP müssen bei der aktuellen unvollständigen Coverage im
-Anonymisierungsmodus am Publikationsrand stoppen. PPTX-Negativfälle prüfen alle
+Die reale Konvertersuite umfasst 31 Gruppen. DOCX, XLSX, PPTX, Text-/Scan-PDF,
+PNG, JPEG und BMP müssen nichtleeres Markdown an die Standalone-Anonymisierung übergeben
+und ihre Quellenabdeckung separat erhalten; leere OCR stoppt. PPTX-Negativfälle prüfen alle
 XML-/RELS-Teile auf DTD/Entities und Strukturgrenzen. PDF-Annotationen, Outline
 und XMP werden gestoppt; standardisierte Info-Metadaten bleiben im reinen
 Markdown-Ergebnis sichtbar erhalten.
@@ -338,9 +351,11 @@ Runtimeprojektion, das selbsttragende Paket und einen isolierten Sidecar-Start
 ohne System-Node. Der Paket-Smoke führt mit dem exakt extrahierten Core eine
 reale Dateideskriptor-Normalisierung, Aufnahme, Ergebnisordnerwahl, bestätigte
 Worker-Übergabe und Verarbeitung bis zu einem dauerhaften Endzustand aus. Er
-prüft anschließend den exakten `Lauf-*`-Ordner, die dort atomar veröffentlichte
-`DataSecure-Zuordnung.csv` und beide privaten Zielresolver, welche die nativen
-Öffnen-Schaltflächen verwenden.
+prüft anschließend den exakten `Lauf-*`-Ordner. Bei Anonymisierung prüft er die
+dort atomar veröffentlichte `DataSecure-Zuordnung.csv`; bei reiner Konvertierung
+prüft er erhaltene Basisnamen, deterministische Kollisionen und das Fehlen der
+Zuordnungsdatei. Die privaten Zielresolver verwenden dieselben nativen
+Öffnen-Schaltflächen.
 Queue-Schema und Worker-Acknowledge werden vor dem positiven
 Handoff doppelt geprüft; Identitäts-Mocks dürfen diese Grenze nicht ersetzen.
 Das ersetzt keine menschliche Windows-UAT und keinen nativen
@@ -350,10 +365,20 @@ Intel-/ARM-macOS-Nachweis.
 
 ```text
 npm run uat:fixtures
+npm run uat:format-corpus
 ```
 
 Danach folgt die menschliche Durchführung im
-[UAT-Testpaket](acceptance/UAT_TEST_KIT/README.md). Automatisierte Tests können
+[UAT-Testpaket](acceptance/UAT_TEST_KIT/README.md), im
+[Standalone-UAT-Testpaket](acceptance/STANDALONE_UAT_TEST_KIT/README.md), im
+[100-Dateien-Formatkorpus](acceptance/STANDALONE_100_FORMAT_TEST_KIT/README.md)
+und im [komplexen DOCX-Testkorpus](acceptance/STANDALONE_COMPLEX_DOCX_TEST_KIT/README.md).
+Der DOCX-Korpus enthält 15 deterministische, zwei- bis achtseitige Dateien mit
+Fließtext, Listen, Tabellen, Kopf-/Fußzeilen, Grafiken und Abschnittswechseln:
+neun vollständig fiktive PII-Szenarien sowie sechs neutrale Kontrollen. Der
+automatisierte Vertrag nimmt alle Dateien über den realen Produktpreflight auf,
+parst sie und prüft Ersetzung, Erhaltungsanker sowie stapelweit gleiche Personen-
+und Unternehmenspseudonyme. Automatisierte Tests können
 Fresh Install, echte Berechtigungsanzeigen, Fokus/Screenreader, OS-Dateisystem,
 100-Dateien-/500-MiB-Lauf und Fach-/Datenschutzfreigabe nicht ersetzen.
 

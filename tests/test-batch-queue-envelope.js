@@ -35,7 +35,11 @@ test('malformed or ambiguous envelopes fail before worker acknowledgement', () =
 });
 
 test('the queue limits are enforced before private IPC', () => {
-  rejects(Array.from({ length: 101 }, (_, index) => ({
+  assert.equal(validateBatchQueueEnvelope(Array.from({ length: 200 }, (_, index) => ({
+    name: `accepted-${index}.txt`, full: path.resolve(__dirname, `accepted-${index}.txt`),
+    sourceBytes: 1, sourceLabel: `accepted-${index}.txt`
+  }))).length, 200);
+  rejects(Array.from({ length: 201 }, (_, index) => ({
     name: `file-${index}.txt`, full: path.resolve(__dirname, `file-${index}.txt`),
     sourceBytes: 1, sourceLabel: `file-${index}.txt`
   })));

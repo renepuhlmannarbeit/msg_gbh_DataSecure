@@ -32,7 +32,8 @@
 
 Nach einer bestätigten Auswahl lautet die erwartete kurze Claude-Antwort:
 **„Die lokale Übernahme wurde gestartet. DataSecure bereitet den
-wiederaufnehmbaren Stapel vor und zeigt nach Abschluss den Ergebnisordner an.“**
+wiederaufnehmbaren Stapel vor und zeigt nach Abschluss eine lokale Meldung mit
+‚Ergebnisse öffnen‘ an.“**
 ergänzt um **„(DataSecure-Version: …)“** mit der Version
 des zu prüfenden Builds. Nennt die Antwort eine andere oder keine Version, läuft
 in Cowork eine ältere Plugin-Kopie: Lauf als `BLOCKED` erfassen, Plugin gemäß
@@ -46,11 +47,13 @@ Dieselbe Version steht in der letzten Zeile jedes lokalen DataSecure-Fensters.
 
 1. Neue Cowork-Aufgabe → „Dateien anonymisieren“.
 2. Nur `inputs/01-positive/personnel-profile.txt` wählen und einmal öffnen.
-3. Lokalen Abschluss abwarten. Danach ausdrücklich um Auswertung des fertigen
-   Ergebnisses bitten.
-4. In der Abschlussmeldung **„Ergebnisse öffnen“** wählen. Markdown im
+3. Lokalen Abschluss abwarten und in der Abschlussmeldung
+   **„Ergebnisse öffnen“** wählen. Markdown im
    `DataSecure-Output` des Test-Arbeitsordners und Mapping getrennt im privaten
    DataSecure-Bereich prüfen.
+4. Optional erst danach in einer neuen Aufgabe ausdrücklich um Auswertung des
+   fertigen Ergebnisses bitten und prüfen, dass nur freigegebenes Markdown
+   übergeben wird.
 
 PASS: genau ein Ergebnis; Direktidentifikatoren, Arbeitgeber und Kunde fehlen;
 Product Owner, Java, SQL, HL7 FHIR, Testautomatisierung, ISTQB und Scrum.org bleiben.

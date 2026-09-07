@@ -82,7 +82,7 @@ test('build metadata describes current product channels and complete blocked for
   const info = JSON.parse(read('BUILD_INFO.json'));
   const pkg = JSON.parse(read('package.json'));
   assert.strictEqual(info.version, pkg.version);
-  assert.strictEqual(info.build_date, '2026-09-06');
+  assert.strictEqual(info.build_date, '2026-09-07');
   assert.match(info.target, /Plugin ZIP \/ private Marketplace/u);
   assert.doesNotMatch(info.target + info.runtime, /MCPB|built-in Node/u);
   assert.deepStrictEqual(new Set(info.formats), new Set(['txt', 'markdown', 'csv', 'docx']));
@@ -193,6 +193,44 @@ test('canonical register distinguishes active, no-go, and superseded contracts',
   }
 });
 
+test('machine document index covers the active document register and current Cowork decision', () => {
+  const index = JSON.parse(read('docs/canonical/DOCUMENT_INDEX.json'));
+  assert.strictEqual(index.schema, 'datasecure-document-index/1');
+  assert.strictEqual(index.validated_at, '2026-09-07');
+  const byPath = new Map(index.documents.map((entry) => [entry.path, entry]));
+  const activePaths = [
+    'docs/canonical/DOCUMENT_REGISTER.md',
+    'docs/canonical/HOST_MATRIX_V1.md',
+    'docs/canonical/RUNTIME_START_MATRIX_V1.json',
+    'docs/canonical/STATUS_APP_PILOT_V1.md',
+    'README.md',
+    'SECURITY.md',
+    'docs/RELEASE.md',
+    'docs/TESTING.md',
+    'docs/PILOT-ABNAHME.md',
+    'docs/IT-BETRIEBSHANDBUCH.md',
+    'docs/FORMAT_COVERAGE_MATRIX.md',
+    'docs/DETECTOR_BENCHMARK.md',
+    'docs/acceptance/UAT_TEST_KIT/README.md',
+    'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
+    'plugins/data-secure/README.md',
+    'plugins/data-secure/server/README.md',
+    'apps/datasecure-standalone/README.md'
+  ];
+  for (const documentPath of activePaths) {
+    const entry = byPath.get(documentPath);
+    assert.ok(entry, `${documentPath} is missing from DOCUMENT_INDEX.json`);
+    assert.strictEqual(entry.status, 'active', `${documentPath} must be active`);
+    assert.ok(fs.existsSync(path.join(root, documentPath)), `${documentPath} does not exist`);
+  }
+  for (const documentPath of ['docs/canonical/DECISIONS.md', 'docs/canonical/TARGET_ARCHITECTURE.md',
+    'docs/canonical/CURRENT_STATE.md', 'docs/canonical/BACKLOG.md',
+    'docs/canonical/TRACEABILITY.md', 'docs/canonical/TARGET_CAPABILITIES.json']) {
+    assert.ok(byPath.get(documentPath)?.decisions.includes('DS-092'),
+      `${documentPath} must be indexed against DS-092`);
+  }
+});
+
 test('Standalone retains both implemented purposes while target-host UAT stays explicit', () => {
   const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
   assert.deepStrictEqual(target.standalone_desktop.core_functions,
@@ -219,7 +257,45 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
   }
 });
 
-test('conversion documentation separates eleven input types, strict wide privacy and old package evidence', () => {
+test('Cowork opens only its latest completed run and preserves the Standalone product boundary', () => {
+  const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+  assert.ok(target.decision_ids.includes('DS-092'));
+  assert.strictEqual(target.output.cowork_open_results,
+    'latest-cowork-batch-only-no-stale-fallback');
+  for (const file of ['CURRENT_STATE.md', 'BACKLOG.md', 'DECISIONS.md',
+    'TARGET_ARCHITECTURE.md', 'TRACEABILITY.md']) {
+    const text = read(`docs/canonical/${file}`);
+    assert.match(text, /DS-092/u, `${file} must bind the Cowork parity decision`);
+    assert.match(text, /(?:kein|nie|niemals)/iu, `${file} must reject fallback`);
+    assert.match(text, /(?:ältere[nr]?|Alt-)/iu, `${file} must name stale results`);
+  }
+  const skill = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md');
+  assert.match(skill, /exakten Ergebnisordner des aktuellsten Cowork-Laufs/u);
+  assert.match(skill, /Meldung mit .*Ergebnisse öffnen/u);
+  const architecture = read('docs/canonical/TARGET_ARCHITECTURE.md');
+  assert.match(architecture, /50 MB/u);
+  assert.match(architecture, /Standalone-Konverter-\/OCR-Runtime/u);
+});
+
+test('Cowork start wording is identical in runtime, skill, examples and UAT', () => {
+  const runtime = path.join(root, 'plugins', 'data-secure', 'server');
+  const { LOCAL_INTAKE_ACCEPTED_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
+  const { INSTRUCTIONS } = require(path.join(runtime, 'mcp-instructions.js'));
+  const normalize = (value) => value.replace(/\s+/gu, ' ').trim();
+  const contracts = [
+    INSTRUCTIONS,
+    read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md'),
+    read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/beispiele.md'),
+    read('docs/acceptance/UAT_TEST_KIT/STEP-BY-STEP.md')
+  ];
+  for (const contract of contracts) {
+    assert.ok(normalize(contract).includes(LOCAL_INTAKE_ACCEPTED_TEXT),
+      'Cowork contract must contain the exact canonical local-intake response');
+  }
+  assert.doesNotMatch(contracts.join('\n'), /zeigt nach Abschluss den Ergebnisordner an/u);
+});
+
+test('conversion documentation separates eleven input types, Markdown-first wide privacy and old package evidence', () => {
   const coverage = read('docs/FORMAT_COVERAGE_MATRIX.md');
   assert.match(coverage, /RC109-Builds aus `6bf7d05747e151ba8f846849229495e9fca4c041`/u,
     'current format evidence must name the exact RC109 source commit');
@@ -233,14 +309,16 @@ test('conversion documentation separates eleven input types, strict wide privacy
   assert.match(parts[0], /vier Formate/u);
   for (const label of ['XLSX', 'PPTX', 'PDF / Scan-PDF', 'PNG, JPEG, BMP']) {
     const row = parts[0].split(/\r?\n/u).find(line => line.startsWith(`| ${label} |`));
-    assert.ok(row && row.includes('| gesperrt | sicherer Einzelstopp |'), `${label}: Cowork stays blocked and incomplete Standalone stops`);
+    assert.ok(row && row.includes('| gesperrt |') && /wird anonymisiert/u.test(row),
+      `${label}: Cowork stays blocked while Standalone anonymizes extracted Markdown`);
   }
   const conversion = parts[1].split('## Plattform- und Nachweisstatus')[0];
   const rows = conversion.split(/\r?\n/u).filter(line => /^\| (?:TXT|Markdown|CSV|DOCX|XLSX|PPTX|PDF mit Text|Scan-PDF|PNG|JPEG|BMP)(?: | \()/u.test(line));
   assert.strictEqual(rows.length, 11, 'eleven product input types, not eleven file extensions');
   for (const term of ['nicht anonymisiert', 'incomplete', 'OCR_NOT_VERIFIED', 'OCR_TEXT_EMPTY',
     'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED', 'DataSecure-Markdown',
-    'DataSecure-Output', 'DataSecure-Zuordnung.csv', 'keine Privacy-Lesecapability']) {
+    'DataSecure-Output', 'Quellbasisname', 'Zuordnungsdatei wird nicht erzeugt',
+    'keine Privacy-Lesecapability']) {
     assert.ok(conversion.includes(term), `conversion coverage must explain ${term}`);
   }
   assert.match(conversion, /MarkItDown\/Python ist nur ein optionales\s+Differentialorakel/u);
@@ -304,7 +382,9 @@ test('architecture and test documentation reject the superseded single-purpose n
   const current = read('docs/canonical/CURRENT_STATE.md');
   assert.doesNotMatch(current, /zwei (?:Haupt)?ansichten|automatisch in die Ergebnisansicht|Zähler nur aus dem jüngsten Standalone-Stapel/iu);
   assert.match(current, /drei Hauptansichten/u);
-  assert.match(current, /DS-087[\s\S]{0,900}automatische Verkettung[\s\S]{0,120}Einzeldatei stoppt/u);
+  assert.match(current, /DS-087/u);
+  assert.match(current, /Quellenextraktionsabdeckung/u);
+  assert.match(current, /Anonymisierungsstatus/u);
   const register = read('docs/canonical/DOCUMENT_REGISTER.md');
   const historical = register.split('## Historisch, nicht entscheidungsführend');
   assert.strictEqual(historical.length, 2);
@@ -317,7 +397,8 @@ test('architecture and test documentation reject the superseded single-purpose n
     'docs/archive/2026-09/reviews/REVIEW_BEIDE_PRODUKTE_2026-09-04.md')), true);
   const runtimeReadme = read('plugins/data-secure/server/README.md');
   assert.match(runtimeReadme, /server\/ocr-runtime` tree is excluded/u);
-  assert.match(runtimeReadme, /separate Standalone\s+Markdown-conversion runtime/u);
+  assert.match(runtimeReadme, /separate Standalone\s+extraction runtime/u);
+  assert.match(runtimeReadme, /pure Markdown conversion and Markdown-first anonymization/u);
   assert.doesNotMatch(runtimeReadme, /uses[\s\S]{0,160}checked-in offline\s+OCR dependency tree/u);
   const ux = read('docs/ANWENDERREVIEW.md');
   assert.match(ux, /Windows-Sammelreview/u);
@@ -333,18 +414,39 @@ test('wide standalone privacy chaining is documented without widening Cowork or 
     assert.ok(read(`docs/canonical/${file}`).includes('DS-087'), file);
   }
   const matrix = read('docs/FORMAT_COVERAGE_MATRIX.md');
-  assert.match(matrix, /aktuelle Extraktion bleibt `incomplete`/u);
+  assert.match(matrix, /Extraktionsstatus bleibt separat `incomplete`/u);
   assert.match(matrix, /Claude-Plugin bleibt[\s\S]{0,100}vier Formate/u);
   assert.match(matrix, /kein rohes Markdown-Zwischenergebnis/u);
-  assert.match(matrix, /Nur in Markdown umwandeln[\s\S]{0,180}neuen Anonymisierungsstapels/u);
+  assert.match(matrix, /Anwenderweg ist einstufig/u);
   assert.match(matrix, /keine vollständige[\s\S]{0,100}ursprünglichen/u);
   const capabilities = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
   assert.strictEqual(capabilities.standalone_desktop.wide_format_original_container_output, false);
-  assert.match(capabilities.standalone_desktop.wide_format_manual_two_step,
-    /markdown-only-output.*new-anonymization-batch/u);
+  assert.match(capabilities.standalone_desktop.wide_format_anonymization,
+    /convert-once-then-anonymize-valid-nonempty-markdown/u);
+  assert.match(capabilities.standalone_desktop.wide_format_status_model,
+    /source-extraction-coverage-separate-from-markdown-anonymization-status/u);
   const architecture = read('docs/canonical/STANDALONE_ARCHITECTURE.md');
   assert.match(architecture, /neutralen Extraktionsvertrag/u);
-  assert.match(architecture, /aktuelle breite[\s\S]{0,100}`incomplete`/u);
+  assert.match(architecture, /`complete` und `incomplete` bleiben Zustände der Quellenextraktion/u);
+});
+
+test('Standalone purpose, naming and mapping contracts remain machine-readable', () => {
+  const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+  assert.deepStrictEqual(target.standalone_desktop.standalone_anonymized_filename_modes,
+    ['neutral', 'source-with-suffix']);
+  assert.strictEqual(target.standalone_desktop.standalone_anonymized_filename_default, 'neutral');
+  assert.strictEqual(target.standalone_desktop.standalone_source_filename_suffix, '-anonymisiert.md');
+  assert.strictEqual(target.standalone_desktop.cowork_anonymized_filename_mode, 'neutral');
+  for (const file of ['STANDALONE_SECURITY_MODEL.md', 'OPEN_SOURCE_COMPONENTS.md']) {
+    const contract = read(`docs/canonical/${file}`);
+    assert.match(contract, /`complete`[^\n]{0,80}`incomplete`|`complete`- und `incomplete`/u, file);
+    assert.match(contract, /gültig(?:em|e)[\s\S]{0,80}nichtleer(?:em|e)[^\n]{0,40}Markdown/u, file);
+  }
+  const architecture = read('docs/canonical/STANDALONE_ARCHITECTURE.md');
+  assert.match(architecture, /Reine Konvertierung\s+erzeugt keine Zuordnung/u);
+  assert.match(architecture, /ausschließlich\s+tatsächlich veröffentlichte Ergebnisse/u);
+  const uml = read('docs/canonical/UML_ARCHITECTURE.md');
+  assert.match(uml, /nur Markdown\| Converted\[Markdown-Ergebnisse ohne Zuordnung/u);
 });
 
 done();

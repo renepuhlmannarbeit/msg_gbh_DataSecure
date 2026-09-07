@@ -25,6 +25,10 @@ h2 { margin:3px 0 6px; font-size:1.35rem; }
 .drop-zone.active { border-style:solid; border-color:#176b4f; background:#e4f2eb; outline:3px solid #b8dbc9; }
 .drop-zone[aria-disabled="true"] { border-color:#c6d1cb; background:#f4f6f5; }
 .summary { background:#f2f7f4; border-radius:14px; padding:14px 16px; font-weight:650; margin-bottom:16px; }
+.selection-list { list-style:none; padding:0; margin:0 0 16px; display:grid; gap:8px; }
+.selection-list li { display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid #dce5e0; border-radius:10px; padding:8px 10px; }
+.selection-list li span { overflow-wrap:anywhere; min-width:0; }
+.selection-list button { flex:0 0 auto; padding:7px 10px; font-size:.8rem; }
 .result-summary { display:flex; align-items:center; gap:14px; background:#f2f7f4; border-radius:14px; padding:16px; margin-bottom:16px; }
 .result-summary strong { font-size:1.8rem; color:#176b4f; }
 .context { display:grid; gap:10px; margin:2px 0; }

@@ -21,6 +21,7 @@ const {
   orgAlias,
   titleCase,
   isStopToken,
+  looksName,
   looksSurname
 } = require('./base');
 const {
@@ -98,6 +99,11 @@ function growOverMarkdownLabel(text, span) {
 const RESIDUAL_DATE_CANDIDATE_RE = /(?:\d{4}[ \t]*[./-][ \t]*\d{1,2}[ \t]*[./-][ \t]*\d{1,2}|\d{1,2}[ \t]*[./-][ \t]*\d{1,2}[ \t]*[./-][ \t]*\d{2,4})/gu;
 const RESIDUAL_PHONE_CANDIDATE_RE = /(?:\+|00)?\d[\d() \t\u00A0\u202F\u2007./\-\u2010\u2011\u2012\u2013\u2212]{4,28}\d/gu;
 const RESIDUAL_TABLE_ID_CANDIDATE_RE = /(?=[A-Z0-9./\- ]{3,40}\d)[A-Z0-9][A-Z0-9./\- ]{1,38}[A-Z0-9]/giu;
+// Deliberately independent from PERSON_LABEL: a defect in the redactor's
+// catalogue must not also blind the final release gate. This literal shape is
+// emitted by the local conversion corpus and is narrow enough to avoid
+// guessing names from unlabelled prose.
+const RESIDUAL_PERSON_TABLE_CANDIDATE_RE = /^\|?[ \t]*person[ \t]*:?[ \t]*\|[ \t]*([^|\n]{1,160})\|/gimu;
 
 function plausibleCalendarDate(value) {
   const numbers = String(value).split(/[./-]/u).map((part) => Number(part.trim()));
@@ -112,6 +118,10 @@ function plausibleCalendarDate(value) {
 
 function conservativeLabelledResiduals(text) {
   const findings = [];
+  for (const match of text.matchAll(RESIDUAL_PERSON_TABLE_CANDIDATE_RE)) {
+    const candidate = normalizeSpaces(match[1]);
+    if (looksName(candidate)) findings.push({ type: 'PERSON_CANDIDATE', text: candidate });
+  }
   for (const match of text.matchAll(RESIDUAL_DATE_CANDIDATE_RE)) {
     if (plausibleCalendarDate(match[0]) && hasLabelBefore(text, match.index, DATE_OF_BIRTH_LABEL_RE, 80)) {
       findings.push({ type: 'DATE_OF_BIRTH', text: match[0] });
@@ -529,7 +539,9 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
       inCredentialContext(clean, span.start, span.end, credentialRanges)
     ) && !['label', 'honorific', 'credential_holder'].includes(seed.confidence);
     if(issuerOnly || certificationOnly) continue;
-    out.push({ type: 'PERSON_CANDIDATE', text: seed.value });
+    if (!out.some((finding) => finding.type === 'PERSON_CANDIDATE' && key(finding.text) === key(seed.value))) {
+      out.push({ type: 'PERSON_CANDIDATE', text: seed.value });
+    }
   }
 
   if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {

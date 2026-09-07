@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MODES, assertRunnableProcessingMode } = require('../core/processing-mode');
+const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 const { batchNextAction } = require('../core/batch-next-action');
 
 const PRODUCT_CHANNEL = 'standalone';
@@ -337,7 +338,10 @@ class StandaloneApplicationService {
       selected_count: selected,
       completed_count: completed,
       failed_count: failed,
-      ...(latest?.complete === true && failed > 0 ? { ledger_available: latest.completion_available === true } : {}),
+      ...(latest?.complete === true && failed > 0 ? {
+        ledger_available: packages > 0 && latest?.processing_mode !== MODES.MARKDOWN &&
+          latest?.completion_available === true
+      } : {}),
       export_pending_count: exportPending,
       ...(completionPending ? { completion_pending: true } : {}),
       review_count: reviews,
@@ -427,15 +431,15 @@ class StandaloneApplicationService {
     if (sourceKind === 'folder') {
       const folder = await this.deps.pickSourceFolderAsync({ signal });
       return this.deps.enumerateSourceFolderAsync(folder, {
-        allowedTypes: ['txt', 'md', 'csv', 'docx'], signal
+        allowedTypes: CONVERSION_TYPES, signal
       });
     }
-    return this.deps.pickSourcesAsync({ allowedTypes: ['txt', 'md', 'csv', 'docx'], signal });
+    return this.deps.pickSourcesAsync({ allowedTypes: CONVERSION_TYPES, signal });
   }
 
   async admitSelectedSources(sourcePaths, sourceKind = 'files', signal) {
     validateChoice(sourceKind, SOURCE_KINDS, 'files');
-    if (!Array.isArray(sourcePaths) || sourcePaths.length < 1 || sourcePaths.length > 100) {
+    if (!Array.isArray(sourcePaths) || sourcePaths.length < 1 || sourcePaths.length > RESOURCE_LIMITS.MAX_BATCH_FILES) {
       throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die lokale Auswahl ist ungültig.');
     }
     if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Eine lokale Auswahl ist bereits geöffnet.');
@@ -470,7 +474,10 @@ class StandaloneApplicationService {
       this.selectionContext = {
         sourceKind,
         sourceFolders: folders,
-        selectedFiles: queue.map((item) => item.name)
+        // The queue already disambiguates duplicate basenames with the shortest
+        // safe relative source label. Keep that label in the local-only UI so
+        // the user removes the intended file.
+        selectedFiles: queue.map((item) => item.sourceLabel || item.name)
       };
       const uiContext = this.uiContext();
       return {
@@ -494,6 +501,29 @@ class StandaloneApplicationService {
     this.admittedQueue = null;
     this.selectionContext = null;
     return { ok: true, event: 'admission_cancelled', external_disclosure: false };
+  }
+
+  removeAdmittedSource(selectionIndex) {
+    if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Eine lokale Auswahl wird bereits geändert.');
+    if (!Number.isSafeInteger(selectionIndex) || selectionIndex < 0 || selectionIndex >= (this.admittedQueue?.length || 0)) {
+      throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die ausgewählte Datei ist nicht mehr in der vorbereiteten Auswahl.');
+    }
+    this.admittedQueue.splice(selectionIndex, 1);
+    if (this.admittedQueue.length === 0) {
+      this.selectionContext = null;
+      return { ok: true, event: 'admission_cleared', selected_count: 0,
+        total_bytes: 0, ui_context: this.uiContext(), external_disclosure: false };
+    }
+    this.selectionContext = {
+      sourceKind: this.selectionContext?.sourceKind || 'files',
+      sourceFolders: [...new Set(this.admittedQueue.map((item) => path.resolve(path.dirname(item.full))))],
+      selectedFiles: this.admittedQueue.map((item) => item.sourceLabel || item.name)
+    };
+    return {
+      ok: true, event: 'selection_updated', selected_count: this.admittedQueue.length,
+      total_bytes: this.admittedQueue.reduce((sum, item) => sum + item.sourceBytes, 0),
+      ui_context: this.uiContext(), external_disclosure: false
+    };
   }
 
   uiContext() {
@@ -531,10 +561,18 @@ class StandaloneApplicationService {
     // to silently replace a requested conversion with anonymization.
     if (typeof options === 'string') options = { profile: options, processingMode: MODES.ANONYMIZE };
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
-        Object.keys(options).some((key) => !['profile', 'processingMode'].includes(key))) {
+        Object.keys(options).some((key) => !['profile', 'processingMode', 'outputNamingMode'].includes(key))) {
       throw fixedFailure('PROCESSING_MODE_INVALID', 'Ungültiger Verarbeitungsmodus.');
     }
     const processingMode = assertRunnableProcessingMode(options.processingMode, PRODUCT_CHANNEL);
+    let outputNamingMode = null;
+    if (processingMode === MODES.MARKDOWN && Object.hasOwn(options, 'outputNamingMode')) {
+      throw fixedFailure('RESULT_NAMING_MODE_INVALID', 'Für reine Konvertierung ist keine Ergebnisbenennung erforderlich.');
+    }
+    if (processingMode !== MODES.MARKDOWN) {
+      outputNamingMode = validateResultNamingMode(Object.hasOwn(options, 'outputNamingMode')
+        ? options.outputNamingMode : RESULT_NAMING_MODES.NEUTRAL, PRODUCT_CHANNEL);
+    }
     const profile = validateChoice(options.profile, PROFILES, 'auto');
     const queue = this.admittedQueue;
     if (!Array.isArray(queue) || queue.length < 1) {
@@ -548,7 +586,8 @@ class StandaloneApplicationService {
       this.observedBatchId = null;
       this.terminalPresentation = null;
       const started = this.deps.startLocalIntakeExecutor(queue, profile, {
-        intakeReservationId: reservation.reservation_id, signal, processingMode
+        intakeReservationId: reservation.reservation_id, signal, processingMode,
+        ...(outputNamingMode ? { outputNamingMode } : {})
       });
       transferred = true;
       try {
@@ -727,6 +766,9 @@ class StandaloneApplicationService {
 
   resolveLedger() {
     const run = this.resolveResults().local_path;
+    if (path.basename(path.dirname(run)) === 'DataSecure-Markdown') {
+      throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Für eine reine Markdown-Konvertierung wird keine Zuordnungsdatei erstellt.');
+    }
     const target = path.join(run, VISIBLE_MAPPING_FILE);
     if (!this.deps.fs.existsSync(target)) {
       throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Für den letzten sichtbaren Ergebnislauf ist noch keine Zuordnungsdatei vorhanden.');

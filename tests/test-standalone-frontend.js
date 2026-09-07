@@ -70,7 +70,10 @@ async function openFeedbackCase() {
     calls.push(action);
     if (action === 'get_ui_context') return { ok: true, result_folder: 'C:\\Results', latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-1', source_folders: [], selected_files: [], local_ui_only: true, external_disclosure: false };
     if (action === 'get_public_state') return { ok: true, state: 'results_available', results_available: true, result_count: 4 };
-    if (action === 'get_run_history') return localHistory([historyEntry('run-1')]);
+    if (action === 'get_run_history') return localHistory([historyEntry('run-1', {
+      processing_mode: 'markdown-and-anonymize', ledger_available: true
+    })]);
+    if (action === 'open_current_results') return { ok: true, handoff_confirmed: true };
     if (action === 'open_history_results' || action === 'open_history_ledger') return { ok: true, handoff_confirmed: true };
     if (action === 'frontend_ready') return { ok: true, product_version: '3.2.0-rc105' };
     return { ok: true };
@@ -84,6 +87,9 @@ async function openFeedbackCase() {
   assert.strictEqual(elements['product-version'].textContent, 'Version 3.2.0-rc105');
   assert.strictEqual(elements['result-folder-results'].textContent, 'C:\\Results\\DataSecure-Output\\Lauf-1');
   assert.strictEqual(elements['home-view'].hidden, false, 'a completed run preserves the default home view');
+  elements['tab-process'].listeners.click();
+  await elements['process-results'].listeners.click();
+  assert.ok(!calls.includes('open_current_results'), 'a historical result never enables the current-session action on startup');
   elements['tab-results'].listeners.click();
   await settleFrontend();
   await rowActions(elements, 0)[0].listeners.click();
@@ -225,7 +231,7 @@ function htmlElements() {
 function historyEntry(batchId, overrides = {}) {
   return { batch_id: batchId, created_at: '2026-09-01T12:00:00Z', processing_mode: 'markdown-only',
     selected_count: 2, result_count: 1, failed_count: 1, status: 'results_available',
-    results_available: true, ledger_available: true, resumable: false, ...overrides };
+    results_available: true, ledger_available: false, resumable: false, ...overrides };
 }
 function localHistory(entries) { return { ok: true, local_ui_only: true, external_disclosure: false, entries }; }
 function rowActions(elements, index) {
@@ -284,6 +290,30 @@ async function pickerTimerCancellationCase() {
   assert.strictEqual(harness.count('get_public_state'), priorCalls + 1, 'polling resumes after cancelling the picker');
   assert.strictEqual(harness.elements['status-title'].textContent, 'Bereit');
   assert.strictEqual(harness.timers.size, 1);
+}
+
+async function selectionEditingCase() {
+  const harness = await frontendHarness({
+    select_files: () => ({ selected_count: 2, total_bytes: 8,
+      ui_context: localContext('Lauf-1', ['a.txt', 'b.txt']) }),
+    remove_admitted_source: ({ selectionIndex }) => {
+      assert.strictEqual(selectionIndex, 0);
+      return { ok: true, selected_count: 1, total_bytes: 4,
+        ui_context: localContext('Lauf-1', ['b.txt']) };
+    },
+    cancel_admission: () => ({ ok: true })
+  });
+  await harness.click('task-markdown');
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['selection-list'].hidden, false);
+  assert.strictEqual(harness.elements['selection-list'].children.length, 2);
+  await harness.elements['selection-list'].children[0].children[1].listeners.click();
+  assert.strictEqual(harness.count('remove_admitted_source'), 1);
+  assert.strictEqual(harness.elements['selection-list'].children.length, 1);
+  assert.strictEqual(harness.elements['selection-list'].children[0].children[0].textContent, 'b.txt');
+  await harness.click('cancel');
+  assert.strictEqual(harness.elements['selection-list'].hidden, true);
+  assert.strictEqual(harness.elements['selection-list'].children.length, 0);
 }
 
 async function uncertainStartPollingCase() {
@@ -345,6 +375,8 @@ async function consecutiveTerminalRunsCase() {
   await harness.runTimer();
   assert.match(harness.elements['result-folder-results'].textContent, /Lauf-B$/u,
     'identical terminal state and counts do not identify the previous run');
+  assert.strictEqual(harness.elements['process-results'].disabled, false,
+    'the exact result created in this UI session enables the process action');
   const contextCalls = harness.count('get_ui_context');
   await harness.runTimer();
   assert.strictEqual(harness.count('get_ui_context'), contextCalls, 'unchanged terminal polls do not repeatedly resolve exports');
@@ -432,7 +464,7 @@ async function cancelledAdmissionContextRaceCase() {
   assert.strictEqual(harness.elements.start.hidden, false);
 }
 
-async function failedRunLedgerAvailabilityCase() {
+async function failedConversionNeverOffersLedgerCase() {
   let ledgerAvailable;
   const harness = await frontendHarness({
     get_public_state: () => ({ state: 'completed_without_results', results_available: false,
@@ -445,13 +477,13 @@ async function failedRunLedgerAvailabilityCase() {
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = false;
   await harness.runTimer();
-  assert.match(harness.elements['result-warning'].textContent, /Zuordnungsdatei ist nicht verfügbar.*Diagnose öffnen/u);
+  assert.match(harness.elements['result-warning'].textContent, /Diagnose öffnen/u);
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = true;
   await harness.runTimer();
-  assert.match(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
-  assert.match(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
-  assert.doesNotMatch(harness.elements['result-warning'].textContent, /Diagnose öffnen/u);
+  assert.match(harness.elements['status-text'].textContent, /keine Zuordnungsdatei erstellt/u);
+  assert.match(harness.elements['result-warning'].textContent, /Diagnose öffnen/u);
+  assert.doesNotMatch(harness.elements['result-warning'].textContent, /Zuordnungsdatei/u);
 }
 
 async function completionPendingCase() {
@@ -484,14 +516,36 @@ async function explicitStartModeCase() {
   const starting = harness.click('start');
   assert.strictEqual(harness.elements['processing-mode'].disabled, true, 'the pending start locks the selector');
   assert.strictEqual(JSON.stringify(harness.calls.find((call) => call.action === 'start_admitted_batch').args),
-    JSON.stringify({ processingMode: 'markdown-and-anonymize' }), 'Tauri receives the selected mode under its camelCase argument');
+    JSON.stringify({ processingMode: 'markdown-and-anonymize', outputNamingMode: 'neutral' }),
+  'Tauri receives the selected purpose and privacy-preserving naming under camelCase arguments');
   harness.elements['processing-mode'].value = 'markdown-only';
   start.resolve({ ok: true });
   await starting;
   assert.strictEqual(harness.elements['processing-mode'].disabled, true, 'accepted but not yet polled intake remains locked');
   assert.strictEqual(harness.calls.find((call) => call.action === 'start_admitted_batch').args.processingMode,
     'markdown-and-anonymize', 'a later selector change cannot mutate the submitted start');
+  assert.strictEqual(harness.calls.find((call) => call.action === 'start_admitted_batch').args.outputNamingMode,
+    'neutral', 'a later UI change cannot mutate the submitted naming choice');
   assert.strictEqual(harness.count('start_admitted_batch'), 1);
+}
+
+async function explicitOutputNamingCase() {
+  const harness = await frontendHarness({
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Profil_Person_001.docx']) })
+  });
+  assert.strictEqual(harness.elements['output-naming'].hidden, true);
+  await harness.click('task-anonymize');
+  assert.strictEqual(harness.elements['output-naming'].hidden, false);
+  assert.strictEqual(harness.elements['output-naming-mode'].value, 'neutral');
+  assert.match(harness.elements['output-naming-help'].textContent, /Dokument-001-anonymisiert/u);
+  harness.elements['output-naming-mode'].value = 'source-with-suffix';
+  harness.elements['output-naming-mode'].listeners.change();
+  assert.match(harness.elements['output-naming-help'].textContent, /Originaldateiname bleibt sichtbar/u);
+  assert.match(harness.elements['output-naming-help'].textContent, /personenbezogenen Angaben/u);
+  await harness.click('select-files');
+  await harness.click('start');
+  assert.strictEqual(harness.calls.find((call) => call.action === 'start_admitted_batch').args.outputNamingMode,
+    'source-with-suffix');
 }
 
 async function unavailableModePreservesAdmissionCase() {
@@ -556,6 +610,8 @@ async function pureConversionCase() {
   await harness.click('select-files');
   await harness.click('start');
   assert.strictEqual(harness.calls.find(call => call.action === 'start_admitted_batch').args.processingMode, 'markdown-only');
+  assert.strictEqual(Object.hasOwn(harness.calls.find(call => call.action === 'start_admitted_batch').args, 'outputNamingMode'), false,
+    'pure conversion never receives an anonymization naming option');
   await harness.runTimer();
   assert.strictEqual(harness.elements['processing-mode'].value, 'markdown-only', 'intake must not reuse the previous batch purpose');
   state = { state: 'results_available', processing_mode: 'markdown-only', results_available: true, result_count: 1, warning_count: 1 };
@@ -633,7 +689,9 @@ async function accessibleTabsCase() {
 
 async function historyRowBindingCase() {
   const batchId = '<img src=x onerror=bad()> exact-run-7';
-  const entries = Array.from({ length: 25 }, (_, index) => historyEntry(index === 7 ? batchId : `run-${index}`, { resumable: index === 7 }));
+  const entries = Array.from({ length: 25 }, (_, index) => historyEntry(index === 7 ? batchId : `run-${index}`, {
+    processing_mode: 'markdown-and-anonymize', ledger_available: true, resumable: index === 7
+  }));
   const harness = await frontendHarness({
     get_run_history: () => localHistory(entries),
     open_history_results: () => ({ ok: true, handoff_confirmed: true }),
@@ -744,6 +802,7 @@ async function historyAdmissionRaceCase() {
   await testAsync('native drops prepare without starting and preserve admission across races', nativeDropCase);
   await testAsync('a renderer reload restores a prepared selection and listener failure preserves picker fallback', restoredAdmissionCase);
   await testAsync('a poll timer consumed by a cancelled picker keeps polling alive', pickerTimerCancellationCase);
+  await testAsync('a prepared selection supports per-file removal and clearing before Start', selectionEditingCase);
   await testAsync('an unconfirmed slow start is observed until completion without restarting the batch', uncertainStartPollingCase);
   await testAsync('an unconfirmed start of a restored admission starts status recovery', restoredAdmissionUncertainStartCase);
   await testAsync('fast consecutive terminal runs refresh their exact result folder without repeated idle export reads', consecutiveTerminalRunsCase);
@@ -751,9 +810,10 @@ async function historyAdmissionRaceCase() {
   await testAsync('a delayed terminal context cannot overwrite a newly prepared selection', staleContextAfterAdmissionCase);
   await testAsync('a delayed terminal context remains stale after the new selection was already started', () => staleContextAfterAdmissionCase(true));
   await testAsync('late cancellation context preserves a freshly dropped selection', cancelledAdmissionContextRaceCase);
-  await testAsync('a failed run offers its ledger only when the backend confirms availability', failedRunLedgerAvailabilityCase);
+  await testAsync('a failed pure conversion never offers a mapping even if stale state claims one', failedConversionNeverOffersLedgerCase);
   await testAsync('completion metadata debt is visible without claiming zero missing documents or no results', completionPendingCase);
   await testAsync('explicit Start sends one immutable camelCase processing mode and locks it before checkpoint', explicitStartModeCase);
+  await testAsync('anonymization offers one explicit filename choice with neutral privacy-preserving default', explicitOutputNamingCase);
   await testAsync('unavailable conversion keeps the admission without a silent anonymization fallback', unavailableModePreservesAdmissionCase);
   await testAsync('active and recoverable modes stay locked and global continue only opens history', recoverableModeLockCase);
   await testAsync('pure conversion stays selected during intake and reports raw results and OCR warnings honestly', pureConversionCase);

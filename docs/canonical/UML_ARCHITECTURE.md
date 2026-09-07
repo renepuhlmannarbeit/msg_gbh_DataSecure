@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 06.09.2026 · 3.2.0-rc111
+Stand: 06.09.2026 · 3.2.0-rc123
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -506,11 +506,13 @@ flowchart TD
   Purpose --> Pick[Vorbereitung: Quelle per Picker oder Drop / Ziel anzeigen]
   Pick --> Start[Expliziter Start]
   Start --> Work[Lokale Verarbeitung mit passivem Fortschritt]
-  Work -->|nur Markdown oder Anonymisierung ohne offene Entscheidung| Map[Ergebnisse und laufbezogene Zuordnung gemeinsam bereitstellen]
+  Work -->|nur Markdown| Converted[Markdown-Ergebnisse ohne Zuordnung bereitstellen]
+  Work -->|Anonymisierung ohne offene Entscheidung| Map[Ergebnisse und laufbezogene Zuordnung gemeinsam bereitstellen]
   Work -->|Anonymisierung: automatische Arbeit fertig, Entscheidung offen| Review[Sammelreview]
   Review -->|entschieden| Map
   Review -->|vertagt oder abgebrochen| Paused[Nichtmodaler fortsetzbarer Status]
-  Map --> Done[Nichtmodaler Abschluss in der aktuellen Ansicht]
+  Converted --> Done[Nichtmodaler Abschluss in der aktuellen Ansicht]
+  Map --> Done
   Home --> History[Verlauf: letzte 20 Läufe]
   Done -.->|nur auf Anwenderaktion| History
   History -->|konkrete Zeile wählen| Open[Ergebnisse öffnen / Zuordnung anzeigen / fortsetzen]
@@ -575,7 +577,7 @@ sequenceDiagram
   E-->>S: Empfangs-ACK, noch kein Checkpoint oder Abschluss
   E->>I: prüfen und versiegelten Snapshot erzeugen
   I->>M: Snapshot-Bytes, gespeicherten Zweck und Format übergeben
-  alt Markdown und anonymisieren: direktes Format
+  alt Markdown und anonymisieren: TXT/Markdown/CSV
     M->>P: Content Graph des unterstützten Anonymisierungsformats
     P->>V: geprüfte Kandidaten / Mehrdeutigkeiten
     opt nach automatischer Arbeit tatsächlich Review bereit
@@ -583,18 +585,18 @@ sequenceDiagram
       U->>V: Entscheidungen
     end
     V->>V: terminale MD und Zuordnung in DataSecure-Output
-  else Markdown und anonymisieren: breite Standalone-Quelle
+  else Markdown und anonymisieren: DOCX oder breite Standalone-Quelle
     M->>M: neutrale Extraktion ohne Artefakt oder Zweck
-    alt Coverage complete
-      M->>P: extrahiertes Markdown an denselben Privacy-Core
+    alt Coverage bekannt und Markdown nichtleer
+      M->>P: extrahiertes Markdown + separaten Extraktionsstatus
       P->>V: geprüfte Kandidaten / Mehrdeutigkeiten
-      V->>V: terminale MD und direkte Zuordnung in DataSecure-Output
-    else Coverage incomplete
+      V->>V: terminale MD, Extraktionsstatus und direkte Zuordnung in DataSecure-Output
+    else Coverage unbekannt, leer oder Quelle unsicher
       M-->>V: sicherer Einzelstopp ohne Rohkonvertat
     end
   else nur Markdown
     M->>V: erhaltene Originalinhalte und Coverage-/OCR-Hinweise
-    V->>V: terminale MD und Zuordnung in DataSecure-Markdown
+    V->>V: terminale MD ohne Zuordnung in DataSecure-Markdown
   end
   V-->>S: Status des konkreten Laufs ohne Ansichtswechsel
 ```
@@ -606,17 +608,14 @@ Ergebnisartefakt und wird nicht im sichtbaren Dateisystem abgelegt. Reine
 Konvertierung speichert solche Inhalte dagegen ausdrücklich im getrennten,
 als nicht anonymisiert gekennzeichneten Ausgabebaum (DS-085). Text-PDF und
 Scan-Seiten werden automatisch unterschieden; OCR läuft lokal. Warnungen sind
-Teil der Extraktionsidentität und des sichtbaren v3-Exports.
+Teil der Extraktionsidentität und des sichtbaren v4-Exports.
 
-DS-087 bindet den breiten Zweig ausschließlich an Standalone. Cowork erreicht
-diesen Konverterpfad nicht. Die aktuelle reale Wide-Format-Coverage bleibt
-`incomplete`; der Sequenzzweig ist deshalb heute ein belegter sicherer Stopp,
-keine Freigabezusage für XLSX/PPTX/PDF/Scan-PDF oder Bilder.
-Ein Anwender kann das sichtbar gekennzeichnete Ergebnis eines separaten
-`markdown-only`-Laufs später als `.md` in einen neuen Anonymisierungsstapel
-aufnehmen. Das ist bewusst keine Kante innerhalb derselben Sequenz: Stapel- und
-Pseudonymkontext beginnen neu, und nur der extrahierte Markdown-Inhalt wird
-geschützt.
+DS-087/090 bindet den DOCX-/breiten Zweig ausschließlich an Standalone. Cowork erreicht
+diesen Konverterpfad nicht. Die aktuelle reale Wide-Format-Coverage bleibt oft
+`incomplete`; sie wird getrennt vom Anonymisierungsstatus geführt. Der
+Sequenzzweig schützt den extrahierten Markdown-Inhalt in demselben Stapel und
+gibt keine Freigabezusage für ausgelassene Bestandteile der ursprünglichen XLSX-,
+DOCX-, PPTX-, PDF-/Scan-PDF- oder Bilddatei.
 
 Recovery setzt den gespeicherten Modus fort; eine UI-Defaultwahl darf ihn nicht
 ändern. Inhaltsfreie Diagnose dokumentiert Phase, Modus und Fehler, keine
@@ -628,6 +627,8 @@ extrahierten Originalinhalte. Keine Konvertate gelangen in den Plugin-Handoff.
 stateDiagram-v2
   [*] --> idle
   idle --> admitted: lokale Auswahl bestätigt
+  admitted --> admitted: einzelne Datei entfernen
+  admitted --> idle: Auswahl vollständig leeren
   admitted --> preparing: expliziter Start / Empfangs-ACK
   preparing --> processing: dauerhafter Stapelcheckpoint und Worker aktiv
   processing --> review_required: automatische Arbeit beendet / Review bereit
@@ -651,9 +652,12 @@ verwirft eine lokale Aufnahmefreigabe, sobald der Sidecar die Admission nicht
 mehr kennt. Exklusiver Outbox-Claim und laufgebundenes Öffnen sind E0
 geschlossen. Der plattformübergreifende Nachweis einer tatsächlich sichtbaren
 Abschlussoberfläche bleibt zusammen mit der Zielhostbeobachtung im Backlog.
-Unter Standalone umfasst `completed` sowohl alle neutralen Ergebnisdateien als
-auch `DataSecure-Zuordnung.csv`; beim Plugin bleibt die Zuordnung außerhalb des
-Cowork-Ergebnisordners. Beim Laden des lokalen UI-Kontexts repariert der Core
+Unter Standalone umfasst `completed` alle Ergebnisdateien und bei
+Anonymisierung zusätzlich `DataSecure-Zuordnung.csv`. Vor dem Start bindet ein
+v6-Journal die gewählte Benennung (neutraler Standard oder Quellbasis mit
+`-anonymisiert`) unveränderlich bis Export und Wiederaufnahme. Reine Konvertate behalten
+ihren Quellbasisnamen und erzeugen keine Zuordnung; beim Plugin bleibt die
+Zuordnung außerhalb des Cowork-Ergebnisordners. Beim Laden des lokalen UI-Kontexts repariert der Core
 eine noch alte oder unvollständige sichtbare Projektion aus dem zugehörigen
 privaten Journal. Für eine Öffnungsaktion liefert der Core das exakte Ziel nur
 über den privaten Sidecar→Rust-Kanal. Rust prüft Pfad, Dateityp und Linkfreiheit,

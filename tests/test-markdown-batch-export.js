@@ -78,7 +78,7 @@ async function run() {
     await assert.rejects(() => store.publishMarkdownArtifact(extraction('different'), id));
     assert.strictEqual(store.readMarkdownArtifact(id).markdown, sourceText);
   });
-  await testAsync('incomplete OCR conversion is saved with explicit warnings, never labeled anonymized', async () => {
+  await testAsync('incomplete OCR conversion keeps its source basename and explicit artifact warnings without a mapping', async () => {
     const id = `dm_${nextId()}`;
     const identity = await store.publishMarkdownArtifact(extraction(sourceText, true), id);
     assert.strictEqual(identity.extraction_grade, 'incomplete');
@@ -86,11 +86,11 @@ async function run() {
     assert.deepStrictEqual(exportCompletedState(state), { exported: 1, pending: 0, available: true });
     const run = visibleExportDirectory(state.token);
     assert.strictEqual(path.basename(path.dirname(run)), 'DataSecure-Markdown');
-    assert.strictEqual(fs.readFileSync(path.join(run, 'Dokument-001-konvertiert.md'), 'utf8'), sourceText);
-    const mapping = fs.readFileSync(path.join(run, 'DataSecure-Zuordnung.csv'), 'utf8');
-    assert.match(mapping, /Nicht anonymisiert/);
-    assert.match(mapping, /OCR-Texterkennung nicht fachlich geprüft/);
-    assert.doesNotMatch(mapping, /Text vollständig extrahiert|Anonymisiertes Ergebnis/);
+    assert.strictEqual(fs.readFileSync(path.join(run, 'scan.md'), 'utf8'), sourceText);
+    assert.strictEqual(fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')), false);
+    const record = JSON.parse(fs.readFileSync(recordPath(state.token), 'utf8'));
+    assert.deepStrictEqual(record.items[0].reason_codes,
+      ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
     assert.strictEqual(fs.existsSync(path.join(process.env.EU_PRIVACY_RESULT_ROOT, 'DataSecure-Output')), false);
   });
   await testAsync('artifact storage preserves an intentional Unicode BOM and rejects tampered text', async () => {
@@ -133,7 +133,7 @@ async function run() {
     assert.strictEqual(exportCompletedState(f.state).available, true);
     const run = visibleExportDirectory(f.state.token);
     assert.strictEqual(path.basename(path.dirname(run)), 'DataSecure-Markdown');
-    assert.deepStrictEqual(fs.readFileSync(path.join(run, 'Dokument-001-konvertiert.md')), Buffer.from(originalDocument));
+    assert.deepStrictEqual(fs.readFileSync(path.join(run, 'Kunde', 'synthetic.md')), Buffer.from(originalDocument));
     assert.deepStrictEqual(fs.readFileSync(f.original), f.sourceBytes);
   });
   await testAsync('crash after committed artifact recovers the exact identity without reconversion', async () => {
@@ -168,7 +168,7 @@ async function run() {
     assert.deepStrictEqual(exportCompletedState(state), { exported: 0, pending: 1, available: false });
     assert.strictEqual(fs.existsSync(recordPath(state.token)), false);
   });
-  await testAsync('pending mapping replays in the Markdown destination without rewriting any output', async () => {
+  await testAsync('pure conversion completion is independent of mapping publication and replay does not rewrite output', async () => {
     const identity = await store.publishMarkdownArtifact(extraction('unchanged', true), `dm_${nextId()}`);
     const state = stateFor([{ ...identity, status: 'released', source_label: 'scan.pdf' }]);
     const previous = fs.linkSync;
@@ -176,11 +176,11 @@ async function run() {
       if (String(to).endsWith('DataSecure-Zuordnung.csv')) throw Object.assign(new Error('synthetic'), { code: 'EIO' });
       return previous.call(fs, from, to, ...rest);
     };
-    try { assert.deepStrictEqual(exportCompletedState(state), { exported: 1, pending: 0, available: false }); }
+    try { assert.deepStrictEqual(exportCompletedState(state), { exported: 1, pending: 0, available: true }); }
     finally { fs.linkSync = previous; }
-    assert.strictEqual(visibleExportDirectory(state.token), '');
+    assert.ok(visibleExportDirectory(state.token));
     const record = JSON.parse(fs.readFileSync(recordPath(state.token), 'utf8'));
-    const document = path.join(process.env.EU_PRIVACY_RESULT_ROOT, 'DataSecure-Markdown', record.run_directory, 'Dokument-001-konvertiert.md');
+    const document = path.join(process.env.EU_PRIVACY_RESULT_ROOT, 'DataSecure-Markdown', record.run_directory, 'scan.md');
     const before = fs.statSync(document);
     const replay = replayPendingResultExports();
     assert.strictEqual(replay.failures, 0);
@@ -230,13 +230,13 @@ async function run() {
     assert.strictEqual(aborted.item.status, 'retryable');
     assert.ok(!Object.hasOwn(aborted.item, 'artifact_id'));
   });
-  await testAsync('run export is idempotent and binds the exact Markdown destination and mapping', async () => {
+  await testAsync('run export is idempotent and binds the exact Markdown destination without a redundant mapping', async () => {
     const identity = await store.publishMarkdownArtifact(extraction(), `dm_${nextId()}`);
     const state = stateFor([{ ...identity, status: 'released', source_label: '=danger.txt' }]);
     assert.strictEqual(exportCompletedState(state).available, true);
     const target = visibleExportDirectory(state.token);
     const names = fs.readdirSync(target);
-    assert.strictEqual(names.length, 2);
+    assert.deepStrictEqual(names, ['=danger.md']);
     assert.strictEqual(exportCompletedState(state).available, true);
     assert.strictEqual(visibleExportDirectory(state.token), target);
     assert.deepStrictEqual(fs.readdirSync(target), names);
@@ -245,7 +245,7 @@ async function run() {
     assert.strictEqual(validRecord(record), true);
     assert.strictEqual(validRecord({ ...record, product_channel: 'plugin' }), false);
     assert.strictEqual(validRecord({ ...record, processing_mode: 'markdown-and-anonymize' }), false);
-    assert.match(fs.readFileSync(path.join(target, 'DataSecure-Zuordnung.csv'), 'utf8'), /'=danger.txt/);
+    assert.strictEqual(fs.existsSync(path.join(target, 'DataSecure-Zuordnung.csv')), false);
     assert.deepStrictEqual(visibleExportStatus(state.token, 1), { exported: 1, pending: 0, available: true });
     const replay = replayPendingResultExports();
     assert.strictEqual(replay.exported, 0);
@@ -256,26 +256,22 @@ async function run() {
     const state = stateFor([a, b].map((identity, index) => ({ ...identity, status: 'released', source_label: `source${index}.txt` })));
     const previous = fs.linkSync;
     fs.linkSync = function(from, to, ...rest) {
-      if (String(to).endsWith('Dokument-002-konvertiert.md')) throw Object.assign(new Error('synthetic'), { code: 'EIO' });
+      if (String(to).endsWith('source1.md')) throw Object.assign(new Error('synthetic'), { code: 'EIO' });
       return previous.call(fs, from, to, ...rest);
     };
     try { assert.deepStrictEqual(exportCompletedState(state), { exported: 1, pending: 1, available: false }); }
     finally { fs.linkSync = previous; }
     const record = JSON.parse(fs.readFileSync(recordPath(state.token), 'utf8'));
     const run = path.join(process.env.EU_PRIVACY_RESULT_ROOT, 'DataSecure-Markdown', record.run_directory);
-    fs.unlinkSync(path.join(run, 'Dokument-001-konvertiert.md'));
+    fs.unlinkSync(path.join(run, 'source0.md'));
     assert.deepStrictEqual(exportCompletedState(state), { exported: 2, pending: 0, available: true });
-    assert.strictEqual(fs.existsSync(path.join(run, 'Dokument-001-konvertiert.md')), false);
-    assert.strictEqual(fs.readFileSync(path.join(run, 'Dokument-002-konvertiert.md'), 'utf8'), 'second');
+    assert.strictEqual(fs.existsSync(path.join(run, 'source0.md')), false);
+    assert.strictEqual(fs.readFileSync(path.join(run, 'source1.md'), 'utf8'), 'second');
   });
-  test('all-stopped conversion has its own exact run CSV instead of a previous batch', () => {
+  test('all-stopped conversion exposes neither an empty run nor an invented mapping', () => {
     const state = stateFor([{ status: 'stopped', source_label: 'broken.csv', error_code: 'PARSE_FAILED' }]);
-    assert.deepStrictEqual(exportCompletedState(state), { exported: 0, pending: 0, available: true });
-    const directory = visibleExportDirectory(state.token);
-    assert.ok(directory);
-    assert.deepStrictEqual(fs.readdirSync(directory), ['DataSecure-Zuordnung.csv']);
-    const csv = fs.readFileSync(path.join(directory, 'DataSecure-Zuordnung.csv'), 'utf8');
-    assert.match(csv, /broken.csv/); assert.match(csv, /Nicht konvertiert/);
+    assert.deepStrictEqual(exportCompletedState(state), { exported: 0, pending: 0, available: false });
+    assert.strictEqual(visibleExportDirectory(state.token), '');
   });
   test('all plugin listing, handoff and acknowledgement paths reject a conversion journal', () => {
     const state = stateFor([]);

@@ -1,10 +1,36 @@
 # Entscheidungs-Traceability
 
-Stand: 07.09.2026 · 3.2.0-rc111
+Stand: 07.09.2026 · 3.2.0-rc123
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC120 / DS-083 / BL-010.13/BL-040.5 bindet die sichtbare Zuordnung an eine
+einfache Existenzinvariante: Zuerst wird jedes Ergebnis atomar veröffentlicht
+und geprüft, erst danach entsteht die CSV ausschließlich aus diesen erfolgreichen
+Exportitems. Gestoppte Items bleiben private Status-/Diagnosedaten. All-stopped
+schließt seinen privaten Exportrecord ohne sichtbaren Ordner ab; History und
+aktuelle Aktionen bleiben deaktiviert. `result-export.js`, `run-history.js`,
+`application-service.js`, Export-/History-/Status-/Pakettests.
+
+RC119 / BL-021.1/BL-030.2/BL-050.1 bindet die Behebung der im sichtbaren Lauf
+`Lauf-20260907-163522-142350c1` nachgewiesenen Personenunterredaktion an
+`privacy/entities.js`, den unabhängigen Kontrollpfad in `privacy/engine.js`,
+`test-pii-regression.js` und `test-standalone-format-corpus.mjs`. Der
+Korpustest extrahiert die vier echten DOCX, liest deren expliziten Personenwert,
+fordert seine vollständige Entfernung und ein Personenpseudonym und lässt die
+freizugebenden Bytes erneut durch den Restprüfer laufen. Damit kann ein fehlender
+Redaktoranker nicht erneut allein durch einen gleich gebauten Gate-Katalog
+kaschiert werden.
+
+RC117 / BL-022.1/BL-050.1 bindet zwei exakt bekannte interne, nicht ausführbare
+Word-Beziehungen und vier namespacegebundene DrawingML-Layoutknoten an
+Positiv-, Lookalike- und Fremdnamespace-Negativtests. Der neue komplexe
+DOCX-UAT-Korpus umfasst 15 deterministische zwei-, vier- und achtseitige
+Dokumente; `test-complex-docx-uat-corpus.mjs` prüft realen Preflight, Parser,
+neutrale Erhaltungsfälle sowie stapelweit gleiche Personen- und
+Unternehmenspseudonyme. Die sichtbare Bedienprüfung bleibt BL-052.1/E2.
 
 RC109-Gesamtreview: DS-022/023/079/083/086 binden Fortsetzung und Anzeige an die
 gemeinsame Progress-/Reviewbereitschaft; DS-085 bindet XLSX-Struktur und BMP32
@@ -22,12 +48,13 @@ native Intel-/ARM-macOS-Ausführung.
 
 RC111 / DS-087 bindet den neutralen `source_type` an die tatsächliche Endung und
 ergänzt reale TXT/XLSX-Mischstapel in beiden Reihenfolgen mit Prozessabbruch,
-Fortsetzung, Exact-once und stabilen Personen-/Unternehmenslabels. Ein wegen
-Coverage gestopptes breites Item erreicht die Registry nicht. Alle realen breiten
-Formate werden zusätzlich am Privacy-Publikationsrand geprüft. BL-022.3 validiert
+Fortsetzung, Exact-once und stabilen Personen-/Unternehmenslabels. Ein nutzbares
+breites Item erreicht die Registry; seine Quellenabdeckung bleibt separat. Alle
+realen breiten Formate werden zusätzlich am Privacy-Publikationsrand geprüft. BL-022.3 validiert
 sämtliche PPTX-XML-/RELS-Teile; BL-023.3 stoppt PDF-Annotationen, Outline und XMP
 und erhält standardisierte Dokumentmetadaten im reinen Markdown-Modus. Diese
-E0-Nachweise erweitern nicht die Anonymisierungsfreigabe. Der neue native
+E0-Nachweise erweitern nicht den Cowork-Formatumfang oder die
+Vollständigkeitszusage für Originalcontainer. Der neue native
 Startup-Checkpoint trennt WebView-Aufbaufehler von späteren IPC-Ausfällen; eine
 INT-13-Bindung folgt ausschließlich nach bestandenem commitgebundenem PKG-04.
 Der zweite Lauf nach Windows-Neustart aus `c77ec592aa95f323bd5b1efe6301b111e7f2f225`
@@ -73,7 +100,8 @@ Historie und konkrete Aktionen; Frontend-, Sidecar-, Rust- und Pakettests
 prüfen die Übergaben. Native Bedien-/Fokusabnahme bleibt menschliche Evidence.
 
 Historischer RC107-Schnitt aus dem RC106-Folgereview: DS-023/DS-069/DS-082/DS-083 binden den Standalone-Abschluss an den
-aktuellen Lauf einschließlich gestoppter Quellen; Tests in
+damaligen aktuellen Lauf einschließlich gestoppter Quellen; RC120 ersetzt diese
+sichtbare Stopzeile durch Abschluss-/Diagnosedaten. Tests in
 `test-result-folder-export`, `test-batch-recovery`, `test-standalone` und
 `test-standalone-frontend`. DS-084 bindet Firmenalias-/Personenkonflikte an
 `test-batch-pseudonym-registry` und die gemeinsame Engine. PKG-04/INT-13 behalten
@@ -93,7 +121,8 @@ Privacy-Paketen. `test-processing-mode`, `test-markdown-artifact` und
 den Konvertierungspfad ohne Pseudonymzustand, Privacy-Grade oder Capability.
 Recovery bewahrt den Stapelmodus; der UI-Default darf ihn nicht ändern.
 `result-export` veröffentlicht die typgebundenen `dm_`-Artefakte atomar nach
-`DataSecure-Markdown/Lauf-…` samt lokaler Zuordnung. Warnende Extraktionen mit
+`DataSecure-Markdown/Lauf-…` unter erhaltenem Basisnamen und ohne lokale
+Zuordnungsdatei. Warnende Extraktionen mit
 `incomplete` und festen Gründen sind zulässig, aber nicht als vollständig
 oder anonymisiert auszuweisen. Öffentliche Privacy-Reads/Handoff lehnen sie ab.
 
@@ -112,7 +141,8 @@ Evidence gehört nicht zum RC107-Paketreceipt.
 RC108 ergänzt `standalone/conversion-worker.js` und `conversion-worker-child.js`
 als echten begrenzten Produktprozess für elf Eingabetypen, Scan-PDF als eigenem
 PDF-Verarbeitungsfall. Der Modus `markdown-only` bewahrt Quellinhalte; der
-Anonymisierungs-/Cowork-Pfad bleibt auf TXT, Markdown, CSV und DOCX begrenzt.
+Der Cowork-Anonymisierungspfad bleibt auf TXT, Markdown, CSV und DOCX begrenzt;
+Standalone akzeptiert DOCX und die breiten Quellen gemäß DS-087/090 Markdown-first.
 `conversion-runtime-resolver.js`, `standalone-conversion-runtime.mjs` und die
 Standalone-Paketgates binden normales Node.js, PDF.js, Canvas, Tesseract.js und
 lokale Modelle statt Systemruntime oder Download. MarkItDown/Python bleibt
@@ -182,7 +212,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-007 | aktiv | BL-021–024; Formatmatrix |
 | DS-008 | aktiv | BL-040, BL-041; Markdown-/Paketvertrag |
 | DS-009 | aktiv, durch DS-067 präzisiert – kein auswählbarer Modus | BL-024, BL-041; Manifest-/Bildgates |
-| DS-010 | aktiv | BL-011, BL-051; 100 Dateien/500 MiB |
+| DS-010 | aktiv | BL-011, BL-051; 200 Dateien/500 MiB |
 | DS-011 | aktiv | BL-011, BL-049; Source-Preflight |
 | DS-012 | aktiv | BL-021, BL-022, BL-031; Korpus-/Regressionstests |
 | DS-013 | durch DS-043 ersetzt | historischer Abschlussdialog; heutiger Hintergrundabschluss über DS-043 |
@@ -230,7 +260,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-055 | aktiv | BL-012, BL-042, BL-052; Sprache/A11y/Admin |
 | DS-056 | aktiv | BL-051, BL-052; E0/E1/E2/E3-Trennung |
 | DS-057 | aktiv | BL-001–003; Dokumentenregister/Archive |
-| DS-058 | aktiv | BL-040; Markdown und lokales Mapping |
+| DS-058 | für neue Standalone-Läufe durch DS-089 ersetzt; für Cowork/Altläufe weiter gültig | BL-040; neutrale Cowork-Namen und unveränderte historische Läufe |
 | DS-059 | aktiv, Speicherweg durch DS-065 präzisiert – kein Keyring | BL-030.2 |
 | DS-060 | aktiv | BL-010, BL-024; Offline-Bundle/SBOM |
 | DS-061 | aktiv, Refactoringpfad durch DS-065/067 neu geschnitten | BL-001–003; aktueller Refactoring-Plan |
@@ -255,11 +285,16 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-080 | aktiv und aktuell | BL-040.5; expliziter geräte- und produktlokaler Ergebnisstamm, keine Workspace-Erkennung und kein automatischer Zielwechsel; `result-folder-config.js`, Picker-/Export-/Dokumentationsverträge |
 | DS-081 | aktiv und aktuell | BL-041.8; hostgesteuerte Aushandlung von `2026-07-28` und getesteten Legacy-Versionen, kein `MCP26-01`-Cutover und keine vollständige Konformitätsaussage ohne offizielle Conformance-Evidence; `mcp-server.js`, `test-mcp-protocol.js`, Dokumentationsvertrag |
 | DS-082 | aktiv und aktuell | BL-010.11/12/28; lokale Auswahl-/Zielanzeige ohne Diagnoseweitergabe, expliziter Start, zwei strikt getrennte aktive Modi; aktiver oder fortsetzbarer Stapel behält Backendmodus. `frontend/index.html`, `frontend/app.js`, Rust-Commands, `application-service.js`, `desktop-ipc.js`; Standalone-Vertragstests und E1/E2 offen |
-| DS-083 | aktiv und aktuell | BL-010.13/26/28, BL-040.5; je terminal sichtbarem Standalone-Lauf eine formelneutralisierte `DataSecure-Zuordnung.csv`: Quelle → anonymisiertes Ergebnis oder ausdrücklich nicht anonymisiertes Konvertat, einschließlich Fehler-/Auslassungsgründen. `DataSecure-Output` und `DataSecure-Markdown` bleiben getrennt; Cowork erhält keine Originalnamen-Projektion. Export-, Recovery-, Standalone- und OS-Öffnertests |
+| DS-083 | aktiv, durch DS-088/RC120 präzisiert | BL-010.13/26/28, BL-040.5; je terminal sichtbarem Standalone-**Anonymisierungslauf mit mindestens einem Ergebnis** eine formelneutralisierte `DataSecure-Zuordnung.csv`: Quelle → tatsächlich vorhandenes anonymisiertes Ergebnis. Fehlergründe bleiben in Abschluss/Diagnose; All-stopped erzeugt keine sichtbaren Artefakte oder Aktionen. Die CSV trägt ein UTF-8-BOM. Derselbe Quellpfad darf innerhalb eines Records genau einen finalen Ausgang besitzen. Der echte Paketlauf prüft Erfolgszeilen, vorhandene Ziele und das Fehlen vorläufiger Stopps/Mojibake. Reine Konvertierung erzeugt keine Zuordnung, Cowork erhält keine Originalnamen-Projektion. Export-, Replay-, History-, Standalone-, Paket- und OS-Öffnertests |
 | DS-084 | aktiv und aktuell | BL-010.12/13, BL-030.2; neue Standalone-Stapel mit lesbaren v2-Kennungen, Firmenrollen einheitlich, Restore behält Version; native Dragdrop-Aufnahme ohne Autostart, Pickeralternative; Registry-, State-, Intake-, Rust-, Frontend- und reale Pakettests |
 | DS-085 | Windows-E0 und Paketbindung abgeschlossen; Zielhost-UAT offen | BL-010.28 mit BL-010.15–19, BL-022.2/3, BL-023.1–4 und BL-024.2/3; zweite Standalone-Kernfunktion ohne PII-Entfernung, elf Eingabetypen einschließlich Scan-PDF, v5-Journal/`dm_`/eigene Worker-Envelope-Typen, Recovery und atomarer `DataSecure-Markdown`-Export. UI-/Rust-/IPC-/Modus-/Journal-/Artefakt-/Extraktions-/Konverter-/Cross-Read-Gates; E0 ist keine fachliche Vollständigkeits- oder UAT-Freigabe |
 | DS-086 | aktiv; Zielhost-UAT offen | BL-010.29; Startseite, leere Betriebsart, bewusst gewählter Tab und Verlauf der letzten 20 Verarbeitungen. `standalone/run-history.js`, `application-service.js`, private IPC, Rust-Commands, Frontend; History-/Frontend-/Sidecar-/Rust-Verträge und echte Paketläufe. Jede Aktion bindet exakt den ausgewählten Lauf, keine automatische Ergebnisnavigation. |
-| DS-087 | Implementierung E0; reale breite Coverage und Zielhost-UAT offen | BL-010.30; neutraler `datasecure-source-extraction/1`-Vertrag, Standalone-only-Admission und einmalige Konverterübergabe vor dem unveränderten Privacy-Core. Nur `complete` publiziert; `incomplete` stoppt ohne `dm_`-Zwischenartefakt. Vertrags-, Orchestrator-, Cross-Produkt- und Produktregressionstests; Cowork-Allowlist unverändert. |
+| DS-087 | Implementierung E0; Originalcontainer-Coverage und Zielhost-UAT offen | BL-010.30; neutraler `datasecure-source-extraction/1`-Vertrag, Standalone-only-Admission und einmalige Konverterübergabe vor dem unveränderten Privacy-Core. Gültiges, nichtleeres Markdown publiziert nach Privacy-Gates; Quellenextraktionsabdeckung und Anonymisierungsstatus bleiben getrennt. Vertrags-, Orchestrator-, Cross-Produkt- und Produktregressionstests; Cowork-Allowlist unverändert. |
+| DS-090 | RC121-E0; realer Worker-/Paketgegenlauf grün, Zielhost-UAT noch zu binden | BL-010.30; Standalone führt auch DOCX über die neutrale isolierte Markdown-Extraktion. Eine synthetische Custom-XML-DOCX prüft im ausgelieferten Sidecar unvollständige Quellenabdeckung, vollständige Markdown-Anonymisierung, Markdown-escapte E-Mail-Adressen, Residual-Gate, Mapping und Scope-Hinweis. Der Cross-Produkt-Goldenlauf bindet den Standalone-Kanal auch über Vertagung, Sammelreview und spätere Publikation, damit Scope und Coverage nicht auf den direkten Cowork-Pfad zurückfallen. Der echte RC120-Problemfall wird über den gebündelten Konvertierungsworker ohne Aufnahme personenbezogener Quelldaten erfolgreich gegengeprüft. Cowork behält den strengen direkten DOCX-Stoppvertrag. |
+| DS-088 | Implementierung und ungebundener Paket-Smoke E0; commitgebundener Kandidat/Zielhost-UAT offen | BL-010.12/28/29/31, BL-040.5/6; Auswahl vor Start einzeln oder vollständig korrigierbar über geschlossenen IPC/Rust/Service-Vertrag. Reine Konvertate behalten den Basisnamen, lösen Kollisionen deterministisch und erzeugen keine Zuordnungsdatei; Legacy-v3-Exporte bleiben final. Frontend-, IPC-, Export-, History-, Rust- und reale ZIP-Regressionsprüfungen. |
+| DS-089 | aktiv, Namensvorgabe durch DS-091 präzisiert | BL-010.33, BL-044, BL-040.5/6; vollständige Wurzel-relative Standalone-Struktur durch Ordneraufnahme, Queue, Journal und sichtbaren Export. Reine Konvertate behalten den Quellbasisnamen; neue Anonymisierungsläufe folgen der Wahl aus DS-091. Mapping enthält exakt beide relativen Pfade. Segment-/Link-/Swap-Gates, Unit-/Export-/Service-/Legacytests und echter verschachtelter Paketlauf; Cowork und vorhandene Läufe unverändert. |
+| DS-091 | Implementierung E0; Zielhost-UAT offen | BL-010.33; Standalone-Anonymisierung bietet vor Start neutralen Standard oder Quellbasis mit `-anonymisiert`. UI-Hilfe, Rust/IPC/Service/Worker, `datasecure-batch/6`, unveränderliche Recoverybindung und strukturtreuer Export sind geschlossen getestet. Alte v4-Läufe bleiben quellbenannt, Cowork bleibt neutral und reine Konvertierung unverändert. |
+| DS-092 | Implementierung E0; Cowork-Zielhost-UAT offen | BL-010.8/23, BL-040.5, BL-041.10, BL-044; `open_result_folder` löst mit `latestBatchOnly` ausschließlich den vollständig sichtbaren aktuellen Cowork-Lauf auf und kennt keinen Alt-/Stammordner-Fallback. Gemeinsame rekursive Ordnerfehler tragen `SOURCE_FOLDER_*` und werden im MCP-Normalweg als Auswahlablehnung projiziert. Standalone-Verträge bleiben unverändert und laufen als Regression mit. `mcp-server.js`, `gateway/batch-recovery.js`, `companion/source-folder.js`; MCP-, Recovery-, Picker-, Source-Folder-, Standalone- und Core-Policy-Tests. |
 
 ## DS-067 – konkrete Umsetzung
 
@@ -308,7 +343,7 @@ aktuelle Produktzusage.
 |---|---|---|
 | BL-010.13/14, BL-040.5/6, DS-079/086 | Standalone leitet Abschluss-, Review-, Fehler- und Ergebniszähler aus dem aktiven oder ausdrücklich fortgesetzten eigenen Lauf ab. Verlaufsaktionen binden genau die gewählte Laufkennung, nicht den jüngsten Lauf. Ein intern abgeschlossener Teil ohne terminalen sichtbaren Gesamtexport ist `export_pending`; offene Exporte werden beim App-Start und nach Ergebnisordnerwahl nachgeholt. Zielstamm und Exportzweig werden identitätsgebunden, pro Lauf serialisiert und nur der konkret angeforderte vollständig sichtbare Lauf kann lokal geöffnet werden. | `standalone/application-service.js`, `standalone/run-history.js`, `gateway/batch-recovery.js`, `gateway/result-export.js`; `test-standalone.js`, `test-standalone-history.js`, `test-batch-recovery.js`, `test-result-folder-export.js` |
 | BL-010.13/26 | Standalone trennt **Verarbeiten** und **Ergebnisse**; der exakte letzte Lauf ist lokal sichtbar. Der Sidecar löst Zielordner oder Mapping nur intern auf; der Rust-Host prüft absoluten Pfad, Existenz, Typ und Linkfreiheit und startet den nativen Dateimanager ohne versteckte Fensteroption. Der Renderer erhält nur die inhaltsfreie Übergabebestätigung. Getrennte Sidecar-Resolver- und Rust-OS-Ereignisse sowie ein separater `aria-live`-Hinweis verhindern falschen oder unsichtbaren Erfolg. | `standalone/application-service.js`, `standalone/desktop-sidecar.js`, `tauri-contract/src/main.rs`, `frontend/*`; `test-standalone.js`, `test-standalone-frontend.js`, `test-standalone-desktop-contract.js`, `test-standalone-package-smoke.mjs` |
-| BL-010.13/26, BL-040.5, DS-083 | RC105: Der UI-Kontext erzwingt vor der Ergebnisanzeige die vollständige Exportprojektion; Standalone veröffentlicht erst nach allen Ergebnisdateien eine formelneutralisierte, laufbezogene `DataSecure-Zuordnung.csv` atomar im sichtbaren `Lauf-*`-Ordner und migriert ältere Records mit ihrem eigenen Stapeljournal. Der reale Paket-Smoke beweist Ergebnis, Mapping und exakt dieselben privaten Resolver, welche die nativen Buttons verwenden. Cowork erhält keine Originalnamen-Projektion. | `gateway/result-export.js`, `gateway/batch-recovery.js`, `standalone/application-service.js`, `desktop-sidecar.js`; `test-result-folder-export.js`, `test-standalone.js`, `test-standalone-package-smoke.mjs` |
+| BL-010.13/26/31, BL-040.5, DS-083/088 | Der UI-Kontext erzwingt vor der Ergebnisanzeige die vollständige Exportprojektion. Standalone-Anonymisierung veröffentlicht nach allen Ergebnisdateien eine formelneutralisierte, laufbezogene `DataSecure-Zuordnung.csv`. Reine Konvertierung verwendet erhaltene Basisnamen, verzichtet auf die Zuordnung und sperrt die entsprechende Aktion. Legacy-v3-Records bleiben lesbar/final; Cowork erhält keine Originalnamen-Projektion. | `gateway/result-export.js`, `standalone/application-service.js`, `standalone/run-history.js`, `desktop-sidecar.js`, Tauri-Host und Frontend; `test-result-folder-export.js`, `test-standalone*.js`, `test-standalone-package-smoke.mjs` |
 | BL-010.13/14, BL-041.10 | Standalone-Worker öffnen keine Cowork-Abschluss- oder Reviewdialoge. Nach Sidecar-Neustart, IPC-Fehler oder verlorener Admission verwirft die UI die veraltete Freigabe und verlangt eine neue lokale Auswahl. | `gateway/batch-executor.js`, `gateway/batch-worker.js`, `gateway/review-worker.js`, `apps/datasecure-standalone/frontend/app.js`; `test-batch-executor-startup.js`, `test-worker-terminal-presentation.js`, `test-local-review-executor.js`, `test-standalone-desktop-contract.js` |
 | BL-010.7, BL-051.6, DS-078 | Die aktuelle Herstellerarchitektur ersetzt die frühere Desktop-Brücken-Annahme: lokale Plugin-MCPs laufen nur in lokalen Sitzungen bestehender Desktop-Deployments. Cloud-Cowork, Web, Mobil und geplante Cloud-Sitzungen dürfen ausschließlich bereits freigegebenes Markdown verwenden. | Hostmatrix, Zielarchitektur, Produkt-/Nutzer-/Skilldokumentation; `test-host-matrix.js`, `test-cowork-documentation-contract.js`, `test:skills`, `test:docs` |
 | BL-003 | Der maschinelle Kanongate verlangt jetzt auch Hostmatrix und Standalone-Sicherheitsmodell; Register, Evidence-Matrix, UML, Benchmarks und aktive Dokumentstände wurden gegen den aktuellen Code revalidiert. | `verify-canonical-docs.mjs`, `DOCUMENT_REGISTER.md`, `BACKLOG_EVIDENCE_MATRIX.md`, `UML_ARCHITECTURE.md`; `test:docs` |
@@ -321,10 +356,10 @@ aktuelle Produktzusage.
 | BL-011.8, BL-040.6 | Gemeinsamer Lock-Freigabevertrag verhindert Erfolg nach `false`/`EPERM`, ohne Primärfehler zu verdecken; Export-Replay zählt alle offenen Items. | `gateway/batch-lock-release.js`, Processing/Continuation/Delivery/Discard/Review/Recovery, `result-export.js`; Lock-, Recovery-, Delivery- und Export-Negativtests |
 | BL-047.1 | Der verzögerte reale Processing-Lock-Test verwendet den aktuellen Byte-Snapshot-Vertrag und stoppt bei unerreichter Publikationsbarriere hart statt ohne Testfall mit Exit 0. | `test-batch-processing-lock.js` |
 | BL-047.1, BL-011.8 | Private Stamm-/Batchverzeichnisse werden nach vollständiger lokaler Sicherheitsprüfung pro Prozess und absoluter Produktkonfiguration identitätsgebunden wiederverwendet. Jeder Zugriff prüft die gespeicherten Inodes; Same-Path-Ersatz stoppt fail-closed. Ein bestätigter Purge löscht nur verwaltete Kinder und lässt die gebundenen Root-Identitäten für die weitere Nutzung intakt. Ein echter lokaler 100-Dateien-TXT/CSV/DOCX-Vorher-/Nachherlauf sank von 149,328/191,247 s auf 22,085/23,532 s (kalt/warm), ohne Fsync-Reduktion oder geänderte Freigabeentscheidung. | `gateway/common.js`, `gateway/batch-private-store.js`, `test-private-root-session.js`, `test-retention.js`, `benchmark-batch-phases.mjs` |
-| BL-010.13/14 | Standalone-Fortsetzung verlangt korrekten Startmarker und Worker-ACK. UI/CLI unterscheiden `stopped`, `export_pending` und `completed_without_results`; All-stopped bietet eine neue Auswahl und die private Zuordnung. | `standalone/application-service.js`, `standalone/cli.js`, `frontend/app.js`; `test-standalone.js` |
+| BL-010.13/14 | Standalone-Fortsetzung verlangt korrekten Startmarker und Worker-ACK. UI/CLI unterscheiden `stopped`, `export_pending` und `completed_without_results`; All-stopped bietet eine neue Auswahl, aber weder Ergebnisordner noch Zuordnung. | `standalone/application-service.js`, `standalone/cli.js`, `frontend/app.js`; `test-standalone.js` |
 | BL-040.5, BL-041.7 | Alle vier MCP-Prompts verpflichten bei `sync_folder_notice=true` denselben einmaligen Cloud-Sync-Hinweis wie der Hauptskill. Aktive Nutzertexte unterscheiden dedizierten lokalen Ergebnisordner, optionalen Cowork-Zugriff und außerhalb liegende Originale. | `prompt-contract.js`, synchronisiertes `manifest.json`, README, Skillbeispiele und UAT-Doku; `test-manifest.js`, Cowork-/Dokumentationsgates |
 | BL-010.20/21 | Zertifikatsfreie macOS-Piloten verwenden explizite Tauri-Ad-hoc-Signatur; Developer-ID/Notarisierung bleiben optional, native Zielhostabnahme verpflichtend. | `tauri.macos.conf.json`, `desktop-targets.json`, `MACOS-START.md`; `test-standalone-desktop-contract.js` |
-| BL-010.13/14, BL-043.1 | Die Standalone-Zuordnung erscheint nur für terminal sichtbare Ergebnisse oder einen vollständig gestoppten Stapel. Der Reviewvertrag beschreibt klare Positionen bis zum Gesamtabschluss ausschließlich als intern fertig. | `frontend/app.js`, `contracts/BATCH_REVIEW_V2.md`; `test-standalone.js`, Dokumentationsgates |
+| BL-010.13/14, BL-043.1 | Die Standalone-Zuordnung erscheint nur für terminal sichtbare, tatsächlich vorhandene Ergebnisse. Ein vollständig gestoppter Stapel bleibt in Abschluss/Diagnose sichtbar, besitzt aber weder Ergebnisordner noch Zuordnung. Der Reviewvertrag beschreibt klare Positionen bis zum Gesamtabschluss ausschließlich als intern fertig. | `result-export.js`, `run-history.js`, `frontend/app.js`, `contracts/BATCH_REVIEW_V2.md`; Export-, History-, Standalone- und Dokumentationsgates |
 | BL-040.6 | Export und Replay melden keinen Erfolg, solange ihr identitätsgebundener Claim nach begrenzten Windows-Retries nicht sicher freigegeben wurde. | `result-export.js`; persistente `EPERM`-Negativfälle in `test-result-folder-export.js` |
 | BL-047.1, BL-010.13 | Ein kombinierter Standalone-Statussnapshot ermittelt Recovery-Zähler und jüngsten Produktlauf in einer Enumeration mit höchstens einem Read je Journal. | `batch-recovery.js`, `standalone/application-service.js`; 1.000-Journal-Test in `test-batch-recovery.js` |
 | BL-011.8, BL-041.10 | Der reale Intake-Worker-Abschlussnachweis wartet auf Dispatcher-Ereignis und Worker-Exit innerhalb des Presenter-Budgets; Fehler räumen Testkinder geordnet auf. | `test-direct-picker-intake-worker.js`; wiederholter Intake-Stresslauf |
@@ -345,7 +380,7 @@ aktuelle Produktzusage.
 | Story | Korrektur / Befund | Code- und Testnachweis |
 |---|---|---|
 | BL-040.5 | Gegencheck: Der Export-Record kannte Finalität nur je Lauf. Blieb ein einzelnes Item dauerhaft fehlschlagend, war der Lauf `complete:false`, und bereits geschriebene, vom Anwender gelöschte Geschwisterdateien wurden bei jedem Replay wiederhergestellt (DS-023). Jetzt wird jedes geschriebene Item sofort als `exported` persistiert und nie erneut geprüft oder erzeugt; nur offene Items werden nachgeholt. | `gateway/result-export.js`; `tests/test-result-folder-export.js` (Teilfehlschlag: Fortschritt je Item, Nutzerlöschung bleibt bei Replay und Terminalexport bestehen, nach Reparatur wird nur das offene Item geschrieben) |
-| BL-044, DS-058 | Die Ordnerauswahl schrieb immer den relativen Quellpfad (häufig Personennamen oder Bewertungen als Ordnernamen) in Journal und dauerhaftes Mapping, auch wenn die Basenamen eindeutig waren; DS-058 erlaubt den relativen Pfad nur bei sonst nicht eindeutiger Abbildung. Der Ordnerwalk gibt kein eigenes Label mehr aus; die Warteschlange bildet die minimale Unterscheidung (Basename, sonst kürzester unterscheidender Suffix). | `companion/source-folder.js`; `tests/test-source-folder.js` (eindeutige Basenamen → nackte Namen ohne Ordnernamen; gleiche Basenamen → `a/same.txt`, `b/same.txt`); Skill-Referenz `unterstuetzte-formate.md` |
+| BL-010.33, BL-044, DS-089/091 | Neue Standalone-Ordnerläufe behalten den relativen Verzeichnisbaum. Der Anwender wählt für anonymisierte Dateiblätter neutral oder quellbasiert; neutral ist Standard. Absolute Wurzelpfade bleiben privat, Diagnosen enthalten keine Namen. Cowork verwendet weiterhin neutrale flache Namen, reine Konvertate behalten den Quellbasisnamen und alte Läufe werden nicht umgeschrieben. | `core/result-naming-mode.js`; `companion/source-folder.js`; `gateway/result-export.js`; Frontend/Rust/IPC/Worker; `tests/test-batch-processing-purpose.js`; `tests/test-result-folder-export.js`; `tests/test-standalone*.js` |
 | BL-044.1, BL-040.5 | Das Output-als-Quelle-Gate galt nur für den Ordnerpicker und verglich Pfadstrings: der Dateipicker nahm `DataSecure-Output/Lauf-*/`-Dateien als Quelle an, ein Windows-8.3-Alias des Output-Baums passierte, und ein ersetzter Ergebnisordner (gleicher Pfad, neue Identität) schaltete den Schutz ab. Jetzt prüfen Datei- und Ordnerpicker dieselbe Realpath-/Case-gefaltete Überlappung gegen den konfigurierten und den zuletzt aufgezeichneten Ergebnisordner. | `gateway/result-folder-config.js`, `companion/file-picker.js`, `companion/source-folder.js`; `tests/test-result-folder-export.js` (Dateipicker, Case-Variante, 8.3-Alias, ersetzter Ordner, Geschwisterordner bleibt wählbar) |
 | BL-010.8, BL-051.2, BL-010.7, BL-012.6 | Dokumentendrift zum Herstellerstand 02.09.2026: Marketplace galt als belegter Nutzerkanal, obwohl der Marketplace-Quellordner `command: node`, den 57-MiB-OCR-Engineering-Baum und keine Runtime enthält; Anleitungen setzten eine lokale Cowork-Sitzung stillschweigend voraus, obwohl Cowork laut Hersteller standardmäßig in der Cloud läuft und `isLocalDevMcpEnabled` lokale Plugin-MCPs sperren kann; Bedienelemente/Skillnamen und Fortsetzungsphrasen waren uneinheitlich; der Cloud-Sync-Hinweis erreichte den Anwender nicht; UAT-04 verlangte ein auf Windows nicht belastbares Kriterium. | `CURRENT_STATE.md`, `PRODUCT.md`, `BACKLOG.md`, `BACKLOG_EVIDENCE_MATRIX.md`, `README.md`, `docs/ANLEITUNG.md`, `docs/IT-BETRIEBSHANDBUCH.md`, `THIRD_PARTY_NOTICES.md`, `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md`, UAT-Kit, `SKILL.md`, `companion/completion-summary.js`, `BUILD_INFO.json`; `test-current-documentation-contract.js`, `test-completion-summary.js` |
 | BL-041.10, BL-012.6 | `result_folder_required` meldete „Es wurde kein Ergebnisordner gewählt“, obwohl der Anwender gewählt hatte (Ordner im privaten DataSecure-Bereich oder nicht anlegbarer `DataSecure-Output`), und der Skill kannte den Code nicht; die Sperre des Ordnerwechsels bei offenem Stapel nannte keinen Ausweg. Jetzt nennt die Antwort den pfadfreien Grund und die erneute Wahl beim nächsten Start; der Skill erklärt den Code; die Wechselsperre nennt Fortsetzen/Abschließen/Verwerfen. | `server/index.js`, `skills/gbh-datasecure-dokument-anonymisieren/SKILL.md`; `tests/test-native-picker-lifecycle.js` (Überlappung mit privatem Root, nativer Fehler ohne Pfadleck, keine Persistenz, kein Quellpicker) |

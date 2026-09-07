@@ -229,7 +229,7 @@ test('Standalone separates pending completion metadata from document counts in m
     pending = false;
     const afterRetry = service.status();
     assert.strictEqual(afterRetry.state, released ? 'results_available' : 'completed_without_results');
-    assert.strictEqual(afterRetry.ledger_available, true);
+    assert.strictEqual(afterRetry.ledger_available, released > 0);
     assert.strictEqual(afterRetry.completion_pending, undefined);
   }
 });
@@ -301,6 +301,9 @@ test('Standalone source manifest is a separate offline product contract', () => 
   assert.deepStrictEqual(manifest.formats_by_processing_mode['markdown-and-anonymize'], manifest.current_formats);
   assert.deepStrictEqual(manifest.current_formats, ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'scan_pdf', 'png', 'jpeg', 'bmp']);
   assert.strictEqual(manifest.default_processing_mode, null, 'the user explicitly chooses a core function');
+  assert.strictEqual(manifest.default_anonymized_output_naming, 'neutral');
+  assert.deepStrictEqual(manifest.anonymized_output_naming_modes, ['neutral', 'source-with-suffix']);
+  assert.strictEqual(manifest.conversion_output_naming, 'source-basename');
   assert.deepStrictEqual(manifest.desktop_targets, [
     'windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64-glibc'
   ]);
@@ -330,30 +333,32 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.strictEqual(contract.renderer_receives_open_target, false);
   assert.strictEqual(contract.desktop_host_target_resolution, 'sidecar-resolve-rust-open');
   assert.strictEqual(contract.state_source, 'polled_public_status_snapshot');
+  assert.strictEqual(contract.default_anonymized_output_naming, 'neutral');
+  assert.deepStrictEqual(contract.anonymized_output_naming_modes, ['neutral', 'source-with-suffix']);
+  assert.strictEqual(contract.output_naming_confirmation, false);
   assert.strictEqual(contract.events, undefined, 'the product has no second, disconnected event-state model');
   assert.ok(contract.forbidden_payload_fields.includes('path'));
   assert.ok(contract.forbidden_payload_fields.includes('raw_content'));
   assert.deepStrictEqual(contract.commands, [
-    'select_files', 'select_folder', 'cancel_admission', 'start_admitted_batch',
+    'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'get_run_history', 'open_history_results', 'open_history_ledger', 'continue_history_batch',
     'ack_terminal_presented', 'continue_current_batch', 'configure_results',
     'open_current_results', 'open_local_ledger', 'open_diagnostic_folder', 'shutdown'
   ]);
   assert.deepStrictEqual([...PRIVATE_ACTIONS], [
-    'admit_selected_sources', 'cancel_admission', 'start_admitted_batch',
+    'admit_selected_sources', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
     'resolve_current_results', 'resolve_local_ledger', 'get_run_history',
     'resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'shutdown'
   ]);
 });
 
-test('Standalone exposes the private ledger only for terminal visible outcomes', () => {
+test('Standalone exposes history ledgers only when the backend marks the anonymized run ledger available', () => {
   const source = fs.readFileSync(path.join(__dirname,
     '../apps/datasecure-standalone/frontend/app.js'), 'utf8');
-  assert.match(source,
-    /const ledgerAvailable = state\.results_available === true \|\|[\s\S]{0,100}state\.state === 'completed_without_results' && state\.ledger_available === true/u);
   assert.match(source, /command: 'open_history_ledger'[^\n]*available: entry\.ledger_available === true/u);
   assert.doesNotMatch(source, /command: 'open_history_ledger'[^\n]*available:.*failed_count/u);
+  assert.match(source, /Für reine Konvertierung wird keine Zuordnungsdatei erstellt/u);
 });
 
 test('private desktop IPC is framed, bounded and independent of line endings', () => {
@@ -393,6 +398,17 @@ test('private desktop IPC is framed, bounded and independent of line endings', (
     (error) => error.code === 'DESKTOP_IPC_PRESENTATION_GENERATION_INVALID');
   assert.throws(() => encodeFrame({ ...message, presentation_generation: 42 }),
     (error) => error.code === 'DESKTOP_IPC_FIELD_INVALID');
+  const removal = { schema: message.schema, request_id: 'd'.repeat(16),
+    action: 'remove_admitted_source', selection_index: 1 };
+  assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(removal)), [removal]);
+  assert.ok(encodeFrame({ ...removal, selection_index: 199 }).length > 4);
+  for (const selection_index of [-1, 200, 1.5, '1', null]) {
+    assert.throws(() => encodeFrame({ ...removal, selection_index }),
+      (error) => error.code === 'DESKTOP_IPC_SELECTION_INDEX_INVALID');
+  }
+  const tooManySources = { ...message, source_paths: Array.from({ length: 201 }, (_, index) => `/tmp/${index}.txt`) };
+  assert.throws(() => encodeFrame(tooManySources),
+    (error) => error.code === 'DESKTOP_IPC_SOURCE_COUNT_INVALID');
 });
 
 test('Standalone runtime source contains no MCP or JSON-RPC transport', () => {
@@ -419,10 +435,17 @@ test('history IPC binds exact opaque run IDs and refuses paths, mode changes and
 
 test('desktop start requires exactly one supported purpose; continue and other actions reject purpose fields', () => {
   const base = { schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16), action: 'start_admitted_batch' };
-  for (const mode of ['markdown-and-anonymize', 'markdown-only']) {
-    const message = { ...base, processing_mode: mode };
+  for (const naming of ['neutral', 'source-with-suffix']) {
+    const message = { ...base, processing_mode: 'markdown-and-anonymize', output_naming_mode: naming };
     assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(message)), [message]);
   }
+  const conversion = { ...base, processing_mode: 'markdown-only' };
+  assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(conversion)), [conversion]);
+  for (const message of [
+    { ...base, processing_mode: 'markdown-and-anonymize' },
+    { ...base, processing_mode: 'markdown-and-anonymize', output_naming_mode: 'unknown' },
+    { ...base, processing_mode: 'markdown-only', output_naming_mode: 'neutral' }
+  ]) assert.throws(() => encodeFrame(message), (error) => error.code === 'RESULT_NAMING_MODE_INVALID');
   for (const mode of [undefined, null, '', 'auto', 'local_only', false, 0, {}, ['markdown-only']]) {
     const message = { ...base, ...(mode === undefined ? {} : { processing_mode: mode }) };
     assert.throws(() => encodeFrame(message), (error) => error.code === 'PROCESSING_MODE_INVALID');
@@ -461,8 +484,10 @@ async function processingModeServiceCase() {
   const queue = service.admittedQueue;
   const selection = service.selectionContext;
   for (const options of [{}, null, [], { processingMode: null },
-    { processingMode: 'local_only' }, { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' }]) {
-    const expected = 'PROCESSING_MODE_INVALID';
+    { processingMode: 'local_only' }, { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' },
+    { processingMode: 'markdown-and-anonymize', outputNamingMode: 'unknown' },
+    { processingMode: 'markdown-only', outputNamingMode: 'neutral' }]) {
+    const expected = Object.hasOwn(options || {}, 'outputNamingMode') ? 'RESULT_NAMING_MODE_INVALID' : 'PROCESSING_MODE_INVALID';
     await assert.rejects(service.startAdmittedBatch(options), (error) => error.code === expected);
     assert.strictEqual(service.admittedQueue, queue, 'rejected purpose must not consume the admission');
     assert.strictEqual(service.selectionContext, selection);
@@ -474,15 +499,22 @@ async function processingModeServiceCase() {
   assert.strictEqual(reservations, 1);
   assert.strictEqual(launches, 1);
   assert.strictEqual(workerOptions.processingMode, 'markdown-and-anonymize');
+  assert.strictEqual(workerOptions.outputNamingMode, 'neutral', 'new internal callers default to privacy-preserving names');
   assert.strictEqual(workerProfile, 'general');
   assert.strictEqual(service.admittedQueue, null);
   await service.admitSelectedSources(['C:\\Source\\a.txt']);
   await service.startAdmittedBatch({ processingMode: 'markdown-only' });
   assert.strictEqual(workerOptions.processingMode, 'markdown-only', 'pure conversion is handed off without an anonymization fallback');
+  assert.strictEqual(Object.hasOwn(workerOptions, 'outputNamingMode'), false);
   assert.strictEqual(launches, 2);
+  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await service.startAdmittedBatch({ processingMode: 'markdown-and-anonymize', outputNamingMode: 'source-with-suffix' });
+  assert.strictEqual(workerOptions.outputNamingMode, 'source-with-suffix', 'the explicit readable-name choice crosses the service boundary');
+  assert.strictEqual(launches, 3);
   const direct = new StandaloneApplicationService({ dependencies: fakeDependencies({
     startLocalIntakeExecutor(_queue, _profile, options) {
       assert.strictEqual(options.processingMode, 'markdown-and-anonymize', 'legacy direct calls stay explicitly anonymization-only');
+      assert.strictEqual(options.outputNamingMode, 'neutral');
       return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
     }
   }) });
@@ -539,12 +571,38 @@ async function admittedServiceCase() {
     local_ui_only: true,
     external_disclosure: false
   });
-  assert.deepStrictEqual(await service.startAdmittedBatch(), {
-    ok: true, event: 'batch_accepted', selected_count: 2, external_disclosure: false
+  assert.deepStrictEqual(service.removeAdmittedSource(0), {
+    ok: true, event: 'selection_updated', selected_count: 1, total_bytes: 4,
+    ui_context: {
+      ok: true,
+      result_folder: 'C:\\Results',
+      latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
+      result_folder_is_default: false,
+      source_kind: 'files',
+      source_folders: ['C:\\Source'],
+      selected_files: ['b.txt'],
+      local_ui_only: true,
+      external_disclosure: false
+    },
+    external_disclosure: false
   });
-  assert.strictEqual(startedQueue.length, 2);
-  assert.deepStrictEqual(service.uiContext().selected_files, ['a.txt', 'b.txt'],
+  assert.throws(() => service.removeAdmittedSource(1), (error) => error.code === 'STANDALONE_SELECTION_INVALID');
+  assert.deepStrictEqual(await service.startAdmittedBatch(), {
+    ok: true, event: 'batch_accepted', selected_count: 1, external_disclosure: false
+  });
+  assert.strictEqual(startedQueue.length, 1);
+  assert.deepStrictEqual(service.uiContext().selected_files, ['b.txt'],
     'the local window keeps the last selection visible while the batch runs');
+  await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
+}
+
+async function clearLastAdmittedSourceCase() {
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies() });
+  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  const cleared = service.removeAdmittedSource(0);
+  assert.strictEqual(cleared.selected_count, 0);
+  assert.deepStrictEqual(cleared.ui_context.selected_files, []);
+  assert.deepStrictEqual(cleared.ui_context.source_folders, []);
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
 }
 
@@ -568,7 +626,7 @@ async function realAdmissionAdapterCase() {
     service.cancelAdmission();
     const admittedFolder = await service.admitSelectedSources([root], 'folder');
     assert.deepStrictEqual(admittedFolder.ui_context.source_folders, [root]);
-    assert.deepStrictEqual(admittedFolder.ui_context.selected_files.sort(), ['first.txt', 'second.txt']);
+    assert.deepStrictEqual(admittedFolder.ui_context.selected_files.sort(), ['first.txt', 'nested/second.txt']);
     assert.ok(service.admittedQueue.every((item) => path.isAbsolute(item.full) &&
       path.basename(item.full) === item.name && Number.isSafeInteger(item.sourceBytes)));
   } finally {
@@ -822,6 +880,7 @@ async function missingLedgerCase() {
   await testAsync('native desktop admission validates once and starts without a second picker', admittedServiceCase);
   await testAsync('processing purpose is rejected before mutations and never silently falls back', processingModeServiceCase);
   await testAsync('native desktop admission uses the real picker-to-queue adapter for files and folders', realAdmissionAdapterCase);
+  await testAsync('prepared selections remove one item or clear the final item before Start', clearLastAdmittedSourceCase);
   await testAsync('native desktop admission enforces the aggregate 500 MB limit', oversizedAdmissionCase);
   await testAsync('a missing worker acknowledgement consumes the admission exactly once', uncertainAdmissionStartCase);
   await testAsync('an incomplete worker start contract consumes the admission and fails closed', invalidAdmissionStartContractCase);

@@ -16,7 +16,7 @@ const contracts = [
   ['document-result-grade', 'gateway']
 ];
 const coreRoots = [...contracts.map(([name]) => name), 'batch-result-projection', 'batch-progress',
-  'processing-mode', 'product-bootstrap'];
+  'processing-mode', 'product-bootstrap', 'source-extraction-contract'];
 const pureFiles = [...coreRoots.map((name) => `core/${name}.js`), 'resource-limits.js'];
 const sources = new Map(pureFiles.map(name => [name, fs.readFileSync(path.join(server, name), 'utf8')]));
 

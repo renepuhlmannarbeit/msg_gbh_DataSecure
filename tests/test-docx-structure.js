@@ -214,6 +214,23 @@ test('modern text-box choice does not duplicate fallback text or drop outer runs
   assertAbsent(result.markdown, 'FALLBACK');
 });
 
+test('DrawingML layout values are ignored by namespace while visible text remains intact', () => {
+  const wp = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
+  const wp14 = 'http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing';
+  const result = parseMainXml(`<w:document ${namespaces} xmlns:wp="${wp}" xmlns:wp14="${wp14}"><w:body>` +
+    `<w:p>${run('BEFORE')}<w:r><w:drawing><wp:anchor><wp:positionH><wp:align>center</wp:align></wp:positionH>` +
+    `<wp:positionV><wp:posOffset>12700</wp:posOffset></wp:positionV>` +
+    `<wp14:sizeRelH><wp14:pctWidth>50000</wp14:pctWidth></wp14:sizeRelH>` +
+    `<wp14:sizeRelV><wp14:pctHeight>50000</wp14:pctHeight></wp14:sizeRelV></wp:anchor></w:drawing></w:r>` +
+    `${run('AFTER')}</w:p></w:body></w:document>`);
+  onceInOrder(result.markdown, ['BEFORE', 'AFTER']);
+  for (const layout of ['center', '12700', '50000']) assertAbsent(result.markdown, layout);
+
+  const rebound = `<w:document ${namespaces} xmlns:wp="urn:hostile"><w:body><w:p><w:r>` +
+    `<wp:posOffset>HIDDEN_CONTENT</wp:posOffset>${run('VISIBLE')}</w:r></w:p></w:body></w:document>`;
+  assert.throws(() => parseMainXml(rebound), error => error.code === 'DOCX_STRUCTURE_UNSAFE');
+});
+
 test('unsupported markup choice uses exactly one declared fallback', () => {
   const content = `<w:p>${run('BEFORE')}<mc:AlternateContent>` +
     `<mc:Choice Requires="vendor"><w:r><w:t>UNSUPPORTED_PRIVATE</w:t></w:r></mc:Choice>` +

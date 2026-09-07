@@ -86,11 +86,15 @@ test('v3 and unknown legacy versions stop without reading, changing or deleting 
 });
 
 test('encrypted extension and encrypted marker cannot be adopted as plaintext v2 or v4', () => {
-  for (const schema of ['datasecure-batch/2', 'datasecure-batch/4']) {
+  for (const schema of ['datasecure-batch/2', 'datasecure-batch/4', 'datasecure-batch/6']) {
     for (const kind of ['extension', 'marker', 'cleanup-marker']) {
       const h = fixture(schema, kind === 'extension' ? '001_aaaaaaaaaaaaaaaaaaaaaaaa.dsart' : undefined);
       try {
-        if (schema.endsWith('/4')) h.state.items[0].private_artifact_plain = true;
+        if (schema.endsWith('/4') || schema.endsWith('/6')) h.state.items[0].private_artifact_plain = true;
+        if (schema.endsWith('/6')) {
+          h.state.product_channel = 'standalone';
+          h.state.output_naming_mode = 'neutral';
+        }
         if (kind === 'marker') h.state.items[0].private_artifact_encrypted = true;
         if (kind === 'cleanup-marker') h.state.items[0].legacy_work_name = '001_bbbbbbbbbbbbbbbbbbbbbbbb.txt';
         const target = path.join(h.work, h.state.items[0].work_name);
@@ -164,11 +168,15 @@ test('v4 plaintext marker validation applies before terminal status shortcuts', 
 });
 
 test('renamed cipher envelopes survive expiry reads and the actual maintenance cleanup path', () => {
-  for (const schema of ['datasecure-batch/2', 'datasecure-batch/4']) {
+  for (const schema of ['datasecure-batch/2', 'datasecure-batch/4', 'datasecure-batch/6']) {
     const h = fixture(schema, '001_aaaaaaaaaaaaaaaaaaaaaaaa.workcopy');
     try {
       const item = h.state.items[0];
-      if (schema.endsWith('/4')) item.private_artifact_plain = true;
+      if (schema.endsWith('/4') || schema.endsWith('/6')) item.private_artifact_plain = true;
+      if (schema.endsWith('/6')) {
+        h.state.product_channel = 'standalone';
+        h.state.output_naming_mode = 'neutral';
+      }
       const envelope = Buffer.from('DSARTF01synthetic-legacy-encrypted-data');
       item.size = envelope.length;
       item.sha256 = crypto.createHash('sha256').update(envelope).digest('hex');

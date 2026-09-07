@@ -44,15 +44,15 @@ function sweep() {
     now: NOW, retentionDays: 7, protectedIds: protection.ids, outputProtectionComplete: protection.complete });
 }
 async function run() {
-  await testAsync('only expired committed private dm copies are removed; originals, visible Markdown and mapping survive', async () => {
+  await testAsync('only expired committed private dm copies are removed; originals and visible basename-preserving Markdown survive', async () => {
     const item = await fixture(); old(item);
     const state = journal([item]);
     const original = path.join(root, 'customer-original.txt'); fs.writeFileSync(original, 'private original');
     assert.strictEqual(exportCompletedState(state).available, true);
     const visible = visibleExportDirectory(state.token);
-    const document = path.join(visible, 'Dokument-001-konvertiert.md');
-    const mapping = path.join(visible, 'DataSecure-Zuordnung.csv');
-    const before = [original, document, mapping].map((file) => fs.readFileSync(file));
+    const document = path.join(visible, 'synthetic.md');
+    assert.strictEqual(fs.existsSync(path.join(visible, 'DataSecure-Zuordnung.csv')), false);
+    const before = [original, document].map((file) => fs.readFileSync(file));
     assert.strictEqual(completedMarkdownExportMatches(state), true);
     assert.strictEqual(openBatchPackageProtection().ids.has(item.artifact_id), false);
     const result = sweep();
@@ -62,7 +62,7 @@ async function run() {
     assert.strictEqual(completedMarkdownExportMatches(state), true, 'historical export does not need expired private bytes');
     assert.deepStrictEqual(exportCompletedState(state), { exported: 1, pending: 0, available: true });
     assert.strictEqual(visibleExportDirectory(state.token), visible);
-    [original, document, mapping].forEach((file, index) => assert.deepStrictEqual(fs.readFileSync(file), before[index]));
+    [original, document].forEach((file, index) => assert.deepStrictEqual(fs.readFileSync(file), before[index]));
     const swapped = structuredClone(state); swapped.items[0].artifact_sha256 = '0'.repeat(64);
     assert.strictEqual(completedMarkdownExportMatches(swapped), false);
     assert.strictEqual(exportCompletedState(swapped).available, false);
@@ -80,7 +80,7 @@ async function run() {
     assert.ok(fs.existsSync(path.join(artifactRoot(), released.artifact_id)));
     assert.ok(fs.existsSync(path.join(artifactRoot(), committing.artifact_id)));
   });
-  await testAsync('completed processing with pending visible export stays protected until its CSV commit', async () => {
+  await testAsync('completed processing with pending visible export stays protected until its run commit', async () => {
     const item = await fixture('export-pending.txt'); old(item);
     const state = journal([item]);
     assert.ok(openBatchPackageProtection().ids.has(item.artifact_id));

@@ -1,5 +1,7 @@
 'use strict';
 
+const { RESOURCE_LIMITS } = require('../resource-limits');
+
 // Content-free diagnostic envelope for tool responses. When a local start or
 // continuation fails, Cowork used to see only a generic sentence; the actual
 // cause existed solely in the local workflow journal. Every error response now
@@ -98,7 +100,8 @@ function normalizePhase(phase) {
 
 function boundedCount(value) {
   const number = Number(value);
-  return Number.isSafeInteger(number) && number >= 0 ? Math.min(number, 100) : undefined;
+  return Number.isSafeInteger(number) && number >= 0
+    ? Math.min(number, RESOURCE_LIMITS.MAX_BATCH_FILES) : undefined;
 }
 
 // `recorded` should be the boolean result of recordWorkflowEvent(); it tells

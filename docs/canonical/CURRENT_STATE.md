@@ -1,32 +1,219 @@
 # Aktueller Iststand
 
-Stand: 07.09.2026 · 3.2.0-rc111 · Startseite und laufgebundener Verlauf
+Stand: 07.09.2026 · 3.2.0-rc123 · Cowork-Parität ohne Standalone-Regression
+
+## Aktueller Entwicklungsstand RC123 / DS-092
+
+Der Cowork-Normalweg übernimmt die gemeinsam nutzbaren Korrekturen der
+Standalone-UATs, ohne dessen eigenständige Oberfläche, Konvertierungsmodus,
+Verlauf, Ordnerstruktur oder wählbare Ergebnisnamen zu verändern. Personen-,
+Unternehmens-, Parser-, Recovery-, Export- und Restprüfungslogik stammen
+weiterhin aus demselben Core und werden in beiden Produktprojektionen geprüft.
+
+`open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
+aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
+oder noch nicht vollständig exportiert, öffnet DataSecure weder den allgemeinen
+`DataSecure-Output`-Stamm noch ein älteres Ergebnis. Rekursive Ordnergrenzen
+verwenden außerdem produktneutrale `SOURCE_FOLDER_*`-Fehlercodes; Cowork meldet
+damit eine korrigierbare Auswahlsperre statt eines irreführenden Pickerfehlers.
+Pfade und Dateinamen bleiben in beiden Fällen vollständig lokal.
+
+Die Produktgrenze bleibt bewusst: Cowork anonymisiert TXT, Markdown, CSV und
+streng geprüfte DOCX mit neutralen Ergebnisnamen. Die reine Markdown-
+Konvertierung, breite Konverter-/OCR-Runtime, Verlaufstabelle, sichtbare
+Zuordnung und wählbare Benennung bleiben Standalone-Funktionen. Dadurch bleibt
+das normale Cowork-Paket klein und sein Ablauf besteht nach der einmaligen
+Ergebnisordnerwahl weiterhin nur aus Quelle wählen, lokal abwarten und Ergebnis
+öffnen beziehungsweise auf ausdrücklichen Wunsch in Claude auswerten.
+
+Alle folgenden RC-Abschnitte sind chronologische Entwicklungsevidenz. Für den
+aktuellen Produktumfang und bei Widersprüchen gelten ausschließlich der
+RC123-Abschnitt oben, das Entscheidungsregister und die dort verlinkten
+Verträge; ältere Abschnitte dürfen keine aktuelle Produktzusage erweitern oder
+einschränken.
+
+## Vorheriger Entwicklungsstand RC121
+
+Der reale RC120-UAT mit der neutral referenzierten Evidence-Datei
+`UAT-DOCX-COMPLEX-001` deckte eine
+Produktinkonsistenz auf: Die reine Konvertierung konnte rund 13.000 Zeichen
+Markdown extrahieren, der Standalone-Anonymisierungspfad stoppte dieselbe Datei
+jedoch wegen Word-Custom-XML, Klassifizierungsmetadaten und Grafiken pauschal mit
+`PARSER_COVERAGE_UNVERIFIED`. DS-090 führt DOCX in Standalone deshalb durch den
+bereits isolierten Markdown-first-Pfad. Gültiger, nichtleerer Markdown-Inhalt
+wird vollständig anonymisiert; die unvollständige Abdeckung des ursprünglichen
+Word-Containers bleibt davon getrennt sichtbar.
+
+Der echte Dokumentgegenlauf über den gebündelten Konvertierungsworker erkennt
+18 Identifikatoren, wählt lokal das Personalprofil, besteht das Residual-Gate
+und veröffentlicht ein Ergebnis mit `privacy_scope=extracted-markdown-only`.
+Der reale Paket-Smoke deckte zusätzlich Markdown-escapte E-Mail-Adressen wie
+`lina\.testfeld@example\.test` auf; die strukturierte Erkennung umfasst nun den
+vollständigen Quellspan statt nur des Nachnamens. Die persönliche Quelldatei
+wird nicht ins Repository übernommen; synthetische DOCX- und E-Mail-Fixtures
+binden beide Fehler als Regression. Cowork bleibt unverändert streng und stoppt
+dieselben nicht abgedeckten DOCX-Strukturen. Beschädigte, verschlüsselte, aktive
+oder leere Quellen bleiben in beiden Produkten gesperrt.
+
+## Vorheriger Entwicklungsstand RC120
+
+Die sichtbare `DataSecure-Zuordnung.csv` ist jetzt wieder ein striktes Mapping:
+Jede Zeile benennt eine Quelle und genau ein bereits atomar veröffentlichtes,
+vorhandenes Ergebnis. Gestoppte Dateien werden nicht mehr als künstliches
+„Kein Ergebnis“-Ziel eingetragen; ihre festen Fehlercodes bleiben im privaten
+Laufzustand sowie in Abschluss und Diagnose erhalten. Ein vollständig gestoppter
+Lauf erzeugt keinen leeren Ergebnisordner und keine sichtbare Zuordnung. Auch
+historische All-stopped-Zeilen bieten keine Öffnen-Aktion mehr, können aber als
+bereits veröffentlichte Benutzerdateien unverändert bestehen bleiben.
+
+## Aktueller Entwicklungsstand RC119
+
+Der UAT-Lauf `Lauf-20260907-163522-142350c1` ist nicht freigabefähig: In den
+vier DOCX-Ergebnissen blieben `Anna Berger`, `Murat Kaya`, `Sofia Lindner` und
+`Jonas Richter` sichtbar. Der DOCX-Konverter lieferte die eindeutige
+Tabellenzeile `| person | <Name> |`; der gemeinsame Personenankerkatalog kannte
+aber nur andere Feldbezeichnungen. Weil die bisherige Restprüfung denselben
+Katalog verwendete, blieb auch das Release-Gate blind.
+
+RC119 ergänzt den fehlenden expliziten Anker und einen absichtlich unabhängigen,
+engen Restprüfer für genau diese Tabellenform. Alle Vorkommen des jeweiligen
+Namens werden dadurch im gesamten konvertierten Markdown demselben
+Personenpseudonym zugeordnet. Der direkte Gegenlauf mit den vier ursprünglichen
+DOCX-Dateien entfernt alle vier Klarwerte und liefert keine Restbefunde. Der
+reproduzierbare 100-Dateien-Korpustest führt diese Anonymisierungsprüfung künftig
+automatisch aus; die allgemeine PII-Regression und der komplexe 15-DOCX-Korpus
+sind ebenfalls grün. Ein neuer Paketkandidat ersetzt RC118 erst nach den
+vollständigen Standalone-/Paketprüfungen.
+
+## Aktueller Entwicklungsstand RC117
+
+RC117 erweitert die reale Word-Interoperabilität und den ausführbaren UAT-
+Korpus. Der DOCX-Preflight akzeptiert jetzt ausschließlich die bekannten,
+internen und nicht ausführbaren Microsoft-Beziehungen `classificationlabels`
+und `stylesWithEffects`; externe Ziele, Lookalikes und alle unbekannten
+Beziehungen bleiben fail-closed. Der WordprocessingML-Parser ignoriert nur die
+namespacegebundenen DrawingML-Layoutknoten `align`, `posOffset`, `pctHeight` und
+`pctWidth`, die keinen Dokumenttext darstellen. Fremde Namespace-Bindungen
+bleiben gesperrt.
+
+Ein neuer deterministischer UAT-Korpus liefert 15 vollständig fiktive, visuell
+geprüfte DOCX mit zwei, vier oder acht Seiten. Neun enthalten Personen,
+Unternehmen, Kontakt-, Adress- und Bankdaten; sechs kontrollieren neutrale
+Fachinhalte. Fünf Dokumente wiederholen dieselbe Person und dasselbe Unternehmen
+und belegen damit die stapelweit konsistente Pseudonymisierung. Der reale
+Admission-, Parser- und Anonymisierungstest ist für alle 15 Dateien grün; eine
+Neuerzeugung ergab 15/15 bytegleiche DOCX. Die beiden Standalone-Funktionen
+lassen sich anhand von `EXPECTED_RESULTS.csv` getrennt menschlich prüfen.
+
+## Vorheriger Entwicklungsstand RC116
+
+Der sichtbare RC115-UAT-Lauf mit 102 Ergebnissen wurde vollständig gegen seine
+`DataSecure-Zuordnung.csv` geprüft: Alle 102 CSV-Zeilen hatten ein vorhandenes,
+eindeutiges Ziel; es fehlte kein Ergebnis. Der Lauf legte jedoch sämtliche
+Ergebnisse flach als `Dokument-NNN-anonymisiert.md` ab und reduzierte die Quellen
+auf ihre Basisnamen. Damit war die Zuordnung technisch vollständig, aber für
+einen ausgewählten Verzeichnisbaum fachlich nicht ausreichend.
+
+DS-089/091 / BL-010.33 korrigieren die Ursache am Beginn der Datenkette. Die sichere
+Ordneraufnahme übergibt jetzt den Wurzel-relativen Quellpfad an Queue, Journal
+und Export. Neue Standalone-Läufe spiegeln die komplette Unterordnerstruktur;
+bei Anonymisierung wählt der Anwender vor Start zwischen
+`bereich/Dokument-001-anonymisiert.md` und
+`bereich/quelle-anonymisiert.md`. Genau die tatsächlich erzeugte Beziehung
+steht in der Zuordnungsdatei. Reine Konvertierung erzeugt entsprechend
+`bereich/quelle.md` ohne Zuordnungsdatei. Pfadsegmente werden vor dem Anlegen
+jedes Zielverzeichnisses validiert und die bestehenden Link-/Identitätsgates
+bleiben aktiv. Vorhandene RC115-Läufe werden bewusst nicht umbenannt oder
+umgeschrieben; Cowork behält seine neutralen flachen Ergebnisnamen.
+
+Fokussierte Aufnahme-, Export-, Markdown- und Standalone-Vertragstests sowie
+die vollständige Produktsuite (61 Basisgruppen und 114 direkte Testdateien)
+sind grün. Der echte Paket-Smoke nimmt vier Formate über einen verschachtelten
+Ordner auf und prüft Folder-Admission, Worker, Ergebnisbaum und jede
+Mappingbeziehung. Das ungebundene RC116-Windows-Archiv hat 110.219.069 Byte
+und SHA-256
+`e074266284f36b5cf6057c077b6927dfa87b191eb354f0734d5e298baa414c88`.
+Paketprüfung, realer Worker-/History-/Sidecar-Smoke und beide Produktmodi sind
+grün. Der Kandidat ist Entwicklungsnachweis; commitgebundene PKG-04-/INT-13-
+Evidence und sichtbarer Zielhost-UAT bleiben getrennt offen.
+
+## Vorheriger Entwicklungsstand RC115
+
+Standalone verarbeitet XLSX, PPTX, PDF/Scan-PDF sowie PNG/JPEG/BMP im
+Anonymisierungsmodus jetzt über denselben bereits bewährten Konverter wie bei
+der reinen Markdown-Erzeugung: Die Quelle wird genau einmal in Markdown
+extrahiert und anschließend wird ausschließlich dieser erzeugte Markdown-Inhalt
+anonymisiert. Ein gültiger, nichtleerer Inhalt darf auch bei unvollständiger
+Quellenabdeckung verarbeitet werden; leere OCR, beschädigte oder unsichere
+Quellen stoppen weiterhin fail-closed.
+
+Das Ergebnis führt zwei voneinander unabhängige Aussagen: Der
+**Extraktionsstatus** beschreibt, ob die ursprüngliche Quelle vollständig in
+Markdown abgebildet werden konnte. Der **Anonymisierungsstatus** bestätigt nur
+die Prüfung des extrahierten Markdown-Inhalts. Eine XLSX-, PPTX-, PDF- oder
+Bildquelle wird daher niemals allein aufgrund einer erfolgreichen
+Markdown-Anonymisierung als vollständig abgedeckt bezeichnet. Hinweis,
+Ergebnismanifest und Compliance-Kopf tragen dieselbe Trennung.
+
+Die Produktgrenze liegt nun zentral bei 200 Dateien und weiterhin 500 MiB.
+Rekursive Ordneraufnahme, Renderer, privater IPC-Vertrag, Rust-Hülle und Worker
+verwenden dieselbe Grenze. Der bislang irreführend scheiternde 102-Dateien-
+Korpus wird dadurch vollständig aufgenommen; konkrete Größen- und
+Formatfehler bleiben als eigene lokale Fehlercodes sichtbar. Sichtbare
+Zuordnungsdateien erhalten ein UTF-8-BOM, damit Excel Umlaute und Gedankenstriche
+ohne Mojibake öffnet.
+
+Die vollständige Produktsuite und die gezielten 200-/201-Dateien-Grenztests
+bestehen. Zusätzlich hat der echte portable Windows-Kandidat den Paket-,
+Worker-, History- und isolierten Sidecar-Smoke einschließlich einer realen
+XLSX-zu-Markdown-zu-Anonymisierung bestanden. Das ungebundene RC115-Archiv hat
+110.218.340 Byte und SHA-256
+`90b8587ed984c4b704789dc6ecaa9e9df9b19230faa3eccf2dd50e741598530f`.
+Es ist Entwicklungsnachweis; native UAT und eine ausdrückliche INT-13-Bindung
+bleiben davon getrennt.
+
+## Vorheriger Entwicklungsstand RC112
+
+DS-088 schließt zwei Bedienlücken vor dem Start: Eine vorbereitete Auswahl kann
+dateiweise korrigiert oder vollständig geleert werden, ohne Quellen zu ändern
+oder einen Stapel zu starten. Derselbe indexgebundene, begrenzte Vertrag gilt
+für beide Standalone-Funktionen und durchläuft Renderer, Tauri, private IPC und
+Application Service. Unter **Verarbeiten** ist der exakte Ergebnisordner zudem
+direkt erreichbar, sobald ein vollständiger sichtbarer Lauf existiert.
+
+Reine Konvertierung exportiert jetzt unter dem Quellbasisnamen mit `.md` und
+deterministischen Kollisionsnummern. Da diese Namen selbsterklärend sind,
+entfällt `DataSecure-Zuordnung.csv`; die zugehörige Verlaufsaktion ist gesperrt.
+Legacy-v3-Exporte bleiben unverändert final. Die vollständigen Standalone-,
+Rust-, Export-, Executor-, Dokument- und realen ZIP-Smokes sind aus dem
+Arbeitsbaum grün. Das ungebundene RC112-Windows-Archiv hat 110.216.378 Byte und
+SHA-256 `0c4679dfa2d602b9484083385d2925bd3e53022e343e1a7eea84c3a089980492`.
+Es ist Entwicklungsnachweis, aber bis zu einem sauberen commitgebundenen Build
+und menschlichem E2-Test kein neuer INT-13-Kandidat.
 
 ## Aktueller Entwicklungsstand RC111
 
-RC111 härtet die breite Standalone-Anonymisierung, ohne ihren Freigabeumfang
-vorzeitig zu erweitern. Der neutrale Extraktionsvertrag bindet den gemeldeten
+RC111 führte den neutralen breiten Standalone-Pfad ein; die aktuelle
+Weiterentwicklung trennt Extraktions- und Anonymisierungsstatus. Der neutrale
+Extraktionsvertrag bindet den gemeldeten
 `source_type` jetzt an die tatsächliche Dateiendung; vertauschte oder unbekannte
 Typen stoppen mit `FORMAT_COVERAGE_UNVERIFIED`. Ein echter Mischstapel aus
 direkter TXT- und konvertierter XLSX-Quelle wurde in beiden Reihenfolgen sowie
 über Prozessabbruch und Fortsetzung geprüft. Personen- und Unternehmenslabels
-bleiben dabei stapelweit stabil und genau einmal veröffentlicht. Eine wegen
-unvollständiger Coverage gestoppte breite Quelle verbraucht keine Labels des
-folgenden direkten Dokuments.
+bleiben dabei stapelweit stabil und genau einmal veröffentlicht. Eine nutzbare
+breite Extraktion teilt diese Labels mit den direkten Dokumenten.
 
 PPTX validiert vor der Extraktion sämtliche XML- und Relationship-Teile gegen
 DTD/Entity-Angriffe und Strukturgrenzen. PDF stoppt bei Annotationen, Outline
 oder XMP-Metadaten; standardisierte Dokumentmetadaten werden im reinen
 Markdown-Modus sichtbar und begrenzt erhalten. Die reale Konvertersuite umfasst
-30 Gruppen und prüft bei XLSX, PPTX, Text-/Scan-PDF, PNG, JPEG und BMP zusätzlich
-die derzeit beabsichtigte Privacy-Sperre. Die Originalcontainer werden dabei nie
-als Originalformat anonymisiert. Standalone erzeugt zuerst eine Markdown-
-Extraktion; nur eine belegbar vollständige Extraktion darf automatisch durch den
-Privacy-Core laufen. Da die realen breiten Konverter derzeit `incomplete` melden,
-stoppt die automatische Ein-Schritt-Anonymisierung. Bereits erzeugte Ergebnisse
-aus **Nur in Markdown umwandeln** können bewusst in einem neuen Stapel als `.md`
-anonymisiert werden. Das schützt ausschließlich den extrahierten Markdown-Inhalt
-und behauptet keine Vollständigkeit des ursprünglichen Containers.
+31 Gruppen und prüft bei XLSX, PPTX, Text-/Scan-PDF, PNG, JPEG und BMP die
+Markdown-first-Übergabe sowie den fortbestehenden Stopp bei leerer OCR. Die
+Originalcontainer werden nie als Originalformat anonymisiert. Standalone erzeugt
+zuerst eine Markdown-Extraktion und anonymisiert jeden vertraglich gültigen,
+nichtleeren Inhalt. Eine `incomplete` Quellenabdeckung bleibt separat in Hinweis
+und Manifest sichtbar; der Anonymisierungsstatus bezieht sich ausschließlich auf
+den extrahierten Markdown-Inhalt.
 
 Der native Windows-Launcher protokolliert nun getrennte, inhaltsfreie Checkpoints
 für WebView-Profil, Setup, Seitenaufbau, Frontend und IPC. Dadurch lässt sich
@@ -103,13 +290,11 @@ DS-087 / BL-010.30 ergänzt im Standalone-Anonymisierungsmodus eine einmalige,
 neutrale Extraktion für XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP vor dem bestehenden
 Privacy-Core. Anonymisiert wird die erzeugte Markdown-Repräsentation, nie der
 Originalcontainer. Der Vertrag enthält weder Zweck noch Publikationskennung; es
-wird kein rohes Markdown-Zwischenartefakt veröffentlicht. Nur `complete` darf in
-PII-, Pseudonym-, Review- und Residualprüfung eintreten. Die heutigen realen
-breiten Konverter melden ihre Coverage weiterhin als `incomplete`, sodass die
-automatische Verkettung aktuell sicher als Einzeldatei stoppt. Der verfügbare,
-bewusste Zweischritt ist **Nur in Markdown umwandeln** und danach die erzeugte
-`.md` in einem neuen Anonymisierungsstapel auswählen. Cowork bleibt auf
-TXT/MD/CSV/DOCX.
+wird kein rohes Markdown-Zwischenartefakt veröffentlicht. Vertraglich gültiges,
+nichtleeres Markdown tritt unabhängig von `complete` oder `incomplete` in PII-,
+Pseudonym-, Review- und Residualprüfung ein. Ergebnis und Manifest führen
+Quellenextraktionsabdeckung und Anonymisierungsstatus getrennt. Leere OCR sowie
+unsichere Quellen stoppen weiterhin. Cowork bleibt auf TXT/MD/CSV/DOCX.
 
 DS-086 / BL-010.29: Standalone startet auf einer kurzen Startseite. Verarbeiten
 und Betriebsart sind nicht vorausgewählt. Der Verlauf zeigt die 20 neuesten
@@ -183,12 +368,14 @@ gescheiterten Paketversuche sind historische Gegencheck-Evidence.
 
 Nach dem gebundenen RC107-Kandidaten wurde **Nur in Markdown umwandeln** als
 eigene Standalone-Funktion durch Frontend, Rust, private IPC, Intake-v2, eigene Worker-
-Nachrichten, v5-Journal, `dm_`-Store, Recovery und v3-Export verbunden. Es gibt
+Nachrichten, v5-Journal, `dm_`-Store, Recovery und v4-Export verbunden. Es gibt
 keine PII-Ersetzung, keinen Pseudonymseed und keinen PII-Review. Dateien wählen
-oder hineinziehen, starten, Ergebnisse öffnen. Namen und Inhalte bleiben erhalten;
-Ausgaben und Zuordnung liegen getrennt unter `DataSecure-Markdown/Lauf-…`.
-Text-/OCR-/Coverage-Hinweise werden ohne Zusatzdialog gespeichert; schlechte oder
-geschützte Dateien erhalten Fehlerpositionen, der übrige Stapel läuft weiter.
+oder hineinziehen, die Auswahl einzeln korrigieren oder leeren, starten,
+Ergebnisse öffnen. Namen und Inhalte bleiben erhalten; Ausgaben behalten ihren
+Quellbasisnamen und liegen getrennt unter `DataSecure-Markdown/Lauf-…`. Eine
+Zuordnungsdatei wird nicht erzeugt. Text-/OCR-/Coverage-Hinweise werden ohne
+Zusatzdialog gespeichert; schlechte oder geschützte Dateien erhalten feste
+Diagnoseereignisse, der übrige Stapel läuft weiter.
 TXT/MD/CSV/DOCX/XLSX/PPTX, PDF/Scan-PDF und PNG/JPEG/BMP nutzen einen gebündelten
 Offline-Worker mit normalem Node, PDF.js, Canvas, Tesseract und DE/EN-Modellen.
 Der unabhängige Integrationsreview fand und korrigierte einen gemeinsamen
@@ -322,11 +509,20 @@ Die zwei früheren Testprofile blieben unangetastet. Damit ist die
 Harness-Korrektur E0-belegt, nicht jedoch die noch ausstehende Zweifachbindung
 des abschließenden Produktcommits.
 
-Neue Standalone-Läufe führen auch gestoppte Quellen mit festem Fehlercode in
-ihrer eigenen Zuordnung. Der aktuelle Laufresolver fällt niemals auf frühere
+Neue Standalone-Läufe führen ausschließlich tatsächlich veröffentlichte
+Ergebnisse in ihrer eigenen Zuordnung. Gestoppte Quellen bleiben im privaten
+Status und in der Diagnose. Der aktuelle Laufresolver fällt niemals auf frühere
 Ergebnisse zurück. Bereits veröffentlichte Altzuordnungen bleiben unverändert;
-ein leeres Altrecord ohne veröffentlichte Dateien kann seine fehlende Übersicht
-nachliefern. Cowork erhält weder diese Zuordnungen noch Quelldateinamen.
+historische All-stopped-Läufe erhalten aber keine Ergebnis- oder
+Zuordnungsaktion. Cowork erhält weder diese Zuordnungen noch Quelldateinamen.
+Der Exportvertrag verweigert außerdem mehrdeutige Records, in denen dieselbe
+Quelle doppelt oder zugleich als erfolgreich und gestoppt vorkommt. Der reale
+Paket-Smoke prüft den Markdown-first-XLSX-Pfad nun auf genau eine finale
+Erfolgszeile, UTF-8-BOM und das Fehlen eines vorläufigen Coverage-Stopps. Eine
+Bestandsprüfung der zehn vorhandenen UAT-Läufe bestätigte: neun Zuordnungen
+verweisen vollständig auf vorhandene Ergebnisse; genau der historische,
+tatsächlich gestoppte Lauf enthält zwei Stopzeilen. Altdateien werden als
+Benutzereigentum bewusst nicht nachträglich umgeschrieben.
 Ein neuer Freigabekandidat benötigt erneut Commit-, Build- und Smoke-Evidence;
 die RC106-Bindung darf nicht nachträglich umetikettiert werden.
 
@@ -341,16 +537,17 @@ die RC106-Bindung darf nicht nachträglich umetikettiert werden.
 - MCPB: internes Engineering-Artefakt, kein Installations-, Fallback- oder
   Supportweg für Anwender.
 - Anonymisierung in beiden Produkten: TXT, Markdown (`.md`, `.markdown`), CSV
-  und DOCX sind freigegeben. Standalone nimmt breite Quellen zusätzlich in den
-  DS-087-Verkettungspfad auf; weil deren reale Extraktion derzeit nicht
-  `complete` ist, stoppen XLSX, PPTX, PDF, Scan-PDF und eigenständige Bilder vor
-  Veröffentlichung. Im Cowork-Produkt bleiben sie bereits bei der Aufnahme
+  und DOCX sind freigegeben. Standalone führt DOCX sowie breite Quellen über den
+  DS-087/DS-090-Verkettungspfad; Cowork verarbeitet DOCX weiterhin direkt und
+  streng. Gültiger, nichtleerer extrahierter Markdown-Inhalt
+  wird anonymisiert; die häufig `incomplete` Quellenabdeckung bleibt separat
+  sichtbar. Im Cowork-Produkt bleiben breite Quellen bereits bei der Aufnahme
   gesperrt.
 - Reine Standalone-Konvertierung: zusätzlich XLSX, PPTX, PDF/Scan-PDF sowie
   PNG/JPEG/BMP im Produktpfad aktiviert. Extraktionshinweise und Fehler bleiben
   laufbezogen sichtbar. Der Windows-Engineering-Paketnachweis ist an den oben
   genannten RC108-Commit gebunden; Zielhost-/Anwenderfreigabe bleibt offen.
-- Stapel: höchstens 100 Dateien und 500 MiB; nur ein aktiver Stapel.
+- Stapel: höchstens 200 Dateien und 500 MiB; nur ein aktiver Stapel.
 - Bilder aus DOCX: Pixel bleiben lokal; kein auswählbarer Bildmodus und keine
   Freigabe über Claude.
 - Speicherung: lokale Plain-Arbeits- und Reviewkopien ohne Schlüsselbund,
@@ -361,10 +558,11 @@ die RC106-Bindung darf nicht nachträglich umetikettiert werden.
 - Anonymisierungsergebnis: Markdown pro freigegebener Datei plus dauerhaft lokale private
   `DataSecure-Mapping.csv`; rekursive relative Labels und gleiche Basenames aus
   unterschiedlichen lokalen Ordnern bleiben darin kollisionsfrei unterscheidbar.
-  Standalone projiziert in beiden Betriebsarten nach vollständigem Abschluss
-  eine atomar erzeugte `DataSecure-Zuordnung.csv` in genau den sichtbaren
-  Laufordner: anonymisiert unter `DataSecure-Output`, reine Konvertate mit
-  Originalinhalten unter `DataSecure-Markdown`.
+  Standalone projiziert bei Anonymisierung nach vollständigem Abschluss eine
+  atomar erzeugte `DataSecure-Zuordnung.csv` in genau den sichtbaren Laufordner
+  unter `DataSecure-Output`. Reine Konvertate liegen unter
+  `DataSecure-Markdown`, behalten den Quellbasisnamen mit `.md` und benötigen
+  keine Zuordnungsdatei; Kollisionen werden deterministisch nummeriert.
 - Sichtbarer Cowork-Export: Beim ersten Lauf wird ein Ergebnisordner einmal lokal
   gewählt, die Output-Anlage geprüft und das Ziel erst danach identitätsgebunden
   gespeichert. Nur verifiziertes Markdown mit
@@ -422,10 +620,11 @@ Laufbindung verwendet sie den jüngsten eigenen Stapel. Auch bei 1.000
 aufbewahrten Journalen gibt es pro
 Poll genau einen Verzeichnisscan und höchstens einen Read je Journal; die
 Produktoberfläche zeigt die laufbezogene Zuordnung eines Mischstapels erst nach
-einem terminalen sichtbaren Ergebnis. Seit RC107 besitzt auch ein vollständig
-gestoppter Standalone-Lauf eine eigene Übersicht mit Quellen und festen
-Fehlercodes, aber keine anonymisierten Ergebnisdateien. Scheitert nur die
-Abschlussübersicht, bleibt die Anzeige ausdrücklich `export_pending`, ohne
+einem terminalen sichtbaren Ergebnis. Die frühere RC107-Übersicht für einen
+vollständig gestoppten Lauf ist durch RC120 ersetzt: Ohne Ergebnis entstehen
+weder sichtbarer Laufordner noch Zuordnung; Fehlercodes bleiben in Abschluss
+und Diagnose. Scheitert bei einem Mischlauf nur die Abschlussübersicht, bleibt
+die Anzeige ausdrücklich `export_pending`, ohne
 bereits fertige Dokumente als fehlgeschlagen zu zählen. Bei der Anonymisierung
 bleibt die private globale Zuordnung zusätzlich für die lokale
 Nachvollziehbarkeit erhalten.
@@ -482,12 +681,14 @@ Cowork-Abschluss nutzt unter Windows ein echtes natives `Shown`-Ereignis statt
 eines bloßen Prozessstarts. Der macOS-Adapter verlangt nun ebenfalls eine
 sichtbare AppKit-Fensterbestätigung (`SHOWN`). Die native Ausführung auf Intel
 und Apple Silicon bleibt Zielhostevidenz.
-Seit DS-086 besitzt Standalone die drei Hauptansichten **Start**,
+Seit DS-086/DS-088 besitzt Standalone die drei Hauptansichten **Start**,
 **Verarbeiten** und **Verlauf**. Die App startet auf **Start** ohne vorbelegte
-Betriebsart. Auswahl, Wiederherstellung und Abschluss ändern die Navigation
+Betriebsart. Vor dem Start können einzelne eindeutig dargestellte Dateien aus
+der Auswahl entfernt oder die gesamte Auswahl geleert werden; beide Funktionen
+verwenden denselben Admissionvertrag. Auswahl, Wiederherstellung und Abschluss ändern die Navigation
 nicht automatisch. **Verlauf** zeigt die 20 neuesten Verarbeitungen mit
-Datum, Zweck, Zählern und Status. Ergebnisordner, Zuordnung und Fortsetzung
-gehören jeweils ausschließlich zur gewählten Zeile. Der Core löst dafür den
+Datum, Zweck, Zählern und Status. Ergebnisordner, eine bei Anonymisierung
+vorhandene Zuordnung und Fortsetzung gehören jeweils ausschließlich zur gewählten Zeile. Der Core löst dafür den
 exakten sichtbaren `Lauf-*`-Ordner beziehungsweise dessen Mappingdatei auf;
 ein fehlendes Ziel führt nicht zum Öffnen eines anderen Laufs.
 Nur der vertrauenswürdige Rust-Host erhält dieses Ziel über den privaten
@@ -496,10 +697,15 @@ Rust validiert Existenz, absoluten Pfad, Typ und Linkfreiheit und startet danach
 Explorer, Finder oder `xdg-open` ohne versteckte Fensteroption. Die Oberfläche
 bestätigt den Handoff getrennt vom fachlichen Abschlussstatus. Die Diagnose
 protokolliert dabei ausschließlich Aktion, Ausgang und festen Fehlercode,
-niemals Pfad, Dateiname oder Inhalt. Ein Standalone-Lauf gilt erst dann als sichtbar abgeschlossen, wenn
-alle neutralen Markdown-Ergebnisse und seine atomar veröffentlichte
-`DataSecure-Zuordnung.csv` vorhanden sind. Die Zuordnung enthält nur die lokale
-Quellbezeichnung und den neutralen Ergebnisnamen. Eine Ergänzung noch
+niemals Pfad, Dateiname oder Inhalt. Ein Standalone-Lauf gilt erst dann als
+sichtbar abgeschlossen, wenn alle Ergebnisdateien und – ausschließlich bei
+Anonymisierung – seine atomar veröffentlichte `DataSecure-Zuordnung.csv`
+vorhanden sind. Die Zuordnung enthält nur die lokale Quellbezeichnung und den
+tatsächlich erzeugten Ergebnisnamen. Neutral ist der datensparende
+Standalone-Standard; wahlweise bleibt der Quellbasisname mit `-anonymisiert`
+erhalten. Die Wahl ist im v6-Stapeljournal für Wiederaufnahme und Export
+unveränderlich gebunden. Reine Konvertate behalten den Quellbasisnamen; ihre
+Zuordnungsaktion ist deaktiviert. Eine Ergänzung noch
 unvollständiger älterer Exportprojektionen bleibt an das zugehörige private
 Stapeljournal gebunden. Bereits endgültige sichtbare Exporte werden nicht
 überschrieben oder wiederhergestellt. Der Cowork-Export erhält diese Datei
@@ -570,7 +776,8 @@ Differentialorakel; seine Python-Runtime gehört nicht zum Nutzerpaket. Der
 aktive Standalone-Produktkonverter verwendet den gebündelten JS-/PDF-/OCR-Pfad
 und unterstützt auch XLSX, PPTX, PDF/Scan-PDF sowie PNG/JPEG/BMP. DS-087 bindet
 diese Formate im Standalone-Anonymisierungsmodus an die neutrale Extraktion und
-den strikten Vollständigkeitsstopp; eine reale breite Freigabe besteht noch nicht. Architektur,
+die nachgelagerte Markdown-Anonymisierung; die Originalcontainer selbst erhalten
+keine Vollständigkeitsfreigabe. Architektur,
 Lieferstufen und offene User Stories stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md) und BL-010.9.
 
@@ -748,10 +955,12 @@ historische JSONL-Dateien bleiben nur lesbarer Upgradebestand. Ein Diagnosefehle
 bleibt ohne Einfluss auf Verarbeitung oder Freigabe.
 
 ### BL-049 – Inhalts- und Formatgrenze
-Signatur-/Strukturprüfung und drei Anonymisierungsergebnisgrade sind implementiert;
-XLSX/PPTX/PDF/Scan-PDF und eigenständige Bilder bleiben für die Anonymisierung
-gesperrt. Die reine Standalone-Konvertierung besitzt den oben beschriebenen
-erweiterten Formatumfang mit eigener Extraktions-/Fehlerkennzeichnung.
+Signatur-/Strukturprüfung und drei Anonymisierungsergebnisgrade sind implementiert.
+Cowork sperrt XLSX/PPTX/PDF/Scan-PDF und eigenständige Bilder weiterhin bei der
+Aufnahme. Standalone verarbeitet DOCX und diese breiten Quellen nach DS-087/090
+Markdown-first und weist Quellenextraktion und Anonymisierung getrennt aus. Die
+reine Standalone-Konvertierung besitzt denselben erweiterten Eingabeumfang mit
+eigener Extraktions-/Fehlerkennzeichnung.
 
 ### BL-042 – Diagnose und Berechtigungen
 Normal- und Supportoberfläche sind getrennt. Die inhaltsfreie Status-App besitzt

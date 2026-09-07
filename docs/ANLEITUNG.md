@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 05.09.2026 · Version 3.2.0 RC111
+Stand: 07.09.2026 · Version 3.2.0 RC123 · Cowork-Plugin
 
 ## Vor dem ersten Lauf
 
@@ -48,7 +48,7 @@ Upload nicht zuverlässig ersetzt. Deshalb:
    Wahl auf diesem Gerät, errät keinen Projektpfad und erstellt darin
    `DataSecure-Output`. Diese Auswahl wird in späteren Läufen und bei
    Projektwechseln nicht wiederholt oder heimlich geändert.
-4. Im lokalen Mehrfachpicker wählen Sie bis zu 100 Dateien mit zusammen höchstens
+4. Im lokalen Mehrfachpicker wählen Sie bis zu 200 Dateien mit zusammen höchstens
    500 MiB und klicken einmal **„Öffnen“**.
 5. Claude antwortet kurz „Die lokale Übernahme wurde gestartet …“ und nennt in
    Klammern die laufende DataSecure-Version. Fehlt die Version oder stimmt sie
@@ -57,7 +57,10 @@ Upload nicht zuverlässig ersetzt. Deshalb:
    verarbeitet lokal. Ein Fehler in einer Datei hält den übrigen Stapel nicht
    automatisch an.
 6. Warten Sie auf die lokale Abschlussmeldung. Mit **„Ergebnisse öffnen“** gelangen
-   Sie direkt zu den neutral benannten Markdown-Dateien. Claude pollt den Lauf nicht.
+   Sie direkt in den exakten Laufordner des neuesten Cowork-Stapels mit den
+   neutral benannten Markdown-Dateien. Ein aktiver, fehlgeschlagener oder noch
+   nicht vollständig exportierter aktueller Lauf öffnet niemals ersatzweise
+   einen älteren Lauf. Claude pollt den Lauf nicht.
 7. Bitten Sie erst danach ausdrücklich: **„Verwende die fertigen anonymisierten
    DataSecure-Ergebnisse.“**
 
@@ -66,6 +69,12 @@ pro Stapel nur die Quellauswahl; keine Profilfrage, keinen Bildmodus, keine
 Einzeldateibestätigung und keine Bestätigung für jedes Ergebnis. Claude-eigene
 Werkzeugfreigaben kann das Plugin nicht abschalten, aber der reine lokale Lauf
 benötigt nur einen MCP-Startaufruf.
+
+Wenn Sie statt einzelner Dateien einen Ordner wählen, prüft DataSecure den
+gesamten regulären Unterordnerbaum. Bei mehr als 200 unterstützten Dateien, mehr
+als 500 MiB oder mindestens einem unbekannten beziehungsweise gesperrten Format
+wird die Auswahl vollständig und verständlich abgelehnt; es startet kein
+unbemerkter Teilstapel.
 
 Der Berechtigungsmodus **Auto** kann zusätzliche Claude-Rückfragen reduzieren,
 sofern Ihre Organisation ihn erlaubt. Organisationsrichtlinien können trotzdem
@@ -147,7 +156,9 @@ Junctions sind gesperrt.
   Review- und Recoverydaten nicht in `DataSecure-Output` kopiert. Standalone
   schreibt nach dem vollständigen Lauf zusätzlich eine auf genau diesen Lauf
   begrenzte `DataSecure-Zuordnung.csv` neben die anonymisierten Dateien; sie
-  enthält nur Quellbezeichnung und neutralen Ergebnisnamen.
+  enthält nur Quellbezeichnung und den Namen eines tatsächlich vorhandenen
+  anonymisierten Ergebnisses. Gestoppte Quellen stehen in Abschluss und
+  Diagnose. Ein vollständig gestoppter Stapel erzeugt keine sichtbare Zuordnung.
 - Manuelles Aufräumen betrifft ausschließlich eindeutig DataSecure-eigene Daten
   und braucht eine ausdrückliche Bestätigung.
 

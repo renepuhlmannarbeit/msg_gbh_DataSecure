@@ -112,13 +112,14 @@ test('the visible result export retries exclusive publication of a released docu
   const realLink = fs.linkSync;
   let injected = 0;
   fs.linkSync = function (from, to) {
-    if (String(to).endsWith('Dokument-001-anonymisiert.md') && injected++ === 0) {
+    if (String(to).endsWith('profil-anonymisiert.md') && injected++ === 0) {
       throw Object.assign(new Error('EPERM synthetic'), { code: 'EPERM' });
     }
     return realLink.call(fs, from, to);
   };
   try {
     const result = exportCompletedState({
+      schema: 'datasecure-batch/4',
       token: 'a'.repeat(64),
       created_at: '2026-09-03T12:00:00.000Z',
       product_channel: 'standalone',

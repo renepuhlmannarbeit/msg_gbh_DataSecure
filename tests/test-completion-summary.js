@@ -52,7 +52,8 @@ test('partial and stopped wording distinguish released from withheld results', (
   assert.match(partial.message, /Für 1 Datei wurde kein Ergebnis freigegeben/i);
   const stopped = completionSummaryText(graded(2, 0, 0, 2));
   assert.match(stopped.message, /Sicher nicht verarbeitet: 2/);
-  assert.match(stopped.message, /0 anonymisierte Ergebnisse/);
+  assert.match(stopped.message, /keine sichtbare Zuordnungsdatei erstellt/);
+  assert.doesNotMatch(stopped.message, /0 anonymisierte Ergebnisse.*Zuordnung.*gespeichert/u);
 });
 
 test('a completed visible export offers one local open-results action', () => {
@@ -172,7 +173,7 @@ test('legacy summaries never invent a result grade', () => {
 
 test('invalid or inconsistent counters fail closed', () => {
   assert.throws(() => validateSummary({ selected_count: 2, released_count: 2, failed_count: 1 }), /Ungültige/);
-  assert.throws(() => validateSummary({ selected_count: 101, released_count: 101, failed_count: 0 }), /Ungültige/);
+  assert.throws(() => validateSummary({ selected_count: 201, released_count: 201, failed_count: 0 }), /Ungültige/);
   assert.throws(() => validateSummary({ selected_count: 1, released_count: -1, failed_count: 2 }), /Ungültige/);
   const invalid = graded(2, 1, 0, 1);
   invalid.result_grade_counts.complete = 2;

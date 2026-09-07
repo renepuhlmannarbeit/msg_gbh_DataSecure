@@ -4,6 +4,7 @@ const { SafeError } = require('../runtime');
 const pii = require('../pii-engine');
 const { VERSION } = require('./common');
 const { createAuditReceipt, writePackageAudit, retainAudit } = require('./audit');
+const { validateCoverage } = require('../core/source-extraction-contract');
 
 const MAX_PASSES = 3;
 
@@ -75,11 +76,22 @@ function aiActNote(profile) {
 }
 
 function complianceHeader(profile, meta) {
+  let processingScope = '';
+  if (meta.sourceExtractionCoverage !== undefined) {
+    const coverage = validateCoverage(meta.sourceExtractionCoverage);
+    const extractionStatus = coverage.status === 'complete'
+      ? 'Markdown erzeugt; Quellvollständigkeit durch den lokalen Konverter bestätigt'
+      : `Markdown erzeugt; Vollständigkeit des Originalcontainers nicht garantiert (${coverage.reason_codes.join(', ')})`;
+    processingScope =
+      `Extraktionsstatus: ${extractionStatus}\n` +
+      'Anonymisierungsstatus: extrahierter Markdown-Inhalt vollständig geprüft\n';
+  }
   return (
     '<!--\n' +
     `EU Privacy Document Gateway ${VERSION}\n` +
     `Profil: ${profile}\n` +
     `Quelle: ${meta.ext.slice(1).toUpperCase()}\n` +
+    processingScope +
     'Unterstützte Restprüfung: keine weiteren Treffer\n' +
     `Datenschutz-Pässe: ${meta.passes}\n` +
     `Ersetzte/erfasste Identifikatoren: ${meta.entityCount}\n` +

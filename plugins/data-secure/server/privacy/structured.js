@@ -40,7 +40,10 @@ const { ibanBoundaryEnd } = require('./iban-boundary');
 const POSTAL_QUANTITY_RE = /^\d{5}[ \t]+(?:Euro|EUR|Stück|Stueck|Punkte|Stunden|Tage|Monate|Jahre|Prozent|Einwohner|Exemplare|Teile|kg|km|qm|m²|Liter)(?:[ \t]|$)/iu;
 const MONTH_YEAR_STREET_FALSE_POSITIVE_RE = /^Im[ \t]+(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)[ \t]+\d{4}$/iu;
 
-const ADDRESS_URI_CHARACTER_RE = /[\p{L}\p{N}%+._~:/?&=@\-]/u;
+// A Markdown converter may preserve URI punctuation with a preceding
+// backslash. Keep it inside the redacted URI token instead of stopping before
+// the escaped address.
+const ADDRESS_URI_CHARACTER_RE = /[\p{L}\p{N}%+._~:/?&=@\\\-]/u;
 const PHONE_PARAMETER_CHARACTER_RE = /[\p{L}\p{N}%+._~:/?&=@;,#\-]/u;
 function uriTokenEnd(text, start, characters = ADDRESS_URI_CHARACTER_RE) {
   let end = start;

@@ -5,32 +5,52 @@
 3. Auf **Start** die gewünschte Funktion wählen: **Nur in Markdown umwandeln**
    oder **In Markdown umwandeln und anonymisieren**. Danach Dateien oder einen
    Ordner auswählen (oder in das Fenster ziehen). Anfangs ist kein Modus vorbelegt.
+   Bei Anonymisierung zusätzlich **Neutrale Dateinamen (empfohlen)** oder
+   **Originalname mit „-anonymisiert“** wählen. Die zweite Variante nur nutzen,
+   wenn Datei- und Ordnernamen keine personenbezogenen Angaben enthalten.
+   Vor dem Start können einzelne Dateien entfernt oder die ganze Auswahl geleert werden.
 4. Bei Bedarf **Ergebnisordner ändern** wählen, dann **Starten** drücken.
 5. Nach Abschluss selbst **Verlauf** öffnen und beim gewünschten Lauf
-   **Ergebnisse öffnen** wählen. Im zugehörigen Laufordner
-   liegen die Markdown-Dateien und `DataSecure-Zuordnung.csv` mit der Zuordnung
-   zur jeweiligen Quelldatei sowie Hinweisen zu übersprungenen Dateien.
+   **Ergebnisordner** wählen. Im zugehörigen Laufordner
+   liegen die Markdown-Dateien. Bei Anonymisierung liegt zusätzlich
+   `DataSecure-Zuordnung.csv` mit der Zuordnung jeder erfolgreich erzeugten
+   Datei zur jeweiligen Quelldatei dort. Gestoppte Dateien stehen nur im
+   Abschluss und in der Diagnose. Wenn alle Dateien stoppen, entstehen weder
+   Ergebnisordner noch Zuordnungsdatei.
 
 **Verlauf** zeigt die letzten 20 Verarbeitungen. Jede Zeile bietet den eigenen
-Ergebnisordner, die eigene Zuordnungsdatei und – nur bei einem fortsetzbaren
-Stapel – **Fortsetzen**. Auch nach einem Neustart bleibt die Startseite sichtbar.
+Ergebnisordner und – nur bei einem fortsetzbaren Stapel – **Fortsetzen**. Die
+Zuordnungsaktion ist nur für Anonymisierung aktiv. Auch nach einem Neustart bleibt die Startseite sichtbar.
 Ein Abschluss öffnet weder automatisch einen Ordner noch eine andere Ansicht.
 
 Die reine Umwandlung unterstützt TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF,
 Scan-PDF und PNG/JPEG/BMP. Sie anonymisiert **nicht**: Namen und andere Inhalte
 bleiben erhalten. Bilder und Scan-Seiten werden mit der mitgelieferten lokalen
 Deutsch-/Englisch-Texterkennung gelesen. OCR und komplexe Layouts können
-unvollständig sein; Hinweise erscheinen beim Abschluss und in der
-Zuordnungsdatei. Passwortgeschützte oder defekte Dateien werden einzeln
+unvollständig sein; Hinweise erscheinen beim Abschluss. Die Ausgaben behalten
+den Basisnamen der Quelle und wechseln nur auf `.md`; gleiche Basisnamen erhalten
+` (2)`, ` (3)` usw. Es wird keine Zuordnungsdatei erstellt. Passwortgeschützte oder defekte Dateien werden einzeln
 übersprungen. Die übrigen Dateien werden weiter verarbeitet.
 
 Optional kann vor dem Start **In Markdown umwandeln und anonymisieren** gewählt
-werden. TXT, Markdown, CSV und DOCX laufen direkt durch den Privacy-Core. Breite
-Quellen werden einmal lokal extrahiert; nur eine vollständig belegte Extraktion
-wird anonymisiert. Aktuelle XLSX/PPTX/PDF/Scan-PDF-/Bildextraktionen bleiben
-ehrlich `incomplete` und werden deshalb als einzelne Datei sicher gestoppt. Die
-übrigen Dateien des Stapels laufen weiter. Bei unklaren personenbezogenen Angaben
-kann eine lokale Prüfung nötig sein.
+werden. TXT, Markdown und CSV laufen direkt durch den Privacy-Core. DOCX und
+breite Quellen werden einmal lokal extrahiert; gültiger, nichtleerer Markdown-Inhalt
+wird anschließend vollständig anonymisiert. Ein Hinweis `incomplete` bezieht
+sich ausschließlich auf die Abdeckung des ursprünglichen Containers und bleibt
+im Ergebnis sichtbar; er behauptet nicht, dass die Markdown-Anonymisierung
+unvollständig war. Leere OCR, beschädigte oder unsichere Quellen werden als
+einzelne Datei gestoppt. Die übrigen Dateien des Stapels laufen weiter. Bei
+unklaren personenbezogenen Angaben kann eine lokale Prüfung nötig sein.
+
+Bei einer Ordnerauswahl bleibt unterhalb von `Lauf-…` die komplette relative
+Unterordnerstruktur erhalten. Aus `bereich/quelle.xlsx` wird im
+Anonymisierungsmodus je nach Auswahl
+`bereich/Dokument-001-anonymisiert.md` oder
+`bereich/quelle-anonymisiert.md`; die `DataSecure-Zuordnung.csv` nennt genau
+den Quellpfad und den tatsächlich erzeugten relativen Ergebnispfad. Im Modus
+**Nur in Markdown umwandeln** entsteht `bereich/quelle.md` und keine
+Zuordnungsdatei. Datei- und Ordnernamen werden nicht anonymisiert, bleiben aber
+vollständig lokal und erscheinen nicht in Diagnoseprotokollen.
 
 Node.js, Rust, Claude, Cowork und eine Internetverbindung werden nicht benötigt.
 DataSecure schreibt private Arbeitsdaten ausschließlich in den lokalen

@@ -252,7 +252,7 @@ function removeOwnedRoot(root, initial) {
         source_kind: 'files', source_paths: [fixtureSource]
       })).ok, true);
       assert.strictEqual((await hostClient.send('start_admitted_batch', '3'.repeat(16), {
-        processing_mode: 'markdown-and-anonymize'
+        processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral'
       })).ok, true);
       const ready = await waitForFile(path.join(caseRoot, 'worker-ready.json'));
       assert.strictEqual(ready.progress.batch_total, 1);

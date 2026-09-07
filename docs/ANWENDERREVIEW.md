@@ -1,6 +1,6 @@
 # Aktuelles Anwender- und UX-Review
 
-Stand: 06.09.2026 · gegen 3.2.0-rc111, DS-078 und DS-086 revalidiert
+Stand: 07.09.2026 · gegen 3.2.0-rc123 und DS-078/086/088/092 revalidiert
 
 ## Ergebnis
 
@@ -41,8 +41,10 @@ reine Konvertierung erhält Originalinhalte und benötigt keinen PII-Review.
   Cowork-Abschlussadapter sind E0 implementiert. Vor der macOS-Abnahme fehlt
   weiterhin die native Ausführungs-, Fokus-, Zoom- und Screenreader-Evidenz auf
   Intel und Apple Silicon; Vertragstests allein belegen den Nutzerablauf nicht.
-- Der Start darf nicht wie ein hängender Chat wirken. Cowork muss klar sagen:
-  „Lokal gestartet; Abschluss erscheint lokal; Ergebnisse später anfordern.“
+- Der Start darf nicht wie ein hängender Chat wirken. Die frühe Antwort bestätigt
+  nur die lokale Übernahme und Vorbereitung; erst die spätere lokale
+  Abschlussmeldung bietet **„Ergebnisse öffnen“**. Sie behauptet weder einen
+  dauerhaften Checkpoint noch eine bereits laufende Anonymisierung.
 - Technische Codes dürfen nur als IT-Detail erscheinen. UAT-Kennungen werden immer
   mit Klartextname und Link gezeigt.
 - Cloud-Cowork, Web, Mobil und geplante Cloud-Aufgaben müssen für Originale früh
@@ -53,7 +55,8 @@ reine Konvertierung erhält Originalinhalte und benötigt keinen PII-Review.
 ## UX-Abnahmekriterien
 
 Eine fachfremde Person kann mit dem
-[aktuellen UAT-Kit](acceptance/UAT_TEST_KIT/README.md):
+[Cowork-UAT-Kit](acceptance/UAT_TEST_KIT/README.md) beziehungsweise mit dem
+[Standalone-UAT-Kit](acceptance/STANDALONE_UAT_TEST_KIT/README.md):
 
 1. den Kernfall ohne Hilfe in höchstens drei bewussten Aktionen starten,
 2. einen sicheren Stopp erklären,

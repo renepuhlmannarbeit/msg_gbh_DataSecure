@@ -53,8 +53,13 @@ function createRunHistory(deps) {
       .slice(0, 20).map((summary) => {
         const state = current.get(summary.batch_id);
         const savedExport = exports.get(summary.export_id);
-        const run = savedExport?.complete === true ? boundRun(summary.export_id, savedExport.run_directory) : '';
-        const ledger = Boolean(run && regularFile(path.join(run, MAPPING)));
+        const bound = savedExport?.complete === true ? boundRun(summary.export_id, savedExport.run_directory) : '';
+        // A visible result action is meaningful only when at least one result
+        // exists. Old all-stopped runs may still contain a historical report
+        // file, but it must not be exposed as a result or mapping action.
+        const run = summary.result_count > 0 ? bound : '';
+        const ledger = summary.processing_mode !== 'markdown-only' &&
+          Boolean(run && regularFile(path.join(run, MAPPING)));
         const processing = Boolean(state && deps.liveExecutor(state));
         const canResume = !processing && !summary.complete && resumable.has(summary.batch_id);
         const reviewReady = state && historyProgress(state).batch_phase === 'awaiting_local_review';

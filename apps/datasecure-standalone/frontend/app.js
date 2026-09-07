@@ -3,17 +3,23 @@
 const invoke = window.__TAURI__.core.invoke;
 const byId = (id) => document.getElementById(id);
 const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue',
-  'new-batch', 'configure-results', 'diagnostics', 'processing-mode', 'task-markdown', 'task-anonymize'];
+  'process-results', 'new-batch', 'configure-results', 'diagnostics', 'processing-mode', 'output-naming-mode',
+  'task-markdown', 'task-anonymize'];
 const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
   STANDALONE_ENGINE_NOT_READY: 'Die lokale Verarbeitung ist noch nicht bereit.',
   STANDALONE_SELECTION_INVALID: 'Die Dateiauswahl überschreitet eine sichere Grenze oder enthält einen nicht unterstützten Pfad.',
+  SOURCE_FOLDER_FILE_LIMIT: 'Der Ordner enthält mehr als 200 unterstützte Dateien. Bitte höchstens 200 Dateien pro Stapel auswählen.',
+  SOURCE_FOLDER_SIZE_LIMIT: 'Die unterstützten Dateien im Ordner sind zusammen größer als 500 MB. Bitte einen kleineren Stapel auswählen.',
+  SOURCE_FOLDER_UNSUPPORTED_FILES: 'Der Ordner enthält mindestens eine nicht unterstützte Datei. Es wurde nichts übernommen; bitte diese Datei entfernen oder einen passenderen Ordner wählen.',
+  SOURCE_FOLDER_EMPTY: 'In diesem Ordner und seinen Unterordnern wurden keine unterstützten Dateien gefunden.',
   STANDALONE_SELECTION_PREPARED: 'Eine Auswahl ist bereits vorbereitet. Bitte starten oder die Auswahl verwerfen, bevor du neue Dateien hinzufügst.',
   STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam ausgewählt werden.',
   STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
   STANDALONE_START_FAILED: 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.',
   PROCESSING_MODE_INVALID: 'Bitte einen gültigen Verarbeitungsmodus auswählen. Der Stapel wurde nicht gestartet.',
   PROCESSING_MODE_FORBIDDEN: 'Dieser Verarbeitungsmodus ist hier nicht verfügbar. Der Stapel wurde nicht gestartet.',
+  RESULT_NAMING_MODE_INVALID: 'Bitte eine gültige Benennung für anonymisierte Ergebnisse auswählen. Der Stapel wurde nicht gestartet.',
   MARKDOWN_CONVERSION_NOT_READY: 'Die installierte Version unterstützt diese Betriebsart nicht. Bitte die aktuelle Standalone-Version verwenden. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
   STANDALONE_RUNTIME_MISSING: 'Der lokale DataSecure-Core fehlt.',
@@ -56,8 +62,14 @@ let historyStateKey = null;
 let historyButtons = [];
 let lastHistorySnapshot = null;
 let historyRenderGeneration = 0;
+let currentResultsAvailable = false;
+let currentSessionRunStarted = false;
+let currentSessionResultBaseline = '';
+let latestResultFolderSeen = '';
+let selectionRemoveButtons = [];
 const views = ['home', 'process', 'results'];
 const validMode = (mode) => ['markdown-only', 'markdown-and-anonymize'].includes(mode);
+const validOutputNamingMode = (mode) => ['neutral', 'source-with-suffix'].includes(mode);
 
 function renderModeHelp(mode) {
   const convert = mode === 'markdown-only';
@@ -66,7 +78,18 @@ function renderModeHelp(mode) {
     ? 'Wähle aus, ob Originalinhalte erhalten bleiben oder erkannte Identifikatoren ersetzt werden sollen.'
     : convert
     ? 'Nicht anonymisiert: Namen und andere Originalinhalte bleiben erhalten. Bei OCR oder grafischen Inhalten können Auslassungen entstehen; Hinweise stehen im Ergebnis.'
-    : 'Namen und weitere erkannte Identifikatoren werden in der Markdown-Ausgabe ersetzt. XLSX, PPTX, PDF/Scan-PDF und Bilder werden vorher lokal extrahiert und nur bei vollständiger Abdeckung freigegeben.';
+    : 'Namen und weitere erkannte Identifikatoren werden in der Markdown-Ausgabe ersetzt. XLSX, PPTX, PDF/Scan-PDF und Bilder werden vorher lokal in Markdown extrahiert; der Extraktionsstatus wird getrennt ausgewiesen.';
+  byId('output-naming').hidden = mode !== 'markdown-and-anonymize';
+  renderOutputNamingHelp();
+}
+
+function renderOutputNamingHelp() {
+  const mode = byId('output-naming-mode').value;
+  const help = byId('output-naming-help');
+  if (!help) return;
+  help.textContent = mode === 'source-with-suffix'
+    ? 'Der Originaldateiname bleibt sichtbar und erhält „-anonymisiert“. Nutze diese Variante nur, wenn Datei- und Ordnernamen keine personenbezogenen Angaben enthalten.'
+    : 'Empfohlen: Neutrale Namen wie „Dokument-001-anonymisiert.md“ vermeiden personenbezogene Angaben im Ergebnisnamen. Die Zuordnungsdatei verbindet Quelle und Ergebnis.';
 }
 
 function busy(value) {
@@ -81,15 +104,26 @@ function applyBusyState() {
   controls.forEach((id) => { byId(id).disabled = operationInFlight; });
   updateModeAvailability();
   updateDropAvailability();
+  updateCurrentResultsAvailability();
+  for (const button of selectionRemoveButtons) button.disabled = operationInFlight;
   updateHistoryAvailability();
   if (!operationInFlight && activeView === 'results' && historyDirty) refreshHistory();
+}
+function updateCurrentResultsAvailability() {
+  const button = byId('process-results');
+  button.disabled = operationInFlight || !currentResultsAvailable;
+  button.title = currentResultsAvailable ? '' : 'Noch kein Ergebnisordner verfügbar.';
 }
 function updateModeAvailability() {
   // The selector describes the next admission, never an active/recoverable run.
   byId('processing-mode').disabled = operationInFlight || (!admitted &&
     !['ready', 'results_available', 'completed_without_results'].includes(lastPublicState));
   const needsMode = admitted && !validMode(byId('processing-mode').value);
-  byId('start').disabled = operationInFlight || !admitted || needsMode;
+  const needsNamingMode = admitted && byId('processing-mode').value === 'markdown-and-anonymize' &&
+    !validOutputNamingMode(byId('output-naming-mode').value);
+  byId('output-naming-mode').disabled = operationInFlight || byId('processing-mode').disabled ||
+    byId('processing-mode').value !== 'markdown-and-anonymize';
+  byId('start').disabled = operationInFlight || !admitted || needsMode || needsNamingMode;
   byId('start-help').hidden = !needsMode;
   byId('task-markdown').disabled = byId('processing-mode').disabled;
   byId('task-anonymize').disabled = byId('processing-mode').disabled;
@@ -261,6 +295,7 @@ function renderUiContext(context) {
   if (!context || context.local_ui_only !== true || context.external_disclosure !== false) return;
   const resultFolder = context.result_folder || 'Noch nicht festgelegt';
   const latestResultFolder = context.latest_result_folder || 'Noch kein abgeschlossener Lauf';
+  latestResultFolderSeen = context.latest_result_folder || '';
   const sourceFolders = summarize(context.source_folders, 'Noch nicht ausgewählt');
   const selectedFiles = summarize(context.selected_files, 'Noch nicht ausgewählt');
   byId('result-folder').textContent = resultFolder;
@@ -271,6 +306,43 @@ function renderUiContext(context) {
   byId('source-folders').title = sourceFolders;
   byId('selected-files').textContent = selectedFiles;
   byId('selected-files').title = selectedFiles;
+  renderSelectionList(context.selected_files);
+  // `latest_result_folder` is durable history and can refer to a run from a
+  // previous app session. The process-tab action represents only a run
+  // explicitly started in this UI session. Historical results remain
+  // available through the history table.
+  currentResultsAvailable = currentSessionRunStarted && Boolean(latestResultFolderSeen) &&
+    latestResultFolderSeen !== currentSessionResultBaseline;
+  updateCurrentResultsAvailability();
+}
+function renderSelectionList(files) {
+  const list = byId('selection-list');
+  list.replaceChildren();
+  selectionRemoveButtons = [];
+  const values = Array.isArray(files) ? files : [];
+  values.forEach((name, index) => {
+    const item = document.createElement('li');
+    const label = document.createElement('span');
+    label.textContent = String(name);
+    const button = document.createElement('button');
+    button.textContent = 'Entfernen';
+    button.setAttribute('aria-label', `${name} aus der Auswahl entfernen`);
+    button.addEventListener('click', async () => {
+      if (button.disabled || !admitted) return;
+      const result = await call('remove_admitted_source', { selectionIndex: index });
+      if (!result) return;
+      if (result.selected_count === 0) {
+        resetAdmissionUi();
+        renderUiContext(result.ui_context);
+        status('Bereit', 'Die Auswahl wurde geleert. Wähle neue Dateien oder einen ganzen Ordner aus.');
+      } else renderAdmission(result);
+    });
+    item.appendChild(label);
+    item.appendChild(button);
+    list.appendChild(item);
+    selectionRemoveButtons.push(button);
+  });
+  list.hidden = !admitted || values.length === 0;
 }
 async function refreshUiContext() {
   const generation = admissionGeneration;
@@ -296,6 +368,9 @@ function resetAdmissionUi() {
   admissionGeneration += 1;
   historyStateKey = null;
   byId('summary').hidden = true;
+  byId('selection-list').hidden = true;
+  byId('selection-list').replaceChildren();
+  selectionRemoveButtons = [];
   byId('home-selection').hidden = true;
   visible('select-files', true);
   visible('select-folder', true);
@@ -307,11 +382,14 @@ function resetAdmissionUi() {
 
 function renderAdmission(result) {
   admissionGeneration += 1;
-  renderUiContext(result.ui_context);
   admitted = true;
+  currentSessionRunStarted = false;
+  currentResultsAvailable = false;
+  renderUiContext(result.ui_context);
   byId('home-selection').hidden = false;
   const size = Number.isSafeInteger(result.total_bytes) ? ` · ${Math.ceil(result.total_bytes / 1024)} KB` : '';
-  byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size} · vollständig lokal`;
+  const recursive = result.ui_context?.source_kind === 'folder' ? ' · einschließlich Unterordnern' : '';
+  byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size}${recursive} · vollständig lokal`;
   byId('summary').hidden = false;
   status('Auswahl bereit', 'Einmal starten – danach läuft der Stapel ohne weitere Bestätigung.');
   visible('select-files', false); visible('select-folder', false); visible('start', true); visible('cancel', true);
@@ -420,7 +498,11 @@ for (const [id, mode] of [['task-markdown', 'markdown-only'], ['task-anonymize',
 }
 byId('select-files').addEventListener('click', () => choose('select_files'));
 byId('select-folder').addEventListener('click', () => choose('select_folder'));
+byId('process-results').addEventListener('click', () => {
+  if (!byId('process-results').disabled) openLocal('open_current_results', 'Ergebnisordner');
+});
 byId('processing-mode').addEventListener('change', () => { renderModeHelp(byId('processing-mode').value); updateModeAvailability(); });
+byId('output-naming-mode').addEventListener('change', () => { renderOutputNamingHelp(); updateModeAvailability(); });
 byId('cancel').addEventListener('click', async () => {
   if (!await call('cancel_admission')) return;
   resetAdmissionUi();
@@ -437,9 +519,23 @@ byId('start').addEventListener('click', async () => {
     updateModeAvailability();
     return;
   }
-  if (!await call('start_admitted_batch', { processingMode })) return;
+  const startArguments = { processingMode };
+  if (processingMode === 'markdown-and-anonymize') {
+    const outputNamingMode = byId('output-naming-mode').value;
+    if (!validOutputNamingMode(outputNamingMode)) {
+      actionFeedback('Bitte eine gültige Benennung für anonymisierte Ergebnisse auswählen. Die Dateiauswahl bleibt erhalten.', true);
+      updateModeAvailability();
+      return;
+    }
+    startArguments.outputNamingMode = outputNamingMode;
+  }
+  if (!await call('start_admitted_batch', startArguments)) return;
+  currentSessionResultBaseline = latestResultFolderSeen;
+  currentSessionRunStarted = true;
   lastProcessingMode = processingMode;
   admitted = false; admissionGeneration += 1; byId('summary').hidden = true;
+  currentResultsAvailable = false;
+  updateCurrentResultsAvailability();
   historyStateKey = null;
   byId('home-selection').hidden = true;
   lastPublicState = 'preparing';
@@ -452,6 +548,7 @@ byId('continue').addEventListener('click', () => switchView('results'));
 byId('new-batch').addEventListener('click', () => {
   if (!byId('processing-mode').disabled) {
     byId('processing-mode').value = '';
+    byId('output-naming-mode').value = 'neutral';
     renderModeHelp('');
     updateModeAvailability();
   }
@@ -534,16 +631,13 @@ async function refresh() {
     if (byId('result-label')) byId('result-label').textContent = converting
       ? 'Markdown-Dateien im letzten abgeschlossenen Lauf – nicht anonymisiert'
       : 'Anonymisierte Ergebnisse im letzten abgeschlossenen Lauf';
-    const ledgerAvailable = state.results_available === true ||
-      (state.state === 'completed_without_results' && state.ledger_available === true);
     if (byId('result-warning')) {
       const warnings = Number.isSafeInteger(state.warning_count) ? state.warning_count : 0;
       const failed = Number.isSafeInteger(state.failed_count) ? state.failed_count : 0;
-      const details = ledgerAvailable ? 'Details stehen in der Zuordnungsdatei.'
-        : 'Eine Zuordnungsdatei ist nicht verfügbar. Bitte die Diagnose öffnen.';
+      const details = failed ? 'Details zum Fehler findest du über „Diagnose öffnen“.' : '';
       byId('result-warning').hidden = !converting;
       byId('result-warning').textContent = converting
-        ? `Nicht anonymisiert: Die Dateien enthalten Originalinhalte.${warnings ? ` ${warnings} Datei(en) mit Extraktionshinweisen.` : ''}${failed ? ` ${failed} Datei(en) konnten nicht umgewandelt werden.` : ''} ${details}`
+        ? `Nicht anonymisiert: Die Dateien enthalten Originalinhalte.${warnings ? ` ${warnings} Datei(en) mit Extraktionshinweisen.` : ''}${failed ? ` ${failed} Datei(en) konnten nicht umgewandelt werden.` : ''}${details ? ` ${details}` : ''}`
         : '';
     }
     updateModeAvailability();
@@ -580,9 +674,11 @@ async function refresh() {
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'completed_without_results') {
-      const details = state.ledger_available === true
-        ? 'Details stehen in der lokalen Zuordnung.'
-        : 'Eine Zuordnungsdatei ist für diesen Lauf nicht verfügbar. Bitte die Diagnose öffnen.';
+      const details = converting
+        ? 'Für reine Konvertierung wird keine Zuordnungsdatei erstellt. Mit „Diagnose öffnen“ findest du Details zum Fehler.'
+        : state.ledger_available === true
+          ? 'Details stehen in der lokalen Zuordnung.'
+          : 'Eine Zuordnungsdatei ist für diesen Lauf nicht verfügbar. Bitte die Diagnose öffnen.';
       status('Abgeschlossen mit Hinweisen', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} nicht verarbeitet. Es ist kein${converting ? ' Markdown-' : ' anonymisiertes '}Ergebnis verfügbar. ${details}`);
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
@@ -606,6 +702,7 @@ async function refresh() {
 
 (async function bootstrap() {
   byId('processing-mode').value = '';
+  byId('output-naming-mode').value = 'neutral';
   renderModeHelp('');
   switchView('home');
   updateModeAvailability();

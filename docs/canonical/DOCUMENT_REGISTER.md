@@ -1,6 +1,6 @@
 # Kanonisches Dokumentenregister
 
-Stand: 06.09.2026
+Stand: 07.09.2026
 
 ## Normativ aktuell
 
@@ -19,7 +19,8 @@ Register. `DOCUMENT_INDEX.json` führt diese Ablösung und DS-085/086 mit.
 | `BACKLOG.md` | einzige aktive Arbeitsliste |
 | `CURRENT_STATE.md` | aktueller belegter Iststand |
 | `TRACEABILITY.md`, `BACKLOG_EVIDENCE_MATRIX.md` | aktuelle Zuordnung und Evidencegrenzen |
-| `TARGET_CAPABILITIES.json`, `HOST_MATRIX_V1.json` | maschinenlesbare Ziel- und Hostverträge; Zielaussagen sind keine Istfreigabe |
+| `TARGET_CAPABILITIES.json`, `HOST_MATRIX_V1.json`, `RUNTIME_START_MATRIX_V1.json` | maschinenlesbare Ziel-, Host- und Runtimeverträge; Zielaussagen sind keine Istfreigabe |
+| `HOST_MATRIX_V1.md`, `STATUS_APP_PILOT_V1.md` | menschenlesbare Hostregel und bewusst deaktivierter Statuskartenpilot |
 | `OPEN_SOURCE_COMPONENTS.md` | verbindliches Wiederverwendungsregister |
 | `DOCUMENT_INDEX.json` | maschinenlesbarer Status, Geltungsbereich, Eigentümer, Versionsregel und Ablösung aller führenden Dokumentklassen |
 | `../archive/INDEX.md` | stabile `ARCH-*`-Kennungen und Fundstellen historischer Dokumentgruppen |

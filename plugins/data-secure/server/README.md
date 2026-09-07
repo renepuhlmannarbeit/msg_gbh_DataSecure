@@ -13,8 +13,9 @@ without a system Node installation on each target platform. The runtime uses
 Node core modules and bundled native/PowerShell helpers; it performs no runtime
 package download. The historical `server/ocr-runtime` tree is excluded from the
 plugin product. Product OCR is supplied only by the separate Standalone
-Markdown-conversion runtime (`server/standalone/conversion-runtime`), not by
-the plugin or its anonymization mode.
+extraction runtime (`server/standalone/conversion-runtime`). It serves both
+Standalone purposes: pure Markdown conversion and Markdown-first anonymization.
+It is not shipped by the plugin and never extends the Cowork format allowlist.
 
 Pure shared contracts live under `core/`; old contract import paths are thin
 compatibility re-exports. Remaining batch I/O and transport composition are

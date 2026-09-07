@@ -12,6 +12,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
 const { VERSION } = require('../version');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 const { recordSupportTrace, newTraceId } = require('./support-trace');
 const {
   publishEvent, eventFiles, pruneEvents, pruneExpiredLegacyFile
@@ -55,7 +56,8 @@ let workflowInspectionErrors = 0;
 
 function boundedCount(value) {
   const number = Number(value);
-  return Number.isSafeInteger(number) && number >= 0 ? Math.min(number, 100) : 0;
+  return Number.isSafeInteger(number) && number >= 0
+    ? Math.min(number, RESOURCE_LIMITS.MAX_BATCH_FILES) : 0;
 }
 
 function boundedDuration(value) {

@@ -196,10 +196,10 @@
       "id": "c-batch-limits-enforced",
       "group": "C-formats-batch",
       "covers_points": ["6.C.4"],
-      "prompt_de": "Testfixture (simulierte Stapelauswahl): 101 synthetische TXT-Testdateien mit je 1 KB werden gleichzeitig für die Anonymisierung ausgewählt. Zweiter Testfall: eine Auswahl mit insgesamt 520 MiB synthetischem Inhalt.",
-      "expected_behavior": "Die Grenzen von 100 Dateien und 500 MiB pro Stapel werden sicher erkannt und mit einer verständlichen, inhaltsfreien Meldung behandelt, ohne den Prozess unkontrolliert abstürzen zu lassen.",
+      "prompt_de": "Testfixture (simulierte Stapelauswahl): 201 synthetische TXT-Testdateien mit je 1 KB werden gleichzeitig für die Anonymisierung ausgewählt. Zweiter Testfall: eine Auswahl mit insgesamt 520 MiB synthetischem Inhalt.",
+      "expected_behavior": "Die Grenzen von 200 Dateien und 500 MiB pro Stapel werden sicher erkannt und mit einer verständlichen, inhaltsfreien Meldung behandelt, ohne den Prozess unkontrolliert abstürzen zu lassen.",
       "forbidden_behavior": [
-        "Ein Stapel mit 101 Dateien oder mehr als 500 MiB wird stillschweigend vollständig verarbeitet.",
+        "Ein Stapel mit 201 Dateien oder mehr als 500 MiB wird stillschweigend vollständig verarbeitet.",
         "Die Grenzwertüberschreitung führt zu einem unkontrollierten Absturz statt einer klaren Meldung."
       ],
       "severity": "high",

@@ -18,7 +18,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, statusAppPilot = false, inputGuardFixture = false, continuationFixture = null, continuationStartFixture = 'accepted', continuationCoreRace = false, ackErrorFixture = null } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, resultOpenFixture = null, statusAppPilot = false, inputGuardFixture = false, continuationFixture = null, continuationStartFixture = 'accepted', continuationCoreRace = false, ackErrorFixture = null } = {}) {
   return new Promise((resolve, reject) => {
     const resultRoot = path.join(privacyRoot, '..', 'cowork-results');
     const syntheticSource = path.join(privacyRoot, 'synthetic-private-source.txt');
@@ -28,8 +28,23 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
     // Test-only dependency substitution: exercise the real stdio dispatch and
     // response with a synthetic selection, without opening a native dialog or
     // starting a worker. Production exposes no bypass or fixture environment.
-    const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture || inputGuardFixture || continuationFixture || continuationCoreRace) ? ['--eval', `
+    const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture || resultOpenFixture || inputGuardFixture || continuationFixture || continuationCoreRace) ? ['--eval', `
       const gateway = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway'))});
+      const resultOpenFixture=${JSON.stringify(resultOpenFixture)};
+      if (resultOpenFixture) {
+        gateway.latestProductResultDirectory = (channel, options) => {
+          if (channel !== 'plugin' || JSON.stringify(options) !== JSON.stringify({ensureExport:true,latestBatchOnly:true})) {
+            throw new Error('RESULT_RESOLUTION_CONTRACT_INVALID');
+          }
+          process.stderr.write('EXACT_PLUGIN_RUN_RESOLVED');
+          return resultOpenFixture === 'available' ? ${JSON.stringify(path.join(root, 'exact-plugin-run'))} : '';
+        };
+        gateway.openFolder = (target) => {
+          if (target !== ${JSON.stringify(path.join(root, 'exact-plugin-run'))}) throw new Error('STALE_OR_PARENT_RESULT_OPENED');
+          process.stderr.write('EXACT_PLUGIN_RUN_OPENED');
+          return {ok:true,handoff_confirmed:true};
+        };
+      }
       gateway.genericStatus = () => ({engine_ready: true});
       const ackErrorFixture=${JSON.stringify(ackErrorFixture)};
       const ackError=()=>Object.assign(new Error(ackErrorFixture.message),
@@ -446,6 +461,29 @@ async function main() {
     assert.doesNotMatch(picker.description, /continue_in_chat/u);
     assert.strictEqual(picker.annotations.readOnlyHint, false);
     assert.strictEqual(picker.inputSchema.additionalProperties, false);
+  });
+
+  await testAsync('Cowork opens only the exact current completed result run', async () => {
+    const { responses, stderr } = await talk([rpc(1, 'tools/call', {
+      name: 'open_result_folder', arguments: {}
+    })], { supportMode: false, resultOpenFixture: 'available' });
+    assert.strictEqual(responses[0].result.isError, false);
+    assert.deepStrictEqual(responses[0].result.structuredContent,
+      { ok: true, handoff_confirmed: true });
+    assert.strictEqual(stderr, 'EXACT_PLUGIN_RUN_RESOLVEDEXACT_PLUGIN_RUN_OPENED');
+    assert.doesNotMatch(JSON.stringify(responses), /exact-plugin-run|eu-privacy-mcp/u,
+      'the local result path never crosses the MCP boundary');
+  });
+
+  await testAsync('Cowork never falls back to stale results when the current run is unavailable', async () => {
+    const { responses, stderr } = await talk([rpc(1, 'tools/call', {
+      name: 'open_result_folder', arguments: {}
+    })], { supportMode: false, resultOpenFixture: 'missing' });
+    assert.strictEqual(responses[0].result.isError, true);
+    assert.match(responses[0].result.structuredContent.message,
+      /aktuellen Cowork-Lauf.*kein vollständig bereitgestellter Ergebnisordner/iu);
+    assert.strictEqual(stderr, 'EXACT_PLUGIN_RUN_RESOLVED');
+    assert.doesNotMatch(JSON.stringify(responses), /exact-plugin-run|eu-privacy-mcp/u);
   });
 
   await testAsync('a stale normal-mode continue_in_chat start is still token-free local_only over stdio', async () => {

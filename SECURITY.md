@@ -36,7 +36,7 @@ boundary sits, what reaches Claude, and every fail-closed point.
 
 ## Standalone boundary
 
-The planned Standalone desktop product is a separate distribution and data
+The implemented Standalone desktop engineering pilot is a separate distribution and data
 namespace, not a privileged mode of the Claude plugin. It reuses the same local
 engine but does not import the plugin's legacy inbox, journals or review state.
 Its renderer receives neither source paths nor raw document content and has no
@@ -46,6 +46,9 @@ listener. These contracts and the Tauri shell have been compiled and exercised
 in a self-contained Windows x64 engineering package. That is implementation
 evidence, not a released end-user boundary: Windows UAT and native macOS
 Intel/ARM builds and UAT remain mandatory before release.
+
+See [docs/canonical/STANDALONE_SECURITY_MODEL.md](docs/canonical/STANDALONE_SECURITY_MODEL.md)
+for the Standalone-specific trust and extraction boundaries.
 
 ## Build provenance
 

@@ -35,6 +35,13 @@ function processingModeForBatch(state) {
     }
     return validateProcessingMode(MODES.ANONYMIZE, channel);
   }
+  if (state.schema === 'datasecure-batch/6') {
+    if (channel !== 'standalone' || state.product_channel !== 'standalone' ||
+        (Object.hasOwn(state, 'processing_mode') && state.processing_mode !== MODES.ANONYMIZE)) {
+      fail('PROCESSING_MODE_INVALID');
+    }
+    return validateProcessingMode(MODES.ANONYMIZE, channel);
+  }
   if (state.schema !== 'datasecure-batch/5' || state.processing_mode !== MODES.MARKDOWN ||
       !Object.hasOwn(state, 'schema') || !Object.hasOwn(state, 'processing_mode') || !Object.hasOwn(state, 'product_channel') ||
       Object.keys(state).some((key) => key.startsWith('pseudonym_')) ||

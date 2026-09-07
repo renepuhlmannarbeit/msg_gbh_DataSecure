@@ -193,6 +193,15 @@ const OFFICE_MATH_NAMESPACES = new Set([
   'http://schemas.openxmlformats.org/officeDocument/2006/math',
   'http://purl.oclc.org/ooxml/officeDocument/math'
 ]);
+const DRAWINGML_WORDPROCESSING_NAMESPACE = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
+const WORD_2010_DRAWING_NAMESPACE = 'http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing';
+// These DrawingML elements carry layout coordinates or alignment tokens, not
+// document prose. Their text must not be mistaken for hidden user content.
+// Namespace normalization below prevents a hostile prefix rebinding from
+// acquiring this exception.
+const NON_CONTENT_DRAWING_TEXT = new Set([
+  'wp:align', 'wp:posOffset', 'wp14:pctHeight', 'wp14:pctWidth'
+]);
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 // Revision properties are content-bearing too: old paragraph styles must not
 // overwrite current styles, and author/history metadata cannot vanish silently.
@@ -217,9 +226,11 @@ function normalizedWordQName(qname, namespaces, attribute = false) {
   if (WORDPROCESSINGML_NAMESPACES.has(namespace)) return `w:${localName}`;
   if (namespace === MARKUP_COMPATIBILITY_NAMESPACE) return `mc:${localName}`;
   if (OFFICE_MATH_NAMESPACES.has(namespace)) return `m:${localName}`;
+  if (namespace === DRAWINGML_WORDPROCESSING_NAMESPACE) return `wp:${localName}`;
+  if (namespace === WORD_2010_DRAWING_NAMESPACE) return `wp14:${localName}`;
   // A misleading `w:` or `mc:` binding must never acquire the semantics of
   // the canonical vocabulary merely because its textual prefix looks right.
-  if (prefix === 'w' || prefix === 'mc' || prefix === 'm') return `unsupported:${localName}`;
+  if (['w', 'mc', 'm', 'wp', 'wp14'].includes(prefix)) return `unsupported:${localName}`;
   return qname;
 }
 
@@ -401,7 +412,8 @@ function parseWordStructure(body, options = {}) {
           if (error?.code === 'OOXML_XML_CHARACTER_INVALID') throw error;
           throw wordStructureError();
         }
-      } else if (!frame.skipped && /\S/.test(body.slice(cursor, end))) {
+      } else if (!frame.skipped && /\S/.test(body.slice(cursor, end)) &&
+          !NON_CONTENT_DRAWING_TEXT.has(frame.name)) {
         // Text outside a canonical Word text node is content, not formatting.
         // Silently dropping vendor/extension text would create a coverage gap
         // before anonymization, so every such construct stops fail closed.

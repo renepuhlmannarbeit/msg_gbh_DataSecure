@@ -61,6 +61,59 @@ test('standard package metadata relationships remain valid DOCX candidates', () 
   assert.strictEqual(result.code, 'SOURCE_FORMAT_CANDIDATE');
 });
 
+test('an internal Microsoft 365 classification-label part is metadata, not active content', () => {
+  const controls = Object.fromEntries(opcControlEntries('docx'));
+  const relationships = controls['_rels/.rels'].replace(
+    '</Relationships>',
+    '<Relationship Id="rIdLabel" Type="http://schemas.microsoft.com/office/2020/02/relationships/classificationlabels" Target="docMetadata/LabelInfo.xml"/></Relationships>'
+  );
+  const contentTypes = controls['[Content_Types].xml'].replace(
+    '</Types>',
+    '<Override PartName="/docMetadata/LabelInfo.xml" ContentType="application/vnd.ms-office.classificationlabels+xml"/></Types>'
+  );
+  const result = inspect('classification-label.docx', docx(
+    { relationships, contentTypes },
+    [['docMetadata/LabelInfo.xml', '<LabelInfo xmlns="http://schemas.microsoft.com/office/2020/mipLabelMetadata"/>']]
+  ));
+  assert.strictEqual(result.verdict, 'candidate');
+  assert.strictEqual(result.code, 'SOURCE_FORMAT_CANDIDATE');
+});
+
+test('the internal Microsoft styles-with-effects projection is metadata, not active content', () => {
+  const controls = Object.fromEntries(opcControlEntries('docx'));
+  const relationships = controls['_rels/.rels'].replace(
+    '</Relationships>',
+    '<Relationship Id="rIdEffects" Type="http://schemas.microsoft.com/office/2007/relationships/stylesWithEffects" Target="word/stylesWithEffects.xml"/></Relationships>'
+  );
+  const result = inspect('styles-with-effects.docx', docx(
+    { relationships },
+    [['word/stylesWithEffects.xml', '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>']]
+  ));
+  assert.strictEqual(result.verdict, 'candidate');
+  assert.strictEqual(result.code, 'SOURCE_FORMAT_CANDIDATE');
+});
+
+test('unknown, external or misspelled Microsoft metadata relationships remain blocked', () => {
+  const controls = Object.fromEntries(opcControlEntries('docx'));
+  for (const [suffix, type, mode] of [
+    ['unknown', 'http://schemas.microsoft.com/office/2020/02/relationships/unknown', ''],
+    ['misspelled', 'http://schemas.microsoft.com/office/2020/02/relationships/classificationlabel', ''],
+    ['styles-lookalike', 'http://schemas.microsoft.com/office/2007/relationships/stylesWithEffect', ''],
+    ['external', 'http://schemas.microsoft.com/office/2020/02/relationships/classificationlabels', ' TargetMode="External"']
+  ]) {
+    const relationships = controls['_rels/.rels'].replace(
+      '</Relationships>',
+      `<Relationship Id="rIdLabel" Type="${type}" Target="docMetadata/LabelInfo.xml"${mode}/></Relationships>`
+    );
+    const result = inspect(`classification-label-${suffix}.docx`, docx(
+      { relationships },
+      [['docMetadata/LabelInfo.xml', '<LabelInfo/>']]
+    ));
+    assert.strictEqual(result.verdict, 'rejected');
+    assert.strictEqual(result.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  }
+});
+
 test('a package digital-signature origin relationship remains a valid DOCX candidate', () => {
   const controls = Object.fromEntries(opcControlEntries('docx'));
   const relationships = controls['_rels/.rels'].replace(

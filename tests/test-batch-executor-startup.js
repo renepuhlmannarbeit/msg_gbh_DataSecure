@@ -122,7 +122,9 @@ function fixture(role, firstChild) {
     require(name) {
       if (name === 'crypto') return { randomBytes: size => Buffer.alloc(size, ++randomCounter) };
       if (name === '../runtime') return { SafeError };
+      if (name === '../resource-limits') return require('../plugins/data-secure/server/resource-limits');
       if (name === '../core/processing-mode') return require('../plugins/data-secure/server/core/processing-mode');
+      if (name === '../core/result-naming-mode') return require('../plugins/data-secure/server/core/result-naming-mode');
       if (name === './batch') return batch;
       if (name === './workflow-diagnostics') return { recordWorkflowEvent: event => records.push(event) };
       if (name === './batch-intake-reservation') return {
@@ -196,6 +198,16 @@ test('an invalid private intake queue is rejected before a child is launched', (
     { sourcePath: path.resolve(__dirname, 'wrong-shape.txt'), sourceBytes: 12 }
   ]), (error) => error instanceof SafeError && error.code === 'LOCAL_QUEUE_SCHEMA_INVALID');
   assert.strictEqual(f.launched.length, 0);
+});
+
+test('Standalone intake sends exactly one validated result-name choice to the worker', () => {
+  for (const outputNamingMode of ['neutral', 'source-with-suffix']) {
+    const child = fakeChild();
+    const f = fixture('intake', child);
+    assert.strictEqual(f.start({ env: { DATASECURE_PRODUCT_CHANNEL: 'standalone' }, outputNamingMode }).ok, true);
+    assert.strictEqual(child.messages[0].output_naming_mode, outputNamingMode);
+    assert.strictEqual(child.messages[0].processing_mode, undefined);
+  }
 });
 
 for (const role of ['batch', 'intake', 'review']) {

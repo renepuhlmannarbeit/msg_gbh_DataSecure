@@ -5,6 +5,7 @@ const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
 const {
   isWidePrivacyExtension,
+  isMarkdownFirstPrivacyExtension,
   extractWideSourceForPrivacy
 } = require('../plugins/data-secure/server/standalone/wide-privacy-extraction');
 
@@ -17,6 +18,12 @@ testAsync('wide allowlist is exact and platform-neutral', async () => {
   }
   for (const extension of ['.docx', '.txt', '.svg', '.exe', '', undefined]) {
     assert.equal(isWidePrivacyExtension(extension), false, String(extension));
+  }
+  for (const extension of ['.docx', '.DOCX', '.xlsx', '.pdf', '.png']) {
+    assert.equal(isMarkdownFirstPrivacyExtension(extension), true, extension);
+  }
+  for (const extension of ['.txt', '.md', '.csv', '.svg', '.exe', '', undefined]) {
+    assert.equal(isMarkdownFirstPrivacyExtension(extension), false, String(extension));
   }
 });
 
@@ -32,26 +39,41 @@ testAsync('complete conversion becomes neutral in-memory parser output without a
     }
   });
   assert.equal(calls, 1);
-  assert.deepEqual(Object.keys(result), ['markdown', 'warnings', 'attachments', 'unreviewedVisualCount', 'requiresExplicitProfile', 'sourceType']);
+  assert.deepEqual(Object.keys(result), ['markdown', 'warnings', 'attachments', 'unreviewedVisualCount',
+    'requiresExplicitProfile', 'sourceType', 'sourceExtractionCoverage']);
+  assert.deepEqual(result.sourceExtractionCoverage, { status: 'complete', reason_codes: [] });
   assert.equal(result.markdown, 'E-Mail: max@example.org');
   assert.equal(Object.hasOwn(result, 'artifact_id'), false);
   assert.equal(Object.hasOwn(result, 'processing_mode'), false);
 });
 
-testAsync('every incomplete coverage reason stops before the privacy publication path', async () => {
-  for (const reason of ['OCR_NOT_VERIFIED', 'OCR_TEXT_EMPTY', 'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']) {
-    await assert.rejects(extractWideSourceForPrivacy(bytes, '.pdf', {
+testAsync('useful incomplete Markdown continues into privacy while empty OCR stays fail closed', async () => {
+  for (const reason of ['OCR_NOT_VERIFIED', 'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']) {
+    const result = await extractWideSourceForPrivacy(bytes, '.pdf', {
       ErrorType: SafeError,
       async convertBuffer() {
         return createMarkdownExtraction({ source_type: 'pdf', markdown: 'private text',
           coverage: { status: 'incomplete', reason_codes: [reason] } });
       }
-    }), error => error instanceof SafeError && error.code === 'PARSER_COVERAGE_UNVERIFIED' && !error.message.includes('private text'));
+    });
+    assert.equal(result.markdown, 'private text');
   }
+  for (const candidate of [
+    { markdown: '', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] },
+    { markdown: '   ', reason_codes: ['OCR_NOT_VERIFIED'] },
+    { markdown: 'unexpected text', reason_codes: ['OCR_TEXT_EMPTY', 'OCR_NOT_VERIFIED'] }
+  ]) await assert.rejects(extractWideSourceForPrivacy(bytes, '.pdf', {
+    ErrorType: SafeError,
+    async convertBuffer() {
+      return createMarkdownExtraction({ source_type: 'pdf', markdown: candidate.markdown,
+        coverage: { status: 'incomplete', reason_codes: [...candidate.reason_codes].sort() } });
+    }
+  }), error => error instanceof SafeError && error.code === 'PARSER_COVERAGE_UNVERIFIED' &&
+    !error.message.includes('unexpected text'));
 });
 
 testAsync('invalid source and malformed converter response fail closed', async () => {
-  await assert.rejects(extractWideSourceForPrivacy(Buffer.from('x'), '.docx', { ErrorType: SafeError }),
+  await assert.rejects(extractWideSourceForPrivacy(Buffer.from('x'), '.txt', { ErrorType: SafeError }),
     { code: 'FORMAT_COVERAGE_UNVERIFIED' });
   await assert.rejects(extractWideSourceForPrivacy(bytes, '.pdf', { ErrorType: SafeError,
     async convertBuffer() { return { markdown: 'raw' }; } }));
@@ -59,7 +81,7 @@ testAsync('invalid source and malformed converter response fail closed', async (
 
 testAsync('converter source type is bound to the admitted extension', async () => {
   const expected = new Map([
-    ['.xlsx', 'xlsx'], ['.pptx', 'pptx'], ['.pdf', 'pdf'], ['.png', 'png'],
+    ['.docx', 'docx'], ['.xlsx', 'xlsx'], ['.pptx', 'pptx'], ['.pdf', 'pdf'], ['.png', 'png'],
     ['.jpg', 'jpeg'], ['.jpeg', 'jpeg'], ['.bmp', 'bmp']
   ]);
   for (const [extension, sourceType] of expected) {

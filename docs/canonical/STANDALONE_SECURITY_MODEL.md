@@ -1,6 +1,6 @@
 # DataSecure Standalone – Sicherheitsmodell
 
-Stand: 06.09.2026 · Entscheidungen DS-075 bis DS-086
+Stand: 07.09.2026 · Entscheidungen DS-075 bis DS-092
 
 ## Geltungsbereich
 
@@ -58,8 +58,9 @@ entscheidet über zwei getrennte Ausgabeverträge (DS-085):
   Lesecapabilities und keine Einträge im Plugin-Handoff.
 
 Beide Zwecke veröffentlichen erst nach terminalem Gesamtstapel einen sichtbaren
-Lauf einschließlich `DataSecure-Zuordnung.csv` (DS-083). Das dauerhafte globale
-Mapping bleibt im privaten Datenbereich. Die lokale Zuordnung ist kein
+Lauf. Nur die Anonymisierung ergänzt `DataSecure-Zuordnung.csv` (DS-083/DS-088).
+Reine Konvertierung behält den Basisnamen und braucht keine zusätzliche Zuordnung.
+Das dauerhafte globale Mapping bleibt im privaten Datenbereich. Die lokale Zuordnung ist kein
 Diagnose-Log und wird nicht an das Claude-Produkt übergeben. Quellen, fertige
 Exporte und Zuordnungen fallen nicht unter die 0–14-Tage-Aufbewahrung temporärer
 Arbeits-/Reviewdaten.
@@ -103,9 +104,10 @@ sind ebenfalls noch offen. Bis dahin ist das Paket ein Engineering-Pilot.
 - keine Cloud-, Remote- oder Browser-only-Verarbeitung;
 - keine freie Pause-/Prozesssteuerung durch den Renderer; technische
   Unterbrechungen und vertagte Reviews bleiben über den Core fortsetzbar;
-- keine Gleichsetzung der aktiven XLSX-/PPTX-/PDF-/Bildkonvertierung mit einer
-  erfolgreichen Anonymisierung oder vollständiger grafischer Coverage. DS-087
-  lässt im Standalone-Anonymisierungsmodus ausschließlich eine neutral
-  extrahierte `complete`-Quelle in den bestehenden Privacy-Core; `incomplete`
-  stoppt vor jeder Veröffentlichung. Maßgeblich ist die
+- keine Gleichsetzung der aktiven DOCX-/XLSX-/PPTX-/PDF-/Bildextraktion mit
+  einer vollständigen Anonymisierung des Originalcontainers. Nach DS-087/090
+  dürfen bekannte `complete`- und `incomplete`-Extraktionen mit gültigem,
+  nichtleerem Markdown in den Privacy-Core; anonymisiert wird ausschließlich
+  diese Markdown-Repräsentation. Unbekannte Coverage, Leertext sowie
+  beschädigte, verschlüsselte oder aktive Quellen stoppen. Maßgeblich ist die
   [Formatmatrix](../FORMAT_COVERAGE_MATRIX.md).

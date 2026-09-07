@@ -1,7 +1,7 @@
 'use strict';
 
 const { SafeError } = require('../runtime');
-const { SCHEMA, V2_SCHEMA } = require('./batch-journal-store');
+const { SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, V2_SCHEMA } = require('./batch-journal-store');
 const { exactPendingEntry } = require('./batch-snapshot');
 const { processingModeForBatch } = require('../core/processing-mode');
 
@@ -14,13 +14,13 @@ function unsupported() {
 // Upgrade only verified plaintext v2 journals. Never decrypt, rename or delete
 // legacy snapshots. Released originals stay independent of private work copies.
 function migrateLegacyBatchState(state, deps = {}) {
-  if (![SCHEMA, V2_SCHEMA, 'datasecure-batch/5'].includes(state?.schema) || !Array.isArray(state.items)) throw unsupported();
-  if (state.schema === 'datasecure-batch/5') processingModeForBatch(state);
+  if (![SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, V2_SCHEMA].includes(state?.schema) || !Array.isArray(state.items)) throw unsupported();
+  if ([MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA].includes(state.schema)) processingModeForBatch(state);
   for (const item of state.items) {
     if (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
         /\.dsart$/iu.test(String(item.work_name || ''))) throw unsupported();
   }
-  if (state.schema === SCHEMA || state.schema === 'datasecure-batch/5') return state;
+  if ([SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA].includes(state.schema)) return state;
   if (typeof deps.writeState !== 'function') throw unsupported();
   const next = JSON.parse(JSON.stringify(state));
   for (const item of next.items) {

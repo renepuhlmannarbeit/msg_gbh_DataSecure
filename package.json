@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc111",
+  "version": "3.2.0-rc123",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -10,7 +10,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "standalone": "node plugins/data-secure/server/standalone/cli.js",
-    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-history.js && node tests/test-standalone-frontend.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && node tests/test-converter-support-trace.js && npm run test:standalone:rust",
+    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-history.js && node tests/test-standalone-frontend.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && node tests/test-converter-support-trace.js && node tests/test-standalone-format-corpus.mjs && node tests/test-complex-docx-uat-corpus.mjs && npm run test:standalone:rust",
     "test:standalone:rust": "cd apps/datasecure-standalone/tauri-contract && cargo test --locked",
     "build:standalone:windows": "node scripts/prepare-standalone-runtime.mjs && cd apps/datasecure-standalone/tauri-contract && cargo build --release --locked",
     "build:standalone:windows:portable": "npm run build:standalone:windows && node scripts/build-standalone-package.mjs && npm run test:standalone:package",
@@ -42,6 +42,7 @@
     "prebuild": "npm run native:verify",
     "fixtures": "node tests/make-fixtures.js",
     "uat:fixtures": "node docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures.js",
+    "uat:format-corpus": "node scripts/generate-standalone-format-corpus.mjs",
     "runtime:target": "node scripts/build-runtime-target.mjs",
     "build:runtime-plugin": "node scripts/build-runtime-plugin.mjs",
     "test:bundled-runtime": "node tests/test-bundled-runtime.mjs && node tests/test-runtime-release-path.mjs",

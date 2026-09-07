@@ -66,13 +66,15 @@ try {
       if (extension === '.txt' || extension === '.md') assert.equal(result.markdown, bytes.toString('utf8'));
     });
   }
-  await test('real packaged wide extraction cannot bypass incomplete coverage into privacy publication', async () => {
+  await test('real packaged XLSX becomes Markdown once and proceeds to privacy with separate source coverage', async () => {
     const bytes = office('xlsx');
     const before = hash(bytes);
-    await assert.rejects(extractWideSourceForPrivacy(bytes, '.xlsx', { convertBuffer }),
-      error => error?.code === 'PARSER_COVERAGE_UNVERIFIED');
+    const result = await extractWideSourceForPrivacy(bytes, '.xlsx', { convertBuffer });
+    assert.match(result.markdown, /Max(?: |&#32;)Mustermann/u);
+    assert.equal(result.sourceExtractionCoverage.status, 'incomplete');
+    assert.ok(result.sourceExtractionCoverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
     assert.equal(hash(bytes), before);
-    assert.ok(children.every(entry => entry.closed), 'privacy refusal follows confirmed converter termination');
+    assert.ok(children.every(entry => entry.closed), 'privacy handoff follows confirmed converter termination');
   });
   await test('XLSX corruption crosses real OPC admission and worker into a stopped item; the next source exports with exact columns', async () => {
     const saved = new Map(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT'].map(key => [key, process.env[key]]));
@@ -131,10 +133,9 @@ try {
       assert.equal(item.status, 'released');
       assert.equal(exportCompletedState(state).available, true);
       const run = visibleExportDirectory(state.token), names = fs.readdirSync(run);
-      assert.equal(names.filter(name => name.endsWith('.md')).length, 1);
-      const mapping = fs.readFileSync(path.join(run, 'DataSecure-Zuordnung.csv'), 'utf8');
-      assert.match(mapping, /broken\.xlsx/u); assert.match(mapping, /Nicht konvertiert/u); assert.match(mapping, /ledger\.xlsx/u);
-      assert.doesNotMatch(mapping, /SECRET PREFIX/u);
+      assert.deepEqual(names, ['ledger.md']);
+      assert.equal(fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')), false,
+        'pure conversion keeps the original basename and needs no visible mapping');
     } finally {
       for (const [key, value] of saved) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     }
@@ -172,18 +173,25 @@ try {
     assert.match(mixed.markdown, /## Seite 1[\s\S]*Text page Max Mustermann[\s\S]*## Seite 2[\s\S]*Nordstern GmbH/u);
     assert.equal((mixed.markdown.match(/Max Mustermann/gu) || []).length, 2);
   });
-  await test('every real wide format remains fail-closed at the privacy publication boundary', async () => {
+  await test('every real wide format hands useful Markdown to privacy with explicit source coverage', async () => {
     const sources = [
       ['.pptx', office('pptx')], ['.pdf', pdf([{ text }])], ['.pdf', pdf([{ image: jpeg }])],
       ['.png', png], ['.jpg', jpeg], ['.jpeg', jpeg], ['.bmp', bmp]
     ];
     for (const [extension, bytes] of sources) {
       const before = hash(bytes);
-      await assert.rejects(extractWideSourceForPrivacy(bytes, extension, { convertBuffer }),
-        cause => cause.code === 'PARSER_COVERAGE_UNVERIFIED');
+      const result = await extractWideSourceForPrivacy(bytes, extension, { convertBuffer });
+      assert.ok(result.markdown.trim().length > 0, `${extension} supplies useful Markdown`);
+      assert.ok(['complete', 'incomplete'].includes(result.sourceExtractionCoverage.status));
       assert.equal(hash(bytes), before, `${extension} source remains unchanged`);
-      assert.ok(children.every(entry => entry.closed), `${extension} refusal follows converter termination`);
+      assert.ok(children.every(entry => entry.closed), `${extension} handoff follows converter termination`);
     }
+  });
+  await test('empty real OCR output remains fail-closed before privacy publication', async () => {
+    const bytes = image(true).toBuffer('image/png');
+    await assert.rejects(extractWideSourceForPrivacy(bytes, '.png', { convertBuffer }),
+      cause => cause.code === 'PARSER_COVERAGE_UNVERIFIED');
+    assert.ok(children.every(entry => entry.closed));
   });
   await test('PDF annotations stop while standard document metadata is retained as literal source text', async () => {
     await assert.rejects(convertBuffer(pdf([{ text, annotation: true }]), '.pdf'),

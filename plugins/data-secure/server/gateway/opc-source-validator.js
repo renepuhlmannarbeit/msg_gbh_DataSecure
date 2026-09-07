@@ -30,6 +30,14 @@ const BLOCKED_MICROSOFT_REL_TYPES = new Set([
   'http://schemas.microsoft.com/office/2006/relationships/ui/extensibility',
   'http://schemas.microsoft.com/office/2007/relationships/ui/extensibility'
 ]);
+// Microsoft 365 stores Purview labels and an optional, static style projection
+// in internal non-executable parts. Neither relationship can launch code or
+// fetch external content and neither is copied into the Markdown result. Keep
+// this allowlist exact: other Microsoft relationship types remain rejected.
+const SAFE_MICROSOFT_REL_TYPES = new Set([
+  'http://schemas.microsoft.com/office/2020/02/relationships/classificationlabels',
+  'http://schemas.microsoft.com/office/2007/relationships/styleswitheffects'
+]);
 const MAIN = Object.freeze({
   docx: Object.freeze({
     part: 'word/document.xml',
@@ -234,6 +242,7 @@ function isBlockedRelationshipType(value) {
 
 function hasSupportedRelationshipNamespace(value) {
   const type = String(value || '').toLowerCase();
+  if (SAFE_MICROSOFT_REL_TYPES.has(type)) return true;
   return [...OFFICE_REL_NAMESPACES, ...PACKAGE_REL_NAMESPACES]
     .some((namespace) => type.startsWith(namespace) && type.length > namespace.length);
 }

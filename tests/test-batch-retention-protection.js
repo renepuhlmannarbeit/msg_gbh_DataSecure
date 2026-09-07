@@ -77,17 +77,39 @@ test('a complete journal scan returns all delivery and mapping package protectio
   assert.deepStrictEqual([...result.ids].sort(), [delivery, mapping]);
 });
 
-test('current v4 and all historical journals protect pending output, ignoring the lock record', () => {
-  for (const version of [1, 2, 3, 4]) {
+test('current anonymization and all historical journals protect pending output, ignoring the lock record', () => {
+  for (const version of [1, 2, 3, 4, 6]) {
     const id = `ds_${String(version).repeat(32)}`;
     const result = _test.openBatchPackageProtection({
       readdirSync: () => [fileEntry('active-processing.json'), fileEntry('a.json')],
       readFileSync(target) {
         assert.ok(!target.endsWith('active-processing.json'));
-        return JSON.stringify({ schema: `datasecure-batch/${version}`, items: [{ status: 'delivery_pending', package_id: id }] });
+        return JSON.stringify({
+          schema: `datasecure-batch/${version}`,
+          ...(version === 6 ? { product_channel: 'standalone', output_naming_mode: 'neutral' } : {}),
+          items: [{ status: 'delivery_pending', package_id: id }]
+        });
       }
     });
     assert.deepStrictEqual(result, { ids: new Set([id]), complete: true });
+  }
+});
+
+test('malformed v6 naming metadata blocks automatic cleanup proof', () => {
+  for (const fields of [
+    { product_channel: 'standalone' },
+    { product_channel: 'standalone', output_naming_mode: 'unexpected' },
+    { product_channel: 'plugin', output_naming_mode: 'neutral' }
+  ]) {
+    const result = _test.openBatchPackageProtection({
+      readdirSync: () => [fileEntry('a.json')],
+      readFileSync: () => JSON.stringify({
+        schema: 'datasecure-batch/6',
+        ...fields,
+        items: [{ status: 'delivery_pending', package_id: `ds_${'6'.repeat(32)}` }]
+      })
+    });
+    assert.deepStrictEqual(result, { ids: new Set(), complete: false });
   }
 });
 

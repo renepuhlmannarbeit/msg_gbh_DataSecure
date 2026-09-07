@@ -511,12 +511,12 @@ async function main() {
     assert.deepStrictEqual(fs.readdirSync(_test.batchRoot()).sort(), batchesBefore);
   });
 
-  await testAsync('batch boundaries accept 100 files but reject 101 files and more than 500 MB before hashing', async () => {
+  await testAsync('batch boundaries accept 200 files but reject 201 files and more than 500 MB before hashing', async () => {
     resetInput();
-    for (let index = 1; index <= 100; index++) add(`${index}.txt`, `Dokument ${index}`);
-    const accepted = beginBatch({ expectedCount: 100, profile: 'general' });
+    for (let index = 1; index <= 200; index++) add(`${index}.txt`, `Dokument ${index}`);
+    const accepted = beginBatch({ expectedCount: 200, profile: 'general' });
     assert.strictEqual(accepted.ok, true);
-    assert.throws(() => beginBatch({ expectedCount: 101, profile: 'general' }), /1 und 100/);
+    assert.throws(() => beginBatch({ expectedCount: 201, profile: 'general' }), /1 und 200/);
 
     resetInput();
     // The 500-MiB promise is a batch envelope. Individual parser inputs have

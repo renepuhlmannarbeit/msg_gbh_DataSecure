@@ -68,7 +68,7 @@ function projectBatchResults(state, options = {}) {
     return { grade_counts: counts, omission_counts: emptyOmissionCounts(), grades_verified: counts.unavailable === 0 };
   }
   if (state.schema === 'datasecure-batch/1') return unavailableProjection(items.length, false);
-  if (!['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4'].includes(state.schema)) {
+  if (!['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6'].includes(state.schema)) {
     return unavailableProjection(items.length, false);
   }
 

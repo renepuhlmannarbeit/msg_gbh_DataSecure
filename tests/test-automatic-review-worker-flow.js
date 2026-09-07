@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const { createSuite } = require('./helpers');
 const { continueIntoLocalReview } = require('../plugins/data-secure/server/gateway/automatic-local-review');
 const processingMode = require('../plugins/data-secure/server/core/processing-mode');
+const resultNamingMode = require('../plugins/data-secure/server/core/result-naming-mode');
 
 const { testAsync, done, assert } = createSuite('Automatic review worker orchestration contract');
 const workerFile = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'gateway', 'batch-worker.js');
@@ -63,6 +64,7 @@ async function runWorker(reviewOutcome, initial = waiting) {
     require(name) {
       if (name === './batch') return batch;
       if (name === '../core/processing-mode') return processingMode;
+      if (name === '../core/result-naming-mode') return resultNamingMode;
       if (name === './batch-intake-reservation') return { releaseIntake: () => true, RESERVATION_ID_RE: /^[a-f0-9]{64}$/u };
       if (name === './result-export') return {
         terminalVisibleExport(progress, exporter) {

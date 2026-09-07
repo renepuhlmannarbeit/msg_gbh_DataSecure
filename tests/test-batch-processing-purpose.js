@@ -17,6 +17,7 @@ const { planBatchAdmission } = require('../plugins/data-secure/server/gateway/ba
 const { PROFILES, LIMITS, validateBatchLimits, storageStatus, hasReparseComponent } = require('../plugins/data-secure/server/gateway/common');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const { MODES, processingModeForBatch } = require('../plugins/data-secure/server/core/processing-mode');
+const { resultNamingModeForBatch } = require('../plugins/data-secure/server/core/result-naming-mode');
 const { validateBatchMessagePurpose } = require('../plugins/data-secure/server/gateway/batch-queue-envelope');
 const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { test, testAsync, assert, done } = createSuite('Persistent batch processing purpose');
@@ -92,8 +93,9 @@ function fixture(channel = 'standalone') {
     root, privateRoot, paths, source, original, store, newStore, privateWorkStore,
     get seeds() { return seeds; }, get copies() { return copies; },
     get intent() { return intentRecord; }, get admissionPurpose() { return admissionPurpose; },
-    begin(mode) {
+    begin(mode, outputNamingMode) {
       return intake.beginBatch({ token, expectedCount: 1, processingMode: mode,
+        ...(outputNamingMode ? { outputNamingMode } : {}),
         queue: [{ name: path.basename(source), full: source, sourceBytes: original.length }] });
     },
     cleanup() { assert.strictEqual(digest(fs.readFileSync(source)), digest(original)); removeFixture(root); }
@@ -119,17 +121,50 @@ test('real intake persists standalone-only conversion purpose before copy and re
   } finally { f.cleanup(); }
 });
 
-test('both historical product channels still create anonymization v4 with their seed contract', () => {
+test('new anonymization journals bind the product-specific schema, seed and naming contract', () => {
   for (const channel of ['plugin', 'standalone']) {
     const f = fixture(channel);
     try {
       f.begin(MODES.ANONYMIZE);
       const state = f.newStore().readState(token);
-      assert.strictEqual(state.schema, 'datasecure-batch/4');
+      assert.strictEqual(state.schema, channel === 'standalone' ? 'datasecure-batch/6' : 'datasecure-batch/4');
       assert.strictEqual(processingModeForBatch(state), MODES.ANONYMIZE);
+      assert.strictEqual(state.output_naming_mode, channel === 'standalone' ? 'neutral' : undefined);
+      assert.strictEqual(resultNamingModeForBatch(state), 'neutral');
       assert.strictEqual(f.seeds, 1);
       assert.strictEqual(typeof state.pseudonym_seed, 'string');
       assert.strictEqual(f.intent.schema, 'datasecure-intake/1');
+    } finally { f.cleanup(); }
+  }
+});
+
+test('filename purpose requires v6 while historical Standalone v4 remains source-based', () => {
+  assert.strictEqual(resultNamingModeForBatch({ schema: 'datasecure-batch/4', product_channel: 'standalone' }),
+    'source-with-suffix');
+  assert.strictEqual(resultNamingModeForBatch({ schema: 'datasecure-batch/6', product_channel: 'standalone',
+    output_naming_mode: 'neutral' }), 'neutral');
+  for (const invalid of [
+    { schema: 'datasecure-batch/4', product_channel: 'standalone', output_naming_mode: 'neutral' },
+    { schema: 'datasecure-batch/6', product_channel: 'standalone' },
+    { schema: 'datasecure-batch/6', product_channel: 'plugin', output_naming_mode: 'neutral' },
+    { schema: 'datasecure-batch/5', product_channel: 'standalone', processing_mode: MODES.MARKDOWN,
+      output_naming_mode: 'neutral' }
+  ]) assert.throws(() => resultNamingModeForBatch(invalid), /RESULT_NAMING_MODE_INVALID/u);
+});
+
+test('loaded-object and fresh-object resume cannot change the persisted anonymized filename choice', () => {
+  for (const fresh of [false, true]) {
+    const f = fixture();
+    try {
+      f.begin(MODES.ANONYMIZE, 'neutral');
+      const writer = f.newStore();
+      let resumed = writer.readState(token);
+      if (fresh) resumed = JSON.parse(JSON.stringify(resumed));
+      const before = digest(fs.readFileSync(f.paths.batchPath(token)));
+      resumed.output_naming_mode = 'source-with-suffix';
+      assert.throws(() => writer.writeState(resumed), error => error.code === 'BATCH_PROCESSING_MODE_CHANGED');
+      assert.strictEqual(digest(fs.readFileSync(f.paths.batchPath(token))), before);
+      assert.strictEqual(f.newStore().readState(token).output_naming_mode, 'neutral');
     } finally { f.cleanup(); }
   }
 });
@@ -326,7 +361,7 @@ async function realWorkerReject(message, channel, existing) {
     assert.strictEqual(output, '');
     assert.strictEqual(messages.length, 1);
     assert.strictEqual(messages[0].type, existing ? 'local-batch-rejected' : 'local-intake-rejected');
-    assert.ok(['PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN'].includes(messages[0].error_code));
+    assert.ok(['PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'RESULT_NAMING_MODE_INVALID'].includes(messages[0].error_code));
   } finally {
     clearTimeout(timer);
     if (child.exitCode === null && child.signalCode === null) { child.kill(); await exited; }
@@ -338,6 +373,10 @@ async function main() {
   await testAsync('actual worker rejects invalid and cross-product purpose before acceptance or source I/O', async () => {
     await realWorkerReject({ type: 'start-local-intake', processing_mode: MODES.MARKDOWN }, 'standalone');
     await realWorkerReject({ type: 'start-local-markdown-intake', processing_mode: MODES.MARKDOWN }, 'plugin');
+    await realWorkerReject({ type: 'start-local-intake', processing_mode: MODES.ANONYMIZE,
+      output_naming_mode: 'source-with-suffix' }, 'plugin');
+    await realWorkerReject({ type: 'start-local-markdown-intake', processing_mode: MODES.MARKDOWN,
+      output_naming_mode: 'neutral' }, 'standalone');
   });
   await testAsync('actual resume worker rejects a legacy message for a v5 journal before accepting ownership', async () => {
     const f = fixture();

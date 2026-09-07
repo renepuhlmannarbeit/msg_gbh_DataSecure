@@ -21,6 +21,7 @@ const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { continueIntoLocalReview } = require('./automatic-local-review');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
 const { MODES } = require('../core/processing-mode');
+const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 
 let started = false;
 const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
@@ -56,9 +57,18 @@ process.once('message', async (message) => {
     }
   }
   let processingMode;
+  let outputNamingMode;
   try {
     const existingMode = isExistingBatch ? readBatchProcessingMode(message.batch_token) : undefined;
     processingMode = validateBatchMessagePurpose(message, standaloneChannel ? 'standalone' : 'plugin', existingMode);
+    if (isNewIntake && processingMode !== MODES.MARKDOWN) {
+      outputNamingMode = validateResultNamingMode(
+        Object.hasOwn(message, 'output_naming_mode') ? message.output_naming_mode : RESULT_NAMING_MODES.NEUTRAL,
+        standaloneChannel ? 'standalone' : 'plugin'
+      );
+    } else if (Object.hasOwn(message, 'output_naming_mode')) {
+      throw Object.assign(new Error('RESULT_NAMING_MODE_INVALID'), { code: 'RESULT_NAMING_MODE_INVALID' });
+    }
   } catch (error) {
     await notify({ type: isNewIntake ? 'local-intake-rejected' : 'local-batch-rejected',
       error_code: PURPOSE_ERROR_CODES.includes(error?.code) ? error.code : 'PROCESSING_MODE_INVALID' });
@@ -79,6 +89,7 @@ process.once('message', async (message) => {
         expectedCount: message.queue.length,
         profile: message.profile || 'auto',
         processingMode,
+        ...(outputNamingMode ? { outputNamingMode } : {}),
         queue: message.queue,
         // The operating-system picker was the only start confirmation.
         confirmStart: () => true

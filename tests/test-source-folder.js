@@ -56,24 +56,23 @@ test('nested supported files are deterministic and retain collision-free relativ
   fs.writeFileSync(path.join(root, 'a', 'same.txt'), 'A');
   const selected = enumerateSourceFolder(root, { hasReparseComponent: () => false });
   assert.deepStrictEqual(selected.map((entry) => path.basename(entry.sourcePath)), ['same.txt', 'same.txt']);
-  assert.ok(selected.every((entry) => entry.sourceLabel === undefined && entry.treeOrder === undefined),
-    'the folder walk emits no label of its own; the queue derives the minimal one');
+  assert.deepStrictEqual(selected.map((entry) => entry.sourceLabel), ['a/same.txt', 'b/same.txt']);
+  assert.ok(selected.every((entry) => entry.treeOrder === undefined),
+    'the folder walk retains only the root-relative label, not its sorting helper');
   const queue = batchQueueFromSelection(selected);
   assert.deepStrictEqual(queue.map((entry) => entry.name), ['same.txt', 'same.txt']);
   assert.deepStrictEqual(queue.map((entry) => entry.sourceLabel), ['a/same.txt', 'b/same.txt']);
 });
 
-test('unique basenames in a folder selection map to bare basenames (DS-058)', () => {
-  // Sub-folder names are frequently person names or assessments. They must not
-  // enter the durable mapping unless bare basenames would otherwise collide.
+test('unique basenames retain their root-relative folder structure', () => {
   const root = clean('unique-basenames');
   fs.mkdirSync(path.join(root, 'Erika Synthetisch (abgelehnt)'));
   fs.mkdirSync(path.join(root, 'Max Beispiel'));
   fs.writeFileSync(path.join(root, 'Erika Synthetisch (abgelehnt)', 'lebenslauf.txt'), 'A');
   fs.writeFileSync(path.join(root, 'Max Beispiel', 'anschreiben.txt'), 'B');
   const queue = batchQueueFromSelection(enumerateSourceFolder(root, { hasReparseComponent: () => false }));
-  assert.deepStrictEqual(queue.map((entry) => entry.sourceLabel), ['lebenslauf.txt', 'anschreiben.txt']);
-  assert.doesNotMatch(JSON.stringify(queue.map((entry) => entry.sourceLabel)), /Erika|Max|abgelehnt/u);
+  assert.deepStrictEqual(queue.map((entry) => entry.sourceLabel),
+    ['Erika Synthetisch (abgelehnt)/lebenslauf.txt', 'Max Beispiel/anschreiben.txt']);
 });
 
 test('a mixed tree is rejected as a whole instead of silently selecting supported files', () => {
@@ -84,6 +83,7 @@ test('a mixed tree is rejected as a whole instead of silently selecting supporte
   fs.writeFileSync(path.join(root, 'presentation.pptx'), 'synthetic');
   fs.writeFileSync(path.join(root, 'unknown.bin'), 'synthetic');
   assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false }), (error) => {
+    assert.strictEqual(error.code, 'SOURCE_FOLDER_UNSUPPORTED_FILES');
     assert.match(error.message, /4 reguläre Dateien, davon 2 nicht freigegebene oder unbekannte Formate/iu);
     assert.match(error.message, /kein Stapel gestartet/iu);
     assert.doesNotMatch(error.message, /contract|notes|presentation|unknown|\.pptx|\.bin/iu);
@@ -111,8 +111,26 @@ test('depth, entry, file-count and aggregate-byte limits fail before returning a
   assert.throws(() => enumerateSourceFolder(root, {
     hasReparseComponent: () => false, treeLimits: { maxDirectories: 10, maxEntries: 1, maxDepth: 10 }
   }), /zu viele Dateisystemeinträge/iu);
-  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false, maxSources: 1 }), /mehr als 1/iu);
-  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false, maxTotalBytes: 2 }), /größer als 500 MB/iu);
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false, maxSources: 1 }),
+    (error) => error.code === 'SOURCE_FOLDER_FILE_LIMIT' && /mehr als 1/iu.test(error.message));
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false, maxTotalBytes: 2 }),
+    (error) => error.code === 'SOURCE_FOLDER_SIZE_LIMIT' && /größer als 500 MB/iu.test(error.message));
+});
+
+test('the product limit admits 200 recursively discovered files and rejects the 201st', () => {
+  const root = clean('product-file-limit');
+  for (let group = 0; group < 4; group++) {
+    const directory = path.join(root, `gruppe-${group}`);
+    fs.mkdirSync(directory);
+    for (let index = 0; index < 50; index++) fs.writeFileSync(path.join(directory, `${index}.txt`), 'x');
+  }
+  assert.strictEqual(enumerateSourceFolder(root, { hasReparseComponent: () => false }).length, 200);
+  fs.writeFileSync(path.join(root, 'gruppe-3', 'zusatz.txt'), 'x');
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false }), (error) => {
+    assert.strictEqual(error.code, 'SOURCE_FOLDER_FILE_LIMIT');
+    assert.match(error.message, /mehr als 200/u);
+    return true;
+  });
 });
 
 test('an empty or unsupported-only folder stops honestly', () => {
@@ -226,6 +244,7 @@ async function main() {
     await assert.rejects(() => enumerateSourceFolderAsync(root, {
       hasReparseComponentAsync: async () => false
     }), (error) => {
+      assert.strictEqual(error.code, 'SOURCE_FOLDER_UNSUPPORTED_FILES');
       assert.match(error.message, /2 reguläre Dateien, davon 1 nicht freigegebene oder unbekannte Formate/iu);
       assert.doesNotMatch(error.message, /supported|blocked|\.md|\.pdf/iu);
       return true;

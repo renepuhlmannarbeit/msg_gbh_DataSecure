@@ -48,11 +48,20 @@
           <option value="markdown-and-anonymize">In Markdown umwandeln und anonymisieren</option>
         </select>
         <p id="processing-mode-help" class="mode-help">Wähle aus, ob Originalinhalte erhalten bleiben oder erkannte Identifikatoren ersetzt werden sollen.</p>
+        <div id="output-naming" class="output-naming" hidden>
+          <label for="output-naming-mode" class="mode-label">Dateinamen der anonymisierten Ergebnisse</label>
+          <select id="output-naming-mode" aria-describedby="output-naming-help">
+            <option value="neutral" selected>Neutrale Dateinamen (empfohlen)</option>
+            <option value="source-with-suffix">Originalname mit „-anonymisiert“</option>
+          </select>
+          <p id="output-naming-help" class="mode-help">Empfohlen: Neutrale Namen wie „Dokument-001-anonymisiert.md“ vermeiden personenbezogene Angaben im Ergebnisnamen. Die Zuordnungsdatei verbindet Quelle und Ergebnis.</p>
+        </div>
         <div id="drop-zone" class="drop-zone" role="region" aria-label="Dateiaufnahme" aria-disabled="true">
           <strong>Dateien oder einen Ordner hierher ziehen</strong>
-          <span>TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF und Bilder (PNG/JPEG/BMP) · bis zu 100 Dateien und 500 MB pro Stapel.<br>Oder unten auswählen. Die Verarbeitung beginnt erst mit „Starten“.</span>
+          <span>Bei einem Ordner werden alle unterstützten Dateien in sämtlichen Unterordnern aufgenommen. TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF und Bilder (PNG/JPEG/BMP) · bis zu 200 Dateien und 500 MB pro Stapel.<br>Oder unten auswählen. Die Verarbeitung beginnt erst mit „Starten“.</span>
         </div>
         <div id="summary" class="summary" hidden></div>
+        <ul id="selection-list" class="selection-list" aria-label="Ausgewählte Dateien" hidden></ul>
         <dl class="context" aria-label="Aktuelle Auswahl">
           <div><dt>Quellenordner</dt><dd id="source-folders" title="">Noch nicht ausgewählt</dd></div>
           <div><dt>Dateiauswahl</dt><dd id="selected-files" title="">Noch nicht ausgewählt</dd></div>
@@ -60,9 +69,10 @@
         </dl>
         <div class="actions">
           <button id="select-files" class="primary">Dateien auswählen</button>
-          <button id="select-folder">Ordner auswählen</button>
+          <button id="select-folder" title="Alle unterstützten Dateien aus diesem Ordner und seinen Unterordnern auswählen">Ordner mit Unterordnern auswählen</button>
+          <button id="process-results" disabled title="Noch kein Ergebnisordner verfügbar.">Ergebnisordner</button>
           <button id="start" class="primary" aria-describedby="start-help" disabled hidden>Starten</button>
-          <button id="cancel" hidden>Auswahl verwerfen</button>
+          <button id="cancel" hidden>Auswahl leeren</button>
           <button id="continue" class="primary" hidden>Im Verlauf fortsetzen</button>
         </div>
         <p id="start-help" class="mode-help" hidden>Bitte zuerst eine Aufgabe auswählen.</p>
@@ -70,7 +80,7 @@
 
       <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" tabindex="0" hidden>
         <h2>Deine letzten Läufe</h2>
-        <p class="section-intro">Ergebnisordner und Zuordnung gehören immer zum jeweiligen Lauf. Die Übersicht bleibt auf diesem Gerät.</p>
+        <p class="section-intro">Ergebnisordner gehören immer zum jeweiligen Lauf. Eine Zuordnung gibt es nur für anonymisierte Ergebnisse. Die Übersicht bleibt auf diesem Gerät.</p>
         <p id="history-feedback" class="mode-help" role="status">Der Verlauf wird beim Öffnen geladen.</p>
         <div class="table-scroll" tabindex="0" role="region" aria-label="Letzte 20 Läufe">
           <table id="history-table" hidden>
@@ -99,7 +109,7 @@
         </div>
       </details>
     </section>
-    <p class="privacy">Originale bleiben unverändert. Ohne Upload und ohne zusätzliche Runtime-Installation. Anonymisierung erzeugt immer Markdown; bei XLSX, PPTX, PDF/Scan-PDF und Bildern wird nur vollständig extrahierter Inhalt freigegeben. Reine Konvertierung kann Extraktionshinweise enthalten. <span id="product-version">Version wird geladen</span></p>
+    <p class="privacy">Originale bleiben unverändert. Ohne Upload und ohne zusätzliche Runtime-Installation. Anonymisierung erzeugt immer Markdown; bei XLSX, PPTX, PDF/Scan-PDF und Bildern wird der extrahierte Markdown-Inhalt anonymisiert und der Extraktionsstatus getrennt ausgewiesen. Reine Konvertierung kann Extraktionshinweise enthalten. <span id="product-version">Version wird geladen</span></p>
   </main>
   <script src="app.js"></script>
 </body>

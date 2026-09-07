@@ -10,9 +10,12 @@ const { uiProcessEnvironment } = require('./ui-process-policy');
 const { windowsFolderDialogScript } = require('./windows-folder-dialog');
 const { SOURCE_TYPES, validateSelectedPath, validateSelectedPathAsync, selectionCancelledError, runPickerAsync, throwIfSelectionAborted, WINDOWS_PICKER_UTF8, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
 
-const SOURCE_FOLDER_TITLE = 'Ordner mit DataSecure lokal anonymisieren';
+const SOURCE_FOLDER_TITLE = 'Ordner mit DataSecure lokal verarbeiten';
 const SOURCE_FOLDER_CANCELLED = '__DATASECURE_SOURCE_FOLDER_CANCELLED__';
 const TREE_LIMITS = Object.freeze({ maxDirectories: 1024, maxEntries: 4096, maxDepth: 32 });
+function folderFailure(code, message) {
+  return Object.assign(new SafeError(message), { code });
+}
 function sameFsObject(left, right) {
   return Boolean(left && right && left.isDirectory() === right.isDirectory() &&
     left.isFile() === right.isFile() && left.isSymbolicLink() === right.isSymbolicLink() &&
@@ -30,7 +33,7 @@ function sourceFolderPickerCommands(platform = process.platform, env = process.e
   if (platform === 'win32') {
     const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const script = windowsFolderDialogScript({
-      preamble: WINDOWS_PICKER_UTF8, title: SOURCE_FOLDER_TITLE, okLabel: 'Ordner anonymisieren',
+      preamble: WINDOWS_PICKER_UTF8, title: SOURCE_FOLDER_TITLE, okLabel: 'Ordner auswählen',
       cancelledToken: SOURCE_FOLDER_CANCELLED, showNewFolderButton: false
     });
     return [{ command: powershell, args: ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script] }];
@@ -170,7 +173,8 @@ function enumerateSourceFolder(root, options = {}) {
       }
       candidates.push({ full, sourceLabel: normalizedSourceLabel(resolvedRoot, full) });
       if (candidates.length > (options.maxSources ?? LIMITS.MAX_BATCH_FILES)) {
-        throw new SafeError(`Der ausgewählte Ordner enthält mehr als ${options.maxSources ?? LIMITS.MAX_BATCH_FILES} unterstützte Dateien.`);
+        throw folderFailure('SOURCE_FOLDER_FILE_LIMIT',
+          `Der ausgewählte Ordner enthält mehr als ${options.maxSources ?? LIMITS.MAX_BATCH_FILES} unterstützte Dateien.`);
       }
     }
   }
@@ -179,17 +183,17 @@ function enumerateSourceFolder(root, options = {}) {
   // private source is copied.  Counts are safe local metadata; names and paths
   // deliberately remain absent from this error.
   if (unsupportedFiles > 0) {
-    throw new SafeError(`Der ausgewählte Ordner enthält ${regularFiles} reguläre Dateien, davon ${unsupportedFiles} nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.`);
+    throw folderFailure('SOURCE_FOLDER_UNSUPPORTED_FILES',
+      `Der ausgewählte Ordner enthält ${regularFiles} reguläre Dateien, davon ${unsupportedFiles} nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.`);
   }
-  if (!candidates.length) throw new SafeError('Der ausgewählte Ordner enthält keine unterstützten Dateien.');
+  if (!candidates.length) throw folderFailure('SOURCE_FOLDER_EMPTY', 'Der ausgewählte Ordner enthält keine unterstützten Dateien.');
 
-  // Re-bind every selected file only after tree traversal succeeded. The
-  // relative path orders the queue deterministically but is not emitted as a
-  // mapping label: DS-058 allows a relative source path in the durable mapping
-  // only where bare basenames would collide, and batchQueueFromSelection
-  // derives exactly that minimal disambiguation from the full paths.
+  // Re-bind every selected file only after tree traversal succeeded. Keep the
+  // root-relative label as part of the private queue: Standalone uses it to
+  // reproduce the selected directory tree in the visible result. It remains
+  // local and is never diagnostic or public MCP data.
   const selected = candidates.map(({ full, sourceLabel }) => ({
-    ...validateSelectedPath(full, { ...options, fs: io, allowedTypes }), treeOrder: sourceLabel
+    ...validateSelectedPath(full, { ...options, fs: io, allowedTypes }), sourceLabel, treeOrder: sourceLabel
   }));
   for (const [directory, identity] of directoryIdentities) {
     let current;
@@ -199,7 +203,7 @@ function enumerateSourceFolder(root, options = {}) {
   }
   const total = selected.reduce((sum, item) => sum + item.sourceBytes, 0);
   if (total > (options.maxTotalBytes ?? LIMITS.MAX_BATCH_TOTAL_BYTES)) {
-    throw new SafeError('Die unterstützten Dateien im ausgewählten Ordner sind zusammen größer als 500 MB.');
+    throw folderFailure('SOURCE_FOLDER_SIZE_LIMIT', 'Die unterstützten Dateien im ausgewählten Ordner sind zusammen größer als 500 MB.');
   }
   return selected.sort((a, b) => a.treeOrder.localeCompare(b.treeOrder))
     .map(({ treeOrder, ...entry }) => entry);
@@ -283,7 +287,8 @@ async function enumerateSourceFolderAsync(root, options = {}) {
         if (sourceType && allowed.has(sourceType)) {
           candidates.push({ full, sourceLabel: normalizedSourceLabel(resolvedRoot, full) });
           if (candidates.length > (options.maxSources ?? LIMITS.MAX_BATCH_FILES)) {
-            throw new SafeError(`Der ausgewählte Ordner enthält mehr als ${options.maxSources ?? LIMITS.MAX_BATCH_FILES} unterstützte Dateien.`);
+            throw folderFailure('SOURCE_FOLDER_FILE_LIMIT',
+              `Der ausgewählte Ordner enthält mehr als ${options.maxSources ?? LIMITS.MAX_BATCH_FILES} unterstützte Dateien.`);
           }
         } else {
           unsupportedFiles++;
@@ -293,14 +298,15 @@ async function enumerateSourceFolderAsync(root, options = {}) {
     }
   }
   if (unsupportedFiles > 0) {
-    throw new SafeError(`Der ausgewählte Ordner enthält ${regularFiles} reguläre Dateien, davon ${unsupportedFiles} nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.`);
+    throw folderFailure('SOURCE_FOLDER_UNSUPPORTED_FILES',
+      `Der ausgewählte Ordner enthält ${regularFiles} reguläre Dateien, davon ${unsupportedFiles} nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.`);
   }
-  if (!candidates.length) throw new SafeError('Der ausgewählte Ordner enthält keine unterstützten Dateien.');
+  if (!candidates.length) throw folderFailure('SOURCE_FOLDER_EMPTY', 'Der ausgewählte Ordner enthält keine unterstützten Dateien.');
   const selected = [];
   for (const { full, sourceLabel } of candidates) {
     selected.push({ ...await validateSelectedPathAsync(full, {
       ...options, fs: io, fsPromises: asyncIo, hasReparseComponentAsync: reparse, allowedTypes
-    }), treeOrder: sourceLabel });
+    }), sourceLabel, treeOrder: sourceLabel });
     await checkpoint();
   }
   for (const [directory, identity] of directoryIdentities) {
@@ -312,7 +318,7 @@ async function enumerateSourceFolderAsync(root, options = {}) {
   }
   const total = selected.reduce((sum, item) => sum + item.sourceBytes, 0);
   if (total > (options.maxTotalBytes ?? LIMITS.MAX_BATCH_TOTAL_BYTES)) {
-    throw new SafeError('Die unterstützten Dateien im ausgewählten Ordner sind zusammen größer als 500 MB.');
+    throw folderFailure('SOURCE_FOLDER_SIZE_LIMIT', 'Die unterstützten Dateien im ausgewählten Ordner sind zusammen größer als 500 MB.');
   }
   throwIfSelectionAborted(options.signal);
   return selected.sort((a, b) => a.treeOrder.localeCompare(b.treeOrder))

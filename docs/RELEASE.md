@@ -1,6 +1,14 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.09.2026 · 3.2.0-rc111
+Stand: 07.09.2026 · 3.2.0-rc123
+
+Der aktuelle Quellstand ist der RC123-Produktkandidat für das Cowork-Plugin.
+Sein zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
+beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
+Plugin-ZIP-Tests und Claude-Validierung gebunden. Ein RC123-Standalone-Paket ist
+damit nicht behauptet: Die zuletzt commitgebundene Windows-Standalone-Evidenz
+bleibt historische Engineering-Evidenz und ersetzt weder native UAT noch eine
+INT-13-Bindung.
 
 ## Nutzerprodukt
 
@@ -103,21 +111,37 @@ Anwender-Voraussetzungen.
 
 - Versionsgleichheit in Paket, Pluginmanifest, Skill und Buildmetadaten.
 - Exakt zwei sichtbare Skills; keine Hooks/Subagenten.
-- TXT/Markdown/CSV/DOCX positiv; XLSX/PPTX/PDF/Scan-PDF/Bilder fail-closed.
+- Cowork: TXT/Markdown/CSV/DOCX positiv, breite Formate fail-closed. Standalone:
+  breite Quellen werden lokal nach Markdown extrahiert und dieser Inhalt mit
+  getrenntem Extraktions- und Anonymisierungsstatus verarbeitet.
 - Kein auswählbarer Bildmodus; Pixel bleiben lokal.
 - 0–14 Tage nur für temporäre Arbeits-/Reviewdaten.
 - Quellen/Originale und fertige Exporte nie automatisch löschen.
 - Fresh Install von ZIP und Marketplace auf Windows x64 und macOS Intel/ARM.
 - Runtime-Evidence, Node-Lizenz, Zielarchitektur, Dateimodi, SBOM und SHA-256.
-- Kernfall, Stopps, Resume, 100 Dateien/500 MiB, Update und Rollback.
+- Kernfall, Stopps, Resume, 200 Dateien/500 MiB, Update und Rollback.
 - aktueller Claude-/Cowork-Hostvertrag und Berechtigungsdialoge.
 - UAT, Accessibility, IT/Health-IT, Datenschutz, Security und Architektur.
 - null offene P0/P1-Defects.
 
-## Formate im Erstrelease
+## Produktbezogene Formatfreigaben
 
-Freigegeben sind TXT, Markdown, CSV und DOCX. Alle anderen sichtbaren Formate
-werden mit unveränderter Quelle und ohne Teiloutput sicher gestoppt.
+- **Cowork-Plugin:** TXT, Markdown, CSV und streng direkt geprüftes DOCX.
+  XLSX, PPTX, PDF/Scan-PDF und eigenständige Bilder werden mit unveränderter
+  Quelle und ohne Teiloutput sicher gestoppt.
+- **Standalone – Nur in Markdown umwandeln:** TXT, Markdown, CSV, DOCX, XLSX,
+  PPTX, PDF/Scan-PDF sowie PNG/JPEG/BMP. Der Quellinhalt bleibt erhalten; eine
+  unvollständige Extraktion wird ausdrücklich gekennzeichnet.
+- **Standalone – In Markdown umwandeln und anonymisieren:** TXT, Markdown und
+  CSV laufen direkt. DOCX und die breiten Formate werden genau einmal lokal
+  nach Markdown extrahiert; ausschließlich dieser gültige, nichtleere
+  Markdown-Inhalt wird anonymisiert. Quellenabdeckung und
+  Anonymisierungsstatus sind getrennte Aussagen.
+
+Unbekannte, beschädigte, verschlüsselte, aktive oder leere Quellen werden in
+beiden Produkten fail-closed behandelt. Cowork lehnt einen nicht vollständig
+freigegebenen Ordner atomar ab; Standalone weist betroffene unterstützte
+Positionen einzeln aus und verarbeitet den sicheren Rest weiter.
 
 ## Rollback
 

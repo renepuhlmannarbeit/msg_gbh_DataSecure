@@ -12,6 +12,9 @@
   "state_source": "polled_public_status_snapshot",
   "initial_view": "home",
   "initial_processing_mode": null,
+  "default_anonymized_output_naming": "neutral",
+  "anonymized_output_naming_modes": ["neutral", "source-with-suffix"],
+  "output_naming_confirmation": false,
   "automatic_result_navigation": false,
   "history": {
     "limit": 20,
@@ -43,6 +46,7 @@
   "commands": [
     "select_files",
     "select_folder",
+    "remove_admitted_source",
     "cancel_admission",
     "start_admitted_batch",
     "get_public_state",

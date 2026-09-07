@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 05.09.2026 · 3.2.0-rc111
+Stand: 07.09.2026 · 3.2.0-rc123 · Cowork-Plugin; Standalone separat
 
 ## Produktkanäle
 
@@ -25,7 +25,7 @@ fail-closed gesperrt.
 - lokale Plugin-MCPs durch Organisations-/Geräterichtlinie erlaubt (MDM-Schlüssel
   `isLocalDevMcpEnabled` darf nicht auf `false` stehen);
 - lokaler, nicht synchronisierter Privacy-Ordner;
-- genügend Speicher für höchstens 100 Dateien/500 MiB plus temporäre Kopien;
+- genügend Speicher für höchstens 200 Dateien/500 MiB plus temporäre Kopien;
 - alle Laufzeiten aus dem Paket, keine manuelle Node-/Python-Installation.
 
 Eine Cloud-Cowork-, Web-, Mobil- oder geplante Cloud-Sitzung darf keinen
@@ -64,6 +64,7 @@ Bestätigungen erzwingen. **Skip** ist für sensible Dokumente kein Betriebsstan
 | Quelle/Original | nur lesen; nie verschieben, überschreiben oder automatisch löschen |
 | temporäre Arbeits-/Reviewdaten | 0–14 Tage, danach nur eindeutig DataSecure-eigene Daten bereinigen |
 | fertige Outputs/Export/Mapping | niemals automatisch löschen; nur ausdrückliche lokale Nutzeraktion |
+| verschlüsselte Altartefakte | unangetastet lassen; kein Keyringversuch; Original neu wählen |
 
 Sichtbare Ergebnisse werden getrennt unter
 `<gewählter lokaler Ergebnisordner>/DataSecure-Output/Lauf-…/` abgelegt. Das kann
@@ -71,8 +72,9 @@ ein dedizierter lokaler Ergebnisordner sein, den der Anwender optional mit Cowor
 verbindet; DataSecure kann verbundene Cowork-Ordner weder erkennen noch prüfen und
 wechselt ihn bei einem Cowork-Projektwechsel nicht automatisch. Im Cowork-
 Produkt dürfen dort nur neutrale `Dokument-NNN-anonymisiert.md`-Dateien liegen.
-Standalone ergänzt im vollständig abgeschlossenen Lauf eine lokale
-`DataSecure-Zuordnung.csv`; die private globale Zuordnung, Originale, Audit,
+Standalone ergänzt im vollständig abgeschlossenen **Anonymisierungslauf** eine
+lokale `DataSecure-Zuordnung.csv`; reine Konvertierung behält den Basisnamen und
+erzeugt keine Zuordnungsdatei. Die private globale Zuordnung, Originale, Audit,
 Review und Recovery bleiben im privaten Bereich. Mit der Chat-Bitte
 **„Ändere den DataSecure-Ergebnisordner“** (Werkzeug „Ergebnisordner festlegen“)
 kann der Zielordner später bewusst neu gewählt werden; solange ein Stapel offen,
@@ -82,8 +84,6 @@ Exporte sind endgültig, gelöschte oder bearbeitete Ergebnisdateien werden nich
 wiederhergestellt, und ein Zielwechsel spiegelt keine alten Läufe. Ein
 Cloud-Sync-Ziel kann die freigegebenen Ergebnisse synchronisieren und ist daher
 eine bewusste Betriebsentscheidung, kein lokaler Privacy-Speicher.
-| verschlüsselte Altartefakte | unangetastet lassen; kein Keyringversuch; Original neu wählen |
-
 Der Privacy-Ordner darf nicht in OneDrive, iCloud, Dropbox, Google Drive,
 Netzlaufwerken, Symlinks oder Junctions liegen. Ordnerwechsel nur ohne aktiven
 Stapel und nach Neustart.

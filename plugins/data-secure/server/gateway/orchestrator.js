@@ -267,9 +267,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     throw new SafeError('Die private Arbeitskopie besitzt keine gültige Formatbindung.');
   }
   const ext = path.extname(originalName || originalSource).toLowerCase();
-  const wideStandalone = deps.productChannel === 'standalone' &&
-    require('../standalone/wide-privacy-extraction').isWidePrivacyExtension(ext);
-  if (!PILOT_SUPPORTED.has(ext) && !wideStandalone) {
+  const markdownFirstStandalone = deps.productChannel === 'standalone' &&
+    require('../standalone/wide-privacy-extraction').isMarkdownFirstPrivacyExtension(ext);
+  if (!PILOT_SUPPORTED.has(ext) && !markdownFirstStandalone) {
     const error = new SafeError(
       'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben. ' +
       'Verwenden Sie ausschließlich TXT, Markdown, CSV oder DOCX; PDF, XLSX, PPTX und Bilddateien bleiben sicher gestoppt.'
@@ -328,7 +328,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     throwIfAborted(deps.abortSignal);
 
-    const converted = wideStandalone
+    const converted = markdownFirstStandalone
       ? await (deps.extractWideSourceForPrivacy || require('../standalone/wide-privacy-extraction').extractWideSourceForPrivacy)(
         sourceBuffer, ext, { signal: deps.abortSignal, convertBuffer: deps.convertBuffer,
           timeoutMs: deps.timeoutMs, ErrorType: SafeError })
@@ -477,6 +477,13 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     const mdName = `${packageId}.md`;
     const mdPath = path.join(stagePackage, mdName);
+    const extractedMarkdownScope = markdownFirstStandalone
+      ? '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. ' +
+        (converted.sourceExtractionCoverage.status === 'complete'
+          ? 'Der lokale Konverter bestätigt die Extraktionsabdeckung; die Originaldatei selbst bleibt unverändert.'
+          : 'Die Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert; nicht extrahierte Inhalte sind in diesem Ergebnis nicht enthalten.') +
+        '\n\n'
+      : '';
     const finalText =
       complianceHeader(effective, {
         ext,
@@ -485,8 +492,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         included,
         review,
         removed,
-        reidentificationRisk: anon.reidentificationRisk
+        reidentificationRisk: anon.reidentificationRisk,
+        ...(markdownFirstStandalone ? { sourceExtractionCoverage: converted.sourceExtractionCoverage } : {})
       }) +
+      extractedMarkdownScope +
       reviewedText +
       assetsMarkdown(vis.results);
     const capacity = deps.assertWritableCapacity || assertWritableCapacity;
@@ -541,6 +550,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       created_at: new Date().toISOString(),
       profile: effective,
       source_type: ext.slice(1),
+      ...(markdownFirstStandalone ? {
+        privacy_scope: 'extracted-markdown-only',
+        source_extraction_coverage: converted.sourceExtractionCoverage
+      } : {}),
       document: mdName,
       document_sha256: documentSha256,
       verification: {
@@ -660,6 +673,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         redactions: vis.results.reduce((n, x) => n + (x.redactions || 0), 0)
       },
       document_result: documentResult,
+      ...(markdownFirstStandalone ? {
+        privacy_scope: 'extracted-markdown-only',
+        source_extraction_coverage: converted.sourceExtractionCoverage
+      } : {}),
       original_moved_to_processed: false,
       persistent_mapping_retained: false,
       ...runtimeInfo(),
