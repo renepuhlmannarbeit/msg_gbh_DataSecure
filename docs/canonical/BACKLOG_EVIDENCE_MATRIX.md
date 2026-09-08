@@ -6,6 +6,14 @@ E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
 Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 
+RC124 / BL-021.1 trennt bei Personenfeldern die schreibweisenunabhängige
+Labelerkennung von der großschreibungsgebundenen Wertgrammatik. Zeilen- und
+Inline-Felder ziehen dadurch kein nachfolgendes kleingeschriebenes Prosawort in
+die Identität; Punktsetzung ist für die Grenze nicht erforderlich. Die v1-/v2-
+Registrytests belegen stabile Wiederverwendung des echten Namens, das Ausbleiben
+eines falschen Prosa-Alias sowie den Bestandsschutz vollständig expliziter
+kleingeschriebener Werte.
+
 RC120 / BL-010.13/BL-040.5/BL-002 trennt sichtbare Zuordnung und Fehlerbericht:
 Nur bereits veröffentlichte Ergebnisse erhalten eine Mappingzeile. All-stopped
 bleibt ohne Ergebnisordner/Zuordnung und ohne Öffnen-Aktionen; Mischstapel führen

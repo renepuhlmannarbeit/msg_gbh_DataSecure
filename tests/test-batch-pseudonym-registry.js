@@ -10,6 +10,7 @@ const {
   SECRET_BYTES, READABLE_CONTRACT_VERSION, canonicalValue, base32, placeholderForDigest, createBatchPseudonymRegistry
 } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
+const { collectPersonAnchors } = require('../plugins/data-secure/server/privacy/entities');
 
 const { test, done, assert } = createSuite('Batch pseudonym registry');
 
@@ -329,6 +330,62 @@ for (const contractVersion of ['batch-pseudonym/v1', READABLE_CONTRACT_VERSION])
       const company = anonymizeMarkdown('Sommer GmbH liefert Software.', 'personnel_profile', { registry });
       assert.match(company.text, /^\[(?:ORGANISATION|UNTERNEHMEN|KUNDE)_[A-Z0-9_]+\] liefert Software\.$/u);
       assert.doesNotMatch(company.text, /PERSON_/u);
+    } finally { registry.dispose(); secret.fill(0); }
+  });
+
+  test(`${contractVersion}: a lower-case prose verb after a person label is not part of the identity`, () => {
+    const secret = Buffer.alloc(SECRET_BYTES, 36);
+    const registry = createBatchPseudonymRegistry(secret, { contractVersion });
+    try {
+      const sentence = anonymizeMarkdown('Autor: Schmidt schrieb dies.', 'personnel_profile', { registry });
+      const marker = sentence.text.match(/\[PERSON_[A-Z0-9_]+\]/u)?.[0];
+      assert.ok(marker, sentence.text);
+      assert.strictEqual(sentence.text, `Autor: ${marker} schrieb dies.`);
+
+      const nameOnly = anonymizeMarkdown('Autor: Schmidt', 'personnel_profile', { registry });
+      assert.strictEqual(nameOnly.text, `Autor: ${marker}`,
+        'the same labelled surname must reuse the identity instead of allocating a prose-bound one');
+
+      const noPunctuationAnchors = collectPersonAnchors('Autor: Schmidt schrieb dies', 'personnel_profile');
+      assert.deepStrictEqual([...new Set(noPunctuationAnchors.map(({ value }) => value))], ['Schmidt'],
+        'the value boundary must not depend on final punctuation');
+
+      const inlineAnchors = collectPersonAnchors('Im Bericht steht Autor: Schmidt schrieb dies.', 'general');
+      assert.deepStrictEqual([...new Set(inlineAnchors.map(({ value }) => value))], ['Schmidt'],
+        'an inline label must use the same case-bound value parser as a line label');
+      const upperLabelAnchors = collectPersonAnchors('AUTOR: Schmidt schrieb dies', 'personnel_profile');
+      assert.deepStrictEqual([...new Set(upperLabelAnchors.map(({ value }) => value))], ['Schmidt'],
+        'label casing must not weaken the case-bound value parser');
+
+      assert.strictEqual(registry.lookup('PERSON', 'Schmidt schrieb'), null,
+        'lower-case prose must never become a persisted person alias');
+
+      const fullNameSentence = anonymizeMarkdown('Autor: Anna Beispiel schrieb dies.', 'personnel_profile', { registry });
+      const fullNameMarker = fullNameSentence.text.match(/\[PERSON_[A-Z0-9_]+\]/u)?.[0];
+      assert.ok(fullNameMarker, fullNameSentence.text);
+      assert.strictEqual(fullNameSentence.text, `Autor: ${fullNameMarker} schrieb dies.`);
+      const fullNameOnly = anonymizeMarkdown('Autor: Anna Beispiel', 'personnel_profile', { registry });
+      assert.strictEqual(fullNameOnly.text, `Autor: ${fullNameMarker}`,
+        'a complete proper name before prose must remain one stable identity');
+
+      const sentenceTerminated = collectPersonAnchors('Ansprechpartner: Deutsche Telekom.', 'contract');
+      assert.deepStrictEqual([...new Set(sentenceTerminated.map(({ value }) => value))], ['Deutsche Telekom'],
+        'terminal punctuation must not suppress an explicitly labelled person occurrence');
+
+      const contactLine = anonymizeMarkdown('Kontakt: Alice Beispiel, alice@example.test', 'general', { registry });
+      assert.match(contactLine.text, /^Kontakt: \[PERSON_[A-Z0-9_]+\], \[EMAIL_REDACTED\]$/u,
+        'a following contact value must remain separate from the labelled person identity');
+
+      const tableCellAnchors = collectPersonAnchors(
+        '| Erfahrung<br>Name: Erika Beispiel | Kontakt: erika.beispiel@example.org |',
+        'personnel_profile'
+      );
+      assert.ok(tableCellAnchors.some(({ value }) => value === 'Erika Beispiel'),
+        'a rendered structural cell boundary must terminate the labelled person value');
+
+      const lowerCaseLabel = anonymizeMarkdown('autor: anna beispiel', 'personnel_profile', { registry });
+      assert.match(lowerCaseLabel.text, /^autor: \[PERSON_[A-Z0-9_]+\]$/u,
+        'case-insensitive labels and explicitly labelled lower-case names remain supported');
     } finally { registry.dispose(); secret.fill(0); }
   });
 

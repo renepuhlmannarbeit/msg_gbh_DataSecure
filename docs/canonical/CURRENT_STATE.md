@@ -70,6 +70,14 @@ beschrifteter Fund keine dokumentweite Ersetzungslizenz. E0 einschließlich
 serialisierter Fortsetzung ist grün; echter OS-Neustart und fachliche UAT
 bleiben E1/E2.
 
+Auch die Aufnahme eines ausdrücklich bezeichneten Personennamens ist jetzt
+syntaktisch begrenzt: Das Label bleibt schreibweisenunabhängig, der unmittelbar
+folgende Namenspräfix wird dagegen ohne globales Case-Insensitive-Flag erkannt.
+Damit wird aus `Autor: Schmidt schrieb dies.` ausschließlich `Schmidt` zur
+Identität; `schrieb dies` bleibt Inhalt und derselbe Name erhält in späteren
+Dokumenten dasselbe Pseudonym. Zeilen- und Inline-Labels verwenden dieselbe
+Logik, vollständig kleingeschriebene explizite Feldwerte bleiben unterstützt.
+
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
 oder noch nicht vollständig exportiert, öffnet DataSecure weder den allgemeinen

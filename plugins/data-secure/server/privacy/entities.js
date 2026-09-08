@@ -49,6 +49,11 @@ const PARTY_CLAUSE_RE =
 const PROFESSIONAL_ORG_PREFIX_RE = /^(?:(?:Senior\s+|Lead\s+)?(?:Product\s+Owner|Scrum\s+Master|Software\s+Engineer|Softwareentwickler(?:in)?|Entwickler(?:in)?|Entwicklung|Softwareentwicklung|Architektur|Konzeption|Beratung|Testmanager(?:in)?|Testmanagement|Tester(?:in)?(?:\s+im\s+Projekt)?|Training|Aufgaben|Projekt|Business\s+Analyst(?:in)?|QA\s+Engineer|IT-?Projektleiter(?:in)?|FHIR-(?:Entwickler(?:in)?|Entwicklung))|Worked|Employed|Working)\s+(?:für|bei|at|for|with)\s+/iu;
 const STRONG_SUFFIXLESS_ORG_LABEL_RE =
   /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Unternehmen|Firma|Organisation|Company|Organization|Employer(?:\s+Name)?|Customer(?:\s+Organization)?|Contract\s+party|Client|Vendor|Supplier)\s*:/iu;
+const LABELLED_PROPER_NAME_PREFIX_RE = new RegExp(
+  `^((?:${NAME_TOKEN}|${CAPS_TOKEN})` +
+    `(?:[ \\t]+(?:(?:${NAME_PARTICLE})[ \\t]+){0,3}(?:${NAME_TOKEN}|${CAPS_TOKEN})){0,3})`,
+  'u'
+);
 
 function labelledOrganizationValue(value) {
   const clean = normalizeSpaces(value).replace(/[.,;:]\s*$/u, '');
@@ -330,6 +335,26 @@ function pushExplicitPerson(out, value, confidence) {
   out.push(seed);
 }
 
+function pushLabelledPersonValue(out, value, confidence) {
+  const raw = String(value || '').trim();
+  // A person label may be followed by sentence prose on the same line. The
+  // complete explicit-field parser intentionally accepts lower-case names, so
+  // first carve out a case-bound proper-name prefix when the next token is a
+  // lower-case non-particle. This also covers the no-final-punctuation form.
+  const prefix = raw.match(LABELLED_PROPER_NAME_PREFIX_RE);
+  if (prefix) {
+    const remainder = raw.slice(prefix[1].length);
+    const proseOrContactAfterDelimiter = /^[ \t]*[,;][ \t]+(?:[\p{Ll}\p{N}+]|(?:mailto:|tel:))/u.test(remainder);
+    const structuralBoundary = /^[ \t]*(?:\||<br[ \t]*\/?[ \t]*>)/iu.test(remainder);
+    if (/^[ \t]+[\p{Ll}]/u.test(remainder) || proseOrContactAfterDelimiter || structuralBoundary ||
+        /^[.,;:!?)]*$/u.test(remainder)) {
+      pushExplicitPerson(out, prefix[1], confidence);
+      return;
+    }
+  }
+  pushExplicitPerson(out, raw, confidence);
+}
+
 // High-confidence anchors: the document itself says "this is a person".
 function collectPersonAnchors(text, profile = 'general') {
   const src = String(text || '');
@@ -386,7 +411,7 @@ function collectPersonAnchors(text, profile = 'general') {
   }
 
   const label = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*(.+)$`, 'gimu');
-  while ((m = label.exec(src))) pushExplicitPerson(out, m[1], 'label');
+  while ((m = label.exec(src))) pushLabelledPersonValue(out, m[1], 'label');
 
   // Additional visible Markdown structures. These are deliberately limited
   // to person-shaped values and profile documents so ordinary prose lists do
@@ -403,8 +428,22 @@ function collectPersonAnchors(text, profile = 'general') {
     while ((m = referenceTitle.exec(src))) pushFullPerson(out, m[2], 'markdown_metadata');
   }
 
-  const inline = new RegExp(`(?<![\\p{L}\\p{N}_])${PERSON_LABEL}(?![\\p{L}\\p{N}_])[ \\t]*:[ \\t]*(${NAME_TOKEN}[ \\t]+${NAME_TOKEN})`, 'giu');
-  while ((m = inline.exec(src))) pushExplicitPerson(out, m[1], 'label');
+  // Keep the label case-insensitive, but never apply that flag to NAME_TOKEN:
+  // otherwise its required Unicode upper-case initial also accepts lower-case
+  // prose and "Autor: Schmidt schrieb dies" learns "Schmidt schrieb" as a
+  // separate person. Scan the label once, then parse a bounded, line-local
+  // proper-name prefix without `i`. Complete line/table fields above retain
+  // their intentionally tolerant handling of explicitly labelled lower-case
+  // names such as "Name: anna beispiel".
+  const inlineLabel = new RegExp(
+    `(?<![\\p{L}\\p{N}_])${PERSON_LABEL}(?![\\p{L}\\p{N}_])[ \\t]*:[ \\t]*`,
+    'giu'
+  );
+  while ((m = inlineLabel.exec(src))) {
+    const lineEnd = src.indexOf('\n', inlineLabel.lastIndex);
+    const value = src.slice(inlineLabel.lastIndex, lineEnd < 0 ? src.length : lineEnd);
+    pushLabelledPersonValue(out, value, 'label');
+  }
 
   const table = new RegExp(`^\\|[ \\t]*${PERSON_LABEL}[ \\t]*:?[ \\t]*\\|[ \\t]*([^|\\n]+)\\|`, 'gimu');
   while ((m = table.exec(src))) {

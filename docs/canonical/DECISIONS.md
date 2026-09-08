@@ -397,6 +397,13 @@ Notizen, Kommentare und relevante versteckte Office-Bereiche gehören zur Covera
 Ein Nulltreffer wird nur nach vollständigem Parse und unabhängigem Residual-Gate
 freigegeben.
 
+Präzisierung 08.09.2026 (RC124): Bei ausdrücklich bezeichneten Personenfeldern
+wird das Label schreibweisenunabhängig erkannt, die Grenze eines
+großgeschriebenen Namenspräfixes jedoch ohne globales Case-Insensitive-Flag.
+Ein folgendes kleingeschriebenes Prosawort gehört nicht zur Identität; dieselbe
+Regel gilt für Zeilen- und Inline-Labels. Ein vollständig expliziter
+kleingeschriebener Feldwert bleibt als bewusster Kompatibilitätsfall zulässig.
+
 Präzisierung 03.09.2026 (RC94): Fragmentierte Tabellenköpfe werden nur dann
 automatisch spaltengebunden zusammengesetzt, wenn höchstens drei gleich breite
 Kopfzeilen je Spalte ein bereits bekanntes sensibles Label ergeben. Abweichende
