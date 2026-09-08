@@ -417,6 +417,17 @@ Text zusätzlich unabhängig als Person oder Organisation auf, bleibt deren notw
 Pseudonym- und Findingbindung erhalten. DS-016 und DS-046 bleiben davon
 unberührt, weil sie verschlüsselte Quelldateien statt Inhalte betreffen.
 
+Präzisierung 08.09.2026 (RC124): IBAN-Gruppierung darf neben einfachem oder
+mehrfachem Leerraum auch Punkt, Schrägstrich sowie ASCII- und Unicode-
+Bindestriche verwenden; Leerraum darf genau ein solches Satzzeichen umgeben.
+Die belegten festen Gesamtlängen für DE, AT, BE, GB und NL begrenzen den
+Bankspan vor eigenständigen Folgeinhalten. Eine direkt getrennte numerische
+Fortsetzung bleibt dagegen konservativ geschützt; ein danach bezeichnetes
+Formularfeld wird nur dann als eigene Inhaltsgrenze erhalten, wenn ein davon
+unabhängiger Detektor und Restprüfer seinen Wert absichert. Unbekannte
+Formularfelder und Länderlayouts bleiben konservativ geschützt. Das ist
+Grenzbestimmung, keine Prüfziffer- oder Kontogültigkeitsbestätigung.
+
 ## DS-050 – Benutzergebundene Verschlüsselung und sichere Löschung
 
 Private Snapshots und Reviewdaten werden pro OS-Benutzer mit einem über DPAPI oder

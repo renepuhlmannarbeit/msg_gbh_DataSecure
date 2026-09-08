@@ -355,6 +355,25 @@ test('a bare BIC on the same line as an IBAN is redacted', () => {
   assertAbsent(text, 'BYLADEM1001', 'BIC');
 });
 
+test('grouped international IBANs are fully redacted without consuming following content', () => {
+  const compactValues = [
+    'DE89370400440532013000',
+    'GB82WEST12345698765432',
+    'NL91ABNA0417164300',
+    'AT611904300234573201',
+    'BE68539007547034'
+  ];
+  for (const compact of compactValues) for (const separator of [' ', '-', '.', '/', '\u2011']) {
+    const value = compact.match(/.{1,4}/gu).join(separator);
+    const source = `IBAN: ${value} Vielen Dank`;
+    for (const profile of profiles) {
+      const result = anonymizeVerified(source, profile);
+      assert.strictEqual(result.text, 'IBAN: [BANK_DATA_REDACTED] Vielen Dank', `${profile}: ${source}`);
+      assert.deepStrictEqual(result.residual, []);
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Unicode boundaries: JavaScript \b does not know umlauts.
 // ---------------------------------------------------------------------------

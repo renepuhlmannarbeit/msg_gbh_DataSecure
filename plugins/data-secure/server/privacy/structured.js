@@ -36,6 +36,7 @@ const {
 } = require('./base');
 const { placeholderSpans, applySpans } = require('./spans');
 const { ibanBoundaryEnd } = require('./iban-boundary');
+const FOLLOWING_EMAIL_RE = new RegExp(EMAIL_RE.source, EMAIL_RE.flags.replace('g', 'y'));
 
 // Five digits followed by a unit are far more likely to be a quantity than a
 // German postcode and city. Keep this semantic exclusion beside the detector
@@ -348,6 +349,35 @@ function safeStructuredSpans(spans) {
   return spans.filter((span) => span.type === 'CREDENTIAL' || !overlapsCredential(intervals, span));
 }
 
+// ASCII dot and hyphen can belong both to an IBAN grouping and to an email
+// local part. After a known fixed-length IBAN the email detector may therefore
+// start at the IBAN's final digit group ("... 00-anna@example.de"). Keep the
+// complete bank span and move only that overlapping email to the independently
+// valid address after the separator. Sorted cursors keep the reconciliation
+// linear in the number of candidate spans.
+function reconcileIbanEmailOverlaps(spans, identifierView, source) {
+  const banks = spans.filter((span) => span.type === 'IBAN')
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const emails = spans.filter((span) => span.type === 'EMAIL')
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  let bankIndex = 0;
+  for (const email of emails) {
+    while (bankIndex < banks.length && banks[bankIndex].end <= email.start) bankIndex++;
+    for (let index = bankIndex; index < banks.length && banks[index].start < email.end; index++) {
+      const bank = banks[index];
+      if (!(email.start < bank.end && bank.end < email.end)) continue;
+      if (!/[.-]/u.test(identifierView[bank.end] || '')) continue;
+      const correctedStart = bank.end + 1;
+      FOLLOWING_EMAIL_RE.lastIndex = correctedStart;
+      const corrected = FOLLOWING_EMAIL_RE.exec(identifierView);
+      if (!corrected || corrected.index !== correctedStart || correctedStart + corrected[0].length !== email.end) continue;
+      email.start = correctedStart;
+      email.text = source.slice(email.start, email.end);
+      break;
+    }
+  }
+}
+
 // A labelled reference number stops at the last space-separated group that
 // still contains a digit, so "Kundennummer: 4711 und weitere" yields "4711".
 function trimReferenceValue(value) {
@@ -417,6 +447,8 @@ function findStructuredSpans(text) {
       });
     }
   }
+
+  reconcileIbanEmailOverlaps(spans, identifierView, src);
 
   // A telephone URI can end inside an email's local part, for example
   // tel:03012345678.anna@example.de. The higher-priority URI would discard

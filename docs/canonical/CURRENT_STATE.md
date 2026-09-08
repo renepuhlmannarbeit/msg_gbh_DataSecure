@@ -29,6 +29,15 @@ kommt derselbe Text zusätzlich in einer eigenständigen Personen- oder Unterneh
 vor, wird nur diese fachlich eigenständige Rolle regulär pseudonymisiert und protokolliert;
 unbeschriftete technische Tokens werden weiterhin nicht geraten.
 
+RC124 erweitert die IBAN-Erkennung auf einfachen und mehrfachen Leerraum, Punkt,
+Schrägstrich sowie ASCII- und Unicode-Bindestriche; Leerraum um genau ein solches
+Satzzeichen bleibt zulässig. Für die belegten festen Gesamtlängen von DE, AT, BE,
+GB und NL endet der Bankspan vor nachfolgenden Labels, weiteren Identifiern oder
+Prosa. Auch nach einer konservativ geschützten numerischen Fortsetzung bleiben
+durch unabhängige Detektoren abgesicherte Folgefelder sichtbar; unbekannte
+Formularfelder bleiben dagegen Teil der konservativen Schutzgrenze. Unbekannte
+Länderlayouts werden nicht anhand einer fremden Länderlänge gekürzt.
+
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
 oder noch nicht vollständig exportiert, öffnet DataSecure weder den allgemeinen

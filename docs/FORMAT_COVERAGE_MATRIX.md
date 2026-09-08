@@ -59,6 +59,14 @@ Ein fachlich eigenständiges Vorkommen desselben Texts als Person oder Organisat
 wird weiterhin regulär pseudonymisiert. Ohne explizites Label wird
 kein Geheimnis anhand seiner Zeichenform geraten.
 
+IBANs werden kompakt sowie mit einfachem oder mehrfachem Leerraum, Punkt,
+Schrägstrich und ASCII-/Unicode-Bindestrichen erkannt; Leerraum um genau ein
+solches Satzzeichen ist zulässig. Für belegte feste Gesamtlängen von DE, AT, BE,
+GB und NL bleiben nachfolgende Telefon-/BIC-/IBAN-Labels, durch unabhängige
+Detektoren abgesicherte Formularlabels und Prosa außerhalb des Bankspans.
+Numerische Fortsetzungen, unbekannte Formularlabels und unbekannte Länderlayouts
+werden konservativ behandelt.
+
 Der neutrale Extraktionsvertrag enthält weder Publikationskennung noch
 Verarbeitungszweck. Es wird kein rohes Markdown-Zwischenergebnis exportiert.
 Direkte und konvertierte Quellen laufen mit derselben stapelgebundenen Personen-

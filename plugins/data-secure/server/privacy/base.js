@@ -70,6 +70,11 @@ const CONTACT_URI_RE = new RegExp(
 const SEP_CHARS = ' \\t\\u00A0\\u202F\\u2007'; // for use inside a character class
 const SEP = `[${SEP_CHARS}]`; // for standalone use
 const DASH_CHARS = '\\-\\u2010\\u2011\\u2012\\u2013\\u2212';
+const IBAN_SEPARATOR_CHARS = `${SEP_CHARS}.${DASH_CHARS}/`;
+// A visual IBAN group separator is either a whitespace run or one punctuation
+// separator with optional surrounding whitespace. Keeping punctuation to one
+// character prevents an IBAN detector from accepting arbitrary delimiter runs.
+const IBAN_SEPARATOR_TOKEN = `(?:[${SEP_CHARS}]+|[${SEP_CHARS}]*[.${DASH_CHARS}/][${SEP_CHARS}]*)`;
 const PHONE_SEPARATOR = `(?:[${SEP_CHARS}]+|[${SEP_CHARS}]*[./${DASH_CHARS}][${SEP_CHARS}]*)`;
 
 // Shape only. Whether a shape is treated as a phone number is decided in
@@ -92,10 +97,12 @@ const PHONE_RE = new RegExp(
 // "Telefoonnummer") and a bracketed qualifier ("Telefon (privat)"); review rc91
 // (F3) showed both shapes disabled the gate entirely.
 const LABEL_QUALIFIER = '(?:\\s*\\([^)\\n]{1,40}\\))?';
-const PHONE_LABEL_RE = new RegExp(
+const PHONE_LABEL_PATTERN =
   '(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|mobile|handy|fax|kontakt|durchwahl|rufnummer' +
   '|erreichbar(?:\\s+unter)?|zu\\s+erreichen(?:\\s+unter)?|unter\\s+der\\s+(?:ruf)?nummer|anzurufen\\s+unter)' +
-  `(?:[\\s-]?(?:nummer|nr\\.?|number|numéro|número|numero))?${LABEL_QUALIFIER}\\s*\\.?\\s*:?\\s*$`,
+  `(?:[\\s-]?(?:nummer|nr\\.?|number|numéro|número|numero))?${LABEL_QUALIFIER}`;
+const PHONE_LABEL_RE = new RegExp(
+  `${PHONE_LABEL_PATTERN}\\s*\\.?\\s*:?\\s*$`,
   'iu'
 );
 // France commonly groups local subscriber numbers into four two-digit pairs
@@ -106,7 +113,7 @@ const FRENCH_PHONE_RE = new RegExp(
   'gu'
 );
 
-const IBAN_RE = new RegExp(`${NB}[A-Z]{2}\\d{2}(?:${SEP}?[A-Z0-9]){11,30}${NA}`, 'giu');
+const IBAN_RE = new RegExp(`${NB}[A-Z]{2}\\d{2}(?:${IBAN_SEPARATOR_TOKEN}?[A-Z0-9]){11,30}${NA}`, 'giu');
 
 // A bare BIC is indistinguishable from an ordinary German word in upper case:
 // /\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\b/ matches SOFTWARE, PROJEKTE,
@@ -783,8 +790,11 @@ module.exports = {
   CONTACT_URI_RE,
   PHONE_RE,
   PHONE_LABEL_RE,
+  PHONE_LABEL_PATTERN,
   FRENCH_PHONE_RE,
   IBAN_RE,
+  IBAN_SEPARATOR_CHARS,
+  IBAN_SEPARATOR_TOKEN,
   BIC_RE,
   BIC_LABEL_RE,
   IP_RE,
