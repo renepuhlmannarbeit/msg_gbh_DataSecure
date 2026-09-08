@@ -1705,6 +1705,8 @@ test('operational person-column labels redact names while neutral columns stop f
   const linked = '| Bezeichnung | Rolle |\n| --- | --- |\n| [Anna Berger](profil) | Product Owner |';
   assert.ok(pii.scanResidual(linked, 'general').some((hit) => hit.type === 'PERSON_CANDIDATE' && hit.text === 'Anna Berger'));
   assert.throws(() => anonymizeMarkdown(linked, 'general'), /PERSON_CANDIDATE/u);
+  const credential = '| Certificering | Rol |\n| --- | --- |\n| ISTQB Foundation | Business Analyst |';
+  assert.deepStrictEqual(pii.scanResidual(credential, 'personnel_profile'), []);
 });
 
 test('gendered salutations are removed while professional academic titles remain', () => {

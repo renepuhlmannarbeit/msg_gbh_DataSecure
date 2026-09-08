@@ -105,6 +105,7 @@ const RESIDUAL_TABLE_ID_CANDIDATE_RE = /(?=[A-Z0-9./\- ]{3,40}\d)[A-Z0-9][A-Z0-9
 // emitted by the local conversion corpus and is narrow enough to avoid
 // guessing names from unlabelled prose.
 const RESIDUAL_PERSON_TABLE_CANDIDATE_RE = /^\|?[ \t]*person[ \t]*:?[ \t]*\|[ \t]*([^|\n]{1,160})\|/gimu;
+const PROFESSIONAL_TABLE_COLUMN_RE = /^(?:Zertifizierungen?|Zertifikate?|Bescheinigungen?|Credentials?|Certifications?|Certificates?|Certificering|Certificación(?:es)?|Licenses?(?:\s+(?:and|&|und)\s+certifications?)?)\s*:?$/iu;
 
 function visibleTableCellValue(value) {
   let visible = normalizeSpaces(value).replace(/<\/?[A-Za-z][^>\n]{0,1000}>/gu, '').trim();
@@ -131,7 +132,9 @@ function residualTablePersonCandidates(text) {
         index--;
         break;
       }
-      for (const value of row) {
+      for (let column = 0; column < row.length; column++) {
+        if (PROFESSIONAL_TABLE_COLUMN_RE.test(headers[column])) continue;
+        const value = row[column];
         const candidate = visibleTableCellValue(value);
         const candidateKey = key(candidate);
         if (candidate.length > 2 && candidate.length <= 160 && looksName(candidate) && !seen.has(candidateKey)) {

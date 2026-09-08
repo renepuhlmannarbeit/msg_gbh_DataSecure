@@ -47,7 +47,9 @@ Quellkopf wird nur in der Privacy-Repräsentation wiederhergestellt. Unter einer
 nicht katalogisierten Überschrift führt ein verbleibender namensförmiger
 Zweiwortwert einschließlich sichtbarem Markdown-Linklabel zum fail-closed-Stopp.
 Diese konservative Grenze kann auch neutrale Zweiwortwerte stoppen; sie ist
-keine Zusage einer semantischen Klassifikation beliebiger Spalten.
+keine Zusage einer semantischen Klassifikation beliebiger Spalten. Eindeutig
+bezeichnete Zertifizierungs-/Credentialspalten bleiben als professioneller
+Inhalt erhalten und werden nicht durch die generische Namensform blockiert.
 
 Der neutrale Extraktionsvertrag enthält weder Publikationskennung noch
 Verarbeitungszweck. Es wird kein rohes Markdown-Zwischenergebnis exportiert.

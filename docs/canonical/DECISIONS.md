@@ -1290,7 +1290,9 @@ bleibt inhaltsgetreu unverändert. Tabellen mit nicht katalogisierten
 fail-closed gestoppt. Das schließt auch sichtbare Namen in Markdown-Linklabels
 ein. Die konservative Grenze kann fachliche Zweiwortwerte wie Orts- oder
 Statusangaben stoppen; sie darf erst nach eigener belegter Regel gelockert
-werden.
+werden. Explizite Zertifizierungs-/Credentialspalten sind davon ausgenommen,
+weil ihre namensförmigen Fachtitel bereits durch den eigenen Credentialkontext
+gebunden sind und keine beliebige unbekannte Spaltensemantik darstellen.
 
 ## DS-091 – Anwender wählt die Dateinamen anonymisierter Standalone-Ergebnisse
 
