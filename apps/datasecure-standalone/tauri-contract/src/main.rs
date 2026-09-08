@@ -593,7 +593,10 @@ fn validate_processing_mode(value: Option<&str>) -> Result<&str, String> {
     }
 }
 
-fn validate_output_naming_mode<'a>(value: Option<&'a str>, processing_mode: &str) -> Result<Option<&'a str>, String> {
+fn validate_output_naming_mode<'a>(
+    value: Option<&'a str>,
+    processing_mode: &str,
+) -> Result<Option<&'a str>, String> {
     match (processing_mode, value) {
         ("markdown-and-anonymize", Some("neutral" | "source-with-suffix")) => Ok(value),
         ("markdown-only", None) => Ok(None),
@@ -774,7 +777,7 @@ fn rpc_request(
             return Err(code);
         }
     };
-    let validated = validate_private_response(&response, &id);
+    let validated = validate_private_response(&response, id);
     if validated.is_err() {
         diagnostic_event(
             "ipc_response_invalid",
@@ -879,7 +882,7 @@ fn native_open_command(target: &Path, kind: &str) -> Result<Command, String> {
         } else {
             command.arg(target);
         }
-        return Ok(command);
+        Ok(command)
     }
     #[cfg(target_os = "macos")]
     {
@@ -888,7 +891,7 @@ fn native_open_command(target: &Path, kind: &str) -> Result<Command, String> {
             command.arg("-R");
         }
         command.arg(target);
-        return Ok(command);
+        Ok(command)
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
@@ -1062,7 +1065,11 @@ async fn start_admitted_batch(
     let owned = state.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
-        let request = private_start_request(&id, processing_mode.as_deref(), output_naming_mode.as_deref())?;
+        let request = private_start_request(
+            &id,
+            processing_mode.as_deref(),
+            output_naming_mode.as_deref(),
+        )?;
         rpc_request(&owned, "start_admitted_batch", &id, request)
     })
     .await
@@ -1478,7 +1485,10 @@ mod tests {
             dropped_source_kind(&[source.clone(), second.clone()]).unwrap(),
             "files"
         );
-        assert_eq!(dropped_source_kind(&[directory.clone()]).unwrap(), "folder");
+        assert_eq!(
+            dropped_source_kind(std::slice::from_ref(&directory)).unwrap(),
+            "folder"
+        );
         assert_eq!(
             dropped_source_kind(&[directory.clone(), source.clone()]).unwrap_err(),
             "STANDALONE_DROP_MIXED"
@@ -1508,7 +1518,7 @@ mod tests {
             let link = directory.join("link.txt");
             std::os::unix::fs::symlink(&source, &link).expect("test symlink");
             assert_eq!(
-                dropped_source_kind(&[link.clone()]).unwrap_err(),
+                dropped_source_kind(std::slice::from_ref(&link)).unwrap_err(),
                 "STANDALONE_SELECTION_INVALID"
             );
             std::fs::remove_file(link).expect("remove test symlink");
