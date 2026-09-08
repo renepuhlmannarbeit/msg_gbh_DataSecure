@@ -1994,6 +1994,73 @@ test('operational person-column labels redact names while neutral columns stop f
   assert.deepStrictEqual(pii.scanResidual(professionalMethod, 'general'), []);
 });
 
+test('plain equal-width table headers never masquerade as fragmented sensitive structures', () => {
+  const directPersonHeaders = new Set(['Name', 'Mitarbeiter']);
+  for (const header of ['Name', 'Mitarbeiter', 'Kunden', 'Personal', 'Patienten',
+    'Rechnungs', 'Fall', 'Akten', 'Lieferanten', 'Abteilung']) {
+    for (const width of [2, 3]) {
+      const thirdHeader = width === 3 ? ' | Notiz' : '';
+      const thirdSeparator = width === 3 ? ' | ---' : '';
+      const thirdValue = width === 3 ? ' | intern' : '';
+      const source = `| ${header} | Rolle${thirdHeader} |\n` +
+        `| --- | ---${thirdSeparator} |\n` +
+        `| Anna Beispiel | Testerin${thirdValue} |`;
+      const rawResidual = pii.scanResidual(source, 'customer_document');
+      assert.ok(!rawResidual.some((hit) => hit.type === 'TABLE_STRUCTURE_AMBIGUOUS'),
+        `${header}/${width}: a single equal-width header is not structurally ambiguous`);
+      if (directPersonHeaders.has(header)) {
+        const result = anonymizeMarkdown(source, 'customer_document');
+        assertAbsent(result.text, 'Anna Beispiel', `${header}/${width}`);
+        assert.match(result.text, /\[PERSON_\d+\]/u, `${header}/${width}`);
+        assertPresent(result.text, header, `${header}/${width}`);
+        assertPresent(result.text, 'Testerin', `${header}/${width}`);
+        if (width === 3) assertPresent(result.text, 'intern', `${header}/${width}`);
+        assert.deepStrictEqual(pii.scanResidual(result.text, 'customer_document', result.dictionary, {
+          strongPersonAnchor: result.strongPersonAnchor
+        }), [], `${header}/${width}`);
+      } else {
+        assert.ok(rawResidual.some((hit) => hit.type === 'PERSON_CANDIDATE' && hit.text === 'Anna Beispiel'),
+          `${header}/${width}: an unclear column must still stop independently`);
+        assert.throws(() => anonymizeMarkdown(source, 'customer_document'), /PERSON_CANDIDATE/u,
+          `${header}/${width}: no silent pass is allowed`);
+      }
+    }
+  }
+
+  for (const source of [
+    '| Abteilung | Rolle |\n| --- | --- |\n| Qualitätssicherung | Testteam |',
+    '| Fall | Status |\n| --- | --- |\n| abgeschlossen | grün |'
+  ]) {
+    const result = anonymizeMarkdown(source, 'customer_document');
+    assert.strictEqual(result.text, source);
+    assert.deepStrictEqual(pii.scanResidual(result.text, 'customer_document', result.dictionary, {
+      strongPersonAnchor: result.strongPersonAnchor
+    }), []);
+  }
+
+  const resolvedPersonBelowNeutralSuperheader =
+    '| Personal | Kategorie |\n| Mitarbeiter | Rolle |\n| --- | --- |\n| Anna Beispiel | Testerin |';
+  const resolved = anonymizeMarkdown(resolvedPersonBelowNeutralSuperheader, 'customer_document');
+  assertAbsent(resolved.text, 'Anna Beispiel', 'a direct person header resolves its own column');
+  assert.match(resolved.text, /\[PERSON_\d+\]/u);
+  assert.deepStrictEqual(pii.scanResidual(resolved.text, 'customer_document', resolved.dictionary, {
+    strongPersonAnchor: resolved.strongPersonAnchor
+  }), []);
+
+  for (const source of [
+    '| Geburts | Steuer | Rolle |\n| datum | Kennung | Typ |\n| --- | --- | --- |\n| 01.01.1980 | 26954371827 | Testerin |',
+    '| Geburts | Passwort | Rolle |\n| datum | Kennung | Typ |\n| --- | --- | --- |\n| 01.01.1980 | sk-live-secret | Testerin |'
+  ]) {
+    const rawResidual = pii.scanResidual(source, 'customer_document');
+    assert.ok(rawResidual.some((hit) => hit.type === 'TABLE_STRUCTURE_AMBIGUOUS'), source);
+    const first = anonymize(source, 'customer_document');
+    assert.ok(pii.scanResidual(first.text, 'customer_document', first.dictionary, {
+      strongPersonAnchor: first.strongPersonAnchor
+    }).some((hit) => hit.type === 'TABLE_STRUCTURE_AMBIGUOUS'), source);
+    assert.throws(() => anonymizeMarkdown(source, 'customer_document'), /TABLE_STRUCTURE_AMBIGUOUS/u, source);
+  }
+});
+
 test('gendered salutations are removed while professional academic titles remain', () => {
   for (const [source, expectedPrefix] of [
     ['Ansprechpartner: Frau Dr. med. Anna Beispiel', 'Ansprechpartner: Dr. med. [PERSON_001]'],

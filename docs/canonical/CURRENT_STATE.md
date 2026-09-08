@@ -46,6 +46,19 @@ Telefonlabel. Technische Abruftexte, Uhrzeiten und plausible Kalenderdaten
 werden dadurch nicht redigiert. Redaktor und unabhängiges Restgate sind mit
 Positiv-, Negativ-, Unicode- und adversarischen Fällen belegt.
 
+Einfache, gleich breite Tabellen werden nicht mehr allein wegen eines Wortes wie
+`Mitarbeiter`, `Kunden`, `Personal`, `Fall` oder `Abteilung` als strukturell
+mehrdeutig eingestuft. Eindeutige Personenfelder werden weiterhin redigiert;
+unter einer nicht katalogisierten Überschrift stoppt ein namensförmiger Wert am
+unabhängigen `PERSON_CANDIDATE`-Gate. Das ist absichtlich enger als die erste
+F8-Auftragsfassung: `Rechnungs`, `Fall`, `Akten` oder `Abteilung` pauschal als
+Personenspalten zu behandeln hätte die F2-Sicherheitsgrenze aufgehoben und
+fachliche Zweiwortwerte über-redigiert. Nur tatsächlich mehrzeilige,
+breitenabweichende oder überlange sensible Tabellenstrukturen erzeugen den
+strukturellen Ambiguitätsstopp. Die Rekonstruktion entscheidet dabei je Spalte:
+Eine korrekt zusammengesetzte Geburtsdatumsspalte kann eine ungelöste Steuer-
+oder Zugangsdaten-Nachbarspalte nicht mehr maskieren.
+
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
 oder noch nicht vollständig exportiert, öffnet DataSecure weder den allgemeinen

@@ -500,6 +500,13 @@ function isStopToken(token) {
 // token and never count as name tokens themselves.
 const NAME_PARTICLE = '(?:von|vom|van|de|der|den|del|della|di|da|du|la|le|zu|zur|zum|y|e|of)';
 const NAME_PARTICLES = new Set(['von', 'vom', 'van', 'de', 'der', 'den', 'del', 'della', 'di', 'da', 'du', 'la', 'le', 'zu', 'zur', 'zum', 'y', 'e', 'of']);
+const PERSON_LABEL =
+  '(?:Name|Person|Full\\s+Name|Employee\\s+Name|Candidate\\s+Name|Contact\\s+Name|Mitarbeitername|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
+  '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|(?:(?:Interner|Technischer|Fachlicher)\\s+)?Kontakt|Sachbearbeiter(?:in)?' +
+  '|Zuständige?|Verantwortliche?|Empfänger(?:in)?|Absender(?:in)?|Unterzeichner(?:in)?|Gesprächspartner(?:in)?' +
+  '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Autor(?:in)?|Verfasser(?:in)?|Manager(?:in)?' +
+  '|Eigentümer(?:in)?|Bearbeiter(?:in)?|(?:Zuletzt\\s+)?(?:geändert|erstellt)\\s+von' +
+  '|Author|Creator|Manager|Owner|Approver|Representative|Contact\\s+person|Last\\s+modified\\s+by|Modified\\s+by|Nom|Nombre|Naam|Имя|ФИО|Όνομα|姓名|氏名|이름)';
 
 function looksName(s) {
   const v = normalizeSpaces(s);
@@ -639,6 +646,12 @@ function isSensitiveTableHeader(value) {
     CREDENTIAL_LABEL_HEADER_RE.test(header);
 }
 
+const PERSON_TABLE_HEADER_RE = new RegExp(`^${PERSON_LABEL}:?$`, 'iu');
+
+function isResolvedSensitiveTableHeader(value) {
+  return isSensitiveTableHeader(value) || PERSON_TABLE_HEADER_RE.test(normalizeSensitiveLabel(value));
+}
+
 function combineHeaderRows(rows) {
   return rows[0].map((_, column) =>
     normalizeSensitiveLabel(rows.map((row) => row[column]).join(' '))
@@ -666,6 +679,13 @@ function hasCredentialHeaderFragmentSequence(rows) {
       parts.includes(first) && parts.includes(last))) return true;
   }
   return false;
+}
+
+function hasCredentialHeaderFragmentSequenceAtColumn(rows, column) {
+  const parts = rows.map((row) => normalizeSensitiveLabel(row[column] || '').toLowerCase())
+    .filter(Boolean);
+  return CREDENTIAL_FRAGMENT_PAIRS.some(([first, last]) =>
+    parts.includes(first) && parts.includes(last));
 }
 
 function buildTableIndex(text) {
@@ -728,11 +748,20 @@ function buildTableIndex(text) {
       return header;
     });
     const cleaned = headers.map((header) => normalizeSensitiveLabel(header.replace(/\s+\(\d+\)$/u, '')));
-    const hasSensitiveHeader = cleaned.some(isSensitiveTableHeader);
+    const resolvedSensitiveColumns = cleaned.map(isResolvedSensitiveTableHeader);
+    const hasSensitiveHeader = resolvedSensitiveColumns.some(Boolean);
     const headerHasSensitiveFragment = hasCredentialHeaderFragmentSequence(headerBlock) || headerBlock
       .flat()
       .some((header) => SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header)));
-    const unresolvedSensitiveHeader = !hasSensitiveHeader && headerHasSensitiveFragment;
+    // Resolve ambiguity per column. A lone, separator-width header cannot be
+    // a fragmented compound. In a real multi-row header, however, one valid
+    // sensitive column must never mask an unresolved neighbour.
+    const unresolvedSensitiveHeader = headerBlock.length > 1 && resolvedSensitiveColumns
+      .some((resolved, column) => !resolved && (
+        hasCredentialHeaderFragmentSequenceAtColumn(headerBlock, column) ||
+        headerBlock.some((header) =>
+          SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header[column] || '')))
+      ));
     const overlongSensitiveHeader = (headerBlock.length > 3 && headerHasSensitiveFragment) ||
       (mismatchedHeaderWidth && headerHasSensitiveFragment);
     let row = index + 1;
@@ -821,6 +850,7 @@ module.exports = {
   UPPER,
   NAME_BODY,
   NAME_TOKEN,
+  PERSON_LABEL,
   CAPS_TOKEN,
   ORG_SUFFIX,
   ORG_SUFFIX_TAIL_RE,

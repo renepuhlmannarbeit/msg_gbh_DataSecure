@@ -406,6 +406,18 @@ Spaltenposition geraten. DOCX-Tabellen mit horizontal oder vertikal verbundenen
 Zellen stoppen bis zu einer koordinatentreuen OOXML-Abbildung ebenfalls
 fail-closed. Dafür entsteht keine neue Anwenderbestätigung.
 
+Präzisierung 08.09.2026 (RC124): Ein einzelner, zur Trennzeile gleich breiter
+Tabellenkopf ist keine fragmentierte oder strukturell mehrdeutige Kopfzeile.
+Ein darin vorkommendes Fragmentwort löst deshalb für sich allein keinen
+`TABLE_STRUCTURE_AMBIGUOUS`-Befund aus. Eindeutige Personenfelder werden
+redigiert; namensförmige Werte unter nicht katalogisierten Fachüberschriften
+stoppen weiterhin am unabhängigen `PERSON_CANDIDATE`-Gate. Insbesondere werden
+`Rechnungs`, `Fall`, `Akten` und `Abteilung` nicht pauschal zu Personenlabels
+umgedeutet. Mehrzeilige, breitenabweichende und überlange sensible Strukturen
+bleiben fail-closed. Mehrzeilige Rekonstruktion wird pro Spalte entschieden;
+eine erfolgreich aufgelöste sensible Spalte darf eine ungelöste sensible
+Nachbarspalte nicht verdecken.
+
 Präzisierung 08.09.2026 (RC124): Explizit bezeichnete Zugangsdaten im
 Dokumentinhalt gehören zur vollständigen Inhaltsgrenze. Benutzer-/Loginwerte,
 Passwörter, Passphrasen, Secrets, Token, API-Keys, Zugangscodes und PINs werden
