@@ -2,7 +2,9 @@ import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readContract, readRegular, sha256, extractRuntime, extractArchiveEntry, assertBinaryTarget } from './lib/bundled-runtime.mjs';
+import {
+  assertBinaryTarget, createTargetOutput, extractArchiveEntry, extractRuntime, readContract, readRegular, sha256
+} from './lib/bundled-runtime.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function argument(name) {
@@ -21,13 +23,7 @@ const bytes = extractRuntime(archive, target);
 const licenseBytes = extractArchiveEntry(archive, target, target.license_path, { minimum: 100, maximum: 2 * 1024 * 1024 });
 assertBinaryTarget(bytes, target);
 
-const output = path.resolve(argument('--output'));
-if (!output.startsWith(`${path.join(root, 'dist')}${path.sep}`) || path.basename(output) !== target.id) {
-  throw new Error('BUNDLED_RUNTIME_OUTPUT_UNSAFE');
-}
-try { fs.lstatSync(output); throw new Error('BUNDLED_RUNTIME_OUTPUT_EXISTS'); }
-catch (error) { if (error.code !== 'ENOENT') throw error; }
-fs.mkdirSync(output);
+const output = createTargetOutput(root, argument('--output'), target.id);
 const launcher = path.join(output, target.launcher);
 fs.writeFileSync(launcher, bytes, { flag: 'wx', mode: target.os === 'win32' ? 0o600 : 0o700 });
 fs.writeFileSync(path.join(output, 'LICENSE.node.txt'), licenseBytes, { flag: 'wx', mode: 0o600 });

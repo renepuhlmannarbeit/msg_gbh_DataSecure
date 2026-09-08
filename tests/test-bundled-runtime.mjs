@@ -5,7 +5,9 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { buildRuntimePlugin } from '../scripts/build-runtime-plugin.mjs';
-import { assertBinaryTarget, extractRuntime, readContract, sha256, verifyTargetEvidence } from '../scripts/lib/bundled-runtime.mjs';
+import {
+  assertBinaryTarget, createTargetOutput, extractRuntime, readContract, sha256, verifyTargetEvidence
+} from '../scripts/lib/bundled-runtime.mjs';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 
 const require = createRequire(import.meta.url);
@@ -107,6 +109,31 @@ test('target evidence is exact and tampering fails closed', () => {
   assert.doesNotThrow(() => verifyTargetEvidence(evidence, bytes, licenseBytes, target, contract));
   evidence.runtime_probe.arch = 'arm64';
   assert.throws(() => verifyTargetEvidence(evidence, bytes, licenseBytes, target, contract), /BUNDLED_RUNTIME_EVIDENCE_INVALID/);
+});
+
+test('target output creates a missing dist parent on a clean checkout', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-runtime-output-'));
+  try {
+    const output = path.join(root, 'dist', 'macos-arm64');
+    assert.equal(createTargetOutput(root, output, 'macos-arm64'), output);
+    assert.ok(fs.lstatSync(path.join(root, 'dist')).isDirectory());
+    assert.ok(fs.lstatSync(output).isDirectory());
+    assert.throws(() => createTargetOutput(root, output, 'macos-arm64'), /BUNDLED_RUNTIME_OUTPUT_EXISTS/);
+  } finally { fs.rmSync(root, { recursive: true }); }
+});
+
+test('target output rejects nested, mismatched and non-directory parents', () => {
+  for (const kind of ['nested', 'mismatched', 'file-parent']) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-runtime-output-'));
+    try {
+      if (kind === 'file-parent') fs.writeFileSync(path.join(root, 'dist'), 'not a directory');
+      const output = kind === 'nested'
+        ? path.join(root, 'dist', 'nested', 'macos-arm64')
+        : path.join(root, 'dist', 'macos-arm64');
+      const target = kind === 'mismatched' ? 'macos-x64' : 'macos-arm64';
+      assert.throws(() => createTargetOutput(root, output, target), /BUNDLED_RUNTIME_OUTPUT_UNSAFE/);
+    } finally { fs.rmSync(root, { recursive: true }); }
+  }
 });
 
 for (const targetId of ['windows-x64', 'macos-x64', 'macos-arm64', 'universal']) {

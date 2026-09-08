@@ -14,6 +14,32 @@ export function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
+export function createTargetOutput(repositoryRoot, requestedOutput, targetId) {
+  const root = path.resolve(repositoryRoot);
+  const dist = path.join(root, 'dist');
+  const output = path.resolve(requestedOutput);
+  if (path.dirname(output) !== dist || path.basename(output) !== targetId) {
+    throw new Error('BUNDLED_RUNTIME_OUTPUT_UNSAFE');
+  }
+
+  try {
+    const parent = fs.lstatSync(dist);
+    if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('BUNDLED_RUNTIME_OUTPUT_UNSAFE');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    fs.mkdirSync(dist, { mode: 0o700 });
+  }
+
+  try {
+    fs.lstatSync(output);
+    throw new Error('BUNDLED_RUNTIME_OUTPUT_EXISTS');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  fs.mkdirSync(output, { mode: 0o700 });
+  return output;
+}
+
 export function readRegular(file, limit = MAX_ARCHIVE) {
   const before = fs.lstatSync(file, { bigint: true });
   if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || before.size <= 0n || before.size > BigInt(limit)) {
