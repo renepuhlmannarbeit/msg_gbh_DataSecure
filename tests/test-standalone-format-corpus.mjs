@@ -16,7 +16,7 @@ const { anonymize, scanResidual } = require('../plugins/data-secure/server/priva
 const { decodePng } = require('../plugins/data-secure/server/images/png');
 const { decodeBmp } = require('../plugins/data-secure/server/images/bmp');
 const { loadImage } = await import('../native/ocr/pilot/node_modules/@napi-rs/canvas/index.js');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-format-corpus-'));
+const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'datasecure-format-corpus-'));
 const first = path.join(root, 'first'), second = path.join(root, 'second');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 

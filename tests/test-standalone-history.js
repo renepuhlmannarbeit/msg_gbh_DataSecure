@@ -6,7 +6,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-standalone-history-'));
+const temporaryRoot = fs.realpathSync(os.tmpdir());
+const base = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-standalone-history-'));
 process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'private');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'workspace');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
@@ -354,7 +355,7 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(fs.existsSync(secondRun), true, 'last-20 retention never deletes visible results');
     process.stdout.write('STANDALONE HISTORY PASS\n');
   } finally {
-    if (path.dirname(base) !== os.tmpdir() || !path.basename(base).startsWith('datasecure-standalone-history-')) throw new Error('TEST_CLEANUP_TARGET_INVALID');
+    if (path.dirname(base) !== temporaryRoot || !path.basename(base).startsWith('datasecure-standalone-history-')) throw new Error('TEST_CLEANUP_TARGET_INVALID');
     fs.rmSync(base, { recursive: true, force: true });
   }
 })().catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; });
