@@ -1,0 +1,140 @@
+name: Manual Standalone macOS sandbox evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Start one architecture first; choose both only when both runner budgets are available.
+        required: true
+        default: macos-arm64
+        type: choice
+        options:
+          - macos-arm64
+          - macos-x64
+          - both
+      confirm_private_runner_minutes:
+        description: I understand that this private-repository run consumes included macOS minutes or billable usage.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-macos-sandbox-${{ github.ref }}-${{ inputs.target }}
+  cancel-in-progress: true
+
+jobs:
+  select-target:
+    name: Select explicitly approved target
+    if: ${{ inputs.confirm_private_runner_minutes == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.target }}" in
+            macos-x64)
+              matrix='{"include":[{"os":"macos-15-intel","target":"macos-x64","rust_arch":"x86_64","sidecar":"datasecure-core-x86_64-apple-darwin","archive":"node-v22.23.2-darwin-x64.tar.gz","sha256":"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"}]}'
+              ;;
+            macos-arm64)
+              matrix='{"include":[{"os":"macos-14","target":"macos-arm64","rust_arch":"arm64","sidecar":"datasecure-core-aarch64-apple-darwin","archive":"node-v22.23.2-darwin-arm64.tar.gz","sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}]}'
+              ;;
+            both)
+              matrix='{"include":[{"os":"macos-15-intel","target":"macos-x64","rust_arch":"x86_64","sidecar":"datasecure-core-x86_64-apple-darwin","archive":"node-v22.23.2-darwin-x64.tar.gz","sha256":"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"},{"os":"macos-14","target":"macos-arm64","rust_arch":"arm64","sidecar":"datasecure-core-aarch64-apple-darwin","archive":"node-v22.23.2-darwin-arm64.tar.gz","sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}]}'
+              ;;
+            *) exit 64 ;;
+          esac
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  native-evidence:
+    name: Standalone native evidence (${{ matrix.target }})
+    needs: select-target
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select-target.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+      - name: Install pinned build and offline-conversion dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --prefix native/ocr/pilot --ignore-scripts --no-audit --no-fund
+          npm ci --prefix native/pdfjs/pilot --ignore-scripts --no-audit --no-fund
+          node native/ocr/pilot/fetch-models.mjs
+      - name: Compile and verify the target-native POSIX supervisor
+        shell: bash
+        run: |
+          set -euo pipefail
+          destination="plugins/data-secure/server/native/${{ matrix.target }}"
+          mkdir -p "$destination"
+          cc -std=c11 -O2 -Wall -Wextra -Werror native/ocr/pilot/posix-sandbox.c \
+            -o "$destination/datasecure-sandbox"
+          chmod 700 "$destination/datasecure-sandbox"
+          "$destination/datasecure-sandbox" --sandbox-contract
+          shasum -a 256 "$destination/datasecure-sandbox" | awk '{print $1}' \
+            > "$destination/datasecure-sandbox.sha256"
+          node -e "const r=require('./plugins/data-secure/server/posix-supervisor').verifyPosixSupervisor(); if(!r.available){throw new Error(r.reason)}"
+      - name: Fetch and verify the pinned official Node runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "${{ matrix.archive }}" \
+            "https://nodejs.org/dist/v22.23.2/${{ matrix.archive }}"
+          echo "${{ matrix.sha256 }}  ${{ matrix.archive }}" | shasum -a 256 --check
+          node scripts/build-runtime-target.mjs --target "${{ matrix.target }}" \
+            --archive "${{ matrix.archive }}" --output "dist/${{ matrix.target }}"
+      - name: Project the self-contained target runtime
+        run: node scripts/prepare-standalone-runtime.mjs
+      - name: Run product, conversion, Rust and workflow contracts
+        run: npm run test:standalone
+      - name: Run the real isolated converter-worker boundary
+        run: npm run test:standalone:conversion
+      - name: Require warning-free native Rust code
+        working-directory: apps/datasecure-standalone/tauri-contract
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Compile the native Tauri application binary
+        working-directory: apps/datasecure-standalone/tauri-contract
+        run: cargo build --release --locked
+      - name: Verify every executable is native to the requested runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="apps/datasecure-standalone/tauri-contract/target/release/datasecure-standalone"
+          sidecar="apps/datasecure-standalone/tauri-contract/binaries/${{ matrix.sidecar }}"
+          supervisor="plugins/data-secure/server/native/${{ matrix.target }}/datasecure-sandbox"
+          for executable in "$app" "$sidecar" "$supervisor"; do
+            test -x "$executable"
+            file "$executable"
+            arches="$(lipo -archs "$executable")"
+            test "$arches" = "${{ matrix.rust_arch }}"
+          done
+      - name: Write content-free evidence summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="apps/datasecure-standalone/tauri-contract/target/release/datasecure-standalone"
+          sidecar="apps/datasecure-standalone/tauri-contract/binaries/${{ matrix.sidecar }}"
+          supervisor="plugins/data-secure/server/native/${{ matrix.target }}/datasecure-sandbox"
+          {
+            echo "### DataSecure Standalone macOS target evidence"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Target: \`${{ matrix.target }}\` on \`${{ matrix.os }}\`"
+            echo "- Tauri binary SHA-256: \`$(shasum -a 256 "$app" | awk '{print $1}')\`"
+            echo "- Core runtime SHA-256: \`$(shasum -a 256 "$sidecar" | awk '{print $1}')\`"
+            echo "- POSIX supervisor SHA-256: \`$(shasum -a 256 "$supervisor" | awk '{print $1}')\`"
+            echo "- No package or diagnostic artifact was uploaded."
+            echo "- Human Gatekeeper, window, picker, VoiceOver and workflow UAT remain open."
+          } >> "$GITHUB_STEP_SUMMARY"

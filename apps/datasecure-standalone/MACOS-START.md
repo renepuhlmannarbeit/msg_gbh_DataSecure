@@ -3,6 +3,28 @@
 Status: Vorbereiteter Installations- und UAT-Vertrag. Die App-Pakete sind noch
 nicht gebaut oder auf echten Intel-/Apple-Silicon-Macs abgenommen.
 
+## Kostenkontrollierter technischer Vorlauf
+
+Der GitHub-Workflow **Manual Standalone macOS sandbox evidence** kann auf echten
+GitHub-macOS-Runnern getrennt für Intel und Apple Silicon ausgeführt werden. Er
+ist ausschließlich manuell startbar und verlangt vor Runner-Zuteilung die
+Bestätigung, dass ein privates Repository enthaltene macOS-Minuten verbrauchen
+oder darüber hinaus Kosten auslösen kann. Zuerst nur `macos-arm64` starten;
+`both` erst nach Prüfung des GitHub-Actions-Budgets wählen.
+
+Der Workflow baut und prüft die gepinnte Laufzeit, den nativen POSIX-
+Supervisor, die Standalone- und echten Konverterverträge, Rust/Clippy sowie das
+native Tauri-Release-Binary. Er verwendet keine Secrets, Caches oder
+Artefakt-Uploads. Sein Job-Summary enthält nur Commit, Ziel und Binärhashes.
+Damit ist eine echte Architekturprüfung möglich, nicht jedoch die nachfolgende
+sichtbare Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
+
+Maßgebliche Herstellerhinweise:
+[GitHub-gehostete Runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
+[Actions-Abrechnung](https://docs.github.com/en/billing/concepts/product-billing/github-actions),
+[Budgets und harte Ausgabenlimits](https://docs.github.com/en/billing/how-tos/set-up-budgets)
+und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/github/).
+
 ## Passendes Paket
 
 - Intel-Mac: `DataSecure-Standalone-<Version>-macos-x64.zip`

@@ -857,8 +857,17 @@ widersprüchlichen Werten. Der Zielkatalog bindet vier getrennte Pakete an exakt
 Windows x64, macOS Intel, macOS Apple Silicon und Linux x64 glibc. Für beide
 macOS-Pakete gilt wegen der gebündelten Node-Laufzeit mindestens macOS 13.5.
 Zertifikatsfreie macOS-Piloten werden ausdrücklich ad-hoc signiert
-(`signingIdentity: "-"`); native Builds und Gatekeeper-UAT auf Intel und Apple
-Silicon bleiben offen.
+(`signingIdentity: "-"`). Ein neues GitHub-Actions-Gate bildet dafür eine
+kostenkontrollierte Zielhost-Sandbox: Es ist nur über `workflow_dispatch`
+startbar, verlangt eine ausdrückliche Bestätigung möglicher privater Runner-
+Minuten und wählt standardmäßig nur Apple Silicon. Auf `macos-15-intel` und
+`macos-14` werden die gepinnte Node-Runtime, der nativ kompilierte POSIX-
+Supervisor, die vollständigen Standalone-/Konverter-/Rust-Verträge, Clippy,
+der Tauri-Release-Build und die Architektur aller drei Executables geprüft.
+Es verwendet keine Secrets, keinen Cache und keine Artefakt-Uploads. Der
+Workflow ist noch nicht ausgeführt; App-Bundle, Gatekeeper, sichtbare Fenster,
+Picker, VoiceOver, Performance und menschliche UAT auf Intel und Apple Silicon
+bleiben offen.
 Rust und Tauri sind ausschließlich Buildwerkzeuge; Anwender installieren weder
 Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
 2.11.5 und MSVC erfolgreich gebaut; `cargo test --locked`, Clippy,

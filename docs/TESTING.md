@@ -257,6 +257,27 @@ Standalone-only Änderungen erreichen jetzt beide automatischen CI-Pfadfilter.
 Es bleibt bei einem kostenbegrenzten Job; native Builds und Konverterressourcen
 werden nicht ungefragt als neue automatische GitHub-Jobs ausgeführt.
 
+### Manueller macOS-Sandbox-Nachweis
+
+`.github/workflows/standalone-macos-sandbox.yml` ist ein bewusst separates
+Zielhostgate. Es besitzt ausschließlich `workflow_dispatch`; Push, Pull Request
+und Zeitplan sind durch einen Vertragstest ausgeschlossen. Vor der
+Runner-Zuteilung muss `confirm_private_runner_minutes` aktiviert werden, weil
+macOS-Runner in einem privaten Repository das enthaltene Actions-Kontingent
+verbrauchen und danach Kosten auslösen können. Standardmäßig wird nur
+`macos-arm64` auf `macos-14` ausgeführt; `macos-x64` verwendet
+`macos-15-intel`, `both` startet beide.
+
+Der Lauf installiert nur gepinnte Abhängigkeiten, lädt die bereits
+hashgebundenen Node-/OCR-Ressourcen, kompiliert den POSIX-Supervisor nativ und
+führt `test:standalone`, den echten isolierten Konvertertest, Clippy, einen
+Tauri-Release-Build sowie `file`/`lipo`-Architekturprüfungen aus. Es gibt keine
+Secrets, Actions-Caches oder Uploadartefakte. Ergebnisse bleiben auf den
+flüchtigen Runner beschränkt; der Job-Summary enthält ausschließlich
+inhaltsfreie Hash-/Zielangaben. Der Lauf ersetzt weder ein distributables
+`.app`-Paket noch Finder/Gatekeeper, sichtbaren Fensterstart, Picker,
+Drag-and-drop, VoiceOver, Performance oder menschliche UAT.
+
 ### RC111: breite Format- und Recovery-Grenzen
 
 `test-wide-privacy-extraction` bindet die gemeldete Quellenart an die tatsächliche

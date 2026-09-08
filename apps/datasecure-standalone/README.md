@@ -67,6 +67,16 @@ npm run test:standalone
 npm run build:standalone:windows:portable
 ```
 
+Für den nativen macOS-Engineeringnachweis existiert zusätzlich der GitHub-
+Workflow **Manual Standalone macOS sandbox evidence**. Er läuft niemals bei
+Push oder Pull Request, sondern nur nach manueller Auswahl von Intel, Apple
+Silicon oder beiden und einer ausdrücklichen Bestätigung der möglichen privaten
+Runner-Minuten. Standard ist nur Apple Silicon. Der Lauf prüft die echte
+Zielarchitektur, Runtime, Sandbox-Supervisor, Produkt-/Konverterverträge, Rust
+und den Tauri-Release-Build; er lädt weder Pakete noch Diagnosen als Actions-
+Artefakt hoch. Er ist kein Ersatz für Finder-/Gatekeeper-, sichtbare Fenster-,
+Picker-, VoiceOver- oder Anwender-UAT.
+
 Der Build erzeugt die geschlossene Runtime-Projektion frisch aus dem aktuellen
 Quellstand, bindet die herkunftsgeprüfte Node-Runtime und legt Manifest, SBOM,
 Lizenzhinweise und SHA-256 bei. Anwender installieren weder Rust noch Node. Vor
