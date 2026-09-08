@@ -461,6 +461,11 @@ Quellbasisnamen und liegen getrennt unter `DataSecure-Markdown/Lauf-…`. Eine
 Zuordnungsdatei wird nicht erzeugt. Text-/OCR-/Coverage-Hinweise werden ohne
 Zusatzdialog gespeichert; schlechte oder geschützte Dateien erhalten feste
 Diagnoseereignisse, der übrige Stapel läuft weiter.
+Nur bereits vorhandene Konvertierungspläne mit Export-Schema
+`datasecure-result-export/3` behalten ihre frühere Recovery-Zusage: War ein
+solcher Plan noch nicht vollständig abgeschlossen, beendet der Replay auch
+seine laufbezogene `DataSecure-Zuordnung.csv`. Der aktuelle Modus und alle neu
+angelegten Läufe bleiben ohne Zuordnung.
 TXT/MD/CSV/DOCX/XLSX/PPTX, PDF/Scan-PDF und PNG/JPEG/BMP nutzen einen gebündelten
 Offline-Worker mit normalem Node, PDF.js, Canvas, Tesseract und DE/EN-Modellen.
 Der unabhängige Integrationsreview fand und korrigierte einen gemeinsamen

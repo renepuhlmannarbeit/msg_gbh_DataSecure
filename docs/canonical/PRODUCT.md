@@ -123,6 +123,11 @@ Ergebnisablauf. Reine Konvertierung entfernt keine personenbezogenen Inhalte,
 hat keinen PII-Review und exportiert ausschließlich `.md`-Nutzdokumente ohne
 Zuordnungsdatei nach `DataSecure-Markdown/Lauf-…`. Diese Dateien sind ausdrücklich
 **nicht anonymisiert** und werden niemals automatisch an Claude übergeben.
+Eine eng begrenzte Recovery-Ausnahme gilt nur für bereits vor DS-085 angelegte
+Legacy-Exportpläne mit Schema `datasecure-result-export/3`: Hatte ein solcher
+Plan seine sichtbare Zuordnung schon zugesagt, beendet ein Replay genau diese
+alte Transaktion einschließlich `DataSecure-Zuordnung.csv`. Neue reine
+Konvertierungsläufe erzeugen weiterhin keine Zuordnungsdatei.
 Die Format-Zielliste bleibt für beide Modi erhalten; deren Freigabestatus darf
 nicht aus einer sichtbaren Moduswahl oder vorhandenen Dateiendung abgeleitet werden.
 

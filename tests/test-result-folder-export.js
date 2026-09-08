@@ -19,7 +19,8 @@ const {
   resultOutputDirectory, isCommonSyncFolder, isNetworkResultFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
-  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport, LEGACY_SCHEMA, validRecord,
+  exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport,
+  LEGACY_SCHEMA, LEGACY_MARKDOWN_SCHEMA, validRecord,
   visibleExportDirectory, visibleExportStatus, _test
 } = require('../plugins/data-secure/server/gateway/result-export');
 
@@ -631,6 +632,47 @@ try {
   assert.ok(uncertainReplay.pending >= 1, 'replay keeps the uncertain record pending');
   assert.strictEqual(fs.existsSync(replayClaimPath), true);
   fs.unlinkSync(replayClaimPath);
+
+  // Historical rc108/rc109 conversion plans used export schema /3 and had
+  // already promised a visible mapping. Replay must finish exactly that old
+  // transaction even though current markdown-only runs intentionally create
+  // no mapping anymore.
+  const legacyRoot = path.join(base, 'legacy-markdown-replay');
+  fs.mkdirSync(legacyRoot);
+  process.env.EU_PRIVACY_RESULT_ROOT = legacyRoot;
+  const legacyToken = '7'.repeat(64);
+  const legacyRunName = 'Lauf-20260904-090000-1234abcd';
+  const legacyBytes = Buffer.from('# Unverändertes Konvertat', 'utf8');
+  const legacyDestination = _test.activeDestination({ schema: LEGACY_MARKDOWN_SCHEMA });
+  const legacyRun = _test.ensurePlainDirectory(legacyDestination, legacyRunName);
+  fs.writeFileSync(path.join(legacyRun.path, 'Dokument-001-konvertiert.md'), legacyBytes);
+  const legacyPlan = {
+    schema: LEGACY_MARKDOWN_SCHEMA,
+    run_directory: legacyRunName,
+    items: [{
+      artifact_id: `dm_${'7'.repeat(32)}`,
+      artifact_bytes: legacyBytes.length,
+      file: 'Dokument-001-konvertiert.md',
+      sha256: crypto.createHash('sha256').update(legacyBytes).digest('hex'),
+      source_label: 'Historisch/Quelle.docx',
+      extraction_grade: 'complete',
+      reason_codes: [],
+      exported: true
+    }],
+    complete: false,
+    destination_id: legacyDestination.id,
+    product_channel: 'standalone',
+    processing_mode: 'markdown-only'
+  };
+  assert.strictEqual(validRecord(legacyPlan), true);
+  fs.writeFileSync(recordPath(legacyToken), JSON.stringify(legacyPlan));
+  replayPendingResultExports();
+  const legacyMapping = path.join(legacyRun.path, 'DataSecure-Zuordnung.csv');
+  assert.strictEqual(fs.existsSync(legacyMapping), true,
+    'legacy schema /3 replay retains its historical visible mapping promise');
+  assert.match(fs.readFileSync(legacyMapping, 'utf8'),
+    /"Historisch\/Quelle\.docx";"Dokument-001-konvertiert\.md";"Nicht anonymisiert"/u);
+  assert.strictEqual(JSON.parse(fs.readFileSync(recordPath(legacyToken), 'utf8')).complete, true);
 
   console.log('RESULT FOLDER EXPORT PASS');
 } finally {
