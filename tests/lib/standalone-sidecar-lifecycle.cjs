@@ -31,9 +31,11 @@ if (path.resolve(process.argv[1]) === batchFile) {
     if (process.connected) await new Promise((resolve) => process.once('disconnect', resolve));
     fs.writeFileSync(path.join(root, 'worker-disconnected.json'), JSON.stringify({ pid: process.pid }));
     const result = await run(...args);
+    const terminalState = batch._test.readStateForMaintenance(token);
     fs.writeFileSync(path.join(root, 'worker-complete.json'), JSON.stringify({
       pid: process.pid, complete: result.complete, released: result.released,
-      progress: batch.readBatchProgress(token)
+      progress: batch.readBatchProgress(token),
+      items: terminalState.items.map((item) => ({ status: item.status, error_code: item.error_code || null }))
     }));
     clearTimeout(deadline);
     return result;

@@ -289,7 +289,8 @@ function removeOwnedRoot(root, initial) {
       const completed = await waitForFile(path.join(caseRoot, 'worker-complete.json'));
       assert.strictEqual(completed.pid, ready.pid);
       assert.strictEqual(completed.complete, true, `${scenario}: independent worker must finish its journal`);
-      assert.strictEqual(completed.released, 1, `${scenario}: real parser/package processing was not completed`);
+      assert.strictEqual(completed.released, 1,
+        `${scenario}: real parser/package processing was not completed: ${JSON.stringify(completed.items)}`);
       assert.strictEqual((await workerEnded(caseRoot)).code, 0);
       assert.strictEqual(fs.readFileSync(fixtureSource, 'utf8'), sourceText, 'original remains untouched');
       const log = fs.readFileSync(path.join(env.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
