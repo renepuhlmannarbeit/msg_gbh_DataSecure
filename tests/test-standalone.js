@@ -709,6 +709,17 @@ async function resultFolderReplayFailureCase() {
   });
 }
 
+async function networkResultFolderNoticeCase() {
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    isNetworkResultFolder: (selected) => selected === '\\\\server\\share'
+  }) });
+  assert.deepStrictEqual(await service.configureResults({ path: '\\\\server\\share' }), {
+    ok: true, configuration_changed: true, result_folder: '\\\\server\\share',
+    network_folder_notice: true, export_replay_pending: false,
+    local_ui_only: true, external_disclosure: false
+  });
+}
+
 async function busyCase() {
   const deps = fakeDependencies({
     lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false, batch_processing_active: true })
@@ -885,6 +896,7 @@ async function missingLedgerCase() {
   await testAsync('a missing worker acknowledgement consumes the admission exactly once', uncertainAdmissionStartCase);
   await testAsync('an incomplete worker start contract consumes the admission and fails closed', invalidAdmissionStartContractCase);
   await testAsync('a saved result folder remains successful when export replay is deferred', resultFolderReplayFailureCase);
+  await testAsync('a network result folder remains allowed and produces a visible notice', networkResultFolderNoticeCase);
   await testAsync('a running batch stops a second start with a fixed domain code', busyCase);
   await testAsync('a rejected batch or review lease never becomes a false continuation success', rejectedContinuationCase);
   await testAsync('a continuation requires an explicit worker acknowledgement', unconfirmedContinuationCase);

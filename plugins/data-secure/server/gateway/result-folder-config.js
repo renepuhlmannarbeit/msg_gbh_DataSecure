@@ -147,9 +147,14 @@ function resultOutputDirectory(options = {}) {
 function isCommonSyncFolder(root) {
   return /(?:^|[\\/])(?:OneDrive(?:\s*-\s*[^\\/]*)?|Dropbox|Google Drive|iCloud Drive)(?:[\\/]|$)/iu.test(String(root || ''));
 }
+function isNetworkResultFolder(root, platform = process.platform) {
+  const selected = String(root || '');
+  if (platform === 'win32') return /^(?:\\\\|\/\/)[^\\/]/u.test(selected);
+  return /^\/\/[^/]/u.test(selected);
+}
 
 module.exports = {
   CONFIG_NAME, SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, recordedResultRootPath,
   saveConfiguredResultRoot, clearConfiguredResultRoot, resultOutputDirectory,
-  isCommonSyncFolder, visibleResultTreeOverlaps
+  isCommonSyncFolder, isNetworkResultFolder, visibleResultTreeOverlaps
 };

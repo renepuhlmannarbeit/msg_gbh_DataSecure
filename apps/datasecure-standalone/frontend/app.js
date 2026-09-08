@@ -565,9 +565,11 @@ byId('configure-results').addEventListener('click', async () => {
     if (result.local_ui_only === true && result.external_disclosure === false) {
       byId('result-folder').textContent = result.result_folder || 'Noch nicht festgelegt';
     }
-    actionFeedback(result.export_replay_pending === true
-      ? 'Der neue Ordner ist gespeichert. Ausstehende Ergebnisse werden beim nächsten sicheren Wiederholungsversuch bereitgestellt.'
-      : 'Künftige Ergebnisse werden dort in einem eigenen Laufordner abgelegt.');
+    actionFeedback(result.network_folder_notice === true
+      ? 'Der Ordner ist gespeichert. Hinweis: Ergebnisse und Zuordnungsdateien können über dieses Netzlaufwerk an andere Systeme übertragen werden.'
+      : result.export_replay_pending === true
+        ? 'Der neue Ordner ist gespeichert. Ausstehende Ergebnisse werden beim nächsten sicheren Wiederholungsversuch bereitgestellt.'
+        : 'Künftige Ergebnisse werden dort in einem eigenen Laufordner abgelegt.');
   }
 });
 

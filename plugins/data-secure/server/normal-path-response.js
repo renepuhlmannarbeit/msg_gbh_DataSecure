@@ -32,6 +32,7 @@ function localOnlyStartResponse(started, options = {}) {
     next_action: 'local_intake_accepted_checkpoint_pending',
     gateway_version: VERSION,
     ...(options.syncFolderNotice === true ? { sync_folder_notice: true } : {}),
+    ...(options.networkFolderNotice === true ? { network_folder_notice: true } : {}),
     raw_content_sent_to_claude: false
   });
 }

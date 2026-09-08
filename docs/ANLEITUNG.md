@@ -140,7 +140,11 @@ Arbeitsordner sein, wird aber nicht automatisch aus einem Projekt erraten oder
 bei einem Projektwechsel geändert. Ein Ziel in OneDrive, iCloud, Dropbox oder Google
 Drive kann die freigegebenen, aber nicht garantiert rechtlich anonymen
 Ergebnisse mit diesem Dienst synchronisieren; Claude weist bei der Auswahl
-einmal darauf hin. Gelöschte oder bearbeitete Ergebnisdateien werden nicht
+einmal darauf hin. Ein ausdrücklich gewähltes Netzlaufwerk ist ebenfalls zulässig;
+DataSecure weist einmal darauf hin, dass Ergebnisse und bei Standalone auch die
+laufbezogene Zuordnungsdatei dadurch an andere Systeme übertragen werden können.
+Beide Hinweise sind reine Informationen und erzeugen keine weitere Bestätigung.
+Gelöschte oder bearbeitete Ergebnisdateien werden nicht
 wiederhergestellt oder überschrieben.
 
 Der private Standardbereich liegt unter `SecureDataMsg`.

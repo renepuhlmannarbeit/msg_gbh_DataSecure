@@ -598,6 +598,16 @@ async function unavailableModePreservesAdmissionCase() {
   assert.strictEqual(harness.elements['status-title'].textContent, 'Stapel wird vorbereitet');
 }
 
+async function networkResultFolderNoticeCase() {
+  const harness = await frontendHarness({
+    configure_results: () => ({ ok: true, result_folder: '\\\\server\\share',
+      network_folder_notice: true, local_ui_only: true, external_disclosure: false })
+  });
+  await harness.click('configure-results');
+  assert.match(harness.elements['action-feedback'].textContent, /Netzlaufwerk.*andere Systeme/u);
+  assert.strictEqual(harness.elements['result-folder'].textContent, '\\\\server\\share');
+}
+
 async function recoverableModeLockCase() {
   let state = { state: 'stopped', resumable_count: 1 };
   const harness = await frontendHarness({ get_public_state: () => state });
@@ -838,6 +848,7 @@ async function historyAdmissionRaceCase() {
   await testAsync('explicit Start sends one immutable camelCase processing mode and locks it before checkpoint', explicitStartModeCase);
   await testAsync('anonymization offers one explicit filename choice with neutral privacy-preserving default', explicitOutputNamingCase);
   await testAsync('unavailable conversion keeps the admission without a silent anonymization fallback', unavailableModePreservesAdmissionCase);
+  await testAsync('a configured network result folder produces a visible local warning', networkResultFolderNoticeCase);
   await testAsync('active and recoverable modes stay locked and global continue only opens history', recoverableModeLockCase);
   await testAsync('pure conversion stays selected during intake and reports raw results and OCR warnings honestly', pureConversionCase);
   done();

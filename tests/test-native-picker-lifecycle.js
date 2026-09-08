@@ -162,6 +162,7 @@ if (process.platform === 'win32') {
       clearConfiguredResultRoot: () => { configured = false; },
       resultOutputDirectory: () => path.join(resultRoot, 'DataSecure-Output'),
       isCommonSyncFolder: () => false,
+      isNetworkResultFolder: () => false,
       replayPendingResultExports: () => ({ exported: 0, pending: 0, failures: 0 }),
       reserveIntake: () => { if (reservationHeld) throw new Error('held'); reservationHeld = true; return { reservation_id: 'f'.repeat(64) }; },
       releaseIntake: () => { reservationHeld = false; return true; },
@@ -225,6 +226,7 @@ if (process.platform === 'win32') {
       resultOutputDirectory: () => { throw new Error('synthetic access denied'); },
       saveConfiguredResultRoot: () => { saves++; },
       isCommonSyncFolder: () => false,
+      isNetworkResultFolder: () => false,
       recordWorkflowEvent: () => {}
     });
     vm.runInContext(source, context);
@@ -248,6 +250,7 @@ if (process.platform === 'win32') {
       resultOutputDirectory: () => { if (outputFailure) throw outputFailure; },
       saveConfiguredResultRoot: () => { saves++; },
       isCommonSyncFolder: () => false,
+      isNetworkResultFolder: () => false,
       reserveIntake: () => ({ reservation_id: 'a'.repeat(64) }),
       releaseIntake: () => true,
       genericStatus: () => ({ engine_ready: true }),

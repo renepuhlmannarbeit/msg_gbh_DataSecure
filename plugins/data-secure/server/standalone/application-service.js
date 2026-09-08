@@ -199,6 +199,7 @@ function defaultDependencies() {
     readConfiguredResultRoot: resultFolder.readConfiguredResultRoot,
     saveConfiguredResultRoot: resultFolder.saveConfiguredResultRoot,
     resultOutputDirectory: resultFolder.resultOutputDirectory,
+    isNetworkResultFolder: resultFolder.isNetworkResultFolder,
     recordSupportTrace: supportTrace.recordSupportTrace,
     newTraceId: supportTrace.newTraceId,
     fs
@@ -722,6 +723,7 @@ class StandaloneApplicationService {
       try { replay = this.deps.replayPendingResultExports?.() || null; }
       catch { replay = { pending: true }; }
       return { ok: true, configuration_changed: true, result_folder: selected,
+        ...(this.deps.isNetworkResultFolder?.(selected) === true ? { network_folder_notice: true } : {}),
         export_replay_pending: replay?.pending === true || Number(replay?.pending || 0) > 0 ||
           Number(replay?.failures || 0) > 0,
         local_ui_only: true, external_disclosure: false };

@@ -76,6 +76,11 @@ weiterlaufen und müssen dort getrennt vom Anonymisierungsstatus sichtbar sein.
 - Fertige Exporte und das Mapping werden niemals automatisch gelöscht.
 - Der Privacy-Ordner muss lokal sein; Cloud-Sync, Netzwerkpfade und Links sind
   gesperrt.
+- Ein sichtbarer Ergebnisordner darf ausdrücklich auf einem Netzlaufwerk liegen.
+  DataSecure weist bei der Wahl einmal sichtbar darauf hin, dass Ergebnisse und
+  – bei Standalone-Anonymisierung – die laufbezogene Zuordnungsdatei dadurch an
+  andere Systeme übertragen werden können. Das ist kein zusätzlicher Dialog und
+  keine Sperre.
 
 ## Claude- und Plattformvertrag
 

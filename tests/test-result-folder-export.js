@@ -16,7 +16,7 @@ process.env.EU_PRIVACY_RESULT_ROOT = cowork;
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const {
   inspectRoot, readConfiguredResultRoot, saveConfiguredResultRoot,
-  resultOutputDirectory, isCommonSyncFolder
+  resultOutputDirectory, isCommonSyncFolder, isNetworkResultFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
   exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport, LEGACY_SCHEMA, validRecord,
@@ -57,6 +57,9 @@ try {
   assert.strictEqual(inspectRoot(cowork).root, path.resolve(cowork));
   assert.strictEqual(path.basename(resultOutputDirectory()), 'DataSecure-Output');
   assert.strictEqual(isCommonSyncFolder(path.join(base, 'OneDrive - Firma', 'Projekt')), true);
+  assert.strictEqual(isNetworkResultFolder('\\\\server\\share', 'win32'), true);
+  assert.strictEqual(isNetworkResultFolder('//server/share', 'linux'), true);
+  assert.strictEqual(isNetworkResultFolder('C:\\Results', 'win32'), false);
 
   const id1 = `ds_${'1'.repeat(32)}`;
   const id2 = `ds_${'2'.repeat(32)}`;

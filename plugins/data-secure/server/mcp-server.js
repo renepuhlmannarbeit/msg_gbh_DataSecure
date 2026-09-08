@@ -19,7 +19,7 @@ const {promptText}=require('./prompt-contract');
 const {INSTRUCTIONS}=require('./mcp-instructions');
 const {storageStatus}=require('./gateway/common');
 const {saveConfiguredPrivacyRoot,clearConfiguredPrivacyRoot}=require('./gateway/privacy-config');
-const {readConfiguredResultRoot,saveConfiguredResultRoot,clearConfiguredResultRoot,resultOutputDirectory,isCommonSyncFolder}=require('./gateway/result-folder-config');
+const {readConfiguredResultRoot,saveConfiguredResultRoot,clearConfiguredResultRoot,resultOutputDirectory,isCommonSyncFolder,isNetworkResultFolder}=require('./gateway/result-folder-config');
 const {replayPendingResultExports}=require('./gateway/result-export');
 const {schedulePendingResultExportReplay}=require('./gateway/result-export-replay');
 const {pickFolderAsync}=require('./companion/folder-picker');
@@ -158,7 +158,7 @@ async function chooseAndSaveResultFolder(context={}){
     resultOutputDirectory({root:selected});
     saveConfiguredResultRoot(selected);
     recordWorkflowEvent({event:'result_folder_picker_accepted',outcome:'ok'});
-    return{sync_notice:isCommonSyncFolder(selected)};
+    return{sync_notice:isCommonSyncFolder(selected),network_notice:isNetworkResultFolder(selected)};
   }catch(error){
     recordWorkflowEvent({event:'result_folder_picker_failed',outcome:'stopped',
       error_code:context.signal?.aborted?'LOCAL_SELECTION_CANCELLED':'RESULT_FOLDER_REQUIRED'});
@@ -178,6 +178,7 @@ async function configureResultFolder(args={},context={}){
     await STARTUP_RESULT_EXPORT_REPLAY.settled;
     const replay=replayPendingResultExports();
     return{ok:true,configuration_changed:true,result_folder_configured:true,sync_folder_notice:selected.sync_notice,
+      network_folder_notice:selected.network_notice,
       pending_exports:replay.pending+replay.failures,exported_now:replay.exported,raw_content_sent_to_claude:false};
   }finally{releaseNativeInteraction(owner);}
 }
@@ -230,6 +231,7 @@ async function startPickerBatch(args,context={}){
   let intakeReservation=null;
   let intakeReservationTransferred=false;
   let resultFolderSyncNotice=false;
+  let resultFolderNetworkNotice=false;
   try{
   try{intakeReservation=reserveIntake();}
   catch{return withDiagnostic({ok:false,error:'batch_active',message:'Eine lokale DataSecure-Auswahl oder Stapelübernahme ist bereits aktiv. Es wurde keine weitere Auswahl geöffnet.',mode,local_processing_started:false,next_action:'no_action',raw_content_sent_to_claude:false},'reservation','BATCH_ACTIVE',false);}
@@ -241,7 +243,11 @@ async function startPickerBatch(args,context={}){
   // another processor owns the active slot. The one-time folder choice is a
   // setup step of an actually admissible run, not a readiness probe.
   if(!readConfiguredResultRoot()){
-    try{resultFolderSyncNotice=(await chooseAndSaveResultFolder(context)).sync_notice===true;}
+    try{
+      const chosenResultFolder=await chooseAndSaveResultFolder(context);
+      resultFolderSyncNotice=chosenResultFolder.sync_notice===true;
+      resultFolderNetworkNotice=chosenResultFolder.network_notice===true;
+    }
     catch(error){
       if(context.signal?.aborted||error?.code==='LOCAL_SELECTION_CANCELLED')return cancelled('result_folder');
       // Name the actual, path-free reason: the user did choose a folder. A
@@ -313,7 +319,8 @@ async function startPickerBatch(args,context={}){
     // local-only route cannot use it and must not expose it to Cowork merely
     // because a background worker needs it. Recovery is intentionally routed
     // through the explicit most-recent-batch action instead.
-    const response=localOnlyStartResponse(started,{syncFolderNotice:resultFolderSyncNotice});
+    const response=localOnlyStartResponse(started,{syncFolderNotice:resultFolderSyncNotice,
+      networkFolderNotice:resultFolderNetworkNotice});
     recordWorkflowEvent({event:'mcp_start_response',outcome:response.ok?'ok':'stopped',item_count:selected.length,
       error_code:response.ok?'NONE':'LOCAL_WORKER_SPAWN_FAILED'});
     return response;

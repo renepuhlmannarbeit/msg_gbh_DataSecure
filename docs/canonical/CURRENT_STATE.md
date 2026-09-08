@@ -986,7 +986,11 @@ Der Ergebnisstamm ist gemäß DS-080 eine ausdrückliche geräte- und
 produktlokale Benutzereinstellung. Er wird beim Start identitätsgebunden an den
 Stapel übernommen und nur über „Ergebnisordner ändern“ gewechselt. Cowork stellt
 keinen belastbaren Projektpfad bereit; DataSecure errät ihn nicht und fragt auch
-nicht pro Projekt oder Stapel erneut. Gemäß DS-079 gibt es keine sichtbare
+nicht pro Projekt oder Stapel erneut. Liegt das ausdrücklich gewählte Ziel auf
+einem Netzlaufwerk, geben Cowork und Standalone einmal einen Hinweis aus, ohne es
+zu sperren oder eine weitere Bestätigung zu verlangen. Der Hinweis enthält keinen
+Pfad; Standalone benennt zusätzlich die mögliche Übertragung der laufbezogenen
+Zuordnungsdatei. Gemäß DS-079 gibt es keine sichtbare
 Teilprojektion bereits klarer Positionen in Mischstapeln.
 
 ### BL-041 – Claude-Übergabe

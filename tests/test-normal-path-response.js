@@ -2,6 +2,7 @@
 
 const { createSuite } = require('./helpers');
 const { localOnlyStartResponse } = require('../plugins/data-secure/server/normal-path-response');
+const { isNetworkResultFolder } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const { VERSION } = require('../plugins/data-secure/server/version');
 
 const { test, done, assert } = createSuite('Local-only start response');
@@ -47,6 +48,14 @@ test('reports the one-time sync-folder notice without exposing a path', () => {
   const result = localOnlyStartResponse({ ok: true, local_intake_pending: true }, { syncFolderNotice: true });
   assert.strictEqual(result.sync_folder_notice, true);
   assert.doesNotMatch(JSON.stringify(result), /OneDrive|Dropbox|[A-Z]:[\\/]/iu);
+});
+
+test('reports the one-time network-folder notice without exposing a path', () => {
+  const result = localOnlyStartResponse({ ok: true, local_intake_pending: true }, {
+    networkFolderNotice: isNetworkResultFolder('\\\\server\\share', 'win32')
+  });
+  assert.strictEqual(result.network_folder_notice, true);
+  assert.doesNotMatch(JSON.stringify(result), /server|share|[A-Z]:[\\/]/iu);
 });
 
 done();
