@@ -16,11 +16,20 @@ const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
 const sidecar = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js'), 'utf8');
 const nativeSmoke = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
 const productVersion = require('../package.json').version;
+const iconDirectory = path.join(root, 'tauri-contract/icons');
 
 test('desktop manifests, Rust package and artifact names use the product version', () => {
   assert.strictEqual(config.version, productVersion);
   assert.match(cargo, new RegExp(`^version = "${productVersion.replaceAll('.', '\\.') }"$`, 'mu'));
   for (const target of targets.targets) assert.ok(target.package_filename.includes(productVersion));
+});
+
+test('fresh Windows and macOS checkouts contain explicit native icon sources', () => {
+  assert.deepStrictEqual(config.bundle.icon, ['icons/icon.png', 'icons/icon.ico']);
+  const png = fs.readFileSync(path.join(iconDirectory, 'icon.png'));
+  const ico = fs.readFileSync(path.join(iconDirectory, 'icon.ico'));
+  assert.strictEqual(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.ok(ico.length > 6 && ico.readUInt16LE(0) === 0 && ico.readUInt16LE(2) === 1);
 });
 
 test('one target catalog binds product names to exact Rust target triples', () => {
