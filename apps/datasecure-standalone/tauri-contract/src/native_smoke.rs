@@ -194,6 +194,11 @@ mod tests {
             .as_nanos();
         let root = std::env::temp_dir().join(format!(".tmp-standalone-native-{id:032x}"));
         std::fs::create_dir(&root).unwrap();
+        // macOS commonly exposes its temporary directory through `/var`, while
+        // the real filesystem location is `/private/var`. The production
+        // validator correctly rejects symlinked ancestors, so exercise it with
+        // the canonical identity of the directory we just created.
+        let root = std::fs::canonicalize(root).unwrap();
         let exe =
             root.join("candidate/DataSecure-Standalone-test-windows-x64/DataSecure Standalone.exe");
         std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
