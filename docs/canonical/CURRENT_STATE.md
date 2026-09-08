@@ -10,6 +10,12 @@ Die native Zielprüfung behandelt unter Windows das Reparse-Attribut nun bei
 Eingabe **und** Ergebnisöffnung gleich und übergibt Junction-Ziele nicht an den
 Explorer. Frontend-, Desktop-Vertrags- und Rust-Tests belegen beide Grenzen.
 
+Der Netzwerkvertrag benennt den MCP-Hauptprozess präzise als Metadaten-,
+Zustands- und Exportkoordinator: Er exportiert nur verifizierte anonymisierte
+Paketbytes und verarbeitet keinen Original- oder Review-Rohtext. Parser, OCR und
+Review behalten die eigene Netzwerk-Deny-Grenze; beide Plugin-Konfigurationen
+werden auf den kleinen MCP-Einstiegspunkt geprüft.
+
 ## Aktueller Entwicklungsstand RC123 / DS-092
 
 Der Cowork-Normalweg übernimmt die gemeinsam nutzbaren Korrekturen der

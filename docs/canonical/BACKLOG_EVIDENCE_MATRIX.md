@@ -6,6 +6,12 @@ E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
 Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 
+RC124 / BL-020.3 präzisiert die Netzwerkgrenze: Parser, OCR und Review laden
+den Netzwerk-Deny-Guard, während der MCP-Hauptprozess nur Metadaten, Zustand und
+bereits verifizierte anonymisierte Exportbytes koordiniert. Der Einstiegspunkt
+und die quellseitige sowie – sofern gebaut – ausgelieferte `.mcp.json` werden
+gemeinsam geprüft. Native OS-Sandbox-Evidenz bleibt E1/E3.
+
 RC124 / BL-021.1 trennt bei Personenfeldern die schreibweisenunabhängige
 Labelerkennung von der großschreibungsgebundenen Wertgrammatik. Zeilen- und
 Inline-Felder ziehen dadurch kein nachfolgendes kleingeschriebenes Prosawort in

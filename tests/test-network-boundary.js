@@ -45,6 +45,30 @@ test('parser and fixed background roles launch the packaged guard before private
   assert.match(bootstrap, /__DATASECURE_NETWORK_DENY_ACTIVE__/u);
 });
 
+test('the MCP entry point is metadata-only and both plugin configs launch that exact boundary', () => {
+  const entryPath = path.join(root, 'plugins', 'data-secure', 'server', 'index.js');
+  const entry = fs.readFileSync(entryPath, 'utf8');
+  assert.match(entry, /require\('\.\/mcp-server'\)/u);
+  assert.doesNotMatch(entry, /network-deny\.cjs/u,
+    'the MCP metadata/export coordinator is outside the raw-content subprocess guard');
+
+  const configPaths = [
+    path.join(root, 'plugins', 'data-secure', '.mcp.json'),
+    path.join(root, 'dist', 'marketplace-repo', 'plugins', 'data-secure', '.mcp.json')
+  ];
+  for (const [index, configPath] of configPaths.entries()) {
+    if (!fs.existsSync(configPath)) continue;
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const server = config.mcpServers && config.mcpServers['data-secure-local'];
+    assert.ok(server);
+    assert.strictEqual(server.command, index === 0
+      ? 'node'
+      : '${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node');
+    assert.deepStrictEqual(server.args, ['${CLAUDE_PLUGIN_ROOT}/server/index.js']);
+    assert.ok(!Object.keys(server.env || {}).some((name) => /^https?_proxy$/iu.test(name)));
+  }
+});
+
 test('the persistent batch worker strips proxy, Node and cloud credential controls', () => {
   const { batchWorkerEnvironment } = require('../plugins/data-secure/server/gateway/batch-executor');
   const clean = batchWorkerEnvironment({

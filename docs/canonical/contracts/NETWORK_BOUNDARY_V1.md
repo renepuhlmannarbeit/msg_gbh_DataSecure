@@ -2,10 +2,19 @@
 
 Status: **Engineering-Vertrag, Node-Grenze unter Windows lokal belegt** · Story: BL-020.3
 
-Rohinhalte dürfen in Parser, OCR, Review und Export keine ausgehende oder
-eingehende Netzwerkfähigkeit erhalten. Das gilt gleichermaßen für Internet,
-Loopback, RFC1918-/ULA-Privatnetze und DNS. Ein lokaler HTTP-Server ist kein
-zulässiger Ersatz für geerbtes `stdio`.
+Rohinhalte dürfen in Parser, OCR und Review keine ausgehende oder eingehende
+Netzwerkfähigkeit erhalten. Das gilt gleichermaßen für Internet, Loopback,
+RFC1918-/ULA-Privatnetze und DNS. Ein lokaler HTTP-Server ist kein zulässiger
+Ersatz für geerbtes `stdio`.
+
+Der MCP-Hauptprozess ist Metadaten-, Zustands- und Exportkoordinator. Sein
+sichtbarer Export verarbeitet ausschließlich bereits verifizierte,
+anonymisierte Paketbytes und niemals Original- oder Review-Rohtext. Er lädt den
+Subprozess-Guard deshalb nicht: native Dialoge und lokale Dateihandoffs bleiben
+im Hauptprozess verfügbar. Der Export-Replay-Worker ist ein `worker_threads`-
+Worker desselben Prozesses und keine eigene Sicherheitsgrenze. Dass beide
+`.mcp.json`-Projektionen exakt den kleinen Einstiegspunkt `server/index.js`
+starten, wird als eigener Vertrag geprüft.
 
 ## Zweistufige Grenze
 
