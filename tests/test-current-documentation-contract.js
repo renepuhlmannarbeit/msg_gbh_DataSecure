@@ -68,6 +68,12 @@ test('every current release header matches the package version', () => {
   }
 });
 
+test('the Cowork release candidate does not imply a same-version Standalone package', () => {
+  const release = read('docs/RELEASE.md');
+  assert.match(release, /Ein Standalone-Paket desselben\s+RC-Stands ist damit nicht behauptet/u);
+  assert.doesNotMatch(release, /Ein RC\d+-Standalone-Paket ist\s+damit nicht behauptet/u);
+});
+
 test('DS-067 deletion and retention wording is present across active contracts', () => {
   const text = activeDocs.map(read).join('\n');
   assert.match(text, /0[–-]14 Tage/u);

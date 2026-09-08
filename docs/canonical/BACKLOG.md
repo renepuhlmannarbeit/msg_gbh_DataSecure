@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 08.09.2026 · Produktstand 3.2.0-rc124
+Stand: 08.09.2026 · Produktstand 3.2.0-rc125
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -20,6 +20,22 @@ sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
 Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
+
+### RC125 – unabhängige Revalidierung
+
+Der aktuelle Stand wurde erneut gegen die offizielle Claude-/Cowork-
+Sitzungsarchitektur und alle automatisierten Produktverträge geprüft. Die
+Cloud-/Local-Grenze bleibt unverändert bindend und ist im aktiven Reviewbericht
+aktualisiert: Originale nur im nachweislich lokalen Desktop-/Plugin-MCP-Weg;
+Cloud-Cowork darf nur bereits freigegebene Ergebnisse erhalten.
+
+Der brüchige Prompt-Nachtrag, der einen historischen Vier-Format-Satz erst zur
+Laufzeit durch die Sechs-Format-Regel ersetzte, ist entfernt. Der SEA-
+Crashvertrag verfolgt jetzt sowohl die direkte als auch die Markdown-first-
+Konvertierung bis zum gemeinsam veröffentlichten Extraktionscheckpoint. Beide
+Befunde sind E0 geschlossen und erzeugen keine neue Story. Weiter offen bleiben
+nur die bereits vorhandenen, ausdrücklich als Zielhost-, UAT-, Performance- oder
+Fachevidenz gekennzeichneten Backlogpunkte.
 
 ### RC124 – DS-093: Cowork-Officequellen über lokales Markdown
 

@@ -1,10 +1,19 @@
 # Entscheidungs-Traceability
 
-Stand: 08.09.2026 · 3.2.0-rc124
+Stand: 08.09.2026 · 3.2.0-rc125
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC125 bindet die erneute Hersteller- und Produktrevalidierung an
+`docs/REVIEW_CLAUDE_COWORK_2026-09-01.md`, `prompt-contract.js` und
+`test-sea-batch-resume-contract.js`. Der Prompt veröffentlicht die aktuelle
+Sechs-Format-Regel ohne historische Stringersetzung. Der Crashvertrag verlangt
+für direkte und Markdown-first-Konvertierung ein abgeschlossenes `await` sowie
+den erwarteten isolierten Parser-Close, bevor `onExtracted` den Checkpoint setzt.
+Dokumentations-, Manifest-, Prompt-, SEA-, Standalone-, Produkt- und Paketgates
+bilden die Gegenprüfung; Zielhost-UAT bleibt davon getrennte menschliche Evidenz.
 
 RC124 / DS-093 / BL-010.34 bindet XLSX und PPTX im Cowork-Plugin an eine
 lokale Markdown-first-Pipeline. `core/markdown-first-privacy.js` kapselt den

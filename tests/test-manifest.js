@@ -64,6 +64,8 @@ test('version synchronization changes release labels without relabelling histori
     'version sync must not replace historical RC labels throughout current documents');
   assert.match(script, /Current synthetic-corpus baseline/u);
   assert.match(script, /Engineering-Pilot/u);
+  assert.match(script, /\(\?=\[\^\\n\]\*\$\)/u,
+    'version headers with a product suffix must remain synchronizable');
 });
 
 test('no runtime module hard-codes a version literal of its own', () => {
@@ -185,7 +187,11 @@ test('MCPB prompt list matches the prompts the server exposes', () => {
 });
 
 test('MCPB prompt texts use the same direct-picker contract as the runtime', () => {
-  const { manifestPromptText, OPEN_BATCH_DECISION_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
+  const { manifestPromptText, OPEN_BATCH_DECISION_TEXT, COWORK_FORMAT_TEXT,
+    NETWORK_FOLDER_NOTICE_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
+  const source = readText(path.join(runtime, 'prompt-contract.js'));
+  assert.doesNotMatch(source, /PDF und alle Formate außer TXT, Markdown, CSV und DOCX bleiben im Pilot gesperrt/u,
+    'the prompt source must not retain a stale format rule for runtime string replacement');
   for (const prompt of mcpb.prompts) {
     assert.strictEqual(prompt.text, manifestPromptText(prompt.name), `${prompt.name} prompt contract drift`);
     assert.match(prompt.text, /genau einmal start_document_batch_from_picker/u, `${prompt.name} must use the direct local picker`);
@@ -194,6 +200,8 @@ test('MCPB prompt texts use the same direct-picker contract as the runtime', () 
     assert.match(prompt.text, /Originale nie per Chat-Anhang oder Fremdwerkzeug/u, `${prompt.name} must forbid upload workarounds`);
     assert.match(prompt.text, /bei batch_active/iu, `${prompt.name} must wait for an active local batch`);
     assert.ok(prompt.text.includes(OPEN_BATCH_DECISION_TEXT), `${prompt.name} must use the canonical open-batch decision`);
+    assert.ok(prompt.text.includes(COWORK_FORMAT_TEXT), `${prompt.name} must use the canonical six-format rule`);
+    assert.ok(prompt.text.includes(NETWORK_FOLDER_NOTICE_TEXT), `${prompt.name} must use the canonical network-folder notice`);
     assert.match(prompt.text, /local_selection_cancelled nichts erneut öffnen/u, `${prompt.name} must keep picker cancellation terminal`);
     assert.match(prompt.text, /sync_folder_notice=true/u,
       `${prompt.name} must preserve the one-time cloud-sync disclosure`);

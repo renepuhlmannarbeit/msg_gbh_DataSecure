@@ -106,7 +106,7 @@ const rcLabel = (version) => {
 };
 patchText('README.md', /^(# GBH DataSecure .*? v)\d+\.\d+\.\d+ RC\d+$/mu,
   `$1${releaseLabel(target)}`);
-patchText('docs/ANLEITUNG.md', /^(Stand:[^\n]*?Version )\d+\.\d+\.\d+ RC\d+$/mu,
+patchText('docs/ANLEITUNG.md', /^(Stand:[^\n]*?Version )\d+\.\d+\.\d+ RC\d+(?=[^\n]*$)/mu,
   `$1${releaseLabel(target)}`);
 patchText('docs/ANWENDERREVIEW.md', /^(Stand:[^\n]*?gegen )\d+\.\d+\.\d+(?:-rc\d+)?/mu,
   `$1${target}`);
@@ -118,7 +118,7 @@ patchText('docs/FORMAT_COVERAGE_MATRIX.md',
   `$1${releaseLabel(target)}`);
 for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md',
   'docs/RELEASE.md', 'docs/TESTING.md']) {
-  patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?$/mu, `$1${target}`);
+  patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?(?=[^\n]*$)/mu, `$1${target}`);
 }
 patchText('docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
   /^(Stand:[^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?$/mu,

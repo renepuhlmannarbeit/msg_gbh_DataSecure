@@ -1,7 +1,8 @@
 # Claude-/Cowork-Revalidierung
 
-Stand: 05.09.2026 · Produktarbeitsstand RC99 · zeitgebundener Herstellerabgleich
-(Cowork-Host- und Marketplace-Aussagen am 05.09.2026 erneut abgerufen; DS-078)
+Stand: 08.09.2026 · Produktarbeitsstand RC125 · zeitgebundener Herstellerabgleich
+(Cowork-Host-, Plugin- und Marketplace-Aussagen am 08.09.2026 erneut abgerufen;
+DS-078/DS-093)
 
 ## Aktuell belegte Herstelleraussagen
 
@@ -73,7 +74,10 @@ MCP sind kein Ersatz.
   Projektpfad und wechselt das Ziel bei einem Projektwechsel nicht. Danach
   benötigt der Normalweg nur die Quellenwahl;
   ausschließlich freigegebenes Markdown wird unter `DataSecure-Output` sichtbar.
-- TXT, Markdown, CSV und DOCX sind freigegeben; weitere Formate stoppen fail-closed.
+- TXT, Markdown, CSV und DOCX werden direkt verarbeitet. XLSX und PPTX werden
+  durch den lokalen isolierten Office-Parser in Markdown extrahiert; ausschließlich
+  dieses Markdown wird anonymisiert. PDF, Scan-PDF und eigenständige Bilder
+  stoppen im Cowork-Produkt weiterhin fail-closed.
 - Bildpixel bleiben lokal; es gibt keinen auswählbaren Bildmodus.
 - Nur temporäre Arbeits-/Reviewdaten haben 0–14 Tage Aufbewahrung. Originale und
   fertige Exporte werden niemals automatisch gelöscht.
@@ -82,6 +86,24 @@ MCP sind kein Ersatz.
   Node.js-22.23.2-Runtime. Der Produktstart installiert nichts nach und benötigt
   kein System-Node. Der reale Windows-x64-Smoke mit leerem `PATH` ist grün;
   macOS Intel/ARM bleiben bis zum Zielhostlauf ungeprüft.
+
+## RC125-Gegenprüfung
+
+Der erneute Abgleich bestätigt die zuvor dokumentierte, inzwischen besonders
+wichtige Sitzungsgrenze: Cowork startet Sitzungen standardmäßig in der Cloud.
+Lokale Plugin-MCP-Server laufen nur in einer lokalen Sitzung eines bestehenden
+Claude-Desktop-Deployments; eine Cloud-Sitzung kann lokale Dateien zwar über die
+geöffnete Desktop-App erreichen, verarbeitet sie dann aber auf Anthropic-
+Infrastruktur. DataSecure darf Originale deshalb weiterhin ausschließlich über
+seinen eigenen Betriebssystempicker an den nachweislich laufenden lokalen MCP
+übergeben. Skill-Sichtbarkeit allein ist kein Laufzeitnachweis.
+
+Die RC124-Officefreigabe ändert diese Grenze nicht. XLSX/PPTX werden nur im
+lokalen Pluginprozess extrahiert. Der Promptvertrag enthält die sechs aktuell
+freigegebenen Formate jetzt direkt als kanonischen Textbaustein, statt einen
+veralteten Vier-Format-Satz nachträglich per Stringersetzung umzuschreiben. Der
+SEA-Crashvertrag prüft beide asynchronen Konvertierungszweige und die neue
+Markdown-first-Schicht vor Veröffentlichung des `extracted`-Checkpoints.
 
 ## Offene menschliche Nachweise
 

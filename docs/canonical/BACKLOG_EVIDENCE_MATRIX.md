@@ -1,10 +1,16 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 08.09.2026 · 3.2.0-rc124
+Stand: 08.09.2026 · 3.2.0-rc125
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
 Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
+
+RC125 revalidiert die Cloud-/Local-Cowork-Grenze gegen die aktuelle offizielle
+Herstellerdokumentation und bindet den direkten Sechs-Format-Prompt sowie beide
+asynchronen Konvertierungszweige an ausführbare Verträge. Vollständige
+Produkt-, Standalone-, Dokumentations-, Skill-, SEA- und Paketgates bilden E0;
+die bereits verzeichneten Zielhost- und Anwendernachweise bleiben E1/E2.
 
 RC124 / DS-093 / BL-010.34 bindet XLSX/PPTX im Cowork-Plugin an den
 ausgelieferten isolierten Office-Parser und danach an denselben Privacy-Core.

@@ -1,6 +1,26 @@
 # Aktueller Iststand
 
-Stand: 08.09.2026 · 3.2.0-rc124 · lokale Office-Markdown-Pipeline in Cowork
+Stand: 08.09.2026 · 3.2.0-rc125 · unabhängige Produkt- und Cowork-Revalidierung
+
+## Aktueller Entwicklungsstand RC125 – unabhängige Revalidierung
+
+Der vollständige RC124-Stand wurde erneut gegen die am 08.09.2026 abrufbare
+offizielle Anthropic-Dokumentation, beide Produktprojektionen, Runtime-, Prompt-,
+IPC-, Paket-, Recovery- und Dokumentationsverträge geprüft. Die zentrale
+Produktgrenze bleibt korrekt: Originale dürfen nur über den DataSecure-
+Betriebssystempicker in einer nachweislich lokalen Claude-Desktop-/Cowork-Sitzung
+mit laufendem Plugin-MCP eingehen. Cloud-Cowork läuft inzwischen standardmäßig
+auf Anthropic-Infrastruktur; eine geöffnete Desktop-App macht daraus keine lokale
+Sitzung. Standalone bleibt davon vollständig unabhängig.
+
+Zwei technische Reviewbefunde sind geschlossen. Der Cowork-Prompt erzeugt die
+aktuelle Sechs-Format-Regel nun direkt aus einem benannten Vertragsbaustein und
+enthält keinen still ersetzten historischen Vier-Format-Satz mehr. Außerdem
+prüft der SEA-Crashvertrag nach der Markdown-first-Erweiterung beide `await`-
+Konvertierungszweige sowie das Await innerhalb der gemeinsamen Extraktionsschicht,
+bevor ein `extracted`-Checkpoint veröffentlicht werden darf. Dadurch ist der
+Test wieder an die wirkliche Laufzeitstruktur gebunden, ohne die Invariante
+abzuschwächen.
 
 ## Aktueller Entwicklungsstand RC124 / DS-093
 

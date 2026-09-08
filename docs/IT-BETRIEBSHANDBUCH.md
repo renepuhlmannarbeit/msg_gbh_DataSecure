@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 08.09.2026 · 3.2.0-rc124 · Cowork-Plugin; Standalone separat
+Stand: 08.09.2026 · 3.2.0-rc125 · Cowork-Plugin; Standalone separat
 
 ## Produktkanäle
 

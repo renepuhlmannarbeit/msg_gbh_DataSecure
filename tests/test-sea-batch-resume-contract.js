@@ -211,6 +211,7 @@ test('failure codes and report fields distinguish an observed crash from a misse
 test('extracted is published only after isolated parser close and awaited conversion', () => {
   const runtime = fs.readFileSync(path.join(path.dirname(file), 'runtime.js'), 'utf8');
   const pipeline = fs.readFileSync(path.join(path.dirname(file), 'gateway/orchestrator.js'), 'utf8');
+  const markdownFirst = fs.readFileSync(path.join(path.dirname(file), 'core/markdown-first-privacy.js'), 'utf8');
   const processor = fs.readFileSync(path.join(path.dirname(file), 'gateway/batch-item-processor.js'), 'utf8');
   const convertStart = runtime.indexOf('async function convertDocument(');
   assert.ok(convertStart >= 0);
@@ -222,9 +223,14 @@ test('extracted is published only after isolated parser close and awaited conver
   assert.strictEqual((conversion.match(/finish\(null,/gu) || []).length, 1,
     'a new successful return path requires crash-safety revalidation');
   assert.strictEqual((conversion.match(/resolve\(value\)/gu) || []).length, 1);
-  const awaited = pipeline.indexOf('const converted = await (deps.convertDocument || convertDocument)(');
+  const assignment = pipeline.indexOf('const converted = markdownFirstPrivacy');
+  const markdownFirstAwaited = pipeline.indexOf('? await ', assignment);
+  const directAwaited = pipeline.indexOf(': await ', assignment);
   const extracted = pipeline.indexOf('if (deps.onExtracted) await deps.onExtracted(converted);');
-  assert.ok(awaited >= 0 && extracted > awaited);
+  assert.ok(assignment >= 0 && markdownFirstAwaited > assignment && directAwaited > markdownFirstAwaited &&
+    extracted > directAwaited, 'both conversion branches must complete before extracted is published');
+  assert.match(markdownFirst, /extraction\s*=\s*await\s+convert\(/u,
+    'Markdown-first conversion must await its isolated converter before returning');
   assert.match(processor, /onExtracted:\s*async\s*\(converted\)\s*=>\s*\{\s*checkpoint\('extracted', 'conversion_and_visual_scan'\);/u);
 });
 
