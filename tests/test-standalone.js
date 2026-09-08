@@ -19,25 +19,31 @@ const {
 const { enumerateSourceFolderAsync } = require('../plugins/data-secure/server/companion/source-folder');
 
 const { test, testAsync, done, assert } = createSuite('Standalone product');
+const FIXTURE_SOURCE_ROOT = path.resolve(os.tmpdir(), 'datasecure-unit-source');
+const FIXTURE_SOURCE_A = path.join(FIXTURE_SOURCE_ROOT, 'a.txt');
+const FIXTURE_SOURCE_B = path.join(FIXTURE_SOURCE_ROOT, 'b.txt');
+const FIXTURE_RESULT_ROOT = path.resolve(os.tmpdir(), 'datasecure-unit-results');
+const FIXTURE_RESULT_RUN = path.join(FIXTURE_RESULT_ROOT, 'DataSecure-Output', 'Lauf-20260904-120000-abcdef12');
+const FIXTURE_MAPPING = path.resolve(os.tmpdir(), 'datasecure-unit-private', 'DataSecure-Mapping.csv');
 
 function fakeDependencies(overrides = {}) {
   const traces = [];
   return {
     traces,
     lightweightStatus: () => ({ engine_ready: true, local_intake_pending: false, batch_processing_active: false }),
-    latestProductResultDirectory: () => 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
-    readConfiguredResultRoot: () => 'C:\\Results',
+    latestProductResultDirectory: () => FIXTURE_RESULT_RUN,
+    readConfiguredResultRoot: () => FIXTURE_RESULT_ROOT,
     saveConfiguredResultRoot: () => {},
-    resultOutputDirectory: () => 'C:\\Results\\DataSecure-Output',
+    resultOutputDirectory: () => path.join(FIXTURE_RESULT_ROOT, 'DataSecure-Output'),
     openFolder: () => ({ ok: true }),
     revealFile: () => ({ ok: true }),
-    mappingPath: () => 'C:\\Private\\DataSecure-Mapping.csv',
-    pickSourcesAsync: async () => [{ sourcePath: 'C:\\Source\\a.txt', sourceType: 'txt', sourceBytes: 4 }],
+    mappingPath: () => FIXTURE_MAPPING,
+    pickSourcesAsync: async () => [{ sourcePath: FIXTURE_SOURCE_A, sourceType: 'txt', sourceBytes: 4 }],
     validateSelectedPathAsync: async (sourcePath) => ({ sourcePath, sourceType: 'txt', sourceBytes: 4 }),
-    pickSourceFolderAsync: async () => 'C:\\Source',
-    enumerateSourceFolderAsync: async () => [{ sourcePath: 'C:\\Source\\a.txt', sourceType: 'txt', sourceBytes: 4 }],
+    pickSourceFolderAsync: async () => FIXTURE_SOURCE_ROOT,
+    enumerateSourceFolderAsync: async () => [{ sourcePath: FIXTURE_SOURCE_A, sourceType: 'txt', sourceBytes: 4 }],
     batchQueueFromSelection,
-    pickFolderAsync: async () => 'C:\\Results',
+    pickFolderAsync: async () => FIXTURE_RESULT_ROOT,
     reserveIntake: () => ({ reservation_id: 'r'.repeat(32) }),
     releaseIntake: () => {},
     startLocalIntakeExecutor: () => ({ ok: true, local_intake_pending: true,
@@ -53,8 +59,12 @@ function fakeDependencies(overrides = {}) {
 
 test('Standalone has an isolated product namespace and a simple default output', () => {
   const root = standaloneDataRoot({ platform: 'linux', environment: { XDG_DATA_HOME: '/data' }, home: '/home/u' });
-  assert.strictEqual(root, path.join('/data', 'SecureDataMsg-Standalone'));
-  assert.strictEqual(path.relative(path.join('/data', 'SecureDataMsg'), root).startsWith('..'), true);
+  assert.strictEqual(root, path.posix.join('/data', 'SecureDataMsg-Standalone'));
+  assert.strictEqual(path.posix.relative(path.posix.join('/data', 'SecureDataMsg'), root).startsWith('..'), true);
+  assert.strictEqual(standaloneDataRoot({ platform: 'darwin', environment: {}, home: '/Users/u' }),
+    '/Users/u/Library/Application Support/SecureDataMsg-Standalone');
+  assert.strictEqual(standaloneDataRoot({ platform: 'win32', environment: { LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local' } }),
+    'C:\\Users\\u\\AppData\\Local\\SecureDataMsg-Standalone');
   assert.strictEqual(defaultResultRoot({ home: '/home/u' }), path.join('/home/u', 'Documents', 'SecureDataMsg'));
   assert.strictEqual(defaultResultRoot({ home: '/ignored', environment: {
     DATASECURE_STANDALONE_DOCUMENTS_DIR: '/mounted/Documents'
@@ -76,7 +86,7 @@ test('Standalone accepts Windows LOCALAPPDATA virtualization when directory iden
   };
   assert.strictEqual(activateStandaloneNamespace({ platform: 'win32', dataRoot: root, fs: io, environment }), root);
   assert.strictEqual(environment.EU_PRIVACY_DATA_ROOT, root);
-  assert.strictEqual(environment.EU_PRIVACY_ROOT, path.join(root, 'workspace'));
+  assert.strictEqual(environment.EU_PRIVACY_ROOT, path.win32.join(root, 'workspace'));
 });
 
 test('Standalone still rejects a redirected POSIX data root', () => {
@@ -480,7 +490,7 @@ async function processingModeServiceCase() {
       return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
     }
   }) });
-  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await service.admitSelectedSources([FIXTURE_SOURCE_A]);
   const queue = service.admittedQueue;
   const selection = service.selectionContext;
   for (const options of [{}, null, [], { processingMode: null },
@@ -502,12 +512,12 @@ async function processingModeServiceCase() {
   assert.strictEqual(workerOptions.outputNamingMode, 'neutral', 'new internal callers default to privacy-preserving names');
   assert.strictEqual(workerProfile, 'general');
   assert.strictEqual(service.admittedQueue, null);
-  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await service.admitSelectedSources([FIXTURE_SOURCE_A]);
   await service.startAdmittedBatch({ processingMode: 'markdown-only' });
   assert.strictEqual(workerOptions.processingMode, 'markdown-only', 'pure conversion is handed off without an anonymization fallback');
   assert.strictEqual(Object.hasOwn(workerOptions, 'outputNamingMode'), false);
   assert.strictEqual(launches, 2);
-  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await service.admitSelectedSources([FIXTURE_SOURCE_A]);
   await service.startAdmittedBatch({ processingMode: 'markdown-and-anonymize', outputNamingMode: 'source-with-suffix' });
   assert.strictEqual(workerOptions.outputNamingMode, 'source-with-suffix', 'the explicit readable-name choice crosses the service boundary');
   assert.strictEqual(launches, 3);
@@ -518,7 +528,7 @@ async function processingModeServiceCase() {
       return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
     }
   }) });
-  await direct.admitSelectedSources(['C:\\Source\\a.txt']);
+  await direct.admitSelectedSources([FIXTURE_SOURCE_A]);
   await direct.startAdmittedBatch();
 }
 
@@ -543,17 +553,17 @@ async function admittedServiceCase() {
     }
   });
   const service = new StandaloneApplicationService({ dependencies: deps });
-  const admitted = await service.admitSelectedSources(['C:\\Source\\a.txt', 'C:\\Source\\b.txt']);
+  const admitted = await service.admitSelectedSources([FIXTURE_SOURCE_A, FIXTURE_SOURCE_B]);
   assert.deepStrictEqual(admitted, {
     ok: true, event: 'selection_summarized', selected_count: 2, total_bytes: 8,
     direct_count: 2, convertible_count: 0, blocked_count: 0, encrypted_count: 0,
     ui_context: {
       ok: true,
-      result_folder: 'C:\\Results',
-      latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
+      result_folder: FIXTURE_RESULT_ROOT,
+      latest_result_folder: FIXTURE_RESULT_RUN,
       result_folder_is_default: false,
       source_kind: 'files',
-      source_folders: ['C:\\Source'],
+      source_folders: [FIXTURE_SOURCE_ROOT],
       selected_files: ['a.txt', 'b.txt'],
       local_ui_only: true,
       external_disclosure: false
@@ -562,11 +572,11 @@ async function admittedServiceCase() {
   });
   assert.deepStrictEqual(service.uiContext(), {
     ok: true,
-    result_folder: 'C:\\Results',
-    latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
+    result_folder: FIXTURE_RESULT_ROOT,
+    latest_result_folder: FIXTURE_RESULT_RUN,
     result_folder_is_default: false,
     source_kind: 'files',
-    source_folders: ['C:\\Source'],
+    source_folders: [FIXTURE_SOURCE_ROOT],
     selected_files: ['a.txt', 'b.txt'],
     local_ui_only: true,
     external_disclosure: false
@@ -575,11 +585,11 @@ async function admittedServiceCase() {
     ok: true, event: 'selection_updated', selected_count: 1, total_bytes: 4,
     ui_context: {
       ok: true,
-      result_folder: 'C:\\Results',
-      latest_result_folder: 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12',
+      result_folder: FIXTURE_RESULT_ROOT,
+      latest_result_folder: FIXTURE_RESULT_RUN,
       result_folder_is_default: false,
       source_kind: 'files',
-      source_folders: ['C:\\Source'],
+      source_folders: [FIXTURE_SOURCE_ROOT],
       selected_files: ['b.txt'],
       local_ui_only: true,
       external_disclosure: false
@@ -598,7 +608,7 @@ async function admittedServiceCase() {
 
 async function clearLastAdmittedSourceCase() {
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies() });
-  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await service.admitSelectedSources([FIXTURE_SOURCE_A]);
   const cleared = service.removeAdmittedSource(0);
   assert.strictEqual(cleared.selected_count, 0);
   assert.deepStrictEqual(cleared.ui_context.selected_files, []);
@@ -647,7 +657,7 @@ async function oversizedAdmissionCase() {
     }
   }) });
   await assert.rejects(
-    service.admitSelectedSources(['C:\\Source\\a.txt', 'C:\\Source\\b.txt']),
+    service.admitSelectedSources([FIXTURE_SOURCE_A, FIXTURE_SOURCE_B]),
     (error) => error.code === 'STANDALONE_SELECTION_INVALID'
   );
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
@@ -665,7 +675,7 @@ async function uncertainAdmissionStartCase() {
         ipcAcknowledgement: Promise.reject(new Error('ACK_LOST')) };
     }
   }) });
-  await service.admitSelectedSources(['C:\\Source\\a.txt']);
+  await service.admitSelectedSources([FIXTURE_SOURCE_A]);
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_START_FAILED');
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
   assert.strictEqual(starts, 1, 'an uncertain delegated start cannot be submitted twice');
@@ -684,7 +694,7 @@ async function invalidAdmissionStartContractCase() {
       releaseIntake: () => { releases += 1; },
       startLocalIntakeExecutor: () => started
     }) });
-    await service.admitSelectedSources(['C:\\Source\\a.txt']);
+    await service.admitSelectedSources([FIXTURE_SOURCE_A]);
     await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_START_FAILED');
     await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
     assert.strictEqual(releases, 0, 'an uncertain delegated start keeps its reservation consumed');
@@ -822,7 +832,7 @@ async function openResultsFailureCase() {
 
 async function openExactResultsCase() {
   const opened = [];
-  const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
+  const run = FIXTURE_RESULT_RUN;
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     latestProductResultDirectory: (channel, options) => {
       assert.strictEqual(channel, PRODUCT_CHANNEL);
@@ -847,7 +857,7 @@ async function missingResultsCase() {
 
 async function openLedgerCase() {
   const opened = [];
-  const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
+  const run = FIXTURE_RESULT_RUN;
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     latestProductResultDirectory: () => run,
     fs: { mkdirSync() {}, existsSync: () => true },
@@ -856,11 +866,11 @@ async function openLedgerCase() {
   assert.deepStrictEqual(await service.openLedger(), {
     ok: true, handoff_confirmed: true, external_disclosure: false
   });
-  assert.deepStrictEqual(opened, [`${run}\\DataSecure-Zuordnung.csv`]);
+  assert.deepStrictEqual(opened, [path.join(run, 'DataSecure-Zuordnung.csv')]);
 }
 
 function privateTargetResolutionCase() {
-  const run = 'C:\\Results\\DataSecure-Output\\Lauf-20260904-120000-abcdef12';
+  const run = FIXTURE_RESULT_RUN;
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     latestProductResultDirectory: (_channel, options) => {
       assert.deepStrictEqual(options, { ensureExport: true, latestBatchOnly: true });
@@ -872,7 +882,7 @@ function privateTargetResolutionCase() {
     ok: true, target_kind: 'directory', local_path: run, external_disclosure: false
   });
   assert.deepStrictEqual(service.resolveLedger(), {
-    ok: true, target_kind: 'file', local_path: `${run}\\DataSecure-Zuordnung.csv`, external_disclosure: false
+    ok: true, target_kind: 'file', local_path: path.join(run, 'DataSecure-Zuordnung.csv'), external_disclosure: false
   });
 }
 

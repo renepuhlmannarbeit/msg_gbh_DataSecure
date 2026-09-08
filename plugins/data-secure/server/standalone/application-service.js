@@ -23,14 +23,15 @@ function validateChoice(value, allowed, fallback) {
 
 function standaloneDataRoot(options = {}) {
   const platform = options.platform || process.platform;
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
   const environment = options.environment || process.env;
   const home = options.home || os.homedir();
   const base = platform === 'win32'
-    ? String(environment.LOCALAPPDATA || path.join(home, 'AppData', 'Local'))
+    ? String(environment.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'))
     : platform === 'darwin'
-      ? path.join(home, 'Library', 'Application Support')
-      : String(environment.XDG_DATA_HOME || path.join(home, '.local', 'share'));
-  return path.join(base, 'SecureDataMsg-Standalone');
+      ? pathApi.join(home, 'Library', 'Application Support')
+      : String(environment.XDG_DATA_HOME || pathApi.join(home, '.local', 'share'));
+  return pathApi.join(base, 'SecureDataMsg-Standalone');
 }
 
 function defaultResultRoot(options = {}) {
@@ -43,16 +44,17 @@ function defaultResultRoot(options = {}) {
 function activateStandaloneNamespace(options = {}) {
   const environment = options.environment || process.env;
   const platform = options.platform || process.platform;
-  const root = path.resolve(options.dataRoot || standaloneDataRoot(options));
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  const root = pathApi.resolve(options.dataRoot || standaloneDataRoot(options));
   const io = options.fs || fs;
-  const workspace = path.join(root, 'workspace');
+  const workspace = pathApi.join(root, 'workspace');
   try {
     io.mkdirSync(root, { recursive: true, mode: 0o700 });
     const named = io.lstatSync(root);
     const opened = io.statSync(root);
     const real = io.realpathSync.native ? io.realpathSync.native(root) : io.realpathSync(root);
     const realOpened = io.statSync(real);
-    const comparable = (value) => platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
+    const comparable = (value) => platform === 'win32' ? pathApi.resolve(value).toLowerCase() : pathApi.resolve(value);
     const sameIdentity = (left, right) => Boolean(left && right && left.dev === right.dev && left.ino === right.ino);
     // Windows may transparently virtualize LOCALAPPDATA for a packaged desktop
     // process. In that case the visible path and native realpath differ although
