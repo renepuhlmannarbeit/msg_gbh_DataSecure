@@ -194,13 +194,58 @@ testAsync('empty OCR publishes nothing', async () => {
   assert.ok(entry.private_bytes.every(byte => byte === 0));
 });
 
-testAsync('the Cowork/plugin channel never reaches the wide converter', async () => {
+testAsync('the Cowork/plugin channel still blocks PDF before any wide converter', async () => {
   const entry = privateEntry('customer.pdf');
   let conversions = 0;
   await assert.rejects(anonymizeNext('general', { productChannel: 'plugin', inputQueue: [entry],
     async convertBuffer() { conversions++; throw new Error('must not run'); } }),
   error => ['PDF_COVERAGE_UNVERIFIED', 'FORMAT_COVERAGE_UNVERIFIED'].includes(error.code));
   assert.equal(conversions, 0);
+});
+
+testAsync('Cowork anonymizes XLSX and PPTX through its isolated Markdown-first Office path', async () => {
+  for (const extension of ['.xlsx', '.pptx']) {
+    const entry = privateEntry(`customer${extension}`);
+    let conversions = 0;
+    const result = await anonymizeNext('personnel_profile', {
+      productChannel: 'plugin', inputQueue: [entry],
+      async convertDocument(_source, options) {
+        conversions++;
+        assert.equal(options.sourceName, `source${extension}`);
+        return {
+          markdown: '| Name | Arbeitgeber |\n| --- | --- |\n| Max Mustermann | Nordlicht GmbH |',
+          warnings: [], attachments: [], unreviewedVisualCount: 0, requiresExplicitProfile: false
+        };
+      }
+    });
+    assert.equal(conversions, 1, extension);
+    assert.equal(result.privacy_scope, 'extracted-markdown-only');
+    assert.deepEqual(result.source_extraction_coverage,
+      { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] });
+    assert.equal(result.raw_content_sent_to_claude, false);
+    const released = readOutput(result.package_id, result.read_capability).text;
+    assert.match(released, /\[PERSON_[A-Z0-9]+\]|\[UNTERNEHMEN_[A-Z0-9]+\]/u, extension);
+    assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH/u, extension);
+    assert.ok(entry.private_bytes.every(byte => byte === 0));
+  }
+});
+
+testAsync('the real isolated Cowork parser processes XLSX and PPTX locally', async () => {
+  for (const [extension, bytes] of [['.xlsx', privacyTableXlsx()], ['.pptx', privacyTablePptx()]]) {
+    const result = await anonymizeNext('personnel_profile', {
+      productChannel: 'plugin',
+      inputQueue: [{ name: `office${extension}`, private_artifact_plain: true, private_bytes: Buffer.from(bytes) }]
+    });
+    assert.equal(result.privacy_scope, 'extracted-markdown-only');
+    assert.deepEqual(result.source_extraction_coverage,
+      { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] });
+    const readResult = readOutput(result.package_id, result.read_capability);
+    assert.equal(readResult.privacy_scope, 'extracted-markdown-only', extension);
+    assert.deepEqual(readResult.source_extraction_coverage,
+      { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }, extension);
+    assert.doesNotMatch(readResult.text, /Max Mustermann|Nordlicht GmbH/u, extension);
+    assert.match(readResult.text, /\[PERSON_[A-Z0-9]+\]|\[UNTERNEHMEN_[A-Z0-9]+\]/u, extension);
+  }
 });
 
 testAsync('direct and converted sources share readable person and company identities in one batch registry', async () => {

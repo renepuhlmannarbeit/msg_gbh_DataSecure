@@ -48,6 +48,10 @@ function createBatchDelivery(options = {}) {
       package_id: packageId,
       read_capability: readGrant.read_capability,
       read_capability_expires_at: readGrant.read_capability_expires_at,
+      ...(readGrant.privacy_scope ? {
+        privacy_scope: readGrant.privacy_scope,
+        source_extraction_coverage: readGrant.source_extraction_coverage
+      } : {}),
       verification: 'passed',
       raw_content_sent_to_claude: false,
       ...publicProgress(state)

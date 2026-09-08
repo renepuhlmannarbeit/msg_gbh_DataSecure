@@ -449,14 +449,16 @@ async function main() {
   });
 
   for (const [name, fixture] of [['XLSX', 'synthetic_customer.xlsx'], ['PPTX', 'synthetic_contract.pptx']]) {
-    await testAsync(`${name} remains blocked until format coverage is proven`, async () => {
+    await testAsync(`${name} uses the Cowork Markdown-first path even for legacy callers without a channel field`, async () => {
       const source = queue(path.join(fixtures, fixture));
-      await assert.rejects(
-        () => gw.anonymizeNext('contract', depsFor('pii')),
-        (error) => error.code === 'FORMAT_COVERAGE_UNVERIFIED'
-      );
+      const before = sourceIdentity(source);
+      const result = await gw.anonymizeNext('contract', depsFor('pii'));
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.privacy_scope, 'extracted-markdown-only');
+      assert.strictEqual(result.source_extraction_coverage.status, 'incomplete');
+      assert.ok(result.source_extraction_coverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
       assert.ok(fs.existsSync(source));
-      fs.unlinkSync(source);
+      assertSourceUnchanged(source, before, `${name} source mutation`);
     });
   }
 
@@ -583,7 +585,7 @@ async function main() {
     assert.strictEqual(fs.existsSync(source), true, 'privacy verification must not mutate the CSV source');
   });
 
-  await testAsync('every recognised but unreleased non-PDF format stops before any claim or package', async () => {
+  await testAsync('every recognised but unreleased image format stops before any claim or package', async () => {
     const outputDir = path.join(root, 'Output');
     const processedDir = path.join(root, 'Processed');
     const reviewDir = path.join(root, 'Needs Visual Review');
@@ -592,8 +594,6 @@ async function main() {
       output: count(outputDir), processed: count(processedDir), review: count(reviewDir)
     };
     const samples = [
-      ['unreleased-sheet.xlsx', Buffer.from('not-an-ooxml-workbook', 'utf8')],
-      ['unreleased-slides.pptx', Buffer.from('not-an-ooxml-presentation', 'utf8')],
       ['unreleased-image.jpg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
       ['unreleased-image.jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
       ['unreleased-image.bmp', Buffer.from('BM', 'ascii')]
@@ -1093,7 +1093,7 @@ async function main() {
     assert.ok(!status.supported_inputs.includes('PDF'));
     assert.deepStrictEqual(status.blocked_inputs, [
       { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
-      { format: 'XLSX, PPTX und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
+      { format: 'Scan-PDF und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ]);
     assert.strictEqual(status.retention_days, 7);
     assert.strictEqual(typeof status.retention_due_entries.total, 'number');

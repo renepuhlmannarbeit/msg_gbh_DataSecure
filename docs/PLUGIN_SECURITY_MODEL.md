@@ -1,6 +1,6 @@
 # DataSecure Security-Modell für das Claude-/Cowork-Plugin
 
-Stand: 08.09.2026 · 3.2.0-rc123
+Stand: 08.09.2026 · 3.2.0-rc124
 
 ## Vertrauensgrenze
 
@@ -60,8 +60,10 @@ gelöscht. Ein Bereinigungsfehler darf keinen breiteren Löschversuch auslösen.
 
 ## Bilder und Formate
 
-TXT, Markdown, CSV und DOCX sind freigegeben. XLSX, PPTX, PDF, Scan-PDF und
-eigenständige Bilder bleiben gesperrt. Bildpixel aus DOCX bleiben lokal. Ein
+TXT, Markdown, CSV und DOCX sind direkt freigegeben. XLSX und PPTX werden lokal
+in Markdown extrahiert; ausschließlich dieser Text wird anonymisiert und seine
+Quellenabdeckung separat ausgewiesen. PDF, Scan-PDF und eigenständige Bilder
+bleiben gesperrt. Bildpixel aus DOCX/XLSX/PPTX bleiben lokal. Ein
 interner Legacy-Parameter darf den festen sicheren Bildschutz nicht herabsetzen
 und ist keine Nutzeroption.
 

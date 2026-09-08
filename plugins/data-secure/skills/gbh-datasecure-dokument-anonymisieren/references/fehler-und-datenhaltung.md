@@ -27,7 +27,9 @@ auf Diagnosewunsch `diagnostic_status` aufgerufen werden. Erkläre nur dessen fe
   Parser niemals direkt als Umgehung.
 - `PARSER_RESOURCE_LIMIT`: Nichts wurde freigegeben; keine automatische Wiederholung.
 - `PARSER_COVERAGE_UNVERIFIED`: Der extrahierte Inhalt war nicht nachweislich vollständig.
-- `FORMAT_COVERAGE_UNVERIFIED`: Im Pilot sind nur TXT, Markdown, CSV und DOCX freigegeben.
+- `FORMAT_COVERAGE_UNVERIFIED`: Im Cowork-Pilot sind TXT, Markdown, CSV und DOCX
+  direkt sowie XLSX/PPTX über lokal extrahiertes Markdown freigegeben. PDF,
+  Scan-PDF und Bilder bleiben gesperrt.
 - `UNSAFE_STORAGE_LOCATION`: Der konfigurierte Ordner liegt in einem bekannten Cloud-Sync-
   oder Netzwerkpfad.
 - `PDF_COVERAGE_UNVERIFIED`: PDF bleibt gesperrt und darf nicht per Chat-Upload umgangen

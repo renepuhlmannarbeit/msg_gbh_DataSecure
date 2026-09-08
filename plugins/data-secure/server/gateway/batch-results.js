@@ -102,7 +102,11 @@ function createBatchResultAccess(deps) {
         package_id: item.package_id,
         read_capability: grant.read_capability,
         read_capability_expires_at: grant.read_capability_expires_at,
-        document_result: verified.document_result ? publicPositiveDocumentResult(verified.document_result) : null
+        document_result: verified.document_result ? publicPositiveDocumentResult(verified.document_result) : null,
+        ...(grant.privacy_scope ? {
+          privacy_scope: grant.privacy_scope,
+          source_extraction_coverage: grant.source_extraction_coverage
+        } : {})
       });
     }
     const available = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true).length;

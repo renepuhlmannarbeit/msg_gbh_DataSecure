@@ -62,6 +62,8 @@ test('fixture layout remains exactly 111 synthetic files', () => {
   const files = expandedLayout();
   assert.strictEqual(files.size, 111);
   assert.ok(files.has('01-positive/personnel-profile.docx'));
+  assert.ok(files.has('01-positive/personnel-profile.xlsx'));
+  assert.ok(files.has('01-positive/personnel-profile.pptx'));
   assert.ok(files.has('02-review/personnel-profile-with-image.docx'));
   assert.ok(files.has('03-blocked/blocked-text.pdf'));
   assert.ok(files.has('04-batch-100/batch-100.txt'));
@@ -91,7 +93,7 @@ test('release GO is strict and UAT-04/05 are executable through the product UI',
   // The Windows file dialog accepts a typed name with another extension; the
   // executable PASS rule is "not offered in the filter, and a forced hand-over
   // stops safely without a result" (reviewer A-09).
-  assert.match(steps, /vier gesperrte Formate werden im Produktpicker nicht angeboten/u);
+  assert.match(steps, /zwei gesperrte Formate werden im Produktpicker nicht angeboten/u);
   assert.match(steps, /erzwungene Auswahl, die\s+sicher stoppt, ist kein FAIL/u);
   assert.match(steps, /nur `malformed\.docx` auswählen/u);
   assert.match(steps, /Sobald \*\*„Die lokale Übernahme wurde gestartet\.“\*\*/u);

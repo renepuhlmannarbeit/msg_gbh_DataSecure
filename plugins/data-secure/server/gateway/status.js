@@ -92,13 +92,15 @@ function genericStatus(options = {}) {
     private_work_encryption: false,
     supported_inputs: [
       'Word (.docx)',
+      'Excel (.xlsx) als extrahiertes Markdown',
+      'PowerPoint (.pptx) als extrahiertes Markdown',
       'Markdown (.md)',
       'CSV',
       'TXT'
     ],
     blocked_inputs: [
       { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
-      { format: 'XLSX, PPTX und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
+      { format: 'Scan-PDF und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ],
     ...runtimeInfo(),
     workflow:

@@ -341,7 +341,8 @@ async function main() {
     assert.match(instructions, /keine rechtssichere Anonymität/i);
     assert.match(instructions, /erlaubt kein automatisches HR-Ranking/i);
     assert.match(instructions, /Erkannter Bildtext benötigt dieselbe Textprüfung/i);
-    assert.match(instructions, /Nutze nur TXT, Markdown, CSV oder DOCX/i);
+    assert.match(instructions, /TXT, Markdown, CSV, DOCX, XLSX oder PPTX/i);
+    assert.match(instructions, /PDF, Scan-PDF und Bilder stoppen/i);
     assert.match(instructions, /Host-Stopp: kein Ersatzdialog oder Teilpaket/i);
     assert.ok(Buffer.byteLength(instructions, 'utf8') <= 2048, 'Claude truncates MCP instructions above 2 KB');
   });
@@ -997,11 +998,18 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.companion_job_inspection_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_model_can_review, false);
     assert.strictEqual(result.structuredContent.companion_model_can_release, false);
-    assert.deepStrictEqual(result.structuredContent.supported_inputs, ['Word (.docx)', 'Markdown (.md)', 'CSV', 'TXT']);
+    assert.deepStrictEqual(result.structuredContent.supported_inputs, [
+      'Word (.docx)',
+      'Excel (.xlsx) als extrahiertes Markdown',
+      'PowerPoint (.pptx) als extrahiertes Markdown',
+      'Markdown (.md)',
+      'CSV',
+      'TXT'
+    ]);
     assert.ok(!result.structuredContent.supported_inputs.includes('PDF'));
     assert.deepStrictEqual(result.structuredContent.blocked_inputs, [
       { format: 'PDF', reason: 'PDF_COVERAGE_UNVERIFIED' },
-      { format: 'XLSX, PPTX und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
+      { format: 'Scan-PDF und Bilder', reason: 'FORMAT_COVERAGE_UNVERIFIED' }
     ]);
     assert.strictEqual(result.structuredContent.visual_boundary,
       process.platform === 'win32' ? 'windows_job_object' : 'unavailable');

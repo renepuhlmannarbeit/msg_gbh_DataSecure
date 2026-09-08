@@ -86,9 +86,9 @@ test('DS-063 excludes an additional Windows account and keeps test isolation as 
   assert.match(read('docs/canonical/BACKLOG.md'), /DS-063/u);
 });
 
-test('the released capability manifest remains the narrow current allowlist', () => {
-  assert.deepStrictEqual(current.formats, ['csv', 'docx', 'markdown', 'txt']);
-  assert.deepStrictEqual(current.blocked_formats, ['xlsx', 'pptx', 'pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']);
+test('the released capability manifest separates direct and Markdown-first Cowork inputs', () => {
+  assert.deepStrictEqual(current.formats, ['csv', 'docx', 'markdown', 'pptx', 'xlsx', 'txt']);
+  assert.deepStrictEqual(current.blocked_formats, ['pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']);
   assert.match(current.status, /^release-candidate$/);
   assert.notDeepStrictEqual(current.formats, target.formats.map((format) => format.id));
 });
@@ -113,8 +113,8 @@ test('runtime modules cannot import or expose the target contract as current sta
   const status = read('plugins/data-secure/server/gateway/status.js');
   assert.match(
     status,
-    /supported_inputs:\s*\[\s*'Word \(\.docx\)',\s*'Markdown \(\.md\)',\s*'CSV',\s*'TXT'\s*\]/u,
-    'privacy_status must expose exactly the released input allowlist'
+    /supported_inputs:\s*\[[\s\S]*'Excel \(\.xlsx\) als extrahiertes Markdown'[\s\S]*'PowerPoint \(\.pptx\) als extrahiertes Markdown'[\s\S]*\]/u,
+    'privacy_status must expose the released Markdown-first Office inputs'
   );
 });
 
@@ -161,14 +161,17 @@ test('marketplace and plugin manifests promise only the released formats', () =>
   for (const description of [entry.description, plugin.description]) {
     assert.match(description, /TXT/u);
     assert.match(description, /DOCX/u);
-    assert.doesNotMatch(description, /PDF|XLSX|PPTX|PNG|JPEG|BMP/u);
+    assert.match(description, /XLSX/u);
+    assert.match(description, /PPTX/u);
+    if (/PDF/u.test(description)) assert.match(description, /PDF.*gesperrt/u);
+    assert.doesNotMatch(description, /PNG|JPEG|BMP/u);
   }
 });
 
 test('the pilot acceptance guide distinguishes active and blocked current formats', () => {
   const pilot = read('docs/PILOT-ABNAHME.md');
-  assert.match(pilot, /Kernformate \| TXT, Markdown, CSV und DOCX positiv/u);
-  assert.match(pilot, /Stopps \| XLSX, PPTX, PDF, Scan-PDF, Bilder, beschädigte und verschlüsselte Dateien sicher negativ/u);
+  assert.match(pilot, /Kernformate \| TXT, Markdown, CSV und DOCX direkt positiv; XLSX\/PPTX Markdown-first positiv/u);
+  assert.match(pilot, /Stopps \| PDF, Scan-PDF, Bilder, beschädigte und verschlüsselte Dateien sicher negativ/u);
   assert.match(pilot, /Quellen\/Originale und fertige Exporte nie automatisch löschen/u);
   assert.match(pilot, /UAT-04 – Gesperrte und beschädigte Dateien stoppen sicher/u);
 });

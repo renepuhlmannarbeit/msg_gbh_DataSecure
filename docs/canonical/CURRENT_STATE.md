@@ -1,6 +1,31 @@
 # Aktueller Iststand
 
-Stand: 08.09.2026 · 3.2.0-rc123 · Cowork-Parität ohne Standalone-Regression
+Stand: 08.09.2026 · 3.2.0-rc124 · lokale Office-Markdown-Pipeline in Cowork
+
+## Aktueller Entwicklungsstand RC124 / DS-093
+
+Das Cowork-Plugin akzeptiert über seine lokalen Datei- und rekursiven
+Ordnerpicker jetzt zusätzlich XLSX und PPTX. Beide Quellen werden im
+netzgesperrten lokalen Pluginprozess genau einmal über den bereits
+ausgelieferten isolierten Office-Parser in neutrales Markdown extrahiert. Nur
+dieses Markdown erreicht anschließend denselben Privacy-Core wie TXT,
+Markdown, CSV und DOCX. Originalbytes, Pfade, Dateinamen, private
+Zwischenstände und Mappings werden dabei nicht an Claude zurückgegeben.
+
+Quellenabdeckung und Datenschutzprüfung bleiben zwei getrennte Aussagen:
+`source_extraction_coverage` beschreibt, dass bei XLSX/PPTX nur der extrahierte
+Markdown-Inhalt betrachtet wurde; `privacy_scope=extracted-markdown-only` und
+`document_result` bestätigen ausschließlich dessen Anonymisierung. Damit wird
+nie behauptet, der vollständige Office-Container einschließlich aller
+Grafiken, Kommentare oder eingebetteten Objekte sei anonymisiert worden.
+
+PDF, Scan-PDF und Bilder bleiben im Cowork-Plugin fail-closed gesperrt. Der
+Standalone-Konverter kann diese Formate zwar lokal verarbeiten, seine rund
+57-MiB-OCR-/PDF-Runtime ist aber weder Bestandteil des aktuellen Cowork-ZIP
+noch auf den Cowork-Zielhosts abgenommen. Eine spätere Freigabe verlangt eine
+kompakte gebündelte Runtime, Offline-/Netzwerkdeny-, Paket- und
+Windows-/macOS-Zielhostnachweise. Der neue Office-Pfad erzeugt keinen weiteren
+Bestätigungsdialog und verändert Standalone nicht.
 
 Der Standalone-Desktop behält den letzten innerhalb derselben UI-Sitzung
 fertiggestellten Ergebnislauf auch dann als exakt gebundene Öffnen-Aktion, wenn
@@ -16,7 +41,7 @@ Paketbytes und verarbeitet keinen Original- oder Review-Rohtext. Parser, OCR und
 Review behalten die eigene Netzwerk-Deny-Grenze; beide Plugin-Konfigurationen
 werden auf den kleinen MCP-Einstiegspunkt geprüft.
 
-## Aktueller Entwicklungsstand RC123 / DS-092
+## Vorheriger Entwicklungsstand RC123 / DS-092
 
 Der Cowork-Normalweg übernimmt die gemeinsam nutzbaren Korrekturen der
 Standalone-UATs, ohne dessen eigenständige Oberfläche, Konvertierungsmodus,
@@ -940,16 +965,20 @@ tatsächlichen Dokumentreferenzen in kanonischer Reihenfolge gelesen. Für
 `mc:AlternateContent` gilt eine feste Policy: bekannte Word-2010-Textfeld-
 Namespaces wählen die erste unterstützte Choice, unbekannte Choices genau einen
 Fallback; ohne eindeutigen Pfad stoppt der Parser. Offen bleiben reale Office-
-Interoperabilitätsfixtures sowie die vollständige Kommentarabdeckung. XLSX und PPTX bleiben für die Anonymisierung
-gesperrt; die reine Standalone-Konvertierung verarbeitet sie bereits mit
-kenntlich gemachten Extraktionsgrenzen. Breiter Office-Korpus und
-Zielhost-/Fachabnahme bleiben offen.
+Interoperabilitätsfixtures sowie die vollständige Kommentarabdeckung. XLSX und
+PPTX werden in Cowork und Standalone Markdown-first anonymisiert; die
+Extraktionsabdeckung des ursprünglichen Containers bleibt dabei ausdrücklich
+`incomplete`, während nur der extrahierte Markdown-Inhalt die vollständigen
+Privacy-Gates durchläuft. Breiter Office-Korpus und Zielhost-/Fachabnahme
+bleiben offen.
 
 ### BL-023 – PDF-Risikogate
-PDF und Scan-PDF bleiben für die Anonymisierung ohne vollständige Pflichtmatrix
-sicher gesperrt. Die reine Standalone-Konvertierung verwendet bereits den
-gebündelten Offline-PDF-/OCR-Pfad; dessen Hinweise sind keine Erweiterung der
-Anonymisierungsfreigabe. Zielhost-/Fachabnahme bleibt offen.
+PDF und Scan-PDF bleiben im Cowork-Plugin ohne paketierten und nativ belegten
+PDF-/OCR-Pfad sicher gesperrt. Standalone verwendet den gebündelten
+Offline-PDF-/OCR-Pfad sowohl für reine Konvertierung als auch für die
+Anonymisierung des extrahierten Markdown-Inhalts; dessen Hinweise sind keine
+Vollständigkeitszusage für den Originalcontainer. Zielhost-/Fachabnahme bleibt
+offen.
 
 ### BL-024 – OCR und Rasterbilder
 Engineering-Komponenten und Harnesses existieren. Der Portable-Engineering-Build
@@ -957,8 +986,9 @@ Engineering-Komponenten und Harnesses existieren. Der Portable-Engineering-Build
 Manifest und Inventar, Modi, Hashes, Installationspfade mit Leerzeichen sowie
 Adapter-Timeout und laufender Abbruch sind E0-geprüft. Für die reine
 Standalone-Konvertierung sind Offline-OCR und PNG/JPEG/BMP integriert und im
-oben gebundenen RC111-Windows-Paket Ende zu Ende geprüft. Native Mac-Pakete und
-Zielhost-/Fachabnahme bleiben offen. Für die Anonymisierung sind eigenständige
+oben gebundenen RC111-Windows-Paket Ende zu Ende geprüft. Standalone kann auch
+den daraus extrahierten Markdown-Inhalt anonymisieren. Native Mac-Pakete und
+Zielhost-/Fachabnahme bleiben offen. Im Cowork-Plugin bleiben eigenständige
 Bilder weiterhin gesperrt; Bildpixel aus DOCX bleiben lokal.
 
 ### BL-030 – Profil und Pseudonyme
@@ -1051,13 +1081,14 @@ bleibt ohne Einfluss auf Verarbeitung oder Freigabe.
 
 ### BL-049 – Inhalts- und Formatgrenze
 Signatur-/Strukturprüfung und drei Anonymisierungsergebnisgrade sind implementiert.
-Cowork sperrt XLSX/PPTX/PDF/Scan-PDF und eigenständige Bilder weiterhin bei der
-Aufnahme. Standalone verarbeitet DOCX und diese breiten Quellen nach DS-087/090
-Markdown-first und weist Quellenextraktion und Anonymisierung getrennt aus. Die
-reine Standalone-Konvertierung besitzt denselben erweiterten Eingabeumfang mit
-eigener Extraktions-/Fehlerkennzeichnung. Ein textloses Bild neben vorhandenem
-nativen PDF-Text erzeugt keinen `OCR_TEXT_EMPTY`-Gesamtstopp mehr; wirklich
-textleere Extraktionen bleiben vor der Anonymisierung gesperrt.
+Cowork nimmt XLSX/PPTX nach DS-093 an und anonymisiert ausschließlich deren
+lokal extrahierten Markdown-Inhalt; PDF/Scan-PDF und eigenständige Bilder
+bleiben dort gesperrt. Standalone verarbeitet DOCX und alle breiten Quellen
+nach DS-087/090 Markdown-first und weist Quellenextraktion und Anonymisierung
+getrennt aus. Die reine Standalone-Konvertierung besitzt denselben erweiterten
+Eingabeumfang mit eigener Extraktions-/Fehlerkennzeichnung. Ein textloses Bild
+neben vorhandenem nativen PDF-Text erzeugt keinen `OCR_TEXT_EMPTY`-Gesamtstopp
+mehr; wirklich textleere Extraktionen bleiben vor der Anonymisierung gesperrt.
 
 ### BL-042 – Diagnose und Berechtigungen
 Normal- und Supportoberfläche sind getrennt. Die inhaltsfreie Status-App besitzt

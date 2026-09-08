@@ -23,11 +23,7 @@ const sharedStandaloneModules = new Set([
   'server/standalone/markdown-artifact.js',
   'server/standalone/markdown-contract.js',
   'server/standalone/markdown-retention.js',
-  'server/standalone/markdown-store.js',
-  // Small policy adapter only. Cowork cannot enter it because the orchestrator
-  // requires the standalone product channel; conversion child/runtime payloads
-  // remain excluded below.
-  'server/standalone/wide-privacy-extraction.js'
+  'server/standalone/markdown-store.js'
 ]);
 
 function excludedEngineeringFile(normalized) {
@@ -54,7 +50,7 @@ export function includeInProduct(name) {
   return !legacyFiles.has(normalized) && normalized !== 'server/vendor/keyring' &&
     !normalized.startsWith('server/vendor/keyring/') &&
     // Standalone converter payloads and MarkItDown remain excluded from Cowork;
-    // only the exact common-core dependencies above may cross the projection.
+    // only the exact shared persistence dependencies above may cross the projection.
     !excludedEngineeringFile(normalized);
 }
 

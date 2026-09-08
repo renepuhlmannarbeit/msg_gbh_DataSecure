@@ -85,8 +85,8 @@ test('build metadata describes current product channels and complete blocked for
   assert.strictEqual(info.build_date, '2026-09-07');
   assert.match(info.target, /Plugin ZIP \/ private Marketplace/u);
   assert.doesNotMatch(info.target + info.runtime, /MCPB|built-in Node/u);
-  assert.deepStrictEqual(new Set(info.formats), new Set(['txt', 'markdown', 'csv', 'docx']));
-  assert.deepStrictEqual(new Set(info.blocked_formats), new Set(['xlsx', 'pptx', 'pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']));
+  assert.deepStrictEqual(new Set(info.formats), new Set(['txt', 'markdown', 'csv', 'docx', 'xlsx', 'pptx']));
+  assert.deepStrictEqual(new Set(info.blocked_formats), new Set(['pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']));
 });
 
 test('product build and engineering artefacts are separate scripts', () => {
@@ -226,8 +226,8 @@ test('machine document index covers the active document register and current Cow
   for (const documentPath of ['docs/canonical/DECISIONS.md', 'docs/canonical/TARGET_ARCHITECTURE.md',
     'docs/canonical/CURRENT_STATE.md', 'docs/canonical/BACKLOG.md',
     'docs/canonical/TRACEABILITY.md', 'docs/canonical/TARGET_CAPABILITIES.json']) {
-    assert.ok(byPath.get(documentPath)?.decisions.includes('DS-092'),
-      `${documentPath} must be indexed against DS-092`);
+    assert.ok(byPath.get(documentPath)?.decisions.includes('DS-093'),
+      `${documentPath} must be indexed against DS-093`);
   }
 });
 
@@ -297,6 +297,10 @@ test('Cowork start wording is identical in runtime, skill, examples and UAT', ()
 
 test('conversion documentation separates eleven input types, Markdown-first wide privacy and old package evidence', () => {
   const coverage = read('docs/FORMAT_COVERAGE_MATRIX.md');
+  const current = read('docs/canonical/CURRENT_STATE.md');
+  assert.doesNotMatch(current, /XLSX und PPTX bleiben für die Anonymisierung\s+gesperrt/iu);
+  assert.doesNotMatch(current, /Cowork sperrt XLSX\/PPTX/iu);
+  assert.match(current, /Cowork nimmt XLSX\/PPTX nach DS-093 an/iu);
   assert.match(coverage, /RC111-Builds aus `b543589f3250a6ab57ddd5bc3a144f03a24ee026`/u,
     'current format evidence must name the exact RC111 source commit');
   assert.match(coverage, /6086d1eb0701c50b77be630bdbcce3d562fab391e92aa5d0bdfeea1eba869f8f/u,
@@ -308,8 +312,13 @@ test('conversion documentation separates eleven input types, Markdown-first wide
   const parts = coverage.split('## Reine Markdown-Konvertierung: nur Standalone');
   assert.strictEqual(parts.length, 2);
   assert.match(parts[0], /markdown-and-anonymize/u);
-  assert.match(parts[0], /vier Formate/u);
-  for (const label of ['XLSX', 'PPTX', 'PDF / Scan-PDF', 'PNG, JPEG, BMP']) {
+  assert.match(parts[0], /sechs\s+Formate/u);
+  for (const label of ['XLSX', 'PPTX']) {
+    const row = parts[0].split(/\r?\n/u).find(line => line.startsWith(`| ${label} |`));
+    assert.ok(row && /Markdown-Extraktion wird anonymisiert/u.test(row) && /wird anonymisiert/u.test(row),
+      `${label}: Cowork and Standalone anonymize only extracted Markdown`);
+  }
+  for (const label of ['PDF / Scan-PDF', 'PNG, JPEG, BMP']) {
     const row = parts[0].split(/\r?\n/u).find(line => line.startsWith(`| ${label} |`));
     assert.ok(row && row.includes('| gesperrt |') && /wird anonymisiert/u.test(row),
       `${label}: Cowork stays blocked while Standalone anonymizes extracted Markdown`);
@@ -408,7 +417,7 @@ test('architecture and test documentation reject the superseded single-purpose n
   assert.doesNotMatch(ux, /macOS-Abnahme fehlt noch \*\*Implementierungsarbeit\*\*/u);
 });
 
-test('wide standalone privacy chaining is documented without widening Cowork or overstating coverage', () => {
+test('wide privacy chaining widens Cowork only to local Office Markdown without overstating coverage', () => {
   const product = JSON.parse(read('plugins/data-secure/server/standalone/product-manifest.json'));
   assert.deepStrictEqual(product.formats_by_processing_mode['markdown-and-anonymize'], product.current_formats);
   for (const file of ['DECISIONS.md', 'PRODUCT_VISION.md', 'PRODUCT.md', 'TARGET_ARCHITECTURE.md',
@@ -417,11 +426,15 @@ test('wide standalone privacy chaining is documented without widening Cowork or 
   }
   const matrix = read('docs/FORMAT_COVERAGE_MATRIX.md');
   assert.match(matrix, /Extraktionsstatus bleibt separat `incomplete`/u);
-  assert.match(matrix, /Claude-Plugin bleibt[\s\S]{0,100}vier Formate/u);
+  assert.match(matrix, /(?:Das )?Cowork-Plugin verarbeitet (?:damit )?sechs\s+Formate/u);
   assert.match(matrix, /kein rohes Markdown-Zwischenergebnis/u);
   assert.match(matrix, /Anwenderweg ist einstufig/u);
   assert.match(matrix, /keine vollständige[\s\S]{0,100}ursprünglichen/u);
   const capabilities = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+  assert.deepStrictEqual(capabilities.processing.cowork_markdown_first_formats, ['xlsx', 'pptx']);
+  assert.deepStrictEqual(capabilities.processing.cowork_blocked_ocr_formats,
+    ['pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']);
+  assert.strictEqual(capabilities.processing.cowork_wide_privacy_scope, 'extracted-markdown-only');
   assert.strictEqual(capabilities.standalone_desktop.wide_format_original_container_output, false);
   assert.match(capabilities.standalone_desktop.wide_format_anonymization,
     /convert-once-then-anonymize-valid-nonempty-markdown/u);

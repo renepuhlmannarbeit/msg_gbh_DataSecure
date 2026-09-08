@@ -15,7 +15,10 @@ function baseWorkflowText(profile, task) {
 }
 
 function workflowText(profile, task) {
-  const text = baseWorkflowText(profile, task);
+  const text = baseWorkflowText(profile, task).replace(
+    'PDF und alle Formate außer TXT, Markdown, CSV und DOCX bleiben im Pilot gesperrt.',
+    'XLSX und PPTX werden lokal in Markdown extrahiert; anonymisiert und später übergeben wird ausschließlich der extrahierte Markdown-Inhalt, dessen Quellvollständigkeit getrennt ausgewiesen wird. PDF, Scan-PDF, Bilder und unbekannte Formate bleiben im Cowork-Pilot gesperrt.'
+  );
   const anchor = 'Enthält dieselbe Antwort sync_folder_notice=true,';
   const networkNotice = 'Enthält dieselbe Antwort network_folder_notice=true, ergänze genau einmal „Hinweis: Der gewählte Ergebnisordner liegt auf einem Netzlaufwerk; Ergebnisse können dadurch an andere Systeme übertragen werden.“ Das ist eine Information, keine Rückfrage und kein Abbruchgrund. ';
   return text.replace(anchor, `${networkNotice}${anchor}`);

@@ -61,10 +61,10 @@ function ordered(name, text, index) {
   return target;
 }
 
-function unsupportedXlsx() {
-  return zipStore([
-    ...opcControlEntries('xlsx'),
-    ['xl/workbook.xml', '<workbook/>']
+function unreleasedPng() {
+  return Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x00
   ]);
 }
 
@@ -684,7 +684,7 @@ async function main() {
     try { fs.unlinkSync(evidencePath()); } catch { /* test starts without a receipt */ }
     // The format gate, not the OOXML-container preflight, is the behavior
     // under test. Keep the extension/content combination structurally honest.
-    fs.writeFileSync(path.join(resetInputDirectory(), 'terminal-stop.xlsx'), unsupportedXlsx());
+    fs.writeFileSync(path.join(resetInputDirectory(), 'terminal-stop.png'), unreleasedPng());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processBatchNext(begun.batch_token, deps);
     assert.strictEqual(result.ok, true);
@@ -697,7 +697,7 @@ async function main() {
       complete: 0, usable_with_omissions: 0, not_processed: 1, unavailable: 0
     });
     assert.deepStrictEqual(record.error_codes, ['SOURCE_FORMAT_NOT_RELEASED']);
-    assert.doesNotMatch(JSON.stringify(record), /terminal-stop|Mustermann|\.xlsx/i);
+    assert.doesNotMatch(JSON.stringify(record), /terminal-stop|Mustermann|\.png/i);
     const listed = listBatchResults(begun.batch_token, { limit: 20 });
     assert.deepStrictEqual(listed.results, []);
     assert.strictEqual(listed.next_cursor, null);
@@ -1289,7 +1289,7 @@ async function main() {
 
   await testAsync('the server owns progress and never retries a stopped item', async () => {
     resetInput();
-    add('blocked.xlsx', unsupportedXlsx());
+    add('blocked.png', unreleasedPng());
     add('first.txt', 'Kunde: Max Mustermann\nE-Mail: max@example.de\nTicket: Eins');
     add('second.txt', 'Kunde: Erika Musterfrau\nE-Mail: erika@example.de\nTicket: Zwei');
     const begun = beginBatch({ expectedCount: 3, profile: 'customer' });
@@ -1312,12 +1312,12 @@ async function main() {
     assert.strictEqual(second.released, 2);
     assert.strictEqual(second.stopped, 1);
     assert.match(first.read_capability, /^[A-Za-z0-9_-]{43}$/);
-    assert.deepStrictEqual(fs.readdirSync(resetInputDirectory()).sort(), ['blocked.xlsx', 'first.txt', 'second.txt']);
+    assert.deepStrictEqual(fs.readdirSync(resetInputDirectory()).sort(), ['blocked.png', 'first.txt', 'second.txt']);
     const mapping = fs.readFileSync(path.join(roots().exports, 'DataSecure-Mapping.csv'), 'utf8');
     assert.match(mapping, /Originaldatei;Anonymisiertes Ergebnis;Ergebnisgrad;Auslassungen;Grundcode;Hinweis/);
     assert.match(mapping, /"first\.txt"/);
     assert.match(mapping, /"second\.txt"/);
-    assert.match(mapping, /"blocked\.xlsx";"";"Sicher nicht verarbeitet";"";"SOURCE_FORMAT_NOT_RELEASED"/);
+    assert.match(mapping, /"blocked\.png";"";"Sicher nicht verarbeitet";"";"SOURCE_FORMAT_NOT_RELEASED"/);
     assert.doesNotMatch(JSON.stringify(first), /first\.txt/);
     const state = _test.readState(begun.batch_token);
     assert.strictEqual(fs.existsSync(path.join(_test.workPath(begun.batch_token), state.items.find((item) => item.name === 'first.txt').work_name)), false);
@@ -1338,7 +1338,7 @@ async function main() {
 
   await testAsync('a terminal stop remains recorded locally when no result package exists', async () => {
     resetInput();
-    add('unreadable.xlsx', unsupportedXlsx());
+    add('unreadable.png', unreleasedPng());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     const result = await processAndAcknowledge(begun.batch_token, deps);
     assert.strictEqual(result.ok, true);
@@ -1346,14 +1346,14 @@ async function main() {
     assert.strictEqual(result.stopped, 1);
     assert.strictEqual(result.package_id, undefined);
     const mapping = fs.readFileSync(path.join(roots().exports, 'DataSecure-Mapping.csv'), 'utf8');
-    assert.match(mapping, /"unreadable\.xlsx";"";"Sicher nicht verarbeitet";"";"SOURCE_FORMAT_NOT_RELEASED"/);
-    assert.doesNotMatch(JSON.stringify(result), /unreadable\.xlsx/);
+    assert.match(mapping, /"unreadable\.png";"";"Sicher nicht verarbeitet";"";"SOURCE_FORMAT_NOT_RELEASED"/);
+    assert.doesNotMatch(JSON.stringify(result), /unreadable\.png/);
   });
 
   await testAsync('a preflight-stopped source never creates a cleanup obligation or invokes source deletion', async () => {
     resetInput();
     const cleanupBefore = localCleanupStatus().private_work_copy_cleanup_pending;
-    add('locked-stop.xlsx', unsupportedXlsx());
+    add('locked-stop.png', unreleasedPng());
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
     let deletionCalls = 0;
     const stopped = await processBatchNext(begun.batch_token, {
@@ -1373,7 +1373,7 @@ async function main() {
 
   await testAsync('startup recovery retries a pending stopped mapping without creating a source copy', async () => {
     resetInput();
-    add('restart-cleanup.xlsx', unsupportedXlsx());
+    add('restart-cleanup.png', unreleasedPng());
     const mappingFile = path.join(roots().exports, 'DataSecure-Mapping.csv');
     fs.writeFileSync(mappingFile, 'corrupt local mapping', 'utf8');
     const begun = beginBatch({ expectedCount: 1, profile: 'customer' });
@@ -1638,8 +1638,8 @@ async function main() {
     for (let index = 1; index <= 100; index++) {
       const blocked = [1, 50, 100].includes(index);
       ordered(
-        `${String(index).padStart(2, '0')}-${blocked ? 'blocked.xlsx' : 'safe.txt'}`,
-        blocked ? unsupportedXlsx() : `Kunde: Person ${index}\nTicket: Test ${index}`,
+        `${String(index).padStart(2, '0')}-${blocked ? 'blocked.png' : 'safe.txt'}`,
+        blocked ? unreleasedPng() : `Kunde: Person ${index}\nTicket: Test ${index}`,
         index
       );
     }
@@ -1674,8 +1674,8 @@ async function main() {
     for (let index = 1; index <= 100; index++) {
       const crashPosition = [1, 50, 100].includes(index);
       ordered(
-        `crash-${String(index).padStart(3, '0')}.${crashPosition ? 'txt' : 'xlsx'}`,
-        crashPosition ? `Kunde: Testperson ${index}\nVorgang: synthetisch` : unsupportedXlsx(),
+        `crash-${String(index).padStart(3, '0')}.${crashPosition ? 'txt' : 'png'}`,
+        crashPosition ? `Kunde: Testperson ${index}\nVorgang: synthetisch` : unreleasedPng(),
         index
       );
     }

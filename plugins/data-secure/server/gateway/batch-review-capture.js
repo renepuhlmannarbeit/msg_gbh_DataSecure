@@ -15,6 +15,7 @@ function createBatchReviewCapture(options = {}) {
     try {
       await withBatchPseudonymRegistry(state, (pseudonymRegistry) => anonymizeNext(state.profile, {
         ...deps,
+        productChannel: state.product_channel,
         pseudonymRegistry,
         inputQueue: [entry],
         copyClaim: true,

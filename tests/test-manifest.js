@@ -144,10 +144,11 @@ test('host wording does not turn portable code into a platform release claim', (
   assert.match(guide, /Originale niemals per Büroklammer in den Chat/u);
 });
 
-test('PDF is declared blocked until the native coverage contract is released', () => {
-  assert.deepStrictEqual(buildInfo.formats, ['csv', 'docx', 'markdown', 'txt'], 'BUILD_INFO must promise exactly the pilot formats');
-  assert.deepStrictEqual(buildInfo.blocked_formats, ['xlsx', 'pptx', 'pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']);
-  assert.match(mcpb.long_description, /XLSX, PPTX, PDF, Scan-PDF, eigenständige Bilder und unbekannte Formate stoppen sicher/u);
+test('PDF and OCR formats stay blocked while XLSX/PPTX use local Markdown-first privacy', () => {
+  assert.deepStrictEqual(buildInfo.formats, ['csv', 'docx', 'markdown', 'pptx', 'xlsx', 'txt'],
+    'BUILD_INFO must promise exactly the Cowork pilot formats');
+  assert.deepStrictEqual(buildInfo.blocked_formats, ['pdf', 'scan-pdf', 'png', 'jpeg', 'bmp']);
+  assert.match(mcpb.long_description, /PDF, Scan-PDF, eigenständige Bilder und unbekannte Formate stoppen sicher/u);
   assert.match(readText(path.join(runtime, 'runtime.js')), /PDF_COVERAGE_UNVERIFIED/u);
   assert.strictEqual(fs.existsSync(path.join(runtime, 'pdf-lite.js')), false, 'legacy PDF parser must not ship');
   assert.strictEqual(fs.existsSync(path.join(root, 'tests', 'helpers', 'legacy-pdf-lite.js')), true);

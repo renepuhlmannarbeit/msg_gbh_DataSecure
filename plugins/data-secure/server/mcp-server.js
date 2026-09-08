@@ -266,9 +266,9 @@ async function startPickerBatch(args,context={}){
     if(args.source_kind==='folder'){
       const folder=await pickSourceFolderAsync({signal:context.signal});
       if(context.signal?.aborted)return cancelled();
-      picked=await enumerateSourceFolderAsync(folder,{allowedTypes:['txt','md','csv','docx'],signal:context.signal});
+      picked=await enumerateSourceFolderAsync(folder,{allowedTypes:['txt','md','csv','docx','xlsx','pptx'],signal:context.signal});
     }else{
-      picked=await pickSourcesAsync({allowedTypes:['txt','md','csv','docx'],signal:context.signal});
+      picked=await pickSourcesAsync({allowedTypes:['txt','md','csv','docx','xlsx','pptx'],signal:context.signal});
     }
     if(context.signal?.aborted)return cancelled();
     selected=batchQueueFromSelection(picked);

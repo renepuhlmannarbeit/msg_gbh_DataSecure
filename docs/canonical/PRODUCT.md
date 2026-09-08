@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 08.09.2026 · Ist-Zustand RC123
+Stand: 08.09.2026 · Ist-Zustand RC124
 
 ## Ziel
 
@@ -54,9 +54,9 @@ Beibehalten-/Anonymisieren-Aktionen und inhaltsfreie Fortschrittszähler.
 
 | Bereich | Aktueller Vertrag |
 |---|---|
-| Cowork freigegeben | TXT, Markdown, CSV und DOCX über den strengen direkten Parserpfad |
+| Cowork freigegeben | TXT, Markdown, CSV und DOCX direkt; XLSX und PPTX werden lokal in Markdown extrahiert und nur als Markdown datenschutzgeprüft |
 | Standalone Markdown-first nach DS-087/090 | DOCX, XLSX, PPTX, PDF, Scan-PDF, PNG, JPEG und BMP werden lokal extrahiert; gültiger, nichtleerer Markdown-Inhalt wird anonymisiert und die Quellenabdeckung separat ausgewiesen |
-| gesperrt | unbekannte Formate; breite Formate im Cowork-Plugin; leere OCR, beschädigte, verschlüsselte oder aktive Quellen |
+| gesperrt | unbekannte Formate; PDF, Scan-PDF und Bilder im Cowork-Plugin; leere OCR, beschädigte, verschlüsselte oder aktive Quellen |
 | verschlüsselt/passwortgeschützt | sicher stoppen, gesondert lokal melden, nicht entschlüsseln |
 | Bilder in DOCX | Pixel bleiben lokal; kein auswählbarer Modus; kein Claude-Freigabeweg |
 | Ergebnis | ein geprüftes Markdown je positiver Datei, dauerhaft lokales Mapping |
@@ -106,9 +106,10 @@ ein eigenes Paket und einen eigenen Update-/Rollbackvertrag. Der E0-Unterbau,
 die Tauri-Hülle und ein selbsttragendes Windows-x64-Engineering-Paket sind
 vorhanden und automatisch verifiziert, aber noch kein freigegebenes
 Endnutzerpaket. Microsoft MarkItDown 0.1.7 ist ausschließlich als deaktivierter
-DOCX-Differentialpfad vorbereitet. Im Cowork-Plugin bleiben die oben genannten
-vier Formate der direkte Anonymisierungspfad. Nach DS-087/090 kann Standalone
-DOCX, XLSX, PPTX, PDF/Scan-PDF und PNG/JPEG/BMP erst neutral in Markdown extrahieren und anschließend
+DOCX-Differentialpfad vorbereitet. Im Cowork-Plugin bleiben TXT, Markdown, CSV
+und DOCX der direkte Anonymisierungspfad; XLSX/PPTX nutzen nach DS-093 die lokal
+extrahierte Markdown-Repräsentation. Nach DS-087/090 kann Standalone DOCX, XLSX,
+PPTX, PDF/Scan-PDF und PNG/JPEG/BMP erst neutral in Markdown extrahieren und anschließend
 denselben Privacy-Core nutzen. Dabei wird nur eine anonymisierte Markdown-
 Extraktion veröffentlicht; ihre Quellenabdeckung wird separat ausgewiesen. Die reine
 Standalone-Konvertierung besitzt denselben breiten Eingabeumfang, darf Hinweise

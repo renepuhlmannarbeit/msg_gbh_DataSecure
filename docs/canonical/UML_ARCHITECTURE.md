@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 08.09.2026 · 3.2.0-rc123
+Stand: 08.09.2026 · 3.2.0-rc124
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -610,16 +610,21 @@ als nicht anonymisiert gekennzeichneten Ausgabebaum (DS-085). Text-PDF und
 Scan-Seiten werden automatisch unterschieden; OCR läuft lokal. Warnungen sind
 Teil der Extraktionsidentität und des sichtbaren v4-Exports.
 
-DS-087/090 bindet den DOCX-/breiten Zweig ausschließlich an Standalone. Cowork erreicht
-diesen Konverterpfad nicht. Die aktuelle reale Wide-Format-Coverage bleibt oft
-`incomplete`; sie wird getrennt vom Anonymisierungsstatus geführt. Der
+DS-087/090 bindet den DOCX-/breiten Standalone-Zweig an den gemeinsamen
+Privacy-Core. DS-093 führt XLSX/PPTX im Cowork-Plugin über dessen bereits
+ausgelieferten isolierten Office-Parser in denselben neutralen
+Markdown-first-Vertrag; PDF, Scan-PDF und Bilder erreichen diesen Pfad dort
+nicht. Die aktuelle reale Wide-Format-Coverage bleibt oft `incomplete`; sie
+wird getrennt vom Anonymisierungsstatus geführt. Der
 Sequenzzweig schützt den extrahierten Markdown-Inhalt in demselben Stapel und
 gibt keine Freigabezusage für ausgelassene Bestandteile der ursprünglichen XLSX-,
 DOCX-, PPTX-, PDF-/Scan-PDF- oder Bilddatei.
 
 Recovery setzt den gespeicherten Modus fort; eine UI-Defaultwahl darf ihn nicht
 ändern. Inhaltsfreie Diagnose dokumentiert Phase, Modus und Fehler, keine
-extrahierten Originalinhalte. Keine Konvertate gelangen in den Plugin-Handoff.
+extrahierten Originalinhalte. Keine rohen Zwischenkonvertate gelangen in den
+Plugin-Handoff; ausschließlich erneut geprüftes anonymisiertes Markdown ist
+später lesbar.
 
 ### Standalone-Abschluss, Export und Neustart
 

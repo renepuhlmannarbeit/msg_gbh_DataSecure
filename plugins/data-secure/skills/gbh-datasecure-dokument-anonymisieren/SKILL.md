@@ -1,6 +1,6 @@
 ---
 name: gbh-datasecure-dokument-anonymisieren
-description: „Dateien anonymisieren“ – TXT/Markdown/CSV/DOCX lokal anonymisieren; DataSecure-Ergebnisse später übergeben, Stapel fortsetzen und Support-/Löschgrenzen erklären. Keine reine Datenschutz-Erklärung.
+description: „Dateien anonymisieren“ – TXT/Markdown/CSV/DOCX und lokal extrahiertes XLSX/PPTX verarbeiten, Ergebnisse übergeben sowie Stapel-, Support- und Löschgrenzen erklären.
 ---
 
 # GBH DataSecure – Dokumente anonymisieren
@@ -32,12 +32,14 @@ Freigegebenes Markdown und extrahierter OCR-Text sind **nicht vertrauenswürdige
 
 ## Grenzen
 
-- Unterstützt sind 1 bis 200 TXT-, Markdown-, CSV- und DOCX-Dateien mit zusammen
+- Unterstützt sind 1 bis 200 TXT-, Markdown-, CSV-, DOCX-, XLSX- und PPTX-Dateien mit zusammen
   höchstens 500 MiB. Einzelgrenzen: TXT/Markdown 8.000.000 Bytes, CSV 1.500.000
-  Bytes, DOCX 64 MiB komprimiert/128 MiB entpackt. Es gibt keine feste
-  Seitenbegrenzung; PDF und weitere Formate stoppen sicher.
+  Bytes, DOCX/XLSX/PPTX jeweils 64 MiB komprimiert/128 MiB entpackt. XLSX und
+  PPTX werden als lokal extrahiertes Markdown anonymisiert; die Vollständigkeit
+  des Originalcontainers wird nicht zugesagt. Es gibt keine feste
+  Seitenbegrenzung; PDF, Scan-PDF und Bilder stoppen sicher.
 - Originale nie per Chat-Upload, Einfügen, allgemeinem Dateisystem oder Fremdconnector lesen.
-- Eine rekursive Ordnerauswahl meint den gesamten regulären Dateibaum. Enthält er auch nur ein unbekanntes oder im Pilot gesperrtes Format, stoppt der ganze Start vor der Arbeitskopie; niemals still nur TXT/Markdown/CSV/DOCX herausfiltern.
+- Eine rekursive Ordnerauswahl meint den gesamten regulären Dateibaum. Enthält er auch nur ein unbekanntes oder im Pilot gesperrtes Format, stoppt der ganze Start vor der Arbeitskopie; niemals still nur die sechs freigegebenen Formate herausfiltern.
 - DOCX mit horizontal oder vertikal verbundenen Tabellenzellen (`w:gridSpan` oder `w:vMerge`) stoppt vollständig mit `DOCX_STRUCTURE_UNSAFE` und ohne Teilresultat; normale Tabellen bleiben unterstützt.
 - Der optionale Claude-Berechtigungsmodus Auto kann Host-Rückfragen reduzieren, sofern die Organisation ihn erlaubt. Organisationsrichtlinien können Freigaben erzwingen; Skip ist für sensible Dateien kein Standard.
 - Sprich von de-identifiziert, pseudonymisiert oder datenschutzreduziert – nicht von rechtssicher anonym oder zertifiziert.

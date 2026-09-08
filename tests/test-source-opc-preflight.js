@@ -257,6 +257,10 @@ test('valid XLSX structure remains structurally checked but product-locked', () 
   assert.strictEqual(result.verdict, 'not_released');
   assert.strictEqual(result.code, 'SOURCE_FORMAT_NOT_RELEASED');
   assert.strictEqual(result.structure.crc_verified, true);
+  const cowork = inspect('locked.xlsx', bytes,
+    { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' });
+  assert.strictEqual(cowork.verdict, 'candidate');
+  assert.strictEqual(cowork.code, 'SOURCE_FORMAT_CANDIDATE');
 });
 
 test('standard package metadata cannot unlock XLSX or PPTX', () => {

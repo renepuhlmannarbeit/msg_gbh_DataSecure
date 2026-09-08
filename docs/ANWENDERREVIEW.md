@@ -1,6 +1,6 @@
 # Aktuelles Anwender- und UX-Review
 
-Stand: 07.09.2026 · gegen 3.2.0-rc123 und DS-078/086/088/092 revalidiert
+Stand: 08.09.2026 · gegen 3.2.0-rc124 und DS-078/086/088/092/093 revalidiert
 
 ## Ergebnis
 

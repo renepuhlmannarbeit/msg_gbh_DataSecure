@@ -23,7 +23,7 @@ function startConfirmationText(summary) {
     title: 'DataSecure – lokalen Stapel starten',
     message: [
       `${selected} Datei(en), zusammen ${size} MB`,
-      'Unterstützt: TXT, Markdown, CSV und DOCX.',
+      'Unterstützt: TXT, Markdown, CSV, DOCX, XLSX und PPTX.',
       'Die Dateien werden lokal geprüft, bevor Claude Inhalte erhält.',
       'Bilder bleiben standardmäßig lokal und werden nicht an Claude übertragen.',
       '',

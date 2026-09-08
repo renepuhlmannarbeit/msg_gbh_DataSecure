@@ -51,7 +51,7 @@ test('valid UTF-8 TXT, Markdown and CSV are candidates, not final verification',
   }
 });
 
-test('extended formats are candidates only for explicit standalone conversion or chained privacy extraction', () => {
+test('wide formats require an explicit product/mode and Cowork admits only XLSX/PPTX privacy extraction', () => {
   const samples = [['sheet.xlsx', officeZip('xlsx')], ['slides.pptx', officeZip('pptx')],
     ['source.pdf', Buffer.from('%PDF-1.7\n')],
     ['source.png', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
@@ -60,10 +60,13 @@ test('extended formats are candidates only for explicit standalone conversion or
     for (const processingMode of ['markdown-only', 'markdown-and-anonymize']) {
       assert.strictEqual(inspectBuffer(name, bytes, { processingMode, productChannel: 'standalone' }).verdict, 'candidate');
     }
-    for (const options of [{}, { processingMode: 'markdown-only', productChannel: 'plugin' },
-      { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' }]) {
+    for (const options of [{}, { processingMode: 'markdown-only', productChannel: 'plugin' }]) {
       assert.notStrictEqual(inspectBuffer(name, bytes, options).verdict, 'candidate');
     }
+    const pluginPrivacy = inspectBuffer(name, bytes,
+      { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' });
+    assert.strictEqual(pluginPrivacy.verdict,
+      /\.(?:xlsx|pptx)$/u.test(name) ? 'candidate' : 'not_released', name);
   }
   assert.strictEqual(inspectBuffer('mismatch.xlsx', officeZip('pptx'), {
     processingMode: 'markdown-only', productChannel: 'standalone'

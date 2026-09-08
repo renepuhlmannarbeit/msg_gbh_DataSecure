@@ -58,15 +58,19 @@ Dieselbe Version steht in der letzten Zeile jedes lokalen DataSecure-Fensters.
 PASS: genau ein Ergebnis; Direktidentifikatoren, Arbeitgeber und Kunde fehlen;
 Product Owner, Java, SQL, HL7 FHIR, Testautomatisierung, ISTQB und Scrum.org bleiben.
 
-## UAT-02 – Vier Formate liefern denselben fachlichen Inhalt
+## UAT-02 – Sechs Formate liefern denselben fachlichen Inhalt
 
 [Ziel und PASS-Regel](CASE_CATALOG.md#uat-02)
 
-1. Alle vier Dateien aus `inputs/01-positive` gemeinsam wählen.
+1. Alle sechs Dateien aus `inputs/01-positive` gemeinsam wählen.
 2. Einmal öffnen; keine Profil-, Bild- oder Einzeldateifrage beantworten.
-3. Vier lokale Ergebnisse und vier Mappingzeilen prüfen.
+3. Sechs lokale Ergebnisse und sechs Mappingzeilen prüfen. Bei XLSX/PPTX muss
+   der Hinweis klarstellen, dass der extrahierte Markdown-Inhalt anonymisiert
+   wurde und keine Vollständigkeit des Originalcontainers zugesagt wird.
 
-PASS: alle vier vollständig verarbeitet, fachlich gleichwertig, Quellen bytegleich.
+PASS: alle sechs liefern datenschutzgeprüftes Markdown, fachlich gleichwertige
+Kerninformationen und bytegleiche Quellen; der Extraktionsstatus von XLSX/PPTX
+bleibt getrennt vom erfolgreichen Anonymisierungsstatus sichtbar.
 
 ## UAT-03 – Bilder lokal halten und Mehrdeutigkeit nicht raten
 
@@ -88,16 +92,16 @@ erscheinen nie in Claude.
 
 1. „Dateien anonymisieren“ starten und im nativen Picker den Ordner
    `inputs/03-blocked` öffnen.
-2. Prüfen, dass PDF, XLSX, PPTX und PNG im Dateifilter des Pickers nicht angeboten
+2. Prüfen, dass PDF und PNG im Dateifilter des Pickers nicht angeboten
    werden. Den Picker abbrechen; das ist in diesem Teilschritt das erwartete
    Verhalten. Hinweis: Ein Windows-Dateidialog nimmt einen getippten Dateinamen
    mit anderer Endung entgegen; die Sperre greift dann erst lokal im Server.
 3. Erneut starten, nur `malformed.docx` auswählen und öffnen.
 4. Terminalen Status abwarten und lokal prüfen, dass kein Ergebnis existiert.
 
-PASS: vier gesperrte Formate werden im Produktpicker nicht angeboten; wird eine
+PASS: zwei gesperrte Formate werden im Produktpicker nicht angeboten; wird eine
 davon trotzdem (etwa per getipptem Namen) übergeben, stoppt sie sicher ohne
-Ergebnis; die beschädigte DOCX stoppt klar und sicher; alle fünf Quellen bleiben
+Ergebnis; die beschädigte DOCX stoppt klar und sicher; alle drei Quellen bleiben
 unverändert und kein Inhalt erscheint in Claude. Eine erzwungene Auswahl, die
 sicher stoppt, ist kein FAIL. Nicht versuchen, die lokale Sicherheitsgrenze zu
 umgehen.

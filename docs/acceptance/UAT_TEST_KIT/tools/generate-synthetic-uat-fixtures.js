@@ -70,6 +70,41 @@ function makeDocx(text, withImage = false) {
   return zipStore(entries);
 }
 
+const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+function makeXlsx() {
+  const values = [['Name', 'Lina Testfeld'], ['E-Mail', 'lina.testfeld@privacy-example.test'],
+    ['Arbeitgeber', 'Nordstern Medizin IT GmbH'], ['Kunde', 'Falken Klinikverbund AG'],
+    ['Rolle', 'Product Owner'], ['Technologien', 'Java, SQL, HL7 FHIR, Testautomatisierung']];
+  const rows = values.map(([left, right], index) => {
+    const number = index + 1;
+    return `<row r="${number}"><c r="A${number}" t="inlineStr"><is><t>${xmlEscape(left)}</t></is></c>` +
+      `<c r="B${number}" t="inlineStr"><is><t>${xmlEscape(right)}</t></is></c></row>`;
+  }).join('');
+  return zipStore([...opcControlEntries('xlsx'),
+    ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Profil" sheetId="1" r:id="s1"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`],
+    ['xl/worksheets/sheet1.xml', `<worksheet xmlns="${S}"><sheetData>${rows}</sheetData></worksheet>`]
+  ]);
+}
+
+function makePptx() {
+  const row = (left, right) => `<a:tr><a:tc><a:txBody><a:p><a:r><a:t>${xmlEscape(left)}</a:t></a:r></a:p></a:txBody></a:tc>` +
+    `<a:tc><a:txBody><a:p><a:r><a:t>${xmlEscape(right)}</a:t></a:r></a:p></a:txBody></a:tc></a:tr>`;
+  const table = row('Name', 'Lina Testfeld') + row('Arbeitgeber', 'Nordstern Medizin IT GmbH') +
+    row('Kunde', 'Falken Klinikverbund AG') + row('Rolle', 'Product Owner') +
+    row('Technologien', 'Java, SQL, HL7 FHIR, Testautomatisierung');
+  return zipStore([...opcControlEntries('pptx'),
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide1.xml"/></Relationships>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><a:tbl>${table}</a:tbl></p:spTree></p:cSld></p:sld>`]
+  ]);
+}
+
 function expectedFiles() {
   const files = new Set();
   for (const [group, definition] of Object.entries(LAYOUT.groups)) {
@@ -94,7 +129,7 @@ function safeOutput(raw) {
 }
 
 function generate(rawOutput) {
-  if (LAYOUT.schema !== 'datasecure-synthetic-uat-layout/2') throw new Error('Unsupported fixture layout');
+  if (LAYOUT.schema !== 'datasecure-synthetic-uat-layout/3') throw new Error('Unsupported fixture layout');
   const output = safeOutput(rawOutput);
   fs.rmSync(output, { recursive: true, force: true });
   for (const group of Object.keys(LAYOUT.groups)) fs.mkdirSync(path.join(output, group), { recursive: true });
@@ -110,17 +145,13 @@ function generate(rawOutput) {
     'Zertifizierung,Scrum.org Professional Scrum Master II (PSM II)', ''
   ].join('\n'));
   fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.docx'), makeDocx(PROFILE));
+  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.xlsx'), makeXlsx());
+  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.pptx'), makePptx());
   fs.writeFileSync(path.join(output, '02-review', 'ambiguous-certificate-provider.txt'), AMBIGUOUS);
   fs.writeFileSync(path.join(output, '02-review', 'personnel-profile-with-image.docx'), makeDocx(PROFILE, true));
 
   const blocked = path.join(output, '03-blocked');
   fs.writeFileSync(path.join(blocked, 'blocked-text.pdf'), '%PDF-1.4\n%%EOF\n');
-  fs.writeFileSync(path.join(blocked, 'blocked-workbook.xlsx'), zipStore([
-    ...opcControlEntries('xlsx'), ['xl/workbook.xml', '<workbook/>']
-  ]));
-  fs.writeFileSync(path.join(blocked, 'blocked-slides.pptx'), zipStore([
-    ...opcControlEntries('pptx'), ['ppt/presentation.xml', '<presentation/>']
-  ]));
   fs.writeFileSync(path.join(blocked, 'blocked-image.png'),
     encodePng({ width: 32, height: 32, rgba: Buffer.alloc(32 * 32 * 4, 0xff) }));
   fs.writeFileSync(path.join(blocked, 'malformed.docx'), 'Intentionally not an OOXML ZIP.');

@@ -67,7 +67,7 @@ test('batch start confirmation contains only bounded selection facts and a clear
   assert.match(text.title, /lokalen Stapel starten/i);
   assert.match(text.message, /3 Datei/);
   assert.match(text.message, /2 MB/);
-  assert.match(text.message, /TXT, Markdown, CSV und DOCX/);
+  assert.match(text.message, /TXT, Markdown, CSV, DOCX, XLSX und PPTX/);
   assert.match(text.message, /Bilder bleiben standardmäßig lokal/);
   assert.doesNotMatch(JSON.stringify(text), /C:\\|\.docx|Musterfrau/i);
   for (const platform of ['win32', 'darwin', 'linux']) {

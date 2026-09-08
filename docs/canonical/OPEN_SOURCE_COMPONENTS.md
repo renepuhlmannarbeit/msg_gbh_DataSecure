@@ -11,9 +11,9 @@ Zielhost- oder Endnutzerfreigabe. Versionen und Integritäten stehen in
 
 | Komponente | Verwendung | Grenze |
 |---|---|---|
-| Node.js / eigene DataSecure-Parser | Gemeinsamer lokaler Kern; zielgebunden mitgelieferte Runtime | Keine Anwenderinstallation; Cowork prüft TXT/Markdown/CSV/DOCX direkt. Standalone verarbeitet TXT/Markdown/CSV direkt und DOCX/breite Quellen Markdown-first nach DS-087/090. |
+| Node.js / eigene DataSecure-Parser | Gemeinsamer lokaler Kern; zielgebunden mitgelieferte Runtime | Keine Anwenderinstallation; Cowork prüft TXT/Markdown/CSV/DOCX direkt und XLSX/PPTX lokal Markdown-first nach DS-093. Standalone verarbeitet TXT/Markdown/CSV direkt und DOCX/breite Quellen Markdown-first nach DS-087/090. |
 | Tauri 2 / Rust | Eigenständige Desktop-Hülle, native Dialoge, Lifecycle, private IPC | Nur Standalone. Rust ist ausschließlich Buildvoraussetzung. Windows-Engineering vorhanden; native Mac-Nachweise und Bedienabnahme offen. |
-| PDF.js, Canvas, Tesseract.js/-core, lokale DE/EN-Modelle | Gebündelter isolierter Standalone-Konvertierungsworker für Text-/Scan-PDF und Bilder | Beide Standalone-Modi dürfen bekannte `complete`- oder `incomplete`-Extraktionen mit gültigem, nichtleerem Markdown nutzen. Quellenabdeckung bleibt separat; kein Online-OCR, keine Originalcontainer- und keine Cowork-Formatfreigabe. |
+| PDF.js, Canvas, Tesseract.js/-core, lokale DE/EN-Modelle | Gebündelter isolierter Standalone-Konvertierungsworker für Text-/Scan-PDF und Bilder | Beide Standalone-Modi dürfen bekannte `complete`- oder `incomplete`-Extraktionen mit gültigem, nichtleerem Markdown nutzen. Quellenabdeckung bleibt separat; kein Online-OCR, keine Originalcontainer- und keine Cowork-PDF-/OCR-Formatfreigabe. |
 | Ajv 8.20.0 (MIT) + esbuild 0.28.2 (MIT) | Build-time-Erzeugung des MCP-Validators aus dem einzigen Toolkatalog | Plugin lädt selbsttragendes JS samt lizenziertem Unicode-Längenhelper. Kein Ajv-npm-Paket, kein Codegenerator zur Laufzeit; nicht in Standalone. |
 | Microsoft MarkItDown 0.1.7 (MIT) | Optionales deaktiviertes DOCX-Differentialorakel | Weder Python noch MarkItDown ist eine produktive Konvertervoraussetzung. Keine zusätzliche Formatfreigabe durch das Orakel. |
 | Mammoth, Papa Parse, markdown-it, fflate | Unabhängige Parser-/Format-Testorakel | Keine alleinige Sicherheits- oder Releaseentscheidung. |

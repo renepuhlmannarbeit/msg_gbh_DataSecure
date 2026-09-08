@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC123
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC124
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -38,8 +38,8 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 
 | Funktion | Stand |
 |---|---|
-| Eingaben | TXT, Markdown, CSV, DOCX |
-| sicher gesperrt | XLSX, PPTX, PDF, Scan-PDF und eigenständige Bilder |
+| Eingaben | TXT, Markdown, CSV, DOCX; XLSX und PPTX über lokale Markdown-Extraktion |
+| sicher gesperrt | PDF, Scan-PDF und eigenständige Bilder |
 | Stapel | bis 200 Dateien, zusammen höchstens 500 MiB |
 | Bilder in DOCX | Pixel bleiben lokal; kein auswählbarer Bildmodus |
 | Ausgabe | freigegebenes Markdown im einmalig gewählten lokalen Ergebnisordner; Mapping bleibt privat |

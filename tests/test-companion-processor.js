@@ -646,7 +646,7 @@ async function main() {
     const job = createJob({ profile: 'customer', source_type: 'pdf' });
     await assert.rejects(
       processCompanionJob(job.job_id, file, job.profile, { confirmAutomaticRelease: () => true }),
-/ausschließlich TXT, Markdown, CSV und DOCX/
+/Dateidialog unterstützt derzeit TXT, Markdown, CSV, DOCX, XLSX und PPTX/
     );
     assert.strictEqual(jobStatus(job.job_id).state, 'Failed');
     assert.ok(fs.existsSync(file));

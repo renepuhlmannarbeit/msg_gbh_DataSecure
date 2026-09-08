@@ -1,11 +1,11 @@
 # Release- und Distributionsvertrag
 
-Stand: 07.09.2026 · 3.2.0-rc123
+Stand: 08.09.2026 · 3.2.0-rc124
 
-Der aktuelle Quellstand ist der RC123-Produktkandidat für das Cowork-Plugin.
+Der aktuelle Quellstand ist der RC124-Produktkandidat für das Cowork-Plugin.
 Sein zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
 beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
-Plugin-ZIP-Tests und Claude-Validierung gebunden. Ein RC123-Standalone-Paket ist
+Plugin-ZIP-Tests und Claude-Validierung gebunden. Ein RC124-Standalone-Paket ist
 damit nicht behauptet: Die zuletzt commitgebundene Windows-Standalone-Evidenz
 bleibt historische Engineering-Evidenz und ersetzt weder native UAT noch eine
 INT-13-Bindung.
@@ -111,7 +111,8 @@ Anwender-Voraussetzungen.
 
 - Versionsgleichheit in Paket, Pluginmanifest, Skill und Buildmetadaten.
 - Exakt zwei sichtbare Skills; keine Hooks/Subagenten.
-- Cowork: TXT/Markdown/CSV/DOCX positiv, breite Formate fail-closed. Standalone:
+- Cowork: TXT/Markdown/CSV/DOCX direkt sowie XLSX/PPTX Markdown-first positiv;
+  PDF/Scan-PDF/Bilder fail-closed. Standalone:
   breite Quellen werden lokal nach Markdown extrahiert und dieser Inhalt mit
   getrenntem Extraktions- und Anonymisierungsstatus verarbeitet.
 - Kein auswählbarer Bildmodus; Pixel bleiben lokal.
@@ -126,9 +127,10 @@ Anwender-Voraussetzungen.
 
 ## Produktbezogene Formatfreigaben
 
-- **Cowork-Plugin:** TXT, Markdown, CSV und streng direkt geprüftes DOCX.
-  XLSX, PPTX, PDF/Scan-PDF und eigenständige Bilder werden mit unveränderter
-  Quelle und ohne Teiloutput sicher gestoppt.
+- **Cowork-Plugin:** TXT, Markdown, CSV und streng direkt geprüftes DOCX;
+  XLSX/PPTX werden lokal extrahiert und nur als Markdown anonymisiert. PDF,
+  Scan-PDF und eigenständige Bilder werden mit unveränderter Quelle und ohne
+  Teiloutput sicher gestoppt.
 - **Standalone – Nur in Markdown umwandeln:** TXT, Markdown, CSV, DOCX, XLSX,
   PPTX, PDF/Scan-PDF sowie PNG/JPEG/BMP. Der Quellinhalt bleibt erhalten; eine
   unvollständige Extraktion wird ausdrücklich gekennzeichnet.

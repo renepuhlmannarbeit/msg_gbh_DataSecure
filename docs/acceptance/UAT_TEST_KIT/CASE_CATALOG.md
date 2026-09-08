@@ -8,9 +8,11 @@ Kundenangaben fehlen; Rolle, Technologien und Zertifikate bleiben erhalten.
 
 ## UAT-02
 
-**Vier freigegebene Formate liefern denselben fachlichen Inhalt.** TXT, Markdown,
-CSV und DOCX werden gemeinsam verarbeitet. Es entstehen vier eindeutige
-Zuordnungen; die Quellen bleiben bytegleich.
+**Sechs freigegebene Formate liefern denselben fachlichen Inhalt.** TXT,
+Markdown, CSV und DOCX werden direkt verarbeitet; XLSX und PPTX werden lokal
+nach Markdown extrahiert. Es entstehen sechs eindeutige Zuordnungen, die
+Quellen bleiben bytegleich und die Office-Quellenabdeckung wird separat
+ausgewiesen.
 
 ## UAT-03
 
@@ -23,7 +25,7 @@ ausdrücklichen lokalen Entscheidung zurückgestellt. Jede andere Kombination is
 ## UAT-04
 
 **Gesperrte Formate werden nicht angeboten und stoppen sicher; eine beschädigte
-freigegebene Datei stoppt sicher.** XLSX, PPTX, PDF und PNG erscheinen nicht als
+freigegebene Datei stoppt sicher.** PDF und PNG erscheinen nicht als
 angebotene Dateitypen; eine dennoch erzwungene Übergabe stoppt lokal ohne
 Ergebnis. Das beschädigte DOCX ist auswählbar, erhält aber kein Ergebnis. Die
 Oberfläche erklärt den sicheren Stopp in Klartext; feste Codes sind nur IT-Details.

@@ -200,7 +200,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
       assert.equal(deferred.read_capability, undefined);
     }
     const reviewNotReady = async () => {
-      const result = await batch.reviewDeferredBatch(reviewToken, { reviewTextLocally: noUi });
+      const result = await batch.reviewDeferredBatch(reviewToken, { convertBuffer, reviewTextLocally: noUi });
       assert.equal(result.error, 'batch_review_not_ready');
       assert.equal(uiCalls, 0);
     };
@@ -219,7 +219,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
       let calls = 0;
       const controller = new AbortController();
       if (action === 'aborted') controller.abort();
-      const result = await batch.reviewDeferredBatch(reviewToken, { abortSignal: controller.signal,
+      const result = await batch.reviewDeferredBatch(reviewToken, { convertBuffer, abortSignal: controller.signal,
         reviewTextLocally(draft) {
           calls++;
           assert.equal(draft.batch_review.document_count, 4);
@@ -265,7 +265,7 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
   assert.equal(reviewed.packages.length, 4);
   const packages = reviewed.packages.map(entry => recordPackage(token, entry));
   checkFacts(token, { released: 2, deferred_review: 0, delivery_pending: 4, next_action: 'batch' });
-  const repeated = await batch.reviewDeferredBatch(token, { reviewTextLocally: noUi });
+  const repeated = await batch.reviewDeferredBatch(token, { convertBuffer, reviewTextLocally: noUi });
   assert.equal(repeated.error, 'batch_review_not_ready'); assert.equal(uiCalls, 0);
   checkPackages(prepared.clear); checkSources(prepared.sources);
   const canonical = semanticBodies([...prepared.clear, ...packages]);

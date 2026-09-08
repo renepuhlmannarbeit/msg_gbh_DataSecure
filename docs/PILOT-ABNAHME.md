@@ -21,8 +21,8 @@ Die getrennte Standalone-Abnahme steht im
 | Block | Erforderlich |
 |---|---|
 | Produktkanal | ZIP und Marketplace jeweils frisch installieren; kein anderer Anwenderweg |
-| Kernformate | TXT, Markdown, CSV und DOCX positiv |
-| Stopps | XLSX, PPTX, PDF, Scan-PDF, Bilder, beschädigte und verschlüsselte Dateien sicher negativ |
+| Kernformate | TXT, Markdown, CSV und DOCX direkt positiv; XLSX/PPTX Markdown-first positiv mit getrenntem Extraktionsstatus |
+| Stopps | PDF, Scan-PDF, Bilder, beschädigte und verschlüsselte Dateien sicher negativ |
 | Datenschutz | keine Originalinhalte/-namen/-pfade/Token im Chat; Quellen bytegleich |
 | Bilder | Pixel bleiben lokal; kein auswählbarer Modus; nie aus Originalen löschen |
 | Retention | 0–14 Tage nur temporär; Quellen/Originale und fertige Exporte nie automatisch löschen |

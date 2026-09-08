@@ -27,6 +27,13 @@ oder ohne sichtbare Roh-Zwischenablage durch den gemeinsamen Privacy-Core gefüh
 wird. Dadurch bleiben beide Kernfunktionen fachlich getrennt, teilen aber genau
 eine Format-Extraktionsschicht.
 
+Im Cowork-Plugin ergänzt DS-093 denselben Grundsatz gezielt für XLSX und PPTX:
+Der bereits ausgelieferte isolierte Office-Parser erzeugt lokal die neutrale
+Markdown-Repräsentation; nur diese wird anonymisiert. PDF, Scan-PDF und Bilder
+bleiben dort gesperrt, bis ihre kompakte lokale Runtime im Cowork-Paket und auf
+den Zielhosts nachgewiesen ist. Diese Erweiterung erzeugt keinen zusätzlichen
+Nutzerdialog und keine Vollständigkeitszusage für den ursprünglichen Container.
+
 DataSecure benötigt keine zusätzliche System-VM. Auch die Abnahmeplanung
 verwendet echte lokale Zielrechner statt eigens eingerichteter VMs (DS-062).
 Auch ein zusätzliches Windows-Benutzerkonto wird nicht vorausgesetzt (DS-063).

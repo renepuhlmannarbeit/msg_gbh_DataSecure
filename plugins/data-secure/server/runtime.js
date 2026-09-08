@@ -302,10 +302,10 @@ async function convertDocument(source, options = {}) {
   const inputBuffer = Buffer.isBuffer(options.inputBuffer) ? options.inputBuffer : null;
   const sourceName = inputBuffer ? String(options.sourceName || '') : String(source || '');
   const ext = path.extname(sourceName).toLowerCase();
-  // The parser contains additional extraction code for adversarial/unit tests,
-  // but the product release boundary is intentionally narrower until coverage
-  // for further formats has been demonstrated.
-  const supported = new Set(['.docx', '.txt', '.md', '.markdown', '.csv']);
+  // XLSX/PPTX are released only through the channel-bound Markdown-first
+  // adapter. Keeping them here lets that adapter reuse the same isolated
+  // parser; admission and publication remain closed in the orchestrator.
+  const supported = new Set(['.docx', '.xlsx', '.pptx', '.txt', '.md', '.markdown', '.csv']);
   if (ext === '.pdf') throw pdfCoverageError();
   if (!supported.has(ext)) throw safeError(
     'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben.',
@@ -381,7 +381,7 @@ async function convertDocument(source, options = {}) {
       throw error;
     }
     if (bufferStartsAsPdf(inputBuffer)) throw pdfCoverageError();
-    if (ext === '.docx') {
+    if (['.docx', '.xlsx', '.pptx'].includes(ext)) {
       try {
         inspectZipDirectory(inputBuffer, {
           maxEntries: 20000,
@@ -390,10 +390,10 @@ async function convertDocument(source, options = {}) {
       } catch (error) {
         if (error instanceof ZipError) {
           throw safeError(
-            'Die DOCX-Datei konnte nicht als sicherer lokaler Office-Container geprüft werden.',
+            'Die Office-Datei konnte nicht als sicherer lokaler Container geprüft werden.',
             error.code === 'OOXML_ENCRYPTED_CONTAINER' || error.code === 'ZIP_ENCRYPTED_ENTRY'
               ? error.code
-              : 'DOCX_CONTAINER_INVALID'
+              : ext === '.docx' ? 'DOCX_CONTAINER_INVALID' : 'OOXML_CONTAINER_INVALID'
           );
         }
         throw error;
@@ -420,7 +420,7 @@ async function convertDocument(source, options = {}) {
       // bytes before parsing. PDF headers may legally follow leading junk within
       // the first 1024 bytes.
       if (descriptorStartsAsPdf(fd)) throw pdfCoverageError();
-      if (ext === '.docx') {
+      if (['.docx', '.xlsx', '.pptx'].includes(ext)) {
         try {
           inspectZipDirectoryFromFd(fd, opened.size, {
             maxEntries: 20000,
@@ -429,10 +429,10 @@ async function convertDocument(source, options = {}) {
         } catch (error) {
           if (error instanceof ZipError) {
             throw safeError(
-              'Die DOCX-Datei konnte nicht als sicherer lokaler Office-Container geprüft werden.',
+              'Die Office-Datei konnte nicht als sicherer lokaler Container geprüft werden.',
               error.code === 'OOXML_ENCRYPTED_CONTAINER' || error.code === 'ZIP_ENCRYPTED_ENTRY'
                 ? error.code
-                : 'DOCX_CONTAINER_INVALID'
+                : ext === '.docx' ? 'DOCX_CONTAINER_INVALID' : 'OOXML_CONTAINER_INVALID'
             );
           }
           throw error;

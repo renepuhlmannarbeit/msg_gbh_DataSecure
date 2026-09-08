@@ -134,8 +134,8 @@ function createCompanionSession(options = {}) {
         throw new SafeError('Ungültiges Profil für die lokale Dateiauswahl.');
       }
       const adapterResult = frame.command === 'pick_sources'
-        ? selectSources({ allowedTypes: ['txt', 'md', 'csv', 'docx'] })
-        : [selectSource({ allowedTypes: ['txt', 'md', 'csv', 'docx'] })];
+        ? selectSources({ allowedTypes: ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx'] })
+        : [selectSource({ allowedTypes: ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx'] })];
       if (!Array.isArray(adapterResult) || !adapterResult.length || adapterResult.length > LIMITS.MAX_BATCH_FILES) {
         throw new SafeError('Der lokale Dateidialog lieferte keine gültige Dateiauswahl.');
       }
@@ -143,7 +143,7 @@ function createCompanionSession(options = {}) {
         if (!exactKeys(selectedByAdapter, ['sourcePath', 'sourceType', 'sourceBytes'])) {
           throw new SafeError('Der lokale Dateidialog lieferte ein ungültiges Ergebnis.');
         }
-        const selected = validateSelectedPath(selectedByAdapter.sourcePath, { allowedTypes: ['txt', 'md', 'csv', 'docx'] });
+        const selected = validateSelectedPath(selectedByAdapter.sourcePath, { allowedTypes: ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx'] });
         if (
           selected.sourceType !== selectedByAdapter.sourceType ||
           selected.sourceBytes !== selectedByAdapter.sourceBytes

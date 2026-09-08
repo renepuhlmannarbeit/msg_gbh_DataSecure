@@ -36,8 +36,7 @@ assert.match(read('.github/workflows/bundled-runtime-release.yml'), /generate-sb
 const projected = collectProductFiles(path.join(root, 'plugins', 'data-secure'));
 const entries = new Map(projected.map(file => [file.archivePath, fs.readFileSync(file.fullPath)]));
 const commonModules = ['conversion-runtime-resolver.js', 'conversion-worker-contract.js', 'conversion-worker.js',
-  'convert-next.js', 'markdown-artifact.js', 'markdown-contract.js', 'markdown-retention.js', 'markdown-store.js',
-  'wide-privacy-extraction.js'];
+  'convert-next.js', 'markdown-artifact.js', 'markdown-contract.js', 'markdown-retention.js', 'markdown-store.js'];
 assert.deepEqual([...entries.keys()].filter(name => name.startsWith('server/standalone/')).sort(),
   commonModules.map(name => `server/standalone/${name}`).sort());
 assert.deepEqual(verifyProductRelativeRequires(entries), { ok: true });
@@ -56,10 +55,13 @@ for (const name of commonModules) {
 }
 for (const name of ['conversion-runtime/node.exe', 'conversion-runtime/node_modules/pdfjs-dist/build/pdf.mjs',
   'conversion-runtime/models/eng.traineddata', 'conversion-worker-child.js', 'markdown-extractor.js',
-  'desktop-sidecar.js', 'application-service.js', 'run-history.js', 'product-manifest.json']) {
+  'wide-privacy-extraction.js', 'desktop-sidecar.js', 'application-service.js', 'run-history.js',
+  'product-manifest.json']) {
   assert.equal(includeInProduct(`server/standalone/${name}`), false, `${name} is not a Cowork payload`);
   assert.equal(entries.has(`server/standalone/${name}`), false);
 }
+assert.equal(entries.has('server/core/markdown-first-privacy.js'), true,
+  'the channel-neutral Markdown-first privacy contract ships in Cowork');
 const broken = new Map(entries);
 broken.set('server/gateway/future-shared.js', Buffer.from("require('../standalone/future-contract');"));
 assert.throws(() => verifyProductRelativeRequires(broken), /PRODUCT_MODULE_DEPENDENCY_MISSING/u,

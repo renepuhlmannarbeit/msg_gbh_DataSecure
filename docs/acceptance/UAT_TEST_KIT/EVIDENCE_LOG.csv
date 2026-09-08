@@ -1,6 +1,6 @@
 test_id,test_name,instructions_anchor,distribution_channel,install_lifecycle,platform,os_version,claude_version,plugin_version,build_commit,artifact_sha256,cold_or_warm,file_count,duration_seconds,grade_complete,grade_usable_with_omissions,grade_not_processed,grade_unavailable,visuals_withheld,host_permission_prompts,data_secure_dialogs,one_picker,keyboard_operable,labels_understandable,no_raw_data_in_chat,originals_unchanged,retention_preserves_sources,no_duplicate_output,result,error_code_it_detail,short_content_free_observation,reviewer,date_utc
 UAT-01,Ein Mitarbeiterprofil sicher de-identifizieren,STEP-BY-STEP.md#uat-01--ein-mitarbeiterprofil-sicher-de-identifizieren,,,,,,,,,cold,1,,,,,,,,,,,,,,,,,,,,
-UAT-02,Vier Formate liefern denselben fachlichen Inhalt,STEP-BY-STEP.md#uat-02--vier-formate-liefern-denselben-fachlichen-inhalt,,,,,,,,,warm,4,,,,,,,,,,,,,,,,,,,,
+UAT-02,Sechs Formate liefern denselben fachlichen Inhalt,STEP-BY-STEP.md#uat-02--sechs-formate-liefern-denselben-fachlichen-inhalt,,,,,,,,,warm,6,,,,,,,,,,,,,,,,,,,,
 UAT-03,Bilder lokal halten und Mehrdeutigkeit nicht raten,STEP-BY-STEP.md#uat-03--bilder-lokal-halten-und-mehrdeutigkeit-nicht-raten,,,,,,,,,warm,2,,,,,,,,,,,,,,,,,,,,
 UAT-04,Gesperrte Formate ausblenden und beschädigte DOCX sicher stoppen,STEP-BY-STEP.md#uat-04--gesperrte-formate-ausblenden-und-beschädigte-docx-sicher-stoppen,,,,,,,,,warm,5,,,,,,,,,,,,,,,,,,,,
 UAT-05,Unterbrochenen Zehnerstapel fortsetzen,STEP-BY-STEP.md#uat-05--unterbrochenen-zehnerstapel-fortsetzen,,,,,,,,,cold,10,,,,,,,,,,,,,,,,,,,,

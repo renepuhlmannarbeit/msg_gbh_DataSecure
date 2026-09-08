@@ -9,7 +9,7 @@
     {
       "name": "data-secure",
       "displayName": "GBH DataSecure – Dokumente anonymisieren",
-      "description": "Lokale De-Identifizierung von TXT-, Markdown-, CSV- und DOCX-Geschäftsdokumenten, bevor Claude deren bereinigten Text verarbeitet; alle weiteren Formate bleiben im Pilot gesperrt.",
+      "description": "Lokale De-Identifizierung von TXT-, Markdown-, CSV-, DOCX-, XLSX- und PPTX-Geschäftsdokumenten, bevor Claude deren bereinigten Markdown-Text verarbeitet; PDF, Scan-PDF und Bilder bleiben im Cowork-Pilot gesperrt.",
       "author": {
         "name": "Geschäftsbereich Healthcare, msg systems ag"
       },

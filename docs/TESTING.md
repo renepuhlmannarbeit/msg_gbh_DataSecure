@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 08.09.2026 · 3.2.0-rc123
+Stand: 08.09.2026 · 3.2.0-rc124
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -48,8 +48,9 @@ Sie prüft unter anderem:
 - keinen auswählbaren Bildmodus;
 - 0–14 Tage nur für temporäre Arbeits-/Reviewdaten;
 - niemals automatische Löschung von Quellen/Originalen oder fertigen Exporten;
-- Cowork-Formatallowlist TXT/Markdown/CSV/DOCX für direkte Anonymisierung;
-  Standalone verarbeitet DOCX und breite Quellen Markdown-first mit getrenntem
+- Cowork-Formatallowlist TXT/Markdown/CSV/DOCX direkt sowie XLSX/PPTX
+  Markdown-first; PDF/Scan-PDF/Bilder bleiben gesperrt. Standalone verarbeitet
+  DOCX und breite Quellen Markdown-first mit getrenntem
   Extraktionsstatus. Reine Standalone-Konvertierung bleibt ein eigener Zweck.
 - inhaltsfreie Statusprojektion, unveränderten Textfallback und einen
   reproduzierbaren Offline-Build aus Repo- und fremdem Arbeitsordner.

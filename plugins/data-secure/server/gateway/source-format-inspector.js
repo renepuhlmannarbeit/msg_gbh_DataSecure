@@ -96,7 +96,9 @@ function verdict(declaredType, detectedType, status, code, structure = null) {
 
 function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
   const conversion = options.processingMode === 'markdown-only' && options.productChannel === 'standalone';
-  const widePrivacy = options.processingMode === 'markdown-and-anonymize' && options.productChannel === 'standalone';
+  const widePrivacy = options.processingMode === 'markdown-and-anonymize' &&
+    (options.productChannel === 'standalone' ||
+      (options.productChannel === 'plugin' && ['.xlsx', '.pptx'].includes(String(extension || '').toLowerCase())));
   const readSync = options.readSync || fs.readSync;
   const fstatSync = options.fstatSync || fs.fstatSync;
   const ext = String(extension || '').toLowerCase();

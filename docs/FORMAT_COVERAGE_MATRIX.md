@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 08.09.2026 · Produktversion 3.2.0 RC123
+Stand: 08.09.2026 · Produktversion 3.2.0 RC124
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest ist keine Freigabe für
@@ -8,13 +8,18 @@ Anonymisierung, Cowork oder einen breiten Endnutzerrollout.
 
 ## Anonymisierung: Claude-Plugin und Standalone
 
-Das Claude-Plugin bleibt im Modus `markdown-and-anonymize` auf vier Formate
-begrenzt. Standalone besitzt den DS-087/090-Pfad: DOCX und breite Quellen werden
+Das Claude-Plugin verarbeitet im Modus `markdown-and-anonymize` TXT, Markdown,
+CSV und DOCX direkt. XLSX und PPTX nutzen nach DS-093 denselben lokalen
+Markdown-first-Grundsatz wie Standalone, aber den bereits ausgelieferten
+isolierten Office-Parser. PDF, Scan-PDF und Bilder bleiben bis zum nachgewiesenen
+Cowork-OCR-/PDF-Paket gesperrt. Standalone besitzt den DS-087/090-Pfad: DOCX und breite Quellen werden
 genau einmal lokal zu einer neutralen Markdown-Extraktion verarbeitet und erst
 danach vom unveränderten Privacy-Core anonymisiert. Der Pfad veröffentlicht
 gültigen, nichtleeren Markdown-Inhalt auch dann, wenn die Vollständigkeit des
 Originalcontainers nicht garantiert werden kann. Sein Ergebnis ist eine
 anonymisierte Markdown-Textrepräsentation, keine anonymisierte Originaldatei.
+Das Cowork-Plugin verarbeitet damit sechs Formate: vier direkt und zwei über
+die lokale Markdown-first-Extraktion.
 
 | Format | Gemeinsame Engine-Coverage | Claude-Plugin | Standalone-Pilot | Freigegebener Inhalt / Verhalten |
 |---|---|---|---|---|
@@ -22,8 +27,8 @@ anonymisierte Markdown-Textrepräsentation, keine anonymisierte Originaldatei.
 | Markdown (`.md`, `.markdown`) | belegt | freigegeben | E0 belegt, UAT offen | normalisierter Text; Links/HTML bleiben inert und werden nicht geladen |
 | CSV | belegt | freigegeben | E0 belegt, UAT offen | strikt validierte Tabelle als Markdown; defekte Struktur stoppt fail-closed |
 | DOCX | belegt für dokumentierte Bereiche | freigegeben; unbekannte inhaltsfähige Bereiche stoppen | Markdown-Extraktion wird anonymisiert | Custom-XML/Grafiken bleiben außerhalb des Markdown; Extraktionsstatus bleibt separat, der Markdown-Inhalt durchläuft alle Privacy-Gates |
-| XLSX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Arbeitsmappe |
-| PPTX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Präsentation |
+| XLSX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | Markdown-Extraktion wird anonymisiert | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Arbeitsmappe |
+| PPTX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | Markdown-Extraktion wird anonymisiert | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Präsentation |
 | PDF / Scan-PDF | Text/OCR angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert | leere OCR stoppt; sonst keine Vollständigkeitszusage für das PDF |
 | PNG, JPEG, BMP | lokale OCR angebunden, OCR nicht fachlich verifiziert | gesperrt | OCR-Markdown wird anonymisiert | leere OCR stoppt; sonst keine Vollständigkeitszusage für den Bildinhalt |
 | unbekannt, beschädigt oder verschlüsselt | nicht zulässig | gesperrt | gesperrt | kein Teilresultat und keine Entschlüsselung |

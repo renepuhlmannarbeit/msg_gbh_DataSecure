@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 07.09.2026 · Version 3.2.0 RC123 · Cowork-Plugin
+Stand: 08.09.2026 · Version 3.2.0 RC124 · Cowork-Plugin
 
 ## Vor dem ersten Lauf
 
@@ -85,7 +85,7 @@ Dokumente nicht der empfohlene Standard.
 
 | Freigegeben | Sicher gesperrt |
 |---|---|
-| TXT, Markdown (`.md`, `.markdown`), CSV, DOCX | XLSX, PPTX, PDF, Scan-PDF, PNG, JPEG, BMP und unbekannte Formate |
+| TXT, Markdown (`.md`, `.markdown`), CSV, DOCX direkt; XLSX/PPTX als lokal extrahiertes Markdown | PDF, Scan-PDF, PNG, JPEG, BMP und unbekannte Formate |
 
 Ein gesperrtes Format bleibt unverändert und erhält kein Teilresultat. Eine
 passwortgeschützte oder verschlüsselte Datei wird nicht entschlüsselt; DataSecure
@@ -188,7 +188,7 @@ wird nicht automatisch an Claude übertragen.
 | Sichtbarer Export vorübergehend fehlgeschlagen | Interne Ergebnisse bleiben erhalten; beim nächsten Pluginstart wird erneut exportiert |
 | Antwort nennt keine oder eine ältere DataSecure-Version | Cowork verarbeitet mit einer älteren Plugin-Kopie; Plugin gemäß „Plugin aktualisieren“ neu bereitstellen und neue Aufgabe starten |
 | Picker geschlossen | Nur auf ausdrücklichen Wunsch neu starten |
-| Auswahl abgelehnt („enthält … nicht freigegebene oder unbekannte Formate“) | Ein Ordner wird immer vollständig verarbeitet oder gar nicht; Ordner nur mit TXT/Markdown/CSV/DOCX wählen oder die Dateien einzeln auswählen. Kein Fehler des Plugins |
+| Auswahl abgelehnt („enthält … nicht freigegebene oder unbekannte Formate“) | Ein Ordner wird immer vollständig verarbeitet oder gar nicht; Ordner nur mit TXT/Markdown/CSV/DOCX/XLSX/PPTX wählen oder die Dateien einzeln auswählen. Kein Fehler des Plugins |
 | Datei sicher gestoppt | Nicht automatisch wiederholen; Klartextmeldung lesen, technischen Code nur an IT nennen |
 | Stapel unterbrochen | „Setze den letzten DataSecure-Stapel fort“ |
 | Mehrdeutigkeit | der Sammelreview öffnet automatisch; fachlich entscheiden oder „Später entscheiden“ wählen |

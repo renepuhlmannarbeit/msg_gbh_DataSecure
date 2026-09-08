@@ -103,6 +103,10 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
       ok: true, job: jobStatus(jobId), package_id: result.package_id,
       read_capability: result.read_capability,
       read_capability_expires_at: result.read_capability_expires_at,
+      ...(result.privacy_scope ? {
+        privacy_scope: result.privacy_scope,
+        source_extraction_coverage: result.source_extraction_coverage
+      } : {}),
       document_id: result.document_id, verification: result.verification,
       detected_identifiers: result.detected_identifiers, review_decision: reviewDecision,
       visual_assets: result.visual_assets,

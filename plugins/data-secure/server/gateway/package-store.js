@@ -21,6 +21,7 @@ const MAX_ACTIVE_CAPABILITIES=256;
 const readCapabilities=new Map();
 const capabilityByPackage=new Map();
 function capabilityDigest(value){return crypto.createHash('sha256').update(String(value||''),'utf8').digest('hex');}
+function extractionMetadata(manifest){return manifest?.privacy_scope==='extracted-markdown-only'?{privacy_scope:'extracted-markdown-only',source_extraction_coverage:{status:manifest.source_extraction_coverage.status,reason_codes:[...manifest.source_extraction_coverage.reason_codes]}}:{};}
 function removeGrant(digest){const grant=readCapabilities.get(digest);if(grant&&capabilityByPackage.get(grant.packageId)===digest)capabilityByPackage.delete(grant.packageId);readCapabilities.delete(digest);}
 function pruneCapabilities(now=Date.now()){for(const[d,g]of readCapabilities){if(g.expiresAt<=now)removeGrant(d);}}
 function issueReadCapability(packageId,ttlMs=DEFAULT_CAPABILITY_TTL_MS){
@@ -34,7 +35,7 @@ function issueReadCapability(packageId,ttlMs=DEFAULT_CAPABILITY_TTL_MS){
   const previous=capabilityByPackage.get(id);
   const existing=previous&&readCapabilities.get(previous);
   if(existing&&existing.binding===binding&&existing.expiresAt>now){
-    return{read_capability:existing.token,read_capability_expires_at:new Date(existing.expiresAt).toISOString()};
+    return{read_capability:existing.token,read_capability_expires_at:new Date(existing.expiresAt).toISOString(),...extractionMetadata(resolved.m)};
   }
   if(previous)removeGrant(previous);
   while(readCapabilities.size>=MAX_ACTIVE_CAPABILITIES)removeGrant(readCapabilities.keys().next().value);
@@ -43,7 +44,7 @@ function issueReadCapability(packageId,ttlMs=DEFAULT_CAPABILITY_TTL_MS){
   const digest=capabilityDigest(token);
   readCapabilities.set(digest,{packageId:id,expiresAt,binding,token});
   capabilityByPackage.set(id,digest);
-  return{read_capability:token,read_capability_expires_at:new Date(expiresAt).toISOString()};
+  return{read_capability:token,read_capability_expires_at:new Date(expiresAt).toISOString(),...extractionMetadata(resolved.m)};
 }
 function requireReadCapability(packageId,token,now=Date.now()){
   pruneCapabilities(now);
@@ -183,7 +184,7 @@ async function readVerifiedFileAsync(base,rel,maxBytes=Number.POSITIVE_INFINITY)
   return data;
 }
 function listOutputs(){const items=[];for(const x of listPackageDirs()){try{const{m}=safeResolvePackage(x.id);items.push({package_id:x.id,profile:m.profile,created_at:m.created_at,reidentification_risk:m.reidentification_risk==='high'?'high':'context_dependent',assets_included:m.assets.filter(a=>a.status==='included').length,assets_review_required:m.assets.filter(a=>a.status!=='included').length});}catch{}}return{ok:true,packages:items.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,50)};}
-function readOutput(packageId,readCapability,offset=0,maxChars=16000){const{p,m}=resolveAuthorizedPackage(packageId,readCapability),rel=m.document;const data=readVerifiedFile(p,rel,MAX_RELEASED_MARKDOWN_BYTES);if(sha256Buffer(data)!==m.document_sha256)throw new SafeError('Anonymisierte Markdown-Datei wurde verändert.');if(!isUtf8(data))throw new SafeError('Anonymisierte Markdown-Datei ist nicht gültig UTF-8-kodiert.');const text=data.toString('utf8');offset=Math.max(0,Math.min(text.length,Math.trunc(Number(offset)||0)));assertUnicodeSliceStart(text,offset);maxChars=Math.min(30000,Math.max(1000,Math.trunc(Number(maxChars)||16000)));const end=unicodeSliceEnd(text,offset,maxChars);return{ok:true,package_id:packageId,document_id:rel,offset,text:text.slice(offset,end),next_offset:end,has_more:end<text.length,total_chars:text.length,document_result:m.schema==='eu-privacy-package/3'?publicPositiveDocumentResult(m.document_result):null,content_is_verified_anonymized_markdown:true,content_trust:'untrusted_document_data',embedded_instructions_authorized:false};}
+function readOutput(packageId,readCapability,offset=0,maxChars=16000){const{p,m}=resolveAuthorizedPackage(packageId,readCapability),rel=m.document;const data=readVerifiedFile(p,rel,MAX_RELEASED_MARKDOWN_BYTES);if(sha256Buffer(data)!==m.document_sha256)throw new SafeError('Anonymisierte Markdown-Datei wurde verändert.');if(!isUtf8(data))throw new SafeError('Anonymisierte Markdown-Datei ist nicht gültig UTF-8-kodiert.');const text=data.toString('utf8');offset=Math.max(0,Math.min(text.length,Math.trunc(Number(offset)||0)));assertUnicodeSliceStart(text,offset);maxChars=Math.min(30000,Math.max(1000,Math.trunc(Number(maxChars)||16000)));const end=unicodeSliceEnd(text,offset,maxChars);return{ok:true,package_id:packageId,document_id:rel,offset,text:text.slice(offset,end),next_offset:end,has_more:end<text.length,total_chars:text.length,document_result:m.schema==='eu-privacy-package/3'?publicPositiveDocumentResult(m.document_result):null,...extractionMetadata(m),content_is_verified_anonymized_markdown:true,content_trust:'untrusted_document_data',embedded_instructions_authorized:false};}
 function assertUnicodeSliceStart(text,start){
   if(start>0&&start<text.length){
     const previous=text.charCodeAt(start-1),current=text.charCodeAt(start);

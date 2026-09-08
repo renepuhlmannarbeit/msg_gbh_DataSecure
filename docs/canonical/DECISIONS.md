@@ -6,7 +6,7 @@ Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenomme
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-092, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-093, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -1388,3 +1388,31 @@ Verlauf, sichtbare Zuordnung, erhaltene Ordnerstruktur und wählbare
 Ergebnisbenennung. DS-092 präzisiert DS-002, DS-005, DS-006, DS-040, DS-075,
 DS-087, DS-089, DS-090 und DS-091, ohne deren Sicherheits- und
 Produktgrenzen zu ersetzen.
+
+## DS-093 – Cowork anonymisiert XLSX/PPTX über lokales Markdown; OCR folgt nach Paketnachweis
+
+Am 08.09.2026 festgelegt: Das Cowork-Plugin erweitert den bestehenden lokalen
+Anonymisierungsweg um XLSX und PPTX. Beide Formate werden nach derselben
+fail-closed Containerprüfung genau einmal im bereits ausgelieferten isolierten
+Office-Parser zu einer neutralen Markdown-Repräsentation extrahiert. Nur diese
+Repräsentation durchläuft anschließend denselben Privacy-Core, dieselbe
+stapelweite Personen-/Unternehmenszuordnung und dasselbe Residual-Gate wie TXT,
+Markdown, CSV und DOCX. Originalbytes, Pfade, Dateinamen und rohes
+Zwischen-Markdown werden weder an Claude übergeben noch sichtbar exportiert.
+
+Der sichtbare Status trennt zwei Aussagen: Der extrahierte Markdown-Inhalt wurde
+vollständig datenschutzgeprüft; die vollständige Abdeckung des ursprünglichen
+Excel-/PowerPoint-Containers wird nicht zugesagt. Daher tragen XLSX/PPTX im
+Cowork-Pilot `privacy_scope=extracted-markdown-only` und mindestens
+`SOURCE_COVERAGE_UNVERIFIED`. Grafiken oder andere nicht extrahierte Inhalte
+werden nicht als anonymisiert behauptet.
+
+PDF, Scan-PDF und eigenständige Bilder bleiben im Cowork-Produkt gesperrt, bis
+die lokale PDF-/OCR-Runtime im ausgelieferten ZIP beziehungsweise in der
+gleichwertigen Marketplace-Projektion enthalten, offline begrenzt, lizenz- und
+größengeprüft sowie auf Windows x64 und macOS Intel/ARM nachgewiesen ist. Der
+Stand 08.09.2026 überschreitet mit der vorhandenen Standalone-OCR-Runtime die
+aktuelle direkte Upload-/Paketbudgetlinie; sie wird deshalb nicht verdeckt in
+das Cowork-Paket kopiert. Die Standalone-Funktionen und -Oberfläche bleiben
+unverändert. Die Cowork-Normalreise behält genau eine Quellenwahl und keine
+zusätzliche Bestätigung. DS-093 präzisiert DS-075, DS-087, DS-090 und DS-092.

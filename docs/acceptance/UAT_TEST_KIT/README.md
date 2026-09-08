@@ -36,9 +36,11 @@ synthetische Marker geprüft.
 
 ## Testbereiche
 
-- `01-positive`: derselbe synthetische Fall als TXT, Markdown, CSV und DOCX.
+- `01-positive`: derselbe synthetische Fall als TXT, Markdown, CSV und DOCX
+  direkt sowie als lokal extrahiertes XLSX/PPTX-Markdown.
 - `02-review`: Bild-DOCX und mehrdeutiger Zertifikatsanbieter.
-- `03-blocked`: absichtlich gesperrte oder beschädigte Formate.
+- `03-blocked`: PDF/Bild sowie eine beschädigte DOCX als absichtlich
+  gesperrte oder beschädigte Formate.
 - `04-batch-100`: 100 kleine TXT-Dateien für Fortsetzung und Serienlauf.
 
 Jede Kennung wird immer zusammen mit ihrem Klartextnamen verwendet. Wer etwa

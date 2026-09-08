@@ -267,12 +267,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     throw new SafeError('Die private Arbeitskopie besitzt keine gültige Formatbindung.');
   }
   const ext = path.extname(originalName || originalSource).toLowerCase();
-  const markdownFirstStandalone = deps.productChannel === 'standalone' &&
-    require('../standalone/wide-privacy-extraction').isMarkdownFirstPrivacyExtension(ext);
-  if (!PILOT_SUPPORTED.has(ext) && !markdownFirstStandalone) {
+  // This orchestrator is the Cowork/plugin entry point unless a caller
+  // explicitly selects the Standalone channel.  Keeping that legacy default
+  // here prevents older batch/recovery callers from being routed through the
+  // Standalone conversion worker merely because productChannel is absent.
+  const productChannel = deps.productChannel || 'plugin';
+  const markdownFirstPrivacy = require('../core/markdown-first-privacy')
+    .isMarkdownFirstPrivacyExtension(ext, productChannel);
+  if (!PILOT_SUPPORTED.has(ext) && !markdownFirstPrivacy) {
     const error = new SafeError(
       'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben. ' +
-      'Verwenden Sie ausschließlich TXT, Markdown, CSV oder DOCX; PDF, XLSX, PPTX und Bilddateien bleiben sicher gestoppt.'
+      'Verwenden Sie TXT, Markdown, CSV, DOCX, XLSX oder PPTX; PDF und Bilddateien bleiben sicher gestoppt.'
     );
     error.code = ext === '.pdf' ? 'PDF_COVERAGE_UNVERIFIED' : 'FORMAT_COVERAGE_UNVERIFIED';
     bestEffortDiagnostic(deps, {
@@ -328,9 +333,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     throwIfAborted(deps.abortSignal);
 
-    const converted = markdownFirstStandalone
-      ? await (deps.extractWideSourceForPrivacy || require('../standalone/wide-privacy-extraction').extractWideSourceForPrivacy)(
+    const converted = markdownFirstPrivacy
+      ? await (deps.extractSourceForPrivacy || require('../core/markdown-first-privacy').extractSourceForPrivacy)(
         sourceBuffer, ext, { signal: deps.abortSignal, convertBuffer: deps.convertBuffer,
+          convertDocument: deps.convertDocument || convertDocument, productChannel,
           timeoutMs: deps.timeoutMs, ErrorType: SafeError })
       : await (deps.convertDocument || convertDocument)(source, {
         signal: deps.abortSignal,
@@ -477,7 +483,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     const mdName = `${packageId}.md`;
     const mdPath = path.join(stagePackage, mdName);
-    const extractedMarkdownScope = markdownFirstStandalone
+    const extractedMarkdownScope = markdownFirstPrivacy
       ? '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. ' +
         (converted.sourceExtractionCoverage.status === 'complete'
           ? 'Der lokale Konverter bestätigt die Extraktionsabdeckung; die Originaldatei selbst bleibt unverändert.'
@@ -493,7 +499,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         review,
         removed,
         reidentificationRisk: anon.reidentificationRisk,
-        ...(markdownFirstStandalone ? { sourceExtractionCoverage: converted.sourceExtractionCoverage } : {})
+        ...(markdownFirstPrivacy ? { sourceExtractionCoverage: converted.sourceExtractionCoverage } : {})
       }) +
       extractedMarkdownScope +
       reviewedText +
@@ -550,7 +556,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       created_at: new Date().toISOString(),
       profile: effective,
       source_type: ext.slice(1),
-      ...(markdownFirstStandalone ? {
+      ...(markdownFirstPrivacy ? {
         privacy_scope: 'extracted-markdown-only',
         source_extraction_coverage: converted.sourceExtractionCoverage
       } : {}),
@@ -673,7 +679,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         redactions: vis.results.reduce((n, x) => n + (x.redactions || 0), 0)
       },
       document_result: documentResult,
-      ...(markdownFirstStandalone ? {
+      ...(markdownFirstPrivacy ? {
         privacy_scope: 'extracted-markdown-only',
         source_extraction_coverage: converted.sourceExtractionCoverage
       } : {}),
@@ -753,8 +759,8 @@ async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
     throw new SafeError('Companion-Quelle ist keine reguläre lokale Datei.');
   }
   const ext = path.extname(absolute).toLowerCase();
-  if (!new Set(['.txt', '.md', '.markdown', '.csv', '.docx']).has(ext)) {
-    throw new SafeError('Der private Dateidialog unterstützt derzeit ausschließlich TXT, Markdown, CSV und DOCX.');
+  if (!new Set(['.txt', '.md', '.markdown', '.csv', '.docx', '.xlsx', '.pptx']).has(ext)) {
+    throw new SafeError('Der private Dateidialog unterstützt derzeit TXT, Markdown, CSV, DOCX, XLSX und PPTX.');
   }
   return anonymizeNext(profile, {
     ...deps,

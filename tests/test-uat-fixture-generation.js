@@ -19,11 +19,11 @@ function digestTree(root) {
   return result;
 }
 
-function inspect(relative) {
+function inspect(relative, options = {}) {
   const target = path.join(output, relative);
   const stat = fs.lstatSync(target);
   const fd = fs.openSync(target, fs.constants.O_RDONLY);
-  try { return inspectSourceFormatFromFd(fd, stat, path.extname(target)); }
+  try { return inspectSourceFormatFromFd(fd, stat, path.extname(target), options); }
   finally { fs.closeSync(fd); }
 }
 
@@ -35,11 +35,15 @@ test('Node generator creates exactly the current 111-file layout without histori
   for (const relative of expectedFiles()) assert.ok(fs.statSync(path.join(output, relative)).isFile(), relative);
   assert.match(fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.txt'), 'utf8'), /Lina Testfeld/u);
   assert.ok(fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.docx')).includes(Buffer.from('word/document.xml')));
+  assert.ok(fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.xlsx')).includes(Buffer.from('xl/worksheets/sheet1.xml')));
+  assert.ok(fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.pptx')).includes(Buffer.from('ppt/slides/slide1.xml')));
   assert.ok(fs.readFileSync(path.join(output, '02-review', 'personnel-profile-with-image.docx')).includes(Buffer.from('word/media/image1.png')));
   assert.strictEqual(inspect('01-positive/personnel-profile.docx').verdict, 'candidate');
   assert.strictEqual(inspect('02-review/personnel-profile-with-image.docx').verdict, 'candidate');
-  assert.strictEqual(inspect('03-blocked/blocked-workbook.xlsx').verdict, 'not_released');
-  assert.strictEqual(inspect('03-blocked/blocked-slides.pptx').verdict, 'not_released');
+  const pluginPrivacy = { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' };
+  assert.strictEqual(inspect('01-positive/personnel-profile.xlsx', pluginPrivacy).verdict, 'candidate');
+  assert.strictEqual(inspect('01-positive/personnel-profile.pptx', pluginPrivacy).verdict, 'candidate');
+  assert.strictEqual(inspect('03-blocked/blocked-text.pdf', pluginPrivacy).verdict, 'not_released');
   assert.strictEqual(inspect('03-blocked/malformed.docx').verdict, 'rejected');
 });
 

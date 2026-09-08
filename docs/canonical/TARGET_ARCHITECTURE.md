@@ -1,6 +1,6 @@
 # Kanonische Zielarchitektur
 
-Stand: 07.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-092
+Stand: 08.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-093
 
 ## Architekturprinzip
 
@@ -50,12 +50,13 @@ Zielhostfreigaben bleiben getrennt; konkrete Extraktionsgrenzen stehen in der
 
 | Produkt / Zweck | Aktiver Eingang | Prüfung und Ausgabe | Modellübergabe |
 |---|---|---|---|
-| Cowork-Plugin / anonymisieren | lokaler OS-Picker; TXT, Markdown, CSV, DOCX | Parser, PII, Residual-Gate, erforderlichenfalls Sammelreview; neutrale MD in `DataSecure-Output`; Mapping privat | nur erneut verifiziertes anonymisiertes Markdown auf späteren ausdrücklichen Auswertungsauftrag |
+| Cowork-Plugin / anonymisieren | lokaler OS-Picker; TXT, Markdown, CSV und DOCX direkt; XLSX/PPTX lokal Markdown-first | isolierte Office-Extraktion, PII, Residual-Gate, erforderlichenfalls Sammelreview; neutrale MD in `DataSecure-Output`; Quellenabdeckung separat, Mapping privat | nur erneut verifiziertes anonymisiertes Markdown auf späteren ausdrücklichen Auswertungsauftrag |
 | Standalone / Markdown und anonymisieren | native Picker oder Drop mit explizitem Start; TXT, Markdown und CSV direkt; DOCX sowie breite Quellen über DS-087/090 | DOCX/XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP einmal neutral extrahiert, gültigen nichtleeren Markdown-Inhalt anonymisiert und Quellenabdeckung separat ausgewiesen; pro Stapel neutrale Ergebnisnamen (Standard) oder Quellbasis mit `-anonymisiert`; MD und laufbezogene `DataSecure-Zuordnung.csv` in `DataSecure-Output` | kein MCP oder automatischer Upload |
 | Standalone / nur Markdown | native Picker oder Drop mit explizitem Start; TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF einschließlich Scans, PNG/JPEG/BMP | Offline-Extraktion ohne PII-Ersetzung und Anonymisierungsreview; ursprüngliche Inhalte und Coveragehinweise; MD unter dem ursprünglichen Basisnamen in `DataSecure-Markdown`, ausdrücklich nicht anonymisiert; keine Zuordnungsdatei | keine Privacy-Lesecapability; vom Plugin-Handoff ausgeschlossen |
 
 Die größere Formatmenge der reinen Konvertierung erweitert das Cowork-Plugin
-nicht. DS-087/090 lässt DOCX und breite Quellen ausschließlich im Standalone-
+nur gemäß DS-093 um XLSX und PPTX. PDF, Scan-PDF und Bilder bleiben dort
+gesperrt. DS-087/090 lässt DOCX und breite Quellen im Standalone-
 Anonymisierungszweck bis zum Privacy-Core zu. `incomplete` bleibt ein separater
 Extraktionsstatus und verhindert nicht die Anonymisierung gültigen, nichtleeren
 Markdowns. Ergebnis und Manifest bestätigen nur diesen extrahierten Inhalt und
@@ -63,6 +64,12 @@ geben keine Vollständigkeitszusage für den Originalcontainer.
 Beschädigte oder geschützte Quellen erzeugen kein Konvertat; im reinen
 Konvertierungszweck erhalten lesbare, begrenzt abgedeckte Extraktionen konkrete
 Hinweise.
+
+DS-092 bindet Cowork-Aktionen immer an den aktuellsten vollständig sichtbaren
+Cowork-Lauf. Es gibt keinen Rückfall auf ältere Ergebnisse oder einen
+historischen Alt-/Stammordner; die Standalone-Historie bleibt davon getrennt.
+Die Standalone-Konverter-/OCR-Runtime wird nicht in das Cowork-Paket übernommen;
+dort werden ausschließlich die isolierten Office-Parser für XLSX/PPTX projiziert.
 
 ## Normalablauf des Cowork-Plugins
 
@@ -218,9 +225,10 @@ Hinweise.
 - Marketplace und manuelles Plugin-ZIP liefern dasselbe Produkt. MCPB bleibt ein
   internes Engineering-Artefakt und ist kein Desktop- oder Fehler-Fallback.
 - Der manuelle Claude-Plugin-Upload ist laut aktueller Herstellerdokumentation
-  auf 50 MB begrenzt. Die große Standalone-Konverter-/OCR-Runtime wird deshalb
-  nicht in das Cowork-ZIP kopiert; breitere Cowork-Formate benötigen eine eigene
-  kleine, zielhostgeprüfte Runtimeprojektion. Quelle:
+  auf 50 MB begrenzt. Die große Standalone-PDF-/OCR-Runtime wird deshalb nicht
+  in das Cowork-ZIP kopiert. XLSX/PPTX nutzen den bereits ausgelieferten kleinen
+  Office-Parser; PDF, Scan-PDF und Bilder benötigen vor einer späteren Freigabe
+  eine eigene kleine, zielhostgeprüfte Runtimeprojektion. Quelle:
   <https://support.claude.com/en/articles/13837433-manage-plugins-for-your-organization>
 - Das Quellplugin bleibt mit `command: node` entwickelbar. Der Produktbuild ersetzt
   diesen Wert deterministisch durch `${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node`

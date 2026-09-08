@@ -23,7 +23,9 @@ function state(schema, documentResult, includeResult = true) {
   };
 }
 
-function access(journal, published) {
+function access(journal, published, grant = {
+  read_capability: 'c'.repeat(43), read_capability_expires_at: 'later'
+}) {
   let issued = 0;
   let fullChecks = 0;
   let identityChecks = 0;
@@ -42,7 +44,7 @@ function access(journal, published) {
     sameDocumentResult: (left, right) => JSON.stringify(left) === JSON.stringify(right),
     issueReadCapability: () => {
       issued++;
-      return { read_capability: 'c'.repeat(43), read_capability_expires_at: 'later' };
+      return grant;
     }
   });
   return { api, issued: () => issued, fullChecks: () => fullChecks, identityChecks: () => identityChecks };
@@ -72,6 +74,22 @@ test('matching V2 journal and verified V3 package issue exactly one capability',
   assert.strictEqual(results.length, 1);
   assert.deepStrictEqual(results[0].document_result, { grade: 'complete', label: 'Vollständig verarbeitet', omissions: [] });
   assert.strictEqual(fixture.issued(), 1);
+});
+
+test('Cowork result listing keeps source extraction and Markdown privacy status separate', () => {
+  const journal = state('datasecure-batch/4', complete);
+  journal.product_channel = 'plugin';
+  journal.items[0].package_identity = { manifest: {}, document: {} };
+  const coverage = { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] };
+  const fixture = access(journal, { state: 'verified', document_result: complete }, {
+    read_capability: 'c'.repeat(43), read_capability_expires_at: 'later',
+    privacy_scope: 'extracted-markdown-only', source_extraction_coverage: coverage
+  });
+  const [result] = fixture.api.listBatchResults(token).results;
+  assert.deepStrictEqual(result.document_result,
+    { grade: 'complete', label: 'Vollständig verarbeitet', omissions: [] });
+  assert.strictEqual(result.privacy_scope, 'extracted-markdown-only');
+  assert.deepStrictEqual(result.source_extraction_coverage, coverage);
 });
 
 for (const [name, journal, published] of [

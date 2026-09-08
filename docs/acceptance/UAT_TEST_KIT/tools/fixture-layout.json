@@ -1,5 +1,5 @@
 {
-  "schema": "datasecure-synthetic-uat-layout/2",
+  "schema": "datasecure-synthetic-uat-layout/3",
   "file_count": 111,
   "groups": {
     "01-positive": {
@@ -7,7 +7,9 @@
         "personnel-profile.txt",
         "personnel-profile.md",
         "personnel-profile.csv",
-        "personnel-profile.docx"
+        "personnel-profile.docx",
+        "personnel-profile.xlsx",
+        "personnel-profile.pptx"
       ]
     },
     "02-review": {
@@ -19,8 +21,6 @@
     "03-blocked": {
       "files": [
         "blocked-text.pdf",
-        "blocked-workbook.xlsx",
-        "blocked-slides.pptx",
         "blocked-image.png",
         "malformed.docx"
       ]

@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 07.09.2026 · 3.2.0-rc123 · Cowork-Plugin; Standalone separat
+Stand: 08.09.2026 · 3.2.0-rc124 · Cowork-Plugin; Standalone separat
 
 ## Produktkanäle
 
@@ -13,9 +13,11 @@ Bereitstellung der selbsttragenden Projektion – Marketplace getrennt frisch
 installiert, aktualisiert und zurückgerollt. Zusätzliche Engineering-Artefakte
 sind kein Nutzer-, Fallback- oder Supportweg.
 
-Der aktuelle Produktpfad verarbeitet TXT, Markdown, CSV und DOCX. XLSX, PPTX,
-PDF/Scan-PDF, eigenständige Bilder, beschädigte und verschlüsselte Dateien bleiben
-fail-closed gesperrt.
+Der aktuelle Produktpfad verarbeitet TXT, Markdown, CSV und DOCX direkt. XLSX
+und PPTX werden nach sicherem Containerpreflight lokal in Markdown extrahiert;
+nur dieser Inhalt wird anonymisiert, die Originalcontainer-Vollständigkeit nicht
+zugesagt. PDF/Scan-PDF, eigenständige Bilder, beschädigte und verschlüsselte
+Dateien bleiben fail-closed gesperrt.
 
 ## Voraussetzungen und Hostgate
 

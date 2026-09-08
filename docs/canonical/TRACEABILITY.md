@@ -1,10 +1,23 @@
 # Entscheidungs-Traceability
 
-Stand: 08.09.2026 · 3.2.0-rc123
+Stand: 08.09.2026 · 3.2.0-rc124
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC124 / DS-093 / BL-010.34 bindet XLSX und PPTX im Cowork-Plugin an eine
+lokale Markdown-first-Pipeline. `core/markdown-first-privacy.js` kapselt den
+gemeinsamen Vertrag; `runtime.js` verwendet die isolierten Office-Parser,
+`source-format-inspector.js`, Picker, IPC, Status, Prompt und Skill führen die
+beiden Formate konsistent. `privacy_scope=extracted-markdown-only`,
+`source_extraction_coverage` und `document_result` trennen Quellenextraktion
+und Datenschutzprüfung. Reale synthetische XLSX-/PPTX-Bytes, beide
+Startreihenfolgen, Paketprojektion und Standalone-Regression werden durch
+`test-wide-privacy-orchestrator.js`, Source-/OPC-Preflight-, Protokoll-,
+Capability-, Dokumentations-, Skill- und Produktgates geprüft. PDF, Scan-PDF
+und Bilder bleiben bis zu gebündelter OCR-Runtime und Zielhostevidenz
+fail-closed gesperrt.
 
 RC120 / DS-083 / BL-010.13/BL-040.5 bindet die sichtbare Zuordnung an eine
 einfache Existenzinvariante: Zuerst wird jedes Ergebnis atomar veröffentlicht
@@ -144,8 +157,9 @@ Evidence gehört nicht zum RC107-Paketreceipt.
 RC108 ergänzt `standalone/conversion-worker.js` und `conversion-worker-child.js`
 als echten begrenzten Produktprozess für elf Eingabetypen, Scan-PDF als eigenem
 PDF-Verarbeitungsfall. Der Modus `markdown-only` bewahrt Quellinhalte; der
-Der Cowork-Anonymisierungspfad bleibt auf TXT, Markdown, CSV und DOCX begrenzt;
-Standalone akzeptiert DOCX und die breiten Quellen gemäß DS-087/090 Markdown-first.
+Der Cowork-Anonymisierungspfad verarbeitet TXT, Markdown, CSV und DOCX direkt
+sowie XLSX/PPTX gemäß DS-093 über lokal extrahiertes Markdown. Standalone
+akzeptiert DOCX und die breiten Quellen gemäß DS-087/090 Markdown-first.
 `conversion-runtime-resolver.js`, `standalone-conversion-runtime.mjs` und die
 Standalone-Paketgates binden normales Node.js, PDF.js, Canvas, Tesseract.js und
 lokale Modelle statt Systemruntime oder Download. MarkItDown/Python bleibt
@@ -305,6 +319,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-089 | aktiv, Namensvorgabe durch DS-091 präzisiert | BL-010.33, BL-044, BL-040.5/6; vollständige Wurzel-relative Standalone-Struktur durch Ordneraufnahme, Queue, Journal und sichtbaren Export. Reine Konvertate behalten den Quellbasisnamen; neue Anonymisierungsläufe folgen der Wahl aus DS-091. Mapping enthält exakt beide relativen Pfade. Segment-/Link-/Swap-Gates, Unit-/Export-/Service-/Legacytests und echter verschachtelter Paketlauf; Cowork und vorhandene Läufe unverändert. |
 | DS-091 | Implementierung E0; Zielhost-UAT offen | BL-010.33; Standalone-Anonymisierung bietet vor Start neutralen Standard oder Quellbasis mit `-anonymisiert`. UI-Hilfe, Rust/IPC/Service/Worker, `datasecure-batch/6`, unveränderliche Recoverybindung und strukturtreuer Export sind geschlossen getestet. Alte v4-Läufe bleiben quellbenannt, Cowork bleibt neutral und reine Konvertierung unverändert. |
 | DS-092 | Implementierung E0; Cowork-Zielhost-UAT offen | BL-010.8/23, BL-040.5, BL-041.10, BL-044; `open_result_folder` löst mit `latestBatchOnly` ausschließlich den vollständig sichtbaren aktuellen Cowork-Lauf auf und kennt keinen Alt-/Stammordner-Fallback. Gemeinsame rekursive Ordnerfehler tragen `SOURCE_FOLDER_*` und werden im MCP-Normalweg als Auswahlablehnung projiziert. Standalone-Verträge bleiben unverändert und laufen als Regression mit. `mcp-server.js`, `gateway/batch-recovery.js`, `companion/source-folder.js`; MCP-, Recovery-, Picker-, Source-Folder-, Standalone- und Core-Policy-Tests. |
+| DS-093 | Implementierung E0; Cowork-Zielhost-UAT offen | BL-010.34; Cowork verarbeitet XLSX/PPTX lokal über denselben neutralen Markdown-Zwischenvertrag wie Standalone und anonymisiert ausschließlich den extrahierten Markdown-Inhalt. Extraktionsabdeckung und Anonymisierungsstatus bleiben getrennt; PDF/Scan-PDF/Bilder bleiben bis zum paketierten OCR-Nachweis gesperrt. `core/markdown-first-privacy.js`, `gateway/orchestrator.js`, `source-format-inspector.js`, Runtimeprojektion; Realformat-, Kanal-, Protokoll-, Dokumentations- und Paketgates. |
 
 ## DS-067 – konkrete Umsetzung
 

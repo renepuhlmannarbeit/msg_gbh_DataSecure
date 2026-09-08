@@ -16,7 +16,8 @@ function reviewError(code, message) {
 function fixture(options = {}) {
   const events = [];
   const entry = { opaque_entry: true };
-  const state = { profile: 'personnel_profile', remove_images: true, untouched: 'state' };
+  const state = { profile: 'personnel_profile', remove_images: true,
+    product_channel: options.productChannel || 'standalone', untouched: 'state' };
   const item = { id: 'item', untouched: 'item' };
   const stateBefore = structuredClone(state);
   const itemBefore = structuredClone(item);
@@ -86,6 +87,7 @@ async function main() {
     assert.deepStrictEqual(value.callOptions().inputQueue, [value.entry]);
     assert.strictEqual(value.callOptions().copyClaim, true);
     assert.strictEqual(value.callOptions().removeImages, true);
+    assert.strictEqual(value.callOptions().productChannel, 'standalone');
     assert.strictEqual(value.callOptions().packageId, 'deterministic-package');
     assert.strictEqual(value.callOptions().suppressDiagnostic, true);
   });

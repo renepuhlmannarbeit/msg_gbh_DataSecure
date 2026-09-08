@@ -94,7 +94,8 @@ Claude-/Cowork-Hostevidenz.
 ## R5 – Content- und Formatfreigaben
 
 1. TXT/Markdown/CSV/DOCX sind der aktive Anonymisierungseingang beider Produkte;
-   Standalone verarbeitet DOCX gemäß DS-090 Markdown-first, Cowork weiterhin direkt;
+   Standalone verarbeitet DOCX gemäß DS-090 Markdown-first; Cowork verarbeitet
+   DOCX weiterhin direkt und XLSX/PPTX gemäß DS-093 Markdown-first;
    aktuelle reale Erzeuger- und Zielhostabnahmen bleiben getrennte Gates.
 2. Die reine Standalone-Konvertierung verarbeitet außerdem XLSX, PPTX, PDF,
    Scan-PDF und PNG/JPEG/BMP. Ihr belegter Extraktionsumfang und konkrete
