@@ -21,6 +21,77 @@ Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
 
+### RC124 – Reviewbefunde aus dem rc123-Gesamtreview
+
+Ein Mehrdimensionsreview von `c62d7ec` hat 27 Befunde erzeugt, alle durch
+Ausführung reproduziert und adversarisch gegengeprüft. Ausführungsdetail,
+Reproduktionen und Abnahmekriterien stehen im aktuellen schreibenden Auftrag
+[`tasks/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md`](../../tasks/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md).
+Die Befunde werden **bestehenden** Storys zugeordnet; neue `BL-nnn.x`-Kennungen
+werden hier nicht eigenmächtig vergeben.
+
+**P0 — Unter-Redaktion.** Die schwerste Fehlerrichtung nach `tasks/README.md`.
+
+| Befund | Story | Neuer offener Punkt | Status |
+|---|---|---|---|
+| F1 | BL-010.30, BL-030.2 (DS-087/DS-090) | Die Standalone-Markdown-first-Extraktion setzt unter `preserveText` einen synthetischen Tabellenkopf `Spalte N` und degradiert die echte Kopfzeile zur Datenzeile. Damit verliert der Redaktionskern das explizite Namensfeld, an dem seine Spaltenerkennung hängt: Namen und Geburtsdaten einer echten DOCX-Teilnehmerliste gelangen unredigiert in das als anonymisiert ausgewiesene Ergebnis, während Cowork denselben Inhalt korrekt redigiert. Beide Gates lassen es durch. Für XLSX und PPTX ist der synthetische Kopf bedingungslos. | **offen, P0** |
+| F2 | BL-021.1, BL-030.2 | Personenspalten unter nicht katalogisierten Kopfzeilen (`Zuständig`, `Verantwortlich`, `Abteilung`, …) lassen den Namen still durch, statt zu redigieren oder fail-closed zu stoppen. Umfangsgrenze ist zu entscheiden und zu dokumentieren. | **offen, P0** |
+| F3 | BL-021.1 | Kein Detektor für Zugangsdaten im Dokumentinhalt; Benutzername, Passwort und API-Key bleiben im Klartext. DS-016/DS-046 betreffen nur verschlüsselte Quelldateien. | **offen, P0** |
+| F4 | BL-021.1 | IBAN wird nur bei Leerzeichen-Gruppierung erkannt; Bindestrich- und Punktgruppierung führen zu Teilleck oder vollständigem Klartext. | **offen, P0** |
+| F5 | BL-021.1 | Der Greedy-IBAN-Span verschluckt ein nachfolgendes Telefonlabel; das Residual-Gate ist danach blind und sieben von zehn Telefonziffern bleiben im Klartext. | **offen, P0** |
+| F6 | BL-021.1 | Telefonlabel-Katalog kennt „rufen Sie … an unter" nicht. | **offen, P0** |
+| F7 | BL-021.1 | Namensförmige Bigramme im Prosakörper ohne Trigger-Wort bleiben im Klartext, auch bei starkem Personenanker. Es gibt dazu keine aktive Entscheidung — entweder fail-closed stoppen oder die Grenze kanonisch dokumentieren. | **Entscheidung offen** |
+
+**P1 — Über-Redaktion und Inhaltszerstörung.** Kein Leck, aber
+Kern-Anwendungsfälle blockiert oder freigegebener Inhalt zerstört.
+
+| Befund | Story | Neuer offener Punkt | Status |
+|---|---|---|---|
+| F8 | BL-021.1 (DS-049) | Eine einzeilige Tabellenkopfzeile mit einem Fragment wie `Mitarbeiter`, `Kunden`, `Personal` oder `Patienten` stoppt die Datei strukturell mit `TABLE_STRUCTURE_AMBIGUOUS`, obwohl `TRACEABILITY.md:316` den Stopp nur für verschobene, anders breite oder überlange Strukturen zusagt. Personallisten sind damit unverarbeitbar. | **offen, P1** |
+| F9 | BL-030.2 (DS-084) | Persistierte Nachnamens-Aliase werden kontextfrei in alle Folgedokumente eines Stapels literal ersetzt; gewöhnliche Substantive und Jahreszeiten werden zu Personen. Das widerspricht DS-084 („Gleiche Schreibweise ist kein Beweis realer Identität"). | **offen, P1** |
+| F10 | BL-021.1 | Das `i`-Flag in `entities.js:412` hebt die Großschreibungsbedingung von `NAME_TOKEN` auf; ein Prosawort wird in den Namens-Seed gezogen und bricht die von DS-059 zugesagte Pseudonymstabilität. | **offen, P1** |
+
+**P2 — Evidenz und Gates.** Keine Redaktionsrichtung.
+
+| Befund | Story | Neuer offener Punkt | Status |
+|---|---|---|---|
+| F11 | BL-022.1, BL-050.1, BL-052.1 | Der als E0 zitierte 15-DOCX-Komplexkorpus lässt sich auf einem frischen Clone nicht erzeugen: der Generator hängt an keinem npm-Skript, und `tests/test-complex-docx-uat-corpus.mjs` stürzt ungeschützt mit ENOENT ab. `npm run test:standalone` kann damit nicht grün werden. Fixtures dürfen nach `.gitignore:1-9` nicht versioniert werden. | **offen, P2** |
+| F12 | BL-020.3 (DS-018) | `NETWORK_BOUNDARY_V1.md:5` nennt „Export" im Geltungsbereich der Netzwerkgrenze, aber `mcp-server.js:179` ruft `replayPendingResultExports()` im MCP-Hauptprozess, der den Guard nach Vertrag `:16` nicht lädt. Kein belegter Abflusspfad; Vertrag und Implementierung widersprechen sich. Der Einstiegspunkt ist von keinem Gate erfasst. | **offen, P2** |
+| F13 | BL-002 (DS-080) | Für Netzwerkpfade als Ergebnisordner fehlt der zu `sync_folder_notice` analoge Hinweis; bei Standalone liegt dort die sichtbare Zuordnung mit Originalnamen. Keine Sperre — nur der fehlende Hinweis. | **offen, P2** |
+| F14 | BL-010.28 (DS-085) | Die Legacy-Ausnahme, dass ein v3-Konvertierungsrecord beim Replay eine `DataSecure-Zuordnung.csv` nach `DataSecure-Markdown` schreibt, steht nur im Code und hat keinen Test. | **offen, P2** |
+| F15 | BL-010.30 | `termination_unconfirmed` wird für Journal-Schema `/6` nicht projiziert; der Anwender sieht den Stapelabbruch ohne den definierten Grund. | **offen, P2** |
+| F16 | BL-023.4 | Ein einzelnes textloses Bild setzt `OCR_TEXT_EMPTY` und stoppt ein sonst lesbares PDF hart, statt es als „verwendbar mit Auslassungen" auszuweisen. | **offen, P2** |
+| F17 | BL-030.2 | Verdacht auf massive Laufzeitkosten von `matchKnownAliases` bei Journalen ohne `known_alias_index` (vor rc123 angelegte Stapel), ohne Timeout in diesem Pfad. **Nicht nachgemessen** — erst messen, dann entscheiden. | **Messung offen** |
+
+**P3 — Kanonkorrekturen.** Reine Dokumentwahrheit, kein Code.
+
+| Befund | Story | Neuer offener Punkt | Status |
+|---|---|---|---|
+| F18/F19 | BL-051.1 (DS-077) | `CURRENT_STATE.md:548` bindet den belegten Umfang der reinen Konvertierung an RC108, das dasselbe Dokument als nicht übertragbar erklärt; richtig ist RC111/`b543589f`. `FORMAT_COVERAGE_MATRIX.md:133` nennt den historischen RC109-Build den „aktuellen" Paketlauf. | **offen, P3** |
+| F20/F21/F23 | BL-002 | Die Unterliste „teilweise präzisiert" in `DECISIONS.md:16-20` führt DS-089, DS-091 und DS-092 nicht. `CURRENT_STATE.md` trägt vier Abschnitte „Aktueller Entwicklungsstand". Zehn in rc123 geänderte Dokumente tragen ein älteres „Stand:"-Datum als ihre jüngste Änderung. | **offen, P3** |
+| F22 | BL-003.9 | `CLAUDE.md:13` und `tasks/README.md` verweisen auf zwei verschiedene, nicht existierende Auftragsdateien. | **offen, P3** |
+| F24 | BL-051.3 (DS-010) | Die GO-Regel des UAT-Kits verlangt nur den 100-Dateien-Stapel, während `PILOT-ABNAHME.md:31` und DS-010 200 Dateien fordern. Ein Team könnte GO vergeben, während BL-051.3 offen ist. | **offen, P3** |
+
+**P4 — Standalone-Desktop.** Klein, keine Redaktionsrichtung.
+
+| Befund | Story | Neuer offener Punkt | Status |
+|---|---|---|---|
+| F25 | BL-010.33 (DS-086) | Der `process-results`-Button verliert seine Freigabe ab der nächsten Auswahl unwiderruflich und zeigt dabei den sachlich falschen Tooltip „Noch kein Ergebnisordner verfügbar." | **offen, P4** |
+| F26/F27 | BL-010.33 | Das Öffnungsziel in `main.rs:844` erkennt eine Windows-Junction nicht, während der Eingabepfad in derselben Datei zusätzlich das Reparse-Attribut prüft. Ein Testname behauptet eine Indexschranke, die er nicht prüft (die Schranke selbst ist dreifach abgesichert). | **offen, P4** |
+
+Als Reviewergebnis ausdrücklich **sauber** und deshalb ohne offenen Punkt:
+Produkttrennung und Datenroots, Exportverifikation und Destination-Bindung,
+Modustrennung zwischen Anonymisierung und reiner Konvertierung, die
+`support-trace`-Projektion, der Rekursionsschutz zwischen Quell- und
+Ergebnisbaum, der Nur-Lese-Zugriff auf Originale, die drei Absturzfenster der
+Wiederaufnahme, Tauri-Kommandofläche und CSP, Panikfreiheit des
+Rust-Produktivcodes, DS-086 und die laufgebundene Verlaufsbindung,
+Markdown-Escaping als Angriffsfläche sowie die Unicode-Wortgrenzen im
+Redaktionskern. Drei zunächst gemeldete Befunde wurden gegengeprüft und
+**widerlegt**: die leere OCR im reinen Konvertierungspfad, die Gradzählung
+zwischen den Journal-Schemata `/5` und `/6` (durch DS-090 gerechtfertigt) und
+der fehlende `network-deny` im MCP-Hauptprozess als solcher (Vertragsscope).
+
 ### RC123 – DS-092: einfacher Cowork-Normalweg und Produktparität
 
 BL-010.8/BL-010.23/BL-040.5/BL-041.10/BL-044: Die in Standalone bestätigten
