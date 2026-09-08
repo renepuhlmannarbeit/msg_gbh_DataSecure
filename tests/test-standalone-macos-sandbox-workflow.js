@@ -27,6 +27,7 @@ for (const expected of [
   'npm ci --ignore-scripts --no-audit --no-fund',
   'node native/ocr/pilot/fetch-models.mjs',
   'native/ocr/pilot/posix-sandbox.c',
+  'tests/test-posix-supervisor-native.sh',
   'node scripts/build-runtime-target.mjs',
   'node scripts/prepare-standalone-runtime.mjs',
   'npm run test:standalone',

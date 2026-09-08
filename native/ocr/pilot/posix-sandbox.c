@@ -88,6 +88,23 @@ static void kill_and_reap(pid_t pid) {
   while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
 }
 
+/* A hosted process may inherit a hard limit below DataSecure's requested
+   ceiling.  POSIX permits an unprivileged process to lower rlim_max, but not
+   to raise it.  Keep the stricter inherited ceiling instead of failing the
+   parser before exec (notably on hosted macOS runners). */
+static int apply_limit_ceiling(int resource, rlim_t requested) {
+  struct rlimit inherited;
+  struct rlimit bounded;
+  if (getrlimit(resource, &inherited) != 0) return -1;
+  bounded.rlim_cur = requested;
+  bounded.rlim_max = requested;
+  if (inherited.rlim_max != RLIM_INFINITY && requested > inherited.rlim_max) {
+    bounded.rlim_cur = inherited.rlim_max;
+    bounded.rlim_max = inherited.rlim_max;
+  }
+  return setrlimit(resource, &bounded);
+}
+
 int main(int argc, char **argv) {
   uint64_t memory_mib = 0, cpu_ms = 0, wall_ms = 0;
   uint64_t memory_bytes, address_bytes, started;
@@ -121,35 +138,17 @@ int main(int argc, char **argv) {
   pid = fork();
   if (pid < 0) return START_ERROR;
   if (pid == 0) {
-    struct rlimit cpu_limit;
-    struct rlimit core_limit;
-    struct rlimit address_limit;
-    struct rlimit data_limit;
-    struct rlimit file_limit;
-    struct rlimit open_file_limit;
     uint64_t seconds = (cpu_ms + 999ULL) / 1000ULL;
     if (setpgid(0, 0) != 0) _exit(SETUP_ERROR);
 #ifdef __linux__
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1) _exit(SETUP_ERROR);
 #endif
-    cpu_limit.rlim_cur = (rlim_t)seconds;
-    cpu_limit.rlim_max = (rlim_t)seconds;
-    core_limit.rlim_cur = 0;
-    core_limit.rlim_max = 0;
-    address_limit.rlim_cur = (rlim_t)address_bytes;
-    address_limit.rlim_max = (rlim_t)address_bytes;
-    data_limit.rlim_cur = (rlim_t)memory_bytes;
-    data_limit.rlim_max = (rlim_t)memory_bytes;
-    file_limit.rlim_cur = (rlim_t)(64ULL * 1024ULL * 1024ULL);
-    file_limit.rlim_max = (rlim_t)(64ULL * 1024ULL * 1024ULL);
-    open_file_limit.rlim_cur = (rlim_t)64;
-    open_file_limit.rlim_max = (rlim_t)64;
-    if (setrlimit(RLIMIT_CPU, &cpu_limit) != 0 ||
-        setrlimit(RLIMIT_CORE, &core_limit) != 0 ||
-        setrlimit(RLIMIT_AS, &address_limit) != 0 ||
-        setrlimit(RLIMIT_DATA, &data_limit) != 0 ||
-        setrlimit(RLIMIT_FSIZE, &file_limit) != 0 ||
-        setrlimit(RLIMIT_NOFILE, &open_file_limit) != 0) {
+    if (apply_limit_ceiling(RLIMIT_CPU, (rlim_t)seconds) != 0 ||
+        apply_limit_ceiling(RLIMIT_CORE, (rlim_t)0) != 0 ||
+        apply_limit_ceiling(RLIMIT_AS, (rlim_t)address_bytes) != 0 ||
+        apply_limit_ceiling(RLIMIT_DATA, (rlim_t)memory_bytes) != 0 ||
+        apply_limit_ceiling(RLIMIT_FSIZE, (rlim_t)(64ULL * 1024ULL * 1024ULL)) != 0 ||
+        apply_limit_ceiling(RLIMIT_NOFILE, (rlim_t)64) != 0) {
       _exit(SETUP_ERROR);
     }
     execvp(argv[8], &argv[8]);

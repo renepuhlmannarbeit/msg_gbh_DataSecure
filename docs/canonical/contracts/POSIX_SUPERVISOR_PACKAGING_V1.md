@@ -22,6 +22,10 @@ Build-Fehler.
 - POSIX-Programme erhalten im Archiv den Ausführmodus `0755`; alle übrigen
   Dateien bleiben nicht ausführbar. Die Runtime prüft zusätzlich ihren festen
   `--sandbox-contract` mit leerer Umgebung.
+- Jedes Ressourcenlimit wird als Obergrenze angewendet. Ist das vom Zielhost
+  geerbte Hard-Limit bereits niedriger, bleibt dieses strengere Limit erhalten;
+  der Supervisor darf nicht versuchen, es zu erhöhen oder den Parser deshalb
+  vor `exec` abbrechen.
 - Keine Freigabe entsteht allein durch Verpackung: reale CPU-, RAM-, Kindprozess-,
   Timeout- und Fresh-Install-Evidenz für macOS x64, macOS ARM64 und Linux x64
   bleibt Pflicht.

@@ -83,6 +83,7 @@ jobs:
             -o "$destination/datasecure-sandbox"
           chmod 700 "$destination/datasecure-sandbox"
           "$destination/datasecure-sandbox" --sandbox-contract
+          bash tests/test-posix-supervisor-native.sh "$destination/datasecure-sandbox"
           shasum -a 256 "$destination/datasecure-sandbox" | awk '{print $1}' \
             > "$destination/datasecure-sandbox.sha256"
           node -e "const r=require('./plugins/data-secure/server/posix-supervisor').verifyPosixSupervisor(); if(!r.available){throw new Error(r.reason)}"
