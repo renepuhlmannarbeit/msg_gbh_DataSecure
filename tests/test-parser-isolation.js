@@ -363,6 +363,8 @@ async function main() {
       error instanceof SafeError && error.code === 'PARSER_RESOURCE_LIMIT' && !/native-125/.test(error.message));
     await assert.rejects(run(123), (error) =>
       error instanceof SafeError && error.code === 'PARSER_ISOLATION_FAILED' && !/native-123/.test(error.message));
+    await assert.rejects(run(132), (error) =>
+      error instanceof SafeError && error.code === 'PARSER_ISOLATION_FAILED' && !/native-132/.test(error.message));
     await assert.rejects(convertDocument(source('posix-setup.txt'), {
       platform: 'linux', nodeVersion: '22.13.0',
       spawn: () => fakeChild((child) => child.emit('close', 123))

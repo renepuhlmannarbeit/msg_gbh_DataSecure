@@ -541,9 +541,9 @@ async function convertDocument(source, options = {}) {
         finish(safeError('Der isolierte Dokumentparser hat eine Ressourcenbegrenzung erreicht.', 'PARSER_RESOURCE_LIMIT'));
         return;
       }
-      // Windows and the future POSIX supervisor reserve 120..126 for boundary
-      // failures. Do not reinterpret a POSIX sandbox failure as a parser error.
-      if (Number.isInteger(code) && code >= 120 && code <= 126) {
+      // Native supervisors reserve 120..139 for boundary and setup failures.
+      // Do not reinterpret a POSIX sandbox failure as a parser error.
+      if (Number.isInteger(code) && code >= 120 && code <= 139) {
         finish(safeError('Die lokale Parserbegrenzung konnte nicht sicher angewendet werden.', 'PARSER_ISOLATION_FAILED'));
         return;
       }

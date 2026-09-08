@@ -23,7 +23,10 @@
 #endif
 
 enum { USAGE_ERROR = 120, SETUP_ERROR = 121, START_ERROR = 122,
-       WAIT_ERROR = 124, RESOURCE_LIMIT = 125 };
+       WAIT_ERROR = 124, RESOURCE_LIMIT = 125,
+       CPU_LIMIT_SETUP_ERROR = 130, CORE_LIMIT_SETUP_ERROR = 131,
+       ADDRESS_LIMIT_SETUP_ERROR = 132, DATA_LIMIT_SETUP_ERROR = 133,
+       FILE_LIMIT_SETUP_ERROR = 134, OPEN_FILE_LIMIT_SETUP_ERROR = 135 };
 
 #define CONTRACT_JSON "{\"schema\":\"datasecure-posix-sandbox/v1\",\"limits\":[\"cpu\",\"address_space\",\"data\",\"file_size\",\"open_files\",\"rss\",\"wallclock\"],\"process_group_reap\":true}\n"
 
@@ -143,14 +146,14 @@ int main(int argc, char **argv) {
 #ifdef __linux__
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1) _exit(SETUP_ERROR);
 #endif
-    if (apply_limit_ceiling(RLIMIT_CPU, (rlim_t)seconds) != 0 ||
-        apply_limit_ceiling(RLIMIT_CORE, (rlim_t)0) != 0 ||
-        apply_limit_ceiling(RLIMIT_AS, (rlim_t)address_bytes) != 0 ||
-        apply_limit_ceiling(RLIMIT_DATA, (rlim_t)memory_bytes) != 0 ||
-        apply_limit_ceiling(RLIMIT_FSIZE, (rlim_t)(64ULL * 1024ULL * 1024ULL)) != 0 ||
-        apply_limit_ceiling(RLIMIT_NOFILE, (rlim_t)64) != 0) {
-      _exit(SETUP_ERROR);
+    if (apply_limit_ceiling(RLIMIT_CPU, (rlim_t)seconds) != 0) _exit(CPU_LIMIT_SETUP_ERROR);
+    if (apply_limit_ceiling(RLIMIT_CORE, (rlim_t)0) != 0) _exit(CORE_LIMIT_SETUP_ERROR);
+    if (apply_limit_ceiling(RLIMIT_AS, (rlim_t)address_bytes) != 0) _exit(ADDRESS_LIMIT_SETUP_ERROR);
+    if (apply_limit_ceiling(RLIMIT_DATA, (rlim_t)memory_bytes) != 0) _exit(DATA_LIMIT_SETUP_ERROR);
+    if (apply_limit_ceiling(RLIMIT_FSIZE, (rlim_t)(64ULL * 1024ULL * 1024ULL)) != 0) {
+      _exit(FILE_LIMIT_SETUP_ERROR);
     }
+    if (apply_limit_ceiling(RLIMIT_NOFILE, (rlim_t)64) != 0) _exit(OPEN_FILE_LIMIT_SETUP_ERROR);
     execvp(argv[8], &argv[8]);
     _exit(START_ERROR);
   }
