@@ -383,8 +383,6 @@ function resetAdmissionUi() {
 function renderAdmission(result) {
   admissionGeneration += 1;
   admitted = true;
-  currentSessionRunStarted = false;
-  currentResultsAvailable = false;
   renderUiContext(result.ui_context);
   byId('home-selection').hidden = false;
   const size = Number.isSafeInteger(result.total_bytes) ? ` · ${Math.ceil(result.total_bytes / 1024)} KB` : '';

@@ -387,6 +387,28 @@ async function consecutiveTerminalRunsCase() {
     'a fresh backend presentation generation also invalidates the terminal context');
 }
 
+async function completedResultRemainsAvailableDuringNextSelectionCase() {
+  let currentRun = 'Lauf-A';
+  let state = { state: 'ready', results_available: false };
+  const harness = await frontendHarness({
+    get_ui_context: () => localContext(currentRun),
+    get_public_state: () => state,
+    select_files: () => ({ selected_count: 1, ui_context: localContext(currentRun, ['Neues-Profil.txt']) }),
+    start_admitted_batch: () => { state = { state: 'processing', selected_count: 1, completed_count: 0 }; return { ok: true }; }
+  });
+  await harness.click('task-anonymize');
+  await harness.click('select-files');
+  await harness.click('start');
+  currentRun = 'Lauf-B';
+  state = { state: 'results_available', result_count: 1, results_available: true };
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['process-results'].disabled, false);
+
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['process-results'].disabled, false,
+    'preparing another selection must not discard the completed result from this UI session');
+}
+
 async function stalePollAfterStartCase() {
   const oldPoll = deferred();
   let held = false;
@@ -806,6 +828,7 @@ async function historyAdmissionRaceCase() {
   await testAsync('an unconfirmed slow start is observed until completion without restarting the batch', uncertainStartPollingCase);
   await testAsync('an unconfirmed start of a restored admission starts status recovery', restoredAdmissionUncertainStartCase);
   await testAsync('fast consecutive terminal runs refresh their exact result folder without repeated idle export reads', consecutiveTerminalRunsCase);
+  await testAsync('a completed result remains available while the next selection is prepared', completedResultRemainsAvailableDuringNextSelectionCase);
   await testAsync('a stale poll cannot overwrite a new run after selection and Start both completed', stalePollAfterStartCase);
   await testAsync('a delayed terminal context cannot overwrite a newly prepared selection', staleContextAfterAdmissionCase);
   await testAsync('a delayed terminal context remains stale after the new selection was already started', () => staleContextAfterAdmissionCase(true));

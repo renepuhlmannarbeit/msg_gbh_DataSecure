@@ -76,8 +76,8 @@ Kern-Anwendungsfälle blockiert oder freigegebener Inhalt zerstört.
 
 | Befund | Story | Neuer offener Punkt | Status |
 |---|---|---|---|
-| F25 | BL-010.33 (DS-086) | Der `process-results`-Button verliert seine Freigabe ab der nächsten Auswahl unwiderruflich und zeigt dabei den sachlich falschen Tooltip „Noch kein Ergebnisordner verfügbar." | **offen, P4** |
-| F26/F27 | BL-010.33 | Das Öffnungsziel in `main.rs:844` erkennt eine Windows-Junction nicht, während der Eingabepfad in derselben Datei zusätzlich das Reparse-Attribut prüft. Ein Testname behauptet eine Indexschranke, die er nicht prüft (die Schranke selbst ist dreifach abgesichert). | **offen, P4** |
+| F25 | BL-010.33 (DS-086) | Der letzte in derselben UI-Sitzung fertiggestellte Lauf bleibt während der Vorbereitung der nächsten Auswahl erreichbar. Eine neue Auswahl verwirft weder dessen exakte Laufbindung noch die Freigabe von `process-results`; historische Läufe nach App-Neustart bleiben weiterhin ausschließlich im Verlauf. | **E0 erledigt; E2-Zielhostbedienung offen** |
+| F26/F27 | BL-010.33 | Dieselbe Windows-Reparse-Point-Prüfung schützt Eingabe- und Öffnungsziele; Junctions werden vor der Übergabe an Explorer abgelehnt. Der Entnahmetest benennt nur noch seine tatsächlich geprüfte Einzelelementsemantik; die 199/200-Indexgrenze bleibt im Rust-Test separat belegt. | **E0 erledigt; E2-Zielhostbedienung offen** |
 
 Als Reviewergebnis ausdrücklich **sauber** und deshalb ohne offenen Punkt:
 Produkttrennung und Datenroots, Exportverifikation und Destination-Bindung,

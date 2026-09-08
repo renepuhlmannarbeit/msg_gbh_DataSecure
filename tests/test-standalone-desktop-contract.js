@@ -225,7 +225,7 @@ test('history actions are separately permissioned and carry only exact batch ide
   assert.match(rust, /validate_local_target\(result, kind\)/u);
 });
 
-test('prepared selections can remove exactly one bounded item through the private native contract', () => {
+test('prepared selections remove exactly one item through the private native contract', () => {
   const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
   assert.ok(capability.permissions.includes('allow-remove-admitted-source'));
   assert.ok(permissions.includes('commands.allow = ["remove_admitted_source"]'));

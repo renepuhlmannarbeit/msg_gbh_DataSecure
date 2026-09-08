@@ -29,6 +29,22 @@ static DIAGNOSTIC_LOCK: Mutex<()> = Mutex::new(());
 static DIAGNOSTIC_SESSION: OnceLock<String> = OnceLock::new();
 static NATIVE_SMOKE_PROFILE: OnceLock<Option<native_smoke::Profile>> = OnceLock::new();
 
+#[cfg(target_os = "windows")]
+fn windows_attributes_contain_reparse_point(attributes: u32) -> bool {
+    attributes & 0x400 != 0
+}
+
+#[cfg(target_os = "windows")]
+fn metadata_is_reparse_point(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    windows_attributes_contain_reparse_point(metadata.file_attributes())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn metadata_is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
+    false
+}
+
 fn diagnostic_session() -> &'static str {
     DIAGNOSTIC_SESSION.get_or_init(|| {
         let nanos = SystemTime::now()
@@ -149,12 +165,8 @@ fn dropped_source_kind(paths: &[PathBuf]) -> Result<&'static str, String> {
         }
         let metadata = std::fs::symlink_metadata(path)
             .map_err(|_| "STANDALONE_SELECTION_INVALID".to_string())?;
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::fs::MetadataExt;
-            if metadata.file_attributes() & 0x400 != 0 {
-                return Err("STANDALONE_SELECTION_INVALID".to_string());
-            }
+        if metadata_is_reparse_point(&metadata) {
+            return Err("STANDALONE_SELECTION_INVALID".to_string());
         }
         if metadata.file_type().is_symlink() || (!metadata.is_dir() && !metadata.is_file()) {
             return Err("STANDALONE_SELECTION_INVALID".to_string());
@@ -841,7 +853,8 @@ fn validate_local_target(result: Value, expected_kind: &str) -> Result<PathBuf, 
             "STANDALONE_RESULTS_MISSING".to_string()
         }
     })?;
-    if metadata.file_type().is_symlink()
+    if metadata_is_reparse_point(&metadata)
+        || metadata.file_type().is_symlink()
         || (expected_kind == "directory" && !metadata.is_dir())
         || (expected_kind == "file" && !metadata.is_file())
     {
@@ -1778,6 +1791,14 @@ mod tests {
             arguments[0].to_string_lossy(),
             format!("/select,{}", mapping.display())
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn local_open_target_rejects_the_windows_reparse_attribute() {
+        assert!(windows_attributes_contain_reparse_point(0x400));
+        assert!(windows_attributes_contain_reparse_point(0x410));
+        assert!(!windows_attributes_contain_reparse_point(0x10));
     }
 
     #[cfg(unix)]

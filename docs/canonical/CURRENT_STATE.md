@@ -2,6 +2,14 @@
 
 Stand: 08.09.2026 · 3.2.0-rc123 · Cowork-Parität ohne Standalone-Regression
 
+Der Standalone-Desktop behält den letzten innerhalb derselben UI-Sitzung
+fertiggestellten Ergebnislauf auch dann als exakt gebundene Öffnen-Aktion, wenn
+bereits der nächste Stapel vorbereitet wird. Ein App-Neustart übernimmt diesen
+Komfortzustand weiterhin nicht; ältere Läufe werden über den Verlauf geöffnet.
+Die native Zielprüfung behandelt unter Windows das Reparse-Attribut nun bei
+Eingabe **und** Ergebnisöffnung gleich und übergibt Junction-Ziele nicht an den
+Explorer. Frontend-, Desktop-Vertrags- und Rust-Tests belegen beide Grenzen.
+
 ## Aktueller Entwicklungsstand RC123 / DS-092
 
 Der Cowork-Normalweg übernimmt die gemeinsam nutzbaren Korrekturen der
