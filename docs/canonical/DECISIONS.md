@@ -1108,6 +1108,12 @@ Gleiche Schreibweise ist kein Beweis realer Identität; Namensvarianten und
 mehrdeutige Nachnamen dürfen nicht als vollautomatische Personenauflösung
 verkauft werden. Bereits bestehende v1-Stapel und das Cowork-Plugin behalten
 ihren vereinbarten HMAC-Platzhaltervertrag; keine nachträgliche Umnummerierung.
+Ein persistierter einwortiger Personenalias ist deshalb ausschließlich eine
+typisierte Identitätsbindung. In einem späteren Dokument wird er nur an der
+konkreten Fundstelle mit erneutem Personenkontext ersetzt; eine Fundstelle unter
+Personenlabel, Honorativ oder Personen-Tabellenkopf darf dabei dasselbe
+Pseudonym wiederverwenden, gleichlautende Fachwörter und Jahreszeiten nicht.
+Mehrwortige exakte Personenidentitäten bleiben stapelweit wiedererkennbar.
 
 Ein Kurzverweis, der zu mehreren vollständigen Firmennamen mit verschiedenen
 Rechtsformen passt, wird keiner dieser Firmen zugeschlagen. Neue Standalone-

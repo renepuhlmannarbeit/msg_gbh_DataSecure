@@ -170,6 +170,13 @@ Journal-Roundtrip, Klammern, Separatoren und Rollenwechsel geprüft. Der optiona
 `known_alias_index` ist an alle Bindings attestiert; Negativtests decken fehlenden,
 veralteten und manipulierten Index sowie Kapazitäten und terminale Textgrenzen ab.
 Der Vertrag benennt die Vorwärtslesbarkeit und die Altreader-Rollbackgrenze.
+Persistierte einwortige PERSON-Aliase werden im Redaktionskern nicht mehr als
+globale Ersetzungsdictionary-Einträge behandelt. `engine.js` prüft stattdessen
+jeden konkreten Fund positionsgebunden und verwendet nur bei aktuellem
+Personenkontext den bereits gebundenen Placeholder. Die Registry bleibt reiner
+rohwertfreier Identitäts-/Membership-Nachweis. `test-batch-pseudonym-registry.js`
+bindet diese Grenze für v1/v2 nach Export/Restore, gewöhnliche Einkauf-/Sommer-
+Prosa, gemischte Vorkommen, Honorativ, Label, Tabelle, Markdown-Link und Firma.
 
 BL-010.13/BL-011.3 binden den Desktop-EOF an das Ende des Steuerprozesses,
 nicht an das Ende dauerhaft übergebener Worker. `desktop-sidecar.js` und

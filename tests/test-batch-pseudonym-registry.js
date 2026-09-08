@@ -277,6 +277,61 @@ for (const contractVersion of ['batch-pseudonym/v1', READABLE_CONTRACT_VERSION])
     } finally { registry.dispose(); }
   });
 
+  test(`${contractVersion}: persisted surname aliases require person context at each occurrence after resume`, () => {
+    const secret = Buffer.alloc(SECRET_BYTES, 35);
+    let registry = createBatchPseudonymRegistry(secret, { contractVersion });
+    try {
+      const purchaseSeed = anonymizeMarkdown('Ansprechpartner: Mueller Einkauf', 'personnel_profile', { registry });
+      const purchaseMarker = purchaseSeed.text.match(/\[PERSON_[A-Z0-9_]+\]/u)?.[0];
+      assert.ok(purchaseMarker, purchaseSeed.text);
+      const seasonSeed = anonymizeMarkdown('Name: Anna Sommer', 'personnel_profile', { registry });
+      const seasonMarker = seasonSeed.text.match(/\[PERSON_[A-Z0-9_]+\]/u)?.[0];
+      assert.ok(seasonMarker, seasonSeed.text);
+      assert.notStrictEqual(purchaseMarker, seasonMarker);
+
+      const persisted = JSON.parse(JSON.stringify(registry.exportState()));
+      assert.doesNotMatch(JSON.stringify(persisted), /Mueller|Einkauf|Anna|Sommer/u);
+      registry.dispose();
+      registry = createBatchPseudonymRegistry(secret, { contractVersion, persistedState: persisted });
+      const beforeProse = JSON.parse(JSON.stringify(registry.exportState()));
+
+      const purchaseProse = 'Der Einkauf hat den Vertrag geprueft. Einkauf und Vertrieb arbeiten zusammen.';
+      const seasonProse = 'Im Sommer war das Wetter gut.';
+      assert.strictEqual(anonymizeMarkdown(purchaseProse, 'personnel_profile', { registry }).text, purchaseProse);
+      assert.strictEqual(anonymizeMarkdown(seasonProse, 'personnel_profile', { registry }).text, seasonProse);
+      assert.deepStrictEqual(registry.exportState(), beforeProse,
+        'reading ordinary prose must not allocate or mutate a batch identity');
+
+      const mixed = anonymizeMarkdown([
+        'Herr Einkauf hat den Vertrag geprueft.',
+        'Der Einkauf bleibt fuer Einkauf und Vertrieb zustaendig.',
+        'Ansprechpartner: Sommer',
+        'Im Sommer war das Wetter gut.'
+      ].join('\n'), 'personnel_profile', { registry });
+      assert.strictEqual((mixed.text.match(new RegExp(purchaseMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'gu')) || []).length, 1,
+        mixed.text);
+      assert.strictEqual((mixed.text.match(new RegExp(seasonMarker.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'gu')) || []).length, 1,
+        mixed.text);
+      assert.ok(mixed.text.includes('Der Einkauf bleibt fuer Einkauf und Vertrieb zustaendig.'), mixed.text);
+      assert.ok(mixed.text.includes('Im Sommer war das Wetter gut.'), mixed.text);
+
+      const table = anonymizeMarkdown([
+        '| Ansprechpartner | Rolle |',
+        '| --- | --- |',
+        '| Sommer | Einkauf |'
+      ].join('\n'), 'personnel_profile', { registry });
+      assert.ok(table.text.includes(`| ${seasonMarker} | Einkauf |`), table.text);
+      const link = anonymizeMarkdown('Ansprechpartner: [Sommer](https://example.com/team)',
+        'personnel_profile', { registry });
+      assert.ok(link.text.includes(`Ansprechpartner: ${seasonMarker}`), link.text);
+      assert.doesNotMatch(link.text, /Sommer/u);
+
+      const company = anonymizeMarkdown('Sommer GmbH liefert Software.', 'personnel_profile', { registry });
+      assert.match(company.text, /^\[(?:ORGANISATION|UNTERNEHMEN|KUNDE)_[A-Z0-9_]+\] liefert Software\.$/u);
+      assert.doesNotMatch(company.text, /PERSON_/u);
+    } finally { registry.dispose(); secret.fill(0); }
+  });
+
   test(`${contractVersion}: explicit person occurrence remains a person beside a matching company short name`, () => {
     const registry = createBatchPseudonymRegistry(Buffer.alloc(SECRET_BYTES, 24), { contractVersion });
     try {

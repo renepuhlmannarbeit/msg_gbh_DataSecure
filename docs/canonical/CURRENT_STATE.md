@@ -59,6 +59,17 @@ strukturellen Ambiguitätsstopp. Die Rekonstruktion entscheidet dabei je Spalte:
 Eine korrekt zusammengesetzte Geburtsdatumsspalte kann eine ungelöste Steuer-
 oder Zugangsdaten-Nachbarspalte nicht mehr maskieren.
 
+Stapelweit gespeicherte einwortige Personenaliase werden in Folgedokumenten
+nicht mehr kontextfrei ersetzt. Die private Registry entscheidet weiterhin,
+welches vorhandene v1-/v2-Pseudonym zu einem Alias gehört; ob eine konkrete
+Fundstelle eine Person bezeichnet, entscheidet ausschließlich der aktuelle
+Dokumentkontext. `Herr Einkauf`, `Ansprechpartner: Sommer` und entsprechend
+beschriftete Tabellen verwenden das frühere Pseudonym, während `Der Einkauf`
+und `Im Sommer` unverändert bleiben. Auch in einem Mischdokument erteilt ein
+beschrifteter Fund keine dokumentweite Ersetzungslizenz. E0 einschließlich
+serialisierter Fortsetzung ist grün; echter OS-Neustart und fachliche UAT
+bleiben E1/E2.
+
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
 oder noch nicht vollständig exportiert, öffnet DataSecure weder den allgemeinen

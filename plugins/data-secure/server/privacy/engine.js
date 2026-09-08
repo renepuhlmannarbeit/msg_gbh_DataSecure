@@ -24,7 +24,8 @@ const {
   titleCase,
   isStopToken,
   looksName,
-  looksSurname
+  looksSurname,
+  tableHeaderAt
 } = require('./base');
 const {
   PERSON_LABEL,
@@ -287,6 +288,24 @@ function isExplicitPersonOccurrence(text, span, coveringOrganizations = []) {
   return /(?:Zertifikat|Bescheinigung|certificate|credential)\s+(?:für|for)\s*$/iu.test(linePrefix);
 }
 
+function isPersistedPersonAliasOccurrence(text, span, coveringOrganizations = []) {
+  // A persisted surname proves which pseudonym to reuse, but not that an
+  // equal word in a later document denotes the person. Decide at the exact
+  // source position. For a Markdown link label, move the context boundary
+  // over the opening bracket while leaving the replacement span unchanged;
+  // growOverMarkdownLabel consumes the brackets after this decision.
+  const contextSpan = span.start > 0 && text[span.start - 1] === '['
+    ? { ...span, start: span.start - 1 }
+    : span;
+  if (isExplicitPersonOccurrence(text, contextSpan, coveringOrganizations)) return true;
+
+  const header = tableHeaderAt(text, span.start);
+  if (header && new RegExp(`^(?:${PERSON_LABEL}):?$`, 'iu').test(normalizeSpaces(header))) return true;
+
+  const before = text.slice(Math.max(0, span.start - 80), span.start);
+  return /(?:z\.\s*hd\.?|zu\s+händen)\s*:?\s*$/iu.test(before);
+}
+
 function findLiteralSpans(text, needle, replacement, type, priority) {
   if (!needle) return [];
   const literal = String(needle).split(/\s+/u).map(escapeRegExp).join('[ \\t\\r\\n]+');
@@ -493,10 +512,20 @@ function anonymize(text, profile = 'general', options = {}) {
   // its repeated short name) must not create a global PERSON/surname alias.
   // Explicit Name/Herr/holder occurrences remain independent evidence.
   const strongPersonAnchors = collectPersonAnchors(analysisSrc, profile).filter((seed) => !organizationOnlySeed(seed));
-  const candidates = collectPersonSeeds(analysisSrc, profile, strongPersonAnchors);
+  const persistedSinglePersonAliases = knownAliases.filter((alias) =>
+    alias.kind === 'PERSON' && normalizeSpaces(alias.value).split(/\s+/u).length === 1
+  );
+  // A one-word alias retained from an earlier document is not a global seed:
+  // "Sommer" and "Einkauf" are ordinary German words as well as surnames.
+  // Their concrete occurrences are handled position-by-position below. Exact
+  // multi-token identities keep the established batch-wide behaviour.
+  const persistedSinglePersonKeys = new Set(persistedSinglePersonAliases.map((alias) => key(alias.value)));
+  const candidates = collectPersonSeeds(analysisSrc, profile, strongPersonAnchors)
+    .filter((seed) => !persistedSinglePersonKeys.has(key(seed.value)));
   const candidateKeys = new Set(candidates.map((seed) => key(seed.value)));
   for (const alias of knownAliases) {
-    if (alias.kind !== 'PERSON' || candidateKeys.has(key(alias.value))) continue;
+    if (alias.kind !== 'PERSON' || persistedSinglePersonKeys.has(key(alias.value)) ||
+        candidateKeys.has(key(alias.value))) continue;
     // Existing aliases are already identity decisions. Do not infer another
     // surname from them, and do not renumber them when this document has no label.
     candidates.push({ value: alias.value, confidence: 'batch_alias', noSurnameAlias: true });
@@ -579,6 +608,19 @@ function anonymize(text, profile = 'general', options = {}) {
     findLiteralSpans(out, org, '', 'ORGANIZATION', PRIORITY.ORGANIZATION)
       .map((span) => ({ ...span, provenCompany: true }))
   ));
+  for (const alias of persistedSinglePersonAliases) {
+    let matched = false;
+    const found = findLiteralSpans(out, alias.value, alias.placeholder, 'PERSON_ALIAS', PRIORITY.PERSON_ALIAS);
+    for (const span of found) {
+      const coveringOrganizations = organizationCoverage.filter((org) =>
+        span.start >= org.start && span.end <= org.end
+      );
+      if (!isPersistedPersonAliasOccurrence(out, span, coveringOrganizations)) continue;
+      spans.push(growOverMarkdownLabel(out, growOverHonorific(out, span)));
+      matched = true;
+    }
+    if (matched) findings.push({ type: 'PERSON', value_hash: hashShort(alias.value) });
+  }
   for (const entry of dictionary) {
     const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority);
     for (const span of found) {
