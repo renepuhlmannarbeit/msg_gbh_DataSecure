@@ -222,7 +222,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-007 | aktiv | BL-021–024; Formatmatrix |
 | DS-008 | aktiv | BL-040, BL-041; Markdown-/Paketvertrag |
 | DS-009 | aktiv, durch DS-067 präzisiert – kein auswählbarer Modus | BL-024, BL-041; Manifest-/Bildgates |
-| DS-010 | aktiv | BL-011, BL-051; 200 Dateien/500 MiB |
+| DS-010 | aktiv | BL-011, BL-051; 200 Dateien/500 MiB. Das aktuelle UAT-Kit verlangt den 200-Dateien-Grenzlauf zusätzlich zum 100-Dateien-Funktionsfall; E1/E2 bleibt offen |
 | DS-011 | aktiv | BL-011, BL-049; Source-Preflight |
 | DS-012 | aktiv | BL-021, BL-022, BL-031; Korpus-/Regressionstests |
 | DS-013 | durch DS-043 ersetzt | historischer Abschlussdialog; heutiger Hintergrundabschluss über DS-043 |

@@ -1,6 +1,6 @@
 # Aktuelles Cowork-Plugin-UAT-Testpaket
 
-Stand: 03.09.2026 · gilt für den jeweils installierten, dokumentierten Build
+Stand: 08.09.2026 · gilt für den jeweils installierten, dokumentierten Build
 
 Dieses Paket verwendet ausschließlich synthetische Daten. Es ist der aktuelle
 Einstieg für die menschliche **Cowork-Plugin-Abnahme**. Die eigenständige App
@@ -61,7 +61,10 @@ gelöscht.
 Ein Release-GO erfordert alle sechs Fälle als `PASS` auf jedem freizugebenden
 Zielbetriebssystem. `BLOCKED` ist kein PASS. Zusätzlich müssen ZIP-Fresh-Install,
 Tastaturbedienung, verständliche Beschriftungen, Quellen-/Retention-Schutz sowie
-der 100-Dateien-Stapel belegt sein. Für eine Marketplace-Veröffentlichung sind
+der 100-Dateien-Stapel belegt sein. Zusätzlich ist die derzeit noch offene
+Grenzabnahme aus BL-051.3 mit einem versionsneuen Stapel aus 200 Dateien auf
+jedem freizugebenden Zielbetriebssystem erforderlich; der 100-Dateien-Fall
+ersetzt diese Grenzabnahme nicht. Für eine Marketplace-Veröffentlichung sind
 Installieren, Aktualisieren und Zurückrollen dort zusätzlich Pflicht. Der lokale
 500-MB-Grenztest wird separat mit `npm run test:batch-500mb-local` nachgewiesen;
 er darf wegen seiner Größe nicht durch einen kleinen UAT-Scheindatensatz ersetzt

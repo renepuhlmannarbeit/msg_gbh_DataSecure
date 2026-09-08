@@ -134,7 +134,7 @@ Lauf erzeugt keinen leeren Ergebnisordner und keine sichtbare Zuordnung. Auch
 historische All-stopped-Zeilen bieten keine Öffnen-Aktion mehr, können aber als
 bereits veröffentlichte Benutzerdateien unverändert bestehen bleiben.
 
-## Aktueller Entwicklungsstand RC119
+## Vorheriger Entwicklungsstand RC119
 
 Der UAT-Lauf `Lauf-20260907-163522-142350c1` ist nicht freigabefähig: In den
 vier DOCX-Ergebnissen blieben `Anna Berger`, `Murat Kaya`, `Sofia Lindner` und
@@ -153,7 +153,7 @@ automatisch aus; die allgemeine PII-Regression und der komplexe 15-DOCX-Korpus
 sind ebenfalls grün. Ein neuer Paketkandidat ersetzt RC118 erst nach den
 vollständigen Standalone-/Paketprüfungen.
 
-## Aktueller Entwicklungsstand RC117
+## Vorheriger Entwicklungsstand RC117
 
 RC117 erweitert die reale Word-Interoperabilität und den ausführbaren UAT-
 Korpus. Der DOCX-Preflight akzeptiert jetzt ausschließlich die bekannten,
@@ -259,7 +259,7 @@ SHA-256 `0c4679dfa2d602b9484083385d2925bd3e53022e343e1a7eea84c3a089980492`.
 Es ist Entwicklungsnachweis, aber bis zu einem sauberen commitgebundenen Build
 und menschlichem E2-Test kein neuer INT-13-Kandidat.
 
-## Aktueller Entwicklungsstand RC111
+## Vorheriger Entwicklungsstand RC111
 
 RC111 führte den neutralen breiten Standalone-Pfad ein; die aktuelle
 Weiterentwicklung trennt Extraktions- und Anonymisierungsstatus. Der neutrale
@@ -617,7 +617,8 @@ die RC106-Bindung darf nicht nachträglich umetikettiert werden.
 - Reine Standalone-Konvertierung: zusätzlich XLSX, PPTX, PDF/Scan-PDF sowie
   PNG/JPEG/BMP im Produktpfad aktiviert. Extraktionshinweise und Fehler bleiben
   laufbezogen sichtbar. Der Windows-Engineering-Paketnachweis ist an den oben
-  genannten RC108-Commit gebunden; Zielhost-/Anwenderfreigabe bleibt offen.
+  genannten RC111-Commit `b543589f3250a6ab57ddd5bc3a144f03a24ee026`
+  gebunden; Zielhost-/Anwenderfreigabe bleibt offen.
 - Stapel: höchstens 200 Dateien und 500 MiB; nur ein aktiver Stapel.
 - Bilder aus DOCX: Pixel bleiben lokal; kein auswählbarer Bildmodus und keine
   Freigabe über Claude.
@@ -937,7 +938,7 @@ Engineering-Komponenten und Harnesses existieren. Der Portable-Engineering-Build
 Manifest und Inventar, Modi, Hashes, Installationspfade mit Leerzeichen sowie
 Adapter-Timeout und laufender Abbruch sind E0-geprüft. Für die reine
 Standalone-Konvertierung sind Offline-OCR und PNG/JPEG/BMP integriert und im
-oben gebundenen RC108-Windows-Paket Ende zu Ende geprüft. Native Mac-Pakete und
+oben gebundenen RC111-Windows-Paket Ende zu Ende geprüft. Native Mac-Pakete und
 Zielhost-/Fachabnahme bleiben offen. Für die Anonymisierung sind eigenständige
 Bilder weiterhin gesperrt; Bildpixel aus DOCX bleiben lokal.
 

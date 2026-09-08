@@ -67,10 +67,10 @@ Kern-Anwendungsfälle blockiert oder freigegebener Inhalt zerstört.
 
 | Befund | Story | Neuer offener Punkt | Status |
 |---|---|---|---|
-| F18/F19 | BL-051.1 (DS-077) | `CURRENT_STATE.md:548` bindet den belegten Umfang der reinen Konvertierung an RC108, das dasselbe Dokument als nicht übertragbar erklärt; richtig ist RC111/`b543589f`. `FORMAT_COVERAGE_MATRIX.md:133` nennt den historischen RC109-Build den „aktuellen" Paketlauf. | **offen, P3** |
-| F20/F21/F23 | BL-002 | Die Unterliste „teilweise präzisiert" in `DECISIONS.md:16-20` führt DS-089, DS-091 und DS-092 nicht. `CURRENT_STATE.md` trägt vier Abschnitte „Aktueller Entwicklungsstand". Zehn in rc123 geänderte Dokumente tragen ein älteres „Stand:"-Datum als ihre jüngste Änderung. | **offen, P3** |
-| F22 | BL-003.9 | `CLAUDE.md:13` und `tasks/README.md` verweisen auf zwei verschiedene, nicht existierende Auftragsdateien. | **offen, P3** |
-| F24 | BL-051.3 (DS-010) | Die GO-Regel des UAT-Kits verlangt nur den 100-Dateien-Stapel, während `PILOT-ABNAHME.md:31` und DS-010 200 Dateien fordern. Ein Team könnte GO vergeben, während BL-051.3 offen ist. | **offen, P3** |
+| F18/F19 | BL-051.1 (DS-077) | Der belegte aktuelle Umfang und die Formatmatrix sind auf RC111/`b543589f` samt ZIP-SHA gebunden; RC108/RC109 bleiben ausdrücklich historische Evidence. | **E0 erledigt (RC123)** |
+| F20/F21/F23 | BL-002 | Der Komfortindex nennt die Präzisierungen DS-089/091/092, ausschließlich RC123 heißt „Aktueller Entwicklungsstand", und die in RC123 gepflegten Dokumente tragen den Stand 08.09.2026. | **erledigt (RC123)** |
+| F22 | BL-003.9 | Einstiegsregeln und `tasks/README.md` verwenden einheitlich `AUFTRAG-<ADRESSAT>-<RC>-<THEMA>.md` und verweisen auf den vorhandenen RC123-Auftrag. | **erledigt (RC123)** |
+| F24 | BL-051.3 (DS-010) | Die UAT-GO-Regel verlangt zusätzlich zum 100-Dateien-Fall ausdrücklich den noch offenen versionsneuen 200-Dateien-Grenzlauf je Zielbetriebssystem. | **Dokumentvertrag erledigt; E2-Grenzlauf offen** |
 
 **P4 — Standalone-Desktop.** Klein, keine Redaktionsrichtung.
 

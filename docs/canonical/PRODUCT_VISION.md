@@ -1,6 +1,6 @@
 # Product Vision
 
-Stand: 06.09.2026 · verbindliches Zielbild beider Produkte und beider Standalone-Betriebsarten
+Stand: 08.09.2026 · verbindliches Zielbild beider Produkte und beider Standalone-Betriebsarten
 
 ## Vision in einem Satz
 

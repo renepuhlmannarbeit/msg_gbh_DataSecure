@@ -10,8 +10,9 @@
 - `docs/canonical/BACKLOG.md` ist die einzige Produktarbeitsliste. Dateien unter
   `docs/archive/**`, `tasks/archiv/**` und RC-spezifische alte UAT-Kits sind nur
   Historie und keine Anforderungen.
-- Der jeweils aktuelle einmalige Arbeitsauftrag steht in
-  `tasks/CLAUDE-CODE-AUFTRAG-AKTUELLER-GESAMTREVIEW.md`.
+- Der jeweils aktuelle einmalige Arbeitsauftrag folgt der Konvention
+  `tasks/AUFTRAG-<ADRESSAT>-<RC>-<THEMA>.md`. Der aktuelle schreibende Auftrag
+  ist `tasks/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md`.
 
 ## Harte Produktgrenzen
 

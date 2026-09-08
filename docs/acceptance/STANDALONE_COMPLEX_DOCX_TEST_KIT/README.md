@@ -1,6 +1,6 @@
 # Komplexer DOCX-Testkorpus
 
-Stand: 07.09.2026 · DataSecure Standalone 3.2.0-rc117
+Stand: 08.09.2026 · DataSecure Standalone 3.2.0-rc123
 
 Dieser Korpus enthält 15 vollständig fiktive Word-Dokumente für die beiden
 Standalone-Funktionen **Nur in Markdown umwandeln** und **In Markdown umwandeln

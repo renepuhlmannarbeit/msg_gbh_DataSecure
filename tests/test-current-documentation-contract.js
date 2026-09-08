@@ -297,11 +297,13 @@ test('Cowork start wording is identical in runtime, skill, examples and UAT', ()
 
 test('conversion documentation separates eleven input types, Markdown-first wide privacy and old package evidence', () => {
   const coverage = read('docs/FORMAT_COVERAGE_MATRIX.md');
-  assert.match(coverage, /RC109-Builds aus `6bf7d05747e151ba8f846849229495e9fca4c041`/u,
-    'current format evidence must name the exact RC109 source commit');
-  assert.match(coverage, /807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1/u,
-    'current format evidence must name the bound RC109 package hash');
-  assert.match(coverage, /RC108-Builds aus `a742333e8ef80b445729d4bede6a91a2b8f13207`/u,
+  assert.match(coverage, /RC111-Builds aus `b543589f3250a6ab57ddd5bc3a144f03a24ee026`/u,
+    'current format evidence must name the exact RC111 source commit');
+  assert.match(coverage, /6086d1eb0701c50b77be630bdbcce3d562fab391e92aa5d0bdfeea1eba869f8f/u,
+    'current format evidence must name the bound RC111 package hash');
+  assert.match(coverage, /RC109-Builds aus\s+`6bf7d05747e151ba8f846849229495e9fca4c041`/u,
+    'the replaced RC109 evidence must remain explicitly historical');
+  assert.match(coverage, /RC108-Builds aus\s+`a742333e8ef80b445729d4bede6a91a2b8f13207`/u,
     'a version bump must not relabel historical commit-bound package evidence');
   const parts = coverage.split('## Reine Markdown-Konvertierung: nur Standalone');
   assert.strictEqual(parts.length, 2);
