@@ -50,6 +50,14 @@ Diese konservative Grenze kann auch neutrale Zweiwortwerte stoppen; sie ist
 keine Zusage einer semantischen Klassifikation beliebiger Spalten. Eindeutig
 bezeichnete Zertifizierungs-/Credentialspalten bleiben als professioneller
 Inhalt erhalten und werden nicht durch die generische Namensform blockiert.
+Das bezeichnet hier ausschließlich berufliche Qualifikationen. Davon getrennte
+Zugangsdaten-Spalten und -Felder (`Benutzername`/Login, Passwort/Kennwort,
+Passphrase, Secret/Token/API-Key, Zugangscode/PIN) werden immer durch
+`[CREDENTIAL_REDACTED]` ersetzt und unabhängig restgeprüft; credential-gebundene
+Vorkommen erscheinen weder als Werte noch als Hashes in Findings oder Diagnosen.
+Ein fachlich eigenständiges Vorkommen desselben Texts als Person oder Organisation
+wird weiterhin regulär pseudonymisiert. Ohne explizites Label wird
+kein Geheimnis anhand seiner Zeichenform geraten.
 
 Der neutrale Extraktionsvertrag enthält weder Publikationskennung noch
 Verarbeitungszweck. Es wird kein rohes Markdown-Zwischenergebnis exportiert.

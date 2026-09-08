@@ -24,6 +24,9 @@ const {
   LABELED_ID_RE,
   ID_LABEL_HEADER_RE,
   TABLE_ID_CELL_RE,
+  CREDENTIAL_FIELD_RE,
+  CREDENTIAL_LABEL_HEADER_RE,
+  tableHeadersAt,
   identifierDetectionText,
   hashShort,
   luhnValid,
@@ -97,6 +100,14 @@ function contactUriEnd(text, match) {
 // 11-digit tax id, and every phone shape without a label), so those documents
 // could never pass the gate no matter how often they were processed.
 const DETECTORS = [
+  {
+    type: 'CREDENTIAL',
+    re: CREDENTIAL_FIELD_RE,
+    placeholder: '[CREDENTIAL_REDACTED]',
+    priority: 96,
+    valueGroup: 2,
+    accept: (_value, text, start) => !isSetextHeadingLine(text, start)
+  },
   {
     type: 'CONTACT_URI',
     re: CONTACT_URI_RE,
@@ -229,6 +240,114 @@ const DETECTORS = [
   }
 ];
 
+// Return GFM cells together with exact source coordinates. Unlike a raw pipe
+// regex this understands optional outer pipes and escaped `\|` characters, so
+// replacing a secret cannot corrupt the table that carried it.
+function markdownCellsWithOffsets(line, lineStart) {
+  const first = line.search(/\S/u);
+  if (first < 0) return null;
+  let last = line.length;
+  while (last > first && /\s/u.test(line[last - 1])) last--;
+  let bodyStart = first;
+  let bodyEnd = last;
+  if (line[bodyStart] === '|') bodyStart++;
+  if (bodyEnd > bodyStart && line[bodyEnd - 1] === '|') bodyEnd--;
+  if (!line.slice(bodyStart, bodyEnd).includes('|')) return null;
+  const cells = [];
+  let cellStart = bodyStart;
+  let escaped = false;
+  const pushCell = (end) => {
+    let start = cellStart;
+    while (start < end && /[ \t]/u.test(line[start])) start++;
+    while (end > start && /[ \t]/u.test(line[end - 1])) end--;
+    cells.push({ value: line.slice(start, end), start: lineStart + start, end: lineStart + end });
+  };
+  for (let index = bodyStart; index < bodyEnd; index++) {
+    const character = line[index];
+    if (escaped) escaped = false;
+    else if (character === '\\') escaped = true;
+    else if (character === '|') {
+      pushCell(index);
+      cellStart = index + 1;
+    }
+  }
+  pushCell(bodyEnd);
+  return cells.length >= 2 ? cells : null;
+}
+
+function findCredentialTableSpans(text) {
+  const src = String(text || '');
+  const lines = src.split(/\r?\n/u);
+  const starts = [];
+  let offset = 0;
+  for (const line of lines) {
+    starts.push(offset);
+    offset += line.length + (src.slice(offset + line.length, offset + line.length + 2) === '\r\n' ? 2 : 1);
+  }
+  const spans = [];
+  for (let row = 0; row + 2 < lines.length; row++) {
+    const headers = markdownCellsWithOffsets(lines[row], starts[row]);
+    const separator = markdownCellsWithOffsets(lines[row + 1], starts[row + 1]);
+    if (!headers || !separator || headers.length !== separator.length ||
+        !separator.every((cell) => /^:?-{3,}:?$/u.test(cell.value))) continue;
+    row += 2;
+    while (row < lines.length) {
+      const cells = markdownCellsWithOffsets(lines[row], starts[row]);
+      if (!cells || cells.length !== headers.length) {
+        row--;
+        break;
+      }
+      const resolved = tableHeadersAt(src, starts[row]);
+      for (let column = 0; column < cells.length; column++) {
+        const cell = cells[column];
+        const header = resolved?.headers[column] ?? null;
+        if (header === null || !CREDENTIAL_LABEL_HEADER_RE.test(header)) continue;
+        if (!cell.value || placeholderSpans(cell.value).length) continue;
+        spans.push({
+          type: 'CREDENTIAL',
+          start: cell.start,
+          end: cell.end,
+          text: src.slice(cell.start, cell.end),
+          replacement: '[CREDENTIAL_REDACTED]',
+          priority: 96
+        });
+      }
+      row++;
+    }
+  }
+  return spans;
+}
+
+function isSetextHeadingLine(text, index) {
+  const src = String(text || '');
+  const lineEnd = src.indexOf('\n', index);
+  if (lineEnd < 0) return false;
+  const nextEnd = src.indexOf('\n', lineEnd + 1);
+  const nextLine = src.slice(lineEnd + 1, nextEnd < 0 ? src.length : nextEnd).replace(/\r$/u, '');
+  return /^[ \t]*(?:={3,}|-{3,})[ \t]*$/u.test(nextLine);
+}
+
+function credentialIntervals(spans) {
+  return spans.filter((span) => span.type === 'CREDENTIAL')
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+}
+
+function overlapsCredential(intervals, span) {
+  let low = 0;
+  let high = intervals.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (intervals[middle].start < span.end) low = middle + 1;
+    else high = middle;
+  }
+  return low > 0 && intervals[low - 1].end > span.start;
+}
+
+function safeStructuredSpans(spans) {
+  const intervals = credentialIntervals(spans);
+  return spans.filter((span) => span.type === 'CREDENTIAL' || !overlapsCredential(intervals, span));
+}
+
 // A labelled reference number stops at the last space-separated group that
 // still contains a digit, so "Kundennummer: 4711 und weitere" yields "4711".
 function trimReferenceValue(value) {
@@ -243,7 +362,7 @@ function findStructuredSpans(text) {
   const src = String(text || '');
   const identifierView = identifierDetectionText(src);
   const reserved = placeholderSpans(src);
-  const spans = [];
+  const spans = findCredentialTableSpans(src);
 
   for (const det of DETECTORS) {
     const view = det.identifierView ? identifierView : src;
@@ -323,9 +442,12 @@ function findStructuredSpans(text) {
 }
 
 function scanStructured(text) {
-  return findStructuredSpans(text).map((s) => ({
+  return safeStructuredSpans(findStructuredSpans(text)).map((s) => ({
     type: s.type,
-    text: s.text,
+    // A short PIN or password hash is reversible by enumeration. Credential
+    // scanners expose only class and coordinates; the raw span stays inside
+    // the replacement operation and is never part of a finding/diagnostic.
+    text: s.type === 'CREDENTIAL' ? '' : s.text,
     start: s.start,
     end: s.end
   }));
@@ -334,7 +456,9 @@ function scanStructured(text) {
 function replaceStructured(text, findings) {
   const src = String(text || '');
   const spans = findStructuredSpans(src);
-  for (const s of spans) findings.push({ type: s.type, value_hash: hashShort(s.text) });
+  for (const s of safeStructuredSpans(spans)) {
+    findings.push(s.type === 'CREDENTIAL' ? { type: s.type } : { type: s.type, value_hash: hashShort(s.text) });
+  }
   return applySpans(src, spans);
 }
 

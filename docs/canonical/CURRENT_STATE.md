@@ -19,6 +19,16 @@ zurück, verhindert ein davon unabhängiges Restgate die Veröffentlichung. Dies
 bewusst konservative Grenze kann neutrale namensförmige Zweiwortwerte stoppen
 und benötigt für eine Lockerung eine bestätigte Produktentscheidung.
 
+RC124 schützt außerdem ausdrücklich bezeichnete Zugangsdaten im gemeinsamen
+Privacy-Core. Benutzer-/Loginwerte, Passwörter, Passphrasen, Secrets, Token,
+API-Keys, Zugangscodes und PINs werden in Zeilen und eindeutigen Tabellenspalten
+durch `[CREDENTIAL_REDACTED]` ersetzt. Die Restprüfung besitzt einen separaten
+Labelkatalog und stoppt verbleibende Werte fail-closed. Credential-gebundene
+Vorkommen werden weder als Klarwert noch als Hash in Findings oder Diagnoseobjekte übernommen;
+kommt derselbe Text zusätzlich in einer eigenständigen Personen- oder Unternehmensrolle
+vor, wird nur diese fachlich eigenständige Rolle regulär pseudonymisiert und protokolliert;
+unbeschriftete technische Tokens werden weiterhin nicht geraten.
+
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
 oder noch nicht vollständig exportiert, öffnet DataSecure weder den allgemeinen

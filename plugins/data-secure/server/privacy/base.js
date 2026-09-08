@@ -203,6 +203,20 @@ const ID_LABEL_HEADER_RE = new RegExp(`^(?:${ID_LABELS})\\s*:?\\s*$`, 'iu');
 // A bare identifier cell: at least one digit, no spaces, id-like characters.
 const TABLE_ID_CELL_RE = new RegExp(`${NB}(?=[A-Z0-9./\\-]*\\d)[A-Z0-9][A-Z0-9./\\-]{2,}${NA}`, 'giu');
 
+// Secrets are recognized only behind an explicit field/column label. Guessing
+// from entropy or token shape would redact ordinary technical prose and still
+// miss human-readable passphrases. Keep the value line-local and retain the
+// label so the released document remains understandable.
+const CREDENTIAL_LABELS =
+  '(?:Pass[ \\t]*wort|Kenn[ \\t]*wort|Pass[ \\t]*word|Pass[ \\t]*phrase|Secret|Token|API(?:[ \\t-]+)?Key' +
+  '|Zugangs[ \\t]*daten|Zugangs[ \\t]*code|PIN|Benutzer[ \\t]*name|Nutzer[ \\t]*name|User[ \\t]*name' +
+  '|Login(?:[ \\t]*name)?|Anmelde[ \\t]*name|Konto[ \\t]*kennung)';
+const CREDENTIAL_FIELD_RE = new RegExp(
+  `^([ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${CREDENTIAL_LABELS}[ \\t]*(?::|=|：|＝)[ \\t]*)([^\\r\\n]*?\\S)(?=[ \\t]*\\r?$)`,
+  'gimu'
+);
+const CREDENTIAL_LABEL_HEADER_RE = new RegExp(`^${CREDENTIAL_LABELS}[ \\t]*[:：]?$`, 'iu');
+
 // Honorifics and job/section vocabulary must never end up inside a person
 // pseudonym. "Herr Müller" used to be registered as the full name, so the same
 // human received PERSON_001 as "Herr Müller", PERSON_002 as "Frau Müller" and
@@ -574,7 +588,8 @@ let tableIndex = null;
 function isSensitiveTableHeader(value) {
   const header = normalizeSensitiveLabel(value);
   return DATE_OF_BIRTH_LABEL_RE.test(header) || PHONE_LABEL_RE.test(header) ||
-    DE_TAX_LABEL_RE.test(header) || ID_LABEL_HEADER_RE.test(header);
+    DE_TAX_LABEL_RE.test(header) || ID_LABEL_HEADER_RE.test(header) ||
+    CREDENTIAL_LABEL_HEADER_RE.test(header);
 }
 
 function combineHeaderRows(rows) {
@@ -586,7 +601,25 @@ function combineHeaderRows(rows) {
 // A known PII label may be split by Word across at most three visible header
 // rows. Longer or structurally inconsistent shapes are not guessed: the final
 // residual gate receives an explicit structural finding and stops the file.
-const SENSITIVE_HEADER_FRAGMENT_RE = /\b(?:steuer|geburts|telefon|telephone|phone|téléphone|teléfono|telefono|telefoon|mobil|mobile|handy|fax|personal|mitarbeiter|sozialversicherungs|patienten|kunden|auftrags|vertrags|rechnungs|bestell|versicherungs|fall|akten|lieferanten|debitoren|kreditoren)\b/iu;
+const SENSITIVE_HEADER_FRAGMENT_RE = /\b(?:steuer|geburts|telefon|telephone|phone|téléphone|teléfono|telefono|telefoon|mobil|mobile|handy|fax|personal|mitarbeiter|sozialversicherungs|patienten|kunden|auftrags|vertrags|rechnungs|bestell|versicherungs|fall|akten|lieferanten|debitoren|kreditoren|passwort|kennwort|password|passphrase|secret|token|zugangsdaten|zugangscode|pin|benutzername|nutzername|username|loginname|anmeldename|kontokennung)\b/iu;
+
+const CREDENTIAL_FRAGMENT_PAIRS = [
+  ['pass', 'wort'], ['kenn', 'wort'], ['pass', 'word'], ['pass', 'phrase'],
+  ['api', 'key'], ['zugangs', 'daten'], ['zugangs', 'code'],
+  ['benutzer', 'name'], ['nutzer', 'name'], ['user', 'name'], ['login', 'name'],
+  ['anmelde', 'name'], ['konto', 'kennung']
+];
+
+function hasCredentialHeaderFragmentSequence(rows) {
+  const width = Math.max(0, ...rows.map((row) => row.length));
+  for (let column = 0; column < width; column++) {
+    const parts = rows.map((row) => normalizeSensitiveLabel(row[column] || '').toLowerCase())
+      .filter(Boolean);
+    if (CREDENTIAL_FRAGMENT_PAIRS.some(([first, last]) =>
+      parts.includes(first) && parts.includes(last))) return true;
+  }
+  return false;
+}
 
 function buildTableIndex(text) {
   const src = String(text || '');
@@ -602,7 +635,7 @@ function buildTableIndex(text) {
     if (!immediate) continue;
     if (immediate.length !== separator.length) {
       const precedingRows = [];
-      for (let distance = 1; distance <= 4 && index >= distance; distance++) {
+      for (let distance = 1; index >= distance; distance++) {
         const preceding = splitTableRow(rows[index - distance]);
         if (!preceding) break;
         if (preceding.every((cell) => /^:?-{3,}:?$/u.test(cell))) break;
@@ -621,7 +654,7 @@ function buildTableIndex(text) {
     let headers = immediate.map(normalizeSensitiveLabel);
     const headerBlock = [];
     let headerCursor = index - 1;
-    while (headerCursor >= 0 && headerBlock.length < 4) {
+    while (headerCursor >= 0) {
       const preceding = splitTableRow(rows[headerCursor]);
       if (!preceding) break;
       if (preceding.every((cell) => /^:?-{3,}:?$/u.test(cell))) break;
@@ -634,20 +667,22 @@ function buildTableIndex(text) {
       if (headerBlock[candidate].length !== immediate.length) break;
       candidates.unshift(headerBlock[candidate]);
     }
-    if (!headers.some(isSensitiveTableHeader)) {
-      // Prefer the shortest unambiguous reconstruction. This preserves a
-      // complete immediate header and only joins a closed known vocabulary.
+    // Resolve every column independently. Different Word table columns may
+    // need different reconstruction depths (for example API/Key beside
+    // Benutzer/name); selecting one global depth would silently miss one.
+    headers = headers.map((header, column) => {
+      if (isSensitiveTableHeader(header)) return header;
       for (let count = 2; count <= candidates.length; count++) {
-        const combined = combineHeaderRows(candidates.slice(-count));
-        if (combined.some(isSensitiveTableHeader)) {
-          headers = combined;
-          break;
-        }
+        const combined = normalizeSensitiveLabel(
+          candidates.slice(-count).map((row) => row[column]).join(' ')
+        );
+        if (isSensitiveTableHeader(combined)) return combined;
       }
-    }
+      return header;
+    });
     const cleaned = headers.map((header) => normalizeSensitiveLabel(header.replace(/\s+\(\d+\)$/u, '')));
     const hasSensitiveHeader = cleaned.some(isSensitiveTableHeader);
-    const headerHasSensitiveFragment = headerBlock
+    const headerHasSensitiveFragment = hasCredentialHeaderFragmentSequence(headerBlock) || headerBlock
       .flat()
       .some((header) => SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header)));
     const unresolvedSensitiveHeader = !hasSensitiveHeader && headerHasSensitiveFragment;
@@ -685,19 +720,10 @@ function hasAmbiguousSensitiveTable(text) {
 
 function tableHeaderAt(text, index) {
   const src = String(text || '');
-  tableAnalysis(src);
-  const { starts, rows, headersByLine } = tableIndex;
-  let lo = 0;
-  let hi = starts.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (starts[mid] <= index) lo = mid;
-    else hi = mid - 1;
-  }
-  const headers = headersByLine.get(lo);
-  if (!headers) return null;
-  const line = rows[lo];
-  const offsetInLine = index - starts[lo];
+  const resolved = tableHeadersAt(src, index);
+  if (!resolved) return null;
+  const { line, lineStart, headers } = resolved;
+  const offsetInLine = index - lineStart;
   const trimmedStart = line.length - line.trimStart().length;
   let column = 0;
   let escaped = false;
@@ -714,6 +740,22 @@ function tableHeaderAt(text, index) {
     }
   }
   return column < headers.length ? headers[column] : null;
+}
+
+function tableHeadersAt(text, index) {
+  const src = String(text || '');
+  tableAnalysis(src);
+  const { starts, rows, headersByLine } = tableIndex;
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= index) lo = mid;
+    else hi = mid - 1;
+  }
+  const headers = headersByLine.get(lo);
+  if (!headers) return null;
+  return { headers, line: rows[lo], lineStart: starts[lo] };
 }
 
 function sameLineHasIban(text, index) {
@@ -788,5 +830,8 @@ module.exports = {
   NAME_PARTICLES,
   ID_LABEL_HEADER_RE,
   TABLE_ID_CELL_RE,
+  CREDENTIAL_FIELD_RE,
+  CREDENTIAL_LABEL_HEADER_RE,
+  tableHeadersAt,
   sameLineHasIban
 };

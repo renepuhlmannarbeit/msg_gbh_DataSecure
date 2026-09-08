@@ -406,6 +406,17 @@ Spaltenposition geraten. DOCX-Tabellen mit horizontal oder vertikal verbundenen
 Zellen stoppen bis zu einer koordinatentreuen OOXML-Abbildung ebenfalls
 fail-closed. Dafür entsteht keine neue Anwenderbestätigung.
 
+Präzisierung 08.09.2026 (RC124): Explizit bezeichnete Zugangsdaten im
+Dokumentinhalt gehören zur vollständigen Inhaltsgrenze. Benutzer-/Loginwerte,
+Passwörter, Passphrasen, Secrets, Token, API-Keys, Zugangscodes und PINs werden
+zeilen- beziehungsweise tabellenspaltengebunden ersetzt; ein unabhängiger
+Restprüfer stoppt verbleibende beschriftete Werte. Es erfolgt keine spekulative
+Erkennung anhand von Entropie oder Tokenform. Findings und Diagnosen enthalten
+für das credential-gebundene Vorkommen weder Klarwert noch Wert-Hash. Tritt derselbe
+Text zusätzlich unabhängig als Person oder Organisation auf, bleibt deren notwendige
+Pseudonym- und Findingbindung erhalten. DS-016 und DS-046 bleiben davon
+unberührt, weil sie verschlüsselte Quelldateien statt Inhalte betreffen.
+
 ## DS-050 – Benutzergebundene Verschlüsselung und sichere Löschung
 
 Private Snapshots und Reviewdaten werden pro OS-Benutzer mit einem über DPAPI oder

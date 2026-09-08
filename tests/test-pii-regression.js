@@ -1234,6 +1234,200 @@ test('common CSV and DOCX-style person and organisation headers are covered', ()
   }
 });
 
+test('labelled credentials and login identifiers are redacted without retaining a reversible hash', () => {
+  const cases = [
+    ['Passwort: Sommer2026!', 'Passwort: [CREDENTIAL_REDACTED]'],
+    ['Kennwort = Winter2026#', 'Kennwort = [CREDENTIAL_REDACTED]'],
+    ['- API-Key: sk-live-example-123', '- API-Key: [CREDENTIAL_REDACTED]'],
+    ['> Token = eyJhbGciOiJIUzI1NiJ9.payload.signature', '> Token = [CREDENTIAL_REDACTED]'],
+    ['Passphrase = four synthetic words', 'Passphrase = [CREDENTIAL_REDACTED]'],
+    ['PIN: 1234', 'PIN: [CREDENTIAL_REDACTED]'],
+    ['Benutzername: f.quastenflosser', 'Benutzername: [CREDENTIAL_REDACTED]'],
+    ['Username = anna@example.test', 'Username = [CREDENTIAL_REDACTED]'],
+    ['Login: https://example.test/private', 'Login: [CREDENTIAL_REDACTED]'],
+    ['\tPASSWORD\t=\tSecret Value\r\nFachtext', '\tPASSWORD\t=\t[CREDENTIAL_REDACTED]\r\nFachtext'],
+    ['Passwort: abc|def', 'Passwort: [CREDENTIAL_REDACTED]'],
+    ['Token: a\\|b', 'Token: [CREDENTIAL_REDACTED]']
+  ];
+  for (const [source, expected] of cases) for (const profile of profiles) {
+    const result = anonymize(source, profile);
+    assert.strictEqual(result.text, expected, `${profile}: ${source}`);
+    const credentialFindings = result.findings.filter((finding) => finding.type === 'CREDENTIAL');
+    assert.deepStrictEqual(credentialFindings, [{ type: 'CREDENTIAL' }]);
+    const residual = pii.scanResidual(source, profile);
+    assert.ok(residual.some((finding) => finding.type === 'CREDENTIAL'));
+    assert.ok(residual.every((finding) => !finding.text), 'credential residuals never expose a value');
+    for (const sensitiveValue of ['Sommer2026!', 'Winter2026#', 'sk-live-example-123', '1234',
+      'f.quastenflosser', 'anna@example.test', 'https://example.test/private']) {
+      assert.doesNotMatch(JSON.stringify({ findings: result.findings, residual }), new RegExp(sensitiveValue.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+    }
+    assert.deepStrictEqual(pii.scanResidual(result.text, profile, result.dictionary), []);
+    assert.strictEqual(anonymize(result.text, profile).text, result.text, 'credential redaction is idempotent');
+  }
+});
+
+test('the full credential label catalogue and the reported multiline case are covered', () => {
+  for (const label of [
+    'Passwort', 'Kennwort', 'Password', 'Passphrase', 'Secret', 'Token', 'API-Key', 'API Key',
+    'Zugangsdaten', 'Zugangscode', 'PIN', 'Benutzername', 'Nutzername', 'Username', 'User name',
+    'Login', 'Loginname', 'Anmeldename', 'Kontokennung'
+  ]) {
+    const source = `${label}: synthetic-value`;
+    assert.strictEqual(anonymizeVerified(source, 'customer_document').text,
+      `${label}: [CREDENTIAL_REDACTED]`, label);
+  }
+  const reported = 'Zugangsdaten\n- Benutzername: f.quastenflosser\n- Passwort: Sommer2026!\n- API-Key: sk-live-4f9a2b7c1d8e6350\n';
+  const result = anonymizeVerified(reported, 'customer_document');
+  assert.strictEqual(result.text,
+    'Zugangsdaten\n- Benutzername: [CREDENTIAL_REDACTED]\n- Passwort: [CREDENTIAL_REDACTED]\n- API-Key: [CREDENTIAL_REDACTED]\n');
+  assert.deepStrictEqual(result.residual, []);
+});
+
+test('fullwidth credential separators and independent residual detection are covered', () => {
+  for (const source of ['Passwort：Sommer2026!', 'Token＝abc123']) {
+    const result = anonymize(source, 'general');
+    assert.match(result.text, /\[CREDENTIAL_REDACTED\]/u, source);
+    assert.deepStrictEqual(result.findings, [{ type: 'CREDENTIAL' }], source);
+  }
+  const { DETECTORS } = require('../plugins/data-secure/server/privacy/structured');
+  const detector = DETECTORS.find((candidate) => candidate.type === 'CREDENTIAL');
+  const original = detector.re;
+  detector.re = /$a/gu;
+  try {
+    assert.deepStrictEqual(pii.scanResidual('Passwort: Sommer2026!'), [{ type: 'CREDENTIAL', text: '' }]);
+  } finally {
+    detector.re = original;
+  }
+});
+
+test('credential columns are redacted structurally and credential-looking prose is preserved', () => {
+  const source = [
+    '| Benutzername | Passwort | Rolle |',
+    '| --- | --- | --- |',
+    '| f.quastenflosser | Sommer2026! | Administrator |'
+  ].join('\n');
+  for (const profile of profiles) {
+    const result = anonymize(source, profile);
+    assert.strictEqual(result.text, [
+      '| Benutzername | Passwort | Rolle |',
+      '| --- | --- | --- |',
+      '| [CREDENTIAL_REDACTED] | [CREDENTIAL_REDACTED] | Administrator |'
+    ].join('\n'));
+    assert.deepStrictEqual(result.findings.filter((finding) => finding.type === 'CREDENTIAL'), [
+      { type: 'CREDENTIAL' }, { type: 'CREDENTIAL' }
+    ]);
+    assert.ok(pii.scanResidual(source, profile).some((finding) => finding.type === 'CREDENTIAL' && !finding.text));
+    assert.deepStrictEqual(pii.scanResidual(result.text, profile, result.dictionary), []);
+  }
+  for (const source of [
+    'Benutzername | Passwort\n--- | ---\nf.quasten | secret',
+    '| Benutzername | Passwort\n| --- | ---\n| f.quasten | secret',
+    'Benutzername | Passwort |\n--- | --- |\nf.quasten | secret |',
+    '| Benutzername | Passwort |\n| --- | --- |\n| f.quasten | abc\\|def |'
+  ]) {
+    const result = anonymizeVerified(source, 'general');
+    assert.strictEqual((result.text.match(/\[CREDENTIAL_REDACTED\]/gu) || []).length, 2, source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+  for (const source of [
+    '| API | Rolle |\n| Key | Typ |\n| --- | --- |\n| sk-live-secret | Admin |',
+    '| User | Rolle |\n| name | Typ |\n| --- | --- |\n| f.quasten | Admin |',
+    '| API | Rolle |\n|  | Typ |\n| Key | Wert |\n| --- | --- |\n| sk-live-secret | Admin |'
+  ]) {
+    const result = anonymizeVerified(source, 'general');
+    assert.match(result.text, /\[CREDENTIAL_REDACTED\]/u, source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+  for (const source of [
+    '| Pass | Rolle |\n| wort | Typ |\n| --- | --- |\n| secret | Admin |',
+    '| Benutzer | Rolle |\n| name | Typ |\n| --- | --- |\n| f.quasten | Admin |',
+    '| Zugangs | Rolle |\n|  | Typ |\n| daten | Wert |\n| --- | --- |\n| secret | Admin |',
+    '| Konto | Rolle |\n| kennung | Typ |\n| --- | --- |\n| f.quasten | Admin |',
+    '| Anmelde | Rolle |\n| name | Typ |\n| --- | --- |\n| f.quasten | Admin |'
+  ]) {
+    const result = anonymizeVerified(source, 'general');
+    assert.match(result.text, /\[CREDENTIAL_REDACTED\]/u, source);
+    assert.deepStrictEqual(result.residual, [], source);
+  }
+  const differentDepths = '|  | Benutzer |\n| API |  |\n| Key | name |\n| --- | --- |\n| sk-secret | f.quasten |';
+  const differentDepthResult = anonymizeVerified(differentDepths, 'general');
+  assert.strictEqual((differentDepthResult.text.match(/\[CREDENTIAL_REDACTED\]/gu) || []).length, 2);
+  assert.deepStrictEqual(differentDepthResult.residual, []);
+  const overlong = '| API | Rolle |\n| access | Typ |\n| credential | Wert |\n| Key | Status |\n| --- | --- |\n| sk-live-secret | Admin |';
+  assert.ok(pii.scanResidual(overlong).some((finding) => finding.type === 'CREDENTIAL' && !finding.text));
+  const unbound = '| API | Rolle |\n| access | Typ |\n| Key | Wert |\n| --- | --- |\n| sk-live-secret | Admin |';
+  assert.ok(pii.scanResidual(unbound).some((finding) => finding.type === 'CREDENTIAL' && !finding.text));
+  for (const source of [
+    '| Pass | Rolle |\n| access | Typ |\n| internal | Wert |\n| wort | Status |\n| --- | --- |\n| secret | Admin |',
+    '| Zugangs | Rolle |\n| internal | Typ |\n| access | Wert |\n| daten | Status |\n| --- | --- |\n| secret | Admin |',
+    '| Pass | Rolle |\n| x1 | Typ |\n| x2 | Wert |\n| x3 | Status |\n| wort | Feld |\n| --- | --- |\n| geheim-123 | Admin |',
+    '| Benutzer | Rolle |\n| x1 | Typ |\n| x2 | Wert |\n| x3 | Status |\n| name | Feld |\n| --- | --- |\n| f.quasten | Admin |',
+    '| Zugangs | Rolle |\n| x1 | Typ |\n| x2 | Wert |\n| x3 | Status |\n| daten | Feld |\n| --- | --- |\n| geheim-123 | Admin |'
+  ]) assert.ok(pii.scanResidual(source).some((finding) => finding.type === 'CREDENTIAL' && !finding.text), source);
+  const technicalTable = '| API | Version |\n| --- | --- |\n| REST | v2 |';
+  assert.strictEqual(anonymize(technicalTable, 'general').text, technicalTable);
+  assert.deepStrictEqual(pii.scanResidual(technicalTable), []);
+  for (const prose of [
+    'Das Passwort muss regelmäßig geändert werden.',
+    'Password Policy und Secret Management sind dokumentiert.',
+    'Die Tokenisierung wird fachlich geprüft.',
+    'Das PIN-Verfahren bleibt unverändert.',
+    '# Zugangsdaten',
+    '# Token: Aufbau und Validierung',
+    '## Secret: Management in Entwicklungsumgebungen',
+    'Token: Aufbau und Validierung\n============================',
+    'Secret: Management in Entwicklungsumgebungen\n-------------------------------------------',
+    'Passwort:',
+    'URL: https://example.test/?token=abc'
+  ]) {
+    assert.strictEqual(anonymize(prose, 'general').text, prose);
+    assert.deepStrictEqual(pii.scanResidual(prose), []);
+  }
+});
+
+test('entity-shaped credential values never enter findings, dictionaries or public scanner text', () => {
+  const { hashShort } = require('../plugins/data-secure/server/privacy/base');
+  const { scanStructured } = require('../plugins/data-secure/server/privacy/structured');
+  for (const source of [
+    'Secret: Nordlicht Beispiel GmbH',
+    '| Secret | Rolle |\n| --- | --- |\n| Nordlicht Beispiel GmbH | intern |',
+    'Passwort: Anna Beispiel'
+  ]) {
+    const secret = source.includes('Anna') ? 'Anna Beispiel' : 'Nordlicht Beispiel GmbH';
+    const result = anonymize(source, 'personnel_profile');
+    assert.deepStrictEqual(result.findings, [{ type: 'CREDENTIAL' }], source);
+    assert.deepStrictEqual(result.dictionary, [], source);
+    assert.strictEqual(result.counts.ORG || 0, 0, source);
+    const encoded = JSON.stringify({ findings: result.findings, dictionary: result.dictionary });
+    assert.doesNotMatch(encoded, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+    assert.doesNotMatch(encoded, new RegExp(hashShort(secret), 'u'));
+    for (const scannerResult of [
+      scanStructured(source),
+      pii.scanResidual(source, 'personnel_profile'),
+      pii.verifyRedactedText(source),
+      pii.sensitiveSpans(source, 'personnel_profile')
+    ]) {
+      assert.doesNotMatch(JSON.stringify(scannerResult), new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+      assert.ok(scannerResult.filter((finding) => finding.type === 'CREDENTIAL').every((finding) => !finding.text));
+    }
+  }
+  for (const source of [
+    'Passwort: anna@example.test',
+    'Login: https://example.test/private',
+    'PIN: +49 30 12345678'
+  ]) {
+    const secret = source.slice(source.indexOf(':') + 1).trim();
+    for (const scannerResult of [
+      scanStructured(source), pii.scanResidual(source, 'personnel_profile'),
+      pii.verifyRedactedText(source), pii.sensitiveSpans(source, 'personnel_profile')
+    ]) assert.doesNotMatch(JSON.stringify(scannerResult), new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+  }
+  const mixed = 'Kunde: Nordlicht Beispiel GmbH\nSecret: Nordlicht Beispiel GmbH';
+  const result = anonymizeVerified(mixed, 'customer_document');
+  assert.match(result.text, /\[ORGANISATION_\d+\]/u);
+  assert.match(result.text, /Secret: \[CREDENTIAL_REDACTED\]/u);
+});
+
 test('explicit contract and customer labels redact suffixless organisations', () => {
   for (const [profile, source] of [
     ['contract', 'Vertragspartei: ACME'],
