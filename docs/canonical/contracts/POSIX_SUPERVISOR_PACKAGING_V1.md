@@ -26,6 +26,10 @@ Build-Fehler.
   geerbte Hard-Limit bereits niedriger, bleibt dieses strengere Limit erhalten;
   der Supervisor darf nicht versuchen, es zu erhöhen oder den Parser deshalb
   vor `exec` abbrechen.
+- macOS erhält wegen seiner bereits vor Prozessstart vorhandenen
+  dyld-/Shared-Region-Mappings eine endliche virtuelle Adressraumgrenze von
+  mindestens 64 GiB. Der tatsächliche physische Speicher bleibt unabhängig
+  davon durch `proc_pid_rusage` auf das angeforderte RAM-Budget begrenzt.
 - Keine Freigabe entsteht allein durch Verpackung: reale CPU-, RAM-, Kindprozess-,
   Timeout- und Fresh-Install-Evidenz für macOS x64, macOS ARM64 und Linux x64
   bleibt Pflicht.

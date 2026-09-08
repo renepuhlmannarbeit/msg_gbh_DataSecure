@@ -129,9 +129,19 @@ int main(int argc, char **argv) {
      on native mmap/Buffer pressure. RSS remains independently monitored at the
      user-selected memory limit. */
   address_bytes = memory_bytes * 8ULL;
+#ifdef __APPLE__
+  /* Modern macOS processes inherit large dyld/shared-region mappings before
+     the parser starts. XNU rejects RLIMIT_AS below the map's current virtual
+     size. Keep a finite 64 GiB virtual ceiling on macOS; physical footprint is
+     still independently enforced at memory_bytes by the parent supervisor. */
+  if (address_bytes < 65536ULL * 1024ULL * 1024ULL) {
+    address_bytes = 65536ULL * 1024ULL * 1024ULL;
+  }
+#else
   if (address_bytes < 4096ULL * 1024ULL * 1024ULL) {
     address_bytes = 4096ULL * 1024ULL * 1024ULL;
   }
+#endif
   memset(&action, 0, sizeof(action));
   action.sa_handler = terminate_group;
   sigemptyset(&action.sa_mask);
