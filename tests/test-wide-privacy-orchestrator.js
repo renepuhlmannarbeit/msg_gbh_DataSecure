@@ -16,6 +16,7 @@ fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT, { recursive: true });
 
 const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
 const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
+const { extractWideSourceForPrivacy } = require('../plugins/data-secure/server/standalone/wide-privacy-extraction');
 const { anonymizeNext } = require('../plugins/data-secure/server/gateway/orchestrator');
 const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
 const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
@@ -23,9 +24,58 @@ const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
 const { testAsync, assert, done } = createSuite('Wide Standalone privacy orchestration');
 
+const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const cell = (value) => `<w:tc><w:p><w:r><w:t>${value}</w:t></w:r></w:p></w:tc>`;
+function privacyTableDocx() {
+  return zipStore([...opcControlEntries('docx'), ['word/document.xml',
+    `<w:document xmlns:w="${W}"><w:body><w:tbl>` +
+    `<w:tr>${cell('Name')}${cell('Arbeitgeber')}</w:tr>` +
+    `<w:tr>${cell('Max Mustermann')}${cell('Nordlicht GmbH')}</w:tr>` +
+    '</w:tbl></w:body></w:document>']]);
+}
+function privacyTableXlsx() {
+  const row = (number, left, right) => `<row r="${number}"><c r="A${number}" t="inlineStr"><is><t>${left}</t></is></c><c r="B${number}" t="inlineStr"><is><t>${right}</t></is></c></row>`;
+  return zipStore([...opcControlEntries('xlsx'),
+    ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Kontakte" sheetId="1" r:id="s1"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`],
+    ['xl/worksheets/sheet1.xml', `<worksheet xmlns="${S}"><sheetData>${row(1, 'Name', 'Arbeitgeber')}${row(2, 'Max Mustermann', 'Nordlicht GmbH')}</sheetData></worksheet>`]
+  ]);
+}
+function privacyTablePptx() {
+  const row = (left, right) => `<a:tr><a:tc><a:txBody><a:p><a:r><a:t>${left}</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>${right}</a:t></a:r></a:p></a:txBody></a:tc></a:tr>`;
+  return zipStore([...opcControlEntries('pptx'),
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide1.xml"/></Relationships>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><a:tbl>${row('Name', 'Arbeitgeber')}${row('Max Mustermann', 'Nordlicht GmbH')}</a:tbl></p:spTree></p:cSld></p:sld>`]
+  ]);
+}
+
 function privateEntry(name, text = 'opaque binary source') {
   return { name, private_artifact_plain: true, private_bytes: Buffer.from(text) };
 }
+
+testAsync('wide DOCX XLSX and PPTX retain an explicit source header for privacy detection', async () => {
+  for (const [extension, bytes] of [['.docx', privacyTableDocx()], ['.xlsx', privacyTableXlsx()], ['.pptx', privacyTablePptx()]]) {
+    const raw = extractMarkdownBuffer(bytes, extension);
+    assert.match(raw.markdown, /\| Spalte 1 \| Spalte 2 \|/u, `${extension} conversion remains content preserving`);
+    const extracted = await extractWideSourceForPrivacy(bytes, extension, {
+      async convertBuffer(input, type) { return extractMarkdownBuffer(input, type); }
+    });
+    assert.match(extracted.markdown, /\| Name \| Arbeitgeber \|\n\| --- \| --- \|/u, extension);
+    assert.doesNotMatch(extracted.markdown, /\| Spalte 1 \| Spalte 2 \|/u, extension);
+    const entry = { name: `privacy-table${extension}`, private_artifact_plain: true, private_bytes: Buffer.from(bytes) };
+    const result = await anonymizeNext('personnel_profile', { productChannel: 'standalone', inputQueue: [entry],
+      async convertBuffer(input, type) { return extractMarkdownBuffer(input, type); } });
+    const released = readOutput(result.package_id, result.read_capability).text;
+    assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH/u, extension);
+    assert.match(released, /\[PERSON_001\]|\[UNTERNEHMEN_001\]/u, extension);
+  }
+});
 
 testAsync('complete wide extraction is converted once, anonymized and published without a raw dm artifact', async () => {
   const entry = privateEntry('customer.pdf');

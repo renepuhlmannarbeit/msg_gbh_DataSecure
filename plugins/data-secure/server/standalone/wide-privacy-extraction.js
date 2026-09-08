@@ -15,6 +15,48 @@ const SOURCE_TYPE_BY_EXTENSION = Object.freeze({
   '.docx': 'docx', '.xlsx': 'xlsx', '.pptx': 'pptx', '.pdf': 'pdf', '.png': 'png',
   '.jpg': 'jpeg', '.jpeg': 'jpeg', '.bmp': 'bmp'
 });
+const EXPLICIT_SENSITIVE_HEADER = /^(?:Name|Vorname|Nachname|Person|Mitarbeiter(?:in)?|Teilnehmer(?:in)?|Ansprechpartner(?:in)?|Arbeitgeber|Kunde|Unternehmen|Firma|Organisation|E-?Mail|Telefon|IBAN|Anschrift|Adresse|Geburtsdatum)$/iu;
+
+function markdownCells(line) {
+  const source = String(line || '').trim();
+  if (!source.startsWith('|') || !source.endsWith('|')) return null;
+  const cells = [];
+  let value = '';
+  let escaped = false;
+  for (const character of source.slice(1, -1)) {
+    if (escaped) {
+      value += character;
+      escaped = false;
+    } else if (character === '\\') {
+      value += character;
+      escaped = true;
+    } else if (character === '|') {
+      cells.push(value.trim());
+      value = '';
+    } else {
+      value += character;
+    }
+  }
+  cells.push(value.trim());
+  return cells;
+}
+
+function promoteExplicitSensitiveTableHeaders(markdown) {
+  const lines = String(markdown || '').split('\n');
+  for (let index = 0; index + 2 < lines.length; index++) {
+    const generated = markdownCells(lines[index]);
+    const separator = markdownCells(lines[index + 1]);
+    const sourceHeader = markdownCells(lines[index + 2]);
+    if (!generated || !separator || !sourceHeader || generated.length !== separator.length ||
+      generated.length !== sourceHeader.length) continue;
+    if (!generated.every((value, column) => value === `Spalte ${column + 1}`) ||
+      !separator.every((value) => /^:?-{3,}:?$/u.test(value))) continue;
+    if (!sourceHeader.some((value) => EXPLICIT_SENSITIVE_HEADER.test(value))) continue;
+    lines[index] = lines[index + 2];
+    lines.splice(index + 2, 1);
+  }
+  return lines.join('\n');
+}
 
 function isWidePrivacyExtension(extension) {
   return WIDE_EXTENSIONS.has(String(extension || '').toLowerCase());
@@ -49,8 +91,10 @@ async function extractWideSourceForPrivacy(bytes, extension, options = {}) {
     failure.code = 'FORMAT_COVERAGE_UNVERIFIED';
     throw failure;
   }
+  const privacyMarkdown = ['docx', 'xlsx', 'pptx'].includes(extraction.source_type)
+    ? promoteExplicitSensitiveTableHeaders(extraction.markdown) : extraction.markdown;
   const neutral = createSourceExtraction({ source_type: extraction.source_type,
-    markdown: extraction.markdown, coverage: extraction.coverage }, RESOURCE_LIMITS.MAX_TEXT_CHARS);
+    markdown: privacyMarkdown, coverage: extraction.coverage }, RESOURCE_LIMITS.MAX_TEXT_CHARS);
   // DS-087 deliberately anonymizes the converter's Markdown representation,
   // not the original container. Coverage reasons therefore remain relevant to
   // the visible scope notice, but they must not reject useful extracted text.
