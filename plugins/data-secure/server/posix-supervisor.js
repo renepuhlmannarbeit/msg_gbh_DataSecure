@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const childProcess = require('child_process');
 
 const CONTRACT = '{"schema":"datasecure-posix-sandbox/v1","limits":["cpu","address_space","data","file_size","open_files","rss","wallclock"],"process_group_reap":true}';
+const DARWIN_CONTRACT = '{"schema":"datasecure-posix-sandbox/v1","limits":["cpu","file_size","open_files","rss","wallclock"],"process_group_reap":true}';
 const TARGETS = Object.freeze({ darwin: new Map([['x64', 'macos-x64'], ['arm64', 'macos-arm64']]), linux: new Map([['x64', 'linux-x64']]) });
 const cache = new Map();
 
@@ -90,11 +91,12 @@ function verifyPosixSupervisor(options = {}) {
       return { available: false, reason: 'verification_failed' };
     }
     const probe = (options.spawnSync || childProcess.spawnSync)(executable, ['--sandbox-contract'], { encoding: 'utf8', windowsHide: true, shell: false, env: {}, timeout: 5000, maxBuffer: 4096, stdio: ['ignore', 'pipe', 'ignore'] });
-    if (probe.status !== 0 || String(probe.stdout || '').trim() !== CONTRACT) return { available: false, reason: 'contract_failed' };
+    const expectedContract = platform === 'darwin' ? DARWIN_CONTRACT : CONTRACT;
+    if (probe.status !== 0 || String(probe.stdout || '').trim() !== expectedContract) return { available: false, reason: 'contract_failed' };
     const result = { available: true, reason: 'ok', executable };
     cache.set(key, result);
     return result;
   } catch { return { available: false, reason: 'verification_failed' }; }
 }
 function clearPosixSupervisorCache() { cache.clear(); }
-module.exports = { CONTRACT, targetFor, artifactPath, inspectBinary, verifyPosixSupervisor, clearPosixSupervisorCache };
+module.exports = { CONTRACT, DARWIN_CONTRACT, targetFor, artifactPath, inspectBinary, verifyPosixSupervisor, clearPosixSupervisorCache };

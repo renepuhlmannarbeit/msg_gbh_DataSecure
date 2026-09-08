@@ -68,7 +68,7 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror native/ocr/pilot/posix-sandbox.c -o native/ocr/pilot/datasecure-ocr-sandbox
           native/ocr/pilot/datasecure-ocr-sandbox --sandbox-contract > datasecure-posix-sandbox-contract.json
           bash tests/test-posix-supervisor-native.sh native/ocr/pilot/datasecure-ocr-sandbox
-          node -e "const c=require('./datasecure-posix-sandbox-contract.json');if(c.schema!=='datasecure-posix-sandbox/v1'||c.process_group_reap!==true||c.limits.length!==7)process.exit(1)"
+          node -e "const c=require('./datasecure-posix-sandbox-contract.json');const n=process.platform==='darwin'?5:7;if(c.schema!=='datasecure-posix-sandbox/v1'||c.process_group_reap!==true||c.limits.length!==n)process.exit(1)"
           echo "DATASECURE_OCR_POSIX_LAUNCHER=$GITHUB_WORKSPACE/native/ocr/pilot/datasecure-ocr-sandbox" >> "$GITHUB_ENV"
       - name: Fetch and verify official build-time language models
         run: node native/ocr/pilot/fetch-models.mjs

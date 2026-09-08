@@ -28,7 +28,11 @@ enum { USAGE_ERROR = 120, SETUP_ERROR = 121, START_ERROR = 122,
        ADDRESS_LIMIT_SETUP_ERROR = 132, DATA_LIMIT_SETUP_ERROR = 133,
        FILE_LIMIT_SETUP_ERROR = 134, OPEN_FILE_LIMIT_SETUP_ERROR = 135 };
 
+#ifdef __APPLE__
+#define CONTRACT_JSON "{\"schema\":\"datasecure-posix-sandbox/v1\",\"limits\":[\"cpu\",\"file_size\",\"open_files\",\"rss\",\"wallclock\"],\"process_group_reap\":true}\n"
+#else
 #define CONTRACT_JSON "{\"schema\":\"datasecure-posix-sandbox/v1\",\"limits\":[\"cpu\",\"address_space\",\"data\",\"file_size\",\"open_files\",\"rss\",\"wallclock\"],\"process_group_reap\":true}\n"
+#endif
 
 static volatile sig_atomic_t child_group = -1;
 
@@ -110,7 +114,10 @@ static int apply_limit_ceiling(int resource, rlim_t requested) {
 
 int main(int argc, char **argv) {
   uint64_t memory_mib = 0, cpu_ms = 0, wall_ms = 0;
-  uint64_t memory_bytes, address_bytes, started;
+  uint64_t memory_bytes, started;
+#ifndef __APPLE__
+  uint64_t address_bytes;
+#endif
   pid_t pid;
   struct sigaction action;
   if (argc == 2 && strcmp(argv[1], "--sandbox-contract") == 0) {
@@ -124,20 +131,12 @@ int main(int argc, char **argv) {
       !parse_unsigned(argv[4], 100, 600000, &cpu_ms) ||
       !parse_unsigned(argv[6], 100, 600000, &wall_ms)) return USAGE_ERROR;
   memory_bytes = memory_mib * 1024ULL * 1024ULL;
+#ifndef __APPLE__
   /* V8 reserves substantially more virtual address space than resident RAM.
      Keep that reservation possible while still placing a finite hard ceiling
      on native mmap/Buffer pressure. RSS remains independently monitored at the
      user-selected memory limit. */
   address_bytes = memory_bytes * 8ULL;
-#ifdef __APPLE__
-  /* Modern macOS processes inherit large dyld/shared-region mappings before
-     the parser starts. XNU rejects RLIMIT_AS below the map's current virtual
-     size. Keep a finite 64 GiB virtual ceiling on macOS; physical footprint is
-     still independently enforced at memory_bytes by the parent supervisor. */
-  if (address_bytes < 65536ULL * 1024ULL * 1024ULL) {
-    address_bytes = 65536ULL * 1024ULL * 1024ULL;
-  }
-#else
   if (address_bytes < 4096ULL * 1024ULL * 1024ULL) {
     address_bytes = 4096ULL * 1024ULL * 1024ULL;
   }
@@ -158,8 +157,10 @@ int main(int argc, char **argv) {
 #endif
     if (apply_limit_ceiling(RLIMIT_CPU, (rlim_t)seconds) != 0) _exit(CPU_LIMIT_SETUP_ERROR);
     if (apply_limit_ceiling(RLIMIT_CORE, (rlim_t)0) != 0) _exit(CORE_LIMIT_SETUP_ERROR);
+#ifndef __APPLE__
     if (apply_limit_ceiling(RLIMIT_AS, (rlim_t)address_bytes) != 0) _exit(ADDRESS_LIMIT_SETUP_ERROR);
     if (apply_limit_ceiling(RLIMIT_DATA, (rlim_t)memory_bytes) != 0) _exit(DATA_LIMIT_SETUP_ERROR);
+#endif
     if (apply_limit_ceiling(RLIMIT_FSIZE, (rlim_t)(64ULL * 1024ULL * 1024ULL)) != 0) {
       _exit(FILE_LIMIT_SETUP_ERROR);
     }

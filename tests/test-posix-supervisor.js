@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { createSuite } = require('./helpers');
-const { CONTRACT, verifyPosixSupervisor, clearPosixSupervisorCache } = require('../plugins/data-secure/server/posix-supervisor');
+const { CONTRACT, DARWIN_CONTRACT, verifyPosixSupervisor, clearPosixSupervisorCache } = require('../plugins/data-secure/server/posix-supervisor');
 const { test, done, assert } = createSuite('POSIX supervisor contract');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-posix-supervisor-'));
 
@@ -29,6 +29,20 @@ test('tampered binary or incorrect contract fails closed', () => {
   assert.deepStrictEqual(verifyPosixSupervisor({ platform: 'linux', arch: 'x64', executable: file }), { available: false, reason: 'integrity_failed' });
   clearPosixSupervisorCache(); const contract = artifact('contract');
   assert.deepStrictEqual(verifyPosixSupervisor({ platform: 'linux', arch: 'x64', executable: contract, spawnSync: () => ({ status: 0, stdout: '{}' }) }), { available: false, reason: 'contract_failed' });
+});
+
+test('macOS verifies its truthful RSS-based resource contract', () => {
+  clearPosixSupervisorCache();
+  const file = path.join(root, 'darwin');
+  const bytes = Buffer.alloc(128);
+  bytes.writeUInt32LE(0xfeedfacf, 0);
+  bytes.writeInt32LE(0x0100000c, 4);
+  fs.writeFileSync(file, bytes, { mode: 0o700 });
+  fs.writeFileSync(`${file}.sha256`, `${crypto.createHash('sha256').update(bytes).digest('hex')}\n`);
+  assert.deepStrictEqual(verifyPosixSupervisor({
+    platform: 'darwin', arch: 'arm64', executable: file,
+    spawnSync: () => ({ status: 0, stdout: DARWIN_CONTRACT })
+  }), { available: true, reason: 'ok', executable: file });
 });
 
 done();

@@ -26,10 +26,13 @@ Build-Fehler.
   geerbte Hard-Limit bereits niedriger, bleibt dieses strengere Limit erhalten;
   der Supervisor darf nicht versuchen, es zu erhöhen oder den Parser deshalb
   vor `exec` abbrechen.
-- macOS erhält wegen seiner bereits vor Prozessstart vorhandenen
-  dyld-/Shared-Region-Mappings eine endliche virtuelle Adressraumgrenze von
-  mindestens 64 GiB. Der tatsächliche physische Speicher bleibt unabhängig
-  davon durch `proc_pid_rusage` auf das angeforderte RAM-Budget begrenzt.
+- Linux begrenzt zusätzlich virtuellen Adressraum und Datensegment per
+  `RLIMIT_AS`/`RLIMIT_DATA`. Auf macOS sind diese beiden Linux-typischen Limits
+  nicht Teil des zugesagten Vertrags: XNU verweigert sie, sobald die bereits
+  vorhandene Mach-VM-Map größer als der Sollwert ist. Dort begrenzt der externe
+  Elternprozess den tatsächlichen physischen Footprint stattdessen hart über
+  `proc_pid_rusage`; CPU-, Core-, Dateigrößen-, Deskriptor- und Wallclock-Grenzen
+  bleiben zusätzlich aktiv.
 - Keine Freigabe entsteht allein durch Verpackung: reale CPU-, RAM-, Kindprozess-,
   Timeout- und Fresh-Install-Evidenz für macOS x64, macOS ARM64 und Linux x64
   bleibt Pflicht.
