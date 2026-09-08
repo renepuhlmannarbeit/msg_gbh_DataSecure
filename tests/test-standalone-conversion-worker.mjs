@@ -47,7 +47,12 @@ try {
     assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
   });
   const { convertBuffer } = require(path.join(server, 'standalone', 'conversion-worker.js'));
-  const { extractWideSourceForPrivacy } = require(path.join(server, 'standalone', 'wide-privacy-extraction.js'));
+  const { extractSourceForPrivacy } = require(path.join(server, 'core', 'markdown-first-privacy.js'));
+  const extractWideSourceForPrivacy = (bytes, extension, options = {}) => extractSourceForPrivacy(
+    bytes,
+    extension,
+    { ...options, productChannel: 'standalone' }
+  );
   async function convert(input, extension, options) {
     const original = hash(input);
     const result = await convertBuffer(input, extension, options);
