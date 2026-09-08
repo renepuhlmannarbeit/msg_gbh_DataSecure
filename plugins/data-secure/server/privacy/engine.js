@@ -137,7 +137,8 @@ function residualTablePersonCandidates(text) {
         const value = row[column];
         const candidate = visibleTableCellValue(value);
         const candidateKey = key(candidate);
-        if (candidate.length > 2 && candidate.length <= 160 && looksName(candidate) && !seen.has(candidateKey)) {
+        const words = candidate.split(/\s+/u).filter(Boolean);
+        if (words.length === 2 && candidate.length <= 160 && looksName(candidate) && !seen.has(candidateKey)) {
           seen.add(candidateKey);
           findings.push({ type: 'PERSON_CANDIDATE', text: candidate });
         }
