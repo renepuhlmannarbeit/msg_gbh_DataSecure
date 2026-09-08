@@ -17,6 +17,8 @@ fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT, { recursive: true });
 const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
 const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 const { extractWideSourceForPrivacy } = require('../plugins/data-secure/server/standalone/wide-privacy-extraction');
+const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
+const { scanResidual } = require('../plugins/data-secure/server/privacy/engine');
 const { anonymizeNext } = require('../plugins/data-secure/server/gateway/orchestrator');
 const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
 const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
@@ -74,6 +76,26 @@ testAsync('wide DOCX XLSX and PPTX retain an explicit source header for privacy 
     const released = readOutput(result.package_id, result.read_capability).text;
     assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH/u, extension);
     assert.match(released, /\[PERSON_001\]|\[UNTERNEHMEN_001\]/u, extension);
+  }
+});
+
+testAsync('wide privacy promotes operational person headers before anonymization', async () => {
+  for (const label of ['Zuständig', 'Verantwortliche', 'Bearbeiterin', 'Sachbearbeiter', 'Betreuerin',
+    'Autor', 'Verfasserin', 'Empfänger', 'Absenderin', 'Unterzeichner', 'Gesprächspartnerin', 'Kontakt']) {
+    const extracted = await extractWideSourceForPrivacy(Buffer.from('fixture'), '.xlsx', {
+      async convertBuffer() {
+        return createMarkdownExtraction({
+          source_type: 'xlsx',
+          markdown: `| Spalte 1 | Spalte 2 |\n| --- | --- |\n| ${label} | Rolle |\n| Anna Berger | Product Owner |`,
+          coverage: { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }
+        });
+      }
+    });
+    assert.match(extracted.markdown, new RegExp(`\\| ${label} \\| Rolle \\|\\n\\| --- \\| --- \\|`, 'u'), label);
+    assert.doesNotMatch(extracted.markdown, /\| Spalte 1 \| Spalte 2 \|/u, label);
+    const privacy = anonymizeMarkdown(extracted.markdown, 'customer_document');
+    assert.doesNotMatch(privacy.text, /Anna Berger/u, label);
+    assert.deepStrictEqual(scanResidual(privacy.text, 'customer_document'), [], label);
   }
 });
 

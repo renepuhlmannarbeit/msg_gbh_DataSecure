@@ -15,7 +15,7 @@ const SOURCE_TYPE_BY_EXTENSION = Object.freeze({
   '.docx': 'docx', '.xlsx': 'xlsx', '.pptx': 'pptx', '.pdf': 'pdf', '.png': 'png',
   '.jpg': 'jpeg', '.jpeg': 'jpeg', '.bmp': 'bmp'
 });
-const EXPLICIT_SENSITIVE_HEADER = /^(?:Name|Vorname|Nachname|Person|Mitarbeiter(?:in)?|Teilnehmer(?:in)?|Ansprechpartner(?:in)?|Arbeitgeber|Kunde|Unternehmen|Firma|Organisation|E-?Mail|Telefon|IBAN|Anschrift|Adresse|Geburtsdatum)$/iu;
+const EXPLICIT_SENSITIVE_HEADER = /^(?:Name|Vorname|Nachname|Person|Mitarbeiter(?:in)?|Teilnehmer(?:in)?|Ansprechpartner(?:in)?|Zuständige?|Verantwortliche?|Bearbeiter(?:in)?|Sachbearbeiter(?:in)?|Betreuer(?:in)?|Autor(?:in)?|Verfasser(?:in)?|Empfänger(?:in)?|Absender(?:in)?|Unterzeichner(?:in)?|Gesprächspartner(?:in)?|Kontakt|Arbeitgeber|Kunde|Unternehmen|Firma|Organisation|E-?Mail|Telefon|IBAN|Anschrift|Adresse|Geburtsdatum)$/iu;
 
 function markdownCells(line) {
   const source = String(line || '').trim();

@@ -38,6 +38,17 @@ unbekannte Coverage, leeres Markdown oder unsichere Quellen stoppen. Der übrige
 Stapel darf weiterlaufen. Originale werden nur gelesen und niemals automatisch
 verändert oder gelöscht.
 
+Für Tabellen werden eindeutige Quellköpfe wie `Name`, `Zuständig`,
+`Verantwortlich`, `Bearbeiter`, `Sachbearbeiter`, `Betreuer`, `Autor`,
+`Verfasser`, `Empfänger`, `Absender`, `Unterzeichner`, `Gesprächspartner` und
+`Kontakt` spaltengebunden redigiert. Bei Standalone gilt das auch dann, wenn der
+neutrale Konverter davor einen technischen `Spalte N`-Kopf erzeugt hat; der
+Quellkopf wird nur in der Privacy-Repräsentation wiederhergestellt. Unter einer
+nicht katalogisierten Überschrift führt ein verbleibender namensförmiger
+Zweiwortwert einschließlich sichtbarem Markdown-Linklabel zum fail-closed-Stopp.
+Diese konservative Grenze kann auch neutrale Zweiwortwerte stoppen; sie ist
+keine Zusage einer semantischen Klassifikation beliebiger Spalten.
+
 Der neutrale Extraktionsvertrag enthält weder Publikationskennung noch
 Verarbeitungszweck. Es wird kein rohes Markdown-Zwischenergebnis exportiert.
 Direkte und konvertierte Quellen laufen mit derselben stapelgebundenen Personen-

@@ -29,6 +29,7 @@ const {
   HONORIFIC,
   GENDERED_SALUTATION,
   ACADEMIC_HONORIFIC,
+  markdownTableCells,
   collectPersonAnchors,
   collectPersonSeeds,
   collectNameSeeds,
@@ -104,6 +105,45 @@ const RESIDUAL_TABLE_ID_CANDIDATE_RE = /(?=[A-Z0-9./\- ]{3,40}\d)[A-Z0-9][A-Z0-9
 // emitted by the local conversion corpus and is narrow enough to avoid
 // guessing names from unlabelled prose.
 const RESIDUAL_PERSON_TABLE_CANDIDATE_RE = /^\|?[ \t]*person[ \t]*:?[ \t]*\|[ \t]*([^|\n]{1,160})\|/gimu;
+
+function visibleTableCellValue(value) {
+  let visible = normalizeSpaces(value).replace(/<\/?[A-Za-z][^>\n]{0,1000}>/gu, '').trim();
+  const inlineLink = visible.match(/^!?\[([^\n]{1,500}?)\]\([^\n)]{1,2000}\)$/u);
+  if (inlineLink) visible = inlineLink[1];
+  const referenceLink = visible.match(/^!?\[([^\n]{1,500}?)\]\[[^\n]{0,500}\]$/u);
+  if (referenceLink) visible = referenceLink[1];
+  return normalizeSpaces(visible.replace(/^(?:\*\*|__|~~|`{1,3})(.*?)(?:\*\*|__|~~|`{1,3})$/u, '$1'));
+}
+
+function residualTablePersonCandidates(text) {
+  const all = String(text || '').split(/\r?\n/u);
+  const findings = [];
+  const seen = new Set();
+  for (let index = 0; index + 2 < all.length; index++) {
+    const headers = markdownTableCells(all[index]);
+    const separator = markdownTableCells(all[index + 1]);
+    if (!headers || !separator || headers.length !== separator.length ||
+        !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
+    index += 2;
+    while (index < all.length) {
+      const row = markdownTableCells(all[index]);
+      if (!row || row.length !== headers.length) {
+        index--;
+        break;
+      }
+      for (const value of row) {
+        const candidate = visibleTableCellValue(value);
+        const candidateKey = key(candidate);
+        if (candidate.length > 2 && candidate.length <= 160 && looksName(candidate) && !seen.has(candidateKey)) {
+          seen.add(candidateKey);
+          findings.push({ type: 'PERSON_CANDIDATE', text: candidate });
+        }
+      }
+      index++;
+    }
+  }
+  return findings;
+}
 
 function plausibleCalendarDate(value) {
   const numbers = String(value).split(/[./-]/u).map((part) => Number(part.trim()));
@@ -514,6 +554,17 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     .map((f) => ({ type: f.type, text: f.text }));
   for (const finding of conservativeLabelledResiduals(clean)) {
     if (!out.some((current) => current.type === finding.type && current.text === finding.text)) out.push(finding);
+  }
+  // This structural final gate is intentionally independent from PERSON_LABEL.
+  // A missing operational column label may prevent redaction, but it must not
+  // make a remaining name-shaped table value releasable.
+  const residualKeys = new Set(out.map((finding) => `${finding.type}:${key(finding.text)}`));
+  for (const finding of residualTablePersonCandidates(clean)) {
+    const findingKey = `${finding.type}:${key(finding.text)}`;
+    if (!residualKeys.has(findingKey)) {
+      residualKeys.add(findingKey);
+      out.push(finding);
+    }
   }
   // Structure is an independent release condition. A shifted/merged table row
   // cannot be assigned to a sensitive header by position without guessing.

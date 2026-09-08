@@ -1686,6 +1686,27 @@ test('a plain person table label anchors the name and the independent gate detec
   assert.deepStrictEqual(result.residual, []);
 });
 
+test('operational person-column labels redact names while neutral columns stop fail-closed', () => {
+  for (const label of ['Zuständig', 'Zuständige', 'Verantwortlich', 'Verantwortliche', 'Bearbeiter',
+    'Sachbearbeiter', 'Betreuer', 'Autor', 'Verfasser', 'Empfänger', 'Absender', 'Unterzeichner',
+    'Gesprächspartner', 'Kontakt']) {
+    const source = `| ${label} | Rolle | Geburtsdatum |\n| --- | --- | --- |\n| Anna Berger | Product Owner | 03.07.1981 |`;
+    const result = anonymizeVerified(source, 'customer_document');
+    assertAbsent(result.text, 'Anna Berger', label);
+    assert.match(result.text, /\[PERSON_\d+\]/u, label);
+    assert.deepStrictEqual(result.residual, [], label);
+  }
+  for (const header of ['Abteilung', 'Bezeichnung', 'Eintrag', 'Spalte 1']) {
+    const source = `| ${header} | Rolle | Geburtsdatum |\n| --- | --- | --- |\n| Anna Berger | Product Owner | 03.07.1981 |`;
+    const residual = pii.scanResidual(source, 'customer_document');
+    assert.ok(residual.some((hit) => hit.type === 'PERSON_CANDIDATE' && hit.text === 'Anna Berger'), header);
+    assert.throws(() => anonymizeMarkdown(source, 'customer_document'), /PERSON_CANDIDATE/u, header);
+  }
+  const linked = '| Bezeichnung | Rolle |\n| --- | --- |\n| [Anna Berger](profil) | Product Owner |';
+  assert.ok(pii.scanResidual(linked, 'general').some((hit) => hit.type === 'PERSON_CANDIDATE' && hit.text === 'Anna Berger'));
+  assert.throws(() => anonymizeMarkdown(linked, 'general'), /PERSON_CANDIDATE/u);
+});
+
 test('gendered salutations are removed while professional academic titles remain', () => {
   for (const [source, expectedPrefix] of [
     ['Ansprechpartner: Frau Dr. med. Anna Beispiel', 'Ansprechpartner: Dr. med. [PERSON_001]'],

@@ -136,6 +136,7 @@ function collectContextOrganizations(text) {
 const PERSON_LABEL =
   '(?:Name|Person|Full\\s+Name|Employee\\s+Name|Candidate\\s+Name|Contact\\s+Name|Mitarbeitername|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
   '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|(?:(?:Interner|Technischer|Fachlicher)\\s+)?Kontakt|Sachbearbeiter(?:in)?' +
+  '|Zuständige?|Verantwortliche?|Empfänger(?:in)?|Absender(?:in)?|Unterzeichner(?:in)?|Gesprächspartner(?:in)?' +
   '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Autor(?:in)?|Verfasser(?:in)?|Manager(?:in)?' +
   '|Eigentümer(?:in)?|Bearbeiter(?:in)?|(?:Zuletzt\\s+)?(?:geändert|erstellt)\\s+von' +
   '|Author|Creator|Manager|Owner|Approver|Representative|Contact\\s+person|Last\\s+modified\\s+by|Modified\\s+by|Nom|Nombre|Naam|Имя|ФИО|Όνομα|姓名|氏名|이름)';

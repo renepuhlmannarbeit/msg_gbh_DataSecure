@@ -10,6 +10,15 @@ Verlauf, Ordnerstruktur oder wählbare Ergebnisnamen zu verändern. Personen-,
 Unternehmens-, Parser-, Recovery-, Export- und Restprüfungslogik stammen
 weiterhin aus demselben Core und werden in beiden Produktprojektionen geprüft.
 
+RC124 schließt die Tabellen-Unterredaktion aus F1/F2: Standalone stellt für die
+Anonymisierung eindeutige sensible Quellköpfe aus neutralen `Spalte N`-
+Extraktionen wieder her; reine Konvertierung und Cowork werden dadurch nicht
+verändert. Der gemeinsame Core kennt die belegten operativen Personenfelder.
+Bleibt unter einer beliebigen anderen Kopfzeile ein namensförmiger Tabellenwert
+zurück, verhindert ein davon unabhängiges Restgate die Veröffentlichung. Diese
+bewusst konservative Grenze kann neutrale namensförmige Zweiwortwerte stoppen
+und benötigt für eine Lockerung eine bestätigte Produktentscheidung.
+
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
 oder noch nicht vollständig exportiert, öffnet DataSecure weder den allgemeinen

@@ -1279,6 +1279,19 @@ strengeren direkten DOCX-Vertrag: Nicht vollständig abgedeckte inhaltsfähige
 Word-Strukturen stoppen dort weiterhin. Bestehende Pakete und Journale werden
 nicht umgeschrieben. Umsetzung und Nachweise bleiben unter BL-010.30 geführt.
 
+Vorläufige RC124-Präzisierung zu DS-090, bis die in
+`tasks/RUECKFRAGEN-RC123.md` vorgeschlagene neue Entscheidung bestätigt ist:
+Eindeutige operative Personenüberschriften werden als explizite Personenfelder
+behandelt. Bei der Standalone-Markdown-first-Anonymisierung darf eine solche
+Quellkopfzeile den rein technischen `Spalte N`-Kopf ausschließlich in der
+internen Privacy-Repräsentation ersetzen; das Ergebnis der reinen Konvertierung
+bleibt inhaltsgetreu unverändert. Tabellen mit nicht katalogisierten
+Überschriften und namensförmigen Zweiwortwerten werden vor Veröffentlichung
+fail-closed gestoppt. Das schließt auch sichtbare Namen in Markdown-Linklabels
+ein. Die konservative Grenze kann fachliche Zweiwortwerte wie Orts- oder
+Statusangaben stoppen; sie darf erst nach eigener belegter Regel gelockert
+werden.
+
 ## DS-091 – Anwender wählt die Dateinamen anonymisierter Standalone-Ergebnisse
 
 Am 07.09.2026 festgelegt: Bei **In Markdown umwandeln und anonymisieren** wählt
