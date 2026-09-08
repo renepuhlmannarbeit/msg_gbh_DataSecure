@@ -12,7 +12,7 @@ const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/com
 const { luhnValid, isAllowedOrg, looksName } = require('../plugins/data-secure/server/privacy/base');
 const { resolveSpans } = require('../plugins/data-secure/server/privacy/spans');
 const { trimReferenceValue } = require('../plugins/data-secure/server/privacy/structured');
-const { collectHeaderNameCandidates } = require('../plugins/data-secure/server/privacy/entities');
+const { collectHeaderNameCandidates, collectPersonAnchors } = require('../plugins/data-secure/server/privacy/entities');
 const { credentialIssuerAmbiguities } = require('../plugins/data-secure/server/privacy/credentials');
 const { fullwidth, profiles, professionalText, identifierCases } = require('./lib/identifier-compatibility');
 
@@ -687,6 +687,76 @@ test('an unlabelled phone number introduced by "erreichbar unter" is redacted', 
   const { text, residual } = anonymizeVerified(src, 'customer');
   assertAbsent(text, '0151 2345678', 'unlabelled phone number');
   assert.deepStrictEqual(residual, [], 'residual gate must be clean');
+});
+
+test('common letter phrases introduce a phone number without making unter a label', () => {
+  assert.strictEqual(looksName('Karl von und zu Beispiel'), true);
+  for (const nonName of ['Karl und zu Beispiel', 'Karl von und Beispiel', 'Max Muster und Anna Beispiel']) {
+    assert.strictEqual(looksName(nonName), false, nonName);
+  }
+  assert.deepStrictEqual(
+    collectPersonAnchors('Herrn Karl von und zu Beispiel', 'general'),
+    [{ value: 'Karl von und zu Beispiel', confidence: 'honorific' }]
+  );
+  for (const profile of profiles) {
+    const compound = anonymizeVerified(
+      'Rufen Sie Herrn Karl von und zu Beispiel an unter 0151 23456789.',
+      profile
+    );
+    assert.strictEqual(compound.text, 'Rufen Sie [PERSON_001] an unter [PHONE_REDACTED].');
+    assert.deepStrictEqual(compound.residual, []);
+  }
+  const positives = [
+    'Rufen Sie mich an unter 0151 23456789.',
+    'Rufen Sie bitte unter 0151 23456789 an.',
+    'Rufen Sie Frau Beispiel an unter 0151 23456789.',
+    'Rufen Sie Herrn Max Beispiel unter (030) 1234567 an.',
+    'Rufen Sie Frau Prof. Dr. Anna Beispiel an unter 0151 23456789.',
+    'Rufen Sie Dr.-Ing. Max Mustermann an unter 0151 23456789.',
+    'Rufen Sie Mx Jordan Beispiel an unter 0151 23456789.',
+    'Rufen Sie Mx. Alex von der Heide gerne an unter 0151 23456789.',
+    'Rufen Sie Herrn von der Heide an unter 0151 23456789.',
+    'Rufen Sie Herrn Jean Claude van den Berg an unter 0151 23456789.',
+    'Rufen Sie Frau Dr. Anna Maria von der Heide an unter 0151 23456789.',
+    'Rufen Sie Herrn Karl von und zu Beispiel an unter 0151 23456789.',
+    'Rufen Sie mich gerne an unter 0151 23456789.',
+    'Rufen Sie uns bitte an unter: 030/1234567.',
+    'Melden Sie sich unter 0151 23456789.',
+    'Melden Sie sich bitte unter 0151 23456789.',
+    'Melden Sie sich gerne unter 0151 23456789.',
+    'Rückfragen unter 0151 23456789.',
+    'Telefonisch unter 0151 23456789 erreichbar.',
+    '- Rückfragen unter\u00a00151\u202f23456789.'
+  ];
+  for (const source of positives) for (const profile of profiles) {
+    assert.ok(pii.scanResidual(source, profile, []).some((finding) => finding.type === 'PHONE'),
+      `independent gate must see the phone in ${profile}: ${source}`);
+    const result = pii.anonymize(source, profile);
+    assert.ok(!result.text.includes('0151 23456789'), `${profile}: ${source}`);
+    assert.ok(result.text.includes('[PHONE_REDACTED]'), `${profile}: ${source}`);
+    if (source.includes('von und zu')) {
+      assert.ok(!result.text.includes('von und zu Beispiel'), `${profile}: ${result.text}`);
+    }
+    assert.deepStrictEqual(pii.scanResidual(result.text, profile, result.dictionary), [], source);
+  }
+  for (const source of [
+    'unter 0151 23456789',
+    'Die Schwelle liegt unter 0151 23456789 Einheiten.',
+    'Rufen Sie unter 123456 den Vorgang auf.',
+    'Rufen Sie unter 030 1234567 den Datensatz auf.',
+    'Rufen Sie den Bericht unter 123456 auf.',
+    'Rufen Sie den Datensatz bitte unter 030 1234567 auf.',
+    'Rufen Sie die Funktion unter Version 123456 auf.',
+    'Rückfragen unter Vorgang 123456.',
+    'Telefonisch unter 9 Uhr.',
+    'Rückfragen unter 01.02.2026.',
+    'Rückfragen unter 01/02/2026.',
+    'Rückfragen unter 2026-02-01.'
+  ]) {
+    const result = pii.anonymize(source, 'general');
+    assert.strictEqual(result.text, source);
+    assert.deepStrictEqual(pii.scanResidual(result.text, 'general', result.dictionary), []);
+  }
 });
 
 test('explicit French, Spanish and Dutch profile labels remove identifiers and preserve qualifications', () => {

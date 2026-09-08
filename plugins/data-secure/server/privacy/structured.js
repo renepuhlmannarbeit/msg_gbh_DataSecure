@@ -5,6 +5,7 @@ const {
   CONTACT_URI_RE,
   PHONE_RE,
   PHONE_LABEL_RE,
+  PHONE_LABEL_WINDOW,
   FRENCH_PHONE_RE,
   IBAN_RE,
   BIC_RE,
@@ -31,13 +32,13 @@ const {
   hashShort,
   luhnValid,
   hasLabelBefore,
+  plausibleCalendarDate,
   tableHeaderAt,
   sameLineHasIban
 } = require('./base');
 const { placeholderSpans, applySpans } = require('./spans');
 const { ibanBoundaryEnd } = require('./iban-boundary');
 const FOLLOWING_EMAIL_RE = new RegExp(EMAIL_RE.source, EMAIL_RE.flags.replace('g', 'y'));
-
 // Five digits followed by a unit are far more likely to be a quantity than a
 // German postcode and city. Keep this semantic exclusion beside the detector
 // so the postal regex remains line-local and the gate shares the same rule.
@@ -202,7 +203,8 @@ const DETECTORS = [
     placeholder: '[PHONE_REDACTED]',
     priority: 80,
     accept: (value, text, index) =>
-      value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE)
+      !plausibleCalendarDate(value.trim()) &&
+      (value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW))
   },
   {
     type: 'PHONE',
@@ -211,7 +213,8 @@ const DETECTORS = [
     placeholder: '[PHONE_REDACTED]',
     priority: 80,
     accept: (value, text, index) =>
-      value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE)
+      !plausibleCalendarDate(value.trim()) &&
+      (value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW))
   },
   {
     type: 'IP',

@@ -97,9 +97,35 @@ const PHONE_RE = new RegExp(
 // "Telefoonnummer") and a bracketed qualifier ("Telefon (privat)"); review rc91
 // (F3) showed both shapes disabled the gate entirely.
 const LABEL_QUALIFIER = '(?:\\s*\\([^)\\n]{1,40}\\))?';
+const PHONE_LABEL_WINDOW = 256;
+const PHONE_CALL_SPACE = `[${SEP_CHARS}]+`;
+const PHONE_CALL_NAME = "[\\p{L}\\p{M}][\\p{L}\\p{M}'’.-]{0,30}";
+const PHONE_CALL_COURTESY = '(?:bitte|gern(?:e)?|jederzeit)';
+const PHONE_CALL_RECIPIENT =
+  `(?:(?:mich|uns|ihn|sie)(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?|${PHONE_CALL_COURTESY})`;
+const PHONE_CALL_HONORIFIC = '(?:frau|herrn?|mx\\.?)';
+const PHONE_CALL_TITLE =
+  '(?:prof\\.?|dr\\.?[- ]ing\\.?|dipl\\.?[- ]ing\\.?|dr\\.?|med\\.?|rer\\.?|nat\\.?|jur\\.?|phil\\.?|habil\\.?)';
+const PHONE_CALL_PARTICLE = '(?:von|van|de|der|den|und|zu|zur|zum|la|le)';
+const PHONE_CALL_SIMPLE_NAME = `${PHONE_CALL_NAME}(?:${PHONE_CALL_SPACE}${PHONE_CALL_NAME}){0,2}`;
+const PHONE_CALL_PARTICLE_NAME =
+  `(?:${PHONE_CALL_NAME}${PHONE_CALL_SPACE}){0,2}` +
+  `(?:${PHONE_CALL_PARTICLE}${PHONE_CALL_SPACE}){1,3}${PHONE_CALL_NAME}`;
+const PHONE_CALL_PERSON_NAME = `(?:${PHONE_CALL_PARTICLE_NAME}|${PHONE_CALL_SIMPLE_NAME})`;
+const PHONE_CALL_CALLEE =
+  `(?:${PHONE_CALL_HONORIFIC}${PHONE_CALL_SPACE}(?:${PHONE_CALL_TITLE}${PHONE_CALL_SPACE}){0,3}` +
+  `${PHONE_CALL_PERSON_NAME}|(?:${PHONE_CALL_TITLE}${PHONE_CALL_SPACE}){1,3}${PHONE_CALL_PERSON_NAME})` +
+  `(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?`;
+const PHONE_CALL_REQUEST =
+  `rufen${PHONE_CALL_SPACE}sie${PHONE_CALL_SPACE}(?:${PHONE_CALL_RECIPIENT}|${PHONE_CALL_CALLEE})` +
+  `${PHONE_CALL_SPACE}(?:an${PHONE_CALL_SPACE})?unter`;
 const PHONE_LABEL_PATTERN =
-  '(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|mobile|handy|fax|kontakt|durchwahl|rufnummer' +
-  '|erreichbar(?:\\s+unter)?|zu\\s+erreichen(?:\\s+unter)?|unter\\s+der\\s+(?:ruf)?nummer|anzurufen\\s+unter)' +
+  `(?:tel|telefon|téléphone|telephone|phone|teléfono|telefono|telefoon|mobil|mobile|handy|fax|kontakt|durchwahl|rufnummer` +
+  `|erreichbar(?:\\s+unter)?|zu\\s+erreichen(?:\\s+unter)?|unter\\s+der\\s+(?:ruf)?nummer|anzurufen\\s+unter` +
+  `|${PHONE_CALL_REQUEST}` +
+  `|melden${PHONE_CALL_SPACE}sie${PHONE_CALL_SPACE}sich(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?${PHONE_CALL_SPACE}unter` +
+  `|rückfragen(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?${PHONE_CALL_SPACE}unter` +
+  `|telefonisch${PHONE_CALL_SPACE}unter)` +
   `(?:[\\s-]?(?:nummer|nr\\.?|number|numéro|número|numero))?${LABEL_QUALIFIER}`;
 const PHONE_LABEL_RE = new RegExp(
   `${PHONE_LABEL_PATTERN}\\s*\\.?\\s*:?\\s*$`,
@@ -481,7 +507,10 @@ function looksName(s) {
   if (TECH_TERMS.has(v.toLocaleUpperCase('de-DE'))) return false;
   const all = v.split(/\s+/);
   if (all.length > 7) return false;
-  const toks = all.filter((t, i) => !(i > 0 && i < all.length - 1 && NAME_PARTICLES.has(t)));
+  const lower = all.map((token) => token.toLocaleLowerCase('de-DE'));
+  const toks = all.filter((t, i) => !(i > 0 && i < all.length - 1 &&
+    (NAME_PARTICLES.has(lower[i]) ||
+      (lower[i] === 'und' && lower[i - 1] === 'von' && lower[i + 1] === 'zu'))));
   if (toks.length < 2 || toks.length > 4) return false;
   if (toks.some(isStopToken)) return false;
   const token = new RegExp(`^(?:${NAME_TOKEN}|${CAPS_TOKEN})$`, 'u');
@@ -535,6 +564,17 @@ function hasLabelBefore(text, index, labelRe, window = 40) {
     if (label !== null && labelRe.test(normalizeSensitiveLabel(label))) return true;
   }
   return false;
+}
+
+function plausibleCalendarDate(value) {
+  const numbers = String(value).split(/[./-]/u).map((part) => Number(part.trim()));
+  if (numbers.length !== 3 || numbers.some((number) => !Number.isInteger(number))) return false;
+  const [year, month, day] = numbers[0] >= 1000
+    ? numbers
+    : [numbers[2] < 100 ? 1900 + numbers[2] : numbers[2], numbers[1], numbers[0]];
+  if (year < 1850 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 // Office line breaks inside narrow header cells often split a closed PII label
@@ -791,6 +831,7 @@ module.exports = {
   PHONE_RE,
   PHONE_LABEL_RE,
   PHONE_LABEL_PATTERN,
+  PHONE_LABEL_WINDOW,
   FRENCH_PHONE_RE,
   IBAN_RE,
   IBAN_SEPARATOR_CHARS,
@@ -833,6 +874,7 @@ module.exports = {
   looksSurname,
   luhnValid,
   hasLabelBefore,
+  plausibleCalendarDate,
   tableHeaderAt,
   hasAmbiguousSensitiveTable,
   normalizeSensitiveLabel,

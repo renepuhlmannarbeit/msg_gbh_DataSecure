@@ -14,8 +14,10 @@ const {
   ORG_SUFFIX_TAIL_RE,
   DATE_OF_BIRTH_LABEL_RE,
   PHONE_LABEL_RE,
+  PHONE_LABEL_WINDOW,
   ID_LABEL_HEADER_RE,
   hasLabelBefore,
+  plausibleCalendarDate,
   hasAmbiguousSensitiveTable,
   isAllowedOrg,
   orgAlias,
@@ -236,17 +238,6 @@ function residualTablePersonCandidates(text) {
   return findings;
 }
 
-function plausibleCalendarDate(value) {
-  const numbers = String(value).split(/[./-]/u).map((part) => Number(part.trim()));
-  if (numbers.length !== 3 || numbers.some((number) => !Number.isInteger(number))) return false;
-  const [year, month, day] = numbers[0] >= 1000
-    ? numbers
-    : [numbers[2] < 100 ? 1900 + numbers[2] : numbers[2], numbers[1], numbers[0]];
-  if (year < 1850 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
-
 function conservativeLabelledResiduals(text) {
   const findings = [];
   for (const match of text.matchAll(RESIDUAL_PERSON_TABLE_CANDIDATE_RE)) {
@@ -261,7 +252,8 @@ function conservativeLabelledResiduals(text) {
   const phoneView = identifierDetectionText(text);
   for (const match of phoneView.matchAll(RESIDUAL_PHONE_CANDIDATE_RE)) {
     const digits = match[0].replace(/\D/gu, '');
-    if (digits.length >= 6 && digits.length <= 15 && hasLabelBefore(phoneView, match.index, PHONE_LABEL_RE, 80)) {
+    if (digits.length >= 6 && digits.length <= 15 && !plausibleCalendarDate(match[0]) &&
+        hasLabelBefore(phoneView, match.index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW)) {
       findings.push({ type: 'PHONE', text: text.slice(match.index, match.index + match[0].length) });
     }
   }

@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 07.09.2026 · Produktstand 3.2.0-rc123
+Stand: 08.09.2026 · Produktstand 3.2.0-rc123
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -39,7 +39,7 @@ werden hier nicht eigenmächtig vergeben.
 | F3 | BL-021.1 | Explizit bezeichnete Zugangsdaten im Dokumentinhalt (`Benutzername`/Login, Passwort/Kennwort/Passphrase, Secret/Token/API-Key, Zugangscode/PIN) werden zeilen- und tabellenspaltengebunden durch `[CREDENTIAL_REDACTED]` ersetzt. Ein unabhängiges Restgate stoppt verbleibende Werte; Findings und Diagnoseobjekte enthalten weder Wert noch Hash. DS-016/DS-046 betreffen weiterhin nur verschlüsselte Quelldateien. | **E0 erledigt** |
 | F4 | BL-021.1 | IBAN-Gruppierungen mit einfachem/mehrfachem Leerraum, Punkt, Schrägstrich, ASCII- und Unicode-Bindestrichen sowie Leerraum um genau ein Satzzeichen werden für DE, AT, BE, GB und NL vollständig erkannt; unbekannte Länderlängen bleiben konservativ. | **E0 erledigt** |
 | F5 | BL-021.1 | Bekannte feste IBAN-Längen enden vor nachfolgenden Telefon-/BIC-/IBAN-Labels, durch unabhängige Detektoren abgesicherten Formularlabels und Prosa. Numerische Fortsetzungen und unbekannte Formularfelder bleiben konservativ geschützt; Folgeidentifier werden separat verarbeitet. | **E0 erledigt** |
-| F6 | BL-021.1 | Telefonlabel-Katalog kennt „rufen Sie … an unter" nicht. | **offen, P0** |
+| F6 | BL-021.1 | Häufige Briefformulierungen (`rufen Sie mich/uns/Frau/Herrn/Mx … [an] unter`, `rufen Sie bitte unter`, `melden Sie sich unter`, `Rückfragen unter`, `telefonisch unter`) sind durch eine begrenzte, zeilenlokale Grammatik als Telefonkontext gebunden. `unter` allein, technische Abrufprosa, Uhrzeiten und Kalenderdaten bleiben unverändert; Redaktor und unabhängiges Restgate sind gegengeprüft. | **E0 erledigt** |
 | F7 | BL-021.1 | Namensförmige Bigramme im Prosakörper ohne Trigger-Wort bleiben im Klartext, auch bei starkem Personenanker. Es gibt dazu keine aktive Entscheidung — entweder fail-closed stoppen oder die Grenze kanonisch dokumentieren. | **Entscheidung offen** |
 
 **P1 — Über-Redaktion und Inhaltszerstörung.** Kein Leck, aber

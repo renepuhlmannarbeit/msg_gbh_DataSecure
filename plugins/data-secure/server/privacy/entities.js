@@ -350,7 +350,7 @@ function collectPersonAnchors(text, profile = 'general') {
   // Tokens are joined by spaces or tabs only: a name never continues on the
   // next line ("Anna Beispiel\nRolle" used to be captured as a three-token name
   // and then rejected as a whole).
-  const particle = `(?:${NAME_PARTICLE}[ \\t]+){0,3}`;
+  const particle = `(?:(?:von[ \\t]+und[ \\t]+zu|${NAME_PARTICLE})[ \\t]+){0,3}`;
   const honor = new RegExp(
     `${HONORIFIC}[ \\t]+((?:${NAME_TOKEN}|${CAPS_TOKEN})(?:[ \\t]+${particle}(?:${NAME_TOKEN}|${CAPS_TOKEN})){0,3})`,
     'gu'

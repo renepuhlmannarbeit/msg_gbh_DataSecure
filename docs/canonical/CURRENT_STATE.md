@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 07.09.2026 · 3.2.0-rc123 · Cowork-Parität ohne Standalone-Regression
+Stand: 08.09.2026 · 3.2.0-rc123 · Cowork-Parität ohne Standalone-Regression
 
 ## Aktueller Entwicklungsstand RC123 / DS-092
 
@@ -37,6 +37,14 @@ Prosa. Auch nach einer konservativ geschützten numerischen Fortsetzung bleiben
 durch unabhängige Detektoren abgesicherte Folgefelder sichtbar; unbekannte
 Formularfelder bleiben dagegen Teil der konservativen Schutzgrenze. Unbekannte
 Länderlayouts werden nicht anhand einer fremden Länderlänge gekürzt.
+
+Der gemeinsame Telefonkontext deckt nun auch häufige deutsche Briefphrasen wie
+„Rufen Sie mich an unter“, „Melden Sie sich unter“, „Rückfragen unter“ und
+„telefonisch unter“ ab. Die Grammatik erlaubt nur eng begrenzte Empfänger- und
+Anredeformen, bleibt auf einer Zeile und macht das Wort `unter` allein nicht zum
+Telefonlabel. Technische Abruftexte, Uhrzeiten und plausible Kalenderdaten
+werden dadurch nicht redigiert. Redaktor und unabhängiges Restgate sind mit
+Positiv-, Negativ-, Unicode- und adversarischen Fällen belegt.
 
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
