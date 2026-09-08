@@ -1,6 +1,25 @@
 # Aktueller Iststand
 
-Stand: 08.09.2026 · 3.2.0-rc125 · unabhängige Produkt- und Cowork-Revalidierung
+Stand: 09.09.2026 · 3.2.0-rc125 · ARM64-Zielhost-E0 und unabhängige Produktrevalidierung
+
+## ARM64-Zielhost-E0 vom 09.09.2026
+
+Der manuell und kostenbestätigt gestartete GitHub-Actions-Lauf
+[`34285518668`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34285518668)
+ist für Commit `487bfe1f4ede640880dac317a06ae2c2f1f5efe9` auf einem echten
+`macos-14`-Apple-Silicon-Runner vollständig grün. Er kompiliert und prüft den
+nativen POSIX-Supervisor, die gepinnte selbsttragende Node-/Konverterruntime,
+sämtliche Standalone-, Konverter- und Rust-Verträge, den real isolierten
+Office-/PDF-/OCR-Worker, Clippy mit `-D warnings`, den Tauri-Release-Build sowie
+die Architektur von App, Core-Sidecar und Supervisor. `file` und `lipo` weisen
+alle drei als Mach-O `arm64` aus. Es wurden keine Secrets, Caches, Pakete,
+Diagnosen oder Artefakte hochgeladen.
+
+Damit ist die automatisierbare native Apple-Silicon-E0-Ausführung belegt. Nicht
+daraus abgeleitet werden ein verteilbares/signiertes `.app`, Finder-/Gatekeeper-
+Bedienung, sichtbarer Start, Picker, Drag-and-drop, VoiceOver, reale Performance
+oder menschliche UAT. Diese E1/E2-Nachweise sowie der separate native Intel-Lauf
+bleiben offen.
 
 ## Aktueller Entwicklungsstand RC125 – unabhängige Revalidierung
 
@@ -864,8 +883,9 @@ Minuten und wählt standardmäßig nur Apple Silicon. Auf `macos-15-intel` und
 `macos-14` werden die gepinnte Node-Runtime, der nativ kompilierte POSIX-
 Supervisor, die vollständigen Standalone-/Konverter-/Rust-Verträge, Clippy,
 der Tauri-Release-Build und die Architektur aller drei Executables geprüft.
-Es verwendet keine Secrets, keinen Cache und keine Artefakt-Uploads. Der
-Workflow ist noch nicht ausgeführt; App-Bundle, Gatekeeper, sichtbare Fenster,
+Es verwendet keine Secrets, keinen Cache und keine Artefakt-Uploads. Der native
+Apple-Silicon-E0-Lauf `34285518668` auf Commit `487bfe1` ist vollständig grün;
+der native Intel-Lauf steht noch aus. App-Bundle, Gatekeeper, sichtbare Fenster,
 Picker, VoiceOver, Performance und menschliche UAT auf Intel und Apple Silicon
 bleiben offen.
 Rust und Tauri sind ausschließlich Buildwerkzeuge; Anwender installieren weder

@@ -176,7 +176,8 @@ Historische Evidence bleibt versionsgebunden: RC109-Builds aus
 `6bf7d05747e151ba8f846849229495e9fca4c041`, RC108-Builds aus
 `a742333e8ef80b445729d4bede6a91a2b8f13207` und der frühere RC107-Kandidat
 aus `7b88a81` belegen nicht den RC111-Stand.
-Native macOS-Intel-/ARM-Ausführung und fachlicher UAT bleiben offen. Die
+Native macOS-ARM64-E0-Ausführung ist durch Lauf `34285518668` auf Commit
+`487bfe1` belegt. Intel-macOS sowie sichtbarer und fachlicher UAT bleiben offen. Die
 DS-087-Verkettung für die **Anonymisierung** ist angebunden und fail-closed
 getestet. RC111 bindet `source_type` an die Dateiendung und prüft echte
 TXT/XLSX-Mischstapel in beiden Reihenfolgen, Abbruch/Fortsetzung, Exact-once und

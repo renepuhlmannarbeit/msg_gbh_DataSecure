@@ -278,6 +278,14 @@ inhaltsfreie Hash-/Zielangaben. Der Lauf ersetzt weder ein distributables
 `.app`-Paket noch Finder/Gatekeeper, sichtbaren Fensterstart, Picker,
 Drag-and-drop, VoiceOver, Performance oder menschliche UAT.
 
+Der Apple-Silicon-Lauf
+[`34285518668`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34285518668)
+vom 09.09.2026 ist für Commit `487bfe1f4ede640880dac317a06ae2c2f1f5efe9`
+vollständig grün. App, Core-Sidecar und POSIX-Supervisor wurden dabei nativ
+gebaut und jeweils durch `file`/`lipo` als Mach-O `arm64` bestätigt. Der
+separate `macos-x64`-Lauf sowie sämtliche sichtbaren E1/E2-Prüfungen bleiben
+offen.
+
 ### RC111: breite Format- und Recovery-Grenzen
 
 `test-wide-privacy-extraction` bindet die gemeldete Quellenart an die tatsächliche
@@ -380,8 +388,8 @@ Zuordnungsdatei. Die privaten Zielresolver verwenden dieselben nativen
 Öffnen-Schaltflächen.
 Queue-Schema und Worker-Acknowledge werden vor dem positiven
 Handoff doppelt geprüft; Identitäts-Mocks dürfen diese Grenze nicht ersetzen.
-Das ersetzt keine menschliche Windows-UAT und keinen nativen
-Intel-/ARM-macOS-Nachweis.
+Das ersetzt keine menschliche Windows-/macOS-UAT. Der native ARM64-E0-Nachweis
+ist inzwischen durch Lauf `34285518668` erbracht; Intel-macOS bleibt offen.
 
 ## UAT
 
