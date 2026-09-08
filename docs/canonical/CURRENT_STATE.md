@@ -362,7 +362,10 @@ wird kein rohes Markdown-Zwischenartefakt veröffentlicht. Vertraglich gültiges
 nichtleeres Markdown tritt unabhängig von `complete` oder `incomplete` in PII-,
 Pseudonym-, Review- und Residualprüfung ein. Ergebnis und Manifest führen
 Quellenextraktionsabdeckung und Anonymisierungsstatus getrennt. Leere OCR sowie
-unsichere Quellen stoppen weiterhin. Cowork bleibt auf TXT/MD/CSV/DOCX.
+unsichere Quellen stoppen weiterhin. Ein nicht bestätigtes Ende des isolierten
+Konverters bleibt auch im breiten Journal-Schema `/6` als
+`termination_unconfirmed` bis zur lokalen Statusanzeige erhalten. Cowork bleibt
+auf TXT/MD/CSV/DOCX.
 
 DS-086 / BL-010.29: Standalone startet auf einer kurzen Startseite. Verarbeiten
 und Betriebsart sind nicht vorausgewählt. Der Verlauf zeigt die 20 neuesten

@@ -226,6 +226,21 @@ test('latest product status selects one channel and exposes only current-run cou
   assert.throws(() => item.recovery.latestProductBatchStatus('invalid'), /PRODUCT_CHANNEL_INVALID/u);
 });
 
+test('wide privacy status projects an unconfirmed converter termination', () => {
+  const stopped = state(tokens[0], {
+    items: [{ status: 'stopped', error_code: 'CONVERSION_TERMINATION_UNCONFIRMED' }]
+  });
+  Object.assign(stopped, {
+    product_channel: 'standalone',
+    schema: 'datasecure-batch/6',
+    processing_mode: 'markdown-and-anonymize',
+    created_at: '2026-08-25T12:00:00.000Z'
+  });
+
+  const status = fixture({ states: [stopped] }).recovery.latestProductBatchStatus('standalone');
+  assert.strictEqual(status.termination_unconfirmed, true);
+});
+
 test('one product status snapshot scans and reads every retained journal at most once', () => {
   const retained = Array.from({ length: 1000 }, (_, index) => {
     const token = index.toString(16).padStart(64, '0');

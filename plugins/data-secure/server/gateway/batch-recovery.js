@@ -132,7 +132,8 @@ function createBatchRecovery(options = {}) {
     const visible = visibleExportStatus(latest.token, progress.released);
     return Object.freeze({
       ...(latest.schema === 'datasecure-batch/5' ? { processing_mode: 'markdown-only', warning_count: progress.warning_count || 0 } : {}),
-      ...(latest.schema === 'datasecure-batch/5' && latest.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')
+      ...(['datasecure-batch/5', 'datasecure-batch/6'].includes(latest.schema)
+        && latest.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')
         ? { termination_unconfirmed: true } : {}),
       selected_count: progress.batch_total,
       completed_count: progress.completed,
