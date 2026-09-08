@@ -173,6 +173,18 @@ try {
     assert.match(mixed.markdown, /## Seite 1[\s\S]*Text page Max Mustermann[\s\S]*## Seite 2[\s\S]*Nordstern GmbH/u);
     assert.equal((mixed.markdown.match(/Max Mustermann/gu) || []).length, 2);
   });
+  await test('PDF native text plus a textless image remains usable with omissions', async () => {
+    const blankJpeg = image(true).toBuffer('image/jpeg');
+    const source = pdf([{ text: 'Readable native text', image: blankJpeg, invisibleText: true }]);
+    const result = await convert(source, '.pdf');
+    assert.match(result.markdown, /Readable native text/u);
+    assert.equal(result.coverage.status, 'incomplete');
+    assert.ok(result.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    assert.ok(!result.coverage.reason_codes.includes('OCR_TEXT_EMPTY'));
+    const privacyInput = await extractWideSourceForPrivacy(source, '.pdf', { convertBuffer });
+    assert.match(privacyInput.markdown, /Readable native text/u);
+    assert.equal(privacyInput.sourceExtractionCoverage.status, 'incomplete');
+  });
   await test('every real wide format hands useful Markdown to privacy with explicit source coverage', async () => {
     const sources = [
       ['.pptx', office('pptx')], ['.pdf', pdf([{ text }])], ['.pdf', pdf([{ image: jpeg }])],

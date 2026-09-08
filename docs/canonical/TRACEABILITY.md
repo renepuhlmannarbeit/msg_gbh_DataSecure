@@ -135,7 +135,10 @@ und lokalen DE/EN-Modelle; sie installieren oder laden nichts herunter.
 PDF-Text, Raster-OCR und Quelle werden niemals gleichzeitig als doppelte Inhalte
 zusammengehängt. Ohne belegte Vollständigkeit entsteht kein vollständiges
 Markdown-Artefakt mit Grad `complete`; eine erfolgreiche unvollständige
-Extraktion darf als solche gespeichert werden. Diese zusätzliche Engineering-
+Extraktion darf als solche gespeichert werden. `OCR_TEXT_EMPTY` wird nur dann
+gesetzt, wenn die Datei insgesamt keinen verwertbaren Text liefert; eine
+textlose Bildfläche neben vorhandenem nativen PDF-Text bleibt ein OCR-/
+Coverage-Hinweis und kein harter Gesamtstopp. Diese zusätzliche Engineering-
 Evidence gehört nicht zum RC107-Paketreceipt.
 
 RC108 ergänzt `standalone/conversion-worker.js` und `conversion-worker-child.js`

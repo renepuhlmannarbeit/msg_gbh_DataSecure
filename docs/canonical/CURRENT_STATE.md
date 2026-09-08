@@ -1028,7 +1028,9 @@ Cowork sperrt XLSX/PPTX/PDF/Scan-PDF und eigenständige Bilder weiterhin bei der
 Aufnahme. Standalone verarbeitet DOCX und diese breiten Quellen nach DS-087/090
 Markdown-first und weist Quellenextraktion und Anonymisierung getrennt aus. Die
 reine Standalone-Konvertierung besitzt denselben erweiterten Eingabeumfang mit
-eigener Extraktions-/Fehlerkennzeichnung.
+eigener Extraktions-/Fehlerkennzeichnung. Ein textloses Bild neben vorhandenem
+nativen PDF-Text erzeugt keinen `OCR_TEXT_EMPTY`-Gesamtstopp mehr; wirklich
+textleere Extraktionen bleiben vor der Anonymisierung gesperrt.
 
 ### BL-042 – Diagnose und Berechtigungen
 Normal- und Supportoberfläche sind getrennt. Die inhaltsfreie Status-App besitzt

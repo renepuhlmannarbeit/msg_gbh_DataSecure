@@ -109,7 +109,7 @@ PDF-Formats, keine eigene Dateiendung:
 | DOCX | vorhandener OOXML-Parser im inhaltserhaltenden Text-/Tabellenpfad | einfache belegte Bereiche vollständig; unbekannte Bereiche oder visuelle Auslassungen als `incomplete` gekennzeichnet; unsichere Struktur stoppt |
 | XLSX | Text-/Zellen-/Formel- und vorhandene Cachewerte aus OOXML | stets `incomplete`; keine Excel-Neuberechnung, Layout-/Objektvollständigkeit nicht zugesagt |
 | PPTX | vorab validierte OOXML-/RELS-Struktur; extrahierbare Folientexte, Tabellen und Notizen | stets `incomplete`; DTD/Entities und Strukturüberlauf stoppen, pixelgetreues Layout und vollständiger grafischer Inhalt sind nicht belegt |
-| PDF mit Text | gebündeltes PDF.js, seitenweise Textauswertung; standardisierte Dokumentmetadaten werden sichtbar erhalten | stets `incomplete`; Annotationen, Outline und XMP stoppen, weitere Objekt-/Layoutabdeckung ist nicht vollständig belegt |
+| PDF mit Text | gebündeltes PDF.js, seitenweise Textauswertung; standardisierte Dokumentmetadaten werden sichtbar erhalten | stets `incomplete`; eine einzelne textlose Bildfläche neben vorhandenem Text erzeugt keinen `OCR_TEXT_EMPTY`-Gesamtstopp; Annotationen, Outline und XMP stoppen, weitere Objekt-/Layoutabdeckung ist nicht vollständig belegt |
 | Scan-PDF | Seiten ohne Text sowie tatsächlich gemalte Bildinhalte werden lokal gerastert und mit DE/EN-OCR gelesen; auch bei zusätzlicher nativer Seitenzahl | stets `incomplete`, OCR nicht verifiziert; native Texte bleiben erhalten, bereits enthaltene OCR-Zeilen werden nicht erneut angehängt |
 | PNG | lokaler Bilddecoder → lokale OCR | stets `incomplete`; Bildpixel werden nicht in Markdown eingebettet |
 | JPEG (`.jpg`, `.jpeg`) | gebündelter Canvas-Decoder → lokale OCR | stets `incomplete`; keine Cloud-Bildbeschreibung |
@@ -119,6 +119,9 @@ Die festen Auslassungsgründe sind `SOURCE_COVERAGE_UNVERIFIED`,
 `VISUAL_CONTENT_NOT_EXTRACTED`, `OCR_NOT_VERIFIED` und `OCR_TEXT_EMPTY`.
 Eine erfolgreiche, aber unvollständige Extraktion darf mit diesen Hinweisen
 gespeichert werden; sie ist weder anonymisiert noch als vollständig bestätigt.
+`OCR_TEXT_EMPTY` gilt ausschließlich, wenn die gesamte Datei keinen verwertbaren
+Text liefert; textlose Bildflächen neben vorhandenem nativen PDF-Text bleiben
+als `OCR_NOT_VERIFIED`/`VISUAL_CONTENT_NOT_EXTRACTED` ausgewiesen.
 Beschädigte, verschlüsselte, übergroße oder nicht sicher auswertbare Eingaben
 erhalten dagegen kein Konvertat und werden mit festem Fehlercode in der lokalen
 Diagnose nachvollziehbar. Es gibt keine Entschlüsselung und keine feste Seitenanzahlgrenze;

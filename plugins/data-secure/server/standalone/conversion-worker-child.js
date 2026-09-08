@@ -192,7 +192,7 @@ async function pdfMarkdown(bytes) {
           if (hasNativeText) additional = additionalOcrText(nativeText, recognized);
           else text = recognized;
           reasons.add('OCR_NOT_VERIFIED');
-          if (!recognized.trim()) reasons.add('OCR_TEXT_EMPTY');
+          if (!recognized.trim() && !hasNativeText) reasons.add('OCR_TEXT_EMPTY');
         }
         const section = `## Seite ${number}\n\n${literal(text)}` +
           (additional.trim() ? `\n\n### Zusätzlicher Bildtext (OCR)\n\n${literal(additional)}` : '');

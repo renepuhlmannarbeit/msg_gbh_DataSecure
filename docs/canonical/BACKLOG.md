@@ -60,7 +60,7 @@ Kern-Anwendungsfälle blockiert oder freigegebener Inhalt zerstört.
 | F13 | BL-002 (DS-080) | Für Netzwerkpfade als Ergebnisordner fehlt der zu `sync_folder_notice` analoge Hinweis; bei Standalone liegt dort die sichtbare Zuordnung mit Originalnamen. Keine Sperre — nur der fehlende Hinweis. | **offen, P2** |
 | F14 | BL-010.28 (DS-085) | Die Legacy-Ausnahme, dass ein v3-Konvertierungsrecord beim Replay eine `DataSecure-Zuordnung.csv` nach `DataSecure-Markdown` schreibt, steht nur im Code und hat keinen Test. | **offen, P2** |
 | F15 | BL-010.30 | `termination_unconfirmed` wird für Journal-Schema `/6` nicht projiziert; der Anwender sieht den Stapelabbruch ohne den definierten Grund. | **offen, P2** |
-| F16 | BL-023.4 | Ein einzelnes textloses Bild setzt `OCR_TEXT_EMPTY` und stoppt ein sonst lesbares PDF hart, statt es als „verwendbar mit Auslassungen" auszuweisen. | **offen, P2** |
+| F16 | BL-023.4 | Ein einzelnes textloses Bild setzt `OCR_TEXT_EMPTY` und stoppt ein sonst lesbares PDF hart, statt es als „verwendbar mit Auslassungen" auszuweisen. | **erledigt** – `OCR_TEXT_EMPTY` gilt nur noch für eine insgesamt textleere Extraktion; nativer PDF-Text bleibt mit getrenntem OCR-Hinweis verwendbar |
 | F17 | BL-030.2 | Verdacht auf massive Laufzeitkosten von `matchKnownAliases` bei Journalen ohne `known_alias_index` (vor rc123 angelegte Stapel), ohne Timeout in diesem Pfad. **Nicht nachgemessen** — erst messen, dann entscheiden. | **Messung offen** |
 
 **P3 — Kanonkorrekturen.** Reine Dokumentwahrheit, kein Code.
@@ -745,7 +745,7 @@ Anonymisierungsgates nicht auf. Linux bleibt eine spätere Plattformstufe.
 | BL-023.1 | PDF-/OCR-Risikogate bis zur vollständigen Pflichtmatrix als NO-GO erhalten. | **in Arbeit** |
 | BL-023.2 | Text-PDF nur nach vollständiger Parser-/Render-/Security-Coverage freigeben. | **offen** |
 | BL-023.3 | RC111 stoppt PDF-Annotationen, Outline und XMP-Metadaten; standardisierte Info-Felder werden im reinen Markdown-Modus sichtbar und begrenzt erhalten. Formulare, Anhänge, Signaturen, weitere Objektarten und Verschlüsselungsvarianten bleiben bis zum vollständigen Coverage-Nachweis gesperrt. | **in Arbeit** |
-| BL-023.4 | Reale Scan-PDF-Konvertierung und Privacy-Sperre sind E0 geprüft. Visuelle Vollständigkeit, OCR-Fachqualität und Zielhostkorpus bleiben offen. | **in Arbeit** |
+| BL-023.4 | Reale Scan-PDF-Konvertierung und Privacy-Sperre sind E0 geprüft. Ein textloses Bild neben vorhandenem nativen PDF-Text erzeugt keinen falschen `OCR_TEXT_EMPTY`-Gesamtbefund mehr; wirklich textleere Extraktion bleibt gesperrt. Visuelle Vollständigkeit, OCR-Fachqualität und Zielhostkorpus bleiben offen. | **in Arbeit** |
 | BL-024.3 | Reale PNG-/JPEG-/BMP-Extraktion und nachgelagerte Anonymisierung ihres gültigen, nichtleeren OCR-Markdowns sind E0 geprüft. Nicht freigegeben bleiben eine Vollständigkeitszusage für das Originalbild sowie Pixelredaktion; dafür sind Decoder-, OCR-, Metadaten- und Pixelnachweis sowie E1/E3 nötig. | **in Arbeit** |
 
 ## Epics
