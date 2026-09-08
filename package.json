@@ -43,6 +43,7 @@
     "fixtures": "node tests/make-fixtures.js",
     "uat:fixtures": "node docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures.js",
     "uat:format-corpus": "node scripts/generate-standalone-format-corpus.mjs",
+    "uat:complex-docx": "node scripts/generate-complex-docx-uat.mjs",
     "runtime:target": "node scripts/build-runtime-target.mjs",
     "build:runtime-plugin": "node scripts/build-runtime-plugin.mjs",
     "test:bundled-runtime": "node tests/test-bundled-runtime.mjs && node tests/test-runtime-release-path.mjs",

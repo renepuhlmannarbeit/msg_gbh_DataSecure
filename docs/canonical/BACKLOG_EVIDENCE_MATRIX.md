@@ -16,10 +16,11 @@ RC119 / BL-021.1/BL-030.2/BL-050.1 schließt die im realen Lauf
 `Lauf-20260907-163522-142350c1` belegte Personenunterredaktion. E0 umfasst einen
 expliziten `Person`-Tabellenanker, einen davon unabhängig formulierten
 Release-Guard, die 128-fällige PII-Regression, alle vier echten DOCX aus dem
-100-Dateien-Korpus und den 15-DOCX-Komplexkorpus. Der alte Lauf bleibt negative
+100-Dateien-Korpus und den deterministisch generierten 15-DOCX-Komplexkorpus.
+Der alte Lauf bleibt negative
 UAT-Evidenz und ist kein verwendbares anonymisiertes Ergebnis.
 
-RC117 ergänzt für BL-022.1/BL-050.1 einen deterministischen 15-DOCX-Korpus mit
+RC117 ergänzt für BL-022.1/BL-050.1 einen deterministisch generierten 15-DOCX-Korpus mit
 kurzen, mittleren und langen realen Dokumentstrukturen. Preflight, Parser,
 Anonymisierung, neutrale Erhaltung und stapelweit konsistente Personen-/
 Unternehmenspseudonyme sind E0 geprüft. Die zwei Standalone-Abläufe mit diesem

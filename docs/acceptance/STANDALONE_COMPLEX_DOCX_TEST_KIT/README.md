@@ -48,11 +48,17 @@ realer Personen oder Unternehmen.
 
 ## Reproduzierbar neu erzeugen
 
-Der Generator überschreibt vorhandene Eingaben nur mit explizitem Schalter:
+Der Generator erneuert ausschließlich den fest gebundenen, ignorierten
+`inputs`-Ordner des Testkits:
 
 ```powershell
-python scripts\generate-complex-docx-uat.py --replace
+npm run uat:complex-docx
 ```
+
+Der frühere Python-Generator wurde durch diesen plattformneutralen Node-Generator
+ersetzt. Er benötigt nur die ohnehin für Entwicklung und Tests verwendete
+Node-Laufzeit. Die 15 DOCX-Dateien werden deterministisch erzeugt und bleiben
+wie alle Dokumentnutzdaten bewusst unversioniert.
 
 Die erzeugten DOCX-Archive werden mit sortierten Einträgen und festen
 Zeitstempeln geschrieben, damit ein erneuter Lauf bytegleiche Dateien ergibt.

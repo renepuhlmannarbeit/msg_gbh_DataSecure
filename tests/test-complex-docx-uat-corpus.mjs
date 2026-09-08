@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import { generate } from '../scripts/generate-complex-docx-uat.mjs';
 
 const require = createRequire(import.meta.url);
 const { planBatchAdmission } = require('../plugins/data-secure/server/gateway/batch-source-admission');
@@ -14,7 +15,9 @@ const {
   SECRET_BYTES
 } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const inputs = path.join(repo, 'docs', 'acceptance', 'STANDALONE_COMPLEX_DOCX_TEST_KIT', 'inputs');
+const kit = path.join(repo, 'docs', 'acceptance', 'STANDALONE_COMPLEX_DOCX_TEST_KIT');
+const inputs = path.join(kit, '.tmp-complex-docx-contract-a');
+const repeatedInputs = path.join(kit, '.tmp-complex-docx-contract-b');
 
 const expectations = Object.freeze([
   ['01-kundenprofil-kurz.docx', 'Product Owner', 'Laura Stein'],
@@ -34,8 +37,20 @@ const expectations = Object.freeze([
   ['15-projektchronik-lang.docx', 'Produktivsetzung', 'Laura Stein']
 ]);
 
+try {
+  generate(inputs);
+  generate(repeatedInputs);
+} catch (error) {
+  throw new Error(`Complex DOCX fixtures could not be generated. Run "npm run uat:complex-docx" for the human UAT kit. Cause: ${error.message}`);
+}
+
 const actual = fs.readdirSync(inputs).filter((name) => name.endsWith('.docx')).sort();
 assert.deepEqual(actual, expectations.map(([name]) => name));
+assert.deepEqual(fs.readdirSync(repeatedInputs).sort(), actual);
+for (const name of actual) {
+  assert.deepEqual(fs.readFileSync(path.join(inputs, name)), fs.readFileSync(path.join(repeatedInputs, name)),
+    `${name} must be byte-reproducible`);
+}
 
 const queue = actual.map((name) => {
   const full = path.join(inputs, name);
@@ -78,4 +93,6 @@ registry.dispose();
 assert.equal(sharedPeople.size, 1, 'Laura Stein must keep one batch-wide person pseudonym');
 assert.equal(sharedOrganizations.size, 1, 'Nordlicht Digital GmbH must keep one batch-wide organization pseudonym');
 
-process.stdout.write(`complex DOCX UAT corpus: ${expectations.length} files passed\n`);
+fs.rmSync(inputs, { recursive: true, force: true });
+fs.rmSync(repeatedInputs, { recursive: true, force: true });
+process.stdout.write(`complex DOCX UAT corpus: ${expectations.length} generated files passed\n`);

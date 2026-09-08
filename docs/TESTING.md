@@ -366,6 +366,7 @@ Intel-/ARM-macOS-Nachweis.
 ```text
 npm run uat:fixtures
 npm run uat:format-corpus
+npm run uat:complex-docx
 ```
 
 Danach folgt die menschliche Durchführung im
@@ -373,8 +374,9 @@ Danach folgt die menschliche Durchführung im
 [Standalone-UAT-Testpaket](acceptance/STANDALONE_UAT_TEST_KIT/README.md), im
 [100-Dateien-Formatkorpus](acceptance/STANDALONE_100_FORMAT_TEST_KIT/README.md)
 und im [komplexen DOCX-Testkorpus](acceptance/STANDALONE_COMPLEX_DOCX_TEST_KIT/README.md).
-Der DOCX-Korpus enthält 15 deterministische, zwei- bis achtseitige Dateien mit
-Fließtext, Listen, Tabellen, Kopf-/Fußzeilen, Grafiken und Abschnittswechseln:
+Der DOCX-Korpus wird als Satz von 15 deterministischen, umfangreichen Dateien
+generiert. Die Dateien enthalten
+Fließtext, Listen, Tabellen, Kopf-/Fußzeilen, Grafiken und Seitenumbrüche:
 neun vollständig fiktive PII-Szenarien sowie sechs neutrale Kontrollen. Der
 automatisierte Vertrag nimmt alle Dateien über den realen Produktpreflight auf,
 parst sie und prüft Ersetzung, Erhaltungsanker sowie stapelweit gleiche Personen-
