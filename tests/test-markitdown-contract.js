@@ -64,9 +64,10 @@ async function engineeringBridgeCase() {
     return fakeSpawn()();
   };
   await convertDocxForDifferential(Buffer.from('synthetic'), {
-    engineeringMode: true, pythonExecutable: 'C:\\Python\\python.exe', runtimeRoot: 'C:\\runtime',
+    engineeringMode: true, pythonExecutable: path.join(root, 'python'), runtimeRoot: root,
     spawn, environment: { TEMP: 'C:\\host-temp', TMP: 'C:\\host-tmp' }
   });
+  assert.strictEqual(observed.command, path.join(root, 'python'));
   assert.deepStrictEqual(observed.args.slice(0, 2), ['-I', '-S']);
   assert.strictEqual(Object.hasOwn(observed.options.env, 'TEMP'), false);
   assert.strictEqual(Object.hasOwn(observed.options.env, 'TMP'), false);
@@ -102,12 +103,12 @@ function fakeSpawn({ output = '# converted', exitCode = 0 } = {}) {
 
 async function oracleCase() {
   const markdown = await convertDocxForDifferential(Buffer.from('synthetic'), {
-    engineeringMode: true, pythonExecutable: 'C:\\Python\\python.exe', runtimeRoot: 'C:\\runtime',
+    engineeringMode: true, pythonExecutable: path.join(root, 'python'), runtimeRoot: root,
     spawn: fakeSpawn(), environment: {}
   });
   assert.strictEqual(markdown, '# converted');
   await assert.rejects(convertDocxForDifferential(Buffer.from('synthetic'), {
-    engineeringMode: false, pythonExecutable: 'C:\\Python\\python.exe', runtimeRoot: 'C:\\runtime',
+    engineeringMode: false, pythonExecutable: path.join(root, 'python'), runtimeRoot: root,
     spawn: fakeSpawn(), environment: {}
   }), (error) => error.code === 'CONVERTER_NOT_RELEASED');
 }
