@@ -66,6 +66,16 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 
 ## Cowork-Plugin: aktueller Umfang
 
+Das zur eigenen Plattform passende Cowork-Paket steht im selben geprüften
+RC131-Release bereit:
+
+- [Windows x64](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc131.zip)
+- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc131.zip)
+- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc131.zip)
+
+Die Pakete vollständig herunterladen und als lokales Claude-Desktop-Plugin
+installieren; sie sind nicht für Cloud-Cowork oder Claude im Browser bestimmt.
+
 | Funktion | Stand |
 |---|---|
 | Eingaben | TXT, Markdown, CSV, DOCX; XLSX und PPTX über lokale Markdown-Extraktion |
