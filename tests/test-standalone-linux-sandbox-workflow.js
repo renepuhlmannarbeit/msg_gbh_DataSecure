@@ -10,6 +10,7 @@ const workflow = read('.github/workflows/standalone-linux-sandbox.yml');
 const launch = read('tests/manual/standalone-native-linux-launch.sh');
 const conversionWorker = read('tests/test-standalone-conversion-worker.mjs');
 const conversionResolver = read('plugins/data-secure/server/standalone/conversion-runtime-resolver.js');
+const tauriMain = read('apps/datasecure-standalone/tauri-contract/src/main.rs');
 const target = JSON.parse(read('apps/datasecure-standalone/desktop-targets.json')).targets
   .find((item) => item.product_target === 'linux-x64-glibc');
 
@@ -48,5 +49,7 @@ assert.match(conversionWorker,
   /process\.platform === 'linux' && process\.arch === 'x64' \? 'linux-x64-glibc' : null/u);
 assert.match(conversionResolver,
   /process\.platform === 'linux' && process\.arch === 'x64' \? 'linux-x64-glibc' : null/u);
+assert.match(tauriMain,
+  /WindowEvent::CloseRequested[\s\S]*?process\.take\(\);[\s\S]*?window\.app_handle\(\)\.exit\(0\);/u);
 
 process.stdout.write('Standalone Linux manual sandbox workflow: PASS\n');

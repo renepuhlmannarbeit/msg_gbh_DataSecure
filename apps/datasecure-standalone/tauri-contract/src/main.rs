@@ -1353,6 +1353,10 @@ fn main() {
                             process.take();
                         }
                     }
+                    // Headless package smokes must prove the app-owned child is
+                    // released before the synthetic window-manager close ends
+                    // WebKit. Normal user sessions keep Tauri's native close path.
+                    window.app_handle().exit(0);
                 }
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
                     // Configured windows can emit events before setup manages
