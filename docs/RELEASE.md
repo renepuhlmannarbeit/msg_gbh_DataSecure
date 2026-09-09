@@ -1,15 +1,16 @@
 # Release- und Distributionsvertrag
 
-Stand: 08.09.2026 · 3.2.0-rc131
+Stand: 09.09.2026 · 3.2.0-rc131
 
 Der aktuelle Quellstand ist der RC131-Produktkandidat für das Cowork-Plugin
 und die Standalone-App.
 Sein zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
 beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
-Plugin-ZIP-Tests und Claude-Validierung gebunden. Ein Standalone-Paket desselben
-RC-Stands ist damit nicht behauptet: Die zuletzt commitgebundene Windows-Standalone-Evidenz
-bleibt historische Engineering-Evidenz und ersetzt weder native UAT noch eine
-INT-13-Bindung.
+Plugin-ZIP-Tests und Claude-Validierung gebunden. Die selbsttragenden
+Standalone- und Cowork-Zielpakete desselben Quellcommits `d4d269b` wurden auf
+Windows x64 sowie macOS Intel/ARM gebaut und technisch geprüft; Windows-PKG-04
+und INT-13 sind gebunden. Die Veröffentlichung als Vorabrelease ersetzt weder
+die noch offene sichtbare N3/N4-UAT noch eine Produktionsfreigabe.
 
 ## Nutzerprodukt
 
@@ -53,6 +54,25 @@ anthropics/claude-code #69020, #65426 als „not planned“). Der Upload bleibt 
 Pilotweg mit dem im IT-Handbuch beschriebenen Entfernen-Neustart-Upload-Ablauf;
 der versionierte Marketplace ist der Zielkanal.
 
+## Prüf- und Veröffentlichungskadenz
+
+Ein normaler Push erzeugt niemals automatisch native macOS-/Windows-Builds,
+OCR-Pakete oder Releaseartefakte. Der eine automatische Ubuntu-Check startet
+für jeden Push und Pull Request, damit eine neue oder umbenannte Datei den
+stabilen Pflichtcheck nicht umgehen kann. Er führt bei reinen Dokumentänderungen
+nur `test:docs` aus; bei Produktcode
+`test:product:ci`; bei gemischten oder nicht sicher klassifizierbaren Änderungen
+beide. Die vollständige lokale Produktsuite bleibt Abschlussgate für einen
+inhaltlichen Entwicklungsblock.
+
+Zielplattformbuilds werden nur ausgeführt, wenn ein neues Paket für UAT oder
+Release tatsächlich benötigt wird. Der manuelle Cowork-Workflow startet daher
+standardmäßig nur `windows-x64`; alle drei Plattformen sind eine ausdrückliche
+Releaseauswahl. PKG-04/INT-13, beide macOS-Architekturen, Security, SBOM und
+Prüfsummen bleiben verpflichtend, sobald genau dieser Commit als neuer
+veröffentlichter Kandidat angeboten wird. Ein nachfolgender reiner
+Dokumentationscommit erfordert keinen Neubau unveränderter Binärartefakte.
+
 ## Produktbuild
 
 ```text
@@ -74,7 +94,8 @@ für die Sitzung weiterhin eine Internetverbindung; das ändert nichts daran,
 dass Originaldateien nur der lokalen DataSecure-Runtime zugeführt werden.
 Der manuelle, kostensparende Workflow `bundled-runtime-release.yml` baut bei
 Bedarf genau ein Ziel-ZIP oder alle drei getrennten Ziel-ZIPs; er läuft niemals
-automatisch. Jedes dieser ZIPs bleibt unter der von Anthropic vorgegebenen
+automatisch und wählt ohne ausdrückliche Änderung nur Windows x64. Jedes dieser
+ZIPs bleibt unter der von Anthropic vorgegebenen
 50-MB-Grenze. Ein Universal-ZIP wird nicht erzeugt, weil die drei gebündelten
 Laufzeiten diese Grenze zusammen zwangsläufig überschreiten würden.
 
@@ -94,8 +115,8 @@ Standalone ist nicht Bestandteil des Plugin-ZIPs oder Marketplace-Artefakts.
 Eine kompilierte und automatisch geprüfte Windows-x64-Hülle samt selbsttragendem
 Engineering-Paket existiert. Echte ad-hoc signierte macOS-App-Bundles sind auf
 Intel und Apple Silicon gebaut, geprüft und bis durch ihre private IPC-/Core-
-Grenze gestartet. Sie sind noch kein Standalone-Release: Die sichtbare
-Windows-/macOS-/Linux-UAT fehlt. Für macOS Intel und Apple
+Grenze gestartet. Sie sind als technisches Vorabrelease verfügbar, aber noch
+keine Produktionsfreigabe: Die sichtbare Windows-/macOS-/Linux-UAT fehlt. Für macOS Intel und Apple
 Silicon existieren inzwischen reproduzierbare, manifest-/hash-/modusgeprüfte
 Engineering-ZIPs, die nach dem Entpacken nochmals nativ gestartet wurden. Der
 aktuelle Zielbuild liefert selbsttragende Pakete für Windows x64, macOS Intel

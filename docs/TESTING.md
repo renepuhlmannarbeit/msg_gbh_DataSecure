@@ -266,9 +266,25 @@ Die RC111-Unicode-Erweiterung dieses Tests startet zusätzlich echte, isolierte
 Plugin- und Standalone-Stapel sowie einen reinen Markdown-Stapel. Diese Fälle
 sind ausdrücklich von der historischen Fassaden-/Mock-OCR-Evidenz getrennt.
 
-Standalone-only Änderungen erreichen jetzt beide automatischen CI-Pfadfilter.
-Es bleibt bei einem kostenbegrenzten Job; native Builds und Konverterressourcen
-werden nicht ungefragt als neue automatische GitHub-Jobs ausgeführt.
+Der automatische Pfad bleibt genau **ein** kostenbegrenzter Ubuntu-Job mit
+stabilem Checknamen und startet für jeden Push beziehungsweise Pull Request.
+`scripts/classify-ci-scope.js` wertet erst innerhalb dieses Jobs den
+vollständigen Git-Diff NUL-sicher und ohne Rename-Erkennung aus. Ausschließlich
+Änderungen an `README.md`, `CLAUDE.md` oder unter `docs/`, `tasks/` und
+`.claude/` starten `test:docs`; ausführbare, gemischte oder unbekannte Änderungen
+starten `test:product:ci`, bei gemischten Änderungen zusätzlich `test:docs`.
+Ein leerer, fehlender oder nicht auswertbarer Diff und ein manueller Start
+fallen sicher auf beide Gates zurück. Dadurch kann weder ein Rename aus
+Produktcode in die Dokumentation noch ein neuer unbekannter Pfad die
+Produktprüfung oder den stabilen Check vollständig umgehen.
+
+Die Klassifikation erfasst neben beiden Produkten auch Buildquellen wie `ui/`,
+`assets/`, `.claude-plugin/`, `support/` und `evals/`. Native Builds,
+Konverterressourcen, Security-Scans und Zielplattformpakete werden weiterhin
+nicht bei jedem Push gestartet, sondern ausschließlich über die manuellen
+evidenzgebundenen Workflows. Der Cowork-Paketworkflow wählt standardmäßig nur
+`windows-x64`; `all` bleibt eine bewusste Releaseauswahl. Zwischenartefakte der
+Zielruntime werden nur einen Tag aufbewahrt.
 
 ### Manueller macOS-Sandbox-Nachweis
 

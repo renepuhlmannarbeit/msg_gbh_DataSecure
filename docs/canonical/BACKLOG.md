@@ -11,15 +11,19 @@ Definition of Done: Code, Tests, `BACKLOG.md`, `CURRENT_STATE.md` und
 offener Zielsystem- oder Anwenderabnahme bleibt hier als „menschliche Evidenz
 offen“ sichtbar, wird aber nicht als weitere Entwicklungsarbeit dargestellt.
 
-Statuslesart: **in Arbeit** kann bedeuten, dass die Engineering-Evidenz E0
-vollständig grün ist, aber E1/E2 auf einem echten Zielhost oder durch einen
-Menschen noch fehlt. Maßgeblich ist deshalb nicht das Statuswort allein, sondern
-die explizite Restangabe in der Story. Für BL-010.11–14, 16–18 und 20–33 ist der
-beschriebene E0-Code samt automatisierten Windows-/Paketgates umgesetzt; offen
-sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
-Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
-Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
-erhalten und sind keine zu löschende Altlast.
+Statuslesart: **in Arbeit** kann bedeuten, dass die beschriebene Kernlieferung
+E0-grün ist, aber E1/E2 auf einem echten Zielhost oder durch einen Menschen noch
+fehlt. Maßgeblich ist deshalb nicht das Statuswort allein, sondern die explizite
+Restangabe in der Story. Für BL-010.11–14, 16–18 und 20–33 sind die jeweils
+beschriebenen E0-Kernpfade samt automatisierten Windows-/Paketgates umgesetzt.
+Neben den benannten Zielhost-, Bedien-, Accessibility-, Performance-, Update-/
+Rollback- und Fachevidenzen bleiben jedoch ausdrücklich als spätere technische
+Lieferungen geführt: die UI-Gruppierung in BL-010.12, ein integrierter
+Tauri-Reviewvertrag in BL-010.13 und ein persistierter Journalfingerprint in
+BL-010.23. Weitere lokal bearbeitbare Punkte stehen in F7/F17 sowie Abschnitt A;
+Abschnitt B enthält dagegen ausschließlich menschliche beziehungsweise
+zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
+und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
 
 ### RC131 – deterministische Fehler sind niemals Endlosschleifen
 
@@ -50,8 +54,19 @@ ein vorhandenes unsicheres Paket stoppt als `RECOVERY_FAILED`.
 Standalone und Cowork verwenden denselben Privacy- und Stapelkern; beide
 Erstverarbeitungs- und Sammelreviewpfade sind an diese Regel gebunden. Gezielte
 Regression, der reale bereits extrahierte DOCX-Markdown-Inhalt und die
-vollständigen Produktgates bilden E0. Paketbau, INT-13 und sichtbarer UAT müssen
-aus dem finalen RC131-Commit neu gebunden werden.
+vollständigen Produktgates bildeten E0 vor dem finalen Paketlauf. Paketbau und
+INT-13 sind inzwischen aus dem finalen RC131-Commit gebunden; sichtbar offen
+bleibt die menschliche UAT.
+
+Die technische Paketbindung ist inzwischen für Commit `d4d269b` erledigt:
+Windows-PKG-04/INT-13, beide nativen macOS-Architekturen und alle drei Cowork-
+Zielpakete sind grün und als `v3.2.0-rc131` veröffentlicht. Offen bleibt nur die
+bereits geplante menschliche N3/N4-UAT. BL-051.7 ist zugleich nachgeschärft:
+Der einzige automatische Ubuntu-Job unterscheidet Docs-only, Produktcode und
+gemischte Änderungen fail-safe; native, Security-, OCR- und Releasegates bleiben
+manuell. Der Cowork-Workflow startet standardmäßig nur Windows x64, während
+`all` ausschließlich bewusst für einen neuen plattformübergreifenden Kandidaten
+gewählt wird.
 
 ### RC130 – Windows-Helferpfade und POSIX-Testisolation
 

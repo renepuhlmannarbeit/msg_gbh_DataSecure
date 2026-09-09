@@ -21,8 +21,9 @@ Erstverarbeitung, Sammelreview und Recovery sowie ein Lauf des
 von RC130 tatsächlich extrahierten Markdown-Artefakts durch den aktuellen
 Privacy-/Publikationskern. `PROCESSING_INTERRUPTED` bleibt ausschließlich reale
 Recoverysemantik; verifizierte Publikationen werden adoptiert, unsichere stoppen,
-und wiederholte identische Transienten enden begrenzt. RC131-Paket-, INT-13- und UAT-Evidenz ist noch neu zu
-erzeugen und darf nicht von RC130 übernommen werden.
+und wiederholte identische Transienten enden begrenzt. RC131-Paket- und
+INT-13-Evidenz sind für Commit `d4d269b` neu erzeugt und im Vorabrelease
+`v3.2.0-rc131` gebunden; nur die sichtbare N3/N4-UAT ist weiterhin offen.
 
 RC125 revalidiert die Cloud-/Local-Cowork-Grenze gegen die aktuelle offizielle
 Herstellerdokumentation und bindet den direkten Sechs-Format-Prompt sowie beide

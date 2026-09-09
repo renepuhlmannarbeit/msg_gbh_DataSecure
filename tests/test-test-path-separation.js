@@ -49,8 +49,12 @@ test('fast documentation validation cannot trigger SEA, apps or Claude CLI', () 
   assert.match(pkg.scripts['test:docs:extended'], /test:status-app/u);
 });
 
-test('automatic and release workflows use product gates and publish no MCPB', () => {
-  assert.match(workflow('ci.yml'), /npm run test:product:ci/u);
+test('automatic and release workflows use their bounded gates and publish no MCPB', () => {
+  const automatic = workflow('ci.yml');
+  assert.match(automatic, /npm run test:docs/u);
+  assert.match(automatic, /npm run test:product:ci/u);
+  assert.match(automatic, /steps\.scope\.outputs\.run_docs/u);
+  assert.match(automatic, /steps\.scope\.outputs\.run_product/u);
   const release = workflow('release-evidence.yml');
   assert.match(release, /npm run test:product:ci/u);
   assert.doesNotMatch(release, /\.mcpb/u);
@@ -58,9 +62,12 @@ test('automatic and release workflows use product gates and publish no MCPB', ()
   assert.ok(fs.existsSync(path.join(root, '.github', 'workflow-archive', 'keyring-pilot.yml')));
 });
 
-test('both automatic event filters include standalone-only changes without extra jobs', () => {
+test('the single automatic job covers standalone-only changes through fail-safe classification', () => {
   const ci = workflow('ci.yml');
-  assert.equal((ci.match(/- 'apps\/datasecure-standalone\/\*\*'/gu) || []).length, 2);
+  const { classifyChangePaths } = require('../scripts/classify-ci-scope');
+  assert.doesNotMatch(ci, /^    paths(?:-ignore)?:$/m);
+  assert.deepStrictEqual(classifyChangePaths(['apps/datasecure-standalone/frontend/app.js']),
+    { profile: 'product', run_docs: false, run_product: true });
   assert.match(ci, /timeout-minutes: 10/u);
   assert.match(runner, /tests\/test-test-harness\.js/u);
 });

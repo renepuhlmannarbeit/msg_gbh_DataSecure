@@ -24,6 +24,18 @@ Residual-Stopp für einen echten ungebundenen Namen in derselben Struktur. Die
 gemeinsame Modulnutzung bindet
 Standalone und Cowork an denselben Vertrag.
 
+Die RC131-Evidence bindet den Binärkandidaten
+`d4d269bd777012ce4fff2fc04ea9b961e5b5fcc3` an den lokalen PKG-04-/INT-13-
+Receipt, den Windows-ZIP-Hash `f475c305…59f63`, den macOS-Intel-/ARM64-Lauf
+`34396545170`, den Cowork-Dreizielbuild `34396542203` und das GitHub-
+Vorabrelease `v3.2.0-rc131`. Die nachfolgende CI-Optimierung ist über
+`.github/workflows/ci.yml`, `scripts/classify-ci-scope.js`,
+`test-workflow-budget.js` und `test-test-path-separation.js` gebunden: genau ein
+stets startender automatischer Ubuntu-Job, NUL-sicherer vollständiger Diff, Docs-only-Gate,
+Produktgate für Code, beide Gates für gemischte/unklare Änderungen sowie
+ausschließlich manuelle native und Releasepfade. Der Cowork-Build hat
+`windows-x64` als kostensicheren Standard und behält `all` explizit bei.
+
 RC130 bindet die hostunabhängige Konstruktion der Windows-Helferpfade an
 `companion/file-picker.js`, `folder-picker.js`, `source-folder.js` und
 `supervisor.js`. `test-companion-ipc.js`, `test-source-folder.js` und

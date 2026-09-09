@@ -35,11 +35,37 @@ test('automatic CI is one bounded Ubuntu job without a matrix or artifacts', () 
   assert.doesNotMatch(ci, /actions\/upload-artifact/);
 });
 
-test('automatic CI ignores documentation outside canonical product contracts', () => {
+test('automatic CI cannot skip a new path before the fail-safe classifier runs', () => {
   const ci = workflows.get('ci.yml');
-  assert.match(ci, /^    paths:$/m);
-  assert.match(ci, /'docs\/canonical\/\*\*'/);
-  assert.doesNotMatch(ci, /'docs\/\*\*'/);
+  assert.doesNotMatch(ci, /^    paths(?:-ignore)?:$/m);
+  assert.match(ci, /^  push:\n    branches: \[main\]$/m);
+  assert.match(ci, /^  pull_request:\n    branches: \[main\]$/m);
+});
+
+test('automatic CI selects documentation, product or mixed gates fail-safely', () => {
+  const ci = workflows.get('ci.yml');
+  const classifier = require('../scripts/classify-ci-scope');
+  assert.deepStrictEqual(classifier.parseNulSeparated(Buffer.from('docs/a.md\0plugins/line\nname.js\0')),
+    ['docs/a.md', 'plugins/line\nname.js']);
+  assert.deepStrictEqual(classifier.classifyChangePaths(['README.md', 'docs/TESTING.md']),
+    { profile: 'docs', run_docs: true, run_product: false });
+  assert.deepStrictEqual(classifier.classifyChangePaths(['plugins/data-secure/server/index.js']),
+    { profile: 'product', run_docs: false, run_product: true });
+  assert.deepStrictEqual(classifier.classifyChangePaths(['docs/TESTING.md', 'plugins/data-secure/server/index.js']),
+    { profile: 'mixed', run_docs: true, run_product: true });
+  assert.deepStrictEqual(classifier.classifyChangePaths([]),
+    { profile: 'mixed', run_docs: true, run_product: true });
+  assert.deepStrictEqual(classifier.classifyChangePaths(['docs\\RELEASE.md']),
+    { profile: 'docs', run_docs: true, run_product: false });
+  assert.deepStrictEqual(classifier.classifyChangePaths(['CLAUDE.md', 'tasks/review.md', '.claude/agents/reviewer.md']),
+    { profile: 'docs', run_docs: true, run_product: false });
+  assert.match(ci, /fetch-depth: 0/u);
+  assert.match(ci, /git diff --no-renames --name-only -z/u);
+  assert.match(ci, /node scripts\/classify-ci-scope\.js --fallback/u);
+  assert.match(ci, /if: \$\{\{ steps\.scope\.outputs\.run_docs == 'true' \}\}/u);
+  assert.match(ci, /if: \$\{\{ steps\.scope\.outputs\.run_product == 'true' \}\}/u);
+  assert.match(ci, /npm run test:docs/u);
+  assert.match(ci, /npm run test:product:ci/u);
 });
 
 test('duplicate runs are cancelled and permissions stay read-only', () => {
@@ -77,6 +103,13 @@ test('Cowork all-target release emits three uploadable platform ZIPs and no over
   assert.match(source, /for id in windows-x64 macos-x64 macos-arm64/u);
   assert.doesNotMatch(source, /build-runtime-plugin\.mjs --runtimes dist\/runtime-all --target universal/u);
   assert.doesNotMatch(source, /universal Marketplace archive/u);
+});
+
+test('manual Cowork packaging defaults to one lower-cost target and keeps intermediates briefly', () => {
+  const source = workflows.get('bundled-runtime-release.yml');
+  assert.match(source, /^        default: windows-x64$/m);
+  assert.match(source, /name: datasecure-runtime-\$\{\{ matrix\.id \}\}-\$\{\{ github\.sha \}\}[\s\S]*?retention-days: 1/u);
+  assert.match(source, /^          - all$/m);
 });
 
 test('line-ending guard excludes only the byte-inventoried vendored OCR runtime', () => {

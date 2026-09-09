@@ -6,7 +6,7 @@ on:
       target:
         description: Build one direct-upload ZIP or all three platform-specific ZIPs.
         required: true
-        default: all
+        default: windows-x64
         type: choice
         options:
           - all
@@ -71,7 +71,7 @@ jobs:
         with:
           name: datasecure-runtime-${{ matrix.id }}-${{ github.sha }}
           path: dist/${{ matrix.id }}/
-          retention-days: 7
+          retention-days: 1
 
   package:
     needs: runtime

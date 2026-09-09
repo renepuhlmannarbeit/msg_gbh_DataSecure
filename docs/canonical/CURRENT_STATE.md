@@ -30,6 +30,27 @@ beschädigtes oder strukturell unsicheres Paket als `RECOVERY_FAILED` stoppt.
 Damit können weder Standalone noch Cowork eine deterministische oder dauerhaft
 technische Pipelineabweichung endlos als fortsetzbar anbieten.
 
+Der Releasekandidat aus Commit `d4d269bd777012ce4fff2fc04ea9b961e5b5fcc3`
+ist inzwischen paketgebunden: Der lokale Windows-PKG-04-Lauf erzeugte zwei
+bytegleiche Standalone-ZIPs (SHA-256
+`f475c305976215bb72ff4c8d183df4a153d6561dc8f3e3785c41adf98f559f63`),
+bestand beide Paket-/Worker-/nativen Smokes und schrieb die INT-13-Bindung.
+GitHub-Lauf `34396545170` bestand denselben nativen Bundle-, IPC-, Signatur-,
+Architektur- und Zweifachbauvertrag auf macOS Intel und ARM64. Lauf
+`34396542203` baute und verifizierte die drei getrennten Cowork-Zielpakete.
+Diese elf Archive, Prüfsummen und die SBOM stehen als Vorabrelease
+`v3.2.0-rc131` bereit. Sichtbare menschliche N3/N4-UAT bleibt davon getrennt
+offen.
+
+Die automatische CI ist nun risikobasiert und bleibt trotzdem genau ein stets
+startender Ubuntu-Job: reine aktuelle Dokumentation läuft nur durch `test:docs`, Code durch
+`test:product:ci`, gemischte Änderungen durch beide. Unbekannte oder nicht
+auswertbare Diffs fallen auf beide Gates zurück. Alle nativen, Security-, OCR-
+und Paketworkflows bleiben manuell; der Cowork-Paketworkflow startet
+standardmäßig nur das günstigere Windows-x64-Ziel statt aller drei Plattformen.
+Damit werden UAT-/Release-Nachweise nicht abgeschwächt, aber nicht mehr mit
+gewöhnlichen Dokument- oder Entwicklungspushes vermischt.
+
 ## RC130 – portable Windows-Helferpfade und reale Testisolation
 
 Die Windows-spezifischen Aufrufe für Datei-/Ordnerauswahl und das kontrollierte

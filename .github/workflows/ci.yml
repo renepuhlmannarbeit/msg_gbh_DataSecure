@@ -1,39 +1,14 @@
 name: Cost-capped CI
 
-# Cost policy: ordinary changes start exactly one short Linux job. Native,
-# three-platform, OCR, packaging and security evidence is intentionally kept in
-# the manual workflows and is run only for an explicit release/acceptance need.
+# Cost policy: ordinary changes start exactly one short Linux job. It runs only
+# documentation gates for docs-only changes and the product CI gate for code.
+# Mixed or unclassifiable changes fail safely into both. Native, three-platform,
+# OCR, packaging and security evidence stays manual for a release/acceptance need.
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/**'
-      - 'benchmarks/**'
-      - 'apps/datasecure-standalone/**'
-      - 'docs/canonical/**'
-      - 'docs/acceptance/UAT_TEST_KIT/**'
-      - 'native/**'
-      - 'plugins/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'manifest.json'
-      - 'package.json'
-      - 'package-lock.json'
   pull_request:
     branches: [main]
-    paths:
-      - '.github/workflows/**'
-      - 'benchmarks/**'
-      - 'apps/datasecure-standalone/**'
-      - 'docs/canonical/**'
-      - 'docs/acceptance/UAT_TEST_KIT/**'
-      - 'native/**'
-      - 'plugins/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'manifest.json'
-      - 'package.json'
-      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
@@ -50,6 +25,33 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+          cache: npm
+
+      - name: Select the smallest safe test scope
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ '${{ github.event_name }}' == 'workflow_dispatch' || -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0+$ ]]; then
+            node scripts/classify-ci-scope.js --fallback < /dev/null >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "${BASE_SHA}^{commit}"; then
+            node scripts/classify-ci-scope.js --fallback < /dev/null >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git diff --no-renames --name-only -z "$BASE_SHA" "$GITHUB_SHA" \
+            | node scripts/classify-ci-scope.js >> "$GITHUB_OUTPUT"; then
+            node scripts/classify-ci-scope.js --fallback < /dev/null >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Repository privacy guards
         shell: bash
@@ -71,13 +73,13 @@ jobs:
           fi
           node -e "const p=require('./package.json'); if (p.dependencies && Object.keys(p.dependencies).length) process.exit(1)"
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22.13.0'
-          cache: npm
-
       - name: Install locked development-only test oracles
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Run current documentation contracts
+        if: ${{ steps.scope.outputs.run_docs == 'true' }}
+        run: npm run test:docs
+
       - name: Run the cost-capped product regression set
+        if: ${{ steps.scope.outputs.run_product == 'true' }}
         run: npm run test:product:ci

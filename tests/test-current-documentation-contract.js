@@ -68,10 +68,12 @@ test('every current release header matches the package version', () => {
   }
 });
 
-test('the Cowork release candidate does not imply a same-version Standalone package', () => {
+test('the RC131 prerelease distinguishes technical packages from human approval', () => {
   const release = read('docs/RELEASE.md');
-  assert.match(release, /Ein Standalone-Paket desselben\s+RC-Stands ist damit nicht behauptet/u);
-  assert.doesNotMatch(release, /Ein RC\d+-Standalone-Paket ist\s+damit nicht behauptet/u);
+  assert.match(release, /Standalone- und Cowork-Zielpakete desselben Quellcommits/u);
+  assert.match(release, /technisches Vorabrelease[\s\S]{0,160}keine Produktionsfreigabe/u);
+  assert.match(release, /offene sichtbare N3\/N4-UAT/u);
+  assert.doesNotMatch(release, /Ein Standalone-Paket desselben\s+RC-Stands ist damit nicht behauptet/u);
 });
 
 test('DS-067 deletion and retention wording is present across active contracts', () => {
