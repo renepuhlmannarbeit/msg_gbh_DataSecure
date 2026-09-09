@@ -113,8 +113,9 @@ PPTX, PDF/Scan-PDF und PNG/JPEG/BMP erst neutral in Markdown extrahieren und ans
 denselben Privacy-Core nutzen. Dabei wird nur eine anonymisierte Markdown-
 Extraktion veröffentlicht; ihre Quellenabdeckung wird separat ausgewiesen. Die reine
 Standalone-Konvertierung besitzt denselben breiten Eingabeumfang, darf Hinweise
-dagegen sichtbar mit ausgeben. Zielhost-UAT und native
-macOS-Pakete bleiben gesondert offen; Details stehen in
+dagegen sichtbar mit ausgeben. Native macOS-App-Bundle-/IPC-E0 ist für Intel
+und Apple Silicon belegt; Zielhost-UAT und herunterladbare macOS-Archive bleiben
+gesondert offen. Details stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 
 Standalone besitzt zwei verbindliche Kernfunktionen (DS-085). Die heute

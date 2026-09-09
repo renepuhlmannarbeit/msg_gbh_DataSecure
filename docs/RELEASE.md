@@ -90,8 +90,10 @@ ist keine Produktfreigabe.
 
 Standalone ist nicht Bestandteil des Plugin-ZIPs oder Marketplace-Artefakts.
 Eine kompilierte und automatisch geprüfte Windows-x64-Hülle samt selbsttragendem
-Engineering-Paket existiert. Sie ist noch kein Standalone-Release: Windows-UAT
-und native macOS-Intel-/ARM-Pakete samt UAT fehlen. Der Zielbuild liefert
+Engineering-Paket existiert. Echte ad-hoc signierte macOS-App-Bundles sind auf
+Intel und Apple Silicon gebaut, geprüft und bis durch ihre private IPC-/Core-
+Grenze gestartet. Sie sind noch kein Standalone-Release: Windows-/macOS-UAT und
+herunterladbare macOS-Distributionsarchive fehlen. Der Zielbuild liefert
 selbsttragende Pakete für Windows x64, macOS Intel, macOS Apple Silicon und
 Linux x64 glibc; Anwender installieren
 weder Rust noch Node noch Python separat. Für macOS gilt mindestens 13.5. Die

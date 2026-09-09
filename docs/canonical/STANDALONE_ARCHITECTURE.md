@@ -122,8 +122,10 @@ Die Standalone-Application-Schicht und eine reale Tauri-Desktop-Hülle sind als
 Engineering-Vertikalschnitt vorhanden. Rust-Hülle, Windows-Mehrfachpicker,
 privater Core-Sidecar und inhaltsfreie UI-Projektion laufen auf Windows x64;
 ein selbsttragendes Windows-x64-Engineering-Paket besteht die Paket- und
-isolierte Startprüfung. Endnutzerfreigabe, native macOS-Zielhostnachweise und
-die native Linux-Paketierung bleiben offen. Der produktive Node-Konverter mit
+isolierte Startprüfung. Ad-hoc signierte App-Bundles sind auf macOS Intel und
+Apple Silicon nativ gebaut, geprüft und über App→private IPC→Core gestartet.
+Endnutzerfreigabe, herunterladbare macOS-Archive, sichtbare macOS-UAT und die
+native Linux-Paketierung bleiben offen. Der produktive Node-Konverter mit
 PDF-/OCR-Komponenten ist bereits angebunden; MarkItDown gehört nicht dazu.
 
 ```mermaid
@@ -358,6 +360,8 @@ verhindern einen unendlich wartenden UI-Aufruf. Das Windows-x64-Pilot-ZIP bindet
 die herkunftsgeprüfte Node-Runtime und eine frisch erzeugte geschlossene
 Coreprojektion; Paketprüfung und isolierter Sidecar-Smoke sind grün. Der Build
 ist ein technischer Vertikalschnitt, **noch kein freigegebenes
-Endnutzerprodukt**. Native macOS-/Linux-Pakete, Lizenzfreigabe und Zielsystem-UAT
-bleiben offen; auch vorhandene grüne Paketnachweise ersetzen keinen Nachweis
+Endnutzerprodukt**. Native macOS-App-Bundle-/IPC-E0 ist auf Intel und Apple
+Silicon belegt; Distributionsarchive, native Linux-Pakete, eine gegebenenfalls
+organisatorische Lizenzfreigabe und Zielsystem-UAT bleiben offen. Auch vorhandene
+grüne Paketnachweise ersetzen keinen Nachweis
 für einen erst danach geänderten Kandidaten.

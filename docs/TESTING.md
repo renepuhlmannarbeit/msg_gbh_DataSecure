@@ -270,12 +270,15 @@ verbrauchen und danach Kosten auslösen können. Standardmäßig wird nur
 
 Der Lauf installiert nur gepinnte Abhängigkeiten, lädt die bereits
 hashgebundenen Node-/OCR-Ressourcen, kompiliert den POSIX-Supervisor nativ und
-führt `test:standalone`, den echten isolierten Konvertertest, Clippy, einen
-Tauri-Release-Build sowie `file`/`lipo`-Architekturprüfungen aus. Es gibt keine
+führt `test:standalone`, den echten isolierten Konvertertest, Clippy, das mit
+exakt gepinnter CLI gebaute Tauri-App-Bundle, `codesign`- sowie
+`file`/`lipo`-Architekturprüfungen aus. Eine isolierte Kopie des Bundles wird
+anschließend bis durch die private IPC-/Core-Grenze gestartet und geordnet
+beendet. Es gibt keine
 Secrets, Actions-Caches oder Uploadartefakte. Ergebnisse bleiben auf den
 flüchtigen Runner beschränkt; der Job-Summary enthält ausschließlich
-inhaltsfreie Hash-/Zielangaben. Der Lauf ersetzt weder ein distributables
-`.app`-Paket noch Finder/Gatekeeper, sichtbaren Fensterstart, Picker,
+inhaltsfreie Hash-/Zielangaben. Der Lauf ersetzt weder ein herunterladbares
+Distributionsarchiv noch Finder/Gatekeeper, beobachteten Fensterstart, Picker,
 Drag-and-drop, VoiceOver, Performance oder menschliche UAT.
 
 Der Apple-Silicon-Lauf
@@ -287,7 +290,16 @@ Intel-Lauf
 [`34318293471`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34318293471)
 vom selben Tag ist für Commit `1cf2d5349d848bc60ff35f7c12341754b8d91bc3`
 mit demselben Prüfpfad vollständig grün und bestätigt alle drei Executables als
-Mach-O `x86_64`. Sämtliche sichtbaren E1/E2-Prüfungen bleiben offen.
+Mach-O `x86_64`.
+
+Die erweiterten App-Bundle-Läufe
+[`34321954381`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34321954381)
+für Apple Silicon und
+[`34322534571`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34322534571)
+für Intel sind auf Commit `52437999ad04a1aa37c05485228aba2980d11cbe`
+vollständig grün. Beide prüfen die echte ad-hoc signierte `.app`, alle
+Bundle-Binaries, isolierten macOS-Datenroot, UI→IPC→Core-Initialisierung und
+verwaisungsfreies Beenden. Sämtliche sichtbaren E1/E2-Prüfungen bleiben offen.
 
 ### RC111: breite Format- und Recovery-Grenzen
 
@@ -391,8 +403,9 @@ Zuordnungsdatei. Die privaten Zielresolver verwenden dieselben nativen
 Öffnen-Schaltflächen.
 Queue-Schema und Worker-Acknowledge werden vor dem positiven
 Handoff doppelt geprüft; Identitäts-Mocks dürfen diese Grenze nicht ersetzen.
-Das ersetzt keine menschliche Windows-/macOS-UAT. Die nativen E0-Nachweise sind
-durch Lauf `34285518668` für ARM64 und Lauf `34318293471` für Intel erbracht.
+Das ersetzt keine menschliche Windows-/macOS-UAT. Die nativen Rohbuildnachweise
+sind durch Lauf `34285518668` für ARM64 und Lauf `34318293471` für Intel
+erbracht; die App-Bundle-/IPC-Nachweise durch `34321954381` und `34322534571`.
 
 ## UAT
 

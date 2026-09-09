@@ -178,7 +178,11 @@ Historische Evidence bleibt versionsgebunden: RC109-Builds aus
 aus `7b88a81` belegen nicht den RC111-Stand.
 Native macOS-ARM64-E0-Ausführung ist durch Lauf `34285518668` auf Commit
 `487bfe1` belegt; native macOS-Intel-E0-Ausführung durch Lauf `34318293471` auf
-Commit `1cf2d53`. Sichtbarer und fachlicher UAT bleiben offen. Die
+Commit `1cf2d53`. Die erweiterten Läufe `34321954381` und `34322534571` auf
+Commit `5243799` belegen zusätzlich das echte ad-hoc signierte App-Bundle,
+Bundlearchitektur, private IPC, Core-Initialisierung und geordnetes Beenden auf
+beiden Architekturen. Distributionsarchive sowie sichtbarer und fachlicher UAT
+bleiben offen. Die
 DS-087-Verkettung für die **Anonymisierung** ist angebunden und fail-closed
 getestet. RC111 bindet `source_type` an die Dateiendung und prüft echte
 TXT/XLSX-Mischstapel in beiden Reihenfolgen, Abbruch/Fortsetzung, Exact-once und

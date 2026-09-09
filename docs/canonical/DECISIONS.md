@@ -957,13 +957,14 @@ Baum. Fehlt es, muss Installation beziehungsweise UAT verständlich stoppen.
 Diese bewusste Betriebssystemvoraussetzung ist nicht mit einer zusätzlichen
 Entwickler-Toolchain gleichzusetzen.
 
-Vor Endnutzerfreigabe bleiben Windows-UAT, native macOS-Intel-/ARM-Pakete und
-UAT sowie die komponentenweise Lizenzklärung der ausgelieferten Rust-Crates
-Pflicht. Das Engineering-SBOM darf unbekannte Crate-Lizenzen als `NOASSERTION`
-inventarisieren, aber keine abgeschlossene Lizenzprüfung behaupten. Drag-and-
-drop und Pausieren bleiben Zielumfang, bis ein echter Befehl, Recoveryvertrag
-und UI-/Negativtests existieren. Diese Entscheidung präzisiert DS-004, DS-075
-und DS-076.
+Vor Endnutzerfreigabe bleiben Windows-/macOS-UAT und herunterladbare macOS-
+Distributionsarchive Pflicht. Inzwischen belegen native Runner das echte,
+ad-hoc signierte App-Bundle samt privater IPC auf Intel und Apple Silicon; das
+Engineering-SBOM inventarisiert alle 259 erreichbaren Nicht-Dev-Crates ohne
+`NOASSERTION`. Eine organisatorisch verlangte menschliche Lizenzfreigabe bleibt
+davon getrennt. Drag-and-drop besitzt mittlerweile Befehl, Admissionvertrag und
+UI-/Negativtests; eine echte Zielhostbedienung bleibt E2. Pause bleibt außerhalb
+der Istzusage. Diese Entscheidung präzisiert DS-004, DS-075 und DS-076.
 
 ## DS-078 – Lokale MCPs nur in lokaler Cowork-Sitzung
 

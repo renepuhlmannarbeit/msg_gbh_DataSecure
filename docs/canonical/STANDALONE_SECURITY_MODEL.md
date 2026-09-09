@@ -92,10 +92,13 @@ Der Konvertierungspfad verwendet die mitgelieferten Node-/OOXML-Parser, PDF.js,
 Canvas und lokale Tesseract-DE/EN-Modelle. MarkItDown/Python ist nur ein
 optionales Engineering-Differentialorakel und kein produktiver Konverter.
 
-Das Engineering-SBOM inventarisiert Rust-Crates, setzt deren Lizenzfelder aber
-noch auf `NOASSERTION`. Vor einem Endnutzerrelease ist eine komponentenweise
-Lizenzprüfung Pflicht. Windows-UAT und native macOS-Intel-/ARM-Pakete samt UAT
-sind ebenfalls noch offen. Bis dahin ist das Paket ein Engineering-Pilot.
+Das Engineering-SBOM inventarisiert die 259 erreichbaren Nicht-Dev-Rust-Crates
+komponentenweise und enthält kein `NOASSERTION`; die maschinelle Lizenzprüfung
+ist E0 belegt. Eine gegebenenfalls organisatorisch verlangte menschliche
+Lizenzfreigabe bleibt davon getrennt. Native ad-hoc signierte macOS-App-Bundles
+sind auf Intel und Apple Silicon gebaut und über die private IPC-Grenze
+gestartet. Windows-/macOS-UAT und herunterladbare macOS-Distributionsarchive
+sind noch offen. Bis dahin ist das Paket ein Engineering-Pilot.
 
 ## Nichtziele
 

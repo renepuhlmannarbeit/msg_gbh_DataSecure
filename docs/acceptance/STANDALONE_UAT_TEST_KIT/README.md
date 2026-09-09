@@ -71,8 +71,10 @@ festen lokalen Protokollordner.
 
 ## Noch nicht durch diesen Windows-Test belegt
 
-macOS Intel, macOS Apple Silicon und Linux benötigen native Pakete und eigene
-Zielhostläufe. Ein Rosetta-Lauf ersetzt keinen Intel-Nachweis. Bei unsignierten
+Für macOS Intel und Apple Silicon bestehen native E0-App-Bundle-/IPC-Läufe;
+herunterladbare Archive und die eigene sichtbare Zielhost-UAT fehlen weiterhin.
+Linux benötigt ein natives Paket und einen eigenen Zielhostlauf. Ein
+Rosetta-Lauf ersetzt keinen Intel-Nachweis. Bei ad-hoc signierten
 macOS-Piloten ist ausschließlich **Datenschutz & Sicherheit → Dennoch öffnen**
 zulässig; globale Schutzabschaltungen oder Terminaltricks sind kein Testweg.
 

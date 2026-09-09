@@ -1,8 +1,8 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc125 · Intel-/ARM64-Zielhost-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc125 · Intel-/ARM64-App-Bundle-E0 und unabhängige Produktrevalidierung
 
-## Intel-/ARM64-Zielhost-E0 vom 09.09.2026
+## Intel-/ARM64-Zielhost- und App-Bundle-E0 vom 09.09.2026
 
 Der manuell und kostenbestätigt gestartete GitHub-Actions-Lauf
 [`34285518668`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34285518668)
@@ -23,12 +23,23 @@ den real isolierten Office-/PDF-/OCR-Worker, Clippy, den Tauri-Release-Build und
 App, Core-Sidecar sowie POSIX-Supervisor jeweils als Mach-O `x86_64`. Auch dieser
 Lauf verwendete keine Secrets, Caches oder Artefakt-Uploads.
 
-Damit ist die automatisierbare native E0-Ausführung für Apple Silicon und Intel
-belegt. Nicht
-daraus abgeleitet werden ein verteilbares/signiertes `.app`, Finder-/Gatekeeper-
-Bedienung, sichtbarer Start, Picker, Drag-and-drop, VoiceOver, reale Performance
-oder menschliche UAT. Diese E1/E2-Nachweise bleiben auf beiden Architekturen
-offen.
+Die erweiterten Läufe
+[`34321954381`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34321954381)
+auf Apple Silicon und
+[`34322534571`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34322534571)
+auf Intel sind für Commit `52437999ad04a1aa37c05485228aba2980d11cbe`
+ebenfalls vollständig grün. Sie bauen mit der exakt gepinnten Tauri-CLI jeweils
+das echte `DataSecure Standalone.app`, prüfen Info.plist, Mindestversion,
+Ad-hoc-Signatur (`codesign --deep --strict`) und alle drei nativen Architekturen.
+Eine isoliert kopierte App startet anschließend den gebündelten Core über die
+private IPC-Grenze, initialisiert den plattformrichtigen Datenroot und beendet
+App sowie Sidecar ohne verwaisten Prozess. Damit ist das flüchtige, ad-hoc
+signierte App-Bundle auf beiden Architekturen automatisiert E0-belegt.
+
+Nicht daraus abgeleitet werden ein herunterladbares Distributionsarchiv,
+Finder-/Gatekeeper-Bedienung, tatsächlich beobachteter Fensterstart, Picker,
+Drag-and-drop, VoiceOver, reale Performance oder menschliche UAT. Diese
+E1/E2-Nachweise bleiben auf beiden Architekturen offen.
 
 ## Aktueller Entwicklungsstand RC125 – unabhängige Revalidierung
 
@@ -832,8 +843,10 @@ nativem Datei-/Ordnerdialog, privatem längengerahmtem Sidecar-Kanal und
 inhaltsfreier Rendererprojektion ist auf Windows x64 kompiliert und im
 laufenden Prozess geprüft. Ein eigenes selbsttragendes Windows-x64-
 Engineering-Paket wurde gebaut, verifiziert und in einem isolierten Pfad ohne
-System-Node gestartet. Zielsystem-UAT und native macOS-Pakete fehlen; der
-Schnitt ist deshalb noch kein freigegebenes Standalone-Produkt.
+System-Node gestartet. Native, ad-hoc signierte macOS-App-Bundles wurden auf
+Intel und Apple Silicon gebaut und über ihre private IPC-Grenze gestartet.
+Herunterladbare macOS-Archive und Zielsystem-UAT fehlen; der Schnitt ist deshalb
+noch kein freigegebenes Standalone-Produkt.
 Die Standalone-Oberfläche zeigt Vorbereitung und danach passive, inhaltsfreie
 Fortschrittszähler. Einen terminalen Zustand bestätigt sie dem Worker erst nach
 einem tatsächlichen Renderer-Paint und nur mit der zu diesem Zustand gehörenden
@@ -892,11 +905,14 @@ Minuten und wählt standardmäßig nur Apple Silicon. Auf `macos-15-intel` und
 `macos-14` werden die gepinnte Node-Runtime, der nativ kompilierte POSIX-
 Supervisor, die vollständigen Standalone-/Konverter-/Rust-Verträge, Clippy,
 der Tauri-Release-Build und die Architektur aller drei Executables geprüft.
-Es verwendet keine Secrets, keinen Cache und keine Artefakt-Uploads. Der native
-Apple-Silicon-E0-Lauf `34285518668` auf Commit `487bfe1` und der native
-Intel-E0-Lauf `34318293471` auf Commit `1cf2d53` sind vollständig grün.
-App-Bundle, Gatekeeper, sichtbare Fenster, Picker, VoiceOver, Performance und
-menschliche UAT auf Intel und Apple Silicon bleiben offen.
+Es verwendet keine Secrets, keinen Cache und keine Artefakt-Uploads. Die nativen
+Rohbuilds sind durch Apple-Silicon-Lauf `34285518668` auf Commit `487bfe1` und
+Intel-Lauf `34318293471` auf Commit `1cf2d53` belegt. Die erweiterten Läufe
+`34321954381` und `34322534571` auf Commit `5243799` bauen, signatur- und
+architekturprüfen und starten zusätzlich das jeweils echte App-Bundle bis durch
+die private IPC-/Core-Grenze. Herunterladbares Distributionsarchiv, Gatekeeper,
+beobachtete Fenster, Picker, VoiceOver, Performance und menschliche UAT auf
+Intel und Apple Silicon bleiben offen.
 Rust und Tauri sind ausschließlich Buildwerkzeuge; Anwender installieren weder
 Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
 2.11.5 und MSVC erfolgreich gebaut; `cargo test --locked`, Clippy,
@@ -961,8 +977,9 @@ Lieferstufen und offene User Stories stehen in
 ZIP/Marketplace sind der Produktkanal. Die selbsttragende Node-22.23.2-Runtime
 ist für Windows x64 sowie macOS Intel/ARM gebaut, hash-/architekturgebunden und
 paketvertraglich geprüft. Ein reales Windows-Paket startete ohne System-Node;
-reale Cowork-Fresh-Install- und macOS-Nachweise bleiben offen. Linux ist kein
-aktuelles Cowork-Produktziel.
+die Standalone-App-Bundles starteten nativ auf Intel und Apple Silicon. Reale
+Cowork-Fresh-Install-/Update-Nachweise sowie die menschliche macOS-Bedienung
+bleiben offen. Linux ist kein aktuelles Cowork-Produktziel.
 
 Die aktuelle Plugin-MCP-Konfiguration verwendet den offiziellen
 `mcpServers`-Wrapper. Eine generierte Marketplace-Projektion mit relativer,
