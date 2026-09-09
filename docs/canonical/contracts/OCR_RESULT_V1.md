@@ -78,12 +78,14 @@ wegen hohen Speicherverbrauchs:
 https://github.com/naptha/tesseract.js/blob/master/docs/performance.md
 
 Windows besitzt zusätzlich harte Job-Object-Grenzen. Der Engineering-Pilot enthält
-einen kleinen POSIX-Supervisor: `RLIMIT_CPU` begrenzt CPU-Zeit; unter Linux gelten
-zusätzlich `RLIMIT_AS` und `RLIMIT_DATA`. Physischer Speicher wird über Linux
+einen kleinen POSIX-Supervisor: `RLIMIT_CPU` begrenzt CPU-Zeit. `RLIMIT_AS` und
+`RLIMIT_DATA` werden bewusst nicht verwendet, weil beide mit Nodes V8-/WebAssembly-
+Speicherreservierung inkompatibel sind und einen bereits erfolgreich antwortenden
+Parser nachträglich fehlschlagen lassen können. Physischer Speicher wird über Linux
 `/proc/<pid>/statm` beziehungsweise Apples `proc_pid_rusage` überwacht und die
 gesamte Prozessgruppe bei Überschreitung beendet. macOS verwendet bewusst keine
-kleinen `RLIMIT_AS`-/`RLIMIT_DATA`-Werte, weil XNU diese gegen die bereits vorhandene
-Mach-VM-Map prüft; maßgeblich ist dort der externe physische Footprint-Wächter. Die Grundlagen
+kleinen virtuellen Speicherlimits; maßgeblich ist dort wie unter Linux der externe
+physische Footprint-Wächter. Die Grundlagen
 sind in der Linux-Manpage zu `setrlimit` und Apples XNU-Header/Manpage dokumentiert:
 
 - https://man7.org/linux/man-pages/man2/getrlimit.2.html

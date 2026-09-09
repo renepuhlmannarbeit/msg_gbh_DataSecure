@@ -35,7 +35,16 @@ if (path.resolve(process.argv[1]) === batchFile) {
     fs.writeFileSync(path.join(root, 'worker-complete.json'), JSON.stringify({
       pid: process.pid, complete: result.complete, released: result.released,
       progress: batch.readBatchProgress(token),
-      items: terminalState.items.map((item) => ({ status: item.status, error_code: item.error_code || null }))
+      items: terminalState.items.map((item) => ({
+        status: item.status,
+        checkpoint: item.checkpoint || null,
+        error_code: item.error_code || null,
+        has_package_id: typeof item.package_id === 'string',
+        has_document_result: Boolean(item.document_result),
+        local_mapping_exported: item.local_mapping_exported ?? null,
+        mapping_outbox_persisted: item.mapping_outbox_persisted ?? null,
+        work_copy_cleanup_pending: item.work_copy_cleanup_pending ?? null
+      }))
     }));
     clearTimeout(deadline);
     return result;

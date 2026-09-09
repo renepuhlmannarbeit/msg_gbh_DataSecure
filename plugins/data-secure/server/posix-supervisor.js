@@ -7,7 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const childProcess = require('child_process');
 
-const CONTRACT = '{"schema":"datasecure-posix-sandbox/v1","limits":["cpu","address_space","data","file_size","open_files","rss","wallclock"],"process_group_reap":true}';
+const CONTRACT = '{"schema":"datasecure-posix-sandbox/v1","limits":["cpu","file_size","open_files","rss","wallclock"],"process_group_reap":true}';
 const DARWIN_CONTRACT = '{"schema":"datasecure-posix-sandbox/v1","limits":["cpu","file_size","open_files","rss","wallclock"],"process_group_reap":true}';
 const TARGETS = Object.freeze({ darwin: new Map([['x64', 'macos-x64'], ['arm64', 'macos-arm64']]), linux: new Map([['x64', 'linux-x64']]) });
 const cache = new Map();

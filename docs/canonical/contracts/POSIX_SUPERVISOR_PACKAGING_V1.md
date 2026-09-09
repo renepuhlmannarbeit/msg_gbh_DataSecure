@@ -26,13 +26,17 @@ Build-Fehler.
   geerbte Hard-Limit bereits niedriger, bleibt dieses strengere Limit erhalten;
   der Supervisor darf nicht versuchen, es zu erhöhen oder den Parser deshalb
   vor `exec` abbrechen.
-- Linux begrenzt zusätzlich virtuellen Adressraum und Datensegment per
-  `RLIMIT_AS`/`RLIMIT_DATA`. Auf macOS sind diese beiden Linux-typischen Limits
-  nicht Teil des zugesagten Vertrags: XNU verweigert sie, sobald die bereits
-  vorhandene Mach-VM-Map größer als der Sollwert ist. Dort begrenzt der externe
-  Elternprozess den tatsächlichen physischen Footprint stattdessen hart über
-  `proc_pid_rusage`; CPU-, Core-, Dateigrößen-, Deskriptor- und Wallclock-Grenzen
-  bleiben zusätzlich aktiv.
+- `RLIMIT_AS` und `RLIMIT_DATA` sind bewusst ausgeschlossen: Nodes V8- und
+  WebAssembly-Laufzeit reserviert große virtuelle Bereiche, ohne entsprechend
+  viel physischen Speicher zu belegen. Beide Limits können deshalb trotz
+  ausreichendem realem Speicher einen bereits erfolgreich antwortenden Parser
+  nachträglich abbrechen. Der externe Elternprozess begrenzt den tatsächlichen
+  physischen Footprint stattdessen hart über Linux `/proc/<pid>/statm`
+  beziehungsweise macOS `proc_pid_rusage`; CPU-, Core-, Dateigrößen-,
+  Deskriptor- und Wallclock-Grenzen bleiben zusätzlich aktiv.
+- Der native Vertrag muss den echten TXT-Parser mit Produktions-Preload und
+  Produktionsflags erfolgreich starten und sauber beenden; eine bloße
+  Einzeiler-Ausführung ist kein ausreichender Node-Runtime-Nachweis.
 - Keine Freigabe entsteht allein durch Verpackung: reale CPU-, RAM-, Kindprozess-,
   Timeout- und Fresh-Install-Evidenz für macOS x64, macOS ARM64 und Linux x64
   bleibt Pflicht.
