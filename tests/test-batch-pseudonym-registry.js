@@ -11,6 +11,7 @@ const {
 } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
 const { collectPersonAnchors } = require('../plugins/data-secure/server/privacy/entities');
+const { generate: generateUatFixtures } = require('../docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures');
 
 const { test, done, assert } = createSuite('Batch pseudonym registry');
 
@@ -107,12 +108,14 @@ test('registry is memory-only and cannot be used after disposal', () => {
 test('real TXT/Markdown/CSV/DOCX parsers feed one readable identity per full person and company', () => {
   const secret = crypto.randomBytes(SECRET_BYTES);
   const options = { contractVersion: READABLE_CONTRACT_VERSION };
+  const fixtureRoot = path.resolve(__dirname, '../docs/acceptance/UAT_TEST_KIT',
+    `.tmp-uat-pseudonym-${process.pid}`);
+  generateUatFixtures(fixtureRoot);
   let registry = createBatchPseudonymRegistry(secret, options);
   try {
     let expectedMarkers;
     for (const ext of ['.txt', '.md', '.csv', '.docx']) {
-      const source = fs.readFileSync(path.join(__dirname,
-        '../docs/acceptance/UAT_TEST_KIT/inputs/01-positive', `personnel-profile${ext}`));
+      const source = fs.readFileSync(path.join(fixtureRoot, '01-positive', `personnel-profile${ext}`));
       const converted = parseDocumentBuffer(source, ext);
       assert.ok(converted.markdown.length > 100, 'real parser must produce source content');
       const result = anonymizeMarkdown(converted.markdown, ext === '.csv' ? 'general' : 'personnel_profile', { registry });
@@ -125,7 +128,11 @@ test('real TXT/Markdown/CSV/DOCX parsers feed one readable identity per full per
       registry.dispose();
       registry = createBatchPseudonymRegistry(secret, { ...options, persistedState: JSON.parse(JSON.stringify(snapshot)) });
     }
-  } finally { registry.dispose(); secret.fill(0); }
+  } finally {
+    registry.dispose();
+    secret.fill(0);
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  }
 });
 
 test('readable restores reject mixed versions, malformed counters, duplicate identities and unresolved aliases', () => {
