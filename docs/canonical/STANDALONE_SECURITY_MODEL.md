@@ -97,8 +97,11 @@ komponentenweise und enthält kein `NOASSERTION`; die maschinelle Lizenzprüfung
 ist E0 belegt. Eine gegebenenfalls organisatorisch verlangte menschliche
 Lizenzfreigabe bleibt davon getrennt. Native ad-hoc signierte macOS-App-Bundles
 sind auf Intel und Apple Silicon gebaut und über die private IPC-Grenze
-gestartet. Windows-/macOS-UAT und herunterladbare macOS-Distributionsarchive
-sind noch offen. Bis dahin ist das Paket ein Engineering-Pilot.
+gestartet. Reproduzierbare, manifest-/hash-/modusgeprüfte Engineering-ZIPs sind
+für beide Architekturen gebaut und nach dem Entpacken erneut gestartet.
+Windows-/macOS-UAT ist noch offen. Bis dahin bleiben die Pakete
+Engineering-Piloten. Linux ist ein späteres, separat zu implementierendes und
+abzunehmendes Produktziel.
 
 ## Nichtziele
 

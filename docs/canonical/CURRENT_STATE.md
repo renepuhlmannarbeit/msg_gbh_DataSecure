@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc125 · Intel-/ARM64-App-Bundle-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc125 · Intel-/ARM64-Distributionspaket-E0 und unabhängige Produktrevalidierung
 
 ## Intel-/ARM64-Zielhost- und App-Bundle-E0 vom 09.09.2026
 
@@ -36,10 +36,27 @@ private IPC-Grenze, initialisiert den plattformrichtigen Datenroot und beendet
 App sowie Sidecar ohne verwaisten Prozess. Damit ist das flüchtige, ad-hoc
 signierte App-Bundle auf beiden Architekturen automatisiert E0-belegt.
 
-Nicht daraus abgeleitet werden ein herunterladbares Distributionsarchiv,
-Finder-/Gatekeeper-Bedienung, tatsächlich beobachteter Fensterstart, Picker,
-Drag-and-drop, VoiceOver, reale Performance oder menschliche UAT. Diese
-E1/E2-Nachweise bleiben auf beiden Architekturen offen.
+Die nachfolgenden Läufe
+[`34334520861`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34334520861)
+auf Apple Silicon und
+[`34335259239`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34335259239)
+auf Intel sind für Commit `06c2669daffdd414153cb3392df2df930c1b1dbf`
+vollständig grün. Je Ziel wird das Distributions-ZIP zweimal bytegleich gebaut,
+gegen Manifest, SHA-256, SBOM, Rust-/Node-Lizenzen und ausführbare Dateimodi
+geprüft, entpackt, nochmals mit `codesign`/`lipo` geprüft und aus genau diesem
+entpackten Paket durch App → private IPC → Core gestartet. ARM64 umfasst 579
+Einträge und 115.143.802 Byte mit SHA-256
+`86b79e8c7633bb964e19f0867432936be6fbd0546de166fa147da55227e721a8`;
+Intel umfasst 579 Einträge und 118.176.134 Byte mit SHA-256
+`61aad77a7b6eaeaada20972a2de329319cc4c1a53d988325b18437e9f6ea4e70`.
+Beide Engineeringpakete wurden für genau einen Tag als Actions-Artefakt
+bereitgestellt.
+
+Nicht daraus abgeleitet werden Finder-/Gatekeeper-Bedienung, tatsächlich
+beobachteter Fensterstart, Picker, Drag-and-drop, VoiceOver, reale Performance
+oder menschliche UAT. Diese E1/E2-Nachweise bleiben auf beiden Architekturen
+offen. Linux bleibt gemäß BL-010.4 ein eigenes späteres Ziel; ein Katalogeintrag
+oder Git-Checkout ist kein gebautes und geprüftes Linux-Produktpaket.
 
 ## Aktueller Entwicklungsstand RC125 – unabhängige Revalidierung
 
@@ -894,8 +911,10 @@ Dateisystemzugriff im Renderer. Ausgewählte Dateinamen, Quellenordner und das
 Ergebnisziel werden ausschließlich im lokalen Standalone-Fenster angezeigt und
 fehlen strukturell in Diagnose, Supportspur und externen Antworten;
 Pflichtzähler und Zustandsübergänge stoppen bei fehlenden, regressiven oder
-widersprüchlichen Werten. Der Zielkatalog bindet vier getrennte Pakete an exakte Rust-Triples:
-Windows x64, macOS Intel, macOS Apple Silicon und Linux x64 glibc. Für beide
+widersprüchlichen Werten. Der aktuelle Zielkatalog bindet drei Erstpakete an
+exakte Rust-Triples: Windows x64, macOS Intel und macOS Apple Silicon. Linux x64
+glibc bleibt als spätere Portabilitätsstufe katalogisiert, ist aber noch kein
+gebautes Produktpaket. Für beide
 macOS-Pakete gilt wegen der gebündelten Node-Laufzeit mindestens macOS 13.5.
 Zertifikatsfreie macOS-Piloten werden ausdrücklich ad-hoc signiert
 (`signingIdentity: "-"`). Ein neues GitHub-Actions-Gate bildet dafür eine
@@ -905,14 +924,17 @@ Minuten und wählt standardmäßig nur Apple Silicon. Auf `macos-15-intel` und
 `macos-14` werden die gepinnte Node-Runtime, der nativ kompilierte POSIX-
 Supervisor, die vollständigen Standalone-/Konverter-/Rust-Verträge, Clippy,
 der Tauri-Release-Build und die Architektur aller drei Executables geprüft.
-Es verwendet keine Secrets, keinen Cache und keine Artefakt-Uploads. Die nativen
+Es verwendet keine Secrets und keinen Cache. Ein ausdrücklicher optionaler
+Upload stellt nur das verifizierte ZIP samt Prüfsumme für einen Tag bereit. Die nativen
 Rohbuilds sind durch Apple-Silicon-Lauf `34285518668` auf Commit `487bfe1` und
 Intel-Lauf `34318293471` auf Commit `1cf2d53` belegt. Die erweiterten Läufe
 `34321954381` und `34322534571` auf Commit `5243799` bauen, signatur- und
 architekturprüfen und starten zusätzlich das jeweils echte App-Bundle bis durch
-die private IPC-/Core-Grenze. Herunterladbares Distributionsarchiv, Gatekeeper,
-beobachtete Fenster, Picker, VoiceOver, Performance und menschliche UAT auf
-Intel und Apple Silicon bleiben offen.
+die private IPC-/Core-Grenze. Die Distributionsläufe `34334520861` und
+`34335259239` auf Commit `06c2669d` belegen darüber hinaus den bytegleichen
+Doppelbau, Paketmetadaten, Dateimodi und den erneuten Start aus dem entpackten
+ZIP. Gatekeeper, beobachtete Fenster, Picker, VoiceOver, Performance und
+menschliche UAT auf Intel und Apple Silicon bleiben offen.
 Rust und Tauri sind ausschließlich Buildwerkzeuge; Anwender installieren weder
 Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
 2.11.5 und MSVC erfolgreich gebaut; `cargo test --locked`, Clippy,

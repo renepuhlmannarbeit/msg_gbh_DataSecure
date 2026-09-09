@@ -114,8 +114,9 @@ denselben Privacy-Core nutzen. Dabei wird nur eine anonymisierte Markdown-
 Extraktion veröffentlicht; ihre Quellenabdeckung wird separat ausgewiesen. Die reine
 Standalone-Konvertierung besitzt denselben breiten Eingabeumfang, darf Hinweise
 dagegen sichtbar mit ausgeben. Native macOS-App-Bundle-/IPC-E0 ist für Intel
-und Apple Silicon belegt; Zielhost-UAT und herunterladbare macOS-Archive bleiben
-gesondert offen. Details stehen in
+und Apple Silicon belegt; reproduzierbare Engineering-ZIPs wurden je
+Architektur entpackt und erneut gestartet. Zielhost-UAT bleibt gesondert offen;
+Linux folgt als eigene spätere Produktstufe. Details stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 
 Standalone besitzt zwei verbindliche Kernfunktionen (DS-085). Die heute

@@ -274,12 +274,14 @@ führt `test:standalone`, den echten isolierten Konvertertest, Clippy, das mit
 exakt gepinnter CLI gebaute Tauri-App-Bundle, `codesign`- sowie
 `file`/`lipo`-Architekturprüfungen aus. Eine isolierte Kopie des Bundles wird
 anschließend bis durch die private IPC-/Core-Grenze gestartet und geordnet
-beendet. Es gibt keine
-Secrets, Actions-Caches oder Uploadartefakte. Ergebnisse bleiben auf den
-flüchtigen Runner beschränkt; der Job-Summary enthält ausschließlich
-inhaltsfreie Hash-/Zielangaben. Der Lauf ersetzt weder ein herunterladbares
-Distributionsarchiv noch Finder/Gatekeeper, beobachteten Fensterstart, Picker,
-Drag-and-drop, VoiceOver, Performance oder menschliche UAT.
+beendet. Danach wird das Distributions-ZIP zweimal bytegleich gebaut, sein
+Manifest samt SBOM, Lizenzen, SHA-256 und Dateimodi geprüft, entpackt und die
+entpackte App nach erneuter Signatur-/Architekturprüfung nochmals gestartet.
+Es gibt keine Secrets oder Actions-Caches. `upload_package` ist standardmäßig
+aus und stellt bei ausdrücklicher Aktivierung nur ZIP plus SHA-256 für einen Tag
+bereit; der Job-Summary enthält ausschließlich inhaltsfreie Hash-/Zielangaben.
+Der Lauf ersetzt weder Finder/Gatekeeper, beobachteten Fensterstart, Picker,
+Drag-and-drop, VoiceOver, Performance noch menschliche UAT.
 
 Der Apple-Silicon-Lauf
 [`34285518668`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34285518668)
@@ -291,6 +293,12 @@ Intel-Lauf
 vom selben Tag ist für Commit `1cf2d5349d848bc60ff35f7c12341754b8d91bc3`
 mit demselben Prüfpfad vollständig grün und bestätigt alle drei Executables als
 Mach-O `x86_64`.
+
+Die Paketläufe `34334520861` (ARM64, 7m06s) und `34335259239` (Intel,
+13m45s) auf Commit `06c2669d` sind vollständig grün. Sie belegen zusätzlich
+bytegleichen Doppelbau und den Start aus dem entpackten ZIP. Paket-SHA-256:
+ARM64 `86b79e8c7633bb964e19f0867432936be6fbd0546de166fa147da55227e721a8`,
+Intel `61aad77a7b6eaeaada20972a2de329319cc4c1a53d988325b18437e9f6ea4e70`.
 
 Die erweiterten App-Bundle-Läufe
 [`34321954381`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34321954381)

@@ -92,16 +92,23 @@ Standalone ist nicht Bestandteil des Plugin-ZIPs oder Marketplace-Artefakts.
 Eine kompilierte und automatisch geprüfte Windows-x64-Hülle samt selbsttragendem
 Engineering-Paket existiert. Echte ad-hoc signierte macOS-App-Bundles sind auf
 Intel und Apple Silicon gebaut, geprüft und bis durch ihre private IPC-/Core-
-Grenze gestartet. Sie sind noch kein Standalone-Release: Windows-/macOS-UAT und
-herunterladbare macOS-Distributionsarchive fehlen. Der Zielbuild liefert
-selbsttragende Pakete für Windows x64, macOS Intel, macOS Apple Silicon und
-Linux x64 glibc; Anwender installieren
+Grenze gestartet. Sie sind noch kein Standalone-Release: Die sichtbare
+Windows-/macOS-UAT fehlt. Für macOS Intel und Apple
+Silicon existieren inzwischen reproduzierbare, manifest-/hash-/modusgeprüfte
+Engineering-ZIPs, die nach dem Entpacken nochmals nativ gestartet wurden. Der
+aktuelle Zielbuild liefert selbsttragende Pakete für Windows x64 sowie macOS
+Intel und Apple Silicon; Anwender installieren
 weder Rust noch Node noch Python separat. Für macOS gilt mindestens 13.5. Die
 ersten internen Pakete dürfen unsigniert sein und verwenden ausschließlich die
 enge Gatekeeper-Freigabe über „Datenschutz & Sicherheit“; globale oder
 kommandozeilenbasierte Schutzabschaltungen sind kein Supportweg. Für eine breite,
 reibungsarme Verteilung bleibt Signierung/Notarisierung eine spätere
 Produktentscheidung.
+
+Linux x64 glibc ist nur als späteres Ziel im Zielkatalog reserviert. Es gibt
+derzeit weder einen vollständigen Linux-Konvertierungsbundle noch ein gebautes,
+nativ geprüftes Linux-Anwenderpaket. Ein Git-Checkout ist daher keine
+Linux-Produktfreigabe.
 
 Der kleine Windows-Pilot nutzt das auf Windows 10/11 vorhandene beziehungsweise
 von der Organisation bereitgestellte Microsoft Edge WebView2-Systemruntime. Es

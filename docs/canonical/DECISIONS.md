@@ -912,7 +912,7 @@ Agenten, generative KI oder externe KI-Dienste“ kommuniziert; spätere lokale
 OCR ist eine separat freizugebende Extraktionskomponente. Diese Entscheidung
 präzisiert DS-007, DS-018, DS-024, DS-038, DS-049, DS-060 und DS-072.
 
-## DS-076 – Tauri-2-Spike und vier eigenständige Desktopziele
+## DS-076 – Tauri-2-Spike und eigenständige Desktopziele
 
 Bestätigt am 04.09.2026 nach UX-, Desktop-, Packaging-, Security- und
 Performancegegencheck: Für die Standalone-Desktop-Hülle ist Tauri 2 der
@@ -923,9 +923,10 @@ mitzuliefern. Eine Produktfreigabe folgt daraus noch nicht; der Spike muss die
 definierten Start-, Größen-, Barrierefreiheits-, Offline-, Abbruch- und
 Rollbackwerte auf echten Zielsystemen erfüllen.
 
-Es entstehen vier selbsttragende Artefakte: Windows x64, macOS x64, macOS
-ARM64 und Linux x64 glibc. Ein Universal-macOS-Binary ist für die erste
-Lieferung nicht erforderlich. Kein Paket setzt vom Anwender installiertes
+Der aktuelle Erstumfang umfasst drei selbsttragende Artefakte: Windows x64,
+macOS x64 und macOS ARM64. Linux x64 glibc folgt gemäß BL-010.4 als eigene
+Portabilitätsstufe mit separatem Build und Zielhostnachweis. Ein
+Universal-macOS-Binary ist für die erste Lieferung nicht erforderlich. Kein Paket setzt vom Anwender installiertes
 Node, Python, Rust oder Claude voraus. Der Renderer erhält weder Rohbytes noch
 Quellpfade, Mapping, private Verzeichnisse oder direkten Dateisystemzugriff.
 Nur die Rust-Hülle öffnet den nativen Picker und übergibt die Auswahl intern an
@@ -957,9 +958,11 @@ Baum. Fehlt es, muss Installation beziehungsweise UAT verständlich stoppen.
 Diese bewusste Betriebssystemvoraussetzung ist nicht mit einer zusätzlichen
 Entwickler-Toolchain gleichzusetzen.
 
-Vor Endnutzerfreigabe bleiben Windows-/macOS-UAT und herunterladbare macOS-
-Distributionsarchive Pflicht. Inzwischen belegen native Runner das echte,
-ad-hoc signierte App-Bundle samt privater IPC auf Intel und Apple Silicon; das
+Vor Endnutzerfreigabe bleibt die sichtbare Windows-/macOS-UAT Pflicht.
+Inzwischen belegen native Runner das echte, ad-hoc signierte App-Bundle samt
+privater IPC auf Intel und Apple Silicon; das je Architektur zweimal bytegleich
+gebaute Engineering-ZIP wird nach dem Entpacken erneut bis durch
+App→IPC→Core gestartet. Das
 Engineering-SBOM inventarisiert alle 259 erreichbaren Nicht-Dev-Crates ohne
 `NOASSERTION`. Eine organisatorisch verlangte menschliche Lizenzfreigabe bleibt
 davon getrennt. Drag-and-drop besitzt mittlerweile Befehl, Admissionvertrag und

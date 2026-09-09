@@ -124,8 +124,9 @@ privater Core-Sidecar und inhaltsfreie UI-Projektion laufen auf Windows x64;
 ein selbsttragendes Windows-x64-Engineering-Paket besteht die Paket- und
 isolierte Startprüfung. Ad-hoc signierte App-Bundles sind auf macOS Intel und
 Apple Silicon nativ gebaut, geprüft und über App→private IPC→Core gestartet.
-Endnutzerfreigabe, herunterladbare macOS-Archive, sichtbare macOS-UAT und die
-native Linux-Paketierung bleiben offen. Der produktive Node-Konverter mit
+Reproduzierbare Engineering-ZIPs sind für beide Architekturen gebaut, entpackt
+und aus dem Paket erneut gestartet. Endnutzerfreigabe, sichtbare macOS-UAT und
+die native Linux-Implementierung und -Paketierung bleiben offen. Der produktive Node-Konverter mit
 PDF-/OCR-Komponenten ist bereits angebunden; MarkItDown gehört nicht dazu.
 
 ```mermaid
@@ -269,8 +270,9 @@ Hüllengröße ohne Core, Tastatur-/Screenreader-Zugänglichkeit, nativer
 Mehrfachpicker, sicherer Abbruch sowie Update und Rollback. Die Wahl ändert den
 gemeinsamen Core und seine Sicherheitsgates nicht.
 
-Vier getrennte Pakete sind vorgesehen: Windows x64, macOS Intel, macOS Apple
-Silicon und Linux x64 glibc. Die beiden macOS-Artefakte werden auf macOS gebaut
+Der aktuelle Erstumfang umfasst drei getrennte Pakete: Windows x64, macOS Intel
+und macOS Apple Silicon. Linux x64 glibc folgt als eigenständige spätere
+Portabilitätsstufe. Die beiden macOS-Artefakte werden auf macOS gebaut
 und jeweils nativ getestet; ein Universal-Binary ist zunächst kein Ziel. Eine
 Developer-ID-Signatur oder Notarisierung ist keine Produktpflicht. Die
 zertifikatsfreien Piloten verwenden aber ausdrücklich Tauri-Ad-hoc-Signierung
