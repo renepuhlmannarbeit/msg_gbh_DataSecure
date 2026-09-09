@@ -43,10 +43,10 @@ cleanup() {
     kill -TERM "$app_pid" 2>/dev/null || true
     wait "$app_pid" 2>/dev/null || true
   fi
-  if [[ -n "$xvfb_pid" ]] && kill -0 "$xvfb_pid" 2>/dev/null; then kill -TERM "$xvfb_pid" 2>/dev/null || true; fi
   if [[ -n "$window_manager_pid" ]] && kill -0 "$window_manager_pid" 2>/dev/null; then
     kill -TERM "$window_manager_pid" 2>/dev/null || true
   fi
+  if [[ -n "$xvfb_pid" ]] && kill -0 "$xvfb_pid" 2>/dev/null; then kill -TERM "$xvfb_pid" 2>/dev/null || true; fi
   if [[ -n "$dbus_pid" ]] && kill -0 "$dbus_pid" 2>/dev/null; then kill -TERM "$dbus_pid" 2>/dev/null || true; fi
   [[ -d "$test_root" && ! -L "$test_root" ]] || return 1
   [[ "$(dirname "$test_root")" == "$tmp_parent" ]] || return 1
@@ -82,13 +82,15 @@ for _ in {1..100}; do [[ -S "/tmp/.X11-unix/X$display_number" ]] && break; sleep
 [[ -S "/tmp/.X11-unix/X$display_number" ]] || { echo "STANDALONE_NATIVE_XVFB_FAILED" >&2; exit 1; }
 eval "$(dbus-launch --sh-syntax)"
 dbus_pid="${DBUS_SESSION_BUS_PID:-}"
-openbox --display "$DISPLAY" --sm-disable >"$test_root/openbox.log" 2>&1 &
+openbox --sm-disable >"$test_root/openbox.log" 2>&1 &
 window_manager_pid=$!
 for _ in {1..100}; do
+  kill -0 "$window_manager_pid" 2>/dev/null || break
   xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id' && break
   sleep 0.1
 done
 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id' || {
+  sed 's/^/openbox: /' "$test_root/openbox.log" >&2 || true
   echo "STANDALONE_NATIVE_WINDOW_MANAGER_FAILED" >&2
   exit 1
 }
