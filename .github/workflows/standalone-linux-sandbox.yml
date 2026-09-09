@@ -108,14 +108,17 @@ jobs:
           appdir="$extraction/AppDir"
           app="$appdir/usr/bin/datasecure-standalone"
           sidecar="$appdir/usr/bin/datasecure-core"
-          resource="$appdir/usr/lib/datasecure-standalone/server"
+          mapfile -t resource_markers < <(find "$appdir/usr/lib" -type f \
+            -path '*/server/standalone/desktop-sidecar.js' -print)
+          test "${#resource_markers[@]}" -eq 1 || { echo 'STANDALONE_LINUX_RESOURCE_LAYOUT_INVALID' >&2; exit 1; }
+          resource="$(dirname "$(dirname "${resource_markers[0]}")")"
+          case "$resource" in "$appdir"/usr/lib/*/server) ;; *) echo 'STANDALONE_LINUX_RESOURCE_ROOT_INVALID' >&2; exit 1 ;; esac
           supervisor="$resource/native/linux-x64/datasecure-sandbox"
-          test -x "$app"
-          test -x "$sidecar"
-          test -x "$supervisor"
-          test -x "$resource/standalone/conversion-runtime/node"
-          test -f "$resource/standalone/desktop-sidecar.js"
-          test -f "$resource/standalone/conversion-runtime/RUNTIME.json"
+          test -x "$app" || { echo 'STANDALONE_LINUX_APP_MISSING' >&2; exit 1; }
+          test -x "$sidecar" || { echo 'STANDALONE_LINUX_SIDECAR_MISSING' >&2; exit 1; }
+          test -x "$supervisor" || { echo 'STANDALONE_LINUX_SUPERVISOR_MISSING' >&2; exit 1; }
+          test -x "$resource/standalone/conversion-runtime/node" || { echo 'STANDALONE_LINUX_NODE_MISSING' >&2; exit 1; }
+          test -f "$resource/standalone/conversion-runtime/RUNTIME.json" || { echo 'STANDALONE_LINUX_RUNTIME_MANIFEST_MISSING' >&2; exit 1; }
           for executable in "$app" "$sidecar" "$supervisor" "$resource/standalone/conversion-runtime/node"; do
             readelf -h "$executable" | grep -q 'Machine:.*Advanced Micro Devices X86-64'
           done

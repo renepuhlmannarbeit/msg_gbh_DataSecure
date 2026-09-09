@@ -28,6 +28,7 @@ for (const required of [
   'node scripts/prepare-standalone-runtime.mjs', 'npm run test:standalone',
   'cargo clippy --all-targets --locked -- -D warnings',
   'npx --no-install tauri build --bundles appimage', '--appimage-extract',
+  "-path '*/server/standalone/desktop-sidecar.js'", '${#resource_markers[@]}',
   'standalone-native-linux-launch.sh', 'build-standalone-linux-package.mjs',
   'verify-standalone-linux-package.mjs', 'cmp "${archive}.first" "$archive"',
   'retention-days: 1', 'compression-level: 0'
