@@ -10,16 +10,11 @@ import { collectStandaloneRuntime } from '../scripts/lib/standalone-runtime-proj
 const require = createRequire(import.meta.url);
 const { createSuite } = require('./helpers');
 const { expected, canonicalizeBodies, profiles, formats, reviewProfiles, goldenFixture } = require('./lib/core-policy-golden');
+const { CORE_POLICY_FILES } = require('../plugins/data-secure/server/core-policy-fingerprint');
 const { test, assert, done } = createSuite('Shared core policy projection and semantic golden binding');
 const root = path.resolve(import.meta.dirname, '..');
 const serverRoot = path.join(root, 'plugins', 'data-secure', 'server');
-const shared = Object.freeze([
-  'privacy/base.js', 'privacy/credential-catalog.js', 'privacy/credential-catalog.json',
-  'privacy/credentials.js', 'privacy/engine.js', 'privacy/entities.js', 'privacy/iban-boundary.js',
-  'privacy/personnel.js', 'privacy/policy.js', 'privacy/spans.js', 'privacy/structured.js',
-  'pii-engine.js', 'resource-limits.js', 'core/batch-next-action.js',
-  'core/conversion-worker-contract.js', 'core/document-result-grade.js', 'core/processing-mode.js'
-].sort());
+const shared = Object.freeze([...CORE_POLICY_FILES].sort());
 const plugin = new Map(collectProductFiles(path.dirname(serverRoot))
   .filter(file => file.archivePath.startsWith('server/'))
   .map(file => [file.archivePath.slice(7), fs.readFileSync(file.fullPath)]));
@@ -48,10 +43,11 @@ test('the actual product projections contain byte-identical selected shared code
 
 test('changed, missing and newly unbound policy modules cannot silently retain the fingerprint', () => {
   const changed = new Map(standalone);
-  changed.set('privacy/credential-catalog.json', Buffer.concat([
-    changed.get('privacy/credential-catalog.json'), Buffer.from('\n ')
-  ]));
-  assert.notEqual(fingerprint(plugin), fingerprint(changed));
+  for (const member of shared) {
+    const changed = new Map(standalone);
+    changed.set(member, Buffer.concat([changed.get(member), Buffer.from('\n ')]));
+    assert.notEqual(fingerprint(plugin), fingerprint(changed), `${member} must change the fingerprint`);
+  }
   const missing = new Map(standalone);
   missing.delete('core/document-result-grade.js');
   assert.throws(() => fingerprint(missing), /missing shared module/u);

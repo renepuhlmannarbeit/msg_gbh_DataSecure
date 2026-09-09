@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 09.09.2026 · vorbereitet für 3.2.0-rc131 und spätere Kandidaten
+Stand: 10.09.2026 · vorbereitet für 3.2.0-rc132 und spätere Kandidaten
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und

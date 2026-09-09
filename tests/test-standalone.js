@@ -603,6 +603,17 @@ async function admittedServiceCase() {
   assert.strictEqual(startedQueue.length, 1);
   assert.deepStrictEqual(service.uiContext().selected_files, ['b.txt'],
     'the local window keeps the last selection visible while the batch runs');
+
+  const mixed = new StandaloneApplicationService({ dependencies: fakeDependencies() });
+  const mixedResult = await mixed.admitSelectedSources([
+    path.join(FIXTURE_SOURCE_ROOT, 'direct.md'),
+    path.join(FIXTURE_SOURCE_ROOT, 'converted.docx')
+  ]);
+  assert.deepStrictEqual(
+    { direct_count: mixedResult.direct_count, convertible_count: mixedResult.convertible_count,
+      blocked_count: mixedResult.blocked_count, encrypted_count: mixedResult.encrypted_count },
+    { direct_count: 1, convertible_count: 1, blocked_count: 0, encrypted_count: 0 }
+  );
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
 }
 

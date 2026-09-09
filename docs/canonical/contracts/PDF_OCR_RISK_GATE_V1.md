@@ -1,12 +1,13 @@
 # Gate: PDF- und OCR-Risikobeweis v1
 
-Status: Nachweis offen · Story: BL-023.1 · Entscheidungen: DS-004, DS-007, DS-009,
+Status: Cowork-/Originalcontainer-Gesamtfreigabe offen; Standalone-E0 aktiv · Story: BL-023.1 · Entscheidungen: DS-004, DS-007, DS-009,
 DS-015, DS-016, DS-017, DS-018, DS-030, DS-034 und DS-037
 
-Dieses Gate erlaubt noch keine PDF- oder Bildfreigabe. Es bündelt die vorhandene
-PDFium-Entscheidung zu einer plattformübergreifenden, reproduzierbaren GO/NO-GO-
-Prüfung. Bis jede Pflichtzelle positiv belegt ist, bleiben PDF, Scan-PDF und
-eigenständige Bilder in Ist-Manifest, Picker, Skills und Marketplace gesperrt.
+Dieses Gate erlaubt noch keine Cowork- oder vollständige Originalcontainer-/
+Pixel-Freigabe für PDF und Bilder. Es bündelt die vorhandene PDFium-Entscheidung
+zu einer plattformübergreifenden, reproduzierbaren GO/NO-GO-Prüfung. Bis jede
+Pflichtzelle positiv belegt ist, bleiben PDF, Scan-PDF und eigenständige Bilder
+im Cowork-Manifest, Cowork-Picker, Cowork-Skill und Marketplace gesperrt.
 
 Der Geltungsbereich ist die Cowork-Freigabe sowie eine Vollständigkeitszusage
 für Originalcontainer oder Bildpixel. Die eigenständige Standalone-App darf
@@ -14,18 +15,40 @@ PDF-/Bildquellen lokal nach Markdown extrahieren und diesen gültigen, nichtleer
 Markdown-Inhalt nach DS-087/090 anonymisieren. Das erfüllt dieses Gate nicht und
 behauptet weder vollständige Quellenextraktion noch Pixelanonymisierung.
 
+## Aktueller Produktstatus 09.09.2026
+
+Die oben genannte Sperre gilt für das **Cowork-Plugin** und für jede Aussage,
+der ursprüngliche PDF-/Bildcontainer oder seine Pixel seien vollständig
+anonymisiert. Sie gilt nicht mehr als Verbot der eigenständigen Standalone-
+Funktion: Die Standalone-App enthält heute eine gepinnte, vollständig lokale
+PDF.js-/Canvas-/Tesseract-Runtime. Sie darf Quellen in Markdown extrahieren und
+den gültigen, nichtleeren Markdown-Inhalt anschließend durch denselben Privacy-
+Core anonymisieren. Extraktionsstatus und Anonymisierungsstatus bleiben getrennt.
+
+BL-023.2/3 ist lokal E0 belegt: Der echte paketierte Parser stoppt erkannte
+Formulare/XFA, JavaScript/Aktionen, Anhänge, Signaturen, Annotationen, Outline,
+XMP und Verschlüsselung. Standardskonforme In-Memory-Golden-PDFs decken
+AcroForm, Signaturfeld, EmbeddedFile/Name-Tree, JavaScript sowie leere und
+nichtleere Benutzerpasswörter ab. Dieser Nachweis fand einen realen Defect in
+der PDF.js-Integration: Anhänge werden als `Map` geliefert und waren durch eine
+`Object.keys`-Prüfung nicht sichtbar. Diese reale `Map`-Regression ist im Golden-
+Korpus belegt. Das Produktgate normalisiert zusätzlich defensiv `Set`, Arrays und
+gewöhnliche Objekte; diese Formen sind keine behaupteten beobachteten PDF.js-
+Rückgaben. Fremderzeuger-, adversariale,
+Layout-, OCR-Fach- und sichtbare Zielhostabnahme bleiben E1/E3 offen.
+
 ## Festgelegte technische Richtung
 
-- Unter DS-038 bleibt die endgültige PDF-Engine bis zum praktischen Vergleich offen.
-  Mozilla PDF.js mit lokal gebündeltem Canvas ist der bevorzugte einfache
-  Drei-Plattform-Pilot; PDFium bleibt der native Fallback. Der Community-Binary-Spike
-  ist nur Engineering-Evidenz und keine Produktabhängigkeit.
+- Für Standalone ist Mozilla PDF.js mit lokal gebündeltem Canvas die aktive,
+  gepinnte Produktengine. PDFium bleibt historische Engineering-Evidenz und ist
+  keine Produktabhängigkeit. Die Cowork-Freigabe bleibt von der paketierten
+  Runtime und der vollständigen Pflichtmatrix abhängig.
 - OCR arbeitet vollständig offline und muss Deutsch, Englisch sowie gemischte
   Dokumente unterstützen.
 - Tesseract.js 7.0.0 mit tesseract.js-core 7.0.0, `@napi-rs/canvas` 1.0.7 und den
-  offiziellen `tessdata_fast`-Modellen 4.1.0 für `deu` und `eng` ist der bevorzugte
-  portable OCR-Pilot. Tesseract 5.5.2 bleibt nativer Fallback. Beides sind noch keine
-  Produktabhängigkeiten. Engine und Modelle werden je Release aus offiziellen Quellen
+  offiziellen `tessdata_fast`-Modellen 4.1.0 für `deu` und `eng` ist die aktive
+  Standalone-OCR-Runtime. Tesseract 5.5.2 bleibt historische Engineering-Evidenz
+  und ist keine Produktabhängigkeit. Engine und Modelle werden je Release aus offiziellen Quellen
   bezogen, exakt gelockt, unverändert gehasht und gemeinsam lizenziert inventarisiert.
 - Parser/OCR erhalten ausschließlich begrenzte Bytes aus privaten Arbeitskopien,
   keine Quellpfade, Cloud-Credentials oder Netzwerkfähigkeit.
@@ -34,7 +57,7 @@ behauptet weder vollständige Quellenextraktion noch Pixelanonymisierung.
 - Signatur, Notarisierung und Produktzertifizierung sind keine Freigabegates. Lizenz,
   SBOM, feste Quellrevisionen, Hashes und reproduzierbare Builds bleiben Pflicht.
 
-## Pflichtmatrix
+## Pflichtmatrix für Cowork und vollständige Originalcontainerfreigabe
 
 | Nachweis | Windows | macOS | Linux |
 |---|---|---|---|
@@ -69,7 +92,7 @@ Fremdbinary-Spike erwartungsgemäß `no_go` meldete. Damit ist die CI-Vorprüfun
 funktionsfähig; keine Zelle der Pflichtmatrix ist dadurch bestanden und BL-023.1
 bleibt in Arbeit.
 
-## PDF.js-/Canvas-Open-Source-Pilot
+## Historische, für Standalone supersedierte PDF.js-/Canvas-Pilotevidenz
 
 GitHub-Actions-Lauf `32594467568` auf Commit `b622278` führte den exakt gelockten
 Stack PDF.js 6.2.108 und `@napi-rs/canvas` 1.0.7 auf Windows x64, macOS x64, macOS
@@ -83,7 +106,7 @@ Annotationen, Verschlüsselung, Ressourcen-/Prozessisolation, Offline-OCR,
 Angriffskorpus, NOTICE/SBOM sowie das echte Pluginpaket bleiben offen. PDF bleibt
 deshalb `PDF_COVERAGE_UNVERIFIED`.
 
-## Tesseract.js-/Canvas-Open-Source-Pilot
+## Historische, für Standalone supersedierte Tesseract.js-/Canvas-Pilotevidenz
 
 Der lokale Windows-x64-Pilot verwendet exakt Tesseract.js 7.0.0,
 tesseract.js-core 7.0.0 und `@napi-rs/canvas` 1.0.7. Die offiziellen Modelle

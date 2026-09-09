@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 08.09.2026 · Ist-Zustand RC131
+Stand: 10.09.2026 · Ist-Zustand RC132
 
 ## Ziel
 
@@ -49,6 +49,13 @@ Kein Profil-, Bildmodus-, Einzeldatei- oder Ergebnislesedialog gehört zum
 Normalstart. Ein zurückgestellter Sammelreview wird ausdrücklich und lokal
 fortgesetzt. Er zeigt nur die tatsächlich mehrdeutigen Dateien, direkte
 Beibehalten-/Anonymisieren-Aktionen und inhaltsfreie Fortschrittszähler.
+Eng begrenzte namensförmige Subjekte in gewöhnlicher Prosa, die der automatische
+Kontext nicht eindeutig einordnen kann, werden dort als konkrete Fundstelle
+**„Als Person anonymisieren“** oder **„Kein Personenname – beibehalten“**
+entschieden. DataSecure rät nicht; die Entscheidung gilt gegenüber späteren
+Reviews nur für die gezeigte Stelle. Gleich geschriebene offene Namen werden
+innerhalb des aktuellen Sammelreviews konsistent entschieden, während eine
+bestätigte Person das stapelweit stabile Pseudonym erhält.
 
 ## Eingaben und Ergebnisse der Anonymisierung
 

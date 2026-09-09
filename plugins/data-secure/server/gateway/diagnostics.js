@@ -97,6 +97,7 @@ function sanitizeDiagnostic(record = {}, options = {}) {
     visual_assets_removed: boundedCount(record.visual_assets_removed),
     text_entity_count: boundedCount(record.text_entity_count),
     ambiguous_organization_count: boundedCount(record.ambiguous_organization_count),
+    ambiguous_person_count: boundedCount(record.ambiguous_person_count),
     error_code: ERROR_CODES.has(errorCode) ? errorCode : 'INTERNAL_FAILURE'
   };
 }

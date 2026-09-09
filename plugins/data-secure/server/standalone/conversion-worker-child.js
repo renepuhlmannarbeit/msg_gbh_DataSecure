@@ -108,6 +108,13 @@ function literal(text) {
   return `${fence}text\n${text}${text.endsWith('\n') ? '' : '\n'}${fence}`;
 }
 
+function populated(value) {
+  if (!value) return false;
+  if (value instanceof Map || value instanceof Set) return value.size > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return typeof value === 'object' ? Object.keys(value).length > 0 : true;
+}
+
 function additionalOcrText(nativeText, ocrText) {
   // Comparison only: the native text and every retained OCR line keep their
   // original spelling/whitespace. Rendering a text layer with its underlying
@@ -143,8 +150,8 @@ async function pdfMarkdown(bytes) {
     if (await document.getPermissions() !== null) fail('SOURCE_ENCRYPTED_UNSUPPORTED');
     // Never execute forms, JavaScript or attachments. Their omission is not a
     // complete document conversion; active-content documents remain stopped.
-    if (document.isPureXfa || await document.hasJSActions() || Object.keys(await document.getFieldObjects() || {}).length ||
-        Object.keys(await document.getAttachments() || {}).length) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+    if (document.isPureXfa || await document.hasJSActions() || populated(await document.getFieldObjects()) ||
+        populated(await document.getAttachments())) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
     const outline = await document.getOutline();
     const metadata = await document.getMetadata();
     const metadataKeys = ['Title', 'Author', 'Subject', 'Keywords', 'Creator', 'Producer',
@@ -165,7 +172,7 @@ async function pdfMarkdown(bytes) {
       const page = await document.getPage(number);
       let canvas;
       try {
-        if (page.isPureXfa || Object.keys(await page.getJSActions() || {}).length) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+        if (page.isPureXfa || populated(await page.getJSActions())) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         if ((await page.getAnnotations({ intent: 'display' })).length > 0) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         const content = await page.getTextContent({ disableNormalization: true });
         let text = '';

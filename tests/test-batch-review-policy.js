@@ -24,12 +24,72 @@ function reviewInput() {
   };
 }
 
+function personReviewInput() {
+  const original = 'Anna Berger koordinierte die Einführung.';
+  return {
+    original_text: original,
+    anonymized_text: original,
+    profile: 'personnel_profile',
+    ambiguities: [{
+      ambiguity_id: 'person:v1:000001',
+      type: 'person_prose_ambiguous',
+      replacement_kind: 'PERSON',
+      original_start: 0,
+      original_end: 11,
+      anonymized_start: 0,
+      anonymized_end: 11
+    }],
+    replacementForAmbiguity(candidate) {
+      assert.strictEqual(original.slice(candidate.original_start, candidate.original_end), 'Anna Berger');
+      return '[PERSON_007]';
+    }
+  };
+}
+
 test('shared decisions preserve or redact only the exact ambiguous issuer', () => {
   const input = reviewInput();
   assert.deepStrictEqual(reviewedBatchText(input, [{ ambiguity_id: 'credential:v2:000001', decision: 'keep' }]), { text: input.anonymized_text });
   assert.strictEqual(reviewedBatchText(input, [{ ambiguity_id: 'credential:v2:000001', decision: 'redact' }]).text, '[MANUAL_REDACTION] Zertifikat');
   assert.throws(() => reviewedBatchText(input, []), /nicht vollständig/i);
   assert.throws(() => reviewedBatchText(input, [{ ambiguity_id: 'credential:v2:999999', decision: 'keep' }]), /ungültig/i);
+});
+
+test('person decisions are occurrence-bound and use a stable typed pseudonym', () => {
+  const input = personReviewInput();
+  assert.deepStrictEqual(reviewedBatchText(input, [{ ambiguity_id: 'person:v1:000001', decision: 'keep' }]),
+    { text: input.anonymized_text });
+  assert.strictEqual(reviewedBatchText(input, [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }]).text,
+    '[PERSON_007] koordinierte die Einführung.');
+  const missingRegistry = { ...input };
+  delete missingRegistry.replacementForAmbiguity;
+  assert.throws(() => reviewedBatchText(missingRegistry,
+    [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }]), /Personenpseudonym/u);
+});
+
+test('a replayed person decision is accepted only for the exact source, redact choice and bound marker', () => {
+  const reviewedDraft = personReviewInput();
+  const replayed = {
+    ...personReviewInput(),
+    anonymized_text: '[PERSON_007] koordinierte die Einführung.',
+    ambiguities: []
+  };
+  const options = { reviewedDraft, resolvedPersonReplacement: () => '[PERSON_007]' };
+  assert.deepStrictEqual(reviewedBatchText(replayed,
+    [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }], options), { text: replayed.anonymized_text });
+  for (const [name, input, decisions, changedOptions] of [
+    ['keep decision', replayed, [{ ambiguity_id: 'person:v1:000001', decision: 'keep' }], options],
+    ['missing marker', { ...replayed, anonymized_text: 'Die Einführung wurde koordiniert.' },
+      [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }], options],
+    ['wrong marker binding', replayed, [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }],
+      { ...options, resolvedPersonReplacement: () => '[PERSON_008]' }],
+    ['changed source', { ...replayed, original_text: `${replayed.original_text} Zusatz` },
+      [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }], options],
+    ['raw spelling remains', { ...replayed, anonymized_text: `${replayed.anonymized_text} Anna Berger` },
+      [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }], options]
+  ]) {
+    assert.throws(() => reviewedBatchText(input, decisions, changedOptions),
+      (error) => error.code === 'LOCAL_REVIEW_CANCELLED', name);
+  }
 });
 
 async function main() {

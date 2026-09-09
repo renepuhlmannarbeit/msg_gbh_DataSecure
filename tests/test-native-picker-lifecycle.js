@@ -119,6 +119,7 @@ if (process.platform === 'win32') {
     let starts = 0;
     let reservationHeld = false;
     let cancelOnAccepted = true;
+    let noticeConsumes = 0;
     let controller = new AbortController();
     const context = vm.createContext({
       process: { env: {} }, setImmediate, ipcAcknowledgementCause,
@@ -130,18 +131,21 @@ if (process.platform === 'win32') {
       batchQueueFromSelection,
       recordWorkflowEvent: (event) => { if (cancelOnAccepted && event.event === 'picker_selection_accepted') controller.abort(); },
       startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+      consumeConfiguredResultNotices: () => { noticeConsumes++; return { sync: false, network: false }; },
       localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
     });
     vm.runInContext(source, context);
     const cancelled = await context.startPickerBatch({}, { signal: controller.signal });
     assert.strictEqual(cancelled.error, 'local_selection_cancelled');
     assert.strictEqual(starts, 0);
+    assert.strictEqual(noticeConsumes, 0, 'source cancellation cannot consume a pending result-folder notice');
     controller = new AbortController();
     cancelOnAccepted = false;
     const started = await context.startPickerBatch({}, { signal: controller.signal });
     assert.strictEqual(started.local_processing_started, true, 'a cancelled selection releases the next picker');
     controller.abort();
     assert.strictEqual(starts, 1, 'there is no cancellation hook attached to the independent intake worker');
+    assert.strictEqual(noticeConsumes, 1, 'the notice is consumed only after the worker acknowledged intake');
   });
 
   await testAsync('the result folder is selected once and reused without another confirmation', async () => {
@@ -173,6 +177,7 @@ if (process.platform === 'win32') {
       batchQueueFromSelection,
       recordWorkflowEvent: () => {},
       startLocalIntakeExecutor: () => { reservationHeld = false; return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+      consumeConfiguredResultNotices: () => ({ sync: false, network: false }),
       localOnlyStartResponse: () => ({ ok: true, next_action: 'local_intake_accepted_checkpoint_pending' })
     });
     vm.runInContext(source, context);
@@ -369,6 +374,7 @@ if (process.platform === 'win32') {
       batchQueueFromSelection,
       recordWorkflowEvent: () => {},
       startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+      consumeConfiguredResultNotices: () => ({ sync: false, network: false }),
       localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
     });
     vm.runInContext(source, context);

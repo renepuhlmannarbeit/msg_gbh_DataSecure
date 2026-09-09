@@ -104,6 +104,11 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Klare Dateien benötigen keinen Review. Mehrdeutigkeiten werden nach der Analyse
   in einem einzigen lokalen Sammelreview mit direkten fachlichen Aktionen,
   sichtbarem Fortschritt und ausdrücklicher Abschlussfreigabe entschieden.
+- Plausible unbeschriftete Prosanamen werden weder still durchgelassen noch
+  pauschal geschwärzt: Eine enge Grammatik führt die offenen Fundstellen in
+  denselben lokalen Sammelreview. Exakt gleiche mögliche Namen werden dort
+  einheitlich entschieden; bereits bestätigte vollständige Identitäten werden
+  in Folgedokumenten automatisch mit dem stabilen Stapelpseudonym ersetzt.
 - Im Standalone-Produkt: ein Fenster mit Betriebsart, Auswahl, Verarbeitung,
   gegebenenfalls Sammelprüfung und Ergebnis. In beiden Betriebsarten derselbe
   Ablauf: **Auswählen** oder **Hineinziehen**, dann **Starten**. Keine zusätzlichen

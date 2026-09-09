@@ -14,6 +14,7 @@ const { resolveSpans } = require('../plugins/data-secure/server/privacy/spans');
 const { trimReferenceValue } = require('../plugins/data-secure/server/privacy/structured');
 const { collectHeaderNameCandidates, collectPersonAnchors } = require('../plugins/data-secure/server/privacy/entities');
 const { credentialIssuerAmbiguities } = require('../plugins/data-secure/server/privacy/credentials');
+const { personProseAmbiguities } = require('../plugins/data-secure/server/privacy/person-ambiguities');
 const { fullwidth, profiles, professionalText, identifierCases } = require('./lib/identifier-compatibility');
 
 const { test, done, assert } = createSuite('PII regression');
@@ -2234,6 +2235,46 @@ test('credential review keeps professional sentence prefixes outside the organis
     assert.strictEqual(ambiguities.length, 1, source);
     assert.strictEqual(output.slice(ambiguities[0].anonymized_start, ambiguities[0].anonymized_end), 'Contoso GmbH', source);
   }
+});
+
+test('F7 sends narrow prose person candidates to local review without flagging professional phrases', () => {
+  for (const source of [
+    'Anna Berger koordinierte die Einführung.',
+    'Max Mustermann verantwortete die Prüfung.',
+    'María-José Núñez bestätigte den Termin.',
+    'Jean-Luc de la Croix berichtete über den Stand.',
+    'Die Prüfung endete. Anna Berger antwortete sofort.',
+    '**Ferdinand Quastenflosser** berichtete über den Stand.',
+    '[Anna Berger](profil) koordinierte die Einführung.',
+    'Ansprechpartner: Cornelia Zwirbelbach\nAm Montag hat Ferdinand Quastenflosser die Rechnung geschickt.',
+    'Ansprechpartner: Cornelia Zwirbelbach\n- Ferdinand Quastenflosser berichtet morgen.'
+  ]) {
+    const ambiguities = personProseAmbiguities(source, source);
+    assert.strictEqual(ambiguities.length, 1, source);
+    assert.strictEqual(ambiguities[0].type, 'person_prose_ambiguous');
+    assert.strictEqual(ambiguities[0].replacement_kind, 'PERSON');
+  }
+  for (const source of [
+    'Digitale Transformation verbessert Abläufe.',
+    'Strategic Planning verbessert Prozesse.',
+    'Public Administration berichtet über Methoden.',
+    'Cloud Native unterstützt Plattformen.',
+    'Zero Trust verbessert die Sicherheit.',
+    'Spring Boot unterstützt Anwendungen.',
+    'Lean Management verbessert Abläufe.',
+    'Service Management berichtet über den Stand.',
+    'Customer Success koordinierte die Einführung.',
+    'Am Montag hat das Team begonnen.'
+  ]) assert.deepStrictEqual(personProseAmbiguities(source, source), [], source);
+});
+
+test('F7 alignment returns only a candidate that survived ordinary anonymization', () => {
+  const source = 'Name: Erika Beispiel\nAnna Berger koordinierte die Einführung.';
+  const output = anonymize(source, 'personnel_profile').text;
+  const ambiguities = personProseAmbiguities(source, output);
+  assert.strictEqual(ambiguities.length, 1);
+  assert.strictEqual(output.slice(ambiguities[0].anonymized_start, ambiguities[0].anonymized_end), 'Anna Berger');
+  assert.ok(!JSON.stringify(ambiguities).includes('Anna Berger'));
 });
 
 done();

@@ -824,6 +824,34 @@ async function main() {
     }
   });
 
+  await testAsync('F7 never silently publishes a prose name and binds a reviewed PERSON pseudonym', async () => {
+    const { reviewedBatchText } = require('../plugins/data-secure/server/gateway/batch-review-policy');
+    const text = 'Anna Berger koordinierte die Einführung.';
+    const blocked = queueBuffer('f7-blocked.txt', text);
+    await assert.rejects(() => orchestrator.anonymizeSelectedSource(blocked, 'personnel_profile'),
+      (error) => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+    fs.unlinkSync(blocked);
+
+    const reviewed = queueBuffer('f7-reviewed.txt', text);
+    let reviewCount = 0;
+    const result = await orchestrator.anonymizeSelectedSource(reviewed, 'personnel_profile', {
+      reviewText(input) {
+        reviewCount++;
+        assert.strictEqual(input.ambiguous_person_count, undefined);
+        assert.strictEqual(input.ambiguities.length, 1);
+        assert.strictEqual(input.ambiguities[0].type, 'person_prose_ambiguous');
+        return reviewedBatchText(input, input.ambiguities.map((candidate) => ({
+          ambiguity_id: candidate.ambiguity_id,
+          decision: 'redact'
+        })));
+      }
+    });
+    assert.strictEqual(reviewCount, 1);
+    const released = gw.readOutput(result.package_id, result.read_capability, 0, 30000).text;
+    assert.doesNotMatch(released, /Anna Berger/u);
+    assert.match(released, /\[PERSON_001\] koordinierte die Einführung/u);
+  });
+
   await testAsync('a failing residual gate releases nothing and keeps the source file', async () => {
     const before = gw.listOutputs().packages.length;
     const src = queueBuffer('synthetic-failure.txt', 'Kunde: Max Mustermann');

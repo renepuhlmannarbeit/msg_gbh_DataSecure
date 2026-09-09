@@ -295,22 +295,27 @@ async function pickerTimerCancellationCase() {
 async function selectionEditingCase() {
   const harness = await frontendHarness({
     select_files: () => ({ selected_count: 2, total_bytes: 8,
-      ui_context: localContext('Lauf-1', ['a.txt', 'b.txt']) }),
+      ui_context: localContext('Lauf-1', ['Quelle.docx', 'Notiz.md']) }),
     remove_admitted_source: ({ selectionIndex }) => {
-      assert.strictEqual(selectionIndex, 0);
+      assert.strictEqual(selectionIndex, 1, 'the grouped display retains the original queue index');
       return { ok: true, selected_count: 1, total_bytes: 4,
-        ui_context: localContext('Lauf-1', ['b.txt']) };
+        ui_context: localContext('Lauf-1', ['Quelle.docx']) };
     },
     cancel_admission: () => ({ ok: true })
   });
   await harness.click('task-markdown');
   await harness.click('select-files');
   assert.strictEqual(harness.elements['selection-list'].hidden, false);
-  assert.strictEqual(harness.elements['selection-list'].children.length, 2);
-  await harness.elements['selection-list'].children[0].children[1].listeners.click();
+  assert.strictEqual(harness.elements['selection-list'].children.length, 4);
+  assert.match(harness.elements['selection-list'].children[0].textContent, /Direkt lesbare Textdateien \(1\)/u);
+  assert.strictEqual(harness.elements['selection-list'].children[1].children[0].textContent, 'Notiz.md');
+  assert.match(harness.elements['selection-list'].children[2].textContent, /Lokal in Markdown umzuwandelnde Dateien \(1\)/u);
+  assert.strictEqual(harness.elements['selection-list'].children[3].children[0].textContent, 'Quelle.docx');
+  await harness.elements['selection-list'].children[1].children[1].listeners.click();
   assert.strictEqual(harness.count('remove_admitted_source'), 1);
-  assert.strictEqual(harness.elements['selection-list'].children.length, 1);
-  assert.strictEqual(harness.elements['selection-list'].children[0].children[0].textContent, 'b.txt');
+  assert.strictEqual(harness.elements['selection-list'].children.length, 2);
+  assert.match(harness.elements['selection-list'].children[0].textContent, /Lokal in Markdown umzuwandelnde Dateien \(1\)/u);
+  assert.strictEqual(harness.elements['selection-list'].children[1].children[0].textContent, 'Quelle.docx');
   await harness.click('cancel');
   assert.strictEqual(harness.elements['selection-list'].hidden, true);
   assert.strictEqual(harness.elements['selection-list'].children.length, 0);

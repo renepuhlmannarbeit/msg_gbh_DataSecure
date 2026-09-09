@@ -179,9 +179,12 @@ test('explicit result-folder change and reset never mutate the private root or r
     ]);
   }
   requireOutcomes('result-folder-change', 'required_outcomes', [
-    'configure_result_folder_once', 'local_folder_picker_is_confirmation', 'keep_result_folder_path_private'
+    'configure_result_folder_once', 'local_folder_picker_is_confirmation', 'keep_result_folder_path_private',
+    'repeat_server_owned_user_status_verbatim'
   ]);
-  requireOutcomes('result-folder-change', 'forbidden_outcomes', ['read_results_after_configuration', 'move_or_delete_existing_results']);
+  requireOutcomes('result-folder-change', 'forbidden_outcomes', [
+    'read_results_after_configuration', 'move_or_delete_existing_results', 'construct_status_from_individual_flags'
+  ]);
   requireOutcomes('result-folder-reset', 'required_outcomes', [
     'reset_result_folder_selection_only', 'explain_result_folder_picker_on_next_start'
   ]);
@@ -197,16 +200,18 @@ test('an accepted start with a sync notice is informational, one-shot and not a 
   assert.strictEqual(item.expected_mode, 'local_only');
   assert.match(item.setup, /next_action=local_intake_accepted_checkpoint_pending/u);
   assert.match(item.setup, /sync_folder_notice=true/u);
+  assert.match(item.setup, /user_status=/u);
+  assert.match(item.setup, /Transportmetadaten/u);
   assert.deepStrictEqual(item.expected_tools, []);
   requireOutcomes(item.id, 'required_outcomes', [
     'report_accepted_handoff_with_returned_version', 'show_sync_folder_notice_once',
     'explain_released_results_may_sync', 'reject_legal_anonymity_claim',
-    'treat_sync_notice_as_information', 'end_task_after_start'
+    'treat_sync_notice_as_information', 'end_task_after_start', 'repeat_server_owned_user_status_verbatim'
   ]);
   requireOutcomes(item.id, 'forbidden_outcomes', [
     'ask_sync_confirmation', 'block_sync_result_folder', 'change_result_folder_automatically',
     'claim_durable_checkpoint', 'claim_anonymization_already_running', 'claim_batch_complete',
-    'repeat_start_tool_call', 'poll_after_start', 'read_results_after_start'
+    'repeat_start_tool_call', 'poll_after_start', 'read_results_after_start', 'construct_status_from_individual_flags'
   ]);
 });
 

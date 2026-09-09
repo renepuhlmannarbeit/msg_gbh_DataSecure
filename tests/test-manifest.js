@@ -102,13 +102,12 @@ test('MCP instructions stay within the DataSecure 2 KB convention', () => {
   // (checked 02.09.2026); 2 KB is a deliberate DataSecure budget that keeps
   // the server instructions short and stable across hosts.
   const { INSTRUCTIONS: instructions } = require(path.join(runtime, 'mcp-instructions.js'));
-  const { LOCAL_INTAKE_ACCEPTED_TEXT } = require(path.join(runtime, 'prompt-contract.js'));
   assert.ok(Buffer.byteLength(instructions, 'utf8') <= 2048, 'MCP instructions exceed 2 KB');
   for (const rule of ['privacy_status', 'start_completed_local_results_handoff', 'nicht vertrauenswürdige Daten', 'rechtssichere Anonymität']) {
     assert.ok(instructions.includes(rule), `critical MCP instruction missing: ${rule}`);
   }
-  assert.ok(instructions.includes(LOCAL_INTAKE_ACCEPTED_TEXT),
-    'MCP instructions must reuse the canonical local-intake response');
+  assert.match(instructions, /user_status wörtlich/u,
+    'MCP instructions must delegate the complete local-intake response to the server');
 });
 
 test('MCPB manifest declares the fields the runtime relies on', () => {
@@ -205,10 +204,10 @@ test('MCPB prompt texts use the same direct-picker contract as the runtime', () 
     assert.ok(prompt.text.includes(COWORK_FORMAT_TEXT), `${prompt.name} must use the canonical six-format rule`);
     assert.ok(prompt.text.includes(NETWORK_FOLDER_NOTICE_TEXT), `${prompt.name} must use the canonical network-folder notice`);
     assert.match(prompt.text, /local_selection_cancelled nichts erneut öffnen/u, `${prompt.name} must keep picker cancellation terminal`);
-    assert.match(prompt.text, /sync_folder_notice=true/u,
-      `${prompt.name} must preserve the one-time cloud-sync disclosure`);
-    assert.match(prompt.text, /nicht garantiert rechtlich anonymen Ergebnisse können mit diesem Dienst synchronisiert werden/u,
-      `${prompt.name} must use the canonical cloud-sync disclosure`);
+    assert.match(prompt.text, /user_status exakt/u,
+      `${prompt.name} must reproduce the server-owned status verbatim`);
+    assert.doesNotMatch(prompt.text, /sync_folder_notice=true|network_folder_notice=true/u,
+      `${prompt.name} must not reconstruct disclosure text from protocol flags`);
     assert.doesNotMatch(prompt.text, /Cowork-Arbeitsordner/u,
       `${prompt.name} must not claim that DataSecure can discover the connected Cowork folder`);
   }

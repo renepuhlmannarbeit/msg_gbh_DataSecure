@@ -8,7 +8,8 @@ const path = require('path');
 const { dataRoot } = require('../runtime');
 
 const CONFIG_NAME = 'result-root.json';
-const SCHEMA = 'datasecure-result-root/1';
+const SCHEMA = 'datasecure-result-root/2';
+const LEGACY_SCHEMA = 'datasecure-result-root/1';
 
 function configDirectory() { return path.join(dataRoot(), 'settings'); }
 function configPath() { return path.join(configDirectory(), CONFIG_NAME); }
@@ -48,10 +49,17 @@ function readRecord() {
     const stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 4096) return null;
     const value = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (!value || value.schema !== SCHEMA || typeof value.root !== 'string' ||
-        !value.identity || Object.keys(value).sort().join(',') !== 'identity,root,schema') return null;
-    const current = inspectRoot(value.root);
-    return sameIdentity(current.identity, value.identity) ? value : null;
+    const keys = Object.keys(value || {}).sort().join(',');
+    const legacy = value?.schema === LEGACY_SCHEMA && keys === 'identity,root,schema';
+    const isCurrent = value?.schema === SCHEMA && keys === 'identity,notices,root,schema' &&
+      value.notices && Object.keys(value.notices).sort().join(',') === 'network,sync' &&
+      typeof value.notices.network === 'boolean' && typeof value.notices.sync === 'boolean';
+    if ((!legacy && !isCurrent) || typeof value.root !== 'string' || !value.identity) return null;
+    const inspected = inspectRoot(value.root);
+    return sameIdentity(inspected.identity, value.identity) ? {
+      ...value,
+      notices: isCurrent ? value.notices : { sync: false, network: false }
+    } : null;
   } catch { return null; }
 }
 function readConfiguredResultRoot() {
@@ -121,10 +129,30 @@ function saveConfiguredResultRoot(root) {
   const directory = ensureConfigDirectory();
   const target = configPath();
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.${Date.now()}.tmp`);
-  const payload = JSON.stringify({ schema: SCHEMA, root: selected.root, identity: selected.identity });
+  const payload = JSON.stringify({ schema: SCHEMA, root: selected.root, identity: selected.identity, notices: {
+    sync: isCommonSyncFolder(selected.root), network: isNetworkResultFolder(selected.root)
+  } });
   fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try { renameWithTransientRetry(temporary, target); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+}
+function consumeConfiguredResultNotices() {
+  if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) {
+    const root = readConfiguredResultRoot();
+    return { sync: isCommonSyncFolder(root), network: isNetworkResultFolder(root) };
+  }
+  const record = readRecord();
+  if (!record) return { sync: false, network: false };
+  const notices = { sync: record.notices.sync === true, network: record.notices.network === true };
+  if (!notices.sync && !notices.network) return notices;
+  const directory = ensureConfigDirectory();
+  const target = configPath();
+  const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.${Date.now()}.tmp`);
+  const payload = JSON.stringify({ ...record, schema: SCHEMA, notices: { sync: false, network: false } });
+  fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  try { renameWithTransientRetry(temporary, target); }
+  finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+  return notices;
 }
 function clearConfiguredResultRoot() {
   try { fs.unlinkSync(configPath()); }
@@ -154,7 +182,7 @@ function isNetworkResultFolder(root, platform = process.platform) {
 }
 
 module.exports = {
-  CONFIG_NAME, SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, recordedResultRootPath,
+  CONFIG_NAME, SCHEMA, LEGACY_SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, recordedResultRootPath,
   saveConfiguredResultRoot, clearConfiguredResultRoot, resultOutputDirectory,
-  isCommonSyncFolder, isNetworkResultFolder, visibleResultTreeOverlaps
+  consumeConfiguredResultNotices, isCommonSyncFolder, isNetworkResultFolder, visibleResultTreeOverlaps
 };

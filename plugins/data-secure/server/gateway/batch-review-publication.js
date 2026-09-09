@@ -76,7 +76,7 @@ function createBatchReviewPublication(options = {}) {
         decisionIds.add(id);
       }
       if (decisionIds.size !== expectedIds.size) throw invalidBinding();
-      try { reviewedBatchText(draft, decisions); }
+      try { reviewedBatchText(draft, decisions, { validateOnly: true }); }
       catch { throw invalidBinding(); }
     }
     return decisionsByIndex;
@@ -129,7 +129,10 @@ function createBatchReviewPublication(options = {}) {
           removeImages: state.remove_images,
           packageId: packageIdForItem(item),
           retainPublishedOnAfterPublishFailure: true,
-          reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1)),
+          reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1), {
+            reviewedDraft: drafts[index],
+            resolvedPersonReplacement: (value) => pseudonymRegistry?.lookup?.('PERSON', value)
+          }),
           beforePublish: async (details) => {
             positiveDocumentResult(details?.document_result);
             verifiedDocumentResult = details.document_result;

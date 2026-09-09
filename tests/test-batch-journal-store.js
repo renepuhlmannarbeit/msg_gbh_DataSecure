@@ -102,7 +102,7 @@ test('writeState rejects an oversized otherwise-valid journal before creating a 
   const item = fixture();
   try {
     const oversized = state({ pseudonym_contract_version: 'batch-pseudonym/v1',
-      pseudonym_ruleset_version: 'de-business/2', pseudonym_seed: 'A'.repeat(43),
+      pseudonym_ruleset_version: 'de-business/3', pseudonym_seed: 'A'.repeat(43),
       pseudonym_registry_state: { labels: [], bindings: [] }, padding: 'x'.repeat(MAX_JOURNAL_BYTES) });
     assert.throws(() => item.store.writeState(oversized), /BATCH_JOURNAL_SIZE_LIMIT/);
     assert.strictEqual(fs.existsSync(item.target), false);

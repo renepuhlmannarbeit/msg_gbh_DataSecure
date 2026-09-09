@@ -45,6 +45,7 @@ function processingModeForBatch(state) {
   if (state.schema !== 'datasecure-batch/5' || state.processing_mode !== MODES.MARKDOWN ||
       !Object.hasOwn(state, 'schema') || !Object.hasOwn(state, 'processing_mode') || !Object.hasOwn(state, 'product_channel') ||
       Object.keys(state).some((key) => key.startsWith('pseudonym_')) ||
+      Object.hasOwn(state, 'core_policy_fingerprint') ||
       Object.hasOwn(state, 'read_capability') || Object.hasOwn(state, 'package_id') ||
       Object.hasOwn(state, 'package_identity') || state.remove_images === true) fail('PROCESSING_MODE_INVALID');
   return validateProcessingMode(state.processing_mode, channel);

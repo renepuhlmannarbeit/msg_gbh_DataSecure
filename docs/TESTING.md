@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 08.09.2026 · 3.2.0-rc131
+Stand: 10.09.2026 · 3.2.0-rc132
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -9,13 +9,18 @@ enthält nur die heute gültigen Testklassen und Releasebefehle.
 RC111 trennt außerdem reine Core-Verträge von den Produktadaptern.
 `test-core-contracts.mjs` prüft Exportidentität der alten Importpfade, reine
 transitive Abhängigkeiten und beide tatsächlichen Paketprojektionen.
-`test-core-policy-binding.mjs` gehört zum lokalen Vollprofil: ausgewählte
-gemeinsame Code-/Policy-Dateien werden aus beiden Projektionen gehasht und
-ein erster Golden-Korpus in getrennten Produktprozessen verarbeitet.
+`test-core-policy-binding.mjs` gehört zum lokalen Vollprofil: Die explizite
+vollständige Liste der ausführungsbestimmenden gemeinsamen Code-/Policy-Dateien
+wird aus beiden Projektionen gehasht und ein Golden-Korpus in getrennten
+Produktprozessen verarbeitet.
 Typisierte, bijektive Pseudonymnormalisierung vergleicht v1/v2 semantisch;
 unterschiedliche Personen/Firmen dürfen nicht zusammenfallen und Fachtext
-darf nicht verschwinden. Das ist keine vollständige Golden-Abdeckung und
-kein persistierter Journal-/Release-Fingerprint.
+darf nicht verschwinden. Seit RC132 wird derselbe SHA-256-Policyfingerprint
+zusätzlich in neuen Anonymisierungsjournalen persistiert. Eine Fortsetzung mit
+abweichender Policy oder Regelversion stoppt fail-closed; reine
+Markdown-Konvertierung besitzt weiterhin keinen Privacy-Fingerprint. Der
+Fingerprint ist kein Release- oder Vollständigkeitsnachweis und ersetzt weder
+weitere Goldenfälle noch Zielhost- und Fachabnahme.
 
 Die normale Standalone-App schreibt ihre inhaltsfreien Interaktionslogs ohne
 zusätzlichen Anwenderdialog. Für eine ausdrücklich aktivierte Supportsession

@@ -9,8 +9,8 @@ const { normalizeText } = require('../privacy/base');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 const { DEFAULT_REVIEW_TIMEOUT_MS } = require('./review-timeouts');
 
-const REVIEW_SCHEMA = 'data-secure-text-review/2';
-const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/2';
+const REVIEW_SCHEMA = 'data-secure-text-review/3';
+const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/3';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
@@ -77,9 +77,17 @@ function exactContextLine(text, start, end) {
 function decisionGroups(ambiguities, originalText) {
   const candidatesByContext = new Map();
   for (const candidate of ambiguities) {
-    const context = exactContextLine(originalText, candidate.original_start, candidate.original_end);
-    if (!context) continue;
-    const key = `${candidate.type}\u0000${context}`;
+    const source = String(originalText || '');
+    const identity = normalizeText(source.slice(candidate.original_start, candidate.original_end))
+      .replace(/\s+/gu, ' ').trim().toLocaleLowerCase('de-DE');
+    const context = exactContextLine(source, candidate.original_start, candidate.original_end);
+    // A potential person's exact normalized spelling is the decision unit:
+    // allowing the same spelling to be kept in one document and redacted in
+    // another would contradict the batch-wide identity contract. Credential
+    // issuers remain groupable only under the stricter full-context proof.
+    const basis = candidate.type === 'person_prose_ambiguous' ? identity : context;
+    if (!basis) continue;
+    const key = `${candidate.type}\u0000${basis}`;
     const ids = candidatesByContext.get(key) || [];
     ids.push(candidate.ambiguity_id);
     candidatesByContext.set(key, ids);
@@ -88,18 +96,18 @@ function decisionGroups(ambiguities, originalText) {
   return [...candidatesByContext.values()]
     .filter((ids) => ids.length > 1)
     .map((ids) => ({
-      group_id: `same_context:v1:${String(++group).padStart(6, '0')}`,
+      group_id: `same_decision:v1:${String(++group).padStart(6, '0')}`,
       candidate_ids: ids
     }));
 }
 
 function groupForCandidate(draft, ambiguityId) {
-  const groups = draft?.batch_review?.decision_groups;
+  const groups = draft?.decision_groups;
   if (!Array.isArray(groups)) return null;
   const matches = groups.filter((group) => group && Array.isArray(group.candidate_ids) && group.candidate_ids.includes(ambiguityId));
   if (matches.length !== 1) return null;
   const group = matches[0];
-  if (!/^same_context:v1:[0-9]{6}$/u.test(String(group.group_id || '')) ||
+  if (!/^same_decision:v1:[0-9]{6}$/u.test(String(group.group_id || '')) ||
     group.candidate_ids.length < 2 || new Set(group.candidate_ids).size !== group.candidate_ids.length) return null;
   return group;
 }
@@ -118,10 +126,14 @@ function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [
     type: span.type
   }));
   const safeAmbiguities = (ambiguities || []).map((item) => {
-    const keys = ['ambiguity_id', 'anonymized_end', 'anonymized_start', 'original_end', 'original_start', 'type'];
+    const credential = item?.type === 'credential_issuer_ambiguous';
+    const person = item?.type === 'person_prose_ambiguous';
+    const keys = credential
+      ? ['ambiguity_id', 'anonymized_end', 'anonymized_start', 'original_end', 'original_start', 'type']
+      : ['ambiguity_id', 'anonymized_end', 'anonymized_start', 'original_end', 'original_start', 'replacement_kind', 'type'];
     if (!item || Object.keys(item).sort().join(',') !== keys.sort().join(',') ||
-      !/^credential:v2:[0-9]{6}$/.test(String(item.ambiguity_id || '')) ||
-      item.type !== 'credential_issuer_ambiguous' ||
+      !(credential ? /^credential:v2:[0-9]{6}$/u : /^person:v1:[0-9]{6}$/u).test(String(item.ambiguity_id || '')) ||
+      (!credential && (!person || item.replacement_kind !== 'PERSON')) ||
       !Number.isSafeInteger(item.original_start) || !Number.isSafeInteger(item.original_end) ||
       !Number.isSafeInteger(item.anonymized_start) || !Number.isSafeInteger(item.anonymized_end) ||
       item.original_start < 0 || item.original_end <= item.original_start || item.original_end > original.length ||
@@ -143,6 +155,10 @@ function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [
     anonymized_text: anonymized,
     locators,
     ambiguities: safeAmbiguities,
+    // Local-only decision metadata is part of every review draft. This makes
+    // repeated person spellings one decision unit even inside a single file;
+    // the aggregate batch facade merely adds progress and document mapping.
+    decision_groups: decisionGroups(safeAmbiguities, original),
     batch_index: batchIndex,
     batch_total: batchTotal,
     allow_defer: allowDefer
@@ -193,11 +209,12 @@ function buildBatchReviewDraft(documents, progress = {}) {
     anonymizedOffset += label.length;
     const candidateIds = new Map();
     for (const candidate of individual.ambiguities) {
-      const globalId = `credential:v2:${String(++globalCandidate).padStart(6, '0')}`;
+      const globalId = `${candidate.type === 'person_prose_ambiguous' ? 'person:v1' : 'credential:v2'}:${String(++globalCandidate).padStart(6, '0')}`;
       candidateIds.set(globalId, candidate.ambiguity_id);
       ambiguities.push({
         ambiguity_id: globalId,
         type: candidate.type,
+        ...(candidate.replacement_kind ? { replacement_kind: candidate.replacement_kind } : {}),
         original_start: originalOffset + candidate.original_start,
         original_end: originalOffset + candidate.original_end,
         anonymized_start: anonymizedOffset + candidate.anonymized_start,
@@ -229,7 +246,7 @@ function buildBatchReviewDraft(documents, progress = {}) {
     // Candidate IDs are opaque local handles. The raw context used to prove
     // equality remains only in the already displayed local draft and is never
     // copied into this metadata, a journal, MCP response or diagnostic.
-    decision_groups: decisionGroups(draft.ambiguities, draft.original_text)
+    decision_groups: draft.decision_groups
   };
   return { draft, entries };
 }
@@ -337,28 +354,28 @@ function powershellReviewScript() {
     '$skip = New-Object System.Windows.Forms.Button; $skip.Text = "Prüfung überspringen"; $skip.Width = 160',
     '$cancel = New-Object System.Windows.Forms.Button; $cancel.Text = "Abbrechen"; $cancel.Width = 110',
     '$defer = New-Object System.Windows.Forms.Button; $defer.Text = "&Später entscheiden"; $defer.Width = 155',
-    '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "&Zertifikatsanbieter behalten"; $keep.Width = 205',
-    '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "&Organisation anonymisieren"; $anonOrg.Width = 205',
+    '$keep = New-Object System.Windows.Forms.Button; $keep.Text = "&Beibehalten"; $keep.Width = 205',
+    '$anonOrg = New-Object System.Windows.Forms.Button; $anonOrg.Text = "&Anonymisieren"; $anonOrg.Width = 205',
     '$keepGroup = New-Object System.Windows.Forms.Button; $keepGroup.Text = "Gleiche behalten"; $keepGroup.Width = 155',
     '$redactGroup = New-Object System.Windows.Forms.Button; $redactGroup.Text = "Gleiche anonymisieren"; $redactGroup.Width = 175',
     '$back = New-Object System.Windows.Forms.Button; $back.Text = "&Rückgängig / ändern"; $back.Width = 155',
     '$ambiguityInfo = New-Object System.Windows.Forms.Label; $ambiguityInfo.Width = 330; $ambiguityInfo.Height = 38',
     '$script:answer = $null; $script:redactions = New-Object System.Collections.ArrayList; $script:decisions = @{}; $script:current = 0',
     'function Ambiguity-Redactions { $items = New-Object System.Collections.ArrayList; foreach ($candidate in $draft.ambiguities) { if ($script:decisions[[string]$candidate.ambiguity_id] -eq "redact") { [void]$items.Add(@{ start = [int]$candidate.anonymized_start; end = [int]$candidate.anonymized_end }) } }; return $items }',
-    'function Update-Preview { $value = [string]$draft.anonymized_text; $all = @($script:redactions) + @(Ambiguity-Redactions); foreach ($item in @($all | Sort-Object start -Descending)) { $value = $value.Substring(0, [int]$item.start) + "[MANUAL_REDACTION]" + $value.Substring([int]$item.end) }; $preview.Text = $value }',
-    'function Group-Candidates($candidate) { if ($null -eq $draft.batch_review -or $null -eq $draft.batch_review.decision_groups) { return @() }; foreach ($group in $draft.batch_review.decision_groups) { if ($null -ne $group.candidate_ids -and @($group.candidate_ids).Count -gt 1 -and @($group.candidate_ids) -contains [string]$candidate.ambiguity_id) { return @($group.candidate_ids) } }; return @() }',
+    'function Update-Preview { $value = [string]$draft.anonymized_text; $all = @($script:redactions) + @(Ambiguity-Redactions); foreach ($item in @($all | Sort-Object start -Descending)) { $candidate = @($draft.ambiguities | Where-Object { [int]$_.anonymized_start -eq [int]$item.start -and [int]$_.anonymized_end -eq [int]$item.end }) | Select-Object -First 1; $replacement = if ($null -ne $candidate -and [string]$candidate.replacement_kind -eq "PERSON") { "[PERSON]" } else { "[MANUAL_REDACTION]" }; $value = $value.Substring(0, [int]$item.start) + $replacement + $value.Substring([int]$item.end) }; $preview.Text = $value }',
+    'function Group-Candidates($candidate) { if ($null -eq $draft.decision_groups) { return @() }; foreach ($group in $draft.decision_groups) { if ($null -ne $group.candidate_ids -and @($group.candidate_ids).Count -gt 1 -and @($group.candidate_ids) -contains [string]$candidate.ambiguity_id) { return @($group.candidate_ids) } }; return @() }',
     'function Advance-ToOpen { while ($script:current -lt $draft.ambiguities.Count -and $null -ne $script:decisions[[string]$draft.ambiguities[$script:current].ambiguity_id]) { $script:current++ } }',
-    'function Show-Ambiguity { Advance-ToOpen; if ($draft.ambiguities.Count -eq 0) { $ambiguityInfo.Text = "Keine offene Zuordnung"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $keepGroup.Visible = $false; $redactGroup.Visible = $false; $back.Enabled = $false; $approve.Enabled = $true; return }; if ($script:current -ge $draft.ambiguities.Count) { $ambiguityInfo.Text = "Alle " + $draft.ambiguities.Count + " Stellen entschieden"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $keepGroup.Visible = $false; $redactGroup.Visible = $false; $back.Enabled = $true; $approve.Enabled = $true; return }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; $groupAvailable = @($group).Count -gt 1; $ambiguityInfo.Text = "Stelle " + ($script:current + 1) + " von " + $draft.ambiguities.Count + ": Gehört dieser Name zu einer Zertifizierung?"; if ($groupAvailable) { $ambiguityInfo.Text += " Für " + @($group).Count + " nachweislich gleiche lokale Stellen kannst du bewusst dieselbe Entscheidung übernehmen." }; $keep.Enabled = $true; $anonOrg.Enabled = $true; $keepGroup.Visible = $groupAvailable; $redactGroup.Visible = $groupAvailable; $back.Enabled = ($script:current -gt 0); $approve.Enabled = $false; $right.Select([int]$candidate.anonymized_start, [int]$candidate.anonymized_end - [int]$candidate.anonymized_start); $right.ScrollToCaret() }',
-    'function Decide-Ambiguity([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $script:decisions[[string]$candidate.ambiguity_id] = $decision; $script:current++; Update-Preview; Show-Ambiguity }',
+    'function Show-Ambiguity { Advance-ToOpen; if ($draft.ambiguities.Count -eq 0) { $ambiguityInfo.Text = "Keine offene Zuordnung"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $keepGroup.Visible = $false; $redactGroup.Visible = $false; $back.Enabled = $false; $approve.Enabled = $true; return }; if ($script:current -ge $draft.ambiguities.Count) { $ambiguityInfo.Text = "Alle " + $draft.ambiguities.Count + " Stellen entschieden"; $keep.Enabled = $false; $anonOrg.Enabled = $false; $keepGroup.Visible = $false; $redactGroup.Visible = $false; $back.Enabled = $true; $approve.Enabled = $true; return }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; $groupAvailable = @($group).Count -gt 1; $personGroup = $groupAvailable -and [string]$candidate.type -eq "person_prose_ambiguous"; if ([string]$candidate.type -eq "person_prose_ambiguous") { $ambiguityInfo.Text = "Stelle " + ($script:current + 1) + " von " + $draft.ambiguities.Count + ": Ist dies ein Personenname?"; $keep.Text = "&Kein Personenname - beibehalten"; $anonOrg.Text = "&Als Person anonymisieren" } else { $ambiguityInfo.Text = "Stelle " + ($script:current + 1) + " von " + $draft.ambiguities.Count + ": Gehört dieser Name zu einer Zertifizierung?"; $keep.Text = "&Zertifikatsanbieter behalten"; $anonOrg.Text = "&Organisation anonymisieren" }; if ($personGroup) { $ambiguityInfo.Text += " Die Entscheidung gilt automatisch für " + @($group).Count + " gleichnamige Stellen." } elseif ($groupAvailable) { $ambiguityInfo.Text += " Für " + @($group).Count + " nachweislich gleiche lokale Stellen kannst du bewusst dieselbe Entscheidung übernehmen." }; $keep.Enabled = $true; $anonOrg.Enabled = $true; $keepGroup.Visible = $groupAvailable -and -not $personGroup; $redactGroup.Visible = $groupAvailable -and -not $personGroup; $back.Enabled = ($script:current -gt 0); $approve.Enabled = $false; $right.Select([int]$candidate.anonymized_start, [int]$candidate.anonymized_end - [int]$candidate.anonymized_start); $right.ScrollToCaret() }',
+    'function Decide-Ambiguity([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; if ([string]$candidate.type -eq "person_prose_ambiguous" -and @($group).Count -gt 1) { foreach ($id in @($group)) { $script:decisions[[string]$id] = $decision } } else { $script:decisions[[string]$candidate.ambiguity_id] = $decision }; $script:current++; Update-Preview; Show-Ambiguity }',
     'function Decide-Group([string]$decision) { if ($script:current -ge $draft.ambiguities.Count) { return }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; if (@($group).Count -lt 2) { return }; foreach ($id in @($group)) { $script:decisions[[string]$id] = $decision }; $script:current++; Update-Preview; Show-Ambiguity }',
-    '$redact.Add_Click({ $start = $right.SelectionStart; $length = $right.SelectionLength; if ($length -le 0) { [void][System.Windows.Forms.MessageBox]::Show("Bitte zuerst rechts eine sensible Stelle auswählen.", "DataSecure", "OK", "Information"); return }; $end = $start + $length; foreach ($candidate in $draft.ambiguities) { if ($start -lt [int]$candidate.anonymized_end -and [int]$candidate.anonymized_start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Für gelb markierte Organisationen bitte die Schaltflächen Erhalten oder Anonymisieren verwenden.", "DataSecure", "OK", "Warning"); return } }; foreach ($item in $script:redactions) { if ($start -lt [int]$item.end -and [int]$item.start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Diese Auswahl überschneidet sich mit einer bestehenden manuellen Anonymisierung.", "DataSecure", "OK", "Warning"); return } }; [void]$script:redactions.Add(@{ start = $start; end = $end }); $right.SelectionBackColor = [System.Drawing.Color]::LightSalmon; $right.Select(0, 0); Update-Preview })',
+    '$redact.Add_Click({ $start = $right.SelectionStart; $length = $right.SelectionLength; if ($length -le 0) { [void][System.Windows.Forms.MessageBox]::Show("Bitte zuerst rechts eine sensible Stelle auswählen.", "DataSecure", "OK", "Information"); return }; $end = $start + $length; foreach ($candidate in $draft.ambiguities) { if ($start -lt [int]$candidate.anonymized_end -and [int]$candidate.anonymized_start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Für gelb markierte Namen bitte die zugehörigen Schaltflächen verwenden.", "DataSecure", "OK", "Warning"); return } }; foreach ($item in $script:redactions) { if ($start -lt [int]$item.end -and [int]$item.start -lt $end) { [void][System.Windows.Forms.MessageBox]::Show("Diese Auswahl überschneidet sich mit einer bestehenden manuellen Anonymisierung.", "DataSecure", "OK", "Warning"); return } }; [void]$script:redactions.Add(@{ start = $start; end = $end }); $right.SelectionBackColor = [System.Drawing.Color]::LightSalmon; $right.Select(0, 0); Update-Preview })',
     '$keep.Add_Click({ Decide-Ambiguity "keep" })',
     '$anonOrg.Add_Click({ Decide-Ambiguity "redact" })',
     '$keepGroup.Add_Click({ Decide-Group "keep" })',
     '$redactGroup.Add_Click({ Decide-Group "redact" })',
     '$back.Add_Click({ if ($draft.ambiguities.Count -eq 0) { return }; if ($script:current -ge $draft.ambiguities.Count) { $script:current = $draft.ambiguities.Count - 1 } elseif ($script:current -gt 0) { $script:current-- }; $candidate = $draft.ambiguities[$script:current]; $group = Group-Candidates $candidate; if (@($group).Count -gt 1) { foreach ($id in @($group)) { [void]$script:decisions.Remove([string]$id) } } else { [void]$script:decisions.Remove([string]$candidate.ambiguity_id) }; Update-Preview; Show-Ambiguity })',
-    '$approve.Add_Click({ if ($script:decisions.Count -ne $draft.ambiguities.Count) { [void][System.Windows.Forms.MessageBox]::Show("Bitte jede gelb markierte Organisation als Zertifizierung erhalten oder anonymisieren.", "DataSecure", "OK", "Warning"); return }; $decisionList = @(); foreach ($candidate in $draft.ambiguities) { $decisionList += @{ ambiguity_id = [string]$candidate.ambiguity_id; decision = [string]$script:decisions[[string]$candidate.ambiguity_id] } }; $script:answer = @{ action = "reviewed"; redactions = @($script:redactions); decisions = $decisionList }; $form.Close() })',
-    '$skip.Add_Click({ if ($draft.ambiguities.Count -gt 0) { [void][System.Windows.Forms.MessageBox]::Show("Bei gelb markierten Organisationen darf die Prüfung nicht übersprungen werden.", "DataSecure", "OK", "Warning"); return }; $script:answer = @{ action = "skipped" }; $form.Close() })',
+    '$approve.Add_Click({ if ($script:decisions.Count -ne $draft.ambiguities.Count) { [void][System.Windows.Forms.MessageBox]::Show("Bitte jede gelb markierte Stelle beibehalten oder anonymisieren.", "DataSecure", "OK", "Warning"); return }; $decisionList = @(); foreach ($candidate in $draft.ambiguities) { $decisionList += @{ ambiguity_id = [string]$candidate.ambiguity_id; decision = [string]$script:decisions[[string]$candidate.ambiguity_id] } }; $script:answer = @{ action = "reviewed"; redactions = @($script:redactions); decisions = $decisionList }; $form.Close() })',
+    '$skip.Add_Click({ if ($draft.ambiguities.Count -gt 0) { [void][System.Windows.Forms.MessageBox]::Show("Bei gelb markierten Stellen darf die Prüfung nicht übersprungen werden.", "DataSecure", "OK", "Warning"); return }; $script:answer = @{ action = "skipped" }; $form.Close() })',
     '$cancel.Add_Click({ $script:answer = @{ action = "cancelled" }; $form.Close() })',
     '$defer.Add_Click({ $script:answer = @{ action = "deferred" }; $form.Close() })',
     '$form.Add_FormClosing({ if ($null -eq $script:answer) { $script:answer = @{ action = "cancelled" } } })',
@@ -407,7 +424,7 @@ function darwinDialogContract(phase, allowDefer = false) {
 // The macOS reviewer deliberately receives the review draft over stdin as
 // UTF-8. Passing text through an osascript argument would expose it in the
 // process list; a temporary file would add an unnecessary raw-data lifecycle.
-// One AppKit sheet presents every known credential ambiguity in one scrollable
+// One AppKit sheet presents every known typed ambiguity in one scrollable
 // collection. It does not pretend to offer the Windows free-range editor.
 function darwinReviewScript() {
   return [
@@ -416,8 +433,8 @@ function darwinReviewScript() {
     '  var data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;',
     '  var source = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding));',
     '  var draft = JSON.parse(source);',
-    '  var title = draft.batch_review ? "DataSecure – lokale Stapelprüfung" : "DataSecure – lokale Zertifikatsprüfung";',
-    '  var progress = draft.batch_review ? "Automatisch abgeschlossen: " + draft.batch_review.automatically_completed_count + ". Bereits lokal geprüft: " + draft.batch_review.previously_reviewed_count + ". Jetzt: " + draft.batch_review.review_finding_count + " Stellen in " + draft.batch_review.review_document_count + " Dateien." : "Prüfe die markierten Organisationen.";',
+    '  var title = draft.batch_review ? "DataSecure – lokale Stapelprüfung" : "DataSecure – lokale Datenschutzprüfung";',
+    '  var progress = draft.batch_review ? "Automatisch abgeschlossen: " + draft.batch_review.automatically_completed_count + ". Bereits lokal geprüft: " + draft.batch_review.previously_reviewed_count + ". Jetzt: " + draft.batch_review.review_finding_count + " Stellen in " + draft.batch_review.review_document_count + " Dateien." : "Prüfe die markierten Stellen.";',
     '  try {',
     '    if (!Array.isArray(draft.ambiguities) || draft.ambiguities.length > 1000) throw new Error("review size");',
     '    var app = $.NSApplication.sharedApplication; app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);',
@@ -425,26 +442,30 @@ function darwinReviewScript() {
     '    alert.addButtonWithTitle($("Geprüft freigeben"));',
     '    if (draft.allow_defer) alert.addButtonWithTitle($("Später entscheiden"));',
     '    alert.addButtonWithTitle($("Abbrechen"));',
-    '    var width = 760; var rowHeight = 86; var contentHeight = Math.max(80, draft.ambiguities.length * rowHeight);',
+    '    function personGroupIds(item) { if (item.type !== "person_prose_ambiguous" || !Array.isArray(draft.decision_groups)) return [item.ambiguity_id]; for (var groupIndex = 0; groupIndex < draft.decision_groups.length; groupIndex++) { var ids = draft.decision_groups[groupIndex].candidate_ids; if (Array.isArray(ids) && ids.length > 1 && ids.indexOf(item.ambiguity_id) >= 0) return ids.slice(); } return [item.ambiguity_id]; }',
+    '    var rendered = {}; var reviewItems = []; draft.ambiguities.forEach(function(item) { if (rendered[item.ambiguity_id]) return; var ids = personGroupIds(item); ids.forEach(function(id) { rendered[id] = true; }); reviewItems.push({ item: item, ids: ids }); });',
+    '    var width = 760; var rowHeight = 86; var contentHeight = Math.max(80, reviewItems.length * rowHeight);',
     '    var document = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, width, contentHeight));',
     '    var controls = [];',
-    '    draft.ambiguities.forEach(function(item, index) {',
+    '    reviewItems.forEach(function(entry, index) {',
+    '      var item = entry.item;',
     '      var value = draft.original_text.substring(item.original_start, item.original_end);',
     '      var before = draft.original_text.substring(Math.max(0, item.original_start - 80), item.original_start);',
     '      var after = draft.original_text.substring(item.original_end, Math.min(draft.original_text.length, item.original_end + 80));',
     '      var y = contentHeight - ((index + 1) * rowHeight) + 42;',
-    '      var label = $.NSTextField.wrappingLabelWithString($("Stelle " + (index + 1) + ": " + before + "[" + value + "]" + after));',
+    '      var question = item.type === "person_prose_ambiguous" ? "Ist dies ein Personenname?" + (entry.ids.length > 1 ? " Die Entscheidung gilt für " + entry.ids.length + " gleichnamige Stellen." : "") : "Ist dies der Aussteller einer Zertifizierung?";',
+    '      var label = $.NSTextField.wrappingLabelWithString($("Stelle " + (index + 1) + ": " + question + "\\n" + before + "[" + value + "]" + after));',
     '      label.frame = $.NSMakeRect(0, y, 550, 40); document.addSubview(label);',
     '      var choice = $.NSPopUpButton.alloc.initWithFramePullsDown($.NSMakeRect(570, y + 4, 180, 32), false);',
     '      choice.addItemsWithTitles($(["Bitte entscheiden", "Beibehalten", "Anonymisieren"])); document.addSubview(choice);',
-    '      controls.push({ id: item.ambiguity_id, choice: choice });',
+    '      controls.push({ ids: entry.ids, choice: choice });',
     '    });',
     '    if (draft.ambiguities.length === 0) { var empty = $.NSTextField.labelWithString($("Keine offene Zuordnung.")); empty.frame = $.NSMakeRect(0, 24, width, 32); document.addSubview(empty); }',
     '    var scroll = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 0, width, Math.min(500, contentHeight))); scroll.hasVerticalScroller = true; scroll.documentView = document; alert.accessoryView = scroll;',
     '    app.activateIgnoringOtherApps(true); alert.window.makeKeyAndOrderFront(null); alert.window.displayIfNeeded();',
     '    var response = alert.runModal;',
     '    if (response !== $.NSAlertFirstButtonReturn) { if (draft.allow_defer && response === $.NSAlertSecondButtonReturn) return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
-    '    var decisions = []; for (var index = 0; index < controls.length; index++) { var selected = ObjC.unwrap(controls[index].choice.titleOfSelectedItem); if (selected !== "Beibehalten" && selected !== "Anonymisieren") return JSON.stringify({ action: draft.allow_defer ? "deferred" : "cancelled" }); decisions.push({ ambiguity_id: controls[index].id, decision: selected === "Beibehalten" ? "keep" : "redact" }); }',
+    '    var decisions = []; for (var index = 0; index < controls.length; index++) { var selected = ObjC.unwrap(controls[index].choice.titleOfSelectedItem); if (selected !== "Beibehalten" && selected !== "Anonymisieren") return JSON.stringify({ action: draft.allow_defer ? "deferred" : "cancelled" }); var decision = selected === "Beibehalten" ? "keep" : "redact"; controls[index].ids.forEach(function(id) { decisions.push({ ambiguity_id: id, decision: decision }); }); }',
     '    return JSON.stringify({ action: "reviewed", redactions: [], decisions: decisions });',
     '  } catch (error) { return JSON.stringify({ action: draft.allow_defer ? "deferred" : "cancelled" }); }',
     '}'
@@ -455,19 +476,22 @@ function linuxReviewContext(draft, item, index) {
   const before = draft.original_text.slice(Math.max(0, item.original_start - 300), item.original_start);
   const value = draft.original_text.slice(item.original_start, item.original_end);
   const after = draft.original_text.slice(item.original_end, Math.min(draft.original_text.length, item.original_end + 300));
+  const personGroup = item.type === 'person_prose_ambiguous' ? groupForCandidate(draft, item.ambiguity_id) : null;
   return [
-    `DataSecure – ${draft.batch_review ? 'lokale Stapelprüfung' : 'lokale Zertifikatsprüfung'} (${index + 1} von ${draft.ambiguities.length})`,
+    `DataSecure – ${draft.batch_review ? 'lokale Stapelprüfung' : 'lokale Datenschutzprüfung'} (${index + 1} von ${draft.ambiguities.length})`,
     ...(draft.batch_review ? ['', batchReviewSummary(draft)] : []),
     '',
     'Die eckig markierte Stelle wird nur lokal angezeigt.',
-    'Ist sie der Aussteller einer Zertifizierung?',
+    item.type === 'person_prose_ambiguous' ? 'Ist dies ein Personenname?' : 'Ist dies der Aussteller einer Zertifizierung?',
+    ...(personGroup
+      ? [`Die Entscheidung gilt automatisch für ${personGroup.candidate_ids.length} gleichnamige Stellen.`] : []),
     '',
     `${before}[${value}]${after}`
   ].join('\n');
 }
 
 function linuxViewerCommands(batchReview = false) {
-  const title = batchReview ? 'DataSecure – lokale Stapelprüfung' : 'DataSecure – lokale Zertifikatsprüfung';
+  const title = batchReview ? 'DataSecure – lokale Stapelprüfung' : 'DataSecure – lokale Datenschutzprüfung';
   return [
     { id: 'zenity', command: 'zenity', args: ['--text-info', `--title=${title}`, '--width=900', '--height=620'] },
     // KDialog accepts a local file name for its text box. `/dev/stdin` binds
@@ -477,9 +501,12 @@ function linuxViewerCommands(batchReview = false) {
   ];
 }
 
-function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = false, sameContextGroup = false) {
-  const prompt = `Fundstelle ${index + 1} von ${total}: Entscheidung lokal treffen.${sameContextGroup ? ' Bewusste Gruppenaktion nur für nachweislich gleiche lokale Stellen verfügbar.' : ''}`;
-  const title = batchReview ? 'DataSecure – Stapelentscheidung' : 'DataSecure – Zertifikatsentscheidung';
+function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = false, sameContextGroup = false,
+  mandatoryPersonGroupCount = 0) {
+  const prompt = `Fundstelle ${index + 1} von ${total}: Entscheidung lokal treffen.` +
+    `${mandatoryPersonGroupCount > 1 ? ` Diese Entscheidung gilt automatisch für ${mandatoryPersonGroupCount} gleichnamige Stellen.` : ''}` +
+    `${sameContextGroup ? ' Bewusste Gruppenaktion nur für nachweislich gleiche lokale Stellen verfügbar.' : ''}`;
+  const title = batchReview ? 'DataSecure – Stapelentscheidung' : 'DataSecure – Datenschutzentscheidung';
   if (id === 'zenity') {
     return {
       command: 'zenity',
@@ -511,7 +538,7 @@ function linuxChoiceCommand(id, index, total, allowDefer = false, batchReview = 
 
 function linuxFinalChoiceCommand(id, allowDefer = false, batchReview = false) {
   const prompt = 'Alle Fundstellen sind entschieden. Freigeben oder Entscheidungen vollständig neu treffen?';
-  const title = batchReview ? 'DataSecure – Stapelentscheidung' : 'DataSecure – Zertifikatsentscheidung';
+  const title = batchReview ? 'DataSecure – Stapelentscheidung' : 'DataSecure – Datenschutzentscheidung';
   if (id === 'zenity') {
     return {
       command: 'zenity',
@@ -545,7 +572,7 @@ function runLinuxReviewDialog(candidates, input, runner, env) {
     if (result?.error?.code === 'ENOENT') continue;
     return { id: candidate.id, result };
   }
-  throw new SafeError('Auf diesem Gerät ist keine lokale Zertifikatsprüfung verfügbar.');
+  throw new SafeError('Auf diesem Gerät ist keine lokale Datenschutzprüfung verfügbar.');
 }
 
 function linuxReviewTextLocally(draft, options) {
@@ -561,7 +588,10 @@ function linuxReviewTextLocally(draft, options) {
       const displayed = runLinuxReviewDialog(linuxViewerCommands(draft.batch_review !== undefined), linuxReviewContext(draft, draft.ambiguities[index], index), runner, env);
       if (displayed.result?.error || displayed.result?.status !== 0) return { action: 'cancelled' };
       reviewerId = displayed.id;
-      const choice = linuxChoiceCommand(displayed.id, index, draft.ambiguities.length, draft.allow_defer === true, draft.batch_review !== undefined, !!group);
+      const mandatoryPersonGroup = item.type === 'person_prose_ambiguous' && !!group;
+      const choice = linuxChoiceCommand(displayed.id, index, draft.ambiguities.length, draft.allow_defer === true,
+        draft.batch_review !== undefined, !!group && !mandatoryPersonGroup,
+        mandatoryPersonGroup ? group.candidate_ids.length : 0);
       const selected = runner(choice.command, choice.args, undefined, env);
       if (selected?.error || selected?.status !== 0) return { action: 'cancelled' };
       const answer = String(selected.stdout || '').trim().toLocaleLowerCase('de-DE');
@@ -572,7 +602,8 @@ function linuxReviewTextLocally(draft, options) {
       if (!decision && answer === 'keep_group') decision = 'keep';
       if (!decision && answer === 'redact_group') decision = 'redact';
       if (!decision) return { action: 'cancelled' };
-      const targets = /_group$/u.test(answer) && group ? group.candidate_ids : [item.ambiguity_id];
+      const targets = mandatoryPersonGroup || (/_group$/u.test(answer) && group)
+        ? group.candidate_ids : [item.ambiguity_id];
       for (const ambiguityId of targets) {
         if (!decisions.some((entry) => entry.ambiguity_id === ambiguityId)) decisions.push({ ambiguity_id: ambiguityId, decision });
       }
@@ -618,7 +649,20 @@ function validateReviewResult(value, draft = null) {
       const expected = (draft.ambiguities || []).map((item) => item.ambiguity_id).sort();
       const actual = decisions.map((item) => item.ambiguity_id).sort();
       if (new Set(actual).size !== actual.length || actual.join(',') !== expected.join(',')) {
-        throw new SafeError('Nicht alle mehrdeutigen Organisationen wurden lokal entschieden.');
+        throw new SafeError('Nicht alle mehrdeutigen Stellen wurden lokal entschieden.');
+      }
+      const byId = new Map((draft.ambiguities || []).map((item) => [item.ambiguity_id, item]));
+      const personChoices = new Map();
+      for (const choice of decisions) {
+        const candidate = byId.get(choice.ambiguity_id);
+        if (candidate?.type !== 'person_prose_ambiguous') continue;
+        const identity = normalizeText(draft.original_text.slice(candidate.original_start, candidate.original_end))
+          .replace(/\s+/gu, ' ').trim().toLocaleLowerCase('de-DE');
+        const previous = personChoices.get(identity);
+        if (previous && previous !== choice.decision) {
+          throw new SafeError('Gleiche mögliche Personennamen müssen im lokalen Stapel einheitlich entschieden werden.');
+        }
+        personChoices.set(identity, choice.decision);
       }
     }
     return {
@@ -644,13 +688,15 @@ function applyManualRedactions(text, ranges) {
   for (const range of sorted) {
     if (
       !Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) ||
-      range.start < previousEnd || range.start < 0 || range.end <= range.start || range.end > source.length
+      range.start < previousEnd || range.start < 0 || range.end <= range.start || range.end > source.length ||
+      (range.replacement !== undefined &&
+        !/^\[(?:MANUAL_REDACTION|PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52}))\]$/u.test(range.replacement))
     ) throw new SafeError('Eine lokale Anonymisierungsauswahl liegt außerhalb des geprüften Textes.');
     previousEnd = range.end;
   }
   let result = source;
   for (const range of sorted.reverse()) {
-    result = result.slice(0, range.start) + '[MANUAL_REDACTION]' + result.slice(range.end);
+    result = result.slice(0, range.start) + (range.replacement || '[MANUAL_REDACTION]') + result.slice(range.end);
   }
   if (result.length > MAX_REVIEW_CHARS) throw new SafeError('Die lokal anonymisierte Fassung ist zu groß.');
   return result;

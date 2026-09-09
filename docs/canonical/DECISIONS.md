@@ -1474,3 +1474,30 @@ Testfallquellen. Der neue formale Rahmen bindet nur Kandidat, Reihenfolge,
 Verantwortung, Evidence und GO-/NO-GO-Regel, damit keine konkurrierende dritte
 Produktspezifikation entsteht. Umsetzung und offene Durchführung werden unter
 BL-051 und BL-052 geführt.
+
+## DS-096 – Unbeschriftete plausible Prosanamen werden lokal entschieden
+
+Am 09.09.2026 nach Fach-, Datenschutz-, UX- und Implementierungsgegenreview
+festgelegt: Ein eng begrenzt namensförmiges Satzsubjekt vor einem typischen
+personenbezogenen Tätigkeitsverb darf nicht mehr still als Fachtext freigegeben
+werden, wenn die normale kontextgebundene Personenerkennung es nicht auflösen
+kann. DataSecure reserviert die konkrete Fundstelle vor der automatischen
+Anonymisierung und legt sie im bestehenden lokalen Sammelreview mit den direkten
+Aktionen **„Als Person anonymisieren“** und **„Kein Personenname – beibehalten“**
+vor. Es entsteht kein weiterer Reviewweg und kein Dialog pro Datei.
+
+Eine positive Entscheidung verwendet das stapelweite Personenpseudonym. Ein
+bereits als Person gebundener exakt gleicher vollständiger Name wird in späteren
+Dokumenten automatisch mit demselben Pseudonym anonymisiert. Bei noch offenen
+Fundstellen bleibt „beibehalten“ zwar auf die geprüften Stellen begrenzt; derselbe
+normalisierte mögliche Personenname muss innerhalb eines Sammelreviews jedoch
+einheitlich entschieden werden und darf bewusst gemeinsam entschieden werden.
+Für Zertifikatsanbieter bleibt eine Gruppenentscheidung ausschließlich bei exakt
+gleicher vollständiger lokaler Kontextzeile zulässig. Rohwert, Kontext und Hash
+gelangen weder in Journal, Diagnose, Mapping noch MCP-Antwort.
+
+Die Grammatik ist absichtlich enger als eine globale Titelworterkennung:
+Technologie-, Methoden-, Rollen- und abstrakte Fachphrasen werden nicht allein
+wegen Großschreibung als Person behandelt. Unentscheidbare Erweiterungen werden
+nicht geraten. DS-096 schließt F7 unter BL-021.1 und präzisiert DS-012, DS-049,
+DS-068 und DS-084.

@@ -28,7 +28,7 @@ test('historical journals stay anonymization, including legacy plugin state', ()
 test('conversion purpose uses a new journal identity without privacy state', () => {
   const state = { schema: 'datasecure-batch/5', product_channel: 'standalone', processing_mode: MODES.MARKDOWN };
   assert.equal(processingModeForBatch(state), MODES.MARKDOWN);
-  for (const key of ['pseudonym_contract_version', 'pseudonym_ruleset_version', 'pseudonym_seed', 'pseudonym_registry_state', 'read_capability']) {
+  for (const key of ['pseudonym_contract_version', 'pseudonym_ruleset_version', 'pseudonym_seed', 'pseudonym_registry_state', 'core_policy_fingerprint', 'read_capability']) {
     assert.throws(() => processingModeForBatch({ ...state, [key]: null }), { code: 'PROCESSING_MODE_INVALID' });
   }
   assert.throws(() => processingModeForBatch({ ...state, product_channel: 'plugin' }), { code: 'PROCESSING_MODE_FORBIDDEN' });

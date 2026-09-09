@@ -17,7 +17,7 @@ process.env.EU_PRIVACY_RESULT_ROOT = cowork;
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const {
   inspectRoot, readConfiguredResultRoot, saveConfiguredResultRoot,
-  resultOutputDirectory, isCommonSyncFolder, isNetworkResultFolder
+  resultOutputDirectory, consumeConfiguredResultNotices, isCommonSyncFolder, isNetworkResultFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
   exportCompletedState, replayPendingResultExports, recordPath, terminalVisibleExport,
@@ -456,6 +456,14 @@ try {
   fs.mkdirSync(configured);
   saveConfiguredResultRoot(configured);
   assert.strictEqual(readConfiguredResultRoot(), path.resolve(configured));
+  assert.deepStrictEqual(consumeConfiguredResultNotices(), { sync: false, network: false });
+  const syncConfigured = path.join(base, 'OneDrive', 'DataSecure');
+  fs.mkdirSync(syncConfigured, { recursive: true });
+  saveConfiguredResultRoot(syncConfigured);
+  assert.deepStrictEqual(consumeConfiguredResultNotices(), { sync: true, network: false });
+  assert.deepStrictEqual(consumeConfiguredResultNotices(), { sync: false, network: false },
+    'a persisted disclosure is consumed only after a successful handoff');
+  saveConfiguredResultRoot(configured);
   const moved = path.join(base, 'configured-cowork-moved');
   fs.renameSync(configured, moved);
   fs.mkdirSync(configured);

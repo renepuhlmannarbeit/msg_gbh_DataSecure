@@ -6,6 +6,7 @@
 
 const crypto = require('crypto');
 const { PRIVACY_RULESET_VERSION } = require('./privacy/policy');
+const { CORE_POLICY_FINGERPRINT } = require('./core-policy-fingerprint');
 const {
   SECRET_BYTES,
   CONTRACT_VERSION,
@@ -30,6 +31,7 @@ function createBatchPseudonymState(options = {}) {
     return {
       pseudonym_contract_version: options.productChannel === 'standalone' ? READABLE_CONTRACT_VERSION : CONTRACT_VERSION,
       pseudonym_ruleset_version: PRIVACY_RULESET_VERSION,
+      core_policy_fingerprint: CORE_POLICY_FINGERPRINT,
       pseudonym_seed: seed.toString('base64url'),
       ...(options.productChannel === 'standalone'
         ? { pseudonym_registry_state: { bindings: [], labels: [] } }
@@ -43,6 +45,7 @@ function createBatchPseudonymState(options = {}) {
 function validateBatchPseudonymState(state) {
   if (!state || ![CONTRACT_VERSION, READABLE_CONTRACT_VERSION].includes(state.pseudonym_contract_version) ||
       state.pseudonym_ruleset_version !== PRIVACY_RULESET_VERSION ||
+      (Object.hasOwn(state, 'core_policy_fingerprint') && state.core_policy_fingerprint !== CORE_POLICY_FINGERPRINT) ||
       (state.pseudonym_contract_version === READABLE_CONTRACT_VERSION && !state.pseudonym_registry_state) ||
       typeof state.pseudonym_seed !== 'string' || !ENCODED_SEED_RE.test(state.pseudonym_seed)) {
     throw unavailable('Der Stapel besitzt keinen kompatiblen Pseudonymkontext. Bitte die Originaldateien neu auswählen.');

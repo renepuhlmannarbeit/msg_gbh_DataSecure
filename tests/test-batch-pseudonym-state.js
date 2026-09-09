@@ -7,6 +7,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { createBatchJournalStore } = require('../plugins/data-secure/server/gateway/batch-journal-store');
 const { PRIVACY_RULESET_VERSION } = require('../plugins/data-secure/server/privacy/policy');
+const { CORE_POLICY_FILES, CORE_POLICY_FINGERPRINT, calculateCorePolicyFingerprint } =
+  require('../plugins/data-secure/server/core-policy-fingerprint');
 const { CONTRACT_VERSION, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const {
@@ -24,6 +26,8 @@ await test('a private journal state contains only versioned random seed material
   const state = createBatchPseudonymState({ randomBytes: () => source });
   assert.strictEqual(state.pseudonym_contract_version, CONTRACT_VERSION);
   assert.strictEqual(state.pseudonym_ruleset_version, PRIVACY_RULESET_VERSION);
+  assert.strictEqual(state.core_policy_fingerprint, CORE_POLICY_FINGERPRINT);
+  assert.match(state.core_policy_fingerprint, /^[a-f0-9]{64}$/u);
   assert.match(state.pseudonym_seed, /^[A-Za-z0-9_-]{43}$/u);
   assert.ok(source.equals(Buffer.alloc(32)), 'caller-provided seed buffer is zeroed');
   assert.doesNotMatch(JSON.stringify(state), /Erika|Beispiel|mapping|keyring|password/iu);
@@ -91,13 +95,53 @@ await test('different batches unlink labels and malformed or incompatible state 
     {},
     { ...one, pseudonym_seed: 'x' },
     { ...one, pseudonym_contract_version: 'batch-pseudonym/v0' },
-    { ...one, pseudonym_ruleset_version: 'other/1' }
+    { ...one, pseudonym_ruleset_version: 'other/1' },
+    { ...one, core_policy_fingerprint: '0'.repeat(64) }
   ]) {
     assert.throws(() => validateBatchPseudonymState(invalid),
       (error) => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
     await assert.rejects(() => withBatchPseudonymRegistry(invalid, async () => undefined),
       (error) => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
   }
+  const legacy = { ...one };
+  delete legacy.core_policy_fingerprint;
+  assert.doesNotThrow(() => validateBatchPseudonymState(legacy),
+    'a legacy journal with the exact ruleset version remains resumable');
+  const incompatibleLegacy = { ...legacy, pseudonym_ruleset_version: 'de-business/2' };
+  assert.throws(() => validateBatchPseudonymState(incompatibleLegacy),
+    (error) => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE',
+    'a fingerprint-less journal from an older ruleset cannot resume under changed policy');
+});
+
+await test('the core-policy fingerprint covers every explicit shared policy file', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-policy-fingerprint-'));
+  const sourceRoot = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
+  const privacyFiles = fs.readdirSync(path.join(sourceRoot, 'privacy'), { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.(?:js|json)$/u.test(entry.name))
+    .map((entry) => `privacy/${entry.name}`)
+    .sort();
+  assert.deepStrictEqual(
+    CORE_POLICY_FILES.filter((relative) => relative.startsWith('privacy/')).sort(),
+    privacyFiles,
+    'every privacy implementation or catalogue byte must invalidate a resumed policy context'
+  );
+  for (const relative of CORE_POLICY_FILES) {
+    const target = path.join(root, ...relative.split('/'));
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(path.join(sourceRoot, ...relative.split('/')), target);
+  }
+  assert.strictEqual(calculateCorePolicyFingerprint({ root }), CORE_POLICY_FINGERPRINT);
+  for (const relative of CORE_POLICY_FILES) {
+    const target = path.join(root, ...relative.split('/'));
+    const original = fs.readFileSync(target);
+    fs.appendFileSync(target, '\n// changed policy\n');
+    assert.notStrictEqual(calculateCorePolicyFingerprint({ root }), CORE_POLICY_FINGERPRINT,
+      `${relative} must invalidate the resumable policy context`);
+    fs.writeFileSync(target, original);
+    assert.strictEqual(calculateCorePolicyFingerprint({ root }), CORE_POLICY_FINGERPRINT,
+      `${relative} restoration must restore the exact fingerprint`);
+  }
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 await test('processing errors survive and an already disposed registry cannot escape the action', async () => {

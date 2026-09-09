@@ -19,13 +19,13 @@ const {promptText}=require('./prompt-contract');
 const {INSTRUCTIONS}=require('./mcp-instructions');
 const {storageStatus}=require('./gateway/common');
 const {saveConfiguredPrivacyRoot,clearConfiguredPrivacyRoot}=require('./gateway/privacy-config');
-const {readConfiguredResultRoot,saveConfiguredResultRoot,clearConfiguredResultRoot,resultOutputDirectory,isCommonSyncFolder,isNetworkResultFolder}=require('./gateway/result-folder-config');
+const {readConfiguredResultRoot,saveConfiguredResultRoot,clearConfiguredResultRoot,resultOutputDirectory,consumeConfiguredResultNotices,isCommonSyncFolder,isNetworkResultFolder}=require('./gateway/result-folder-config');
 const {replayPendingResultExports}=require('./gateway/result-export');
 const {schedulePendingResultExportReplay}=require('./gateway/result-export-replay');
 const {pickFolderAsync}=require('./companion/folder-picker');
 const {pickSourcesAsync,batchQueueFromSelection}=require('./companion/file-picker');
 const {pickSourceFolderAsync,enumerateSourceFolderAsync}=require('./companion/source-folder');
-const {localOnlyStartResponse}=require('./normal-path-response');
+const {localOnlyStartResponse,configuredResultFolderUserStatus}=require('./normal-path-response');
 const {createLocalOnlyHandoff}=require('./gateway/local-only-handoff');
 const {recordWorkflowEvent}=require('./gateway/workflow-diagnostics');
 const {recordSupportTrace,newTraceId}=require('./gateway/support-trace');
@@ -177,9 +177,15 @@ async function configureResultFolder(args={},context={}){
     // replay below then performs the requested, user-visible retry.
     await STARTUP_RESULT_EXPORT_REPLAY.settled;
     const replay=replayPendingResultExports();
+    const noticeOptions={syncFolderNotice:selected.sync_notice,networkFolderNotice:selected.network_notice};
+    const userStatus=configuredResultFolderUserStatus(noticeOptions);
+    // Consume only after every operation needed for the visible response has
+    // succeeded. If replay or response preparation fails, the next confirmed
+    // intake still carries the persisted one-time notice.
+    consumeConfiguredResultNotices();
     return{ok:true,configuration_changed:true,result_folder_configured:true,sync_folder_notice:selected.sync_notice,
       network_folder_notice:selected.network_notice,
-      pending_exports:replay.pending+replay.failures,exported_now:replay.exported,raw_content_sent_to_claude:false};
+      user_status:userStatus,pending_exports:replay.pending+replay.failures,exported_now:replay.exported,raw_content_sent_to_claude:false};
   }finally{releaseNativeInteraction(owner);}
 }
 function rootMutationBlocked(){
@@ -319,8 +325,9 @@ async function startPickerBatch(args,context={}){
     // local-only route cannot use it and must not expose it to Cowork merely
     // because a background worker needs it. Recovery is intentionally routed
     // through the explicit most-recent-batch action instead.
-    const response=localOnlyStartResponse(started,{syncFolderNotice:resultFolderSyncNotice,
-      networkFolderNotice:resultFolderNetworkNotice});
+    const pendingNotices=consumeConfiguredResultNotices();
+    const response=localOnlyStartResponse(started,{syncFolderNotice:resultFolderSyncNotice||pendingNotices.sync,
+      networkFolderNotice:resultFolderNetworkNotice||pendingNotices.network});
     recordWorkflowEvent({event:'mcp_start_response',outcome:response.ok?'ok':'stopped',item_count:selected.length,
       error_code:response.ok?'NONE':'LOCAL_WORKER_SPAWN_FAILED'});
     return response;

@@ -34,6 +34,9 @@ const { migrateLegacyAuditReceipts, createPreparedAuditRun } = require('./audit'
 const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
 const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
+const { personProseCandidateSpans, personProseAmbiguities } = require('../privacy/person-ambiguities');
+const { makeRegistry } = require('../privacy/entities');
+const { normalizeText } = require('../privacy/base');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { processAlive } = require('./process-liveness');
 const { readSourceToPrivateMemory } = require('./read-only-source-snapshot');
@@ -55,6 +58,44 @@ function throwIfAborted(signal) {
   const error = new SafeError('Die lokale Verarbeitung wurde auf Anforderung sicher abgebrochen.');
   error.code = 'REQUEST_CANCELLED';
   throw error;
+}
+
+function reservePersonReviewCandidates(text, pseudonymRegistry) {
+  const original = normalizeText(text);
+  const reservations = personProseCandidateSpans(original)
+    .filter((span) => !pseudonymRegistry?.lookup?.('PERSON', span.value))
+    .map((span, index) => ({
+      ...span,
+      token: `[PERSON_REVIEW_${String(index + 1).padStart(6, '0')}]`
+    }));
+  for (const reservation of reservations) {
+    if (original.includes(reservation.token)) {
+      const error = new SafeError('Ein lokaler Personenhinweis kollidiert mit reservierter interner Syntax. Es wurde nichts freigegeben.');
+      error.code = 'AMBIGUITY_REVIEW_REQUIRED';
+      throw error;
+    }
+  }
+  let masked = original;
+  for (const reservation of [...reservations].sort((a, b) => b.start - a.start)) {
+    masked = masked.slice(0, reservation.start) + reservation.token + masked.slice(reservation.end);
+  }
+  return {
+    original,
+    masked,
+    restore(value) {
+      let restored = String(value || '');
+      for (const reservation of reservations) {
+        const first = restored.indexOf(reservation.token);
+        if (first < 0 || restored.indexOf(reservation.token, first + reservation.token.length) >= 0) {
+          const error = new SafeError('Ein lokaler Personenhinweis konnte nach der Datenschutzprüfung nicht sicher rekonstruiert werden.');
+          error.code = 'AMBIGUITY_REVIEW_REQUIRED';
+          throw error;
+        }
+        restored = restored.slice(0, first) + reservation.value + restored.slice(first + reservation.token.length);
+      }
+      return restored;
+    }
+  };
 }
 
 function newJobId() {
@@ -434,18 +475,24 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // the future three-platform native-secret-store release. It cannot come
     // from an MCP tool argument and is never written to an output package,
     // journal, diagnostic, or audit receipt.
-    const anon = anonymizeMarkdown(rawWithOcr, effective,
-      deps.pseudonymRegistry ? { registry: deps.pseudonymRegistry } : undefined);
-    const ambiguities = ['personnel_profile', 'applicant'].includes(effective)
-      ? credentialIssuerAmbiguities(rawWithOcr, anon.text)
+    const pseudonymRegistry = deps.pseudonymRegistry || makeRegistry();
+    const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry);
+    const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry });
+    anon.text = personReview.restore(anon.text);
+    const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(effective)
+      ? credentialIssuerAmbiguities(personReview.original, anon.text)
       : [];
+    const personAmbiguities = personProseAmbiguities(personReview.original, anon.text);
+    const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
     diagnostic.text_entity_count = anon.entityCount;
-    diagnostic.ambiguous_organization_count = ambiguities.length;
+    diagnostic.ambiguous_organization_count = organizationAmbiguities.length;
+    diagnostic.ambiguous_person_count = personAmbiguities.length;
     if (deps.onDetected) {
       await deps.onDetected({
         profile: effective,
         detected_identifiers: anon.entityCount,
-        ambiguous_organization_count: ambiguities.length,
+        ambiguous_organization_count: organizationAmbiguities.length,
+        ambiguous_person_count: personAmbiguities.length,
         technical_review_required:
           review > 0 ||
           (converted.warnings || []).length > 0 ||
@@ -454,17 +501,24 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     let reviewedText = anon.text;
     if (ambiguities.length > 0 && !deps.reviewText) {
-      const error = new SafeError('Mehrdeutige Organisationsnamen benötigen eine lokale Entscheidung vor der Freigabe.');
+      const error = new SafeError('Mehrdeutige Personen- oder Organisationsnamen benötigen eine lokale Entscheidung vor der Freigabe.');
       error.code = 'AMBIGUITY_REVIEW_REQUIRED';
       throw error;
     }
     if (deps.reviewText) {
       const reviewResult = await deps.reviewText({
-        original_text: rawWithOcr,
+        original_text: personReview.original,
         anonymized_text: anon.text,
         profile: effective,
         detected_identifiers: anon.entityCount,
         ambiguities,
+        replacementForAmbiguity: (candidate) => {
+          if (candidate?.type !== 'person_prose_ambiguous' || candidate.replacement_kind !== 'PERSON') {
+            throw new SafeError('Die lokale Mehrdeutigkeitsentscheidung ist ungültig.');
+          }
+          const value = personReview.original.slice(candidate.original_start, candidate.original_end);
+          return pseudonymRegistry.assign('PERSON', value);
+        },
         technical_review_required:
           review > 0 ||
           (converted.warnings || []).length > 0 ||
@@ -574,7 +628,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         ...runtimeInfo()
       },
       ambiguity_resolution: ambiguities.length > 0 ? 'local_human_complete' : 'not_required',
-      ambiguous_organization_count: ambiguities.length,
+      ambiguous_organization_count: organizationAmbiguities.length,
+      ambiguous_person_count: personAmbiguities.length,
       reidentification_risk: anon.reidentificationRisk,
       assets: vis.results,
       parser_warnings: converted.warnings || [],

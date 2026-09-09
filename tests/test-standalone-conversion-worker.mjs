@@ -19,7 +19,7 @@ const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows
     : process.platform === 'linux' && process.arch === 'x64' ? 'linux-x64-glibc' : null;
 if (!target) throw new Error('CONVERSION_TEST_HOST_UNSUPPORTED');
 // Resolve target-native fixture dependencies only after the explicit host gate.
-const { office, image, pdf, text } = await import('./helpers/conversion-fixtures.mjs');
+const { office, image, pdf, encryptedPdf, text } = await import('./helpers/conversion-fixtures.mjs');
 const scope = fs.mkdtempSync(path.join(repo, '.tmp-standalone-package-conversion-'));
 const server = path.join(scope, 'server');
 const runtime = path.join(server, 'standalone', 'conversion-runtime');
@@ -219,6 +219,24 @@ try {
     assert.match(metadata.markdown, /Title: Private title/u);
     assert.match(metadata.markdown, /Author: Max Mustermann/u);
     assert.ok(children.every(entry => entry.closed));
+  });
+  await test('PDF forms, signatures, attachments, JavaScript and encryption stop through the real packaged parser', async () => {
+    const activeSources = [
+      ['AcroForm', pdf([{ text }], '', { form: true })],
+      ['signature', pdf([{ text }], '', { signature: true })],
+      ['attachment', pdf([{ text }], '', { attachment: true })],
+      ['JavaScript', pdf([{ text }], '/OpenAction << /S /JavaScript /JS (app.alert\\(1\\)) >>')]
+    ];
+    for (const [label, source] of activeSources) {
+      await assert.rejects(convertBuffer(source, '.pdf'),
+        cause => cause.code === 'PDF_OBJECT_COVERAGE_UNVERIFIED', `${label} must stop`);
+      assert.ok(children.every(entry => entry.closed));
+    }
+    for (const password of ['', 'secret']) {
+      await assert.rejects(convertBuffer(encryptedPdf(password), '.pdf'),
+        cause => cause.code === 'SOURCE_ENCRYPTED_UNSUPPORTED');
+      assert.ok(children.every(entry => entry.closed));
+    }
   });
   await test('hybrid PDF retains a scan body beside native page numbers and headers with one OCR session', async () => {
     let sessions = 0;

@@ -34,7 +34,7 @@ test('the current receipt is a strict metadata whitelist with ruleset provenance
     operation_id: crypto.randomUUID(),
     timestamp: '2026-08-21T08:00:00.000Z',
     gateway_version: '3.2.0-rc8',
-    privacy_ruleset: 'de-business/2',
+    privacy_ruleset: 'de-business/3',
     credential_context_policy: 'credential-context/2',
     profile: 'personnel_profile',
     source_extension: '.docx',
@@ -55,7 +55,7 @@ test('the current receipt is a strict metadata whitelist with ruleset provenance
   });
   const encoded = JSON.stringify(receipt);
   assert.strictEqual(receipt.schema, AUDIT_SCHEMA);
-  assert.strictEqual(receipt.privacy_ruleset, 'de-business/2');
+  assert.strictEqual(receipt.privacy_ruleset, 'de-business/3');
   assert.strictEqual(receipt.credential_context_policy, 'credential-context/2');
   assert.strictEqual(receipt.source_size_class, 'tiny');
   assert.strictEqual(receipt.source_bytes, undefined);

@@ -1,6 +1,51 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc131 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 10.09.2026 · 3.2.0-rc132 · lokaler Produktkandidat; neue Paket-/Zielhostbindung offen
+
+## RC132 – Reviewkonsistenz, Policybindung und serverseitige Statuswahrheit
+
+RC132 schließt drei in unabhängigen Gegenreviews reproduzierte Produktdefekte.
+Erstens bleibt eine gemeinsam bestätigte F7-Personenentscheidung auch dann
+gültig, wenn das erste veröffentlichte Dokument das stapelweite Pseudonym bindet
+und derselbe Name im nächsten Dokument deshalb schon vor dem Replay automatisch
+ersetzt wird. Die alte Entscheidung wird nur akzeptiert, wenn Originalentwurf,
+exakte Schreibweise und das frisch gebundene Personenpseudonym nachweislich
+zusammenpassen; fremde oder verschwundene Review-IDs bleiben fail-closed.
+Windows, macOS und Linux zeigen für mehrere nachweislich gleichnamige F7-
+Fundstellen nur eine Personenentscheidung und wenden sie automatisch auf die
+gesamte Gruppe an. Widersprüchliche Einzelentscheidungen werden damit bereits
+in der Oberfläche vermieden; die gemeinsame Validierung bleibt als zweite
+Schutzlinie bestehen.
+
+Zweitens besitzt der dauerhafte Pseudonymkontext genau eine kanonische,
+bytegebundene Policy-Dateiliste. Sie umfasst Privacy-Module und Kataloge,
+Pseudonymkontext, Reviewmodell/-publikation, Profilwahl, relevante Core-Verträge
+und Ressourcenlimits. Jede einzelne Mitgliedsänderung verändert den Fingerprint;
+ein neu hinzukommendes Privacy-Modul lässt das Golden-Gate rot werden. Wegen der
+materiellen F7-Regeländerung ist der Privacy-Ruleset auf `de-business/3` erhöht;
+ältere Journale ohne passenden Ruleset werden nicht geraten oder fortgesetzt.
+
+Drittens zählt die begrenzte Präindex-Aliasauflösung tatsächlich besuchte Fenster
+und damit auch wiederholte Cachetreffer. Hochrepetitiver Text kann das
+50.000-Fenster-Arbeitsbudget nicht mehr umgehen. Der normale attestierte Index
+bleibt davon unberührt.
+
+Cowork liefert die vollständige nutzersichtbare Startmeldung jetzt als
+serverseitigen `user_status` durch die echte MCP-Grenze. Skill, Prompt und
+MCP-Instruktionen geben ihn nur wörtlich wieder. Dasselbe gilt für einen
+ausdrücklichen nachträglichen Ergebnisordnerwechsel einschließlich Netzwerk-/
+Cloud-Sync-Hinweis; die einzelnen Booleschen Felder sind nur Transportmetadaten.
+Ein noch nicht gezeigter
+Netzwerk-/Cloud-Sync-Hinweis bleibt nach einer abgebrochenen Quelldateiauswahl
+lokal gespeichert und wird erst beim nächsten bestätigten Handoff verbraucht.
+Standalone gruppiert die bereits zugelassenen Quellen sichtbar in direkt lesbar
+und lokal zu konvertieren; gesperrte oder verschlüsselte Quellen bleiben korrekt
+dem vorgeschalteten Admissiongate zugeordnet. Reale PDF-Goldenfälle decken
+Formulare, Signatur, Anhang, JavaScript und Verschlüsselung im paketierten Parser
+ab; dabei wurde eine echte PDF.js-`Map`-Integrationslücke behoben.
+
+Alle Aussagen dieses Abschnitts sind E0-Code-/Testevidenz. RC132 ist noch nicht
+an PKG-04, INT-13, ein Releasearchiv oder menschliche N3/N4-Abnahme gebunden.
 
 ## RC131 – generalisierte Fortsetzungs- und DOCX-Residualkorrektur
 
@@ -375,6 +420,25 @@ Damit wird aus `Autor: Schmidt schrieb dies.` ausschließlich `Schmidt` zur
 Identität; `schrieb dies` bleibt Inhalt und derselbe Name erhält in späteren
 Dokumenten dasselbe Pseudonym. Zeilen- und Inline-Labels verwenden dieselbe
 Logik, vollständig kleingeschriebene explizite Feldwerte bleiben unterstützt.
+
+F7 ist mit DS-096 geschlossen. Eine enge, zeilenlokale Satzsubjekt-/
+Tätigkeitsgrammatik reserviert plausible unbeschriftete Prosanamen, die der
+normale Kontext nicht eindeutig auflöst, vor der automatischen Redaktion. Der
+bestehende Sammelreview lässt die konkrete Stelle als Person anonymisieren oder
+als Nicht-Person beibehalten. Die erste Wahl bindet das stapelweite
+Personenpseudonym; derselbe bereits gebundene vollständige Name wird in späteren
+Dokumenten automatisch gleich anonymisiert. Ein noch nicht gebundener möglicher
+Name muss innerhalb eines Sammelreviews einheitlich entschieden werden;
+„beibehalten“ gilt nur für die dabei geprüften Fundstellen. Fachphrasen werden
+über Positiv-/Negativfälle gegengedeckt, und Reviewmetadaten bleiben rohwertfrei.
+
+F17 ist begrenzt. Eine lokale, nicht als Release-Benchmark gebundene Beobachtung
+zeigte bereits bei einem kleinen synthetischen Präindex-Zustand eine mehrsekündige
+Aliasfenstersuche. Weil der fehlende Klartext-Startindex aus HMAC-Bindungen nicht
+rekonstruiert werden kann, prüft DataSecure kleine Altstapel weiterhin exakt,
+stoppt aber nach 50.000 besuchten Aliasfenstern – einschließlich wiederholter
+Cachetreffer – mit einer festen Aufforderung zur erneuten Originalauswahl. Aktuelle Journale verwenden unverändert den attestierten
+Startindex und sind von dieser Upgradegrenze nicht betroffen.
 
 `open_result_folder` löst nun ausschließlich den sichtbaren Laufordner des
 aktuellsten Cowork-Stapels auf. Ist genau dieser Lauf noch aktiv, fehlgeschlagen
@@ -1258,7 +1322,16 @@ PDF-/OCR-Pfad sicher gesperrt. Standalone verwendet den gebündelten
 Offline-PDF-/OCR-Pfad sowohl für reine Konvertierung als auch für die
 Anonymisierung des extrahierten Markdown-Inhalts; dessen Hinweise sind keine
 Vollständigkeitszusage für den Originalcontainer. Zielhost-/Fachabnahme bleibt
-offen.
+offen. Der Standalone-E0-Vertrag stoppt erkannte Formulare/XFA, JavaScript-
+Aktionen, Anhänge, Signaturen, Annotationen, Outline, XMP und Verschlüsselung.
+Standardskonforme In-Memory-PDFs laufen dabei durch den echten paketierten
+PDF.js-Parser. Diese Prüfung fand und schloss einen realen Defect: PDF.js 6
+liefert Anhänge als `Map`; eine reine `Object.keys`-Prüfung hatte sie zuvor
+fälschlich als leer bewertet. Genau diese `Map`-Regression ist durch ein echtes
+Golden-PDF belegt. Das Gate normalisiert zusätzlich defensiv `Set`, Array und
+gewöhnliche Objektprojektionen; diese Formen sind keine behaupteten beobachteten
+PDF.js-Rückgaben. Vollständige Fremderzeuger-,
+Layout-, OCR- und Zielhostabdeckung bleibt E1/E3 und wird nicht vorweggenommen.
 
 ### BL-024 – OCR und Rasterbilder
 Engineering-Komponenten und Harnesses existieren. Der Portable-Engineering-Build

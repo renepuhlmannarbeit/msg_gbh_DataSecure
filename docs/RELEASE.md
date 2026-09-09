@@ -1,16 +1,21 @@
 # Release- und Distributionsvertrag
 
-Stand: 09.09.2026 · 3.2.0-rc131
+Stand: 10.09.2026 · 3.2.0-rc132
 
-Der aktuelle Quellstand ist der RC131-Produktkandidat für das Cowork-Plugin
-und die Standalone-App.
-Sein zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
+Der aktuelle Quellstand ist der noch nicht paket- oder zielhostgebundene
+RC132-Entwicklungsstand für das Cowork-Plugin und die Standalone-App. Sein
+zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
 beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
-Plugin-ZIP-Tests und Claude-Validierung gebunden. Die selbsttragenden
-Standalone- und Cowork-Zielpakete desselben Quellcommits `d4d269b` wurden auf
-Windows x64 sowie macOS Intel/ARM gebaut und technisch geprüft; Windows-PKG-04
-und INT-13 sind gebunden. Die Veröffentlichung als Vorabrelease ersetzt weder
-die noch offene sichtbare N3/N4-UAT noch eine Produktionsfreigabe.
+Plugin-ZIP-Tests und Claude-Validierung geprüft. Ein lokaler Build allein bindet
+jedoch weder PKG-04 noch INT-13 oder eine Zielhostfreigabe.
+
+Der letzte veröffentlichte technische Produktkandidat bleibt RC131. Die
+selbsttragenden Standalone- und Cowork-Zielpakete seines Quellcommits `d4d269b`
+wurden auf Windows x64 sowie macOS Intel/ARM gebaut und technisch geprüft;
+Windows-PKG-04 und INT-13 sind an RC131 gebunden. Diese Veröffentlichung als
+Vorabrelease ersetzt weder die noch offene sichtbare N3/N4-UAT noch eine
+Produktionsfreigabe. RC132 darf diese Evidence erst nach einem eigenen
+commitgebundenen Paket- und Zielhostlauf übernehmen.
 
 ## Nutzerprodukt
 

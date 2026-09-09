@@ -769,6 +769,7 @@ module.exports = {
   collectPersonAnchors,
   collectHeaderNameCandidates,
   collectContextualNameCandidates,
+  hasAbstractNounShape,
   collectPersonSeeds,
   collectNameSeeds,
   collectOrganizations,

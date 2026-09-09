@@ -18,7 +18,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
-function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, resultOpenFixture = null, statusAppPilot = false, inputGuardFixture = false, continuationFixture = null, continuationStartFixture = 'accepted', continuationCoreRace = false, ackErrorFixture = null } = {}) {
+function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, resultOpenFixture = null, statusAppPilot = false, inputGuardFixture = false, continuationFixture = null, continuationStartFixture = 'accepted', continuationCoreRace = false, ackErrorFixture = null, folderNoticeFixture = false, configureResultFixture = false } = {}) {
   return new Promise((resolve, reject) => {
     const resultRoot = path.join(privacyRoot, '..', 'cowork-results');
     const syntheticSource = path.join(privacyRoot, 'synthetic-private-source.txt');
@@ -28,8 +28,19 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
     // Test-only dependency substitution: exercise the real stdio dispatch and
     // response with a synthetic selection, without opening a native dialog or
     // starting a worker. Production exposes no bypass or fixture environment.
-    const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture || resultOpenFixture || inputGuardFixture || continuationFixture || continuationCoreRace) ? ['--eval', `
+    const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture || resultOpenFixture || inputGuardFixture || continuationFixture || continuationCoreRace || folderNoticeFixture || configureResultFixture) ? ['--eval', `
       const gateway = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway'))});
+      if (${configureResultFixture}) {
+        const selected = ${JSON.stringify(path.join(root, '..', 'OneDrive - Synthetic'))};
+        require('fs').mkdirSync(selected, {recursive:true});
+        const folderPicker = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'folder-picker'))});
+        folderPicker.pickFolderAsync = async () => selected;
+      }
+      if (${folderNoticeFixture}) {
+        const resultConfig = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway', 'result-folder-config'))});
+        resultConfig.readConfiguredResultRoot = () => ${JSON.stringify(path.join(root, 'notice-root'))};
+        resultConfig.consumeConfiguredResultNotices = () => ({sync:true,network:true});
+      }
       const resultOpenFixture=${JSON.stringify(resultOpenFixture)};
       if (resultOpenFixture) {
         gateway.latestProductResultDirectory = (channel, options) => {
@@ -497,7 +508,36 @@ async function main() {
     assert.strictEqual(result.structuredContent.mode, 'local_only');
     assert.strictEqual(result.structuredContent.local_processing_started, false);
     assert.strictEqual(result.structuredContent.next_action, 'local_intake_accepted_checkpoint_pending');
+    assert.strictEqual(typeof result.structuredContent.user_status, 'string');
     assert.doesNotMatch(JSON.stringify(result), /batch_token|synthetic-private-source|continue_in_chat|aaaaaaaa/u);
+  });
+
+  await testAsync('the MCP boundary carries the complete server-owned status including both folder notices', async () => {
+    const { responses } = await talk([rpc(1, 'tools/call', {
+      name: 'start_document_batch_from_picker', arguments: { mode: 'local_only' }
+    })], { supportMode: false, localStartFixture: true, folderNoticeFixture: true });
+    const result = responses[0].result.structuredContent;
+    assert.strictEqual(result.sync_folder_notice, true);
+    assert.strictEqual(result.network_folder_notice, true);
+    assert.match(result.user_status, /Cloud-Sync-Ordner/u);
+    assert.match(result.user_status, /Netzlaufwerk/u);
+    assert.doesNotMatch(JSON.stringify(result), /notice-root|synthetic-private-source|batch_token/u);
+  });
+
+  await testAsync('result-folder configuration returns one complete server-owned and path-free status', async () => {
+    const { responses } = await talk([rpc(1, 'tools/call', {
+      name: 'configure_result_folder', arguments: {}
+    })], { supportMode: false, configureResultFixture: true });
+    const result = responses[0].result.structuredContent;
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.configuration_changed, true);
+    assert.strictEqual(result.result_folder_configured, true);
+    assert.strictEqual(result.sync_folder_notice, true);
+    assert.strictEqual(result.network_folder_notice, false);
+    assert.match(result.user_status, /Ergebnisordner wurde lokal geändert/u);
+    assert.match(result.user_status, /DataSecure-Version:/u);
+    assert.match(result.user_status, /Cloud-Sync-Ordner/u);
+    assert.doesNotMatch(JSON.stringify(result), /OneDrive|Synthetic|eu-privacy-mcp|[A-Z]:[\\/]/iu);
   });
 
   await testAsync('explicit support mode preserves the legacy start response contract', async () => {
@@ -971,7 +1011,7 @@ async function main() {
       process.platform === 'win32' ? 'windows_job_object' : 'node_heap_and_parent_timeout');
     assert.strictEqual(result.structuredContent.parser_hard_process_limits, process.platform === 'win32');
     assert.strictEqual(result.structuredContent.audit_schema, 'data-secure-audit-receipt/4');
-    assert.strictEqual(result.structuredContent.privacy_ruleset, 'de-business/2');
+    assert.strictEqual(result.structuredContent.privacy_ruleset, 'de-business/3');
     assert.strictEqual(result.structuredContent.credential_context_policy, 'credential-context/2');
     assert.strictEqual(typeof result.structuredContent.audit_receipts_retained, 'number');
     assert.strictEqual(typeof result.structuredContent.legacy_audit_pending, 'number');

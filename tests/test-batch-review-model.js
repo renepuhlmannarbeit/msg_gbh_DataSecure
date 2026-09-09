@@ -4,9 +4,12 @@ const { createSuite } = require('./helpers');
 const {
   BATCH_REVIEW_SCHEMA,
   batchReviewSummary,
+  buildReviewDraft,
   buildBatchReviewDraft,
+  darwinReviewScript,
   groupForCandidate,
   linuxReviewTextLocally,
+  powershellReviewScript,
   resolveBatchReviewResult,
   reviewBatchTextLocally
 } = require('../plugins/data-secure/server/companion/text-review');
@@ -34,6 +37,14 @@ function ambiguity(id, originalText, anonymizedText, value) {
     original_end: originalText.indexOf(value) + value.length,
     anonymized_start: anonymizedText.indexOf(value),
     anonymized_end: anonymizedText.indexOf(value) + value.length
+  };
+}
+
+function personAmbiguity(id, originalText, anonymizedText, value) {
+  return {
+    ...ambiguity(id, originalText, anonymizedText, value),
+    type: 'person_prose_ambiguous',
+    replacement_kind: 'PERSON'
   };
 }
 
@@ -96,6 +107,45 @@ test('builds one anonymous local draft and maps choices back to the source posit
   });
 });
 
+test('preserves mixed ambiguity types and their local identifiers through one batch review', () => {
+  const issuer = 'Microsoft Zertifikat';
+  const person = 'Anna Berger koordinierte die Einführung.';
+  const bundle = buildBatchReviewDraft([
+    { original_text: issuer, anonymized_text: issuer, profile: 'personnel_profile',
+      ambiguities: [ambiguity('credential:v2:000001', issuer, issuer, 'Microsoft')] },
+    { original_text: person, anonymized_text: person, profile: 'personnel_profile',
+      ambiguities: [personAmbiguity('person:v1:000001', person, person, 'Anna Berger')] }
+  ]);
+  assert.match(bundle.draft.ambiguities[0].ambiguity_id, /^credential:v2:/u);
+  assert.match(bundle.draft.ambiguities[1].ambiguity_id, /^person:v1:/u);
+  assert.strictEqual(bundle.draft.ambiguities[1].replacement_kind, 'PERSON');
+  const resolved = resolveBatchReviewResult(bundle, {
+    action: 'reviewed', redactions: [], decisions: bundle.draft.ambiguities.map((candidate) => ({
+      ambiguity_id: candidate.ambiguity_id, decision: 'redact'
+    }))
+  });
+  assert.deepStrictEqual(resolved.documents.map((document) => document.decisions[0].ambiguity_id),
+    ['credential:v2:000001', 'person:v1:000001']);
+});
+
+test('rejects contradictory choices for the same possible person across documents', () => {
+  const text = 'Anna Berger koordinierte die Einführung.';
+  const bundle = buildBatchReviewDraft([
+    { original_text: text, anonymized_text: text, profile: 'personnel_profile',
+      ambiguities: [personAmbiguity('person:v1:000001', text, text, 'Anna Berger')] },
+    { original_text: text, anonymized_text: text, profile: 'personnel_profile',
+      ambiguities: [personAmbiguity('person:v1:000001', text, text, 'Anna Berger')] }
+  ]);
+  const group = groupForCandidate(bundle.draft, bundle.draft.ambiguities[0].ambiguity_id);
+  assert.ok(group);
+  assert.deepStrictEqual(group.candidate_ids, bundle.draft.ambiguities.map((item) => item.ambiguity_id));
+  assert.throws(() => resolveBatchReviewResult(bundle, {
+    action: 'reviewed', redactions: [], decisions: bundle.draft.ambiguities.map((candidate, index) => ({
+      ambiguity_id: candidate.ambiguity_id, decision: index === 0 ? 'redact' : 'keep'
+    }))
+  }), /einheitlich entschieden/u);
+});
+
 test('projects a content-free batch summary for the short local review flow', () => {
   const original = 'Scrum.org Zertifikat';
   const bundle = buildBatchReviewDraft([{
@@ -132,7 +182,7 @@ test('never accepts free ranges or missing decisions for the shared batch review
   }), /Freie Bereichsanonymisierungen/);
   assert.throws(() => resolveBatchReviewResult(bundle, {
     action: 'reviewed', redactions: [], decisions: []
-  }), /Nicht alle mehrdeutigen Organisationen/);
+  }), /Nicht alle mehrdeutigen Stellen/);
 });
 
 test('offers a conscious group only for identical normalized local context lines', () => {
@@ -173,6 +223,50 @@ test('the local Linux reviewer expands only an explicitly chosen same-context gr
   });
   assert.strictEqual(choiceCalls, 1);
   assert.deepStrictEqual(result.decisions, bundle.draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' })));
+});
+
+test('all native reviewers bind one person decision to repeated identities within one file', () => {
+  const text = 'Anna Berger koordinierte. Anna Berger dokumentierte.';
+  const first = text.indexOf('Anna Berger');
+  const second = text.indexOf('Anna Berger', first + 1);
+  const draft = buildReviewDraft(text, text, 'personnel_profile', [first, second].map((start, index) => ({
+    ambiguity_id: `person:v1:${String(index + 1).padStart(6, '0')}`,
+    type: 'person_prose_ambiguous',
+    replacement_kind: 'PERSON',
+    original_start: start,
+    original_end: start + 'Anna Berger'.length,
+    anonymized_start: start,
+    anonymized_end: start + 'Anna Berger'.length
+  })));
+  assert.deepStrictEqual(groupForCandidate(draft, draft.ambiguities[0].ambiguity_id).candidate_ids,
+    draft.ambiguities.map((item) => item.ambiguity_id));
+  let viewerCalls = 0;
+  let choiceCalls = 0;
+  const result = linuxReviewTextLocally(draft, {
+    runner: (_command, args, input) => {
+      const command = args.join(' ');
+      if (command.includes('--text-info')) {
+        viewerCalls++;
+        assert.match(String(input || ''), /automatisch für 2 gleichnamige Stellen/u);
+        return { status: 0, stdout: '' };
+      }
+      if (command.includes('Alle Fundstellen sind entschieden')) return { status: 0, stdout: 'release' };
+      assert.doesNotMatch(command, /keep_group|redact_group/u,
+        'person identities use one mandatory decision rather than an optional group action');
+      assert.match(command, /automatisch für 2 gleichnamige Stellen/u);
+      choiceCalls++;
+      return { status: 0, stdout: 'redact' };
+    },
+    env: {}
+  });
+  assert.strictEqual(viewerCalls, 1);
+  assert.strictEqual(choiceCalls, 1);
+  assert.deepStrictEqual(result.decisions,
+    draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'redact' })));
+  assert.match(powershellReviewScript(), /Die Entscheidung gilt automatisch/u);
+  assert.match(powershellReviewScript(), /person_prose_ambiguous.*foreach \(\$id/iu);
+  assert.match(darwinReviewScript(), /personGroupIds/u);
+  assert.match(darwinReviewScript(), /controls\[index\]\.ids\.forEach/u);
 });
 
 test('keeps names and paths out of its local-to-local metadata map', () => {

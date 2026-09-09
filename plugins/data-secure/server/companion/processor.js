@@ -30,7 +30,7 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
       if (platform === 'win32' || platform === 'darwin' || platform === 'linux') {
         return (options.nativeReview || reviewTextLocally)(input.review_draft, { platform });
       }
-      throw reviewRequired('Mehrdeutige Organisationen benötigen auf diesem Gerät eine lokale Entscheidung; es wurde nichts freigegeben.');
+      throw reviewRequired('Mehrdeutige Personen- oder Organisationsnamen benötigen auf diesem Gerät eine lokale Entscheidung; es wurde nichts freigegeben.');
     }
     if (options.automaticBatchApproval === true) return { action: 'skipped' };
     if (options.confirmAutomaticRelease) {
@@ -69,7 +69,17 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
             .filter((item) => item.decision === 'redact')
             .map((item) => {
               const candidate = byId.get(item.ambiguity_id);
-              return { start: candidate.anonymized_start, end: candidate.anonymized_end };
+              if (candidate.type !== 'person_prose_ambiguous') {
+                return { start: candidate.anonymized_start, end: candidate.anonymized_end };
+              }
+              if (typeof input.replacementForAmbiguity !== 'function') {
+                throw reviewRequired('Das stabile Personenpseudonym konnte nicht lokal gebunden werden.');
+              }
+              return {
+                start: candidate.anonymized_start,
+                end: candidate.anonymized_end,
+                replacement: input.replacementForAmbiguity(candidate)
+              };
             });
           const text = applyManualRedactions(input.anonymized_text, [...decision.redactions, ...ambiguityRedactions]);
           approvedContentSha256 = textSha256(text);
@@ -79,7 +89,7 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
         }
         if (decision?.action === 'skipped') {
           if ((input.ambiguities || []).length > 0) {
-            throw reviewRequired('Mehrdeutige Organisationen müssen vor der Freigabe lokal entschieden werden.');
+            throw reviewRequired('Mehrdeutige Personen- oder Organisationsnamen müssen vor der Freigabe lokal entschieden werden.');
           }
           approvedContentSha256 = textSha256(input.anonymized_text);
           reviewDecision = 'skipped';

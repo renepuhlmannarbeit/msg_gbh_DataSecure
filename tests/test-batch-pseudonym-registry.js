@@ -599,4 +599,52 @@ test('the normal restored index probes unique text tokens rather than every poss
   } finally { crypto.createHmac = createHmac; registry.dispose(); secret.fill(0); }
 });
 
+test('a pre-index journal keeps exact short matching but stops a hostile alias search at a fixed probe budget', () => {
+  const secret = Buffer.alloc(32, 37);
+  const initial = createBatchPseudonymRegistry(secret);
+  let state;
+  let marker;
+  try {
+    marker = initial.assign('PERSON', 'Erika Beispiel');
+    state = structuredClone(initial.exportState());
+    delete state.known_alias_index;
+  } finally { initial.dispose(); }
+  const short = createBatchPseudonymRegistry(secret, { persistedState: state });
+  try {
+    assert.ok(short.matchKnownAliases('Erika Beispiel dokumentiert den Stand.')
+      .some((hit) => hit.placeholder === marker));
+  } finally { short.dispose(); }
+
+  const bounded = createBatchPseudonymRegistry(secret, { persistedState: state });
+  const createHmac = crypto.createHmac;
+  let probes = 0;
+  crypto.createHmac = function(...args) { probes++; return createHmac.apply(this, args); };
+  try {
+    const text = Array.from({ length: 3000 }, (_, i) => `wort${i.toString(36)}`).join(' ');
+    assert.throws(() => bounded.matchKnownAliases(text),
+      (error) => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE' && /Originaldateien neu auswählen/u.test(error.message));
+    assert.ok(probes <= 100_010, `legacy scan used ${probes} HMAC probes`);
+  } finally {
+    crypto.createHmac = createHmac;
+    bounded.dispose();
+    secret.fill(0);
+  }
+});
+
+test('a pre-index journal also bounds highly repetitive alias windows despite cache hits', () => {
+  const secret = Buffer.alloc(32, 38);
+  const initial = createBatchPseudonymRegistry(secret);
+  let state;
+  try {
+    initial.assign('PERSON', 'Erika Beispiel');
+    state = structuredClone(initial.exportState());
+    delete state.known_alias_index;
+  } finally { initial.dispose(); }
+  const registry = createBatchPseudonymRegistry(secret, { persistedState: state });
+  try {
+    assert.throws(() => registry.matchKnownAliases('a '.repeat(60_000)),
+      (error) => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
+  } finally { registry.dispose(); secret.fill(0); }
+});
+
 done();

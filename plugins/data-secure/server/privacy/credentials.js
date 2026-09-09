@@ -412,6 +412,7 @@ module.exports={
   credentialContextSpans,
   credentialContextDetails,
   credentialIssuerAmbiguities,
+  preservedTextRanges,
   inCredentialContext,
   isCredentialIssuerDomain,
   isCatalogTechnologyTerm,

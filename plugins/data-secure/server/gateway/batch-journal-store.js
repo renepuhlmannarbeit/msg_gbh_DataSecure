@@ -270,6 +270,7 @@ function createBatchJournalStore(options = {}) {
       PSEUDONYM_VERSION_RE.test(String(state.pseudonym_contract_version || '')) &&
       PSEUDONYM_VERSION_RE.test(String(state.pseudonym_ruleset_version || '')) &&
       typeof state.pseudonym_seed === 'string' && PSEUDONYM_SEED_RE.test(state.pseudonym_seed) &&
+      (!Object.hasOwn(state, 'core_policy_fingerprint') || /^[a-f0-9]{64}$/u.test(state.core_policy_fingerprint)) &&
       Buffer.from(state.pseudonym_seed, 'base64url').length === 32)) return false;
     if (!Object.hasOwn(state, 'pseudonym_registry_state')) return true;
     const snapshot = state.pseudonym_registry_state;

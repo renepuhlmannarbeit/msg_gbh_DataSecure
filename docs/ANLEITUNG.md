@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 08.09.2026 · Version 3.2.0 RC131 · Cowork-Plugin
+Stand: 10.09.2026 · Version 3.2.0 RC132 · Cowork-Plugin
 
 ## Vor dem ersten Lauf
 
@@ -106,16 +106,23 @@ Bildpixel aus DOCX bleiben immer lokal und werden nicht an Claude freigegeben.
 Es gibt keinen auswählbaren Bildmodus. DataSecure löscht Bilder niemals aus der
 Originaldatei.
 
-Unklare Organisations-/Zertifikatsstellen werden nicht geraten. Nach der
+Unklare Organisations-/Zertifikatsstellen und eng begrenzte plausible
+Personennamen in gewöhnlicher Prosa werden nicht geraten. Nach der
 automatischen Analyse öffnet DataSecure dafür selbstständig genau einen lokalen
 Sammelreview; ein zweiter Cowork-Auftrag oder Werkzeugaufruf ist nicht nötig.
 Abbrechen, Schließen oder **„Später entscheiden“** ist zulässig und lässt den
 Stapel sicher fortsetzbar; erst dann schreiben Sie später bei Bedarf
 **„Setze den letzten DataSecure-Stapel fort.“**
 Klare Dateien sind zu diesem Zeitpunkt bereits fertig und werden im Review nicht
-noch einmal vorgelegt. Der lokale Dialog zeigt gelbe offene Stellen und die
-direkten Aktionen **„Zertifikatsanbieter behalten“** beziehungsweise
-**„Organisation anonymisieren“**. Rot markierte Stellen sind bereits anonymisiert.
+noch einmal vorgelegt. Der lokale Dialog zeigt gelbe offene Stellen. Für
+Zertifikatskontexte lauten die direkten Aktionen **„Zertifikatsanbieter
+behalten“** beziehungsweise **„Organisation anonymisieren“**; für plausible
+Prosanamen **„Kein Personenname – beibehalten“** beziehungsweise **„Als Person
+anonymisieren“**. Rot markierte Stellen sind bereits anonymisiert. Eine
+Beibehalten-Entscheidung gilt gegenüber späteren Reviews nur für die gezeigte
+Fundstelle; gleich geschriebene offene Namen werden innerhalb des aktuellen
+Sammelreviews konsistent entschieden. Eine bestätigte
+Person erhält im ganzen Stapel dasselbe Pseudonym.
 Auf Windows funktionieren zusätzlich `Alt+Z`, `Alt+O`, `Alt+R`, `Strg+Enter` und
 `Esc`; die Schaltflächen bleiben der normale Weg.
 

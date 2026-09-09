@@ -13,12 +13,18 @@ const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
 const SOURCE_KINDS = new Set(['files', 'folder']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const CONVERSION_TYPES = ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp'];
+const DIRECT_MARKDOWN_TYPES = new Set(['.txt', '.md', '.markdown', '.csv']);
 let standaloneStartup;
 
 function validateChoice(value, allowed, fallback) {
   const selected = value || fallback;
   if (!allowed.has(selected)) throw Object.assign(new Error('Ungültige lokale Auswahl.'), { code: 'STANDALONE_ARGUMENT_INVALID' });
   return selected;
+}
+
+function admissionCounts(queue) {
+  const direct = queue.filter((item) => DIRECT_MARKDOWN_TYPES.has(path.extname(item.name).toLowerCase())).length;
+  return { direct_count: direct, convertible_count: queue.length - direct, blocked_count: 0, encrypted_count: 0 };
 }
 
 function standaloneDataRoot(options = {}) {
@@ -486,8 +492,7 @@ class StandaloneApplicationService {
       return {
         ok: true, event: 'selection_summarized', selected_count: queue.length,
         total_bytes: totalBytes,
-        direct_count: queue.length, convertible_count: 0, blocked_count: 0,
-        encrypted_count: 0, ui_context: uiContext, external_disclosure: false
+        ...admissionCounts(queue), ui_context: uiContext, external_disclosure: false
       };
     } catch (error) {
       this.admittedQueue = null;

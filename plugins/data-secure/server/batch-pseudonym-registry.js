@@ -24,6 +24,11 @@ const READABLE_LABEL_RE = /^\[(PERSON|UNTERNEHMEN|PROJEKT|PERSON_UNKLAR|UNTERNEH
 const KNOWN_ALIAS_MAX_CHARS = 160;
 const KNOWN_ALIAS_MAX_TOKENS = KNOWN_ALIAS_MAX_CHARS;
 const KNOWN_ALIAS_CACHE_SIZE = 8192;
+// Pre-rc123 journals do not contain the attested first-token index. Their
+// bindings are keyed HMACs, so that index cannot be reconstructed without the
+// original aliases. Preserve exact matching for small resumptions, but stop
+// before an attacker-controlled document can trigger millions of HMAC probes.
+const LEGACY_ALIAS_PROBE_LIMIT = 50_000;
 const LEGACY_EMPLOYER_ROLE = '[ARBEITGEBER_001]';
 const { RESOURCE_LIMITS } = require('./resource-limits');
 const { SafeError } = require('./runtime');
@@ -108,7 +113,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     key.fill(0);
     throw inputError('Die Pseudonym-Vertragsversion ist ungültig.');
   }
-  const rulesetVersion = String(options.rulesetVersion || 'de-business/2');
+  const rulesetVersion = String(options.rulesetVersion || 'de-business/3');
   if (!/^[a-z0-9][a-z0-9._/-]{0,63}$/u.test(rulesetVersion)) {
     key.fill(0);
     throw inputError('Die Pseudonym-Regelversion ist ungültig.');
@@ -432,6 +437,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     const startCache = new Map();
     const startOrder = new Array(KNOWN_ALIAS_CACHE_SIZE);
     let startCursor = 0;
+    let legacyWork = 0;
     const isKnownStart = (token) => {
       if (!completeStartIndex) return true; // pre-index journals never silently lose aliases
       const value = token.toLowerCase();
@@ -444,6 +450,14 @@ function createBatchPseudonymRegistry(secret, options = {}) {
       return hit;
     };
     const visit = (start, end) => {
+      // Count candidate windows, not only cache misses. Repeated input can
+      // otherwise reuse one cached spelling while still forcing millions of
+      // overlapping window visits in a pre-index journal.
+      if (!completeStartIndex && ++legacyWork > LEGACY_ALIAS_PROBE_LIMIT) {
+        const error = new SafeError('Der ältere Stapel kann mit diesem Dokument nicht mehr sicher und zeitnah fortgesetzt werden. Bitte die Originaldateien neu auswählen.');
+        error.code = 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE';
+        throw error;
+      }
       if ((start > 0 && wordBoundary.test(src[start - 1])) ||
           (end < src.length && wordBoundary.test(src[end]))) return;
       const value = src.slice(start, end).toLowerCase();
@@ -526,5 +540,6 @@ function createBatchPseudonymRegistry(secret, options = {}) {
 module.exports = {
   SECRET_BYTES, CONTRACT_VERSION, READABLE_CONTRACT_VERSION, validPersistedLabel,
   KNOWN_ALIAS_MAX_TOKENS, KNOWN_ALIAS_MAX_CHARS, KNOWN_ALIAS_INDEX_SCHEMA, validKnownAliasIndex,
+  LEGACY_ALIAS_PROBE_LIMIT,
   canonicalValue, base32, placeholderForDigest, createBatchPseudonymRegistry
 };

@@ -68,9 +68,14 @@ test('every current release header matches the package version', () => {
   }
 });
 
-test('the RC131 prerelease distinguishes technical packages from human approval', () => {
+test('release truth separates the current RC132 source from the last bound RC131 packages and human approval', () => {
   const release = read('docs/RELEASE.md');
-  assert.match(release, /Standalone- und Cowork-Zielpakete desselben Quellcommits/u);
+  assert.match(release, /aktuelle Quellstand[\s\S]{0,120}RC132-Entwicklungsstand/u);
+  assert.match(release, /RC132[\s\S]{0,420}weder PKG-04 noch INT-13 oder eine Zielhostfreigabe/u);
+  assert.match(release, /letzte veröffentlichte technische Produktkandidat bleibt RC131/u);
+  assert.match(release, /Standalone- und Cowork-Zielpakete seines Quellcommits/u);
+  assert.match(release, /Windows-PKG-04 und INT-13 sind an RC131 gebunden/u);
+  assert.match(release, /RC132 darf diese Evidence erst nach einem eigenen\s+commitgebundenen Paket- und Zielhostlauf übernehmen/u);
   assert.match(release, /technisches Vorabrelease[\s\S]{0,160}keine Produktionsfreigabe/u);
   assert.match(release, /offene sichtbare N3\/N4-UAT/u);
   assert.doesNotMatch(release, /Ein Standalone-Paket desselben\s+RC-Stands ist damit nicht behauptet/u);
@@ -443,6 +448,13 @@ test('architecture and test documentation reject the superseded single-purpose n
   assert.match(ux, /Windows-Sammelreview/u);
   assert.match(ux, /AppKit-Sammelreview[\s\S]{0,120}E0 implementiert/u);
   assert.doesNotMatch(ux, /macOS-Abnahme fehlt noch \*\*Implementierungsarbeit\*\*/u);
+});
+
+test('current testing documentation states the durable RC132 policy fingerprint without making it release evidence', () => {
+  const testing = read('docs/TESTING.md');
+  assert.match(testing, /Seit RC132 wird derselbe SHA-256-Policyfingerprint\s+zusätzlich in neuen Anonymisierungsjournalen persistiert/u);
+  assert.match(testing, /kein Release- oder Vollständigkeitsnachweis/u);
+  assert.doesNotMatch(testing, /kein persistierter Journal-\/Release-Fingerprint/u);
 });
 
 test('wide privacy chaining widens Cowork only to local Office Markdown without overstating coverage', () => {

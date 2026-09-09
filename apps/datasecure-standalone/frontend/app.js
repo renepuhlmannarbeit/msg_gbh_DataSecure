@@ -320,7 +320,18 @@ function renderSelectionList(files) {
   list.replaceChildren();
   selectionRemoveButtons = [];
   const values = Array.isArray(files) ? files : [];
-  values.forEach((name, index) => {
+  const directExtensions = new Set(['txt', 'md', 'markdown', 'csv']);
+  const grouped = [
+    ['Direkt lesbare Textdateien', values.map((name, index) => ({ name, index })).filter(({ name }) => directExtensions.has(String(name).split('.').pop().toLocaleLowerCase('de-DE')))],
+    ['Lokal in Markdown umzuwandelnde Dateien', values.map((name, index) => ({ name, index })).filter(({ name }) => !directExtensions.has(String(name).split('.').pop().toLocaleLowerCase('de-DE')))]
+  ];
+  grouped.forEach(([heading, entries]) => {
+    if (entries.length === 0) return;
+    const groupHeading = document.createElement('li');
+    groupHeading.className = 'selection-group-heading';
+    groupHeading.textContent = `${heading} (${entries.length})`;
+    list.appendChild(groupHeading);
+    entries.forEach(({ name, index }) => {
     const item = document.createElement('li');
     const label = document.createElement('span');
     label.textContent = String(name);
@@ -341,6 +352,7 @@ function renderSelectionList(files) {
     item.appendChild(button);
     list.appendChild(item);
     selectionRemoveButtons.push(button);
+    });
   });
   list.hidden = !admitted || values.length === 0;
 }

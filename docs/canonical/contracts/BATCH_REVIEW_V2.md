@@ -1,7 +1,7 @@
 # Vertrag: einfacher lokaler Sammelreview v2
 
 Status: verbindlicher Produktvertrag · Stories: BL-012.9, BL-012.10, BL-043.1,
-BL-032.1 · Entscheidung: DS-068
+BL-032.1, BL-021.1 · Entscheidungen: DS-068, DS-096
 
 ## Produktentscheidung
 
@@ -15,8 +15,10 @@ Bedienung vereinfachen, ohne die lokale Datenschutzgrenze zu verschieben:
 
 - farbliche Trennung: rot steht für bereits anonymisierte, gelb für noch zu
   entscheidende Stellen;
-- direkte fachliche Aktionen statt Ja/Nein: **Zertifikatsanbieter behalten** und
-  **Organisation anonymisieren**;
+- direkte fachliche Aktionen statt Ja/Nein: für Zertifikatskontexte
+  **Zertifikatsanbieter behalten** / **Organisation anonymisieren**, für eng
+  begrenzte plausible Prosanamen **Kein Personenname – beibehalten** /
+  **Als Person anonymisieren**;
 - sichtbarer Fortschritt für automatisch abgeschlossene, bereits geprüfte,
   aktuell zu prüfende und danach noch offene Dateien;
 - Vor/Zurück beziehungsweise Rückgängig, ausdrückliches Vertagen und eine einzige
@@ -69,7 +71,14 @@ Bedienung vereinfachen, ohne die lokale Datenschutzgrenze zu verschieben:
 - Windows-, macOS- und Linux-Adapter verwenden dasselbe Aktionsvokabular und
   zeigen den Fortschritt, ohne Rohdaten in Argumenten oder Metadaten abzulegen.
 - Unvollständige, manipulierte oder fremde Entscheidungen stoppen fail-closed.
-- Gruppenaktionen gelten nur für exakt identische normalisierte Kontextzeilen.
+- Gruppenaktionen gelten für Zertifikatsanbieter nur bei exakt identischen
+  normalisierten Kontextzeilen. Bei möglichen Personen bilden exakt gleiche
+  normalisierte vollständige Namen eine gemeinsame Entscheidungseinheit.
+- Eine als Person bestätigte Prosafundstelle erhält dasselbe stapelweite
+  Personenpseudonym wie dieselbe Identität an eindeutigen Personenfeldern. Ein
+  bereits gebundener exakter vollständiger Name wird in Folgedokumenten
+  automatisch anonymisiert. „Beibehalten“ gilt nur für die geprüften offenen
+  Stellen, innerhalb desselben Sammelreviews aber stets einheitlich.
 
 ## Noch erforderliche menschliche Evidenz
 

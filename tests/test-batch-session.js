@@ -1041,6 +1041,78 @@ async function main() {
     assert.strictEqual(acknowledgeDeliveredPackage(begun.batch_token, result.package_id).complete, true);
   });
 
+  await testAsync('F7 rejects contradictory decisions for the same possible person in one batch', async () => {
+    resetInput();
+    ordered('f7-person.txt', 'Anna Berger koordinierte die Einführung.', 1);
+    ordered('f7-phrase.txt', 'Anna Berger koordinierte die Einführung.', 2);
+    const begun = beginBatch({ expectedCount: 2, profile: 'personnel_profile' });
+    assert.strictEqual((await processBatchNext(begun.batch_token, deps)).error, 'LOCAL_REVIEW_DEFERRED');
+    assert.strictEqual((await processBatchNext(begun.batch_token, deps)).error, 'LOCAL_REVIEW_DEFERRED');
+    const refused = await reviewDeferredBatch(begun.batch_token, {
+      ...deps,
+      platform: 'linux',
+      reviewTextLocally: (draft) => ({
+        action: 'reviewed', redactions: [], decisions: draft.ambiguities.map((candidate, index) => ({
+          ambiguity_id: candidate.ambiguity_id,
+          decision: index === 0 ? 'redact' : 'keep'
+        }))
+      })
+    });
+    assert.strictEqual(refused.ok, false);
+    assert.strictEqual(refused.error, 'LOCAL_REVIEW_FAILED');
+    assert.strictEqual(refused.packages.length, 0);
+    const stateText = JSON.stringify(_test.readState(begun.batch_token));
+    assert.doesNotMatch(stateText, /Anna Berger|koordinierte die Einführung/u);
+    assert.doesNotMatch(stateText, /PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52})/u);
+  });
+
+  await testAsync('F7 automatically reuses an exact full person identity established earlier in the batch', async () => {
+    resetInput();
+    ordered('known-person.txt', 'Name: Anna Berger', 1);
+    ordered('known-person-prose.txt', 'Anna Berger koordinierte die Einführung.', 2);
+    const begun = beginBatch({ expectedCount: 2, profile: 'personnel_profile' });
+    const first = await processAndAcknowledge(begun.batch_token, deps);
+    const second = await processAndAcknowledge(begun.batch_token, {
+      ...deps,
+      reviewTextLocally: () => { throw new Error('a known exact identity must not require review'); }
+    });
+    assert.strictEqual(first.ok, true);
+    assert.strictEqual(second.ok, true);
+    const outputs = [first, second].map((entry) =>
+      fs.readFileSync(path.join(roots().output, entry.package_id, `${entry.package_id}.md`), 'utf8'));
+    const labels = outputs.map((output) => output.match(/\[PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]/u)?.[0]);
+    assert.ok(labels[0]);
+    assert.deepStrictEqual(labels, [labels[0], labels[0]]);
+    assert.doesNotMatch(outputs.join('\n'), /Anna Berger/u);
+  });
+
+  await testAsync('F7 publishes every jointly redacted occurrence after the first document binds the person', async () => {
+    resetInput();
+    ordered('f7-first.txt', 'Anna Berger koordinierte die Einführung.', 1);
+    ordered('f7-second.txt', 'Anna Berger koordinierte die Einführung.', 2);
+    const begun = beginBatch({ expectedCount: 2, profile: 'personnel_profile' });
+    assert.strictEqual((await processBatchNext(begun.batch_token, deps)).error, 'LOCAL_REVIEW_DEFERRED');
+    assert.strictEqual((await processBatchNext(begun.batch_token, deps)).error, 'LOCAL_REVIEW_DEFERRED');
+    const reviewed = await reviewDeferredBatch(begun.batch_token, {
+      ...deps,
+      platform: 'linux',
+      reviewTextLocally: (draft) => ({
+        action: 'reviewed', redactions: [],
+        decisions: draft.ambiguities.map((candidate) => ({ ambiguity_id: candidate.ambiguity_id, decision: 'redact' }))
+      })
+    });
+    assert.strictEqual(reviewed.ok, true, JSON.stringify(reviewed));
+    assert.strictEqual(reviewed.stopped, 0);
+    assert.strictEqual(reviewed.packages.length, 2);
+    const outputs = reviewed.packages.map((entry) =>
+      fs.readFileSync(path.join(roots().output, entry.package_id, `${entry.package_id}.md`), 'utf8'));
+    const labels = outputs.map((output) => output.match(/\[PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]/u)?.[0]);
+    assert.ok(labels[0]);
+    assert.deepStrictEqual(labels, [labels[0], labels[0]]);
+    assert.doesNotMatch(outputs.join('\n'), /Anna Berger/u);
+    for (const entry of reviewed.packages) acknowledgeDeliveredPackage(begun.batch_token, entry.package_id);
+  });
+
   await testAsync('an entirely clear multi-file batch completes without opening any review UI', async () => {
     resetInput();
     ordered('clear-first.txt', 'Kunde: Max Mustermann\nRolle: Entwickler', 1);
