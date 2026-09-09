@@ -15,7 +15,8 @@ const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
 const { xlsxCounterexample, bmp32 } = require('./lib/conversion-counterexamples');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
-  : process.platform === 'darwin' && ['x64', 'arm64'].includes(process.arch) ? `macos-${process.arch}` : null;
+  : process.platform === 'darwin' && ['x64', 'arm64'].includes(process.arch) ? `macos-${process.arch}`
+    : process.platform === 'linux' && process.arch === 'x64' ? 'linux-x64-glibc' : null;
 if (!target) throw new Error('CONVERSION_TEST_HOST_UNSUPPORTED');
 // Resolve target-native fixture dependencies only after the explicit host gate.
 const { office, image, pdf, text } = await import('./helpers/conversion-fixtures.mjs');
