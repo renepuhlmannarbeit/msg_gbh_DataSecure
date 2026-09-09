@@ -38,6 +38,7 @@ const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('
 const { processAlive } = require('./process-liveness');
 const { readSourceToPrivateMemory } = require('./read-only-source-snapshot');
 const { releasedDocumentResult } = require('./document-result-grade');
+const { preserveOpaqueErrorCode } = require('./prepublication-error');
 const { createStage, assertStage, publishStage, discardStage, recoverAbandonedStages } = require('./package-staging');
 
 // A batch worker gets one unforgeable in-process preparation capability after
@@ -516,7 +517,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     });
     if (finalResidual.length) {
       const classes = [...new Set(finalResidual.map((x) => x.type))].sort().join(', ');
-      throw new SafeError(`Finale Markdown-Datei hat den Residual-Gate nicht bestanden (${classes}).`);
+      const error = new SafeError(`Finale Markdown-Datei hat den Residual-Gate nicht bestanden (${classes}).`);
+      error.code = 'RESIDUAL_PII';
+      throw error;
     }
     diagnosticStage = 'verified';
 
@@ -627,12 +630,18 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         });
       }
     } catch (error) {
-      try {
-        safeRemovePrivateTree(r.output, path.basename(finalPackage));
-      } catch {
-        throw new SafeError(
-          'Companion-Release konnte nicht atomar abgeschlossen werden; manuelle Prüfung erforderlich.'
-        );
+      // Batch journals treat the atomic rename as the publication commit point
+      // and recover the remaining mapping/delivery projection from the verified
+      // package. Companion callers keep their historical all-or-nothing callback
+      // contract unless they explicitly opt into that durable batch behaviour.
+      if (deps.retainPublishedOnAfterPublishFailure !== true) {
+        try {
+          safeRemovePrivateTree(r.output, path.basename(finalPackage));
+        } catch {
+          throw new SafeError(
+            'Companion-Release konnte nicht atomar abgeschlossen werden; manuelle Prüfung erforderlich.'
+          );
+        }
       }
       throw error;
     }
@@ -728,9 +737,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     });
     if (recoveryError) throw recoveryError;
     if (e instanceof SafeError) throw e;
-    const failure = new SafeError(
+    const failure = preserveOpaqueErrorCode(e, new SafeError(
       'Verarbeitung wurde sicher gestoppt. Es wurde kein vollständiges Output-Paket freigegeben.'
-    );
+    ));
     if (['LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE'].includes(e?.code) ||
         (typeof e?.code === 'string' && e.code.startsWith('PACKAGE_STAGING_') && classifyDiagnosticError(e) === e.code)) {
       failure.code = e.code;

@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC130
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC131
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -11,7 +11,7 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende Paket vollständig entpacken und
 nicht direkt aus dem ZIP starten:
 
-**[Alle geprüften RC130-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc130)**
+**[Alle geprüften 3.2.0-rc130-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc130)**
 
 - **Windows 10/11 x64:**
   [DataSecure-Standalone-3.2.0-rc130-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc130/DataSecure-Standalone-3.2.0-rc130-windows-x64.zip)

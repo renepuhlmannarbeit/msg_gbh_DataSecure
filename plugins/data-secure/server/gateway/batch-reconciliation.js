@@ -15,6 +15,7 @@ const {
 } = require('./document-result-grade');
 const { packageIdentityMatches } = require('./package-identity');
 const { artifactRoot, readMarkdownArtifact, metadata, verifyMarkdownItem } = require('../standalone/markdown-store');
+const { applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
 
 function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
@@ -200,6 +201,7 @@ function createBatchReconciliation(options = {}) {
         if (record.state !== 'verified') continue;
         const { state: ignored, ...identity } = record;
         Object.assign(item, identity);
+        clearRetryBudget(item);
         delete item.document_result;
         delete item.error_code;
         delete item.processing_started_at_ms;
@@ -221,6 +223,7 @@ function createBatchReconciliation(options = {}) {
       // manufacturing a DS-045 result; never process the deterministic package
       // path a second time.
       markMappingPending(item, packageId, published.document_result);
+      clearRetryBudget(item);
       changed = true;
     }
     return changed;
@@ -228,6 +231,19 @@ function createBatchReconciliation(options = {}) {
 
   function markInterruptedItemsRetryable(state) {
     let recovered = 0;
+    const stopRecovery = (item, code = 'RECOVERY_FAILED') => {
+      item.status = 'stopped';
+      item.checkpoint = code === 'RECOVERY_FAILED' ? 'recovery_failed' : 'stopped';
+      item.error_code = code;
+      item.document_result = notProcessedDocumentResult(code);
+      item.local_mapping_exported = false;
+      try {
+        writeMapping(item.source_label || item.name, '', STOPPED, {
+          mappingReference: item.id, documentResult: item.document_result
+        });
+        item.local_mapping_exported = true;
+      } catch { /* the durable stopped-mapping checkpoint remains repairable */ }
+    };
     for (const item of state.items || []) {
       if (item.status !== 'processing') continue;
       if (state.schema === 'datasecure-batch/5' && state.product_channel === 'standalone' && state.processing_mode === 'markdown-only') {
@@ -238,24 +254,30 @@ function createBatchReconciliation(options = {}) {
         if (publication.state === 'verified') continue;
         for (const field of ['artifact_id', 'artifact_sha256', 'artifact_bytes', 'extraction_grade', 'reason_codes']) delete item[field];
         if (publication.state !== 'missing') {
-          item.status = 'stopped';
-          item.checkpoint = 'recovery_failed';
-          item.error_code = 'RECOVERY_FAILED';
-          item.document_result = notProcessedDocumentResult('RECOVERY_FAILED');
-          item.local_mapping_exported = false;
-          try {
-            writeMapping(item.source_label || item.name, '', STOPPED, {
-              mappingReference: item.id, documentResult: item.document_result
-            });
-            item.local_mapping_exported = true;
-          } catch { /* the durable stopped-mapping checkpoint remains repairable */ }
+          stopRecovery(item);
+          recovered++;
+          continue;
+        }
+      } else {
+        let packageId;
+        try { packageId = packageIdForItem(item); }
+        catch { stopRecovery(item); recovered++; continue; }
+        const publication = publishedPackageRecord(packageId);
+        if (publication.state === 'verified') continue;
+        if (publication.state !== 'missing') {
+          stopRecovery(item);
           recovered++;
           continue;
         }
       }
-      item.status = 'retryable';
-      item.error_code = 'PROCESSING_INTERRUPTED';
-      item.checkpoint = 'retryable';
+      const retry = applyRetryBudget(item, {
+        code: 'PROCESSING_INTERRUPTED', retryable: true, deferred: false
+      });
+      if (retry.retryable) {
+        item.status = 'retryable';
+        item.error_code = 'PROCESSING_INTERRUPTED';
+        item.checkpoint = 'retryable';
+      } else stopRecovery(item, 'RETRY_LIMIT_EXCEEDED');
       recovered++;
     }
     return recovered;

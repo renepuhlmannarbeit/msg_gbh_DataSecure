@@ -129,7 +129,12 @@ test('a non-durable state write still lands correctly on disk but skips fsync, a
     token,
     profile: 'general',
     expires_at: new Date(Date.now() + 60_000).toISOString(),
-    items: [{ name: 'x', status: 'processing', checkpoint: 'processing_started' }]
+    items: [{
+      id: 'b'.repeat(32),
+      name: 'x',
+      status: 'processing',
+      checkpoint: 'processing_started'
+    }]
   };
 
   const originalFsync = fs.fsyncSync;
@@ -148,7 +153,9 @@ test('a non-durable state write still lands correctly on disk but skips fsync, a
     state.items[0].checkpoint = 'extracted';
     _test.writeState(state, { durable: false });
     assert.strictEqual(fsyncCalls, durableFsyncsPerWrite, 'a non-durable checkpoint-only write must not fsync');
-    assert.deepStrictEqual(_test.readState(token).items[0], { name: 'x', status: 'processing', checkpoint: 'extracted' },
+    assert.deepStrictEqual(_test.readState(token).items[0], {
+      id: 'b'.repeat(32), name: 'x', status: 'processing', checkpoint: 'extracted'
+    },
       'the non-durable write must still land correctly and be readable back');
 
     state.items[0].status = 'retryable';

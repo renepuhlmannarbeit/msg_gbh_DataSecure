@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 09.09.2026 · 3.2.0-rc130
+Stand: 09.09.2026 · 3.2.0-rc131
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
@@ -12,6 +12,17 @@ E1-Abnahme eines durch Commit und Paket-Hash festgeschriebenen Kandidaten;
 maschinengeprüfter Zwei-Personen-Ablauf für Windows x64 und einen Mac sind E0
 fertig. Die leeren `NOT_RUN`-Protokolle sind keine Evidence. Ein einzelner Mac
 belegt nur seine tatsächliche Intel- oder ARM64-Architektur.
+
+RC131 / BL-010.13/BL-011.8/BL-021.1/BL-041.1 bindet den real beobachteten
+DOCX-Fehler an drei voneinander unabhängige E0-Nachweise: fachliche
+kontextgebundene Residual-Regression mit breitem Fachwortsatz und unverändert
+scharfem Namens-Gegenfall, generalisierte und begrenzte Fehlerklassifikation in
+Erstverarbeitung, Sammelreview und Recovery sowie ein Lauf des
+von RC130 tatsächlich extrahierten Markdown-Artefakts durch den aktuellen
+Privacy-/Publikationskern. `PROCESSING_INTERRUPTED` bleibt ausschließlich reale
+Recoverysemantik; verifizierte Publikationen werden adoptiert, unsichere stoppen,
+und wiederholte identische Transienten enden begrenzt. RC131-Paket-, INT-13- und UAT-Evidenz ist noch neu zu
+erzeugen und darf nicht von RC130 übernommen werden.
 
 RC125 revalidiert die Cloud-/Local-Cowork-Grenze gegen die aktuelle offizielle
 Herstellerdokumentation und bindet den direkten Sechs-Format-Prompt sowie beide

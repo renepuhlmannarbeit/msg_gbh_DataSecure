@@ -1,10 +1,28 @@
 # Entscheidungs-Traceability
 
-Stand: 09.09.2026 · 3.2.0-rc130
+Stand: 09.09.2026 · 3.2.0-rc131
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC131 bindet die gemeinsame Wiederaufnahmeregel an
+`gateway/prepublication-error.js`, `batch-item-processor.js`,
+`batch-review-publication.js` und `batch-reconciliation.js`.
+`test-prepublication-error-policy.js`, `test-batch-item-processor.js`,
+`test-batch-review-publication.js`, `test-batch-reconciliation.js`,
+`test-batch-post-publish-recovery.js` und `test-gateway-e2e.js` belegen: nur
+explizite Codes aus dem transienten Katalog bleiben wiederholbar, identische
+Fehler sind auf drei Fehlschläge begrenzt, eine fehlende Isolation ist terminal,
+unklassifizierte Exceptions stoppen als `INTERNAL_FAILURE`, verifizierte bereits
+veröffentlichte Ergebnisse werden ohne Neuverarbeitung adoptiert und unsichere
+vorhandene Pakete stoppen als `RECOVERY_FAILED`. `compliance.js` und
+`orchestrator.js` geben beide Residual-Gates als `RESIDUAL_PII` weiter.
+`test-pii-regression.js` erhält einen breiten Satz professioneller Zweiwortwerte
+aus bewerteten neutralen DOCX-Tabellen, fordert aber weiterhin den terminalen
+Residual-Stopp für einen echten ungebundenen Namen in derselben Struktur. Die
+gemeinsame Modulnutzung bindet
+Standalone und Cowork an denselben Vertrag.
 
 RC130 bindet die hostunabhängige Konstruktion der Windows-Helferpfade an
 `companion/file-picker.js`, `folder-picker.js`, `source-folder.js` und

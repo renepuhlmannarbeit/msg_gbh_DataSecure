@@ -1,6 +1,34 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc130 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc131 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+
+## RC131 – generalisierte Fortsetzungs- und DOCX-Residualkorrektur
+
+Ein realer RC130-Standalone-Lauf erreichte Konvertierung und visuelle Prüfung,
+stoppte danach aber bei vier fachlichen Zweiwortwerten in generisch beschrifteten
+DOCX-Tabellen. Die Werte waren weder Quell-Namensanker noch Teil des privaten
+Personenwörterbuchs; der unabhängige Residual-Prüfer hatte sie konservativ als
+`PERSON_CANDIDATE` eingeordnet. RC131 erkennt diese Begriffe und weitere
+professionelle Zweiwortphrasen in bewerteten Skill-/Kompetenzmatrizen
+kontextgebunden als Inhalt, ohne die neutrale Tabellensperre für einen echten
+Namen zu öffnen.
+Der reale, von RC130 erfolgreich konvertierte Markdown-Inhalt durchläuft den
+aktuellen Privacy-Kern byte-idempotent sowie den vollständigen
+Verifikations-/Publikationspfad erfolgreich.
+
+Die zweite Korrektur ist absichtlich nicht dokumentspezifisch: Der gemeinsame
+Classifier für Erstverarbeitung und Sammelreview erlaubt Wiederaufnahme nur
+für explizite transiente Codes. Ein zurückgekehrter unbekannter Fehler ist
+`INTERNAL_FAILURE`; `RESIDUAL_PII` bleibt als eigener terminaler Grund erhalten.
+Nur die Recovery eines verwaisten `processing`-Checkpoints oder ein Fehler nach
+atomarer Veröffentlichung darf `PROCESSING_INTERRUPTED` setzen. Identische
+transiente Fehler dürfen höchstens zwei Fortsetzungen erreichen und werden beim
+dritten Fehlschlag terminal als `RETRY_LIMIT_EXCEEDED` gebunden; eine fehlende
+Konvertierungsisolation ist kein transienter Zustand. Nach dem atomaren Rename
+bleibt ein verifiziertes Paket für die Adoption erhalten, während ein vorhandenes
+beschädigtes oder strukturell unsicheres Paket als `RECOVERY_FAILED` stoppt.
+Damit können weder Standalone noch Cowork eine deterministische oder dauerhaft
+technische Pipelineabweichung endlos als fortsetzbar anbieten.
 
 ## RC130 – portable Windows-Helferpfade und reale Testisolation
 

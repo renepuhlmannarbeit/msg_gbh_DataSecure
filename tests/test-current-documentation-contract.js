@@ -269,14 +269,16 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
 
 test('main README gives direct Windows and macOS Standalone installation paths', () => {
   const readme = read('README.md');
-  const version = JSON.parse(read('package.json')).version;
-  for (const value of [
-    `DataSecure-Standalone-${version}-windows-x64.zip`,
-    `DataSecure-Standalone-${version}-macos-x64.zip`,
-    `DataSecure-Standalone-${version}-macos-arm64.zip`,
-    'DataSecure Standalone.exe',
-    'DataSecure Standalone.app'
-  ]) assert.ok(readme.includes(value), value);
+  const release = /Alle geprüften (\d+\.\d+\.\d+-rc\d+)-Pakete/u.exec(readme)?.[1];
+  assert.ok(release, 'README must name the actually published Standalone release');
+  for (const target of ['windows-x64', 'macos-x64', 'macos-arm64']) {
+    const asset = `DataSecure-Standalone-${release}-${target}.zip`;
+    assert.ok(readme.includes(asset), asset);
+    assert.ok(readme.includes(`/releases/download/v${release}/${asset}`), `${asset} direct release link`);
+  }
+  for (const value of ['DataSecure Standalone.exe', 'DataSecure Standalone.app']) {
+    assert.ok(readme.includes(value), value);
+  }
   assert.match(readme, /weder Claude noch Cowork, Node\.js, Python oder\s+Rust/u);
   assert.match(readme, /Systemeinstellungen →\s+Datenschutz & Sicherheit/u);
 });

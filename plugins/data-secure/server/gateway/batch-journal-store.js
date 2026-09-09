@@ -318,8 +318,18 @@ function createBatchJournalStore(options = {}) {
       value.split('/').every((part) => part && part !== '.' && part !== '..');
   }
 
+  function validRetryBudget(item) {
+    const hasCode = Object.hasOwn(item, 'retry_failure_code');
+    const hasCount = Object.hasOwn(item, 'retry_failure_count');
+    return hasCode === hasCount && (!hasCode || (
+      /^[A-Z][A-Z0-9_]{2,63}$/u.test(String(item.retry_failure_code || '')) &&
+      Number.isSafeInteger(item.retry_failure_count) && item.retry_failure_count >= 1 &&
+      item.retry_failure_count <= 3
+    ));
+  }
+
   function validV2ItemResult(item, schema) {
-    if (!validSourceLabel(item) || Object.hasOwn(item, 'read_capability')) return false;
+    if (!validSourceLabel(item) || !validRetryBudget(item) || Object.hasOwn(item, 'read_capability')) return false;
     // Storage validation must precede all status-specific early returns.
     if (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
         /\.dsart$/iu.test(String(item.work_name || ''))) return false;
@@ -353,7 +363,7 @@ function createBatchJournalStore(options = {}) {
 
   const markdownArtifactFields = ['artifact_id', 'artifact_sha256', 'artifact_bytes', 'extraction_grade', 'reason_codes'];
   function validMarkdownItem(item) {
-    if (!item || typeof item !== 'object' || Array.isArray(item) || !validSourceLabel(item) ||
+    if (!item || typeof item !== 'object' || Array.isArray(item) || !validSourceLabel(item) || !validRetryBudget(item) ||
         !/^[a-f0-9]{32}$/u.test(String(item.id || '')) || typeof item.name !== 'string' ||
         item.name.length < 1 || item.name.length > 255 ||
         ['package_id', 'package_identity', 'read_capability', 'analysis_acknowledged', 'private_artifact_encrypted', 'legacy_work_name']

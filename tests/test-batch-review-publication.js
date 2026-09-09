@@ -92,7 +92,9 @@ function fixture(options = {}) {
       events.push(`anonymize:${item.name}`);
       if (options.pipelineFailure === item.name) {
         const error = new Error('pipeline failed');
-        error.code = options.pipelineFailureCode || 'PARSER_TIMEOUT';
+        if (options.uncodedPipelineFailure !== true) {
+          error.code = options.pipelineFailureCode || 'PARSER_TIMEOUT';
+        }
         throw error;
       }
       const reviewed = callOptions.reviewText(drafts[items.indexOf(item)]);
@@ -186,6 +188,20 @@ async function main() {
     assert.strictEqual(value.items[0].status, 'delivery_pending');
     assert.strictEqual(value.items[1].status, 'retryable');
     assert.strictEqual(value.items[1].error_code, 'PARSER_TIMEOUT');
+  });
+
+  await testAsync('an uncoded review-pipeline exception stops and is never offered as resumable', async () => {
+    const value = fixture({ pipelineFailure: 'first', uncodedPipelineFailure: true });
+    const result = await value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+      { document_index: 1, decisions: [decision('a-1')] },
+      { document_index: 2, decisions: [decision('a-2')] }
+    ]);
+    assert.strictEqual(result.failed, 1);
+    assert.strictEqual(value.items[0].status, 'stopped');
+    assert.strictEqual(value.items[0].checkpoint, 'stopped');
+    assert.strictEqual(value.items[0].error_code, 'INTERNAL_FAILURE');
+    assert.strictEqual(value.items[0].document_result.reason_code, 'INTERNAL_FAILURE');
+    assert.strictEqual(value.items[1].status, 'delivery_pending');
   });
 
   await testAsync('mapping and cleanup failures retain recoverable state and continue', async () => {

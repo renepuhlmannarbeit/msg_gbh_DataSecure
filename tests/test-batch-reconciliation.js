@@ -133,9 +133,11 @@ test('verified processing items are adopted before interrupted work becomes retr
   assert.deepStrictEqual(invalid, {
     id: 'g'.repeat(32),
     name: 'two.txt',
-    status: 'retryable',
-    checkpoint: 'retryable',
-    error_code: 'PROCESSING_INTERRUPTED'
+    status: 'stopped',
+    checkpoint: 'recovery_failed',
+    error_code: 'RECOVERY_FAILED',
+    document_result: notProcessedDocumentResult('RECOVERY_FAILED'),
+    local_mapping_exported: true
   });
   assert.strictEqual(reconciliation.markInterruptedItemsRetryable(state), 0);
   assert.strictEqual(pending.status, 'pending');
@@ -160,17 +162,26 @@ test('a v1 journal adopts an already published v2 package without inventing a gr
   assert.strictEqual(reconciliation.reconcilePublishedItems(v2State), false);
 });
 
-test('missing or unsafe output is never adopted or mapped', () => {
+test('missing output is retryable while unsafe output stops without adoption', () => {
   for (const mode of ['missing', 'hash-mismatch', 'folder-symlink']) {
     const { reconciliation, events } = fixture({ mode });
     const processing = { id: 'a'.repeat(32), name: 'one.txt', status: 'processing' };
     assert.strictEqual(reconciliation.reconcilePublishedItems({ items: [processing] }), false, mode);
     assert.strictEqual(processing.status, 'processing', mode);
     assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items: [processing] }), 1, mode);
+    if (mode === 'missing') {
+      assert.strictEqual(processing.status, 'retryable');
+      assert.strictEqual(processing.error_code, 'PROCESSING_INTERRUPTED');
+      assert.strictEqual(processing.retry_failure_count, 1);
+    } else {
+      assert.strictEqual(processing.status, 'stopped');
+      assert.strictEqual(processing.error_code, 'RECOVERY_FAILED');
+      assert.strictEqual(processing.document_result.reason_code, 'RECOVERY_FAILED');
+    }
     const mapping = { name: 'one.txt', status: 'mapping_pending', package_id: packageId };
     assert.strictEqual(reconciliation.reconcilePendingMappings({ items: [mapping] }), false, mode);
     assert.strictEqual(mapping.status, 'mapping_pending', mode);
-    assert.deepStrictEqual(events, [], mode);
+    assert.deepStrictEqual(events, mode === 'missing' ? [] : ['append:one.txt:'], mode);
   }
 });
 
@@ -218,17 +229,36 @@ test('every mapping crash boundary remains pending and can be retried without pu
 });
 
 test('interruption recovery mutates only processing items and is idempotent', () => {
-  const { reconciliation } = fixture();
+  const { reconciliation } = fixture({ mode: 'missing' });
   const statuses = ['pending', 'processing', 'released', 'stopped', 'delivery_pending', 'mapping_pending', 'deferred_review', 'processing'];
-  const items = statuses.map((status, index) => ({ status, marker: index }));
+  const items = statuses.map((status, index) => ({ status, marker: index,
+    ...(status === 'processing' ? { id: (index + 1).toString(16).repeat(32) } : {}) }));
   const untouched = items.filter((item) => item.status !== 'processing').map((item) => ({ ...item }));
   assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items }), 2);
   assert.deepStrictEqual(items.filter((item) => item.status !== 'retryable'), untouched);
   for (const item of items.filter((entry) => entry.status === 'retryable')) {
     assert.strictEqual(item.checkpoint, 'retryable');
     assert.strictEqual(item.error_code, 'PROCESSING_INTERRUPTED');
+    assert.strictEqual(item.retry_failure_count, 1);
   }
   assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items }), 0);
+});
+
+test('three identical orphaned processing recoveries stop instead of looping forever', () => {
+  const { reconciliation } = fixture({ mode: 'missing' });
+  const item = { id: '8'.repeat(32), name: 'one.txt', status: 'processing' };
+  for (let failure = 1; failure <= 3; failure++) {
+    assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items: [item] }), 1);
+    assert.strictEqual(item.retry_failure_count, failure);
+    if (failure < 3) {
+      assert.strictEqual(item.status, 'retryable');
+      item.status = 'processing';
+    }
+  }
+  assert.strictEqual(item.status, 'stopped');
+  assert.strictEqual(item.error_code, 'RETRY_LIMIT_EXCEEDED');
+  assert.strictEqual(item.document_result.reason_code, 'RETRY_LIMIT_EXCEEDED');
+  assert.strictEqual(item.local_mapping_exported, true);
 });
 
 test('preflight stops become terminal only after an idempotent local stopped mapping', () => {

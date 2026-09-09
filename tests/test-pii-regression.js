@@ -1994,6 +1994,44 @@ test('operational person-column labels redact names while neutral columns stop f
   assert.deepStrictEqual(pii.scanResidual(professionalMethod, 'general'), []);
 });
 
+test('generic DOCX table columns preserve professional terms without weakening the person gate', () => {
+  const professionalValues = [
+    'Soft Skills',
+    'Servant Leadership',
+    'Change Management',
+    'Öffentliche Verwaltung',
+    'Strategic Planning',
+    'Public Administration',
+    'Team Collaboration',
+    'Conflict Resolution',
+    'Digital Strategy',
+    'Process Optimization',
+    'Talent Development',
+    'Service Management',
+    'Knowledge Management',
+    'Customer Success',
+    'Operational Excellence',
+    'Lean Management'
+  ];
+  const source = [
+    '| Spalte 1 | Spalte 2 |',
+    '| --- | --- |',
+    ...professionalValues.map((value) => `| ${value} | ●●●○ |`)
+  ].join('\n');
+  const result = anonymizeMarkdown(source, 'personnel_profile');
+  for (const value of professionalValues) assertPresent(result.text, value, value);
+  assert.deepStrictEqual(pii.scanResidual(result.text, 'personnel_profile', result.dictionary, {
+    strongPersonAnchor: result.strongPersonAnchor
+  }), []);
+
+  const unresolvedPerson = `${source}\n| Anna Berger | ●●●○ |`;
+  assert.throws(() => anonymizeMarkdown(unresolvedPerson, 'personnel_profile'), (error) => {
+    assert.strictEqual(error.code, 'RESIDUAL_PII');
+    assert.match(error.message, /PERSON_CANDIDATE/u);
+    return true;
+  });
+});
+
 test('plain equal-width table headers never masquerade as fragmented sensitive structures', () => {
   const directPersonHeaders = new Set(['Name', 'Mitarbeiter']);
   for (const header of ['Name', 'Mitarbeiter', 'Kunden', 'Personal', 'Patienten',

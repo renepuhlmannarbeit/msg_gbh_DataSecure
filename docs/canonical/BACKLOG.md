@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 09.09.2026 · Produktstand 3.2.0-rc130
+Stand: 09.09.2026 · Produktstand 3.2.0-rc131
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -20,6 +20,38 @@ sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
 Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
+
+### RC131 – deterministische Fehler sind niemals Endlosschleifen
+
+BL-010.13/BL-011.8/BL-021.1/BL-041.1: Ein realer RC130-Standalone-Lauf mit
+einem komplexen DOCX belegte zwei gekoppelte Fehler. Der unabhängige
+Residual-Prüfer klassifizierte fachliche Tabellenwerte aus einem generischen
+Office-Export als Personenkandidaten. Der sichere Stopp wurde anschließend
+ohne maschinenlesbaren Grund in `PROCESSING_INTERRUPTED` umgedeutet und dadurch
+bei jeder Verlauf-Fortsetzung identisch wiederholt.
+
+RC131 ergänzt den bestehenden Fachwortkatalog um belegte Begriffe und behandelt
+darüber hinaus bewertete Skill-/Kompetenzmatrizen kontextgebunden: allgemeine
+professionelle Zweiwortphrasen bleiben Inhalt, echte Namen in derselben neutralen
+Tabellenstruktur bleiben weiterhin gesperrt. Der gemeinsame
+Vorveröffentlichungs-Classifier setzt außerdem produktweit durch: Nur ein
+explizit katalogisierter transienter Fehler ist fortsetzbar. Uncodierte oder
+unbekannte Pipelinefehler werden terminal als `INTERNAL_FAILURE`, Residual-
+Fehler explizit als `RESIDUAL_PII` gespeichert. Ein echter
+`PROCESSING_INTERRUPTED`-Zustand entsteht nur nach nachgewiesenem Prozessverlust
+aus einem verwaisten dauerhaften `processing`-Checkpoint oder nach bereits
+atomar veröffentlichter, noch nicht vollständig abgeglichener Ausgabe. Derselbe
+explizit transiente Fehler bleibt höchstens zweimal fortsetzbar und stoppt beim
+dritten Fehlschlag als `RETRY_LIMIT_EXCEEDED`; eine dauerhaft fehlende
+Konvertierungsisolation ist sofort terminal. Ein verifiziertes veröffentlichtes
+Paket wird nach Callback-/Journalfehlern adoptiert und niemals neu verarbeitet;
+ein vorhandenes unsicheres Paket stoppt als `RECOVERY_FAILED`.
+
+Standalone und Cowork verwenden denselben Privacy- und Stapelkern; beide
+Erstverarbeitungs- und Sammelreviewpfade sind an diese Regel gebunden. Gezielte
+Regression, der reale bereits extrahierte DOCX-Markdown-Inhalt und die
+vollständigen Produktgates bilden E0. Paketbau, INT-13 und sichtbarer UAT müssen
+aus dem finalen RC131-Commit neu gebunden werden.
 
 ### RC130 – Windows-Helferpfade und POSIX-Testisolation
 

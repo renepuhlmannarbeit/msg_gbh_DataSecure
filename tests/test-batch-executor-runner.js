@@ -9,11 +9,12 @@ const { test, testAsync, done, assert } = createSuite('Batch executor runner bou
 const token = 'e'.repeat(64);
 const pid = 4242;
 
-test('transient conversion failures remain recoverable in the production batch policy', () => {
+test('only transient conversion failures remain recoverable in the production batch policy', () => {
   assert.deepEqual(
     batchFacade._test.retryableErrorCodes.filter(code => code.startsWith('CONVERSION_')).sort(),
-    ['CONVERSION_ISOLATION_UNAVAILABLE', 'CONVERSION_START_FAILED', 'CONVERSION_TIMEOUT']
+    ['CONVERSION_START_FAILED', 'CONVERSION_TIMEOUT']
   );
+  assert.ok(!batchFacade._test.retryableErrorCodes.includes('CONVERSION_ISOLATION_UNAVAILABLE'));
 });
 
 function progress(overrides = {}) {

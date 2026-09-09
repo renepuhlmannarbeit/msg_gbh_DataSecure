@@ -2,10 +2,10 @@
 
 const {
   notProcessedDocumentResult,
-  normalizeDocumentResultReasonCode,
   positiveDocumentResult,
   sameDocumentResult
 } = require('./document-result-grade');
+const { classifyPrepublicationError, applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
 
 function createBatchReviewPublication(options = {}) {
   const anonymizeNext = options.anonymizeNext;
@@ -128,6 +128,7 @@ function createBatchReviewPublication(options = {}) {
           copyClaim: true,
           removeImages: state.remove_images,
           packageId: packageIdForItem(item),
+          retainPublishedOnAfterPublishFailure: true,
           reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1)),
           beforePublish: async (details) => {
             positiveDocumentResult(details?.document_result);
@@ -162,6 +163,7 @@ function createBatchReviewPublication(options = {}) {
           throw unconfirmedPublication();
         }
         markMappingPending(item, result.package_id, result.document_result);
+        clearRetryBudget(item);
         writeState(state);
         try {
           ensureMappingOutbox(item.source_label || item.name, result.package_id, item.document_result);
@@ -201,11 +203,9 @@ function createBatchReviewPublication(options = {}) {
           failed++;
           continue;
         }
-        const reportedCode = String(error?.code || 'PROCESSING_INTERRUPTED');
-        const code = retryableCodes.has(reportedCode)
-          ? reportedCode
-          : normalizeDocumentResultReasonCode(reportedCode);
-        item.status = retryableCodes.has(code) ? 'retryable' : 'stopped';
+        const classified = applyRetryBudget(item, classifyPrepublicationError(error, retryableCodes));
+        const { code } = classified;
+        item.status = classified.retryable ? 'retryable' : 'stopped';
         item.checkpoint = item.status === 'retryable' ? 'retryable' : 'stopped';
         item.error_code = code;
         if (item.status === 'stopped') {

@@ -452,6 +452,22 @@ async function main() {
     }
   });
 
+  await testAsync('a batch publication commit survives a later callback failure for deterministic adoption', async () => {
+    const source = queueBuffer('durable-batch-publication.txt', 'Kunde: Max Mustermann');
+    const selected = { name: path.basename(source), full: source, stat: fs.lstatSync(source) };
+    const packageId = `ds_${'9'.repeat(32)}`;
+    await assert.rejects(() => gw.anonymizeNext('customer', {
+      ...depsFor('none'),
+      inputQueue: [selected],
+      packageId,
+      retainPublishedOnAfterPublishFailure: true,
+      afterPublish: async () => { throw new Error('synthetic journal callback failure'); }
+    }), /sicher|gestoppt/u);
+    const published = path.join(root, 'Output', packageId);
+    assert.ok(fs.existsSync(path.join(published, 'manifest.json')));
+    assert.ok(fs.existsSync(path.join(published, `${packageId}.md`)));
+  });
+
   for (const [name, fixture] of [['XLSX', 'synthetic_customer.xlsx'], ['PPTX', 'synthetic_contract.pptx']]) {
     await testAsync(`${name} uses the Cowork Markdown-first path even for legacy callers without a channel field`, async () => {
       const source = queue(path.join(fixtures, fixture));

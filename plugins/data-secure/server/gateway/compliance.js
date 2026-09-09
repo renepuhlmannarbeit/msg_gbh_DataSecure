@@ -37,10 +37,15 @@ function anonymizeMarkdown(raw, profile, options = {}) {
 
   if (residual.length) {
     const classes = [...new Set(residual.map((r) => r.type))].sort().join(', ');
-    throw new SafeError(
+    const error = new SafeError(
       `Finale Rest-PII-Prüfung hat nach ${passes} Durchläufen ${residual.length} mögliche ` +
         `direkte Identifikatoren gefunden (${classes}). Verarbeitung wurde fail-closed gestoppt.`
     );
+    // A residual finding is deterministic for the same source and ruleset.
+    // It must be a terminal, explainable result instead of masquerading as an
+    // interrupted worker that the history UI offers to resume forever.
+    error.code = 'RESIDUAL_PII';
+    throw error;
   }
 
   return {

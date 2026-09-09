@@ -124,6 +124,7 @@ function fixture(options = {}) {
       assert.strictEqual(callOptions.removeImages, true);
       assert.strictEqual(callOptions.packageId, expectedPackageId);
       assert.strictEqual(callOptions.productChannel, state.product_channel);
+      assert.strictEqual(callOptions.retainPublishedOnAfterPublishFailure, true);
       if (options.pipelineError) throw options.pipelineError;
       if (options.onAnonymize) options.onAnonymize(callOptions);
       await callOptions.onClaimed();
@@ -269,8 +270,9 @@ async function main() {
     for (const [error, status, checkpoint, expectedCode] of [
       [codedError('LOCAL_REVIEW_DEFERRED'), 'deferred_review', 'awaiting_local_review', 'LOCAL_REVIEW_DEFERRED'],
       [codedError('PARSER_TIMEOUT'), 'retryable', 'retryable', 'PARSER_TIMEOUT'],
-      [new SafeError('Unknown worker crash'), 'retryable', 'retryable', 'PROCESSING_INTERRUPTED'],
-      [new Error('Unexpected pipeline exception'), 'retryable', 'retryable', 'PROCESSING_INTERRUPTED'],
+      [new SafeError('Unknown pipeline failure'), 'stopped', 'stopped', 'INTERNAL_FAILURE'],
+      [new Error('Unexpected pipeline exception'), 'stopped', 'stopped', 'INTERNAL_FAILURE'],
+      [codedError('RESIDUAL_PII'), 'stopped', 'stopped', 'RESIDUAL_PII'],
       [codedError('PARSE_FAILED'), 'stopped', 'stopped', 'PARSE_FAILED'],
       [codedError('ALICE_MUSTERMANN'), 'stopped', 'stopped', 'INTERNAL_FAILURE']
     ]) {
@@ -284,6 +286,28 @@ async function main() {
       assert.strictEqual(value.events.includes('cleanup'), status === 'stopped');
       assert.ok(value.events.includes('evidence'));
     }
+  });
+
+  await testAsync('persistent transient failures stop after a bounded identical retry sequence', async () => {
+    const value = fixture({ pipelineError: codedError('PARSER_TIMEOUT') });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+      assert.strictEqual(result.error, attempt < 3 ? 'PARSER_TIMEOUT' : 'RETRY_LIMIT_EXCEEDED');
+      assert.strictEqual(value.item.retry_failure_count, attempt);
+      assert.strictEqual(value.item.retry_failure_code, 'PARSER_TIMEOUT');
+      assert.strictEqual(value.item.status, attempt < 3 ? 'retryable' : 'stopped');
+    }
+    assert.strictEqual(value.item.document_result.reason_code, 'RETRY_LIMIT_EXCEEDED');
+    assert.strictEqual(value.events.filter((event) => event === 'mapping-stopped').length, 1);
+  });
+
+  await testAsync('a missing conversion isolation runtime is terminal instead of endlessly resumable', async () => {
+    const value = fixture({ pipelineError: codedError('CONVERSION_ISOLATION_UNAVAILABLE') });
+    const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+    assert.strictEqual(result.error, 'CONVERSION_ISOLATION_UNAVAILABLE');
+    assert.strictEqual(value.item.status, 'stopped');
+    assert.strictEqual(value.item.document_result.reason_code, 'CONVERSION_ISOLATION_UNAVAILABLE');
+    assert.strictEqual(Object.hasOwn(value.item, 'retry_failure_count'), false);
   });
 
   await testAsync('a real malformed CSV becomes a durable stopped item in the shared product pipeline', async () => {
@@ -351,7 +375,7 @@ async function main() {
       [{ skipAfterPublish: true }, 'publication_unconfirmed'],
       [{ doubleAfterPublish: true }, 'package_published'],
       [{ wrongPackageId: true }, 'package_published'],
-      [{ missingBeforePublishResult: true }, 'retryable'],
+      [{ missingBeforePublishResult: true }, 'stopped'],
       [{ missingAfterPublishResult: true }, 'package_published'],
       [{ mismatchedAfterPublishResult: true }, 'package_published'],
       [{ missingReturnResult: true }, 'package_published'],
@@ -360,16 +384,20 @@ async function main() {
       const value = fixture(options);
       const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
       assert.strictEqual(result.error,
-        options.missingBeforePublishResult || options.missingAfterPublishResult
+        options.missingBeforePublishResult
+          ? 'INTERNAL_FAILURE'
+          : options.missingAfterPublishResult
           ? 'PROCESSING_INTERRUPTED'
           : 'BATCH_PUBLICATION_UNCONFIRMED');
       assert.strictEqual(value.item.status,
-        options.missingBeforePublishResult ? 'retryable' : 'processing');
+        options.missingBeforePublishResult ? 'stopped' : 'processing');
       assert.strictEqual(value.item.checkpoint, expectedCheckpoint);
-      if (options.missingBeforePublishResult) assert.ok(!Object.hasOwn(value.item, 'document_result'));
+      if (options.missingBeforePublishResult) {
+        assert.strictEqual(value.item.document_result.reason_code, 'INTERNAL_FAILURE');
+      }
       assert.ok(!value.events.includes('mapping-pending'));
-      assert.ok(!value.events.includes('mapping-stopped'));
-      assert.ok(!value.events.includes('cleanup'));
+      assert.strictEqual(value.events.includes('mapping-stopped'), options.missingBeforePublishResult === true);
+      assert.strictEqual(value.events.includes('cleanup'), options.missingBeforePublishResult === true);
     }
   });
 

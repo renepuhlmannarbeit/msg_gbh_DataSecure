@@ -2,13 +2,13 @@
 
 const {
   notProcessedDocumentResult,
-  normalizeDocumentResultReasonCode,
   positiveDocumentResult,
   sameDocumentResult
 } = require('./document-result-grade');
 const { validateCoverage } = require('../standalone/markdown-contract');
 const { verifyMarkdownItem } = require('../standalone/markdown-store');
 const { processingModeForBatch } = require('../core/processing-mode');
+const { classifyPrepublicationError, applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
 
 function conversionBatch(state) {
   return state?.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' && state.product_channel === 'standalone';
@@ -50,14 +50,23 @@ function createBatchItemProcessor(options = {}) {
     return error;
   }
 
-  function publicFailureMessage(code) {
+  function publicFailureMessage(code, classification = {}) {
     const fixed = {
       BATCH_SNAPSHOT_CHANGED: 'Der bestätigte Dateistapel wurde verändert. Die unveröffentlichten privaten Kopien wurden sicher gestoppt.',
       CONVERSION_TERMINATION_UNCONFIRMED: 'Die Verarbeitung wurde unterbrochen. Das Ende des Konvertierungsprozesses konnte nicht bestätigt werden. Weitere Dateien werden nicht gestartet.',
       LOCAL_REVIEW_DEFERRED: 'Die lokale Prüfung wurde vertagt. Das Dokument bleibt lokal und wird nicht freigegeben.',
       REQUEST_CANCELLED: 'Die lokale Verarbeitung wurde auf Anforderung sicher abgebrochen.'
     };
-    return fixed[code] || 'Die lokale Verarbeitung wurde sicher unterbrochen. Es wurde kein Paket freigegeben.';
+    if (classification.exhausted) {
+      return 'Die Verarbeitung ist mit demselben technischen Fehler wiederholt fehlgeschlagen und wird nicht erneut fortgesetzt. Bitte die Diagnose prüfen und einen neuen Lauf starten.';
+    }
+    if (classification.retryable) {
+      return 'Die lokale Verarbeitung wurde technisch unterbrochen. Sie kann ausdrücklich fortgesetzt werden.';
+    }
+    if (code === 'RESIDUAL_PII') {
+      return 'Die Datenschutzprüfung hat mögliche Identifikatoren gefunden. Das Dokument wurde nicht freigegeben.';
+    }
+    return 'Die Datei wurde sicher nicht verarbeitet. Es wurde kein Paket freigegeben. Bitte die Diagnose prüfen.';
   }
 
   function publishedFailure(state, item, expectedPackageId, error) {
@@ -124,6 +133,7 @@ function createBatchItemProcessor(options = {}) {
         copyClaim: true,
         removeImages: state.remove_images,
         ...(converting ? { artifactId: expectedPackageId } : { packageId: expectedPackageId }),
+        retainPublishedOnAfterPublishFailure: true,
         onClaimed: async () => {
           checkpoint('private_copy_claimed', 'intake_and_preparation');
           if (deps.onClaimed) await deps.onClaimed();
@@ -189,6 +199,7 @@ function createBatchItemProcessor(options = {}) {
           throw publicationUnconfirmed();
         }
         Object.assign(item, identity);
+        clearRetryBudget(item);
         delete item.document_result;
         item.status = deliveryPendingStatus;
         item.checkpoint = 'delivery_pending';
@@ -210,6 +221,7 @@ function createBatchItemProcessor(options = {}) {
         throw publicationUnconfirmed();
       }
       markMappingPending(item, expectedPackageId, result.document_result);
+      clearRetryBudget(item);
       writeState(state);
       try {
         ensureMappingOutbox(item.source_label || item.name, expectedPackageId, item.document_result);
@@ -276,16 +288,16 @@ function createBatchItemProcessor(options = {}) {
           raw_content_sent_to_claude: false
         };
       }
-      const reportedCode = String(error?.code || 'PROCESSING_INTERRUPTED');
-      const code = reportedCode === 'LOCAL_REVIEW_DEFERRED' || retryableCodes.has(reportedCode)
-        ? reportedCode
-        : normalizeDocumentResultReasonCode(reportedCode);
+      const classified = applyRetryBudget(item, classifyPrepublicationError(error, retryableCodes, {
+        deferredCode: 'LOCAL_REVIEW_DEFERRED'
+      }));
+      const { code } = classified;
       if (code === 'BATCH_SNAPSHOT_CHANGED') {
         invalidateUnpublishedBatchCopies(state, { ...deps, writeState }, item);
       }
-      item.status = code === 'LOCAL_REVIEW_DEFERRED'
+      item.status = classified.deferred
         ? deferredReviewStatus
-        : (retryableCodes.has(code) ? 'retryable' : 'stopped');
+        : (classified.retryable ? 'retryable' : 'stopped');
       item.checkpoint = item.status === 'retryable'
         ? 'retryable'
         : (item.status === deferredReviewStatus ? 'awaiting_local_review' : 'stopped');
@@ -334,7 +346,7 @@ function createBatchItemProcessor(options = {}) {
       return {
         ok: false,
         error: code,
-        message: publicFailureMessage(code),
+        message: publicFailureMessage(code, classified),
         ...publicProgress(state),
         local_mapping_exported: item.status === 'stopped' ? item.local_mapping_exported : null,
         local_evidence_exported: localEvidenceExported,

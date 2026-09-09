@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 08.09.2026 · 3.2.0-rc130
+Stand: 08.09.2026 · 3.2.0-rc131
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -28,6 +28,19 @@ oder vollständige Extraktion. Qualitätsgrade und Auslassungshinweise stehen
 im Ergebnisjournal und der Laufzuordnung. Rohes stderr, Namen, Pfade und
 Dokumentinhalte gehören niemals in diese Spur. Es gibt keinen neuen Schalter
 im normalen Umwandlungsablauf und keine globale Umgebungsänderung durch Tests.
+
+RC131 ergänzt den verbindlichen Negativvertrag für Wiederaufnahme: Ein
+zurückgekehrter uncodierter oder unbekannter Pipelinefehler ist in
+Erstverarbeitung und Sammelreview terminal; nur explizite Einträge im
+transienten Fehlerkatalog dürfen als `retryable` erscheinen. Ein identischer
+transienter Fehler ist auf drei Fehlschläge begrenzt; danach ist der Lauf
+terminal. Der echte Prozessverlust wird separat aus einem verwaisten dauerhaften
+`processing`-Checkpoint rekonstruiert. Recovery unterscheidet fehlenden Output
+(fortsetzbar), verifizierten Output (adoptieren) und vorhandenen unsicheren Output
+(terminal). Die DOCX-Residualregression kombiniert einen breiten Satz fachlicher
+Zweiwortwerte in einer bewerteten Kompetenzmatrix mit einem echten Namens-
+Gegenfall, damit der
+Funktionsfix das fail-closed Gate nicht abschwächt.
 
 ## Schnelle Dokumenten- und Vertragsprüfung
 

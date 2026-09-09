@@ -125,6 +125,8 @@ const RESIDUAL_TABLE_ID_CANDIDATE_RE = /(?=[A-Z0-9./\- ]{3,40}\d)[A-Z0-9][A-Z0-9
 // guessing names from unlabelled prose.
 const RESIDUAL_PERSON_TABLE_CANDIDATE_RE = /^\|?[ \t]*person[ \t]*:?[ \t]*\|[ \t]*([^|\n]{1,160})\|/gimu;
 const PROFESSIONAL_TABLE_COLUMN_RE = /^(?:Zertifizierungen?|Zertifikate?|Bescheinigungen?|Credentials?|Certifications?|Certificates?|Certificering|Certificación(?:es)?|Licenses?(?:\s+(?:and|&|und)\s+certifications?)?)\s*:?$/iu;
+const PROFESSIONAL_MATRIX_RATING_RE = /^(?:(?:[●○◐◑◒◓◔★☆◆◇■□]\s*){2,10}|(?:[0-5](?:[.,]\d)?\s*\/\s*5)|(?:[0-9]{1,3}\s*%))$/u;
+const PROFESSIONAL_PHRASE_RE = /\b(?:Administration|Analysis|Architecture|Assurance|Automation|Collaboration|Communication|Consulting|Delivery|Design|Development|Engineering|Excellence|Governance|Informatics|Integration|Leadership|Learning|Management|Migration|Modeling|Optimierung|Optimization|Planning|Programmierung|Resolution|Research|Security|Skills?|Strategy|Success|Testing|Transformation|Verwaltung)\b/iu;
 // Independent from the redactor's credential catalogue. If that catalogue is
 // accidentally narrowed, a clearly labelled secret must still stop release.
 const RESIDUAL_CREDENTIAL_LABEL_RE = /^(?:Pass[ \t]*wort|Kenn[ \t]*wort|Pass[ \t]*word|Pass[ \t]*phrase|Secret|Token|API(?:[ \t-]+)?Key|Zugangs[ \t]*daten|Zugangs[ \t]*code|PIN|Benutzer[ \t]*name|Nutzer[ \t]*name|User[ \t]*name|Login(?:[ \t]*name)?|Anmelde[ \t]*name|Konto[ \t]*kennung)\s*:?$/iu;
@@ -228,7 +230,11 @@ function residualTablePersonCandidates(text) {
         const candidate = visibleTableCellValue(value);
         const candidateKey = key(candidate);
         const words = candidate.split(/\s+/u).filter(Boolean);
-        if (words.length === 2 && candidate.length <= 160 && looksName(candidate) && !seen.has(candidateKey)) {
+        const ratedProfessionalPhrase = row.some((cell, index) => index !== column &&
+          PROFESSIONAL_MATRIX_RATING_RE.test(visibleTableCellValue(cell))) &&
+          PROFESSIONAL_PHRASE_RE.test(candidate);
+        if (words.length === 2 && candidate.length <= 160 && looksName(candidate) &&
+            !ratedProfessionalPhrase && !seen.has(candidateKey)) {
           seen.add(candidateKey);
           findings.push({ type: 'PERSON_CANDIDATE', text: candidate });
         }
