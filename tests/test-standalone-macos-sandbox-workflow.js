@@ -7,6 +7,9 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const file = path.join(root, '.github', 'workflows', 'standalone-macos-sandbox.yml');
 const workflow = fs.readFileSync(file, 'utf8');
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const packageLock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+const macosLaunch = fs.readFileSync(path.join(root, 'tests', 'manual', 'standalone-native-macos-launch.sh'), 'utf8');
 
 assert.match(workflow, /^name: Manual Standalone macOS sandbox evidence$/mu);
 assert.match(workflow, /^on:\n  workflow_dispatch:\n/mu);
@@ -33,10 +36,26 @@ for (const expected of [
   'npm run test:standalone',
   'npm run test:standalone:conversion',
   'cargo clippy --all-targets --locked -- -D warnings',
-  'cargo build --release --locked',
+  'npx --no-install tauri build --bundles app',
+  'DataSecure Standalone.app',
+  'codesign --verify --deep --strict',
+  'Signature=adhoc',
   'lipo -archs',
-  'Human Gatekeeper, window, picker, VoiceOver and workflow UAT remain open.'
+  'standalone-native-macos-launch.sh',
+  'Human Gatekeeper, Finder picker, VoiceOver and workflow UAT remain open.'
 ]) assert.ok(workflow.includes(expected), `workflow is missing required evidence step: ${expected}`);
+
+assert.strictEqual(packageJson.devDependencies['@tauri-apps/cli'], '2.11.4');
+assert.strictEqual(packageLock.packages['node_modules/@tauri-apps/cli'].version, '2.11.4');
+for (const expected of [
+  'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT',
+  'DATASECURE_STANDALONE_DOCUMENTS_DIR',
+  'sidecar_started',
+  'service_initialized',
+  'osascript',
+  'STANDALONE_NATIVE_MACOS_ORPHANED_SIDECAR'
+]) assert.ok(macosLaunch.includes(expected), `macOS launch smoke is missing: ${expected}`);
+assert.doesNotMatch(macosLaunch, /curl|wget|https?:\/\//u);
 
 assert.match(workflow, /actions\/checkout@[a-f0-9]{40}/u);
 assert.match(workflow, /actions\/setup-node@[a-f0-9]{40}/u);

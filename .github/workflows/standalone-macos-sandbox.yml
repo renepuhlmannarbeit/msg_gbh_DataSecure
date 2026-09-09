@@ -106,36 +106,57 @@ jobs:
       - name: Require warning-free native Rust code
         working-directory: apps/datasecure-standalone/tauri-contract
         run: cargo clippy --all-targets --locked -- -D warnings
-      - name: Compile the native Tauri application binary
+      - name: Build the native signed macOS application bundle
         working-directory: apps/datasecure-standalone/tauri-contract
-        run: cargo build --release --locked
-      - name: Verify every executable is native to the requested runner
+        run: npx --no-install tauri build --bundles app
+      - name: Verify bundle contract, signature and native architectures
         shell: bash
         run: |
           set -euo pipefail
-          app="apps/datasecure-standalone/tauri-contract/target/release/datasecure-standalone"
-          sidecar="apps/datasecure-standalone/tauri-contract/binaries/${{ matrix.sidecar }}"
-          supervisor="plugins/data-secure/server/native/${{ matrix.target }}/datasecure-sandbox"
+          bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          app="$bundle/Contents/MacOS/datasecure-standalone"
+          sidecar="$bundle/Contents/MacOS/datasecure-core"
+          supervisor="$bundle/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"
+          test -f "$bundle/Contents/Info.plist"
+          test -d "$bundle/Contents/Resources/server/standalone/conversion-runtime"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle/Contents/Info.plist")" = "de.msg.datasecure.standalone"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Contents/Info.plist")" = "$(node -p "require('./package.json').version")"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$bundle/Contents/Info.plist")" = "13.5"
+          codesign --verify --deep --strict --verbose=2 "$bundle"
+          codesign -dv --verbose=4 "$bundle" 2>&1 | grep -q '^Signature=adhoc$'
           for executable in "$app" "$sidecar" "$supervisor"; do
             test -x "$executable"
             file "$executable"
             arches="$(lipo -archs "$executable")"
             test "$arches" = "${{ matrix.rust_arch }}"
           done
+          if find "$bundle" -print | grep -E '/(?:\.claude-plugin|skills|Claude|Cowork)(/|$)|/\.mcp\.json$'; then
+            exit 1
+          fi
+      - name: Launch the packaged app through its private IPC boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          bash tests/manual/standalone-native-macos-launch.sh \
+            --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app" \
+            --target "${{ matrix.target }}" --version "$version"
       - name: Write content-free evidence summary
         shell: bash
         run: |
           set -euo pipefail
-          app="apps/datasecure-standalone/tauri-contract/target/release/datasecure-standalone"
-          sidecar="apps/datasecure-standalone/tauri-contract/binaries/${{ matrix.sidecar }}"
-          supervisor="plugins/data-secure/server/native/${{ matrix.target }}/datasecure-sandbox"
+          bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          app="$bundle/Contents/MacOS/datasecure-standalone"
+          sidecar="$bundle/Contents/MacOS/datasecure-core"
+          supervisor="$bundle/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"
           {
             echo "### DataSecure Standalone macOS target evidence"
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Target: \`${{ matrix.target }}\` on \`${{ matrix.os }}\`"
+            echo "- Ad-hoc signed Tauri application bundle built and launched through the private IPC boundary."
             echo "- Tauri binary SHA-256: \`$(shasum -a 256 "$app" | awk '{print $1}')\`"
             echo "- Core runtime SHA-256: \`$(shasum -a 256 "$sidecar" | awk '{print $1}')\`"
             echo "- POSIX supervisor SHA-256: \`$(shasum -a 256 "$supervisor" | awk '{print $1}')\`"
             echo "- No package or diagnostic artifact was uploaded."
-            echo "- Human Gatekeeper, window, picker, VoiceOver and workflow UAT remain open."
+            echo "- Human Gatekeeper, Finder picker, VoiceOver and workflow UAT remain open."
           } >> "$GITHUB_STEP_SUMMARY"

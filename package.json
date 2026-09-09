@@ -95,6 +95,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@tauri-apps/cli": "2.11.4",
     "ajv": "8.20.0",
     "axe-core": "4.11.1",
     "esbuild": "0.28.2",

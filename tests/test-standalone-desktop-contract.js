@@ -84,6 +84,9 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /read_exact/u);
   assert.match(rust, /env_clear\(\)/u);
   assert.match(rust, /fn child_process_path\(path: &Path\)/u);
+  assert.match(rust, /directory\.join\(bundled_name\)/u,
+    'Tauri app bundles remove the target triple from externalBin names');
+  assert.match(rust, /"datasecure-core"/u);
   assert.match(rust, /Command::new\(child_process_path\(&executable\)\)/u);
   assert.match(rust, /current_dir\(child_process_path\(script_directory\)\)/u);
   assert.match(rust, /\.arg\("--require=\.\.\/network-deny\.cjs"\)/u,

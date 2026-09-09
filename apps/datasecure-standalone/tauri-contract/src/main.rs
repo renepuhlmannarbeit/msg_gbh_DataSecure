@@ -334,10 +334,25 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
     } else {
         "datasecure-core-x86_64-unknown-linux-gnu"
     };
+    let executable_directory = std::env::current_exe()
+        .ok()
+        .and_then(|value| value.parent().map(Path::to_path_buf));
+    let bundled_name = if cfg!(target_os = "windows") {
+        "datasecure-core.exe"
+    } else {
+        "datasecure-core"
+    };
     let mut executable_candidates = vec![
         resource.join(target),
         resource.join("binaries").join(target),
     ];
+    if let Some(directory) = executable_directory {
+        // Tauri removes the target-triple suffix from externalBin entries and
+        // puts the executable next to the application binary. Keep the exact
+        // target-named candidates for the existing portable Windows package.
+        executable_candidates.push(directory.join(bundled_name));
+        executable_candidates.push(directory.join(target));
+    }
     if cfg!(debug_assertions) {
         executable_candidates.push(manifest.join("binaries").join(target));
     }

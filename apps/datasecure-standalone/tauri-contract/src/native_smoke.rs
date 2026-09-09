@@ -9,6 +9,12 @@ use std::{
 pub const PROFILE_ENV: &str = "DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT";
 const ERROR: &str = "STANDALONE_NATIVE_SMOKE_PROFILE_INVALID";
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PackageLayout {
+    Windows,
+    Macos,
+}
+
 #[derive(Debug)]
 pub struct Profile {
     pub user_profile: PathBuf,
@@ -66,9 +72,10 @@ fn regular_path(path: &Path, directory: bool) -> Result<(), String> {
     Ok(())
 }
 
-pub fn validate(
+fn validate(
     root: &Path,
     executable: &Path,
+    layout: PackageLayout,
     environment: impl Fn(&str) -> Option<OsString>,
 ) -> Result<Profile, String> {
     if !is_reserved_root(root) {
@@ -76,15 +83,45 @@ pub fn validate(
     }
     regular_path(root, true)?;
     regular_path(executable, false)?;
-    let product = executable.parent().ok_or(ERROR)?;
-    if product.parent() != Some(root.join("candidate").as_path())
+    let candidate = root.join("candidate");
+    let product = match layout {
+        PackageLayout::Windows => executable.parent().ok_or(ERROR)?,
+        PackageLayout::Macos => executable
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .ok_or(ERROR)?,
+    };
+    let executable_matches = match layout {
+        PackageLayout::Windows => {
+            executable.file_name().and_then(|name| name.to_str())
+                == Some("DataSecure Standalone.exe")
+        }
+        PackageLayout::Macos => {
+            executable.file_name().and_then(|name| name.to_str()) == Some("datasecure-standalone")
+                && executable
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    == Some("Contents")
+                && executable
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::parent)
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    == Some("DataSecure Standalone.app")
+        }
+    };
+    if product.parent() != Some(candidate.as_path())
         || !product
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("")
             .starts_with("DataSecure-Standalone-")
-        || executable.file_name().and_then(|name| name.to_str())
-            != Some("DataSecure Standalone.exe")
+        || !executable_matches
     {
         return Err(ERROR.into());
     }
@@ -102,10 +139,35 @@ pub fn validate(
     }
     let webview = root.join("webview/main");
     regular_path(&webview, true)?;
-    // Native smoke uses the same automatic Tauri window creation as the
-    // product. Its test-only WebView2 override is the single UDF authority.
-    if environment("WEBVIEW2_USER_DATA_FOLDER").map(PathBuf::from) != Some(webview.clone()) {
-        return Err(ERROR.into());
+    match layout {
+        PackageLayout::Windows => {
+            // Native smoke uses the same automatic Tauri window creation as
+            // the product. Its test-only WebView2 override is the single UDF
+            // authority.
+            if environment("WEBVIEW2_USER_DATA_FOLDER").map(PathBuf::from) != Some(webview.clone())
+            {
+                return Err(ERROR.into());
+            }
+        }
+        PackageLayout::Macos => {
+            // Keep all product-controlled storage and temporary output inside
+            // the owned profile. Cocoa/WebKit system caches on the ephemeral
+            // target host are outside the product contract and are not claimed
+            // as isolated evidence.
+            for (key, expected) in [
+                ("HOME", root.join("profile")),
+                ("XDG_DATA_HOME", root.join("profile/Xdg")),
+                ("TMPDIR", root.join("temp")),
+                (
+                    "DATASECURE_STANDALONE_DOCUMENTS_DIR",
+                    root.join("profile/Documents"),
+                ),
+            ] {
+                if environment(key).map(PathBuf::from) != Some(expected) {
+                    return Err(ERROR.into());
+                }
+            }
+        }
     }
     Ok(Profile {
         user_profile: root.join("profile"),
@@ -136,7 +198,7 @@ pub fn prepare_webview_directory(profile: &Profile) -> Result<PathBuf, String> {
 
 fn select_profile(
     executable: &Path,
-    windows: bool,
+    layout: Option<PackageLayout>,
     environment: impl Fn(&str) -> Option<OsString>,
 ) -> Result<Option<Profile>, String> {
     let Some(root) = environment(PROFILE_ENV) else {
@@ -147,19 +209,20 @@ fn select_profile(
         }
         return Ok(None);
     };
-    // This harness has only Windows native evidence. Other targets keep their
-    // normal product paths; they cannot silently treat this as validated smoke.
-    if !windows {
-        return Err(ERROR.into());
-    }
-    validate(&PathBuf::from(root), executable, environment).map(Some)
+    let layout = layout.ok_or(ERROR)?;
+    validate(&PathBuf::from(root), executable, layout, environment).map(Some)
 }
 
 pub fn from_environment() -> Result<Option<Profile>, String> {
     let executable = std::env::current_exe().map_err(|_| ERROR.to_string())?;
-    select_profile(&executable, cfg!(target_os = "windows"), |key| {
-        std::env::var_os(key)
-    })
+    let layout = if cfg!(target_os = "windows") {
+        Some(PackageLayout::Windows)
+    } else if cfg!(target_os = "macos") {
+        Some(PackageLayout::Macos)
+    } else {
+        None
+    };
+    select_profile(&executable, layout, |key| std::env::var_os(key))
 }
 
 #[cfg(test)]
@@ -175,13 +238,24 @@ mod tests {
         let base = std::env::temp_dir();
         let normal = base.join("DataSecure-Standalone-normal/DataSecure Standalone.exe");
         let copied = base.join(".tmp-standalone-native-0123456789abcdef0123456789abcdef/candidate/DataSecure-Standalone-test-windows-x64/DataSecure Standalone.exe");
-        assert!(select_profile(&normal, true, |_| None).unwrap().is_none());
-        assert!(select_profile(&normal, false, |_| None).unwrap().is_none());
-        assert_eq!(select_profile(&copied, true, |_| None).unwrap_err(), ERROR);
-        assert_eq!(select_profile(&copied, false, |_| None).unwrap_err(), ERROR);
+        assert!(
+            select_profile(&normal, Some(PackageLayout::Windows), |_| None)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            select_profile(&normal, Some(PackageLayout::Macos), |_| None)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            select_profile(&copied, Some(PackageLayout::Windows), |_| None).unwrap_err(),
+            ERROR
+        );
+        assert_eq!(select_profile(&copied, None, |_| None).unwrap_err(), ERROR);
         let case_variant = base.join(".TMP-STANDALONE-NATIVE-0123456789ABCDEF0123456789ABCDEF/candidate/DataSecure-Standalone-test-windows-x64/DataSecure Standalone.exe");
         assert_eq!(
-            select_profile(&case_variant, true, |_| None).unwrap_err(),
+            select_profile(&case_variant, Some(PackageLayout::Windows), |_| None).unwrap_err(),
             ERROR
         );
     }
@@ -218,7 +292,10 @@ mod tests {
             "WEBVIEW2_USER_DATA_FOLDER",
             root.join("webview/main").into_os_string(),
         );
-        let profile = validate(&root, &exe, |key| variables.get(key).cloned()).unwrap();
+        let profile = validate(&root, &exe, PackageLayout::Windows, |key| {
+            variables.get(key).cloned()
+        })
+        .unwrap();
         assert_eq!(profile.documents, root.join("profile/Documents"));
         assert_eq!(profile.local_app_data, root.join("profile/Local"));
         assert_eq!(
@@ -226,7 +303,7 @@ mod tests {
             root.join("temp/SecureDataMsg-Standalone")
         );
         assert_eq!(profile.webview, root.join("webview/main"));
-        let selected = select_profile(&exe, true, |key| {
+        let selected = select_profile(&exe, Some(PackageLayout::Windows), |key| {
             if key == PROFILE_ENV {
                 Some(root.as_os_str().to_owned())
             } else {
@@ -242,30 +319,120 @@ mod tests {
             profile.webview
         );
         assert!(!profile.webview.join(".datasecure-write-probe").exists());
-        assert!(validate(&root, &exe, |_| None).is_err());
+        assert!(validate(&root, &exe, PackageLayout::Windows, |_| None).is_err());
         variables.insert(
             "WEBVIEW2_USER_DATA_FOLDER",
             root.join("webview").into_os_string(),
         );
-        assert!(validate(&root, &exe, |key| variables.get(key).cloned()).is_err());
-        variables.insert(
-            "WEBVIEW2_USER_DATA_FOLDER",
-            root.join("webview/main").into_os_string(),
-        );
-        assert!(validate(root.parent().unwrap(), &exe, |key| variables
-            .get(key)
-            .cloned())
-        .is_err());
         assert!(
-            validate(&root, &std::env::current_exe().unwrap(), |key| variables
+            validate(&root, &exe, PackageLayout::Windows, |key| variables
                 .get(key)
                 .cloned())
             .is_err()
         );
+        variables.insert(
+            "WEBVIEW2_USER_DATA_FOLDER",
+            root.join("webview/main").into_os_string(),
+        );
+        assert!(validate(
+            root.parent().unwrap(),
+            &exe,
+            PackageLayout::Windows,
+            |key| variables.get(key).cloned()
+        )
+        .is_err());
+        assert!(validate(
+            &root,
+            &std::env::current_exe().unwrap(),
+            PackageLayout::Windows,
+            |key| variables.get(key).cloned()
+        )
+        .is_err());
         // Delete only enumerated owned paths, never traverse an injected link.
         std::fs::remove_file(&exe).unwrap();
         for relative in [
             "candidate/DataSecure-Standalone-test-windows-x64",
+            "candidate",
+            "profile/Local",
+            "profile/Roaming",
+            "profile/Xdg",
+            "profile/Documents",
+            "profile",
+            "temp/SecureDataMsg-Standalone",
+            "temp",
+            "webview/main",
+            "webview",
+        ] {
+            std::fs::remove_dir(root.join(relative)).unwrap();
+        }
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn macos_smoke_accepts_only_the_exact_app_bundle_layout_and_owned_paths() {
+        let id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(".tmp-standalone-native-{id:032x}"));
+        std::fs::create_dir(&root).unwrap();
+        let root = std::fs::canonicalize(root).unwrap();
+        let executable = root.join(
+            "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents/MacOS/datasecure-standalone",
+        );
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        std::fs::write(&executable, b"synthetic executable identity only").unwrap();
+        for relative in [
+            "profile/Local",
+            "profile/Roaming",
+            "profile/Xdg",
+            "profile/Documents",
+            "temp/SecureDataMsg-Standalone",
+            "webview/main",
+        ] {
+            std::fs::create_dir_all(root.join(relative)).unwrap();
+        }
+        let variables = HashMap::from([
+            ("HOME", root.join("profile").into_os_string()),
+            ("XDG_DATA_HOME", root.join("profile/Xdg").into_os_string()),
+            ("TMPDIR", root.join("temp").into_os_string()),
+            (
+                "DATASECURE_STANDALONE_DOCUMENTS_DIR",
+                root.join("profile/Documents").into_os_string(),
+            ),
+        ]);
+        let profile = validate(&root, &executable, PackageLayout::Macos, |key| {
+            variables.get(key).cloned()
+        })
+        .unwrap();
+        assert_eq!(profile.documents, root.join("profile/Documents"));
+        let selected = select_profile(&executable, Some(PackageLayout::Macos), |key| {
+            if key == PROFILE_ENV {
+                Some(root.as_os_str().to_owned())
+            } else {
+                variables.get(key).cloned()
+            }
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(selected.diagnostics, profile.diagnostics);
+        let wrong = root.join(
+            "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents/MacOS/not-the-app",
+        );
+        std::fs::write(&wrong, b"wrong identity").unwrap();
+        assert!(
+            validate(&root, &wrong, PackageLayout::Macos, |key| variables
+                .get(key)
+                .cloned())
+            .is_err()
+        );
+        std::fs::remove_file(wrong).unwrap();
+        std::fs::remove_file(executable).unwrap();
+        for relative in [
+            "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents/MacOS",
+            "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents",
+            "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app",
+            "candidate/DataSecure-Standalone-test-macos-arm64",
             "candidate",
             "profile/Local",
             "profile/Roaming",
