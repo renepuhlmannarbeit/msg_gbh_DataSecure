@@ -112,6 +112,8 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /diagnostic_event\("webview_profile_ready"/u);
   assert.match(rust, /diagnostic_event\("setup_completed"/u);
   assert.match(rust, /diagnostic_event\(\s*"application_run_failed"/u);
+  assert.match(rust,
+    /RunEvent::ExitRequested \{ \.\. \} \| tauri::RunEvent::Exit[\s\S]*?process\.take\(\);/u);
   assert.match(rust, /fn frontend_ready\(/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);

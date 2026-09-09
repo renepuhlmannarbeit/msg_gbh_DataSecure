@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 08.09.2026 · 3.2.0-rc126
+Stand: 08.09.2026 · 3.2.0-rc127
 
-Der aktuelle Quellstand ist der RC126-Produktkandidat für das Cowork-Plugin.
+Der aktuelle Quellstand ist der RC127-Produktkandidat für das Cowork-Plugin.
 Sein zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
 beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
 Plugin-ZIP-Tests und Claude-Validierung gebunden. Ein Standalone-Paket desselben
@@ -72,9 +72,10 @@ System-Node-/Python-Installation voraus. Claude Desktop und Cowork benötigen
 für die Sitzung weiterhin eine Internetverbindung; das ändert nichts daran,
 dass Originaldateien nur der lokalen DataSecure-Runtime zugeführt werden.
 Der manuelle, kostensparende Workflow `bundled-runtime-release.yml` baut bei
-Bedarf die drei Ziel-ZIPs und prüft eine universelle Marketplace-Projektion; er
-läuft niemals automatisch. Eine zu große oder unvollständige Projektion stoppt
-und wird nicht als Release veröffentlicht.
+Bedarf genau ein Ziel-ZIP oder alle drei getrennten Ziel-ZIPs; er läuft niemals
+automatisch. Jedes dieser ZIPs bleibt unter der von Anthropic vorgegebenen
+50-MB-Grenze. Ein Universal-ZIP wird nicht erzeugt, weil die drei gebündelten
+Laufzeiten diese Grenze zusammen zwangsläufig überschreiten würden.
 
 ## Engineeringbuild
 

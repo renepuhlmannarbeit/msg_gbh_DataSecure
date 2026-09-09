@@ -71,6 +71,21 @@ test('costly platform workflows default to one Linux target and assemble only on
   }
 });
 
+test('Cowork all-target release emits three uploadable platform ZIPs and no oversized universal ZIP', () => {
+  const source = workflows.get('bundled-runtime-release.yml');
+  assert.ok(source);
+  assert.match(source, /for id in windows-x64 macos-x64 macos-arm64/u);
+  assert.doesNotMatch(source, /build-runtime-plugin\.mjs --runtimes dist\/runtime-all --target universal/u);
+  assert.doesNotMatch(source, /universal Marketplace archive/u);
+});
+
+test('line-ending guard excludes only the byte-inventoried vendored OCR runtime', () => {
+  const ci = workflows.get('ci.yml');
+  assert.match(ci, /':\(exclude\)plugins\/data-secure\/server\/ocr-runtime\/node_modules\/\*\*'/u);
+  assert.doesNotMatch(ci, /':\(exclude\)plugins\/data-secure\/server\/ocr-runtime\/\*\*'/u);
+  assert.match(ci, /git grep --cached -Il \$'\\r'/u);
+});
+
 test('manual security evidence can be selected instead of always running three jobs', () => {
   const security = workflows.get('security.yml');
   for (const scope of ['javascript', 'native', 'secrets', 'all']) {

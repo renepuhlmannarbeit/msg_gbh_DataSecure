@@ -1395,17 +1395,32 @@ fn main() {
             shutdown,
             frontend_ready
         ])
-        .run(context);
-    if result.is_err() {
-        diagnostic_event(
-            "application_run_failed",
-            None,
-            "error",
-            Some("STANDALONE_APPLICATION_RUN_FAILED"),
-            None,
-        );
-        std::process::exit(70);
-    }
+        .build(context);
+    let app = match result {
+        Ok(app) => app,
+        Err(_) => {
+            diagnostic_event(
+                "application_run_failed",
+                None,
+                "error",
+                Some("STANDALONE_APPLICATION_RUN_FAILED"),
+                None,
+            );
+            std::process::exit(70);
+        }
+    };
+    app.run(|app_handle, event| {
+        if matches!(
+            event,
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+        ) {
+            if let Some(state) = app_handle.try_state::<DesktopState>() {
+                if let Ok(mut process) = state.sidecar.lock() {
+                    process.take();
+                }
+            }
+        }
+    });
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: Build one direct-upload ZIP or all targets plus the universal Marketplace archive.
+        description: Build one direct-upload ZIP or all three platform-specific ZIPs.
         required: true
         default: all
         type: choice
@@ -102,7 +102,6 @@ jobs:
             for id in windows-x64 macos-x64 macos-arm64; do
               node scripts/build-runtime-plugin.mjs --runtimes dist/runtime-all --target "$id"
             done
-            node scripts/build-runtime-plugin.mjs --runtimes dist/runtime-all --target universal
           else
             node scripts/build-runtime-plugin.mjs --runtimes dist/runtime-all --target '${{ inputs.target }}'
           fi

@@ -120,7 +120,21 @@ done
   echo "STANDALONE_NATIVE_ISOLATED_WORKSPACE_MISSING" >&2
   exit 1
 }
-child_pids="$(pgrep -P "$app_pid" 2>/dev/null || true)"
+sidecar_pids="$(pgrep -P "$app_pid" -x datasecure-core 2>/dev/null || true)"
+[[ "$(printf '%s\n' "$sidecar_pids" | sed '/^$/d' | wc -l | tr -d ' ')" == 1 ]] || {
+  echo "STANDALONE_NATIVE_SIDECAR_IDENTITY_INVALID" >&2
+  exit 1
+}
+sidecar_pid="$sidecar_pids"
+[[ "$sidecar_pid" =~ ^[0-9]+$ ]] || {
+  echo "STANDALONE_NATIVE_SIDECAR_MISSING" >&2
+  exit 1
+}
+sidecar_command="$(ps -p "$sidecar_pid" -o command= 2>/dev/null || true)"
+case "$sidecar_command" in
+  "$candidate/Contents/MacOS/datasecure-core "*) ;;
+  *) echo "STANDALONE_NATIVE_SIDECAR_IDENTITY_INVALID" >&2; exit 1 ;;
+esac
 
 osascript -e 'tell application id "de.msg.datasecure.standalone" to quit'
 for _ in {1..150}; do
@@ -136,11 +150,14 @@ wait "$app_pid" || status=$?
   echo "STANDALONE_NATIVE_MACOS_EXIT_${status}" >&2
   exit 1
 }
-for child in $child_pids; do
-  kill -0 "$child" 2>/dev/null && {
-    echo "STANDALONE_NATIVE_MACOS_ORPHANED_SIDECAR" >&2
-    exit 1
-  }
+for _ in {1..50}; do
+  kill -0 "$sidecar_pid" 2>/dev/null || break
+  sleep 0.1
 done
+remaining_command="$(ps -p "$sidecar_pid" -o command= 2>/dev/null || true)"
+if [[ -n "$remaining_command" && "$remaining_command" == "$sidecar_command" ]]; then
+  echo "STANDALONE_NATIVE_MACOS_ORPHANED_SIDECAR" >&2
+  exit 1
+fi
 app_pid=""
 echo "STANDALONE NATIVE MACOS APP BUNDLE LAUNCH PASS ($target)"

@@ -1,9 +1,34 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC126
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC127
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
 verarbeitet und niemals automatisch verändert oder gelöscht. Claude erhält nur
 freigegebene Markdown-Ergebnisse.
+
+## Standalone-App installieren (Windows und macOS)
+
+Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
+Rust** benötigt. Das zur eigenen CPU passende Paket vollständig entpacken und
+nicht direkt aus dem ZIP starten:
+
+- **Windows 10/11 x64:**
+  `DataSecure-Standalone-3.2.0-rc127-windows-x64.zip` entpacken und
+  `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
+  Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
+- **Mac mit Intel-Prozessor:**
+  `DataSecure-Standalone-3.2.0-rc127-macos-x64.zip` im Finder öffnen,
+  `DataSecure Standalone.app` nach **Programme** ziehen und dort starten.
+- **Mac mit Apple Silicon (M1 oder neuer):**
+  `DataSecure-Standalone-3.2.0-rc127-macos-arm64.zip` genauso installieren.
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. Mindestversion ist
+  macOS 13.5. [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
+
+Die internen Pilotpakete sind nicht mit einer Apple Developer ID notariell
+signiert. Falls macOS den ersten Start blockiert, unter **Systemeinstellungen →
+Datenschutz & Sicherheit** bei DataSecure **Dennoch öffnen** wählen und die
+Rückfrage mit **Öffnen** bestätigen. Gatekeeper nicht global deaktivieren.
+Vor einem formalen Test immer Paketname und veröffentlichte SHA-256-Prüfsumme
+mit dem Kandidatenmanifest vergleichen.
 
 ## Wofür DataSecure gedacht ist
 

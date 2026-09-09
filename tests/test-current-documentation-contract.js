@@ -136,6 +136,8 @@ test('distribution docs require a self-contained relative marketplace source wit
   assert.doesNotMatch(`${decisions}\n${vision}`, /macOS-universal/iu);
   assert.doesNotMatch(`${decisions}\n${vision}`,
     /müssen vor breitem Unternehmenseinsatz signiert|Signierungspflicht|Signierungs- und Lifecycle-Evidenz/iu);
+  assert.match(release, /alle drei getrennten Ziel-ZIPs/u);
+  assert.doesNotMatch(release, /universelle Marketplace-Projektion/iu);
 });
 
 test('security and third-party notices match the current product boundary', () => {
@@ -263,6 +265,20 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
     assert.match(instructions, /Scan-PDF/u, file);
     assert.doesNotMatch(instructions, /Nur in Markdown umwandeln[^\n]*(?:deaktiviert|noch in Entwicklung)/u, file);
   }
+});
+
+test('main README gives direct Windows and macOS Standalone installation paths', () => {
+  const readme = read('README.md');
+  const version = JSON.parse(read('package.json')).version;
+  for (const value of [
+    `DataSecure-Standalone-${version}-windows-x64.zip`,
+    `DataSecure-Standalone-${version}-macos-x64.zip`,
+    `DataSecure-Standalone-${version}-macos-arm64.zip`,
+    'DataSecure Standalone.exe',
+    'DataSecure Standalone.app'
+  ]) assert.ok(readme.includes(value), value);
+  assert.match(readme, /weder Claude noch Cowork, Node\.js, Python oder\s+Rust/u);
+  assert.match(readme, /Systemeinstellungen →\s+Datenschutz & Sicherheit/u);
 });
 
 test('Cowork opens only its latest completed run and preserves the Standalone product boundary', () => {

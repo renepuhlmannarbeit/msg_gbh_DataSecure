@@ -1,6 +1,34 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc126 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc127 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+
+## RC127 – installierbare Zielpakete und belastbarer CI-Guard
+
+Der reale RC126-Lauf `34369709771` hat alle drei zielsystemspezifischen
+Cowork-Runtimes und ZIPs erfolgreich gebaut. Erst der zusätzliche Universalbau
+stoppte mit `BUNDLED_PLUGIN_ARCHIVE_LIMIT`: Drei gebündelte Laufzeiten können
+nicht gemeinsam unter Anthropics 50-MB-Grenze für manuell hochgeladene
+Plugin-ZIPs bleiben. RC127 erzeugt deshalb im All-Targets-Lauf ausschließlich
+die drei vorgesehenen Windows-x64-, macOS-x64- und macOS-arm64-ZIPs. Die
+Größenbegrenzung bleibt unverändert; sie wird nicht zur Umgehung der
+Herstellervorgabe angehoben.
+
+Der automatische CI-LF-Guard prüft jetzt die Git-Indexbytes und nimmt nur den
+byteinventorierten Upstream-`node_modules`-Teil der deaktivierten OCR-Runtime
+aus. Eigene Runtime-, Produkt- und Dokumentationsquellen bleiben geprüft; ein
+Treffer nennt künftig den Pfad. RC126 bestand PKG-04/INT-13 lokal und der
+macOS-ARM64-Zieljob lief vollständig grün. Der Intel-Zieljob belegte Build,
+Signatur, Architektur und privaten IPC-Start, meldete beim anschließenden
+Programmende aber einen vermeintlichen Sidecar-Nachläufer. Die Messung hatte
+bis dahin alle direkten WebView-Kindprozesse gleich behandelt. RC127 beendet
+den verwalteten Sidecar vorsorglich sowohl beim Tauri-`ExitRequested` als auch
+beim finalen `Exit`; der native macOS-Test bindet PID, Prozessname und
+Kommandozeile an den tatsächlichen Sidecar. Diese RC126-Nachweise dienen der
+Diagnose, werden aber wegen des neuen Quellcommits nicht als RC127-UAT-Evidence
+übernommen.
+
+PKG-04/INT-13, die drei Cowork-Zielpakete und beide macOS-Standalone-Pakete
+müssen für den finalen RC127-Commit erneut erzeugt werden.
 
 ## RC126 – plattformneutrale Cowork-Runtime-Lizenz
 

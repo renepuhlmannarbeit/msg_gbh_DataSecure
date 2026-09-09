@@ -63,9 +63,13 @@ for (const expected of [
   'profile/Library/Application Support/SecureDataMsg-Standalone/workspace',
   'sidecar_started',
   'service_initialized',
+  'pgrep -P "$app_pid" -x datasecure-core',
+  'sidecar_command="$(ps -p "$sidecar_pid" -o command=',
   'osascript',
   'STANDALONE_NATIVE_MACOS_ORPHANED_SIDECAR'
 ]) assert.ok(macosLaunch.includes(expected), `macOS launch smoke is missing: ${expected}`);
+assert.doesNotMatch(macosLaunch, /child_pids="\$\(pgrep -P/u,
+  'the sidecar check must not classify every WebView child as a sidecar');
 assert.doesNotMatch(macosLaunch, /curl|wget|https?:\/\//u);
 
 assert.match(workflow, /actions\/checkout@[a-f0-9]{40}/u);

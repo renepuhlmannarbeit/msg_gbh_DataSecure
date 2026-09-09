@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "datasecure-standalone"
-version = "3.2.0-rc126"
+version = "3.2.0-rc127"
 dependencies = [
  "rfd",
  "serde",

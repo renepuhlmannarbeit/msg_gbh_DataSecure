@@ -60,9 +60,13 @@ jobs:
             echo "Office/PDF files must not be committed to this repository."
             exit 1
           fi
-          bad="$(git grep -Il $'\r' -- '*.js' '*.mjs' '*.json' '*.md' '*.yml' '*.ps1' '*.cpp' '*.c' || true)"
+          # The hash-inventoried upstream OCR runtime is intentionally byte-exact;
+          # its text files may therefore retain upstream CRLF. Guard our sources.
+          bad="$(git grep --cached -Il $'\r' -- '*.js' '*.mjs' '*.json' '*.md' '*.yml' '*.ps1' '*.cpp' '*.c' \
+            ':(exclude)plugins/data-secure/server/ocr-runtime/node_modules/**' || true)"
           if [ -n "$bad" ]; then
             echo "Tracked source files must use LF."
+            printf '%s\n' "$bad"
             exit 1
           fi
           node -e "const p=require('./package.json'); if (p.dependencies && Object.keys(p.dependencies).length) process.exit(1)"

@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 09.09.2026 · Produktstand 3.2.0-rc126
+Stand: 09.09.2026 · Produktstand 3.2.0-rc127
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -20,6 +20,27 @@ sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
 Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
+
+### RC127 – Zielpaket- und CI-Vertrag korrigiert
+
+Der RC126-All-Targets-Lauf hat drei gültige, jeweils unter 45 MiB liegende
+Cowork-Ziel-ZIPs gebaut und anschließend nur am zusätzlichen Universal-ZIP
+gestoppt. RC127 entfernt diesen nicht installierbaren Sammelartefaktweg aus dem
+Releaseworkflow, ohne die 50-MB-Sicherheitsgrenze anzuheben. Ein Vertragstest
+fordert dauerhaft genau die drei getrennten Zielpakete. Der automatische
+LF-Guard prüft Git-Indexbytes und lässt ausschließlich die byteinventorierten
+Upstream-Abhängigkeiten der deaktivierten OCR-Runtime aus; eigene Quellen
+bleiben vollständig erfasst. Der reale Intel-macOS-Lauf entdeckte zusätzlich,
+dass die bisherige Nachlaufprüfung beliebige direkte WebView-Kindprozesse als
+Sidecar klassifizieren konnte. Der Tauri-Lifecycle schließt den verwalteten
+Sidecar nun vorsorglich bei beiden globalen Exit-Ereignissen; der Zielhosttest
+bindet PID, Prozessname und Kommandozeile an den exakten `datasecure-core`-
+Kindprozess und wartet begrenzt auf dessen Ende.
+
+E0-Code und Regression sind erledigt. Offen sind der commitgebundene
+PKG-04-/INT-13-Neulauf, die drei Cowork-Zielbuilds und die beiden nativen
+macOS-Standalone-Builds aus dem finalen RC127-Commit. Die RC126-Läufe dürfen
+nicht in die formale UAT-Kampagne umgebunden werden.
 
 ### RC126 – Cowork-Sammelpaket auf allen Zielsystemen reproduzierbar
 
@@ -724,7 +745,7 @@ nicht durch Diagramme als erledigt dargestellt:
 | Die Worker-Empfangsbestätigung belegt validierte Nachrichtenannahme, aber noch keinen dauerhaften ersten Stapelcheckpoint. | BL-011.8, BL-043 | erledigt | öffentlicher Zustand benennt bis zum Checkpoint ausdrücklich `checkpoint_pending` |
 | Lange Standalone-Stapel besaßen keine passive lokale Fortschrittsanzeige. | BL-012.6, BL-042.3 | erledigt | inhaltsfreie Vorbereitung und monotone Zähler laufen im bestehenden Fenster ohne Polling durch Claude; E2-UX bleibt offen |
 | Skill und Server spiegeln Teile der Zustandsentscheidung und können sprachlich oder logisch auseinanderlaufen. | BL-041.1 | P3 | Skill auf Intent/Toolwahl begrenzen, Serverantwort als einzige Zustandswahrheit kontraktprüfen |
-| GitHub-synchronisierte Organisations-Marketplaces unterstützen die zuvor erzeugte `archive`-Quelle nicht. | BL-010.8 | erledigt | Build und Dokumentation erzeugen ausschließlich die selbsttragende relative Git-Projektion; Veröffentlichung und Zielhost-UAT bleiben menschliche Evidenz |
+| GitHub-synchronisierte Organisations-Marketplaces unterstützen die zuvor erzeugte `archive`-Quelle nicht; die selbsttragende Projektion überschreitet mit den offiziellen macOS-Node-Binaries zudem GitHubs 100-MiB-Grenze für normale Git-Objekte. | BL-010.8 | blockiert | Ziel-ZIPs bleiben der freigegebene UAT-Weg. Für den Marketplace erst eine kleinere selbsttragende Runtime oder einen von Claude nachweislich unterstützten Binärtransport festlegen; keine LFS-Annahme und keine Universal-ZIP-Grenzerhöhung. |
 | DataSecure kann verbundene Cowork-Ordner nicht auslesen und damit die Trennung von Quellen und Ergebnisziel nicht technisch attestieren. | BL-040.5, BL-041.7 | entschieden | ehrliche Setup-/UAT-Regel: nur dedizierten Ergebnisordner verbinden, Quellordner nicht verbinden; keine zusätzliche Laufbestätigung |
 | Nativer Standalone-Admission-Pfad prüfte die 500-MiB-Gesamtgrenze nicht und eine verlorene Worker-Bestätigung ließ dieselbe Auswahl erneut starten. | BL-010.12, BL-011.10 | erledigt | Gesamtbudget vor Start, einmaliger Verbrauch nach delegiertem Start und Regressionstests |
 | Ein neuerer aktiver Standalone-Stapel verdeckte den jüngsten vollständig sichtbaren Ergebnislauf. | BL-010.13, BL-040.6, BL-010.29 | erledigt | Seit DS-086 bleibt die Navigation zwischen Start, Verarbeiten und Verlauf unabhängig vom Laufzustand. Status und Zähler gehören zum aktiven beziehungsweise ausdrücklich fortgesetzten Stapel, sonst zum jüngsten eigenen Stapel. Jede Verlaufszeile öffnet ausschließlich ihren eigenen vollständigen Ergebnislauf bzw. ihre Zuordnung; ein fehlendes Ziel fällt niemals auf einen anderen Lauf zurück. |
@@ -735,7 +756,7 @@ nicht durch Diagramme als erledigt dargestellt:
 
 | Story | Noch erforderlicher Nachweis | Status |
 |---|---|---|
-| BL-010.8 | Selbsttragende Runtime und drei Zielpaketprojektionen sind E0 fertig; die Runtime läuft im echten Standalone-App-Bundle nativ auf macOS Intel/ARM, Cowork-Fresh-Install fehlt. Der Build erzeugt die von Anthropic unterstützte selbsttragende Git-Marketplace-Projektion mit relativer Quelle. Vor einer Freigabe fehlen Veröffentlichung in einem privaten/internen Marketplace-Repository sowie Installation und Update auf den Cowork-Zielhosts. | **blockiert** |
+| BL-010.8 | Drei getrennte, selbsttragende Ziel-ZIPs sind der aktuelle Produkt- und UAT-Weg. Die relative Git-Marketplace-Projektion ist konzeptionell korrekt, aber mit den offiziellen macOS-Node-Binaries nicht in einem normalen GitHub-Repository publizierbar, weil einzelne Dateien 100 MiB überschreiten. Vor Marketplace-Freigabe fehlen ein kleinerer Runtime-/Launcherweg oder belastbare Claude-Evidence für einen anderen Binärtransport sowie Veröffentlichung, Installation und Update auf den Cowork-Zielhosts. | **blockiert** |
 | BL-010.7 | Lokale Cowork-Sitzung eines bestehenden Desktop-Deployments mit Plugin-MCP positiv sowie Cloud-Cowork/Web/Mobil/Scheduled – auch bei geöffneter Desktop-App – negativ für Originale prüfen. | **blockiert** |
 | BL-010.1 | Portablen Pluginstart auf jedem freizugebenden Zielsystem ohne vorinstallierte Runtime nachweisen; Windows-E0 ist grün, macOS und echter Cowork-Host fehlen. | **blockiert** |
 | BL-010.2 | Windows-x64 Fresh Install, Kernlauf, Update und Entfernen. | **offen** |

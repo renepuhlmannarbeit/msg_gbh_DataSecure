@@ -1,10 +1,27 @@
 # Entscheidungs-Traceability
 
-Stand: 09.09.2026 · 3.2.0-rc126
+Stand: 09.09.2026 · 3.2.0-rc127
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC127 bindet den installierbaren Cowork-Distributionsweg an
+`bundled-runtime-release.yml`, `test-workflow-budget.js`, `docs/RELEASE.md` und
+BL-010.8. Der All-Targets-Lauf veröffentlicht drei getrennte Ziel-ZIPs unter
+der unveränderten 50-MB-Herstellervorgabe und kein zwangsläufig zu großes
+Universal-ZIP. Der automatische CI-Zeilenendungswächter prüft über `--cached`
+die Quellbytes des Kandidaten und nimmt nur den byteinventorierten
+`ocr-runtime/node_modules`-Baum aus; `test-workflow-budget.js` verhindert eine
+breitere Ausnahme. Die RC126-Läufe sind Diagnose-/E0-Nachweis, aber keine an
+RC127 übertragbare UAT-Evidence. Die dabei auf Intel macOS gefundene
+überbreite Nachlaufmessung und die ergänzende Lifecycle-Härtung sind in
+`tauri-contract/src/main.rs`,
+`test-standalone-desktop-contract.js` und
+`tests/manual/standalone-native-macos-launch.sh` gebunden: globale
+Tauri-Exit-Ereignisse stoppen den verwalteten Kindprozess, und der native
+Nachweis bindet PID, Prozessname sowie Kommandozeile ausschließlich an diesen
+Prozess.
 
 DS-095 / BL-051 / BL-052 bindet die formale Zwei-Personen-Abnahme an
 `ACCEPTANCE_LEVELS.md` und `docs/acceptance/FORMAL_UAT/*`. N3 entspricht der
