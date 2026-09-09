@@ -2,10 +2,11 @@
 
 Dieses Verzeichnis enthält die reale Tauri-2-Desktop-Hülle und ihren
 plattformneutralen, maschinenprüfbaren Vertrag. Die Rust-Hülle, der native
-Datei-/Ordnerdialog und der private DataSecure-Sidecar-Kanal wurden auf Windows
-x64 kompiliert, als laufender Engineering-Build geprüft und zusammen mit der
-gepinnten Node-Runtime in einem selbsttragenden Windows-x64-Pilot-ZIP verifiziert.
-Es ist noch **kein freigegebenes Endnutzerprodukt**.
+Datei-/Ordnerdialog und der private DataSecure-Sidecar-Kanal wurden in getrennten
+Engineering-Paketen für Windows x64, macOS Intel, macOS Apple Silicon und Linux
+x64 glibc gebaut. Alle vier Pakete enthalten ihre gepinnte Runtime; die drei
+POSIX-Ziele sind nativ bis durch App → private IPC → Core gestartet. Es ist
+noch **kein freigegebenes Endnutzerprodukt**.
 
 Tauri ist ausschließlich für Fenster, native Auswahl, Sidecar-Lifecycle und
 die feste UI-Projektion zuständig. Formatprüfung, Konvertierung, PII-Erkennung,
@@ -67,23 +68,25 @@ npm run test:standalone
 npm run build:standalone:windows:portable
 ```
 
-Für den nativen macOS-Engineeringnachweis existiert zusätzlich der GitHub-
-Workflow **Manual Standalone macOS sandbox evidence**. Er läuft niemals bei
-Push oder Pull Request, sondern nur nach manueller Auswahl von Intel, Apple
-Silicon oder beiden und einer ausdrücklichen Bestätigung der möglichen privaten
-Runner-Minuten. Standard ist nur Apple Silicon. Der Lauf prüft die echte
-Zielarchitektur, Runtime, Sandbox-Supervisor, Produkt-/Konverterverträge, Rust
-und den Tauri-Release-Build; er lädt weder Pakete noch Diagnosen als Actions-
-Artefakt hoch. Er ist kein Ersatz für Finder-/Gatekeeper-, sichtbare Fenster-,
-Picker-, VoiceOver- oder Anwender-UAT.
+Für native POSIX-Engineeringnachweise existieren die manuellen GitHub-Workflows
+**Manual Standalone macOS sandbox evidence** und **Manual Standalone Linux
+sandbox evidence**. Sie laufen niemals bei Push oder Pull Request, sondern nur
+nach ausdrücklicher Bestätigung möglicher Runner-Minuten. Die macOS-Zellen bauen
+getrennt auf Intel und Apple Silicon; Linux x64 baut auf Ubuntu 22.04 mit glibc
+2.35. Beide Gates prüfen Zielarchitektur, Runtime, POSIX-Supervisor,
+Produkt-/Konverterverträge, Rust/Clippy, native Hülle und App→private IPC→Core.
+Die Distributionspfade bauen ihr ZIP zweimal bytegleich und starten es nach dem
+Entpacken erneut. Ein optionaler Paketupload gilt höchstens einen Tag. Diese
+E0-Läufe ersetzen keine Finder-/Gatekeeper-/Linux-Dateimanager-, sichtbare
+Picker-/Drop-, Screenreader- oder Anwender-UAT.
 
 Der Build erzeugt die geschlossene Runtime-Projektion frisch aus dem aktuellen
 Quellstand, bindet die herkunftsgeprüfte Node-Runtime und legt Manifest, SBOM,
 Lizenzhinweise und SHA-256 bei. Anwender installieren weder Rust noch Node. Vor
-einer Freigabe fehlen Windows-UAT sowie native Pakete und UATs auf macOS Intel
-und Apple Silicon; der Windows-Nachweis ersetzt sie nicht. Windows verwendet
-für den kleinen Pilot das vorhandene Microsoft Edge WebView2-Systemruntime und
-lädt es nicht selbst nach.
+einer Freigabe fehlt die sichtbare menschliche UAT auf Windows, macOS Intel,
+macOS Apple Silicon und Linux x64; technische E0-Pakete ersetzen sie nicht.
+Windows verwendet für den kleinen Pilot das vorhandene Microsoft Edge
+WebView2-Systemruntime und lädt es nicht selbst nach.
 
 Sieben transportneutrale Core-Verträge für Start, Zweck, nächste Aktion,
 Konverterkommunikation, Ergebnisgrad, Ergebnisprojektion und Fortschritt sind

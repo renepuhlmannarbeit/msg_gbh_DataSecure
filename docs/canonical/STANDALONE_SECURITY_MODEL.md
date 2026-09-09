@@ -99,9 +99,10 @@ Lizenzfreigabe bleibt davon getrennt. Native ad-hoc signierte macOS-App-Bundles
 sind auf Intel und Apple Silicon gebaut und über die private IPC-Grenze
 gestartet. Reproduzierbare, manifest-/hash-/modusgeprüfte Engineering-ZIPs sind
 für beide Architekturen gebaut und nach dem Entpacken erneut gestartet.
-Windows-/macOS-UAT ist noch offen. Bis dahin bleiben die Pakete
-Engineering-Piloten. Linux ist ein späteres, separat zu implementierendes und
-abzunehmendes Produktziel.
+Die sichtbare Windows-/macOS-UAT ist noch offen. Linux x64 besitzt ebenfalls eine gebündelte,
+nativ gebaute und bis durch App → private IPC → Core gestartete AppImage-
+Projektion; die sichtbare Linux-Zielhost-UAT ist noch offen. Bis dahin bleiben
+alle Pakete Engineering-Piloten.
 
 ## Nichtziele
 

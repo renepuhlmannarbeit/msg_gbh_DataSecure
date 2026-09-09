@@ -87,9 +87,11 @@ weiterlaufen und müssen dort getrennt vom Anonymisierungsstatus sichtbar sein.
 Plugin-ZIP und privater Marketplace liefern dasselbe Nutzerprodukt. Bis die
 selbsttragende Marketplace-Projektion freigegeben ist, ist das Plugin-ZIP der
 einzige freigegebene Installationsweg. Das intern erzeugte MCPB ist kein
-Anwenderweg. Windows x64 sowie macOS Intel/ARM sind die
-Erstreleaseziele, Linux folgt getrennt. Alle nötigen Laufzeiten müssen im Produkt
-enthalten sein; Anwender installieren weder Node.js noch Python.
+Anwenderweg. Das Cowork-Plugin zielt auf Windows x64 sowie macOS Intel/ARM und
+besitzt keinen Linux-Produktweg. Standalone besitzt davon getrennte Pakete für
+Windows x64, macOS Intel/ARM und Linux x64 glibc. Alle nötigen Laufzeiten müssen
+im jeweiligen Produkt enthalten sein; Anwender installieren weder Node.js noch
+Python.
 
 Lokale Originalverarbeitung ist in einer lokalen Cowork-Sitzung eines
 bestehenden Claude-Desktop-Deployments oder in lokalem Claude Code zulässig,
@@ -115,8 +117,9 @@ Extraktion veröffentlicht; ihre Quellenabdeckung wird separat ausgewiesen. Die 
 Standalone-Konvertierung besitzt denselben breiten Eingabeumfang, darf Hinweise
 dagegen sichtbar mit ausgeben. Native macOS-App-Bundle-/IPC-E0 ist für Intel
 und Apple Silicon belegt; reproduzierbare Engineering-ZIPs wurden je
-Architektur entpackt und erneut gestartet. Zielhost-UAT bleibt gesondert offen;
-Linux folgt als eigene spätere Produktstufe. Details stehen in
+Architektur entpackt und erneut gestartet. Linux x64 glibc besitzt denselben
+technischen Vertikalschnitt als AppImage im reproduzierbaren ZIP. Zielhost-UAT
+bleibt für alle Plattformen gesondert offen. Details stehen in
 [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 
 Standalone besitzt zwei verbindliche Kernfunktionen (DS-085). Die heute
@@ -160,7 +163,7 @@ verarbeitet gezählt.
 
 ## Grenzen vor Freigabe
 
-Fresh Install, Update/Rollback, Host-/Berechtigungsanzeigen, Windows/macOS-
+Fresh Install, Update/Rollback, Host-/Berechtigungsanzeigen, Windows-/macOS-/Linux-
 Dateisystemverhalten, 200 Dateien/500 MiB, UX, Accessibility, IT/Health-IT,
 Datenschutz, Security und Architektur benötigen noch menschliche Evidenz. Siehe
 [`BACKLOG.md`](BACKLOG.md) und [`BACKLOG_EVIDENCE_MATRIX.md`](BACKLOG_EVIDENCE_MATRIX.md).

@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc125 · Intel-/ARM64-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc125 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
 
 ## Intel-/ARM64-Zielhost- und App-Bundle-E0 vom 09.09.2026
 
@@ -55,8 +55,35 @@ bereitgestellt.
 Nicht daraus abgeleitet werden Finder-/Gatekeeper-Bedienung, tatsächlich
 beobachteter Fensterstart, Picker, Drag-and-drop, VoiceOver, reale Performance
 oder menschliche UAT. Diese E1/E2-Nachweise bleiben auf beiden Architekturen
-offen. Linux bleibt gemäß BL-010.4 ein eigenes späteres Ziel; ein Katalogeintrag
-oder Git-Checkout ist kein gebautes und geprüftes Linux-Produktpaket.
+offen. Linux x64 glibc besitzt inzwischen einen getrennten nativen AppImage-
+und Distributionsnachweis; dessen sichtbare Desktop-, Dateidialog-,
+Dateimanager-, Accessibility- und Performance-UAT bleibt ebenfalls offen.
+
+## Linux-x64-AppImage- und Distributions-E0 vom 09.09.2026
+
+Der manuell und kostenbestätigt gestartete GitHub-Actions-Lauf
+[`34356576842`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34356576842)
+ist für Commit `84fd616c65665f3c7a31426bd722206c7145b6a6` auf
+`ubuntu-22.04` mit glibc 2.35 vollständig grün. Ohne Secrets oder Buildcache
+prüft er Produkt- und Konvertierungsverträge, den echten isolierten
+Office-/PDF-/OCR-Worker, den nativen POSIX-Supervisor, Rust/Clippy, sämtliche
+ELF-x64-Architekturen und den dynamisch aus dem AppImage ermittelten
+Tauri-Ressourcenroot.
+
+Das entpackte AppImage und anschließend dasselbe AppImage aus dem verifizierten
+Distributions-ZIP starten jeweils über den echten `AppRun`-Einstieg. Beide
+Läufe erreichen ein sichtbares X11-Fenster, Frontend, Sidecar, Service und die
+ersten beiden privaten IPC-Antworten; ein über den Window Manager ausgelöstes
+normales Schließen beendet App und Sidecar ohne verwaisten Kindprozess. Das
+Distributions-ZIP wurde zweimal bytegleich gebaut und gegen Manifest, SBOM,
+Lizenzen, SHA-256 und ausführbare Dateimodi geprüft. Sein SHA-256 ist
+`177b976399785b010937ba17fde738b14f3eed94b4d78f94ea4491736f93eaee`;
+das enthaltene AppImage hat SHA-256
+`bd25febd291328202b62e48edea9e46c4e696c6b329c4efe6255041c6f498853`.
+Das Engineeringpaket `DataSecure-Standalone-linux-x64-glibc-84fd616c65665f3c7a31426bd722206c7145b6a6`
+wurde als Actions-Artefakt bis zum 10.09.2026 bereitgestellt. Eine menschliche
+Linux-UAT für reale Desktopumgebung, Picker, Drag-and-drop, Dateimanager,
+Accessibility, Performance, Installation und Update/Rollback bleibt offen.
 
 ## Aktueller Entwicklungsstand RC125 – unabhängige Revalidierung
 
@@ -911,10 +938,9 @@ Dateisystemzugriff im Renderer. Ausgewählte Dateinamen, Quellenordner und das
 Ergebnisziel werden ausschließlich im lokalen Standalone-Fenster angezeigt und
 fehlen strukturell in Diagnose, Supportspur und externen Antworten;
 Pflichtzähler und Zustandsübergänge stoppen bei fehlenden, regressiven oder
-widersprüchlichen Werten. Der aktuelle Zielkatalog bindet drei Erstpakete an
-exakte Rust-Triples: Windows x64, macOS Intel und macOS Apple Silicon. Linux x64
-glibc bleibt als spätere Portabilitätsstufe katalogisiert, ist aber noch kein
-gebautes Produktpaket. Für beide
+widersprüchlichen Werten. Der aktuelle Zielkatalog bindet vier getrennte Pakete
+an exakte Rust-Triples: Windows x64, macOS Intel, macOS Apple Silicon und Linux
+x64 glibc. Für beide
 macOS-Pakete gilt wegen der gebündelten Node-Laufzeit mindestens macOS 13.5.
 Zertifikatsfreie macOS-Piloten werden ausdrücklich ad-hoc signiert
 (`signingIdentity: "-"`). Ein neues GitHub-Actions-Gate bildet dafür eine
@@ -953,8 +979,8 @@ Worker delegieren terminale Meldungen an die Tauri-Oberfläche und öffnen keine
 Cowork-Abschlussdialog. Nach Sidecar-Neustart oder verlorenem Admission-Zustand
 setzt der Renderer seine veraltete Startfreigabe zurück. Die laufgebundene
 Öffnen-Aktion und ein exklusiver Export-Outbox-Claim sind E0 geschlossen. Offen
-bleiben Windows-UAT, Accessibility-/Performance-Messung sowie native Builds und
-UATs auf macOS Intel/ARM und Linux. Die maschinenlesbare Rust-Komponenten- und
+bleiben Windows-UAT, Accessibility-/Performance-Messung sowie sichtbare native
+UATs auf macOS Intel/ARM und Linux x64. Die maschinenlesbare Rust-Komponenten- und
 SBOM-Aufbereitung ist E0 abgeschlossen; eine organisatorisch verlangte
 menschliche Lizenzfreigabe bleibt davon getrennt.
 
@@ -996,10 +1022,11 @@ Lieferstufen und offene User Stories stehen in
 ## Backlog-Ist je Epic
 
 ### BL-010 – Plattform und Distribution
-ZIP/Marketplace sind der Produktkanal. Die selbsttragende Node-22.23.2-Runtime
-ist für Windows x64 sowie macOS Intel/ARM gebaut, hash-/architekturgebunden und
-paketvertraglich geprüft. Ein reales Windows-Paket startete ohne System-Node;
-die Standalone-App-Bundles starteten nativ auf Intel und Apple Silicon. Reale
+ZIP/Marketplace sind der Cowork-Produktkanal; Standalone verwendet getrennte
+zielgebundene Desktoppakete. Die selbsttragende Node-22.23.2-Runtime ist für
+Windows x64, macOS Intel/ARM und Linux x64 glibc gebaut, hash-/architekturgebunden
+und paketvertraglich geprüft. Ein reales Windows-Paket startete ohne System-Node;
+die Standalone-App-Bundles starteten nativ auf Intel, Apple Silicon und Linux x64. Reale
 Cowork-Fresh-Install-/Update-Nachweise sowie die menschliche macOS-Bedienung
 bleiben offen. Linux ist kein aktuelles Cowork-Produktziel.
 

@@ -26,10 +26,12 @@ Die aktuelle Produkt-/Zweckmatrix steht in
    Node.js noch Python.
 2. Rollenassembly, Start-, Abbruch-, Resume- und Unveränderbarkeitsnachweis
    schließen.
-3. Windows x64 und macOS Intel/ARM getrennt paketieren und frisch installieren.
+3. Cowork für Windows x64 und macOS Intel/ARM sowie Standalone zusätzlich für
+   Linux x64 getrennt paketieren und frisch installieren.
 
 **Gate:** Kernfall läuft ohne System-Node; bei fehlendem/defektem Zielartefakt
-stoppt das Plugin vor Originalzugriff. Linux folgt als eigenes Paket.
+stoppt das Plugin vor Originalzugriff. Das Linux-Standalone-Paket ist E0
+gebaut und gestartet; sichtbare Fresh-Install-/UAT-Evidence bleibt offen.
 
 ## R3 – Stapelkern und lokale Datengrenze
 
@@ -125,6 +127,7 @@ unvollständiger Lauf zählt nicht als Performanceergebnis.
 
 ## R7 – Release und menschliche Freigabe
 
-Reihenfolge: E0-Gates → Fresh Install Windows/macOS → Cowork/UAT → IT/Health-IT →
-Datenschutz/Security/Architektur → Pilotentscheidung. MCPB-Evidenz ist optionales
-Engineering-Wissen und weder Anwenderweg noch Produktfreigabe.
+Reihenfolge: E0-Gates → Fresh Install Windows/macOS für beide Produkte und Linux
+für Standalone → Cowork-/Standalone-UAT → IT/Health-IT → Datenschutz/Security/
+Architektur → Pilotentscheidung. MCPB-Evidenz ist optionales Engineering-Wissen
+und weder Anwenderweg noch Produktfreigabe.

@@ -96,7 +96,8 @@
     "DS-090",
     "DS-091",
     "DS-092",
-    "DS-093"
+    "DS-093",
+    "DS-094"
   ],
   "products": {
     "shared_core": "one-policy-and-engine-baseline",

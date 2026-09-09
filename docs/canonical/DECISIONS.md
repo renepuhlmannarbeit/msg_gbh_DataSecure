@@ -1,12 +1,12 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 08.09.2026
+Stand: 09.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-093, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-094, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -20,7 +20,8 @@ bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
   DS-023 und DS-069 durch DS-080; die UI-Vorbelegung aus DS-085 durch DS-086;
   DS-058 und DS-083 für neue Standalone-Ergebnisse durch DS-089; die feste
   Namensvorgabe aus DS-089 durch DS-091; DS-079 und DS-080 für das Öffnen des
-  aktuellen Cowork-Laufs durch DS-092.
+  aktuellen Cowork-Laufs durch DS-092; der Standalone-Plattformumfang aus
+  DS-052, DS-076 und DS-077 durch DS-094.
 
 Der aktuelle operative Status steht in
 [`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still
@@ -1420,3 +1421,32 @@ aktuelle direkte Upload-/Paketbudgetlinie; sie wird deshalb nicht verdeckt in
 das Cowork-Paket kopiert. Die Standalone-Funktionen und -Oberfläche bleiben
 unverändert. Die Cowork-Normalreise behält genau eine Quellenwahl und keine
 zusätzliche Bestätigung. DS-093 präzisiert DS-075, DS-087, DS-090 und DS-092.
+
+## DS-094 – Linux x64 als viertes eigenständiges Standalone-Zielpaket
+
+Am 09.09.2026 nach nativer Build-, Paket-, Lifecycle- und
+Supply-Chain-Prüfung festgelegt: Standalone besitzt neben Windows x64 und
+macOS x64/ARM64 ein viertes getrenntes Zielpaket für Linux x64 glibc. Es wird
+auf Ubuntu 22.04 mit glibc 2.35 als Tauri-AppImage gebaut und zusammen mit
+Manifest, SBOM, Lizenzinventar und Prüfsummen in einem deterministischen ZIP
+ausgeliefert. Node, Python, Rust und ein lokaler Server werden auf dem
+Anwenderrechner nicht vorausgesetzt; Core, Konverter, OCR-Runtime und nativer
+POSIX-Supervisor sind zielgebunden enthalten.
+
+Das kostenbestätigte manuelle Linux-Gate verwendet keine Secrets oder Caches.
+Es prüft Produkt- und Konvertierungsverträge, den echten isolierten Worker,
+Clippy, native ELF-x64-Architektur, den aus dem AppImage dynamisch über den
+eindeutigen Sidecar-Marker gefundenen Tauri-Ressourcenroot, App→private
+IPC→Core sowie den geordneten Prozessabschluss. Danach baut es das
+Distributions-ZIP zweimal bytegleich, prüft das Paket und startet dasselbe
+AppImage erneut aus dem entpackten ZIP. Virtuelle Adressraumlimits werden für
+Node nicht verwendet; die POSIX-Grenze bleibt durch CPU-, Datei-, FD-,
+Wallclock-, Prozessgruppen- und physische RSS-Überwachung fail-closed.
+
+Diese E0-Evidence ist keine Endnutzerfreigabe. Sichtbares Fenster, nativer
+Picker, Drag-and-drop, Dateimanageröffnung, Accessibility, Performance,
+Installations-/Update-/Rollbackweg und menschliche Linux-UAT bleiben
+zielhostgebunden offen. Linux ARM64 und Windows ARM64 sind nicht Bestandteil
+dieser Entscheidung. Das Cowork-Plugin bleibt ein Claude-Desktop-Produkt für
+Windows und macOS; DS-094 erweitert ausschließlich Standalone und präzisiert
+die entsprechenden „Linux später“-Teile von DS-052, DS-076 und DS-077.

@@ -103,7 +103,9 @@ Die eigentliche Verarbeitung läuft lokal und offline. Cowork ist der bequeme
 Einstieg und kann die freigegebenen Markdown-Ergebnisse anschließend auswerten;
 die Anonymisierungsengine ist davon fachlich getrennt. Die eigenständige
 Desktop-Oberfläche ohne Claude/Cowork wird als Engineering-Pilot entwickelt und
-verwendet dieselbe Engine, dieselben Prüfregeln und dasselbe Mapping.
+verwendet dieselbe Engine und dieselben Prüfregeln. Das Mapping gilt nur für
+Anonymisierung; reine Markdown-Konvertierung behält die Quellbasisnamen und
+benötigt keine Zuordnungsdatei.
 
 ## Standalone ohne Claude – Entwicklungsstand
 
@@ -153,13 +155,16 @@ Quellen stoppen weiterhin ohne Ergebnis.
 
 Heute sind Application-Service, getrenntes Datenverzeichnis, UI-Zustandsvertrag,
 privates gerahmtes IPC, Sidecar-Lifecycle und Zielpaketkatalog implementiert.
-Die Tauri-App ist auf Windows x64 kompiliert; ein selbsttragendes Windows-
-Engineering-Paket wurde gebaut, verifiziert und ohne installiertes System-Node
-isoliert gestartet. Es bleibt bewusst ein **Engineering-Pilot**, bis Windows-UAT
-und native Builds/UATs auf macOS Intel und Apple Silicon vorliegen. Eine reine
+Getrennte selbsttragende Engineering-Pakete sind technisch für Windows x64,
+macOS Intel, macOS Apple Silicon und Linux x64 glibc gebaut und nativ bis durch
+App → private IPC → Core geprüft; Rust, Node und Python werden auf
+Anwenderrechnern nicht benötigt. Es bleibt bewusst ein **Engineering-Pilot**,
+bis die sichtbare menschliche UAT auf den jeweiligen Zielsystemen abgeschlossen
+ist. Linux ARM64 und Windows ARM64 sind keine aktuellen Paketziele. Eine reine
 Browser-Webanwendung ist nicht vorgesehen: Ohne lokale Komponente kann sie die
 zugesagte lokale, offlinefähige Dateiverarbeitung und Betriebssystemdialoge nicht
-zuverlässig bereitstellen.
+zuverlässig bereitstellen. Cowork bleibt davon getrennt ein Claude-Desktop-Weg
+für Windows und macOS; Linux wird nur durch Standalone unterstützt.
 
 Keine sensiblen Originale als Chat-Anhang hochladen. Eine in Web oder Mobil
 gestartete Aufgabe, eine geplante Aufgabe und eine geschlossene oder getrennte

@@ -1,6 +1,6 @@
 # DataSecure Standalone – UAT-Testkit
 
-Stand: 08.09.2026 · Engineering-Pilot 3.2.0-rc125
+Stand: 09.09.2026 · Engineering-Pilot 3.2.0-rc125
 
 Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien
@@ -8,8 +8,9 @@ verwenden.
 
 ## Vorbereitung
 
-Anwender verwenden das fertig bereitgestellte Windows-ZIP. Sie müssen weder
-Quellcode bauen noch eine Entwicklungsumgebung installieren.
+Anwender verwenden das für ihren Zielrechner fertig bereitgestellte ZIP:
+Windows x64, macOS Intel, macOS Apple Silicon oder Linux x64 glibc. Sie müssen
+weder Quellcode bauen noch eine Entwicklungsumgebung installieren.
 
 1. Den in `docs/canonical/CURRENT_STATE.md` benannten Kandidaten und die
    synthetischen Testdateien bereitstellen lassen.
@@ -17,22 +18,30 @@ Quellcode bauen noch eine Entwicklungsumgebung installieren.
    Leerzeichen und Umlaut kopieren und die Prüfsumme vergleichen.
 3. ZIP vollständig entpacken. Nicht direkt aus dem Archiv starten.
 4. Netzwerk trennen. Claude Desktop, Node, Rust und Python sind für den Test
-   nicht erforderlich. Windows 10/11 x64 benötigt Microsoft Edge WebView2.
+   nicht erforderlich. Windows 10/11 x64 benötigt Microsoft Edge WebView2;
+   macOS mindestens 13.5. Das Linux-Paket setzt x64 mit glibc 2.35 oder neuer
+   und eine grafische Desktopumgebung voraus.
+5. Nur auf macOS: Das zur CPU passende Paket verwenden. Bei einem ad-hoc
+   signierten Engineering-Piloten ausschließlich **Datenschutz & Sicherheit →
+   Dennoch öffnen** nutzen; keine globale Schutzabschaltung.
+6. Nur auf Linux: ZIP-Prüfsumme vor dem Entpacken verifizieren. Falls das
+   Ausführungsrecht beim Entpacken verloren ging, einmal
+   `chmod u+x "DataSecure Standalone.AppImage"` ausführen.
 
 Nur für die Entwicklerbereitstellung: `npm run uat:fixtures` erzeugt die
 synthetischen Eingaben. `npm run test:standalone:pkg-04` baut und prüft den
 Kandidaten aus einem sauberen Commit; ein beliebiger lokaler Neubau ersetzt
 diese konkrete Paketbindung nicht.
 
-## Windows-x64-Ablauf
+## Gemeinsamer Ablauf auf Windows, macOS und Linux x64
 
 | Schritt | Aktion | Erwartung / PASS |
 |---|---|---|
-| S01 | `DataSecure Standalone.exe` doppelklicken | Die Startseite erklärt beide Funktionen; weder Verarbeiten noch eine Betriebsart ist vorbelegt. Kein Terminal, Download oder zweiter Prozessdialog wird verlangt. |
+| S01 | `DataSecure Standalone.exe`, `DataSecure Standalone.app` beziehungsweise `DataSecure Standalone.AppImage` öffnen | Die Startseite erklärt beide Funktionen; weder Verarbeiten noch eine Betriebsart ist vorbelegt. Kein Terminal, Download oder zweiter Prozessdialog wird verlangt. |
 | S02 | Auf Start **Markdown erstellen**, dann **Dateien auswählen** und einen kleinen gemischten Satz aus `docs/acceptance/UAT_TEST_KIT/inputs` wählen. Eine Datei über **Entfernen** herausnehmen, danach erneut auswählen und einmal **Auswahl leeren** testen | Genau ein Mehrfachpicker; danach Anzahl, gewählte Dateinamen, Quellenordner und der aktuelle Ergebnisordner im ausschließlich lokalen Fenster. Einzelnes Entfernen verändert nur die vorbereitete Auswahl; Leeren setzt sie vollständig zurück. Keine Verarbeitung und keine Quelldateiänderung vor **Starten**. |
 | S03 | Die ausdrücklich gewählte Betriebsart **Nur in Markdown umwandeln** prüfen und **Starten** wählen | Fortschritt ohne PII-Prüfung oder Einzelbestätigung; Namen bleiben erhalten. Ohne gewählte Betriebsart kann kein neuer Stapel starten. |
 | S04 | Abschluss und eventuell angezeigte Extraktionshinweise ansehen | Kein Reviewdialog im reinen Konvertierungsmodus. Unvollständige/OCR-Ausgaben sind als solche gekennzeichnet; keine Behauptung vollständiger oder anonymisierter Inhalte. |
-| S05 | **Verlauf**, dann **Ergebnisordner** in der Zeile dieses Laufs | Explorer/Finder öffnet exakt dessen `DataSecure-Markdown/Lauf-*`-Ordner. Jede `.md` behält den Basisnamen ihrer Quelle; nur die Endung ändert sich. Namenskollisionen tragen ` (2)`, ` (3)` usw. Originale bleiben unverändert. Kein automatischer Ansichts- oder Explorerwechsel bei Abschluss. |
+| S05 | **Verlauf**, dann **Ergebnisordner** in der Zeile dieses Laufs | Explorer, Finder beziehungsweise der Linux-Dateimanager öffnet exakt dessen `DataSecure-Markdown/Lauf-*`-Ordner. Jede `.md` behält den Basisnamen ihrer Quelle; nur die Endung ändert sich. Namenskollisionen tragen ` (2)`, ` (3)` usw. Originale bleiben unverändert. Kein automatischer Ansichts- oder Dateimanagerwechsel bei Abschluss. |
 | S06 | **Zuordnung** in derselben reinen Konvertierungszeile prüfen | Die Aktion ist deaktiviert und erklärt, dass keine Zuordnung nötig ist. Im Laufordner existiert keine `DataSecure-Zuordnung.csv`. Im späteren Anonymisierungslauf aus S14 ist die Aktion dagegen aktiv und markiert genau dessen Zuordnungsdatei. |
 | S07 | **Ergebnisordner ändern**, neuen leeren Ordner wählen, zweiten Lauf starten | Ein Ordnerpicker; neue Ergebnisse landen nur dort, bestehende Exporte werden nicht gespiegelt oder gelöscht. |
 | S08 | Picker abbrechen | Ruhiger Abbruch, kein automatischer zweiter Picker und kein erfundener Erfolg. |
@@ -69,17 +78,18 @@ festen lokalen Protokollordner.
   ist kein Performancewert.
 - Prüfen, dass das Programm offline bleibt und keine Firewallfreigabe verlangt.
 
-## Noch nicht durch diesen Windows-Test belegt
+## Zielhostgrenzen dieses Testkits
 
-Für macOS Intel und Apple Silicon bestehen native E0-App-Bundle-/IPC-Läufe;
-herunterladbare Archive und die eigene sichtbare Zielhost-UAT fehlen weiterhin.
-Linux benötigt ein natives Paket und einen eigenen Zielhostlauf. Ein
-Rosetta-Lauf ersetzt keinen Intel-Nachweis. Bei ad-hoc signierten
-macOS-Piloten ist ausschließlich **Datenschutz & Sicherheit → Dennoch öffnen**
-zulässig; globale Schutzabschaltungen oder Terminaltricks sind kein Testweg.
+Native E0-App-/IPC-/Paketläufe bestehen für macOS Intel, macOS Apple Silicon
+und Linux x64; Windows besitzt ebenfalls seinen technischen Paketnachweis. Das
+ersetzt auf keinem Zielhost die hier beschriebene sichtbare menschliche UAT.
+Jede Plattform und auf macOS jede CPU-Architektur erhält ein eigenes Protokoll;
+ein Rosetta-Lauf ersetzt keinen Intel-Nachweis. Linux ARM64 und Windows ARM64
+sind keine aktuellen Produktziele. Cowork wird auf Linux nicht mitgetestet,
+weil Linux ausschließlich ein Standalone-Ziel ist.
 
 ## Ergebnis
 
-PASS/FAIL je Schritt, Betriebssystemversion, Paket-SHA-256, beobachtete Dauer und
-Defects in einer separaten Evidence-Datei festhalten. Keine Originalinhalte,
-Dateinamen, Pfade, Tokens oder Dokumenthashes protokollieren.
+PASS/FAIL je Schritt, Betriebssystem und Architektur, Paket-SHA-256, beobachtete
+Dauer und Defects in einer separaten Evidence-Datei festhalten. Keine
+Originalinhalte, Dateinamen, Pfade, Tokens oder Dokumenthashes protokollieren.

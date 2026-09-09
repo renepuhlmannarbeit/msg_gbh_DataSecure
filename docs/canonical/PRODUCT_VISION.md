@@ -170,8 +170,10 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 ## Plattform- und Distributionstrategie
 
 - Produktive Cowork-Freigabe beginnt mit Windows x64 sowie macOS Intel/Apple
-  Silicon. Die Engine bleibt portabel; Linux und Windows ARM64 benötigen eigene
-  Host- und Zielgeräteevidenz.
+  Silicon; Claude Desktop/Cowork ist kein Linux-Produktweg. Standalone besitzt
+  zusätzlich ein eigenständiges Linux-x64-glibc-Paket. Technische Paketevidenz
+  und menschliche Zielgeräteevidenz bleiben auf jeder Plattform getrennt;
+  Windows ARM64 ist nicht implementiert.
 - Anwender installieren weder Node.js noch Python. Zielpakete enthalten die
   benötigte Laufzeit.
 - Ein organisationsverwaltetes Marketplace-Produkt; manuell getrennte

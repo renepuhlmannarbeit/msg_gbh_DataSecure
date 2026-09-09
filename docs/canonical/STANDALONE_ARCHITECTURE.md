@@ -125,8 +125,10 @@ ein selbsttragendes Windows-x64-Engineering-Paket besteht die Paket- und
 isolierte Startprüfung. Ad-hoc signierte App-Bundles sind auf macOS Intel und
 Apple Silicon nativ gebaut, geprüft und über App→private IPC→Core gestartet.
 Reproduzierbare Engineering-ZIPs sind für beide Architekturen gebaut, entpackt
-und aus dem Paket erneut gestartet. Endnutzerfreigabe, sichtbare macOS-UAT und
-die native Linux-Implementierung und -Paketierung bleiben offen. Der produktive Node-Konverter mit
+und aus dem Paket erneut gestartet. Linux x64 besitzt eine native Tauri-/
+AppImage-Projektion mit gebündelter Runtime, POSIX-Supervisor und eigener
+Paket-/Startprüfung. Endnutzerfreigabe sowie sichtbare macOS-/Linux-UAT bleiben
+offen. Der produktive Node-Konverter mit
 PDF-/OCR-Komponenten ist bereits angebunden; MarkItDown gehört nicht dazu.
 
 ```mermaid
@@ -270,15 +272,14 @@ Hüllengröße ohne Core, Tastatur-/Screenreader-Zugänglichkeit, nativer
 Mehrfachpicker, sicherer Abbruch sowie Update und Rollback. Die Wahl ändert den
 gemeinsamen Core und seine Sicherheitsgates nicht.
 
-Der aktuelle Erstumfang umfasst drei getrennte Pakete: Windows x64, macOS Intel
-und macOS Apple Silicon. Linux x64 glibc folgt als eigenständige spätere
-Portabilitätsstufe. Die beiden macOS-Artefakte werden auf macOS gebaut
+Der aktuelle Stand umfasst vier getrennte Pakete: Windows x64, macOS Intel,
+macOS Apple Silicon und Linux x64 glibc. Die beiden macOS-Artefakte werden auf macOS gebaut
 und jeweils nativ getestet; ein Universal-Binary ist zunächst kein Ziel. Eine
 Developer-ID-Signatur oder Notarisierung ist keine Produktpflicht. Die
 zertifikatsfreien Piloten verwenden aber ausdrücklich Tauri-Ad-hoc-Signierung
 (`signingIdentity: "-"`); die verbleibende Gatekeeper-Bedienung muss im macOS-UAT
 sichtbar und dokumentiert sein. Wegen
-der gebündelten Node-24-Core-Runtime ist für beide Mac-Pakete mindestens macOS
+der gebündelten Node-22.23.2-Core-Runtime ist für beide Mac-Pakete mindestens macOS
 13.5 fest vorgegeben. Der maschinenlesbare Ziel- und Sidecarvertrag liegt in
 `apps/datasecure-standalone/desktop-targets.json`; die Pilotanleitung in
 `apps/datasecure-standalone/MACOS-START.md`.
@@ -362,8 +363,8 @@ verhindern einen unendlich wartenden UI-Aufruf. Das Windows-x64-Pilot-ZIP bindet
 die herkunftsgeprüfte Node-Runtime und eine frisch erzeugte geschlossene
 Coreprojektion; Paketprüfung und isolierter Sidecar-Smoke sind grün. Der Build
 ist ein technischer Vertikalschnitt, **noch kein freigegebenes
-Endnutzerprodukt**. Native macOS-App-Bundle-/IPC-E0 ist auf Intel und Apple
-Silicon belegt; Distributionsarchive, native Linux-Pakete, eine gegebenenfalls
-organisatorische Lizenzfreigabe und Zielsystem-UAT bleiben offen. Auch vorhandene
+Endnutzerprodukt**. Native App-/IPC-/Paket-E0 ist auf macOS Intel/Apple Silicon
+und Linux x64 belegt; eine gegebenenfalls organisatorische Lizenzfreigabe und
+sichtbare Zielsystem-UAT bleiben offen. Auch vorhandene
 grüne Paketnachweise ersetzen keinen Nachweis
 für einen erst danach geänderten Kandidaten.

@@ -411,9 +411,43 @@ Zuordnungsdatei. Die privaten Zielresolver verwenden dieselben nativen
 Öffnen-Schaltflächen.
 Queue-Schema und Worker-Acknowledge werden vor dem positiven
 Handoff doppelt geprüft; Identitäts-Mocks dürfen diese Grenze nicht ersetzen.
-Das ersetzt keine menschliche Windows-/macOS-UAT. Die nativen Rohbuildnachweise
+Das ersetzt keine menschliche Windows-/macOS-/Linux-UAT. Die nativen Rohbuildnachweise
 sind durch Lauf `34285518668` für ARM64 und Lauf `34318293471` für Intel
 erbracht; die App-Bundle-/IPC-Nachweise durch `34321954381` und `34322534571`.
+
+### Manueller Linux-x64-Sandboxnachweis
+
+`.github/workflows/standalone-linux-sandbox.yml` ist ausschließlich manuell
+startbar und verlangt `confirm_runner_minutes=true`. Das Gate läuft auf
+Ubuntu 22.04 mit glibc 2.35, verwendet keine Secrets oder Caches und lädt nur
+bei `upload_package=true` das verifizierte Engineeringpaket für einen Tag hoch.
+Es kompiliert den nativen POSIX-Supervisor, prüft die gepinnte Node- und
+Konvertierungsruntime, führt Produkt-, Konverter-, Rust- und Clippy-Verträge aus
+und baut das Tauri-AppImage. Der Ressourcenroot wird nach dem Entpacken über
+genau einen vorhandenen `server/standalone/desktop-sidecar.js`-Marker unter
+`usr/lib` ermittelt; ein fest angenommener Tauri-Installationspfad ist kein
+Vertrag.
+
+Der native Lifecycle-Smoke startet den Kandidaten unter Xvfb/DBus und einem
+kleinen X11-Fenstermanager über seinen echten `AppRun`-Einstieg, wartet auf
+Fenster-, Frontend-, Sidecar-, Service- und
+beide erste IPC-Bestätigungen und verlangt anschließend einen geordneten
+App-/Sidecar-Abschluss. Die X11-Softwaredarstellung ist ausschließlich eine
+Eigenschaft dieses headless E0-Smokes, nicht der Endnutzerkonfiguration. Danach
+wird das AppImage-in-ZIP zweimal bytegleich gebaut, gegen Manifest, SBOM,
+Lizenzen, Hashes und Dateimodi geprüft, entpackt und ein zweites Mal über
+App→private IPC→Core gestartet. Technische E0-Evidence ersetzt weder sichtbare
+Linux-Desktop-/Picker-/Drag-and-drop-/Dateimanagerprüfung noch Accessibility,
+Performance, Installation, Update/Rollback oder menschliche UAT.
+
+Der vollständige Referenzlauf ist
+[`34356576842`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34356576842)
+auf Commit `84fd616c65665f3c7a31426bd722206c7145b6a6`. Beide nativen
+Lifecycle-Smokes und der bytegleiche Doppelbau sind grün. Erwartete Prüfsummen:
+AppImage `bd25febd291328202b62e48edea9e46c4e696c6b329c4efe6255041c6f498853`,
+Distributions-ZIP `177b976399785b010937ba17fde738b14f3eed94b4d78f94ea4491736f93eaee`.
+Das optionale Engineering-Artefakt ist nur bis 10.09.2026 verfügbar; der Lauf
+und seine inhaltsfreie Evidence bleiben danach der dauerhafte Nachweis.
 
 ## UAT
 
