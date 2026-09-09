@@ -59,9 +59,16 @@ chmod 700 "$test_root/profile/Runtime"
 cp -a "$appdir" "$product/AppDir"
 candidate="$product/AppDir"
 executable="$candidate/usr/bin/datasecure-standalone"
+launcher="$candidate/AppRun"
 desktop_log="$test_root/temp/SecureDataMsg-Standalone/desktop-interactions.jsonl"
 sidecar_log="$test_root/temp/SecureDataMsg-Standalone/sidecar-interactions.jsonl"
 [[ -x "$executable" && ! -L "$executable" ]] || { echo "STANDALONE_NATIVE_EXECUTABLE_MISSING" >&2; exit 66; }
+[[ -x "$launcher" ]] || { echo "STANDALONE_NATIVE_APPRUN_MISSING" >&2; exit 66; }
+launcher_target="$(realpath -e "$launcher")"
+[[ "$launcher_target" == "$candidate"/* && -f "$launcher_target" ]] || {
+  echo "STANDALONE_NATIVE_APPRUN_TARGET_INVALID" >&2
+  exit 66
+}
 
 display_number=$((100 + 0x${session_id:0:4} % 500))
 export DISPLAY=":$display_number"
@@ -79,8 +86,9 @@ env \
   LOCALAPPDATA="$test_root/profile/Local" APPDATA="$test_root/profile/Roaming" \
   XDG_DATA_HOME="$test_root/profile/Xdg" XDG_RUNTIME_DIR="$test_root/profile/Runtime" \
   TEMP="$test_root/temp" TMP="$test_root/temp" TMPDIR="$test_root/temp" \
+  GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1 \
   DISPLAY="$DISPLAY" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
-  "$executable" >"$test_root/app.stdout" 2>"$test_root/app.stderr" &
+  "$launcher" >"$test_root/app.stdout" 2>"$test_root/app.stderr" &
 app_pid=$!
 
 deadline=$((SECONDS + 60))

@@ -37,6 +37,7 @@ assert.match(workflow, /uses: actions\/upload-artifact@[a-f0-9]{40}/u);
 assert.doesNotMatch(workflow, /uses: [^\n]+@(?![a-f0-9]{40}(?:\s|$))/u);
 for (const required of [
   'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT', 'XDG_DATA_HOME', 'XDG_RUNTIME_DIR',
+  'AppRun', 'realpath -e', 'GDK_BACKEND=x11', 'WEBKIT_DISABLE_COMPOSITING_MODE=1',
   'Xvfb', 'dbus-launch', 'sidecar_started', 'service_initialized', 'xdotool',
   'STANDALONE_NATIVE_LINUX_ORPHANED_SIDECAR'
 ]) assert.ok(launch.includes(required), required);
