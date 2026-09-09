@@ -116,7 +116,7 @@ done
   echo "STANDALONE_NATIVE_MACOS_IPC_TIMEOUT" >&2
   exit 1
 }
-[[ -d "$test_root/profile/Local/SecureDataMsg-Standalone/workspace" ]] || {
+[[ -d "$test_root/profile/Library/Application Support/SecureDataMsg-Standalone/workspace" ]] || {
   echo "STANDALONE_NATIVE_ISOLATED_WORKSPACE_MISSING" >&2
   exit 1
 }

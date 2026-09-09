@@ -50,6 +50,7 @@ assert.strictEqual(packageLock.packages['node_modules/@tauri-apps/cli'].version,
 for (const expected of [
   'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT',
   'DATASECURE_STANDALONE_DOCUMENTS_DIR',
+  'profile/Library/Application Support/SecureDataMsg-Standalone/workspace',
   'sidecar_started',
   'service_initialized',
   'osascript',
