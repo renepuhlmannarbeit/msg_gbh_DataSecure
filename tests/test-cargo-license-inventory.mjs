@@ -62,6 +62,23 @@ test('the loader uses locked offline target-filtered Cargo metadata without a sh
   assert.strictEqual(calls[0].options.shell, false);
 });
 
+test('the loader accepts every declared desktop Rust target and rejects arbitrary triples', () => {
+  for (const target of [
+    'x86_64-pc-windows-msvc',
+    'x86_64-apple-darwin',
+    'aarch64-apple-darwin',
+    'x86_64-unknown-linux-gnu'
+  ]) {
+    const result = loadCargoLicenseInventory('C:/source/Cargo.toml', target, {
+      spawnSync: () => ({ status: 0, stdout: JSON.stringify(fixture()) })
+    });
+    assert.strictEqual(result.components.length, 2);
+  }
+  assert.throws(() => loadCargoLicenseInventory('C:/source/Cargo.toml', 'aarch64-attacker-example', {
+    spawnSync: () => ({ status: 0, stdout: JSON.stringify(fixture()) })
+  }), /CARGO_LICENSE_ARGUMENT_INVALID/u);
+});
+
 test('damaged metadata and subprocess failures stay content-free', () => {
   assert.throws(() => cargoLicenseInventoryFromMetadata({}), /CARGO_LICENSE_METADATA_INVALID/u);
   assert.throws(() => loadCargoLicenseInventory('C:/source/Cargo.toml', 'x86_64-pc-windows-msvc', {

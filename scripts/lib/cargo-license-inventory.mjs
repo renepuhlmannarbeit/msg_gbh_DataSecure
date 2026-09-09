@@ -60,7 +60,13 @@ export function cargoLicenseInventoryFromMetadata(metadata) {
 }
 
 export function loadCargoLicenseInventory(manifestPath, rustTarget, options = {}) {
-  if (!safeText(manifestPath, 4000) || !/^[A-Za-z0-9_][A-Za-z0-9_.-]*-[A-Za-z0-9_.-]+-[A-Za-z0-9_.-]+-[A-Za-z0-9_.-]+$/u.test(rustTarget)) {
+  const supportedTargets = new Set([
+    'x86_64-pc-windows-msvc',
+    'x86_64-apple-darwin',
+    'aarch64-apple-darwin',
+    'x86_64-unknown-linux-gnu'
+  ]);
+  if (!safeText(manifestPath, 4000) || !supportedTargets.has(rustTarget)) {
     throw new Error('CARGO_LICENSE_ARGUMENT_INVALID');
   }
   const result = (options.spawnSync || childProcess.spawnSync)('cargo', [
