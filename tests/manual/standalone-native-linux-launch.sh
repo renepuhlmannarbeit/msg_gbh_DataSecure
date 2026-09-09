@@ -37,12 +37,16 @@ test_root="$(cd "$test_root" && pwd -P)"
 app_pid=""
 xvfb_pid=""
 dbus_pid=""
+window_manager_pid=""
 cleanup() {
   if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then
     kill -TERM "$app_pid" 2>/dev/null || true
     wait "$app_pid" 2>/dev/null || true
   fi
   if [[ -n "$xvfb_pid" ]] && kill -0 "$xvfb_pid" 2>/dev/null; then kill -TERM "$xvfb_pid" 2>/dev/null || true; fi
+  if [[ -n "$window_manager_pid" ]] && kill -0 "$window_manager_pid" 2>/dev/null; then
+    kill -TERM "$window_manager_pid" 2>/dev/null || true
+  fi
   if [[ -n "$dbus_pid" ]] && kill -0 "$dbus_pid" 2>/dev/null; then kill -TERM "$dbus_pid" 2>/dev/null || true; fi
   [[ -d "$test_root" && ! -L "$test_root" ]] || return 1
   [[ "$(dirname "$test_root")" == "$tmp_parent" ]] || return 1
@@ -78,6 +82,16 @@ for _ in {1..100}; do [[ -S "/tmp/.X11-unix/X$display_number" ]] && break; sleep
 [[ -S "/tmp/.X11-unix/X$display_number" ]] || { echo "STANDALONE_NATIVE_XVFB_FAILED" >&2; exit 1; }
 eval "$(dbus-launch --sh-syntax)"
 dbus_pid="${DBUS_SESSION_BUS_PID:-}"
+openbox --display "$DISPLAY" --sm-disable >"$test_root/openbox.log" 2>&1 &
+window_manager_pid=$!
+for _ in {1..100}; do
+  xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id' && break
+  sleep 0.1
+done
+xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id' || {
+  echo "STANDALONE_NATIVE_WINDOW_MANAGER_FAILED" >&2
+  exit 1
+}
 
 env \
   DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT="$test_root" \
@@ -115,7 +129,10 @@ done
 sidecar_pid="$(pgrep -P "$app_pid" -f 'datasecure-core' | head -n 1 || true)"
 [[ "$sidecar_pid" =~ ^[0-9]+$ ]] || { echo "STANDALONE_NATIVE_SIDECAR_MISSING" >&2; exit 1; }
 
-xdotool search --onlyvisible --name '^DataSecure Standalone$' windowclose >/dev/null
+window_id="$(xdotool search --onlyvisible --name '^DataSecure Standalone$' | head -n 1)"
+[[ "$window_id" =~ ^[0-9]+$ ]] || { echo "STANDALONE_NATIVE_WINDOW_MISSING" >&2; exit 1; }
+xdotool windowactivate --sync "$window_id"
+xdotool key alt+F4
 for _ in {1..150}; do kill -0 "$app_pid" 2>/dev/null || break; sleep 0.2; done
 if kill -0 "$app_pid" 2>/dev/null; then echo "STANDALONE_NATIVE_LINUX_GRACEFUL_EXIT_TIMEOUT" >&2; exit 1; fi
 wait "$app_pid" || status=$?

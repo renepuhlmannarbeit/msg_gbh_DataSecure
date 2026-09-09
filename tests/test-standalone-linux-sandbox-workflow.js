@@ -24,7 +24,7 @@ assert.match(workflow, /^permissions:\n  contents: read$/mu);
 assert.match(workflow, /timeout-minutes: 45/u);
 assert.doesNotMatch(workflow, /secrets\.|cache:/u);
 for (const required of [
-  'libwebkit2gtk-4.1-dev', 'node-v22.23.2-linux-x64.tar.gz',
+  'libwebkit2gtk-4.1-dev', 'openbox', 'x11-utils', 'node-v22.23.2-linux-x64.tar.gz',
   'b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a',
   'node scripts/prepare-standalone-runtime.mjs', 'npm run test:standalone',
   'cargo clippy --all-targets --locked -- -D warnings',
@@ -39,7 +39,8 @@ assert.doesNotMatch(workflow, /uses: [^\n]+@(?![a-f0-9]{40}(?:\s|$))/u);
 for (const required of [
   'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT', 'XDG_DATA_HOME', 'XDG_RUNTIME_DIR',
   'AppRun', 'realpath -e', 'GDK_BACKEND=x11', 'WEBKIT_DISABLE_COMPOSITING_MODE=1',
-  'Xvfb', 'dbus-launch', 'sidecar_started', 'service_initialized', 'xdotool',
+  'Xvfb', 'dbus-launch', 'openbox --display', '_NET_SUPPORTING_WM_CHECK',
+  'xdotool key alt+F4', 'sidecar_started', 'service_initialized', 'xdotool',
   'STANDALONE_NATIVE_LINUX_ORPHANED_SIDECAR'
 ]) assert.ok(launch.includes(required), required);
 assert.equal(target.minimum_glibc_version, '2.35');
