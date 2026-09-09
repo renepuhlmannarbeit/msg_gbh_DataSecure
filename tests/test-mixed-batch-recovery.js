@@ -19,6 +19,7 @@ Module._load = function guardedLoad(request, parent, isMain) {
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-mixed-recovery-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'data');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch, processBatchNext, resumeBatch, acknowledgeDeliveredPackage, _test } = require('../plugins/data-secure/server/gateway/batch');
 const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');

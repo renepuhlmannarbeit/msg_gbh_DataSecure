@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 09.09.2026 · Produktstand 3.2.0-rc129
+Stand: 09.09.2026 · Produktstand 3.2.0-rc130
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -20,6 +20,19 @@ sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
 Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
+
+### RC130 – Windows-Helferpfade und POSIX-Testisolation
+
+Datei-/Ordnerdialoge sowie `taskkill.exe` werden mit expliziter Windows-
+Pfadsemantik aufgebaut und durch exakte plattformneutrale Vertragstests
+gebunden. Die realen Audit-/Exporttests verwenden auf jedem Betriebssystem
+einen eigenen temporären Produktdatenroot; der Abschlussanzeigentest akzeptiert
+die zwei zulässigen Ergebnisse eines sauberen IPC-Schließens, fordert aber
+weiterhin exakt einen Presenter. Die separate Worker-Übernahme bei echtem
+Elternausfall bleibt unverändert geprüft. Die vollständige CI-Produktsuite ist
+auf Windows und mit dem gepinnten Node 22.23.2 auf einem nativen Linux-
+Dateisystem grün. Offen sind PKG-04/INT-13 und die commitgebundenen
+Zielpaketjobs.
 
 ### RC129 – Windows-Pfadsemantik vom Testhost entkoppelt
 

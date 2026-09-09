@@ -9,6 +9,7 @@ const path = require('path');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-result-export-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'data');
 const cowork = path.join(base, 'cowork');
 fs.mkdirSync(cowork, { recursive: true });
 process.env.EU_PRIVACY_RESULT_ROOT = cowork;
@@ -480,7 +481,10 @@ try {
   const releasedFile = path.join(shieldRun, 'Dokument-001-anonymisiert.md');
   fs.writeFileSync(releasedFile, '# Bereits anonymisiert');
   assert.throws(() => validateSelectedPath(releasedFile), /sichtbaren DataSecure-Output/u, 'the file picker rejects a released result');
-  assert.throws(() => validateSelectedPath(releasedFile.toUpperCase()), /sichtbaren DataSecure-Output/u, 'case variants are the same location');
+  if (process.platform === 'win32') {
+    assert.throws(() => validateSelectedPath(releasedFile.toUpperCase()), /sichtbaren DataSecure-Output/u,
+      'Windows case variants are the same location');
+  }
   assert.throws(() => enumerateSourceFolder(shieldRun, { hasReparseComponent: () => false }), /DataSecure-Output|getrennten Ordner/u);
   const originalsDirectory = path.join(shieldRoot, 'Originale');
   fs.mkdirSync(originalsDirectory);

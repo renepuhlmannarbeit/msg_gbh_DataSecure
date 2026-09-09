@@ -1,8 +1,9 @@
 # Release- und Distributionsvertrag
 
-Stand: 08.09.2026 · 3.2.0-rc129
+Stand: 08.09.2026 · 3.2.0-rc130
 
-Der aktuelle Quellstand ist der RC129-Produktkandidat für das Cowork-Plugin.
+Der aktuelle Quellstand ist der RC130-Produktkandidat für das Cowork-Plugin
+und die Standalone-App.
 Sein zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
 beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
 Plugin-ZIP-Tests und Claude-Validierung gebunden. Ein Standalone-Paket desselben

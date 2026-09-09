@@ -34,6 +34,8 @@ test('platform pickers use argument arrays and no network transport', () => {
       assert.match(spec.args.join(' '), new RegExp(PICKER_TITLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
   }
+  assert.strictEqual(pickerCommands('win32', { SystemRoot: 'C:\\Windows' })[0].command,
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
 });
 
 test('privacy-folder picker is local on all supported platforms and never returns a folder through MCP', () => {
@@ -45,6 +47,8 @@ test('privacy-folder picker is local on all supported platforms and never return
       assert.match(spec.args.join(' '), new RegExp(FOLDER_PICKER_TITLE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
   }
+  assert.strictEqual(folderPickerCommands('win32', { SystemRoot: 'C:\\Windows' })[0].command,
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
   const folder = path.join(root, 'local-privacy');
   fs.mkdirSync(folder);
   assert.strictEqual(pickFolder({ platform: 'linux', runner: () => ({ status: 0, stdout: `${folder}\n` }) }), folder);

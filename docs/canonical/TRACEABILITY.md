@@ -1,10 +1,21 @@
 # Entscheidungs-Traceability
 
-Stand: 09.09.2026 · 3.2.0-rc129
+Stand: 09.09.2026 · 3.2.0-rc130
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC130 bindet die hostunabhängige Konstruktion der Windows-Helferpfade an
+`companion/file-picker.js`, `folder-picker.js`, `source-folder.js` und
+`supervisor.js`. `test-companion-ipc.js`, `test-source-folder.js` und
+`test-companion-supervisor.js` fordern die exakten Windows-Systempfade auch
+auf POSIX-Testhosts. `test-direct-picker-intake-worker.js` bindet die
+Single-Presenter-Invariante an beide zulässigen Abläufe eines sauberen
+IPC-Schließens; `test-worker-terminal-presentation.js` belegt weiterhin die
+Worker-Übernahme bei tatsächlich nicht erreichbarem Elternprozess.
+`test-transient-rename-retry.js` und `test-gateway-e2e.js` binden ihre realen
+Dateisystemoperationen explizit an einen sitzungseigenen temporären Datenroot.
 
 RC129 bindet die Erkennung der temporären Claude-Windows-Projektion und den
 stabilen Profil-Fallback an explizite Windows-Pfadsemantik in

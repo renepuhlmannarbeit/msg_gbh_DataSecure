@@ -40,7 +40,7 @@ async function main() {
         return { status: 0 };
       }
     });
-    assert.match(invocation.command, /taskkill\.exe$/i);
+    assert.strictEqual(invocation.command, 'C:\\Windows\\System32\\taskkill.exe');
     assert.deepStrictEqual(invocation.args, ['/pid', '4321', '/t', '/f']);
     assert.strictEqual(invocation.options.shell, false);
     assert.strictEqual(directKills, 0);

@@ -20,7 +20,7 @@ function defaultRunner(command, args, env = process.env) {
 
 function pickerCommands(platform = process.platform, env = process.env, title = FOLDER_PICKER_TITLE) {
   if (platform === 'win32') {
-    const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const powershell = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const script = windowsFolderDialogScript({
       preamble: WINDOWS_PICKER_UTF8, title, okLabel: 'Ordner auswählen',
       cancelledToken: FOLDER_PICKER_CANCELLED, showNewFolderButton: true

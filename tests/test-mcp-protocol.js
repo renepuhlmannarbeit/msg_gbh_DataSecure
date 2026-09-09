@@ -162,6 +162,7 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
         ...process.env,
         EU_PRIVACY_ROOT: privacyRoot,
         EU_PRIVACY_RESULT_ROOT: resultRoot,
+        EU_PRIVACY_DATA_ROOT: path.join(privacyRoot, 'localapp', 'SecureDataMsg'),
         LOCALAPPDATA: path.join(privacyRoot, 'localapp'),
         EU_PRIVACY_LANGUAGE: 'de',
         EU_PRIVACY_VISUAL_MODE: 'strict',

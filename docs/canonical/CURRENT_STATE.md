@@ -1,6 +1,26 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc129 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc130 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+
+## RC130 – portable Windows-Helferpfade und reale Testisolation
+
+Die Windows-spezifischen Aufrufe für Datei-/Ordnerauswahl und das kontrollierte
+Beenden eines Kindprozessbaums werden nun unabhängig vom ausführenden Testhost
+mit `path.win32` zusammengesetzt. Damit entstehen auch unter Linux und macOS
+die echten Windows-Pfade zu PowerShell und `taskkill.exe`; die Runtime auf
+Windows bleibt funktional unverändert. Exakte Vertragstests sichern alle drei
+Helferpfade.
+
+Der CI-nahe Linux-Lauf deckte außerdem zwei Testannahmen auf, die nur unter
+Windows isoliert waren. Audit-/Exportdaten besitzen jetzt auch in den
+Realprozess- und Publikationstests einen expliziten temporären Datenroot. Das
+IPC-Integrationstestbild prüft plattformgleich genau eine Abschlussanzeige:
+ein noch lebender Elternprozess darf ein gepuffertes Ereignis präsentieren,
+bei echtem Elternausfall übernimmt weiterhin der separat getestete Worker.
+Produktcode wurde dafür nicht durch Mocks ersetzt. E0-Paket- und
+Zielhostnachweise müssen aus dem finalen RC130-Commit entstehen. Die komplette
+CI-Produktsuite ist auf Windows und zusätzlich mit dem gepinnten Node 22.23.2
+auf einem nativen Linux-Dateisystem grün.
 
 ## RC129 – Windows-Pfadvertrag hostunabhängig geprüft
 

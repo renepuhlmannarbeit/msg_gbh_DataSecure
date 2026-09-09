@@ -84,7 +84,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
   const macTypeFilter = `{${extensions.map((ext) => `"${ext.slice(1)}"`).join(', ')}}`;
   if (platform === 'win32') {
     const systemRoot = env.SystemRoot || 'C:\\Windows';
-    const powershell = path.join(
+    const powershell = path.win32.join(
       systemRoot,
       'System32',
       'WindowsPowerShell',

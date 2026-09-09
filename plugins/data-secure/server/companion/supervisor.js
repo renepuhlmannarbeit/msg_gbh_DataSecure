@@ -32,7 +32,7 @@ function terminateProcessTree(child, options = {}) {
     const runner = options.killTreeRunner || childProcess.spawnSync;
     const systemRoot = options.systemRoot || process.env.SystemRoot || 'C:\\Windows';
     try {
-      const result = runner(path.join(systemRoot, 'System32', 'taskkill.exe'), ['/pid', String(child.pid), '/t', '/f'], {
+      const result = runner(path.win32.join(systemRoot, 'System32', 'taskkill.exe'), ['/pid', String(child.pid), '/t', '/f'], {
         windowsHide: true,
         stdio: 'ignore',
         shell: false,

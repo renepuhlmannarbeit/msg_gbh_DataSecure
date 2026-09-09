@@ -16,6 +16,10 @@ const runtimeDir = path.join(__dirname, '..', 'plugins', 'data-secure', 'server'
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-v32-e2e-'));
 process.env.EU_PRIVACY_ROOT = root;
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
+// Bind the cross-platform test explicitly. LOCALAPPDATA is authoritative only
+// on Windows; without this root Linux would retain audit fixtures below the
+// real user data directory and contaminate later count assertions.
+process.env.EU_PRIVACY_DATA_ROOT = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg');
 
 const { encodePng } = require(path.join(runtimeDir, 'image-sanitizer.js'));
 const gateway = require(path.join(runtimeDir, 'gateway.js'));

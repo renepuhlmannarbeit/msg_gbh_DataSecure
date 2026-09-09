@@ -20,6 +20,7 @@ try {
       ...process.env,
       EU_PRIVACY_ROOT: privacyRoot,
       EU_PRIVACY_RESULT_ROOT: privacyRoot,
+      EU_PRIVACY_DATA_ROOT: path.join(privacyRoot, 'data'),
       LOCALAPPDATA: privacyRoot,
       EU_PRIVACY_SUPPORT_MODE: '1'
     },
