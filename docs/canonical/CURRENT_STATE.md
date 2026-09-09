@@ -1,6 +1,18 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc128 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc129 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+
+## RC129 – Windows-Pfadvertrag hostunabhängig geprüft
+
+Der automatische RC128-Linux-Lauf `34375438144` erreichte den korrigierten
+Startup-Guard, deckte danach aber eine zweite Windows-spezifische
+Testannahme auf: Der Helfer für Claudes temporäre Windows-Projektion nutzte
+beim plattformneutralen Vertragstest den Pfadparser des Linux-Hosts. RC129
+wertet diesen ausdrücklich Windows-eigenen Vertrag immer mit `path.win32`
+aus. Das ändert das Verhalten auf Windows nicht, macht Erkennung,
+Profil-Fallback und Identitätsvergleich jedoch auf jedem Testhost
+reproduzierbar. Die begonnenen RC128-Paketläufe wurden abgebrochen; sämtliche
+E0-Paket- und Zielhostnachweise müssen aus dem finalen RC129-Commit entstehen.
 
 ## RC128 – plattformneutraler realer Startup-Guard-Nachweis
 

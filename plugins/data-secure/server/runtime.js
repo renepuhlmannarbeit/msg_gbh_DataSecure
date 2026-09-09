@@ -70,8 +70,8 @@ function verifyNativeLauncher(launcher, options = {}) {
 }
 
 function isClaudeTemporaryLocalData(candidate, platform = process.platform) {
-  if (platform !== 'win32' || !candidate || !path.isAbsolute(candidate)) return false;
-  const normalized = path.resolve(candidate).replaceAll('/', '\\').toLowerCase();
+  if (platform !== 'win32' || !candidate || !path.win32.isAbsolute(candidate)) return false;
+  const normalized = path.win32.resolve(candidate).replaceAll('/', '\\').toLowerCase();
   return normalized.includes('\\appdata\\local\\temp\\claude\\') ||
     normalized.includes('\\appdata\\roaming\\claude\\local-agent-mode-sessions\\');
 }
@@ -85,13 +85,13 @@ function stableWindowsLocalData(environment = process.env, home = os.homedir(), 
   // workers must not inherit that lifetime. Use the user's established Windows
   // Local AppData only for this narrowly recognised Claude temporary path.
   const profile = String(environment.USERPROFILE || home || '').trim();
-  if (!profile || !path.isAbsolute(profile)) return configured;
-  const candidate = path.resolve(profile, 'AppData', 'Local');
+  if (!profile || !path.win32.isAbsolute(profile)) return configured;
+  const candidate = path.win32.resolve(profile, 'AppData', 'Local');
   try {
     const stat = io.lstatSync(candidate);
     if (!stat.isDirectory() || stat.isSymbolicLink()) return configured;
     const real = io.realpathSync.native ? io.realpathSync.native(candidate) : io.realpathSync(candidate);
-    if (path.resolve(real).toLowerCase() !== candidate.toLowerCase()) return configured;
+    if (path.win32.resolve(real).toLowerCase() !== candidate.toLowerCase()) return configured;
     return candidate;
   } catch { return configured; }
 }

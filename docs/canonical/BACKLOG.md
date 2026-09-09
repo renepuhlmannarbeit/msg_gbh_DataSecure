@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 09.09.2026 · Produktstand 3.2.0-rc128
+Stand: 09.09.2026 · Produktstand 3.2.0-rc129
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -20,6 +20,17 @@ sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
 Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
+
+### RC129 – Windows-Pfadsemantik vom Testhost entkoppelt
+
+Der RC128-Linux-Lauf bestätigte den realen Startup-Guard und fand anschließend
+im Test für den stabilen Cowork-Datenroot eine Host-Pfadabhängigkeit. Der
+Windows-Vertrag verwendet nun durchgängig `path.win32` für Absolutheit,
+Normalisierung und Identitätsvergleich. Damit bleibt der echte Produktpfad
+unter Windows unverändert und derselbe Vertrag ist unter Linux und macOS
+automatisiert belegbar. Lokal sind die gezielten Pfad- und Startup-Tests grün;
+offen sind der Linux-CI-Rerun, PKG-04/INT-13 und die fünf commitgebundenen
+Zielpaketjobs.
 
 ### RC128 – Startup-Guard-Test auf allen Hosts real gebunden
 

@@ -1,10 +1,17 @@
 # Entscheidungs-Traceability
 
-Stand: 09.09.2026 · 3.2.0-rc128
+Stand: 09.09.2026 · 3.2.0-rc129
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC129 bindet die Erkennung der temporären Claude-Windows-Projektion und den
+stabilen Profil-Fallback an explizite Windows-Pfadsemantik in
+`plugins/data-secure/server/runtime.js`. Der plattformneutrale Vertragstest
+`tests/test-stable-data-root.js` prüft dadurch echte Windows-Pfade unabhängig
+vom Betriebssystem des Testhosts; Windows-Produktverhalten und Datenroot-
+Grenzen bleiben unverändert.
 
 RC128 bindet den plattformneutralen Startup-Guard-Realprozessnachweis an
 `tests/test-startup-guard.js` und den bereits produktiven absoluten
