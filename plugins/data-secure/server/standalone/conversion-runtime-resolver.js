@@ -26,7 +26,9 @@ function resolveConversionRuntime() {
     const manifestFile = path.join(root, 'RUNTIME.json');
     const manifestRead = readChecked(manifestFile, 2 * 1024 * 1024);
     const manifest = JSON.parse(manifestRead.bytes);
-    const target = process.platform === 'win32' ? `windows-${process.arch}` : process.platform === 'darwin' ? `macos-${process.arch}` : null;
+    const target = process.platform === 'win32' ? `windows-${process.arch}`
+      : process.platform === 'darwin' ? `macos-${process.arch}`
+        : process.platform === 'linux' && process.arch === 'x64' ? 'linux-x64-glibc' : null;
     if (manifest.schema !== 'datasecure-conversion-runtime/1' || manifest.target !== target ||
         manifest.node_file !== (process.platform === 'win32' ? 'node.exe' : 'node') ||
         !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > 4096) fail();

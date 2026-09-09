@@ -9,6 +9,7 @@ const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 const workflow = read('.github/workflows/standalone-linux-sandbox.yml');
 const launch = read('tests/manual/standalone-native-linux-launch.sh');
 const conversionWorker = read('tests/test-standalone-conversion-worker.mjs');
+const conversionResolver = read('plugins/data-secure/server/standalone/conversion-runtime-resolver.js');
 const target = JSON.parse(read('apps/datasecure-standalone/desktop-targets.json')).targets
   .find((item) => item.product_target === 'linux-x64-glibc');
 
@@ -42,6 +43,8 @@ assert.equal(target.minimum_glibc_version, '2.35');
 assert.equal(target.distribution_format, 'appimage-in-zip');
 assert.equal(target.start_guide, 'LINUX-START.md');
 assert.match(conversionWorker,
+  /process\.platform === 'linux' && process\.arch === 'x64' \? 'linux-x64-glibc' : null/u);
+assert.match(conversionResolver,
   /process\.platform === 'linux' && process\.arch === 'x64' \? 'linux-x64-glibc' : null/u);
 
 process.stdout.write('Standalone Linux manual sandbox workflow: PASS\n');
