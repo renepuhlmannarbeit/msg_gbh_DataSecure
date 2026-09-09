@@ -1,8 +1,8 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc125 · ARM64-Zielhost-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc125 · Intel-/ARM64-Zielhost-E0 und unabhängige Produktrevalidierung
 
-## ARM64-Zielhost-E0 vom 09.09.2026
+## Intel-/ARM64-Zielhost-E0 vom 09.09.2026
 
 Der manuell und kostenbestätigt gestartete GitHub-Actions-Lauf
 [`34285518668`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34285518668)
@@ -15,11 +15,20 @@ die Architektur von App, Core-Sidecar und Supervisor. `file` und `lipo` weisen
 alle drei als Mach-O `arm64` aus. Es wurden keine Secrets, Caches, Pakete,
 Diagnosen oder Artefakte hochgeladen.
 
-Damit ist die automatisierbare native Apple-Silicon-E0-Ausführung belegt. Nicht
+Der separat gestartete Intel-Lauf
+[`34318293471`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34318293471)
+ist für Commit `1cf2d5349d848bc60ff35f7c12341754b8d91bc3` auf dem echten
+`macos-15-intel`-Runner ebenfalls vollständig grün. Derselbe Prüfpfad bestätigt
+den real isolierten Office-/PDF-/OCR-Worker, Clippy, den Tauri-Release-Build und
+App, Core-Sidecar sowie POSIX-Supervisor jeweils als Mach-O `x86_64`. Auch dieser
+Lauf verwendete keine Secrets, Caches oder Artefakt-Uploads.
+
+Damit ist die automatisierbare native E0-Ausführung für Apple Silicon und Intel
+belegt. Nicht
 daraus abgeleitet werden ein verteilbares/signiertes `.app`, Finder-/Gatekeeper-
 Bedienung, sichtbarer Start, Picker, Drag-and-drop, VoiceOver, reale Performance
-oder menschliche UAT. Diese E1/E2-Nachweise sowie der separate native Intel-Lauf
-bleiben offen.
+oder menschliche UAT. Diese E1/E2-Nachweise bleiben auf beiden Architekturen
+offen.
 
 ## Aktueller Entwicklungsstand RC125 – unabhängige Revalidierung
 
@@ -884,10 +893,10 @@ Minuten und wählt standardmäßig nur Apple Silicon. Auf `macos-15-intel` und
 Supervisor, die vollständigen Standalone-/Konverter-/Rust-Verträge, Clippy,
 der Tauri-Release-Build und die Architektur aller drei Executables geprüft.
 Es verwendet keine Secrets, keinen Cache und keine Artefakt-Uploads. Der native
-Apple-Silicon-E0-Lauf `34285518668` auf Commit `487bfe1` ist vollständig grün;
-der native Intel-Lauf steht noch aus. App-Bundle, Gatekeeper, sichtbare Fenster,
-Picker, VoiceOver, Performance und menschliche UAT auf Intel und Apple Silicon
-bleiben offen.
+Apple-Silicon-E0-Lauf `34285518668` auf Commit `487bfe1` und der native
+Intel-E0-Lauf `34318293471` auf Commit `1cf2d53` sind vollständig grün.
+App-Bundle, Gatekeeper, sichtbare Fenster, Picker, VoiceOver, Performance und
+menschliche UAT auf Intel und Apple Silicon bleiben offen.
 Rust und Tauri sind ausschließlich Buildwerkzeuge; Anwender installieren weder
 Rust noch Node oder Python. Der Windows-Build wurde mit Rust 1.98.1, Tauri
 2.11.5 und MSVC erfolgreich gebaut; `cargo test --locked`, Clippy,

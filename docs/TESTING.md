@@ -283,8 +283,11 @@ Der Apple-Silicon-Lauf
 vom 09.09.2026 ist für Commit `487bfe1f4ede640880dac317a06ae2c2f1f5efe9`
 vollständig grün. App, Core-Sidecar und POSIX-Supervisor wurden dabei nativ
 gebaut und jeweils durch `file`/`lipo` als Mach-O `arm64` bestätigt. Der
-separate `macos-x64`-Lauf sowie sämtliche sichtbaren E1/E2-Prüfungen bleiben
-offen.
+Intel-Lauf
+[`34318293471`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/34318293471)
+vom selben Tag ist für Commit `1cf2d5349d848bc60ff35f7c12341754b8d91bc3`
+mit demselben Prüfpfad vollständig grün und bestätigt alle drei Executables als
+Mach-O `x86_64`. Sämtliche sichtbaren E1/E2-Prüfungen bleiben offen.
 
 ### RC111: breite Format- und Recovery-Grenzen
 
@@ -388,8 +391,8 @@ Zuordnungsdatei. Die privaten Zielresolver verwenden dieselben nativen
 Öffnen-Schaltflächen.
 Queue-Schema und Worker-Acknowledge werden vor dem positiven
 Handoff doppelt geprüft; Identitäts-Mocks dürfen diese Grenze nicht ersetzen.
-Das ersetzt keine menschliche Windows-/macOS-UAT. Der native ARM64-E0-Nachweis
-ist inzwischen durch Lauf `34285518668` erbracht; Intel-macOS bleibt offen.
+Das ersetzt keine menschliche Windows-/macOS-UAT. Die nativen E0-Nachweise sind
+durch Lauf `34285518668` für ARM64 und Lauf `34318293471` für Intel erbracht.
 
 ## UAT
 
