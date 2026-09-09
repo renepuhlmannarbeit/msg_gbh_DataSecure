@@ -48,6 +48,8 @@ test('macOS package build is deterministic, self-contained and fail-closed', () 
     assert.doesNotMatch(source, /execSync|shell:\s*true|\bcurl\b|\bwget\b/u);
   }
   assert.match(build, /writeZip/u);
+  assert.match(build, /path\.join\(runtimeDir, runtimeTarget\.launcher\)/u);
+  assert.doesNotMatch(build, /path\.join\(runtimeDir, 'datasecure-node'\)/u);
   assert.match(build, /fs\.lstatSync/u);
   assert.match(build, /isSymbolicLink/u);
   assert.match(build, /STANDALONE_MACOS_SOURCE_CHANGED/u);

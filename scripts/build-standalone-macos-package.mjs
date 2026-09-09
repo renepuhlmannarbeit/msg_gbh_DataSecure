@@ -96,8 +96,9 @@ copyTree(appSource, path.join(stage, appRelative));
 
 const contract = readContract(root);
 const runtimeTarget = contract.targets.find((candidate) => candidate.id === productTarget);
+if (!runtimeTarget) throw new Error('STANDALONE_MACOS_RUNTIME_TARGET_MISSING');
 const runtimeDir = path.join(root, 'dist', productTarget);
-const runtime = path.join(runtimeDir, 'datasecure-node');
+const runtime = path.join(runtimeDir, runtimeTarget.launcher);
 const runtimeLicense = path.join(runtimeDir, 'LICENSE.node.txt');
 const runtimeEvidence = JSON.parse(readRegular(path.join(runtimeDir, 'runtime-evidence.json'), 64 * 1024));
 const runtimeBytes = readRegular(runtime, 128 * 1024 * 1024);
