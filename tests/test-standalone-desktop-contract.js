@@ -355,7 +355,10 @@ test('macOS instructions use a narrow Gatekeeper exception without terminal bypa
   assert.match(guide, /Dennoch öffnen/u);
   assert.match(guide, /macOS 13\.5/u);
   assert.doesNotMatch(guide, /`(?:xattr|spctl)\s+[-\w]/u);
-  assert.match(guide, /kein baubares|noch\s+nicht gebaut/iu);
+  assert.match(guide, /App-Bundles sind auf echten Intel- und\s+Apple-Silicon-Runnern gebaut/u);
+  assert.match(guide, /sichtbare menschliche Abnahme bleibt offen/u);
+  assert.match(guide, /upload_package/u);
+  assert.match(guide, /einem Tag Aufbewahrung/u);
 });
 
 done();

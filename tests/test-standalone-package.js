@@ -34,6 +34,35 @@ test('standalone package build uses pinned runtime and a closed resource project
     'the Windows desktop linker must emit a reproducible PE image');
 });
 
+test('macOS package build is deterministic, self-contained and fail-closed', () => {
+  const build = fs.readFileSync(path.join(root, 'scripts', 'build-standalone-macos-package.mjs'), 'utf8');
+  const verify = fs.readFileSync(path.join(root, 'scripts', 'verify-standalone-macos-package.mjs'), 'utf8');
+  for (const source of [build, verify]) {
+    assert.match(source, /\['macos-x64', 'macos-arm64'\]/u);
+    assert.match(source, /DataSecure Standalone\.app/u);
+    assert.match(source, /STANDALONE-MANIFEST\.json/u);
+    assert.match(source, /RUNTIME-EVIDENCE\.json/u);
+    assert.match(source, /RUST-LICENSE-INVENTORY\.json/u);
+    assert.match(source, /SBOM\.spdx\.json/u);
+    assert.match(source, /SHA256SUMS/u);
+    assert.doesNotMatch(source, /execSync|shell:\s*true|\bcurl\b|\bwget\b/u);
+  }
+  assert.match(build, /writeZip/u);
+  assert.match(build, /fs\.lstatSync/u);
+  assert.match(build, /isSymbolicLink/u);
+  assert.match(build, /STANDALONE_MACOS_SOURCE_CHANGED/u);
+  assert.match(build, /requires_node_install: false/u);
+  assert.match(build, /requires_rust_install: false/u);
+  assert.match(build, /requires_network: false/u);
+  assert.match(build, /requires_webview2: false/u);
+  assert.match(build, /MACOS-START\.md/u);
+  assert.match(verify, /readCentralModes/u);
+  assert.match(verify, /0o100755/u);
+  assert.match(verify, /\[0xcf, 0xfa, 0xed, 0xfe\]/u);
+  assert.match(verify, /CONVERSION_PACKAGE_RESOURCE_MISSING/u);
+  assert.match(verify, /`\$\{archive\}\.sha256`/u);
+});
+
 test('release runtime lookup cannot fall back to the developer checkout', () => {
   const source = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone', 'tauri-contract', 'src', 'main.rs'), 'utf8');
   assert.match(source, /if cfg!\(debug_assertions\)/u);

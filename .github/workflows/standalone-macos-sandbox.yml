@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      upload_package:
+        description: Upload the verified engineering ZIP for one day so it can be tested on a real Mac.
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -141,6 +146,57 @@ jobs:
           bash tests/manual/standalone-native-macos-launch.sh \
             --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app" \
             --target "${{ matrix.target }}" --version "$version"
+      - name: Build, verify and launch the deterministic distribution archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          archive="dist/DataSecure-Standalone-${version}-${{ matrix.target }}.zip"
+          node scripts/build-standalone-macos-package.mjs \
+            --target "${{ matrix.target }}" --app "$bundle"
+          cp "$archive" "${archive}.first"
+          node scripts/build-standalone-macos-package.mjs \
+            --target "${{ matrix.target }}" --app "$bundle"
+          cmp "${archive}.first" "$archive"
+          rm -- "${archive}.first"
+          node scripts/verify-standalone-macos-package.mjs \
+            --target "${{ matrix.target }}" --archive "$archive"
+
+          extraction="$(mktemp -d "${RUNNER_TEMP}/datasecure-macos-package.XXXXXX")"
+          case "$extraction" in
+            "${RUNNER_TEMP}/datasecure-macos-package."*) ;;
+            *) echo "Unsafe extraction directory" >&2; exit 74 ;;
+          esac
+          cleanup() {
+            case "$extraction" in
+              "${RUNNER_TEMP}/datasecure-macos-package."*) rm -rf -- "$extraction" ;;
+              *) exit 74 ;;
+            esac
+          }
+          trap cleanup EXIT
+          ditto -x -k "$archive" "$extraction"
+          packaged_app="$extraction/DataSecure-Standalone-${version}-${{ matrix.target }}/DataSecure Standalone.app"
+          codesign --verify --deep --strict --verbose=2 "$packaged_app"
+          for executable in \
+            "$packaged_app/Contents/MacOS/datasecure-standalone" \
+            "$packaged_app/Contents/MacOS/datasecure-core" \
+            "$packaged_app/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"; do
+            test "$(lipo -archs "$executable")" = "${{ matrix.rust_arch }}"
+          done
+          bash tests/manual/standalone-native-macos-launch.sh \
+            --app "$packaged_app" --target "${{ matrix.target }}" --version "$version"
+      - name: Upload the verified engineering package for one day
+        if: ${{ inputs.upload_package == true }}
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: DataSecure-Standalone-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            dist/DataSecure-Standalone-*-${{ matrix.target }}.zip
+            dist/DataSecure-Standalone-*-${{ matrix.target }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
       - name: Write content-free evidence summary
         shell: bash
         run: |
@@ -157,6 +213,10 @@ jobs:
             echo "- Tauri binary SHA-256: \`$(shasum -a 256 "$app" | awk '{print $1}')\`"
             echo "- Core runtime SHA-256: \`$(shasum -a 256 "$sidecar" | awk '{print $1}')\`"
             echo "- POSIX supervisor SHA-256: \`$(shasum -a 256 "$supervisor" | awk '{print $1}')\`"
-            echo "- No package or diagnostic artifact was uploaded."
+            if [[ "${{ inputs.upload_package }}" == "true" ]]; then
+              echo "- The verified engineering ZIP and its SHA-256 sidecar were uploaded for one day."
+            else
+              echo "- No package or diagnostic artifact was uploaded."
+            fi
             echo "- Human Gatekeeper, Finder picker, VoiceOver and workflow UAT remain open."
           } >> "$GITHUB_STEP_SUMMARY"

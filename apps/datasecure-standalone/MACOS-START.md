@@ -1,7 +1,9 @@
 # DataSecure Standalone auf macOS starten
 
-Status: Vorbereiteter Installations- und UAT-Vertrag. Die App-Pakete sind noch
-nicht gebaut oder auf echten Intel-/Apple-Silicon-Macs abgenommen.
+Status: Native ad-hoc-signierte App-Bundles sind auf echten Intel- und
+Apple-Silicon-Runnern gebaut und über ihre private IPC-Grenze gestartet. Der
+Workflow kann daraus zusätzlich ein geprüftes Engineering-ZIP für einen Tag
+zum Zielhosttest bereitstellen. Die sichtbare menschliche Abnahme bleibt offen.
 
 ## Kostenkontrollierter technischer Vorlauf
 
@@ -14,10 +16,14 @@ oder darüber hinaus Kosten auslösen kann. Zuerst nur `macos-arm64` starten;
 
 Der Workflow baut und prüft die gepinnte Laufzeit, den nativen POSIX-
 Supervisor, die Standalone- und echten Konverterverträge, Rust/Clippy sowie das
-native Tauri-Release-Binary. Er verwendet keine Secrets, Caches oder
-Artefakt-Uploads. Sein Job-Summary enthält nur Commit, Ziel und Binärhashes.
-Damit ist eine echte Architekturprüfung möglich, nicht jedoch die nachfolgende
-sichtbare Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
+native Tauri-Release-Binary. Er verwendet keine Secrets oder persistenten
+Abhängigkeits-Caches. Ein Paket-Upload ist standardmäßig
+ausgeschaltet. Wird `upload_package` ausdrücklich aktiviert, lädt der Workflow
+nur das verifizierte ZIP und seine SHA-256-Datei mit einem Tag Aufbewahrung hoch.
+Das Archiv wird zweimal bytegleich erzeugt, geprüft, entpackt, erneut auf
+Signatur und Architektur geprüft und aus dem entpackten Paket über die private
+IPC-Grenze gestartet. Das ersetzt nicht die nachfolgende sichtbare
+Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
 
 Maßgebliche Herstellerhinweise:
 [GitHub-gehostete Runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),

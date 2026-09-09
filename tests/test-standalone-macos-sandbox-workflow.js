@@ -16,6 +16,7 @@ assert.match(workflow, /^on:\n  workflow_dispatch:\n/mu);
 assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule):/mu,
   'the paid private-repository macOS evidence must never run automatically');
 assert.match(workflow, /confirm_private_runner_minutes:[\s\S]*?default: false[\s\S]*?type: boolean/u);
+assert.match(workflow, /upload_package:[\s\S]*?default: false[\s\S]*?type: boolean/u);
 assert.match(workflow, /if: \$\{\{ inputs\.confirm_private_runner_minutes == true \}\}/u);
 assert.match(workflow, /default: macos-arm64/u, 'the default must allocate only one target');
 assert.match(workflow, /macos-15-intel/u);
@@ -23,8 +24,8 @@ assert.match(workflow, /macos-14/u);
 assert.match(workflow, /^permissions:\n  contents: read$/mu);
 assert.match(workflow, /timeout-minutes: 45/u);
 assert.match(workflow, /cancel-in-progress: true/u);
-assert.doesNotMatch(workflow, /upload-artifact|download-artifact|cache:/u,
-  'the evidence run must not consume persistent Actions storage');
+assert.doesNotMatch(workflow, /download-artifact|cache:/u,
+  'the evidence run must not download artifacts or persist a dependency cache');
 assert.doesNotMatch(workflow, /secrets\./u);
 for (const expected of [
   'npm ci --ignore-scripts --no-audit --no-fund',
@@ -42,8 +43,17 @@ for (const expected of [
   'Signature=adhoc',
   'lipo -archs',
   'standalone-native-macos-launch.sh',
+  'scripts/build-standalone-macos-package.mjs',
+  'scripts/verify-standalone-macos-package.mjs',
+  'cmp "${archive}.first" "$archive"',
+  'ditto -x -k "$archive" "$extraction"',
+  'packaged_app="$extraction/DataSecure-Standalone-${version}-${{ matrix.target }}/DataSecure Standalone.app"',
+  'retention-days: 1',
+  'compression-level: 0',
   'Human Gatekeeper, Finder picker, VoiceOver and workflow UAT remain open.'
 ]) assert.ok(workflow.includes(expected), `workflow is missing required evidence step: ${expected}`);
+
+assert.match(workflow, /if: \$\{\{ inputs\.upload_package == true \}\}[\s\S]*?uses: actions\/upload-artifact@[a-f0-9]{40}/u);
 
 assert.strictEqual(packageJson.devDependencies['@tauri-apps/cli'], '2.11.4');
 assert.strictEqual(packageLock.packages['node_modules/@tauri-apps/cli'].version, '2.11.4');
