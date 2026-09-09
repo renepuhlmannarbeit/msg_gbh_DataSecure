@@ -2,7 +2,7 @@
   "schema_version": 2,
   "contract": "target-only-not-runtime",
   "product": "GBH DataSecure",
-  "baseline": "3.2.0-rc127",
+  "baseline": "3.2.0-rc128",
   "decision_ids": [
     "DS-001",
     "DS-002",

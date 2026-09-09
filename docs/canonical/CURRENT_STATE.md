@@ -1,6 +1,21 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc127 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc128 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+
+## RC128 – plattformneutraler realer Startup-Guard-Nachweis
+
+Der automatische RC127-Linux-Lauf `34373724221` bestätigte zunächst den neuen
+Repository- und LF-Guard. Zwei nachgelagerte Realprozess-Tests präparierten
+ihren privaten Datenroot jedoch nur über die Windows-Variable `LOCALAPPDATA`.
+Linux wählte vertragsgemäß `XDG_DATA_HOME` beziehungsweise den Home-Fallback;
+dadurch testeten Präparation und Erwartung unterschiedliche Verzeichnisse.
+
+RC128 bindet beide echten Node-Childprozesse über den absoluten,
+plattformneutralen Produktvertrag `EU_PRIVACY_DATA_ROOT` an genau den zuvor
+präparierten Testroot. Bootstrap, Startup-Transaktion, Journal-/Marker-I/O und
+Fehlerprojektion bleiben real; es wurde kein Mock eingeführt. Die begonnenen
+RC127-Plattformläufe wurden nach diesem Befund abgebrochen. PKG-04/INT-13 und
+sämtliche Zielpakete müssen deshalb aus dem finalen RC128-Commit neu entstehen.
 
 ## RC127 – installierbare Zielpakete und belastbarer CI-Guard
 

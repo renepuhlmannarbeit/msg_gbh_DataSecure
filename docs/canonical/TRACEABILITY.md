@@ -1,10 +1,17 @@
 # Entscheidungs-Traceability
 
-Stand: 09.09.2026 · 3.2.0-rc127
+Stand: 09.09.2026 · 3.2.0-rc128
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+RC128 bindet den plattformneutralen Startup-Guard-Realprozessnachweis an
+`tests/test-startup-guard.js` und den bereits produktiven absoluten
+`EU_PRIVACY_DATA_ROOT`-Vertrag. Beide Childprozesse starten weiterhin den
+echten `server/index.js`-Bootstrap und prüfen reale Journal-/Marker-I/O sowie
+die inhaltsfreie Fehlerprojektion. Der automatische Linux-Rerun ist die
+abschließende E0-Evidence; RC127-Paketläufe werden nicht übernommen.
 
 RC127 bindet den installierbaren Cowork-Distributionsweg an
 `bundled-runtime-release.yml`, `test-workflow-budget.js`, `docs/RELEASE.md` und

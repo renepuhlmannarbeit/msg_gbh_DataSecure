@@ -143,16 +143,18 @@ test('the bundled runtime is verified against RUNTIME-EVIDENCE.json only in the 
 
 test('the real server refuses a broken data root with one content-free line and a marker, exit 1', () => {
   const localAppData = path.join(base, 'localappdata');
-  fs.mkdirSync(path.join(localAppData, 'SecureDataMsg'), { recursive: true });
+  const dataRoot = path.join(localAppData, 'SecureDataMsg');
+  fs.mkdirSync(dataRoot, { recursive: true });
   // A file where the batch directory must be makes the private root unusable.
-  fs.writeFileSync(path.join(localAppData, 'SecureDataMsg', 'batches'), 'not a directory');
+  fs.writeFileSync(path.join(dataRoot, 'batches'), 'not a directory');
   const entry = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'index.js');
   const result = spawnSync(process.execPath, [entry], {
     input: '',
     encoding: 'utf8',
     timeout: 30000,
     windowsHide: true,
-    env: { ...process.env, LOCALAPPDATA: localAppData, EU_PRIVACY_ROOT: '', EU_PRIVACY_SUPPORT_MODE: '0' }
+    env: { ...process.env, LOCALAPPDATA: localAppData, EU_PRIVACY_DATA_ROOT: dataRoot,
+      EU_PRIVACY_ROOT: '', EU_PRIVACY_SUPPORT_MODE: '0' }
   });
   assert.strictEqual(result.status, 1, `exit code 1, got ${result.status} (${result.signal || 'no signal'})`);
   assert.strictEqual(result.stdout, '', 'the MCP channel stays silent');
@@ -160,9 +162,9 @@ test('the real server refuses a broken data root with one content-free line and 
   assert.strictEqual(lines.length, 1, `one stderr line, got: ${JSON.stringify(result.stderr)}`);
   assert.match(lines[0], /^DataSecure-Start verweigert: UNSAFE_STORAGE_LOCATION \(DataSecure-Version: /u);
   assert.doesNotMatch(result.stderr, /Users|msg_gbh|\.js|\\|\//u, 'no stack trace, no path');
-  const marker = JSON.parse(fs.readFileSync(path.join(localAppData, 'SecureDataMsg', 'diagnostics', 'startup-refused.json'), 'utf8'));
+  const marker = JSON.parse(fs.readFileSync(path.join(dataRoot, 'diagnostics', 'startup-refused.json'), 'utf8'));
   assert.strictEqual(marker.code, 'UNSAFE_STORAGE_LOCATION');
-  const events = workflowDiagnostics._test.readWorkflowEvents({ dataRoot: path.join(localAppData, 'SecureDataMsg') });
+  const events = workflowDiagnostics._test.readWorkflowEvents({ dataRoot });
   assert.strictEqual(events.at(-1).event, 'startup_refused');
   assert.strictEqual(events.at(-1).error_code, 'UNSAFE_STORAGE_LOCATION');
   assert.strictEqual(marker.journal_recorded, true);
@@ -170,6 +172,7 @@ test('the real server refuses a broken data root with one content-free line and 
 
 test('an early product-module load failure is caught by the tiny bootstrap without a stack trace', () => {
   const localAppData = path.join(base, 'early-load-localappdata');
+  const dataRoot = path.join(localAppData, 'SecureDataMsg');
   const entry = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'index.js');
   const child = [
     "const Module=require('module')",
@@ -179,7 +182,8 @@ test('an early product-module load failure is caught by the tiny bootstrap witho
   ].join(';');
   const result = spawnSync(process.execPath, ['-e', child], {
     encoding: 'utf8', timeout: 30000, windowsHide: true,
-    env: { ...process.env, LOCALAPPDATA: localAppData, EU_PRIVACY_ROOT: '', EU_PRIVACY_SUPPORT_MODE: '0' }
+    env: { ...process.env, LOCALAPPDATA: localAppData, EU_PRIVACY_DATA_ROOT: dataRoot,
+      EU_PRIVACY_ROOT: '', EU_PRIVACY_SUPPORT_MODE: '0' }
   });
   assert.strictEqual(result.status, 1);
   assert.strictEqual(result.stdout, '');
@@ -187,7 +191,7 @@ test('an early product-module load failure is caught by the tiny bootstrap witho
   assert.strictEqual(lines.length, 1, JSON.stringify(result.stderr));
   assert.match(lines[0], /^DataSecure-Start verweigert: STARTUP_FAILED \(DataSecure-Version: /u);
   assert.doesNotMatch(result.stderr, /secret|someone|\.js| at |\\|\//u);
-  const marker = JSON.parse(fs.readFileSync(path.join(localAppData, 'SecureDataMsg', 'diagnostics', 'startup-refused.json'), 'utf8'));
+  const marker = JSON.parse(fs.readFileSync(path.join(dataRoot, 'diagnostics', 'startup-refused.json'), 'utf8'));
   assert.strictEqual(marker.code, 'STARTUP_FAILED');
 });
 

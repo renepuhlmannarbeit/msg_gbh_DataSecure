@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 09.09.2026 · Produktstand 3.2.0-rc127
+Stand: 09.09.2026 · Produktstand 3.2.0-rc128
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -20,6 +20,16 @@ sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
 Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
+
+### RC128 – Startup-Guard-Test auf allen Hosts real gebunden
+
+Der RC127-CI-Lauf belegte den korrigierten LF-Guard, deckte aber zwei
+Windows-spezifisch präparierte Startup-Guard-Realprozesstests auf. RC128 setzt
+für die Childprozesse den absoluten `EU_PRIVACY_DATA_ROOT`, sodass Defekt,
+Marker, Diagnosejournal und Erwartung unter Windows, Linux und macOS denselben
+realen Speicherort verwenden. Das ändert keinen Produktpfad und ersetzt keine
+Runtime durch einen Mock. E0 lokal ist grün; offen sind der Linux-CI-Rerun,
+PKG-04/INT-13 und die fünf commitgebundenen Zielpaketjobs.
 
 ### RC127 – Zielpaket- und CI-Vertrag korrigiert
 
