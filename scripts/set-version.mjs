@@ -75,6 +75,9 @@ patchJson('BUILD_INFO.json', (d) => {
 patchJson('docs/canonical/TARGET_CAPABILITIES.json', (d) => {
   d.baseline = target;
 });
+patchJson('docs/acceptance/FORMAL_UAT/CAMPAIGN.template.json', (d) => {
+  d.product_version = target;
+});
 
 writeIfChanged('plugins/data-secure/VERSION', `${target}\n`);
 patchText(
@@ -123,6 +126,11 @@ for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md
 patchText('docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
   /^(Stand:[^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?$/mu,
   `$1${target}`);
+patchText('docs/acceptance/FORMAL_UAT/README.md',
+  /^(Stand:[^\n]*?vorbereitet für )\d+\.\d+\.\d+(?:-rc\d+)?/mu,
+  `$1${target}`);
+patchText('docs/acceptance/FORMAL_UAT/GIT-WORKFLOW.md',
+  /rc\d+-uat1/gu, `${rcLabel(target).toLowerCase()}-uat1`);
 patchText('plugins/data-secure/README.md',
   /^(Version )\d+\.\d+\.\d+(?:-rc\d+)?/mu, `$1${target}`);
 

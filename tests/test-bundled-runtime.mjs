@@ -6,7 +6,7 @@ import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { buildRuntimePlugin } from '../scripts/build-runtime-plugin.mjs';
 import {
-  assertBinaryTarget, createTargetOutput, extractRuntime, readContract,
+  assertBinaryTarget, createTargetOutput, extractRuntime, normalizeRuntimeLicense, readContract,
   readStandaloneRuntimeContract, sha256, verifyTargetEvidence
 } from '../scripts/lib/bundled-runtime.mjs';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
@@ -133,6 +133,22 @@ test('target evidence is exact and tampering fails closed', () => {
   assert.doesNotThrow(() => verifyTargetEvidence(evidence, bytes, licenseBytes, target, contract));
   evidence.runtime_probe.arch = 'arm64';
   assert.throws(() => verifyTargetEvidence(evidence, bytes, licenseBytes, target, contract), /BUNDLED_RUNTIME_EVIDENCE_INVALID/);
+});
+
+test('official Node license text is portable across LF and CRLF archives', () => {
+  const lf = Buffer.from('Node.js license fixture\n'.repeat(10));
+  const crlf = Buffer.from('Node.js license fixture\r\n'.repeat(10));
+  assert.deepEqual(normalizeRuntimeLicense(crlf), normalizeRuntimeLicense(lf));
+  assert.equal(sha256(normalizeRuntimeLicense(crlf)), sha256(normalizeRuntimeLicense(lf)));
+  assert.throws(() => normalizeRuntimeLicense(Buffer.alloc(99, 0x41)), /BUNDLED_RUNTIME_LICENSE_INVALID/);
+  assert.throws(() => normalizeRuntimeLicense(Buffer.concat([Buffer.alloc(100, 0x41), Buffer.from([0xff])])),
+    /BUNDLED_RUNTIME_LICENSE_INVALID/);
+  assert.throws(() => normalizeRuntimeLicense(Buffer.concat([Buffer.alloc(100, 0x41), Buffer.from([0])])),
+    /BUNDLED_RUNTIME_LICENSE_INVALID/);
+  const builder = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'scripts',
+    'build-runtime-target.mjs'), 'utf8');
+  assert.match(builder, /normalizeRuntimeLicense\(extractArchiveEntry\(/u,
+    'every target must normalize its verified license before hashing and publication');
 });
 
 test('target output creates a missing dist parent on a clean checkout', () => {

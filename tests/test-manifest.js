@@ -64,6 +64,8 @@ test('version synchronization changes release labels without relabelling histori
     'version sync must not replace historical RC labels throughout current documents');
   assert.match(script, /Current synthetic-corpus baseline/u);
   assert.match(script, /Engineering-Pilot/u);
+  assert.match(script, /FORMAL_UAT\/CAMPAIGN\.template\.json/u);
+  assert.match(script, /FORMAL_UAT\/GIT-WORKFLOW\.md/u);
   assert.match(script, /\(\?=\[\^\\n\]\*\$\)/u,
     'version headers with a product suffix must remain synchronizable');
 });

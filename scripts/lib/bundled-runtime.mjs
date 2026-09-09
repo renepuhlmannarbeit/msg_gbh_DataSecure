@@ -14,6 +14,20 @@ export function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
+export function normalizeRuntimeLicense(bytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 100 || bytes.length > 2 * 1024 * 1024) {
+    throw new Error('BUNDLED_RUNTIME_LICENSE_INVALID');
+  }
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error('BUNDLED_RUNTIME_LICENSE_INVALID');
+  }
+  if (text.includes('\0')) throw new Error('BUNDLED_RUNTIME_LICENSE_INVALID');
+  return Buffer.from(text.replace(/\r\n/gu, '\n'), 'utf8');
+}
+
 export function createTargetOutput(repositoryRoot, requestedOutput, targetId) {
   const root = path.resolve(repositoryRoot);
   const dist = path.join(root, 'dist');

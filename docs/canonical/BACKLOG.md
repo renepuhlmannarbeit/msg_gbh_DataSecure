@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 09.09.2026 · Produktstand 3.2.0-rc125
+Stand: 09.09.2026 · Produktstand 3.2.0-rc126
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -20,6 +20,20 @@ sind nur die jeweils benannten Windows-/macOS-Zielhost-, Bedien-,
 Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
+
+### RC126 – Cowork-Sammelpaket auf allen Zielsystemen reproduzierbar
+
+Der reale RC125-All-Targets-Lauf hat eine technische Paketierungsannahme
+widerlegt: Offizielle Node-Archive liefern den identischen Lizenztext auf
+Windows mit CRLF und auf macOS mit LF. Der zielübergreifende Rohbytevergleich
+stoppte daher korrekt, aber unnötig. RC126 normalisiert die verifizierte
+UTF-8-Lizenz vor Hash und Veröffentlichung auf LF; alle anderen Abweichungen
+bleiben gesperrt. Der Regressionstest deckt LF, CRLF, ungültiges UTF-8, NUL und
+Größengrenzen ab. `version:sync` bindet zusätzlich die formale UAT-Vorlage.
+
+E0-Code und Vollregression sind erledigt. Vor Kampagnenstart bleiben der neue
+commitgebundene PKG-04-/INT-13-Lauf und die Zielpaketbuilds aus exakt diesem
+RC126-Commit auszuführen; RC125-Evidence darf nicht übernommen werden.
 
 ### RC125 – N3/N4 und formale Zwei-Personen-UAT vorbereitet
 

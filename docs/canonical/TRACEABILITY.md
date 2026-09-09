@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 09.09.2026 · 3.2.0-rc125
+Stand: 09.09.2026 · 3.2.0-rc126
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
@@ -13,6 +13,15 @@ E2-/E3-Anwender-, Accessibility- und Fachfreigabe. Manifest, zehn N3- und acht
 N4-Klartextprüfungen, getrennte Windows-/macOS-CSV, Git-Branchvertrag und
 Freigabevorlage werden durch `test-formal-uat-contract.js` geprüft. Das ist
 E0-Vorbereitung und schließt keine der noch offenen Zielhostzeilen.
+
+RC126 bindet die portable Node-Lizenzprojektion an
+`normalizeRuntimeLicense`, `build-runtime-target.mjs` und
+`test-bundled-runtime.mjs`. CRLF und LF desselben validen UTF-8-Texts ergeben
+dieselben veröffentlichten Bytes und Evidence-Hashes; andere Inhalte,
+ungültiges UTF-8, NUL und Grenzenverletzungen stoppen. `set-version.mjs`,
+`test-manifest.js` und `test-formal-uat-contract.js` verhindern zusätzlich
+Versionsdrift zwischen Produkt und formaler UAT-Kampagne. Der fehlgeschlagene
+RC125-Lauf `34367064924` ist ausdrücklich keine Paket- oder UAT-Evidence.
 
 RC125 bindet die erneute Hersteller- und Produktrevalidierung an
 `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md`, `prompt-contract.js` und

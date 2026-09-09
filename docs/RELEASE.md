@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 08.09.2026 · 3.2.0-rc125
+Stand: 08.09.2026 · 3.2.0-rc126
 
-Der aktuelle Quellstand ist der RC125-Produktkandidat für das Cowork-Plugin.
+Der aktuelle Quellstand ist der RC126-Produktkandidat für das Cowork-Plugin.
 Sein zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
 beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
 Plugin-ZIP-Tests und Claude-Validierung gebunden. Ein Standalone-Paket desselben

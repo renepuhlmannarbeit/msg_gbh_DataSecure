@@ -9,6 +9,8 @@ const { test, done, assert } = createSuite('Formal N3/N4 UAT contract');
 const root = path.resolve(__dirname, '..');
 const kit = path.join(root, 'docs', 'acceptance', 'FORMAL_UAT');
 const read = (name) => fs.readFileSync(path.join(kit, name), 'utf8');
+const productVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const campaignLabel = productVersion.match(/-rc(\d+)$/u)?.[1];
 
 test('formal kit contains the complete two-person campaign contract', () => {
   for (const file of ['README.md', 'N3-N4-CHECKLIST.md', 'GIT-WORKFLOW.md',
@@ -70,6 +72,7 @@ test('platform evidence files are disjoint and start as NOT_RUN', () => {
 test('campaign template cannot be mistaken for completed evidence', () => {
   const campaign = JSON.parse(read('CAMPAIGN.template.json'));
   assert.strictEqual(campaign.schema, 'datasecure-formal-uat-campaign/1');
+  assert.strictEqual(campaign.product_version, productVersion);
   assert.strictEqual(campaign.state, 'planned');
   assert.strictEqual(campaign.candidate_commit, '');
   assert.strictEqual(campaign.release_scope.windows_x64, true);
@@ -81,9 +84,10 @@ test('campaign template cannot be mistaken for completed evidence', () => {
 
 test('shared repository workflow isolates platform evidence from product code', () => {
   const workflow = read('GIT-WORKFLOW.md');
-  assert.match(workflow, /uat\/campaign-rc125-uat1/u);
-  assert.match(workflow, /uat\/windows-rc125-uat1/u);
-  assert.match(workflow, /uat\/macos-rc125-uat1/u);
+  assert.ok(campaignLabel, 'the formal campaign workflow requires an RC product version');
+  assert.match(workflow, new RegExp(`uat/campaign-rc${campaignLabel}-uat1`, 'u'));
+  assert.match(workflow, new RegExp(`uat/windows-rc${campaignLabel}-uat1`, 'u'));
+  assert.match(workflow, new RegExp(`uat/macos-rc${campaignLabel}-uat1`, 'u'));
   assert.match(workflow, /git merge-base --is-ancestor <candidate-commit> HEAD/u);
   assert.match(workflow, /ändert nur `WINDOWS-EVIDENCE\.csv`/u);
   assert.match(workflow, /ändert nur `MACOS-EVIDENCE\.csv`/u);

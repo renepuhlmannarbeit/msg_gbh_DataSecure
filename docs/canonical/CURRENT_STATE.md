@@ -1,6 +1,21 @@
 # Aktueller Iststand
 
-Stand: 09.09.2026 · 3.2.0-rc125 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+Stand: 09.09.2026 · 3.2.0-rc126 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
+
+## RC126 – plattformneutrale Cowork-Runtime-Lizenz
+
+Der RC125-Sammelbuild `34367064924` hat nach drei erfolgreich geprüften
+Zielruntimes den Universal-Paketbau mit `BUNDLED_PLUGIN_LICENSE_MISMATCH`
+gestoppt. Die Originalarchive enthalten denselben Node-Lizenztext: Windows mit
+CRLF, macOS mit LF. Die normalisierten UTF-8-Inhalte und Hashes sind identisch.
+RC126 kanonisiert deshalb ausschließlich CRLF zu LF, bevor Lizenzdatei und
+Runtime-Evidence geschrieben werden. Ungültiges UTF-8, NUL, unplausible Größe,
+abweichender Text oder manipulierte Evidence bleiben fail-closed. Ein
+Regressionstest bindet beide realen Zeilenendungsvarianten; der formale UAT-
+Versionshelfer hält nun auch Kampagnenvorlage und Branchbeispiele synchron.
+
+Der fehlgeschlagene RC125-Build ist keine Release-Evidence. PKG-04/INT-13 und
+alle Zielpakete müssen nach dem RC126-Commit erneut erzeugt werden.
 
 ## Formale N3/N4-Abnahme ist vorbereitet, noch nicht durchgeführt
 

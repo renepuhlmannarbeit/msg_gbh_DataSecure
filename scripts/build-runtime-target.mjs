@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   assertBinaryTarget, createTargetOutput, extractArchiveEntry, extractRuntime,
-  readContract, readStandaloneRuntimeContract, readRegular, sha256
+  normalizeRuntimeLicense, readContract, readStandaloneRuntimeContract, readRegular, sha256
 } from './lib/bundled-runtime.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,7 +24,9 @@ const archiveFile = path.resolve(argument('--archive'));
 const archive = readRegular(archiveFile);
 if (path.basename(archiveFile) !== target.archive || sha256(archive) !== target.archive_sha256) throw new Error('BUNDLED_RUNTIME_ARCHIVE_HASH');
 const bytes = extractRuntime(archive, target);
-const licenseBytes = extractArchiveEntry(archive, target, target.license_path, { minimum: 100, maximum: 2 * 1024 * 1024 });
+const licenseBytes = normalizeRuntimeLicense(extractArchiveEntry(
+  archive, target, target.license_path, { minimum: 100, maximum: 2 * 1024 * 1024 }
+));
 assertBinaryTarget(bytes, target);
 
 const output = createTargetOutput(root, argument('--output'), target.id);

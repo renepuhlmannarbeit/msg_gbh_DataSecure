@@ -1,6 +1,6 @@
 {
   "productName": "DataSecure Standalone",
-  "version": "3.2.0-rc125",
+  "version": "3.2.0-rc126",
   "identifier": "de.msg.datasecure.standalone",
   "build": {
     "frontendDist": "../frontend"
