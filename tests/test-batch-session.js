@@ -10,6 +10,7 @@ const { createSuite } = require('./helpers');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
+process.env.XDG_DATA_HOME = path.join(base, 'xdg-data');
 const { roots, privacyRoot, storageStatus, ensurePrivateDirectory } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch: beginBatchFromQueue, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
 const { startLocalBatchExecutor } = require('../plugins/data-secure/server/gateway/batch-executor');
@@ -806,7 +807,15 @@ async function main() {
   await testAsync('default storage uses local application data and known sync roots are refused', async () => {
     const configured = process.env.EU_PRIVACY_ROOT;
     delete process.env.EU_PRIVACY_ROOT;
-    assert.ok(privacyRoot().startsWith(path.resolve(process.env.LOCALAPPDATA)));
+    const applicationData = process.platform === 'win32'
+      ? process.env.LOCALAPPDATA
+      : process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support')
+        : process.env.XDG_DATA_HOME;
+    assert.strictEqual(
+      privacyRoot(),
+      path.resolve(applicationData, 'SecureDataMsg', 'workspace')
+    );
     assert.strictEqual(path.basename(path.dirname(privacyRoot())), 'SecureDataMsg');
     assert.strictEqual(storageStatus().mode, 'local_app_data');
     process.env.EU_PRIVACY_ROOT = path.join(base, 'OneDrive - Example', 'Privacy');
@@ -829,20 +838,20 @@ async function main() {
   });
 
   await testAsync('the private batch root refuses a junction or symlink before listing or copying', async () => {
-    const configuredLocalAppData = process.env.LOCALAPPDATA;
-    const isolatedLocalAppData = path.join(base, 'isolated-localapp');
-    const gatewayRoot = path.join(isolatedLocalAppData, 'SecureDataMsg');
+    const configuredDataRoot = process.env.EU_PRIVACY_DATA_ROOT;
+    const gatewayRoot = path.join(base, 'isolated-product-data');
     const outside = path.join(base, 'outside-batch-target');
     fs.mkdirSync(gatewayRoot, { recursive: true });
     fs.mkdirSync(outside, { recursive: true });
     const linkedBatches = path.join(gatewayRoot, 'batches');
     fs.symlinkSync(outside, linkedBatches, process.platform === 'win32' ? 'junction' : 'dir');
-    process.env.LOCALAPPDATA = isolatedLocalAppData;
+    process.env.EU_PRIVACY_DATA_ROOT = gatewayRoot;
     try {
       assert.throws(() => _test.batchRoot(), /PRIVACY_STORAGE_UNSAFE/);
       assert.deepStrictEqual(fs.readdirSync(outside), []);
     } finally {
-      process.env.LOCALAPPDATA = configuredLocalAppData;
+      if (configuredDataRoot === undefined) delete process.env.EU_PRIVACY_DATA_ROOT;
+      else process.env.EU_PRIVACY_DATA_ROOT = configuredDataRoot;
     }
   });
 
