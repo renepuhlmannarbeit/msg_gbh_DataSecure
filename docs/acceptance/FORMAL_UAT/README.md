@@ -31,19 +31,24 @@ macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
 
 ## Vorbereitung durch die Release-Koordination
 
-1. `main` muss sauber sein; vollständigen Commit mit `git rev-parse HEAD`
-   festschreiben. Ab diesem Zeitpunkt den Kandidaten nicht mehr verändern.
+1. `main` muss sauber sein; vollständigen Produkt-Commit mit `git rev-parse HEAD`
+   als Kandidat festschreiben. Ab diesem Zeitpunkt den Kandidaten nicht mehr
+   verändern.
 2. Aus genau diesem Commit die zielsystemspezifischen Standalone- und
    Cowork-Pakete bauen. Quell-ZIPs oder Pakete eines anderen Commits sind
    unzulässig.
-3. Paketnamen und SHA-256 in eine Kopie von `CAMPAIGN.template.json` eintragen.
-   Für jedes Produkt und jeden Zielhost ist ein eigener Hash Pflicht.
+3. Vom Kandidaten den Branch `uat/campaign-<kampagne>` anlegen, dort eine Kopie
+   von `CAMPAIGN.template.json` unter einem kampagnenspezifischen Namen
+   eintragen und committen. Für jedes Produkt und jeden Zielhost ist ein eigener
+   Hash Pflicht. Das Feld `candidate_commit` bleibt der Produkt-Commit; der
+   spätere Manifest-Commit ist bewusst ein Nachfahre davon.
 4. Automatische E0-Gates, PKG-04/INT-13 soweit anwendbar und die
    Dokumentationsprüfung müssen grün sein. Das ersetzt N3/N4 nicht.
 5. Nur synthetische Testdaten bereitstellen. Niemals echte Personen-, Kunden-
    oder Unternehmensdaten in Git, Evidenz oder Defectbeschreibungen aufnehmen.
-6. Beide Tester erhalten denselben Kandidaten-Commit, aber das jeweils passende
-   Paket und eine eigene Evidenzdatei. Jede anwendbare Prüfung wird darin für
+6. Beide Tester starten ihre Plattformbranches vom selben Kampagnenbranch und
+   prüfen dessen identischen `candidate_commit`, aber das jeweils passende Paket
+   und eine eigene Evidenzdatei. Jede anwendbare Prüfung wird darin für
    Standalone und Cowork getrennt bewertet; ein gemeinsames PASS ist unzulässig.
 
 Solange Commit oder Paket-Hash fehlen, ist die Kampagne **nicht gestartet**.

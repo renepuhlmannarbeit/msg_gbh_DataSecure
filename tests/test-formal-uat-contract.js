@@ -81,9 +81,13 @@ test('campaign template cannot be mistaken for completed evidence', () => {
 
 test('shared repository workflow isolates platform evidence from product code', () => {
   const workflow = read('GIT-WORKFLOW.md');
+  assert.match(workflow, /uat\/campaign-rc125-uat1/u);
   assert.match(workflow, /uat\/windows-rc125-uat1/u);
   assert.match(workflow, /uat\/macos-rc125-uat1/u);
-  assert.match(workflow, /Keine Produktdateien ändern/u);
+  assert.match(workflow, /git merge-base --is-ancestor <candidate-commit> HEAD/u);
+  assert.match(workflow, /ändert nur `WINDOWS-EVIDENCE\.csv`/u);
+  assert.match(workflow, /ändert nur `MACOS-EVIDENCE\.csv`/u);
+  assert.match(workflow, /Manifest-Commit[\s\S]*nicht der Produktkandidat/u);
   assert.match(workflow, /Product-Fix[\s\S]*neuen\s+Kandidaten/u);
   assert.match(read('FREIGABEENTSCHEIDUNG.md'), /keine offenen P0\/P1-Defects/u);
 });

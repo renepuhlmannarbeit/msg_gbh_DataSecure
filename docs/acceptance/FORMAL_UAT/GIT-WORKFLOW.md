@@ -1,48 +1,76 @@
 # Gemeinsamer Git-Ablauf für zwei Tester
 
 Beide Personen verwenden dasselbe Repository, arbeiten aber nicht direkt auf
-`main` und nicht in derselben Evidenzdatei.
+`main` und nicht in derselben Evidenzdatei. Produkt-Commit, Kampagnen-Commit und
+Evidence-Commits haben bewusst verschiedene Aufgaben.
 
-## Gemeinsamer Start
+## 1. Produktkandidat festschreiben
 
-Die Release-Koordination nennt eine Kampagnenkennung, zum Beispiel
-`rc125-uat1`, und einen vollständigen Kandidaten-Commit. Beide Tester prüfen:
+Die Release-Koordination aktualisiert `main`, prüft einen leeren Arbeitsbaum und
+notiert den vollständigen Produkt-Commit als `candidate_commit`:
 
 ```text
 git switch main
 git pull --ff-only
-git rev-parse HEAD
 git status --short
+git rev-parse HEAD
 ```
 
-`HEAD` muss exakt dem Kampagnenmanifest entsprechen; `git status --short` muss
-leer sein.
+Aus genau diesem Produkt-Commit werden alle Pakete gebaut. Ab jetzt darf dieser
+Commit nicht verändert oder durch ein Paket eines anderen Stands ersetzt werden.
 
-## Windows-Person
+## 2. Kampagne im selben Repository anlegen
+
+Nach den Builds legt die Release-Koordination vom Produkt-Commit einen
+Kampagnenbranch an, zum Beispiel:
 
 ```text
-git switch -c uat/windows-rc125-uat1
+git switch -c uat/campaign-rc125-uat1 <candidate-commit>
 ```
 
-Nur `WINDOWS-EVIDENCE.csv` und bei Bedarf eine inhaltsfreie Defectnotiz ändern,
-committen und den Plattformbranch pushen. Keine Produktdateien ändern.
+`CAMPAIGN.template.json` wird als `CAMPAIGN-rc125-uat1.json` kopiert und mit
+Kampagnenkennung, `candidate_commit`, Paketnamen und SHA-256 ausgefüllt. Nur
+Manifest und gegebenenfalls unveränderte Evidence-Vorlagen werden committet und
+der Kampagnenbranch wird gepusht. Der Manifest-Commit ist zwangsläufig ein
+Nachfahre des darin gebundenen Produkt-Commits; er ist nicht der Produktkandidat.
 
-## Mac-Person
+## 3. Plattformbranches anlegen
+
+Beide Personen holen denselben Kampagnenbranch. Die Windows-Person verwendet:
 
 ```text
-git switch -c uat/macos-rc125-uat1
+git fetch origin
+git switch -c uat/windows-rc125-uat1 origin/uat/campaign-rc125-uat1
 ```
 
-Nur `MACOS-EVIDENCE.csv` und bei Bedarf eine inhaltsfreie Defectnotiz ändern,
-committen und den Plattformbranch pushen. Architektur vorher mit `uname -m`
-feststellen und im Protokoll eintragen.
+Sie ändert nur `WINDOWS-EVIDENCE.csv` und bei Bedarf eine inhaltsfreie
+Defectnotiz. Die Mac-Person verwendet:
 
-## Zusammenführen
+```text
+git fetch origin
+git switch -c uat/macos-rc125-uat1 origin/uat/campaign-rc125-uat1
+```
 
-Die Release-Koordination prüft beide Branches, übernimmt ausschließlich die
-Evidenzdateien und füllt danach die Freigabeentscheidung aus. Ein Product-Fix
-wird nie in einen UAT-Branch gemischt. Er erzeugt auf `main` einen neuen
-Kandidaten; die neue Kampagne startet wieder von dessen vollständigem Commit.
+Sie ändert nur `MACOS-EVIDENCE.csv` und bei Bedarf eine inhaltsfreie
+Defectnotiz. Architektur vorher mit `uname -m` feststellen und im Protokoll
+eintragen. Beide prüfen vor dem ersten Test, dass der im Manifest gebundene
+Produkt-Commit ein Vorfahr ihres aktuellen Branches ist:
 
-Dieses Branchmodell folgt dem Shared-Repository-Prinzip: getrennte Branches und
+```text
+git merge-base --is-ancestor <candidate-commit> HEAD
+```
+
+Exitcode 0 ist Pflicht. Die Paket-Hashes müssen zusätzlich exakt mit dem
+Manifest übereinstimmen; die Git-Abstammung allein belegt kein Paket.
+
+## 4. Zusammenführen
+
+Die Release-Koordination prüft beide Branches, übernimmt ausschließlich
+Manifest, Evidenzdateien und inhaltsfreie Defectnotizen und füllt danach die
+Freigabeentscheidung aus. Ein Product-Fix wird nie in einen UAT-Branch gemischt.
+Er erzeugt auf `main` einen neuen Kandidaten; die neue Kampagne startet wieder
+von dessen vollständigem Produkt-Commit.
+
+Dieses Branchmodell folgt dem Shared-Repository-Prinzip: ein eingefrorener
+Produktstand, ein gemeinsamer Kampagnenursprung, getrennte Plattformbranches und
 Review vor der Übernahme schützen `main` und vermeiden Schreibkonflikte.
