@@ -1,0 +1,188 @@
+name: Manual Standalone Linux sandbox evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_runner_minutes:
+        description: I understand that this private-repository run consumes included Linux runner minutes or billable usage.
+        required: true
+        default: false
+        type: boolean
+      upload_package:
+        description: Upload the verified Linux engineering ZIP for one day.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-linux-sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-evidence:
+    name: Standalone native evidence (linux-x64-glibc)
+    if: ${{ inputs.confirm_runner_minutes == true }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+      - name: Install official Tauri Linux build and headless-smoke prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl file libayatana-appindicator3-dev libfuse2 \
+            librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev \
+            patchelf wget xdg-utils xdotool xvfb dbus-x11 unzip
+      - name: Install pinned build and offline-conversion dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --prefix native/ocr/pilot --ignore-scripts --no-audit --no-fund
+          npm ci --prefix native/pdfjs/pilot --ignore-scripts --no-audit --no-fund
+          node native/ocr/pilot/fetch-models.mjs
+      - name: Compile and verify the target-native POSIX supervisor
+        shell: bash
+        run: |
+          set -euo pipefail
+          destination="plugins/data-secure/server/native/linux-x64"
+          mkdir -p "$destination"
+          cc -std=c11 -O2 -Wall -Wextra -Werror native/ocr/pilot/posix-sandbox.c \
+            -o "$destination/datasecure-sandbox"
+          chmod 700 "$destination/datasecure-sandbox"
+          "$destination/datasecure-sandbox" --sandbox-contract
+          bash tests/test-posix-supervisor-native.sh "$destination/datasecure-sandbox"
+          sha256sum "$destination/datasecure-sandbox" | awk '{print $1}' \
+            > "$destination/datasecure-sandbox.sha256"
+          node -e "const r=require('./plugins/data-secure/server/posix-supervisor').verifyPosixSupervisor(); if(!r.available){throw new Error(r.reason)}"
+      - name: Fetch and verify the pinned official Linux Node runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="node-v22.23.2-linux-x64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$archive" "https://nodejs.org/dist/v22.23.2/$archive"
+          echo "b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a  $archive" | sha256sum --check
+          node scripts/build-runtime-target.mjs --target linux-x64-glibc \
+            --archive "$archive" --output dist/linux-x64-glibc
+      - name: Project the self-contained target runtime
+        run: node scripts/prepare-standalone-runtime.mjs
+      - name: Run product, conversion, Rust and workflow contracts
+        run: npm run test:standalone
+      - name: Run the real isolated converter-worker boundary
+        run: npm run test:standalone:conversion
+      - name: Require warning-free native Rust code
+        working-directory: apps/datasecure-standalone/tauri-contract
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Build the native Linux AppImage
+        working-directory: apps/datasecure-standalone/tauri-contract
+        run: npx --no-install tauri build --bundles appimage
+      - id: appimage
+        name: Locate and inspect the single target AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t images < <(find apps/datasecure-standalone/tauri-contract/target/release/bundle/appimage \
+            -maxdepth 1 -type f -name '*.AppImage' -print)
+          test "${#images[@]}" -eq 1
+          image="${images[0]}"
+          chmod 700 "$image"
+          file "$image" | grep -q 'ELF 64-bit LSB'
+          printf 'path=%s\n' "$image" >> "$GITHUB_OUTPUT"
+      - id: extracted
+        name: Extract and verify the AppImage payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          extraction="$(mktemp -d "${RUNNER_TEMP}/datasecure-linux-appimage.XXXXXXXX")"
+          (cd "$extraction" && "${GITHUB_WORKSPACE}/${{ steps.appimage.outputs.path }}" --appimage-extract >/dev/null)
+          mv "$extraction/squashfs-root" "$extraction/AppDir"
+          appdir="$extraction/AppDir"
+          app="$appdir/usr/bin/datasecure-standalone"
+          sidecar="$appdir/usr/bin/datasecure-core"
+          resource="$appdir/usr/lib/datasecure-standalone/server"
+          supervisor="$resource/native/linux-x64/datasecure-sandbox"
+          test -x "$app"
+          test -x "$sidecar"
+          test -x "$supervisor"
+          test -x "$resource/standalone/conversion-runtime/node"
+          test -f "$resource/standalone/desktop-sidecar.js"
+          test -f "$resource/standalone/conversion-runtime/RUNTIME.json"
+          for executable in "$app" "$sidecar" "$supervisor" "$resource/standalone/conversion-runtime/node"; do
+            readelf -h "$executable" | grep -q 'Machine:.*Advanced Micro Devices X86-64'
+          done
+          if find "$appdir" -print | grep -E '/(?:\.claude-plugin|skills|Claude|Cowork)(/|$)|/\.mcp\.json$'; then exit 1; fi
+          printf 'path=%s\n' "$appdir" >> "$GITHUB_OUTPUT"
+      - name: Launch the extracted AppImage through its private IPC boundary
+        shell: bash
+        run: |
+          bash tests/manual/standalone-native-linux-launch.sh \
+            --appdir "${{ steps.extracted.outputs.path }}" --target linux-x64-glibc \
+            --version "$(node -p "require('./package.json').version")"
+      - name: Build the deterministic Linux distribution twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          archive="dist/DataSecure-Standalone-${version}-linux-x64-glibc.zip"
+          node scripts/build-standalone-linux-package.mjs --appimage "${{ steps.appimage.outputs.path }}"
+          cp "$archive" "${archive}.first"
+          node scripts/build-standalone-linux-package.mjs --appimage "${{ steps.appimage.outputs.path }}"
+          cmp "${archive}.first" "$archive"
+          rm "${archive}.first"
+          node scripts/verify-standalone-linux-package.mjs --archive "$archive"
+      - id: packaged
+        name: Extract and launch the packaged AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          archive="dist/DataSecure-Standalone-${version}-linux-x64-glibc.zip"
+          extraction="$(mktemp -d "${RUNNER_TEMP}/datasecure-linux-package.XXXXXXXX")"
+          unzip -q "$archive" -d "$extraction"
+          product="$extraction/DataSecure-Standalone-${version}-linux-x64-glibc"
+          image="$product/DataSecure Standalone.AppImage"
+          test -x "$image"
+          (cd "$product" && "$image" --appimage-extract >/dev/null)
+          mv "$product/squashfs-root" "$product/AppDir"
+          bash tests/manual/standalone-native-linux-launch.sh \
+            --appdir "$product/AppDir" --target linux-x64-glibc --version "$version"
+      - name: Upload the verified engineering package for one day
+        if: ${{ inputs.upload_package == true }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: DataSecure-Standalone-linux-x64-glibc-${{ github.sha }}
+          path: |
+            dist/DataSecure-Standalone-*-linux-x64-glibc.zip
+            dist/DataSecure-Standalone-*-linux-x64-glibc.zip.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Write content-free evidence summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ steps.appimage.outputs.path }}"
+          archive="dist/DataSecure-Standalone-$(node -p "require('./package.json').version")-linux-x64-glibc.zip"
+          {
+            echo "### DataSecure Standalone Linux target evidence"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Target: \`linux-x64-glibc\` on \`ubuntu-22.04\` (glibc 2.35 baseline)."
+            echo "- AppImage SHA-256: \`$(sha256sum "$image" | awk '{print $1}')\`"
+            echo "- Distribution ZIP SHA-256: \`$(sha256sum "$archive" | awk '{print $1}')\`"
+            echo "- AppImage and extracted distribution started through App → private IPC → Core."
+            if [[ "${{ inputs.upload_package }}" == "true" ]]; then
+              echo "- The verified engineering ZIP and its SHA-256 sidecar were uploaded for one day."
+            else
+              echo "- No package or diagnostic artifact was uploaded."
+            fi
+            echo "- Human desktop-environment, picker, drag-and-drop, file-manager, accessibility and workflow UAT remain open."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -18,7 +18,8 @@ const PLATFORM_ASSETS = Object.freeze({
     'native/windows-x64/datasecure-sandbox.sha256'
   ]),
   'macos-x64': Object.freeze(['native/macos-x64/datasecure-sandbox', 'native/macos-x64/datasecure-sandbox.sha256']),
-  'macos-arm64': Object.freeze(['native/macos-arm64/datasecure-sandbox', 'native/macos-arm64/datasecure-sandbox.sha256'])
+  'macos-arm64': Object.freeze(['native/macos-arm64/datasecure-sandbox', 'native/macos-arm64/datasecure-sandbox.sha256']),
+  'linux-x64-glibc': Object.freeze(['native/linux-x64/datasecure-sandbox', 'native/linux-x64/datasecure-sandbox.sha256'])
 });
 const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)/iu;
 
@@ -76,7 +77,7 @@ export function writeStandaloneRuntime(serverRoot, destination, productTarget) {
   for (const file of files) {
     const target = path.join(output, ...file.relative.split('/'));
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    const executable = /^native\/macos-(?:x64|arm64)\/datasecure-sandbox$/u.test(file.relative);
+    const executable = /^native\/(?:macos-(?:x64|arm64)|linux-x64)\/datasecure-sandbox$/u.test(file.relative);
     fs.writeFileSync(target, file.bytes, { flag: 'wx', mode: executable ? 0o700 : 0o600 });
   }
   return files.map(({ relative, bytes }) => ({ relative: `server/${relative}`, bytes: bytes.length }));

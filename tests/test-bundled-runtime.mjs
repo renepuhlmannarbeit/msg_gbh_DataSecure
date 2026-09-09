@@ -6,7 +6,8 @@ import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { buildRuntimePlugin } from '../scripts/build-runtime-plugin.mjs';
 import {
-  assertBinaryTarget, createTargetOutput, extractRuntime, readContract, sha256, verifyTargetEvidence
+  assertBinaryTarget, createTargetOutput, extractRuntime, readContract,
+  readStandaloneRuntimeContract, sha256, verifyTargetEvidence
 } from '../scripts/lib/bundled-runtime.mjs';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 
@@ -24,8 +25,13 @@ function binary(target) {
     bytes[0] = 0x4d; bytes[1] = 0x5a; bytes.writeUInt32LE(64, 0x3c);
     Buffer.from('PE\0\0').copy(bytes, 64); bytes.writeUInt16LE(0x8664, 68);
   } else {
-    bytes.writeUInt32LE(0xfeedfacf, 0);
-    bytes.writeUInt32LE(target.arch === 'arm64' ? 0x0100000c : 0x01000007, 4);
+    if (target.os === 'linux') {
+      Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1]).copy(bytes, 0);
+      bytes.writeUInt16LE(0x3e, 18);
+    } else {
+      bytes.writeUInt32LE(0xfeedfacf, 0);
+      bytes.writeUInt32LE(target.arch === 'arm64' ? 0x0100000c : 0x01000007, 4);
+    }
   }
   return bytes;
 }
@@ -79,6 +85,24 @@ test('contract has exactly the supported Cowork desktop targets and no top-level
   assert.deepEqual(contract.targets.map((target) => target.id), ['windows-x64', 'macos-x64', 'macos-arm64']);
   assert.equal(contract.plugin_command, '${CLAUDE_PLUGIN_ROOT}/runtime/datasecure-node');
   assert.ok(!contract.plugin_command.includes('/bin/'));
+});
+
+test('Standalone adds the exact Linux runtime without widening the Cowork package contract', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const cowork = readContract(root);
+  const standalone = readStandaloneRuntimeContract(root);
+  assert.deepEqual(cowork.targets.map((target) => target.id),
+    ['windows-x64', 'macos-x64', 'macos-arm64']);
+  assert.deepEqual(standalone.targets.map((target) => target.id),
+    ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64-glibc']);
+  const linux = standalone.targets.at(-1);
+  assert.doesNotThrow(() => assertBinaryTarget(binary(linux), linux));
+  assert.throws(() => assertBinaryTarget(binary(linux), cowork.targets[1]),
+    /BUNDLED_RUNTIME_BINARY_TARGET/);
+  const builder = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'scripts',
+    'build-runtime-target.mjs'), 'utf8');
+  assert.match(builder, /targetId === 'linux-x64-glibc'[\s\S]*readStandaloneRuntimeContract\(root\)[\s\S]*readContract\(root\)/u,
+    'only the Standalone Linux target may widen the Cowork runtime contract');
 });
 
 test('binary header gate distinguishes every target architecture', () => {

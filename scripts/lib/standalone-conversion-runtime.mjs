@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { readRegular, sha256, readContract, verifyTargetEvidence } from './bundled-runtime.mjs';
+import { readRegular, sha256, readStandaloneRuntimeContract, verifyTargetEvidence } from './bundled-runtime.mjs';
 
 const BINDINGS = Object.freeze({ 'windows-x64': 'canvas-win32-x64-msvc',
-  'macos-x64': 'canvas-darwin-x64', 'macos-arm64': 'canvas-darwin-arm64' });
+  'macos-x64': 'canvas-darwin-x64', 'macos-arm64': 'canvas-darwin-arm64',
+  'linux-x64-glibc': 'canvas-linux-x64-gnu' });
 const PINNED = Object.freeze({ 'tesseract.js': '7.0.0', 'tesseract.js-core': '7.0.0',
   '@napi-rs/canvas': '1.0.7', 'pdfjs-dist': '6.2.108' });
 const MAX_FILES = 4096, MAX_BYTES = 384 * 1024 * 1024;
@@ -84,7 +85,7 @@ export function collectConversionRuntime(repoRoot, productTarget) {
     if (bytes.length !== entry.bytes || sha256(bytes) !== entry.sha256) throw new Error('CONVERSION_PACKAGE_MODEL_INVALID');
     add(`models/${entry.file}`, bytes);
   }
-  const contract = readContract(root), target = contract.targets.find(item => item.id === productTarget);
+  const contract = readStandaloneRuntimeContract(root), target = contract.targets.find(item => item.id === productTarget);
   const runtimeDir = path.join(root, 'dist', productTarget);
   const node = readRegular(path.join(runtimeDir, productTarget === 'windows-x64' ? 'datasecure-node.exe' : 'node'), 128 * 1024 * 1024);
   const license = readRegular(path.join(runtimeDir, 'LICENSE.node.txt'), 2 * 1024 * 1024);

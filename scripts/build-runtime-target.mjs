@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  assertBinaryTarget, createTargetOutput, extractArchiveEntry, extractRuntime, readContract, readRegular, sha256
+  assertBinaryTarget, createTargetOutput, extractArchiveEntry, extractRuntime,
+  readContract, readStandaloneRuntimeContract, readRegular, sha256
 } from './lib/bundled-runtime.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -13,8 +14,11 @@ function argument(name) {
   return process.argv[index + 1];
 }
 
-const contract = readContract(root);
-const target = contract.targets.find((item) => item.id === argument('--target'));
+const targetId = argument('--target');
+const contract = targetId === 'linux-x64-glibc'
+  ? readStandaloneRuntimeContract(root)
+  : readContract(root);
+const target = contract.targets.find((item) => item.id === targetId);
 if (!target || target.os !== process.platform || target.arch !== process.arch) throw new Error('BUNDLED_RUNTIME_HOST_MISMATCH');
 const archiveFile = path.resolve(argument('--archive'));
 const archive = readRegular(archiveFile);

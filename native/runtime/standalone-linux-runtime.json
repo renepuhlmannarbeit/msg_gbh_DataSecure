@@ -1,0 +1,15 @@
+{
+  "schema": "datasecure-standalone-runtime-targets/v1",
+  "targets": [
+    {
+      "id": "linux-x64-glibc",
+      "os": "linux",
+      "arch": "x64",
+      "archive": "node-v22.23.2-linux-x64.tar.gz",
+      "archive_sha256": "b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a",
+      "node_path": "node-v22.23.2-linux-x64/bin/node",
+      "license_path": "node-v22.23.2-linux-x64/LICENSE",
+      "launcher": "node"
+    }
+  ]
+}

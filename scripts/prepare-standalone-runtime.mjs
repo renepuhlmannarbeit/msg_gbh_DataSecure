@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { readContract, readRegular, sha256, verifyTargetEvidence } from './lib/bundled-runtime.mjs';
+import { readStandaloneRuntimeContract, readRegular, sha256, verifyTargetEvidence } from './lib/bundled-runtime.mjs';
 import { writeStandaloneRuntime } from './lib/standalone-runtime-projection.mjs';
 import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
 
@@ -12,7 +12,7 @@ const targets = JSON.parse(fs.readFileSync(path.join(app, 'desktop-targets.json'
 const productTarget = `${process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux'}-${process.arch === 'arm64' ? 'arm64' : 'x64'}${process.platform === 'linux' ? '-glibc' : ''}`;
 const target = targets.targets.find((candidate) => candidate.product_target === productTarget);
 if (!target) throw new Error(`STANDALONE_BUILD_TARGET_UNSUPPORTED:${process.platform}/${process.arch}`);
-const contract = readContract(root);
+const contract = readStandaloneRuntimeContract(root);
 const runtimeDirectory = path.join(root, 'dist', target.product_target);
 const source = path.join(runtimeDirectory, target.product_target === 'windows-x64' ? 'datasecure-node.exe' : 'node');
 const evidenceFile = path.join(runtimeDirectory, 'runtime-evidence.json');

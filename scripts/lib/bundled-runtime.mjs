@@ -129,6 +129,13 @@ export function assertBinaryTarget(bytes, target) {
     if (bytes.readUInt32LE(0) !== 0xfeedfacf || bytes.readUInt32LE(4) !== cpu) throw new Error('BUNDLED_RUNTIME_BINARY_TARGET');
     return;
   }
+  if (target.os === 'linux') {
+    if (!bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) ||
+        bytes[4] !== 2 || bytes[5] !== 1 || bytes.readUInt16LE(18) !== 0x3e) {
+      throw new Error('BUNDLED_RUNTIME_BINARY_TARGET');
+    }
+    return;
+  }
   throw new Error('BUNDLED_RUNTIME_BINARY_TARGET');
 }
 
@@ -149,6 +156,23 @@ export function readContract(root) {
         !/^[A-Za-z0-9._-]+$/u.test(target.launcher)) throw new Error('BUNDLED_RUNTIME_CONTRACT_INVALID');
   }
   return Object.freeze({ ...contract, targets: Object.freeze(contract.targets.map((target) => Object.freeze({ ...target }))) });
+}
+
+export function readStandaloneRuntimeContract(root) {
+  const base = readContract(root);
+  const file = path.join(root, 'native', 'runtime', 'standalone-linux-runtime.json');
+  const extension = JSON.parse(readRegular(file, 64 * 1024));
+  const expected = extension?.targets?.[0];
+  if (extension?.schema !== 'datasecure-standalone-runtime-targets/v1' ||
+      !Array.isArray(extension.targets) || extension.targets.length !== 1 ||
+      expected?.id !== 'linux-x64-glibc' || expected.os !== 'linux' || expected.arch !== 'x64' ||
+      expected.archive !== `node-v${base.node_version}-linux-x64.tar.gz` ||
+      !HEX.test(expected.archive_sha256) || expected.node_path !== `node-v${base.node_version}-linux-x64/bin/node` ||
+      expected.license_path !== `node-v${base.node_version}-linux-x64/LICENSE` || expected.launcher !== 'node') {
+    throw new Error('STANDALONE_RUNTIME_CONTRACT_INVALID');
+  }
+  return Object.freeze({ ...base,
+    targets: Object.freeze([...base.targets, Object.freeze({ ...expected })]) });
 }
 
 export function verifyTargetEvidence(evidence, bytes, licenseBytes, target, contract) {

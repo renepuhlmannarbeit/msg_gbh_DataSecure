@@ -13,6 +13,7 @@ const ERROR: &str = "STANDALONE_NATIVE_SMOKE_PROFILE_INVALID";
 enum PackageLayout {
     Windows,
     Macos,
+    Linux,
 }
 
 #[derive(Debug)]
@@ -86,7 +87,7 @@ fn validate(
     let candidate = root.join("candidate");
     let product = match layout {
         PackageLayout::Windows => executable.parent().ok_or(ERROR)?,
-        PackageLayout::Macos => executable
+        PackageLayout::Macos | PackageLayout::Linux => executable
             .parent()
             .and_then(Path::parent)
             .and_then(Path::parent)
@@ -113,6 +114,27 @@ fn validate(
                     .and_then(Path::file_name)
                     .and_then(|name| name.to_str())
                     == Some("DataSecure Standalone.app")
+        }
+        PackageLayout::Linux => {
+            executable.file_name().and_then(|name| name.to_str()) == Some("datasecure-standalone")
+                && executable
+                    .parent()
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    == Some("bin")
+                && executable
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    == Some("usr")
+                && executable
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::parent)
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    == Some("AppDir")
         }
     };
     if product.parent() != Some(candidate.as_path())
@@ -157,6 +179,24 @@ fn validate(
             for (key, expected) in [
                 ("HOME", root.join("profile")),
                 ("XDG_DATA_HOME", root.join("profile/Xdg")),
+                ("TMPDIR", root.join("temp")),
+                (
+                    "DATASECURE_STANDALONE_DOCUMENTS_DIR",
+                    root.join("profile/Documents"),
+                ),
+            ] {
+                if environment(key).map(PathBuf::from) != Some(expected) {
+                    return Err(ERROR.into());
+                }
+            }
+        }
+        PackageLayout::Linux => {
+            let runtime = root.join("profile/Runtime");
+            regular_path(&runtime, true)?;
+            for (key, expected) in [
+                ("HOME", root.join("profile")),
+                ("XDG_DATA_HOME", root.join("profile/Xdg")),
+                ("XDG_RUNTIME_DIR", runtime),
                 ("TMPDIR", root.join("temp")),
                 (
                     "DATASECURE_STANDALONE_DOCUMENTS_DIR",
@@ -219,6 +259,8 @@ pub fn from_environment() -> Result<Option<Profile>, String> {
         Some(PackageLayout::Windows)
     } else if cfg!(target_os = "macos") {
         Some(PackageLayout::Macos)
+    } else if cfg!(target_os = "linux") {
+        Some(PackageLayout::Linux)
     } else {
         None
     };
@@ -245,6 +287,11 @@ mod tests {
         );
         assert!(
             select_profile(&normal, Some(PackageLayout::Macos), |_| None)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            select_profile(&normal, Some(PackageLayout::Linux), |_| None)
                 .unwrap()
                 .is_none()
         );
@@ -437,6 +484,93 @@ mod tests {
             "profile/Local",
             "profile/Roaming",
             "profile/Xdg",
+            "profile/Documents",
+            "profile",
+            "temp/SecureDataMsg-Standalone",
+            "temp",
+            "webview/main",
+            "webview",
+        ] {
+            std::fs::remove_dir(root.join(relative)).unwrap();
+        }
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn linux_smoke_accepts_only_the_exact_appdir_layout_and_owned_paths() {
+        let id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(".tmp-standalone-native-{id:032x}"));
+        std::fs::create_dir(&root).unwrap();
+        let root = std::fs::canonicalize(root).unwrap();
+        let executable = root.join(
+            "candidate/DataSecure-Standalone-test-linux-x64-glibc/AppDir/usr/bin/datasecure-standalone",
+        );
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        std::fs::write(&executable, b"synthetic executable identity only").unwrap();
+        for relative in [
+            "profile/Local",
+            "profile/Roaming",
+            "profile/Xdg",
+            "profile/Runtime",
+            "profile/Documents",
+            "temp/SecureDataMsg-Standalone",
+            "webview/main",
+        ] {
+            std::fs::create_dir_all(root.join(relative)).unwrap();
+        }
+        let variables = HashMap::from([
+            ("HOME", root.join("profile").into_os_string()),
+            ("XDG_DATA_HOME", root.join("profile/Xdg").into_os_string()),
+            (
+                "XDG_RUNTIME_DIR",
+                root.join("profile/Runtime").into_os_string(),
+            ),
+            ("TMPDIR", root.join("temp").into_os_string()),
+            (
+                "DATASECURE_STANDALONE_DOCUMENTS_DIR",
+                root.join("profile/Documents").into_os_string(),
+            ),
+        ]);
+        let profile = validate(&root, &executable, PackageLayout::Linux, |key| {
+            variables.get(key).cloned()
+        })
+        .unwrap();
+        assert_eq!(profile.xdg_data, root.join("profile/Xdg"));
+        let selected = select_profile(&executable, Some(PackageLayout::Linux), |key| {
+            if key == PROFILE_ENV {
+                Some(root.as_os_str().to_owned())
+            } else {
+                variables.get(key).cloned()
+            }
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(selected.documents, profile.documents);
+        let wrong = root.join(
+            "candidate/DataSecure-Standalone-test-linux-x64-glibc/AppDir/usr/bin/not-the-app",
+        );
+        std::fs::write(&wrong, b"wrong identity").unwrap();
+        assert!(
+            validate(&root, &wrong, PackageLayout::Linux, |key| variables
+                .get(key)
+                .cloned())
+            .is_err()
+        );
+        std::fs::remove_file(wrong).unwrap();
+        std::fs::remove_file(executable).unwrap();
+        for relative in [
+            "candidate/DataSecure-Standalone-test-linux-x64-glibc/AppDir/usr/bin",
+            "candidate/DataSecure-Standalone-test-linux-x64-glibc/AppDir/usr",
+            "candidate/DataSecure-Standalone-test-linux-x64-glibc/AppDir",
+            "candidate/DataSecure-Standalone-test-linux-x64-glibc",
+            "candidate",
+            "profile/Local",
+            "profile/Roaming",
+            "profile/Xdg",
+            "profile/Runtime",
             "profile/Documents",
             "profile",
             "temp/SecureDataMsg-Standalone",

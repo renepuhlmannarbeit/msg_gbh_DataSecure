@@ -10,7 +10,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "standalone": "node plugins/data-secure/server/standalone/cli.js",
-    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-history.js && node tests/test-standalone-frontend.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && node tests/test-converter-support-trace.js && node tests/test-standalone-format-corpus.mjs && node tests/test-complex-docx-uat-corpus.mjs && node tests/test-standalone-macos-sandbox-workflow.js && npm run test:standalone:rust",
+    "test:standalone": "node tests/test-product-bootstrap.js && node tests/test-standalone.js && node tests/test-standalone-history.js && node tests/test-standalone-frontend.js && node tests/test-standalone-sidecar.js && node tests/test-standalone-desktop-contract.js && node tests/test-standalone-package.js && node tests/test-markitdown-contract.js && node tests/test-converter-support-trace.js && node tests/test-standalone-format-corpus.mjs && node tests/test-complex-docx-uat-corpus.mjs && node tests/test-standalone-macos-sandbox-workflow.js && node tests/test-standalone-linux-sandbox-workflow.js && npm run test:standalone:rust",
     "test:standalone:rust": "cd apps/datasecure-standalone/tauri-contract && cargo test --locked",
     "build:standalone:windows": "node scripts/prepare-standalone-runtime.mjs && cd apps/datasecure-standalone/tauri-contract && cargo build --release --locked",
     "build:standalone:windows:portable": "npm run build:standalone:windows && node scripts/build-standalone-package.mjs && npm run test:standalone:package",

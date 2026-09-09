@@ -65,6 +65,35 @@ test('macOS package build is deterministic, self-contained and fail-closed', () 
   assert.match(verify, /`\$\{archive\}\.sha256`/u);
 });
 
+test('Linux package build is deterministic, self-contained and fail-closed', () => {
+  const build = fs.readFileSync(path.join(root, 'scripts', 'build-standalone-linux-package.mjs'), 'utf8');
+  const verify = fs.readFileSync(path.join(root, 'scripts', 'verify-standalone-linux-package.mjs'), 'utf8');
+  for (const source of [build, verify]) {
+    assert.match(source, /linux-x64-glibc/u);
+    assert.match(source, /DataSecure Standalone\.AppImage/u);
+    assert.match(source, /STANDALONE-MANIFEST\.json/u);
+    assert.match(source, /RUNTIME-EVIDENCE\.json/u);
+    assert.match(source, /RUST-LICENSE-INVENTORY\.json/u);
+    assert.match(source, /SBOM\.spdx\.json/u);
+    assert.match(source, /SHA256SUMS/u);
+    assert.doesNotMatch(source, /execSync|shell:\s*true|\bcurl\b|\bwget\b/u);
+  }
+  assert.match(build, /writeZip/u);
+  assert.match(build, /readStandaloneRuntimeContract/u);
+  assert.match(build, /verifyTargetEvidence/u);
+  assert.match(build, /requires_node_install: false/u);
+  assert.match(build, /requires_rust_install: false/u);
+  assert.match(build, /requires_network: false/u);
+  assert.match(build, /minimum_glibc_version/u);
+  assert.match(build, /LINUX-START\.md/u);
+  assert.match(verify, /readCentralModes/u);
+  assert.match(verify, /0o100755/u);
+  assert.match(verify, /\[0x7f, 0x45, 0x4c, 0x46\]/u);
+  assert.match(verify, /x86_64-unknown-linux-gnu/u);
+  assert.match(verify, /appimage-in-zip/u);
+  assert.match(verify, /`\$\{archive\}\.sha256`/u);
+});
+
 test('release runtime lookup cannot fall back to the developer checkout', () => {
   const source = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone', 'tauri-contract', 'src', 'main.rs'), 'utf8');
   assert.match(source, /if cfg!\(debug_assertions\)/u);

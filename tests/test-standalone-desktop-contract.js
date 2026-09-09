@@ -62,6 +62,20 @@ test('both macOS packages require 13.5 and native target-host evidence', () => {
   assert.deepStrictEqual(macConfig.bundle.targets, ['app']);
 });
 
+test('Linux Standalone has an explicit AppImage and glibc baseline contract', () => {
+  const linuxTarget = targets.targets.find((target) => target.product_target === 'linux-x64-glibc');
+  assert.ok(linuxTarget);
+  assert.strictEqual(linuxTarget.rust_target, 'x86_64-unknown-linux-gnu');
+  assert.strictEqual(linuxTarget.minimum_glibc_version, '2.35');
+  assert.strictEqual(linuxTarget.distribution_format, 'appimage-in-zip');
+  assert.strictEqual(linuxTarget.start_guide, 'LINUX-START.md');
+  const guide = fs.readFileSync(path.join(root, linuxTarget.start_guide), 'utf8');
+  assert.match(guide, /Ubuntu 22\.04/u);
+  assert.match(guide, /chmod (?:u\+x|\+x)/u);
+  assert.match(guide, /weder Claude noch eine zusätzliche Node\.js-,\s+Python- oder Rust-Installation/u);
+  assert.match(guide, /sichtbare menschliche Linux-Abnahme\s+bleibt[^.]+offen/u);
+});
+
 test('Tauri renderer has no direct file, dialog, shell or network permission', () => {
   const serialized = JSON.stringify(capability);
   assert.deepStrictEqual(capability.windows, ['main']);
