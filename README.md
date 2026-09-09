@@ -184,6 +184,7 @@ deaktiviert; siehe IT-Betriebshandbuch.
 - [IT-Betriebshandbuch](docs/IT-BETRIEBSHANDBUCH.md)
 - [Security-Modell](docs/PLUGIN_SECURITY_MODEL.md)
 - [UAT-Testpaket](docs/acceptance/UAT_TEST_KIT/README.md)
+- [formale N3/N4-Abnahme für Windows und macOS](docs/acceptance/FORMAL_UAT/README.md)
 - [100-Dateien-Formatkorpus](docs/acceptance/STANDALONE_100_FORMAT_TEST_KIT/README.md)
 - [komplexer DOCX-Testkorpus](docs/acceptance/STANDALONE_COMPLEX_DOCX_TEST_KIT/README.md)
 - [Dokumentenarchiv und stabile Archiv-IDs](docs/archive/INDEX.md)

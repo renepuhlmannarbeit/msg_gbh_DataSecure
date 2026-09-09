@@ -202,7 +202,7 @@ test('canonical register distinguishes active, no-go, and superseded contracts',
 test('machine document index covers the active document register and current Cowork decision', () => {
   const index = JSON.parse(read('docs/canonical/DOCUMENT_INDEX.json'));
   assert.strictEqual(index.schema, 'datasecure-document-index/1');
-  assert.strictEqual(index.validated_at, '2026-09-07');
+  assert.strictEqual(index.validated_at, '2026-09-09');
   const byPath = new Map(index.documents.map((entry) => [entry.path, entry]));
   const activePaths = [
     'docs/canonical/DOCUMENT_REGISTER.md',
@@ -219,6 +219,8 @@ test('machine document index covers the active document register and current Cow
     'docs/DETECTOR_BENCHMARK.md',
     'docs/acceptance/UAT_TEST_KIT/README.md',
     'docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
+    'docs/acceptance/FORMAL_UAT/README.md',
+    'docs/canonical/ACCEPTANCE_LEVELS.md',
     'plugins/data-secure/README.md',
     'plugins/data-secure/server/README.md',
     'apps/datasecure-standalone/README.md'
@@ -468,6 +470,21 @@ test('Standalone purpose, naming and mapping contracts remain machine-readable',
   assert.match(architecture, /ausschließlich\s+tatsächlich veröffentlichte Ergebnisse/u);
   const uml = read('docs/canonical/UML_ARCHITECTURE.md');
   assert.match(uml, /nur Markdown\| Converted\[Markdown-Ergebnisse ohne Zuordnung/u);
+});
+
+test('formal N3 and N4 acceptance stays bound to one candidate and separate target-host evidence', () => {
+  const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+  assert.ok(target.decision_ids.includes('DS-095'));
+  assert.deepStrictEqual(target.formal_acceptance, {
+    n3: 'target-host-technical-e1',
+    n4: 'formal-human-e2-e3',
+    shared_candidate_commit: true,
+    platform_evidence_separate: true,
+    windows_testers: 1,
+    macos_testers: 1,
+    single_mac_covers_only_native_architecture: true,
+    n4_requires_n3_pass: true,
+  });
 });
 
 done();

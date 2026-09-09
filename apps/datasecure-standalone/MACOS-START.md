@@ -89,3 +89,9 @@ Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
   löschen oder zu verändern.
 
 Ein ARM-Lauf unter Rosetta ersetzt den echten Intel-Nachweis nicht.
+
+Für die Zwei-Personen-Abnahme vor der Installation `uname -m` ausführen und die
+tatsächliche Architektur in der macOS-Spur des
+[N3/N4-Testplans](../../docs/acceptance/FORMAL_UAT/README.md) eintragen. Der Mac-
+Tester verwendet denselben Kandidaten-Commit wie der Windows-Tester, aber das
+architekturpassende Paket und eine getrennte Evidence-Datei.

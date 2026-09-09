@@ -66,3 +66,8 @@ automatisch aus dem Internet nach.
 
 Dieses Paket ist noch ein interner Engineering-Pilot ohne Codesignatur. Windows
 kann deshalb beim ersten Start einen Herkunftshinweis anzeigen.
+
+Für eine formale Freigabe anschließend nicht frei protokollieren, sondern die
+Windows-Spur im [N3/N4-Testplan](../../docs/acceptance/FORMAL_UAT/README.md)
+verwenden. Dort werden Commit, Paket-SHA-256, N3-Technik und N4-Anwendung
+einheitlich mit dem Mac-Lauf zusammengeführt.

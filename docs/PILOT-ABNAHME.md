@@ -1,12 +1,16 @@
-# Cowork-Plugin: Pilot- und UAT-Abnahme
+# DataSecure: Pilot- und UAT-Abnahme
 
-Stand: 07.09.2026 · aktueller Cowork-Produktvertrag
+Stand: 09.09.2026 · Cowork-Plugin und Standalone
 
 Diese Datei ist der Abnahmeindex, keine konkurrierende zweite Testanleitung. Die
 Durchführung steht ausschließlich im
 [aktuellen UAT-Testpaket](acceptance/UAT_TEST_KIT/README.md).
 Die getrennte Standalone-Abnahme steht im
 [Standalone-UAT-Kit](acceptance/STANDALONE_UAT_TEST_KIT/README.md).
+Für die gemeinsame Zwei-Personen-Kampagne auf Windows und macOS gilt darüber
+der [formale N3/N4-Rahmen](acceptance/FORMAL_UAT/README.md). N3 bindet den
+technischen Zielhostnachweis, N4 das formale Anwender- und Freigabeurteil; die
+produktbezogenen Testfälle werden dadurch nicht dupliziert.
 
 ## Vorbedingungen
 

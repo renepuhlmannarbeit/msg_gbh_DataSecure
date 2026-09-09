@@ -21,6 +21,23 @@ Accessibility-, Performance-, Update-/Rollback- oder Fachevidenzen. Die
 Kompatibilitätsadapter für bestehende Journale und Exporte bleiben absichtlich
 erhalten und sind keine zu löschende Altlast.
 
+### RC125 – N3/N4 und formale Zwei-Personen-UAT vorbereitet
+
+BL-051/BL-052 / DS-095: N3 ist jetzt als technische E1-Zielhostabnahme, N4 als
+anschließende formale E2-/E3-Anwender- und Freigabeabnahme definiert. Der aktive
+Rahmen unter `docs/acceptance/FORMAL_UAT` bindet einen vollständigen Commit an
+separate Standalone-/Cowork-Pakete und SHA-256 für Windows x64 sowie die reale
+Architektur eines Test-Macs. Getrennte Plattformprotokolle, Branchablauf,
+N3-/N4-Klartextfälle und eine fail-closed Freigabevorlage sind angelegt und
+maschinell geprüft. Die bestehenden Cowork- und Standalone-UAT-Kits bleiben die
+einzigen produktbezogenen Fallquellen.
+
+Offen und bewusst menschlich: finalen Kandidaten festschreiben, vier
+zielgebundene Paket-Hashes eintragen, Windows- und macOS-N3/N4 durchführen und
+gemeinsam entscheiden. Ein Mac belegt nur seine native Architektur; die andere
+macOS-Architektur bleibt separat offen. Die Vorbereitung ist E0 erledigt und
+keine vorweggenommene UAT-Evidence.
+
 ### RC125 – unabhängige Revalidierung
 
 Der aktuelle Stand wurde erneut gegen die offizielle Claude-/Cowork-

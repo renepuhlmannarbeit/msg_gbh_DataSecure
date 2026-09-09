@@ -88,6 +88,12 @@ macOS Apple Silicon und Linux x64; technische E0-Pakete ersetzen sie nicht.
 Windows verwendet für den kleinen Pilot das vorhandene Microsoft Edge
 WebView2-Systemruntime und lädt es nicht selbst nach.
 
+Die erste formale N3/N4-Kampagne ist für eine Windows-x64-Person und eine
+Mac-Person vorbereitet. Der gemeinsame Ablauf, die Kandidatenbindung und die
+getrennten Evidence-Dateien stehen im
+[`FORMAL_UAT`-Kit](../../docs/acceptance/FORMAL_UAT/README.md). Ein einzelner Mac
+belegt nur seine tatsächliche Intel- oder ARM64-Architektur.
+
 Sieben transportneutrale Core-Verträge für Start, Zweck, nächste Aktion,
 Konverterkommunikation, Ergebnisgrad, Ergebnisprojektion und Fortschritt sind
 in beiden Produktprojektionen gebunden. Breitere Format-/Profil-/Recovery-

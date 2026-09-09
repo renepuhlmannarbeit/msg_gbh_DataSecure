@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 08.09.2026 · 3.2.0-rc125 · Cowork-Plugin; Standalone separat
+Stand: 09.09.2026 · 3.2.0-rc125 · Cowork-Plugin; Standalone separat
 
 ## Produktkanäle
 
@@ -52,6 +52,15 @@ dort nicht. Solche Sitzungen dürfen nur bereits freigegebenes Markdown nutzen.
    ordner-, Start-, Bild- oder Exportbestätigung.
 6. Anschließend mit synthetischen Daten das
    [UAT-Kit](acceptance/UAT_TEST_KIT/README.md) durchführen.
+
+Für die formale Freigabe genügt dieser Einzeltest nicht. Die Windows- und
+Mac-Person verwenden den gemeinsamen
+[N3/N4-Abnahmeplan](acceptance/FORMAL_UAT/README.md): identischer Commit,
+zielsystemspezifische Paket-Hashes, getrennte Evidence-Dateien, N3 vor N4 und
+keine Produktkorrektur innerhalb einer laufenden Kampagne. Standalone wird auf
+dem jeweiligen Zielhost nach `apps/datasecure-standalone/START-WINDOWS.md`
+beziehungsweise `MACOS-START.md` installiert. Die Mac-Architektur wird mit
+`uname -m` dokumentiert; ein einzelner Mac gibt nicht beide Architekturen frei.
 
 Fehlt der Picker, keinen Chat-Upload, anderen Connector oder Engineeringweg als
 Ersatz verwenden. Plugin-/Connectorstatus, Claude-Version und Richtlinien prüfen.

@@ -472,6 +472,21 @@ und Unternehmenspseudonyme. Automatisierte Tests können
 Fresh Install, echte Berechtigungsanzeigen, Fokus/Screenreader, OS-Dateisystem,
 100-Dateien-/500-MiB-Lauf und Fach-/Datenschutzfreigabe nicht ersetzen.
 
+### Formale N3/N4-Kampagne mit zwei Personen
+
+Die gemeinsame Durchführung für eine Windows-x64-Person und eine Mac-Person
+steht unter [`acceptance/FORMAL_UAT`](acceptance/FORMAL_UAT/README.md). N3
+belegt die technische E1-Zielhostfähigkeit eines vollständig durch Commit und
+Paket-Hash gebundenen Kandidaten. N4 führt anschließend die bestehenden
+produktbezogenen Fälle als beobachtete E2-/E3-Abnahme aus. Beide Personen
+verwenden denselben Git-Commit, aber getrennte Plattformbranches und
+Evidenzdateien. Ein einzelner Mac belegt nur seine mit `uname -m` festgestellte
+Architektur.
+
+`test-formal-uat-contract.js` prüft Vorlagen, Fallzahlen, Plattformtrennung,
+Pflichtfelder, den ungestarteten Vorlagenstatus und die GO-Grenze. Eine Vorlage
+mit `NOT_RUN` ist keine Evidence.
+
 ## Umgang mit Fehlern
 
 Ein unvollständiger Lauf ist kein PASS und kein Performancewert. Sandbox-, Host-

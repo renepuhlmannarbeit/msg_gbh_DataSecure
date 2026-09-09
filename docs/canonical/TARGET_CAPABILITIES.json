@@ -97,7 +97,8 @@
     "DS-091",
     "DS-092",
     "DS-093",
-    "DS-094"
+    "DS-094",
+    "DS-095"
   ],
   "products": {
     "shared_core": "one-policy-and-engine-baseline",
@@ -383,5 +384,15 @@
     ],
     "maximum_unjustified_performance_regression_ratio": 0.1,
     "maximum_open_p0_or_p1_findings": 0
+  },
+  "formal_acceptance": {
+    "n3": "target-host-technical-e1",
+    "n4": "formal-human-e2-e3",
+    "shared_candidate_commit": true,
+    "platform_evidence_separate": true,
+    "windows_testers": 1,
+    "macos_testers": 1,
+    "single_mac_covers_only_native_architecture": true,
+    "n4_requires_n3_pass": true
   }
 }

@@ -8,6 +8,10 @@ wird mit dem [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md)
 abgenommen. Alte RC30-/RC63-Kits bleiben als
 reproduzierbare Historie erhalten, sind aber keine Anleitung.
 
+In einer formalen Zwei-Personen-Abnahme werden diese Fälle nicht direkt in
+`main` protokolliert. Der [N3/N4-Rahmen](../FORMAL_UAT/README.md) bindet zuerst
+Commit und Zielpaket und führt Windows- und macOS-Evidence getrennt zusammen.
+
 ## In drei Schritten
 
 1. Im Repository `npm run uat:fixtures` ausführen. Der aktuelle Node-Generator

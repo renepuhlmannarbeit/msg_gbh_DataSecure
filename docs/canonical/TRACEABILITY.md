@@ -6,6 +6,14 @@ Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detailli
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
 
+DS-095 / BL-051 / BL-052 bindet die formale Zwei-Personen-Abnahme an
+`ACCEPTANCE_LEVELS.md` und `docs/acceptance/FORMAL_UAT/*`. N3 entspricht der
+noch auszuführenden technischen E1-Zielhostabnahme; N4 der danach folgenden
+E2-/E3-Anwender-, Accessibility- und Fachfreigabe. Manifest, zehn N3- und acht
+N4-Klartextprüfungen, getrennte Windows-/macOS-CSV, Git-Branchvertrag und
+Freigabevorlage werden durch `test-formal-uat-contract.js` geprüft. Das ist
+E0-Vorbereitung und schließt keine der noch offenen Zielhostzeilen.
+
 RC125 bindet die erneute Hersteller- und Produktrevalidierung an
 `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md`, `prompt-contract.js` und
 `test-sea-batch-resume-contract.js`. Der Prompt veröffentlicht die aktuelle
@@ -330,6 +338,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-092 | Implementierung E0; Cowork-Zielhost-UAT offen | BL-010.8/23, BL-040.5, BL-041.10, BL-044; `open_result_folder` löst mit `latestBatchOnly` ausschließlich den vollständig sichtbaren aktuellen Cowork-Lauf auf und kennt keinen Alt-/Stammordner-Fallback. Gemeinsame rekursive Ordnerfehler tragen `SOURCE_FOLDER_*` und werden im MCP-Normalweg als Auswahlablehnung projiziert. Standalone-Verträge bleiben unverändert und laufen als Regression mit. `mcp-server.js`, `gateway/batch-recovery.js`, `companion/source-folder.js`; MCP-, Recovery-, Picker-, Source-Folder-, Standalone- und Core-Policy-Tests. |
 | DS-093 | Implementierung E0; Cowork-Zielhost-UAT offen | BL-010.34; Cowork verarbeitet XLSX/PPTX lokal über denselben neutralen Markdown-Zwischenvertrag wie Standalone und anonymisiert ausschließlich den extrahierten Markdown-Inhalt. Extraktionsabdeckung und Anonymisierungsstatus bleiben getrennt; PDF/Scan-PDF/Bilder bleiben bis zum paketierten OCR-Nachweis gesperrt. `core/markdown-first-privacy.js`, `gateway/orchestrator.js`, `source-format-inspector.js`, Runtimeprojektion; Realformat-, Kanal-, Protokoll-, Dokumentations- und Paketgates. |
 | DS-094 | Implementierung E0 durch Lauf `34356576842` auf Commit `84fd616c`; sichtbare Linux-Zielhost-UAT offen | BL-010.4/11/16/17/20/21; Linux x64 glibc ist viertes Standalone-Ziel als AppImage-in-ZIP mit gebündelter Runtime und nativem POSIX-Supervisor. Das kostenbestätigte Gate prüft echten Konverter, Rust/Clippy, ELF-Architektur, dynamisch ermittelten Tauri-Ressourcenroot, App→private IPC→Core, Paketvertrag, zweiten Start aus dem entpackten Paket und bytegleichen Doppelbau. AppImage-SHA-256 `bd25febd…8853`, ZIP-SHA-256 `177b9763…eaee`. Cowork, Linux ARM64 und Windows ARM64 sind nicht erweitert. |
+| DS-095 | N3/N4-Vorbereitung E0; Durchführung offen | BL-051/BL-052; N3 bindet technische E1-Zielhostevidence, N4 die nachfolgende formale E2-/E3-Abnahme. `ACCEPTANCE_LEVELS.md`, `docs/acceptance/FORMAL_UAT/*`, getrennte Windows-/macOS-Protokolle, gemeinsamer Commit und plattformspezifische Pakethashes; `test-formal-uat-contract.js`. Ein Mac belegt nur seine native Architektur. |
 
 ## DS-067 – konkrete Umsetzung
 

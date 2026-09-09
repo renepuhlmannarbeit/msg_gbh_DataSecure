@@ -1,0 +1,37 @@
+{
+  "schema": "datasecure-formal-uat-campaign/1",
+  "campaign_id": "",
+  "state": "planned",
+  "product_version": "3.2.0-rc125",
+  "candidate_commit": "",
+  "created_at_utc": "",
+  "release_scope": {
+    "cowork_plugin": true,
+    "standalone": true,
+    "windows_x64": true,
+    "macos_architecture": ""
+  },
+  "packages": {
+    "windows": {
+      "standalone_name": "",
+      "standalone_sha256": "",
+      "cowork_plugin_name": "",
+      "cowork_plugin_sha256": ""
+    },
+    "macos": {
+      "architecture": "",
+      "standalone_name": "",
+      "standalone_sha256": "",
+      "cowork_plugin_name": "",
+      "cowork_plugin_sha256": ""
+    }
+  },
+  "e0_gates": {
+    "documentation": "NOT_RUN",
+    "product": "NOT_RUN",
+    "standalone": "NOT_RUN",
+    "plugin_package": "NOT_RUN",
+    "standalone_package": "NOT_RUN"
+  },
+  "notes": "No personal data, local paths or source-document hashes."
+}

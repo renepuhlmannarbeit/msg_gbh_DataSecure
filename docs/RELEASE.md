@@ -140,6 +140,23 @@ Anwender-Voraussetzungen.
 - UAT, Accessibility, IT/Health-IT, Datenschutz, Security und Architektur.
 - null offene P0/P1-Defects.
 
+## Formale N3/N4-Kandidatenbindung
+
+Für die geplante Zwei-Personen-Abnahme wird erst nach Abschluss aller E0-Gates
+eine Kampagnendatei aus
+[`CAMPAIGN.template.json`](acceptance/FORMAL_UAT/CAMPAIGN.template.json)
+angelegt. Sie bindet denselben vollständigen Git-Commit an vier getrennte
+Pakete/Hashes: Standalone und Cowork-Plugin jeweils für Windows x64 und die
+tatsächliche Architektur des Test-Macs. Pakete eines älteren Commits dürfen
+nicht als aktueller Kandidat umetikettiert werden.
+
+N3 muss auf jeder als freizugebend markierten Zielhost-/Produktkombination
+vollständig `PASS` sein, bevor N4 beginnt. Die Windows- und Mac-Person führen
+getrennte Evidence-Dateien auf getrennten UAT-Branches. Erst die gegengeprüfte
+[Freigabeentscheidung](acceptance/FORMAL_UAT/FREIGABEENTSCHEIDUNG.md) darf ein
+GO aussprechen. Die nicht vorhandene zweite Mac-Architektur bleibt ausdrücklich
+offen und wird nicht durch Rosetta oder den anderen Mac-Typ ersetzt.
+
 ## Produktbezogene Formatfreigaben
 
 - **Cowork-Plugin:** TXT, Markdown, CSV und streng direkt geprüftes DOCX;

@@ -1,7 +1,7 @@
 # Claude-/Cowork-Revalidierung
 
-Stand: 08.09.2026 · Produktarbeitsstand RC125 · zeitgebundener Herstellerabgleich
-(Cowork-Host-, Plugin- und Marketplace-Aussagen am 08.09.2026 erneut abgerufen;
+Stand: 09.09.2026 · Produktarbeitsstand RC125 · zeitgebundener Herstellerabgleich
+(Cowork-Host-, Plugin- und Marketplace-Aussagen am 09.09.2026 erneut abgerufen;
 DS-078/DS-093)
 
 ## Aktuell belegte Herstelleraussagen
@@ -116,9 +116,12 @@ Markdown-first-Schicht vor Veröffentlichung des `extracted`-Checkpoints.
 5. Sicherstellen, dass Originalinhalt, Dateiname, Pfad, Token und Paketkennung nie
    im Chat erscheinen.
 
-Die genaue Durchführung steht im
-[versionneutralen UAT-Kit](acceptance/UAT_TEST_KIT/README.md). Kennungen werden dort
-immer zusammen mit Klartextnamen und direktem Anleitungslink verwendet.
+Die produktbezogenen Fälle stehen im
+[versionneutralen UAT-Kit](acceptance/UAT_TEST_KIT/README.md). Der
+[formale N3/N4-Rahmen](acceptance/FORMAL_UAT/README.md) bindet sie an denselben
+Kandidaten wie die Standalone-Abnahme, hält Plattform- und Produktevidence aber
+getrennt. Kennungen werden immer zusammen mit Klartextnamen und direktem
+Anleitungslink verwendet.
 
 ## Pflegehinweis
 

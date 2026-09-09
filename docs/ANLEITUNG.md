@@ -203,3 +203,8 @@ lesbarem Originalinhalt.
 DataSecure de-identifiziert und minimiert Daten. Es garantiert keine rechtliche
 Anonymität, zertifiziert weder DSGVO noch EU AI Act und macht eine spätere
 Personal-, Recruiting- oder Fachentscheidung nicht automatisch zulässig.
+
+Wer das Produkt nicht nur benutzen, sondern formal abnehmen soll, folgt nicht
+dieser Kurzanleitung allein. Für zwei Tester auf Windows und macOS gilt der
+[N3/N4-Abnahmeplan](acceptance/FORMAL_UAT/README.md) mit festem Commit,
+Paket-Prüfsummen und getrennten Plattformprotokollen.

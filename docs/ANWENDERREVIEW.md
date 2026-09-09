@@ -1,6 +1,6 @@
 # Aktuelles Anwender- und UX-Review
 
-Stand: 08.09.2026 · gegen 3.2.0-rc125 und DS-078/086/088/092/093 revalidiert
+Stand: 09.09.2026 · gegen 3.2.0-rc125 und DS-078/086/088/092/093/095 revalidiert
 
 ## Ergebnis
 
@@ -65,6 +65,11 @@ Eine fachfremde Person kann mit dem
 5. zwischen lokalem Abschluss und späterer Claude-Auswertung unterscheiden.
 6. im Mischstapel erklären, welche Dateien bereits automatisch abgeschlossen
    wurden und warum nur gelbe Fundstellen zur Entscheidung erscheinen.
+
+Die beobachteten Ergebnisse werden im
+[formalen N3/N4-Rahmen](acceptance/FORMAL_UAT/README.md) pro Zielhost und Produkt
+getrennt protokolliert. Erst ein bestandenes N3 desselben Kandidaten erlaubt die
+N4-UX-/Fachfreigabe.
 
 Der frühere RC34-Bericht bleibt im
 [Archiv](archive/2026-08/reviews/ANWENDERREVIEW_RC34.md).

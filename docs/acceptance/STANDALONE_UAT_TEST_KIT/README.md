@@ -6,6 +6,11 @@ Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien
 verwenden.
 
+Für die geplante gemeinsame Abnahme durch eine Windows- und eine Mac-Person gilt
+zusätzlich der [formale N3/N4-Rahmen](../FORMAL_UAT/README.md). Er legt Kandidat,
+Paket-Hashes, Reihenfolge und getrennte Evidence-Dateien fest; die folgenden
+S01–S23 bleiben die ausführbaren Standalone-Fälle.
+
 ## Vorbereitung
 
 Anwender verwenden das für ihren Zielrechner fertig bereitgestellte ZIP:

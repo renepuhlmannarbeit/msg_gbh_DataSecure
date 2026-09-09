@@ -1450,3 +1450,27 @@ zielhostgebunden offen. Linux ARM64 und Windows ARM64 sind nicht Bestandteil
 dieser Entscheidung. Das Cowork-Plugin bleibt ein Claude-Desktop-Produkt für
 Windows und macOS; DS-094 erweitert ausschließlich Standalone und präzisiert
 die entsprechenden „Linux später“-Teile von DS-052, DS-076 und DS-077.
+
+## DS-095 – N3/N4 werden als zweipersonige Zielhost- und Freigabeabnahme geführt
+
+Am 09.09.2026 festgelegt: N3 bezeichnet die technische E1-Abnahme eines exakt
+durch Commit, Produktversion, Zielarchitektur, Paket und SHA-256 gebundenen
+Kandidaten auf realer Hardware. N4 bezeichnet die anschließende formale E2-/E3-
+Anwender-, Accessibility-, Fach-, Datenschutz-, Security- und
+Architekturabnahme desselben Kandidaten. Automatisierte E0-Gates, CI-Runner und
+Paket-Smokes ersetzen keine der beiden Stufen.
+
+Die erste Kampagne wird von zwei Personen im selben Git-Repository durchgeführt:
+eine Person auf Windows x64, eine Person auf einem Mac. Beide starten vom selben
+unveränderlichen `main`-Commit und verwenden zielsystemspezifische Pakete. Sie
+schreiben in getrennte Plattformdateien und Plattformbranches; Produktcode wird
+während der Kampagne nicht verändert. Ein Defect erzeugt nach Korrektur einen
+neuen Kandidaten. Ein einzelner Mac belegt ausschließlich seine reale CPU-
+Architektur; Rosetta oder ein Apple-Silicon-Lauf ersetzt keinen Intel-Nachweis
+und umgekehrt.
+
+Die bestehenden Cowork- und Standalone-UAT-Kits bleiben die fachlichen
+Testfallquellen. Der neue formale Rahmen bindet nur Kandidat, Reihenfolge,
+Verantwortung, Evidence und GO-/NO-GO-Regel, damit keine konkurrierende dritte
+Produktspezifikation entsteht. Umsetzung und offene Durchführung werden unter
+BL-051 und BL-052 geführt.

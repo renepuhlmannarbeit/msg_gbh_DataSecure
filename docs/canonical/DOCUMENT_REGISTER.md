@@ -1,6 +1,6 @@
 # Kanonisches Dokumentenregister
 
-Stand: 07.09.2026
+Stand: 09.09.2026
 
 ## Normativ aktuell
 
@@ -17,6 +17,7 @@ Register. `DOCUMENT_INDEX.json` führt diese Ablösung und DS-085/086 mit.
 | `STANDALONE_ARCHITECTURE.md`, `STANDALONE_SECURITY_MODEL.md` | Standalone-Nutzerfluss, Sicherheits- und Konvertergrenze, Lieferstufen und Diagnosevertrag |
 | `TARGET_ARCHITECTURE.md`, `UML_ARCHITECTURE.md`, `REFACTORING_PLAN.md` | Architektur, codebasierte UML-Prüfsichten und Lieferreihenfolge |
 | `BACKLOG.md` | einzige aktive Arbeitsliste |
+| `ACCEPTANCE_LEVELS.md` | verbindliche Definition der technischen N3- und formalen N4-Abnahme |
 | `CURRENT_STATE.md` | aktueller belegter Iststand |
 | `TRACEABILITY.md`, `BACKLOG_EVIDENCE_MATRIX.md` | aktuelle Zuordnung und Evidencegrenzen |
 | `TARGET_CAPABILITIES.json`, `HOST_MATRIX_V1.json`, `RUNTIME_START_MATRIX_V1.json` | maschinenlesbare Ziel-, Host- und Runtimeverträge; Zielaussagen sind keine Istfreigabe |
@@ -61,7 +62,7 @@ Abnahme.
 | `README.md`, `docs/ANLEITUNG.md` | Interessierte und Anwender |
 | `docs/ANWENDERREVIEW.md` | Product Owner, UX, UAT |
 | `docs/IT-BETRIEBSHANDBUCH.md` | IT-Betrieb und Support |
-| `docs/PILOT-ABNAHME.md`, `docs/acceptance/UAT_TEST_KIT/*`, `docs/acceptance/STANDALONE_UAT_TEST_KIT/*` | Testverantwortliche |
+| `docs/PILOT-ABNAHME.md`, `docs/acceptance/UAT_TEST_KIT/*`, `docs/acceptance/STANDALONE_UAT_TEST_KIT/*`, `docs/acceptance/FORMAL_UAT/*` | Testverantwortliche; Produktfälle plus gemeinsame N3/N4-Kampagnensteuerung |
 | `docs/PLUGIN_SECURITY_MODEL.md`, `SECURITY.md` | Security, Datenschutz, Architektur |
 | `docs/RELEASE.md`, `docs/TESTING.md`, `BUILD_INFO.json` | Entwicklung und Release Engineering |
 | `docs/FORMAT_COVERAGE_MATRIX.md` | belegter und geplanter Formatumfang; keine Freigabe ohne zugehörige Evidence |

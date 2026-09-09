@@ -6,6 +6,13 @@ E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
 Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 
+DS-095 ordnet die nächsten Stufen eindeutig zu: **N3** ist die technische
+E1-Abnahme eines durch Commit und Paket-Hash festgeschriebenen Kandidaten;
+**N4** ist dessen anschließende formale E2-/E3-Abnahme. Vorlagen und
+maschinengeprüfter Zwei-Personen-Ablauf für Windows x64 und einen Mac sind E0
+fertig. Die leeren `NOT_RUN`-Protokolle sind keine Evidence. Ein einzelner Mac
+belegt nur seine tatsächliche Intel- oder ARM64-Architektur.
+
 RC125 revalidiert die Cloud-/Local-Cowork-Grenze gegen die aktuelle offizielle
 Herstellerdokumentation und bindet den direkten Sechs-Format-Prompt sowie beide
 asynchronen Konvertierungszweige an ausführbare Verträge. Vollständige

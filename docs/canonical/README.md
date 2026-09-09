@@ -16,6 +16,7 @@ Entscheidung und Testevidenz beantworten unterschiedliche Fragen.
 | Was wird als Nächstes gebaut? | [BACKLOG.md](BACKLOG.md) | [REFACTORING_PLAN.md](REFACTORING_PLAN.md) bestimmt die sichere Reihenfolge. |
 | Welche maschinenlesbaren Grenzen gelten? | [TARGET_CAPABILITIES.json](TARGET_CAPABILITIES.json), [HOST_MATRIX_V1.json](HOST_MATRIX_V1.json), `contracts/*` | Ein Zielvertrag ist keine Istfreigabe. |
 | Welche Abnahme fehlt? | [BACKLOG_EVIDENCE_MATRIX.md](BACKLOG_EVIDENCE_MATRIX.md) | Zielhost-/UX-/Fachevidence bleibt menschlich. |
+| Wann sind N3 und N4 erreicht? | [ACCEPTANCE_LEVELS.md](ACCEPTANCE_LEVELS.md) | Das [formale UAT-Kit](../acceptance/FORMAL_UAT/README.md) steuert die Zwei-Personen-Durchführung. |
 | Welche Open-Source-Komponente ist zugelassen? | [OPEN_SOURCE_COMPONENTS.md](OPEN_SOURCE_COMPONENTS.md) | Version, Zweck und Aktivierungsgrenze sind verbindlich. |
 | Gilt eine Funktion für beide Produkte? | Produkt-/Modusmatrix in [TARGET_ARCHITECTURE.md](TARGET_ARCHITECTURE.md) | Standalone-Konvertierung ist keine Formatfreigabe der Anonymisierung oder des Cowork-Plugins. |
 | Wo ist der Status einer Datei dokumentiert? | [DOCUMENT_INDEX.json](DOCUMENT_INDEX.json), [DOCUMENT_REGISTER.md](DOCUMENT_REGISTER.md) | Der Index ist maschinenlesbar; Archive bleiben zugänglich, aber nicht entscheidungsführend. |
@@ -34,6 +35,7 @@ und [BACKLOG_ARCHIVE_2026-09.md](BACKLOG_ARCHIVE_2026-09.md) nachvollziehbar.
 - [aktueller Claude-/Cowork-Abgleich](../REVIEW_CLAUDE_COWORK_2026-09-01.md)
 - [versionneutrales UAT-Kit](../acceptance/UAT_TEST_KIT/README.md)
 - [Standalone-UAT-Kit](../acceptance/STANDALONE_UAT_TEST_KIT/README.md)
+- [formale N3/N4-Abnahme](../acceptance/FORMAL_UAT/README.md)
 
 Historische RC-Berichte und frühere Vollstände liegen unter
 [`docs/archive`](../archive/README.md). Der

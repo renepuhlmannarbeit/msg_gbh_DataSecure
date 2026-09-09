@@ -2,6 +2,23 @@
 
 Stand: 09.09.2026 · 3.2.0-rc125 · Windows-/macOS-/Linux-Distributionspaket-E0 und unabhängige Produktrevalidierung
 
+## Formale N3/N4-Abnahme ist vorbereitet, noch nicht durchgeführt
+
+DS-095 führt für beide Produkte einen gemeinsamen, aber nicht vermischten
+Abnahmeweg ein. N3 bindet technische E1-Zielhostevidence an Commit, Version,
+Paket, SHA-256, OS und Architektur. N4 führt erst danach die bestehenden
+Cowork-UAT-01–06 und Standalone-S01–23 als beobachtete E2-/E3-Abnahme mit
+Accessibility-, Fach-, Datenschutz-, Security- und Architektururteil aus.
+
+Für die zwei benannten Personen existieren getrennte Windows- und macOS-
+Evidencevorlagen, eine Kandidatenmanifestvorlage, ein konfliktfreier Git-Ablauf
+und eine gemeinsame GO-/NO-GO-Vorlage unter
+`docs/acceptance/FORMAL_UAT`. Beide verwenden denselben festgeschriebenen
+`main`-Commit; die Zielpakete und Hashes bleiben plattformspezifisch. Der Rahmen
+ist E0-geprüfte Vorbereitung, aber noch keine N3-/N4-Evidence. Vor Testbeginn
+fehlen der finale Kandidatencommit, dessen aktuelle Pakete/Hashes und die
+tatsächliche Architektur des Test-Macs.
+
 ## Intel-/ARM64-Zielhost- und App-Bundle-E0 vom 09.09.2026
 
 Der manuell und kostenbestätigt gestartete GitHub-Actions-Lauf

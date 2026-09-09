@@ -33,3 +33,8 @@ Organisationsrichtlinie sie erzwingt; Skip ist für sensible Dateien kein Standa
 
 Dieses Plugin ist keine Rechtsberatung, keine Garantie rechtlicher Anonymität und
 keine DSGVO-/EU-AI-Act-Zertifizierung.
+
+Die formale Windows-/macOS-Abnahme des Plugin-ZIPs ist im
+[`N3/N4-Testplan`](../../docs/acceptance/FORMAL_UAT/README.md) beschrieben. Beide
+Tester verwenden denselben Commit, aber das jeweilige Zielpaket und getrennte
+Evidence-Dateien.
