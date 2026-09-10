@@ -223,7 +223,9 @@ testAsync('Cowork DOCX privacy omits header and footer through the isolated pars
     status: 'incomplete', reason_codes: ['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY']
   });
   const released = readOutput(result.package_id, result.read_capability).text;
-  assert.match(released, /Kopf- und Fußzeilen sind gemäß Ausgaberegel nicht enthalten/u);
+  assert.match(released, /DOCX-Struktur wurde vollständig geprüft/u);
+  assert.match(released, /bewusst keine Kopf- und Fußzeilen/u);
+  assert.doesNotMatch(released, /Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert/u);
   assert.match(released, /\[PERSON_[A-Z0-9]+\]|\[UNTERNEHMEN_[A-Z0-9]+\]/u);
   assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH|HEADER PRIVATE|FOOTER PRIVATE/u);
   assert.ok(entry.private_bytes.every(byte => byte === 0));

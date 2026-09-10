@@ -543,12 +543,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     const mdName = `${packageId}.md`;
     const mdPath = path.join(stagePackage, mdName);
+    const policyScopedDocx = ext === '.docx' && sourceExtractionCoverage.status === 'incomplete' &&
+      sourceExtractionCoverage.reason_codes.length === 1 &&
+      sourceExtractionCoverage.reason_codes[0] === 'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY';
     const extractedMarkdownScope = scopedPrivacy
       ? '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. ' +
         (sourceExtractionCoverage.status === 'complete'
           ? 'Der lokale Konverter bestätigt die Extraktionsabdeckung; die Originaldatei selbst bleibt unverändert.'
+          : policyScopedDocx
+            ? 'Die DOCX-Struktur wurde vollständig geprüft; der freigegebene Dokumentumfang enthält bewusst keine Kopf- und Fußzeilen.'
           : 'Die Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert; nicht extrahierte Inhalte sind in diesem Ergebnis nicht enthalten.') +
-        (ext === '.docx' ? ' Kopf- und Fußzeilen sind gemäß Ausgaberegel nicht enthalten.' : '') +
+        (ext === '.docx' && !policyScopedDocx ? ' Kopf- und Fußzeilen sind gemäß Ausgaberegel nicht enthalten.' : '') +
         '\n\n'
       : '';
     const finalText =
