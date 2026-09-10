@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 10.09.2026 · 3.2.0-rc134 · Windows-PKG-04/INT-13 gebunden; N3/N4 und weitere Zielhosts offen
+Stand: 10.09.2026 · 3.2.0-rc135 · Windows-PKG-04/INT-13 gebunden; N3/N4 und weitere Zielhosts offen
 
 ## RC134 – gebundene zweckabhängige DOCX-Kopf-/Fußprojektion
 

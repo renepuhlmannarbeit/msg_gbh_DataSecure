@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 10.09.2026 · 3.2.0-rc134
+Stand: 10.09.2026 · 3.2.0-rc135
 
-Der aktuelle Quellstand ist der lokal paketgebundene RC134-Kandidat für das
+Der aktuelle Quellstand ist der lokal paketgebundene RC135-Entwicklungsstand für das
 Cowork-Plugin und die Standalone-App. Der Windows-PKG-04-Lauf stammt aus dem
 sauberen Quellcommit `583d71929a279fb57370a19c11776fc54aebc2d0`.
 PKG-04 erzeugte zwei bytegleiche Archive mit jeweils 110.250.875 Byte. Beide

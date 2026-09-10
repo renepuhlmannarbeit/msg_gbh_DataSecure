@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 10.09.2026 · 3.2.0-rc134
+Stand: 10.09.2026 · 3.2.0-rc135
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
