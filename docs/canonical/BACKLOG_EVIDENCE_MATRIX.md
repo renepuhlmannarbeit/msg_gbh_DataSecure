@@ -13,6 +13,13 @@ maschinengeprüfter Zwei-Personen-Ablauf für Windows x64 und einen Mac sind E0
 fertig. Die leeren `NOT_RUN`-Protokolle sind keine Evidence. Ein einzelner Mac
 belegt nur seine tatsächliche Intel- oder ARM64-Architektur.
 
+RC133 bindet den RC132-Funktionsstand und die abschließende Fortsetzungshärtung
+an Commit `2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`. Zwei saubere Windows-
+Paketbauten sind bytegleich; beide Paket-, Worker-, History-/Sidecar- und
+nativen Smokes bestanden. PKG-04 und INT-13 binden das 110.249.642 Byte große
+Archiv mit SHA-256 `fd3dcb1b0f99940a110857c085793b70930454571ffda3a7e5d8565a997ece66`.
+N3/N4 sowie Cowork-/macOS-Zielhostevidenz bleiben offen.
+
 RC132 / BL-010.12/BL-010.23/BL-021.1/BL-030.2/BL-041.1 besitzt lokale E0-
 Evidence für: gemeinsame F7-Redaktion über mehrere Dokumente nach dynamischer
 Pseudonymbindung; eine kanonische bytegebundene Policydateiliste mit

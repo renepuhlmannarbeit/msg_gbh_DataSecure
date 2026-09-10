@@ -68,18 +68,20 @@ test('every current release header matches the package version', () => {
   }
 });
 
-test('release truth separates the current source from the last bound packages and human approval', () => {
+test('release truth separates the current Windows binding from published packages and human approval', () => {
   const release = read('docs/RELEASE.md');
   const version = JSON.parse(read('package.json')).version;
   const match = /-rc(\d+)$/iu.exec(version);
   assert.ok(match, `release candidate version expected, got ${version}`);
   const currentRc = `RC${match[1]}`;
   assert.match(release, new RegExp(`aktuelle Quellstand[\\s\\S]{0,120}${currentRc}-(?:Kandidat|Entwicklungsstand)`, 'u'));
-  assert.match(release, new RegExp(`${currentRc}[\\s\\S]{0,420}weder PKG-04 noch INT-13 oder eine Zielhostfreigabe`, 'u'));
+  assert.match(release, new RegExp(`${currentRc}[\\s\\S]{0,520}PKG-04[\\s\\S]{0,320}INT-13`, 'u'));
+  assert.match(release, /zwei bytegleiche Archive/u);
+  assert.match(release, /noch keine N3\/N4- oder weitere Zielhostfreigabe/u);
   assert.match(release, /letzte veröffentlichte technische Produktkandidat bleibt RC131/u);
   assert.match(release, /Standalone- und Cowork-Zielpakete seines Quellcommits/u);
   assert.match(release, /Windows-PKG-04 und INT-13 sind an RC131 gebunden/u);
-  assert.match(release, new RegExp(`${currentRc} darf diese Evidence erst nach einem eigenen\\s+commitgebundenen Paket- und Zielhostlauf übernehmen`, 'u'));
+  assert.match(release, /Cowork- und macOS-Pakete\s+benötigen ihre eigenen commitgebundenen Zielhostläufe/u);
   assert.match(release, /technisches Vorabrelease[\s\S]{0,160}keine Produktionsfreigabe/u);
   assert.match(release, /offene sichtbare N3\/N4-UAT/u);
   assert.doesNotMatch(release, /Ein Standalone-Paket desselben\s+RC-Stands ist damit nicht behauptet/u);

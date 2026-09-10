@@ -6,6 +6,12 @@ Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detailli
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
 
+RC133 bindet die nachfolgenden RC132-/DS-097-Verträge an den sauberen Quellcommit
+`2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`. Der lokale Windows-PKG-04-Lauf
+erzeugte zwei bytegleiche Archive und bestand beide Paket-, Worker-, History-/
+Sidecar- und nativen Smokes. INT-13 referenziert SHA-256
+`fd3dcb1b0f99940a110857c085793b70930454571ffda3a7e5d8565a997ece66`.
+
 RC132 bindet DS-096/F7 an `person-ambiguities.js`, `text-review.js`,
 `batch-review-policy.js` und `batch-review-publication.js`. Der reale
 Mehrdokumenttest fordert gemeinsame Redaktion, vollständige Veröffentlichung,

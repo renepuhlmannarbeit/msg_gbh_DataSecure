@@ -27,10 +27,11 @@ und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
 
 ### RC133 – versionierter Paket- und Testkandidat
 
-Der RC132-Funktionsstand wird als RC133 geschnitten. Vor INT-13 sind ein sauberer
-Commit auf `main`, zwei unabhängig bereinigte bytegleiche Windows-Paketbauten
-und jeweils grüne Paket-, Worker- und native Smokes erforderlich. Die
-anschließende Bindung ist technische E0-Evidence; N3/N4 bleibt menschlich offen.
+Der RC132-Funktionsstand ist als RC133 aus Commit `2cd4150` geschnitten und auf
+`main` veröffentlicht. Zwei unabhängig bereinigte Windows-Paketbauten sind
+bytegleich; beide Paket-, Worker-, History-/Sidecar- und native Smokes sind
+grün. INT-13 bindet SHA-256 `fd3dcb1b…ece66`. Damit ist die technische Windows-
+E0-Evidence erledigt; N3/N4 sowie Cowork-/macOS-Zielhostevidenz bleiben offen.
 
 ### RC132 – unabhängige Defectrunde und ehrliche Policy-/Statusbindung
 

@@ -2,20 +2,22 @@
 
 Stand: 10.09.2026 · 3.2.0-rc133
 
-Der aktuelle Quellstand ist der noch nicht paket- oder zielhostgebundene
-RC133-Kandidat für das Cowork-Plugin und die Standalone-App. Sein
-zielsystemspezifisches Plugin-ZIP wird ausschließlich mit dem unten
-beschriebenen Produktbuild erzeugt und durch `SHA256SUMS`, SPDX-SBOM,
-Plugin-ZIP-Tests und Claude-Validierung geprüft. Ein lokaler Build allein bindet
-jedoch weder PKG-04 noch INT-13 oder eine Zielhostfreigabe.
+Der aktuelle Quellstand ist der auf Windows x64 technisch paketgebundene
+RC133-Kandidat für das Cowork-Plugin und die Standalone-App. Der lokale
+Standalone-PKG-04-Lauf aus Commit `2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`
+erzeugte zwei bytegleiche Archive; beide Paket-, Worker- und nativen Smokes
+bestanden. INT-13 bindet dieses Windows-Archiv mit SHA-256
+`fd3dcb1b0f99940a110857c085793b70930454571ffda3a7e5d8565a997ece66`.
+Das ist noch keine N3/N4- oder weitere Zielhostfreigabe.
 
 Der letzte veröffentlichte technische Produktkandidat bleibt RC131. Die
 selbsttragenden Standalone- und Cowork-Zielpakete seines Quellcommits `d4d269b`
 wurden auf Windows x64 sowie macOS Intel/ARM gebaut und technisch geprüft;
 Windows-PKG-04 und INT-13 sind an RC131 gebunden. Diese Veröffentlichung als
 Vorabrelease ersetzt weder die noch offene sichtbare N3/N4-UAT noch eine
-Produktionsfreigabe. RC133 darf diese Evidence erst nach einem eigenen
-commitgebundenen Paket- und Zielhostlauf übernehmen.
+Produktionsfreigabe. Die lokale RC133-Windows-Bindung macht RC133 noch nicht zum
+veröffentlichten plattformübergreifenden Kandidaten; Cowork- und macOS-Pakete
+benötigen ihre eigenen commitgebundenen Zielhostläufe.
 
 ## Nutzerprodukt
 
