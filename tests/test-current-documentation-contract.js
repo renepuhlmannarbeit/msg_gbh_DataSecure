@@ -68,14 +68,18 @@ test('every current release header matches the package version', () => {
   }
 });
 
-test('release truth separates the current RC132 source from the last bound RC131 packages and human approval', () => {
+test('release truth separates the current source from the last bound packages and human approval', () => {
   const release = read('docs/RELEASE.md');
-  assert.match(release, /aktuelle Quellstand[\s\S]{0,120}RC132-Entwicklungsstand/u);
-  assert.match(release, /RC132[\s\S]{0,420}weder PKG-04 noch INT-13 oder eine Zielhostfreigabe/u);
+  const version = JSON.parse(read('package.json')).version;
+  const match = /-rc(\d+)$/iu.exec(version);
+  assert.ok(match, `release candidate version expected, got ${version}`);
+  const currentRc = `RC${match[1]}`;
+  assert.match(release, new RegExp(`aktuelle Quellstand[\\s\\S]{0,120}${currentRc}-(?:Kandidat|Entwicklungsstand)`, 'u'));
+  assert.match(release, new RegExp(`${currentRc}[\\s\\S]{0,420}weder PKG-04 noch INT-13 oder eine Zielhostfreigabe`, 'u'));
   assert.match(release, /letzte veröffentlichte technische Produktkandidat bleibt RC131/u);
   assert.match(release, /Standalone- und Cowork-Zielpakete seines Quellcommits/u);
   assert.match(release, /Windows-PKG-04 und INT-13 sind an RC131 gebunden/u);
-  assert.match(release, /RC132 darf diese Evidence erst nach einem eigenen\s+commitgebundenen Paket- und Zielhostlauf übernehmen/u);
+  assert.match(release, new RegExp(`${currentRc} darf diese Evidence erst nach einem eigenen\\s+commitgebundenen Paket- und Zielhostlauf übernehmen`, 'u'));
   assert.match(release, /technisches Vorabrelease[\s\S]{0,160}keine Produktionsfreigabe/u);
   assert.match(release, /offene sichtbare N3\/N4-UAT/u);
   assert.doesNotMatch(release, /Ein Standalone-Paket desselben\s+RC-Stands ist damit nicht behauptet/u);
@@ -94,8 +98,11 @@ test('DS-067 deletion and retention wording is present across active contracts',
 test('build metadata describes current product channels and complete blocked formats', () => {
   const info = JSON.parse(read('BUILD_INFO.json'));
   const pkg = JSON.parse(read('package.json'));
+  const releaseHeader = read('docs/RELEASE.md').split(/\r?\n/u).slice(0, 5).join('\n');
+  const stand = /Stand: (\d{2})\.(\d{2})\.(\d{4})/u.exec(releaseHeader);
   assert.strictEqual(info.version, pkg.version);
-  assert.strictEqual(info.build_date, '2026-09-07');
+  assert.ok(stand, 'release header must carry a canonical Stand date');
+  assert.strictEqual(info.build_date, `${stand[3]}-${stand[2]}-${stand[1]}`);
   assert.match(info.target, /Plugin ZIP \/ private Marketplace/u);
   assert.doesNotMatch(info.target + info.runtime, /MCPB|built-in Node/u);
   assert.deepStrictEqual(new Set(info.formats), new Set(['txt', 'markdown', 'csv', 'docx', 'xlsx', 'pptx']));

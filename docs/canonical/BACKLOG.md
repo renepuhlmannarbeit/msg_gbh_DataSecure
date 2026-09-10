@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 10.09.2026 · Produktstand 3.2.0-rc132
+Stand: 10.09.2026 · Produktstand 3.2.0-rc133
 
 Dies ist die **einzige aktive Arbeitsliste**. Historische RC-Schnitte, erledigte
 Teilarbeiten und frühere Keyring-/MCPB-Pläne stehen im
@@ -24,6 +24,13 @@ bewusst den lokalen Core-Reviewer hinter der inhaltsfreien Renderergrenze.
 Abschnitt B enthält ausschließlich menschliche beziehungsweise
 zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
 und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
+
+### RC133 – versionierter Paket- und Testkandidat
+
+Der RC132-Funktionsstand wird als RC133 geschnitten. Vor INT-13 sind ein sauberer
+Commit auf `main`, zwei unabhängig bereinigte bytegleiche Windows-Paketbauten
+und jeweils grüne Paket-, Worker- und native Smokes erforderlich. Die
+anschließende Bindung ist technische E0-Evidence; N3/N4 bleibt menschlich offen.
 
 ### RC132 – unabhängige Defectrunde und ehrliche Policy-/Statusbindung
 

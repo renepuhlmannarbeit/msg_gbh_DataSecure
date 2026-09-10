@@ -1,6 +1,6 @@
 # DataSecure Security-Modell für das Claude-/Cowork-Plugin
 
-Stand: 10.09.2026 · 3.2.0-rc132
+Stand: 10.09.2026 · 3.2.0-rc133
 
 ## Vertrauensgrenze
 

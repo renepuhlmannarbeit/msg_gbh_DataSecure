@@ -1,6 +1,17 @@
 # Aktueller Iststand
 
-Stand: 10.09.2026 · 3.2.0-rc132 · lokaler Produktkandidat; neue Paket-/Zielhostbindung offen
+Stand: 10.09.2026 · 3.2.0-rc133 · lokaler Produktkandidat; neue Paket-/Zielhostbindung offen
+
+## RC133 – commitgebundener Testschnitt
+
+RC133 übernimmt den vollständig geprüften RC132-Funktionsstand einschließlich
+der policygebundenen Fortsetzung, stabiler Workerfehler und wieder verfügbarer
+Quellaufnahme als eigenen versionierten Kandidaten. Vor einer Bindung wird der
+Stand sauber committet und auf `main` veröffentlicht. PKG-04 muss anschließend
+aus genau diesem Commit zwei unabhängig bereinigte, bytegleiche Windows-ZIPs
+erzeugen; beide Paket-, Worker- und nativen Smokes müssen bestehen. Erst dann
+darf INT-13 auf diesen Kandidaten zeigen. Diese technische Bindung ersetzt
+keine menschliche N3/N4-Abnahme.
 
 ## RC132 – Reviewkonsistenz, Policybindung und serverseitige Statuswahrheit
 
