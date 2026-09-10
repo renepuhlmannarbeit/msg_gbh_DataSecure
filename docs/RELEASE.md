@@ -2,26 +2,32 @@
 
 Stand: 10.09.2026 · 3.2.0-rc135
 
-Der aktuelle Quellstand ist der lokal paketgebundene RC135-Entwicklungsstand für das
-Cowork-Plugin und die Standalone-App. Der Windows-PKG-04-Lauf stammt aus dem
-sauberen Quellcommit `583d71929a279fb57370a19c11776fc54aebc2d0`.
-PKG-04 erzeugte zwei bytegleiche Archive mit jeweils 110.250.875 Byte. Beide
-Paket-, Worker- und
-nativen Smokes bestanden; auch Desktop- und Core-Binaries sind bytegleich.
-INT-13 bindet dieses Windows-Archiv mit SHA-256
-`cdc2ec38c7346217a1de21ec9a5137895ded9fe4322dd5cb16f06a599dd6de0c`.
-Das ist noch keine N3/N4- oder weitere Zielhostfreigabe; ein aktuelles
-Cowork-Paket ist damit ebenfalls noch nicht belegt. RC133 bleibt unveränderte
-historische Evidence.
+Der aktuelle Quellstand ist der paketgebundene RC135-Entwicklungsstand für das
+Cowork-Plugin und die Standalone-App. Alle nachfolgend genannten Pakete stammen
+aus dem sauberen, auf `main` veröffentlichten Quellcommit
+`9c2e4f9061dbdc3cd1bf0280d95939528029c978`.
+
+Der Windows-PKG-04-Lauf erzeugte zwei bytegleiche Archive mit jeweils
+110.250.920 Byte. Beide Paket-, Worker-, History-/Sidecar- und nativen Smokes
+bestanden; INT-13 bindet SHA-256
+`8a27494c19c1713ccd5104d1ec3dda8abd2e773ceedb47d250befccbe174c3d1`.
+Der kostenbestätigte Lauf `34499428661` baute, prüfte und startete die
+Standalone-Archive zweimal deterministisch auf macOS ARM64 (115.159.211 Byte,
+SHA-256 `e9f54b5b…9f8c6`) und Intel (118.191.466 Byte, SHA-256
+`9061aae7…880e9`). Lauf `34501324817` erzeugte und validierte die drei
+selbsttragenden Cowork-Plugin-ZIPs für Windows x64 und beide Mac-Architekturen.
+Das ist technische E0-Paketevidence, aber noch keine N3/N4- oder weitere Zielhostfreigabe
+und insbesondere keine sichtbare Fresh-Install- oder
+Anwenderabnahme.
 
 Der letzte veröffentlichte technische Produktkandidat bleibt RC131. Die
 selbsttragenden Standalone- und Cowork-Zielpakete seines Quellcommits `d4d269b`
 wurden auf Windows x64 sowie macOS Intel/ARM gebaut und technisch geprüft;
 Windows-PKG-04 und INT-13 sind an RC131 gebunden. Diese Veröffentlichung als
 Vorabrelease ersetzt weder die noch offene sichtbare N3/N4-UAT noch eine
-Produktionsfreigabe. Die lokale RC134-Windows-Bindung macht RC134 noch nicht zum
-veröffentlichten plattformübergreifenden Kandidaten; Cowork- und macOS-Pakete
-benötigen ihre eigenen commitgebundenen Zielhostläufe.
+Produktionsfreigabe. Auch die vollständige technische RC135-Paketmatrix macht
+RC135 ohne ausdrückliche Veröffentlichung und menschliche N3/N4-Abnahme noch
+nicht zum veröffentlichten plattformübergreifenden Kandidaten.
 
 ## Nutzerprodukt
 

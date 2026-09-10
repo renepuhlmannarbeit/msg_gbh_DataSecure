@@ -13,6 +13,18 @@ maschinengeprüfter Zwei-Personen-Ablauf für Windows x64 und einen Mac sind E0
 fertig. Die leeren `NOT_RUN`-Protokolle sind keine Evidence. Ein einzelner Mac
 belegt nur seine tatsächliche Intel- oder ARM64-Architektur.
 
+RC135 bindet den aktuellen Funktions- und Evidence-Stand an den sauberen,
+veröffentlichten Commit `9c2e4f9061dbdc3cd1bf0280d95939528029c978`.
+Windows-PKG-04/INT-13 belegen zwei bytegleiche Standalone-ZIPs zu 110.250.920
+Byte mit SHA-256 `8a27494c…c3d1` sowie beide Paket-, Worker-, History-/Sidecar-
+und nativen Smokes. Lauf `34499428661` belegt für Standalone den zweimal
+bytegleichen nativen Build, Signatur-/Architekturcheck und App→IPC→Core-Start
+auf macOS ARM64 (`e9f54b5b…9f8c6`) und Intel (`9061aae7…880e9`). Lauf
+`34501324817` erzeugt und validiert die selbsttragenden Cowork-ZIPs für Windows
+x64 (`62796e6f…d1cdb`), macOS ARM64 (`38301698…233fd`) und macOS Intel
+(`1efd4cc4…e1395`) aus demselben Commit. Sichtbare N3/N4-, Fresh-Install-,
+Finder-/Explorer-, Cowork- und Accessibility-Evidence bleibt offen.
+
 RC134 bindet DS-098 und den RC133-Funktionsstand an Commit
 `583d71929a279fb57370a19c11776fc54aebc2d0`. Zwei saubere Windows-Paketbauten
 sind als ZIP, Desktop- und Core-Binary bytegleich; beide Paket-, Worker- und
@@ -199,7 +211,7 @@ INT-13-Bindung liegen unter `dist/pkg-04/b543589f3250a6ab57ddd5bc3a144f03a24ee02
 | BL-022.2/3, BL-023.1–4, BL-024.3 | Cowork-XLSX/PPTX ist gemäß DS-093 E0 aktiv; nur Cowork-PDF/Scan-PDF/Bilder bleibt NO-GO. Reine Standalone-Konvertierung und Markdown-first-Anonymisierung von XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP ist im isolierten Produktworker integriert; Originalwerte bleiben im Nur-Konvertieren-Modus, unvollständige Coverage/OCR wird in beiden Modi mit festen Gründen statt als vollständiger Originalcontainer ausgewiesen. RC111 validiert sämtliche PPTX-XML-/RELS-Teile, stoppt PDF-Annotationen/Outline/XMP und erhält standardisierte PDF-Metadaten sichtbar. Standardskonforme In-Memory-PDFs prüfen den echten paketierten Parser zusätzlich gegen AcroForm, Signaturfeld, EmbeddedFile/Name-Tree, JavaScript sowie leeres und nichtleeres Benutzerpasswort; die dabei aufgedeckte PDF.js-`Map`-Repräsentation von Anhängen ist im Produktgate geschlossen. Scan plus Seitenzahl, Privacy-Übergabe und gebündelte Offline-Decoder/Modelle sind regressionsgeprüft; `OCR_TEXT_EMPTY` bezeichnet nur eine insgesamt textleere Extraktion und stoppt nicht mehr vorhandenen nativen PDF-Text wegen einer einzelnen textlosen Bildfläche. Bestätigtes Ende oder `CONVERSION_TERMINATION_UNCONFIRMED`; 60 frühe Windows-Kills prüfen atomare Jobzuweisung | E1/E3; vollständige Objekt-/Layout-/OCR-Coverage des Originalcontainers bleibt eigenständig offen |
 | BL-031.1 | Kontext- und Regressionskorpus | IT-/Health-IT-Fachprüfung E3 |
 | BL-041.1–9, BL-044.1, BL-049.1, BL-050.3 | Tool-, Picker-, Handoff-, Recovery- und Performanceverträge; stdio-JSON-RPC vor dem Parsen auf 1 MiB je Frame begrenzt und nach Überschreitung wieder synchronisiert. BL-044.1 ist als direkte lokale Windows-Mikromessung mit 201 Kandidaten/20 Verzeichnissen quantifiziert (p95 77,142 ms; lokales Referenzbudget 250 ms). Ein dauerhafter Cache ist auf diesem Host nicht indiziert. | aktuelle Cowork-/OS-/UX-/Security-Evidenz E1/E2/E3; End-to-End-Admission sowie UNC-/Sync-Root-Gegenprobe |
-| BL-051.1–6 | ZIP-/Marketplace-/Paketgates lokal; aktueller Windows-Paketnachweis RC134/`583d7192`, ZIP-SHA-256 `cdc2ec38…de0c`; UAT-Vertrag trennt den 100-Dateien-Funktionsfall vom zusätzlichen 200-Dateien-/500-MiB-Grenznachweis | Fresh Install, Update, Rollback, Hostmatrix sowie versionsneuer 200-Dateien- und 500-MiB-Lauf E1/E2 |
+| BL-051.1–6 | ZIP-/Marketplace-/Paketgates lokal; aktueller Windows-Paketnachweis RC135/`9c2e4f90`, ZIP-SHA-256 `8a27494c…c3d1`; native Standalone-Mac-Pakete und drei Cowork-Zielpakete stammen aus demselben Commit; UAT-Vertrag trennt den 100-Dateien-Funktionsfall vom zusätzlichen 200-Dateien-/500-MiB-Grenznachweis | Fresh Install, Update, Rollback, Hostmatrix sowie versionsneuer 200-Dateien- und 500-MiB-Lauf E1/E2 |
 | BL-052.1–5 | synthetisches UAT-Kit und leere Evidenzvorlage | benannte Anwender-, Fach-, Datenschutz-, UX-, Architektur- und Securityrollen |
 
 Die Linux-x64-E0-Zelle ist durch Lauf

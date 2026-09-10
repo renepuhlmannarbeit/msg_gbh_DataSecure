@@ -1,6 +1,37 @@
 # Aktueller Iststand
 
-Stand: 10.09.2026 · 3.2.0-rc135 · Windows-PKG-04/INT-13 gebunden; N3/N4 und weitere Zielhosts offen
+Stand: 10.09.2026 · 3.2.0-rc135 · Windows-PKG-04/INT-13 und native macOS-E0 gebunden; N3/N4 offen
+
+## RC135 – commitgebundene Paketmatrix und gehärtete Release-Evidence
+
+RC135 bindet den konsolidierten RC134-Funktionsstand und die nachfolgende
+Härtung der nativen Evidence-Harnesses an den sauberen, auf `main`
+veröffentlichten Quellcommit
+`9c2e4f9061dbdc3cd1bf0280d95939528029c978`. PKG-04 erzeugte daraus zwei
+bytegleiche Windows-Standalone-ZIPs zu jeweils 110.250.920 Byte; beide Paket-,
+Worker-, History-/Sidecar- und nativen Smokes bestanden. INT-13 bindet das
+Archiv mit SHA-256
+`8a27494c19c1713ccd5104d1ec3dda8abd2e773ceedb47d250befccbe174c3d1`.
+
+Der kostenbestätigte GitHub-Lauf `34499428661` baute aus demselben Commit die
+Standalone-App nativ für macOS Apple Silicon und Intel, startete jeweils App,
+private IPC und Core, prüfte Signatur sowie Binärarchitektur und erzeugte jedes
+Distributionsarchiv zweimal bytegleich. Das ARM64-ZIP hat 115.159.211 Byte und
+SHA-256 `e9f54b5bf1178050be36b774b7aebcfb145678d678a0dc9337e0fe802b99f8c6`;
+das Intel-ZIP hat 118.191.466 Byte und SHA-256
+`9061aae7d75078d6a230df4b6c1843f20e242213308c33579edb6b15f16880e9`.
+
+Der Cowork-Lauf `34501324817` erzeugte und validierte ebenfalls aus demselben
+Commit die drei selbsttragenden Plugin-ZIPs: Windows x64 mit 35.041.604 Byte
+und SHA-256 `62796e6f8f0d7cf295800776e805a5e53d5c7d785e3cf8d1002f14d852ad1cdb`,
+macOS ARM64 mit 38.797.037 Byte und SHA-256
+`38301698449c74dd017399d3fa243d3cce7fa2007a1943d6ee88d5f85b0233fd`
+sowie macOS Intel mit 39.781.289 Byte und SHA-256
+`1efd4cc4e590abbded540ad8be513891b69f3be8f39ee1bb327e2912668e1395`.
+Diese E0-Paketnachweise ersetzen keine sichtbare Fresh-Install-, Finder-/
+Explorer-, Cowork- oder Accessibility-Abnahme. N3 und N4 bleiben offen; RC131
+bleibt bis zu einer ausdrücklichen Veröffentlichung der letzte dauerhaft über
+GitHub Releases angebotene Vorabkandidat.
 
 ## RC134 – gebundene zweckabhängige DOCX-Kopf-/Fußprojektion
 
