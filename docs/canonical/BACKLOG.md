@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 10.09.2026 · Produktstand 3.2.0-rc133
+Stand: 10.09.2026 · Produktstand 3.2.0-rc134
 
 Dies ist die **einzige aktive Arbeitsliste**. Handlungsbedarf entsteht nur aus
 den Storytabellen und ihren ausdrücklich genannten Resten. Die nachfolgenden

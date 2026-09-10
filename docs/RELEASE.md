@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 10.09.2026 · 3.2.0-rc133
+Stand: 10.09.2026 · 3.2.0-rc134
 
 Der aktuelle Quellstand ist der auf Windows x64 technisch paketgebundene
 RC133-Kandidat für das Cowork-Plugin und die Standalone-App. Der lokale

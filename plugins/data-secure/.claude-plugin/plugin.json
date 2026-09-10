@@ -1,7 +1,7 @@
 {
   "name": "data-secure",
   "displayName": "GBH DataSecure – Dokumente anonymisieren",
-  "version": "3.2.0-rc133",
+  "version": "3.2.0-rc134",
   "description": "Lokale De-Identifizierung von TXT-, Markdown-, CSV-, DOCX-, XLSX- und PPTX-Geschäftsdokumenten, bevor Claude deren bereinigten Markdown-Text verarbeitet.",
   "author": {
     "name": "Geschäftsbereich Healthcare, msg systems ag"
