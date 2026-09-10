@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 10.09.2026 · RC133-Basis und spätere, jeweils neu gebundene Kandidaten
+Stand: 10.09.2026 · RC134-Basis und spätere, jeweils neu gebundene Kandidaten
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -8,10 +8,12 @@ denselben festgeschriebenen Commit. Die Testfälle selbst bleiben in den
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC133 bleibt der letzte gebundene Kandidat. Der danach implementierte DOCX-
-Vertrag DS-098 (Kopf-/Fußzeilen nur bei Anonymisierung auslassen) gehört erst zu
-einem neu gebauten und im Kampagnenmanifest gebundenen Folgekandidaten. Eine
-Abnahme darf diese Änderung nicht rückwirkend RC133 zuschreiben.
+RC134 ist der aktuelle lokal Windows-PKG-04-/INT-13-gebundene Kandidat und
+enthält den DOCX-Vertrag DS-098: Kopf-/Fußzeilen bleiben bei reiner Konvertierung
+erhalten und werden nur bei Anonymisierung ausgelassen. Eine formale Kampagne
+beginnt dennoch erst, wenn auch die benötigten Cowork- und Mac-Pakete aus
+demselben Commit im Kampagnenmanifest gebunden sind. RC133 bleibt historische
+Evidence und darf nicht umetikettiert werden.
 
 ## Was N3 und N4 bedeuten
 
@@ -36,9 +38,9 @@ macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
 
 ## Vorbereitung durch die Release-Koordination
 
-1. `main` muss sauber sein; vollständigen Produkt-Commit mit `git rev-parse HEAD`
-   als Kandidat festschreiben. Ab diesem Zeitpunkt den Kandidaten nicht mehr
-   verändern.
+1. `npm run test:version-truth` muss grün sein. Danach muss `main` sauber sein;
+   vollständigen Produkt-Commit mit `git rev-parse HEAD` als Kandidat
+   festschreiben. Ab diesem Zeitpunkt den Kandidaten nicht mehr verändern.
 2. Aus genau diesem Commit die zielsystemspezifischen Standalone- und
    Cowork-Pakete bauen. Quell-ZIPs oder Pakete eines anderen Commits sind
    unzulässig.

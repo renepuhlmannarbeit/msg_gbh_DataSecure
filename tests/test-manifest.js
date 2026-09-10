@@ -72,6 +72,18 @@ test('version synchronization changes release labels without relabelling histori
     'version sync may change only the explicit current release-truth role');
   assert.match(script, /\(\?=\[\^\\n\]\*\$\)/u,
     'version headers with a product suffix must remain synchronizable');
+  assert.match(script, /--check/u,
+    'version truth must support a non-mutating CI check');
+  assert.match(script, /target === previous \? currentRole : 'Entwicklungsstand'/u,
+    'checking a bound version must preserve its candidate role');
+});
+
+test('documentation CI always verifies version and release truth first', () => {
+  assert.strictEqual(pkg.scripts['test:version-truth'], 'node scripts/set-version.mjs --check');
+  assert.match(pkg.scripts['test:docs:fast'], /^npm run test:version-truth &&/u);
+  const release = readText(path.join(root, 'docs', 'RELEASE.md'));
+  assert.match(release, /Jeder neue RC beginnt mit `npm run version:sync -- <version>`/u);
+  assert.match(release, /`npm run test:version-truth` grün/u);
 });
 
 test('no runtime module hard-codes a version literal of its own', () => {

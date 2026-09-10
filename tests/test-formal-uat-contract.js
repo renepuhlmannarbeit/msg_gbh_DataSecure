@@ -24,7 +24,8 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.match(overview, /Ein einzelner Mac schließt nur seine reale Architektur/u);
   assert.match(overview, /Standalone muss offline funktionieren/u);
   assert.match(overview, /Cowork benötigt Claude Desktop und\s+Internet/u);
-  assert.match(overview, /RC133 bleibt der letzte gebundene Kandidat/u);
+  assert.match(overview, /RC134 ist der aktuelle lokal Windows-PKG-04-\/INT-13-gebundene Kandidat/u);
+  assert.match(overview, /npm run test:version-truth/u);
   assert.match(overview, /S01.S23 einschließlich S14a/u);
 });
 

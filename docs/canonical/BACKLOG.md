@@ -28,7 +28,25 @@ Abschnitt B enthält ausschließlich menschliche beziehungsweise
 zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
 und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
 
-### RC133 – versionierter Paket- und Testkandidat
+### RC134 – zweckgebundene DOCX-Projektion und Windows-Paketbindung
+
+DS-098 trennt nach vollständiger struktureller DOCX-Prüfung die sichtbare
+Projektion nach Zweck: reine Konvertierung behält Kopf-/Fußzeilen; die
+Anonymisierung lässt sie sowie nur dort referenzierte Bilder aus, erhält aber
+Haupttext, Kommentare, Fuß- und Endnoten. Die bewusste Inhaltsgrenze wird nicht
+als Extraktionsfehler ausgegeben. Zusätzlich ist die aktuelle Releasewahrheit
+dauerhaft abgesichert: `version:sync` aktualisiert den neuen Entwicklungs-RC,
+`test:version-truth` läuft in `test:docs`, historische Evidence bleibt
+unverändert und eine erfolgte Paketbindung wird nicht zurückgestuft.
+
+Der saubere Commit `583d719` bestand die vollständigen Produkt-, Standalone-,
+Dokumentations-, Engineering-, Conversion- und Auditgates. Zwei unabhängig
+bereinigte Windows-Paketbauten sind als ZIP, Desktop- und Core-Binary bytegleich;
+beide Paket-, Worker- und nativen Smokes bestanden. INT-13 bindet das
+110.250.875 Byte große Archiv mit SHA-256 `cdc2ec38…6de0c`. Offen bleiben
+N3/N4, aktuelle Cowork-Pakete sowie macOS-/Linux-Zielhostevidenz.
+
+### RC133 – historischer versionierter Paket- und Testkandidat
 
 Der RC132-Funktionsstand ist als RC133 aus Commit `2cd4150` geschnitten und auf
 `main` veröffentlicht. Zwei unabhängig bereinigte Windows-Paketbauten sind

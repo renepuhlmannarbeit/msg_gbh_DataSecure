@@ -2,7 +2,7 @@
 
 Stand: 10.09.2026 · 3.2.0-rc134 · Windows-PKG-04/INT-13 gebunden; N3/N4 und weitere Zielhosts offen
 
-## Ungebundener Arbeitsstand – zweckgebundene DOCX-Kopf-/Fußprojektion
+## RC134 – gebundene zweckabhängige DOCX-Kopf-/Fußprojektion
 
 Nach DS-098 bleibt die vollständige DOCX-Strukturprüfung unverändert streng,
 aber die sichtbare Projektion unterscheidet den Zweck. Reine
@@ -10,10 +10,16 @@ Markdown-Konvertierung erhält Kopf- und Fußzeilen. Cowork- und
 Standalone-Anonymisierung geben diese Bereiche und ausschließlich dort
 referenzierte Bilder nicht mehr aus; Hauptteil, Kommentare, Fußnoten und
 Endnoten bleiben im geprüften Markdown. Ein fester, inhaltsfreier
-Quellenabdeckungsgrund weist den eingeschränkten Ergebnisumfang ehrlich aus.
+Quellenabdeckungsgrund beschreibt den bewusst eingeschränkten Ergebnisumfang,
+ohne ihn fälschlich als unvollständige Extraktion zu bezeichnen.
 PDF-/Scan-PDF-Seitenränder und PPTX-Master werden nicht heuristisch entfernt.
-Parser-, Worker-, Orchestrator- und reale DOCX-Gegenläufe sind Teil des noch zu
-bindenden Nachweises; RC133 selbst bleibt unverändert.
+Parser-, Worker-, Orchestrator- und reale DOCX-Gegenläufe sind grün. Der saubere
+Quellcommit `583d71929a279fb57370a19c11776fc54aebc2d0` bestand PKG-04 mit zwei
+bytegleichen Windows-ZIPs zu 110.250.875 Byte; beide Paket-, Worker- und nativen
+Smokes sowie die Desktop-/Core-Hashvergleiche sind grün. INT-13 bindet SHA-256
+`cdc2ec38c7346217a1de21ec9a5137895ded9fe4322dd5cb16f06a599dd6de0c`.
+N3/N4, aktuelle Cowork-Zielpakete und weitere Zielhosts bleiben offen; RC133
+bleibt unverändert.
 
 ## RC133 – commitgebundener Testschnitt
 

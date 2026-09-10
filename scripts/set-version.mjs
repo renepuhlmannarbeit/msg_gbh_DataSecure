@@ -14,7 +14,10 @@ const pkgPath = path.join(root, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const previous = pkg.version;
 
-const target = process.argv[2] || pkg.version;
+const arguments_ = process.argv.slice(2);
+const checkOnly = arguments_.includes('--check');
+const explicitTarget = arguments_.find((argument) => argument !== '--check');
+const target = explicitTarget || pkg.version;
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(target)) {
   console.error(`Not a semver version: ${target}`);
   process.exit(1);
@@ -26,7 +29,7 @@ function writeIfChanged(rel, next) {
   const file = path.join(root, rel);
   const current = fs.readFileSync(file, 'utf8');
   if (current === next) return;
-  fs.writeFileSync(file, next, 'utf8');
+  if (!checkOnly) fs.writeFileSync(file, next, 'utf8');
   changed.push(rel);
 }
 
@@ -124,8 +127,8 @@ for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md
   patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?(?=[^\n]*$)/mu, `$1${target}`);
 }
 patchText('docs/RELEASE.md',
-  /(Der aktuelle Quellstand ist[^\n]*?)(?:RC\d+)-(?:Kandidat|Entwicklungsstand)/u,
-  `$1${rcLabel(target)}-Entwicklungsstand`);
+  /(Der aktuelle Quellstand ist[^\n]*?)(?:RC\d+)-(Kandidat|Entwicklungsstand)/u,
+  (_, prefix, currentRole) => `${prefix}${rcLabel(target)}-${target === previous ? currentRole : 'Entwicklungsstand'}`);
 patchText('docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
   /^(Stand:[^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?$/mu,
   `$1${target}`);
@@ -164,7 +167,8 @@ patchText(
 
 console.log(`version ${target}`);
 if (changed.length) {
-  for (const rel of changed) console.log(`  updated ${rel}`);
+  for (const rel of changed) console.log(`  ${checkOnly ? 'out of sync' : 'updated'} ${rel}`);
+  if (checkOnly) process.exitCode = 1;
 } else {
   console.log('  all files already in sync');
 }

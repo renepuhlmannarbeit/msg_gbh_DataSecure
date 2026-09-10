@@ -2,22 +2,24 @@
 
 Stand: 10.09.2026 · 3.2.0-rc134
 
-Der aktuelle Quellstand ist der noch nicht paketgebundene RC134-Entwicklungsstand
-für das Cowork-Plugin und die Standalone-App. Sein PKG-04-/INT-13-Nachweis wird
-erst aus dem abschließend geprüften RC134-Commit erzeugt. Der letzte lokale
-Windows-Paketnachweis gehört weiterhin zum RC133-Kandidaten: Der Standalone-
-PKG-04-Lauf aus Commit `2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`
-erzeugte zwei bytegleiche Archive; beide Paket-, Worker- und nativen Smokes
-bestanden. INT-13 bindet dieses Windows-Archiv mit SHA-256
-`fd3dcb1b0f99940a110857c085793b70930454571ffda3a7e5d8565a997ece66`.
-Das ist noch keine N3/N4- oder weitere Zielhostfreigabe.
+Der aktuelle Quellstand ist der lokal paketgebundene RC134-Kandidat für das
+Cowork-Plugin und die Standalone-App. Der Windows-PKG-04-Lauf stammt aus dem
+sauberen Quellcommit `583d71929a279fb57370a19c11776fc54aebc2d0`.
+PKG-04 erzeugte zwei bytegleiche Archive mit jeweils 110.250.875 Byte. Beide
+Paket-, Worker- und
+nativen Smokes bestanden; auch Desktop- und Core-Binaries sind bytegleich.
+INT-13 bindet dieses Windows-Archiv mit SHA-256
+`cdc2ec38c7346217a1de21ec9a5137895ded9fe4322dd5cb16f06a599dd6de0c`.
+Das ist noch keine N3/N4- oder weitere Zielhostfreigabe; ein aktuelles
+Cowork-Paket ist damit ebenfalls noch nicht belegt. RC133 bleibt unveränderte
+historische Evidence.
 
 Der letzte veröffentlichte technische Produktkandidat bleibt RC131. Die
 selbsttragenden Standalone- und Cowork-Zielpakete seines Quellcommits `d4d269b`
 wurden auf Windows x64 sowie macOS Intel/ARM gebaut und technisch geprüft;
 Windows-PKG-04 und INT-13 sind an RC131 gebunden. Diese Veröffentlichung als
 Vorabrelease ersetzt weder die noch offene sichtbare N3/N4-UAT noch eine
-Produktionsfreigabe. Die lokale RC133-Windows-Bindung macht RC133 noch nicht zum
+Produktionsfreigabe. Die lokale RC134-Windows-Bindung macht RC134 noch nicht zum
 veröffentlichten plattformübergreifenden Kandidaten; Cowork- und macOS-Pakete
 benötigen ihre eigenen commitgebundenen Zielhostläufe.
 
@@ -81,6 +83,18 @@ Releaseauswahl. PKG-04/INT-13, beide macOS-Architekturen, Security, SBOM und
 Prüfsummen bleiben verpflichtend, sobald genau dieser Commit als neuer
 veröffentlichter Kandidat angeboten wird. Ein nachfolgender reiner
 Dokumentationscommit erfordert keinen Neubau unveränderter Binärartefakte.
+
+## Verbindliche Versions- und Releasewahrheit
+
+Jeder neue RC beginnt mit `npm run version:sync -- <version>`. Der Befehl setzt
+alle aktiven Versionsköpfe und Manifeste gemeinsam fort, kennzeichnet nur einen
+tatsächlich neuen RC als Entwicklungsstand und verändert keine historische
+Commit-/Paket-Evidence. Vor Commit, Paketbau und Dokumentationsabschluss muss
+`npm run test:version-truth` grün sein; derselbe Check ist Bestandteil von
+`test:docs` und damit des automatischen Pflichtgates. Nach bestandenem PKG-04
+wird ausschließlich der exakt gebundene RC in diesem Vertrag als Kandidat mit
+Commit, Archivgröße und SHA-256 dokumentiert. Ein älterer RC darf nie als
+aktueller Quellstand stehen bleiben.
 
 ## Produktbuild
 

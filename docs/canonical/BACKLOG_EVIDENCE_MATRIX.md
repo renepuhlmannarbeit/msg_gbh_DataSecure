@@ -13,6 +13,16 @@ maschinengeprüfter Zwei-Personen-Ablauf für Windows x64 und einen Mac sind E0
 fertig. Die leeren `NOT_RUN`-Protokolle sind keine Evidence. Ein einzelner Mac
 belegt nur seine tatsächliche Intel- oder ARM64-Architektur.
 
+RC134 bindet DS-098 und den RC133-Funktionsstand an Commit
+`583d71929a279fb57370a19c11776fc54aebc2d0`. Zwei saubere Windows-Paketbauten
+sind als ZIP, Desktop- und Core-Binary bytegleich; beide Paket-, Worker- und
+nativen Smokes bestanden. PKG-04 und INT-13 binden das 110.250.875 Byte große
+Archiv mit SHA-256
+`cdc2ec38c7346217a1de21ec9a5137895ded9fe4322dd5cb16f06a599dd6de0c`.
+Automatisierte Produkt-, Dokumentations-, Engineering-, Conversion- und
+Auditgates sind grün. N3/N4 sowie Cowork-/macOS-/Linux-Zielhostevidenz bleiben
+offen.
+
 RC133 bindet den RC132-Funktionsstand und die abschließende Fortsetzungshärtung
 an Commit `2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`. Zwei saubere Windows-
 Paketbauten sind bytegleich; beide Paket-, Worker-, History-/Sidecar- und

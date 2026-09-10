@@ -6,7 +6,17 @@ Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detailli
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
 
-RC133 bindet die nachfolgenden RC132-/DS-097-Verträge an den sauberen Quellcommit
+RC134 bindet DS-098 und die nachfolgenden RC133-/RC132-Verträge an den sauberen
+Quellcommit `583d71929a279fb57370a19c11776fc54aebc2d0`. Der lokale Windows-
+PKG-04-Lauf erzeugte zwei bytegleiche Archive und bestand beide Paket-, Worker-
+und nativen Smokes; Desktop- und Core-Binaries sind ebenfalls bytegleich.
+INT-13 referenziert SHA-256
+`cdc2ec38c7346217a1de21ec9a5137895ded9fe4322dd5cb16f06a599dd6de0c`.
+`set-version.mjs`, `test:version-truth`, `test-manifest.js` und das
+Dokumentationsgate binden die aktive Versions-/Releasewahrheit, ohne historische
+Evidence umzuschreiben.
+
+RC133 bindet die RC132-/DS-097-Verträge an den sauberen Quellcommit
 `2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`. Der lokale Windows-PKG-04-Lauf
 erzeugte zwei bytegleiche Archive und bestand beide Paket-, Worker-, History-/
 Sidecar- und nativen Smokes. INT-13 referenziert SHA-256
