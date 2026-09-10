@@ -66,6 +66,7 @@ const { createPrivateWorkStore } = require('./private-work-store');
 const { migrateLegacyBatchState } = require('./batch-private-artifact-migration');
 const {
   createBatchPseudonymState,
+  validateBatchPseudonymState,
   withBatchPseudonymRegistry
 } = require('../batch-pseudonym-context');
 
@@ -73,6 +74,23 @@ const active = new Set();
 const RETRYABLE_CODES = new Set(['REQUEST_CANCELLED', 'PARSER_TIMEOUT', 'PARSER_START_FAILED',
   'CONVERSION_TIMEOUT', 'CONVERSION_START_FAILED',
   'PROCESSING_INTERRUPTED', 'LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE']);
+
+function recoverableWithCurrentPolicy(state) {
+  try {
+    if (processingModeForBatch(state) === 'markdown-only') return true;
+    // Published delivery and already committed mapping debt are independent
+    // projections; they do not reopen privacy processing and remain safely
+    // repairable after a detector/pseudonym ruleset upgrade.
+    const needsPrivacyContext = state.items.some((item) =>
+      ['pending', 'processing', 'retryable', 'deferred_review'].includes(item.status));
+    if (!needsPrivacyContext) return true;
+    const seed = validateBatchPseudonymState(state);
+    seed.fill(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const DELIVERY_PENDING = 'delivery_pending';
 const DEFERRED_REVIEW = 'deferred_review';
 const MAPPING_PENDING = 'mapping_pending';
@@ -320,7 +338,8 @@ const {
   deliveryPendingStatus: DELIVERY_PENDING,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
-  preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING
+  preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING,
+  recoverableState: recoverableWithCurrentPolicy
 });
 
 const { discardIncompleteBatches } = createBatchDiscard({
@@ -650,6 +669,7 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   incrementPrivateIoSummary,
   processBatchNext,
   finalizePublishedPackageLocally,
+  cleanupTerminalWorkCopy,
   writeTerminalEvidence,
   releaseLocalBatchExecutor(token, pid) {
     const released = releaseLocalBatchExecutor(token, pid);
@@ -657,6 +677,7 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
     return released;
   },
   deliveryPendingStatus: DELIVERY_PENDING,
+  retryableCodes: RETRYABLE_CODES,
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 

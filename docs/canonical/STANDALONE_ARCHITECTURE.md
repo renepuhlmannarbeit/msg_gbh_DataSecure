@@ -1,6 +1,6 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 07.09.2026 · Entscheidungen DS-075 bis DS-091 · Steuerung über BL-010.9
+Stand: 10.09.2026 · Entscheidungen DS-075 bis DS-097 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
 
@@ -74,6 +74,15 @@ jeweils laufgebundenen Ergebnis-/Zuordnungs- und Fortsetzungsaktionen. Der
 Backendzustand wird vor jeder Aktion erneut geprüft; Fortsetzung übernimmt
 keine Betriebsart aus der aktuellen Eingabemaske. Die Anzeigegrenze entfernt
 keine Exporte. Innerhalb dieser Navigation bestehen folgende Arbeitszustände:
+
+Ein alter Anonymisierungslauf ist nur fortsetzbar, wenn sein gespeicherter
+Pseudonym-/Policykontext zur aktuellen Engine passt. Andernfalls bleibt er als
+fehlgeschlagener Historieneintrag sichtbar und verlangt eine neue Auswahl; er
+blockiert weder Funktionswahl noch Picker oder Drag-and-drop. Eine reine
+Konvertierung und bereits veröffentlichte Export-/Zuordnungsschuld benötigen
+keine erneute Privacy-Ausführung und bleiben unabhängig reparierbar. Der
+Fortsetzen-Klick meldet nur die Workerannahme und liest danach den dauerhaften
+Laufstatus neu.
 
 1. **Auswahl:** `Dateien auswählen`, `Ordner auswählen`, Drag-and-drop,
    einzelne Dateien entfernen, explizites `Starten` oder die gesamte
@@ -164,6 +173,12 @@ optionale Support-CLI rufen die neutrale Application API direkt auf. Der
 aktuelle E0-Unterbau erfüllt diese Trennung bereits: der frühere RPC-Prototyp
 wurde verworfen, und ein eigener `standalone`-Datenroot wird vor dem Laden der
 Engine festgelegt.
+
+Nach DS-097 bedeutet diese Produkttrennung weder eine zweite Kopie des Privacy-
+Kerns noch dauerhafte Windows-/macOS-Entwicklungsbranches. Ein gemeinsamer
+Commit speist getrennte Produktpakete und Zieljobs. Cowork-/Standalone- sowie
+Windows-/macOS-/Linux-Varianten liegen ausschließlich in schmalen Adaptern;
+gemeinsame Verarbeitung gehört unter die neutrale Processing-API.
 
 Die Endnutzerpakete sind getrennt: Standalone enthält kein Pluginmanifest,
 keine Skills, keine Prompts und keine Claude-/MCP-Laufzeit. Es erhält ein

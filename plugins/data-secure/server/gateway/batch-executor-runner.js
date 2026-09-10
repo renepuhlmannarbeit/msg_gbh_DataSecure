@@ -3,6 +3,7 @@
 const { SafeError } = require('../runtime');
 const { notProcessedDocumentResult } = require('./document-result-grade');
 const { appendMapping, STOPPED } = require('./mapping');
+const { classifyPrepublicationError, applyRetryBudget } = require('./prepublication-error');
 
 function createBatchExecutorRunner(options = {}) {
   const ErrorType = options.SafeError || SafeError;
@@ -17,26 +18,84 @@ function createBatchExecutorRunner(options = {}) {
   const finalizePublishedPackageLocally = options.finalizePublishedPackageLocally;
   const writeTerminalEvidence = options.writeTerminalEvidence;
   const releaseLocalBatchExecutor = options.releaseLocalBatchExecutor;
+  const cleanupTerminalWorkCopy = options.cleanupTerminalWorkCopy || (() => {});
+  const retryableCodes = options.retryableCodes || new Set();
   const appendStoppedMapping = options.appendMapping || appendMapping;
   const stoppedMappingStatus = options.stoppedMappingStatus || STOPPED;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const maxBatchFiles = options.maxBatchFiles || 100;
 
+  function isPureConversion(state) {
+    return state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' &&
+      state.product_channel === 'standalone';
+  }
+
+  // A worker-level exception can happen outside the per-document catch, for
+  // example while restoring a policy-bound pseudonym context. Leaving the
+  // claimed item as `pending` or `processing` would advertise an endless
+  // Continue loop. Convert every still-open item into the same bounded error
+  // policy used by the normal item processor. Published and mapping-only work
+  // is deliberately untouched because it has its own idempotent recovery.
+  function stabilizeUnhandledFailure(token, error) {
+    const state = readState(token);
+    const conversion = isPureConversion(state);
+    const affected = state.items.filter((item) => ['pending', 'processing', 'retryable'].includes(item.status));
+    if (!affected.length) return;
+    const stopped = [];
+    for (const item of affected) {
+      const classified = applyRetryBudget(item, classifyPrepublicationError(error, retryableCodes));
+      item.status = classified.retryable ? 'retryable' : 'stopped';
+      item.checkpoint = classified.retryable ? 'retryable' : 'stopped';
+      item.error_code = classified.code;
+      delete item.processing_started_at_ms;
+      if (item.status !== 'stopped') continue;
+      item.document_result = notProcessedDocumentResult(classified.code);
+      // Markdown-only intentionally has no mapping. Mark that projection as
+      // satisfied so a failed conversion can never become mapping-recoverable.
+      item.local_mapping_exported = conversion;
+      item.work_copy_cleanup_pending = true;
+      stopped.push(item);
+    }
+    // The terminal/retry decision is the authoritative commit. Mapping and
+    // work-copy cleanup are independent, retryable projections after it.
+    writeState(state);
+    for (const item of stopped) {
+      if (!conversion) {
+        try {
+          appendStoppedMapping(item.source_label || item.name, '', stoppedMappingStatus, {
+            mappingReference: item.id, documentResult: item.document_result
+          });
+          item.local_mapping_exported = true;
+        } catch { /* explicit mapping debt remains recoverable */ }
+      }
+      try {
+        cleanupTerminalWorkCopy(state, item);
+        item.work_copy_cleanup_pending = false;
+      } catch { item.work_copy_cleanup_pending = true; }
+      writeState(state);
+    }
+    if (publicProgress(state).complete === true && typeof writeTerminalEvidence === 'function') {
+      writeTerminalEvidence(state);
+    }
+  }
+
   function stopUnstartedConversionItems(token) {
     const state = readState(token);
+    const conversion = isPureConversion(state);
     const pending = state.items.filter(item => ['pending', 'retryable'].includes(item.status));
     for (const item of pending) {
       item.status = 'stopped';
       item.checkpoint = 'stopped';
       item.error_code = 'CONVERSION_TERMINATION_UNCONFIRMED';
       item.document_result = notProcessedDocumentResult(item.error_code);
-      item.local_mapping_exported = false;
+      item.local_mapping_exported = conversion;
       item.work_copy_cleanup_pending = true;
     }
     // Commit all non-start decisions before materialising their local mapping.
     // This is not proof that the preceding native process was terminated.
     if (pending.length) writeState(state);
     for (const item of pending) {
+      if (conversion) continue;
       try {
         appendStoppedMapping(item.source_label || item.name, '', stoppedMappingStatus, {
           mappingReference: item.id, documentResult: item.document_result
@@ -57,10 +116,13 @@ function createBatchExecutorRunner(options = {}) {
     }
     let lastProgress = publicProgress(claimed);
     let interrupted = false;
+    let lifecycleEntered = false;
+    let primaryError = null;
     try {
       if (!Array.isArray(claimed.items) || claimed.items.length < 1 || claimed.items.length > maxBatchFiles) {
         throw new ErrorType('Der lokale Stapelzustand ist ungültig.');
       }
+      lifecycleEntered = true;
       // Expensive but mandatory housekeeping is established exactly once for a
       // claimed local batch. The opaque capability remains process-local.
       const conversion = claimed.schema === 'datasecure-batch/5' && claimed.processing_mode === 'markdown-only' && claimed.product_channel === 'standalone';
@@ -106,9 +168,20 @@ function createBatchExecutorRunner(options = {}) {
         const after = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
         if (before === after) break;
       }
+    } catch (error) {
+      primaryError = error;
+      if (lifecycleEntered) {
+        try { stabilizeUnhandledFailure(token, error); }
+        catch { /* preserve the primary failure; recovery will see the last durable state */ }
+      }
+      throw error;
     } finally {
-      if (releaseLocalBatchExecutor(token, executorPid) !== true) {
-        throw new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.');
+      try {
+        if (releaseLocalBatchExecutor(token, executorPid) !== true && !primaryError) {
+          throw new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.');
+        }
+      } catch (releaseError) {
+        if (!primaryError) throw releaseError;
       }
     }
     // Publication and stopped-item paths already attempt this commit. Reconcile

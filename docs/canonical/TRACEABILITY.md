@@ -20,6 +20,21 @@ dauerhaften einmaligen Ordnerhinweis. PDF-Goldenobjekte laufen durch den echten
 paketierten Parser und binden auch dessen `Map`-Rückgabe. Paket-/INT-13- und
 Zielhostevidenz ist ausdrücklich noch nicht RC132-gebunden.
 
+DS-097 bindet die Resume-Capability an `batch.js` und `batch-recovery.js`:
+offene Privacy-Arbeit ist nur mit aktuellem Pseudonym-/Policykontext sichtbar
+fortsetzbar; reine Konvertierung und nachgelagerte Projektionsschuld bleiben
+unabhängig. `batch-executor-runner.js`, `batch-worker.js` und
+`batch-executor.js` erhalten feste Ursachencodes und stabilisieren ungefangene
+Fehler nach gültigem Claim über die gemeinsame Retry-Policy. `run-history.js`,
+Standalone-Frontend und Rust-Admission lassen inaktive Historienläufe nicht die
+nächste Auswahl sperren und unterscheiden Workerannahme von Abschluss.
+`test-batch-recovery.js`, `test-batch-executor-runner.js`,
+`test-batch-executor-startup.js`, `test-standalone-history.js`,
+`test-standalone-frontend.js` und die Rust-Unit-Tests bilden die negativen und
+positiven Grenzen. Die Zielarchitektur bindet zwei Produktadapter und drei
+Plattformadapter an einen gemeinsamen Commit; eine weitere physische
+Entkopplung bleibt nur bei konkreter Änderung erforderlich.
+
 RC131 bindet die gemeinsame Wiederaufnahmeregel an
 `gateway/prepublication-error.js`, `batch-item-processor.js`,
 `batch-review-publication.js` und `batch-reconciliation.js`.
@@ -428,6 +443,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-087 | Implementierung E0; Originalcontainer-Coverage und Zielhost-UAT offen | BL-010.30; neutraler `datasecure-source-extraction/1`-Vertrag, Standalone-only-Admission und einmalige Konverterübergabe vor dem unveränderten Privacy-Core. Gültiges, nichtleeres Markdown publiziert nach Privacy-Gates; Quellenextraktionsabdeckung und Anonymisierungsstatus bleiben getrennt. `CONVERSION_TERMINATION_UNCONFIRMED` wird aus den Standalone-Schemata `/5` und `/6` bis in die lokale Statusprojektion getragen. Vertrags-, Orchestrator-, Recovery-, Cross-Produkt- und Produktregressionstests; Cowork-Allowlist unverändert. |
 | DS-090 | RC121-E0; realer Worker-/Paketgegenlauf grün, Zielhost-UAT noch zu binden | BL-010.30; Standalone führt auch DOCX über die neutrale isolierte Markdown-Extraktion. Eine synthetische Custom-XML-DOCX prüft im ausgelieferten Sidecar unvollständige Quellenabdeckung, vollständige Markdown-Anonymisierung, Markdown-escapte E-Mail-Adressen, Residual-Gate, Mapping und Scope-Hinweis. Der Cross-Produkt-Goldenlauf bindet den Standalone-Kanal auch über Vertagung, Sammelreview und spätere Publikation, damit Scope und Coverage nicht auf den direkten Cowork-Pfad zurückfallen. Der echte RC120-Problemfall wird über den gebündelten Konvertierungsworker ohne Aufnahme personenbezogener Quelldaten erfolgreich gegengeprüft. Cowork behält den strengen direkten DOCX-Stoppvertrag. |
 | DS-096 | E0 umgesetzt; E2/E3 offen | BL-021.1; enge unbeschriftete Prosanamen werden vor Aliasersetzung reserviert und im bestehenden Sammelreview als Person anonymisiert oder als Nicht-Person beibehalten. Exakt bekannte vollständige Identitäten werden in Folgedokumenten automatisch mit demselben v1/v2-Pseudonym ersetzt; widersprüchliche Entscheidungen für denselben offenen normalisierten Namen werden abgewiesen. Fachphrasen-Gegenfälle und rohwertfreie Metadaten sind in `privacy/person-ambiguities.js`, `test-pii-regression.js`, `test-gateway-e2e.js`, `test-batch-review-policy.js`, `test-batch-review-model.js` und `test-batch-session.js` gebunden. |
+| DS-097 | E0 umgesetzt; Paket-/Zielhost-UAT offen | BL-010.9/23, BL-010.13, BL-011.8; Resume wird gegen den aktuellen Privacy-/Pseudonymkontext berechnet, Workerfehler werden mit festem Code und gemeinsamem Retrybudget stabilisiert, inaktive Altjournale sperren keine neue Aufnahme. Cowork und Standalone bleiben getrennte Adapter/Distributionen auf einem gemeinsamen Core; Windows, macOS und Linux bleiben Zieladapter aus demselben Commit statt dauerhafter OS-Branches. Recovery-, Runner-, History-, Frontend-, Rust- und Dokumentationsgates. |
 | DS-088 | Implementierung und ungebundener Paket-Smoke E0; commitgebundener Kandidat/Zielhost-UAT offen | BL-010.12/28/29/31, BL-040.5/6; Auswahl vor Start einzeln oder vollständig korrigierbar über geschlossenen IPC/Rust/Service-Vertrag. Reine Konvertate behalten den Basisnamen, lösen Kollisionen deterministisch und erzeugen keine Zuordnungsdatei; Legacy-v3-Exporte bleiben final. Frontend-, IPC-, Export-, History-, Rust- und reale ZIP-Regressionsprüfungen. |
 | DS-089 | aktiv, Namensvorgabe durch DS-091 präzisiert | BL-010.33, BL-044, BL-040.5/6; vollständige Wurzel-relative Standalone-Struktur durch Ordneraufnahme, Queue, Journal und sichtbaren Export. Reine Konvertate behalten den Quellbasisnamen; neue Anonymisierungsläufe folgen der Wahl aus DS-091. Mapping enthält exakt beide relativen Pfade. Segment-/Link-/Swap-Gates, Unit-/Export-/Service-/Legacytests und echter verschachtelter Paketlauf; Cowork und vorhandene Läufe unverändert. |
 | DS-091 | Implementierung E0; Zielhost-UAT offen | BL-010.33; Standalone-Anonymisierung bietet vor Start neutralen Standard oder Quellbasis mit `-anonymisiert`. UI-Hilfe, Rust/IPC/Service/Worker, `datasecure-batch/6`, unveränderliche Recoverybindung und strukturtreuer Export sind geschlossen getestet. Alte v4-Läufe bleiben quellbenannt, Cowork bleibt neutral und reine Konvertierung unverändert. |

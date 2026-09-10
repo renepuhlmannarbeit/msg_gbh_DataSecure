@@ -180,16 +180,27 @@ fn dropped_source_kind(paths: &[PathBuf]) -> Result<&'static str, String> {
     }
 }
 
+fn state_allows_new_admission(state: Option<&str>) -> bool {
+    matches!(
+        state,
+        Some(
+            "ready"
+                | "results_available"
+                | "completed_without_results"
+                | "review_required"
+                | "stopped"
+                | "export_pending"
+        )
+    )
+}
+
 fn admit_native_sources(
     state: &DesktopState,
     paths: &[PathBuf],
     kind: &str,
 ) -> Result<Value, String> {
     let current = rpc(state, "get_public_state", None, &[], None, None)?;
-    if !matches!(
-        current.get("state").and_then(Value::as_str),
-        Some("ready" | "results_available" | "completed_without_results")
-    ) {
+    if !state_allows_new_admission(current.get("state").and_then(Value::as_str)) {
         return Err("STANDALONE_BUSY".to_string());
     }
     let result = rpc(
@@ -1426,6 +1437,24 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inactive_previous_runs_never_block_a_new_selection() {
+        for state in [
+            "ready",
+            "results_available",
+            "completed_without_results",
+            "review_required",
+            "stopped",
+            "export_pending",
+        ] {
+            assert!(state_allows_new_admission(Some(state)), "{state}");
+        }
+        for state in ["preparing", "processing", "blocked", "unknown"] {
+            assert!(!state_allows_new_admission(Some(state)), "{state}");
+        }
+        assert!(!state_allows_new_admission(None));
+    }
 
     #[test]
     fn history_requests_bind_only_exact_batch_ids_without_paths_or_modes() {

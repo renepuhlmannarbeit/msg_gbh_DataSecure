@@ -23,6 +23,7 @@ const reservation = require('../plugins/data-secure/server/gateway/batch-intake-
 const historyStore = require('../plugins/data-secure/server/gateway/standalone-history-store');
 const { createRunHistory } = require('../plugins/data-secure/server/standalone/run-history');
 const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
+const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const now = Date.now();
 const makeHistory = () => createRunHistory({
   readStates: batch.readStandaloneHistoryStates,
@@ -38,6 +39,8 @@ function stateFixture(character, offset = 0, extra = {}) {
     items: [{ id: character.repeat(32), name: 'private-source-name.txt', status: 'retryable',
       error_code: 'PROCESSING_INTERRUPTED', checkpoint: 'stopped' }], ...extra
   };
+  if (state.schema !== 'datasecure-batch/5') Object.assign(state,
+    createBatchPseudonymState({ productChannel: state.product_channel }));
   if (state.product_channel === 'standalone') batch._test.writeState(state);
   else {
     // A foreign negative fixture must not be admitted by the live product

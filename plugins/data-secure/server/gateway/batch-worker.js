@@ -179,13 +179,15 @@ process.once('message', async (message) => {
       await presentTerminalEnvelope(terminalOptions);
     }
     process.exit(0);
-  } catch {
+  } catch (error) {
     if (isNewIntake) releaseIntake(reservationId);
     const stage = checkpointCreated || isExistingBatch ? 'after_checkpoint' : 'before_checkpoint';
     try {
       const terminalOptions = {
         token: message.batch_token,
-        envelope: { type: isNewIntake ? 'local-intake-stopped' : 'local-batch-stopped', stage },
+        envelope: { type: isNewIntake ? 'local-intake-stopped' : 'local-batch-stopped', stage,
+          error_code: /^[A-Z][A-Z0-9_]{2,63}$/u.test(String(error?.code || ''))
+            ? error.code : 'INTERNAL_FAILURE' },
         // Before the checkpoint no journal exists to arbitrate; a live parent
         // acknowledges instead, an absent parent leaves the notice to us.
         reserve: stage === 'after_checkpoint' ? reserveTerminalNotice : () => ({ ok: true, state: 'unavailable', reservation_id: null }),
@@ -193,7 +195,9 @@ process.once('message', async (message) => {
         release: releaseTerminalNoticeReservation,
         present: () => showLocalIntakeNoticeConfirmed(stage),
         record: recordWorkflowEvent,
-        evidence: { event: 'intake_terminal_state', outcome: 'stopped', error_code: 'LOCAL_WORKER_EXITED' }
+        evidence: { event: 'intake_terminal_state', outcome: 'stopped',
+          error_code: /^[A-Z][A-Z0-9_]{2,63}$/u.test(String(error?.code || ''))
+            ? error.code : 'INTERNAL_FAILURE' }
       };
       if (standaloneChannel) {
         await notify(terminalOptions.envelope);

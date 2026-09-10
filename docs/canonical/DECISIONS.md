@@ -1501,3 +1501,30 @@ Technologie-, Methoden-, Rollen- und abstrakte Fachphrasen werden nicht allein
 wegen Großschreibung als Person behandelt. Unentscheidbare Erweiterungen werden
 nicht geraten. DS-096 schließt F7 unter BL-021.1 und präzisiert DS-012, DS-049,
 DS-068 und DS-084.
+
+## DS-097 – Zwei Produktadapter und drei Plattformadapter auf einem gemeinsamen Core
+
+Am 10.09.2026 nach Architektur-, Runtime-, UX- und Recovery-Gegenreview
+festgelegt: Cowork-Plugin und DataSecure Standalone bleiben zwei eigenständige
+Produkte mit getrennten Paketen, Konfigurationen, Datenroots, Oberflächen und
+öffentlichen Verträgen. Sie teilen genau einen neutralen Privacy- und
+Verarbeitungskern hinter einer schmalen lokalen Processing-API. Gemeinsame
+Workflowlogik wird weder in Produktverzeichnisse kopiert noch dauerhaft aus
+`server/standalone/` konsumiert; bei konkreter Änderung wandern solche Module
+in die neutrale Schicht. Ein Big-Bang-Umbau ohne Defectbezug ist ausgeschlossen.
+
+Windows, macOS und Linux werden als kleine Plattformadapter und getrennte
+Build-/Zielhostjobs aus demselben unveränderlichen Commit geführt. Dauerhafte
+OS-Branches sind wegen Drift- und Merge-Risiko kein Entwicklungsmodell;
+kurzlebige Abnahmebranches dürfen ausschließlich Evidence des gebundenen
+Kandidaten aufnehmen.
+
+Wiederaufnahme ist eine neu zu berechnende Capability. Offene
+Anonymisierungsarbeit verlangt einen zur aktuellen Engine passenden
+Pseudonym-/Policykontext. Ein inkompatibles Altjournal bleibt sichtbar, wird
+aber terminal und darf die nächste Quellenwahl nicht sperren. Reine
+Konvertierung sowie bereits festgeschriebene Export-/Zuordnungsschuld dürfen
+ohne erneute Privacy-Verarbeitung repariert werden. Eine Workerannahme bestätigt
+nur den Start; Abschluss, Review oder Fehler werden ausschließlich aus dem
+anschließend gelesenen dauerhaften Zustand abgeleitet. DS-097 präzisiert DS-022,
+DS-023, DS-075, DS-086 und DS-092.

@@ -44,6 +44,29 @@ Standalone gruppiert ausschließlich zugelassene Quellen; Ablehnungsgründe blei
 im Admissiongate. E0 ist lokal automatisiert belegt. Neue Paket-/INT-13- und
 menschliche N3/N4-Evidenz für RC132 bleibt offen.
 
+BL-010.13/BL-011.8/BL-010.23: Ein realer Altjournal-Gegenlauf zeigte, dass ein
+Anonymisierungsstapel des früheren Rulesets `de-business/2` trotz aktuellem
+`de-business/3` noch als fortsetzbar erschien. Die Recovery filtert nun jede
+Privacy-Fortsetzung bereits vor der UI-Projektion gegen den gespeicherten
+Pseudonym-/Policykontext. Reine Konvertierung sowie reine Export-/Mappingreparatur
+bleiben davon unabhängig. Ungefangene Workerfehler stabilisieren alle offenen
+Positionen über den gemeinsamen Vorveröffentlichungs-Classifier und dessen
+begrenztes Retrybudget; der feste Ursachencode bleibt über Worker, Executor und
+Diagnose erhalten. Historische inaktive Läufe blockieren weder Funktionswahl
+noch Datei-, rekursive Ordner- oder Dropaufnahme. Der Verlauf bestätigt nach
+einem Klick nur den angenommenen Start und prüft anschließend den tatsächlichen
+Laufstatus. Der gespeicherte Ergebnisstamm ist unter Einstellungen sichtbar.
+
+DS-097/BL-010.9/BL-010.23: Zwei Produkte bleiben eine Repository- und Core-Linie.
+Standalone und Cowork besitzen getrennte Distributionen, Datenräume, UI- und
+Transportadapter; Betriebssystemunterschiede gehören in kleine Windows-/macOS-/
+Linux-Adapter und Zielpaketgates. Permanente Produkt- oder OS-Branches sowie
+kopierte Privacy-/Workflowimplementierungen sind ausdrücklich kein Ziel. Die
+noch sichtbaren Imports gemeinsamer Verarbeitung aus `server/standalone/` werden
+bei konkreter Änderung in eine schmale neutrale Processing-API beziehungsweise
+plattformgebundene Adapter verschoben; kein risikoreicher Big-Bang-Umbau im
+Fortsetzungsfix. Produkt- und Abhängigkeitsgrenzen bleiben maschinelle Gates.
+
 ### RC131 – deterministische Fehler sind niemals Endlosschleifen
 
 BL-010.13/BL-011.8/BL-021.1/BL-041.1: Ein realer RC130-Standalone-Lauf mit
@@ -849,6 +872,7 @@ nicht durch Diagramme als erledigt dargestellt:
 | DataSecure kann verbundene Cowork-Ordner nicht auslesen und damit die Trennung von Quellen und Ergebnisziel nicht technisch attestieren. | BL-040.5, BL-041.7 | entschieden | ehrliche Setup-/UAT-Regel: nur dedizierten Ergebnisordner verbinden, Quellordner nicht verbinden; keine zusätzliche Laufbestätigung |
 | Nativer Standalone-Admission-Pfad prüfte die 500-MiB-Gesamtgrenze nicht und eine verlorene Worker-Bestätigung ließ dieselbe Auswahl erneut starten. | BL-010.12, BL-011.10 | erledigt | Gesamtbudget vor Start, einmaliger Verbrauch nach delegiertem Start und Regressionstests |
 | Ein neuerer aktiver Standalone-Stapel verdeckte den jüngsten vollständig sichtbaren Ergebnislauf. | BL-010.13, BL-040.6, BL-010.29 | erledigt | Seit DS-086 bleibt die Navigation zwischen Start, Verarbeiten und Verlauf unabhängig vom Laufzustand. Status und Zähler gehören zum aktiven beziehungsweise ausdrücklich fortgesetzten Stapel, sonst zum jüngsten eigenen Stapel. Jede Verlaufszeile öffnet ausschließlich ihren eigenen vollständigen Ergebnislauf bzw. ihre Zuordnung; ein fehlendes Ziel fällt niemals auf einen anderen Lauf zurück. |
+| Ein policyinkompatibles Altjournal wurde als fortsetzbar angeboten; der Worker konnte vor der Einzelverarbeitung abbrechen und die Position offen zurücklassen. | BL-010.13, BL-011.8, BL-010.23 | E0 erledigt | Recovery prüft den aktuellen Pseudonym-/Policykontext vor jeder Resume-Projektion. Ungefangene Fehler nach gültigem Claim werden mit festem Code und gemeinsamem Retrybudget stabilisiert; Markdown-only bleibt mappingfrei. Inaktive Altläufe sperren keine neue Quellenwahl. |
 | Tauri und Node-Sidecar hatten abweichende Pfadbudgets und die UI besaß `core:default`. | BL-010.12, BL-010.15 | erledigt | identische UTF-8-Einzel-/Gesamtbudgets, nicht-UTF-8 fail-closed und nur explizite DataSecure-Kommandorechte |
 | Atomare Journalpublikation erkennt viele Austauschfälle, kann aber ohne betriebssystemweites CAS keinen feindlichen gleichzeitigen Austausch durch denselben lokalen Benutzer ausschließen. | BL-011.8, BL-011.11 | P3 | bewusst außerhalb des aktuellen lokalen Vertrauensmodells; für ein später verschärftes Modell immutable Generationen oder nativen No-Replace-/CAS-Vertrag entwerfen, ohne Anwenderdialog |
 

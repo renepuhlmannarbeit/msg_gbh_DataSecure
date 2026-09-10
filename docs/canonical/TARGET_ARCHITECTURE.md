@@ -1,6 +1,6 @@
 # Kanonische Zielarchitektur
 
-Stand: 08.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-093
+Stand: 10.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-097
 
 ## Architekturprinzip
 
@@ -17,6 +17,13 @@ erweitern diese Produktfreigabe nicht automatisch; dafür wäre eigene
 versions- und zielhostgebundene Evidenz nötig. Ein
 sichtbarer Skill oder Plugin-Eintrag ist kein Nachweis einer lokalen Privacy-
 Grenze.
+
+Die Separation of Concerns verläuft über Adapter, nicht über duplizierte
+Codebasen: gemeinsamer Privacy-/Verarbeitungskern, schmale lokale Processing-
+API, getrennte Cowork-/Standalone-Adapter und darunter kleine Windows-/macOS-/
+Linux-Adapter. Beide Produkte besitzen eigenständige Distributionen,
+Konfigurationen, Datenräume und UIs. Alle Zielpakete entstehen aus demselben
+Commit; permanente Produkt- oder Betriebssystembranches sind unzulässig.
 
 DS-062/DS-063 schließen zusätzliche System-VMs und Windows-Benutzerkonten aus.
 DS-065 entfernt die zusätzliche Verschlüsselung lokaler Arbeitsdaten: kein
@@ -154,6 +161,11 @@ dort werden ausschließlich die isolierten Office-Parser für XLSX/PPTX projizie
   aus. **Verlauf** zeigt die letzten 20 Läufe mit laufgebundenen Aktionen;
   diese Anzeigegrenze löscht keine Daten und ein neues Standardziel verändert
   keine Öffnungsziele früherer Läufe.
+- Nach DS-097 ist ein Resume eine aktuelle Capability, keine historische
+  Behauptung. Offene Privacy-Arbeit erfordert einen zur Engine passenden
+  Pseudonym-/Policykontext. Inkompatible Altjournale erscheinen terminal und
+  blockieren keine neue Auswahl; reine Export-/Zuordnungsreparatur bleibt
+  unabhängig. Workerannahme und fachlicher Abschluss sind getrennte Zustände.
 - Die verbindliche Lieferfolge und UX stehen in
   [`STANDALONE_ARCHITECTURE.md`](STANDALONE_ARCHITECTURE.md).
 

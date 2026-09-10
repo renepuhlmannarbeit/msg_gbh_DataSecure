@@ -46,6 +46,7 @@ button.primary { color:white; background:#176b4f; border-color:#176b4f; } button
 .settings { border-top:1px solid #e3e9e6; margin-top:20px; padding-top:16px; }
 .settings summary { cursor:pointer; font-weight:700; color:#46534d; }
 .settings p { color:#617069; margin-bottom:0; }
+.settings-context { margin-top:14px; }
 button:focus-visible, summary:focus-visible, select:focus-visible, [tabindex="0"]:focus-visible { outline:3px solid #176b4f; outline-offset:3px; }
 .privacy { color:#526259; font-size:.86rem; margin:18px 4px; }
 .section-intro, .home-note { color:#526259; line-height:1.5; }

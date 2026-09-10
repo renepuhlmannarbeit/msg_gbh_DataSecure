@@ -85,6 +85,8 @@ async function openFeedbackCase() {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), context);
   await new Promise((resolve) => setImmediate(resolve));
   assert.strictEqual(elements['product-version'].textContent, 'Version 3.2.0-rc105');
+  assert.strictEqual(elements['settings-result-folder'].textContent, 'C:\\Results');
+  assert.strictEqual(elements['settings-result-folder'].title, 'C:\\Results');
   assert.strictEqual(elements['result-folder-results'].textContent, 'C:\\Results\\DataSecure-Output\\Lauf-1');
   assert.strictEqual(elements['home-view'].hidden, false, 'a completed run preserves the default home view');
   elements['tab-process'].listeners.click();
@@ -611,29 +613,45 @@ async function networkResultFolderNoticeCase() {
   await harness.click('configure-results');
   assert.match(harness.elements['action-feedback'].textContent, /Netzlaufwerk.*andere Systeme/u);
   assert.strictEqual(harness.elements['result-folder'].textContent, '\\\\server\\share');
+  assert.strictEqual(harness.elements['settings-result-folder'].textContent, '\\\\server\\share');
+  assert.strictEqual(harness.elements['settings-result-folder'].title, '\\\\server\\share');
 }
 
 async function recoverableModeLockCase() {
   let state = { state: 'stopped', resumable_count: 1 };
-  const harness = await frontendHarness({ get_public_state: () => state });
+  const harness = await frontendHarness({
+    get_public_state: () => state,
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-neu', ['Neu.txt']) })
+  });
   const mode = harness.elements['processing-mode'];
-  for (const name of ['stopped', 'review_required', 'processing', 'preparing', 'export_pending', 'blocked']) {
+  for (const name of ['processing', 'preparing', 'blocked']) {
     state = { state: name, resumable_count: 1, review_count: 1, export_pending_count: 1 };
     await harness.runTimer();
-    assert.strictEqual(mode.disabled, true, `${name} does not permit changing the current batch mode`);
+    assert.strictEqual(mode.disabled, true, `${name} blocks a concurrent new batch`);
     await harness.click('configure-results');
-    assert.strictEqual(mode.disabled, true, `finishing an unrelated RPC must not unlock ${name}`);
+    assert.strictEqual(mode.disabled, true, `finishing an unrelated RPC must not unlock active ${name}`);
+  }
+  for (const name of ['stopped', 'review_required', 'export_pending']) {
+    state = { state: name, resumable_count: 1, review_count: 1, export_pending_count: 1 };
+    await harness.runTimer();
+    assert.strictEqual(mode.disabled, false, `${name} remains an optional historical action`);
+    assert.strictEqual(harness.elements['select-files'].hidden, false, `${name} keeps file selection visible`);
+    assert.strictEqual(harness.elements['select-folder'].hidden, false, `${name} keeps folder selection visible`);
+    assert.strictEqual(harness.elements['drop-zone'].attributes['aria-disabled'], 'false');
   }
   state = { state: 'stopped', resumable_count: 1 };
   await harness.runTimer();
-  mode.value = 'markdown-only';
   await harness.click('continue');
   await settleFrontend();
   const continued = harness.calls.filter((call) => call.action === 'continue_current_batch');
   assert.strictEqual(continued.length, 0, 'the global button cannot resume an implicit latest run');
   assert.strictEqual(harness.elements['results-view'].hidden, false, 'the user selects the exact run in history');
   assert.strictEqual(harness.count('continue_history_batch'), 0, 'navigation alone never resumes a batch');
-  assert.strictEqual(mode.disabled, true);
+  assert.strictEqual(mode.disabled, false);
+  await harness.click('task-markdown');
+  assert.strictEqual(mode.value, 'markdown-only', 'a previous interrupted run never disables a new task');
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Neu.txt');
 }
 
 async function pureConversionCase() {
@@ -854,7 +872,7 @@ async function historyAdmissionRaceCase() {
   await testAsync('anonymization offers one explicit filename choice with neutral privacy-preserving default', explicitOutputNamingCase);
   await testAsync('unavailable conversion keeps the admission without a silent anonymization fallback', unavailableModePreservesAdmissionCase);
   await testAsync('a configured network result folder produces a visible local warning', networkResultFolderNoticeCase);
-  await testAsync('active and recoverable modes stay locked and global continue only opens history', recoverableModeLockCase);
+  await testAsync('only active work blocks admission while historical recovery remains optional', recoverableModeLockCase);
   await testAsync('pure conversion stays selected during intake and reports raw results and OCR warnings honestly', pureConversionCase);
   done();
 })();

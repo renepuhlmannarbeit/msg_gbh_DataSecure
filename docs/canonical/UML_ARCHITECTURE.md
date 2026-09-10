@@ -20,6 +20,11 @@ Importpfade sind nur Reexports. Die nachstehenden Batch-/Worker-Kanten sind
 dadurch noch keine vollständig entkoppelte Application API: Verifikation mit
 Dateizugriff und öffentliche Antwortprojektion bleiben teilweise komponiert.
 
+DS-097 hält diese gemeinsame Linie bewusst fest: zwei getrennte Produkte und
+Distributionen, aber genau ein Privacy-/Verarbeitungs-Core. Produktadapter und
+kleine Betriebssystemadapter bilden die Variationspunkte. Dauerhafte Produkt-
+oder OS-Branches und kopierte Workflowlogik sind keine Zielarchitektur.
+
 ## 1. Systemkontext
 
 ```mermaid
@@ -642,8 +647,10 @@ stateDiagram-v2
   export_pending --> completed: sichtbarer Export vollständig
   admitted --> idle: Sidecar-Neustart / IPC-Fehler / Admission verloren
   processing --> stopped: sicherer Fehler oder Abbruch
-  stopped --> processing: konkrete Fortsetzung / automatische Arbeit offen
-  stopped --> review_required: konkrete Fortsetzung / nur Review offen
+  stopped --> processing: kompatible konkrete Fortsetzung / automatische Arbeit offen
+  stopped --> review_required: kompatible konkrete Fortsetzung / nur Review offen
+  stopped --> failed: gespeicherter Privacykontext nicht mehr kompatibel
+  failed --> admitted: Originale neu auswählen
 ```
 
 Der Standalone-Status beobachtet den aktiven oder ausdrücklich ausgewählten Lauf
@@ -700,3 +707,39 @@ enthält höchstens 20 Zeilen, neueste zuerst; die Daten werden dadurch nicht
 gelöscht. Historienaktionen verwenden nur die konkrete Laufkennung. Fortsetzung
 prüft erneut Journal, gespeicherten Zweck und die Sperre für einen aktiven
 Stapel; ein nicht mehr fortsetzbarer Eintrag startet niemals einen anderen Lauf.
+
+Die Wiederaufnahmeprüfung findet vor der UI-Projektion statt. Reine Export- oder
+Zuordnungsschuld darf auch nach einem Privacy-Rulesetwechsel repariert werden;
+offene Privacy-Verarbeitung nicht. Eine angenommene Worker-Nachricht ist nur der
+Übergabenachweis. Erst der danach erneut gelesene dauerhafte Zustand belegt
+`processing`, `review_required`, `completed` oder einen terminalen Fehler. Ein
+historischer inaktiver Lauf blockiert die nächste Aufnahme nicht.
+
+## 12. Produkt- und Plattformgrenzen
+
+```mermaid
+flowchart TB
+  Core[Gemeinsamer Privacy- und Verarbeitungskern]
+  API[Schmale lokale Processing-API]
+  Cowork[Cowork-Adapter<br/>MCP, Skill, inhaltsfreie Statusantwort]
+  Standalone[Standalone-Adapter<br/>Desktop-UI, Verlauf, reine Konvertierung]
+  Platform[Plattformadapter]
+  Win[Windows<br/>Picker, Presenter, Explorer, Supervisor]
+  Mac[macOS<br/>Picker, AppKit, Finder, Supervisor]
+  Linux[Linux<br/>Picker, Presenter, xdg-open, Supervisor]
+
+  Core --> API
+  API --> Cowork
+  API --> Standalone
+  Cowork --> Platform
+  Standalone --> Platform
+  Platform --> Win
+  Platform --> Mac
+  Platform --> Linux
+```
+
+Cowork und Standalone besitzen getrennte Pakete, Konfigurationen,
+Produktdatenroots und öffentliche Verträge. Sie teilen ausschließlich neutrale,
+modellunabhängige Verarbeitung. Betriebssysteme werden aus demselben
+unveränderlichen Commit gebaut und geprüft; getrennte Zieljobs und kurzlebige
+Abnahmebranches ersetzen keine gemeinsame Hauptentwicklungslinie.

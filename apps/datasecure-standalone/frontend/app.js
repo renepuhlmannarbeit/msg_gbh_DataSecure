@@ -22,6 +22,7 @@ const messages = {
   RESULT_NAMING_MODE_INVALID: 'Bitte eine gültige Benennung für anonymisierte Ergebnisse auswählen. Der Stapel wurde nicht gestartet.',
   MARKDOWN_CONVERSION_NOT_READY: 'Die installierte Version unterstützt diese Betriebsart nicht. Bitte die aktuelle Standalone-Version verwenden. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
+  BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE: 'Dieser ältere Stapel verwendet nicht mehr den aktuellen Datenschutz-Regelsatz. Bitte die Originaldateien neu auswählen.',
   STANDALONE_RUNTIME_MISSING: 'Der lokale DataSecure-Core fehlt.',
   STANDALONE_RUNTIME_START_FAILED: 'Der lokale DataSecure-Core konnte nicht gestartet werden.',
   STANDALONE_DATA_ROOT_UNSAFE: 'Der private lokale DataSecure-Bereich konnte nicht sicher geöffnet werden.',
@@ -68,6 +69,8 @@ let currentSessionResultBaseline = '';
 let latestResultFolderSeen = '';
 let selectionRemoveButtons = [];
 const views = ['home', 'process', 'results'];
+const admissionAvailableStates = new Set(['ready', 'results_available', 'completed_without_results',
+  'review_required', 'stopped', 'export_pending']);
 const validMode = (mode) => ['markdown-only', 'markdown-and-anonymize'].includes(mode);
 const validOutputNamingMode = (mode) => ['neutral', 'source-with-suffix'].includes(mode);
 
@@ -116,8 +119,7 @@ function updateCurrentResultsAvailability() {
 }
 function updateModeAvailability() {
   // The selector describes the next admission, never an active/recoverable run.
-  byId('processing-mode').disabled = operationInFlight || (!admitted &&
-    !['ready', 'results_available', 'completed_without_results'].includes(lastPublicState));
+  byId('processing-mode').disabled = operationInFlight || (!admitted && !admissionAvailableStates.has(lastPublicState));
   const needsMode = admitted && !validMode(byId('processing-mode').value);
   const needsNamingMode = admitted && byId('processing-mode').value === 'markdown-and-anonymize' &&
     !validOutputNamingMode(byId('output-naming-mode').value);
@@ -132,8 +134,7 @@ function updateModeAvailability() {
   byId('task-anonymize').title = reason;
 }
 function updateDropAvailability() {
-  const available = !operationInFlight && !admitted &&
-    ['ready', 'results_available', 'completed_without_results'].includes(lastPublicState);
+  const available = !operationInFlight && !admitted && admissionAvailableStates.has(lastPublicState);
   byId('drop-zone').setAttribute('aria-disabled', String(!available));
   if (!available) byId('drop-zone').className = 'drop-zone';
   return available;
@@ -237,8 +238,8 @@ function renderHistory(entries) {
         feedback.textContent = `${action.label} wird angefordert …`;
         if (action.resume) {
           const result = await call(action.command, { batchId: entry.batch_id });
-          feedback.textContent = result?.ok === true ? 'Fortsetzung bestätigt.' : 'Fortsetzung nicht möglich. Bitte den aktuellen Status prüfen.';
-          if (result?.ok === true) { actionFeedback('Die Fortsetzung wurde angefordert. Der aktuelle Status wird geprüft.'); await refresh(); }
+          feedback.textContent = result?.ok === true ? 'Fortsetzung gestartet. Der Laufstatus wird geprüft …' : 'Fortsetzung nicht möglich. Bitte den aktuellen Status prüfen.';
+          if (result?.ok === true) { actionFeedback('Der Worker hat die Fortsetzung angenommen. Erst der aktualisierte Laufstatus bestätigt das Ergebnis.'); await refresh(); }
         } else {
           const result = await openLocal(action.command, action.label, { batchId: entry.batch_id });
           feedback.textContent = result?.handoff_confirmed === true
@@ -298,8 +299,10 @@ function renderUiContext(context) {
   latestResultFolderSeen = context.latest_result_folder || '';
   const sourceFolders = summarize(context.source_folders, 'Noch nicht ausgewählt');
   const selectedFiles = summarize(context.selected_files, 'Noch nicht ausgewählt');
-  byId('result-folder').textContent = resultFolder;
-  byId('result-folder').title = resultFolder;
+  for (const id of ['result-folder', 'settings-result-folder']) {
+    byId(id).textContent = resultFolder;
+    byId(id).title = resultFolder;
+  }
   byId('result-folder-results').textContent = latestResultFolder;
   byId('result-folder-results').title = latestResultFolder;
   byId('source-folders').textContent = sourceFolders;
@@ -403,6 +406,7 @@ function renderAdmission(result) {
   byId('summary').hidden = false;
   status('Auswahl bereit', 'Einmal starten – danach läuft der Stapel ohne weitere Bestätigung.');
   visible('select-files', false); visible('select-folder', false); visible('start', true); visible('cancel', true);
+  visible('continue', false);
   byId('action-feedback').hidden = true;
   updateModeAvailability();
   updateDropAvailability();
@@ -575,7 +579,11 @@ byId('configure-results').addEventListener('click', async () => {
   const result = await call('configure_results');
   if (result && !result.cancelled) {
     if (result.local_ui_only === true && result.external_disclosure === false) {
-      byId('result-folder').textContent = result.result_folder || 'Noch nicht festgelegt';
+      const resultFolder = result.result_folder || 'Noch nicht festgelegt';
+      for (const id of ['result-folder', 'settings-result-folder']) {
+        byId(id).textContent = resultFolder;
+        byId(id).title = resultFolder;
+      }
     }
     actionFeedback(result.network_folder_notice === true
       ? 'Der Ordner ist gespeichert. Hinweis: Ergebnisse und Zuordnungsdateien können über dieses Netzlaufwerk an andere Systeme übertragen werden.'
@@ -656,8 +664,8 @@ async function refresh() {
     updateDropAvailability();
     byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');
-    visible('select-files', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
-    visible('select-folder', state.state === 'ready' || state.state === 'results_available' || state.state === 'completed_without_results');
+    visible('select-files', admissionAvailableStates.has(state.state));
+    visible('select-folder', admissionAvailableStates.has(state.state));
     if (state.state === 'preparing') {
       acknowledgedPresentationGeneration = null;
       status('Stapel wird vorbereitet', 'DataSecure erstellt den wiederaufnehmbaren lokalen Zwischenstand.');

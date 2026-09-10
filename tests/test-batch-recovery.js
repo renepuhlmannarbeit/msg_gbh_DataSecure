@@ -144,7 +144,8 @@ function fixture(options = {}) {
     deliveryPendingStatus: 'delivery_pending',
     deferredReviewStatus: 'deferred_review',
     mappingPendingStatus: 'mapping_pending',
-    preflightMappingPendingStatus: 'preflight_mapping_pending'
+    preflightMappingPendingStatus: 'preflight_mapping_pending',
+    ...(options.recoverableState ? { recoverableState: options.recoverableState } : {})
   });
   return { recovery, events, states };
 }
@@ -192,6 +193,24 @@ test('status separates live executors, resumable batches, delivery and cleanup c
   assert.deepStrictEqual(cleanup, { private_work_copy_cleanup_pending: 2, expired_batch_cleanup_pending: 1 });
   assert.doesNotMatch(JSON.stringify({ status, cleanup }), /[a-e]{64}|name|path|hash/u);
   assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
+});
+
+test('policy-incompatible journals are never advertised as executable continuations', () => {
+  const compatible = state(tokens[0], { items: [{ status: 'retryable' }] });
+  compatible.product_channel = 'standalone';
+  compatible.created_at = '2026-08-25T10:00:00.000Z';
+  compatible.compatible = true;
+  const obsolete = state(tokens[1], { items: [{ status: 'pending' }] });
+  obsolete.product_channel = 'standalone';
+  obsolete.created_at = '2026-08-25T11:00:00.000Z';
+  obsolete.compatible = false;
+  const item = fixture({ states: [compatible, obsolete], recoverableState: (candidate) => candidate.compatible === true });
+  assert.deepStrictEqual(item.recovery.recoverableBatchStates().map((candidate) => candidate.token), [compatible.token]);
+  assert.strictEqual(item.recovery.latestProductBatchStatus('standalone').resumable, false,
+    'the newest incompatible journal cannot override the executable recovery catalogue');
+  const snapshot = item.recovery.productStatusSnapshot('standalone', { localUiSelection: true, selectedBatchId: obsolete.token });
+  assert.strictEqual(snapshot.observed_recoverable, false);
+  assert.strictEqual(snapshot.latest.resumable, false);
 });
 
 test('latest product status selects one channel and exposes only current-run counters', () => {

@@ -480,6 +480,11 @@ function startLocalBatchExecutor(token, options = {}) {
       }
       const progress = localBatchStateProgress(message);
       presentProgress(progress);
+      if (message?.type === 'local-batch-stopped') {
+        lifecycle({ event: 'intake_terminal_state', outcome: 'stopped',
+          error_code: /^[A-Z][A-Z0-9_]{2,63}$/u.test(String(message.error_code || ''))
+            ? message.error_code : 'LOCAL_WORKER_EXITED' });
+      }
     });
     child.send(startMessage, (error) => {
       if (worker.ended || worker.failed) return;
@@ -657,8 +662,10 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       const progress = localBatchStateProgress(message);
       showStateOnce(progress);
       if (message.type === 'local-intake-stopped') {
+        const errorCode = /^[A-Z][A-Z0-9_]{2,63}$/u.test(String(message.error_code || ''))
+          ? message.error_code : 'LOCAL_WORKER_EXITED';
         lifecycle({ event: 'intake_terminal_state', outcome: 'stopped', item_count: itemCount,
-          error_code: 'LOCAL_WORKER_EXITED' });
+          error_code: errorCode });
         showFailureNotice(message.stage === 'after_checkpoint' ? 'after_checkpoint' : 'before_checkpoint');
       }
     });

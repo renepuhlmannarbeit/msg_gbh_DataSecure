@@ -44,6 +44,7 @@ function createBatchRecovery(options = {}) {
   const finishZeroDayWork = options.finishZeroDayWork || (() => false);
   const removeState = options.removeState;
   const ErrorType = options.SafeError || SafeError;
+  const recoverableState = options.recoverableState || (() => true);
 
   function intakeToken(entry) {
     if (!entry.isFile() || !entry.name.endsWith(INTAKE_SUFFIX)) return null;
@@ -76,7 +77,7 @@ function createBatchRecovery(options = {}) {
         const state = readMaintenanceState(token);
         if (state.zero_day_work === true && state.zero_day_work_cleaned !== true &&
             !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid)) continue;
-        if (nowMs() <= Date.parse(state.expires_at) && incompleteBatchState(state) &&
+        if (nowMs() <= Date.parse(state.expires_at) && incompleteBatchState(state) && recoverableState(state) &&
             (callOptions.includeActiveExecutors === true || !liveLocalExecutor(state))) states.push(state);
       } catch { /* malformed and expired snapshots remain unavailable */ }
     }
@@ -147,7 +148,7 @@ function createBatchRecovery(options = {}) {
       // proves current work; otherwise the recovery counters expose Resume.
       // A live global processing lock is independently projected in `recovery`.
       processing: progress.local_processing_active === true,
-      resumable: progress.awaiting_resume === true,
+      resumable: progress.awaiting_resume === true && recoverableState(latest),
       complete: progress.complete === true,
       ...(progress.complete === true && progress.stopped > 0
         ? { completion_available: visible.available === true && visibleExportDirectory(latest.token) !== '' } : {})
@@ -192,7 +193,7 @@ function createBatchRecovery(options = {}) {
         const expiresAt = Date.parse(candidate.expires_at);
         const live = liveLocalExecutor(candidate);
         if (live) processingActive = true;
-        if (!ownerActive && nowMs() <= expiresAt && incompleteBatchState(candidate) &&
+        if (!ownerActive && nowMs() <= expiresAt && incompleteBatchState(candidate) && recoverableState(candidate) &&
             !(candidate.zero_day_work === true && candidate.zero_day_work_cleaned !== true &&
               !live && !processAlive(candidate.intake_owner_pid))) {
           if (!live) recoverable.push(candidate);

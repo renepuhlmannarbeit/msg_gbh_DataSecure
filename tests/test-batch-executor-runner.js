@@ -44,6 +44,7 @@ function fixture(options = {}) {
   let processCalls = 0;
   let finalizeCalls = 0;
   let stoppedMappings = 0;
+  let cleaned = 0;
 
   const { runLocalBatchExecutor } = createBatchExecutorRunner({
     SafeError,
@@ -70,7 +71,7 @@ function fixture(options = {}) {
     prepareProcessingRun(deps) {
       events.push('prepare');
       assert.strictEqual(deps.marker, options.marker);
-      if (options.failPrepare) throw new Error('PREPARE_FAILED');
+      if (options.failPrepare) throw options.prepareError || new Error('PREPARE_FAILED');
       return preparedRun;
     },
     incrementPrivateIoSummary(summary, key) {
@@ -82,9 +83,11 @@ function fixture(options = {}) {
       processCalls++;
       events.push(`process:${processCalls}`);
       assert.strictEqual(value, token);
-      assert.strictEqual(deps.preparedRun, preparedRun);
+      const conversion = current.schema === 'datasecure-batch/5' && current.processing_mode === 'markdown-only' &&
+        current.product_channel === 'standalone';
+      assert.strictEqual(deps.preparedRun, conversion ? undefined : preparedRun);
       assert.strictEqual(deps.executorPid, Number(options.executorPid ?? pid));
-      if (options.failProcessAt === processCalls) throw new Error('PROCESS_FAILED');
+      if (options.failProcessAt === processCalls) throw options.processError || new Error('PROCESS_FAILED');
       const result = options.process
         ? await options.process(processCalls, current, events)
         : progress();
@@ -111,6 +114,8 @@ function fixture(options = {}) {
       return options.releaseResult !== false;
     },
     appendMapping() { stoppedMappings++; events.push('stopped-mapping'); },
+    cleanupTerminalWorkCopy() { cleaned++; events.push('cleanup'); },
+    retryableCodes: new Set(['CONVERSION_TIMEOUT']),
     deliveryPendingStatus: 'delivery_pending',
     maxBatchFiles: options.maxBatchFiles || 100
   });
@@ -125,6 +130,8 @@ function fixture(options = {}) {
     }),
     counts: () => ({ reads, processCalls, finalizeCalls }),
     stoppedMappings: () => stoppedMappings,
+    cleaned: () => cleaned,
+    state: () => current,
     setState(value) { current = value; }
   };
 }
@@ -246,6 +253,20 @@ testAsync('unconfirmed wide privacy converter termination stops every unstarted 
   assert.equal(value.counts().processCalls, 1);
   assert.equal(value.stoppedMappings(), 1);
   assert.equal(value.events.filter(event => event.startsWith('process:')).length, 1);
+
+  const conversion = fixture({
+    state: {
+      schema: 'datasecure-batch/5', processing_mode: 'markdown-only', product_channel: 'standalone',
+      token, local_executor_pid: pid,
+      items: [{ status: 'pending', name: 'second.pdf' }],
+      io_summary: {}, progress: progress({ remaining: 1 })
+    },
+    process: () => ({ ...progress({ remaining: 1 }), error: 'CONVERSION_TERMINATION_UNCONFIRMED' })
+  });
+  await conversion.run();
+  assert.strictEqual(conversion.state().items[0].local_mapping_exported, true);
+  assert.strictEqual(conversion.stoppedMappings(), 0,
+    'a stopped pure conversion has no mapping projection to repair');
 });
 
 testAsync('a new package is finalized immediately while zero remaining does no work', async () => {
@@ -334,6 +355,69 @@ testAsync('every post-claim failure releases once and success uses fresh final p
   assert.strictEqual(JSON.stringify(result).includes('René Beispiel'), false);
 
   assert.strictEqual(typeof batchFacade.runLocalBatchExecutor, 'function');
+});
+
+testAsync('unhandled post-claim failures become durable terminal decisions instead of endless resume loops', async () => {
+  const policyError = Object.assign(new Error('private detail'), { code: 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE' });
+  const anonymization = fixture({
+    state: {
+      schema: 'datasecure-batch/6', product_channel: 'standalone', token, local_executor_pid: pid,
+      items: [{ id: 'a'.repeat(32), name: 'source.docx', status: 'pending' }],
+      io_summary: {}, progress: progress({ remaining: 1 })
+    },
+    failProcessAt: 1,
+    processError: policyError
+  });
+  await assert.rejects(anonymization.run(), (error) => error === policyError);
+  const stopped = anonymization.state().items[0];
+  assert.strictEqual(stopped.status, 'stopped');
+  assert.strictEqual(stopped.checkpoint, 'stopped');
+  assert.strictEqual(stopped.error_code, 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
+  assert.strictEqual(stopped.document_result.reason_code, stopped.error_code);
+  assert.strictEqual(stopped.local_mapping_exported, true);
+  assert.strictEqual(stopped.work_copy_cleanup_pending, false);
+  assert.strictEqual(anonymization.stoppedMappings(), 1);
+  assert.strictEqual(anonymization.cleaned(), 1);
+
+  const conversion = fixture({
+    state: {
+      schema: 'datasecure-batch/5', processing_mode: 'markdown-only', product_channel: 'standalone',
+      token, local_executor_pid: pid,
+      items: [{ id: 'b'.repeat(32), name: 'source.pdf', status: 'pending' }],
+      io_summary: {}, progress: progress({ remaining: 1 })
+    },
+    failProcessAt: 1
+  });
+  await assert.rejects(conversion.run(), /PROCESS_FAILED/);
+  assert.strictEqual(conversion.state().items[0].status, 'stopped');
+  assert.strictEqual(conversion.state().items[0].local_mapping_exported, true,
+    'pure conversion has no mapping debt');
+  assert.strictEqual(conversion.stoppedMappings(), 0, 'pure conversion never writes a mapping row');
+});
+
+testAsync('only catalogued transient worker failures remain resumable and exhaust their retry budget', async () => {
+  let state = {
+    schema: 'datasecure-batch/5', processing_mode: 'markdown-only', product_channel: 'standalone',
+    token, local_executor_pid: pid,
+    items: [{ id: 'c'.repeat(32), name: 'source.pdf', status: 'pending' }],
+    io_summary: {}, progress: progress({ remaining: 1 })
+  };
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    state.local_executor_pid = pid;
+    const transient = Object.assign(new Error('timeout detail'), { code: 'CONVERSION_TIMEOUT' });
+    const value = fixture({ state, failProcessAt: 1, processError: transient });
+    await assert.rejects(value.run(), (error) => error === transient);
+    state = value.state();
+    assert.strictEqual(state.items[0].retry_failure_count, attempt);
+    if (attempt < 3) {
+      assert.strictEqual(state.items[0].status, 'retryable');
+      state.items[0].status = 'pending';
+      state.items[0].checkpoint = 'resumed';
+    } else {
+      assert.strictEqual(state.items[0].status, 'stopped');
+      assert.strictEqual(state.items[0].error_code, 'RETRY_LIMIT_EXCEEDED');
+    }
+  }
 });
 
 done();

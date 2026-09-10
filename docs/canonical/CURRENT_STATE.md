@@ -44,6 +44,28 @@ dem vorgeschalteten Admissiongate zugeordnet. Reale PDF-Goldenfälle decken
 Formulare, Signatur, Anhang, JavaScript und Verschlüsselung im paketierten Parser
 ab; dabei wurde eine echte PDF.js-`Map`-Integrationslücke behoben.
 
+Die Standalone-Fortsetzung ist zusätzlich an den gespeicherten
+Privacy-/Pseudonymkontext gebunden. Ein alter Anonymisierungslauf mit einem nicht
+mehr aktuellen Ruleset wird weder im Verlauf noch im globalen Zustand als
+fortsetzbar angeboten; er erscheint terminal fehlgeschlagen und fordert eine
+neue Auswahl der Originaldateien. Bereits veröffentlichte Export- oder
+Zuordnungsschulden bleiben unabhängig davon reparierbar, weil sie keine
+Privacy-Verarbeitung wiederholen. Tritt nach einem gültigen Executor-Claim eine
+ungefangene Ausnahme auf, stabilisiert der Worker jede noch offene Position mit
+dem ursprünglichen festen Fehlercode nach derselben begrenzten Retry-Policy wie
+die reguläre Einzelverarbeitung. Reine Markdown-Konvertierung erzeugt dabei
+weiterhin keine Zuordnung. Eine Worker-Annahme ist in der Oberfläche nur ein
+Startnachweis, niemals eine Abschlussbestätigung.
+
+Ein historischer gestoppter, zu prüfender oder noch zu exportierender Lauf sperrt
+die nächste lokale Quellenwahl nicht. Datei- und Ordnerpicker, Drag-and-drop und
+die Funktionswahl bleiben verfügbar; nur tatsächliche Vorbereitung,
+Verarbeitung oder ein blockierter Core sperren eine neue Aufnahme. Der globale
+Fortsetzen-Hinweis navigiert ausschließlich in den Verlauf. Der dortige
+Fortsetzen-Knopf bindet weiter exakt die konkrete Laufkennung. Unter
+**Einstellungen und Hilfe** wird nun derselbe aktuelle Ergebnisstamm angezeigt
+wie unter **Verarbeiten**.
+
 Alle Aussagen dieses Abschnitts sind E0-Code-/Testevidenz. RC132 ist noch nicht
 an PKG-04, INT-13, ein Releasearchiv oder menschliche N3/N4-Abnahme gebunden.
 
