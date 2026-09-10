@@ -38,7 +38,11 @@ und ausdrücklich gekennzeichnet; gesperrte/defekte Dateien werden übersprungen
 Die Anonymisierung verarbeitet TXT/MD/CSV direkt. DOCX, XLSX/PPTX/PDF/Scan-PDF
 und Bilder durchlaufen denselben lokalen Konverter genau einmal; jeder nichtleere,
 vertraglich gültige Markdown-Inhalt wird anschließend an den Privacy-Core
-weitergegeben. Ergebnis und Manifest weisen Extraktionsabdeckung und
+weitergegeben. Bei DOCX bleibt die vollständige Strukturprüfung erhalten, aber
+Kopf- und Fußzeilen sowie ausschließlich dort referenzierte Bilder werden nur
+im Anonymisierungsmodus nicht ausgegeben. Die reine Konvertierung erhält sie.
+PDF-/Scan-PDF-Seitenränder und PPTX-Mastertexte werden nicht heuristisch entfernt.
+Ergebnis und Manifest weisen Extraktionsabdeckung und
 Anonymisierungsstatus getrennt aus: `incomplete` bedeutet keine Zusage über den
 gesamten Originalcontainer, nicht eine unvollständige Anonymisierung des
 extrahierten Markdown-Inhalts. Leere OCR sowie beschädigte, verschlüsselte oder

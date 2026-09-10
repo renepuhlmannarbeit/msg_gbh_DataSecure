@@ -47,6 +47,36 @@ testAsync('complete conversion becomes neutral in-memory parser output without a
   assert.equal(Object.hasOwn(result, 'processing_mode'), false);
 });
 
+testAsync('Standalone DOCX privacy alone requests header and footer omission', async () => {
+  let docxOptions;
+  const result = await extractWideSourceForPrivacy(Buffer.from('synthetic docx'), '.docx', {
+    ErrorType: SafeError,
+    async convertBuffer(_input, extension, options) {
+      assert.equal(extension, '.docx');
+      docxOptions = options;
+      return createMarkdownExtraction({ source_type: 'docx', markdown: 'Body text', coverage: {
+        status: 'incomplete', reason_codes: ['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY']
+      } });
+    }
+  });
+  assert.strictEqual(docxOptions.omitDocxHeaderFooter, true);
+  assert.deepStrictEqual(result.sourceExtractionCoverage, {
+    status: 'incomplete', reason_codes: ['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY']
+  });
+
+  let xlsxOptions;
+  await extractWideSourceForPrivacy(bytes, '.xlsx', {
+    ErrorType: SafeError,
+    async convertBuffer(_input, _extension, options) {
+      xlsxOptions = options;
+      return createMarkdownExtraction({ source_type: 'xlsx', markdown: 'Body text', coverage: {
+        status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED']
+      } });
+    }
+  });
+  assert.strictEqual(Object.hasOwn(xlsxOptions, 'omitDocxHeaderFooter'), false);
+});
+
 testAsync('useful incomplete Markdown continues into privacy while empty OCR stays fail closed', async () => {
   for (const reason of ['OCR_NOT_VERIFIED', 'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']) {
     const result = await extractWideSourceForPrivacy(bytes, '.pdf', {

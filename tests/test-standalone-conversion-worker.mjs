@@ -13,6 +13,8 @@ const require = createRequire(import.meta.url);
 const { decodePng } = require('../plugins/data-secure/server/images/png');
 const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
 const { xlsxCounterexample, bmp32 } = require('./lib/conversion-counterexamples');
+const { zipStore } = require('./lib/zip');
+const { opcControlEntries } = require('./lib/opc');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
   : process.platform === 'darwin' && ['x64', 'arm64'].includes(process.arch) ? `macos-${process.arch}`
@@ -25,6 +27,20 @@ const server = path.join(scope, 'server');
 const runtime = path.join(server, 'standalone', 'conversion-runtime');
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const originalSpawn = childProcess.spawn, children = [];
+function headerFooterDocx() {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  return zipStore([
+    ...opcControlEntries('docx', { additionalOverrides: [
+      { part: 'word/header1.xml', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml' },
+      { part: 'word/footer1.xml', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml' }
+    ] }),
+    ['word/document.xml', `<w:document xmlns:w="${W}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>BODY PRIVATE</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="head"/><w:footerReference w:type="default" r:id="foot"/></w:sectPr></w:body></w:document>`],
+    ['word/_rels/document.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="head" Type="${R}/header" Target="header1.xml"/><Relationship Id="foot" Type="${R}/footer" Target="footer1.xml"/></Relationships>`],
+    ['word/header1.xml', `<w:hdr xmlns:w="${W}"><w:p><w:r><w:t>HEADER PRIVATE</w:t></w:r></w:p></w:hdr>`],
+    ['word/footer1.xml', `<w:ftr xmlns:w="${W}"><w:p><w:r><w:t>FOOTER PRIVATE</w:t></w:r></w:p></w:ftr>`]
+  ]);
+}
 let observeSpawn;
 childProcess.spawn = (...args) => {
   const child = originalSpawn(...args);
@@ -72,6 +88,17 @@ try {
       if (extension === '.txt' || extension === '.md') assert.equal(result.markdown, bytes.toString('utf8'));
     });
   }
+  await test('packaged DOCX keeps header and footer for conversion but omits them for privacy', async () => {
+    const bytes = headerFooterDocx();
+    const converted = await convert(bytes, '.docx');
+    assert.match(converted.markdown, /BODY PRIVATE/u);
+    assert.match(converted.markdown, /HEADER PRIVATE/u);
+    assert.match(converted.markdown, /FOOTER PRIVATE/u);
+    const privacy = await convert(bytes, '.docx', { omitDocxHeaderFooter: true });
+    assert.match(privacy.markdown, /BODY PRIVATE/u);
+    assert.doesNotMatch(privacy.markdown, /HEADER PRIVATE|FOOTER PRIVATE|## Kopfzeile|## Fußzeile/u);
+    assert.ok(privacy.coverage.reason_codes.includes('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY'));
+  });
   await test('real packaged XLSX becomes Markdown once and proceeds to privacy with separate source coverage', async () => {
     const bytes = office('xlsx');
     const before = hash(bytes);

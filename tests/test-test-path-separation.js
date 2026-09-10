@@ -32,6 +32,15 @@ test('engineering and historical evidence have explicit opt-in scripts', () => {
   assert.strictEqual(pkg.scripts['test:engineering-keyring'], undefined);
 });
 
+test('golden verification is read-only and regeneration stays explicitly opt-in', () => {
+  assert.strictEqual(pkg.scripts['test:golden'],
+    'node tests/make-fixtures.js && node tests/test-pii-regression.js');
+  assert.strictEqual(pkg.scripts['update:golden'],
+    'node tests/make-fixtures.js && node tests/test-pii-regression.js --update');
+  assert.doesNotMatch(pkg.scripts['test:golden'], /--update/u);
+  assert.ok(require('./run-product-suite').baseFiles.includes('tests/test-complex-docx-uat-corpus.mjs'));
+});
+
 test('native conversion resources are required by PKG-04, not silently added to cost-capped source CI', () => {
   const suite = require('./run-product-suite');
   const nativeTest = 'test-standalone-conversion-worker.mjs';

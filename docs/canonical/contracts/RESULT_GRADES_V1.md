@@ -18,6 +18,14 @@ dürfen ihn frei formulieren.
 | `usable-with-omissions` | Verwendbar mit ausdrücklich benannten Auslassungen | Ausschließlich erlaubte, gezählte Auslassungen liegen vor. |
 | `not-processed` | Sicher nicht verarbeitet | Es wurde kein freigegebenes Paket erzeugt; ein fester inhaltsfreier Fehlercode benennt den Grund. |
 
+`complete` bewertet die Datenschutzprüfung des ausdrücklich ausgewiesenen
+Ergebnisumfangs. Bei DOCX-Anonymisierung gehört nach DS-098 der
+Dokumenthauptinhalt ohne Kopf- und Fußzeilen zu diesem Umfang. Der bewusste,
+sichtbar benannte Ausschluss ist kein stilles Parserloch und kein visueller
+Auslassungscode; die Quellenextraktion führt dafür getrennt
+`DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY`. Reine Markdown-Konvertierung hat diese
+Zweckprojektion nicht und erhält Kopf-/Fußzeilen.
+
 Für den mittleren Grad sind in V1 nur diese Auslassungen erlaubt:
 
 - `IMAGES_REMOVED_BY_REQUEST`

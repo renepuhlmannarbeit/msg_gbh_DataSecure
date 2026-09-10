@@ -2,6 +2,19 @@
 
 Stand: 10.09.2026 · 3.2.0-rc133 · Windows-PKG-04/INT-13 gebunden; N3/N4 und weitere Zielhosts offen
 
+## Ungebundener Arbeitsstand – zweckgebundene DOCX-Kopf-/Fußprojektion
+
+Nach DS-098 bleibt die vollständige DOCX-Strukturprüfung unverändert streng,
+aber die sichtbare Projektion unterscheidet den Zweck. Reine
+Markdown-Konvertierung erhält Kopf- und Fußzeilen. Cowork- und
+Standalone-Anonymisierung geben diese Bereiche und ausschließlich dort
+referenzierte Bilder nicht mehr aus; Hauptteil, Kommentare, Fußnoten und
+Endnoten bleiben im geprüften Markdown. Ein fester, inhaltsfreier
+Quellenabdeckungsgrund weist den eingeschränkten Ergebnisumfang ehrlich aus.
+PDF-/Scan-PDF-Seitenränder und PPTX-Master werden nicht heuristisch entfernt.
+Parser-, Worker-, Orchestrator- und reale DOCX-Gegenläufe sind Teil des noch zu
+bindenden Nachweises; RC133 selbst bleibt unverändert.
+
 ## RC133 – commitgebundener Testschnitt
 
 RC133 übernimmt den vollständig geprüften RC132-Funktionsstand einschließlich
@@ -1341,6 +1354,10 @@ gehärtet. Die Auswertung ist an die tatsächliche WordprocessingML-Namespace-UR
 gebunden; unbekannte XML-Entities, fremde Relationship-Namespaces und fremde
 direkte Textknoten stoppen. Kopf-/Fußzeilen werden ausschließlich über die
 tatsächlichen Dokumentreferenzen in kanonischer Reihenfolge gelesen. Für
+die reine Konvertierung werden sie ausgegeben; für Anonymisierung werden sie
+nach dieser vollständigen Prüfung gemäß DS-098 aus der Ergebnisprojektion
+entfernt. Ausschließlich dort referenzierte Bilder werden ebenfalls nicht
+ausgegeben. Kommentare, Fuß- und Endnoten bleiben erhalten. Für
 `mc:AlternateContent` gilt eine feste Policy: bekannte Word-2010-Textfeld-
 Namespaces wählen die erste unterstützte Choice, unbekannte Choices genau einen
 Fallback; ohne eindeutigen Pfad stoppt der Parser. Offen bleiben reale Office-

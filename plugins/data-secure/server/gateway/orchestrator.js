@@ -316,6 +316,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
   const productChannel = deps.productChannel || 'plugin';
   const markdownFirstPrivacy = require('../core/markdown-first-privacy')
     .isMarkdownFirstPrivacyExtension(ext, productChannel);
+  const scopedPrivacy = markdownFirstPrivacy || ext === '.docx';
   if (!PILOT_SUPPORTED.has(ext) && !markdownFirstPrivacy) {
     const error = new SafeError(
       'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben. ' +
@@ -383,10 +384,14 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       : await (deps.convertDocument || convertDocument)(source, {
         signal: deps.abortSignal,
         inputBuffer: sourceBuffer,
-        sourceName: originalName
+        sourceName: originalName,
+        ...(ext === '.docx' ? { omitDocxHeaderFooter: true } : {})
       });
     throwIfAborted(deps.abortSignal);
     diagnosticStage = 'converted';
+    const sourceExtractionCoverage = markdownFirstPrivacy ? converted.sourceExtractionCoverage
+      : ext === '.docx' ? Object.freeze({ status: 'incomplete',
+        reason_codes: Object.freeze(['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY']) }) : null;
     diagnostic.parser_warning_count = (converted.warnings || []).length;
     diagnostic.visual_assets_total = (converted.attachments || []).length + (converted.unreviewedVisualCount || 0);
     if (deps.onExtracted) await deps.onExtracted(converted);
@@ -538,11 +543,12 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
 
     const mdName = `${packageId}.md`;
     const mdPath = path.join(stagePackage, mdName);
-    const extractedMarkdownScope = markdownFirstPrivacy
+    const extractedMarkdownScope = scopedPrivacy
       ? '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. ' +
-        (converted.sourceExtractionCoverage.status === 'complete'
+        (sourceExtractionCoverage.status === 'complete'
           ? 'Der lokale Konverter bestätigt die Extraktionsabdeckung; die Originaldatei selbst bleibt unverändert.'
           : 'Die Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert; nicht extrahierte Inhalte sind in diesem Ergebnis nicht enthalten.') +
+        (ext === '.docx' ? ' Kopf- und Fußzeilen sind gemäß Ausgaberegel nicht enthalten.' : '') +
         '\n\n'
       : '';
     const finalText =
@@ -554,7 +560,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         review,
         removed,
         reidentificationRisk: anon.reidentificationRisk,
-        ...(markdownFirstPrivacy ? { sourceExtractionCoverage: converted.sourceExtractionCoverage } : {})
+        ...(scopedPrivacy ? { sourceExtractionCoverage } : {})
       }) +
       extractedMarkdownScope +
       reviewedText +
@@ -613,9 +619,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       created_at: new Date().toISOString(),
       profile: effective,
       source_type: ext.slice(1),
-      ...(markdownFirstPrivacy ? {
+      ...(scopedPrivacy ? {
         privacy_scope: 'extracted-markdown-only',
-        source_extraction_coverage: converted.sourceExtractionCoverage
+        source_extraction_coverage: sourceExtractionCoverage
       } : {}),
       document: mdName,
       document_sha256: documentSha256,
@@ -743,9 +749,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         redactions: vis.results.reduce((n, x) => n + (x.redactions || 0), 0)
       },
       document_result: documentResult,
-      ...(markdownFirstPrivacy ? {
+      ...(scopedPrivacy ? {
         privacy_scope: 'extracted-markdown-only',
-        source_extraction_coverage: converted.sourceExtractionCoverage
+        source_extraction_coverage: sourceExtractionCoverage
       } : {}),
       original_moved_to_processed: false,
       persistent_mapping_retained: false,

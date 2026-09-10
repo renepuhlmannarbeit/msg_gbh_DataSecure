@@ -89,7 +89,7 @@ test('incomplete conversion is retained with its explicit non-anonymized grade a
     assert.strictEqual(validateMarkdownArtifact(artifact.manifest, artifact.markdown), artifact.manifest);
   }
   const result = extraction('Text', 'pdf', { status: 'incomplete', reason_codes: [...COVERAGE_REASON_CODES] });
-  assert.strictEqual(result.coverage.reason_codes.length, 4);
+  assert.strictEqual(result.coverage.reason_codes.length, COVERAGE_REASON_CODES.length);
 });
 
 test('coverage rejects missing, unknown, duplicate, unsorted and contradictory reasons', () => {

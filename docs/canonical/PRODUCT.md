@@ -66,6 +66,7 @@ bestätigte Person das stapelweit stabile Pseudonym erhält.
 | gesperrt | unbekannte Formate; PDF, Scan-PDF und Bilder im Cowork-Plugin; leere OCR, beschädigte, verschlüsselte oder aktive Quellen |
 | verschlüsselt/passwortgeschützt | sicher stoppen, gesondert lokal melden, nicht entschlüsseln |
 | Bilder in DOCX | Pixel bleiben lokal; kein auswählbarer Modus; kein Claude-Freigabeweg |
+| DOCX-Kopf/-Fußzeilen | reine Konvertierung erhält sie; Anonymisierung prüft sie vollständig, gibt sie und ausschließlich dort referenzierte Bilder aber nicht aus |
 | Ergebnis | ein geprüftes Markdown je positiver Datei, dauerhaft lokales Mapping |
 | Grade | vollständig verarbeitet; verwendbar mit Auslassungen; sicher nicht verarbeitet |
 
@@ -73,6 +74,10 @@ Eine Endung ist keine Freigabe. Signatur, Containerstruktur, aktive Inhalte,
 Einbettungen und Größen werden fail-closed geprüft. Bekannte, vertraglich
 klassifizierte Extraktionslücken dürfen nur im Standalone-Markdown-first-Pfad
 weiterlaufen und müssen dort getrennt vom Anonymisierungsstatus sichtbar sein.
+Für DOCX-Anonymisierung ist der sichtbare Ausgabeumfang nach DS-098 ausdrücklich
+der Dokumentinhalt **ohne Kopf- und Fußzeilen**. Kommentare, Fußnoten und
+Endnoten bleiben enthalten. Die Regel gilt in Cowork und Standalone; sie ist
+keine allgemeine Heuristik für PDF-Seitenränder, PPTX-Master oder Bilder.
 
 ## Lokale Daten
 
@@ -143,6 +148,8 @@ alte Transaktion einschließlich `DataSecure-Zuordnung.csv`. Neue reine
 Konvertierungsläufe erzeugen weiterhin keine Zuordnungsdatei.
 Die Format-Zielliste bleibt für beide Modi erhalten; deren Freigabestatus darf
 nicht aus einer sichtbaren Moduswahl oder vorhandenen Dateiendung abgeleitet werden.
+Bei DOCX erhält dieser reine Konvertierungszweck Kopf- und Fußzeilen, während der
+Anonymisierungszweck sie nach vollständiger Strukturprüfung nicht veröffentlicht.
 
 Für Standalone-Anonymisierung ist die sichtbare Ergebnisbenennung eine
 ausdrückliche Stapelwahl (DS-091): neutral ist Standard, alternativ bleibt der

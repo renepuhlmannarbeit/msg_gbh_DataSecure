@@ -6,6 +6,7 @@ const path = require('path');
 const { createSuite } = require('./helpers');
 const { generate, expectedFiles, LAYOUT } = require('../docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures');
 const { inspectSourceFormatFromFd } = require('../plugins/data-secure/server/gateway/source-format-inspector');
+const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 
 const { test, done, assert } = createSuite('Current UAT fixture generation');
 const kit = path.resolve(__dirname, '..', 'docs', 'acceptance', 'UAT_TEST_KIT');
@@ -45,6 +46,19 @@ test('Node generator creates exactly the current 111-file layout without histori
   assert.strictEqual(inspect('01-positive/personnel-profile.pptx', pluginPrivacy).verdict, 'candidate');
   assert.strictEqual(inspect('03-blocked/blocked-text.pdf', pluginPrivacy).verdict, 'not_released');
   assert.strictEqual(inspect('03-blocked/malformed.docx').verdict, 'rejected');
+  const docx = fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.docx'));
+  const converted = extractMarkdownBuffer(docx, '.docx');
+  const privacy = extractMarkdownBuffer(docx, '.docx', { omitDocxHeaderFooter: true });
+  assert.match(converted.markdown, /DATENSECURE UAT KOPFZEILE/u);
+  assert.match(converted.markdown, /DATENSECURE UAT FUSSZEILE/u);
+  assert.doesNotMatch(privacy.markdown, /DATENSECURE UAT (?:KOPF|FUSS)ZEILE/u);
+  assert.match(privacy.markdown, /Product Owner/u);
+  assert.deepStrictEqual(privacy.coverage, {
+    status: 'incomplete', reason_codes: [
+      'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
+      'SOURCE_COVERAGE_UNVERIFIED'
+    ]
+  });
 });
 
 test('generation is byte-reproducible and rejects output outside the current kit', () => {

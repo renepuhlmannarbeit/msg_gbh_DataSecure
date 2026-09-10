@@ -25,11 +25,17 @@ try {
     networkGuard.configurable !== false) throw new Error('network_boundary_missing');
   const ext = String(process.argv[2] || '').toLowerCase();
   const sourceFd = Number(process.argv[3]);
+  const outputPolicy = process.argv[4];
   if (sourceFd !== 0 && sourceFd !== 3) throw new Error('source_descriptor_invalid');
+  if (process.argv.length > 5 || (outputPolicy !== undefined && outputPolicy !== 'omit-docx-header-footer')) {
+    throw new Error('output_policy_invalid');
+  }
+  if (outputPolicy !== undefined && ext !== '.docx') throw new Error('output_policy_format_invalid');
   const fs = require('fs');
   const { parseDocumentBuffer } = require('./document-parser');
   const input = fs.readFileSync(sourceFd);
-  send({ schema: 'data-secure-parser-result/1', ok: true, result: parseDocumentBuffer(input, ext) });
+  send({ schema: 'data-secure-parser-result/1', ok: true, result: parseDocumentBuffer(input, ext,
+    outputPolicy === undefined ? {} : { omitDocxHeaderFooter: true }) });
 } catch {
   send({ schema: 'data-secure-parser-result/1', ok: false, error: 'parse_failed' });
   process.exitCode = 2;

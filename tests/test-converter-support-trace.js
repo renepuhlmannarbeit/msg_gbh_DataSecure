@@ -43,7 +43,7 @@ function fixture(text = sourceText, extension = '.txt') {
 }
 function convert(f, extra = {}) {
   return convertNext('ignored-profile', { inputQueue: [f.entry], artifactId: f.artifactId,
-    convertBuffer: extractMarkdownBuffer, ...extra });
+    convertBuffer: (bytes, extension) => extractMarkdownBuffer(bytes, extension), ...extra });
 }
 function evidence(f, expected) {
   assert.deepEqual(f.observed.map(event => event.event), expected);

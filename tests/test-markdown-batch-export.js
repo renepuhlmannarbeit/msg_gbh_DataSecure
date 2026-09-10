@@ -26,6 +26,7 @@ const digest = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex'
 let serial = 0;
 const nextId = () => (++serial).toString(16).padStart(32, '0');
 const sourceText = 'Name: Max Mustermann\r\nUnternehmen: Nordstern GmbH\r\nIBAN: DE89 3704 0044 0532 0130 00\r\n';
+const extractWithWorkerInterface = (bytes, extension) => extractMarkdownBuffer(bytes, extension);
 function extraction(text = sourceText, incomplete = false) {
   return createMarkdownExtraction({ source_type: 'txt', markdown: text, coverage: incomplete
     ? { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'] }
@@ -105,7 +106,7 @@ async function run() {
   });
   await testAsync('real TXT conversion crosses processing/publication/delivery without privacy hooks', async () => {
     const f = processorFixture();
-    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractMarkdownBuffer });
+    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractWithWorkerInterface });
     assert.strictEqual(result.ok, true);
     assert.strictEqual(f.item.status, 'delivery_pending');
     assert.ok(store.verifyMarkdownItem(f.item));
@@ -124,7 +125,7 @@ async function run() {
   await testAsync('Markdown-only preserves compatibility identifiers and telephone suffixes through real conversion, store and export', async () => {
     const { originalDocument } = require('./lib/identifier-compatibility');
     const f = processorFixture(originalDocument);
-    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractMarkdownBuffer });
+    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractWithWorkerInterface });
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.anonymized, false);
     assert.strictEqual(store.readMarkdownArtifact(f.item.artifact_id).markdown, originalDocument);
@@ -139,7 +140,7 @@ async function run() {
   await testAsync('crash after committed artifact recovers the exact identity without reconversion', async () => {
     const f = processorFixture();
     f.faults.failWrite = 2;
-    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractMarkdownBuffer });
+    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractWithWorkerInterface });
     assert.strictEqual(result.ok, false);
     assert.strictEqual(f.item.status, 'processing');
     const expected = f.item.artifact_id;
@@ -192,7 +193,7 @@ async function run() {
   await testAsync('a legacy, plugin-owned or pseudonym-bearing mode cannot reach conversion hooks', async () => {
     for (const change of [{ schema: 'datasecure-batch/4' }, { product_channel: 'plugin' }, { pseudonym_seed: 'secret' }]) {
       const f = processorFixture(); Object.assign(f.state, change);
-      await assert.rejects(() => f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractMarkdownBuffer }));
+      await assert.rejects(() => f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractWithWorkerInterface }));
       assert.strictEqual(f.item.status, 'pending');
       assert.strictEqual(f.writes.length, 0);
     }
@@ -209,10 +210,10 @@ async function run() {
   });
   await testAsync('CSV input content remains present and malformed CSV is stopped, not privacy-reviewed', async () => {
     const good = processorFixture('Name,Firma\nMax Mustermann,Nordstern GmbH\n', '.csv');
-    assert.strictEqual((await good.processor.processSingleBatchItem(good.state, good.item, good.entry, { convertBuffer: extractMarkdownBuffer })).ok, true);
+    assert.strictEqual((await good.processor.processSingleBatchItem(good.state, good.item, good.entry, { convertBuffer: extractWithWorkerInterface })).ok, true);
     assert.match(store.readMarkdownArtifact(good.item.artifact_id).markdown, /Max&#32;Mustermann/);
     const bad = processorFixture('Name,Wert\n"unterminiert', '.csv');
-    const result = await bad.processor.processSingleBatchItem(bad.state, bad.item, bad.entry, { convertBuffer: extractMarkdownBuffer });
+    const result = await bad.processor.processSingleBatchItem(bad.state, bad.item, bad.entry, { convertBuffer: extractWithWorkerInterface });
     assert.strictEqual(result.ok, false);
     assert.strictEqual(bad.item.status, 'stopped');
     assert.ok(!Object.hasOwn(bad.item, 'artifact_id'));
@@ -220,12 +221,12 @@ async function run() {
   });
   await testAsync('source digest mismatch and cancellation never publish', async () => {
     const f = processorFixture(); f.entry.private_bytes[0] ^= 1;
-    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractMarkdownBuffer });
+    const result = await f.processor.processSingleBatchItem(f.state, f.item, f.entry, { convertBuffer: extractWithWorkerInterface });
     assert.strictEqual(result.ok, false);
     assert.ok(!Object.hasOwn(f.item, 'artifact_id'));
     const aborted = processorFixture(); const controller = new AbortController(); controller.abort();
     const cancelled = await aborted.processor.processSingleBatchItem(aborted.state, aborted.item, aborted.entry,
-      { signal: controller.signal, convertBuffer: extractMarkdownBuffer });
+      { signal: controller.signal, convertBuffer: extractWithWorkerInterface });
     assert.strictEqual(cancelled.ok, false);
     assert.strictEqual(aborted.item.status, 'retryable');
     assert.ok(!Object.hasOwn(aborted.item, 'artifact_id'));

@@ -60,3 +60,10 @@ Metadatenknoten. Benutzerdefinierte Werte werden nur für unterstützte skalare
 OOXML-Typen ausgegeben; komplexe Typen stoppen die Coverage-Prüfung. Feinere
 Absatz-, Zell-, Seiten- und Spezialmetadaten-Locators werden in den jeweiligen positiven
 Formatstories ergänzt, bevor diese Formate freigegeben werden.
+
+Der Graph ist das validierte Quelleninventar und nicht automatisch die sichtbare
+Ausgabeprojektion. Nach DS-098 bleiben DOCX-Kopf/-Fußzeilen im Graph gebunden und
+vollständig prüfbar. Der reine Konvertierungszweck rendert sie; der
+Anonymisierungszweck projiziert sie und ausschließlich dort referenzierte Bilder
+nicht in das Ergebnis. Dieser zweckgebundene Ausschluss darf weder unbekannte
+Parts noch fehlerhafte Beziehungen aus der Coverage-Prüfung entfernen.

@@ -571,6 +571,7 @@ function visibleMappingBytes(record) {
   }
   const converting = record.schema === LEGACY_MARKDOWN_SCHEMA;
   const notices = {
+    DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY: 'DOCX-Kopf- und Fußzeilen gemäß Ausgaberegel nicht enthalten',
     OCR_NOT_VERIFIED: 'OCR-Texterkennung nicht fachlich geprüft',
     OCR_TEXT_EMPTY: 'Kein Text durch OCR erkannt',
     SOURCE_COVERAGE_UNVERIFIED: 'Vollständigkeit der Inhaltsextraktion nicht bestätigt',

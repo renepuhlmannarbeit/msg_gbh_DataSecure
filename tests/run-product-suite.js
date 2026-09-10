@@ -51,7 +51,8 @@ const baseFiles = [
   'tests/test-stable-data-root.js',
   'tests/make-fixtures.js', 'scripts/verify-canonical-docs.mjs',
   'tests/test-current-documentation-contract.js', 'tests/test-current-document-links.js',
-  'tests/test-current-uat-kit-contract.js', 'tests/test-uat-fixture-generation.js'
+  'tests/test-current-uat-kit-contract.js', 'tests/test-uat-fixture-generation.js',
+  'tests/test-complex-docx-uat-corpus.mjs'
 ];
 
 const ciFiles = [

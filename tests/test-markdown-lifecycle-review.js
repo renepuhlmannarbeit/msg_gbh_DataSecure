@@ -36,7 +36,8 @@ async function probe(scenario, root) {
   const itemId = initial.items[0].id;
   if (continuationScenario) {
     let starts = 0, pipelineRuns = 0, execution;
-    const deps = { executorPid: process.pid, convertBuffer: extractMarkdownBuffer,
+    const deps = { executorPid: process.pid,
+      convertBuffer: (bytes, extension) => extractMarkdownBuffer(bytes, extension),
       // Use the actual text extractor in both purpose paths. Only its native
       // launch boundary is replaced, as in the other integration scenarios.
       convertDocument: async (_source, options) => {
@@ -165,7 +166,7 @@ async function probe(scenario, root) {
   const convertBuffer = terminationScenario ? async () => {
     conversions++;
     throw Object.assign(new Error('Fixed synthetic termination boundary'), { code: 'CONVERSION_TERMINATION_UNCONFIRMED' });
-  } : extractMarkdownBuffer;
+  } : (bytes, extension) => extractMarkdownBuffer(bytes, extension);
   const result = await batch.runLocalBatchExecutor(token, { executorPid: process.pid, convertBuffer });
   probeStage = 'read-final';
   const state = batch._test.readState(token);

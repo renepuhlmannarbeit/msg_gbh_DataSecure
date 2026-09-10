@@ -24,6 +24,8 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.match(overview, /Ein einzelner Mac schließt nur seine reale Architektur/u);
   assert.match(overview, /Standalone muss offline funktionieren/u);
   assert.match(overview, /Cowork benötigt Claude Desktop und\s+Internet/u);
+  assert.match(overview, /RC133 bleibt der letzte gebundene Kandidat/u);
+  assert.match(overview, /S01.S23 einschließlich S14a/u);
 });
 
 test('N3 and N4 have ten and eight named executable checks', () => {
@@ -37,6 +39,8 @@ test('N3 and N4 have ten and eight named executable checks', () => {
   assert.match(checklist, /200-Dateien-Lauf/u);
   assert.match(checklist, /500-MiB/u);
   assert.match(checklist, /Narrator beziehungsweise VoiceOver/u);
+  assert.match(checklist, /DS-098-Kandidaten[\s\S]*Kopf-\/Fußzeilen/u);
+  assert.match(checklist, /keine Aussage über PDF-\/PPTX-Randbereiche/u);
 });
 
 test('platform evidence files are disjoint and start as NOT_RUN', () => {

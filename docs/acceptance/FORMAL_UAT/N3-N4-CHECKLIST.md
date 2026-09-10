@@ -14,7 +14,7 @@ das Cowork-Plugin.
 | N3-03 | Standalone-Kommunikation | Oberfläche, privates IPC, Sidecar und Core sind ohne separat gestarteten Server erreichbar; Diagnose öffnet inhaltsfreie Logs. |
 | N3-04 | Cowork-Kommunikation | Lokale Cowork-Sitzung erkennt Plugin und Tools nach Neustart. Cloud-/Web-/Mobilpfade erhalten keinen lokalen Originalzugriff. |
 | N3-05 | Datei-, Ordner- und Ergebnisweg | Ein Picker je Auswahl, rekursive Unterordner, Auswahlkorrektur, Ergebnisordner, exakte Öffnen-Aktion und produktspezifische Mappingregel stimmen. |
-| N3-06 | Format- und Sicherheitsgrenzen | Alle laut aktuellem Produktvertrag freigegebenen Formate funktionieren; beschädigte, aktive oder verschlüsselte Quellen stoppen wie dokumentiert. |
+| N3-06 | Format- und Sicherheitsgrenzen | Alle laut aktuellem Produktvertrag freigegebenen Formate funktionieren; beschädigte, aktive oder verschlüsselte Quellen stoppen wie dokumentiert. Bei einem DS-098-Kandidaten erhält reine DOCX-Konvertierung Kopf-/Fußzeilen, während die Anonymisierung sie nach vollständiger Strukturprüfung auslässt, den engeren Umfang nennt und Hauptteil, Kommentare, Fuß- und Endnoten erhält. |
 | N3-07 | Abbruch, Neustart und Fortsetzung | Kein Doppelstart, keine Duplikate, kein alter Ergebnis-Fallback und konsistenter Stapel-/Pseudonymzustand. |
 | N3-08 | Quellen- und Netzwerkgrenze | Originale bleiben bytegleich. Standalone funktioniert offline; Cowork sendet keine Originaldaten, Pfade oder Dateinamen an Claude. |
 | N3-09 | Serien- und Grenzlauf | Versionsneuer 200-Dateien-Lauf und vereinbarte 500-MiB-Prüfung schließen ohne unzulässigen Teiloutput ab; Zeiten und Referenzhardware werden inhaltsfrei notiert. |
@@ -30,7 +30,7 @@ der Marketplace im Kampagnenmanifest als freizugebender Kanal eingetragen ist.
 |---|---|---|
 | N4-01 | Einstieg und Aufgabenverständnis | Testperson erkennt beide Standalone-Funktionen beziehungsweise den Cowork-Anonymisierungsweg ohne technische Erklärung. |
 | N4-02 | Einfacher Normalweg | Auswahl, Start, eventuelle Sammelprüfung und Ergebniszugriff sind eindeutig; keine Bestätigungsorgie oder unerwartete Navigation. |
-| N4-03 | Ergebnisverständnis | Konvertierung versus Anonymisierung, Extraktionsgrad, gestoppte Dateien und Zuordnung werden fachlich richtig verstanden. |
+| N4-03 | Ergebnisverständnis | Konvertierung versus Anonymisierung, Extraktionsgrad, gestoppte Dateien und Zuordnung werden fachlich richtig verstanden. Beim DOCX-Vertrag ist verständlich, dass Kopf-/Fußzeilen nur in der anonymisierten Ausgabe fehlen und dies keine Aussage über PDF-/PPTX-Randbereiche ist. |
 | N4-04 | Stapel und Historie | Dokumentübergreifende Personen-/Unternehmenskennungen, 20 Verlaufszeilen und laufgebundene Aktionen sind nachvollziehbar. |
 | N4-05 | Fehler und Wiederaufnahme | Abbruch, Fehler, Diagnose und Fortsetzung nennen eine klare nächste Aktion; technische Codes erscheinen nur als Detail. |
 | N4-06 | Accessibility | Vollständig per Tastatur bedienbar; Fokus sichtbar; 200-%-Zoom ohne Funktionsverlust; Narrator beziehungsweise VoiceOver vermittelt Namen, Zustand und Aktionen. |

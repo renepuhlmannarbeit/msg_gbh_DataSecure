@@ -116,8 +116,13 @@ test('real TXT/Markdown/CSV/DOCX parsers feed one readable identity per full per
     let expectedMarkers;
     for (const ext of ['.txt', '.md', '.csv', '.docx']) {
       const source = fs.readFileSync(path.join(fixtureRoot, '01-positive', `personnel-profile${ext}`));
-      const converted = parseDocumentBuffer(source, ext);
+      // Feed the same purpose-specific DOCX projection used by both products;
+      // comparing the content-preserving conversion would reintroduce header
+      // and footer text that privacy output intentionally excludes under DS-098.
+      const converted = parseDocumentBuffer(source, ext,
+        ext === '.docx' ? { omitDocxHeaderFooter: true } : {});
       assert.ok(converted.markdown.length > 100, 'real parser must produce source content');
+      if (ext === '.docx') assert.doesNotMatch(converted.markdown, /DATENSECURE UAT (?:KOPF|FUSS)ZEILE/u);
       const result = anonymizeMarkdown(converted.markdown, ext === '.csv' ? 'general' : 'personnel_profile', { registry });
       const markers = [...new Set(result.text.match(/\[(?:PERSON|UNTERNEHMEN)_\d+\]/gu))].sort();
       assert.ok(markers.includes('[PERSON_001]'), result.text);

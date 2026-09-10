@@ -105,6 +105,7 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     const convert = options.convertBuffer || require('../standalone/conversion-worker').convertBuffer;
     extraction = await convert(bytes, normalizedExtension, {
       signal: options.signal,
+      ...(normalizedExtension === '.docx' ? { omitDocxHeaderFooter: true } : {}),
       ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs })
     });
     const { validateMarkdownExtraction } = require('../standalone/markdown-contract');
@@ -120,7 +121,8 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     extraction = await convert(normalizedExtension, {
       signal: options.signal,
       inputBuffer: bytes,
-      sourceName: `source${normalizedExtension}`
+      sourceName: `source${normalizedExtension}`,
+      ...(normalizedExtension === '.docx' ? { omitDocxHeaderFooter: true } : {})
     });
     coverage = directParserCoverage(extraction);
   }

@@ -95,6 +95,11 @@ Sie konvertiert TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF/Scan-PDF sowie
 PNG/JPEG/BMP nach Markdown. Im Anonymisierungsmodus laufen TXT, Markdown und CSV
 direkt; DOCX und die breiten Formate werden genau einmal lokal nach Markdown
 extrahiert und anschließend mit demselben Privacy-Core anonymisiert.
+DOCX-Kopf- und Fußzeilen werden weiterhin vollständig auf sichere Struktur
+geprüft. Reine Markdown-Konvertierung erhält sie; Cowork- und
+Standalone-Anonymisierung geben sie sowie ausschließlich dort referenzierte
+Bilder nicht aus. PDF-/Scan-PDF-Seitenränder werden nicht unsicher geraten oder
+automatisch abgeschnitten.
 
 ## Einfacher Cowork-Ablauf
 

@@ -34,11 +34,20 @@ const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const cell = (value) => `<w:tc><w:p><w:r><w:t>${value}</w:t></w:r></w:p></w:tc>`;
 function privacyTableDocx() {
-  return zipStore([...opcControlEntries('docx'), ['word/document.xml',
-    `<w:document xmlns:w="${W}"><w:body><w:tbl>` +
+  return zipStore([...opcControlEntries('docx', { additionalOverrides: [
+    { part: 'word/header1.xml', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml' },
+    { part: 'word/footer1.xml', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml' }
+  ] }), ['word/document.xml',
+    `<w:document xmlns:w="${W}" xmlns:r="${R}"><w:body><w:tbl>` +
     `<w:tr>${cell('Name')}${cell('Arbeitgeber')}</w:tr>` +
     `<w:tr>${cell('Max Mustermann')}${cell('Nordlicht GmbH')}</w:tr>` +
-    '</w:tbl></w:body></w:document>']]);
+    '</w:tbl><w:sectPr><w:headerReference w:type="default" r:id="rIdHeader1"/>' +
+    '<w:footerReference w:type="default" r:id="rIdFooter1"/></w:sectPr></w:body></w:document>'],
+  ['word/_rels/document.xml.rels', `<Relationships xmlns="${PR}">` +
+    `<Relationship Id="rIdHeader1" Type="${R}/header" Target="header1.xml"/>` +
+    `<Relationship Id="rIdFooter1" Type="${R}/footer" Target="footer1.xml"/></Relationships>`],
+  ['word/header1.xml', `<w:hdr xmlns:w="${W}"><w:p><w:r><w:t>HEADER PRIVATE</w:t></w:r></w:p></w:hdr>`],
+  ['word/footer1.xml', `<w:ftr xmlns:w="${W}"><w:p><w:r><w:t>FOOTER PRIVATE</w:t></w:r></w:p></w:ftr>`]]);
 }
 function privacyTableXlsx() {
   const row = (number, left, right) => `<row r="${number}"><c r="A${number}" t="inlineStr"><is><t>${left}</t></is></c><c r="B${number}" t="inlineStr"><is><t>${right}</t></is></c></row>`;
@@ -201,6 +210,23 @@ testAsync('the Cowork/plugin channel still blocks PDF before any wide converter'
     async convertBuffer() { conversions++; throw new Error('must not run'); } }),
   error => ['PDF_COVERAGE_UNVERIFIED', 'FORMAT_COVERAGE_UNVERIFIED'].includes(error.code));
   assert.equal(conversions, 0);
+});
+
+testAsync('Cowork DOCX privacy omits header and footer through the isolated parser contract', async () => {
+  const entry = { name: 'profile.docx', private_artifact_plain: true,
+    private_bytes: Buffer.from(privacyTableDocx()) };
+  const result = await anonymizeNext('personnel_profile', {
+    productChannel: 'plugin', inputQueue: [entry]
+  });
+  assert.equal(result.privacy_scope, 'extracted-markdown-only');
+  assert.deepEqual(result.source_extraction_coverage, {
+    status: 'incomplete', reason_codes: ['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY']
+  });
+  const released = readOutput(result.package_id, result.read_capability).text;
+  assert.match(released, /Kopf- und Fußzeilen sind gemäß Ausgaberegel nicht enthalten/u);
+  assert.match(released, /\[PERSON_[A-Z0-9]+\]|\[UNTERNEHMEN_[A-Z0-9]+\]/u);
+  assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH|HEADER PRIVATE|FOOTER PRIVATE/u);
+  assert.ok(entry.private_bytes.every(byte => byte === 0));
 });
 
 testAsync('Cowork anonymizes XLSX and PPTX through its isolated Markdown-first Office path', async () => {

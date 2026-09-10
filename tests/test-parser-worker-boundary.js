@@ -16,11 +16,12 @@ const failedResponse = { schema: 'data-secure-parser-result/1', ok: false, error
 const activeMarker = { value: true, writable: false, configurable: false };
 
 function runWorker({ permission = { has: () => false }, marker = activeMarker,
-  fd = '0', extension = '.TXT', env = {} } = {}) {
+  fd = '0', extension = '.TXT', outputPolicy, env = {} } = {}) {
   const events = [];
   let output = '';
+  let parserOptions;
   const fakeProcess = {
-    argv: ['node', workerPath, extension, fd], permission, env,
+    argv: ['node', workerPath, extension, fd, ...(outputPolicy === undefined ? [] : [outputPolicy])], permission, env,
     stdout: { write(text) { output += text; } }
   };
   const sandbox = {
@@ -32,8 +33,9 @@ function runWorker({ permission = { has: () => false }, marker = activeMarker,
         return Buffer.from('PARSER_BOUNDARY_CANARY');
       } };
       assert.strictEqual(name, './document-parser');
-      return { parseDocumentBuffer(bytes, ext) {
+      return { parseDocumentBuffer(bytes, ext, options) {
         events.push(`parse:${ext}`);
+        parserOptions = options;
         assert.strictEqual(bytes.toString('utf8'), 'PARSER_BOUNDARY_CANARY');
         return { markdown: 'parsed-canary' };
       } };
@@ -41,7 +43,7 @@ function runWorker({ permission = { has: () => false }, marker = activeMarker,
   };
   if (marker !== null) Object.defineProperty(sandbox, markerName, marker);
   vm.runInNewContext(workerSource, sandbox, { timeout: 1000 });
-  return { events, response: JSON.parse(output), exitCode: fakeProcess.exitCode };
+  return { events, response: JSON.parse(output), exitCode: fakeProcess.exitCode, parserOptions };
 }
 
 function assertRejectedBeforeImport(options) {
@@ -85,10 +87,22 @@ test('a complete boundary preserves fd 0/fd 3 and extension normalization', () =
     assert.deepStrictEqual(checked, scopes);
     assert.deepStrictEqual(result.events, ['require:fs', 'require:./document-parser', `read:${fd}`, 'parse:.txt']);
     assert.strictEqual(result.exitCode, undefined);
+    assert.strictEqual(JSON.stringify(result.parserOptions), '{}');
     assert.deepStrictEqual(result.response, {
       schema: 'data-secure-parser-result/1', ok: true, result: { markdown: 'parsed-canary' }
     });
   }
+});
+
+test('the only output policy is bound to DOCX and reaches the parser as a boolean option', () => {
+  const accepted = runWorker({ extension: '.DOCX', outputPolicy: 'omit-docx-header-footer' });
+  assert.deepStrictEqual(accepted.events, ['require:fs', 'require:./document-parser', 'read:0', 'parse:.docx']);
+  assert.strictEqual(JSON.stringify(accepted.parserOptions), '{"omitDocxHeaderFooter":true}');
+  for (const options of [
+    { extension: '.txt', outputPolicy: 'omit-docx-header-footer' },
+    { extension: '.docx', outputPolicy: 'include-docx-header-footer' },
+    { extension: '.docx', outputPolicy: '' }
+  ]) assertRejectedBeforeImport(options);
 });
 
 test('invalid descriptors still fail before parser import and never become file paths', () => {

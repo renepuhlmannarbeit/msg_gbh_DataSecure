@@ -60,9 +60,17 @@ function extractCsv(source) {
   return lines.join('\n');
 }
 
-function extractMarkdownBuffer(buffer, extension) {
+function extractMarkdownBuffer(buffer, extension, options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options) ||
+      Object.keys(options).some((key) => key !== 'omitDocxHeaderFooter') ||
+      (options.omitDocxHeaderFooter !== undefined && typeof options.omitDocxHeaderFooter !== 'boolean')) {
+    throw new MarkdownExtractionError('CONVERSION_INPUT_INVALID');
+  }
   const source_type = SOURCE_TYPES.get(typeof extension === 'string' ? extension.toLowerCase() : '');
   if (!source_type) throw new MarkdownExtractionError('MARKDOWN_FORMAT_UNSUPPORTED');
+  if (options.omitDocxHeaderFooter === true && source_type !== 'docx') {
+    throw new MarkdownExtractionError('CONVERSION_INPUT_INVALID');
+  }
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new MarkdownExtractionError('INPUT_FILE_LIMIT');
   const maximumBytes = source_type === 'csv' ? RESOURCE_LIMITS.MAX_CSV_SOURCE_BYTES
     : ['txt', 'md'].includes(source_type) ? RESOURCE_LIMITS.MAX_TEXT_SOURCE_BYTES : RESOURCE_LIMITS.MAX_DOCX_SOURCE_BYTES;
@@ -77,8 +85,12 @@ function extractMarkdownBuffer(buffer, extension) {
     } else if (source_type === 'csv') {
       markdown = extractCsv(decodeUtf8Source(buffer));
     } else {
-      const parsed = parseOoxml(buffer, `.${source_type}`, undefined, { preserveText: true });
+      const parsed = parseOoxml(buffer, `.${source_type}`, undefined, {
+        preserveText: true,
+        ...(options.omitDocxHeaderFooter === true ? { omitDocxHeaderFooter: true } : {})
+      });
       markdown = parsed.markdown;
+      if (options.omitDocxHeaderFooter === true) reasons.add('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY');
       if (parsed.warnings.length || source_type === 'xlsx' || source_type === 'pptx') reasons.add('SOURCE_COVERAGE_UNVERIFIED');
       if (parsed.attachments.length) reasons.add('VISUAL_CONTENT_NOT_EXTRACTED');
     }

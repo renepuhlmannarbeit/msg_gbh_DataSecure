@@ -217,10 +217,10 @@ test('canonical register distinguishes active, no-go, and superseded contracts',
   }
 });
 
-test('machine document index covers the active document register and current Cowork decision', () => {
+test('machine document index covers the active document register and current purpose projection decision', () => {
   const index = JSON.parse(read('docs/canonical/DOCUMENT_INDEX.json'));
   assert.strictEqual(index.schema, 'datasecure-document-index/1');
-  assert.strictEqual(index.validated_at, '2026-09-09');
+  assert.strictEqual(index.validated_at, '2026-09-10');
   const byPath = new Map(index.documents.map((entry) => [entry.path, entry]));
   const activePaths = [
     'docs/canonical/DOCUMENT_REGISTER.md',
@@ -254,6 +254,13 @@ test('machine document index covers the active document register and current Cow
     'docs/canonical/TRACEABILITY.md', 'docs/canonical/TARGET_CAPABILITIES.json']) {
     assert.ok(byPath.get(documentPath)?.decisions.includes('DS-093'),
       `${documentPath} must be indexed against DS-093`);
+  }
+  for (const documentPath of ['docs/canonical/DECISIONS.md', 'docs/canonical/PRODUCT.md',
+    'docs/canonical/CURRENT_STATE.md', 'docs/canonical/BACKLOG.md',
+    'docs/canonical/TRACEABILITY.md', 'docs/canonical/UML_ARCHITECTURE.md',
+    'docs/canonical/TARGET_CAPABILITIES.json']) {
+    assert.ok(byPath.get(documentPath)?.decisions.includes('DS-098'),
+      `${documentPath} must be indexed against DS-098`);
   }
 });
 

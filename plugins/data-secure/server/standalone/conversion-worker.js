@@ -13,12 +13,13 @@ const TERMINATION_GRACE_MS = 1500;
 const MAX_RESPONSE_BYTES = MAX_MARKDOWN_CHARS * 6 + 4096;
 const error = code => Object.assign(new Error('Die lokale Markdown-Konvertierung konnte nicht abgeschlossen werden.'), { code });
 
-function launch(runtime, sourceType, inputBytes, timeoutMs) {
+function launch(runtime, sourceType, inputBytes, timeoutMs, omitDocxHeaderFooter) {
   const server = path.resolve(__dirname, '..');
   const script = path.join(__dirname, 'conversion-worker-child.js');
   const nodeArgs = ['--no-warnings', '--permission', `--allow-fs-read=${server}`,
     '--allow-worker', '--allow-addons', '--disable-proto=throw', '--max-old-space-size=512',
-    `--require=${path.join(server, 'network-deny.cjs')}`, script, sourceType, String(inputBytes)];
+    `--require=${path.join(server, 'network-deny.cjs')}`, script, sourceType, String(inputBytes),
+    ...(omitDocxHeaderFooter ? ['omit-docx-header-footer'] : [])];
   let command;
   if (process.platform === 'win32' && process.arch === 'x64') {
     command = path.join(server, 'native', 'windows-x64', 'datasecure-sandbox.exe');
@@ -34,18 +35,19 @@ function launch(runtime, sourceType, inputBytes, timeoutMs) {
 
 async function convertBuffer(bytes, extension, options = {}) {
   if (!options || typeof options !== 'object' || Array.isArray(options) ||
-      Object.keys(options).some(key => !['signal', 'timeoutMs'].includes(key))) throw error('CONVERSION_INPUT_INVALID');
-  const { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+      Object.keys(options).some(key => !['signal', 'timeoutMs', 'omitDocxHeaderFooter'].includes(key))) throw error('CONVERSION_INPUT_INVALID');
+  const { signal, timeoutMs = DEFAULT_TIMEOUT_MS, omitDocxHeaderFooter = false } = options;
   if (signal !== undefined && !(signal instanceof AbortSignal)) throw error('CONVERSION_INPUT_INVALID');
   if (signal?.aborted) throw error('REQUEST_CANCELLED');
   const suffix = typeof extension === 'string' ? extension.toLowerCase() : '';
   const type = Object.hasOwn(SOURCE_TYPES, suffix) ? SOURCE_TYPES[suffix] : null;
   if (!type) throw error('MARKDOWN_FORMAT_UNSUPPORTED');
-  if (!(bytes instanceof Uint8Array) || !bytes.length || bytes.length > MAX_INPUT_BYTES ||
+  if (typeof omitDocxHeaderFooter !== 'boolean' || (omitDocxHeaderFooter && type !== 'docx') ||
+      !(bytes instanceof Uint8Array) || !bytes.length || bytes.length > MAX_INPUT_BYTES ||
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > DEFAULT_TIMEOUT_MS) throw error('CONVERSION_INPUT_INVALID');
   const input = Buffer.from(bytes); // The worker cannot detach or mutate originals.
   const runtime = resolveConversionRuntime();
-  const invocation = launch(runtime, type, input.length, timeoutMs);
+  const invocation = launch(runtime, type, input.length, timeoutMs, omitDocxHeaderFooter);
   if (signal?.aborted) throw error('REQUEST_CANCELLED');
   const environment = { DISABLE_SYSTEM_FONTS_LOAD: '1', PATH: '' };
   for (const key of ['SystemRoot', 'WINDIR']) if (process.env[key]) environment[key] = process.env[key];

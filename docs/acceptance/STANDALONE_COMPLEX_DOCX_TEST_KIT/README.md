@@ -1,6 +1,6 @@
 # Komplexer DOCX-Testkorpus
 
-Stand: 08.09.2026 · DataSecure Standalone 3.2.0-rc123
+Stand: 10.09.2026 · vorbereitet für den nächsten Kandidaten nach 3.2.0-rc133
 
 Dieser Korpus enthält 15 vollständig fiktive Word-Dokumente für die beiden
 Standalone-Funktionen **Nur in Markdown umwandeln** und **In Markdown umwandeln
@@ -21,6 +21,10 @@ ein Stapel gewählt werden kann. Die Dokumente sind reine Testdaten und dürfen
 frei kopiert, gelöscht und erneut erzeugt werden. Sie enthalten keine Angaben
 realer Personen oder Unternehmen.
 
+Der Kopf-/Fußzeilenvertrag DS-098 liegt nach dem gebundenen RC133. Die hier
+beschriebene Anonymisierungsprüfung darf deshalb nicht rückwirkend als RC133-
+Evidence gewertet werden, sondern erst für einen daraus neu gebauten Kandidaten.
+
 ## Test A – reine Markdown-Konvertierung
 
 1. In der Standalone-App **Nur in Markdown umwandeln** wählen.
@@ -30,6 +34,8 @@ realer Personen oder Unternehmen.
    `DataSecure-Zuordnung.csv`.
 5. Fiktive Namen und Unternehmen müssen im Markdown weiterhin enthalten sein.
    Die in der Solltabelle genannten Erhaltungsanker müssen auffindbar sein.
+6. Kopf- und Fußzeilen der DOCX müssen in diesem inhaltserhaltenden Modus im
+   Markdown vorhanden sein.
 
 ## Test B – Anonymisierung
 
@@ -45,6 +51,9 @@ realer Personen oder Unternehmen.
    entstehen.
 6. Die fünf Dokumente der Stapelgruppe `Laura-Stein-Nordlicht` müssen für Laura
    Stein und Nordlicht Digital GmbH jeweils dieselben Pseudonyme verwenden.
+7. Kopf- und Fußzeilen dürfen in keinem anonymisierten Markdown vorkommen.
+   Dokumenthauptteil, Fuß-/Endnoten und Kommentare bleiben, sofern im Szenario
+   vorhanden, enthalten.
 
 ## Reproduzierbar neu erzeugen
 

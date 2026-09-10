@@ -34,6 +34,15 @@ im Ergebnisjournal und der Laufzuordnung. Rohes stderr, Namen, Pfade und
 Dokumentinhalte gehören niemals in diese Spur. Es gibt keinen neuen Schalter
 im normalen Umwandlungsablauf und keine globale Umgebungsänderung durch Tests.
 
+Golden-Erwartungen werden im normalen Prüflauf niemals neu geschrieben.
+`npm run test:golden` vergleicht ausschließlich gegen die versionierte
+Erwartungsdatei. Nur nach einer ausdrücklich beabsichtigten und fachlich
+geprüften Verhaltensänderung darf `npm run update:golden` verwendet und dessen
+Diff vor dem Commit kontrolliert werden. Der komplexe, deterministisch erzeugte
+15-DOCX-Korpus gehört zum regulären Produktgate und durchläuft echte OOXML-
+Extraktion, Zweckprojektion und Datenschutzprüfung; er belegt insbesondere den
+unterschiedlichen Kopf-/Fußzeilenvertrag von Konvertierung und Anonymisierung.
+
 RC131 ergänzt den verbindlichen Negativvertrag für Wiederaufnahme: Ein
 zurückgekehrter uncodierter oder unbekannter Pipelinefehler ist in
 Erstverarbeitung und Sammelreview terminal; nur explizite Einträge im

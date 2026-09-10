@@ -228,8 +228,12 @@ async function main() {
       process.env.DISABLE_SYSTEM_FONTS_LOAD !== '1') fail('CONVERSION_POLICY_FAILED');
   const type = process.argv[2];
   const expectedBytes = Number(process.argv[3]);
-  if (process.argv.length !== 4 || !Object.values(SOURCE_TYPES).includes(type) ||
+  const outputPolicy = process.argv[4];
+  if (![4, 5].includes(process.argv.length) || !Object.values(SOURCE_TYPES).includes(type) ||
       !/^[1-9][0-9]*$/u.test(process.argv[3]) || !Number.isSafeInteger(expectedBytes) || expectedBytes > MAX_INPUT_BYTES) fail('CONVERSION_INPUT_INVALID');
+  if (outputPolicy !== undefined && (outputPolicy !== 'omit-docx-header-footer' || type !== 'docx')) {
+    fail('CONVERSION_INPUT_INVALID');
+  }
   const chunks = []; let size = 0;
   for await (const chunk of process.stdin) {
     size += chunk.length;
@@ -240,7 +244,8 @@ async function main() {
   const bytes = Buffer.concat(chunks);
   if (type === 'pdf') return pdfMarkdown(bytes);
   if (['png', 'bmp', 'jpeg'].includes(type)) return imageMarkdown(bytes, type);
-  return extractMarkdownBuffer(bytes, `.${type}`);
+  return extractMarkdownBuffer(bytes, `.${type}`,
+    outputPolicy === undefined ? {} : { omitDocxHeaderFooter: true });
 }
 
 process.stdout.on('error', () => process.exit(2));

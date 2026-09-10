@@ -1528,3 +1528,29 @@ ohne erneute Privacy-Verarbeitung repariert werden. Eine Workerannahme bestätig
 nur den Start; Abschluss, Review oder Fehler werden ausschließlich aus dem
 anschließend gelesenen dauerhaften Zustand abgeleitet. DS-097 präzisiert DS-022,
 DS-023, DS-075, DS-086 und DS-092.
+
+## DS-098 – DOCX-Kopf- und Fußzeilen werden nur aus Anonymisierungsergebnissen ausgeschlossen
+
+Am 10.09.2026 nach Produkt-, Datenschutz-, Parser- und UX-Gegenreview
+festgelegt: Eine DOCX-Anonymisierung veröffentlicht ausschließlich den
+Dokumenthauptteil sowie die weiterhin abgedeckten Kommentare, Fußnoten und
+Endnoten. Strukturell deklarierte Kopf- und Fußzeilen und ausschließlich daraus
+referenzierte Bilder werden nicht in das anonymisierte Markdown projiziert. Die
+reine Markdown-Konvertierung bleibt inhaltserhaltend und gibt diese Bereiche
+weiterhin aus.
+
+Der Ausschluss ist keine Parserabkürzung. Beziehungen, Content Types, Wurzeltypen,
+XML-Struktur, Ressourcenbudgets und Bildreferenzen der Kopf-/Fußzeilen werden vor
+der Projektion weiterhin vollständig und fail-closed geprüft. Ein unbekannter,
+externer, beschädigter oder widersprüchlicher Bereich stoppt deshalb weiterhin;
+er wird nicht durch Weglassen legitimiert. Das Ergebnis nennt seinen Umfang
+ausdrücklich als „Dokumentinhalt ohne Kopf- und Fußzeilen“. Der feste
+Quellenabdeckungsgrund `DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY` trennt diese
+bewusste Projektion von der vollständigen Datenschutzprüfung des tatsächlich
+ausgegebenen Markdown-Inhalts.
+
+Die Regel gilt identisch für Standalone und Cowork und erzeugt keinen neuen
+Dialog. PDF-/Scan-PDF-Seitenränder, PPTX-Master-/Layouttexte und andere nur
+heuristisch vermutete Kopf-/Fußbereiche werden nicht automatisch entfernt.
+DS-098 präzisiert DS-017, DS-049, DS-087, DS-090 und DS-093 und wird unter
+BL-010.30 sowie BL-022.1 geführt.

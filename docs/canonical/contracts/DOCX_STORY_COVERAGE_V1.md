@@ -5,15 +5,16 @@ Stand: 31.08.2026 · Story: BL-022.1 · Status: in Arbeit
 ## Zweck und Grenze
 
 Ein DOCX ist ein OPC-Paket aus verknüpften WordprocessingML-Parts. Die lokale
-Parsergrenze verarbeitet nicht nur `word/document.xml`, sondern alle im V1
-abgedeckten Text-Stories vor der Anonymisierung. Ein unbekannter
+Parsergrenze validiert nicht nur `word/document.xml`, sondern alle im V1
+abgedeckten Text-Stories vor jeder Ausgabe. Ein unbekannter
 inhaltsfähiger Part, eine externe Beziehung oder aktiver Inhalt führt zu einer
 inhaltsfreien Coverage-Warnung und verhindert die Freigabe.
 
 ## Abgedeckte Stories
 
 - Hauptteil: `w:body` in `word/document.xml`
-- Kopf- und Fußzeilen: `w:hdr` und `w:ftr`
+- Kopf- und Fußzeilen: `w:hdr` und `w:ftr` (vollständig validiert; nur bei
+  reiner Konvertierung ausgegeben)
 - Kommentare: `w:comments`
 - Fuß- und Endnoten: `w:footnotes` und `w:endnotes`
 - sichtbare Textfelder in diesen Stories, Tabellen, Tabs und Zeilenumbrüche
@@ -26,11 +27,12 @@ interne Beziehung von `word/document.xml` erreichbar sein. Der Wurzeltyp des Zie
 muss zum Relationship-Typ passen (`w:hdr`, `w:ftr`, `w:comments`, `w:footnotes` oder
 `w:endnotes`). Verwaiste Parts, externe Ziele, Parent-Traversal, fehlende Ziele,
 doppelte Story-Beziehungen, falsch deklarierte oder abgeschnittene Story-Wurzeln und mehrdeutige Root-Beziehungen sind keine
-zulässige Alternative. Die Inhalte
-werden genau einmal in der Markdown-Repräsentation
-geführt und anschließend durch denselben Pseudonymisierungs- und Residual-Gate
-geprüft wie der Haupttext. Parser-generierte Überschriften dienen nur der
-Trennung der Stories; sie sind kein Freigabeweg für Rohdaten.
+zulässige Alternative. Bei reiner Markdown-Konvertierung werden die Inhalte
+aller Stories genau einmal in der Markdown-Repräsentation geführt. Bei
+Anonymisierung werden Kopf- und Fußzeilen nach erfolgreicher Strukturprüfung
+nicht projiziert; Hauptteil, Kommentare, Fuß- und Endnoten durchlaufen weiterhin
+denselben Pseudonymisierungs- und Residual-Gate. Parser-generierte Überschriften
+dienen nur der Trennung der Stories; sie sind kein Freigabeweg für Rohdaten.
 
 Bilddateien unter `word/media/` sind ebenfalls keine Dateinamen-Allowlist. Jede
 Grafik muss über genau eine oder mehrere passende interne Beziehungen des Typs
@@ -38,6 +40,13 @@ Grafik muss über genau eine oder mehrere passende interne Beziehungen des Typs
 Bildziele und Medien unter einem anderen Beziehungstyp werden weder als lokales
 Sichtprüf-Asset ausgegeben noch freigegeben; sie erzeugen eine inhaltsfreie
 Coverage-Warnung.
+
+Bei Anonymisierung werden Bilder, die ausschließlich aus einer Kopf- oder
+Fußzeile referenziert werden, ebenfalls nicht projiziert. Ein zusätzlich aus dem
+Hauptteil referenziertes identisches Bild bleibt Bestandteil der normalen
+Bildprüfung. Die vollständige Relationship-/Orphan-Prüfung verwendet weiterhin
+das gesamte validierte Beziehungsinventar; der bewusste Ausgabeausschluss darf
+keine fehlerhafte Beziehung verdecken.
 
 ## RC69: verschachtelte Tabellen und Textfelder
 
@@ -75,9 +84,12 @@ unterstützter Inhalt darf nicht stillschweigend ausgelassen werden.
 
 ## Akzeptanznachweis
 
-`tests/test-parsers.js` belegt die strukturtreue Extraktion von Kopf-/Fußzeile,
-Kommentar, Fuß- und Endnote inklusive Tab und Zeilenumbruch sowie deren
-Anonymisierung. Ein separater Negativtest belegt verwaiste und fehlende
+`tests/test-parsers.js` und `tests/test-docx-structure.js` belegen die
+strukturtreue Extraktion von Kopf-/Fußzeile, Kommentar, Fuß- und Endnote
+inklusive Tab und Zeilenumbruch. Der zweckgebundene Positivtest belegt außerdem,
+dass reine Konvertierung Kopf-/Fußzeilen erhält, Anonymisierung sie samt
+ausschließlich dort referenziertem Bild auslässt und Hauptteil, Kommentar,
+Fußnote sowie Endnote weitergibt. Ein separater Negativtest belegt verwaiste und fehlende
 Story-Beziehungen ohne Preisgabe von Partnamen oder Text; die Matrix umfasst zusätzlich
 fehlende, externe, falsche und doppelte Root-`officeDocument`-Beziehungen sowie
 Parent-Traversal, externe Ziele, Typ-Ziel-Mismatches, doppelte Story-Beziehungen und

@@ -100,7 +100,8 @@
     "DS-094",
     "DS-095",
     "DS-096",
-    "DS-097"
+    "DS-097",
+    "DS-098"
   ],
   "products": {
     "shared_core": "one-policy-and-engine-baseline",
@@ -337,6 +338,12 @@
       "bmp"
     ],
     "cowork_wide_privacy_scope": "extracted-markdown-only",
+    "docx_header_footer_policy": {
+      "validation": "always-fail-closed",
+      "markdown_only_output": "retained",
+      "anonymization_output": "excluded-with-exclusive-images",
+      "comments_footnotes_endnotes": "retained"
+    },
     "ocr_languages": [
       "de",
       "en"

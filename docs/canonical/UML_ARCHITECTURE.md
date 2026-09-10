@@ -592,6 +592,10 @@ sequenceDiagram
     V->>V: terminale MD und Zuordnung in DataSecure-Output
   else Markdown und anonymisieren: DOCX oder breite Standalone-Quelle
     M->>M: neutrale Extraktion ohne Artefakt oder Zweck
+    opt DOCX
+      M->>M: alle Stories und Beziehungen fail-closed validieren
+      M->>M: Kopf-/Fußzeilen und nur dort referenzierte Bilder aus Ergebnisprojektion entfernen
+    end
     alt Coverage bekannt und Markdown nichtleer
       M->>P: extrahiertes Markdown + separaten Extraktionsstatus
       P->>V: geprüfte Kandidaten / Mehrdeutigkeiten
@@ -600,7 +604,7 @@ sequenceDiagram
       M-->>V: sicherer Einzelstopp ohne Rohkonvertat
     end
   else nur Markdown
-    M->>V: erhaltene Originalinhalte und Coverage-/OCR-Hinweise
+    M->>V: erhaltene Originalinhalte einschließlich DOCX-Kopf/-Fußzeilen und Coverage-/OCR-Hinweise
     V->>V: terminale MD ohne Zuordnung in DataSecure-Markdown
   end
   V-->>S: Status des konkreten Laufs ohne Ansichtswechsel
@@ -624,6 +628,12 @@ wird getrennt vom Anonymisierungsstatus geführt. Der
 Sequenzzweig schützt den extrahierten Markdown-Inhalt in demselben Stapel und
 gibt keine Freigabezusage für ausgelassene Bestandteile der ursprünglichen XLSX-,
 DOCX-, PPTX-, PDF-/Scan-PDF- oder Bilddatei.
+
+DS-098 trennt für DOCX das vollständige validierte Story-Inventar von der
+zweckgebundenen Ausgabeprojektion. Der Privacy-Zweig veröffentlicht keine Kopf-
+oder Fußzeile; der reine Konvertierungszweig erhält sie. PDF-/OCR-Seitenränder
+und PPTX-Master-/Layouttext werden nicht aufgrund einer unsicheren Heuristik
+entfernt.
 
 Recovery setzt den gespeicherten Modus fort; eine UI-Defaultwahl darf ihn nicht
 ändern. Inhaltsfreie Diagnose dokumentiert Phase, Modus und Fehler, keine

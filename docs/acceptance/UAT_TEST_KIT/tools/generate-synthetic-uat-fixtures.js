@@ -46,26 +46,45 @@ function xmlEscape(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-function documentXml(text, withImage = false) {
+function documentXml(text, withImage = false, withHeaderFooter = false) {
   const paragraphs = text.trimEnd().split(/\r?\n/u).map((line) =>
     `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`).join('');
   const drawing = withImage
     ? '<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage1"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>'
     : '';
-  return `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}${drawing}</w:body></w:document>`;
+  const section = withHeaderFooter
+    ? '<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader1"/><w:footerReference w:type="default" r:id="rIdFooter1"/></w:sectPr>'
+    : '';
+  return `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${paragraphs}${drawing}${section}</w:body></w:document>`;
 }
 
-function makeDocx(text, withImage = false) {
+function makeDocx(text, withImage = false, withHeaderFooter = false) {
+  const additionalOverrides = withHeaderFooter ? [
+    { part: 'word/header1.xml', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml' },
+    { part: 'word/footer1.xml', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml' }
+  ] : [];
   const entries = [
-    ...opcControlEntries('docx'),
-    ['word/document.xml', documentXml(text, withImage)]
+    ...opcControlEntries('docx', { additionalOverrides }),
+    ['word/document.xml', documentXml(text, withImage, withHeaderFooter)]
   ];
+  const relationships = [];
   if (withImage) {
     const png = encodePng({ width: 32, height: 32, rgba: Buffer.alloc(32 * 32 * 4, 0x7f) });
-    entries.push(
-      ['word/_rels/document.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>'],
-      ['word/media/image1.png', png]
+    relationships.push('<Relationship Id="rIdImage1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>');
+    entries.push(['word/media/image1.png', png]);
+  }
+  if (withHeaderFooter) {
+    relationships.push(
+      '<Relationship Id="rIdHeader1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>',
+      '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'
     );
+    entries.push(
+      ['word/header1.xml', '<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>DATENSECURE UAT KOPFZEILE – NUR TESTDATEN</w:t></w:r></w:p></w:hdr>'],
+      ['word/footer1.xml', '<?xml version="1.0" encoding="UTF-8"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>DATENSECURE UAT FUSSZEILE – NICHT AUSGEBEN</w:t></w:r></w:p></w:ftr>']
+    );
+  }
+  if (relationships.length) {
+    entries.push(['word/_rels/document.xml.rels', `<?xml version="1.0"?><Relationships xmlns="${PR}">${relationships.join('')}</Relationships>`]);
   }
   return zipStore(entries);
 }
@@ -144,7 +163,7 @@ function generate(rawOutput) {
     'Zertifizierung,ISTQB Certified Tester Foundation Level',
     'Zertifizierung,Scrum.org Professional Scrum Master II (PSM II)', ''
   ].join('\n'));
-  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.docx'), makeDocx(PROFILE));
+  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.docx'), makeDocx(PROFILE, false, true));
   fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.xlsx'), makeXlsx());
   fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.pptx'), makePptx());
   fs.writeFileSync(path.join(output, '02-review', 'ambiguous-certificate-provider.txt'), AMBIGUOUS);

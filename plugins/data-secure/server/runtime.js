@@ -302,6 +302,10 @@ async function convertDocument(source, options = {}) {
   const inputBuffer = Buffer.isBuffer(options.inputBuffer) ? options.inputBuffer : null;
   const sourceName = inputBuffer ? String(options.sourceName || '') : String(source || '');
   const ext = path.extname(sourceName).toLowerCase();
+  if (options.omitDocxHeaderFooter !== undefined &&
+      (typeof options.omitDocxHeaderFooter !== 'boolean' || ext !== '.docx')) {
+    throw safeError('Die angeforderte Dokumentausgabe ist ungültig.', 'PARSER_ISOLATION_FAILED');
+  }
   // XLSX/PPTX are released only through the channel-bound Markdown-first
   // adapter. Keeping them here lets that adapter reuse the same isolated
   // parser; admission and publication remain closed in the orchestrator.
@@ -336,7 +340,8 @@ async function convertDocument(source, options = {}) {
     '--permission', `--allow-fs-read=${__dirname}`, `--require=${networkDeny}`, '--disable-proto=throw',
     '--max-old-space-size=384', worker, ext
   ];
-  const workerArgs = seaRole ? [ext, '0'] : [...nodeFlags, '0'];
+  const outputPolicyArgs = options.omitDocxHeaderFooter === true ? ['omit-docx-header-footer'] : [];
+  const workerArgs = seaRole ? [ext, '0', ...outputPolicyArgs] : [...nodeFlags, '0', ...outputPolicyArgs];
   let command = nodeExecutable;
   let args = workerArgs;
   let stdio;

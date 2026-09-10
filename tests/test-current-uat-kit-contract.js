@@ -82,6 +82,8 @@ test('review and blocked cases have exact user-facing rules', () => {
   assert.match(steps, /mehrdeutige Datei bis zur lokalen Entscheidung kein Ergebnis/u);
   assert.match(steps, /Details für IT:/u);
   assert.match(steps, /Ein anderer[\s\S]*fail-closed\s+Code ist kein automatisches FAIL/u);
+  assert.match(steps, /personnel-profile\.docx[\s\S]*sichtbare fiktive Kopf- und Fußzeile/u);
+  assert.match(steps, /DOCX-\s*Kopf-\/Fußzeilenschritt[\s\S]*DS-098/u);
 });
 
 test('release GO is strict and UAT-04/05 are executable through the product UI', () => {

@@ -779,7 +779,7 @@ function docxStoryRelationshipIssueCount(entries) {
   }
   return issues;
 }
-function docxImageRelationshipCoverage(entries) {
+function docxImageRelationshipCoverage(entries, options = {}) {
   // Picture bytes are sensitive content just like text.  A Word media part is
   // therefore not an attachment merely because its filename looks familiar:
   // it must be referenced by one internal image relationship from a covered
@@ -788,6 +788,7 @@ function docxImageRelationshipCoverage(entries) {
   const media = new Set([...entries.keys()].filter((name) =>
     /^word\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(name)
   ));
+  const validatedTargets = new Set();
   const safeTargets = new Set();
   let issues = 0;
   for (const [relPath, data] of entries) {
@@ -813,13 +814,17 @@ function docxImageRelationshipCoverage(entries) {
       const target = path.posix.normalize(path.posix.join(base, rawTarget));
       if (type === 'image') {
         if (!sourceExists || !media.has(target)) issues++;
-        else safeTargets.add(target);
+        else {
+          validatedTargets.add(target);
+          if (options.omitDocxHeaderFooter !== true ||
+              !/^word\/(?:header|footer)\d+\.xml$/i.test(sourcePart)) safeTargets.add(target);
+        }
       } else if (sourceExists && media.has(target)) {
         issues++;
       }
     }
   }
-  for (const name of media) if (!safeTargets.has(name)) issues++;
+  for (const name of media) if (!validatedTargets.has(name)) issues++;
   return {
     safeTargets,
     warnings: issues ? [`DOCX enthält ${issues} nicht eindeutig über eine interne Bildbeziehung abgesicherte Grafik(en); Freigabe wird blockiert.`] : []
@@ -1056,7 +1061,10 @@ function parseDocx(entries, options = {}) {
     ...[...entries.keys()].filter((name) => /^word\/header\d+\.xml$/iu.test(name)).sort((left, right) => left.localeCompare(right, 'en')),
     ...[...entries.keys()].filter((name) => /^word\/footer\d+\.xml$/iu.test(name)).sort((left, right) => left.localeCompare(right, 'en'))
   ];
-  for(const name of orderedStories) {
+  // Header/footer parts remain inside the structural coverage and relationship
+  // checks below even when a privacy caller intentionally omits them from its
+  // released Markdown.  The option changes output scope, never validation.
+  if (options.omitDocxHeaderFooter !== true) for(const name of orderedStories) {
     const data = entries.get(name);
     const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root,options);
     if(t) sections.push({kind:'text',source_part:name,markdown:`## ${root==='hdr'?'Kopfzeile':'Fußzeile'}\n\n${t}`});
@@ -1070,7 +1078,7 @@ function parseDocx(entries, options = {}) {
     if(t)sections.push({kind:'text',source_part:extra,markdown:`## ${label}\n\n${t}`});
   }
   sections.push(...metadataSections(entries,options));
-  const imageCoverage = docxImageRelationshipCoverage(entries);
+  const imageCoverage = docxImageRelationshipCoverage(entries, options);
   return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries)] };
 }
 function xlsxSheetRelationshipMap(entries, reader) {

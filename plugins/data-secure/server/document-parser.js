@@ -154,9 +154,15 @@ function normalized(result, ext) {
   };
 }
 
-function parseDocumentBuffer(buffer, ext) {
+function parseDocumentBuffer(buffer, ext, options = {}) {
   if (!Buffer.isBuffer(buffer)) throw new TypeError('parser input must be a buffer');
-  if (['.docx', '.xlsx', '.pptx'].includes(ext)) return normalized(parseOoxml(buffer, ext), ext);
+  if (!options || typeof options !== 'object' || Array.isArray(options) ||
+      Object.keys(options).some((key) => key !== 'omitDocxHeaderFooter') ||
+      (options.omitDocxHeaderFooter !== undefined && typeof options.omitDocxHeaderFooter !== 'boolean') ||
+      (options.omitDocxHeaderFooter === true && ext !== '.docx')) {
+    throw new TypeError('parser options are invalid');
+  }
+  if (['.docx', '.xlsx', '.pptx'].includes(ext)) return normalized(parseOoxml(buffer, ext, undefined, options), ext);
 if (ext === '.md' || ext === '.markdown' || ext === '.txt') {
     return normalized({ markdown: decodeUtf8Source(buffer), attachments: [], warnings: [] }, ext);
   }

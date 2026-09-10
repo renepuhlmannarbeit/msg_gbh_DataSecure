@@ -12,7 +12,9 @@ Kundenangaben fehlen; Rolle, Technologien und Zertifikate bleiben erhalten.
 Markdown, CSV und DOCX werden direkt verarbeitet; XLSX und PPTX werden lokal
 nach Markdown extrahiert. Es entstehen sechs eindeutige Zuordnungen, die
 Quellen bleiben bytegleich und die Office-Quellenabdeckung wird separat
-ausgewiesen.
+ausgewiesen. Beim DOCX enthält das anonymisierte Markdown keine strukturell
+deklarierte Kopf- oder Fußzeile; Haupttext, Kommentare, Fuß- und Endnoten bleiben
+Teil des geprüften Inhalts. Der sichtbare Scope-Hinweis benennt diese Grenze.
 
 ## UAT-03
 

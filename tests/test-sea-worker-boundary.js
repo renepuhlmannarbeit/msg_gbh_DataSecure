@@ -10,6 +10,7 @@ const path = require('path');
 const crypto = require('crypto');
 const vm = require('vm');
 const { createSuite } = require('./helpers');
+const { zipStore } = require('./lib/zip');
 const { convertDocument } = require('../plugins/data-secure/server/runtime');
 
 const { test, testAsync, done, assert } = createSuite('SEA worker boundary: unreleased NO-GO');
@@ -103,6 +104,18 @@ async function main() {
       `--require=${path.join(serverRoot, 'network-deny.cjs')}`,
       '--disable-proto=throw', '--max-old-space-size=384',
       path.join(serverRoot, 'parser-worker.js'), '.txt', '0'
+    ]);
+    let privacyArgs;
+    await assert.rejects(convertDocument('opaque-private-artifact', {
+      platform: 'win32', arch: 'x64', execPath: executable,
+      launcherPath: process.execPath, launcherBytes,
+      launcherExpectedSha256: crypto.createHash('sha256').update(launcherBytes).digest('hex'),
+      inputBuffer: zipStore([['word/document.xml', '<w:document/>']]), sourceName: 'source.docx',
+      omitDocxHeaderFooter: true,
+      spawn(_command, args) { privacyArgs = args; throw new Error('TEST_CAPTURE_ONLY_NO_CHILD'); }
+    }), (error) => error.code === 'PARSER_ISOLATION_FAILED');
+    assert.deepStrictEqual(privacyArgs.slice(privacyArgs.indexOf('--') + 2).slice(-3), [
+      '.docx', '0', 'omit-docx-header-footer'
     ]);
   });
 

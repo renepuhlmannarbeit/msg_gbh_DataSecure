@@ -1,12 +1,17 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 10.09.2026 · vorbereitet für 3.2.0-rc133 und spätere Kandidaten
+Stand: 10.09.2026 · RC133-Basis und spätere, jeweils neu gebundene Kandidaten
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
 denselben festgeschriebenen Commit. Die Testfälle selbst bleiben in den
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
+
+RC133 bleibt der letzte gebundene Kandidat. Der danach implementierte DOCX-
+Vertrag DS-098 (Kopf-/Fußzeilen nur bei Anonymisierung auslassen) gehört erst zu
+einem neu gebauten und im Kampagnenmanifest gebundenen Folgekandidaten. Eine
+Abnahme darf diese Änderung nicht rückwirkend RC133 zuschreiben.
 
 ## Was N3 und N4 bedeuten
 
@@ -59,7 +64,8 @@ Solange Commit oder Paket-Hash fehlen, ist die Kampagne **nicht gestartet**.
    Architektur, Produkt-/Claude-Version und Installationskanal.
 2. [N3/N4-Checkliste](N3-N4-CHECKLIST.md) Abschnitt N3 ausführen.
 3. Nur bei vollständig grünem N3 die produktbezogenen UAT-Fälle ausführen:
-   Standalone S01–S23 und Cowork UAT-01–UAT-06.
+   Standalone S01–S23 einschließlich S14a und Cowork UAT-01–UAT-06. S14a nur
+   ausführen, wenn der gebundene Kandidat DS-098 enthält.
 4. [N3/N4-Checkliste](N3-N4-CHECKLIST.md) Abschnitt N4 abschließen.
 5. Eigene Evidenzdatei committen und über den im
    [Git-Ablauf](GIT-WORKFLOW.md) beschriebenen Plattformbranch bereitstellen.

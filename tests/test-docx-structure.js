@@ -53,6 +53,42 @@ function parseMainXml(xml) {
     ['word/document.xml', xml]
   ]), '.docx');
 }
+function headerFooterDocx(headerXml = `<w:hdr ${namespaces}>${paragraph('HEADER PRIVATE')}</w:hdr>`) {
+  const contentTypes = '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="png" ContentType="image/png"/>' +
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+    '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
+    '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
+    '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>' +
+    '<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>' +
+    '<Override PartName="/word/endnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml"/>' +
+    '</Types>';
+  const packageRels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="root" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+    '</Relationships>';
+  const document = `<w:document ${namespaces} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>` +
+    `${paragraph('BODY CONTROL')}<w:sectPr><w:headerReference w:type="default" r:id="head"/>` +
+    '<w:footerReference w:type="default" r:id="foot"/></w:sectPr></w:body></w:document>';
+  const documentRels = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="head" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' +
+    '<Relationship Id="foot" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' +
+    '<Relationship Id="comments" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>' +
+    '<Relationship Id="footnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>' +
+    '<Relationship Id="endnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes" Target="endnotes.xml"/>' +
+    '</Relationships>';
+  return zipStore([
+    ['[Content_Types].xml', contentTypes], ['_rels/.rels', packageRels], ['word/document.xml', document],
+    ['word/_rels/document.xml.rels', documentRels],
+    ['word/header1.xml', headerXml],
+    ['word/footer1.xml', `<w:ftr ${namespaces}>${paragraph('FOOTER PRIVATE')}</w:ftr>`],
+    ['word/_rels/header1.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="logo" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/header.png"/></Relationships>'],
+    ['word/media/header.png', Buffer.from([0x89, 0x50, 0x4e, 0x47])],
+    ['word/comments.xml', `<w:comments ${namespaces}><w:comment w:id="1">${paragraph('COMMENT CONTROL')}</w:comment></w:comments>`],
+    ['word/footnotes.xml', `<w:footnotes ${namespaces}><w:footnote>${paragraph('FOOTNOTE CONTROL')}</w:footnote></w:footnotes>`],
+    ['word/endnotes.xml', `<w:endnotes ${namespaces}><w:endnote>${paragraph('ENDNOTE CONTROL')}</w:endnote></w:endnotes>`]
+  ]);
+}
 function onceInOrder(markdown, expected) {
   let previous = -1;
   for (const token of expected) {
@@ -84,6 +120,43 @@ test('WordprocessingML uses namespace URIs instead of trusting the textual prefi
   assert.strictEqual(falseNamespace.markdown, '');
   assert.ok(falseNamespace.warnings.length > 0);
   assertAbsent(falseNamespace.warnings.join(' '), 'FALSE_NAMESPACE');
+});
+
+test('privacy output omits DOCX headers footers and their exclusive images after structural validation', () => {
+  const source = headerFooterDocx();
+  const converted = parseOoxml(source, '.docx');
+  onceInOrder(converted.markdown, ['BODY CONTROL', 'HEADER PRIVATE', 'FOOTER PRIVATE',
+    'COMMENT CONTROL', 'FOOTNOTE CONTROL', 'ENDNOTE CONTROL']);
+  assert.strictEqual(converted.attachments.length, 1);
+  assert.deepStrictEqual(converted.warnings, []);
+
+  const privacy = parseOoxml(source, '.docx', undefined, { omitDocxHeaderFooter: true });
+  for (const retained of ['BODY CONTROL', 'COMMENT CONTROL', 'FOOTNOTE CONTROL', 'ENDNOTE CONTROL']) {
+    assertPresent(privacy.markdown, retained);
+  }
+  for (const omitted of ['HEADER PRIVATE', 'FOOTER PRIVATE', '## Kopfzeile', '## Fußzeile']) {
+    assertAbsent(privacy.markdown, omitted);
+  }
+  assert.deepStrictEqual(privacy.sections.map(section => section.source_part), [
+    'word/document.xml', 'word/comments.xml', 'word/footnotes.xml', 'word/endnotes.xml'
+  ]);
+  assert.strictEqual(privacy.attachments.length, 0);
+  assert.deepStrictEqual(privacy.warnings, [], 'omission cannot bypass header/footer validation');
+
+  const plainMarkdown = extractMarkdownBuffer(source, '.docx');
+  assert.match(plainMarkdown.markdown, /HEADER(?: |&#32;)PRIVATE/u);
+  const privateMarkdown = extractMarkdownBuffer(source, '.docx', { omitDocxHeaderFooter: true });
+  assert.doesNotMatch(privateMarkdown.markdown, /HEADER(?: |&#32;)PRIVATE|FOOTER(?: |&#32;)PRIVATE/u);
+  assert.ok(privateMarkdown.coverage.reason_codes.includes('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY'));
+});
+
+test('privacy omission never converts an invalid header into covered input', () => {
+  const source = headerFooterDocx(`<w:body ${namespaces}>${paragraph('PRIVATE_HEADER')}</w:body>`);
+  // A correctly named/related part with the wrong WordprocessingML root must
+  // remain a coverage failure although this output mode never renders it.
+  const privacy = parseOoxml(source, '.docx', undefined, { omitDocxHeaderFooter: true });
+  assert.ok(privacy.warnings.length > 0);
+  assertAbsent(privacy.markdown, 'PRIVATE_HEADER');
 });
 
 test('OPC part names in a non-canonical case cannot bypass the story coverage gate', () => {

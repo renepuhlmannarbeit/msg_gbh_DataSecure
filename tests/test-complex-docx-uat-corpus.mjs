@@ -8,7 +8,7 @@ import { generate } from '../scripts/generate-complex-docx-uat.mjs';
 
 const require = createRequire(import.meta.url);
 const { planBatchAdmission } = require('../plugins/data-secure/server/gateway/batch-source-admission');
-const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
+const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const {
   createBatchPseudonymRegistry,
@@ -68,14 +68,33 @@ const registry = createBatchPseudonymRegistry(crypto.createHash('sha256').update
 const sharedPeople = new Set();
 const sharedOrganizations = new Set();
 for (const [name, preserve, identity] of expectations) {
-  const parsed = parseDocumentBuffer(fs.readFileSync(path.join(inputs, name)), '.docx');
-  assert.ok(parsed.markdown.length > 2_000, `${name} should be a substantial document`);
-  assert.match(parsed.markdown, /TESTDATEN – VOLLSTAENDIG FIKTIV/u, name);
-  assert.ok(parsed.markdown.includes(preserve), `${name} lost preservation anchor ${preserve}`);
-  const anonymized = anonymizeMarkdown(parsed.markdown, 'general', { registry });
+  const source = fs.readFileSync(path.join(inputs, name));
+  const converted = extractMarkdownBuffer(source, '.docx');
+  const privacyProjection = extractMarkdownBuffer(source, '.docx', { omitDocxHeaderFooter: true });
+  assert.ok(converted.markdown.length > 2_000, `${name} should be a substantial document`);
+  assert.match(converted.markdown, /^## Kopfzeile$/mu, `${name} pure conversion lost its header`);
+  assert.match(converted.markdown, /^## Fußzeile$/mu, `${name} pure conversion lost its footer`);
+  assert.doesNotMatch(privacyProjection.markdown, /^## (?:Kopf|Fuß)zeile$/mu,
+    `${name} privacy projection retained a header/footer section`);
+  assert.deepEqual(privacyProjection.coverage, {
+    status: 'incomplete', reason_codes: [
+      'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
+      'SOURCE_COVERAGE_UNVERIFIED',
+      'VISUAL_CONTENT_NOT_EXTRACTED'
+    ]
+  }, `${name} privacy scope must remain explicit`);
+  assert.match(privacyProjection.markdown, /TESTDATEN – VOLLSTAENDIG FIKTIV/u, name);
+  assert.ok(privacyProjection.markdown.includes(preserve), `${name} lost preservation anchor ${preserve}`);
+  let anonymized;
+  try {
+    anonymized = anonymizeMarkdown(privacyProjection.markdown, 'general', { registry });
+  } catch (error) {
+    error.message = `${name}: ${error.message}`;
+    throw error;
+  }
   assert.ok(anonymized.text.includes(preserve), `${name} anonymized preservation anchor ${preserve}`);
   if (identity) {
-    assert.ok(parsed.markdown.includes(identity), `${name} lost synthetic identity ${identity}`);
+    assert.ok(privacyProjection.markdown.includes(identity), `${name} lost synthetic identity ${identity}`);
     assert.ok(!anonymized.text.includes(identity), `${name} retained synthetic identity ${identity}`);
     if (identity === 'Laura Stein') {
       const person = anonymized.text.match(/\| Name \| (\[PERSON_[A-Z2-7]+\]) \|/u)?.[1];
@@ -85,8 +104,8 @@ for (const [name, preserve, identity] of expectations) {
       sharedOrganizations.add(organization);
     }
   } else {
-    assert.doesNotMatch(parsed.markdown, /@beispiel|\+49|\bDE\d{2}\s/u, `${name} is a neutral control`);
-    assert.equal(anonymized.text, parsed.markdown, `${name} changed neutral content`);
+    assert.doesNotMatch(privacyProjection.markdown, /@beispiel|\+49|\bDE\d{2}\s/u, `${name} is a neutral control`);
+    assert.equal(anonymized.text, privacyProjection.markdown, `${name} changed neutral content`);
   }
 }
 registry.dispose();

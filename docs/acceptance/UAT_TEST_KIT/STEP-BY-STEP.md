@@ -62,15 +62,22 @@ Product Owner, Java, SQL, HL7 FHIR, Testautomatisierung, ISTQB und Scrum.org ble
 
 [Ziel und PASS-Regel](CASE_CATALOG.md#uat-02)
 
-1. Alle sechs Dateien aus `inputs/01-positive` gemeinsam wählen.
+1. `npm run uat:fixtures` ausführen und danach alle sechs Dateien aus
+   `inputs/01-positive` gemeinsam wählen. Das erzeugte `personnel-profile.docx`
+   besitzt eine sichtbare fiktive Kopf- und Fußzeile.
 2. Einmal öffnen; keine Profil-, Bild- oder Einzeldateifrage beantworten.
-3. Sechs lokale Ergebnisse und sechs Mappingzeilen prüfen. Bei XLSX/PPTX muss
+3. Sechs lokale Ergebnisse und sechs Mappingzeilen prüfen. Im anonymisierten
+   DOCX-Markdown dürfen die Abschnitte `Kopfzeile` und `Fußzeile` sowie deren
+   Testtexte nicht vorkommen; der Haupttext mit `Product Owner` bleibt erhalten
+   und der engere Ausgabeumfang wird genannt. Bei XLSX/PPTX muss
    der Hinweis klarstellen, dass der extrahierte Markdown-Inhalt anonymisiert
    wurde und keine Vollständigkeit des Originalcontainers zugesagt wird.
 
 PASS: alle sechs liefern datenschutzgeprüftes Markdown, fachlich gleichwertige
 Kerninformationen und bytegleiche Quellen; der Extraktionsstatus von XLSX/PPTX
-bleibt getrennt vom erfolgreichen Anonymisierungsstatus sichtbar.
+bleibt getrennt vom erfolgreichen Anonymisierungsstatus sichtbar. Der DOCX-
+Kopf-/Fußzeilenschritt gilt erst für einen gebundenen Kandidaten mit DS-098,
+nicht rückwirkend für RC133.
 
 ## UAT-03 – Bilder lokal halten und Mehrdeutigkeit nicht raten
 

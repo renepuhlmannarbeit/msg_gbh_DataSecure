@@ -8,6 +8,7 @@ const PROCESSING_MODE = MODES.MARKDOWN;
 // Vocabulary is a format contract, not a declaration of packaged support.
 const SOURCE_TYPES = Object.freeze(['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp']);
 const COVERAGE_REASON_CODES = Object.freeze([
+  'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
   'OCR_NOT_VERIFIED',
   'OCR_TEXT_EMPTY',
   'SOURCE_COVERAGE_UNVERIFIED',

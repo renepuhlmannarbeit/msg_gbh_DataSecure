@@ -77,7 +77,7 @@ function table(rows) {
 
 function documentXml(title, preserve, identity) {
   const identityRows = identity ? [
-    ['Feld', 'Fiktiver Testwert'],
+    ['Feld', 'Testwert'],
     ['Name', identity.person],
     ['Unternehmen', identity.organization],
     ['E-Mail', identity.email],

@@ -9,7 +9,8 @@ verwenden.
 Für die geplante gemeinsame Abnahme durch eine Windows- und eine Mac-Person gilt
 zusätzlich der [formale N3/N4-Rahmen](../FORMAL_UAT/README.md). Er legt Kandidat,
 Paket-Hashes, Reihenfolge und getrennte Evidence-Dateien fest; die folgenden
-S01–S23 bleiben die ausführbaren Standalone-Fälle.
+S01–S23 einschließlich des ergänzenden Falls S14a bleiben die ausführbaren
+Standalone-Fälle.
 
 ## Vorbereitung
 
@@ -38,6 +39,10 @@ synthetischen Eingaben. `npm run test:standalone:pkg-04` baut und prüft den
 Kandidaten aus einem sauberen Commit; ein beliebiger lokaler Neubau ersetzt
 diese konkrete Paketbindung nicht.
 
+Für S14a zusätzlich einmal `npm run uat:complex-docx` ausführen und etwa
+`STANDALONE_COMPLEX_DOCX_TEST_KIT/inputs/01-kundenprofil-kurz.docx` verwenden.
+Diese Eingaben enthalten sichtbare, vollständig fiktive Kopf- und Fußzeilen.
+
 ## Gemeinsamer Ablauf auf Windows, macOS und Linux x64
 
 | Schritt | Aktion | Erwartung / PASS |
@@ -56,6 +61,7 @@ diese konkrete Paketbindung nicht.
 | S12 | Vier Dateien aus `inputs/01-positive` hineinziehen, noch nicht starten | Lokale Dateinamen und Quellenordner erscheinen; **Starten** ist die einzige Startaktion. Ohne Klick entstehen keine Ergebnisse. Klick-/Tastaturauswahl bleibt gleichwertig. |
 | S13 | Während vorbereiteter Auswahl erneut Dateien hineinziehen; anschließend eine Datei entfernen und dann **Auswahl leeren** | Zweiter Drop ersetzt die erste Auswahl nicht. Einzelnes Entfernen aktualisiert Anzahl und Liste; vollständiges Leeren erlaubt danach eine neue Auswahl. Dateien plus Ordner zusammen werden als gemischte Auswahl abgelehnt. Das Verhalten ist in beiden Betriebsarten identisch. |
 | S14 | Für einen neuen vierformatigen Stapel ausdrücklich **In Markdown umwandeln und anonymisieren** wählen, starten und die vier Ergebnisse vergleichen | Dieselbe synthetische Person ist überall `[PERSON_001]`; Arbeitgeber und Kunde tragen zwei unterschiedliche, dokumentübergreifend identische `[UNTERNEHMEN_…]`-Kennungen. Keine ursprünglichen Personen-/Firmennamen. Diese Betriebsart darf eine lokale Sammelprüfung verlangen. Ausgabe und Zuordnung liegen getrennt unter `DataSecure-Output/Lauf-*`. |
+| S14a | Ein mit `npm run uat:complex-docx` erzeugtes DOCX mit sichtbarer Kopf-/Fußzeile einmal rein konvertieren und danach in einem neuen Lauf anonymisieren | Reine Konvertierung erhält Kopf und Fuß. Das anonymisierte Markdown enthält beide nicht und weist seinen Umfang als Dokumentinhalt ohne Kopf-/Fußzeilen aus. Haupttext sowie vorhandene Kommentare, Fuß- und Endnoten bleiben enthalten. Dieser Fall gilt erst für einen Kandidaten, der DS-098 enthält; RC133 enthält die ungebundene Änderung noch nicht. |
 | S15 | Wieder **Nur in Markdown umwandeln** wählen; synthetische XLSX/PPTX, Text-PDF, Scan-PDF und PNG/JPEG/BMP verarbeiten | Alle lesbaren Eingaben erzeugen je eine Markdown-Datei. Namen bleiben erhalten; OCR und nicht vollständig erfasste Objekte werden verständlich als Hinweise ausgewiesen, ohne Zusatzdialog. Kein Python-/Node-Download, keine KI-Verbindung. Ergebnisse sind ausdrücklich **nicht anonymisiert**. |
 | S16 | Nach einem erfolgreichen Lauf **Neue Aufgabe wählen**, eine Funktion wählen und einen zweiten kleinen Stapel starten | Die Verarbeitung läuft ohne erneutes Öffnen der App weiter. Unter **Verlauf** stehen beide Läufe; jede Öffnen-Aktion gehört ausschließlich zu ihrer Zeile. |
 | S17 | Einen Picker länger offen lassen, abbrechen und anschließend einen kleinen Stapel starten | Nach dem Abbruch bleibt die App bedienbar; Fortschritt und Abschluss aktualisieren sich wieder selbständig. |
