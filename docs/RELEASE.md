@@ -20,14 +20,13 @@ Das ist technische E0-Paketevidence, aber noch keine N3/N4- oder weitere Zielhos
 und insbesondere keine sichtbare Fresh-Install- oder
 Anwenderabnahme.
 
-Der letzte veröffentlichte technische Produktkandidat bleibt RC131. Die
-selbsttragenden Standalone- und Cowork-Zielpakete seines Quellcommits `d4d269b`
-wurden auf Windows x64 sowie macOS Intel/ARM gebaut und technisch geprüft;
-Windows-PKG-04 und INT-13 sind an RC131 gebunden. Diese Veröffentlichung als
-Vorabrelease ersetzt weder die noch offene sichtbare N3/N4-UAT noch eine
-Produktionsfreigabe. Auch die vollständige technische RC135-Paketmatrix macht
-RC135 ohne ausdrückliche Veröffentlichung und menschliche N3/N4-Abnahme noch
-nicht zum veröffentlichten plattformübergreifenden Kandidaten.
+RC135 ist als technischer Vorabkandidat unter
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc135>
+veröffentlicht. Tag, sechs Zielpakete, Prüfsummen und SBOM binden unverändert
+den Quellcommit `9c2e4f9061dbdc3cd1bf0280d95939528029c978`; der spätere reine
+Dokumentationscommit verändert diese Binärartefakte nicht. Diese
+Veröffentlichung ersetzt weder die noch offene sichtbare N3/N4-UAT noch eine
+Produktionsfreigabe.
 
 ## Nutzerprodukt
 

@@ -11,19 +11,19 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende Paket vollständig entpacken und
 nicht direkt aus dem ZIP starten:
 
-**[Alle geprüften 3.2.0-rc131-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc131)**
+**[Alle geprüften 3.2.0-rc135-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc135)**
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc131-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Standalone-3.2.0-rc131-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc135-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Standalone-3.2.0-rc135-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [DataSecure-Standalone-3.2.0-rc131-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Standalone-3.2.0-rc131-macos-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc135-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Standalone-3.2.0-rc135-macos-x64.zip)
   herunterladen und im Finder öffnen,
   `DataSecure Standalone.app` nach **Programme** ziehen und dort starten.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [DataSecure-Standalone-3.2.0-rc131-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Standalone-3.2.0-rc131-macos-arm64.zip)
+  [DataSecure-Standalone-3.2.0-rc135-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Standalone-3.2.0-rc135-macos-arm64.zip)
   herunterladen und genauso installieren.
   Die Architektur zeigt **Apple-Menü → Über diesen Mac**. Mindestversion ist
   macOS 13.5. [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
@@ -67,11 +67,11 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 ## Cowork-Plugin: aktueller Umfang
 
 Das zur eigenen Plattform passende Cowork-Paket steht im selben geprüften
-RC131-Release bereit:
+RC135-Release bereit:
 
-- [Windows x64](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc131.zip)
-- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc131.zip)
-- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc131/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc131.zip)
+- [Windows x64](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc135.zip)
+- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc135.zip)
+- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc135.zip)
 
 Die Pakete vollständig herunterladen und als lokales Claude-Desktop-Plugin
 installieren; sie sind nicht für Cloud-Cowork oder Claude im Browser bestimmt.

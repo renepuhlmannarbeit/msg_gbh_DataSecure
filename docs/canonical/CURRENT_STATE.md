@@ -29,9 +29,9 @@ macOS ARM64 mit 38.797.037 Byte und SHA-256
 sowie macOS Intel mit 39.781.289 Byte und SHA-256
 `1efd4cc4e590abbded540ad8be513891b69f3be8f39ee1bb327e2912668e1395`.
 Diese E0-Paketnachweise ersetzen keine sichtbare Fresh-Install-, Finder-/
-Explorer-, Cowork- oder Accessibility-Abnahme. N3 und N4 bleiben offen; RC131
-bleibt bis zu einer ausdrücklichen Veröffentlichung der letzte dauerhaft über
-GitHub Releases angebotene Vorabkandidat.
+Explorer-, Cowork- oder Accessibility-Abnahme. RC135 ist unter
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc135>
+als technischer Vorabkandidat veröffentlicht; N3 und N4 bleiben offen.
 
 ## RC134 – gebundene zweckabhängige DOCX-Kopf-/Fußprojektion
 
