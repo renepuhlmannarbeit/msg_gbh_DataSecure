@@ -162,6 +162,35 @@ Receipt-Schema v2 bindet zusätzlich Betriebssystembuild, Prozessarchitektur
 sowie Version und Installationsscope der verwendeten WebView2-Runtime; Pfade
 und Benutzerdaten werden nicht aufgenommen.
 
+Zusätzliche, explizit lokale Evidenzläufe arbeiten gegen das unveränderte,
+commitgebundene Archiv:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/manual/measure-standalone-native-windows.ps1 -Archive <RC-ZIP> -ExpectedSha256 <64-stellige-SHA-256> -Iterations 30
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/manual/measure-standalone-native-windows.ps1 -Archive <RC-ZIP> -ExpectedSha256 <64-stellige-SHA-256> -Iterations 10 -AssertNoListeners
+node tests/manual/standalone-package-corpus.mjs <RC-ZIP> <64-stellige-SHA-256>
+npm run benchmark:result-overlap
+```
+
+Die Fresh-Profile-Startzeit beginnt unmittelbar vor `Process.Start` und endet erst nach
+`frontend_ready`, den beiden initialen IPC-Antworten sowie Sidecar- und
+Servicebereitschaft. p50/p95 verwenden nearest-rank und 30 jeweils frische,
+isolierte Profile; Betriebssystem-, Defender- und WebView-Dateicaches werden
+nicht künstlich geleert, daher ist dies kein OS-Kaltstart. Der Listenerlauf
+besitzt pro Start eine echte positive TCP- und UDP-Kontrolle und beobachtet ab
+dem Prozessstart bis zur Bereitschaft in etwa 100-ms-Abständen. Root und Kinder
+werden mit Erstellzeit und der Root zusätzlich mit dem exakten EXE-Pfad gegen
+PID-Wiederverwendung gebunden. Jeder TCP-Listener sowie jeder UDP-Endpunkt eines DataSecure-
+oder Core-/Workerprozesses stoppt. Ein UDP-Endpunkt darf nur als Plattformbefund
+weiterlaufen, wenn sein Besitzer ein abstammender, gültig Microsoft-signierter
+WebView2-Prozess mit exakt geparstem `--user-data-dir` des isolierten Testprofils
+ist; unklare Zuordnung
+stoppt. Das 100-Dateien-Paketgate verwendet den wirklichen entpackten Sidecar,
+verlangt Strukturtreue, unveränderte Quellhashes und im reinen Modus exakt
+100 Ergebnisse ohne Zuordnungsdatei. Es weist Verarbeitungs- und gesamte
+Harnessdauer getrennt aus. Der Korpus belegt weder native UI-Interaktionen noch
+Anonymisierung, 200-Dateien-/500-MiB-Grenzen oder reale Office-/OCR-Fachbreite.
+
 Der native Windows-Smoke startet die Tauri-Hülle bewusst kurz sichtbar. Ein
 mit `WindowStyle Hidden` oder `Minimized` erzeugtes Top-Level-Fenster kann die
 WebView2-Seiteninitialisierung auf einem realen Windows-Host aufschieben und

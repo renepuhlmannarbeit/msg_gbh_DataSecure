@@ -280,12 +280,23 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
   assert.match(isolation, /environment\("WEBVIEW2_USER_DATA_FOLDER"\)\.map\(PathBuf::from\)/u);
   assert.match(nativeSmoke, /STANDALONE_NATIVE_ISOLATION_UNSUPPORTED/u, 'old binaries must not be launched');
   assert.match(nativeSmoke, /ValidateIsolationOnly/u);
-  const polling = nativeSmoke.slice(nativeSmoke.indexOf('    do {'), nativeSmoke.indexOf('    } while ('));
+  const readinessDeadline = nativeSmoke.indexOf('$deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)');
+  const pollingStart = nativeSmoke.indexOf('    do {', readinessDeadline);
+  const pollingEnd = nativeSmoke.indexOf('    } while (', pollingStart);
+  assert.ok(readinessDeadline >= 0 && pollingStart > readinessDeadline && pollingEnd > pollingStart,
+    'native readiness polling block must remain structurally discoverable');
+  const polling = nativeSmoke.slice(pollingStart, pollingEnd);
   assert.ok(polling.indexOf('Assert-NativeProcessRunning $process') >= 0);
+  assert.match(polling, /Get-NativeNetworkObservation/u,
+    'listener evidence is sampled during startup instead of only after readiness');
   assert.ok(polling.indexOf('Assert-NativeProcessRunning $process') < polling.indexOf('Read-InteractionEvents'),
     'exit before the first application event must be reported before the no-events continue branch');
   assert.match(isolation, /executable\.ancestors\(\)\.any\(is_reserved_root\)/u);
   assert.match(nativeSmoke, /Get-CheckedTree/u);
+  assert.match(nativeSmoke, /network_observed = \[bool\] \$AssertNoListeners/u);
+  assert.match(nativeSmoke, /STANDALONE_NATIVE_UDP_OBSERVER_INVALID/u);
+  assert.match(nativeSmoke, /ExpectedRootExecutable/u);
+  assert.match(nativeSmoke, /--user-data-dir/u);
   assert.doesNotMatch(nativeSmoke, /(?:Get-ChildItem|Remove-Item)[^\n]*-Recurse/u);
   const main = rust.slice(rust.indexOf('fn main()'), rust.indexOf('#[cfg(test)]\nmod tests'));
   assert.ok(main.indexOf('native_smoke::from_environment()') < main.indexOf('diagnostic_event('));

@@ -18,6 +18,20 @@ Quellcommit `583d71929a279fb57370a19c11776fc54aebc2d0` bestand PKG-04 mit zwei
 bytegleichen Windows-ZIPs zu 110.250.875 Byte; beide Paket-, Worker- und nativen
 Smokes sowie die Desktop-/Core-Hashvergleiche sind grün. INT-13 bindet SHA-256
 `cdc2ec38c7346217a1de21ec9a5137895ded9fe4322dd5cb16f06a599dd6de0c`.
+Die nachträgliche, read-only Kandidatenevidenz vermisst 30 vollständig frische
+Windows-Starts vom Prozessstart bis zu bestätigter UI-, IPC-, Sidecar- und
+Servicebereitschaft mit p50 1,012 s, p95 1,124 s und maximal 1,256 s. Die
+Tauri-Hülle hat 3.549.184 Byte und bleibt klar unter der 20-MiB-Grenze. Zehn
+weitere Starts mit positiver TCP-/UDP-Observerkontrolle und circa 100-ms-
+Beobachtung vom Start bis zur Bereitschaft zeigen null TCP-Listener und null
+UDP-Endpunkte in DataSecure-/Core-/Workerprozessen. Prozessidentitäten werden an
+Erstellzeit und Root-EXE gebunden; ein WebView2-UDP-Endpunkt dürfte nur bei
+Microsoft-Signatur und exakt geparstem isoliertem Profil als Plattformbefund
+erscheinen. Unklare Attribution stoppt das Gate. Der
+wirklich entpackte RC134-Sidecar konvertierte außerdem den reproduzierbaren
+100-Dateien-Korpus in 50,892 s Verarbeitungszeit beziehungsweise 51,092 s
+gesamter Harnessdauer: 100 Ergebnisse, keine Fehler, keine Zuordnung,
+vollständige relative Ordnerstruktur und unveränderte Quellhashes.
 N3/N4, aktuelle Cowork-Zielpakete und weitere Zielhosts bleiben offen; RC133
 bleibt unverändert.
 
@@ -253,9 +267,11 @@ Evidencevorlagen, eine Kandidatenmanifestvorlage, ein konfliktfreier Git-Ablauf
 und eine gemeinsame GO-/NO-GO-Vorlage unter
 `docs/acceptance/FORMAL_UAT`. Beide verwenden denselben festgeschriebenen
 `main`-Commit; die Zielpakete und Hashes bleiben plattformspezifisch. Der Rahmen
-ist E0-geprüfte Vorbereitung, aber noch keine N3-/N4-Evidence. Vor Testbeginn
-fehlen der finale Kandidatencommit, dessen aktuelle Pakete/Hashes und die
-tatsächliche Architektur des Test-Macs.
+ist E0-geprüfte Vorbereitung, aber noch keine N3-/N4-Evidence. Der Windows-
+Kandidat RC134 ist aus Commit `583d71929a279fb57370a19c11776fc54aebc2d0`
+mit ZIP-Hash und PKG-04/INT-13 gebunden. Vor dem gemeinsamen N3/N4 fehlen noch
+die Cowork- und macOS-Pakete/Hashes aus demselben festgeschriebenen Commit sowie
+die tatsächliche Architektur des Test-Macs.
 
 ## Intel-/ARM64-Zielhost- und App-Bundle-E0 vom 09.09.2026
 
@@ -799,7 +815,7 @@ SHA-256 `807940d1a48846c5de9e898691e45027d934fb84e5b3d64ef7f8031f79d271e1`).
 Der commitgebundene RC109-Kandidat und seine Nachweisgrenzen stehen im folgenden
 Abschnitt.
 
-## Aktueller geprüfter Kandidat
+## Historischer geprüfter Kandidat RC111
 
 RC111 aus sauberem `main`-Quellcommit
 `b543589f3250a6ab57ddd5bc3a144f03a24ee026` ist an INT-13 gebunden. PKG-04

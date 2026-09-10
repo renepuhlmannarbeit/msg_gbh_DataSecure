@@ -1,12 +1,12 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 09.09.2026
+Stand: 10.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-094, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-098, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -21,7 +21,8 @@ bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
   DS-058 und DS-083 für neue Standalone-Ergebnisse durch DS-089; die feste
   Namensvorgabe aus DS-089 durch DS-091; DS-079 und DS-080 für das Öffnen des
   aktuellen Cowork-Laufs durch DS-092; der Standalone-Plattformumfang aus
-  DS-052, DS-076 und DS-077 durch DS-094.
+  DS-052, DS-076 und DS-077 durch DS-094; die Resume-/Produktadaptergrenzen
+  durch DS-097; die DOCX-Projektion für Kopf-/Fußzeilen durch DS-098.
 
 Der aktuelle operative Status steht in
 [`TRACEABILITY.md`](TRACEABILITY.md). Historische Texte werden nicht still

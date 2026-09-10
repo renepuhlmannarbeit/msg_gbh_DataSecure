@@ -19,7 +19,8 @@ function folderFailure(code, message) {
 function sameFsObject(left, right) {
   return Boolean(left && right && left.isDirectory() === right.isDirectory() &&
     left.isFile() === right.isFile() && left.isSymbolicLink() === right.isSymbolicLink() &&
-    left.dev === right.dev && left.ino === right.ino);
+    left.dev === right.dev && left.ino === right.ino &&
+    left.birthtimeMs === right.birthtimeMs && left.ctimeMs === right.ctimeMs);
 }
 
 function defaultRunner(command, args, env = process.env) {
