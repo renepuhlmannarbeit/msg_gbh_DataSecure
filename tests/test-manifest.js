@@ -66,6 +66,10 @@ test('version synchronization changes release labels without relabelling histori
   assert.match(script, /Engineering-Pilot/u);
   assert.match(script, /FORMAL_UAT\/CAMPAIGN\.template\.json/u);
   assert.match(script, /FORMAL_UAT\/GIT-WORKFLOW\.md/u);
+  assert.match(script, /Der aktuelle Quellstand ist/u,
+    'version sync must advance the explicit current release-truth label');
+  assert.match(script, /Kandidat\|Entwicklungsstand/u,
+    'version sync may change only the explicit current release-truth role');
   assert.match(script, /\(\?=\[\^\\n\]\*\$\)/u,
     'version headers with a product suffix must remain synchronizable');
 });

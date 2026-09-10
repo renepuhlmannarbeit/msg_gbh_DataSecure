@@ -123,6 +123,9 @@ for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md
   'docs/RELEASE.md', 'docs/TESTING.md']) {
   patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?(?=[^\n]*$)/mu, `$1${target}`);
 }
+patchText('docs/RELEASE.md',
+  /(Der aktuelle Quellstand ist[^\n]*?)(?:RC\d+)-(?:Kandidat|Entwicklungsstand)/u,
+  `$1${rcLabel(target)}-Entwicklungsstand`);
 patchText('docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
   /^(Stand:[^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?$/mu,
   `$1${target}`);

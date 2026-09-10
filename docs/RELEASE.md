@@ -2,9 +2,11 @@
 
 Stand: 10.09.2026 · 3.2.0-rc134
 
-Der aktuelle Quellstand ist der auf Windows x64 technisch paketgebundene
-RC133-Kandidat für das Cowork-Plugin und die Standalone-App. Der lokale
-Standalone-PKG-04-Lauf aus Commit `2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`
+Der aktuelle Quellstand ist der noch nicht paketgebundene RC134-Entwicklungsstand
+für das Cowork-Plugin und die Standalone-App. Sein PKG-04-/INT-13-Nachweis wird
+erst aus dem abschließend geprüften RC134-Commit erzeugt. Der letzte lokale
+Windows-Paketnachweis gehört weiterhin zum RC133-Kandidaten: Der Standalone-
+PKG-04-Lauf aus Commit `2cd4150adfdff2e3aa6771c6cd81e2972ea0413a`
 erzeugte zwei bytegleiche Archive; beide Paket-, Worker- und nativen Smokes
 bestanden. INT-13 bindet dieses Windows-Archiv mit SHA-256
 `fd3dcb1b0f99940a110857c085793b70930454571ffda3a7e5d8565a997ece66`.
