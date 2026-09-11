@@ -1,4 +1,8 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC135
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC136
+
+Der Quellstand ist RC136. Die zuletzt veröffentlichten und verlinkten Pakete
+sind RC135; RC136 wird erst nach reproduzierbarem Paketbau und formaler
+Kandidatenbindung als Download veröffentlicht.
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend

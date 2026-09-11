@@ -24,7 +24,8 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.match(overview, /Ein einzelner Mac schließt nur seine reale Architektur/u);
   assert.match(overview, /Standalone muss offline funktionieren/u);
   assert.match(overview, /Cowork benötigt Claude Desktop und\s+Internet/u);
-  assert.match(overview, /RC134 ist der aktuelle lokal Windows-PKG-04-\/INT-13-gebundene Kandidat/u);
+  assert.match(overview, /RC134 ist der letzte lokal Windows-PKG-04-\/INT-13-gebundene Standalone-Kandidat/u);
+  assert.match(overview, /RC136 ist der aktuelle, noch nicht formal gebundene Cowork-Quellstand/u);
   assert.match(overview, /npm run test:version-truth/u);
   assert.match(overview, /S01.S23 einschließlich S14a/u);
 });
@@ -85,6 +86,14 @@ test('campaign template cannot be mistaken for completed evidence', () => {
   assert.strictEqual(campaign.packages.windows.standalone_sha256, '');
   assert.strictEqual(campaign.packages.macos.cowork_plugin_sha256, '');
   assert.deepStrictEqual(new Set(Object.values(campaign.e0_gates)), new Set(['NOT_RUN']));
+  assert.deepStrictEqual(campaign.cowork_model_gates, {
+    full_matrix_41x3: 'NOT_RUN', candidate_smoke_12x3: 'NOT_RUN'
+  });
+  assert.strictEqual(campaign.cowork_model_evidence.case_corpus_sha256, '');
+  assert.strictEqual(campaign.cowork_model_evidence.candidate_matrix_sha256, '');
+  assert.deepStrictEqual(campaign.cowork_model_evidence.models, []);
+  assert.strictEqual(campaign.cowork_model_evidence.candidate_smoke_command,
+    'npm run uat:cowork-candidate');
 });
 
 test('shared repository workflow isolates platform evidence from product code', () => {
@@ -98,7 +107,11 @@ test('shared repository workflow isolates platform evidence from product code', 
   assert.match(workflow, /ändert nur `MACOS-EVIDENCE\.csv`/u);
   assert.match(workflow, /Manifest-Commit[\s\S]*nicht der Produktkandidat/u);
   assert.match(workflow, /Product-Fix[\s\S]*neuen\s+Kandidaten/u);
-  assert.match(read('FREIGABEENTSCHEIDUNG.md'), /keine offenen P0\/P1-Defects/u);
+  const decision = read('FREIGABEENTSCHEIDUNG.md');
+  assert.match(decision, /keine offenen P0\/P1-Defects/u);
+  assert.match(decision, /Modellabnahme 41×3:[\s\S]*NOT_RUN/u);
+  assert.match(decision, /Kandidatensmoke 12×3:[\s\S]*NOT_RUN/u);
+  assert.match(decision, /beide\s+Modellgates `PASS`/u);
 });
 
 done();

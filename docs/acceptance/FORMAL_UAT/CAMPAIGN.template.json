@@ -2,7 +2,7 @@
   "schema": "datasecure-formal-uat-campaign/1",
   "campaign_id": "",
   "state": "planned",
-  "product_version": "3.2.0-rc135",
+  "product_version": "3.2.0-rc136",
   "candidate_commit": "",
   "created_at_utc": "",
   "release_scope": {
@@ -32,6 +32,16 @@
     "standalone": "NOT_RUN",
     "plugin_package": "NOT_RUN",
     "standalone_package": "NOT_RUN"
+  },
+  "cowork_model_gates": {
+    "full_matrix_41x3": "NOT_RUN",
+    "candidate_smoke_12x3": "NOT_RUN"
+  },
+  "cowork_model_evidence": {
+    "case_corpus_sha256": "",
+    "candidate_matrix_sha256": "",
+    "models": [],
+    "candidate_smoke_command": "npm run uat:cowork-candidate"
   },
   "notes": "No personal data, local paths or source-document hashes."
 }

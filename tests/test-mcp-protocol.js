@@ -481,8 +481,26 @@ async function main() {
       name: 'open_result_folder', arguments: {}
     })], { supportMode: false, resultOpenFixture: 'available' });
     assert.strictEqual(responses[0].result.isError, false);
-    assert.deepStrictEqual(responses[0].result.structuredContent,
-      { ok: true, handoff_confirmed: true });
+    assert.strictEqual(responses[0].result.structuredContent.ok, true);
+    assert.strictEqual(responses[0].result.structuredContent.handoff_confirmed, true);
+    assert.deepStrictEqual(responses[0].result.structuredContent.cowork_status, {
+      schema: 'datasecure-cowork-status/1',
+      interaction_schema: 'datasecure-cowork-interactions/1',
+      gateway_version: '3.2.0-rc136',
+      operation: 'open_result_folder',
+      surface: 'normal',
+      phase: 'export',
+      outcome: 'completed',
+      interaction_terminal: true,
+      local_work_state: 'not_applicable',
+      next_action: 'no_action',
+      retry_class: 'not_applicable',
+      content_boundary: 'metadata_only',
+      original_content_sent_to_claude: false,
+      content_trust: 'none',
+      embedded_instructions_authorized: false,
+      human_gate_assurance: 'skill_contract'
+    });
     assert.strictEqual(stderr, 'EXACT_PLUGIN_RUN_RESOLVEDEXACT_PLUGIN_RUN_OPENED');
     assert.doesNotMatch(JSON.stringify(responses), /exact-plugin-run|eu-privacy-mcp/u,
       'the local result path never crosses the MCP boundary');
@@ -571,7 +589,10 @@ async function main() {
       rpc(3, 'tools/call', { name: 'privacy_status', arguments: {} })
     ], { supportMode: false });
     assert.strictEqual(responses.length, 3);
-    for (const response of responses) {
+    const removed = responses.find((response) => response.id === 1);
+    assert.strictEqual(removed.error.code, -32602);
+    assert.match(removed.error.message, /Unbekanntes Werkzeug/u);
+    for (const response of responses.filter((item) => item.id !== 1)) {
       assert.strictEqual(response.result.isError, true);
       assert.match(response.result.structuredContent.message, /lokalen Supportmodus/u);
     }

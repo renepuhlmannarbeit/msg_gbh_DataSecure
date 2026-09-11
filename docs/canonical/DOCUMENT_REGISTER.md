@@ -21,6 +21,7 @@ Register. `DOCUMENT_INDEX.json` führt diese Ablösung und DS-085/086 mit.
 | `CURRENT_STATE.md` | aktueller belegter Iststand |
 | `TRACEABILITY.md`, `BACKLOG_EVIDENCE_MATRIX.md` | aktuelle Zuordnung und Evidencegrenzen |
 | `TARGET_CAPABILITIES.json`, `HOST_MATRIX_V1.json`, `RUNTIME_START_MATRIX_V1.json` | maschinenlesbare Ziel-, Host- und Runtimeverträge; Zielaussagen sind keine Istfreigabe |
+| `contracts/COWORK_INTERACTION_V1.md` | kanonische Cowork-Werkzeug-, Human-Gate-, Status- und Modell-Evidence-Semantik nach DS-099 |
 | `HOST_MATRIX_V1.md`, `STATUS_APP_PILOT_V1.md` | menschenlesbare Hostregel und bewusst deaktivierter Statuskartenpilot |
 | `OPEN_SOURCE_COMPONENTS.md` | verbindliches Wiederverwendungsregister |
 | `DOCUMENT_INDEX.json` | maschinenlesbarer Status, Geltungsbereich, Eigentümer, Versionsregel und Ablösung aller führenden Dokumentklassen |
@@ -80,6 +81,11 @@ Abnahme.
   erhalten; aktuelle Aussagen und Nachweisgrenzen führt `CURRENT_STATE.md`.
   Dies entspricht `historical` und `superseded_by: CANON-CURRENT` im
   maschinenlesbaren Dokumentindex.
+- `ARCH-DOC-COWORK-BID-REVIEW-2026-09-11` unter
+  `docs/archive/2026-09/reviews/REVIEW_COWORK_BID_STRUKTURMUSTER_2026-09-11.md`:
+  read-only Herkunftsnachweis der übernommenen allgemeinen Cowork-Muster. Die
+  aktive Produktsemantik steht ausschließlich in DS-099 und
+  `COWORK_INTERACTION_V1.md`.
 - [`docs/archive`](../archive/README.md) mit
   [stabilem Archivindex](../archive/INDEX.md): frühere Architektur-, Review-,
   Release-, Test- und Kanonvollstände.

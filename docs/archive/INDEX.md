@@ -15,6 +15,7 @@ steht im [kanonischen Dokumentensystem](../canonical/README.md).
 | `ARCH-DOC-RETIRED-2026-09` | [überholte aktive Unterlagen](2026-09/retired-active-docs/) | Status je Datei; maßgeblich ist `CANON-DOCUMENT-INDEX` |
 | `ARCH-DOC-REVIEW-BOTH-RC99` | [Gesamtreview beider Produkte vom 04.09.2026](2026-09/reviews/REVIEW_BEIDE_PRODUKTE_2026-09-04.md) | `CANON-CURRENT`; zeitgebundene Evidence, nicht aktuelles Urteil |
 | `ARCH-DOC-OSS-PRE-RC109` | [Open-Source-Register vor RC109](2026-09/OPEN_SOURCE_COMPONENTS_BEFORE_RC109.md) | `CANON-OSS` |
+| `ARCH-DOC-COWORK-BID-REVIEW-2026-09-11` | [Read-only Strukturreview der Cowork-Muster](2026-09/reviews/REVIEW_COWORK_BID_STRUKTURMUSTER_2026-09-11.md) | DS-099, BL-041.10–.13 und `COWORK_INTERACTION_V1.md` |
 | `ARCH-TASK-RC111-WIDE` | [RC111: breite Format- und Recovery-Härtung](../../tasks/archiv/2026-09-06-rc111-wide-format-recovery-hardening.md) | `CANON-CURRENT`, DS-087 und BL-010.30 |
 
 Abgeschlossene Einzelaufträge behalten außerdem ihren sprechenden Dateinamen

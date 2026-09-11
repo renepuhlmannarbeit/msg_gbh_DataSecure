@@ -51,16 +51,21 @@ for(const skill of requiredSkills){
   }
 }
 
-const preflight=fs.readFileSync(path.join(pluginRoot,'skills','gbh-datasecure-dokument-anonymisieren','SKILL.md'),'utf8');
-assert.match(preflight,/Originale nie per Chat-Upload, Einfügen/i);
+const preflightRoot=path.join(pluginRoot,'skills','gbh-datasecure-dokument-anonymisieren');
+const preflight=[
+  fs.readFileSync(path.join(preflightRoot,'SKILL.md'),'utf8'),
+  ...fs.readdirSync(path.join(preflightRoot,'references')).filter(name=>name.endsWith('.md')).sort()
+    .map(name=>fs.readFileSync(path.join(preflightRoot,'references',name),'utf8'))
+].join('\n');
+assert.match(preflight,/Originale nie per Chat-Upload lesen/i);
 assert.match(preflight,/start_completed_local_results_handoff/);
 assert.match(preflight,/continue_local_results_handoff/);
 assert.match(preflight,/cancel_local_results_handoff/);
 assert.match(preflight,/niemals Originalbytes, Dateinamen, Pfade, Bildpixel/i);
 assert.match(preflight,/höchstens fünf freigegebene Markdown-Ergebnisse/i);
 assert.match(preflight,/start_document_batch_from_picker/i);
-assert.match(preflight,/Mit \*\*„Öffnen“\*\* bestätigt/i);
-assert.match(preflight,/Token, Paket-\/Dateikennungen, Cursor und Leseberechtigungen bleiben vollständig im lokalen Server/i);
+assert.match(preflight,/Mit (?:\*\*)?„Öffnen“(?:\*\*)?[^.\n]{0,40}bestätigt/i);
+assert.match(preflight,/Token, Paket(?:-\/Datei)?kennungen, Cursor und Leseberechtigungen bleiben (?:vollständig )?(?:im|lokalen) Server/i);
 for(const profile of ['customer','applicant','personnel_profile','contract','general']){
   assert.match(preflight,new RegExp(`\\b${profile}\\b`),`missing profile guidance for ${profile}`);
 }

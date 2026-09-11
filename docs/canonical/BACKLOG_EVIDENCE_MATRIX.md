@@ -1,10 +1,18 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 10.09.2026 · 3.2.0-rc135
+Stand: 11.09.2026 · 3.2.0-rc136
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
 Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
+
+RC136 / DS-099 / BL-041.11–.13: E0 bindet 27 Registryeinträge bijektiv
+an Werkzeuge und Handler, leitet 10 Normal-/17 Supportwerkzeuge sowie
+Annotationen aus derselben Quelle ab und projiziert den additiven öffentlichen
+Statusumschlag. Der verkleinerte Hauptskill, vier Intentreferenzen, 41
+strukturierte Routingfälle und die 12×3-Candidate-Matrix sind automatisiert
+prüfbar. Das ist keine Modell- oder sichtbare Cowork-Abnahme; dreifache frische
+Sitzungen pro Modell und Zielhost bleiben E1/E2.
 
 DS-095 ordnet die nächsten Stufen eindeutig zu: **N3** ist die technische
 E1-Abnahme eines durch Commit und Paket-Hash festgeschriebenen Kandidaten;

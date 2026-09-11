@@ -19,9 +19,17 @@ Produktversion: _noch einzutragen_
 
 `GO`, `NO-GO` oder `BLOCKED`: **BLOCKED – Kampagne noch nicht durchgeführt**
 
+Cowork-Modellabnahme 41×3: **NOT_RUN**
+
+Cowork-Kandidatensmoke 12×3: **NOT_RUN**
+
+Gebundene Korpus-Hashes geprüft: **NOT_RUN**
+
 GO ist nur zulässig, wenn alle als Releaseumfang markierten Zeilen N3 und N4
 `PASS` sind, keine offenen P0/P1-Defects bestehen und Commit sowie Paket-Hashes
-mit dem Kampagnenmanifest übereinstimmen. Ein einzelner Mac gibt nur die dort
+mit dem Kampagnenmanifest übereinstimmen. Für Cowork müssen außerdem beide
+Modellgates `PASS` sein und die geprüften Korpus-Hashes mit dem Manifest
+übereinstimmen. Ein einzelner Mac gibt nur die dort
 wirklich getestete Architektur frei.
 
 Windows-Tester / Datum UTC: _noch einzutragen_

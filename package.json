@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc135",
+  "version": "3.2.0-rc136",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -67,6 +67,7 @@
     "benchmark:result-overlap": "node scripts/benchmark-visible-result-overlap.mjs",
     "test:windows-visual": "node tests/windows-visual-acceptance.js",
     "test:skills": "node tests/test-contract-skill-acceptance.js && node tests/test-contract-skill-matrix.js",
+    "uat:cowork-candidate": "node scripts/print-cowork-candidate-smoke.mjs",
     "test:docs": "npm run test:docs:fast",
     "validate:claude-local": "node scripts/validate-claude-local.mjs",
     "build:status-app": "node scripts/build-status-app.mjs",

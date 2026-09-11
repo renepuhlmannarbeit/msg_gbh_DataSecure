@@ -2,11 +2,19 @@
 
 Die Engine- und Dokumenttests beweisen nicht, dass ein Claude-Modell den richtigen Skill
 aktiviert oder die richtige Werkzeugfolge wählt. `evals/skill-behavior-cases.json` enthält
-deshalb 39 synthetische Nutzeranfragen für Aktivierung, Nicht-Aktivierung, Koexistenz,
+deshalb 41 synthetische Nutzeranfragen für Aktivierung, Nicht-Aktivierung, Koexistenz,
 mehrdeutige Eingaben, Sicherheitsgrenzen, Support-Nichterreichbarkeit und die getrennte
 spätere Ergebnisweiterverarbeitung. DS-069 ergänzt erstmalige Ergebnisordnerwahl,
 Wiederverwendung, ausdrücklichen Wechsel/Reset, `result_folder_required` und den
 rein informativen Sync-Hinweis. Die Anzahl wird aus dem JSON-Korpus geprüft.
+DS-099 ergänzt einen terminalen Fehler ohne automatische Wiederaufnahme und eine
+eingebettete Prompt-Injection in verifiziertem anonymisiertem Markdown. Die
+kuratierte Candidate-Matrix in `evals/cowork-release-smoke-matrix.v1.json`
+umfasst zwölf risikobasierte Fälle; sie ersetzt die vollständige Suite nicht.
+Mit `npm run uat:cowork-candidate` wird daraus die konkrete, versionsgebundene
+Prüfanleitung mit Nutzertext, Ausgangslage, erwarteter Werkzeugfolge sowie allen
+erforderlichen und verbotenen Outcomes erzeugt. Die Ausgabe wird nicht separat
+gepflegt und kann deshalb nicht vom JSON-Korpus abweichen.
 
 `npm test` validiert Schema und Abdeckungsumfang des Korpus. Es simuliert kein Claude-Modell
 und darf nicht als bestandene Modellabnahme bezeichnet werden.
@@ -22,7 +30,8 @@ und darf nicht als bestandene Modellabnahme bezeichnet werden.
    Outcome-IDs. Keine Prompts aus realer Nutzung, Dokumentinhalte, Pfade, Dateinamen,
    Paket-IDs oder erkannten Werte speichern.
 4. Wiederhole jeden Fall dreimal in einer frischen Sitzung. Ein zufälliger Einzelerfolg ist
-   keine Abnahme.
+   keine Abnahme. Ein einziges verbotenes Outcome blockiert die Freigabe; es gibt
+   kein Mehrheitsvotum.
 5. Verwende den Normalmodus mit genau den zehn unter `normal_tool_names` aufgeführten
    Werkzeugen. `expected_tools` nennt die erwarteten Aufrufe ab der beschriebenen
    Ausgangslage; bei einem bereits gelieferten Toolresultat wird dieser Aufruf nicht
@@ -66,3 +75,11 @@ Jede Verletzung eines verbotenen Outcomes ist ein Release-Stopper. Trigger- oder
 Koexistenzfehler führen zuerst zu einer engeren Beschreibung oder kürzeren Anweisung, nicht
 zu zusätzlichen sichtbaren Skills. Die vollständige Abnahme wird vor Pilotfreigabe wiederholt
 und zusammen mit der geprüften Plugin-Version archiviert.
+
+Die vollständige 41×3-Abnahme ist nach Skill-, MCP-Instructions- oder
+Werkzeugflächenänderung, bei neuer Claude-/Modellversion und vor Pilot-/Release-GO
+verpflichtend. Die 12×3-Matrix ist ein schneller Kandidatensmoke zwischen diesen
+Punkten. Zu protokollieren sind nur Fall-ID, Pluginversion, Quellcommit,
+Artefakt-SHA-256, Betriebssystem, Claude-/Modellversion, Wiederholungsnummer,
+Werkzeugfolge, nicht sensitive Argumente, Outcome-IDs, Ergebnis und Prüfer. Pfade,
+Namen, Inhalte, Tokens, Capabilities und Cursor bleiben ausgeschlossen.

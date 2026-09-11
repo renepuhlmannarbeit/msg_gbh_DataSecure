@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 10.09.2026 · RC134-Basis und spätere, jeweils neu gebundene Kandidaten
+Stand: 11.09.2026 · RC136-Quellstand und spätere, jeweils neu gebundene Kandidaten
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -8,7 +8,7 @@ denselben festgeschriebenen Commit. Die Testfälle selbst bleiben in den
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC134 ist der aktuelle lokal Windows-PKG-04-/INT-13-gebundene Kandidat und
+RC134 ist der letzte lokal Windows-PKG-04-/INT-13-gebundene Standalone-Kandidat; RC136 ist der aktuelle, noch nicht formal gebundene Cowork-Quellstand und
 enthält den DOCX-Vertrag DS-098: Kopf-/Fußzeilen bleiben bei reiner Konvertierung
 erhalten und werden nur bei Anonymisierung ausgelassen. Eine formale Kampagne
 beginnt dennoch erst, wenn auch die benötigten Cowork- und Mac-Pakete aus
@@ -51,6 +51,10 @@ macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
    spätere Manifest-Commit ist bewusst ein Nachfahre davon.
 4. Automatische E0-Gates, PKG-04/INT-13 soweit anwendbar und die
    Dokumentationsprüfung müssen grün sein. Das ersetzt N3/N4 nicht.
+   Für das Cowork-Plugin sind zusätzlich die vollständige 41×3-Modellabnahme
+   und der 12×3-Kandidatensmoke mit den im Manifest gebundenen Korpus-Hashes
+   als `PASS` erforderlich. Die reproduzierbare 12-Fälle-Anleitung erzeugt
+   `npm run uat:cowork-candidate`; Setup und Aufräumen gehören zu jedem Fall.
 5. Nur synthetische Testdaten bereitstellen. Niemals echte Personen-, Kunden-
    oder Unternehmensdaten in Git, Evidenz oder Defectbeschreibungen aufnehmen.
 6. Beide Tester starten ihre Plattformbranches vom selben Kampagnenbranch und
@@ -89,6 +93,9 @@ Solange Commit oder Paket-Hash fehlen, ist die Kampagne **nicht gestartet**.
 - Windows- und macOS-Ergebnisse bleiben getrennt auswertbar. Ein gemeinsames GO
   ist nur möglich, wenn alle im Kampagnenmanifest als freizugebend markierten
   Zielhost-/Produktkombinationen N3 und N4 bestanden haben.
+- Ein Cowork-GO ist ausgeschlossen, solange `full_matrix_41x3` oder
+  `candidate_smoke_12x3` nicht `PASS` ist. Ein verbotenes Outcome in nur einer
+  Wiederholung blockiert die Freigabe.
 
 ## Benötigte Dateien
 

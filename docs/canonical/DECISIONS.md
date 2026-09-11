@@ -1,6 +1,6 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 10.09.2026
+Stand: 11.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
@@ -1555,3 +1555,34 @@ Dialog. PDF-/Scan-PDF-Seitenränder, PPTX-Master-/Layouttexte und andere nur
 heuristisch vermutete Kopf-/Fußbereiche werden nicht automatisch entfernt.
 DS-098 präzisiert DS-017, DS-049, DS-087, DS-090 und DS-093 und wird unter
 BL-010.30 sowie BL-022.1 geführt.
+
+## DS-099 – Cowork-Interaktionen besitzen eine einzige maschinenlesbare Semantik
+
+Am 11.09.2026 nach read-only Strukturvergleich mit dem fremden
+GBH-BID-Skills-Repository sowie unabhängigen Architektur-, Security- und
+Testgegenchecks festgelegt: DataSecure übernimmt keine BID-Fachlogik, sondern
+die nützlichen Governance-Muster. Jedes Cowork-Werkzeug wird genau einmal in
+einer geschlossenen Registry mit Oberfläche, Wirkung, Idempotenz, Human-Gates,
+Erfolgsdisposition und Inhaltsgrenze geführt. Laufzeitlisten und Annotationen
+werden daraus abgeleitet; Werkzeugtabelle, Registry und Handler müssen bijektiv
+sein.
+
+Jede bekannte Werkzeugantwort erhält additiv einen einheitlichen
+`cowork_status`. Er trennt die Claude-Interaktion vom lokalen Arbeitszustand,
+Workerannahme vom Abschluss und Originalinhalt von ausdrücklich übergebenem,
+verifiziertem anonymisiertem Markdown. Dokumentinhalt bleibt untrusted und kann
+keine Aktion autorisieren. Unbekannte und terminale Fehler werden nie aus
+Vorsicht retryfähig. Bestehende Top-Level-Felder bleiben bis zur echten
+Cowork-UAT kompatibel erhalten.
+
+Der Hauptskill enthält nur den unverhandelbaren Privacy-/Trust-/Normalweg und
+eine Intenttabelle; Detailabläufe liegen in genau passenden Referenzen.
+Automatisierte Golden Cases beweisen Struktur und Runtime, nicht das tatsächliche
+Claude-Verhalten. Modellfälle werden pro freizugebendem Modell dreimal in
+frischen Sitzungen ausgeführt; jedes verbotene Outcome stoppt die Freigabe.
+Die 41×3-Vollmatrix und die 12×3-Kandidatenmatrix sind eigenständige formale
+Cowork-GO-Gates. Die Kandidatenmatrix bindet jeden Fall an Fixture,
+Vorbereitung, bewerteten Schritt und Aufräumen; „frische Sitzung“ schließt diese
+Vorbereitung innerhalb derselben Sitzung ein.
+DS-099 präzisiert DS-012, DS-041, DS-067, DS-069, DS-078, DS-092 und DS-097 und
+wird unter BL-041.10 bis BL-041.13 geführt.

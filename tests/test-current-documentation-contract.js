@@ -74,12 +74,18 @@ test('release truth binds the published candidate while keeping human approval s
   const match = /-rc(\d+)$/iu.exec(version);
   assert.ok(match, `release candidate version expected, got ${version}`);
   const currentRc = `RC${match[1]}`;
-  assert.match(release, new RegExp(`aktuelle Quellstand[\\s\\S]{0,120}${currentRc}-(?:Kandidat|Entwicklungsstand)`, 'u'));
-  assert.match(release, new RegExp(`${currentRc}[\\s\\S]{0,520}PKG-04[\\s\\S]{0,320}INT-13`, 'u'));
+  assert.match(release, new RegExp(`aktuelle Quellstand[\\s\\S]{0,120}nicht paketgebundene ${currentRc}-Entwicklungsstand`, 'u'));
+  const published = /RC(\d+) ist als technischer Vorabkandidat[\s\S]{0,160}releases\/tag\/v(\d+\.\d+\.\d+-rc\d+)/u.exec(release);
+  assert.ok(published, 'the last package-bound candidate and release link must be explicit');
+  const publishedRc = `RC${published[1]}`;
+  const publishedVersion = published[2];
+  assert.notStrictEqual(publishedRc, currentRc,
+    'an unbound development RC must not masquerade as the published package candidate');
+  assert.match(release, new RegExp(`${publishedRc}[\\s\\S]{0,760}PKG-04[\\s\\S]{0,320}INT-13`, 'u'));
   assert.match(release, /zwei bytegleiche Archive/u);
   assert.match(release, /noch keine N3\/N4- oder weitere Zielhostfreigabe/u);
-  assert.match(release, new RegExp(`${currentRc} ist als technischer Vorabkandidat`, 'u'));
-  assert.match(release, new RegExp(`releases/tag/v${version.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`, 'u'));
+  assert.match(release, new RegExp(`${publishedRc} ist als technischer Vorabkandidat`, 'u'));
+  assert.match(release, new RegExp(`releases/tag/v${publishedVersion.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`, 'u'));
   assert.match(release, /Tag, sechs Zielpakete, Prüfsummen und SBOM binden unverändert/u);
   assert.match(release, /Lauf `34499428661`[\s\S]{0,360}macOS ARM64[\s\S]{0,220}Intel/u);
   assert.match(release, /Lauf `34501324817`[\s\S]{0,220}drei\s+selbsttragenden Cowork-Plugin-ZIPs/u);
@@ -319,7 +325,10 @@ test('Cowork opens only its latest completed run and preserves the Standalone pr
     assert.match(text, /(?:kein|nie|niemals)/iu, `${file} must reject fallback`);
     assert.match(text, /(?:ältere[nr]?|Alt-)/iu, `${file} must name stale results`);
   }
-  const skill = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md');
+  const skillRoot = 'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren';
+  const skill = [read(`${skillRoot}/SKILL.md`), ...fs.readdirSync(path.join(root, skillRoot, 'references'))
+    .filter((name) => name.endsWith('.md')).sort()
+    .map((name) => read(`${skillRoot}/references/${name}`))].join('\n');
   assert.match(skill, /exakten Ergebnisordner des aktuellsten Cowork-Laufs/u);
   assert.match(skill, /Meldung mit .*Ergebnisse öffnen/u);
   const architecture = read('docs/canonical/TARGET_ARCHITECTURE.md');

@@ -122,7 +122,7 @@ try {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, value, { flag: 'wx' });
   }
-  for (const test of debugBuild ? [] : ['test-contract-skill-acceptance.js', 'test-contract-skill-matrix.js']) {
+  for (const test of ['test-contract-skill-acceptance.js', 'test-contract-skill-matrix.js']) {
     const result = spawnSync(process.execPath, [path.join(root, 'tests', test), target], { cwd: root, stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) process.exit(result.status || 1);

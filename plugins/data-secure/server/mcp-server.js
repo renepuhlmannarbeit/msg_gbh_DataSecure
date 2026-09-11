@@ -17,6 +17,8 @@ const {startBatchMaintenance}=require('./gateway/batch-maintenance');
 const {initializeProduct}=require('./core/product-bootstrap');
 const {promptText}=require('./prompt-contract');
 const {INSTRUCTIONS}=require('./mcp-instructions');
+const {assertInteractionBinding,namesForSurface,annotationsForTool}=require('./cowork-interaction-contract');
+const {withCoworkStatus}=require('./cowork-status-envelope');
 const {storageStatus}=require('./gateway/common');
 const {saveConfiguredPrivacyRoot,clearConfiguredPrivacyRoot}=require('./gateway/privacy-config');
 const {readConfiguredResultRoot,saveConfiguredResultRoot,clearConfiguredResultRoot,resultOutputDirectory,consumeConfiguredResultNotices,isCommonSyncFolder,isNetworkResultFolder}=require('./gateway/result-folder-config');
@@ -65,23 +67,11 @@ const TOOLS=[
 ];
 // Cowork should reason over the short, normal workflow rather than technical
 assertSchemaBinding(TOOLS);
+assertInteractionBinding(TOOLS);
 // delivery and support functions. The complete table is available only in
 // explicit IT support mode; the removed Input-folder intake is not retained.
-const NORMAL_TOOL_NAMES = Object.freeze(new Set([
-  'start_document_batch_from_picker',
-  'start_completed_local_results_handoff',
-  'continue_local_results_handoff',
-  'cancel_local_results_handoff',
-  'continue_most_recent_document_batch',
-  'discard_incomplete_document_batches',
-  'configure_privacy_folder',
-  'configure_result_folder',
-  'open_result_folder',
-  'open_export_folder'
-]));
-const SUPPORT_TOOL_NAMES = Object.freeze(new Set(
-  TOOLS.map((tool) => tool.name).filter((name) => !NORMAL_TOOL_NAMES.has(name))
-));
+const NORMAL_TOOL_NAMES = namesForSurface('normal');
+const SUPPORT_TOOL_NAMES = namesForSurface('support');
 function listedTools() {
   return process.env.EU_PRIVACY_SUPPORT_MODE === '1'
     ? TOOLS
@@ -107,14 +97,7 @@ function listedTools() {
 // operations that can discard/consume local state or irreversibly advance a
 // checkpoint; merely opening a local dialog is neither destructive nor
 // idempotent.
-const DESTRUCTIVE_TOOLS=new Set(['review_deferred_document_batch','acknowledge_batch_document','acknowledge_batch_documents','discard_incomplete_document_batches','purge_local_data']);
-const IDEMPOTENT_TOOLS=new Set(['privacy_status','diagnostic_status','document_batch_status','read_anonymized_document','read_anonymized_documents','continue_anonymized_batch_in_chat','list_visual_review_items']);
-for(const tool of TOOLS){tool.annotations=Object.freeze({
-  readOnlyHint:tool.annotations?.readOnlyHint===true,
-  destructiveHint:DESTRUCTIVE_TOOLS.has(tool.name),
-  idempotentHint:IDEMPOTENT_TOOLS.has(tool.name),
-  openWorldHint:false
-});}
+for(const tool of TOOLS)tool.annotations=annotationsForTool(tool);
 const PROMPTS=[{name:'anonymize_customer',title:'Kundendokument anonymisieren',description:'Bestätigte Kundendokumente lokal verarbeiten.',arguments:[{name:'task',description:'Optionale Analyseaufgabe',required:false}]},{name:'anonymize_applicant',title:'Bewerbung anonymisieren',description:'Bestätigte Bewerbungen lokal verarbeiten.',arguments:[{name:'task',description:'Optionale beschreibende Aufgabe',required:false}]},{name:'anonymize_personnel_profile',title:'Mitarbeiterprofil anonymisieren',description:'Bestätigte Mitarbeiter-/Beraterprofile lokal de-identifizieren.',arguments:[{name:'task',description:'Optionale beschreibende Aufgabe',required:false}]},{name:'anonymize_contract',title:'Vertrag anonymisieren',description:'Bestätigte Verträge lokal verarbeiten.',arguments:[{name:'task',description:'Optionale Analyseaufgabe',required:false}]}];
 function send(o){process.stdout.write(JSON.stringify(o)+'\n');}function ok(id,result,modern=false){if(modern&&result&&typeof result==='object'&&!Array.isArray(result))result={...result,_meta:{...(result._meta||{}),'io.modelcontextprotocol/serverInfo':SERVER_INFO}};send({jsonrpc:'2.0',id,result});}function rpcError(id,code,message,data){const e={code,message};if(data!==undefined)e.data=data;send({jsonrpc:'2.0',id,error:e});}function modern(req){return req?.params?._meta?.['io.modelcontextprotocol/protocolVersion']==='2026-07-28';}function sanitizeStructured(o){if(!o||typeof o!=='object')return o;const c={...o};delete c.__image;return c;}function toolResult(o,isError=false){const s=sanitizeStructured(o);if(o?.__image)return{content:[{type:'text',text:JSON.stringify(s,null,2)},{type:'image',data:o.__image.data,mimeType:o.__image.mimeType}],structuredContent:s,isError};return{content:[{type:'text',text:JSON.stringify(s,null,2)}],structuredContent:s,isError};}
 let nativeInteractionOwner=null;
@@ -551,6 +534,7 @@ async function guardedDispatch(name,args={},context={}){
   const traceId=context.traceId||newTraceId();
   const startedAt=Date.now();
   recordSupportTrace({trace_id:traceId,event:'tool_started',method:'tools/call',operation:name,outcome:'progress'});
+  if(!TOOLS.some(tool=>tool.name===name))return null;
   if(process.env.EU_PRIVACY_SUPPORT_MODE!=='1'){
     if(!NORMAL_TOOL_NAMES.has(name)){
       recordSupportTrace({trace_id:traceId,event:'tool_failed',method:'tools/call',operation:name,
@@ -583,7 +567,7 @@ async function handle(req,traceId){if(!req||req.jsonrpc!=='2.0'||typeof req.meth
 if(req.method==='notifications/cancelled'){ACTIVE_REQUESTS.get(requestKey(req.params?.requestId))?.abort();return;}
 if(!Object.hasOwn(req,'id'))return;
 if(req.method==='tools/call'&&(!req.params||typeof req.params!=='object'||Array.isArray(req.params)||typeof req.params.name!=='string'))return rpcError(id,-32602,'Ungültige Werkzeuganfrage');
-if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);try{const dispatched=await guardedDispatch(req.params?.name,req.params?.arguments,{signal:controller.signal,traceId});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=completeDiagnostic(dispatched);const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const tr=STATUS_APP.toolResult(req.params?.name,toolResult(withDiagnostic({ok:false,error:e?.code==='MCP_ARGUMENT_INVALID'?'invalid_tool_arguments':e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
+if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);const supportMode=process.env.EU_PRIVACY_SUPPORT_MODE==='1';try{const dispatched=await guardedDispatch(req.params?.name,req.params?.arguments,{signal:controller.signal,traceId});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=withCoworkStatus(req.params.name,completeDiagnostic(dispatched),{supportMode});const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const v=withCoworkStatus(req.params.name,withDiagnostic({ok:false,error:e?.code==='MCP_ARGUMENT_INVALID'?'invalid_tool_arguments':e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),{supportMode});const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
 // Fail-closed startup. A refusal leaves a content-free journal line, a marker
 // file and one fixed stderr sentence instead of a raw stack trace with paths
 // (stdout is the MCP channel; the host does not surface stderr).

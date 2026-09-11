@@ -11,10 +11,14 @@ const { createSuite, assertAbsent, assertPresent } = require('./helpers');
 const pluginRoot = process.argv[2]
   ? path.resolve(process.argv[2])
   : path.join(__dirname, '..', 'plugins', 'data-secure');
-const anonymizeSkill = fs.readFileSync(
+let anonymizeSkill = fs.readFileSync(
   path.join(pluginRoot, 'skills', 'gbh-datasecure-dokument-anonymisieren', 'SKILL.md'),
   'utf8'
 );
+const anonymizeReferences = path.join(pluginRoot, 'skills', 'gbh-datasecure-dokument-anonymisieren', 'references');
+for (const name of fs.readdirSync(anonymizeReferences).filter((name) => name.endsWith('.md')).sort()) {
+  anonymizeSkill += '\n' + fs.readFileSync(path.join(anonymizeReferences, name), 'utf8');
+}
 const explainSkill = fs.readFileSync(
   path.join(pluginRoot, 'skills', 'gbh-datasecure-datenschutz-erklaeren', 'SKILL.md'),
   'utf8'
@@ -27,14 +31,13 @@ test('anonymization skill selects the local contract path without uploading the 
   assert.match(anonymizeSkill, /`start_document_batch_from_picker`/u);
   assert.match(anonymizeSkill, /passendes Profil nur bei eindeutigem Zweck/u);
   assert.match(anonymizeSkill, /Originale nie per Chat-Upload/iu);
-  assert.match(anonymizeSkill, /continue_anonymized_batch_in_chat/u);
   assert.match(anonymizeSkill, /höchstens fünf freigegebene Markdown-Ergebnisse/iu);
   assert.match(anonymizeSkill, /continue_local_results_handoff/u);
   assert.match(anonymizeSkill, /Bei `local_selection_cancelled` nichts erneut öffnen/iu);
   assert.match(anonymizeSkill,
     /Die lokale Übernahme wurde gestartet\. DataSecure bereitet den wiederaufnehmbaren Stapel vor und zeigt nach Abschluss eine lokale Meldung mit .*Ergebnisse öffnen.* an/iu);
   assert.match(anonymizeSkill, /exakten Ergebnisordner des aktuellsten Cowork-Laufs/iu);
-  assert.match(anonymizeSkill, /Behaupte an dieser Stelle weder einen dauerhaften Zwischenstand noch eine bereits laufende Anonymisierung/iu);
+  assert.match(anonymizeSkill, /Behaupte weder einen dauerhaften Zwischenstand noch eine bereits laufende oder abgeschlossene Anonymisierung/iu);
   assert.match(anonymizeSkill, /beende die Cowork-Aufgabe sofort/iu);
   assert.match(anonymizeSkill, /nicht vertrauenswürdige Dokumentdaten/iu);
   assert.match(anonymizeSkill, /separate ausdrückliche Anweisung des Anwenders außerhalb des Dokumentinhalts/iu);

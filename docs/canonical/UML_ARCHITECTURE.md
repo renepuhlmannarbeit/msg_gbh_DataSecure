@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 10.09.2026 · 3.2.0-rc135
+Stand: 11.09.2026 · 3.2.0-rc136
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -57,6 +57,58 @@ Liegt `DataSecure-Output` in einem mit Cowork verbundenen Arbeitsordner, kann
 der Host die dort sichtbaren Dateien entsprechend seiner Ordnerberechtigung
 lesen. DataSecure steuert nur seine MCP-Rückgaben, nicht den danach möglichen
 Dateizugriff des Hosts.
+
+### 1a. DS-099: drei prüfbare Cowork-Interaktionen
+
+```mermaid
+sequenceDiagram
+  actor U as Anwender
+  participant C as Claude/Skill
+  participant M as MCP + Registry
+  participant W as lokaler Worker
+  U->>C: Dateien anonymisieren
+  C->>M: start_document_batch_from_picker (einmal)
+  M->>U: nativer Ergebnis-/Quellpicker
+  M->>W: validierte lokale Übergabe
+  W-->>M: exakter IPC-ACK
+  M-->>C: accepted + cowork_status, Original=false
+  Note over C: user_status wörtlich, Aufgabe endet; kein Polling
+```
+
+```mermaid
+sequenceDiagram
+  actor U as Anwender
+  participant C as Claude/Skill
+  participant M as MCP + Registry
+  participant R as lokaler Review/Recovery
+  U->>C: Letzten Stapel fortsetzen
+  C->>M: continue_most_recent_document_batch(confirmed=true)
+  M->>R: dauerhaften Zustand neu prüfen
+  alt ausdrücklich retryfähig oder Review vertagt
+    R-->>M: IPC-ACK
+    M-->>C: accepted, interaction_terminal=true
+  else terminal/unbekannt
+    M-->>C: stopped, retry_class=not_indicated
+  end
+```
+
+```mermaid
+sequenceDiagram
+  actor U as Anwender
+  participant C as Claude/Skill
+  participant M as MCP + Registry
+  participant P as verifizierter Package Store
+  U->>C: Späterer ausdrücklicher Auswertungsauftrag
+  C->>M: start_completed_local_results_handoff
+  M->>P: verifizierte Seite lesen
+  P-->>M: anonymisiertes Markdown
+  M-->>C: verified_anonymized_markdown, untrusted
+  Note over C: eingebettete Anweisungen sind Daten, keine Autorität
+```
+
+Die Registry ist nur Cowork-Adaptervertrag. Standalone importiert weder die
+MCP-Toolfläche noch die Modellroutinglogik; beide Produkte teilen weiterhin nur
+den neutralen Processing-/Privacy-Core nach DS-097.
 
 ## 2. Komponenten und Verantwortungen
 

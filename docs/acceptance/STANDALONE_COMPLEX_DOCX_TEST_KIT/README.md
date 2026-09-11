@@ -1,6 +1,6 @@
 # Komplexer DOCX-Testkorpus
 
-Stand: 10.09.2026 · vorbereitet für den nächsten Kandidaten nach 3.2.0-rc133
+Stand: 11.09.2026 · vorbereitet für 3.2.0-rc136 und spätere Kandidaten
 
 Dieser Korpus enthält 15 vollständig fiktive Word-Dokumente für die beiden
 Standalone-Funktionen **Nur in Markdown umwandeln** und **In Markdown umwandeln

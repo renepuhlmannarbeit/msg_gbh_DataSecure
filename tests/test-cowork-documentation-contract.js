@@ -8,7 +8,13 @@ const root = path.resolve(__dirname, '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const guide = read('docs/ANLEITUNG.md');
 const review = read('docs/ANWENDERREVIEW.md');
-const anonymize = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md');
+const anonymizeSkillRoot = 'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren';
+const anonymizeMain = read(`${anonymizeSkillRoot}/SKILL.md`);
+const anonymizeReferences = fs.readdirSync(path.join(root, anonymizeSkillRoot, 'references'))
+  .filter((name) => name.endsWith('.md'))
+  .sort()
+  .map((name) => read(`${anonymizeSkillRoot}/references/${name}`));
+const anonymize = [anonymizeMain, ...anonymizeReferences].join('\n');
 const explain = read('plugins/data-secure/skills/gbh-datasecure-datenschutz-erklaeren/SKILL.md');
 const boundary = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/sicherheitsgrenze.md');
 const installation = read('plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/references/plugin-oder-mcpb.md');
@@ -23,11 +29,11 @@ for (const text of [guide, review, anonymize, explain, boundary]) {
 }
 assert.match(guide, /klicken einmal \*\*„Öffnen“\*\*/iu, 'single confirmation is unclear');
 assert.match(anonymize, /genau einmal[^\n]*start_document_batch_from_picker/iu);
-assert.match(anonymize, /weder `privacy_status`[^\n]*(?:Ordner|Supportwerkzeug)/iu);
+assert.match(anonymizeMain, /weder Status-, Ordner- noch Supportwerkzeuge/iu);
 assert.doesNotMatch(all, /ausschließlich[^\n]{0,100}`Input`-Ordner (?:kopieren|eingehen)/iu,
   'old Input normal path returned');
 assert.match(explain, /(?:keinen technischen (?:Input-|Eingangs)ordner|nie durch einen[^\n]{0,80}technischen Eingangsordner)/iu);
-assert.match(anonymize, /pausierter oder fortsetzbarer Stapel blockiert[^\n]{0,100}neue Auswahl nicht/iu);
+assert.match(anonymize, /pausierter oder retryfähiger Stapel blockiert[^\n]{0,100}neue Auswahl nicht/iu);
 assert.doesNotMatch(server, /if\(status\.recoverable_batches>0\)return\{ok:false,error:'recoverable_batch_exists'/u,
   'paused batches must not block a new picker batch');
 
@@ -35,7 +41,7 @@ assert.match(all, /lokal/iu, 'local host boundary missing');
 assert.match(all, /Cowork/iu, 'Cowork host boundary missing');
 assert.match(`${anonymize}\n${boundary}`, /lokal(?:e|en) Cowork-Sitzung/iu,
   'local Cowork session boundary is missing');
-assert.match(`${anonymize}\n${boundary}`, /Lokale Plugin-MCPs laufen laut Hersteller nicht in Cloud-Sitzungen/iu,
+assert.match(`${anonymize}\n${boundary}`, /Cloud-\s*Sitzungen laufen lokale Plugin-MCPs nicht/iu,
   'local-MCP cloud-session denial is missing');
 assert.match(`${anonymize}\n${boundary}`, /Cloud-Cowork[\s\S]{0,260}keine Originale/iu,
   'cloud Cowork must not process originals');
@@ -43,7 +49,7 @@ assert.match(securityModel, /Cloud-Sitzung[\s\S]{0,180}unabhängig von geöffnet
   'security model must not revive the superseded desktop-bridge assumption');
 assert.match(`${guide}\n${anonymize}`, /Berechtigungsmodus[\s\S]{0,160}Auto[\s\S]{0,220}Organisationsrichtlinien/iu,
   'optional Auto mode and organization policy boundary are missing');
-assert.match(`${guide}\n${anonymize}`, /Skip[^\n]{0,120}(?:kein|nicht)[^\n]{0,80}Standard/iu,
+assert.match(`${guide}\n${anonymize}`, /Skip[\s\S]{0,160}(?:kein|nicht)[\s\S]{0,80}Standard/iu,
   'Skip must not be the standard for sensitive files');
 assert.match(`${guide}\n${anonymize}`, /(?:errät|automatisch)[^\n]{0,120}(?:Projektpfad|Projektwechsel)/iu,
   'the plugin must not claim automatic Cowork workspace detection');

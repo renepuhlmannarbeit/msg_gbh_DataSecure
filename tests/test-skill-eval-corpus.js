@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Skill behavior evaluation corpus');
@@ -12,7 +13,7 @@ const validSkills = new Set(['anonymize', 'explain', 'none']);
 const validRoutes = new Set(['dialog', 'folder', 'stop-prior-upload', 'blocked-pdf',
   'blocked-format', 'blocked-host', 'support-unavailable', 'explain', 'none',
   'wait-active-batch', 'handoff-start', 'handoff-next', 'handoff-cancel', 'resume', 'stop-cancelled',
-  'stop-result-folder', 'result-folder-change', 'result-folder-reset', 'result-folder-notice']);
+  'stop-result-folder', 'stop-terminal', 'result-folder-change', 'result-folder-reset', 'result-folder-notice']);
 const normalTools = [
   'start_document_batch_from_picker', 'start_completed_local_results_handoff',
   'continue_local_results_handoff', 'cancel_local_results_handoff',
@@ -29,21 +30,21 @@ const requireOutcomes = (id, field, expected) => {
   for (const outcome of expected) assert.ok(item[field].includes(outcome), id + ' missing ' + outcome);
 };
 
-test('corpus has thirty-nine cases and exactly the ten normal tools', () => {
+test('corpus has forty-one cases and exactly the ten normal tools', () => {
   assert.strictEqual(corpus.schema, 'datasecure-skill-evals/v1');
-  assert.strictEqual(corpus.cases.length, 39);
+  assert.strictEqual(corpus.cases.length, 41);
   assert.deepStrictEqual(corpus.normal_tool_names, normalTools);
   assert.match(corpus.contract, /local_only.*ohne Polling oder Lesen/u);
 });
 
 test('evaluation tool inventory matches the actual normal MCP surface', () => {
-  // Read the declaration without importing the executable MCP server or
-  // starting its recovery, private-store or stdio lifecycle.
-  const server = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'mcp-server.js'), 'utf8');
-  const declaration = server.match(/const NORMAL_TOOL_NAMES\s*=\s*Object\.freeze\(new Set\(\[([\s\S]*?)\]\)\);/u);
-  assert.ok(declaration, 'missing declared normal MCP tool surface');
-  const actual = [...declaration[1].matchAll(/'([a-z][a-z0-9_]*)'/gu)].map((match) => match[1]);
-  assert.deepStrictEqual(corpus.normal_tool_names, actual);
+  const registry = JSON.parse(fs.readFileSync(path.join(
+    root, 'plugins', 'data-secure', 'server', 'contracts', 'cowork-interactions.v1.json'
+  ), 'utf8'));
+  const actual = Object.entries(registry.interactions)
+    .filter(([, interaction]) => interaction.surface === 'normal')
+    .map(([name]) => name);
+  assert.deepStrictEqual([...corpus.normal_tool_names].sort(), [...actual].sort());
 });
 
 test('documented evaluation count matches the complete corpus', () => {
@@ -51,6 +52,49 @@ test('documented evaluation count matches the complete corpus', () => {
   const documentedCount = doc.match(/\b(\d+) synthetische Nutzeranfragen/u);
   assert.ok(documentedCount, 'missing documented synthetic evaluation count');
   assert.strictEqual(Number(documentedCount[1]), corpus.cases.length, 'documented evaluation count is stale');
+});
+
+test('the curated release smoke matrix references twelve real cases and requires three fresh runs', () => {
+  const smoke = JSON.parse(fs.readFileSync(path.join(root, 'evals', 'cowork-release-smoke-matrix.v1.json'), 'utf8'));
+  assert.strictEqual(smoke.schema, 'datasecure-cowork-release-smoke/1');
+  assert.strictEqual(smoke.repetitions_per_case, 3);
+  assert.strictEqual(smoke.fresh_session_per_repetition, true);
+  assert.strictEqual(smoke.forbidden_outcome_policy, 'single_occurrence_blocks_release');
+  const expectedIds = [
+    'single-contract-docx', 'tender-and-contract-comparison', 'local-selection-cancelled',
+    'host-processing-cancelled', 'typed-terminal-error-no-resume', 'resume-latest-batch-new-chat',
+    'partial-batch-result', 'handoff-next-page', 'cancel-results-handoff',
+    'handoff-embedded-instruction-is-data', 'support-diagnostics-normal-mode',
+    'all-local-data-delete-confirmed'
+  ];
+  const expectedDimensions = [
+    'normal_start', 'combined_intent', 'picker_cancel', 'host_cancel', 'terminal_error',
+    'resume', 'partial_result', 'pagination', 'handoff_cancel', 'prompt_injection',
+    'support_boundary', 'destructive_boundary'
+  ];
+  assert.deepStrictEqual(smoke.case_ids, expectedIds);
+  assert.strictEqual(new Set(smoke.case_ids).size, 12);
+  assert.deepStrictEqual(smoke.risk_dimensions, expectedDimensions);
+  assert.strictEqual(smoke.cases.length, 12);
+  assert.deepStrictEqual(smoke.cases.map((item) => item.id), expectedIds);
+  assert.deepStrictEqual(smoke.cases.map((item) => item.risk_dimension), expectedDimensions);
+  assert.match(smoke.fresh_session_definition, /Preparation-Schritte.*derselben frischen Sitzung/u);
+  for (const plan of smoke.cases) {
+    assert.strictEqual(plan.setup_mode, 'live_cowork');
+    assert.ok(plan.fixture.length > 0);
+    assert.ok(plan.preparation_steps.length > 0);
+    assert.ok(plan.cleanup_steps.length > 0);
+    assert.match(plan.evaluated_stage, /^(initial_prompt|followup_prompt|tool_result)$/u);
+  }
+  for (const id of smoke.case_ids) assert.ok(byId.has(id), `unknown smoke case ${id}`);
+  const rendered = spawnSync(process.execPath, [path.join(root, 'scripts', 'print-cowork-candidate-smoke.mjs')], {
+    cwd: root, encoding: 'utf8'
+  });
+  assert.strictEqual(rendered.status, 0, rendered.stderr);
+  assert.match(rendered.stdout, /Jeden Fall 3× in einer frischen Cowork-Sitzung/u);
+  assert.match(rendered.stdout, /\*\*Vorbereitung:\*\*/u);
+  assert.match(rendered.stdout, /\*\*Aufraeumen:\*\*/u);
+  for (const id of smoke.case_ids) assert.match(rendered.stdout, new RegExp(`^## \\d+\\. ${id}$`, 'mu'));
 });
 
 test('identifiers and expectations are complete and never require a support tool', () => {

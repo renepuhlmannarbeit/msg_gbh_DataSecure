@@ -7,16 +7,15 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const index = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'mcp-server.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-const skill = fs.readFileSync(path.join(
+const interactionContract = JSON.parse(fs.readFileSync(path.join(
+  root, 'plugins', 'data-secure', 'server', 'contracts', 'cowork-interactions.v1.json'
+), 'utf8'));
+let skill = fs.readFileSync(path.join(
   root, 'plugins', 'data-secure', 'skills', 'gbh-datasecure-dokument-anonymisieren', 'SKILL.md'
 ), 'utf8');
-
-function namesIn(source, startMarker, endMarker) {
-  const start = source.indexOf(startMarker);
-  assert.notStrictEqual(start, -1, `missing ${startMarker}`);
-  const end = source.indexOf(endMarker, start);
-  assert.notStrictEqual(end, -1, `unterminated ${startMarker}`);
-  return [...source.slice(start, end).matchAll(/'([a-z][a-z0-9_]*)'/g)].map((match) => match[1]);
+const references = path.join(root, 'plugins', 'data-secure', 'skills', 'gbh-datasecure-dokument-anonymisieren', 'references');
+for (const name of fs.readdirSync(references).filter((name) => name.endsWith('.md')).sort()) {
+  skill += '\n' + fs.readFileSync(path.join(references, name), 'utf8');
 }
 
 function declaredToolNames(source) {
@@ -28,7 +27,9 @@ function declaredToolNames(source) {
 }
 
 const declaredTools = declaredToolNames(index);
-const normalTools = namesIn(index, 'const NORMAL_TOOL_NAMES', ']));');
+const normalTools = Object.entries(interactionContract.interactions)
+  .filter(([, interaction]) => interaction.surface === 'normal')
+  .map(([name]) => name);
 const expectedNormal = [
   'start_document_batch_from_picker',
   'start_completed_local_results_handoff',
@@ -43,9 +44,10 @@ const expectedNormal = [
 ];
 
 assert.strictEqual(declaredTools.length, 27, 'support surface must contain exactly 27 reviewed tools');
-assert.deepStrictEqual(normalTools, expectedNormal, 'normal Cowork tool surface drifted');
+assert.deepStrictEqual([...normalTools].sort(), [...expectedNormal].sort(), 'normal Cowork tool surface drifted');
 assert.strictEqual(new Set(declaredTools).size, declaredTools.length, 'duplicate MCP tool name');
-assert.ok(index.includes('const SUPPORT_TOOL_NAMES'), 'support-tool complement must be explicit');
+assert.strictEqual(interactionContract.closed_world, true, 'interaction registry must be closed-world');
+assert.ok(index.includes("namesForSurface('support')"), 'support surface must derive from the registry');
 assert.strictEqual(declaredTools.filter((name) => !normalTools.includes(name)).length, 17);
 assert.deepStrictEqual(
   [...manifest.tools.map((tool) => tool.name)].sort(),

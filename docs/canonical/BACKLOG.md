@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 10.09.2026 · Produktstand 3.2.0-rc135
+Stand: 11.09.2026 · Produktstand 3.2.0-rc136
 
 Dies ist die **einzige aktive Arbeitsliste**. Handlungsbedarf entsteht nur aus
 den Storytabellen und ihren ausdrücklich genannten Resten. Die nachfolgenden
@@ -27,6 +27,16 @@ bewusst den lokalen Core-Reviewer hinter der inhaltsfreien Renderergrenze.
 Abschnitt B enthält ausschließlich menschliche beziehungsweise
 zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
 und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
+
+### RC136 – DS-099: kanonischer Cowork-Interaktionsvertrag
+
+Der read-only Strukturvergleich mit `GBH-BID-Skills` ist dauerhaft unter
+`ARCH-DOC-COWORK-BID-REVIEW-2026-09-11` archiviert. Übernommen werden nur
+allgemeine Cowork-Governance-Muster: eine geschlossene Interaktionsregistry,
+ein additiver öffentlicher Statusumschlag, maschinenlesbare Human-Gates,
+progressive Skillreferenzen und produktnahe Golden Cases. BID-Fachlogik,
+Subagenten-Orchestrierung und fremde Runtimebestandteile bleiben außerhalb des
+Produkts. Standalone bleibt unverändert und dient nur als Gegenregression.
 
 ### RC134 – zweckgebundene DOCX-Projektion und Windows-Paketbindung
 
@@ -854,6 +864,9 @@ künstlichen `MCP26-01`-Cutover aus.
 | BL-042.4 | Gemäß DS-074 UML-basierte Supportdiagnose: separate manuelle Debug-ZIP-Variante, gleicher Enginepfad, geschlossene JSON-Ereignisse an MCP-, Picker-, Worker-, Review- und Exportgrenzen. Fach-, Workflow- und Supportdiagnose verwenden dieselbe mehrprozesssichere Einzelereignis-Komponente; Alters- und Mengengrenzen werden physisch bereinigt, historisches JSONL bleibt nur lesbarer Upgradebestand. Keine Rohkommunikation und keine Wirkung auf Freigaben. E0 ist erledigt; echter Cowork-Supportlauf bleibt E1. | **erledigt** |
 | BL-040.6 | Sichtbaren Export je Lauf und Zielunterordner identitätsgebunden serialisieren; ein Prozessclaim verhindert konkurrierende Record-Schreiber, ein ausgetauschter `DataSecure-Output` stoppt den Restexport, und lokale Öffnen-Aktionen wählen nur den vollständig abgeschlossenen aktuellen Lauf. Mischstapel bleiben gemäß DS-079 bis zum Gesamtabschluss unsichtbar. | **erledigt** |
 | BL-003.9 | Maschinenlesbarer Dokumentindex mit Klasse, Status, Produktgeltung, Eigentümer, Versionsregel, Ablösung und Backlogbindung; Driftgate prüft Existenz, Eindeutigkeit und Kanonvollständigkeit. | **erledigt** |
+| BL-041.11 | Geschlossene Cowork-Interaktionsregistry gemäß DS-099: alle 27 Werkzeuge genau einmal mit Normal-/Supportfläche, Wirkung, Idempotenz, Human-Gates, Erfolgsdisposition und Inhaltsgrenze binden. Normal-/Supportmengen und MCP-Annotationen werden daraus abgeleitet; Werkzeugtabelle und Handler bleiben bijektiv. Unbekannte Toolnamen dürfen nicht fälschlich als Supportwerkzeuge erscheinen. E1/E2-Cowork-Zielhostevidenz steht in Abschnitt B aus. | **erledigt** |
+| BL-041.12 | Additiver, schema-validierter `datasecure-cowork-status/1`-Umschlag für jede bekannte Toolantwort. Claude-Interaktion, lokaler Arbeitszustand, Annahme/Abschluss/Abbruch, Retryklasse, Human-Gate-Assurance und tatsächliche Inhaltsgrenze werden getrennt; Originalinhalt bleibt immer `false`, tatsächlich enthaltenes anonymisiertes Markdown ausdrücklich untrusted. Leere Übergaben bleiben Metadaten; alle Fortsetzungsformen werden erkannt; ein Normalmodus-Guard verweigert private Kennungen. Top-Level-Kompatibilität bleibt bis zur realen Cowork-UAT erhalten; E1/E2 steht in Abschnitt B aus. | **erledigt** |
+| BL-041.13 | Hauptskill auf unverhandelbaren Normal-/Trustkern und Intenttabelle reduzieren; einfacher Normalstart ohne Referenzrunde, Sonderstart, Ergebnisübergabe, Fortsetzung/Verwerfen und Konfiguration als isolierte Referenzen. Strukturkorpus auf 41 Fälle erweitern und kuratierte, exakt risikogebundene 12×3-Candidate-Matrix mit Fixture-, Setup-, Bewertungs- und Cleanup-Vertrag liefern. Beide Modellmatrizen sind formale Cowork-GO-Gates; ein verbotenes Modelloutcome ist Release-Stopper. Automatisierte Tests werden nicht als Modellabnahme ausgegeben. E1/E2-Modell-/Hostabnahme steht in Abschnitt B aus. | **erledigt** |
 
 ### Erledigungsabgleich der Restbefunde aus dem Gesamtgegenreview 02.09.2026
 
@@ -943,6 +956,7 @@ nicht durch Diagramme als erledigt dargestellt:
 | BL-041.8 | Den ausgelieferten Pluginserver mit der offiziellen MCP-Conformance-Prüfung gegen `2026-07-28` belegen. MCP-Tasks/Benachrichtigungen zusätzlich versions- und zielhostgebunden prüfen; ohne jeweiligen Nachweis kein Produktpfad und keine vollständige Konformitätsaussage. | **blockiert** |
 | BL-041.9 | Den automatischen Übergang vom Hintergrundstapel in genau einen nicht blockierenden Sammelreview sowie „Später“, Abschluss und Wiederaufnahme auf Windows/macOS beobachten. | **blockiert** |
 | BL-041.10 | Die gelieferte einmalige Ergebnisordnerwahl, Wiederverwendung ohne neue Abfrage, Ordnerwechsel, begrenzten Hintergrund-Replay und „Ergebnisse öffnen“ in echter Cowork-Bedienung auf Windows/macOS abnehmen. Beobachtung 03.09.2026 (Windows, rc85): Cowork beendet den MCP-Elternprozess kurz nach der Tool-Antwort; die Abschlussmeldung erschien in 4 von 5 Läufen nicht. Seit der zweiphasigen Eltern-/Worker-Übernahme (E0) ist nativ zu belegen, dass bei Elternprozessende oder Presenterfehler genau ein Fenster erscheint. | **blockiert** |
+| BL-041.11–.13 | Registry, öffentlicher Statusumschlag und progressive Skillkontexte mit den 41 vollständigen Modellfällen jeweils dreimal in frischen Cowork-Sitzungen prüfen; zusätzlich die kuratierte 12×3-Candidate-Matrix ausführen. Ein verbotenes Outcome ist kein Mehrheitsentscheid, sondern Release-Stopper. | **blockiert** |
 | BL-044.1 | Rekursive Ordnerquelle mit Link-/Race-Gegenproben auf Zielsystemen prüfen. | **blockiert** |
 | BL-049.1 | Format-/Strukturgates und Ergebnisgrade durch Security auf Zielsystemen abnehmen. | **blockiert** |
 | BL-050.3 | Referenzwerte und reales Dateisystem-/Power-Loss-Verhalten erfassen. | **blockiert** |

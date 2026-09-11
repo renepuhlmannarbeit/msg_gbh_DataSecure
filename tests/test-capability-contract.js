@@ -29,6 +29,15 @@ const currentPublicFiles = [
   'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md',
   'plugins/data-secure/skills/gbh-datasecure-datenschutz-erklaeren/SKILL.md'
 ];
+const anonymizeSkillPath = 'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md';
+const readPublicContract = (rel) => {
+  if (rel !== anonymizeSkillPath) return read(rel);
+  const skillRoot = path.dirname(rel);
+  const references = fs.readdirSync(path.join(root, skillRoot, 'references'))
+    .filter((name) => name.endsWith('.md')).sort()
+    .map((name) => read(path.join(skillRoot, 'references', name)));
+  return [read(rel), ...references].join('\n');
+};
 
 test('the target contract is explicitly non-runtime and covers every accepted decision', () => {
   assert.strictEqual(target.schema_version, 2);
@@ -133,7 +142,7 @@ test('runtime, MCP schema, skills and active handbooks retain the 200-file/500-M
   assert.match(batch, /limits:\s*LIMITS/u);
   assert.match(intake, /expected > limits\.MAX_BATCH_FILES/u);
   for (const rel of currentPublicFiles) {
-    const text = read(rel);
+    const text = readPublicContract(rel);
     assert.match(text, /200/u, `${rel} omits the current batch maximum`);
     assert.match(text, /500 MiB/u, `${rel} omits the current batch-size limit`);
     assert.match(text, /TXT/u, `${rel} omits TXT`);
@@ -146,7 +155,7 @@ test('runtime, MCP schema, skills and active handbooks retain the 200-file/500-M
     'plugins/data-secure/skills/gbh-datasecure-dokument-anonymisieren/SKILL.md',
     'plugins/data-secure/skills/gbh-datasecure-datenschutz-erklaeren/SKILL.md'
   ]) {
-    const text = read(rel);
+    const text = readPublicContract(rel);
     assert.match(text, /8\.000\.000/u, `${rel} omits the TXT/Markdown source limit`);
     assert.match(text, /1\.500\.000/u, `${rel} omits the CSV source limit`);
     assert.match(text, /64 MiB/u, `${rel} omits the DOCX source limit`);

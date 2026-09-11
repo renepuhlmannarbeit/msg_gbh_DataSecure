@@ -33,6 +33,7 @@ und [BACKLOG_ARCHIVE_2026-09.md](BACKLOG_ARCHIVE_2026-09.md) nachvollziehbar.
 - [Release-Vertrag](../RELEASE.md)
 - [Testvertrag](../TESTING.md)
 - [aktueller Claude-/Cowork-Abgleich](../REVIEW_CLAUDE_COWORK_2026-09-01.md)
+- [übernommene Cowork-Strukturmuster aus dem externen BID-Review](../archive/2026-09/reviews/REVIEW_COWORK_BID_STRUKTURMUSTER_2026-09-11.md)
 - [versionneutrales UAT-Kit](../acceptance/UAT_TEST_KIT/README.md)
 - [Standalone-UAT-Kit](../acceptance/STANDALONE_UAT_TEST_KIT/README.md)
 - [formale N3/N4-Abnahme](../acceptance/FORMAL_UAT/README.md)

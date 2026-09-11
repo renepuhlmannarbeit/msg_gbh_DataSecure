@@ -58,8 +58,9 @@ const baseFiles = [
 const ciFiles = [
   'test-read-only-source-snapshot.js', 'test-source-folder.js', 'test-workflow-budget.js',
   'test-manifest.js', 'test-capability-contract.js',
-  'test-cowork-tool-surface-contract.js', 'test-mcp-tool-annotations.js',
+  'test-cowork-tool-surface-contract.js', 'test-cowork-interaction-contract.js', 'test-mcp-tool-annotations.js',
   'test-cowork-documentation-contract.js', 'test-resource-limits.js',
+  'test-skill-eval-corpus.js',
   'test-package-read-capabilities.js', 'test-package-snapshot-async.js', 'test-batch-snapshot.js',
   'test-batch-post-publish-recovery.js', 'test-batch-processing-lock.js',
   'test-batch-maintenance.js', 'test-parallel-preparation-harness.js',
@@ -88,7 +89,7 @@ const fullOnly = [
   // full local gate, not the cost-capped source CI profile.
   'test-core-policy-binding.mjs',
   'test-product-isolation-offline.mjs',
-  'test-skill-eval-corpus.js', 'test-text-source.js', 'test-csv-source.js',
+  'test-text-source.js', 'test-csv-source.js',
   'test-csv-differential.js', 'test-parser-isolation.js', 'test-content-graph.js',
   'test-contract-skill-acceptance.js',
   'test-contract-skill-matrix.js', 'test-contract-corpus.js', 'test-corpus-contract.js',

@@ -1,6 +1,31 @@
 # Aktueller Iststand
 
-Stand: 10.09.2026 · 3.2.0-rc135 · Windows-PKG-04/INT-13 und native macOS-E0 gebunden; N3/N4 offen
+Stand: 11.09.2026 · 3.2.0-rc136 · Cowork-Interaktionsvertrag E0; neue Paketbindung und N3/N4 offen
+
+## RC136 – geschlossene Cowork-Interaktionen und progressive Modellkontexte
+
+DS-099 bindet die 27 Cowork-Werkzeuge an eine einzige maschinenlesbare
+Interaktionsregistry. Normalmodus, Supportmodus und MCP-Annotationen werden
+daraus abgeleitet; Registry, Werkzeugtabelle und Handler müssen bijektiv sein.
+Ein unbekannter Werkzeugname wird nicht mehr fälschlich als Supportweg
+klassifiziert. Jede bekannte Antwort erhält additiv einen inhaltsfreien
+`datasecure-cowork-status/1`-Umschlag, der Interaktionsende, lokalen
+Arbeitszustand, Retryklasse, Human-Gate-Assurance und die tatsächlich gelieferte
+Inhaltsgrenze trennt. Leere Übergaben werden nicht als Inhalt ausgewiesen;
+Abbruch, Reviewstart und alle Cursor-/Seitenfortsetzungen besitzen eindeutige
+Zustände. Ein rekursiver Guard verweigert im Normalmodus private Token,
+Capabilities, Paketkennungen und Cursor. Verifiziertes anonymisiertes Markdown
+bleibt ausdrücklich untrusted; Originalinhalt wird nie übergeben.
+
+Der Cowork-Hauptskill enthält nur noch den unverhandelbaren Normal-, Privacy-
+und Trustkern sowie eine Intenttabelle; der einfache Start benötigt keine
+Referenzrunde, Sonderabläufe laden genau eine isolierte Referenz. Der
+strukturierte Modellkorpus umfasst 41 Fälle und eine kuratierte 12×3-Matrix mit
+reproduzierbarem Fixture-, Setup-, Bewertungs- und Cleanup-Vertrag. Beide sind
+nun formale Cowork-GO-Gates. Diese E0-Prüfungen simulieren kein Claude-Modell.
+Dreifache echte Cowork-Ausführung, neue Pluginpakete und N3/N4 sind noch offen.
+Die Standalone-App und der gemeinsame Privacy-Core wurden funktional nicht
+geändert.
 
 ## RC135 – commitgebundene Paketmatrix und gehärtete Release-Evidence
 

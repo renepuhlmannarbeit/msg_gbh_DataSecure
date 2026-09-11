@@ -1,10 +1,11 @@
 # Release- und Distributionsvertrag
 
-Stand: 10.09.2026 · 3.2.0-rc135
+Stand: 11.09.2026 · 3.2.0-rc136
 
-Der aktuelle Quellstand ist der paketgebundene RC135-Entwicklungsstand für das
-Cowork-Plugin und die Standalone-App. Alle nachfolgend genannten Pakete stammen
-aus dem sauberen, auf `main` veröffentlichten Quellcommit
+Der aktuelle Quellstand ist der noch nicht paketgebundene RC136-Entwicklungsstand
+für das Cowork-Plugin und die Standalone-App. Der letzte paketgebundene und
+veröffentlichte Kandidat bleibt RC135. Alle nachfolgend genannten Pakete stammen
+aus dessen sauberem, auf `main` veröffentlichtem Quellcommit
 `9c2e4f9061dbdc3cd1bf0280d95939528029c978`.
 
 Der Windows-PKG-04-Lauf erzeugte zwei bytegleiche Archive mit jeweils
@@ -207,6 +208,13 @@ getrennte Evidence-Dateien auf getrennten UAT-Branches. Erst die gegengeprüfte
 [Freigabeentscheidung](acceptance/FORMAL_UAT/FREIGABEENTSCHEIDUNG.md) darf ein
 GO aussprechen. Die nicht vorhandene zweite Mac-Architektur bleibt ausdrücklich
 offen und wird nicht durch Rosetta oder den anderen Mac-Typ ersetzt.
+
+Für einen Cowork-Kandidaten gehören außerdem die vollständige 41×3-Modellmatrix
+und der risikobasierte 12×3-Kandidatensmoke zum formalen Gate. Beide müssen im
+Kampagnenmanifest mit Korpus-Hashes gebunden und `PASS` sein; ein einziges
+verbotenes Outcome blockiert die Freigabe. `npm run uat:cowork-candidate`
+erzeugt die versionsgebundene Durchführung mit Fixture, Vorbereitung,
+bewertetem Schritt und Aufräumen.
 
 ## Produktbezogene Formatfreigaben
 

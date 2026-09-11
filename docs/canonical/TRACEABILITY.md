@@ -1,10 +1,20 @@
 # Entscheidungs-Traceability
 
-Stand: 10.09.2026 · 3.2.0-rc135
+Stand: 11.09.2026 · 3.2.0-rc136
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+DS-099/BL-041.11–.13 binden die maschinenlesbare Registry
+`cowork-interactions.v1.json` an `mcp-server.js`, dessen Normal-/Supportflächen,
+MCP-Annotationen und bijektive Handlerprüfung. `cowork-status-envelope.js`
+projiziert jede bekannte Antwort additiv nach `COWORK_INTERACTION_V1.md`.
+Hauptskill und vier Intentreferenzen bilden den progressiven Modellkontext.
+`test-cowork-interaction-contract.js`, Werkzeugflächen-/Annotations-/MCP-Tests,
+41 strukturierte Skillfälle und die 12×3-Matrix liefern E0; echte dreifache
+Claude-/Cowork-Ausführung bleibt E1/E2. Der Ursprung des Strukturvergleichs ist
+unter `ARCH-DOC-COWORK-BID-REVIEW-2026-09-11` unveränderlich auffindbar.
 
 RC135 bindet den aktuellen Funktions- und Evidence-Stand an den sauberen,
 veröffentlichten Quellcommit
@@ -474,6 +484,7 @@ Betriebsarten im echten Paket sind grün. E1/E2/E3 bleiben separat offen.
 | DS-096 | E0 umgesetzt; E2/E3 offen | BL-021.1; enge unbeschriftete Prosanamen werden vor Aliasersetzung reserviert und im bestehenden Sammelreview als Person anonymisiert oder als Nicht-Person beibehalten. Exakt bekannte vollständige Identitäten werden in Folgedokumenten automatisch mit demselben v1/v2-Pseudonym ersetzt; widersprüchliche Entscheidungen für denselben offenen normalisierten Namen werden abgewiesen. Fachphrasen-Gegenfälle und rohwertfreie Metadaten sind in `privacy/person-ambiguities.js`, `test-pii-regression.js`, `test-gateway-e2e.js`, `test-batch-review-policy.js`, `test-batch-review-model.js` und `test-batch-session.js` gebunden. |
 | DS-097 | E0 und RC135-Paketmatrix abgeschlossen; sichtbare Cowork-/Zielhost-UAT offen | BL-010.9/23, BL-010.13, BL-011.8; Resume wird gegen den aktuellen Privacy-/Pseudonymkontext berechnet, Workerfehler werden mit festem Code und gemeinsamem Retrybudget stabilisiert, inaktive Altjournale sperren keine neue Aufnahme. Cowork und Standalone bleiben getrennte Adapter/Distributionen auf einem gemeinsamen Core; Windows, macOS und Linux bleiben Zieladapter aus demselben Commit statt dauerhafter OS-Branches. Recovery-, Runner-, History-, Frontend-, Rust- und Dokumentationsgates. |
 | DS-098 | E0 und RC135-Paketmatrix abgeschlossen; sichtbare Cowork-/Zielhost-UAT offen | BL-010.30/BL-022.1; DOCX-Kopf/-Fußzeilen bleiben in Struktur-, Relationship-, Content-Type- und Ressourcenprüfung gebunden. Reine Konvertierung erhält sie; Cowork- und Standalone-Anonymisierung projizieren sie sowie ausschließlich dort referenzierte Bilder nicht. Kommentare, Fuß-/Endnoten und Hauptteil bleiben enthalten. Fester Scope-/Coverage-Grund, Parser-/Workergrenz-, Orchestrator-, Produkt- und Real-DOCX-Regression. |
+| DS-099 | Implementierung E0; dreifache Cowork-Modell-/Hostabnahme E1/E2 offen | BL-041.11–.13; geschlossene maschinenlesbare Registry für alle 27 Werkzeuge, daraus abgeleitete Normal-/Supportflächen und MCP-Annotationen, additiver inhaltsfreier Statusumschlag und progressiver Skillkontext. `test-cowork-interaction-contract.js`, MCP-/Werkzeugflächen-/Annotationsgates, 41 strukturierte Skillfälle und kuratierte 12×3-Candidate-Matrix; Ursprungsreview `ARCH-DOC-COWORK-BID-REVIEW-2026-09-11`. |
 | DS-088 | Implementierung und RC135-Paketmatrix E0; sichtbare Zielhost-UAT offen | BL-010.12/28/29/31, BL-040.5/6; Auswahl vor Start einzeln oder vollständig korrigierbar über geschlossenen IPC/Rust/Service-Vertrag. Reine Konvertate behalten den Basisnamen, lösen Kollisionen deterministisch und erzeugen keine Zuordnungsdatei; Legacy-v3-Exporte bleiben final. Frontend-, IPC-, Export-, History-, Rust- und reale ZIP-Regressionsprüfungen. |
 | DS-089 | aktiv, Namensvorgabe durch DS-091 präzisiert | BL-010.33, BL-044, BL-040.5/6; vollständige Wurzel-relative Standalone-Struktur durch Ordneraufnahme, Queue, Journal und sichtbaren Export. Reine Konvertate behalten den Quellbasisnamen; neue Anonymisierungsläufe folgen der Wahl aus DS-091. Mapping enthält exakt beide relativen Pfade. Segment-/Link-/Swap-Gates, Unit-/Export-/Service-/Legacytests und echter verschachtelter Paketlauf; Cowork und vorhandene Läufe unverändert. |
 | DS-091 | Implementierung E0; Zielhost-UAT offen | BL-010.33; Standalone-Anonymisierung bietet vor Start neutralen Standard oder Quellbasis mit `-anonymisiert`. UI-Hilfe, Rust/IPC/Service/Worker, `datasecure-batch/6`, unveränderliche Recoverybindung und strukturtreuer Export sind geschlossen getestet. Alte v4-Läufe bleiben quellbenannt, Cowork bleibt neutral und reine Konvertierung unverändert. |

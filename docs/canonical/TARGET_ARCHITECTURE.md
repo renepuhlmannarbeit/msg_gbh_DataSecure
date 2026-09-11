@@ -1,6 +1,6 @@
 # Kanonische Zielarchitektur
 
-Stand: 10.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-097
+Stand: 11.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-099
 
 ## Architekturprinzip
 
@@ -77,6 +77,22 @@ Cowork-Lauf. Es gibt keinen Rückfall auf ältere Ergebnisse oder einen
 historischen Alt-/Stammordner; die Standalone-Historie bleibt davon getrennt.
 Die Standalone-Konverter-/OCR-Runtime wird nicht in das Cowork-Paket übernommen;
 dort werden ausschließlich die isolierten Office-Parser für XLSX/PPTX projiziert.
+
+### Maschinenlesbarer Cowork-Interaktionsvertrag
+
+DS-099 bindet jedes MCP-Werkzeug an genau einen Eintrag in
+`server/contracts/cowork-interactions.v1.json`. Der geschlossene Vertrag hält
+Normal-/Supportoberfläche, Seiteneffekt, Idempotenz, erforderliche menschliche
+Gates, Erfolgsdisposition und Inhaltsgrenze gemeinsam fest. Serverstart und CI
+stoppen bei fehlenden, zusätzlichen oder semantisch ungültigen Einträgen.
+
+Jede bekannte Werkzeugantwort erhält zusätzlich die additive, pfad- und
+inhaltsfreie Hülle `datasecure-cowork-status/1`. Sie trennt Annahme, laufende
+Arbeit, Review, Abschluss und Stopp, weist Retry nur bei expliziter
+Klassifikation aus und kennzeichnet übergebenes Markdown weiterhin als
+unvertrauenswürdige Dokumentdaten. Bestehende Antwortfelder bleiben erhalten.
+Der stets geladene Skill enthält nur Routing und Sicherheitsinvarianten;
+Detailabläufe werden absichtsbezogen aus Referenzdateien geladen.
 
 ## Normalablauf des Cowork-Plugins
 

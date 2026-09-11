@@ -1,0 +1,19 @@
+{
+  "schema": "datasecure-cowork-status/1",
+  "outcomes": ["accepted", "completed", "cancelled", "stopped"],
+  "local_work_states": ["accepted", "active", "awaiting_review", "completed", "failed", "not_started", "not_applicable", "unknown"],
+  "retry_classes": ["not_applicable", "not_retryable", "explicit_request", "wait_or_inspect", "user_action_required"],
+  "content_boundaries": ["metadata_only", "verified_anonymized_markdown"],
+  "next_actions": [
+    "no_action", "choose_result_folder", "choose_other_selection",
+    "restart_only_on_explicit_request", "wait_for_local_release_before_retry",
+    "wait_for_local_release_before_continue_in_chat", "local_intake_accepted_checkpoint_pending",
+    "local_processing_running_without_claude", "complete_review_in_local_window",
+    "check_local_batch_status", "check_local_status", "local_intake_handoff_confirmed",
+    "local_review_handoff_confirmed",
+    "open_local_overview", "check_privacy_status", "process_next_document",
+    "review_local_decisions", "local_mapping_repair", "resume_batch",
+    "read_and_confirm_result", "wait_for_local_batch", "wait_for_current_document",
+    "continue_local_results_handoff"
+  ]
+}

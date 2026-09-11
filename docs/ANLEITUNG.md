@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 10.09.2026 · Version 3.2.0 RC135 · Cowork-Plugin
+Stand: 11.09.2026 · Version 3.2.0 RC136 · Cowork-Plugin
 
 ## Vor dem ersten Lauf
 
