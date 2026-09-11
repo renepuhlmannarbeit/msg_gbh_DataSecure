@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 11.09.2026 · 3.2.0-rc136 · Cowork-Interaktionsvertrag E0; neue Paketbindung und N3/N4 offen
+Stand: 11.09.2026 · 3.2.0-rc136 · Windows-Cowork-Paket gebunden; Modellabnahme und N3/N4 offen
 
 ## RC136 – geschlossene Cowork-Interaktionen und progressive Modellkontexte
 
@@ -23,9 +23,19 @@ Referenzrunde, Sonderabläufe laden genau eine isolierte Referenz. Der
 strukturierte Modellkorpus umfasst 41 Fälle und eine kuratierte 12×3-Matrix mit
 reproduzierbarem Fixture-, Setup-, Bewertungs- und Cleanup-Vertrag. Beide sind
 nun formale Cowork-GO-Gates. Diese E0-Prüfungen simulieren kein Claude-Modell.
-Dreifache echte Cowork-Ausführung, neue Pluginpakete und N3/N4 sind noch offen.
-Die Standalone-App und der gemeinsame Privacy-Core wurden funktional nicht
-geändert.
+Dreifache echte Cowork-Ausführung und N3/N4 sind noch offen. Der
+Windows-x64-Kandidat wurde aus Commit
+`71ecafddde891d9d1b4e4bd9cd67833b46d03b08` jeweils zweimal bytegleich als
+Normal- und Debug-Paket gebaut. Beide Varianten bestanden ihre Paket-, Runtime-,
+Worker- und Skill-Smokes. Normal: 35.048.298 Byte, SHA-256
+`212646f6a27d610ed502bad724441f6c8d30872d55d387d6f59c9fe006ec1cbf`;
+Debug: 35.049.821 Byte, SHA-256
+`2b8e660e44ea95566bdebbda22ff67e6dfe3bc6da23b00dd78cf6b60de587c70`.
+Der technische Vorabrelease liegt unter
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc136>.
+Seine 36 Evidence-Zeilen stehen absichtlich auf `NOT_RUN`. Die Standalone-App
+und der gemeinsame Privacy-Core wurden funktional nicht geändert; ihre letzte
+vollständige plattformübergreifende Paketmatrix bleibt RC135.
 
 ## RC135 – commitgebundene Paketmatrix und gehärtete Release-Evidence
 

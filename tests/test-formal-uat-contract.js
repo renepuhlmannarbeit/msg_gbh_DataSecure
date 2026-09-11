@@ -26,7 +26,8 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.match(overview, /Standalone muss offline funktionieren/u);
   assert.match(overview, /Cowork benötigt Claude Desktop und\s+Internet/u);
   assert.match(overview, /RC134 ist der letzte lokal Windows-PKG-04-\/INT-13-gebundene Standalone-Kandidat/u);
-  assert.match(overview, /RC136 ist der aktuelle, noch nicht formal gebundene Cowork-Quellstand/u);
+  assert.match(overview, /RC136 ist als technischer Windows-x64-Cowork-Kandidat[\s\S]{0,160}gebunden und veröffentlicht/u);
+  assert.match(overview, /12×3- und 41×3-Modellgates bleiben\s+`NOT_RUN`/u);
   assert.match(overview, /npm run test:version-truth/u);
   assert.match(overview, /S01.S23 einschließlich S14a/u);
   assert.match(overview, /npm run build:cowork-uat-evidence/u);

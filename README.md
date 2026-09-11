@@ -1,8 +1,9 @@
 # GBH DataSecure – Dokumente anonymisieren v3.2.0 RC136
 
-Der Quellstand ist RC136. Die zuletzt veröffentlichten und verlinkten Pakete
-sind RC135; RC136 wird erst nach reproduzierbarem Paketbau und formaler
-Kandidatenbindung als Download veröffentlicht.
+Der Quellstand ist RC136. Das Windows-x64-Cowork-Paket ist als commitgebundener
+RC136-Vorabkandidat veröffentlicht. Die zuletzt gemeinsam für Standalone,
+Windows und beide Mac-Architekturen veröffentlichten Pakete bleiben RC135;
+menschliche N3/N4- und Cowork-Modellabnahmen sind weiterhin offen.
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -70,15 +71,24 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 
 ## Cowork-Plugin: aktueller Umfang
 
-Das zur eigenen Plattform passende Cowork-Paket steht im selben geprüften
-RC135-Release bereit:
+Der aktuelle Windows-Cowork-Kandidat steht im
+[RC136-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc136)
+bereit:
 
-- [Windows x64](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc135.zip)
-- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc135.zip)
-- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc135.zip)
+- [Windows x64 – normales Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc136.zip)
+- [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc136.zip)
+- [Commitgebundene 12×3-UAT-Vorlage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/DataSecure-Cowork-UAT-Evidence-v3.2.0-rc136.zip)
+- [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/SHA256SUMS)
 
-Die Pakete vollständig herunterladen und als lokales Claude-Desktop-Plugin
-installieren; sie sind nicht für Cloud-Cowork oder Claude im Browser bestimmt.
+Die letzten gebauten Cowork-Pakete für macOS bleiben im RC135-Release:
+
+- [macOS Intel – RC135](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc135.zip)
+- [macOS Apple Silicon – RC135](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc135.zip)
+
+Das passende Paket vollständig herunterladen und als lokales
+Claude-Desktop-Plugin installieren; es ist nicht für Cloud-Cowork oder Claude
+im Browser bestimmt. Das Debug-Paket nur für einen ausdrücklichen Supportfall
+installieren. Die UAT-Vorlage ist keine bestandene Abnahme.
 
 | Funktion | Stand |
 |---|---|

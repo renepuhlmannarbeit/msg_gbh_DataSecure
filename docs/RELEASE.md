@@ -2,13 +2,27 @@
 
 Stand: 11.09.2026 · 3.2.0-rc136
 
-Der aktuelle Quellstand ist der noch nicht paketgebundene RC136-Entwicklungsstand
-für das Cowork-Plugin und die Standalone-App. Der letzte paketgebundene und
-veröffentlichte Kandidat bleibt RC135. Alle nachfolgend genannten Pakete stammen
-aus dessen sauberem, auf `main` veröffentlichtem Quellcommit
-`9c2e4f9061dbdc3cd1bf0280d95939528029c978`.
+Der aktuelle Quellstand ist RC136. Sein Windows-x64-Cowork-Kandidat ist an den
+sauberen, auf `main` veröffentlichten Quellcommit
+`71ecafddde891d9d1b4e4bd9cd67833b46d03b08` gebunden. RC135 bleibt getrennt
+der letzte plattformübergreifend paketgebundene Stand für Standalone sowie
+Cowork auf Windows und beiden Mac-Architekturen.
 
-Der Windows-PKG-04-Lauf erzeugte zwei bytegleiche Archive mit jeweils
+RC136 wurde zweimal aus genau diesem Commit gebaut. Beide normalen Archive
+waren bytegleich mit jeweils 35.048.298 Byte und SHA-256
+`212646f6a27d610ed502bad724441f6c8d30872d55d387d6f59c9fe006ec1cbf`;
+beide Paket-, Runtime-, Worker- und Skill-Smokes bestanden. Die getrennte
+Debug-Variante war ebenfalls zweimal bytegleich mit jeweils 35.049.821 Byte
+und SHA-256
+`2b8e660e44ea95566bdebbda22ff67e6dfe3bc6da23b00dd78cf6b60de587c70`.
+SBOM, Prüfsummen und eine commitgebundene, vollständig auf `NOT_RUN` stehende
+12×3-UAT-Evidence-Vorlage gehören zum Release. RC136 ist als technischer
+Windows-Cowork-Vorabkandidat unter
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc136>
+veröffentlicht. Das ist keine Standalone-, macOS-, Modell-, N3/N4- oder
+Produktionsfreigabe.
+
+Für RC135 erzeugte der Windows-PKG-04-Lauf zwei bytegleiche Archive mit jeweils
 110.250.920 Byte. Beide Paket-, Worker-, History-/Sidecar- und nativen Smokes
 bestanden; INT-13 bindet SHA-256
 `8a27494c19c1713ccd5104d1ec3dda8abd2e773ceedb47d250befccbe174c3d1`.
@@ -21,13 +35,14 @@ Das ist technische E0-Paketevidence, aber noch keine N3/N4- oder weitere Zielhos
 und insbesondere keine sichtbare Fresh-Install- oder
 Anwenderabnahme.
 
-RC135 ist als technischer Vorabkandidat unter
+RC135 ist als plattformübergreifender technischer Vorabkandidat unter
 <https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc135>
 veröffentlicht. Tag, sechs Zielpakete, Prüfsummen und SBOM binden unverändert
 den Quellcommit `9c2e4f9061dbdc3cd1bf0280d95939528029c978`; der spätere reine
 Dokumentationscommit verändert diese Binärartefakte nicht. Diese
 Veröffentlichung ersetzt weder die noch offene sichtbare N3/N4-UAT noch eine
-Produktionsfreigabe.
+Produktionsfreigabe. Die Veröffentlichung des neueren Windows-Cowork-RC136
+verändert oder ersetzt diese sechs RC135-Zielpakete nicht.
 
 ## Nutzerprodukt
 

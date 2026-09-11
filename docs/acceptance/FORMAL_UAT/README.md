@@ -8,11 +8,14 @@ denselben festgeschriebenen Commit. Die Testfälle selbst bleiben in den
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC134 ist der letzte lokal Windows-PKG-04-/INT-13-gebundene Standalone-Kandidat; RC136 ist der aktuelle, noch nicht formal gebundene Cowork-Quellstand und
+RC134 ist der letzte lokal Windows-PKG-04-/INT-13-gebundene Standalone-Kandidat;
+RC136 ist als technischer Windows-x64-Cowork-Kandidat an Commit
+`71ecafddde891d9d1b4e4bd9cd67833b46d03b08` gebunden und veröffentlicht. Er
 enthält den DOCX-Vertrag DS-098: Kopf-/Fußzeilen bleiben bei reiner Konvertierung
 erhalten und werden nur bei Anonymisierung ausgelassen. Eine formale Kampagne
-beginnt dennoch erst, wenn auch die benötigten Cowork- und Mac-Pakete aus
-demselben Commit im Kampagnenmanifest gebunden sind. RC133 bleibt historische
+beginnt dennoch erst, wenn alle benötigten Produkt-/Zielhostpakete im
+Kampagnenmanifest gebunden sind. Die 12×3- und 41×3-Modellgates bleiben
+`NOT_RUN`; das veröffentlichte Evidence-ZIP ist nur ihre leere Vorlage. RC133 bleibt historische
 Evidence und darf nicht umetikettiert werden.
 
 ## Was N3 und N4 bedeuten
