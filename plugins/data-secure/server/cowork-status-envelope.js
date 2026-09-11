@@ -149,6 +149,9 @@ function withCoworkStatus(operation, result, options = {}) {
   const interaction = interactionForTool(operation);
   if (!interaction) throw new Error(`Unknown Cowork operation: ${operation}`);
   if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Invalid Cowork result.');
+  if (result.raw_content_sent_to_claude === true || result.original_content_sent_to_claude === true) {
+    throw new Error('Original content crossed the Cowork boundary.');
+  }
   if (interaction.surface === 'normal' && options.supportMode !== true) assertNormalResponseBoundary(result);
   const outcome = outcomeOf(result);
   const nextAction = nextActionOf(result);

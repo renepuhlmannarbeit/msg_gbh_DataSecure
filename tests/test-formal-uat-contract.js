@@ -11,6 +11,7 @@ const kit = path.join(root, 'docs', 'acceptance', 'FORMAL_UAT');
 const read = (name) => fs.readFileSync(path.join(kit, name), 'utf8');
 const productVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const campaignLabel = productVersion.match(/-rc(\d+)$/u)?.[1];
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('formal kit contains the complete two-person campaign contract', () => {
   for (const file of ['README.md', 'N3-N4-CHECKLIST.md', 'GIT-WORKFLOW.md',
@@ -28,6 +29,11 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.match(overview, /RC136 ist der aktuelle, noch nicht formal gebundene Cowork-Quellstand/u);
   assert.match(overview, /npm run test:version-truth/u);
   assert.match(overview, /S01.S23 einschließlich S14a/u);
+  assert.match(overview, /npm run build:cowork-uat-evidence/u);
+  assert.match(overview, /36 Zeilen bleiben zunächst\s+`NOT_RUN`/u);
+  assert.strictEqual(packageJson.scripts['build:cowork-uat-evidence'],
+    'node scripts/build-cowork-uat-evidence.mjs');
+  assert.ok(fs.existsSync(path.join(root, 'scripts', 'build-cowork-uat-evidence.mjs')));
 });
 
 test('N3 and N4 have ten and eight named executable checks', () => {

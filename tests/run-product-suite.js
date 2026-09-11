@@ -58,7 +58,8 @@ const baseFiles = [
 const ciFiles = [
   'test-read-only-source-snapshot.js', 'test-source-folder.js', 'test-workflow-budget.js',
   'test-manifest.js', 'test-capability-contract.js',
-  'test-cowork-tool-surface-contract.js', 'test-cowork-interaction-contract.js', 'test-mcp-tool-annotations.js',
+  'test-cowork-tool-surface-contract.js', 'test-cowork-interaction-contract.js',
+  'test-cowork-boundary-mutations.js', 'test-mcp-tool-annotations.js',
   'test-cowork-documentation-contract.js', 'test-resource-limits.js',
   'test-skill-eval-corpus.js',
   'test-package-read-capabilities.js', 'test-package-snapshot-async.js', 'test-batch-snapshot.js',

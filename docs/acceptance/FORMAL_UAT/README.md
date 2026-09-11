@@ -55,6 +55,10 @@ macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
    und der 12×3-Kandidatensmoke mit den im Manifest gebundenen Korpus-Hashes
    als `PASS` erforderlich. Die reproduzierbare 12-Fälle-Anleitung erzeugt
    `npm run uat:cowork-candidate`; Setup und Aufräumen gehören zu jedem Fall.
+   Nach dem bytegleichen Cowork-Paketbau erzeugt
+   `npm run build:cowork-uat-evidence` zusätzlich ein an Commit, Paket-Hashes
+   und Korpus-Hashes gebundenes Evidence-ZIP. Seine 36 Zeilen bleiben zunächst
+   `NOT_RUN`; das ZIP ist eine Vorlage und niemals selbst ein UAT-Nachweis.
 5. Nur synthetische Testdaten bereitstellen. Niemals echte Personen-, Kunden-
    oder Unternehmensdaten in Git, Evidenz oder Defectbeschreibungen aufnehmen.
 6. Beide Tester starten ihre Plattformbranches vom selben Kampagnenbranch und
@@ -104,6 +108,8 @@ Solange Commit oder Paket-Hash fehlen, ist die Kampagne **nicht gestartet**.
 - `N3-N4-CHECKLIST.md` – verständliche Durchführung;
 - `GIT-WORKFLOW.md` – konfliktfreies Arbeiten im selben Repository;
 - `FREIGABEENTSCHEIDUNG.md` – gemeinsames Schlussurteil.
+- `DataSecure-Cowork-UAT-Evidence-v<version>.zip` – generierte, inhaltsfreie
+  12×3-Cowork-Vorlage für genau einen sauberen Kandidatencommit.
 
 Die Vorlagen sind bewusst leer beziehungsweise mit `NOT_RUN` vorbelegt. Erst
 eine ausgefüllte, gegengeprüfte Kampagne ist Evidence.

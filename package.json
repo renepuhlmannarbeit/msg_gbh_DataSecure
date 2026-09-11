@@ -68,6 +68,7 @@
     "test:windows-visual": "node tests/windows-visual-acceptance.js",
     "test:skills": "node tests/test-contract-skill-acceptance.js && node tests/test-contract-skill-matrix.js",
     "uat:cowork-candidate": "node scripts/print-cowork-candidate-smoke.mjs",
+    "build:cowork-uat-evidence": "node scripts/build-cowork-uat-evidence.mjs",
     "test:docs": "npm run test:docs:fast",
     "validate:claude-local": "node scripts/validate-claude-local.mjs",
     "build:status-app": "node scripts/build-status-app.mjs",
