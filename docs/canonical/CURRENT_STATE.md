@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 11.09.2026 · 3.2.0-rc137 · Entwicklungsstand; neue Paketbindung, Modellabnahme und N3/N4 offen
+Stand: 11.09.2026 · 3.2.0-rc137 · E0-Paketmatrix gebunden; Modellabnahme und N3/N4 offen
 
 ## RC137 – Standalone-Härtetest und sitzungsgebundener Start
 
@@ -23,9 +23,18 @@ reparieren. Ein tatsächlich lebender Worker bleibt exklusiv. Die vom echten
 Intake-Worker bestätigte Laufkennung wird unmittelbar an die aktuelle Sitzung
 gebunden, damit auch ein vor dem ersten Status-Poll beendeter Kurzlauf sichtbar
 bleibt. Admission-, Standalone-Service-, History-, Frontend-, Recovery- und
-adversarielle Golden-Tests sind lokal grün. Dieser Abschnitt beschreibt einen
-noch nicht als neues Paket gebundenen Entwicklungsstand; RC136 selbst bleibt
-unverändert.
+adversarielle Golden-Tests sind grün. Der saubere Quellcommit
+`8979d4b2127741c2921cb6f0654fb83d82944845` ist auf `main` veröffentlicht.
+Windows-PKG-04/INT-13 bindet zwei bytegleiche Standalone-ZIPs mit SHA-256
+`3dfdb381…47c6f0`. Die Läufe `34609450730` und `34609464020` belegen die
+jeweils zweimal deterministischen nativen Standalone-Pakete und App→IPC→Core-
+Starts auf macOS Intel/ARM beziehungsweise Linux x64 glibc. Lauf
+`34609438970` bindet die validierten Cowork-ZIPs für Windows und beide
+Mac-Architekturen; die getrennte Windows-Debug-Variante ist ebenfalls zweimal
+bytegleich und vollständig geprüft. Alle Artefakte liegen im technischen
+Vorabrelease
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc137>.
+Sichtbare Zielhost-, N3/N4- und Cowork-Modellabnahmen bleiben offen.
 
 ## RC136 – geschlossene Cowork-Interaktionen und progressive Modellkontexte
 
@@ -59,8 +68,9 @@ Debug: 35.049.821 Byte, SHA-256
 Der technische Vorabrelease liegt unter
 <https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc136>.
 Seine 36 Evidence-Zeilen stehen absichtlich auf `NOT_RUN`. Die Standalone-App
-und der gemeinsame Privacy-Core wurden funktional nicht geändert; ihre letzte
-vollständige plattformübergreifende Paketmatrix bleibt RC135.
+und der gemeinsame Privacy-Core wurden in RC136 funktional nicht geändert; zu
+diesem historischen Zeitpunkt blieb RC135 ihre letzte vollständige
+plattformübergreifende Paketmatrix.
 
 ## RC135 – commitgebundene Paketmatrix und gehärtete Release-Evidence
 

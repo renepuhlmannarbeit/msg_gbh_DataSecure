@@ -6,6 +6,15 @@ Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detailli
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
 
+RC137 bindet DS-100/BL-010.35 und die RC136-Interaktionsverträge an den
+sauberen Quellcommit `8979d4b2127741c2921cb6f0654fb83d82944845`.
+Windows-PKG-04/INT-13, die nativen Läufe `34609450730` (macOS Intel/ARM) und
+`34609464020` (Linux x64 glibc) sowie der Cowork-Paketlauf `34609438970`
+belegen Quell-, Runtime-, Paket-, Architektur- und Startparität für die
+veröffentlichten Zielartefakte. Die normale und getrennte Debug-Cowork-Variante
+verwenden dieselbe nachgewiesene Windows-Runtime. Diese E0-Traceability ersetzt
+keine sichtbare N3/N4-, Zielhost- oder Modellabnahme.
+
 DS-099/BL-041.11–.13 binden die maschinenlesbare Registry
 `cowork-interactions.v1.json` an `mcp-server.js`, dessen Normal-/Supportflächen,
 MCP-Annotationen und bijektive Handlerprüfung. `cowork-status-envelope.js`

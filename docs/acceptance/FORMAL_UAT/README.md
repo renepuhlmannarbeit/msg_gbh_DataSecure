@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 11.09.2026 · RC136-Quellstand und spätere, jeweils neu gebundene Kandidaten
+Stand: 11.09.2026 · RC137-Kandidat
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -8,15 +8,14 @@ denselben festgeschriebenen Commit. Die Testfälle selbst bleiben in den
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC134 ist der letzte lokal Windows-PKG-04-/INT-13-gebundene Standalone-Kandidat;
-RC136 ist als technischer Windows-x64-Cowork-Kandidat an Commit
-`71ecafddde891d9d1b4e4bd9cd67833b46d03b08` gebunden und veröffentlicht. Er
-enthält den DOCX-Vertrag DS-098: Kopf-/Fußzeilen bleiben bei reiner Konvertierung
-erhalten und werden nur bei Anonymisierung ausgelassen. Eine formale Kampagne
-beginnt dennoch erst, wenn alle benötigten Produkt-/Zielhostpakete im
-Kampagnenmanifest gebunden sind. Die 12×3- und 41×3-Modellgates bleiben
-`NOT_RUN`; das veröffentlichte Evidence-ZIP ist nur ihre leere Vorlage. RC133 bleibt historische
-Evidence und darf nicht umetikettiert werden.
+RC137 ist als technischer Standalone- und Cowork-Kandidat an Commit
+`8979d4b2127741c2921cb6f0654fb83d82944845` gebunden und veröffentlicht.
+Windows-PKG-04/INT-13, native macOS-Intel-/ARM- und Linux-x64-Bauten sowie die
+drei Cowork-Zielpakete sind E0-grün. Eine formale Kampagne beginnt dennoch erst,
+wenn beide Tester die exakten Pakethashes in ihrem Kampagnenmanifest gebunden
+haben. Die 12×3- und 41×3-Modellgates bleiben `NOT_RUN`; das veröffentlichte
+Evidence-ZIP ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch
+und darf nicht umetikettiert werden.
 
 ## Was N3 und N4 bedeuten
 

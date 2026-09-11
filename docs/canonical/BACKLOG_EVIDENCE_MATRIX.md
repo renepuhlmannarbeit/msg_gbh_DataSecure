@@ -6,6 +6,20 @@ E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
 Architekturfreigabe. Nur das [Backlog](BACKLOG.md) steuert Arbeit.
 
+RC137 / DS-100 / BL-010.35 bindet den sauberen Commit
+`8979d4b2127741c2921cb6f0654fb83d82944845` an die vollständige technische
+Paketmatrix. Windows-PKG-04/INT-13 belegen zwei bytegleiche Standalone-ZIPs,
+alle Paket-, Worker-, History-/Sidecar- und nativen Smokes sowie SHA-256
+`3dfdb381…47c6f0`. Lauf `34609450730` belegt zweimal deterministische native
+Standalone-Pakete und App→IPC→Core-Starts auf macOS ARM64 (`8314572d…d4416`)
+und Intel (`e8210902…b514`); Lauf `34609464020` belegt denselben Vertrag für
+Linux x64 glibc (`f282d416…d282`). Lauf `34609438970` erzeugt und validiert die
+Cowork-ZIPs für Windows sowie beide Mac-Architekturen. Die getrennte
+Windows-Debug-Variante ist ebenfalls zweimal bytegleich. Release, SBOM,
+Prüfsummen und leere 12×3-UAT-Vorlage sind veröffentlicht. Sichtbare N3/N4-,
+Fresh-Install-, Finder-/Explorer-/Linux-Dateimanager-, Cowork-Modell- und
+Accessibility-Evidence bleibt E1/E2 offen.
+
 RC136 / DS-099 / BL-041.11–.13: E0 bindet 27 Registryeinträge bijektiv
 an Werkzeuge und Handler, leitet 10 Normal-/17 Supportwerkzeuge sowie
 Annotationen aus derselben Quelle ab und projiziert den additiven öffentlichen

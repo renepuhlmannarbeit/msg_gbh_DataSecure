@@ -1,39 +1,43 @@
 # GBH DataSecure – Dokumente anonymisieren v3.2.0 RC137
 
-Der Quellstand ist RC137. Er enthält die nach dem realen RC136-Härtetest
-entstandenen Standalone-, Admission-, Recovery- und Golden-Test-Korrekturen und
-ist bis zum neuen commitgebundenen Paketnachweis ein Entwicklungsstand. Der
-Windows-x64-Cowork-Kandidat RC136 und die plattformübergreifende RC135-Matrix
-bleiben unverändert veröffentlicht; menschliche N3/N4- und
-Cowork-Modellabnahmen sind weiterhin offen.
+RC137 ist der aktuelle commitgebundene technische UAT-Kandidat für Standalone
+und Cowork. Die Pakete stammen aus Quellcommit
+`8979d4b2127741c2921cb6f0654fb83d82944845`; Windows-PKG-04/INT-13 sowie die
+nativen macOS-Intel-, macOS-ARM- und Linux-x64-Bauten sind grün. Das ist noch
+keine Produktionsfreigabe: Menschliche N3/N4- und Cowork-Modellabnahmen sind
+weiterhin offen.
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
 verarbeitet und niemals automatisch verändert oder gelöscht. Claude erhält nur
 freigegebene Markdown-Ergebnisse.
 
-## Standalone-App installieren (Windows und macOS)
+## Standalone-App installieren (Windows, macOS und Linux)
 
 Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende Paket vollständig entpacken und
 nicht direkt aus dem ZIP starten:
 
-**[Alle geprüften 3.2.0-rc135-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc135)**
+**[Alle geprüften 3.2.0-rc137-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc137)**
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc135-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Standalone-3.2.0-rc135-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc137-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Standalone-3.2.0-rc137-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [DataSecure-Standalone-3.2.0-rc135-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Standalone-3.2.0-rc135-macos-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc137-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Standalone-3.2.0-rc137-macos-x64.zip)
   herunterladen und im Finder öffnen,
   `DataSecure Standalone.app` nach **Programme** ziehen und dort starten.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [DataSecure-Standalone-3.2.0-rc135-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Standalone-3.2.0-rc135-macos-arm64.zip)
+  [DataSecure-Standalone-3.2.0-rc137-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Standalone-3.2.0-rc137-macos-arm64.zip)
   herunterladen und genauso installieren.
   Die Architektur zeigt **Apple-Menü → Über diesen Mac**. Mindestversion ist
   macOS 13.5. [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
+- **Linux x64 mit glibc:**
+  [DataSecure-Standalone-3.2.0-rc137-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Standalone-3.2.0-rc137-linux-x64-glibc.zip)
+  vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
+  Dieses Paket ist technisch nativ geprüft; die sichtbare Linux-UAT ist offen.
 
 Die internen Pilotpakete sind nicht mit einer Apple Developer ID notariell
 signiert. Falls macOS den ersten Start blockiert, unter **Systemeinstellungen →
@@ -73,19 +77,16 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 
 ## Cowork-Plugin: aktueller Umfang
 
-Der aktuelle Windows-Cowork-Kandidat steht im
-[RC136-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc136)
+Der aktuelle Cowork-Kandidat steht im
+[RC137-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc137)
 bereit:
 
-- [Windows x64 – normales Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc136.zip)
-- [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc136.zip)
-- [Commitgebundene 12×3-UAT-Vorlage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/DataSecure-Cowork-UAT-Evidence-v3.2.0-rc136.zip)
-- [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc136/SHA256SUMS)
-
-Die letzten gebauten Cowork-Pakete für macOS bleiben im RC135-Release:
-
-- [macOS Intel – RC135](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc135.zip)
-- [macOS Apple Silicon – RC135](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc135/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc135.zip)
+- [Windows x64 – normales Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc137.zip)
+- [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc137.zip)
+- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc137.zip)
+- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc137.zip)
+- [Commitgebundene 12×3-UAT-Vorlage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Cowork-UAT-Evidence-v3.2.0-rc137.zip)
+- [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/SHA256SUMS)
 
 Das passende Paket vollständig herunterladen und als lokales
 Claude-Desktop-Plugin installieren; es ist nicht für Cloud-Cowork oder Claude

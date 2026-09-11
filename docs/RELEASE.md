@@ -2,15 +2,39 @@
 
 Stand: 11.09.2026 · 3.2.0-rc137
 
-Der aktuelle Quellstand ist RC137-Entwicklungsstand. Er wird erst nach sauberem
-Commit, bestandenem Windows-PKG-04/INT-13 und den nativen Zielplattformbauten
-als neuer Paketkandidat veröffentlicht. Der Windows-x64-Cowork-Kandidat RC136
-bleibt an den sauberen, auf `main` veröffentlichten Quellcommit
-`71ecafddde891d9d1b4e4bd9cd67833b46d03b08` gebunden. RC135 bleibt getrennt
-der letzte plattformübergreifend paketgebundene Stand für Standalone sowie
-Cowork auf Windows und beiden Mac-Architekturen.
+Der aktuelle Quellstand ist RC137 und als technischer UAT-Kandidat an den
+sauberen, auf `main` veröffentlichten Quellcommit
+`8979d4b2127741c2921cb6f0654fb83d82944845` gebunden. Der
+Windows-x64-Cowork-Kandidat RC137 ist ebenfalls an diesen Quellcommit
+`8979d4b2127741c2921cb6f0654fb83d82944845` gebunden. RC135 bleibt getrennt
+als letzter plattformübergreifend paketgebundener Stand vor RC137 vollständig
+nachvollziehbar; RC136 bleibt der dazwischenliegende Windows-Cowork-Kandidat.
 
-RC136 wurde zweimal aus genau diesem Commit gebaut. Beide normalen Archive
+Windows-PKG-04 erzeugte zwei bytegleiche Standalone-Archive zu jeweils
+110.253.680 Byte. Paket-, Worker-, History-/Sidecar- und native Smokes
+bestanden; INT-13 bindet SHA-256
+`3dfdb38107cf7fd9deae0f26091b7b44a8054a954a192817b69d3f749a47c6f0`.
+Der kostenbestätigte Lauf `34609450730` baute, prüfte und startete Standalone
+zweimal deterministisch auf macOS ARM64 (115.162.051 Byte, SHA-256
+`8314572d…d4416`) und Intel (118.194.215 Byte, SHA-256 `e8210902…b514`).
+Lauf `34609464020` tat dasselbe für Linux x64 glibc samt AppImage
+(194.347.824 Byte, SHA-256 `f282d416…d282`).
+
+Der Cowork-Lauf `34609438970` erzeugte und validierte die drei
+selbsttragenden normalen Plugin-ZIPs: Windows x64 (35.050.312 Byte,
+SHA-256 `b97afba9…e467`), macOS ARM64 (38.805.746 Byte, SHA-256
+`17d2b6ef…d7f`) und macOS Intel (39.789.997 Byte, SHA-256
+`68bdaf9a…839b`). Die getrennte Windows-Debug-Variante wurde lokal aus
+derselben Workflow-Runtime zweimal bytegleich gebaut (35.051.835 Byte,
+SHA-256 `30a19dc3…6c3c`) und vollständig validiert. Der Vorabrelease
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc137>
+enthält alle Zielpakete, Sidecar-Prüfsummen, SBOM und eine commitgebundene,
+vollständig auf `NOT_RUN` stehende 12×3-UAT-Vorlage. Diese E0-Evidence ist
+keine menschliche N3/N4-, sichtbare Zielhost-, Cowork-Modell- oder
+Produktionsfreigabe.
+
+RC136 wurde zweimal aus Commit
+`71ecafddde891d9d1b4e4bd9cd67833b46d03b08` gebaut. Beide normalen Archive
 waren bytegleich mit jeweils 35.048.298 Byte und SHA-256
 `212646f6a27d610ed502bad724441f6c8d30872d55d387d6f59c9fe006ec1cbf`;
 beide Paket-, Runtime-, Worker- und Skill-Smokes bestanden. Die getrennte
