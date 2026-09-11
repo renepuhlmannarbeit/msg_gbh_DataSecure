@@ -828,6 +828,24 @@ test('quantities and units are not mistaken for postal addresses', () => {
   }
 });
 
+test('five-digit standards remain professional content, not postal addresses', () => {
+  for (const source of ['ISO 27001 bleibt anwendbar.', 'IEC 62443 Security Level 2', 'DIN 50001 ist ein Testwert.', 'EN 50126 im Projekt']) {
+    const { text } = anonymizeVerified(source, 'general');
+    assert.strictEqual(text, source);
+    assert.doesNotMatch(text, /\[LOCATION_REDACTED\]/u);
+  }
+  assert.match(anonymizeVerified('ISO Consult, 20457 Hamburg', 'general').text, /ISO Consult, \[LOCATION_REDACTED\]/u);
+});
+
+test('international and connector company names are redacted as complete organisations', () => {
+  for (const organization of ['Mühlen & Partner GmbH', 'Société Lumière SAS', 'Étoile Santé SARL']) {
+    const result = anonymizeVerified(`Unternehmen: ${organization}\n${organization} liefert FHIR-Software.`, 'general');
+    assert.doesNotMatch(result.text, new RegExp(organization.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'), organization);
+    assert.match(result.text, /\[ORGANISATION_\d+\]/u, organization);
+    assert.deepStrictEqual(result.residual, [], organization);
+  }
+});
+
 test('real postal addresses remain detectable including lower-case cities', () => {
   for (const value of ['20457 Hamburg', '80331 München', '04103 Leipzig Mitte', '20457 hamburg']) {
     const { text } = anonymizeVerified(`${value}\n`, 'general');
@@ -1549,6 +1567,28 @@ test('professional relationship prefixes remain while the same organisation stay
     assert.strictEqual((result.text.match(/\[KUNDE_001\]/gu) || []).length, 2);
     assert.strictEqual((result.text.match(/\[KUNDE_002\]/gu) || []).length, 0);
   }
+});
+
+test('named employment subjects never become part of an organisation span', () => {
+  for (const source of [
+    'Max Mustermann arbeitet bei Nordstern GmbH. Max Mustermann leitet das Projekt von Nordstern GmbH.',
+    'Dr.-Ing. Aylin Öztürk arbeitet für Mühlen & Partner GmbH. Aylin Öztürk verantwortet die Freigabe.',
+    'Alex Taylor works for Northstar Health Ltd. Alex Taylor leads the review.'
+  ]) {
+    const result = anonymizeVerified(source, 'personnel_profile');
+    assert.deepStrictEqual(result.residual, [], source);
+    assert.doesNotMatch(result.text, /Mustermann|Aylin|Öztürk|Alex Taylor|Nordstern|Mühlen|Partner|Northstar|Health/iu, source);
+    assert.match(result.text, /\[PERSON_\d+\]/u, source);
+    assert.match(result.text, /\[(?:ORGANISATION|ARBEITGEBER|KUNDE)_\d+\]/u, source);
+  }
+});
+
+test('quoted employment prose remains a privacy boundary, not a detector boundary', () => {
+  const source = '> Max Mustermann arbeitet bei Mühlen & Partner GmbH.\n> Max Mustermann verantwortet die Prüfung.';
+  const result = anonymizeVerified(source, 'personnel_profile');
+  assert.deepStrictEqual(result.residual, []);
+  assert.doesNotMatch(result.text, /Max Mustermann|Mühlen|Partner/u);
+  assert.match(result.text, /> \[PERSON_\d+\] arbeitet bei \[(?:ARBEITGEBER|KUNDE|ORGANISATION)_\d+\]/u);
 });
 
 test('Unicode spaces and dashes do not bypass identifier detection', () => {
@@ -2275,6 +2315,17 @@ test('F7 alignment returns only a candidate that survived ordinary anonymization
   assert.strictEqual(ambiguities.length, 1);
   assert.strictEqual(output.slice(ambiguities[0].anonymized_start, ambiguities[0].anonymized_end), 'Anna Berger');
   assert.ok(!JSON.stringify(ambiguities).includes('Anna Berger'));
+});
+
+test('F7 keeps a late review candidate after many redactions and Markdown canonicalisation', () => {
+  const repeated = Array.from({ length: 80 }, (_, index) =>
+    `> Abschnitt ${index + 1}: Max Mustermann arbeitet bei Nordstern GmbH. Kontakt: max.mustermann@example.test.`
+  ).join('\n');
+  const source = `# Profil\n\n**Name:** Max Mustermann\n\n${repeated}\n\n\`Golden Test\` bleibt.\n\nFerdinand Quastenflosser koordinierte die Einführung.`;
+  const output = anonymize(source, 'personnel_profile').text;
+  const ambiguities = personProseAmbiguities(source, output);
+  assert.strictEqual(ambiguities.length, 1);
+  assert.strictEqual(output.slice(ambiguities[0].anonymized_start, ambiguities[0].anonymized_end), 'Ferdinand Quastenflosser');
 });
 
 done();

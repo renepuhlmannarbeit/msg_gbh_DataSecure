@@ -8,11 +8,13 @@ import { fileURLToPath } from 'node:url';
 import { writeStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
 import { collectConversionRuntime, writeConversionRuntime } from '../scripts/lib/standalone-conversion-runtime.mjs';
 import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+import { createCases as createAdversarialCases } from '../scripts/generate-adversarial-golden-corpus.mjs';
 
 const require = createRequire(import.meta.url);
 const { decodePng } = require('../plugins/data-secure/server/images/png');
 const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
 const { xlsxCounterexample, bmp32 } = require('./lib/conversion-counterexamples');
+const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -418,6 +420,21 @@ try {
     finally { fs.readFileSync = originalRead; }
     assert.equal(heavyReads, 0); assert.equal(heavyBytes, 0);
     process.stdout.write(`100-TXT packaged runtime: ${Math.round(performance.now() - started)} ms; repeated heavy runtime reads: ${heavyReads}\n`);
+  });
+  await test('adversarial text PDF, scan PDF and JPEG traverse the real packaged worker and privacy gate', async () => {
+    const corpus = createAdversarialCases();
+    for (const [suffix, extension, expected] of [
+      ['11-text-pdf-zwoelf-seiten.pdf', '.pdf', /Max Mustermann/u],
+      ['13-scan-pdf-mehrseitig.pdf', '.pdf', /Max Mustermann/u],
+      ['15-dichter-scan.jpg', '.jpeg', /Max Mustermann/u]
+    ]) {
+      const source = corpus.find(item => item.file.endsWith(suffix));
+      assert.ok(source, suffix);
+      const converted = await convert(source.bytes, extension);
+      assert.match(converted.markdown, expected, suffix);
+      const released = anonymizeMarkdown(converted.markdown, 'personnel_profile');
+      assert.doesNotMatch(released.text, /Aylin(?: Öztürk)?|Max Mustermann|Nordstern Gesundheit/u, suffix);
+    }
   });
   process.stdout.write(`${passed} packaged conversion groups passed\n`);
 } finally {

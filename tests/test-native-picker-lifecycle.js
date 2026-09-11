@@ -130,7 +130,7 @@ if (process.platform === 'win32') {
       pickSourcesAsync: async () => [{ sourcePath: selectedPath, sourceBytes: 12 }],
       batchQueueFromSelection,
       recordWorkflowEvent: (event) => { if (cancelOnAccepted && event.event === 'picker_selection_accepted') controller.abort(); },
-      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, batch_token: 'b'.repeat(64), local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
       consumeConfiguredResultNotices: () => { noticeConsumes++; return { sync: false, network: false }; },
       localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
     });
@@ -176,7 +176,7 @@ if (process.platform === 'win32') {
       enumerateSourceFolderAsync: async () => [],
       batchQueueFromSelection,
       recordWorkflowEvent: () => {},
-      startLocalIntakeExecutor: () => { reservationHeld = false; return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+      startLocalIntakeExecutor: () => { reservationHeld = false; return { ok: true, batch_token: 'b'.repeat(64), local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
       consumeConfiguredResultNotices: () => ({ sync: false, network: false }),
       localOnlyStartResponse: () => ({ ok: true, next_action: 'local_intake_accepted_checkpoint_pending' })
     });
@@ -373,7 +373,7 @@ if (process.platform === 'win32') {
       enumerateSourceFolderAsync: async () => [],
       batchQueueFromSelection,
       recordWorkflowEvent: () => {},
-      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+      startLocalIntakeExecutor: (_selected, _profile, options) => { starts++; reservationHeld = false; assert.match(options.intakeReservationId, /^[a-f0-9]{64}$/); return { ok: true, batch_token: 'b'.repeat(64), local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
       consumeConfiguredResultNotices: () => ({ sync: false, network: false }),
       localOnlyStartResponse: (started) => ({ ok: started.ok, local_processing_started: true })
     });
@@ -485,7 +485,7 @@ if (process.platform === 'win32') {
         pickSourcesAsync: async () => { throw failure; },
         batchQueueFromSelection,
         recordWorkflowEvent: (event) => { events.push(event); },
-        startLocalIntakeExecutor: () => { starts++; return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
+        startLocalIntakeExecutor: () => { starts++; return { ok: true, batch_token: 'b'.repeat(64), local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; },
         localOnlyStartResponse: (started) => ({ ok: started.ok })
       });
       vm.runInContext(source, context);
@@ -515,6 +515,13 @@ if (process.platform === 'win32') {
     assert.strictEqual(boundedFolder.next_action, 'choose_other_selection');
     assert.match(boundedFolder.message, /mehr als 200 unterstützte Dateien/u);
     assert.strictEqual(boundedFolder.diagnostic.cause, 'LOCAL_SELECTION_REJECTED');
+    const owner = await run(Object.assign(new SafeError('Eine temporäre Office-Sperrdatei kann nicht verarbeitet werden.'), {
+      code: 'SOURCE_ARTIFACT_IGNORED'
+    }));
+    assert.strictEqual(owner.error, 'local_selection_rejected',
+      'a proven Office owner artifact is a selection rejection, not an infrastructure failure');
+    assert.strictEqual(owner.next_action, 'choose_other_selection');
+    assert.strictEqual(owner.diagnostic.cause, 'LOCAL_SELECTION_REJECTED');
     const timeout = await run(Object.assign(new SafeError('Die lokale Ordnerauswahl wurde wegen Zeitüberschreitung beendet.'), { code: 'LOCAL_PICKER_TIMEOUT' }));
     assert.strictEqual(timeout.error, 'local_start_failed', 'a picker infrastructure failure is not a selection rejection');
     assert.strictEqual(timeout.diagnostic.cause, 'LOCAL_PICKER_TIMEOUT');

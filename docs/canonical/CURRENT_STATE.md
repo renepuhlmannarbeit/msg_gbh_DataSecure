@@ -1,6 +1,31 @@
 # Aktueller Iststand
 
-Stand: 11.09.2026 · 3.2.0-rc136 · Windows-Cowork-Paket gebunden; Modellabnahme und N3/N4 offen
+Stand: 11.09.2026 · 3.2.0-rc137 · Entwicklungsstand; neue Paketbindung, Modellabnahme und N3/N4 offen
+
+## RC137 – Standalone-Härtetest und sitzungsgebundener Start
+
+Der reale RC136-Härtetest mit dem 16-Dateien-Korpus nahm zusätzlich eine von
+Microsoft Office erzeugte `~$`-Besitzerdatei als siebzehntes Dokument auf. Sie
+war kein verarbeitbarer DOCX-Container und führte deshalb zu einem unnötigen
+Stopp. DS-100 / BL-010.35 beheben die Ursache generalisiert: Nur eine nach
+Dateisystemsprüfung, kleiner Größe, fehlender eigener OPC-Signatur und passender
+größerer OPC-Quelldatei belegte `~$*.docx/xlsx/pptx` wird übersprungen; ein
+echtes OPC-Dokument mit solchem Namen bleibt Quelle. Die UI nennt ausschließlich
+die Anzahl. Alle 16 echten Korpusdateien werden
+weiter rekursiv aufgenommen. Der absichtlich mehrdeutige Markdown-Fall bleibt
+weiterhin eine erwartete lokale Reviewentscheidung und ist kein stiller Fehler.
+
+Der App-Neustart projiziert außerdem keinen inaktiven historischen Lauf mehr als
+aktuellen Prozess. Start und neue Auswahl sind frei; alte fortsetzbare Läufe
+bleiben in der laufgebundenen Verlaufstabelle. Die technische Recoveryprüfung
+bleibt erhalten und darf verwaiste Sperren sowie unvollständige atomare Exporte
+reparieren. Ein tatsächlich lebender Worker bleibt exklusiv. Die vom echten
+Intake-Worker bestätigte Laufkennung wird unmittelbar an die aktuelle Sitzung
+gebunden, damit auch ein vor dem ersten Status-Poll beendeter Kurzlauf sichtbar
+bleibt. Admission-, Standalone-Service-, History-, Frontend-, Recovery- und
+adversarielle Golden-Tests sind lokal grün. Dieser Abschnitt beschreibt einen
+noch nicht als neues Paket gebundenen Entwicklungsstand; RC136 selbst bleibt
+unverändert.
 
 ## RC136 – geschlossene Cowork-Interaktionen und progressive Modellkontexte
 

@@ -205,7 +205,8 @@ function code(expected) { return (error) => error?.code === expected; }
       },
       startLocalIntakeExecutor(_queue, _profile, options) {
         reservation.releaseIntake(options.intakeReservationId);
-        return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
+        return { ok: true, local_intake_pending: true, batch_token: 'd'.repeat(64),
+          ipcAcknowledgement: Promise.resolve() };
       }
     });
     const observing = new StandaloneApplicationService({ dependencies: observedDependencies });
@@ -248,12 +249,19 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.deepEqual(notices, [{ token: markdown.token, generation: 71 }]);
     assert.doesNotMatch(JSON.stringify(terminalState), /observed_batch_id|batch_token|[a-f0-9]{64}/u);
     const freshDefault = new StandaloneApplicationService({ dependencies: observedDependencies });
-    assert.equal(freshDefault.status().selected_count, 1, 'without active work or an explicit observation, newest remains the default');
-    assert.equal(freshDefault.uiContext().latest_result_folder, secondRun);
+    assert.equal(freshDefault.status().selected_count, 0,
+      'without active work or an explicit History choice, an earlier run never becomes current after restart');
+    assert.equal(freshDefault.status().state, 'ready');
+    assert.equal(freshDefault.uiContext().latest_result_folder, '',
+      'older result folders remain available only through their exact History row');
     observing.admittedQueue = [{ name: 'next-source.txt' }];
     await observing.startAdmittedBatch({ profile: 'auto', processingMode: 'markdown-and-anonymize' });
-    assert.equal(observing.observedBatchId, null, 'a new intake leaves the previous history observation');
-    assert.equal(observing.status().selected_count, 1);
+    assert.equal(observing.observedBatchId, 'd'.repeat(64),
+      'a new intake binds the exact returned run even when it finishes before the first status poll');
+    assert.equal(observing.status().selected_count, 1,
+      'a just-confirmed run that is already terminal remains current before the first poll');
+    assert.equal(observing.uiContext().latest_result_folder, originalRun,
+      'the fast terminal run resolves its own result instead of a newer historical folder');
 
     // Restart and source retention do not lose summary or original destination.
     const retiredJournal = path.join(batch._test.batchRoot(), `${completed.token}.json`);
@@ -329,7 +337,8 @@ function code(expected) { return (error) => error?.code === expected; }
       assert.deepEqual([row.selected_count, row.result_count, row.failed_count, row.completed_count, row.review_count],
         [progress.batch_total, progress.released, progress.stopped, progress.completed, progress.deferred_review], JSON.stringify(items));
       assert.equal(row.resumable, !progress.complete, JSON.stringify(items));
-      assert.equal(row.status, progress.complete ? 'export_pending' :
+      assert.equal(row.status, progress.complete
+        ? (progress.released > 0 ? 'export_pending' : 'completed_without_results') :
         progress.batch_phase === 'awaiting_local_review' ? 'review_required' : 'stopped', JSON.stringify(items));
       assert.equal(row.results_available, false); assert.equal(row.ledger_available, false);
       const saved = JSON.parse(fs.readFileSync(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-run-history', `${candidate.token}.json`), 'utf8'));

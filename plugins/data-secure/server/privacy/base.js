@@ -23,8 +23,8 @@ const ORG_SUFFIX =
   '|UG(?:\\s*\\(haftungsbeschränkt\\))?)';
 
 const COMPANY_RE = new RegExp(
-  `${NB}([${UPPER}][A-Za-z0-9ÄÖÜäöüß&.'’+\\-/]*` +
-    `(?:[ \\t]+[${UPPER}0-9][A-Za-z0-9ÄÖÜäöüß&.'’+\\-/]*){0,7}` +
+  `${NB}([${UPPER}][\\p{L}\\p{M}\\p{N}&.'’+\\-/]*` +
+    `(?:[ \\t]+(?:[${UPPER}\\p{N}][\\p{L}\\p{M}\\p{N}&.'’+\\-/]*|[&+])){0,7}` +
     `[ \\t]+${ORG_SUFFIX})${NA}`,
   'gu'
 );

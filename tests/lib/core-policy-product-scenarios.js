@@ -56,8 +56,9 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
   };
   const packageText = entry => readOutput(entry.package_id, entry.read_capability, 0, 30000).text;
   const convertBuffer = channel === 'standalone'
-    ? (bytes, extension) => Promise.resolve(
-      require(path.join(server, 'standalone', 'markdown-extractor')).extractMarkdownBuffer(bytes, extension))
+    ? (bytes, extension, options) => Promise.resolve(
+      require(path.join(server, 'standalone', 'markdown-extractor')).extractMarkdownBuffer(bytes, extension,
+        options?.omitDocxHeaderFooter === true ? { omitDocxHeaderFooter: true } : {}))
     : undefined;
   const packageBody = entry => {
     const text = packageText(entry), divider = text.indexOf('-->\n\n');
@@ -66,16 +67,16 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
     assert.deepEqual(pii.scanResidual(body, profile), []);
     return body;
   };
-  const standaloneDocxNotice = '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. ' +
-    'Der lokale Konverter bestätigt die Extraktionsabdeckung; die Originaldatei selbst bleibt unverändert.\n\n';
+  const docxScopeNotice = '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. ' +
+    'Die DOCX-Struktur wurde vollständig geprüft; der freigegebene Dokumentumfang enthält bewusst keine Kopf- und Fußzeilen.\n\n';
   const semanticBodies = entries => canonicalizeBodies(entries.map((entry) => {
     const body = packageBody(entry);
-    if (channel !== 'standalone' || entry.format !== 'docx') return body;
-    assert.ok(body.startsWith(standaloneDocxNotice), 'Standalone DOCX must disclose its Markdown-only privacy scope');
+    if (entry.format !== 'docx') return body;
+    assert.ok(body.startsWith(docxScopeNotice), 'DOCX privacy output must disclose its Markdown-only policy scope');
     // The conversion boundary makes Office text inert Markdown. Remove only
     // that known presentation escaping for the cross-product semantic oracle;
     // the package-level tests retain byte-exact coverage of the visible form.
-    return body.slice(standaloneDocxNotice.length)
+    return body.slice(docxScopeNotice.length)
       .replace(/\\([\\`*_[\]{}()#+.!|])/gu, '$1')
       .replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
   }));

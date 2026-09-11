@@ -1,6 +1,6 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 11.09.2026 · Entscheidungen DS-075 bis DS-099 · Steuerung über BL-010.9
+Stand: 11.09.2026 · Entscheidungen DS-075 bis DS-100 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
 

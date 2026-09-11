@@ -119,6 +119,20 @@ test('selected source must be an absolute regular supported file', () => {
   assert.strictEqual(validateSelectedPath(longMarkdown, { allowedTypes: ['md'] }).sourceType, 'md');
 });
 
+test('proven Office owner files are rejected across OPC types while real ~$ documents remain sources', () => {
+  for (const [extension, sourceType] of [['docx', 'docx'], ['xlsx', 'xlsx'], ['PPTX', 'pptx']]) {
+    const source = path.join(root, `04-opened-${sourceType}.${extension}`);
+    const owner = path.join(root, `~$-opened-${sourceType}.${extension}`);
+    fs.writeFileSync(source, Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(64)]));
+    fs.writeFileSync(owner, 'owner');
+    assert.throws(() => validateSelectedPath(owner), (error) => error.code === 'SOURCE_ARTIFACT_IGNORED');
+    const legitimate = path.join(root, `~$legitimate-${sourceType}.${extension}`);
+    fs.writeFileSync(legitimate, Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(32)]));
+    assert.equal(validateSelectedPath(legitimate).sourceType, sourceType,
+      'a real OPC document is never ignored by name alone');
+  }
+});
+
 test('linux picker falls back locally and validates the result', () => {
   const source = path.join(root, 'scan.pdf');
   fs.writeFileSync(source, 'synthetic pdf');

@@ -13,6 +13,7 @@ const messages = {
   SOURCE_FOLDER_SIZE_LIMIT: 'Die unterstützten Dateien im Ordner sind zusammen größer als 500 MB. Bitte einen kleineren Stapel auswählen.',
   SOURCE_FOLDER_UNSUPPORTED_FILES: 'Der Ordner enthält mindestens eine nicht unterstützte Datei. Es wurde nichts übernommen; bitte diese Datei entfernen oder einen passenderen Ordner wählen.',
   SOURCE_FOLDER_EMPTY: 'In diesem Ordner und seinen Unterordnern wurden keine unterstützten Dateien gefunden.',
+  SOURCE_ARTIFACT_IGNORED: 'Temporäre Office-Sperrdateien sind keine Dokumente. Bitte die eigentliche Word-, Excel- oder PowerPoint-Datei auswählen.',
   STANDALONE_SELECTION_PREPARED: 'Eine Auswahl ist bereits vorbereitet. Bitte starten oder die Auswahl verwerfen, bevor du neue Dateien hinzufügst.',
   STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam ausgewählt werden.',
   STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
@@ -402,7 +403,10 @@ function renderAdmission(result) {
   byId('home-selection').hidden = false;
   const size = Number.isSafeInteger(result.total_bytes) ? ` · ${Math.ceil(result.total_bytes / 1024)} KB` : '';
   const recursive = result.ui_context?.source_kind === 'folder' ? ' · einschließlich Unterordnern' : '';
-  byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size}${recursive} · vollständig lokal`;
+  const ignored = Number.isSafeInteger(result.ignored_artifact_count) && result.ignored_artifact_count > 0
+    ? ` · ${result.ignored_artifact_count} temporäre Office-Datei${result.ignored_artifact_count === 1 ? '' : 'en'} übersprungen`
+    : '';
+  byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size}${recursive}${ignored} · vollständig lokal`;
   byId('summary').hidden = false;
   status('Auswahl bereit', 'Einmal starten – danach läuft der Stapel ohne weitere Bestätigung.');
   visible('select-files', false); visible('select-folder', false); visible('start', true); visible('cancel', true);

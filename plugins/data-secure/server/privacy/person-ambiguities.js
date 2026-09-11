@@ -106,7 +106,19 @@ function personProseAmbiguities(originalText, anonymizedText) {
   for (const candidate of personProseCandidateSpans(original)) {
     const originalStart = candidate.start;
     const originalEnd = candidate.end;
-    const mapped = mappedPreservedRange(preserved, originalStart, originalEnd);
+    let mapped = mappedPreservedRange(preserved, originalStart, originalEnd);
+    if (!mapped || anonymized.slice(mapped.start, mapped.end) !== candidate.value) {
+      // Many earlier placeholders plus Markdown canonicalisation can make a
+      // large surviving fragment impossible to align byte-for-byte. Never let
+      // that presentation difference suppress a real, still-visible review
+      // candidate. Select the nearest exact surviving occurrence; the result
+      // remains fail-closed and the UI still receives precise output offsets.
+      const occurrences = literalOccurrences(anonymized, candidate.value)
+        .filter((item) => !used.has(`${item.start}:${item.end}`));
+      const projected = original.length ? Math.round(originalStart / original.length * anonymized.length) : 0;
+      mapped = occurrences.sort((left, right) =>
+        Math.abs(left.start - projected) - Math.abs(right.start - projected) || left.start - right.start)[0] || null;
+    }
     if (!mapped || anonymized.slice(mapped.start, mapped.end) !== candidate.value) continue;
     const key = `${mapped.start}:${mapped.end}`;
     if (used.has(key)) continue;
@@ -122,6 +134,16 @@ function personProseAmbiguities(originalText, anonymizedText) {
     });
   }
   return candidates;
+}
+
+function literalOccurrences(text, value) {
+  const out = [];
+  let offset = 0;
+  while ((offset = String(text).indexOf(value, offset)) >= 0) {
+    out.push({ start: offset, end: offset + value.length });
+    offset += Math.max(1, value.length);
+  }
+  return out;
 }
 
 module.exports = { personProseCandidateSpans, personProseAmbiguities };

@@ -1,9 +1,11 @@
 # Release- und Distributionsvertrag
 
-Stand: 11.09.2026 · 3.2.0-rc136
+Stand: 11.09.2026 · 3.2.0-rc137
 
-Der aktuelle Quellstand ist RC136. Sein Windows-x64-Cowork-Kandidat ist an den
-sauberen, auf `main` veröffentlichten Quellcommit
+Der aktuelle Quellstand ist RC137-Entwicklungsstand. Er wird erst nach sauberem
+Commit, bestandenem Windows-PKG-04/INT-13 und den nativen Zielplattformbauten
+als neuer Paketkandidat veröffentlicht. Der Windows-x64-Cowork-Kandidat RC136
+bleibt an den sauberen, auf `main` veröffentlichten Quellcommit
 `71ecafddde891d9d1b4e4bd9cd67833b46d03b08` gebunden. RC135 bleibt getrennt
 der letzte plattformübergreifend paketgebundene Stand für Standalone sowie
 Cowork auf Windows und beiden Mac-Architekturen.

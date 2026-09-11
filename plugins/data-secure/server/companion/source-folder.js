@@ -8,7 +8,7 @@ const { LIMITS, hasReparseComponent, hasReparseComponentAsync, isManagedStagingP
 const { visibleResultTreeOverlaps } = require('../gateway/result-folder-config');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 const { windowsFolderDialogScript } = require('./windows-folder-dialog');
-const { SOURCE_TYPES, validateSelectedPath, validateSelectedPathAsync, selectionCancelledError, runPickerAsync, throwIfSelectionAborted, WINDOWS_PICKER_UTF8, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
+const { SOURCE_TYPES, sourceArtifactReason, sourceArtifactReasonAsync, validateSelectedPath, validateSelectedPathAsync, selectionCancelledError, runPickerAsync, throwIfSelectionAborted, WINDOWS_PICKER_UTF8, pickerOutputMaxBuffer, documentedNativeCancellation } = require('./file-picker');
 
 const SOURCE_FOLDER_TITLE = 'Ordner mit DataSecure lokal verarbeiten';
 const SOURCE_FOLDER_CANCELLED = '__DATASECURE_SOURCE_FOLDER_CANCELLED__';
@@ -166,6 +166,11 @@ function enumerateSourceFolder(root, options = {}) {
         continue;
       }
       if (!stat.isFile()) throw new SafeError('Der ausgewählte Ordner enthält ein nicht unterstütztes Dateisystemobjekt.');
+      const artifactReason = sourceArtifactReason(full, { fs: io, stat });
+      if (artifactReason) {
+        options.onIgnoredArtifact?.(artifactReason);
+        continue;
+      }
       regularFiles++;
       const sourceType = SOURCE_TYPES[path.extname(entry.name).toLowerCase()];
       if (!sourceType || !allowed.has(sourceType)) {
@@ -283,6 +288,12 @@ async function enumerateSourceFolderAsync(root, options = {}) {
       }
       else {
         if (!stat.isFile()) throw new SafeError('Der ausgewählte Ordner enthält ein nicht unterstütztes Dateisystemobjekt.');
+        const artifactReason = await sourceArtifactReasonAsync(full, { fs: io, fsPromises: asyncIo, stat });
+        if (artifactReason) {
+          options.onIgnoredArtifact?.(artifactReason);
+          await checkpoint();
+          continue;
+        }
         regularFiles++;
         const sourceType = SOURCE_TYPES[path.extname(entry.name).toLowerCase()];
         if (sourceType && allowed.has(sourceType)) {

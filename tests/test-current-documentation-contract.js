@@ -75,8 +75,15 @@ test('release truth binds the published candidate while keeping human approval s
   assert.ok(match, `release candidate version expected, got ${version}`);
   const currentRc = `RC${match[1]}`;
   assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}`, 'u'));
-  assert.match(release, new RegExp(`${currentRc}[\\s\\S]{0,500}Windows-x64-Cowork-Kandidat[\\s\\S]{0,500}71ecafddde891d9d1b4e4bd9cd67833b46d03b08`, 'u'));
-  assert.ok(release.includes(`releases/tag/v${version}`), 'current Cowork release link must match package version');
+  const boundCowork = /Windows-x64-Cowork-Kandidat (RC(\d+))[\s\S]{0,500}?Quellcommit\s+`([0-9a-f]{40})`/u.exec(release);
+  assert.ok(boundCowork, 'release truth must name one commit-bound Windows Cowork candidate');
+  const publishedVersion = version.replace(/rc\d+$/iu, `rc${boundCowork[2]}`);
+  assert.ok(release.includes(`releases/tag/v${publishedVersion}`),
+    'published Cowork release link must match the explicitly bound candidate');
+  if (boundCowork[1] !== currentRc) {
+    assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}-Entwicklungsstand`, 'u'),
+      'a newer unbound source RC must remain explicitly marked as development state');
+  }
   assert.match(release, /RC135 bleibt getrennt[\s\S]{0,180}letzte plattformübergreifend paketgebundene Stand/u);
   assert.match(release, /RC135 ist als plattformübergreifender technischer Vorabkandidat/u);
   assert.match(release, /releases\/tag\/v3\.2\.0-rc135/u);

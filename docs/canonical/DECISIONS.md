@@ -1586,3 +1586,32 @@ Vorbereitung, bewerteten Schritt und Aufräumen; „frische Sitzung“ schließt
 Vorbereitung innerhalb derselben Sitzung ein.
 DS-099 präzisiert DS-012, DS-041, DS-067, DS-069, DS-078, DS-092 und DS-097 und
 wird unter BL-041.10 bis BL-041.13 geführt.
+
+## DS-100 – Standalone trennt aktuelle Sitzung, Historie und fremde Office-Artefakte
+
+Am 11.09.2026 nach realem RC136-Härtetest sowie Architektur-, Sicherheits- und
+Testgegenreview festgelegt: Ein inaktiver historischer Lauf wird nach einem
+App-Neustart nicht als aktueller Arbeitslauf projiziert. Die Startseite ist
+sofort für eine neue Auswahl bereit; fortsetzbare ältere Läufe bleiben mit
+ihrem exakten Status ausschließlich im **Verlauf** erreichbar. Ein in derselben
+Sitzung gestarteter oder dort ausdrücklich fortgesetzter Lauf bleibt dagegen
+bis zu seinem terminalen Zustand an die Prozesskarte gebunden.
+
+Die technische Startinitialisierung bleibt fail-closed erhalten. Sie bereinigt
+verwaiste Sperren, prüft unvollständige atomare Veröffentlichungen und ermittelt
+einen tatsächlich noch lebenden Worker. Diese Konsistenzprüfung darf keinen
+inaktiven Lauf automatisch fortsetzen oder dessen Ergebnisordner als aktuellen
+Ordner öffnen. Ein wirklich lebender Worker behält die Ein-Stapel-Exklusivität
+und blockiert eine zweite Verarbeitung.
+
+Microsoft-Office-Besitzerdateien der eng geschlossenen Form
+`~$*.docx`, `~$*.xlsx` und `~$*.pptx` sind keine Quellen. Der Name allein ist
+jedoch kein Beweis: Übersprungen wird nur eine kleine, selbst nicht als OPC-ZIP
+erkennbare Datei, für die im selben Ordner die größere passende OPC-Quelldatei
+existiert. Link-/Dateitypprüfungen laufen vorher; die UI zeigt ausschließlich
+die Anzahl. Eine direkte Auswahl eines so belegten Artefakts wird mit einem
+festen Fehlercode abgewiesen. Ein echtes OPC-Dokument mit `~$`-Namen bleibt
+Quelle. Beliebige versteckte, Backup- oder nicht unterstützte Dateien werden
+nicht pauschal ignoriert, weil sie fachliche Quelldaten enthalten können; für
+sie bleibt die Aufnahme fail-closed. DS-100 präzisiert DS-076,
+DS-082, DS-086, DS-092 und DS-097 und wird unter BL-010.35 geführt.

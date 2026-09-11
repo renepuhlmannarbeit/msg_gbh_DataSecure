@@ -65,6 +65,21 @@ Dateimanager des Betriebssystems; diese Bestätigung erscheint getrennt vom
 fachlichen Laufstatus. Die Zuordnungsaktion markiert unter Windows und macOS
 die konkrete CSV-Datei, unter Linux öffnet sie deren Ordner.
 
+Nach einem App-Neustart bleibt die aktuelle Prozesskarte bewusst leer und die
+neue Auswahl sofort verfügbar. Fortsetzbare ältere Läufe werden nicht erneut
+als aktueller Lauf geladen; sie stehen mit **Fortsetzen** in ihrer exakten
+Verlaufszeile. Die lokale Startprüfung läuft dennoch kurz fail-closed, um
+verwaiste Sperren oder unvollständige Exporte zu bereinigen. Nur ein tatsächlich
+noch lebender Worker blockiert eine parallele zweite Verarbeitung.
+
+Ist ein Office-Dokument noch in Word, Excel oder PowerPoint geöffnet, kann im
+Quellordner eine `~$`-Besitzerdatei liegen. Die rekursive Aufnahme überspringt
+sie nur, wenn Größe, fehlende OPC-Signatur und die passende größere
+OPC-Quelldatei das Artefakt gemeinsam belegen, und zeigt nur deren Anzahl. Ein
+echtes Office-Dokument wird nie allein wegen seines Namens verworfen; die
+eigentliche Datei bleibt im Stapel. Eine direkte Auswahl einer belegten
+Besitzerdatei wird verständlich abgewiesen.
+
 Entwickler bauen und prüfen die Hülle mit:
 
 ```powershell

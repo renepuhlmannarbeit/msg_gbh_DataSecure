@@ -296,7 +296,7 @@ async function pickerTimerCancellationCase() {
 
 async function selectionEditingCase() {
   const harness = await frontendHarness({
-    select_files: () => ({ selected_count: 2, total_bytes: 8,
+    select_files: () => ({ selected_count: 2, total_bytes: 8, ignored_artifact_count: 1,
       ui_context: localContext('Lauf-1', ['Quelle.docx', 'Notiz.md']) }),
     remove_admitted_source: ({ selectionIndex }) => {
       assert.strictEqual(selectionIndex, 1, 'the grouped display retains the original queue index');
@@ -307,6 +307,7 @@ async function selectionEditingCase() {
   });
   await harness.click('task-markdown');
   await harness.click('select-files');
+  assert.match(harness.elements.summary.textContent, /1 temporäre Office-Datei übersprungen/u);
   assert.strictEqual(harness.elements['selection-list'].hidden, false);
   assert.strictEqual(harness.elements['selection-list'].children.length, 4);
   assert.match(harness.elements['selection-list'].children[0].textContent, /Direkt lesbare Textdateien \(1\)/u);

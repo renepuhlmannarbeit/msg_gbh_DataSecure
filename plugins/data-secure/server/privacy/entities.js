@@ -24,7 +24,7 @@ const {
 // Lower/mixed-case variants are accepted only as a whole labelled value, a
 // party-list segment, or a complete standalone line. In particular, ordinary
 // prose connectors such as "und" never establish company context themselves.
-const COMPANY_WORD = "[A-Za-z0-9ÄÖÜäöüß&.'’+\\-/]+";
+const COMPANY_WORD = "[\\p{L}\\p{M}\\p{N}&.'’+\\-/]+";
 const SEGMENT_COMPANY_RE = new RegExp(
   `^[ \\t]*(?:die[ \\t]+)?(${COMPANY_WORD}(?:[ \\t]+${COMPANY_WORD}){0,7}[ \\t]+${ORG_SUFFIX})` +
     `(?=[ \\t]*(?:$|[.,;:]|\\(|[-–—]|vertreten\\b|nachfolgend\\b))`,
@@ -47,6 +47,14 @@ const PARTY_CLAUSE_RE =
 // such as "Testmanager für Fiktive Gesundheit GmbH" could be consumed as one
 // organisation by the deliberately broad standalone-line matcher.
 const PROFESSIONAL_ORG_PREFIX_RE = /^(?:(?:Senior\s+|Lead\s+)?(?:Product\s+Owner|Scrum\s+Master|Software\s+Engineer|Softwareentwickler(?:in)?|Entwickler(?:in)?|Entwicklung|Softwareentwicklung|Architektur|Konzeption|Beratung|Testmanager(?:in)?|Testmanagement|Tester(?:in)?(?:\s+im\s+Projekt)?|Training|Aufgaben|Projekt|Business\s+Analyst(?:in)?|QA\s+Engineer|IT-?Projektleiter(?:in)?|FHIR-(?:Entwickler(?:in)?|Entwicklung))|Worked|Employed|Working)\s+(?:für|bei|at|for|with)\s+/iu;
+// The permissive standalone-line matcher is needed for legitimately lower-case
+// brands, but it must not absorb a named sentence subject into the company.
+// Keep this rule semantic and bounded: strip the prefix only when the subject
+// itself has a person-name shape and an explicit employment connector follows.
+// This prevents "Max Mustermann arbeitet bei Nordstern GmbH" from becoming one
+// giant organisation and leaving a later occurrence of the person in clear.
+const PERSON_EMPLOYMENT_ORG_PREFIX_RE =
+  /^(.{2,100}?)\s+(?:arbeitet(?:e)?|wirkt(?:e)?|ist\s+tätig|war\s+tätig|works?|worked|is\s+employed|was\s+employed)\s+(?:bei|für|at|for|with)\s+(.+)$/iu;
 const STRONG_SUFFIXLESS_ORG_LABEL_RE =
   /^(?:Vertragspartei|Vertragspartner(?:in)?|Auftraggeber(?:in)?|Auftragnehmer(?:in)?|Kunde|Unternehmen|Firma|Organisation|Company|Organization|Employer(?:\s+Name)?|Customer(?:\s+Organization)?|Contract\s+party|Client|Vendor|Supplier)\s*:/iu;
 const LABELLED_PROPER_NAME_PREFIX_RE = new RegExp(
@@ -59,6 +67,13 @@ function labelledOrganizationValue(value) {
   const clean = normalizeSpaces(value).replace(/[.,;:]\s*$/u, '');
   if (!clean || clean.length > 160 || clean.startsWith('[') || /[<>]/u.test(clean)) return null;
   return clean;
+}
+
+function stripOrganizationContextPrefix(value) {
+  let candidate = String(value || '').replace(PROFESSIONAL_ORG_PREFIX_RE, '');
+  const employment = candidate.match(PERSON_EMPLOYMENT_ORG_PREFIX_RE);
+  if (employment && looksName(stripHonorifics(employment[1]))) candidate = employment[2];
+  return candidate;
 }
 
 const CLAUSE_ABBREVIATIONS = new Set([
@@ -120,7 +135,7 @@ function collectContextOrganizations(text) {
         !/^(?:Zertifikat|Bescheinigung|Certificate|Credential)\s+(?:für|for)\s+/iu.test(trimmed)) candidates.push(trimmed);
     for (const candidate of candidates) {
       const organizationCandidate = (!table && !labelled && !clause)
-        ? candidate.replace(PROFESSIONAL_ORG_PREFIX_RE, '')
+        ? stripOrganizationContextPrefix(candidate)
           // A compact credential followed by "bei" names a separate party,
           // not one very long legal-form company including the title.
           .replace(/^[^,;\n]{0,100}\b(?:Expert|Professional|Tester|Practitioner|Zertifikat)\s+bei\s+/iu, '')
@@ -627,7 +642,7 @@ function collectContextualNameCandidates(text, profile) {
   const out = [];
   const before =
     /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/iu;
-  const after = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b/i;
+  const after = /^\s*(?:(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b|(?:arbeitet(?:e)?|wirkt(?:e)?|ist\s+tätig|war\s+tätig|works?|worked|is\s+employed|was\s+employed)\s+(?:bei|für|at|for|with)\b)/iu;
   // Contracts and customer records name the counterparty through connectors
   // rather than honorifics: "Vertrag zwischen Alpha GmbH und Max Mustermann".
   const contractual =
@@ -652,7 +667,12 @@ function collectContextualNameCandidates(text, profile) {
         const start = window[0].start;
         const end = window[window.length - 1].end;
         const { from, to } = lineBoundsAt(src, start);
-        if (isStructuralLine(src.slice(from, to))) continue;
+        const sourceLine = src.slice(from, to);
+        // A block quote is presentation, not a privacy boundary. Explicit
+        // person context inside quoted correspondence must stay detectable.
+        // Other Markdown structures remain excluded to avoid reclassifying
+        // headings and generic list labels as people.
+        if (isStructuralLine(sourceLine) && !/^\s*>/u.test(sourceLine)) continue;
 
         const ctxBefore = src.slice(Math.max(0, start - 45), start);
         const ctxAfter = src.slice(end, end + 30);
@@ -722,7 +742,7 @@ function collectOrganizations(text) {
   COMPANY_RE.lastIndex = 0;
   let m;
   while ((m = COMPANY_RE.exec(text))) {
-    const v = normalizeSpaces(m[1].replace(PROFESSIONAL_ORG_PREFIX_RE, ''));
+    const v = normalizeSpaces(stripOrganizationContextPrefix(m[1]));
     if (v) out.push(v);
   }
   return [...new Set(out.map((value) => value.replace(/^Bei\s+/u, '')))];

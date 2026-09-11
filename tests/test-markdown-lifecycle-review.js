@@ -16,6 +16,13 @@ async function probe(scenario, root) {
   const { readMarkdownArtifact, artifactRoot } = require('../plugins/data-secure/server/standalone/markdown-store');
   const { saveConfiguredResultRoot } = require('../plugins/data-secure/server/gateway/result-folder-config');
   const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
+  const { createRunHistory } = require('../plugins/data-secure/server/standalone/run-history');
+  const runHistory = createRunHistory({
+    readStates: batch.readStandaloneHistoryStates,
+    readExports: require('../plugins/data-secure/server/gateway/result-export').readStandaloneExportHistory,
+    recoverableStates: batch.standaloneRecoverableStates,
+    liveExecutor: require('../plugins/data-secure/server/gateway/batch-active-lock').liveLocalExecutor
+  });
   const token = 'c'.repeat(64);
   const raw = '# Auftrag\nName: Max Mustermann\nArbeitgeber: Nordstern Medizin GmbH\n';
   const source = path.join(root, 'synthetic.md');
@@ -47,13 +54,17 @@ async function probe(scenario, root) {
       },
       beforePublish: async () => { pipelineRuns++; }
     };
-    const statusSnapshot = () => {
-      const snapshot = batch.productStatusSnapshot('standalone');
-      return { current: { ...snapshot.recovery, engine_ready: true }, latest: snapshot.latest };
+    const statusSnapshot = (selectedBatchId) => {
+      const snapshot = batch.productStatusSnapshot('standalone', { localUiSelection: true, selectedBatchId });
+      return { current: { ...snapshot.recovery, engine_ready: true }, latest: snapshot.latest,
+        observed_batch_id: snapshot.observed_batch_id, observed_is_active: snapshot.observed_is_active,
+        observed_recoverable: snapshot.observed_recoverable };
     };
     const app = new StandaloneApplicationService({ dependencies: {
       publicStatusSnapshot: statusSnapshot, lightweightStatus: () => statusSnapshot().current,
-      continueMostRecentBatch: batch.continueMostRecentBatch,
+      runHistory, continueStandaloneBatch: batch.continueStandaloneBatch,
+      reserveIntake: require('../plugins/data-secure/server/gateway/batch-intake-reservation').reserveIntake,
+      releaseIntake: require('../plugins/data-secure/server/gateway/batch-intake-reservation').releaseIntake,
       startLocalBatchExecutor(batchToken) {
         starts++;
         const claimed = batch.claimLocalBatchExecutor(batchToken, process.pid);
@@ -99,7 +110,9 @@ async function probe(scenario, root) {
     const before = app.status();
     const checkpoint = batch._test.readState(token).items[0];
     let continued, failure;
-    try { continued = await app.continueCurrentBatch(); } catch (error) { failure = error.code; }
+    // A fresh desktop session does not project a historical interrupted run as
+    // the current process card. Resume that exact run through History instead.
+    try { continued = await app.continueHistoryBatch(token); } catch (error) { failure = error.code; }
     if (execution) await execution;
     const after = batch._test.readState(token);
     const exported = batch.exportCompletedBatchResults(token);
@@ -174,12 +187,15 @@ async function probe(scenario, root) {
     const latest = batch.productStatusSnapshot('standalone');
     const app = new StandaloneApplicationService({ dependencies: {
       publicStatusSnapshot: () => ({ current: { ...latest.recovery, engine_ready: true }, latest: latest.latest }),
-      lightweightStatus: () => ({ ...latest.recovery, engine_ready: true })
+      lightweightStatus: () => ({ ...latest.recovery, engine_ready: true }), runHistory
     } });
+    const status = app.status();
+    const historical = app.history().entries.find(entry => entry.batch_id === token);
     return { ok: result.ok, error: result.error, conversions, complete: result.complete,
       statuses: state.items.map(item => item.status), codes: state.items.map(item => item.error_code),
       recoverable: batch.recoverableBatchStatus().recoverable_batches,
-      resume_ok: batch.resumeBatch(token).ok, termination_unconfirmed: app.status().termination_unconfirmed,
+      resume_ok: batch.resumeBatch(token).ok, current_state: status.state,
+      history_status: historical?.status,
       originals_unchanged: sources.every(full => fs.readFileSync(full, 'utf8') === raw) };
   }
   if (state.items[0].status !== 'released') return {
@@ -203,21 +219,26 @@ async function probe(scenario, root) {
       result_count: batch.latestProductBatchStatus('standalone').result_count,
       source_unchanged: fs.readFileSync(source, 'utf8') === raw };
   }
-  const statusSnapshot = () => {
-    const snapshot = batch.productStatusSnapshot('standalone');
-    return { current: { ...snapshot.recovery, engine_ready: true }, latest: snapshot.latest };
+  const statusSnapshot = (selectedBatchId) => {
+    const snapshot = batch.productStatusSnapshot('standalone', { localUiSelection: true, selectedBatchId });
+    return { current: { ...snapshot.recovery, engine_ready: true }, latest: snapshot.latest,
+      observed_batch_id: snapshot.observed_batch_id, observed_is_active: snapshot.observed_is_active,
+      observed_recoverable: snapshot.observed_recoverable };
   };
   const app = new StandaloneApplicationService({ dependencies: {
     publicStatusSnapshot: statusSnapshot,
-    lightweightStatus: () => statusSnapshot().current
+    lightweightStatus: () => statusSnapshot().current,
+    runHistory
   } });
   probeStage = 'app-status';
   const status = app.status();
+  const historical = app.history().entries.find(entry => entry.batch_id === token);
   return { complete: result.complete, released: result.released,
     mode: state.processing_mode, stored_raw: stored.markdown === raw,
     anonymized: stored.manifest.anonymized, privacy_receipt: Object.hasOwn(state, 'terminal_evidence'),
     pseudonym_state: Object.keys(state).some(key => key.startsWith('pseudonym_')),
     visible: visible.available, state: status.state, result_count: status.result_count,
+    history_state: historical?.status, history_result_count: historical?.result_count,
     original_unchanged: fs.readFileSync(source, 'utf8') === raw };
 }
 
@@ -265,11 +286,12 @@ if (process.argv[2] === '--probe') {
       return JSON.parse(child.stdout);
     } finally { cleanup(root); }
   }
-  test('real v5 executor publishes raw Markdown without privacy state and the application shows the result', () => {
+  test('real v5 executor publishes raw Markdown and a fresh application keeps it in History', () => {
     assert.deepStrictEqual(run('complete'), {
       complete: true, released: 1, mode: 'markdown-only', stored_raw: true,
       anonymized: false, privacy_receipt: false, pseudonym_state: false,
-      visible: true, state: 'results_available', result_count: 1, original_unchanged: true
+      visible: true, state: 'ready', result_count: 0,
+      history_state: 'results_available', history_result_count: 1, original_unchanged: true
     });
   });
   test('a missing publication target can resume without an unverified dm locator in retry state', () => {
@@ -298,7 +320,8 @@ if (process.argv[2] === '--probe') {
         ok: false, error: 'CONVERSION_TERMINATION_UNCONFIRMED', conversions: scenario.startsWith('restored') ? 0 : 1,
         complete: true, statuses: ['stopped', 'stopped'],
         codes: ['CONVERSION_TERMINATION_UNCONFIRMED', 'CONVERSION_TERMINATION_UNCONFIRMED'],
-        recoverable: 0, resume_ok: false, termination_unconfirmed: true, originals_unchanged: true
+        recoverable: 0, resume_ok: false, current_state: 'ready',
+        history_status: 'completed_without_results', originals_unchanged: true
       });
     });
   }
@@ -325,9 +348,9 @@ if (process.argv[2] === '--probe') {
     }
   });
   for (const version of ['v4', 'v5']) {
-    test(`${version}: real post-publication recovery is shown as resumable and one Continue completes delivery`, () => {
+    test(`${version}: real post-publication recovery stays in History and one exact Continue completes delivery`, () => {
       assert.deepStrictEqual(run(`crash-${version}`), {
-        injected: true, interrupted: true, checkpoint: 'processing', before: 'stopped', recoverable: 1,
+        injected: true, interrupted: true, checkpoint: 'processing', before: 'ready', recoverable: 1,
         continued: true, failure: null, starts: 1, pipelineRuns: 1, item: 'released',
         mode: version === 'v4' ? 'markdown-and-anonymize' : 'markdown-only', exported: true,
         after: 'results_available', original_unchanged: true

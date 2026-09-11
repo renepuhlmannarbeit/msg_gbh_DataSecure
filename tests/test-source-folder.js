@@ -91,6 +91,26 @@ test('a mixed tree is rejected as a whole instead of silently selecting supporte
   });
 });
 
+test('known Office owner files are reported and skipped without weakening whole-tree validation', () => {
+  const root = clean('office-owner-files');
+  fs.mkdirSync(path.join(root, 'word'));
+  fs.writeFileSync(path.join(root, 'word', '04-report.docx'), Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(64)]));
+  fs.writeFileSync(path.join(root, 'word', '~$-report.docx'), 'owner');
+  fs.writeFileSync(path.join(root, 'word', '~$legitimate.docx'), Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(32)]));
+  fs.writeFileSync(path.join(root, 'notes.txt'), 'synthetic notes');
+  const ignored = [];
+  const selected = enumerateSourceFolder(root, {
+    hasReparseComponent: () => false,
+    onIgnoredArtifact: (reason) => ignored.push(reason)
+  });
+  assert.deepStrictEqual(selected.map((entry) => entry.sourceLabel),
+    ['notes.txt', 'word/~$legitimate.docx', 'word/04-report.docx']);
+  assert.deepStrictEqual(ignored, ['office_owner_file']);
+  fs.writeFileSync(path.join(root, '.private-backup'), 'must remain fail-closed');
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false }),
+    (error) => error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES');
+});
+
 test('any link or special traversal ambiguity rejects the whole tree before admission', () => {
   const root = clean('links');
   const outside = clean('outside');
@@ -249,6 +269,18 @@ async function main() {
       assert.doesNotMatch(error.message, /supported|blocked|\.md|\.pdf/iu);
       return true;
     });
+  });
+  await testAsync('async recursive intake excludes Office owner files and exposes only a bounded reason', async () => {
+    const root = clean('async-office-owner-file');
+    fs.writeFileSync(path.join(root, '04-workbook.xlsx'), Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(64)]));
+    fs.writeFileSync(path.join(root, '~$-workbook.xlsx'), 'owner');
+    const ignored = [];
+    const selected = await enumerateSourceFolderAsync(root, {
+      allowedTypes: ['xlsx'], hasReparseComponentAsync: async () => false,
+      onIgnoredArtifact: (reason) => ignored.push(reason)
+    });
+    assert.deepStrictEqual(selected.map((entry) => entry.sourceLabel), ['04-workbook.xlsx']);
+    assert.deepStrictEqual(ignored, ['office_owner_file']);
   });
   await testAsync('a selected root replacement during async listing rejects the complete queue', async () => {
     const root = clean('async-root-swap');

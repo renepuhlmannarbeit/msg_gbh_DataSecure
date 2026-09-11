@@ -116,7 +116,7 @@ function selectionCounts(message){
   return match?{total:Number(match[1]),rejected:Number(match[2])}:undefined;
 }
 function selectionPolicyFailure(error){
-  return error instanceof SafeError&&(!error.code||/^SOURCE_FOLDER_(?:FILE_LIMIT|SIZE_LIMIT|UNSUPPORTED_FILES|EMPTY)$/u.test(error.code));
+  return error instanceof SafeError&&(!error.code||/^SOURCE_FOLDER_(?:FILE_LIMIT|SIZE_LIMIT|UNSUPPORTED_FILES|EMPTY)$/u.test(error.code)||error.code==='SOURCE_ARTIFACT_IGNORED');
 }
 function acquireNativeInteraction(owner){
   if(nativeInteractionOwner!==null)return false;

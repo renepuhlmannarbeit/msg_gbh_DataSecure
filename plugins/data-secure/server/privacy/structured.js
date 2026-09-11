@@ -43,6 +43,10 @@ const FOLLOWING_EMAIL_RE = new RegExp(EMAIL_RE.source, EMAIL_RE.flags.replace('g
 // German postcode and city. Keep this semantic exclusion beside the detector
 // so the postal regex remains line-local and the gate shares the same rule.
 const POSTAL_QUANTITY_RE = /^\d{5}[ \t]+(?:Euro|EUR|Stück|Stueck|Punkte|Stunden|Tage|Monate|Jahre|Prozent|Einwohner|Exemplare|Teile|kg|km|qm|m²|Liter)(?:[ \t]|$)/iu;
+// Five-digit standard numbers are not German postcodes. The surrounding
+// standards marker is intentionally checked outside the matched value so real
+// addresses such as "ISO Consult, 20457 Hamburg" remain detectable.
+const POSTAL_STANDARD_CONTEXT_RE = /(?:^|[^\p{L}\p{N}_])(?:ISO|IEC|DIN|EN)[ \t]*$/iu;
 const MONTH_YEAR_STREET_FALSE_POSITIVE_RE = /^Im[ \t]+(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)[ \t]+\d{4}$/iu;
 
 // A Markdown converter may preserve URI punctuation with a preceding
@@ -240,7 +244,8 @@ const DETECTORS = [
     re: POSTAL_ADDRESS_RE,
     placeholder: '[LOCATION_REDACTED]',
     priority: 76,
-    accept: (value) => !POSTAL_QUANTITY_RE.test(value)
+    accept: (value, text, index) => !POSTAL_QUANTITY_RE.test(value) &&
+      !POSTAL_STANDARD_CONTEXT_RE.test(text.slice(Math.max(0, index - 12), index))
   }
 ];
 

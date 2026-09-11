@@ -1,9 +1,11 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC136
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC137
 
-Der Quellstand ist RC136. Das Windows-x64-Cowork-Paket ist als commitgebundener
-RC136-Vorabkandidat veröffentlicht. Die zuletzt gemeinsam für Standalone,
-Windows und beide Mac-Architekturen veröffentlichten Pakete bleiben RC135;
-menschliche N3/N4- und Cowork-Modellabnahmen sind weiterhin offen.
+Der Quellstand ist RC137. Er enthält die nach dem realen RC136-Härtetest
+entstandenen Standalone-, Admission-, Recovery- und Golden-Test-Korrekturen und
+ist bis zum neuen commitgebundenen Paketnachweis ein Entwicklungsstand. Der
+Windows-x64-Cowork-Kandidat RC136 und die plattformübergreifende RC135-Matrix
+bleiben unverändert veröffentlicht; menschliche N3/N4- und
+Cowork-Modellabnahmen sind weiterhin offen.
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -186,7 +188,12 @@ Standalone öffnet eine **Startseite** mit beiden Funktionen, ohne vorausgewähl
 Betriebsart. **Nur in Markdown umwandeln** wählen, Dateien auswählen oder
 hineinziehen, **Starten**. Der **Verlauf** zeigt die letzten 20 Verarbeitungen
 mit jeweils eigenen Aktionen für Ergebnisse, Zuordnung und mögliche Fortsetzung.
-Ein Abschluss wechselt die Ansicht nicht automatisch. TXT, Markdown, CSV, DOCX,
+Ein Abschluss wechselt die Ansicht nicht automatisch. Nach einem Neustart bleibt
+die aktuelle Prozesskarte frei; alte fortsetzbare Läufe stehen ausschließlich
+in ihrer Verlaufszeile. Als solche belegte Office-Besitzerdateien
+`~$*.docx/xlsx/pptx` werden bei rekursiver Ordneraufnahme gezählt und
+übersprungen; ein echtes OPC-Dokument wird nicht nur wegen seines Namens
+verworfen. TXT, Markdown, CSV, DOCX,
 XLSX, PPTX, Text-PDF, Scan-PDF und PNG/JPEG/BMP werden lokal verarbeitet.
 Die App bringt Konverter und deutsche/englische OCR-Modelle mit. Ergebnisse
 liegen in `DataSecure-Markdown/Lauf-…` unter dem gewählten Ziel. Bei einer
@@ -246,6 +253,7 @@ deaktiviert; siehe IT-Betriebshandbuch.
 - [formale N3/N4-Abnahme für Windows und macOS](docs/acceptance/FORMAL_UAT/README.md)
 - [100-Dateien-Formatkorpus](docs/acceptance/STANDALONE_100_FORMAT_TEST_KIT/README.md)
 - [komplexer DOCX-Testkorpus](docs/acceptance/STANDALONE_COMPLEX_DOCX_TEST_KIT/README.md)
+- [adversarieller Golden-Härtetestkorpus](docs/acceptance/STANDALONE_ADVERSARIAL_GOLDEN_TEST_KIT/README.md)
 - [Dokumentenarchiv und stabile Archiv-IDs](docs/archive/INDEX.md)
 
 ## Entwicklung

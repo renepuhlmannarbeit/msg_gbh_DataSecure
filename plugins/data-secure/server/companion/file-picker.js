@@ -31,6 +31,81 @@ const SOURCE_TYPES = Object.freeze({
   '.bmp': 'bmp'
 });
 
+const OFFICE_OWNER_MAX_BYTES = 8192;
+
+function officeOwnerName(fileName) {
+  const name = path.basename(String(fileName || ''));
+  return /^~\$.+\.(?:docx|xlsx|pptx)$/iu.test(name) ? name : null;
+}
+
+function zipPrefix(buffer) {
+  return buffer?.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b &&
+    ((buffer[2] === 0x03 && buffer[3] === 0x04) ||
+     (buffer[2] === 0x05 && buffer[3] === 0x06) ||
+     (buffer[2] === 0x07 && buffer[3] === 0x08));
+}
+
+function readPrefixSync(filePath, fsApi) {
+  const descriptor = fsApi.openSync(filePath, 'r');
+  try {
+    const prefix = Buffer.alloc(4);
+    const bytes = fsApi.readSync(descriptor, prefix, 0, prefix.length, 0);
+    return prefix.subarray(0, bytes);
+  } finally { fsApi.closeSync(descriptor); }
+}
+
+async function readPrefix(filePath, io) {
+  const handle = await io.open(filePath, 'r');
+  try {
+    const prefix = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(prefix, 0, prefix.length, 0);
+    return prefix.subarray(0, bytesRead);
+  } finally { await handle.close(); }
+}
+
+// A reserved-looking name alone is insufficient: a user can legitimately
+// name a real OPC document "~$...". Treat the file as an Office owner record
+// only when it is small, is not itself an OPC ZIP, and a larger valid sibling
+// exists whose first two characters Office replaced with "~$".
+function sourceArtifactReason(filePath, options = {}) {
+  const name = officeOwnerName(filePath);
+  if (!name) return null;
+  const fsApi = options.fs || fs;
+  const stat = options.stat || fsApi.lstatSync(filePath);
+  if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > OFFICE_OWNER_MAX_BYTES) return null;
+  if (zipPrefix(readPrefixSync(filePath, fsApi))) return null;
+  const tail = name.slice(2).toLocaleLowerCase('en-US');
+  for (const entry of fsApi.readdirSync(path.dirname(filePath), { withFileTypes: true })) {
+    if (entry.name === name || entry.name.startsWith('~$') ||
+        entry.name.slice(2).toLocaleLowerCase('en-US') !== tail || !entry.isFile()) continue;
+    const sibling = path.join(path.dirname(filePath), entry.name);
+    const siblingStat = fsApi.lstatSync(sibling);
+    if (!siblingStat.isFile() || siblingStat.isSymbolicLink() || siblingStat.size <= stat.size) continue;
+    if (zipPrefix(readPrefixSync(sibling, fsApi))) return 'office_owner_file';
+  }
+  return null;
+}
+
+async function sourceArtifactReasonAsync(filePath, options = {}) {
+  const name = officeOwnerName(filePath);
+  if (!name) return null;
+  const fsApi = options.fs || fs;
+  const io = options.fsPromises || fsApi.promises || fs.promises;
+  const stat = options.stat || await io.lstat(filePath);
+  if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > OFFICE_OWNER_MAX_BYTES) return null;
+  if (zipPrefix(await readPrefix(filePath, io))) return null;
+  const tail = name.slice(2).toLocaleLowerCase('en-US');
+  for (const entry of await io.readdir(path.dirname(filePath), { withFileTypes: true })) {
+    if (entry.name === name || entry.name.startsWith('~$') ||
+        entry.name.slice(2).toLocaleLowerCase('en-US') !== tail || !entry.isFile()) continue;
+    const sibling = path.join(path.dirname(filePath), entry.name);
+    const siblingStat = await io.lstat(sibling);
+    if (!siblingStat.isFile() || siblingStat.isSymbolicLink() || siblingStat.size <= stat.size) continue;
+    if (zipPrefix(await readPrefix(sibling, io))) return 'office_owner_file';
+  }
+  return null;
+}
+
 function pickerOutputMaxBuffer(maxSources = 1) {
   const count = Math.min(MAX_SELECTED_SOURCES, Math.max(1, Number(maxSources) || 1));
   return Math.max(1024 * 1024, Math.ceil(count) * (MAX_NATIVE_PATH_UTF8_BYTES + 2) + 256);
@@ -181,6 +256,10 @@ function validateSelectedPath(selected, options = {}) {
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new SafeError('Die Auswahl ist keine reguläre lokale Datei.');
   }
+  if (sourceArtifactReason(candidate, { ...options, fs: fsApi, stat })) {
+    throw Object.assign(new SafeError('Eine temporäre Office-Sperrdatei kann nicht verarbeitet werden.'),
+      { code: 'SOURCE_ARTIFACT_IGNORED' });
+  }
   const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
     throw new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.');
@@ -214,6 +293,10 @@ async function validateSelectedPathAsync(selected, options = {}) {
   catch { throw new SafeError('Die ausgewählte Datei ist nicht mehr verfügbar.'); }
   throwIfSelectionAborted(options.signal);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Die Auswahl ist keine reguläre lokale Datei.');
+  if (await sourceArtifactReasonAsync(candidate, { ...options, fs: fsApi, fsPromises: io, stat })) {
+    throw Object.assign(new SafeError('Eine temporäre Office-Sperrdatei kann nicht verarbeitet werden.'),
+      { code: 'SOURCE_ARTIFACT_IGNORED' });
+  }
   const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
     throw new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.');
@@ -396,7 +479,7 @@ module.exports = {
   MAX_SELECTED_SOURCES,
   PICKER_CANCELLED,
   PICKER_TITLE,
-  SOURCE_TYPES,
+  SOURCE_TYPES, sourceArtifactReason, sourceArtifactReasonAsync,
   pickerCommands,
   validateSelectedPath,
   validateSelectedPathAsync,

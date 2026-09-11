@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 11.09.2026 · 3.2.0-rc136
+Stand: 11.09.2026 · 3.2.0-rc137
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -527,6 +527,7 @@ und seine inhaltsfreie Evidence bleiben danach der dauerhafte Nachweis.
 npm run uat:fixtures
 npm run uat:format-corpus
 npm run uat:complex-docx
+npm run uat:adversarial-corpus
 ```
 
 Danach folgt die menschliche Durchführung im
@@ -534,6 +535,10 @@ Danach folgt die menschliche Durchführung im
 [Standalone-UAT-Testpaket](acceptance/STANDALONE_UAT_TEST_KIT/README.md), im
 [100-Dateien-Formatkorpus](acceptance/STANDALONE_100_FORMAT_TEST_KIT/README.md)
 und im [komplexen DOCX-Testkorpus](acceptance/STANDALONE_COMPLEX_DOCX_TEST_KIT/README.md).
+Der [adversarielle Golden-Härtetestkorpus](acceptance/STANDALONE_ADVERSARIAL_GOLDEN_TEST_KIT/README.md)
+ergänzt lange Fließtexte, Unicode-Unternehmen, Markdown-Zitate, Office-Runs,
+Formeln, Notizen sowie Text-, Hybrid- und Scan-PDF/OCR-Fälle. Seine direkte
+Parser-/Privacy-Prüfung läuft dauerhaft in `test:standalone`.
 Der DOCX-Korpus wird als Satz von 15 deterministischen, umfangreichen Dateien
 generiert. Die Dateien enthalten
 Fließtext, Listen, Tabellen, Kopf-/Fußzeilen, Grafiken und Seitenumbrüche:

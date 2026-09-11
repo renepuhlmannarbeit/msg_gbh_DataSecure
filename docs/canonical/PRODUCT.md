@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 11.09.2026 · Ist-Zustand RC136
+Stand: 11.09.2026 · Ist-Zustand RC137
 
 ## Ziel
 
@@ -21,6 +21,9 @@ Funktionswahl und Dateiauswahl startet der Anwender einmal die Verarbeitung.
 Zählern und Status. Jede Zeile öffnet nur ihren eigenen Ergebnisordner bzw. bei
 Anonymisierung ihre Zuordnung oder setzt genau diesen Stapel fort, sofern möglich. Ein
 Abschluss oder Neustart wechselt die Ansicht nicht automatisch.
+Nach einem Neustart ist die aktuelle Prozesskarte leer und eine neue Auswahl
+sofort möglich. Frühere fortsetzbare Läufe werden nicht automatisch geladen;
+sie bleiben ausschließlich über ihre konkrete Zeile im Verlauf erreichbar.
 
 1. In Cowork „Dateien anonymisieren“ schreiben oder den gleichnamigen Skill wählen.
 2. Nur beim ersten Lauf einen lokalen Ergebnisordner ausdrücklich wählen.
@@ -78,6 +81,11 @@ Für DOCX-Anonymisierung ist der sichtbare Ausgabeumfang nach DS-098 ausdrückli
 der Dokumentinhalt **ohne Kopf- und Fußzeilen**. Kommentare, Fußnoten und
 Endnoten bleiben enthalten. Die Regel gilt in Cowork und Standalone; sie ist
 keine allgemeine Heuristik für PDF-Seitenränder, PPTX-Master oder Bilder.
+Belegte temporäre Office-Besitzerdateien `~$*.docx/xlsx/pptx` werden bei einer
+rekursiven Standalone-Ordneraufnahme nicht als Dokumente verarbeitet. Der Name
+allein genügt nicht; ein echtes OPC-Dokument mit `~$`-Namen bleibt Quelle. Nur
+diese eng nachgewiesene Artefaktklasse wird übersprungen und in der UI gezählt; andere
+nicht unterstützte oder verdächtige Dateien stoppen die Aufnahme weiterhin.
 
 ## Lokale Daten
 

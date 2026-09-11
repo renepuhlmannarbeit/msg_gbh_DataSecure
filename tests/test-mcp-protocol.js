@@ -10,6 +10,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createSuite } = require('./helpers');
 const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
+const { VERSION } = require('../plugins/data-secure/server/version');
 
 const { testAsync, done, assert } = createSuite('MCP protocol');
 
@@ -486,7 +487,7 @@ async function main() {
     assert.deepStrictEqual(responses[0].result.structuredContent.cowork_status, {
       schema: 'datasecure-cowork-status/1',
       interaction_schema: 'datasecure-cowork-interactions/1',
-      gateway_version: '3.2.0-rc136',
+      gateway_version: VERSION,
       operation: 'open_result_folder',
       surface: 'normal',
       phase: 'export',

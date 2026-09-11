@@ -47,6 +47,7 @@ function fakeDependencies(overrides = {}) {
     reserveIntake: () => ({ reservation_id: 'r'.repeat(32) }),
     releaseIntake: () => {},
     startLocalIntakeExecutor: () => ({ ok: true, local_intake_pending: true,
+      batch_token: 'b'.repeat(64),
       ipcAcknowledgement: Promise.resolve() }),
     acknowledgeStandaloneTerminalNotice: () => false,
     pendingStandaloneTerminalNoticeGeneration: () => null,
@@ -155,6 +156,7 @@ test('Standalone status uses the latest product batch instead of historical glob
 
 test('Standalone consumes one combined journal snapshot per public status poll', () => {
   let snapshots = 0;
+  const batchId = 'a'.repeat(64);
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
     publicStatusSnapshot: () => {
       snapshots++;
@@ -162,14 +164,41 @@ test('Standalone consumes one combined journal snapshot per public status poll',
         current: { engine_ready: true, local_intake_pending: false, batch_processing_active: false,
           recoverable_batches: 0, batches_awaiting_resume: 0 },
         latest: { result_count: 1, review_count: 0, failed_count: 0, export_pending_count: 0,
-          processing: false, resumable: false, complete: true }
+          processing: false, resumable: false, complete: true },
+        observed_batch_id: batchId, observed_is_active: false, observed_recoverable: false
       };
     },
     lightweightStatus: () => { throw new Error('SECOND_STATUS_SCAN'); },
     latestProductBatchStatus: () => { throw new Error('SECOND_PRODUCT_SCAN'); }
   }) });
+  service.observedBatchId = batchId;
   assert.strictEqual(service.status().state, 'results_available');
   assert.strictEqual(snapshots, 1);
+});
+
+test('a restart leaves historical recoverable work in History and presents a fresh process card', () => {
+  const historicalBatchId = 'b'.repeat(64);
+  let presentationChecks = 0;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    publicStatusSnapshot: () => ({
+      current: { engine_ready: true, local_intake_pending: false, batch_processing_active: false,
+        recoverable_batches: 1, batches_awaiting_resume: 1 },
+      latest: { result_count: 12, review_count: 1, failed_count: 4, export_pending_count: 0,
+        processing: false, resumable: true, complete: false },
+      observed_batch_id: historicalBatchId, observed_is_active: false, observed_recoverable: true
+    }),
+    pendingStandaloneTerminalNoticeGeneration: () => { presentationChecks++; return 7; }
+  }) });
+  const status = service.status();
+  assert.strictEqual(status.state, 'ready');
+  assert.strictEqual(status.resumable, false);
+  assert.strictEqual(status.resumable_count, 0);
+  assert.strictEqual(status.recoverable_count, 1, 'history can still list the safely recovered run');
+  assert.strictEqual(status.results_available, false);
+  assert.strictEqual(status.presentation_generation, undefined);
+  assert.strictEqual(presentationChecks, 0, 'a historical terminal notice is not presented as current work');
+  assert.strictEqual(service.uiContext().latest_result_folder, '');
+  assert.throws(() => service.resolveResults(), (error) => error.code === 'STANDALONE_RESULTS_MISSING');
 });
 
 test('Standalone reports an incomplete visible export instead of a false finished state', () => {
@@ -487,7 +516,8 @@ async function processingModeServiceCase() {
     reserveIntake() { reservations += 1; return { reservation_id: 'r'.repeat(32) }; },
     startLocalIntakeExecutor(_queue, profile, options) {
       launches += 1; workerOptions = options; workerProfile = profile;
-      return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
+      return { ok: true, batch_token: 'c'.repeat(64), local_intake_pending: true,
+        ipcAcknowledgement: Promise.resolve() };
     }
   }) });
   await service.admitSelectedSources([FIXTURE_SOURCE_A]);
@@ -525,7 +555,8 @@ async function processingModeServiceCase() {
     startLocalIntakeExecutor(_queue, _profile, options) {
       assert.strictEqual(options.processingMode, 'markdown-and-anonymize', 'legacy direct calls stay explicitly anonymization-only');
       assert.strictEqual(options.outputNamingMode, 'neutral');
-      return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
+      return { ok: true, batch_token: 'c'.repeat(64), local_intake_pending: true,
+        ipcAcknowledgement: Promise.resolve() };
     }
   }) });
   await direct.admitSelectedSources([FIXTURE_SOURCE_A]);
@@ -549,7 +580,8 @@ async function admittedServiceCase() {
   const deps = fakeDependencies({
     startLocalIntakeExecutor: (queue) => {
       startedQueue = queue;
-      return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
+      return { ok: true, batch_token: 'c'.repeat(64), local_intake_pending: true,
+        ipcAcknowledgement: Promise.resolve() };
     }
   });
   const service = new StandaloneApplicationService({ dependencies: deps });
@@ -664,7 +696,8 @@ async function oversizedAdmissionCase() {
     }),
     startLocalIntakeExecutor: () => {
       started = true;
-      return { ok: true, local_intake_pending: true, ipcAcknowledgement: Promise.resolve() };
+      return { ok: true, batch_token: 'c'.repeat(64), local_intake_pending: true,
+        ipcAcknowledgement: Promise.resolve() };
     }
   }) });
   await assert.rejects(
@@ -682,7 +715,7 @@ async function uncertainAdmissionStartCase() {
     releaseIntake: () => { releases += 1; },
     startLocalIntakeExecutor: () => {
       starts += 1;
-      return { ok: true, local_intake_pending: true,
+      return { ok: true, batch_token: 'c'.repeat(64), local_intake_pending: true,
         ipcAcknowledgement: Promise.reject(new Error('ACK_LOST')) };
     }
   }) });

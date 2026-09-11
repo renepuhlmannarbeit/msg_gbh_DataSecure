@@ -64,7 +64,11 @@ function createRunHistory(deps) {
         const canResume = !processing && !summary.complete && resumable.has(summary.batch_id);
         const reviewReady = state && historyProgress(state).batch_phase === 'awaiting_local_review';
         const status = processing ? 'processing' : canResume ? (reviewReady ? 'review_required' : 'stopped') :
-          summary.complete ? (savedExport?.complete === true ? (summary.result_count > 0 ? 'results_available' : 'completed_without_results') : 'export_pending') : 'failed';
+          summary.complete
+            ? (summary.result_count === 0
+                ? 'completed_without_results'
+                : savedExport?.complete === true ? 'results_available' : 'export_pending')
+            : 'failed';
         const { schema, export_id, complete, ...fields } = summary;
         return { ...fields, status, results_available: Boolean(run), ledger_available: ledger, resumable: canResume, _run: run };
       });

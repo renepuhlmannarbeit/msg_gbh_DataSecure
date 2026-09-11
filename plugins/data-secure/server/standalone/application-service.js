@@ -233,6 +233,15 @@ function confirmedIntakeStart(started) {
   return started.ipcAcknowledgement;
 }
 
+function confirmedIntakeBatchToken(started) {
+  const token = String(started?.batch_token || '');
+  if (!/^[a-f0-9]{64}$/u.test(token)) {
+    throw fixedFailure('STANDALONE_START_FAILED',
+      'Der lokale Start hat keine gültige Laufkennung bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.');
+  }
+  return token;
+}
+
 function pathsOverlap(left, right) {
   const a = path.resolve(left);
   const b = path.resolve(right);
@@ -285,7 +294,15 @@ class StandaloneApplicationService {
   status() {
     const snapshot = this.observeCurrentRun();
     const current = snapshot?.current || this.deps.lightweightStatus();
-    const latest = snapshot ? snapshot.latest : (this.deps.latestProductBatchStatus?.(PRODUCT_CHANNEL) || null);
+    // A product snapshot also contains the newest historical journal so the
+    // history adapter can render it efficiently. It is not the current UI run.
+    // After an app restart, only a still-live worker or a run explicitly chosen
+    // through History may take over the process card.
+    const currentRunObserved = Boolean(snapshot && this.observedBatchId &&
+      snapshot.observed_batch_id === this.observedBatchId);
+    const latest = snapshot
+      ? (currentRunObserved ? snapshot.latest : null)
+      : (this.deps.latestProductBatchStatus?.(PRODUCT_CHANNEL) || null);
     const packages = Number.isSafeInteger(latest?.result_count)
       ? latest.result_count
       : 0;
@@ -300,7 +317,9 @@ class StandaloneApplicationService {
     const completionPending = latest?.completion_pending === true;
     const recoverable = Number.isSafeInteger(current.recoverable_batches) ? current.recoverable_batches : 0;
     const awaitingResume = Number.isSafeInteger(current.batches_awaiting_resume) ? current.batches_awaiting_resume : 0;
-    const resumableCount = this.observedBatchId
+    const resumableCount = snapshot && !currentRunObserved
+      ? 0
+      : this.observedBatchId
       ? (latest?.resumable === true || snapshot?.observed_recoverable === true ? 1 : 0)
       : latest?.resumable === true ? Math.max(1, recoverable, awaitingResume) : Math.max(recoverable, awaitingResume);
     const resumable = resumableCount > 0;
@@ -326,9 +345,11 @@ class StandaloneApplicationService {
             : latest?.complete === true && failed > 0
               ? 'completed_without_results'
             : 'ready';
-    const currentBatchId = snapshot && Object.hasOwn(snapshot, 'observed_batch_id')
-      ? snapshot.observed_batch_id : (this.observedBatchId || undefined);
-    const presentationGeneration = this.deps.pendingStandaloneTerminalNoticeGeneration?.(currentBatchId);
+    const currentBatchId = currentRunObserved ? this.observedBatchId
+      : (!snapshot ? (this.observedBatchId || undefined) : undefined);
+    const presentationGeneration = currentBatchId || !snapshot
+      ? this.deps.pendingStandaloneTerminalNoticeGeneration?.(currentBatchId)
+      : null;
     this.terminalPresentation = Number.isSafeInteger(presentationGeneration) && presentationGeneration > 0
       ? { generation: presentationGeneration, batchId: currentBatchId } : null;
     return {
@@ -459,9 +480,11 @@ class StandaloneApplicationService {
     }
     this.interactionActive = true;
     try {
+      let ignoredArtifactCount = 0;
       const selected = sourceKind === 'folder'
         ? await this.deps.enumerateSourceFolderAsync(sourcePaths[0], {
-            allowedTypes: CONVERSION_TYPES, signal
+            allowedTypes: CONVERSION_TYPES, signal,
+            onIgnoredArtifact: () => { ignoredArtifactCount++; }
           })
         : await Promise.all(sourcePaths.map((candidate) => this.deps.validateSelectedPathAsync(candidate, {
             allowedTypes: CONVERSION_TYPES, signal
@@ -492,6 +515,7 @@ class StandaloneApplicationService {
       return {
         ok: true, event: 'selection_summarized', selected_count: queue.length,
         total_bytes: totalBytes,
+        ...(ignoredArtifactCount > 0 ? { ignored_artifact_count: ignoredArtifactCount } : {}),
         ...admissionCounts(queue), ui_context: uiContext, external_disclosure: false
       };
     } catch (error) {
@@ -546,7 +570,12 @@ class StandaloneApplicationService {
     try {
       latestResultFolder = this.observedBatchId
         ? this.deps.runHistory.resolveResults(this.observedBatchId).local_path
-        : this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true }) || '';
+        // Compatibility-only callers without the run-scoped snapshot predate
+        // the desktop history. Production starts with no current result; older
+        // result folders are resolved only from their exact History row.
+        : !this.deps.publicStatusSnapshot
+          ? this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true }) || ''
+          : '';
     }
     catch { /* A local display hint must never affect processing. */ }
     return {
@@ -599,7 +628,12 @@ class StandaloneApplicationService {
       });
       transferred = true;
       try {
+        const batchToken = confirmedIntakeBatchToken(started);
         await confirmedIntakeStart(started);
+        // Bind the run returned by the actual intake contract immediately.
+        // A small batch may already be terminal before the first status poll;
+        // observing only live workers would then lose its result card.
+        this.observedBatchId = batchToken;
       } catch {
         // Once the reservation has been delegated, a missing acknowledgement
         // is an uncertain start. Never reuse the same admission: the worker may
@@ -680,7 +714,9 @@ class StandaloneApplicationService {
         intakeReservationId: reservation.reservation_id, signal
       });
       transferred = true;
+      const batchToken = confirmedIntakeBatchToken(started);
       await confirmedIntakeStart(started);
+      this.observedBatchId = batchToken;
       this.trace('standalone_batch_accepted', { trace_id: traceId, outcome: 'ok', item_count: selected.length });
       return {
         ok: true,
@@ -764,6 +800,10 @@ class StandaloneApplicationService {
     this.ensureResultRoot();
     try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
     if (this.observedBatchId) return this.deps.runHistory.resolveResults(this.observedBatchId);
+    if (this.deps.publicStatusSnapshot) {
+      throw fixedFailure('STANDALONE_RESULTS_MISSING',
+        'In dieser Sitzung ist noch kein Ergebnislauf verfügbar. Ältere Ergebnisse stehen im Verlauf.');
+    }
     const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true });
     if (!target || !path.isAbsolute(target)) {
       throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');

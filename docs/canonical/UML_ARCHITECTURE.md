@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 11.09.2026 · 3.2.0-rc136
+Stand: 11.09.2026 · 3.2.0-rc137
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -715,9 +715,10 @@ stateDiagram-v2
   failed --> admitted: Originale neu auswählen
 ```
 
-Der Standalone-Status beobachtet den aktiven oder ausdrücklich ausgewählten Lauf
-auch nach dessen Abschluss. Nur ohne solche Bindung ist der jüngste Stapel des
-eigenen Produktkanals der Standard. Eine historische Fortsetzung darf daher
+Der Standalone-Status beobachtet den in derselben Sitzung gestarteten oder
+ausdrücklich fortgesetzten Lauf auch nach dessen Abschluss. Ohne solche Bindung
+bleibt die aktuelle Prozesskarte bereit; ältere Läufe erscheinen ausschließlich
+im Verlauf. Eine historische Fortsetzung darf daher
 keinen neueren Lauf, dessen Zweck oder dessen Zähler übernehmen. Ein interner Paketabschluss ist kein sichtbarer
 Erfolg. Offene Exporte werden beim Standalone-Start und nach einer bewussten
 Ergebnisordnerwahl erneut versucht; der Zielordner ist vor dem ersten Teilexport
@@ -769,6 +770,24 @@ enthält höchstens 20 Zeilen, neueste zuerst; die Daten werden dadurch nicht
 gelöscht. Historienaktionen verwenden nur die konkrete Laufkennung. Fortsetzung
 prüft erneut Journal, gespeicherten Zweck und die Sperre für einen aktiven
 Stapel; ein nicht mehr fortsetzbarer Eintrag startet niemals einen anderen Lauf.
+
+```mermaid
+flowchart LR
+  Boot[App-Start] --> Reconcile[begrenzte Recovery- und Konsistenzprüfung]
+  Reconcile -->|kein lebender Worker| Fresh[aktuelle Prozesskarte: bereit]
+  Reconcile -->|lebender Worker| Active[exakten aktiven Lauf beobachten]
+  Fresh --> History[ältere Läufe nur im Verlauf]
+  History -->|Fortsetzen mit Lauf-ID| Active
+  History -->|Ergebnis oder Zuordnung mit Lauf-ID| Exact[exaktes historisches Ziel]
+```
+
+Bei rekursiver Ordneraufnahme werden reguläre Quellen erst vollständig gegen
+Pfad-, Link-, Typ- und Größenregeln geprüft. Nur die eng definierte
+Office-Besitzerdatei `~$*.docx/xlsx/pptx` wird danach nur verworfen, wenn kleine
+Artefaktgröße, fehlende eigene OPC-Signatur und eine passende größere
+OPC-Quelldatei im selben Ordner zusammen belegt sind. Ein echtes OPC-Dokument
+wird nie allein aufgrund seines Namens verworfen. Der Artefaktzähler bleibt
+inhaltsfrei; ein allgemeiner Hidden-/Backup-Filter existiert absichtlich nicht.
 
 Die Wiederaufnahmeprüfung findet vor der UI-Projektion statt. Reine Export- oder
 Zuordnungsschuld darf auch nach einem Privacy-Rulesetwechsel repariert werden;
