@@ -108,8 +108,12 @@ for (const name of entries.keys()) {
 }
 
 const target = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-zip-'));
-const runtimeData = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-runtime-'));
-const runtimeProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-profile-'));
+// Product storage deliberately rejects linked or disposable system-temp paths
+// (for example /var -> /private/var on GitHub macOS runners). Keep executable
+// extraction disposable, but exercise data/profile creation below the runner's
+// real local home just like an installed Cowork session would.
+const runtimeData = fs.mkdtempSync(path.join(os.homedir(), '.datasecure-product-runtime-'));
+const runtimeProfile = fs.mkdtempSync(path.join(os.homedir(), '.datasecure-product-profile-'));
 let nativeVerified = false;
 try {
   for (const [name, value] of entries) {

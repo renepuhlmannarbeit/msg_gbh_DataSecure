@@ -20,6 +20,9 @@ assert.match(verify, /PRODUCT_ENGINEERING_PAYLOAD_FORBIDDEN/u);
 assert.match(verify, /PRODUCT_ARCHIVE_NATIVE_HOST_REQUIRED/u);
 assert.match(verify, /configuration\.command/u, 'the package manifest determines its native start');
 assert.match(verify, /fs\.chmodSync\(destination, modes\.get\(name\) & 0o777\)/u);
+assert.match(verify, /fs\.mkdtempSync\(path\.join\(os\.homedir\(\), '\.datasecure-product-runtime-'\)\)/u,
+  'native package storage must be tested below a real local home, not an OS temp alias');
+assert.doesNotMatch(verify, /mkdtempSync\(path\.join\(os\.tmpdir\(\), 'datasecure-product-runtime-'/u);
 assert.match(verify, /EU_PRIVACY_DATA_ROOT: process\.platform === 'win32' \? '' : path\.join\(stableRuntimeData, 'SecureDataMsg'\)/u);
 assert.match(verify, /notifications\/initialized/u);
 assert.match(verify, /cancel_local_results_handoff/u);
