@@ -1,12 +1,19 @@
 # Aktueller Iststand
 
-Stand: 12.09.2026 · 3.2.0-rc139 · Cowork-Release vorbereitet; Modellabnahme und N3/N4 offen
+Stand: 12.09.2026 · 3.2.0-rc139 · Cowork-Release veröffentlicht; Modellabnahme und N3/N4 offen
 
 ## RC139 – Lieferung der Astra-/Terra-Gegenreviewkorrekturen
 
-RC139 bündelt BL-041.15–.18 und `ASTRA2-20260912-01`–`04` für einen neuen
-commitgebundenen Cowork-Kandidaten. Normal/Debug/UAT und beide Mac-Zielpakete
-werden nur nach den jeweiligen nativen Smokes neu veröffentlicht. Die
+RC139 liefert BL-041.15–.18 und `ASTRA2-20260912-01`–`04` aus Quellcommit
+`46c6fec4722c879989f5c8e3059367241c117c3a`. Normal/Debug/UAT, beide Mac-Zielpakete,
+SPDX und Prüfsummen sind im [RC139-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc139)
+veröffentlicht. Pflichtlauf `34701892871` und Dreiziel-Paketlauf `34701897963`
+sind grün; exakt die normalen Release-ZIPs bestanden die nativen Smokes auf
+Windows x64, macOS Intel und ARM64. Die vollständige lokale Produktsuite bestand
+mit 182 Testdateien. Windows-Normal und -Debug wurden jeweils zweimal bytegleich
+gebaut und beide Bauten nativ geprüft. Das normale ZIP stimmt auch bytegenau
+mit dem Workflow-Archiv überein; die UAT-Vorlage bindet exakt diese Releasebytes.
+Alle sieben Upload-Digests stimmen mit den lokalen Artefakten überein. Die
 Versionsmetadaten im gemeinsamen Repository werden synchron fortgeschrieben;
 Standalone-Funktionen und seine veröffentlichten RC137-Binaries bleiben unverändert.
 Die finale Mehrplattforminventur bindet alle Produkt-ZIPs an denselben Commit,
@@ -46,13 +53,14 @@ Normal-/Debug-/UAT-/SPDX-Artefaktsatz, Bindung an den tatsächlich nativ geprüf
 ZIP-Snapshot sowie ausführbare UAT-Vorbedingungen statt simulierter
 Parser-Startantworten. Ein isolierter Offline-Integrationstest baut beide
 Cowork-Pakete, startet sie nativ und prüft UAT und finale Prüfsummen gemeinsam.
-Dies ist Entwicklungs-E0, weder Veröffentlichung noch menschliche Abnahme.
+Dieser Offline-Test ist Entwicklungs-E0; die gesonderte RC139-Veröffentlichung
+ist oben belegt. Beide Nachweise ersetzen keine menschliche Abnahme.
 
 RC138 bleibt ein veröffentlichter technischer Zwischenstand; seine positiven
 Paket-, Start- und MCP-Roundtripnachweise bleiben historisch gültig. Es ist
 jedoch kein aktueller N3/N4- oder Modell-UAT-Kandidat. Die vier Stories sind
-geschlossen; ein neuer Kandidat muss ihre Regeln dennoch aus einem sauberen
-Commit mit zwei expliziten, verifizierten Archiven erneut nachweisen.
+geschlossen; RC139 hat ihre Regeln aus sauberem Commit mit zwei expliziten,
+verifizierten Windows-Archiven erneut nachgewiesen.
 Die Marketplace-Projektion wählt das aktuelle Host-ZIP, verweigert veraltete
 Quellbytes vor Ausgabeänderungen und prüft die fertigen Dateien gegen das
 tatsächliche Archiv. Hash, Ziel und Execute-Bits sind explizit nachvollziehbar;

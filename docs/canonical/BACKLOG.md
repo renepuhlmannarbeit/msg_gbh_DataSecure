@@ -28,14 +28,26 @@ ist umgesetzt und durch produktnahe Vertrags- und Regressionstests belegt.
 Der zweite Gegenreview öffnete BL-041.17 wegen vier Release-/UAT-Restfehlern
 erneut. Der lokale Korrekturblock `ASTRA2-20260912-01`–`04` unten schließt diese
 mit zusätzlichen Negativtests und einem echten Offline-Paketintegrationstest.
-RC138 bleibt dennoch nicht wiederverwendbar: Ein neuer Kandidat muss die jetzt
-strengere Commit-, Archiv- und UAT-Bindung aus einem sauberen Quellstand erneut
-nachweisen, bevor er N3/N4-fähig wird.
+RC138 bleibt dennoch nicht wiederverwendbar. RC139 hat die strengere Commit-,
+Archiv- und UAT-Bindung aus sauberem Quellstand erneut nachgewiesen; damit kann
+die menschliche N3/N4-Kampagne vorbereitet werden, nicht als bestanden gelten.
 Ein integrierter Tauri-Review ist keine aktuelle Restlieferung: Standalone nutzt
 bewusst den lokalen Core-Reviewer hinter der inhaltsfreien Renderergrenze.
 Abschnitt B enthält ausschließlich menschliche beziehungsweise
 zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
 und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
+
+### RC139 – Astra-Korrekturen und exakte Release-/UAT-Bindung
+
+Quellcommit `46c6fec4722c879989f5c8e3059367241c117c3a` liefert BL-041.15–.18 und
+`ASTRA2-20260912-01`–`04`. Alle 182 lokalen Produkttestdateien, Docs-/Versionsgates
+und echte UAT-Fixtures sind grün. Pflichtlauf `34701892871` und Paketlauf
+`34701897963` bestanden. Die drei normalen Release-ZIPs sind auf ihren nativen
+Windows-/Intel-Mac-/ARM-Mac-Hosts gestartet. Windows-Normal und -Debug sind
+jeweils zweimal bytegleich gebaut und beide Bauten geprüft; die UAT-Vorlage
+bindet exakt diese veröffentlichten Bytes. Finale Prüfsummen, SPDX und alle
+sieben Upload-Digests sind abgeglichen. Modellgates sowie menschliche N3/N4-
+Abnahmen bleiben offen; Standalone-Pakete verbleiben unverändert bei RC137.
 
 ### RC138 – native Cowork-Paketparität und Interaktionshärtung
 
@@ -46,8 +58,8 @@ an Commit `d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden. Lauf
 macOS Intel und macOS ARM64; der Pflichtlauf `34691166336` ist ebenfalls grün.
 Die damalige technische E0-Lieferung ist als historische Evidence erhalten. Die
 nachträglich bestätigten Astra-Befunde `BL-041.15`–`.18` sind inzwischen
-implementiert; ein neuer Kandidat muss sie nun aus sauberem Commit mit exakt
-verifizierten Normal-/Debug-Archiven und frisch erzeugter UAT-Vorlage belegen.
+implementiert und durch RC139 aus sauberem Commit mit exakt verifizierten
+Normal-/Debug-Archiven und frisch erzeugter UAT-Vorlage erneut belegt.
 Danach bleiben die benannten menschlichen Cowork-Modell-, N3/N4-, Accessibility-
 und Fresh-Install-Nachweise. Standalone bleibt unverändert auf RC137.
 
@@ -925,7 +937,8 @@ isolierten sauberen Test-Checkout Normal-/Debug-Pakete mit dem vorhandenen
 attestierten Windows-Node, führt beide nativen Paketprüfungen aus und erstellt
 UAT/SPDX/SHA256SUMS mit vier tatsächlich hashgleichen Inventareinträgen. Keine
 Netzwerkaufrufe, keine Änderungen am Hauptrepository-Commit, kein Release-GO.
-Der nächste echte Kandidat muss dies nach Commit erneut bestehen; Modell-UAT,
+RC139 hat nach Commit den separaten echten Releaseweg erneut bestanden, nun
+einschließlich der zwei Mac-ZIPs und sechs finalen Prüfsummeneinträge. Modell-UAT,
 Windows-/macOS-N3/N4 und Fresh-Install bleiben als E1/E2 offen.
 
 ### Erledigungsabgleich der Restbefunde aus dem Gesamtgegenreview 02.09.2026

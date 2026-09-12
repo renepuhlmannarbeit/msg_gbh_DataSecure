@@ -1,16 +1,17 @@
 # GBH DataSecure – Dokumente anonymisieren v3.2.0 RC139
 
 Die Produktkandidaten sind bewusst getrennt: Standalone bleibt auf dem unter
-Windows bestätigten RC137; das Cowork-Plugin ist als RC138 aus Quellcommit
-`d70cb266df90bdc07b0efadbf81f0d81195b3920` veröffentlicht und mit den exakt
+Windows bestätigten RC137; das Cowork-Plugin ist als RC139 aus Quellcommit
+`46c6fec4722c879989f5c8e3059367241c117c3a` veröffentlicht und mit den exakt
 erzeugten Paketen nativ auf Windows x64, macOS Intel und macOS ARM64 gestartet.
 Das ist noch keine Produktionsfreigabe: Menschliche N3/N4- und Cowork-
 Modellabnahmen sind weiterhin offen.
 
-RC139 ist der neue Entwicklungsstand. Die Release-/UAT-Korrekturen nach dem
-zweiten Astra-Review sind noch nicht in diesen Downloads enthalten. Die vier nachvollziehbaren Befunde stehen bei
-[BL-041.17 im Backlog](docs/canonical/BACKLOG.md); der nächste Kandidat benötigt
-einen neuen sauberen Commit und erneut geprüfte Normal-/Debug-/UAT-Artefakte.
+RC139 enthält die Release-/UAT-Korrekturen nach dem zweiten Astra-Review.
+Windows-Normal und -Debug sind jeweils zweimal bytegleich gebaut und beide
+Bauten nativ geprüft. Die UAT-Vorlage bindet exakt die veröffentlichten Archive.
+Die vier nachvollziehbaren Befunde stehen bei
+[BL-041.17 im Backlog](docs/canonical/BACKLOG.md).
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -83,19 +84,19 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 ## Cowork-Plugin: aktueller Umfang
 
 Der aktuelle Cowork-Kandidat steht im
-[RC138-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc138)
+[RC139-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc139)
 bereit:
 
-- [Windows x64 – normales Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc138.zip)
-- [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc138.zip)
-- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc138.zip)
-- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc138.zip)
-- Die veröffentlichten RC138-Cowork-Archive und ihre UAT-Vorlage bleiben
-  historische Evidenz. Die nachträglich geschlossenen BL-041.15–.18 verlangen
-  für einen neuen Kandidaten einen sauberen Commit, beide expliziten und vorab
-  verifizierten Archive sowie eine frisch erzeugte Vorlage gemäß
-  [Release-Anleitung](docs/RELEASE.md); RC138 ist deshalb nicht wiederverwendbar.
-- [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/SHA256SUMS)
+- [Windows x64 – normales Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc139/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc139.zip)
+- [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc139/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc139.zip)
+- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc139/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc139.zip)
+- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc139/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc139.zip)
+- [Windows-UAT-Vorlage – alle Modellgates `NOT_RUN`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc139/DataSecure-Cowork-UAT-Evidence-v3.2.0-rc139.zip)
+- [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc139/SHA256SUMS)
+
+RC138-Archive und ihre damalige UAT-Vorlage bleiben historische Evidenz und
+werden nicht neu gebunden. Für RC139 gelten die erneuerten Nachweise in der
+[Release-Anleitung](docs/RELEASE.md); die Windows-UAT-Vorlage ersetzt keine Mac-Abnahme.
 
 Das passende Paket vollständig herunterladen und als lokales
 Claude-Desktop-Plugin installieren; es ist nicht für Cloud-Cowork oder Claude

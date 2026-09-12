@@ -2,7 +2,42 @@
 
 Stand: 12.09.2026 · 3.2.0-rc139
 
-Der aktuelle Quellstand ist RC139-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Der Windows-x64-Cowork-Kandidat RC138 und die
+Der aktuelle Quellstand ist RC139 und als technischer Cowork-Vorabkandidat veröffentlicht.
+Der Windows-x64-Cowork-Kandidat RC139 sowie beide Mac-Kandidaten binden den sauberen Quellcommit
+`46c6fec4722c879989f5c8e3059367241c117c3a`. Der Release
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc139>
+enthält drei normale Ziel-ZIPs, Windows-Debug, Windows-UAT-Vorlage, SPDX und
+die finale Prüfsummenliste. Alle sieben hochgeladenen Dateien wurden über die
+GitHub-Asset-Digests mit den lokalen Dateien abgeglichen.
+
+Die vollständige lokale Produktsuite bestand mit 65 Basis- und 117 direkten
+Testdateien (182 insgesamt); Versions-, Dokumentations- und echte UAT-Fixture-
+Prüfungen sind grün. Pflichtlauf `34701892871` ist erfolgreich. Der gezielte
+Paketlauf `34701897963` baute die drei normalen ZIPs und startete exakt diese
+Archive anschließend auf Windows x64, macOS Intel und macOS ARM64 nativ.
+Manifest, Architektur, MCP-Roundtrip und dauerhafter lokaler Zustand bestanden.
+
+| RC139-Artefakt | Byte | SHA-256 |
+|---|---:|---|
+| Windows x64 Normal | 35.051.787 | `032cb8a7f1603c607c3d223096d9d8a1f2ab577d6d17baee0ed72982e45d6a71` |
+| Windows x64 Debug | 35.053.309 | `77a049dfb4ad3d90cfff44b083979fcf5d17b4bcd106c9fde55251a76793a6a8` |
+| macOS Intel Normal | 39.791.473 | `816925c53432f628c21ecd1174ebe9bd4243f62bccec38be6384504e71cef5d7` |
+| macOS ARM64 Normal | 38.807.221 | `5993ad7bb93768314d793a759ca8850c7a40c98e9d1d13b5f7037226d10cd541` |
+| Windows-UAT-Vorlage | 5.540 | `0e909dceb4b1920ac97b229492558bf2162a398fa12a5b75ee31d7904fd3a50f` |
+| SPDX | 20.950 | `5a8c07893faef607c5e18786822fa30fc3e90483673fa42a0bb30b5acaf6059d` |
+
+Windows-Normal und -Debug wurden zusätzlich aus derselben Workflow-Runtime
+jeweils zweimal bytegleich gebaut; beide Bauten bestanden jeweils das native
+ZIP-Gate. Das lokale normale Windows-ZIP ist bytegleich zum Workflow- und
+Release-ZIP. Die UAT-Vorlage bindet genau diese Normal-/Debug-Bytes und denselben
+Commit; ihre 12×3- und 41×3-Modellgates bleiben `NOT_RUN`. Die separate native
+Mac-Evidence ist keine Windows-UAT- oder menschliche Abnahme. Sichtbare
+Claude-/Cowork-, N3/N4- und Produktionsfreigaben bleiben offen. Standalone bleibt
+funktional und in seinen veröffentlichten Paketen auf RC137; RC139 ist Cowork-only.
+
+### Historische Kandidaten und behobene Nachweislücken
+
+Der frühere Windows-x64-Cowork-Kandidat RC138 und die
 beiden macOS-Cowork-Kandidaten sind an den sauberen Quellcommit
 `d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden. Der Release
 <https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc138>
@@ -46,8 +81,8 @@ vor der Evidenzaufnahme verifizierte Archive. RC138 und seine UAT-Vorlage bleibe
 damit historische Evidence und dürfen nicht erneut als N3/N4-Kandidat gebunden
 werden.
 
-Der zweite Astra-Korrekturblock `ASTRA2-20260912-01`–`04` ist lokaler
-Entwicklungsstand, noch kein neuer Release. Der manuelle Windows-Releaseweg
+Der zweite Astra-Korrekturblock `ASTRA2-20260912-01`–`04` ist seit RC139
+veröffentlicht; die RC138-Archive bleiben unverändert. Der manuelle Windows-Releaseweg
 lädt Node außerhalb des Quellbaums nach `RUNNER_TEMP`, baut Normal und Debug,
 erzeugt die UAT-Vorlage und inventarisiert **danach** mit `generate-sbom.mjs
 --archive <normal> --archive <debug> --cowork-uat <uat>` den finalen Satz.

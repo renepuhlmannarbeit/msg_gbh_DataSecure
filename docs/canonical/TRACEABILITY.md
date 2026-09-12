@@ -2,6 +2,15 @@
 
 Stand: 12.09.2026 · 3.2.0-rc139
 
+RC139-Lieferung: BL-041.15–.18 / `ASTRA2-20260912-01`–`04` → Quellcommit
+`46c6fec4722c879989f5c8e3059367241c117c3a` → vollständige lokale Produktsuite
+(182 Testdateien), Pflichtlauf `34701892871` → drei exakt nativ gestartete
+Cowork-ZIPs in Lauf `34701897963` → Windows-Normal-/Debug-Doppelbau mit jeweils
+gleichen Bytes und bestandenen nativen Smokes → exakt gebundene Windows-UAT,
+finale SPDX-/Prüfsummenliste und sieben abgeglichene Upload-Digests.
+Archivgrößen/Hashes und Grenzen stehen in [RELEASE](../RELEASE.md). Die
+12×3-/41×3-Modellgates bleiben `NOT_RUN`; Standalone-Release bleibt RC137.
+
 BL-041.17 / `ASTRA2-20260912-01`–`04`: `release-evidence.yml` lädt Node nach
 `RUNNER_TEMP`, baut Normal/Debug/UAT und inventarisiert erst den finalen Satz.
 `cowork-candidate.mjs` bindet das native Receipt an den ZIP-Snapshot und prüft

@@ -9,12 +9,12 @@ Produktkandidaten dürfen nicht vermischt werden. Die Testfälle selbst bleiben 
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC138 ist als technischer Cowork-Kandidat an Commit
-`d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden und veröffentlicht.
+RC139 ist als technischer Cowork-Kandidat an Commit
+`46c6fec4722c879989f5c8e3059367241c117c3a` gebunden und veröffentlicht.
 Die exakt erzeugten Cowork-ZIPs wurden auf Windows x64, macOS Intel und macOS
 ARM64 nativ gestartet. Standalone bleibt als eigener technischer Kandidat auf
 RC137 und Commit `8979d4b2127741c2921cb6f0654fb83d82944845`; es gibt kein
-Standalone-RC138-Paket. Deshalb ist die Vorlage zunächst auf **Cowork-only**
+Standalone-RC139-Paket. Deshalb ist die Vorlage zunächst auf **Cowork-only**
 gesetzt. Für eine Standalone-Kampagne wird ein separates Manifest mit RC137-
 Commit und -Pakethashes angelegt. Eine formale Kampagne beginnt erst, wenn beide
 Tester die exakten Pakethashes des jeweiligen Produkts gebunden haben. Die
@@ -22,12 +22,14 @@ Tester die exakten Pakethashes des jeweiligen Produkts gebunden haben. Die
 ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch und darf nicht
 umetikettiert werden.
 
-Neue Quellkorrekturen nach dem Astra-/Terra-Gegenreview sind nicht in den
-RC138-Paketen enthalten. RC139 muss vor einer Kampagnenbindung neu gebaut und
-geprüft werden; die RC138-UAT-Vorlage ist nicht wiederverwendbar.
+Die Korrekturen nach dem Astra-/Terra-Gegenreview sind in RC139 enthalten.
+Seine Windows-UAT-Vorlage bindet die veröffentlichten Normal-/Debug-Bytes und
+denselben Quellcommit. Die RC138-UAT-Vorlage ist nicht wiederverwendbar.
+Die separate Mac-Kampagne bindet das zu ihrer Architektur passende normale
+RC139-Paket; die Windows-Vorlage behauptet keinen Mac-Ausführungsnachweis.
 
 Evidence-Präzisierung vom 12.09.2026: Das nachgezogene native ZIP-Gate ist für
-RC138 auf allen drei Cowork-Zielarchitekturen bestanden. Danach folgt weiterhin
+RC139 auf allen drei Cowork-Zielarchitekturen bestanden. Danach folgt weiterhin
 die beobachtete Installation und Bedienung in Claude; ein maschineller
 MCP-Roundtrip ist keine sichtbare Anwenderabnahme.
 

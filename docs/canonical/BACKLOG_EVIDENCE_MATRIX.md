@@ -2,6 +2,17 @@
 
 Stand: 12.09.2026 · 3.2.0-rc139
 
+RC139-Liefernachweis für BL-041.15–.18 / `ASTRA2-20260912-01`–`04`: Commit
+`46c6fec4722c879989f5c8e3059367241c117c3a`, Pflichtlauf `34701892871` und
+Dreiziel-Paketlauf `34701897963`. Alle 182 lokalen Produkttestdateien bestanden.
+Die drei normalen Release-ZIPs bestehen ihre nativen Smokes. Windows-Normal
+und -Debug sind jeweils zweimal bytegleich und beide Bauten geprüft; das normale
+Archiv stimmt auch mit dem Workflow überein. Die veröffentlichte Windows-UAT
+bindet genau diese Normal-/Debug-Bytes; alle sechs Prüfsummeneinträge und sieben
+Upload-Digests stimmen. Die Mac-Nativnachweise sind getrennt. Modellgates und
+menschliche N3/N4 bleiben offen; Standalone-RC137 bleibt unverändert. Vollständige
+Hashes stehen im [Releasevertrag](../RELEASE.md).
+
 Nachprüfung `CWR-20260912-01`–`11`: BL-041.8/.10/.12/.13/.14 und BL-010.8
 erhalten Code-/Regressionsevidence für Status, ACK, Abbruch, Übergabe, Picker
 und MCP-Hüllen sowie das korrigierte native Paketgate. RC138 bindet Commit
@@ -16,15 +27,15 @@ Handoff-Cancel/Neustart-Race, verlorene strukturierte Extraktionsabdeckung,
 unvollständige Paketintegritätsgates, eine falsch gebundene RC138-UAT-Vorlage
 sowie nicht geschlossene Promptnamen. Die Terra-Ausführung hat diese E0-Punkte
 geschlossen; die folgenden RC138-Aussagen bleiben dennoch historische Evidence,
-kein aktuelles GO, weil der neue Kandidat die strengeren Regeln erst belegen muss.
+kein aktuelles GO. RC139 hat die strengeren technischen Regeln separat belegt.
 
 Der zweite Gegenreview (`ASTRA2-20260912-01`–`04`, bei BL-041.17) ergänzte vier
 lokal korrigierte Release-/UAT-Lücken: externes Downloadstaging, vollständiges
 finales Inventar, natives Snapshot-Receipt statt erneutem blindem Hashlesen und
 geprüfte Live-UAT-Vorbedingungen. Der Offline-Paketintegrationstest baute und
 startete beide Windows-Cowork-Pakete im isolierten Test-Checkout und prüfte die
-UAT-/SPDX-/Prüfsummenbindung. Das belegt die Pipeline lokal, nicht einen neuen
-veröffentlichten Kandidaten oder eine menschliche Modell-/N3/N4-Abnahme.
+UAT-/SPDX-/Prüfsummenbindung. Das belegt die Pipeline lokal; der separate
+RC139-Liefernachweis steht oben. Keiner ersetzt eine menschliche Modell-/N3/N4-Abnahme.
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder
