@@ -62,16 +62,25 @@ function outcomeOf(result) {
 }
 
 function localWorkStateOf(result, outcome) {
-  if (result?.review_required === true || result?.awaiting_review === true ||
-      result?.batch_phase === 'awaiting_review') return 'awaiting_review';
-  if (result?.local_review_started === true || result?.local_processing_started === true ||
-      result?.processing === true || result?.batch_phase === 'processing_local_review') return 'active';
-  if (result?.local_intake_pending === true || result?.accepted === true) return 'accepted';
-  if (result?.complete === true || result?.completed === true || result?.done === true) return 'completed';
+  // A missing ACK is not proof that a worker never started. Progress captured
+  // before attempting that handoff must not override this uncertainty either.
+  if (result?.error === 'local_start_failed') return 'unknown';
+  const facts = [result, result?.batch].filter((value) => value && typeof value === 'object' && !Array.isArray(value));
+  if (facts.some((value) => value.local_review_started === true || value.local_processing_started === true ||
+      value.local_processing_active === true || value.batch_processing_active === true || value.processing === true ||
+      (Number.isSafeInteger(value.processing) && value.processing > 0) ||
+      ['processing_local_review', 'processing_local_batch', 'processing_local_document'].includes(value.batch_phase))) return 'active';
+  if (facts.some((value) => value.review_required === true || value.awaiting_review === true ||
+      ['awaiting_review', 'awaiting_local_review'].includes(value.batch_phase))) return 'awaiting_review';
+  if (facts.some((value) => value.local_intake_pending === true || value.accepted === true)) return 'accepted';
+  if (facts.some((value) => value.complete === true || value.completed === true || value.done === true)) return 'completed';
+  // A refused overlapping interaction says nothing about the other operation
+  // unless its actual progress facts are present above.
+  if (['batch_active', 'local_handoff_active'].includes(result?.error)) return 'unknown';
   if (cancelled(result)) return result?.error === 'local_selection_cancelled' ? 'not_started' : 'unknown';
   if (['no_completed_local_batch', 'no_active_local_handoff', 'local_handoff_expired']
     .includes(result?.error)) return 'not_applicable';
-  if (['result_folder_required', 'local_selection_rejected', 'local_start_failed',
+  if (['result_folder_required', 'local_selection_rejected',
     'local_engine_unavailable'].includes(result?.error)) return 'not_started';
   if (outcome === 'stopped') return 'failed';
   return 'not_applicable';

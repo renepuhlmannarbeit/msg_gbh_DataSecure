@@ -43,6 +43,16 @@ const versionedDocs = [
   'plugins/data-secure/README.md'
 ];
 
+test('persistent project context respects both current product purposes instead of reactivating an old RC task', () => {
+  const context = read('CLAUDE.md');
+  assert.doesNotMatch(context, /aktuelle schreibende Auftrag\s+ist/u);
+  assert.match(context, /Cowork anonymisiert[\s\S]{0,180}XLSX\/PPTX/u);
+  assert.match(context, /BL-023\.1/u);
+  assert.match(context, /Standalone unterstützt beide Zwecke/u);
+  assert.match(context, /reine Markdown-Konvertierung\s+erzeugt keine Zuordnungsdatei/u);
+  assert.match(context, /Extraktionsstatus und Anonymisierungsstatus bleiben getrennt/u);
+});
+
 test('active user documentation has no obsolete RC or internal product path', () => {
   const text = userDocs.map(read).join('\n');
   for (const file of userDocs) {

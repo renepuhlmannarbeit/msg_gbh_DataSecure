@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 11.09.2026 · Produktstand 3.2.0-rc137
+Stand: 12.09.2026 · Produktstand 3.2.0-rc138
 
 Dies ist die **einzige aktive Arbeitsliste**. Handlungsbedarf entsteht nur aus
 den Storytabellen und ihren ausdrücklich genannten Resten. Die nachfolgenden
@@ -868,6 +868,7 @@ künstlichen `MCP26-01`-Cutover aus.
 | BL-041.11 | Geschlossene Cowork-Interaktionsregistry gemäß DS-099: alle 27 Werkzeuge genau einmal mit Normal-/Supportfläche, Wirkung, Idempotenz, Human-Gates, Erfolgsdisposition und Inhaltsgrenze binden. Normal-/Supportmengen und MCP-Annotationen werden daraus abgeleitet; Werkzeugtabelle und Handler bleiben bijektiv. Unbekannte Toolnamen dürfen nicht fälschlich als Supportwerkzeuge erscheinen. E1/E2-Cowork-Zielhostevidenz steht in Abschnitt B aus. | **erledigt** |
 | BL-041.12 | Additiver, schema-validierter `datasecure-cowork-status/1`-Umschlag für jede bekannte Toolantwort. Claude-Interaktion, lokaler Arbeitszustand, Annahme/Abschluss/Abbruch, Retryklasse, Human-Gate-Assurance und tatsächliche Inhaltsgrenze werden getrennt; Originalinhalt bleibt immer `false`, tatsächlich enthaltenes anonymisiertes Markdown ausdrücklich untrusted. Leere Übergaben bleiben Metadaten; alle Fortsetzungsformen werden erkannt; ein Normalmodus-Guard verweigert private Kennungen. Top-Level-Kompatibilität bleibt bis zur realen Cowork-UAT erhalten; E1/E2 steht in Abschnitt B aus. | **erledigt** |
 | BL-041.13 | Hauptskill auf unverhandelbaren Normal-/Trustkern und Intenttabelle reduzieren; einfacher Normalstart ohne Referenzrunde, Sonderstart, Ergebnisübergabe, Fortsetzung/Verwerfen und Konfiguration als isolierte Referenzen. Strukturkorpus auf 41 Fälle erweitern und kuratierte, exakt risikogebundene 12×3-Candidate-Matrix mit Fixture-, Setup-, Bewertungs- und Cleanup-Vertrag liefern. Beide Modellmatrizen sind formale Cowork-GO-Gates; ein verbotenes Modelloutcome ist Release-Stopper. Automatisierte Tests werden nicht als Modellabnahme ausgegeben. E1/E2-Modell-/Hostabnahme steht in Abschnitt B aus. | **erledigt** |
+| BL-041.14 | Hersteller-/Folgefehlerreview auf RC137-Basis, Kennungen CWR-20260912-01–11 in `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md`: DS-078 beibehalten; DS-099-Statusprojektion an echte Core-Phasen gebunden; ACK-Ungewissheit und nativen Abbruch erhalten; terminalen Ergebnisordnerwechsel, paginierte Übergabesprache, lokale datierte Stapelwahl und MCP-Hüllenprüfung korrigiert. BL-010.8/BL-041.8: Mac-ZIP-Verifier repariert und manueller nativer Start exakt gebauter ZIPs verpflichtend; Marketplace wählt exaktes Host-ZIP, weist fehlende, geänderte und zusätzliche Quelldateien vor Mutation zurück und prüft tatsächliche Ausgabebytes. Projektkontext nach Produkt/Zweck bereinigt. E0: drei unabhängige Reviews, volle lokale Produktsuite und zusätzliche Paketregressionen, Windows-Normal-/Debug-ZIP-Starts, Marketplace-Artefaktabgleich und Docs-/CLI-Gates bestanden. RC138-Releasegates laufen; native Mac-Jobs und menschliche Cowork-Abnahme bleiben getrennte E1/E2-Evidence, keine Umdeutung der RC137-Release-Hashes. | **erledigt** |
 
 ### Erledigungsabgleich der Restbefunde aus dem Gesamtgegenreview 02.09.2026
 

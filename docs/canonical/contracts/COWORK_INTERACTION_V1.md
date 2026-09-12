@@ -61,6 +61,23 @@ Die bestehenden Top-Level-Felder bleiben für eine Übergangsgeneration erhalten
 Sie dürfen dem Umschlag semantisch nicht widersprechen. Erst echte Cowork-UAT
 darf ihre spätere Entfernung freigeben.
 
+Der Umschlag verwendet die echten Core-Felder (`processing` als Zähler,
+`local_processing_active`, `processing_local_batch`, `processing_local_document`,
+`awaiting_local_review`), auch unter `batch`. Ein abgewiesener zweiter Aufruf
+ist `stopped`, obwohl belegte lokale Arbeit weiter `active` oder `accepted`
+sein kann. Eine unbestätigte Workerübernahme (`local_start_failed`, etwa bei
+ACK-Verlust) ist `unknown`, niemals allein wegen `*_started:false` sicher
+`not_started`. Ein nativer Abbruch der Ergebnisauswahl bleibt als solcher
+erhalten und wird nicht in einen internen Fehler umgedeutet.
+
+Die erste Übergabeseite beschreibt zur Übergabe **verfügbare** Ergebnisse,
+nicht bereits vollständig an Claude gelieferte Dokumente. `more` und das
+jeweilige `has_more` bestimmen die weitere Übergabe. Eine bereits terminale
+Seite darf beim ausdrücklichen Ergebnis-/Privacy-Ordnerwechsel quittiert werden;
+unvollständige Seiten blockieren den Wechsel weiterhin. Mehrere fertige Stapel
+werden im nativen Dialog mit lokalem Abschlussdatum/-zeit und „neueste zuerst“
+unterschieden. Zeitpunkt, Kennungen und Auswahlkarten gehen nicht an Claude.
+
 ## Human-Gate-Grenze
 
 `explicit_request` und `explicit_confirmation` beschreiben erforderliche, an den konkreten Auftrag

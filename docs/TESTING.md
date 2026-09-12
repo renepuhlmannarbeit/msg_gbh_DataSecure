@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 11.09.2026 · 3.2.0-rc137
+Stand: 11.09.2026 · 3.2.0-rc138
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei

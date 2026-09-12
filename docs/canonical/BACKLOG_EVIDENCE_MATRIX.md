@@ -1,6 +1,17 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 11.09.2026 · 3.2.0-rc137
+Stand: 12.09.2026 · 3.2.0-rc138
+
+Nachprüfung `CWR-20260912-01`–`11`: BL-041.8/.10/.12/.13/.14 und BL-010.8
+erhalten lokale Code-/Regressionsevidence für Status, ACK, Abbruch, Übergabe,
+Picker und MCP-Hüllen sowie das korrigierte native Paketgate. Der Windows-
+Pluginstart und die byteidentische Marketplace-Projektion aus dem aktuellen
+Host-ZIP sind lokal geprüft; die neuen Mac-ZIP-Gates bleiben ungestartet.
+Der bisherige zentrale Ubuntu-Paketjob ist nur statische Cowork-ZIP-Evidence,
+kein nativer Mac-Pluginstart. Standalone-Evidence bleibt davon unberührt.
+Alle veröffentlichten Hashbindungen bleiben historische Kandidatenevidence;
+lokale Änderungen sind noch nicht veröffentlicht. Einzelbefunde stehen im
+[Herstellerreview](../REVIEW_CLAUDE_COWORK_2026-09-01.md).
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
 Anwendung/Accessibility, E3 = Fach-, Datenschutz-, Security- oder

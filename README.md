@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC137
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC138
 
 RC137 ist der aktuelle commitgebundene technische UAT-Kandidat für Standalone
 und Cowork. Die Pakete stammen aus Quellcommit

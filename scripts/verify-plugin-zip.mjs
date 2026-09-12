@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
-import { collectProductFiles, verifyKeyringFreeProductEntries, verifyProductRelativeRequires } from './lib/product-files.mjs';
+import { verifyProductSourceEntries, verifyKeyringFreeProductEntries, verifyProductRelativeRequires } from './lib/product-files.mjs';
 import { readContract, sha256 } from './lib/bundled-runtime.mjs';
 
 const require = createRequire(import.meta.url);
@@ -90,12 +90,7 @@ else assert.notEqual(mcp?.mcpServers?.['data-secure-local']?.env?.EU_PRIVACY_SUP
 
 // Every canonical product source byte must be present unchanged, except for
 // .mcp.json (rewritten to the bundled launcher); runtime evidence is additive.
-for (const file of collectProductFiles(path.join(root, 'plugins', 'data-secure'))) {
-  if (file.archivePath === '.mcp.json' || (debugBuild && file.archivePath === '.claude-plugin/plugin.json')) continue;
-  if (!entries.get(file.archivePath)?.equals(fs.readFileSync(file.fullPath))) {
-    throw new Error(`PRODUCT_ARCHIVE_SOURCE_DRIFT:${file.archivePath}`);
-  }
-}
+verifyProductSourceEntries(entries, path.join(root, 'plugins', 'data-secure'), { debugBuild, targets: targetIds });
 const debugSkillName = 'skills/gbh-datasecure-debug-anonymisieren/SKILL.md';
 if (debugBuild) {
   const expected = fs.readFileSync(path.join(root, 'support', debugSkillName));
@@ -115,42 +110,73 @@ for (const name of entries.keys()) {
 const target = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-zip-'));
 const runtimeData = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-runtime-'));
 const runtimeProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-product-profile-'));
+let nativeVerified = false;
 try {
   for (const [name, value] of entries) {
     const destination = path.resolve(target, ...name.split('/'));
     if (!destination.startsWith(`${path.resolve(target)}${path.sep}`)) throw new Error('PRODUCT_ARCHIVE_PATH_TRAVERSAL');
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.writeFileSync(destination, value, { flag: 'wx' });
+    fs.writeFileSync(destination, value, { flag: 'wx', mode: modes.get(name) & 0o777 });
+    // chmod explicitly: the runner's umask must not strip the verified ZIP's
+    // executable bit from the macOS launcher or its architecture-specific Node.
+    if (process.platform !== 'win32') fs.chmodSync(destination, modes.get(name) & 0o777);
   }
   for (const test of ['test-contract-skill-acceptance.js', 'test-contract-skill-matrix.js']) {
     const result = spawnSync(process.execPath, [path.join(root, 'tests', test), target], { cwd: root, stdio: 'inherit' });
     if (result.error) throw result.error;
-    if (result.status !== 0) process.exit(result.status || 1);
+    if (result.status !== 0) throw new Error(`PRODUCT_ARCHIVE_CONTRACT_FAILED:${test}`);
   }
   const hostTarget = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
     : process.platform === 'darwin' && process.arch === 'x64' ? 'macos-x64'
       : process.platform === 'darwin' && process.arch === 'arm64' ? 'macos-arm64' : null;
+  if (process.argv.includes('--require-native') && (!hostTarget || !targetIds.includes(hostTarget))) {
+    throw new Error('PRODUCT_ARCHIVE_NATIVE_HOST_REQUIRED');
+  }
   if (hostTarget && targetIds.includes(hostTarget)) {
     const stableRuntimeData = process.platform === 'win32'
       ? path.join(runtimeProfile, 'AppData', 'Local') : runtimeData;
     const advertisedRuntimeData = process.platform === 'win32'
       ? path.join(stableRuntimeData, 'Temp', 'claude', 'zip-gate-session') : runtimeData;
     fs.mkdirSync(advertisedRuntimeData, { recursive: true });
-    const executable = process.platform === 'win32'
-      ? path.join(target, 'runtime', 'datasecure-node.exe')
-      : path.join(target, 'runtime', 'datasecure-node');
-    const started = spawnSync(executable, [path.join(target, 'server', 'index.js')], {
+    const configuration = mcp.mcpServers['data-secure-local'];
+    const expand = (value) => value.replaceAll('${CLAUDE_PLUGIN_ROOT}', target);
+    const smokeMessages = [
+      {jsonrpc: '2.0', id: 1, method: 'initialize', params: {
+        protocolVersion: '2025-11-25', capabilities: {}, clientInfo: {name: 'zip-gate', version: '1'}
+      }},
+      {jsonrpc: '2.0', method: 'notifications/initialized'},
+      {jsonrpc: '2.0', id: 2, method: 'tools/list'},
+      // No picker, document access or worker: this closes only a nonexistent
+      // RAM handoff in the isolated fresh process, through the real dispatcher.
+      {jsonrpc: '2.0', id: 3, method: 'tools/call', params: {name: 'cancel_local_results_handoff', arguments: {}}}
+    ];
+    const started = spawnSync(expand(configuration.command), configuration.args.map(expand), {
       cwd: target, encoding: 'utf8', timeout: 30000, windowsHide: true,
-      input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {
-        protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'zip-gate', version: '1' }
-      } })}\n`,
-      env: { ...process.env, USERPROFILE: runtimeProfile, LOCALAPPDATA: advertisedRuntimeData,
+      input: smokeMessages.map(message => JSON.stringify(message)).join('\n') + '\n',
+      env: { ...process.env, ...configuration.env, USERPROFILE: runtimeProfile, HOME: runtimeProfile,
+        LOCALAPPDATA: advertisedRuntimeData, EU_PRIVACY_STATUS_APP_PILOT: '0',
+        EU_PRIVACY_SUPPORT_MODE: debugBuild ? '1' : '0',
+        // Windows deliberately tests the durable fallback from Temp/claude;
+        // every other platform uses an explicit synthetic application root.
+        EU_PRIVACY_DATA_ROOT: process.platform === 'win32' ? '' : path.join(stableRuntimeData, 'SecureDataMsg'),
         EU_PRIVACY_ROOT: path.join(stableRuntimeData, 'privacy'),
         EU_PRIVACY_RESULT_ROOT: path.join(stableRuntimeData, 'results') }
     });
-    if (started.error || started.status !== 0 || !String(started.stdout).includes(pkg.version)) {
+    if (started.error || started.status !== 0) {
       throw new Error('PRODUCT_ARCHIVE_RUNTIME_START_FAILED');
     }
+    const responses = String(started.stdout).split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
+    assert.equal(responses.length, 3, 'one response per request, no notification reply or stdout chatter');
+    assert.equal(new Set(responses.map(response => response.id)).size, 3);
+    for (const response of responses) {assert.equal(response.jsonrpc, '2.0'); assert.equal(response.error, undefined);}
+    assert.equal(responses.find(response => response.id === 1)?.result?.serverInfo?.version, pkg.version);
+    const tools = responses.find(response => response.id === 2)?.result?.tools;
+    assert.equal(tools?.length, debugBuild ? 27 : 10);
+    assert.ok(tools.some(tool => tool.name === 'start_document_batch_from_picker'));
+    const call = responses.find(response => response.id === 3)?.result;
+    assert.notEqual(call?.isError, true);
+    assert.equal(call?.structuredContent?.ok, true);
+    assert.equal(call.structuredContent.cowork_status.content_boundary, 'metadata_only');
     // Windows Cowork may advertise a disposable LOCALAPPDATA below
     // Temp\claude. The product archive must prove that its durable runtime is
     // instead created below the established user profile.
@@ -161,10 +187,11 @@ try {
     assert.ok(fs.statSync(path.join(cache, 'server', 'gateway', 'batch-worker.js')).isFile());
     assert.ok(fs.statSync(path.join(cache, 'runtime', process.platform === 'win32'
       ? 'datasecure-node.exe' : 'datasecure-node')).isFile());
+    nativeVerified = true;
   }
 } finally {
   fs.rmSync(target, { recursive: true });
   fs.rmSync(runtimeData, { recursive: true });
   fs.rmSync(runtimeProfile, { recursive: true });
 }
-console.log(`Self-contained product ZIP: PASS (${path.basename(archive)}, ${entries.size} entries, ${targetIds.join(', ')})`);
+console.log(`Self-contained product ZIP: ${nativeVerified ? 'NATIVE PASS' : 'STATIC PASS (native not run)'} (${path.basename(archive)}, ${entries.size} entries, ${targetIds.join(', ')}, sha256=${sha256(bytes)})`);

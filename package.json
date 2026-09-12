@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc137",
+  "version": "3.2.0-rc138",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -87,7 +87,7 @@
     "prebuild:plugin": "node scripts/build-status-app.mjs --check",
     "prebuild:mcpb": "node scripts/build-status-app.mjs --check",
     "build:mcpb": "node scripts/build-mcpb.mjs",
-    "build": "npm run build:plugin && npm run test:artifacts && node scripts/generate-sbom.mjs && node scripts/build-marketplace-repo.mjs && node tests/test-status-app-artifacts.mjs --archives",
+    "build": "npm run build:plugin && npm run test:artifacts && node scripts/generate-sbom.mjs && node scripts/build-marketplace-repo.mjs && node tests/test-marketplace-projection.mjs --artifact && node tests/test-status-app-artifacts.mjs --archives",
     "build:engineering": "npm run sync:mcpb-manifest && npm run build:mcpb && npm run test:engineering-artifacts && node scripts/generate-sbom.mjs --engineering && node tests/test-status-app-artifacts.mjs --engineering-archives",
     "test:source-readonly": "node tests/test-read-only-source-snapshot.js",
     "test:uat-fixtures": "node tests/test-uat-fixture-generation.js",

@@ -28,7 +28,8 @@ test('every cause has a fixed, path-free German hint and the list is closed', ()
 });
 
 test('the shared fixed catalog contains all public causes without making internal codes public', () => {
-  assert.strictEqual(CAUSE_CODES.length, 25, 'the public cause contract is not expanded');
+  assert.strictEqual(CAUSE_CODES.length, 26, 'only the explicit native handoff-cancellation cause extends the public contract');
+  assert.strictEqual(normalizeCause('LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED'), 'LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED');
   for (const codes of [CAUSE_CODES, WORKFLOW_ERROR_CODES, SUPPORT_ERROR_CODES]) {
     assert.ok(Object.isFrozen(codes));
     assert.strictEqual(new Set(codes).size, codes.length);

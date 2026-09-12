@@ -1,6 +1,24 @@
 # Entscheidungs-Traceability
 
-Stand: 11.09.2026 · 3.2.0-rc137
+Stand: 12.09.2026 · 3.2.0-rc138
+
+DS-078/DS-097/DS-099, BL-041.8/.10/.12/.13 und BL-010.8: Der Abgleich
+`CWR-20260912-01`–`11` in
+[Claude-/Cowork-Revalidierung](../REVIEW_CLAUDE_COWORK_2026-09-01.md) bindet
+`mcp-server.js`, `cowork-status-envelope.js`, `diagnostic-causes.js`,
+`local-only-handoff.js` und `completed-batch-picker.js` an echte stdio-,
+Core-Progress-, Handoff- und native Picker-Grenztests. `verify-plugin-zip.mjs`
+und der manuelle `native-package-smoke`-Job prüfen die tatsächlichen Pakete
+statt nur synthetischer Runtimefixtures. Der Test
+`test-runtime-release-path.mjs` sichert diese verpflichtende Verbindung.
+`test-marketplace-projection.mjs` sichert zusätzlich die exakte Hostwahl,
+Quellbyte-Gleichheit vor Mutation und den tatsächlichen ZIP-/Ausgabeabgleich;
+`scripts/lib/product-files.mjs` liefert beiden Releasewegen denselben Guard.
+Die Korrekturen sind lokaler Quellstand, noch keine neue Releasebindung.
+Der bisherige Cowork-Paketlauf auf Ubuntu beweist insbesondere keinen
+nativen Mac-Pluginstart; die nachstehende native Startparität gilt für die
+explizit gestarteten Standalone-Zielpakete und den lokal geprüften Windows-
+Cowork-Pfad, nicht automatisch für die Cowork-Mac-ZIPs.
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im

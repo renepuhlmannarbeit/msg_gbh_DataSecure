@@ -17,6 +17,13 @@ const verify = read('scripts/verify-plugin-zip.mjs');
 assert.match(verify, /RUNTIME-EVIDENCE\.json/u);
 assert.match(verify, /host_node_required/u);
 assert.match(verify, /PRODUCT_ENGINEERING_PAYLOAD_FORBIDDEN/u);
+assert.match(verify, /PRODUCT_ARCHIVE_NATIVE_HOST_REQUIRED/u);
+assert.match(verify, /configuration\.command/u, 'the package manifest determines its native start');
+assert.match(verify, /fs\.chmodSync\(destination, modes\.get\(name\) & 0o777\)/u);
+assert.match(verify, /EU_PRIVACY_DATA_ROOT: process\.platform === 'win32' \? '' : path\.join\(stableRuntimeData, 'SecureDataMsg'\)/u);
+assert.match(verify, /notifications\/initialized/u);
+assert.match(verify, /cancel_local_results_handoff/u);
+assert.match(verify, /STATIC PASS \(native not run\)/u);
 
 const sbom = read('scripts/generate-sbom.mjs');
 assert.match(sbom, /SPDXRef-Package-Node\.js/u);
@@ -32,6 +39,13 @@ for (const workflow of ['release-evidence.yml', 'bundled-runtime-release.yml']) 
 assert.match(read('.github/workflows/release-evidence.yml'), /npm run build/u);
 assert.match(read('.github/workflows/bundled-runtime-release.yml'), /verify-plugin-zip\.mjs/u);
 assert.match(read('.github/workflows/bundled-runtime-release.yml'), /generate-sbom\.mjs/u);
+const nativeJob = read('.github/workflows/bundled-runtime-release.yml').split('  native-package-smoke:')[1];
+assert.ok(nativeJob, 'packaging alone must not pass as native evidence');
+assert.match(nativeJob, /needs: \[select, package\]/u);
+assert.match(nativeJob, /matrix: \$\{\{ fromJSON\(needs.select.outputs.matrix\) \}\}/u);
+assert.match(nativeJob, /datasecure-cowork-plugin-\$\{\{ inputs.target \}\}-\$\{\{ github.sha \}\}/u);
+assert.match(nativeJob, /verify-plugin-zip\.mjs --require-native/u);
+assert.doesNotMatch(nativeJob, /build-runtime-plugin|test-bundled-runtime/u);
 
 const projected = collectProductFiles(path.join(root, 'plugins', 'data-secure'));
 const entries = new Map(projected.map(file => [file.archivePath, fs.readFileSync(file.fullPath)]));

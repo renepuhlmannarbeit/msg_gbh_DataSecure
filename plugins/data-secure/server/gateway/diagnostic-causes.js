@@ -35,6 +35,7 @@ const CAUSES = Object.freeze({
   LOCAL_QUEUE_SCHEMA_INVALID: 'Die interne lokale Dateiliste war unvollständig oder widersprüchlich. Es wurde kein Stapel bestätigt; DataSecure aktualisieren oder den Supportbericht öffnen.',
   LOCAL_BATCH_STILL_PROCESSING: 'Die lokale Verarbeitung läuft noch. Ergebnisse stehen erst nach dem lokalen Abschluss bereit.',
   LOCAL_HANDOFF_ACTIVE: 'Eine andere lokale DataSecure-Auswahl oder Übergabe ist bereits geöffnet.',
+  LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED: 'Die lokale Auswahl anonymisierter Ergebnisse wurde abgebrochen. Es werden keine weiteren Ergebnisse übergeben.',
   NO_INCOMPLETE_BATCH: 'Es liegt kein unvollständiger Stapel zum Fortsetzen oder Verwerfen vor.',
   NO_COMPLETED_LOCAL_BATCH: 'Es liegt kein lokal abgeschlossener Stapel zur Auswertung vor. Erst eine Verarbeitung lokal abschließen lassen.',
   NO_ACTIVE_LOCAL_HANDOFF: 'Es ist keine lokale Ergebnisübergabe aktiv. Zuerst die Auswertung abgeschlossener Ergebnisse starten.',

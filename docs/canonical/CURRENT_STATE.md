@@ -1,6 +1,30 @@
 # Aktueller Iststand
 
-Stand: 11.09.2026 · 3.2.0-rc137 · E0-Paketmatrix gebunden; Modellabnahme und N3/N4 offen
+Stand: 12.09.2026 · 3.2.0-rc138 · Cowork-Releasegates laufen; Modellabnahme und N3/N4 offen
+
+## RC138 – Cowork-Revalidierung nach RC137
+
+Der Herstellerabgleich mit drei unabhängigen Reviews korrigiert die
+Statusprojektion, ACK-Ungewissheit, native Auswahlabbrüche, paginierte
+Übergabesprache, terminale Ordnerwechsel und ungültige MCP-Hüllen. Die lokale
+Stapelwahl zeigt zusätzlich den Abschlusszeitpunkt. Befunde und Tests sind
+unter `CWR-20260912-01` bis `CWR-20260912-11` im
+[Herstellerreview](../REVIEW_CLAUDE_COWORK_2026-09-01.md) festgehalten.
+Die Standalone-Verarbeitung und Erkennungsregeln werden nicht geändert.
+Die Marketplace-Projektion wählt das aktuelle Host-ZIP, verweigert veraltete
+Quellbytes vor Ausgabeänderungen und prüft die fertigen Dateien gegen das
+tatsächliche Archiv. Hash, Ziel und Execute-Bits sind explizit nachvollziehbar;
+die Projektion selbst behauptet keinen nativen Ausführungsnachweis.
+
+Wichtige Evidence-Präzisierung: Der bisherige zentrale Cowork-Paketjob auf Linux
+prüfte Archiv/Quellinhalt, aber startete die Mac-ZIPs nicht. Die nativen
+Standalone-Nachweise unten sind gültig, lassen sich jedoch nicht auf Cowork
+übertragen. Der manuelle Cowork-Workflow verlangt künftig einen echten Start
+jedes fertigen ZIPs auf seinem Zielhost. Execute-Bits und isolierte Mac-
+Testpfade sind korrigiert. Neue Mac-Gates wurden lokal nicht ausgeführt.
+Diese Änderungen werden nicht in die veröffentlichten RC137-ZIPs
+zurückgeschrieben. RC138 erhält eine eigene Commit-/Paketbindung; bis deren
+Releasegates beendet sind, bleiben RC137-Hashes und INT-13 unverändert.
 
 ## RC137 – Standalone-Härtetest und sitzungsgebundener Start
 

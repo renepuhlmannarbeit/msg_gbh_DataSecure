@@ -130,3 +130,34 @@ jobs:
             dist/DataSecure-Privacy-Preflight-v*.spdx.json
             dist/SHA256SUMS
           retention-days: 7
+
+  native-package-smoke:
+    # The Linux packaging job cannot execute PE/Mach-O. Start exactly its ZIPs
+    # on their native hosts, without repackaging or substituting source fixtures.
+    needs: [select, package]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: datasecure-cowork-plugin-${{ inputs.target }}-${{ github.sha }}
+          path: dist
+      - name: Native manifest, MCP roundtrip and durable-cache smoke of the exact ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-plugin-zip.mjs --require-native | tee dist/cowork-native-smoke.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: datasecure-cowork-native-${{ matrix.id }}-${{ github.sha }}
+          path: dist/cowork-native-smoke.txt
+          retention-days: 7

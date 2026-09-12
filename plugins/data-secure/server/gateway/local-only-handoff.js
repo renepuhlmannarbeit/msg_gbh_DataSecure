@@ -70,7 +70,7 @@ function publicBatchSummary(candidate) {
     grade_counts: { ...counts },
     omission_counts: { ...omissions },
     grades_verified: verified,
-    message: `An Claude übergeben: ${candidate.released} anonymisierte Ergebnisse. Nicht übergeben: ${candidate.stopped} sicher nicht verarbeitete ${candidate.stopped === 1 ? 'Datei' : 'Dateien'}.`
+    message: `Zur Übergabe verfügbar: ${candidate.released} anonymisierte Ergebnisse. Nicht übergeben: ${candidate.stopped} sicher nicht verarbeitete ${candidate.stopped === 1 ? 'Datei' : 'Dateien'}.`
   };
 }
 
@@ -119,7 +119,8 @@ function createLocalOnlyHandoff(deps) {
       selection = controller;
       options.signal?.addEventListener('abort', abort, { once: true });
       try {
-        const ordinal = await choose(candidates.map((candidate, index) => ({ ordinal: index + 1, released: candidate.released, stopped: candidate.stopped })), { signal: controller.signal });
+        const ordinal = await choose(candidates.map((candidate, index) => ({ ordinal: index + 1, released: candidate.released, stopped: candidate.stopped,
+          ...(candidate.completedAt ? { completedAt: candidate.completedAt } : {}) })), { signal: controller.signal });
         if (controller.signal.aborted) throw cancelledError();
         selected = candidates[ordinal - 1];
         if (!Number.isSafeInteger(ordinal) || !selected) throw cancelledError();

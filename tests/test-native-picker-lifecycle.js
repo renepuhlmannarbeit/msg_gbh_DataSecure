@@ -25,6 +25,20 @@ const validation = {
 };
 const candidates = [{ ordinal: 1, released: 2, stopped: 0 }, { ordinal: 2, released: 1, stopped: 1 }];
 
+test('completed picker distinguishes equal-sized runs by local time without exposing arbitrary state text', () => {
+  const dated = completed.validateCandidates(candidates.map((entry, index) => ({...entry,
+    completedAt: `2026-09-12T${index === 0 ? '12' : '10'}:34:56.000Z`} )));
+  assert.notStrictEqual(completed.candidateLabel(dated[0]), completed.candidateLabel({...dated[1], ordinal: 1, released: 2, stopped: 0}));
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const commands = JSON.stringify(completed.pickerCommands(dated, {platform}));
+    assert.match(commands, /12\.09\.2026/u);
+    assert.match(commands, /neueste zuerst/u);
+    const hostile = completed.pickerCommands(candidates.map(entry => ({...entry, completedAt: 'PRIVATE_PATH; INJECT'})), {platform});
+    assert.doesNotMatch(JSON.stringify(hostile), /PRIVATE_PATH|INJECT/u);
+    assert.match(JSON.stringify(hostile), /Zeitpunkt nicht verfügbar/u);
+  }
+});
+
 test('completed Windows picker fills the list silently before selecting the first item', () => {
   const script = completed.pickerCommands(candidates, { platform: 'win32' })[0].args.at(-1);
   assert.strictEqual((script.match(/\[void\]\$list.Items.Add/g) || []).length, 2);
@@ -32,6 +46,30 @@ test('completed Windows picker fills the list silently before selecting the firs
 });
 
 async function main() {
+  for (const unfinished of [false, true]) await testAsync(`result folder reset with ${unfinished ? 'unfinished' : 'terminal'} real handoff state`, async () => {
+    const {createLocalOnlyHandoff} = require('../plugins/data-secure/server/gateway/local-only-handoff');
+    let acknowledgements = 0;
+    let resets = 0;
+    const handoff = createLocalOnlyHandoff({
+      completedLocalOnlyCandidates: () => [{token: 'a'.repeat(64), released: 1, stopped: 0}],
+      listBatchResults: () => ({results: [{package_id: 'synthetic', read_capability: 'c'.repeat(43)}], next_cursor: null}),
+      readOutputs: () => ({documents: [{package_id: 'synthetic', text: 'verified', has_more: unfinished, next_offset: 8}]}),
+      acknowledgeDeliveredPackages: () => {acknowledgements++;}
+    });
+    await handoff.start();
+    const code = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/mcp-server.js'), 'utf8');
+    const context = vm.createContext({
+      SafeError: class extends Error {}, LOCAL_ONLY_HANDOFF: handoff, genericStatus: () => ({}),
+      clearConfiguredResultRoot: () => {resets++;}
+    });
+    vm.runInContext(code.slice(code.indexOf('let nativeInteractionOwner='), code.indexOf('function continueAnonymizedBatchInChat(')), context);
+    if (unfinished) await assert.rejects(context.configureResultFolder({reset: true}), /noch offen/u);
+    else assert.strictEqual((await context.configureResultFolder({reset: true})).ok, true);
+    assert.strictEqual(resets, unfinished ? 0 : 1);
+    assert.strictEqual(acknowledgements, unfinished ? 0 : 1);
+    assert.strictEqual(handoff.isActive(), unfinished);
+    handoff.cancel();
+  });
   await testAsync('multi-file validation stays asynchronous and observes cancellation between files', async () => {
     const controller = new AbortController();
     let stats = 0;

@@ -67,6 +67,35 @@ export function collectProductFiles(directory) {
   return selected;
 }
 
+// Version equality is not source equality: multiple local candidates can have
+// the same version. Both ZIP verification and Marketplace projection use this
+// byte-level guard before accepting an archive from a different build.
+export function verifyProductSourceEntries(entries, directory, { debugBuild = false, targets = [] } = {}) {
+  const files = collectProductFiles(directory);
+  const expected = new Set(files.map(file => file.archivePath));
+  if (targets.length) {
+    expected.add('RUNTIME-EVIDENCE.json');
+    expected.add('runtime/LICENSE.node.txt');
+  }
+  for (const target of targets) {
+    if (target === 'windows-x64') expected.add('runtime/datasecure-node.exe');
+    else if (target === 'macos-x64' || target === 'macos-arm64') {
+      expected.add('runtime/datasecure-node');
+      expected.add(`runtime/targets/${target}/node`);
+    } else throw new Error('PRODUCT_ARCHIVE_TARGET_INVALID');
+  }
+  if (debugBuild) expected.add('skills/gbh-datasecure-debug-anonymisieren/SKILL.md');
+  for (const name of entries.keys()) {
+    if (!expected.has(name)) throw new Error(`PRODUCT_ARCHIVE_UNEXPECTED_FILE:${name}`);
+  }
+  for (const file of files) {
+    if (file.archivePath === '.mcp.json' || (debugBuild && file.archivePath === '.claude-plugin/plugin.json')) continue;
+    if (!entries.get(file.archivePath)?.equals(fs.readFileSync(file.fullPath))) {
+      throw new Error(`PRODUCT_ARCHIVE_SOURCE_DRIFT:${file.archivePath}`);
+    }
+  }
+}
+
 // Archive-level check, independent of the source-tree module loader. This
 // catches newly added shared imports even when developer tests find them in
 // the full checkout and therefore conceal a missing shipped dependency.

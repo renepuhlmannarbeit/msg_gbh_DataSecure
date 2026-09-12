@@ -4,6 +4,35 @@ const { createLocalOnlyHandoff, MAX_TTL_MS } = require('../plugins/data-secure/s
 const { testAsync, done, assert } = createSuite('Local-only handoff');
 
 async function main() {
+for (const asynchronous of [false, true]) await testAsync(`paginated ${asynchronous ? 'async' : 'sync'} handoff reports availability, never premature delivery`, async () => {
+  const values = Array.from({length: 6}, (_, index) => ({package_id: `synthetic-${index}`, read_capability: 'c'.repeat(43)}));
+  let acknowledged = 0;
+  const snapshot = () => ({bytes: 5000, dispose() {}, read(offset) {
+    return {text: 'verified chunk', next_offset: offset + 4800, has_more: offset === 0};
+  }});
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => [{token: 'a'.repeat(64), released: 6, stopped: 1}],
+    listBatchResults: (_token, {cursor}) => ({results: cursor ? values.slice(5) : values.slice(0, 5),
+      next_cursor: cursor ? null : 'next', available: 6 - acknowledged, safely_stopped: 1, still_open: 0, batch_complete: true}),
+    ...(asynchronous ? {openVerifiedMarkdownSnapshotAsync: async () => snapshot()} : {openVerifiedMarkdownSnapshot: snapshot}),
+    acknowledgeDeliveredPackages: (_token, entries) => {acknowledged += entries.length;}
+  });
+  const first = await handoff.start();
+  assert.strictEqual(first.documents.length, 5);
+  assert.ok(first.documents.every(document => document.has_more));
+  assert.strictEqual(first.more, true);
+  assert.match(first.batch_result_summary.message, /^Zur Übergabe verfügbar: 6/u);
+  assert.doesNotMatch(first.batch_result_summary.message, /An Claude übergeben/u);
+  assert.strictEqual(handoff.finalizeTerminal(), false);
+  assert.strictEqual(acknowledged, 0);
+  assert.strictEqual((await handoff.nextAsync()).more, true);
+  assert.strictEqual((await handoff.nextAsync()).more, true);
+  assert.strictEqual((await handoff.nextAsync()).more, false);
+  assert.strictEqual(handoff.finalizeTerminal(), true);
+  assert.strictEqual(acknowledged, 6);
+  handoff.cancel();
+  assert.strictEqual(handoff.isActive(), false);
+});
 await testAsync('production async snapshot preparation keeps Cowork continuation responsive', async () => {
   let preparationStarted = false;
   let timerObserved = false;

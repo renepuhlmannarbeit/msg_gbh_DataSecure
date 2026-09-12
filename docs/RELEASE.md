@@ -1,13 +1,16 @@
 # Release- und Distributionsvertrag
 
-Stand: 11.09.2026 · 3.2.0-rc137
+Stand: 12.09.2026 · 3.2.0-rc138
 
-Der aktuelle Quellstand ist RC137 und als technischer UAT-Kandidat an den
-sauberen, auf `main` veröffentlichten Quellcommit
-`8979d4b2127741c2921cb6f0654fb83d82944845` gebunden. Der
+Der aktuelle Quellstand ist RC138-Entwicklungsstand. Die Cowork-Korrekturen aus
+`CWR-20260912-01`–`11` werden als neuer technischer Vorabkandidat geschnitten;
+Commit-, Paket- und Zielhostbindung werden erst nach den Releasegates ergänzt.
+RC137 bleibt als technischer UAT-Kandidat an den sauberen, auf `main`
+veröffentlichten Quellcommit `8979d4b2127741c2921cb6f0654fb83d82944845`
+gebunden. Der
 Windows-x64-Cowork-Kandidat RC137 ist ebenfalls an diesen Quellcommit
 `8979d4b2127741c2921cb6f0654fb83d82944845` gebunden. RC135 bleibt getrennt
-als letzter plattformübergreifend paketgebundener Stand vor RC137 vollständig
+als letzter plattformübergreifend paketgebundener Stand vor RC138 vollständig
 nachvollziehbar; RC136 bleibt der dazwischenliegende Windows-Cowork-Kandidat.
 
 Windows-PKG-04 erzeugte zwei bytegleiche Standalone-Archive zu jeweils
@@ -96,6 +99,19 @@ Marketplace. Eine abweichende Kennung (z. B. `data-secure-uat`) ist nur für
 Test-/UAT-Installationen gedacht, etwa wenn ein blockierter Kontoeintrag den
 Produktnamen belegt, und wird im Evidence-Log vermerkt.
 
+Seit der Nachprüfung vom 12.09.2026 wählt der Standardaufruf ausschließlich das
+ZIP der aktuellen Hostarchitektur. Ein anderes Archiv muss ausdrücklich über
+`--zip dist/<archiv>.zip` angegeben werden. Gleiche Version genügt nicht:
+Vor Ersetzen der generierten Ausgabe müssen die Produktquellen bytegleich mit
+dem aktuellen Checkout sein. `PROJECTION-EVIDENCE.json` nennt Quell-ZIP,
+SHA-256, Ziel und ausführbare Dateien; die Projektion ist kein nativer Smoke.
+`npm run build` prüft den erzeugten Marketplace zusätzlich gegen das echte ZIP.
+macOS-Projektionen werden auf POSIX erstellt, nicht auf Windows, und behalten
+die Archivmodi. Vor Git-Veröffentlichung müssen alle in der Evidence genannten
+ausführbaren Dateien im Git-Index Modus `100755` haben; ein Checkout-Smoke des
+Zielhosts bleibt erforderlich. Bereits veröffentlichte RC137-Pakete werden
+durch diese lokalen Korrekturen nicht nachträglich neu gebunden.
+
 Für den reinen ZIP-Weg erzeugt `node scripts/rename-plugin-zip.mjs --plugin-name
 <kennung>` aus dem verifizierten Zielpaket eine Upload-Variante, deren Manifest
 eine andere Plugin-Kennung trägt (Inhalt und Archivmodi bleiben byteidentisch).
@@ -130,6 +146,16 @@ Releaseauswahl. PKG-04/INT-13, beide macOS-Architekturen, Security, SBOM und
 Prüfsummen bleiben verpflichtend, sobald genau dieser Commit als neuer
 veröffentlichter Kandidat angeboten wird. Ein nachfolgender reiner
 Dokumentationscommit erfordert keinen Neubau unveränderter Binärartefakte.
+
+Seit der Nachprüfung vom 12.09.2026 gilt zusätzlich: Der Ubuntu-Job des
+Cowork-Workflows belegt nur statische ZIP-Eigenschaften. Der nachgelagerte
+`native-package-smoke` muss **genau diese ZIPs** auf jedem gewählten nativen
+Host mit `node scripts/verify-plugin-zip.mjs --require-native` starten.
+Manifestkommando, vollständiger MCP-Roundtrip und dauerhafter isolierter Cache
+werden geprüft. Fremdplattformen dürfen kein natives PASS liefern. Die neue
+Prüfung ist vorbereitet, aber noch nicht als Mac-Releaseevidence ausgeführt;
+die bisherigen Cowork-Mac-Archive werden dadurch nicht rückwirkend als nativ
+gestartet ausgewiesen. Standalone-Paketnachweise bleiben separat gültig.
 
 ## Verbindliche Versions- und Releasewahrheit
 

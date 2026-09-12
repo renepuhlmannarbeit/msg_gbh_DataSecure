@@ -17,6 +17,13 @@ haben. Die 12×3- und 41×3-Modellgates bleiben `NOT_RUN`; das veröffentlichte
 Evidence-ZIP ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch
 und darf nicht umetikettiert werden.
 
+Evidence-Präzisierung vom 12.09.2026: Der bisherige Cowork-ZIP-Job prüfte die
+Archive auf Ubuntu statisch. Ein nativer Standalone-Mac-Start belegt keinen
+Cowork-Mac-Start. Vor Cowork-N3 muss daher das nachgezogene native ZIP-Gate
+auf der jeweiligen Architektur bestanden sein; danach folgt weiterhin die
+beobachtete Installation in Claude. Lokale CWR-20260912-Korrekturen sind noch
+nicht Bestandteil der hier gebundenen RC137-Pakete.
+
 ## Was N3 und N4 bedeuten
 
 - **N3:** technische Zielhost-Abnahme des exakt gebundenen Pakets einschließlich

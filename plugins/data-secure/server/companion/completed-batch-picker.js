@@ -6,6 +6,7 @@ const { runPickerAsync } = require('./file-picker');
 
 const PICKER_CANCELLED = 'LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED';
 const PICKER_TITLE = 'DataSecure – anonymisierte Ergebnisse auswerten';
+const PICKER_PROMPT = 'Wähle einen lokal abgeschlossenen Stapel (neueste zuerst).';
 
 function validateCandidates(candidates) {
   if (!Array.isArray(candidates) || candidates.length < 2 || candidates.length > 50) {
@@ -20,13 +21,20 @@ function validateCandidates(candidates) {
         !Number.isSafeInteger(stopped) || stopped < 0) {
       throw new SafeError('Die lokale Auswahl abgeschlossener Stapel ist ungültig.');
     }
-    return { ordinal, released, stopped };
+    const timestamp = typeof candidate.completedAt === 'string' &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(candidate.completedAt)
+      ? Date.parse(candidate.completedAt) : NaN;
+    return { ordinal, released, stopped,
+      ...(Number.isFinite(timestamp) ? { completedAt: new Date(timestamp).toISOString() } : {}) };
   });
 }
 
 function candidateLabel(candidate) {
   const stopped = candidate.stopped > 0 ? ` · ${candidate.stopped} sicher gestoppt` : '';
-  return `Stapel ${candidate.ordinal} – ${candidate.released} freigegebene Ergebnisse${stopped}`;
+  const date = candidate.completedAt ? new Date(candidate.completedAt).toLocaleString('de-DE', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }) : 'Zeitpunkt nicht verfügbar';
+  return `Stapel ${candidate.ordinal} · ${date} – ${candidate.released} freigegebene Ergebnisse${stopped}`;
 }
 
 function pickerCommands(candidates, options = {}) {
@@ -44,7 +52,7 @@ function pickerCommands(candidates, options = {}) {
       "$form.StartPosition = 'CenterScreen'", '$form.ClientSize = New-Object System.Drawing.Size(560,310)',
       '$form.FormBorderStyle = "FixedDialog"', '$form.MaximizeBox = $false', '$form.MinimizeBox = $false',
       '$info = New-Object System.Windows.Forms.Label',
-      "$info.Text = 'Wähle einen lokal abgeschlossenen Stapel. Dateinamen und Inhalte werden nicht angezeigt.'",
+      `$info.Text = '${quote(PICKER_PROMPT)} Dateinamen und Inhalte werden nicht angezeigt.'`,
       '$info.Location = New-Object System.Drawing.Point(20,18)', '$info.Size = New-Object System.Drawing.Size(520,42)',
       '$list = New-Object System.Windows.Forms.ListBox', '$list.Location = New-Object System.Drawing.Point(20,68)', '$list.Size = New-Object System.Drawing.Size(520,165)',
       items, '$list.SelectedIndex = 0',
@@ -60,7 +68,7 @@ function pickerCommands(candidates, options = {}) {
     const choices = labels.map((label) => `"${escape(label)}"`).join(', ');
     const script = [
       `set choices to {${choices}}`,
-      `set answer to choose from list choices with title "${escape(PICKER_TITLE)}" with prompt "Wähle einen lokal abgeschlossenen Stapel." OK button name "Auswertung starten" cancel button name "Abbrechen" without multiple selections allowed`,
+      `set answer to choose from list choices with title "${escape(PICKER_TITLE)}" with prompt "${escape(PICKER_PROMPT)}" OK button name "Auswertung starten" cancel button name "Abbrechen" without multiple selections allowed`,
       `if answer is false then return "${PICKER_CANCELLED}"`,
       'set chosen to item 1 of answer',
       'repeat with i from 1 to count of choices', 'if item i of choices is chosen then return i as text', 'end repeat'
@@ -70,8 +78,8 @@ function pickerCommands(candidates, options = {}) {
   if (platform === 'linux') {
     const rows = entries.flatMap((candidate) => [String(candidate.ordinal), candidateLabel(candidate)]);
     return [
-      { command: 'zenity', args: ['--list', `--title=${PICKER_TITLE}`, '--text=Wähle einen lokal abgeschlossenen Stapel.', '--column=Nr.', '--column=Stapel', '--hide-column=1', '--print-column=1', '--width=620', '--height=360', ...rows] },
-      { command: 'kdialog', args: ['--menu', 'Wähle einen lokal abgeschlossenen Stapel.', ...rows] }
+      { command: 'zenity', args: ['--list', `--title=${PICKER_TITLE}`, `--text=${PICKER_PROMPT}`, '--column=Nr.', '--column=Stapel', '--hide-column=1', '--print-column=1', '--width=620', '--height=360', ...rows] },
+      { command: 'kdialog', args: ['--menu', PICKER_PROMPT, ...rows] }
     ];
   }
   throw new SafeError('Für dieses Betriebssystem ist keine lokale Stapelauswahl verfügbar.');

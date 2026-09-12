@@ -112,6 +112,41 @@ assert.strictEqual(review.cowork_status.outcome, 'accepted');
 assert.strictEqual(review.cowork_status.local_work_state, 'active');
 assert.strictEqual(review.cowork_status.interaction_terminal, true);
 
+// Use the production Core progress vocabulary, not invented envelope fixtures.
+const { publicProgress } = require('../plugins/data-secure/server/gateway/batch-progress').createBatchProgress({
+  deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review', mappingPendingStatus: 'mapping_pending',
+  liveLocalExecutor: (state) => state.testLive === true, publishedPackageRecord: () => null
+});
+for (const [itemStatus, testLive, expected] of [
+  ['processing', false, 'active'], ['pending', true, 'active'], ['deferred_review', false, 'awaiting_review'],
+  ['deferred_review', true, 'active'], ['stopped', false, 'completed']
+]) {
+  const progress = publicProgress({token: 'a'.repeat(64), testLive, items: [{status: itemStatus}]}, {skipResultProjection: true});
+  for (const payload of [progress, {batch: progress}]) {
+    const actual = withCoworkStatus('document_batch_status', {ok: true, ...payload}, {supportMode: true}).cowork_status;
+    assert.strictEqual(actual.local_work_state, expected, `${itemStatus}/${testLive}/${Boolean(payload.batch)}`);
+  }
+}
+for (const [facts, expected] of [
+  [{}, 'unknown'], [{local_processing_active: true}, 'active'], [{local_intake_pending: true}, 'accepted']
+]) {
+  const status = withCoworkStatus('continue_most_recent_document_batch', {
+    ok: false, error: 'batch_active', local_processing_started: false, ...facts,
+    next_action: 'wait_for_local_release_before_retry'
+  }).cowork_status;
+  assert.strictEqual(status.outcome, 'stopped');
+  assert.strictEqual(status.local_work_state, expected);
+}
+for (const cause of ['LOCAL_IPC_ACK_TIMEOUT', 'LOCAL_WORKER_SPAWN_FAILED', 'LOCAL_IPC_ACK_INVALID', 'INTERNAL_FAILURE']) {
+  const status = withCoworkStatus('continue_most_recent_document_batch', {
+    ok: false, error: 'local_start_failed', local_processing_started: false,
+    batch_phase: 'awaiting_local_review', diagnostic: {phase: 'continuation', cause},
+    next_action: 'restart_only_on_explicit_request'
+  }).cowork_status;
+  assert.strictEqual(status.local_work_state, 'unknown', cause);
+  assert.strictEqual(status.retry_class, 'explicit_request');
+}
+
 const cancelled = withCoworkStatus('start_document_batch_from_picker', {
   ok: false, error: 'local_selection_cancelled', next_action: 'no_action'
 });

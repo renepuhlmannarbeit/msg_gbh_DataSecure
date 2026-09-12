@@ -5,7 +5,7 @@ Every adapter receives the same version-controlled, synthetic ground truth and m
 only spans plus anonymized output. No real document, network request or model download is
 part of the benchmark.
 
-## Current synthetic-corpus baseline (3.2.0-rc137)
+## Current synthetic-corpus baseline (3.2.0-rc138)
 
 Command:
 

@@ -239,6 +239,36 @@ function assertPrivateContinuationFieldsAbsent(responses) {
 }
 
 async function main() {
+  await testAsync('invalid outer envelopes produce fixed errors and do not break the next real stdio request', async () => {
+    const invalid = ['null', '42', '[]', '{}',
+      ...[null, true, false, {}, [], 1.5].map(id => JSON.stringify({jsonrpc: '2.0', id, method: 'ping'}))];
+    const {responses} = await talk([...invalid, rpc(99, 'ping')], {supportMode: false});
+    assert.strictEqual(responses.length, invalid.length + 1);
+    for (const response of responses.slice(0, -1)) {
+      assert.strictEqual(response.id, null);
+      assert.strictEqual(response.error.code, -32600);
+    }
+    assert.deepStrictEqual(responses.at(-1), {jsonrpc: '2.0', id: 99, result: {}});
+  });
+  await testAsync('invalid params are rejected, genuine notifications stay silent, and string/zero IDs work', async () => {
+    const {responses} = await talk([
+      ...[null, false, [], 'private'].map((params, index) => ({jsonrpc: '2.0', id: index + 1, method: 'ping', params})),
+      {jsonrpc: '2.0', method: 'notifications/initialized', params: {}}, rpc(0, 'ping'), rpc('valid', 'ping')
+    ]);
+    for (const response of responses.slice(0, 4)) assert.strictEqual(response.error.code, -32602);
+    assert.deepStrictEqual(responses.slice(4).map(response => response.id), [0, 'valid']);
+  });
+  await testAsync('duplicate active IDs cannot replace the cancellation owner', async () => {
+    const {responses, stderr} = await talk([
+      rpc(1, 'tools/call', {name: 'start_completed_local_results_handoff', arguments: {}}),
+      rpc(1, 'tools/call', {name: 'start_completed_local_results_handoff', arguments: {}}),
+      {jsonrpc: '2.0', method: 'notifications/cancelled', params: {requestId: 1}}, rpc(2, 'ping')
+    ], {handoffFixture: true, supportMode: false});
+    assert.strictEqual(stderr, '');
+    assert.strictEqual(responses.filter(response => response.error?.code === -32600).length, 1);
+    const cancelled = responses.find(response => response.result?.structuredContent)?.result.structuredContent;
+    assert.strictEqual(cancelled.cowork_status.outcome, 'cancelled');
+  });
   for (const cancelTool of [false, true]) await testAsync(`MCP completed-batch picker stays responsive and honours ${cancelTool ? 'cancel tool' : 'host notification'}`, async () => {
     const { responses, stderr } = await talk([
       rpc(1, 'tools/call', { name: 'start_completed_local_results_handoff', arguments: {} }),
@@ -253,6 +283,8 @@ async function main() {
     const first = responses.find(r => r.id === 1).result;
     assert.strictEqual(first.isError, true);
     assert.match(first.structuredContent.message, /abgebrochen/);
+    assert.strictEqual(first.structuredContent.cowork_status.outcome, 'cancelled');
+    assert.strictEqual(first.structuredContent.diagnostic.cause, 'LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED');
     assert.strictEqual(first.structuredContent.raw_content_sent_to_claude, false);
     assert.strictEqual(responses.find(r => r.id === 3).result.structuredContent.error, 'local_handoff_active');
     assert.doesNotMatch(JSON.stringify(responses), /batch_token|read_capability|aaaaaaa|bbbbbbb/);

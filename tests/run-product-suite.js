@@ -48,6 +48,7 @@ const baseFiles = [
   'tests/test-batch-result-projection.js', 'scripts/verify-native.mjs',
   'tests/test-bundled-runtime.mjs',
   'tests/test-runtime-release-path.mjs',
+  'tests/test-marketplace-projection.mjs',
   'tests/test-stable-data-root.js',
   'tests/make-fixtures.js', 'scripts/verify-canonical-docs.mjs',
   'tests/test-current-documentation-contract.js', 'tests/test-current-document-links.js',

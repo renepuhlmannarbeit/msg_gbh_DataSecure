@@ -11,8 +11,9 @@
   `docs/archive/**`, `tasks/archiv/**` und RC-spezifische alte UAT-Kits sind nur
   Historie und keine Anforderungen.
 - Der jeweils aktuelle einmalige Arbeitsauftrag folgt der Konvention
-  `tasks/AUFTRAG-<ADRESSAT>-<RC>-<THEMA>.md`. Der aktuelle schreibende Auftrag
-  ist `tasks/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md`.
+  `tasks/AUFTRAG-<ADRESSAT>-<RC>-<THEMA>.md`. Nur ein ausdrücklich vom Anwender
+  zugewiesener, mit dem aktuellen Kanon revalidierter Auftrag ist aktiv.
+  Ein alter RC-Auftrag wird nicht durch seine bloße Existenz wieder aktiviert.
 
 ## Harte Produktgrenzen
 
@@ -21,16 +22,21 @@
   Standalone-Drops aufgenommen, niemals aus Chat-Uploads oder durch
   Claude-Werkzeuge. Die Claude-Hostgrenze bleibt DS-078; eine Hersteller-
   Desktop-Brücke erweitert die DataSecure-Freigabe nicht automatisch.
-- Anonymisierung unterstützt TXT, Markdown, CSV und DOCX. Standalone besitzt
-  zusätzlich den ausführbaren Zweck **Nur in Markdown umwandeln** für diese
-  Formate sowie XLSX, PPTX, PDF/Scan-PDF und PNG/JPEG/BMP (DS-085).
+- Cowork anonymisiert TXT, Markdown, CSV, DOCX sowie lokal extrahiertes Markdown
+  aus XLSX/PPTX (DS-093). PDF/Scan-PDF und eigenständige Bilder sind dort noch
+  nicht freigegeben (BL-023.1). Standalone unterstützt beide Zwecke für TXT,
+  Markdown, CSV, DOCX, XLSX, PPTX, PDF/Scan-PDF und PNG/JPEG/BMP (DS-085).
+  **Nur in Markdown umwandeln** erhält Originalinhalte. Bei der Anonymisierung
+  breiter Formate wird ausschließlich extrahiertes Markdown anonymisiert;
+  Extraktionsstatus und Anonymisierungsstatus bleiben getrennt.
   Die [Formatmatrix](docs/FORMAT_COVERAGE_MATRIX.md) trennt Coverage und
   Zweckfreigabe; Quellimplementierung ersetzt keine menschliche Zielhostabnahme.
 - Originale niemals verändern, verschieben oder automatisch löschen.
 - Nur verifiziertes anonymisiertes Markdown gelangt nach `DataSecure-Output`.
   Reine Konvertate bleiben **nicht anonymisiert** in `DataSecure-Markdown` und
-  außerhalb des Plugin-Handoffs. Standalone ergänzt je Lauf eine lokale
-  `DataSecure-Zuordnung.csv` (DS-083); das globale Mapping bleibt privat.
+  außerhalb des Plugin-Handoffs. Standalone ergänzt nur Anonymisierungsläufe um
+  eine lokale `DataSecure-Zuordnung.csv` (DS-083); reine Markdown-Konvertierung
+  erzeugt keine Zuordnungsdatei. Das globale Mapping bleibt privat.
   Cowork-Outputs enthalten keine Zuordnung oder Originalnamen.
 - Standalone zeigt gewählte Quellenordner, Dateinamen und Ergebnisziele lokal
   als Text (DS-082), ohne freie Datei-/Netzwerkrechte. Diese Anzeige gehört

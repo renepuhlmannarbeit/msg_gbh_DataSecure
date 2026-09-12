@@ -152,6 +152,7 @@ async function configureResultFolder(args={},context={}){
   const owner='result_folder';
   if(!acquireNativeInteraction(owner))throw new SafeError('Eine lokale DataSecure-Auswahl ist bereits geöffnet. Der Ergebnisordner bleibt unverändert.');
   try{
+    LOCAL_ONLY_HANDOFF.finalizeTerminal();
     if(rootMutationBlocked())throw new SafeError('Ein lokaler Stapel oder eine Ergebnisübergabe ist noch offen. Bitte zuerst fortsetzen, abschließen oder verwerfen; bis dahin bleibt der Ergebnisordner unverändert.');
     if(args.reset===true){clearConfiguredResultRoot();return{ok:true,configuration_changed:true,result_folder_configured:false,raw_content_sent_to_claude:false};}
     const selected=await chooseAndSaveResultFolder(context);
@@ -349,7 +350,9 @@ async function continueMostRecentDocumentBatch(context={}){
   // intake or batch worker. The paused batch stays durable for a later request.
   const status=genericStatus();
   if(status.local_intake_pending===true||status.batch_processing_active===true){
-    return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Die Fortsetzung wurde nicht gestartet und bleibt später möglich.',local_processing_started:false,next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'continuation','BATCH_ACTIVE',false);
+    return withDiagnostic({ok:false,error:'batch_active',message:'Ein lokaler DataSecure-Stapel wird bereits verarbeitet. Die Fortsetzung wurde nicht gestartet und bleibt später möglich.',local_processing_started:false,
+      local_processing_active:status.batch_processing_active===true,local_intake_pending:status.local_intake_pending===true,
+      next_action:'wait_for_local_release_before_retry',raw_content_sent_to_claude:false},'continuation','BATCH_ACTIVE',false);
   }
   const continued=continueMostRecentBatch();
   // Normal and support callers share this token-free continuation response.
@@ -439,7 +442,8 @@ async function startSupportBatchReview(args,context={}){
   },'review',cause,false);
   const status=genericStatus();
   if(status.local_intake_pending===true||status.batch_processing_active===true)
-    return unavailable('BATCH_ACTIVE','batch_active');
+    return {...unavailable('BATCH_ACTIVE','batch_active'),local_processing_active:status.batch_processing_active===true,
+      local_intake_pending:status.local_intake_pending===true};
   // Metadata only. Reconciliation and raw reconstruction belong to the worker
   // under its exclusive batch lease, including the support-only route.
   const progress=readBatchProgress(args.batch_token);
@@ -561,13 +565,30 @@ const ACTIVE_REQUESTS=new Map();
 const IN_FLIGHT=new Set();
 let shuttingDown=false;
 function requestKey(id){try{return JSON.stringify(id);}catch{return String(id);}}
-async function handle(req,traceId){if(!req||req.jsonrpc!=='2.0'||typeof req.method!=='string'){if(req&&Object.hasOwn(req,'id'))rpcError(req.id,-32600,'Ungültige Anfrage');return;}const isModern=modern(req)||req.method==='server/discover',id=req.id;
+function validRequestId(id){return typeof id==='string'||Number.isSafeInteger(id);}
+async function handle(req,traceId){
+  // Invalid JSON values are not notifications. Reject the outer MCP envelope
+  // before tool dispatch; never reflect arbitrary objects as response IDs.
+  const object=req!==null&&typeof req==='object'&&!Array.isArray(req);
+  const hasId=object&&Object.hasOwn(req,'id');
+  const id=hasId&&validRequestId(req.id)?req.id:null;
+  if(!object||req.jsonrpc!=='2.0'||typeof req.method!=='string'||
+      (hasId&&!validRequestId(req.id))){
+    return rpcError(id,-32600,'Ungültige Anfrage');
+  }
+  if(Object.hasOwn(req,'params')&&(!req.params||typeof req.params!=='object'||Array.isArray(req.params))){
+    if(hasId)return rpcError(id,-32602,'Ungültige Parameter');
+    return;
+  }
+  const isModern=modern(req)||req.method==='server/discover';
 // A request without an id is a notification: JSON-RPC forbids any response,
 // including an error response. Only the notifications/* namespace is expected.
-if(req.method==='notifications/cancelled'){ACTIVE_REQUESTS.get(requestKey(req.params?.requestId))?.abort();return;}
-if(!Object.hasOwn(req,'id'))return;
+if(hasId&&req.method.startsWith('notifications/'))return rpcError(id,-32600,'Benachrichtigungen dürfen keine Anfrage-ID enthalten');
+if(req.method==='notifications/cancelled'){if(validRequestId(req.params?.requestId))ACTIVE_REQUESTS.get(requestKey(req.params.requestId))?.abort();return;}
+if(!hasId)return;
+if(ACTIVE_REQUESTS.has(requestKey(id)))return rpcError(id,-32600,'Anfrage-ID ist bereits aktiv');
 if(req.method==='tools/call'&&(!req.params||typeof req.params!=='object'||Array.isArray(req.params)||typeof req.params.name!=='string'))return rpcError(id,-32602,'Ungültige Werkzeuganfrage');
-if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id),controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);const supportMode=process.env.EU_PRIVACY_SUPPORT_MODE==='1';try{const dispatched=await guardedDispatch(req.params?.name,req.params?.arguments,{signal:controller.signal,traceId});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=withCoworkStatus(req.params.name,completeDiagnostic(dispatched),{supportMode});const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const v=withCoworkStatus(req.params.name,withDiagnostic({ok:false,error:e?.code==='MCP_ARGUMENT_INVALID'?'invalid_tool_arguments':e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),{supportMode});const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
+if(req.method==='server/discover')return ok(id,{resultType:'complete',supportedVersions:['2026-07-28','2025-11-25','2025-06-18'],capabilities:{tools:{listChanged:false},prompts:{listChanged:false}},instructions:INSTRUCTIONS,ttlMs:3600000,cacheScope:'public'},true);if(req.method==='initialize'){STATUS_APP.initialize(req.params?.capabilities);const rq=req.params?.protocolVersion,s=new Set(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);return ok(id,{protocolVersion:s.has(rq)?rq:'2025-11-25',capabilities:{tools:{listChanged:false},prompts:{listChanged:false},...STATUS_APP.capabilities()},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});}if(req.method==='notifications/initialized')return;if(req.method==='ping')return ok(id,isModern?{resultType:'complete'}:{},isModern);if(req.method==='resources/list'){const r=STATUS_APP.listResources();if(!r)return rpcError(id,-32601,'Methode nicht gefunden');return ok(id,r,isModern);}if(req.method==='resources/read'){if(!STATUS_APP.capabilities().resources)return rpcError(id,-32601,'Methode nicht gefunden');const r=STATUS_APP.readResource(req.params?.uri);if(!r)return rpcError(id,-32602,'Unbekannte Ressource');return ok(id,r,isModern);}if(req.method==='tools/list'){const r={tools:STATUS_APP.tools(listedTools())};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='tools/call'){const key=requestKey(id);if(ACTIVE_REQUESTS.has(key))return rpcError(id,-32600,'Anfrage-ID ist bereits aktiv');const controller=new AbortController();if(shuttingDown)controller.abort();ACTIVE_REQUESTS.set(key,controller);const supportMode=process.env.EU_PRIVACY_SUPPORT_MODE==='1';try{const dispatched=await guardedDispatch(req.params?.name,req.params?.arguments,{signal:controller.signal,traceId});if(dispatched===null)return rpcError(id,-32602,'Unbekanntes Werkzeug');const v=withCoworkStatus(req.params.name,completeDiagnostic(dispatched),{supportMode});const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,v?.ok===false&&v?.error!=='input_empty'));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}catch(e){const msg=e instanceof SafeError?e.message:'Die lokale Verarbeitung wurde sicher abgebrochen. Es wurde kein freigegebenes Output-Paket erzeugt.';const v=withCoworkStatus(req.params.name,withDiagnostic({ok:false,error:e?.code==='MCP_ARGUMENT_INVALID'?'invalid_tool_arguments':e?.code==='REQUEST_CANCELLED'?'request_cancelled':'processing_stopped',message:msg,raw_content_sent_to_claude:false},'dispatch',e?.code==='REQUEST_CANCELLED'?'REQUEST_CANCELLED':causeFromError(e,'INTERNAL_FAILURE'),false),{supportMode});const tr=STATUS_APP.toolResult(req.params?.name,toolResult(v,true));if(isModern)tr.resultType='complete';return ok(id,tr,isModern);}finally{ACTIVE_REQUESTS.delete(key);}}if(req.method==='prompts/list'){const r={prompts:PROMPTS};if(isModern)Object.assign(r,{resultType:'complete',ttlMs:3600000,cacheScope:'public'});return ok(id,r,isModern);}if(req.method==='prompts/get'){const t=promptText(req.params?.name,req.params?.arguments||{});if(!t)return rpcError(id,-32602,'Unbekannter Prompt');const r={description:PROMPTS.find(p=>p.name===req.params?.name)?.description||'',messages:[{role:'user',content:{type:'text',text:t}}]};if(isModern)r.resultType='complete';return ok(id,r,isModern);}return rpcError(id,-32601,'Methode nicht gefunden');}
 // Fail-closed startup. A refusal leaves a content-free journal line, a marker
 // file and one fixed stderr sentence instead of a raw stack trace with paths
 // (stdout is the MCP channel; the host does not surface stderr).
