@@ -3,14 +3,13 @@
 Stand: 12.09.2026 · 3.2.0-rc138
 
 Nachprüfung `CWR-20260912-01`–`11`: BL-041.8/.10/.12/.13/.14 und BL-010.8
-erhalten lokale Code-/Regressionsevidence für Status, ACK, Abbruch, Übergabe,
-Picker und MCP-Hüllen sowie das korrigierte native Paketgate. Der Windows-
-Pluginstart und die byteidentische Marketplace-Projektion aus dem aktuellen
-Host-ZIP sind lokal geprüft; die neuen Mac-ZIP-Gates bleiben ungestartet.
-Der bisherige zentrale Ubuntu-Paketjob ist nur statische Cowork-ZIP-Evidence,
-kein nativer Mac-Pluginstart. Standalone-Evidence bleibt davon unberührt.
-Alle veröffentlichten Hashbindungen bleiben historische Kandidatenevidence;
-lokale Änderungen sind noch nicht veröffentlicht. Einzelbefunde stehen im
+erhalten Code-/Regressionsevidence für Status, ACK, Abbruch, Übergabe, Picker
+und MCP-Hüllen sowie das korrigierte native Paketgate. RC138 bindet Commit
+`d70cb266df90bdc07b0efadbf81f0d81195b3920`; Lauf `34691170241` baute und
+startete exakt die veröffentlichten Cowork-ZIPs auf Windows x64, macOS Intel
+und macOS ARM64. Der lokale Windows-Doppelbau ist bytegleich. Standalone-
+Evidence bleibt davon unberührt und weiterhin an RC137 gebunden. Sichtbare
+Cowork-, Modell-, N3/N4- und Fresh-Install-Abnahmen bleiben offen. Einzelbefunde stehen im
 [Herstellerreview](../REVIEW_CLAUDE_COWORK_2026-09-01.md).
 
 E0 = lokale Code-/Testevidenz, E1 = Zielsystem/Installation, E2 = beobachtete
@@ -244,7 +243,7 @@ INT-13-Bindung liegen unter `dist/pkg-04/b543589f3250a6ab57ddd5bc3a144f03a24ee02
 | BL-022.2/3, BL-023.1–4, BL-024.3 | Cowork-XLSX/PPTX ist gemäß DS-093 E0 aktiv; nur Cowork-PDF/Scan-PDF/Bilder bleibt NO-GO. Reine Standalone-Konvertierung und Markdown-first-Anonymisierung von XLSX/PPTX/PDF/Scan-PDF/PNG/JPEG/BMP ist im isolierten Produktworker integriert; Originalwerte bleiben im Nur-Konvertieren-Modus, unvollständige Coverage/OCR wird in beiden Modi mit festen Gründen statt als vollständiger Originalcontainer ausgewiesen. RC111 validiert sämtliche PPTX-XML-/RELS-Teile, stoppt PDF-Annotationen/Outline/XMP und erhält standardisierte PDF-Metadaten sichtbar. Standardskonforme In-Memory-PDFs prüfen den echten paketierten Parser zusätzlich gegen AcroForm, Signaturfeld, EmbeddedFile/Name-Tree, JavaScript sowie leeres und nichtleeres Benutzerpasswort; die dabei aufgedeckte PDF.js-`Map`-Repräsentation von Anhängen ist im Produktgate geschlossen. Scan plus Seitenzahl, Privacy-Übergabe und gebündelte Offline-Decoder/Modelle sind regressionsgeprüft; `OCR_TEXT_EMPTY` bezeichnet nur eine insgesamt textleere Extraktion und stoppt nicht mehr vorhandenen nativen PDF-Text wegen einer einzelnen textlosen Bildfläche. Bestätigtes Ende oder `CONVERSION_TERMINATION_UNCONFIRMED`; 60 frühe Windows-Kills prüfen atomare Jobzuweisung | E1/E3; vollständige Objekt-/Layout-/OCR-Coverage des Originalcontainers bleibt eigenständig offen |
 | BL-031.1 | Kontext- und Regressionskorpus | IT-/Health-IT-Fachprüfung E3 |
 | BL-041.1–9, BL-044.1, BL-049.1, BL-050.3 | Tool-, Picker-, Handoff-, Recovery- und Performanceverträge; stdio-JSON-RPC vor dem Parsen auf 1 MiB je Frame begrenzt und nach Überschreitung wieder synchronisiert. BL-044.1 ist als direkte lokale Windows-Mikromessung mit 201 Kandidaten/20 Verzeichnissen quantifiziert (p95 77,142 ms; lokales Referenzbudget 250 ms). Ein dauerhafter Cache ist auf diesem Host nicht indiziert. | aktuelle Cowork-/OS-/UX-/Security-Evidenz E1/E2/E3; End-to-End-Admission sowie UNC-/Sync-Root-Gegenprobe |
-| BL-051.1–6 | ZIP-/Marketplace-/Paketgates lokal; aktueller Windows-Paketnachweis RC135/`9c2e4f90`, ZIP-SHA-256 `8a27494c…c3d1`; native Standalone-Mac-Pakete und drei Cowork-Zielpakete stammen aus demselben Commit; UAT-Vertrag trennt den 100-Dateien-Funktionsfall vom zusätzlichen 200-Dateien-/500-MiB-Grenznachweis | Fresh Install, Update, Rollback, Hostmatrix sowie versionsneuer 200-Dateien- und 500-MiB-Lauf E1/E2 |
+| BL-051.1–6 | Standalone bleibt mit RC137/`8979d4b2` und INT-13 `3dfdb381…47c6f0` paketgebunden. Cowork RC138/`d70cb266` ist getrennt veröffentlicht: Windows x64 `bc005e23…97d251`, macOS Intel `a34443f8…8c5efb`, macOS ARM64 `829ba3f2…7463f2`; Lauf `34691170241` startete exakt alle drei Archive nativ und prüfte den MCP-Roundtrip. Marketplace-, SBOM-, Prüfsummen- und UAT-Vorlagengates sind grün; lokaler Windows-Doppelbau bytegleich. | Menschliche Fresh-Install-, Update-, Rollback-, Hostmatrix-, Cowork-Modell- und N3/N4-Abnahmen; versionsgebundener 200-Dateien-/500-MiB-Grenzlauf E1/E2 |
 | BL-052.1–5 | synthetisches UAT-Kit und leere Evidenzvorlage | benannte Anwender-, Fach-, Datenschutz-, UX-, Architektur- und Securityrollen |
 
 Die Linux-x64-E0-Zelle ist durch Lauf

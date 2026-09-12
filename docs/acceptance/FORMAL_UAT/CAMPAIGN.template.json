@@ -7,7 +7,7 @@
   "created_at_utc": "",
   "release_scope": {
     "cowork_plugin": true,
-    "standalone": true,
+    "standalone": false,
     "windows_x64": true,
     "macos_architecture": ""
   },

@@ -2,16 +2,45 @@
 
 Stand: 12.09.2026 · 3.2.0-rc138
 
-Der aktuelle Quellstand ist RC138-Entwicklungsstand. Die Cowork-Korrekturen aus
-`CWR-20260912-01`–`11` werden als neuer technischer Vorabkandidat geschnitten;
-Commit-, Paket- und Zielhostbindung werden erst nach den Releasegates ergänzt.
-RC137 bleibt als technischer UAT-Kandidat an den sauberen, auf `main`
-veröffentlichten Quellcommit `8979d4b2127741c2921cb6f0654fb83d82944845`
-gebunden. Der
-Windows-x64-Cowork-Kandidat RC137 ist ebenfalls an diesen Quellcommit
-`8979d4b2127741c2921cb6f0654fb83d82944845` gebunden. RC135 bleibt getrennt
-als letzter plattformübergreifend paketgebundener Stand vor RC138 vollständig
+Der aktuelle Quellstand ist RC138 und für das Cowork-Produkt als technischer
+Vorabkandidat veröffentlicht. Der Windows-x64-Cowork-Kandidat RC138 und die
+beiden macOS-Cowork-Kandidaten sind an den sauberen Quellcommit
+`d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden. Der Release
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc138>
+enthält die drei nativ geprüften Normalpakete, eine getrennte Windows-Debug-
+Variante, SBOM, Prüfsummen und die vollständig auf `NOT_RUN` stehende Cowork-
+UAT-Vorlage.
+
+Der manuelle Lauf `34691170241` erzeugte die drei normalen Plugin-ZIPs und
+startete **genau diese Archive** anschließend auf Windows x64, macOS Intel und
+macOS ARM64. Manifest, Architektur, vollständiger MCP-Roundtrip und dauerhafter
+lokaler Zustand bestanden auf allen drei Zielhosts. Die Releaseartefakte sind:
+
+- Windows x64: 35.051.336 Byte, SHA-256
+  `bc005e23060c5334b8466525e91deb9d9f712e5c64bf4de1b420e8c04797d251`;
+- macOS Intel: 39.791.021 Byte, SHA-256
+  `a34443f8147034b8e63f61f1129790a043c89b3cc5d84a99d6641325848c5efb`;
+- macOS ARM64: 38.806.770 Byte, SHA-256
+  `829ba3f25c263ad1477d42540068439da7d4e9340b866bd5689376b39f7463f2`.
+
+Der lokale Windows-Doppelbau aus demselben Commit war bytegleich: normales
+Paket 35.051.388 Byte mit SHA-256
+`934c8cb6df4e1843149b5733d316b0c77aae0def2d276e3a83520b899f3ff08a`,
+Debug-Paket 35.052.910 Byte mit SHA-256
+`1f7a343853971bf296f9c2fad154bf73cb9540a64ca4764682fc85ab299eccf7`.
+Das commitgebundene UAT-Evidence-ZIP hat 3.375 Byte und SHA-256
+`8777115f3143a58f90ab8adee1b1323416661fbfc8db7cf667a97a019f242a5a`.
+Die abweichenden Hashes des lokalen und des Workflow-Windows-ZIPs beruhen auf
+unterschiedlichen Checkout-Zeilenenden; veröffentlicht wird ausschließlich das
+im Workflow nativ gestartete Archiv.
+
+Standalone wurde funktional nicht geändert und nicht als RC138 neu gebaut.
+Sein aktueller technischer UAT-Kandidat bleibt RC137, gebunden an Quellcommit
+`8979d4b2127741c2921cb6f0654fb83d82944845`. RC135 bleibt getrennt als letzter
+plattformübergreifend paketgebundener Stand vor RC138 vollständig
 nachvollziehbar; RC136 bleibt der dazwischenliegende Windows-Cowork-Kandidat.
+RC138 ist trotz der grünen E0-Gates keine menschliche Cowork-Modell-, N3/N4-
+oder Produktionsfreigabe.
 
 Windows-PKG-04 erzeugte zwei bytegleiche Standalone-Archive zu jeweils
 110.253.680 Byte. Paket-, Worker-, History-/Sidecar- und native Smokes
@@ -153,9 +182,10 @@ Cowork-Workflows belegt nur statische ZIP-Eigenschaften. Der nachgelagerte
 Host mit `node scripts/verify-plugin-zip.mjs --require-native` starten.
 Manifestkommando, vollständiger MCP-Roundtrip und dauerhafter isolierter Cache
 werden geprüft. Fremdplattformen dürfen kein natives PASS liefern. Die neue
-Prüfung ist vorbereitet, aber noch nicht als Mac-Releaseevidence ausgeführt;
-die bisherigen Cowork-Mac-Archive werden dadurch nicht rückwirkend als nativ
-gestartet ausgewiesen. Standalone-Paketnachweise bleiben separat gültig.
+Für RC138 wurde diese Prüfung im Lauf `34691170241` auf Windows x64, macOS
+Intel und macOS ARM64 erfolgreich ausgeführt. Frühere Cowork-Mac-Archive werden
+dadurch nicht rückwirkend als nativ gestartet ausgewiesen. Standalone-
+Paketnachweise bleiben separat gültig.
 
 ## Verbindliche Versions- und Releasewahrheit
 

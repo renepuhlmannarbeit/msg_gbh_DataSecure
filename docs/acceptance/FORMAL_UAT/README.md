@@ -1,28 +1,31 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 11.09.2026 · RC137-Kandidat
+Stand: 12.09.2026 · RC138-Cowork-Kandidat; Standalone RC137 separat
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
-denselben festgeschriebenen Commit. Die Testfälle selbst bleiben in den
+für das jeweils geprüfte Produkt denselben festgeschriebenen Commit. Die
+Produktkandidaten dürfen nicht vermischt werden. Die Testfälle selbst bleiben in den
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC137 ist als technischer Standalone- und Cowork-Kandidat an Commit
-`8979d4b2127741c2921cb6f0654fb83d82944845` gebunden und veröffentlicht.
-Windows-PKG-04/INT-13, native macOS-Intel-/ARM- und Linux-x64-Bauten sowie die
-drei Cowork-Zielpakete sind E0-grün. Eine formale Kampagne beginnt dennoch erst,
-wenn beide Tester die exakten Pakethashes in ihrem Kampagnenmanifest gebunden
-haben. Die 12×3- und 41×3-Modellgates bleiben `NOT_RUN`; das veröffentlichte
-Evidence-ZIP ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch
-und darf nicht umetikettiert werden.
+RC138 ist als technischer Cowork-Kandidat an Commit
+`d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden und veröffentlicht.
+Die exakt erzeugten Cowork-ZIPs wurden auf Windows x64, macOS Intel und macOS
+ARM64 nativ gestartet. Standalone bleibt als eigener technischer Kandidat auf
+RC137 und Commit `8979d4b2127741c2921cb6f0654fb83d82944845`; es gibt kein
+Standalone-RC138-Paket. Deshalb ist die Vorlage zunächst auf **Cowork-only**
+gesetzt. Für eine Standalone-Kampagne wird ein separates Manifest mit RC137-
+Commit und -Pakethashes angelegt. Eine formale Kampagne beginnt erst, wenn beide
+Tester die exakten Pakethashes des jeweiligen Produkts gebunden haben. Die
+12×3- und 41×3-Modellgates bleiben `NOT_RUN`; das veröffentlichte Evidence-ZIP
+ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch und darf nicht
+umetikettiert werden.
 
-Evidence-Präzisierung vom 12.09.2026: Der bisherige Cowork-ZIP-Job prüfte die
-Archive auf Ubuntu statisch. Ein nativer Standalone-Mac-Start belegt keinen
-Cowork-Mac-Start. Vor Cowork-N3 muss daher das nachgezogene native ZIP-Gate
-auf der jeweiligen Architektur bestanden sein; danach folgt weiterhin die
-beobachtete Installation in Claude. Lokale CWR-20260912-Korrekturen sind noch
-nicht Bestandteil der hier gebundenen RC137-Pakete.
+Evidence-Präzisierung vom 12.09.2026: Das nachgezogene native ZIP-Gate ist für
+RC138 auf allen drei Cowork-Zielarchitekturen bestanden. Danach folgt weiterhin
+die beobachtete Installation und Bedienung in Claude; ein maschineller
+MCP-Roundtrip ist keine sichtbare Anwenderabnahme.
 
 ## Was N3 und N4 bedeuten
 
@@ -72,8 +75,10 @@ macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
    oder Unternehmensdaten in Git, Evidenz oder Defectbeschreibungen aufnehmen.
 6. Beide Tester starten ihre Plattformbranches vom selben Kampagnenbranch und
    prüfen dessen identischen `candidate_commit`, aber das jeweils passende Paket
-   und eine eigene Evidenzdatei. Jede anwendbare Prüfung wird darin für
-   Standalone und Cowork getrennt bewertet; ein gemeinsames PASS ist unzulässig.
+   und eine eigene Evidenzdatei. Pro Kampagne wird nur der im Manifest aktivierte
+   Produktkandidat geprüft. Standalone und Cowork erhalten wegen ihrer derzeit
+   unterschiedlichen Kandidatencommits getrennte Kampagnen; ein gemeinsames PASS
+   ist unzulässig.
 
 Solange Commit oder Paket-Hash fehlen, ist die Kampagne **nicht gestartet**.
 

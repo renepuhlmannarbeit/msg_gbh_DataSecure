@@ -28,6 +28,17 @@ Abschnitt B enthält ausschließlich menschliche beziehungsweise
 zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
 und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
 
+### RC138 – native Cowork-Paketparität und Interaktionshärtung
+
+Die Befunde `CWR-20260912-01`–`11`, die geschlossene Interaktionsregistry,
+Status-/ACK-/Handoff-Korrekturen, paginierte Aufnahme und Marketplace-Gates sind
+an Commit `d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden. Lauf
+`34691170241` baute und startete exakt die drei Release-ZIPs auf Windows x64,
+macOS Intel und macOS ARM64; der Pflichtlauf `34691166336` ist ebenfalls grün.
+Die technische E0-Lieferung ist erledigt. Offen bleiben ausschließlich die
+benannten menschlichen Cowork-Modell-, N3/N4-, Accessibility- und
+Fresh-Install-Nachweise. Standalone bleibt unverändert auf RC137.
+
 ### RC136 – DS-099: kanonischer Cowork-Interaktionsvertrag
 
 Der read-only Strukturvergleich mit `GBH-BID-Skills` ist dauerhaft unter

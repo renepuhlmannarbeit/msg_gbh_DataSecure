@@ -14,11 +14,14 @@ statt nur synthetischer Runtimefixtures. Der Test
 `test-marketplace-projection.mjs` sichert zusätzlich die exakte Hostwahl,
 Quellbyte-Gleichheit vor Mutation und den tatsächlichen ZIP-/Ausgabeabgleich;
 `scripts/lib/product-files.mjs` liefert beiden Releasewegen denselben Guard.
-Die Korrekturen sind lokaler Quellstand, noch keine neue Releasebindung.
-Der bisherige Cowork-Paketlauf auf Ubuntu beweist insbesondere keinen
-nativen Mac-Pluginstart; die nachstehende native Startparität gilt für die
-explizit gestarteten Standalone-Zielpakete und den lokal geprüften Windows-
-Cowork-Pfad, nicht automatisch für die Cowork-Mac-ZIPs.
+RC138 bindet diese Korrekturen an Quellcommit
+`d70cb266df90bdc07b0efadbf81f0d81195b3920`. Der kostenbegrenzte Pflichtlauf
+`34691166336` sowie der Dreiziel-Paketlauf `34691170241` sind grün. Letzterer
+startet exakt die erzeugten Cowork-ZIPs auf Windows x64, macOS Intel und macOS
+ARM64 und prüft Manifest, MCP-Roundtrip und dauerhaften lokalen Zustand. Die
+veröffentlichten SHA-256 sind `bc005e23…97d251`, `a34443f8…8c5efb` und
+`829ba3f2…7463f2`. Standalone bleibt unverändert an RC137 gebunden. Die
+maschinelle Startparität ersetzt keine sichtbare Cowork-/N3/N4-/Modellabnahme.
 
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im

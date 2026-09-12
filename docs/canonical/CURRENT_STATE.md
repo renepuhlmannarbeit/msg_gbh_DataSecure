@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 12.09.2026 · 3.2.0-rc138 · Cowork-Releasegates laufen; Modellabnahme und N3/N4 offen
+Stand: 12.09.2026 · 3.2.0-rc138 · Cowork technisch veröffentlicht; Modellabnahme und N3/N4 offen
 
 ## RC138 – Cowork-Revalidierung nach RC137
 
@@ -16,15 +16,20 @@ Quellbytes vor Ausgabeänderungen und prüft die fertigen Dateien gegen das
 tatsächliche Archiv. Hash, Ziel und Execute-Bits sind explizit nachvollziehbar;
 die Projektion selbst behauptet keinen nativen Ausführungsnachweis.
 
-Wichtige Evidence-Präzisierung: Der bisherige zentrale Cowork-Paketjob auf Linux
-prüfte Archiv/Quellinhalt, aber startete die Mac-ZIPs nicht. Die nativen
-Standalone-Nachweise unten sind gültig, lassen sich jedoch nicht auf Cowork
-übertragen. Der manuelle Cowork-Workflow verlangt künftig einen echten Start
-jedes fertigen ZIPs auf seinem Zielhost. Execute-Bits und isolierte Mac-
-Testpfade sind korrigiert. Neue Mac-Gates wurden lokal nicht ausgeführt.
-Diese Änderungen werden nicht in die veröffentlichten RC137-ZIPs
-zurückgeschrieben. RC138 erhält eine eigene Commit-/Paketbindung; bis deren
-Releasegates beendet sind, bleiben RC137-Hashes und INT-13 unverändert.
+RC138 ist an Quellcommit `d70cb266df90bdc07b0efadbf81f0d81195b3920`
+gebunden und unter
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc138>
+veröffentlicht. Der kostenbegrenzte Pflichtlauf `34691166336` ist grün. Der
+manuelle Lauf `34691170241` baute die drei Cowork-Zielarchive und startete exakt
+diese Pakete auf Windows x64, macOS Intel und macOS ARM64. Manifest, Architektur,
+MCP-Roundtrip und dauerhafter lokaler Zustand bestanden. Windows x64 bindet
+SHA-256 `bc005e23…97d251`, macOS Intel `a34443f8…8c5efb` und macOS ARM64
+`829ba3f2…7463f2`. Ein lokaler Windows-Doppelbau war zusätzlich bytegleich.
+
+Diese E0-Evidence schließt den früheren Nachweisfehler, ist aber keine sichtbare
+Claude-/Cowork-, Modell-, Accessibility-, N3/N4- oder Produktionsabnahme.
+Standalone wurde nicht verändert oder als RC138 neu gebaut; sein technischer
+Kandidat bleibt RC137 mit unveränderten Hashes und INT-13-Bindung.
 
 ## RC137 – Standalone-Härtetest und sitzungsgebundener Start
 

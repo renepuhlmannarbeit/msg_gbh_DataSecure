@@ -94,6 +94,10 @@ test('release truth binds the published candidate while keeping human approval s
     assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}-Entwicklungsstand`, 'u'),
       'a newer unbound source RC must remain explicitly marked as development state');
   }
+  if (boundCowork[1] === currentRc) {
+    assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}(?!-Entwicklungsstand)`, 'u'),
+      'a published current Cowork RC must no longer be marked as development state');
+  }
   assert.match(release, new RegExp(`RC135 bleibt getrennt[\\s\\S]{0,180}plattformübergreifend paketgebundener Stand vor ${currentRc}`, 'u'));
   assert.match(release, /RC135 ist als plattformübergreifender technischer Vorabkandidat/u);
   assert.match(release, /releases\/tag\/v3\.2\.0-rc135/u);

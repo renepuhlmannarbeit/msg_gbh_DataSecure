@@ -22,7 +22,7 @@ test('formal kit contains the complete two-person campaign contract', () => {
   }
   const overview = read('README.md');
   assert.match(overview, /eine auf\s+Windows x64 und eine auf einem Mac/u);
-  assert.match(overview, /denselben festgeschriebenen Commit/u);
+  assert.match(overview, /jeweils geprüfte Produkt denselben festgeschriebenen Commit/u);
   assert.match(overview, /Ein einzelner Mac schließt nur seine reale Architektur/u);
   assert.match(overview, /Standalone muss offline funktionieren/u);
   assert.match(overview, /Cowork benötigt Claude Desktop und\s+Internet/u);
@@ -30,7 +30,7 @@ test('formal kit contains the complete two-person campaign contract', () => {
   const boundCandidate = /Windows-x64-Cowork-Kandidat RC(\d+)[\s\S]{0,500}?Quellcommit\s+`([0-9a-f]{40})`/u.exec(release);
   assert.ok(boundCandidate, 'release truth must identify the currently published Cowork candidate');
   assert.match(overview, new RegExp(
-    `RC${boundCandidate[1]} ist als technischer Standalone- und Cowork-Kandidat[\\s\\S]{0,120}` +
+    `RC${boundCandidate[1]} ist als technischer Cowork-Kandidat[\\s\\S]{0,120}` +
     '`[0-9a-f]{40}` gebunden und veröffentlicht', 'u'));
   if (boundCandidate[1] !== campaignLabel) {
     assert.match(release, new RegExp(`aktuelle Quellstand ist RC${campaignLabel}-Entwicklungsstand`, 'u'));
@@ -98,6 +98,8 @@ test('campaign template cannot be mistaken for completed evidence', () => {
   assert.strictEqual(campaign.state, 'planned');
   assert.strictEqual(campaign.candidate_commit, '');
   assert.strictEqual(campaign.release_scope.windows_x64, true);
+  assert.strictEqual(campaign.release_scope.cowork_plugin, true);
+  assert.strictEqual(campaign.release_scope.standalone, false);
   assert.strictEqual(campaign.release_scope.macos_architecture, '');
   assert.strictEqual(campaign.packages.windows.standalone_sha256, '');
   assert.strictEqual(campaign.packages.macos.cowork_plugin_sha256, '');
