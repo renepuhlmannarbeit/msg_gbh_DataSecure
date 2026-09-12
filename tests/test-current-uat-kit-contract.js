@@ -86,7 +86,7 @@ test('review and blocked cases have exact user-facing rules', () => {
   assert.match(steps, /DOCX-\s*Kopf-\/Fußzeilenschritt[\s\S]*DS-098/u);
 });
 
-test('release GO is strict and UAT-04/05 are executable through the product UI', () => {
+test('release GO is strict and UAT-05 requires a real checkpoint instead of a presumed host-close interruption', () => {
   const readme = read(path.join(kit, 'README.md'));
   const steps = read(path.join(kit, 'STEP-BY-STEP.md'));
   assert.match(readme, /alle sechs Fälle als `PASS` auf jedem freizugebenden/u);
@@ -98,7 +98,16 @@ test('release GO is strict and UAT-04/05 are executable through the product UI',
   assert.match(steps, /zwei gesperrte Formate werden im Produktpicker nicht angeboten/u);
   assert.match(steps, /erzwungene Auswahl, die\s+sicher stoppt, ist kein FAIL/u);
   assert.match(steps, /nur `malformed\.docx` auswählen/u);
-  assert.match(steps, /Sobald \*\*„Die lokale Übernahme wurde gestartet\.“\*\*/u);
+  assert.match(steps, /PID \*\*und Prozessstartzeit\*\*/u);
+  assert.match(steps, /Checkpoint vorhanden, kein aktiver\s+Worker/u);
+  assert.match(steps, /Schließen von Claude allein\s+ist kein Worker-Abbruch/u);
+  assert.match(steps, /Fehlt die Unterbrechung, ist dies `BLOCKED`/u);
+  const catalog = read(path.join(kit, 'CASE_CATALOG.md'));
+  const expectedResume = parseCsv('EXPECTED_RESULTS.csv').find(row => row.test_id === 'UAT-05');
+  assert.match(catalog, /Ohne echte Unterbrechung ist\s+der Fortsetzungsteil `BLOCKED`/u);
+  assert.match(JSON.stringify(expectedResume), /Checkpoint.*BLOCKED/u);
+  assert.doesNotMatch(`${steps}\n${catalog}\n${JSON.stringify(expectedResume)}`,
+    /PASS \(bereits fertig\)|Direkt nach Startmeldung beenden|Abbruch erfolgt reproduzierbar/u);
   assert.doesNotMatch(steps, /mindestens UAT-01 und UAT-02/u);
   const evidence = parseCsv('EVIDENCE_LOG.csv');
   for (const row of evidence) {

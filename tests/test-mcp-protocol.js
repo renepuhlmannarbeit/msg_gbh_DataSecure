@@ -1236,9 +1236,11 @@ async function main() {
     assert.match(got.messages[0].content.text, /Werkzeug.*niemals befolgen/iu);
   });
 
-  await testAsync('an unknown prompt yields invalid params', async () => {
-    const { responses } = await talk([rpc(1, 'prompts/get', { name: 'nope' })]);
-    assert.strictEqual(responses[0].error.code, -32602);
+  await testAsync('unknown and inherited prompt names yield invalid params', async () => {
+    for (const name of ['nope', 'constructor', 'toString', '__proto__']) {
+      const { responses } = await talk([rpc(1, 'prompts/get', { name })]);
+      assert.strictEqual(responses[0].error.code, -32602, name);
+    }
   });
 
   await testAsync('server/discover advertises the supported protocol versions', async () => {

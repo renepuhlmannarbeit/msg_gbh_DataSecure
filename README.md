@@ -1,4 +1,4 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC138
+# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC139
 
 Die Produktkandidaten sind bewusst getrennt: Standalone bleibt auf dem unter
 Windows bestätigten RC137; das Cowork-Plugin ist als RC138 aus Quellcommit
@@ -6,6 +6,11 @@ Windows bestätigten RC137; das Cowork-Plugin ist als RC138 aus Quellcommit
 erzeugten Paketen nativ auf Windows x64, macOS Intel und macOS ARM64 gestartet.
 Das ist noch keine Produktionsfreigabe: Menschliche N3/N4- und Cowork-
 Modellabnahmen sind weiterhin offen.
+
+RC139 ist der neue Entwicklungsstand. Die Release-/UAT-Korrekturen nach dem
+zweiten Astra-Review sind noch nicht in diesen Downloads enthalten. Die vier nachvollziehbaren Befunde stehen bei
+[BL-041.17 im Backlog](docs/canonical/BACKLOG.md); der nächste Kandidat benötigt
+einen neuen sauberen Commit und erneut geprüfte Normal-/Debug-/UAT-Artefakte.
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -85,7 +90,11 @@ bereit:
 - [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc138.zip)
 - [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc138.zip)
 - [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc138.zip)
-- [Commitgebundene 12×3-UAT-Vorlage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/DataSecure-Cowork-UAT-Evidence-v3.2.0-rc138.zip)
+- Die veröffentlichten RC138-Cowork-Archive und ihre UAT-Vorlage bleiben
+  historische Evidenz. Die nachträglich geschlossenen BL-041.15–.18 verlangen
+  für einen neuen Kandidaten einen sauberen Commit, beide expliziten und vorab
+  verifizierten Archive sowie eine frisch erzeugte Vorlage gemäß
+  [Release-Anleitung](docs/RELEASE.md); RC138 ist deshalb nicht wiederverwendbar.
 - [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc138/SHA256SUMS)
 
 Das passende Paket vollständig herunterladen und als lokales

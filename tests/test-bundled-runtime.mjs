@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { buildRuntimePlugin } from '../scripts/build-runtime-plugin.mjs';
 import {
   assertBinaryTarget, createTargetOutput, extractRuntime, normalizeRuntimeLicense, readContract,
@@ -180,13 +181,15 @@ for (const targetId of ['windows-x64', 'macos-x64', 'macos-arm64', 'universal'])
   test(`${targetId} package is self-contained, deterministic in scope and excludes disabled OCR`, () => {
     const f = fixture();
     try {
-      const result = buildRuntimePlugin({ repositoryRoot: f.directory, runtimesRoot: f.runtimes, targetId });
+      const result = buildRuntimePlugin({ repositoryRoot: f.directory, runtimesRoot: f.runtimes, targetId,
+        sourceCommit: 'f'.repeat(40) });
       const bytes = fs.readFileSync(result.archive), entries = readZip(bytes), modes = readCentralModes(bytes);
       const mcp = JSON.parse(entries.get('.mcp.json'));
       assert.deepEqual(Object.keys(mcp), ['mcpServers']);
       assert.equal(mcp.mcpServers['data-secure-local'].command, f.contract.plugin_command);
       assert.deepEqual(mcp.mcpServers['data-secure-local'].args, [f.contract.runtime_entry]);
       assert.ok(entries.has('RUNTIME-EVIDENCE.json'));
+      assert.equal(JSON.parse(entries.get('RUNTIME-EVIDENCE.json')).source_commit, 'f'.repeat(40));
       assert.ok(entries.has('runtime/LICENSE.node.txt'));
       assert.ok(![...entries.keys()].some((name) => name === 'bin' || name.startsWith('bin/') || name.startsWith('server/ocr-runtime')));
       if (targetId === 'windows-x64') {
@@ -219,10 +222,46 @@ test('missing target, stale evidence and wrong binary refuse publication', () =>
       }
       if (kind === 'binary') fs.writeFileSync(file, Buffer.alloc(256));
       assert.throws(() => buildRuntimePlugin({ repositoryRoot: f.directory, runtimesRoot: f.runtimes,
-        targetId: target.id }), /BUNDLED_(?:PLUGIN_RUNTIME_MISSING|RUNTIME_(?:FILE_UNSAFE|EVIDENCE_INVALID|BINARY_TARGET))/);
+        targetId: target.id, sourceCommit: 'f'.repeat(40) }), /BUNDLED_(?:PLUGIN_RUNTIME_MISSING|RUNTIME_(?:FILE_UNSAFE|EVIDENCE_INVALID|BINARY_TARGET))/);
       assert.equal(fs.readdirSync(path.join(f.directory, 'dist')).length, 0);
     } finally { f.close(); }
   }
+});
+
+test('package evidence refuses an absent or malformed source commit before writing an archive', () => {
+  const f = fixture();
+  try {
+    assert.throws(() => buildRuntimePlugin({ repositoryRoot: f.directory, runtimesRoot: f.runtimes,
+      targetId: 'windows-x64' }), /BUNDLED_PLUGIN_SOURCE_COMMIT_REQUIRED/);
+    assert.throws(() => buildRuntimePlugin({ repositoryRoot: f.directory, runtimesRoot: f.runtimes,
+      targetId: 'windows-x64', sourceCommit: 'not-a-commit' }), /BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID/);
+    assert.equal(fs.readdirSync(path.join(f.directory, 'dist')).length, 0);
+  } finally { f.close(); }
+});
+
+test('real clean checkout builds after external download staging, but refuses an untracked root ZIP', () => {
+  const f = fixture();
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-download-test-'));
+  try {
+    fs.writeFileSync(path.join(f.directory, '.gitignore'), 'dist/\n');
+    const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/iu.test(key)));
+    const git = (...args) => execFileSync('git', ['-c',`core.hooksPath=${path.join(f.directory,'no-hooks')}`,...args],
+      {cwd:f.directory, env:gitEnv, encoding:'utf8', stdio:['ignore','pipe','pipe']}).trim();
+    git('init', '-q');
+    git('add', '.');
+    git('-c','user.name=DataSecure Test','-c','user.email=test@example.invalid',
+      '-c','commit.gpgsign=false','commit','-qm','Synthetic release staging fixture');
+    assert.equal(git('status','--porcelain'), '');
+    const download = path.join(f.directory, 'node-v22.23.2-win-x64.zip');
+    fs.writeFileSync(download, 'Synthetic download; not an executable.');
+    assert.throws(() => buildRuntimePlugin({repositoryRoot:f.directory,runtimesRoot:f.runtimes,targetId:'windows-x64'}),
+      /BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID/);
+    fs.renameSync(download, path.join(staging, path.basename(download)));
+    assert.equal(git('status','--porcelain'), '');
+    const result = buildRuntimePlugin({repositoryRoot:f.directory,runtimesRoot:f.runtimes,targetId:'windows-x64'});
+    assert.equal(JSON.parse(readZip(fs.readFileSync(result.archive)).get('RUNTIME-EVIDENCE.json')).source_commit, git('rev-parse','HEAD'));
+    assert.equal(git('status','--porcelain'), '', 'build artifacts do not dirty the checkout');
+  } finally { f.close(); fs.rmSync(staging, {recursive:true}); }
 });
 
 console.log(`Bundled runtime/package contract: ${passed} passed`);

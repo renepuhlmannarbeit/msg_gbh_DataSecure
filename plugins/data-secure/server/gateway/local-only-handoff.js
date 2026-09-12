@@ -5,6 +5,7 @@
 const { SafeError } = require('../runtime');
 const { pickCompletedBatch, cancelledError } = require('../companion/completed-batch-picker');
 const { GRADES, OMISSION_CODES } = require('./document-result-grade');
+const { validateCoverage } = require('../core/source-extraction-contract');
 
 // Cap the handoff strictly below the package-store capability lifetime. This
 // prevents a half-open RAM session from retaining a stale read capability.
@@ -39,13 +40,38 @@ function validatedPublicResult(value) {
   return value;
 }
 function publicDocument(document, entry) {
+  const extraction = validatedExtractionMetadata(entry);
   return {
     text: document.text,
     has_more: document.has_more === true,
     content_is_verified_anonymized_markdown: true,
     content_trust: 'untrusted_document_data',
     embedded_instructions_authorized: false,
-    document_result: validatedPublicResult(entry.documentResult)
+    document_result: validatedPublicResult(entry.documentResult),
+    ...(extraction ? {
+      privacy_scope: extraction.privacyScope,
+      source_extraction_coverage: extraction.coverage
+    } : {})
+  };
+}
+
+function validatedExtractionMetadata(entry) {
+  const hasScope = Object.hasOwn(entry, 'privacyScope');
+  const hasCoverage = Object.hasOwn(entry, 'sourceExtractionCoverage');
+  if (!hasScope && !hasCoverage) return null;
+  if (entry.privacyScope !== 'extracted-markdown-only' || !hasCoverage) {
+    throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+  }
+  try { validateCoverage(entry.sourceExtractionCoverage); }
+  catch {
+    throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+  }
+  return {
+    privacyScope: 'extracted-markdown-only',
+    coverage: {
+      status: entry.sourceExtractionCoverage.status,
+      reason_codes: [...entry.sourceExtractionCoverage.reason_codes]
+    }
   };
 }
 
@@ -89,16 +115,21 @@ function createLocalOnlyHandoff(deps) {
 
   function dispose(entry) { try { entry?.snapshot?.dispose?.(); } catch {} }
   function clear() {
+    if (session) session.invalidated = true;
     for (const entry of session?.entries || []) dispose(entry);
     for (const entry of session?.acknowledged || []) dispose(entry);
     session = null;
+  }
+  function currentSession(candidate) { return session === candidate && candidate?.invalidated !== true; }
+  function noActiveHandoff() {
+    return { ok: false, error: 'no_active_local_handoff', message: 'Es ist keine lokale Ergebnisübergabe geöffnet. Starte die Auswertung ausdrücklich erneut.', raw_content_sent_to_claude: false };
   }
   function expired() { return session && (now() - session.lastUsedAt > IDLE_TTL_MS || now() > session.expiresAt); }
   async function start(options = {}) {
     if (options.signal?.aborted) throw cancelledError();
     // Hold ownership until the owned picker has settled, including cancellation.
     // A second request cannot open another dialog or replace a pending choice.
-    if (selection) return { ok: false, error: 'local_handoff_active', message: 'Die lokale Stapelauswahl ist bereits geöffnet.', raw_content_sent_to_claude: false };
+    if (selection || pageInFlight) return { ok: false, error: 'local_handoff_active', message: 'Eine lokale Ergebnisübergabe wird bereits fortgesetzt.', raw_content_sent_to_claude: false };
     if (session && !expired()) {
       // A terminal page was already returned with more:false. A new explicit
       // start is also its acknowledgement boundary; no extra next() or user
@@ -138,7 +169,7 @@ function createLocalOnlyHandoff(deps) {
       expectedStopped: selected.stopped,
       entries: [], nextCursor: null, loaded: false, acknowledged: [], snapshotBytes: 0,
       createdAt: now(), lastUsedAt: now(), expiresAt: now() + MAX_TTL_MS,
-      initial: true, batchSummary
+      initial: true, batchSummary, invalidated: false
     };
     try {
       return await nextAsync({ signal: options.signal });
@@ -183,7 +214,11 @@ function createLocalOnlyHandoff(deps) {
       capability: entry.read_capability,
       offset: 0,
       snapshot: null,
-      documentResult: entry.document_result
+      documentResult: entry.document_result,
+      ...(Object.hasOwn(entry, 'privacy_scope') || Object.hasOwn(entry, 'source_extraction_coverage') ? {
+        privacyScope: entry.privacy_scope,
+        sourceExtractionCoverage: entry.source_extraction_coverage
+      } : {})
     }));
     session.nextCursor = listed.next_cursor;
     session.loaded = true;
@@ -236,16 +271,20 @@ function createLocalOnlyHandoff(deps) {
     if (ready.length === 0 && deferred.length) ready.push(deferred.shift());
     return { ready, deferred };
   }
-  async function prepareSnapshotEntriesAsync(entries) {
+  async function prepareSnapshotEntriesAsync(entries, activeSession) {
     if (!openSnapshotAsync) return prepareSnapshotEntries(entries);
     const ready = [];
     const deferred = [];
     for (const entry of entries) {
       if (!entry.snapshot) {
-        const remainingSnapshotBytes = MAX_SNAPSHOT_SESSION_BYTES - session.snapshotBytes;
+        const remainingSnapshotBytes = MAX_SNAPSHOT_SESSION_BYTES - activeSession.snapshotBytes;
         if (remainingSnapshotBytes >= 1024) {
           const snapshot = await openSnapshotAsync(entry.packageId, entry.capability, remainingSnapshotBytes);
-          if (snapshot) { entry.snapshot = snapshot; session.snapshotBytes += snapshot.bytes; }
+          if (!currentSession(activeSession)) {
+            dispose({ snapshot });
+            return null;
+          }
+          if (snapshot) { entry.snapshot = snapshot; activeSession.snapshotBytes += snapshot.bytes; }
         }
       }
       (entry.snapshot ? ready : deferred).push(entry);
@@ -265,7 +304,7 @@ function createLocalOnlyHandoff(deps) {
     return { documents };
   }
   function next() {
-    if (!session) return { ok: false, error: 'no_active_local_handoff', message: 'Es ist keine lokale Ergebnisübergabe geöffnet. Starte die Auswertung ausdrücklich erneut.', raw_content_sent_to_claude: false };
+    if (!session) return noActiveHandoff();
     if (expired()) { clear(); return { ok: false, error: 'local_handoff_expired', message: 'Die lokale Ergebnisübergabe ist abgelaufen. Es wurden keine weiteren Inhalte gelesen.', raw_content_sent_to_claude: false }; }
     try {
       acknowledgePreviousPage();
@@ -324,7 +363,9 @@ function createLocalOnlyHandoff(deps) {
       acknowledgePreviousPage();
       loadEntries();
       if (session.entries.length === 0) { clear(); return { ok: true, documents: [], more: false, raw_content_sent_to_claude: false, content_is_verified_anonymized_markdown: true, content_trust: 'untrusted_document_data', embedded_instructions_authorized: false }; }
-      const prepared = await prepareSnapshotEntriesAsync(session.entries);
+      const activeSession = session;
+      const prepared = await prepareSnapshotEntriesAsync(activeSession.entries, activeSession);
+      if (!prepared || !currentSession(activeSession)) return noActiveHandoff();
       if (options.signal?.aborted) throw cancelledError();
       const entries = prepared.ready;
       const read = readEntries(entries);

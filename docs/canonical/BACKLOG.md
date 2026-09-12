@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 12.09.2026 · Produktstand 3.2.0-rc138
+Stand: 12.09.2026 · Produktstand 3.2.0-rc139
 
 Dies ist die **einzige aktive Arbeitsliste**. Handlungsbedarf entsteht nur aus
 den Storytabellen und ihren ausdrücklich genannten Resten. Die nachfolgenden
@@ -22,6 +22,15 @@ beschriebenen E0-Kernpfade samt automatisierten Windows-/Paketgates umgesetzt.
 Neben den benannten Zielhost-, Bedien-, Accessibility-, Performance-, Update-/
 Rollback- und Fachevidenzen sind die lokale Auswahlgruppierung, die serverseitige
 Statuswahrheit, F7/F17 und der dauerhafte Journalfingerprint E0 geschlossen.
+Das unabhängige Astra-Gegenreview vom 12.09.2026 hat vier zusammenhängende
+Cowork-Entwicklungsstories (`BL-041.15`–`.18`) hervorgebracht. Ihre E0-Lieferung
+ist umgesetzt und durch produktnahe Vertrags- und Regressionstests belegt.
+Der zweite Gegenreview öffnete BL-041.17 wegen vier Release-/UAT-Restfehlern
+erneut. Der lokale Korrekturblock `ASTRA2-20260912-01`–`04` unten schließt diese
+mit zusätzlichen Negativtests und einem echten Offline-Paketintegrationstest.
+RC138 bleibt dennoch nicht wiederverwendbar: Ein neuer Kandidat muss die jetzt
+strengere Commit-, Archiv- und UAT-Bindung aus einem sauberen Quellstand erneut
+nachweisen, bevor er N3/N4-fähig wird.
 Ein integrierter Tauri-Review ist keine aktuelle Restlieferung: Standalone nutzt
 bewusst den lokalen Core-Reviewer hinter der inhaltsfreien Renderergrenze.
 Abschnitt B enthält ausschließlich menschliche beziehungsweise
@@ -35,9 +44,12 @@ Status-/ACK-/Handoff-Korrekturen, paginierte Aufnahme und Marketplace-Gates sind
 an Commit `d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden. Lauf
 `34691170241` baute und startete exakt die drei Release-ZIPs auf Windows x64,
 macOS Intel und macOS ARM64; der Pflichtlauf `34691166336` ist ebenfalls grün.
-Die technische E0-Lieferung ist erledigt. Offen bleiben ausschließlich die
-benannten menschlichen Cowork-Modell-, N3/N4-, Accessibility- und
-Fresh-Install-Nachweise. Standalone bleibt unverändert auf RC137.
+Die damalige technische E0-Lieferung ist als historische Evidence erhalten. Die
+nachträglich bestätigten Astra-Befunde `BL-041.15`–`.18` sind inzwischen
+implementiert; ein neuer Kandidat muss sie nun aus sauberem Commit mit exakt
+verifizierten Normal-/Debug-Archiven und frisch erzeugter UAT-Vorlage belegen.
+Danach bleiben die benannten menschlichen Cowork-Modell-, N3/N4-, Accessibility-
+und Fresh-Install-Nachweise. Standalone bleibt unverändert auf RC137.
 
 ### RC136 – DS-099: kanonischer Cowork-Interaktionsvertrag
 
@@ -880,6 +892,41 @@ künstlichen `MCP26-01`-Cutover aus.
 | BL-041.12 | Additiver, schema-validierter `datasecure-cowork-status/1`-Umschlag für jede bekannte Toolantwort. Claude-Interaktion, lokaler Arbeitszustand, Annahme/Abschluss/Abbruch, Retryklasse, Human-Gate-Assurance und tatsächliche Inhaltsgrenze werden getrennt; Originalinhalt bleibt immer `false`, tatsächlich enthaltenes anonymisiertes Markdown ausdrücklich untrusted. Leere Übergaben bleiben Metadaten; alle Fortsetzungsformen werden erkannt; ein Normalmodus-Guard verweigert private Kennungen. Top-Level-Kompatibilität bleibt bis zur realen Cowork-UAT erhalten; E1/E2 steht in Abschnitt B aus. | **erledigt** |
 | BL-041.13 | Hauptskill auf unverhandelbaren Normal-/Trustkern und Intenttabelle reduzieren; einfacher Normalstart ohne Referenzrunde, Sonderstart, Ergebnisübergabe, Fortsetzung/Verwerfen und Konfiguration als isolierte Referenzen. Strukturkorpus auf 41 Fälle erweitern und kuratierte, exakt risikogebundene 12×3-Candidate-Matrix mit Fixture-, Setup-, Bewertungs- und Cleanup-Vertrag liefern. Beide Modellmatrizen sind formale Cowork-GO-Gates; ein verbotenes Modelloutcome ist Release-Stopper. Automatisierte Tests werden nicht als Modellabnahme ausgegeben. E1/E2-Modell-/Hostabnahme steht in Abschnitt B aus. | **erledigt** |
 | BL-041.14 | Hersteller-/Folgefehlerreview auf RC137-Basis, Kennungen CWR-20260912-01–11 in `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md`: DS-078 beibehalten; DS-099-Statusprojektion an echte Core-Phasen gebunden; ACK-Ungewissheit und nativen Abbruch erhalten; terminalen Ergebnisordnerwechsel, paginierte Übergabesprache, lokale datierte Stapelwahl und MCP-Hüllenprüfung korrigiert. BL-010.8/BL-041.8: Mac-ZIP-Verifier repariert und manueller nativer Start exakt gebauter ZIPs verpflichtend; Marketplace wählt exaktes Host-ZIP, weist fehlende, geänderte und zusätzliche Quelldateien vor Mutation zurück und prüft tatsächliche Ausgabebytes. Projektkontext nach Produkt/Zweck bereinigt. E0: drei unabhängige Reviews, volle lokale Produktsuite und zusätzliche Paketregressionen, Windows-Normal-/Debug-ZIP-Starts, Marketplace-Artefaktabgleich und Docs-/CLI-Gates bestanden. RC138-Releasegates laufen; native Mac-Jobs und menschliche Cowork-Abnahme bleiben getrennte E1/E2-Evidence, keine Umdeutung der RC137-Release-Hashes. | **erledigt** |
+| BL-041.15 | **P2 · Astra-20260912-Handoffintegrität.** Eine asynchron vorbereitete Ergebnis-Seite erhält eine unveränderliche Sitzungs-ID/Generation. `cancel_local_results_handoff` widerruft diese Generation; `start_completed_local_results_handoff` darf solange keine Sitzung ersetzen, wie eine Seite läuft. Nach jedem `await` werden Generation, Token und Sitzung erneut geprüft; verspätete Snapshots werden verworfen und niemals bestätigt. Die öffentliche Dokumentantwort übernimmt außerdem die vom Ergebniszugriff geprüften Felder `privacy_scope` und `source_extraction_coverage` (mit geschlossener Allowlist/Schema), damit `extracted-markdown-only` und unvollständige Quellabdeckung nicht hinter einem alleinigen Ergebnisgrad verschwinden. | Blockierter In-Memory-Snapshot: Seite A läuft, Cancel, Startversuch für B, Freigabe der alten Seite. Ergebnis: kein Inhalt von A nach Cancel, keine ACK für A unter Token B, keine neue Sitzung vor Ende der alten Seite. Listing → Handoff erhält bei XLSX/PPTX Scope und Coverage byte-/schemawahr; zusätzlich wird eine Coverage ohne Privacy-Scope geschlossen abgewiesen. `test-local-only-handoff.js` (33 Fälle), Resume- und MCP-Gates sind grün. | **erledigt** |
+| BL-041.16 | **P2 · Astra-20260912-Paketintegrität.** ZIP-Verifier und Marketplace-Projektion verwenden einen gemeinsamen vollständigen Validator. `.mcp.json` wird gegen genau einen normalisierten `data-secure-local`-Server, dessen Kommando, Argumente und erlaubte Umgebung geprüft; zusätzliche Server oder Felder außerhalb des Vertrags stoppen vor jeder Ausgabeänderung. Runtime-Lizenz, Runtime-Evidence und alle für das Ziel verlangten Runtime-Dateien werden in beiden Wegen auf Existenz, Größe und Hash gebunden. | Speicherbasierte Negativarchive mit zusätzlichem MCP-Server bzw. fehlender `runtime/LICENSE.node.txt` werden durch beide Entry-Points vor jedem Schreibzugriff abgewiesen. Runtime-Evidence bindet zusätzlich einen 40-stelligen Quellcommit. `test-bundled-runtime.mjs`, `test-marketplace-projection.mjs` und der Releasepfad sind grün. | **erledigt** |
+| BL-041.17 | **P2 · Astra-20260912-Kandidaten- und UAT-Evidenzbindung.** Die UAT-Vorlage entsteht ausschließlich aus dem finalen, explizit übergebenen Release-Artefaktsatz und dessen gebundenem Commit, nicht aus beliebigem lokalem `dist` oder aktuellem `HEAD`. Die 12×3-Matrix referenziert nur tatsächlich erzeugte UAT-Fixtures und beschreibt Initial-, Tool- und Follow-up-Phase widerspruchsfrei; der automatische Vertragstest löst Fixture, Vorbedingung, erwartetes Werkzeug und Cleanup gegen den Korpus auf. Die Release-Dokumentation trennt Cowork- und Standalone-Kampagnen sowie veröffentlichte Normal-, Debug- und UAT-Artefakte eindeutig. | `build:cowork-uat-evidence` verlangt Normal-ZIP, Debug-ZIP und sauberen aktuellen Kandidatencommit, verifiziert beide Archive vor der Evidenzaufnahme und bindet deren `source_commit`. Die Matrix prüft alle Fixturepfade gegen den Generator; nicht vorhandene Fälle, falsche Zuordnungen und fehlende Argumente stoppen. Workflow und Vertragstests sind grün. | **erledigt** |
+| BL-041.18 | **P3 · Astra-20260912-Promptnamen.** Die Promptauflösung akzeptiert ausschließlich eigene Schlüssel von `PROMPT_DEFAULTS`; Prototyp-Eigenschaften und jeder unbekannte Name liefern dieselbe definierte Invalid-Params-Antwort wie andere unbekannte Prompts. | `constructor`, `toString`, `__proto__` und beliebige unbekannte Namen liefern keinen Workflow; alle vier erklärten Promptnamen bleiben manifest- und serverseitig identisch. `test-manifest.js` und 66 echte stdio-Protokollfälle sind grün. | **erledigt** |
+
+#### BL-041.17 – zweiter Astra-Gegenreview, 12.09.2026
+
+Diese nummerierten Befunde bleiben als Fehlerursache und Regressionsvertrag
+erhalten. Die vorherige Erledigt-Markierung war zu früh: grüne Strukturtests
+hatten keinen vollständigen Releaseablauf und keine realen UAT-Vorbedingungen
+belegt. Die folgende Korrektur betrifft ausschließlich Cowork-Entwicklungswege;
+Standalone-Code und seine Paketbindung bleiben unverändert.
+
+| Review-ID | Reproduzierter Fehler | Korrektur und wiederholbarer Nachweis | Status |
+| --- | --- | --- | --- |
+| ASTRA2-20260912-01 | Node-Download als unignoriertes ZIP im Checkout kollidiert mit dem neuen Clean-Git-Gate; der manuelle Windows-Releasebuild stoppt. | Download nach `RUNNER_TEMP`. `test-bundled-runtime.mjs` erstellt ein echtes isoliertes Git-Repository: Root-ZIP wird abgewiesen, externes Downloadstaging erlaubt den sauberen Build ohne Commit-Override. `test-runtime-release-path.mjs` bindet diesen Pfad an den Workflow. | E0 korrigiert |
+| ASTRA2-20260912-02 | Debug-ZIP fehlt im Upload; Prüfsummen entstehen vor Debug und UAT. | Upload enthält Debug explizit. Finaler SPDX-/SHA256SUMS-Lauf nach UAT inventarisiert Normal, Debug und UAT; er prüft die UAT-Referenzen gegen die tatsächlichen Produktbytes und Commitwerte. Fehlende, doppelte oder veraltete Bindungen stoppen. `test-cowork-uat-evidence.mjs` und `tests/manual/cowork-release-offline.mjs`. | E0 korrigiert |
+| ASTRA2-20260912-03 | ZIP-Prüfer und UAT-Generator lesen denselben Pfad zu verschiedenen Zeitpunkten ohne Hashvergleich. | Der native ZIP-Prüfer liefert ein maschinenlesbares Receipt über seinen geprüften Byte-Snapshot. Die UAT-Erzeugung verlangt `NATIVE_PASS` und exakt dessen Größe/SHA-256; austauschbare gleich große ZIPs, statische oder fehlende Receipts werden in `test-cowork-uat-evidence.mjs` abgewiesen. Keine falsche Standalone-PKG-04-Behauptung. | E0 korrigiert |
+| ASTRA2-20260912-04 | Host-Abbruch nach ACK, ein späterer Parserfehler als Startantwort, falscher Mischstapel und erfundene Handoff-Antwort erzeugen nicht die behaupteten Live-UAT-Zustände. | Host-Stopp während offenem MCP-Picker; terminaler Fehler als lokal beobachteter Zustand mit Nutzer-Folgeauftrag; echte DOCX-Grafikfixture für Auslassungen; reale TXT-Injectionfixture. Resume setzt einen in N3-07 nachgewiesenen Checkpoint voraus. Der unabhängige Gegenreview fand zusätzlich den widersprüchlichen UAT-05-Host-Close-Pfad; Fallkatalog, Schritte, Erwartungs-CSV und N3 sind korrigiert und regressionsgeprüft. Fehlende Vorbedingungen ergeben `BLOCKED`, niemals `PASS`. Gemeinsamer Planvalidator prüft Phase, Toolfolge, Fixture, Cleanup und Beobachtung; Mutationen sind negative Tests. `tests/manual/cowork-uat-fixtures.js` belegt die tatsächlichen Fixture-Grade und Handoff-Inhalte ohne Parser-/OCR-/Journal-Mocks. | E0 korrigiert |
+
+RC139-Lieferabsicherung: Die finale Inventur darf die beiden normalen Mac-ZIPs
+zusätzlich enthalten, verlangt auch für diese exakt den Kandidatencommit und
+weist doppelte/unbekannte Namen ab. Windows-UAT bleibt Windows-UAT.
+`test-release-version.mjs` sichert den Schnitt aus einer veröffentlichten
+einfachen „RC…“-Quellstandsaussage ab; ein neuer RC darf nicht versehentlich
+als bereits veröffentlicht stehen bleiben. Dies ist Teil von BL-041.17 und
+der dauerhaften Versions-/Releasewahrheit, kein neues Produktfeature.
+
+Lokaler Nachweis: `node tests/manual/cowork-release-offline.mjs` baut in einem
+isolierten sauberen Test-Checkout Normal-/Debug-Pakete mit dem vorhandenen
+attestierten Windows-Node, führt beide nativen Paketprüfungen aus und erstellt
+UAT/SPDX/SHA256SUMS mit vier tatsächlich hashgleichen Inventareinträgen. Keine
+Netzwerkaufrufe, keine Änderungen am Hauptrepository-Commit, kein Release-GO.
+Der nächste echte Kandidat muss dies nach Commit erneut bestehen; Modell-UAT,
+Windows-/macOS-N3/N4 und Fresh-Install bleiben als E1/E2 offen.
 
 ### Erledigungsabgleich der Restbefunde aus dem Gesamtgegenreview 02.09.2026
 

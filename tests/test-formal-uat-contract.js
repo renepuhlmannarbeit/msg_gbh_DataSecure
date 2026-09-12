@@ -34,13 +34,18 @@ test('formal kit contains the complete two-person campaign contract', () => {
     '`[0-9a-f]{40}` gebunden und veröffentlicht', 'u'));
   if (boundCandidate[1] !== campaignLabel) {
     assert.match(release, new RegExp(`aktuelle Quellstand ist RC${campaignLabel}-Entwicklungsstand`, 'u'));
-    assert.match(overview, new RegExp(`CWR-20260912-Korrekturen[\\s\\S]{0,100}nicht[\\s\\S]{0,80}RC${boundCandidate[1]}-Pakete`, 'u'));
+    assert.match(overview, new RegExp(`Neue Quellkorrekturen[\\s\\S]{0,100}nicht[\\s\\S]{0,80}RC${boundCandidate[1]}-Pakete`, 'u'));
   }
   assert.match(overview, /12×3- und 41×3-Modellgates bleiben\s+`NOT_RUN`/u);
   assert.match(overview, /npm run test:version-truth/u);
   assert.match(overview, /S01.S23 einschließlich S14a/u);
   assert.match(overview, /npm run build:cowork-uat-evidence/u);
-  assert.match(overview, /36 Zeilen bleiben zunächst\s+`NOT_RUN`/u);
+  assert.match(overview, /Seine 36\s+Zeilen bleiben zunächst\s+`NOT_RUN`/u);
+  assert.match(overview, /--candidate-commit <Commit>[\s\S]*--normal-zip[\s\S]*--debug-zip/u);
+  assert.match(overview, /expliziten[\s\S]*Cowork-ZIP-Verifizierer/u);
+  assert.match(overview, /precondition_result=OBSERVED/u);
+  assert.match(overview, /PKG-04 bleibt der separate Standalone-Nachweis/u);
+  assert.match(overview, /eingebetteten Runtime-Evidence identischen\s+Quellcommit/u);
   assert.strictEqual(packageJson.scripts['build:cowork-uat-evidence'],
     'node scripts/build-cowork-uat-evidence.mjs');
   assert.ok(fs.existsSync(path.join(root, 'scripts', 'build-cowork-uat-evidence.mjs')));

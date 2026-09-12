@@ -1,9 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 12.09.2026 · 3.2.0-rc138
+Stand: 12.09.2026 · 3.2.0-rc139
 
-Der aktuelle Quellstand ist RC138 und für das Cowork-Produkt als technischer
-Vorabkandidat veröffentlicht. Der Windows-x64-Cowork-Kandidat RC138 und die
+Der aktuelle Quellstand ist RC139-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Der Windows-x64-Cowork-Kandidat RC138 und die
 beiden macOS-Cowork-Kandidaten sind an den sauberen Quellcommit
 `d70cb266df90bdc07b0efadbf81f0d81195b3920` gebunden. Der Release
 <https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc138>
@@ -31,16 +30,44 @@ Debug-Paket 35.052.910 Byte mit SHA-256
 Das commitgebundene UAT-Evidence-ZIP hat 3.375 Byte und SHA-256
 `8777115f3143a58f90ab8adee1b1323416661fbfc8db7cf667a97a019f242a5a`.
 Die abweichenden Hashes des lokalen und des Workflow-Windows-ZIPs beruhen auf
-unterschiedlichen Checkout-Zeilenenden; veröffentlicht wird ausschließlich das
+unterschiedlichen LF-/CRLF-Zeilenenden der gebündelten Node-Lizenz und deren
+Evidence-Feldern, nicht abweichenden Produktquellen; veröffentlicht wird ausschließlich das
 im Workflow nativ gestartete Archiv.
 
 Standalone wurde funktional nicht geändert und nicht als RC138 neu gebaut.
 Sein aktueller technischer UAT-Kandidat bleibt RC137, gebunden an Quellcommit
 `8979d4b2127741c2921cb6f0654fb83d82944845`. RC135 bleibt getrennt als letzter
-plattformübergreifend paketgebundener Stand vor RC138 vollständig
+plattformübergreifend paketgebundener Stand vor RC139 vollständig
 nachvollziehbar; RC136 bleibt der dazwischenliegende Windows-Cowork-Kandidat.
 RC138 ist trotz der grünen E0-Gates keine menschliche Cowork-Modell-, N3/N4-
-oder Produktionsfreigabe.
+oder Produktionsfreigabe. Die nachträglich geschlossenen BL-041.15–.18 verlangen
+für den nächsten Kandidaten einen sauberen Commit sowie zwei explizit angegebene,
+vor der Evidenzaufnahme verifizierte Archive. RC138 und seine UAT-Vorlage bleiben
+damit historische Evidence und dürfen nicht erneut als N3/N4-Kandidat gebunden
+werden.
+
+Der zweite Astra-Korrekturblock `ASTRA2-20260912-01`–`04` ist lokaler
+Entwicklungsstand, noch kein neuer Release. Der manuelle Windows-Releaseweg
+lädt Node außerhalb des Quellbaums nach `RUNNER_TEMP`, baut Normal und Debug,
+erzeugt die UAT-Vorlage und inventarisiert **danach** mit `generate-sbom.mjs
+--archive <normal> --archive <debug> --cowork-uat <uat>` den finalen Satz.
+Upload und `SHA256SUMS` umfassen beide Produkt-ZIPs, UAT-ZIP und SPDX. Die
+UAT-Bindungen müssen den tatsächlichen Archivbytes und Quellcommits entsprechen.
+Beim plattformübergreifenden Release enthält derselbe finale Inventarlauf
+zusätzlich die normalen Mac-Intel-/ARM-ZIPs aus demselben Commit. Ihre nativen
+Smokes bleiben getrennte Zielhostnachweise; die Windows-UAT-Vorlage behauptet
+keinen Mac-Test. Unbekannte, doppelte oder fremdcommitgebundene Zusatzpakete
+werden nicht akzeptiert.
+Der wiederholbare Offline-Test ist `node tests/manual/cowork-release-offline.mjs`
+(Windows x64, bereits attestierte Runtime unter `dist/windows-x64`); er ist
+kein Ersatz für commitgebundenen Releasebau oder menschliche Abnahme.
+
+`node tests/manual/cowork-uat-fixtures.js` prüft die synthetischen UAT-Eingaben
+mit dem echten nativen Parser/OCR, Batchjournal und verifizierten Handoff:
+terminales DOCX ohne Retry, vollständiges Ergebnis plus zurückgehaltene Grafik
+plus Stopp, eingebettete Instruktion als untrusted data und sechs Ergebnisse mit
+`more=true`. Keine Parser-/OCR-/Ergebnis-Mocks, kein Claude-Modelltest. Der Lauf
+benötigt die native Parserumgebung und erzeugt nur isolierte Testdaten.
 
 Windows-PKG-04 erzeugte zwei bytegleiche Standalone-Archive zu jeweils
 110.253.680 Byte. Paket-, Worker-, History-/Sidecar- und native Smokes
@@ -198,6 +225,9 @@ Commit-/Paket-Evidence. Vor Commit, Paketbau und Dokumentationsabschluss muss
 wird ausschließlich der exakt gebundene RC in diesem Vertrag als Kandidat mit
 Commit, Archivgröße und SHA-256 dokumentiert. Ein älterer RC darf nie als
 aktueller Quellstand stehen bleiben.
+`test-release-version.mjs` deckt auch den Versionsschnitt aus der einfachen
+veröffentlichten Form „RC…“ ab: Der neue RC wird Entwicklungsstand, während
+historische Paketnamen, Commitwerte und Hashes unverändert bleiben.
 
 ## Produktbuild
 
@@ -294,9 +324,10 @@ Anwender-Voraussetzungen.
 Für die geplante Zwei-Personen-Abnahme wird erst nach Abschluss aller E0-Gates
 eine Kampagnendatei aus
 [`CAMPAIGN.template.json`](acceptance/FORMAL_UAT/CAMPAIGN.template.json)
-angelegt. Sie bindet denselben vollständigen Git-Commit an vier getrennte
-Pakete/Hashes: Standalone und Cowork-Plugin jeweils für Windows x64 und die
-tatsächliche Architektur des Test-Macs. Pakete eines älteren Commits dürfen
+angelegt. Die Produkte erhalten getrennte Kampagnen: Innerhalb eines Produkts
+bindet derselbe vollständige Git-Commit die Windows- und Mac-Pakete mit jeweils
+eigenem Hash. Ein Cowork-only-Release erzwingt keinen Standalone-Neubau.
+Pakete eines älteren Commits dürfen
 nicht als aktueller Kandidat umetikettiert werden.
 
 N3 muss auf jeder als freizugebend markierten Zielhost-/Produktkombination
@@ -312,6 +343,19 @@ Kampagnenmanifest mit Korpus-Hashes gebunden und `PASS` sein; ein einziges
 verbotenes Outcome blockiert die Freigabe. `npm run uat:cowork-candidate`
 erzeugt die versionsgebundene Durchführung mit Fixture, Vorbereitung,
 bewertetem Schritt und Aufräumen.
+
+Die zugehörige leere Evidence-Vorlage wird nur aus einem sauberen Checkout mit
+expliziter Kandidatenbindung erzeugt: `npm run build:cowork-uat-evidence --
+--candidate-commit <Commit> --normal-zip <dist/normal.zip> --debug-zip
+<dist/debug.zip>`. Beide ZIPs müssen aus genau diesem Commit stammen und vor
+der Hash-Aufnahme den nativen Cowork-ZIP-Verifizierer bestehen; dessen
+maschinenlesbares Receipt muss Größe und SHA-256 genau der für UAT gelesenen
+Bytes bestätigen. PKG-04/INT-13 gehören zur Standalone-Kampagne. Eine bloße Dateisuche in
+`dist` ist kein zulässiger Bindungsnachweis. Der Produktbau schreibt den
+Quellcommit in jedes `RUNTIME-EVIDENCE.json`; die Evidence-Erzeugung verweigert
+jede Abweichung zum explizit angegebenen Kandidatencommit.
+Die UAT-Anleitung verlangt echte beobachtete Vorbedingungen. Fehlen diese,
+bleibt der Fall `BLOCKED`; simulierte Toolantworten sind kein Live-UAT-Nachweis.
 
 ## Produktbezogene Formatfreigaben
 

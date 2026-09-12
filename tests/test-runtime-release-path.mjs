@@ -15,6 +15,7 @@ assert.match(pkg.scripts['test:plugin-zip'], /verify-plugin-zip\.mjs/u);
 
 const verify = read('scripts/verify-plugin-zip.mjs');
 assert.match(verify, /RUNTIME-EVIDENCE\.json/u);
+assert.match(verify, /source_commit/u, 'every released product archive binds a source commit');
 assert.match(verify, /host_node_required/u);
 assert.match(verify, /PRODUCT_ENGINEERING_PAYLOAD_FORBIDDEN/u);
 assert.match(verify, /PRODUCT_ARCHIVE_NATIVE_HOST_REQUIRED/u);
@@ -40,6 +41,16 @@ for (const workflow of ['release-evidence.yml', 'bundled-runtime-release.yml']) 
   assert.match(source, /build-runtime-target\.mjs/u);
 }
 assert.match(read('.github/workflows/release-evidence.yml'), /npm run build/u);
+assert.match(read('.github/workflows/release-evidence.yml'), /build:cowork-uat-evidence/u);
+assert.match(read('.github/workflows/release-evidence.yml'), /--candidate-commit \$env:GITHUB_SHA/u);
+const releaseWorkflow = read('.github/workflows/release-evidence.yml');
+assert.match(releaseWorkflow, /\$archive = Join-Path \$env:RUNNER_TEMP \$archiveName/u);
+assert.match(releaseWorkflow, /Invoke-WebRequest[^\n]+\$archiveName[^\n]+-OutFile \$archive/u);
+assert.match(releaseWorkflow, /dist\/DataSecure-Privacy-Preflight-windows-x64-debug-v\*\.zip/u);
+const inventoryStep = releaseWorkflow.indexOf('- name: Inventory the final');
+assert.ok(inventoryStep > releaseWorkflow.indexOf('npm run build:cowork-uat-evidence'));
+assert.ok(inventoryStep < releaseWorkflow.indexOf('- uses: actions/upload-artifact'));
+assert.match(releaseWorkflow.slice(inventoryStep), /--archive[^\n]+windows-x64-v[^\n]+[\s\S]*--archive[^\n]+windows-x64-debug-v[\s\S]*--cowork-uat/u);
 assert.match(read('.github/workflows/bundled-runtime-release.yml'), /verify-plugin-zip\.mjs/u);
 assert.match(read('.github/workflows/bundled-runtime-release.yml'), /generate-sbom\.mjs/u);
 const nativeJob = read('.github/workflows/bundled-runtime-release.yml').split('  native-package-smoke:')[1];

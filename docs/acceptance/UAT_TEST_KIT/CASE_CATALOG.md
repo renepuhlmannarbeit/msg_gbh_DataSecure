@@ -34,10 +34,13 @@ Oberfläche erklärt den sicheren Stopp in Klartext; feste Codes sind nur IT-Det
 
 ## UAT-05
 
-**Ein unmittelbar nach bestätigtem Start unterbrochener Zehnerstapel wird ohne
-Neuauswahl fortgesetzt.** Der Abbruch erfolgt reproduzierbar direkt nach der
-Startmeldung durch vollständiges Beenden von Claude Desktop. Bereits fertige
-Positionen werden nicht wiederholt. Am Ende gibt es genau zehn Zuordnungen.
+**Ein nachgewiesen unterbrochener Zehnerstapel wird ohne Neuauswahl
+fortgesetzt.** Die IT-Testperson muss im entbehrlichen Testkonto einen dauerhaften
+Checkpoint, mindestens eine unfertige Position und einen tatsächlich beendeten
+eigenen Worker nachweisen. Das Schließen von Claude allein ist kein Worker-Abbruch:
+ein bereits gestarteter Worker kann weiterarbeiten. Ohne echte Unterbrechung ist
+der Fortsetzungsteil `BLOCKED`, auch wenn der Stapel schon fertig ist. Bereits
+fertige Positionen werden nicht wiederholt. Am Ende gibt es genau zehn Zuordnungen.
 
 ## UAT-06
 

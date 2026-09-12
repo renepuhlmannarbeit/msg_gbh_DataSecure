@@ -22,7 +22,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { readCentralModes } from './lib/zip.mjs';
-import { verifyProductSourceEntries, verifyKeyringFreeProductEntries, verifyProductRelativeRequires } from './lib/product-files.mjs';
+import { verifyProductSourceEntries, verifyKeyringFreeProductEntries, verifyProductRelativeRequires,
+  verifyBundledProductMcp, verifyBundledProductRuntimeLicense } from './lib/product-files.mjs';
 import { readContract, sha256 } from './lib/bundled-runtime.mjs';
 
 const require = createRequire(import.meta.url);
@@ -101,16 +102,15 @@ export function buildMarketplaceRepo(options = {}) {
       evidence.mode !== 'direct-upload-target' || evidence.product_version !== pkg.version ||
       !Array.isArray(evidence.targets) || evidence.targets.length !== 1 || runtime?.target !== target ||
       evidence.plugin_command !== contract.plugin_command || evidence.host_node_required !== false ||
-      evidence.runtime_dependency_install !== false) throw new Error('MARKETPLACE_REPO_EVIDENCE_INVALID');
+      evidence.runtime_dependency_install !== false || !/^[a-f0-9]{40}$/u.test(evidence.source_commit || '')) throw new Error('MARKETPLACE_REPO_EVIDENCE_INVALID');
+  verifyBundledProductRuntimeLicense(entries, evidence, { errorCode: 'MARKETPLACE_REPO_RUNTIME_LICENSE_INVALID' });
   const runtimeName = target === 'windows-x64' ? 'runtime/datasecure-node.exe' : `runtime/targets/${target}/node`;
   const runtimeBytes = entries.get(runtimeName);
   if (!runtimeBytes || runtime.bytes !== runtimeBytes.length || runtime.sha256 !== sha256(runtimeBytes)) {
     throw new Error('MARKETPLACE_REPO_RUNTIME_INVALID');
   }
-  const mcp = JSON.parse(entries.get('.mcp.json') || 'null');
-  const server = mcp?.mcpServers?.['data-secure-local'];
-  if (server?.command !== contract.plugin_command || JSON.stringify(server.args) !== JSON.stringify([contract.runtime_entry]) ||
-      server.env?.EU_PRIVACY_SUPPORT_MODE === '1') throw new Error('MARKETPLACE_REPO_MCP_INVALID');
+  verifyBundledProductMcp(entries, path.join(root, 'plugins', 'data-secure'), contract,
+    { errorCode: 'MARKETPLACE_REPO_MCP_INVALID' });
   const modes = readCentralModes(archiveBytes);
   for (const name of entries.keys()) {
     safeRelative(name);

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { readContract, sha256 } from './lib/bundled-runtime.mjs';
+import { verifyUatInventory } from './lib/cowork-candidate.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -50,7 +51,8 @@ const artefacts = productArguments().map((file) => {
   const evidence = JSON.parse(evidenceBytes.toString('utf8'));
   if (evidence.schema !== 'datasecure-bundled-plugin/v1' || evidence.product_version !== pkg.version ||
       evidence.host_node_required !== false || evidence.runtime_dependency_install !== false ||
-      evidence.plugin_command !== contract.plugin_command || !Array.isArray(evidence.targets) || !evidence.targets.length) {
+      evidence.plugin_command !== contract.plugin_command || !/^[a-f0-9]{40}$/u.test(evidence.source_commit || '') ||
+      !Array.isArray(evidence.targets) || !evidence.targets.length) {
     throw new Error('SBOM_RUNTIME_EVIDENCE_INVALID');
   }
   const mcp = JSON.parse(entries.get('.mcp.json') || 'null');
@@ -72,8 +74,19 @@ const artefacts = productArguments().map((file) => {
   const name = path.basename(file);
   runtimeFiles.push(hashes(`${name}!/RUNTIME-EVIDENCE.json`, evidenceBytes, { kind: 'runtime-evidence' }));
   runtimeFiles.push(hashes(`${name}!/runtime/LICENSE.node.txt`, licenseBytes, { kind: 'runtime-license' }));
-  return hashes(name, bytes, { kind: 'product-archive' });
+  return hashes(name, bytes, { kind: 'product-archive', bytes: bytes.length, source_commit: evidence.source_commit });
 });
+const uatIndex = process.argv.indexOf('--cowork-uat');
+if (uatIndex >= 0) {
+  const uatArgument = process.argv[uatIndex + 1];
+  if (!uatArgument) throw new Error('SBOM_UAT_ARGUMENT_MISSING');
+  const uatFile = path.resolve(uatArgument);
+  const name = `DataSecure-Cowork-UAT-Evidence-v${pkg.version}.zip`;
+  if (path.dirname(uatFile) !== dist || path.basename(uatFile) !== name) throw new Error('SBOM_UAT_PATH_UNSAFE');
+  const bytes = fs.readFileSync(uatFile);
+  verifyUatInventory(bytes, artefacts, pkg.version);
+  artefacts.push(hashes(name, bytes, {kind: 'uat-evidence'}));
+}
 if (process.argv.includes('--engineering')) {
   const name = `DataSecure-Privacy-Gateway-v${pkg.version}.mcpb`, file = path.join(dist, name);
   if (!fs.existsSync(file)) throw new Error(`SBOM_ENGINEERING_ARTEFACT_MISSING:${name}`);

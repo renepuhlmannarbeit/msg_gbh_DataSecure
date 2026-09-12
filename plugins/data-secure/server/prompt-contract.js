@@ -21,15 +21,16 @@ function workflowText(profile, task) {
 }
 
 function promptText(name, args = {}) {
+  if (typeof name !== 'string' || !Object.hasOwn(PROMPT_DEFAULTS, name)) return null;
   const definition = PROMPT_DEFAULTS[name];
-  if (!definition) return null;
   const task = String(args.task || '').trim() || definition.task;
   return workflowText(definition.profile, task);
 }
 
 function manifestPromptText(name) {
+  if (typeof name !== 'string' || !Object.hasOwn(PROMPT_DEFAULTS, name)) return null;
   const definition = PROMPT_DEFAULTS[name];
-  return definition ? workflowText(definition.profile, '${arguments.task}') : null;
+  return workflowText(definition.profile, '${arguments.task}');
 }
 
 module.exports = { PROMPT_DEFAULTS, OPEN_BATCH_DECISION_TEXT, LOCAL_INTAKE_ACCEPTED_TEXT,

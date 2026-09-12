@@ -8,7 +8,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
-import { verifyProductSourceEntries, verifyKeyringFreeProductEntries, verifyProductRelativeRequires } from './lib/product-files.mjs';
+import { verifyProductSourceEntries, verifyKeyringFreeProductEntries, verifyProductRelativeRequires,
+  verifyBundledProductMcp, verifyBundledProductRuntimeLicense } from './lib/product-files.mjs';
 import { readContract, sha256 } from './lib/bundled-runtime.mjs';
 
 const require = createRequire(import.meta.url);
@@ -54,7 +55,8 @@ const evidence = JSON.parse(evidenceBytes.toString('utf8'));
 const debugBuild = evidence.mode === 'direct-upload-debug-target';
 if (evidence.schema !== 'datasecure-bundled-plugin/v1' || evidence.product_version !== pkg.version ||
     evidence.host_node_required !== false || evidence.runtime_dependency_install !== false ||
-    evidence.plugin_command !== contract.plugin_command || !Array.isArray(evidence.targets) || !evidence.targets.length) {
+    evidence.plugin_command !== contract.plugin_command || !/^[a-f0-9]{40}$/u.test(evidence.source_commit || '') ||
+    !Array.isArray(evidence.targets) || !evidence.targets.length) {
   throw new Error('PRODUCT_RUNTIME_EVIDENCE_INVALID');
 }
 const targetIds = evidence.targets.map((item) => item.target);
@@ -65,11 +67,7 @@ if (new Set(targetIds).size !== targetIds.length || targetIds.some((id) => !allo
 }
 const limit = evidence.mode === 'marketplace-universal' ? contract.archive_limit_bytes : contract.direct_upload_limit_bytes;
 if (bytes.length > limit) throw new Error('PRODUCT_ARCHIVE_BUDGET_EXCEEDED');
-const license = entries.get('runtime/LICENSE.node.txt');
-if (!license || new Set(evidence.targets.map((item) => item.license_sha256)).size !== 1 ||
-    evidence.targets.some((item) => item.license_sha256 !== sha256(license) || item.license_bytes !== license.length)) {
-  throw new Error('PRODUCT_RUNTIME_LICENSE_INVALID');
-}
+verifyBundledProductRuntimeLicense(entries, evidence);
 const runtimeNames = expectedRuntimeNames(evidence.targets);
 for (const name of runtimeNames) if (!entries.has(name)) throw new Error(`PRODUCT_RUNTIME_MISSING:${name}`);
 for (const target of evidence.targets) {
@@ -81,12 +79,8 @@ if ([...entries.keys()].some((name) => name === 'bin' || name.startsWith('bin/')
     name.startsWith('server/ocr-runtime') || name.endsWith('.mcpb'))) {
   throw new Error('PRODUCT_ENGINEERING_PAYLOAD_FORBIDDEN');
 }
-const mcp = JSON.parse(entries.get('.mcp.json') || 'null');
-assert.deepEqual(Object.keys(mcp || {}), ['mcpServers']);
-assert.equal(mcp?.mcpServers?.['data-secure-local']?.command, contract.plugin_command);
-assert.deepEqual(mcp?.mcpServers?.['data-secure-local']?.args, [contract.runtime_entry]);
-if (debugBuild) assert.equal(mcp?.mcpServers?.['data-secure-local']?.env?.EU_PRIVACY_SUPPORT_MODE, '1');
-else assert.notEqual(mcp?.mcpServers?.['data-secure-local']?.env?.EU_PRIVACY_SUPPORT_MODE, '1');
+verifyBundledProductMcp(entries, path.join(root, 'plugins', 'data-secure'), contract, { debugBuild });
+const mcp = JSON.parse(entries.get('.mcp.json').toString('utf8'));
 
 // Every canonical product source byte must be present unchanged, except for
 // .mcp.json (rewritten to the bundled launcher); runtime evidence is additive.
@@ -207,4 +201,10 @@ try {
   fs.rmSync(runtimeData, { recursive: true });
   fs.rmSync(runtimeProfile, { recursive: true });
 }
-console.log(`Self-contained product ZIP: ${nativeVerified ? 'NATIVE PASS' : 'STATIC PASS (native not run)'} (${path.basename(archive)}, ${entries.size} entries, ${targetIds.join(', ')}, sha256=${sha256(bytes)})`);
+if (process.argv.includes('--report-json')) {
+  // `bytes` is the same immutable snapshot used for validation and extraction.
+  console.log(JSON.stringify({schema: 'datasecure-product-zip-verification/1',
+    status: nativeVerified ? 'NATIVE_PASS' : 'STATIC_PASS', bytes: bytes.length, sha256: sha256(bytes)}));
+} else {
+  console.log(`Self-contained product ZIP: ${nativeVerified ? 'NATIVE PASS' : 'STATIC PASS (native not run)'} (${path.basename(archive)}, ${entries.size} entries, ${targetIds.join(', ')}, sha256=${sha256(bytes)})`);
+}

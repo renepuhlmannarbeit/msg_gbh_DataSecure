@@ -3,7 +3,9 @@
 // different product through Marketplace and the ZIP/MCPB archives.
 import fs from 'node:fs';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { collectFiles } from './zip.mjs';
+import { sha256 } from './bundled-runtime.mjs';
 
 const legacyFiles = new Set([
   'server/gateway/installation-secret-store.js',
@@ -94,6 +96,54 @@ export function verifyProductSourceEntries(entries, directory, { debugBuild = fa
       throw new Error(`PRODUCT_ARCHIVE_SOURCE_DRIFT:${file.archivePath}`);
     }
   }
+}
+
+function parseObjectJson(bytes, errorCode) {
+  let value;
+  try { value = JSON.parse(Buffer.from(bytes || '').toString('utf8')); }
+  catch { throw new Error(errorCode); }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(errorCode);
+  return value;
+}
+
+function canonicalProductMcp(sourceDirectory, contract, debugBuild, errorCode) {
+  const source = parseObjectJson(fs.readFileSync(path.join(sourceDirectory, '.mcp.json')), errorCode);
+  const servers = source.mcpServers;
+  const server = servers?.['data-secure-local'];
+  if (JSON.stringify(Object.keys(source).sort()) !== JSON.stringify(['mcpServers']) ||
+      !servers || typeof servers !== 'object' || Array.isArray(servers) ||
+      JSON.stringify(Object.keys(servers).sort()) !== JSON.stringify(['data-secure-local']) ||
+      !server || typeof server !== 'object' || Array.isArray(server) ||
+      server.command !== 'node' || JSON.stringify(server.args) !== JSON.stringify([contract.runtime_entry]) ||
+      !server.env || typeof server.env !== 'object' || Array.isArray(server.env) ||
+      Object.hasOwn(server.env, 'EU_PRIVACY_SUPPORT_MODE')) throw new Error(errorCode);
+  const expected = JSON.parse(JSON.stringify(source));
+  expected.mcpServers['data-secure-local'].command = contract.plugin_command;
+  if (debugBuild) expected.mcpServers['data-secure-local'].env.EU_PRIVACY_SUPPORT_MODE = '1';
+  return expected;
+}
+
+// A product ZIP starts a native process. Accept exactly the one MCP server
+// produced from the canonical source configuration, not merely a valid-looking
+// data-secure-local entry next to unreviewed additional servers.
+export function verifyBundledProductMcp(entries, sourceDirectory, contract, { debugBuild = false, errorCode = 'PRODUCT_ARCHIVE_MCP_INVALID' } = {}) {
+  const actual = parseObjectJson(entries.get('.mcp.json'), errorCode);
+  const expected = canonicalProductMcp(sourceDirectory, contract, debugBuild, errorCode);
+  if (!isDeepStrictEqual(actual, expected)) throw new Error(errorCode);
+  return Object.freeze({ ok: true, debug_build: debugBuild });
+}
+
+// The common Node license must be present and exactly bound to every runtime
+// target recorded in the archive evidence. Marketplace projections use this
+// same gate as the direct ZIP verifier.
+export function verifyBundledProductRuntimeLicense(entries, evidence, { errorCode = 'PRODUCT_RUNTIME_LICENSE_INVALID' } = {}) {
+  const license = entries.get('runtime/LICENSE.node.txt');
+  if (!Buffer.isBuffer(license) || !Array.isArray(evidence?.targets) || !evidence.targets.length ||
+      new Set(evidence.targets.map((item) => item?.license_sha256)).size !== 1 ||
+      evidence.targets.some((item) => item?.license_sha256 !== sha256(license) || item?.license_bytes !== license.length)) {
+    throw new Error(errorCode);
+  }
+  return Object.freeze({ ok: true, sha256: sha256(license), bytes: license.length });
 }
 
 // Archive-level check, independent of the source-tree module loader. This

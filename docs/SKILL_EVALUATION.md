@@ -16,6 +16,17 @@ Prüfanleitung mit Nutzertext, Ausgangslage, erwarteter Werkzeugfolge sowie alle
 erforderlichen und verbotenen Outcomes erzeugt. Die Ausgabe wird nicht separat
 gepflegt und kann deshalb nicht vom JSON-Korpus abweichen.
 
+Die Candidate-Matrix verlangt echte beobachtete Vorbedingungen. Der gemeinsame
+Planvalidator bindet Fixture, Phase, erwartete Werkzeugfolge und Cleanup; die
+Vorlage enthält dafür `precondition_result`. Ohne die verlangte Beobachtung
+ist der Fall `BLOCKED`, nicht erfolgreich ausgeführt. Beim Host-Stopp muss der
+MCP-Picker noch offen sein; ein Stopp nach dessen ACK testet diesen Fall nicht.
+Der terminale DOCX-Fall bewertet den Nutzer-Folgeauftrag nach lokalem Fehler,
+keine erfundene spätere Parserantwort im bereits abgeschlossenen Startaufruf.
+Resume setzt einen in N3-07 tatsächlich nachgewiesenen unterbrochenen Checkpoint
+voraus. Der Injectionfall verwendet `evals/fixtures/cowork-embedded-instruction.txt`
+über den echten lokalen Konverter und Handoff, niemals eine imitierte Toolantwort.
+
 `npm test` validiert Schema und Abdeckungsumfang des Korpus. Es simuliert kein Claude-Modell
 und darf nicht als bestandene Modellabnahme bezeichnet werden.
 

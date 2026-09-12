@@ -5,9 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { buildMarketplaceRepo, defaultZip } from '../scripts/build-marketplace-repo.mjs';
-import { collectProductFiles, verifyProductSourceEntries } from '../scripts/lib/product-files.mjs';
+import { collectProductFiles, verifyProductSourceEntries, verifyBundledProductMcp,
+  verifyBundledProductRuntimeLicense } from '../scripts/lib/product-files.mjs';
 import { readCentralModes, writeZip } from '../scripts/lib/zip.mjs';
-import { sha256 } from '../scripts/lib/bundled-runtime.mjs';
+import { readContract, sha256 } from '../scripts/lib/bundled-runtime.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -17,6 +18,22 @@ const source = path.join(root, 'plugins', 'data-secure');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).version;
 const entries = new Map(collectProductFiles(source).map(file => [file.archivePath, fs.readFileSync(file.fullPath)]));
 verifyProductSourceEntries(entries, source);
+const contract = readContract(root);
+const mcpEntry = JSON.parse(entries.get('.mcp.json').toString('utf8'));
+mcpEntry.mcpServers['data-secure-local'].command = contract.plugin_command;
+entries.set('.mcp.json', Buffer.from(`${JSON.stringify(mcpEntry)}\n`));
+assert.doesNotThrow(() => verifyBundledProductMcp(entries, source, contract));
+const extraMcp = JSON.parse(entries.get('.mcp.json').toString('utf8'));
+extraMcp.mcpServers['unreviewed-sidecar'] = { command: 'not-approved', args: [] };
+const extraMcpEntries = new Map(entries);
+extraMcpEntries.set('.mcp.json', Buffer.from(`${JSON.stringify(extraMcp)}\n`));
+assert.throws(() => verifyBundledProductMcp(extraMcpEntries, source, contract), /PRODUCT_ARCHIVE_MCP_INVALID/u);
+const license = Buffer.from('Node runtime license fixture\n'.repeat(12));
+const licenseEvidence = { targets: [{ license_sha256: sha256(license), license_bytes: license.length }] };
+const licenseEntries = new Map([['runtime/LICENSE.node.txt', license]]);
+assert.doesNotThrow(() => verifyBundledProductRuntimeLicense(licenseEntries, licenseEvidence));
+licenseEvidence.targets[0].license_sha256 = '0'.repeat(64);
+assert.throws(() => verifyBundledProductRuntimeLicense(licenseEntries, licenseEvidence), /PRODUCT_RUNTIME_LICENSE_INVALID/u);
 for (const name of ['server/mcp-server.js', '.claude-plugin/plugin.json',
   'skills/gbh-datasecure-dokument-anonymisieren/SKILL.md']) {
   assert.ok(entries.has(name));

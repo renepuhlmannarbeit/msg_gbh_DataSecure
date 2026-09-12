@@ -122,19 +122,29 @@ den aktuellen Source-Preflight geprüft werden.
 
 [Ziel und PASS-Regel](CASE_CATALOG.md#uat-05)
 
-1. `batch-001.txt` bis `batch-010.txt` wählen und öffnen.
-2. Sobald **„Die lokale Übernahme wurde gestartet.“** sichtbar ist, Claude
-   Desktop vollständig beenden: Windows über „Beenden“ im Taskleistenmenü,
-   macOS mit `Cmd+Q`. Nicht auf eine Abschlussmeldung warten.
-3. Claude Desktop neu starten und „Setze den unvollständigen DataSecure-Stapel
-   fort“ schreiben. Falls der lokale Worker den Stapel während des Neustarts
-   bereits vollständig abgeschlossen hat, wird das als `PASS (bereits fertig)`
-   dokumentiert; es darf trotzdem kein Ersatzpicker erscheinen.
-4. Keine Dateien erneut auswählen.
+1. Nur in einem entbehrlichen, isolierten Testkonto `batch-001.txt` bis
+   `batch-010.txt` wählen und öffnen. Die Startmeldung bestätigt die Annahme,
+   noch keinen dauerhaften Checkpoint.
+2. Die IT-Testperson beobachtet lokal den eigenen Batch-Checkpoint mit mindestens
+   einer unfertigen Position. Für eine kontrollierte N3-07-Störung darf nur der
+   diesem Testlauf eindeutig zugeordnete Test-Worker beendet werden: Prozesspfad,
+   PID **und Prozessstartzeit** müssen zum aktuellen Executor-Lease dieses
+   Teststapels passen. Keine Journale ändern, keine fremden Prozesse beenden und
+   keine pauschale Beendigung aller Node-/Claude-Prozesse. Ist die Zuordnung nicht
+   sicher oder der Lauf schon fertig, nicht eingreifen und `BLOCKED` dokumentieren.
+3. Vor dem Fortsetzungsauftrag lokal nachweisen: Checkpoint vorhanden, kein aktiver
+   Worker und tatsächlich angebotene Fortsetzung. **Das Schließen von Claude allein
+   ist kein Worker-Abbruch**; der getrennte Worker darf nach der Annahme weiterlaufen.
+4. In einer neuen Cowork-Sitzung „Setze den unvollständigen DataSecure-Stapel fort“
+   schreiben und die vom Modell erbetene Fortsetzung ausdrücklich bestätigen.
+   Keine Dateien erneut auswählen.
 
-PASS: kein Ersatzpicker, keine Duplikate, genau zehn Zuordnungen, kein Teiloutput
-der beim Beenden aktiven Position. Ein nicht reproduzierbarer Abbruch oder ein
-erneuter Picker ist `FAIL`, nicht `BLOCKED`.
+PASS: echte Wiederaufnahme des nachgewiesenen Checkpoints, kein Ersatzpicker,
+keine Duplikate, genau zehn Zuordnungen, kein Teiloutput der unterbrochenen Position.
+Fehlt die Unterbrechung, ist dies `BLOCKED`, kein Fortsetzungs-PASS. Ein bereits
+fertiger Stapel kann separat den Parent-Disconnect-Fall belegen, ersetzt aber nicht
+die Wiederaufnahme. Ein Ersatzpicker oder Duplikate nach gültiger Vorbereitung sind
+`FAIL`. Nur inhaltsfreie Beobachtungen protokollieren, keine Lease- oder Pfaddaten.
 
 ## UAT-06 – Hundert Dateien als einen Stapel verarbeiten
 
@@ -155,7 +165,7 @@ Für jeden Fall eine Evidence-Zeile mit `PASS`, `FAIL` oder `BLOCKED` ausfüllen
 Ein GO erfordert UAT-01 bis UAT-06 als PASS auf jedem freizugebenden Zielhost und
 keinen harten Datenschutzfehler. UAT-03 muss exakt einem erlaubten Szenario
 folgen; UAT-04 muss Pickergrenze und sicheren DOCX-Stopp belegen; UAT-05 muss den
-Abbruchzustand oder den bereits terminal abgeschlossenen Stapel eindeutig zeigen.
+Abbruchzustand und die anschließende Wiederaufnahme eindeutig zeigen.
 `BLOCKED` ersetzt keinen Zielhostnachweis. Marketplace-GO erfordert zusätzlich
 Installieren, Aktualisieren und Zurückrollen. ZIP-GO erfordert eine echte
 Fresh-Install-Runde. Tastaturbedienung, verständliche Beschriftungen, Quellen- und

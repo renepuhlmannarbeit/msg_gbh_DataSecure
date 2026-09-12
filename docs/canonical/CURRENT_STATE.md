@@ -1,6 +1,16 @@
 # Aktueller Iststand
 
-Stand: 12.09.2026 · 3.2.0-rc138 · Cowork technisch veröffentlicht; Modellabnahme und N3/N4 offen
+Stand: 12.09.2026 · 3.2.0-rc139 · Cowork-Release vorbereitet; Modellabnahme und N3/N4 offen
+
+## RC139 – Lieferung der Astra-/Terra-Gegenreviewkorrekturen
+
+RC139 bündelt BL-041.15–.18 und `ASTRA2-20260912-01`–`04` für einen neuen
+commitgebundenen Cowork-Kandidaten. Normal/Debug/UAT und beide Mac-Zielpakete
+werden nur nach den jeweiligen nativen Smokes neu veröffentlicht. Die
+Versionsmetadaten im gemeinsamen Repository werden synchron fortgeschrieben;
+Standalone-Funktionen und seine veröffentlichten RC137-Binaries bleiben unverändert.
+Die finale Mehrplattforminventur bindet alle Produkt-ZIPs an denselben Commit,
+ohne die Windows-UAT-Vorlage als Mac-Ausführungsnachweis zu behandeln.
 
 ## RC138 – Cowork-Revalidierung nach RC137
 
@@ -11,6 +21,38 @@ Stapelwahl zeigt zusätzlich den Abschlusszeitpunkt. Befunde und Tests sind
 unter `CWR-20260912-01` bis `CWR-20260912-11` im
 [Herstellerreview](../REVIEW_CLAUDE_COWORK_2026-09-01.md) festgehalten.
 Die Standalone-Verarbeitung und Erkennungsregeln werden nicht geändert.
+
+### Nachträglicher unabhängiger Astra-Gegenreview
+
+Der am 12.09.2026 nach Veröffentlichung durchgeführte read-only Gegenreview
+bestätigte vier E0-Defektgruppen: Eine asynchrone Ergebnisübergabe kann
+nach Cancel mit einer nachfolgenden Auswahl vermischt werden; strukturierte
+Angaben zur Extraktionsabdeckung gehen auf dem Handoff-Weg verloren; die
+ZIP-/Marketplace-Integritätsgates schließen zusätzliche MCP-Server und eine
+fehlende Runtime-Lizenz nicht zuverlässig aus; die veröffentlichte UAT-Vorlage
+bindet ein vom tatsächlichen Windows-Release abweichendes lokales ZIP und die
+12×3-Matrix prüft ihre Fixtures nicht gegen den UAT-Korpus. Zusätzlich sind
+Prototyp-Promptnamen als gültige Prompts akzeptiert. Die Terra-Ausführung hat
+die vier ursprünglichen Befunde bearbeitet: generationstreue Handoff-Sitzungen samt
+Coverage-Projektion, gemeinsamer ZIP-/Marketplace-Validator einschließlich
+Runtime-Lizenz und Quellcommit, explizite Kandidaten-/Archivbindung mit
+fixture-validierter 12×3-Matrix sowie reine Own-Key-Promptauflösung. Die genaue
+nachvollziehbare Lieferung steht in `BL-041.15`–`.18`.
+
+Der zweite Astra-Gegenreview fand vier Restdefekte im Release-/UAT-Weg.
+`ASTRA2-20260912-01`–`04` sind im Backlog einzeln festgehalten und lokal
+korrigiert: Download außerhalb des Quellbaums, vollständiger finaler
+Normal-/Debug-/UAT-/SPDX-Artefaktsatz, Bindung an den tatsächlich nativ geprüften
+ZIP-Snapshot sowie ausführbare UAT-Vorbedingungen statt simulierter
+Parser-Startantworten. Ein isolierter Offline-Integrationstest baut beide
+Cowork-Pakete, startet sie nativ und prüft UAT und finale Prüfsummen gemeinsam.
+Dies ist Entwicklungs-E0, weder Veröffentlichung noch menschliche Abnahme.
+
+RC138 bleibt ein veröffentlichter technischer Zwischenstand; seine positiven
+Paket-, Start- und MCP-Roundtripnachweise bleiben historisch gültig. Es ist
+jedoch kein aktueller N3/N4- oder Modell-UAT-Kandidat. Die vier Stories sind
+geschlossen; ein neuer Kandidat muss ihre Regeln dennoch aus einem sauberen
+Commit mit zwei expliziten, verifizierten Archiven erneut nachweisen.
 Die Marketplace-Projektion wählt das aktuelle Host-ZIP, verweigert veraltete
 Quellbytes vor Ausgabeänderungen und prüft die fertigen Dateien gegen das
 tatsächliche Archiv. Hash, Ziel und Execute-Bits sind explizit nachvollziehbar;

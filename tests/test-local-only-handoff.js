@@ -127,6 +127,52 @@ await testAsync('token-free handoff reads a verified page without exposing local
   assert.deepStrictEqual(acknowledgements, [{ token: 'a'.repeat(64), packageIds: ['ds_1234567890abcdef1234567890abcdef'] }]);
 });
 
+await testAsync('handoff preserves validated extracted-Markdown scope and coverage without local capabilities', async () => {
+  const coverage = { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] };
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => [{ token: 'a'.repeat(64), released: 1, stopped: 0 }],
+    listBatchResults: () => ({ results: [{
+      package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43),
+      document_result: { grade: 'complete', label: 'Vollständig verarbeitet', omissions: [] },
+      privacy_scope: 'extracted-markdown-only', source_extraction_coverage: coverage
+    }], next_cursor: null }),
+    readOutputs: () => ({ documents: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', text: 'Freigegeben', has_more: false, next_offset: 12 }] }),
+    acknowledgeDeliveredPackages: () => {}
+  });
+  const page = await handoff.start();
+  assert.deepStrictEqual(page.documents[0].source_extraction_coverage, coverage);
+  assert.strictEqual(page.documents[0].privacy_scope, 'extracted-markdown-only');
+  assert.doesNotMatch(JSON.stringify(page), /package_id|read_capability/u);
+});
+
+await testAsync('malformed extracted-Markdown metadata fails closed before document text is returned', async () => {
+  let reads = 0;
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => [{ token: 'a'.repeat(64), released: 1, stopped: 0 }],
+    listBatchResults: () => ({ results: [{
+      package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43),
+      privacy_scope: 'extracted-markdown-only', source_extraction_coverage: { status: 'complete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }
+    }], next_cursor: null }),
+    readOutputs: () => { reads++; return { documents: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', text: 'Freigegeben', has_more: false, next_offset: 12 }] }; },
+    acknowledgeDeliveredPackages: () => {}
+  });
+  await assert.rejects(() => handoff.start(), (error) => error.code === 'LOCAL_HANDOFF_VERIFICATION_FAILED');
+  assert.strictEqual(reads, 1, 'the source is read only from the already verified local package, then the public projection fails closed');
+});
+
+await testAsync('coverage without its required privacy scope cannot disappear during local handoff', async () => {
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => [{ token: 'a'.repeat(64), released: 1, stopped: 0 }],
+    listBatchResults: () => ({ results: [{
+      package_id: 'ds_1234567890abcdef1234567890abcdef', read_capability: 'c'.repeat(43),
+      source_extraction_coverage: { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }
+    }], next_cursor: null }),
+    readOutputs: () => ({ documents: [{ package_id: 'ds_1234567890abcdef1234567890abcdef', text: 'Freigegeben', has_more: false, next_offset: 12 }] }),
+    acknowledgeDeliveredPackages: () => {}
+  });
+  await assert.rejects(() => handoff.start(), (error) => error.code === 'LOCAL_HANDOFF_VERIFICATION_FAILED');
+});
+
 await testAsync('multiple local batches are selected locally and cancellation does not reveal candidates', async () => {
   const handoff = createLocalOnlyHandoff({
     completedLocalOnlyCandidates: () => [{ token: 'a'.repeat(64), released: 1, stopped: 0 }, { token: 'b'.repeat(64), released: 2, stopped: 1 }],
@@ -523,6 +569,51 @@ await testAsync('parallel page requests are rejected without acknowledging an un
   assert.strictEqual((await continuation).more, true);
   assert.strictEqual(acknowledgements, 0);
   handoff.cancel();
+});
+
+await testAsync('cancelled asynchronous handoff never mixes an old page with a later batch', async () => {
+  let selected = 'A';
+  let releaseSnapshot;
+  let snapshotStarted;
+  const snapshotMayFinish = new Promise((resolve) => { releaseSnapshot = resolve; });
+  const snapshotEntered = new Promise((resolve) => { snapshotStarted = resolve; });
+  const acknowledgements = [];
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => [{ token: selected, released: selected === 'A' ? 6 : 1, stopped: 0 }],
+    listBatchResults: (token, { cursor }) => {
+      const ids = token === 'A' ? (cursor ? ['A6'] : ['A1', 'A2', 'A3', 'A4', 'A5']) : ['B1'];
+      return { results: ids.map((package_id) => ({ package_id, read_capability: 'c'.repeat(43) })),
+        next_cursor: token === 'A' && !cursor ? 'A-next' : null };
+    },
+    openVerifiedMarkdownSnapshotAsync: async (packageId) => {
+      if (packageId === 'A6') {
+        snapshotStarted();
+        await snapshotMayFinish;
+      }
+      return { bytes: 1, read: () => ({ text: packageId, has_more: false, next_offset: 1 }), dispose: () => {} };
+    },
+    readOutputs: () => assert.fail('snapshot path expected'),
+    acknowledgeDeliveredPackages: (token, packageIds) => acknowledgements.push({ token, packageIds })
+  });
+  const first = await handoff.start();
+  assert.deepStrictEqual(first.documents.map((document) => document.text), ['A1', 'A2', 'A3', 'A4', 'A5']);
+  const pendingOldPage = handoff.nextAsync();
+  await snapshotEntered;
+  assert.strictEqual(handoff.cancel().ok, true);
+  selected = 'B';
+  assert.strictEqual((await handoff.start()).error, 'local_handoff_active', 'do not replace a running page with a new batch');
+  releaseSnapshot();
+  const cancelled = await pendingOldPage;
+  assert.strictEqual(cancelled.error, 'no_active_local_handoff');
+  assert.deepStrictEqual(acknowledgements, [{ token: 'A', packageIds: ['A1', 'A2', 'A3', 'A4', 'A5'] }]);
+  const replacement = await handoff.start();
+  assert.deepStrictEqual(replacement.documents.map((document) => document.text), ['B1']);
+  assert.match(replacement.batch_result_summary.message, /1 anonymisierte Ergebnis/u);
+  assert.strictEqual(handoff.next().more, false);
+  assert.deepStrictEqual(acknowledgements, [
+    { token: 'A', packageIds: ['A1', 'A2', 'A3', 'A4', 'A5'] },
+    { token: 'B', packageIds: ['B1'] }
+  ]);
 });
 
 await testAsync('finalizing an expired terminal page clears the session without acknowledgement', async () => {

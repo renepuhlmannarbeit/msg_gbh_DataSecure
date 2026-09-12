@@ -24,6 +24,12 @@ Für N3-05 bis N3-09 gelten zusätzlich die detaillierten Fälle aus den beiden
 produktbezogenen UAT-Kits. Cowork-Marketplace-Lifecycle wird nur geprüft, wenn
 der Marketplace im Kampagnenmanifest als freizugebender Kanal eingetragen ist.
 
+Für Cowork-N3-07 ist ein tatsächlich unterbrochener eigener Test-Worker mit
+dauerhaftem Checkpoint erforderlich, siehe [UAT-05](../UAT_TEST_KIT/STEP-BY-STEP.md#uat-05--unterbrochenen-zehnerstapel-fortsetzen).
+Claude schließen kann den getrennten Worker weiterlaufen lassen und belegt
+keine Wiederaufnahme. Fehlende Unterbrechung ergibt `BLOCKED`; ein bereits
+abgeschlossener Lauf ist kein Ersatz-PASS für den Fortsetzungsteil.
+
 ## N4 – formale Anwender- und Freigabeabnahme
 
 | ID | Prüfung | PASS-Regel |

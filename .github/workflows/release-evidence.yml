@@ -61,15 +61,39 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $archive = 'node-v22.23.2-win-x64.zip'
-          Invoke-WebRequest -Uri "https://nodejs.org/dist/v22.23.2/$archive" -OutFile $archive
+          $archiveName = 'node-v22.23.2-win-x64.zip'
+          $archive = Join-Path $env:RUNNER_TEMP $archiveName
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v22.23.2/$archiveName" -OutFile $archive
           node scripts/build-runtime-target.mjs --target windows-x64 --archive $archive --output dist/windows-x64
       - run: npm run build
+      - run: npm run build:debug
+      - run: npm run test:debug-zip
+      - name: Bind exact normal and debug ZIPs to the current UAT candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = node -p "require('./package.json').version"
+          npm run build:cowork-uat-evidence -- `
+            --candidate-commit $env:GITHUB_SHA `
+            --normal-zip "dist/DataSecure-Privacy-Preflight-windows-x64-v$version.zip" `
+            --debug-zip "dist/DataSecure-Privacy-Preflight-windows-x64-debug-v$version.zip"
+      - name: Inventory the final normal, debug and UAT artifact set
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = node -p "require('./package.json').version"
+          node scripts/generate-sbom.mjs `
+            --archive "dist/DataSecure-Privacy-Preflight-windows-x64-v$version.zip" `
+            --archive "dist/DataSecure-Privacy-Preflight-windows-x64-debug-v$version.zip" `
+            --cowork-uat "dist/DataSecure-Cowork-UAT-Evidence-v$version.zip"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: data-secure-release-${{ github.sha }}
           path: |
             dist/DataSecure-Privacy-Preflight-windows-x64-v*.zip
+            dist/DataSecure-Privacy-Preflight-windows-x64-debug-v*.zip
+            dist/DataSecure-Cowork-UAT-Evidence-v*.zip
             dist/*.spdx.json
             dist/SHA256SUMS
+          if-no-files-found: error
           retention-days: 7

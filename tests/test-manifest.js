@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { createSuite } = require('./helpers');
 
-const { test, done, assert } = createSuite('Manifest consistency');
+const { test, testAsync, done, assert } = createSuite('Manifest consistency');
 
 const root = path.resolve(__dirname, '..');
 const runtime = path.join(root, 'plugins', 'data-secure', 'server');
@@ -58,7 +58,7 @@ test('version synchronization cannot consume the UML header newline', () => {
     'UML prose must start on a new paragraph after the version header');
 });
 
-test('version synchronization changes release labels without relabelling historical evidence', () => {
+testAsync('version synchronization changes release labels without relabelling historical evidence', async () => {
   const script = readText(path.join(root, 'scripts', 'set-version.mjs'));
   assert.doesNotMatch(script, /replaceAll\(previous|replaceAll\(rcLabel\(previous\)/u,
     'version sync must not replace historical RC labels throughout current documents');
@@ -66,15 +66,19 @@ test('version synchronization changes release labels without relabelling histori
   assert.match(script, /Engineering-Pilot/u);
   assert.match(script, /FORMAL_UAT\/CAMPAIGN\.template\.json/u);
   assert.match(script, /FORMAL_UAT\/GIT-WORKFLOW\.md/u);
-  assert.match(script, /Der aktuelle Quellstand ist/u,
-    'version sync must advance the explicit current release-truth label');
-  assert.match(script, /Kandidat\|Entwicklungsstand/u,
-    'version sync may change only the explicit current release-truth role');
+  assert.match(script, /writeIfChanged\('docs\/RELEASE\.md', advanceReleaseSource\(/u,
+    'version sync must use the tested release-truth transition');
   assert.match(script, /\(\?=\[\^\\n\]\*\$\)/u,
     'version headers with a product suffix must remain synchronizable');
   assert.match(script, /--check/u,
     'version truth must support a non-mutating CI check');
-  assert.match(script, /target === previous \? currentRole : 'Entwicklungsstand'/u,
+  const { advanceReleaseSource } = await import('../scripts/lib/release-version.mjs');
+  const published = 'Der aktuelle Quellstand ist RC138 und veröffentlicht.\n'
+    + 'Der letzte gebundene Kandidat RC138 hat eigene Commit-Evidence.\n';
+  assert.strictEqual(advanceReleaseSource(published, {previous: '3.2.0-rc138', target: '3.2.0-rc139'}),
+    'Der aktuelle Quellstand ist RC139-Entwicklungsstand und noch kein neu gebundener Paketkandidat.\n'
+    + 'Der letzte gebundene Kandidat RC138 hat eigene Commit-Evidence.\n');
+  assert.strictEqual(advanceReleaseSource(published, {previous: '3.2.0-rc138', target: '3.2.0-rc138'}), published,
     'checking a bound version must preserve its candidate role');
 });
 
@@ -226,6 +230,14 @@ test('MCPB prompt texts use the same direct-picker contract as the runtime', () 
       `${prompt.name} must not reconstruct disclosure text from protocol flags`);
     assert.doesNotMatch(prompt.text, /Cowork-Arbeitsordner/u,
       `${prompt.name} must not claim that DataSecure can discover the connected Cowork folder`);
+  }
+});
+
+test('prompt contract rejects inherited and unknown prompt names', () => {
+  const { promptText, manifestPromptText } = require(path.join(runtime, 'prompt-contract.js'));
+  for (const name of ['nope', 'constructor', 'toString', '__proto__', null, 42]) {
+    assert.strictEqual(promptText(name), null, `runtime prompt ${String(name)} must be rejected`);
+    assert.strictEqual(manifestPromptText(name), null, `manifest prompt ${String(name)} must be rejected`);
   }
 });
 

@@ -1,6 +1,17 @@
 # Entscheidungs-Traceability
 
-Stand: 12.09.2026 · 3.2.0-rc138
+Stand: 12.09.2026 · 3.2.0-rc139
+
+BL-041.17 / `ASTRA2-20260912-01`–`04`: `release-evidence.yml` lädt Node nach
+`RUNNER_TEMP`, baut Normal/Debug/UAT und inventarisiert erst den finalen Satz.
+`cowork-candidate.mjs` bindet das native Receipt an den ZIP-Snapshot und prüft
+UAT gegen die finalen SPDX-Eingänge. `cowork-smoke-plan.cjs` wird von Anleitung,
+UAT-Builder und Tests gemeinsam genutzt. Negativtests liegen in
+`test-cowork-uat-evidence.mjs`, `test-skill-eval-corpus.js` und
+`test-runtime-release-path.mjs`; ein echter Clean-Git-Build in
+`test-bundled-runtime.mjs`. `tests/manual/cowork-release-offline.mjs` prüft
+beide echten nativen ZIPs plus UAT/SPDX/Prüfsummen ohne Netzwerk. Die Anwendung
+und Standalone-Auslieferung werden durch diesen Korrekturblock nicht verändert.
 
 DS-078/DS-097/DS-099, BL-041.8/.10/.12/.13 und BL-010.8: Der Abgleich
 `CWR-20260912-01`–`11` in
@@ -26,6 +37,21 @@ maschinelle Startparität ersetzt keine sichtbare Cowork-/N3/N4-/Modellabnahme.
 Diese Tabelle bindet jede Entscheidung an den aktuellen Arbeitsbereich. Detaillierte
 frühere Code-/Testzuordnungen bleiben im
 [Traceability-Archiv](../archive/2026-09/canonical-history/TRACEABILITY_HISTORY_THROUGH_RC84.md).
+
+BL-041.15–.18 / Astra-20260912: `local-only-handoff.js` hält eine asynchrone
+Sitzung bis zum Ende der Seite exklusiv, verwirft nach Cancel jeden verspäteten
+Snapshot und projiziert validierte Extraktionsabdeckung nur vollständig. Die
+gemeinsamen Guards in `scripts/lib/product-files.mjs` schließen in ZIP-Verifier
+und Marketplace zusätzliche MCP-Server, abweichende Runtime-Lizenzen und nicht
+an einen Commit gebundene Runtime-Evidence. Die UAT-Evidence verlangt explizite
+Normal-/Debug-Archive und den sauberen aktuellen Commit; die 12×3-Matrix wird
+gegen die echten UAT-Fixtures aufgelöst. `prompt-contract.js` akzeptiert nur
+eigene deklarierte Promptnamen. Belegt durch `test-local-only-handoff.js` (33),
+`test-bundled-runtime.mjs`, `test-marketplace-projection.mjs`,
+`test-cowork-uat-evidence.mjs`, `test-skill-eval-corpus.js`,
+`test-manifest.js` und `test-mcp-protocol.js` (66 stdio-Fälle). Diese Delivery
+verändert kein Standalone-Produkt und macht RC138 nicht rückwirkend zum neuen
+Kandidaten.
 
 RC137 bindet DS-100/BL-010.35 und die RC136-Interaktionsverträge an den
 sauberen Quellcommit `8979d4b2127741c2921cb6f0654fb83d82944845`.

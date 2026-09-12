@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 12.09.2026 · RC138-Cowork-Kandidat; Standalone RC137 separat
+Stand: 12.09.2026 · vorbereitet für 3.2.0-rc139; Standalone RC137 separat
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -21,6 +21,10 @@ Tester die exakten Pakethashes des jeweiligen Produkts gebunden haben. Die
 12×3- und 41×3-Modellgates bleiben `NOT_RUN`; das veröffentlichte Evidence-ZIP
 ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch und darf nicht
 umetikettiert werden.
+
+Neue Quellkorrekturen nach dem Astra-/Terra-Gegenreview sind nicht in den
+RC138-Paketen enthalten. RC139 muss vor einer Kampagnenbindung neu gebaut und
+geprüft werden; die RC138-UAT-Vorlage ist nicht wiederverwendbar.
 
 Evidence-Präzisierung vom 12.09.2026: Das nachgezogene native ZIP-Gate ist für
 RC138 auf allen drei Cowork-Zielarchitekturen bestanden. Danach folgt weiterhin
@@ -67,10 +71,18 @@ macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
    und der 12×3-Kandidatensmoke mit den im Manifest gebundenen Korpus-Hashes
    als `PASS` erforderlich. Die reproduzierbare 12-Fälle-Anleitung erzeugt
    `npm run uat:cowork-candidate`; Setup und Aufräumen gehören zu jedem Fall.
-   Nach dem bytegleichen Cowork-Paketbau erzeugt
-   `npm run build:cowork-uat-evidence` zusätzlich ein an Commit, Paket-Hashes
-   und Korpus-Hashes gebundenes Evidence-ZIP. Seine 36 Zeilen bleiben zunächst
+   Nach dem bytegleichen Cowork-Paketbau erzeugt `npm run build:cowork-uat-evidence --
+   --candidate-commit <Commit> --normal-zip <dist/normal.zip> --debug-zip
+   <dist/debug.zip>` zusätzlich ein an **diese expliziten**, zuvor nativ durch den Cowork-ZIP-Verifizierer
+   geprüften Paket-Hashes und dem im eingebetteten Runtime-Evidence identischen
+   Quellcommit gebundenes Evidence-ZIP. Seine 36 Zeilen bleiben zunächst
    `NOT_RUN`; das ZIP ist eine Vorlage und niemals selbst ein UAT-Nachweis.
+   Das maschinenlesbare Prüf-Receipt bindet den tatsächlich geprüften ZIP-Snapshot
+   an Größe und SHA-256. PKG-04 bleibt der separate Standalone-Nachweis.
+   Vor jedem Modelltest die echte Vorbedingung beobachten und
+   `precondition_result=OBSERVED` eintragen. Andernfalls beide Ergebnisfelder
+   auf `BLOCKED` setzen. Keine erfundenen Toolantworten oder manipulierten
+   Journale verwenden; Resume verlangt den in N3-07 nachgewiesenen Checkpoint.
 5. Nur synthetische Testdaten bereitstellen. Niemals echte Personen-, Kunden-
    oder Unternehmensdaten in Git, Evidenz oder Defectbeschreibungen aufnehmen.
 6. Beide Tester starten ihre Plattformbranches vom selben Kampagnenbranch und

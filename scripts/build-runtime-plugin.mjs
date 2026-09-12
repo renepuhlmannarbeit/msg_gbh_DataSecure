@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { collectProductFiles, verifyKeyringFreeProductFiles } from './lib/product-files.mjs';
 import { writeZip, readCentralModes } from './lib/zip.mjs';
 import { readContract, readRegular, sha256, verifyTargetEvidence } from './lib/bundled-runtime.mjs';
@@ -28,8 +29,29 @@ function copyRegular(source, destination, mode = 0o600) {
   return bytes;
 }
 
-export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, targetId, output, supportMode = false } = {}) {
+function sourceCommit(repository, supplied) {
+  if (supplied !== undefined) {
+    if (!/^[a-f0-9]{40}$/u.test(supplied)) throw new Error('BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID');
+    return supplied;
+  }
+  try {
+    const git = { cwd: repository, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] };
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], git).trim();
+    if (!/^[a-f0-9]{40}$/u.test(commit) ||
+        execFileSync('git', ['status', '--porcelain'], git).trim()) {
+      throw new Error('BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID');
+    }
+    return commit;
+  } catch (error) {
+    if (error.message === 'BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID') throw error;
+    throw new Error('BUNDLED_PLUGIN_SOURCE_COMMIT_REQUIRED');
+  }
+}
+
+export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, targetId, output, supportMode = false,
+  sourceCommit: suppliedSourceCommit } = {}) {
   const repository = path.resolve(repositoryRoot);
+  const source_commit = sourceCommit(repository, suppliedSourceCommit);
   const contract = readContract(repository);
   const selected = targetId === 'universal' ? contract.targets : contract.targets.filter((item) => item.id === targetId);
   if (!selected.length || (targetId !== 'universal' && selected.length !== 1)) throw new Error('BUNDLED_PLUGIN_TARGET_INVALID');
@@ -105,7 +127,7 @@ export function buildRuntimePlugin({ repositoryRoot = root, runtimesRoot, target
       mode: supportMode ? 'direct-upload-debug-target' :
         (targetId === 'universal' ? 'marketplace-universal' : 'direct-upload-target'),
       host_node_required: false, runtime_dependency_install: false,
-      plugin_command: contract.plugin_command, targets: targetEvidence
+      plugin_command: contract.plugin_command, source_commit, targets: targetEvidence
     }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
 
     const files = collectProductFiles(stage).map((file) => ({ ...file, mode: executable.has(file.archivePath) ? 0o100755 : 0o100644 }));

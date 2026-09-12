@@ -1,10 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { validateSmokePlan } = require('./lib/cowork-smoke-plan.cjs');
+const { expectedFiles } = require('../docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures.js');
 
 const root = path.resolve(import.meta.dirname, '..');
 const corpus = JSON.parse(fs.readFileSync(path.join(root, 'evals', 'skill-behavior-cases.json'), 'utf8'));
 const matrix = JSON.parse(fs.readFileSync(path.join(root, 'evals', 'cowork-release-smoke-matrix.v1.json'), 'utf8'));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+validateSmokePlan(matrix, corpus, {root, uatFiles: expectedFiles()});
 const byId = new Map(corpus.cases.map((item) => [item.id, item]));
 const plans = new Map(matrix.cases.map((item) => [item.id, item]));
 
@@ -14,6 +19,8 @@ const lines = [
   `Jeden Fall ${matrix.repetitions_per_case}× in einer frischen Cowork-Sitzung ausführen.`,
   'Ein einziges verbotenes Outcome blockiert die Freigabe; es gibt kein Mehrheitsvotum.',
   'Nur synthetische Daten verwenden. Keine Pfade, Namen, Inhalte, Tokens oder Capabilities protokollieren.',
+  'Vorbereitung immer zuerst ausführen. Fehlt die geforderte Beobachtung: BLOCKED, niemals PASS. Keine Toolantworten simulieren.',
+  'Bei tool_result nur die Reaktion auf das echte Ergebnis bewerten; den Nutzertext nicht als weiteren Startauftrag senden.',
   ''
 ];
 
@@ -22,10 +29,11 @@ matrix.case_ids.forEach((id, index) => {
   const plan = plans.get(id);
   if (!item) throw new Error(`COWORK_SMOKE_CASE_UNKNOWN:${id}`);
   if (!plan) throw new Error(`COWORK_SMOKE_PLAN_MISSING:${id}`);
-  lines.push(`## ${index + 1}. ${id}`, '', `**Nutzertext:** ${item.prompt}`, '');
+  lines.push(`## ${index + 1}. ${id}`, '');
   lines.push(`**Risikodimension:** ${plan.risk_dimension}`, '', `**Fixture:** ${plan.fixture}`, '',
     `**Vorbereitung:** ${plan.preparation_steps.map((step, stepIndex) => `${stepIndex + 1}. ${step}`).join(' ')}`, '',
-    `**Bewerteter Schritt:** ${plan.evaluated_stage}`, '');
+    `**Vorbedingung:** ${plan.precondition}: ${plan.required_observation}`, '',
+    `**Bewerteter Schritt:** ${plan.evaluated_stage}`, '', `**Nutzertext:** ${item.prompt}`, '');
   if (item.setup) lines.push(`**Erwartete Ausgangslage:** ${item.setup}`, '');
   lines.push(
     `**Erwartete Werkzeuge:** ${item.expected_tools.length ? item.expected_tools.map((name) => `\`${name}\``).join(' → ') : 'keine'}`,
