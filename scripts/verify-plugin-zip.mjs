@@ -163,7 +163,16 @@ try {
         EU_PRIVACY_RESULT_ROOT: path.join(stableRuntimeData, 'results') }
     });
     if (started.error || started.status !== 0) {
-      throw new Error('PRODUCT_ARCHIVE_RUNTIME_START_FAILED');
+      // This verifier processes only synthetic, content-free MCP messages. Keep
+      // bounded child diagnostics in the release log so a native target failure
+      // remains actionable instead of collapsing into an opaque gate code.
+      const detail = JSON.stringify({
+        error_code: started.error?.code || null,
+        status: started.status,
+        signal: started.signal,
+        stderr: String(started.stderr || '').replace(/[\r\n\t]+/gu, ' ').trim().slice(0, 2000)
+      });
+      throw new Error(`PRODUCT_ARCHIVE_RUNTIME_START_FAILED:${detail}`);
     }
     const responses = String(started.stdout).split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
     assert.equal(responses.length, 3, 'one response per request, no notification reply or stdout chatter');
