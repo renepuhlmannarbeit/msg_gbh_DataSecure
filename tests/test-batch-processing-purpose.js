@@ -25,8 +25,8 @@ const token = 'a'.repeat(64);
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
 function removeFixture(root) {
-  const resolved = fs.realpathSync(root);
-  assert.strictEqual(path.dirname(resolved), fs.realpathSync(os.tmpdir()));
+  const resolved = fs.realpathSync.native(root);
+  assert.strictEqual(path.dirname(resolved), fs.realpathSync.native(os.tmpdir()));
   assert.ok(path.basename(resolved).startsWith('datasecure-purpose-'));
   const targets = [];
   function inspect(directory) {
@@ -49,7 +49,7 @@ function removeFixture(root) {
 }
 
 function fixture(channel = 'standalone') {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-purpose-')));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-purpose-')));
   const privateRoot = path.join(root, 'private');
   fs.mkdirSync(privateRoot);
   const journals = path.join(privateRoot, 'batches');
@@ -337,7 +337,7 @@ test('a new actual batch process resumes an interrupted conversion without creat
 });
 
 async function realWorkerReject(message, channel, existing) {
-  const root = existing?.root || fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-purpose-')));
+  const root = existing?.root || fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-purpose-')));
   const child = fork(path.join(__dirname, '../plugins/data-secure/server/gateway/batch-worker.js'), [], {
     windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: channel, EU_PRIVACY_ROOT: path.join(root, 'workspace'),
