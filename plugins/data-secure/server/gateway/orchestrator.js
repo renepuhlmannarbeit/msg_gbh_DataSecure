@@ -35,8 +35,9 @@ const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
 const { issueReadCapability } = require('./package-store');
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { personProseCandidateSpans, personProseAmbiguities } = require('../privacy/person-ambiguities');
+const { residualPersonAmbiguities, createPersonReviewBinding } = require('../privacy/residual-person-review');
 const { makeRegistry } = require('../privacy/entities');
-const { normalizeText } = require('../privacy/base');
+const { canonicalizeRenderedText } = require('../privacy/base');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { processAlive } = require('./process-liveness');
 const { readSourceToPrivateMemory } = require('./read-only-source-snapshot');
@@ -61,7 +62,9 @@ function throwIfAborted(signal) {
 }
 
 function reservePersonReviewCandidates(text, pseudonymRegistry) {
-  const original = normalizeText(text);
+  // Source preview, reservations and engine must share one representation.
+  // Parser-generated <br>/entities otherwise shift retained review fragments.
+  const original = canonicalizeRenderedText(text);
   const reservations = personProseCandidateSpans(original)
     .filter((span) => !pseudonymRegistry?.lookup?.('PERSON', span.value))
     .map((span, index) => ({
@@ -482,13 +485,20 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // journal, diagnostic, or audit receipt.
     const pseudonymRegistry = deps.pseudonymRegistry || makeRegistry();
     const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry);
-    const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry });
+    const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry, deferPersonReview: true });
     anon.text = personReview.restore(anon.text);
     const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(effective)
       ? credentialIssuerAmbiguities(personReview.original, anon.text)
       : [];
-    const personAmbiguities = personProseAmbiguities(personReview.original, anon.text);
+    const personAmbiguities = [
+      ...personProseAmbiguities(personReview.original, anon.text),
+      ...(anon.residualPersonCandidates ? residualPersonAmbiguities(personReview.original, anon.text,
+        pii.scanResidual(anon.text, effective, anon.dictionary, {
+          strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true
+        })) : [])
+    ];
     const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
+    const personReviewBinding = createPersonReviewBinding(anon.text, ambiguities);
     diagnostic.text_entity_count = anon.entityCount;
     diagnostic.ambiguous_organization_count = organizationAmbiguities.length;
     diagnostic.ambiguous_person_count = personAmbiguities.length;
@@ -517,8 +527,9 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         profile: effective,
         detected_identifiers: anon.entityCount,
         ambiguities,
+        confirmPersonReview: personReviewBinding.confirm,
         replacementForAmbiguity: (candidate) => {
-          if (candidate?.type !== 'person_prose_ambiguous' || candidate.replacement_kind !== 'PERSON') {
+          if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate?.type) || candidate.replacement_kind !== 'PERSON') {
             throw new SafeError('Die lokale Mehrdeutigkeitsentscheidung ist ungültig.');
           }
           const value = personReview.original.slice(candidate.original_start, candidate.original_end);
@@ -556,7 +567,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         (ext === '.docx' && !policyScopedDocx ? ' Kopf- und Fußzeilen sind gemäß Ausgaberegel nicht enthalten.' : '') +
         '\n\n'
       : '';
-    const finalText =
+    const finalPrefix =
       complianceHeader(effective, {
         ext,
         passes: anon.passes,
@@ -567,9 +578,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         reidentificationRisk: anon.reidentificationRisk,
         ...(scopedPrivacy ? { sourceExtractionCoverage } : {})
       }) +
-      extractedMarkdownScope +
-      reviewedText +
-      assetsMarkdown(vis.results);
+      extractedMarkdownScope;
+    const finalSuffix = assetsMarkdown(vis.results);
+    const reviewedPersonCandidates = personReviewBinding.forPublication(finalPrefix, reviewedText, finalSuffix);
+    const finalText = finalPrefix + reviewedText + finalSuffix;
     const capacity = deps.assertWritableCapacity || assertWritableCapacity;
     capacity({ directory: stagePackage, bytes: Buffer.byteLength(finalText, 'utf8') });
     try { fs.writeFileSync(mdPath, finalText, 'utf8'); }
@@ -578,7 +590,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // Second, independent gate over the exact bytes that will be released,
     // including the compliance header and the asset section.
     const finalResidual = pii.scanResidual(finalText, effective, anon.dictionary, {
-      strongPersonAnchor: anon.strongPersonAnchor
+      strongPersonAnchor: anon.strongPersonAnchor,
+      reviewedPersonCandidates
     });
     if (finalResidual.length) {
       const classes = [...new Set(finalResidual.map((x) => x.type))].sort().join(', ');

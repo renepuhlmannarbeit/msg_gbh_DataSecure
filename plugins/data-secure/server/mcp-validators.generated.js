@@ -662,6 +662,7 @@ function validate28(data, { instancePath = "", parentData, parentDataProperty, r
 }
 validate28.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
 exports.start_completed_local_results_handoff = validate29;
+var schema40 = { "type": "object", "properties": { "scope": { "type": "string", "enum": ["unread", "reuse_completed"], "default": "unread" } }, "additionalProperties": false };
 function validate29(data, { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {}) {
   let vErrors = null;
   let errors = 0;
@@ -674,10 +675,26 @@ function validate29(data, { instancePath = "", parentData, parentDataProperty, r
   }
   if (errors === 0) {
     if (data && typeof data == "object" && !Array.isArray(data)) {
+      const _errs1 = errors;
       for (const key0 of Object.keys(data)) {
-        validate29.errors = [{ instancePath, schemaPath: "#/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 } }];
-        return false;
-        break;
+        if (!(key0 === "scope")) {
+          validate29.errors = [{ instancePath, schemaPath: "#/additionalProperties", keyword: "additionalProperties", params: { additionalProperty: key0 } }];
+          return false;
+          break;
+        }
+      }
+      if (_errs1 === errors) {
+        if (data.scope !== void 0 && func0.call(data, "scope")) {
+          let data0 = data.scope;
+          if (typeof data0 !== "string") {
+            validate29.errors = [{ instancePath: instancePath + "/scope", schemaPath: "#/properties/scope/type", keyword: "type", params: { type: "string" } }];
+            return false;
+          }
+          if (!(data0 === "unread" || data0 === "reuse_completed")) {
+            validate29.errors = [{ instancePath: instancePath + "/scope", schemaPath: "#/properties/scope/enum", keyword: "enum", params: { allowedValues: schema40.properties.scope.enum } }];
+            return false;
+          }
+        }
       }
     } else {
       validate29.errors = [{ instancePath, schemaPath: "#/type", keyword: "type", params: { type: "object" } }];
@@ -1868,4 +1885,4 @@ function validate46(data, { instancePath = "", parentData, parentDataProperty, r
   return errors === 0;
 }
 validate46.evaluated = { "props": true, "dynamicProps": false, "dynamicItems": false };
-exports.schemaDigest = "238f0c4e3248a1cc81c7920f5575464cab98ebedd50163e936880f393b397321";
+exports.schemaDigest = "546493718e4d2c746b339c6244aadc018afb92695cd94f231d71f805727bc40b";

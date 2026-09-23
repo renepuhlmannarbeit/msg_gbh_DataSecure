@@ -13,9 +13,10 @@ const { VERSION } = require('../version');
 const { dataRoot } = require('../runtime');
 const { runtimeInfo } = require('../runtime-info');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
+const { assertRootSeparation } = require('./root-boundary');
 
 const STARTUP_CODES = Object.freeze({
-  UNSAFE_STORAGE_LOCATION: 'Der lokale Datenordner ist kein sicherer Ort oder nicht zugreifbar.',
+  UNSAFE_STORAGE_LOCATION: 'Der lokale Datenordner ist nicht sicher, nicht zugreifbar oder nicht vom Ergebnisordner getrennt.',
   STARTUP_RECOVERY_FAILED: 'Die Wiederherstellung offener Stapel ist fail-closed gestoppt.',
   STARTUP_OUTBOX_RECOVERY_FAILED: 'Die Wiederherstellung der Zuordnungsübersicht ist fail-closed gestoppt.',
   STARTUP_MIGRATION_FAILED: 'Die Migration älterer lokaler Daten ist fail-closed gestoppt oder noch aktiv.',
@@ -73,10 +74,14 @@ function sameDirectoryIdentity(directory, expected, io = fs) {
 function recordStartupRefusal(error, options = {}) {
   const code = startupCodeFor(error);
   const record = options.recordWorkflowEvent || recordWorkflowEvent;
+  let storageSafe = false;
+  try { assertRootSeparation({ dataRoot: options.dataRoot }); storageSafe = true; }
+  catch { /* refusal itself must not write into the conflicting private tree */ }
   let recorded = false;
-  try { recorded = record({ event: 'startup_refused', outcome: 'stopped', error_code: code }) === true; } catch { /* journal unavailable */ }
+  try { if (storageSafe) recorded = record({ event: 'startup_refused', outcome: 'stopped', error_code: code }) === true; } catch { /* journal unavailable */ }
   let marker = false;
   try {
+    if (!storageSafe) throw new Error('unsafe refusal storage');
     const io = options.fs || fs;
     const file = markerFile(options);
     const root = path.dirname(path.dirname(file));

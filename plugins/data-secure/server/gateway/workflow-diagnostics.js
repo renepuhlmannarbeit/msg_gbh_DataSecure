@@ -36,7 +36,9 @@ const EVENTS = new Set([
   'automatic_review_started', 'automatic_review_finished',
   'automatic_review_claim_failed', 'automatic_review_failed',
   'automatic_review_release_failed',
-  'startup_refused', 'terminal_state_delegated_to_product_ui'
+  'startup_refused', 'terminal_state_delegated_to_product_ui',
+  'local_results_reuse_started', 'local_results_reuse_page', 'local_results_reuse_finished',
+  'local_results_reuse_cancelled', 'local_results_reuse_failed', 'local_results_reuse_expired'
 ]);
 const OUTCOMES = new Set(['progress', 'ok', 'stopped']);
 const PHASES = new Set([

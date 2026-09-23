@@ -6,6 +6,7 @@ const fs = require('fs');
 const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
+const { assertRootSeparation, reserveRootSeparation } = require('./root-boundary');
 
 const CONFIG_NAME = 'privacy-root.json';
 
@@ -32,13 +33,20 @@ function readConfiguredPrivacyRoot() {
   } catch { return ''; }
 }
 function saveConfiguredPrivacyRoot(root) {
+  if (typeof root !== 'string' || !root.trim() || !path.isAbsolute(root)) throw new Error('PRIVACY_CONFIG_UNSAFE');
   const selected = path.resolve(String(root));
+  assertRootSeparation({ privacyRoot: selected });
+  reserveRootSeparation({ privacyRoot: selected });
   const directory = ensureConfigDirectory();
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.tmp`);
   fs.writeFileSync(temporary, JSON.stringify({ version: 1, root: selected }), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try { renameWithTransientRetry(temporary, configPath()); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
 }
-function clearConfiguredPrivacyRoot() { try { fs.unlinkSync(configPath()); } catch (error) { if (error?.code !== 'ENOENT') throw error; } }
+function clearConfiguredPrivacyRoot() {
+  assertRootSeparation({ resetPrivacy: true });
+  reserveRootSeparation({ resetPrivacy: true });
+  try { fs.unlinkSync(configPath()); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+}
 
 module.exports = { configPath, readConfiguredPrivacyRoot, saveConfiguredPrivacyRoot, clearConfiguredPrivacyRoot };

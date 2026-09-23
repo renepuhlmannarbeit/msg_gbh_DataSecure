@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 12.09.2026 · 3.2.0-rc139
+Stand: 23.09.2026 · 3.2.0-rc140
 
-Der aktuelle Quellstand ist RC139 und als technischer Cowork-Vorabkandidat veröffentlicht.
+Der aktuelle Quellstand ist RC140-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
 Der Windows-x64-Cowork-Kandidat RC139 sowie beide Mac-Kandidaten binden den sauberen Quellcommit
 `46c6fec4722c879989f5c8e3059367241c117c3a`. Der Release
 <https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc139>

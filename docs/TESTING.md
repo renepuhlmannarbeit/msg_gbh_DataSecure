@@ -1,10 +1,17 @@
 # Aktueller Testvertrag
 
-Stand: 11.09.2026 · 3.2.0-rc139
+Stand: 23.09.2026 · 3.2.0-rc140
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
 enthält nur die heute gültigen Testklassen und Releasebefehle.
+
+Prüfungen bleiben risikoorientiert: einen konkreten Defect möglichst im
+bestehenden Test oder Golden-Orakel absichern, dazu nur die relevanten
+Sicherheitsgegenfälle. Keine neue Testmatrix, doppelte Vertragskopie oder
+kostenpflichtige Modellrunde allein wegen einer kleinen Korrektur. Die
+vollständige lokale Produktsuite dient der abschließenden Integration;
+Tests und interne Nachweise erweitern nicht den normalen Anwenderablauf.
 
 RC111 trennt außerdem reine Core-Verträge von den Produktadaptern.
 `test-core-contracts.mjs` prüft Exportidentität der alten Importpfade, reine
@@ -42,6 +49,41 @@ Diff vor dem Commit kontrolliert werden. Der komplexe, deterministisch erzeugte
 15-DOCX-Korpus gehört zum regulären Produktgate und durchläuft echte OOXML-
 Extraktion, Zweckprojektion und Datenschutzprüfung; er belegt insbesondere den
 unterschiedlichen Kopf-/Fußzeilenvertrag von Konvertierung und Anonymisierung.
+
+BL-050.4 ergänzt `npm run test:golden:adversarial-batch`: alle 16 komplexen
+synthetischen Quellen in beiden Standalone-Modi durch die echte produktive
+Runtimeprojektion mit gebündeltem Konverter/OCR bis zum sichtbaren Export.
+Das unabhängige Orakel prüft Original-/Fachanker pro Veröffentlichung und
+Pseudonyme aus verschiedenen konkreten Dokumentstellen; kein Selbst-Lookup
+oder einzelnes Ambiguitätslabel genügt als Privacy-Nachweis. Die konkrete
+menschliche Reviewentscheidung ist im automatischen Test synthetisch, nicht
+als native Abnahme ausgegeben. Dieser ressourcenintensive Lauf bleibt ein
+explizites lokales Gate statt zusätzlicher Pflichtkosten für jeden Docs-Push.
+Nach BL-021.3/4 verlangt der Endzustandsvertrag 16 Konvertate und 16 anonymisierte
+Ausgaben nach den erforderlichen lokalen Entscheidungen. Technische Versalientitel
+dürfen nicht still als Person gebunden werden; ihre konkrete Beibehalten-Entscheidung
+ist im synthetischen Orakel ausdrücklich vorgegeben. Sonstige Restkandidaten,
+einschließlich beschädigter OCR-Namen, entscheidet das konservative Testorakel als
+Person. Die unabhängigen Fachanker dürfen dadurch nicht verloren gehen. Es gibt
+keine pauschale Beibehalten-Antwort oder Pflicht, immer genau drei DOCX-Hinweise
+zu bestätigen. Vor notwendigem Review entsteht kein Publikationsartefakt.
+`test-residual-person-review.js` prüft
+zusätzlich Text-/Fundstellenbindung, veränderte Fassungen, gleichlautende weitere
+Stellen, Originalzuordnung, direkte/strukturierte Identifier und tatsächliche
+Publikation für beide Produkte. Der neue Policy-Baustein ist im gemeinsamen
+Recovery-Fingerprint enthalten. Tabellenpositionen müssen auch bei CRLF und
+gemischten Zeilentrennern auf die richtige Fundstelle zeigen; identische weitere
+Stellen werden nicht mitfreigegeben. Erhaltene ausgewählte Fachanker beweisen
+keine vollständige semantische Genauigkeit. Den erreichten Ausführungsstand
+führt die Evidence-Matrix; der Sollvertrag allein ist kein PASS.
+
+BL-041.19 und DS-101 besitzen echte temporäre Dateisystem-/Paket-/Journaltests
+in der regulären Produktsuite: Rootwechsel/Reservierungen, Bootstrap ohne
+unsichere Writes sowie Wiederverwendung mit Ablauf, Manipulation, async
+Generationswechsel und unveränderten Quittierungen. Der eigene
+Claude-Code-Vorcheck (`npm run validate:claude-code-pilot`) enthält keine
+Modellanfrage; seine Vertragstests simulieren ausschließlich CLI-Antworten und
+werden niemals als Host-/Modell-Evidence gezählt.
 
 RC131 ergänzt den verbindlichen Negativvertrag für Wiederaufnahme: Ein
 zurückgekehrter uncodierter oder unbekannter Pipelinefehler ist in

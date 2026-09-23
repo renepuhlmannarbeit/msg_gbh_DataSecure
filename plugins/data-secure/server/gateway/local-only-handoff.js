@@ -3,12 +3,15 @@
 // Normal Cowork handoff: all identifiers, read capabilities and cursors stay
 // in this process.  This module intentionally stores no document text.
 const { SafeError } = require('../runtime');
+const crypto = require('node:crypto');
 const { pickCompletedBatch, cancelledError } = require('../companion/completed-batch-picker');
 const { GRADES, OMISSION_CODES } = require('./document-result-grade');
 const { validateCoverage } = require('../core/source-extraction-contract');
+const { causeFromError } = require('./diagnostic-causes');
 
-// Cap the handoff strictly below the package-store capability lifetime. This
-// prevents a half-open RAM session from retaining a stale read capability.
+// Bound the session independently, and shorten it to every actual grant expiry
+// loaded below. Reused capabilities may already be near the end of their TTL;
+// a fresh RAM session must never extend those existing read permissions.
 const IDLE_TTL_MS = 10 * 60 * 1000;
 const MAX_TTL_MS = 14 * 60 * 1000;
 const PAGE_SIZE = 5;
@@ -107,11 +110,46 @@ function createLocalOnlyHandoff(deps) {
   const openSnapshot = deps.openVerifiedMarkdownSnapshot;
   const openSnapshotAsync = deps.openVerifiedMarkdownSnapshotAsync;
   const acknowledgeDeliveredPackages = deps.acknowledgeDeliveredPackages;
+  const verifyCompletedLocalOnlyGeneration = deps.verifyCompletedLocalOnlyGeneration;
+  const recordWorkflowEvent = deps.recordWorkflowEvent || (() => {});
   const choose = deps.pickCompletedBatch || pickCompletedBatch;
   const now = deps.now || (() => Date.now());
   let session = null;
   let selection = null;
   let pageInFlight = false;
+
+  function replayEvent(event, outcome = 'ok', state = session, errorCode = 'NONE') {
+    if (state?.scope !== 'reuse_completed') return;
+    // This nonce is random, session-local, and unrelated to document identity.
+    // The diagnostic schema rejects arbitrary strings and source-derived data.
+    try { recordWorkflowEvent({ event, outcome, run_id: state.traceId,
+      item_count: state.expectedReleased, released_count: state.expectedReleased - state.expectedAvailable,
+      error_code: errorCode }); } catch { /* diagnostics never alter a handoff */ }
+  }
+
+  function replayFailure(error, state = session, picker = false) {
+    // Classify fixed codes only; never inspect or log native error messages.
+    // Uncoded safe failures at a package boundary mean failed verification,
+    // not proof that a journal generation changed. Unknown defects stay internal.
+    const pickerCodes = {
+      LOCAL_COMPLETED_BATCH_SELECTION_TIMEOUT: 'LOCAL_PICKER_TIMEOUT',
+      LOCAL_COMPLETED_BATCH_SELECTION_FAILED: 'LOCAL_PICKER_FAILED'
+    };
+    const explicit = Object.hasOwn(pickerCodes, error?.code) ? pickerCodes[error.code] : null;
+    const fallback = error instanceof SafeError && !error.code
+      ? (picker ? 'LOCAL_PICKER_FAILED' : 'LOCAL_HANDOFF_VERIFICATION_FAILED') : 'INTERNAL_FAILURE';
+    const cause = explicit || causeFromError(error, fallback);
+    replayEvent(cause === 'LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED'
+      ? 'local_results_reuse_cancelled' : 'local_results_reuse_failed', 'stopped', state, cause);
+  }
+
+  function verifyReplayGeneration(state = session) {
+    if (state?.scope !== 'reuse_completed') return;
+    if (typeof verifyCompletedLocalOnlyGeneration !== 'function' ||
+        verifyCompletedLocalOnlyGeneration(state.token, state.generation) !== true) {
+      throw safeError('LOCAL_HANDOFF_CHANGED', 'Die lokalen Ergebnisse haben sich seit der Auswahl geändert. Bitte die Auswertung erneut starten.');
+    }
+  }
 
   function dispose(entry) { try { entry?.snapshot?.dispose?.(); } catch {} }
   function clear() {
@@ -124,9 +162,22 @@ function createLocalOnlyHandoff(deps) {
   function noActiveHandoff() {
     return { ok: false, error: 'no_active_local_handoff', message: 'Es ist keine lokale Ergebnisübergabe geöffnet. Starte die Auswertung ausdrücklich erneut.', raw_content_sent_to_claude: false };
   }
-  function expired() { return session && (now() - session.lastUsedAt > IDLE_TTL_MS || now() > session.expiresAt); }
+  function expired() { return session && (now() - session.lastUsedAt > IDLE_TTL_MS || now() >= session.expiresAt); }
+  const expiryMessage = 'Die lokale Ergebnisübergabe oder ihre Leseberechtigung ist abgelaufen. Es werden keine weiteren Inhalte übergeben. Starte die Auswertung ausdrücklich erneut.';
+  function requireUnexpiredSession() {
+    if (expired()) throw safeError('LOCAL_HANDOFF_EXPIRED', expiryMessage);
+  }
+  function expiredResponse() {
+    replayEvent('local_results_reuse_expired', 'stopped', session, 'LOCAL_HANDOFF_EXPIRED');
+    clear();
+    return { ok: false, error: 'local_handoff_expired', message: expiryMessage, raw_content_sent_to_claude: false };
+  }
   async function start(options = {}) {
     if (options.signal?.aborted) throw cancelledError();
+    const scope = options.scope ?? 'unread';
+    if (!['unread', 'reuse_completed'].includes(scope)) {
+      throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Der Umfang der Ergebnisübergabe ist ungültig.');
+    }
     // Hold ownership until the owned picker has settled, including cancellation.
     // A second request cannot open another dialog or replace a pending choice.
     if (selection || pageInFlight) return { ok: false, error: 'local_handoff_active', message: 'Eine lokale Ergebnisübergabe wird bereits fortgesetzt.', raw_content_sent_to_claude: false };
@@ -140,10 +191,13 @@ function createLocalOnlyHandoff(deps) {
       try { acknowledgePreviousPage(); } finally { clear(); }
     }
     if (session) clear();
-    const candidates = candidatesForChat();
+    // A native selection can fail before there is a readable handoff session.
+    // Keep its diagnostics nonce separate from journal/package identifiers.
+    const attempt = { scope, traceId: crypto.randomBytes(4).toString('hex'), expectedReleased: 0, expectedAvailable: 0 };
+    const candidates = candidatesForChat({ scope });
     if (candidates.length === 0) return { ok: false, error: 'no_completed_local_batch', message: 'Es liegen keine vollständig abgeschlossenen lokalen Ergebnisse für die Claude-Auswertung vor.', raw_content_sent_to_claude: false };
     let selected;
-    if (candidates.length === 1) selected = candidates[0];
+    if (candidates.length === 1 && scope === 'unread') selected = candidates[0];
     else {
       const controller = new AbortController();
       const abort = () => controller.abort();
@@ -151,26 +205,39 @@ function createLocalOnlyHandoff(deps) {
       options.signal?.addEventListener('abort', abort, { once: true });
       try {
         const ordinal = await choose(candidates.map((candidate, index) => ({ ordinal: index + 1, released: candidate.released, stopped: candidate.stopped,
-          ...(candidate.completedAt ? { completedAt: candidate.completedAt } : {}) })), { signal: controller.signal });
+          ...(candidate.completedAt ? { completedAt: candidate.completedAt } : {}) })), { signal: controller.signal, scope });
         if (controller.signal.aborted) throw cancelledError();
         selected = candidates[ordinal - 1];
         if (!Number.isSafeInteger(ordinal) || !selected) throw cancelledError();
+      } catch (error) {
+        replayFailure(error, attempt, true);
+        throw error;
       } finally {
         options.signal?.removeEventListener('abort', abort);
         selection = null;
       }
     }
     if (options.signal?.aborted) throw cancelledError();
+    if (scope === 'reuse_completed' && (typeof selected.generation !== 'string' || !/^[a-f0-9]{64}$/u.test(selected.generation))) {
+      throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+    }
     const batchSummary = publicBatchSummary(selected);
+    const retentionDeadline = selected.expiresAt ? Date.parse(selected.expiresAt) : Infinity;
+    if (!Number.isFinite(retentionDeadline) && retentionDeadline !== Infinity) {
+      throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
+    }
     session = {
       token: selected.token,
+      scope, generation: selected.generation,
+      traceId: attempt.traceId,
       expectedReleased: selected.released,
       expectedAvailable: selected.released,
       expectedStopped: selected.stopped,
       entries: [], nextCursor: null, loaded: false, acknowledged: [], snapshotBytes: 0,
-      createdAt: now(), lastUsedAt: now(), expiresAt: now() + MAX_TTL_MS,
+      createdAt: now(), lastUsedAt: now(), expiresAt: Math.min(now() + MAX_TTL_MS, retentionDeadline),
       initial: true, batchSummary, invalidated: false
     };
+    replayEvent('local_results_reuse_started');
     try {
       return await nextAsync({ signal: options.signal });
     } catch (error) {
@@ -182,7 +249,8 @@ function createLocalOnlyHandoff(deps) {
     if (!listed || typeof listed !== 'object' || Array.isArray(listed) || !Array.isArray(listed.results) ||
         listed.results.length > PAGE_SIZE || listed.results.some((entry) =>
           !entry || typeof entry !== 'object' || Array.isArray(entry) ||
-          typeof entry.package_id !== 'string' || typeof entry.read_capability !== 'string') ||
+          typeof entry.package_id !== 'string' || typeof entry.read_capability !== 'string' ||
+          typeof entry.read_capability_expires_at !== 'string' || !Number.isFinite(Date.parse(entry.read_capability_expires_at))) ||
         !(listed.next_cursor === null || (typeof listed.next_cursor === 'string' && listed.next_cursor.length <= 256))) {
       throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
     }
@@ -200,15 +268,23 @@ function createLocalOnlyHandoff(deps) {
     const expectedPageSize = Math.min(PAGE_SIZE, session.expectedAvailable);
     const validPageBoundary = listed.results.length === expectedPageSize &&
       (listed.next_cursor !== null) === (session.expectedAvailable > PAGE_SIZE);
-    if (!valid || !validPageBoundary || listed.available !== session.expectedAvailable ||
+    const expectedListedAvailable = session.scope === 'reuse_completed' ? session.expectedReleased : session.expectedAvailable;
+    if (!valid || !validPageBoundary || listed.available !== expectedListedAvailable ||
         listed.safely_stopped !== session.expectedStopped || listed.still_open !== 0 || listed.batch_complete !== true) {
       throw safeError('LOCAL_HANDOFF_CHANGED', 'Die lokalen Ergebnisse haben sich seit der Auswahl geändert. Bitte die Auswertung erneut starten.');
     }
   }
   function loadEntries() {
     if (session.entries.length || (session.loaded && session.nextCursor === null)) return;
-    const listed = listBatchResults(session.token, { cursor: session.nextCursor, limit: PAGE_SIZE });
+    const listed = listBatchResults(session.token, {
+      cursor: session.nextCursor, limit: PAGE_SIZE, scope: session.scope,
+      ...(session.scope === 'reuse_completed' ? { generation: session.generation } : {})
+    });
     verifyListing(listed);
+    for (const entry of listed.results) {
+      session.expiresAt = Math.min(session.expiresAt, Date.parse(entry.read_capability_expires_at));
+    }
+    requireUnexpiredSession();
     session.entries = listed.results.map((entry) => ({
       packageId: entry.package_id,
       capability: entry.read_capability,
@@ -224,9 +300,12 @@ function createLocalOnlyHandoff(deps) {
     session.loaded = true;
   }
   function acknowledgePreviousPage() {
+    requireUnexpiredSession();
     if (!session.acknowledged.length) return;
     const page = [...session.acknowledged];
-    acknowledgeDeliveredPackages(session.token, page.map((entry) => entry.packageId));
+    // Explicit replay acknowledges only this RAM session. Never reset or consume
+    // the durable unread queue, rewrite evidence or rerun anonymization.
+    if (session.scope !== 'reuse_completed') acknowledgeDeliveredPackages(session.token, page.map((entry) => entry.packageId));
     session.expectedAvailable -= page.length;
     if (!Number.isSafeInteger(session.expectedAvailable) || session.expectedAvailable < 0) {
       throw safeError('LOCAL_HANDOFF_VERIFICATION_FAILED', 'Die lokale Ergebnisübergabe konnte nicht sicher verifiziert werden.');
@@ -255,11 +334,13 @@ function createLocalOnlyHandoff(deps) {
     const ready = [];
     const deferred = [];
     for (const entry of entries) {
+      requireUnexpiredSession();
       if (!entry.snapshot) {
         const remainingSnapshotBytes = MAX_SNAPSHOT_SESSION_BYTES - session.snapshotBytes;
         if (remainingSnapshotBytes >= 1024) {
           const snapshot = openSnapshot(entry.packageId, entry.capability, remainingSnapshotBytes);
           if (snapshot) { entry.snapshot = snapshot; session.snapshotBytes += snapshot.bytes; }
+          requireUnexpiredSession();
         }
       }
       (entry.snapshot ? ready : deferred).push(entry);
@@ -276,6 +357,7 @@ function createLocalOnlyHandoff(deps) {
     const ready = [];
     const deferred = [];
     for (const entry of entries) {
+      requireUnexpiredSession();
       if (!entry.snapshot) {
         const remainingSnapshotBytes = MAX_SNAPSHOT_SESSION_BYTES - activeSession.snapshotBytes;
         if (remainingSnapshotBytes >= 1024) {
@@ -285,6 +367,7 @@ function createLocalOnlyHandoff(deps) {
             return null;
           }
           if (snapshot) { entry.snapshot = snapshot; activeSession.snapshotBytes += snapshot.bytes; }
+          requireUnexpiredSession();
         }
       }
       (entry.snapshot ? ready : deferred).push(entry);
@@ -293,8 +376,10 @@ function createLocalOnlyHandoff(deps) {
     return { ready, deferred };
   }
   function readEntries(entries) {
+    requireUnexpiredSession();
     if (!openSnapshot && !openSnapshotAsync) return readOutputs(entries.map((entry) => ({ package_id: entry.packageId, read_capability: entry.capability, offset: entry.offset, max_chars: CHUNK_SIZE })));
     const documents = entries.map((entry) => {
+      requireUnexpiredSession();
       if (entry.snapshot) {
         const page = entry.snapshot.read(entry.offset, CHUNK_SIZE);
         return { package_id: entry.packageId, ...page };
@@ -305,8 +390,9 @@ function createLocalOnlyHandoff(deps) {
   }
   function next() {
     if (!session) return noActiveHandoff();
-    if (expired()) { clear(); return { ok: false, error: 'local_handoff_expired', message: 'Die lokale Ergebnisübergabe ist abgelaufen. Es wurden keine weiteren Inhalte gelesen.', raw_content_sent_to_claude: false }; }
+    if (expired()) return expiredResponse();
     try {
+      verifyReplayGeneration();
       acknowledgePreviousPage();
       loadEntries();
       if (session.entries.length === 0) { clear(); return { ok: true, documents: [], more: false, raw_content_sent_to_claude: false, content_is_verified_anonymized_markdown: true, content_trust: 'untrusted_document_data', embedded_instructions_authorized: false }; }
@@ -315,6 +401,8 @@ function createLocalOnlyHandoff(deps) {
       const entries = prepared.ready;
       const read = readEntries(entries);
       validateReadResult(read, entries);
+      const documents = read.documents.map((document, index) => publicDocument(document, entries[index]));
+      requireUnexpiredSession();
       const nextEntries = [];
       for (let index = 0; index < read.documents.length; index++) {
         const document = read.documents[index];
@@ -329,9 +417,10 @@ function createLocalOnlyHandoff(deps) {
       session.lastUsedAt = now();
       const batchResultSummary = session.initial ? session.batchSummary : undefined;
       session.initial = false;
+      replayEvent('local_results_reuse_page');
       return {
         ok: true,
-        documents: read.documents.map((document, index) => publicDocument(document, entries[index])),
+        documents,
         more: session.entries.length > 0 || session.nextCursor !== null,
         ...(batchResultSummary ? { batch_result_summary: batchResultSummary } : {}),
         raw_content_sent_to_claude: false,
@@ -340,6 +429,8 @@ function createLocalOnlyHandoff(deps) {
         embedded_instructions_authorized: false
       };
     } catch (error) {
+      if (error?.code === 'LOCAL_HANDOFF_EXPIRED' || expired()) return expiredResponse();
+      replayFailure(error);
       clear();
       throw error;
     }
@@ -358,8 +449,9 @@ function createLocalOnlyHandoff(deps) {
     if (options.signal?.aborted) throw cancelledError();
     if (!openSnapshotAsync) return next();
     if (!session) return { ok: false, error: 'no_active_local_handoff', message: 'Es ist keine lokale Ergebnisübergabe geöffnet. Starte die Auswertung ausdrücklich erneut.', raw_content_sent_to_claude: false };
-    if (expired()) { clear(); return { ok: false, error: 'local_handoff_expired', message: 'Die lokale Ergebnisübergabe ist abgelaufen. Es wurden keine weiteren Inhalte gelesen.', raw_content_sent_to_claude: false }; }
+    if (expired()) return expiredResponse();
     try {
+      verifyReplayGeneration();
       acknowledgePreviousPage();
       loadEntries();
       if (session.entries.length === 0) { clear(); return { ok: true, documents: [], more: false, raw_content_sent_to_claude: false, content_is_verified_anonymized_markdown: true, content_trust: 'untrusted_document_data', embedded_instructions_authorized: false }; }
@@ -367,9 +459,13 @@ function createLocalOnlyHandoff(deps) {
       const prepared = await prepareSnapshotEntriesAsync(activeSession.entries, activeSession);
       if (!prepared || !currentSession(activeSession)) return noActiveHandoff();
       if (options.signal?.aborted) throw cancelledError();
+      if (expired()) return expiredResponse();
+      verifyReplayGeneration(activeSession);
       const entries = prepared.ready;
       const read = readEntries(entries);
       validateReadResult(read, entries);
+      const documents = read.documents.map((document, index) => publicDocument(document, entries[index]));
+      requireUnexpiredSession();
       const nextEntries = [];
       for (let index = 0; index < read.documents.length; index++) {
         const document = read.documents[index];
@@ -381,9 +477,10 @@ function createLocalOnlyHandoff(deps) {
       session.lastUsedAt = now();
       const batchResultSummary = session.initial ? session.batchSummary : undefined;
       session.initial = false;
+      replayEvent('local_results_reuse_page');
       return {
         ok: true,
-        documents: read.documents.map((document, index) => publicDocument(document, entries[index])),
+        documents,
         more: session.entries.length > 0 || session.nextCursor !== null,
         ...(batchResultSummary ? { batch_result_summary: batchResultSummary } : {}),
         raw_content_sent_to_claude: false,
@@ -392,6 +489,8 @@ function createLocalOnlyHandoff(deps) {
         embedded_instructions_authorized: false
       };
     } catch (error) {
+      if (error?.code === 'LOCAL_HANDOFF_EXPIRED' || expired()) return expiredResponse();
+      replayFailure(error);
       if (error?.code !== 'LOCAL_COMPLETED_BATCH_SELECTION_CANCELLED') clear();
       throw error;
     }
@@ -401,11 +500,16 @@ function createLocalOnlyHandoff(deps) {
   }
   function finalizeTerminal() {
     if (!session) return false;
-    if (expired()) { clear(); return false; }
+    if (expired()) { expiredResponse(); return false; }
     if (!session.loaded || session.entries.length || session.nextCursor !== null) return false;
     try {
+      verifyReplayGeneration();
       acknowledgePreviousPage();
+      replayEvent('local_results_reuse_finished');
       return true;
+    } catch (error) {
+      if (error?.code === 'LOCAL_HANDOFF_EXPIRED') { expiredResponse(); return false; }
+      throw error;
     } finally {
       clear();
     }
@@ -415,7 +519,7 @@ function createLocalOnlyHandoff(deps) {
     next,
     nextAsync,
     finalizeTerminal,
-    cancel: () => { selection?.abort(); clear(); return { ok: true, raw_content_sent_to_claude: false }; },
+    cancel: () => { selection?.abort(); replayEvent('local_results_reuse_cancelled'); clear(); return { ok: true, raw_content_sent_to_claude: false }; },
     isActive: () => selection !== null || pageInFlight || session !== null,
     _test: { session: () => session }
   };

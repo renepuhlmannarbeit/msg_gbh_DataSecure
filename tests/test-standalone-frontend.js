@@ -568,6 +568,11 @@ async function explicitOutputNamingCase() {
   assert.strictEqual(harness.elements['output-naming'].hidden, false);
   assert.strictEqual(harness.elements['output-naming-mode'].value, 'neutral');
   assert.match(harness.elements['output-naming-help'].textContent, /Dokument-001-anonymisiert/u);
+  assert.match(harness.elements['output-naming-help'].textContent, /Unterordnernamen bleiben unverändert/u);
+  assert.match(harness.elements['output-naming-help'].textContent, /Zuordnungsdatei enthält Originalnamen/u);
+  const resultNotice = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
+  assert.match(resultNotice, /id="result-sharing-notice"[^>]*>Vor einer Weitergabe:[^<]+nicht pauschal den ganzen Laufordner/u);
+  assert.match(resultNotice, /Reine Markdown-Konvertierung anonymisiert keine Inhalte/u);
   harness.elements['output-naming-mode'].value = 'source-with-suffix';
   harness.elements['output-naming-mode'].listeners.change();
   assert.match(harness.elements['output-naming-help'].textContent, /Originaldateiname bleibt sichtbar/u);

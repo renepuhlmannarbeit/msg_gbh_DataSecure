@@ -1,6 +1,7 @@
 'use strict';
 
-const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName, IBAN_RE, ORG_SUFFIX_TAIL_RE } = require('./base');
+const { normalizeSpaces, key, hashShort, isStopToken, titleCase, looksName, IBAN_RE, ORG_SUFFIX_TAIL_RE,
+  TECH_TERMS, ORG_ALLOW, escapeRegExp } = require('./base');
 const { collectOrganizations, markdownTableColumnValues, markdownTableCells } = require('./entities');
 const { credentialContextSpans } = require('./credentials');
 
@@ -29,6 +30,27 @@ const DASH_SPLIT_RE = /^(.{2,120}?)[ \t]+[–—-][ \t]+(.{3,180})$/u;
 
 const EMPLOYER_PLACEHOLDER = '[ARBEITGEBER_001]';
 const LOCATION_PLACEHOLDER = '[LOCATION_REDACTED]';
+const TECHNICAL_ACRONYMS = new Set([...TECH_TERMS].flatMap(term => term.split(' ')));
+const TECHNICAL_LIST_NAMES = [...new Set([...TECH_TERMS, ...ORG_ALLOW])]
+  .sort((a, b) => b.length - a.length)
+  .map(term => new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(term)}(?![\\p{L}\\p{N}_])`, 'giu'));
+
+// A compact technology/standard list is not a customer/project heading merely
+// because OCR rendered a bullet as a dash. Require three independent signals:
+// a catalogued technical acronym on the left, a known product on the right,
+// and a numbered standard. Explicit employer/customer fields are handled
+// earlier and never use this shape exception.
+function technicalStandardList(left, right) {
+  if (!/^[A-Z][A-Z0-9]{1,9}$/u.test(left) || !TECHNICAL_ACRONYMS.has(left)) return false;
+  let standards = 0, technologies = 0;
+  let remainder = right.replace(/\b(?:ISO(?:\/IEC)?|IEC|IEEE|RFC|DIN|EN)\s+\d{2,6}(?::\d{4})?\b/gu,
+    () => { standards++; return ' '; });
+  for (const pattern of TECHNICAL_LIST_NAMES) {
+    remainder = remainder.replace(pattern,
+      () => { technologies++; return ' '; });
+  }
+  return standards > 0 && technologies > 0 && /^[\s·•«»–—,;/\-]*$/u.test(remainder);
+}
 
 function hasStopToken(value) {
   return normalizeSpaces(value).split(/\s+/).some(isStopToken);
@@ -97,7 +119,7 @@ function looksLikeOrgSide(value, personKeys) {
   return ORG_SHAPE_RE.test(clean) || DOMAIN_SHAPE_RE.test(clean);
 }
 
-function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDashCompanyRanges = []) {
+function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDashCompanyRanges = [], deferredTypographyKeys = new Set()) {
   const out = [];
   const ranges = credentialContextSpans(text);
   // A customer can be a natural person. Leave a proven person value for the
@@ -212,9 +234,16 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
     if (dash) {
       const left = normalizeSpaces(dash[1]);
       const right = normalizeSpaces(dash[2]);
+      // Do not turn an unresolved person/title hypothesis into an organisation
+      // and project merely through a dash. Explicit fields above, legal-form
+      // companies and actual project context remain independent evidence.
+      const unresolvedTitle = deferredTypographyKeys.has(key(left)) && !projectSection &&
+        !/^(?:Projekt|Project)\b/iu.test(right) &&
+        !collectOrganizations(left).some((org) => ORG_SUFFIX_TAIL_RE.test(org));
       // Only the left side is gated: a project name legitimately starts with
       // "Projekt", so a stop-token check on the right would skip the rule.
-      if (looksLikeOrgSide(left, personKeys) && right.length >= 3) {
+      if (!unresolvedTitle && looksLikeOrgSide(left, personKeys) && right.length >= 3 &&
+          (projectSection || !technicalStandardList(left, right))) {
         const customer = reg.assign('CUSTOMER', left);
         const project = reg.assign('PROJECT', right);
         rememberOrganization(reg, left, customer);

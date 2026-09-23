@@ -50,6 +50,13 @@ test('nested pages, confirmations, string lengths and numeric bounds are enforce
   assert.strictEqual(validToolArguments('continue_most_recent_document_batch', { confirmed: true }), true);
   assert.strictEqual(validToolArguments('diagnostic_status', { limit: 1.5 }), false);
   assert.strictEqual(validToolArguments('start_document_batch_from_picker', { source_kind: 'web' }), false);
+  for (const scope of ['unread', 'reuse_completed']) {
+    assert.strictEqual(validToolArguments('start_completed_local_results_handoff', { scope }), true);
+  }
+  for (const scope of ['all', 'latest', '', true, null]) {
+    assert.strictEqual(validToolArguments('start_completed_local_results_handoff', { scope }), false);
+  }
+  assert.strictEqual(validToolArguments('start_completed_local_results_handoff', {}), true);
   const validators = require('../plugins/data-secure/server/mcp-validators.generated');
   assert.strictEqual(validators.start_document_batch_from_picker.errors, null);
 });

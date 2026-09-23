@@ -1,4 +1,10 @@
-# GBH DataSecure – Dokumente anonymisieren v3.2.0 RC139
+# GBH DataSecure – Cowork RC139 · Standalone RC137
+
+Quellstand: 3.2.0-rc140
+
+Die Überschrift nennt die getrennt veröffentlichten Produktkandidaten, nicht
+zwei identische Programmversionen. Ein neuer Quellstand aktualisiert bestehende
+Downloads nicht automatisch.
 
 Die Produktkandidaten sind bewusst getrennt: Standalone bleibt auf dem unter
 Windows bestätigten RC137; das Cowork-Plugin ist als RC139 aus Quellcommit

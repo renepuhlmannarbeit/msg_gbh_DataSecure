@@ -811,6 +811,23 @@ test('common German street variants are redacted', () => {
   }
 });
 
+test('number-first French streets are removed without consuming adjacent prose or rows', () => {
+  for (const value of ['7 Rue Exemple', '12 bis rue de la République', '31 Avenue Victor Hugo',
+    '8 boulevard Saint-Germain', "6 Rue de l'Église", '14 RUE DES LILAS', '9 Quai Voltaire']) {
+    for (const src of [`Adresse: ${value}, 75001 Paris. FHIR reste disponible.`,
+      `La correspondance mentionne ${value}, puis Kubernetes.`, `| Adresse | ${value} |\n| Technologie | FHIR |`]) {
+      const result = anonymizeVerified(src, 'general');
+      assertAbsent(result.text, value, 'French street component');
+      assertPresent(result.text, src.includes('FHIR') ? 'FHIR' : 'Kubernetes', 'adjacent technical content');
+      assert.deepStrictEqual(result.residual, []);
+    }
+  }
+  for (const src of ['7 FHIR Ressourcen', '12 API Routes', 'ISO 27001', '7 rue mechanisms',
+    '7 Rue\nFHIR bleibt', '31 Kubernetes Nodes']) {
+    assertPresent(anonymizeVerified(src, 'general').text, src, 'non-address or line boundary');
+  }
+});
+
 test('quantities and units are not mistaken for postal addresses', () => {
   const cases = [
     ['Rechnungsbetrag: 50000 Euro netto', '50000 Euro'],
@@ -2326,6 +2343,166 @@ test('F7 keeps a late review candidate after many redactions and Markdown canoni
   const ambiguities = personProseAmbiguities(source, output);
   assert.strictEqual(ambiguities.length, 1);
   assert.strictEqual(output.slice(ambiguities[0].anonymized_start, ambiguities[0].anonymized_end), 'Ferdinand Quastenflosser');
+});
+
+test('ambiguous negative-determiner clauses stop instead of waiving residual candidates', () => {
+  for (const phrase of ['KEINE REALDATEN', 'KEIN KLARTEXT', 'KEINER RISIKOGRUPPE', 'KEINEM FACHBEREICH']) {
+    for (const separator of ['-', '–', '—']) {
+      assert.throws(() => anonymizeMarkdown(`Name: Max Mustermann\nMax Mustermann ${separator} ${phrase}`,
+        'personnel_profile'), error => error.code === 'RESIDUAL_PII', phrase);
+      assert.ok(pii.scanResidual(`[PERSON_001] ${separator} ${phrase}`, 'personnel_profile', [phrase],
+        { strongPersonAnchor: true }).length, 'independent literal evidence remains active');
+    }
+    // A real person field remains automatic. A competing all-caps list/title
+    // is now an occurrence-bound review, never a silently accepted disclaimer.
+    assertAbsent(anonymizeMarkdown(`Name: ${phrase}`, 'personnel_profile').text, phrase, 'explicit person evidence');
+    assert.throws(() => anonymizeMarkdown(`- ${phrase}\nName: Max Mustermann`, 'personnel_profile'),
+      error => error.code === 'RESIDUAL_PII', 'typography does not prove a second person');
+  }
+  // Real field/list candidates remain detectable despite nearby placeholders.
+  for (const source of ['Name: Erika Beispiel\nName: [PERSON_001]',
+    '[PERSON_001]\n- Erika Beispiel\nName: [PERSON_002]']) {
+    assert.ok(pii.scanResidual(source, 'personnel_profile', [], { strongPersonAnchor: true })
+      .some(finding => finding.text.includes('Erika Beispiel')));
+  }
+});
+
+test('negated person references cannot waive a name at the publication boundary', () => {
+  for (const profile of ['personnel_profile', 'applicant']) {
+    for (const negation of ['keine', 'KEINE', 'Keinem', 'KEINEM', 'nicht', 'NICHT']) {
+      for (const name of ['Erika Beispiel', 'ERIKA BEISPIEL']) {
+        for (const prefix of ['Max Mustermann - ', '[PERSON_001] – ', '- ', '> - ', '> * ', '> 1. ', 'Name: ']) {
+          const source = `Name: Max Mustermann\n${prefix}${negation} ${name}`;
+          let result;
+          try {
+            result = anonymizeMarkdown(source, profile);
+          } catch (error) {
+            assert.strictEqual(error.code, 'RESIDUAL_PII', source);
+            continue;
+          }
+          assertAbsent(result.text, name, 'negated person reference at the publication boundary');
+        }
+      }
+    }
+  }
+});
+
+test('a masked person in the next paragraph cannot attach employment context to an earlier notice', () => {
+  for (const profile of ['general', 'personnel_profile']) {
+    const source = 'SYNTHETISCHER HÄRTETEST – KEINE REALDATEN\n\n' +
+      'Max Mustermann arbeitet bei Nordstern GmbH.\n\nName: Max Mustermann';
+    const result = anonymizeMarkdown(source, profile, { deferPersonReview: true });
+    assertPresent(result.text, 'SYNTHETISCHER HÄRTETEST – KEINE REALDATEN', 'intact notice');
+    assertAbsent(result.text, 'Max Mustermann', 'real employment subject');
+    assert.deepStrictEqual(result.residualPersonCandidates.map(item => item.text), ['SYNTHETISCHER HÄRTETEST'],
+      'only the existing competing title hypothesis needs review, not an invented cross-paragraph subject');
+    for (const candidate of ['Erika Beispiel arbeitet bei Nordstern GmbH.',
+      'Nicht Erika Beispiel arbeitet bei Nordstern GmbH.', 'Erika Beispiel\nTelefon: +49 30 5550123']) {
+      const actual = anonymizeMarkdown(`Name: Max Mustermann\n\n${candidate}`, profile);
+      assertAbsent(actual.text, 'Erika Beispiel', 'adjacent or negated subject and multiline contact remain protected');
+    }
+    for (const newline of ['\n', '\r\n']) {
+      const body = `fortlaufende technische beschreibung.${newline}`.repeat(45);
+      const wrapped = anonymizeMarkdown(`${body}Max Mustermann${newline}arbeitet bei Beispiel GmbH`, profile);
+      assertAbsent(wrapped.text, 'Max Mustermann', 'a genuine soft-wrapped subject outside the header remains protected');
+      const wrappedPredicate = anonymizeMarkdown(`${body}Max Mustermann is${newline}employed at Beispiel GmbH`, profile);
+      assertAbsent(wrappedPredicate.text, 'Max Mustermann', 'a soft wrap inside the employment predicate remains supported');
+    }
+    const ambiguousSingleBreak = anonymizeMarkdown(source.replace('REALDATEN\n\n', 'REALDATEN\n'),
+      profile, { deferPersonReview: true });
+    assert.ok(ambiguousSingleBreak.residualPersonCandidates.some(item => item.text === 'KEINE REALDATEN'),
+      'a single break after a masked subject is ambiguous and remains reviewable, never a blanket exemption');
+  }
+});
+
+test('nested quote, unordered, ordered and task-list containers cannot hide profile names', () => {
+  const prefixes = ['> - ', '> * ', '> + ', '> 1. ', '> 1) ', '> > - ', '>> * ', '- > ',
+    '1. > ', '> - [ ] ', '> * [x] ', '> > 1. '];
+  for (const profile of ['personnel_profile', 'applicant']) {
+    for (const prefix of prefixes) {
+      for (const [name, value] of [['Erika Beispiel', 'Erika Beispiel'], ['ERIKA BEISPIEL', 'ERIKA BEISPIEL'],
+        ['Anna von der Heide', 'Anna von der Heide'], ['erika beispiel', 'Name: erika beispiel']]) {
+        // Nesting remains visible even outside the bounded profile-header window.
+        const source = `Name: Max Mustermann\n${Array(45).fill('Technologien: FHIR').join('\n')}\n${prefix}${value}`;
+        let result;
+        try {
+          result = anonymizeMarkdown(source, profile);
+        } catch (error) {
+          assert.strictEqual(error.code, 'RESIDUAL_PII', source);
+          continue;
+        }
+        assertAbsent(result.text, name, `${profile}: ${prefix}${value}`);
+        assertPresent(result.text, prefix, 'original Markdown container');
+      }
+    }
+  }
+});
+
+test('nested Markdown retains technical terms and sentence-shaped disclaimers', () => {
+  for (const profile of ['personnel_profile', 'applicant']) {
+    for (const prefix of ['> - ', '> * ', '> 1. ', '> > - ', '1. > ', '> - [ ] ']) {
+      for (const content of ['FHIR', 'Kubernetes', 'ISO 27001', 'Digitale Transformation', 'Cloud Migration',
+        'Keine personenbezogenen Daten enthalten.']) {
+        const source = `${prefix}${content}`;
+        assert.strictEqual(anonymizeMarkdown(source, profile).text, source, source);
+      }
+      // A previously unclassified name-shaped phrase is not silently rewritten
+      // to obtain a successful result. Uncertainty stays a visible safe stop.
+      for (const ambiguous of ['Separation of Concerns', 'KEINE PERSONENBEZOGENEN DATEN ENTHALTEN.']) {
+        assert.throws(() => anonymizeMarkdown(`${prefix}${ambiguous}`, profile),
+          error => error.code === 'RESIDUAL_PII');
+      }
+    }
+  }
+});
+
+test('the publication gate never releases an adjacent name hidden by a preceding pseudonym', () => {
+  for (const name of ['Erika Beispiel', 'ERIKA BEISPIEL', 'Jürgen Müller', 'ENZO KEINE']) {
+    for (const separator of ['-', '–', '—']) {
+      const source = `Name: Max Mustermann\nMax Mustermann ${separator} ${name}`;
+      let result;
+      try {
+        result = anonymizeMarkdown(source, 'personnel_profile');
+      } catch (error) {
+        assert.strictEqual(error.code, 'RESIDUAL_PII', source);
+        continue;
+      }
+      assertAbsent(result.text, name, 'adjacent name at the publication boundary');
+    }
+  }
+});
+
+test('the publication gate does not let placeholder-only lines exhaust residual name context', () => {
+  for (const count of [12, 40, 80]) {
+    for (const tail of ['Erika Beispiel', '- Erika Beispiel', '# Erika Beispiel']) {
+      const source = `Name: Max Mustermann\n${Array(count).fill('Max Mustermann').join('\n')}\n${tail}`;
+      let result;
+      try {
+        result = anonymizeMarkdown(source, 'personnel_profile');
+      } catch (error) {
+        assert.strictEqual(error.code, 'RESIDUAL_PII', `${count} repeated lines before ${tail}`);
+        continue;
+      }
+      assertAbsent(result.text, 'Erika Beispiel', 'late name at the publication boundary');
+    }
+  }
+});
+
+test('OCR-style technology and standard lists never bind a false customer or project across documents', () => {
+  const { createBatchPseudonymRegistry, SECRET_BYTES } = require('../plugins/data-secure/server/batch-pseudonym-registry');
+  const registry = createBatchPseudonymRegistry(Buffer.alloc(SECRET_BYTES, 71));
+  for (const source of ['FHIR - Kubernetes « ISO 27001', 'HL7 – Docker · ISO 9001',
+    'API — Linux / IEC 62304', 'SQL - GitHub; RFC 9110']) {
+    assert.strictEqual(anonymizeMarkdown(source, 'personnel_profile', { registry }).text, source);
+  }
+  const followUp = 'Technologien: FHIR, Kubernetes, Docker, Linux, GitHub.\nStandards: ISO 27001 und IEC 62304.';
+  assert.strictEqual(anonymizeMarkdown(followUp, 'personnel_profile', { registry }).text, followUp);
+  // A real business role, legal company or actual project title still wins.
+  for (const source of ['Kunde: FHIR', 'Unternehmen: Kubernetes',
+    'FHIR GmbH – Kubernetes ISO 27001', 'FHIR – Projekt Migration', 'ACME – Projekt Alpha',
+    '## Projekte\nFHIR - Kubernetes ISO 27001']) {
+    assert.notStrictEqual(anonymizeMarkdown(source, 'personnel_profile').text, source);
+  }
 });
 
 done();

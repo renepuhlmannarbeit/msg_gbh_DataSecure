@@ -1,9 +1,17 @@
 # DataSecure-Hostmatrix V1
 
-Stand: 04.09.2026 · offizielle Anthropic-Dokumentation erneut geprüft
+Stand: 23.09.2026 · offizielle Anthropic-Dokumentation erneut geprüft
 
 Diese Matrix bewertet nicht, wo ein Skill sichtbar ist. Sie entscheidet nur, ob
 DataSecure lokale **Originale** annehmen darf.
+
+Der zusätzliche Herstellerweg Konto→Claude Code ändert diese Matrix nicht:
+Synchronisierung ist keine Host- oder Rohdatengrenzen-Abnahme. Lokales Claude
+Code bleibt konditional; Installation, Berechtigungen und GUI-/Modellverhalten
+werden separat in BL-041.20 qualifiziert. Die lokale Korrektur zur Ordnertrennung
+BL-041.19 muss im tatsächlich geprüften Kandidaten enthalten sein; alte Archive
+belegen den neuen Quellstand nicht. Quellen, Details und lokale Nachweise:
+[PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md).
 
 **Geltungsbereich:** Diese Hostmatrix gilt ausschließlich für das
 **DataSecure-Cowork-Plugin**. Das eigenständige Standalone-Produkt verarbeitet
@@ -25,6 +33,14 @@ Sitzung. Eine Cloud-Sitzung erreicht lokale MCP-Server nicht.
 | Geplante Cloud-Sitzung | nein | ja | kein Zugriff auf den lokalen Plugin-MCP |
 
 ## Erreichbarkeit ist keine Host-Attestierung
+
+Für lokales Claude Code ist der [eigene Pilotvertrag](../acceptance/CLAUDE_CODE_PILOT/README.md)
+mit 14 Fällen vorbereitet. `npm run validate:claude-code-pilot` führt nur
+kostenfreie lokale Versions-/Strukturprüfungen aus. Er ersetzt weder native
+Dialoge noch Modellabnahme; das Profil bleibt konditional. CLI und der lokale
+Code-Reiter von Claude Desktop sind getrennt zu beobachten. Modelltests dürfen
+gemäß Nutzerentscheidung nur die enthaltene Abonutzung verwenden, niemals
+API-Abrechnung oder kostenpflichtige Zusatznutzung.
 
 Nach aktueller [Cowork-Architekturdokumentation](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview)
 laufen lokale Plugin-MCPs nur in lokalen Sitzungen bestehender Desktop-

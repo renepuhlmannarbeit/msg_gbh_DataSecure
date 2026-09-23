@@ -1,6 +1,6 @@
 # Kanonische Zielarchitektur
 
-Stand: 11.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-100
+Stand: 23.09.2026 · abgeleitet aus `DECISIONS.md`, `PRODUCT_VISION.md` und DS-075 bis DS-101
 
 ## Architekturprinzip
 
@@ -22,8 +22,11 @@ Die Separation of Concerns verläuft über Adapter, nicht über duplizierte
 Codebasen: gemeinsamer Privacy-/Verarbeitungskern, schmale lokale Processing-
 API, getrennte Cowork-/Standalone-Adapter und darunter kleine Windows-/macOS-/
 Linux-Adapter. Beide Produkte besitzen eigenständige Distributionen,
-Konfigurationen, Datenräume und UIs. Alle Zielpakete entstehen aus demselben
-Commit; permanente Produkt- oder Betriebssystembranches sind unzulässig.
+Konfigurationen, Datenräume und UIs. Innerhalb einer Produkt-Releasekampagne
+entstehen alle Zielpakete aus demselben Commit. Die beiden Produkte dürfen
+unabhängig veröffentlichte Versionen und Quellcommits besitzen; ein Cowork-
+Release erzwingt keinen Standalone-Neubau. Permanente Produkt- oder
+Betriebssystembranches sind unzulässig.
 
 DS-062/DS-063 schließen zusätzliche System-VMs und Windows-Benutzerkonten aus.
 DS-065 entfernt die zusätzliche Verschlüsselung lokaler Arbeitsdaten: kein
@@ -44,7 +47,8 @@ lokaler Plugin-MCP ------------- optionales inhaltsfreies MCP-App-UI
   +-- lokale rohdatenhaltige Reviewoberfläche
   +-- lokaler Mapping-/Exportbereich
   |
-  +-- genau eine bewusste Übergabe freigegebener Markdown-Ergebnisse
+  +-- bewusste Übergabe freigegebener Markdown-Ergebnisse
+  +-- optionaler expliziter Replay vollständig übergebener Cowork-Stapel
   v
 Claude-Modell
 ```
@@ -72,9 +76,18 @@ Beschädigte oder geschützte Quellen erzeugen kein Konvertat; im reinen
 Konvertierungszweck erhalten lesbare, begrenzt abgedeckte Extraktionen konkrete
 Hinweise.
 
-DS-092 bindet Cowork-Aktionen immer an den aktuellsten vollständig sichtbaren
-Cowork-Lauf. Es gibt keinen Rückfall auf ältere Ergebnisse oder einen
-historischen Alt-/Stammordner; die Standalone-Historie bleibt davon getrennt.
+DS-092 bindet die regulären Cowork-Aktionen an den aktuellsten vollständig
+sichtbaren Cowork-Lauf. Es gibt keinen automatischen Rückfall auf ältere
+Ergebnisse oder einen historischen Alt-/Stammordner; die Standalone-Historie
+bleibt davon getrennt. Nur der nachfolgende explizite DS-101-Weg ist eine
+eng begrenzte Ausnahme für bereits übergebene Stapel.
+DS-101 erlaubt nur für einen bereits vollständig an Claude übergebenen und
+quittierten Cowork-Stapel eine neue, ausdrücklich bestätigte Übergabe. Der
+lokale Picker wird auch bei einem einzigen Kandidaten gezeigt. Vor jeder Seite
+gelten erneut terminaler Zustand, unveränderte Paket-/Zustellgeneration,
+Aufbewahrung, Leseberechtigung und Integritätsprüfung. Unzugestellte Ergebnisse
+bleiben allein im Standardpfad; Replay verändert weder Zustellquittungen noch
+Originale und führt keine Anonymisierung erneut aus.
 Die Standalone-Konverter-/OCR-Runtime wird nicht in das Cowork-Paket übernommen;
 dort werden ausschließlich die isolierten Office-Parser für XLSX/PPTX projiziert.
 

@@ -31,11 +31,16 @@ function anonymizeMarkdown(raw, profile, options = {}) {
     for (const value of result.dictionary || []) dictionary.push(value);
     strongPersonAnchor ||= result.strongPersonAnchor === true;
     passes = pass;
-    residual = pii.scanResidual(candidate, profile, dictionary, { strongPersonAnchor });
+    residual = pii.scanResidual(candidate, profile, dictionary, { strongPersonAnchor,
+      ...(options.deferPersonReview === true ? { includePersonCandidateSpans: true } : {}) });
     if (!residual.length) break;
   }
 
-  if (residual.length) {
+  // This is an internal, not-yet-released review draft, never a successful
+  // residual verdict. Direct identifiers and unlocatable findings still stop.
+  const personReviewPending = options.deferPersonReview === true && residual.length > 0 && residual.every((finding) =>
+    finding.type === 'PERSON_CANDIDATE' && Number.isSafeInteger(finding.start) && Number.isSafeInteger(finding.end));
+  if (residual.length && !personReviewPending) {
     const classes = [...new Set(residual.map((r) => r.type))].sort().join(', ');
     const error = new SafeError(
       `Finale Rest-PII-Prüfung hat nach ${passes} Durchläufen ${residual.length} mögliche ` +
@@ -54,6 +59,7 @@ function anonymizeMarkdown(raw, profile, options = {}) {
     passes,
     dictionary,
     strongPersonAnchor,
+    ...(personReviewPending ? { residualPersonCandidates: residual } : {}),
     reidentificationRisk: profile === 'personnel_profile' ? 'high' : 'context_dependent'
   };
 }

@@ -1,6 +1,6 @@
 # DataSecure Security-Modell für das Claude-/Cowork-Plugin
 
-Stand: 11.09.2026 · 3.2.0-rc139
+Stand: 11.09.2026 · 3.2.0-rc140
 
 ## Vertrauensgrenze
 
@@ -12,6 +12,27 @@ verifiziertes Markdown mit kurzlebiger, laufgebundener Leseberechtigung.
 Dieses Dokument gilt ausschließlich für das Plugin. Das eigenständige Produkt
 hat einen getrennten Vertrag im
 [Standalone-Sicherheitsmodell](canonical/STANDALONE_SECURITY_MODEL.md).
+
+Diese Aussage beschreibt den vorgesehenen DataSecure-Werkzeugpfad, nicht eine
+technische Sperre aller anderen Claude-Werkzeuge. Der Server attestiert weder
+die Hostklasse noch die tatsächliche Herkunft einer Modellbestätigung.
+Original-, Privacy- und interne Datenordner dürfen dem Claude-Host nicht als
+allgemeine Dateiquelle freigegeben werden. In lokalem Claude Code sind außerdem
+Datei-, Shell-, IDE- und weitere Connectorzugriffe getrennt abzusichern;
+ein Skilltext allein ist keine Zugriffskontrolle.
+
+**Quellkorrektur PH-20260923-01 / BL-041.19, noch unveröffentlicht:** Eine
+gemeinsame kanonische Prüfung sperrt Gleichheit und Verschachtelung zwischen
+privaten Workspace-/Daten- und sichtbaren Ergebniswurzeln in beiden
+Konfigurationsrichtungen, bei Reset und vor privater Dateianlage. Frühere im
+selben Produktdatenraum erfasste Wurzeln bleiben durch begrenzte private
+Metadaten reserviert; Reset entfernt diesen Schutz nicht. Ein Rootkonflikt
+schreibt auch keine Diagnose in den unsicheren Baum.
+
+Unbekannte Host-Freigaben aus Altversionen oder anderen Datennamespaces sind
+nicht rekonstruierbar. Diese Prüfung attestiert keine tatsächlich verbundenen
+Claude-Ordner und verschiebt oder löscht keine bestehenden Daten. Die alten
+veröffentlichten RC139-Pakete enthalten den neuen Schutz noch nicht.
 
 ## Bedrohungen und Kontrollen
 

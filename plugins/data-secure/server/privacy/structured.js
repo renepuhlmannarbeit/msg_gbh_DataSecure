@@ -14,6 +14,7 @@ const {
   IPV6_RE,
   POSTAL_ADDRESS_RE,
   STREET_ADDRESS_RE,
+  FRENCH_STREET_ADDRESS_RE,
   DATE_OF_BIRTH_RE,
   DATE_OF_BIRTH_LABEL_RE,
   VEHICLE_PLATE_RE,
@@ -246,6 +247,12 @@ const DETECTORS = [
     priority: 76,
     accept: (value, text, index) => !POSTAL_QUANTITY_RE.test(value) &&
       !POSTAL_STANDARD_CONTEXT_RE.test(text.slice(Math.max(0, index - 12), index))
+  },
+  {
+    type: 'STREET_ADDRESS',
+    re: FRENCH_STREET_ADDRESS_RE,
+    placeholder: '[LOCATION_REDACTED]',
+    priority: 77
   }
 ];
 

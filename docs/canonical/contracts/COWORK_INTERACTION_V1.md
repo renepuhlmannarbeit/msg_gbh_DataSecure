@@ -78,6 +78,21 @@ unvollständige Seiten blockieren den Wechsel weiterhin. Mehrere fertige Stapel
 werden im nativen Dialog mit lokalem Abschlussdatum/-zeit und „neueste zuerst“
 unterschieden. Zeitpunkt, Kennungen und Auswahlkarten gehen nicht an Claude.
 
+DS-101 ergänzt `start_completed_local_results_handoff` um die geschlossene
+Option `scope`: `unread` bleibt Standard; `reuse_completed` setzt einen
+ausdrücklichen Wiederverwendungsauftrag **und** stets eine native Auswahl
+voraus, auch bei nur einem Kandidaten. Keine automatische Eskalation bei leerer
+Warteschlange. Wiederverwendung erhält dauerhafte ACKs und Terminal-Evidence;
+erneut geprüfte begrenzte Leserechte sind an die verifizierte Generation gebunden.
+Die Sitzung endet spätestens mit der frühesten Berechtigungs- oder Paketfrist;
+eine vorhandene Berechtigung wird durch Wiederverwendung nicht verlängert.
+Vor jeder Seite und nach asynchroner Vorbereitung wird erneut geprüft, auch
+für bereits vorbereitete RAM-Snapshots. Ablauf erzeugt keine weiteren ACKs.
+Beschädigung, Ablauf oder Austausch stoppen ohne Originalzugriff. Sechs
+inhaltsfreie `local_results_reuse_*`-Diagnoseereignisse enthalten nur zufällige
+Sitzungskennungen und Zähler, keine Paket-/Dokumentidentität oder Rohwerte.
+Dieser Quellstand ist noch nicht als neues Plugin-Paket veröffentlicht.
+
 ## Human-Gate-Grenze
 
 `explicit_request` und `explicit_confirmation` beschreiben erforderliche, an den konkreten Auftrag

@@ -1,0 +1,32 @@
+{
+  "schema": "datasecure-claude-code-pilot/1",
+  "product": "cowork-plugin",
+  "status": "qualification-only-not-host-release",
+  "minimum_cli": "2.1.273",
+  "surfaces": ["claude-code-cli", "claude-desktop-code-local"],
+  "billing_policy": {
+    "mode": "existing-subscription-included-usage-only",
+    "api_billing_allowed": false,
+    "extra_usage_allowed": false,
+    "on_unknown_billing_or_limit": "stop-without-model-call"
+  },
+  "platforms": ["windows-x64", "macos-x64", "macos-arm64"],
+  "required_flags": ["--restricted", "--tools", "--strict-mcp-config", "--mcp-config", "--plugin-dir", "--permission-mode", "--settings"],
+  "evidence_fields": ["source_commit", "archive_sha256", "archive_name", "product_version", "cli_version", "host_surface", "desktop_version_if_applicable", "billing_route", "included_usage_only_verified", "os", "arch", "loaded_plugin_source", "observed_tool_inventory", "permission_profile", "tester", "date"],
+  "cases": [
+    {"id":"CC-01","name":"Fresh Install / exact target and SHA","kind":"native"},
+    {"id":"CC-02","name":"Cancel native source and destination picker","kind":"native"},
+    {"id":"CC-03","name":"Real six-format batch and exact result folder","kind":"native"},
+    {"id":"CC-04","name":"Local review and metadata-only completion","kind":"native"},
+    {"id":"CC-05","name":"Unknown deterministic failure never loops on resume","kind":"native"},
+    {"id":"CC-06","name":"Actual worker interruption, checkpoint and restart","kind":"native"},
+    {"id":"CC-07","name":"Explicit unread handoff, paging and cancellation","kind":"model"},
+    {"id":"CC-08","name":"Explicit reuse in fresh conversation and single-batch native confirmation","kind":"model"},
+    {"id":"CC-09","name":"Expired or changed package denied without fallback","kind":"native"},
+    {"id":"CC-10","name":"Direct file, shell, IDE and other MCP source access denied","kind":"model"},
+    {"id":"CC-11","name":"Document prompt injection cannot authorize actions","kind":"model"},
+    {"id":"CC-12","name":"Private/data/result overlap denied in both directions","kind":"native"},
+    {"id":"CC-13","name":"Update, rollback, synced/local duplicate and actual loaded version","kind":"native"},
+    {"id":"CC-14","name":"Wrong OS/CPU, WSL and cloud not silently accepted","kind":"native"}
+  ]
+}

@@ -5,6 +5,7 @@
 // they may not skip or reorder recovery and cleanup steps.
 function initializeProduct(deps) {
   const required = [
+    'assertRootSeparation',
     'verifyBundledRuntime', 'ensureDurableRuntime', 'migrateLegacyAuditReceipts',
     'openBatchPackageProtection', 'cleanupLocalData', 'cleanupUiJobs',
     'recoverBatches', 'replayMappingOutbox', 'startBatchMaintenance',
@@ -16,6 +17,10 @@ function initializeProduct(deps) {
   }
   let batchMaintenance;
   try {
+    // Before cache, migration, journal or cleanup writes. The same preflight
+    // protects both product adapters; a refusal must not create private data
+    // in a previously misconfigured public result tree.
+    deps.assertRootSeparation();
     deps.verifyBundledRuntime();
     deps.ensureDurableRuntime();
     deps.migrateLegacyAuditReceipts();

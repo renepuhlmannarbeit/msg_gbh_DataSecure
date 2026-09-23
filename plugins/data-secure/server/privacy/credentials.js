@@ -168,7 +168,9 @@ function literalMatches(text, value) {
 // assuming that source/output line numbers or repeated-name ordinals match.
 function preservedTextRanges(original, anonymized) {
   const ranges=[];
-  const placeholders=/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu;
+  // Cowork/legacy batches use base32 labels, including digits inside the
+  // suffix. They delimit preserved fragments just like readable V2 labels.
+  const placeholders=/\[(?:[A-ZÄÖÜ_]+(?:_\d+)?|(?:PERSON|ORGANISATION|KUNDE|PROJEKT)_[A-Z2-7]{10,52})\]/gu;
   let outputStart=0; let originalCursor=0;
   const add=(end)=> {
     let fragment=anonymized.slice(outputStart,end);

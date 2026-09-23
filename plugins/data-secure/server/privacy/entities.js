@@ -370,6 +370,36 @@ function pushLabelledPersonValue(out, value, confidence) {
   pushExplicitPerson(out, raw, confidence);
 }
 
+// Markdown containers can nest in either order (quote -> list, list -> quote,
+// repeated quotes, ordered/task lists). Inspect their content without changing
+// source spelling or span offsets: the returned literal is later located in
+// the original text. Consuming one marker at a time also avoids a recursive or
+// backtracking-heavy nested-container expression.
+function nestedMarkdownValue(line) {
+  const source = String(line);
+  const marker = /[ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)/uy;
+  let depth = 0;
+  let end = 0;
+  while (marker.exec(source)) {
+    depth++;
+    end = marker.lastIndex;
+  }
+  return depth >= 2 ? source.slice(end).trim() : '';
+}
+
+// This new structural evidence belongs to the independent release gate first:
+// an unknown technical phrase can also be name-shaped. Stop for review instead
+// of silently rewriting such content as a newly inferred person identity.
+function collectNestedMarkdownPersonCandidates(text, profile) {
+  const out = [];
+  if (profile !== 'personnel_profile' && profile !== 'applicant') return out;
+  for (const line of lines(text)) {
+    const value = nestedMarkdownValue(line);
+    if (value && !hasAbstractNounShape(value)) pushFullPerson(out, value, 'markdown_structure');
+  }
+  return out;
+}
+
 // High-confidence anchors: the document itself says "this is a person".
 function collectPersonAnchors(text, profile = 'general') {
   const src = String(text || '');
@@ -637,17 +667,26 @@ function capitalisedRuns(text) {
 
 // Contextual: a name that is introduced by a person-ish word or immediately
 // followed by contact details.
-function collectContextualNameCandidates(text, profile) {
+function collectContextualNameCandidates(text, profile, { includeNegation = false } = {}) {
   const src = String(text || '');
   const out = [];
   const before =
     /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/iu;
-  const after = /^\s*(?:(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b|(?:arbeitet(?:e)?|wirkt(?:e)?|ist\s+tätig|war\s+tätig|works?|worked|is\s+employed|was\s+employed)\s+(?:bei|für|at|for|with)\b)/iu;
+  const contactAfter = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b/iu;
+  // Employment prose may wrap across lines, but not a paragraph boundary. In
+  // the residual view, a masked person in the next paragraph is whitespace,
+  // not permission to make the preceding heading the subject.
+  const employmentAfter = /^\s*(?:arbeitet(?:e)?|wirkt(?:e)?|ist\s+tätig|war\s+tätig|works?|worked|is\s+employed|was\s+employed)\s+(?:bei|für|at|for|with)\b/iu;
   // Contracts and customer records name the counterparty through connectors
   // rather than honorifics: "Vertrag zwischen Alpha GmbH und Max Mustermann".
   const contractual =
     /(?:zwischen|und|sowie|auftraggeber(?:in)?|auftragnehmer(?:in)?|lieferant(?:in)?|nachfolgend|handelnd\s+für|im\s+namen\s+von|between|and|client|supplier)\s*$/i;
   const useContractual = profile === 'contract' || profile === 'customer';
+  // Negated capitalized phrases are ambiguous (names and uppercase disclaimers
+  // overlap). Only the independent release gate opts in; the redactor must not
+  // silently turn previously unclassified professional text into an identity.
+  const useNegatedPerson = includeNegation && (profile === 'personnel_profile' || profile === 'applicant');
+  const negationBefore = /(?<![\p{L}\p{N}_])(?:kein(?:e|er|es|em|en)?|nicht)[ \t]+$/iu;
 
   for (const run of capitalisedRuns(src)) {
     // Two tokens is the normal case. Three are only considered for a run that
@@ -668,17 +707,25 @@ function collectContextualNameCandidates(text, profile) {
         const end = window[window.length - 1].end;
         const { from, to } = lineBoundsAt(src, start);
         const sourceLine = src.slice(from, to);
+        const ctxBefore = src.slice(Math.max(0, start - 45), start);
+        const ctxAfter = src.slice(end, end + 30);
+        const employmentMatch = ctxAfter.match(employmentAfter);
+        const employmentContext = employmentMatch &&
+          !/\n[ \t]*\n/u.test(employmentMatch[0].replace(/\r\n?/gu, '\n'));
+        // A negated reference still identifies its subject. Treat the word as
+        // an additional boundary, never as permission to discard the clause;
+        // walking shorter windows also finds the name after uppercase KEINE.
+        const negatedPerson = useNegatedPerson && negationBefore.test(ctxBefore);
         // A block quote is presentation, not a privacy boundary. Explicit
         // person context inside quoted correspondence must stay detectable.
         // Other Markdown structures remain excluded to avoid reclassifying
         // headings and generic list labels as people.
-        if (isStructuralLine(sourceLine) && !/^\s*>/u.test(sourceLine)) continue;
-
-        const ctxBefore = src.slice(Math.max(0, start - 45), start);
-        const ctxAfter = src.slice(end, end + 30);
+        if (isStructuralLine(sourceLine) && !/^\s*>/u.test(sourceLine) && !negatedPerson) continue;
         const matched =
           before.test(ctxBefore) ||
-          after.test(ctxAfter) ||
+          contactAfter.test(ctxAfter) ||
+          employmentContext ||
+          negatedPerson ||
           (useContractual && contractual.test(ctxBefore));
         if (!matched) continue;
 
@@ -714,6 +761,17 @@ function collectPersonSeeds(
     ...collectHeaderNameCandidates(text, profile, 40, hasStrongPersonAnchor),
     ...collectContextualNameCandidates(text, profile)
   ];
+  if (hasStrongPersonAnchor) {
+    // A typographic title followed by a dash is not, by itself, evidence of
+    // a customer/project relationship. Keep the left-hand name hypothesis
+    // visible to the existing local review and independent residual gate.
+    for (const line of lines(text)) {
+      const match = String(line).match(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)?(.{2,120}?)[ \t]+[–—-][ \t]+.{3,180}$/u);
+      if (match && /\p{Lu}/u.test(match[1]) && !/\p{Ll}/u.test(match[1]) && looksName(titleCase(match[1]))) {
+        pushPerson(seeds, match[1], 'caps_dash');
+      }
+    }
+  }
   if (profile === 'personnel_profile' || profile === 'applicant') {
     let seen = 0;
     for (const line of lines(text)) {
@@ -789,6 +847,7 @@ module.exports = {
   collectPersonAnchors,
   collectHeaderNameCandidates,
   collectContextualNameCandidates,
+  collectNestedMarkdownPersonCandidates,
   hasAbstractNounShape,
   collectPersonSeeds,
   collectNameSeeds,

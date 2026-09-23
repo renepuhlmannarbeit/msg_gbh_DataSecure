@@ -1,6 +1,19 @@
 # Entscheidungs-Traceability
 
-Stand: 12.09.2026 · 3.2.0-rc139
+Stand: 23.09.2026 · 3.2.0-rc140
+
+Review 23.09.2026: [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md) →
+DS-069/DS-078/DS-097/DS-099/DS-100/DS-101 → BL-041.19–.21 und BL-050.4.
+PH-12 → DS-012/DS-049/DS-096 → BL-021.3: fundstellengebundener lokaler
+Restkandidatenreview implementiert; 16+16-Golden mit expliziten titel-/personenbezogenen
+Entscheidungen. Vorgelagerte Titelklassifikation separat BL-021.4;
+technische Tests ersetzen keine menschliche Inhalts- oder Hostabnahme.
+VECTRA-20260923 → BL-050.4 → vorhandener CSV-Test: eingebettete JSON-Skalare,
+E-Mail/IPv4/IPv6, unveränderte Fachwerte und gegenläufiger Konvertierungsvertrag;
+kein JSON-Importer oder zusätzlicher Skillbefehl.
+Neue Root-/Wiederverwendungs- und Golden-Korrekturen sowie der konditionale
+Code-Hostpilot bleiben ausdrücklich von abgeschlossener RC139-Evidence
+getrennt. Quelländerungen ändern keine historischen Artefaktbindungen.
 
 RC139-Lieferung: BL-041.15–.18 / `ASTRA2-20260912-01`–`04` → Quellcommit
 `46c6fec4722c879989f5c8e3059367241c117c3a` → vollständige lokale Produktsuite
@@ -682,7 +695,22 @@ aktuelle Produktzusage.
 | BL-002, BL-040.5, DS-080 | Explizite Netzwerk-Ergebnisordner bleiben zulässig, erzeugen aber einmalig einen pfadfreien Hinweis in Cowork und Standalone. Standalone benennt zusätzlich, dass seine laufbezogene Zuordnungsdatei über das Netzlaufwerk übertragen werden kann; es entsteht keine weitere Bestätigung. | `gateway/result-folder-config.js`, `mcp-server.js`, `normal-path-response.js`, `prompt-contract.js`, `standalone/application-service.js`, `frontend/app.js`; Ergebnisordner-, Normalantwort-, Standalone-Service-, Renderer- und Manifesttests |
 | BL-010.28, DS-085 | Aktuelle reine Markdown-Konvertierung exportiert ohne Zuordnung. Nur ein bereits angelegter Legacy-Exportplan `/3` beendet beim Replay die damals zugesagte `DataSecure-Zuordnung.csv`; die Ausnahme kann keine neuen Legacy-Pläne erzeugen. | `gateway/result-export.js`; `tests/test-result-folder-export.js` mit unvollständigem `/3`-Plan, vorhandener Markdown-Datei, Replay, Zuordnung und finalem Record |
 
-## Aktueller E0-Abschluss BL-011.8 / BL-020.1 / BL-020.2 / BL-030.2
+## Reviewfortführung PH-20260923
+
+| Story | Umsetzung / Vertrag | Nachweisgrenze |
+|---|---|---|
+| DS-101 | Ausdrückliche Wiederverwendung abgeschlossener Cowork-Stapel, ohne Originalzugriff oder neue Anonymisierung | BL-041.21; verpflichtende native Auswahl, erneute Generation-/Integritätsprüfung, dauerhaftes ACK unverändert; `test-local-handoff-reuse.js` |
+| BL-041.19 | `gateway/root-boundary.js`, `root-reservations.js`, beide Konfigurationsadapter, verpflichtende Bootstrap-Injektion; keine private Dateianlage bei Rootkonflikt, feste Fehler auch bei I/O-/Close-Fehlern | `test-root-boundary.js`, `test-product-bootstrap.js`, `test-core-contracts.mjs`; historische Host-Freigaben alter Versionen nicht rekonstruierbar |
+| BL-041.20 | `acceptance/CLAUDE_CODE_PILOT/contract.json` und Vorcheck `scripts/check-claude-code-pilot.mjs`; CLI und Desktop-Code-Reiter, ausschließlich enthaltene Abonutzung | `test-claude-code-pilot.mjs` prüft CLI-/Kostenvertrag; echte lokale CLI 2.1.280 und Strukturvorcheck PASS, CLI nicht angemeldet; Desktop-/Host-/Modellfälle NOT_RUN |
+| BL-041.21 / DS-101 | `gateway/local-only-handoff.js`, `batch-results.js`, nativer Picker, MCP-Schema/Registry und Skillreferenz | `test-local-handoff-reuse.js`: reale Pakete/Journal/Verifier, kein Originalzugriff, tatsächliche Grantfrist auch bei RAM-Snapshots; menschliche Auswahl gezielt eingespeist, nicht als native Abnahme ausgewiesen |
+| BL-050.4 | `tests/lib/adversarial-golden-oracle.mjs`, corpus-/batch-Goldenprüfungen; Produktionsfixes in `privacy/base.js`, `structured.js`, `engine.js`, `entities.js`, `personnel.js`; VECTRA-20260923: `tests/test-csv-source.js` | `npm run test:golden:adversarial-batch`: 16 Konvertate und 16 anonymisierte Ausgaben nach explizitem Titel-/Personenreview; echter Konverter/OCR/Verarbeitung/Export, Fach-/Identitätsanker einschließlich Titel, unabhängiger Pseudonymvergleich. CSV-JSON-Skalare über echten Parser/Privacy-Gateway, kein neuer Importer |
+| BL-021.3 / DS-096 | `privacy/residual-person-review.js`, Residualscanner, Compliance/Orchestrator und beide lokale Reviewadapter; Policy-Fingerprint einschlägig | `test-residual-person-review.js` sowie Vollstapel-Golden; exakte lokale Inhalts-/Fundstellenbindung, CRLF-/gemischte Tabellenoffsets, wiederholte Fragmente, kanonische Original-/Ergebnisdarstellung; keine Wortfreigabe/Gruppenübernahme; native Bedienung und neuer Release noch offen |
+| BL-021.4 | `privacy/engine.js`, `entities.js`, `personnel.js`: kontextgebundene Titelhypothese vor Personen-/Kunden-/Projektbindung; keine Korpusausnahme | PII-/Residualreview-Regressionen und unabhängige Fachanker im Vollstapel-Golden: technische Titel bleiben nach Entscheidung erhalten, starke Personenanker und Folge-Dokumente geschützt; Beschäftigungskontext darf nicht über Absätze zum vorherigen Hinweis springen |
+
+Die bisherigen Releasebindungen gelten nicht als Nachweis dieser neuen lokalen
+Quelländerungen. Sie benötigen vor Auslieferung eigene Paket-/Hostgates.
+
+## Bestehender E0-Abschluss BL-011.8 / BL-020.1 / BL-020.2 / BL-030.2
 
 | Story | Code | Automatisierte Evidenz |
 |---|---|---|

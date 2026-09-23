@@ -366,17 +366,30 @@ test('direct and snapshot paging reject an offset inside a Unicode surrogate pai
 
 test('descriptor close failures remain content-free and fail closed', () => {
   const grant = issueReadCapability('run-one');
+  const originalOpen = fs.openSync;
   const originalClose = fs.closeSync;
+  const packageDescriptors = new Set();
+  let injected = 0;
+  fs.openSync = (value, ...args) => {
+    const descriptor = originalOpen(value, ...args);
+    if (String(value).endsWith(`${path.sep}run-one.md`)) packageDescriptors.add(descriptor);
+    return descriptor;
+  };
   fs.closeSync = (descriptor) => {
     originalClose(descriptor);
-    throw new Error(`native close detail: ${path.join(root, 'private-name.md')}`);
+    if (packageDescriptors.delete(descriptor)) {
+      injected++;
+      throw new Error(`native close detail: ${path.join(root, 'private-name.md')}`);
+    }
   };
   try {
     assert.throws(
       () => readOutput('run-one', grant.read_capability),
       (error) => error && error.message === 'Paketdatei ist nicht freigegeben.'
     );
+    assert.strictEqual(injected, 1, 'inject into the actual package descriptor, not root preflight');
   } finally {
+    fs.openSync = originalOpen;
     fs.closeSync = originalClose;
   }
 });

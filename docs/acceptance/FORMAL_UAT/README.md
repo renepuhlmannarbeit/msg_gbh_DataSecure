@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 12.09.2026 · vorbereitet für 3.2.0-rc139; Standalone RC137 separat
+Stand: 23.09.2026 · vorbereitet für 3.2.0-rc140; Standalone RC137 separat
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -32,6 +32,10 @@ Evidence-Präzisierung vom 12.09.2026: Das nachgezogene native ZIP-Gate ist für
 RC139 auf allen drei Cowork-Zielarchitekturen bestanden. Danach folgt weiterhin
 die beobachtete Installation und Bedienung in Claude; ein maschineller
 MCP-Roundtrip ist keine sichtbare Anwenderabnahme.
+
+Neue Quellkorrekturen in RC140 verändern nicht die veröffentlichten RC139-Pakete.
+Erst ein neuer, commitgebundener Paketbau mit eigenen Prüfsummen darf als
+RC140-Kandidat in einer separaten Kampagne ausgewählt werden.
 
 ## Was N3 und N4 bedeuten
 

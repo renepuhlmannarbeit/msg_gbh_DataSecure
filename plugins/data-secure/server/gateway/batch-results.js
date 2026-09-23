@@ -54,13 +54,57 @@ function createBatchResultAccess(deps) {
     return new SafeError('Der Ergebnis-Cursor ist ungültig.');
   }
 
-  function resultCursor(token, index) {
+  function handoffScope(options) {
+    const scope = options.scope ?? 'unread';
+    if (!['unread', 'reuse_completed'].includes(scope)) throw new SafeError('Der Umfang der Ergebnisübergabe ist ungültig.');
+    return scope;
+  }
+
+  // Internal immutable generation, never a public batch identifier. A replay
+  // requires every released item to have been delivered and acknowledged.
+  // Include that state so a later journal change invalidates the selection.
+  function fullyDelivered(state) {
+    return state.items.some(item => item.status === 'released') &&
+      state.items.every(item => item.status !== 'released' || item.analysis_acknowledged === true);
+  }
+  function completedGeneration(state) {
+    return crypto.createHash('sha256').update(JSON.stringify({
+      schema: state.schema, token: state.token, product_channel: state.product_channel,
+      processing_mode: state.processing_mode, expires_at: state.expires_at,
+      terminal_evidence: state.terminal_evidence,
+      items: state.items.map(item => ({
+        id: item.id, status: item.status, analysis_acknowledged: item.analysis_acknowledged,
+        package_id: item.package_id,
+        package_identity: item.package_identity, document_result: item.document_result,
+        error_code: item.error_code
+      }))
+    })).digest('hex');
+  }
+
+  function changedGeneration() {
+    const error = new SafeError('Die lokalen Ergebnisse haben sich seit der Auswahl geändert. Bitte die Auswertung erneut starten.');
+    error.code = 'LOCAL_HANDOFF_CHANGED';
+    return error;
+  }
+
+  function verifyCompletedLocalOnlyGeneration(token, generation) {
+    const state = readStateForMaintenance(token);
+    if (!pluginHandoffState(state) || typeof generation !== 'string' || !/^[a-f0-9]{64}$/u.test(generation) ||
+        !Number.isFinite(Date.parse(state.expires_at)) || Date.now() >= Date.parse(state.expires_at) ||
+        completedGeneration(state) !== generation || !fullyDelivered(state) ||
+        liveLocalExecutor(state) || !publicProgress(state).complete) {
+      throw changedGeneration();
+    }
+    return true;
+  }
+
+  function resultCursor(token, index, binding = '') {
     const position = String(index);
-    const signature = crypto.createHmac('sha256', token).update(position).digest('base64url').slice(0, 16);
+    const signature = crypto.createHmac('sha256', token).update(binding ? `${binding}:${position}` : position).digest('base64url').slice(0, 16);
     return Buffer.from(`${position}.${signature}`, 'utf8').toString('base64url');
   }
 
-  function parseResultCursor(token, cursor) {
+  function parseResultCursor(token, cursor, binding = '') {
     if (cursor === undefined || cursor === null || cursor === '') return 0;
     if (typeof cursor !== 'string' || cursor.length > 96 || !/^[A-Za-z0-9_-]+$/.test(cursor)) {
       throw invalidCursor();
@@ -74,7 +118,7 @@ function createBatchResultAccess(deps) {
     const match = /^(0|[1-9][0-9]{0,2})\.([A-Za-z0-9_-]{16})$/.exec(decoded);
     if (!match) throw invalidCursor();
     const index = Number(match[1]);
-    const expected = resultCursor(token, index);
+    const expected = resultCursor(token, index, binding);
     const left = Buffer.from(expected);
     const right = Buffer.from(cursor);
     if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) throw invalidCursor();
@@ -82,19 +126,30 @@ function createBatchResultAccess(deps) {
   }
 
   function listBatchResults(token, options = {}) {
+    const scope = handoffScope(options);
+    const replay = scope === 'reuse_completed';
     const limit = Number(options.limit ?? 10);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new SafeError('Ergebnislimit muss zwischen 1 und 20 liegen.');
     const state = readState(token);
     if (!pluginHandoffState(state)) {
       throw new SafeError('Dieser lokale Stapel gehört nicht zum Claude-Plugin.');
     }
-    const start = parseResultCursor(token, options.cursor);
+    const progress = publicProgress(state);
+    if (replay && (typeof options.generation !== 'string' || !/^[a-f0-9]{64}$/u.test(options.generation) ||
+        completedGeneration(state) !== options.generation || !fullyDelivered(state) ||
+        !progress.complete || liveLocalExecutor(state) ||
+        !Number.isFinite(Date.parse(state.expires_at)) || Date.now() >= Date.parse(state.expires_at))) {
+      throw changedGeneration();
+    }
+    const binding = replay ? `reuse_completed:${options.generation}` : '';
+    const eligible = item => item.status === 'released' && (replay || item.analysis_acknowledged !== true);
+    const start = parseResultCursor(token, options.cursor, binding);
     if (start > state.items.length) throw invalidCursor();
     const results = [];
     let nextIndex = start;
     for (; nextIndex < state.items.length && results.length < limit; nextIndex++) {
       const item = state.items[nextIndex];
-      if (item.status !== 'released' || item.analysis_acknowledged === true) continue;
+      if (!eligible(item)) continue;
       const verified = verifiedResultPackage(state, item);
       if (!verified) throw new SafeError('Ein freigegebenes Ergebnis konnte nicht sicher verifiziert werden.');
       const grant = issueReadCapability(item.package_id);
@@ -109,19 +164,18 @@ function createBatchResultAccess(deps) {
         } : {})
       });
     }
-    const available = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true).length;
+    const available = state.items.filter(eligible).length;
     const used = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged === true).length;
-    const progress = publicProgress(state);
     const nextResultIndex = state.items.findIndex((item, index) =>
-      index >= nextIndex && item.status === 'released' && item.analysis_acknowledged !== true
+      index >= nextIndex && eligible(item)
     );
     return {
       ok: true,
       results,
-      // Stopped and already acknowledged journal items are not result pages.
-      // Point directly at the next unread result instead of making Cowork call
-      // the tool once more only to receive an empty page.
-      next_cursor: nextResultIndex >= 0 ? resultCursor(token, nextResultIndex) : null,
+      // Stopped entries are never result pages. In normal scope acknowledged
+      // entries are skipped too; explicit replay includes them without mutation.
+      // Point directly at the next eligible result, never an empty trailing page.
+      next_cursor: nextResultIndex >= 0 ? resultCursor(token, nextResultIndex, binding) : null,
       used,
       available,
       still_open: progress.remaining + progress.processing + progress.retryable + progress.deferred_review + progress.mapping_pending + progress.delivery_pending,
@@ -132,7 +186,8 @@ function createBatchResultAccess(deps) {
   }
 
   // Internal discovery only: opaque checkpoint tokens must never cross MCP.
-  function completedLocalOnlyCandidates() {
+  function completedLocalOnlyCandidates(options = {}) {
+    const replay = handoffScope(options) === 'reuse_completed';
     let entries;
     try {
       entries = fs.readdirSync(batchRoot(), { withFileTypes: true });
@@ -147,10 +202,10 @@ function createBatchResultAccess(deps) {
       try {
         const state = readStateForMaintenance(token);
         if (!pluginHandoffState(state)) continue;
-        if (Date.now() > Date.parse(state.expires_at)) continue;
+        if (!Number.isFinite(Date.parse(state.expires_at)) || Date.now() >= Date.parse(state.expires_at)) continue;
         const progress = publicProgress(state);
-        if (liveLocalExecutor(state) || !progress.complete) continue;
-        const releasedItems = state.items.filter((item) => item.status === 'released' && item.analysis_acknowledged !== true);
+        if (liveLocalExecutor(state) || !progress.complete || (replay && !fullyDelivered(state))) continue;
+        const releasedItems = state.items.filter((item) => item.status === 'released' && (replay || item.analysis_acknowledged !== true));
         const verified = state.schema === 'datasecure-batch/2'
           ? progress.result_grades_verified === true
           : releasedItems.every((item) => verifiedResultPackage(state, item));
@@ -164,7 +219,7 @@ function createBatchResultAccess(deps) {
         const projection = progress.result_grades_verified === true
           ? projectBatchResults({
               schema: state.schema,
-              items: state.items.filter((item) => item.status !== 'released' || item.analysis_acknowledged !== true)
+              items: state.items.filter((item) => replay || item.status !== 'released' || item.analysis_acknowledged !== true)
             }, { verifyPositive: (item) => ({ state: 'verified', document_result: item.document_result }) })
           : {
               grade_counts: emptyGradeCounts(releasedItems.length + progress.stopped),
@@ -173,6 +228,8 @@ function createBatchResultAccess(deps) {
             };
         candidates.push({
           token,
+          ...(replay ? { generation: completedGeneration(state) } : {}),
+          expiresAt: state.expires_at,
           released: releasedItems.length,
           stopped: progress.stopped,
           grade_counts: projection.grade_counts,
@@ -191,7 +248,7 @@ function createBatchResultAccess(deps) {
     return ordered;
   }
 
-  return { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCandidates };
+  return { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCandidates, verifyCompletedLocalOnlyGeneration };
 }
 
 module.exports = { createBatchResultAccess };

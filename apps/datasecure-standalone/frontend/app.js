@@ -93,7 +93,7 @@ function renderOutputNamingHelp() {
   if (!help) return;
   help.textContent = mode === 'source-with-suffix'
     ? 'Der Originaldateiname bleibt sichtbar und erhält „-anonymisiert“. Nutze diese Variante nur, wenn Datei- und Ordnernamen keine personenbezogenen Angaben enthalten.'
-    : 'Empfohlen: Neutrale Namen wie „Dokument-001-anonymisiert.md“ vermeiden personenbezogene Angaben im Ergebnisnamen. Die Zuordnungsdatei verbindet Quelle und Ergebnis.';
+    : 'Empfohlen: Neutrale Namen wie „Dokument-001-anonymisiert.md“ vermeiden personenbezogene Angaben im Dateinamen. Unterordnernamen bleiben unverändert und die Zuordnungsdatei enthält Originalnamen. Beides kann personenbezogene Angaben enthalten und gehört nicht ungeprüft in einen KI-Upload.';
 }
 
 function busy(value) {

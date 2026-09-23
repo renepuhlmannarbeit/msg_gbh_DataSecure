@@ -35,11 +35,14 @@ const {
   markdownTableCells,
   collectPersonAnchors,
   collectPersonSeeds,
+  collectContextualNameCandidates,
+  collectNestedMarkdownPersonCandidates,
   collectNameSeeds,
   collectOrganizations,
   makeRegistry
 } = require('./entities');
 const { anonymizePersonnel } = require('./personnel');
+const { reviewedPersonRanges } = require('./residual-person-review');
 const { findStructuredSpans, scanStructured, replaceStructured } = require('./structured');
 const { placeholderSpans, applySpans } = require('./spans');
 const {
@@ -63,6 +66,12 @@ const PRIORITY = {
   LOCATION: 60,
   URL: 58
 };
+
+function uppercasePresentationHypothesis(seed) {
+  return ['caps_line', 'caps_dash', 'header_block', 'header_comma', 'header_particle', 'header_tab',
+    'profile_structure', 'markdown_structure', 'markdown_link_label', 'markdown_metadata'].includes(seed.confidence) &&
+    /\p{Lu}/u.test(seed.value) && !/\p{Ll}/u.test(seed.value);
+}
 
 function sortedCredentialIntervals(spans) {
   return spans.filter((span) => span.type === 'CREDENTIAL')
@@ -208,7 +217,14 @@ function visibleTableCellValue(value) {
 }
 
 function residualTablePersonCandidates(text) {
-  const all = String(text || '').split(/\r?\n/u);
+  const source = String(text || '');
+  const all = source.split(/\r?\n/u);
+  const lineOffsets = [0];
+  // Review coordinates belong to the unchanged canonical text. CRLF consumes
+  // two code units; treating it as LF can bind a cell to an earlier namesake.
+  for (const separator of source.matchAll(/\r?\n/gu)) {
+    lineOffsets.push(separator.index + separator[0].length);
+  }
   const findings = [];
   const seen = new Set();
   for (let index = 0; index + 2 < all.length; index++) {
@@ -216,6 +232,10 @@ function residualTablePersonCandidates(text) {
     const separator = markdownTableCells(all[index + 1]);
     if (!headers || !separator || headers.length !== separator.length ||
         !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
+    // Generated converter columns carry no person-role evidence. A plain,
+    // exactly locatable name-shaped cell may use the existing local review;
+    // labelled columns and transformed/escaped cells retain the strict gate.
+    const generatedColumns = headers.every((header, column) => header === `Spalte ${column + 1}`);
     index += 2;
     while (index < all.length) {
       const row = markdownTableCells(all[index]);
@@ -233,10 +253,22 @@ function residualTablePersonCandidates(text) {
         const ratedProfessionalPhrase = row.some((cell, index) => index !== column &&
           PROFESSIONAL_MATRIX_RATING_RE.test(visibleTableCellValue(cell))) &&
           PROFESSIONAL_PHRASE_RE.test(candidate);
-        if (words.length === 2 && candidate.length <= 160 && looksName(candidate) &&
-            !ratedProfessionalPhrase && !seen.has(candidateKey)) {
-          seen.add(candidateKey);
-          findings.push({ type: 'PERSON_CANDIDATE', text: candidate });
+        if (words.length === 2 && candidate.length <= 160 && looksName(candidate) && !ratedProfessionalPhrase) {
+          const raw = all[index];
+          const cells = raw.trim().replace(/^\|/u, '').replace(/\|$/u, '').split('|');
+          if (generatedColumns && !raw.includes('\\|') && value === candidate && cells.length === row.length &&
+              !cells[column].includes('\\') && raw.trim().startsWith('|')) {
+            const start = lineOffsets[index] + raw.indexOf('|') + 1 +
+              cells.slice(0, column).reduce((sum, cell) => sum + cell.length + 1, 0) + cells[column].indexOf(candidate);
+            if (String(text).slice(start, start + candidate.length) === candidate) {
+              findings.push({ type: 'PERSON_CANDIDATE', text: candidate, start, end: start + candidate.length });
+              continue;
+            }
+          }
+          if (!seen.has(candidateKey)) {
+            seen.add(candidateKey);
+            findings.push({ type: 'PERSON_CANDIDATE', text: candidate });
+          }
         }
       }
       index++;
@@ -526,8 +558,33 @@ function anonymize(text, profile = 'general', options = {}) {
   // Their concrete occurrences are handled position-by-position below. Exact
   // multi-token identities keep the established batch-wide behaviour.
   const persistedSinglePersonKeys = new Set(persistedSinglePersonAliases.map((alias) => key(alias.value)));
-  const candidates = collectPersonSeeds(analysisSrc, profile, strongPersonAnchors)
-    .filter((seed) => !persistedSinglePersonKeys.has(key(seed.value)));
+  const explicitPersonKeys = new Set(strongPersonAnchors
+    .filter((seed) => ['label', 'honorific', 'credential_holder'].includes(seed.confidence))
+    .map((seed) => key(seed.value)));
+  // Preserve that context on subsequent privacy passes after the explicit
+  // name itself became a placeholder (readable and legacy batch labels).
+  // An unlabelled full identity actually matched in this document is still
+  // anchored by the batch. A lone surname is not: it can be ordinary prose.
+  const knownPersonAnchor = knownAliases.some((alias) =>
+    alias.kind === 'PERSON' && normalizeSpaces(alias.value).split(/\s+/u).length > 1);
+  const otherPersonEvidence = explicitPersonKeys.size > 0 || /\[PERSON(?:_UNKLAR)?_[A-Z0-9]+\]/u.test(analysisSrc) ||
+    knownPersonAnchor;
+  const deferredTypographyKeys = new Set();
+  const candidates = collectPersonSeeds(analysisSrc, profile, strongPersonAnchors, otherPersonEvidence ? true : null)
+    .filter((seed) => {
+      if (persistedSinglePersonKeys.has(key(seed.value))) return false;
+      // A separately anchored person does not prove an unrelated all-caps
+      // title is another name. Keep that competing typographic hypothesis for
+      // the existing occurrence-bound local review,
+      // before assigning either a person identity or a global surname alias.
+      // Explicit labels, honorifics, holders and established batch
+      // identities are independent evidence and retain normal redaction.
+      if (otherPersonEvidence && !explicitPersonKeys.has(key(seed.value)) && uppercasePresentationHypothesis(seed)) {
+        deferredTypographyKeys.add(key(seed.value));
+        return false;
+      }
+      return true;
+    });
   const candidateKeys = new Set(candidates.map((seed) => key(seed.value)));
   for (const alias of knownAliases) {
     if (alias.kind !== 'PERSON' || persistedSinglePersonKeys.has(key(alias.value)) ||
@@ -571,7 +628,7 @@ function anonymize(text, profile = 'general', options = {}) {
   if (profile === 'personnel_profile' || profile === 'applicant') {
     const knownDashCompanyRanges = knownAliases.filter((alias) => alias.kind === 'ORG' && /\s-\s/u.test(alias.value))
       .flatMap((alias) => findLiteralSpans(analysisSrc, alias.value, '', 'ORGANIZATION', PRIORITY.ORGANIZATION));
-    out = anonymizePersonnel(out, reg, findings, personKeys, knownDashCompanyRanges);
+    out = anonymizePersonnel(out, reg, findings, personKeys, knownDashCompanyRanges, deferredTypographyKeys);
   }
   const credentialRanges = credentialContextDetails(out);
 
@@ -688,7 +745,7 @@ function anonymize(text, profile = 'general', options = {}) {
     // let the verifier distinguish a private person alias from a vendor with
     // a separate, position-bound professional role. No registry is persisted.
     dictionary: dictionary.map(({value,type}) => ({value,type})),
-    strongPersonAnchor: strongPersonAnchors.length > 0,
+    strongPersonAnchor: strongPersonAnchors.length > 0 || knownPersonAnchor,
     reidentification_risk: profile === 'personnel_profile' ? 'high' : 'context_dependent'
   };
 }
@@ -698,7 +755,11 @@ function anonymize(text, profile = 'general', options = {}) {
 // things: that no direct identifier pattern is left, and that no literal the
 // redactor claimed to have replaced survives in the output.
 function scanResidual(text, profile = 'general', knownValues = [], options = {}) {
-  const clean = canonicalizeRenderedText(text).replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, ' ');
+  const rendered = canonicalizeRenderedText(text);
+  // Keep UTF-16 coordinates in the canonical view. A local human decision is
+  // occurrence-bound; shrinking placeholders would move its reviewed span.
+  const clean = rendered.replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, (value) => ' '.repeat(value.length));
+  const reviewedRanges = reviewedPersonRanges(options.reviewedPersonCandidates, rendered);
   const credentialRanges = credentialContextDetails(clean);
   const structured = scanStructured(clean);
   const credentialSpans = sortedCredentialIntervals(structured);
@@ -718,10 +779,13 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   // make a remaining name-shaped table value releasable.
   const residualKeys = new Set(out.map((finding) => `${finding.type}:${key(finding.text)}`));
   for (const finding of residualTablePersonCandidates(clean)) {
-    const findingKey = `${finding.type}:${key(finding.text)}`;
+    const located = Number.isSafeInteger(finding.start) && Number.isSafeInteger(finding.end);
+    if (located && reviewedRanges.some((range) => range.start === finding.start && range.end === finding.end)) continue;
+    const findingKey = `${finding.type}:${key(finding.text)}` +
+      (located && options.includePersonCandidateSpans === true ? `:${finding.start}:${finding.end}` : '');
     if (!residualKeys.has(findingKey)) {
       residualKeys.add(findingKey);
-      out.push(finding);
+      out.push(located && options.includePersonCandidateSpans !== true ? { type: finding.type, text: finding.text } : finding);
     }
   }
   // Structure is an independent release condition. A shifted/merged table row
@@ -741,7 +805,34 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   }
 
   const strongPersonAnchor = options.strongPersonAnchor === true;
-  for (const seed of collectPersonSeeds(clean, profile, null, strongPersonAnchor)) {
+  // Explicit person context also makes an unrelated uppercase Markdown title
+  // or link label ambiguous in the general profile. Use the existing bounded
+  // presentation detector, but only its uppercase hypotheses: no automatic
+  // profile change, redaction, or broad Title-Case rule is introduced here.
+  const presentationCandidates = (source) => strongPersonAnchor && !['personnel_profile', 'applicant'].includes(profile)
+    ? collectPersonSeeds(source, 'personnel_profile', null, true).filter(uppercasePresentationHypothesis) : [];
+  // Both views are necessary: intact placeholders preserve actual Markdown
+  // boundaries, but masking them exposes adjacent names and prevents already
+  // redacted lines from exhausting the bounded profile-header window.
+  const intactPersonSeeds = [
+    ...collectPersonSeeds(rendered, profile, null, strongPersonAnchor),
+    ...presentationCandidates(rendered),
+    ...collectContextualNameCandidates(rendered, profile, { includeNegation: true }),
+    ...collectNestedMarkdownPersonCandidates(rendered, profile)
+  ];
+  const intactPersonKeys = new Set(intactPersonSeeds.map((seed) => key(seed.value)));
+  const residualPersonSeeds = [...intactPersonSeeds];
+  const personDiscoveryText = clean.replace(/^([ \t]*)[–—](?=[ \t])/gmu, '$1-');
+  for (const seed of [...collectPersonSeeds(personDiscoveryText, profile, null, strongPersonAnchor),
+    ...presentationCandidates(personDiscoveryText),
+    ...collectContextualNameCandidates(personDiscoveryText, profile, { includeNegation: true }),
+    ...collectNestedMarkdownPersonCandidates(personDiscoveryText, profile)]) {
+    if (intactPersonKeys.has(key(seed.value))) continue;
+    // Do not waive a candidate based on a negation or an apparent disclaimer:
+    // those clauses can themselves contain names. Ambiguity must stop release.
+    residualPersonSeeds.push(seed);
+  }
+  for (const seed of residualPersonSeeds) {
     const occurrences=findLiteralSpans(clean,seed.value,'','PERSON',PRIORITY.PERSON)
       .filter((span) => !insideCredentialValue(span.start, span.end));
     if (!occurrences.length) continue;
@@ -753,7 +844,19 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
       inCredentialContext(clean, span.start, span.end, credentialRanges)
     ) && !['label', 'honorific', 'credential_holder'].includes(seed.confidence);
     if(issuerOnly || certificationOnly) continue;
-    if (!out.some((finding) => finding.type === 'PERSON_CANDIDATE' && key(finding.text) === key(seed.value))) {
+    // An explicit person field/holder/honorific is not an ambiguous structural
+    // guess. Neither it, a sensitive table value, nor known literal evidence
+    // below can be waived by the residual-person reviewer.
+    const reviewable = !['label', 'honorific', 'credential_holder'].includes(seed.confidence);
+    const remaining = reviewable ? occurrences.filter((span) => !reviewedRanges.some((range) =>
+      range.start === span.start && range.end === span.end)) : occurrences;
+    if (options.includePersonCandidateSpans === true && reviewable) {
+      for (const span of remaining) {
+        if (!out.some((finding) => finding.type === 'PERSON_CANDIDATE' && finding.start === span.start && finding.end === span.end)) {
+          out.push({ type: 'PERSON_CANDIDATE', text: span.text, start: span.start, end: span.end });
+        }
+      }
+    } else if (remaining.length && !out.some((finding) => finding.type === 'PERSON_CANDIDATE' && key(finding.text) === key(seed.value))) {
       out.push({ type: 'PERSON_CANDIDATE', text: seed.value });
     }
   }

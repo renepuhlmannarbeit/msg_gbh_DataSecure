@@ -108,6 +108,7 @@ function defaultDependencies() {
   } = require('../gateway/batch');
   const { cleanupLocalData } = require('../gateway/retention');
   const { initializeProduct } = require('../core/product-bootstrap');
+  const { assertRootSeparation } = require('../gateway/root-boundary');
   const { verifyBundledRuntime, refuseStartup } = require('../gateway/startup-guard');
   const { migrateLegacyAuditReceipts } = require('../gateway/audit');
   const { cleanupCompanionJobs } = require('../companion/retention');
@@ -126,10 +127,14 @@ function defaultDependencies() {
     continueStandaloneBatch,
     initializeProduct() {
       if (!standaloneStartup) {
+        // Even optional history can touch internal files; reject conflicting
+        // roots before that first access, then recheck in the shared bootstrap.
+        assertRootSeparation();
         // Capture existing summaries and original export destinations before
         // startup retention retires their source journals.
         try { runHistory.history(); } catch { /* optional history is repairable */ }
         const startup = initializeProduct({
+          assertRootSeparation,
           verifyBundledRuntime,
           // Unlike Cowork's temporary plugin projection, the Standalone package
           // is the durable runtime. Copying the 87 MiB interpreter on every new

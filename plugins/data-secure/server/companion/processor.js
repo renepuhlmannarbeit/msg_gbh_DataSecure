@@ -69,7 +69,7 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
             .filter((item) => item.decision === 'redact')
             .map((item) => {
               const candidate = byId.get(item.ambiguity_id);
-              if (candidate.type !== 'person_prose_ambiguous') {
+              if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate.type)) {
                 return { start: candidate.anonymized_start, end: candidate.anonymized_end };
               }
               if (typeof input.replacementForAmbiguity !== 'function') {
@@ -81,7 +81,9 @@ async function processCompanionJob(jobId, sourcePath, profile, options = {}) {
                 replacement: input.replacementForAmbiguity(candidate)
               };
             });
-          const text = applyManualRedactions(input.anonymized_text, [...decision.redactions, ...ambiguityRedactions]);
+          const redactions = [...decision.redactions, ...ambiguityRedactions];
+          const text = applyManualRedactions(input.anonymized_text, redactions);
+          input.confirmPersonReview?.(decision.decisions, redactions, text);
           approvedContentSha256 = textSha256(text);
           reviewDecision = 'reviewed';
           transitionJob(jobId, 'Reviewed', { human_action: localAction(approvedContentSha256) });

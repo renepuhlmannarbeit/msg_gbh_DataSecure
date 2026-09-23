@@ -54,7 +54,7 @@
             <option value="neutral" selected>Neutrale Dateinamen (empfohlen)</option>
             <option value="source-with-suffix">Originalname mit „-anonymisiert“</option>
           </select>
-          <p id="output-naming-help" class="mode-help">Empfohlen: Neutrale Namen wie „Dokument-001-anonymisiert.md“ vermeiden personenbezogene Angaben im Ergebnisnamen. Die Zuordnungsdatei verbindet Quelle und Ergebnis.</p>
+          <p id="output-naming-help" class="mode-help">Neutrale Dateinamen schützen nicht den ganzen Ordner: Unterordnernamen bleiben unverändert und die Zuordnungsdatei enthält Originalnamen. Beides vor einer Weitergabe prüfen.</p>
         </div>
         <div id="drop-zone" class="drop-zone" role="region" aria-label="Dateiaufnahme" aria-disabled="true">
           <strong>Dateien oder einen Ordner hierher ziehen</strong>
@@ -81,6 +81,7 @@
       <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" tabindex="0" hidden>
         <h2>Deine letzten Läufe</h2>
         <p class="section-intro">Ergebnisordner gehören immer zum jeweiligen Lauf. Eine Zuordnung gibt es nur für anonymisierte Ergebnisse. Die Übersicht bleibt auf diesem Gerät.</p>
+        <p id="result-sharing-notice" class="mode-help">Vor einer Weitergabe: Nur die geprüften Markdown-Ergebnisse auswählen, nicht pauschal den ganzen Laufordner. Auch bei neutralen Dateinamen können Unterordnernamen und die Zuordnungsdatei Originalangaben enthalten. Reine Markdown-Konvertierung anonymisiert keine Inhalte.</p>
         <p id="history-feedback" class="mode-help" role="status">Der Verlauf wird beim Öffnen geladen.</p>
         <div class="table-scroll" tabindex="0" role="region" aria-label="Letzte 20 Läufe">
           <table id="history-table" hidden>

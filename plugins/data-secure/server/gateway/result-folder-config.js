@@ -6,6 +6,7 @@ const fs = require('fs');
 const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
+const { assertRootSeparation, reserveRootSeparation } = require('./root-boundary');
 
 const CONFIG_NAME = 'result-root.json';
 const SCHEMA = 'datasecure-result-root/2';
@@ -21,6 +22,7 @@ function sameIdentity(left, right) {
     typeof left[key] === 'string' && left[key] === right[key]);
 }
 function inspectRoot(root) {
+  if (typeof root !== 'string' || !root.trim() || !path.isAbsolute(root)) throw new Error('RESULT_ROOT_UNSAFE');
   const selected = path.resolve(String(root || ''));
   if (!path.isAbsolute(selected)) throw new Error('RESULT_ROOT_UNSAFE');
   const named = fs.lstatSync(selected);
@@ -63,6 +65,7 @@ function readRecord() {
   } catch { return null; }
 }
 function readConfiguredResultRoot() {
+  assertRootSeparation();
   const environment = String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim();
   if (environment) {
     try { return inspectRoot(environment).root; } catch { return ''; }
@@ -126,6 +129,8 @@ function visibleResultTreeOverlaps(target) {
 }
 function saveConfiguredResultRoot(root) {
   const selected = inspectRoot(root);
+  assertRootSeparation({ resultRoot: selected.root });
+  reserveRootSeparation({ resultRoot: selected.root });
   const directory = ensureConfigDirectory();
   const target = configPath();
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.${Date.now()}.tmp`);
@@ -137,6 +142,7 @@ function saveConfiguredResultRoot(root) {
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
 }
 function consumeConfiguredResultNotices() {
+  assertRootSeparation();
   if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) {
     const root = readConfiguredResultRoot();
     return { sync: isCommonSyncFolder(root), network: isNetworkResultFolder(root) };
@@ -155,6 +161,8 @@ function consumeConfiguredResultNotices() {
   return notices;
 }
 function clearConfiguredResultRoot() {
+  assertRootSeparation({ resetResult: true });
+  reserveRootSeparation({ resetResult: true });
   try { fs.unlinkSync(configPath()); }
   catch (error) { if (error?.code !== 'ENOENT') throw error; }
 }
@@ -162,6 +170,7 @@ function resultOutputDirectory(options = {}) {
   const root = options.root || readConfiguredResultRoot();
   if (!root) return '';
   const checked = inspectRoot(root);
+  assertRootSeparation({ resultRoot: checked.root });
   const output = path.join(checked.root, 'DataSecure-Output');
   if (!fs.existsSync(output)) fs.mkdirSync(output, { mode: 0o700 });
   const stat = fs.lstatSync(output);

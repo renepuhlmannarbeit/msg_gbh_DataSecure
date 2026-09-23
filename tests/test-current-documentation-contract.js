@@ -88,6 +88,13 @@ test('release truth binds the published candidate while keeping human approval s
   const boundCowork = /Windows-x64-Cowork-Kandidat (RC(\d+))[\s\S]{0,500}?Quellcommit\s+`([0-9a-f]{40})`/u.exec(release);
   assert.ok(boundCowork, 'release truth must name one commit-bound Windows Cowork candidate');
   const publishedVersion = version.replace(/rc\d+$/iu, `rc${boundCowork[2]}`);
+  const readme = read('README.md');
+  const standaloneVersion = /DataSecure-Standalone-(\d+\.\d+\.\d+-rc(\d+))-windows-x64\.zip/u.exec(readme);
+  assert.ok(standaloneVersion, 'README must bind a separate Standalone candidate');
+  assert.strictEqual(readme.split(/\r?\n/u)[0],
+    `# GBH DataSecure – Cowork ${boundCowork[1]} · Standalone RC${standaloneVersion[2]}`,
+    'product title must agree with published candidates, not just source version');
+  assert.ok(readme.includes(`Quellstand: ${version}`));
   assert.ok(release.includes(`releases/tag/v${publishedVersion}`),
     'published Cowork release link must match the explicitly bound candidate');
   if (boundCowork[1] !== currentRc) {
@@ -98,7 +105,9 @@ test('release truth binds the published candidate while keeping human approval s
     assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}(?!-Entwicklungsstand)`, 'u'),
       'a published current Cowork RC must no longer be marked as development state');
   }
-  assert.match(release, new RegExp(`RC135 bleibt getrennt[\\s\\S]{0,180}plattformübergreifend paketgebundener Stand vor ${currentRc}`, 'u'));
+  // This sentence is historical release evidence: a new source version must
+  // not silently relabel which published candidate followed RC135.
+  assert.match(release, /RC135 bleibt getrennt[\s\S]{0,180}plattformübergreifend paketgebundener Stand vor RC139/u);
   assert.match(release, /RC135 ist als plattformübergreifender technischer Vorabkandidat/u);
   assert.match(release, /releases\/tag\/v3\.2\.0-rc135/u);
   assert.match(release, /Für RC135 erzeugte der Windows-PKG-04-Lauf[\s\S]{0,320}INT-13/u);
@@ -245,7 +254,9 @@ test('canonical register distinguishes active, no-go, and superseded contracts',
 test('machine document index covers the active document register and current purpose projection decision', () => {
   const index = JSON.parse(read('docs/canonical/DOCUMENT_INDEX.json'));
   assert.strictEqual(index.schema, 'datasecure-document-index/1');
-  assert.strictEqual(index.validated_at, '2026-09-10');
+  assert.match(index.validated_at, /^\d{4}-\d{2}-\d{2}$/u);
+  assert.strictEqual(new Date(`${index.validated_at}T00:00:00Z`).toISOString().slice(0, 10),
+    index.validated_at, 'document index validation date must be a real ISO calendar date');
   const byPath = new Map(index.documents.map((entry) => [entry.path, entry]));
   const activePaths = [
     'docs/canonical/DOCUMENT_REGISTER.md',

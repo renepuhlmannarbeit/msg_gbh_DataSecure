@@ -9,6 +9,7 @@ const {
   parseDocumentBuffer
 } = require('../plugins/data-secure/server/document-parser');
 const pii = require('../plugins/data-secure/server/pii-engine');
+const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 
 const { test, done, assert } = createSuite('CSV source contract');
 
@@ -63,6 +64,32 @@ test('PII in headers and cells remains visible to the normal de-identification p
   assertAbsent(anonymized, 'Max Mustermann', 'CSV name');
   assertAbsent(anonymized, 'max@example.de', 'CSV email');
   assertPresent(anonymized, '# Tabelleninhalt', 'table heading');
+});
+
+test('embedded JSON scalars follow the real CSV conversion and gateway privacy path without losing metadata', () => {
+  const payload = {
+    email: 'alex.beispiel@example.org', ipv4: '192.0.2.42', ipv6: '2001:db8::42',
+    schema: 'network_event_v1', protocol: 'HTTPS', technology: 'Kubernetes',
+    standard: 'ISO 27001', attempts: 3, success: true, note: null
+  };
+  const json = JSON.stringify(payload);
+  const source = `Datensatz,Payload\r\nevent-001,"${json.replace(/"/gu, '""')}"\r\n`;
+  const bytes = Buffer.from(source, 'utf8');
+  const parsed = parseDocumentBuffer(bytes, '.csv');
+  const table = '# Tabelleninhalt\n\n| Datensatz | Payload |\n| --- | --- |\n';
+  // Conversion alone preserves the original scalar values; JSON remains cell
+  // content and does not introduce a new supported input format or parser.
+  assert.strictEqual(parsed.markdown, `${table}| event-001 | ${json} |`);
+  const redacted = JSON.stringify({ ...payload, email: '[EMAIL_REDACTED]',
+    ipv4: '[IP_REDACTED]', ipv6: '[IP_REDACTED]' });
+  for (const profile of ['general', 'personnel_profile']) {
+    const result = anonymizeMarkdown(parsed.markdown, profile);
+    assert.strictEqual(result.text, `${table}| event-001 | ${redacted} |`,
+      'only the identifiers change; JSON keys, scalar types and professional content stay exact');
+  }
+  assert.strictEqual(bytes.toString('utf8'), source, 'the source buffer stays unchanged');
+  assert.strictEqual(parsed.markdown, `${table}| event-001 | ${json} |`,
+    'anonymization does not mutate the pure-conversion result');
 });
 
 test('formula-looking CSV text is inert but still passes through de-identification', () => {

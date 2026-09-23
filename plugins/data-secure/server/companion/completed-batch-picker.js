@@ -9,7 +9,7 @@ const PICKER_TITLE = 'DataSecure – anonymisierte Ergebnisse auswerten';
 const PICKER_PROMPT = 'Wähle einen lokal abgeschlossenen Stapel (neueste zuerst).';
 
 function validateCandidates(candidates) {
-  if (!Array.isArray(candidates) || candidates.length < 2 || candidates.length > 50) {
+  if (!Array.isArray(candidates) || candidates.length < 1 || candidates.length > 50) {
     throw new SafeError('Die lokale Auswahl abgeschlossener Stapel ist ungültig.');
   }
   return candidates.map((candidate, index) => {
@@ -39,6 +39,9 @@ function candidateLabel(candidate) {
 
 function pickerCommands(candidates, options = {}) {
   const entries = validateCandidates(candidates);
+  const prompt = options.scope === 'reuse_completed'
+    ? 'Stapel zur erneuten Übergabe an Claude wählen (neueste zuerst).'
+    : PICKER_PROMPT;
   const labels = entries.map(candidateLabel);
   const platform = options.platform || process.platform;
   if (platform === 'win32') {
@@ -52,7 +55,7 @@ function pickerCommands(candidates, options = {}) {
       "$form.StartPosition = 'CenterScreen'", '$form.ClientSize = New-Object System.Drawing.Size(560,310)',
       '$form.FormBorderStyle = "FixedDialog"', '$form.MaximizeBox = $false', '$form.MinimizeBox = $false',
       '$info = New-Object System.Windows.Forms.Label',
-      `$info.Text = '${quote(PICKER_PROMPT)} Dateinamen und Inhalte werden nicht angezeigt.'`,
+      `$info.Text = '${quote(prompt)} Dateinamen und Inhalte werden nicht angezeigt.'`,
       '$info.Location = New-Object System.Drawing.Point(20,18)', '$info.Size = New-Object System.Drawing.Size(520,42)',
       '$list = New-Object System.Windows.Forms.ListBox', '$list.Location = New-Object System.Drawing.Point(20,68)', '$list.Size = New-Object System.Drawing.Size(520,165)',
       items, '$list.SelectedIndex = 0',
@@ -68,7 +71,7 @@ function pickerCommands(candidates, options = {}) {
     const choices = labels.map((label) => `"${escape(label)}"`).join(', ');
     const script = [
       `set choices to {${choices}}`,
-      `set answer to choose from list choices with title "${escape(PICKER_TITLE)}" with prompt "${escape(PICKER_PROMPT)}" OK button name "Auswertung starten" cancel button name "Abbrechen" without multiple selections allowed`,
+      `set answer to choose from list choices with title "${escape(PICKER_TITLE)}" with prompt "${escape(prompt)}" OK button name "Auswertung starten" cancel button name "Abbrechen" without multiple selections allowed`,
       `if answer is false then return "${PICKER_CANCELLED}"`,
       'set chosen to item 1 of answer',
       'repeat with i from 1 to count of choices', 'if item i of choices is chosen then return i as text', 'end repeat'
@@ -78,8 +81,8 @@ function pickerCommands(candidates, options = {}) {
   if (platform === 'linux') {
     const rows = entries.flatMap((candidate) => [String(candidate.ordinal), candidateLabel(candidate)]);
     return [
-      { command: 'zenity', args: ['--list', `--title=${PICKER_TITLE}`, `--text=${PICKER_PROMPT}`, '--column=Nr.', '--column=Stapel', '--hide-column=1', '--print-column=1', '--width=620', '--height=360', ...rows] },
-      { command: 'kdialog', args: ['--menu', PICKER_PROMPT, ...rows] }
+      { command: 'zenity', args: ['--list', `--title=${PICKER_TITLE}`, `--text=${prompt}`, '--column=Nr.', '--column=Stapel', '--hide-column=1', '--print-column=1', '--width=620', '--height=360', ...rows] },
+      { command: 'kdialog', args: ['--menu', prompt, ...rows] }
     ];
   }
   throw new SafeError('Für dieses Betriebssystem ist keine lokale Stapelauswahl verfügbar.');

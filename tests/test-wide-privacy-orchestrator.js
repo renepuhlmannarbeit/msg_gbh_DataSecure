@@ -70,18 +70,26 @@ function privateEntry(name, text = 'opaque binary source') {
   return { name, private_artifact_plain: true, private_bytes: Buffer.from(text) };
 }
 
+// Use the real in-memory extractor and preserve its semantic option. Worker
+// lifecycle options (signal/timeout) do not belong to the extractor contract.
+async function directConversion(input, extension, { omitDocxHeaderFooter } = {}) {
+  return extractMarkdownBuffer(input, extension, { omitDocxHeaderFooter });
+}
+
 testAsync('wide DOCX XLSX and PPTX retain an explicit source header for privacy detection', async () => {
   for (const [extension, bytes] of [['.docx', privacyTableDocx()], ['.xlsx', privacyTableXlsx()], ['.pptx', privacyTablePptx()]]) {
     const raw = extractMarkdownBuffer(bytes, extension);
     assert.match(raw.markdown, /\| Spalte 1 \| Spalte 2 \|/u, `${extension} conversion remains content preserving`);
-    const extracted = await extractWideSourceForPrivacy(bytes, extension, {
-      async convertBuffer(input, type) { return extractMarkdownBuffer(input, type); }
-    });
+    const extracted = await extractWideSourceForPrivacy(bytes, extension, { convertBuffer: directConversion });
     assert.match(extracted.markdown, /\| Name \| Arbeitgeber \|\n\| --- \| --- \|/u, extension);
     assert.doesNotMatch(extracted.markdown, /\| Spalte 1 \| Spalte 2 \|/u, extension);
+    if (extension === '.docx') {
+      assert.match(raw.markdown, /HEADER PRIVATE/u);
+      assert.doesNotMatch(extracted.markdown, /HEADER PRIVATE|FOOTER PRIVATE/u);
+    }
     const entry = { name: `privacy-table${extension}`, private_artifact_plain: true, private_bytes: Buffer.from(bytes) };
     const result = await anonymizeNext('personnel_profile', { productChannel: 'standalone', inputQueue: [entry],
-      async convertBuffer(input, type) { return extractMarkdownBuffer(input, type); } });
+      convertBuffer: directConversion });
     const released = readOutput(result.package_id, result.read_capability).text;
     assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH/u, extension);
     assert.match(released, /\[PERSON_001\]|\[UNTERNEHMEN_001\]/u, extension);
@@ -173,14 +181,13 @@ testAsync('Standalone DOCX with non-rendered custom XML anonymizes extracted Mar
   ]);
   const entry = { name: 'profile.docx', private_artifact_plain: true, private_bytes: Buffer.from(docx) };
   const result = await anonymizeNext('personnel_profile', {
-    productChannel: 'standalone', inputQueue: [entry],
-    async convertBuffer(input, extension) { return extractMarkdownBuffer(input, extension); }
+    productChannel: 'standalone', inputQueue: [entry], convertBuffer: directConversion
   });
   assert.equal(result.document_result.grade, 'complete');
   assert.equal(result.privacy_scope, 'extracted-markdown-only');
   assert.deepEqual(result.source_extraction_coverage, {
     status: 'incomplete',
-    reason_codes: ['SOURCE_COVERAGE_UNVERIFIED']
+    reason_codes: ['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY', 'SOURCE_COVERAGE_UNVERIFIED']
   });
   const released = readOutput(result.package_id, result.read_capability).text;
   assert.match(released, /\[PERSON_001\]/u);

@@ -2,6 +2,7 @@
 const fs=require('fs');const path=require('path');const crypto=require('crypto');const {spawn}=require('child_process');
 const {dataRoot}=require('../runtime');
 const {readConfiguredPrivacyRoot}=require('./privacy-config');
+const {assertRootSeparation,reserveRootSeparation}=require('./root-boundary');
 const {VERSION}=require('../version');
 const {uiProcessEnvironment}=require('../companion/ui-process-policy');
 const {RESOURCE_LIMITS,assertSourceSize}=require('../resource-limits');
@@ -184,6 +185,9 @@ function samePrivateDirectory(target,expected){
 }
 function roots(){
   const root=privacyRoot();const gatewayDataRoot=path.resolve(dataRoot());const sessionKey=`${root}\0${gatewayDataRoot}`;
+  // Also recheck cached roots: the other configuration or an environment
+  // override may have changed without changing this private session key.
+  assertRootSeparation();
   // Directory creation and full ancestor/reparse validation are intentionally
   // paid once per process/configuration. Every later use still verifies the
   // inode of every returned directory. A removed, replaced or redirected
@@ -201,6 +205,9 @@ function roots(){
   const after=storageStatus(root);if(!after.safe)throw new Error('PRIVACY_STORAGE_UNSAFE');
   const gatewayRoot=ensurePrivateDirectory(path.dirname(gatewayDataRoot),path.basename(gatewayDataRoot));
   const r=Object.freeze({root,output:ensurePrivateDirectory(root,'Output'),processed:ensurePrivateDirectory(root,'Processed'),review:ensurePrivateDirectory(root,'Needs Visual Review'),exports:ensurePrivateDirectory(root,'DataSecure-Export'),audit:ensurePrivateDirectory(gatewayRoot,'audit'),jobs:ensurePrivateDirectory(gatewayRoot,'jobs'),migrations:ensurePrivateDirectory(gatewayRoot,'migrations')});
+  // Revalidate the now-existing prefixes and prime their verified parent
+  // identity before serving the cached fast path.
+  reserveRootSeparation();
   const identities=Object.freeze(Object.fromEntries(Object.entries(r).map(([name,target])=>[name,privateDirectoryIdentity(target)])));
   verifiedRootsSession=Object.freeze({key:sessionKey,roots:r,identities});
   return r;

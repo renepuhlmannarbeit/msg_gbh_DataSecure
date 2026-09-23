@@ -52,7 +52,8 @@ async function main() {
     let resets = 0;
     const handoff = createLocalOnlyHandoff({
       completedLocalOnlyCandidates: () => [{token: 'a'.repeat(64), released: 1, stopped: 0}],
-      listBatchResults: () => ({results: [{package_id: 'synthetic', read_capability: 'c'.repeat(43)}], next_cursor: null}),
+      listBatchResults: () => ({results: [{package_id: 'synthetic', read_capability: 'c'.repeat(43),
+        read_capability_expires_at: new Date(Date.now() + 60_000).toISOString()}], next_cursor: null}),
       readOutputs: () => ({documents: [{package_id: 'synthetic', text: 'verified', has_more: unfinished, next_offset: 8}]}),
       acknowledgeDeliveredPackages: () => {acknowledgements++;}
     });

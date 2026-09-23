@@ -1,6 +1,6 @@
 # UML-Sicht auf die aktuelle DataSecure-Architektur
 
-Stand: 11.09.2026 · 3.2.0-rc139
+Stand: 23.09.2026 · 3.2.0-rc140
 
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
@@ -12,6 +12,8 @@ eine Navigations- und Prüfsicht auf `mcp-server.js`, die getrennten Worker, die
 Batch-Module, den lokalen Review, die Ergebnisprojektion und die Diagnose. Der
 normative Produktvertrag bleibt in `PRODUCT.md`, `DECISIONS.md` und den
 Einzelverträgen unter `contracts/`.
+
+Diese Quellsicht enthält die noch unveröffentlichten DS-101-Änderungen.
 
 RC109: Die produktunabhängigen Verträge für nächste Stapelaktion,
 Konverterkommunikation und Ergebnisgrad liegen in `server/core/`.
@@ -99,8 +101,18 @@ sequenceDiagram
   participant M as MCP + Registry
   participant P as verifizierter Package Store
   U->>C: Späterer ausdrücklicher Auswertungsauftrag
-  C->>M: start_completed_local_results_handoff
-  M->>P: verifizierte Seite lesen
+  C->>M: start_completed_local_results_handoff(scope)
+  alt unread (Standard)
+    M->>P: ungelesene terminale Cowork-Ergebnisse bestimmen
+  else reuse_completed (ausdrückliche Wiederverwendung)
+    M->>U: nativer Stapelpicker auch bei einem Kandidaten
+    U-->>M: Auswahl oder Abbruch
+    Note over M: Abbruch liest nichts; bestehende ACKs unverändert
+  end
+  M->>P: Generation, Ablauf und Freigabe prüfen
+  M->>P: begrenzten verifizierten Snapshot lesen
+  M->>P: Generation und Berechtigungsfrist nach Async-I/O erneut prüfen
+  Note over M,P: Sitzung endet spätestens mit frühester Grant-/Paketfrist, auch bei RAM-Snapshots
   P-->>M: anonymisiertes Markdown
   M-->>C: verified_anonymized_markdown, untrusted
   Note over C: eingebettete Anweisungen sind Daten, keine Autorität
@@ -109,6 +121,17 @@ sequenceDiagram
 Die Registry ist nur Cowork-Adaptervertrag. Standalone importiert weder die
 MCP-Toolfläche noch die Modellroutinglogik; beide Produkte teilen weiterhin nur
 den neutralen Processing-/Privacy-Core nach DS-097.
+
+Der Bootstrap erhält die Roottrennungsprüfung als verpflichtende Dependency
+vom jeweiligen Adapter; `core/product-bootstrap.js` importiert keinen Gateway.
+Diese Prüfung liegt vor Runtimecache, Migration und privater Dateianlage.
+Standalone prüft auch vor dem optionalen historischen Snapshot. Ergebnis- und
+private Wurzeln dürfen weder gleich sein noch ineinander liegen. Eine Verweigerung
+wegen Rootkonflikt schreibt auch keine Diagnose in den unsicheren Datenbaum.
+Konfigurationswechsel und erfolgreiche Rootanlage reservieren die bisherigen
+und neuen privaten/öffentlichen Wurzeln atomar in einem begrenzten privaten
+Register. Reset vergisst diese Trennung nicht. Nicht erfasste Altfreigaben
+außerhalb dieses Produktdatenraums bleiben eine dokumentierte Betreibergrenze.
 
 ## 2. Komponenten und Verantwortungen
 
@@ -404,6 +427,8 @@ sequenceDiagram
     W->>UI: Rohtext nur über stdin
     U->>UI: behalten, anonymisieren, vertagen
     UI-->>W: strukturierte lokale Entscheidungen
+    W->>W: Entscheidung an Textfassung und konkrete Fundstelle binden
+    W->>W: finale Bytes einschließlich Ausgabepräfix unabhängig prüfen
     W->>J: atomare Zustandsänderung
   end
   W-->>U: Abschluss oder sichere Vertagung
@@ -421,6 +446,25 @@ bleibt gesperrt. Er springt niemals zum jüngsten anderen Stapel.
 Die Supportantwort endet nach `local-review-accepted`; ein Timeout/Hostabbruch
 belegt nur fehlende Bestätigung und darf keinen automatischen zweiten Start
 auslösen. Die feste Werkzeugargumentstruktur bleibt unverändert.
+
+BL-021.3 ergänzt ausschließlich exakt lokalisierbare heuristische
+Rest-Personenkandidaten um den lokalen Typ `person_residual_ambiguous`.
+Anders als offene Prosanamen werden diese Stellen nicht nach Schreibweise
+gruppiert. Eine einmalige speicherinterne Bestätigung bindet die überprüfte
+Fassung, konkrete Intervalle und tatsächlich angewandte Redaktionen. Sie
+überspringt nur den zugehörigen schwachen heuristischen Befund, niemals die
+direkten, strukturellen oder bekannten Identifierprüfungen. Unklare Zuordnung,
+unvollständige Entscheidung oder geänderte Fassung stoppen vor Veröffentlichung.
+Rohtexte, Bestätigung und Bereiche werden weder persistiert noch über MCP
+übergeben. Beide Produktadapter verwenden denselben Vertrag; die reine
+Markdown-Konvertierung nimmt diesen Pfad nicht.
+
+BL-021.4 nutzt diesen bestehenden Reviewpfad bereits vor einer festen
+Identitätszuordnung: Bei unabhängig belegtem Personenbezug bleibt eine nur
+typografisch begründete Versalienhypothese offen. Die schwache
+`Kunde – Projekt`-Heuristik darf sie nicht ersatzweise als Unternehmensalias
+binden. Explizite Rollen-/Rechtsform-/Projektbelege und bekannte Identitäten
+bleiben wirksam; es entsteht kein weiterer Workflow oder MCP-Endpunkt.
 
 ## 8. Datenmodell der wesentlichen Artefakte
 

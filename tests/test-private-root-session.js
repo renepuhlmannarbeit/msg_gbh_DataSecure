@@ -23,7 +23,10 @@ test('cached roots avoid repeated ancestor walks but reject a same-path replacem
     fs.lstatSync = (...args) => { lstatCalls += 1; return originalLstat(...args); };
     try { assert.strictEqual(common.roots(), first); }
     finally { fs.lstatSync = originalLstat; }
-    assert.ok(lstatCalls <= Object.keys(first).length + 1,
+    // In addition to the returned directories, recheck config metadata and
+    // canonical private roots. The security gate must notice configuration
+    // changes, but its cached path must not repeat whole ancestor walks.
+    assert.ok(lstatCalls <= Object.keys(first).length + 7,
       `cached verification unexpectedly walked ancestors (${lstatCalls} lstat calls)`);
 
     const disposable = path.join(first.output, 'Dokument_20260906_120000_anonymisiert');

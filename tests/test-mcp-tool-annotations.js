@@ -18,8 +18,10 @@ try {
     cwd: root,
     env: {
       ...process.env,
-      EU_PRIVACY_ROOT: privacyRoot,
-      EU_PRIVACY_RESULT_ROOT: privacyRoot,
+      // Exercise the real bootstrap with the same separated roots required
+      // in production; this annotation test must not bypass storage safety.
+      EU_PRIVACY_ROOT: path.join(privacyRoot, 'private'),
+      EU_PRIVACY_RESULT_ROOT: path.join(privacyRoot, 'results'),
       EU_PRIVACY_DATA_ROOT: path.join(privacyRoot, 'data'),
       LOCALAPPDATA: privacyRoot,
       EU_PRIVACY_SUPPORT_MODE: '1'

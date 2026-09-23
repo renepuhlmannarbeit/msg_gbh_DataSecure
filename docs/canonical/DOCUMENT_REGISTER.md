@@ -1,6 +1,6 @@
 # Kanonisches Dokumentenregister
 
-Stand: 09.09.2026
+Stand: 23.09.2026
 
 ## Normativ aktuell
 
@@ -26,6 +26,7 @@ Register. `DOCUMENT_INDEX.json` führt diese Ablösung und DS-085/086 mit.
 | `OPEN_SOURCE_COMPONENTS.md` | verbindliches Wiederverwendungsregister |
 | `DOCUMENT_INDEX.json` | maschinenlesbarer Status, Geltungsbereich, Eigentümer, Versionsregel und Ablösung aller führenden Dokumentklassen |
 | `../archive/INDEX.md` | stabile `ARCH-*`-Kennungen und Fundstellen historischer Dokumentgruppen |
+| `../acceptance/CLAUDE_CODE_PILOT/README.md`, `contract.json` | BL-041.20: eigener 14-Fälle-Hostplan und kostenfreier lokaler Vorcheck; keine Hostfreigabe |
 
 ### Vertragsstatus unter `contracts/`
 
@@ -69,6 +70,7 @@ Abnahme.
 | `docs/FORMAT_COVERAGE_MATRIX.md` | belegter und geplanter Formatumfang; keine Freigabe ohne zugehörige Evidence |
 | `docs/DETECTOR_BENCHMARK.md` | synthetische, reproduzierbare Detektorbaseline; keine Aussage universeller Genauigkeit |
 | `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | zeitgebundene Herstelleraufnahme; aktuelle Produktgrenze steht in DS-078 und der Hostmatrix |
+| `docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md` | zeitgebundener Mehrdimensionenreview beider Produkte und Claude-Code-Hostoption; Befunde PH-20260923, offene Arbeit ausschließlich im Backlog |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
 

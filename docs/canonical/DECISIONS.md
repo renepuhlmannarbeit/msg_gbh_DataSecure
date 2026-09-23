@@ -1503,6 +1503,19 @@ wegen Großschreibung als Person behandelt. Unentscheidbare Erweiterungen werden
 nicht geraten. DS-096 schließt F7 unter BL-021.1 und präzisiert DS-012, DS-049,
 DS-068 und DS-084.
 
+Präzisierung vom 23.09.2026 (BL-021.3): Ausschließlich heuristische, exakt
+lokalisierbare Rest-Personenkandidaten dürfen denselben lokalen Review nutzen.
+Hier gilt ausdrücklich **eine Entscheidung pro Fundstelle**, nicht die obige
+namensweite Prosa-Gruppierung. Eine Hinweiszeile kann denselben Wortlaut wie ein
+Personenfeld besitzen. Zustimmung ist an unveränderte Textfassung und exakte
+Position gebunden; bei unklarer Herkunft oder nach Textänderung wird sie nicht
+übernommen. Manuelle Redaktionsverschiebungen und Ausgabepräfixe werden bei
+der Bindung berücksichtigt. Direkte Identifier, bekannte Originalwerte,
+Personenfelder, Credentials und Strukturfehler bleiben unabhängig gesperrt.
+Ohne vollständige gültige lokale Entscheidung erfolgt keine Veröffentlichung.
+Es entsteht keine globale oder persistente Begriffsfreigabe. Reine
+Markdown-Konvertierung bleibt von dieser Datenschutzprüfung unberührt.
+
 ## DS-097 – Zwei Produktadapter und drei Plattformadapter auf einem gemeinsamen Core
 
 Am 10.09.2026 nach Architektur-, Runtime-, UX- und Recovery-Gegenreview
@@ -1615,3 +1628,31 @@ Quelle. Beliebige versteckte, Backup- oder nicht unterstützte Dateien werden
 nicht pauschal ignoriert, weil sie fachliche Quelldaten enthalten können; für
 sie bleibt die Aufnahme fail-closed. DS-100 präzisiert DS-076,
 DS-082, DS-086, DS-092 und DS-097 und wird unter BL-010.35 geführt.
+
+## DS-101 – Ausdrückliche Wiederverwendung abgeschlossener Claude-Ergebnisse
+
+Am 23.09.2026 durch den Product Owner bestätigt (BL-041.21): Bereits vollständig
+an Claude übergebene und quittierte Cowork-Stapel dürfen in weiteren Aufgaben erneut verwendet werden,
+ohne erneute Anonymisierung oder erneuten Originalzugriff. Dies ist keine
+automatische Dokumentbibliothek und keine Erweiterung auf Standalone-Stapel.
+
+`start_completed_local_results_handoff` behält `scope: unread` als Standard.
+Nur ein ausdrücklicher Wiederverwendungsauftrag erlaubt `scope: reuse_completed`.
+Dieser Weg öffnet immer die lokale Stapelauswahl, auch bei einem einzigen
+Kandidaten. Abbrechen liest nichts; eine leere Warteschlange schaltet nie
+automatisch auf Wiederverwendung um. Die Auswahl bleibt lokal, ohne Pfade,
+Originalnamen oder Stapelkennungen im Modellkontext.
+
+Jede Seite prüft Produkt, terminale Freigabe, unveränderte Paketgeneration,
+Aufbewahrung und Integrität erneut; nach asynchroner Vorbereitung folgt eine
+zweite Prüfung. Erneut geprüfte, kurzlebige Leserechte ersetzen keine dauerhaften
+Zustellquittungen. Eine noch gültige vorhandene Berechtigung darf wiederverwendet
+werden, verlängert aber ihre ursprüngliche Ablaufzeit nicht. Auch vorbereitete
+RAM-Snapshots dürfen danach keine weiteren Inhalte liefern. Wiederverwendung verändert weder die ungelesene Warteschlange
+noch Terminal-Evidence und erzeugt keine neuen Ergebnisdateien. Abgelaufene,
+manipulierte oder nicht mehr vorhandene Pakete stoppen sicher. Ein erfolgreiches
+Lesen ist weiterhin keine fachliche Kenntnisnahme durch den Anwender.
+
+DS-101 präzisiert DS-069 und DS-099. Umsetzung im aktuellen Quellstand ist nicht
+gleichbedeutend mit Verfügbarkeit in den veröffentlichten RC139-/RC137-Paketen;
+Modellrouting, native Auswahl und neue Paketfreigabe bleiben getrennte Nachweise.

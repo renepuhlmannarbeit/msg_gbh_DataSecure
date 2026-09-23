@@ -15,7 +15,7 @@ function localReviewError(code, message) {
 }
 
 function ambiguityRedaction(input, ambiguity, validateOnly = false) {
-  if (ambiguity?.type !== 'person_prose_ambiguous') {
+  if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(ambiguity?.type)) {
     return { start: ambiguity.anonymized_start, end: ambiguity.anonymized_end };
   }
   if (typeof input.replacementForAmbiguity !== 'function') {
@@ -60,7 +60,10 @@ async function reviewSingleBatchTextLocally(input, state, item, deps = {}) {
       const ambiguity = ambiguityById.get(candidate.ambiguity_id);
       return ambiguityRedaction(input, ambiguity);
     });
-  return { text: applyManualRedactions(input.anonymized_text, [...decision.redactions, ...ambiguityRedactions]) };
+  const redactions = [...decision.redactions, ...ambiguityRedactions];
+  const text = applyManualRedactions(input.anonymized_text, redactions);
+  input.confirmPersonReview?.(decision.decisions, redactions, text);
+  return { text };
 }
 
 function reviewedBatchText(input, decisions, options = {}) {
@@ -69,10 +72,21 @@ function reviewedBatchText(input, decisions, options = {}) {
   }
   const ambiguityById = new Map((input.ambiguities || []).map((candidate) => [candidate.ambiguity_id, candidate]));
   const reviewedDraft = options.reviewedDraft;
+  if (reviewedDraft && reviewedDraft.original_text !== input.original_text) {
+    throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung gehört zu einer anderen Quellfassung. Es wurde nichts freigegeben.');
+  }
   const reviewedById = new Map((reviewedDraft?.ambiguities || []).map((candidate) => [candidate.ambiguity_id, candidate]));
   const activeDecisions = [];
   for (const decision of decisions) {
     if (ambiguityById.has(decision.ambiguity_id)) {
+      if (reviewedDraft) {
+        const current = ambiguityById.get(decision.ambiguity_id);
+        const prior = reviewedById.get(decision.ambiguity_id);
+        if (!prior || prior.type !== current.type || prior.original_start !== current.original_start ||
+            prior.original_end !== current.original_end) {
+          throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung gehört zu einer anderen Fundstelle. Es wurde nichts freigegeben.');
+        }
+      }
       activeDecisions.push(decision);
       continue;
     }
@@ -85,7 +99,7 @@ function reviewedBatchText(input, decisions, options = {}) {
     // the same source, it was explicitly redacted, and the freshly generated
     // text contains the registry's exact bound marker but no raw spelling.
     const prior = reviewedById.get(decision.ambiguity_id);
-    if (!prior || decision.decision !== 'redact' || prior.type !== 'person_prose_ambiguous' ||
+    if (!prior || decision.decision !== 'redact' || !['person_prose_ambiguous', 'person_residual_ambiguous'].includes(prior.type) ||
         prior.replacement_kind !== 'PERSON' || reviewedDraft.original_text !== input.original_text ||
         typeof options.resolvedPersonReplacement !== 'function') {
       throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung ist für diese Datei nicht vollständig. Es wurde nichts freigegeben.');
@@ -110,7 +124,9 @@ function reviewedBatchText(input, decisions, options = {}) {
     }
     return ambiguityRedaction(input, ambiguity, options.validateOnly === true);
   }).filter(Boolean);
-  return { text: applyManualRedactions(input.anonymized_text, redactions) };
+  const text = applyManualRedactions(input.anonymized_text, redactions);
+  if (options.validateOnly !== true) input.confirmPersonReview?.(activeDecisions, redactions, text);
+  return { text };
 }
 
 module.exports = { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText };

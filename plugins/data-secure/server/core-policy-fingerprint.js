@@ -33,6 +33,7 @@ const CORE_POLICY_FILES = Object.freeze([
   'privacy/person-ambiguities.js',
   'privacy/personnel.js',
   'privacy/policy.js',
+  'privacy/residual-person-review.js',
   'privacy/spans.js',
   'privacy/structured.js'
 ]);

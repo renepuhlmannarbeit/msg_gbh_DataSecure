@@ -30,13 +30,43 @@ Claude schließen kann den getrennten Worker weiterlaufen lassen und belegt
 keine Wiederaufnahme. Fehlende Unterbrechung ergibt `BLOCKED`; ein bereits
 abgeschlossener Lauf ist kein Ersatz-PASS für den Fortsetzungsteil.
 
+**Für den neuen, noch zu paketierenden PH-20260923-/DS-101-Kandidaten:**
+
+- N3-05 zusätzlich: Ergebnis-/Privacy-/Datenwurzeln in beiden Richtungen gleich
+  und verschachtelt wählen; auch nach Umkonfiguration/Reset müssen vorher
+  erfasste Wurzeln geschützt bleiben. Nur eigene leere synthetische Testordner
+  verwenden. Es dürfen keine privaten Artefakte im Ergebnisbereich entstehen.
+- Cowork-N3-07/-08 zusätzlich: denselben vollständig übergebenen Stapel in einer
+  neuen Aufgabe ausdrücklich wiederverwenden. Native Auswahl auch bei einem
+  einzigen Kandidaten, kein erneutes Anonymisieren/Originallesen, unveränderte
+  Zustellquittungen. Abbruch, Ablauf, manipulierte Pakete und leere ungelesene
+  Warteschlange dürfen keine automatische Ersatzübergabe auslösen.
+- N3-06 und N4-07 zusätzlich: Härtetest mit französischen Straßen sowie
+  technischen Dashlisten und Namen hinter Pseudonymen; Fachtext darf nicht
+  verschwinden und erwartete Identifikatoren dürfen nicht veröffentlicht werden.
+- N3-06 und N4-02/-07 zusätzlich (BL-021.3/4): Mehrdeutige technische
+  Versalientitel und gleichartig geschriebene echte Namen im vorhandenen lokalen
+  Review prüfen, bevor Titel als Identitäten gebunden oder Ergebnisse freigegeben
+  werden. Es müssen nicht pauschal drei DOCX-Hinweise bestätigt werden. Gleichlautende
+  Restkandidaten einzeln beurteilen; ein bestätigter Hinweis darf weder eine
+  weitere ungeprüfte Stelle noch ein explizites Personenfeld freigeben. Vertagen,
+  Abbrechen und geänderte Quelle prüfen; ohne gültige Entscheidung keine Ausgabe.
+  Auf Windows und macOS alle betroffenen Kontexte sichtbar prüfen. Technische
+  Überschriften zusätzlich auf Überredaktion kontrollieren, nicht nur auf das
+  Vorhandensein der Ergebnisdatei. Tabellen mit Windows-/gemischten Zeilentrennern
+  und wiederholte PDF-/OCR-Überschriften auf genaue Fundstellenzuordnung prüfen.
+
+Diese Zusatzfälle sind keine nachträgliche Änderung der bereits gebundenen
+RC139-/RC137-Paket-Evidence. Den [Claude-Code-Pilot](../CLAUDE_CODE_PILOT/README.md)
+separat aufzeichnen; er ersetzt die Cowork-Fälle nicht.
+
 ## N4 – formale Anwender- und Freigabeabnahme
 
 | ID | Prüfung | PASS-Regel |
 |---|---|---|
 | N4-01 | Einstieg und Aufgabenverständnis | Testperson erkennt beide Standalone-Funktionen beziehungsweise den Cowork-Anonymisierungsweg ohne technische Erklärung. |
 | N4-02 | Einfacher Normalweg | Auswahl, Start, eventuelle Sammelprüfung und Ergebniszugriff sind eindeutig; keine Bestätigungsorgie oder unerwartete Navigation. |
-| N4-03 | Ergebnisverständnis | Konvertierung versus Anonymisierung, Extraktionsgrad, gestoppte Dateien und Zuordnung werden fachlich richtig verstanden. Beim DOCX-Vertrag ist verständlich, dass Kopf-/Fußzeilen nur in der anonymisierten Ausgabe fehlen und dies keine Aussage über PDF-/PPTX-Randbereiche ist. |
+| N4-03 | Ergebnisverständnis | Konvertierung versus Anonymisierung, Extraktionsgrad, gestoppte Dateien und Zuordnung werden fachlich richtig verstanden. Auch bei neutralen Dateinamen erkennt die Testperson, dass erhaltene Unterordnernamen und Zuordnungsdateien Originalangaben enthalten können: kein pauschaler KI-Upload des Laufordners. Beim DOCX-Vertrag ist verständlich, dass Kopf-/Fußzeilen nur in der anonymisierten Ausgabe fehlen und dies keine Aussage über PDF-/PPTX-Randbereiche ist. |
 | N4-04 | Stapel und Historie | Dokumentübergreifende Personen-/Unternehmenskennungen, 20 Verlaufszeilen und laufgebundene Aktionen sind nachvollziehbar. |
 | N4-05 | Fehler und Wiederaufnahme | Abbruch, Fehler, Diagnose und Fortsetzung nennen eine klare nächste Aktion; technische Codes erscheinen nur als Detail. |
 | N4-06 | Accessibility | Vollständig per Tastatur bedienbar; Fokus sichtbar; 200-%-Zoom ohne Funktionsverlust; Narrator beziehungsweise VoiceOver vermittelt Namen, Zustand und Aktionen. |

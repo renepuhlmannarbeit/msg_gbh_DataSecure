@@ -181,6 +181,18 @@ const STREET_ADDRESS_RE = new RegExp(
   'giu'
 );
 
+// Number-first French street components occur in free prose as well as address
+// fields. Require an explicit street type and a bounded proper-name sequence;
+// horizontal whitespace only prevents eating the next table row or paragraph.
+// Deliberately not a broad "number + words" rule (quantities/standards remain).
+const FRENCH_STREET_TYPE = '(?:[Rr][Uu][Ee]|[Aa]venue|AVENUE|[Bb]oulevard|BOULEVARD|[Cc]hemin|CHEMIN|[Ii]mpasse|IMPASSE|[Aa]llée|ALLÉE|[Rr]oute|ROUTE|[Pp]lace|PLACE|[Qq]uai|QUAI)';
+const FRENCH_STREET_WORD = `(?:[dDlL]['’])?[${UPPER}][${NAME_BODY}]{0,60}`;
+const FRENCH_STREET_ADDRESS_RE = new RegExp(
+  `${NB}\\d{1,5}(?:[a-zA-Z]|[ \\t]+(?:bis|ter))?[ \\t]+${FRENCH_STREET_TYPE}` +
+    `(?:[ \\t]+(?:(?:de|du|des|la|le|DE|DU|DES|LA|LE)[ \\t]+){0,2}${FRENCH_STREET_WORD}){1,5}${NA}`,
+  'gu'
+);
+
 // Numeric and spelled-out dates ("1. Januar 1980", "January 1, 1980"); the
 // detector stays label-gated, so month names cannot fire on ordinary prose.
 const MONTH_NAME = '(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember' +
@@ -400,9 +412,12 @@ function canonicalizeRenderedText(s) {
   // Remove only actual, common HTML tags from the source representation.
   // Entity-escaped comparisons and programming generics are visible text and
   // must not turn into markup after entity decoding.
-  const htmlBoundaryTag = /<\/?(?:address|article|aside|blockquote|br|caption|col|colgroup|dd|details|div|dl|dt|figcaption|figure|footer|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|summary|table|tbody|td|tfoot|th|thead|tr|ul)(?:\s[^<>\n]{0,2000})?\s*\/?>/giu;
-  const htmlInlineTag = /<\/?(?:a|abbr|b|cite|code|del|dfn|em|i|img|ins|kbd|mark|picture|q|s|samp|small|source|span|strong|sub|sup|time|u|var)(?:\s[^<>\n]{0,2000})?\s*\/?>/giu;
-  value=value.replace(/<!--[\s\S]*?-->/gu,'').replace(htmlBoundaryTag,' ').replace(htmlInlineTag,'');
+  const htmlBoundaryNames = 'address|article|aside|blockquote|br|caption|col|colgroup|dd|details|div|dl|dt|figcaption|figure|footer|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|summary|table|tbody|td|tfoot|th|thead|tr|ul';
+  const htmlInlineNames = 'a|abbr|b|cite|code|del|dfn|em|i|img|ins|kbd|mark|picture|q|s|samp|small|source|span|strong|sub|sup|time|u|var';
+  const htmlBoundaryTag = new RegExp(`<\\/?(?:${htmlBoundaryNames})(?:\\s[^<>\\n]{0,2000})?\\s*\\/?>`, 'giu');
+  const htmlInlineTag = new RegExp(`<\\/?(?:${htmlInlineNames})(?:\\s[^<>\\n]{0,2000})?\\s*\\/?>`, 'giu');
+  const htmlComment = /<!--[\s\S]*?-->/gu;
+  value=value.replace(htmlComment,'').replace(htmlBoundaryTag,' ').replace(htmlInlineTag,'');
   const named = {
     nbsp:' ',tab:' ',newline:'\n',ensp:' ',emsp:' ',thinsp:' ',hairsp:' ',mediumspace:' ',verythinspace:' ',
     amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",period:'.',commat:'@',colon:':',semi:';',comma:',',sol:'/',bsol:'\\',
@@ -441,6 +456,16 @@ function canonicalizeRenderedText(s) {
   value=value.replace(/(?<![\p{L}\p{N}\]])_([^_\n]+)_(?![\p{L}\p{N}\[])/gu,'$1');
   value=value.replace(/~~([^~\n]+)~~/gu,'$1');
   value=value.replace(/`+([^`\n]+)`+/gu,'$1');
+  // Tags introduced only by decoding visible text are not source markup.
+  // Keep their angle brackets escaped so a later engine/review pass cannot
+  // reinterpret (and delete) them. Ordinary entities still decode for PII
+  // detection; actual source tags/comments were already removed above.
+  const escapeVisibleMarkup = (fragment) => fragment.replace(/</gu,'&lt;').replace(/>/gu,'&gt;');
+  value=value.replace(htmlComment,escapeVisibleMarkup)
+    .replace(htmlBoundaryTag,escapeVisibleMarkup).replace(htmlInlineTag,escapeVisibleMarkup);
+  // A quoted angle bracket inside a literal tag can prevent the whole-tag
+  // matcher from recognising it. Its opening still must remain inert.
+  value=value.replace(new RegExp(`<(?=/?(?:${htmlBoundaryNames}|${htmlInlineNames})[\\s/>]|!--)`, 'giu'),'&lt;');
   return normalizeText(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu,'\uFFFD');
 }
 
@@ -875,6 +900,7 @@ module.exports = {
   IPV6_RE,
   POSTAL_ADDRESS_RE,
   STREET_ADDRESS_RE,
+  FRENCH_STREET_ADDRESS_RE,
   DATE_OF_BIRTH_RE,
   DATE_OF_BIRTH_LABEL_RE,
   VEHICLE_PLATE_RE,

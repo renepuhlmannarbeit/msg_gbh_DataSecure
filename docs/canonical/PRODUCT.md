@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 11.09.2026 · Ist-Zustand RC139
+Stand: 11.09.2026 · Ist-Zustand RC140
 
 ## Ziel
 
@@ -11,6 +11,12 @@ Anonymisierung sowie reine Markdown-Konvertierung **ohne** Anonymisierung.
 Menschen wählen Dateien und Zweck; Originale bleiben unverändert. Der
 Anonymisierungsmodus reduziert Daten, garantiert aber keine rechtliche
 Anonymität. Keines der Produkte trifft Personal- oder Fachentscheidungen.
+
+Einfachheit ist Produktziel: vorhandene Bedienwege und gemeinsame Kernlogik
+wiederverwenden, statt für Fehler neue Einstellungen oder Sonderabläufe
+einzuführen. Claude erhält knappe aufgabenbezogene Anweisungen; technische
+Schutzprüfungen bleiben im Code. Nur tatsächlich mehrdeutige Inhalte benötigen
+eine lokale Fachentscheidung, nicht jeder erfolgreiche Verarbeitungsschritt.
 
 ## Normalreise
 
@@ -48,6 +54,14 @@ sie bleiben ausschließlich über ihre konkrete Zeile im Verlauf erreichbar.
 6. Erst ein späterer ausdrücklicher Auftrag übergibt benötigte freigegebene
    Markdown-Ergebnisse begrenzt an Claude.
 
+DS-101 ergänzt im noch nicht veröffentlichten Quellstand die **ausdrückliche
+Wiederverwendung**: Bereits übergebene Cowork-Stapel können ohne neue
+Anonymisierung in einem lokalen Dialog erneut gewählt werden, auch bei nur
+einem Kandidaten. Standard bleibt die ungelesene Warteschlange; eine leere
+Warteschlange löst keine automatische Wiederholung aus. Jede Seite wird gegen
+dieselbe unveränderte, noch gültige Paketgeneration geprüft. Standalone-Stapel,
+Originale und reine Konvertate sind nicht Teil dieses Claude-Übergabewegs.
+
 Kein Profil-, Bildmodus-, Einzeldatei- oder Ergebnislesedialog gehört zum
 Normalstart. Ein zurückgestellter Sammelreview wird ausdrücklich und lokal
 fortgesetzt. Er zeigt nur die tatsächlich mehrdeutigen Dateien, direkte
@@ -59,6 +73,23 @@ entschieden. DataSecure rät nicht; die Entscheidung gilt gegenüber späteren
 Reviews nur für die gezeigte Stelle. Gleich geschriebene offene Namen werden
 innerhalb des aktuellen Sammelreviews konsistent entschieden, während eine
 bestätigte Person das stapelweit stabile Pseudonym erhält.
+
+BL-021.3 erweitert im unveröffentlichten Quellstand den lokalen Review auf
+exakt lokalisierbare, ausschließlich heuristische Rest-Personenkandidaten.
+Diese werden **pro Fundstelle** entschieden, nicht nach gleichem Wortlaut
+gruppiert. Eine gültige Beibehalten-Entscheidung gilt nur für die unveränderte
+geprüfte Fassung; direkte Identifier, bekannte Originalwerte und explizite
+Personenfelder bleiben unabhängig geprüft. Ohne Entscheidung beziehungsweise
+bei unklarer Herkunft kein Export. Dies ist keine automatische Freigabe von
+Hinweistexten und ändert weder Markdown-only noch den freigegebenen Formatscope.
+
+BL-021.4 ergänzt dieselbe lokale Entscheidung vor einer Identitätsbindung:
+Eine rein typografisch namensähnliche Versalienüberschrift bei unabhängig
+belegtem Personenbezug ist noch keine bewiesene Person oder Firma. Sie darf
+nicht vorab eine stapelweite Personen-, Unternehmens- oder Projektzuordnung
+erzeugen. Explizite Personenfelder und tatsächlich erkannte bestehende
+Identitäten bleiben geschützt. Es gibt weder eine technische Wortfreigabeliste
+noch einen neuen Bedienmodus; ungeklärte Stellen gehen in den vorhandenen Review.
 
 ## Eingaben und Ergebnisse der Anonymisierung
 
@@ -171,17 +202,19 @@ Extrahierbarer Text und Tabellen werden übernommen;
 grafische Inhalte und OCR besitzen kenntlich gemachte Grenzen. Solche Hinweise
 werden ohne PII-Review mit den Ergebnissen gespeichert. Defekte, verschlüsselte
 oder aktiv gefährliche Eingaben erhalten eine eigene Fehlerposition, während der
-Stapel weiterläuft. Die auf TXT, Markdown, CSV und den strengen direkten
-DOCX-Parser begrenzte **Cowork-Anonymisierungsfreigabe** erweitert sich dadurch
-nicht.
+Stapel weiterläuft. Die **Cowork-Anonymisierungsfreigabe** umfasst TXT,
+Markdown, CSV, den strengen direkten DOCX-Parser sowie lokal extrahiertes
+Markdown aus XLSX/PPTX (DS-093). Standalone-PDF/Scan-PDF und eigenständige
+Bilder erweitern diese Cowork-Freigabe nicht (BL-023.1).
 
-Die Ordneraufnahme hat bewusst produktspezifische Finalität: Cowork lehnt einen
-gewählten Baum atomar ab, sobald er ein unbekanntes oder gesperrtes Format
-enthält. Standalone nimmt alle unterstützten Quellen rekursiv auf; eine defekte,
-verschlüsselte oder unsichere unterstützte Datei stoppt nur ihre eigene Position,
-während der Rest weiterläuft. Nicht unterstützte Dateien werden in Standalone
-sichtbar als nicht aufgenommen ausgewiesen und niemals still als erfolgreich
-verarbeitet gezählt.
+Die Ordneraufnahme prüft in beiden Produkten den gesamten regulären Baum:
+Ein unbekanntes oder für das jeweilige Produkt gesperrtes Format weist die
+Auswahl atomar zurück; es wird kein Teilstapel übernommen (DS-100).
+Explizit erkannte temporäre Office-Besitzerdateien werden dagegen übersprungen
+und gezählt. Nach erfolgreicher Aufnahme stoppt eine später als defekt,
+verschlüsselt oder unsicher erkannte unterstützte Datei nur ihre eigene
+Position; der Reststapel läuft weiter. Aufnahme und Verarbeitung sind getrennte
+Phasen, keine stillschweigende Teilfreigabe unbekannter Formate.
 
 ## Grenzen vor Freigabe
 

@@ -12,6 +12,7 @@ function fixture(overrides = {}) {
   return {
     calls,
     deps: {
+      assertRootSeparation: call('storage.preflight', true),
       verifyBundledRuntime: call('runtime.verify', {}),
       ensureDurableRuntime: call('runtime.ensure', {}),
       migrateLegacyAuditReceipts: call('audit.migrate', {}),
@@ -35,11 +36,11 @@ test('plugin and Standalone can share one ordered fail-closed startup transactio
   const result = initializeProduct(item.deps);
   assert.strictEqual(result.batchMaintenance.stop(), true);
   assert.deepStrictEqual(item.calls.map((entry) => entry.name), [
-    'runtime.verify', 'runtime.ensure', 'audit.migrate', 'output.protect',
+    'storage.preflight', 'runtime.verify', 'runtime.ensure', 'audit.migrate', 'output.protect',
     'retention.cleanup', 'ui.cleanup', 'batch.recover', 'mapping.replay',
     'maintenance.start', 'legacy.migrate', 'working.cleanup', 'maintenance.stop'
   ]);
-  assert.deepStrictEqual(item.calls[4].args[0], {
+  assert.deepStrictEqual(item.calls[5].args[0], {
     trigger: 'startup', protectedIds: ['x'], outputProtectionComplete: true
   });
 });
@@ -58,7 +59,13 @@ test('a post-maintenance recovery failure stops maintenance and refuses startup 
 test('a failure before maintenance still produces one fixed startup refusal', () => {
   const item = fixture({ verifyBundledRuntime: () => { throw new Error('private runtime details'); } });
   assert.throws(() => initializeProduct(item.deps), /private runtime details/u);
-  assert.deepStrictEqual(item.calls.map((entry) => entry.name), ['startup.refuse']);
+  assert.deepStrictEqual(item.calls.map((entry) => entry.name), ['storage.preflight', 'startup.refuse']);
+});
+
+test('storage preflight failure refuses startup before any cache, migration or cleanup', () => {
+  const item = fixture({ assertRootSeparation() { throw Object.assign(new Error('PRIVACY_STORAGE_UNSAFE'), { code: 'PRIVACY_STORAGE_UNSAFE' }); } });
+  assert.throws(() => initializeProduct(item.deps), /PRIVACY_STORAGE_UNSAFE/u);
+  assert.deepStrictEqual(item.calls.map(entry => entry.name), ['startup.refuse']);
 });
 
 done();

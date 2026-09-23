@@ -1,6 +1,6 @@
 # Anleitung: Dateien mit GBH DataSecure anonymisieren
 
-Stand: 11.09.2026 · Version 3.2.0 RC139 · Cowork-Plugin
+Stand: 11.09.2026 · Version 3.2.0 RC140 · Cowork-Plugin
 
 ## Vor dem ersten Lauf
 
@@ -12,10 +12,15 @@ Laden Sie sensible Originale niemals per Büroklammer in den Chat.
 
 ## Plugin aktualisieren
 
-Cowork führt Plugins aus seinem eigenen Speicher („My Uploads“) aus. Eine
-Installation über den Bereich „Claude Code“ oder die Kommandozeile erreicht
-Cowork nicht, und ein bereits hochgeladenes Plugin wird durch einen erneuten
-Upload nicht zuverlässig ersetzt. Deshalb:
+Für den bisher geprüften ZIP-Uploadweg in Cowork gilt: Eine Installation über
+die Claude-Code-Kommandozeile aktualisiert diese Cowork-Kopie nicht.
+Anthropic dokumentiert inzwischen zusätzlich eine einseitige Synchronisierung
+vom Claude-Konto nach lokalem Claude Code ab Version 2.1.273, nicht umgekehrt.
+Das ersetzt weder den DataSecure-Zielplattformabgleich noch die Prüfung der
+tatsächlich laufenden Version. Der neue Sync-Weg ist für DataSecure noch nicht
+abgenommen; siehe [Hostreview vom 23.09.2026](REVIEW_PRODUCT_HOSTS_2026-09-23.md).
+Für eine bisher per „My Uploads“ installierte Kopie verwenden Sie weiterhin
+den bestehenden Austauschablauf:
 
 1. Einstellungen → Anpassen → Plugins → „GBH DataSecure“ öffnen und das Plugin
    **entfernen**.
@@ -83,6 +88,19 @@ Dokumente nicht der empfohlene Standard.
 
 ## Unterstützte Dateien
 
+### Fertige Ergebnisse nochmals verwenden
+
+Im neuen, noch nicht veröffentlichten Quellstand nach DS-101 können Sie
+ausdrücklich schreiben: **„Verwende einen bereits übergebenen DataSecure-Stapel
+noch einmal für diese Aufgabe.“** Wählen Sie den gewünschten fertigen Stapel im
+lokalen Dialog; auch ein einzelner Stapel wird bestätigt. DataSecure prüft die
+vorhandenen freigegebenen Ergebnisse erneut und anonymisiert nicht nochmals.
+Abbrechen lässt alles unverändert. Gelöschte, abgelaufene oder veränderte Pakete
+werden nicht ersatzweise aus Originalen rekonstruiert. Die veröffentlichten
+RC139-Pakete besitzen diesen zusätzlichen Weg noch nicht.
+
+### Formatgrenzen
+
 | Freigegeben | Sicher gesperrt |
 |---|---|
 | TXT, Markdown (`.md`, `.markdown`), CSV, DOCX direkt; XLSX/PPTX als lokal extrahiertes Markdown | PDF, Scan-PDF, PNG, JPEG, BMP und unbekannte Formate |
@@ -123,6 +141,12 @@ Beibehalten-Entscheidung gilt gegenüber späteren Reviews nur für die gezeigte
 Fundstelle; gleich geschriebene offene Namen werden innerhalb des aktuellen
 Sammelreviews konsistent entschieden. Eine bestätigte
 Person erhält im ganzen Stapel dasselbe Pseudonym.
+Im noch unveröffentlichten Arbeitsstand (BL-021.3) gilt für erst bei der
+Restprüfung gefundene mehrdeutige Stellen eine engere Regel: Jede Stelle wird
+einzeln entschieden, auch bei identischem Wortlaut. So kann eine technische
+Hinweiszeile beibehalten werden, ohne ein gleichlautendes Personenfeld
+freizugeben. Nicht sicher zuordenbare oder weiterhin sensible Befunde stoppen;
+„beibehalten“ schaltet keine anderen Datenschutzprüfungen aus.
 Auf Windows funktionieren zusätzlich `Alt+Z`, `Alt+O`, `Alt+R`, `Strg+Enter` und
 `Esc`; die Schaltflächen bleiben der normale Weg.
 

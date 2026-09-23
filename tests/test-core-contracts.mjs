@@ -150,6 +150,7 @@ test('the complete core leaf graph loads and runs without gateway, standalone or
   const calls = [];
   const bootstrap = isolated.load('core/product-bootstrap.js');
   const initialized = bootstrap.initializeProduct({
+    assertRootSeparation: () => calls.push('storage'),
     verifyBundledRuntime: () => calls.push('runtime'), ensureDurableRuntime: () => calls.push('durable'),
     migrateLegacyAuditReceipts: () => calls.push('audit'),
     openBatchPackageProtection: () => ({ ids: ['opaque'], complete: true }),
@@ -159,7 +160,7 @@ test('the complete core leaf graph loads and runs without gateway, standalone or
     migrateLegacyInput: () => ({ failures: 0, active: false }),
     cleanupAbandonedWorkingJobs: () => ({ failures: 0 }), refuseStartup: () => calls.push('refused')
   });
-  assert.deepStrictEqual(calls, ['runtime', 'durable', 'audit', 'retention', 'ui']);
+  assert.deepStrictEqual(calls, ['storage', 'runtime', 'durable', 'audit', 'retention', 'ui']);
   assert.ok(initialized.batchMaintenance && Object.isFrozen(initialized));
   assert.deepStrictEqual([...isolated.loaded.keys()].sort(), [...pureFiles].sort());
 });

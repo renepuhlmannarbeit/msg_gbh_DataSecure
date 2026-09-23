@@ -1,6 +1,6 @@
 # DataSecure IT-Betriebshandbuch
 
-Stand: 11.09.2026 · 3.2.0-rc139 · Cowork-Plugin; Standalone separat
+Stand: 11.09.2026 · 3.2.0-rc140 · Cowork-Plugin; Standalone separat
 
 ## Produktkanäle
 
@@ -40,8 +40,9 @@ dort nicht. Solche Sitzungen dürfen nur bereits freigegebenes Markdown nutzen.
 
 1. Plugin in Claude Desktop über Einstellungen → Anpassen → Plugins → „Aus Datei
    hochladen“ installieren, Claude vollständig beenden und neu starten. Der
-   Bereich „Claude Code“ und die Kommandozeile nutzen einen anderen Speicher
-   (`~/.claude/plugins`); Cowork startet daraus nichts.
+   Eine lokale Claude-Code-Installation aktualisiert diese Cowork-Kopie nicht.
+   Der inzwischen dokumentierte Konto→Claude-Code-Sync ist ein anderer,
+   einseitiger Weg und noch kein abgenommener DataSecure-Rollout.
 2. In der geöffneten Claude-Desktop-App eine neue Cowork-Aufgabe öffnen.
 3. „Dateien anonymisieren“ schreiben.
 4. Beim ersten Lauf erwartet: zuerst einmalig die lokale Ergebnisordnerwahl. Einen
@@ -69,6 +70,26 @@ die Organisation ihn zulässt. Organisationsrichtlinien können einzelne
 Bestätigungen erzwingen. **Skip** ist für sensible Dokumente kein Betriebsstandard.
 
 ## Lokale Verzeichnisse und Löschung
+
+**PH-20260923-01 / BL-041.19:** Privacy-/Daten- und Ergebniswurzeln müssen
+strikt getrennt bleiben. Der neue, noch unveröffentlichte Quellstand prüft
+dies in beiden Auswahlrichtungen sowie bei Reset, Bootstrap und Rootauflösung.
+`settings/root-reservations` schützt innerhalb des Produktdatenraums auch
+frühere Wurzeln mit höchstens 256 atomaren lokalen Metadatensätzen; diese
+enthalten Pfade und gehören niemals in Diagnosepakete oder Hostfreigaben.
+Fehlerhafte, umgeleitete oder übervolle Reservierungen stoppen sicher.
+
+Bei einer widersprüchlichen **Altkonfiguration**: alle DataSecure-App-/Worker-
+und Pluginprozesse kontrolliert beenden, irrtümliche Host-Freigaben lösen und
+die konkret betroffenen Einstellungen lokal prüfen/sichern. Erst dann darf
+der Betreiber ausschließlich diese geprüften Einstellungen offline korrigieren
+oder zurücksetzen und getrennte Wurzeln neu wählen. Keine pauschale Löschung
+von Datenbäumen oder Reservierungen; alte private Daten werden dadurch nicht
+automatisch verschoben, entfernt oder sicher freigegeben. Regulärer Reset
+umgeht weder Rootschutz noch Recovery-Sperren. Historische Freigaben alter
+Versionen und fremder Datennamespaces bleiben eine gesonderte Betreiberprüfung.
+Auch interne Daten-/Journalordner dürfen nicht mit Claude verbunden werden.
+Details: [Mehrdimensionenreview](REVIEW_PRODUCT_HOSTS_2026-09-23.md).
 
 | Bereich | Betrieb |
 |---|---|

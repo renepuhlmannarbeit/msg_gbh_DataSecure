@@ -176,7 +176,9 @@ Engine festgelegt.
 
 Nach DS-097 bedeutet diese Produkttrennung weder eine zweite Kopie des Privacy-
 Kerns noch dauerhafte Windows-/macOS-Entwicklungsbranches. Ein gemeinsamer
-Commit speist getrennte Produktpakete und Zieljobs. Cowork-/Standalone- sowie
+Quellbaum speist getrennte Produktpakete und Zieljobs. Commitgleichheit gilt
+innerhalb derselben Produkt-Releasekampagne; Cowork und Standalone dürfen
+unabhängige veröffentlichte Stände behalten. Cowork-/Standalone- sowie
 Windows-/macOS-/Linux-Varianten liegen ausschließlich in schmalen Adaptern;
 gemeinsame Verarbeitung gehört unter die neutrale Processing-API.
 

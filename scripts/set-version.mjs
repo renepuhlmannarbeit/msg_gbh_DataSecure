@@ -111,8 +111,10 @@ const rcLabel = (version) => {
   const match = /-rc(\d+)$/i.exec(version);
   return match ? `RC${match[1]}` : version;
 };
-patchText('README.md', /^(# GBH DataSecure .*? v)\d+\.\d+\.\d+ RC\d+$/mu,
-  `$1${releaseLabel(target)}`);
+// The README title names independently published product candidates. A source
+// version cut must not relabel either archive; only publication updates them.
+patchText('README.md', /^(Quellstand: )\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/mu,
+  `$1${target}`);
 patchText('docs/ANLEITUNG.md', /^(Stand:[^\n]*?Version )\d+\.\d+\.\d+ RC\d+(?=[^\n]*$)/mu,
   `$1${releaseLabel(target)}`);
 patchText('docs/ANWENDERREVIEW.md', /^(Stand:[^\n]*?gegen )\d+\.\d+\.\d+(?:-rc\d+)?/mu,

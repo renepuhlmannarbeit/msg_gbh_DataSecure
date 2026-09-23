@@ -1,8 +1,65 @@
 # Aktueller Iststand
 
-Stand: 12.09.2026 · 3.2.0-rc139 · Cowork-Release veröffentlicht; Modellabnahme und N3/N4 offen
+Stand: 23.09.2026 · 3.2.0-rc140 · Quellstand ungebunden; Cowork RC139 und Standalone RC137 veröffentlicht; Modellabnahme und N3/N4 offen
 
-## RC139 – Lieferung der Astra-/Terra-Gegenreviewkorrekturen
+## RC140 – noch ungebundene Produktkorrekturen
+
+**Unveröffentlichter Arbeitsstand 23.09.2026:** [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md)
+führt die gemeinsame Roottrennung einschließlich zukünftiger historischer
+Reservierungen (BL-041.19), den vorbereiteten 14-Fälle-Claude-Code-Pilot
+(BL-041.20) und ausdrücklich bestätigte Wiederverwendung fertiger Cowork-Stapel
+ohne neue Anonymisierung (DS-101/BL-041.21). BL-050.4 prüft alle 16
+Härtetestdateien bis zum Export in beiden Zwecken; die dabei gefundenen
+Erkennungs-/Fachwortdefekte werden über End-to-End-Gegenfälle abgesichert.
+Der Härtetest prüft nach BL-021.3/4 16 Konvertate und 16 anonymisierte
+Ausgaben nach explizitem lokalem Titel-/Personenreview. Unklare Restkandidaten
+werden nicht automatisch freigegeben:
+Textfassung und konkrete Fundstelle binden die lokale Entscheidung; alle
+unabhängigen direkten Identifierprüfungen bleiben erhalten. BL-021.4 verhindert
+die vorgelagerte feste Bindung konkurrierender technischer Versalientitel als
+Person/Kunde/Projekt; Fachanker prüfen ihren Erhalt unabhängig vom Dateierfolg.
+Reviewpositionen sind für CRLF-/gemischte Tabellen, vollständig erhaltene
+wiederholte Fragmente und kanonische Konverterdarstellungen nachgehärtet.
+Sichtbare escaped HTML-Beispiele bleiben auch bei wiederholter Verarbeitung
+erhalten; echte HTML-Tags und entitycodierte Identifier werden weiterhin geprüft.
+Absatzgrenzen verhindern künstliche Beschäftigungsbeziehungen zu vorherigen
+Hinweisen, während echte Namens-Softwraps geschützt bleiben.
+Die Standalone-Oberfläche ergänzt ausschließlich Hinweise zu Ordnernamen/
+Zuordnung; Navigation, Zwecke und Produktgrenzen bleiben erhalten. Die gemeinsamen
+Root- und Privacy-Korrekturen wirken auch in ihrem Verarbeitungskern und sind
+deshalb durch Standalone-Gegenregressionen abgesichert. Kanonwidersprüche zu Aufnahme,
+Office-Freigabe und produktweiser Commitbindung sind korrigiert.
+
+Der vollständige lokale Produkttest nach der Review-Erweiterung besteht mit
+186 Testdateien (67 Basis + 119 direkte Tests), einschließlich beider
+Produktprojektionen und nativer Windows-Prozessgrenzen. Die aktualisierten
+Docs-/Versions-/UAT-Verträge bestehen mit 101 Entscheidungen, 24 Epics und
+109 Stories. Der reale 16+16-Härtetest wurde erneut erfolgreich ausgeführt.
+Ein identischer atomarer Reservierungsaustausch zwischen Prüfung und Öffnen ist
+inzwischen mit echtem Kindprozess reproduziert und korrigiert (43 Rootfälle).
+Die frühere sporadische Beobachtung ist damit nicht rückwirkend eindeutig
+zugeordnet. Die nachfolgend genannten Host-/Paket-/Modellabnahmen bleiben offen.
+
+Der vollständig gelesene externe Referenzstand `vectranetworks/anonym`
+(`bc464647…`, 44 Dateien) ist als VECTRA-20260923 im Reviewbericht verankert.
+Übernommen wurde ausschließlich ein kleiner realer CSV-Integrationsgegenfall
+mit eingebetteten JSON-Skalaren (12 CSV-Fälle; 40 vorhandene Registryfälle).
+Keine fremde Engine, neue Produktionsabhängigkeit, zusätzliche Formatfreigabe,
+Importoberfläche oder kostenpflichtige Modellprüfung. Beide Produkte nutzen
+weiterhin denselben typisierten Kern; reine Markdown-Konvertierung bleibt
+inhaltserhaltend und getrennt von der Anonymisierung.
+
+Die folgenden Releasebelege gelten weiter für die **unveränderten alten**
+RC139-/RC137-Pakete, nicht für diese neuen Quelländerungen. Kein neuer Build,
+keine zusätzliche Host- oder Produktionsfreigabe. Claude Code wurde lokal mit dem
+offiziellen Updater von 2.1.267 auf 2.1.280 aktualisiert; der Pilotvorcheck besteht
+(Minimum 2.1.273). Die CLI ist nicht angemeldet. Der lokale Code-Reiter in Claude
+Desktop ist als gesondert zu belegende Oberfläche vorgesehen. Modelltests dürfen
+ausschließlich enthaltene Claude-Abonutzung verbrauchen, keine API-/Zusatzkosten.
+Desktop-Abrechnungsweg und Werkzeuge sind noch nicht geprüft;
+Native-/Modell-/N3-/N4-Abnahme bleiben offen.
+
+## RC139 – veröffentlichter Cowork-Kandidat
 
 RC139 liefert BL-041.15–.18 und `ASTRA2-20260912-01`–`04` aus Quellcommit
 `46c6fec4722c879989f5c8e3059367241c117c3a`. Normal/Debug/UAT, beide Mac-Zielpakete,
