@@ -751,3 +751,18 @@ macOS-Anleitung und README benennen jetzt den ZIP-Unterordner, die getrennte
 und nicht zu umgehende Schadsoftware-/Beschädigt-Warnungen. Die sichtbare
 Installation auf einem echten Intel- und ARM-Mac bleibt ausdrücklich UAT; für
 eine konkrete Fehlersuche ist die genaue Meldung des betroffenen Macs nötig.
+
+## Zweites Windows-Releasegate: sichtbarer Export im Fortsetzungstest
+
+Der Windows-Releaseworkflow aus `787ae4ed1a64e382176df632cd858f5ac92784c3`
+stoppte vor dem Paketbau: 14 gemischte Fortsetzungsfälle meldeten nach dem
+Review-Ereignis null sichtbare Ergebnisse. Ein unabhängiger Code-Gegenreview
+führte dies auf eine zweite, nicht kanonisierte `os.tmpdir()`-Fixture zurück.
+Die produktive Ergebniswurzel lehnt den Alias sicher ab; das synthetische
+„export“-Ereignis allein hatte die fehlende sichtbare Publikation im Test
+verdeckt. Der Test verwendet nun den physischen Pfad und prüft zusätzlich
+die konfigurierte Ergebniswurzel sowie den tatsächlichen `visibleExportStatus`.
+Die 22 Fortsetzungsfälle und die schnellen Dokumentationsverträge bestanden
+lokal erneut. Auch dieser Zwischencommit bleibt **nicht veröffentlichbar**;
+Windows-Releasegate und alle Pakete müssen aus dem folgenden endgültigen SHA
+neu laufen.

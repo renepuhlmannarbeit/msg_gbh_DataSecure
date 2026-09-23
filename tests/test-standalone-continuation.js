@@ -7,7 +7,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-mixed-continuation-'));
+// Hosted Windows TMP may name the same directory through a junction or alias.
+// The real export boundary intentionally rejects that path, so put the
+// synthetic fixture under its physical root before exercising recovery.
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-mixed-continuation-')));
 process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'private');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'workspace');
 process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
@@ -24,12 +27,15 @@ const { createBatchReviewOrchestrator } = require('../plugins/data-secure/server
 const { createBatchExecutorRunner } = require('../plugins/data-secure/server/gateway/batch-executor-runner');
 const { continueIntoLocalReview } = require('../plugins/data-secure/server/gateway/automatic-local-review');
 const { batchNextAction } = require('../plugins/data-secure/server/gateway/batch-next-action');
+const { readConfiguredResultRoot } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const exportsApi = require('../plugins/data-secure/server/gateway/result-export');
 const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
 const { testAsync, done, assert } = createSuite('Standalone mixed continuation integration');
 
 function fixture(otherStatus, options = {}) {
+  assert.equal(readConfiguredResultRoot(), process.env.EU_PRIVACY_RESULT_ROOT,
+    'the real result root must accept the canonical synthetic fixture');
   const token = crypto.randomBytes(32).toString('hex');
   let state = {
     schema: 'datasecure-batch/1', product_channel: 'standalone', token, profile: 'general',
@@ -292,6 +298,9 @@ async function confirmStart(f, invoke, expected) {
           assert.equal(completed.complete, true);
           assert.equal(completed.completed, 4);
           assert.equal(f.events.at(-1), 'export');
+          const visible = exportsApi.visibleExportStatus(f.token, 4 -
+            (['stopped', 'preflight_mapping_pending'].includes(other) ? 2 : 1));
+          assert.equal(visible.available, true, 'a review event alone does not prove visible export');
           const status = f.service.status();
           assert.equal(status.completed_count, 4);
           assert.equal(status.failed_count, ['stopped', 'preflight_mapping_pending'].includes(other) ? 2 : 1);
