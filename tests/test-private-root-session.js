@@ -18,16 +18,27 @@ test('cached roots avoid repeated ancestor walks but reject a same-path replacem
   const common = require(commonPath);
   try {
     const first = common.roots();
-    let lstatCalls = 0;
+    const { assertRootSeparation } = require('../plugins/data-secure/server/gateway/root-boundary');
+    let separationCalls = 0;
+    let cachedCalls = 0;
+    let count = 'separation';
     const originalLstat = fs.lstatSync;
-    fs.lstatSync = (...args) => { lstatCalls += 1; return originalLstat(...args); };
-    try { assert.strictEqual(common.roots(), first); }
+    fs.lstatSync = (...args) => {
+      if (count === 'separation') separationCalls++;
+      else cachedCalls++;
+      return originalLstat(...args);
+    };
+    try {
+      assertRootSeparation();
+      count = 'cached';
+      assert.strictEqual(common.roots(), first);
+    }
     finally { fs.lstatSync = originalLstat; }
-    // In addition to the returned directories, recheck config metadata and
-    // canonical private roots. The security gate must notice configuration
-    // changes, but its cached path must not repeat whole ancestor walks.
-    assert.ok(lstatCalls <= Object.keys(first).length + 7,
-      `cached verification unexpectedly walked ancestors (${lstatCalls} lstat calls)`);
+    // The mandatory root-separation check has host-path-dependent work. Only
+    // the cached private-root overhead should be bounded by returned roots,
+    // rather than a fixed total lstat count tied to local path depth.
+    assert.ok(cachedCalls <= separationCalls + Object.keys(first).length + 2,
+      `cached verification unexpectedly walked ancestors (${cachedCalls} versus ${separationCalls} separation lstat calls)`);
 
     const disposable = path.join(first.output, 'Dokument_20260906_120000_anonymisiert');
     fs.mkdirSync(disposable);
