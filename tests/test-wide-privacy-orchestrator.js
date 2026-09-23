@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { createSuite } = require('./helpers');
 
-const scope = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-wide-privacy-'));
+const scope = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-wide-privacy-')));
 const previous = Object.fromEntries(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT',
   'DATASECURE_PRODUCT_CHANNEL'].map(key => [key, process.env[key]]));
 process.env.EU_PRIVACY_DATA_ROOT = path.join(scope, 'data');

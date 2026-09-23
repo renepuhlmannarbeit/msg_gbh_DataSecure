@@ -6,8 +6,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const temporaryRoot = fs.realpathSync(os.tmpdir());
-const base = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-standalone-history-'));
+// The hosted Windows TMP spelling may be an alias. The real result-root
+// boundary must receive the physical fixture path, not an equivalent alias.
+const temporaryRoot = fs.realpathSync.native(os.tmpdir());
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-standalone-history-')));
 process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'private');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'workspace');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
@@ -19,6 +21,7 @@ process.env.EU_PRIVACY_RESULT_ROOT = originalResultRoot;
 const batch = require('../plugins/data-secure/server/gateway/batch');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const exportsApi = require('../plugins/data-secure/server/gateway/result-export');
+const { readConfiguredResultRoot } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const reservation = require('../plugins/data-secure/server/gateway/batch-intake-reservation');
 const historyStore = require('../plugins/data-secure/server/gateway/standalone-history-store');
 const { createRunHistory } = require('../plugins/data-secure/server/standalone/run-history');
@@ -81,6 +84,8 @@ function code(expected) { return (error) => error?.code === expected; }
 
 (async () => {
   try {
+    assert.equal(readConfiguredResultRoot(), originalResultRoot,
+      'real result-root admission must accept the physical history fixture');
     // The shared product loads the store without the Standalone UI adapter.
     // Its channel guards must return before even creating history storage.
     const historyDirectory = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-run-history');

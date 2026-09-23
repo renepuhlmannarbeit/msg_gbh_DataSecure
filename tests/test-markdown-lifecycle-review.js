@@ -254,7 +254,7 @@ if (process.argv[2] === '--probe') {
   const { test, assert, done } = createSuite('Markdown lifecycle independent review');
   function cleanup(root) {
     const resolved = fs.realpathSync(root);
-    assert.strictEqual(path.dirname(resolved), fs.realpathSync(os.tmpdir()));
+    assert.strictEqual(path.dirname(resolved), fs.realpathSync.native(os.tmpdir()));
     assert.ok(path.basename(resolved).startsWith('datasecure-md-review-'));
     const plan = [];
     function inspect(folder) {
@@ -272,7 +272,7 @@ if (process.argv[2] === '--probe') {
     fs.rmdirSync(resolved);
   }
   function run(scenario) {
-    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-md-review-')));
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-md-review-')));
     try {
       fs.mkdirSync(path.join(root, 'private'));
       const child = spawnSync(process.execPath, [__filename, '--probe', scenario, root], {

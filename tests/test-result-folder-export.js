@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-result-export-'));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-result-export-')));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'data');

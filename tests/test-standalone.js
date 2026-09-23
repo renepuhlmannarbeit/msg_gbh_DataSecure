@@ -660,7 +660,7 @@ async function clearLastAdmittedSourceCase() {
 }
 
 async function realAdmissionAdapterCase() {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'datasecure-real-admission-'));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-real-admission-'));
   const nested = path.join(root, 'nested');
   fs.mkdirSync(nested);
   const first = path.join(root, 'first.txt');

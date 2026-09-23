@@ -766,3 +766,18 @@ Die 22 Fortsetzungsfälle und die schnellen Dokumentationsverträge bestanden
 lokal erneut. Auch dieser Zwischencommit bleibt **nicht veröffentlichbar**;
 Windows-Releasegate und alle Pakete müssen aus dem folgenden endgültigen SHA
 neu laufen.
+
+## Drittes Windows-Releasegate: Fixture-Aliasfamilie
+
+Das Releasegate aus `8002aa6247cb0d72de7fd158df8b0f1a7c0d143a`
+bestätigte die Fortsetzungskorrektur mit 22/22 Fällen, stoppte aber als
+nächstes im Standalone-Historientest: Die Fixture erzeugte ihren Ergebnisordner
+noch über die nicht-native Temp-Pfadschreibweise. Ein unabhängiger Audit der
+release-erreichbaren Tests identifizierte dieselbe Konstruktion in weiteren
+Ergebnisordner-/Markdown-/Sidecar-Fixtures. Nur diese synthetischen Wurzeln
+werden nun über `realpathSync.native` kanonisiert; die produktive
+Pfad-/Reparse-Sperre bleibt unverändert. Der Historientest prüft zusätzlich
+die tatsächlich akzeptierte Ergebniswurzel. Alle betroffenen Testgruppen
+bestanden lokal; der Windows-Runner muss sie aus einem neuen Commit erneut
+bestätigen. Die parallel gestarteten Pakete des vorherigen SHA sind nicht als
+Release-Evidence verwendbar und wurden, soweit noch aktiv, abgebrochen.

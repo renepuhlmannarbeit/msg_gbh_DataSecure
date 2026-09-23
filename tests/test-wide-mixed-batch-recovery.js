@@ -8,7 +8,7 @@ const { createSuite } = require('./helpers');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
 
-const scope = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-wide-mixed-recovery-'));
+const scope = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-wide-mixed-recovery-')));
 const previous = Object.fromEntries(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT',
   'LOCALAPPDATA', 'DATASECURE_PRODUCT_CHANNEL'].map(key => [key, process.env[key]]));
 process.env.EU_PRIVACY_DATA_ROOT = path.join(scope, 'data');

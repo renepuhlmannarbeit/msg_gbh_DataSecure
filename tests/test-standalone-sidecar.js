@@ -128,7 +128,7 @@ function removeOwnedRoot(root, initial) {
   assert.strictEqual(stat.dev, initial.dev);
   assert.strictEqual(stat.ino, initial.ino);
   assert.match(path.basename(root), /^datasecure-standalone-ipc-/u);
-  assert.strictEqual(path.dirname(root), fs.realpathSync(os.tmpdir()));
+  assert.strictEqual(path.dirname(root), fs.realpathSync.native(os.tmpdir()));
   const targets = [];
   const inspect = (candidate) => {
     const relative = path.relative(root, candidate);
@@ -145,7 +145,7 @@ function removeOwnedRoot(root, initial) {
 }
 
 (async () => {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'datasecure-standalone-ipc-'));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-standalone-ipc-'));
   const initial = fs.lstatSync(root);
   const children = [];
   const fixtureRoots = [];
