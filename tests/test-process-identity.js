@@ -20,15 +20,20 @@ test('Linux identity binds boot identity and process start ticks, not PID alone'
 });
 
 test('Windows and macOS adapters accept only bounded exact start metadata', () => {
-  const win = _test.windowsBirth(42, (_executable, _arguments, options) => {
-    assert.equal(options.timeout, 8000);
-    assert.equal(options.maxBuffer, 4096);
+  const win = _test.windowsBirth(42, (executable, arguments_, options) => {
+    assert.ok(executable.endsWith('datasecure-sandbox.exe'));
+    assert.deepEqual(arguments_, ['--process-birth', '42']);
+    assert.equal(options.timeout, 2000);
+    assert.equal(options.maxBuffer, 128);
+    assert.deepEqual(options.env, {});
     return { status: 0, stdout: '638999999999999999' };
-  }, { SystemRoot: 'C:\\Windows' });
+  }, () => true);
   const mac = _test.macosBirth(42, () => ({ status: 0, stdout: 'Fri Sep  5 12:34:56 2026\n' }));
   assert.match(win, /^[a-f0-9]{64}$/u);
   assert.match(mac, /^[a-f0-9]{64}$/u);
-  assert.strictEqual(_test.windowsBirth(42, () => ({ status: 0, stdout: 'ticks\nprivate' })), null);
+  assert.strictEqual(_test.windowsBirth(42, () => ({ status: 0, stdout: 'ticks\nprivate' }), () => true), null);
+  assert.throws(() => _test.windowsBirth(42, () => ({ status: 0, stdout: '638999999999999999' }),
+    () => { throw new Error('unverified'); }), /unverified/u);
   assert.strictEqual(_test.macosBirth(42, () => ({ status: 0, stdout: '/private/path' })), null);
 });
 

@@ -830,3 +830,19 @@ Referenzen: [Apple – Distribution](https://developer.apple.com/documentation/t
 [Apple – Code Signing](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac/),
 [Apple – Pakettest](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution),
 [Tauri 2 – macOS Signierung](https://v2.tauri.app/distribute/sign/macos/).
+
+## Windows-Releasegate: Ursache bestätigt, nativer Ersatz
+
+Der echte Runner `35858860376` bestätigte die Ursache der blockierten Lease:
+der PowerShell-Unterprozess lieferte nach acht Sekunden ohne stdout/stderr
+`ETIMEDOUT`. Das ist keine Parser- oder Fixture-Annahme. Die bereits
+ausgelieferte, hashgeprüfte native Windows-Sandbox besitzt daher jetzt eine
+eng begrenzte `--process-birth <PID>`-Abfrage über
+`OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` und `GetProcessTimes`. Sie
+liefert ausschließlich einen dezimalen Startzeitwert; die Umrechnung von
+FILETIME in .NET-Ticks erhält die bisherige Lease-Identität. Der JS-Adapter
+verifiziert das native Artefakt vor jedem Aufruf und akzeptiert nur den
+exakten Zahlenwert. Fehlt die Abfrage, bleibt die Sperre fail-closed. Lokal
+stimmen native und alte .NET-Startticks eines realen Prozesses exakt überein;
+der aktualisierte native Build ist bytegleich reproduzierbar. Ein neuer
+Windows-Runner muss das noch bestätigen, bevor irgendein RC140-Paket gilt.

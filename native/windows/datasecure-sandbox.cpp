@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cwchar>
 #include <limits>
 #include <string>
@@ -84,6 +85,26 @@ void CloseIfValid(HANDLE handle) {
 int wmain(int argc, wchar_t* argv[]) {
   if (!IsNativeAmd64Host()) return kUnsupportedHost;
   if (argc == 2 && std::wcscmp(argv[1], L"--probe-host") == 0) return 0;
+  if (argc == 3 && std::wcscmp(argv[1], L"--process-birth") == 0) {
+    std::uint64_t requested_pid = 0;
+    if (!ParseUnsigned(argv[2], 1, 0xffffffffULL, &requested_pid)) return kUsageError;
+    const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                       static_cast<DWORD>(requested_pid));
+    if (process == nullptr) return kSetupError;
+    FILETIME created{}, exited{}, kernel{}, user{};
+    const BOOL queried = GetProcessTimes(process, &created, &exited, &kernel, &user);
+    CloseHandle(process);
+    if (!queried) return kSetupError;
+    ULARGE_INTEGER birth{};
+    birth.LowPart = created.dwLowDateTime;
+    birth.HighPart = created.dwHighDateTime;
+    // Windows FILETIME starts in 1601; .NET DateTime.Ticks starts in year 1.
+    // Preserve the old persisted lease identity across the provider change.
+    constexpr std::uint64_t kDateTimeEpochOffset = 504911232000000000ULL;
+    const std::uint64_t ticks = birth.QuadPart + kDateTimeEpochOffset;
+    std::printf("%llu", static_cast<unsigned long long>(ticks));
+    return 0;
+  }
   if (argc < 10 || std::wcscmp(argv[1], L"--memory-mib") != 0 ||
       std::wcscmp(argv[3], L"--cpu-ms") != 0 ||
       std::wcscmp(argv[5], L"--wall-ms") != 0 || std::wcscmp(argv[7], L"--") != 0) {

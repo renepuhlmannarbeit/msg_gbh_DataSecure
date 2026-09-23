@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
 const path = require('node:path');
 const { processAlive } = require('./process-liveness');
+const { verifyNativeLauncherArtifact } = require('../native-launcher');
 
 const ID_RE = /^[a-f0-9]{64}$/u;
 const cache = new Map();
@@ -24,15 +25,12 @@ function linuxBirth(pid, io = fs) {
   return digest(`linux:${bootId.toLowerCase()}:${startTicks}`);
 }
 
-function windowsBirth(pid, spawnSync = childProcess.spawnSync, environment = process.env) {
-  const systemRoot = String(environment.SystemRoot || environment.WINDIR || 'C:\\Windows');
-  const executable = path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const script = `$p=Get-Process -Id ${pid} -ErrorAction Stop;[Console]::Out.Write($p.StartTime.ToUniversalTime().Ticks)`;
-  const result = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Command', script], {
-    // A cold Windows PowerShell start on a loaded target host can exceed 2 s.
-    // Keep a finite bound, but do not mistake startup latency for PID reuse.
-    encoding: 'utf8', windowsHide: true, shell: false, timeout: 8000,
-    maxBuffer: 4096, env: { SystemRoot: systemRoot, WINDIR: systemRoot }
+function windowsBirth(pid, spawnSync = childProcess.spawnSync, verifyArtifact = verifyNativeLauncherArtifact) {
+  const executable = path.join(__dirname, '..', 'native', 'windows-x64', 'datasecure-sandbox.exe');
+  verifyArtifact(executable);
+  const result = spawnSync(executable, ['--process-birth', String(pid)], {
+    encoding: 'utf8', windowsHide: true, shell: false, timeout: 2000,
+    maxBuffer: 128, env: {}
   });
   const ticks = String(result?.stdout || '').trim();
   if (result?.status !== 0 || !/^\d{10,20}$/u.test(ticks)) return null;
@@ -59,7 +57,8 @@ function processInstanceIdentity(pid, options = {}) {
   let identity = null;
   try {
     if (platform === 'linux') identity = linuxBirth(pid, options.fs || fs);
-    else if (platform === 'win32') identity = windowsBirth(pid, options.spawnSync || childProcess.spawnSync, options.env || process.env);
+    else if (platform === 'win32') identity = windowsBirth(pid, options.spawnSync || childProcess.spawnSync,
+      options.verifyArtifact || verifyNativeLauncherArtifact);
     else if (platform === 'darwin') identity = macosBirth(pid, options.spawnSync || childProcess.spawnSync);
   } catch { identity = null; }
   if (!ID_RE.test(String(identity || ''))) return null;
