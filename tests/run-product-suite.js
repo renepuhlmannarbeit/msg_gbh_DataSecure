@@ -10,6 +10,8 @@
 // tests/test-test-path-separation.js both reject such an overlap.
 
 const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const os = require('node:os');
 
 const baseFiles = [
   'tests/test-test-harness.js',
@@ -164,6 +166,17 @@ function main() {
   if (duplicates.length) {
     console.error(`Product suite lists overlap: ${duplicates.join(', ')}`);
     process.exit(65);
+  }
+  // GitHub Windows can expose the runner temp directory through an alias.
+  // Synthetic fixture roots must use its native canonical spelling: the
+  // production guards deliberately reject redirected private ancestors.
+  // Separate boundary tests still exercise those hostile paths explicitly.
+  if (process.platform === 'win32') {
+    const temporaryRoot = fs.realpathSync.native(os.tmpdir());
+    const named = fs.lstatSync(temporaryRoot);
+    if (!named.isDirectory() || named.isSymbolicLink()) throw new Error('TEST_TEMP_ROOT_UNSAFE');
+    process.env.TMP = temporaryRoot;
+    process.env.TEMP = temporaryRoot;
   }
   for (const file of baseFiles) run(file);
   const files = [...ciFiles, ...(profile === 'full' ? fullOnly : [])];

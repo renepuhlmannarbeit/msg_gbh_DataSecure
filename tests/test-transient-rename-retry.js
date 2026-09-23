@@ -14,7 +14,7 @@ const {
 } = require('../plugins/data-secure/server/gateway/batch-journal-io');
 
 const { test, assert, done } = createSuite('Transient rename retry');
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-rename-retry-'));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-rename-retry-')));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'data');
