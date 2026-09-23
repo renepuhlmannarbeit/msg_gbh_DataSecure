@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-support-trace-'));
+const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-support-trace-')));
 const {
   SUPPORT_TRACE_SCHEMA, sanitizeSupportTrace, recordSupportTrace,
   supportTraceStatus, _test

@@ -6,7 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { createSuite } = require('./helpers');
 
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-snapshot-'));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-snapshot-')));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 

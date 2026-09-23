@@ -15,7 +15,7 @@ const { releasedDocumentResult, notProcessedDocumentResult } = require('../plugi
 const { test, done, assert } = createSuite('Plain batch compatibility and legacy preservation');
 
 function fixture(schema = 'datasecure-batch/2', workName = '001_aaaaaaaaaaaaaaaaaaaaaaaa.txt') {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-batch-plain-'));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'ds-batch-plain-')));
   const work = path.join(root, 'work');
   fs.mkdirSync(work, { mode: 0o700 });
   const bytes = Buffer.from('Kunde: Synthetische Person 4711', 'utf8');

@@ -5,7 +5,7 @@ const path = require('path');
 const { createSuite } = require('./helpers');
 const { createPrivateWorkStore } = require('../plugins/data-secure/server/gateway/private-work-store');
 const { test, done, assert } = createSuite('Plain private work store (no secrets)');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-plain-store-'));
+const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-plain-store-')));
 let sequence = 0;
 function target() { return path.join(root, `${++sequence}.snapshot`); }
 function store(options = {}) { return createPrivateWorkStore({ privateRoot: root, ...options }); }

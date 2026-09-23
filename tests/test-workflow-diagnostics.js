@@ -15,7 +15,7 @@ const {
 } = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 
 const { test, done, assert } = createSuite('Content-free workflow diagnostics');
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-workflow-diagnostics-'));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-workflow-diagnostics-')));
 const NOW = Date.UTC(2026, 7, 24, 12, 0, 0);
 
 test('every shared cause survives both the workflow journal and its actual support mirror', () => {

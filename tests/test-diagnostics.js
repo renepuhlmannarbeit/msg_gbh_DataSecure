@@ -3,7 +3,7 @@ const fs=require('fs');const os=require('os');const path=require('path');
 const {createSuite}=require('./helpers');
 const {DIAGNOSTIC_SCHEMA,RETENTION_DAYS,MAX_EVENTS,sanitizeDiagnostic,classifyDiagnosticError,recordDiagnostic,diagnosticStatus,exportDiagnosticPackage,_test}=require('../plugins/data-secure/server/gateway/diagnostics');
 const {test,done,assert}=createSuite('Privacy-safe diagnostics');
-const base=fs.mkdtempSync(path.join(os.tmpdir(),'data-secure-diagnostics-'));const NOW=Date.UTC(2026,7,21,12,0,0);
+const base=fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(),'data-secure-diagnostics-')));const NOW=Date.UTC(2026,7,21,12,0,0);
 
 test('diagnostic entries use a strict metadata whitelist',()=>{const event=sanitizeDiagnostic({timestamp:new Date(NOW).toISOString(),route:'input',stage:'converted',result:'stopped',source_type:'.docx',profile:'personnel_profile',remove_images:true,error_code:'LOCAL_REVIEW_DEFERRED',ambiguous_organization_count:3,ambiguous_person_count:2,filename:'Max Mustermann Lebenslauf.docx',path:'C:\\Personal\\Max.docx',raw_content:'Max Mustermann',message:'ZIP error for Max',document_sha256:'a'.repeat(64)},{now:NOW});const encoded=JSON.stringify(event);assert.strictEqual(event.schema,DIAGNOSTIC_SCHEMA);assert.strictEqual(event.source_type,'docx');assert.strictEqual(event.error_code,'LOCAL_REVIEW_DEFERRED');assert.strictEqual(event.ambiguous_organization_count,3);assert.strictEqual(event.ambiguous_person_count,2);assert.doesNotMatch(encoded,/Max|Personal|Lebenslauf|raw_content|sha256|message|filename|path/i);});
 

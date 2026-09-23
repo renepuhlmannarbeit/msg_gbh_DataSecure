@@ -6,7 +6,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { _test } = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 
-const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-workflow-concurrency-'));
+const dataRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-workflow-concurrency-')));
 fs.mkdirSync(_test.workflowDiagnosticDirectory({ dataRoot }), { recursive: true });
 const modulePath = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'gateway', 'workflow-diagnostics.js');
 const writer = `const {recordWorkflowEvent}=require(process.argv[1]);const root=process.argv[2],run=process.argv[3];for(let i=0;i<50;i++){if(!recordWorkflowEvent({event:'intake_processing_started',outcome:'progress',run_id:run},{dataRoot:root}))process.exit(65);}`;
