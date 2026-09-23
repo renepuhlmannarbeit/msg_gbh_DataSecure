@@ -796,3 +796,37 @@ bleiben **fail-closed**. Ein echter Selbstprozess-Test läuft auf Windows mit
 System- und paketierter Node-22-Laufzeit grün, ebenso die Historie. Der neue
 Windows-Runner muss diese Verfügbarkeitskorrektur bestätigen, bevor erneut
 Pakete gebunden werden.
+
+Der Windows-Runner aus `2aa9e8c9839cb835016c6913e4a38fa6ceefb1ef`
+stoppte dennoch an derselben Stelle. Die bloße Timeout-Erhöhung hat den
+CI-Fehler also **nicht** behoben; die vorherige Engpassannahme ist nicht
+belegt. Vor einem weiteren Paketbau steht nun ein eigenständiger echter
+Windows-Prozessidentitätstest im Releasegate. Er meldet ausschließlich
+Exitstatus, Signal, einen festen Spawn-Fehlercode sowie Ausgabelängen, niemals
+Prozessdaten oder Dokumentinhalt. Die fail-closed-Leaseregel bleibt bestehen.
+
+## Zweiter unabhängiger macOS-Installationsreview
+
+Zwei voneinander unabhängige technische Reviews verglichen den konkreten
+Tauri-/ZIP-/CI-Pfad mit Apples Code-Signing-/Gatekeeper- und Tauri-2-Vorgaben.
+Ein beschädigtes Archiv ist statisch nicht belegt, aber der bisherige native
+Smoke startet das Mach-O direkt aus einer unquarantänisierten CI-Kopie.
+Das ist **kein** Nachweis für Browser-Download, Finder, LaunchServices,
+Kopie nach Programme oder Gatekeeper. Ad-hoc-Signierung bleibt nur ein
+interner Pilotweg; Developer-ID-Signierung und Notarisierung sind für eine
+reibungsarme breite Installation ein eigener, noch offener Schritt.
+
+Konkreter technischer Gap: Der Konvertierungs-Node und der POSIX-Supervisor
+liegen als Mach-O unter `Contents/Resources`; eine äußere `codesign --deep`-
+Prüfung belegt ihre Einzel-Signaturen nicht. Der Supervisor wird nun vor der
+Paketprojektion ausdrücklich ad hoc signiert und beide Helfer werden ebenso
+wie App und Sidecar einzeln vor und nach ZIP auf Signatur/Architektur geprüft.
+Ein synthetischer XLSX-/PDF-/Bild-OCR-Lauf aus dem tatsächlich entpackten
+`.app`-Inhalt ergänzt den bisherigen reinen IPC-Start. Damit wird E0 enger,
+aber nicht als N3/N4 oder macOS-13.5-Abnahme ausgegeben. Die langfristig
+saubere Code-Location für Mach-O-Helfer ist separat zu prüfen; ein Pfadumbau
+ohne echten Mac-Regressionstest wäre derzeit riskanter als die Härtung.
+Referenzen: [Apple – Distribution](https://developer.apple.com/documentation/technologyoverviews/distribution),
+[Apple – Code Signing](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac/),
+[Apple – Pakettest](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution),
+[Tauri 2 – macOS Signierung](https://v2.tauri.app/distribute/sign/macos/).

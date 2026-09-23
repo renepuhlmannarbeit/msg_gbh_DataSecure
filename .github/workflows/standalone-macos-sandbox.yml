@@ -87,6 +87,8 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror native/ocr/pilot/posix-sandbox.c \
             -o "$destination/datasecure-sandbox"
           chmod 700 "$destination/datasecure-sandbox"
+          codesign --force --sign - "$destination/datasecure-sandbox"
+          codesign --verify --strict --verbose=2 "$destination/datasecure-sandbox"
           "$destination/datasecure-sandbox" --sandbox-contract
           bash tests/test-posix-supervisor-native.sh "$destination/datasecure-sandbox"
           shasum -a 256 "$destination/datasecure-sandbox" | awk '{print $1}' \
@@ -121,6 +123,7 @@ jobs:
           bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
           app="$bundle/Contents/MacOS/datasecure-standalone"
           sidecar="$bundle/Contents/MacOS/datasecure-core"
+          conversion_node="$bundle/Contents/Resources/server/standalone/conversion-runtime/node"
           supervisor="$bundle/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"
           test -f "$bundle/Contents/Info.plist"
           test -d "$bundle/Contents/Resources/server/standalone/conversion-runtime"
@@ -129,11 +132,12 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$bundle/Contents/Info.plist")" = "13.5"
           codesign --verify --deep --strict --verbose=2 "$bundle"
           codesign -dv --verbose=4 "$bundle" 2>&1 | grep -q '^Signature=adhoc$'
-          for executable in "$app" "$sidecar" "$supervisor"; do
+          for executable in "$app" "$sidecar" "$conversion_node" "$supervisor"; do
             test -x "$executable"
             file "$executable"
             arches="$(lipo -archs "$executable")"
             test "$arches" = "${{ matrix.rust_arch }}"
+            codesign --verify --strict --verbose=2 "$executable"
           done
           if find "$bundle" -print | grep -E '/(?:\.claude-plugin|skills|Claude|Cowork)(/|$)|/\.mcp\.json$'; then
             exit 1
@@ -181,11 +185,14 @@ jobs:
           for executable in \
             "$packaged_app/Contents/MacOS/datasecure-standalone" \
             "$packaged_app/Contents/MacOS/datasecure-core" \
+            "$packaged_app/Contents/Resources/server/standalone/conversion-runtime/node" \
             "$packaged_app/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"; do
             test "$(lipo -archs "$executable")" = "${{ matrix.rust_arch }}"
+            codesign --verify --strict --verbose=2 "$executable"
           done
           bash tests/manual/standalone-native-macos-launch.sh \
             --app "$packaged_app" --target "${{ matrix.target }}" --version "$version"
+          node tests/manual/standalone-macos-packaged-conversion.mjs "$packaged_app"
       - name: Upload the verified engineering package for one day
         if: ${{ inputs.upload_package == true }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

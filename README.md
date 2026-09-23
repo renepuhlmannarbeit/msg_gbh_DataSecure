@@ -30,7 +30,7 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende Paket vollständig entpacken und
 nicht direkt aus dem ZIP starten:
 
-**[Alle geprüften 3.2.0-rc137-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc137)**
+**[Technisch geprüfte 3.2.0-rc137-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc137)**
 
 - **Windows 10/11 x64:**
   [DataSecure-Standalone-3.2.0-rc137-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Standalone-3.2.0-rc137-windows-x64.zip)
@@ -52,13 +52,17 @@ nicht direkt aus dem ZIP starten:
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
   Dieses Paket ist technisch nativ geprüft; die sichtbare Linux-UAT ist offen.
 
-Die internen Pilotpakete sind nicht mit einer Apple Developer ID notariell
-signiert. Falls macOS den ersten Start wegen fehlender Identifizierung oder
+Die macOS-Pakete sind interne, nur ad-hoc-signierte Piloten: Der tatsächliche
+Browser-/Finder-/Gatekeeper-Installationsweg auf Intel und Apple Silicon ist
+noch nicht abgenommen. Sie sind nicht mit einer Apple Developer ID signiert
+oder notariell beglaubigt. Falls macOS den ersten Start wegen fehlender Identifizierung oder
 Notarisierung blockiert, danach unter **Systemeinstellungen → Datenschutz & Sicherheit**
 bei DataSecure **Dennoch öffnen** wählen und die Rückfrage mit
 **Öffnen** bestätigen. Bei „beschädigt“ oder Schadsoftwarewarnung nicht
 umgehen; genaue Meldung und Prüfsumme kontrollieren. Gatekeeper nicht global
 deaktivieren.
+Für eine reibungsarme breite macOS-Verteilung sind Developer-ID-Signierung,
+Notarisierung und ein Fresh-Install-Test des heruntergeladenen Pakets nötig.
 Vor einem formalen Test immer Paketname und veröffentlichte SHA-256-Prüfsumme
 mit dem Kandidatenmanifest vergleichen.
 

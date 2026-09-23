@@ -2,8 +2,9 @@
 
 Status: Native ad-hoc-signierte App-Bundles sind auf echten Intel- und
 Apple-Silicon-Runnern gebaut und über ihre private IPC-Grenze gestartet. Ein
-Browser-Download mit Finder-Entpackung und Gatekeeper wurde damit noch nicht
-nachgewiesen. Der
+Browser-Download mit Finder-Entpackung, Kopie nach Programme, LaunchServices
+und Gatekeeper wurde damit noch nicht nachgewiesen. Die Runner verwenden
+macOS 14/15; die deklarierte Mindestversion 13.5 ist noch nicht nativ geprüft. Der
 Workflow kann daraus zusätzlich ein geprüftes Engineering-ZIP für einen Tag
 zum Zielhosttest bereitstellen. Die sichtbare menschliche Abnahme bleibt offen.
 
@@ -23,8 +24,9 @@ Abhängigkeits-Caches. Ein Paket-Upload ist standardmäßig
 ausgeschaltet. Wird `upload_package` ausdrücklich aktiviert, lädt der Workflow
 nur das verifizierte ZIP und seine SHA-256-Datei mit einem Tag Aufbewahrung hoch.
 Das Archiv wird zweimal bytegleich erzeugt, geprüft, entpackt, erneut auf
-Signatur und Architektur geprüft und aus dem entpackten Paket über die private
-IPC-Grenze gestartet. Das ersetzt nicht die nachfolgende sichtbare
+Signatur und Architektur geprüft, aus dem entpackten Paket über die private
+IPC-Grenze gestartet und mit synthetischen Office-/PDF-/OCR-Eingaben durch den
+echten Konverter geführt. Das ersetzt nicht die nachfolgende sichtbare
 Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
 
 Maßgebliche Herstellerhinweise:
@@ -49,7 +51,7 @@ zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc140-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc137-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die
@@ -86,8 +88,11 @@ Das Pilotpaket wird beim nativen macOS-Build ohne Apple-Zertifikat ausdrücklich
 ad-hoc signiert (`signingIdentity: "-"`), aber nicht notariell beglaubigt. Diese
 kostenfreie technische Signatur ersetzt weder Developer-ID-Signierung noch
 Notarisierung und kann die Gatekeeper-Rückfrage deshalb nicht vermeiden. Der
-Weg bleibt ein interner Pilot. Developer-ID-Signierung und Notarisierung sind
-optionale spätere Verbesserungen für eine bequemere breite Verteilung.
+Weg bleibt ein interner Pilot, dessen tatsächliche Installierbarkeit pro
+Zielhost erst im N3-Test belegt wird. Für eine reibungsarme breite Verteilung
+ist Developer-ID-Signierung mit Notarisierung der vorgesehene Weg; eine
+ad-hoc-Signatur ist dafür kein Ersatz. Ohne diese Voraussetzungen nicht als
+einfach installierbare macOS-Version bewerben.
 
 ## Zielhost-Abnahme
 

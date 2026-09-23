@@ -328,7 +328,7 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
 
 test('main README gives direct Windows and macOS Standalone installation paths', () => {
   const readme = read('README.md');
-  const release = /Alle geprüften (\d+\.\d+\.\d+-rc\d+)-Pakete/u.exec(readme)?.[1];
+  const release = /Technisch geprüfte (\d+\.\d+\.\d+-rc\d+)-Pakete/u.exec(readme)?.[1];
   assert.ok(release, 'README must name the actually published Standalone release');
   for (const target of ['windows-x64', 'macos-x64', 'macos-arm64']) {
     const asset = `DataSecure-Standalone-${release}-${target}.zip`;

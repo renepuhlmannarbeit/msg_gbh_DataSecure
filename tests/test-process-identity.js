@@ -1,5 +1,6 @@
 'use strict';
 
+const childProcess = require('node:child_process');
 const { createSuite } = require('./helpers');
 const { processInstanceIdentity, processInstanceState, _test } = require('../plugins/data-secure/server/gateway/process-identity');
 
@@ -33,6 +34,19 @@ test('Windows and macOS adapters accept only bounded exact start metadata', () =
 
 test('Windows reads the real current process birth identity within the bounded host allowance', () => {
   if (process.platform !== 'win32') return;
+  let probe = null;
+  const direct = _test.windowsBirth(process.pid, (file, args, options) => {
+    const result = childProcess.spawnSync(file, args, options);
+    probe = {
+      status: Number.isInteger(result.status) ? result.status : 'null',
+      signal: result.signal || 'none',
+      error: ['ETIMEDOUT', 'ENOBUFS', 'ENOENT'].includes(result.error?.code) ? result.error.code : 'none',
+      stdoutLength: result.stdout?.length || 0,
+      stderrLength: result.stderr?.length || 0
+    };
+    return result;
+  });
+  assert.ok(direct, `WINDOWS_BIRTH_PROBE:${JSON.stringify(probe)}`);
   const actual = processInstanceIdentity(process.pid);
   assert.match(actual, /^[a-f0-9]{64}$/u);
   assert.strictEqual(processInstanceIdentity(process.pid), actual);

@@ -55,6 +55,8 @@ jobs:
           node-version: '22.23.2'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify real Windows process birth lookup before product tests
+        run: node tests/test-process-identity.js
       - run: npm run test:product:ci
       - run: npm run native:repro
       - name: Fetch and attest pinned official Windows product runtime
