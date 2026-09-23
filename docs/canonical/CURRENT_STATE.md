@@ -1,10 +1,10 @@
 # Aktueller Iststand
 
-Stand: 23.09.2026 · 3.2.0-rc140 · Quellstand ungebunden; Cowork RC139 und Standalone RC137 veröffentlicht; Modellabnahme und N3/N4 offen
+Stand: 23.09.2026 · 3.2.0-rc140 · beide Produkte technisch an `814bc50e` gebunden und als Vorabversion veröffentlicht; Modellabnahme und N3/N4 offen
 
-## RC140 – noch ungebundene Produktkorrekturen
+## RC140 – veröffentlichter technischer Produktkandidat
 
-**Unveröffentlichter Arbeitsstand 23.09.2026:** [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md)
+**Quell- und Paketstand 23.09.2026:** [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md)
 führt die gemeinsame Roottrennung einschließlich zukünftiger historischer
 Reservierungen (BL-041.19), den vorbereiteten 14-Fälle-Claude-Code-Pilot
 (BL-041.20) und ausdrücklich bestätigte Wiederverwendung fertiger Cowork-Stapel
@@ -38,7 +38,7 @@ Docs-/Versions-/UAT-Verträge bestehen mit 101 Entscheidungen, 24 Epics und
 Ein identischer atomarer Reservierungsaustausch zwischen Prüfung und Öffnen ist
 inzwischen mit echtem Kindprozess reproduziert und korrigiert (43 Rootfälle).
 Die frühere sporadische Beobachtung ist damit nicht rückwirkend eindeutig
-zugeordnet. Die nachfolgend genannten Host-/Paket-/Modellabnahmen bleiben offen.
+zugeordnet. Die menschlichen Zielhost-/Modell-/N3-/N4-Abnahmen bleiben offen.
 
 Der vollständig gelesene externe Referenzstand `vectranetworks/anonym`
 (`bc464647…`, 44 Dateien) ist als VECTRA-20260923 im Reviewbericht verankert.
@@ -49,15 +49,24 @@ Importoberfläche oder kostenpflichtige Modellprüfung. Beide Produkte nutzen
 weiterhin denselben typisierten Kern; reine Markdown-Konvertierung bleibt
 inhaltserhaltend und getrennt von der Anonymisierung.
 
-Die folgenden Releasebelege gelten weiter für die **unveränderten alten**
-RC139-/RC137-Pakete, nicht für diese neuen Quelländerungen. Kein neuer Build,
-keine zusätzliche Host- oder Produktionsfreigabe. Claude Code wurde lokal mit dem
+RC140 bindet beide Produkte an Commit `814bc50e3d754224cd95b6fa91f122dd45f48487`
+und den [Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140).
+Standalone-Windows bestand PKG-04/INT-13 mit zwei bytegleichen Bauten und
+beiden nativen Smokes. Mac-Intel/-ARM (`35864636481`) und Linux (`35864697349`)
+bestanden native Paket-, ZIP- und Konvertierungsprüfungen; Cowork auf Windows,
+Intel-Mac und ARM-Mac bestand `35864685584`, der getrennte Windows-Normal-/Debug-/UAT-Lauf
+`35864624729`. Alle 15 Release-Assets wurden gegen lokale Bytes geprüft;
+Pflicht-CI `35864600808` ist grün. Das belegt keine Finder-/Gatekeeper-
+Installation, keine macOS-13.5-Ausführung und keine menschliche Modell-/N3-/N4-
+oder Produktionsabnahme. Die folgenden RC139-/RC137-Abschnitte sind Historie.
+
+Claude Code wurde lokal mit dem
 offiziellen Updater von 2.1.267 auf 2.1.280 aktualisiert; der Pilotvorcheck besteht
 (Minimum 2.1.273). Die CLI ist nicht angemeldet. Der lokale Code-Reiter in Claude
 Desktop ist als gesondert zu belegende Oberfläche vorgesehen. Modelltests dürfen
 ausschließlich enthaltene Claude-Abonutzung verbrauchen, keine API-/Zusatzkosten.
 Desktop-Abrechnungsweg und Werkzeuge sind noch nicht geprüft;
-Native-/Modell-/N3-/N4-Abnahme bleiben offen.
+Sichtbare Host-/Modell-/N3-/N4-Abnahme bleiben offen.
 
 ## RC139 – veröffentlichter Cowork-Kandidat
 

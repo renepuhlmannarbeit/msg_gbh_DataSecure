@@ -2,7 +2,32 @@
 
 Stand: 23.09.2026 · 3.2.0-rc140
 
-Der aktuelle Quellstand ist RC140-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+RC140 ist als gemeinsamer, aber produktgetrennter Vorabkandidat aus dem sauberen
+Quellcommit `814bc50e3d754224cd95b6fa91f122dd45f48487` veröffentlicht:
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140>.
+Alle 15 Release-Assets stimmen in Größe und SHA-256 mit dem lokalen Staging
+überein; `SHA256SUMS` deckt die 14 weiteren Dateien ab. Standalone-Windows
+bestand PKG-04/INT-13: zwei saubere, bytegleiche ZIP-Bauten zu je 110.290.089
+Bytes, SHA-256 `deb0eaab98b3981f2ca979cfe7a941e1942bc00a83ba934a7a23dd2de79796f1`,
+beide Paket-, Worker-, Verlaufs- und nativen Smokes. Die nativen Mac-Intel-/ARM-
+Läufe `35864636481` bauten die ZIPs jeweils zweimal bytegleich, prüften
+App, Sidecar, Node und Supervisor einzeln auf Signatur/Architektur und starteten
+den entpackten Paketinhalt mit echten Office-/PDF-/OCR-Konvertierungen. Linux
+bestand `35864697349`. Cowork bestand seine drei nativen Zielpakete in
+`35864685584`; Windows-Normal ist bytegleich zum unabhängigen Release-Lauf
+`35864624729`, der Normal, Debug, UAT und SPDX bindet. Pflicht-CI
+`35864600808` ist grün. Der native Windows-Helfer wurde mit der gepinnten
+MSVC-Toolchain auf dem Buildhost quell-/binärgleich reproduziert; das rollende
+VS-2026-GitHub-Image prüft nur die Integrität des getrackten Helfers und wird
+nicht fälschlich als identischer Compiler ausgegeben.
+
+Die macOS-ZIPs bleiben ad-hoc-signierte **interne Piloten**. Browser-Download,
+Finder-Entpackung, Kopie nach Programme, Gatekeeper/LaunchServices, macOS 13.5
+und sichtbare Intel-/ARM-UAT sind nicht durch Runner-Smokes bewiesen.
+Menschliche N3/N4-, Cowork-Modell- und Produktionsfreigaben bleiben offen.
+
+### RC139 – historischer Cowork-Kandidat
+
 Der Windows-x64-Cowork-Kandidat RC139 sowie beide Mac-Kandidaten binden den sauberen Quellcommit
 `46c6fec4722c879989f5c8e3059367241c117c3a`. Der Release
 <https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc139>

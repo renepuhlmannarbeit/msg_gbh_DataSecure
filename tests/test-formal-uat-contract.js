@@ -27,14 +27,14 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.match(overview, /Standalone muss offline funktionieren/u);
   assert.match(overview, /Cowork benötigt Claude Desktop und\s+Internet/u);
   assert.ok(campaignLabel, `release-candidate label missing in ${productVersion}`);
-  const boundCandidate = /Windows-x64-Cowork-Kandidat RC(\d+)[\s\S]{0,500}?Quellcommit\s+`([0-9a-f]{40})`/u.exec(release);
-  assert.ok(boundCandidate, 'release truth must identify the currently published Cowork candidate');
+  const boundCandidate = /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
+  assert.ok(boundCandidate, 'release truth must identify the currently published product candidate');
   assert.match(overview, new RegExp(
-    `RC${boundCandidate[1]} ist als technischer Cowork-Kandidat[\\s\\S]{0,120}` +
+    `RC${boundCandidate[1]} ist als technischer Kandidat beider getrennten Produkte[\\s\\S]{0,120}` +
     '`[0-9a-f]{40}` gebunden und veröffentlicht', 'u'));
   if (boundCandidate[1] !== campaignLabel) {
     assert.match(release, new RegExp(`aktuelle Quellstand ist RC${campaignLabel}-Entwicklungsstand`, 'u'));
-    assert.match(overview, new RegExp(`Neue Quellkorrekturen[\\s\\S]{0,100}nicht[\\s\\S]{0,80}RC${boundCandidate[1]}-Pakete`, 'u'));
+    assert.match(overview, /historische Kandidaten/u);
   }
   assert.match(overview, /12×3- und 41×3-Modellgates bleiben\s+`NOT_RUN`/u);
   assert.match(overview, /npm run test:version-truth/u);

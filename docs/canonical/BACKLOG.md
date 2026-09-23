@@ -37,9 +37,25 @@ Abschnitt B enthält ausschließlich menschliche beziehungsweise
 zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
 und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
 
+### RC140 – aktuelle technische Release-Evidence
+
+Beide Produkte sind aus dem sauberen Commit
+`814bc50e3d754224cd95b6fa91f122dd45f48487` als
+[RC140-Vorabversion](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)
+veröffentlicht. Standalone-Windows bestand PKG-04/INT-13 mit zwei bytegleichen
+Bauten und beiden nativen Smokes; Mac Intel und ARM (`35864636481`) sowie Linux
+(`35864697349`) bestanden die native Paket-Evidence. Cowork bestand seine drei
+nativen Zielpakete (`35864685584`), den getrennten Windows-Normal-/Debug-/UAT-
+Lauf (`35864624729`) und die Pflicht-CI (`35864600808`). Alle 15 Release-Assets
+stimmen mit den lokalen Bytes überein. Das schließt technische E0-Lieferung,
+aber keine menschliche N3/N4-/Modell-/Finder-/Gatekeeper-Abnahme und keine
+macOS-13.5-Evidenz. Der nächste Mac-Schritt ist ein echter Browser-Download
+mit Fresh Install und sichtbarem Start auf Intel und Apple Silicon; ein
+ad-hoc-signiertes Paket bleibt nur ein interner Pilot.
+
 ### RC139 – Astra-Korrekturen und exakte Release-/UAT-Bindung
 
-**Reviewfortführung, kein neuer Release:** [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md)
+**Damals noch ungebundene Reviewfortführung, seit RC140 gebunden:** [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md)
 führt die Ordnertrennung (BL-041.19), den vorbereiteten separaten
 Claude-Code-Hostpilot (BL-041.20) und die vom Product Owner bestätigte
 Wiederverwendung nach DS-101 (BL-041.21). BL-050.4 prüft jetzt alle 16
@@ -50,8 +66,8 @@ BL-021.4 behandelt konkurrierende Versalientitel vor der Personen-Aliasbindung;
 Fachanker prüfen ihren Erhalt zusätzlich zur erfolgreichen Publikation.
 VECTRA-20260923 ergänzt unter BL-050.4 genau einen CSV-Integrationsgegenfall,
 keine neue Engine, Eingabeart oder Bedienaktion.
-Neue Quelländerungen sind noch nicht veröffentlicht; bestehende RC139-/RC137-
-Paketnachweise decken sie nicht ab.
+Die damaligen RC139-/RC137-Paketnachweise deckten diese Änderungen nicht ab;
+maßgeblich ist nun die vorangestellte RC140-Evidence.
 
 Quellcommit `46c6fec4722c879989f5c8e3059367241c117c3a` liefert BL-041.15–.18 und
 `ASTRA2-20260912-01`–`04`. Alle 182 lokalen Produkttestdateien, Docs-/Versionsgates

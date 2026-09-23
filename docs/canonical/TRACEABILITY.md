@@ -2,6 +2,16 @@
 
 Stand: 23.09.2026 · 3.2.0-rc140
 
+RC140-Lieferung: PH-20260923 / BL-021.3–.4, BL-041.19–.21, BL-050.4
+und die getrennten Windows-/Mac-Installationskorrekturen → Quellcommit
+`814bc50e3d754224cd95b6fa91f122dd45f48487` → Pflicht-CI `35864600808`
+→ Standalone-Windows-PKG-04/INT-13, native Mac-Intel/-ARM-Evidence
+`35864636481`, Linux-Evidence `35864697349`, Cowork-Dreiziel-Evidence
+`35864685584` und Windows-Normal-/Debug-/UAT-Evidence `35864624729` →
+[15 abgeglichene Release-Assets](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140).
+E1/E2/E3, insbesondere Browser-/Finder-/Gatekeeper-Fresh-Install und
+Cowork-Modellabnahme, sind dadurch nicht ersetzt.
+
 Review 23.09.2026: [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md) →
 DS-069/DS-078/DS-097/DS-099/DS-100/DS-101 → BL-041.19–.21 und BL-050.4.
 PH-12 → DS-012/DS-049/DS-096 → BL-021.3: fundstellengebundener lokaler
@@ -11,9 +21,9 @@ technische Tests ersetzen keine menschliche Inhalts- oder Hostabnahme.
 VECTRA-20260923 → BL-050.4 → vorhandener CSV-Test: eingebettete JSON-Skalare,
 E-Mail/IPv4/IPv6, unveränderte Fachwerte und gegenläufiger Konvertierungsvertrag;
 kein JSON-Importer oder zusätzlicher Skillbefehl.
-Neue Root-/Wiederverwendungs- und Golden-Korrekturen sowie der konditionale
-Code-Hostpilot bleiben ausdrücklich von abgeschlossener RC139-Evidence
-getrennt. Quelländerungen ändern keine historischen Artefaktbindungen.
+Die Root-/Wiederverwendungs- und Golden-Korrekturen sind nun in RC140 gebunden;
+der konditionale Code-Hostpilot bleibt ohne kostenpflichtige Modellaufrufe offen.
+RC139-Evidence und historische Artefaktbindungen werden dadurch nicht umgedeutet.
 
 RC139-Lieferung: BL-041.15–.18 / `ASTRA2-20260912-01`–`04` → Quellcommit
 `46c6fec4722c879989f5c8e3059367241c117c3a` → vollständige lokale Produktsuite

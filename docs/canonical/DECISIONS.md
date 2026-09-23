@@ -1,12 +1,12 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 11.09.2026
+Stand: 23.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-098, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-101, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -1653,6 +1653,6 @@ noch Terminal-Evidence und erzeugt keine neuen Ergebnisdateien. Abgelaufene,
 manipulierte oder nicht mehr vorhandene Pakete stoppen sicher. Ein erfolgreiches
 Lesen ist weiterhin keine fachliche Kenntnisnahme durch den Anwender.
 
-DS-101 präzisiert DS-069 und DS-099. Umsetzung im aktuellen Quellstand ist nicht
-gleichbedeutend mit Verfügbarkeit in den veröffentlichten RC139-/RC137-Paketen;
-Modellrouting, native Auswahl und neue Paketfreigabe bleiben getrennte Nachweise.
+DS-101 präzisiert DS-069 und DS-099. Die Implementierung ist in den technisch
+geprüften RC140-Cowork-Paketen enthalten. Modellrouting und sichtbare native
+Auswahl bleiben gesonderte menschliche Abnahmen, keine automatische Freigabe.

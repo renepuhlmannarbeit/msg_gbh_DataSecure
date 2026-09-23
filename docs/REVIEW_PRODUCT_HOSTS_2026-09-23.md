@@ -869,3 +869,27 @@ Das GitHub-Gate prüft deshalb die Integrität des *bereits reproduzierten*
 getrackten Helfers; es behauptet ausdrücklich **keinen** CI-Neubau mit dem
 abweichenden Compiler. Ein späterer Toolchain-Wechsel erfordert einen
 bewussten Binär-/Quell-Neubau und erneute Doppelbau-Evidence.
+
+## Abschluss des technischen RC140-Reviews und offene Mac-Abnahme
+
+Quellcommit `814bc50e3d754224cd95b6fa91f122dd45f48487` ist als
+[RC140-Vorabversion](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)
+veröffentlicht. Pflicht-CI `35864600808`, Windows-Cowork-Releasegate
+`35864624729`, Cowork-Dreiziel-Paketlauf `35864685584`, Standalone-macOS-
+Intel/-ARM-Lauf `35864636481` und Standalone-Linux-Lauf `35864697349`
+bestanden. Der lokale Windows-PKG-04-Lauf band zwei bytegleiche Standalone-
+Archive (`deb0eaab98b3981f2ca979cfe7a941e1942bc00a83ba934a7a23dd2de79796f1`)
+mit beiden nativen Smokes an INT-13. Alle 15 veröffentlichten Assets stimmen
+in Größe und SHA-256 mit dem lokal geprüften Release-Staging überein.
+
+Das technische Mac-Ergebnis umfasst Ad-hoc-Signatur, Einzelprüfung aller vier
+ausführbaren Mach-O-Komponenten, Architektur, deterministisches ZIP, Start der
+entpackten App über die private IPC-Grenze und reale Office-/PDF-/OCR-
+Konvertierung. Es umfasst **nicht** den Browser-/Finder-/Gatekeeper-Pfad eines
+quarantänisierten Downloads, den sichtbaren Dateidialog oder macOS 13.5.
+Apple erlaubt unter bestimmten Bedingungen ein app-spezifisches „Dennoch
+öffnen“ nach verifizierter Herkunft, nicht aber die Umgehung einer Beschädigt-
+oder Schadsoftwarewarnung. Ohne Developer-ID-Signatur und Notarisierung bleibt
+RC140 ein interner Pilot. N3/N4 auf echten Intel-/ARM-Macs muss genau diesen
+Erstinstallationspfad noch protokollieren; keine maschinelle Evidence wird als
+menschliche Freigabe umgedeutet.

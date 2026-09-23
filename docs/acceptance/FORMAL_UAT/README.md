@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 23.09.2026 · vorbereitet für 3.2.0-rc140; Standalone RC137 separat
+Stand: 23.09.2026 · vorbereitet für beide Produkte in 3.2.0-rc140
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -9,33 +9,36 @@ Produktkandidaten dürfen nicht vermischt werden. Die Testfälle selbst bleiben 
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC139 ist als technischer Cowork-Kandidat an Commit
-`46c6fec4722c879989f5c8e3059367241c117c3a` gebunden und veröffentlicht.
+RC140 ist als technischer Kandidat beider getrennten Produkte an Commit
+`814bc50e3d754224cd95b6fa91f122dd45f48487` gebunden und veröffentlicht.
 Die exakt erzeugten Cowork-ZIPs wurden auf Windows x64, macOS Intel und macOS
-ARM64 nativ gestartet. Standalone bleibt als eigener technischer Kandidat auf
-RC137 und Commit `8979d4b2127741c2921cb6f0654fb83d82944845`; es gibt kein
-Standalone-RC139-Paket. Deshalb ist die Vorlage zunächst auf **Cowork-only**
-gesetzt. Für eine Standalone-Kampagne wird ein separates Manifest mit RC137-
-Commit und -Pakethashes angelegt. Eine formale Kampagne beginnt erst, wenn beide
+ARM64 nativ gestartet; Standalone bestand Windows-PKG-04/INT-13 und native
+Paketläufe auf macOS Intel/ARM64 und Linux. Die generische Vorlage bleibt
+bewusst zunächst auf **Cowork-only** gesetzt, weil die veröffentlichte
+Windows-UAT-Datei nur Cowork-Normal/Debug bindet. Für eine Standalone-Kampagne
+wird ein eigenes Manifest mit demselben RC140-Commit, `standalone=true` und
+den exakten Standalone-Pakethashes angelegt. Eine formale Kampagne beginnt erst, wenn beide
 Tester die exakten Pakethashes des jeweiligen Produkts gebunden haben. Die
 12×3- und 41×3-Modellgates bleiben `NOT_RUN`; das veröffentlichte Evidence-ZIP
 ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch und darf nicht
 umetikettiert werden.
 
-Die Korrekturen nach dem Astra-/Terra-Gegenreview sind in RC139 enthalten.
-Seine Windows-UAT-Vorlage bindet die veröffentlichten Normal-/Debug-Bytes und
+Die Korrekturen nach dem Astra-/Terra-Gegenreview sind in RC140 enthalten.
+Seine Windows-Cowork-UAT-Vorlage bindet die veröffentlichten Normal-/Debug-Bytes und
 denselben Quellcommit. Die RC138-UAT-Vorlage ist nicht wiederverwendbar.
 Die separate Mac-Kampagne bindet das zu ihrer Architektur passende normale
-RC139-Paket; die Windows-Vorlage behauptet keinen Mac-Ausführungsnachweis.
+RC140-Paket; die Windows-Vorlage behauptet keinen Mac-Ausführungsnachweis.
 
-Evidence-Präzisierung vom 12.09.2026: Das nachgezogene native ZIP-Gate ist für
-RC139 auf allen drei Cowork-Zielarchitekturen bestanden. Danach folgt weiterhin
+Evidence-Präzisierung vom 23.09.2026: Das native ZIP-Gate ist für
+RC140 auf allen drei Cowork-Zielarchitekturen und den genannten Standalone-
+Zielen bestanden. Danach folgt weiterhin
 die beobachtete Installation und Bedienung in Claude; ein maschineller
 MCP-Roundtrip ist keine sichtbare Anwenderabnahme.
 
-Neue Quellkorrekturen in RC140 verändern nicht die veröffentlichten RC139-Pakete.
-Erst ein neuer, commitgebundener Paketbau mit eigenen Prüfsummen darf als
-RC140-Kandidat in einer separaten Kampagne ausgewählt werden.
+RC139- und RC137-Pakete bleiben historische Kandidaten; die formale RC140-
+Kampagne muss die neuen, commitgebundenen Pakethashes ausdrücklich wählen.
+Ein Runner-Smoke ersetzt nicht den Browser-/Finder-/Gatekeeper-Fresh-Install
+auf einem echten Mac.
 
 ## Was N3 und N4 bedeuten
 

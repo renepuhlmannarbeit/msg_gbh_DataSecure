@@ -1,7 +1,9 @@
 # DataSecure Standalone auf macOS starten
 
-Status: Native ad-hoc-signierte App-Bundles sind auf echten Intel- und
-Apple-Silicon-Runnern gebaut und über ihre private IPC-Grenze gestartet. Ein
+Status: Die RC140-ZIPs aus Commit `814bc50e3d754224cd95b6fa91f122dd45f48487`
+sind auf echten Intel- und Apple-Silicon-Runnern zweimal bytegleich gebaut,
+einzeln auf Signatur und Architektur geprüft sowie entpackt mit echten
+Konvertierungen über die private IPC-Grenze gestartet. Ein
 Browser-Download mit Finder-Entpackung, Kopie nach Programme, LaunchServices
 und Gatekeeper wurde damit noch nicht nachgewiesen. Die Runner verwenden
 macOS 14/15; die deklarierte Mindestversion 13.5 ist noch nicht nativ geprüft. Der
@@ -51,7 +53,7 @@ zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc137-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc140-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die

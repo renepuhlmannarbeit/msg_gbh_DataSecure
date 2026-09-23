@@ -84,26 +84,28 @@ test('release truth binds the published candidate while keeping human approval s
   const match = /-rc(\d+)$/iu.exec(version);
   assert.ok(match, `release candidate version expected, got ${version}`);
   const currentRc = `RC${match[1]}`;
-  assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}`, 'u'));
-  const boundCowork = /Windows-x64-Cowork-Kandidat (RC(\d+))[\s\S]{0,500}?Quellcommit\s+`([0-9a-f]{40})`/u.exec(release);
-  assert.ok(boundCowork, 'release truth must name one commit-bound Windows Cowork candidate');
-  const publishedVersion = version.replace(/rc\d+$/iu, `rc${boundCowork[2]}`);
+  const published = /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
+  assert.ok(published, 'release truth must name a commit-bound published candidate');
+  const publishedRc = `RC${published[1]}`;
+  const publishedVersion = version.replace(/rc\d+$/iu, `rc${published[1]}`);
   const readme = read('README.md');
-  const standaloneVersion = /DataSecure-Standalone-(\d+\.\d+\.\d+-rc(\d+))-windows-x64\.zip/u.exec(readme);
-  assert.ok(standaloneVersion, 'README must bind a separate Standalone candidate');
   assert.strictEqual(readme.split(/\r?\n/u)[0],
-    `# GBH DataSecure – Cowork ${boundCowork[1]} · Standalone RC${standaloneVersion[2]}`,
+    `# GBH DataSecure – Cowork und Standalone ${publishedRc}`,
     'product title must agree with published candidates, not just source version');
   assert.ok(readme.includes(`Quellstand: ${version}`));
   assert.ok(release.includes(`releases/tag/v${publishedVersion}`),
-    'published Cowork release link must match the explicitly bound candidate');
-  if (boundCowork[1] !== currentRc) {
+    'published release link must match the explicitly bound candidate');
+  assert.ok(readme.includes(`DataSecure-Standalone-${publishedVersion}-windows-x64.zip`));
+  assert.ok(readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${publishedVersion}.zip`));
+  assert.match(release, /Menschliche N3\/N4-[\s\S]{0,160}Produktionsfreigaben bleiben offen/u);
+  if (publishedRc !== currentRc) {
     assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}-Entwicklungsstand`, 'u'),
       'a newer unbound source RC must remain explicitly marked as development state');
   }
-  if (boundCowork[1] === currentRc) {
-    assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}(?!-Entwicklungsstand)`, 'u'),
-      'a published current Cowork RC must no longer be marked as development state');
+  if (publishedRc === currentRc) {
+    assert.doesNotMatch(release.split('### RC139 – historischer Cowork-Kandidat')[0],
+      /aktuelle Quellstand ist RC\d+-Entwicklungsstand/u,
+      'a published current RC must not be marked as development state');
   }
   // This sentence is historical release evidence: a new source version must
   // not silently relabel which published candidate followed RC135.

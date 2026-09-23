@@ -2,6 +2,20 @@
 
 Stand: 23.09.2026 · 3.2.0-rc140
 
+RC140-Liefernachweis für beide Produkte: sauberer Commit
+`814bc50e3d754224cd95b6fa91f122dd45f48487`, Pflicht-CI `35864600808`,
+Windows-Cowork-Normal-/Debug-/UAT `35864624729`, drei native Cowork-Ziele
+`35864685584`, Standalone-macOS-Intel/-ARM `35864636481`, Standalone-Linux
+`35864697349` und lokaler Windows-PKG-04/INT-13-Doppelbau mit SHA-256
+`deb0eaab98b3981f2ca979cfe7a941e1942bc00a83ba934a7a23dd2de79796f1`.
+Alle 15 [Vorabrelease-Assets](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)
+stimmen in Größe und Digest mit den lokal verifizierten Dateien überein.
+Mac-Pakete sind ad hoc signierte Piloten: E1-Finder-/Gatekeeper-/macOS-13.5-
+Nachweise, sichtbare N3/N4-UAT, Cowork-Modellgates und E3-Produktionsfreigabe
+bleiben **offen**. Ein nativer Runner-Start ist keine menschliche Installation.
+
+### Historische Evidence: RC139 und früher
+
 RC139-Liefernachweis für BL-041.15–.18 / `ASTRA2-20260912-01`–`04`: Commit
 `46c6fec4722c879989f5c8e3059367241c117c3a`, Pflichtlauf `34701892871` und
 Dreiziel-Paketlauf `34701897963`. Alle 182 lokalen Produkttestdateien bestanden.
