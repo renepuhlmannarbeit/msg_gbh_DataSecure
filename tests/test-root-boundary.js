@@ -7,7 +7,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-root-boundary-'));
+// Hosted Windows runners may expose TMP through a junction or differently
+// cased alias. Root policy deliberately refuses those aliases; construct the
+// synthetic fixture under its physical path so the test exercises separation.
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-root-boundary-')));
 const keys = ['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT'];
 const saved = new Map(keys.map(key => [key, process.env[key]]));
 const boundary = require('../plugins/data-secure/server/gateway/root-boundary');

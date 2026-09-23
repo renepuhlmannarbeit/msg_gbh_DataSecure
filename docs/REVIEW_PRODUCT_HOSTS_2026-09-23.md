@@ -719,3 +719,23 @@ Version, Kanon, N3/N4-Verträge und `git diff --check` bestanden ebenfalls.
 Diese Quelltests sind keine neue native Zielhost-, Claude-Modell- oder
 menschliche Freigabe. Erst commitgebundene, verifizierte ZIPs dürfen als RC140-
 Kandidaten bezeichnet werden.
+
+## RC140-Paketgate: verworfener erster Commit
+
+Der erste gepushte RC140-Commit `0d226c7b97430956b104efad9199bca991fab417`
+ist **kein Paketkandidat**. Das Windows-Releasegate fand im Root-Test eine
+lexikalische Temp-Pfad-Aliasannahme: Der produktive Root-Check verweigerte den
+nicht kanonisierten Testpfad zu Recht. Der Fixture-Root wird nun vor der
+Prüfung über `realpathSync.native` kanonisiert. Der lokale Root-Test bestand
+danach auch unter der paketierten Node-22-Laufzeit.
+
+Die erste lokale PKG-04-Vorprüfung fand eine zweite veraltete Testannahme:
+Ein mehrdeutiger Personenname im Konvertertest wurde nach F7 korrekt als
+`PERSON_CANDIDATE` in den lokalen Review geleitet, während der Test noch eine
+direkte Freigabe erwartete. Der Test prüft nun ausdrücklich den nicht
+veröffentlichten Review-Entwurf und seine Residualdiagnose; der separate
+16+16-Golden-Batch-Test belegt den echten Publikationsweg nach Entscheidung.
+Die Konvertergruppe (35 Fälle) bestand danach. Die vier bereits gestarteten
+Remote-Workflows des ersten Commits wurden abgebrochen; ihre Ergebnisse sind
+keine RC140-Evidence. Ein neuer Quellcommit und alle commitgebundenen Gates
+sind erforderlich, bevor ein RC140-Archiv veröffentlicht wird.

@@ -421,7 +421,7 @@ try {
     assert.equal(heavyReads, 0); assert.equal(heavyBytes, 0);
     process.stdout.write(`100-TXT packaged runtime: ${Math.round(performance.now() - started)} ms; repeated heavy runtime reads: ${heavyReads}\n`);
   });
-  await test('adversarial text PDF, scan PDF and JPEG traverse the real packaged worker and privacy gate', async () => {
+  await test('adversarial text PDF, scan PDF and JPEG traverse the real packaged worker and review-bound privacy gate', async () => {
     const corpus = createAdversarialCases();
     for (const [suffix, extension, expected] of [
       ['11-text-pdf-zwoelf-seiten.pdf', '.pdf', /Max Mustermann/u],
@@ -432,8 +432,15 @@ try {
       assert.ok(source, suffix);
       const converted = await convert(source.bytes, extension);
       assert.match(converted.markdown, expected, suffix);
-      const released = anonymizeMarkdown(converted.markdown, 'personnel_profile');
-      assert.doesNotMatch(released.text, /Aylin(?: Öztürk)?|Max Mustermann|Nordstern Gesundheit/u, suffix);
+      // F7 intentionally stops ambiguous person-like residuals. This direct
+      // converter test inspects the non-publishable review draft; the separate
+      // 16+16 Golden batch proves publication after explicit local decisions.
+      const draft = anonymizeMarkdown(converted.markdown, 'personnel_profile', { deferPersonReview: true });
+      assert.doesNotMatch(draft.text, /Aylin(?: Öztürk)?|Max Mustermann|Nordstern Gesundheit/u, suffix);
+      if (draft.residualPersonCandidates) {
+        assert.ok(draft.residualPersonCandidates.length > 0);
+        assert.ok(draft.residualPersonCandidates.every(item => item.type === 'PERSON_CANDIDATE'));
+      }
     }
   });
   process.stdout.write(`${passed} packaged conversion groups passed\n`);
