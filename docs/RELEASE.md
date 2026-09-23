@@ -2,14 +2,30 @@
 
 Stand: 23.09.2026 · 3.2.0-rc141
 
-Der aktuelle Quellstand ist RC141-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+Der aktuelle Quellstand ist RC141-Entwicklungsstand mit nativ geprüften Standalone-Mac-Engineering-Paketen, aber noch ohne neuen gemeinsamen Vorabrelease.
 
 **Kompatibilitätsnachtrag MAC-20260923:** Der Standalone-Supervisor in den
 unveränderten RC140-Assets verlangt Intel macOS 15.0 bzw. ARM macOS 14.0.
 Die deklarierte Mindestversion 13.5 ist für diese Pakete nicht korrekt. Die
-nachträglichen Deployment-/Signatur-/Plist-/Reviewkorrekturen sind nur im
-Quellstand vorhanden und brauchen einen neuen nativen Paketkandidaten. RC140-
+nachträglichen Deployment-/Signatur-/Plist-/Reviewkorrekturen sind in den neuen
+Standalone-Mac-Engineering-ZIPs RC141 enthalten. RC140-
 Hashes, Tag und damalige Testläufe werden nicht nachträglich umgedeutet.
+
+**RC141-Mac-Evidence:** Beide Standalone-Architekturen binden Commit
+`1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542`, Pflicht-CI `35875614129` und den
+bestandenen nativen Lauf `35875613438`. Je kompiliertem Bundle wurden zwei
+bytegleiche ZIPs erzeugt; das belegt deterministische Archivierung, nicht zwei
+unabhängige Compiler-Builds. Signaturen sämtlicher nativer Komponenten,
+Architekturen, tatsächliche minOS-/Systembibliotheksverträge, direkte und
+LaunchServices-Starts sowie echte Konvertierung/Anonymisierung, Zuordnung,
+Fehler und Verlauf nach Neustart bestehen. Beide heruntergeladenen ZIPs wurden
+lokal erneut geprüft. Die exakten Größen und Hashes stehen im
+[RC141-Nachweis](REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
+Die Artefakte sind lokal gesichert und in Actions nur einen Tag verfügbar;
+kein RC141-GitHub-Release wurde angelegt. Windows, Linux und Cowork behalten
+ihre veröffentlichten RC140-Pakete. macOS 13.5 ist nun der verifizierte
+Binärvertrag, noch kein real ausgeführter Zielhosttest. Sichtbare Installation
+und N3/N4 bleiben offen; die Pakete sind ad hoc signiert, nicht notarisiert.
 
 RC140 ist als gemeinsamer, aber produktgetrennter Vorabkandidat aus dem sauberen
 Quellcommit `814bc50e3d754224cd95b6fa91f122dd45f48487` veröffentlicht:

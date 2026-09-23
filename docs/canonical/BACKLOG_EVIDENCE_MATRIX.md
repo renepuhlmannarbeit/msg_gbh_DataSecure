@@ -2,13 +2,17 @@
 
 Stand: 23.09.2026 · 3.2.0-rc141
 
-**Aktueller Nachreview MAC-20260923:** BL-010.20/BL-012.9 sind wieder technisch
-in Arbeit. Die tatsächlichen RC140-Standalone-Mach-O-Bytes verlangen wegen des
+**Aktueller Nachreview MAC-20260923:** BL-010.20 ist mit den neuen RC141-Mac-
+Engineering-Paketen technisch neu belegt. Die RC140-Standalone-Mach-O-Bytes verlangen wegen des
 Supervisors Intel 15.0 / ARM 14.0; die bisher deklarierte 13.5 ist widerlegt.
 Quellkorrekturen einschließlich vollständigem nativen Paketvertrag,
-LaunchServices-Smoke und begrenzten Reviewgruppen sind lokal implementiert,
-aber noch nicht nativ neu belegt oder ausgeliefert. Details und lokale
-Regressionen: [Reviewbericht](../REVIEW_PRODUCT_HOSTS_2026-09-23.md#mac-20260923--vollständiger-macos-paket-und-installationsnachreview).
+LaunchServices-Smoke und begrenzten Reviewgruppen sind in RC141 enthalten.
+Commit `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542`, Pflicht-CI `35875614129`
+und beide nativen Architekturjobs `35875613438` sind grün. Exakte ZIPs wurden
+lokal nachgeprüft; nur eintägige Actions-Artefakte, noch kein neuer Release.
+BL-012.9 behält Cowork-Paketlieferung und sichtbare AppKit-/E1-/E2-Abnahme als
+Restarbeit. Details und Hashes:
+[RC141-Nachweis](../REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
 
 RC140-Liefernachweis für beide Produkte: sauberer Commit
 `814bc50e3d754224cd95b6fa91f122dd45f48487`, Pflicht-CI `35864600808`,

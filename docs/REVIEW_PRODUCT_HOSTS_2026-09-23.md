@@ -965,8 +965,9 @@ nachweisen, statt nur die Ad-hoc-Option umzuschalten.
   LaunchServices-Exitcode ist nicht beobachtbar und wird nicht als gemessene 0
   ausgegeben. Swift ist ausschließlich ein
   CI-Hilfsmittel und wird nicht als Endanwenderabhängigkeit ausgeliefert.
-- **Noch offen:** Ausführung der neuen Build-/LaunchServices-/Paketsmokes auf
-  Intel und ARM, neu gebundener Kandidat, tatsächlicher 13.5-Lauf und sichtbare
+- **Nach Neubau RC141:** Die neuen Build-/LaunchServices-/Paketsmokes auf
+  Intel und ARM sind bestanden und unten an Commit und ZIP-Bytes gebunden.
+  Offen bleiben dauerhafte Veröffentlichung, tatsächlicher 13.5-Lauf und
   Browser-/Finder-/Gatekeeper-/N3-/N4-Abnahme. Ad-hoc-Signierung bleibt Pilot;
   sie ist weder Developer ID noch Notarisierung und beweist keine allgemeine
   Installierbarkeit.
@@ -999,3 +1000,40 @@ Buildstufen beendet. Das verändert keine Produkt-Datenpfade.
 - [Apple – Apps sicher auf dem Mac öffnen](https://support.apple.com/102445)
 - [Tauri 2 – macOS App-Bundle](https://v2.tauri.app/distribute/macos-application-bundle/)
 - [Tauri 2 – macOS Signierung/Notarisierung](https://v2.tauri.app/distribute/sign/macos/)
+
+### RC141 – nativer Neubau und genaue Nachweisgrenze
+
+Quellcommit: `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542`.
+Pflicht-CI `35875614129`: **PASS**. Beide Architekturjobs des nativen Mac-Laufs: **PASS**:
+[`35875613438`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/35875613438).
+Dies ist ein Standalone-Mac-Engineering-Kandidat, kein gemeinsamer neuer
+Release beider Produkte. Veröffentlichte RC140-Dateien werden nicht verändert.
+
+| Architektur / Runner | Paketdatei | Byte | ZIP-SHA-256 | Ergebnis |
+|---|---|---:|---|---|
+| ARM64 / macOS 14 | `DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip` | 115.180.393 | `45f9bbc2a87d18fa3953364c55cf829bb128d26760b56e914fcc4369055bb003` | PASS; lokal erneut verifiziert |
+| Intel / macOS 15 | `DataSecure-Standalone-3.2.0-rc141-macos-x64.zip` | 118.465.919 | `8e3b1ef836c46e7c7dfb59070c454bf2b03155b96ed10400b63eae12929ee050` | PASS; lokal erneut verifiziert |
+
+Beide Jobs bestanden echte Konvertierung und Anonymisierung über die gebündelte
+Runtime, Fehlerfälle, Zuordnungsdatei, Supportereignisse, laufgebundenen Verlauf,
+Neustart und geänderten Ergebnisordner. Direkter App-Start und LaunchServices-
+Start nach ZIP-Entpackung bestanden einschließlich geordnetem Beenden ohne
+verwaisten Core. Alle fünf nativen Komponenten bestehen Architektur-,
+Signatur- und Ladeabhängigkeitsprüfungen; App und Supervisor deklarieren
+13.5, beide Node-Dateien 11.0, das ARM-Canvas-Addon 11.0 und das Intel-Addon 10.13.
+
+Der Workflow kompiliert die App je Architektur einmal und erzeugt daraus das
+Distributions-ZIP zweimal bytegleich. Dies belegt deterministische Archivierung
+dieses Bundles, nicht zwei unabhängige native Compiler-Builds. Der
+LaunchServices-Exitcode ist nicht beobachtbar; der Test behauptet dafür keine
+gemessene Null. Die Testeingaben sind synthetische echte Dokumentdateien,
+keine Ersatz-Konverter oder gemockten Worker.
+
+Die ZIPs und externen `.sha256`-Dateien werden lokal unter
+`dist/rc141-macos-native-35875613438/<Architektur>/` gesichert. GitHub-Actions-
+Artefakte sind nur einen Tag verfügbar; ein dauerhafter RC141-Release wurde
+nicht angelegt. Signaturen sind ad hoc, nicht Developer ID/notarisiert.
+Sichtbarer Browser-/Finder-/Gatekeeper-Fresh-Install, tatsächliche Ausführung
+auf macOS 13.5, Accessibility und N3/N4 bleiben offen. Der gemeinsame
+Mac-Sammelreview benötigt weiterhin seine sichtbare AppKit-Abnahme und eine
+neue Cowork-Paketlieferung; Standalone-Evidence ersetzt diese nicht.

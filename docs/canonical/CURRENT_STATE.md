@@ -1,6 +1,24 @@
 # Aktueller Iststand
 
-Stand: 23.09.2026 · 3.2.0-rc141 · neuer Mac-Prüfstand, noch nicht veröffentlicht; RC140 bleibt letzter gebundener Release beider Produkte; Modellabnahme und N3/N4 offen
+Stand: 23.09.2026 · 3.2.0-rc141 · Standalone-Mac-Engineering-Pakete nativ geprüft, noch kein neuer Release; RC140 bleibt letzter veröffentlichter Release beider Produkte; Modellabnahme und N3/N4 offen
+
+## RC141 – nativ geprüfter Standalone-Mac-Kandidat
+
+Intel und ARM binden Quellcommit `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542`.
+Pflicht-CI `35875614129` und beide Architekturjobs `35875613438` bestehen.
+Die ZIPs sind je Architektur zweimal bytegleich aus demselben kompilierten
+Bundle erzeugt und nach dem Entpacken direkt sowie über LaunchServices
+gestartet. Echte gebündelte Konvertierung/Anonymisierung, Zuordnung, Fehlerfälle
+und Verlauf nach Neustart bestehen; kein Converter-/Worker-Mock. Lokaler
+Download und erneute Paket-/Prüfsummenprüfung sind abgeschlossen.
+App und Supervisor deklarieren jetzt korrekt minOS 13.5; alle übrigen nativen
+Komponenten liegen darunter. Reale Ausführung auf 13.5, sichtbarer
+Browser-/Finder-/Gatekeeper-Fresh-Install und N3/N4 bleiben offen.
+[Exakte Pakete und Hashes](../REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
+Kein neuer gemeinsamer Release: Windows/Linux und Cowork bleiben bei ihren
+veröffentlichten RC140-Paketen; RC141-Mac liegt lokal und als eintägiges
+Actions-Artefakt vor. Der Mac-Sammelreview-Fix ist im Standalone-Paket enthalten;
+Cowork-Auslieferung und sichtbare AppKit-Abnahme bleiben getrennte Restarbeit.
 
 ## RC140 – veröffentlichter technischer Produktkandidat
 
@@ -8,11 +26,12 @@ Stand: 23.09.2026 · 3.2.0-rc141 · neuer Mac-Prüfstand, noch nicht veröffentl
 einen Supervisor mit minOS Intel 15.0 / ARM 14.0 trotz deklarierter 13.5. Sie
 sind daher kein 13.5-Kandidat. Deployment-Target, vollständige native
 Signatur-/Bibliotheksprüfung, numerische Plist-Versionen sowie LaunchServices-
-und echte Beide-Modi-Paketsmokes sind im Quellstand nachgezogen; neue native
-Evidence und Auslieferung stehen noch aus. Der gemeinsame Mac-Reviewadapter
+und echte Beide-Modi-Paketsmokes sind im Quellstand nachgezogen und für RC141
+oben nativ belegt; dauerhafte Veröffentlichung steht noch aus. Der gemeinsame Mac-Reviewadapter
 beider Produkte partitioniert zusätzlich bei 1000 Fundstellen und meldet
-technische Fehler nicht mehr als „Später“. BL-010.20/BL-012.9 sind dafür erneut
-in Arbeit. Bestehende Release-Bytes und menschliche Abnahmestände bleiben
+technische Fehler nicht mehr als „Später“. BL-010.20 ist technisch neu belegt;
+BL-012.9 wartet noch auf Cowork-Lieferung und sichtbare AppKit-Abnahme.
+Bestehende Release-Bytes und menschliche Abnahmestände bleiben
 unverändert; Details im [Reviewbericht](../REVIEW_PRODUCT_HOSTS_2026-09-23.md#mac-20260923--vollständiger-macos-paket-und-installationsnachreview).
 
 **Quell- und Paketstand 23.09.2026:** [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md)

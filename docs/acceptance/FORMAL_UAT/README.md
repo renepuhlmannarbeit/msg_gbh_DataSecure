@@ -9,6 +9,17 @@ neuem commitgebundenem Paketnachweis schließen. Die alten ZIPs enthalten die
 Quellkorrekturen nicht; eine erfolgreiche Installation auf neuerem macOS
 belegt keine Unterstützung der deklarierten 13.5.
 
+**Neuer technischer Mac-Prüfstand:** RC141-Standalone für Intel und ARM ist
+an Commit `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` und den bestandenen
+Lauf `35875613438` gebunden. Beide ZIPs samt Hashes sind im
+[RC141-Nachweis](../../REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze)
+erfasst und lokal gesichert; Actions-Artefakte laufen nach einem Tag ab.
+Dieser Engineering-Vorlauf ist noch keine gemeinsame Windows-/Mac-Kampagne:
+kein neuer Windows-/Cowork-Kandidat und keine menschliche Evidence wurden
+damit erzeugt. Für die formale Kampagne keine RC140-Windows- und RC141-Mac-
+Pakete als denselben Produktcommit zusammenfassen. N3/N4-Vorlagen bleiben
+`NOT_RUN`; tatsächliches macOS 13.5 und Finder-/Gatekeeper-Abnahme sind offen.
+
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
 für das jeweils geprüfte Produkt denselben festgeschriebenen Commit. Die

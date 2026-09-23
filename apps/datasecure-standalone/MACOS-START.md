@@ -1,6 +1,16 @@
 # DataSecure Standalone auf macOS starten
 
-Status: Die RC140-ZIPs aus Commit `814bc50e3d754224cd95b6fa91f122dd45f48487`
+Status: Die neuen RC141-Engineering-ZIPs aus Commit
+`1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` bestehen den nativen Intel-/ARM-Lauf
+[`35875613438`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/35875613438)
+einschließlich Signaturen, Mindestversionen sämtlicher nativer Komponenten,
+direktem/LaunchServices-Start, Konvertierung, Anonymisierung und Verlauf.
+[Exakte ZIP-Hashes und Nachweisgrenzen](../../docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
+Die ZIPs sind lokal gesichert; Actions hält sie nur einen Tag vor. Noch kein
+dauerhafter RC141-Release. Browser-/Finder-/Gatekeeper-Installation und eine
+tatsächliche Ausführung auf macOS 13.5 bleiben offen.
+
+Historischer Vergleich: Die RC140-ZIPs aus Commit `814bc50e3d754224cd95b6fa91f122dd45f48487`
 sind auf echten Intel- und Apple-Silicon-Runnern zweimal bytegleich gebaut,
 einzeln auf Signatur und Architektur geprüft sowie entpackt mit echten
 Konvertierungen über die private IPC-Grenze gestartet. Ein
@@ -9,10 +19,9 @@ und Gatekeeper wurde damit noch nicht nachgewiesen. Die Runner verwenden
 macOS 14/15. **Der erneute Byte-Review hat einen Fehler im RC140-Paketvertrag
 bewiesen:** Der POSIX-Helfer verlangt Intel macOS 15.0 bzw. ARM macOS 14.0,
 obwohl die App macOS 13.5 deklariert. RC140 deshalb nicht auf 13.5 einsetzen.
-Der Quellstand korrigiert das Deployment-Target, native Signaturen und numerische
-App-Metadaten; die veröffentlichten ZIPs enthalten diese Korrekturen nicht. Der
-Workflow kann daraus zusätzlich ein geprüftes Engineering-ZIP für einen Tag
-zum Zielhosttest bereitstellen. Die sichtbare menschliche Abnahme bleibt offen.
+RC141 korrigiert das Deployment-Target, native Signaturen und numerische
+App-Metadaten; die veröffentlichten RC140-ZIPs enthalten diese Korrekturen nicht.
+Die sichtbare menschliche Abnahme bleibt offen.
 
 ## Kostenkontrollierter technischer Vorlauf
 
@@ -35,7 +44,7 @@ die tatsächlich eingebettete Mindestversion und Systembibliotheken **aller**
 Mach-O-Dateien einschließlich des Canvas-Addons. Er startet die entpackte App
 direkt sowie über LaunchServices und prüft Konvertierung, Anonymisierung,
 Zuordnung, Fehlerfälle und Verlauf mit der gebündelten Runtime. Diese neuen
-Gates benötigen noch einen erfolgreichen nativen Lauf aus dem korrigierten
+Gates bestehen für RC141 auf Intel und ARM aus dem oben gebundenen
 Commit. Das ersetzt nicht die nachfolgende sichtbare
 Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
 
@@ -51,25 +60,25 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 - Apple Silicon (M1 oder neuer):
   `DataSecure-Standalone-<Version>-macos-arm64.zip`
 - Veröffentlichte RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
-- Entwicklungsziel nach Korrektur: macOS 13.5. Erst ein neu geprüftes Paket darf
-  diese Mindestversion beanspruchen; sichtbare Abnahme auf 13.5 bleibt zusätzlich offen.
+- RC141-Engineering-ZIPs: minOS-Binärvertrag 13.5 für beide Architekturen geprüft;
+  tatsächlich ausgeführt auf macOS 15 (Intel) und 14 (ARM). Abnahme auf 13.5 bleibt offen.
 
 Node, PDF-Parser, Canvas-Bilddecoder, Tesseract-WASM und deutsche/englische
 OCR-Modelle sind enthalten. Anwender installieren weder Rust/Xcode noch Node,
 Python, Homebrew, LibreOffice oder ein eigenes Tesseract. Die Laufzeitprüfung
-der RC140-ZIPs fand nur macOS-Systembibliotheken als native Ladeabhängigkeiten.
+der RC140-/RC141-ZIPs fand nur macOS-Systembibliotheken als native Ladeabhängigkeiten.
 Ein fehlendes Build-Tool ist deshalb keine Erklärung für einen Endanwenderfehler.
 
 Das ZIP enthält einen Ordner
 `DataSecure-Standalone-<Version>-macos-<Architektur>` mit der App,
 `SHA256SUMS`, SBOM und Lizenznachweisen. Die Prüfsumme des **gesamten ZIPs**
-steht in einem separaten Download `<ZIP-Name>.sha256` derselben Release-Seite.
+steht in `<ZIP-Name>.sha256` aus demselben Release beziehungsweise Engineering-Artefakt.
 Beide Dateien im selben Ordner ablegen und vor dem Entpacken im Terminal prüfen,
 zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc140-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die

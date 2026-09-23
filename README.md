@@ -2,8 +2,14 @@
 
 Quellstand: 3.2.0-rc141
 
-RC141 enthält die Mac-Nachreviewkorrekturen und wird nativ neu geprüft. Die
-unten verlinkten veröffentlichten Downloads bleiben bis zur neuen Bindung RC140.
+RC141 enthält die Mac-Nachreviewkorrekturen: Standalone für Intel und Apple
+Silicon wurde nativ gebaut und mit Konvertierung, Anonymisierung, Zuordnung,
+Verlauf und LaunchServices geprüft. Die neuen Engineering-ZIPs samt Prüfsummen
+liegen lokal und kurzfristig als Artefakte des
+[bestandenen Mac-Laufs](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/35875613438)
+(Aufbewahrung: ein Tag). [Commitbindung und exakte Pakethashes](docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
+Die unten verlinkten dauerhaft veröffentlichten Downloads bleiben RC140;
+es wurde kein neuer gemeinsamer GitHub-Release angelegt.
 
 Die Überschrift nennt zwei getrennte Produkte. Auch bei gleicher RC-Nummer
 bleiben ihre Pakete und Abnahmen getrennt. Ein neuer Quellstand aktualisiert
@@ -33,8 +39,8 @@ nicht direkt aus dem ZIP starten:
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Die Korrektur im Quellstand aktualisiert diese Downloads
-nicht; ein neuer Paketnachweis ist erforderlich. Sie bleiben interne,
+diese ZIPs falsch. Die Korrektur ist in den separat geprüften RC141-Mac-ZIPs
+enthalten und aktualisiert die RC140-Downloads nicht. Beide bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
 
 - **Windows 10/11 x64:**

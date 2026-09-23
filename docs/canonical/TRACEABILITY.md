@@ -7,8 +7,13 @@ Mach-O-Versionen/Architekturen/Systembibliotheken/Signaturen, numerische
 Plist-Versionen, entpackter LaunchServices- und echter Beide-Modi-Paketsmoke.
 MAC-20260923-04 → BL-012.9 → gemeinsame Mac-Reviewgruppierung bei 1000
 Fundstellen und explizite technische Fehler statt falscher Vertagung.
-Quellkorrekturen sind nicht im veröffentlichten RC140 enthalten; neuer nativer
-Paketnachweis und sichtbare Zielhost-UAT bleiben getrennt erforderlich.
+Quellkorrekturen sind nicht im veröffentlichten RC140 enthalten. RC141-
+Standalone-Mac bindet Commit `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` an
+Pflicht-CI `35875614129` und beide bestandenen nativen Architekturjobs
+`35875613438`; [ZIP-Hashes und Grenzen](../REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
+Lokale Pakete sind geprüft, dauerhafte Veröffentlichung und sichtbare
+Zielhost-UAT bleiben offen. Der MAC-04-Fix ist damit im Standalone-Mac-Paket,
+aber noch nicht in einem neuen Cowork-Paket ausgeliefert.
 
 RC140-Lieferung: PH-20260923 / BL-021.3–.4, BL-041.19–.21, BL-050.4
 und die getrennten Windows-/Mac-Installationskorrekturen → Quellcommit
