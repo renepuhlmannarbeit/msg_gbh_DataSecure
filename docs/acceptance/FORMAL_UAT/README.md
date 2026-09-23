@@ -1,11 +1,11 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 23.09.2026 · vorbereitet für 3.2.0-rc141; RC140 bleibt der letzte veröffentlichte Kandidat beider Produkte
+Stand: 23.09.2026 · Standalone macOS 3.2.0-rc141 veröffentlicht; Standalone Windows/Linux und Cowork bleiben RC140; menschliche Abnahme offen
 
 **Mac-Sperrhinweis MAC-20260923:** Standalone-RC140 ist aufgrund seines
 POSIX-Helfers kein macOS-13.5-Kandidat (Intel mindestens 15.0, ARM mindestens
-14.0). Vor formaler Mac-Freigabe die neu geöffneten BL-010.20/BL-012.9 samt
-neuem commitgebundenem Paketnachweis schließen. Die alten ZIPs enthalten die
+14.0). BL-010.20 ist für RC141 technisch neu belegt; BL-012.9 behält die getrennte
+Cowork-Paketlieferung und sichtbare AppKit-Abnahme offen. Die alten ZIPs enthalten die
 Quellkorrekturen nicht; eine erfolgreiche Installation auf neuerem macOS
 belegt keine Unterstützung der deklarierten 13.5.
 
@@ -13,8 +13,10 @@ belegt keine Unterstützung der deklarierten 13.5.
 an Commit `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` und den bestandenen
 Lauf `35875613438` gebunden. Beide ZIPs samt Hashes sind im
 [RC141-Nachweis](../../REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze)
-erfasst und lokal gesichert; Actions-Artefakte laufen nach einem Tag ab.
-Dieser Engineering-Vorlauf ist noch keine gemeinsame Windows-/Mac-Kampagne:
+erfasst und im [dauerhaften RC141-Mac-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc141)
+mit unveränderten ZIP-Bytes veröffentlicht. Für einen separaten Mac-Test dieses
+architekturspezifische ZIP, seinen Hash und den RC141-Buildcommit verwenden.
+Dieser technische Vorlauf ist noch keine gemeinsame Windows-/Mac-Kampagne:
 kein neuer Windows-/Cowork-Kandidat und keine menschliche Evidence wurden
 damit erzeugt. Für die formale Kampagne keine RC140-Windows- und RC141-Mac-
 Pakete als denselben Produktcommit zusammenfassen. N3/N4-Vorlagen bleiben

@@ -8,6 +8,7 @@ import {advanceReleaseSource} from '../scripts/lib/release-version.mjs';
 const history = '\nDer Windows-x64-Cowork-Kandidat RC138 bleibt an Quellcommit `' + 'a'.repeat(40) + '` gebunden.\n';
 for (const first of [
   'Der aktuelle Quellstand ist RC138 und für Cowork als technischer\nVorabkandidat veröffentlicht.',
+  'Der aktuelle Quellstand ist RC138 und für Standalone macOS als technischer Vorabkandidat veröffentlicht.',
   'Der aktuelle Quellstand ist RC138-Kandidat und veröffentlicht.',
   'Der aktuelle Quellstand ist RC138-Entwicklungsstand und noch nicht gebunden.'
 ]) {

@@ -31,9 +31,17 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.ok(boundCandidate, 'release truth must identify the currently published product candidate');
   assert.match(overview, new RegExp(
     `RC${boundCandidate[1]} ist als technischer Kandidat beider getrennten Produkte[\\s\\S]{0,120}` +
-    '`[0-9a-f]{40}` gebunden und veröffentlicht', 'u'));
+    `\`${boundCandidate[2]}\` gebunden und veröffentlicht`, 'u'));
   if (boundCandidate[1] !== campaignLabel) {
-    assert.match(release, new RegExp(`aktuelle Quellstand ist RC${campaignLabel}-Entwicklungsstand`, 'u'));
+    const macCandidate = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
+    if (macCandidate?.[1] === campaignLabel) {
+      assert.ok(overview.includes(macCandidate[2]), 'separate Mac candidate must bind its exact source commit');
+      assert.ok(overview.includes(`/releases/tag/v${productVersion}`));
+      assert.match(overview, /keine gemeinsame Windows-\/Mac-Kampagne/u);
+      assert.match(overview, /keine RC\d+-Windows- und RC\d+-Mac-\s+Pakete als denselben Produktcommit zusammenfassen/u);
+    } else {
+      assert.match(release, new RegExp(`aktuelle Quellstand ist RC${campaignLabel}-Entwicklungsstand`, 'u'));
+    }
     assert.match(overview, /historische Kandidaten/u);
   }
   assert.match(overview, /12×3- und 41×3-Modellgates bleiben\s+`NOT_RUN`/u);

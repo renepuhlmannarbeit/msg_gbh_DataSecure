@@ -2,13 +2,21 @@
 
 Stand: 23.09.2026 · 3.2.0-rc141
 
-Der aktuelle Quellstand ist RC141-Entwicklungsstand mit nativ geprüften Standalone-Mac-Engineering-Paketen, aber noch ohne neuen gemeinsamen Vorabrelease.
+Der aktuelle Quellstand ist RC141 und für Standalone macOS als technischer Vorabkandidat veröffentlicht.
+
+RC141 ist als Standalone-macOS-Vorabkandidat aus Quellcommit
+`1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` veröffentlicht:
+<https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc141>.
+Der Tag bindet exakt den Buildcommit, nicht den späteren Dokumentationsstand.
+Die vier Release-Assets (Intel-/ARM-ZIP und jeweils `.zip.sha256`) sind in Größe
+und SHA-256 mit den lokal geprüften Dateien abgeglichen. Die ZIPs wurden für
+die dauerhafte Veröffentlichung weder neu gebaut noch verändert.
 
 **Kompatibilitätsnachtrag MAC-20260923:** Der Standalone-Supervisor in den
 unveränderten RC140-Assets verlangt Intel macOS 15.0 bzw. ARM macOS 14.0.
 Die deklarierte Mindestversion 13.5 ist für diese Pakete nicht korrekt. Die
 nachträglichen Deployment-/Signatur-/Plist-/Reviewkorrekturen sind in den neuen
-Standalone-Mac-Engineering-ZIPs RC141 enthalten. RC140-
+Standalone-Mac-ZIPs RC141 enthalten. RC140-
 Hashes, Tag und damalige Testläufe werden nicht nachträglich umgedeutet.
 
 **RC141-Mac-Evidence:** Beide Standalone-Architekturen binden Commit
@@ -21,11 +29,14 @@ LaunchServices-Starts sowie echte Konvertierung/Anonymisierung, Zuordnung,
 Fehler und Verlauf nach Neustart bestehen. Beide heruntergeladenen ZIPs wurden
 lokal erneut geprüft. Die exakten Größen und Hashes stehen im
 [RC141-Nachweis](REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
-Die Artefakte sind lokal gesichert und in Actions nur einen Tag verfügbar;
-kein RC141-GitHub-Release wurde angelegt. Windows, Linux und Cowork behalten
+Die Artefakte sind lokal gesichert und im oben verlinkten GitHub-Release dauerhaft
+verfügbar; die eintägige Actions-Aufbewahrung betrifft nur die Buildkopien.
+Standalone Windows, Linux und sämtliche Cowork-Pakete behalten
 ihre veröffentlichten RC140-Pakete. macOS 13.5 ist nun der verifizierte
 Binärvertrag, noch kein real ausgeführter Zielhosttest. Sichtbare Installation
 und N3/N4 bleiben offen; die Pakete sind ad hoc signiert, nicht notarisiert.
+
+### RC140 – letzter gemeinsamer Vorabrelease, weiterhin für Windows/Linux und Cowork
 
 RC140 ist als gemeinsamer, aber produktgetrennter Vorabkandidat aus dem sauberen
 Quellcommit `814bc50e3d754224cd95b6fa91f122dd45f48487` veröffentlicht:

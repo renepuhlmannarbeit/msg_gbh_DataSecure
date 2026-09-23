@@ -1,13 +1,14 @@
 # DataSecure Standalone auf macOS starten
 
-Status: Die neuen RC141-Engineering-ZIPs aus Commit
+Status: Die veröffentlichten RC141-ZIPs aus Commit
 `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` bestehen den nativen Intel-/ARM-Lauf
 [`35875613438`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/35875613438)
 einschließlich Signaturen, Mindestversionen sämtlicher nativer Komponenten,
 direktem/LaunchServices-Start, Konvertierung, Anonymisierung und Verlauf.
 [Exakte ZIP-Hashes und Nachweisgrenzen](../../docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
-Die ZIPs sind lokal gesichert; Actions hält sie nur einen Tag vor. Noch kein
-dauerhafter RC141-Release. Browser-/Finder-/Gatekeeper-Installation und eine
+Die ZIPs samt Prüfsummen sind im
+[dauerhaften RC141-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc141)
+verfügbar und lokal gesichert. Browser-/Finder-/Gatekeeper-Installation und eine
 tatsächliche Ausführung auf macOS 13.5 bleiben offen.
 
 Historischer Vergleich: Die RC140-ZIPs aus Commit `814bc50e3d754224cd95b6fa91f122dd45f48487`
@@ -56,11 +57,13 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 
 ## Passendes Paket
 
-- Intel-Mac: `DataSecure-Standalone-<Version>-macos-x64.zip`
+- Intel-Mac: [DataSecure-Standalone-3.2.0-rc141-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-x64.zip)
+  und [SHA-256-Datei](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-x64.zip.sha256).
 - Apple Silicon (M1 oder neuer):
-  `DataSecure-Standalone-<Version>-macos-arm64.zip`
-- Veröffentlichte RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
-- RC141-Engineering-ZIPs: minOS-Binärvertrag 13.5 für beide Architekturen geprüft;
+  [DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip)
+  und [SHA-256-Datei](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip.sha256).
+- Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
+- RC141-ZIPs: minOS-Binärvertrag 13.5 für beide Architekturen geprüft;
   tatsächlich ausgeführt auf macOS 15 (Intel) und 14 (ARM). Abnahme auf 13.5 bleibt offen.
 
 Node, PDF-Parser, Canvas-Bilddecoder, Tesseract-WASM und deutsche/englische

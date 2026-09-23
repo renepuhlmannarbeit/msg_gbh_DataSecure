@@ -967,7 +967,7 @@ nachweisen, statt nur die Ad-hoc-Option umzuschalten.
   CI-Hilfsmittel und wird nicht als Endanwenderabhängigkeit ausgeliefert.
 - **Nach Neubau RC141:** Die neuen Build-/LaunchServices-/Paketsmokes auf
   Intel und ARM sind bestanden und unten an Commit und ZIP-Bytes gebunden.
-  Offen bleiben dauerhafte Veröffentlichung, tatsächlicher 13.5-Lauf und
+  Die dauerhafte Veröffentlichung ist unten belegt. Offen bleiben tatsächlicher 13.5-Lauf und
   Browser-/Finder-/Gatekeeper-/N3-/N4-Abnahme. Ad-hoc-Signierung bleibt Pilot;
   sie ist weder Developer ID noch Notarisierung und beweist keine allgemeine
   Installierbarkeit.
@@ -1006,7 +1006,7 @@ Buildstufen beendet. Das verändert keine Produkt-Datenpfade.
 Quellcommit: `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542`.
 Pflicht-CI `35875614129`: **PASS**. Beide Architekturjobs des nativen Mac-Laufs: **PASS**:
 [`35875613438`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/35875613438).
-Dies ist ein Standalone-Mac-Engineering-Kandidat, kein gemeinsamer neuer
+Dies ist ein veröffentlichter Standalone-Mac-Vorabkandidat, kein gemeinsamer neuer
 Release beider Produkte. Veröffentlichte RC140-Dateien werden nicht verändert.
 
 | Architektur / Runner | Paketdatei | Byte | ZIP-SHA-256 | Ergebnis |
@@ -1030,9 +1030,13 @@ gemessene Null. Die Testeingaben sind synthetische echte Dokumentdateien,
 keine Ersatz-Konverter oder gemockten Worker.
 
 Die ZIPs und externen `.sha256`-Dateien werden lokal unter
-`dist/rc141-macos-native-35875613438/<Architektur>/` gesichert. GitHub-Actions-
-Artefakte sind nur einen Tag verfügbar; ein dauerhafter RC141-Release wurde
-nicht angelegt. Signaturen sind ad hoc, nicht Developer ID/notarisiert.
+`dist/rc141-macos-native-35875613438/<Architektur>/` gesichert. Der
+[dauerhafte RC141-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc141)
+enthält exakt diese vier Dateien, ohne Neubau oder Byteänderung. Der Tag bindet
+den oben genannten Buildcommit; alle vier Asset-Größen und SHA-256-Digests
+stimmen mit den lokalen Dateien überein. Die eintägige Actions-Aufbewahrung
+betrifft nur die ursprünglichen Buildkopien, nicht die Release-Downloads.
+Windows/Linux und Cowork bleiben auf RC140. Signaturen sind ad hoc, nicht Developer ID/notarisiert.
 Sichtbarer Browser-/Finder-/Gatekeeper-Fresh-Install, tatsächliche Ausführung
 auf macOS 13.5, Accessibility und N3/N4 bleiben offen. Der gemeinsame
 Mac-Sammelreview benötigt weiterhin seine sichtbare AppKit-Abnahme und eine

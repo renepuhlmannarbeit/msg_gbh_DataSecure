@@ -90,21 +90,46 @@ test('release truth binds the published candidate while keeping human approval s
   assert.ok(published, 'release truth must name a commit-bound published candidate');
   const publishedRc = `RC${published[1]}`;
   const publishedVersion = version.replace(/rc\d+$/iu, `rc${published[1]}`);
+  // A platform-only release must not silently relabel other product binaries.
+  const macPublished = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
+  const macRc = macPublished ? `RC${macPublished[1]}` : publishedRc;
+  const macVersion = macPublished ? version.replace(/rc\d+$/iu, `rc${macPublished[1]}`) : publishedVersion;
   const readme = read('README.md');
   assert.strictEqual(readme.split(/\r?\n/u)[0],
-    `# GBH DataSecure – Cowork und Standalone ${publishedRc}`,
+    macRc === publishedRc
+      ? `# GBH DataSecure – Cowork und Standalone ${publishedRc}`
+      : `# GBH DataSecure – Standalone macOS ${macRc} · Windows/Linux und Cowork ${publishedRc}`,
     'product title must agree with published candidates, not just source version');
   assert.ok(readme.includes(`Quellstand: ${version}`));
   assert.ok(release.includes(`releases/tag/v${publishedVersion}`),
     'published release link must match the explicitly bound candidate');
-  assert.ok(readme.includes(`DataSecure-Standalone-${publishedVersion}-windows-x64.zip`));
-  assert.ok(readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${publishedVersion}.zip`));
+  const downloadRoot = 'https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download';
+  const publishedArchives = [
+    [publishedVersion, `DataSecure-Standalone-${publishedVersion}-windows-x64.zip`],
+    [publishedVersion, `DataSecure-Standalone-${publishedVersion}-linux-x64-glibc.zip`],
+    [publishedVersion, `DataSecure-Privacy-Preflight-windows-x64-v${publishedVersion}.zip`],
+    ...['macos-x64', 'macos-arm64'].map(target => [macVersion, `DataSecure-Standalone-${macVersion}-${target}.zip`])
+  ];
+  for (const [archiveVersion, name] of publishedArchives) {
+    assert.ok(readme.includes(`${downloadRoot}/v${archiveVersion}/${name}`),
+      `README download must bind ${name} to its published release`);
+  }
+  assert.ok(release.includes(`releases/tag/v${macVersion}`));
+  if (macPublished && macRc !== publishedRc) {
+    assert.ok(readme.includes(macPublished[2]), 'Mac source commit must remain explicit');
+    for (const target of ['windows-x64', 'linux-x64-glibc']) {
+      assert.ok(!readme.includes(`DataSecure-Standalone-${macVersion}-${target}.zip`),
+        'Mac-only publication must not invent new Windows/Linux downloads');
+    }
+    assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${macVersion}.zip`),
+      'Mac-only publication must not invent a new Cowork download');
+  }
   assert.match(release, /Menschliche N3\/N4-[\s\S]{0,160}Produktionsfreigaben bleiben offen/u);
-  if (publishedRc !== currentRc) {
+  if (publishedRc !== currentRc && macRc !== currentRc) {
     assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}-Entwicklungsstand`, 'u'),
       'a newer unbound source RC must remain explicitly marked as development state');
   }
-  if (publishedRc === currentRc) {
+  if (publishedRc === currentRc || macRc === currentRc) {
     assert.doesNotMatch(release.split('### RC139 – historischer Cowork-Kandidat')[0],
       /aktuelle Quellstand ist RC\d+-Entwicklungsstand/u,
       'a published current RC must not be marked as development state');
@@ -332,12 +357,12 @@ test('Standalone retains both implemented purposes while target-host UAT stays e
 
 test('main README gives direct Windows and macOS Standalone installation paths', () => {
   const readme = read('README.md');
-  const release = /Technisch geprüfte (\d+\.\d+\.\d+-rc\d+)-Pakete/u.exec(readme)?.[1];
-  assert.ok(release, 'README must name the actually published Standalone release');
   for (const target of ['windows-x64', 'macos-x64', 'macos-arm64']) {
-    const asset = `DataSecure-Standalone-${release}-${target}.zip`;
-    assert.ok(readme.includes(asset), asset);
-    assert.ok(readme.includes(`/releases/download/v${release}/${asset}`), `${asset} direct release link`);
+    const links = [...readme.matchAll(new RegExp(
+      `/releases/download/v(\\d+\\.\\d+\\.\\d+-rc\\d+)/DataSecure-Standalone-(\\d+\\.\\d+\\.\\d+-rc\\d+)-${target}\\.zip\\)`, 'gu'))];
+    assert.strictEqual(links.length, 1, `${target} must have one unambiguous direct ZIP download`);
+    assert.strictEqual(links[0][1], links[0][2], `${target} tag and filename versions must agree`);
+    assert.ok(readme.includes(`/releases/tag/v${links[0][1]}`), `${target} needs a release page for checksums`);
   }
   for (const value of ['DataSecure Standalone.exe', 'DataSecure Standalone.app']) {
     assert.ok(readme.includes(value), value);
