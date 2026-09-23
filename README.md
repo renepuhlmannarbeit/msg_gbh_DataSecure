@@ -1,6 +1,9 @@
 # GBH DataSecure – Cowork und Standalone RC140
 
-Quellstand: 3.2.0-rc140
+Quellstand: 3.2.0-rc141
+
+RC141 enthält die Mac-Nachreviewkorrekturen und wird nativ neu geprüft. Die
+unten verlinkten veröffentlichten Downloads bleiben bis zur neuen Bindung RC140.
 
 Die Überschrift nennt zwei getrennte Produkte. Auch bei gleicher RC-Nummer
 bleiben ihre Pakete und Abnahmen getrennt. Ein neuer Quellstand aktualisiert
@@ -27,6 +30,13 @@ nicht direkt aus dem ZIP starten:
 
 **[Technisch geprüfte 3.2.0-rc140-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)**
 
+**Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
+Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
+verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
+diese ZIPs falsch. Die Korrektur im Quellstand aktualisiert diese Downloads
+nicht; ein neuer Paketnachweis ist erforderlich. Sie bleiben interne,
+ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
+
 - **Windows 10/11 x64:**
   [DataSecure-Standalone-3.2.0-rc140-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Standalone-3.2.0-rc140-windows-x64.zip)
   herunterladen, vollständig entpacken und
@@ -40,8 +50,9 @@ nicht direkt aus dem ZIP starten:
 - **Mac mit Apple Silicon (M1 oder neuer):**
   [DataSecure-Standalone-3.2.0-rc140-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Standalone-3.2.0-rc140-macos-arm64.zip)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. Mindestversion ist
-  macOS 13.5. [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. Die derzeitigen
+  RC140-ZIPs verlangen Intel macOS 15 bzw. ARM macOS 14 (siehe Hinweis oben).
+  [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
 - **Linux x64 mit glibc:**
   [DataSecure-Standalone-3.2.0-rc140-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Standalone-3.2.0-rc140-linux-x64-glibc.zip)
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.

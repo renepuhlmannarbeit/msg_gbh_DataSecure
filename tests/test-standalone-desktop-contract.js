@@ -57,6 +57,9 @@ test('both macOS packages require 13.5 and native target-host evidence', () => {
     assert.strictEqual(target.gatekeeper_guide, 'MACOS-START.md');
   }
   assert.strictEqual(macConfig.bundle.macOS.minimumSystemVersion, '13.5');
+  assert.match(macConfig.version, /^\d+\.\d+\.\d+$/u);
+  assert.strictEqual(macConfig.version, config.version.split('-')[0]);
+  assert.match(macConfig.bundle.macOS.bundleVersion, /^[1-9]\d*$/u);
   assert.strictEqual(macConfig.bundle.macOS.signingIdentity, '-',
     'certificate-free macOS pilots require an explicit ad-hoc signature');
   assert.deepStrictEqual(macConfig.bundle.targets, ['app']);
@@ -382,7 +385,7 @@ test('macOS instructions use a narrow Gatekeeper exception without terminal bypa
   assert.match(guide, /Dennoch öffnen/u);
   assert.match(guide, /macOS 13\.5/u);
   assert.doesNotMatch(guide, /`(?:xattr|spctl)\s+[-\w]/u);
-  assert.match(guide, /App-Bundles sind auf echten Intel- und\s+Apple-Silicon-Runnern gebaut/u);
+  assert.match(guide, /Intel- und Apple-Silicon-Runnern/u);
   assert.match(guide, /sichtbare menschliche Abnahme bleibt offen/u);
   assert.match(guide, /upload_package/u);
   assert.match(guide, /einem Tag Aufbewahrung/u);

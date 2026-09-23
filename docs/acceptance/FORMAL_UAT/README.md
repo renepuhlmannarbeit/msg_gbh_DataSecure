@@ -1,6 +1,13 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 23.09.2026 · vorbereitet für beide Produkte in 3.2.0-rc140
+Stand: 23.09.2026 · vorbereitet für 3.2.0-rc141; RC140 bleibt der letzte veröffentlichte Kandidat beider Produkte
+
+**Mac-Sperrhinweis MAC-20260923:** Standalone-RC140 ist aufgrund seines
+POSIX-Helfers kein macOS-13.5-Kandidat (Intel mindestens 15.0, ARM mindestens
+14.0). Vor formaler Mac-Freigabe die neu geöffneten BL-010.20/BL-012.9 samt
+neuem commitgebundenem Paketnachweis schließen. Die alten ZIPs enthalten die
+Quellkorrekturen nicht; eine erfolgreiche Installation auf neuerem macOS
+belegt keine Unterstützung der deklarierten 13.5.
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -56,7 +63,7 @@ Die vollständige Definition steht im
 | Person | Zielhost | Standalone | Cowork-Plugin | Evidenzdatei |
 |---|---|---|---|---|
 | Windows-Tester | Windows 10/11 x64 | N3 und N4 | N3 und N4 in aktueller Claude-Desktop-/Cowork-Version | `WINDOWS-EVIDENCE.csv` |
-| Mac-Tester | macOS 13.5 oder neuer; Architektur mit `uname -m` feststellen | N3 und N4 mit passendem x64- oder ARM64-Paket | N3 und N4 in aktueller Claude-Desktop-/Cowork-Version | `MACOS-EVIDENCE.csv` |
+| Mac-Tester | Paket-Mindestversion beachten (RC140 Standalone: Intel 15 / ARM 14); Architektur mit `uname -m` feststellen | N3 und N4 mit passendem x64- oder ARM64-Paket | N3 und N4 in aktueller Claude-Desktop-/Cowork-Version | `MACOS-EVIDENCE.csv` |
 
 Ein einzelner Mac schließt nur seine reale Architektur. Die jeweils andere
 macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
@@ -76,6 +83,13 @@ macOS-Architektur bleibt offen, bis sie auf passender Hardware abgenommen wurde.
    spätere Manifest-Commit ist bewusst ein Nachfahre davon.
 4. Automatische E0-Gates, PKG-04/INT-13 soweit anwendbar und die
    Dokumentationsprüfung müssen grün sein. Das ersetzt N3/N4 nicht.
+   Mac-Evidence muss alle eingebetteten Mach-O-Dateien einschließlich Addons
+   auf Architektur, echte Mindestversion, Ladeabhängigkeiten und Signatur
+   prüfen. Numerische Plist-Versionen, LaunchServices-Start und echter
+   Konvertierungs-/Anonymisierungslauf ohne installierte Runtime gehören zum
+   Paketgate. In der sichtbaren Abnahme zusätzlich Browser-Quarantäne, Finder,
+   Gatekeeper und große AppKit-Prüfgruppen testen; technische Dialogfehler
+   dürfen keine endlose „Später“-/Fortsetzen-Schleife erzeugen.
    Für das Cowork-Plugin sind zusätzlich die vollständige 41×3-Modellabnahme
    und der 12×3-Kandidatensmoke mit den im Manifest gebundenen Korpus-Hashes
    als `PASS` erforderlich. Die reproduzierbare 12-Fälle-Anleitung erzeugt

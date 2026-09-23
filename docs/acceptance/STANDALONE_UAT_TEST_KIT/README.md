@@ -1,6 +1,6 @@
 # DataSecure Standalone – UAT-Testkit
 
-Stand: 11.09.2026 · Engineering-Pilot 3.2.0-rc140
+Stand: 11.09.2026 · Engineering-Pilot 3.2.0-rc141
 
 Dieses Testkit erzeugt menschliche Zielsystem-Evidence. Automatische Tests und
 ein erfolgreiches Paket sind kein Ersatz. Ausschließlich synthetische Dateien

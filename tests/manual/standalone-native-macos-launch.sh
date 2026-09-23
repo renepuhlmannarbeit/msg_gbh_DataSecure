@@ -9,11 +9,13 @@ fi
 app_bundle=""
 target=""
 version=""
+launch_services=false
 while (($#)); do
   case "$1" in
     --app) app_bundle="${2:-}"; shift 2 ;;
     --target) target="${2:-}"; shift 2 ;;
     --version) version="${2:-}"; shift 2 ;;
+    --launch-services) launch_services=true; shift ;;
     *) echo "STANDALONE_NATIVE_ARGUMENT_INVALID" >&2; exit 64 ;;
   esac
 done
@@ -53,7 +55,15 @@ child_pids=""
 cleanup() {
   if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then
     kill -TERM "$app_pid" 2>/dev/null || true
-    wait "$app_pid" 2>/dev/null || true
+    if [[ "$launch_services" == false ]]; then
+      wait "$app_pid" 2>/dev/null || true
+    else
+      for _ in {1..50}; do
+        kill -0 "$app_pid" 2>/dev/null || break
+        sleep 0.1
+      done
+      if kill -0 "$app_pid" 2>/dev/null; then return 1; fi
+    fi
   fi
   [[ -d "$test_root" && ! -L "$test_root" ]] || return 1
   [[ "$(dirname "$test_root")" == "$tmp_parent" ]] || return 1
@@ -79,6 +89,11 @@ sidecar_log="$test_root/temp/SecureDataMsg-Standalone/sidecar-interactions.jsonl
 }
 codesign --verify --deep --strict --verbose=2 "$candidate"
 
+script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [[ "$launch_services" == true ]]; then
+  app_pid="$(/usr/bin/swift "$script_directory/../helpers/macos-launch-services.swift" "$candidate" "$test_root")"
+  [[ "$app_pid" =~ ^[0-9]+$ ]] || { echo "STANDALONE_LAUNCH_SERVICES_PID_INVALID" >&2; exit 1; }
+else
 env \
   DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT="$test_root" \
   DATASECURE_STANDALONE_DOCUMENTS_DIR="$test_root/profile/Documents" \
@@ -91,12 +106,13 @@ env \
   WEBVIEW2_USER_DATA_FOLDER="$test_root/webview/main" \
   "$executable" >"$test_root/app.stdout" 2>"$test_root/app.stderr" &
 app_pid=$!
+fi
 
 deadline=$((SECONDS + 45))
 ready=false
 while ((SECONDS < deadline)); do
   kill -0 "$app_pid" 2>/dev/null || {
-    wait "$app_pid" || status=$?
+    if [[ "$launch_services" == false ]]; then wait "$app_pid" || status=$?; fi
     echo "STANDALONE_NATIVE_APP_EXITED_${status:-0}" >&2
     exit 1
   }
@@ -136,7 +152,7 @@ case "$sidecar_command" in
   *) echo "STANDALONE_NATIVE_SIDECAR_IDENTITY_INVALID" >&2; exit 1 ;;
 esac
 
-osascript -e 'tell application id "de.msg.datasecure.standalone" to quit'
+/usr/bin/swift "$script_directory/../helpers/macos-launch-services.swift" --terminate "$candidate" "$app_pid"
 for _ in {1..150}; do
   kill -0 "$app_pid" 2>/dev/null || break
   sleep 0.2
@@ -145,11 +161,15 @@ if kill -0 "$app_pid" 2>/dev/null; then
   echo "STANDALONE_NATIVE_MACOS_GRACEFUL_EXIT_TIMEOUT" >&2
   exit 1
 fi
-wait "$app_pid" || status=$?
-[[ "${status:-0}" == 0 ]] || {
-  echo "STANDALONE_NATIVE_MACOS_EXIT_${status}" >&2
-  exit 1
-}
+if [[ "$launch_services" == false ]]; then
+  status=0
+  wait "$app_pid" || status=$?
+  [[ "$status" == 0 ]] || { echo "STANDALONE_NATIVE_MACOS_EXIT_${status}" >&2; exit 1; }
+else
+  # LaunchServices owns the process. We observe termination after the exact
+  # instance accepted a normal quit request, but cannot observe its exit code.
+  echo "STANDALONE_LAUNCH_SERVICES_EXIT_CODE_UNAVAILABLE"
+fi
 for _ in {1..50}; do
   kill -0 "$sidecar_pid" 2>/dev/null || break
   sleep 0.1
@@ -160,4 +180,4 @@ if [[ -n "$remaining_command" && "$remaining_command" == "$sidecar_command" ]]; 
   exit 1
 fi
 app_pid=""
-echo "STANDALONE NATIVE MACOS APP BUNDLE LAUNCH PASS ($target)"
+echo "STANDALONE NATIVE MACOS APP BUNDLE LAUNCH PASS ($target, launch_services=$launch_services)"

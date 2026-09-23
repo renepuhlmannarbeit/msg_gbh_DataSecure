@@ -66,7 +66,7 @@ testAsync('version synchronization changes release labels without relabelling hi
   assert.match(script, /Engineering-Pilot/u);
   assert.match(script, /FORMAL_UAT\/CAMPAIGN\.template\.json/u);
   assert.match(script, /FORMAL_UAT\/GIT-WORKFLOW\.md/u);
-  assert.match(script, /writeIfChanged\('docs\/RELEASE\.md', advanceReleaseSource\(/u,
+  assert.match(script, /const nextReleaseSource = advanceReleaseSource\(/u,
     'version sync must use the tested release-truth transition');
   assert.match(script, /\(\?=\[\^\\n\]\*\$\)/u,
     'version headers with a product suffix must remain synchronizable');

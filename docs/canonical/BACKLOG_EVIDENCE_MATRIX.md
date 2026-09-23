@@ -1,6 +1,14 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 23.09.2026 · 3.2.0-rc140
+Stand: 23.09.2026 · 3.2.0-rc141
+
+**Aktueller Nachreview MAC-20260923:** BL-010.20/BL-012.9 sind wieder technisch
+in Arbeit. Die tatsächlichen RC140-Standalone-Mach-O-Bytes verlangen wegen des
+Supervisors Intel 15.0 / ARM 14.0; die bisher deklarierte 13.5 ist widerlegt.
+Quellkorrekturen einschließlich vollständigem nativen Paketvertrag,
+LaunchServices-Smoke und begrenzten Reviewgruppen sind lokal implementiert,
+aber noch nicht nativ neu belegt oder ausgeliefert. Details und lokale
+Regressionen: [Reviewbericht](../REVIEW_PRODUCT_HOSTS_2026-09-23.md#mac-20260923--vollständiger-macos-paket-und-installationsnachreview).
 
 RC140-Liefernachweis für beide Produkte: sauberer Commit
 `814bc50e3d754224cd95b6fa91f122dd45f48487`, Pflicht-CI `35864600808`,

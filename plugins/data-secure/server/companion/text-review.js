@@ -12,6 +12,7 @@ const { DEFAULT_REVIEW_TIMEOUT_MS } = require('./review-timeouts');
 const REVIEW_SCHEMA = 'data-secure-text-review/3';
 const BATCH_REVIEW_SCHEMA = 'data-secure-batch-review/3';
 const MAX_REVIEW_CHARS = LIMITS.MAX_TEXT_CHARS;
+const MAX_DARWIN_REVIEW_FINDINGS = 1000;
 const MAX_MANUAL_REDACTIONS = 10_000;
 
 function reviewSizeError() {
@@ -442,7 +443,8 @@ function darwinReviewScript() {
     '  var title = draft.batch_review ? "DataSecure – lokale Stapelprüfung" : "DataSecure – lokale Datenschutzprüfung";',
     '  var progress = draft.batch_review ? "Automatisch abgeschlossen: " + draft.batch_review.automatically_completed_count + ". Bereits lokal geprüft: " + draft.batch_review.previously_reviewed_count + ". Jetzt: " + draft.batch_review.review_finding_count + " Stellen in " + draft.batch_review.review_document_count + " Dateien." : "Prüfe die markierten Stellen.";',
     '  try {',
-    '    if (!Array.isArray(draft.ambiguities) || draft.ambiguities.length > 1000) throw new Error("review size");',
+    '    if (!Array.isArray(draft.ambiguities)) throw new Error("invalid review");',
+    `    if (draft.ambiguities.length > ${MAX_DARWIN_REVIEW_FINDINGS}) return JSON.stringify({ error_code: "LOCAL_REVIEW_TOO_LARGE" });`,
     '    var app = $.NSApplication.sharedApplication; app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);',
     '    var alert = $.NSAlert.alloc.init; alert.messageText = $(title); alert.informativeText = $(progress + "\\nAlle Entscheidungen bleiben lokal.");',
     '    alert.addButtonWithTitle($("Geprüft freigeben"));',
@@ -473,7 +475,7 @@ function darwinReviewScript() {
     '    if (response !== $.NSAlertFirstButtonReturn) { if (draft.allow_defer && response === $.NSAlertSecondButtonReturn) return JSON.stringify({ action: "deferred" }); return JSON.stringify({ action: "cancelled" }); }',
     '    var decisions = []; for (var index = 0; index < controls.length; index++) { var selected = ObjC.unwrap(controls[index].choice.titleOfSelectedItem); if (selected !== "Beibehalten" && selected !== "Anonymisieren") return JSON.stringify({ action: draft.allow_defer ? "deferred" : "cancelled" }); var decision = selected === "Beibehalten" ? "keep" : "redact"; controls[index].ids.forEach(function(id) { decisions.push({ ambiguity_id: id, decision: decision }); }); }',
     '    return JSON.stringify({ action: "reviewed", redactions: [], decisions: decisions });',
-    '  } catch (error) { return JSON.stringify({ action: draft.allow_defer ? "deferred" : "cancelled" }); }',
+    '  } catch (error) { return JSON.stringify({ error_code: "LOCAL_REVIEW_FAILED" }); }',
     '}'
   ].join('\n');
 }
@@ -727,6 +729,8 @@ function defaultRunner(command, args, input, env = process.env, timeoutMs = DEFA
 function reviewTextLocally(draft, options = {}) {
   const platform = options.platform || process.platform;
   if (!draft || draft.schema !== REVIEW_SCHEMA) throw new SafeError('Ungültiger lokaler Review-Entwurf.');
+  if (platform === 'darwin' && Array.isArray(draft.ambiguities) &&
+      draft.ambiguities.length > MAX_DARWIN_REVIEW_FINDINGS) throw reviewSizeError();
   const env = options.env || process.env;
   // Sanitize before invoking the supplied runner as well. This keeps test,
   // integration and production runners on the same no-proxy/no-cloud-secret
@@ -763,6 +767,14 @@ function reviewTextLocally(draft, options = {}) {
   }
   let parsed;
   try { parsed = JSON.parse(String(result.stdout || '')); } catch { throw new SafeError('Die lokale Textprüfung lieferte kein gültiges Ergebnis.'); }
+  if (platform === 'darwin' && parsed && Object.keys(parsed).join(',') === 'error_code') {
+    if (parsed.error_code === 'LOCAL_REVIEW_TOO_LARGE') throw reviewSizeError();
+    if (parsed.error_code === 'LOCAL_REVIEW_FAILED') {
+      const error = new SafeError('Die lokale Textprüfung konnte nicht sicher abgeschlossen werden.');
+      error.code = 'LOCAL_REVIEW_FAILED';
+      throw error;
+    }
+  }
   return validateReviewResult(parsed, draft);
 }
 
@@ -770,6 +782,7 @@ module.exports = {
   REVIEW_SCHEMA,
   BATCH_REVIEW_SCHEMA,
   MAX_REVIEW_CHARS,
+  MAX_DARWIN_REVIEW_FINDINGS,
   reviewSizeError,
   buildReviewDraft,
   buildBatchReviewDraft,

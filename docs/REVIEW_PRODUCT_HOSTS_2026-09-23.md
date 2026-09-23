@@ -893,3 +893,91 @@ oder Schadsoftwarewarnung. Ohne Developer-ID-Signatur und Notarisierung bleibt
 RC140 ein interner Pilot. N3/N4 auf echten Intel-/ARM-Macs muss genau diesen
 Erstinstallationspfad noch protokollieren; keine maschinelle Evidence wird als
 menschliche Freigabe umgedeutet.
+
+## MAC-20260923 – vollständiger macOS-Paket- und Installationsnachreview
+
+Zwei unabhängige technische Gegenreviews plus Hauptreview prüften die echten
+RC140-Archive, nicht nur Quellen oder Mocks. Standalone und Cowork bleiben
+getrennte Produkte. Die folgenden neuen Defects öffnen BL-010.20/BL-012.9
+erneut; der vorherige RC140-Liefernachweis belegt diese Korrekturen nicht.
+
+| ID | Tatsächlicher Befund | Korrektur im Quellstand |
+|---|---|---|
+| MAC-20260923-01 · P1 | Standalone-Plist/Manifest nennen 13.5, der gebündelte Supervisor enthält `LC_BUILD_VERSION` 15.0 auf Intel und 14.0 auf ARM. Die neuere CI-Maschine verdeckte die Kompatibilitätslücke. | `MACOSX_DEPLOYMENT_TARGET=13.5`; ZIP-Verifier liest jede Mach-O-Datei einschließlich Addons und lehnt höhere Mindestversion, falsche Architektur und nicht aufgelöste externe Bibliotheksabhängigkeiten ab. |
+| MAC-20260923-02 · P2 | Intel-Canvas besitzt keine eigene eingebettete Signatur. Die bisherigen vier expliziten Signaturprüfungen ließen `.node` aus. Die äußere Bundle-Prüfung allein reicht dafür nicht. | Addon vor Runtime-Inventarisierung ad hoc signieren; native Einzelprüfung sämtlicher Addons vor und nach ZIP. Statischer Verifier prüft nur Signaturvorhandensein, `codesign` ihre Gültigkeit. |
+| MAC-20260923-03 · P2 | Beide Plist-Versionsfelder enthalten `3.2.0-rc140` statt Apples numerischer Versionsform. Ein konkreter Startabbruch dadurch ist nicht bewiesen. | Mac-Override: Marketingversion `3.2.0`, Buildversion `140`; Versionssynchronisierer hält die Buildnummer monoton und idempotent. Produkt-/Cargo-/UI-/ZIP-Version bleibt vollständig RC-bezogen. |
+| MAC-20260923-04 · P2 | Gemeinsamer Mac-Reviewadapter akzeptiert höchstens 1000 Fundstellen, Orchestrator teilte nur nach Zeichen. Große Gruppen und technische JXA-Fehler wurden fälschlich als Benutzervertagung gemeldet. | Gruppierung nach Zeichen **und** Fundstellenzahl; einzelne übergroße Dokumente klar ablehnen; technische Fehlercodes erhalten. Beide Produkte profitieren, Windows-Gruppierung unverändert. |
+
+Native Byte-Inventur der unveränderten RC140-ZIPs:
+
+| Komponente | Intel minOS | ARM minOS |
+|---|---|---|
+| Tauri-App | 13.5 | 13.5 |
+| Core-Node | 11.0 | 11.0 |
+| Konverter-Node | 11.0 | 11.0 |
+| Canvas-Addon | 10.13 | 11.0 |
+| POSIX-Supervisor | **15.0** | **14.0** |
+
+Intel-Archiv SHA-256:
+`50cdf4f508606a7fd85d9229482ce947f260f310c6a85282d3b5ebd1c6b801cc`.
+ARM-Archiv SHA-256:
+`8069b71426ed107ab9c5d8ad76c85e08e93aafa56e52656a54a23fe4c60d8c62`.
+Diese Bytes werden nicht ersetzt oder als korrigierter Kandidat umetikettiert.
+
+### Abhängigkeiten und sinnvolle Grenzen
+
+Alle nativen Ladeabhängigkeiten liegen in `/usr/lib` oder den macOS-System-
+Frameworks. Keine Homebrew-, Entwicklerpfad- oder externe `@rpath`-Abhängigkeit
+ist in den untersuchten Paketen vorhanden. Ein Canvas-`LC_ID_DYLIB` mit
+Buildpfad ist eine Identität, keine Ladeabhängigkeit, und wird nicht fälschlich
+beanstandet. Die 16 Konverterpakete, sechs Tesseract-WASM-Varianten, DE-/EN-
+Modelle und PDF-CMaps/Fonts/ICC/WASM sind enthalten; Node 22.23.2 erfüllt die
+Anforderung des gepinnten PDF.js 6.2.108. Anwender benötigen keine zusätzliche
+Node-/Python-/Rust-/Xcode-/Homebrew-/LibreOffice-/Tesseract-Installation.
+
+Der aktuelle Cowork-ZIP-Pfad verwendet seine eigene schlankere Runtime und
+erbt nicht den Standalone-Konverterbundlevertrag. Sein gemeinsam genutzter
+Mac-Prüfdialog erhält MAC-04, ohne Standalone-Ressourcen in das Plugin zu ziehen.
+Dialoge/Dateimanager werden nativ aufgerufen; Prozessstart ist weiterhin keine
+Garantie für ein tatsächlich sichtbares Finder-Fenster. Mach-O-Helfer unter
+`Contents/Resources` bleiben einzeln geprüft; eine spätere Developer-ID-
+Distribution muss Code-Layout, Hardened Runtime und Notarisierung gesondert
+nachweisen, statt nur die Ad-hoc-Option umzuschalten.
+
+### Regression und noch fehlende Evidence
+
+- Die neuen Byte-Vertragstests prüfen echte Headerstrukturen einschließlich
+  falscher Mindestversion/Architektur, fehlender Signatur, externer Bibliothek
+  und beschädigter Load-Commands. Beide alten RC140-Pakete fallen am tatsächlich
+  zu hohen Supervisor-minOS durch, wie erwartet.
+- 100 lokale Review-/Companion-/Policyfälle bestehen: unter anderem 600+600,
+  600+400+1 Fundstellen, einzelnes Dokument mit 1001 Fundstellen, technischer
+  Dialogfehler, erhaltene Teilpublikation und unveränderte Windows-Gruppierung.
+- Der bestehende echte Standalone-Paketsmoke läuft nun auf Mac **und** Windows;
+  kein zweiter Ablauf und kein Converter-Mock. Windows-RC140 bestand nach
+  Erweiterung erneut Konvertierung, Anonymisierung, CSV-Fehler, exakte
+  Exportziele/Zuordnung, Verlauf, Neustart und geänderte Ergebniswurzel.
+- Zusätzlicher nativer Mac-Smoke startet die entpackte `.app` über
+  `NSWorkspace`/LaunchServices in isoliertem Testprofil, prüft App→IPC→Core
+  und Prozessende nach normaler Beenden-Anforderung ohne verwaisten Sidecar.
+  Die PID und Bundle-URL binden diese Anforderung an genau die Testinstanz,
+  niemals an eine eventuell zusätzlich laufende Benutzerinstanz. Der
+  LaunchServices-Exitcode ist nicht beobachtbar und wird nicht als gemessene 0
+  ausgegeben. Swift ist ausschließlich ein
+  CI-Hilfsmittel und wird nicht als Endanwenderabhängigkeit ausgeliefert.
+- **Noch offen:** Ausführung der neuen Build-/LaunchServices-/Paketsmokes auf
+  Intel und ARM, neu gebundener Kandidat, tatsächlicher 13.5-Lauf und sichtbare
+  Browser-/Finder-/Gatekeeper-/N3-/N4-Abnahme. Ad-hoc-Signierung bleibt Pilot;
+  sie ist weder Developer ID noch Notarisierung und beweist keine allgemeine
+  Installierbarkeit.
+
+### Primärquellen
+
+- [Apple – macOS-Pakete verteilen und testen](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)
+- [Apple – Code für die Distribution signieren](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac/)
+- [Apple – CFBundleShortVersionString](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)
+- [Apple – CFBundleVersion](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)
+- [Apple – LaunchServices-Startkonfiguration](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration)
+- [Apple – Apps sicher auf dem Mac öffnen](https://support.apple.com/102445)
+- [Tauri 2 – macOS App-Bundle](https://v2.tauri.app/distribute/macos-application-bundle/)
+- [Tauri 2 – macOS Signierung/Notarisierung](https://v2.tauri.app/distribute/sign/macos/)

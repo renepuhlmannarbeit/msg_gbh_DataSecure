@@ -65,6 +65,49 @@ test('macOS package build is deterministic, self-contained and fail-closed', () 
   assert.match(verify, /`\$\{archive\}\.sha256`/u);
 });
 
+test('macOS deployment contract checks every native dependency, including addons', async () => {
+  const { inspectMachO, verifyMacNativeContract } = await import('../scripts/lib/macos-native-contract.mjs');
+  function binary({ minimum = 0x0d0500, cpu = 0x01000007, library = '/usr/lib/libSystem.B.dylib',
+    signed = true, libraryCommand = 0xc } = {}) {
+    const name = Buffer.from(`${library}\0`);
+    const dylib = Buffer.alloc(Math.ceil((24 + name.length) / 8) * 8);
+    dylib.writeUInt32LE(libraryCommand); dylib.writeUInt32LE(dylib.length, 4);
+    dylib.writeUInt32LE(24, 8); name.copy(dylib, 24);
+    const version = Buffer.alloc(24);
+    version.writeUInt32LE(0x32); version.writeUInt32LE(24, 4);
+    version.writeUInt32LE(1, 8); version.writeUInt32LE(minimum, 12);
+    const signature = Buffer.alloc(signed ? 16 : 0);
+    const size = 32 + version.length + dylib.length + signature.length;
+    if (signed) {
+      signature.writeUInt32LE(0x1d); signature.writeUInt32LE(16, 4);
+      signature.writeUInt32LE(size, 8); signature.writeUInt32LE(16, 12);
+    }
+    const header = Buffer.alloc(32);
+    header.writeUInt32LE(0xfeedfacf); header.writeUInt32LE(cpu, 4);
+    header.writeUInt32LE(signed ? 3 : 2, 16); header.writeUInt32LE(size - 32, 20);
+    return Buffer.concat([header, version, dylib, signature, Buffer.alloc(16)]);
+  }
+  const contract = { target: 'macos-x64', minimumVersion: '13.5' };
+  const check = bytes => verifyMacNativeContract(new Map([['addon.node', bytes]]), contract);
+  assert.equal(check(binary())[0].minimumVersion, '13.5.0');
+  for (const minimum of [0x0e0000, 0x0f0000]) {
+    assert.throws(() => check(binary({ minimum })), /MINIMUM_TOO_HIGH/u);
+  }
+  assert.throws(() => check(binary({ cpu: 0x0100000c })), /ARCHITECTURE_MISMATCH/u);
+  assert.throws(() => check(binary({ signed: false })), /SIGNATURE_MISSING/u);
+  for (const library of ['/opt/homebrew/lib/dependency.dylib', '@rpath/dependency.dylib',
+    '/usr/lib/../../opt/local/lib/dependency.dylib']) {
+    assert.throws(() => check(binary({ library })), /EXTERNAL_LIBRARY/u);
+  }
+  // LC_ID_DYLIB is the library's identity, not an external load dependency.
+  assert.equal(check(binary({ library: '/Users/build/libcanvas.dylib', libraryCommand: 0xd })).length, 1);
+  assert.equal(inspectMachO(Buffer.from('resource')), null);
+  assert.throws(() => check(Buffer.from('not an addon')), /BINARY_INVALID/u);
+  assert.throws(() => inspectMachO(binary().subarray(0, 40)), /COMMANDS_INVALID/u);
+  const malformed = binary(); malformed.writeUInt32LE(0, 36);
+  assert.throws(() => inspectMachO(malformed), /COMMAND_INVALID/u);
+});
+
 test('Linux package build is deterministic, self-contained and fail-closed', () => {
   const build = fs.readFileSync(path.join(root, 'scripts', 'build-standalone-linux-package.mjs'), 'utf8');
   const verify = fs.readFileSync(path.join(root, 'scripts', 'verify-standalone-linux-package.mjs'), 'utf8');

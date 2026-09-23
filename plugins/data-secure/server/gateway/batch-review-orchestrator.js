@@ -2,7 +2,7 @@
 
 const { releaseOwnedLock } = require('./batch-lock-release');
 
-const { MAX_REVIEW_CHARS, reviewSizeError } = require('../companion/text-review');
+const { MAX_REVIEW_CHARS, MAX_DARWIN_REVIEW_FINDINGS, reviewSizeError } = require('../companion/text-review');
 
 // Covers both per-document separator labels (at most 100 documents).
 const REVIEW_LABEL_BUDGET = 64;
@@ -54,6 +54,8 @@ function createBatchReviewOrchestrator(options = {}) {
       const lifecycle = (event) => {
         try { deps.onReviewLifecycle?.(event); } catch { /* diagnostics cannot change a privacy decision */ }
       };
+      const platform = deps.platform || currentPlatform();
+      const findingLimit = platform === 'darwin' ? MAX_DARWIN_REVIEW_FINDINGS : Infinity;
       let cursor = 0;
       let carry = null;
       let reviewedCount = 0;
@@ -87,6 +89,7 @@ function createBatchReviewOrchestrator(options = {}) {
       const drafts = [];
       const selected = [];
       let budget = 0;
+      let findings = 0;
       try {
         checkAbort();
         lifecycle({ event: 'review_reconstruction_started', outcome: 'progress', item_count: items.length });
@@ -101,15 +104,17 @@ function createBatchReviewOrchestrator(options = {}) {
           if (!carry) cursor++;
           carry = null;
           const chars = draftCharacters(draft);
-          if (chars > MAX_REVIEW_CHARS) throw reviewSizeError();
+          const count = Array.isArray(draft?.ambiguities) ? draft.ambiguities.length : 0;
+          if (chars > MAX_REVIEW_CHARS || count > findingLimit) throw reviewSizeError();
           const weight = chars + REVIEW_LABEL_BUDGET;
-          if (drafts.length && budget + weight > MAX_REVIEW_CHARS) {
+          if (drafts.length && (budget + weight > MAX_REVIEW_CHARS || findings + count > findingLimit)) {
             carry = { item, draft };
             break;
           }
           selected.push(item);
           drafts.push(draft);
           budget += weight;
+          findings += count;
         }
         lifecycle({ event: 'review_reconstruction_finished', outcome: 'ok', item_count: selected.length });
       } catch (error) {
@@ -130,7 +135,7 @@ function createBatchReviewOrchestrator(options = {}) {
         checkAbort();
         lifecycle({ event: 'review_ui_started', outcome: 'progress', item_count: selected.length });
         outcome = await runBatchReviewLocally(drafts, {
-          platform: deps.platform || currentPlatform(),
+          platform,
           allowDefer: true,
           batchSummary: {
             batchTotal,

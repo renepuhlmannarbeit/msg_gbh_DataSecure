@@ -40,6 +40,10 @@ for (const expected of [
   'npx --no-install tauri build --bundles app',
   'DataSecure Standalone.app',
   'codesign --verify --deep --strict',
+  "MACOSX_DEPLOYMENT_TARGET: '13.5'",
+  'Sign the target-native converter addon before inventory and bundling',
+  '--launch-services',
+  'node tests/test-standalone-package-smoke.mjs "$archive"',
   'Signature=adhoc',
   'lipo -archs',
   'standalone-native-macos-launch.sh',
@@ -65,7 +69,8 @@ for (const expected of [
   'service_initialized',
   'pgrep -P "$app_pid" -x datasecure-core',
   'sidecar_command="$(ps -p "$sidecar_pid" -o command=',
-  'osascript',
+  'macos-launch-services.swift" --terminate "$candidate" "$app_pid"',
+  'STANDALONE_LAUNCH_SERVICES_EXIT_CODE_UNAVAILABLE',
   'STANDALONE_NATIVE_MACOS_ORPHANED_SIDECAR'
 ]) assert.ok(macosLaunch.includes(expected), `macOS launch smoke is missing: ${expected}`);
 assert.doesNotMatch(macosLaunch, /child_pids="\$\(pgrep -P/u,

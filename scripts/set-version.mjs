@@ -25,6 +25,10 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(target)) {
 }
 
 const changed = [];
+// Validate the release-source contract before the first write. A missing
+// marker must not leave half the repository on a new version.
+const releaseSource = fs.readFileSync(path.join(root, 'docs/RELEASE.md'), 'utf8');
+const nextReleaseSource = advanceReleaseSource(releaseSource, { previous, target });
 
 function writeIfChanged(rel, next) {
   const file = path.join(root, rel);
@@ -65,6 +69,15 @@ patchJson('plugins/data-secure/server/standalone/product-manifest.json', (d) => 
 });
 patchJson('apps/datasecure-standalone/tauri-contract/tauri.conf.json', (d) => {
   d.version = target;
+});
+// Finder's marketing version is numeric; the full RC stays in Cargo, the UI,
+// logs and package names. The separately tracked build number never decreases.
+patchJson('apps/datasecure-standalone/tauri-contract/tauri.macos.conf.json', (d) => {
+  d.version = target.split('-')[0];
+  const current = Number(d.bundle.macOS.bundleVersion);
+  if (!Number.isSafeInteger(current) || current < 1) throw new Error('MACOS_BUILD_VERSION_INVALID');
+  const rc = Number(/-rc(\d+)$/u.exec(target)?.[1] || 0);
+  d.bundle.macOS.bundleVersion = String(Math.max(current + (previous === target ? 0 : 1), rc));
 });
 patchJson('apps/datasecure-standalone/desktop-targets.json', (d) => {
   for (const item of d.targets || []) {
@@ -129,8 +142,8 @@ for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md
   'docs/RELEASE.md', 'docs/TESTING.md']) {
   patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?(?=[^\n]*$)/mu, `$1${target}`);
 }
-writeIfChanged('docs/RELEASE.md', advanceReleaseSource(
-  fs.readFileSync(path.join(root, 'docs/RELEASE.md'), 'utf8'), { previous, target }));
+writeIfChanged('docs/RELEASE.md', nextReleaseSource.replace(
+  /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?(?=[^\n]*$)/mu, `$1${target}`));
 patchText('docs/acceptance/STANDALONE_UAT_TEST_KIT/README.md',
   /^(Stand:[^\n]*?Engineering-Pilot )\d+\.\d+\.\d+(?:-rc\d+)?$/mu,
   `$1${target}`);

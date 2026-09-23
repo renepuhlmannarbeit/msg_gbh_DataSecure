@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
+import { verifyMacNativeContract } from './lib/macos-native-contract.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -100,6 +101,8 @@ for (const executable of executables) {
   const value = relative.get(executable);
   assert.deepEqual([...value.subarray(0, 4)], [0xcf, 0xfa, 0xed, 0xfe]);
 }
+const native = verifyMacNativeContract(relative, { target: productTarget,
+  minimumVersion: manifest.minimum_system_version });
 const conversion = JSON.parse(relative.get(`${app}/Contents/Resources/server/standalone/conversion-runtime/RUNTIME.json`));
 assert.equal(conversion.schema, 'datasecure-conversion-runtime/1');
 assert.equal(conversion.target, productTarget);
@@ -112,4 +115,5 @@ for (const file of conversion.files) {
 const checksum = fs.readFileSync(`${archive}.sha256`, 'utf8').trim();
 assert.equal(checksum, `${crypto.createHash('sha256').update(bytes).digest('hex')}  ${path.basename(archive)}`);
 process.stdout.write(`${JSON.stringify({ ok: true, archive, target: productTarget,
-  entries: relative.size, bytes: bytes.length })}\n`);
+  entries: relative.size, bytes: bytes.length, native_binaries: native.map(({ path, minimumVersion }) =>
+    ({ path, minimum_version: minimumVersion })) })}\n`);

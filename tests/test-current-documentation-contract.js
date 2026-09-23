@@ -84,6 +84,8 @@ test('release truth binds the published candidate while keeping human approval s
   const match = /-rc(\d+)$/iu.exec(version);
   assert.ok(match, `release candidate version expected, got ${version}`);
   const currentRc = `RC${match[1]}`;
+  assert.match(release, /^Der aktuelle Quellstand ist\b/mu,
+    'the next version cut requires a stable source-state marker even after publication');
   const published = /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
   assert.ok(published, 'release truth must name a commit-bound published candidate');
   const publishedRc = `RC${published[1]}`;

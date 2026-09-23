@@ -11,7 +11,8 @@ const {
   linuxReviewTextLocally,
   powershellReviewScript,
   resolveBatchReviewResult,
-  reviewBatchTextLocally
+  reviewBatchTextLocally,
+  reviewTextLocally
 } = require('../plugins/data-secure/server/companion/text-review');
 
 const { test, testAsync, done, assert } = createSuite('Local batch review model');
@@ -47,6 +48,53 @@ function personAmbiguity(id, originalText, anonymizedText, value) {
     replacement_kind: 'PERSON'
   };
 }
+
+function evaluateDarwinReview(draft) {
+  let appkitAccessed = false;
+  const native = {
+    NSFileHandle: { fileHandleWithStandardInput: { readDataToEndOfFile: JSON.stringify(draft) } },
+    NSString: { alloc: { initWithDataEncoding: (data) => data } },
+    NSUTF8StringEncoding: 4
+  };
+  Object.defineProperty(native, 'NSApplication', { get() {
+    appkitAccessed = true;
+    throw new Error('synthetic AppKit failure containing private content');
+  } });
+  const execute = new Function('ObjC', '$', `${darwinReviewScript()}\nreturn run([]);`);
+  const response = JSON.parse(execute({ import() {}, unwrap: (value) => value }, native));
+  return { response, appkitAccessed };
+}
+
+test('macOS finding limit fails before spawning, while the exact boundary and Windows still reach their reviewer', () => {
+  const draft = buildReviewDraft('Acme', 'Acme', 'general', [], { allowDefer: true });
+  let calls = 0;
+  const runner = () => { calls++; return { status: 0, stdout: '{"action":"deferred"}' }; };
+  draft.ambiguities = Array.from({ length: 1001 }, () => ambiguity('credential:v2:000001', 'Acme', 'Acme', 'Acme'));
+  assert.throws(() => reviewTextLocally(draft, { platform: 'darwin', runner }),
+    (error) => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+  assert.strictEqual(calls, 0);
+  assert.deepStrictEqual(reviewTextLocally(draft, { platform: 'win32', runner }), { action: 'deferred' });
+  draft.ambiguities.pop();
+  assert.deepStrictEqual(reviewTextLocally(draft, { platform: 'darwin', runner }), { action: 'deferred' });
+  assert.strictEqual(calls, 2);
+});
+
+test('generated macOS reviewer and adapter distinguish technical failures from human deferral', () => {
+  const draft = buildReviewDraft('Acme', 'Acme', 'general', [ambiguity('credential:v2:000001', 'Acme', 'Acme', 'Acme')], { allowDefer: true });
+  for (const allowDefer of [true, false]) {
+    const oversize = evaluateDarwinReview({ ...draft, allow_defer: allowDefer, ambiguities: Array(1001).fill(draft.ambiguities[0]) });
+    assert.strictEqual(oversize.appkitAccessed, false);
+    assert.deepStrictEqual(oversize.response, { error_code: 'LOCAL_REVIEW_TOO_LARGE' });
+    const failure = evaluateDarwinReview({ ...draft, allow_defer: allowDefer });
+    assert.strictEqual(failure.appkitAccessed, true);
+    assert.deepStrictEqual(failure.response, { error_code: 'LOCAL_REVIEW_FAILED' });
+    for (const { response } of [oversize, failure]) {
+      assert.throws(() => reviewTextLocally(draft, {
+        platform: 'darwin', runner: () => ({ status: 0, stdout: JSON.stringify(response) })
+      }), (error) => error.code === response.error_code && !error.message.includes('private content'));
+    }
+  }
+});
 
 test('identifier-only compatibility detection preserves actual review locators and decision offsets', () => {
   const pii = require('../plugins/data-secure/server/pii-engine');

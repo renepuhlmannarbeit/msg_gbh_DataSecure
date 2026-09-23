@@ -3,6 +3,7 @@
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchReviewOrchestrator } = require('../plugins/data-secure/server/gateway/batch-review-orchestrator');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
+const { reviewBatchTextLocally } = require('../plugins/data-secure/server/companion/text-review');
 const { createSuite } = require('./helpers');
 
 const { test, testAsync, done, assert } = createSuite('Batch review orchestration boundary');
@@ -89,7 +90,103 @@ function fixture(options = {}) {
   return { orchestrator, token, active, events, lifecycle, items, state, drafts, progress, deps, writes: () => writes };
 }
 
+function findingFixture(counts, platform = 'darwin') {
+  const items = counts.map((count, id) => ({ id, count, status: 'deferred_review' }));
+  const state = { items };
+  const active = new Set();
+  const captured = [];
+  const groups = [];
+  const orchestrator = createBatchReviewOrchestrator({
+    SafeError, active, acquireActiveLock() {}, releaseActiveLock() { return true; },
+    readState: () => state, assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
+    reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
+    publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
+    currentPlatform: () => platform,
+    captureDeferredReviewInput: async (_state, item) => {
+      captured.push(item.id);
+      const text = 'Acme\n'.repeat(item.count);
+      return { original_text: text, anonymized_text: text, ambiguities: Array.from({ length: item.count }, (_, index) => ({
+        ambiguity_id: `credential:v2:${String(index + 1).padStart(6, '0')}`,
+        type: 'credential_issuer_ambiguous', original_start: index * 5, original_end: index * 5 + 4,
+        anonymized_start: index * 5, anonymized_end: index * 5 + 4
+      })) };
+    },
+    runBatchReviewLocally: reviewBatchTextLocally,
+    reviewTextLocally: (draft, options) => {
+      assert.strictEqual(options.platform, platform);
+      groups.push({ findings: draft.ambiguities.length, progress: draft.batch_review });
+      return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map((item) => ({
+        ambiguity_id: item.ambiguity_id, decision: 'keep'
+      })) };
+    },
+    publishReviewedBatch: async (_state, selected, drafts, documents) => {
+      assert.deepStrictEqual(documents.map((document) => document.decisions.length), selected.map((item) => item.count));
+      assert.strictEqual(drafts.length, selected.length);
+      selected.forEach((item) => { item.status = 'released'; });
+      return { packages: [], locallyReleased: selected.length, failed: 0 };
+    },
+    markDeferredReview: (_state, selected, code) => {
+      for (const item of selected) { item.status = 'deferred_review'; item.error_code = code; }
+    },
+    writeTerminalEvidence: () => true
+  });
+  return { orchestrator, active, items, captured, groups };
+}
+
 async function main() {
+  for (const [counts, expectedGroups] of [[[600, 600], [600, 600]], [[600, 400, 1], [1000, 1]]]) {
+    await testAsync(`macOS splits ${counts.join('+')} findings and publishes every document exactly once`, async () => {
+      const value = findingFixture(counts);
+      const result = await value.orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.locally_released, counts.length);
+      assert.strictEqual(result.reviewed_documents, counts.length);
+      assert.deepStrictEqual(value.groups.map((group) => group.findings), expectedGroups);
+      assert.deepStrictEqual(value.captured, counts.map((_, index) => index), 'carried drafts are not reconstructed twice');
+      assert.ok(value.items.every((item) => item.status === 'released'));
+      assert.strictEqual(value.groups[1].progress.previously_reviewed_count, counts.length - 1);
+      assert.strictEqual(value.groups[1].progress.review_pending_count, 1);
+      assert.strictEqual(value.active.size, 0);
+    });
+  }
+
+  await testAsync('Windows keeps its existing combined review above the macOS finding limit', async () => {
+    const value = findingFixture([600, 600], 'win32');
+    const result = await value.orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.locally_released, 2);
+    assert.deepStrictEqual(value.groups.map((group) => group.findings), [1200]);
+    assert.strictEqual(value.active.size, 0);
+  });
+
+  await testAsync('a single oversized macOS document reports a technical size error without UI or silent deferral', async () => {
+    const value = findingFixture([1001]);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await value.orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.error, 'LOCAL_REVIEW_TOO_LARGE');
+      assert.strictEqual(result.reviewed_documents, 0);
+      assert.strictEqual(result.locally_released, 0);
+      assert.match(result.message, /zu groß/u);
+      assert.strictEqual(value.items[0].error_code, 'LOCAL_REVIEW_TOO_LARGE');
+      assert.deepStrictEqual(value.groups, []);
+      assert.strictEqual(value.active.size, 0);
+    }
+    assert.deepStrictEqual(value.captured, [0, 0], 'one capture per explicit attempt, no retry loop');
+  });
+
+  await testAsync('a later oversized macOS document preserves already published groups', async () => {
+    const value = findingFixture([600, 600, 1001]);
+    const result = await value.orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+    assert.strictEqual(result.error, 'LOCAL_REVIEW_TOO_LARGE');
+    assert.strictEqual(result.reviewed_documents, 1);
+    assert.strictEqual(result.locally_released, 1);
+    assert.strictEqual(value.items[0].status, 'released');
+    assert.deepStrictEqual(value.items.slice(1).map((item) => item.error_code), ['LOCAL_REVIEW_TOO_LARGE', 'LOCAL_REVIEW_TOO_LARGE']);
+    assert.deepStrictEqual(value.groups.map((group) => group.findings), [600]);
+    assert.strictEqual(value.active.size, 0);
+  });
+
   await testAsync('an already aborted review never captures, opens UI or publishes', async () => {
     const value = fixture();
     const controller = new AbortController();
@@ -180,7 +277,7 @@ async function main() {
         },
         markDeferredReview() { throw new Error('unexpected deferral'); }, writeTerminalEvidence: () => true
       });
-      const result = await orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+      const result = await orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true, platform: 'darwin' });
       assert.strictEqual(result.locally_released, 3);
       assert.strictEqual(result.reviewed_documents, 3);
       assert.strictEqual(result.local_evidence_exported, true);

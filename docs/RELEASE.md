@@ -1,6 +1,15 @@
 # Release- und Distributionsvertrag
 
-Stand: 23.09.2026 · 3.2.0-rc140
+Stand: 23.09.2026 · 3.2.0-rc141
+
+Der aktuelle Quellstand ist RC141-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+
+**Kompatibilitätsnachtrag MAC-20260923:** Der Standalone-Supervisor in den
+unveränderten RC140-Assets verlangt Intel macOS 15.0 bzw. ARM macOS 14.0.
+Die deklarierte Mindestversion 13.5 ist für diese Pakete nicht korrekt. Die
+nachträglichen Deployment-/Signatur-/Plist-/Reviewkorrekturen sind nur im
+Quellstand vorhanden und brauchen einen neuen nativen Paketkandidaten. RC140-
+Hashes, Tag und damalige Testläufe werden nicht nachträglich umgedeutet.
 
 RC140 ist als gemeinsamer, aber produktgetrennter Vorabkandidat aus dem sauberen
 Quellcommit `814bc50e3d754224cd95b6fa91f122dd45f48487` veröffentlicht:

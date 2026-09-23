@@ -1,6 +1,14 @@
 # Entscheidungs-Traceability
 
-Stand: 23.09.2026 · 3.2.0-rc140
+Stand: 23.09.2026 · 3.2.0-rc141
+
+MAC-20260923-01–03 → BL-010.20 → Build-Deployment-Target 13.5, sämtliche
+Mach-O-Versionen/Architekturen/Systembibliotheken/Signaturen, numerische
+Plist-Versionen, entpackter LaunchServices- und echter Beide-Modi-Paketsmoke.
+MAC-20260923-04 → BL-012.9 → gemeinsame Mac-Reviewgruppierung bei 1000
+Fundstellen und explizite technische Fehler statt falscher Vertagung.
+Quellkorrekturen sind nicht im veröffentlichten RC140 enthalten; neuer nativer
+Paketnachweis und sichtbare Zielhost-UAT bleiben getrennt erforderlich.
 
 RC140-Lieferung: PH-20260923 / BL-021.3–.4, BL-041.19–.21, BL-050.4
 und die getrennten Windows-/Mac-Installationskorrekturen → Quellcommit

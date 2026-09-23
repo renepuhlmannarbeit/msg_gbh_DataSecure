@@ -6,7 +6,11 @@ einzeln auf Signatur und Architektur geprüft sowie entpackt mit echten
 Konvertierungen über die private IPC-Grenze gestartet. Ein
 Browser-Download mit Finder-Entpackung, Kopie nach Programme, LaunchServices
 und Gatekeeper wurde damit noch nicht nachgewiesen. Die Runner verwenden
-macOS 14/15; die deklarierte Mindestversion 13.5 ist noch nicht nativ geprüft. Der
+macOS 14/15. **Der erneute Byte-Review hat einen Fehler im RC140-Paketvertrag
+bewiesen:** Der POSIX-Helfer verlangt Intel macOS 15.0 bzw. ARM macOS 14.0,
+obwohl die App macOS 13.5 deklariert. RC140 deshalb nicht auf 13.5 einsetzen.
+Der Quellstand korrigiert das Deployment-Target, native Signaturen und numerische
+App-Metadaten; die veröffentlichten ZIPs enthalten diese Korrekturen nicht. Der
 Workflow kann daraus zusätzlich ein geprüftes Engineering-ZIP für einen Tag
 zum Zielhosttest bereitstellen. Die sichtbare menschliche Abnahme bleibt offen.
 
@@ -26,9 +30,13 @@ Abhängigkeits-Caches. Ein Paket-Upload ist standardmäßig
 ausgeschaltet. Wird `upload_package` ausdrücklich aktiviert, lädt der Workflow
 nur das verifizierte ZIP und seine SHA-256-Datei mit einem Tag Aufbewahrung hoch.
 Das Archiv wird zweimal bytegleich erzeugt, geprüft, entpackt, erneut auf
-Signatur und Architektur geprüft, aus dem entpackten Paket über die private
-IPC-Grenze gestartet und mit synthetischen Office-/PDF-/OCR-Eingaben durch den
-echten Konverter geführt. Das ersetzt nicht die nachfolgende sichtbare
+Signatur und Architektur geprüft. Der überarbeitete Workflow prüft zusätzlich
+die tatsächlich eingebettete Mindestversion und Systembibliotheken **aller**
+Mach-O-Dateien einschließlich des Canvas-Addons. Er startet die entpackte App
+direkt sowie über LaunchServices und prüft Konvertierung, Anonymisierung,
+Zuordnung, Fehlerfälle und Verlauf mit der gebündelten Runtime. Diese neuen
+Gates benötigen noch einen erfolgreichen nativen Lauf aus dem korrigierten
+Commit. Das ersetzt nicht die nachfolgende sichtbare
 Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
 
 Maßgebliche Herstellerhinweise:
@@ -42,7 +50,15 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 - Intel-Mac: `DataSecure-Standalone-<Version>-macos-x64.zip`
 - Apple Silicon (M1 oder neuer):
   `DataSecure-Standalone-<Version>-macos-arm64.zip`
-- Mindestversion: macOS 13.5
+- Veröffentlichte RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
+- Entwicklungsziel nach Korrektur: macOS 13.5. Erst ein neu geprüftes Paket darf
+  diese Mindestversion beanspruchen; sichtbare Abnahme auf 13.5 bleibt zusätzlich offen.
+
+Node, PDF-Parser, Canvas-Bilddecoder, Tesseract-WASM und deutsche/englische
+OCR-Modelle sind enthalten. Anwender installieren weder Rust/Xcode noch Node,
+Python, Homebrew, LibreOffice oder ein eigenes Tesseract. Die Laufzeitprüfung
+der RC140-ZIPs fand nur macOS-Systembibliotheken als native Ladeabhängigkeiten.
+Ein fehlendes Build-Tool ist deshalb keine Erklärung für einen Endanwenderfehler.
 
 Das ZIP enthält einen Ordner
 `DataSecure-Standalone-<Version>-macos-<Architektur>` mit der App,
@@ -115,6 +131,9 @@ Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
 - bei Anonymisierung neutrale Ergebnisnamen als Standard und den Quellbasisnamen
   mit `-anonymisiert` als ausdrückliche Alternative prüfen;
 - Review, Abbruch, App-Neustart und Fortsetzung;
+- große lokale Prüfgruppen: mehr als 1000 Fundstellen werden auf mehrere
+  begrenzte Gruppen verteilt; technische Dialogfehler dürfen nicht als
+  Benutzerentscheidung „Später“ erscheinen (Quellkorrektur nach RC140);
 - Verlauf mit 20 zeilengebundenen Läufen; Ergebnisordner, Zuordnung und
   Fortsetzung öffnen stets nur den gewählten Lauf;
 - falsches Architekturpaket stoppt verständlich;

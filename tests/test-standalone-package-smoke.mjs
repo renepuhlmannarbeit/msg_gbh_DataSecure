@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { readCentralModes } from '../scripts/lib/zip.mjs';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 import { office, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
 
@@ -14,7 +15,9 @@ const { zipStore } = require('./lib/zip.js');
 const { opcControlEntries } = require('./lib/opc.js');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
-const zip = path.resolve(process.argv[2] || path.join(root, 'dist', `DataSecure-Standalone-${version}-windows-x64.zip`));
+const productTarget = process.platform === 'darwin' ? `macos-${process.arch}` : 'windows-x64';
+assert.ok(['windows-x64', 'macos-x64', 'macos-arm64'].includes(productTarget));
+const zip = path.resolve(process.argv[2] || path.join(root, 'dist', `DataSecure-Standalone-${version}-${productTarget}.zip`));
 const extraction = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
 const install = path.join(extraction, 'Leerzeichen ünicode');
 const sourceDirectory = path.join(extraction, 'Quellen');
@@ -101,8 +104,10 @@ try {
   // only an in-process logger double. This opt-in is scoped to this test child.
   environment.EU_PRIVACY_SUPPORT_MODE = '1';
   fs.mkdirSync(install, { recursive: true });
-  const entries = readZip(fs.readFileSync(zip), { maxEntries: 2000, maxUncompressed: 512 * 1024 * 1024 });
-  const prefix = `DataSecure-Standalone-${version}-windows-x64/`;
+  const archiveBytes = fs.readFileSync(zip);
+  const entries = readZip(archiveBytes, { maxEntries: 15000, maxUncompressed: 768 * 1024 * 1024 });
+  const modes = readCentralModes(archiveBytes);
+  const prefix = `DataSecure-Standalone-${version}-${productTarget}/`;
   for (const [name, bytes] of entries) {
     assert.ok(name.startsWith(prefix));
     const relative = name.slice(prefix.length);
@@ -111,6 +116,7 @@ try {
     assert.equal(path.relative(install, destination).startsWith('..'), false);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, bytes, { flag: 'wx' });
+    if (process.platform === 'darwin') fs.chmodSync(destination, modes.get(name) & 0o777);
   }
   fs.mkdirSync(sourceDirectory, { recursive: true });
   fs.mkdirSync(resultDirectory, { recursive: true });
@@ -127,9 +133,12 @@ try {
     return destination;
   });
   const launchRoot = process.platform === 'win32' ? `\\\\?\\${install}` : install;
-  const runtime = path.join(launchRoot, 'datasecure-core-x86_64-pc-windows-msvc.exe');
-  const sidecar = path.join(launchRoot, 'server', 'standalone', 'desktop-sidecar.js');
-  const deny = path.join(install, 'server', 'network-deny.cjs');
+  const bundle = path.join(launchRoot, 'DataSecure Standalone.app', 'Contents');
+  const server = process.platform === 'darwin' ? path.join(bundle, 'Resources', 'server') : path.join(launchRoot, 'server');
+  const runtime = process.platform === 'darwin' ? path.join(bundle, 'MacOS', 'datasecure-core')
+    : path.join(launchRoot, 'datasecure-core-x86_64-pc-windows-msvc.exe');
+  const sidecar = path.join(server, 'standalone', 'desktop-sidecar.js');
+  const deny = path.join(server, 'network-deny.cjs');
   assert.equal(fs.statSync(deny).isFile(), true);
   child = childProcess.spawn(childProcessPath(runtime), ['--require=../network-deny.cjs', path.basename(sidecar)], {
     cwd: childProcessPath(path.dirname(sidecar)), windowsHide: true, shell: false,

@@ -65,6 +65,8 @@ jobs:
       matrix: ${{ fromJSON(needs.select-target.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.5'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -94,6 +96,16 @@ jobs:
           shasum -a 256 "$destination/datasecure-sandbox" | awk '{print $1}' \
             > "$destination/datasecure-sandbox.sha256"
           node -e "const r=require('./plugins/data-secure/server/posix-supervisor').verifyPosixSupervisor(); if(!r.available){throw new Error(r.reason)}"
+      - name: Sign the target-native converter addon before inventory and bundling
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch="${{ matrix.target }}"
+          arch="${arch#macos-}"
+          binding="native/ocr/pilot/node_modules/@napi-rs/canvas-darwin-${arch}/skia.darwin-${arch}.node"
+          test -f "$binding"
+          codesign --force --sign - "$binding"
+          codesign --verify --strict --verbose=2 "$binding"
       - name: Fetch and verify the pinned official Node runtime
         shell: bash
         run: |
@@ -128,7 +140,8 @@ jobs:
           test -f "$bundle/Contents/Info.plist"
           test -d "$bundle/Contents/Resources/server/standalone/conversion-runtime"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle/Contents/Info.plist")" = "de.msg.datasecure.standalone"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Contents/Info.plist")" = "$(node -p "require('./package.json').version")"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Contents/Info.plist")" = "$(node -p "require('./apps/datasecure-standalone/tauri-contract/tauri.macos.conf.json').version")"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$bundle/Contents/Info.plist")" = "$(node -p "require('./apps/datasecure-standalone/tauri-contract/tauri.macos.conf.json').bundle.macOS.bundleVersion")"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$bundle/Contents/Info.plist")" = "13.5"
           codesign --verify --deep --strict --verbose=2 "$bundle"
           codesign -dv --verbose=4 "$bundle" 2>&1 | grep -q '^Signature=adhoc$'
@@ -139,6 +152,7 @@ jobs:
             test "$arches" = "${{ matrix.rust_arch }}"
             codesign --verify --strict --verbose=2 "$executable"
           done
+          find "$bundle" -type f \( -name '*.node' -o -name '*.dylib' \) -exec codesign --verify --strict --verbose=2 {} +
           if find "$bundle" -print | grep -E '/(?:\.claude-plugin|skills|Claude|Cowork)(/|$)|/\.mcp\.json$'; then
             exit 1
           fi
@@ -190,9 +204,13 @@ jobs:
             test "$(lipo -archs "$executable")" = "${{ matrix.rust_arch }}"
             codesign --verify --strict --verbose=2 "$executable"
           done
+          find "$packaged_app" -type f \( -name '*.node' -o -name '*.dylib' \) -exec codesign --verify --strict --verbose=2 {} +
           bash tests/manual/standalone-native-macos-launch.sh \
             --app "$packaged_app" --target "${{ matrix.target }}" --version "$version"
+          bash tests/manual/standalone-native-macos-launch.sh \
+            --app "$packaged_app" --target "${{ matrix.target }}" --version "$version" --launch-services
           node tests/manual/standalone-macos-packaged-conversion.mjs "$packaged_app"
+          node tests/test-standalone-package-smoke.mjs "$archive"
       - name: Upload the verified engineering package for one day
         if: ${{ inputs.upload_package == true }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

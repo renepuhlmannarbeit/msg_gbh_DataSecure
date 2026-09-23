@@ -1,8 +1,19 @@
 # Aktueller Iststand
 
-Stand: 23.09.2026 · 3.2.0-rc140 · beide Produkte technisch an `814bc50e` gebunden und als Vorabversion veröffentlicht; Modellabnahme und N3/N4 offen
+Stand: 23.09.2026 · 3.2.0-rc141 · neuer Mac-Prüfstand, noch nicht veröffentlicht; RC140 bleibt letzter gebundener Release beider Produkte; Modellabnahme und N3/N4 offen
 
 ## RC140 – veröffentlichter technischer Produktkandidat
+
+**Mac-Nachreview MAC-20260923:** Veröffentlichte Standalone-RC140-ZIPs enthalten
+einen Supervisor mit minOS Intel 15.0 / ARM 14.0 trotz deklarierter 13.5. Sie
+sind daher kein 13.5-Kandidat. Deployment-Target, vollständige native
+Signatur-/Bibliotheksprüfung, numerische Plist-Versionen sowie LaunchServices-
+und echte Beide-Modi-Paketsmokes sind im Quellstand nachgezogen; neue native
+Evidence und Auslieferung stehen noch aus. Der gemeinsame Mac-Reviewadapter
+beider Produkte partitioniert zusätzlich bei 1000 Fundstellen und meldet
+technische Fehler nicht mehr als „Später“. BL-010.20/BL-012.9 sind dafür erneut
+in Arbeit. Bestehende Release-Bytes und menschliche Abnahmestände bleiben
+unverändert; Details im [Reviewbericht](../REVIEW_PRODUCT_HOSTS_2026-09-23.md#mac-20260923--vollständiger-macos-paket-und-installationsnachreview).
 
 **Quell- und Paketstand 23.09.2026:** [PH-20260923](../REVIEW_PRODUCT_HOSTS_2026-09-23.md)
 führt die gemeinsame Roottrennung einschließlich zukünftiger historischer
@@ -1476,8 +1487,10 @@ fehlen strukturell in Diagnose, Supportspur und externen Antworten;
 Pflichtzähler und Zustandsübergänge stoppen bei fehlenden, regressiven oder
 widersprüchlichen Werten. Der aktuelle Zielkatalog bindet vier getrennte Pakete
 an exakte Rust-Triples: Windows x64, macOS Intel, macOS Apple Silicon und Linux
-x64 glibc. Für beide
-macOS-Pakete gilt wegen der gebündelten Node-Laufzeit mindestens macOS 13.5.
+x64 glibc. Das Entwicklungsziel für beide macOS-Pakete ist 13.5. Die
+veröffentlichten RC140-ZIPs verlangen jedoch wegen des Supervisors Intel 15.0
+beziehungsweise ARM 14.0 (MAC-20260923-01). Node selbst verlangt darin 11.0;
+eine pauschale Ableitung der Produktmindestversion allein aus Node ist falsch.
 Zertifikatsfreie macOS-Piloten werden ausdrücklich ad-hoc signiert
 (`signingIdentity: "-"`). Ein neues GitHub-Actions-Gate bildet dafür eine
 kostenkontrollierte Zielhost-Sandbox: Es ist nur über `workflow_dispatch`
@@ -1485,7 +1498,8 @@ startbar, verlangt eine ausdrückliche Bestätigung möglicher privater Runner-
 Minuten und wählt standardmäßig nur Apple Silicon. Auf `macos-15-intel` und
 `macos-14` werden die gepinnte Node-Runtime, der nativ kompilierte POSIX-
 Supervisor, die vollständigen Standalone-/Konverter-/Rust-Verträge, Clippy,
-der Tauri-Release-Build und die Architektur aller drei Executables geprüft.
+der Tauri-Release-Build und im korrigierten Gate alle nativen Komponenten
+einschließlich Canvas-Addon geprüft. Der erneute native Nachweis steht aus.
 Es verwendet keine Secrets und keinen Cache. Ein ausdrücklicher optionaler
 Upload stellt nur das verifizierte ZIP samt Prüfsumme für einen Tag bereit. Die nativen
 Rohbuilds sind durch Apple-Silicon-Lauf `34285518668` auf Commit `487bfe1` und
