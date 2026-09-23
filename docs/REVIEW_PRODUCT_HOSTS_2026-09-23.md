@@ -846,3 +846,26 @@ exakten Zahlenwert. Fehlt die Abfrage, bleibt die Sperre fail-closed. Lokal
 stimmen native und alte .NET-Startticks eines realen Prozesses exakt überein;
 der aktualisierte native Build ist bytegleich reproduzierbar. Ein neuer
 Windows-Runner muss das noch bestätigen, bevor irgendein RC140-Paket gilt.
+
+## Release-Evidence nach Runner-Image-Wechsel
+
+Der macOS-Standalone-Lauf `35860008788` bestand auf Intel und ARM64 den
+zweifachen bytegleichen Paketbau, die Einzelprüfung der Mach-O-Signaturen
+und -Architekturen sowie IPC- und reale Konvertierungs-Smokes aus dem ZIP.
+Der Cowork-Lauf `35860100205` bestand seine Windows-/Intel-/ARM-Pakete und
+nativen Smokes. Beide Läufe beziehen sich auf `8148e8c`; für eine Bindung
+an einen späteren Release-Commit müssen sie erneut laufen.
+
+Der Windows-Release-Lauf `35863305361` bestand erstmals die vollständige
+Produktsuite (67 Basis- und 61 direkte Tests). Die vorherigen Runner-Fehler
+waren Windows-Temp-Reparse-/Fixture-Probleme; diese wurden in Tests und
+Test-Runner behoben, ohne die produktive Pfadsperre zu lockern. Das folgende
+`native:repro` scheiterte jedoch, weil `windows-latest` nun ein VS-2026-Image
+mit rollendem Compiler liefert, während die ausgelieferte Binärdatei an
+MSVC `19.50.35725` und Windows SDK `10.0.26100.0` gebunden ist. Auf dem
+Windows-Buildhost wurde genau dieser Quell-/Binärvergleich erneut bestanden:
+`sha256=4c21142b4a40c591e7e9cbe38a8a714dd8dca24aeffcb400beacb7c456161951`.
+Das GitHub-Gate prüft deshalb die Integrität des *bereits reproduzierten*
+getrackten Helfers; es behauptet ausdrücklich **keinen** CI-Neubau mit dem
+abweichenden Compiler. Ein späterer Toolchain-Wechsel erfordert einen
+bewussten Binär-/Quell-Neubau und erneute Doppelbau-Evidence.

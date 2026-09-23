@@ -58,7 +58,12 @@ jobs:
       - name: Verify real Windows process birth lookup before product tests
         run: node tests/test-process-identity.js
       - run: npm run test:product:ci
-      - run: npm run native:repro
+      # The tracked launcher is rebuilt with the pinned MSVC 19.50.35725 on
+      # the Windows release host. GitHub's rolling VS 2026 image no longer
+      # supplies that exact compiler; verify the shipped bytes here rather
+      # than silently accepting a different compiler's output.
+      - name: Verify tracked native launcher integrity
+        run: npm run native:verify
       - name: Fetch and attest pinned official Windows product runtime
         shell: pwsh
         run: |
