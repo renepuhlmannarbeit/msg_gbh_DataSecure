@@ -164,6 +164,10 @@ test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () 
 });
 
 test('package smoke uses a private environment and refuses links before cleanup', async () => {
+  const smoke = fs.readFileSync(path.join(root, 'tests', 'test-standalone-package-smoke.mjs'), 'utf8');
+  assert.match(smoke, /process\.platform === 'darwin'\s*\? path\.join\(environment\.HOME, 'Library', 'Application Support'\) : environment\.LOCALAPPDATA/u,
+    'native support-event evidence must use the product data root of the target OS');
+  assert.doesNotMatch(smoke, /path\.join\(environment\.LOCALAPPDATA, 'SecureDataMsg-Standalone'/u);
   const { isolatedSidecarEnvironment, removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
   const directory = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
   let linked = false;

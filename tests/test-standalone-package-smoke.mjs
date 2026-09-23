@@ -439,7 +439,9 @@ try {
     request_id: 'c5'.repeat(8), action: 'resolve_local_ledger' });
   assert.equal(convertedLedger.ok, false); assert.equal(convertedLedger.error_code, 'STANDALONE_LEDGER_MISSING');
   assert.equal(fs.readFileSync(mapping, 'utf8'), mappingText, 'conversion never rewrites a previous anonymized result');
-  const supportDirectory = path.join(environment.LOCALAPPDATA, 'SecureDataMsg-Standalone', 'diagnostics', 'support-events');
+  const productDataBase = process.platform === 'darwin'
+    ? path.join(environment.HOME, 'Library', 'Application Support') : environment.LOCALAPPDATA;
+  const supportDirectory = path.join(productDataBase, 'SecureDataMsg-Standalone', 'diagnostics', 'support-events');
   const conversionEvents = fs.readdirSync(supportDirectory).filter(name => name.endsWith('.json'))
     .map(name => JSON.parse(fs.readFileSync(path.join(supportDirectory, name), 'utf8')))
     .filter(event => ['converter_started', 'coverage_checked', 'converter_completed', 'converter_stopped'].includes(event.event));

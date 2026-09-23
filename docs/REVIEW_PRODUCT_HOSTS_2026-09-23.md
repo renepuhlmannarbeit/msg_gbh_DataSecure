@@ -983,6 +983,11 @@ Der Smoke erzeugt seine Eingabebytes jetzt direkt über denselben synthetischen
 UAT-Generator, ohne vorhandene Arbeitsverzeichnisse vorauszusetzen oder die
 Benutzer-UAT-Eingaben neu zu schreiben. Beide Architekturen müssen diesen
 korrigierten Test aus einem neuen sauberen Checkout erneut bestehen.
+Der unabhängige Gegenreview fand zusätzlich einen ausschließlich auf Windows
+ausgelegten Supportlog-Pfad im erweiterten Paketsmoke. Auf macOS liegt er unter
+`HOME/Library/Application Support`, nicht unter `LOCALAPPDATA`. Auch diese
+Testannahme ist korrigiert; Lauf `35875084248` wurde vor weiteren teuren
+Buildstufen beendet. Das verändert keine Produkt-Datenpfade.
 
 ### Primärquellen
 
