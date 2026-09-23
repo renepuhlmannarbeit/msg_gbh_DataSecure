@@ -39,8 +39,9 @@ nicht direkt aus dem ZIP starten:
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
   [DataSecure-Standalone-3.2.0-rc137-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Standalone-3.2.0-rc137-macos-x64.zip)
-  herunterladen und im Finder öffnen,
-  `DataSecure Standalone.app` nach **Programme** ziehen und dort starten.
+  herunterladen, die separate `.zip.sha256` derselben Release-Seite prüfen,
+  im Finder entpacken, den enthaltenen gleichnamigen Ordner öffnen und erst
+  daraus `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
   [DataSecure-Standalone-3.2.0-rc137-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc137/DataSecure-Standalone-3.2.0-rc137-macos-arm64.zip)
   herunterladen und genauso installieren.
@@ -52,9 +53,12 @@ nicht direkt aus dem ZIP starten:
   Dieses Paket ist technisch nativ geprüft; die sichtbare Linux-UAT ist offen.
 
 Die internen Pilotpakete sind nicht mit einer Apple Developer ID notariell
-signiert. Falls macOS den ersten Start blockiert, unter **Systemeinstellungen →
-Datenschutz & Sicherheit** bei DataSecure **Dennoch öffnen** wählen und die
-Rückfrage mit **Öffnen** bestätigen. Gatekeeper nicht global deaktivieren.
+signiert. Falls macOS den ersten Start wegen fehlender Identifizierung oder
+Notarisierung blockiert, danach unter **Systemeinstellungen → Datenschutz & Sicherheit**
+bei DataSecure **Dennoch öffnen** wählen und die Rückfrage mit
+**Öffnen** bestätigen. Bei „beschädigt“ oder Schadsoftwarewarnung nicht
+umgehen; genaue Meldung und Prüfsumme kontrollieren. Gatekeeper nicht global
+deaktivieren.
 Vor einem formalen Test immer Paketname und veröffentlichte SHA-256-Prüfsumme
 mit dem Kandidatenmanifest vergleichen.
 

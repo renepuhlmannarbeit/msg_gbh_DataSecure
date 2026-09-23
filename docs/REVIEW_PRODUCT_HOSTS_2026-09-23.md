@@ -739,3 +739,15 @@ Die Konvertergruppe (35 Fälle) bestand danach. Die vier bereits gestarteten
 Remote-Workflows des ersten Commits wurden abgebrochen; ihre Ergebnisse sind
 keine RC140-Evidence. Ein neuer Quellcommit und alle commitgebundenen Gates
 sind erforderlich, bevor ein RC140-Archiv veröffentlicht wird.
+
+## macOS-Installationsreview vor RC140
+
+Ein zusätzlicher unabhängiger Review des Intel-/ARM-Paketpfads fand keinen
+statisch reproduzierbaren Bundle-Defekt: der Workflow prüft Signatur und
+Architektur vor und nach dem ZIP sowie den nativen IPC-Start. Er prüft jedoch
+**nicht** den Browser-Download mit Finder-Quarantäne und Gatekeeper. Die
+macOS-Anleitung und README benennen jetzt den ZIP-Unterordner, die getrennte
+äußere `.zip.sha256`, den erst nach Blockierung sichtbaren „Dennoch öffnen“-Weg
+und nicht zu umgehende Schadsoftware-/Beschädigt-Warnungen. Die sichtbare
+Installation auf einem echten Intel- und ARM-Mac bleibt ausdrücklich UAT; für
+eine konkrete Fehlersuche ist die genaue Meldung des betroffenen Macs nötig.

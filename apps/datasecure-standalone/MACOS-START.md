@@ -1,7 +1,9 @@
 # DataSecure Standalone auf macOS starten
 
 Status: Native ad-hoc-signierte App-Bundles sind auf echten Intel- und
-Apple-Silicon-Runnern gebaut und über ihre private IPC-Grenze gestartet. Der
+Apple-Silicon-Runnern gebaut und über ihre private IPC-Grenze gestartet. Ein
+Browser-Download mit Finder-Entpackung und Gatekeeper wurde damit noch nicht
+nachgewiesen. Der
 Workflow kann daraus zusätzlich ein geprüftes Engineering-ZIP für einen Tag
 zum Zielhosttest bereitstellen. Die sichtbare menschliche Abnahme bleibt offen.
 
@@ -38,22 +40,47 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
   `DataSecure-Standalone-<Version>-macos-arm64.zip`
 - Mindestversion: macOS 13.5
 
-Das ZIP muss `SHA256SUMS`, die SBOM und Lizenznachweise enthalten. Vor der
-Installation ist die veröffentlichte SHA-256-Prüfsumme zu vergleichen.
+Das ZIP enthält einen Ordner
+`DataSecure-Standalone-<Version>-macos-<Architektur>` mit der App,
+`SHA256SUMS`, SBOM und Lizenznachweisen. Die Prüfsumme des **gesamten ZIPs**
+steht in einem separaten Download `<ZIP-Name>.sha256` derselben Release-Seite.
+Beide Dateien im selben Ordner ablegen und vor dem Entpacken im Terminal prüfen,
+zum Beispiel für Apple Silicon:
+
+```sh
+cd ~/Downloads
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc140-macos-arm64.zip.sha256
+```
+
+Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die
+tatsächlich heruntergeladenen Dateien anpassen. Die interne `SHA256SUMS` ist
+kein Ersatz für diese Prüfung des heruntergeladenen ZIPs.
 
 ## Installation eines ad-hoc-signierten internen Pilotpakets
 
-1. Das passende ZIP im Finder öffnen.
-2. `DataSecure Standalone.app` nach **Programme** ziehen.
+1. Das passende ZIP im Finder öffnen und den darin enthaltenen Ordner
+   `DataSecure-Standalone-<Version>-macos-<Architektur>` öffnen.
+2. **Nur** `DataSecure Standalone.app` aus diesem Ordner nach **Programme**
+   ziehen; die App nicht direkt aus dem ZIP oder Downloads starten.
 3. Die App einmal normal öffnen.
-4. Falls macOS die App blockiert: **Systemeinstellungen → Datenschutz &
-   Sicherheit** öffnen und bei DataSecure **Dennoch öffnen** wählen.
-5. Die erneute Rückfrage mit **Öffnen** bestätigen.
+4. Nur wenn macOS wegen des nicht identifizierten Entwicklers oder der fehlenden
+   Notarisierung blockiert und die Quelle samt Prüfsumme verifiziert wurde:
+   **Systemeinstellungen → Datenschutz & Sicherheit** öffnen und bei
+   DataSecure **Dennoch öffnen** wählen. Diese Option erscheint erst nach dem
+   gescheiterten Öffnungsversuch und nur begrenzte Zeit (etwa eine Stunde).
+5. Die erneute Rückfrage mit **Öffnen** bestätigen; gegebenenfalls das
+   Mac-Anmeldepasswort eingeben.
 
 Danach lässt sich die App normal über **Programme** oder Spotlight starten.
 Die Ausnahme gilt nur für diese App. Gatekeeper darf weder global abgeschaltet
 noch mit `xattr`- oder `spctl`-Befehlen umgangen werden. Auf verwalteten Macs
 kann die Organisation das Öffnen nicht freigegebener Apps unterbinden.
+
+Falls macOS **„beschädigt“** oder eine **Schadsoftwarewarnung** meldet, nicht
+„Dennoch öffnen“ erzwingen: Prüfsumme und richtiges Architekturpaket erneut
+kontrollieren und den genauen Wortlaut mit macOS-Version und `uname -m` für
+die UAT notieren. Dasselbe gilt, wenn die App nach dem Öffnen sofort schließt;
+ein bestandener Runner-IPC-Test ersetzt keinen sichtbaren Start auf dem Mac.
 
 Das Pilotpaket wird beim nativen macOS-Build ohne Apple-Zertifikat ausdrücklich
 ad-hoc signiert (`signingIdentity: "-"`), aber nicht notariell beglaubigt. Diese
@@ -66,7 +93,9 @@ optionale spätere Verbesserungen für eine bequemere breite Verteilung.
 
 Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
 
-- Download, Prüfsumme, Finder-Entpackung und Gatekeeper-Ablauf;
+- echter Browser-Download beider Release-Dateien, externe ZIP-Prüfsumme,
+  Finder-Entpackung samt Paket-Unterordner, Kopie nach Programme und
+  Gatekeeper-Ablauf (oder dessen genaue Blockiermeldung);
 - Startseite ohne vorbelegten Modus; Auswahl oder Drag-and-drop verarbeitet noch
   nichts und erst **Starten** beginnt den Stapel;
 - Mehrfachauswahl und rekursive Ordnerauswahl ohne zweiten Picker;
