@@ -19,12 +19,23 @@ test('Linux identity binds boot identity and process start ticks, not PID alone'
 });
 
 test('Windows and macOS adapters accept only bounded exact start metadata', () => {
-  const win = _test.windowsBirth(42, () => ({ status: 0, stdout: '638999999999999999' }), { SystemRoot: 'C:\\Windows' });
+  const win = _test.windowsBirth(42, (_executable, _arguments, options) => {
+    assert.equal(options.timeout, 8000);
+    assert.equal(options.maxBuffer, 4096);
+    return { status: 0, stdout: '638999999999999999' };
+  }, { SystemRoot: 'C:\\Windows' });
   const mac = _test.macosBirth(42, () => ({ status: 0, stdout: 'Fri Sep  5 12:34:56 2026\n' }));
   assert.match(win, /^[a-f0-9]{64}$/u);
   assert.match(mac, /^[a-f0-9]{64}$/u);
   assert.strictEqual(_test.windowsBirth(42, () => ({ status: 0, stdout: 'ticks\nprivate' })), null);
   assert.strictEqual(_test.macosBirth(42, () => ({ status: 0, stdout: '/private/path' })), null);
+});
+
+test('Windows reads the real current process birth identity within the bounded host allowance', () => {
+  if (process.platform !== 'win32') return;
+  const actual = processInstanceIdentity(process.pid);
+  assert.match(actual, /^[a-f0-9]{64}$/u);
+  assert.strictEqual(processInstanceIdentity(process.pid), actual);
 });
 
 test('identity state distinguishes death and PID reuse while observer failure stays unknown', () => {

@@ -29,8 +29,10 @@ function windowsBirth(pid, spawnSync = childProcess.spawnSync, environment = pro
   const executable = path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const script = `$p=Get-Process -Id ${pid} -ErrorAction Stop;[Console]::Out.Write($p.StartTime.ToUniversalTime().Ticks)`;
   const result = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Command', script], {
-    encoding: 'utf8', windowsHide: true, shell: false, timeout: 2000,
-    maxBuffer: 256, env: { SystemRoot: systemRoot, WINDIR: systemRoot }
+    // A cold Windows PowerShell start on a loaded target host can exceed 2 s.
+    // Keep a finite bound, but do not mistake startup latency for PID reuse.
+    encoding: 'utf8', windowsHide: true, shell: false, timeout: 8000,
+    maxBuffer: 4096, env: { SystemRoot: systemRoot, WINDIR: systemRoot }
   });
   const ticks = String(result?.stdout || '').trim();
   if (result?.status !== 0 || !/^\d{10,20}$/u.test(ticks)) return null;

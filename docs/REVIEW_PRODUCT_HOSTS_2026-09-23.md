@@ -781,3 +781,18 @@ die tatsächlich akzeptierte Ergebniswurzel. Alle betroffenen Testgruppen
 bestanden lokal; der Windows-Runner muss sie aus einem neuen Commit erneut
 bestätigen. Die parallel gestarteten Pakete des vorherigen SHA sind nicht als
 Release-Evidence verwendbar und wurden, soweit noch aktiv, abgebrochen.
+
+## Viertes Windows-Releasegate: Prozess-Startidentität
+
+Der Runner aus `cd47a60a297bebeb67d05f0247b58bf58635c645` passierte die
+Wurzel- und Fortsetzungstests, stoppte aber später beim echten
+`claimLocalBatchExecutor(process.pid)` im Historientest. Der unabhängige
+Gegenreview lokalisierte die Abhängigkeit von einem frischen Windows-PowerShell-
+Prozess zur Startzeitabfrage: zwei Sekunden Timeout und 256 Byte Puffer waren
+auf einem belasteten Zielhost zu knapp. Die Anfrage bleibt streng begrenzt,
+erhält aber acht Sekunden und 4096 Byte; das gelesene Ergebnis bleibt ein
+exakter numerischer Startzeitwert. Unbekannte Identität und PID-Wiederverwendung
+bleiben **fail-closed**. Ein echter Selbstprozess-Test läuft auf Windows mit
+System- und paketierter Node-22-Laufzeit grün, ebenso die Historie. Der neue
+Windows-Runner muss diese Verfügbarkeitskorrektur bestätigen, bevor erneut
+Pakete gebunden werden.
