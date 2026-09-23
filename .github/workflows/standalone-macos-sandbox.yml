@@ -119,7 +119,9 @@ jobs:
       - name: Project the self-contained target runtime
         run: node scripts/prepare-standalone-runtime.mjs
       - name: Run product, conversion, Rust and workflow contracts
-        run: npm run test:standalone
+        run: |
+          node tests/test-uat-fixture-generation.js
+          npm run test:standalone
       - name: Run the real isolated converter-worker boundary
         run: npm run test:standalone:conversion
       - name: Require warning-free native Rust code

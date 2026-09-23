@@ -147,25 +147,36 @@ function safeOutput(raw) {
   return target;
 }
 
-function generate(rawOutput) {
-  if (LAYOUT.schema !== 'datasecure-synthetic-uat-layout/3') throw new Error('Unsupported fixture layout');
-  const output = safeOutput(rawOutput);
-  fs.rmSync(output, { recursive: true, force: true });
-  for (const group of Object.keys(LAYOUT.groups)) fs.mkdirSync(path.join(output, group), { recursive: true });
-
-  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.txt'), PROFILE);
-  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.md'), PROFILE);
-  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.csv'), [
+// The package smoke also uses these bytes directly. It must not depend on an
+// ignored inputs directory left behind by an earlier local UAT generation.
+function positiveProfileFixtures() {
+  const csv = [
     'Feld,Wert', 'Name,Lina Testfeld', 'E-Mail,lina.testfeld@privacy-example.test',
     'Telefon,+49 221 555 0182', 'IBAN,DE89 3704 0044 0532 0130 00',
     'Arbeitgeber,Nordstern Medizin IT GmbH', 'Kunde,Falken Klinikverbund AG',
     'Rolle,Product Owner', 'Technologien,"Java, SQL, HL7 FHIR, Testautomatisierung"',
     'Zertifizierung,ISTQB Certified Tester Foundation Level',
     'Zertifizierung,Scrum.org Professional Scrum Master II (PSM II)', ''
-  ].join('\n'));
-  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.docx'), makeDocx(PROFILE, false, true));
-  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.xlsx'), makeXlsx());
-  fs.writeFileSync(path.join(output, '01-positive', 'personnel-profile.pptx'), makePptx());
+  ].join('\n');
+  return new Map([
+    ['personnel-profile.txt', Buffer.from(PROFILE)],
+    ['personnel-profile.md', Buffer.from(PROFILE)],
+    ['personnel-profile.csv', Buffer.from(csv)],
+    ['personnel-profile.docx', makeDocx(PROFILE, false, true)],
+    ['personnel-profile.xlsx', makeXlsx()],
+    ['personnel-profile.pptx', makePptx()]
+  ]);
+}
+
+function generate(rawOutput) {
+  if (LAYOUT.schema !== 'datasecure-synthetic-uat-layout/3') throw new Error('Unsupported fixture layout');
+  const output = safeOutput(rawOutput);
+  fs.rmSync(output, { recursive: true, force: true });
+  for (const group of Object.keys(LAYOUT.groups)) fs.mkdirSync(path.join(output, group), { recursive: true });
+
+  for (const [name, bytes] of positiveProfileFixtures()) {
+    fs.writeFileSync(path.join(output, '01-positive', name), bytes);
+  }
   fs.writeFileSync(path.join(output, '02-review', 'ambiguous-certificate-provider.txt'), AMBIGUOUS);
   fs.writeFileSync(path.join(output, '02-review', 'personnel-profile-with-image.docx'), makeDocx(PROFILE, true));
 
@@ -208,4 +219,4 @@ if (require.main === module) {
   console.log(`Synthetic UAT fixtures created: ${result.count} files`);
 }
 
-module.exports = { generate, expectedFiles, safeOutput, DEFAULT_OUT, LAYOUT };
+module.exports = { generate, positiveProfileFixtures, expectedFiles, safeOutput, DEFAULT_OUT, LAYOUT };

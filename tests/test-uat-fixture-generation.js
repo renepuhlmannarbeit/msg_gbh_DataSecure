@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { createSuite } = require('./helpers');
-const { generate, expectedFiles, LAYOUT } = require('../docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures');
+const { generate, positiveProfileFixtures, expectedFiles, LAYOUT } = require('../docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures');
 const { inspectSourceFormatFromFd } = require('../plugins/data-secure/server/gateway/source-format-inspector');
 const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 
@@ -28,12 +28,23 @@ function inspect(relative, options = {}) {
   finally { fs.closeSync(fd); }
 }
 
+test('package fixture bytes are available without a prior generated inputs directory', () => {
+  const fixtures = positiveProfileFixtures();
+  assert.deepStrictEqual([...fixtures.keys()], ['personnel-profile.txt', 'personnel-profile.md',
+    'personnel-profile.csv', 'personnel-profile.docx', 'personnel-profile.xlsx', 'personnel-profile.pptx']);
+  assert.ok([...fixtures.values()].every((bytes) => Buffer.isBuffer(bytes) && bytes.length > 0));
+  assert.deepStrictEqual(positiveProfileFixtures(), fixtures);
+});
+
 test('Node generator creates exactly the current 111-file layout without historical inputs', () => {
   const result = generate(output);
   assert.strictEqual(result.count, 111);
   assert.strictEqual(LAYOUT.file_count, 111);
   assert.strictEqual(expectedFiles().size, 111);
   for (const relative of expectedFiles()) assert.ok(fs.statSync(path.join(output, relative)).isFile(), relative);
+  for (const [name, bytes] of positiveProfileFixtures()) {
+    assert.deepStrictEqual(fs.readFileSync(path.join(output, '01-positive', name)), bytes);
+  }
   assert.match(fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.txt'), 'utf8'), /Lina Testfeld/u);
   assert.ok(fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.docx')).includes(Buffer.from('word/document.xml')));
   assert.ok(fs.readFileSync(path.join(output, '01-positive', 'personnel-profile.xlsx')).includes(Buffer.from('xl/worksheets/sheet1.xml')));

@@ -13,6 +13,7 @@ const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
 const { xlsxCounterexample } = require('./lib/conversion-counterexamples.js');
 const { zipStore } = require('./lib/zip.js');
 const { opcControlEntries } = require('./lib/opc.js');
+const { positiveProfileFixtures } = require('../docs/acceptance/UAT_TEST_KIT/tools/generate-synthetic-uat-fixtures.js');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const productTarget = process.platform === 'darwin' ? `macos-${process.arch}` : 'windows-x64';
@@ -122,10 +123,10 @@ try {
   fs.mkdirSync(resultDirectory, { recursive: true });
   // Exercise the shipped parser/worker chain, not a replacement worker or one
   // synthetic TXT path. All four fixtures describe the same synthetic parties.
-  const fixtureRoot = path.join(root, 'docs', 'acceptance', 'UAT_TEST_KIT', 'inputs', '01-positive');
+  const fixtures = positiveProfileFixtures();
   const sourceNames = ['txt/personnel-profile.txt', 'markdown/personnel-profile.md',
     'csv/personnel-profile.csv', 'docx/personnel-profile.docx'];
-  const originals = sourceNames.map((name) => fs.readFileSync(path.join(fixtureRoot, path.posix.basename(name))));
+  const originals = sourceNames.map((name) => fixtures.get(path.posix.basename(name)));
   const sourceFiles = sourceNames.map((name, index) => {
     const destination = path.join(sourceDirectory, ...name.split('/'));
     fs.mkdirSync(path.dirname(destination), { recursive: true });

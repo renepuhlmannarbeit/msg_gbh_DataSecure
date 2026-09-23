@@ -971,6 +971,19 @@ nachweisen, statt nur die Ad-hoc-Option umzuschalten.
   sie ist weder Developer ID noch Notarisierung und beweist keine allgemeine
   Installierbarkeit.
 
+### Neubau-Zwischenstand
+
+Neubau-Zwischenstand RC141: Der native Lauf `35873430518` auf Quellcommit
+`9149e0459404cf67b31b15fbfd016502e3743ab8` bestand auf ARM bereits Bundle-/ZIP-
+Signaturen, Mach-O-Mindestversionen, direkte und LaunchServices-Starts sowie
+Office-/PDF-/OCR-Konvertierung. Der anschließende gemeinsame Paketsmoke
+scheiterte vor dem Sidecar-Start an nicht eingecheckten UAT-Eingabedateien
+(`ENOENT`). Das ist ein Testaufbaufehler, keine bestandene Paketevidence.
+Der Smoke erzeugt seine Eingabebytes jetzt direkt über denselben synthetischen
+UAT-Generator, ohne vorhandene Arbeitsverzeichnisse vorauszusetzen oder die
+Benutzer-UAT-Eingaben neu zu schreiben. Beide Architekturen müssen diesen
+korrigierten Test aus einem neuen sauberen Checkout erneut bestehen.
+
 ### Primärquellen
 
 - [Apple – macOS-Pakete verteilen und testen](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)

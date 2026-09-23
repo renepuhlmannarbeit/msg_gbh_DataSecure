@@ -35,6 +35,7 @@ for (const expected of [
   'node scripts/build-runtime-target.mjs',
   'node scripts/prepare-standalone-runtime.mjs',
   'npm run test:standalone',
+  'node tests/test-uat-fixture-generation.js',
   'npm run test:standalone:conversion',
   'cargo clippy --all-targets --locked -- -D warnings',
   'npx --no-install tauri build --bundles app',
