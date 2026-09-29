@@ -1,6 +1,15 @@
 # Aktueller Iststand
 
-Stand: 29.09.2026 · 3.2.0-rc151 lokaler Entwicklungsstand · Standalone macOS RC141 dauerhaft veröffentlicht; Standalone Windows/Linux und Cowork bleiben RC140; Modellabnahme und N3/N4 offen
+Stand: 29.09.2026 · 3.2.0-rc151 · Standalone Windows RC151 und macOS RC142 als getrennte Vorabkandidaten veröffentlicht; Standalone Linux und Cowork bleiben RC140; Modellabnahme und N3/N4 offen
+
+Windows RC151 bindet den sauberen Quellcommit
+`fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`. Die Pflicht-CI und zwei
+bytegleiche, nativ gestartete PKG-04-/INT-13-Archive bestanden; der ZIP-Hash ist
+`5108d3957c4987088519cf26ce2c5aba4df5611f9f993aa17c027ab1a82230c7`.
+Der vollständige 140-Dateien-Zielhostlauf mit diesem Paket und menschliche
+N3/N4-Abnahme stehen noch aus. Die nachfolgenden „lokalen“ Befunde beschreiben
+die Entstehung des jetzt veröffentlichten Windows-Kandidaten, keine
+Mac-/Linux-/Cowork-Paketfreigabe.
 
 Lokaler RC149-UAT-Nachtrag BL-010.42: Ein 140-Dateien-Korpus ergab 138
 anonymisierte Ergebnisse und zwei sicher gestoppte DOCX. Die technischen
@@ -30,13 +39,13 @@ bleibt direkt Markdown-first; ein CSV-
 Zwischenschritt wäre für mehrblättrige Mappen verlustbehaftet. Cowork und
 die bereits veröffentlichten Pakete ändern sich dadurch nicht.
 
-Lokaler, noch unveröffentlichter Standalone-Nachtrag BL-010.37: Eine vor
+Vor RC151 lokal vorbereiteter Standalone-Nachtrag BL-010.37: Eine vor
 `Starten` vorbereitete Auswahl kann über Datei-/Ordnerpicker oder Drop ergänzt
 werden. Doppelte Quellen werden übersprungen; ungültige oder zu große Nachträge
 lassen die bestehende Queue unverändert. Nach `Starten` gehört Neues in einen
 eigenen Lauf. Automatisierte Prüfungen und ein neuer lokaler Kandidat werden
-vor der sichtbaren Benutzerabnahme durchgeführt; daraus folgt noch keine
-Änderung der veröffentlichten Windows-/Mac-/Linux- oder Cowork-Pakete.
+vor der sichtbaren Benutzerabnahme durchgeführt. Die Windows-Änderung ist
+in RC151 paketgebunden; Mac-, Linux- und Cowork-Pakete bleiben unverändert.
 BL-010.38 trennt zusätzlich einen abgeschlossenen Lauf von der Vorbereitung
 des nächsten. Der RC143-Zielhostbefund mit sieben sicher gestoppten PDFs ist
 auf das bisherige `PDF_OBJECT_COVERAGE_UNVERIFIED`-Gate zurückgeführt.
@@ -44,8 +53,8 @@ DS-103/BL-010.39 führt jetzt auch Standalone-PDF/PPTX über die bereits
 gebündelte passive Markdown-Extraktion in die nachgelagerte Anonymisierung.
 Die Quellabdeckung bleibt ausdrücklich unvollständig; unsichere Quellen
 stoppen weiter. Abschlussansicht, bewusste Rücksetzung, Warnanzeige und
-dieser Privacy-Übergang sind nur lokal und noch nicht als Release oder
-sichtbare Zielhost-UAT belegt.
+dieser Privacy-Übergang sind mit Windows RC151 paketgebunden, aber noch
+nicht durch einen erneuten vollständigen sichtbaren Zielhostlauf belegt.
 BL-010.40 ergänzt den RC144-Zielhostbefund 11/12: Die lokale Reviewphase
 startete, doch ein sichtbares Prüffenster war nicht nachweisbar, während der
 interaktive Prozess weiterlief. RC145 startet nur diesen Dialog ohne versteckten

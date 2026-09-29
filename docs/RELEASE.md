@@ -2,7 +2,29 @@
 
 Stand: 29.09.2026 · 3.2.0-rc151
 
-Der aktuelle Quellstand ist RC151-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+Der aktuelle Quellstand ist als RC151-Windows-Standalone-Vorabkandidat gebunden. Die übrigen
+Produkt-/Plattformpakete behalten ihre separat geprüften Versionsstände.
+
+### RC151 – Standalone Windows x64
+
+Das [RC151-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
+bindet den sauberen Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`.
+Die [Pflicht-CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36615798739)
+und die lokale vollständige Produktsuite bestanden. Windows-PKG-04/INT-13
+bestätigt zwei saubere, bytegleiche ZIP-Bauten, Paket-/Worker-Prüfungen und
+native Starts beider Archive. Das veröffentlichte ZIP umfasst 110.303.055 Byte
+und hat SHA-256
+`5108d3957c4987088519cf26ce2c5aba4df5611f9f993aa17c027ab1a82230c7`.
+Die GitHub-Asset-Digests des ZIPs und seiner `.sha256`-Datei wurden mit den
+lokalen Dateien abgeglichen.
+
+RC151 bündelt die Standalone-Korrekturen für neue Läufe, Dateiauswahl,
+Fehleranzeige und lokale Prüfentscheidungen sowie die ergänzten
+Datenschutz-/Formatregressionen. Der erneute vollständige 140-Dateien-Lauf
+auf dem Benutzer-Zielhost, menschliche N3/N4-Abnahme und Produktionsfreigabe
+bleiben offen. Sicher gestoppte Dateien werden nicht automatisch freigegeben.
+RC151 enthält keine neuen macOS-, Linux- oder Cowork-Pakete: macOS ZIP/DMG
+bleiben RC142, Linux und Cowork RC140. Ältere Assets werden nicht überschrieben.
 
 ### RC142 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

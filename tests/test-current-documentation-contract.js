@@ -93,14 +93,17 @@ test('release truth binds the published candidate while keeping human approval s
   // A platform-only release must not silently relabel other product binaries.
   const macPublished = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
   const standalonePublished = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const windowsPublished = /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
   const standaloneRc = standalonePublished ? `RC${standalonePublished[1]}` : null;
-  const windowsRc = standaloneRc || publishedRc;
+  const windowsRc = windowsPublished ? `RC${windowsPublished[1]}` : standaloneRc || publishedRc;
   const windowsVersion = version.replace(/rc\d+$/iu, `rc${windowsRc.slice(2)}`);
   const macRc = standaloneRc || (macPublished ? `RC${macPublished[1]}` : publishedRc);
   const macVersion = version.replace(/rc\d+$/iu, `rc${macRc.slice(2)}`);
   const readme = read('README.md');
   assert.strictEqual(readme.split(/\r?\n/u)[0],
-    standaloneRc
+    windowsPublished
+      ? `# GBH DataSecure – Standalone Windows ${windowsRc}, macOS ${macRc} · Linux und Cowork ${publishedRc}`
+      : standaloneRc
       ? `# GBH DataSecure – Standalone Windows/macOS ${standaloneRc} · Linux und Cowork ${publishedRc}`
       : macRc === publishedRc
         ? `# GBH DataSecure – Cowork und Standalone ${publishedRc}`
@@ -121,6 +124,12 @@ test('release truth binds the published candidate while keeping human approval s
       `README download must bind ${name} to its published release`);
   }
   assert.ok(release.includes(`releases/tag/v${macVersion}`));
+  if (windowsPublished) {
+    assert.ok(readme.includes(windowsPublished[2]), 'Windows source commit must remain explicit');
+    assert.ok(release.includes(`releases/tag/v${windowsVersion}`));
+    assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
+      'Windows-only publication must not invent a Cowork package');
+  }
   if (standalonePublished) {
     assert.ok(readme.includes(standalonePublished[2]), 'Standalone source commit must remain explicit');
     assert.ok(release.includes(`releases/tag/v${windowsVersion}`));

@@ -1,6 +1,14 @@
-# GBH DataSecure – Standalone Windows/macOS RC142 · Linux und Cowork RC140
+# GBH DataSecure – Standalone Windows RC151, macOS RC142 · Linux und Cowork RC140
 
 Quellstand: 3.2.0-rc151
+
+Der [Windows-Standalone-Vorabkandidat RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
+bindet Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`.
+Zwei saubere, bytegleiche Windows-Bauten bestanden Paket- und native Starttests;
+die Pflicht-CI ist grün. RC151 verbessert die Vorbereitung neuer Läufe,
+Datei- und Ordnerauswahl, verständliche Fehlerhinweise und lokale
+Prüfentscheidungen. Eine erneute sichtbare Abnahme des 140-Dateien-Korpus und
+N3/N4 stehen noch aus; RC151 ist keine Produktionsfreigabe.
 
 RC142 behebt die reine Windows-Markdown-Konvertierung für PDF-/PPTX-Quellen mit
 passiven Formular-, Signatur-, Link- und eingebetteten OLE-Objekten. Diese
@@ -37,7 +45,8 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[Windows und macOS: RC142-ZIPs, Mac-DMGs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)** ·
+**[Windows: RC151-ZIP und Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)** ·
+**[macOS: RC142-ZIPs, DMGs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)** ·
 **[Linux und Cowork: RC140-Pakete und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)**
 
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
@@ -49,7 +58,7 @@ Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc142-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc151-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)

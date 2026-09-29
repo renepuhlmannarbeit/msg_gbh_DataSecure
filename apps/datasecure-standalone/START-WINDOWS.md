@@ -1,5 +1,9 @@
 # DataSecure Standalone starten (Windows x64)
 
+Aktuelles Windows-Testpaket: [RC151-ZIP mit Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151).
+Es ist ein technischer Vorabkandidat; sichtbare Vollkorpus- und N3/N4-Abnahme
+stehen noch aus.
+
 1. ZIP vollständig in einen lokalen Ordner entpacken.
 2. `DataSecure Standalone.exe` doppelklicken.
 3. Auf **Start** die gewünschte Funktion wählen: **Nur in Markdown umwandeln**

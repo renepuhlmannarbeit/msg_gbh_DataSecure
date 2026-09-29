@@ -35,7 +35,13 @@ test('formal kit contains the complete two-person campaign contract', () => {
   if (boundCandidate[1] !== campaignLabel) {
     const standaloneCandidate = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,300}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
     const macCandidate = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
-    if (standaloneCandidate?.[1] === campaignLabel) {
+    const windowsCandidate = /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+    if (windowsCandidate?.[1] === campaignLabel) {
+      assert.ok(overview.includes(windowsCandidate[2]), 'Windows-only candidate must bind its exact source commit');
+      assert.ok(overview.includes(`/releases/tag/v${productVersion}`));
+      assert.match(overview, /keine gemeinsame Windows-\/Mac-Kampagne/u);
+      assert.match(overview, /RC\d+-Windows und RC\d+-Mac bilden/u);
+    } else if (standaloneCandidate?.[1] === campaignLabel) {
       assert.ok(overview.includes(standaloneCandidate[2]), 'Standalone Windows/Mac candidate must bind its exact source commit');
       assert.ok(overview.includes(`/releases/tag/v${productVersion}`));
       assert.match(overview, /Windows-PKG-04\/INT-13 bestand zwei bytegleiche/u);
